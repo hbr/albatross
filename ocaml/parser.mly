@@ -22,10 +22,11 @@ let cinfo (i:info) =  info_string (filename ()) i
 %token KWdeferred  KWdo
 %token KWelse      KWelseif       KWend        KWensure
 %token KWfeature
+%token KWghost
 %token KWif        KWimmutable    KWin         KWinspect
        KWinvariant
 %token KWlocal
-%token KWnot
+%token KWnot       KWnote
 %token KWor
 %token KWrequire
 %token KWthen
@@ -44,6 +45,7 @@ let cinfo (i:info) =  info_string (filename ()) i
 %token EOF
 %token EQ
 %token EQV
+%token EXCLAM
 %token GE
 %token GT
 %token HIGHEST_PREC
@@ -59,12 +61,14 @@ let cinfo (i:info) =  info_string (filename ()) i
 %token NEWLINE
 %token NOTIN
 %token PLUS
+%token QMARK
 %token RBRACE
 %token RBRACKET
 %token RPAREN
 %token SEMICOL
 %token TIMES
 %token UMINUS
+%token USCORE
 
 %token <int>    UIDENTIFIER
 %token <int>    LIDENTIFIER
@@ -73,7 +77,7 @@ let cinfo (i:info) =  info_string (filename ()) i
 %token <string> NUMBER
 
 
-/*  0 */ %nonassoc LOWEST_PREC
+/*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
 /* 10 */ %right    COMMA     SEMICOL
 /* 15 */ %right    COLON
@@ -95,29 +99,60 @@ let cinfo (i:info) =  info_string (filename ()) i
 %start main
 %type <Support.module_t> main
 
-
 %%
 
 
-main:
-  { empty_module }
 
-| main optsemi class_declaration  { class_added $3 $1 }
+main:module_nt { $1 }
 
-| main optsemi formal_generic_declaration { 
-  let n,t = $3
-  in
-  Printf.printf 
-    "%s formal generic declaration %s:%s\n" 
-    (info_string (filename ()) n.i)
-    (symbol_string n.v)
-    (string_of_type t.v);
-  formal_generic_added n t $1 }
+module_nt:
+    { empty_module }
+|   module_nt optsemi declaration { $1 }
+|   module_nt declaration_block KWend { $1 }
 
-| main optsemi feature_declaration {
-  $1  (* ??? *)
-}
 
+/* ------------------------------------------------------------------------- */
+/* Declaration blocks */
+/* ------------------------------------------------------------------------- */
+
+declaration_block: block_type visibility optsemi declarations {()}
+
+block_type:
+    KWfeature   { () }
+|   KWcreate    { () }
+|   KWinvariant { () }
+
+
+visibility:
+    {()}
+|   LBRACE KWNONE RBRACE {()}
+
+declarations:
+    %prec LOWEST_PREC {()}
+|   declarations optsemi declaration {()}
+
+
+declaration:
+    class_declaration {()}
+|   named_feature     {()}
+|   assertion_feature {()}
+|   formal_generic    {()}
+
+
+
+/* ------------------------------------------------------------------------- */
+/* Formal generics */
+/* ------------------------------------------------------------------------- */
+
+formal_generic:
+  UIDENTIFIER COLON type_nt { withinfo (rhs_info 1) $1, 
+                              withinfo (rhs_info 3) $3 }
+
+
+
+/* ------------------------------------------------------------------------- */
+/* Classes and types */
+/* ------------------------------------------------------------------------- */
 
 
 
@@ -125,21 +160,23 @@ header_mark:
   { No_hmark }
 | KWimmutable { Immutable_hmark }
 | KWcase      { Case_hmark }
+| KWdeferred  { Deferred_hmark  }
 
 
 
 
 class_declaration:
-  header_mark KWclass UIDENTIFIER optsemi KWend {
+  header_mark KWclass UIDENTIFIER actual_generics 
+  class_blocks
+  KWend {
   {hmark= withinfo (rhs_info 1) $1; cname=withinfo (rhs_info 3) $3}
 }
 
 
+class_blocks:
+    {()}
+|   class_blocks declaration_block {()}
 
-
-formal_generic_declaration:
-  UIDENTIFIER COLON type_nt { withinfo (rhs_info 1) $1, 
-                              withinfo (rhs_info 3) $3 }
 
 
 
@@ -150,26 +187,40 @@ path:
 
 type_nt:
   simple_type  { $1 }
-| generic_type { $1 }
+| current_type { $1 }
 | arrow_type   { $1 }
+| ghost_type   { $1 }
+| tuple_type   { $1 }
 
 
 type_list:
   type_nt { [$1]}
-| type_list COMMA type_nt {
-  $3::$1
+| type_nt COMMA type_list {
+  $1::$3
 }
 
 
-simple_type: path UIDENTIFIER { Normal_type ($1, $2, [])}
+actual_generics:
+    %prec LOWEST_PREC {[]}
+|   LBRACKET type_list RBRACKET { $2 }
 
-generic_type: path UIDENTIFIER LBRACKET type_list RBRACKET {
-  Normal_type ($1, $2, List.rev $4)
-}
+
+
+simple_type: 
+    path UIDENTIFIER actual_generics { Normal_type ($1,$2,$3)}
+
+current_type: KWCURRENT actual_generics { Current_type $2 }
+
 
 arrow_type: type_nt ARROW type_nt {
   Arrow_type ($1,$3)
 }
+
+
+ghost_type: KWghost type_nt { Ghost_type $2 }
+
+
+tuple_type: LBRACKET type_list RBRACKET { Tuple_type $2 }
 
 
 
@@ -181,40 +232,53 @@ arrow_type: type_nt ARROW type_nt {
 /* ------------------------------------------------------------------------- */
 
 
-feature_declaration:
-   assertion_feature {()}
-
-
 assertion_feature:
-    KWall LPAREN expression RPAREN optsemi
-    require_block
-    proof_block
-    ensure_block 
-    KWend {
-  let r =
-  try
-    formals_from_expression $3
-  with
-    _ -> 
-      Printf.eprintf 
-        "%s \"%s\" is not an argument list\n" 
-        (cinfo (rhs_info 3))
-        (string_of_expression $3);
-      failwith "Parse error"
-  in
-  Printf.printf "Formal arguments: %s\n" (string_of_formals r);
-  r
+    KWall formal_arguments optsemi block_list KWend {
+  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
 }
 
-require_block:
+
+
+named_feature: 
+    nameorop formal_arguments rettype optsemi block_list_opt {
+  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
+}
+
+nameorop:
+    operator {()}
+|   LIDENTIFIER {()}
+|   LIDENTIFIER EXCLAM {()}
+
+
+rettype:
     {()}
-|   KWrequire assertions {()}
+|   COLON type_nt {()}
+
+block_list_opt:
+    %prec LOWEST_PREC {()}
+|   block_list KWend {()}
+
+block_list:
+    block  {()}
+|   block_list block {()}
+
+
+block:
+    require_block  {()}
+|   ensure_block   {()}
+|   proof_block    {()}
+|   note_block     {()}
+|   KWdeferred     {()}
+
+
+require_block:
+    KWrequire assertions {()}
 
 proof_block:
-    {()}
-|   KWdeferred {()}
-|   KWcheck assertions {()}
+    KWcheck assertions {()}
 
+note_block:
+    KWnote compound {()}
 
 ensure_block:
     KWensure assertions {()}
@@ -233,6 +297,20 @@ assertions: compound {
 }
 
 
+
+formal_arguments:
+    { [] }
+|   LPAREN expression RPAREN {
+  try
+    formals_from_expression $2
+  with
+    _ -> 
+      Printf.eprintf 
+        "%s \"%s\" is not an argument list\n" 
+        (cinfo (rhs_info 2))
+        (string_of_expression $2);
+      failwith "Parse error"
+}
 
 
 /* ------------------------------------------------------------------------- */
@@ -349,7 +427,11 @@ uexp:
 atomic_expression:
     LIDENTIFIER                    { Identifier $1 }
 
+|   KWResult                       { ExpResult }
+
 |   NUMBER                         { Number $1 }
+
+|   KWCurrent                      { ExpCurrent }
 
 |   LPAREN expression RPAREN       { Expparen $2 }
 
@@ -373,6 +455,10 @@ operator:
 |   MINUS     { Minusop }
 |   TIMES     { Timesop }
 |   DIVIDE    { Divideop }
+|   EQ        { Eqop }
+|   EQV       { Eqvop }
+|   NEQ       { NEqop }
+|   NEQV      { NEqvop }
 |   LT        { LTop }
 |   LE        { LEop }
 |   GT        { GTop }
@@ -385,8 +471,11 @@ operator:
 |   DBAR      { DBarop }
 |   ARROW     { Arrowop }
 |   DARROW    { DArrowop }
+|   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
 |   ROPERATOR { RFreeop $1 }
+|   LBRACKET RBRACKET {Bracketop}
+
 
 
 /* ------------------------------------------------------------------------- */
@@ -396,5 +485,5 @@ operator:
 
 
 optsemi:
-    {()}
+    %prec LOWEST_PREC {()}
 |   optsemi SEMICOL {()}

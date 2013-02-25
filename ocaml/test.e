@@ -1,23 +1,125 @@
 -- This is a comment
 
 
-class
+deferred class
     ANY
 end
 
-case class LIST end
+= (a,b:CURRENT): BOOLEAN
+   deferred
+   end
 
-immutable class BOOLEAN end
+
+immutable class 
+    BOOLEAN
+end
+
+=> (a,b:BOOLEAN): BOOLEAN
+   note built_in end
+
+false: BOOLEAN
+   note built_in end
+
+=  (a,b:BOOLEAN): BOOLEAN
+   note built_in end
+
+all(a,b:BOOLEAN)
+   note built_in ensure
+       antisymmetric: (a=>b) => (b=>a) => (a=b)
+       classic:       ((a=>false)=>false) => a
+   end
 
 
 G: kernel.ANY   -- All classnames can be fully qualified
 
 H: LIST[ARRAY[kernel.INTEGER],NATURAL]
 
-J: a.A -> b.B
+J: ghost a.A -> ghost b.B
 
 immutable class
     FUNCTION
+end
+
+
+some_event 
+    require a ensure b end
+
+some_feature(a:A)
+    require
+        r
+    ensure
+        e
+    end
+
+some_proc! (a:A, tuple:[A,B]): RT
+    ensure e end
+
+some_func(a:A): ghost B
+    ensure Result = exp end
+
+
+feature{NONE}          -- a private feature block
+    class A_PRIVATE_CLASS end
+
+    a_private_function(a:A): B
+        ensure
+            Result = a
+        end
+end
+
+G:ANY
+
+case class 
+    LIST[G]
+create
+    nil
+    :: (first:G, tail:CURRENT)
+end
+
+
++ (a:LIST[G], e:G): LIST[G]
+    ensure
+        Result = inspect a
+                 case nil  then e::nil
+                 case f::t then f::(t+e)
+                 end 
+    end
+
++ (a,b:LIST[G]): LIST[G]
+   ensure
+       Result = inspect a
+                case nil  then b
+                case f::t then f::(t+b)
+                end
+   end
+
+
+
+deferred class
+    ABSTRACT_ARRAY[G]
+feature
+    count: NATURAL
+        deferred end
+    [] (i:NATURAL): G
+        require
+             i < count
+        deferred
+        end
+end
+
+class 
+     BUFFER[G]
+feature
+     count: NATURAL
+     capacity: NATURAL
+     [] (i:NATURAL): G
+         require
+             i < count
+         note 
+             built_in
+         end
+invariant
+     count <= capacity
 end
 
 

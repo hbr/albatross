@@ -126,31 +126,39 @@ let rec split_list (l: 'a list) (sep: 'a -> bool) =
 (* Classes and types *)
 
 
-type header_mark = No_hmark | Case_hmark | Immutable_hmark
+type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
 
 type class_t =  {hmark:header_mark withinfo; cname: int withinfo}
 
 type type_t =
     Normal_type of int list * int * type_t list   (* kernel.ANY, 
-                                                     kernel.ARRAY[NATURAL] *)
-  | Arrow_type of type_t * type_t                 (* A -> B              *)
+                                                 kernel.ARRAY[NATURAL] *)
+  | Current_type of type_t list
+  | Arrow_type of type_t * type_t        (* A -> B              *)
+  | Ghost_type of type_t
+  | Tuple_type of type_t list
 
 
 let rec string_of_type (t:type_t) =
+  let actuals l =
+    match l with
+      [] -> ""
+      | _::_ -> 
+          "[" 
+          ^ (string_of_list l string_of_type ",") 
+          ^ "]"
+  in
   match t with
     Normal_type (p,n,l) ->
       let ps = string_of_path p
       in
-      (match l with
-        [] -> ps ^ (symbol_string n)
-      | _::_ -> 
-          ps 
-          ^ (symbol_string n) 
-          ^ "[" 
-          ^ (string_of_list l string_of_type ",") 
-          ^ "]")
+      ps ^ (symbol_string n) ^ (actuals l)
+  | Current_type l -> "CURRENT" ^ (actuals l)
   | Arrow_type (t1,t2) ->
       (string_of_type t1) ^ "->" ^ (string_of_type t2)
+  | Ghost_type t ->
+      "ghost " ^  (string_of_type t)
+  | Tuple_type l -> actuals l
 
 
 
@@ -177,6 +185,7 @@ type operator =
   | Barop
   | DBarop
   | Arrowop
+  | Bracketop
   | DArrowop
   | DColonop
   | Freeop  of int
@@ -205,6 +214,7 @@ let opdata op =
   | Barop     -> "|",   40,  Left
   | DBarop    -> "||",  40,  Left
   | Arrowop   -> "->",  20,  Right
+  | Bracketop -> "[]",  1000, Nonassoc
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
   | Freeop  i -> symbol_string i, 60,  Left
@@ -230,9 +240,13 @@ let string_of_op op =
       in
       s
 
+
+
 type expression =
     Identifier    of int
   | Number        of string
+  | ExpResult
+  | ExpCurrent
   | Expparen      of expression
   | Expbracket    of expression
   | Expop         of operator
@@ -261,6 +275,8 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   match e with
     Identifier id -> symbol_string id
   | Number num    -> num
+  | ExpResult     -> "Result"
+  | ExpCurrent    -> "Current"
   | Expparen e   -> "(" ^ (strexp e) ^")"
   | Expbracket e -> "[" ^ (strexp e) ^"]"
   | Expop op     -> "(" ^ (rstring_of_op op) ^ ")"

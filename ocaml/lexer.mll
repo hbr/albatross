@@ -49,7 +49,7 @@ let _ =
      ("CURRENT",   Parser.KWCURRENT);
      ("Current",   Parser.KWCurrent);
      ("NONE",      Parser.KWNONE);
-     ("Precorsor", Parser.KWPrecursor);
+     ("Precursor", Parser.KWPrecursor);
      ("Process",   Parser.KWProcess);
      ("Result",    Parser.KWResult);
 
@@ -66,6 +66,7 @@ let _ =
      ("end"  ,     Parser.KWend);
      ("ensure",    Parser.KWensure);
      ("feature",   Parser.KWfeature);
+     ("ghost",     Parser.KWghost);
      ("if",        Parser.KWif);
      ("immutable", Parser.KWimmutable);
      ("in",        Parser.KWin);
@@ -73,6 +74,7 @@ let _ =
      ("invariant", Parser.KWinvariant);
      ("local",     Parser.KWlocal);
      ("not",       Parser.KWnot);
+     ("note",      Parser.KWnote);
      ("or",        Parser.KWor);
      ("require",   Parser.KWrequire);
      ("then",      Parser.KWthen);
@@ -132,11 +134,15 @@ rule next_token = parse
 
 | '.'             { Parser.DOT,      (false,false) }
 
+| '!'             { Parser.EXCLAM,   (false,false) }
+
 | '{'             { Parser.LBRACE,   (true,false)  }
 
-| '['             { Parser.LBRACKET, (true,false) }
+| '['             { Parser.LBRACKET, (true,false)  }
 
-| '('             { Parser.LPAREN,   (true,false) }
+| '('             { Parser.LPAREN,   (true,false)  }
+
+| '?'             { Parser.QMARK,    (false,false) }
 
 | '}'             { Parser.RBRACE,   (false,true)  }
 
@@ -145,6 +151,8 @@ rule next_token = parse
 | ')'             { Parser.RPAREN,   (false,true)  }
 
 | ';'             { Parser.SEMICOL,  (false,false) }
+
+| '_'             { Parser.USCORE,   (false,false) }
 
 
 | "/in"           { Parser.NOTIN,    (false,false) }
