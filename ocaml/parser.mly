@@ -89,12 +89,12 @@ let cinfo (i:info) =  info_string (filename ()) i
 /* 45 */ %left     PLUS      MINUS
 /* 50 */ %left     TIMES     DIVIDE
 /* 55 */ %right    CARET     DCOLON
-/* 60 */ %left     OPERATOR
+/* 60 */ %left     OPERATOR  KWin      NOTIN
 /* 61 */ %right    ROPERATOR
-/* 65 */ %nonassoc KWnot
+/* 65 */ %nonassoc KWnot     QMARK
 /* 80 */ %nonassoc LPAREN    LBRACKET
 /* 90 */ %nonassoc UMINUS
-/*100 */ %nonassoc HIGHEST_PREC
+/*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
 %start main
 %type <Support.module_t> main
@@ -191,6 +191,7 @@ type_nt:
 | arrow_type   { $1 }
 | ghost_type   { $1 }
 | tuple_type   { $1 }
+| qmark_type   { $1 }
 
 
 type_list:
@@ -222,7 +223,7 @@ ghost_type: KWghost type_nt { Ghost_type $2 }
 
 tuple_type: LBRACKET type_list RBRACKET { Tuple_type $2 }
 
-
+qmark_type: type_nt QMARK   { QMark_type $1 }
 
 
 
@@ -266,35 +267,35 @@ block_list:
 block:
     require_block  {()}
 |   ensure_block   {()}
-|   proof_block    {()}
+|   implementation_block    {()}
 |   note_block     {()}
 |   KWdeferred     {()}
 
 
 require_block:
-    KWrequire assertions {()}
+    KWrequire compound {()}
 
-proof_block:
-    KWcheck assertions {()}
+check_block:
+    KWcheck compound {()}
+
+do_block: KWdo compound {()}
+
+local_block: 
+    {()}
+|   KWlocal compound {()}
 
 note_block:
     KWnote compound {()}
 
 ensure_block:
-    KWensure assertions {()}
+    KWensure compound {()}
 
-assertions: compound {
-  Printf.printf "\n%scompound: %s\n"  
-    (cinfo (rhs_info 1))
-    (string_of_expression $1);
-  match $1 with
-    Expcompound l ->
-      List.iter 
-        (fun el -> 
-          Printf.printf "%s exp: %s\n" (cinfo el.i) (string_of_expression el.v))
-        l
-  | _ -> assert false
-}
+implementation_block:
+    local_block do_block    {()}
+|   local_block check_block {()}
+
+
+
 
 
 
@@ -304,7 +305,7 @@ formal_arguments:
   try
     formals_from_expression $2
   with
-    _ -> 
+    Failure _ ->
       Printf.eprintf 
         "%s \"%s\" is not an argument list\n" 
         (cinfo (rhs_info 2))
@@ -334,29 +335,29 @@ else_part:
 
 
 inspect:
-    KWinspect expression case_list KWend {
-  Expinspect (withinfo (rhs_info 2) $2, $3)
-}
+    KWinspect info_expression case_list KWend { Expinspect ($2, $3) }
 
 case_list:
     case_part { [$1] }
-|   case_part case_list { $1::$2}
+|   case_part case_list { $1::$2 }
 
-case_part:  KWcase expression KWthen expression {
-  (withinfo (rhs_info 2) $2), (withinfo (rhs_info 4) $4)
-}
+case_part:  KWcase info_expression KWthen compound { $2,$4 }
 
 
 /* ------------------------------------------------------------------------- */
 /* Expressions */
 /* ------------------------------------------------------------------------- */
 
+compound: compound_list {
+  (Printf.printf "%s compound: %s\n"
+    (cinfo (rhs_info 1))
+    (string_of_compound $1));
+  $1
+}
 
-compound: compound_list { Expcompound $1 }
 
 compound_list:
-    { [] }
-|   info_expression { [$1] }
+    info_expression { [$1] }
 |   info_expression SEMICOL compound_list { $1::$3 }
 
 
@@ -390,6 +391,10 @@ uexp:
 |   uexp DIVIDE uexp { Binexp (Divideop,$1,$3) }
 
 |   uexp CARET  uexp { Binexp (Caretop,$1,$3) }
+
+|   uexp KWin uexp   { Binexp (Inop,$1,$3) }
+
+|   uexp NOTIN uexp  { Binexp (Notinop,$1,$3) }
 
 |   uexp EQ  uexp    { Binexp (Eqop,$1,$3) }
 
@@ -449,6 +454,10 @@ atomic_expression:
 
 |   inspect     { $1 }
 
+|   require_block ensure_block KWend {failwith "Not yet implemented"}
+
+|   require_block implementation_block ensure_block KWend {failwith "Not yet implemented"}
+
 
 operator:
     PLUS      { Plusop }
@@ -467,6 +476,8 @@ operator:
 |   KWand     { Andop }
 |   KWor      { Orop }
 |   KWnot     { Notop }
+|   KWin      { Inop  }
+|   NOTIN     { Notinop }
 |   BAR       { Barop }
 |   DBAR      { DBarop }
 |   ARROW     { Arrowop }

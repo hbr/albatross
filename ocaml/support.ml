@@ -1,5 +1,14 @@
 (*
 -----------------------------------------------------------------------------
+   Exceptions
+-----------------------------------------------------------------------------
+*)
+
+exception Exit_error of string
+
+
+(*
+-----------------------------------------------------------------------------
    Line and column info
 -----------------------------------------------------------------------------
 *)
@@ -137,6 +146,7 @@ type type_t =
   | Arrow_type of type_t * type_t        (* A -> B              *)
   | Ghost_type of type_t
   | Tuple_type of type_t list
+  | QMark_type of type_t
 
 
 let rec string_of_type (t:type_t) =
@@ -159,6 +169,7 @@ let rec string_of_type (t:type_t) =
   | Ghost_type t ->
       "ghost " ^  (string_of_type t)
   | Tuple_type l -> actuals l
+  | QMark_type t -> (string_of_type t) ^ "?"
 
 
 
@@ -188,6 +199,8 @@ type operator =
   | Bracketop
   | DArrowop
   | DColonop
+  | Inop
+  | Notinop
   | Freeop  of int
   | RFreeop of int
 
@@ -217,6 +230,8 @@ let opdata op =
   | Bracketop -> "[]",  1000, Nonassoc
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
+  | Inop      -> "in",  60,  Nonassoc
+  | Notinop      -> "/in",  60, Nonassoc
   | Freeop  i -> symbol_string i, 60,  Left
   | RFreeop i -> symbol_string i, 61,  Right
 
@@ -235,6 +250,8 @@ let string_of_op op =
     Andop ->  " and "
   | Orop  ->  " or "
   | Notop ->  "not "
+  | Inop  ->  " in "
+  | Notinop -> " /in "
   | _     ->
       let s,_,_ = opdata op
       in
@@ -259,13 +276,19 @@ type expression =
   | Taggedexp     of expression * expression
   | Explist       of expression list
   | Expassign     of expression * expression
-  | Expcompound   of expression withinfo list
-  | Expif         of 
-      (expression withinfo * expression) list  * expression option
+  | Expif         of (info_expression * compound) list * compound option
   | Expinspect    of 
-      (expression withinfo) 
-        * ((expression withinfo) * (expression withinfo)) list
-
+      info_expression
+        * (info_expression * compound) list
+  | Expproof      of 
+      expression 
+        * (expression option * bool * expression) option
+        (* bool true: check, false: do *)
+        * expression
+and 
+      info_expression = expression withinfo
+and 
+      compound        = info_expression list
 
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
@@ -301,8 +324,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expassign (e1,e2) ->
       withparen ((strexp e1) ^ ":=" ^ (strexp e2)) wp
 
-  | Expcompound l -> (string_of_list l (fun ie -> strexp ie.v) ";")
-
   | Expif (thenlist,elsepart) ->
       "if " 
       ^ (string_of_list
@@ -312,12 +333,12 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
              in
              (string_of_expression cond.v) 
              ^ " then " 
-             ^ (string_of_expression comp))
+             ^ (string_of_compound comp))
            " elseif ")
       ^ (
         match elsepart with
           None -> ""
-        | Some e -> " else " ^ (string_of_expression e))
+        | Some e -> " else " ^ (string_of_compound e))
       ^ " end"
   | Expinspect (inspexp,caselist) ->
       "inspect "
@@ -325,12 +346,32 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       ^ (string_of_list
            caselist
            (fun ce ->
-             let pat,exp = ce
+             let pat,comp = ce
              in
              " case " ^ (string_of_expression pat.v) 
-             ^ " then " ^  (string_of_expression exp.v))
+             ^ " then " ^  (string_of_compound comp))
            "")
       ^ " end"
+  | Expproof (req,imp,ens) ->
+      let impstr =
+        match imp with
+          Some e ->
+            let loc,chk,blck = e
+            in
+            (match loc with
+              Some e -> "local " ^ (string_of_expression e)
+            | None -> "")
+            ^
+              (if chk then "check " else "do ")
+            ^
+              (string_of_expression blck)
+        | None -> ""
+      in
+      "require " ^ (string_of_expression req)
+      ^ impstr
+      ^ " ensure " ^ (string_of_expression ens)
+and string_of_compound comp = 
+  string_of_list comp (fun ie -> string_of_expression ie.v) ";"
 
       
 

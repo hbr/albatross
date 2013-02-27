@@ -15,5 +15,6 @@ try
   Validate.validate !modules;
   write_package
 with
-  Sys_error str -> prerr_endline str; exit 1
+  Support.Exit_error str 
+| Sys_error str -> prerr_endline str; exit 1
 

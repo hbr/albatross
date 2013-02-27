@@ -1,5 +1,4 @@
--- This is a comment
-
+-- --------------------------------------------------------------------
 
 deferred class
     ANY
@@ -9,6 +8,14 @@ end
    deferred
    end
 
+all(a,b:CURRENT, e:BOOLEAN)
+   deferred
+   ensure
+       reflexivity: a=a
+       rewrite:     a=b => e => e[a:=b]
+   end
+
+-- --------------------------------------------------------------------
 
 immutable class 
     BOOLEAN
@@ -23,12 +30,64 @@ false: BOOLEAN
 =  (a,b:BOOLEAN): BOOLEAN
    note built_in end
 
-all(a,b:BOOLEAN)
+all(a,b,e:BOOLEAN)
    note built_in ensure
+       equal_1:       a=a
+       equal_2:       a=b => e => e[a:=b]
        antisymmetric: (a=>b) => (b=>a) => (a=b)
        classic:       ((a=>false)=>false) => a
    end
 
+
+-- --------------------------------------------------------------------
+
+immutable class
+    PREDICATE[G]
+end
+
+in (a:G, p:G?): BOOLEAN
+    note built_in end
+
+all(a:G, exp:BOOLEAN)
+    note
+        built_in
+    ensure
+        in_1:  a in {x:exp} => exp[x:=a]
+        in_2:  exp[x:=a]    => a in {x:exp}
+    end
+
+-- --------------------------------------------------------------------
+
+-- module: any
+all(a,b:CURRENT)
+    require
+        r1: a=b
+    check
+        c1: a=a              -- reflexivity
+        c2: a in {x: x=a}    -- c1, in_2
+        -- c3: all(p:CURRENT?)
+        --         require
+        --             r2: a in p
+        --         ensure
+        --             b in p    -- r1,r2,rewrite
+        --         end
+        c4: b in {x: x=a}     -- c2,c3
+    ensure
+        b=a                   -- c4,in_2
+    end
+
+
+-- --------------------------------------------------------------------
+
+nat_val: NATURAL
+
+func_assign(i:NATURAL)
+    do
+       nat_val := i
+       a       := b
+    ensure
+       nat_val = i
+    end
 
 G: kernel.ANY   -- All classnames can be fully qualified
 
