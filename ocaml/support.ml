@@ -25,7 +25,7 @@ let noinfo v = {i=UNKNOWN; v=v}
 
 let info_string (name:string) (i:info) =
   match i with
-    FINFO(l,c) -> 
+    FINFO(l,c) ->
       name ^ ":" ^ (string_of_int l) ^ ":" ^ (string_of_int c) ^ ":"
   | UNKNOWN    ->
       name ^":"
@@ -42,7 +42,7 @@ let info_from_position pos =
    Syntax error function
 -----------------------------------------------------------------------------
 *)
-let parse_error_fun : (string->unit) ref = 
+let parse_error_fun : (string->unit) ref =
   ref (fun str -> Printf.eprintf "%s\n" str; failwith "Parse error")
 
 
@@ -57,8 +57,8 @@ type symbol_table = {mutable st_count: int;
                      mutable st_arr:   string array;
                      st_map:           (string,int) Hashtbl.t}
 
-let symbol_table = {st_count=0; 
-                    st_arr= Array.make 1 ""; 
+let symbol_table = {st_count=0;
+                    st_arr= Array.make 1 "";
                     st_map = Hashtbl.create 53}
 
 let added_symbol str =
@@ -80,7 +80,7 @@ let added_symbol str =
   st.st_arr.(cnt) <- str;
   st.st_count <- cnt + 1;
   cnt
-    
+
 
 let symbol str =
   try
@@ -125,8 +125,8 @@ let rec split_list (l: 'a list) (sep: 'a -> bool) =
       in
       match res with
         [] -> [[f]]
-      | f1::t1 -> 
-          if sep f 
+      | f1::t1 ->
+          if sep f
           then [f]::res
           else (f::f1)::t1
 
@@ -140,7 +140,7 @@ type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
 type class_t =  {hmark:header_mark withinfo; cname: int withinfo}
 
 type type_t =
-    Normal_type of int list * int * type_t list   (* kernel.ANY, 
+    Normal_type of int list * int * type_t list   (* kernel.ANY,
                                                  kernel.ARRAY[NATURAL] *)
   | Current_type of type_t list
   | Arrow_type of type_t * type_t        (* A -> B              *)
@@ -153,9 +153,9 @@ let rec string_of_type (t:type_t) =
   let actuals l =
     match l with
       [] -> ""
-      | _::_ -> 
-          "[" 
-          ^ (string_of_list l string_of_type ",") 
+      | _::_ ->
+          "["
+          ^ (string_of_list l string_of_type ",")
           ^ "]"
   in
   match t with
@@ -170,6 +170,25 @@ let rec string_of_type (t:type_t) =
       "ghost " ^  (string_of_type t)
   | Tuple_type l -> actuals l
   | QMark_type t -> (string_of_type t) ^ "?"
+
+
+
+(* Formal arguments *)
+
+type entities =
+    Untyped_entities of int list
+  | Typed_entities   of int list * type_t
+
+
+let string_of_entities (args: entities) =
+  match args with
+    Typed_entities (l,t) ->
+      (string_of_list l symbol_string ",") ^ ":" ^ string_of_type t
+  | Untyped_entities l -> string_of_list l symbol_string ","
+
+
+let string_of_formals (args: entities list) =
+  string_of_list args string_of_entities ","
 
 
 
@@ -240,9 +259,9 @@ let is_letter ch =
   in
   ((Char.code 'A') <= ic && ic <= (Char.code 'Z')) ||
   ((Char.code 'a') <= ic && ic <= (Char.code 'z'))
-  
 
-let rstring_of_op op = 
+
+let rstring_of_op op =
   let s,_,_ = opdata op in s
 
 let string_of_op op =
@@ -277,19 +296,27 @@ type expression =
   | Explist       of expression list
   | Expassign     of expression * expression
   | Expif         of (info_expression * compound) list * compound option
-  | Expinspect    of 
+  | Expinspect    of
       info_expression
         * (info_expression * compound) list
-  | Expproof      of 
-      expression 
+  | Expproof      of compound * implementation option * compound
+  | Expall        of entities list * expression
+  | Expsome       of entities list * expression
+(*
+  | Expproof      of
+      expression
         * (expression option * bool * expression) option
         (* bool true: check, false: do *)
         * expression
-and 
+*)
+and
       info_expression = expression withinfo
-and 
+and
       compound        = info_expression list
-
+and
+      implementation  = locals option * bool * compound
+and
+      locals          = (entities list * expression option) list
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
@@ -303,9 +330,9 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expparen e   -> "(" ^ (strexp e) ^")"
   | Expbracket e -> "[" ^ (strexp e) ^"]"
   | Expop op     -> "(" ^ (rstring_of_op op) ^ ")"
-  | Funapp (f,args) -> 
+  | Funapp (f,args) ->
       (strexp f) ^ "(" ^ (strexp args) ^ ")"
-  | Bracketapp (tgt,args) -> 
+  | Bracketapp (tgt,args) ->
       (strexp tgt) ^ "[" ^ (strexp args) ^ "]"
   | Expset s ->
       "{" ^  (strexp s) ^ "}"
@@ -313,26 +340,26 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       withparen ((strexp e1) ^ (string_of_op op) ^ (strexp e2)) wp
   | Unexp (op,e) ->
       withparen ((string_of_op op) ^ (strexp e)) wp
- 
+
   | Taggedexp (t,e) ->
       withparen((strexp t) ^ ":" ^ (strexp e)) wp
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp
   | Explist l ->
       withparen (string_of_list l strexp ",") wp
-      
+
   | Expassign (e1,e2) ->
       withparen ((strexp e1) ^ ":=" ^ (strexp e2)) wp
 
   | Expif (thenlist,elsepart) ->
-      "if " 
+      "if "
       ^ (string_of_list
-           thenlist 
+           thenlist
            (fun tp ->
              let cond,comp = tp
              in
-             (string_of_expression cond.v) 
-             ^ " then " 
+             (string_of_expression cond.v)
+             ^ " then "
              ^ (string_of_compound comp))
            " elseif ")
       ^ (
@@ -348,86 +375,54 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
            (fun ce ->
              let pat,comp = ce
              in
-             " case " ^ (string_of_expression pat.v) 
+             " case " ^ (string_of_expression pat.v)
              ^ " then " ^  (string_of_compound comp))
            "")
       ^ " end"
-  | Expproof (req,imp,ens) ->
-      let impstr =
-        match imp with
-          Some e ->
-            let loc,chk,blck = e
-            in
-            (match loc with
-              Some e -> "local " ^ (string_of_expression e)
-            | None -> "")
-            ^
-              (if chk then "check " else "do ")
-            ^
-              (string_of_expression blck)
-        | None -> ""
-      in
-      "require " ^ (string_of_expression req)
-      ^ impstr
-      ^ " ensure " ^ (string_of_expression ens)
-and string_of_compound comp = 
+  | Expproof (req,imp_opt,ens) ->
+      "require " ^ (string_of_compound req)
+      ^
+        (match imp_opt with
+          Some imp -> string_of_implementation imp
+        | None     -> "")
+      ^ "ensure " ^ (string_of_compound ens)
+
+  | Expall (elist,exp) ->
+      "all(" ^ (string_of_formals elist) ^ ") "  ^ (string_of_expression exp) 
+  | Expsome (elist,exp) ->
+      "some(" ^ (string_of_formals elist) ^ ") " ^ (string_of_expression exp) 
+      
+and string_of_compound comp =
   string_of_list comp (fun ie -> string_of_expression ie.v) ";"
 
-      
+and string_of_locals loc_opt =
+  match loc_opt with
+    Some loc ->
+      string_of_list
+        loc
+        (fun el -> 
+          let lst,exp = el in
+          (string_of_formals lst) ^ 
+          (match exp with
+           Some e -> ":=" ^ (string_of_expression e)
+          | None -> ""))
+        ";"
+  | None -> ""
 
-
-
-
-(* Formal arguments *)
-
-type entities =
-    Untyped_entities of int list
-  | Typed_entities   of int list * type_t
-
-
-let string_of_entities (args: entities) =
-  match args with
-    Typed_entities (l,t) ->
-      (string_of_list l symbol_string ",") ^ ":" ^ string_of_type t
-  | Untyped_entities l -> string_of_list l symbol_string ","
-
-
-let string_of_formals (args: entities list) =
-  string_of_list args string_of_entities ","
-
-
-let rec formals_from_expression (e:expression) =
-  let rec entlist (l: expression list) =
-    match l with
-      [Typedexp ((Identifier id),t)] -> Typed_entities ([id],t)
-    | [(Identifier id)] -> Untyped_entities [id]
-    | (Identifier id)::t -> 
-        (let u = entlist t
-        in
-        match u with
-          Untyped_entities l -> Untyped_entities (id::l)
-        | Typed_entities (l,t) -> Typed_entities ((id::l),t)
-        )
-    | _ -> 
-        (match l with 
-          [] -> Printf.eprintf "entlist failure: empty expression list\n"
-        | _::_ ->
-            Printf.eprintf 
-              "entlist failure with %s\n" 
-              (string_of_expression (Explist l)));
-        failwith "entlist"
+and string_of_implementation imp =
+  let loc_opt,dochk,comp = imp
   in
-  match e with
-  | Explist l  -> 
-      let ll = split_list
-          l 
-          (fun el -> 
-            match el with
-              Typedexp (_,_) -> true | _ -> false)
-      in
-      List.map entlist ll
-  | _ -> [entlist [e]]
-  
+  (string_of_locals loc_opt)
+  ^
+    (if dochk then "do " else "check ")
+  ^
+    (string_of_compound comp)
+
+
+
+
+
+
 
 
 

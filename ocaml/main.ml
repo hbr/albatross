@@ -4,7 +4,7 @@ let modules : string list ref = ref [];;
 let add_module str = modules := str :: !modules;;
 
 
-let write_package = ();;  
+let write_package = ();;
 
 
 
@@ -15,6 +15,6 @@ try
   Validate.validate !modules;
   write_package
 with
-  Support.Exit_error str 
+  Support.Exit_error str
 | Sys_error str -> prerr_endline str; exit 1
 

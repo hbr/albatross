@@ -10,6 +10,64 @@ let rhs_info i     =  info_from_position (rhs_start_pos i)
 
 let cinfo (i:info) =  info_string (filename ()) i
 
+let rec formals_from_expression (e:expression) =
+  let rec entlist (l: expression list) =
+    match l with
+      [Typedexp ((Identifier id),t)] -> Typed_entities ([id],t)
+    | [(Identifier id)] -> Untyped_entities [id]
+    | (Identifier id)::t ->
+        (let u = entlist t
+        in
+        match u with
+          Untyped_entities l -> Untyped_entities (id::l)
+        | Typed_entities (l,t) -> Typed_entities ((id::l),t)
+        )
+    | _ ->
+        (match l with
+          [] -> Printf.eprintf "entlist failure: empty expression list\n"
+        | _::_ ->
+            Printf.eprintf
+              "entlist failure with %s\n"
+              (string_of_expression (Explist l)));
+        failwith "entlist"
+  in
+  match e with
+  | Explist l  ->
+      let ll = split_list
+          l
+          (fun el ->
+            match el with
+              Typedexp (_,_) -> true | _ -> false)
+      in
+      List.map entlist ll
+  | _ -> [entlist [e]]
+
+
+let locals_from_compound (comp:compound) =
+  let ents_from_exp (i:info) (e:expression) =
+    try
+      formals_from_expression e
+    with
+      Failure _ ->
+        Printf.eprintf
+          "%s \"%s\" is not a list of locals\n"
+          (cinfo i) (string_of_expression e);
+        failwith "Syntax error"
+  in
+  let from_exp (e:info_expression) =
+    match e.v with
+      Expassign (lhs,rhs) ->
+        (ents_from_exp e.i lhs), Some rhs
+    | _ ->
+        (ents_from_exp e.i e.v), None
+  in
+  List.map
+    (fun ie -> from_exp ie)
+    comp
+
+
+
+
 %}
 
 %token KWCURRENT KWCurrent
@@ -145,7 +203,7 @@ declaration:
 /* ------------------------------------------------------------------------- */
 
 formal_generic:
-  UIDENTIFIER COLON type_nt { withinfo (rhs_info 1) $1, 
+  UIDENTIFIER COLON type_nt { withinfo (rhs_info 1) $1,
                               withinfo (rhs_info 3) $3 }
 
 
@@ -166,7 +224,7 @@ header_mark:
 
 
 class_declaration:
-  header_mark KWclass UIDENTIFIER actual_generics 
+  header_mark KWclass UIDENTIFIER actual_generics
   class_blocks
   KWend {
   {hmark= withinfo (rhs_info 1) $1; cname=withinfo (rhs_info 3) $3}
@@ -207,7 +265,7 @@ actual_generics:
 
 
 
-simple_type: 
+simple_type:
     path UIDENTIFIER actual_generics { Normal_type ($1,$2,$3)}
 
 current_type: KWCURRENT actual_generics { Current_type $2 }
@@ -240,7 +298,7 @@ assertion_feature:
 
 
 
-named_feature: 
+named_feature:
     nameorop formal_arguments rettype optsemi block_list_opt {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
 }
@@ -273,26 +331,28 @@ block:
 
 
 require_block:
-    KWrequire compound {()}
+    KWrequire compound { $2 }
 
 check_block:
-    KWcheck compound {()}
+    KWcheck compound { $2 }
 
-do_block: KWdo compound {()}
+do_block: KWdo compound { $2 }
 
-local_block: 
-    {()}
-|   KWlocal compound {()}
+
+local_block:
+    { None }
+|   KWlocal compound { Some (locals_from_compound $2) }
+
 
 note_block:
     KWnote compound {()}
 
 ensure_block:
-    KWensure compound {()}
+    KWensure compound { $2 }
 
 implementation_block:
-    local_block do_block    {()}
-|   local_block check_block {()}
+    local_block do_block    { $1,true, $2 }
+|   local_block check_block { $1,false,$2 }
 
 
 
@@ -306,12 +366,14 @@ formal_arguments:
     formals_from_expression $2
   with
     Failure _ ->
-      Printf.eprintf 
-        "%s \"%s\" is not an argument list\n" 
+      Printf.eprintf
+        "%s \"%s\" is not an argument list\n"
         (cinfo (rhs_info 2))
         (string_of_expression $2);
-      failwith "Parse error"
+      failwith "Syntax error"
 }
+
+
 
 
 /* ------------------------------------------------------------------------- */
@@ -342,6 +404,10 @@ case_list:
 |   case_part case_list { $1::$2 }
 
 case_part:  KWcase info_expression KWthen compound { $2,$4 }
+
+
+
+
 
 
 /* ------------------------------------------------------------------------- */
@@ -454,9 +520,11 @@ atomic_expression:
 
 |   inspect     { $1 }
 
-|   require_block ensure_block KWend {failwith "Not yet implemented"}
+|   require_block ensure_block KWend { Expproof ($1,None,$2) }
 
-|   require_block implementation_block ensure_block KWend {failwith "Not yet implemented"}
+|   require_block implementation_block ensure_block KWend {
+  Expproof ($1,Some $2, $3)
+}
 
 
 operator:
