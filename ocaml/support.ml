@@ -195,6 +195,10 @@ let string_of_formals (args: entities list) =
 
 (* Expressions *)
 
+type quantifier =
+    Universal
+  | Existential
+
 type operator =
     Plusop
   | Minusop
@@ -300,23 +304,23 @@ type expression =
       info_expression
         * (info_expression * compound) list
   | Expproof      of compound * implementation option * compound
-  | Expall        of entities list * expression
-  | Expsome       of entities list * expression
-(*
-  | Expproof      of
-      expression
-        * (expression option * bool * expression) option
-        (* bool true: check, false: do *)
-        * expression
-*)
+  | Expquantified of quantifier * entities list * expression
+
 and
       info_expression = expression withinfo
 and
       compound        = info_expression list
 and
-      implementation  = locals option * bool * compound
-and
-      locals          = (entities list * expression option) list
+      implementation  =
+    Impdeferred
+  | Impbuiltin
+  | Impdefined of locals option * bool * compound
+
+and local_declaration =
+    Unassigned of entities list
+  | Assigned   of entities list * expression
+
+and locals          = local_declaration list
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
@@ -383,40 +387,39 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       "require " ^ (string_of_compound req)
       ^
         (match imp_opt with
-          Some imp -> string_of_implementation imp
+          Some imp -> " " ^ string_of_implementation imp
         | None     -> "")
-      ^ "ensure " ^ (string_of_compound ens)
+      ^ " ensure " ^ (string_of_compound ens) ^ " end"
 
-  | Expall (elist,exp) ->
-      "all(" ^ (string_of_formals elist) ^ ") "  ^ (string_of_expression exp) 
-  | Expsome (elist,exp) ->
-      "some(" ^ (string_of_formals elist) ^ ") " ^ (string_of_expression exp) 
-      
+  | Expquantified (q,elist,exp) ->
+      (match q with Universal -> "all" | Existential -> "some")
+      ^ "(" ^ (string_of_formals elist) ^ ") "  ^ (string_of_expression exp)
+
 and string_of_compound comp =
   string_of_list comp (fun ie -> string_of_expression ie.v) ";"
 
-and string_of_locals loc_opt =
-  match loc_opt with
-    Some loc ->
-      string_of_list
-        loc
-        (fun el -> 
-          let lst,exp = el in
-          (string_of_formals lst) ^ 
-          (match exp with
-           Some e -> ":=" ^ (string_of_expression e)
-          | None -> ""))
-        ";"
-  | None -> ""
+and string_of_locals loc =
+  string_of_list
+    loc
+    (fun el ->
+      match el with
+        Unassigned elist -> string_of_formals elist
+      | Assigned (elist,exp) ->
+          (string_of_formals elist) ^ ":=" ^ (string_of_expression exp))
+    ";"
 
 and string_of_implementation imp =
-  let loc_opt,dochk,comp = imp
-  in
-  (string_of_locals loc_opt)
-  ^
-    (if dochk then "do " else "check ")
-  ^
-    (string_of_compound comp)
+  match imp with
+    Impdeferred -> "deferred"
+  | Impbuiltin  -> "note built_in"
+  | Impdefined (loc_opt,dochk,comp) ->
+      (match loc_opt with
+        None -> ""
+      | Some loc -> "local " ^ (string_of_locals loc) ^ " ")
+      ^
+        (if dochk then "do " else "check ")
+      ^
+        (string_of_compound comp)
 
 
 

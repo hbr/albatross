@@ -4,7 +4,7 @@ let last_pos = ref (Lexing.dummy_pos)
 
 let last_is_endtok = ref false
 
-let cached_tok: ((Parser.token*(bool*bool)) * Lexing.position) option ref 
+let cached_tok: ((Parser.token*(bool*bool)) * Lexing.position) option ref
     = ref None
 
 
@@ -25,7 +25,7 @@ let print_illegal pos = print_error pos "Illegal token"
 let info lexbuf =
       let pos = Lexing.lexeme_start_p lexbuf
       in
-      Support.FINFO( 
+      Support.FINFO(
         pos.Lexing.pos_lnum, (pos.Lexing.pos_cnum - pos.Lexing.pos_bol))
 
 
@@ -77,6 +77,7 @@ let _ =
      ("note",      Parser.KWnote);
      ("or",        Parser.KWor);
      ("require",   Parser.KWrequire);
+     ("some",      Parser.KWsome);
      ("then",      Parser.KWthen);
 
      ("->",        Parser.ARROW);
@@ -108,6 +109,8 @@ let kwtoken id =
   match kw with
     Parser.KWrequire -> kw, (true,false)
   | Parser.KWend     -> kw, (false,true)
+  | Parser.KWall     -> kw, (true,false)
+  | Parser.KWsome    -> kw, (true,false)
   | Parser.KWif      -> kw, (true,false)
   | Parser.KWinspect -> kw, (true,false)
   | _                -> kw, (false,false)
@@ -168,7 +171,7 @@ rule next_token = parse
       let last = op.[(String.length op)-1]
       and sym  = Support.symbol op
       in
-      if last = ':' 
+      if last = ':'
       then Parser.OPERATOR  sym, (false,false)
       else Parser.ROPERATOR sym, (false,false)
 }
@@ -186,7 +189,7 @@ rule next_token = parse
 }
 
 
-| ['a'-'z'] ['a'-'z' '0'-'9' '_']* as id { 
+| ['a'-'z'] ['a'-'z' '0'-'9' '_']* as id {
   try
     kwtoken id
   with
@@ -194,7 +197,7 @@ rule next_token = parse
 }
 
 
-| ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_']* as id { 
+| ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_']* as id {
   try
     kwtoken id
   with
@@ -221,9 +224,9 @@ rule next_token = parse
 
 let nextorcached_token lexbuf =
   match !cached_tok with
-    None -> 
-      let tok = next_token lexbuf 
-      in  
+    None ->
+      let tok = next_token lexbuf
+      in
       tok, Lexing.lexeme_start_p lexbuf
   | Some(t,p) ->
       cached_tok := None;
@@ -232,7 +235,7 @@ let nextorcached_token lexbuf =
 let some_cached () =
   match !cached_tok with None -> false | Some(_,_) -> true
 
-let cache_next lexbuf = 
+let cache_next lexbuf =
   let tok = next_token lexbuf
   in
   assert  (some_cached () = false);
@@ -250,7 +253,7 @@ let rec token lexbuf =
   and isend   t = snd (snd t)
   in
   match fst tok with
-    Parser.NEWLINE -> 
+    Parser.NEWLINE ->
       if !last_is_endtok then
         let tok = cache_next lexbuf
         in
@@ -262,7 +265,7 @@ let rec token lexbuf =
       else
         token lexbuf
 
-  | _ -> 
+  | _ ->
       return_tok (fst tok) (isend tok) pos
 
 

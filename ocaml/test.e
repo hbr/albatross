@@ -17,26 +17,42 @@ all(a,b:CURRENT, e:BOOLEAN)
 
 -- --------------------------------------------------------------------
 
-immutable class 
+immutable class
     BOOLEAN
 end
 
 => (a,b:BOOLEAN): BOOLEAN
-   note built_in end
+    note built_in end
 
 false: BOOLEAN
-   note built_in end
+    note built_in end
 
 =  (a,b:BOOLEAN): BOOLEAN
-   note built_in end
+    note built_in end
 
 all(a,b,e:BOOLEAN)
-   note built_in ensure
-       equal_1:       a=a
-       equal_2:       a=b => e => e[a:=b]
-       antisymmetric: (a=>b) => (b=>a) => (a=b)
-       classic:       ((a=>false)=>false) => a
-   end
+    note built_in ensure
+        equal_reflexive:  a=a
+        equal_rewrite:    a=b => e => e[a:=b]
+        antisymmetric:    (a=>b) => (b=>a) => (a=b)
+        classic:          ((a=>false)=>false) => a
+    end
+
+not (a:BOOLEAN): BOOLEAN
+    ensure
+        Result = (a=>false)
+    end
+
+and (a,b:BOOLEAN): BOOLEAN
+    ensure
+        Result = not (a => not b)
+    end
+
+or (a,b:BOOLEAN): BOOLEAN
+    ensure
+        Result = (not a => b)
+    end
+
 
 
 -- --------------------------------------------------------------------
@@ -63,14 +79,14 @@ all(a,b:CURRENT)
     require
         r1: a=b
     check
-        c1: a=a              -- reflexivity
-        c2: a in {x: x=a}    -- c1, in_2
-        -- c3: all(p:CURRENT?)
-        --         require
-        --             r2: a in p
-        --         ensure
-        --             b in p    -- r1,r2,rewrite
-        --         end
+        c1: a=a               -- reflexivity
+        c2: a in {x: x=a}     -- c1, in_2
+        c3: all(p:CURRENT?)
+                require
+                    r2: a in p
+                ensure
+                    b in p    -- r1,r2,rewrite
+                end
         c4: b in {x: x=a}     -- c2,c3
     ensure
         b=a                   -- c4,in_2
@@ -100,7 +116,7 @@ immutable class
 end
 
 
-some_event 
+some_event
     require a ensure b end
 
 some_feature(a:A)
@@ -128,7 +144,7 @@ end
 
 G:ANY
 
-case class 
+case class
     LIST[G]
 create
     nil
@@ -141,7 +157,7 @@ end
         Result = inspect a
                  case nil  then e::nil
                  case f::t then f::(t+e)
-                 end 
+                 end
     end
 
 + (a,b:LIST[G]): LIST[G]
@@ -166,7 +182,7 @@ feature
         end
 end
 
-class 
+class
      BUFFER[G]
 feature
      count: NATURAL
@@ -174,7 +190,7 @@ feature
      [] (i:NATURAL): G
          require
              i < count
-         note 
+         note
              built_in
          end
 invariant
@@ -188,7 +204,7 @@ all(a:A) ensure [a,b] end
 all(a,b,c,d) deferred ensure (a+b)=[x,y] and not b end
 
 all(a,b,c,d:A, e,f:E, g,h,i)
-    require 
+    require
         a[i]=5; r1; r2
         a+f(i) = ff(k)(l)+b
         (i)
@@ -198,7 +214,15 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         if c1 then e11;e12;e13 elseif c2 then e2 else e3 end
         if c then e end
         inspect list case nil then nilexp case f::t then oexp end
+        some(x) x=5 => true
+        all(a) require apre check acheck ensure apost end
+        all(a,b) a => a and b
+    local
+        a,b := aexp,bexp
+        -- fun(a) ensure Result = a*a end
     check
+        require r local l1; l2:=exp check c ensure e end
+        require r local l1 do proc ensure e end
         x -> a+b*c :T :U, a, b
         a+b = c
         a and b = c

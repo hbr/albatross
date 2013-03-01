@@ -43,29 +43,6 @@ let rec formals_from_expression (e:expression) =
   | _ -> [entlist [e]]
 
 
-let locals_from_compound (comp:compound) =
-  let ents_from_exp (i:info) (e:expression) =
-    try
-      formals_from_expression e
-    with
-      Failure _ ->
-        Printf.eprintf
-          "%s \"%s\" is not a list of locals\n"
-          (cinfo i) (string_of_expression e);
-        failwith "Syntax error"
-  in
-  let from_exp (e:info_expression) =
-    match e.v with
-      Expassign (lhs,rhs) ->
-        (ents_from_exp e.i lhs), Some rhs
-    | _ ->
-        (ents_from_exp e.i e.v), None
-  in
-  List.map
-    (fun ie -> from_exp ie)
-    comp
-
-
 
 
 %}
@@ -87,6 +64,7 @@ let locals_from_compound (comp:compound) =
 %token KWnot       KWnote
 %token KWor
 %token KWrequire
+%token KWsome
 %token KWthen
 
 %token ARROW
@@ -292,7 +270,7 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 
 
 assertion_feature:
-    KWall formal_arguments optsemi block_list KWend {
+    KWall formal_arguments optsemi feature_declaration_block {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
 }
 
@@ -300,7 +278,7 @@ assertion_feature:
 
 named_feature:
     nameorop formal_arguments rettype optsemi block_list_opt {
-  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
+  Printf.printf "Formal arguments: %s\n" (string_of_formals $2)
 }
 
 nameorop:
@@ -312,6 +290,31 @@ nameorop:
 rettype:
     {()}
 |   COLON type_nt {()}
+
+
+feature_declaration_block:
+    require_list_opt feature_implementation_opt ensure_list KWend {()}
+
+feature_implementation_opt:
+    {()}
+|   KWdeferred {()}
+|   note_block {()}
+|   implementation_block {()}
+
+require_list_opt:
+    {()}
+|   require_list {()}
+
+require_list:
+    require_block {()}
+|   require_block require_list {()}
+
+
+
+ensure_list:
+    ensure_block {()}
+|   ensure_block ensure_list {()}
+
 
 block_list_opt:
     %prec LOWEST_PREC {()}
@@ -341,7 +344,18 @@ do_block: KWdo compound { $2 }
 
 local_block:
     { None }
-|   KWlocal compound { Some (locals_from_compound $2) }
+|   KWlocal local_list { Some $2 }
+
+local_list:
+    local_declaration { [$1] }
+|   local_declaration SEMICOL local_list { $1::$3}
+
+
+local_declaration:
+    entity_list { Unassigned $1 }
+|   entity_list ASSIGN expression { Assigned ($1,$3) }
+|   LIDENTIFIER LPAREN variable_list RPAREN feature_declaration_block {
+  assert false}
 
 
 note_block:
@@ -350,28 +364,30 @@ note_block:
 ensure_block:
     KWensure compound { $2 }
 
+
+
+
+
 implementation_block:
-    local_block do_block    { $1,true, $2 }
-|   local_block check_block { $1,false,$2 }
+    local_block do_block    { Impdefined($1,true, $2) }
+|   local_block check_block { Impdefined($1,false,$2) }
 
 
 
+entity_list: variable_list { formals_from_expression (Explist $1) }
 
+variable_list:
+    variable { [$1] }
+|   variable COMMA variable_list { $1::$3 }
+
+variable:
+    LIDENTIFIER  { Identifier $1 }
+|   LIDENTIFIER COLON type_nt  { Typedexp ((Identifier $1), $3) }
 
 
 formal_arguments:
     { [] }
-|   LPAREN expression RPAREN {
-  try
-    formals_from_expression $2
-  with
-    Failure _ ->
-      Printf.eprintf
-        "%s \"%s\" is not an argument list\n"
-        (cinfo (rhs_info 2))
-        (string_of_expression $2);
-      failwith "Syntax error"
-}
+|   LPAREN entity_list RPAREN { $2 }
 
 
 
@@ -423,7 +439,7 @@ compound: compound_list {
 
 
 compound_list:
-    info_expression { [$1] }
+    info_expression  optsemi { [$1] }
 |   info_expression SEMICOL compound_list { $1::$3 }
 
 
@@ -440,6 +456,13 @@ expression:
   | _ -> Explist [$1;$3]
 }
 
+|   quantifier LPAREN entity_list RPAREN optsemi expression %prec COLON {
+  Expquantified ($1,$3,$6) }
+
+
+quantifier:
+    KWall  { Universal   }
+|   KWsome { Existential }
 
 
 
@@ -525,6 +548,7 @@ atomic_expression:
 |   require_block implementation_block ensure_block KWend {
   Expproof ($1,Some $2, $3)
 }
+
 
 
 operator:
