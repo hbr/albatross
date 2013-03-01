@@ -4,6 +4,7 @@ deferred class
     ANY
 end
 
+
 = (a,b:CURRENT): BOOLEAN
    deferred
    end
@@ -36,6 +37,7 @@ all(a,b,e:BOOLEAN)
         equal_rewrite:    a=b => e => e[a:=b]
         antisymmetric:    (a=>b) => (b=>a) => (a=b)
         classic:          ((a=>false)=>false) => a
+        deduction:        require a ensure b end => (a=>b)
     end
 
 not (a:BOOLEAN): BOOLEAN
@@ -53,6 +55,10 @@ or (a,b:BOOLEAN): BOOLEAN
         Result = (not a => b)
     end
 
+true: BOOLEAN
+    ensure
+        Result = (false=>false)
+    end
 
 
 -- --------------------------------------------------------------------
@@ -72,6 +78,16 @@ all(a:G, exp:BOOLEAN)
         in_2:  exp[x:=a]    => a in {x:exp}
     end
 
+0: CURRENT
+    ensure
+        Result = {x: false}
+    end
+
+1: CURRENT
+    ensure
+        Result = {x: true}
+    end
+
 -- --------------------------------------------------------------------
 
 -- module: any
@@ -79,17 +95,20 @@ all(a,b:CURRENT)
     require
         r1: a=b
     check
-        c1: a=a               -- reflexivity
-        c2: a in {x: x=a}     -- c1, in_2
+        c1: a=a                             -- reflexivity
+        c2: a in {x: x=a}                   -- c1, in_2
         c3: all(p:CURRENT?)
                 require
                     r2: a in p
+                check
+                    c4: a in p => b in p    -- r1,rewrite
                 ensure
-                    b in p    -- r1,r2,rewrite
+                    b in p    -- r2,c4
                 end
-        c4: b in {x: x=a}     -- c2,c3
+        c5: a in {x: x=a} => b in {x: x=a}   -- c3,deduction
+        c6: b in {x: x=a}                    -- c2,c5
     ensure
-        b=a                   -- c4,in_2
+        b=a                                  -- c5,in_2
     end
 
 

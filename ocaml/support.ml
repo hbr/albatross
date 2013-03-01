@@ -43,7 +43,7 @@ let info_from_position pos =
 -----------------------------------------------------------------------------
 *)
 let parse_error_fun : (string->unit) ref =
-  ref (fun str -> Printf.eprintf "%s\n" str; failwith "Parse error")
+  ref (fun str -> Printf.eprintf "%s\n" str;  failwith "Syntax error")
 
 
 
@@ -258,6 +258,7 @@ let opdata op =
   | Freeop  i -> symbol_string i, 60,  Left
   | RFreeop i -> symbol_string i, 61,  Right
 
+
 let is_letter ch =
   let ic = Char.code ch
   in
@@ -287,6 +288,8 @@ type expression =
   | Number        of string
   | ExpResult
   | ExpCurrent
+  | Exptrue
+  | Expfalse
   | Expparen      of expression
   | Expbracket    of expression
   | Expop         of operator
@@ -314,6 +317,7 @@ and
       implementation  =
     Impdeferred
   | Impbuiltin
+  | Impevent
   | Impdefined of locals option * bool * compound
 
 and local_declaration =
@@ -331,6 +335,8 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Number num    -> num
   | ExpResult     -> "Result"
   | ExpCurrent    -> "Current"
+  | Exptrue       -> "true"
+  | Expfalse      -> "false"
   | Expparen e   -> "(" ^ (strexp e) ^")"
   | Expbracket e -> "[" ^ (strexp e) ^"]"
   | Expop op     -> "(" ^ (rstring_of_op op) ^ ")"
@@ -412,6 +418,7 @@ and string_of_implementation imp =
   match imp with
     Impdeferred -> "deferred"
   | Impbuiltin  -> "note built_in"
+  | Impevent    -> "note event"
   | Impdefined (loc_opt,dochk,comp) ->
       (match loc_opt with
         None -> ""

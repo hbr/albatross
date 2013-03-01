@@ -10,6 +10,8 @@ let rhs_info i     =  info_from_position (rhs_start_pos i)
 
 let cinfo (i:info) =  info_string (filename ()) i
 
+let syntax_error () = raise (Parsing.Parse_error)
+
 let rec formals_from_expression (e:expression) =
   let rec entlist (l: expression list) =
     match l with
@@ -56,7 +58,7 @@ let rec formals_from_expression (e:expression) =
 %token KWcase      KWclass        KWcheck      KWcreate
 %token KWdeferred  KWdo
 %token KWelse      KWelseif       KWend        KWensure
-%token KWfeature
+%token KWfalse     KWfeature
 %token KWghost
 %token KWif        KWimmutable    KWin         KWinspect
        KWinvariant
@@ -65,7 +67,7 @@ let rec formals_from_expression (e:expression) =
 %token KWor
 %token KWrequire
 %token KWsome
-%token KWthen
+%token KWthen      KWtrue
 
 %token ARROW
 %token ASSIGN
@@ -270,19 +272,21 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 
 
 assertion_feature:
-    KWall formal_arguments optsemi feature_declaration_block {
+    KWall formal_arguments optsemi feature_body {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
 }
 
-
-
 named_feature:
-    nameorop formal_arguments rettype optsemi block_list_opt {
+    nameopconst formal_arguments rettype optsemi feature_body_opt {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2)
 }
 
-nameorop:
+
+nameopconst:
     operator {()}
+|   KWtrue   {()}
+|   KWfalse  {()}
+|   NUMBER   {()}
 |   LIDENTIFIER {()}
 |   LIDENTIFIER EXCLAM {()}
 
@@ -291,19 +295,31 @@ rettype:
     {()}
 |   COLON type_nt {()}
 
+feature_body_opt:
+    %prec LOWEST_PREC {()}
+|   feature_body { $1 }
 
-feature_declaration_block:
-    require_list_opt feature_implementation_opt ensure_list KWend {()}
+feature_body:
+    require_list feature_implementation ensure_list KWend {()}
+|   require_list feature_implementation KWend {()}
+|   feature_implementation ensure_list KWend {()}
+|   require_list ensure_list KWend {()}
+|   require_list KWend {()}
+|   feature_implementation KWend {()}
+|   ensure_list KWend {()}
 
-feature_implementation_opt:
-    {()}
-|   KWdeferred {()}
-|   note_block {()}
+
+
+feature_implementation:
+    KWdeferred {()}
+|   implementation_note {()}
 |   implementation_block {()}
 
-require_list_opt:
-    {()}
-|   require_list {()}
+
+implementation_block:
+    local_block do_block    { Impdefined($1,true, $2) }
+|   local_block check_block { Impdefined($1,false,$2) }
+
 
 require_list:
     require_block {()}
@@ -315,22 +331,6 @@ ensure_list:
     ensure_block {()}
 |   ensure_block ensure_list {()}
 
-
-block_list_opt:
-    %prec LOWEST_PREC {()}
-|   block_list KWend {()}
-
-block_list:
-    block  {()}
-|   block_list block {()}
-
-
-block:
-    require_block  {()}
-|   ensure_block   {()}
-|   implementation_block    {()}
-|   note_block     {()}
-|   KWdeferred     {()}
 
 
 require_block:
@@ -354,12 +354,40 @@ local_list:
 local_declaration:
     entity_list { Unassigned $1 }
 |   entity_list ASSIGN expression { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN variable_list RPAREN feature_declaration_block {
+|   LIDENTIFIER LPAREN variable_list RPAREN feature_body {
   assert false}
 
 
+
+implementation_note: note_block {
+  let prerror () =
+    (Printf.eprintf
+       "%s Syntax error: only \"note built_in\" or \"note event\" possible here\n"
+       (cinfo (rhs_info 1));
+     syntax_error ())
+  in
+  match $1 with
+    [e] ->
+      (match e.v with
+        Identifier id ->
+          let str = symbol_string id in
+          if str = "built_in"   then Impbuiltin
+          else if str = "event" then Impevent
+          else prerror ()
+      | _ -> prerror ())
+  | _ -> prerror ()
+}
+
+
 note_block:
-    KWnote compound {()}
+    KWnote compound {
+  let _ =
+    Printf.printf "%s compound: %s\n"
+      (cinfo (rhs_info 2))
+      (string_of_compound $2)
+  in
+  $2
+}
 
 ensure_block:
     KWensure compound { $2 }
@@ -367,10 +395,6 @@ ensure_block:
 
 
 
-
-implementation_block:
-    local_block do_block    { Impdefined($1,true, $2) }
-|   local_block check_block { Impdefined($1,false,$2) }
 
 
 
@@ -431,9 +455,11 @@ case_part:  KWcase info_expression KWthen compound { $2,$4 }
 /* ------------------------------------------------------------------------- */
 
 compound: compound_list {
-  (Printf.printf "%s compound: %s\n"
-    (cinfo (rhs_info 1))
-    (string_of_compound $1));
+  let _ =
+    Printf.printf "%s compound: %s\n"
+      (cinfo (rhs_info 1))
+      (string_of_compound $1)
+  in
   $1
 }
 
@@ -526,6 +552,10 @@ atomic_expression:
 |   NUMBER                         { Number $1 }
 
 |   KWCurrent                      { ExpCurrent }
+
+|   KWfalse                        { Expfalse }
+
+|   KWtrue                         { Exptrue }
 
 |   LPAREN expression RPAREN       { Expparen $2 }
 

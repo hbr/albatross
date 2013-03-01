@@ -16,7 +16,8 @@ let print_error pos str =
   in
   Printf.eprintf "%s:%d:%d: %s\n" name line col str
 
-let print_unexpected (str:string) = print_error !last_pos "Unexpected token"
+let print_unexpected (str:string) =
+  print_error !last_pos "Syntax error: Unexpected token"
 
 let print_illegal pos = print_error pos "Illegal token"
 
@@ -65,6 +66,7 @@ let _ =
      ("elseif",    Parser.KWelseif);
      ("end"  ,     Parser.KWend);
      ("ensure",    Parser.KWensure);
+     ("false",     Parser.KWfalse);
      ("feature",   Parser.KWfeature);
      ("ghost",     Parser.KWghost);
      ("if",        Parser.KWif);
@@ -79,6 +81,7 @@ let _ =
      ("require",   Parser.KWrequire);
      ("some",      Parser.KWsome);
      ("then",      Parser.KWthen);
+     ("true",      Parser.KWtrue);
 
      ("->",        Parser.ARROW);
      (":=",        Parser.ASSIGN);
@@ -113,6 +116,8 @@ let kwtoken id =
   | Parser.KWsome    -> kw, (true,false)
   | Parser.KWif      -> kw, (true,false)
   | Parser.KWinspect -> kw, (true,false)
+  | Parser.KWtrue    -> kw, (true,true)
+  | Parser.KWfalse   -> kw, (true,true)
   | _                -> kw, (false,false)
 
 
