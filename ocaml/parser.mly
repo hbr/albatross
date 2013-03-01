@@ -130,6 +130,7 @@ let rec formals_from_expression (e:expression) =
 /* 60 */ %left     OPERATOR  KWin      NOTIN
 /* 61 */ %right    ROPERATOR
 /* 65 */ %nonassoc KWnot     QMARK
+/* 66 */ %left     DOT
 /* 80 */ %nonassoc LPAREN    LBRACKET
 /* 90 */ %nonassoc UMINUS
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
@@ -469,7 +470,12 @@ compound_list:
 |   info_expression SEMICOL compound_list { $1::$3 }
 
 
-info_expression: expression { withinfo (rhs_info 1) $1 }
+info_expression: expression {
+  Printf.printf "%s exp: %s\n"
+    (cinfo (rhs_info 1))
+    (string_of_expression ~wp:false $1);
+  withinfo (rhs_info 1) $1
+}
 
 expression:
     uexp %prec COMMA { $1 }
@@ -545,7 +551,7 @@ uexp:
 
 
 atomic_expression:
-    LIDENTIFIER                    { Identifier $1 }
+    LIDENTIFIER  %prec LOWEST_PREC { Identifier $1 }
 
 |   KWResult                       { ExpResult }
 
@@ -568,6 +574,8 @@ atomic_expression:
 |   atomic_expression LPAREN expression RPAREN     { Funapp ($1,$3) }
 
 |   atomic_expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
+
+|   atomic_expression DOT atomic_expression { Expdot ($1,$3) }
 
 |   conditional { $1 }
 

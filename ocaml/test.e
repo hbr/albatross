@@ -249,6 +249,8 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         {x: f(x)=z} = 0
         x := 5+3*7
         exp[e:=i+j]
+        t.f(a)=t.f(b).value
+        [a,b] = [x,y]
     ensure
         tag1: e1; tag2: e2
         tag3: p||q

@@ -295,6 +295,7 @@ type expression =
   | Expop         of operator
   | Funapp        of expression * expression
   | Bracketapp    of expression * expression
+  | Expdot        of expression * expression
   | Expset        of expression
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
@@ -344,6 +345,8 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       (strexp f) ^ "(" ^ (strexp args) ^ ")"
   | Bracketapp (tgt,args) ->
       (strexp tgt) ^ "[" ^ (strexp args) ^ "]"
+  | Expdot (t,f) ->
+      withparen ((strexp t) ^ "." ^ (strexp f)) wp
   | Expset s ->
       "{" ^  (strexp s) ^ "}"
   | Binexp (op,e1,e2) ->
