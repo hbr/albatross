@@ -575,7 +575,11 @@ atomic_expression:
 
 |   atomic_expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
 
-|   atomic_expression DOT atomic_expression { Expdot ($1,$3) }
+|   atomic_expression DOT atomic_expression {
+  Printf.printf "%s.%s encountered\n"
+    (string_of_expression $1) (string_of_expression $3);
+  Expdot ($1,$3)
+}
 
 |   conditional { $1 }
 

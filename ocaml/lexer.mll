@@ -118,6 +118,9 @@ let kwtoken id =
   | Parser.KWinspect -> kw, (true,false)
   | Parser.KWtrue    -> kw, (true,true)
   | Parser.KWfalse   -> kw, (true,true)
+  | Parser.KWResult  -> kw, (true,true)
+  | Parser.KWCurrent -> kw, (true,true)
+  | Parser.KWProcess -> kw, (true,true)
   | _                -> kw, (false,false)
 
 

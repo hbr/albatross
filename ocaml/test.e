@@ -256,3 +256,15 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         tag3: p||q
         tag4: a|b
     end
+
+
+closed(p:A?, f:A->A): ghost A?
+    ensure
+        -- Result = {q:A?: q.is_closed(f) and p<=q}.infimum
+        t.f(a)
+        {t.f(a)}
+        {x,y: f(x,y)}
+        {x: (t.f(a) and q)}
+        Result = {q:A?: (x.is_closed(q,f) and p<=q) }
+        bla
+    end

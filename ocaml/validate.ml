@@ -10,4 +10,5 @@ let parse_file (f:string) =
 
 let parse_file2 (f:string) = let _ = parse_file f in ()
 
-let rec validate (modules:string list)  = List.iter parse_file2 modules
+let rec validate (modules:string list)  = 
+  List.iter parse_file2 modules

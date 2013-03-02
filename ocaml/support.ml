@@ -109,12 +109,16 @@ let rec string_of_path (p: int list) =
     [] -> ""
   | f::t -> (symbol_string f) ^ "." ^ (string_of_path t)
 
+let rec string_of_list (l: 'a list) (sfun: 'a -> string) (sep: string) =
+  String.concat sep (List.map sfun l)
 
+(* more efficient but more complicated
 let rec string_of_list (l: 'a list) (sfun: 'a -> string) (sep: string) =
   match l with
     [] -> ""
   | f::t ->
       (sfun f) ^ (List.fold_left (fun str el -> str ^ sep ^ (sfun el))"" t)
+*)
 
 
 let rec split_list (l: 'a list) (sep: 'a -> bool) =
