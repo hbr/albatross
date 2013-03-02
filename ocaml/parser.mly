@@ -355,7 +355,7 @@ local_list:
 local_declaration:
     entity_list { Unassigned $1 }
 |   entity_list ASSIGN expression { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN variable_list RPAREN feature_body {
+|   LIDENTIFIER LPAREN entity_list RPAREN feature_body {
   assert false}
 
 
@@ -396,11 +396,22 @@ ensure_block:
 
 
 
+identifier_list:
+    LIDENTIFIER %prec LOWEST_PREC     { [$1] }
+                /* should not be necessary when expressions are refactored */
+|   LIDENTIFIER COMMA identifier_list { $1::$3 }
+
+entity_group:
+    identifier_list               { Untyped_entities $1 }
+|   identifier_list COLON type_nt { Typed_entities ($1,$3) }
+
+entity_list:
+    entity_group { [$1] }
+|   entity_group COMMA entity_list { $1::$3 }
 
 
-
+/*
 entity_list: variable_list { formals_from_expression (Explist $1) }
-
 variable_list:
     variable { [$1] }
 |   variable COMMA variable_list { $1::$3 }
@@ -408,6 +419,7 @@ variable_list:
 variable:
     LIDENTIFIER  { Identifier $1 }
 |   LIDENTIFIER COLON type_nt  { Typedexp ((Identifier $1), $3) }
+*/
 
 
 formal_arguments:
