@@ -71,7 +71,11 @@ with more than one identifier.
 
 Moreover sets are defined with the `{x,y:T,z:U: expression}` notation. In this
 case the 'tag' is a complete entity list. But sets can be defined as well with
-enumeration `{a,b,c,d+e}` which can be at the same time an expression list
+enumeration `{x,y:T,z:U}` which can be at the same time an expression list
 (i.e. an expression) or an entity list (note that `x,y:T,z:U` is an entity
 list and an expression).
 
+
+<!---
+comment
+-->
