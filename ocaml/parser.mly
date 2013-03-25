@@ -10,8 +10,21 @@ let rhs_info i     =  info_from_position (rhs_start_pos i)
 
 let cinfo (i:info) =  info_string (filename ()) i
 
+
 let syntax_error () = raise (Parsing.Parse_error)
 
+
+let rec path_from_expression (e:expression) =
+  let rec reversed e =
+    match e with
+      Identifier id -> [id]
+    | Expdot(e1,Identifier id) -> id::(reversed e1)
+    | _ -> raise (Tohandle "path_from_expression")
+  in
+  List.rev (reversed e)
+
+
+                                         
 let rec formals_from_expression (e:expression) =
   let rec entlist (l: expression list) =
     match l with
@@ -45,8 +58,36 @@ let rec formals_from_expression (e:expression) =
   | _ -> [entlist [e]]
 
 
+let formals_from_expression2 (e:expression)(i:info) =
+  try
+    formals_from_expression e
+  with
+    Failure _ ->
+      Printf.eprintf "%s %s is not an argument list\n"
+        (cinfo i)
+        (string_of_expression e);
+      syntax_error ()
 
-
+(*
+let expression_from_entities entlist =
+  let egroup grp =
+    match grp with
+      Typed_entities (l,tp) ->
+        let lr = List.rev l
+        in
+        (match lr with
+          f::t -> 
+            let lrmapped = 
+              (Typedexp ((Identifier f),tp))
+              :: (List.map (function id -> Identifier id) t)
+            in
+            List.rev lrmapped
+        | _ -> assert false)
+    | Untyped_entities l ->
+        List.map (function id -> Identifier id) l
+  in
+  Explist (List.concat (List.map egroup entlist))
+*)
 %}
 
 %token KWCURRENT KWCurrent
@@ -118,8 +159,9 @@ let rec formals_from_expression (e:expression) =
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
 /* 10 */ %right    COMMA     SEMICOL
-/* 15 */ %right    COLON
-/* 20 */ %right    ARROW     DARROW
+/* ?? */ %right    ARROW
+/* 15 */ %left     COLON
+/* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %left     EQ        NEQ       EQV     NEQV
                    LE        LT        GE      GT
@@ -221,7 +263,17 @@ class_blocks:
 
 path:
   { [] }
-| LIDENTIFIER DOT path { $1::$3 }
+| expression DOT {
+  try
+    path_from_expression $1
+  with
+    Tohandle str ->
+      Printf.eprintf "%s %s is not a valid path\n"
+        (cinfo (rhs_info 1))
+        (string_of_expression $1);
+      syntax_error ()
+    
+ }
 
 
 type_nt:
@@ -246,8 +298,11 @@ actual_generics:
 
 
 
+
 simple_type:
     path UIDENTIFIER actual_generics { Normal_type ($1,$2,$3)}
+
+
 
 current_type: KWCURRENT actual_generics { Current_type $2 }
 
@@ -263,7 +318,6 @@ ghost_type: KWghost type_nt { Ghost_type $2 }
 tuple_type: LBRACKET type_list RBRACKET { Tuple_type $2 }
 
 qmark_type: type_nt QMARK   { QMark_type $1 }
-
 
 
 
@@ -355,40 +409,26 @@ local_list:
 local_declaration:
     entity_list { Unassigned $1 }
 |   entity_list ASSIGN expression { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN entity_list RPAREN feature_body {
-  assert false}
+|   LIDENTIFIER LPAREN entity_list RPAREN rettype feature_body {
+  Local_feature ($1,$3) (* feature body is missing in semantics *)
+}
 
 
 
-implementation_note: note_block {
-  let prerror () =
+
+implementation_note: KWnote LIDENTIFIER {
+  let str = symbol_string $2
+  in
+  if str = "built_in" then Impbuiltin
+  else if str = "event" then Impevent
+  else 
     (Printf.eprintf
-       "%s Syntax error: only \"note built_in\" or \"note event\" possible here\n"
+       "%s Syntax error: only \"note built_in\" or \"note event\" \
+       possible here\n"
        (cinfo (rhs_info 1));
      syntax_error ())
-  in
-  match $1 with
-    [e] ->
-      (match e.v with
-        Identifier id ->
-          let str = symbol_string id in
-          if str = "built_in"   then Impbuiltin
-          else if str = "event" then Impevent
-          else prerror ()
-      | _ -> prerror ())
-  | _ -> prerror ()
 }
 
-
-note_block:
-    KWnote compound {
-  let _ =
-    Printf.printf "%s compound: %s\n"
-      (cinfo (rhs_info 2))
-      (string_of_compound $2)
-  in
-  $2
-}
 
 ensure_block:
     KWensure compound { $2 }
@@ -396,30 +436,19 @@ ensure_block:
 
 
 
-identifier_list:
-    LIDENTIFIER %prec LOWEST_PREC     { [$1] }
-                /* should not be necessary when expressions are refactored */
-|   LIDENTIFIER COMMA identifier_list { $1::$3 }
-
-entity_group:
-    identifier_list               { Untyped_entities $1 }
-|   identifier_list COLON type_nt { Typed_entities ($1,$3) }
-
 entity_list:
     entity_group { [$1] }
 |   entity_group COMMA entity_list { $1::$3 }
 
+entity_group:
+    identifier_list { Untyped_entities $1 }
+|   identifier_list COLON type_nt { Typed_entities ($1,$3) }
 
-/*
-entity_list: variable_list { formals_from_expression (Explist $1) }
-variable_list:
-    variable { [$1] }
-|   variable COMMA variable_list { $1::$3 }
 
-variable:
-    LIDENTIFIER  { Identifier $1 }
-|   LIDENTIFIER COLON type_nt  { Typedexp ((Identifier $1), $3) }
-*/
+identifier_list:
+    LIDENTIFIER %prec LOWEST_PREC { [$1] }
+|   LIDENTIFIER COMMA identifier_list { $1::$3 }
+
 
 
 formal_arguments:
@@ -460,12 +489,163 @@ case_part:  KWcase info_expression KWthen compound { $2,$4 }
 
 
 
-
-
-
 /* ------------------------------------------------------------------------- */
 /* Expressions */
 /* ------------------------------------------------------------------------- */
+
+/*
+printed_expression: expression {
+  Printf.printf "%s exp: %s\n"
+    (cinfo (rhs_info 1))
+    (string_of_expression $1);
+  $1
+}
+*/
+
+expression:
+    KWResult                       { ExpResult }
+
+|   NUMBER                         { Number $1 }
+
+|   KWCurrent                      { ExpCurrent }
+
+|   LIDENTIFIER                    { Identifier $1 }
+
+|   KWfalse                        { Expfalse }
+
+|   KWtrue                         { Exptrue }
+
+|   LPAREN expression RPAREN       { Expparen $2 }
+
+|   LPAREN operator RPAREN         { Expop $2 }
+
+|   LBRACKET expression RBRACKET   { Expbracket $2 }
+
+|   LBRACE expression RBRACE { 
+  match $2 with
+    Expcolon(fargs,exp) ->
+      let elist = formals_from_expression2 fargs (rhs_info 2)
+      in
+      let _ = 
+        Printf.printf "%s predicate {%s:%s}\n"
+          (cinfo (rhs_info 1))
+          (string_of_formals elist)
+          (string_of_expression exp)
+      in
+      Exppred (elist, exp)
+  | _ ->
+      Expset $2
+}
+
+|   expression LPAREN expression RPAREN     { Funapp ($1,$3) }
+
+|   expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
+
+|   expression DOT expression {
+  Printf.printf "%s.%s encountered\n"
+    (string_of_expression $1) (string_of_expression $3);
+  Expdot ($1,$3)
+}
+
+|   conditional { $1 }
+
+|   inspect     { $1 }
+
+|   require_block ensure_block KWend { Expproof ($1,None,$2) }
+
+|   require_block implementation_block ensure_block KWend {
+  Expproof ($1,Some $2, $3)
+}
+
+|   expression COMMA expression {
+  match $3 with
+    Explist l -> Explist ($1::l)
+  | _ -> Explist [$1;$3]
+}
+
+|   quantifier LPAREN entity_list RPAREN optsemi expression %prec COLON {
+  Expquantified ($1,$3,$6) }
+
+|   expression PLUS expression   { Binexp (Plusop,$1,$3) }
+
+|   expression MINUS expression  { Binexp (Minusop,$1,$3) }
+
+|   MINUS expression       { Unexp (Minusop,$2) }
+
+|   expression TIMES expression  { Binexp (Timesop,$1,$3) }
+
+|   expression DIVIDE expression { Binexp (Divideop,$1,$3) }
+
+|   expression CARET  expression { Binexp (Caretop,$1,$3) }
+
+|   expression KWin expression   { Binexp (Inop,$1,$3) }
+
+|   expression NOTIN expression  { Binexp (Notinop,$1,$3) }
+
+|   expression EQ  expression    { Binexp (Eqop,$1,$3) }
+
+|   expression LT  expression    { Binexp (LTop,$1,$3) }
+
+|   expression LE  expression    { Binexp (LEop,$1,$3) }
+
+|   expression GT  expression    { Binexp (GTop,$1,$3) }
+
+|   expression GE  expression    { Binexp (GEop,$1,$3) }
+
+|   expression KWand  expression { Binexp (Andop,$1,$3) }
+
+|   expression KWor   expression { Binexp (Orop,$1,$3)  }
+
+|   KWnot   expression     { Unexp (Notop,$2) }
+
+|   expression DCOLON expression { Binexp (DColonop,$1,$3) }
+
+|   expression COLON expression  { Expcolon ($1,$3) }
+
+|   expression BAR  expression   {
+  Printf.printf "%s barexp %s\n"
+    (cinfo (rhs_info 1))
+    (string_of_expression (Binexp (Barop,$1,$3)));
+  Binexp (Barop,$1,$3) 
+}
+
+|   expression DBAR expression   { Binexp (DBarop,$1,$3) }
+
+
+|   arrow_exp expression
+    %prec LOWEST_PREC {
+  let l = formals_from_expression2 $1 (rhs_info 1) in
+  Printf.printf "%s arrowexp: %s\n"
+    (cinfo (rhs_info 1))
+    (string_of_expression (Exparrow(l,$2)));
+  Exparrow (l,$2)
+}
+
+|   arrow_exp type_nt
+    %prec LOWEST_PREC   {
+  match $1 with
+    Typedexp (e,t) -> Typedexp (e, Arrow_type(t,$2))
+  | _ ->
+      Printf.eprintf "%s Unexpected type %s\n"
+        (cinfo (rhs_info 2))
+        (string_of_type $2);
+      syntax_error ()
+}
+
+|   expression DARROW expression { Binexp (DArrowop,$1,$3) }
+
+|   expression COLON type_nt     { Typedexp ($1,$3) }
+
+|   expression ASSIGN expression { Expassign ($1,$3) }
+
+
+arrow_exp: expression ARROW { $1 }
+
+quantifier:
+    KWall  { Universal   }
+|   KWsome { Existential }
+
+
 
 compound: compound_list {
   let _ =
@@ -482,126 +662,35 @@ compound_list:
 |   info_expression SEMICOL compound_list { $1::$3 }
 
 
-info_expression: expression {
+
+info_expression: tagged_expression {
   Printf.printf "%s exp: %s\n"
     (cinfo (rhs_info 1))
     (string_of_expression ~wp:false $1);
   withinfo (rhs_info 1) $1
 }
 
-expression:
-    uexp %prec COMMA { $1 }
 
-|   uexp COLON expression { Taggedexp ($1,$3) }
 
-|   expression COMMA expression {
-  match $3 with
-    Explist l -> Explist ($1::l)
-  | _ -> Explist [$1;$3]
+tagged_expression:
+    expression { 
+  match $1 with
+    Expcolon (e1,e2) ->
+      (match e1 with
+        Identifier id ->
+          Taggedexp (id,e2)
+      | _ ->
+          Printf.eprintf "%s %s is not a valid tag\n"
+            (cinfo (rhs_info 1))
+            (string_of_expression e1);
+          syntax_error ()
+      )
+  | _ ->
+      $1
 }
 
-|   quantifier LPAREN entity_list RPAREN optsemi expression %prec COLON {
-  Expquantified ($1,$3,$6) }
 
 
-quantifier:
-    KWall  { Universal   }
-|   KWsome { Existential }
-
-
-
-uexp:
-    atomic_expression           { $1 }
-
-|   uexp PLUS uexp   { Binexp (Plusop,$1,$3) }
-
-|   uexp MINUS uexp  { Binexp (Minusop,$1,$3) }
-
-|   MINUS uexp       { Unexp (Minusop,$2) }
-
-|   uexp TIMES uexp  { Binexp (Timesop,$1,$3) }
-
-|   uexp DIVIDE uexp { Binexp (Divideop,$1,$3) }
-
-|   uexp CARET  uexp { Binexp (Caretop,$1,$3) }
-
-|   uexp KWin uexp   { Binexp (Inop,$1,$3) }
-
-|   uexp NOTIN uexp  { Binexp (Notinop,$1,$3) }
-
-|   uexp EQ  uexp    { Binexp (Eqop,$1,$3) }
-
-|   uexp LT  uexp    { Binexp (LTop,$1,$3) }
-
-|   uexp LE  uexp    { Binexp (LEop,$1,$3) }
-
-|   uexp GT  uexp    { Binexp (GTop,$1,$3) }
-
-|   uexp GE  uexp    { Binexp (GEop,$1,$3) }
-
-|   uexp KWand  uexp { Binexp (Andop,$1,$3) }
-
-|   uexp KWor   uexp { Binexp (Orop,$1,$3)  }
-
-|   KWnot   uexp     { Unexp (Notop,$2) }
-
-|   uexp DCOLON uexp { Binexp (DColonop,$1,$3) }
-
-|   uexp BAR  uexp   { Binexp (Barop,$1,$3) }
-
-|   uexp DBAR uexp   { Binexp (DBarop,$1,$3) }
-
-|   uexp ARROW  uexp { Binexp (Arrowop,$1,$3) }
-
-|   uexp DARROW uexp { Binexp (DArrowop,$1,$3) }
-
-|   uexp COLON type_nt     { Typedexp ($1,$3) }
-
-|   uexp ASSIGN uexp { Expassign ($1,$3) }
-
-
-
-
-atomic_expression:
-    LIDENTIFIER  %prec LOWEST_PREC { Identifier $1 }
-
-|   KWResult                       { ExpResult }
-
-|   NUMBER                         { Number $1 }
-
-|   KWCurrent                      { ExpCurrent }
-
-|   KWfalse                        { Expfalse }
-
-|   KWtrue                         { Exptrue }
-
-|   LPAREN expression RPAREN       { Expparen $2 }
-
-|   LPAREN operator RPAREN         { Expop $2 }
-
-|   LBRACKET expression RBRACKET   { Expbracket $2 }
-
-|   LBRACE  expression RBRACE      { Expset $2 }
-
-|   atomic_expression LPAREN expression RPAREN     { Funapp ($1,$3) }
-
-|   atomic_expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
-
-|   atomic_expression DOT atomic_expression {
-  Printf.printf "%s.%s encountered\n"
-    (string_of_expression $1) (string_of_expression $3);
-  Expdot ($1,$3)
-}
-
-|   conditional { $1 }
-
-|   inspect     { $1 }
-
-|   require_block ensure_block KWend { Expproof ($1,None,$2) }
-
-|   require_block implementation_block ensure_block KWend {
-  Expproof ($1,Some $2, $3)
-}
 
 
 

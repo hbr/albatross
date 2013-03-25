@@ -2,6 +2,7 @@
 
 let parse_file (f:string) =
   let lexbuf = Lexing.from_channel (open_in f)
+  (* and _ =   Parsing.set_trace true*)
   in
   lexbuf.Lexing.lex_curr_p <- 
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = f};

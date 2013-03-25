@@ -1,3 +1,8 @@
+all(x:X)
+    ensure
+       {x:exp}
+    end
+
 -- --------------------------------------------------------------------
 
 deferred class
@@ -80,7 +85,7 @@ all(a:G, exp:BOOLEAN)
 
 0: CURRENT
     ensure
-        Result = {x: false}
+        Result = {x:false}
     end
 
 1: CURRENT
@@ -95,18 +100,18 @@ all(a,b:CURRENT)
     require
         r1: a=b
     check
-        c1: a=a                             -- reflexivity
-        c2: a in {x: x=a}                   -- c1, in_2
+        c1: a=a                              -- reflexivity
+        c2: a in {x:x=a}                     -- c1, in_2
         c3: all(p:CURRENT?)
                 require
                     r2: a in p
                 check
-                    c4: a in p => b in p    -- r1,rewrite
+                    c4: a in p => b in p     -- r1,rewrite
                 ensure
                     b in p    -- r2,c4
                 end
-        c5: a in {x: x=a} => b in {x: x=a}   -- c3,deduction
-        c6: b in {x: x=a}                    -- c2,c5
+        c5: a in {x:x=a} => b in {x:x=a}     -- c3,deduction
+        c6: b in {x:x=a}                     -- c2,c5
     ensure
         b=a                                  -- c5,in_2
     end
@@ -238,7 +243,7 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         all(a,b) a => a and b
     local
         a,b := aexp,bexp
-        -- fun(a) ensure Result = a*a end
+        fun(a) ensure Result = a*a end
     check
         require r local l1; l2:=exp check c ensure e end
         require r local l1 do proc ensure e end
@@ -246,7 +251,8 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         a+b = c
         a and b = c
         {a,b,c} = x
-        {x: f(x)=z} = 0
+        {x:A: f(x)=z} = 0
+        {x:A: (p:a::b::p)} = 0
         x := 5+3*7
         exp[e:=i+j]
         t.f(a)=t.f(b).value
@@ -264,7 +270,7 @@ closed(p:A?, f:A->A): ghost A?
         t.f(a)
         {t.f(a)}
         {x,y: f(x,y)}
-        {x: (t.f(a) and q)}
-        Result = {q:A?: (x.is_closed(q,f) and p<=q) }
+        {x: t.f(a) and q}
+        Result = {q:A?: x.is_closed(q,f) and p<=q }
         bla
     end

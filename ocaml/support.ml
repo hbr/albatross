@@ -5,6 +5,7 @@
 *)
 
 exception Exit_error of string
+exception Tohandle of string
 
 
 (*
@@ -296,16 +297,19 @@ type expression =
   | Expfalse
   | Expparen      of expression
   | Expbracket    of expression
+  | Exparrow      of entities list * expression
   | Expop         of operator
   | Funapp        of expression * expression
   | Bracketapp    of expression * expression
   | Expdot        of expression * expression
   | Expset        of expression
+  | Exppred       of entities list * expression
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
   | Typedexp      of expression * type_t
-  | Taggedexp     of expression * expression
+  | Taggedexp     of int * expression
   | Explist       of expression list
+  | Expcolon      of expression * expression
   | Expassign     of expression * expression
   | Expif         of (info_expression * compound) list * compound option
   | Expinspect    of
@@ -328,6 +332,7 @@ and
 and local_declaration =
     Unassigned of entities list
   | Assigned   of entities list * expression
+  | Local_feature of int * entities list
 
 and locals          = local_declaration list
 
@@ -337,33 +342,57 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   in
   match e with
     Identifier id -> symbol_string id
+
   | Number num    -> num
+
   | ExpResult     -> "Result"
+
   | ExpCurrent    -> "Current"
+
   | Exptrue       -> "true"
+
   | Expfalse      -> "false"
+
   | Expparen e   -> "(" ^ (strexp e) ^")"
+
   | Expbracket e -> "[" ^ (strexp e) ^"]"
+
+  | Exparrow  (l,e) ->
+      (string_of_formals l) ^ "->" ^ (string_of_expression e)
+
   | Expop op     -> "(" ^ (rstring_of_op op) ^ ")"
+
   | Funapp (f,args) ->
       (strexp f) ^ "(" ^ (strexp args) ^ ")"
+
   | Bracketapp (tgt,args) ->
       (strexp tgt) ^ "[" ^ (strexp args) ^ "]"
+
   | Expdot (t,f) ->
       withparen ((strexp t) ^ "." ^ (strexp f)) wp
+
   | Expset s ->
       "{" ^  (strexp s) ^ "}"
+
+  | Exppred (elist,exp) ->
+      "{" ^ (string_of_formals elist) ^ ":" ^ (string_of_expression exp)^ "}"
+
   | Binexp (op,e1,e2) ->
       withparen ((strexp e1) ^ (string_of_op op) ^ (strexp e2)) wp
+
   | Unexp (op,e) ->
       withparen ((string_of_op op) ^ (strexp e)) wp
 
   | Taggedexp (t,e) ->
-      withparen((strexp t) ^ ":" ^ (strexp e)) wp
+      withparen ((symbol_string t) ^ ":" ^ (strexp e)) wp
+
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp
   | Explist l ->
       withparen (string_of_list l strexp ",") wp
+
+  | Expcolon (e1,e2) ->
+      withparen ((strexp e1) ^ ":" ^ (strexp e2)) wp
 
   | Expassign (e1,e2) ->
       withparen ((strexp e1) ^ ":=" ^ (strexp e2)) wp
@@ -418,7 +447,10 @@ and string_of_locals loc =
       match el with
         Unassigned elist -> string_of_formals elist
       | Assigned (elist,exp) ->
-          (string_of_formals elist) ^ ":=" ^ (string_of_expression exp))
+          (string_of_formals elist) ^ ":=" ^ (string_of_expression exp)
+      | Local_feature (id,elist) ->
+          (symbol_string id) ^ "(" ^ (string_of_formals elist) ^")"
+    )
     ";"
 
 and string_of_implementation imp =
