@@ -77,6 +77,7 @@ let _ =
      ("local",     Parser.KWlocal);
      ("not",       Parser.KWnot);
      ("note",      Parser.KWnote);
+     ("old",       Parser.KWold);
      ("or",        Parser.KWor);
      ("require",   Parser.KWrequire);
      ("some",      Parser.KWsome);
@@ -185,7 +186,7 @@ rule next_token = parse
 }
 
 
-| ['0'-'9']+ as num { Parser.NUMBER num, (true,true) }
+| ['0'-'9']+ as num { Parser.NUMBER (Support.symbol num), (true,true) }
 
 
 | ['A'-'Z'] ['A'-'Z' '0'-'9' '_']* as id {

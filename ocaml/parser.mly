@@ -24,7 +24,7 @@ let rec path_from_expression (e:expression) =
   List.rev (reversed e)
 
 
-                                         
+
 let rec formals_from_expression (e:expression) =
   let rec entlist (l: expression list) =
     match l with
@@ -76,8 +76,8 @@ let expression_from_entities entlist =
         let lr = List.rev l
         in
         (match lr with
-          f::t -> 
-            let lrmapped = 
+          f::t ->
+            let lrmapped =
               (Typedexp ((Identifier f),tp))
               :: (List.map (function id -> Identifier id) t)
             in
@@ -105,7 +105,7 @@ let expression_from_entities entlist =
        KWinvariant
 %token KWlocal
 %token KWnot       KWnote
-%token KWor
+%token KWold       KWor
 %token KWrequire
 %token KWsome
 %token KWthen      KWtrue
@@ -153,7 +153,7 @@ let expression_from_entities entlist =
 %token <int>    LIDENTIFIER
 %token <int>    OPERATOR
 %token <int>    ROPERATOR
-%token <string> NUMBER
+%token <int>    NUMBER
 
 
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
@@ -171,53 +171,67 @@ let expression_from_entities entlist =
 /* 55 */ %right    CARET     DCOLON
 /* 60 */ %left     OPERATOR  KWin      NOTIN
 /* 61 */ %right    ROPERATOR
-/* 65 */ %nonassoc KWnot     QMARK
+/* 65 */ %nonassoc KWnot     KWold     QMARK
 /* 66 */ %left     DOT
 /* 80 */ %nonassoc LPAREN    LBRACKET
 /* 90 */ %nonassoc UMINUS
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
 %start main
-%type <Support.module_t> main
+%type <Support.declaration list> main
+
+
+
 
 %%
 
 
 
-main:module_nt { $1 }
+main: toplevel_declarations { List.rev $1 }
 
-module_nt:
-    { empty_module }
-|   module_nt optsemi declaration { $1 }
-|   module_nt declaration_block KWend { $1 }
+
+toplevel_declarations:
+    { [] }
+|   toplevel_declarations optsemi declaration { $3::$1 }
+|   toplevel_declarations declaration_block KWend {
+  (Declaration_block $2)::$1
+}
 
 
 /* ------------------------------------------------------------------------- */
 /* Declaration blocks */
 /* ------------------------------------------------------------------------- */
 
-declaration_block: block_type visibility optsemi declarations {()}
-
-block_type:
-    KWfeature   { () }
-|   KWcreate    { () }
-|   KWinvariant { () }
+declaration_block:
+    KWfeature visibility optsemi declarations {
+  Feature_block ($2,List.rev $4)
+}
+|   KWcreate visibility  optsemi declarations {
+  Create_block  ($2,List.rev $4)
+}
+|   KWinvariant  compound {
+  Invariant_block (Public,$2)
+}
+|   KWinvariant LBRACE KWNONE RBRACE  compound {
+  Invariant_block (Private,$5)
+}
 
 
 visibility:
-    {()}
-|   LBRACE KWNONE RBRACE {()}
+    { Public }
+|   LBRACE KWNONE RBRACE { Private }
+|   LBRACE uidentifier_list RBRACE { Protected (withinfo (rhs_info 2) $2) }
 
 declarations:
-    %prec LOWEST_PREC {()}
-|   declarations optsemi declaration {()}
+    %prec LOWEST_PREC { [] }
+|   declarations optsemi declaration { $3::$1 }
 
 
 declaration:
-    class_declaration {()}
-|   named_feature     {()}
-|   assertion_feature {()}
-|   formal_generic    {()}
+    class_declaration { $1 }
+|   named_feature     { $1 }
+|   assertion_feature { $1 }
+|   formal_generic    { $1 }
 
 
 
@@ -226,13 +240,13 @@ declaration:
 /* ------------------------------------------------------------------------- */
 
 formal_generic:
-  UIDENTIFIER COLON type_nt { withinfo (rhs_info 1) $1,
-                              withinfo (rhs_info 3) $3 }
+  UIDENTIFIER COLON type_nt { Formal_generic (withinfo (rhs_info 1) $1,
+                                              withinfo (rhs_info 3) $3) }
 
 
 
 /* ------------------------------------------------------------------------- */
-/* Classes and types */
+/* Classes */
 /* ------------------------------------------------------------------------- */
 
 
@@ -247,16 +261,38 @@ header_mark:
 
 
 class_declaration:
-  header_mark KWclass UIDENTIFIER actual_generics
+  header_mark KWclass UIDENTIFIER class_generics
+  inheritance
   class_blocks
   KWend {
-  {hmark= withinfo (rhs_info 1) $1; cname=withinfo (rhs_info 3) $3}
+  Class_declaration( withinfo (rhs_info 1) $1,
+                     withinfo (rhs_info 3) $3,
+                     withinfo (rhs_info 4) $4,
+                     []
+                    )
 }
+
+
+class_generics:
+    { [] }
+|   LBRACKET uidentifier_list RBRACKET { $2 }
+
+
+inheritance:
+    { () }
 
 
 class_blocks:
     {()}
 |   class_blocks declaration_block {()}
+
+
+
+
+
+/* ------------------------------------------------------------------------- */
+/* Types */
+/* ------------------------------------------------------------------------- */
 
 
 
@@ -272,7 +308,7 @@ path:
         (cinfo (rhs_info 1))
         (string_of_expression $1);
       syntax_error ()
-    
+
  }
 
 
@@ -290,6 +326,7 @@ type_list:
 | type_nt COMMA type_list {
   $1::$3
 }
+
 
 
 actual_generics:
@@ -329,46 +366,54 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 assertion_feature:
     KWall formal_arguments optsemi feature_body {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
+  Assertion_feature ((withinfo (rhs_info 2) $2), $4)
 }
 
 named_feature:
-    nameopconst formal_arguments rettype optsemi feature_body_opt {
-  Printf.printf "Formal arguments: %s\n" (string_of_formals $2)
+    nameopconst formal_arguments return_type optsemi feature_body_opt {
+  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
+  let name,exclam = $1
+  in
+  Named_feature ((withinfo (rhs_info 1) name),
+                 exclam,
+                 (withinfo (rhs_info 2) $2),
+                 (withinfo (rhs_info 3) $3),
+                 $5)
 }
 
 
 nameopconst:
-    operator {()}
-|   KWtrue   {()}
-|   KWfalse  {()}
-|   NUMBER   {()}
-|   LIDENTIFIER {()}
-|   LIDENTIFIER EXCLAM {()}
+    operator           { FNoperator $1,false}
+|   KWtrue             { FNtrue,false }
+|   KWfalse            { FNfalse,false }
+|   NUMBER             { FNnumber $1, false }
+|   LIDENTIFIER        { FNname $1, false }
+|   LIDENTIFIER EXCLAM { FNname $1, true}
 
 
-rettype:
-    {()}
-|   COLON type_nt {()}
+return_type:
+    { None }
+|   COLON type_nt { Some $2 }
 
 feature_body_opt:
-    %prec LOWEST_PREC {()}
-|   feature_body { $1 }
+    %prec LOWEST_PREC { None }
+|   feature_body      { Some $1 }
 
 feature_body:
-    require_list feature_implementation ensure_list KWend {()}
-|   require_list feature_implementation KWend {()}
-|   feature_implementation ensure_list KWend {()}
-|   require_list ensure_list KWend {()}
-|   require_list KWend {()}
-|   feature_implementation KWend {()}
-|   ensure_list KWend {()}
+    require_list feature_implementation ensure_list KWend { $1, Some $2, $3 }
+|   require_list feature_implementation KWend             { $1, Some $2, [] }
+|   feature_implementation ensure_list KWend              { [], Some $1, $2 }
+|   require_list ensure_list KWend                        { $1, None, $2 }
+|   require_list KWend                                    { $1, None, [] }
+|   feature_implementation KWend                          { [], Some $1, [] }
+|   ensure_list KWend                                     { [], None, $1 }
 
 
 
 feature_implementation:
-    KWdeferred {()}
-|   implementation_note {()}
-|   implementation_block {()}
+    KWdeferred           { Impdeferred }
+|   implementation_note  { $1 }
+|   implementation_block { $1 }
 
 
 implementation_block:
@@ -377,14 +422,14 @@ implementation_block:
 
 
 require_list:
-    require_block {()}
-|   require_block require_list {()}
+    require_block { [$1] }
+|   require_block require_list { $1::$2 }
 
 
 
 ensure_list:
-    ensure_block {()}
-|   ensure_block ensure_list {()}
+    ensure_block { [$1] }
+|   ensure_block ensure_list { $1::$2 }
 
 
 
@@ -409,8 +454,8 @@ local_list:
 local_declaration:
     entity_list { Unassigned $1 }
 |   entity_list ASSIGN expression { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN entity_list RPAREN rettype feature_body {
-  Local_feature ($1,$3) (* feature body is missing in semantics *)
+|   LIDENTIFIER LPAREN entity_list RPAREN return_type feature_body {
+  Local_feature ($1,$3,$5,$6)
 }
 
 
@@ -421,7 +466,7 @@ implementation_note: KWnote LIDENTIFIER {
   in
   if str = "built_in" then Impbuiltin
   else if str = "event" then Impevent
-  else 
+  else
     (Printf.eprintf
        "%s Syntax error: only \"note built_in\" or \"note event\" \
        possible here\n"
@@ -521,12 +566,12 @@ expression:
 
 |   LBRACKET expression RBRACKET   { Expbracket $2 }
 
-|   LBRACE expression RBRACE { 
+|   LBRACE expression RBRACE {
   match $2 with
     Expcolon(fargs,exp) ->
       let elist = formals_from_expression2 fargs (rhs_info 2)
       in
-      let _ = 
+      let _ =
         Printf.printf "%s predicate {%s:%s}\n"
           (cinfo (rhs_info 1))
           (string_of_formals elist)
@@ -598,6 +643,8 @@ expression:
 
 |   KWnot   expression     { Unexp (Notop,$2) }
 
+|   KWold   expression     { Unexp (Oldop,$2) }
+
 |   expression DCOLON expression { Binexp (DColonop,$1,$3) }
 
 |   expression COLON expression  { Expcolon ($1,$3) }
@@ -606,7 +653,7 @@ expression:
   Printf.printf "%s barexp %s\n"
     (cinfo (rhs_info 1))
     (string_of_expression (Binexp (Barop,$1,$3)));
-  Binexp (Barop,$1,$3) 
+  Binexp (Barop,$1,$3)
 }
 
 |   expression DBAR expression   { Binexp (DBarop,$1,$3) }
@@ -673,7 +720,7 @@ info_expression: tagged_expression {
 
 
 tagged_expression:
-    expression { 
+    expression {
   match $1 with
     Expcolon (e1,e2) ->
       (match e1 with
@@ -733,3 +780,8 @@ operator:
 optsemi:
     %prec LOWEST_PREC {()}
 |   optsemi SEMICOL {()}
+
+
+uidentifier_list:
+    UIDENTIFIER { [$1] }
+|   UIDENTIFIER COMMA uidentifier_list { $1::$3 }

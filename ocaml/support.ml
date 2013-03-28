@@ -137,12 +137,7 @@ let rec split_list (l: 'a list) (sep: 'a -> bool) =
 
 
 
-(* Classes and types *)
-
-
-type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
-
-type class_t =  {hmark:header_mark withinfo; cname: int withinfo}
+(* Types *)
 
 type type_t =
     Normal_type of int list * int * type_t list   (* kernel.ANY,
@@ -220,6 +215,7 @@ type operator =
   | GEop
   | Andop
   | Orop
+  | Oldop
   | Notop
   | Barop
   | DBarop
@@ -251,6 +247,7 @@ let opdata op =
   | GEop      -> ">=",  35,  Left
   | Andop     -> "and", 25,  Left
   | Orop      -> "or",  25,  Left
+  | Oldop     -> "old", 65,  Nonassoc
   | Notop     -> "not", 65,  Nonassoc
   | Barop     -> "|",   40,  Left
   | DBarop    -> "||",  40,  Left
@@ -278,6 +275,7 @@ let string_of_op op =
   match op with
     Andop ->  " and "
   | Orop  ->  " or "
+  | Oldop ->  "old "
   | Notop ->  "not "
   | Inop  ->  " in "
   | Notinop -> " /in "
@@ -290,7 +288,7 @@ let string_of_op op =
 
 type expression =
     Identifier    of int
-  | Number        of string
+  | Number        of int
   | ExpResult
   | ExpCurrent
   | Exptrue
@@ -332,9 +330,12 @@ and
 and local_declaration =
     Unassigned of entities list
   | Assigned   of entities list * expression
-  | Local_feature of int * entities list
+  | Local_feature of int * entities list * type_t option * feature_body
 
 and locals          = local_declaration list
+
+and feature_body = compound list * implementation option * compound list
+
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
@@ -343,7 +344,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   match e with
     Identifier id -> symbol_string id
 
-  | Number num    -> num
+  | Number num    -> symbol_string num
 
   | ExpResult     -> "Result"
 
@@ -448,8 +449,11 @@ and string_of_locals loc =
         Unassigned elist -> string_of_formals elist
       | Assigned (elist,exp) ->
           (string_of_formals elist) ^ ":=" ^ (string_of_expression exp)
-      | Local_feature (id,elist) ->
+      | Local_feature (id,elist,rt,body) ->
           (symbol_string id) ^ "(" ^ (string_of_formals elist) ^")"
+          ^
+          (match rt with Some t -> ":" ^ (string_of_type t) | None -> "")
+          ^ " " ^ (string_of_body body)
     )
     ";"
 
@@ -467,30 +471,59 @@ and string_of_implementation imp =
       ^
         (string_of_compound comp)
 
+and string_of_body b =
+  let rl,imp_opt,el = b in
+  (string_of_list rl (function e -> " require " ^ (string_of_compound e)) "")
+  ^
+    (match imp_opt with
+      Some imp -> (string_of_implementation imp)
+    | None -> "")
+  ^ (string_of_list rl (function e -> " ensure " ^ (string_of_compound e)) "")
+  ^ " end"
 
 
 
 
+(* Classes *)
+
+type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
+
+type inheritance_clause = int list
 
 
 
 
+(* Features *)
 
-(* Modules *)
-
-type module_t = {classes: class_t list;
-                 formal_generics: (int withinfo * type_t withinfo) list;
-                 features: int list}
-
-
-let empty_module = {classes=[]; features=[]; formal_generics=[]}
-
-let class_added (c:class_t) (m:module_t) = {m with classes = c::m.classes}
+type visibility =
+    Public
+  | Private
+  | Protected of int list withinfo
 
 
-let formal_generic_added (n:int withinfo) (t:type_t withinfo)  (m:module_t)
-    = {m with formal_generics = (n,t)::m.formal_generics}
+type feature_name =
+    FNname of int
+  | FNoperator of operator
+  | FNtrue
+  | FNfalse
+  | FNnumber of int
 
-
-
-
+type declaration =
+    Assertion_feature of entities list withinfo * feature_body
+  | Named_feature of
+      feature_name withinfo
+        * bool
+        * entities list withinfo
+        * type_t option withinfo
+        * feature_body option
+  | Formal_generic of int withinfo * type_t withinfo
+  | Class_declaration of
+      header_mark withinfo
+        * int withinfo
+        * int list withinfo
+        * inheritance_clause list
+  | Declaration_block of declaration_block
+and declaration_block =
+    Feature_block of visibility * declaration list
+  | Create_block  of visibility * declaration list
+  | Invariant_block of visibility * compound
