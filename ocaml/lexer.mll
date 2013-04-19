@@ -57,8 +57,8 @@ let _ =
      ("all",       Parser.KWall);
      ("and",       Parser.KWand);
      ("case",      Parser.KWcase);
-     ("class",     Parser.KWclass);
      ("check",     Parser.KWcheck);
+     ("class",     Parser.KWclass);
      ("create",    Parser.KWcreate);
      ("deferred",  Parser.KWdeferred);
      ("do",        Parser.KWdo);
