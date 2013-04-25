@@ -319,6 +319,7 @@ type_nt:
 | ghost_type   { $1 }
 | tuple_type   { $1 }
 | qmark_type   { $1 }
+| LPAREN type_nt RPAREN { Paren_type $2 }
 
 
 type_list:

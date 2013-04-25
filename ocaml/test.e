@@ -274,3 +274,11 @@ closed(p:A?, f:A->A): ghost A?
         Result = {q:A?: x.is_closed(q,f) and p<=q }
         bla
     end
+
+
+
+functional(c:G, h:[G,CURRENT]->G): ghost (CURRENT->G)->(CURRENT->G)
+    ensure
+        Result = (g -> n -> if n=0 then c 
+                            else h(g(n.pred),n) end)
+    end

@@ -147,6 +147,7 @@ type type_t =
   | Ghost_type of type_t
   | Tuple_type of type_t list
   | QMark_type of type_t
+  | Paren_type of type_t
 
 
 let rec string_of_type (t:type_t) =
@@ -170,6 +171,7 @@ let rec string_of_type (t:type_t) =
       "ghost " ^  (string_of_type t)
   | Tuple_type l -> actuals l
   | QMark_type t -> (string_of_type t) ^ "?"
+  | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
 
 
 
