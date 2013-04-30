@@ -511,7 +511,7 @@ type feature_name =
   | FNnumber of int
 
 type declaration =
-    Assertion_feature of entities list withinfo * feature_body
+    Assertion_feature of int option * entities list withinfo * feature_body
   | Named_feature of
       feature_name withinfo
         * bool

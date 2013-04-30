@@ -101,8 +101,8 @@ let expression_from_entities entlist =
 %token KWelse      KWelseif       KWend        KWensure
 %token KWfalse     KWfeature
 %token KWghost
-%token KWif        KWimmutable    KWin         KWinspect
-       KWinvariant
+%token KWif        KWimmutable    KWin         KWinherit
+       KWinspect   KWinvariant
 %token KWlocal
 %token KWnot       KWnote
 %token KWold       KWor
@@ -173,7 +173,7 @@ let expression_from_entities entlist =
 /* 61 */ %right    ROPERATOR
 /* 65 */ %nonassoc KWnot     KWold     QMARK
 /* 66 */ %left     DOT
-/* 80 */ %nonassoc LPAREN    LBRACKET
+/* 80 */ %nonassoc LPAREN    LBRACKET  LBRACE
 /* 90 */ %nonassoc UMINUS
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
@@ -218,7 +218,7 @@ declaration_block:
 
 
 visibility:
-    { Public }
+    %prec LOWEST_PREC { Public }
 |   LBRACE KWNONE RBRACE { Private }
 |   LBRACE uidentifier_list RBRACE { Protected (withinfo (rhs_info 2) $2) }
 
@@ -242,6 +242,9 @@ declaration:
 formal_generic:
   UIDENTIFIER COLON type_nt { Formal_generic (withinfo (rhs_info 1) $1,
                                               withinfo (rhs_info 3) $3) }
+
+
+
 
 
 
@@ -279,7 +282,8 @@ class_generics:
 
 
 inheritance:
-    { () }
+    { [] }
+|   inherit_block inheritance { $1::$2 }
 
 
 class_blocks:
@@ -287,7 +291,17 @@ class_blocks:
 |   class_blocks declaration_block {()}
 
 
+/* ------------------------------------------------------------------------- */
+/* Inheritance */
+/* ------------------------------------------------------------------------- */
 
+inherit_block: KWinherit visibility parent_list { () }
+
+parent_list:
+    parent { [$1] }
+|   parent parent_list { $1::$2 }
+
+parent: type_nt { $1 }
 
 
 /* ------------------------------------------------------------------------- */
@@ -365,13 +379,62 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 
 
 assertion_feature:
-    KWall formal_arguments optsemi feature_body {
-  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
-  Assertion_feature ((withinfo (rhs_info 2) $2), $4)
+    KWall formal_arguments_opt optsemi feature_body {
+  Assertion_feature (None, (withinfo (rhs_info 2) $2), $4)
+}
+|   LIDENTIFIER COLON KWall formal_arguments_opt optsemi feature_body {
+  Assertion_feature ((Some $1), (withinfo (rhs_info 4) $4), $6)
 }
 
 named_feature:
-    nameopconst formal_arguments return_type optsemi feature_body_opt {
+    nameopconst formal_arguments return_type_opt optsemi feature_body_opt {
+  let name,exclam = $1
+  in
+  Named_feature ((withinfo (rhs_info 1) name),
+                 exclam,
+                 (withinfo (rhs_info 2) $2),
+                 (withinfo (rhs_info 3) $3),
+                 $5)
+}
+|
+    name_rtype optsemi feature_body_opt {
+  let name,exclam,rt = $1
+  in
+  Named_feature (name,
+                 exclam,
+                 (withinfo rt.i []),
+                 rt,
+                 $3)
+}
+
+name_rtype:
+    featopconst return_type_opt {
+  let name,exclam = $1
+  in
+  (withinfo (rhs_info 1) name),
+  exclam,
+  (withinfo (rhs_info 2) $2)
+}
+| LIDENTIFIER {
+  (withinfo (rhs_info 1) (FNname $1)),
+  false,
+  (withinfo (rhs_info 1) None)
+}
+| LIDENTIFIER  COLON type_nt {
+  (withinfo (rhs_info 1) (FNname $1)),
+  false,
+  (withinfo (rhs_info 3) (Some $3))
+}
+| LIDENTIFIER  EXCLAM COLON type_nt {
+  (withinfo (rhs_info 1) (FNname $1)),
+  true,
+  (withinfo (rhs_info 4) (Some $4))
+}
+
+
+/*
+named_feature:
+    nameopconst formal_arguments_opt return_type_opt optsemi feature_body_opt {
   Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
   let name,exclam = $1
   in
@@ -381,8 +444,10 @@ named_feature:
                  (withinfo (rhs_info 3) $3),
                  $5)
 }
+*/
 
 
+/*
 nameopconst:
     operator           { FNoperator $1,false}
 |   KWtrue             { FNtrue,false }
@@ -390,11 +455,29 @@ nameopconst:
 |   NUMBER             { FNnumber $1, false }
 |   LIDENTIFIER        { FNname $1, false }
 |   LIDENTIFIER EXCLAM { FNname $1, true}
+*/
+
+nameopconst:
+    LIDENTIFIER        { FNname $1, false }
+|   LIDENTIFIER EXCLAM { FNname $1, true}
+|   featopconst        { $1 }
+
+
+featopconst:
+    operator           { FNoperator $1, false}
+|   KWtrue             { FNtrue, false }
+|   KWfalse            { FNfalse, false }
+|   NUMBER             { FNnumber $1, false }
 
 
 return_type:
+    COLON type_nt { $2 }
+
+
+return_type_opt:
     { None }
-|   COLON type_nt { Some $2 }
+|   return_type { Some $1 }
+
 
 feature_body_opt:
     %prec LOWEST_PREC { None }
@@ -455,7 +538,7 @@ local_list:
 local_declaration:
     entity_list { Unassigned $1 }
 |   entity_list ASSIGN expression { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN entity_list RPAREN return_type feature_body {
+|   LIDENTIFIER LPAREN entity_list RPAREN return_type_opt feature_body {
   Local_feature ($1,$3,$5,$6)
 }
 
@@ -497,10 +580,18 @@ identifier_list:
 
 
 
+formal_arguments_opt:
+    { [] }
+|   formal_arguments { $1 }
+
+formal_arguments: LPAREN entity_list RPAREN { $2 }
+
+
+/*
 formal_arguments:
     { [] }
 |   LPAREN entity_list RPAREN { $2 }
-
+*/
 
 
 
@@ -587,10 +678,20 @@ expression:
 
 |   expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
 
-|   expression DOT expression {
+|   expression DOT LIDENTIFIER %prec LOWEST_PREC {
+  let idexp = Identifier $3
+  in
   Printf.printf "%s.%s encountered\n"
-    (string_of_expression $1) (string_of_expression $3);
-  Expdot ($1,$3)
+    (string_of_expression $1) (string_of_expression idexp);
+  Expdot ($1, idexp)
+}
+
+|   expression DOT LIDENTIFIER LPAREN expression RPAREN{ 
+  let idexp = Funapp ((Identifier $3), $5)
+  in
+  Printf.printf "%s.%s encountered\n"
+    (string_of_expression $1) (string_of_expression idexp);
+  Expdot ($1, idexp)
 }
 
 |   conditional { $1 }
@@ -690,7 +791,7 @@ expression:
 arrow_exp: expression ARROW { $1 }
 
 quantifier:
-    KWall  { Universal   }
+    KWall  %prec LOWEST_PREC { Universal   }
 |   KWsome { Existential }
 
 
@@ -786,3 +887,5 @@ optsemi:
 uidentifier_list:
     UIDENTIFIER { [$1] }
 |   UIDENTIFIER COMMA uidentifier_list { $1::$3 }
+
+

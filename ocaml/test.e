@@ -257,6 +257,8 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         exp[e:=i+j]
         t.f(a)=t.f(b).value
         [a,b] = [x,y]
+        a.b.c(1,2).d
+        (<=).is_transitive
     ensure
         tag1: e1; tag2: e2
         tag3: p||q

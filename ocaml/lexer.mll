@@ -72,6 +72,7 @@ let _ =
      ("if",        Parser.KWif);
      ("immutable", Parser.KWimmutable);
      ("in",        Parser.KWin);
+     ("inherit",   Parser.KWinherit);
      ("inspect",   Parser.KWinspect);
      ("invariant", Parser.KWinvariant);
      ("local",     Parser.KWlocal);
