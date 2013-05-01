@@ -25,6 +25,18 @@ all(a,b:CURRENT, e:BOOLEAN)
 
 immutable class
     BOOLEAN
+inherit {NONE}
+    BOOLEAN_LATTICE
+        rename
+            * as and,
+            + as or,
+            - as not,
+            foo(NAT,G) as baz
+        redefine
+            foo(NAT)
+        undefine
+            foo(NAT), bla, blabla(INT,NAT)
+        end
 end
 
 => (a,b:BOOLEAN): BOOLEAN
@@ -150,7 +162,7 @@ some_feature(a:A)
         e
     end
 
-some_proc! (a:A, tuple:[A,B]): RT
+some_proc (a:A, tuple:[A,B])!: RT
     ensure e end
 
 some_func(a:A): ghost B

@@ -174,6 +174,8 @@ let rec string_of_type (t:type_t) =
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
 
 
+type return_type = (type_t*bool) withinfo option
+
 
 (* Formal arguments *)
 
@@ -332,7 +334,7 @@ and
 and local_declaration =
     Unassigned of entities list
   | Assigned   of entities list * expression
-  | Local_feature of int * entities list * type_t option * feature_body
+  | Local_feature of int * entities list * return_type * feature_body
 
 and locals          = local_declaration list
 
@@ -454,7 +456,12 @@ and string_of_locals loc =
       | Local_feature (id,elist,rt,body) ->
           (symbol_string id) ^ "(" ^ (string_of_formals elist) ^")"
           ^
-          (match rt with Some t -> ":" ^ (string_of_type t) | None -> "")
+          (match rt with Some t -> 
+            let tp,exclam = t.v
+            in
+            (if exclam then "!:" else ":")
+            ^ (string_of_type tp) 
+          | None -> "")
           ^ " " ^ (string_of_body body)
     )
     ";"
@@ -514,9 +521,8 @@ type declaration =
     Assertion_feature of int option * entities list withinfo * feature_body
   | Named_feature of
       feature_name withinfo
-        * bool
         * entities list withinfo
-        * type_t option withinfo
+        * return_type
         * feature_body option
   | Formal_generic of int withinfo * type_t withinfo
   | Class_declaration of

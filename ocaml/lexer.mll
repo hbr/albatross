@@ -56,6 +56,7 @@ let _ =
 
      ("all",       Parser.KWall);
      ("and",       Parser.KWand);
+     ("as",        Parser.KWas);
      ("case",      Parser.KWcase);
      ("check",     Parser.KWcheck);
      ("class",     Parser.KWclass);
@@ -80,10 +81,13 @@ let _ =
      ("note",      Parser.KWnote);
      ("old",       Parser.KWold);
      ("or",        Parser.KWor);
+     ("redefine",  Parser.KWredefine);
+     ("rename",    Parser.KWrename);
      ("require",   Parser.KWrequire);
      ("some",      Parser.KWsome);
      ("then",      Parser.KWthen);
      ("true",      Parser.KWtrue);
+     ("undefine",  Parser.KWundefine);
 
      ("->",        Parser.ARROW);
      (":=",        Parser.ASSIGN);

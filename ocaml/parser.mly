@@ -84,7 +84,7 @@ let expression_from_entities entlist =
 %token KWPrecursor KWProcess
 %token KWResult
 
-%token KWall       KWand
+%token KWall       KWand          KWas
 %token KWcase      KWclass        KWcheck      KWcreate
 %token KWdeferred  KWdo
 %token KWelse      KWelseif       KWend        KWensure
@@ -95,9 +95,10 @@ let expression_from_entities entlist =
 %token KWlocal
 %token KWnot       KWnote
 %token KWold       KWor
-%token KWrequire
+%token KWredefine  KWrename       KWrequire
 %token KWsome
 %token KWthen      KWtrue
+%token KWundefine
 
 %token ARROW
 %token ASSIGN
@@ -280,17 +281,51 @@ class_blocks:
 |   class_blocks declaration_block {()}
 
 
+
+
 /* ------------------------------------------------------------------------- */
 /* Inheritance */
 /* ------------------------------------------------------------------------- */
 
-inherit_block: KWinherit visibility parent_list { () }
+inherit_block: KWinherit visibility optsemi parent_list { () }
 
 parent_list:
     parent { [$1] }
 |   parent parent_list { $1::$2 }
 
-parent: type_nt { $1 }
+parent: type_nt feature_adaptation { $1 }
+
+feature_adaptation:
+    { [] }
+|   adaptation_list KWend { $1 }
+
+adaptation_list:
+    adaptation_block  { [$1] }
+|   adaptation_block adaptation_list { $1::$2 }
+
+adaptation_block:
+    KWrename rename_list { () }
+|   KWredefine feature_name_list { () }
+|   KWundefine feature_name_list { () }
+
+feature_name_list:
+    name_sig   { [$1] }
+|   name_sig  COMMA feature_name_list { $1::$3 }
+
+
+rename_list:
+    rename_item  { [$1] }
+|   rename_item  COMMA rename_list { $1::$3 }
+
+rename_item:
+    name_sig KWas nameopconst  { $1,$3 }
+
+name_sig:
+    nameopconst { $1,[] }
+|   nameopconst LPAREN type_list RPAREN { $1,$3 }
+
+
+
 
 
 /* ------------------------------------------------------------------------- */
@@ -371,66 +406,55 @@ assertion_feature:
 
 named_feature:
     nameopconst formal_arguments return_type_opt optsemi feature_body_opt {
-  let name,exclam = $1
-  in
-  Named_feature ((withinfo (rhs_info 1) name),
-                 exclam,
+  Named_feature ((withinfo (rhs_info 1) $1),
                  (withinfo (rhs_info 2) $2),
-                 (withinfo (rhs_info 3) $3),
+                 $3,
                  $5)
 }
 |
     name_rtype optsemi feature_body_opt {
-  let name,exclam,rt = $1
+  let name,rt = $1
   in
   Named_feature (name,
-                 exclam,
-                 (withinfo rt.i []),
+                 (noinfo []),
                  rt,
                  $3)
 }
 
 name_rtype:
-    featopconst return_type_opt {
-  let name,exclam = $1
-  in
-  (withinfo (rhs_info 1) name),
-  exclam,
-  (withinfo (rhs_info 2) $2)
-}
-| LIDENTIFIER {
+    LIDENTIFIER {
   (withinfo (rhs_info 1) (FNname $1)),
-  false,
-  (withinfo (rhs_info 1) None)
+  None
 }
-| LIDENTIFIER  COLON type_nt {
+|   LIDENTIFIER  COLON type_nt {
   (withinfo (rhs_info 1) (FNname $1)),
-  false,
-  (withinfo (rhs_info 3) (Some $3))
+  (Some (withinfo (rhs_info 3) ($3,false)))
 }
-| LIDENTIFIER  EXCLAM COLON type_nt {
+|   LIDENTIFIER  EXCLAM COLON type_nt {
   (withinfo (rhs_info 1) (FNname $1)),
-  true,
-  (withinfo (rhs_info 4) (Some $4))
+  (Some (withinfo (rhs_info 4) ($4,true)))
 }
-
+|   featopconst return_type_opt {
+  (withinfo (rhs_info 1) $1),
+  $2
+}
 
 
 nameopconst:
-    LIDENTIFIER        { FNname $1, false }
-|   LIDENTIFIER EXCLAM { FNname $1, true}
+    LIDENTIFIER        { FNname $1 }
 |   featopconst        { $1 }
 
 
 featopconst:
-    operator           { FNoperator $1, false}
-|   KWtrue             { FNtrue, false }
-|   KWfalse            { FNfalse, false }
-|   NUMBER             { FNnumber $1, false }
+    operator           { FNoperator $1}
+|   KWtrue             { FNtrue }
+|   KWfalse            { FNfalse }
+|   NUMBER             { FNnumber $1 }
 
 
 return_type:
-    COLON type_nt { $2 }
+    COLON type_nt { withinfo (rhs_info 2) ($2,false) }
+|   EXCLAM COLON type_nt { withinfo (rhs_info 3) ($3,true) }
 
 
 return_type_opt:
