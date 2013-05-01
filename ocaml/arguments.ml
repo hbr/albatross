@@ -1,14 +1,16 @@
-let file_list: string list ref = ref []
-
-let clear () = file_list := []
-
-let add str = file_list := str::!file_list
-
 let usage_string = "\
-Usage: eiffelc options file1.e file2.e ...
-       eiffelc options filelist.eml"
+Usage: 
+    eiffelc options file1.e file2.e ...  pckg.epc
+    eiffelc options filelist.eml [pckg.epc]
 
-let parse_module_list ml =
+    options
+       -I path    directory to search for used packages"
+
+let display_usage str =  raise (Support.Exit_error (str^usage_string))
+
+
+
+let parse_eml_file ml =
   let dir = Filename.dirname ml
   and ic = open_in ml
   in
@@ -21,7 +23,7 @@ let parse_module_list ml =
       else
         (Printf.eprintf "%s:%d: %s does not have extension \".e\"\n"
            ml line_no line;
-         raise (Support.Exit_error ""))
+         display_usage "")
     with
       End_of_file -> line::list
   in
@@ -34,19 +36,52 @@ let parse_module_list ml =
 
 
 let parse () =
-  let _ = clear ()
+  let efiles:    string list ref = ref []
+  and emlfiles:  string list ref = ref []
+  and pfiles:    string list ref = ref []
+  and includes:  string list ref = ref []
   in
-  let _ = Arg.parse [] add usage_string
+
+  let add_file fn    = 
+    if Filename.check_suffix fn ".e" then
+      efiles := fn::!efiles
+    else if Filename.check_suffix fn ".eml" then
+      emlfiles := fn::!emlfiles
+    else if Filename.check_suffix fn ".epc" then
+      pfiles := fn::!pfiles
+    else
+      display_usage ("error: file \"" ^ fn ^ "\" has illegal extension\n")
+  and add_include str = includes  := str::!includes
   in
-  if List.for_all (fun fn -> Filename.check_suffix fn ".e") !file_list then
-    List.rev !file_list
+
+  let _ = 
+    Arg.parse 
+      [("-I",Arg.String add_include,"path to search for packages")]
+      add_file 
+      usage_string
+  in
+
+  if !efiles!=[] && !emlfiles=[] 
+  then
+    match !pfiles with
+      [pfn] -> 
+        !includes, List.rev !efiles, pfn
+    | [] -> display_usage "error: packagefile needed\n"
+    | _  -> display_usage "error: only one packagefile allowed\n"
+  else if !efiles=[] &&  !emlfiles!=[]
+  then
+    let eml = 
+      match !emlfiles with 
+        [fn] -> fn
+      | _ ->     display_usage "error: only one eml file allowed\n"
+    in
+    let pfn =
+      match !pfiles with
+        [] -> (Filename.chop_extension eml) ^ ".epc"
+      | [fn] -> fn
+      | _ -> display_usage "error: only one packagefile allowed\n"
+    in
+    !includes, parse_eml_file eml, pfn
   else
-    match !file_list with
-      [fn] ->
-        if Filename.check_suffix fn ".eml" then
-          parse_module_list fn
-        else
-           raise (Support.Exit_error usage_string)
-    | _ ->
-        raise (Support.Exit_error usage_string)
+    display_usage "error: either explicit list of modules or .eml file\n"
 

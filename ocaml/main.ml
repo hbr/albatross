@@ -5,7 +5,9 @@ let write_package = ();;
 
 
 try
-  Validate.validate (Arguments.parse ());
+  let _,efiles,_ = Arguments.parse ()
+  in
+  Validate.validate efiles;
   write_package
 with
   Support.Exit_error str -> prerr_endline str; exit 1
