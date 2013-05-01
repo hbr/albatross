@@ -14,17 +14,6 @@ let cinfo (i:info) =  info_string (filename ()) i
 let syntax_error () = raise (Parsing.Parse_error)
 
 
-let rec path_from_expression (e:expression) =
-  let rec reversed e =
-    match e with
-      Identifier id -> [id]
-    | Expdot(e1,Identifier id) -> id::(reversed e1)
-    | _ -> raise (Tohandle "path_from_expression")
-  in
-  List.rev (reversed e)
-
-
-
 let rec formals_from_expression (e:expression) =
   let rec entlist (l: expression list) =
     match l with
@@ -218,7 +207,7 @@ declaration_block:
 
 
 visibility:
-    %prec LOWEST_PREC { Public }
+    { Public }
 |   LBRACE KWNONE RBRACE { Private }
 |   LBRACE uidentifier_list RBRACE { Protected (withinfo (rhs_info 2) $2) }
 
@@ -310,20 +299,14 @@ parent: type_nt { $1 }
 
 
 
-
 path:
-  { [] }
-| expression DOT {
-  try
-    path_from_expression $1
-  with
-    Tohandle str ->
-      Printf.eprintf "%s %s is not a valid path\n"
-        (cinfo (rhs_info 1))
-        (string_of_expression $1);
-      syntax_error ()
+    { [] }
+|   dotted_id_list DOT { List.rev $1 }
 
- }
+
+dotted_id_list:
+    LIDENTIFIER  %prec LOWEST_PREC { [$1] }
+|   dotted_id_list DOT LIDENTIFIER { $3::$1 }
 
 
 type_nt:
@@ -432,30 +415,6 @@ name_rtype:
 }
 
 
-/*
-named_feature:
-    nameopconst formal_arguments_opt return_type_opt optsemi feature_body_opt {
-  Printf.printf "Formal arguments: %s\n" (string_of_formals $2);
-  let name,exclam = $1
-  in
-  Named_feature ((withinfo (rhs_info 1) name),
-                 exclam,
-                 (withinfo (rhs_info 2) $2),
-                 (withinfo (rhs_info 3) $3),
-                 $5)
-}
-*/
-
-
-/*
-nameopconst:
-    operator           { FNoperator $1,false}
-|   KWtrue             { FNtrue,false }
-|   KWfalse            { FNfalse,false }
-|   NUMBER             { FNnumber $1, false }
-|   LIDENTIFIER        { FNname $1, false }
-|   LIDENTIFIER EXCLAM { FNname $1, true}
-*/
 
 nameopconst:
     LIDENTIFIER        { FNname $1, false }
@@ -587,11 +546,6 @@ formal_arguments_opt:
 formal_arguments: LPAREN entity_list RPAREN { $2 }
 
 
-/*
-formal_arguments:
-    { [] }
-|   LPAREN entity_list RPAREN { $2 }
-*/
 
 
 
@@ -630,23 +584,32 @@ case_part:  KWcase info_expression KWthen compound { $2,$4 }
 /* Expressions */
 /* ------------------------------------------------------------------------- */
 
-/*
-printed_expression: expression {
-  Printf.printf "%s exp: %s\n"
-    (cinfo (rhs_info 1))
-    (string_of_expression $1);
-  $1
-}
-*/
+
 
 expression:
+    pexpression %prec LOWEST_PREC  { $1 }
+|   cexpression %prec LOWEST_PREC  { $1 }
+
+
+
+
+
+pexpression: dotted_id_list %prec LOWEST_PREC {
+  match List.rev $1 with
+    f::t -> 
+      let func e i = Expdot (e, Identifier i)
+      in
+      List.fold_left func (Identifier f) t
+  | _    -> assert false
+}
+
+
+cexpression:
     KWResult                       { ExpResult }
 
 |   NUMBER                         { Number $1 }
 
 |   KWCurrent                      { ExpCurrent }
-
-|   LIDENTIFIER                    { Identifier $1 }
 
 |   KWfalse                        { Expfalse }
 
@@ -674,24 +637,26 @@ expression:
       Expset $2
 }
 
-|   expression LPAREN expression RPAREN     { Funapp ($1,$3) }
 
-|   expression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
+|   cexpression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
 
-|   expression DOT LIDENTIFIER %prec LOWEST_PREC {
-  let idexp = Identifier $3
-  in
-  Printf.printf "%s.%s encountered\n"
-    (string_of_expression $1) (string_of_expression idexp);
-  Expdot ($1, idexp)
+|   pexpression LBRACKET expression RBRACKET { 
+  Bracketapp ($1,$3)
 }
 
-|   expression DOT LIDENTIFIER LPAREN expression RPAREN{ 
-  let idexp = Funapp ((Identifier $3), $5)
+
+|   cexpression LPAREN expression RPAREN     { Funapp ($1,$3) }
+
+|   pexpression LPAREN expression RPAREN {
+  Funapp ($1,$3)
+}
+
+|   cexpression DOT LIDENTIFIER %prec LOWEST_PREC { Expdot ($1, Identifier $3) }
+
+|   cexpression DOT LIDENTIFIER LPAREN expression RPAREN{ 
+  let dotexp = Expdot ($1, Identifier $3)
   in
-  Printf.printf "%s.%s encountered\n"
-    (string_of_expression $1) (string_of_expression idexp);
-  Expdot ($1, idexp)
+  Funapp(dotexp,$5)
 }
 
 |   conditional { $1 }
@@ -751,12 +716,7 @@ expression:
 
 |   expression COLON expression  { Expcolon ($1,$3) }
 
-|   expression BAR  expression   {
-  Printf.printf "%s barexp %s\n"
-    (cinfo (rhs_info 1))
-    (string_of_expression (Binexp (Barop,$1,$3)));
-  Binexp (Barop,$1,$3)
-}
+|   expression BAR  expression   { Binexp (Barop,$1,$3) }
 
 |   expression DBAR expression   { Binexp (DBarop,$1,$3) }
 
