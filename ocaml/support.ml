@@ -497,12 +497,16 @@ and string_of_body b =
 
 type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
 
-type inheritance_clause = int list
 
 
 
 
 (* Features *)
+
+type classname = int withinfo
+
+type formal_generics = int list withinfo
+
 
 type visibility =
     Public
@@ -517,6 +521,20 @@ type feature_name =
   | FNfalse
   | FNnumber of int
 
+type name_sig = feature_name * type_t list
+
+type rename_item = name_sig * feature_name
+
+type adaptation_clause =
+    Rename of rename_item list
+  | Redefine of name_sig list
+  | Undefine of name_sig list
+
+type parent = type_t * adaptation_clause list
+
+type inherit_clause = visibility * parent list
+
+
 type declaration =
     Assertion_feature of int option * entities list withinfo * feature_body
   | Named_feature of
@@ -527,9 +545,10 @@ type declaration =
   | Formal_generic of int withinfo * type_t withinfo
   | Class_declaration of
       header_mark withinfo
-        * int withinfo
-        * int list withinfo
-        * inheritance_clause list
+        * classname
+        * formal_generics
+        * inherit_clause list
+        * declaration_block list
   | Declaration_block of declaration_block
 and declaration_block =
     Feature_block of visibility * declaration list

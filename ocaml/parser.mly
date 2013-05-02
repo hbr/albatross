@@ -261,7 +261,8 @@ class_declaration:
   Class_declaration( withinfo (rhs_info 1) $1,
                      withinfo (rhs_info 3) $3,
                      withinfo (rhs_info 4) $4,
-                     []
+                     $5,
+                     $6
                     )
 }
 
@@ -273,12 +274,12 @@ class_generics:
 
 inheritance:
     { [] }
-|   inherit_block inheritance { $1::$2 }
+|   inherit_clause inheritance { $1::$2 }
 
 
 class_blocks:
-    {()}
-|   class_blocks declaration_block {()}
+    { [] }
+|   class_blocks declaration_block { $2::$1 }
 
 
 
@@ -287,26 +288,26 @@ class_blocks:
 /* Inheritance */
 /* ------------------------------------------------------------------------- */
 
-inherit_block: KWinherit visibility optsemi parent_list { () }
+inherit_clause: KWinherit visibility optsemi parent_list { $2,$4 }
 
 parent_list:
     parent { [$1] }
 |   parent parent_list { $1::$2 }
 
-parent: type_nt feature_adaptation { $1 }
+parent: type_nt feature_adaptation { $1,$2 }
 
 feature_adaptation:
     { [] }
 |   adaptation_list KWend { $1 }
 
 adaptation_list:
-    adaptation_block  { [$1] }
-|   adaptation_block adaptation_list { $1::$2 }
+    adaptation_clause  { [$1] }
+|   adaptation_clause adaptation_list { $1::$2 }
 
-adaptation_block:
-    KWrename rename_list { () }
-|   KWredefine feature_name_list { () }
-|   KWundefine feature_name_list { () }
+adaptation_clause:
+    KWrename rename_list         { Rename $2   }
+|   KWredefine feature_name_list { Redefine $2 }
+|   KWundefine feature_name_list { Undefine $2 }
 
 feature_name_list:
     name_sig   { [$1] }
