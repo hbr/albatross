@@ -1,6 +1,10 @@
+let print_module (f:string) (d:Support.declaration list) =
+  Printf.printf "module: %s\n" f
+
+
 let parse_file (f:string) =
   let lexbuf = Lexing.from_channel (open_in f)
-  (* and _ =   Parsing.set_trace true*)
+  (*and _ =   Parsing.set_trace true*)
   in
   lexbuf.Lexing.lex_curr_p <- 
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = f};
@@ -8,10 +12,6 @@ let parse_file (f:string) =
   Parser.main Lexer.token lexbuf
 
 
-
-
-let print_module (f:string) (d:Support.declaration list) =
-  Printf.printf "module: %s\n" f
 
 
 let rec validate (modules:string list)  =

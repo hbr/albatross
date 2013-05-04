@@ -267,6 +267,8 @@ all(a,b,c,d:A, e,f:E, g,h,i)
         {x:A: (p:a::b::p)} = 0
         x := 5+3*7
         exp[e:=i+j]
+        (aexp).(fexp)(b)
+        a.b.(fexp)(b)
         t.f(a)=t.f(b).value
         [a,b] = [x,y]
         a.b.c(1,2).d

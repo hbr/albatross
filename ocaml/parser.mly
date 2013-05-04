@@ -14,6 +14,15 @@ let cinfo (i:info) =  info_string (filename ()) i
 let syntax_error () = raise (Parsing.Parse_error)
 
 
+let expression_from_dotted_id (l: int list) =
+  match List.rev l with
+    f::t -> 
+      let func e i = Expdot (e, Identifier i)
+      in
+      List.fold_left func (Identifier f) t
+  | _    -> assert false
+
+
 let rec formals_from_expression (e:expression) =
   let rec entlist (l: expression list) =
     match l with
@@ -336,8 +345,8 @@ name_sig:
 
 
 path:
-    { [] }
-|   dotted_id_list DOT { List.rev $1 }
+/*    { [] }
+|*/   dotted_id_list DOT { $1 }
 
 
 dotted_id_list:
@@ -371,7 +380,8 @@ actual_generics:
 
 
 simple_type:
-    path UIDENTIFIER actual_generics { Normal_type ($1,$2,$3)}
+    UIDENTIFIER actual_generics { Normal_type ([],$1,$2)}
+|   path UIDENTIFIER actual_generics { Normal_type (List.rev $1,$2,$3)}
 
 
 
@@ -620,12 +630,7 @@ expression:
 
 
 pexpression: dotted_id_list %prec LOWEST_PREC {
-  match List.rev $1 with
-    f::t -> 
-      let func e i = Expdot (e, Identifier i)
-      in
-      List.fold_left func (Identifier f) t
-  | _    -> assert false
+  expression_from_dotted_id $1
 }
 
 
@@ -665,6 +670,7 @@ cexpression:
 
 |   cexpression LBRACKET expression RBRACKET { Bracketapp ($1,$3) }
 
+
 |   pexpression LBRACKET expression RBRACKET { 
   Bracketapp ($1,$3)
 }
@@ -672,17 +678,17 @@ cexpression:
 
 |   cexpression LPAREN expression RPAREN     { Funapp ($1,$3) }
 
-|   pexpression LPAREN expression RPAREN {
-  Funapp ($1,$3)
+|   pexpression LPAREN expression RPAREN     { Funapp ($1,$3) }
+
+
+|   path LPAREN expression RPAREN  {
+  let e = expression_from_dotted_id $1 in
+  Expdot (e, Expparen $3)
 }
 
-|   cexpression DOT LIDENTIFIER %prec LOWEST_PREC { Expdot ($1, Identifier $3) }
+|   cexpression DOT LIDENTIFIER { Expdot ($1, Identifier $3) }
 
-|   cexpression DOT LIDENTIFIER LPAREN expression RPAREN{ 
-  let dotexp = Expdot ($1, Identifier $3)
-  in
-  Funapp(dotexp,$5)
-}
+|   cexpression DOT LPAREN expression RPAREN { Expdot ($1,Expparen $4) }
 
 |   conditional { $1 }
 

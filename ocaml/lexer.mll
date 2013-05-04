@@ -221,8 +221,7 @@ rule next_token = parse
       raise (Sys_error "error during lexical analyis")
 }
 
-| eof   {Printf.printf "end of file encountered\n";
-         Parser.EOF, (false,false) }
+| eof   { Parser.EOF, (false,false) }
 
 
 | _     {

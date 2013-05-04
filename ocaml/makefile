@@ -3,7 +3,7 @@ main:
 
 
 test: main
-	./main.byte test.e
+	./main.byte test.e test.epc
 
 kernel: main
 	./main.byte ../library/kernel/kernel.eml
