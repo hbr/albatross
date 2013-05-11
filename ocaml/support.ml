@@ -225,6 +225,7 @@ type operator =
   | DBarop
   | Arrowop
   | Bracketop
+  | Parenop
   | DArrowop
   | DColonop
   | Inop
@@ -256,6 +257,7 @@ let opdata op =
   | Barop     -> "|",   40,  Left
   | DBarop    -> "||",  40,  Left
   | Arrowop   -> "->",  20,  Right
+  | Parenop   -> "()",  1000, Nonassoc
   | Bracketop -> "[]",  1000, Nonassoc
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
@@ -554,3 +556,4 @@ and declaration_block =
     Feature_block of visibility * declaration list
   | Create_block  of visibility * declaration list
   | Invariant_block of visibility * compound
+  | Import_block    of visibility * int list list

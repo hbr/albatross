@@ -72,6 +72,7 @@ let _ =
      ("ghost",     Parser.KWghost);
      ("if",        Parser.KWif);
      ("immutable", Parser.KWimmutable);
+     ("import",    Parser.KWimport);
      ("in",        Parser.KWin);
      ("inherit",   Parser.KWinherit);
      ("inspect",   Parser.KWinspect);
@@ -173,6 +174,10 @@ rule next_token = parse
 
 
 | "/in"           { Parser.NOTIN,    (false,false) }
+
+| "()"            { Parser.PARENOP,  (false,false) }
+
+| "[]"            { Parser.BRACKETOP,(false,false) }
 
 
 | ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|']+ as op {

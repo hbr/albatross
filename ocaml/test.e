@@ -131,6 +131,11 @@ all(a,b:CURRENT)
 
 -- --------------------------------------------------------------------
 
+import
+    a.b.c.d
+    p
+end
+
 nat_val: NATURAL
 
 func_assign(i:NATURAL)

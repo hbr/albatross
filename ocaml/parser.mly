@@ -99,8 +99,8 @@ let expression_from_entities entlist =
 %token KWelse      KWelseif       KWend        KWensure
 %token KWfalse     KWfeature
 %token KWghost
-%token KWif        KWimmutable    KWin         KWinherit
-       KWinspect   KWinvariant
+%token KWif        KWimmutable    KWimport     KWin
+       KWinherit   KWinspect      KWinvariant
 %token KWlocal
 %token KWnot       KWnote
 %token KWold       KWor
@@ -112,6 +112,7 @@ let expression_from_entities entlist =
 %token ARROW
 %token ASSIGN
 %token BAR
+%token BRACKETOP
 %token CARET
 %token COLON
 %token COMMA
@@ -138,6 +139,7 @@ let expression_from_entities entlist =
 %token NEQV
 %token NEWLINE
 %token NOTIN
+%token PARENOP
 %token PLUS
 %token QMARK
 %token RBRACE
@@ -214,12 +216,15 @@ declaration_block:
 |   KWinvariant LBRACE KWNONE RBRACE  compound {
   Invariant_block (Private,$5)
 }
-
+|   KWimport visibility optsemi imports {
+  Import_block ($2,$4)
+}
 
 visibility:
     { Public }
 |   LBRACE KWNONE RBRACE { Private }
 |   LBRACE uidentifier_list RBRACE { Protected (withinfo (rhs_info 2) $2) }
+
 
 declarations:
     %prec LOWEST_PREC { [] }
@@ -233,6 +238,11 @@ declaration:
 |   formal_generic    { $1 }
 
 
+imports:
+    one_import { [$1] }
+|   one_import SEMICOL imports { $1::$3 } 
+
+one_import: dotted_id_list { List.rev $1 }
 
 /* ------------------------------------------------------------------------- */
 /* Formal generics */
@@ -344,9 +354,7 @@ name_sig:
 
 
 
-path:
-/*    { [] }
-|*/   dotted_id_list DOT { $1 }
+path: dotted_id_list DOT { $1 }
 
 
 dotted_id_list:
@@ -787,6 +795,11 @@ quantifier:
 
 
 
+/* todo: distinguish between expressions which can occur within expressions
+         only and expressions which can occur in imperative constructs to
+         avoid the check ambiguity !!!
+*/
+
 compound: compound_list {
   let _ =
     Printf.printf "%s compound: %s\n"
@@ -860,7 +873,8 @@ operator:
 |   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
 |   ROPERATOR { RFreeop $1 }
-|   LBRACKET RBRACKET {Bracketop}
+|   PARENOP   { Parenop }
+|   BRACKETOP { Bracketop }
 
 
 
