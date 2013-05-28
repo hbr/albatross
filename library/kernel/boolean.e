@@ -1,3 +1,5 @@
+G: ANY
+
 immutable class
     BOOLEAN
 end
@@ -18,6 +20,14 @@ all(a,b,e:BOOLEAN)
         antisymmetric:    (a=>b) => (b=>a) => (a=b)
         classic:          ((a=>false)=>false) => a
         deduction:        require a ensure b end => (a=>b)
+    end
+
+all(e,f:BOOLEAN)
+    note built_in ensure
+        exist_intro:      all(x:G) e => some(y:G) e[x:=y]
+        exist_elim:       (some(y:G) e)
+                          => (all(y:G) e=>f)
+                          => f
     end
 
 not (a:BOOLEAN): BOOLEAN

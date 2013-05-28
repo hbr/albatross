@@ -19,7 +19,7 @@ all(a,b:CURRENT)
         r1: a=b
     check
         c1: a=a                             -- reflexivity
-        c2: a in {x: x=a}                   -- c1, in_2
+        c2: a in {x: x=a}                   -- c1, in_1
         c3: all(p:CURRENT?)
                 require
                     r2: a in p

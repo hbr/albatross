@@ -17,6 +17,14 @@ feature    -- Basic functions
             built_in
         end
 
+    all(a:G, e:BOOLEAN)
+        note
+            built_in
+        ensure
+            in_1: e[x:=a]     =>   a in {x:e}
+            in_2: a in {x:e}  =>   e[x:=a]
+        end
+
     <= (p,q:CURRENT): ghost BOOLEAN
             -- Is `p' a subset of `q'?
         ensure
