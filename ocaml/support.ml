@@ -47,54 +47,98 @@ let parse_error_fun : (string->unit) ref =
   ref (fun str -> Printf.eprintf "%s\n" str;  failwith "Syntax error")
 
 
-
 (*
 -----------------------------------------------------------------------------
-   Symbol table
+   Library
 -----------------------------------------------------------------------------
 *)
 
-type symbol_table = {mutable st_count: int;
-                     mutable st_arr:   string array;
-                     st_map:           (string,int) Hashtbl.t}
+module type Seq_sig = sig
+  type 'a sequence
+  val empty: 'a -> 'a sequence
+  val count: 'a sequence -> int
+  val elem:  'a sequence -> int -> 'a
+  val push:  'a sequence -> 'a -> unit
+end
 
-let symbol_table = {st_count=0;
-                    st_arr= Array.make 1 "";
-                    st_map = Hashtbl.create 53}
-
-let added_symbol str =
-  let st = symbol_table
-  in
-  let cnt = st.st_count
-  in
-  let _ =
-    if Array.length st.st_arr = cnt then
-      let narr = Array.make (2*cnt) ""
-      in
-      Array.blit st.st_arr 0  narr 0 cnt;
-      st.st_arr <- narr
-    else
-      ()
-  in
-  assert (cnt < Array.length st.st_arr);
-  Hashtbl.add st.st_map str cnt;
-  st.st_arr.(cnt) <- str;
-  st.st_count <- cnt + 1;
-  cnt
-
-
-let symbol str =
-  try
-    Hashtbl.find symbol_table.st_map str
-  with
-    Not_found ->
-      added_symbol str
-
-let symbol_string (s:int) =
-  assert (s < symbol_table.st_count);
-  symbol_table.st_arr.(s)
+module Seq = struct
+  type 'a sequence = {mutable cnt:int;
+                      mutable arr: 'a array}
+  let empty elem = {cnt=0; arr=Array.make 1 elem}
+  let count seq  = seq.cnt
+  let elem seq i =
+    assert (i<seq.cnt);
+    seq.arr.(i)
+  let push seq elem =
+    let cnt = seq.cnt
+    in
+    let _ =
+      if cnt = Array.length seq.arr then
+        let narr =
+          assert (Array.length seq.arr>0);
+          Array.make (2*cnt) seq.arr.(0)
+        in
+        Array.blit seq.arr 0 narr 0 cnt;
+        seq.arr <- narr
+      else
+        ()
+    in
+    assert (cnt < Array.length seq.arr);
+    seq.arr.(cnt) <- elem;
+    seq.cnt <- cnt+1
+end
 
 
+module type Symbol_table_sig = sig
+  type 'a table
+  val empty:  'a -> 'a table
+  val count:  'a table -> int
+  val symbol: 'a table -> 'a -> int
+  val elem:   'a table -> int -> 'a
+end
+
+module Symbol_table: Symbol_table_sig = struct
+  type 'a table = {seq: 'a Seq.sequence;
+                   map: ('a,int) Hashtbl.t}
+
+  let empty elem = {seq=Seq.empty elem; map=Hashtbl.create 53}
+
+  let count st   = Seq.count st.seq
+
+  let added st elem =
+    let cnt = Seq.count st.seq
+    in
+    Seq.push st.seq elem;
+    Hashtbl.add st.map elem cnt;
+    cnt
+
+  let symbol st elem =
+    try 
+      Hashtbl.find st.map elem
+    with
+      Not_found ->
+        added st elem
+
+  let elem st (s:int) =
+    assert (s < Seq.count st.seq);
+    Seq.elem st.seq s
+end
+
+
+
+(*
+-----------------------------------------------------------------------------
+   Symbol tables
+-----------------------------------------------------------------------------
+*)
+
+let symbol_table              = Symbol_table.empty ""
+let symbol (str:string)       = Symbol_table.symbol symbol_table str
+let symbol_string (s:int)     = Symbol_table.elem symbol_table s
+
+let path_table                = Symbol_table.empty ([]:int list)
+let path_symbol (p: int list) = Symbol_table.symbol path_table p
+let symbol_path (s:int)       = Symbol_table.elem path_table s
 
 
 (*
@@ -140,7 +184,7 @@ let rec split_list (l: 'a list) (sep: 'a -> bool) =
 (* Types *)
 
 type type_t =
-    Normal_type of int list * int * type_t list   (* kernel.ANY,
+    Normal_type of int * int * type_t list   (* kernel.ANY,
                                                  kernel.ARRAY[NATURAL] *)
   | Current_type of type_t list
   | Arrow_type of type_t * type_t        (* A -> B              *)
@@ -161,7 +205,7 @@ let rec string_of_type (t:type_t) =
   in
   match t with
     Normal_type (p,n,l) ->
-      let ps = string_of_path p
+      let ps = string_of_path (symbol_path p)
       in
       ps ^ (symbol_string n) ^ (actuals l)
   | Current_type l -> "CURRENT" ^ (actuals l)

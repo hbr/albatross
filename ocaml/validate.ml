@@ -1,3 +1,28 @@
+(*
+open Support
+
+let used_packages (dl: declaration list) =
+  let rec up_dl (dl: declaration list) =
+    match dl with
+      []   -> []
+    | f::t -> List.rev_append (up_dec f) (up_dl t)
+  and up_dec (d: Support.declaration) =
+    match d with
+      Assertion_feature (_,entlist,body) ->
+        List.rev_append (up_entlist entlist.v) (up_body body)
+    | Named_feature (_,entlist,rt,body) ->
+        List.rev_append (up_entlist entlist.v) (up_body body)
+  and
+      up_entlist entlist =
+        assert false
+  and
+      up_body body =
+        assert false
+  in
+  up_dl dl
+*)  
+        
+
 let print_module (f:string) (d:Support.declaration list) =
   Printf.printf "module: %s\n" f
 

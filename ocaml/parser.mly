@@ -388,8 +388,12 @@ actual_generics:
 
 
 simple_type:
-    UIDENTIFIER actual_generics { Normal_type ([],$1,$2)}
-|   path UIDENTIFIER actual_generics { Normal_type (List.rev $1,$2,$3)}
+    UIDENTIFIER actual_generics {
+  Normal_type ((path_symbol []),$1,$2)
+}
+|   path UIDENTIFIER actual_generics {
+  Normal_type (path_symbol (List.rev $1),$2,$3)
+}
 
 
 
