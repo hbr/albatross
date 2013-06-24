@@ -55,7 +55,7 @@ let parse_error_fun : (string->unit) ref =
 
 module type Seq_sig = sig
   type 'a sequence
-  val empty: 'a -> 'a sequence
+  val empty: unit -> 'a sequence
   val count: 'a sequence -> int
   val elem:  'a sequence -> int -> 'a
   val push:  'a sequence -> 'a -> unit
@@ -64,7 +64,7 @@ end
 module Seq = struct
   type 'a sequence = {mutable cnt:int;
                       mutable arr: 'a array}
-  let empty elem = {cnt=0; arr=Array.make 1 elem}
+  let empty () = {cnt=0; arr=Array.init 0 (function _ -> assert false)}
   let count seq  = seq.cnt
   let elem seq i =
     assert (i<seq.cnt);
@@ -75,8 +75,7 @@ module Seq = struct
     let _ =
       if cnt = Array.length seq.arr then
         let narr =
-          assert (Array.length seq.arr>0);
-          Array.make (2*cnt) seq.arr.(0)
+          Array.make (1+2*cnt) elem
         in
         Array.blit seq.arr 0 narr 0 cnt;
         seq.arr <- narr
@@ -91,7 +90,7 @@ end
 
 module type Symbol_table_sig = sig
   type 'a table
-  val empty:  'a -> 'a table
+  val empty:  unit -> 'a table
   val count:  'a table -> int
   val symbol: 'a table -> 'a -> int
   val elem:   'a table -> int -> 'a
@@ -101,7 +100,7 @@ module Symbol_table: Symbol_table_sig = struct
   type 'a table = {seq: 'a Seq.sequence;
                    map: ('a,int) Hashtbl.t}
 
-  let empty elem = {seq=Seq.empty elem; map=Hashtbl.create 53}
+  let empty () = {seq=Seq.empty (); map=Hashtbl.create 53}
 
   let count st   = Seq.count st.seq
 
@@ -132,11 +131,11 @@ end
 -----------------------------------------------------------------------------
 *)
 
-let symbol_table              = Symbol_table.empty ""
+let symbol_table              = Symbol_table.empty ()
 let symbol (str:string)       = Symbol_table.symbol symbol_table str
 let symbol_string (s:int)     = Symbol_table.elem symbol_table s
 
-let path_table                = Symbol_table.empty ([]:int list)
+let path_table                = Symbol_table.empty ()
 let path_symbol (p: int list) = Symbol_table.symbol path_table p
 let symbol_path (s:int)       = Symbol_table.elem path_table s
 
