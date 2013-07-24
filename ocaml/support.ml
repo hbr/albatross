@@ -53,50 +53,15 @@ let parse_error_fun : (string->unit) ref =
 -----------------------------------------------------------------------------
 *)
 
-module type Seq_sig = sig
-  type 'a sequence
-  val empty: unit -> 'a sequence
-  val count: 'a sequence -> int
-  val elem:  'a sequence -> int -> 'a
-  val push:  'a sequence -> 'a -> unit
-end
 
-module Seq = struct
-  type 'a sequence = {mutable cnt:int;
-                      mutable arr: 'a array}
-  let empty () = {cnt=0; arr=Array.init 0 (function _ -> assert false)}
-  let count seq  = seq.cnt
-  let elem seq i =
-    assert (i<seq.cnt);
-    seq.arr.(i)
-  let push seq elem =
-    let cnt = seq.cnt
-    in
-    let _ =
-      if cnt = Array.length seq.arr then
-        let narr =
-          Array.make (1+2*cnt) elem
-        in
-        Array.blit seq.arr 0 narr 0 cnt;
-        seq.arr <- narr
-      else
-        ()
-    in
-    assert (cnt < Array.length seq.arr);
-    seq.arr.(cnt) <- elem;
-    seq.cnt <- cnt+1
-end
-
-
-module type Symbol_table_sig = sig
+module Symbol_table: sig
   type 'a table
   val empty:  unit -> 'a table
   val count:  'a table -> int
   val symbol: 'a table -> 'a -> int
   val elem:   'a table -> int -> 'a
-end
-
-module Symbol_table: Symbol_table_sig = struct
+end = struct
+  open Container
   type 'a table = {seq: 'a Seq.sequence;
                    map: ('a,int) Hashtbl.t}
 

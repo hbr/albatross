@@ -1,5 +1,14 @@
 open Type
 open Term
+open Container
+
+let _ = ArrayedSet.test ()
+
+type term =
+    Variable    of int
+  | Application of term * term
+  | Lambda      of typ * term
+
 
 module Proof = struct
   type proof_term =
