@@ -552,7 +552,7 @@ local_declaration:
 
 
 implementation_note: KWnote LIDENTIFIER {
-  let str = symbol_string $2
+  let str = ST.string $2
   in
   if str = "built_in" then Impbuiltin
   else if str = "event" then Impevent

@@ -1,14 +1,67 @@
-G: ANY
-
 immutable class
     BOOLEAN
 end
 
-=> (a,b:BOOLEAN): BOOLEAN
-    note built_in end
 
-false: BOOLEAN
-    note built_in end
+feature   -- Basic functions
+    => (a,b:BOOLEAN): BOOLEAN
+        note built_in end
+
+    false: BOOLEAN
+        note built_in end
+
+end
+
+feature {NONE}   -- Axioms
+    all(a:BOOLEAN)
+        note built_in ensure
+            classic:  ((a=>false)=>false) => a
+            ex_falso: false => a
+        end
+end
+
+
+feature {NONE} -- Negation
+    not (a:BOOLEAN): BOOLEAN
+        ensure
+            Result = (a=>false)
+        end
+end
+
+feature   -- Negation
+    not (a:BOOLEAN): BOOLEAN
+
+
+    all(a:BOOLEAN)
+        ensure
+            refutation:    (a => false)     => not a
+            indirect:      (not a => false) => a
+            contradiction: a => not a => false
+        end
+end
+
+
+
+feature {NONE}  -- conjunction
+    and (a,b:BOOLEAN): BOOLEAN
+        ensure
+            Result = not (a => not b)
+        end
+end
+
+
+feature -- conjunction
+    and (a,b:BOOLEAN): BOOLEAN
+
+    all(a,b:BOOLEAN)
+        ensure
+            a and b => a
+            a and b => b
+            a => b => a and b
+        end
+end
+
+
 
 =  (a,b:BOOLEAN): BOOLEAN
     note built_in end
@@ -20,14 +73,6 @@ all(a,b,e:BOOLEAN)
         antisymmetric:    (a=>b) => (b=>a) => (a=b)
         classic:          ((a=>false)=>false) => a
         deduction:        require a ensure b end => (a=>b)
-    end
-
-all(e,f:BOOLEAN)
-    note built_in ensure
-        exist_intro:      all(x:G) e => some(y:G) e[x:=y]
-        exist_elim:       (some(y:G) e)
-                          => (all(y:G) e=>f)
-                          => f
     end
 
 not (a:BOOLEAN): BOOLEAN

@@ -188,7 +188,7 @@ rule next_token = parse
       let _ = assert ((String.length op) > 0)
       in
       let last = op.[(String.length op)-1]
-      and sym  = Support.symbol op
+      and sym  = Support.ST.symbol op
       in
       if last = ':'
       then Parser.OPERATOR  sym, (false,false)
@@ -196,7 +196,7 @@ rule next_token = parse
 }
 
 
-| ['0'-'9']+ as num { Parser.NUMBER (Support.symbol num), (true,true) }
+| ['0'-'9']+ as num { Parser.NUMBER (Support.ST.symbol num), (true,true) }
 
 
 | ['A'-'Z'] ['A'-'Z' '0'-'9' '_']* as id {
@@ -204,7 +204,7 @@ rule next_token = parse
     kwtoken id
   with
     Not_found ->
-      Parser.UIDENTIFIER (Support.symbol id), (true,true)
+      Parser.UIDENTIFIER (Support.ST.symbol id), (true,true)
 }
 
 
@@ -212,7 +212,7 @@ rule next_token = parse
   try
     kwtoken id
   with
-    Not_found -> Parser.LIDENTIFIER (Support.symbol id), (true,true)
+    Not_found -> Parser.LIDENTIFIER (Support.ST.symbol id), (true,true)
 }
 
 

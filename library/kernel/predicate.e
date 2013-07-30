@@ -17,10 +17,17 @@ feature    -- Basic functions
             built_in
         end
 
+    all(p:G?, e:BOOLEAN)
+        note built_in ensure
+            exist_intro:   all(x) x in p => some(y) y in p
+            exist_elim:    (some(x) x in p)
+                           => (all(x) x in p => e)
+                           => e
+        end
+
     all(a:G, e:BOOLEAN)
-        note
-            built_in
-        ensure
+        note built_in ensure
+            -- Not necessary???
             in_1: e[x:=a]     =>   a in {x:e}
             in_2: a in {x:e}  =>   e[x:=a]
         end

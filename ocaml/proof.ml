@@ -1,38 +1,47 @@
-open Type
-open Term
+(*open Term*)
 open Container
+open Type
 
 let _ = ArrayedSet.test ()
-
+(*
 type term =
     Variable    of int
   | Application of term * term
   | Lambda      of typ * term
+*)
 
-
-module Proof = struct
+module Proof: sig
+end = struct
+  open Class
+  open Term
   type proof_term =
-      Assumption    of term
-    | Premise       of term  * proof_term
+      Context       of typ array
+    | Assumption    of proof_term * term
+    | Premise       of term  * proof_term  (* discharge assumption as premise *)
     | MP            of proof_term * proof_term       (* a => (a=>b) => b *)
     | Generalize    of proof_term * int
     | Theorem       of int
     | Specialize    of proof_term * term list
     | Fold          of proof_term * term  (* Fold a function with new term *)
     | Unfold        of proof_term * term  (* Unfold a function with new term *)
-
+    | PopContext    of proof_term
+  
 
   exception Failed_proof
       
+(*
   type proof =
       {type_context: type_context;
        assumptions:  term array;
        term:         term;
        proof_term:   proof_term}
 
+
   let check_proof (p:proof) =
     match p.proof_term with
-      Assumption t ->
+      Context tarr ->
+        assert false
+    | Assumption (c,t)->
         ((Array.length p.assumptions) = 1) &&
         (p.assumptions.(0) = t)
     | Premise (t,pt) ->
@@ -49,7 +58,9 @@ module Proof = struct
         assert false
     | Unfold (pt,t) ->
         assert false
-        
+    | PopContext t ->
+        assert false
+*)        
 end
         
         
@@ -85,6 +96,15 @@ end
    5: Premise(a=>b=>c,4)                       []            (a=>b=>c)=>b=>a=>c
 
 
+*)
+
+(* Contexts
+
+We have a toplevel context which contains all classes and functions. I.e. we
+have a class and a type context. If we enter a proof we need to shift the
+bound variables of the proof into the type context. So we can have a whole
+stack of type contexts. The types are found inside out i.e the variable 0 is
+the innermost binding and soon.
 
 *)
 
@@ -92,6 +112,7 @@ end
 
 
 module Commands = struct
+  open Term
   type command =
       Enter
     | MP of term

@@ -6,6 +6,7 @@
 
 exception Exit_error of string
 exception Tohandle of string
+exception Eiffel_error of string
 
 
 (*
@@ -47,48 +48,6 @@ let parse_error_fun : (string->unit) ref =
   ref (fun str -> Printf.eprintf "%s\n" str;  failwith "Syntax error")
 
 
-(*
------------------------------------------------------------------------------
-   Library
------------------------------------------------------------------------------
-*)
-
-
-module Symbol_table: sig
-  type 'a table
-  val empty:  unit -> 'a table
-  val count:  'a table -> int
-  val symbol: 'a table -> 'a -> int
-  val elem:   'a table -> int -> 'a
-end = struct
-  open Container
-  type 'a table = {seq: 'a Seq.sequence;
-                   map: ('a,int) Hashtbl.t}
-
-  let empty () = {seq=Seq.empty (); map=Hashtbl.create 53}
-
-  let count st   = Seq.count st.seq
-
-  let added st elem =
-    let cnt = Seq.count st.seq
-    in
-    Seq.push st.seq elem;
-    Hashtbl.add st.map elem cnt;
-    cnt
-
-  let symbol st elem =
-    try 
-      Hashtbl.find st.map elem
-    with
-      Not_found ->
-        added st elem
-
-  let elem st (s:int) =
-    assert (s < Seq.count st.seq);
-    Seq.elem st.seq s
-end
-
-
 
 (*
 -----------------------------------------------------------------------------
@@ -96,13 +55,22 @@ end
 -----------------------------------------------------------------------------
 *)
 
-let symbol_table              = Symbol_table.empty ()
-let symbol (str:string)       = Symbol_table.symbol symbol_table str
-let symbol_string (s:int)     = Symbol_table.elem symbol_table s
+module ST : sig
+  val symbol: string -> int
+  val string: int    -> string
+  val count:  unit   -> int
+end = struct
+  open Container
+  let kt                   = Key_table.empty ()
+  let symbol (str:string)  = Key_table.index kt str
+  let string (i:int)       = Key_table.key   kt i 
+  let count ()             = Key_table.count kt
+end
 
-let path_table                = Symbol_table.empty ()
-let path_symbol (p: int list) = Symbol_table.symbol path_table p
-let symbol_path (s:int)       = Symbol_table.elem path_table s
+open Container
+let path_table                = Key_table.empty ()
+let path_symbol (p: int list) = Key_table.index path_table p
+let symbol_path (s:int)       = Key_table.key path_table s
 
 
 (*
@@ -116,7 +84,7 @@ let symbol_path (s:int)       = Symbol_table.elem path_table s
 let rec string_of_path (p: int list) =
   match p with
     [] -> ""
-  | f::t -> (symbol_string f) ^ "." ^ (string_of_path t)
+  | f::t -> (ST.string f) ^ "." ^ (string_of_path t)
 
 let rec string_of_list (l: 'a list) (sfun: 'a -> string) (sep: string) =
   String.concat sep (List.map sfun l)
@@ -171,7 +139,7 @@ let rec string_of_type (t:type_t) =
     Normal_type (p,n,l) ->
       let ps = string_of_path (symbol_path p)
       in
-      ps ^ (symbol_string n) ^ (actuals l)
+      ps ^ (ST.string n) ^ (actuals l)
   | Current_type l -> "CURRENT" ^ (actuals l)
   | Arrow_type (t1,t2) ->
       (string_of_type t1) ^ "->" ^ (string_of_type t2)
@@ -195,8 +163,8 @@ type entities =
 let string_of_entities (args: entities) =
   match args with
     Typed_entities (l,t) ->
-      (string_of_list l symbol_string ",") ^ ":" ^ string_of_type t
-  | Untyped_entities l -> string_of_list l symbol_string ","
+      (string_of_list l ST.string ",") ^ ":" ^ string_of_type t
+  | Untyped_entities l -> string_of_list l ST.string ","
 
 
 let string_of_formals (args: entities list) =
@@ -271,8 +239,8 @@ let opdata op =
   | DColonop  -> "::",  55,  Right
   | Inop      -> "in",  60,  Nonassoc
   | Notinop      -> "/in",  60, Nonassoc
-  | Freeop  i -> symbol_string i, 60,  Left
-  | RFreeop i -> symbol_string i, 61,  Right
+  | Freeop  i -> ST.string i, 60,  Left
+  | RFreeop i -> ST.string i, 61,  Right
 
 
 let is_letter ch =
@@ -356,9 +324,9 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
   in
   match e with
-    Identifier id -> symbol_string id
+    Identifier id -> ST.string id
 
-  | Number num    -> symbol_string num
+  | Number num    -> ST.string num
 
   | ExpResult     -> "Result"
 
@@ -399,7 +367,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       withparen ((string_of_op op) ^ (strexp e)) wp
 
   | Taggedexp (t,e) ->
-      withparen ((symbol_string t) ^ ":" ^ (strexp e)) wp
+      withparen ((ST.string t) ^ ":" ^ (strexp e)) wp
 
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp
@@ -464,7 +432,7 @@ and string_of_locals loc =
       | Assigned (elist,exp) ->
           (string_of_formals elist) ^ ":=" ^ (string_of_expression exp)
       | Local_feature (id,elist,rt,body) ->
-          (symbol_string id) ^ "(" ^ (string_of_formals elist) ^")"
+          (ST.string id) ^ "(" ^ (string_of_formals elist) ^")"
           ^
           (match rt with Some t -> 
             let tp,exclam = t.v
@@ -565,3 +533,7 @@ and declaration_block =
   | Create_block  of visibility * declaration list
   | Invariant_block of visibility * compound
   | Import_block    of visibility * int list list
+
+
+
+

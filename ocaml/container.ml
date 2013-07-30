@@ -34,6 +34,8 @@ module Seq: sig
   val count: 'a sequence -> int
   val elem:  'a sequence -> int -> 'a
   val push:  'a sequence -> 'a -> unit
+  val iter:  ('a->unit) -> 'a sequence -> unit
+  val iteri: (int->'a->unit) -> 'a sequence -> unit
 end = struct
   type 'a sequence = {mutable cnt:int;
                       mutable arr: 'a array}
@@ -59,9 +61,71 @@ end = struct
     assert (cnt < Array.length seq.arr);
     seq.arr.(cnt) <- elem;
     seq.cnt <- cnt+1
+
+  let iter f s =
+    let rec iter0 i =
+      if i=s.cnt then ()
+      else begin
+        f (elem s i);
+        iter0 (i+1)
+      end
+    in iter0 0
+
+  let iteri f s =
+    let rec iter0 i =
+      if i=s.cnt then ()
+      else begin
+        f i (elem s i);
+        iter0 (i+1)
+      end
+    in iter0 0
 end
 
 type 'a seq = 'a Seq.sequence
+
+
+
+
+
+module Key_table: sig
+  type 'a table
+  val empty:  unit -> 'a table
+  val count:  'a table -> int
+  val index:  'a table -> 'a -> int
+  val key:   'a table -> int -> 'a
+end = struct
+  type 'a table = {seq: 'a Seq.sequence;
+                   map: ('a,int) Hashtbl.t}
+
+  let empty () = {seq=Seq.empty (); map=Hashtbl.create 53}
+
+  let count st   = Seq.count st.seq
+
+  let added st elem =
+    let cnt = Seq.count st.seq
+    in
+    Seq.push st.seq elem;
+    Hashtbl.add st.map elem cnt;
+    cnt
+
+  let index st elem =
+    try 
+      Hashtbl.find st.map elem
+    with
+      Not_found ->
+        added st elem
+
+  let key st (s:int) =
+    assert (s < Seq.count st.seq);
+    Seq.elem st.seq s
+end
+
+type 'a key_table = 'a Key_table.table
+
+
+
+
+
 
 
 module type Set = sig
