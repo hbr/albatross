@@ -39,6 +39,11 @@ let info_from_position pos =
   create_info l c
 
 
+exception Error_info of info*string
+exception Error_fileinfo of string*info*string
+
+
+
 (*
 -----------------------------------------------------------------------------
    Syntax error function
@@ -85,6 +90,11 @@ let rec string_of_path (p: int list) =
   match p with
     [] -> ""
   | f::t -> (ST.string f) ^ "." ^ (string_of_path t)
+
+let string_of_option  (o: 'a option) (sfun: 'a -> string) =
+  match o with
+    None -> ""
+  | Some e -> sfun e
 
 let rec string_of_list (l: 'a list) (sfun: 'a -> string) (sep: string) =
   String.concat sep (List.map sfun l)
@@ -211,7 +221,7 @@ type operator =
 
 type associativity = Left | Right | Nonassoc
 
-let opdata op =
+let operator_data op =
   match op with
     Plusop    -> "+",   45,  Left
   | Minusop   -> "-",   45,  Left
@@ -250,10 +260,10 @@ let is_letter ch =
   ((Char.code 'a') <= ic && ic <= (Char.code 'z'))
 
 
-let rstring_of_op op =
-  let s,_,_ = opdata op in s
+let operator_to_rawstring op =
+  let s,_,_ = operator_data op in s
 
-let string_of_op op =
+let operator_to_string op =
   match op with
     Andop ->  " and "
   | Orop  ->  " or "
@@ -262,7 +272,7 @@ let string_of_op op =
   | Inop  ->  " in "
   | Notinop -> " /in "
   | _     ->
-      let s,_,_ = opdata op
+      let s,_,_ = operator_data op
       in
       s
 
@@ -316,7 +326,7 @@ and local_declaration =
 
 and locals          = local_declaration list
 
-and feature_body = compound list * implementation option * compound list
+and feature_body = compound option * implementation option * compound option
 
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
@@ -343,7 +353,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Exparrow  (l,e) ->
       (string_of_formals l) ^ "->" ^ (string_of_expression e)
 
-  | Expop op     -> "(" ^ (rstring_of_op op) ^ ")"
+  | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 
   | Funapp (f,args) ->
       (strexp f) ^ "(" ^ (strexp args) ^ ")"
@@ -361,10 +371,10 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       "{" ^ (string_of_formals elist) ^ ":" ^ (string_of_expression exp)^ "}"
 
   | Binexp (op,e1,e2) ->
-      withparen ((strexp e1) ^ (string_of_op op) ^ (strexp e2)) wp
+      withparen ((strexp e1) ^ (operator_to_string op) ^ (strexp e2)) wp
 
   | Unexp (op,e) ->
-      withparen ((string_of_op op) ^ (strexp e)) wp
+      withparen ((operator_to_string op) ^ (strexp e)) wp
 
   | Taggedexp (t,e) ->
       withparen ((ST.string t) ^ ":" ^ (strexp e)) wp
@@ -460,22 +470,33 @@ and string_of_implementation imp =
 
 and string_of_body b =
   let rl,imp_opt,el = b in
-  (string_of_list rl (function e -> " require " ^ (string_of_compound e)) "")
+  (string_of_option rl (function e -> " require " ^ (string_of_compound e)))
   ^
     (match imp_opt with
       Some imp -> (string_of_implementation imp)
     | None -> "")
-  ^ (string_of_list rl (function e -> " ensure " ^ (string_of_compound e)) "")
+  ^ (string_of_option rl (function e -> " ensure " ^ (string_of_compound e)))
   ^ " end"
 
 
 
 
-(* Classes *)
+(* Header mark *)
 
 type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
 
+let hmark2string (hm:header_mark) =
+  match hm with
+    No_hmark -> "" 
+  | Case_hmark -> "case"
+  | Immutable_hmark -> "immutable"
+  | Deferred_hmark  -> "deferred"
 
+let hmark2string_wblank (hm:header_mark) =
+  let str = hmark2string hm in
+  if str = "" then str
+  else str ^ " "
+        
 
 
 

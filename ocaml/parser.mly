@@ -490,13 +490,14 @@ feature_body_opt:
 |   feature_body      { Some $1 }
 
 feature_body:
-    require_list feature_implementation ensure_list KWend { $1, Some $2, $3 }
-|   require_list feature_implementation KWend             { $1, Some $2, [] }
-|   feature_implementation ensure_list KWend              { [], Some $1, $2 }
-|   require_list ensure_list KWend                        { $1, None, $2 }
-|   require_list KWend                                    { $1, None, [] }
-|   feature_implementation KWend                          { [], Some $1, [] }
-|   ensure_list KWend                                     { [], None, $1 }
+    require_block feature_implementation ensure_block KWend
+    { Some $1, Some $2, Some $3 }
+|   require_block feature_implementation KWend  { Some $1, Some $2, None }
+|   feature_implementation ensure_block KWend   { None   , Some $1, Some $2 }
+|   require_block ensure_block KWend            { Some $1, None,    Some $2 }
+|   require_block KWend                         { Some $1, None,    None }
+|   feature_implementation KWend                { None,    Some $1, None }
+|   ensure_block KWend                          { None,    None,    Some $1 }
 
 
 
@@ -510,17 +511,17 @@ implementation_block:
     local_block do_block    { Impdefined($1,true, $2) }
 |   local_block check_block { Impdefined($1,false,$2) }
 
-
+/*
 require_list:
     require_block { [$1] }
 |   require_block require_list { $1::$2 }
+*/
 
-
-
+/*
 ensure_list:
     ensure_block { [$1] }
 |   ensure_block ensure_list { $1::$2 }
-
+*/
 
 
 require_block:
@@ -805,11 +806,11 @@ quantifier:
 */
 
 compound: compound_list {
-  let _ =
+  (*let _ =
     Printf.printf "%s compound: %s\n"
       (cinfo (rhs_info 1))
       (string_of_compound $1)
-  in
+  in*)
   $1
 }
 
@@ -821,9 +822,9 @@ compound_list:
 
 
 info_expression: tagged_expression {
-  Printf.printf "%s exp: %s\n"
+  (*Printf.printf "%s exp: %s\n"
     (cinfo (rhs_info 1))
-    (string_of_expression ~wp:false $1);
+    (string_of_expression ~wp:false $1);*)
   withinfo (rhs_info 1) $1
 }
 

@@ -92,7 +92,8 @@ module Key_table: sig
   val empty:  unit -> 'a table
   val count:  'a table -> int
   val index:  'a table -> 'a -> int
-  val key:   'a table -> int -> 'a
+  val key:    'a table -> int -> 'a
+  val find:   'a table -> 'a  -> int
 end = struct
   type 'a table = {seq: 'a Seq.sequence;
                    map: ('a,int) Hashtbl.t}
@@ -107,6 +108,8 @@ end = struct
     Seq.push st.seq elem;
     Hashtbl.add st.map elem cnt;
     cnt
+
+  let find  st elem = Hashtbl.find st.map elem
 
   let index st elem =
     try 
