@@ -41,9 +41,9 @@ end = struct
       let idx = Key_table.find c.names cn.v in
       let desc = Seq.elem c.classes idx in
       if hm.v <> desc.hmark then
-        let str = 
-          "Header mark should be \"" 
-          ^ (hmark2string desc.hmark) 
+        let str =
+          "Header mark should be \""
+          ^ (hmark2string desc.hmark)
           ^ "\"\n"
         in
         raise (Error_info (hm.i,str))
@@ -53,7 +53,7 @@ end = struct
       assert false
 
   let type_map (f:int->int->int) (t:typ) =
-    let rec map nb t = 
+    let rec map nb t =
       match t with
          Simple j -> Simple (f j nb)
       | Tuple tarr ->
@@ -67,7 +67,7 @@ end = struct
 
   let type_up (i:int) (t:typ) =
     (* Shift all classes up by 'i' in type 't' *)
-    type_map 
+    type_map
       (fun j nb ->
         if j<nb then j
         else j+i)

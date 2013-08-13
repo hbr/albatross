@@ -1,19 +1,10 @@
-(*open Term*)
+open Term
 open Container
 open Type
-
-let _ = ArrayedSet.test ()
-(*
-type term =
-    Variable    of int
-  | Application of term * term
-  | Lambda      of typ * term
-*)
 
 module Proof: sig
 end = struct
   open Class
-  open Term
   type proof_term =
       Context       of typ array
     | Assumption    of proof_term * term

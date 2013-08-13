@@ -30,7 +30,7 @@ let rec exp2string (e:expression) =
   | Namedop (name,_,_,_) ->
       name
   | Abstraction (tarr,e) ->
-      "(" ^ "[" ^ (arr2string "," (fun x->x) tarr) ^ "]" 
+      "(" ^ "[" ^ (arr2string "," (fun x->x) tarr) ^ "]"
       ^ (exp2string e) ^ ")"
 
 
@@ -102,7 +102,7 @@ let rec reduce (e:expression) =
     Call (op,args) ->
       let opred = reduce op
       and argsr = Array.map (fun x -> reduce x) args
-      in 
+      in
       apply opred argsr
   | Abstraction (tarr,exp) -> Abstraction (tarr, reduce exp)
   | _ -> e
@@ -113,13 +113,13 @@ let rec reduce (e:expression) =
 let rec shift_above_up (e:expression)  (base:int) (n:int) =
   match e with
     Variable (i,t) ->
-      if base<=i 
+      if base<=i
       then Variable (i+n,t)
       else e
   | Call (op,earr) ->
       Call (op, Array.map (fun e -> shift_above_up e base n) earr)
   | Namedop (name,_,_,_) -> e
-  | Abstraction (tarr,exp) -> 
+  | Abstraction (tarr,exp) ->
       let len = Array.length tarr in
       Abstraction (tarr, shift_above_up exp len n)
 
@@ -140,13 +140,13 @@ let shift_up (e:expression) (n:int) =
    permutation
 
    The permutation is stable i.e. the elements below and above idx are in
-   their original order 
+   their original order
 *)
 let partition (p:'a->bool) (arr: 'a array) =
   let rec part (i:int) (len1:int) (l1:int list) (l2:int list) =
     if i=0 then
       len1,l1,l2
-    else 
+    else
       if p arr.(i-1) then
         part (i-1) (len1+1) ((i-1)::l1) l2
       else
@@ -221,7 +221,7 @@ let rec abstract_based (e:expression) (base:int) =
         else
           let tlsti,tleni,nvarsi,ei,alsti = argsabs.(i-1)
           in
-          let tlstc,tlenc,nvarsc,elstc,alstc = 
+          let tlstc,tlenc,nvarsc,elstc,alstc =
             merge_one tlsti tleni nvarsi ei alsti tlst tlen nvars elst alst
           in
           merge (i-1) tlstc tlenc nvarsc elstc alstc
@@ -239,7 +239,7 @@ let rec abstract_based (e:expression) (base:int) =
 let abstract (e:expression) =
   let tlst,tlen,nvars,exp,arglst = abstract_based e 0
   in
-  let tarr,argsint = 
+  let tarr,argsint =
     Array.of_list tlst, Array.of_list arglst
   in
   let args = Array.init tlen (fun i -> Variable(argsint.(i),tarr.(i)))
@@ -265,19 +265,19 @@ let rec abstract_parts (e:expression) =
       in
       let perm,lenfree = partition (fun i -> tarrlen<=i) args
       in
-      let farr arr base = fun i -> 
+      let farr arr base = fun i ->
         assert (0<=(base+i)); assert ((base+i)<(Array.length arr));
         arr.(perm.(base+i))
       in
-      Printf.printf "lenfree,tarrlen,len(ta),len(args) = %d,%d,%d,%d\n" 
+      Printf.printf "lenfree,tarrlen,len(ta),len(args) = %d,%d,%d,%d\n"
         lenfree tarrlen (Array.length ta) (Array.length args);
       print_permutation perm;
       (Array.init lenfree (farr ta 0)),
       Abstraction (Array.init (talen-lenfree) (farr ta lenfree),
                    substitute e talen 0
                      (let pinv = invers_permutation perm in
-                     (Array.init 
-                        talen 
+                     (Array.init
+                        talen
                         (fun i -> Variable(talen-pinv.(i)-1,ta.(i)))))
                   ),
       (Array.init lenfree (farr args 0))
@@ -317,8 +317,8 @@ let rec abstract_parts (e:expression) =
       in
       (Array.append tarrop tarr),
       (Call (shift_up expop base0,exparr)),
-      (Array.append 
-         (Array.map 
+      (Array.append
+         (Array.map
             (fun i -> assert (i>=down); i-down)
             argsop)
          args)
@@ -330,8 +330,8 @@ let rec abstract_parts (e:expression) =
 let abstract (e:expression) =
   let tarr, exp, args = abstract_parts e
   in
-  let res = Call (Abstraction (tarr,exp), 
-                  (Array.init 
+  let res = Call (Abstraction (tarr,exp),
+                  (Array.init
                      (Array.length args)
                      (fun i -> Variable(args.(i),tarr.(i)))))
   in

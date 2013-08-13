@@ -2,7 +2,7 @@ open Support
 
 let usage_string = "\
 Usage:
-    eiffelc srcfile.e
+    e iffelc srcfile.e
 "
 
 
@@ -17,7 +17,7 @@ let parse_file fn =
 
 
 
-
+(*
 module Block_stack: sig
   type t
   val empty: unit -> t
@@ -41,7 +41,7 @@ end = struct
     match Stack.top s with
       Private -> true | _ -> false
 end
-
+*)
 
 
 
@@ -49,9 +49,10 @@ module Analyze = struct
   open Type
 
   let analyze(ast:declaration list) =
-    let block_stack = Block_stack.empty ()
+    let block_stack = Block_stack.make ()
     and class_table = Class_table.base_table ()
     and feature_table = Feature_table.empty ()
+    and ass_table = Assertion_table.empty ()
     in
     let rec analyz (ast: declaration list) =
       let one_decl (d:declaration) =
@@ -60,15 +61,23 @@ module Analyze = struct
             assert (fgens.v = []);
             assert (inherits = []);
             assert (decl_blocks = []);
-            Class_table.put class_table hm cname
+            Class_table.put hm cname class_table
         | Declaration_block (Feature_block (visi,dlist)) ->
             Block_stack.push visi block_stack;
             analyz dlist;
             Block_stack.pop block_stack;
             ()
         | Named_feature (fn, entlst, rt, body) ->
-            Feature_table.put fn entlst rt body feature_table
-        | _ -> assert false
+            Feature_table.put fn entlst rt body 
+              block_stack class_table feature_table
+        | Assertion_feature (label, entlst,body) ->
+            Assertion_table.put 
+              entlst body class_table feature_table ass_table;
+            Assertion_table.print class_table feature_table ass_table
+        | _ ->
+            Class_table.print   class_table;
+            Feature_table.print class_table feature_table;
+            assert false
       in
       match ast with
         [] -> ()

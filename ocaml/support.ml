@@ -42,6 +42,11 @@ let info_from_position pos =
 exception Error_info of info*string
 exception Error_fileinfo of string*info*string
 
+let error_info (i:info) (str:string) =
+  raise (Error_info (i,str))
+
+let not_yet_implemented (i:info) (str:string) =
+  error_info i (str ^ " not yet implemented")
 
 
 (*
@@ -68,7 +73,7 @@ end = struct
   open Container
   let kt                   = Key_table.empty ()
   let symbol (str:string)  = Key_table.index kt str
-  let string (i:int)       = Key_table.key   kt i 
+  let string (i:int)       = Key_table.key   kt i
   let count ()             = Key_table.count kt
 end
 
@@ -253,6 +258,31 @@ let operator_data op =
   | RFreeop i -> ST.string i, 61,  Right
 
 
+let is_binary (op:operator): bool =
+  match op with
+    Plusop | Minusop | Timesop | Divideop | Caretop | Eqop | NEqop
+  | Eqvop  | NEqvop  | LTop    | LEop     | GTop    | GEop | Andop
+  | Orop   | Barop   | DBarop  | Inop     | Notinop
+  | DArrowop -> true
+  | Freeop i | RFreeop i -> true
+  | _ -> false
+
+
+let is_unary (op:operator): bool =
+  match op with
+    Plusop | Minusop | Notop | Oldop  -> true
+  | Freeop i | RFreeop i -> true
+  | _ -> false
+
+
+let is_nary (op:operator): bool =
+  match op with
+    Parenop | Bracketop -> true
+  | _ -> false
+
+
+
+
 let is_letter ch =
   let ic = Char.code ch
   in
@@ -276,6 +306,8 @@ let operator_to_string op =
       in
       s
 
+
+type is_do_block = bool
 
 
 type expression =
@@ -317,7 +349,7 @@ and
     Impdeferred
   | Impbuiltin
   | Impevent
-  | Impdefined of locals option * bool * compound
+  | Impdefined of locals option * is_do_block * compound
 
 and local_declaration =
     Unassigned of entities list
@@ -444,11 +476,11 @@ and string_of_locals loc =
       | Local_feature (id,elist,rt,body) ->
           (ST.string id) ^ "(" ^ (string_of_formals elist) ^")"
           ^
-          (match rt with Some t -> 
+          (match rt with Some t ->
             let tp,exclam = t.v
             in
             (if exclam then "!:" else ":")
-            ^ (string_of_type tp) 
+            ^ (string_of_type tp)
           | None -> "")
           ^ " " ^ (string_of_body body)
     )
@@ -487,7 +519,7 @@ type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
 
 let hmark2string (hm:header_mark) =
   match hm with
-    No_hmark -> "" 
+    No_hmark -> ""
   | Case_hmark -> "case"
   | Immutable_hmark -> "immutable"
   | Deferred_hmark  -> "deferred"
@@ -496,7 +528,7 @@ let hmark2string_wblank (hm:header_mark) =
   let str = hmark2string hm in
   if str = "" then str
   else str ^ " "
-        
+
 
 
 
@@ -519,6 +551,13 @@ type feature_name =
   | FNtrue
   | FNfalse
   | FNnumber of int
+
+let feature_name_to_string (fn:feature_name): string =
+  match fn with
+    FNname i | FNnumber i -> ST.string i
+  | FNoperator op -> operator_to_rawstring op
+  | FNtrue -> "true"
+  | FNfalse -> "false"
 
 type name_sig = feature_name * type_t list
 
@@ -558,3 +597,54 @@ and declaration_block =
 
 
 
+(*
+-----------------------------------------------------------------------------
+   Analysis types
+-----------------------------------------------------------------------------
+*)
+
+
+type block_descriptor = {visibility: visibility;
+                         mutable formal_generics: int * int list}
+
+module Block_stack: sig
+  type t
+  val make: unit -> t
+  val count: t -> int
+  val count_formals: t -> int
+  val is_private: t -> bool
+  val push:  visibility -> t -> unit
+  val pop:   t -> unit
+end = struct
+  type t = block_descriptor Stack.t
+
+  let count (st:t): int = Stack.length st
+
+  let count_formals (st:t): int =
+    let n,_ = (Stack.top st).formal_generics in n
+
+  let is_empty s = Stack.is_empty s
+
+  let is_private (s:t): bool =
+    match (Stack.top s).visibility with
+      Private -> true | _ -> false
+
+  let make () =
+    let st = Stack.create () in
+    Stack.push {visibility = Public;
+                formal_generics = 0,[]} st;
+    st
+
+  let push (v:visibility) (st:t): unit =
+    let vtop =
+      match (Stack.top st).visibility, v with
+        Private,    _ -> Private
+      | Public,     _ -> v
+      | Protected _,_ -> assert false
+    in
+    Stack.push {visibility=vtop;formal_generics=0,[]} st
+
+  let pop (st:t): unit =
+    assert ((count st) > 1);
+    let _ = Stack.pop st in ()
+end

@@ -1,8 +1,7 @@
-module type Search = sig
+module Search: sig
   val binsearch_max: 'a -> 'a array -> int
-end
-
-module Search: Search = struct
+  val array_find_min: 'a -> 'a array -> int
+end = struct
   let binsearch_max (el:'a) (arr: 'a array) =
     (* returns the maximal index where el can to be inserted *)
     let len = Array.length arr
@@ -23,8 +22,42 @@ module Search: Search = struct
     in
     assert (0<=idx && idx<=Array.length arr);
     idx
+
+  let array_find_min (el:'a) (arr: 'a array) =
+    let len = Array.length arr in
+    let rec search i =
+      if i=len then raise Not_found
+      else begin
+        assert (0<=i); assert (i<len);
+        if arr.(i) = el then i
+        else search (i+1)
+      end
+    in
+    search 0
 end
 
+
+
+
+module Mylist: sig
+
+  val iteri: (int -> 'a -> unit) -> 'a list -> unit
+
+end = struct
+
+  let iteri (f:int->'a->unit) (l:'a list): unit =
+    let pos = ref 0 in
+    let rec itrec l =
+      match l with
+        [] -> ()
+      | h::t -> begin
+          f !pos h;
+          pos := !pos + 1
+      end
+    in
+    itrec l
+
+end
 
 
 module Seq: sig
@@ -94,6 +127,8 @@ module Key_table: sig
   val index:  'a table -> 'a -> int
   val key:    'a table -> int -> 'a
   val find:   'a table -> 'a  -> int
+  val iter:   ('a -> unit) -> 'a table -> unit
+  val iteri:  (int->'a->unit) -> 'a table -> unit
 end = struct
   type 'a table = {seq: 'a Seq.sequence;
                    map: ('a,int) Hashtbl.t}
@@ -112,7 +147,7 @@ end = struct
   let find  st elem = Hashtbl.find st.map elem
 
   let index st elem =
-    try 
+    try
       Hashtbl.find st.map elem
     with
       Not_found ->
@@ -121,6 +156,12 @@ end = struct
   let key st (s:int) =
     assert (s < Seq.count st.seq);
     Seq.elem st.seq s
+
+  let iter f t =
+    Seq.iter f t.seq
+
+  let iteri f t =
+    Seq.iteri f t.seq
 end
 
 type 'a key_table = 'a Key_table.table
@@ -158,8 +199,8 @@ module ArrayedSet: Set = struct
     if 0<i  && set.(i-1)=el then
       set
     else
-      Array.init (len+1) 
-        (fun j -> 
+      Array.init (len+1)
+        (fun j ->
           if j<i then set.(j)
           else if j=i then el
           else set.(j-1))

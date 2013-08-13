@@ -12,11 +12,22 @@ feature   -- Basic functions
 
 end
 
+
+feature    -- Some theorems with implication
+    all(a,b,c:BOOLEAN)
+        ensure
+            a => a
+            a => (a=>b) => b
+            (a=>b) => (b=>c) => (a=>c)
+        end
+end
+
+
 feature {NONE}   -- Axioms
     all(a:BOOLEAN)
         note built_in ensure
-            classic:  ((a=>false)=>false) => a
             ex_falso: false => a
+            classic:  ((a=>false)=>false) => a
         end
 end
 
@@ -30,7 +41,6 @@ end
 
 feature   -- Negation
     not (a:BOOLEAN): BOOLEAN
-
 
     all(a:BOOLEAN)
         ensure
