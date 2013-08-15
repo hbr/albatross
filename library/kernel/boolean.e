@@ -19,6 +19,7 @@ feature    -- Some theorems with implication
             a => a
             a => (a=>b) => b
             (a=>b) => (b=>c) => (a=>c)
+            (a=>b) => (a=>b=>c) => (a=>c)
         end
 end
 
