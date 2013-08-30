@@ -41,9 +41,18 @@ end
 
 module Mylist: sig
 
-  val iteri: (int -> 'a -> unit) -> 'a list -> unit
+  val is_empty:     'a list -> bool
+  val is_singleton: 'a list -> bool
+  val iteri:        (int -> 'a -> unit) -> 'a list -> unit
 
 end = struct
+
+  let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
+
+  let is_singleton (l: 'a list): bool =
+    match l with
+      [_] -> true
+    | _   -> false
 
   let iteri (f:int->'a->unit) (l:'a list): unit =
     let pos = ref 0 in

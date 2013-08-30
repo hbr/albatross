@@ -52,6 +52,8 @@ let tuple2 a b = Tuple [|a;b|]
 let pset_any nb = TypSet.singleton (Class.type_up nb any)
 
 
+let boolean_type (ct:t): typ = bool
+
 let boolean_binary (ct:t): typ =
   func 0 (tuple2 bool bool) bool
 

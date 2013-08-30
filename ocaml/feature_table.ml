@@ -3,21 +3,10 @@ open Type
 open Term
 open Support
 
-(*
-type signature  = {generics: typ array; arguments: typ array; result: typ}
 
-let signature_to_type (sg:signature) (ct:Class_table.t): typ =
-  let nargs = Array.length sg.arguments
-  in
-  if nargs = 0 then
-    TLam (sg.generics, sg.result)
-  else
-    (*Class_table.make_function sg.generics sg.arguments sg.result*)
-    assert false
-*)
 
 type definition = {names: int array; term:term}
-type descriptor = {priv: definition option;
+type descriptor = {priv:        definition option;
                    mutable pub: definition option option}
 
 type key        = {name: feature_name; typ: typ}
@@ -31,13 +20,68 @@ let empty () =
   {keys = Key_table.empty () ; implication = None; features = Seq.empty ()}
 
 
+
+
+let has_implication (ft:t): bool =
+  match ft.implication with
+    None -> false
+  | _    -> true
+
+
+
+
+let implication_term (a:term) (b:term) (nbound:int) (ft:t)
+    : term =
+  (* The implication term a=>b in an environment with 'nbound' bound variables
+   *)
+  assert (has_implication ft);
+  match ft.implication with
+    None -> assert false
+  | Some i ->
+      let args = Array.init 2 (fun i -> if i=0 then a else b) in
+      Application (Variable (i+nbound), args)
+
+let implication_chain (t:term) (nbound:int) (ft:t): (term list * term) list =
+  (* Split the term t into its implication chain i.e. split a=>b=>c into
+     [ [],a=>b=>c; [a],b=>c; [a,b],c ]
+   *)
+  let is_implication t =
+    match t,ft.implication with
+      Variable i, Some j -> i=j+nbound
+    | _ -> false
+  in
+  let rec split(t:term): (term list * term) list =
+    match t with
+      Variable _
+    | Lam (_,_)  -> [ [], t ]
+    | Application (t,args) ->
+        let len = Array.length args in
+        if len=2 && is_implication t then
+          let chain = split args.(1) in
+          ([],t) :: (List.map
+                       (fun e ->
+                         let premises,term=e in
+                         args.(0)::premises, term
+                       )
+                       chain)
+        else
+          [ [], t ]
+  in
+  split t
+
+
+
+
+
+
 let find_feature (name: feature_name) (ft:t)
     : int list =
+  (* List of features with the name 'name' *)
   let lst = ref []
   in
-  let _ = 
-    Key_table.iteri 
-      (fun i k -> 
+  let _ =
+    Key_table.iteri
+      (fun i k ->
         if k.name=name then
           lst := i::!lst
         else
@@ -49,11 +93,12 @@ let find_feature (name: feature_name) (ft:t)
 
 let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
     : (int * typ array * typ) list =
+  (* List of functions with the name 'name' and with 'nargs' argumens *)
   let lst = ref []
   in
-  let _ = 
-    Key_table.iteri 
-      (fun i k -> 
+  let _ =
+    Key_table.iteri
+      (fun i k ->
         if k.name=name then
           try
             let args,rt = Class_table.split_function k.typ ct in
@@ -69,12 +114,14 @@ let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
   !lst
 
 
-let term
-    (ie:info_expression) 
+
+
+let typed_term
+    (ie:info_expression)
     (names: int array)
     (types: typ array)
-    (ct:Class_table.t) 
-    (ft:t):  term =
+    (ct:Class_table.t)
+    (ft:t):  term * typ =
   assert ((Array.length names) = (Array.length types));
   let nbound = Array.length types in
   let check_match (e:expression) (tp:typ) (expected:typ): unit =
@@ -82,13 +129,13 @@ let term
       raise (
       Error_info (ie.i,
                  "expression " ^ (string_of_expression e) ^ " has type "
-                  ^ (Class_table.type2string tp 0 ct) 
-                  ^ " expected type " 
-                  ^ (Class_table.type2string expected 0 ct) 
+                  ^ (Class_table.type2string tp 0 ct)
+                  ^ " expected type "
+                  ^ (Class_table.type2string expected 0 ct)
                  ))
     else ()
   in
-  let find_name (name:int) =
+  let find_name (name:int): term * typ =
     let idx =
       try
         nbound - 1 - (Search.array_find_min name names)
@@ -98,7 +145,7 @@ let term
     Variable idx,
     if idx<nbound then types.(nbound-1-idx) else assert false
   in
-  let rec trm e =
+  let rec trm e: term * typ =
     match e with
       Identifier i ->
         find_name i
@@ -125,7 +172,7 @@ let term
                                 (operator_to_rawstring op) ^ "\""))
           | [idx,tarr,rt] ->
               assert ((Array.length tarr) = 2);
-              let _ = check_match e1 tp1 tarr.(0) 
+              let _ = check_match e1 tp1 tarr.(0)
               and _ = check_match e1 tp2 tarr.(1)
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
@@ -133,8 +180,36 @@ let term
         end
     | _ -> assert false
   in
-  let t,tp = trm ie.v in t
+  trm ie.v
 
+
+
+
+let term
+    (ie:info_expression)
+    (names: int array)
+    (types: typ array)
+    (ct:Class_table.t)
+    (ft:t):  term =
+  let t,_ = typed_term ie names types ct ft
+  in
+  t
+
+
+
+
+let assertion_term
+    (ie:info_expression)
+    (names: int array)
+    (types: typ array)
+    (ct:Class_table.t)
+    (ft:t):  term =
+  let t,tp = typed_term ie names types ct ft
+  in
+  if tp <> (Class_table.boolean_type ct) then
+    error_info ie.i "Expression does not have type BOOLEAN"
+  else
+    t
 
 
 
@@ -162,13 +237,13 @@ let term_to_string (t:term) (names:int array) (ft:t): string =
               let _,prec1,assoc1 = operator_data op1
               and _,prec,assoc   = operator_data op in
               if op=op1 && nargs=2 && (
-                match assoc with 
+                match assoc with
                   Left -> not left
                 | Right -> left
                 | Nonassoc -> assert false
-               ) then "(" ^ str ^ ")" 
+               ) then "(" ^ str ^ ")"
               else if op<>op1 && nargs=2 && prec1<=prec then
-                "(" ^ str ^ ")" 
+                "(" ^ str ^ ")"
               else
                 str
         in begin
@@ -189,9 +264,9 @@ let term_to_string (t:term) (names:int array) (ft:t): string =
                     else
                       assert false
                 | _ ->
-                    (feature_name_to_string fn) ^ "(" 
-                    ^ (String.concat 
-                         "," 
+                    (feature_name_to_string fn) ^ "("
+                    ^ (String.concat
+                         ","
                          (List.map
                             (fun str_op -> let str,_,_ = str_op in str)
                             (Array.to_list argsstr_op)))
@@ -225,7 +300,7 @@ let print (ct:Class_table.t)  (ft:t): unit =
       match fdesc.pub with
         None ->
           Printf.printf "%s  %s = (%s)\n" name tname (bdyname fdesc.priv)
-      | Some pdef -> 
+      | Some pdef ->
           Printf.printf "%s  %s = (%s, %s)\n"
             name tname (bdyname fdesc.priv) (bdyname pdef))
     ft.features
@@ -244,7 +319,7 @@ let put
   let argtypes,rettype,functype,argnames =
     Class_table.feature_type entlst rt ct
   in
-  let func_def: definition option = 
+  let func_def: definition option =
     match bdy with
       None -> None
     | Some (None, Some Impbuiltin, None) -> None
@@ -262,29 +337,29 @@ let put
   let _ =
     match fn.v with
       FNoperator op ->
-        if 
+        if
           (nargs=1 && is_unary op) ||
           (nargs=2 && is_binary op)||
           (nargs>0 && is_nary op) then ()
         else if nargs=0 then
           raise (
-          Error_info (fn.i, "Operator \"" ^ 
-                      (operator_to_rawstring op) 
+          Error_info (fn.i, "Operator \"" ^
+                      (operator_to_rawstring op)
                       ^ "\" must have arguments"))
         else if nargs=1 then
           raise (
-          Error_info (fn.i, "Operator \"" ^ 
-                      (operator_to_rawstring op) 
+          Error_info (fn.i, "Operator \"" ^
+                      (operator_to_rawstring op)
                       ^ "\" is not a unary operator"))
         else if nargs=2 then
           raise (
-          Error_info (fn.i, "Operator \"" ^ 
-                      (operator_to_rawstring op) 
+          Error_info (fn.i, "Operator \"" ^
+                      (operator_to_rawstring op)
                       ^ "\" is not a binary operator"))
         else
           raise (
-          Error_info (fn.i, "Operator \"" ^ 
-                      (operator_to_rawstring op) 
+          Error_info (fn.i, "Operator \"" ^
+                      (operator_to_rawstring op)
                       ^ "\" is not an nary operator"))
     | FNfalse | FNtrue | FNnumber _ ->
         if nargs <> 0 then
@@ -318,14 +393,14 @@ let put
     in
     {name = fn.v; typ = functype}
   in
-  let idx = Key_table.index ft.keys key 
+  let idx = Key_table.index ft.keys key
   and cnt = Seq.count ft.features
   in
   if idx < cnt then begin
     if Block_stack.is_private bs then
       raise (
-      Error_info (fn.i, 
-                  "The feature \"" ^ (feature_name_to_string fn.v) 
+      Error_info (fn.i,
+                  "The feature \"" ^ (feature_name_to_string fn.v)
                   ^ "\" has already a private definition"))
     else
       match func_def with
@@ -339,7 +414,7 @@ let put
     if fn.v = (FNoperator DArrowop) then
       ft.implication <- Some idx
     else ();
-    Seq.push 
+    Seq.push
       ft.features
       (if Block_stack.is_private bs then {priv=func_def;pub=None}
       else {priv = func_def; pub = Some func_def});

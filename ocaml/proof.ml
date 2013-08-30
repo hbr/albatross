@@ -5,8 +5,9 @@ open Type
 exception Failed_proof
 
 type proof_term =
-    Context       of typ array
-  | Assumption    of proof_term * term
+(*    Context       of typ array
+  | Assumption    of proof_term * term *)
+    Assume        of term
   | Discharge     of term  * proof_term  (* discharge assumption as premise *)
   | MP            of proof_term * proof_term       (* a => (a=>b) => b *)
   | Generalize    of proof_term * int
@@ -14,7 +15,7 @@ type proof_term =
   | Specialize    of proof_term * term list
   | Fold          of proof_term * term  (* Fold a function with new term *)
   | Unfold        of proof_term * term  (* Unfold a function with new term *)
-  | PopContext    of proof_term
+(*  | PopContext    of proof_term*)
 
 
 
@@ -69,13 +70,13 @@ end
    assumptions by proofs.
 
    Partial proof: A set of assumptions, a set of assertions with proofs which
-   are a consequence of the assumptions and a set of set of goals which
+   are a consequence of the assumptions and a set of proofs of the goal which
    contain not yet proved assumptions.
 
-   A partial proof is complete if one of its goal sets has no unproved
-   assumptions (i.e. no assumptions besides the ones which are the introduced
-   assumptions of the partial proof). By discharging the introduced
-   assumptions a complete proof of the original goal is obtained.
+   A partial proof is complete if one of its proofs of the goal has no
+   unproved assumptions (i.e. no assumptions besides the ones which are the
+   introduced assumptions of the partial proof). By discharging the introduced
+   assumptions a complete proof of the goal is obtained.
 
    The proof finder maintains a set of partial proofs. Each step the proof
    finder adds some new partial proofs by its built in rules. The procedure
@@ -84,15 +85,20 @@ end
 
    The following rules can be used to add new partial proofs:
 
-   - An unproved assumption of a goal in one of the goal sets is identical
-     with one of the already proved assertions on the stack
+   - An unproved assumption of a goal is identical with one of the already
+     proved assertions on the stack
 
    - An unproved assumption can be proved by an already proved assertion of
      the global context.
 
-   - An unproved assumption can be replaced by another assumption by using the
+   - An unproved assumption can be replaced by other assumptions using the
      modus ponens rule with the already proved assertions on the stack of the
-     form a=>b and b being the unproved assumption.
+     form a=>b=>c=>...=>z and z being the unproved assumption.
+
+   - An unproved assumption can be replaced by other assumptions using the
+     modus ponens rule with the already proved global assertions of the form
+     a=>b=>...=>z and z being the unproved assertion and a,b,... satisfying
+     the termination rule.
 
 *)
 

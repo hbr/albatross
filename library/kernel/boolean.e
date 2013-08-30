@@ -14,6 +14,40 @@ end
 
 
 feature    -- Some theorems with implication
+    all(a:BOOLEAN)
+        require
+            a
+        ensure
+            a
+        end
+
+    all(a,b:BOOLEAN)
+        require
+            a
+            a => b
+        ensure
+            b
+        end
+
+
+    all(a,b,c:BOOLEAN)
+        require
+            a => b
+            b => c
+        ensure
+            a => c
+        end
+
+
+    all(a,b,c:BOOLEAN)
+        require
+            a => b
+            a => b => c
+        ensure
+            a => c
+        end
+
+
     all(a,b,c:BOOLEAN)
         ensure
             a => a

@@ -7,6 +7,8 @@ val base_table: unit -> t
 
 val put: header_mark withinfo -> int withinfo -> t -> unit
 
+val boolean_type:   t -> typ
+
 val boolean_binary: t -> typ
 
 val boolean_unary:  t -> typ
