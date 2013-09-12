@@ -12,11 +12,6 @@ type t  = {seq: descriptor seq}
 exception Cannot_prove
 exception Proof_found of proof_term
 
-module TermMap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = term
-end)
-
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = term
@@ -33,25 +28,7 @@ module FwdSet = Set.Make(struct
     Pervasives.compare b1 b2
 end)
 
-(*
-module BwdSet = Set.Make(struct
-  type t = int * term list * term * term * proof_term
-        (* number of premises
-           list of premises  [a,b,c,...]
-           conclusion        z           ??? Not necessary ???
-           implication       a=>b=>c=>...=>z
-           proof_term of  the implication *)
-  let compare (a:t) (b:t) =
-    let n1,_,_,i1,_ = a
-    and n2,_,_,i2,_ = b
-    in
-    let cmp0 = Pervasives.compare n1 n2 in
-    if cmp0=0 then
-      Pervasives.compare i1 i2
-    else
-      cmp0
-end)
-*)
+
 
 module BwdSet = Set.Make(struct
   type t = int * term list * proof_term
@@ -75,6 +52,13 @@ type term_descriptor = {
     fwd_set:    FwdSet.t;
     bwd_set:    BwdSet.t
   }
+
+
+module TermMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = term
+end)
+
 
 type term_map     = term_descriptor TermMap.t
 
@@ -298,8 +282,7 @@ let add_backward_tm
     match lst with
       [] -> tm
     | (premises,target)::tl ->
-        (*add tl (add_one premises target tm)*)
-        add_one premises target tm
+        add tl (add_one premises target tm)
   in
   let tm = add chain tm in
   Printf.printf "\n"; tm
@@ -417,6 +400,7 @@ let prove
     assert (is_proved t res);
     res
   in
+
   let add_tm_close
       (t:term)
       (pt:proof_term)
@@ -457,6 +441,7 @@ let prove
     in
     add [t,pt] tm
   in
+
   let tm_pre: term_map =
     List.fold_left
       (fun tm t ->
@@ -466,12 +451,18 @@ let prove
       TermMap.empty
       pre_terms
   in
-  let rec prove_one (t:term) (tm:term_map): proof_term =
-    (* Prove the term 't' within the term map 'tm' *)
-    (*let desc =
-      try TermMap.find t tm
-      with Not_found -> raise Cannot_prove
-    in*)
+
+  let rec prove_one (t:term) (tm:term_map) (tried: TermSet.t) : proof_term =
+    (* Prove the term 't' within the term map 'tm' where all terms
+       within the set 'tried' have been tried already on the stack
+     *)
+    begin
+      if TermSet.mem t tried then
+        raise Cannot_prove
+      else ()
+    end;
+    Printf.printf "  Try to proof %s\n" (term2string t);
+    let tried = TermSet.add t tried in
     try (* backward, enter, expand *)
       begin
         try
@@ -479,7 +470,8 @@ let prove
           let _ = BwdSet.iter
               (fun (_,premises,pt) ->
                 try
-                  let pt_lst = List.rev_map (fun t -> prove_one t tm) premises
+                  let pt_lst =
+                    List.rev_map (fun t -> prove_one t tm tried) premises
                   in
                   let rec use_premises
                       (lst: proof_term list)
@@ -504,7 +496,7 @@ let prove
             (term2string a) (chain2string (chain a));
           let tm = add_tm_close a (Assume a) split chain tm in
           try
-            let ptb = prove_one b tm in
+            let ptb = prove_one b tm tried in
             raise (Proof_found (Discharge (a,ptb)))
           with Cannot_prove -> ()
         with Not_found -> () (* expand *)
@@ -513,6 +505,7 @@ let prove
     with
       Proof_found pt -> pt
   in
+
   let proof_compound
       (c:compound)
       (tm:term_map)
@@ -522,7 +515,7 @@ let prove
         let tm,lst = res in
         let t = exp2term ie in
         let pt =
-          try prove_one t tm
+          try prove_one t tm TermSet.empty
           with Cannot_prove -> error_info ie.i "Cannot prove"
         in
         add_tm_close t pt split chain tm,
@@ -530,6 +523,7 @@ let prove
       (tm,[])
       c
   in
+
   let tm_inter,_ = proof_compound chck tm_pre
   in
   let _,revlst = proof_compound post tm_inter

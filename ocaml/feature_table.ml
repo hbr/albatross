@@ -202,12 +202,31 @@ let typed_term
               and _ = check_match e1 tp2 tarr.(1)
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
-          | _ -> error_info ie.i
-                ("Cannot type expression " ^
+          | _ -> not_yet_implemented ie.i
+                ("Typing of expression " ^
                  (string_of_expression ie.v))
         end
-    | _ -> error_info ie.i
-          ("Cannot type expression " ^
+    | Unexp (op,e1) ->
+        assert (is_unary op);
+        let t1,tp1 = trm e1
+        and oplst = find_function (FNoperator op) 1 ct ft
+        in begin
+          match oplst with
+            [] ->
+              raise (Error_info (ie.i,
+                                "There is no unary operator \"" ^
+                                (operator_to_rawstring op) ^ "\""))
+          | [idx,tarr,rt] ->
+              assert ((Array.length tarr) = 1);
+              let _ = check_match e1 tp1 tarr.(0)
+              in
+              Application (Variable (nbound+idx), [|t1|]),rt
+          | _ -> not_yet_implemented ie.i
+                ("Typing of expression " ^
+                 (string_of_expression ie.v))
+        end
+    | _ -> not_yet_implemented ie.i
+          ("Typing of expression " ^
            (string_of_expression ie.v))
   in
   trm ie.v
