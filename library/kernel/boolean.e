@@ -12,6 +12,15 @@ feature   -- Basic functions
 
 end
 
+feature {NONE}   -- Axioms
+    all(a:BOOLEAN)
+        note built_in ensure
+            -- ex_falso: false => a           -- really necessary??
+            classic:  ((a=>false)=>false) => a
+        end
+end
+
+
 
 feature    -- Some theorems with implication
     all(a:BOOLEAN)
@@ -21,12 +30,23 @@ feature    -- Some theorems with implication
             a
         end
 
-    all(a,b:BOOLEAN)
+    all(a,b,c:BOOLEAN)
         require
             a
+            c => b            -- does not succeed
             a => b
         ensure
             b
+        end
+
+
+    all(a,b,c:BOOLEAN)
+        require
+            a => b
+            b => c
+            a
+        ensure
+            c
         end
 
 
@@ -57,14 +77,6 @@ feature    -- Some theorems with implication
         end
 end
 
-
-feature {NONE}   -- Axioms
-    all(a:BOOLEAN)
-        note built_in ensure
-            ex_falso: false => a
-            classic:  ((a=>false)=>false) => a
-        end
-end
 
 
 feature {NONE} -- Negation

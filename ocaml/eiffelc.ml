@@ -72,8 +72,7 @@ module Analyze = struct
               block_stack class_table feature_table
         | Assertion_feature (label, entlst,body) ->
             Assertion_table.put 
-              entlst body class_table feature_table ass_table;
-            Assertion_table.print class_table feature_table ass_table
+              entlst body class_table feature_table ass_table
         | _ ->
             Class_table.print   class_table;
             Feature_table.print class_table feature_table;
