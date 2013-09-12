@@ -41,9 +41,35 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
       let args = Array.init 2 (fun i -> if i=0 then a else b) in
       Application (Variable (i+nbound), args)
 
-let implication_chain (t:term) (nbound:int) (ft:t): (term list * term) list =
+
+
+
+let split_implication (t:term) (nbound:int) (ft:t): term*term =
+  (* Split the implication 'a=>b' into its components 'a' and 'b' *)
+  match t with
+    Application (f,args) ->
+      begin match f,ft.implication with
+        Variable i, Some j ->
+          if i=j+nbound then begin
+            assert ((Array.length args)=2);
+            args.(0), args.(1)
+          end
+          else raise Not_found
+      | _,_ -> raise Not_found
+      end
+  | _ -> raise Not_found
+
+
+
+let implication_chain
+    (t:term)
+    (nbound:int)
+    (ft:t)
+    : (term list * term) list =
   (* Split the term t into its implication chain i.e. split a=>b=>c into
      [ [],a=>b=>c; [a],b=>c; [a,b],c ]
+     and return in the second return parameter the optional premise and
+     conclusion of the implication (i.e. a,b=>c)
    *)
   let is_implication t =
     match t,ft.implication with
@@ -54,9 +80,9 @@ let implication_chain (t:term) (nbound:int) (ft:t): (term list * term) list =
     match t with
       Variable _
     | Lam (_,_)  -> [ [], t ]
-    | Application (t,args) ->
+    | Application (f,args) ->
         let len = Array.length args in
-        if len=2 && is_implication t then
+        if len=2 && is_implication f then
           let chain = split args.(1) in
           ([],t) :: (List.map
                        (fun e ->
@@ -176,9 +202,13 @@ let typed_term
               and _ = check_match e1 tp2 tarr.(1)
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
-          | _ -> assert false
+          | _ -> error_info ie.i
+                ("Cannot type expression " ^
+                 (string_of_expression ie.v))
         end
-    | _ -> assert false
+    | _ -> error_info ie.i
+          ("Cannot type expression " ^
+           (string_of_expression ie.v))
   in
   trm ie.v
 
