@@ -326,7 +326,7 @@ let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
      'names' and 'nanon' further anonymous variables *)
   let arglen = Array.length names in
   if i<nanon then
-    FNname (ST.symbol ("@" ^ (string_of_int i)))
+    FNname (ST.symbol ("@" ^ (string_of_int (nanon-1-i))))
   else if i < arglen+nanon then
     FNname names.(arglen+nanon-1-i)
   else
