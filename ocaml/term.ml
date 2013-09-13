@@ -11,6 +11,14 @@ type term =
 
 module Term: sig
 
+  val map: (int->int->term) -> term -> term
+
+  val upbound: int->int->term->term
+
+  val up: int->term->term
+
+  val reduce: term -> term
+
   val normalize: typ array -> term -> typ array * term * int array
 
 end = struct
@@ -62,7 +70,8 @@ end = struct
           if jfree < len then
             args.(jfree)
           else
-            Variable(j + nbound - len))
+            Variable(j + nbound - len)
+      )
       t
 
 
@@ -147,7 +156,7 @@ end = struct
     in
     let vars_sorted = Array.init len (fun i -> i) in
     let _ =
-      Array.sort 
+      Array.sort
         (fun i j ->
           match usearr.(i), usearr.(j) with
             Used p1, Used p2 -> compare p1 p2
@@ -163,6 +172,15 @@ end = struct
       (t = (sub tnorm (Array.map (fun i -> Variable i) varsused) len));
     tarrnorm, tnorm, varsused
 
+
+
+  let reduce (t:term): term =
+    match t with
+      Application (Lam (tarr,t0) ,args) ->
+        let len = Array.length tarr in
+        assert (len = (Array.length args));
+        sub t args (assert false)
+    | _ -> t
 
 
 end

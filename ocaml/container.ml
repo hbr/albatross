@@ -44,6 +44,7 @@ module Mylist: sig
   val is_empty:     'a list -> bool
   val is_singleton: 'a list -> bool
   val iteri:        (int -> 'a -> unit) -> 'a list -> unit
+  val mapi:         (int -> 'a -> 'b) -> 'a list -> 'b list
 
 end = struct
 
@@ -66,6 +67,13 @@ end = struct
     in
     itrec l
 
+  let mapi (f:int->'a->'b) (l:'a list): 'b list =
+    let rec maprec l i =
+      match l with
+        [] -> []
+      | h::tl -> (f i h)::(maprec tl (i+1))
+    in
+    maprec l 0
 end
 
 

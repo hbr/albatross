@@ -5,7 +5,7 @@ open Support
 
 
 
-type definition = {names: int array; term:term}
+type definition = {names: int array; types: typ array; term:term}
 type descriptor = {priv:        definition option;
                    mutable pub: definition option option}
 
@@ -142,6 +142,46 @@ let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
 
 
 
+let rec expand_term (t:term) (nbound:int) (ft:t): term =
+  (* Expand the definitions of the term 't' within an environment with
+     'nbound' bound variables, i.e. a variable i with nbound<=i refers to
+     the global feature i-nbound *)
+  Term.map
+    (fun i nb ->
+      let n = nb+nbound in
+      if i<n then
+        Variable i
+      else
+        let idx = i-n in
+        assert (idx < (Seq.count ft.features));
+        match (Seq.elem ft.features idx).priv with
+          None -> Variable i
+        | Some def ->
+            let nargs = Array.length def.types in
+            let t = expand_term def.term nargs ft in
+            Lam (def.types, Term.upbound n nargs t)
+    )
+    t
+
+
+
+let check_match
+    (i:info)
+    (e:expression)
+    (tp:typ)
+    (expected:typ)
+    (ct:Class_table.t)
+    : unit =
+  if tp<>expected then
+    error_info
+      i
+      ("expression " ^ (string_of_expression e) ^ " has type "
+       ^ (Class_table.type2string tp 0 ct)
+       ^ " expected type "
+       ^ (Class_table.type2string expected 0 ct))
+    else ()
+
+
 let typed_term
     (ie:info_expression)
     (names: int array)
@@ -150,16 +190,7 @@ let typed_term
     (ft:t):  term * typ =
   assert ((Array.length names) = (Array.length types));
   let nbound = Array.length types in
-  let check_match (e:expression) (tp:typ) (expected:typ): unit =
-    if tp<>expected then
-      raise (
-      Error_info (ie.i,
-                 "expression " ^ (string_of_expression e) ^ " has type "
-                  ^ (Class_table.type2string tp 0 ct)
-                  ^ " expected type "
-                  ^ (Class_table.type2string expected 0 ct)
-                 ))
-    else ()
+  let check e tp expected = check_match ie.i e tp expected ct
   in
   let find_name (name:int): term * typ =
     let idx =
@@ -198,8 +229,8 @@ let typed_term
                                 (operator_to_rawstring op) ^ "\""))
           | [idx,tarr,rt] ->
               assert ((Array.length tarr) = 2);
-              let _ = check_match e1 tp1 tarr.(0)
-              and _ = check_match e1 tp2 tarr.(1)
+              let _ = check e1 tp1 tarr.(0)
+              and _ = check e1 tp2 tarr.(1)
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
           | _ -> not_yet_implemented ie.i
@@ -218,7 +249,7 @@ let typed_term
                                 (operator_to_rawstring op) ^ "\""))
           | [idx,tarr,rt] ->
               assert ((Array.length tarr) = 1);
-              let _ = check_match e1 tp1 tarr.(0)
+              let _ = check e1 tp1 tarr.(0)
               in
               Application (Variable (nbound+idx), [|t1|]),rt
           | _ -> not_yet_implemented ie.i
@@ -262,73 +293,136 @@ let assertion_term
 
 
 
+let maybe_parenthesized
+    (op:operator)
+    (exp:string*operator option*int)
+    (left:bool) =
+  (* Put parenthesis around the expression 'exp' if necessary. The expression
+     consists of the string and optional operator and a number of arguments.
+     'op' is the operator of the next higher expression. The boolean 'left'
+     signifies that 'exp' is the left argument of the operator 'op'
+   *)
+  let str,op_opt,nargs = exp in
+  match op_opt with
+    None -> str
+  | Some op1 ->
+      let _,prec1,assoc1 = operator_data op1
+      and _,prec,assoc   = operator_data op in
+      if op=op1 && nargs=2 && (
+        match assoc with
+          Left -> not left
+        | Right -> left
+                | Nonassoc -> assert false
+       ) then "(" ^ str ^ ")"
+      else if op<>op1 && nargs=2 && prec1<=prec then
+        "(" ^ str ^ ")"
+      else
+        str
+
+
+
+let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
+  (* The name of the feature number 'i' in an environment with the arguments
+     'names' and 'nanon' further anonymous variables *)
+  let arglen = Array.length names in
+  if i<nanon then
+    FNname (ST.symbol ("@" ^ (string_of_int i)))
+  else if i < arglen+nanon then
+    FNname names.(arglen+nanon-1-i)
+  else
+    begin
+      assert ((i-(arglen+nanon))<Seq.count ft.features);
+      (Key_table.key ft.keys (i-(arglen+nanon))).name
+    end
+
+
+let normal_application2string
+    (name:string)
+    (args: (string*operator option*int) array) =
+  let nargs = Array.length args in
+  name ^ "("
+  ^ (String.concat
+       ","
+       (List.map
+          (fun str_op -> let str,_,_ = str_op in str)
+          (Array.to_list args)))
+  ^ ")", None, nargs
+
+let application2string
+    (fn:feature_name)
+    (args: (string*operator option*int) array) =
+  (* Convert the function application with the feature name 'fn' and the
+     arguments 'args' (already as string, optional operator and a number of
+     arguments to distinguish unary and binary operators)
+   *)
+  let nargs = Array.length args in
+  match fn with
+    FNoperator op ->
+      if nargs = 1 then
+        (operator_to_rawstring op)
+        ^ " " ^ (maybe_parenthesized op args.(0) true),
+        Some op, nargs
+      else if nargs = 2 then
+                      (maybe_parenthesized op args.(0) true)
+        ^ " " ^ (operator_to_rawstring op) ^ " "
+        ^ (maybe_parenthesized op args.(1) false),
+        Some op, nargs
+      else
+        assert false (* There are only unary and binary operators *)
+  | _ ->
+      normal_application2string (feature_name_to_string fn) args
+      (*(feature_name_to_string fn) ^ "("
+      ^ (String.concat
+           ","
+           (List.map
+              (fun str_op -> let str,_,_ = str_op in str)
+              (Array.to_list args)))
+      ^ ")", None, nargs*)
+
+
+
+
 let term_to_string (t:term) (names:int array) (ft:t): string =
-  let len = Array.length names in
-  let rec tostr_op (t:term): string * operator option * int =
-    let fname i =
-      if i<len then FNname names.(len-1-i)
-      else begin
-        assert ((i-len)<Seq.count ft.features);
-        (Key_table.key ft.keys (i-len)).name
-      end
-    in
+  let fname i nanon = feature_name i names nanon ft
+  in
+  let rec term2str (t:term) (nanon:int): string * operator option * int =
     match t with
       Variable i ->
-        feature_name_to_string (fname i), None, 0
+        feature_name_to_string (fname i nanon), None, 0
     | Application (f,args) ->
-        let argsstr_op = Array.map (fun t -> tostr_op t) args
-        and nargs = Array.length args in
-        let lower_op op low_op left =
-          let str,op_opt,nargs = low_op in
-          match op_opt with
-            None -> str
-          | Some op1 ->
-              let _,prec1,assoc1 = operator_data op1
-              and _,prec,assoc   = operator_data op in
-              if op=op1 && nargs=2 && (
-                match assoc with
-                  Left -> not left
-                | Right -> left
-                | Nonassoc -> assert false
-               ) then "(" ^ str ^ ")"
-              else if op<>op1 && nargs=2 && prec1<=prec then
-                "(" ^ str ^ ")"
-              else
-                str
-        in begin
-          match f with
-            Variable i ->
-              let fn = fname i in begin
-                match fn with
-                  FNoperator op ->
-                    if nargs = 1 then
-                      (operator_to_rawstring op)
-                      ^ " " ^ (lower_op op argsstr_op.(0) true),
-                      Some op, nargs
-                    else if nargs = 2 then
-                      (lower_op op argsstr_op.(0) true)
-                      ^ " " ^ (operator_to_rawstring op) ^ " "
-                      ^ (lower_op op argsstr_op.(1) false),
-                      Some op, nargs
-                    else
-                      assert false
-                | _ ->
-                    (feature_name_to_string fn) ^ "("
-                    ^ (String.concat
-                         ","
-                         (List.map
-                            (fun str_op -> let str,_,_ = str_op in str)
-                            (Array.to_list argsstr_op)))
-                    ^ ")", None, nargs
-              end
-          | Lam (tarr,t) ->
-              assert false
-          | Application (f,args) ->
-              assert false
-        end
-    | Lam (tarr,t) -> assert false
+        app2str f args nanon
+    | Lam (tarr,t) ->
+        (lam2str tarr t nanon),None,0
+  and app2str (f:term) (args:term array) (nanon:int)
+      : string * operator option * int =
+    let arg_strings = Array.map (fun t -> term2str t nanon) args
+    in
+    match f with
+      Variable i ->
+        let fn = fname i nanon in
+        application2string fn arg_strings
+    | Lam (tarr,t) ->
+        normal_application2string
+          (lam2str tarr t nanon)
+          arg_strings
+    | Application (f,args) ->
+        let fstr,_,_ = app2str f args nanon in
+        normal_application2string fstr arg_strings
+  and lam2str (tarr:typ array) (t:term) (nanon:int): string =
+    let len = Array.length tarr in
+    let tstr,_,_ = term2str t (nanon+len) in
+    let fargs =
+      String.concat
+        ","
+        (Mylist.mapi
+           (fun i tp ->
+             feature_name_to_string (fname i (nanon+len))
+           )
+           (Array.to_list tarr))
+    in
+    "([" ^ fargs ^ "] -> " ^ tstr ^ ")"
   in
-  let s,_,_ = tostr_op t in s
+  let s,_,_ = term2str t 0 in s
 
 
 
@@ -376,8 +470,13 @@ let put
         begin
           match ens.v with
             Binexp (Eqop, ExpResult,def) ->
+              let term,tp =
+                typed_term (withinfo ens.i def) argnames argtypes ct ft
+              in
+              check_match ens.i def tp rettype ct;
               Some {names = argnames;
-                    term  = term (withinfo ens.i def) argnames argtypes ct ft}
+                    types = argtypes;
+                    term  = term}
           | _ -> assert false (*NYI*)
         end
     | _ -> assert false (*NYI*)

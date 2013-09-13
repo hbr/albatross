@@ -461,7 +461,8 @@ let prove
         raise Cannot_prove
       else ()
     end;
-    Printf.printf "  Try to proof %s\n" (term2string t);
+    Printf.printf "  Try to proof %s\n\texpanded %s\n"
+      (term2string t) (term2string (Feature_table.expand_term t arglen ft));
     let tried = TermSet.add t tried in
     try (* backward, enter, expand *)
       begin
