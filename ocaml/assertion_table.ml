@@ -378,8 +378,12 @@ let prove
     Printf.printf "%s%s%s\n" (level_string l) str1 (term2string t)
 
   and trace_premises (lst:term list) (l:int) (): unit =
-    let lstr = String.concat "," (List.map term2string lst) in
-    Printf.printf "%sPremises [%s]\n" (level_string l) lstr
+    let n = List.length lst in
+    if n>0 then
+      let lstr = String.concat "," (List.map term2string lst) in
+      Printf.printf "%sPremises [%s]\n" (level_string l) lstr
+    else
+      Printf.printf "%sGoal already in the context\n" (level_string l)
   in
 
   let pre_terms: term list = List.rev_map exp2term pre
@@ -482,11 +486,16 @@ let prove
       begin
         try
           let bwd_set = (TermMap.find t tm).bwd_set in
-          do_trace (trace_string
-                      ("Trying up to "
-                       ^ (string_of_int (BwdSet.cardinal bwd_set))
-                       ^ " alternatives")
-                      level);
+          begin
+            let n = BwdSet.cardinal bwd_set in
+            if n>0 then
+              do_trace (trace_string
+                          ("Trying up to "
+                           ^ (string_of_int n)
+                           ^ " alternative(s)")
+                          level)
+            else ()
+          end;
           let _ = BwdSet.iter
               (fun (_,premises,pt) ->
                 try

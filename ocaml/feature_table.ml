@@ -197,7 +197,8 @@ let typed_term
       try
         nbound - 1 - (Search.array_find_min name names)
       with Not_found ->
-          assert false (* search in global feature table!! *)
+        not_yet_implemented ie.i
+          ("Search in global feature table of name " ^ (ST.string name))
     in
     Variable idx,
     if idx<nbound then types.(nbound-1-idx) else assert false
