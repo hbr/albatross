@@ -92,8 +92,8 @@ feature   -- Negation
     all(a:BOOLEAN)
         ensure
             refutation:    (a => false)     => not a
-            indirect:      (not a => false) => a
             contradiction: a => not a => false
+            indirect:      (not a => false) => a
         end
 end
 
