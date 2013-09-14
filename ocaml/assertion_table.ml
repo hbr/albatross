@@ -11,6 +11,7 @@ type t  = {seq: descriptor seq}
 
 exception Cannot_prove
 exception Proof_found of proof_term
+exception Cannot_prove_info of info
 
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
@@ -180,6 +181,40 @@ let prove_in_context
 *)
 
 
+let header_to_string
+    (names: int array)
+    (types: typ array)
+    (ct: Class_table.t)
+    (ft:Feature_table.t)
+    : string =
+  let nargs = Array.length names in
+  assert (nargs = (Array.length types));
+  let args = Array.init
+      nargs
+      (fun i ->
+        (ST.string names.(i))
+        ^ ":"
+        ^ (Class_table.type2string types.(i) 0 ct))
+  in
+  "all"
+  ^ (
+    if nargs=0 then " "
+    else "(" ^ (String.concat "," (Array.to_list args)) ^ ")"
+   )
+
+
+let assertion_to_string
+    (d:descriptor)
+    (ct:Class_table.t)
+    (ft:Feature_table.t): string =
+  (header_to_string d.names d.types ct ft)
+  ^ " "
+  ^ (Feature_table.term_to_string d.term d.names ft)
+
+
+
+
+
 
 
 let proof_term (t:term) (tm:term_map): proof_term =
@@ -235,7 +270,7 @@ let add_forward_tm
   (* Add the  implication 'a=>b' with the proof term 'pt' to the forward set
      of the term 'a' in term map 'tm', i.e. add the conclusion 'b' and the
      proof term 'pt' of the implication *)
-  Printf.printf " fwd";
+  (*Printf.printf " fwd";*)
   TermMap.add
     a
     begin
@@ -264,7 +299,7 @@ let add_backward_tm
   let add_one premises target tm =
     let n = List.length premises in
     let e = (n,premises,pt) in
-    Printf.printf " bwd(%d)" n;
+    (*Printf.printf " bwd(%d)" n;*)
     TermMap.add
       target
       begin
@@ -285,11 +320,11 @@ let add_backward_tm
         add tl (add_one premises target tm)
   in
   let tm = add chain tm in
-  Printf.printf "\n"; tm
+  (*Printf.printf "\n";*) tm
 
 
 
-
+(*
 let add_one_tm
     (t:term)
     (pt:proof_term)
@@ -309,7 +344,6 @@ let add_one_tm
   in
   let chn = chain t in
   add_backward_tm chn pt tm
-
 
 let add_tm_close
     (t:term)
@@ -340,6 +374,7 @@ let add_tm_close
         add (step_close t pt tl) (add_one_tm t pt split chain tm)
   in
   add [t,pt] tm
+*)
 
 
 let prove
@@ -357,15 +392,52 @@ let prove
      assertions) and 'post' (postconditions) and return the list of all
      discharged terms and proof terms of the postconditions
    *)
+  let traceflag = ref false in
+  let do_trace (f:unit->unit): unit =
+    if !traceflag then f () else ()
+  in
   let arglen = Array.length argnames in
   let exp2term ie =  Feature_table.assertion_term ie argnames argtypes ct ft
   and term2string t = Feature_table.term_to_string t argnames ft
   and split = fun t -> Feature_table.split_implication t arglen ft
   and chain = fun t -> Feature_table.implication_chain t arglen ft
   in
+
+  let blank_string (i:int): string =
+    assert (0<=i);
+    let rec str i s =
+      if i=0 then s
+      else str (i-1) (s ^ " ")
+    in
+    str i ""
+  in
+
+  let level_string (i:int): string =
+    assert (0<=i);
+    blank_string (2*i)
+  in
+
+  let trace_header (): unit =
+    Printf.printf "\n%s\n" (header_to_string argnames argtypes ct ft)
+
+  and trace_string (str:string) (l:int) (): unit =
+    Printf.printf "%s%s\n" (level_string l) str
+
+  and trace_term (str:string) (t:term) (l:int) (): unit =
+    let len = String.length str in
+    let str1 = (if len<10 then str ^ (blank_string (10-len)) else str) ^ "  "
+    in
+    Printf.printf "%s%s%s\n" (level_string l) str1 (term2string t)
+
+  and trace_premises (lst:term list) (l:int) (): unit =
+    let lstr = String.concat "," (List.map term2string lst) in
+    Printf.printf "%sPremises [%s]\n" (level_string l) lstr
+  in
+
   let pre_terms: term list = List.rev_map exp2term pre
   in
-  let chain2string chn =
+
+  (*let chain2string chn =
     "["
     ^ (String.concat "; "
          (List.map
@@ -375,16 +447,18 @@ let prove
               ^ "]," ^ (term2string t))
             chn))
     ^ "]"
-  in
+  in*)
   let add_one_tm
       (t:term)
       (pt:proof_term)
+      (level:int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
       (tm:term_map)
       : term_map =
     (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
-    Printf.printf "    add %s to tm" (term2string t);
+    do_trace (trace_term "Context" t level);
+    (*Printf.printf "    add %s to tm" (term2string t);*)
     let tm = add_term_tm t pt tm in
     let tm =
       try
@@ -404,6 +478,7 @@ let prove
   let add_tm_close
       (t:term)
       (pt:proof_term)
+      (level: int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
       (tm:term_map)
@@ -416,15 +491,15 @@ let prove
         (lst: proof_pair list)
         (tm:term_map)
         : proof_pair list =
-      let cs = List.length (consequences t pt tm) in
-      Printf.printf "    cons %d\n" cs;
+      (*let cs = List.length (consequences t pt tm) in
+      Printf.printf "    cons %d\n" cs;*)
       let l1 = (consequences t pt tm) @ lst in
       try
         let a,b = split t in
-        Printf.printf "    try to find a proof term for antecedent %s\n"
-          (term2string a);
+        (*Printf.printf "    try to find a proof term for antecedent %s\n"
+          (term2string a);*)
         let pta = proof_term a tm in
-        Printf.printf "    +1\n";
+        (*Printf.printf "    +1\n";*)
         (b, MP(pta,pt)) :: l1
       with Not_found -> l1
     in
@@ -437,42 +512,54 @@ let prove
           else
             add
               (step_close t pt tl tm)
-              (add_one_tm t pt split chain tm)
+              (add_one_tm t pt level split chain tm)
     in
     add [t,pt] tm
   in
 
-  let tm_pre: term_map =
-    List.fold_left
-      (fun tm t ->
-        Printf.printf "  Add assumption %s: %s\n"
-          (term2string t) (chain2string (chain t));
-        add_tm_close t (Assume t) split chain tm)
-      TermMap.empty
-      pre_terms
-  in
-
-  let rec prove_one (t:term) (tm:term_map) (tried: TermSet.t) : proof_term =
+  let rec prove_one
+      (t:term)
+      (tm:term_map)
+      (tried: TermSet.t)
+      (level: int)
+      : proof_term =
     (* Prove the term 't' within the term map 'tm' where all terms
        within the set 'tried' have been tried already on the stack
      *)
     begin
+      let texp = Feature_table.expand_term t arglen ft in
+      let tred = Term.reduce texp in
+      do_trace (trace_term "Goal" t level);
+      do_trace (trace_term "  normal" tred level);
+      (*Printf.printf "  Try to proof %s\n\texpanded %s\n\treduced %s\n"
+        (term2string t)
+        (term2string texp)
+        (term2string tred)*)
+    end;
+    begin
       if TermSet.mem t tried then
-        raise Cannot_prove
+        (do_trace (trace_term  "Failure (loop)"  t level);
+         raise Cannot_prove)
       else ()
     end;
-    Printf.printf "  Try to proof %s\n\texpanded %s\n"
-      (term2string t) (term2string (Feature_table.expand_term t arglen ft));
     let tried = TermSet.add t tried in
     try (* backward, enter, expand *)
       begin
         try
           let bwd_set = (TermMap.find t tm).bwd_set in
+          do_trace (trace_string
+                      ("Trying up to "
+                       ^ (string_of_int (BwdSet.cardinal bwd_set))
+                       ^ " alternatives")
+                      level);
           let _ = BwdSet.iter
               (fun (_,premises,pt) ->
                 try
+                  do_trace (trace_premises premises (level+1));
                   let pt_lst =
-                    List.rev_map (fun t -> prove_one t tm tried) premises
+                    List.rev_map
+                      (fun t -> prove_one t tm tried (level+2))
+                      premises
                   in
                   let rec use_premises
                       (lst: proof_term list)
@@ -483,6 +570,7 @@ let prove
                     | pt1::tl ->
                         MP (pt1, use_premises tl pt)
                   in
+                  do_trace (trace_term "Success" t level);
                   raise (Proof_found (use_premises pt_lst pt))
                 with Cannot_prove -> ()
               )
@@ -493,15 +581,18 @@ let prove
       begin
         try
           let a,b = split t in
-          Printf.printf "  Enter assumption %s: %s\n"
-            (term2string a) (chain2string (chain a));
-          let tm = add_tm_close a (Assume a) split chain tm in
+          do_trace (trace_term "Enter" a level);
+          (*Printf.printf "  Enter assumption %s: %s\n"
+            (term2string a) (chain2string (chain a));*)
+          let tm = add_tm_close a (Assume a) (level+1) split chain tm in
           try
-            let ptb = prove_one b tm tried in
+            let ptb = prove_one b tm tried (level+1) in
+            do_trace (trace_term "Success" t level);
             raise (Proof_found (Discharge (a,ptb)))
           with Cannot_prove -> ()
         with Not_found -> () (* expand *)
       end;
+      do_trace (trace_term "Failure" t level);
       raise Cannot_prove
     with
       Proof_found pt -> pt
@@ -510,66 +601,71 @@ let prove
   let proof_compound
       (c:compound)
       (tm:term_map)
+      (level: int)
       : term_map * (term*proof_term) list =
     List.fold_left
       (fun res ie ->
         let tm,lst = res in
         let t = exp2term ie in
         let pt =
-          try prove_one t tm TermSet.empty
-          with Cannot_prove -> error_info ie.i "Cannot prove"
+          try prove_one t tm TermSet.empty level
+          (*with Cannot_prove -> error_info ie.i "Cannot prove"*)
+          with Cannot_prove -> raise (Cannot_prove_info  ie.i)
         in
-        add_tm_close t pt split chain tm,
-        (t,pt)::lst)
+        add_tm_close t pt level split chain tm,
+        (t,pt)::lst
+      )
       (tm,[])
       c
   in
 
-  let tm_inter,_ = proof_compound chck tm_pre
+  let prove_toplevel () : (proof_pair) list =
+    do_trace trace_header;
+    let tm_pre: term_map =
+      List.fold_left
+        (fun tm t ->
+          do_trace (trace_term "Assumption" t 1);
+          (*Printf.printf "  Add assumption %s: %s\n"
+            (term2string t) (chain2string (chain t));*)
+        add_tm_close t (Assume t) 2 split chain tm)
+        TermMap.empty
+        pre_terms
+    in
+    let tm_inter,_ = proof_compound chck tm_pre 1
+    in
+    let _,revlst = proof_compound post tm_inter 1
+    in
+    let rec discharge (pre: term list) (t:term) (pt:proof_term)
+        : term * proof_term =
+      match pre with
+        [] -> t,pt
+      | f::tl ->
+          discharge
+            tl (Feature_table.implication_term f t arglen ft) (Discharge (f,pt))
+    in
+    List.rev_map
+      (fun (t,pt) ->
+        discharge pre_terms t pt)
+      revlst
+
   in
-  let _,revlst = proof_compound post tm_inter
-  in
-  let rec discharge (pre: term list) (t:term) (pt:proof_term)
-      : term * proof_term =
-    match pre with
-      [] -> t,pt
-    | f::tl ->
-        discharge
-          tl (Feature_table.implication_term f t arglen ft) (Discharge (f,pt))
-  in
-  List.rev_map
-    (fun (t,pt) ->
-      discharge pre_terms t pt)
-    revlst
+
+  try
+    prove_toplevel ()
+  with Cannot_prove_info i ->
+    if not !traceflag then
+      begin
+        traceflag := true;
+        try
+          prove_toplevel ()
+        with Cannot_prove_info i ->
+          error_info i "Cannot prove"
+      end
+    else
+      error_info i "Cannot prove"
 
 
 
-
-
-
-
-
-
-
-let assertion_to_string
-    (d:descriptor)
-    (ct:Class_table.t)
-    (ft:Feature_table.t): string =
-  let nargs = Array.length d.names in
-  assert (nargs = (Array.length d.types));
-  let args = Array.init
-      nargs
-      (fun i ->
-        (ST.string d.names.(i))
-        ^ ":"
-        ^ (Class_table.type2string d.types.(i) 0 ct))
-  in
-  "all"
-  ^ (
-    if nargs=0 then " "
-    else "(" ^ (String.concat "," (Array.to_list args)) ^ ") "
-   )
-  ^ (Feature_table.term_to_string d.term d.names ft)
 
 
 

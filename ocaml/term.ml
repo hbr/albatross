@@ -11,17 +11,37 @@ type term =
 
 module Term: sig
 
+  val to_string: term -> string
+
   val map: (int->int->term) -> term -> term
 
   val upbound: int->int->term->term
 
   val up: int->term->term
 
+  val apply: term -> term array -> term
+
   val reduce: term -> term
 
   val normalize: typ array -> term -> typ array * term * int array
 
 end = struct
+
+  let rec to_string (t:term): string =
+    match t with
+      Variable i -> string_of_int i
+    | Application (f,args) ->
+        let fstr = to_string f
+        and argsstr = Array.to_list (Array.map to_string args)
+        in
+        fstr ^ "(" ^
+        (String.concat "," argsstr)
+        ^ ")"
+    | Lam(tarr,t) ->
+        let len = Array.length tarr in
+        let args = Array.init len (fun i -> (string_of_int (len-1-i))) in
+        let argsstr = String.concat "," (Array.to_list args) in
+        "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
   let map (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
@@ -75,6 +95,11 @@ end = struct
       t
 
 
+  let apply (t:term) (args: term array): term =
+    (* Reduce (beta reduction) the term ([v0,v1,...]->t)(a0,a1,...) i.e.
+       apply the function ([v0,v1,...]->t) to the arguments in args
+     *)
+    sub t args 0
 
 
   let variables_below (n:int) (t:term): int list =
@@ -174,13 +199,24 @@ end = struct
 
 
 
-  let reduce (t:term): term =
+  let rec reduce (t:term): term =
+    (* Do all possible beta reductions in the term 't' *)
+    let app (f:term) (args: term array): term =
+      match f with
+        Lam(tarr,t) ->
+          assert ((Array.length tarr)=(Array.length args));
+          apply t args
+      | _ -> Application (f,args)
+    in
     match t with
-      Application (Lam (tarr,t0) ,args) ->
-        let len = Array.length tarr in
-        assert (len = (Array.length args));
-        sub t args (assert false)
-    | _ -> t
+      Variable _ -> t
+    | Application (f,args) ->
+        let fr = reduce f
+          and argsr = Array.map reduce args
+        in
+        app fr argsr
+    | Lam(tarr,t) ->
+        Lam (tarr, reduce t)
 
 
 end
