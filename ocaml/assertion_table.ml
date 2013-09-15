@@ -13,10 +13,13 @@ exception Cannot_prove
 exception Proof_found of proof_term
 exception Cannot_prove_info of info
 
+
+
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = term
 end)
+
 
 
 module FwdSet = Set.Make(struct
@@ -48,12 +51,6 @@ module BwdSet = Set.Make(struct
 end)
 
 
-type term_descriptor = {
-    pt_opt:     proof_term option;
-    fwd_set:    FwdSet.t;
-    bwd_set:    BwdSet.t
-  }
-
 
 module TermMap = Map.Make(struct
   let compare = Pervasives.compare
@@ -61,124 +58,156 @@ module TermMap = Map.Make(struct
 end)
 
 
-type term_map     = term_descriptor TermMap.t
-
 type proof_pair = term * proof_term
 
 
-let proof_term (t:term) (tm:term_map): proof_term =
-  try
-    match (TermMap.find t tm).pt_opt with
-      None -> raise Not_found
-    | Some pt -> pt
-  with Not_found ->
-    raise Not_found
 
 
-let is_proved (t:term) (tm:term_map) =
-  try
-    let _ = proof_term t tm in
-    true
-  with Not_found ->
-    false
+module Context: sig
+
+  type t
+  val empty: t
+  val count: t -> int
+  val proof_term:   term -> t -> proof_term
+  val is_proved:    term -> t -> bool
+  val backward_set: term -> t -> BwdSet.t
+  val consequences: term -> proof_term -> t -> proof_pair list
+  val add_proof:    term -> proof_term -> t -> t
+  val add_forward:  term -> term -> proof_term -> t -> t
+  val add_backward: (term list * term) list -> proof_term -> t -> t
+
+end = struct
+
+  type term_descriptor = {
+      pt_opt:     proof_term option;
+      fwd_set:    FwdSet.t;
+      bwd_set:    BwdSet.t
+    }
+
+  type t = {
+      map:   term_descriptor TermMap.t;
+      count: int       (* number of proofs in the context *)
+     }
+
+  let empty: t = {map = TermMap.empty; count=0}
+
+  let count (c:t): int = c.count
+
+  let proof_term (t:term) (c:t): proof_term =
+    try
+      match (TermMap.find t c.map).pt_opt with
+        None -> raise Not_found
+      | Some pt -> pt
+    with Not_found ->
+      raise Not_found
+
+  let is_proved (t:term) (c:t) =
+    try
+      let _ = proof_term t c in
+      true
+    with Not_found ->
+      false
+
+  let backward_set (t:term) (c:t): BwdSet.t =
+    (TermMap.find t c.map).bwd_set
+
+  let consequences (t:term) (pt:proof_term) (c:t): proof_pair list =
+    (* The direct consequences of the term 't' with the proof term 'pt' within
+       the context 'c', i.e. if 'c' has a proved term 't=>u' then 'u' is
+       one of the direct consequences of 't' *)
+    try
+      let lst = FwdSet.elements (TermMap.find t c.map).fwd_set in
+      List.map (fun (b,pt_imp) -> b,MP(pt,pt_imp)) lst
+    with
+      Not_found -> []
 
 
-type proved_map   = proof_term TermMap.t
-type forward_map  = FwdSet.t TermMap.t
-type backward_map = BwdSet.t TermMap.t
 
-type proof_context = {
-    mutable proved:     proof_term TermMap.t;
-    mutable mp_targets: (term list * term * proof_term) TermMap.t;
-    argnames:          int array;
-    argtypes:          typ array;
-    class_table:        Class_table.t;
-    feature_table:      Feature_table.t;
-    assertion_table:    t
-  }
-
-(*
-module CTXT = struct
-  let empty
-      (argnames: int array)
-      (argtypes: typ array)
-      (ct: Class_table.t)
-      (ft: Feature_table.t)
-      (at: t)
-      : proof_context
-      =
-    {proved          = TermMap.empty;
-     mp_targets      = TermMap.empty;
-     argnames        = argnames;
-     argtypes        = argtypes;
-     class_table     = ct;
-     feature_table   = ft;
-     assertion_table = at}
+  let add_proof (t:term) (pt:proof_term) (c:t): t =
+    (* Add the term 't' with the proof term 'pt' to the context 'c' *)
+    try
+      let d0 = TermMap.find t c.map in
+      match d0.pt_opt with
+        None ->
+          {map = TermMap.add t {d0 with pt_opt = Some pt} c.map;
+           count = c.count + 1}
+      | Some _ -> c
+    with Not_found ->
+      {map = TermMap.add t {pt_opt = Some pt;
+                            fwd_set = FwdSet.empty;
+                            bwd_set = BwdSet.empty} c.map;
+       count = c.count + 1}
 
 
-  let nbound (c:proof_context): int =
-    Array.length c.argnames
-
-  let term_to_string (t:term) (c:proof_context): string =
-    Feature_table.term_to_string t c.argnames c.feature_table
-
-
-  let add_proved (t:term) (pt:proof_term) (c:proof_context): unit =
-    c.proved <- TermMap.add t pt c.proved
-
-
-  let add_mp_target
-      (target:  term)
-      (premises:term list)
-      (term:    term)
-      (pt:      proof_term)
-      (c:       proof_context)
-      : unit =
-    c.mp_targets <- TermMap.add target (premises,term,pt) c.mp_targets
-
-
-  let term (ie:info_expression) (c:proof_context): term =
-    Feature_table.assertion_term ie
-      c.argnames c.argtypes c.class_table c.feature_table
-
-  let find_proved (t:term) (c:proof_context): proof_term =
-    TermMap.find t c.proved
-
-  let discharge
-      (ass:term list)
-      (t:term)
+  let add_forward
+      (a:term)
+      (b:term)
       (pt:proof_term)
-      (c:proof_context)
-      : term * proof_term =
-    (* Discharge all assumptions of the context 'c' in the term 't' and its
-       corresponding proof term 'pt'. *)
-    let rec dischrg ass t pt  =
-      match ass with
-        [] -> t,pt
-      | f::tl ->
-          let t,pt = dischrg tl t pt in
-          Feature_table.implication_term f t (nbound c) c.feature_table,
-          Discharge (f,pt)
+      (c:t)
+      : t =
+    (* Add the  implication 'a=>b' with the proof term 'pt' to the forward set
+       of the term 'a' in the context 'c, i.e. add the conclusion 'b' and the
+       proof term 'pt' of the implication *)
+    {map =
+     TermMap.add
+       a
+       begin
+         try
+           let d0 = TermMap.find a c.map in
+           {d0 with fwd_set = FwdSet.add (b,pt) d0.fwd_set}
+         with Not_found ->
+           {pt_opt  = None;
+            fwd_set = FwdSet.singleton (b,pt);
+            bwd_set = BwdSet.empty}
+       end
+       c.map;
+     count = c.count}
+
+
+  let add_backward
+      (chain: (term list * term) list)
+      (pt:proof_term)
+      (c:t)
+      : t =
+    (* Add the implication chain 'a=>b=>...=>z' give as the list
+     [[],a=>b=>...=>z; [a],b=>...=>z; [a,b],...=>z; ... ] with the proof
+       term 'pt' to the backward set of the corresponding target in the
+       context 'c' *)
+    let add_one premises target c =
+      let n = List.length premises in
+      let e = (n,premises,pt)
+      and tm = c.map
+      and count = c.count
+      in
+      {map =
+       TermMap.add
+         target
+         begin
+           try
+             let d0 = TermMap.find target tm in
+             {d0 with bwd_set = BwdSet.add e d0.bwd_set}
+           with Not_found ->
+             {pt_opt  = None;
+              fwd_set = FwdSet.empty;
+              bwd_set = BwdSet.singleton e}
+         end
+         tm;
+       count = count}
     in
-    dischrg ass t pt
+    let rec add lst c =
+      match lst with
+        [] -> c
+      | (premises,target)::tl ->
+          add tl (add_one premises target c)
+    in
+    add chain c
+
 end
 
+type tried_map    = Context.t TermMap.t
 
 
 
-
-let prove_in_context
-    (ie: info_expression)
-    (ctxt: proof_context)
-    :
-    term * proof_term =
-  let term = CTXT.term ie ctxt in
-  try
-    let pt = CTXT.find_proved term ctxt in
-    term,pt
-  with Not_found ->
-    assert false
-*)
 
 
 let header_to_string
@@ -216,108 +245,6 @@ let assertion_to_string
 
 
 
-
-let proof_term (t:term) (tm:term_map): proof_term =
-  (* The proof term associated with the term 't' within the term map 'tm'
-     raise Not_found if there is none *)
-  let desc = TermMap.find t tm in
-  match desc.pt_opt with
-    Some pt -> pt
-  | None -> raise Not_found
-
-
-
-let consequences (t:term) (pt:proof_term) (tm:term_map): proof_pair list =
-  (* The direct consequences of the term 't' with the proof term 'pt' within
-     the term map 'tm', i.e. if 'tm' has a proved term 't=>u' then 'u' is
-     one of the direct consequences of 't' *)
-  try
-    let lst = FwdSet.elements (TermMap.find t tm).fwd_set in
-    List.map (fun (b,pt_imp) -> b,MP(pt,pt_imp)) lst
-  with
-    Not_found -> []
-
-
-
-let add_term_tm
-    (t:term)
-    (pt:proof_term)
-    (tm:term_map)
-    : term_map =
-  (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
-  TermMap.add
-    t
-    begin
-      try
-        let d0 = TermMap.find t tm in
-        {d0 with
-         pt_opt  = Some pt}
-      with Not_found ->
-        {pt_opt  = Some pt;
-         fwd_set = FwdSet.empty;
-         bwd_set = BwdSet.empty}
-    end
-    tm
-
-
-
-let add_forward_tm
-    (a:term)
-    (b:term)
-    (pt:proof_term)
-    (tm:term_map)
-    : term_map =
-  (* Add the  implication 'a=>b' with the proof term 'pt' to the forward set
-     of the term 'a' in term map 'tm', i.e. add the conclusion 'b' and the
-     proof term 'pt' of the implication *)
-  TermMap.add
-    a
-    begin
-      try
-        let d0 = TermMap.find a tm in
-        {d0 with fwd_set = FwdSet.add (b,pt) d0.fwd_set}
-      with Not_found ->
-        {pt_opt  = None;
-         fwd_set = FwdSet.singleton (b,pt);
-         bwd_set = BwdSet.empty}
-    end
-    tm
-
-
-
-
-let add_backward_tm
-    (chain: (term list * term) list)
-    (pt:proof_term)
-    (tm:term_map)
-    : term_map =
-  (* Add the implication chain 'a=>b=>...=>z' give as the list
-     [[],a=>b=>...=>z; [a],b=>...=>z; [a,b],...=>z; ... ] with the proof
-     term 'pt' to the backward set of the corresponding target in the
-     term map 'tm' *)
-  let add_one premises target tm =
-    let n = List.length premises in
-    let e = (n,premises,pt) in
-    TermMap.add
-      target
-      begin
-        try
-          let d0 = TermMap.find target tm in
-          {d0 with bwd_set = BwdSet.add e d0.bwd_set}
-        with Not_found ->
-          {pt_opt  = None;
-           fwd_set = FwdSet.empty;
-           bwd_set = BwdSet.singleton e}
-      end
-      tm
-  in
-  let rec add lst tm =
-    match lst with
-      [] -> tm
-    | (premises,target)::tl ->
-        add tl (add_one premises target tm)
-  in
-  add chain tm
 
 
 
@@ -400,92 +327,97 @@ let prove
             chn))
     ^ "]"
   in*)
-  let add_one_tm
+  let add_one_ctxt
       (t:term)
       (pt:proof_term)
       (level:int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
-      (tm:term_map)
-      : term_map =
+      (c:Context.t)
+      : Context.t =
     (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
     do_trace (trace_term "Context" t level);
-    let tm = add_term_tm t pt tm in
-    let tm =
+    let c = Context.add_proof t pt c in
+    let c =
       try
       let a,b = split t in
-      add_forward_tm a b pt tm
+      Context.add_forward a b pt c
       with Not_found ->
-        tm
+        c
     in
     let chn = chain t in
     let res =
-      add_backward_tm chn pt tm
+      Context.add_backward chn pt c
     in
-    assert (is_proved t res);
+    assert (Context.is_proved t res);
     res
   in
 
-  let add_tm_close
+  let add_ctxt_close
       (t:term)
       (pt:proof_term)
       (level: int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
-      (tm:term_map)
-      : term_map =
-    (* Add the term 't' with the proof term 'pt' to the term map 'tm' and
+      (c:Context.t)
+      : Context.t =
+    (* Add the term 't' with the proof term 'pt' to the context 'c' and
        close it *)
     let step_close
         (t:term)
         (pt:proof_term)
         (lst: proof_pair list)
-        (tm:term_map)
+        (c:Context.t)
         : proof_pair list =
-      let l1 = (consequences t pt tm) @ lst in
+      let l1 = (Context.consequences t pt c) @ lst in
       try
         let a,b = split t in
-        let pta = proof_term a tm in
+        let pta = Context.proof_term a c in
         (b, MP(pta,pt)) :: l1
       with Not_found -> l1
     in
-    let rec add (lst: proof_pair list) (tm:term_map): term_map =
+    let rec add (lst: proof_pair list) (c:Context.t): Context.t =
       match lst with
-        [] -> tm
+        [] -> c
       | (t,pt)::tl ->
-          if is_proved t tm then
-            add tl tm
+          if Context.is_proved t c then
+            add tl c
           else
             add
-              (step_close t pt tl tm)
-              (add_one_tm t pt level split chain tm)
+              (step_close t pt tl c)
+              (add_one_ctxt t pt level split chain c)
     in
-    add [t,pt] tm
+    add [t,pt] c
   in
 
   let rec prove_one
       (t:term)
-      (tm:term_map)
-      (tried: TermSet.t)
+      (c:Context.t)
+      (tried: tried_map)
       (level: int)
       : proof_term =
     (* Prove the term 't' within the term map 'tm' where all terms
-       within the set 'tried' have been tried already on the stack
+       within the map 'tried' have been tried already on the stack
+       with a corresponding term map.
      *)
     begin
       do_trace (trace_term "Goal" t level);
     end;
     begin
-      if TermSet.mem t tried then
-        (do_trace (trace_term  "Failure (loop)"  t level);
-         raise Cannot_prove)
-      else ()
+      try
+        let c0 = TermMap.find t tried in
+        if (Context.count c0) < (Context.count c) then
+          ()
+        else
+          (do_trace (trace_term  "Failure (loop)"  t level);
+           raise Cannot_prove)
+      with Not_found -> ()
     end;
-    let tried = TermSet.add t tried in
+    let tried = TermMap.add t c tried in
     try (* backward, enter, expand *)
       begin
         try
-          let bwd_set = (TermMap.find t tm).bwd_set in
+          let bwd_set = Context.backward_set t c in
           begin
             let n = BwdSet.cardinal bwd_set in
             if n>0 then
@@ -502,7 +434,7 @@ let prove
                   do_trace (trace_premises premises (level+1));
                   let pt_lst =
                     List.rev_map
-                      (fun t -> prove_one t tm tried (level+2))
+                      (fun t -> prove_one t c tried (level+2))
                       premises
                   in
                   let rec use_premises
@@ -526,9 +458,9 @@ let prove
         try
           let a,b = split t in
           do_trace (trace_term "Enter" a level);
-          let tm = add_tm_close a (Assume a) (level+1) split chain tm in
+          let c = add_ctxt_close a (Assume a) (level+1) split chain c in
           try
-            let ptb = prove_one b tm tried (level+1) in
+            let ptb = prove_one b c tried (level+1) in
             do_trace (trace_term "Success" t level);
             raise (Proof_found (Discharge (a,ptb)))
           with Cannot_prove -> ()
@@ -542,39 +474,39 @@ let prove
 
   let proof_compound
       (c:compound)
-      (tm:term_map)
+      (ctxt:Context.t)
       (level: int)
-      : term_map * (term*proof_term) list =
+      : Context.t * (term*proof_term) list =
     List.fold_left
       (fun res ie ->
-        let tm,lst = res in
+        let ctxt,lst = res in
         let t = exp2term ie in
         let tnormal = normal t in
         let pt =
           try
             do_trace (trace_term "User goal" t level);
-            prove_one tnormal tm TermSet.empty (level+1)
+            prove_one tnormal ctxt TermMap.empty (level+1)
           with Cannot_prove ->
             do_trace (trace_term "User failure" t level);
             raise (Cannot_prove_info  ie.i)
         in
         do_trace (trace_term "User success" t level);
-        add_tm_close tnormal pt (level+1) split chain tm,
+        add_ctxt_close tnormal pt (level+1) split chain ctxt,
         (tnormal,pt)::lst
       )
-      (tm,[])
+      (ctxt,[])
       c
   in
 
   let prove_toplevel () : (proof_pair) list =
     do_trace trace_header;
-    let tm_pre: term_map =
+    let tm_pre: Context.t =
       List.fold_left
-        (fun tm t ->
+        (fun c t ->
           do_trace (trace_term "Assumption" t 1);
           let tn = normal t in
-          add_tm_close tn (Assume tn) 2 split chain tm)
-        TermMap.empty
+          add_ctxt_close tn (Assume tn) 2 split chain c)
+        Context.empty
         pre_terms
     in
     let tm_inter,_ = proof_compound chck tm_pre 1

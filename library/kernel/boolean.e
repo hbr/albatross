@@ -75,6 +75,8 @@ feature    -- Some theorems with implication
             (a=>b) => (b=>c) => (a=>c)
             (a=>b) => (a=>b=>c) => (a=>c)
         end
+
+
 end
 
 
@@ -84,6 +86,31 @@ feature {NONE} -- Negation
         ensure
             Result = (a=>false)
         end
+
+    all(a:BOOLEAN)
+            -- provable without classical logic
+        ensure
+            -- f;   without semicolon leads to unexpected token 'not' !!
+            not not not a => not a
+            -- not not (a or not a)
+            -- ((a or not a) => not b) => not b
+        end
+
+
+    all(a,b:BOOLEAN)
+        require
+            a => b
+            b => a
+        ensure
+            a
+        end
+
+    all(a:BOOLEAN)
+        ensure
+            (a=>a) => a
+        end
+
+
 end
 
 feature   -- Negation
