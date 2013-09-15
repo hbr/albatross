@@ -36,7 +36,7 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
    *)
   assert (has_implication ft);
   match ft.implication with
-    None -> assert false
+    None -> assert false  (* Cannot happen *)
   | Some i ->
       let args = Array.init 2 (fun i -> if i=0 then a else b) in
       Application (Variable (i+nbound), args)
@@ -201,7 +201,10 @@ let typed_term
           ("Search in global feature table of name " ^ (ST.string name))
     in
     Variable idx,
-    if idx<nbound then types.(nbound-1-idx) else assert false
+    if idx<nbound then
+      types.(nbound-1-idx)
+    else
+      assert false (* would be global *)
   in
   let rec trm e: term * typ =
     match e with
@@ -213,7 +216,7 @@ let typed_term
         begin
           match flst with
             [i] -> Variable (nbound+i), (Key_table.key ft.keys i).typ
-          | _ -> assert false
+          | _ -> not_yet_implemented ie.i "feature overloading"
         end
     | Expparen e -> trm e
     | Taggedexp (label,e) -> trm e
@@ -313,7 +316,8 @@ let maybe_parenthesized
         match assoc with
           Left -> not left
         | Right -> left
-                | Nonassoc -> assert false
+        | Nonassoc -> assert false (* Cannot happen, or the parser does not
+                                      work correctly *)
        ) then "(" ^ str ^ ")"
       else if op<>op1 && nargs=2 && prec1<=prec then
         "(" ^ str ^ ")"
@@ -478,9 +482,11 @@ let put
               Some {names = argnames;
                     types = argtypes;
                     term  = term}
-          | _ -> assert false (*NYI*)
+          | _ -> not_yet_implemented ens.i
+                "functions not defined with \"Result = ...\""
         end
-    | _ -> assert false (*NYI*)
+    | _ -> not_yet_implemented fn.i
+          "functions with implementation/preconditions"
   in
   let nargs = Array.length argtypes in
   let _ =
@@ -547,16 +553,17 @@ let put
   in
   if idx < cnt then begin
     if Block_stack.is_private bs then
-      raise (
-      Error_info (fn.i,
-                  "The feature \"" ^ (feature_name_to_string fn.v)
-                  ^ "\" has already a private definition"))
+      error_info fn.i
+        ("The feature \"" ^ (feature_name_to_string fn.v)
+         ^ "\" has already a private definition")
     else
       match func_def with
         None ->
           (Seq.elem ft.features idx).pub <- Some func_def
       | Some _ ->
-          assert false (*NYI*)
+          not_yet_implemented fn.i
+            ("public function definition if there is already "
+             ^ "a private definition")
   end
   else begin
     assert (idx=cnt);

@@ -10,17 +10,17 @@ end)
 
 type descriptor =
     {hmark:header_mark; constraints: typ array; parents: TypSet.t}
-      
+
 type t = {names: int key_table; classes: descriptor seq}
 
 let boolean_index   = 0
 let any_index       = 1
 let predicate_index = 2
 let function_index  = 3
-      
+
 let count (c:t) =
   Seq.count c.classes
-    
+
 let class_name (i:int) (c:t) =
   assert (i<count c);
   Support.ST.string (Key_table.key c.names i)
@@ -31,16 +31,16 @@ let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
     let idx = Key_table.find c.names cn.v in
     let desc = Seq.elem c.classes idx in
     if hm.v <> desc.hmark then
-      let str = 
-        "Header mark should be \"" 
-        ^ (hmark2string desc.hmark) 
+      let str =
+        "Header mark should be \""
+        ^ (hmark2string desc.hmark)
         ^ "\"\n"
       in
-      raise (Error_info (hm.i,str))
+      error_info hm.i str
     else
       ()
   with Not_found ->
-    assert false
+    not_yet_implemented cn.i "Insertion of new classes"
 
 let fgen i = Simple i
 let bool = Simple 0
@@ -59,7 +59,7 @@ let boolean_binary (ct:t): typ =
 
 let boolean_unary (ct:t): typ =
   func 0 (tuple1 bool) bool
-    
+
 
 
 let get_type (tp:type_t withinfo) (ct:t) =
@@ -70,10 +70,10 @@ let get_type (tp:type_t withinfo) (ct:t) =
         let idx = Key_table.find ct.names name in
         Simple idx
       with Not_found ->
-        raise (Error_info (tp.i, "Class " ^ (ST.string name) 
-                           ^ " does not exist"))
+        error_info tp.i ("Class " ^ (ST.string name)
+                         ^ " does not exist")
     end
-  | _ -> assert false
+  | _ -> not_yet_implemented tp.i "types other than normal types"
 
 
 
@@ -86,8 +86,8 @@ let split_function (function_type:typ) (ct:t): typ array * typ =
         assert ((Array.length tarr) = 2);
         match tarr.(0) with
           Tuple args -> args,tarr.(1)
-        | _ -> assert false
-      end      
+        | _ -> assert false  (* always a tuple! *)
+      end
   | _ -> failwith "is not a function"
 
 
@@ -97,16 +97,16 @@ let arguments
     (entlst: entities list withinfo)
     (ct:t): int array * typ array =
   let args: (int*typ)list =
-    List.flatten 
-      (List.map 
+    List.flatten
+      (List.map
          (fun es ->
            match es with
              Untyped_entities _ ->
-               raise (Error_info (entlst.i, 
-                                  "Arguments must be fully typed "
-                                  ^ "in top level declarations "))
+               error_info entlst.i
+                 ("Arguments must be fully typed "
+                  ^ "in top level declarations")
            | Typed_entities (lst,tp) ->
-               let t = get_type (withinfo entlst.i tp) ct 
+               let t = get_type (withinfo entlst.i tp) ct
                in
                List.map (fun name -> name,t) lst)
          entlst.v)
@@ -117,11 +117,10 @@ let arguments
   let rec check_names (namelst: int list) =
     match namelst with
       [] -> ()
-    | f::t -> 
+    | f::t ->
         if List.mem f t then
-          raise (Error_info (
-                 entlst.i, 
-                 ("Duplicate argument \"" ^ (ST.string f) ^ "\"" )))
+          error_info entlst.i
+            ("Duplicate argument \"" ^ (ST.string f) ^ "\"" )
         else check_names t
   in
   check_names argnames;
@@ -179,9 +178,9 @@ let type2string (t:typ) (nb:int) (c:t) =
   and func      = 3
   in
   let rec t2s qmark nb t =
-    let arr2s nb tarr = 
-      String.concat 
-        "," 
+    let arr2s nb tarr =
+      String.concat
+        ","
         (Array.to_list (Array.map (fun t -> t2s false nb t) tarr))
     and j2s j nb =
       if j<nb then string_of_int j
@@ -213,22 +212,22 @@ let type2string (t:typ) (nb:int) (c:t) =
           (tup2s nb tarr) ^ (t2s false (nb+len) t)
   in
   t2s false nb t
-    
-    
+
+
 let class2string (i:int) (ctxt:t) =
   assert (i < count ctxt);
   let desc = Seq.elem  ctxt.classes i in
   let ngen = Array.length desc.constraints in
   let con2string =
     if ngen = 0 then ""
-    else 
+    else
       "["
-      ^ (String.concat 
+      ^ (String.concat
              ","
            (Array.to_list
               (Array.mapi (fun i c ->
-                (string_of_int (ngen-1-i)) 
-                ^ ":" 
+                (string_of_int (ngen-1-i))
+                ^ ":"
                 ^ (type2string c 0 ctxt)) desc.constraints) )
         )
       ^ "]"
@@ -240,15 +239,15 @@ let class2string (i:int) (ctxt:t) =
                    desc.parents
                    []))
   in
-  (hmark2string_wblank desc.hmark) 
-  ^ "class " ^ (class_name i ctxt) 
-  ^ con2string 
+  (hmark2string_wblank desc.hmark)
+  ^ "class " ^ (class_name i ctxt)
+  ^ con2string
   ^ (if TypSet.is_empty desc.parents then ""
   else" inherit " ^ par2string)
   ^ " end"
-                                              
+
 let print ctxt =
-  Seq.iteri 
+  Seq.iteri
     (fun i c -> Printf.printf "%s\n" (class2string i ctxt))
     ctxt.classes
-    
+
