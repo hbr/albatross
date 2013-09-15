@@ -251,3 +251,22 @@ let print ctxt =
     (fun i c -> Printf.printf "%s\n" (class2string i ctxt))
     ctxt.classes
 
+
+
+let arguments_to_string
+    (names: int array)
+    (types: typ array)
+    (ct:t): string =
+  let nargs = Array.length names in
+  assert (nargs = (Array.length types));
+  let args = Array.init
+      nargs
+      (fun i ->
+        (ST.string names.(i))
+        ^ ":"
+        ^ (type2string types.(i) 0 ct))
+  in
+   if nargs=0 then
+     " "
+   else 
+     "(" ^ (String.concat "," (Array.to_list args)) ^ ")"

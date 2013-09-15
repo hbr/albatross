@@ -25,3 +25,5 @@ val split_function: typ -> t -> typ array * typ
 val print: t -> unit
 
 val type2string: typ -> int -> t -> string
+
+val arguments_to_string: int array -> typ array -> t -> string

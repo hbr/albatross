@@ -80,22 +80,47 @@ feature    -- Some theorems with implication
 end
 
 
-
 feature {NONE} -- Negation
     not (a:BOOLEAN): BOOLEAN
         ensure
             Result = (a=>false)
         end
 
-    all(a:BOOLEAN)
+    or (a,b:BOOLEAN): BOOLEAN
+        ensure
+            Result = (not a => b)
+        end
+
+    and (a,b:BOOLEAN): BOOLEAN
+        ensure
+            Result = not (a => not b)
+        end
+
+
+    all(a,b,c:BOOLEAN)
             -- provable without classical logic
         ensure
             a => a
+            a or not a
+            a and b => not not a
+            a and b => not not b
+            a => b => a and b
+            a or b => (a=>c) => (b=>c) => not not c
             not not not a => not a
             -- not not (a or not a)
             -- ((a or not a) => not b) => not b
         end
 
+    all(a,b:BOOLEAN)
+        require
+            not not a => a
+            not not b => b
+        ensure
+            a and b => a
+            a and b => b
+            a => b => a and b
+            a and b => b and a
+        end
 
     all(a,b:BOOLEAN)
         require

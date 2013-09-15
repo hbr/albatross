@@ -9,7 +9,7 @@ Usage:
 let parse_file fn =
   let lexbuf = Lexing.from_channel (open_in fn)
   in
-  lexbuf.Lexing.lex_curr_p <- 
+  lexbuf.Lexing.lex_curr_p <-
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = fn};
   Support.parse_error_fun := Lexer.print_unexpected;
   Parser.main Lexer.token lexbuf
@@ -68,10 +68,10 @@ module Analyze = struct
             Block_stack.pop block_stack;
             ()
         | Named_feature (fn, entlst, rt, body) ->
-            Feature_table.put fn entlst rt body 
+            Feature_table.put fn entlst rt body
               block_stack class_table feature_table
         | Assertion_feature (label, entlst,body) ->
-            Assertion_table.put 
+            Prover.prove_and_store
               entlst body class_table feature_table ass_table
         | _ ->
             Class_table.print   class_table;
@@ -98,7 +98,7 @@ let _ =
     else
       file_name := str;
   in
-  try 
+  try
     Arg.parse [] anon_fun usage_string;
     if !file_name = "" then
       raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string));
@@ -106,7 +106,7 @@ let _ =
       Analyze.analyze (parse_file !file_name)
     with Support.Error_info (inf,str) ->
       raise (Support.Error_fileinfo (!file_name,inf,str))
-  with 
+  with
     Support.Eiffel_error str
   | Sys_error str ->  prerr_string str; exit 1
   | Support.Error_fileinfo (fn,inf,str) ->
