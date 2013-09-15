@@ -492,7 +492,7 @@ let prove
         in
         do_trace (trace_term "User success" t level);
         add_ctxt_close tnormal pt (level+1) split chain ctxt,
-        (tnormal,pt)::lst
+        (t,pt)::lst
       )
       (ctxt,[])
       c
