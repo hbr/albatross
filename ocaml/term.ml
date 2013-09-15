@@ -88,7 +88,7 @@ end = struct
         else
           let jfree = j-nb in
           if jfree < len then
-            args.(jfree)
+            args.(len-1-jfree)
           else
             Variable(j + nbound - len)
       )

@@ -234,7 +234,7 @@ let typed_term
           | [idx,tarr,rt] ->
               assert ((Array.length tarr) = 2);
               let _ = check e1 tp1 tarr.(0)
-              and _ = check e1 tp2 tarr.(1)
+              and _ = check e2 tp2 tarr.(1)
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
           | _ -> not_yet_implemented ie.i
