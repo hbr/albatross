@@ -4,7 +4,16 @@ let last_pos = ref (Lexing.dummy_pos)
 
 let last_is_endtok = ref false
 
-let cached_tok: ((Parser.token*(bool*bool)) * Lexing.position) option ref
+type extended_token = Parser.token*(bool*bool)
+              (* [token, [can_start_line,can_end_line]] *)
+
+let parse_token (tok: extended_token): Parser.token = fst tok
+
+let is_start_token (tok:extended_token): bool = fst (snd tok)
+
+let is_end_token   (tok:extended_token): bool = snd (snd tok)
+
+let cached_tok: (extended_token * Lexing.position) option ref
     = ref None
 
 
@@ -118,8 +127,10 @@ let kwtoken id =
   in
   match kw with
     Parser.KWrequire -> kw, (true,false)
-  | Parser.KWend     -> kw, (false,true)
   | Parser.KWall     -> kw, (true,false)
+  | Parser.KWend     -> kw, (false,true)
+  | Parser.KWnot     -> kw, (true,false)
+  | Parser.KWold     -> kw, (true,false)
   | Parser.KWsome    -> kw, (true,false)
   | Parser.KWif      -> kw, (true,false)
   | Parser.KWinspect -> kw, (true,false)
@@ -254,9 +265,9 @@ let some_cached () =
   match !cached_tok with None -> false | Some(_,_) -> true
 
 let cache_next lexbuf =
+  assert  (not (some_cached ()));
   let tok = next_token lexbuf
   in
-  assert  (some_cached () = false);
   cached_tok := Some (tok, Lexing.lexeme_start_p lexbuf);
   tok
 
@@ -267,15 +278,13 @@ let return_tok tok isend pos =
 
 let rec token lexbuf =
   let tok,pos = nextorcached_token lexbuf
-  and isstart t = fst (snd t)
-  and isend   t = snd (snd t)
   in
-  match fst tok with
+  match parse_token tok with
     Parser.NEWLINE ->
       if !last_is_endtok then
         let tok = cache_next lexbuf
         in
-        if isstart tok then
+        if is_start_token tok then
           (last_is_endtok:=false;
            return_tok Parser.SEMICOL false pos)
         else
@@ -284,7 +293,7 @@ let rec token lexbuf =
         token lexbuf
 
   | _ ->
-      return_tok (fst tok) (isend tok) pos
+      return_tok (fst tok) (is_end_token tok) pos
 
 
 

@@ -90,7 +90,7 @@ feature {NONE} -- Negation
     all(a:BOOLEAN)
             -- provable without classical logic
         ensure
-            -- f;   without semicolon leads to unexpected token 'not' !!
+            a => a
             not not not a => not a
             -- not not (a or not a)
             -- ((a or not a) => not b) => not b
