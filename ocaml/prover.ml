@@ -53,8 +53,6 @@ module TermMap = Map.Make(struct
 end)
 
 
-type proof_pair = term * proof_term
-
 
 
 
@@ -240,7 +238,7 @@ let prove
      assertions) and 'post' (postconditions) and return the list of all
      discharged terms and proof terms of the postconditions
    *)
-  let traceflag = ref false in
+  let traceflag = ref true in
   let do_trace (f:unit->unit): unit =
     if !traceflag then f () else ()
   in
@@ -381,6 +379,7 @@ let prove
       do_trace (trace_term "Goal" t level);
     end;
     begin
+      (* Bail out if the goal has already been tried in the same context *)
       try
         let c0 = TermMap.find t tried in
         if (Context.count c0) < (Context.count c) then
@@ -391,6 +390,15 @@ let prove
       with Not_found -> ()
     end;
     let tried = TermMap.add t c tried in
+
+    let bwd_glob = Assertion_table.find_backward t arglen at in
+    let c = List.fold_left
+        (fun c (t,pt) ->
+          do_trace (trace_term "Global" t level);
+          add_ctxt_close t pt (level+1) split chain c)
+        c
+        bwd_glob
+    in
     try (* backward, enter, expand *)
       begin
         try

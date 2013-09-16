@@ -259,14 +259,31 @@ let arguments_to_string
     (ct:t): string =
   let nargs = Array.length names in
   assert (nargs = (Array.length types));
-  let args = Array.init
-      nargs
-      (fun i ->
-        (ST.string names.(i))
-        ^ ":"
-        ^ (type2string types.(i) 0 ct))
-  in
-   if nargs=0 then
-     " "
-   else 
-     "(" ^ (String.concat "," (Array.to_list args)) ^ ")"
+  if nargs=0 then
+      " "
+  else
+    let zipped = Array.to_list (Array.init nargs (fun i -> names.(i),types.(i)))
+    in
+    let llst =
+      List.fold_left
+        (fun ll (n,tp) ->
+          match ll with
+            [] -> [[n],tp]
+          | (ns,tp1)::tl ->
+              if tp=tp1 then
+                [n::ns,tp]
+              else
+                ([n],tp)::ll
+        )
+        []
+        zipped
+    in
+    "("
+    ^  String.concat
+        ","
+        (List.rev_map
+           (fun (ns,tp) ->
+             (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
+             ^ ":" ^ (type2string tp 0 ct))
+           llst)
+    ^ ")"

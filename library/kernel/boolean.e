@@ -113,6 +113,15 @@ feature {NONE} -- Negation
 
     all(a,b:BOOLEAN)
         require
+            a and b
+        check
+            not not a => a
+        ensure
+            a
+        end
+
+    all(a,b:BOOLEAN)
+        require
             not not a => a
             not not b => b
         ensure
@@ -122,18 +131,6 @@ feature {NONE} -- Negation
             a and b => b and a
         end
 
-    all(a,b:BOOLEAN)
-        require
-            a => b
-            b => a
-        ensure
-            a
-        end
-
-    all(a:BOOLEAN)
-        ensure
-            (a=>a) => a
-        end
 
 
 end
@@ -144,7 +141,7 @@ feature   -- Negation
     all(a:BOOLEAN)
         ensure
             refutation:    (a => false)     => not a
-            contradiction: a => not a => false
+            contradiction: not a => a => false
             indirect:      (not a => false) => a
         end
 end

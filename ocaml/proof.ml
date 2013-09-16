@@ -5,18 +5,15 @@ open Type
 exception Failed_proof
 
 type proof_term =
-(*    Context       of typ array
-  | Assumption    of proof_term * term *)
     Assume        of term
   | Discharge     of term  * proof_term  (* discharge assumption as premise *)
   | MP            of proof_term * proof_term       (* a => (a=>b) => b *)
   | Generalize    of proof_term * int
   | Theorem       of int
-  | Specialize    of proof_term * term list
-  | Fold          of proof_term * term  (* Fold a function with new term *)
-  | Unfold        of proof_term * term  (* Unfold a function with new term *)
-(*  | PopContext    of proof_term*)
+  | Specialize    of proof_term * term array
 
+
+type proof_pair = term * proof_term
 
 
 

@@ -25,6 +25,8 @@ module Term: sig
 
   val normalize: typ array -> term -> typ array * term * int array
 
+  val unify: term -> int -> term -> int -> term array
+
 end = struct
 
   let rec to_string (t:term): string =
@@ -43,6 +45,8 @@ end = struct
         let argsstr = String.concat "," (Array.to_list args) in
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
+
+
   let map (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
        number of bound variables in the context where 'j' appears
@@ -59,6 +63,8 @@ end = struct
 
 
 
+
+
   let upbound (n:int) (start:int) (t:term): term =
     (* Shift all free variables up by 'n' from 'start' on in the term 't' *)
     map
@@ -66,6 +72,8 @@ end = struct
         if j<nb+start then Variable(j)
         else Variable(j+n))
       t
+
+
 
 
   let up (n:int) (t:term): term =
@@ -95,11 +103,15 @@ end = struct
       t
 
 
+
+
   let apply (t:term) (args: term array): term =
     (* Reduce (beta reduction) the term ([v0,v1,...]->t)(a0,a1,...) i.e.
        apply the function ([v0,v1,...]->t) to the arguments in args
      *)
     sub t args 0
+
+
 
 
   let variables_below (n:int) (t:term): int list =
@@ -218,5 +230,56 @@ end = struct
     | Lam(tarr,t) ->
         Lam (tarr, reduce t)
 
+
+
+
+  let unify (t1:term) (nb1:int) (t2:term) (nb2:int): term array =
+    (* Find a substitution (i.e. an array of arguments) for the nb2 bound
+       variable of the term t2 so that t1 = Lam(nb2,t2) (args). Clearly the
+       size of args must be nb2. The term t1 is in an environment with nb1
+       bound variables
+     *)
+    let args  = Array.make nb2 t1
+    and flags = Array.make nb2 false
+    in
+    let notfound_unless (cond:bool): unit =
+      if cond then () else raise Not_found
+    in
+    let rec uni t1 t2 =
+      match t1,t2 with
+        _, Variable i2 ->
+          if i2<nb2 then
+            begin
+              if not flags.(i2) then
+                (args.(nb2-1-i2) <- t1;
+                 flags.(i2) <- true)
+              else
+                notfound_unless (args.(nb2-1-i2)=t1)
+            end
+          else begin
+            match t1 with
+              Variable i1 ->
+                notfound_unless ((i1-nb1) = (i2-nb2))
+            | _ -> raise Not_found
+          end
+      | Application (f1,args1), Application (f2,args2) ->
+          let l1,l2 = Array.length args1, Array.length args2 in
+          if l1=l2 then begin
+            uni f1 f2;
+            Array.iteri (fun i e -> uni e args2.(i)) args1
+          end
+          else
+            raise Not_found
+      | Lam(tarr1,u1), Lam(tarr2,u2) ->
+          let l1,l2 = Array.length tarr1, Array.length tarr2 in
+          if l1=l2 then
+            uni u1 u2
+          else
+            raise Not_found
+      | _ -> raise Not_found
+    in
+    uni t1 t2;
+    assert (t1 = (sub t2 args nb1));
+    args
 
 end
