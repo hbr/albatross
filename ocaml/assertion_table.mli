@@ -6,10 +6,19 @@ type t
 
 val empty: unit -> t
 
-val find_backward: term -> int -> t -> proof_pair list
+val count: t -> int
 
-val put_axiom:  int array -> typ array -> term -> t -> unit
+val to_string: int -> Class_table.t -> Feature_table.t -> t -> string
 
-val put_proved: int array -> typ array -> term -> proof_term -> t -> unit
+val find_backward: term -> int -> Feature_table.t -> t ->
+  (proof_pair * int * bool) list
+
+val put_axiom:
+    int array -> typ array -> term
+      -> Feature_table.t -> t -> unit
+
+val put_proved:
+    int array -> typ array -> term -> proof_term
+      -> Feature_table.t -> t -> unit
 
 val print: Class_table.t -> Feature_table.t -> t -> unit

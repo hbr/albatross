@@ -70,7 +70,7 @@ feature    -- Some theorems with implication
 
     all(a,b,c:BOOLEAN)
         ensure
-            a => a
+            -- a => a
             a => (a=>b) => b
             (a=>b) => (b=>c) => (a=>c)
             (a=>b) => (a=>b=>c) => (a=>c)
@@ -97,6 +97,13 @@ feature {NONE} -- Negation
         end
 
 
+    all(a,b:BOOLEAN)
+        require
+            a and b
+        ensure
+            a
+        end
+
     all(a,b,c:BOOLEAN)
             -- provable without classical logic
         ensure
@@ -109,15 +116,6 @@ feature {NONE} -- Negation
             not not not a => not a
             -- not not (a or not a)
             -- ((a or not a) => not b) => not b
-        end
-
-    all(a,b:BOOLEAN)
-        require
-            a and b
-        check
-            not not a => a
-        ensure
-            a
         end
 
     all(a,b:BOOLEAN)

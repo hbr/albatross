@@ -9,9 +9,14 @@ type term =
   | Lam         of typ array * term
 
 
+
 module Term: sig
 
   val to_string: term -> string
+
+  val nodes: term -> int
+
+  val bound_variables: term -> int -> IntSet.t
 
   val map: (int->int->term) -> term -> term
 
@@ -19,13 +24,15 @@ module Term: sig
 
   val up: int->term->term
 
+  val sub:   term -> term array -> int -> term
+
   val apply: term -> term array -> term
 
   val reduce: term -> term
 
   val normalize: typ array -> term -> typ array * term * int array
 
-  val unify: term -> int -> term -> int -> term array
+  val unify: term -> int -> term -> int -> term array * bool array
 
 end = struct
 
@@ -45,6 +52,37 @@ end = struct
         let argsstr = String.concat "," (Array.to_list args) in
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
+
+  let rec nodes (t:term): int =
+    (* The number of nodes in the term t *)
+    match t with
+      Variable _ -> 1
+    | Application (f,args) ->
+        (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
+    | Lam (tarr,t) ->
+        1 + (nodes t)
+
+
+  let bound_variables (t:term) (nb:int): IntSet.t =
+    let rec bvars t nb set =
+      match t with
+        Variable i ->
+          if i<nb then
+            IntSet.add i set
+          else
+            set
+      | Application (f,args) ->
+          let fset = bvars f nb set
+          and asets = Array.map (fun t -> bvars t nb set) args
+          in
+          Array.fold_left
+            (fun cum_set set -> IntSet.union cum_set set)
+            fset
+            asets
+      | Lam (tarr,t) ->
+          bvars t (nb+(Array.length tarr)) set
+    in
+    bvars t nb IntSet.empty
 
 
   let map (f:int->int->term) (t:term): term =
@@ -233,11 +271,14 @@ end = struct
 
 
 
-  let unify (t1:term) (nb1:int) (t2:term) (nb2:int): term array =
+  let unify (t1:term) (nb1:int) (t2:term) (nb2:int)
+      : term array * bool array =
     (* Find a substitution (i.e. an array of arguments) for the nb2 bound
        variable of the term t2 so that t1 = Lam(nb2,t2) (args). Clearly the
        size of args must be nb2. The term t1 is in an environment with nb1
-       bound variables
+       bound variables.
+
+       The array of flags indicate which bound variables do occur in t2.
      *)
     let args  = Array.make nb2 t1
     and flags = Array.make nb2 false
@@ -280,6 +321,6 @@ end = struct
     in
     uni t1 t2;
     assert (t1 = (sub t2 args nb1));
-    args
+    args,flags
 
 end

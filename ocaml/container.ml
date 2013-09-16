@@ -39,6 +39,21 @@ end
 
 
 
+module IntSet = Set.Make(struct
+  let compare = Pervasives.compare
+  type t = int
+end)
+
+
+let intset_to_string (set:IntSet.t): string =
+  "{"
+  ^ String.concat
+      ","
+      (List.map string_of_int (IntSet.elements set))
+  ^ "}"
+
+
+
 module Mylist: sig
 
   val is_empty:     'a list -> bool

@@ -209,7 +209,7 @@ let assertion_to_string
     (term: term)
     (ct:Class_table.t)
     (ft:Feature_table.t): string =
-  "all" 
+  "all"
   ^ (Class_table.arguments_to_string names types ct)
   ^ " "
   ^ (Feature_table.term_to_string term names ft)
@@ -267,17 +267,17 @@ let prove
   in
 
   let trace_header (): unit =
-    Printf.printf "\nall%s\n" 
+    Printf.printf "\nall%s\n"
       (Class_table.arguments_to_string argnames argtypes ct)
 
   and trace_string (str:string) (l:int) (): unit =
     Printf.printf "%s%s\n" (level_string l) str
 
   and trace_term (str:string) (t:term) (l:int) (): unit =
-    let len = String.length str in
-    let str1 = (if len<10 then str ^ (blank_string (10-len)) else str) ^ "  "
-    in
-    Printf.printf "%s%s%s\n" (level_string l) str1 (term2string t)
+    Printf.printf "%s%-12s %s\n" (level_string l) str (term2string t)
+
+  and trace_tagged_string (tag:string) (str:string) (l:int) (): unit =
+    Printf.printf "%s%-12s%s\n" (level_string l) tag str
 
   and trace_premises (lst:term list) (l:int) (): unit =
     let n = List.length lst in
@@ -369,12 +369,14 @@ let prove
       (t:term)
       (c:Context.t)
       (tried: tried_map)
+      (globals: IntSet.t)
       (level: int)
       : proof_term =
     (* Prove the term 't' within the term map 'tm' where all terms
        within the map 'tried' have been tried already on the stack
        with a corresponding term map.
      *)
+    assert (level < 100); (* to detect potential endless loops !! *)
     begin
       do_trace (trace_term "Goal" t level);
     end;
@@ -391,15 +393,27 @@ let prove
     end;
     let tried = TermMap.add t c tried in
 
-    let bwd_glob = Assertion_table.find_backward t arglen at in
-    let c = List.fold_left
-        (fun c (t,pt) ->
-          do_trace (trace_term "Global" t level);
-          add_ctxt_close t pt (level+1) split chain c)
-        c
+    let bwd_glob = Assertion_table.find_backward t arglen ft at in
+    let c,globals =
+      List.fold_left
+        (fun (c,g) ((t,pt),idx,simpl) ->
+          if simpl || not (IntSet.mem  idx globals) then
+            begin
+              do_trace (trace_tagged_string
+                          "Global"
+                          (Assertion_table.to_string idx ct ft at)
+                          level);
+              add_ctxt_close t pt (level+1) split chain c,
+              IntSet.add idx g
+            end
+          else
+            (do_trace (trace_term ("gloop " ^ (string_of_int idx)) t level);
+            c,g)
+        )
+        (c,globals)
         bwd_glob
     in
-    try (* backward, enter, expand *)
+    try (* backward, enter *)
       begin
         try
           let bwd_set = Context.backward_set t c in
@@ -419,7 +433,7 @@ let prove
                   do_trace (trace_premises premises (level+1));
                   let pt_lst =
                     List.rev_map
-                      (fun t -> prove_one t c tried (level+2))
+                      (fun t -> prove_one t c tried globals (level+2))
                       premises
                   in
                   let rec use_premises
@@ -445,7 +459,7 @@ let prove
           do_trace (trace_term "Enter" a level);
           let c = add_ctxt_close a (Assume a) (level+1) split chain c in
           try
-            let ptb = prove_one b c tried (level+1) in
+            let ptb = prove_one b c tried globals (level+1) in
             do_trace (trace_term "Success" t level);
             raise (Proof_found (Discharge (a,ptb)))
           with Cannot_prove -> ()
@@ -470,7 +484,7 @@ let prove
         let pt =
           try
             do_trace (trace_term "User goal" t level);
-            prove_one tnormal ctxt TermMap.empty (level+1)
+            prove_one tnormal ctxt TermMap.empty IntSet.empty (level+1)
           with Cannot_prove ->
             do_trace (trace_term "User failure" t level);
             raise (Cannot_prove_info  ie.i)
@@ -543,14 +557,16 @@ let prove_and_store
     (ft: Feature_table.t)
     (at: Assertion_table.t): unit =
   let push_axiom (argnames: int array) (argtypes: typ array) (t:term) =
-    Printf.printf "axiom   %s\n"
+    Printf.printf "%3d axiom   %s\n"
+      (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
-    Assertion_table.put_axiom argnames argtypes t at
+    Assertion_table.put_axiom argnames argtypes t ft at
   and push_proved (argnames: int array) (argtypes: typ array)
       (t:term) (pt:proof_term): unit =
-    Printf.printf "proved  %s\n" 
+    Printf.printf "%3d proved  %s\n"
+      (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
-    Assertion_table.put_proved argnames argtypes t pt at
+    Assertion_table.put_proved argnames argtypes t pt ft at
   in
   let argnames,argtypes = Class_table.arguments entlst ct in
   match bdy with
