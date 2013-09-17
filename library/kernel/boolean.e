@@ -100,8 +100,21 @@ feature {NONE} -- Negation
     all(a,b:BOOLEAN)
         require
             a and b
+        check
+            not not a => a
         ensure
             a
+        end
+
+    all(a,b,c:BOOLEAN)
+        require
+            a or b
+            a => c
+            b => c
+        check
+            not not c => c
+        ensure
+            c
         end
 
     all(a,b,c:BOOLEAN)
@@ -112,8 +125,8 @@ feature {NONE} -- Negation
             a and b => not not a
             a and b => not not b
             a => b => a and b
-            a or b => (a=>c) => (b=>c) => not not c
-            not not not a => not a
+            a or b => (a=>c) => (b=>c) => c
+            -- not not not a => not a
             -- not not (a or not a)
             -- ((a or not a) => not b) => not b
         end

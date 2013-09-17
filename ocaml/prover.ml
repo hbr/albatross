@@ -393,22 +393,24 @@ let prove
     end;
     let tried = TermMap.add t c tried in
 
-    let bwd_glob = Assertion_table.find_backward t arglen ft at in
+    (*let bwd_glob =
+      if IntSet.is_empty globals then
+        Assertion_table.find_backward t arglen ft at
+      else
+        []
+    in*)
+    let bwd_glob =
+      Assertion_table.find_backward t arglen ft at
+    in
     let c,globals =
       List.fold_left
-        (fun (c,g) ((t,pt),idx,simpl) ->
-          if simpl || not (IntSet.mem  idx globals) then
-            begin
-              do_trace (trace_tagged_string
-                          "Global"
-                          (Assertion_table.to_string idx ct ft at)
-                          level);
-              add_ctxt_close t pt (level+1) split chain c,
-              IntSet.add idx g
-            end
-          else
-            (do_trace (trace_term ("gloop " ^ (string_of_int idx)) t level);
-            c,g)
+        (fun (c,g) ((t,pt),idx) ->
+          do_trace (trace_tagged_string
+                      "Global"
+                      (Assertion_table.to_string idx ct ft at)
+                      level);
+          add_ctxt_close t pt (level+1) split chain c,
+          IntSet.add idx g
         )
         (c,globals)
         bwd_glob

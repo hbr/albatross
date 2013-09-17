@@ -8,8 +8,9 @@ open Proof
 type descriptor = {
     names: int array;
     types: typ array;
-    term:term;
-    chain: (term list * bool * term) list;
+    term:  term;
+    nterm: term;
+    chain: (term list * term) list;
     pt_opt: proof_term option}
 
 type t  = {seq: descriptor seq}
@@ -46,7 +47,7 @@ let find_backward
     (nb:int)
     (ft:Feature_table.t)
     (at:t)
-    : (proof_pair * int * bool ) list =
+    : (proof_pair * int) list =
   (* Find a list of proof pairs such that the term has the form
 
          'a=>b=>...=>t'         (the set of premises might be empty)
@@ -57,17 +58,18 @@ let find_backward
 
      which proves ass[idx](args) = (a=>b=>...=>t)
    *)
-  let res = ref [] in
+  let res = ref []
+  in
   begin
     Seq.iteri
       (fun i desc ->
         let n = Array.length desc.types in
         List.iter
-          (fun (premises,simpl,target) ->
+          (fun (premises,target) ->
             try
               let args,flags = Term.unify t nb target n in
-              let tt = Term.sub desc.term args nb in
-              res := ((tt,Specialize (Theorem i, args)),i,simpl) :: !res
+              let tt = Term.sub desc.nterm args nb in
+              res := ((tt,Specialize (Theorem i, args)),i) :: !res
             with Not_found ->
               ()
           )
@@ -87,40 +89,35 @@ let put_assertion
     (at:    t)
     : unit =
   let nb  = Array.length types in
-  let chn = Feature_table.implication_chain term nb ft in
+  let nterm = Feature_table.normalize_term term nb ft in
+  let chn = Feature_table.implication_chain nterm nb ft in
   let chn2 =
     List.filter
       (fun (premises,target) ->
-        let bvars_tgt = Term.bound_variables target nb in
+        let bvars_tgt = Term.bound_variables target nb
+        and n_tgt     = Term.nodes target
+        in
         List.for_all
           (fun p ->
-            (p<>target) &&
-            let bvars = Term.bound_variables p nb in
+           (p<>target) &&
+            let bvars = Term.bound_variables p nb
+            and n     = Term.nodes p
+            in
+            n <= n_tgt &&  (* Has to be refined to allow distributivity *)
             IntSet.subset bvars bvars_tgt
           )
           premises
       )
       chn
   in
-  let chn3 =
-    List.map
-      (fun (premises,target) ->
-        let n_tgt = Term.nodes target in
-        premises,
-        List.for_all
-          (fun p -> (Term.nodes p)<=n_tgt)
-          premises,
-        target
-      )
-      chn2
-  in
   Seq.push
     at.seq
-    {names = names;
-     types = types;
-     term  = term;
+    {names  = names;
+     types  = types;
+     term   = term;
+     nterm  = nterm;
      pt_opt = pt_opt;
-     chain  = chn3}
+     chain  = chn2}
 
 
 

@@ -11,7 +11,7 @@ val count: t -> int
 val to_string: int -> Class_table.t -> Feature_table.t -> t -> string
 
 val find_backward: term -> int -> Feature_table.t -> t ->
-  (proof_pair * int * bool) list
+  (proof_pair * int) list
 
 val put_axiom:
     int array -> typ array -> term

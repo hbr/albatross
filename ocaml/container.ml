@@ -61,6 +61,8 @@ module Mylist: sig
   val iteri:        (int -> 'a -> unit) -> 'a list -> unit
   val mapi:         (int -> 'a -> 'b) -> 'a list -> 'b list
 
+  val sum:          ('a -> int) -> int -> 'a list -> int
+
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -89,6 +91,9 @@ end = struct
       | h::tl -> (f i h)::(maprec tl (i+1))
     in
     maprec l 0
+
+  let sum (f:'a->int) (start:int) (l:'a list): int =
+    List.fold_left (fun cum e -> cum + f e) start l
 end
 
 

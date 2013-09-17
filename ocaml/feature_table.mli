@@ -17,6 +17,8 @@ val implication_term: term -> term -> int -> t -> term
 
 val expand_term: term->int->t->term
 
+val normalize_term: term->int->t->term
+
 val put:
     feature_name withinfo -> entities list withinfo -> return_type
       -> feature_body option ->

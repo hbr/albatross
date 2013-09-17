@@ -165,6 +165,18 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
 
 
 
+
+let rec normalize_term (t:term) (nbound:int) (ft:t): term =
+  (* Expand the definitions of the term 't' and beta reduce it within an
+     environment with 'nbound' bound variables, i.e. a variable i with
+     nbound<=i refers to the global feature i-nbound *)
+  Term.reduce (expand_term t nbound ft)
+
+
+
+
+
+
 let check_match
     (i:info)
     (e:expression)
