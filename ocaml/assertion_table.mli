@@ -10,6 +10,9 @@ val count: t -> int
 
 val to_string: int -> Class_table.t -> Feature_table.t -> t -> string
 
+val consequences: term -> int -> Feature_table.t -> t
+  -> (proof_pair * int) list
+
 val find_backward: term -> int -> Feature_table.t -> t ->
   (proof_pair * int) list
 

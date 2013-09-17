@@ -277,7 +277,7 @@ let prove
     Printf.printf "%s%-12s %s\n" (level_string l) str (term2string t)
 
   and trace_tagged_string (tag:string) (str:string) (l:int) (): unit =
-    Printf.printf "%s%-12s%s\n" (level_string l) tag str
+    Printf.printf "%s%-12s %s\n" (level_string l) tag str
 
   and trace_premises (lst:term list) (l:int) (): unit =
     let n = List.length lst in
@@ -344,7 +344,21 @@ let prove
         (lst: proof_pair list)
         (c:Context.t)
         : proof_pair list =
-      let l1 = (Context.consequences t pt c) @ lst in
+      let lglobal =
+        (Assertion_table.consequences t (Array.length argtypes) ft at)
+      in
+      List.iter
+        (fun ((_,_),idx) ->
+          do_trace (trace_tagged_string
+                      "Global(fwd)"
+                      (Assertion_table.to_string idx ct ft at)
+                      level)
+        )
+        lglobal;
+      let l1 =
+        (Context.consequences t pt c)
+        @ (List.map (fun ((t,pt),_) -> t,pt) lglobal)
+        @ lst in
       try
         let a,b = split t in
         let pta = Context.proof_term a c in

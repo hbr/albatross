@@ -101,7 +101,7 @@ feature {NONE} -- Negation
         require
             a and b
         check
-            not not a => a
+            not a => false
         ensure
             a
         end
@@ -112,7 +112,7 @@ feature {NONE} -- Negation
             a => c
             b => c
         check
-            not not c => c
+            not c => false
         ensure
             c
         end

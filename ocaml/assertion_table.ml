@@ -11,6 +11,7 @@ type descriptor = {
     term:  term;
     nterm: term;
     chain: (term list * term) list;
+    fwd_opt: term option;
     pt_opt: proof_term option}
 
 type t  = {seq: descriptor seq}
@@ -80,6 +81,52 @@ let find_backward
   !res
 
 
+
+
+
+
+let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
+    :(proof_pair* int) list =
+  (* The direct consequences of the term 't' in an enviroment with 'nb' bound
+     variables, i.e. if the assertion table has a proved assertion of the form
+     'a=>b' and 'a' can be unified with the term 't' and 'b' is not more
+     complex than 'a' then 'b' transformed into the environemt of term 't'
+     is a direct consequence of 't'.
+
+     If
+
+          ass[idx](args) = (t=>u)
+
+     then the proof pair is
+
+          t=>u, Specialize (Theorem idx, args)
+   *)
+  let res = ref []
+  in
+  begin
+    Seq.iteri
+      (fun i desc ->
+        let n = Array.length desc.types in
+        match desc.fwd_opt with
+          None -> ()
+        | Some fwd ->
+            try
+              let args,flags = Term.unify t nb fwd n in
+              let tt = Term.sub desc.nterm args nb in
+              res := ((tt,Specialize (Theorem i, args)),i) :: !res
+            with Not_found ->
+              ()
+      )
+      at.seq
+  end;
+  !res
+
+
+
+
+
+
+
 let put_assertion
     (names: int array)
     (types: typ array)
@@ -110,6 +157,21 @@ let put_assertion
       )
       chn
   in
+  let fwd_opt =
+    try
+      let a,b = Feature_table.split_implication nterm nb ft in
+      let bvars_a = Term.bound_variables a nb
+      and bvars_b = Term.bound_variables b nb
+      and n_a     = Term.nodes a
+      and n_b     = Term.nodes b
+      in
+      if n_b <= n_a && a<>b && IntSet.subset bvars_b bvars_a then
+        Some a
+      else
+        None
+    with Not_found ->
+      None
+  in
   Seq.push
     at.seq
     {names  = names;
@@ -117,7 +179,8 @@ let put_assertion
      term   = term;
      nterm  = nterm;
      pt_opt = pt_opt;
-     chain  = chn2}
+     chain  = chn2;
+     fwd_opt= fwd_opt}
 
 
 
