@@ -79,7 +79,8 @@ end = struct
         [] -> ()
       | h::t -> begin
           f !pos h;
-          pos := !pos + 1
+          pos := !pos + 1;
+          itrec t
       end
     in
     itrec l

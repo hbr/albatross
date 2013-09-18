@@ -67,11 +67,14 @@ let find_backward
         let n = Array.length desc.types in
         List.iter
           (fun (premises,target) ->
-            try
-              let args,flags = Term.unify t nb target n in
-              let tt = Term.sub desc.nterm args nb in
-              res := ((tt,Specialize (Theorem i, args)),i) :: !res
-            with Not_found ->
+            if premises=[] then
+              try
+                let args,flags = Term.unify t nb target n in
+                let tt = Term.sub desc.nterm args nb in
+                res := ((tt,Specialize (Theorem i, args)),i) :: !res
+              with Not_found ->
+                ()
+            else
               ()
           )
           desc.chain

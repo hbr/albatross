@@ -1,5 +1,40 @@
 (*
 -----------------------------------------------------------------------------
+   Command line options
+-----------------------------------------------------------------------------
+*)
+
+module Options: sig
+  val is_prover_basic:  unit -> bool
+  val is_prover_local:  unit -> bool
+  val is_prover_smart:  unit -> bool
+  val set_prover_basic: unit -> unit
+  val set_prover_local: unit -> unit
+
+  val is_tracing_failed_proof: unit -> bool
+  val is_tracing_proof:        unit -> bool
+  val set_trace_failed_proof:  unit -> unit
+  val set_trace_proof:         unit -> unit
+end = struct
+  let prover = ref 10
+
+  let is_prover_basic () = (0 <= !prover)
+  let is_prover_local () = (1 <= !prover)
+  let is_prover_smart () = (1 <  !prover)
+
+  let set_prover_basic () = prover := 0
+  let set_prover_local () = prover := 1
+
+  let trace = ref 0
+  let is_tracing_failed_proof () = (1 <= !trace)
+  let is_tracing_proof ()        = (2 <= !trace)
+  let set_trace_failed_proof ()  = trace := 1
+  let set_trace_proof ()         = trace := 2
+end
+
+
+(*
+-----------------------------------------------------------------------------
    Exceptions
 -----------------------------------------------------------------------------
 *)

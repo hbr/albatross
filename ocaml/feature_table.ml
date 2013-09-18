@@ -230,6 +230,14 @@ let typed_term
             [i] -> Variable (nbound+i), (Key_table.key ft.keys i).typ
           | _ -> not_yet_implemented ie.i "feature overloading"
         end
+    | Exptrue ->
+        let flst = find_feature FNtrue ft
+        in
+        begin
+          match flst with
+            [i] -> Variable (nbound+i), (Key_table.key ft.keys i).typ
+          | _ -> not_yet_implemented ie.i "feature overloading"
+        end
     | Expparen e -> trm e
     | Taggedexp (label,e) -> trm e
     | Binexp (op,e1,e2) ->
@@ -250,7 +258,7 @@ let typed_term
               in
               Application (Variable (nbound+idx), [|t1;t2|]),rt
           | _ -> not_yet_implemented ie.i
-                ("Typing of expression " ^
+                ("(Binexp)Typing of expression " ^
                  (string_of_expression ie.v))
         end
     | Unexp (op,e1) ->
@@ -269,11 +277,11 @@ let typed_term
               in
               Application (Variable (nbound+idx), [|t1|]),rt
           | _ -> not_yet_implemented ie.i
-                ("Typing of expression " ^
+                ("(Unexp)Typing of expression " ^
                  (string_of_expression ie.v))
         end
     | _ -> not_yet_implemented ie.i
-          ("Typing of expression " ^
+          ("(others)Typing of expression " ^
            (string_of_expression ie.v))
   in
   trm ie.v

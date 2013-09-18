@@ -12,83 +12,16 @@ feature   -- Basic functions
 
 end
 
-feature {NONE}   -- Axioms
-    all(a:BOOLEAN)
-        note built_in ensure
-            -- ex_falso: false => a           -- really necessary??
-            classic:  ((a=>false)=>false) => a
-        end
-end
 
-
-
-feature    -- Some theorems with implication
-    all(a:BOOLEAN)
-        require
-            a
+feature {NONE}    -- Function definitions and axiom
+    true: BOOLEAN
         ensure
-            a
+            Result = (false => false)
         end
 
-    all(a,b,c:BOOLEAN)
-        require
-            a
-            c => b            -- does not succeed
-            a => b
-        ensure
-            b
-        end
-
-
-    all(a,b,c:BOOLEAN)
-        require
-            a => b
-            b => c
-            a
-        ensure
-            c
-        end
-
-
-    all(a,b,c:BOOLEAN)
-        require
-            a => b
-            b => c
-        ensure
-            a => c
-        end
-
-
-    all(a,b,c:BOOLEAN)
-        require
-            a => b
-            a => b => c
-        ensure
-            a => c
-        end
-
-
-    all(a,b,c:BOOLEAN)
-        ensure
-            -- a => a
-            a => (a=>b) => b
-            (a=>b) => (b=>c) => (a=>c)
-            (a=>b) => (a=>b=>c) => (a=>c)
-        end
-
-
-end
-
-
-feature {NONE} -- Negation
     not (a:BOOLEAN): BOOLEAN
         ensure
-            Result = (a=>false)
-        end
-
-    or (a,b:BOOLEAN): BOOLEAN
-        ensure
-            Result = (not a => b)
+            Result = (a => false)
         end
 
     and (a,b:BOOLEAN): BOOLEAN
@@ -96,17 +29,73 @@ feature {NONE} -- Negation
             Result = not (a => not b)
         end
 
+    or (a,b:BOOLEAN): BOOLEAN
+        ensure
+            Result = (not a => b)
+        end
 
-    all(a,b:BOOLEAN)
+    = (a,b:BOOLEAN): BOOLEAN
+        ensure
+            Result = ((a => b) and (b => a))
+        end
+
+    all(a:BOOLEAN)
+        note built_in ensure
+            double_negation: not not a => a
+        end
+end
+
+
+feature         -- Constants / Negation
+
+    true: BOOLEAN
+
+    false: BOOLEAN
+
+    not (a:BOOLEAN): BOOLEAN
+
+    all(a:BOOLEAN)
+        ensure
+            indirect:      (not a => false) => a
+            refutation:    (a     => false) => not a
+            contradiction: not a => a => false
+        end
+
+    all ensure
+            true
+            not false
+        end
+
+end
+
+
+
+feature         -- Conjunction
+
+    and_elimination: all(a,b:BOOLEAN)
         require
             a and b
         check
             not a => false
+            not b => false
         ensure
             a
+            b
         end
 
-    all(a,b,c:BOOLEAN)
+    and_introduction: all(a,b:BOOLEAN)
+        require
+            a; b
+        ensure
+            a and b
+        end
+
+end
+
+
+feature         -- Disjunction
+
+    or_elimination: all(a,b,c:BOOLEAN)
         require
             a or b
             a => c
@@ -117,97 +106,98 @@ feature {NONE} -- Negation
             c
         end
 
-    all(a,b,c:BOOLEAN)
-            -- provable without classical logic
+    or_introduction: all(a,b:BOOLEAN)
+        check
+            (not b => false) => b
         ensure
-            a => a
-            a or not a
-            a and b => not not a
-            a and b => not not b
-            a => b => a and b
-            a or b => (a=>c) => (b=>c) => c
-            -- not not not a => not a
-            -- not not (a or not a)
-            -- ((a or not a) => not b) => not b
+            a => a or b
+            b => a or b
         end
 
-    all(a,b:BOOLEAN)
+end
+
+
+
+feature              -- Boolean equivalence
+
+    equal_elimination:  all(a,b:BOOLEAN)
         require
-            not not a => a
-            not not b => b
+            a = b
         ensure
-            a and b => a
-            a and b => b
-            a => b => a and b
-            a and b => b and a
+            a => b
+            b => a
         end
 
+    equal_introduction:  all(a,b:BOOLEAN)
+        require
+            a => b
+            b => a
+        ensure
+            a = b
+        end
 
+    reflexivity:  all(a:BOOLEAN)
+        ensure
+            a = a
+        end
+
+    symmetry:     all(a,b:BOOLEAN)
+        ensure
+            a = b => b = a
+        end
+
+    transitivity: all(a,b,c:BOOLEAN)
+        ensure
+            a = b => b = c => a = c
+        end
 
 end
 
-feature   -- Negation
-    not (a:BOOLEAN): BOOLEAN
 
-    all(a:BOOLEAN)
+feature              -- Boolean algebra
+
+    and_commutativity: all(a,b:BOOLEAN)
         ensure
-            refutation:    (a => false)     => not a
-            contradiction: not a => a => false
-            indirect:      (not a => false) => a
+            (a and b) = (b and a)
+        end
+
+    and_associativity: all(a,b,c:BOOLEAN)
+        ensure
+            (a and b and c) = (a and (b and c))
+        end
+
+    lemma: all(a,b:BOOLEAN)
+        check
+            a or b => (a => b or a) => (b => b or a) => b or a
+        ensure
+            (a or b) => (b or a)
+        end
+
+    or_commutativity:  all(a,b:BOOLEAN)
+        ensure
+            (a or b) = (b or a)
+        end
+
+    or_associativity:  all(a,b,c:BOOLEAN)
+        ensure
+            (a or b or c) = (a or (b or c))
+        end
+
+    all(a,b,c:BOOLEAN)
+        require
+            a and (b or c)
+        ensure
+            (a and b) or (a and c)
+        end
+
+    all(a,b,c:BOOLEAN)
+        require
+            (a and b) or (a and c)
+        ensure
+            (a and b) or (a and c)
+            => ((a and b) => a and (b or c))
+            => ((a and c) => a and (b or c))
+            => (a and (b or c))
+            a and (b or c)
         end
 end
-
-
-
-feature {NONE}  -- conjunction
-    and (a,b:BOOLEAN): BOOLEAN
-        ensure
-            Result = not (a => not b)
-        end
-end
-
-
-feature -- conjunction
-    and (a,b:BOOLEAN): BOOLEAN
-
-    all(a,b:BOOLEAN)
-        ensure
-            a and b => a
-            a and b => b
-            a => b => a and b
-        end
-end
-
-
-
-=  (a,b:BOOLEAN): BOOLEAN
-    note built_in end
-
-all(a,b,e:BOOLEAN)
-    note built_in ensure
-        equal_reflexive:  a=a
-        equal_rewrite:    a=b => e => e[a:=b]
-        antisymmetric:    (a=>b) => (b=>a) => (a=b)
-        classic:          ((a=>false)=>false) => a
-        deduction:        require a ensure b end => (a=>b)
-    end
-
-not (a:BOOLEAN): BOOLEAN
-    ensure
-        Result = (a=>false)
-    end
-
-and (a,b:BOOLEAN): BOOLEAN
-    ensure
-        Result = not (a => not b)
-    end
-
-or (a,b:BOOLEAN): BOOLEAN
-    ensure
-        Result = (not a => b)
-    end
-
-true: BOOLEAN
-    ensure
-        Result = (false=>false)
-    end

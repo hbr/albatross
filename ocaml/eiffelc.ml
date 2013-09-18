@@ -2,7 +2,11 @@ open Support
 
 let usage_string = "\
 Usage:
-    e iffelc srcfile.e
+    eiffelc options srcfile.e
+
+options:
+    -trace  {proof,failed-proof}
+    -prover {basic,local}
 "
 
 
@@ -15,33 +19,6 @@ let parse_file fn =
   Parser.main Lexer.token lexbuf
 
 
-
-
-(*
-module Block_stack: sig
-  type t
-  val empty: unit -> t
-  val push:  Support.visibility -> t -> unit
-  val pop:   t -> unit
-  val is_empty: t -> bool
-  val is_private: t -> bool
-end = struct
-  open Support
-  type t = visibility Stack.t
-  let empty () = Stack.create ()
-  let push v s =
-    assert (Stack.is_empty s);
-    Stack.push v s
-  let pop s =
-    let _ = Stack.pop s in
-    ()
-  let is_empty s = Stack.is_empty s
-  let is_private s =
-    (not (Stack.is_empty s)) &&
-    match Stack.top s with
-      Private -> true | _ -> false
-end
-*)
 
 
 
@@ -97,9 +74,27 @@ let _ =
       raise (Arg.Bad "Eiffel source file must have suffix \".e\"")
     else
       file_name := str;
+  and set_tracer (str:string): unit =
+    if str = "proof" then
+      Options.set_trace_proof ()
+    else if str = "failed-proof" then
+      Options.set_trace_failed_proof ()
+    else
+      raise (Arg.Bad "-trace proof  or  -trace failed-proof")
+  and set_prover (str:string): unit =
+    if str = "basic" then
+      Options.set_prover_basic ()
+    else if str = "local" then
+      Options.set_prover_local ()
+    else
+      raise (Arg.Bad "-trace proof  or  -trace failed-proof")
   in
   try
-    Arg.parse [] anon_fun usage_string;
+    Arg.parse
+      [("-trace",Arg.String set_tracer,"trace option");
+       ("-prover", Arg.String set_prover, "prover strength")]
+      anon_fun
+      usage_string;
     if !file_name = "" then
       raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string));
     try

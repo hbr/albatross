@@ -266,7 +266,11 @@ end = struct
         in
         app fr argsr
     | Lam(tarr,t) ->
-        Lam (tarr, reduce t)
+        let tred = reduce t in
+        if 0 < (Array.length tarr) then
+          Lam (tarr, tred)
+        else
+          tred
 
 
 
