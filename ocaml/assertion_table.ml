@@ -141,6 +141,7 @@ let put_assertion
   let nb  = Array.length types in
   let nterm = Feature_table.normalize_term term nb ft in
   let chn = Feature_table.implication_chain nterm nb ft in
+  assert (chn<>[]);
   let chn2 =
     List.filter
       (fun (premises,target) ->
@@ -174,6 +175,23 @@ let put_assertion
         None
     with Not_found ->
       None
+  in
+  let elim_opt =
+    let premises,target = List.hd (List.rev chn)
+    in
+    match premises with
+      [] -> None
+    | p0::_ ->
+        let bvars_p0  = Term.bound_variables p0 nb
+        and bvars_tgt = Term.bound_variables target nb
+        in
+        let bvars_union = IntSet.union bvars_p0 bvars_tgt in
+        (* Still need to check that there is a function eliminated *)
+        if (IntSet.cardinal bvars_union) = nb then
+          ((*Printf.printf "Elimination rule found\n";*)
+           None)
+        else
+          None
   in
   Seq.push
     at.seq

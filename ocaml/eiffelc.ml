@@ -3,10 +3,6 @@ open Support
 let usage_string = "\
 Usage:
     eiffelc options srcfile.e
-
-options:
-    -trace  {proof,failed-proof}
-    -prover {basic,local}
 "
 
 
@@ -63,8 +59,6 @@ module Analyze = struct
 end
 
 
-
-
 let _ =
   let file_name = ref "" in
   let anon_fun str =
@@ -87,18 +81,30 @@ let _ =
     else if str = "local" then
       Options.set_prover_local ()
     else
-      raise (Arg.Bad "-trace proof  or  -trace failed-proof")
+      raise (Arg.Bad "")
   in
   try
     Arg.parse
-      [("-trace",Arg.String set_tracer,"trace option");
-       ("-prover", Arg.String set_prover, "prover strength")]
+      [("-trace",Arg.String set_tracer,"{proof,failed-proof}");
+       ("-prover", Arg.String set_prover, "{basic,local}");
+       ("-statistics", Arg.Unit Options.set_statistics, "");
+       ("-goal-limit",
+        Arg.Int
+          (fun i ->
+            if i<0 then
+              raise (Arg.Bad "")
+            else
+              Options.set_goal_limit i),
+        "maximum number of goals per proof");
+       ("-no-limit", Arg.Unit Options.set_no_limit, "")
+     ]
       anon_fun
       usage_string;
     if !file_name = "" then
       raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string));
     try
-      Analyze.analyze (parse_file !file_name)
+      Analyze.analyze (parse_file !file_name);
+      Statistics.write ();
     with Support.Error_info (inf,str) ->
       raise (Support.Error_fileinfo (!file_name,inf,str))
   with

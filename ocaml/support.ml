@@ -15,7 +15,33 @@ module Options: sig
   val is_tracing_proof:        unit -> bool
   val set_trace_failed_proof:  unit -> unit
   val set_trace_proof:         unit -> unit
+
+  val is_statistics:           unit -> bool
+  val set_statistics:          unit -> unit
+
+  val has_goal_limit:   unit -> bool
+  val goal_limit:       unit -> int
+  val set_goal_limit:   int  -> unit
+  val set_no_limit:     unit -> unit
 end = struct
+
+  let glimit = ref (Some 200)
+
+  let has_goal_limit (): bool =
+    match !glimit with None -> false | Some _ -> true
+
+  let goal_limit (): int =
+    assert (has_goal_limit ());
+    match !glimit with
+      None -> assert false
+    | Some n -> n
+
+  let set_goal_limit (i:int): unit =
+    glimit := Some i
+
+  let set_no_limit () : unit =
+    glimit := None
+
   let prover = ref 10
 
   let is_prover_basic () = (0 <= !prover)
@@ -26,10 +52,65 @@ end = struct
   let set_prover_local () = prover := 1
 
   let trace = ref 0
+
   let is_tracing_failed_proof () = (1 <= !trace)
   let is_tracing_proof ()        = (2 <= !trace)
   let set_trace_failed_proof ()  = trace := 1
   let set_trace_proof ()         = trace := 2
+
+  let statistics = ref false
+  let is_statistics () = !statistics
+  let set_statistics () = statistics := true
+end
+
+
+(*
+-----------------------------------------------------------------------------
+   Statistics
+-----------------------------------------------------------------------------
+*)
+
+module Statistics: sig
+  val n_goals:       unit -> int
+  val max_goals:     unit -> int
+  val average_goals: unit -> int
+  val n_proofs:      unit -> int
+
+  val proof_done: int -> unit
+
+  val write: unit -> unit
+end = struct
+  let n       = ref 0
+  let max     = ref 0
+  let np      = ref 0
+
+  let n_goals ()       = !n
+  let max_goals ()     = !max
+  let n_proofs ()      = !np
+  let average_goals () = if !np<>0 then !n / !np else 1
+
+  let proof_done (i:int): unit =
+    assert (0 < i);
+    n  := !n  + i;
+    np := !np + 1;
+    begin
+      if !max < i then
+        max := i
+      else
+        ()
+    end
+
+  let write (): unit =
+    if Options.is_statistics () then
+      Printf.printf "\
+Statistics
+    proofs %4d
+    goals  %4d (max %d, avg %d)
+"
+        !np !n !max (average_goals ())
+    else
+      ()
+
 end
 
 

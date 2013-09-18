@@ -5,8 +5,10 @@ open Proof
 open Support
 
 exception Cannot_prove
-exception Proof_found of proof_term
 exception Cannot_prove_info of info
+exception Goal_limit
+exception Goal_limit_info of info
+exception Proof_found of proof_term
 
 
 
@@ -260,6 +262,9 @@ let assertion_to_string
 
 
 
+let ngoals = ref 0
+let inc_goals () =   ngoals := !ngoals + 1
+let reset_goals () = ngoals := 0
 
 
 
@@ -339,6 +344,59 @@ let prove
         Printf.printf "%3d %s%2d: %s\n" l (level_string l) i (term2string t)
       )
       lst
+  in
+
+  let attempt_map = ref AttemptMap.empty in
+
+  let attempt (t:term) (c:Context.t): bool * proof_term option =
+    let tset = Context.proved_set c in
+    try
+      let pt_opt = AttemptMap.find (t,tset) !attempt_map in
+      true, pt_opt
+    with
+      Not_found ->
+        false, None
+  in
+
+  let has_attempt (t:term) (c:Context.t): bool =
+    let att,pt_opt = attempt t c in
+    att (*&& match pt_opt with None -> true | _ -> false*)
+  and has_success (t:term) (c:Context.t): bool =
+    let att,pt_opt = attempt t c in
+    att && match pt_opt with None -> false | _ -> true
+  in
+
+  let add_attempt (t:term) (c:Context.t): unit =
+    begin
+      let tset = Context.proved_set c in
+      try
+        let _ = AttemptMap.find (t,tset) !attempt_map in
+        assert false  (* No repeated attempts! *)
+      with Not_found ->
+        attempt_map := AttemptMap.add (t,tset) None !attempt_map
+    end;
+    assert (has_attempt t c)
+
+  and add_success (t:term) (c:Context.t) (pt:proof_term): unit =
+    assert (has_attempt t c);
+    begin
+      let tset = Context.proved_set c in
+      try
+        let pt_opt_found = AttemptMap.find (t,tset) !attempt_map in
+        match pt_opt_found with
+          None ->
+            attempt_map := AttemptMap.add (t,tset) (Some pt) !attempt_map
+        | Some _ ->
+            assert false (* No multiple successes! *)
+      with Not_found ->
+        assert false (* Success can be added only if attempt has
+                        been added before *)
+    end;
+    assert (has_attempt t c);
+    assert (has_success t c)
+
+  and reset_attempts (): unit =
+    attempt_map := AttemptMap.empty
   in
 
   let pre_terms: term list = List.rev_map exp2term pre
@@ -432,58 +490,6 @@ let prove
     add [t,pt] c
   in
 
-  let attempt_map = ref AttemptMap.empty in
-
-  let attempt (t:term) (c:Context.t): bool * proof_term option =
-    let tset = Context.proved_set c in
-    try
-      let pt_opt = AttemptMap.find (t,tset) !attempt_map in
-      true, pt_opt
-    with
-      Not_found ->
-        false, None
-  in
-
-  let has_attempt (t:term) (c:Context.t): bool =
-    let att,pt_opt = attempt t c in
-    att (*&& match pt_opt with None -> true | _ -> false*)
-  and has_success (t:term) (c:Context.t): bool =
-    let att,pt_opt = attempt t c in
-    att && match pt_opt with None -> false | _ -> true
-  in
-
-  let add_attempt (t:term) (c:Context.t): unit =
-    begin
-      let tset = Context.proved_set c in
-      try
-        let _ = AttemptMap.find (t,tset) !attempt_map in
-        assert false  (* No repeated attempts! *)
-      with Not_found ->
-        attempt_map := AttemptMap.add (t,tset) None !attempt_map
-    end;
-    assert (has_attempt t c)
-
-  and add_success (t:term) (c:Context.t) (pt:proof_term): unit =
-    assert (has_attempt t c);
-    begin
-      let tset = Context.proved_set c in
-      try
-        let pt_opt_found = AttemptMap.find (t,tset) !attempt_map in
-        match pt_opt_found with
-          None ->
-            attempt_map := AttemptMap.add (t,tset) (Some pt) !attempt_map
-        | Some _ ->
-            assert false (* No multiple successes! *)
-      with Not_found ->
-        assert false (* Success can be added only if attempt has
-                        been added before *)
-    end;
-    assert (has_attempt t c);
-    assert (has_success t c)
-
-  and reset_attempts (): unit =
-    attempt_map := AttemptMap.empty
-  in
 
   let rec prove_one
       (t:term)
@@ -583,7 +589,6 @@ let prove
 
     in
     begin
-      (*trace_term "prove_one" t level ();*)
       do_trace (trace_term "Goal" t level);
       do_trace (trace_context c (level+1));
     end;
@@ -594,13 +599,17 @@ let prove
         if (Context.count c0) < (Context.count c) then
           ()
         else
-          ((*let str
-              = "Failure (loop " ^ (string_of_int (Context.count c)) ^ ")" in
-             do_trace (trace_term  str  t level);*)
-           do_trace (trace_term  "Failure (1stloop)"  t level);
+           (do_trace (trace_term  "Failure (1stloop)"  t level);
            raise Cannot_prove)
       with Not_found -> ()
     end;
+    begin (* Bail out if goal limit is exceeded *)
+      if (Options.has_goal_limit ())
+          && (Options.goal_limit ()) <= !ngoals then
+        (do_trace (trace_term "Failure (goal-limit)" t level);
+         raise Goal_limit)
+    end;
+    inc_goals ();
     begin
       let att,pt_opt = attempt t c in
       if att then
@@ -650,8 +659,13 @@ let prove
           with Cannot_prove ->
             do_trace (trace_term "User failure" t level);
             raise (Cannot_prove_info  ie.i)
+          | Goal_limit ->
+            do_trace (trace_term "User failure(goal limit)" t level);
+            raise (Goal_limit_info  ie.i)
         in
         do_trace (trace_term "User success" t level);
+        Statistics.proof_done !ngoals;
+        reset_goals ();
         add_ctxt_close tnormal pt (level+1) split chain ctxt,
         (t,pt)::lst
       )
@@ -680,7 +694,9 @@ let prove
         [] -> t,pt
       | f::tl ->
           discharge
-            tl (Feature_table.implication_term f t arglen ft) (Discharge (f,pt))
+            tl
+            (Feature_table.implication_term f t arglen ft)
+            (Discharge (f,pt))
     in
     List.rev_map
       (fun (t,pt) ->
@@ -691,6 +707,7 @@ let prove
 
   try
     prove_toplevel ()
+
   with Cannot_prove_info i ->
     if not !traceflag && (Options.is_tracing_failed_proof ()) then
       begin
@@ -703,6 +720,24 @@ let prove
       end
     else
       error_info i "Cannot prove"
+
+  | Goal_limit_info i ->
+      let str = "Cannot prove (goal limit "
+        ^ (string_of_int (Options.goal_limit ()))
+        ^ " exceeded)"
+      in
+      if not !traceflag && (Options.is_tracing_failed_proof ()) then
+        begin
+          traceflag := true;
+          reset_attempts ();
+          try
+            prove_toplevel ()
+          with Goal_limit_info i ->
+          error_info i str
+          | _ -> assert false
+        end
+      else
+        error_info i str
 
 
 
@@ -719,18 +754,21 @@ let prove_and_store
     (ct: Class_table.t)
     (ft: Feature_table.t)
     (at: Assertion_table.t): unit =
+
   let push_axiom (argnames: int array) (argtypes: typ array) (t:term) =
     Printf.printf "%3d axiom   %s\n"
       (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
     Assertion_table.put_axiom argnames argtypes t ft at
+
   and push_proved (argnames: int array) (argtypes: typ array)
       (t:term) (pt:proof_term): unit =
     Printf.printf "%3d proved  %s\n"
       (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
-    Assertion_table.put_proved argnames argtypes t pt ft at
+    Assertion_table.put_proved argnames argtypes t pt ft at;
   in
+
   let argnames,argtypes = Class_table.arguments entlst ct in
   match bdy with
     _, _, None ->
