@@ -185,19 +185,50 @@ end = struct
     and nused = ref 0
     and usearr = Array.make n Unused
     in
+    Printf.printf "variables [%s]\n"
+      (String.concat ","
+         (List.map string_of_int varlst));
     let _ =
       Mylist.iteri
         (fun pos var ->
           assert (var < n);
           match usearr.(var) with
             Unused -> begin
-              usearr.(var) <- Used pos;
+              usearr.(var) <- Used pos;  (* first usage of 'var' *)
               nused := !nused + 1
             end
           | Used _ -> ()
         )
         varlst
     in
+    Printf.printf "positions = [%s]\n"
+      (String.concat ","
+         (List.map
+            (fun usg ->
+              match usg with
+                Unused -> "*"
+              | Used pos -> string_of_int pos)
+            (Array.to_list usearr)));
+    assert
+      (List.for_all
+         (fun var ->
+           match usearr.(var) with
+             Unused -> false
+           | Used _ -> true
+         )
+         varlst
+      );
+    assert
+      (let varlstlen = List.length varlst in
+      List.for_all
+         (fun usg ->
+           match usg with
+             Unused -> true
+           | Used pos -> pos < varlstlen
+         )
+         (Array.to_list usearr)
+      );
+    Printf.printf "nused %d, nvars %d\n" !nused (List.length varlst);
     !nused,usearr
 
 
@@ -214,14 +245,24 @@ end = struct
     let tnorm = map
         (fun i nb ->
           if nb+len <= i then
-            Variable (i-(len-nused))
+            (* free variable *)
+            Variable (i-(len-nused)) (* fill unused variables *)
           else if i < nb then
+            (* bound variable i.e. below local *)
             Variable i
           else begin
+            (* local variable according to tarr *)
             assert(nb<=i); assert((i-nb)<len);
             match usearr.(i-nb) with
               Used pos ->
-                assert (pos < nused);
+                begin
+                  if pos >= nused then
+                    Printf.printf "pos %d, nused %d\n" pos nused
+                  else
+                    ()
+                end;
+                assert (pos < nused); (* Something wrong: var 0 can be
+                                         at pos 2 *)
                 Variable (nb + nused - 1 - pos)
             | Unused ->
                 assert false  (* Variable i-nb must be used *)

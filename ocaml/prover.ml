@@ -759,7 +759,7 @@ let prove_and_store
               (fun ie ->
                 let term =
                   Feature_table.assertion_term ie argnames argtypes ct ft in
-                let _ = Term.normalize argtypes term in
+                (* let _ = Term.normalize argtypes term in*)
                 push_axiom argnames argtypes term)
               elst
         | _ ->
