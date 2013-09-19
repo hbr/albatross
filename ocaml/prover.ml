@@ -17,6 +17,32 @@ module TermSet = Set.Make(struct
   type t = term
 end)
 
+module SizedTerm: sig
+  type t
+  val item: t -> term
+  val make: term -> t
+  val compare: t -> t -> int
+end = struct
+  type t = {size:int; term:term}
+  let item (st:t): term =
+    st.term
+  let make (t:term): t =
+    {size = Term.nodes t; term=t}
+  let compare (a:t) (b:t): int =
+    let cmp = Pervasives.compare a.size b.size in
+    if cmp = 0 then
+      Pervasives.compare a.term b.term
+    else
+      cmp
+end
+
+module SizedTermSet = Set.Make(struct
+  let compare = SizedTerm.compare
+  type t = SizedTerm.t
+end)
+
+
+
 module TermSetSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = TermSet.t
@@ -88,6 +114,7 @@ module Context: sig
   val add_proof:    term -> proof_term -> t -> t
   val add_forward:  term -> term -> proof_term -> t -> t
   val add_backward: (term list * term) list -> proof_term -> t -> t
+  val one_eliminated: term -> t -> proof_pair * t
 
 end = struct
 
@@ -97,13 +124,30 @@ end = struct
       bwd_set:    BwdSet.t
     }
 
-  type t = {
-      map:   term_descriptor TermMap.t;
-      count: int;       (* number of proofs in the context *)
-      proved_set: TermSet.t
+  type elimination_descriptor = {
+      elim_term:      term; (* term to be eliminated *)
+      n_bound:        int;  (* of the environment of the term *)
+      assertion_term: term;
+      assertion_idx:  int;
+      args:           term array;
+      var_target:     int
     }
 
-  let empty: t = {map = TermMap.empty; count=0; proved_set = TermSet.empty}
+  type t = {
+      map:   term_descriptor TermMap.t;
+      elims: elimination_descriptor list;
+      eliminated: TermSet.t; (* eliminated terms, subset of proved terms *)
+      count: int;            (* number of proofs in the context *)
+      proved_set: TermSet.t  (* set of proofed terms *)
+    }
+
+  let empty: t = {
+    map = TermMap.empty;
+    elims=[];
+    eliminated = TermSet.empty;
+    count=0;
+    proved_set = TermSet.empty
+  }
 
   let count (c:t): int = c.count
 
@@ -164,12 +208,14 @@ end = struct
       let d0 = TermMap.find t c.map in
       match d0.pt_opt with
         None ->
-          {map = TermMap.add t {d0 with pt_opt = Some pt} c.map;
+          {c with
+           map   = TermMap.add t {d0 with pt_opt = Some pt} c.map;
            count = c.count + 1;
            proved_set = TermSet.add t c.proved_set}
       | Some _ -> c
     with Not_found ->
-      {map = TermMap.add t {pt_opt = Some pt;
+      {c with
+       map = TermMap.add t {pt_opt = Some pt;
                             fwd_set = FwdSet.empty;
                             bwd_set = BwdSet.empty} c.map;
        count = c.count + 1;
@@ -185,7 +231,8 @@ end = struct
     (* Add the  implication 'a=>b' with the proof term 'pt' to the forward set
        of the term 'a' in the context 'c, i.e. add the conclusion 'b' and the
        proof term 'pt' of the implication *)
-    {map =
+    {c with
+     map =
      TermMap.add
        a
        begin
@@ -197,9 +244,7 @@ end = struct
             fwd_set = FwdSet.singleton (b,pt);
             bwd_set = BwdSet.empty}
        end
-       c.map;
-     count = c.count;
-     proved_set = c.proved_set}
+       c.map}
 
 
   let add_backward
@@ -216,7 +261,8 @@ end = struct
       let e = (n,premises,pt)
       and tm = c.map
       in
-      {map =
+      {c with
+       map =
        TermMap.add
          target
          begin
@@ -228,9 +274,8 @@ end = struct
               fwd_set = FwdSet.empty;
               bwd_set = BwdSet.singleton e}
          end
-         tm;
-       count      = c.count;
-       proved_set = c.proved_set}
+         tm
+     }
     in
     let rec add lst c =
       match lst with
@@ -239,6 +284,19 @@ end = struct
           add tl (add_one premises target c)
     in
     add chain c
+
+  let one_eliminated (t:term) (c:t): proof_pair * t =
+    match c.elims with
+      [] ->
+        raise Not_found
+    | elim::tl ->
+        let args = Array.copy elim.args in
+        args.(elim.var_target) <- t;
+        (Term.sub elim.assertion_term elim.args elim.n_bound,
+         Specialize (Theorem elim.assertion_idx, args)),
+        {c with
+         elims = tl;
+         eliminated = TermSet.add elim.elim_term c.eliminated}
 
 end
 
@@ -455,9 +513,10 @@ let prove
         (lst: proof_pair list)
         (c:Context.t)
         : proof_pair list =
-      let lglobal =
+      let lglobal,elims =
         (Assertion_table.consequences t (Array.length argtypes) ft at)
       in
+      (* assert (elims = []); code for eliminations *)
       List.iter
         (fun ((_,_),idx) ->
           do_trace (trace_tagged_string
@@ -529,6 +588,20 @@ let prove
       try
         let pt = Context.proof_term t c in
         raise (Proof_found pt);
+      with Not_found ->
+        ()
+
+    and do_elim (c:Context.t) (globals: IntSet.t): unit =
+      (* Check if there is an elimination rule to apply, if
+         yes, mark the rule as eliminated and add it to the context
+         with the term 't' as target and try to prove the term *)
+      try
+        let (te,pte), c_elim = Context.one_eliminated t c in
+        let ctxt_new = add_ctxt_close te pte (level+1) split chain c_elim
+        in
+        let pt = prove_one t ctxt_new tried globals (level+1)
+        in
+        raise (Proof_found pt)
       with Not_found ->
         ()
 
@@ -630,6 +703,7 @@ let prove
           try
             let c,g = global_backward c globals in
             do_direct   c g;
+            do_elim     c g;
             do_enter    c g;
             do_backward c g;
             raise Cannot_prove

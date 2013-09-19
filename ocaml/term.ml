@@ -16,6 +16,12 @@ module Term: sig
 
   val nodes: term -> int
 
+  val depth: term -> int
+
+  val split_variables: term -> int -> IntSet.t * IntSet.t
+
+  val free_variables: term -> int -> IntSet.t
+
   val bound_variables: term -> int -> IntSet.t
 
   val map: (int->int->term) -> term -> term
@@ -32,7 +38,7 @@ module Term: sig
 
   val normalize: typ array -> term -> typ array * term * int array
 
-  val unify: term -> int -> term -> int -> term array * bool array
+  val unify: term -> int -> term -> int -> term array * int list
 
 end = struct
 
@@ -53,6 +59,8 @@ end = struct
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
 
+
+
   let rec nodes (t:term): int =
     (* The number of nodes in the term t *)
     match t with
@@ -63,8 +71,57 @@ end = struct
         1 + (nodes t)
 
 
+  let rec depth (t:term): int =
+    (* The depth of the term t *)
+    match t with
+      Variable _ -> 0
+    | Application (f,args) ->
+        Mylist.sum depth (1 + (depth f)) (Array.to_list args)
+    | Lam (tarr,t) ->
+        1 + (depth t)
+
+
+
+  let split_variables (t:term) (nb:int): IntSet.t * IntSet.t =
+    (* The set of bound variables strictly below 'n' and above 'n'
+       in the term 't' *)
+    let rec bfvars t nb bset fset =
+      match t with
+        Variable i ->
+          if i<nb then
+            (IntSet.add i bset), fset
+          else
+            bset, (IntSet.add i fset)
+      | Application (f,args) ->
+          let fbset,ffset = bfvars f nb bset fset
+          and asets = Array.map (fun t -> bfvars t nb bset fset) args
+          in
+          Array.fold_left
+            (fun (cum_bset,cum_fset) (bset,fset) ->
+              IntSet.union cum_bset bset,
+              IntSet.union cum_fset fset)
+            (fbset,ffset)
+            asets
+      | Lam (tarr,t) ->
+          bfvars t (nb+(Array.length tarr)) bset fset
+    in
+    bfvars t nb IntSet.empty IntSet.empty
+
+
+  let free_variables (t:term) (nb:int): IntSet.t =
+    (* The set of free variables above 'n' in the term 't' *)
+    let _,fvars = split_variables t nb
+    in
+    fvars
+
+
+
   let bound_variables (t:term) (nb:int): IntSet.t =
-    let rec bvars t nb set =
+    (* The set of bound variables strictly below 'n' in the term 't' *)
+    let bvars,_ = split_variables t nb
+    in
+    bvars
+(*    let rec bvars t nb set =
       match t with
         Variable i ->
           if i<nb then
@@ -83,7 +140,7 @@ end = struct
           bvars t (nb+(Array.length tarr)) set
     in
     bvars t nb IntSet.empty
-
+*)
 
   let map (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
@@ -317,13 +374,14 @@ end = struct
 
 
   let unify (t1:term) (nb1:int) (t2:term) (nb2:int)
-      : term array * bool array =
+      : term array * int list =
     (* Find a substitution (i.e. an array of arguments) for the nb2 bound
        variable of the term t2 so that t1 = Lam(nb2,t2) (args). Clearly the
        size of args must be nb2. The term t1 is in an environment with nb1
        bound variables.
 
-       The array of flags indicate which bound variables do occur in t2.
+       The second return parameter is the list of variables which do not
+       occur in t2.
      *)
     let args  = Array.make nb2 t1
     and flags = Array.make nb2 false
@@ -366,6 +424,13 @@ end = struct
     in
     uni t1 t2;
     assert (t1 = (sub t2 args nb1));
-    args,flags
+    let arbitrary: int list ref = ref []
+    in
+    Array.iteri
+      (fun i flag ->
+        if flag then ()
+        else arbitrary := (nb2-1-i)::!arbitrary )
+      flags;
+    args,!arbitrary
 
 end

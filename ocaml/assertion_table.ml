@@ -3,8 +3,29 @@ open Container
 open Type
 open Term
 open Proof
-
-
+(*
+module Elim: sig
+  type t
+  val assertion_term:  t -> term
+  val assertion_index: t -> int
+  val arguments:       t -> term array
+  val target_variable: t -> int
+  val make: term -> int -> term array -> int -> t
+end = struct
+  type t = {
+      ass_term: term;
+      tgt_var:  int;
+      args:     term array;
+      ass_idx:  int
+    }
+  let assertion_term  (x:t) = x.ass_term
+  let assertion_index (x:t) = x.ass_idx
+  let arguments       (x:t) = x.args
+  let target_variable (x:t) = x.tgt_var
+  let make (ass_term:term) (tgt_var:int)(args:term array)(ass_idx:int): t =
+    {ass_term=ass_term; tgt_var=tgt_var; args=args; ass_idx=ass_idx}
+end
+*)
 type descriptor = {
     names: int array;
     types: typ array;
@@ -12,6 +33,7 @@ type descriptor = {
     nterm: term;
     chain: (term list * term) list;
     fwd_opt: term option;
+    elim_opt: term option; (* !!! *)
     pt_opt: proof_term option}
 
 type t  = {seq: descriptor seq}
@@ -89,40 +111,71 @@ let find_backward
 
 
 let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
-    :(proof_pair* int) list =
+    :(proof_pair * int) list * (term * int * term array * int) list =
   (* The direct consequences of the term 't' in an enviroment with 'nb' bound
      variables, i.e. if the assertion table has a proved assertion of the form
      'a=>b' and 'a' can be unified with the term 't' and 'b' is not more
-     complex than 'a' then 'b' transformed into the environemt of term 't'
+     complex than 'a' then 'b' transformed into the environment of term 't'
      is a direct consequence of 't'.
 
-     If
+     a) direct consequences
+         If
 
-          ass[idx](args) = (t=>u)
+              ass[idx](args) = (t=>u)
 
-     then the proof pair is
+         then the proof pair is
 
-          t=>u, Specialize (Theorem idx, args)
+              t=>u, Specialize (Theorem idx, args)
+
+     b) eliminations
+
+          There is a an assertion variable i and arguments args so
+          that
+
+          for all c
+              args.(nb_ass-1-i ) <- c
+              ass[idx](args) = (t => ... => c)
+
+          ass[idx], i, args, idx
    *)
-  let res = ref []
+  let res  = ref []
+  and res2 = ref []
   in
   begin
     Seq.iteri
       (fun i desc ->
         let n = Array.length desc.types in
-        match desc.fwd_opt with
-          None -> ()
-        | Some fwd ->
-            try
-              let args,flags = Term.unify t nb fwd n in
-              let tt = Term.sub desc.nterm args nb in
-              res := ((tt,Specialize (Theorem i, args)),i) :: !res
-            with Not_found ->
-              ()
+        begin
+          match desc.fwd_opt with
+            None -> ()
+          | Some fwd ->
+              try
+                let args,_ = Term.unify t nb fwd n in
+                let tt = Term.sub desc.nterm args nb in
+                res := ((tt,Specialize (Theorem i, args)),i) :: !res
+              with Not_found ->
+                ()
+        end;
+        begin
+          match desc.elim_opt with
+            None -> ()
+          | Some elim ->
+              try
+                let args,arbitrary = Term.unify t nb elim n in
+                match arbitrary with
+                  [tgt_var] ->
+                    res2 :=
+                      ((Seq.elem at.seq i).term, i, args, tgt_var)
+                      :: !res2
+                | _ ->
+                    assert false (* Cannot happen *)
+              with Not_found ->
+                ()
+        end
       )
       at.seq
   end;
-  !res
+  !res, !res2
 
 
 
@@ -168,40 +221,61 @@ let put_assertion
       and bvars_b = Term.bound_variables b nb
       and n_a     = Term.nodes a
       and n_b     = Term.nodes b
+      and distributes a b = false (* Algorithm needed for distributivity *)
       in
       if n_b <= n_a && a<>b && IntSet.subset bvars_b bvars_a then
-        Some a
+        (Printf.printf "Simplification rule found\n";
+         Some a)
+      else if (Term.depth a) = (Term.depth b)
+          && distributes a b then
+        None
       else
         None
     with Not_found ->
       None
   in
+
   let elim_opt =
     let premises,target = List.hd (List.rev chn)
     in
     match premises with
       [] -> None
-    | p0::_ ->
-        let bvars_p0  = Term.bound_variables p0 nb
-        and bvars_tgt = Term.bound_variables target nb
+    | p0::tl -> begin
+        let bvars_p0, fvars_p0  = Term.split_variables p0 nb
+        and bvars_tgt,fvars_tgt = Term.split_variables target nb
         in
-        let bvars_union = IntSet.union bvars_p0 bvars_tgt in
-        (* Still need to check that there is a function eliminated *)
-        if (IntSet.cardinal bvars_union) = nb then
-          ((*Printf.printf "Elimination rule found\n";*)
-           None)
-        else
-          None
+        let elim_vars (): IntSet.t =
+          List.fold_left
+            (fun set p ->
+              IntSet.diff set (Term.free_variables p nb))
+                (IntSet.diff fvars_p0 fvars_tgt)
+            tl
+        in
+        match target with
+          Variable i_tgt when
+            not (IntSet.mem i_tgt bvars_p0)
+              && (IntSet.cardinal bvars_p0) + 1 = nb
+              && not (IntSet.is_empty (elim_vars ()))
+          ->
+            begin
+              (Printf.printf "Elimination rule found\n";
+               Some p0)
+            end
+        | _ ->
+            None
+    end
   in
+
   Seq.push
     at.seq
-    {names  = names;
-     types  = types;
-     term   = term;
-     nterm  = nterm;
-     pt_opt = pt_opt;
-     chain  = chn2;
-     fwd_opt= fwd_opt}
+    {names    = names;
+     types    = types;
+     term     = term;
+     nterm    = nterm;
+     pt_opt   = pt_opt;
+     chain    = chn2;
+     fwd_opt  = fwd_opt;
+     elim_opt = elim_opt}
 
 
 
