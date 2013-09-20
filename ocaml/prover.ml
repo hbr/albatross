@@ -610,7 +610,7 @@ let prove
       with Not_found ->
         ()
 
-    and do_backward (t:term) (c:Context.t) : unit =
+    and do_backward (t:term) (c:Context.t) (tried:tried_map): unit =
       (* Backward reasoning *)
       let c = global_backward t c in
       do_trace (trace_context c (level+1));
@@ -646,7 +646,7 @@ let prove
                 in
               do_trace (trace_term "Success" t level);
               raise (Proof_found (use_premises pt_lst pt))
-              with Cannot_prove -> ()
+            with Cannot_prove -> ()
           )
           bwd_set
       in
@@ -697,8 +697,12 @@ let prove
         else
            (do_trace (trace_term  "Failure (1stloop)"  t level);
            raise Cannot_prove)
-      with Not_found -> ()
+      with Not_found ->
+        ()
     end;
+    let tried = TermMap.add t c tried
+    in
+
     begin (* Bail out if goal limit is exceeded *)
       if (Options.has_goal_limit ())
           && (Options.goal_limit ()) <= !ngoals then
@@ -721,17 +725,17 @@ let prove
         begin
           assert (not (has_attempt t c));
           assert (not (has_success t c));
-          add_attempt t c;
-          assert (has_attempt t c);
+          (*add_attempt t c;
+          assert (has_attempt t c);*)
           try
             let t,c = enter t c in
-            do_backward t c;
+            do_backward t c tried;
             do_trace (trace_term "Failure" t level);
             raise Cannot_prove
           with
             Proof_found pt ->
-              assert (has_attempt t c);
-              add_success t c pt;
+              (*assert (has_attempt t c);
+              add_success t c pt;*)
               pt
         end
     end
