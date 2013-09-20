@@ -574,7 +574,6 @@ let prove
       (t:term)
       (c:Context.t)
       (tried: tried_map)
-      (globals: IntSet.t)
       (level: int)
       : proof_term =
     (* Prove the term 't' within the term map 'tm' where all terms
@@ -586,24 +585,23 @@ let prove
      *)
     assert (level < 500); (* to detect potential endless loops !! *)
 
-    let global_backward (c:Context.t) (g:IntSet.t): Context.t * IntSet.t =
+    let global_backward (c:Context.t): Context.t =
       (* The backward set from the global assertion table *)
       let bwd_glob =
         Assertion_table.find_backward t arglen ft at
       in
       List.fold_left
-        (fun (c,g) ((t,pt),idx) ->
+        (fun c ((t,pt),idx) ->
           do_trace (trace_tagged_string
                       "Global"
                       (Assertion_table.to_string idx ct ft at)
                       level);
-          add_ctxt_close t pt (level+1) split chain c,
-          IntSet.add idx g
+          add_ctxt_close t pt (level+1) split chain c
         )
-        (c,globals)
+        c
         bwd_glob
 
-    and do_direct (c:Context.t) (globals: IntSet.t): unit =
+    and do_direct (c:Context.t): unit =
       (* Check if the term is already in the context *)
       try
         let pt = Context.proof_term t c in
@@ -611,7 +609,7 @@ let prove
       with Not_found ->
         ()
 
-    and do_elim (c:Context.t) (globals: IntSet.t): unit =
+    and do_elim (c:Context.t): unit =
       (* Check if there is an elimination rule to apply, if
          yes, mark the rule as eliminated and add it to the context
          with the term 't' as target and try to prove the term *)
@@ -619,13 +617,13 @@ let prove
         let (te,pte), c_elim = Context.one_eliminated t c in
         let ctxt_new = add_ctxt_close te pte (level+1) split chain c_elim
         in
-        let pt = prove_one t ctxt_new tried globals (level+1)
+        let pt = prove_one t ctxt_new tried (level+1)
         in
         raise (Proof_found pt)
       with Not_found ->
         ()
 
-    and do_backward (c:Context.t) (globals: IntSet.t) : unit =
+    and do_backward (c:Context.t) : unit =
       (* Backward reasoning *)
         let bwd_set = Context.backward_set t c in
         begin
@@ -646,7 +644,7 @@ let prove
                 do_trace (trace_premises premises (level+1));
                 let pt_lst =
                   List.rev_map
-                    (fun t -> prove_one t c tried globals (level+2))
+                    (fun t -> prove_one t c tried (level+2))
                     premises
                 in
                 let rec use_premises
@@ -667,14 +665,14 @@ let prove
         (* All alternatives failed (or maybe there are no alternatives) *)
         ()
 
-    and do_enter (c:Context.t) (globals: IntSet.t): unit =
+    and do_enter (c:Context.t): unit =
       (* Enter an implication if possible *)
       try
         let a,b = split t in
         do_trace (trace_term "Enter" a level);
         let c = add_ctxt_close a (Assume a) (level+1) split chain c in
           try
-            let ptb = prove_one b c tried globals (level+1) in
+            let ptb = prove_one b c tried (level+1) in
             do_trace (trace_term "Success" t level);
             raise (Proof_found (Discharge (a,ptb)))
           with Cannot_prove -> ()
@@ -721,11 +719,11 @@ let prove
           add_attempt t c;
           assert (has_attempt t c);
           try
-            let c,g = global_backward c globals in
-            do_direct   c g;
-            do_elim     c g;
-            do_enter    c g;
-            do_backward c g;
+            let c = global_backward c in
+            do_direct   c;
+            do_elim     c;
+            do_enter    c;
+            do_backward c;
             raise Cannot_prove
           with
             Proof_found pt ->
@@ -749,7 +747,7 @@ let prove
         let pt =
           try
             do_trace (trace_term "User goal" t level);
-            prove_one tnormal ctxt TermMap.empty IntSet.empty (level+1)
+            prove_one tnormal ctxt TermMap.empty (level+1)
           with Cannot_prove ->
             do_trace (trace_term "User failure" t level);
             raise (Cannot_prove_info  ie.i)
