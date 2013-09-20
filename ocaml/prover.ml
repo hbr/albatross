@@ -62,13 +62,13 @@ end)
 
 
 module BwdSet = Set.Make(struct
-  type t = int * term list * proof_term
+  type t = int * TermSet.t * term list * proof_term
         (* number of premises
            list of premises  [a,b,c,...]
            proof_term of  the implication a=>b=>...=>z*)
   let compare (x:t) (y:t) =
-    let n1,ps1,_ = x
-    and n2,ps2,_ = y
+    let n1,_,ps1,_ = x
+    and n2,_,ps2,_ = y
     in
     let cmp0 = Pervasives.compare n1 n2 in
     if cmp0=0 then
@@ -264,8 +264,12 @@ end = struct
        i.e. the last element of the list is the interesting one.
      *)
     let add_one premises target c =
-      let n = List.length premises in
-      let e = (n,premises,pt)
+      let term_set ts =
+        List.fold_left (fun set p -> TermSet.add p set) TermSet.empty ts
+      in
+      let n = List.length premises
+      and pset = term_set premises in
+      let e = (n,pset,premises,pt)
       and tm = c.map
       in
       {c with
@@ -275,7 +279,13 @@ end = struct
          begin
            try
              let d0 = TermMap.find target tm in
-             {d0 with bwd_set = BwdSet.add e d0.bwd_set}
+             if BwdSet.for_all
+                 (fun (_,pset0,_,_) -> pset0 <> pset)
+                 d0.bwd_set
+             then
+               {d0 with bwd_set = BwdSet.add e d0.bwd_set}
+             else
+               d0
            with Not_found ->
              {pt_opt  = None;
               fwd_set = FwdSet.empty;
@@ -631,7 +641,7 @@ let prove
           else ()
         end;
         let _ = BwdSet.iter
-            (fun (_,premises,pt) ->
+            (fun (_,_,premises,pt) ->
               try
                 do_trace (trace_premises premises (level+1));
                 let pt_lst =
@@ -808,7 +818,7 @@ let prove
   | Goal_limit_info i ->
       let str = "Cannot prove (goal limit "
         ^ (string_of_int (Options.goal_limit ()))
-        ^ " exceeded)"
+        ^ " exceeded)\n)"
       in
       if not !traceflag && (Options.is_tracing_failed_proof ()) then
         begin
