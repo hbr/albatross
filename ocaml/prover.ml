@@ -415,13 +415,16 @@ let prove
 
   and trace_context (c:Context.t) (l:int) (): unit =
     let lst = Context.proved_terms c in
-    Printf.printf "%3d %sContext has %d items\n"
-      l (level_string l) (List.length lst);
-    Mylist.iteri
-      (fun i (t,_) ->
-        Printf.printf "%3d %s%2d: %s\n" l (level_string l) i (term2string t)
-      )
-      lst
+    let len = List.length lst in
+    if len > 0 then
+      (Printf.printf "%3d %sContext\n" l (level_string l);
+       Mylist.iteri
+         (fun i (t,_) ->
+           Printf.printf "%3d %s%2d: %s\n" l (level_string l) i (term2string t)
+         )
+         lst)
+    else
+      Printf.printf "%3d %sContext is empty\n" l (level_string l)
   in
 
   let attempt_map = ref AttemptMap.empty in
@@ -500,7 +503,7 @@ let prove
       (c:Context.t)
       : Context.t =
     (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
-    do_trace (trace_term "to context" t level);
+    (*do_trace (trace_term "to context" t level);*)
     let c = Context.add_proof t pt c in
     let c =
       try
@@ -537,14 +540,6 @@ let prove
         (Assertion_table.consequences t (Array.length argtypes) ft at)
       in
       (* assert (elims = []); code for eliminations *)
-      List.iter
-        (fun ((_,_),idx) ->
-          do_trace (trace_tagged_string
-                      "Global(fwd)"
-                      (Assertion_table.to_string idx ct ft at)
-                      level)
-        )
-        lglobal;
       let l1 =
         (Context.consequences t pt c)
         @ (List.map (fun ((t,pt),_) -> t,pt) lglobal)
@@ -585,31 +580,23 @@ let prove
      *)
     assert (level < 500); (* to detect potential endless loops !! *)
 
-    let global_backward (c:Context.t): Context.t =
+    let global_backward (t:term) (c:Context.t): Context.t =
       (* The backward set from the global assertion table *)
       let bwd_glob =
         Assertion_table.find_backward t arglen ft at
       in
       List.fold_left
         (fun c ((t,pt),idx) ->
-          do_trace (trace_tagged_string
-                      "Global"
+          (*do_trace (trace_tagged_string
+                      "Global(bwd)"
                       (Assertion_table.to_string idx ct ft at)
-                      level);
+                      level);*)
           add_ctxt_close t pt (level+1) split chain c
         )
         c
         bwd_glob
-
-    and do_direct (c:Context.t): unit =
-      (* Check if the term is already in the context *)
-      try
-        let pt = Context.proof_term t c in
-        raise (Proof_found pt);
-      with Not_found ->
-        ()
-
-    and do_elim (c:Context.t): unit =
+    in
+    let do_elim (c:Context.t): unit =
       (* Check if there is an elimination rule to apply, if
          yes, mark the rule as eliminated and add it to the context
          with the term 't' as target and try to prove the term *)
@@ -623,65 +610,83 @@ let prove
       with Not_found ->
         ()
 
-    and do_backward (c:Context.t) : unit =
+    and do_backward (t:term) (c:Context.t) : unit =
       (* Backward reasoning *)
-        let bwd_set = Context.backward_set t c in
-        begin
-          let n = BwdSet.cardinal bwd_set in
-          if n>0 then begin
-            do_trace (trace_string
-                        ("Trying up to "
-                         ^ (string_of_int n)
-                         ^ " alternative(s)")
-                        level);
-            do_trace (trace_context c (level+1))
-          end
+      let c = global_backward t c in
+      do_trace (trace_context c (level+1));
+      let bwd_set = Context.backward_set t c in
+      begin
+        let n = BwdSet.cardinal bwd_set in
+        if n>0 then begin
+          do_trace (trace_string
+                      ("Trying up to "
+                       ^ (string_of_int n)
+                       ^ " alternative(s)")
+                      level)
+        end
           else ()
-        end;
-        let _ = BwdSet.iter
-            (fun (_,_,premises,pt) ->
-              try
-                do_trace (trace_premises premises (level+1));
-                let pt_lst =
-                  List.rev_map
-                    (fun t -> prove_one t c tried (level+2))
-                    premises
-                in
-                let rec use_premises
-                    (lst: proof_term list)
-                    (pt:  proof_term)
-                    : proof_term =
-                  match lst with
+      end;
+      let _ = BwdSet.iter
+          (fun (_,_,premises,pt) ->
+            try
+              do_trace (trace_premises premises (level+1));
+              let pt_lst =
+                List.rev_map
+                  (fun t -> prove_one t c tried (level+2))
+                  premises
+              in
+              let rec use_premises
+                  (lst: proof_term list)
+                  (pt:  proof_term)
+                  : proof_term =
+                match lst with
                     [] -> pt
-                  | pt1::tl ->
-                      MP (pt1, use_premises tl pt)
+                | pt1::tl ->
+                    MP (pt1, use_premises tl pt)
                 in
-                do_trace (trace_term "Success" t level);
-                raise (Proof_found (use_premises pt_lst pt))
+              do_trace (trace_term "Success" t level);
+              raise (Proof_found (use_premises pt_lst pt))
               with Cannot_prove -> ()
-            )
-            bwd_set
-        in
-        (* All alternatives failed (or maybe there are no alternatives) *)
-        ()
+          )
+          bwd_set
+      in
+      (* All alternatives failed (or maybe there are no alternatives) *)
+      ()
 
-    and do_enter (c:Context.t): unit =
-      (* Enter an implication if possible *)
-      try
-        let a,b = split t in
-        do_trace (trace_term "Enter" a level);
-        let c = add_ctxt_close a (Assume a) (level+1) split chain c in
-          try
-            let ptb = prove_one b c tried (level+1) in
-            do_trace (trace_term "Success" t level);
-            raise (Proof_found (Discharge (a,ptb)))
-          with Cannot_prove -> ()
-      with Not_found -> ()
+    and enter (t:term) (c:Context.t): term * Context.t =
+      (* Check the term and split implications recursively *)
+      let direct (t:term) (c:Context.t): Context.t =
+        let c = global_backward t c in
+        try
+          let pt = Context.proof_term t c in
+          do_trace (trace_term "Success" t level);
+          raise (Proof_found pt);
+        with Not_found ->
+          c
+      in
+      let rec ent (t:term) (c:Context.t) (entered:bool)
+          : term * Context.t * bool =
+        try
+          let a,b = split t in
+          do_trace (trace_term "Enter" a level);
+          let c = add_ctxt_close a (Assume a) (level+1) split chain c in
+          let c = direct b c in
+          ent b c true
+        with Not_found ->
+          t,c,entered
+      in
+      let c = direct t c in
+      let t,c,entered = ent t c false in
+      if entered then
+        (do_trace (trace_term "Goal" t level);
+         t,c)
+      else
+        t,c
 
     in
     begin
       do_trace (trace_term "Goal" t level);
-      do_trace (trace_context c (level+1));
+      (*do_trace (trace_context c (level+1));*)
     end;
     begin
       (* Bail out if the goal has already been tried in the same context *)
@@ -719,11 +724,8 @@ let prove
           add_attempt t c;
           assert (has_attempt t c);
           try
-            let c = global_backward c in
-            do_direct   c;
-            do_elim     c;
-            do_enter    c;
-            do_backward c;
+            let t,c = enter t c in
+            do_backward t c;
             raise Cannot_prove
           with
             Proof_found pt ->
