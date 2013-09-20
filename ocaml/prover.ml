@@ -726,6 +726,7 @@ let prove
           try
             let t,c = enter t c in
             do_backward t c;
+            do_trace (trace_term "Failure" t level);
             raise Cannot_prove
           with
             Proof_found pt ->
