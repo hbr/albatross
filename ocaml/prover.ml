@@ -252,10 +252,17 @@ end = struct
       (pt:proof_term)
       (c:t)
       : t =
-    (* Add the implication chain 'a=>b=>...=>z' give as the list
-     [[],a=>b=>...=>z; [a],b=>...=>z; [a,b],...=>z; ... ] with the proof
-       term 'pt' to the backward set of the corresponding target in the
-       context 'c' *)
+    (* It is assumed that 'a=>b=>...=>z' is proved with the proof term
+       'pt'. The term is given as an implication chain. Then add
+       'n,[a,b,...],pt' to the backward set of 'z' in the context 'c'
+       where 'n' is the number of premises.
+
+       Note that an implication chain has the form:
+
+          [([],a=>b=>...=>z), ([a],b=>...=>z); ..., ([a,b,...],z)]
+
+       i.e. the last element of the list is the interesting one.
+     *)
     let add_one premises target c =
       let n = List.length premises in
       let e = (n,premises,pt)
@@ -280,10 +287,13 @@ end = struct
     let rec add lst c =
       match lst with
         [] -> c
+      | [(premises,target)] ->
+          add_one premises target c
       | (premises,target)::tl ->
-          add tl (add_one premises target c)
+          add tl c
     in
     add chain c
+
 
   let one_eliminated (t:term) (c:t): proof_pair * t =
     match c.elims with
