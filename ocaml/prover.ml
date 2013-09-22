@@ -12,11 +12,6 @@ exception Proof_found of proof_term
 
 
 
-module TermSet = Set.Make(struct
-  let compare = Pervasives.compare
-  type t = term
-end)
-
 module SizedTerm: sig
   type t
   val item: t -> term
@@ -78,11 +73,6 @@ module BwdSet = Set.Make(struct
 end)
 
 
-
-module TermMap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = term
-end)
 
 
 module TermSetMap = Map.Make(struct

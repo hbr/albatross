@@ -44,6 +44,11 @@ module IntSet = Set.Make(struct
   type t = int
 end)
 
+module IntMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = int
+end)
+
 
 let intset_to_string (set:IntSet.t): string =
   "{"

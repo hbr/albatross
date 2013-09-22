@@ -9,6 +9,17 @@ type term =
   | Lam         of typ array * term
 
 
+module TermSet = Set.Make(struct
+  let compare = Pervasives.compare
+  type t = term
+end)
+
+module TermMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = term
+end)
+
+
 
 module Term: sig
 
@@ -381,7 +392,7 @@ end = struct
        bound variables.
 
        The second return parameter is the list of variables which do not
-       occur in t2.
+       occur in t2 (i.e. a subset of {0,1,...,nb2-1}).
      *)
     let args  = Array.make nb2 t1
     and flags = Array.make nb2 false
@@ -389,7 +400,7 @@ end = struct
     let notfound_unless (cond:bool): unit =
       if cond then () else raise Not_found
     in
-    let rec uni t1 t2 =
+    let rec uni (t1:term) (t2:term): unit =
       match t1,t2 with
         _, Variable i2 ->
           if i2<nb2 then
