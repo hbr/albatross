@@ -74,12 +74,6 @@ end)
 
 
 
-
-module TermSetMap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = TermSet.t
-end)
-
 module AttemptMap = Map.Make(struct
   let compare = Pervasives.compare
   type t = term * TermSet.t
@@ -128,7 +122,7 @@ end = struct
       elims: elimination_descriptor list;
       eliminated: TermSet.t; (* eliminated terms, subset of proved terms *)
       count: int;            (* number of proofs in the context *)
-      proved_set: TermSet.t  (* set of proofed terms *)
+      proved_set: TermSet.t; (* set of proofed terms *)
     }
 
   let empty: t = {

@@ -3,6 +3,30 @@ open Container
 open Type
 open Term
 open Proof
+open Term_table
+
+
+module Context: sig
+  type t
+  val  count: t -> int
+end = struct
+  type t = {
+      proved:  proof_pair Term_table.t;
+      forward: (term * proof_term) Term_table.t;
+                (* conclusion b,
+                   proof term of the implication a=>b *)
+      backward: (term list * proof_term) Term_table.t
+                (* premises [a,b,...],
+                   proof term of the implication a=>b=>...=>z *)
+    }
+
+  let count (c:t): int = Term_table.count c.proved
+end
+
+
+
+
+
 
 
 type descriptor = {
@@ -44,6 +68,7 @@ let to_string
 
 let empty (): t =  {seq = Seq.empty () }
 
+
 let find_backward
     (t:term)
     (nb:int)
@@ -70,7 +95,7 @@ let find_backward
           (fun (premises,target) ->
             (*if premises=[] then*)
               try
-                let args,flags = Term.unify t nb target n in
+                let args,_ = Term.unify t nb target n in
                 let tt = Term.sub desc.nterm args nb in
                 res := ((tt,Specialize (Theorem i, args)),i) :: !res
               with Not_found ->
@@ -84,7 +109,28 @@ let find_backward
   end;
   !res
 
+(*
+exception Exact_match_found of int * int * substitution
 
+let find (t:term) (nb:int) (at:t): int * int * substitution =
+  (* Find for the term 't' which comes from an environment with 'nb'
+     bound variables in the assertion table 't' the
+          idx:  index of the assertion in 't'
+          nargs: number of arguments of the assertion
+          sub:   substitution
+
+     so that sub applied to ass[idx] yields 't'
+   *)
+  try
+    Seq.iteri
+      (fun i ass ->
+        assert false
+      )
+      at.seq;
+    raise Not_found
+  with
+    Index_found idx ->
+*)
 
 
 
@@ -286,234 +332,3 @@ let print (ct:Class_table.t) (ft:Feature_table.t) (at:t): unit =
   Seq.iter
     (fun desc -> Printf.printf "%s\n" (assertion_to_string desc ct ft))
     at.seq
-
-
-
-
-
-
-(*
------------------------------------------------------------------------------
-   Experimental
------------------------------------------------------------------------------
-*)
-
-
-
-
-module Term_sub: sig
-  type t
-end = struct
-  type t = term IntMap.t
-
-  let singleton (i:int) (t:term): t =
-    IntMap.add i t IntMap.empty
-
-  let find (i:int) (sub:t): term =
-    IntMap.find i sub
-
-  let mem (i:int) (sub:t): bool =
-    IntMap.mem i sub
-
-  let add (i:int) (t:term) (sub:t): t =
-    assert (not (mem i sub));
-    assert false
-end
-
-
-
-
-module Term_table: sig
-end = struct
-  type substitution = term IntMap.t
-
-  type table = {
-      bvar: int  IntMap.t;  (* idx -> argument variable *)
-      ovar: int  IntMap.t;  (* idx -> other variable (free or bound) *)
-      fapp: (table * table array) IntMap.t;
-      lam:  (typ array * table) IntMap.t
-    }
-
-  exception Term_found of term
-
-  let has_index (idx:int) (tab:table): bool =
-    (IntMap.mem idx tab.bvar) ||
-    (IntMap.mem idx tab.ovar) ||
-    (IntMap.mem idx tab.fapp) ||
-    (IntMap.mem idx tab.lam)
-
-
-
-  let empty_table = {
-    bvar = IntMap.empty;
-    ovar = IntMap.empty;
-    fapp = IntMap.empty;
-    lam  = IntMap.empty
-  }
-
-
-  let merge_sub (sub1: substitution) (sub2: substitution)
-      : substitution =
-    IntMap.fold
-      (fun bvar t1 res ->
-        try
-          let t2 = IntMap.find bvar sub2 in
-          if t1=t2 then res
-          else raise Not_found  (* No merge possible *)
-        with Not_found ->
-          IntMap.add bvar t1 res
-      )
-      sub1 (* map to fold *)
-      sub2 (* start map   *)
-
-
-
-  let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
-      : substitution IntMap.t =
-    IntMap.fold
-      (fun idx sub1 res ->
-        try
-          let sub2 = IntMap.find idx m2 in
-          let sub  = merge_sub sub1 sub2 in
-          IntMap.add idx sub res
-        with Not_found ->
-          res
-      )
-      m1
-      IntMap.empty
-
-
-
-
-  let unify (t:term) (nbt:int) (tab:table)
-      :  substitution IntMap.t =
-    (* Return a set of term indices together with substitutions i.e. a mapping
-       from the bound variables of the corresponding term to subterms of 't'.
-     *)
-    let rec uni (t:term) (nb:int) (tab:table): substitution IntMap.t =
-      match t with
-        Variable i when nb<=i && i<nbt ->
-          (* The term 't' is an argument variable of the toplevel term to
-             be unified *)
-          IntMap.map
-            (fun i2 ->
-              IntMap.add i2 t (IntMap.empty)
-            )
-            tab.bvar
-      | Variable i ->
-          (* The term 't' is either a bound variable or a free variable of
-             the toplevel term to be unified *)
-          IntMap.fold
-            (fun idx ovar res ->
-              if ovar=i then
-                IntMap.add idx IntMap.empty res
-              else
-                res
-            )
-            tab.ovar
-            IntMap.empty
-      | Application (f,args) ->
-          let len = Array.length args in
-          IntMap.fold
-            (fun idx (ftab,argstab) res ->
-              let lentab = Array.length argstab in
-              if len=lentab then
-                let fu = uni f nb ftab
-                and argsu =
-                  Array.mapi (fun i t -> uni t nb argstab.(i)) args
-                in
-                Array.fold_left
-                  (fun res map -> merge_map res map)
-                  fu
-                  argsu
-              else
-                res
-            )
-            tab.fapp
-            IntMap.empty
-      | Lam(tarr,t) ->
-          assert false; (* NYI: unification of lambda terms *)
-    in
-
-    uni t 0 tab
-
-
-  let term (idx:int) (tab:table): term =
-    let rec termrec (nb:int) (tab:table): term =
-      let var_term (vmap: int IntMap.t): unit =
-        try
-          let i = IntMap.find idx vmap in
-          raise (Term_found (Variable i))
-        with Not_found ->
-          ()
-      and fapp_term (fappmap: (table * table array) IntMap.t): unit =
-        try
-          let ftab,argstab = IntMap.find idx fappmap in
-          let f = termrec nb ftab
-          and args = Array.map (fun tab -> termrec nb tab) argstab
-          in
-          raise (Term_found (Application (f,args)))
-        with Not_found ->
-          ()
-      and lam_term (lammap: (typ array * table) IntMap.t): unit =
-        try
-          let tarr,tab = IntMap.find idx lammap in
-          let n = Array.length tarr in
-          let t = termrec (nb+n) tab in
-          raise (Term_found (Lam (tarr,t)))
-        with Not_found ->
-          ()
-      in
-      try
-        var_term  tab.bvar;
-        var_term  tab.ovar;
-        fapp_term tab.fapp;
-        lam_term  tab.lam;
-        raise Not_found
-      with Term_found t ->
-        t
-    in
-    termrec 0 tab
-
-  let has_term (idx:int) (tab:table): bool =
-    try
-      let _ = term idx tab in
-      true
-    with Not_found ->
-      false
-
-
-
-  let rec add (t:term) (nbt:int) (idx:int) (tab:table): table =
-    (* Add the term 't' which has 'nbt' bound variables and the index 'idx' to
-       the table 'tab'.
-     *)
-    assert (not (has_term idx tab));
-    let rec addrec (t:term) (nb:int) (tab:table): table =
-      match t with
-        Variable i when nb<=i && i<nb+nbt ->
-          (* variable is a formal argument which can be substituted *)
-            {tab with bvar = IntMap.add idx i tab.bvar}
-      | Variable i ->
-            {tab with ovar = IntMap.add idx i tab.ovar}
-        (*
-          if i<nb then
-            assert false
-          else if i<nbt then
-            {tab with bvar = IntMap.add idx i tab.bvar}
-          else
-            {tab with ovar = IntMap.add idx (i-nbt) tab.ovar}*)
-      | Application (f,args) ->
-          let ftab = addrec f nb empty_table
-          and argstab = Array.map (fun t -> addrec t nb empty_table) args
-          in
-          {tab with fapp = IntMap.add idx (ftab,argstab) tab.fapp}
-      | Lam (tarr,t) ->
-          let len = Array.length tarr in
-          let ttab = addrec t (nb+len) empty_table in
-          {tab with lam = IntMap.add idx (tarr,ttab) tab.lam}
-    in
-    let tab = addrec t 0 tab in
-    assert (t = term idx tab);
-    tab
-end
