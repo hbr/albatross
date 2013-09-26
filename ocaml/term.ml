@@ -1,12 +1,11 @@
 open Support
-open Type
 open Container
 
 
 type term =
     Variable    of int
   | Application of term * term array
-  | Lam         of typ array * term
+  | Lam         of int * term
 
 
 module TermSet = Set.Make(struct
@@ -124,8 +123,6 @@ module Term: sig
 
   val reduce: term -> term
 
-  val normalize: typ array -> term -> typ array * term * int array
-
   val unify: term -> int -> term -> int ->  term array * int list
 
 end = struct
@@ -140,9 +137,8 @@ end = struct
         fstr ^ "(" ^
         (String.concat "," (List.rev argsstr))
         ^ ")"
-    | Lam(tarr,t) ->
-        let len = Array.length tarr in
-        let args = Array.init len (fun i -> (string_of_int (len-1-i))) in
+    | Lam(nargs,t) ->
+        let args = Array.init nargs (fun i -> (string_of_int (nargs-1-i))) in
         let argsstr = String.concat "," (Array.to_list args) in
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
@@ -155,7 +151,7 @@ end = struct
       Variable _ -> 1
     | Application (f,args) ->
         (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
-    | Lam (tarr,t) ->
+    | Lam (_,t) ->
         1 + (nodes t)
 
 
@@ -165,7 +161,7 @@ end = struct
       Variable _ -> 0
     | Application (f,args) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (tarr,t) ->
+    | Lam (_,t) ->
         1 + (depth t)
 
 
@@ -190,8 +186,8 @@ end = struct
               IntSet.union cum_fset fset)
             (fbset,ffset)
             asets
-      | Lam (tarr,t) ->
-          bfvars t (nb+(Array.length tarr)) bset fset
+      | Lam (nargs,t) ->
+          bfvars t (nb+nargs) bset fset
     in
     bfvars t nb IntSet.empty IntSet.empty
 
@@ -209,26 +205,8 @@ end = struct
     let bvars,_ = split_variables t nb
     in
     bvars
-(*    let rec bvars t nb set =
-      match t with
-        Variable i ->
-          if i<nb then
-            IntSet.add i set
-          else
-            set
-      | Application (f,args) ->
-          let fset = bvars f nb set
-          and asets = Array.map (fun t -> bvars t nb set) args
-          in
-          Array.fold_left
-            (fun cum_set set -> IntSet.union cum_set set)
-            fset
-            asets
-      | Lam (tarr,t) ->
-          bvars t (nb+(Array.length tarr)) set
-    in
-    bvars t nb IntSet.empty
-*)
+
+
 
   let map (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
@@ -239,8 +217,8 @@ end = struct
         Variable j -> f j nb
       | Application (a,b) ->
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b)
-      | Lam (tarr,t) ->
-          Lam(tarr, mapr (nb+Array.length tarr) t)
+      | Lam (nargs,t) ->
+          Lam(nargs, mapr (nb+nargs) t)
     in
     mapr 0 t
 
@@ -297,150 +275,13 @@ end = struct
 
 
 
-  let variables_below (n:int) (t:term): int list =
-    (* The list of free variables below 'n' in the order in which they appear
-       in the term 't'
-     *)
-    let rec vars (t:term) (nb:int): int list =
-      match t with
-        Variable j -> if j<nb || n+nb<=j then [] else [j-nb]
-      | Application (t,args) ->
-          let tl = vars t nb
-          and al = List.map (fun t -> vars t nb) (Array.to_list args)
-          in
-          tl @ (List.flatten al)
-      | Lam (tarr,t) ->
-          vars t (nb+(Array.length tarr))
-    in
-    vars t 0
-
-
-
-  type usage =
-      Unused
-    | Used of int   (* the first appearance *)
-
-
-
-  let usage_array (n:int) (t:term): int * usage array =
-    (* The number of used variables and the usage array of the
-       variables below 'n' in the term 't'
-     *)
-    let varlst = variables_below n t
-    and nused = ref 0
-    and usearr = Array.make n Unused
-    in
-    Printf.printf "variables [%s]\n"
-      (String.concat ","
-         (List.map string_of_int varlst));
-    let _ =
-      Mylist.iteri
-        (fun pos var ->
-          assert (var < n);
-          match usearr.(var) with
-            Unused -> begin
-              usearr.(var) <- Used pos;  (* first usage of 'var' *)
-              nused := !nused + 1
-            end
-          | Used _ -> ()
-        )
-        varlst
-    in
-    Printf.printf "positions = [%s]\n"
-      (String.concat ","
-         (List.map
-            (fun usg ->
-              match usg with
-                Unused -> "*"
-              | Used pos -> string_of_int pos)
-            (Array.to_list usearr)));
-    assert
-      (List.for_all
-         (fun var ->
-           match usearr.(var) with
-             Unused -> false
-           | Used _ -> true
-         )
-         varlst
-      );
-    assert
-      (let varlstlen = List.length varlst in
-      List.for_all
-         (fun usg ->
-           match usg with
-             Unused -> true
-           | Used pos -> pos < varlstlen
-         )
-         (Array.to_list usearr)
-      );
-    Printf.printf "nused %d, nvars %d\n" !nused (List.length varlst);
-    !nused,usearr
-
-
-
-
-  let normalize (tarr: typ array) (t:term): typ array * term * int array =
-    (* Normalize the term 't' with local variables of types 'tarr'
-       and return the types of the used variables and the term
-       where the variables have their occurrence according to the
-       type array
-     *)
-    let len = Array.length tarr in
-    let nused,usearr = usage_array len t in
-    let tnorm = map
-        (fun i nb ->
-          if nb+len <= i then
-            (* free variable *)
-            Variable (i-(len-nused)) (* fill unused variables *)
-          else if i < nb then
-            (* bound variable i.e. below local *)
-            Variable i
-          else begin
-            (* local variable according to tarr *)
-            assert(nb<=i); assert((i-nb)<len);
-            match usearr.(i-nb) with
-              Used pos ->
-                begin
-                  if pos >= nused then
-                    Printf.printf "pos %d, nused %d\n" pos nused
-                  else
-                    ()
-                end;
-                assert (pos < nused); (* Something wrong: var 0 can be
-                                         at pos 2 *)
-                Variable (nb + nused - 1 - pos)
-            | Unused ->
-                assert false  (* Variable i-nb must be used *)
-          end
-        )
-        t
-    in
-    let vars_sorted = Array.init len (fun i -> i) in
-    let _ =
-      Array.sort
-        (fun i j ->
-          match usearr.(i), usearr.(j) with
-            Used p1, Used p2 -> compare p1 p2
-          | Used _ , Unused  -> -1
-          | Unused , Used _  ->  1
-          | Unused , Unused  ->  0)
-        vars_sorted
-    in
-    let tarrnorm = Array.init nused (fun i -> tarr.(vars_sorted.(i)))
-    and varsused = (Array.sub vars_sorted 0 nused)
-    in
-    assert
-      (t = (sub tnorm (Array.map (fun i -> Variable i) varsused) len));
-    tarrnorm, tnorm, varsused
-
-
 
   let rec reduce (t:term): term =
     (* Do all possible beta reductions in the term 't' *)
     let app (f:term) (args: term array): term =
       match f with
-        Lam(tarr,t) ->
-          assert ((Array.length tarr)=(Array.length args));
+        Lam(nargs,t) ->
+          assert (nargs=(Array.length args));
           apply t args
       | _ -> Application (f,args)
     in
@@ -451,10 +292,10 @@ end = struct
         and argsr = Array.map reduce args
         in
         app fr argsr
-    | Lam(tarr,t) ->
+    | Lam(nargs,t) ->
         let tred = reduce t in
-        if 0 < (Array.length tarr) then
-          Lam (tarr, tred)
+        if 0 < nargs then
+          Lam (nargs, tred)
         else
           tred
 
@@ -502,8 +343,7 @@ end = struct
           end
           else
             raise Not_found
-      | Lam(tarr1,u1), Lam(tarr2,u2) ->
-          let l1,l2 = Array.length tarr1, Array.length tarr2 in
+      | Lam(l1,u1), Lam(l2,u2) ->
           if l1=l2 then
             uni u1 u2
           else

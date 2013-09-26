@@ -159,7 +159,7 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
         | Some def ->
             let nargs = Array.length def.types in
             let t = expand_term def.term nargs ft in
-            Lam (def.types, Term.upbound n nargs t)
+            Lam (nargs, Term.upbound n nargs t)
     )
     t
 
@@ -426,24 +426,25 @@ let term_to_string (t:term) (names:int array) (ft:t): string =
       Variable i ->
         let fn = fname i nanon in
         application2string fn arg_strings
-    | Lam (tarr,t) ->
+    | Lam (n,t) ->
         normal_application2string
-          (lam2str tarr t nanon)
+          (lam2str n t nanon)
           arg_strings
     | Application (f,args) ->
         let fstr,_,_ = app2str f args nanon in
         normal_application2string fstr arg_strings
-  and lam2str (tarr:typ array) (t:term) (nanon:int): string =
-    let len = Array.length tarr in
+  and lam2str (len:int) (t:term) (nanon:int): string =
     let tstr,_,_ = term2str t (nanon+len) in
     let fargs =
       String.concat
         ","
-        (Mylist.mapi
-           (fun i tp ->
-             feature_name_to_string (fname i (nanon+len))
-           )
-           (Array.to_list tarr))
+        (let arr =
+          (Array.init len
+             (fun i ->
+               feature_name_to_string (fname (len-1-i) (nanon+len))))
+        in
+        List.rev (Array.to_list arr)
+        )
     in
     "([" ^ fargs ^ "] -> " ^ tstr ^ ")"
   in
