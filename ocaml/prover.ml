@@ -74,12 +74,6 @@ end)
 
 
 
-module AttemptMap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = term * TermSet.t
-end)
-
-type attempt_map = (proof_term option) AttemptMap.t
 
 
 
@@ -411,59 +405,6 @@ let prove
       Printf.printf "%3d %sContext is empty\n" l (level_string l)
   in
 
-  let attempt_map = ref AttemptMap.empty in
-
-  let attempt (t:term) (c:Context.t): bool * proof_term option =
-    let tset = Context.proved_set c in
-    try
-      let pt_opt = AttemptMap.find (t,tset) !attempt_map in
-      true, pt_opt
-    with
-      Not_found ->
-        false, None
-  in
-
-  let has_attempt (t:term) (c:Context.t): bool =
-    let att,pt_opt = attempt t c in
-    att (*&& match pt_opt with None -> true | _ -> false*)
-  and has_success (t:term) (c:Context.t): bool =
-    let att,pt_opt = attempt t c in
-    att && match pt_opt with None -> false | _ -> true
-  in
-
-  let add_attempt (t:term) (c:Context.t): unit =
-    begin
-      let tset = Context.proved_set c in
-      try
-        let _ = AttemptMap.find (t,tset) !attempt_map in
-        assert false  (* No repeated attempts! *)
-      with Not_found ->
-        attempt_map := AttemptMap.add (t,tset) None !attempt_map
-    end;
-    assert (has_attempt t c)
-
-  and add_success (t:term) (c:Context.t) (pt:proof_term): unit =
-    assert (has_attempt t c);
-    begin
-      let tset = Context.proved_set c in
-      try
-        let pt_opt_found = AttemptMap.find (t,tset) !attempt_map in
-        match pt_opt_found with
-          None ->
-            attempt_map := AttemptMap.add (t,tset) (Some pt) !attempt_map
-        | Some _ ->
-            assert false (* No multiple successes! *)
-      with Not_found ->
-        assert false (* Success can be added only if attempt has
-                        been added before *)
-    end;
-    assert (has_attempt t c);
-    assert (has_success t c)
-
-  and reset_attempts (): unit =
-    attempt_map := AttemptMap.empty
-  in
-
   let pre_terms: term list = List.rev_map exp2term pre
   in
 
@@ -695,33 +636,14 @@ let prove
     end;
     inc_goals ();
     begin
-      let att,pt_opt = attempt t c in
-      if att then
-        match pt_opt with
-          None ->
-            assert (has_attempt t c);
-            (do_trace (trace_term  "Failure (2ndloop)"  t level);
-             raise Cannot_prove)
-        | Some pt ->
-            assert (has_success t c);
-            pt
-      else
-        begin
-          assert (not (has_attempt t c));
-          assert (not (has_success t c));
-          (*add_attempt t c;
-          assert (has_attempt t c);*)
-          try
-            let t,c = enter t c in
-            do_backward t c tried;
-            do_trace (trace_term "Failure" t level);
-            raise Cannot_prove
-          with
-            Proof_found pt ->
-              (*assert (has_attempt t c);
-              add_success t c pt;*)
-              pt
-        end
+      try
+        let t,c = enter t c in
+        do_backward t c tried;
+        do_trace (trace_term "Failure" t level);
+        raise Cannot_prove
+      with
+        Proof_found pt ->
+          pt
     end
   in
 
@@ -795,7 +717,6 @@ let prove
     if not !traceflag && (Options.is_tracing_failed_proof ()) then
       begin
         traceflag := true;
-        reset_attempts ();
         try
           prove_toplevel ()
         with Cannot_prove_info i ->
@@ -812,7 +733,6 @@ let prove
       if not !traceflag && (Options.is_tracing_failed_proof ()) then
         begin
           traceflag := true;
-          reset_attempts ();
           try
             prove_toplevel ()
           with Goal_limit_info i ->
@@ -880,7 +800,6 @@ let prove_and_store
               (fun ie ->
                 let term =
                   Feature_table.assertion_term ie argnames argtypes ct ft in
-                (* let _ = Term.normalize argtypes term in*)
                 push_axiom argnames argtypes term)
               elst
         | _ ->
@@ -897,7 +816,3 @@ let prove_and_store
         List.iter
           (fun (t,pt) -> push_proved argnames argtypes t pt)
           lst
-
-
-
-
