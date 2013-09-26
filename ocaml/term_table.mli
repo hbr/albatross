@@ -10,6 +10,6 @@ val data:  int -> 'a t -> int * 'a
 
 val term:  int -> 'a t -> term
 
-val unify: term -> int -> 'a t -> (int * 'a * substitution) list
+val unify: term -> int -> 'a t -> (int * int * 'a * substitution) list
 
 val add: term -> int -> 'a -> 'a t -> 'a t

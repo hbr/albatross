@@ -5,7 +5,8 @@ open Type
 exception Failed_proof
 
 type proof_term =
-    Assume        of term
+    Axiom         of term
+  | Assume        of term
   | Discharge     of term  * proof_term  (* discharge assumption as premise *)
   | MP            of proof_term * proof_term       (* a => (a=>b) => b *)
   | Generalize    of proof_term * int

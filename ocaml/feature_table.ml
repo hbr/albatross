@@ -38,7 +38,7 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   match ft.implication with
     None -> assert false  (* Cannot happen *)
   | Some i ->
-      let args = Array.init 2 (fun i -> if i=0 then a else b) in
+      let args = Array.init 2 (fun i -> if i=1 then a else b) in
       Application (Variable (i+nbound), args)
 
 
@@ -52,7 +52,7 @@ let split_implication (t:term) (nbound:int) (ft:t): term*term =
         Variable i, Some j ->
           if i=j+nbound then begin
             assert ((Array.length args)=2);
-            args.(0), args.(1)
+            args.(1), args.(0)
           end
           else raise Not_found
       | _,_ -> raise Not_found
@@ -83,11 +83,11 @@ let implication_chain
     | Application (f,args) ->
         let len = Array.length args in
         if len=2 && is_implication f then
-          let chain = split args.(1) in
+          let chain = split args.(0) in
           ([],t) :: (List.map
                        (fun e ->
                          let premises,term=e in
-                         args.(0)::premises, term
+                         args.(1)::premises, term
                        )
                        chain)
         else
@@ -243,7 +243,7 @@ let typed_term
     | Binexp (op,e1,e2) ->
         assert (is_binary op);
         let t1,tp1 = trm e1
-        and t2,tp2 = trm e2
+        and t0,tp0 = trm e2
         and oplst = find_function (FNoperator op) 2 ct ft
         in begin
           match oplst with
@@ -254,9 +254,9 @@ let typed_term
           | [idx,tarr,rt] ->
               assert ((Array.length tarr) = 2);
               let _ = check e1 tp1 tarr.(0)
-              and _ = check e2 tp2 tarr.(1)
+              and _ = check e2 tp0 tarr.(1)
               in
-              Application (Variable (nbound+idx), [|t1;t2|]),rt
+              Application (Variable (nbound+idx), [|t0;t1|]),rt
           | _ -> not_yet_implemented ie.i
                 ("(Binexp)Typing of expression " ^
                  (string_of_expression ie.v))
@@ -396,13 +396,6 @@ let application2string
         assert false (* There are only unary and binary operators *)
   | _ ->
       normal_application2string (feature_name_to_string fn) args
-      (*(feature_name_to_string fn) ^ "("
-      ^ (String.concat
-           ","
-           (List.map
-              (fun str_op -> let str,_,_ = str_op in str)
-              (Array.to_list args)))
-      ^ ")", None, nargs*)
 
 
 

@@ -124,11 +124,11 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
 
 
 let unify (t:term) (nbt:int) (table:'a t)
-    :  (int * 'a * substitution) list =
+    :  (int * int * 'a * substitution) list =
   (* Unify the term 't' which comes from an environment with 'nbt' bound
      variables with the terms in the table 'table'.
 
-     The result is a list of triples (nargs,data,sub) where the unified
+     The result is a list of tuple (nargs,idx,data,sub) where the unified
      term 'ut' has 'nargs' arguments, it is associated with the data 'data'
      and applying the substitution 'sub' to 'ut' yields the term 't'.
    *)
@@ -171,7 +171,7 @@ let unify (t:term) (nbt:int) (table:'a t)
     IntMap.fold
     (fun i sub lst ->
       let nargs,data = IntMap.find i table.data in
-      (nargs,data,sub)::lst
+      (nargs,i,data,sub)::lst
     )
     map
     []
@@ -231,8 +231,8 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
   let lst = unify t nargs table in
   assert
     (List.for_all
-       (fun (nargs2,_,sub) ->
-         nargs2=nargs && Term_sub.is_identity sub
+       (fun (nargs2,_,_,sub) ->
+         nargs2=nargs && Term_sub.is_permutation sub
        )
        lst
     );

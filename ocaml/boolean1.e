@@ -230,4 +230,9 @@ feature     -- Distributivity of "or"
             (a or (b and c)) = ((a or b) and (a or c))
         end
 
+    all(c,b,a:BOOLEAN)
+        ensure
+            (a or (b and c)) = ((a or b) and (a or c))
+        end
+
 end

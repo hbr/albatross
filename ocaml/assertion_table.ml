@@ -39,7 +39,8 @@ type descriptor = {
     elim_opt: term option; (* !!! *)
     pt_opt: proof_term option}
 
-type t  = {seq: descriptor seq}
+type t  = {seq:           descriptor seq;
+           mutable table: proof_term Term_table.t}
 
 
 let count (at:t): int = Seq.count at.seq
@@ -66,7 +67,7 @@ let to_string
 
 (* Public functions *)
 
-let empty (): t =  {seq = Seq.empty () }
+let empty (): t =  {seq = Seq.empty (); table = Term_table.empty }
 
 
 let find_backward
@@ -110,26 +111,38 @@ let find_backward
   !res
 
 (*
-exception Exact_match_found of int * int * substitution
+exception Assertion_found of int * term array
 
-let find (t:term) (nb:int) (at:t): int * int * substitution =
+let find (t:term) (nb:int) (at:t): int * term array =
   (* Find for the term 't' which comes from an environment with 'nb'
      bound variables in the assertion table 't' the
-          idx:  index of the assertion in 't'
-          nargs: number of arguments of the assertion
-          sub:   substitution
+          idx:   index of the assertion in 't'
+          args:  the arguments
 
-     so that sub applied to ass[idx] yields 't'
+     so that t = ass[idx] args
    *)
   try
     Seq.iteri
-      (fun i ass ->
-        assert false
+      (fun i desc ->
+        let n = Array.length desc.types in
+        List.iter
+          (fun (premises,target) ->
+            if premises=[] then
+              try
+                let args,_ = Term.unify t nb target n in
+                raise (Assertion_found (i,args));
+              with Not_found ->
+                ()
+            else
+              ()
+          )
+          desc.chain
       )
       at.seq;
     raise Not_found
   with
-    Index_found idx ->
+    Assertion_found (idx,args) ->
+      idx,args
 *)
 
 
@@ -218,6 +231,9 @@ let put_assertion
     : unit =
   let nb  = Array.length types in
   let nterm = Feature_table.normalize_term term nb ft in
+  at.table <- Term_table.add nterm nb
+      (match pt_opt with None -> Axiom nterm | Some pt -> pt)
+      at.table;
   let chn = Feature_table.implication_chain nterm nb ft in
   assert (chn<>[]);
   let chn2 =

@@ -23,80 +23,6 @@ end)
 
 
 
-module Term_sub: sig
-  type t
-  val is_identity: t -> bool
-  val is_permutation: t -> bool
-  val empty:     t
-  val singleton: int -> term -> t
-  val find:      int -> t -> term
-  val mem:       int -> t -> bool
-  val add:       int -> term -> t -> t
-  val merge:     t -> t -> t
-end = struct
-  type t = term IntMap.t
-
-  let for_all (f: int -> term -> bool) (sub:t): bool =
-    IntMap.fold (fun i t res -> res && f i t) sub true
-
-  let is_identity (sub:t): bool =
-    for_all (fun i t -> Variable i = t) sub
-    (*IntMap.fold (fun i t is_id -> is_id && Variable i = t) sub true *)
-
-  let is_permutation (sub:t): bool =
-    try
-      let inverse =
-        IntMap.fold
-          (fun i t map ->
-            match t with
-              Variable j when not (IntMap.mem j sub) ->
-                IntMap.add j i map
-            | _ -> raise Not_found)
-          sub
-          IntMap.empty
-      in
-      for_all
-        (fun i t ->
-          match t with
-            Variable j -> (IntMap.find j inverse) = i
-          | _ -> assert false)
-        sub
-    with Not_found -> false
-
-  let empty = IntMap.empty
-
-  let singleton (i:int) (t:term): t =
-    IntMap.add i t IntMap.empty
-
-  let find (i:int) (sub:t): term =
-    IntMap.find i sub
-
-  let mem (i:int) (sub:t): bool =
-    IntMap.mem i sub
-
-  let add (i:int) (t:term) (sub:t): t =
-    assert (not (mem i sub));
-    IntMap.add i t sub
-
-  let merge (sub1:t) (sub2:t): t =
-    IntMap.fold
-      (fun bvar t1 res ->
-        try
-          let t2 = IntMap.find bvar sub2 in
-          if t1=t2 then res
-          else raise Not_found  (* No merge possible *)
-        with Not_found ->
-          IntMap.add bvar t1 res
-      )
-      sub1 (* map to fold *)
-      sub2 (* start map   *)
-end
-
-
-type substitution = Term_sub.t
-
-
-
 module Term: sig
 
   val to_string: term -> string
@@ -362,3 +288,95 @@ end = struct
     args,!arbitrary
 
 end
+
+
+module Term_sub: sig
+  type t
+  val is_identity: t -> bool
+  val is_permutation: t -> bool
+  val to_string: t -> string
+  val empty:     t
+  val singleton: int -> term -> t
+  val find:      int -> t -> term
+  val mem:       int -> t -> bool
+  val add:       int -> term -> t -> t
+  val merge:     t -> t -> t
+end = struct
+  type t = term IntMap.t
+
+  let to_string (sub:t): string =
+    let lst = IntMap.fold
+        (fun i t lst -> ((string_of_int i)^"->"^(Term.to_string t))::lst
+        )
+        sub
+        []
+    in
+    "{" ^ (String.concat "," (List.rev lst)) ^ "}"
+
+  let for_all (f: int -> term -> bool) (sub:t): bool =
+    IntMap.fold (fun i t res -> res && f i t) sub true
+
+  let is_identity (sub:t): bool =
+    for_all (fun i t -> Variable i = t) sub
+    (*IntMap.fold (fun i t is_id -> is_id && Variable i = t) sub true *)
+
+  let is_permutation (sub:t): bool =
+    try
+      let inverse =
+        IntMap.fold
+          (fun i t map ->
+            match t with
+              Variable j ->
+                IntMap.add j i map
+            | _ -> raise Not_found)
+          sub
+          IntMap.empty
+      in
+      for_all
+        (fun i t ->
+          match t with
+            Variable j -> (IntMap.find j inverse) = i
+          | _ -> assert false)
+        sub
+    with Not_found -> false
+
+
+  let empty = IntMap.empty
+
+  let singleton (i:int) (t:term): t =
+    IntMap.add i t IntMap.empty
+
+  let find (i:int) (sub:t): term =
+    IntMap.find i sub
+
+  let mem (i:int) (sub:t): bool =
+    IntMap.mem i sub
+
+  let add (i:int) (t:term) (sub:t): t =
+    assert (not (mem i sub));
+    IntMap.add i t sub
+
+  let merge (sub1:t) (sub2:t): t =
+    let res = ref sub2 in
+    IntMap.iter
+      (fun i t1 ->
+        let t2_opt =
+          try Some (IntMap.find i sub2)
+          with Not_found -> None
+        in
+        match t2_opt with
+          None ->
+              res := IntMap.add i t1 !res
+        | Some t2 ->
+            if t1=t2 then ()
+            else raise Not_found
+      )
+      sub1;
+    !res
+end
+
+
+type substitution = Term_sub.t
+
+
+

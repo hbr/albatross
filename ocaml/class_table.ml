@@ -98,7 +98,7 @@ let arguments
     (ct:t): int array * typ array =
   let args: (int*typ)list =
     List.flatten
-      (List.rev_map
+      (List.map
          (fun es ->
            match es with
              Untyped_entities _ ->
@@ -111,8 +111,8 @@ let arguments
                List.map (fun name -> name,t) lst)
          entlst.v)
   in
-  let argnames = List.map (fun e -> let n,_ = e in n) args
-  and argtypes = Array.of_list (List.map (fun e -> let _,t = e in t) args)
+  let argnames = List.rev_map (fun e -> let n,_ = e in n) args
+  and argtypes = List.rev_map (fun e -> let _,t = e in t) args
   in
   let rec check_names (namelst: int list) =
     match namelst with
@@ -124,7 +124,7 @@ let arguments
         else check_names t
   in
   check_names argnames;
-  (Array.of_list argnames), argtypes
+  (Array.of_list argnames), (Array.of_list argtypes)
 
 
 let feature_type
@@ -262,7 +262,9 @@ let arguments_to_string
   if nargs=0 then
       " "
   else
-    let zipped = Array.to_list (Array.init nargs (fun i -> names.(i),types.(i)))
+    let zipped =
+      Array.to_list (Array.init nargs
+                       (fun i -> let j=nargs-1-i in names.(j),types.(j)))
     in
     let llst =
       List.fold_left
