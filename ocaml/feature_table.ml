@@ -207,14 +207,14 @@ let typed_term
   let find_name (name:int): term * typ =
     let idx =
       try
-        nbound - 1 - (Search.array_find_min name names)
+        Search.array_find_min name names
       with Not_found ->
         not_yet_implemented ie.i
           ("Search in global feature table of name " ^ (ST.string name))
     in
     Variable idx,
     if idx<nbound then
-      types.(nbound-1-idx)
+      types.(idx)
     else
       assert false (* would be global *)
   in
@@ -353,7 +353,7 @@ let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
   if i<nanon then
     FNname (ST.symbol ("@" ^ (string_of_int (nanon-1-i))))
   else if i < arglen+nanon then
-    FNname names.(arglen+nanon-1-i)
+    FNname names.(i-nanon)
   else
     begin
       assert ((i-(arglen+nanon))<Seq.count ft.features);
@@ -368,7 +368,7 @@ let normal_application2string
   name ^ "("
   ^ (String.concat
        ","
-       (List.map
+       (List.rev_map
           (fun str_op -> let str,_,_ = str_op in str)
           (Array.to_list args)))
   ^ ")", None, nargs
@@ -388,9 +388,9 @@ let application2string
         ^ " " ^ (maybe_parenthesized op args.(0) true),
         Some op, nargs
       else if nargs = 2 then
-                      (maybe_parenthesized op args.(0) true)
+        (maybe_parenthesized op args.(1) true)
         ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (maybe_parenthesized op args.(1) false),
+        ^ (maybe_parenthesized op args.(0) false),
         Some op, nargs
       else
         assert false (* There are only unary and binary operators *)

@@ -98,7 +98,7 @@ let arguments
     (ct:t): int array * typ array =
   let args: (int*typ)list =
     List.flatten
-      (List.map
+      (List.rev_map
          (fun es ->
            match es with
              Untyped_entities _ ->

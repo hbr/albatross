@@ -138,7 +138,7 @@ end = struct
         and argsstr = Array.to_list (Array.map to_string args)
         in
         fstr ^ "(" ^
-        (String.concat "," argsstr)
+        (String.concat "," (List.rev argsstr))
         ^ ")"
     | Lam(tarr,t) ->
         let len = Array.length tarr in
@@ -279,7 +279,7 @@ end = struct
         else
           let jfree = j-nb in
           if jfree < len then
-            args.(len-1-jfree)
+            args.(jfree)
           else
             Variable(j + nbound - len)
       )
@@ -448,7 +448,7 @@ end = struct
       Variable _ -> t
     | Application (f,args) ->
         let fr = reduce f
-          and argsr = Array.map reduce args
+        and argsr = Array.map reduce args
         in
         app fr argsr
     | Lam(tarr,t) ->
@@ -483,10 +483,10 @@ end = struct
           if i2<nb2 then
             begin
               if not flags.(i2) then
-                (args.(nb2-1-i2) <- t1;
+                (args.(i2) <- t1;
                  flags.(i2) <- true)
               else
-                notfound_unless (args.(nb2-1-i2)=t1)
+                notfound_unless (args.(i2)=t1)
             end
           else begin
             match t1 with
@@ -517,7 +517,7 @@ end = struct
     Array.iteri
       (fun i flag ->
         if flag then ()
-        else arbitrary := (nb2-1-i)::!arbitrary )
+        else arbitrary := i::!arbitrary )
       flags;
     args,!arbitrary
 
