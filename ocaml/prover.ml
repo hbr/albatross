@@ -319,8 +319,10 @@ let assertion_to_string
 
 
 let ngoals = ref 0
-let inc_goals () =   ngoals := !ngoals + 1
-let reset_goals () = ngoals := 0
+let nfailed = ref 0
+let inc_goals ()   =  ngoals  := !ngoals + 1
+let inc_failed ()  =  nfailed := !nfailed + 1
+let reset_goals () =  ngoals  := 0; nfailed := 0
 
 
 
@@ -620,7 +622,8 @@ let prove
         if (Context.count c0) < (Context.count c) then
           ()
         else
-           (do_trace (trace_term  "Failure (1stloop)"  t level);
+           (do_trace (trace_term  "Failure (loop)"  t level);
+            inc_failed ();
            raise Cannot_prove)
       with Not_found ->
         ()
@@ -640,6 +643,7 @@ let prove
         let t,c = enter t c in
         do_backward t c tried;
         do_trace (trace_term "Failure" t level);
+        inc_failed ();
         raise Cannot_prove
       with
         Proof_found pt ->
@@ -669,7 +673,7 @@ let prove
             raise (Goal_limit_info  ie.i)
         in
         do_trace (trace_term "User success" t level);
-        Statistics.proof_done !ngoals;
+        Statistics.proof_done !ngoals !nfailed;
         reset_goals ();
         add_ctxt_close tnormal pt (level+1) split chain ctxt,
         (t,pt)::lst
