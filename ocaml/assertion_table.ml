@@ -6,21 +6,74 @@ open Proof
 open Term_table
 
 
-module Context: sig
+module Assertion_context: sig
   type t
   val  count: t -> int
 end = struct
+  type forward_descriptor = {
+      conclusion: term;
+      pt_fwd:     proof_term;
+      simpl_fwd:  bool
+    }
+
+  type backward_descriptor = {
+      premises:   term list;   (* [...,b,a] *)
+      pt_bwd:     proof_term;  (* of the whole chain a=>b=>...=>z *)
+      simpl_bwd:  bool
+    }
+
   type t = {
       proved:  proof_pair Term_table.t;
-      forward: (term * proof_term) Term_table.t;
+      forward: forward_descriptor Term_table.t;
                 (* conclusion b,
                    proof term of the implication a=>b *)
-      backward: (term list * proof_term) Term_table.t
+      backward: backward_descriptor Term_table.t
                 (* premises [a,b,...],
                    proof term of the implication a=>b=>...=>z *)
     }
 
   let count (c:t): int = Term_table.count c.proved
+
+  let add (tnorm:term) (nargs:int) (pp:proof_pair) (impid:int) (c:t): t =
+    let add0 (): t =
+      let t,pt = pp
+      in
+      let proved =
+        Term_table.add tnorm nargs pp c.proved
+      and forward =
+        try
+          let a,b = Term.binary_split tnorm (impid+nargs) in
+          Term_table.add
+            a nargs
+            {conclusion=b; pt_fwd=pt; simpl_fwd=assert false}
+            c.forward
+        with Not_found -> c.forward
+
+      and backward =
+        let lst = Term.binary_right tnorm (impid+nargs) in
+        match lst with
+          [] -> c.backward
+        | tgt::tl ->
+            Term_table.add
+              tgt nargs
+              {premises=tl;pt_bwd=pt;simpl_bwd=assert false}
+              c.backward
+      in
+      {proved  = proved;
+       forward = forward;
+       backward = backward}
+    in
+
+    let lst = Term_table.unify tnorm nargs c.proved in
+    match lst with
+      [] ->
+        add0 ()
+    | (_,_,_,sub)::tl when not (Term_sub.is_permutation sub) ->
+        assert (tl=[]);
+        add0 ()
+    | _ ->
+        c
+
 end
 
 
@@ -109,41 +162,6 @@ let find_backward
       at.seq
   end;
   !res
-
-(*
-exception Assertion_found of int * term array
-
-let find (t:term) (nb:int) (at:t): int * term array =
-  (* Find for the term 't' which comes from an environment with 'nb'
-     bound variables in the assertion table 't' the
-          idx:   index of the assertion in 't'
-          args:  the arguments
-
-     so that t = ass[idx] args
-   *)
-  try
-    Seq.iteri
-      (fun i desc ->
-        let n = Array.length desc.types in
-        List.iter
-          (fun (premises,target) ->
-            if premises=[] then
-              try
-                let args,_ = Term.unify t nb target n in
-                raise (Assertion_found (i,args));
-              with Not_found ->
-                ()
-            else
-              ()
-          )
-          desc.chain
-      )
-      at.seq;
-    raise Not_found
-  with
-    Assertion_found (idx,args) ->
-      idx,args
-*)
 
 
 

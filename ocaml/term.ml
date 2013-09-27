@@ -51,6 +51,10 @@ module Term: sig
 
   val unify: term -> int -> term -> int ->  term array * int list
 
+  val binary_split: term -> int -> term * term
+
+  val binary_right: term -> int -> term list
+
 end = struct
 
   let rec to_string (t:term): string =
@@ -287,20 +291,44 @@ end = struct
       flags;
     args,!arbitrary
 
+
+  let binary_split (t:term) (binid:int): term * term =
+    match t with
+      Application (f,args) when (Array.length args) = 2 ->
+        (match f with
+          Variable i when i=binid ->
+            (args.(1), args.(0))
+        | _ -> raise Not_found)
+    | _ -> raise Not_found
+
+  let binary_right (t:term) (binid:int): term list =
+    let rec binr (t:term) (lst:term list): term list =
+      match t with
+        Application (f,args) when Array.length args = 2 ->
+          begin
+            match f with
+              Variable i when i = binid ->
+                args.(1) :: lst
+            | _ -> lst
+          end
+      | _ -> []
+    in
+    binr t []
 end
 
 
 module Term_sub: sig
   type t
+  val to_string:   t -> string
+  val count:       t -> int
   val is_identity: t -> bool
   val is_permutation: t -> bool
-  val to_string: t -> string
-  val empty:     t
-  val singleton: int -> term -> t
-  val find:      int -> t -> term
-  val mem:       int -> t -> bool
-  val add:       int -> term -> t -> t
-  val merge:     t -> t -> t
+  val empty:       t
+  val singleton:   int -> term -> t
+  val find:        int -> t -> term
+  val mem:         int -> t -> bool
+  val add:         int -> term -> t -> t
+  val merge:       t -> t -> t
 end = struct
   type t = term IntMap.t
 
@@ -312,6 +340,12 @@ end = struct
         []
     in
     "{" ^ (String.concat "," (List.rev lst)) ^ "}"
+
+  let count (sub:t): int =
+    IntMap.fold
+      (fun i _ sum -> sum+1)
+      sub
+      0
 
   let for_all (f: int -> term -> bool) (sub:t): bool =
     IntMap.fold (fun i t res -> res && f i t) sub true
@@ -377,6 +411,3 @@ end
 
 
 type substitution = Term_sub.t
-
-
-

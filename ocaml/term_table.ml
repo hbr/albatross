@@ -128,10 +128,11 @@ let unify (t:term) (nbt:int) (table:'a t)
   (* Unify the term 't' which comes from an environment with 'nbt' bound
      variables with the terms in the table 'table'.
 
-     The result is a list of tuple (nargs,idx,data,sub) where the unified
-     term 'ut' has 'nargs' arguments, it is associated with the data 'data'
-     and applying the substitution 'sub' to 'ut' yields the term 't'.
-   *)
+     The result is a list of tuples (nargs,idx,data,sub) where the unified
+     term 'ut' has 'nargs' arguments, it has the index 'idx', it is associated
+     with the data 'data' and applying the substitution 'sub' to 'ut' yields
+     the term 't'.  *)
+
   let rec uni (t:term) (tab:node) (nb:int): substitution IntMap.t =
     let map: substitution IntMap.t =
       IntMap.map (fun avar -> Term_sub.singleton (avar-nb) t) tab.avarmap

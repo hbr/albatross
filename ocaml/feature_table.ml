@@ -28,6 +28,11 @@ let has_implication (ft:t): bool =
   | _    -> true
 
 
+let implication_index (ft:t): int =
+  assert (has_implication ft);
+  match ft.implication with
+    None -> assert false
+  | Some i -> i
 
 
 let implication_term (a:term) (b:term) (nbound:int) (ft:t)

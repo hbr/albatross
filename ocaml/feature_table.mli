@@ -8,6 +8,8 @@ val empty: unit -> t
 
 val has_implication: t -> bool
 
+val implication_index: t -> int
+
 val split_implication: term -> int -> t -> term * term
 
 val implication_chain: term -> int -> t
