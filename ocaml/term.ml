@@ -301,17 +301,19 @@ end = struct
         | _ -> raise Not_found)
     | _ -> raise Not_found
 
-  let binary_right (t:term) (binid:int): term list =
+
+
+  let rec binary_right (t:term) (binid:int): term list =
     let rec binr (t:term) (lst:term list): term list =
       match t with
         Application (f,args) when Array.length args = 2 ->
           begin
             match f with
               Variable i when i = binid ->
-                args.(1) :: lst
-            | _ -> lst
+                binr args.(0) (args.(1) :: lst)
+            | _ -> t::lst
           end
-      | _ -> []
+      | _ -> t::lst
     in
     binr t []
 end
@@ -319,17 +321,19 @@ end
 
 module Term_sub: sig
   type t
-  val to_string:   t -> string
-  val count:       t -> int
-  val is_identity: t -> bool
-  val is_permutation: t -> bool
-  val empty:       t
-  val singleton:   int -> term -> t
-  val find:        int -> t -> term
-  val mem:         int -> t -> bool
-  val add:         int -> term -> t -> t
-  val merge:       t -> t -> t
+  val to_string:      t -> string
+  val count:          t -> int
+  val is_identity:    t -> bool
+(*  val is_permutation: t -> bool*)
+  val is_injective:   t -> bool
+  val empty:          t
+  val singleton:      int -> term -> t
+  val find:           int -> t -> term
+  val mem:            int -> t -> bool
+  val add:            int -> term -> t -> t
+  val merge:          t -> t -> t
 end = struct
+
   type t = term IntMap.t
 
   let to_string (sub:t): string =
@@ -353,6 +357,26 @@ end = struct
   let is_identity (sub:t): bool =
     for_all (fun i t -> Variable i = t) sub
     (*IntMap.fold (fun i t is_id -> is_id && Variable i = t) sub true *)
+
+
+  let inverse (sub:t): t =
+    IntMap.fold
+      (fun i t inv ->
+        match t with
+          Variable j when not (IntMap.mem j inv) ->
+            IntMap.add j (Variable i) inv
+        | _ -> raise Not_found
+      )
+      sub
+      IntMap.empty
+
+  let is_injective (sub:t): bool =
+    try
+      let _ = inverse sub in
+      true
+    with Not_found ->
+      false
+
 
   let is_permutation (sub:t): bool =
     try

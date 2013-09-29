@@ -143,7 +143,7 @@ let unify (t:term) (nbt:int) (table:'a t)
     | Variable i ->
           IntMap.fold
           (fun idx (ovar,ffree) map ->
-            if (i<nb && ovar=i) || ovar-ffree = i-nbt then
+            if (i<nb && ovar=i) || nb<=i && ovar-ffree = i-nbt then
               IntMap.add idx Term_sub.empty map
             else
               map
@@ -230,11 +230,25 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
   assert (t = term ((count table)-1) table);
   assert ((nargs,dat) = data ((count table)-1) table);
   let lst = unify t nargs table in
-  assert
-    (List.for_all
-       (fun (nargs2,_,_,sub) ->
-         nargs2=nargs && Term_sub.is_permutation sub
+  let all_injective =
+    List.for_all
+      (fun (_,_,_,sub) ->
+        Term_sub.is_injective sub
+      )
+      lst
+  in
+  (*Printf.printf "added idx=%d, nargs=%d, term=%s\n"
+    idx nargs (Term.to_string t);*)
+  (if not all_injective then
+    (Printf.printf "term = %s\n" (Term.to_string t);
+     List.iter
+       (fun (nargs,idx,_,sub) ->
+         let t = term idx table in
+         Printf.printf "nargs=%d, idx=%d, term=%s, sub=%s\n"
+           nargs idx (Term.to_string t) (Term_sub.to_string sub)
        )
-       lst
-    );
+       lst)
+  else
+    ());
+  assert all_injective;
   table
