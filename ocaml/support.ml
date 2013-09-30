@@ -107,9 +107,9 @@ end = struct
       Printf.printf "\
 Statistics
     proofs %4d
-    goals (success/failed)
-        per proof  max %d/%d, avg %d/%d
-        total %d/%d
+    goals (failed)
+        per proof  max %d(%d), avg %d(%d)
+        total %d(%d)
 "
         !np
         !max  !maxf (average_goals ()) (average_failed ())
