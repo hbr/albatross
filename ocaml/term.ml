@@ -51,6 +51,8 @@ module Term: sig
 
   val unify: term -> int -> term -> int ->  term array * int list
 
+  val binary: int -> term -> term -> term
+
   val binary_split: term -> int -> term * term
 
   val binary_right: term -> int -> term list
@@ -292,6 +294,13 @@ end = struct
     args,!arbitrary
 
 
+
+  let binary (binid:int) (left:term) (right:term): term =
+    let args = [| right; left |] in
+    Application (Variable binid, args)
+
+
+
   let binary_split (t:term) (binid:int): term * term =
     match t with
       Application (f,args) when (Array.length args) = 2 ->
@@ -319,19 +328,25 @@ end = struct
 end
 
 
+
+
+
+
+
+
+
 module Term_sub: sig
   type t
   val to_string:      t -> string
   val count:          t -> int
-  val is_identity:    t -> bool
-(*  val is_permutation: t -> bool*)
   val is_injective:   t -> bool
   val empty:          t
   val singleton:      int -> term -> t
   val find:           int -> t -> term
   val mem:            int -> t -> bool
-  val add:            int -> term -> t -> t
+  val add:            int -> term ->  t -> t
   val merge:          t -> t -> t
+  val arguments:      int -> t -> term array
 end = struct
 
   type t = term IntMap.t
@@ -354,10 +369,6 @@ end = struct
   let for_all (f: int -> term -> bool) (sub:t): bool =
     IntMap.fold (fun i t res -> res && f i t) sub true
 
-  let is_identity (sub:t): bool =
-    for_all (fun i t -> Variable i = t) sub
-    (*IntMap.fold (fun i t is_id -> is_id && Variable i = t) sub true *)
-
 
   let inverse (sub:t): t =
     IntMap.fold
@@ -377,26 +388,6 @@ end = struct
     with Not_found ->
       false
 
-
-  let is_permutation (sub:t): bool =
-    try
-      let inverse =
-        IntMap.fold
-          (fun i t map ->
-            match t with
-              Variable j ->
-                IntMap.add j i map
-            | _ -> raise Not_found)
-          sub
-          IntMap.empty
-      in
-      for_all
-        (fun i t ->
-          match t with
-            Variable j -> (IntMap.find j inverse) = i
-          | _ -> assert false)
-        sub
-    with Not_found -> false
 
 
   let empty = IntMap.empty
@@ -427,10 +418,20 @@ end = struct
               res := IntMap.add i t1 !res
         | Some t2 ->
             if t1=t2 then ()
-            else raise Not_found
+            else ((*Printf.printf "    Cannot merge sub\n";*) raise Not_found)
       )
       sub1;
     !res
+
+  let arguments (nargs:int) (sub:t): term array =
+    let args = Array.make nargs (Variable 0) in
+    IntMap.iter
+      (fun i t ->
+        assert (i<nargs);
+        args.(i) <- t)
+      sub;
+    args
+
 end
 
 
