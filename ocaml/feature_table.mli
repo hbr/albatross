@@ -37,5 +37,7 @@ val term: info_expression -> int array -> typ array
 
 val term_to_string: term -> int array -> t -> string
 
+val raw_term_to_string: term -> int -> t -> string
+
 val print: Class_table.t -> t -> unit
 

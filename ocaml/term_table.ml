@@ -9,9 +9,6 @@ type node = {
                                        first_free *)
     fapp:    (node * node array) IntMap.t;
                              (* one for each number of arguments *)
-    (*fapp:    node IntMap.t;  (* one node for the function term
-                                and one node for each argument   *)
-    lammap:  (typ array * node) IntMap.t (* Rework ??? *)*)
   }
 
 
@@ -93,6 +90,19 @@ let term (idx:int) (table:'a t): term =
 
 
 
+let join_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
+    : substitution IntMap.t =
+  (* Join the two disjoint maps 'm1' and 'm2' *)
+  IntMap.fold
+    (fun idx sub2 map ->
+      assert (not (IntMap.mem idx m1)); (* maps must be disjoint! *)
+      IntMap.add idx sub2 map
+    )
+    m2  (* map to fold *)
+    m1  (* start map   *)
+
+
+
 
 let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
     : substitution IntMap.t =
@@ -101,9 +111,6 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
      The domain of the merge is the subset of the intersection of both domains
      where the corresponding substitutions are mergeable (i.e. do not have
      different terms for the same variable).
-
-     Note: The algorithm is more efficient if 'm1' has the smaller domain,
-     because the algorithm iterates over the domain of 'm1'.
    *)
   IntMap.fold
     (fun idx sub1 res ->
@@ -113,7 +120,8 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
           let sub  = Term_sub.merge sub1 sub2 in
           IntMap.add idx sub res
         with Not_found ->
-          IntMap.remove idx res
+          res
+          (*IntMap.remove idx res*)
       with Not_found ->
         res
     )
@@ -121,6 +129,13 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
     IntMap.empty
 
 
+
+let write_map (map: substitution IntMap.t) (level:int): unit =
+  IntMap.iter
+    (fun idx sub ->
+      Printf.printf "%d: idx=%d, sub=%s\n" level idx (Term_sub.to_string sub)
+    )
+    map
 
 
 let unify (t:term) (nbt:int) (table:'a t)
@@ -132,18 +147,22 @@ let unify (t:term) (nbt:int) (table:'a t)
      term 'ut' has 'nargs' arguments, it has the index 'idx', it is associated
      with the data 'data' and applying the substitution 'sub' to 'ut' yields
      the term 't'.  *)
-
-  let rec uni (t:term) (tab:node) (nb:int): substitution IntMap.t =
+  (*Printf.printf "unify size=%d nbt=%d term=%s\n"
+    (count table) nbt (Term.to_string t);*)
+  let rec uni (t:term) (tab:node) (nb:int) (level:int): substitution IntMap.t =
+    assert (nb=0); (* as long as there are no lambda terms *)
     let map: substitution IntMap.t =
-      IntMap.map (fun avar -> Term_sub.singleton (avar-nb) t) tab.avarmap
+      IntMap.map (fun avar ->
+        Term_sub.singleton (avar-nb) t) tab.avarmap
+    and ffreet = nb+nbt  (* first free variable in the term 't' *)
     in
     match t with
-      Variable i when nb<=i && i<nbt ->
+      Variable i when nb<=i && i<ffreet ->
         map
     | Variable i ->
           IntMap.fold
           (fun idx (ovar,ffree) map ->
-            if (i<nb && ovar=i) || nb<=i && ovar-ffree = i-nbt then
+            if (i<nb && ovar=i) || ffreet<=i && ovar-ffree = i-ffreet then
               IntMap.add idx Term_sub.empty map
             else
               map
@@ -151,31 +170,52 @@ let unify (t:term) (nbt:int) (table:'a t)
           tab.ovarmap
           map
     | Application (f,args) ->
+        let res =
         begin
           try
             let len           = Array.length args in
             let ftab, argtabs = IntMap.find len tab.fapp in
-            let fmap = ref (uni f ftab nb) in
+            let fmap = ref (uni f ftab nb (level+1)) in
             Array.iteri
-            (fun i a ->
-              let amap = uni a argtabs.(i) nb in
-              fmap := merge_map !fmap amap)
+              (fun i a ->
+                let amap = uni a argtabs.(i) nb (level+1) in
+                fmap := merge_map !fmap amap;
+              )
               args;
-            !fmap
+            (*!fmap      (* join with map !!! *)*)
+            join_map map !fmap
           with Not_found ->
-            IntMap.empty
-        end
+            map
+        end in
+        (*Printf.printf "%d: App map\n" level;
+        write_map res level;*)
+        res
     | Lam (tarr,t) ->
         assert false
   in
-  let map = uni t table.root 0 in
-    IntMap.fold
-    (fun i sub lst ->
-      let nargs,data = IntMap.find i table.data in
-      (nargs,i,data,sub)::lst
-    )
-    map
-    []
+  try
+    let map = uni t table.root 0 0 in
+    let res =
+      IntMap.fold
+        (fun i sub lst ->
+          let nargs,data = IntMap.find i table.data in
+          (nargs,i,data,sub)::lst
+        )
+        map
+        []
+    in
+    (*Printf.printf "  uni result map:\n";
+    List.iter
+      (fun (nargs,idx,_,sub) ->
+        Printf.printf "  nargs=%d, idx=%d, sub=%s\n"
+          nargs idx (Term_sub.to_string sub)
+      ) res;*)
+    res
+  with Not_found ->
+    (*Printf.printf "not found\n";*)
+    raise Not_found
+
+
 
 
 
@@ -217,6 +257,10 @@ let add_term (t:term) (nargs:int) (idx:int) (tab:node): node =
 
 
 
+
+
+
+
 let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
   (* Add the term 't' which has 'nargs' arguments to the table 'table' and
      associate with it the data 'dat'.
@@ -238,7 +282,7 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
       lst
   in
   (*Printf.printf "added idx=%d, nargs=%d, term=%s\n"
-    idx nargs (Term.to_string t);*)
+    idx nargs (Term.to_string t);
   (if not all_injective then
     (Printf.printf "term = %s\n" (Term.to_string t);
      List.iter
@@ -249,6 +293,19 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
        )
        lst)
   else
-    ());
-  assert all_injective;
+    ());*)
+  (*assert all_injective;*) (* too strong ?! *)
   table
+
+
+let write (table: 'a t): unit =
+  let n = count table in
+  let rec writ (i:int): unit =
+    if i=0 then ()
+    else
+      (Printf.printf "  %2d: %s\n"
+         (n-i)
+         (Term.to_string (term (n-i) table));
+       writ (i-1))
+  in
+  writ n

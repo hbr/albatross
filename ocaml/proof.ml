@@ -2,7 +2,6 @@ open Container
 open Term
 open Type
 
-exception Failed_proof
 
 type proof_term =
     Axiom         of term
@@ -12,9 +11,11 @@ type proof_term =
   | Generalize    of proof_term * int
   | Theorem       of int
   | Specialize    of proof_term * term array
+  | Formal_args   of int * proof_term
 
 
 type proof_pair = term * proof_term
+
 
 
 
@@ -125,4 +126,42 @@ module Commands = struct
     | Resolve
     | Induction of int
     | Contradiction of term
+end
+
+
+module Checker: sig
+  val term: proof_term -> int -> int -> (int->int*term) -> term
+end = struct
+  let term (pt:proof_term) (nb:int) (imp_id:int)
+      (global: int -> int*term)
+      : term =
+    let rec termr (pt:proof_term) (nb:int): term  =
+      match pt with
+        Axiom  t -> t
+      | Assume a -> a
+      | Discharge (a,ptb) ->
+          let b = termr ptb nb in
+          Term.binary (imp_id+nb) a b
+      | MP (pta, ptimp) ->
+          let a,imp = termr pta nb, termr ptimp nb in
+          let a0,b0 = Term.binary_split imp imp_id in
+          if a=a0 then b0
+          else         (
+            Printf.printf "MP\n  a=%s\n  a0=%s\n  b0=%s\n  imp=%s\n"
+              (Term.to_string a) (Term.to_string a0)
+              (Term.to_string b0) (Term.to_string imp);
+            raise Not_found)
+      | Formal_args (n,pt) ->
+          termr pt (n+nb)
+      | Theorem idx ->
+          let nargs,t = global idx in
+          let term = Term.upbound nb nargs t
+          in
+          Lam (nargs,term)
+      | Specialize (pt,args) ->
+          let t = termr pt nb in
+          Term.reduce (Application (t,args))
+      | _ -> assert false
+    in
+    termr pt nb
 end

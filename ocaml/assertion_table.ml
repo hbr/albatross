@@ -12,20 +12,27 @@ module Assertion_context: sig
   val  count: t -> int
   val  has:   term -> int -> t -> bool
   val  empty: t
+  val  proof_pair: int -> t -> int * proof_pair
   val  add:   term -> proof_term -> int -> int -> t -> t
+  val find:   term -> int -> t
+    -> int * int * proof_pair * Term_sub.t
+  val  forward: term -> int -> t
+    -> (int * int * proof_pair * Term_sub.t * bool * bool) list
+  val  backward: term  -> int -> t
+    -> (int * int * proof_pair * Term_sub.t * bool) list
 
 end = struct
 
   type t = {
-      proved:  proof_term Term_table.t;
-      forward: (term * int * bool * bool) Term_table.t;
-                (* conclusion b,
-                   index of the implication a=>b
+      proved:  proof_pair Term_table.t;
+      forward: (int * proof_pair * bool * bool) Term_table.t;
+                (* index of the implication a=>b
+                   proof pair of the implication
                    is simplification rule
                    is closed *)
-      backward: (term list * int * bool) Term_table.t
-                (* premises [...,b,a],
-                   index of the implication a=>b=>...=>z
+      backward: (int * proof_pair * bool) Term_table.t
+                (* index of the implication a=>b=>...=>z
+                   proof pair of the implication
                    is simplification rule *)
     }
 
@@ -34,6 +41,10 @@ end = struct
   let empty: t = {proved=Term_table.empty; forward=Term_table.empty;
                   backward=Term_table.empty}
 
+
+  let proof_pair (idx:int) (c:t): int * proof_pair =
+    assert (idx < count c);
+    Term_table.data idx c.proved
 
   let has (t:term) (nargs:int) (c:t): bool =
     let lst = Term_table.unify t nargs c.proved in
@@ -44,20 +55,25 @@ end = struct
 
 
   let find (t:term) (nbt:int) (c:t)
-      : int * int * proof_term * Term_sub.t =
+      : int * int * proof_pair * Term_sub.t =
     (* Find an assertion which is unifyable with the term 't' with 'nbt'
        bound variables.
 
        Return:  nargs: number of formal arguments of the assertion
                 idx:   index of the assertion
-                pt:    proof term of the assertion
+                pp:    proof pair of the assertion
                 sub:   substitution if applied to the assertion term
                        yields 't'
      *)
     let lst = Term_table.unify t nbt c.proved in
     match lst with
       []    -> raise Not_found
-    | [res] -> res
+    | [res] ->
+        let nargs,idx,(t0,_),sub = res in
+        let args = Term_sub.arguments nargs sub in
+        let tt = Term.sub t0 args nbt in
+        assert(t=tt);
+        res
     | _     -> assert false
 
 
@@ -65,24 +81,22 @@ end = struct
 
 
 
-  let conclusions (t:term) (nbt:int) (c:t)
-      : (int * int * proof_term * Term_sub.t * term * bool * bool) list =
+  let forward (t:term) (nbt:int) (c:t)
+      : (int * int * proof_pair * Term_sub.t * bool * bool) list =
     (* Find all assertions of the form 'a=>b' so that 't' can be unified
        with 'a' and 'a=>b' is a valid forward rule
 
        Return:  nargs:  number of formal arguments of 'a=>b'
                 idx:    index of 'a=>b'
-                pt:     proof term of 'a=>b'
+                pp:     proof pair of 'a=>b'
                 sub:    substitution if applied to 'a' yields 't'
-                u:      'sub' applied to 'b'
                 simpl:  is simplification rule
                 closed: 'sub' applied to 'b' does not leave open formal args
      *)
     let lst = Term_table.unify t nbt c.forward in
     List.rev_map
-      (fun (_,_,(b,idx,simpl,closed),sub) ->
-        let nargs,pt = Term_table.data idx c.proved in
-        nargs,idx,pt,sub,assert false,simpl,closed
+      (fun (nargs,_,(idx,pp,simpl,closed),sub) ->
+        nargs,idx,pp,sub,simpl,closed
       )
       lst
 
@@ -91,29 +105,50 @@ end = struct
 
 
 
-  let premises (t:term) (nbt:int) (c:t)
-      : (int * int * proof_term * Term_sub.t * term list * bool) list =
+  let backward (t:term) (nbt:int) (c:t)
+      : (int * int * proof_pair * Term_sub.t * bool) list =
     (* Find all assertions of the form 'a=>b=>...=>z' so that 't' can be
        unified with 'z' and 'a=>b=>...=>z' is a valid backward rule
 
-       Return:  nargs:  number of formal arguments of 'a=>b'
+       Return:  nargs:  number of formal arguments of 'a=>b=>...=>z'
                 idx:    index of 'a=>b=>...=>z'
-                pt:     proof term of 'a=>b=>...=>z'
+                pp:     proof pair of 'a=>b=>...=>z'
                 sub:    substitution if applied to 'z' yields 't'
-                ps:     [...,b.sub,a.sub]
                 simpl:  is simplification rule
      *)
-    assert false
+    List.rev_map
+      (fun (nargs,_,(idx,pp,simpl),sub)->
+        nargs,idx,pp,sub,simpl
+      )
+      (Term_table.unify t nbt c.backward)
 
 
-
+  let implication_chain (t:term) (impid:int)
+      : (term list * term) list =
+    let rec chainr (t:term) (lst: (term list * term) list)
+        : (term list * term) list =
+      try
+        let a,b = Term.binary_split t impid in
+        let lst =
+          List.map
+            (fun (ps,tgt) -> a::ps,tgt)
+            (chainr b lst)
+        in
+        ([a],b)::lst
+      with Not_found ->
+        lst
+    in
+    chainr t []
 
 
   let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
-    let idx = Term_table.count c.proved in
+    let idx = Term_table.count c.proved
+    and pp  = t,pt
+    in
+    (*Printf.printf "idx=%d to ass ctxt %s\n" idx (Term.to_string t);*)
     let add0 (): t =
       let proved =
-        Term_table.add t nargs pt c.proved
+        Term_table.add t nargs pp c.proved
       and forward =
         try
           let a,b = Term.binary_split t (impid+nargs) in
@@ -129,46 +164,78 @@ end = struct
           if is_simpl || is_elim then
             ((*Printf.printf "forward rule found simpl=%B closed=%B\n"
                is_simpl is_closed;*)
-             Term_table.add a nargs (b,idx,is_simpl,is_closed) c.forward)
+             Term_table.add a nargs (idx,pp,is_simpl,is_closed) c.forward)
           else
             c.forward
         with Not_found -> c.forward
 
       and backward =
-        let lst = Term.binary_right t (impid+nargs) in
+        List.fold_left
+          (fun table (premises,target) ->
+            let bvars_tgt = Term.bound_variables target nargs
+            and n_tgt     = Term.nodes target
+            in
+            let ok,simpl =
+              List.fold_left
+                (fun (ok,simpl) p ->
+                  ok &&
+                  p<>target &&
+                  IntSet.subset (Term.bound_variables p nargs) bvars_tgt,
+                  simpl && (Term.nodes p) <= n_tgt)
+                (true,true)
+                premises
+            in
+            if ok then
+              ((*Printf.printf "backward rule found simpl %B premises=%d\n"
+                 simpl (List.length premises);*)
+              Term_table.add target nargs (idx,pp,simpl) table)
+            else
+              table
+          )
+          c.backward
+          (implication_chain t (impid+nargs))
+
+        (*let lst = Term.binary_right t (impid+nargs) in
         match lst with
           [] | [_] -> c.backward
         | target::premises ->
             let bvars_tgt = Term.bound_variables target nargs
             and n_tgt     = Term.nodes target
             in
-            let bvars_ok,simpl =
+            let ok,simpl =
               List.fold_left
-                (fun (bvars_ok,simpl) p ->
-                  bvars_ok &&
+                (fun (ok,simpl) p ->
+                  ok &&
+                  p<>target &&
                   IntSet.subset (Term.bound_variables p nargs) bvars_tgt,
                   simpl && (Term.nodes p) <= n_tgt)
                 (true,true)
                 premises
             in
-            if bvars_ok then
-              ((*Printf.printf "backward rule found simpl %B\n" simpl;*)
-              Term_table.add target nargs (premises,idx,simpl) c.backward)
+            if ok then
+              (Printf.printf "backward rule found simpl %B premises=%d\n"
+                 simpl (List.length premises);
+              Term_table.add target nargs (idx,pp,simpl) c.backward)
             else
-              c.backward
+              c.backward*)
       in
-      {proved  = proved;
-       forward = forward;
-       backward = backward}
+      let res =
+        {proved  = proved;
+         forward = forward;
+         backward = backward}
+      in
+      (*Printf.printf "Proved item added, table ... \n";
+      Term_table.write res.proved;*)
+      res
     in
 
     let lst = Term_table.unify t nargs c.proved in
     match lst with
       [] ->
         add0 ()
-    | (_,_,_,sub)::tl when not (Term_sub.is_injective sub) ->
+    (*| (_,_,_,sub)::tl when not (Term_sub.is_injective sub) ->
         assert (tl=[]);
-        add0 ()
+        add0 () *)
     | _ ->
         Printf.printf "duplicate\n";
         c
@@ -188,15 +255,19 @@ type descriptor = {
     nterm: term;
     chain: (term list * term) list;
     fwd_opt: term option;
-    elim_opt: term option; (* !!! *)
     pt_opt: proof_term option}
 
 type t  = {seq:           descriptor seq;
-           mutable table: proof_term Term_table.t;
            mutable context: Assertion_context.t}
 
 
 let count (at:t): int = Seq.count at.seq
+
+let term (idx:int) (at:t): int * term =
+  assert (idx < count at);
+  let desc = Seq.elem at.seq idx in
+  let nargs = Array.length desc.types in
+  nargs,desc.nterm
 
 let assertion_to_string
     (d:descriptor)
@@ -220,7 +291,7 @@ let to_string
 
 (* Public functions *)
 
-let empty (): t =  {seq = Seq.empty (); table = Term_table.empty;
+let empty (): t =  {seq = Seq.empty ();
                     context = Assertion_context.empty}
 
 
@@ -240,6 +311,39 @@ let find_backward
 
      which proves ass[idx](args) = (a=>b=>...=>t)
    *)
+  let write_list str lst =
+    Printf.printf "backward list %s\n" str;
+    Mylist.iteri
+      (fun i ((t,pt),idx) ->
+        Printf.printf " %d idx=%d %s\n"
+          i idx
+          (Feature_table.raw_term_to_string t nb ft)
+      )
+      lst
+  in
+  let lst =
+    List.fold_left
+      (fun lst (nargs,idx,(t,pt),sub,simpl) ->
+        if simpl then
+          let args = Term_sub.arguments nargs sub in
+          let tt = Term.sub t args nb in
+          ((tt,Specialize(Theorem idx,args)),idx)::lst
+        else
+          lst
+      )
+      []
+      (Assertion_context.backward t nb at.context)
+  in
+  let lst =
+    try
+      let nargs,idx,(t,pt),sub = Assertion_context.find t nb at.context in
+      let args = Term_sub.arguments nargs sub in
+      let tt = Term.sub t args nb in
+      ((tt,Specialize(Theorem idx,args)),idx)::lst
+    with Not_found -> (*Printf.printf "  no direct match\n";*)
+      lst
+  in
+  (*Printf.printf "%d backward rules found\n" (List.length lst);*)
   let res = ref []
   in
   begin
@@ -262,20 +366,27 @@ let find_backward
       )
       at.seq
   end;
-  !res
+  (*Printf.printf "Term to match %s\n"
+    (Feature_table.raw_term_to_string t nb ft);
+  if (List.length !res) <> (List.length lst) then
+    Printf.printf "!! Table and Context different !!\n";
+  write_list "Table" !res;
+  write_list "Context" lst;*)
+  (*!res*)
+  lst
 
 
 
 
 let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
-    :(proof_pair * int) list * (term * int * term array * int) list =
+    :(proof_pair * int) list =
   (* The direct consequences of the term 't' in an enviroment with 'nb' bound
      variables, i.e. if the assertion table has a proved assertion of the form
      'a=>b' and 'a' can be unified with the term 't' and 'b' is not more
      complex than 'a' then 'b' transformed into the environment of term 't'
      is a direct consequence of 't'.
 
-     a) direct consequences
+     direct consequences
          If
 
               ass[idx](args) = (t=>u)
@@ -283,56 +394,55 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
          then the proof pair is
 
               t=>u, Specialize (Theorem idx, args)
-
-     b) eliminations
-
-          There is a an assertion variable i and arguments args so
-          that
-
-          for all c
-              args.(nb_ass-1-i ) <- c
-              ass[idx](args) = (t => ... => c)
-
-          ass[idx], i, args, idx
    *)
-  let res  = ref []
-  and res2 = ref []
-  in
-  begin
-    Seq.iteri
-      (fun i desc ->
-        let n = Array.length desc.types in
-        begin
-          match desc.fwd_opt with
-            None -> ()
-          | Some fwd ->
-              try
-                let args,_ = Term.unify t nb fwd n in
-                let tt = Term.sub desc.nterm args nb in
-                res := ((tt,Specialize (Theorem i, args)),i) :: !res
-              with Not_found ->
-                ()
-        end;
-        begin
-          match desc.elim_opt with
-            None -> ()
-          | Some elim ->
-              try
-                let args,arbitrary = Term.unify t nb elim n in
-                match arbitrary with
-                  [tgt_var] ->
-                    res2 :=
-                      ((Seq.elem at.seq i).term, i, args, tgt_var)
-                      :: !res2
-                | _ ->
-                    assert false (* Cannot happen *)
-              with Not_found ->
-                ()
-        end
+  let write_list str lst =
+    Printf.printf "%s\n" str;
+    Mylist.iteri
+      (fun i ((t,_),idx) ->
+        Printf.printf "%d: idx=%d, %s\n" i idx
+          (Feature_table.raw_term_to_string t nb ft)
       )
-      at.seq
-  end;
-  !res, !res2
+      lst
+  in
+  let lst =
+    List.fold_left
+      (fun lst (nargs,idx,(t,pt),sub,simpl,closed) ->
+        if simpl && closed then
+          let args = Term_sub.arguments nargs sub in
+          let tt = Term.sub t args nb in
+          ((tt,Specialize(Theorem idx,args)),idx)::lst
+        else
+          lst
+      )
+      []
+      (Assertion_context.forward t nb at.context)
+  in
+  let res  = ref []
+  in
+  Seq.iteri
+    (fun i desc ->
+      let n = Array.length desc.types in
+      begin
+        match desc.fwd_opt with
+          None -> ()
+        | Some fwd ->
+            try
+              let args,_ = Term.unify t nb fwd n in
+              let tt = Term.sub desc.nterm args nb in
+              res := ((tt,Specialize (Theorem i, args)),i) :: !res
+            with Not_found ->
+              ()
+      end
+    )
+    at.seq;
+  (*Printf.printf "Term to match %s\n"
+    (Feature_table.raw_term_to_string t nb ft);
+  if (List.length !res) <> (List.length lst) then
+    Printf.printf "!! Table and Context different !!\n";
+  write_list "Table" !res;
+  write_list "Context" lst;*)
+  (*!res*)
+  lst
 
 
 
@@ -350,9 +460,6 @@ let put_assertion
     : unit =
   let nb  = Array.length types in
   let nterm = Feature_table.normalize_term term nb ft in
-  at.table <- Term_table.add nterm nb
-      (match pt_opt with None -> Axiom nterm | Some pt -> pt)
-      at.table;
   at.context <-
     Assertion_context.add nterm
       (match pt_opt with None -> Axiom nterm | Some pt -> pt)
@@ -400,48 +507,18 @@ let put_assertion
     with Not_found ->
       None
   in
-
-  let elim_opt =
-    let premises,target = List.hd (List.rev chn)
-    in
-    match premises with
-      [] -> None
-    | p0::tl -> begin
-        let bvars_p0, fvars_p0  = Term.split_variables p0 nb
-        and bvars_tgt,fvars_tgt = Term.split_variables target nb
-        in
-        let elim_vars (): IntSet.t =
-          List.fold_left
-            (fun set p ->
-              IntSet.diff set (Term.free_variables p nb))
-                (IntSet.diff fvars_p0 fvars_tgt)
-            tl
-        in
-        match target with
-          Variable i_tgt when
-            not (IntSet.mem i_tgt bvars_p0)
-              && (IntSet.cardinal bvars_p0) + 1 = nb
-              && not (IntSet.is_empty (elim_vars ()))
-          ->
-            begin
-              ((*Printf.printf "Elimination rule found\n";*)
-               Some p0)
-            end
-        | _ ->
-            None
-    end
-  in
-
-  Seq.push
-    at.seq
-    {names    = names;
-     types    = types;
-     term     = term;
-     nterm    = nterm;
-     pt_opt   = pt_opt;
-     chain    = chn2;
-     fwd_opt  = fwd_opt;
-     elim_opt = elim_opt}
+  if (Seq.count at.seq) < (Assertion_context.count at.context) then
+    Seq.push
+      at.seq
+      {names    = names;
+       types    = types;
+       term     = term;
+       nterm    = nterm;
+       pt_opt   = pt_opt;
+       chain    = chn2;
+       fwd_opt  = fwd_opt}
+  else
+    Printf.printf "Duplicate, do not enter in at.seq\n"
 
 
 

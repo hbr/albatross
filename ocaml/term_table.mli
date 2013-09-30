@@ -13,3 +13,5 @@ val term:  int -> 'a t -> term
 val unify: term -> int -> 'a t -> (int * int * 'a * substitution) list
 
 val add: term -> int -> 'a -> 'a t -> 'a t
+
+val write: 'a t -> unit

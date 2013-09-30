@@ -86,13 +86,11 @@ module Context: sig
   val proof_term:   term -> t -> proof_term
   val is_proved:    term -> t -> bool
   val proved_terms: t -> proof_pair list
-  val proved_set:   t -> TermSet.t
   val backward_set: term -> t -> BwdSet.t
   val consequences: term -> proof_term -> t -> proof_pair list
   val add_proof:    term -> proof_term -> t -> t
   val add_forward:  term -> term -> proof_term -> t -> t
   val add_backward: (term list * term) list -> proof_term -> t -> t
-  val one_eliminated: term -> t -> proof_pair * t
 
 end = struct
 
@@ -102,29 +100,14 @@ end = struct
       bwd_set:    BwdSet.t
     }
 
-  type elimination_descriptor = {
-      elim_term:      term; (* term to be eliminated *)
-      n_bound:        int;  (* of the environment of the term *)
-      assertion_term: term;
-      assertion_idx:  int;
-      args:           term array;
-      var_target:     int
-    }
-
   type t = {
       map:   term_descriptor TermMap.t;
-      elims: elimination_descriptor list;
-      eliminated: TermSet.t; (* eliminated terms, subset of proved terms *)
       count: int;            (* number of proofs in the context *)
-      proved_set: TermSet.t; (* set of proofed terms *)
     }
 
   let empty: t = {
     map = TermMap.empty;
-    elims=[];
-    eliminated = TermSet.empty;
-    count=0;
-    proved_set = TermSet.empty
+    count=0
   }
 
   let count (c:t): int = c.count
@@ -144,8 +127,6 @@ end = struct
     with Not_found ->
       false
 
-  let proved_set (c:t): TermSet.t =
-    c.proved_set
 
   let proved_terms (c:t): proof_pair list =
     let lst =
@@ -186,18 +167,16 @@ end = struct
       let d0 = TermMap.find t c.map in
       match d0.pt_opt with
         None ->
-          {c with
+          {(*c with*)
            map   = TermMap.add t {d0 with pt_opt = Some pt} c.map;
-           count = c.count + 1;
-           proved_set = TermSet.add t c.proved_set}
+           count = c.count + 1}
       | Some _ -> c
     with Not_found ->
-      {c with
+      {(*c with*)
        map = TermMap.add t {pt_opt = Some pt;
                             fwd_set = FwdSet.empty;
                             bwd_set = BwdSet.empty} c.map;
-       count = c.count + 1;
-       proved_set = TermSet.add t c.proved_set}
+       count = c.count + 1}
 
 
   let add_forward
@@ -281,20 +260,6 @@ end = struct
           add tl c
     in
     add chain c
-
-
-  let one_eliminated (t:term) (c:t): proof_pair * t =
-    match c.elims with
-      [] ->
-        raise Not_found
-    | elim::tl ->
-        let args = Array.copy elim.args in
-        args.(elim.var_target) <- t;
-        (Term.sub elim.assertion_term elim.args elim.n_bound,
-         Specialize (Theorem elim.assertion_idx, args)),
-        {c with
-         elims = tl;
-         eliminated = TermSet.add elim.elim_term c.eliminated}
 
 end
 
@@ -382,9 +347,6 @@ let prove
   and trace_term (str:string) (t:term) (l:int) (): unit =
     Printf.printf "%3d %s%-12s %s\n" l (level_string l) str (term2string t)
 
-  and trace_tagged_string (tag:string) (str:string) (l:int) (): unit =
-    Printf.printf "%3d %s%-12s %s\n" l (level_string l) tag str
-
   and trace_premises (lst:term list) (l:int) (): unit =
     let n = List.length lst in
     if n>0 then
@@ -463,10 +425,9 @@ let prove
         (lst: proof_pair list)
         (c:Context.t)
         : proof_pair list =
-      let lglobal,elims =
+      let lglobal =
         (Assertion_table.consequences t (Array.length argtypes) ft at)
       in
-      (* assert (elims = []); code for eliminations *)
       let l1 =
         (Context.consequences t pt c)
         @ (List.map (fun ((t,pt),_) -> t,pt) lglobal)
@@ -523,21 +484,7 @@ let prove
         c
         bwd_glob
     in
-    let do_elim (c:Context.t): unit =
-      (* Check if there is an elimination rule to apply, if
-         yes, mark the rule as eliminated and add it to the context
-         with the term 't' as target and try to prove the term *)
-      try
-        let (te,pte), c_elim = Context.one_eliminated t c in
-        let ctxt_new = add_ctxt_close te pte (level+1) split chain c_elim
-        in
-        let pt = prove_one t ctxt_new tried (level+1)
-        in
-        raise (Proof_found pt)
-      with Not_found ->
-        ()
-
-    and do_backward (t:term) (c:Context.t) (tried:tried_map): unit =
+    let do_backward (t:term) (c:Context.t) (tried:tried_map): unit =
       (* Backward reasoning *)
       let c = global_backward t c in
       do_trace (trace_context c (level+1));
@@ -600,7 +547,7 @@ let prove
           let c = direct b c in
           ent b c true
         with Not_found ->
-          t,c,entered
+          t,c,false
       in
       let c = direct t c in
       let t,c,entered = ent t c false in
@@ -635,7 +582,10 @@ let prove
       if (Options.has_goal_limit ())
           && (Options.goal_limit ()) <= !ngoals then
         (do_trace (trace_term "Failure (goal-limit)" t level);
+         reset_goals ();
          raise Goal_limit)
+      else
+        ()
     end;
     inc_goals ();
     begin
@@ -647,6 +597,17 @@ let prove
         raise Cannot_prove
       with
         Proof_found pt ->
+          (*let global (idx:int): int*term =
+            Assertion_table.term idx at
+          in
+          let imp_idx = Feature_table.implication_index ft in
+          let tt = Checker.term pt arglen imp_idx global in
+          (if t<>tt then
+            Printf.printf "t  = %s\ntt = %s\n"
+              (Feature_table.term_to_string t argnames ft)
+              (Feature_table.term_to_string tt argnames ft)
+          else ());*)
+          (*assert (t = tt);*)
           pt
     end
   in

@@ -405,7 +405,7 @@ let application2string
 
 
 
-let term_to_string (t:term) (names:int array) (ft:t): string =
+let term_to_string_base (t:term) (names:int array) (nanon:int) (ft:t): string =
   let fname i nanon = feature_name i names nanon ft
   in
   let rec term2str (t:term) (nanon:int): string * operator option * int =
@@ -446,8 +446,16 @@ let term_to_string (t:term) (names:int array) (ft:t): string =
     in
     "([" ^ fargs ^ "] -> " ^ tstr ^ ")"
   in
-  let s,_,_ = term2str t 0 in s
+  let s,_,_ = term2str t nanon in s
 
+
+
+let term_to_string (t:term) (names:int array) (ft:t): string =
+  term_to_string_base t names 0 ft
+
+
+let raw_term_to_string (t:term) (nanon:int) (ft:t): string =
+  term_to_string_base t [| |] nanon ft
 
 
 
