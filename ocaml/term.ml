@@ -57,6 +57,8 @@ module Term: sig
 
   val binary_right: term -> int -> term list
 
+  val implication_chain: term -> int -> (term list * term) list
+
 end = struct
 
   let rec to_string (t:term): string =
@@ -325,6 +327,27 @@ end = struct
       | _ -> t::lst
     in
     binr t []
+
+
+  let implication_chain (t:term) (impid:int)
+      : (term list * term) list =
+    let rec chainr (t:term) (lst: (term list * term) list)
+        : (term list * term) list =
+      try
+        let a,b = binary_split t impid in
+        let lst =
+          List.map
+            (fun (ps,tgt) -> a::ps,tgt)
+            (chainr b lst)
+        in
+        ([a],b)::lst
+      with Not_found ->
+        lst
+    in
+    chainr t [([],t)]
+
+
+
 end
 
 

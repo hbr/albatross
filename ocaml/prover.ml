@@ -12,37 +12,6 @@ exception Proof_found of proof_term
 
 
 
-module SizedTerm: sig
-  type t
-  val item: t -> term
-  val make: term -> t
-  val compare: t -> t -> int
-end = struct
-  type t = {size:int; term:term}
-  let item (st:t): term =
-    st.term
-  let make (t:term): t =
-    {size = Term.nodes t; term=t}
-  let compare (a:t) (b:t): int =
-    let cmp = Pervasives.compare a.size b.size in
-    if cmp = 0 then
-      Pervasives.compare a.term b.term
-    else
-      cmp
-end
-
-module SizedTermSet = Set.Make(struct
-  let compare = SizedTerm.compare
-  type t = SizedTerm.t
-end)
-
-
-
-module TermSetSet = Set.Make(struct
-  let compare = Pervasives.compare
-  type t = TermSet.t
-end)
-
 
 module FwdSet = Set.Make(struct
   type t = term * proof_term
