@@ -2,11 +2,11 @@ open Container
 open Type
 open Term
 
+
 type node = {
     avarmap: int IntMap.t;   (* idx -> argument variable *)
-    ovarmap: (int*int) IntMap.t;
-                             (* idx -> other variable (free or bound),
-                                       first_free *)
+    ovarmap: (substitution IntMap.t) IntMap.t;
+      (* ovar -> empty map *)
     fapp:    (node * node array) IntMap.t;
                              (* one for each number of arguments *)
   }
@@ -40,23 +40,25 @@ let data  (i:int) (t:'a t): int * 'a =
 exception Term_found of term
 
 
-let termtab (idx:int) (tab:node) (nb:int): term =
+let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
   (* The term associated with index 'idx' of the node 'tab' with 'nb'
      bound variables.
    *)
   let rec termtab0 (tab:node) (nb:int): term =
     let aterm (avarmap: int IntMap.t): unit =
       try
-        let i = IntMap.find idx avarmap in
+        let i = nb + IntMap.find idx avarmap in
         raise (Term_found (Variable i))
       with Not_found ->
         ()
-    and oterm (ovarmap: (int*int) IntMap.t): unit =
-      try
-        let i,_ = IntMap.find idx ovarmap in
-        raise (Term_found (Variable i))
-      with Not_found ->
-        ()
+    and oterm (ovarmap: (substitution IntMap.t) IntMap.t): unit =
+      IntMap.iter
+        (fun ovar map ->
+          if IntMap.mem idx map then
+            let ivar = if ovar<nb then ovar else ovar+nargs in
+            raise (Term_found (Variable ivar))
+        )
+        ovarmap
     and fapp_term (fapp: (node * node array) IntMap.t): unit =
       IntMap.iter
         (fun len (ftab,argtabs) ->
@@ -86,7 +88,8 @@ let term (idx:int) (table:'a t): term =
      root node 'tab'
    *)
   assert (idx < count table);
-  termtab idx table.root 0
+  let nargs,_ = data idx table in
+  termtab idx nargs table.root 0
 
 
 
@@ -121,12 +124,12 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
           IntMap.add idx sub res
         with Not_found ->
           res
-          (*IntMap.remove idx res*)
       with Not_found ->
         res
     )
     m1
     IntMap.empty
+
 
 
 
@@ -138,6 +141,10 @@ let write_map (map: substitution IntMap.t) (level:int): unit =
     map
 
 
+
+
+
+
 let unify (t:term) (nbt:int) (table:'a t)
     :  (int * int * 'a * substitution) list =
   (* Unify the term 't' which comes from an environment with 'nbt' bound
@@ -146,55 +153,52 @@ let unify (t:term) (nbt:int) (table:'a t)
      The result is a list of tuples (nargs,idx,data,sub) where the unified
      term 'ut' has 'nargs' arguments, it has the index 'idx', it is associated
      with the data 'data' and applying the substitution 'sub' to 'ut' yields
-     the term 't'.  *)
-  (*Printf.printf "unify size=%d nbt=%d term=%s\n"
-    (count table) nbt (Term.to_string t);*)
-  let rec uni (t:term) (tab:node) (nb:int) (level:int): substitution IntMap.t =
+     the term 't'.
+   *)
+  let rec uni (t:term) (tab:node) (nb:int): substitution IntMap.t =
     assert (nb=0); (* as long as there are no lambda terms *)
     let map: substitution IntMap.t =
       IntMap.map (fun avar ->
-        Term_sub.singleton (avar-nb) t) tab.avarmap
+        Term_sub.singleton avar t) tab.avarmap
     and ffreet = nb+nbt  (* first free variable in the term 't' *)
     in
     match t with
       Variable i when nb<=i && i<ffreet ->
         map
     | Variable i ->
-          IntMap.fold
-          (fun idx (ovar,ffree) map ->
-            if (i<nb && ovar=i) || ffreet<=i && ovar-ffree = i-ffreet then
-              IntMap.add idx Term_sub.empty map
-            else
+        let ovar = if i<nb then i else i-nbt in
+        begin
+          try
+            join_map
               map
-          )
-          tab.ovarmap
-          map
+              (IntMap.find ovar tab.ovarmap)
+          with
+            Not_found ->
+              map
+        end
     | Application (f,args) ->
         let res =
         begin
           try
             let len           = Array.length args in
             let ftab, argtabs = IntMap.find len tab.fapp in
-            let fmap = ref (uni f ftab nb (level+1)) in
+            let fmap = ref (uni f ftab nb) in
             Array.iteri
               (fun i a ->
-                let amap = uni a argtabs.(i) nb (level+1) in
+                let amap = uni a argtabs.(i) nb in
                 fmap := merge_map !fmap amap;
               )
               args;
-            (*!fmap      (* join with map !!! *)*)
             join_map map !fmap
           with Not_found ->
             map
         end in
-        (*Printf.printf "%d: App map\n" level;
-        write_map res level;*)
         res
     | Lam (tarr,t) ->
         assert false
   in
   try
-    let map = uni t table.root 0 0 in
+    let map = uni t table.root 0 in
     let res =
       IntMap.fold
         (fun i sub lst ->
@@ -204,15 +208,8 @@ let unify (t:term) (nbt:int) (table:'a t)
         map
         []
     in
-    (*Printf.printf "  uni result map:\n";
-    List.iter
-      (fun (nargs,idx,_,sub) ->
-        Printf.printf "  nargs=%d, idx=%d, sub=%s\n"
-          nargs idx (Term_sub.to_string sub)
-      ) res;*)
     res
   with Not_found ->
-    (*Printf.printf "not found\n";*)
     raise Not_found
 
 
@@ -231,10 +228,20 @@ let add_term (t:term) (nargs:int) (idx:int) (tab:node): node =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
           (* variable is a formal argument which can be substituted *)
-          {tab with avarmap = IntMap.add idx i tab.avarmap}
+          {tab with avarmap = IntMap.add idx (i-nb) tab.avarmap}
       | Variable i ->
           (* variable is either bound or free (not an argument) *)
-          {tab with ovarmap = IntMap.add idx (i,nb+nargs) tab.ovarmap}
+          let ovar = if i<nb then i else i-nargs in
+          let ovarmap =
+            try
+              let idx2sub = IntMap.find ovar tab.ovarmap in
+              let idx2sub = IntMap.add idx Term_sub.empty idx2sub in
+              IntMap.add ovar idx2sub tab.ovarmap
+            with Not_found ->
+              IntMap.add ovar (IntMap.add idx Term_sub.empty IntMap.empty)
+                tab.ovarmap
+          in
+          {tab with ovarmap = ovarmap}
       | Application (f,args) ->
           let len = Array.length args in
           let ftab,argtabs =
@@ -273,28 +280,6 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
       data  = IntMap.add idx (nargs,dat) table.data } in
   assert (t = term ((count table)-1) table);
   assert ((nargs,dat) = data ((count table)-1) table);
-  let lst = unify t nargs table in
-  let all_injective =
-    List.for_all
-      (fun (_,_,_,sub) ->
-        Term_sub.is_injective sub
-      )
-      lst
-  in
-  (*Printf.printf "added idx=%d, nargs=%d, term=%s\n"
-    idx nargs (Term.to_string t);
-  (if not all_injective then
-    (Printf.printf "term = %s\n" (Term.to_string t);
-     List.iter
-       (fun (nargs,idx,_,sub) ->
-         let t = term idx table in
-         Printf.printf "nargs=%d, idx=%d, term=%s, sub=%s\n"
-           nargs idx (Term.to_string t) (Term_sub.to_string sub)
-       )
-       lst)
-  else
-    ());*)
-  (*assert all_injective;*) (* too strong ?! *)
   table
 
 
