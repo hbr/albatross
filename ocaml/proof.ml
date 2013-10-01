@@ -19,6 +19,27 @@ type proof_pair = term * proof_term
 
 
 
+module BwdSet = Set.Make(struct
+  type t = int * TermSet.t * term list * proof_term
+        (* number of premises
+           list of premises  [a,b,c,...]
+           proof_term of  the implication a=>b=>...=>z*)
+  let compare (x:t) (y:t) =
+    let n1,_,ps1,_ = x
+    and n2,_,ps2,_ = y
+    in
+    let cmp0 = Pervasives.compare n1 n2 in
+    if cmp0=0 then
+      Pervasives.compare ps1 ps2
+    else
+      cmp0
+end)
+
+
+
+
+
+
 module Proof: sig
 end = struct
 
