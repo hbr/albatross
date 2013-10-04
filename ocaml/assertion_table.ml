@@ -18,7 +18,7 @@ type descriptor = {
     pt_opt: proof_term option}
 
 type t  = {seq:           descriptor seq;
-           mutable context: Assertion_context.t}
+           mutable context: General_context.t}
 
 
 let count (at:t): int = Seq.count at.seq
@@ -52,7 +52,7 @@ let to_string
 (* Public functions *)
 
 let empty (): t =  {seq = Seq.empty ();
-                    context = Assertion_context.empty}
+                    context = General_context.empty}
 
 
 let find_backward
@@ -92,7 +92,7 @@ let find_backward
           lst
       )
       []
-      (Assertion_context.backward t nb at.context)
+      (General_context.backward t nb at.context)
   in
   let res = ref []
   in
@@ -165,7 +165,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
           lst
       )
       []
-      (Assertion_context.forward t nb at.context)
+      (General_context.forward t nb at.context)
   in
   let res  = ref []
   in
@@ -211,7 +211,7 @@ let put_assertion
   let nb  = Array.length types in
   let nterm = Feature_table.normalize_term term nb ft in
   at.context <-
-    Assertion_context.add nterm
+    General_context.add nterm
       (match pt_opt with None -> Axiom nterm | Some pt -> pt)
       nb
       (Feature_table.implication_index ft)
@@ -257,7 +257,7 @@ let put_assertion
     with Not_found ->
       None
   in
-  if (Seq.count at.seq) < (Assertion_context.count at.context) then
+  if (Seq.count at.seq) < (General_context.count at.context) then
     Seq.push
       at.seq
       {names    = names;

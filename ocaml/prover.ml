@@ -19,7 +19,7 @@ exception Proof_found of proof_term
 
 
 
-type tried_map    = Proof_context.t TermMap.t
+type tried_map    = Local_context.t TermMap.t
 
 
 
@@ -109,8 +109,8 @@ let prove
     else
       Printf.printf "%3d %sGoal already in the context\n" l (level_string l)
 
-  and trace_context (c:Proof_context.t) (l:int) (): unit =
-    let lst = Proof_context.proved_terms c in
+  and trace_context (c:Local_context.t) (l:int) (): unit =
+    let lst = Local_context.proved_terms c in
     let len = List.length lst in
     if len > 0 then
       (Printf.printf "%3d %sContext\n" l (level_string l);
@@ -143,22 +143,22 @@ let prove
       (level:int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
-      (c:Proof_context.t)
-      : Proof_context.t =
+      (c:Local_context.t)
+      : Local_context.t =
     (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
-    let c = Proof_context.add_proof t pt c in
+    let c = Local_context.add_proof t pt c in
     let c =
       try
       let a,b = split t in
-      Proof_context.add_forward a b pt c
+      Local_context.add_forward a b pt c
       with Not_found ->
         c
     in
     let chn = chain t in
     let res =
-      Proof_context.add_backward chn pt c
+      Local_context.add_backward chn pt c
     in
-    assert (Proof_context.is_proved t res);
+    assert (Local_context.is_proved t res);
     res
   in
 
@@ -168,34 +168,34 @@ let prove
       (level: int)
       (split: term -> term*term)
       (chain: term -> (term list * term) list)
-      (c:Proof_context.t)
-      : Proof_context.t =
+      (c:Local_context.t)
+      : Local_context.t =
     (* Add the term 't' with the proof term 'pt' to the context 'c' and
        close it *)
     let step_close
         (t:term)
         (pt:proof_term)
         (lst: proof_pair list)
-        (c:Proof_context.t)
+        (c:Local_context.t)
         : proof_pair list =
       let lglobal =
         (Assertion_table.consequences t (Array.length argtypes) ft at)
       in
       let l1 =
-        (Proof_context.consequences t pt c)
+        (Local_context.consequences t pt c)
         @ (List.map (fun ((t,pt),_) -> t,pt) lglobal)
         @ lst in
       try
         let a,b = split t in
-        let pta = Proof_context.proof_term a c in
+        let pta = Local_context.proof_term a c in
         (b, MP(pta,pt)) :: l1
       with Not_found -> l1
     in
-    let rec add (lst: proof_pair list) (c:Proof_context.t): Proof_context.t =
+    let rec add (lst: proof_pair list) (c:Local_context.t): Local_context.t =
       match lst with
         [] -> c
       | (t,pt)::tl ->
-          if Proof_context.is_proved t c then
+          if Local_context.is_proved t c then
             add tl c
           else
             add
@@ -208,7 +208,7 @@ let prove
 
   let rec prove_one
       (t:term)
-      (c:Proof_context.t)
+      (c:Local_context.t)
       (tried: tried_map)
       (level: int)
       : proof_term =
@@ -221,7 +221,7 @@ let prove
      *)
     assert (level < 500); (* to detect potential endless loops !! *)
 
-    let global_backward (t:term) (c:Proof_context.t): Proof_context.t =
+    let global_backward (t:term) (c:Local_context.t): Local_context.t =
       (* The backward set from the global assertion table *)
       let bwd_glob =
         Assertion_table.find_backward t arglen ft at
@@ -237,11 +237,11 @@ let prove
         c
         bwd_glob
     in
-    let do_backward (t:term) (c:Proof_context.t) (tried:tried_map): unit =
+    let do_backward (t:term) (c:Local_context.t) (tried:tried_map): unit =
       (* Backward reasoning *)
       let c = global_backward t c in
       do_trace (trace_context c (level+1));
-      let bwd_set = Proof_context.backward_set t c in
+      let bwd_set = Local_context.backward_set t c in
       begin
         let n = BwdSet.cardinal bwd_set in
         if n>0 then begin
@@ -280,19 +280,19 @@ let prove
       (* All alternatives failed (or maybe there are no alternatives) *)
       ()
 
-    and enter (t:term) (c:Proof_context.t): term * Proof_context.t =
+    and enter (t:term) (c:Local_context.t): term * Local_context.t =
       (* Check the term and split implications recursively *)
-      let direct (t:term) (c:Proof_context.t): Proof_context.t =
+      let direct (t:term) (c:Local_context.t): Local_context.t =
         let c = global_backward t c in
         try
-          let pt = Proof_context.proof_term t c in
+          let pt = Local_context.proof_term t c in
           do_trace (trace_term "Success" t level);
           raise (Proof_found pt);
         with Not_found ->
           c
       in
-      let rec ent (t:term) (c:Proof_context.t) (entered:bool)
-          : term * Proof_context.t * bool =
+      let rec ent (t:term) (c:Local_context.t) (entered:bool)
+          : term * Local_context.t * bool =
         try
           let a,b = split t in
           do_trace (trace_term "Enter" a level);
@@ -316,7 +316,7 @@ let prove
       (* Bail out if the goal has already been tried in the same context *)
       try
         let c0 = TermMap.find t tried in
-        if (Proof_context.count c0) < (Proof_context.count c) then
+        if (Local_context.count c0) < (Local_context.count c) then
           ()
         else
            (do_trace (trace_term  "Failure (loop)"  t level);
@@ -364,9 +364,9 @@ let prove
 
   let prove_compound
       (c:compound)
-      (ctxt:Proof_context.t)
+      (ctxt:Local_context.t)
       (level: int)
-      : Proof_context.t * (term*proof_term) list =
+      : Local_context.t * (term*proof_term) list =
     List.fold_left
       (fun res ie ->
         let ctxt,lst = res in
@@ -395,13 +395,13 @@ let prove
 
   let prove_toplevel () : (proof_pair) list =
     do_trace trace_header;
-    let tm_pre: Proof_context.t =
+    let tm_pre: Local_context.t =
       List.fold_left
         (fun c t ->
           do_trace (trace_term "Assumption" t 1);
           let tn = normal t in
           add_ctxt_close tn (Assume tn) 2 split chain c)
-        Proof_context.empty
+        Local_context.empty
         pre_terms
     in
     let tm_inter,_ = prove_compound chck tm_pre 1
