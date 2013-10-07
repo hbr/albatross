@@ -129,8 +129,10 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
       with Not_found -> c.forward
 
     and backward =
-      List.fold_left
-        (fun table (premises,target) ->
+      let rec bwd (chain: (term list * term) list) =
+        match chain with
+          [] -> assert false
+        | (premises,target)::tail ->
           let bvars_tgt = Term.bound_variables target nargs
           and n_tgt     = Term.nodes target
           in
@@ -145,12 +147,11 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
               premises
           in
           if ok then
-            Term_table.add target nargs (idx,pp,simpl) table
+            Term_table.add target nargs (idx,pp,simpl) c.backward
           else
-            table
-        )
-        c.backward
-        (Term.implication_chain t (impid+nargs))
+            bwd tail
+      in
+      bwd  (Term.implication_chain t (impid+nargs))
     in
     {proved  = proved;
      forward = forward;

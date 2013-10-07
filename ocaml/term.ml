@@ -329,25 +329,31 @@ end = struct
     binr t []
 
 
+
+
   let implication_chain (t:term) (impid:int)
       : (term list * term) list =
-    let rec chainr (t:term) (lst: (term list * term) list)
+    (* Extract the implication chain of the term 't' i.e. we have
+
+       t = (a=>...=>y=>z)
+
+       result:
+       [([a,...,y],z), ([a,...],y=>z), ..., ([],a=>...=>y=>z)]
+
+       In the case that 't' is not an implication then the returned list
+       consists only of the last element.
+     *)
+    let rec chainr (t:term)
         : (term list * term) list =
       try
         let a,b = binary_split t impid in
-        let lst =
-          List.map
-            (fun (ps,tgt) -> a::ps,tgt)
-            (chainr b lst)
-        in
-        ([a],b)::lst
+        ([],t) :: (List.map
+                     (fun (ps,tgt) -> a::ps,tgt)
+                     (chainr b))
       with Not_found ->
-        lst
+        [([],t)]
     in
-    chainr t [([],t)]
-
-
-
+    List.rev (chainr t)
 end
 
 
