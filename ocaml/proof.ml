@@ -10,7 +10,7 @@ type proof_term =
   | MP            of proof_term * proof_term       (* a => (a=>b) => b *)
   | Generalize    of proof_term * int
   | Theorem       of int
-  | Specialize    of proof_term * term array
+  | Specialize    of proof_term * Term_sub.t
   | Formal_args   of int * proof_term
 
 
@@ -181,7 +181,8 @@ end = struct
           Lam (nargs,term)
       | Specialize (pt,args) ->
           let t = termr pt nb in
-          Term.reduce (Application (t,args))
+          (*Term.reduce (Application (t,args))*)
+          assert false
       | _ -> assert false
     in
     termr pt nb

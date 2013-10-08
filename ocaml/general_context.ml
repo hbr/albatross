@@ -4,11 +4,11 @@ open Container
 
 type t = {
     proved:  proof_pair Term_table.t;
-    forward: (int * proof_pair * bool * bool) Term_table.t;
+    forward: (int * proof_pair * bool * int) Term_table.t;
     (* index of the implication a=>b
        proof pair of the implication
        is simplification rule
-       is closed *)
+       number of open variables *)
     backward: (int * proof_pair * bool) Term_table.t
       (* index of the implication a=>b=>...=>z
          proof pair of the implication
@@ -60,7 +60,7 @@ let find (t:term) (nbt:int) (c:t)
 
 
 let forward (t:term) (nbt:int) (c:t)
-    : (int * int * proof_pair * Term_sub.t * bool * bool) list =
+    : (int * int * proof_pair * Term_sub.t * bool * int) list =
   (* Find all assertions of the form 'a=>b' so that 't' can be unified
      with 'a' and 'a=>b' is a valid forward rule
 
@@ -69,12 +69,12 @@ let forward (t:term) (nbt:int) (c:t)
               pp:     proof pair of 'a=>b'
               sub:    substitution if applied to 'a' yields 't'
               simpl:  is simplification rule
-              closed: 'sub' applied to 'b' does not leave open formal args
+              nopen: 'sub' applied to 'b' does  leave nopen formal args open
    *)
   let lst = Term_table.unify t nbt c.forward in
   List.rev_map
-    (fun (nargs,_,(idx,pp,simpl,closed),sub) ->
-      nargs,idx,pp,sub,simpl,closed
+    (fun (nargs,_,(idx,pp,simpl,nopen),sub) ->
+      nargs,idx,pp,sub,simpl,nopen
     )
     lst
 
@@ -118,12 +118,12 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
         and n_a      = Term.nodes a
         and n_b      = Term.nodes b
         in
-        let is_closed = IntSet.is_empty (IntSet.diff bvars_b bvars_a)
+        let nopen     = IntSet.cardinal (IntSet.diff bvars_b bvars_a)
         and is_elim   = not (IntSet.is_empty (IntSet.diff fvars_a fvars_b))
         and is_simpl  = n_b <= n_a
         in
         if is_simpl || is_elim then
-           Term_table.add a nargs (idx,pp,is_simpl,is_closed) c.forward
+           Term_table.add a nargs (idx,pp,is_simpl,nopen) c.forward
         else
           c.forward
       with Not_found -> c.forward

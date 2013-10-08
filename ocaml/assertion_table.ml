@@ -87,14 +87,14 @@ let find_backward
         if simpl then
           let args = Term_sub.arguments nargs sub in
           let tt = Term.sub t args nb in
-          ((tt,Specialize(Theorem idx,args)),idx)::lst
+          ((tt,Specialize(Theorem idx,sub)),idx)::lst
         else
           lst
       )
       []
       (General_context.backward t nb at.context)
   in
-  let res = ref []
+  (*let res = ref []
   in
   begin
     Seq.iteri
@@ -115,7 +115,7 @@ let find_backward
           desc.chain
       )
       at.seq
-  end;
+  end;*)
   (*Printf.printf "Term to match %s\n"
     (Feature_table.raw_term_to_string t nb ft);
   if (List.length !res) <> (List.length lst) then
@@ -156,18 +156,18 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
   in
   let lst =
     List.fold_left
-      (fun lst (nargs,idx,(t,pt),sub,simpl,closed) ->
-        if simpl && closed then
+      (fun lst (nargs,idx,(t,pt),sub,simpl,nopen) ->
+        if simpl && (nopen=0) then
           let args = Term_sub.arguments nargs sub in
           let tt = Term.sub t args nb in
-          ((tt,Specialize(Theorem idx,args)),idx)::lst
+          ((tt,Specialize(Theorem idx,sub)),idx)::lst
         else
           lst
       )
       []
       (General_context.forward t nb at.context)
   in
-  let res  = ref []
+  (*let res  = ref []
   in
   Seq.iteri
     (fun i desc ->
@@ -184,7 +184,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
               ()
       end
     )
-    at.seq;
+    at.seq;*)
   (*Printf.printf "Term to match %s\n"
     (Feature_table.raw_term_to_string t nb ft);
   if (List.length !res) <> (List.length lst) then

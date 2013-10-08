@@ -21,7 +21,7 @@ val  add:   term -> proof_term -> int -> int -> t -> t
 
 
 val  forward: term -> int -> t
-  -> (int * int * proof_pair * Term_sub.t * bool * bool) list
+  -> (int * int * proof_pair * Term_sub.t * bool * int) list
   (* The list of forward rules for a term with nargs arguments in the
      context:
 
@@ -30,7 +30,7 @@ val  forward: term -> int -> t
              pp:    proof pair of 'a=>b'
              sub:   substitution if applied to 'a' yields the term
              simpl: is simplification rule
-             closed: 'sub' applied to 'b' does not leave open args
+             nopen: 'sub' applied to 'b' does leave 'nopen' args open
    *)
 
 
