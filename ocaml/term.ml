@@ -39,6 +39,8 @@ module Term: sig
 
   val map: (int->int->term) -> term -> term
 
+  val down: int -> term -> term
+
   val upbound: int->int->term->term
 
   val up: int->term->term
@@ -157,6 +159,19 @@ end = struct
     mapr 0 t
 
 
+
+  let down (n:int) (t:term): term =
+    (* Shift all free variables of 't' down by 'n', require that there
+       are no free variables 0,1,...,n-1
+     *)
+    map
+      (fun j nb ->
+        if j<nb then Variable j
+        else (
+          assert (n <= (j-nb));
+          Variable (j-n)
+         ))
+      t
 
 
 
@@ -376,6 +391,9 @@ module Term_sub: sig
   val add:            int -> term ->  t -> t
   val merge:          t -> t -> t
   val arguments:      int -> t -> term array
+  val domain:         t -> IntSet.t
+  val apply_0:        term -> int -> t -> bool -> term
+  val apply:          term -> int -> t -> term * int
 end = struct
 
   type t = term IntMap.t
@@ -461,6 +479,70 @@ end = struct
       sub;
     args
 
+
+  let domain (sub:t): IntSet.t =
+    IntMap.fold
+      (fun i _ set -> IntSet.add i set)
+      sub
+      IntSet.empty
+
+
+  let up (n:int) (sub:t): t =
+    IntMap.map (fun t -> Term.up n t) sub
+
+  let is_covering (t:term) (nargs:int) (sub:t): bool =
+    (* Does the substitution 'sub' cover all argument variables in the
+       term 't'  which has 'nargs' formal arguments?
+     *)
+    let openvars
+        = IntSet.diff (Term.bound_variables t nargs) (domain sub)
+    in
+    IntSet.is_empty openvars
+
+
+
+  let apply_0 (t:term) (nargs:int) (sub:t) (covers:bool): term =
+    (* Apply to the term 't' with 'nargs' formal arguments the substitution
+       'sub'. If the substitution covers all formal arguments of 't' then
+       all free variables (i.e. variables above 'nargs') are shifted down
+       by nargs and 0 is returned with the result term.
+
+       Note that all substitution terms have to be shifted up by 'nargs'
+       if the substitution is not covering.
+     *)
+    let nargs_res, sub =
+      if covers then
+        0, sub
+      else
+        nargs, up nargs sub
+    in
+    let args  = Array.init nargs (fun i -> Variable i)
+    in
+    IntMap.iter
+      (fun i t ->
+        assert (i<nargs);
+        args.(i) <- t
+      )
+      sub;
+    Term.sub t args nargs_res
+
+
+
+
+
+  let apply (t:term) (nargs:int) (sub:t): term * int =
+    (* Apply to the term 't' with 'nargs' formal arguments the substitution
+       'sub'. If the substitution covers all formal arguments of 't' then
+       all free variables (i.e. variables above 'nargs') are shifted down
+       by nargs and 0 is returned with the result term.
+
+       Note that all substitution terms have to be shifted up by 'nargs'
+       if the substitution is not covering.
+     *)
+    let covers = is_covering t nargs sub in
+    let nargs_res = if covers then 0 else nargs
+    in
+    apply_0 t nargs sub covers, nargs_res
 end
 
 

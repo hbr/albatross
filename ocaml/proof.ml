@@ -180,8 +180,8 @@ end = struct
           in
           Lam (nargs,term)
       | Specialize (pt,args) ->
-          let t = termr pt nb in
-          (*Term.reduce (Application (t,args))*)
+          (*let t = termr pt nb in
+          Term.reduce (Application (t,args))*)
           assert false
       | _ -> assert false
     in
