@@ -119,10 +119,9 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
         and n_b      = Term.nodes b
         in
         let nopen     = IntSet.cardinal (IntSet.diff bvars_b bvars_a)
-        and is_elim   = not (IntSet.is_empty (IntSet.diff fvars_a fvars_b))
         and is_simpl  = n_b <= n_a
         in
-        if is_simpl || is_elim then
+        if is_simpl ||  1 < n_a then
            Term_table.add a nargs (idx,pp,is_simpl,nopen) c.forward
         else
           c.forward
@@ -140,6 +139,7 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
             List.fold_left
               (fun (ok,simpl) p ->
                 ok &&
+                1 < n_tgt &&
                 p<>target &&
                 IntSet.subset (Term.bound_variables p nargs) bvars_tgt,
                 simpl && (Term.nodes p) <= n_tgt)
