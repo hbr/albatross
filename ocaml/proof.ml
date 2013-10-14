@@ -137,23 +137,14 @@ the innermost binding and soon.
 
 
 
-module Commands = struct
-  open Term
-  type command =
-      Enter
-    | MP of term
-    | Premise of term list
-    | Remove
-    | Resolve
-    | Induction of int
-    | Contradiction of term
-end
-
 
 module Checker: sig
-  val term: proof_term -> int -> int -> (int->int*term) -> term
+
+  val term: proof_term -> int -> int -> int -> (int->int*term) -> term
+
 end = struct
-  let term (pt:proof_term) (nb:int) (imp_id:int)
+
+  let term (pt:proof_term) (nb:int) (imp_id:int) (all_id:int)
       (global: int -> int*term)
       : term =
     let rec termr (pt:proof_term) (nb:int): term  =

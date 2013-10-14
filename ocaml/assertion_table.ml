@@ -6,7 +6,7 @@ open Proof
 open Term_table
 
 
-
+type header = int array * typ array
 
 type descriptor = {
     names: int array;
@@ -18,7 +18,7 @@ type descriptor = {
     pt_opt: proof_term option}
 
 type t  = {seq:           descriptor seq;
-           mutable context: General_context.t}
+           mutable context: header General_context.t}
 
 
 let count (at:t): int = Seq.count at.seq
@@ -83,7 +83,7 @@ let find_backward
   in
   let lst =
     List.fold_left
-      (fun lst (nargs,idx,(t,pt),sub,simpl) ->
+      (fun lst (nargs,idx,(t,pt),_,sub,simpl) ->
         if simpl then
           let args = Term_sub.arguments nargs sub in
           let tt = Term.sub t args nb in
@@ -156,7 +156,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
   in
   let lst =
     List.fold_left
-      (fun lst (nargs,idx,(t,pt),sub,simpl,nopen) ->
+      (fun lst (nargs,idx,(t,pt),_,sub,simpl,nopen) ->
         if simpl && (nopen=0) then
           let args = Term_sub.arguments nargs sub in
           let tt = Term.sub t args nb in
@@ -211,8 +211,10 @@ let put_assertion
   let nb  = Array.length types in
   let nterm = Feature_table.normalize_term term nb ft in
   at.context <-
-    General_context.add nterm
+    General_context.add
+      nterm
       (match pt_opt with None -> Axiom nterm | Some pt -> pt)
+      (names,types)
       nb
       (Feature_table.implication_index ft)
       at.context;

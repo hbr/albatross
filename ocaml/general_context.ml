@@ -2,14 +2,15 @@ open Term
 open Proof
 open Container
 
-type t = {
-    proved:  proof_pair Term_table.t;
-    forward: (int * proof_pair * bool * int) Term_table.t;
+
+type 'a t = {
+    proved:  (proof_pair * 'a) Term_table.t;
+    forward: (int * proof_pair * 'a * bool * int) Term_table.t;
     (* index of the implication a=>b
        proof pair of the implication
        is simplification rule
        number of open variables *)
-    backward: (int * proof_pair * bool) Term_table.t
+    backward: (int * proof_pair * 'a * bool) Term_table.t
       (* index of the implication a=>b=>...=>z
          proof pair of the implication
          is simplification rule *)
@@ -17,14 +18,14 @@ type t = {
 
 
 
-let count (c:t): int = Term_table.count c.proved
+let count (c:'a t): int = Term_table.count c.proved
 
-let empty: t = {proved=Term_table.empty; forward=Term_table.empty;
-                backward=Term_table.empty}
+let empty: 'a t = {proved=Term_table.empty; forward=Term_table.empty;
+                   backward=Term_table.empty}
 
 
 
-let has (t:term) (nargs:int) (c:t): bool =
+let has (t:term) (nargs:int) (c:'a t): bool =
   let lst = Term_table.unify t nargs c.proved in
   List.exists (fun (_,_,_,sub) -> Term_sub.is_injective sub) lst
 
@@ -32,14 +33,15 @@ let has (t:term) (nargs:int) (c:t): bool =
 
 
 
-let find (t:term) (nbt:int) (c:t)
-    : int * int * proof_pair * Term_sub.t =
+let find (t:term) (nbt:int) (c:'a t)
+    : int * int * proof_pair * 'a * Term_sub.t =
   (* Find an assertion which is unifyable with the term 't' with 'nbt'
      bound variables.
 
      Return:  nargs: number of formal arguments of the assertion
               idx:   index of the assertion
               pp:    proof pair of the assertion
+              dat:   data of the assertion
               sub:   substitution if applied to the assertion term
                      yields 't'
    *)
@@ -47,11 +49,11 @@ let find (t:term) (nbt:int) (c:t)
   match lst with
     []    -> raise Not_found
   | [res] ->
-      let nargs,idx,(t0,_),sub = res in
+      let nargs,idx,((t0,pt),dat),sub = res in
       let args = Term_sub.arguments nargs sub in
       let tt = Term.sub t0 args nbt in
       assert(t=tt);
-      res
+      nargs,idx,(t0,pt),dat,sub
   | _     -> assert false
 
 
@@ -59,22 +61,23 @@ let find (t:term) (nbt:int) (c:t)
 
 
 
-let forward (t:term) (nbt:int) (c:t)
-    : (int * int * proof_pair * Term_sub.t * bool * int) list =
+let forward (t:term) (nbt:int) (c:'a t)
+    : (int * int * proof_pair * 'a * Term_sub.t * bool * int) list =
   (* Find all assertions of the form 'a=>b' so that 't' can be unified
      with 'a' and 'a=>b' is a valid forward rule
 
      Return:  nargs:  number of formal arguments of 'a=>b'
               idx:    index of 'a=>b'
               pp:     proof pair of 'a=>b'
+              dat:    data associated with 'a=>b'
               sub:    substitution if applied to 'a' yields 't'
               simpl:  is simplification rule
               nopen: 'sub' applied to 'b' does  leave nopen formal args open
    *)
   let lst = Term_table.unify t nbt c.forward in
   List.rev_map
-    (fun (nargs,_,(idx,pp,simpl,nopen),sub) ->
-      nargs,idx,pp,sub,simpl,nopen
+    (fun (nargs,_,(idx,pp,dat,simpl,nopen),sub) ->
+      nargs,idx,pp,dat,sub,simpl,nopen
     )
     lst
 
@@ -83,33 +86,35 @@ let forward (t:term) (nbt:int) (c:t)
 
 
 
-let backward (t:term) (nbt:int) (c:t)
-    : (int * int * proof_pair * Term_sub.t * bool) list =
+let backward (t:term) (nbt:int) (c:'a t)
+    : (int * int * proof_pair * 'a * Term_sub.t * bool) list =
   (* Find all assertions of the form 'a=>b=>...=>z' so that 't' can be
      unified with 'z' and 'a=>b=>...=>z' is a valid backward rule
 
      Return:  nargs:  number of formal arguments of 'a=>b=>...=>z'
               idx:    index of 'a=>b=>...=>z'
               pp:     proof pair of 'a=>b=>...=>z'
+              dat:    data associated with 'a=>b=>...=>z'
               sub:    substitution if applied to 'z' yields 't'
               simpl:  is simplification rule
    *)
   List.rev_map
-    (fun (nargs,_,(idx,pp,simpl),sub)->
-      nargs,idx,pp,sub,simpl
+    (fun (nargs,_,(idx,pp,dat,simpl),sub)->
+      nargs,idx,pp,dat,sub,simpl
     )
     (Term_table.unify t nbt c.backward)
 
 
 
 
-let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
+let add (t:term) (pt:proof_term)  (dat:'a) (nargs:int) (impid:int)(c:'a t)
+    : 'a t =
   let idx = Term_table.count c.proved
   and pp  = t,pt
   in
-  let add0 (): t =
+  let add0 (): 'a t =
     let proved =
-      Term_table.add t nargs pp c.proved
+      Term_table.add t nargs (pp,dat) c.proved
     and forward =
       try
         let a,b = Term.binary_split t (impid+nargs) in
@@ -122,7 +127,7 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
         and is_simpl  = n_b <= n_a
         in
         if is_simpl ||  1 < n_a then
-           Term_table.add a nargs (idx,pp,is_simpl,nopen) c.forward
+           Term_table.add a nargs (idx,pp,dat,is_simpl,nopen) c.forward
         else
           c.forward
       with Not_found -> c.forward
@@ -147,7 +152,7 @@ let add (t:term) (pt:proof_term) (nargs:int) (impid:int) (c:t): t =
               premises
           in
           if ok then
-            Term_table.add target nargs (idx,pp,simpl) c.backward
+            Term_table.add target nargs (idx,pp,dat,simpl) c.backward
           else
             bwd tail
       in

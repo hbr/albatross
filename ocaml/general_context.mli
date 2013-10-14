@@ -1,27 +1,27 @@
 open Term
 open Proof
 
-type t
+type 'a t
 
-val  count: t -> int
+val  count: 'a t -> int
     (* Number of proved assertions in the context *)
 
 
-val  has:   term -> int -> t -> bool
+val  has:   term -> int -> 'a t -> bool
     (* Is the term with nargs arguments in the context? *)
 
 
-val  empty: t
+val  empty: 'a t
     (* The empty context *)
 
 
-val  add:   term -> proof_term -> int -> int -> t -> t
+val  add:   term -> proof_term -> 'a -> int -> int -> 'a t -> 'a t
     (* Add a term with a proof term with nargs arguments and implication id
        to the context *)
 
 
-val  forward: term -> int -> t
-  -> (int * int * proof_pair * Term_sub.t * bool * int) list
+val  forward: term -> int -> 'a t
+  -> (int * int * proof_pair * 'a * Term_sub.t * bool * int) list
   (* The list of forward rules for a term with nargs arguments in the
      context:
 
@@ -34,8 +34,8 @@ val  forward: term -> int -> t
    *)
 
 
-val  backward: term  -> int -> t
-  -> (int * int * proof_pair * Term_sub.t * bool) list
+val  backward: term  -> int -> 'a t
+  -> (int * int * proof_pair * 'a * Term_sub.t * bool) list
   (* The list of backward rules for a term with nargs arguments in the
      context:
 

@@ -49,6 +49,8 @@ module Term: sig
 
   val apply: term -> term array -> term
 
+  val abstract: term -> int array -> term
+
   val reduce: term -> term
 
   val unify: term -> int -> term -> int ->  term array * int list
@@ -223,6 +225,33 @@ end = struct
 
 
 
+  let abstract (t:term) (args: int array): term =
+    (* Abstract the free variables in the 'args' array, i.e. make 'args.(0)'
+       to 'Variable 0', 'args.(1)' to 'Variable(1)' ... and all other
+       'Variable j' to 'Variable (j+len).
+     *)
+    let len = Array.length args
+    and mp  = ref IntMap.empty
+    in
+    Array.iteri
+      (fun i i0 -> mp := IntMap.add i0 i !mp)
+      args;
+    let res =
+      map
+        (fun j nb ->
+          if j < nb then Variable j
+          else
+            try
+              Variable (nb+(IntMap.find (j-nb) !mp))
+            with Not_found ->
+              Variable (j+len)
+        )
+        t
+    in
+    assert ((apply res (Array.map (fun i -> Variable i) args)) = t);
+    res
+
+
 
 
   let rec reduce (t:term): term =
@@ -393,6 +422,7 @@ module Term_sub: sig
   val arguments:      int -> t -> term array
   val domain:         t -> IntSet.t
   val apply_0:        term -> int -> t -> bool -> term
+  val apply_covering: term -> int -> t -> term
   val apply:          term -> int -> t -> term * int
 end = struct
 
@@ -526,6 +556,15 @@ end = struct
       sub;
     Term.sub t args nargs_res
 
+
+
+  let apply_covering (t:term) (nargs:int) (sub:t): term =
+    (* Apply to the term 't' with 'nargs' formal arguments the substitution
+       'sub' assuming that the substitution covers all formal arguments
+       contained in 't'
+     *)
+    assert ((domain sub) = (Term.bound_variables t nargs));
+    apply_0 t nargs sub true
 
 
 
