@@ -1,8 +1,18 @@
-modern-eiffel
-=============
+# General
 
-# The first chapter
+This repository holds the sources for the Modern Eiffel compiler.
 
-# The second chapter
+The language Modern Eiffel allows for static verification
+(i.e. correctness proofs) of all programs written in this language.
 
-# A third chapter
+
+
+
+
+<!---
+Local Variables:
+mode: outline
+coding: iso-latin-1
+outline-regexp: "#+"
+End:
+-->
