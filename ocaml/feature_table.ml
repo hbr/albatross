@@ -49,22 +49,6 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 
 
-let split_implication (t:term) (nbound:int) (ft:t): term*term =
-  (* Split the implication 'a=>b' into its components 'a' and 'b' *)
-  match t with
-    Application (f,args) ->
-      begin match f,ft.implication with
-        Variable i, Some j ->
-          if i=j+nbound then begin
-            assert ((Array.length args)=2);
-            args.(1), args.(0)
-          end
-          else raise Not_found
-      | _,_ -> raise Not_found
-      end
-  | _ -> raise Not_found
-
-
 
 let implication_chain
     (t:term)

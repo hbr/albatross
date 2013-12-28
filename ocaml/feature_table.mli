@@ -10,10 +10,8 @@ val has_implication: t -> bool
 
 val implication_index: t -> int
 
-val split_implication: term -> int -> t -> term * term
-
 val implication_chain: term -> int -> t
-  -> (term list * term) list
+  -> (term list * term) list  (* still used in prover.ml *)
 
 val implication_term: term -> term -> int -> t -> term
 

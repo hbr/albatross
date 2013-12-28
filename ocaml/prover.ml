@@ -68,9 +68,10 @@ let prove
     if !traceflag then f () else ()
   in
   let arglen = Array.length argnames in
+  let imp_id = (Feature_table.implication_index ft) + arglen in
   let exp2term ie =  Feature_table.assertion_term ie argnames argtypes ct ft
   and term2string t = Feature_table.term_to_string t argnames ft
-  and split = fun t -> Feature_table.split_implication t arglen ft
+  and split = fun t -> Term.binary_split t imp_id
   and chain = fun t -> Feature_table.implication_chain t arglen ft
   and normal (t:term): term =
     let texp = Feature_table.expand_term t arglen ft in

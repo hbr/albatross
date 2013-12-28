@@ -241,7 +241,8 @@ let put_assertion
   in
   let fwd_opt =
     try
-      let a,b = Feature_table.split_implication nterm nb ft in
+      let imp_ind = (Feature_table.implication_index ft) + nb in
+      let a,b     = Term.binary_split nterm imp_ind in
       let bvars_a = Term.bound_variables a nb
       and bvars_b = Term.bound_variables b nb
       and n_a     = Term.nodes a
