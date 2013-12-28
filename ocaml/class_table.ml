@@ -49,7 +49,7 @@ let func nb dom ran = Generic(nb+3,[|dom;ran|])
 let predicate nb g = Generic(nb+2,[|g|])
 let tuple1 a   = Tuple [|a|]
 let tuple2 a b = Tuple [|a;b|]
-let pset_any nb = TypSet.singleton (Class.type_up nb any)
+let pset_any nb = TypSet.singleton (type_up nb any)
 
 
 let boolean_type (ct:t): typ = bool
