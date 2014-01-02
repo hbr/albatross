@@ -10,6 +10,7 @@ type descriptor = {priv:        definition option;
                    mutable pub: definition option option}
 
 type key        = {name: feature_name; typ: typ}
+(*type key        = {name: feature_name; args: typ array; ret: typ}*)
 type t          = {keys: key key_table;
                    mutable implication: int option;
                    features: descriptor seq}
@@ -117,6 +118,7 @@ let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
         if k.name=name then
           try
             let args,rt = Class_table.split_function k.typ ct in
+            (*let args,rt = k.args, k.ret in*)
             if nargs = (Array.length args) then
               lst := (i,args,rt)::!lst
             else ()
@@ -207,7 +209,7 @@ let typed_term
     else
       assert false (* would be global *)
   in
-  let rec trm e: term * typ =
+  let rec trm (e:expression): term * typ =
     match e with
       Identifier i ->
         find_name i
@@ -542,16 +544,16 @@ let put
         FNoperator op ->
           (match op with
             DArrowop ->
-              if functype = Class_table.boolean_binary ct then ()
+              if Class_table.is_boolean_binary argtypes rettype then ()
               else error_info fn.i "Operator \"=>\" must be boolean binary"
           | Andop ->
-              if functype = Class_table.boolean_binary ct then ()
+              if Class_table.is_boolean_binary argtypes rettype then ()
               else error_info fn.i "Operator \"and\" must be boolean binary"
           | Orop ->
-              if functype = Class_table.boolean_binary ct then ()
+              if Class_table.is_boolean_binary argtypes rettype then ()
               else error_info fn.i "Operator \"or\" must be boolean binary"
           | Notop ->
-              if functype = Class_table.boolean_unary ct then ()
+              if Class_table.is_boolean_unary argtypes rettype then ()
               else error_info fn.i "Operator \"not\" must be boolean unary"
           | _ -> ()  (* more error checks here *)
           )

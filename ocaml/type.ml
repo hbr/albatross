@@ -2,7 +2,6 @@ open Support
 
 type typ =
     Simple of int
-  | Tuple of typ array
   | Generic of int * typ array
   | TLam of typ array * typ
 
@@ -11,8 +10,6 @@ let type_map (f:int->int->int) (t:typ) =
   let rec map nb t =
     match t with
       Simple j -> Simple (f j nb)
-    | Tuple tarr ->
-        Tuple (Array.map (fun t -> map nb t) tarr)
     | Generic (j,tarr) ->
         Generic (f j nb, Array.map (fun t -> map nb t) tarr)
     | TLam (tarr,t) ->

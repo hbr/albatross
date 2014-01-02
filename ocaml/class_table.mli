@@ -9,9 +9,9 @@ val put: header_mark withinfo -> int withinfo -> t -> unit
 
 val boolean_type:   t -> typ
 
-val boolean_binary: t -> typ
+val is_boolean_binary: typ array -> typ -> bool
 
-val boolean_unary:  t -> typ
+val is_boolean_unary: typ array -> typ -> bool
 
 val get_type: type_t withinfo -> t -> typ
 

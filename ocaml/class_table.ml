@@ -13,10 +13,11 @@ type descriptor =
 
 type t = {names: int key_table; classes: descriptor seq}
 
-let boolean_index   = 0
-let any_index       = 1
+let any_index       = 0
+let boolean_index   = 1
 let predicate_index = 2
 let function_index  = 3
+let tuple_index     = 4
 
 let count (c:t) =
   Seq.count c.classes
@@ -42,23 +43,23 @@ let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
   with Not_found ->
     not_yet_implemented cn.i "Insertion of new classes"
 
-let fgen i = Simple i
-let bool = Simple 0
-let any  = Simple 1
+let boolean = Simple boolean_index
+let any     = Simple any_index
 let func nb dom ran = Generic(nb+3,[|dom;ran|])
-let predicate nb g = Generic(nb+2,[|g|])
-let tuple1 a   = Tuple [|a|]
-let tuple2 a b = Tuple [|a;b|]
-let pset_any nb = TypSet.singleton (type_up nb any)
 
 
-let boolean_type (ct:t): typ = bool
+let boolean_type (ct:t): typ = boolean
 
-let boolean_binary (ct:t): typ =
-  func 0 (tuple2 bool bool) bool
+let is_boolean_binary (args: typ array) (ret:typ): bool =
+  ret=boolean
+    && (Array.length args)=2
+    && args.(0)=boolean
+    && args.(1)=boolean
 
-let boolean_unary (ct:t): typ =
-  func 0 (tuple1 bool) bool
+let is_boolean_unary (args: typ array) (ret:typ): bool =
+  ret=boolean
+    && (Array.length args)=1
+    && args.(0)=boolean
 
 
 
@@ -80,16 +81,20 @@ let get_type (tp:type_t withinfo) (ct:t) =
 let split_function (function_type:typ) (ct:t): typ array * typ =
   match function_type with
     Generic (i,tarr) ->
-      if i<>function_index then
-        failwith "is not a function"
-      else begin
-        assert ((Array.length tarr) = 2);
-        match tarr.(0) with
-          Tuple args -> args,tarr.(1)
-        | _ -> assert false  (* always a tuple! *)
-      end
-  | _ -> failwith "is not a function"
-
+      assert (i=function_index);
+      assert ((Array.length tarr) = 2);
+      let rec arglist (t:typ) (l:typ list): typ list =
+        match t with
+          Generic (i,tarr) ->
+            if i = tuple_index then begin
+              assert ((Array.length tarr) = 2);
+              tarr.(0) :: (arglist tarr.(1) l)
+            end else
+              t::l
+        | _ -> t::l
+      in
+      Array.of_list (arglist tarr.(0) []), tarr.(1)
+  | _ -> assert false
 
 
 
@@ -141,12 +146,21 @@ let feature_type
         get_type (withinfo tp.i t) ct
   in
   let function_type =
-    if (Array.length argtypes) = 0 then
+    let arglen = Array.length argtypes in
+    if arglen = 0 then
       ret
     else
-      func 0 (Tuple argtypes) ret
+      let rec arg_type (n:int): typ =
+        assert (n>0);
+        if n=1 then argtypes.(arglen-n)
+        else Generic(tuple_index,
+                     [| argtypes.(arglen-n); arg_type (n-1)|])
+      in
+      func 0 (arg_type arglen) ret
   in
   argtypes, ret, function_type, argnames
+
+
 
 
 let base_table () =
@@ -155,63 +169,68 @@ let base_table () =
   in
   let index cname = Key_table.index kt (Support.ST.symbol cname)
   in
-  let bool_idx = index "BOOLEAN"
-  and any_idx  = index "ANY"
-  and pred_idx = index "PREDICATE"
-  and func_idx = index "FUNCTION"
+  let any_idx   = index "ANY"
+  and bool_idx  = index "BOOLEAN"
+  and pred_idx  = index "PREDICATE"
+  and func_idx  = index "FUNCTION"
+  and tuple_idx = index "TUPLE"
   in
   assert (bool_idx=boolean_index);   assert (any_idx=any_index);
   assert (pred_idx=predicate_index); assert (func_idx=function_index);
-  Seq.push cc {hmark = Immutable_hmark; constraints = [||];
-               parents = pset_any 0};
+  assert (tuple_idx=tuple_index);
   Seq.push cc {hmark = Deferred_hmark; constraints = [||];
                parents = TypSet.empty };
+  Seq.push cc {hmark = Immutable_hmark; constraints = [||];
+               parents = TypSet.empty};
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any|];
-               parents = pset_any 1 };
+               parents = TypSet.empty};
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
-               parents = pset_any 2};
+               parents = TypSet.empty};
+  Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
+               parents =TypSet.empty};
   {names=kt; classes=cc}
 
 
-let type2string (t:typ) (nb:int) (c:t) =
-  let predicate = 2
-  and func      = 3
-  in
-  let rec t2s qmark nb t =
-    let arr2s nb tarr =
-      String.concat
-        ","
-        (Array.to_list (Array.map (fun t -> t2s false nb t) tarr))
-    and j2s j nb =
-      if j<nb then string_of_int j
-      else
-        class_name (j-nb) c
+
+
+let type2string (t:typ) (nb:int) (ct:t): string =
+  let rec to_string(t:typ) (nb:int) (prec:int): string =
+    let args_to_string (tarr:typ array) (nb:int): string =
+      "["
+      ^ (String.concat ","
+           (Array.to_list (Array.map (fun t -> to_string t nb 1) tarr)))
+      ^ "]"
     in
-    let tup2s nb tarr = "[" ^ (arr2s nb tarr) ^ "]"
+    let inner_prec, str =
+      match t with
+        Simple j ->
+          1, if j<nb then string_of_int j else class_name (j-nb) ct
+      | Generic (j,tarr) ->
+          let j1 = j-nb
+          and tarrlen = Array.length tarr in
+          if j1 = predicate_index then begin
+            assert (tarrlen=1);
+            1, ((to_string tarr.(0) nb 2) ^ "?")
+          end else if j1 = function_index then begin
+            assert (tarrlen=2);
+            1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
+          end else if j1 = tuple_index then begin
+            assert (tarrlen=2);
+            0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
+          end else begin
+            1,
+            (to_string (Simple j) nb 1) ^ (args_to_string tarr nb)
+          end
+      | TLam (arr,t) ->
+          let len = Array.length arr in
+          1,
+          (args_to_string arr nb) ^ (to_string t (nb+len) 1)
     in
-    match t with
-      Simple j -> j2s j nb
-    | Tuple tarr ->
-        tup2s nb tarr
-    | Generic (j,tarr) ->
-        let j1 = j-nb in
-        if j1 = predicate then begin
-          assert ((Array.length tarr)=1);
-          (t2s true nb tarr.(0)) ^ "?"
-        end
-        else if j1 = func then begin
-          assert ((Array.length tarr)=2);
-          let str0 = (t2s false nb tarr.(0)) ^ "->" ^ (t2s false nb tarr.(1))
-          in
-          if qmark then "(" ^ str0 ^ ")" else str0
-        end
-        else
-          (j2s j nb) ^ (tup2s nb tarr)
-      | TLam (tarr,t) ->
-          let len = Array.length tarr in
-          (tup2s nb tarr) ^ (t2s false (nb+len) t)
+    if inner_prec < prec then "(" ^ str ^ ")" else str
   in
-  t2s false nb t
+  to_string t nb 0
+
+
 
 
 let class2string (i:int) (ctxt:t) =
