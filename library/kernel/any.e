@@ -1,14 +1,15 @@
-export
+feature
     deferred class
         ANY
     end
 
+    G: ANY
 
-    = (a,b:CURRENT): BOOLEAN
+    = (a,b:G): BOOLEAN
        deferred
        end
 
-    all(a,b,c:CURRENT)
+    all(a,b,c:G)
        deferred
        ensure
            reflexivity:  a=a

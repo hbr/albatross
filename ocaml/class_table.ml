@@ -11,7 +11,9 @@ end)
 type descriptor =
     {hmark:header_mark; constraints: typ array; parents: TypSet.t}
 
-type t = {names: int key_table; classes: descriptor seq}
+type t = {names:   int key_table;
+          classes: descriptor seq;
+          mutable fgens: typ IntMap.t}
 
 let any_index       = 0
 let boolean_index   = 1
@@ -25,6 +27,7 @@ let count (c:t) =
 let class_name (i:int) (c:t) =
   assert (i<count c);
   Support.ST.string (Key_table.key c.names i)
+
 
 
 let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
@@ -63,18 +66,80 @@ let is_boolean_unary (args: typ array) (ret:typ): bool =
 
 
 
-let get_type (tp:type_t withinfo) (ct:t) =
-  match tp.v with
-    Normal_type (path,name,actuals) -> begin
-      assert (actuals = []);
+let collect_formal_generics
+    (l: type_t list)
+    (i:info)
+    (ct:t)
+    : IntSet.t =
+  (* Collect all formal generics which are in the types of the list 'l'
+     where 'lgens' are the formal generics of the local module
+   *)
+  let rec fgs (tp:type_t) (fgens: IntSet.t): IntSet.t =
+    match tp with
+      Normal_type (path,name,args) ->
+        let fgens =
+          try
+            let _ = IntMap.find name ct.fgens
+            in
+            match args with
+              [] -> IntSet.add name fgens
+            | _ -> error_info i
+                  ("Formal generic " ^  (ST.string name) ^
+                   "cannot have actual generics")
+          with Not_found -> fgens
+        in
+        fgs_list fgens args
+    | Arrow_type (tpa,tpb) ->
+        fgs tpb (fgs tpa fgens)
+    | Ghost_type tp ->
+        fgs tp fgens
+    | _ -> not_yet_implemented i "other types (collect_formal_generics)"
+  and fgs_list (set:IntSet.t) (lst: type_t list) =
+    List.fold_left (fun set tp -> fgs tp set) set lst
+  in
+  fgs_list IntSet.empty l
+
+
+
+
+
+let get_type
+    (tp:type_t withinfo)
+    (nb:int)
+    (fgmap: int IntMap.t)
+    (ct:t)
+    : typ =
+  (* Convert the syntactic type 'tp' into a type term in an environment having
+     'nb' formal generics and the generics map 'fgmap' *)
+  let cls_idx (name:int): int =
+    try
+      let fgidx = IntMap.find name fgmap in (assert (fgidx<nb); fgidx)
+    with Not_found ->
       try
-        let idx = Key_table.find ct.names name in
-        Simple idx
+        (Key_table.find ct.names name) + nb
       with Not_found ->
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
-    end
+  in
+  match tp.v with
+    Normal_type (path,name,actuals) ->
+      assert (actuals = []);
+      Simple (cls_idx name)
   | _ -> not_yet_implemented tp.i "types other than normal types"
+
+
+
+let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
+  if IntMap.mem name.v ct.fgens then
+    error_info
+      name.i
+      ("formal generic " ^ (ST.string name.v) ^ " already defined")
+  else
+    ct.fgens <- IntMap.add
+        name.v
+        (get_type concept 0 IntMap.empty ct)
+        ct.fgens
+
 
 
 
@@ -100,8 +165,11 @@ let split_function (function_type:typ) (ct:t): typ array * typ =
 
 let arguments
     (entlst: entities list withinfo)
-    (ct:t): int array * typ array =
-  let args: (int*typ)list =
+    (nb: int)
+    (fgmap: int IntMap.t)
+    (ct:t)
+    : int array * typ array =
+  let args: (int*typ) list =
     List.flatten
       (List.map
          (fun es ->
@@ -111,7 +179,7 @@ let arguments
                  ("Arguments must be fully typed "
                   ^ "in top level declarations")
            | Typed_entities (lst,tp) ->
-               let t = get_type (withinfo entlst.i tp) ct
+               let t = get_type (withinfo entlst.i tp) nb fgmap ct
                in
                List.map (fun name -> name,t) lst)
          entlst.v)
@@ -132,18 +200,106 @@ let arguments
   (Array.of_list argnames), (Array.of_list argtypes)
 
 
+let signature
+    (entlst: entities list withinfo)
+    (rt:return_type)
+    (ct:t)
+    : int array * typ array * int array * typ array * typ option =
+  let fgens: IntSet.t = (* Set of formal generics names *)
+    let tplst =
+      match rt with None -> []
+      | Some tp ->
+          let t,_ = tp.v in [t]
+    in
+    let tplst = List.fold_left
+      (fun lst ent->
+        match ent with Untyped_entities _ -> lst
+        | Typed_entities (_,tp) -> tp::lst)
+      tplst
+      entlst.v
+    in
+    collect_formal_generics tplst entlst.i ct
+  in
+  let fgnames,concepts,fgenmap = (* Concept array and map into the array *)
+    let ns,cs,map,_ =
+      IntSet.fold
+        (fun name (ns,cs,map,i) ->
+          name::ns,
+          (IntMap.find name ct.fgens)::cs,
+          IntMap.add name i map,
+          i+1)
+        fgens
+        ([], [], IntMap.empty, 0)
+    in
+    Array.of_list (List.rev ns), Array.of_list (List.rev cs), map
+  in
+  let nfgens = Array.length concepts
+  in
+  let argnames,argtypes = arguments entlst nfgens fgenmap ct
+  and ret =
+    match rt with
+      None -> None
+    | Some tp ->
+        let t,procedure = tp.v in
+        assert (not procedure);
+        Some (get_type (withinfo tp.i t) nfgens fgenmap ct)
+  in
+  fgnames, concepts, argnames, argtypes, ret
+
+
+let argument_signature
+    (entlst: entities list withinfo)
+    (ct:t)
+    : int array * typ array * int array * typ array =
+  let fgnames, concepts, argnames, argtypes, _ =
+    signature entlst None ct
+  in
+  fgnames, concepts, argnames, argtypes
+
+
+
 let feature_type
     (entlst: entities list withinfo)
     (rt:return_type)
-    (ct:t): typ array * typ * typ * int array =
-  let argnames,argtypes = arguments entlst ct
+    (ct:t)
+    : typ array * typ * typ * int array =
+  let fgens: IntSet.t = (* Set of formal generics names *)
+    let tplst =
+      match rt with None -> []
+      | Some tp ->
+          let t,_ = tp.v in [t]
+    in
+    let tplst = List.fold_left
+      (fun lst ent->
+        match ent with Untyped_entities _ -> lst
+        | Typed_entities (_,tp) -> tp::lst)
+      tplst
+      entlst.v
+    in
+    collect_formal_generics tplst entlst.i ct
+  in
+  let concepts,fgenmap = (* Concept array and map into the array *)
+    let cs,map,_ =
+      IntSet.fold
+        (fun name (cs,map,i) ->
+          (IntMap.find name ct.fgens)::cs,
+          IntMap.add name i map,
+          i+1)
+        fgens
+        ([], IntMap.empty,0)
+    in
+    Array.of_list (List.rev cs), map
+  in
+  let nfgens = Array.length concepts
+  in
+  let argnames,argtypes = arguments entlst nfgens fgenmap ct
   and ret =
     match rt with
       None -> assert false
     | Some tp ->
         let t,procedure = tp.v in
         assert (not procedure);
-        get_type (withinfo tp.i t) ct
+        get_type (withinfo tp.i t) nfgens fgenmap ct
   in
   let function_type =
     let arglen = Array.length argtypes in
@@ -161,11 +317,17 @@ let feature_type
   argtypes, ret, function_type, argnames
 
 
-
-
-let base_table () =
+let empty_table (): t =
   let cc = Seq.empty ()
   and kt = Key_table.empty ()
+  in
+  {names=kt; classes=cc; fgens=IntMap.empty}
+
+
+let base_table (): t =
+  let bt = empty_table () in
+  let cc = bt.classes
+  and kt = bt.names
   in
   let index cname = Key_table.index kt (Support.ST.symbol cname)
   in
@@ -188,7 +350,7 @@ let base_table () =
                parents = TypSet.empty};
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
                parents =TypSet.empty};
-  {names=kt; classes=cc}
+  {names=kt; classes=cc; fgens=bt.fgens}
 
 
 

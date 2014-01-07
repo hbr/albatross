@@ -4,9 +4,12 @@ open Term
 open Support
 
 
+type implementation_status = No_implementation | Builtin | Deferred
 
 type definition = {names: int array; types: typ array; term:term}
-type descriptor = {priv:        definition option;
+
+type descriptor = {impstat:     implementation_status;
+                   priv:        definition option;
                    mutable pub: definition option option}
 
 type key        = {name: feature_name; typ: typ}
@@ -480,11 +483,12 @@ let put
   let argtypes,rettype,functype,argnames =
     Class_table.feature_type entlst rt ct
   in
-  let func_def: definition option =
+  let (impstat:implementation_status), (func_def: definition option) =
     match bdy with
-      None -> None
-    | Some (None, Some Impbuiltin, None) -> None
+      None -> No_implementation, None
+    | Some (None, Some Impbuiltin, None) -> Builtin, None
     | Some (None, None, Some [ens]) ->
+        No_implementation,
         begin
           match ens.v with
             Binexp (Eqop, ExpResult,def) ->
@@ -498,6 +502,8 @@ let put
           | _ -> not_yet_implemented ens.i
                 "functions not defined with \"Result = ...\""
         end
+    | Some (None, Some Impdeferred, None) ->
+        Deferred, None
     | _ -> not_yet_implemented fn.i
           "functions with implementation/preconditions"
   in
@@ -585,6 +591,8 @@ let put
     else ();
     Seq.push
       ft.features
-      (if Block_stack.is_private bs then {priv=func_def;pub=None}
-      else {priv = func_def; pub = Some func_def});
+      (if Block_stack.is_private bs then
+        {impstat=impstat; priv=func_def;pub=None}
+      else
+        {impstat=impstat; priv = func_def; pub = Some func_def});
   end

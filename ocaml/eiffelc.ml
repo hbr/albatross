@@ -1,4 +1,5 @@
 open Support
+open Container
 
 let usage_string = "\
 Usage:
@@ -43,9 +44,11 @@ module Analyze = struct
         | Named_feature (fn, entlst, rt, body) ->
             Feature_table.put fn entlst rt body
               block_stack class_table feature_table
-        | Assertion_feature (label, entlst,body) ->
+        | Assertion_feature (label, entlst, body) ->
             Prover.prove_and_store
               entlst body class_table feature_table ass_table
+        | Formal_generic (name, concept) ->
+            Class_table.put_formal name concept class_table
         | _ ->
             Class_table.print   class_table;
             Feature_table.print class_table feature_table;

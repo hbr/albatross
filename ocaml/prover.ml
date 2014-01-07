@@ -488,7 +488,9 @@ let prove_and_store
     Assertion_table.put_proved argnames argtypes t pt ft at;
   in
 
-  let argnames,argtypes = Class_table.arguments entlst ct in
+  let fgnames, concepts, argnames,argtypes =
+    Class_table.argument_signature entlst ct in
+  assert ((Array.length fgnames) = 0);
   match bdy with
     _, _, None ->
       error_info entlst.i "Assertion must have an ensure clause"

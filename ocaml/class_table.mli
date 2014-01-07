@@ -3,7 +3,11 @@ open Type
 
 type t
 
+val empty_table: unit -> t
+
 val base_table: unit -> t
+
+val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
 val put: header_mark withinfo -> int withinfo -> t -> unit
 
@@ -13,9 +17,8 @@ val is_boolean_binary: typ array -> typ -> bool
 
 val is_boolean_unary: typ array -> typ -> bool
 
-val get_type: type_t withinfo -> t -> typ
-
-val arguments: entities list withinfo -> t -> int array * typ array
+val argument_signature: entities list withinfo -> t ->
+  int array * typ array * int array * typ array
 
 val feature_type: entities list withinfo -> return_type -> t ->
   typ array * typ * typ * int array
