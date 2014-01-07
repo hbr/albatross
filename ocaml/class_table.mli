@@ -17,6 +17,9 @@ val is_boolean_binary: typ array -> typ -> bool
 
 val is_boolean_unary: typ array -> typ -> bool
 
+val signature: entities list withinfo -> return_type -> t ->
+  int array * typ array * int array * typ array * (typ*bool) option
+
 val argument_signature: entities list withinfo -> t ->
   int array * typ array * int array * typ array
 

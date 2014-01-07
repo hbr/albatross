@@ -204,7 +204,7 @@ let signature
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : int array * typ array * int array * typ array * typ option =
+    : int array * typ array * int array * typ array * (typ*bool) option =
   let fgens: IntSet.t = (* Set of formal generics names *)
     let tplst =
       match rt with None -> []
@@ -242,7 +242,7 @@ let signature
     | Some tp ->
         let t,procedure = tp.v in
         assert (not procedure);
-        Some (get_type (withinfo tp.i t) nfgens fgenmap ct)
+        Some ((get_type (withinfo tp.i t) nfgens fgenmap ct),procedure)
   in
   fgnames, concepts, argnames, argtypes, ret
 
@@ -263,43 +263,12 @@ let feature_type
     (rt:return_type)
     (ct:t)
     : typ array * typ * typ * int array =
-  let fgens: IntSet.t = (* Set of formal generics names *)
-    let tplst =
-      match rt with None -> []
-      | Some tp ->
-          let t,_ = tp.v in [t]
-    in
-    let tplst = List.fold_left
-      (fun lst ent->
-        match ent with Untyped_entities _ -> lst
-        | Typed_entities (_,tp) -> tp::lst)
-      tplst
-      entlst.v
-    in
-    collect_formal_generics tplst entlst.i ct
+  let fgnames,concepts,argnames,argtypes,ret = signature entlst rt ct
   in
-  let concepts,fgenmap = (* Concept array and map into the array *)
-    let cs,map,_ =
-      IntSet.fold
-        (fun name (cs,map,i) ->
-          (IntMap.find name ct.fgens)::cs,
-          IntMap.add name i map,
-          i+1)
-        fgens
-        ([], IntMap.empty,0)
-    in
-    Array.of_list (List.rev cs), map
-  in
-  let nfgens = Array.length concepts
-  in
-  let argnames,argtypes = arguments entlst nfgens fgenmap ct
-  and ret =
-    match rt with
-      None -> assert false
-    | Some tp ->
-        let t,procedure = tp.v in
-        assert (not procedure);
-        get_type (withinfo tp.i t) nfgens fgenmap ct
+  let ret = match ret with
+    None -> not_yet_implemented entlst.i "procedures"
+  | Some (r,proc) ->
+      if proc then not_yet_implemented entlst.i "procedures" else r
   in
   let function_type =
     let arglen = Array.length argtypes in

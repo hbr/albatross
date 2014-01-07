@@ -8,51 +8,15 @@ open Term_table
 
 type header = int array * typ array
 
-type descriptor = {
-    names: int array;
-    types: typ array;
-    term:  term;
-    nterm: term;
-    chain: (term list * term) list;
-    fwd_opt: term option;
-    pt_opt: proof_term option}
-
-type t  = {seq:           descriptor seq;
-           mutable context: header General_context.t}
+type t  = {mutable context: header General_context.t}
 
 
-let count (at:t): int = Seq.count at.seq
-
-let term (idx:int) (at:t): int * term =
-  assert (idx < count at);
-  let desc = Seq.elem at.seq idx in
-  let nargs = Array.length desc.types in
-  nargs,desc.nterm
-
-let assertion_to_string
-    (d:descriptor)
-    (ct:Class_table.t)
-    (ft:Feature_table.t): string =
-  "all"
-  ^ (Class_table.arguments_to_string d.names d.types ct)
-  ^ " "
-  ^ (Feature_table.term_to_string d.term d.names ft)
-
-
-let to_string
-    (i:int)
-    (ct:Class_table.t)
-    (ft:Feature_table.t)
-    (at:t): string =
-  assert (i < Seq.count at.seq);
-  assertion_to_string (Seq.elem at.seq i) ct ft
-
+let count (at:t): int = General_context.count at.context
 
 
 (* Public functions *)
 
-let empty (): t =  {seq = Seq.empty ();
-                    context = General_context.empty}
+let empty (): t =  {context = General_context.empty}
 
 
 let find_backward
@@ -94,35 +58,6 @@ let find_backward
       []
       (General_context.backward t nb at.context)
   in
-  (*let res = ref []
-  in
-  begin
-    Seq.iteri
-      (fun i desc ->
-        let n = Array.length desc.types in
-        List.iter
-          (fun (premises,target) ->
-            (*if premises=[] then*)
-              try
-                let args,_ = Term.unify t nb target n in
-                let tt = Term.sub desc.nterm args nb in
-                res := ((tt,Specialize (Theorem i, args)),i) :: !res
-              with Not_found ->
-                ()
-            (*else
-              ()*)
-          )
-          desc.chain
-      )
-      at.seq
-  end;*)
-  (*Printf.printf "Term to match %s\n"
-    (Feature_table.raw_term_to_string t nb ft);
-  if (List.length !res) <> (List.length lst) then
-    Printf.printf "!! Table and Context different !!\n";
-  write_list "Table" !res;
-  write_list "Context" lst;*)
-  (*!res*)
   lst
 
 
@@ -167,31 +102,6 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
       []
       (General_context.forward t nb at.context)
   in
-  (*let res  = ref []
-  in
-  Seq.iteri
-    (fun i desc ->
-      let n = Array.length desc.types in
-      begin
-        match desc.fwd_opt with
-          None -> ()
-        | Some fwd ->
-            try
-              let args,_ = Term.unify t nb fwd n in
-              let tt = Term.sub desc.nterm args nb in
-              res := ((tt,Specialize (Theorem i, args)),i) :: !res
-            with Not_found ->
-              ()
-      end
-    )
-    at.seq;*)
-  (*Printf.printf "Term to match %s\n"
-    (Feature_table.raw_term_to_string t nb ft);
-  if (List.length !res) <> (List.length lst) then
-    Printf.printf "!! Table and Context different !!\n";
-  write_list "Table" !res;
-  write_list "Context" lst;*)
-  (*!res*)
   lst
 
 
@@ -217,63 +127,7 @@ let put_assertion
       (names,types)
       nb
       (Feature_table.implication_index ft)
-      at.context;
-  let chn = Feature_table.implication_chain nterm nb ft in
-  assert (chn<>[]);
-  let chn2 =
-    List.filter
-      (fun (premises,target) ->
-        let bvars_tgt = Term.bound_variables target nb
-        and n_tgt     = Term.nodes target
-        in
-        List.for_all
-          (fun p ->
-           (p<>target) &&
-            let bvars = Term.bound_variables p nb
-            and n     = Term.nodes p
-            in
-            n <= n_tgt &&  (* Has to be refined to allow distributivity *)
-            IntSet.subset bvars bvars_tgt
-          )
-          premises
-      )
-      chn
-  in
-  let fwd_opt =
-    try
-      let imp_ind = (Feature_table.implication_index ft) + nb in
-      let a,b     = Term.binary_split nterm imp_ind in
-      let bvars_a = Term.bound_variables a nb
-      and bvars_b = Term.bound_variables b nb
-      and n_a     = Term.nodes a
-      and n_b     = Term.nodes b
-      and distributes a b = false (* Algorithm needed for distributivity *)
-      in
-      if n_b <= n_a && a<>b && IntSet.subset bvars_b bvars_a then
-        ((*Printf.printf "Simplification rule found\n";*)
-         Some a)
-      else if (Term.depth a) = (Term.depth b)
-          && distributes a b then
-        None
-      else
-        None
-    with Not_found ->
-      None
-  in
-  if (Seq.count at.seq) < (General_context.count at.context) then
-    Seq.push
-      at.seq
-      {names    = names;
-       types    = types;
-       term     = term;
-       nterm    = nterm;
-       pt_opt   = pt_opt;
-       chain    = chn2;
-       fwd_opt  = fwd_opt}
-  else
-    Printf.printf "Duplicate, do not enter in at.seq\n"
-
-
+      at.context
 
 
 let put_axiom
@@ -297,9 +151,3 @@ let put_proved
     : unit =
   (* Put a proved assertion into the table *)
   put_assertion names types term (Some pt) ft at
-
-
-let print (ct:Class_table.t) (ft:Feature_table.t) (at:t): unit =
-  Seq.iter
-    (fun desc -> Printf.printf "%s\n" (assertion_to_string desc ct ft))
-    at.seq
