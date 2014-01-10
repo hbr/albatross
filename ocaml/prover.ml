@@ -49,6 +49,7 @@ let reset_goals () =  ngoals  := 0; nfailed := 0
 
 
 let prove
+    (concepts: typ array)
     (argnames: int array)
     (argtypes: typ array)
     (pre: compound)
@@ -69,7 +70,8 @@ let prove
   in
   let arglen = Array.length argnames in
   let imp_id = (Feature_table.implication_index ft) + arglen in
-  let exp2term ie =  Feature_table.assertion_term ie argnames argtypes ct ft
+  let exp2term ie =
+    Feature_table.assertion_term ie concepts argnames argtypes ct ft
   and term2string t = Feature_table.term_to_string t argnames ft
   and split = fun t -> Term.binary_split t imp_id
   and chain = fun t -> Feature_table.implication_chain t arglen ft
@@ -485,40 +487,40 @@ let prove_and_store
     Printf.printf "%3d proved  %s\n"
       (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
-    Assertion_table.put_proved argnames argtypes t pt ft at;
+    Assertion_table.put_proved argnames argtypes t pt ft at
   in
 
   let fgnames, concepts, argnames,argtypes =
     Class_table.argument_signature entlst ct in
-  assert ((Array.length fgnames) = 0);
+  (*assert ((Array.length fgnames) = 0);*)
   match bdy with
     _, _, None ->
       error_info entlst.i "Assertion must have an ensure clause"
   | rlst_opt, imp_opt, Some elst ->
       let rlst = match rlst_opt with None -> [] | Some l -> l
-      and axiom,is_do,clst =
+      and axiom,defer,is_do,clst =
         match imp_opt with
-          None -> false,false,[]
-        | Some Impdeferred ->
-            not_yet_implemented entlst.i "Deferred assertions"
-        | Some Impbuiltin -> (
-            true,false,[]
-           )
+          None -> false,false,false,[]
+        | Some Impdeferred -> false,true,false,[]
+        | Some Impbuiltin -> true,false,false,[]
         | Some Impevent ->
             error_info entlst.i "Assertion cannot be an event"
         | Some (Impdefined (Some locs,is_do,cmp)) ->
             not_yet_implemented entlst.i "Local variables in assertions"
         | Some (Impdefined (None,is_do,cmp)) ->
-            false,is_do,cmp
+            false,false,is_do,cmp
       in
-      if axiom then
+      if axiom || defer then
         match rlst with
           [] ->
             List.iter
               (fun ie ->
                 let term =
-                  Feature_table.assertion_term ie argnames argtypes ct ft in
-                push_axiom argnames argtypes term)
+                  Feature_table.assertion_term ie
+                    concepts argnames argtypes ct ft in
+                if axiom then
+                  push_axiom argnames argtypes term
+                else not_yet_implemented entlst.i "Deferred assertions")
               elst
         | _ ->
             not_yet_implemented entlst.i "axioms with preconditions"
@@ -527,7 +529,7 @@ let prove_and_store
       else
         let lst =
           if Feature_table.has_implication ft then
-            prove argnames argtypes rlst clst elst ct ft at
+            prove concepts argnames argtypes rlst clst elst ct ft at
           else
             error_info entlst.i "\"=>\" is not yet defined"
         in

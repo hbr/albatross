@@ -24,13 +24,13 @@ val put:
       -> feature_body option ->
         Block_stack.t -> Class_table.t -> t -> unit
 
-val typed_term: info_expression -> int array -> typ array
+val typed_term: info_expression -> typ array -> int array -> typ array
   -> Class_table.t -> t -> term * typ
 
-val assertion_term: info_expression -> int array -> typ array
+val assertion_term: info_expression -> typ array -> int array -> typ array
   -> Class_table.t -> t -> term
 
-val term: info_expression -> int array -> typ array
+val term: info_expression -> typ array -> int array -> typ array
   -> Class_table.t -> t -> term
 
 val term_to_string: term -> int array -> t -> string

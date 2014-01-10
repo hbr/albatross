@@ -262,7 +262,7 @@ let feature_type
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : typ array * typ * typ * int array =
+    : int array * typ array * int array * typ array * typ * typ =
   let fgnames,concepts,argnames,argtypes,ret = signature entlst rt ct
   in
   let ret = match ret with
@@ -283,7 +283,7 @@ let feature_type
       in
       func 0 (arg_type arglen) ret
   in
-  argtypes, ret, function_type, argnames
+  fgnames, concepts, argnames, argtypes, ret, function_type
 
 
 let empty_table (): t =

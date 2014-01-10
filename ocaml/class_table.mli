@@ -24,7 +24,7 @@ val argument_signature: entities list withinfo -> t ->
   int array * typ array * int array * typ array
 
 val feature_type: entities list withinfo -> return_type -> t ->
-  typ array * typ * typ * int array
+  int array * typ array * int array * typ array * typ * typ
 
 val split_function: typ -> t -> typ array * typ
 

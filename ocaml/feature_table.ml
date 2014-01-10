@@ -6,22 +6,40 @@ open Support
 
 type implementation_status = No_implementation | Builtin | Deferred
 
+module Signature_map = Map.Make(struct
+  type t = typ array * typ array * typ
+  let compare = Pervasives.compare
+end)
+
+module Key_map = Map.Make(struct
+  type t = feature_name * int
+  let compare = Pervasives.compare
+end)
+
 type definition = {names: int array; types: typ array; term:term}
 
 type descriptor = {impstat:     implementation_status;
+                   fgnames:     int array;
+                   concepts:    typ array;
+                   argnames:    int array;
+                   argtypes:    typ array;
+                   return:      typ;
                    priv:        definition option;
                    mutable pub: definition option option}
 
 type key        = {name: feature_name; typ: typ}
-(*type key        = {name: feature_name; args: typ array; ret: typ}*)
+
 type t          = {keys: key key_table;
                    mutable implication: int option;
+                   mutable key_map: (int Signature_map.t) Key_map.t;
                    features: descriptor seq}
 
 
-
 let empty () =
-  {keys = Key_table.empty () ; implication = None; features = Seq.empty ()}
+  {keys = Key_table.empty () ;
+   implication = None;
+   key_map =  Key_map.empty;
+   features = Seq.empty ()}
 
 
 
@@ -121,7 +139,6 @@ let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
         if k.name=name then
           try
             let args,rt = Class_table.split_function k.typ ct in
-            (*let args,rt = k.args, k.ret in*)
             if nargs = (Array.length args) then
               lst := (i,args,rt)::!lst
             else ()
@@ -188,8 +205,13 @@ let check_match
     else ()
 
 
+
+
+
+
 let typed_term
     (ie:info_expression)
+    (concepts: typ array)
     (names: int array)
     (types: typ array)
     (ct:Class_table.t)
@@ -250,7 +272,7 @@ let typed_term
               let _ = check e1 tp1 tarr.(0)
               and _ = check e2 tp0 tarr.(1)
               in
-              Application (Variable (nbound+idx), [|t0;t1|]),rt
+              Application (Variable (nbound+idx), [|t0;t1|]), rt
           | _ -> not_yet_implemented ie.i
                 ("(Binexp)Typing of expression " ^
                  (string_of_expression ie.v))
@@ -285,11 +307,12 @@ let typed_term
 
 let term
     (ie:info_expression)
+    (concepts: typ array)
     (names: int array)
     (types: typ array)
     (ct:Class_table.t)
     (ft:t):  term =
-  let t,_ = typed_term ie names types ct ft
+  let t,_ = typed_term ie concepts names types ct ft
   in
   t
 
@@ -298,11 +321,12 @@ let term
 
 let assertion_term
     (ie:info_expression)
+    (concepts: typ array)
     (names: int array)
     (types: typ array)
     (ct:Class_table.t)
     (ft:t):  term =
-  let t,tp = typed_term ie names types ct ft
+  let t,tp = typed_term ie concepts names types ct ft
   in
   if tp <> (Class_table.boolean_type ct) then
     error_info ie.i "Expression does not have type BOOLEAN"
@@ -480,7 +504,7 @@ let put
     (bs: Block_stack.t)
     (ct: Class_table.t)
     (ft: t) =
-  let argtypes,rettype,functype,argnames =
+  let fgnames,concepts,argnames,argtypes,rettype,functype =
     Class_table.feature_type entlst rt ct
   in
   let (impstat:implementation_status), (func_def: definition option) =
@@ -493,7 +517,7 @@ let put
           match ens.v with
             Binexp (Eqop, ExpResult,def) ->
               let term,tp =
-                typed_term (withinfo ens.i def) argnames argtypes ct ft
+                typed_term (withinfo ens.i def) concepts argnames argtypes ct ft
               in
               check_match ens.i def tp rettype ct;
               Some {names = argnames;
@@ -591,8 +615,11 @@ let put
     else ();
     Seq.push
       ft.features
-      (if Block_stack.is_private bs then
-        {impstat=impstat; priv=func_def;pub=None}
-      else
-        {impstat=impstat; priv = func_def; pub = Some func_def});
+      (let pub = if Block_stack.is_private bs then None else Some func_def in
+      {impstat=impstat;
+       fgnames=fgnames;   concepts=concepts;
+       argnames=argnames; argtypes=argtypes;
+       return=rettype;
+       priv = func_def;
+       pub = pub})
   end
