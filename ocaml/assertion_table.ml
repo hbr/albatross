@@ -1,12 +1,11 @@
 open Support
 open Container
-open Type
 open Term
 open Proof
 open Term_table
 
 
-type header = int array * typ array
+type header = int array * term array
 
 type t  = {mutable context: header General_context.t}
 
@@ -112,7 +111,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
 
 let put_assertion
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (term:  term)
     (pt_opt: proof_term option)
     (ft:    Feature_table.t)
@@ -132,7 +131,7 @@ let put_assertion
 
 let put_axiom
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (term:  term)
     (ft:    Feature_table.t)
     (at:    t)
@@ -143,7 +142,7 @@ let put_axiom
 
 let put_proved
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (term:  term)
     (pt:    proof_term)
     (ft:    Feature_table.t)

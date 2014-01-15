@@ -1,19 +1,19 @@
 open Support
-open Type
+open Term
 open Container
 
 module TypSet = Set.Make(struct
   let compare = Pervasives.compare
-  type t = typ
+  type t = term
 end)
 
 
 type descriptor =
-    {hmark:header_mark; constraints: typ array; parents: TypSet.t}
+    {hmark:header_mark; constraints: term array; parents: TypSet.t}
 
 type t = {names:   int key_table;
           classes: descriptor seq;
-          mutable fgens: typ IntMap.t}
+          mutable fgens: term IntMap.t}
 
 let any_index       = 0
 let boolean_index   = 1
@@ -46,23 +46,22 @@ let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
   with Not_found ->
     not_yet_implemented cn.i "Insertion of new classes"
 
-let boolean = Simple boolean_index
-let any     = Simple any_index
-let func nb dom ran = Generic(nb+3,[|dom;ran|])
+let boolean_type  = Variable boolean_index
+let any           = Variable any_index
+let func nb dom ran = Application(Variable(nb+3),[|dom;ran|])
 
 
-let boolean_type (ct:t): typ = boolean
 
-let is_boolean_binary (args: typ array) (ret:typ): bool =
-  ret=boolean
+let is_boolean_binary (args: term array) (ret:term): bool =
+  ret=boolean_type
     && (Array.length args)=2
-    && args.(0)=boolean
-    && args.(1)=boolean
+    && args.(0)=boolean_type
+    && args.(1)=boolean_type
 
-let is_boolean_unary (args: typ array) (ret:typ): bool =
-  ret=boolean
+let is_boolean_unary (args: term array) (ret:term): bool =
+  ret=boolean_type
     && (Array.length args)=1
-    && args.(0)=boolean
+    && args.(0)=boolean_type
 
 
 
@@ -108,7 +107,7 @@ let get_type
     (nb:int)
     (fgmap: int IntMap.t)
     (ct:t)
-    : typ =
+    : term =
   (* Convert the syntactic type 'tp' into a type term in an environment having
      'nb' formal generics and the generics map 'fgmap' *)
   let cls_idx (name:int): int =
@@ -124,7 +123,7 @@ let get_type
   match tp.v with
     Normal_type (path,name,actuals) ->
       assert (actuals = []);
-      Simple (cls_idx name)
+      Variable (cls_idx name)
   | _ -> not_yet_implemented tp.i "types other than normal types"
 
 
@@ -143,14 +142,14 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
 
 
 
-let split_function (function_type:typ) (ct:t): typ array * typ =
+let split_function (function_type:term) (ct:t): term array * term =
   match function_type with
-    Generic (i,tarr) ->
+    Application (Variable i,tarr) ->
       assert (i=function_index);
       assert ((Array.length tarr) = 2);
-      let rec arglist (t:typ) (l:typ list): typ list =
+      let rec arglist (t:term) (l:term list): term list =
         match t with
-          Generic (i,tarr) ->
+          Application (Variable i,tarr) ->
             if i = tuple_index then begin
               assert ((Array.length tarr) = 2);
               tarr.(0) :: (arglist tarr.(1) l)
@@ -168,8 +167,8 @@ let arguments
     (nb: int)
     (fgmap: int IntMap.t)
     (ct:t)
-    : int array * typ array =
-  let args: (int*typ) list =
+    : int array * term array =
+  let args: (int*term) list =
     List.flatten
       (List.map
          (fun es ->
@@ -204,7 +203,7 @@ let signature
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : int array * typ array * int array * typ array * (typ*bool) option =
+    : int array * term array * int array * term array * (term*bool) option =
   let fgens: IntSet.t = (* Set of formal generics names *)
     let tplst =
       match rt with None -> []
@@ -250,7 +249,7 @@ let signature
 let argument_signature
     (entlst: entities list withinfo)
     (ct:t)
-    : int array * typ array * int array * typ array =
+    : int array * term array * int array * term array =
   let fgnames, concepts, argnames, argtypes, _ =
     signature entlst None ct
   in
@@ -262,7 +261,7 @@ let feature_type
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : int array * typ array * int array * typ array * typ * typ =
+    : int array * term array * int array * term array * term * term =
   let fgnames,concepts,argnames,argtypes,ret = signature entlst rt ct
   in
   let ret = match ret with
@@ -275,11 +274,11 @@ let feature_type
     if arglen = 0 then
       ret
     else
-      let rec arg_type (n:int): typ =
+      let rec arg_type (n:int): term =
         assert (n>0);
         if n=1 then argtypes.(arglen-n)
-        else Generic(tuple_index,
-                     [| argtypes.(arglen-n); arg_type (n-1)|])
+        else Application(Variable tuple_index,
+                         [| argtypes.(arglen-n); arg_type (n-1)|])
       in
       func 0 (arg_type arglen) ret
   in
@@ -324,9 +323,9 @@ let base_table (): t =
 
 
 
-let type2string (t:typ) (nb:int) (ct:t): string =
-  let rec to_string(t:typ) (nb:int) (prec:int): string =
-    let args_to_string (tarr:typ array) (nb:int): string =
+let type2string (t:term) (nb:int) (ct:t): string =
+  let rec to_string(t:term) (nb:int) (prec:int): string =
+    let args_to_string (tarr:term array) (nb:int): string =
       "["
       ^ (String.concat ","
            (Array.to_list (Array.map (fun t -> to_string t nb 1) tarr)))
@@ -334,9 +333,9 @@ let type2string (t:typ) (nb:int) (ct:t): string =
     in
     let inner_prec, str =
       match t with
-        Simple j ->
+        Variable j ->
           1, if j<nb then string_of_int j else class_name (j-nb) ct
-      | Generic (j,tarr) ->
+      | Application (Variable j,tarr) ->
           let j1 = j-nb
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
@@ -350,12 +349,14 @@ let type2string (t:typ) (nb:int) (ct:t): string =
             0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
           end else begin
             1,
-            (to_string (Simple j) nb 1) ^ (args_to_string tarr nb)
+            (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
           end
-      | TLam (arr,t) ->
-          let len = Array.length arr in
+      | Application (class_exp,args) -> assert false (*not yet implemented*)
+      | Lam (len,t) ->
+          assert false (*nyi*)
+          (*let len = Array.length arr in
           1,
-          (args_to_string arr nb) ^ (to_string t (nb+len) 1)
+          (args_to_string arr nb) ^ (to_string t (nb+len) 1)*)
     in
     if inner_prec < prec then "(" ^ str ^ ")" else str
   in
@@ -405,7 +406,7 @@ let print ctxt =
 
 let arguments_to_string
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (ct:t): string =
   let nargs = Array.length names in
   assert (nargs = (Array.length types));

@@ -53,7 +53,7 @@ module Term: sig
 
   val reduce: term -> term
 
-  val unify: term -> int -> term -> int ->  term array * int list
+  (*val unify: term -> int -> term -> int ->  term array * int list*)
 
   val binary: int -> term -> term -> term
 

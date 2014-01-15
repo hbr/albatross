@@ -1,6 +1,5 @@
 open Container
 open Term
-open Type
 
 
 type proof_term =

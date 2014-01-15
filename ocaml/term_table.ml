@@ -1,5 +1,4 @@
 open Container
-open Type
 open Term
 
 

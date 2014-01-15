@@ -1,5 +1,4 @@
 open Container
-open Type
 open Term
 open Proof
 open Support
@@ -25,7 +24,7 @@ type tried_map    = Local_context.t TermMap.t
 
 let assertion_to_string
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (term: term)
     (ct:Class_table.t)
     (ft:Feature_table.t): string =
@@ -49,9 +48,9 @@ let reset_goals () =  ngoals  := 0; nfailed := 0
 
 
 let prove
-    (concepts: typ array)
+    (concepts: term array)
     (argnames: int array)
-    (argtypes: typ array)
+    (argtypes: term array)
     (pre: compound)
     (chck: compound)
     (post: compound)
@@ -476,13 +475,13 @@ let prove_and_store
     (ft: Feature_table.t)
     (at: Assertion_table.t): unit =
 
-  let push_axiom (argnames: int array) (argtypes: typ array) (t:term) =
+  let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
     Printf.printf "%3d axiom   %s\n"
       (Assertion_table.count at)
       (assertion_to_string argnames argtypes t ct ft);
     Assertion_table.put_axiom argnames argtypes t ft at
 
-  and push_proved (argnames: int array) (argtypes: typ array)
+  and push_proved (argnames: int array) (argtypes: term array)
       (t:term) (pt:proof_term): unit =
     Printf.printf "%3d proved  %s\n"
       (Assertion_table.count at)

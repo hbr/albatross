@@ -15,10 +15,10 @@ val find_backward: term -> int -> Feature_table.t -> t ->
   (proof_pair * int) list
 
 val put_axiom:
-    int array -> typ array -> term
+    int array -> term array -> term
       -> Feature_table.t -> t -> unit
 
 val put_proved:
-    int array -> typ array -> term -> proof_term
+    int array -> term array -> term -> proof_term
       -> Feature_table.t -> t -> unit
 

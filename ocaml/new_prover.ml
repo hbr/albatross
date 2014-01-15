@@ -1,5 +1,4 @@
 open Term
-open Type
 open Container
 open Proof
 
@@ -34,7 +33,7 @@ module BwdSet = Set.Make(struct
 end)
 
 
-type global_info = int array * typ array
+type global_info = int array * term array
 type local_info  = IntSet.t
 
 type context = {

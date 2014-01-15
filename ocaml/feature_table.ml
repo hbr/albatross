@@ -1,5 +1,4 @@
 open Container
-open Type
 open Term
 open Support
 
@@ -7,7 +6,7 @@ open Support
 type implementation_status = No_implementation | Builtin | Deferred
 
 module Signature_map = Map.Make(struct
-  type t = typ array * typ array * typ
+  type t = term array * term array * term
   let compare = Pervasives.compare
 end)
 
@@ -16,18 +15,18 @@ module Key_map = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
-type definition = {names: int array; types: typ array; term:term}
+type definition = {names: int array; types: term array; term:term}
 
 type descriptor = {impstat:     implementation_status;
                    fgnames:     int array;
-                   concepts:    typ array;
+                   concepts:    term array;
                    argnames:    int array;
-                   argtypes:    typ array;
-                   return:      typ;
+                   argtypes:    term array;
+                   return:      term;
                    priv:        definition option;
                    mutable pub: definition option option}
 
-type key        = {name: feature_name; typ: typ}
+type key        = {name: feature_name; typ: term}
 
 type t          = {keys: key key_table;
                    mutable implication: int option;
@@ -129,7 +128,7 @@ let find_feature (name: feature_name) (ft:t)
 
 
 let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
-    : (int * typ array * typ) list =
+    : (int * term array * term) list =
   (* List of functions with the name 'name' and with 'nargs' argumens *)
   let lst = ref []
   in
@@ -191,8 +190,8 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
 let check_match
     (i:info)
     (e:expression)
-    (tp:typ)
-    (expected:typ)
+    (tp:term)
+    (expected:term)
     (ct:Class_table.t)
     : unit =
   if tp<>expected then
@@ -211,16 +210,16 @@ let check_match
 
 let typed_term
     (ie:info_expression)
-    (concepts: typ array)
+    (concepts: term array)
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (ct:Class_table.t)
-    (ft:t):  term * typ =
+    (ft:t):  term * term =
   assert ((Array.length names) = (Array.length types));
   let nbound = Array.length types in
   let check e tp expected = check_match ie.i e tp expected ct
   in
-  let find_name (name:int): term * typ =
+  let find_name (name:int): term * term =
     let idx =
       try
         Search.array_find_min name names
@@ -234,7 +233,7 @@ let typed_term
     else
       assert false (* would be global *)
   in
-  let rec trm (e:expression): term * typ =
+  let rec trm (e:expression): term * term =
     match e with
       Identifier i ->
         find_name i
@@ -307,9 +306,9 @@ let typed_term
 
 let term
     (ie:info_expression)
-    (concepts: typ array)
+    (concepts: term array)
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (ct:Class_table.t)
     (ft:t):  term =
   let t,_ = typed_term ie concepts names types ct ft
@@ -321,14 +320,14 @@ let term
 
 let assertion_term
     (ie:info_expression)
-    (concepts: typ array)
+    (concepts: term array)
     (names: int array)
-    (types: typ array)
+    (types: term array)
     (ct:Class_table.t)
     (ft:t):  term =
   let t,tp = typed_term ie concepts names types ct ft
   in
-  if tp <> (Class_table.boolean_type ct) then
+  if tp <> Class_table.boolean_type then
     error_info ie.i "Expression does not have type BOOLEAN"
   else
     t

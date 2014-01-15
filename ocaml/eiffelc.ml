@@ -20,7 +20,6 @@ let parse_file fn =
 
 
 module Analyze = struct
-  open Type
 
   let analyze(ast:declaration list) =
     let block_stack = Block_stack.make ()
