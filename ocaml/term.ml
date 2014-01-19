@@ -8,6 +8,8 @@ type term =
   | Lam         of int * term
 
 
+exception Term_capture
+
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = term
@@ -39,7 +41,7 @@ module Term: sig
 
   val map: (int->int->term) -> term -> term
 
-  val down: int -> term -> term
+  (*val down: int -> term -> term*)
 
   val upbound: int->int->term->term
 
@@ -53,7 +55,7 @@ module Term: sig
 
   val reduce: term -> term
 
-  (*val unify: term -> int -> term -> int ->  term array * int list*)
+  val unify: term -> term -> int ->  term array * int list
 
   val binary: int -> term -> term -> term
 
@@ -168,22 +170,28 @@ end = struct
      *)
     map
       (fun j nb ->
-        if j<nb then Variable j
-        else (
-          assert (n <= (j-nb));
+        if j<nb then
+          Variable j
+        else if n <= j-nb then
           Variable (j-n)
-         ))
+        else
+          raise Term_capture
+      )
       t
 
 
 
   let upbound (n:int) (start:int) (t:term): term =
     (* Shift all free variables up by 'n' from 'start' on in the term 't' *)
-    map
-      (fun j nb ->
-        if j<nb+start then Variable(j)
-        else Variable(j+n))
+    assert (n>=0);
+    if n=0 then
       t
+    else
+      map
+        (fun j nb ->
+          if j<nb+start then Variable(j)
+          else Variable(j+n))
+        t
 
 
 
@@ -193,6 +201,18 @@ end = struct
     upbound n 0 t
 
 
+
+  let sub_var (i:int) (t:term) (u:term): term =
+    (* Substitute the free variabe 'i' in the term 't' by the term 'u' *)
+    assert (0<=i);
+    map
+      (fun k nb ->
+        if i+nb=k then
+          up nb u
+        else
+          Variable k
+      )
+      t
 
 
   let sub (t:term) (args:term array) (nbound:int): term =
@@ -208,7 +228,7 @@ end = struct
         else
           let jfree = j-nb in
           if jfree < len then
-            args.(jfree)
+            up nb args.(jfree)
           else
             Variable(j + nbound - len)
       )
@@ -280,56 +300,60 @@ end = struct
 
 
 
-  let unify (t1:term) (nb1:int) (t2:term) (nb2:int)
-      : term array * int list =
-    (* Find a substitution (i.e. an array of arguments) for the nb2 bound
-       variables of the term t2 so that t1 = Lam(nb2,t2) (args). Clearly the
-       size of args must be nb2. The term t1 is in an environment with nb1
-       bound variables.
+  let unify (t1:term) (t2:term) (nvars:int): term array * int list =
+    (* Find a substitution which applied to the terms 't1' and 't2' makes them
+       identical. Note that all substituted variables except the arbitrary
+       ones do not occur after the substitution.
 
-       The second return parameter is the list of variables which do not
-       occur in t2 (i.e. a subset of {0,1,...,nb2-1}).
-     *)
-    let args  = Array.make nb2 t1
-    and flags = Array.make nb2 false
+       The second return parameter specifies the arbitrary variables *)
+    let args  = Array.init nvars (fun i -> Variable i)
+    and flags = Array.make nvars false
     in
-    let notfound_unless (cond:bool): unit =
-      if cond then () else raise Not_found
-    in
-    let rec uni (t1:term) (t2:term): unit =
-      match t1,t2 with
-        _, Variable i2 ->
-          if i2<nb2 then
-            begin
-              if not flags.(i2) then
-                (args.(i2) <- t1;
-                 flags.(i2) <- true)
-              else
-                notfound_unless (args.(i2)=t1)
-            end
+    let do_sub (i:int) (t:term) (nb:int): unit =
+      assert (nb<=i); assert (i<=nb+nvars);
+      match t with
+        Variable j when i=j -> ()
+      | _ ->
+          let i,t =
+            try i-nb, down nb t
+            with Term_capture -> raise Not_found
+          in
+          let t = sub t args nvars
+          in
+          if IntSet.mem i (bound_variables t nvars) then
+            raise Not_found (* circular substitution *)
           else begin
-            match t1 with
-              Variable i1 ->
-                notfound_unless ((i1-nb1) = (i2-nb2))
-            | _ -> raise Not_found
+            Array.iteri
+              (fun j e -> if flags.(j) then args.(j) <- sub_var i e t else ())
+              args;
+            if not flags.(i) then (args.(i)<-t; flags.(i)<-true)
+            else if t = args.(i) then ()
+            else raise Not_found
           end
-      | Application (f1,args1), Application (f2,args2) ->
-          let l1,l2 = Array.length args1, Array.length args2 in
-          if l1=l2 then begin
-            uni f1 f2;
-            Array.iteri (fun i e -> uni e args2.(i)) args1
-          end
+    in
+    let rec uni (t1:term) (t2:term) (nb:int): unit =
+      match t1,t2 with
+        Variable i, _ when nb<=i && i<nb+nvars ->
+          do_sub i t2 nb
+      | _, Variable j when nb<=j && j<nb+nvars ->
+          do_sub j t1 nb
+      | Variable i, Variable j ->
+          assert (i<nb||nb+nvars<=i);
+          assert (j<nb||nb+nvars<=j);
+          if i=j then
+            ()
           else
             raise Not_found
-      | Lam(l1,u1), Lam(l2,u2) ->
-          if l1=l2 then
-            uni u1 u2
+      | Application(f1,args1), Application(f2,args2) ->
+          assert false
+      | Lam (nb1,t1), Lam (nb2,t2) ->
+          if nb1=nb2 then
+            uni t1 t2 (nb+nb1)
           else
             raise Not_found
       | _ -> raise Not_found
     in
-    uni t1 t2;
-    assert (t1 = (sub t2 args nb1));
+    uni t1 t2 0;
     let arbitrary: int list ref = ref []
     in
     Array.iteri
@@ -337,7 +361,9 @@ end = struct
         if flag then ()
         else arbitrary := i::!arbitrary )
       flags;
+    assert ((sub t1 args nvars) = (sub t2 args nvars));
     args,!arbitrary
+
 
 
 
@@ -535,7 +561,7 @@ end = struct
     (* Apply to the term 't' with 'nargs' formal arguments the substitution
        'sub'. If the substitution covers all formal arguments of 't' then
        all free variables (i.e. variables above 'nargs') are shifted down
-       by nargs and 0 is returned with the result term.
+       by nargs.
 
        Note that all substitution terms have to be shifted up by 'nargs'
        if the substitution is not covering.
@@ -582,6 +608,8 @@ end = struct
     let nargs_res = if covers then 0 else nargs
     in
     apply_0 t nargs sub covers, nargs_res
+
+
 end
 
 
