@@ -299,6 +299,41 @@ end = struct
 
 
 
+  module Sub: sig
+    type t
+    val make: int -> t
+    val flags: t -> bool array
+    val args:  t -> term array
+    val add:   int -> term -> t -> unit
+  end = struct
+    type t = {n:int; args: term array; flags: bool array}
+
+    let flags (s:t): bool array = s.flags
+    let args  (s:t): term array = s.args
+
+    let make (n:int): t = 
+      {n     = n;
+       args  = Array.init n (fun i -> Variable i);
+       flags = Array.make n false}
+
+    let add (i:int) (t:term) (s:t): unit =
+      assert (i <= s.n);
+      let t = sub t s.args s.n in
+      if IntSet.mem i (bound_variables t s.n) then
+        raise Not_found (* circular substitution *)
+      else begin
+        Array.iteri
+          (fun j e -> if s.flags.(j) then s.args.(j) <- sub_var i e t else ())
+          s.args;
+        if not s.flags.(i) then
+          (s.args.(i)<-t; s.flags.(i)<-true)
+        else if t = s.args.(i) then
+          ()
+        else
+          raise Not_found
+      end
+  end
+
 
   let unify (t1:term) (t2:term) (nvars:int): term array * int list =
     (* Find a substitution which applied to the terms 't1' and 't2' makes them
@@ -306,30 +341,18 @@ end = struct
        ones do not occur after the substitution.
 
        The second return parameter specifies the arbitrary variables *)
-    let args  = Array.init nvars (fun i -> Variable i)
-    and flags = Array.make nvars false
-    in
+    let subst = Sub.make nvars in
     let do_sub (i:int) (t:term) (nb:int): unit =
       assert (nb<=i); assert (i<=nb+nvars);
       match t with
-        Variable j when i=j -> ()
+        Variable j when i=j ->
+          ()
       | _ ->
           let i,t =
             try i-nb, down nb t
             with Term_capture -> raise Not_found
           in
-          let t = sub t args nvars
-          in
-          if IntSet.mem i (bound_variables t nvars) then
-            raise Not_found (* circular substitution *)
-          else begin
-            Array.iteri
-              (fun j e -> if flags.(j) then args.(j) <- sub_var i e t else ())
-              args;
-            if not flags.(i) then (args.(i)<-t; flags.(i)<-true)
-            else if t = args.(i) then ()
-            else raise Not_found
-          end
+          Sub.add i t subst
     in
     let rec uni (t1:term) (t2:term) (nb:int): unit =
       match t1,t2 with
@@ -360,9 +383,9 @@ end = struct
       (fun i flag ->
         if flag then ()
         else arbitrary := i::!arbitrary )
-      flags;
-    assert ((sub t1 args nvars) = (sub t2 args nvars));
-    args,!arbitrary
+      (Sub.flags subst);
+    assert ((sub t1 (Sub.args subst) nvars) = (sub t2 (Sub.args subst) nvars));
+    (Sub.args subst),!arbitrary
 
 
 
