@@ -1,3 +1,17 @@
+module Option: sig
+  val has_value:   'a option -> bool
+  val value: 'a option -> 'a
+end = struct
+  let has_value (o: 'a option): bool =
+    match o with None -> false | Some _ -> true
+  let value (o: 'a option): 'a =
+    assert (has_value o);
+    match o with
+      None -> assert false
+    | Some x -> x
+end
+
+
 module Search: sig
   val binsearch_max: 'a -> 'a array -> int
   val array_find_min: 'a -> 'a array -> int
@@ -115,7 +129,7 @@ module Seq: sig
 end = struct
   type 'a sequence = {mutable cnt:int;
                       mutable arr: 'a array}
-  let empty () = {cnt=0; arr=Array.init 0 (function _ -> assert false)}
+  let empty () = {cnt=0; arr=[||]}
   let singleton e = {cnt=1; arr=Array.make 1 e}
   let count seq  = seq.cnt
   let elem seq i =
@@ -132,10 +146,9 @@ end = struct
         Array.blit seq.arr 0 narr 0 cnt;
         seq.arr <- narr
       else
-        ()
+        seq.arr.(cnt) <- elem
     in
     assert (cnt < Array.length seq.arr);
-    seq.arr.(cnt) <- elem;
     seq.cnt <- cnt+1
 
   let iter f s =
