@@ -5,19 +5,20 @@ open Support
 
 type implementation_status = No_implementation | Builtin | Deferred
 
-module Signature_map = Map.Make(struct
+module ESignature_map = Map.Make(struct
   type t = term array * term array * term
   let compare = Pervasives.compare
 end)
 
 module Key_map = Map.Make(struct
-  type t = feature_name * int
+  type t = feature_name * int (* name, # of arguments *)
   let compare = Pervasives.compare
 end)
 
 type definition = {names: int array; types: term array; term:term}
 
-type descriptor = {impstat:     implementation_status;
+type descriptor = {fname:       feature_name;
+                   impstat:     implementation_status;
                    fgnames:     int array;
                    concepts:    term array;
                    argnames:    int array;
@@ -29,13 +30,15 @@ type descriptor = {impstat:     implementation_status;
 type key        = {name: feature_name; typ: term}
 
 type t          = {keys: key key_table;
+                   mutable map: int ESignature_map.t Key_map.t;
                    mutable implication: int option;
-                   mutable key_map: (int Signature_map.t) Key_map.t;
+                   mutable key_map: (int ESignature_map.t) Key_map.t;
                    features: descriptor seq}
 
 
 let empty () =
-  {keys = Key_table.empty () ;
+  {keys = Key_table.empty ();
+   map  = Key_map.empty;
    implication = None;
    key_map =  Key_map.empty;
    features = Seq.empty ()}
@@ -125,6 +128,8 @@ let find_feature (name: feature_name) (ft:t)
       ft.keys
   in
   !lst
+
+
 
 
 let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
@@ -374,7 +379,7 @@ let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
   else
     begin
       assert ((i-(arglen+nanon))<Seq.count ft.features);
-      (Key_table.key ft.keys (i-(arglen+nanon))).name
+      (Seq.elem ft.features (i-(arglen+nanon))).fname
     end
 
 
@@ -475,10 +480,10 @@ let raw_term_to_string (t:term) (nanon:int) (ft:t): string =
 let print (ct:Class_table.t)  (ft:t): unit =
   Seq.iteri
     (fun i fdesc ->
-      let key = Key_table.key ft.keys i
-      in
-      let name = feature_name_to_string key.name
-      and tname = Class_table.type2string key.typ 0 ct
+      (*let key = Key_table.key ft.keys i
+      in*)
+      let name = feature_name_to_string fdesc.fname
+      and tname = assert false (*Class_table.type2string key.typ 0 ct*)
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
@@ -590,10 +595,34 @@ let put
     in
     {name = fn.v; typ = functype}
   in
-  let idx = Key_table.index ft.keys key
-  and cnt = Seq.count ft.features
-  in
-  if idx < cnt then begin
+
+  let cnt = Seq.count ft.features in
+  let sig_map =
+    try Key_map.find (fn.v,nargs) ft.map
+    with Not_found -> ESignature_map.empty in
+  let idx =
+    try ESignature_map.find (concepts,argtypes,rettype) sig_map
+    with Not_found -> cnt in
+  let idx2 = Key_table.index ft.keys key in
+  assert (idx=idx2);
+  if idx=cnt then begin
+    if fn.v = (FNoperator DArrowop) then
+      ft.implication <- Some cnt
+    else ();
+    Seq.push
+      ft.features
+      (let pub = if Block_stack.is_private bs then None else Some func_def in
+      {fname=fn.v;        impstat=impstat;
+       fgnames=fgnames;   concepts=concepts;
+       argnames=argnames; argtypes=argtypes;
+       return  =  rettype;
+       priv    = func_def;
+       pub     =  pub});
+    ft.map <- Key_map.add
+        (fn.v,nargs)
+        (ESignature_map.add (concepts,argtypes,rettype) idx sig_map)
+        ft.map
+  end else begin
     if Block_stack.is_private bs then
       error_info fn.i
         ("The feature \"" ^ (feature_name_to_string fn.v)
@@ -606,19 +635,4 @@ let put
           not_yet_implemented fn.i
             ("public function definition if there is already "
              ^ "a private definition")
-  end
-  else begin
-    assert (idx=cnt);
-    if fn.v = (FNoperator DArrowop) then
-      ft.implication <- Some idx
-    else ();
-    Seq.push
-      ft.features
-      (let pub = if Block_stack.is_private bs then None else Some func_def in
-      {impstat=impstat;
-       fgnames=fgnames;   concepts=concepts;
-       argnames=argnames; argtypes=argtypes;
-       return=rettype;
-       priv = func_def;
-       pub = pub})
   end

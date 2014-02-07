@@ -1,6 +1,5 @@
 open Support
 open Term
-open Type
 
 type t
 

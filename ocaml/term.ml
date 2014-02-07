@@ -7,6 +7,7 @@ type term =
   | Application of term * term array
   | Lam         of int * term
 
+type type_term = term
 
 exception Term_capture
 
