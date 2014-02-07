@@ -67,11 +67,10 @@ let is_boolean_unary (args: term array) (ret:term): bool =
 
 let collect_formal_generics
     (l: type_t list)
-    (i:info)
+    (i: info)
     (ct:t)
     : IntSet.t =
   (* Collect all formal generics which are in the types of the list 'l'
-     where 'lgens' are the formal generics of the local module
    *)
   let rec fgs (tp:type_t) (fgens: IntSet.t): IntSet.t =
     match tp with
@@ -88,11 +87,14 @@ let collect_formal_generics
           with Not_found -> fgens
         in
         fgs_list fgens args
+    | Current_type lst ->
+        assert false
     | Arrow_type (tpa,tpb) ->
         fgs tpb (fgs tpa fgens)
-    | Ghost_type tp ->
+    | Ghost_type tp | QMark_type tp | Paren_type tp ->
         fgs tp fgens
-    | _ -> not_yet_implemented i "other types (collect_formal_generics)"
+    | Tuple_type lst ->
+        fgs_list fgens lst
   and fgs_list (set:IntSet.t) (lst: type_t list) =
     List.fold_left (fun set tp -> fgs tp set) set lst
   in
@@ -129,6 +131,8 @@ let get_type
 
 
 let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
+  (* Add the formal generic with name and concept to the formal generics of
+     the class table *)
   if IntMap.mem name.v ct.fgens then
     error_info
       name.i
@@ -205,12 +209,12 @@ let signature
     (ct:t)
     : int array * term array * int array * term array * (term*bool) option =
   let fgens: IntSet.t = (* Set of formal generics names *)
-    let tplst =
+    let tplst: type_t list =
       match rt with None -> []
       | Some tp ->
           let t,_ = tp.v in [t]
     in
-    let tplst = List.fold_left
+    let tplst: type_t list = List.fold_left
       (fun lst ent->
         match ent with Untyped_entities _ -> lst
         | Typed_entities (_,tp) -> tp::lst)
