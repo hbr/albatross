@@ -1,4 +1,3 @@
-open Type
 open Term
 open Proof
 
