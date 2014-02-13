@@ -1,11 +1,11 @@
 module Option: sig
-  val has_value:   'a option -> bool
+  val has:   'a option -> bool
   val value: 'a option -> 'a
 end = struct
-  let has_value (o: 'a option): bool =
+  let has (o: 'a option): bool =
     match o with None -> false | Some _ -> true
   let value (o: 'a option): 'a =
-    assert (has_value o);
+    assert (has o);
     match o with
       None -> assert false
     | Some x -> x
