@@ -66,6 +66,13 @@ module Term: sig
 
   val implication_chain: term -> int -> (term list * term) list
 
+  module Sub: sig
+    type t
+    val make: int -> t
+    val flags: t -> bool array
+    val args:  t -> term array
+    val add:   int -> term -> t -> unit
+  end
 end = struct
 
   let rec to_string (t:term): string =
