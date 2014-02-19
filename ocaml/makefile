@@ -1,3 +1,15 @@
+typer:
+	ocamlbuild typer.byte
+
+boolean:
+	ocamlbuild eiffelc.byte -- ../library/kernel/boolean.e
+
+boolean1:
+	ocamlbuild eiffelc.byte -- boolean1.e
+
+any:
+	ocamlbuild eiffelc.byte -- ../library/kernel/any.e
+
 main:
 	ocamlbuild -yaccflag -v main.byte
 

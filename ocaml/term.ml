@@ -7,7 +7,6 @@ type term =
   | Application of term * term array
   | Lam         of int * term
 
-type type_term = term
 
 exception Term_capture
 
@@ -28,6 +27,8 @@ end)
 
 module Term: sig
 
+  val is_variable: term -> int -> bool
+
   val to_string: term -> string
 
   val nodes: term -> int
@@ -42,11 +43,13 @@ module Term: sig
 
   val map: (int->int->term) -> term -> term
 
-  (*val down: int -> term -> term*)
+  val down: int -> term -> term
 
   val upbound: int->int->term->term
 
   val up: int->term->term
+
+  val sub_var: int -> term -> term -> term
 
   val sub:   term -> term array -> int -> term
 
@@ -56,8 +59,6 @@ module Term: sig
 
   val reduce: term -> term
 
-  val unify: term -> term -> int ->  term array * int list
-
   val binary: int -> term -> term -> term
 
   val binary_split: term -> int -> term * term
@@ -66,14 +67,13 @@ module Term: sig
 
   val implication_chain: term -> int -> (term list * term) list
 
-  module Sub: sig
-    type t
-    val make: int -> t
-    val flags: t -> bool array
-    val args:  t -> term array
-    val add:   int -> term -> t -> unit
-  end
 end = struct
+
+  let is_variable (t:term) (i:int): bool =
+    match t with
+      Variable j when i=j -> true
+    | _                   -> false
+
 
   let rec to_string (t:term): string =
     match t with
@@ -307,97 +307,6 @@ end = struct
 
 
 
-  module Sub: sig
-    type t
-    val make: int -> t
-    val flags: t -> bool array
-    val args:  t -> term array
-    val add:   int -> term -> t -> unit
-  end = struct
-    type t = {n:int; args: term array; flags: bool array}
-
-    let flags (s:t): bool array = s.flags
-    let args  (s:t): term array = s.args
-
-    let make (n:int): t = 
-      {n     = n;
-       args  = Array.init n (fun i -> Variable i);
-       flags = Array.make n false}
-
-    let add (i:int) (t:term) (s:t): unit =
-      assert (i <= s.n);
-      let t = sub t s.args s.n in
-      if IntSet.mem i (bound_variables t s.n) then
-        raise Not_found (* circular substitution *)
-      else begin
-        Array.iteri
-          (fun j e -> if s.flags.(j) then s.args.(j) <- sub_var i e t else ())
-          s.args;
-        if not s.flags.(i) then
-          (s.args.(i)<-t; s.flags.(i)<-true)
-        else if t = s.args.(i) then
-          ()
-        else
-          raise Not_found
-      end
-  end
-
-
-  let unify (t1:term) (t2:term) (nvars:int): term array * int list =
-    (* Find a substitution which applied to the terms 't1' and 't2' makes them
-       identical. Note that all substituted variables except the arbitrary
-       ones do not occur after the substitution.
-
-       The second return parameter specifies the arbitrary variables *)
-    let subst = Sub.make nvars in
-    let do_sub (i:int) (t:term) (nb:int): unit =
-      assert (nb<=i); assert (i<=nb+nvars);
-      match t with
-        Variable j when i=j ->
-          ()
-      | _ ->
-          let i,t =
-            try i-nb, down nb t
-            with Term_capture -> raise Not_found
-          in
-          Sub.add i t subst
-    in
-    let rec uni (t1:term) (t2:term) (nb:int): unit =
-      match t1,t2 with
-        Variable i, _ when nb<=i && i<nb+nvars ->
-          do_sub i t2 nb
-      | _, Variable j when nb<=j && j<nb+nvars ->
-          do_sub j t1 nb
-      | Variable i, Variable j ->
-          assert (i<nb||nb+nvars<=i);
-          assert (j<nb||nb+nvars<=j);
-          if i=j then
-            ()
-          else
-            raise Not_found
-      | Application(f1,args1), Application(f2,args2) ->
-          assert false
-      | Lam (nb1,t1), Lam (nb2,t2) ->
-          if nb1=nb2 then
-            uni t1 t2 (nb+nb1)
-          else
-            raise Not_found
-      | _ -> raise Not_found
-    in
-    uni t1 t2 0;
-    let arbitrary: int list ref = ref []
-    in
-    Array.iteri
-      (fun i flag ->
-        if flag then ()
-        else arbitrary := i::!arbitrary )
-      (Sub.flags subst);
-    assert ((sub t1 (Sub.args subst) nvars) = (sub t2 (Sub.args subst) nvars));
-    (Sub.args subst),!arbitrary
-
-
-
-
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| right; left |] in
     Application (Variable binid, args)
@@ -455,7 +364,148 @@ end = struct
         [([],t)]
     in
     List.rev (chainr t)
-end
+end (* Term *)
+
+
+
+
+module Term_sub_arr: sig
+  type t
+  val make: int -> t
+  val count: t -> int
+  val flags: t -> bool array
+  val args:  t -> term array
+  val add:   int -> term -> t -> unit
+  val extend:int -> t -> t
+  val extend_bottom: int -> t -> t
+  val remove_bottom: int -> t -> t
+  val unify: term -> term -> t -> unit
+end = struct
+  type t = {n:int; args: term array; flags: bool array}
+
+    let flags (s:t): bool array = s.flags
+  let args  (s:t): term array = s.args
+
+  let make (n:int): t =
+    {n     = n;
+     args  = Array.init n (fun i -> Variable i);
+     flags = Array.make n false}
+
+  let count (s:t): int = s.n
+
+  let add (i:int) (t:term) (s:t): unit =
+    (** Add the substitution [i ~~> t] to the substitution [s] i.e.
+        apply to [t] all already available substitutions and check for
+        circularity and apply [i ~~> t] to all available substitutions.
+     *)
+    assert (i <= s.n);
+    assert (not (Term.is_variable t i));
+    let t = Term.sub t s.args s.n in
+    if IntSet.mem i (Term.bound_variables t s.n) then
+      raise Not_found (* circular substitution *)
+    else begin
+      Array.iteri
+        (fun j e ->
+          if s.flags.(j) then s.args.(j) <- Term.sub_var i e t
+          else ())
+        s.args;
+      if not s.flags.(i) then
+        (s.args.(i)<-t; s.flags.(i)<-true)
+      else if t = s.args.(i) then
+        ()
+      else
+        raise Not_found
+    end
+
+  let extend (n:int) (s:t): t =
+    (** Introduce [n] new variables at the top, i.e. all
+          terms are just copied into the new larger substitution.
+     *)
+    let snew = make (n+s.n) in
+    Array.blit s.args  0  snew.args  0  s.n;
+    Array.blit s.flags 0  snew.flags 0  s.n;
+    snew
+
+
+  let extend_bottom (n:int) (s:t): t =
+    (** Introduce [n] new variables at the bottom, i.e. shift all
+          terms up by [n].
+     *)
+    let snew = make (n+s.n) in
+    Array.iteri (fun i t -> snew.args.(i+n) <- Term.up n t) s.args;
+    Array.blit s.flags 0 snew.flags n  s.n;
+    snew
+
+
+
+  let remove_bottom (n:int) (s:t): t =
+    (** Remove [n] variables from the bottom, i.e. shift all
+          terms down by [n].
+     *)
+    assert (n <= (count s));
+    let snew = make (s.n-n) in
+    Array.iteri
+      (fun i _ -> snew.args.(i) <- Term.down n s.args.(i+n)) snew.args;
+    Array.blit s.flags n   snew.flags 0   (s.n-n);
+    snew
+
+
+  let unify (t1:term) (t2:term) (subst:t): unit =
+    (** Unify the terms [t1] and [t2] using the substitution [subst], i.e.
+        apply first the substitution [subst] to both terms and then
+        add substitutions to [subst] so that when applied to both terms makes
+        them identical.
+     *)
+    let nvars = count subst
+    in
+    let do_sub (i:int) (t:term) (nb:int): unit =
+      assert (nb<=i); assert (i<nb+nvars);
+      match t with
+        Variable j when nb<=j && j<nb+nvars ->
+          if i=j then ()
+          else
+            let lo,hi = if i<=j then i,j else j,i in
+            add (lo-nb) (Variable (hi-nb)) subst
+              (*Variable j when i=j ->
+                ()*)
+      | _ ->
+          let i,t =
+            try i-nb, Term.down nb t
+            with Term_capture -> raise Not_found
+          in
+          add i t subst
+    in
+    let rec uni (t1:term) (t2:term) (nb:int): unit =
+      match t1,t2 with
+        Variable i, _ when nb<=i && i<nb+nvars ->
+          do_sub i t2 nb
+        | _, Variable j when nb<=j && j<nb+nvars ->
+            do_sub j t1 nb
+        | Variable i, Variable j ->
+            assert (i<nb||nb+nvars<=i);
+            assert (j<nb||nb+nvars<=j);
+            if i=j then
+              ()
+            else
+              raise Not_found
+        | Application(f1,args1), Application(f2,args2) ->
+            if (Array.length args1) <> (Array.length args2) then
+              raise Not_found;
+            uni f1 f2 nb;
+            Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
+        | Lam (nb1,t1), Lam (nb2,t2) ->
+            if nb1=nb2 then
+              uni t1 t2 (nb+nb1)
+            else
+              raise Not_found
+        | _ -> raise Not_found
+    in
+    uni t1 t2 0;
+    assert ((Term.sub t1 (args subst) nvars)
+              = (Term.sub t2 (args subst) nvars))
+  end (* Term_sub_arr *)
+
+
 
 
 

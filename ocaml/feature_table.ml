@@ -1,12 +1,12 @@
 open Container
-open Term
 open Support
-
+open Term
+open Signature
 
 type implementation_status = No_implementation | Builtin | Deferred
 
 module ESignature_map = Map.Make(struct
-  type t = term array * term array * term
+  type t = constraints * Sign.t
   let compare = Pervasives.compare
 end)
 
@@ -32,7 +32,6 @@ type key        = {name: feature_name; typ: term}
 type t          = {keys: key key_table;
                    mutable map: int ESignature_map.t Key_map.t;
                    mutable implication: int option;
-                   mutable key_map: (int ESignature_map.t) Key_map.t;
                    features: descriptor seq}
 
 
@@ -40,7 +39,6 @@ let empty () =
   {keys = Key_table.empty ();
    map  = Key_map.empty;
    implication = None;
-   key_map =  Key_map.empty;
    features = Seq.empty ()}
 
 
@@ -129,6 +127,19 @@ let find_feature (name: feature_name) (ft:t)
   in
   !lst
 
+
+let find_funcs
+    (fn:feature_name)
+    (nargs:int) (ft:t)
+    : (int * TVars.t * Sign.t) list =
+  (** Find all functions with name [fn] and [nargs] arguments in the feature
+      table [ft]. Return the indices with the corresponding type variables
+      and signature
+   *)
+  ESignature_map.fold
+    (fun (cs,sign) i lst -> (i,TVars.make 0 cs,sign)::lst)
+    (Key_map.find (fn,nargs) ft.map)
+    []
 
 
 
@@ -219,7 +230,7 @@ let typed_term
     (names: int array)
     (types: term array)
     (ct:Class_table.t)
-    (ft:t):  term * term =
+    (ft:t):  term * type_term =
   assert ((Array.length names) = (Array.length types));
   let nbound = Array.length types in
   let check e tp expected = check_match ie.i e tp expected ct
@@ -238,7 +249,7 @@ let typed_term
     else
       assert false (* would be global *)
   in
-  let rec trm (e:expression): term * term =
+  let rec trm (e:expression): term * type_term =
     match e with
       Identifier i ->
         find_name i
@@ -505,11 +516,13 @@ let put
     (entlst: entities list withinfo)
     (rt: return_type)
     (bdy: feature_body option)
-    (bs: Block_stack.t)
+    (is_priv: bool)
     (ct: Class_table.t)
     (ft: t) =
   let fgnames,concepts,argnames,argtypes,rettype,functype =
     Class_table.feature_type entlst rt ct
+  in
+  let sign = Sign.make_func argtypes rettype
   in
   let (impstat:implementation_status), (func_def: definition option) =
     match bdy with
@@ -601,7 +614,7 @@ let put
     try Key_map.find (fn.v,nargs) ft.map
     with Not_found -> ESignature_map.empty in
   let idx =
-    try ESignature_map.find (concepts,argtypes,rettype) sig_map
+    try ESignature_map.find (concepts,sign) sig_map
     with Not_found -> cnt in
   let idx2 = Key_table.index ft.keys key in
   assert (idx=idx2);
@@ -611,7 +624,7 @@ let put
     else ();
     Seq.push
       ft.features
-      (let pub = if Block_stack.is_private bs then None else Some func_def in
+      (let pub = if is_priv then None else Some func_def in
       {fname=fn.v;        impstat=impstat;
        fgnames=fgnames;   concepts=concepts;
        argnames=argnames; argtypes=argtypes;
@@ -620,10 +633,10 @@ let put
        pub     =  pub});
     ft.map <- Key_map.add
         (fn.v,nargs)
-        (ESignature_map.add (concepts,argtypes,rettype) idx sig_map)
+        (ESignature_map.add (concepts,sign) idx sig_map)
         ft.map
   end else begin
-    if Block_stack.is_private bs then
+    if is_priv then
       error_info fn.i
         ("The feature \"" ^ (feature_name_to_string fn.v)
          ^ "\" has already a private definition")

@@ -15,11 +15,12 @@ type t = {names:   int key_table;
           classes: descriptor seq;
           mutable fgens: term IntMap.t}
 
-let any_index       = 0
+let zero_index      = 0
 let boolean_index   = 1
-let predicate_index = 2
-let function_index  = 3
-let tuple_index     = 4
+let any_index       = 2
+let predicate_index = 3
+let function_index  = 4
+let tuple_index     = 5
 
 let count (c:t) =
   Seq.count c.classes
@@ -48,7 +49,8 @@ let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
 
 let boolean_type  = Variable boolean_index
 let any           = Variable any_index
-let func nb dom ran = Application(Variable(nb+3),[|dom;ran|])
+let zero          = Variable zero_index
+let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
 
 
 
@@ -303,25 +305,31 @@ let base_table (): t =
   in
   let index cname = Key_table.index kt (Support.ST.symbol cname)
   in
-  let any_idx   = index "ANY"
+  let zero_idx  = index "@ZERO"
   and bool_idx  = index "BOOLEAN"
+  and any_idx   = index "ANY"
   and pred_idx  = index "PREDICATE"
   and func_idx  = index "FUNCTION"
   and tuple_idx = index "TUPLE"
   in
-  assert (bool_idx=boolean_index);   assert (any_idx=any_index);
-  assert (pred_idx=predicate_index); assert (func_idx=function_index);
+  assert (zero_idx=zero_index);
+  assert (bool_idx=boolean_index);
+  assert (any_idx=any_index);
+  assert (pred_idx=predicate_index);
+  assert (func_idx=function_index);
   assert (tuple_idx=tuple_index);
-  Seq.push cc {hmark = Deferred_hmark; constraints = [||];
-               parents = TypSet.empty };
-  Seq.push cc {hmark = Immutable_hmark; constraints = [||];
-               parents = TypSet.empty};
+  Seq.push cc {hmark = No_hmark; constraints = [||];
+               parents = TypSet.empty }; (*@ZERO*)
+  Seq.push cc {hmark = Immutable_hmark; constraints = [|zero|];
+               parents = TypSet.empty}; (*BOOLEAN*)
+  Seq.push cc {hmark = Deferred_hmark; constraints = [|zero|];
+               parents = TypSet.empty }; (*ANY*)
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any|];
-               parents = TypSet.empty};
+               parents = TypSet.empty}; (*PREDICATE*)
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
-               parents = TypSet.empty};
+               parents = TypSet.empty}; (*FUNCTION*)
   Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
-               parents =TypSet.empty};
+               parents =TypSet.empty}; (*TUPLE*)
   {names=kt; classes=cc; fgens=bt.fgens}
 
 

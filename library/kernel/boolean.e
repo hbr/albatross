@@ -3,17 +3,21 @@ immutable class
 end
 
 
-feature   -- Basic functions
+feature   -- Basic functions and axioms
     => (a,b:BOOLEAN): BOOLEAN
         note built_in end
 
     false: BOOLEAN
         note built_in end
 
+    all(a:BOOLEAN)
+        note built_in ensure
+            ((a=>false)=>false) => a
+        end
 end
 
 
-feature {NONE}    -- Function definitions and axiom
+feature {NONE}    -- Function definitions
     true: BOOLEAN
         ensure
             Result = (false => false)
@@ -40,7 +44,7 @@ feature {NONE}    -- Function definitions and axiom
         end
 
     all(a:BOOLEAN)
-        note built_in ensure
+        ensure
             double_negation: not not a => a
         end
 end
@@ -65,7 +69,6 @@ feature         -- Constants / Negation
             true
             not false
         end
-
 end
 
 

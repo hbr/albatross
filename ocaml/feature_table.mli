@@ -1,5 +1,6 @@
 open Support
 open Term
+open Signature
 
 type t
 
@@ -18,10 +19,12 @@ val expand_term: term->int->t->term
 
 val normalize_term: term->int->t->term
 
+val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
+
 val put:
     feature_name withinfo -> entities list withinfo -> return_type
       -> feature_body option ->
-        Block_stack.t -> Class_table.t -> t -> unit
+        bool -> Class_table.t -> t -> unit
 
 val typed_term: info_expression -> term array -> int array -> term array
   -> Class_table.t -> t -> term * term

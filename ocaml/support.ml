@@ -235,7 +235,7 @@ let rec string_of_list (l: 'a list) (sfun: 'a -> string) (sep: string) =
 *)
 
 
-let rec split_list (l: 'a list) (sep: 'a -> bool) =
+let rec split_list (l: 'a list) (sep: 'a -> bool): 'a list list =
   match l with
     [] -> []
   | f::t ->
