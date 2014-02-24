@@ -2,6 +2,7 @@ open Container
 open Term
 open Proof
 open Support
+open Context
 
 exception Cannot_prove
 exception Cannot_prove_info of info
@@ -471,9 +472,15 @@ let prove
 let prove_and_store
     (entlst: entities list withinfo)
     (bdy:feature_body)
-    (ct: Class_table.t)
-    (ft: Feature_table.t)
-    (at: Assertion_table.t): unit =
+    (context: Context.t)
+    : unit =
+
+  let ct,ft,at =
+    let g = Context.global context in
+    (Global_context.ct g),
+    (Global_context.ft g),
+    (Global_context.at g)
+  in
 
   let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
     Printf.printf "%3d axiom   %s\n"

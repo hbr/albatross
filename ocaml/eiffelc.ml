@@ -65,11 +65,7 @@ let parse_file fn =
 
 
 let analyze(ast:declaration list): unit =
-  let block_stack = Block_stack.make ()
-  and class_table = Class_table.base_table ()
-  and feature_table = Feature_table.empty ()
-  and ass_table = Assertion_table.empty ()
-  and context = Context.make ()
+  let context = Context.make ()
   in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
@@ -78,27 +74,19 @@ let analyze(ast:declaration list): unit =
           assert (fgens.v = []);
           assert (inherits = []);
           assert (decl_blocks = []);
-          Class_table.put hm cname class_table
+          Context.put_class hm cname context;
       | Declaration_block (Feature_block (visi,dlist)) ->
-          Block_stack.push visi block_stack;
           Context.set_visibility visi context;
           analyz dlist;
           Context.reset_visibility context;
-          Block_stack.pop block_stack
       | Named_feature (fn, entlst, rt, body) ->
-            Context.put_feature fn entlst rt body context;
-          Feature_table.put fn entlst rt body
-            (Block_stack.is_private block_stack)
-            class_table feature_table
+          Context.put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
-          Prover.prove_and_store
-            entlst body class_table feature_table ass_table
+          Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
-          Class_table.put_formal name concept class_table;
           Context.put_formal_generic name concept context
       | _ ->
-          Class_table.print   class_table;
-          Feature_table.print class_table feature_table;
+          Context.print context;
           assert false
     in
     match ast with

@@ -104,10 +104,13 @@ module Context: sig
   val set_visibility:   visibility -> t -> unit
   val reset_visibility: t -> unit
 
-  val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
+  val global:       t -> Global_context.t
 
+  val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
+  val put_class: header_mark withinfo -> int withinfo -> t -> unit
   val put_feature: feature_name withinfo -> entities list withinfo
     -> return_type -> feature_body option -> t -> unit
+  val print: t -> unit
 
   val find_identifier: int -> int -> t
     -> (int * TVars.t * Sign.t) list * int
@@ -163,6 +166,11 @@ end = struct
     | _       -> assert false (* illegal path *)
 
 
+  let put_class (hm:header_mark withinfo) (cn:int withinfo) (c:t): unit =
+    assert (is_basic c);
+    Class_table.put hm cn (Global_context.ct (global c))
+
+
   let put_formal_generic
       (name:int withinfo)
       (concept:type_t withinfo)
@@ -189,6 +197,12 @@ end = struct
     let ct,ft = Global_context.ct g, Global_context.ft g in
     Feature_table.put fn entlst rt bdy (is_private c) ct ft
 
+  let print (c:t): unit =
+    assert (is_basic c);
+    let g = global c in
+    let ct,ft = Global_context.ct g, Global_context.ft g in
+    Class_table.print ct;
+    Feature_table.print ct ft
 
 
   let find_identifier
