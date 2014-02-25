@@ -27,7 +27,7 @@ type descriptor = {fname:       feature_name;
                    priv:        definition option;
                    mutable pub: definition option option}
 
-type key        = {name: feature_name; typ: term}
+type key        = {name: feature_name; sign: Sign.t}
 
 type t          = {keys: key key_table;
                    mutable map: int ESignature_map.t Key_map.t;
@@ -152,12 +152,10 @@ let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
     Key_table.iteri
       (fun i k ->
         if k.name=name then
-          try
-            let args,rt = Class_table.split_function k.typ ct in
-            if nargs = (Array.length args) then
-              lst := (i,args,rt)::!lst
-            else ()
-          with Failure _ ->
+          if (Sign.has_result k.sign) && (Sign.arity k.sign) = nargs
+          then
+            lst := (i, Sign.arguments k.sign, Sign.result k.sign) :: !lst
+          else
             ()
         else
           () )
@@ -258,7 +256,11 @@ let typed_term
         in
         begin
           match flst with
-            [i] -> Variable (nbound+i), (Key_table.key ft.keys i).typ
+            [i] ->
+              let sign = (Key_table.key ft.keys i).sign in
+              assert (Sign.is_constant sign);
+              let res = Sign.result sign in
+              Variable (nbound+i), res
           | _ -> not_yet_implemented ie.i "feature overloading"
         end
     | Exptrue ->
@@ -266,7 +268,11 @@ let typed_term
         in
         begin
           match flst with
-            [i] -> Variable (nbound+i), (Key_table.key ft.keys i).typ
+            [i] ->
+              let sign = (Key_table.key ft.keys i).sign in
+              assert (Sign.is_constant sign);
+              let res = Sign.result sign in
+              Variable (nbound+i), res
           | _ -> not_yet_implemented ie.i "feature overloading"
         end
     | Expparen e -> trm e
@@ -519,7 +525,7 @@ let put
     (is_priv: bool)
     (ct: Class_table.t)
     (ft: t) =
-  let fgnames,concepts,argnames,argtypes,rettype,functype =
+  let fgnames,concepts,argnames,argtypes,rettype =
     Class_table.feature_type entlst rt ct
   in
   let sign = Sign.make_func argtypes rettype
@@ -606,7 +612,7 @@ let put
           )
       | _ -> ()
     in
-    {name = fn.v; typ = functype}
+    {name = fn.v; sign = sign}
   in
 
   let cnt = Seq.count ft.features in

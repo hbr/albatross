@@ -68,11 +68,12 @@ let is_boolean_unary (args: term array) (ret:term): bool =
 
 
 let collect_formal_generics
-    (l: type_t list)
-    (i: info)
+    (entlst: entities list withinfo)
+    (rt:return_type)
     (ct:t)
     : IntSet.t =
-  (* Collect all formal generics which are in the types of the list 'l'
+  (** Collect the names of all formal generics of the entity list [entlst]
+      and the return type [rt]
    *)
   let rec fgs (tp:type_t) (fgens: IntSet.t): IntSet.t =
     match tp with
@@ -83,14 +84,14 @@ let collect_formal_generics
             in
             match args with
               [] -> IntSet.add name fgens
-            | _ -> error_info i
+            | _ -> error_info entlst.i
                   ("Formal generic " ^  (ST.string name) ^
                    "cannot have actual generics")
           with Not_found -> fgens
         in
         fgs_list fgens args
     | Current_type lst ->
-        assert false
+        assert false (* nyi: but might be eliminated from the language *)
     | Arrow_type (tpa,tpb) ->
         fgs tpb (fgs tpa fgens)
     | Ghost_type tp | QMark_type tp | Paren_type tp ->
@@ -100,6 +101,18 @@ let collect_formal_generics
   and fgs_list (set:IntSet.t) (lst: type_t list) =
     List.fold_left (fun set tp -> fgs tp set) set lst
   in
+  let l: type_t list =
+    match rt with None -> []
+    | Some tp ->
+        let t,_ = tp.v in [t]
+  in
+  let l: type_t list = List.fold_left
+      (fun lst ent->
+        match ent with Untyped_entities _ -> lst
+        | Typed_entities (_,tp) -> tp::lst)
+      l
+      entlst.v
+  in
   fgs_list IntSet.empty l
 
 
@@ -108,18 +121,19 @@ let collect_formal_generics
 
 let get_type
     (tp:type_t withinfo)
-    (nb:int)
-    (fgmap: int IntMap.t)
+    (fgnames: int array)
     (ct:t)
     : term =
-  (* Convert the syntactic type 'tp' into a type term in an environment having
-     'nb' formal generics and the generics map 'fgmap' *)
+  (** Convert the syntactic type [tp] in an environment with the formal
+      generic names [fgnames] into a type term
+   *)
+  let nfgs = Array.length fgnames in
   let cls_idx (name:int): int =
     try
-      let fgidx = IntMap.find name fgmap in (assert (fgidx<nb); fgidx)
+      Search.array_find_min name fgnames
     with Not_found ->
       try
-        (Key_table.find ct.names name) + nb
+        (Key_table.find ct.names name) + nfgs
       with Not_found ->
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
@@ -142,36 +156,15 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
   else
     ct.fgens <- IntMap.add
         name.v
-        (get_type concept 0 IntMap.empty ct)
+        (get_type concept  [||] ct)
         ct.fgens
 
 
 
 
-let split_function (function_type:term) (ct:t): term array * term =
-  match function_type with
-    Application (Variable i,tarr) ->
-      assert (i=function_index);
-      assert ((Array.length tarr) = 2);
-      let rec arglist (t:term) (l:term list): term list =
-        match t with
-          Application (Variable i,tarr) ->
-            if i = tuple_index then begin
-              assert ((Array.length tarr) = 2);
-              tarr.(0) :: (arglist tarr.(1) l)
-            end else
-              t::l
-        | _ -> t::l
-      in
-      Array.of_list (arglist tarr.(0) []), tarr.(1)
-  | _ -> assert false
-
-
-
 let arguments
     (entlst: entities list withinfo)
-    (nb: int)
-    (fgmap: int IntMap.t)
+    (fgnames: int array)
     (ct:t)
     : int array * term array =
   let args: (int*term) list =
@@ -184,7 +177,7 @@ let arguments
                  ("Arguments must be fully typed "
                   ^ "in top level declarations")
            | Typed_entities (lst,tp) ->
-               let t = get_type (withinfo entlst.i tp) nb fgmap ct
+               let t = get_type (withinfo entlst.i tp) fgnames ct
                in
                List.map (fun name -> name,t) lst)
          entlst.v)
@@ -211,19 +204,7 @@ let signature
     (ct:t)
     : int array * term array * int array * term array * (term*bool) option =
   let fgens: IntSet.t = (* Set of formal generics names *)
-    let tplst: type_t list =
-      match rt with None -> []
-      | Some tp ->
-          let t,_ = tp.v in [t]
-    in
-    let tplst: type_t list = List.fold_left
-      (fun lst ent->
-        match ent with Untyped_entities _ -> lst
-        | Typed_entities (_,tp) -> tp::lst)
-      tplst
-      entlst.v
-    in
-    collect_formal_generics tplst entlst.i ct
+    collect_formal_generics entlst rt ct
   in
   let fgnames,concepts,fgenmap = (* Concept array and map into the array *)
     let ns,cs,map,_ =
@@ -238,16 +219,14 @@ let signature
     in
     Array.of_list (List.rev ns), Array.of_list (List.rev cs), map
   in
-  let nfgens = Array.length concepts
-  in
-  let argnames,argtypes = arguments entlst nfgens fgenmap ct
+  let argnames,argtypes = arguments entlst fgnames ct
   and ret =
     match rt with
       None -> None
     | Some tp ->
         let t,procedure = tp.v in
         assert (not procedure);
-        Some ((get_type (withinfo tp.i t) nfgens fgenmap ct),procedure)
+        Some ((get_type (withinfo tp.i t) fgnames ct),procedure)
   in
   fgnames, concepts, argnames, argtypes, ret
 
@@ -267,7 +246,7 @@ let feature_type
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : int array * term array * int array * term array * term * term =
+    : int array * term array * int array * term array * term  =
   let fgnames,concepts,argnames,argtypes,ret = signature entlst rt ct
   in
   let ret = match ret with
@@ -275,20 +254,7 @@ let feature_type
   | Some (r,proc) ->
       if proc then not_yet_implemented entlst.i "procedures" else r
   in
-  let function_type =
-    let arglen = Array.length argtypes in
-    if arglen = 0 then
-      ret
-    else
-      let rec arg_type (n:int): term =
-        assert (n>0);
-        if n=1 then argtypes.(arglen-n)
-        else Application(Variable tuple_index,
-                         [| argtypes.(arglen-n); arg_type (n-1)|])
-      in
-      func 0 (arg_type arglen) ret
-  in
-  fgnames, concepts, argnames, argtypes, ret, function_type
+  fgnames, concepts, argnames, argtypes, ret
 
 
 let empty_table (): t =

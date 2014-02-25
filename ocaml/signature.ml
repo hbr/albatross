@@ -94,6 +94,7 @@ module Sign: sig
   val make_const:  type_term -> t
   val arity:       t -> int
   val is_constant: t -> bool
+  val arguments:   t -> type_term array
   val argument:    int -> t -> t
   val has_result:  t -> bool
   val result:      t -> type_term
@@ -116,6 +117,8 @@ end = struct
   let arity (s:t): int = Array.length s.args
 
   let is_constant (s:t): bool = (arity s) = 0
+
+  let arguments (s:t): type_term array = s.args
 
   let argument (i:int) (s:t): t =
     assert (i < (arity s));
