@@ -95,10 +95,14 @@ end = struct
     let fgnames, concepts, argnames, ntvs, sign =
       Class_table.signature entlst rt [||] [||] [||] 0 ct
     in
-    {fgnames=fgnames;   concepts=concepts;
-     argnames=argnames; signature=sign;
-     tvars_sub = assert false;
-     ct=ct}
+    {fgnames    =  fgnames;
+     concepts   =  concepts;
+     argnames   =  argnames;
+     signature  =  sign;
+     tvars_sub  =  TVars_sub.make ntvs;
+     ct         =  ct}
+
+
 
   let make_next
       (entlst: entities list withinfo)
@@ -108,7 +112,17 @@ end = struct
     (** Make a next local context with the argument list [entlst] and the
         return type [rt] based on previous local global context [loc]
      *)
-    assert false
+    let fgnames, concepts, argnames, ntvs, sign =
+      let ntvs0 = TVars_sub.count_local loc.tvars_sub in
+      Class_table.signature entlst rt
+        loc.fgnames loc.concepts loc.argnames ntvs0 loc.ct
+    in
+    {fgnames   =  fgnames;
+     concepts  =  concepts;
+     argnames  =  argnames;
+     signature =  sign;
+     tvars_sub =  TVars_sub.add_local ntvs loc.tvars_sub;
+     ct        =  loc.ct}
 
 
   let arity     (loc:t): int = Sign.arity loc.signature
@@ -152,8 +166,10 @@ module Context: sig
   val is_private:   t -> bool
   val set_visibility:   visibility -> t -> unit
   val reset_visibility: t -> unit
+  val push: entities list withinfo -> return_type -> t -> t
 
   val global:       t -> Global_context.t
+  val local:        t -> Local_context.t
 
   val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
   val put_class: header_mark withinfo -> int withinfo -> t -> unit
@@ -193,6 +209,13 @@ end = struct
     | _       -> false
 
 
+  let local (c:t): Local_context.t =
+    assert (not (is_basic c));
+    match c with
+      Basic _ -> assert false
+    | Combined (loc,_) -> loc
+
+
   let is_private (c:t): bool =
     Global_context.is_private (global c)
 
@@ -225,7 +248,11 @@ end = struct
     (** Push the entity list [entlst] with the return type [rt] as a new
         local context onto the context [c]
      *)
-    let loc = assert false (*nyi:*) in
+    let loc =
+      match c with
+        Basic g ->           Local_context.make_first entlst rt g
+      | Combined (loc,c) ->  Local_context.make_next  entlst rt loc
+    in
     Combined (loc,c)
 
 

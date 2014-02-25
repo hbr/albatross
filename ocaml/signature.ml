@@ -11,6 +11,7 @@ module TVars: sig
 
   type t
   val make: int -> constraints -> t
+  val make_local: int -> t
   val count_local: t -> int
   val count_global: t -> int
   val count: t -> int
@@ -23,7 +24,8 @@ end = struct
 
   type t = {nlocal:int; constraints: constraints}
 
-  let make (nf:int) (cs:constraints): t = {nlocal=nf;constraints=cs}
+  let make (ntvs:int) (cs:constraints): t = {nlocal=ntvs;constraints=cs}
+  let make_local (ntvs:int) : t           = {nlocal=ntvs;constraints=[||]}
   let count_local (tvs:t): int = tvs.nlocal
   let count_global (tvs:t): int = Array.length tvs.constraints
   let count (tvs:t): int = tvs.nlocal + (count_global tvs)
@@ -43,6 +45,7 @@ end (* TVars *)
 module TVars_sub: sig
 
   type t
+  val make:  int -> t
   val count: t -> int
   val count_global: t -> int
   val count_local:   t -> int
@@ -56,6 +59,9 @@ end = struct
 
   type t = {vars: TVars.t;
             sub:  Term_sub_arr.t}
+
+  let make (ntvs: int): t =
+    {vars = TVars.make_local ntvs; sub = Term_sub_arr.make ntvs}
 
   let count (tvars:t): int = TVars.count tvars.vars
 

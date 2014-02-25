@@ -62,6 +62,17 @@ let parse_file fn =
 
 
 
+let put_feature
+    (fn: feature_name withinfo)
+    (entlst: entities list withinfo)
+    (rt: return_type)
+    (bdy: feature_body option)
+    (c:   Context.t): unit =
+  let c = Context.push entlst rt c in
+  let loc = Context.local c in
+  ()
+
+
 
 
 let analyze(ast:declaration list): unit =
@@ -80,6 +91,7 @@ let analyze(ast:declaration list): unit =
           analyz dlist;
           Context.reset_visibility context;
       | Named_feature (fn, entlst, rt, body) ->
+          put_feature fn entlst rt body context;
           Context.put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body context
