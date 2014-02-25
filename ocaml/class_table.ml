@@ -1,5 +1,6 @@
 open Support
 open Term
+open Signature
 open Container
 
 module TypSet = Set.Make(struct
@@ -166,7 +167,7 @@ let arguments
     (entlst: entities list withinfo)
     (fgnames: int array)
     (ct:t)
-    : int array * term array =
+    : int array * type_term array =
   let args: (int*term) list =
     List.flatten
       (List.map
@@ -202,22 +203,22 @@ let signature
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : int array * term array * int array * term array * (term*bool) option =
+    : int array * type_term array  (*  fgnames, concepts *)
+    * int array * type_term array  (*  argnames, types   *)
+    * (type_term*bool) option =
   let fgens: IntSet.t = (* Set of formal generics names *)
     collect_formal_generics entlst rt ct
   in
-  let fgnames,concepts,fgenmap = (* Concept array and map into the array *)
-    let ns,cs,map,_ =
+  let fgnames,concepts =
+    let ns,cs =
       IntSet.fold
-        (fun name (ns,cs,map,i) ->
+        (fun name (ns,cs) ->
           name::ns,
-          (IntMap.find name ct.fgens)::cs,
-          IntMap.add name i map,
-          i+1)
+          (IntMap.find name ct.fgens)::cs)
         fgens
-        ([], [], IntMap.empty, 0)
+        ([], [])
     in
-    Array.of_list (List.rev ns), Array.of_list (List.rev cs), map
+    Array.of_list (List.rev ns), Array.of_list (List.rev cs)
   in
   let argnames,argtypes = arguments entlst fgnames ct
   and ret =
@@ -234,7 +235,7 @@ let signature
 let argument_signature
     (entlst: entities list withinfo)
     (ct:t)
-    : int array * term array * int array * term array =
+    : int array * type_term array * int array * type_term array =
   let fgnames, concepts, argnames, argtypes, _ =
     signature entlst None ct
   in
@@ -255,6 +256,22 @@ let feature_type
       if proc then not_yet_implemented entlst.i "procedures" else r
   in
   fgnames, concepts, argnames, argtypes, ret
+
+
+let feature_signature
+    (entlst:    entities list withinfo)
+    (rt:        return_type)
+    (fgnames0:  int array)
+    (concepts0: type_term array)
+    (names0:    int array)
+    (ct:        t)
+    : int array * type_term array * int array * Sign.t =
+  (** Analyze the syntactic signature [entlst,rt] based on an environment
+      which has already the formal generics [fgnames0] with their constraints
+      [concepts0] and the arguments [names0]
+   *)
+  assert false
+
 
 
 let empty_table (): t =
