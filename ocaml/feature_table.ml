@@ -15,15 +15,14 @@ module Key_map = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
-type definition = {names: int array; types: term array; term:term}
+type definition = term
 
 type descriptor = {fname:       feature_name;
                    impstat:     implementation_status;
                    fgnames:     int array;
                    concepts:    term array;
                    argnames:    int array;
-                   argtypes:    term array;
-                   return:      term;
+                   sign:        Sign.t;
                    priv:        definition option;
                    mutable pub: definition option option}
 
@@ -178,11 +177,12 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
       else
         let idx = i-n in
         assert (idx < (Seq.count ft.features));
-        match (Seq.elem ft.features idx).priv with
+        let desc = Seq.elem ft.features idx in
+        match desc.priv with
           None -> Variable i
         | Some def ->
-            let nargs = Array.length def.types in
-            let t = expand_term def.term nargs ft in
+            let nargs = Sign.arity desc.sign in
+            let t = expand_term def nargs ft in
             Lam (nargs, Term.upbound n nargs t)
     )
     t
@@ -504,7 +504,7 @@ let print (ct:Class_table.t)  (ft:t): unit =
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
-        | Some def -> term_to_string def.term def.names ft
+        | Some def -> term_to_string def fdesc.argnames ft
       in
       match fdesc.pub with
         None ->
@@ -545,9 +545,7 @@ let put
                 typed_term (withinfo ens.i def) concepts argnames argtypes ct ft
               in
               check_match ens.i def tp rettype ct;
-              Some {names = argnames;
-                    types = argtypes;
-                    term  = term}
+              Some term
           | _ -> not_yet_implemented ens.i
                 "functions not defined with \"Result = ...\""
         end
@@ -633,12 +631,14 @@ let put
     Seq.push
       ft.features
       (let pub = if is_priv then None else Some func_def in
-      {fname=fn.v;        impstat=impstat;
-       fgnames=fgnames;   concepts=concepts;
-       argnames=argnames; argtypes=argtypes;
-       return  =  rettype;
-       priv    = func_def;
-       pub     =  pub});
+      {fname=fn.v;
+       impstat  = impstat;
+       fgnames  = fgnames;
+       concepts = concepts;
+       argnames = argnames;
+       sign     = sign;
+       priv     = func_def;
+       pub      = pub});
     ft.map <- Key_map.add
         (fn.v,nargs)
         (ESignature_map.add (concepts,sign) idx sig_map)
