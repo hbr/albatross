@@ -68,7 +68,6 @@ module Local_context: sig
 
   val nfgs:    t -> int
   val fgnames: t -> int array
-  val filter_formal_generics: IntSet.t -> t -> IntSet.t
 
   val tvars_sub: t -> TVars_sub.t
 
@@ -76,7 +75,8 @@ end = struct
 
   type t = {
       fgnames:   int array;        (* cumulated        *)
-      names:     int array;        (* from declaration *)
+      concepts:  type_term array;  (* cumulated        *)
+      argnames:  int array;        (* cumulated        *)
       signature: Sign.t;           (* from declaration *)
       tvars_sub: TVars_sub.t;      (* cumulated        *)
       ct:        Class_table.t
@@ -92,13 +92,13 @@ end = struct
         return type [rt] based on the global context [g]
      *)
     let ct = Global_context.ct g in
-    let fgset = Class_table.collect_formal_generics entlst rt ct in
-    let fgnames =
-      let lst = IntSet.fold (fun name lst -> name::lst) fgset [] in
-      Array.of_list (List.rev lst)
+    let fgnames, concepts, argnames, ntvs, sign =
+      Class_table.signature entlst rt [||] [||] [||] 0 ct
     in
-    let argnames,argtypes = Class_table.arguments entlst fgnames ct in
-    assert false
+    {fgnames=fgnames;   concepts=concepts;
+     argnames=argnames; signature=sign;
+     tvars_sub = assert false;
+     ct=ct}
 
   let make_next
       (entlst: entities list withinfo)
@@ -115,7 +115,7 @@ end = struct
 
   let argument (name:int) (loc:t): int * TVars.t * Sign.t =
     (** The term and the signature of the argument named [name] *)
-    let i = Search.array_find_min name loc.names in
+    let i = Search.array_find_min name loc.argnames in
     i, TVars_sub.tvars loc.tvars_sub, Sign.argument i loc.signature
 
   let nfgs (loc:t): int =
@@ -130,15 +130,6 @@ end = struct
      *)
     loc.fgnames
 
-
-  let filter_formal_generics (fgs:IntSet.t) (loc:t): IntSet.t =
-    (** Filter out the formal generics which are already present in
-        the local context
-     *)
-    Array.fold_left
-      (fun set fgname -> IntSet.remove fgname set)
-      fgs
-      loc.fgnames
 
   let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
 
@@ -225,17 +216,6 @@ end = struct
 
 
 
-  let filter_formal_generics (fgs: IntSet.t) (c:t): IntSet.t =
-    (** Remove the formal generics from the set [fgs] if they are already
-        present in one of the stacked local contexts
-     *)
-    match c with
-      Basic g ->
-        fgs
-    | Combined (l,_) ->
-        Local_context.filter_formal_generics fgs l
-
-
 
   let push
       (entlst: entities list withinfo)
@@ -245,23 +225,6 @@ end = struct
     (** Push the entity list [entlst] with the return type [rt] as a new
         local context onto the context [c]
      *)
-    let ct = let g = (global c) in Global_context.ct g in
-    let fgnames0 =
-      match c with
-        Basic _ -> [||]
-      | Combined (loc,_) -> Local_context.fgnames loc
-    in
-    let fgset =
-      filter_formal_generics
-        (Class_table.collect_formal_generics entlst rt ct)
-        c
-    in
-    let fgnames =
-      Array.append
-        fgnames0
-        (let lst = IntSet.fold (fun name lst -> name::lst) fgset [] in
-        Array.of_list (List.rev lst))
-    in
     let loc = assert false (*nyi:*) in
     Combined (loc,c)
 

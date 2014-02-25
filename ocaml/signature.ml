@@ -8,6 +8,7 @@ type constraints = type_term array
 
 
 module TVars: sig
+
   type t
   val make: int -> constraints -> t
   val count_local: t -> int
@@ -17,6 +18,7 @@ module TVars: sig
   val add_global: constraints -> t -> t
   val add_local:  int -> t -> t
   val remove_local: int -> t -> t
+
 end = struct
 
   type t = {nlocal:int; constraints: constraints}
@@ -33,12 +35,13 @@ end = struct
   let remove_local (n:int) (tvs:t): t =
     assert (n <= (count_local tvs));
     {tvs with nlocal = tvs.nlocal - n}
-end
+end (* TVars *)
 
 
 
 
 module TVars_sub: sig
+
   type t
   val count: t -> int
   val count_global: t -> int
@@ -48,10 +51,12 @@ module TVars_sub: sig
   val add_global:       constraints -> t -> t
   val add_local:             int -> t -> t
   val remove_local:         int -> t -> t
+
 end = struct
 
   type t = {vars: TVars.t;
             sub:  Term_sub_arr.t}
+
   let count (tvars:t): int = TVars.count tvars.vars
 
   let count_global (tv:t): int =
@@ -81,7 +86,7 @@ end = struct
      *)
     {vars = TVars.remove_local n tv.vars;
      sub  = Term_sub_arr.remove_bottom n tv.sub}
-end
+end (* TVars_sub *)
 
 
 
@@ -200,4 +205,4 @@ end = struct
     (** Apply the substitution [sub] to the signature [s]
      *)
     assert false
-end
+end (* Sign *)

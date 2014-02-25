@@ -525,10 +525,12 @@ let put
     (is_priv: bool)
     (ct: Class_table.t)
     (ft: t) =
-  let fgnames,concepts,argnames,argtypes,rettype =
-    Class_table.feature_type entlst rt ct
+  let fgnames,concepts,argnames,ntvs,sign =
+    Class_table.signature entlst rt [||] [||] [||] 0 ct
   in
-  let sign = Sign.make_func argtypes rettype
+  assert (Sign.has_result sign);
+  assert (ntvs = 0);
+  let argtypes,rettype = Sign.arguments sign, Sign.result sign
   in
   let (impstat:implementation_status), (func_def: definition option) =
     match bdy with

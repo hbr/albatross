@@ -72,9 +72,9 @@ let collect_formal_generics
     (entlst: entities list withinfo)
     (rt:return_type)
     (ct:t)
-    : IntSet.t =
-  (** Collect the names of all formal generics of the entity list [entlst]
-      and the return type [rt]
+    : IntSet.t * int =
+  (** Collect the names of all formal generics and the number of untyped
+      entities of the entity list [entlst] and the return type [rt]
    *)
   let rec fgs (tp:type_t) (fgens: IntSet.t): IntSet.t =
     match tp with
@@ -107,14 +107,15 @@ let collect_formal_generics
     | Some tp ->
         let t,_ = tp.v in [t]
   in
-  let l: type_t list = List.fold_left
-      (fun lst ent->
-        match ent with Untyped_entities _ -> lst
-        | Typed_entities (_,tp) -> tp::lst)
-      l
+  let l,ntvs  = List.fold_left
+      (fun (lst,ntvs) ent->
+        match ent with
+          Untyped_entities vars -> lst, ntvs+(List.length vars)
+        | Typed_entities (_,tp) -> tp::lst,ntvs)
+      (l,0)
       entlst.v
   in
-  fgs_list IntSet.empty l
+  fgs_list IntSet.empty l, ntvs
 
 
 
@@ -141,7 +142,7 @@ let get_type
   in
   match tp.v with
     Normal_type (path,name,actuals) ->
-      assert (actuals = []);
+      assert (actuals = []); (* nyi: generic types *)
       Variable (cls_idx name)
   | _ -> not_yet_implemented tp.i "types other than normal types"
 
@@ -173,18 +174,16 @@ let arguments
       (List.map
          (fun es ->
            match es with
-             Untyped_entities _ ->
-               error_info entlst.i
-                 ("Arguments must be fully typed "
-                  ^ "in top level declarations")
+             Untyped_entities lst ->
+               List.mapi (fun i name -> name, Variable i) lst
            | Typed_entities (lst,tp) ->
                let t = get_type (withinfo entlst.i tp) fgnames ct
                in
                List.map (fun name -> name,t) lst)
          entlst.v)
   in
-  let argnames = List.rev_map (fun e -> let n,_ = e in n) args
-  and argtypes = List.rev_map (fun e -> let _,t = e in t) args
+  let argnames = List.rev_map (fun e -> let n,_ = e in n) args (*reindex*)
+  and argtypes = List.rev_map (fun e -> let _,t = e in t) args (*reindex*)
   in
   let rec check_names (namelst: int list) =
     match namelst with
@@ -199,15 +198,27 @@ let arguments
   (Array.of_list argnames), (Array.of_list argtypes)
 
 
+
+
 let signature
     (entlst: entities list withinfo)
     (rt:return_type)
+    (fgnames0:  int array)
+    (concepts0: type_term array)
+    (argnames0: int array)
+    (ntvs0:     int)
     (ct:t)
-    : int array * type_term array  (*  fgnames, concepts *)
-    * int array * type_term array  (*  argnames, types   *)
-    * (type_term*bool) option =
-  let fgens: IntSet.t = (* Set of formal generics names *)
+    : int array * type_term array * int array * int * Sign.t =
+  (** Analyze the syntactic signature [entlst,rt] based on an environment
+      which has already the formal generics [fgnames0] with their constraints
+      [concepts0] and the arguments [argnames0] and the number of type
+      variables [ntvs0]
+   *)
+  let fgens, ntvs = (* Set of formal generics names and number of type vars *)
     collect_formal_generics entlst rt ct
+  in
+  let fgens =
+    Array.fold_left (fun set name -> IntSet.remove name set) fgens fgnames0
   in
   let fgnames,concepts =
     let ns,cs =
@@ -220,57 +231,40 @@ let signature
     in
     Array.of_list (List.rev ns), Array.of_list (List.rev cs)
   in
-  let argnames,argtypes = arguments entlst fgnames ct
-  and ret =
-    match rt with
-      None -> None
-    | Some tp ->
-        let t,procedure = tp.v in
-        assert (not procedure);
-        Some ((get_type (withinfo tp.i t) fgnames ct),procedure)
+  let fgnames  = Array.append fgnames  fgnames0
+  and concepts = Array.append concepts concepts0
   in
-  fgnames, concepts, argnames, argtypes, ret
+  let argnames,argtypes = arguments entlst fgnames ct
+  in
+  let argnames = Array.append argnames argnames0
+  in
+  let sign =
+    match rt with
+      None -> Sign.make_args argtypes
+    | Some tpinf ->
+        let tp,proc = tpinf.v in
+        let t = get_type (withinfo tpinf.i tp) fgnames ct in
+        if proc then Sign.make_proc argtypes t
+        else Sign.make_func argtypes t
+  in
+  fgnames, concepts, argnames, (ntvs0+ntvs), sign
+
+
 
 
 let argument_signature
     (entlst: entities list withinfo)
     (ct:t)
     : int array * type_term array * int array * type_term array =
-  let fgnames, concepts, argnames, argtypes, _ =
-    signature entlst None ct
+  let fgnames, concepts, argnames, _, sign =
+    signature entlst None [||] [||] [||] 0 ct
   in
-  fgnames, concepts, argnames, argtypes
+  fgnames, concepts, argnames, Sign.arguments sign
 
 
 
-let feature_type
-    (entlst: entities list withinfo)
-    (rt:return_type)
-    (ct:t)
-    : int array * term array * int array * term array * term  =
-  let fgnames,concepts,argnames,argtypes,ret = signature entlst rt ct
-  in
-  let ret = match ret with
-    None -> not_yet_implemented entlst.i "procedures"
-  | Some (r,proc) ->
-      if proc then not_yet_implemented entlst.i "procedures" else r
-  in
-  fgnames, concepts, argnames, argtypes, ret
 
 
-let feature_signature
-    (entlst:    entities list withinfo)
-    (rt:        return_type)
-    (fgnames0:  int array)
-    (concepts0: type_term array)
-    (names0:    int array)
-    (ct:        t)
-    : int array * type_term array * int array * Sign.t =
-  (** Analyze the syntactic signature [entlst,rt] based on an environment
-      which has already the formal generics [fgnames0] with their constraints
-      [concepts0] and the arguments [names0]
-   *)
-  assert false
 
 
 
