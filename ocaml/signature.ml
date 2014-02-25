@@ -91,28 +91,39 @@ end
 module Sign: sig
   type t
   val make_func:   type_term array -> type_term -> t
+  val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
+  val make_args:   type_term array -> t
   val arity:       t -> int
   val is_constant: t -> bool
   val arguments:   t -> type_term array
   val argument:    int -> t -> t
   val has_result:  t -> bool
   val result:      t -> type_term
+  val is_procedure:t -> bool
   val up_from:     int -> int -> t -> t
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
   val to_function: int -> t -> t
   val unify:       t -> t -> TVars_sub.t -> unit
   (*val apply:       Term_sub_arr.t -> t -> t*)
+
 end = struct
+
   type t = {args: type_term array;
-            result: type_term option}
+            result: (type_term*bool) option}
 
   let make_func (args: type_term array) (result:type_term): t =
-    {args = args; result = Some result}
+    {args = args; result = Some (result,false)}
+
+  let make_args (args: type_term array): t =
+    {args = args; result = None}
 
   let make_const (result:type_term): t =
-    {args = [||]; result = Some result}
+    {args = [||]; result = Some (result,false)}
+
+  let make_proc (args: type_term array) (result:type_term): t =
+    {args = args; result = Some (result,true)}
 
   let arity (s:t): int = Array.length s.args
 
@@ -129,7 +140,13 @@ end = struct
 
   let result (s:t): type_term =
     assert (has_result s);
-    Option.value s.result
+    let r,_ = Option.value s.result in r
+
+  let is_procedure (s:t): bool =
+    match s.result with
+      None -> true
+    | Some (r,proc) -> proc
+
 
   let up_from (n:int) (start:int) (s:t): t =
     (** Shift all types up by [n] starting from [start].
@@ -137,7 +154,7 @@ end = struct
     {args = Array.map (fun t -> Term.upbound n start t) s.args;
      result = match s.result with
        None   -> None
-     | Some t -> Some (Term.upbound n start t)}
+     | Some (t,proc) -> Some (Term.upbound n start t,proc)}
 
 
   let up (n:int) (s:t): t =
@@ -164,7 +181,7 @@ end = struct
     assert (has_result s);
     assert (is_constant s);
     {args   = Array.init nargs (fun i -> Variable i);
-     result = Some (Term.up nargs (result s))}
+     result = Some (Term.up nargs (result s),false)}
 
 
 
