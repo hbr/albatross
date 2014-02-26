@@ -10,7 +10,9 @@ end)
 
 
 type descriptor =
-    {hmark:header_mark; constraints: term array; parents: TypSet.t}
+    {hmark:header_mark;
+     fgnames: int array; constraints: term array;
+     parents: TypSet.t}
 
 type t = {names:   int key_table;
           classes: descriptor seq;
@@ -295,24 +297,44 @@ let base_table (): t =
   assert (pred_idx=predicate_index);
   assert (func_idx=function_index);
   assert (tuple_idx=tuple_index);
-  Seq.push cc {hmark = No_hmark; constraints = [||];
+  let fgg = ST.symbol "G"
+  and fga = ST.symbol "A"
+  and fgb = ST.symbol "B"
+  in
+  Seq.push cc {hmark = No_hmark;
+               fgnames = [||]; constraints = [||];
                parents = TypSet.empty }; (*@ZERO*)
-  Seq.push cc {hmark = Immutable_hmark; constraints = [|zero|];
+
+  Seq.push cc {hmark = Immutable_hmark;
+               fgnames = [||]; constraints = [|zero|];
                parents = TypSet.empty}; (*BOOLEAN*)
-  Seq.push cc {hmark = Deferred_hmark; constraints = [|zero|];
+
+  Seq.push cc {hmark = Deferred_hmark;
+               fgnames = [||]; constraints = [|zero|];
                parents = TypSet.empty }; (*ANY*)
-  Seq.push cc {hmark = Immutable_hmark; constraints = [|any|];
+
+  Seq.push cc {hmark = Immutable_hmark;
+               fgnames = [|fgg|]; constraints = [|any|];
                parents = TypSet.empty}; (*PREDICATE*)
-  Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
+
+  Seq.push cc {hmark = Immutable_hmark;
+               fgnames = [|fga;fgb|]; constraints = [|any;any|];
                parents = TypSet.empty}; (*FUNCTION*)
-  Seq.push cc {hmark = Immutable_hmark; constraints = [|any;any|];
+
+  Seq.push cc {hmark = Immutable_hmark;
+               fgnames = [|fga;fgb|]; constraints = [|any;any|];
                parents =TypSet.empty}; (*TUPLE*)
   {names=kt; classes=cc; fgens=bt.fgens}
 
 
 
 
-let type2string (t:term) (nb:int) (ct:t): string =
+let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
+  (** Convert the type term [t] in an environment with [nb] type variables
+      and the formal generics [fgnames]
+   *)
+  let nfgs = Array.length fgnames
+  in
   let rec to_string(t:term) (nb:int) (prec:int): string =
     let args_to_string (tarr:term array) (nb:int): string =
       "["
@@ -323,7 +345,12 @@ let type2string (t:term) (nb:int) (ct:t): string =
     let inner_prec, str =
       match t with
         Variable j ->
-          1, if j<nb then string_of_int j else class_name (j-nb) ct
+          1,
+          if j<nb then
+            string_of_int j
+          else if j < nb+nfgs then
+            ST.string fgnames.(j-nb)
+          else class_name (j-nb-nfgs) ct
       | Application (Variable j,tarr) ->
           let j1 = j-nb
           and tarrlen = Array.length tarr in
@@ -354,7 +381,7 @@ let type2string (t:term) (nb:int) (ct:t): string =
 
 
 
-let class2string (i:int) (ctxt:t) =
+let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
   let desc = Seq.elem  ctxt.classes i in
   let ngen = Array.length desc.constraints in
@@ -368,14 +395,14 @@ let class2string (i:int) (ctxt:t) =
               (Array.mapi (fun i c ->
                 (string_of_int (ngen-1-i))
                 ^ ":"
-                ^ (type2string c 0 ctxt)) desc.constraints) )
+                ^ (type2string c 0 [||] ctxt)) desc.constraints) )
         )
       ^ "]"
   and par2string =
     String.concat
       ";"
       (List.rev (TypSet.fold
-                     (fun el lst -> (type2string el ngen ctxt)::lst)
+                   (fun el lst -> (type2string el 0 desc.fgnames ctxt)::lst)
                    desc.parents
                    []))
   in
@@ -426,6 +453,6 @@ let arguments_to_string
         (List.rev_map
            (fun (ns,tp) ->
              (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
-             ^ ":" ^ (type2string tp 0 ct))
+             ^ ":" ^ (type2string tp 0 [||] ct))
            llst)
     ^ ")"

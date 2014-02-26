@@ -29,6 +29,6 @@ val argument_signature: entities list withinfo -> t ->
 
 val print: t -> unit
 
-val type2string: term -> int -> t -> string
+val type2string: term -> int -> int array -> t -> string
 
 val arguments_to_string: int array -> term array -> t -> string
