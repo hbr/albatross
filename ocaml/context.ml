@@ -66,19 +66,23 @@ module Local_context: sig
   val arity:     t -> int
   val argument:  int -> t -> int * TVars.t * Sign.t
 
+  val count_type_variables: t -> int
+
   val nfgs:    t -> int
   val fgnames: t -> int array
 
   val tvars_sub: t -> TVars_sub.t
 
+  val update_type_variables: TVars_sub.t -> t -> unit
+
 end = struct
 
   type t = {
-      fgnames:   int array;        (* cumulated        *)
-      concepts:  type_term array;  (* cumulated        *)
-      argnames:  int array;        (* cumulated        *)
-      signature: Sign.t;           (* from declaration *)
-      tvars_sub: TVars_sub.t;      (* cumulated        *)
+      fgnames:   int array;           (* cumulated        *)
+      concepts:  type_term array;     (* cumulated        *)
+      argnames:  int array;           (* cumulated        *)
+      mutable signature: Sign.t;      (* from declaration *)
+      mutable tvars_sub: TVars_sub.t; (* cumulated        *)
       ct:        Class_table.t
     }
 
@@ -132,6 +136,13 @@ end = struct
     let i = Search.array_find_min name loc.argnames in
     i, TVars_sub.tvars loc.tvars_sub, Sign.argument i loc.signature
 
+  let count_type_variables (loc:t): int =
+    (** The number of cumulated type variables in this context and all
+        preceeding contexts
+     *)
+    TVars_sub.count loc.tvars_sub
+
+
   let nfgs (loc:t): int =
     (** The cumulated number of formal generics in this context and all
         previous contexts
@@ -147,6 +158,18 @@ end = struct
 
   let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
 
+  let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
+    (** Update the type variables of the current context with [tvs]
+     *)
+    let nloc1  = TVars_sub.count_local  tvs
+    and nloc2  = TVars_sub.count_local  loc.tvars_sub
+    and nglob1 = TVars_sub.count_global tvs
+    and nglob2 = TVars_sub.count_global loc.tvars_sub
+    in
+    assert (nloc1 = nloc2);
+    assert (nglob1 >= nglob2);
+    loc.tvars_sub <- tvs;
+    loc.signature <- Sign.up_from (nglob1-nglob2) nglob2 loc.signature
 end (* Local_context *)
 
 
@@ -185,6 +208,7 @@ module Context: sig
 
   val type_variables:  t -> TVars_sub.t
 
+  val update_type_variables: TVars_sub.t -> t -> unit
 end = struct
 
 
@@ -288,7 +312,7 @@ end = struct
     assert (is_basic c);
     let g = global c in
     let ct,ft = Global_context.ct g, Global_context.ft g in
-    Feature_table.put fn entlst rt bdy (is_private c) ct ft
+    Feature_table.analyze_and_store fn entlst rt bdy (is_private c) ct ft
 
   let print (c:t): unit =
     assert (is_basic c);
@@ -359,8 +383,9 @@ end = struct
       Basic _ -> assert false (* illegal path *)
     | Combined (loc,_) -> Local_context.tvars_sub loc
 
-  let update_type_variables (tv:TVars_sub.t) (c:t): t =
+  let update_type_variables (tv:TVars_sub.t) (c:t): unit =
     assert (not (is_basic c));
-    assert false
+    let loc = local c in
+    Local_context.update_type_variables tv loc
 
 end (* Context *)

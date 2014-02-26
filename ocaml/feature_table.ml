@@ -108,25 +108,6 @@ let implication_chain
 
 
 
-
-
-let find_feature (name: feature_name) (ft:t)
-    : int list =
-  (* List of features with the name 'name' *)
-  let lst = ref []
-  in
-  let _ =
-    Key_table.iteri
-      (fun i k ->
-        if k.name=name then
-          lst := i::!lst
-        else
-          () )
-      ft.keys
-  in
-  !lst
-
-
 let find_funcs
     (fn:feature_name)
     (nargs:int) (ft:t)
@@ -212,9 +193,9 @@ let check_match
     error_info
       i
       ("expression " ^ (string_of_expression e) ^ " has type "
-       ^ (Class_table.type2string tp 0 ct)
+       ^ (Class_table.type2string tp 0 [||] ct)
        ^ " expected type "
-       ^ (Class_table.type2string expected 0 ct))
+       ^ (Class_table.type2string expected 0 [||] ct))
     else ()
 
 
@@ -252,24 +233,22 @@ let typed_term
       Identifier i ->
         find_name i
     | Expfalse ->
-        let flst = find_feature FNfalse ft
+        let lst  = find_funcs FNfalse 0 ft
         in
         begin
-          match flst with
-            [i] ->
-              let sign = (Key_table.key ft.keys i).sign in
+          match lst with
+            [i,tvars,sign] ->
               assert (Sign.is_constant sign);
               let res = Sign.result sign in
               Variable (nbound+i), res
           | _ -> not_yet_implemented ie.i "feature overloading"
         end
     | Exptrue ->
-        let flst = find_feature FNtrue ft
+        let lst  = find_funcs FNtrue 0 ft
         in
         begin
-          match flst with
-            [i] ->
-              let sign = (Key_table.key ft.keys i).sign in
+          match lst with
+            [i,tvars,sign] ->
               assert (Sign.is_constant sign);
               let res = Sign.result sign in
               Variable (nbound+i), res
@@ -517,14 +496,32 @@ let print (ct:Class_table.t)  (ft:t): unit =
 
 
 
-let put
+let put_function
+    (fn:       feature_name)
+    (fgnames:  int array)
+    (concepts: type_term array)
+    (argnames: int array)
+    (sign:     Sign.t)
+    (is_priv:  bool)
+    (term:     term)
+    (ft:       t): unit =
+  (** Add the function with then name [fn], the formal generics [fgnames] with
+      their constraints [concepts], the arguments [argnames], the
+      signature [sign] to the feature table
+   *)
+  assert false
+
+
+
+let analyze_and_store
     (fn: feature_name withinfo)
     (entlst: entities list withinfo)
     (rt: return_type)
     (bdy: feature_body option)
     (is_priv: bool)
     (ct: Class_table.t)
-    (ft: t) =
+    (ft: t)
+    : unit =
   let fgnames,concepts,argnames,ntvs,sign =
     Class_table.signature entlst rt [||] [||] [||] 0 ct
   in

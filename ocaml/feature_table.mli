@@ -21,7 +21,7 @@ val normalize_term: term->int->t->term
 
 val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
-val put:
+val analyze_and_store:
     feature_name withinfo -> entities list withinfo -> return_type
       -> feature_body option ->
         bool -> Class_table.t -> t -> unit

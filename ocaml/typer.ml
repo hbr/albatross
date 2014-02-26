@@ -16,7 +16,7 @@ module Accu: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val term:              type_term -> t -> term * type_term
+  val result:            t -> term * TVars_sub.t
 end = struct
 
   type t = {mutable tlist: term list;
@@ -160,11 +160,11 @@ end = struct
     acc.tvars <- TVars_sub.remove_local nargs acc.tvars
 
 
-  let term (expected:type_term) (acc:t): term * type_term =
-    (** Expect the argument [i] as the next term.
+  let result (acc:t): term * TVars_sub.t =
+    (** Return the term and the calculated substitutions of the type variables
      *)
     assert (Mylist.is_singleton acc.tlist);
-    assert false
+    List.hd acc.tlist, acc.tvars
 
 end (* Accu *)
 
@@ -184,7 +184,7 @@ module Accus: sig
   val add_leaf:        (int*TVars.t*Sign.t) list -> int -> t -> unit
   val expect_function: int -> t -> unit
   val expect_argument: t -> unit
-  val term:            type_term -> t -> term * type_term
+  val result:          t -> term * TVars_sub.t
 end = struct
 
   type t = {mutable accus: Accu.t list;
@@ -278,10 +278,10 @@ end = struct
     accs.nterms <- accs.nterms + 1;
     pop accs
 
-  let term (expected: type_term) (accs:t): term * type_term =
+  let result (accs:t): term * TVars_sub.t =
     assert (is_complete accs);
     assert (is_singleton accs);
-    Accu.term expected (List.hd accs.accus)
+    Accu.result (List.hd accs.accus)
 end (* Accus *)
 
 
@@ -291,10 +291,9 @@ let analyse_expression
     (ie:        info_expression)
     (expected:  type_term)
     (context:   Context.t)
-    : term * type_term =
+    : term =
   (** Analyse the expression [ie] with the expected type [expected]
-      in the context [context] and return the term and the corresponding
-      actual type term.
+      in the context [context] and return the term.
    *)
   assert (not (Context.is_basic context));
   let info, exp = ie.i, ie.v in
@@ -366,4 +365,6 @@ let analyse_expression
       info
       ("The expression " ^ (string_of_expression exp) ^ " is ambiguous");
 
-  Accus.term expected accs
+  let term,tvars_sub = Accus.result accs in
+  Context.update_type_variables tvars_sub context;
+  term
