@@ -50,24 +50,23 @@ let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
   with Not_found ->
     not_yet_implemented cn.i "Insertion of new classes"
 
-let boolean_type  = Variable boolean_index
-let any           = Variable any_index
-let zero          = Variable zero_index
+let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
+let any (ntvs:int)           = Variable (any_index+ntvs)
+let zero (ntvs:int)          = Variable (zero_index+ntvs)
 let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
 
 
 
-let is_boolean_binary (args: term array) (ret:term): bool =
-  ret=boolean_type
-    && (Array.length args)=2
-    && args.(0)=boolean_type
-    && args.(1)=boolean_type
+let is_boolean_binary (s:Sign.t) (ntvs:int): bool =
+  (Sign.is_binary s) &&
+  (Sign.arg_type 0 s) = (boolean_type ntvs) &&
+  (Sign.arg_type 1 s) = (boolean_type ntvs) &&
+  (Sign.result s)     = (boolean_type ntvs)
 
-let is_boolean_unary (args: term array) (ret:term): bool =
-  ret=boolean_type
-    && (Array.length args)=1
-    && args.(0)=boolean_type
-
+let is_boolean_unary (s:Sign.t) (ntvs:int): bool =
+  (Sign.is_unary s) &&
+  (Sign.arg_type 0 s) = (boolean_type ntvs) &&
+  (Sign.result s)     = (boolean_type ntvs)
 
 
 let collect_formal_generics
@@ -306,23 +305,23 @@ let base_table (): t =
                parents = TypSet.empty }; (*@ZERO*)
 
   Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [||]; constraints = [|zero|];
+               fgnames = [||]; constraints = [||];
                parents = TypSet.empty}; (*BOOLEAN*)
 
   Seq.push cc {hmark = Deferred_hmark;
-               fgnames = [||]; constraints = [|zero|];
+               fgnames = [||]; constraints = [||];
                parents = TypSet.empty }; (*ANY*)
 
   Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fgg|]; constraints = [|any|];
+               fgnames = [|fgg|]; constraints = [|any 0|];
                parents = TypSet.empty}; (*PREDICATE*)
 
   Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fga;fgb|]; constraints = [|any;any|];
+               fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
                parents = TypSet.empty}; (*FUNCTION*)
 
   Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fga;fgb|]; constraints = [|any;any|];
+               fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
                parents =TypSet.empty}; (*TUPLE*)
   {names=kt; classes=cc; fgens=bt.fgens}
 
@@ -380,11 +379,34 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
 
 
 
+let string_of_signature
+    (s:Sign.t)
+    (ntvs:int)
+    (fgnames: int array)
+    (ct:t)
+    : string =
+  let argsstr =
+    if (Sign.arity s) = 0 then ""
+    else
+      "("
+      ^ (String.concat
+           ","
+           (List.rev_map   (* reindexing *)
+              (fun tp -> type2string tp ntvs fgnames ct)
+              (Array.to_list (Sign.arguments s))))
+      ^ "): "
+  and retstr =
+    type2string (Sign.result s) ntvs fgnames ct
+  in
+  argsstr ^ retstr
+
+
 
 let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
   let desc = Seq.elem  ctxt.classes i in
   let ngen = Array.length desc.constraints in
+  assert (ngen = Array.length desc.fgnames);
   let con2string =
     if ngen = 0 then ""
     else
@@ -392,10 +414,12 @@ let class2string (i:int) (ctxt:t): string =
       ^ (String.concat
              ","
            (Array.to_list
-              (Array.mapi (fun i c ->
-                (string_of_int (ngen-1-i))
-                ^ ":"
-                ^ (type2string c 0 [||] ctxt)) desc.constraints) )
+              (Array.mapi
+                 (fun i c ->
+                   (ST.string desc.fgnames.(i))
+                   ^ ":"
+                   ^ (type2string c 0 [||] ctxt))
+                 desc.constraints) )
         )
       ^ "]"
   and par2string =

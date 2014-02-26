@@ -369,10 +369,14 @@ end (* Term *)
 
 
 
+
+
 module Term_sub_arr: sig
+
   type t
   val make: int -> t
   val count: t -> int
+  val get:   int -> t -> term
   val flags: t -> bool array
   val args:  t -> term array
   val add:   int -> term -> t -> unit
@@ -380,10 +384,12 @@ module Term_sub_arr: sig
   val extend_bottom: int -> t -> t
   val remove_bottom: int -> t -> t
   val unify: term -> term -> t -> unit
+
 end = struct
+
   type t = {n:int; args: term array; flags: bool array}
 
-    let flags (s:t): bool array = s.flags
+  let flags (s:t): bool array = s.flags
   let args  (s:t): term array = s.args
 
   let make (n:int): t =
@@ -392,6 +398,10 @@ end = struct
      flags = Array.make n false}
 
   let count (s:t): int = s.n
+
+  let get (i:int) (s:t): term =
+    assert (i < (count s));
+    s.args.(i)
 
   let add (i:int) (t:term) (s:t): unit =
     (** Add the substitution [i ~~> t] to the substitution [s] i.e.

@@ -1,6 +1,7 @@
 open Container
 open Support
 open Context
+open Term
 
 let usage_string = "\
 Usage:
@@ -68,11 +69,37 @@ let put_feature
     (rt: return_type)
     (bdy: feature_body option)
     (c:   Context.t): unit =
-  let c = Context.push entlst rt c in
-  let loc = Context.local c in
-  ()
+   let context = Context.push entlst rt c in
+   let impstat,term_opt =
+     match bdy with
+       None ->
+         Feature_table.No_implementation,
+         None
+     | Some (None, Some Impbuiltin, None) ->
+         Feature_table.Builtin,
+         None
+     | Some (None, None, Some [ens]) ->
+         begin
+           match ens.v with
+             Binexp (Eqop, ExpResult,def) ->
+               let term =
+                 Typer.result_term
+                   (withinfo ens.i def)
+                   context
+               in
+               Feature_table.No_implementation,
+               Some term
+           | _ -> not_yet_implemented ens.i
+                 "functions not defined with \"Result = ...\""
+         end
+     | Some (None, Some Impdeferred, None) ->
+         Feature_table.Deferred,
+         None
 
-
+     | _ -> not_yet_implemented fn.i
+           "functions with implementation/preconditions"
+   in
+   Context.put_function fn impstat term_opt context
 
 
 let analyze(ast:declaration list): unit =
@@ -92,7 +119,6 @@ let analyze(ast:declaration list): unit =
           Context.reset_visibility context;
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
-          Context.put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
@@ -105,7 +131,8 @@ let analyze(ast:declaration list): unit =
       [] -> ()
       | f::t -> one_decl f; analyz t
   in
-  analyz ast
+  analyz ast;
+  Context.print context
 
 
 

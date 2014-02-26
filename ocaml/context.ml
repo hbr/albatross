@@ -18,7 +18,8 @@ module Global_context: sig
   val ct:  t -> Class_table.t
   val ft:  t -> Feature_table.t
   val at:  t -> Assertion_table.t
-
+  val string_of_term: term -> t -> string
+  val sign2string: Sign.t -> t -> string
 end = struct
   type t = {
       mutable visi: visibility;
@@ -47,6 +48,13 @@ end = struct
   let ct (g:t): Class_table.t      = g.ct
   let ft (g:t): Feature_table.t    = g.ft
   let at (g:t): Assertion_table.t  = g.at
+
+  let string_of_term (t:term) (g:t): string =
+    Feature_table.term_to_string t [||]  g.ft
+
+  let sign2string (s:Sign.t) (g:t): string =
+    Class_table.string_of_signature s 0 [||] g.ct
+
 end (* Global_context *)
 
 
@@ -66,6 +74,8 @@ module Local_context: sig
   val arity:     t -> int
   val argument:  int -> t -> int * TVars.t * Sign.t
 
+  val result_type: t -> type_term
+
   val count_type_variables: t -> int
 
   val nfgs:    t -> int
@@ -73,7 +83,16 @@ module Local_context: sig
 
   val tvars_sub: t -> TVars_sub.t
 
+  val boolean: t -> term
+
   val update_type_variables: TVars_sub.t -> t -> unit
+
+  val string_of_term: term -> t -> string
+  val sign2string:    Sign.t -> t -> string
+
+  val put_global_function:
+      feature_name withinfo -> bool -> Feature_table.implementation_status ->
+        term option -> t -> unit
 
 end = struct
 
@@ -83,7 +102,8 @@ end = struct
       argnames:  int array;           (* cumulated        *)
       mutable signature: Sign.t;      (* from declaration *)
       mutable tvars_sub: TVars_sub.t; (* cumulated        *)
-      ct:        Class_table.t
+      ct:        Class_table.t;
+      ft:        Feature_table.t
     }
 
 
@@ -95,7 +115,8 @@ end = struct
     (** Make a first local context with the argument list [entlst] and the
         return type [rt] based on the global context [g]
      *)
-    let ct = Global_context.ct g in
+    let ct = Global_context.ct g
+    and ft = Global_context.ft g in
     let fgnames, concepts, argnames, ntvs, sign =
       Class_table.signature entlst rt [||] [||] [||] 0 ct
     in
@@ -104,7 +125,8 @@ end = struct
      argnames   =  argnames;
      signature  =  sign;
      tvars_sub  =  TVars_sub.make ntvs;
-     ct         =  ct}
+     ct         =  ct;
+     ft         =  ft}
 
 
 
@@ -126,7 +148,8 @@ end = struct
      argnames  =  argnames;
      signature =  sign;
      tvars_sub =  TVars_sub.add_local ntvs loc.tvars_sub;
-     ct        =  loc.ct}
+     ct        =  loc.ct;
+     ft        =  loc.ft}
 
 
   let arity     (loc:t): int = Sign.arity loc.signature
@@ -135,6 +158,16 @@ end = struct
     (** The term and the signature of the argument named [name] *)
     let i = Search.array_find_min name loc.argnames in
     i, TVars_sub.tvars loc.tvars_sub, Sign.argument i loc.signature
+
+
+  let has_result (loc:t): bool =
+    Sign.has_result loc.signature
+
+  let result_type (loc:t): type_term =
+    (** The result type of the context
+     *)
+    assert (has_result loc);
+    Sign.result loc.signature
 
   let count_type_variables (loc:t): int =
     (** The number of cumulated type variables in this context and all
@@ -149,6 +182,13 @@ end = struct
      *)
     Array.length loc.fgnames
 
+  let ntvs (loc:t): int =
+    (** The cumulated number of formal generics and type variables in
+        this context and all previous contexts
+     *)
+    (nfgs loc) + (count_type_variables loc)
+
+
   let fgnames (loc:t): int array=
     (** The cumulated formal generic names of this context and all
         previous contexts
@@ -157,6 +197,9 @@ end = struct
 
 
   let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
+
+  let boolean (loc:t): term =
+    Class_table.boolean_type (ntvs loc)
 
   let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
     (** Update the type variables of the current context with [tvs]
@@ -170,6 +213,34 @@ end = struct
     assert (nglob1 >= nglob2);
     loc.tvars_sub <- tvs;
     loc.signature <- Sign.up_from (nglob1-nglob2) nglob2 loc.signature
+
+  let string_of_term (t:term) (loc:t): string =
+    Feature_table.term_to_string t loc.argnames loc.ft
+
+  let sign2string (s:Sign.t) (loc:t): string =
+    Class_table.string_of_signature
+      s
+      (count_type_variables loc)
+      loc.fgnames
+      loc.ct
+
+  let put_global_function
+      (fn:       feature_name withinfo)
+      (is_priv:  bool)
+      (impstat:  Feature_table.implementation_status)
+      (term_opt: term option)
+      (loc:      t)
+      : unit =
+    Feature_table.put_function
+      fn
+      loc.fgnames
+      loc.concepts
+      loc.argnames
+      loc.signature
+      is_priv
+      impstat
+      term_opt
+      loc.ft
 end (* Local_context *)
 
 
@@ -185,19 +256,24 @@ module Context: sig
   val make:  unit -> t
 
   val is_basic:     t -> bool
+  val global:       t -> Global_context.t
+  val local:        t -> Local_context.t
   val is_public:    t -> bool
   val is_private:   t -> bool
   val set_visibility:   visibility -> t -> unit
   val reset_visibility: t -> unit
+  val string_of_term: term -> t -> string
+  val sign2string:  Sign.t -> t -> string
+  val boolean:      t -> term
   val push: entities list withinfo -> return_type -> t -> t
+  val put_function:
+      feature_name withinfo -> Feature_table.implementation_status
+        -> term option -> t -> unit
 
-  val global:       t -> Global_context.t
-  val local:        t -> Local_context.t
 
   val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
   val put_class: header_mark withinfo -> int withinfo -> t -> unit
-  val put_feature: feature_name withinfo -> entities list withinfo
-    -> return_type -> feature_body option -> t -> unit
+
   val print: t -> unit
 
   val find_identifier: int -> int -> t
@@ -209,6 +285,7 @@ module Context: sig
   val type_variables:  t -> TVars_sub.t
 
   val update_type_variables: TVars_sub.t -> t -> unit
+
 end = struct
 
 
@@ -263,6 +340,21 @@ end = struct
 
 
 
+  let string_of_term (t:term) (c:t): string =
+    match c with
+      Basic g          -> Global_context.string_of_term t g
+    | Combined (loc,c) -> Local_context.string_of_term t loc
+
+  let sign2string (s:Sign.t) (c:t): string =
+    match c with
+      Basic g          -> Global_context.sign2string s g
+    | Combined (loc,c) -> Local_context.sign2string s loc
+
+  let boolean (c:t): term =
+    match c with
+      Basic g          -> Class_table.boolean_type 0
+    | Combined (loc,c) -> Local_context.boolean loc
+
 
   let push
       (entlst: entities list withinfo)
@@ -278,6 +370,28 @@ end = struct
       | Combined (loc,c) ->  Local_context.make_next  entlst rt loc
     in
     Combined (loc,c)
+
+
+  let put_function
+      (fn: feature_name withinfo)
+      (impstat: Feature_table.implementation_status)
+      (term_opt: term option)
+      (c:t)
+      : unit =
+    (** Put the function [fn] into the corresponding table.
+     *)
+    assert (not (is_basic c));
+    match c with
+      Combined (loc, Basic _) ->
+        Local_context.put_global_function
+          fn
+          (is_private c)
+          impstat
+          term_opt
+          loc
+    | Combined (loc0, Combined (loc,_)) ->
+        assert false (* nyi: local functions *)
+    | _ -> assert false (* illegal path *)
 
 
   let put_class (hm:header_mark withinfo) (cn:int withinfo) (c:t): unit =
@@ -299,20 +413,6 @@ end = struct
     Class_table.put_formal name concept (Global_context.ct (global c))
 
 
-
-
-  let put_feature
-      (fn: feature_name withinfo)
-      (entlst: entities list withinfo)
-      (rt: return_type)
-      (bdy: feature_body option)
-      (c: t): unit =
-    (** Add the feature [fn] with [entlst] [rt] and [bdy] to the global context
-     *)
-    assert (is_basic c);
-    let g = global c in
-    let ct,ft = Global_context.ct g, Global_context.ft g in
-    Feature_table.analyze_and_store fn entlst rt bdy (is_private c) ct ft
 
   let print (c:t): unit =
     assert (is_basic c);

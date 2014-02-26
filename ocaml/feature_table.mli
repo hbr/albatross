@@ -4,6 +4,8 @@ open Signature
 
 type t
 
+type implementation_status = No_implementation | Builtin | Deferred
+
 val empty: unit -> t
 
 val has_implication: t -> bool
@@ -21,19 +23,9 @@ val normalize_term: term->int->t->term
 
 val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
-val analyze_and_store:
-    feature_name withinfo -> entities list withinfo -> return_type
-      -> feature_body option ->
-        bool -> Class_table.t -> t -> unit
-
-val typed_term: info_expression -> term array -> int array -> term array
-  -> Class_table.t -> t -> term * term
-
-val assertion_term: info_expression -> term array -> int array -> term array
-  -> Class_table.t -> t -> term
-
-val term: info_expression -> term array -> int array -> term array
-  -> Class_table.t -> t -> term
+val put_function:
+    feature_name withinfo -> int array -> type_term array -> int array
+      -> Sign.t -> bool -> implementation_status -> term option -> t -> unit
 
 val term_to_string: term -> int array -> t -> string
 

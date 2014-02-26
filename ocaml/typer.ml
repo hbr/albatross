@@ -17,6 +17,7 @@ module Accu: sig
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
   val result:            t -> term * TVars_sub.t
+
 end = struct
 
   type t = {mutable tlist: term list;
@@ -126,7 +127,9 @@ end = struct
   let expect_argument (i:int) (acc:t): unit =
     (** Expect the argument [i] as the next term.
      *)
-    acc.sign <- Sign.make_const (Variable i)
+    assert (i < (TVars_sub.count_local acc.tvars));
+    acc.sign <- Sign.make_const (TVars_sub.get i acc.tvars)
+    (*acc.sign <- Sign.make_const (Variable i)*)
 
 
 
@@ -143,15 +146,19 @@ end = struct
         of the last argument. If there are more arguments to come, then
         [expect_argument] will put a new expected signature into the accumulator
      *)
+    (*Printf.printf
+      "Complete a function with %d arguments and %d terms on stack\n"
+      nargs (List.length acc.tlist);*)
     let arglst = ref [] in
     let rec pop_args (n:int): unit =
       if n=0 then ()
-      else
+      else begin
         assert (not (Mylist.is_empty acc.tlist));
         let t = List.hd acc.tlist in
         acc.tlist <- List.tl acc.tlist;
         arglst := t :: !arglst;
         pop_args (n-1)
+      end
     in
     pop_args nargs;
     let f = List.hd acc.tlist in
@@ -172,7 +179,10 @@ end (* Accu *)
 
 
 
+
+
 module Accus: sig
+
   type t
   exception Untypeable of Sign.t list
 
@@ -185,6 +195,7 @@ module Accus: sig
   val expect_function: int -> t -> unit
   val expect_argument: t -> unit
   val result:          t -> term * TVars_sub.t
+
 end = struct
 
   type t = {mutable accus: Accu.t list;
@@ -232,6 +243,7 @@ end = struct
     (** Expect the next argument of the current application *)
     assert ((nterms_missing accs) > 0);
     assert (accs.nterms > 0);
+    accs.arity <- 0;
     List.iter (fun acc -> Accu.expect_argument (accs.nterms-1) acc) accs.accus
 
 
@@ -287,7 +299,7 @@ end (* Accus *)
 
 
 
-let analyse_expression
+let analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
     (context:   Context.t)
@@ -310,8 +322,15 @@ let analyse_expression
       : unit =
     let nargs = Accus.expected_arity accs in
     let feat_fun (fn:feature_name) =
-      fun () -> Context.find_feature fn nargs context
-    and do_leaf f: unit =
+      fun () ->
+        try
+          (*Printf.printf "Try to find \"%s\" with %d arguments\n"
+            (feature_name_to_string fn) nargs;*)
+          Context.find_feature fn nargs context
+        with Not_found ->
+          let str = "Cannot find \"" ^ (feature_name_to_string fn) ^ "\"" in
+          error_info info str
+    and do_leaf (f: unit -> (int*TVars.t*Sign.t) list * int): unit =
       try
         let lst,nvars = f () in
         Accus.add_leaf lst nvars accs
@@ -319,26 +338,36 @@ let analyse_expression
         Accus.Untypeable exp_sign_lst ->
           let str = "The expression "
             ^ (string_of_expression e)
-            ^ "does not satisfy any of the expected types in {"
+            ^ " does not satisfy any of the expected types in {"
             ^ (String.concat
                  ","
-                 (List.map (fun sign -> assert false) exp_sign_lst))
+                 (List.map
+                    (fun sign -> Context.sign2string sign context)
+                    exp_sign_lst))
             ^ "}"
           in
           error_info info str
     in
       match e with
         Identifier name ->
-          do_leaf (fun () -> Context.find_identifier name nargs context)
-      | Expfalse -> do_leaf (feat_fun FNfalse)
-      | Exptrue  -> do_leaf (feat_fun FNtrue)
-      | Binexp (op,e1,e2) -> application (Expop op) [|e1; e2|] accs
-      | Funapp (f,args)   -> application f (arg_array args) accs
-      | _ -> assert false (* nyi: all alternatives *)
+          do_leaf (fun ()   -> Context.find_identifier name nargs context)
+      | Expfalse            -> do_leaf (feat_fun FNfalse)
+      | Exptrue             -> do_leaf (feat_fun FNtrue)
+      | Expop op            -> do_leaf (feat_fun (FNoperator op))
+      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
+      | Unexp  (op,e)       -> application (Expop op) [|e|] accs
+      | Funapp (f,args)     -> application f (arg_array args) accs
+      | Expparen e          -> analyze e accs
+      | Taggedexp (label,e) -> analyze e accs
+
+      | _ -> not_yet_implemented ie.i
+            ("(others)Typing of expression " ^
+             (string_of_expression e))
+             (*assert false (* nyi: all alternatives *)*)
 
   and application
       (f:expression)
-      (args: expression array)
+      (args: expression array) (* unreversed, i.e. as in the source code *)
       (accs: Accus.t)
       : unit =
     let nargs = Array.length args in
@@ -348,7 +377,7 @@ let analyse_expression
     let rec do_args_from (i:int): unit =
       if i=nargs then ()
       else (Accus.expect_argument accs;
-            analyze args.(i) accs;
+            analyze args.(nargs-1-i) accs;
             do_args_from (i+1))
     in
     do_args_from 0
@@ -367,4 +396,30 @@ let analyse_expression
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub context;
+  Printf.printf "\tterm: %s\n"
+    (Context.string_of_term term context);
   term
+
+
+
+let result_term
+    (ie:        info_expression)
+    (context:   Context.t)
+    : term =
+  (** Analyse the expression [ie] as the result expression of the
+      context [context] and return the term.
+   *)
+  assert (not (Context.is_basic context));
+  let loc = Context.local context in
+  analyze_expression ie (Local_context.result_type loc) context
+
+
+let boolean_term
+    (ie:       info_expression)
+    (context:  Context.t)
+    : term =
+  (** Analyse the expression [ie] as a boolean expression in the
+      context [context] and return the term.
+   *)
+  assert (not (Context.is_basic context));
+  analyze_expression ie (Context.boolean context) context

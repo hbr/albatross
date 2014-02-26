@@ -74,6 +74,7 @@ end
 
 
 feature         -- Conjunction
+    and (a,b:BOOLEAN): BOOLEAN
 
     and_elimination: all(a,b:BOOLEAN)
         require
@@ -97,6 +98,7 @@ end
 
 
 feature         -- Disjunction
+    or (a,b:BOOLEAN): BOOLEAN
 
     or_elimination: all(a,b,c:BOOLEAN)
         require
@@ -122,6 +124,7 @@ end
 
 
 feature              -- Boolean equivalence
+    = (a,b:BOOLEAN): BOOLEAN
 
     equal_elimination:  all(a,b:BOOLEAN)
         require

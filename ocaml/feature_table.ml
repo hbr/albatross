@@ -28,15 +28,13 @@ type descriptor = {fname:       feature_name;
 
 type key        = {name: feature_name; sign: Sign.t}
 
-type t          = {keys: key key_table;
-                   mutable map: int ESignature_map.t Key_map.t;
+type t          = {mutable map: int ESignature_map.t Key_map.t;
                    mutable implication: int option;
                    features: descriptor seq}
 
 
 let empty () =
-  {keys = Key_table.empty ();
-   map  = Key_map.empty;
+  {map  = Key_map.empty;
    implication = None;
    features = Seq.empty ()}
 
@@ -123,28 +121,6 @@ let find_funcs
 
 
 
-let find_function (name: feature_name) (nargs:int) (ct:Class_table.t) (ft:t)
-    : (int * term array * term) list =
-  (* List of functions with the name 'name' and with 'nargs' argumens *)
-  let lst = ref []
-  in
-  let _ =
-    Key_table.iteri
-      (fun i k ->
-        if k.name=name then
-          if (Sign.has_result k.sign) && (Sign.arity k.sign) = nargs
-          then
-            lst := (i, Sign.arguments k.sign, Sign.result k.sign) :: !lst
-          else
-            ()
-        else
-          () )
-      ft.keys
-  in
-  !lst
-
-
-
 
 let rec expand_term (t:term) (nbound:int) (ft:t): term =
   (* Expand the definitions of the term 't' within an environment with
@@ -178,160 +154,6 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
   Term.reduce (expand_term t nbound ft)
 
 
-
-
-
-
-let check_match
-    (i:info)
-    (e:expression)
-    (tp:term)
-    (expected:term)
-    (ct:Class_table.t)
-    : unit =
-  if tp<>expected then
-    error_info
-      i
-      ("expression " ^ (string_of_expression e) ^ " has type "
-       ^ (Class_table.type2string tp 0 [||] ct)
-       ^ " expected type "
-       ^ (Class_table.type2string expected 0 [||] ct))
-    else ()
-
-
-
-
-
-
-let typed_term
-    (ie:info_expression)
-    (concepts: term array)
-    (names: int array)
-    (types: term array)
-    (ct:Class_table.t)
-    (ft:t):  term * type_term =
-  assert ((Array.length names) = (Array.length types));
-  let nbound = Array.length types in
-  let check e tp expected = check_match ie.i e tp expected ct
-  in
-  let find_name (name:int): term * term =
-    let idx =
-      try
-        Search.array_find_min name names
-      with Not_found ->
-        not_yet_implemented ie.i
-          ("Search in global feature table of name " ^ (ST.string name))
-    in
-    Variable idx,
-    if idx<nbound then
-      types.(idx)
-    else
-      assert false (* would be global *)
-  in
-  let rec trm (e:expression): term * type_term =
-    match e with
-      Identifier i ->
-        find_name i
-    | Expfalse ->
-        let lst  = find_funcs FNfalse 0 ft
-        in
-        begin
-          match lst with
-            [i,tvars,sign] ->
-              assert (Sign.is_constant sign);
-              let res = Sign.result sign in
-              Variable (nbound+i), res
-          | _ -> not_yet_implemented ie.i "feature overloading"
-        end
-    | Exptrue ->
-        let lst  = find_funcs FNtrue 0 ft
-        in
-        begin
-          match lst with
-            [i,tvars,sign] ->
-              assert (Sign.is_constant sign);
-              let res = Sign.result sign in
-              Variable (nbound+i), res
-          | _ -> not_yet_implemented ie.i "feature overloading"
-        end
-    | Expparen e -> trm e
-    | Taggedexp (label,e) -> trm e
-    | Binexp (op,e1,e2) ->
-        assert (is_binary op);
-        let t1,tp1 = trm e1
-        and t0,tp0 = trm e2
-        and oplst = find_function (FNoperator op) 2 ct ft
-        in begin
-          match oplst with
-            [] ->
-              raise (Error_info (ie.i,
-                                "There is no binary operator \"" ^
-                                (operator_to_rawstring op) ^ "\""))
-          | [idx,tarr,rt] ->
-              assert ((Array.length tarr) = 2);
-              let _ = check e1 tp1 tarr.(0)
-              and _ = check e2 tp0 tarr.(1)
-              in
-              Application (Variable (nbound+idx), [|t0;t1|]), rt
-          | _ -> not_yet_implemented ie.i
-                ("(Binexp)Typing of expression " ^
-                 (string_of_expression ie.v))
-        end
-    | Unexp (op,e1) ->
-        assert (is_unary op);
-        let t1,tp1 = trm e1
-        and oplst = find_function (FNoperator op) 1 ct ft
-        in begin
-          match oplst with
-            [] ->
-              raise (Error_info (ie.i,
-                                "There is no unary operator \"" ^
-                                (operator_to_rawstring op) ^ "\""))
-          | [idx,tarr,rt] ->
-              assert ((Array.length tarr) = 1);
-              let _ = check e1 tp1 tarr.(0)
-              in
-              Application (Variable (nbound+idx), [|t1|]),rt
-          | _ -> not_yet_implemented ie.i
-                ("(Unexp)Typing of expression " ^
-                 (string_of_expression ie.v))
-        end
-    | _ -> not_yet_implemented ie.i
-          ("(others)Typing of expression " ^
-           (string_of_expression ie.v))
-  in
-  trm ie.v
-
-
-
-
-let term
-    (ie:info_expression)
-    (concepts: term array)
-    (names: int array)
-    (types: term array)
-    (ct:Class_table.t)
-    (ft:t):  term =
-  let t,_ = typed_term ie concepts names types ct ft
-  in
-  t
-
-
-
-
-let assertion_term
-    (ie:info_expression)
-    (concepts: term array)
-    (names: int array)
-    (types: term array)
-    (ct:Class_table.t)
-    (ft:t):  term =
-  let t,tp = typed_term ie concepts names types ct ft
-  in
-  if tp <> Class_table.boolean_type then
-    error_info ie.i "Expression does not have type BOOLEAN"
-  else
-    t
 
 
 
@@ -379,6 +201,7 @@ let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
     end
 
 
+
 let normal_application2string
     (name:string)
     (args: (string*operator option*int) array) =
@@ -390,6 +213,8 @@ let normal_application2string
           (fun str_op -> let str,_,_ = str_op in str)
           (Array.to_list args)))
   ^ ")", None, nargs
+
+
 
 let application2string
     (fn:feature_name)
@@ -476,10 +301,9 @@ let raw_term_to_string (t:term) (nanon:int) (ft:t): string =
 let print (ct:Class_table.t)  (ft:t): unit =
   Seq.iteri
     (fun i fdesc ->
-      (*let key = Key_table.key ft.keys i
-      in*)
       let name = feature_name_to_string fdesc.fname
-      and tname = assert false (*Class_table.type2string key.typ 0 ct*)
+      and tname =
+        Class_table.string_of_signature fdesc.sign 0 fdesc.fgnames ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
@@ -487,9 +311,9 @@ let print (ct:Class_table.t)  (ft:t): unit =
       in
       match fdesc.pub with
         None ->
-          Printf.printf "%s  %s = (%s)\n" name tname (bdyname fdesc.priv)
+          Printf.printf "%-7s  %s = (%s)\n" name tname (bdyname fdesc.priv)
       | Some pdef ->
-          Printf.printf "%s  %s = (%s, %s)\n"
+          Printf.printf "%-7s  %s = (%s, %s)\n"
             name tname (bdyname fdesc.priv) (bdyname pdef))
     ft.features
 
@@ -497,160 +321,69 @@ let print (ct:Class_table.t)  (ft:t): unit =
 
 
 let put_function
-    (fn:       feature_name)
+    (fn:       feature_name withinfo)
     (fgnames:  int array)
     (concepts: type_term array)
     (argnames: int array)
     (sign:     Sign.t)
     (is_priv:  bool)
-    (term:     term)
+    (impstat:  implementation_status)
+    (term_opt: term option)
     (ft:       t): unit =
   (** Add the function with then name [fn], the formal generics [fgnames] with
       their constraints [concepts], the arguments [argnames], the
       signature [sign] to the feature table
    *)
-  assert false
-
-
-
-let analyze_and_store
-    (fn: feature_name withinfo)
-    (entlst: entities list withinfo)
-    (rt: return_type)
-    (bdy: feature_body option)
-    (is_priv: bool)
-    (ct: Class_table.t)
-    (ft: t)
-    : unit =
-  let fgnames,concepts,argnames,ntvs,sign =
-    Class_table.signature entlst rt [||] [||] [||] 0 ct
+  let cnt   = Seq.count ft.features
+  and ntvs  = Array.length fgnames
+  and nargs = Sign.arity sign
   in
-  assert (Sign.has_result sign);
-  assert (ntvs = 0);
-  let argtypes,rettype = Sign.arguments sign, Sign.result sign
-  in
-  let (impstat:implementation_status), (func_def: definition option) =
-    match bdy with
-      None -> No_implementation, None
-    | Some (None, Some Impbuiltin, None) -> Builtin, None
-    | Some (None, None, Some [ens]) ->
-        No_implementation,
-        begin
-          match ens.v with
-            Binexp (Eqop, ExpResult,def) ->
-              let term,tp =
-                typed_term (withinfo ens.i def) concepts argnames argtypes ct ft
-              in
-              check_match ens.i def tp rettype ct;
-              Some term
-          | _ -> not_yet_implemented ens.i
-                "functions not defined with \"Result = ...\""
-        end
-    | Some (None, Some Impdeferred, None) ->
-        Deferred, None
-    | _ -> not_yet_implemented fn.i
-          "functions with implementation/preconditions"
-  in
-  let nargs = Array.length argtypes in
-  let _ =
-    match fn.v with
-      FNoperator op ->
-        if
-          (nargs=1 && is_unary op) ||
-          (nargs=2 && is_binary op)||
-          (nargs>0 && is_nary op) then ()
-        else if nargs=0 then
-          raise (
-          Error_info (fn.i, "Operator \"" ^
-                      (operator_to_rawstring op)
-                      ^ "\" must have arguments"))
-        else if nargs=1 then
-          raise (
-          Error_info (fn.i, "Operator \"" ^
-                      (operator_to_rawstring op)
-                      ^ "\" is not a unary operator"))
-        else if nargs=2 then
-          raise (
-          Error_info (fn.i, "Operator \"" ^
-                      (operator_to_rawstring op)
-                      ^ "\" is not a binary operator"))
-        else
-          raise (
-          Error_info (fn.i, "Operator \"" ^
-                      (operator_to_rawstring op)
-                      ^ "\" is not an nary operator"))
-    | FNfalse | FNtrue | FNnumber _ ->
-        if nargs <> 0 then
-          raise (
-          Error_info (fn.i, "\"" ^ (feature_name_to_string fn.v)
-                      ^ "\" must be a constant"))
-        else
-          ()
-    | _ -> ()
-  in
-  let key =
-    let _ =
-      match fn.v with
-        FNoperator op ->
-          (match op with
-            DArrowop ->
-              if Class_table.is_boolean_binary argtypes rettype then ()
-              else error_info fn.i "Operator \"=>\" must be boolean binary"
-          | Andop ->
-              if Class_table.is_boolean_binary argtypes rettype then ()
-              else error_info fn.i "Operator \"and\" must be boolean binary"
-          | Orop ->
-              if Class_table.is_boolean_binary argtypes rettype then ()
-              else error_info fn.i "Operator \"or\" must be boolean binary"
-          | Notop ->
-              if Class_table.is_boolean_unary argtypes rettype then ()
-              else error_info fn.i "Operator \"not\" must be boolean unary"
-          | _ -> ()  (* more error checks here *)
-          )
-      | _ -> ()
-    in
-    {name = fn.v; sign = sign}
-  in
-
-  let cnt = Seq.count ft.features in
   let sig_map =
     try Key_map.find (fn.v,nargs) ft.map
-    with Not_found -> ESignature_map.empty in
+    with Not_found -> ESignature_map.empty
+  in
   let idx =
     try ESignature_map.find (concepts,sign) sig_map
     with Not_found -> cnt in
-  let idx2 = Key_table.index ft.keys key in
-  assert (idx=idx2);
-  if idx=cnt then begin
-    if fn.v = (FNoperator DArrowop) then
-      ft.implication <- Some cnt
-    else ();
+  if idx=cnt then begin (* new feature *)
+    if fn.v = (FNoperator DArrowop) &&
+      (Class_table.is_boolean_binary sign ntvs) then
+      ft.implication <- Some cnt;
     Seq.push
       ft.features
-      (let pub = if is_priv then None else Some func_def in
-      {fname=fn.v;
+      {fname    = fn.v;
        impstat  = impstat;
        fgnames  = fgnames;
        concepts = concepts;
        argnames = argnames;
        sign     = sign;
-       priv     = func_def;
-       pub      = pub});
+       priv     = term_opt;
+       pub      = if is_priv then None else Some term_opt};
     ft.map <- Key_map.add
         (fn.v,nargs)
         (ESignature_map.add (concepts,sign) idx sig_map)
-        ft.map
-  end else begin
-    if is_priv then
-      error_info fn.i
-        ("The feature \"" ^ (feature_name_to_string fn.v)
-         ^ "\" has already a private definition")
-    else
-      match func_def with
+        ft.map;
+  end else begin        (* feature update *)
+    let desc = Seq.elem ft.features idx
+    and not_match str =
+      let str = "The " ^ str ^ " of \""
+        ^ (feature_name_to_string fn.v)
+        ^ "\" does not match the previous definition"
+      in
+      error_info fn.i str
+    in
+
+    if is_priv then begin
+      if impstat <> desc.impstat then
+        not_match "implementation status";
+      if term_opt <> desc.priv
+      then
+        not_match "private definition"
+    end else
+      match desc.pub with
         None ->
-          (Seq.elem ft.features idx).pub <- Some func_def
-      | Some _ ->
-          not_yet_implemented fn.i
-            ("public function definition if there is already "
-             ^ "a private definition")
+          desc.pub <- Some term_opt
+      | Some def ->
+          if def <> term_opt then
+            not_match "public definition"
   end

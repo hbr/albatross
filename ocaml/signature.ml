@@ -45,15 +45,16 @@ end (* TVars *)
 module TVars_sub: sig
 
   type t
-  val make:  int -> t
-  val count: t -> int
+  val make:         int -> t
+  val count:        t -> int
+  val get:          int -> t -> term
   val count_global: t -> int
-  val count_local:   t -> int
-  val tvars: t -> TVars.t
-  val sub:   t -> Term_sub_arr.t
-  val add_global:       constraints -> t -> t
-  val add_local:             int -> t -> t
-  val remove_local:         int -> t -> t
+  val count_local:  t -> int
+  val tvars:        t -> TVars.t
+  val sub:          t -> Term_sub_arr.t
+  val add_global:   constraints -> t -> t
+  val add_local:    int -> t -> t
+  val remove_local: int -> t -> t
 
 end = struct
 
@@ -64,6 +65,10 @@ end = struct
     {vars = TVars.make_local ntvs; sub = Term_sub_arr.make ntvs}
 
   let count (tvars:t): int = TVars.count tvars.vars
+
+  let get (i:int) (tvars:t): term =
+    assert (i < (count tvars));
+    Term_sub_arr.get i tvars.sub
 
   let count_global (tv:t): int =
     TVars.count_global tv.vars
@@ -108,8 +113,11 @@ module Sign: sig
   val arity:       t -> int
   val is_constant: t -> bool
   val arguments:   t -> type_term array
+  val arg_type:    int -> t -> type_term
   val argument:    int -> t -> t
   val has_result:  t -> bool
+  val is_binary:   t -> bool
+  val is_unary:    t -> bool
   val result:      t -> type_term
   val is_procedure:t -> bool
   val up_from:     int -> int -> t -> t
@@ -142,12 +150,19 @@ end = struct
 
   let arguments (s:t): type_term array = s.args
 
+  let arg_type (i:int) (s:t): type_term =
+    assert (i < (arity s));
+    s.args.(i)
+
   let argument (i:int) (s:t): t =
     assert (i < (arity s));
     make_func [||] s.args.(i)
 
   let has_result (s:t): bool =
     Option.has s.result
+
+  let is_binary (s:t): bool = (has_result s) && ((arity s) = 2)
+  let is_unary  (s:t): bool = (has_result s) && ((arity s) = 1)
 
   let result (s:t): type_term =
     assert (has_result s);

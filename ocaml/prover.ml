@@ -55,6 +55,7 @@ let prove
     (pre: compound)
     (chck: compound)
     (post: compound)
+    (context: Context.t)
     (ct: Class_table.t)
     (ft: Feature_table.t)
     (at: Assertion_table.t)
@@ -70,8 +71,7 @@ let prove
   in
   let arglen = Array.length argnames in
   let imp_id = (Feature_table.implication_index ft) + arglen in
-  let exp2term ie =
-    Feature_table.assertion_term ie concepts argnames argtypes ct ft
+  let exp2term ie = Typer.boolean_term ie context
   and term2string t = Feature_table.term_to_string t argnames ft
   and split = fun t -> Term.binary_split t imp_id
   and chain = fun t -> Feature_table.implication_chain t arglen ft
@@ -481,7 +481,8 @@ let prove_and_store
     (Global_context.ft g),
     (Global_context.at g)
   in
-
+  let context = Context.push entlst None context
+  in
   let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
     Printf.printf "%3d axiom   %s\n"
       (Assertion_table.count at)
@@ -521,9 +522,7 @@ let prove_and_store
           [] ->
             List.iter
               (fun ie ->
-                let term =
-                  Feature_table.assertion_term ie
-                    concepts argnames argtypes ct ft in
+                let term = Typer.boolean_term ie context in
                 if axiom then
                   push_axiom argnames argtypes term
                 else not_yet_implemented entlst.i "Deferred assertions")
@@ -535,7 +534,7 @@ let prove_and_store
       else
         let lst =
           if Feature_table.has_implication ft then
-            prove concepts argnames argtypes rlst clst elst ct ft at
+            prove concepts argnames argtypes rlst clst elst context ct ft at
           else
             error_info entlst.i "\"=>\" is not yet defined"
         in
