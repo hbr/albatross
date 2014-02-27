@@ -11,8 +11,9 @@ module Accu: sig
 
   type t
   val signature:         t -> Sign.t
+  val ntvars:            t -> int
   val make:              type_term -> Context.t -> t
-  val add_term:          int ->  TVars.t -> Sign.t -> int -> t -> t
+  val add_term:          int ->  TVars.t -> Sign.t -> int -> int -> t -> t
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
@@ -26,6 +27,8 @@ end = struct
 
   let signature (acc:t): Sign.t = acc.sign
 
+  let ntvars (acc:t): int = TVars_sub.count acc.tvars
+
   let make (expected:type_term) (c:Context.t): t =
     (** New accumulator for an expression with the expected type [e] in the
         context [c] *)
@@ -38,58 +41,70 @@ end = struct
   let add_global (cs:constraints) (acc:t): t =
     (** Add the constraints [cs] to the accumulator [acc]
      *)
-    let n = Array.length cs in
-    if 0 < n then
-      {acc with
-       sign  = Sign.up2 n (TVars_sub.count acc.tvars) 0  acc.sign;
-       tvars = TVars_sub.add_global cs acc.tvars}
-    else
-      acc
+    let n = Array.length cs
+    and start = TVars_sub.count acc.tvars in
+    (*Printf.printf "\tadd %d globals above %d\n" n start;*)
+    {acc with
+     sign  = Sign.up_from n start acc.sign;
+     tvars = TVars_sub.add_global cs acc.tvars}
 
 
   let adapt_signature
       (s:Sign.t)
       (tvs:TVars.t)
+      (nfgs:int)
       (acc:t)
       : Sign.t =
-    (** Adapt the signature [s] with the type variables [tvs] to the
-        accumulator [acc].
+    (** Adapt the signature [s] with the type variables [tvs] and
+        [nfgs] formal generics less than the environmen of the accumulator
+        to the accumulator [acc].
 
         Note: The accumulator has already been adapted to the signature,
         i.e. it has all type variables with and without constraints of the
         signature
 
-        a) Signature is from global environment: Make space for all type
-        variables of the accumulator except those which are already in.
+        a) Signature is from global environment: Make space for all formal
+        generics of the context of the accumulator above the type
+        variables [tvs] and then at the bottom make space for all type
+        variables of the accumulator.
 
         b) Signature is from a local environment: Signature has no type
         variables with constraints. Therefore make space for all type
         variables of the accumulator which are not yet contained in the
         signature
      *)
-    let start = TVars.count_local tvs
-    and n1    =
-      (TVars_sub.count_global acc.tvars)
-        - TVars.count_global tvs
-    and n2    =
-      (TVars_sub.count_local acc.tvars)
-        - TVars.count_local tvs
+    let start = TVars.count tvs
+    and n     = (TVars_sub.count_local acc.tvars) - TVars.count_local tvs
     in
-    assert (0 <= n1);
-    assert (0 <= n2);
-    assert (0 <= start);
-    Sign.up2 n1 start n2 s
+    (*Printf.printf "\tshiftup %d above %d and then shiftup %d\n"
+        nfgs start n;*)
+    Sign.up2 nfgs start n s
 
 
-  let add_term (i:int) (tvs:TVars.t) (s:Sign.t) (nvars:int) (acc:t): t =
-    (** Add the term [i,tvs,s] which comes from an environment with [nvars]
-        variables less than the environment of [acc] to the accumulator [acc]
+
+
+  let add_term
+      (i:int)
+      (tvs:TVars.t)
+      (s:Sign.t)
+      (nfgs:int)
+      (nvars:int)
+      (acc:t): t =
+    (** Add the term [i,tvs,s] which comes from an environment with
+        [nfgs,nvars] formals (generics/variables) less than the environment
+        of [acc] to the accumulator [acc]
      *)
+    (*Printf.printf "\tadd term: sign %s, expected %s\n"
+      (Sign.to_string s)
+      (Sign.to_string acc.sign);*)
     let acc = add_global (TVars.constraints tvs) acc
     in
-    let s   = adapt_signature s tvs acc
+    let s   = adapt_signature s tvs nfgs acc
     and i   = i + nvars
     in
+    (*Printf.printf "\tunify %s with expected %s\n"
+      (Sign.to_string s)
+      (Sign.to_string acc.sign);*)
     Sign.unify s acc.sign acc.tvars;
     {acc with tlist = (Variable i)::acc.tlist}
 
@@ -184,14 +199,14 @@ end (* Accu *)
 module Accus: sig
 
   type t
-  exception Untypeable of Sign.t list
+  exception Untypeable of (Sign.t*int) list
 
   val make:            type_term -> Context.t -> t
   val is_empty:        t -> bool
   val is_singleton:    t -> bool
   val is_complete:     t -> bool
   val expected_arity:  t -> int
-  val add_leaf:        (int*TVars.t*Sign.t) list -> int -> t -> unit
+  val add_leaf:        (int*TVars.t*Sign.t) list -> int -> int -> t -> unit
   val expect_function: int -> t -> unit
   val expect_argument: t -> unit
   val result:          t -> term * TVars_sub.t
@@ -204,7 +219,7 @@ end = struct
             mutable arity:  int;
             mutable stack:  (int*int) list}
 
-  exception Untypeable of Sign.t list
+  exception Untypeable of (Sign.t*int) list
 
   let nterms_missing (accs:t): int =
     accs.nterms_expected - accs.nterms
@@ -265,12 +280,13 @@ end = struct
 
   let add_leaf
       (terms: (int*TVars.t*Sign.t) list)
+      (nfgs:int)
       (nvars:  int)
       (accs:   t)
       : unit =
     (** Add the terms from the list [terms] which come from an environment
-        with [nvars] variables less than the environment of [acclst] to the
-        accumulators [accs]
+        with [nfgs,nvars] formals (generics/variables) less than the
+        environment of [accs] to the accumulators [accs]
      *)
     let accus = accs.accus in
     accs.accus <-
@@ -278,7 +294,7 @@ end = struct
         (fun lst acc ->
           List.fold_left
             (fun lst (i,tvs,s) ->
-              try (Accu.add_term i tvs s nvars acc) :: lst
+              try (Accu.add_term i tvs s nfgs nvars acc) :: lst
               with Not_found -> lst)
             lst
           terms
@@ -286,7 +302,10 @@ end = struct
         []
         accus;
     if Mylist.is_empty accs.accus then
-      raise (Untypeable (List.map Accu.signature accus));
+      raise (Untypeable
+               (List.map
+                  (fun acc -> Accu.signature acc, Accu.ntvars acc)
+                  accus));
     accs.nterms <- accs.nterms + 1;
     pop accs
 
@@ -320,7 +339,14 @@ let analyze_expression
       (e:expression)
       (accs: Accus.t)
       : unit =
-    let nargs = Accus.expected_arity accs in
+    let nargs = Accus.expected_arity accs
+    in
+    let cannot_find (name:string) =
+      let str = "Cannot find \"" ^ name
+        ^ "\" with " ^ (string_of_int nargs) ^ " arguments"
+      in
+      error_info info str
+    in
     let feat_fun (fn:feature_name) =
       fun () ->
         try
@@ -328,12 +354,29 @@ let analyze_expression
             (feature_name_to_string fn) nargs;*)
           Context.find_feature fn nargs context
         with Not_found ->
-          let str = "Cannot find \"" ^ (feature_name_to_string fn) ^ "\"" in
-          error_info info str
-    and do_leaf (f: unit -> (int*TVars.t*Sign.t) list * int): unit =
+          cannot_find (feature_name_to_string fn)
+    and id_fun (name:int) =
+      fun () ->
+        try
+          Context.find_identifier name nargs context
+        with Not_found ->
+          cannot_find (ST.string name)
+    and do_leaf (f: unit -> (int*TVars.t*Sign.t) list * int * int): unit =
       try
-        let lst,nvars = f () in
-        Accus.add_leaf lst nvars accs
+        let lst,nfgs,nvars = f () in
+        (*Printf.printf "found %s with {%s}\n"
+          (string_of_expression e)
+          (String.concat
+             ","
+             (List.map
+                (fun (i,tvs,s) ->
+                  let loc     = Context.local context in
+                  let ct      = Local_context.ct loc
+                  and ntvs    = TVars.count tvs
+                  in
+                  Class_table.string_of_signature s ntvs [||] ct)
+                lst));*)
+        Accus.add_leaf lst nfgs nvars accs
       with
         Accus.Untypeable exp_sign_lst ->
           let str = "The expression "
@@ -342,15 +385,19 @@ let analyze_expression
             ^ (String.concat
                  ","
                  (List.map
-                    (fun sign -> Context.sign2string sign context)
+                    (fun (sign,ntvs) ->
+                      let loc     = Context.local context in
+                      let fgnames = Local_context.fgnames loc
+                      and ct      = Local_context.ct loc
+                      in
+                      Class_table.string_of_signature sign ntvs fgnames ct)
                     exp_sign_lst))
             ^ "}"
           in
           error_info info str
     in
       match e with
-        Identifier name ->
-          do_leaf (fun ()   -> Context.find_identifier name nargs context)
+        Identifier name     -> do_leaf (id_fun name)
       | Expfalse            -> do_leaf (feat_fun FNfalse)
       | Exptrue             -> do_leaf (feat_fun FNtrue)
       | Expop op            -> do_leaf (feat_fun (FNoperator op))

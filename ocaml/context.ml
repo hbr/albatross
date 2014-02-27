@@ -79,7 +79,10 @@ module Local_context: sig
   val count_type_variables: t -> int
 
   val nfgs:    t -> int
+  val nargs:   t -> int
   val fgnames: t -> int array
+  val ct:      t -> Class_table.t
+  val ft:      t -> Feature_table.t
 
   val tvars_sub: t -> TVars_sub.t
 
@@ -182,6 +185,12 @@ end = struct
      *)
     Array.length loc.fgnames
 
+  let nargs (loc:t): int =
+    (** The cumulated number of formal arguments in this context and all
+        previous contexts
+     *)
+    Array.length loc.argnames
+
   let ntvs (loc:t): int =
     (** The cumulated number of formal generics and type variables in
         this context and all previous contexts
@@ -195,6 +204,9 @@ end = struct
      *)
     loc.fgnames
 
+  let ct (loc:t): Class_table.t = loc.ct
+
+  let ft (loc:t): Feature_table.t = loc.ft
 
   let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
 
@@ -265,6 +277,7 @@ module Context: sig
   val string_of_term: term -> t -> string
   val sign2string:  Sign.t -> t -> string
   val boolean:      t -> term
+  val count_formals: t -> int * int
   val push: entities list withinfo -> return_type -> t -> t
   val put_function:
       feature_name withinfo -> Feature_table.implementation_status
@@ -277,10 +290,10 @@ module Context: sig
   val print: t -> unit
 
   val find_identifier: int -> int -> t
-    -> (int * TVars.t * Sign.t) list * int
+    -> (int * TVars.t * Sign.t) list * int * int
 
   val find_feature:    feature_name -> int -> t
-    -> (int * TVars.t * Sign.t) list * int
+    -> (int * TVars.t * Sign.t) list * int * int
 
   val type_variables:  t -> TVars_sub.t
 
@@ -349,6 +362,11 @@ end = struct
     match c with
       Basic g          -> Global_context.sign2string s g
     | Combined (loc,c) -> Local_context.sign2string s loc
+
+  let count_formals (c:t): int * int =
+    match c with
+      Basic _          -> 0,0
+    | Combined (loc,_) -> Local_context.nfgs loc, Local_context.nargs loc
 
   let boolean (c:t): term =
     match c with
@@ -422,59 +440,66 @@ end = struct
     Feature_table.print ct ft
 
 
+
+
   let find_identifier
       (name:int)
       (nargs:int)
       (c:t)
-      : (int * TVars.t * Sign.t) list * int =
+      : (int * TVars.t * Sign.t) list * int * int =
     (** Find the identifier named [name] which accepts [nargs] arguments
         in one of the local contexts or in the global feature table. Return
         the list of variables together with their signature and the difference
-        of the number of variables between the actual context [c] and the
-        context where the identifier has been found
+        of the number of formals (generics and arguments) between the actual
+        context [c] and the context where the identifier has been found
      *)
-    let rec ident (nvars:int) (c:t)
-        :(int * TVars.t * Sign.t) list * int =
+    let nfgs_c0,nargs_c0 = count_formals c
+    in
+    let rec ident (c:t)
+        :(int * TVars.t * Sign.t) list * int * int =
       match c with
         Basic g ->
-          (Feature_table.find_funcs (FNname name) nargs (Global_context.ft g),
-           nvars)
-      | Combined (loc,c) ->
+          Feature_table.find_funcs (FNname name) nargs (Global_context.ft g),
+          nfgs_c0, nargs_c0
+      | Combined (loc,cprev) ->
           try
             let i,tvs,s = Local_context.argument name loc
             in
-            if (Sign.arity s) = nargs then
-              [i,tvs,s], nvars
-            else
+            if (Sign.arity s) = nargs then begin
+              let nfgs_c,nargs_c = count_formals c in
+              [i,tvs,s], nfgs_c0 - nfgs_c, nargs_c0 - nargs_c
+            end else
               raise Not_found
           with Not_found ->
-            ident (Local_context.arity loc) c
+            ident cprev
 
     in
-    ident 0 c
+    ident c
 
 
   let find_feature
       (fn:feature_name)
       (nargs:int)
       (c:t)
-      : (int * TVars.t * Sign.t) list * int =
+      : (int * TVars.t * Sign.t) list * int * int =
     (** Find the feature named [fn] which accepts [nargs] arguments global
         feature table. Return the list of variables together with their
-        signature and the difference of the number of variables between the
-        actual context [c] and the global context.
+        signature and the difference of the number of formals (generics
+        and variables) between the actual context [c] and the global context.
       *)
-    let rec feat (nvars:int) (c:t)
-        :(int * TVars.t * Sign.t) list * int =
+    let nfgs_c0, nargs_c0 = count_formals c in
+    let rec feat (c:t)
+        :(int * TVars.t * Sign.t) list * int * int =
       match c with
         Basic g ->
-          (Feature_table.find_funcs fn nargs (Global_context.ft g),
-           nvars)
+          Feature_table.find_funcs fn nargs (Global_context.ft g),
+          nfgs_c0,
+          nargs_c0
       | Combined (loc,c) ->
-            feat (Local_context.arity loc) c
+            feat c
 
     in
-    feat 0 c
+    feat c
 
 
   let type_variables (c:t): TVars_sub.t =

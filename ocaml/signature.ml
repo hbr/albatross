@@ -110,6 +110,7 @@ module Sign: sig
   val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
   val make_args:   type_term array -> t
+  val to_string:   t -> string
   val arity:       t -> int
   val is_constant: t -> bool
   val arguments:   t -> type_term array
@@ -173,6 +174,22 @@ end = struct
       None -> true
     | Some (r,proc) -> proc
 
+
+  let to_string (s:t): string =
+    let argsstr =
+      if (arity s) = 0 then ""
+      else
+        "("
+        ^ (String.concat
+             ","
+             (List.map Term.to_string (Array.to_list s.args)))
+        ^ ")"
+        ^ (if has_result s then ":" else "")
+    and retstr =
+      if has_result s then Term.to_string (result s)
+      else ""
+    in
+    argsstr ^ retstr
 
   let up_from (n:int) (start:int) (s:t): t =
     (** Shift all types up by [n] starting from [start].
