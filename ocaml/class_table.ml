@@ -330,7 +330,7 @@ let base_table (): t =
 
 let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
   (** Convert the type term [t] in an environment with [nb] type variables
-      and the formal generics [fgnames]
+      and the formal generics [fgnames] to a string.
    *)
   let nfgs = Array.length fgnames
   in

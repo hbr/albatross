@@ -157,143 +157,102 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
 
 
 
-let maybe_parenthesized
-    (op:operator)
-    (exp:string*operator option*int)
-    (left:bool) =
-  (* Put parenthesis around the expression 'exp' if necessary. The expression
-     consists of the string and optional operator and a number of arguments.
-     'op' is the operator of the next higher expression. The boolean 'left'
-     signifies that 'exp' is the left argument of the operator 'op'
+let term_to_string
+    (t:term)
+    (names: int array)
+    (ft:t)
+    : string =
+  (** Convert the term [t] in an environment with the named variables [names]
+      to a string.
    *)
-  let str,op_opt,nargs = exp in
-  match op_opt with
-    None -> str
-  | Some op1 ->
-      let _,prec1,assoc1 = operator_data op1
-      and _,prec,assoc   = operator_data op in
-      if op=op1 && nargs=2 && (
-        match assoc with
-          Left -> not left
-        | Right -> left
-        | Nonassoc -> assert false (* Cannot happen, or the parser does not
-                                      work correctly *)
-       ) then "(" ^ str ^ ")"
-      else if op<>op1 && nargs=2 && prec1<=prec then
-        "(" ^ str ^ ")"
+  let nnames = Array.length names
+  and anon2str (i:int): string = "@" ^ (string_of_int i)
+  in
+  let rec to_string (t:term) (nb:int) (outop: (operator*bool) option): string =
+    (* outop is the optional outer operator and a flag if the current term
+       is the left operand of the outer operator
+     *)
+    let var2str (i:int): string =
+      if i<nb then
+        anon2str i
+      else if i < nb + nnames then
+        ST.string names.(i-nb)
       else
-        str
-
-
-
-let feature_name (i:int) (names:int array) (nanon:int) (ft:t): feature_name =
-  (* The name of the feature number 'i' in an environment with the arguments
-     'names' and 'nanon' further anonymous variables *)
-  let arglen = Array.length names in
-  if i<nanon then
-    FNname (ST.symbol ("@" ^ (string_of_int (nanon-1-i))))
-  else if i < arglen+nanon then
-    FNname names.(i-nanon)
-  else
-    begin
-      assert ((i-(arglen+nanon))<Seq.count ft.features);
-      (Seq.elem ft.features (i-(arglen+nanon))).fname
-    end
-
-
-
-let normal_application2string
-    (name:string)
-    (args: (string*operator option*int) array) =
-  let nargs = Array.length args in
-  name ^ "("
-  ^ (String.concat
-       ","
-       (List.rev_map
-          (fun str_op -> let str,_,_ = str_op in str)
-          (Array.to_list args)))
-  ^ ")", None, nargs
-
-
-
-let application2string
-    (fn:feature_name)
-    (args: (string*operator option*int) array) =
-  (* Convert the function application with the feature name 'fn' and the
-     arguments 'args' (already as string, optional operator and a number of
-     arguments to distinguish unary and binary operators)
-   *)
-  let nargs = Array.length args in
-  match fn with
-    FNoperator op ->
+        feature_name_to_string
+          (Seq.elem ft.features (i-nnames-nb)).fname
+    and find_op (f:term): operator  =
+      match f with
+        Variable i when nnames+nb <= i ->
+          begin
+            match (Seq.elem ft.features (i-nnames-nb)).fname with
+              FNoperator op -> op
+            | _ -> raise Not_found
+          end
+      | _ -> raise Not_found
+    and op2str (op:operator) (args: term array): string =
+      let nargs = Array.length args in
       if nargs = 1 then
-        (operator_to_rawstring op)
-        ^ " " ^ (maybe_parenthesized op args.(0) true),
-        Some op, nargs
-      else if nargs = 2 then
-        (maybe_parenthesized op args.(1) true)
+        (operator_to_rawstring op) ^ " "
+        ^ (to_string args.(0) nb (Some (op,false)))
+      else begin
+        assert (nargs=2); (* only unary and binary operators *)
+        let tl,tr = args.(1), args.(0) in (* reindex *)
+        (to_string tl nb (Some (op,true)))
         ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (maybe_parenthesized op args.(0) false),
-        Some op, nargs
-      else
-        assert false (* There are only unary and binary operators *)
-  | _ ->
-      normal_application2string (feature_name_to_string fn) args
-
-
-
-
-let term_to_string_base (t:term) (names:int array) (nanon:int) (ft:t): string =
-  let fname i nanon = feature_name i names nanon ft
-  in
-  let rec term2str (t:term) (nanon:int): string * operator option * int =
-    match t with
-      Variable i ->
-        feature_name_to_string (fname i nanon), None, 0
-    | Application (f,args) ->
-        app2str f args nanon
-    | Lam (tarr,t) ->
-        (lam2str tarr t nanon),None,0
-  and app2str (f:term) (args:term array) (nanon:int)
-      : string * operator option * int =
-    let arg_strings = Array.map (fun t -> term2str t nanon) args
+        ^ (to_string tr nb (Some (op,false)))
+      end
+    and app2str (f:term) (args: term array): string =
+      (to_string f nb None)
+      ^ "("
+      ^ (String.concat
+           ","
+           (List.rev_map  (* reindex *)
+              (fun t -> to_string t nb None)
+              (Array.to_list args)))
+      ^ ")"
+    and lam2str (n:int) (t:term): string =
+      let fargs  = Array.init n (fun i -> anon2str (n-1-i)) in (* reindex *)
+      let argstr = String.concat "," (Array.to_list fargs)
+      and tstr   = to_string t (nb+n) None
+      in
+      "((" ^ argstr ^ ") -> " ^ tstr ^ ")"
     in
-    match f with
-      Variable i ->
-        let fn = fname i nanon in
-        application2string fn arg_strings
-    | Lam (n,t) ->
-        normal_application2string
-          (lam2str n t nanon)
-          arg_strings
-    | Application (f,args) ->
-        let fstr,_,_ = app2str f args nanon in
-        normal_application2string fstr arg_strings
-  and lam2str (len:int) (t:term) (nanon:int): string =
-    let tstr,_,_ = term2str t (nanon+len) in
-    let fargs =
-      String.concat
-        ","
-        (let arr =
-          (Array.init len
-             (fun i ->
-               feature_name_to_string (fname (len-1-i) (nanon+len))))
+    let inop, str =
+      match t with
+        Variable i ->
+          None, var2str i
+      | Application (f,args) ->
+          begin
+            try
+              let op = find_op f in
+              Some op, op2str op args
+            with Not_found ->
+              None, app2str f args
+          end
+      | Lam (n,t) ->
+          None, lam2str n t
+    in
+    match inop, outop with
+      Some iop, Some (oop,is_left) ->
+        let _,iprec,iassoc = operator_data iop
+        and _,oprec,oassoc = operator_data oop
         in
-        List.rev (Array.to_list arr)
-        )
-    in
-    "([" ^ fargs ^ "] -> " ^ tstr ^ ")"
+        let paren1 = iprec < oprec
+        and paren2 = (iop = oop) &&
+          match oassoc with
+            Left  -> not is_left
+          | Right -> is_left
+          | _     -> false
+        and paren3 = (iprec = oprec) && (iop <> oop)
+        in
+        if  paren1 || paren2 || paren3 then
+          "(" ^ str ^ ")"
+        else
+          str
+    | _ -> str
   in
-  let s,_,_ = term2str t nanon in s
+  to_string t 0 None
 
-
-
-let term_to_string (t:term) (names:int array) (ft:t): string =
-  term_to_string_base t names 0 ft
-
-
-let raw_term_to_string (t:term) (nanon:int) (ft:t): string =
-  term_to_string_base t [| |] nanon ft
 
 
 

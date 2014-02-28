@@ -34,7 +34,7 @@ let find_backward
 
      which proves ass[idx](args) = (a=>b=>...=>t)
    *)
-  let write_list str lst =
+  (*let write_list str lst =
     Printf.printf "backward list %s\n" str;
     Mylist.iteri
       (fun i ((t,pt),idx) ->
@@ -43,7 +43,7 @@ let find_backward
           (Feature_table.raw_term_to_string t nb ft)
       )
       lst
-  in
+  in*)
   let lst =
     List.fold_left
       (fun lst (nargs,idx,(t,pt),_,sub,simpl) ->
@@ -79,7 +79,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
 
               t=>u, Specialize (Theorem idx, args)
    *)
-  let write_list str lst =
+  (*let write_list str lst =
     Printf.printf "%s\n" str;
     Mylist.iteri
       (fun i ((t,_),idx) ->
@@ -87,7 +87,7 @@ let consequences (t:term) (nb:int) (ft:Feature_table.t) (at:t)
           (Feature_table.raw_term_to_string t nb ft)
       )
       lst
-  in
+  in*)
   let lst =
     List.fold_left
       (fun lst (nargs,idx,(t,pt),_,sub,simpl,nopen) ->
