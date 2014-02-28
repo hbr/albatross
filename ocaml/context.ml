@@ -161,6 +161,7 @@ end = struct
     (** The term and the signature of the argument named [name] *)
     let i = Search.array_find_min name loc.argnames in
     i, TVars_sub.tvars loc.tvars_sub, Sign.argument i loc.signature
+      (* bug: argnames are cumulated and signature not!! *)
 
 
   let has_result (loc:t): bool =

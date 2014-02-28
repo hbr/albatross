@@ -1,6 +1,3 @@
-typer:
-	ocamlbuild typer.byte
-
 boolean:
 	ocamlbuild eiffelc.byte -- ../library/kernel/boolean.e
 
@@ -20,3 +17,5 @@ test: main
 kernel: main
 	./main.byte ../library/kernel/kernel.eml
 
+clean:
+	ocamlbuild -clean
