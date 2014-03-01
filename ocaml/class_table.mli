@@ -20,8 +20,9 @@ val is_boolean_unary:  Sign.t -> int -> bool
 
 val signature:
     entities list withinfo -> return_type
-      -> int array -> type_term array -> int array -> int -> t ->
-  int array * type_term array * int array * int * Sign.t
+    -> int array -> type_term array -> int array -> type_term array -> int
+    -> t
+    -> int array * type_term array * int array * type_term array * int * Sign.t
 
 val argument_signature: entities list withinfo -> t ->
   int array * term array * int array * term array

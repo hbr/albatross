@@ -103,6 +103,7 @@ end = struct
       fgnames:   int array;           (* cumulated        *)
       concepts:  type_term array;     (* cumulated        *)
       argnames:  int array;           (* cumulated        *)
+      argtypes:  type_term array;     (* cumulated        *)
       mutable signature: Sign.t;      (* from declaration *)
       mutable tvars_sub: TVars_sub.t; (* cumulated        *)
       ct:        Class_table.t;
@@ -120,12 +121,13 @@ end = struct
      *)
     let ct = Global_context.ct g
     and ft = Global_context.ft g in
-    let fgnames, concepts, argnames, ntvs, sign =
-      Class_table.signature entlst rt [||] [||] [||] 0 ct
+    let fgnames, concepts, argnames, argtypes, ntvs, sign =
+      Class_table.signature entlst rt [||] [||] [||] [||] 0 ct
     in
     {fgnames    =  fgnames;
      concepts   =  concepts;
      argnames   =  argnames;
+     argtypes   =  argtypes;
      signature  =  sign;
      tvars_sub  =  TVars_sub.make ntvs;
      ct         =  ct;
@@ -141,14 +143,15 @@ end = struct
     (** Make a next local context with the argument list [entlst] and the
         return type [rt] based on previous local global context [loc]
      *)
-    let fgnames, concepts, argnames, ntvs, sign =
+    let fgnames, concepts, argnames, argtypes, ntvs, sign =
       let ntvs0 = TVars_sub.count_local loc.tvars_sub in
       Class_table.signature entlst rt
-        loc.fgnames loc.concepts loc.argnames ntvs0 loc.ct
+        loc.fgnames loc.concepts loc.argnames loc.argtypes ntvs0 loc.ct
     in
     {fgnames   =  fgnames;
      concepts  =  concepts;
      argnames  =  argnames;
+     argtypes  =  argtypes;
      signature =  sign;
      tvars_sub =  TVars_sub.add_local ntvs loc.tvars_sub;
      ct        =  loc.ct;
@@ -291,10 +294,10 @@ module Context: sig
   val print: t -> unit
 
   val find_identifier: int -> int -> t
-    -> (int * TVars.t * Sign.t) list * int * int
+    -> (int * TVars.t * Sign.t) list
 
   val find_feature:    feature_name -> int -> t
-    -> (int * TVars.t * Sign.t) list * int * int
+    -> (int * TVars.t * Sign.t) list
 
   val type_variables:  t -> TVars_sub.t
 
@@ -442,38 +445,56 @@ end = struct
 
 
 
+  let find_funcs
+      (fn:feature_name) (nargs:int)
+      (nfgs:int) (nvars:int)
+      (ft:Feature_table.t)
+      : (int*TVars.t*Sign.t) list =
+    let lst = Feature_table.find_funcs fn nargs ft
+    in
+    let lst = List.rev_map
+        (fun (i,tvs,s) ->
+          let start = TVars.count tvs in
+          i+nvars, tvs, Sign.up_from nfgs start s)
+        lst
+    in
+    lst
+
+  exception Wrong_signature
 
   let find_identifier
       (name:int)
       (nargs:int)
       (c:t)
-      : (int * TVars.t * Sign.t) list * int * int =
+      : (int * TVars.t * Sign.t) list =
     (** Find the identifier named [name] which accepts [nargs] arguments
         in one of the local contexts or in the global feature table. Return
-        the list of variables together with their signature and the difference
-        of the number of formals (generics and arguments) between the actual
-        context [c] and the context where the identifier has been found
+        the list of variables together with their signature
      *)
     let nfgs_c0,nargs_c0 = count_formals c
     in
-    let rec ident (c:t)
-        :(int * TVars.t * Sign.t) list * int * int =
+    let ident (c:t)
+        :(int * TVars.t * Sign.t) list =
       match c with
         Basic g ->
-          Feature_table.find_funcs (FNname name) nargs (Global_context.ft g),
-          nfgs_c0, nargs_c0
+          find_funcs (FNname name) nargs nfgs_c0 nargs_c0 (Global_context.ft g)
       | Combined (loc,cprev) ->
           try
             let i,tvs,s = Local_context.argument name loc
             in
             if (Sign.arity s) = nargs then begin
               let nfgs_c,nargs_c = count_formals c in
-              [i,tvs,s], nfgs_c0 - nfgs_c, nargs_c0 - nargs_c
+              assert (nfgs_c0  = nfgs_c);
+              assert (nargs_c0 = nargs_c);
+              [i,tvs,s]
             end else
+              raise Wrong_signature
+          with
+            Not_found ->
+              find_funcs
+                (FNname name) nargs nfgs_c0 nargs_c0 (Local_context.ft loc)
+          | Wrong_signature ->
               raise Not_found
-          with Not_found ->
-            ident cprev
-
     in
     ident c
 
@@ -482,23 +503,18 @@ end = struct
       (fn:feature_name)
       (nargs:int)
       (c:t)
-      : (int * TVars.t * Sign.t) list * int * int =
+      : (int * TVars.t * Sign.t) list =
     (** Find the feature named [fn] which accepts [nargs] arguments global
         feature table. Return the list of variables together with their
-        signature and the difference of the number of formals (generics
-        and variables) between the actual context [c] and the global context.
+        signature.
       *)
     let nfgs_c0, nargs_c0 = count_formals c in
-    let rec feat (c:t)
-        :(int * TVars.t * Sign.t) list * int * int =
+    let rec feat (c:t): (int * TVars.t * Sign.t) list =
       match c with
         Basic g ->
-          Feature_table.find_funcs fn nargs (Global_context.ft g),
-          nfgs_c0,
-          nargs_c0
+          find_funcs fn nargs nfgs_c0 nargs_c0 (Global_context.ft g)
       | Combined (loc,c) ->
             feat c
-
     in
     feat c
 

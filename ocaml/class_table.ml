@@ -207,9 +207,11 @@ let signature
     (fgnames0:  int array)
     (concepts0: type_term array)
     (argnames0: int array)
+    (argtypes0: type_term array)
     (ntvs0:     int)
     (ct:t)
-    : int array * type_term array * int array * int * Sign.t =
+    : int array * type_term array * int array * type_term array
+    * int * Sign.t =
   (** Analyze the syntactic signature [entlst,rt] based on an environment
       which has already the formal generics [fgnames0] with their constraints
       [concepts0] and the arguments [argnames0] and the number of type
@@ -232,12 +234,12 @@ let signature
     in
     Array.of_list (List.rev ns), Array.of_list (List.rev cs)
   in
+  let nfgs  = Array.length fgnames
+  in
   let fgnames  = Array.append fgnames  fgnames0
   and concepts = Array.append concepts concepts0
   in
   let argnames,argtypes = arguments entlst fgnames ct
-  in
-  let argnames = Array.append argnames argnames0
   in
   let sign =
     match rt with
@@ -248,7 +250,13 @@ let signature
         if proc then Sign.make_proc argtypes t
         else Sign.make_func argtypes t
   in
-  fgnames, concepts, argnames, (ntvs0+ntvs), sign
+  let argnames = Array.append argnames argnames0
+  and argtypes =
+    Array.append
+      argtypes
+      (Array.map (fun t -> Term.up ntvs (Term.upbound nfgs ntvs0 t)) argtypes0)
+  in
+  fgnames, concepts, argnames, argtypes, (ntvs0+ntvs), sign
 
 
 
@@ -257,8 +265,8 @@ let argument_signature
     (entlst: entities list withinfo)
     (ct:t)
     : int array * type_term array * int array * type_term array =
-  let fgnames, concepts, argnames, _, sign =
-    signature entlst None [||] [||] [||] 0 ct
+  let fgnames, concepts, argnames, _, _, sign =
+    signature entlst None [||] [||] [||] [||]  0 ct
   in
   fgnames, concepts, argnames, Sign.arguments sign
 
