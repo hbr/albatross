@@ -386,7 +386,7 @@ let analyze_expression
     let rec do_args_from (i:int): unit =
       if i=nargs then ()
       else (Accus.expect_argument accs;
-            analyze args.(nargs-1-i) accs;
+            analyze args.(i) accs;
             do_args_from (i+1))
     in
     do_args_from 0

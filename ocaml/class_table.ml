@@ -183,8 +183,8 @@ let arguments
                List.map (fun name -> name,t) lst)
          entlst.v)
   in
-  let argnames = List.rev_map (fun e -> let n,_ = e in n) args (*reindex*)
-  and argtypes = List.rev_map (fun e -> let _,t = e in t) args (*reindex*)
+  let argnames = List.map (fun e -> let n,_ = e in n) args
+  and argtypes = List.map (fun e -> let _,t = e in t) args
   in
   let rec check_names (namelst: int list) =
     match namelst with
@@ -463,7 +463,7 @@ let arguments_to_string
   else
     let zipped =
       Array.to_list (Array.init nargs
-                       (fun i -> let j=nargs-1-i in names.(j),types.(j)))
+                       (fun i -> names.(i),types.(i)))
     in
     let llst =
       List.fold_left

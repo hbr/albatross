@@ -62,7 +62,7 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   match ft.implication with
     None -> assert false  (* Cannot happen *)
   | Some i ->
-      let args = Array.init 2 (fun i -> if i=1 then a else b) in
+      let args = Array.init 2 (fun i -> if i=0 then a else b) in
       Application (Variable (i+nbound), args)
 
 
@@ -91,11 +91,11 @@ let implication_chain
     | Application (f,args) ->
         let len = Array.length args in
         if len=2 && is_implication f then
-          let chain = split args.(0) in
+          let chain = split args.(1) in
           ([],t) :: (List.map
                        (fun e ->
                          let premises,term=e in
-                         args.(1)::premises, term
+                         args.(0)::premises, term
                        )
                        chain)
         else
@@ -196,22 +196,21 @@ let term_to_string
         ^ (to_string args.(0) nb (Some (op,false)))
       else begin
         assert (nargs=2); (* only unary and binary operators *)
-        let tl,tr = args.(1), args.(0) in (* reindex *)
-        (to_string tl nb (Some (op,true)))
+        (to_string args.(0) nb (Some (op,true)))
         ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (to_string tr nb (Some (op,false)))
+        ^ (to_string args.(1) nb (Some (op,false)))
       end
     and app2str (f:term) (args: term array): string =
       (to_string f nb None)
       ^ "("
       ^ (String.concat
            ","
-           (List.rev_map  (* reindex *)
+           (List.map
               (fun t -> to_string t nb None)
               (Array.to_list args)))
       ^ ")"
     and lam2str (n:int) (t:term): string =
-      let fargs  = Array.init n (fun i -> anon2str (n-1-i)) in (* reindex *)
+      let fargs  = Array.init n (fun i -> anon2str i) in
       let argstr = String.concat "," (Array.to_list fargs)
       and tstr   = to_string t (nb+n) None
       in

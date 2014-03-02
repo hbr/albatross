@@ -86,7 +86,7 @@ end = struct
         (String.concat "," (List.rev argsstr))
         ^ ")"
     | Lam(nargs,t) ->
-        let args = Array.init nargs (fun i -> (string_of_int (nargs-1-i))) in
+        let args = Array.init nargs (fun i -> (string_of_int i)) in
         let argsstr = String.concat "," (Array.to_list args) in
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
@@ -318,7 +318,7 @@ end = struct
       Application (f,args) when (Array.length args) = 2 ->
         (match f with
           Variable i when i=binid ->
-            (args.(1), args.(0))
+            (args.(0), args.(1))
         | _ -> raise Not_found)
     | _ -> raise Not_found
 
