@@ -393,20 +393,26 @@ let string_of_signature
     (fgnames: int array)
     (ct:t)
     : string =
+  let has_args = (Sign.arity s) <> 0
+  and has_res  = Sign.has_result s
+  in
   let argsstr =
-    if (Sign.arity s) = 0 then ""
+    if not has_args then ""
     else
       "("
       ^ (String.concat
            ","
-           (List.rev_map   (* reindexing *)
+           (List.map
               (fun tp -> type2string tp ntvs fgnames ct)
               (Array.to_list (Sign.arguments s))))
-      ^ "): "
+      ^ ")"
   and retstr =
-    type2string (Sign.result s) ntvs fgnames ct
+    if has_res then
+      type2string (Sign.result s) ntvs fgnames ct
+    else ""
+  and colon = if has_args && has_res then ": " else ""
   in
-  argsstr ^ retstr
+  argsstr ^ colon ^ retstr
 
 
 

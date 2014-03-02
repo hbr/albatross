@@ -106,6 +106,7 @@ end (* TVars_sub *)
 
 module Sign: sig
   type t
+  val empty:       t
   val make_func:   type_term array -> type_term -> t
   val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
@@ -132,6 +133,8 @@ end = struct
 
   type t = {args: type_term array;
             result: (type_term*bool) option}
+
+  let empty: t = {args = [||]; result = None}
 
   let make_func (args: type_term array) (result:type_term): t =
     {args = args; result = Some (result,false)}

@@ -35,6 +35,8 @@ let assertion_to_string
   ^ (Feature_table.term_to_string term names ft)
 
 
+let string_of_assertion (c:Context.t): string =
+  "all" ^ (Context.signature_string c)
 
 
 let ngoals = ref 0
@@ -476,16 +478,17 @@ let prove_and_store
     : unit =
 
   let ct,ft,at =
-    let g = Context.global context in
-    (Global_context.ct g),
-    (Global_context.ft g),
-    (Global_context.at g)
+    let loc = Context.local context in
+    (Local_context.ct loc),
+    (Local_context.ft loc),
+    (Local_context.at loc)
   in
   let context = Context.push entlst None context
   in
   let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
     Printf.printf "%3d axiom   %s\n"
       (Assertion_table.count at)
+      (*(string_of_assertion context);*)
       (assertion_to_string argnames argtypes t ct ft);
     Assertion_table.put_axiom argnames argtypes t ft at
 
@@ -493,6 +496,7 @@ let prove_and_store
       (t:term) (pt:proof_term): unit =
     Printf.printf "%3d proved  %s\n"
       (Assertion_table.count at)
+      (*(string_of_assertion context);*)
       (assertion_to_string argnames argtypes t ct ft);
     Assertion_table.put_proved argnames argtypes t pt ft at
   in
@@ -523,9 +527,9 @@ let prove_and_store
             List.iter
               (fun ie ->
                 let term = Typer.boolean_term ie context in
-                if axiom then
-                  push_axiom argnames argtypes term
-                else not_yet_implemented entlst.i "Deferred assertions")
+                push_axiom argnames argtypes term)
+                  (* bug: store deferred assertions in class table, because
+                     they have to be proved in descendants !!!*)
               elst
         | _ ->
             not_yet_implemented entlst.i "axioms with preconditions"
