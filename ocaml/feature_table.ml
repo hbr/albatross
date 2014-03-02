@@ -29,41 +29,51 @@ type descriptor = {fname:       feature_name;
 type key        = {name: feature_name; sign: Sign.t}
 
 type t          = {mutable map: int ESignature_map.t Key_map.t;
-                   mutable implication: int option;
                    features: descriptor seq}
 
 
-let empty () =
+let empty (): t =
   {map  = Key_map.empty;
-   implication = None;
    features = Seq.empty ()}
 
 
 
+let base_table () : t =
+  (** Construct a basic table which contains at least implication.
+   *)
+  let ft   = empty ()
+  and fn   = FNoperator DArrowop
+  and idx  = 0
+  and bool = Class_table.boolean_type 0 in
+  let sign = Sign.make_func [|bool;bool|] bool in
+  Seq.push
+    ft.features
+    {fname    = fn;
+     impstat  = Builtin;
+     fgnames  = [||];
+     concepts = [||];
+     argnames = [||];
+     sign     = sign;
+     priv     = None;
+     pub      = Some None};
+  ft.map <- Key_map.add
+      (fn,2)
+      (ESignature_map.singleton ([||],sign) idx)
+      ft.map;
+  ft
 
-let has_implication (ft:t): bool =
-  match ft.implication with
-    None -> false
-  | _    -> true
 
 
-let implication_index (ft:t): int =
-  assert (has_implication ft);
-  match ft.implication with
-    None -> assert false
-  | Some i -> i
+
+let implication_index: int = 0
 
 
 let implication_term (a:term) (b:term) (nbound:int) (ft:t)
     : term =
   (* The implication term a=>b in an environment with 'nbound' bound variables
    *)
-  assert (has_implication ft);
-  match ft.implication with
-    None -> assert false  (* Cannot happen *)
-  | Some i ->
-      let args = Array.init 2 (fun i -> if i=0 then a else b) in
-      Application (Variable (i+nbound), args)
+  let args = [|a;b|] in
+  Application (Variable (implication_index+nbound), args)
 
 
 
@@ -80,8 +90,8 @@ let implication_chain
      conclusion of the implication (i.e. a,b=>c)
    *)
   let is_implication t =
-    match t,ft.implication with
-      Variable i, Some j -> i=j+nbound
+    match t with
+      Variable i -> i = implication_index+nbound
     | _ -> false
   in
   let rec split(t:term): (term list * term) list =
@@ -304,9 +314,6 @@ let put_function
     try ESignature_map.find (concepts,sign) sig_map
     with Not_found -> cnt in
   if idx=cnt then begin (* new feature *)
-    if fn.v = (FNoperator DArrowop) &&
-      (Class_table.is_boolean_binary sign ntvs) then
-      ft.implication <- Some cnt;
     Seq.push
       ft.features
       {fname    = fn.v;

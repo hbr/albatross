@@ -30,7 +30,7 @@ let make_basic (): t =
    is_basic  = true;
    visi      = Public;
    ct        = Class_table.base_table ();
-   ft        = Feature_table.empty ();
+   ft        = Feature_table.base_table ();
    at        = Assertion_table.empty ()}
 
 

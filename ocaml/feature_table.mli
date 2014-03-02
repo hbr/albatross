@@ -6,11 +6,9 @@ type t
 
 type implementation_status = No_implementation | Builtin | Deferred
 
-val empty: unit -> t
+val base_table: unit -> t
 
-val has_implication: t -> bool
-
-val implication_index: t -> int
+val implication_index: int
 
 val implication_chain: term -> int -> t
   -> (term list * term) list  (* still used in prover.ml *)

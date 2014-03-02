@@ -72,7 +72,7 @@ let prove
     if !traceflag then f () else ()
   in
   let arglen = Array.length argnames in
-  let imp_id = (Feature_table.implication_index ft) + arglen in
+  let imp_id = Feature_table.implication_index + arglen in
   let exp2term ie = Typer.boolean_term ie context
   and term2string t = Feature_table.term_to_string t argnames ft
   and split = fun t -> Term.binary_split t imp_id
@@ -537,10 +537,7 @@ let prove_and_store
         not_yet_implemented entlst.i "Assertions with do block"
       else
         let lst =
-          if Feature_table.has_implication ft then
-            prove concepts argnames argtypes rlst clst elst context ct ft at
-          else
-            error_info entlst.i "\"=>\" is not yet defined"
+          prove concepts argnames argtypes rlst clst elst context ct ft at
         in
         List.iter
           (fun (t,pt) -> push_proved argnames argtypes t pt)

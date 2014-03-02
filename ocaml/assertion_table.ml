@@ -125,7 +125,7 @@ let put_assertion
       (match pt_opt with None -> Axiom nterm | Some pt -> pt)
       (names,types)
       nb
-      (Feature_table.implication_index ft)
+      Feature_table.implication_index
       at.context
 
 
