@@ -36,6 +36,7 @@ val update_type_variables: TVars_sub.t -> t -> unit
 val string_of_term: term -> t -> string
 val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
+val named_signature_string: t -> string
 
 val put_global_function:
     feature_name withinfo -> bool -> Feature_table.implementation_status ->

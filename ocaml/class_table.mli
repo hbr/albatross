@@ -31,5 +31,3 @@ val print: t -> unit
 
 val type2string: term -> int -> int array -> t -> string
 val string_of_signature: Sign.t -> int -> int array -> t -> string
-
-val arguments_to_string: int array -> term array -> t -> string

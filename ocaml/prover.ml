@@ -23,20 +23,10 @@ type tried_map    = Local_ass_context.t TermMap.t
 
 
 
-let assertion_to_string
-    (names: int array)
-    (types: term array)
-    (term: term)
-    (ct:Class_table.t)
-    (ft:Feature_table.t): string =
+let string_of_assertion (t:term) (c:Context.t): string =
   "all"
-  ^ (Class_table.arguments_to_string names types ct)
-  ^ " "
-  ^ (Feature_table.term_to_string term names ft)
-
-
-let string_of_assertion (c:Context.t): string =
-  "all" ^ (Context.signature_string c)
+  ^ (Context.named_signature_string c) ^ " "
+  ^ (Context.string_of_term t c)
 
 
 let ngoals = ref 0
@@ -98,7 +88,7 @@ let prove
 
   let trace_header (): unit =
     Printf.printf "\nall%s\n"
-      (Class_table.arguments_to_string argnames argtypes ct)
+      (Context.named_signature_string context)
 
   and trace_string (str:string) (l:int) (): unit =
     Printf.printf "%3d %s%s\n" l (level_string l) str
@@ -488,16 +478,14 @@ let prove_and_store
   let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
     Printf.printf "%3d axiom   %s\n"
       (Assertion_table.count at)
-      (*(string_of_assertion context);*)
-      (assertion_to_string argnames argtypes t ct ft);
+      (string_of_assertion t context);
     Assertion_table.put_axiom argnames argtypes t ft at
 
   and push_proved (argnames: int array) (argtypes: term array)
       (t:term) (pt:proof_term): unit =
     Printf.printf "%3d proved  %s\n"
       (Assertion_table.count at)
-      (*(string_of_assertion context);*)
-      (assertion_to_string argnames argtypes t ct ft);
+      (string_of_assertion t context);
     Assertion_table.put_proved argnames argtypes t pt ft at
   in
 

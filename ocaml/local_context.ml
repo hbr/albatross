@@ -149,8 +149,12 @@ let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
     assert false (* nyi: assignment of constraints to type variables *)
 
 
+
+
 let string_of_term (t:term) (loc:t): string =
   Feature_table.term_to_string t loc.argnames loc.ft
+
+
 
 let sign2string (s:Sign.t) (loc:t): string =
   Class_table.string_of_signature
@@ -159,8 +163,58 @@ let sign2string (s:Sign.t) (loc:t): string =
     loc.fgnames
     loc.ct
 
+
+
 let signature_string (loc:t): string =
+  (** Print the signature of the context [loc].
+   *)
   sign2string loc.signature loc
+
+
+
+let named_signature_string (loc:t): string =
+  (** Print the signature of the context [loc] with all argument names.
+   *)
+  let nargs = arity loc in
+  let has_res = has_result loc
+  and has_args = (nargs <> 0) in
+  let argsstr =
+    if not has_args then
+      ""
+    else
+      let zipped = Array.to_list (Array.init nargs
+                                    (fun i ->
+                                      loc.argnames.(i), loc.argtypes.(i)))
+      in
+      let llst = List.fold_left
+          (fun ll (n,tp) -> match ll with
+            [] -> [[n],tp]
+          | (ns,tp1)::tl ->
+              if tp=tp1 then [n::ns,tp]
+              else           ([n],tp)::ll )
+          []
+          zipped
+      in
+      "("
+      ^  String.concat
+          ","
+          (List.rev_map
+             (fun (ns,tp) ->
+               (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
+               ^ ":"
+               ^ (Class_table.type2string tp 0 loc.fgnames loc.ct))
+             llst)
+      ^ ")"
+  and resstr =
+    if has_res then
+      Class_table.type2string (result_type loc) 0 loc.fgnames loc.ct
+    else ""
+  in
+  if has_args && has_res then argsstr ^ ": " ^ resstr
+  else if has_args then       argsstr
+  else                        resstr
+
+
 
 let put_global_function
     (fn:       feature_name withinfo)

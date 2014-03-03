@@ -20,6 +20,7 @@ module Context: sig
   val string_of_term: term -> t -> string
   val sign2string:  Sign.t -> t -> string
   val signature_string:   t -> string
+  val named_signature_string: t -> string
   val boolean:      t -> term
   val count_formals: t -> int * int
   val push: entities list withinfo -> return_type -> t -> t
@@ -88,6 +89,11 @@ end = struct
   let signature_string (c:t): string =
     assert (not (is_basic c));
     Local_context.signature_string (local c)
+
+  let named_signature_string (c:t): string =
+    assert (not (is_basic c));
+    Local_context.named_signature_string (local c)
+
 
   let count_formals (c:t): int * int =
     let loc = local c in
