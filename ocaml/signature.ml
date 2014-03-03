@@ -55,7 +55,7 @@ module TVars_sub: sig
   val add_global:   constraints -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
-
+  val update:       t -> t -> unit
 end = struct
 
   type t = {vars: TVars.t;
@@ -97,6 +97,29 @@ end = struct
      *)
     {vars = TVars.remove_local n tv.vars;
      sub  = Term_sub_arr.remove_bottom n tv.sub}
+
+  let update (tv:t) (tvnew:t): unit =
+    (** Update the type variables in [tv] with the type variables in [tvnew].
+
+        This requires that [tv] and [tvnew] have the same number of local type
+        variables and [tvnew] might have more globals than [tv]
+     *)
+    assert ((count tv) <= (count tvnew));
+    assert ((count_local tv) = (count_local tvnew));
+    let nloc  = count_local tv
+    and ndown = (count_global tvnew) - (count_global tv)
+    in
+    let rec updt (i:int): unit =
+      if i = nloc then ()
+      else begin
+        Term_sub_arr.add
+          i
+          (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
+          tv.sub;
+        updt (i+1)
+      end
+    in updt 0
+
 end (* TVars_sub *)
 
 
@@ -127,7 +150,6 @@ module Sign: sig
   val up2:         int -> int -> int -> t -> t
   val to_function: int -> t -> t
   val unify:       t -> t -> TVars_sub.t -> unit
-  (*val apply:       Term_sub_arr.t -> t -> t*)
 
 end = struct
 
@@ -240,10 +262,4 @@ end = struct
     if has_res then
       Term_sub_arr.unify (result s1) (result s2) subst;
     Array.iteri (fun i t -> Term_sub_arr.unify t s2.args.(i) subst) s1.args
-
-
-  let apply (sub:Term_sub_arr.t) (s:t): t =
-    (** Apply the substitution [sub] to the signature [s]
-     *)
-    assert false
 end (* Sign *)

@@ -43,6 +43,8 @@ module Term: sig
 
   val map: (int->int->term) -> term -> term
 
+  val down_from: int -> int -> term -> term
+
   val down: int -> term -> term
 
   val upbound: int->int->term->term
@@ -171,12 +173,28 @@ end = struct
     mapr 0 t
 
 
+  let down_from (n:int) (start:int) (t:term): term =
+    (** Shift all free variables of [t] above [start] down by [n]. In case
+        that free variables get captured raise 'Term_capture'
+     *)
+    map
+      (fun j nb ->
+        if j < nb+start then
+          Variable j
+        else if n <= j-nb-start then
+          Variable (j-n)
+        else
+          raise Term_capture
+      )
+      t
+
 
   let down (n:int) (t:term): term =
     (* Shift all free variables of 't' down by 'n', require that there
        are no free variables 0,1,...,n-1
      *)
-    map
+    down_from n 0 t
+    (*map
       (fun j nb ->
         if j<nb then
           Variable j
@@ -185,7 +203,7 @@ end = struct
         else
           raise Term_capture
       )
-      t
+      t*)
 
 
 

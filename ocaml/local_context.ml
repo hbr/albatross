@@ -143,15 +143,11 @@ let boolean (loc:t): term =
 let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
   (** Update the type variables of the current context with [tvs]
    *)
-  let nloc1  = TVars_sub.count_local  tvs
-  and nloc2  = TVars_sub.count_local  loc.tvars_sub
-  and nglob1 = TVars_sub.count_global tvs
-  and nglob2 = TVars_sub.count_global loc.tvars_sub
-  in
-  assert (nloc1 = nloc2);
-  assert (nglob1 >= nglob2);
-  loc.tvars_sub <- tvs;
-  loc.signature <- Sign.up_from (nglob1-nglob2) nglob2 loc.signature
+  try
+    TVars_sub.update loc.tvars_sub tvs
+  with Term_capture ->
+    assert false (* nyi: assignment of constraints to type variables *)
+
 
 let string_of_term (t:term) (loc:t): string =
   Feature_table.term_to_string t loc.argnames loc.ft

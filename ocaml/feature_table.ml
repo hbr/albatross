@@ -303,7 +303,6 @@ let put_function
       signature [sign] to the feature table
    *)
   let cnt   = Seq.count ft.features
-  and ntvs  = Array.length fgnames
   and nargs = Sign.arity sign
   in
   let sig_map =
