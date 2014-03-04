@@ -1,6 +1,7 @@
 open Container
 open Signature
 open Term
+open Proof
 open Support
 
 
@@ -220,6 +221,9 @@ let named_signature_string (loc:t): string =
 
 
 
+
+
+
 let put_global_function
     (fn:       feature_name withinfo)
     (is_priv:  bool)
@@ -237,3 +241,27 @@ let put_global_function
     impstat
     term_opt
     loc.ft
+
+
+let implication_id (loc:t): int =
+  Feature_table.implication_index + (nargs loc)
+
+
+let string_of_assertion (t:term) (loc: t): string =
+  "all"
+  ^ (named_signature_string loc) ^ " "
+  ^ (string_of_term t loc)
+
+
+let put_global_assertion
+    (t:term) (pt_opt: proof_term option) (loc:t): unit =
+  (** Put the assertion [t] with its optional proof term [pt_opt]
+      into the global assertion table.
+   *)
+  Printf.printf "%3d %s  %s\n"
+    (Assertion_table.count loc.at)
+    (match pt_opt with
+      None    -> "axiom "
+    | Some pt -> "proved")
+    (string_of_assertion t loc);
+  Assertion_table.put_assertion t (arity loc) pt_opt loc.ft loc.at

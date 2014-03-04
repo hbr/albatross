@@ -82,7 +82,6 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 let implication_chain
     (t:term)
     (nbound:int)
-    (ft:t)
     : (term list * term) list =
   (* Split the term t into its implication chain i.e. split a=>b=>c into
      [ [],a=>b=>c; [a],b=>c; [a,b],c ]

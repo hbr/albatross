@@ -10,7 +10,7 @@ val base_table: unit -> t
 
 val implication_index: int
 
-val implication_chain: term -> int -> t
+val implication_chain: term -> int
   -> (term list * term) list  (* still used in prover.ml *)
 
 val implication_term: term -> term -> int -> t -> term

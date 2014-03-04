@@ -41,32 +41,31 @@ let reset_goals () =  ngoals  := 0; nfailed := 0
 
 
 let prove
-    (concepts: term array)
-    (argnames: int array)
-    (argtypes: term array)
     (pre: compound)
     (chck: compound)
     (post: compound)
     (context: Context.t)
-    (ct: Class_table.t)
-    (ft: Feature_table.t)
-    (at: Assertion_table.t)
     : (term * proof_term) list =
   (* Prove the top level assertion with the formal arguments 'argnames' and
      'argtypes' and the body 'pre' (preconditions), 'chck' (the intermediate
      assertions) and 'post' (postconditions) and return the list of all
      discharged terms and proof terms of the postconditions
    *)
+  let loc = Context.local context in
+  let ft  = Local_context.ft loc
+  and at  = Local_context.at loc
+  in
   let traceflag = ref (Options.is_tracing_proof ()) in
   let do_trace (f:unit->unit): unit =
     if !traceflag then f () else ()
   in
-  let arglen = Array.length argnames in
-  let imp_id = Feature_table.implication_index + arglen in
+  let _, arglen = Context.count_formals context
+  and imp_id    = Context.implication_id context
+  in
   let exp2term ie = Typer.boolean_term ie context
-  and term2string t = Feature_table.term_to_string t argnames ft
-  and split = fun t -> Term.binary_split t imp_id
-  and chain = fun t -> Feature_table.implication_chain t arglen ft
+  and term2string t = Context.string_of_term t context
+  and split t = Term.binary_split t imp_id
+  and chain t = Feature_table.implication_chain t arglen
   and normal (t:term): term =
     let texp = Feature_table.expand_term t arglen ft in
     Term.reduce texp
@@ -174,7 +173,7 @@ let prove
         (c:Local_ass_context.t)
         : proof_pair list =
       let lglobal =
-        (Assertion_table.consequences t (Array.length argtypes) ft at)
+        (Assertion_table.consequences t arglen at)
       in
       let l1 =
         (Local_ass_context.consequences t pt c)
@@ -186,7 +185,8 @@ let prove
         (b, MP(pta,pt)) :: l1
       with Not_found -> l1
     in
-    let rec add (lst: proof_pair list) (c:Local_ass_context.t): Local_ass_context.t =
+    let rec add
+        (lst: proof_pair list) (c:Local_ass_context.t): Local_ass_context.t =
       match lst with
         [] -> c
       | (t,pt)::tl ->
@@ -219,7 +219,7 @@ let prove
     let global_backward (t:term) (c:Local_ass_context.t): Local_ass_context.t =
       (* The backward set from the global assertion table *)
       let bwd_glob =
-        Assertion_table.find_backward t arglen ft at
+        Assertion_table.find_backward t arglen at
       in
       List.fold_left
         (fun c ((t,pt),idx) ->
@@ -341,19 +341,7 @@ let prove
         inc_failed ();
         raise Cannot_prove
       with
-        Proof_found pt ->
-          (*let global (idx:int): int*term =
-            Assertion_table.term idx at
-          in
-          let imp_idx = Feature_table.implication_index ft in
-          let tt = Checker.term pt arglen imp_idx global in
-          (if t<>tt then
-            Printf.printf "t  = %s\ntt = %s\n"
-              (Feature_table.term_to_string t argnames ft)
-              (Feature_table.term_to_string tt argnames ft)
-          else ());*)
-          (*assert (t = tt);*)
-          pt
+        Proof_found pt -> pt
     end
   in
 
@@ -467,31 +455,15 @@ let prove_and_store
     (context: Context.t)
     : unit =
 
-  let ct,ft,at =
-    let loc = Context.local context in
-    (Local_context.ct loc),
-    (Local_context.ft loc),
-    (Local_context.at loc)
-  in
   let context = Context.push entlst None context
   in
-  let push_axiom (argnames: int array) (argtypes: term array) (t:term) =
-    Printf.printf "%3d axiom   %s\n"
-      (Assertion_table.count at)
-      (string_of_assertion t context);
-    Assertion_table.put_axiom argnames argtypes t ft at
+  let push_axiom (t:term) =
+    Context.put_assertion t None context
 
-  and push_proved (argnames: int array) (argtypes: term array)
-      (t:term) (pt:proof_term): unit =
-    Printf.printf "%3d proved  %s\n"
-      (Assertion_table.count at)
-      (string_of_assertion t context);
-    Assertion_table.put_proved argnames argtypes t pt ft at
+  and push_proved (t:term) (pt:proof_term): unit =
+    Context.put_assertion t (Some pt) context
   in
 
-  let fgnames, concepts, argnames,argtypes =
-    Class_table.argument_signature entlst ct in
-  (*assert ((Array.length fgnames) = 0);*)
   match bdy with
     _, _, None ->
       error_info entlst.i "Assertion must have an ensure clause"
@@ -515,7 +487,7 @@ let prove_and_store
             List.iter
               (fun ie ->
                 let term = Typer.boolean_term ie context in
-                push_axiom argnames argtypes term)
+                push_axiom term)
                   (* bug: store deferred assertions in class table, because
                      they have to be proved in descendants !!!*)
               elst
@@ -525,8 +497,8 @@ let prove_and_store
         not_yet_implemented entlst.i "Assertions with do block"
       else
         let lst =
-          prove concepts argnames argtypes rlst clst elst context ct ft at
+          prove rlst clst elst context
         in
         List.iter
-          (fun (t,pt) -> push_proved argnames argtypes t pt)
+          (fun (t,pt) -> push_proved t pt)
           lst

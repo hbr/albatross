@@ -1,6 +1,7 @@
 open Signature
 open Support
 open Term
+open Proof
 
 type t
 val make_basic: unit -> t
@@ -41,3 +42,8 @@ val named_signature_string: t -> string
 val put_global_function:
     feature_name withinfo -> bool -> Feature_table.implementation_status ->
       term option -> t -> unit
+
+val implication_id: t -> int
+
+val put_global_assertion:
+    term -> proof_term option -> t -> unit

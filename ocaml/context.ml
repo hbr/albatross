@@ -1,5 +1,6 @@
 open Container
 open Term
+open Proof
 open Signature
 open Support
 
@@ -12,6 +13,7 @@ module Context: sig
   val make:  unit -> t
 
   val is_basic:     t -> bool
+  val is_toplevel:  t -> bool
   val local:        t -> Local_context.t
   val is_public:    t -> bool
   val is_private:   t -> bool
@@ -27,7 +29,8 @@ module Context: sig
   val put_function:
       feature_name withinfo -> Feature_table.implementation_status
         -> term option -> t -> unit
-
+  val implication_id:    t -> int
+  val put_assertion: term -> proof_term option -> t -> unit
 
   val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
   val put_class: header_mark withinfo -> int withinfo -> t -> unit
@@ -62,7 +65,14 @@ end = struct
 
 
   let is_basic (c:t): bool =
-    Local_context.is_basic (local c)
+    match c with
+      Basic _ -> true
+    | _       -> false
+
+  let is_toplevel (c:t): bool =
+    match c with
+      Combined (_, Basic _ ) -> true
+    | _                      -> false
 
   let is_private (c:t): bool =
     Local_context.is_private (local c)
@@ -115,6 +125,17 @@ end = struct
     let loc = Local_context.make_next entlst rt (local c)
     in
     Combined (loc,c)
+
+
+  let implication_id (c:t): int =
+    Local_context.implication_id (local c)
+
+  let put_assertion (t:term) (pt_opt: proof_term option) (c:t): unit =
+    (** Put the assertion [t] with its optional proof term [pt_opt]
+        into the global assertion table.
+     *)
+    assert (is_toplevel c);
+    Local_context.put_global_assertion t pt_opt (local c)
 
 
   let put_function
