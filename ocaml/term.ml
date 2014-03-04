@@ -358,18 +358,29 @@ end = struct
 
 
 
+  let implication_chain2 (t:term) (impid:int): term list * term =
+    let rec chrec (t:term) (ps_rev:term list): term list * term =
+      try
+        let a,b = binary_split t impid in
+        chrec b (a::ps_rev)
+      with Not_found ->
+        ps_rev, t
+    in
+    let ps_rev, last = chrec t [] in
+    List.rev ps_rev, last
+
 
   let implication_chain (t:term) (impid:int)
       : (term list * term) list =
     (* Extract the implication chain of the term 't' i.e. we have
 
-       t = (a=>...=>y=>z)
+       t = (a=>b=>...=>z)
 
        result:
-       [([a,...,y],z), ([a,...],y=>z), ..., ([],a=>...=>y=>z)]
+       [([],a=>b=>...=>z), ([a],b=>...=>z), ... , ([a,...,y],z)]
 
        In the case that 't' is not an implication then the returned list
-       consists only of the last element.
+       consists only of the first element.
      *)
     let rec chainr (t:term)
         : (term list * term) list =
@@ -381,7 +392,7 @@ end = struct
       with Not_found ->
         [([],t)]
     in
-    List.rev (chainr t)
+    chainr t
 end (* Term *)
 
 

@@ -34,37 +34,37 @@ let empty: t = {
   count=0
 }
 
-  let count (c:t): int = c.count
-
-  let proof_term (t:term) (c:t): proof_term =
-    try
-      match (TermMap.find t c.map).pt_opt with
-        None -> raise Not_found
-      | Some pt -> pt
-    with Not_found ->
-      raise Not_found
-
-  let is_proved (t:term) (c:t) =
-    try
-      let _ = proof_term t c in
-      true
-    with Not_found ->
-      false
+let count (c:t): int = c.count
 
 
-  let proved_terms (c:t): proof_pair list =
-    let lst =
-      TermMap.fold
-        (fun t desc lst ->
-          match desc.pt_opt with
-            None -> lst
-          | Some pt -> (t,pt)::lst
-        )
-        c.map
-        []
-    in
-    assert (c.count = (List.length lst));
-    lst
+let proof_term (t:term) (c:t): proof_term =
+  match (TermMap.find t c.map).pt_opt with
+    None -> raise Not_found
+  | Some pt -> pt
+
+
+
+let is_proved (t:term) (c:t) =
+  try
+    let _ = proof_term t c in
+    true
+  with Not_found ->
+    false
+
+
+let proved_terms (c:t): proof_pair list =
+  let lst =
+    TermMap.fold
+      (fun t desc lst ->
+        match desc.pt_opt with
+          None -> lst
+        | Some pt -> (t,pt)::lst
+      )
+      c.map
+      []
+  in
+  assert (c.count = (List.length lst));
+  lst
 
 
 
@@ -123,10 +123,10 @@ let add_forward
        try
          let d0 = TermMap.find a c.map in
          {d0 with fwd_set = FwdSet.add (b,pt) d0.fwd_set}
-         with Not_found ->
-           {pt_opt  = None;
-            fwd_set = FwdSet.singleton (b,pt);
-            bwd_set = BwdSet.empty}
+       with Not_found ->
+         {pt_opt  = None;
+          fwd_set = FwdSet.singleton (b,pt);
+          bwd_set = BwdSet.empty}
      end
      c.map}
 
@@ -143,7 +143,7 @@ let add_backward
 
      Note that an implication chain has the form:
 
-         [([],a=>b=>...=>z), ([a],b=>...=>z); ..., ([a,b,...],z)]
+     [([],a=>b=>...=>z), ([a],b=>...=>z); ..., ([a,b,...],z)]
 
      i.e. the last element of the list is the interesting one.
    *)

@@ -79,40 +79,6 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 
 
-let implication_chain
-    (t:term)
-    (nbound:int)
-    : (term list * term) list =
-  (* Split the term t into its implication chain i.e. split a=>b=>c into
-     [ [],a=>b=>c; [a],b=>c; [a,b],c ]
-     and return in the second return parameter the optional premise and
-     conclusion of the implication (i.e. a,b=>c)
-   *)
-  let is_implication t =
-    match t with
-      Variable i -> i = implication_index+nbound
-    | _ -> false
-  in
-  let rec split(t:term): (term list * term) list =
-    match t with
-      Variable _
-    | Lam (_,_)  -> [ [], t ]
-    | Application (f,args) ->
-        let len = Array.length args in
-        if len=2 && is_implication f then
-          let chain = split args.(1) in
-          ([],t) :: (List.map
-                       (fun e ->
-                         let premises,term=e in
-                         args.(0)::premises, term
-                       )
-                       chain)
-        else
-          [ [], t ]
-  in
-  split t
-
-
 
 
 let find_funcs

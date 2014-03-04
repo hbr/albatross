@@ -65,7 +65,7 @@ let prove
   let exp2term ie = Typer.boolean_term ie context
   and term2string t = Context.string_of_term t context
   and split t = Term.binary_split t imp_id
-  and chain t = Feature_table.implication_chain t arglen
+  and chain t = Term.implication_chain t imp_id
   and normal (t:term): term =
     let texp = Feature_table.expand_term t arglen ft in
     Term.reduce texp
