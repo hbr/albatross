@@ -359,11 +359,11 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
             ST.string fgnames.(j-nb)
           else class_name (j-nb-nfgs) ct
       | Application (Variable j,tarr) ->
-          let j1 = j-nb
+          let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
             assert (tarrlen=1);
-            1, ((to_string tarr.(0) nb 2) ^ "?")
+            1, ((to_string tarr.(0) nb 1) ^ "?")
           end else if j1 = function_index then begin
             assert (tarrlen=2);
             1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))

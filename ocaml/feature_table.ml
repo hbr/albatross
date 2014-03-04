@@ -41,25 +41,58 @@ let empty (): t =
 let base_table () : t =
   (** Construct a basic table which contains at least implication.
    *)
-  let ft   = empty ()
-  and fn   = FNoperator DArrowop
-  and idx  = 0
-  and bool = Class_table.boolean_type 0 in
-  let sign = Sign.make_func [|bool;bool|] bool in
+  let bool    = Class_table.boolean_type 0 in
+  let ft      = empty ()
+  and fnimp   = FNoperator DArrowop
+  and idximp  = 0
+  and signimp = Sign.make_func [|bool;bool|] bool
+  in
+  (* boolean *)
   Seq.push
     ft.features
-    {fname    = fn;
+    {fname    = fnimp;
      impstat  = Builtin;
      fgnames  = [||];
      concepts = [||];
      argnames = [||];
-     sign     = sign;
+     sign     = signimp;
      priv     = None;
      pub      = Some None};
   ft.map <- Key_map.add
-      (fn,2)
-      (ESignature_map.singleton ([||],sign) idx)
+      (fnimp,2)
+      (ESignature_map.singleton ([||],signimp) idximp)
       ft.map;
+  (* predicate *)
+  let g = ST.symbol "G"
+  and p = ST.symbol "p"
+  and any   = Variable Class_table.any_index
+  and bool1 = Variable (Class_table.boolean_index+1)
+  and g_tp  = Variable 0 in
+  let p_tp  = Application (Variable (Class_table.predicate_index+1),
+                           [|g_tp|])
+  in
+  let entry =
+    {fname    = FNall;
+     impstat  = Builtin;
+     fgnames  = [|g|];
+     concepts = [|any|];
+     argnames = [|p|];
+     sign     = Sign.make_func [|p_tp|] bool1;
+     priv     = None;
+     pub      = Some None}
+  in
+  begin
+    let idx,fn,sign = 1, FNoperator Parenop,
+      Sign.make_func [|p_tp;g_tp|] bool1
+    in
+    Seq.push ft.features {entry with fname = FNoperator Parenop;
+                          sign = sign};
+    ft.map <- Key_map.add (FNoperator Parenop,2)
+        (ESignature_map.singleton ([|any|],sign) idx)
+        ft.map
+  end;
+  Seq.push ft.features entry;
+  Seq.push ft.features {entry with fname = FNsome};
   ft
 
 

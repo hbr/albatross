@@ -5,6 +5,14 @@ open Container
 
 type t
 
+val zero_index:      int
+val boolean_index:   int
+val any_index:       int
+val predicate_index: int
+val function_index:  int
+val tuple_index:     int
+
+
 val empty_table: unit -> t
 
 val base_table: unit -> t

@@ -673,13 +673,17 @@ type feature_name =
   | FNtrue
   | FNfalse
   | FNnumber of int
+  | FNall
+  | FNsome
 
 let feature_name_to_string (fn:feature_name): string =
   match fn with
     FNname i | FNnumber i -> ST.string i
   | FNoperator op -> operator_to_rawstring op
-  | FNtrue -> "true"
+  | FNtrue ->  "true"
   | FNfalse -> "false"
+  | FNall   -> "@all"
+  | FNsome  -> "@some"
 
 type name_sig = feature_name * type_t list
 
