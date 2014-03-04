@@ -405,8 +405,8 @@ let analyze_expression
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub context;
-  Printf.printf "\tterm: %s\n"
-    (Context.string_of_term term context);
+  (*Printf.printf "\tterm: %s\n"
+    (Context.string_of_term term context);*)
   term
 
 

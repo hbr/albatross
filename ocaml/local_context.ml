@@ -10,6 +10,7 @@ type t = {
     concepts:  type_term array;     (* cumulated        *)
     argnames:  int array;           (* cumulated        *)
     argtypes:  type_term array;     (* cumulated        *)
+    info:      info;
     mutable signature: Sign.t;      (* from declaration *)
     mutable tvars_sub: TVars_sub.t; (* cumulated        *)
     is_basic:     bool;
@@ -25,6 +26,7 @@ let make_basic (): t =
    concepts = [||];
    argnames = [||];
    argtypes = [||];
+   info      = UNKNOWN;
    signature = Sign.empty;
    tvars_sub = TVars_sub.make 0;
    is_basic  = true;
@@ -51,6 +53,7 @@ let make_next
    concepts  =  concepts;
    argnames  =  argnames;
    argtypes  =  argtypes;
+   info      =  entlst.i;
    signature =  sign;
    tvars_sub =  TVars_sub.add_local ntvs loc.tvars_sub;
    is_basic  =  false;
@@ -140,13 +143,14 @@ let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
 let boolean (loc:t): term =
   Class_table.boolean_type (ntvs loc)
 
+
 let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
   (** Update the type variables of the current context with [tvs]
    *)
   try
     TVars_sub.update loc.tvars_sub tvs
   with Term_capture ->
-    assert false (* nyi: assignment of constraints to type variables *)
+    not_yet_implemented loc.info "Type inference of formal generics"
 
 
 
