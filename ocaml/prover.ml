@@ -23,12 +23,6 @@ type tried_map    = Local_ass_context.t TermMap.t
 
 
 
-let string_of_assertion (t:term) (c:Context.t): string =
-  "all"
-  ^ (Context.named_signature_string c) ^ " "
-  ^ (Context.string_of_term t c)
-
-
 let ngoals = ref 0
 let nfailed = ref 0
 let inc_goals ()   =  ngoals  := !ngoals + 1
