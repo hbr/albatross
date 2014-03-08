@@ -156,7 +156,7 @@ let add (t:term) (pt:proof_term)  (dat:'a) (nargs:int) (impid:int)(c:'a t)
           else
             bwd tail
       in
-      bwd  (Term.implication_chain t (impid+nargs))
+      bwd  (List.rev (Term.implication_chain t (impid+nargs)))
     in
     {proved  = proved;
      forward = forward;
