@@ -1,13 +1,58 @@
+(*
+We use a tree like datastructure which contains the structure of all terms in
+the table.
+
+A term is a recursive structure which is either a variable, an application
+(i.e. a function term and a sequence of argument terms) or a lambda
+abstraction (i.e. a number of arguments which are bound in the abstraction and
+a term).
+
+We need to distinguish three type of variables:
+
+- Argument variables: They can be substituted by any term
+
+- Bound variables: These are variables bound by some lambda abstraction. They
+                   can be unified only with the same variable
+
+- Constants: They refer to some global features and can be unified only with
+             the same variable
+
+
+The first type of variables are called `avar's` (argument variables), the
+second and third type are called `ovar's` (other variables).
+
+Each node of the tree has the following information
+
+- avarmap: There is an entry in this map for each assertion which has an
+           argument variable in this position. It maps assertion ids to the
+           corresponding argument variable
+
+- ovarmap: There is an entry in this map for each other variable which appears
+           in any of the assertions at this position. The map maps the other
+           variable to the set of assertion id's.
+
+- fappmap: There is an entry in this map for each number of arguments where a
+           function application appears in any of the assertions with this
+           number of arguments at that position. The map maps the number of
+           arguments to a node (for the function term) and a node array (for
+           the argument terms).
+
+- lammap:  There is an entry in this map for each number of arguments where a
+           lambda term appears in any of the assertions with this number of
+           arguments at that position. The map maps the number of bound
+           variables to a node for the abstracted term.
+*)
+
 open Container
 open Term
 
 
 type node = {
-    avarmap: int IntMap.t;   (* idx -> argument variable *)
-    ovarmap: (substitution IntMap.t) IntMap.t;
-      (* ovar -> empty map *)
+    avarmap: int IntMap.t;      (* idx -> argument variable *)
+    ovarmap: IntSet.t IntMap.t; (* ovar -> idx set *)
     fapp:    (node * node array) IntMap.t;
-                             (* one for each number of arguments *)
+                                (* one for each number of arguments *)
+    lammap:  node IntMap.t      (* one for each number of bindings *)
   }
 
 
@@ -22,7 +67,8 @@ type 'a t = {
 let empty_node = {
   avarmap = IntMap.empty;
   ovarmap = IntMap.empty;
-  fapp    = IntMap.empty
+  fapp    = IntMap.empty;
+  lammap  = IntMap.empty
 }
 
 
@@ -50,10 +96,10 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
         raise (Term_found (Variable i))
       with Not_found ->
         ()
-    and oterm (ovarmap: (substitution IntMap.t) IntMap.t): unit =
+    and oterm (ovarmap: IntSet.t IntMap.t): unit =
       IntMap.iter
-        (fun ovar map ->
-          if IntMap.mem idx map then
+        (fun ovar set ->
+          if IntSet.mem idx set then
             let ivar = if ovar<nb then ovar else ovar+nargs in
             raise (Term_found (Variable ivar))
         )
@@ -71,11 +117,18 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
             ()
         )
         fapp
+    and lam_term (lammap: node IntMap.t): unit =
+      IntMap.iter
+        (fun n ttab ->
+          let t = termtab0 ttab (nb+n) in
+          raise (Term_found (Lam (n,t))))
+        lammap
     in
     try
       fapp_term tab.fapp;
       oterm     tab.ovarmap;
       aterm     tab.avarmap;
+      lam_term  tab.lammap;
       raise Not_found
     with Term_found t ->
       t
@@ -91,9 +144,31 @@ let term (idx:int) (table:'a t): term =
   termtab idx nargs table.root 0
 
 
+let domain_of_map (map: 'a IntMap.t): IntSet.t =
+  IntMap.fold
+    (fun i _ set -> IntSet.add i set)
+    map
+    IntSet.empty
 
-let join_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
-    : substitution IntMap.t =
+
+let add_set_to_map
+    (set:IntSet.t)
+    (map: Term_sub.t IntMap.t)
+    : Term_sub.t IntMap.t =
+  (** Add for each index of the set [set] and empty substitution to the map
+      [map] *)
+  IntSet.fold
+    (fun idx map ->
+      assert (not (IntMap.mem idx map));  (* Cannot overwrite a substitution
+                                             for an index *)
+      IntMap.add idx Term_sub.empty map)
+    set
+    map
+
+
+
+let join_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
+    : Term_sub.t IntMap.t =
   (* Join the two disjoint maps 'm1' and 'm2' *)
   IntMap.fold
     (fun idx sub2 map ->
@@ -106,8 +181,8 @@ let join_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
 
 
 
-let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
-    : substitution IntMap.t =
+let merge_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
+    : Term_sub.t IntMap.t =
   (* Merge the two maps 'm1' and 'm2'
 
      The domain of the merge is the subset of the intersection of both domains
@@ -132,7 +207,7 @@ let merge_map (m1: substitution IntMap.t) (m2: substitution IntMap.t)
 
 
 
-let write_map (map: substitution IntMap.t) (level:int): unit =
+let write_map (map: Term_sub.t IntMap.t) (level:int): unit =
   IntMap.iter
     (fun idx sub ->
       Printf.printf "%d: idx=%d, sub=%s\n" level idx (Term_sub.to_string sub)
@@ -145,7 +220,7 @@ let write_map (map: substitution IntMap.t) (level:int): unit =
 
 
 let unify (t:term) (nbt:int) (table:'a t)
-    :  (int * int * 'a * substitution) list =
+    :  (int * int * 'a * Term_sub.t) list =
   (* Unify the term 't' which comes from an environment with 'nbt' bound
      variables with the terms in the table 'table'.
 
@@ -154,9 +229,9 @@ let unify (t:term) (nbt:int) (table:'a t)
      with the data 'data' and applying the substitution 'sub' to 'ut' yields
      the term 't'.
    *)
-  let rec uni (t:term) (tab:node) (nb:int): substitution IntMap.t =
+  let rec uni (t:term) (tab:node) (nb:int): Term_sub.t IntMap.t =
     assert (nb=0); (* as long as there are no lambda terms *)
-    let map: substitution IntMap.t =
+    let map: Term_sub.t IntMap.t =
       IntMap.map (fun avar ->
         Term_sub.singleton avar t) tab.avarmap
     and ffreet = nb+nbt  (* first free variable in the term 't' *)
@@ -168,12 +243,8 @@ let unify (t:term) (nbt:int) (table:'a t)
         let ovar = if i<nb then i else i-nbt in
         begin
           try
-            join_map
-              map
-              (IntMap.find ovar tab.ovarmap)
-          with
-            Not_found ->
-              map
+            add_set_to_map (IntMap.find ovar tab.ovarmap) map
+          with Not_found -> map
         end
     | Application (f,args) ->
         let res =
@@ -193,8 +264,13 @@ let unify (t:term) (nbt:int) (table:'a t)
             map
         end in
         res
-    | Lam (tarr,t) ->
-        assert false
+    | Lam (n,t) ->
+        try
+          let ttab = IntMap.find n tab.lammap in
+          let tmap = uni t ttab (nb+n) in
+          join_map map tmap
+        with Not_found ->
+          map
   in
   try
     let map = uni t table.root 0 in
@@ -233,12 +309,11 @@ let add_term (t:term) (nargs:int) (idx:int) (tab:node): node =
           let ovar = if i<nb then i else i-nargs in
           let ovarmap =
             try
-              let idx2sub = IntMap.find ovar tab.ovarmap in
-              let idx2sub = IntMap.add idx Term_sub.empty idx2sub in
-              IntMap.add ovar idx2sub tab.ovarmap
+              let idxset = IntMap.find ovar tab.ovarmap in
+              let idxset = IntSet.add idx idxset in
+              IntMap.add ovar idxset tab.ovarmap
             with Not_found ->
-              IntMap.add ovar (IntMap.add idx Term_sub.empty IntMap.empty)
-                tab.ovarmap
+              IntMap.add ovar (IntSet.singleton idx) tab.ovarmap
           in
           {tab with ovarmap = ovarmap}
       | Application (f,args) ->
@@ -254,8 +329,13 @@ let add_term (t:term) (nargs:int) (idx:int) (tab:node): node =
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapp = IntMap.add len (ftab,argtabs) tab.fapp}
-      | Lam (tarr,t) ->
-          assert false
+      | Lam (n,t) ->
+          let ttab =
+            try IntMap.find n tab.lammap
+            with Not_found -> empty_node
+          in
+          let ttab = add0 t (nb+n) ttab in
+          {tab with lammap = IntMap.add n ttab tab.lammap}
     in
     tab
   in
