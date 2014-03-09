@@ -67,6 +67,8 @@ module Term: sig
 
   val binary_right: term -> int -> term list
 
+  val implication_chain2: term -> int -> term list * term
+
   val implication_chain: term -> int -> (term list * term) list
 
 end = struct
@@ -358,7 +360,23 @@ end = struct
 
 
 
-  let implication_chain2 (t:term) (impid:int): term list * term =
+
+  let implication_chain2 (t:term) (impid:int)
+      : term list * term =
+    (** Extract the implication chain of the term [t], i.e. if
+        [t] has the form
+
+            a => b => ... => e => z
+
+        it returns
+
+            [e,...,b,a] , z
+
+        Note:
+        a) The premises are returned in reverse order.
+        b) If [t] is not an implication, then the list of premises is
+           empty and [t] is returned as the consequence
+     *)
     let rec chrec (t:term) (ps_rev:term list): term list * term =
       try
         let a,b = binary_split t impid in
@@ -366,8 +384,9 @@ end = struct
       with Not_found ->
         ps_rev, t
     in
-    let ps_rev, last = chrec t [] in
-    List.rev ps_rev, last
+    chrec t []
+
+
 
 
   let implication_chain (t:term) (impid:int)

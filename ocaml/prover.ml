@@ -113,18 +113,6 @@ let prove
 
   let pre_terms: term list = List.rev_map exp2term pre
   in
-
-  (*let chain2string chn =
-    "["
-    ^ (String.concat "; "
-         (List.map
-            (fun (ps,t) ->
-              "["
-              ^ (String.concat "," (List.map (fun a -> term2string a) ps))
-              ^ "]," ^ (term2string t))
-            chn))
-    ^ "]"
-  in*)
   let add_one_ctxt
       (t:term)
       (pt:proof_term)

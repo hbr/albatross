@@ -131,7 +131,43 @@ let add (t:term) (pt:proof_term)  (dat:'a) (nargs:int) (impid:int)(c:'a t)
         else
           c.forward
       with Not_found -> c.forward
-
+    (*and backward =
+      let impid = impid+nargs in
+      let ps_rev,target = Term.implication_chain2 t impid in
+      let bvars_ps =
+        List.fold_left
+          (fun bvars p ->
+            let bvars_p = Term.bound_variables p nargs in
+            IntSet.union bvars bvars_p)
+          IntSet.empty
+          ps_rev
+      and bvars_tgt = Term.bound_variables target nargs
+      and n_tgt     = Term.nodes target
+      in
+      let rec bwd
+          (ps_rev: term list)
+          (target:term)
+          (bvars_tgt: IntSet.t)
+          (n_tgt: int)
+          : (int * proof_pair * 'a * bool) Term_table.t =
+        if IntSet.subset bvars_ps bvars_tgt then
+          let simpl =
+            List.for_all (fun p -> (Term.nodes p) <= n_tgt) ps_rev
+          in
+          Term_table.add target nargs (idx,pp,dat,simpl) c.backward
+        else begin
+          assert (ps_rev <> []);
+          let ps_rev = List.tl ps_rev
+          and p      = List.hd ps_rev in
+          let tgt    = Term.binary impid p target
+          and bvars_tgt =
+            IntSet.union bvars_tgt (Term.bound_variables p nargs)
+          and n_tgt = 1 + n_tgt + (Term.nodes p)
+          in
+          bwd ps_rev tgt bvars_tgt n_tgt
+        end
+      in
+      bwd ps_rev target bvars_tgt n_tgt*)
     and backward =
       let rec bwd (chain: (term list * term) list) =
         match chain with
@@ -158,8 +194,8 @@ let add (t:term) (pt:proof_term)  (dat:'a) (nargs:int) (impid:int)(c:'a t)
       in
       bwd  (List.rev (Term.implication_chain t (impid+nargs)))
     in
-    {proved  = proved;
-     forward = forward;
+    {proved   = proved;
+     forward  = forward;
      backward = backward}
   in
   let lst = Term_table.unify t nargs c.proved in
