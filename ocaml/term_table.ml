@@ -135,6 +135,7 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
   in
   termtab0 tab nb
 
+
 let term (idx:int) (table:'a t): term =
   (* The term associated with index 'idx' in the table represented by the
      root node 'tab'
@@ -142,13 +143,6 @@ let term (idx:int) (table:'a t): term =
   assert (idx < count table);
   let nargs,_ = data idx table in
   termtab idx nargs table.root 0
-
-
-let domain_of_map (map: 'a IntMap.t): IntSet.t =
-  IntMap.fold
-    (fun i _ set -> IntSet.add i set)
-    map
-    IntSet.empty
 
 
 let add_set_to_map
