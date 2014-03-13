@@ -2,7 +2,9 @@ open Term
 
 type 'a t
 
-val empty: 'a t
+val global: 'a t
+
+val local: int -> 'a t -> 'a t
 
 val count: 'a t -> int
 

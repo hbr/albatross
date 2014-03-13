@@ -20,8 +20,8 @@ type 'a t = {
 
 let count (c:'a t): int = Term_table.count c.proved
 
-let empty: 'a t = {proved=Term_table.empty; forward=Term_table.empty;
-                   backward=Term_table.empty}
+let empty: 'a t = {proved=Term_table.global; forward=Term_table.global;
+                   backward=Term_table.global}
 
 
 
