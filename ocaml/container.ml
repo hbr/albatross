@@ -124,6 +124,8 @@ module Seq: sig
   val count: 'a sequence -> int
   val elem:  'a sequence -> int -> 'a
   val push:  'a sequence -> 'a -> unit
+  val pop:   'a sequence -> int -> unit
+  val keep:  'a sequence -> int -> unit
   val iter:  ('a->unit) -> 'a sequence -> unit
   val iteri: (int->'a->unit) -> 'a sequence -> unit
 end = struct
@@ -150,6 +152,14 @@ end = struct
     in
     assert (cnt < Array.length seq.arr);
     seq.cnt <- cnt+1
+
+  let pop (seq: 'a sequence) (n:int): unit =
+    assert (n <= count seq);
+    seq.cnt <- seq.cnt - n
+
+  let keep (seq: 'a sequence) (n:int): unit =
+    assert (n <= count seq);
+    seq.cnt <- n
 
   let iter f s =
     let rec iter0 i =
