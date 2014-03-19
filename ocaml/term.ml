@@ -53,6 +53,8 @@ module Term: sig
 
   val sub_var: int -> term -> term -> term
 
+  val part_sub: term -> int -> term array -> int -> term
+
   val sub:   term -> term array -> int -> term
 
   val apply: term -> term array -> term
@@ -60,6 +62,12 @@ module Term: sig
   val abstract: term -> int array -> term
 
   val reduce: term -> term
+
+  val lambda_split: term -> int * term
+
+  val unary: int -> term -> term
+
+  val unary_split: term -> int -> term
 
   val binary: int -> term -> term -> term
 
@@ -242,13 +250,21 @@ end = struct
       )
       t
 
+  let part_sub (t:term) (nargs:int) (args:term array) (n_delta:int): term =
+    (** Perform a partial substitution.
 
-  let sub (t:term) (args:term array) (nbound:int): term =
-    (* substitute the free variables 0,1,args.len-1 in term t by the
-       arguments which are from an environment with 'nbound' bound variables,
-       i.e. all free variables above 'len' are shifted up by 'nbound-args.len'
+        The term [t] has [nargs] argument variables. The first
+        [Array.length args] of them will be substituted by the corresponding
+        term in [args] and the others will be shifted down appropriately so
+        that the new term has [(Array.length args)-nargs] argument variables.
+
+        The arguments come from an environment with [n_delta] variables more
+        than the term [t]. Therefore the variables in [t] above [nargs] have
+        to be shifted up by [n_delta] to transform them into the environment
+        of the arguments.
      *)
     let len = Array.length args in
+    assert (len <= nargs);
     map
       (fun j nb ->
         if j<nb then
@@ -256,11 +272,23 @@ end = struct
         else
           let jfree = j-nb in
           if jfree < len then
-            up nb args.(jfree)
+            up (nb+nargs-len) args.(jfree)
+          else if jfree < nargs then
+            Variable (j-len)
           else
-            Variable(j + nbound - len)
+            Variable(j+n_delta-len)
       )
       t
+
+
+  let sub (t:term) (args:term array) (nbound:int): term =
+    (** substitute the free variables 0,1,args.len-1 in term [t] by the
+        arguments [args] which are from an environment with [nbound] bound
+        variables more than the variable of the term [t], i.e. all free
+        variables above [len] are shifted up by [nbound-args.len]
+     *)
+    let len = Array.length args in
+    part_sub t len args nbound
 
 
 
@@ -326,11 +354,29 @@ end = struct
           tred
 
 
+  let lambda_split (t:term): int * term =
+    match t with
+      Lam (n,t) -> n,t
+    | _ -> raise Not_found
+
+
+  let unary (unid:int) (t:term): term =
+    let args = [| t |] in
+    Application (Variable unid, args)
+
+
+  let unary_split (t:term) (unid:int): term =
+    match t with
+      Application (f,args) when (Array.length args) = 1 ->
+        (match f with
+          Variable i when i=unid -> args.(0)
+        | _ -> raise Not_found)
+    | _ -> raise Not_found
+
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| right; left |] in
     Application (Variable binid, args)
-
 
 
   let binary_split (t:term) (binid:int): term * term =
