@@ -375,7 +375,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
           end
       | Application (class_exp,args) -> assert false (*not yet implemented*)
-      | Lam (len,t) ->
+      | Lam (len,names,t) ->
           assert false (*nyi*)
           (*let len = Array.length arr in
           1,

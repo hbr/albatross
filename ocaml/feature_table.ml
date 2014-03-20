@@ -148,7 +148,7 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
         | Some def ->
             let nargs = Sign.arity desc.sign in
             let t = expand_term def nargs ft in
-            Lam (nargs, Term.upbound n nargs t)
+            Lam (nargs, [||], Term.upbound n nargs t)
     )
     t
 
@@ -173,26 +173,29 @@ let term_to_string
   (** Convert the term [t] in an environment with the named variables [names]
       to a string.
    *)
-  let nnames = Array.length names
-  and anon2str (i:int): string = "@" ^ (string_of_int i)
-  in
-  let rec to_string (t:term) (nb:int) (outop: (operator*bool) option): string =
-    (* outop is the optional outer operator and a flag if the current term
-       is the left operand of the outer operator
+  let rec to_string
+      (t:term)
+      (names: int array)
+      (nanon: int)
+      (outop: (operator*bool) option)
+      : string =
+    (* nanon: number of already used anonymous variables
+       outop: the optional outer operator and a flag if the current term
+              is the left operand of the outer operator
      *)
+    let nnames = Array.length names
+    and anon2str (i:int): string = "$" ^ (string_of_int (nanon+i))
+    in
     let var2str (i:int): string =
-      if i<nb then
-        anon2str i
-      else if i < nb + nnames then
-        ST.string names.(i-nb)
+      if i<nnames then
+        ST.string names.(i)
       else
-        feature_name_to_string
-          (Seq.elem ft.features (i-nnames-nb)).fname
+        feature_name_to_string (Seq.elem ft.features (i-nnames)).fname
     and find_op (f:term): operator  =
       match f with
-        Variable i when nnames+nb <= i ->
+        Variable i when nnames <= i ->
           begin
-            match (Seq.elem ft.features (i-nnames-nb)).fname with
+            match (Seq.elem ft.features (i-nnames)).fname with
               FNoperator op -> op
             | _ -> raise Not_found
           end
@@ -201,26 +204,30 @@ let term_to_string
       let nargs = Array.length args in
       if nargs = 1 then
         (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(0) nb (Some (op,false)))
+        ^ (to_string args.(0) names nanon (Some (op,false)))
       else begin
         assert (nargs=2); (* only unary and binary operators *)
-        (to_string args.(0) nb (Some (op,true)))
+        (to_string args.(0) names nanon (Some (op,true)))
         ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(1) nb (Some (op,false)))
+        ^ (to_string args.(1) names nanon (Some (op,false)))
       end
     and app2str (f:term) (args: term array): string =
-      (to_string f nb None)
+      (to_string f names nanon None)
       ^ "("
       ^ (String.concat
            ","
            (List.map
-              (fun t -> to_string t nb None)
+              (fun t -> to_string t names nanon None)
               (Array.to_list args)))
       ^ ")"
-    and lam2str (n:int) (t:term): string =
-      let fargs  = Array.init n (fun i -> anon2str i) in
+    and lam2str (n:int) (nms: int array) (t:term): string =
+      let names = Array.append nms names
+      and nnms  = Array.length nms in
+      assert (nnms=0 || nnms = n);
+      let fargs  = Array.init n (if nnms=0 then anon2str else ST.string)
+      in
       let argstr = String.concat "," (Array.to_list fargs)
-      and tstr   = to_string t (nb+n) None
+      and tstr   = to_string t (Array.append nms names) (nanon+n-nnms) None
       in
       "((" ^ argstr ^ ") -> " ^ tstr ^ ")"
     in
@@ -236,8 +243,8 @@ let term_to_string
             with Not_found ->
               None, app2str f args
           end
-      | Lam (n,t) ->
-          None, lam2str n t
+      | Lam (n,nms,t) ->
+          None, lam2str n nms t
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->
@@ -258,7 +265,7 @@ let term_to_string
           str
     | _ -> str
   in
-  to_string t 0 None
+  to_string t names 0 None
 
 
 

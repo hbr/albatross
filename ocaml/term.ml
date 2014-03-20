@@ -5,7 +5,7 @@ open Container
 type term =
     Variable    of int
   | Application of term * term array
-  | Lam         of int * term
+  | Lam         of int * int array * term
 
 
 exception Term_capture
@@ -41,6 +41,8 @@ module Term: sig
 
   val bound_variables: term -> int -> IntSet.t
 
+  val no_names: term -> term
+
   val map: (int->int->term) -> term -> term
 
   val down_from: int -> int -> term -> term
@@ -63,7 +65,7 @@ module Term: sig
 
   val reduce: term -> term
 
-  val lambda_split: term -> int * term
+  val lambda_split: term -> int * int array * term
 
   val unary: int -> term -> term
 
@@ -97,8 +99,14 @@ end = struct
         fstr ^ "(" ^
         (String.concat "," (List.rev argsstr))
         ^ ")"
-    | Lam(nargs,t) ->
-        let args = Array.init nargs (fun i -> (string_of_int i)) in
+    | Lam(nargs,names,t) ->
+        let nnames = Array.length names in
+        assert (nnames=0 || nnames=nargs);
+        let args = Array.init nargs
+            (fun i ->
+              if nnames = 0 then (string_of_int i)
+              else ST.string names.(i))
+        in
         let argsstr = String.concat "," (Array.to_list args) in
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
@@ -111,7 +119,7 @@ end = struct
       Variable _ -> 1
     | Application (f,args) ->
         (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
-    | Lam (_,t) ->
+    | Lam (_,_,t) ->
         1 + (nodes t)
 
 
@@ -121,7 +129,7 @@ end = struct
       Variable _ -> 0
     | Application (f,args) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,t) ->
+    | Lam (_,_,t) ->
         1 + (depth t)
 
 
@@ -146,7 +154,7 @@ end = struct
               IntSet.union cum_fset fset)
             (fbset,ffset)
             asets
-      | Lam (nargs,t) ->
+      | Lam (nargs,_,t) ->
           bfvars t (nb+nargs) bset fset
     in
     bfvars t nb IntSet.empty IntSet.empty
@@ -167,6 +175,17 @@ end = struct
     bvars
 
 
+  let rec no_names (t:term): term =
+    (** The term [t] with all names in abstractions erased.
+     *)
+    match t with
+      Variable _ -> t
+    | Application (f,args) ->
+        Application (no_names f,
+                     Array.map (fun t -> no_names t) args)
+    | Lam (n,_,t) -> Lam (n, [||], no_names t)
+
+
 
   let map (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
@@ -177,8 +196,8 @@ end = struct
         Variable j -> f j nb
       | Application (a,b) ->
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b)
-      | Lam (nargs,t) ->
-          Lam(nargs, mapr (nb+nargs) t)
+      | Lam (nargs,names,t) ->
+          Lam(nargs, names, mapr (nb+nargs) t)
     in
     mapr 0 t
 
@@ -334,7 +353,7 @@ end = struct
     (* Do all possible beta reductions in the term 't' *)
     let app (f:term) (args: term array): term =
       match f with
-        Lam(nargs,t) ->
+        Lam(nargs,_,t) ->
           assert (nargs=(Array.length args));
           apply t args
       | _ -> Application (f,args)
@@ -346,17 +365,18 @@ end = struct
         and argsr = Array.map reduce args
         in
         app fr argsr
-    | Lam(nargs,t) ->
+    | Lam(nargs,names,t) ->
+        (* assert (0 < nargs); (* bug: why not? *) *)
         let tred = reduce t in
         if 0 < nargs then
-          Lam (nargs, tred)
+          Lam (nargs, names, tred)
         else
-          tred
+          tred  (* ??? *)
 
 
-  let lambda_split (t:term): int * term =
+  let lambda_split (t:term): int * int array * term =
     match t with
-      Lam (n,t) -> n,t
+      Lam (n,names,t) -> n,names,t
     | _ -> raise Not_found
 
 
@@ -597,7 +617,7 @@ end = struct
               raise Not_found;
             uni f1 f2 nb;
             Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
-        | Lam (nb1,t1), Lam (nb2,t2) ->
+        | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
             if nb1=nb2 then
               uni t1 t2 (nb+nb1)
             else

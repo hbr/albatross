@@ -168,7 +168,7 @@ end = struct
           let nargs,t = global idx in
           let term = Term.upbound nb nargs t
           in
-          Lam (nargs,term)
+          Lam (nargs,[||],term)
       | Specialize (pt,args) ->
           (*let t = termr pt nb in
           Term.reduce (Application (t,args))*)

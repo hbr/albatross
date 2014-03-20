@@ -139,7 +139,7 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
       IntMap.iter
         (fun n ttab ->
           let t = termtab0 ttab (nb+n) in
-          raise (Term_found (Lam (n,t))))
+          raise (Term_found (Lam (n,[||],t))))
         lam
     in
     try
@@ -175,7 +175,7 @@ let add_set_to_map
     (set:IntSet.t)
     (map: Term_sub.t IntMap.t)
     : Term_sub.t IntMap.t =
-  (** Add for each index of the set [set] and empty substitution to the map
+  (** Add for each index of the set [set] an empty substitution to the map
       [map] *)
   IntSet.fold
     (fun idx map ->
@@ -227,24 +227,13 @@ let merge_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
 
 
 
-let write_map (map: Term_sub.t IntMap.t) (level:int): unit =
-  IntMap.iter
-    (fun idx sub ->
-      Printf.printf "%d: idx=%d, sub=%s\n" level idx (Term_sub.to_string sub)
-    )
-    map
-
-
-
-
-
 
 let unify (t:term) (nbt:int) (table:t)
     :  (int * Term_sub.t) list =
   (** Unify the term [t] which comes from an environment with [nbt] bound
       variables with the terms in the table 'table'.
 
-      The result is a list of tuples (nargs,idx,sub) where the unified
+      The result is a list of tuples (idx,sub) where the unified
       term [ut] has the index [idx], and applying
       the substitution [sub] to [ut] yields the term [t].
    *)
@@ -292,7 +281,7 @@ let unify (t:term) (nbt:int) (table:t)
             basic_subs
         end in
         res
-    | Lam (n,t) ->
+    | Lam (n,_,t) ->
         try
           let ttab = IntMap.find n tab.lams in
           let tmap = uni t ttab (nb+n) in
@@ -371,7 +360,7 @@ let add_term
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
-      | Lam (n,t) ->
+      | Lam (n,_,t) ->
           let ttab =
             try IntMap.find n tab.lams
             with Not_found -> empty_node
