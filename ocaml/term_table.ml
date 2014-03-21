@@ -3,19 +3,25 @@ open Term
 
 type 'a t = {
     table: Term_table0.t;
+    count: int;
+    nbenv: int;
     data:  (int * 'a) IntMap.t
   }
 
 
 
 
-let global = {table = Term_table0.global; data = IntMap.empty}
+let global = {table = Term_table0.empty;
+              count = 0; nbenv = 0;
+              data = IntMap.empty}
 
 let local (nb:int) (t: 'a t): 'a t =
-  {t with table = Term_table0.local nb t.table}
+  {t with nbenv = t.nbenv+nb}
 
-let count (t: 'a t): int = Term_table0.count t.table
 
+let count (t: 'a t): int = t.count
+
+let count_environment (t: 'a t): int = t.nbenv
 
 let data  (i:int) (t:'a t): int * 'a =
   assert (i < count t);
@@ -73,7 +79,9 @@ let add (t:term) (nargs:int) (dat:'a) (table:'a t): 'a t =
   let idx = count table
   in
   let table =
-    {table = Term_table0.add t nargs table.table;
+    {table with
+     table = Term_table0.add t nargs table.nbenv idx table.table;
+     count = table.count + 1;
      data  = IntMap.add idx (nargs,dat) table.data}
   in
   assert ((nargs,dat) = data ((count table)-1) table);

@@ -57,26 +57,20 @@ open Container
 open Term
 
 
-type node = {
+type t = {
     avars: int IntMap.t;      (* idx -> argument variable *)
     bvars: IntSet.t IntMap.t; (* bvar -> idx set *)
     cvars: (int * IntSet.t IntMap.t) list;
                               (* [nbenv, cvar -> idx set] *)
-    fapps:    (node * node array) IntMap.t;
-                                (* one for each number of arguments *)
-    lams:  node IntMap.t      (* one for each number of bindings *)
-  }
-
-
-type t = {
-    count: int;
-    nbenv: int;
-    root:  node;
+    fapps: (t * t array) IntMap.t;
+                              (* one for each number of arguments *)
+    lams:  t IntMap.t         (* one for each number of bindings *)
   }
 
 
 
-let empty_node = {
+
+let empty = {
   avars = IntMap.empty;
   bvars = IntMap.empty;
   cvars = [];
@@ -86,29 +80,15 @@ let empty_node = {
 
 
 
-let global = {count = 0; nbenv = 0; root = empty_node}
-
-
-let local (nb: int) (t: t): t =
-  assert (0 <= nb);
-  {t with nbenv = nb + t.nbenv}
-
-
-
-let count (t:t): int = t.count
-
-let count_environment (t:t): int = t.nbenv
-
-
 
 exception Term_found of term
 
 
-let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
+let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
   (** The term associated with index [idx] having [nargs] argument variables
       of the node [tab] with [nb] bound variables.
    *)
-  let rec termtab0 (tab:node) (nb:int): term =
+  let rec termtab0 (tab:t) (nb:int): term =
     let aterm (avar: int IntMap.t): unit =
       try
         let i = nb + IntMap.find idx avar in
@@ -122,7 +102,7 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
             raise (Term_found (Variable (ovar+n)))
         )
         ovars
-    and fapp_term (fapp: (node * node array) IntMap.t): unit =
+    and fapp_term (fapp: (t * t array) IntMap.t): unit =
       IntMap.iter
         (fun len (ftab,argtabs) ->
           assert (len = (Array.length argtabs));
@@ -135,7 +115,7 @@ let termtab (idx:int) (nargs:int) (tab:node) (nb:int): term =
             ()
         )
         fapp
-    and lam_term (lam: node IntMap.t): unit =
+    and lam_term (lam: t IntMap.t): unit =
       IntMap.iter
         (fun n ttab ->
           let t = termtab0 ttab (nb+n) in
@@ -164,8 +144,7 @@ let term (idx:int) (nargs:int) (table:t): term =
   (** The term associated with index [idx] with [nargs] arguments  in the
       table [table].
    *)
-  assert (idx < count table);
-  termtab idx nargs table.root 0
+  termtab idx nargs table 0
 
 
 
@@ -237,7 +216,7 @@ let unify (t:term) (nbt:int) (table:t)
       term [ut] has the index [idx], and applying
       the substitution [sub] to [ut] yields the term [t].
    *)
-  let rec uni (t:term) (tab:node) (nb:int): Term_sub.t IntMap.t =
+  let rec uni (t:term) (tab:t) (nb:int): Term_sub.t IntMap.t =
     assert (nb=0); (* as long as there are no lambda terms *)
     let basic_subs: Term_sub.t IntMap.t =
       IntMap.map (fun avar -> Term_sub.singleton avar t) tab.avars
@@ -290,7 +269,7 @@ let unify (t:term) (nbt:int) (table:t)
           basic_subs
   in
   try
-    let map = uni t table.root 0 in
+    let map = uni t table 0 in
     let res =
       IntMap.fold
         (fun i sub lst -> (i,sub)::lst)
@@ -318,10 +297,10 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
 
 
 
-let add_term
+let add
     (t:term) (nargs:int) (nbenv:int)
     (idx:int)
-    (tab:node): node =
+    (tab:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
       environment with [nvenv] variables to the index [idx]
       within the node [tab].
@@ -335,7 +314,7 @@ let add_term
     with Not_found ->
       IntMap.add i (IntSet.singleton idx) map
   in
-  let rec add0 (t:term) (nb:int) (tab:node): node =
+  let rec add0 (t:term) (nb:int) (tab:t): t =
     let tab =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
@@ -365,7 +344,7 @@ let add_term
             try
               IntMap.find len tab.fapps
             with Not_found ->
-              empty_node, Array.make len empty_node
+              empty, Array.make len empty
           in
           let ftab    = add0 f nb ftab
           and argtabs =
@@ -375,7 +354,7 @@ let add_term
       | Lam (n,_,t) ->
           let ttab =
             try IntMap.find n tab.lams
-            with Not_found -> empty_node
+            with Not_found -> empty
           in
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
@@ -383,21 +362,3 @@ let add_term
     tab
   in
   add0 t 0 tab
-
-
-
-
-
-
-
-let add (t:term) (nargs:int) (table:t): t =
-  (** Add the term [t] which has [nargs] arguments to the table [table].
-   *)
-  let idx = count table
-  in
-  let table =
-    { table with
-      count = idx+1;
-      root  = add_term t nargs table.nbenv idx table.root} in
-  assert (t = term ((count table)-1) nargs table);
-  table
