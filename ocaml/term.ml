@@ -71,6 +71,10 @@ module Term: sig
 
   val unary_split: term -> int -> term
 
+  val quantified: int -> int -> int array -> term -> term
+
+  val quantifier_split: term -> int -> int * int array * term
+
   val binary: int -> term -> term -> term
 
   val binary_split: term -> int -> term * term
@@ -387,9 +391,12 @@ end = struct
 
   let unary_split (t:term) (unid:int): term =
     match t with
-      Application (f,args) when (Array.length args) = 1 ->
+      Application (f,args) ->
+        let nargs = Array.length args in
         (match f with
-          Variable i when i=unid -> args.(0)
+          Variable i when i=unid ->
+            if nargs=1 then args.(0)
+            else assert false
         | _ -> raise Not_found)
     | _ -> raise Not_found
 
@@ -401,12 +408,27 @@ end = struct
 
   let binary_split (t:term) (binid:int): term * term =
     match t with
-      Application (f,args) when (Array.length args) = 2 ->
+      Application (f,args) ->
+        let nargs = Array.length args in
         (match f with
           Variable i when i=binid ->
-            (args.(0), args.(1))
+            if nargs = 2 then
+              (args.(0), args.(1))
+            else assert false
         | _ -> raise Not_found)
     | _ -> raise Not_found
+
+
+
+  let quantified (quantid:int) (nargs:int) (names:int array) (t:term): term =
+    unary quantid (Lam (nargs,names,t))
+
+
+
+  let quantifier_split (t:term) (quantid:int): int * int array * term =
+    let lam = unary_split t quantid in
+    try lambda_split lam
+    with Not_found -> assert false
 
 
 
