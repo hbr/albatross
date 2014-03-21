@@ -14,5 +14,7 @@ val term:  int -> int -> t -> term
 
 val unify: term -> int -> t -> (int * Term_sub.t) list
 
+val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
+
 val add: term -> int -> t -> t
 

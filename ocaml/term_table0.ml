@@ -304,21 +304,32 @@ let unify (t:term) (nbt:int) (table:t)
 
 
 
+let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
+    :  (int * Term_sub.t) list =
+  (** Unify the terms in the table [table] with term [t] which has [nargs]
+      arguments and comes from an environment with [nbenv] variables.
+
+      The result is a list of tuples (idx,sub) where applying the substitution
+      [sub] to the term [t] yields the term at [idx].
+   *)
+  assert false
+
 
 
 
 
 let add_term
-    (t:term) (nargs:int)
+    (t:term) (nargs:int) (nbenv:int)
     (idx:int)
-    (tab:node) (nbenv:int): node =
-  (** Associate the term [t] which has [nargs] arguments to the index [idx]
-      within the node [tab] which pertains to an environment with [nbnev]
-      bound variables
+    (tab:node): node =
+  (** Associate the term [t] which has [nargs] arguments and comes from an
+      environment with [nvenv] variables to the index [idx]
+      within the node [tab].
    *)
   let newmap (i:int) (map: IntSet.t IntMap.t): IntSet.t IntMap.t =
     try
       let idxset = IntMap.find i map in
+      assert (not (IntSet.mem idx idxset));
       let idxset = IntSet.add idx idxset in
       IntMap.add i idxset map
     with Not_found ->
@@ -329,6 +340,7 @@ let add_term
       match t with
         Variable i when nb<=i && i<nb+nargs ->
           (* variable is a formal argument which can be substituted *)
+          assert (not (IntMap.mem idx tab.avars));
           {tab with avars = IntMap.add idx (i-nb) tab.avars}
       | Variable i when nb+nargs <= i ->
           (* variable is a constant (i.e. not substitutable *)
@@ -386,6 +398,6 @@ let add (t:term) (nargs:int) (table:t): t =
   let table =
     { table with
       count = idx+1;
-      root  = add_term t nargs idx table.root table.nbenv} in
+      root  = add_term t nargs table.nbenv idx table.root} in
   assert (t = term ((count table)-1) nargs table);
   table
