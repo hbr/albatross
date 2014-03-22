@@ -667,6 +667,7 @@ module Term_sub: sig
   val count:          t -> int
   val is_injective:   t -> bool
   val empty:          t
+  val is_empty:       t -> bool
   val singleton:      int -> term -> t
   val find:           int -> t -> term
   val mem:            int -> t -> bool
@@ -721,6 +722,8 @@ end = struct
 
 
   let empty = IntMap.empty
+
+  let is_empty(sub:t) = IntMap.is_empty sub
 
   let singleton (i:int) (t:term): t =
     IntMap.add i t IntMap.empty
