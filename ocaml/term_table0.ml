@@ -268,17 +268,14 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
   in
-  try
-    let map = uni t table 0 in
-    let res =
-      IntMap.fold
-        (fun i sub lst -> (i,sub)::lst)
-        map
-        []
-    in
-    res
-  with Not_found ->
-    raise Not_found
+  let map = uni t table 0 in
+  let res = (* convert map to list *)
+    IntMap.fold
+      (fun i sub lst -> (i,sub)::lst)
+      map
+      []
+  in
+  res
 
 
 
