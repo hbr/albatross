@@ -101,7 +101,7 @@ end = struct
         and argsstr = Array.to_list (Array.map to_string args)
         in
         fstr ^ "(" ^
-        (String.concat "," (List.rev argsstr))
+        (String.concat "," argsstr)
         ^ ")"
     | Lam(nargs,names,t) ->
         let nnames = Array.length names in
@@ -675,6 +675,7 @@ module Term_sub: sig
   val merge:          t -> t -> t
   val arguments:      int -> t -> term array
   val domain:         t -> IntSet.t
+  val is_covering:    term -> int -> t -> bool
   val apply_0:        term -> int -> t -> bool -> term
   val apply_covering: term -> int -> t -> term
   val apply:          term -> int -> t -> term * int
