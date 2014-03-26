@@ -35,6 +35,9 @@ module Term: sig
 
   val depth: term -> int
 
+  val fold: ('a -> int -> 'a) -> 'a -> term -> 'a
+  val fold_arguments: ('a -> int -> 'a) -> 'a -> term -> int -> 'a
+
   val split_variables: term -> int -> IntSet.t * IntSet.t
 
   val free_variables: term -> int -> IntSet.t
@@ -84,6 +87,12 @@ module Term: sig
   val implication_chain2: term -> int -> term list * term
 
   val implication_chain: term -> int -> (term list * term) list
+
+  val is_normalized: term -> int -> bool
+  val used_args: term -> int -> int array
+  val normalizing_args: term -> int -> term array * int
+  val normalize: term -> int -> term * int
+  val keep_used: int array -> term -> int -> term
 
 end = struct
 
@@ -138,30 +147,47 @@ end = struct
 
 
 
-  let split_variables (t:term) (nb:int): IntSet.t * IntSet.t =
-    (* The set of bound variables strictly below 'n' and above 'n'
-       in the term 't' *)
-    let rec bfvars t nb bset fset =
+  let fold (f:'a->int->'a) (a:'a) (t:term): 'a =
+    (** Fold the variables in the order in which they appear in the term
+        [t] with the function [f] and accumulate the results in [a].
+     *)
+    let rec fld (a:'a) (t:term) (nb:int): 'a =
       match t with
         Variable i ->
-          if i<nb then
-            (IntSet.add i bset), fset
-          else
-            bset, (IntSet.add i fset)
+          f a (i-nb)
       | Application (f,args) ->
-          let fbset,ffset = bfvars f nb bset fset
-          and asets = Array.map (fun t -> bfvars t nb bset fset) args
-          in
-          Array.fold_left
-            (fun (cum_bset,cum_fset) (bset,fset) ->
-              IntSet.union cum_bset bset,
-              IntSet.union cum_fset fset)
-            (fbset,ffset)
-            asets
-      | Lam (nargs,_,t) ->
-          bfvars t (nb+nargs) bset fset
+          let a = fld a f nb in
+          Array.fold_left (fun a t -> fld a t nb) a args
+      | Lam (n,_,t) ->
+          fld a t (nb+n)
     in
-    bfvars t nb IntSet.empty IntSet.empty
+    fld a t 0
+
+
+  let fold_arguments (f:'a->int->'a) (a:'a) (t:term) (nargs:int): 'a =
+    (** Fold the arguments in the order in which they appear in the term
+        [t] with [nargs] arguments with the function [f] and accumulate
+        the results in [a].
+     *)
+    let fargs a i =
+      if i < nargs then f a i else a
+    in
+    fold fargs a t
+
+
+  let split_variables (t:term) (n:int): IntSet.t * IntSet.t =
+    (** The set of bound variables strictly below [n] and above [n]
+       in the term [t].
+     *)
+    fold
+      (fun (lset,uset) i ->
+        if i < n then
+          IntSet.add i lset, uset
+        else
+          lset, IntSet.add i uset)
+      (IntSet.empty,IntSet.empty)
+      t
+
 
 
   let free_variables (t:term) (nb:int): IntSet.t =
@@ -500,6 +526,100 @@ end = struct
         [([],t)]
     in
     chainr t
+
+
+  exception Out_of_order
+
+  let is_normalized (t:term) (nargs:int): bool =
+    (** Is the term [t] with [nargs] arguments normalized, i.e. do all
+        its arguments appear in ascending order and do all argumens
+        appear?
+     *)
+    try
+      nargs = fold_arguments
+        (fun n i -> (* [n] is the number of arguments which already have
+                       appeared in ascending order *)
+          assert (i < nargs);
+          if i<n then n
+          else if i=0 then n+1
+          else raise Out_of_order)
+        0  t nargs
+    with Out_of_order -> false
+
+
+  let normalize_base (t:term) (nargs:int): int array * int =
+    (** Find for the term [t] with [nargs] arguments which
+        normalize the term and the number of used variables.
+
+        To normalize the term [t] apply
+        [sub t (Array.map Variable args) nused].
+     *)
+    assert (0 < nargs);
+    let arr   = Array.make nargs (-1)
+    in
+    let nused =
+      fold_arguments
+        (fun n i ->
+          assert (i < nargs);
+          if arr.(i) <> -1 then
+            n
+          else
+            (arr.(i) <- n;  n+1))
+        0  t nargs
+    in
+    arr, nused
+
+
+
+  let used_args (t:term) (nargs:int): int array =
+    (** The used arguments of the the term [t] with [nargs] arguments
+        in the order in which they appear in the term.
+     *)
+    let arr, n = normalize_base t nargs in
+    Array.of_list
+      (Array.fold_right
+         (fun i lst -> if i<>(-1) then i::lst else lst)
+         arr
+         [])
+
+
+
+  let normalizing_args (t:term) (nargs:int): term array * int =
+    (** Find for the term [t] with [nargs] arguments which
+        normalize the term and the number of used variables.
+
+        To normalize the term [t] apply [sub t args nused].
+     *)
+    assert (0 < nargs);
+    let args, nused = normalize_base t nargs
+    in
+    Array.map (fun i -> Variable i) args,
+    nused
+
+  let normalize (t:term) (nargs:int): term * int =
+    let args,n = normalizing_args t nargs in
+    let tnorm = sub t args n              in
+    assert (is_normalized tnorm n);
+    t,n
+
+
+
+  let keep_used (used: int array) (t:term) (nargs:int): term =
+    (** Keep the used arguments [used] within the term [t] with
+        [nargs] arguments as the first [0,1,..,nused-1] variables.
+
+        Note: [used] must contain all used variables of the term [t]!
+     *)
+    let nused = Array.length used in
+    assert (nused <= nargs);
+    let args = Array.make nargs (Variable (-1))in
+    Array.iteri
+      (fun i var ->
+        assert (var < nargs);
+        args.(var) <- Variable i)
+      used;
+    sub t args nused
+
 end (* Term *)
 
 
