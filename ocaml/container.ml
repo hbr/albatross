@@ -17,7 +17,10 @@ module Search: sig
   val array_find_min: 'a -> 'a array -> int
 end = struct
   let binsearch_max (el:'a) (arr: 'a array) =
-    (* returns the maximal index where el can to be inserted *)
+    (** The maximal index where [el] can be inserted into the array [arr]
+        without disturbing the order.
+
+        The algorithm assumes that the array is sorted *)
     let len = Array.length arr
     in
     (* all k: 0<=k<=i => arr.(k)<=el   *)
@@ -258,7 +261,7 @@ module ArrayedSet: Set = struct
     in
     0<idx && set.(idx-1)=el
 
-  let plus_elem (el:'a) (set:'a set) =
+  let plus_elem (el:'a) (set:'a set): 'a set =
     let i = Search.binsearch_max el set;
     and len = Array.length set
     in
@@ -271,7 +274,7 @@ module ArrayedSet: Set = struct
           else if j=i then el
           else set.(j-1))
 
-  let plus_set s1 s2 =
+  let plus_set (s1:'a set) (s2:'a set): 'a set =
     let rec plus i =
       if i=0 then s1
       else plus_elem s2.(i-1) s1
