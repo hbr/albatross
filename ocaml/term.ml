@@ -38,6 +38,8 @@ module Term: sig
   val fold: ('a -> int -> 'a) -> 'a -> term -> 'a
   val fold_arguments: ('a -> int -> 'a) -> 'a -> term -> int -> 'a
 
+  val least_free: term -> int
+
   val split_variables: term -> int -> IntSet.t * IntSet.t
 
   val free_variables: term -> int -> IntSet.t
@@ -148,13 +150,13 @@ end = struct
 
 
   let fold (f:'a->int->'a) (a:'a) (t:term): 'a =
-    (** Fold the variables in the order in which they appear in the term
-        [t] with the function [f] and accumulate the results in [a].
+    (** Fold the free variables in the order in which they appear in the
+        term [t] with the function [f] and accumulate the results in [a].
      *)
     let rec fld (a:'a) (t:term) (nb:int): 'a =
       match t with
         Variable i ->
-          f a (i-nb)
+          if nb <= i then f a (i-nb) else a
       | Application (f,args) ->
           let a = fld a f nb in
           Array.fold_left (fun a t -> fld a t nb) a args
@@ -173,6 +175,17 @@ end = struct
       if i < nargs then f a i else a
     in
     fold fargs a t
+
+
+  let least_free (t:term): int =
+    (** The least free variable of the term [t] or [-1] if the term does not
+        have free variables.
+     *)
+    fold
+      (fun least i ->
+        if least = (-1) || i < least then i
+        else least)
+      (-1) t
 
 
   let split_variables (t:term) (n:int): IntSet.t * IntSet.t =
