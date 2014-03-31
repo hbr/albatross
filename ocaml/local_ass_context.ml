@@ -75,6 +75,13 @@ let backward_set (t:term) (c:t): BwdSet.t =
     BwdSet.empty
 
 
+let prune_backward_set (t:term) (e:BwdSet.elt) (c:t): t =
+  assert (TermMap.mem t c.map);
+  let desc    = TermMap.find t c.map            in
+  let bwd_set = BwdSet.remove e desc.bwd_set    in
+  let desc    = {desc with bwd_set = bwd_set}   in
+  {c with map = TermMap.add t desc c.map}
+
 
 let consequences (t:term) (pt:proof_term) (c:t): proof_pair list =
   (* The direct consequences of the term 't' with the proof term 'pt' within

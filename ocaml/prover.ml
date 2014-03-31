@@ -230,13 +230,16 @@ let prove
         end
           else ()
       end;
-      let _ = BwdSet.iter
-          (fun (_,_,premises,pt) ->
+      let _ = BwdSet.fold
+          (fun (nps,pset,premises,pt) c ->
             try
               do_trace (trace_premises premises (level+1));
+              let c1 = Local_ass_context.prune_backward_set
+                  t (nps,pset,premises,pt) c
+              in
               let pt_lst =
                 List.rev_map
-                  (fun t -> prove_one t c tried (level+2))
+                  (fun t -> prove_one t c1 tried (level+2))
                   premises
               in
               let rec use_premises
@@ -250,9 +253,10 @@ let prove
                 in
               do_trace (trace_term "Success" t level);
               raise (Proof_found (use_premises pt_lst pt))
-            with Cannot_prove -> ()
+            with Cannot_prove -> c
           )
           bwd_set
+          c
       in
       (* All alternatives failed (or maybe there are no alternatives) *)
       ()

@@ -22,6 +22,7 @@ feature     -- Basic functions and axioms
 
     all(a:BOOLEAN)
         note built_in ensure
+            truth:         true
             indirect:      (not a => false) => a
             refutation:    (a => false)     => not a
             contradiction: not a => a => false
@@ -67,7 +68,7 @@ feature     -- Basic functions and axioms
 end
 
 
-feature
+feature                  -- Commutativity and associativity of 'and' / 'or'
     all(a,b:BOOLEAN)
         ensure
             (a and b) = (b and a)
@@ -79,10 +80,12 @@ feature
         end
 
     all(a,b:BOOLEAN)
+        require
+            a or b
         check
-            a or b => (a => b or a) => (b => b or a) => b or a
+            (a => b or a) => (b => b or a) => b or a
         ensure
-            a or b => b or a
+            b or a
         end
 
     all(a,b:BOOLEAN)
@@ -95,23 +98,9 @@ feature
         require
             a or b
         check
-            -- b => b or c
-
-            -- b or c => a or (b or c)
-
-            -- b => a or (b or c)
-
-            a or b
-            => (a => a or (b or c))
+            (a => a or (b or c))
             => (b => a or (b or c))
             => a or (b or c)
-        ensure
-            a or (b or c)
-        end
-
-    lemma: all(a,b,c:BOOLEAN)
-        require
-            c
         ensure
             a or (b or c)
         end
@@ -128,13 +117,6 @@ feature
             a or (b or c)
         end
 
-    lemma: all(a,b,c:BOOLEAN)
-        require
-            a or (b or c)
-        ensure
-            (a or b) or c
-        end
-
     all(a,b,c:BOOLEAN)
         ensure
             (a or b or c) = ((a or b) or c)
@@ -144,40 +126,28 @@ end
 
 feature     -- Distributivity of "and"
 
-    all(a,b,c:BOOLEAN)
+    lemma: all(a,b,c:BOOLEAN)
         require
            a and (b or c)
         check
-           a
-
-           b or c
-
-           b or c
-           => (b => (a and b) or (a and c))
+           (b => (a and b) or (a and c))
            => (c => (a and b) or (a and c))
            => (a and b) or (a and c)
         ensure
            (a and b) or (a and c)
         end
 
-    all(a,b,c:BOOLEAN)
+    lemma: all(a,b,c:BOOLEAN)
         require
            (a and b) or (a and c)
         check
-           (a and b) or (a and c)
-           => (a and b => a)
+           (a and b => a)
            => (a and c => a)
            => a
 
-           (a and b) or (a and c) => a
-
-           (a and b) or (a and c)
-           => (a and b => b or c)
+           (a and b => b or c)
            => (a and c => b or c)
            => b or c
-
-           (a and b) or (a and c) => b or c
-
         ensure
            a and (b or c)
         end
@@ -192,33 +162,27 @@ end
 
 feature     -- Distributivity of "or"
 
-    all(a,b,c:BOOLEAN)
+    lemma: all(a,b,c:BOOLEAN)
         require
             a or (b and c)
         check
-            a => (a or b) and (a or c)
-
-            (b and c) => (a or b) and (a or c)
-
-            a or (b and c)
-            => (a => (a or b) and (a or c))
+            (a => (a or b) and (a or c))
             => ((b and c) => (a or b) and (a or c))
             => (a or b) and (a or c)
         ensure
             (a or b) and (a or c)
         end
 
-    all(a,b,c:BOOLEAN)
+    lemma: all(a,b,c:BOOLEAN)
         require
-            (a or b) and (a or c)
-        check
             a or b
-            => (a => a or (b and c))
+            a or c
+        check
+            (a => a or (b and c))
             => (b => a or (b and c))
             => a or (b and c)
 
-            a or c
-            => (a => a or (b and c))
+            (a => a or (b and c))
             => (c => a or (b and c))
             => a or (b and c)
         ensure
@@ -230,9 +194,90 @@ feature     -- Distributivity of "or"
             (a or (b and c)) = ((a or b) and (a or c))
         end
 
-    all(c,b,a:BOOLEAN)
+    some_test: all(c,b,a:BOOLEAN)
         ensure
             (a or (b and c)) = ((a or b) and (a or c))
         end
 
+end
+
+
+feature                       -- top and bottom
+    lemma: all(a:BOOLEAN)
+        require
+            a
+        ensure
+            a or false
+        end
+
+    lemma: all(a:BOOLEAN)
+        require
+            a or false
+        check
+            not a => a => false
+
+            (a or false)
+            => (a     => not a => false)
+            => (false => not a => false)
+            => not a => false
+
+            not a => false
+        ensure
+            a
+        end
+
+    all(a:BOOLEAN)
+        ensure
+           (a or false)  =  a
+           (a and true)  =  a
+        end
+
+
+    all(a:BOOLEAN)
+        check
+            false => not a => false
+            false => not not a => false
+            false => a
+            false => not a
+
+            not a => a => false
+        ensure
+           (a and not a) =  false
+        end
+
+    lemma: all(a,b:BOOLEAN)
+        require
+            not a => not b
+            b
+        check
+            not b => b => false
+            (not a => false) => a
+        ensure
+            a
+        end
+
+    lemma: all(a,b:BOOLEAN)
+        require
+            a => b
+            not b
+        check
+            not b => b => false
+            (a => false) => not a
+        ensure
+            not a
+        end
+
+    all(a:BOOLEAN)
+        check
+           a => a or not a
+           not a => a or not a
+
+           not (a or not a) => not a
+           not (a or not a) => not not a
+           not not a => not a => false
+
+           not (a or not a) => false
+        ensure
+           (a or not a)  =  true
+        end
 end

@@ -49,6 +49,27 @@ feature {NONE}    -- Function definitions
         end
 end
 
+    lemma: all(a,b:BOOLEAN)
+        require
+            a or b
+        check
+            (a or b) => not b => not not a
+        ensure
+            b or a
+        end
+
+    all(a:BOOLEAN)
+       ensure
+           -- e00: a or (false => a)
+           e01: a or (a => false)
+           -- e0: a or false = a
+           -- e1: a => true
+           -- e2: a and (true => a)   -- loops in combination with 'e0' and 'e01'
+           -- e3: a and (a => true)   -- loops in combination with 'e0' and 'e01'
+           -- e4: a and true = a   -- loops in combination with 'e0' and 'e01'
+       end
+
+
 
 feature         -- Constants / Negation
 
@@ -70,7 +91,6 @@ feature         -- Constants / Negation
             not false
         end
 end
-
 
 
 feature         -- Conjunction
@@ -95,6 +115,8 @@ feature         -- Conjunction
         end
 
 end
+
+
 
 
 feature         -- Disjunction
@@ -173,10 +195,12 @@ feature              -- Boolean algebra
         end
 
     lemma: all(a,b:BOOLEAN)
+        require
+            a or b
         check
-            a or b => (a => b or a) => (b => b or a) => b or a
+            (a or b) => not b => not not a
         ensure
-            (a or b) => (b or a)
+            b or a
         end
 
     or_commutativity:  all(a,b:BOOLEAN)
@@ -205,5 +229,25 @@ feature              -- Boolean algebra
             => ((a and c) => a and (b or c))
             => (a and (b or c))
             a and (b or c)
+        end
+
+    and_distributivity:
+    all(a,b,c:BOOLEAN)
+        ensure
+            (a and (b or c)) =  ((a and b) or (a and c))
+        end
+
+    or_distributivity:
+    all(a,b,c:BOOLEAN)
+        ensure
+            (a or (b and c)) = ((a or b) and (a or c))
+        end
+
+    all(a:BOOLEAN)
+        ensure
+           (a or false)  =  a
+           (a and true)  =  a
+           (a and not a) =  false
+           (a or not a)  =  true
         end
 end
