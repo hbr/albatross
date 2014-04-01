@@ -56,12 +56,12 @@ Each node of the tree has the following information
 open Container
 open Term
 
+type submap = Term_sub.t IntMap.t   (* idx -> sub *)
 
 type nd = {
-    avars: (int*int) IntMap.t;(* idx -> (argument variable, nargs) *)
-    bvars: IntSet.t IntMap.t; (* bvar -> idx set *)
-    cvars: (int * IntSet.t IntMap.t) list;
-                              (* [nbenv, cvar -> idx set] *)
+    avars: (int*int) IntMap.t;  (* idx -> (argument variable, nargs) *)
+    bvars: submap IntMap.t;     (* bvar -> idx -> sub *)
+    cvars: (int * submap IntMap.t) list; (* [nbenv, cvar -> idx -> sub] *)
     fapps: (nd * nd array) IntMap.t;
                               (* one for each number of arguments *)
     lams:  nd IntMap.t        (* one for each number of bindings *)
@@ -99,10 +99,10 @@ let termtab (idx:int) (nargs:int) (tab:nd) (nb:int): term =
         raise (Term_found (Variable i))*)
       with Not_found ->
         ()
-    and oterm (ovars: IntSet.t IntMap.t) (n:int): unit =
+    and oterm (ovars: submap IntMap.t) (n:int): unit =
       IntMap.iter
-        (fun ovar set ->
-          if IntSet.mem idx set then
+        (fun ovar map ->
+          if IntMap.mem idx map then
             raise (Term_found (Variable (ovar+n)))
         )
         ovars
@@ -154,24 +154,8 @@ let term (idx:int) (nargs:int) (table:t): term =
 
 
 
-let add_set_to_map
-    (set:IntSet.t)
-    (map: Term_sub.t IntMap.t)
-    : Term_sub.t IntMap.t =
-  (** Add for each index of the set [set] an empty substitution to the map
-      [map] *)
-  IntSet.fold
-    (fun idx map ->
-      assert (not (IntMap.mem idx map));  (* Cannot overwrite a substitution
-                                             for an index *)
-      IntMap.add idx Term_sub.empty map)
-    set
-    map
-
-
-
-let join_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
-    : Term_sub.t IntMap.t =
+let join_map (m1: submap) (m2: submap)
+    : submap =
   (* Join the two disjoint maps 'm1' and 'm2' *)
   IntMap.fold
     (fun idx sub2 map ->
@@ -184,8 +168,8 @@ let join_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
 
 
 
-let merge_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
-    : Term_sub.t IntMap.t =
+let merge_map (m1: submap) (m2: submap)
+    : submap =
   (* Merge the two maps 'm1' and 'm2'
 
      The domain of the merge is the subset of the intersection of both domains
@@ -209,7 +193,7 @@ let merge_map (m1: Term_sub.t IntMap.t) (m2: Term_sub.t IntMap.t)
 
 
 
-let map_to_list(map: Term_sub.t IntMap.t): (int * Term_sub.t) list =
+let map_to_list(map: submap): (int * Term_sub.t) list =
   IntMap.fold
     (fun i sub lst -> (i,sub)::lst)
     map
@@ -225,16 +209,16 @@ let unify (t:term) (nbt:int) (table:t)
       term [ut] has the index [idx], and applying
       the substitution [sub] to [ut] yields the term [t].
    *)
-  let rec uni (t:term) (tab:nd) (nb:int): Term_sub.t IntMap.t =
+  let rec uni (t:term) (tab:nd) (nb:int): submap =
     assert (nb=0); (* as long as there are no lambda terms *)
-    let basic_subs: Term_sub.t IntMap.t =
+    let basic_subs: submap =
       IntMap.map (fun (avar,nargs) -> Term_sub.singleton avar t) tab.avars
     and subs
         (i:int)
-        (mp:IntSet.t IntMap.t)
-        (base:Term_sub.t IntMap.t) : Term_sub.t IntMap.t =
+        (mp: submap IntMap.t)
+        (base: submap) : submap =
       try
-        add_set_to_map (IntMap.find i mp) base
+        join_map (IntMap.find i mp) base
       with Not_found -> base
     in
     match t with
@@ -281,7 +265,7 @@ let unify (t:term) (nbt:int) (table:t)
 
 
 
-
+(*
 let closed_terms (table:t): (term * int) list =
   (** The list of all closed terms in the table together with the
       indices.
@@ -320,7 +304,7 @@ let closed_terms (table:t): (term * int) list =
     lams (fapps (cterms (bterms lst)))
   in
   terms table.node 0 []
-
+*)
 
 
 let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
@@ -331,7 +315,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
       The result is a list of tuples (idx,sub) where applying the substitution
       [sub] to the term [t] yields the term at [idx].
    *)
-  let rec uniw (t:term) (tab:t) (nb:int): Term_sub.t IntMap.t =
+  let rec uniw (t:term) (tab:t) (nb:int): submap =
     match t with
       Variable i when i < nb ->
         assert false
@@ -357,14 +341,14 @@ let add
       within the node [tab].
    *)
   assert (table.next_idx <= idx);
-  let newmap (i:int) (map: IntSet.t IntMap.t): IntSet.t IntMap.t =
+  let newmap (i:int) (map: submap IntMap.t): submap IntMap.t =
     try
-      let idxset = IntMap.find i map in
-      assert (not (IntSet.mem idx idxset));
-      let idxset = IntSet.add idx idxset in
-      IntMap.add i idxset map
+      let idxmap = IntMap.find i map in
+      assert (not (IntMap.mem idx idxmap));
+      let idxmap = IntMap.add idx Term_sub.empty idxmap in
+      IntMap.add i idxmap map
     with Not_found ->
-      IntMap.add i (IntSet.singleton idx) map
+      IntMap.add i (IntMap.singleton idx Term_sub.empty) map
   in
   let rec add0 (t:term) (nb:int) (tab:nd): nd =
     let tab =
