@@ -69,7 +69,7 @@ let arity     (loc:t): int = Sign.arity loc.signature
 
 let argument (name:int) (loc:t): int * TVars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
-  let i = Search.array_find_min name loc.argnames in
+  let i = Search.array_find_min (fun n -> n=name) loc.argnames in
   i, TVars_sub.tvars loc.tvars_sub, Sign.argument i loc.signature
     (* bug: argnames are cumulated and signature not!! *)
 

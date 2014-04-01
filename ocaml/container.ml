@@ -14,7 +14,7 @@ end
 
 module Search: sig
   val binsearch_max: 'a -> 'a array -> int
-  val array_find_min: 'a -> 'a array -> int
+  val array_find_min: ('a -> bool) -> 'a array -> int
 end = struct
   let binsearch_max (el:'a) (arr: 'a array) =
     (** The maximal index where [el] can be inserted into the array [arr]
@@ -40,13 +40,13 @@ end = struct
     assert (0<=idx && idx<=Array.length arr);
     idx
 
-  let array_find_min (el:'a) (arr: 'a array) =
+  let array_find_min (p:'a -> bool) (arr: 'a array) =
     let len = Array.length arr in
     let rec search i =
       if i=len then raise Not_found
       else begin
         assert (0<=i); assert (i<len);
-        if arr.(i) = el then i
+        if p arr.(i)  then i
         else search (i+1)
       end
     in

@@ -133,7 +133,7 @@ let get_type
   let nfgs = Array.length fgnames in
   let cls_idx (name:int): int =
     try
-      Search.array_find_min name fgnames
+      Search.array_find_min (fun n -> n=name) fgnames
     with Not_found ->
       try
         (Key_table.find ct.names name) + nfgs
