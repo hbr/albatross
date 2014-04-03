@@ -27,9 +27,12 @@ end)
 
 module Term: sig
 
-  val is_variable: term -> int -> bool
+  val is_variable_i: term -> int -> bool
 
   val to_string: term -> string
+
+  val variable:    term -> int
+  val is_variable: term -> bool
 
   val nodes: term -> int
 
@@ -39,6 +42,8 @@ module Term: sig
   val fold_arguments: ('a -> int -> 'a) -> 'a -> term -> int -> 'a
 
   val least_free: term -> int
+
+  val greatestp1_arg: term -> int -> int
 
   val split_variables: term -> int -> IntSet.t * IntSet.t
 
@@ -86,19 +91,20 @@ module Term: sig
 
   val binary_right: term -> int -> term list
 
-  val implication_chain2: term -> int -> term list * term
+  val split_implication_chain: term -> int -> term list * term
+  val make_implication_chain:  term list -> term -> int -> term
 
   val implication_chain: term -> int -> (term list * term) list
 
-  val is_normalized: term -> int -> bool
+  val is_normalized: term -> int -> int -> bool
   val used_args: term -> int -> int array
   val normalizing_args: term -> int -> term array * int
-  val normalize: term -> int -> term * int
+  val normalize: term -> int -> int array -> term * int array * int
   val keep_used: int array -> term -> int -> term
 
 end = struct
 
-  let is_variable (t:term) (i:int): bool =
+  let is_variable_i (t:term) (i:int): bool =
     match t with
       Variable j when i=j -> true
     | _                   -> false
@@ -126,6 +132,18 @@ end = struct
         "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
 
 
+  let variable (t:term): int =
+    match t with
+      Variable i -> i
+    | _ -> raise Not_found
+
+
+  let is_variable (t:term): bool =
+    try
+      let _ = variable t in
+      true
+    with Not_found ->
+      false
 
 
   let rec nodes (t:term): int =
@@ -186,6 +204,17 @@ end = struct
         if least = (-1) || i < least then i
         else least)
       (-1) t
+
+
+  let greatestp1_arg (t:term) (nargs:int): int =
+    (** The greatest (plus 1) argument variable of the term [t] with
+        [nargs] arguments or [nargs] if there is no argument variable
+     *)
+    fold_arguments
+      (fun gtst i -> if gtst <= i then i+1 else gtst)
+      0
+      t
+      nargs
 
 
   let split_variables (t:term) (n:int): IntSet.t * IntSet.t =
@@ -460,6 +489,8 @@ end = struct
 
 
   let quantified (quantid:int) (nargs:int) (names:int array) (t:term): term =
+    assert (0 < nargs);
+    assert (let nnms = Array.length names in nnms=0 || nnms = nargs);
     unary quantid (Lam (nargs,names,t))
 
 
@@ -488,7 +519,7 @@ end = struct
 
 
 
-  let implication_chain2 (t:term) (impid:int)
+  let split_implication_chain (t:term) (impid:int)
       : term list * term =
     (** Extract the implication chain of the term [t], i.e. if
         [t] has the form
@@ -513,6 +544,17 @@ end = struct
     in
     chrec t []
 
+
+
+  let rec make_implication_chain
+      (ps:term list) (tgt:term) (imp_id:int): term =
+    match ps with
+      [] -> tgt
+    | p::ps0 ->
+        make_implication_chain
+          ps0
+          (binary imp_id p tgt)
+          imp_id
 
 
 
@@ -543,13 +585,13 @@ end = struct
 
   exception Out_of_order
 
-  let is_normalized (t:term) (nargs:int): bool =
+  let is_normalized (t:term) (nargs:int) (nused:int): bool =
     (** Is the term [t] with [nargs] arguments normalized, i.e. do all
-        its arguments appear in ascending order and do all argumens
-        appear?
+        its arguments appear in ascending order starting from zero without
+        holse and is [nused] the number of used arguments?
      *)
     try
-      nargs = fold_arguments
+      nused = fold_arguments
         (fun n i -> (* [n] is the number of arguments which already have
                        appeared in ascending order *)
           assert (i < nargs);
@@ -558,6 +600,7 @@ end = struct
           else raise Out_of_order)
         0  t nargs
     with Out_of_order -> false
+
 
 
   let normalize_base (t:term) (nargs:int): int array * int =
@@ -609,11 +652,42 @@ end = struct
     Array.map (fun i -> Variable i) args,
     nused
 
-  let normalize (t:term) (nargs:int): term * int =
-    let args,n = normalizing_args t nargs in
-    let tnorm = sub t args n              in
-    assert (is_normalized tnorm n);
-    t,n
+
+  let normalize (t:term) (nargs:int) (nms:int array)
+    (** Normalize the term [t] with [nargs] arguments and the argument
+        names [nms]. I.e. reorder the arguments so that they appear in
+        ascending sequence starting from zero without holes and reorder
+        the names and return the number of used arguments.
+     *)
+      : term * int array * int =
+    let lennms = Array.length nms in
+    assert (lennms = 0 || lennms = nargs);
+    let argspos,nused = normalize_base t nargs in
+    let args  = Array.map (fun i -> Variable i) argspos
+    in
+    let tnorm =  sub t args nargs
+    in
+    let nms =
+      if lennms <> 0 then
+        let nms1 = Array.make nargs 0
+        and unused0 = ref nused
+        in
+        Array.iteri
+          (fun var pos ->
+            let p =
+              if pos <> (-1) then
+                pos
+              else
+                (let p = !unused0 in unused0 := !unused0 + 1; p)
+            in
+            nms1.(p) <- nms.(var))
+          argspos;
+        assert false
+      else
+        nms
+    in
+    assert (is_normalized tnorm nargs nused);
+    tnorm, nms, nused
 
 
 
@@ -678,7 +752,7 @@ end = struct
         circularity and apply [i ~~> t] to all available substitutions.
      *)
     assert (i <= s.n);
-    assert (not (Term.is_variable t i));
+    assert (not (Term.is_variable_i t i));
     let t = Term.sub t s.args s.n in
     if IntSet.mem i (Term.bound_variables t s.n) then
       raise Not_found (* circular substitution *)
