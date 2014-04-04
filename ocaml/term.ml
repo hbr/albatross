@@ -38,6 +38,7 @@ module Term: sig
 
   val depth: term -> int
 
+  val fold_with_level: ('a -> int -> int -> 'a) -> 'a -> term -> 'a
   val fold: ('a -> int -> 'a) -> 'a -> term -> 'a
   val fold_arguments: ('a -> int -> 'a) -> 'a -> term -> int -> 'a
 
@@ -167,21 +168,32 @@ end = struct
 
 
 
+  let fold_with_level (f:'a->int->int->'a) (a:'a) (t:term): 'a =
+    (** Fold the free variables with their level (from the top) in the order
+        in which they appear in the term [t] with the function [f] and
+        accumulate the results in [a].
+     *)
+    let rec fld (a:'a) (t:term) (level) (nb:int): 'a =
+      match t with
+        Variable i ->
+          if nb <= i then f a (i-nb) level else a
+      | Application (f,args) ->
+          let a = fld a f (level+1) nb in
+          Array.fold_left (fun a t -> fld a t (level+1) nb) a args
+      | Lam (n,_,t) ->
+          fld a t (level+1) (nb+n)
+    in
+    fld a t 0 0
+
+
+
   let fold (f:'a->int->'a) (a:'a) (t:term): 'a =
     (** Fold the free variables in the order in which they appear in the
         term [t] with the function [f] and accumulate the results in [a].
      *)
-    let rec fld (a:'a) (t:term) (nb:int): 'a =
-      match t with
-        Variable i ->
-          if nb <= i then f a (i-nb) else a
-      | Application (f,args) ->
-          let a = fld a f nb in
-          Array.fold_left (fun a t -> fld a t nb) a args
-      | Lam (n,_,t) ->
-          fld a t (nb+n)
-    in
-    fld a t 0
+    let f0 a i level = f a i in
+    fold_with_level f0 a t
+
 
 
   let fold_arguments (f:'a->int->'a) (a:'a) (t:term) (nargs:int): 'a =
