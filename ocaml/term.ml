@@ -52,7 +52,8 @@ module Term: sig
 
   val bound_variables: term -> int -> IntSet.t
 
-  val no_names: term -> term
+  val wo_names: term -> term
+  val equal_wo_names: term -> term -> bool
 
   val map: (int->int->term) -> term -> term
 
@@ -259,16 +260,22 @@ end = struct
     bvars
 
 
-  let rec no_names (t:term): term =
+  let rec wo_names (t:term): term =
     (** The term [t] with all names in abstractions erased.
      *)
     match t with
       Variable _ -> t
     | Application (f,args) ->
-        Application (no_names f,
-                     Array.map (fun t -> no_names t) args)
-    | Lam (n,_,t) -> Lam (n, [||], no_names t)
+        Application (wo_names f,
+                     Array.map (fun t -> wo_names t) args)
+    | Lam (n,_,t) -> Lam (n, [||], wo_names t)
 
+
+  let equal_wo_names (t1:term) (t2:term): bool =
+    let u1 = wo_names t1
+    and u2 = wo_names t2
+    in
+    u1 = u2
 
 
   let map (f:int->int->term) (t:term): term =
