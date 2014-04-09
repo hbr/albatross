@@ -2,7 +2,6 @@ open Container
 open Term
 open Signature
 open Support
-open Context
 
 
 
@@ -281,14 +280,13 @@ end (* Accus *)
 let analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
-    (context:   Context.t)
+    (loc:       Local_context.t)
     : term =
   (** Analyse the expression [ie] with the expected type [expected]
       in the context [context] and return the term.
    *)
-  assert (not (Context.is_basic context));
-  let loc = Context.local context
-  and info, exp = ie.i, ie.v in
+  assert (not (Local_context.is_global loc));
+  let info, exp = ie.i, ie.v in
 
   let arg_array (e:expression): expression array =
     match e with
@@ -403,29 +401,28 @@ let analyze_expression
   let term,tvars_sub = Accus.result accs in
   Local_context.update_type_variables tvars_sub loc;
   (*Printf.printf "\tterm: %s\n"
-    (Context.string_of_term term context);*)
+    (Local_context.string_of_term term loc);*)
   term
 
 
 
 let result_term
-    (ie:        info_expression)
-    (context:   Context.t)
+    (ie:    info_expression)
+    (loc:   Local_context.t)
     : term =
   (** Analyse the expression [ie] as the result expression of the
       context [context] and return the term.
    *)
-  assert (not (Context.is_basic context));
-  let loc = Context.local context in
-  analyze_expression ie (Local_context.result_type loc) context
+  assert (not (Local_context.is_global loc));
+  analyze_expression ie (Local_context.result_type loc) loc
 
 
 let boolean_term
-    (ie:       info_expression)
-    (context:  Context.t)
+    (ie:   info_expression)
+    (loc:  Local_context.t)
     : term =
   (** Analyse the expression [ie] as a boolean expression in the
       context [context] and return the term.
    *)
-  assert (not (Context.is_basic context));
-  analyze_expression ie (Context.boolean context) context
+  assert (not (Local_context.is_global loc));
+  analyze_expression ie (Local_context.boolean loc) loc

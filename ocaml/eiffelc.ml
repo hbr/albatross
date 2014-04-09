@@ -1,6 +1,5 @@
 open Container
 open Support
-open Context
 open Term
 
 let usage_string = "\
@@ -68,44 +67,43 @@ let put_feature
     (entlst: entities list withinfo)
     (rt: return_type)
     (bdy: feature_body option)
-    (c:   Context.t): unit =
-   let context = Context.push entlst rt c in
-   let impstat,term_opt =
-     match bdy with
-       None ->
-         Feature_table.No_implementation,
-         None
-     | Some (None, Some Impbuiltin, None) ->
-         Feature_table.Builtin,
-         None
-     | Some (None, None, Some [ens]) ->
-         begin
-           match ens.v with
-             Binexp (Eqop, ExpResult,def) ->
-               let term =
-                 Typer.result_term
-                   (withinfo ens.i def)
-                   context
-               in
-               Feature_table.No_implementation,
-               Some term
-           | _ -> not_yet_implemented ens.i
-                 "functions not defined with \"Result = ...\""
-         end
-     | Some (None, Some Impdeferred, None) ->
-         Feature_table.Deferred,
-         None
+    (loc: Local_context.t): unit =
+  Local_context.push entlst rt loc;
+  let impstat,term_opt =
+    match bdy with
+      None ->
+        Feature_table.No_implementation,
+        None
+    | Some (None, Some Impbuiltin, None) ->
+        Feature_table.Builtin,
+        None
+    | Some (None, None, Some [ens]) ->
+        begin
+          match ens.v with
+            Binexp (Eqop, ExpResult,def) ->
+              let term =
+                Typer.result_term
+                  (withinfo ens.i def)
+                  loc
+              in
+              Feature_table.No_implementation,
+              Some term
+          | _ -> not_yet_implemented ens.i
+                "functions not defined with \"Result = ...\""
+        end
+    | Some (None, Some Impdeferred, None) ->
+        Feature_table.Deferred,
+        None
 
      | _ -> not_yet_implemented fn.i
            "functions with implementation/preconditions"
-   in
-   Context.put_function fn impstat term_opt context
+  in
+  Local_context.put_global_function fn impstat term_opt loc;
+  Local_context.pop loc
 
 
 let analyze(ast:declaration list): unit =
-  let context = Context.make ()
-  in
-  let loc = Context.local context
+  let loc = Local_context.make ()
   in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
@@ -116,17 +114,17 @@ let analyze(ast:declaration list): unit =
           assert (decl_blocks = []);
           Local_context.put_class hm cname loc;
       | Declaration_block (Feature_block (visi,dlist)) ->
-          Context.set_visibility visi context;
+          Local_context.set_visibility visi loc;
           analyz dlist;
-          Context.reset_visibility context;
+          Local_context.reset_visibility loc;
       | Named_feature (fn, entlst, rt, body) ->
-          put_feature fn entlst rt body context;
+          put_feature fn entlst rt body loc;
       | Assertion_feature (label, entlst, body) ->
-          Prover.prove_and_store entlst body context
+          Prover.prove_and_store entlst body loc
       | Formal_generic (name, concept) ->
           Local_context.put_formal_generic name concept loc
       | _ ->
-          Context.print context;
+          Local_context.print loc;
           assert false
     in
     match ast with
@@ -134,7 +132,7 @@ let analyze(ast:declaration list): unit =
       | f::t -> one_decl f; analyz t
   in
   analyz ast;
-  Context.print context
+  Local_context.print loc
 
 
 

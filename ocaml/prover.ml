@@ -2,7 +2,6 @@ open Container
 open Term
 open Proof
 open Support
-open Context
 
 exception Cannot_prove
 exception Cannot_prove_info of info
@@ -38,14 +37,13 @@ let prove
     (pre: compound)
     (chck: compound)
     (post: compound)
-    (context: Context.t)
+    (loc:  Local_context.t)
     : (term * proof_term) list =
   (* Prove the top level assertion with the formal arguments 'argnames' and
      'argtypes' and the body 'pre' (preconditions), 'chck' (the intermediate
      assertions) and 'post' (postconditions) and return the list of all
      discharged terms and proof terms of the postconditions
    *)
-  let loc = Context.local context in
   let ft  = Local_context.ft loc
   and at  = Local_context.at loc
   in
@@ -53,11 +51,11 @@ let prove
   let do_trace (f:unit->unit): unit =
     if !traceflag then f () else ()
   in
-  let _, arglen = Context.count_formals context
-  and imp_id    = Context.implication_id context
+  let arglen    = Local_context.nargs loc
+  and imp_id    = Local_context.implication_id loc
   in
-  let exp2term ie = Typer.boolean_term ie context
-  and term2string t = Context.string_of_term t context
+  let exp2term ie = Typer.boolean_term ie loc
+  and term2string t = Local_context.string_of_term t loc
   and split t = Term.binary_split t imp_id
   and chain t = Term.implication_chain t imp_id
   and normal (t:term): term =
@@ -81,7 +79,7 @@ let prove
 
   let trace_header (): unit =
     Printf.printf "\nall%s\n"
-      (Context.named_signature_string context)
+      (Local_context.named_signature_string loc)
 
   and trace_string (str:string) (l:int) (): unit =
     Printf.printf "%3d %s%s\n" l (level_string l) str
@@ -437,54 +435,56 @@ let prove
 
 let prove_and_store
     (entlst: entities list withinfo)
-    (bdy:feature_body)
-    (context: Context.t)
+    (bdy:    feature_body)
+    (loc: Local_context.t)
     : unit =
-
-  let context = Context.push entlst None context
-  in
+  assert (Local_context.is_global loc);
+  Local_context.push entlst None loc;
   let push_axiom (t:term) =
-    Context.put_assertion t None context
+    Local_context.put_global_assertion t None loc
 
   and push_proved (t:term) (pt:proof_term): unit =
-    Context.put_assertion t (Some pt) context
+    Local_context.put_global_assertion t (Some pt) loc
   in
 
-  match bdy with
-    _, _, None ->
-      error_info entlst.i "Assertion must have an ensure clause"
-  | rlst_opt, imp_opt, Some elst ->
-      let rlst = match rlst_opt with None -> [] | Some l -> l
-      and axiom,defer,is_do,clst =
-        match imp_opt with
-          None -> false,false,false,[]
-        | Some Impdeferred -> false,true,false,[]
-        | Some Impbuiltin -> true,false,false,[]
-        | Some Impevent ->
+  begin
+    match bdy with
+      _, _, None ->
+        error_info entlst.i "Assertion must have an ensure clause"
+    | rlst_opt, imp_opt, Some elst ->
+        let rlst = match rlst_opt with None -> [] | Some l -> l
+        and axiom,defer,is_do,clst =
+          match imp_opt with
+            None -> false,false,false,[]
+          | Some Impdeferred -> false,true,false,[]
+          | Some Impbuiltin -> true,false,false,[]
+          | Some Impevent ->
             error_info entlst.i "Assertion cannot be an event"
-        | Some (Impdefined (Some locs,is_do,cmp)) ->
-            not_yet_implemented entlst.i "Local variables in assertions"
-        | Some (Impdefined (None,is_do,cmp)) ->
-            false,false,is_do,cmp
-      in
-      if axiom || defer then
-        match rlst with
-          [] ->
-            List.iter
-              (fun ie ->
-                let term = Typer.boolean_term ie context in
-                push_axiom term)
-                  (* bug: store deferred assertions in class table, because
-                     they have to be proved in descendants !!!*)
-              elst
-        | _ ->
-            not_yet_implemented entlst.i "axioms with preconditions"
-      else if is_do then
-        not_yet_implemented entlst.i "Assertions with do block"
-      else
-        let lst =
-          prove rlst clst elst context
+          | Some (Impdefined (Some locs,is_do,cmp)) ->
+              not_yet_implemented entlst.i "Local variables in assertions"
+          | Some (Impdefined (None,is_do,cmp)) ->
+              false,false,is_do,cmp
         in
+        if axiom || defer then
+          match rlst with
+            [] ->
+            List.iter
+                (fun ie ->
+                  let term = Typer.boolean_term ie loc in
+                  push_axiom term)
+                (* bug: store deferred assertions in class table, because
+                   they have to be proved in descendants !!!*)
+                elst
+          | _ ->
+              not_yet_implemented entlst.i "axioms with preconditions"
+        else if is_do then
+          not_yet_implemented entlst.i "Assertions with do block"
+        else
+          let lst =
+            prove rlst clst elst loc
+          in
         List.iter
-          (fun (t,pt) -> push_proved t pt)
-          lst
+            (fun (t,pt) -> push_proved t pt)
+            lst
+  end;
+  Local_context.pop loc

@@ -4,13 +4,15 @@ open Term
 open Proof
 
 type t
-val make_basic: unit -> t
-val make_next:
-    entities list withinfo -> return_type -> t -> t
+val make:  unit -> t
+val push:  entities list withinfo -> return_type -> t -> unit
+val pop:   t -> unit
+val print: t -> unit
 
-val is_basic:   t -> bool
-val is_private: t -> bool
-val is_public:  t -> bool
+val is_global:   t -> bool
+val is_toplevel: t -> bool
+val is_private:  t -> bool
+val is_public:   t -> bool
 val set_visibility: visibility -> t -> unit
 val reset_visibility: t -> unit
 
@@ -43,7 +45,7 @@ val find_identifier: int ->          int -> t -> (int * TVars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
 val put_global_function:
-    feature_name withinfo -> bool -> Feature_table.implementation_status ->
+    feature_name withinfo  -> Feature_table.implementation_status ->
       term option -> t -> unit
 
 val implication_id: t -> int
