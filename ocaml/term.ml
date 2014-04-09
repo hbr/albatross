@@ -919,10 +919,7 @@ end = struct
     "{" ^ (String.concat "," (List.rev lst)) ^ "}"
 
   let count (sub:t): int =
-    IntMap.fold
-      (fun i _ sum -> sum+1)
-      sub
-      0
+    IntMap.cardinal sub
 
   let for_all (f: int -> term -> bool) (sub:t): bool =
     IntMap.fold (fun i t res -> res && f i t) sub true
