@@ -64,6 +64,12 @@ let imp_id (at:t): int =
 let all_id (at:t): int =
   at.entry.all_id
 
+let implication (a:term) (b:term) (at:t): term =
+  Term.binary at.entry.imp_id a b
+
+let quantified (nargs:int) (names:int array) (t:term) (at:t): term =
+  Term.quantified at.entry.all_id nargs names t
+
 let make (imp_id:int) (all_id:int): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
@@ -94,7 +100,7 @@ let pop (at:t): unit =
   Seq.keep at.seq at.entry.count
 
 
-let implication (i:int) (at:t): term =
+let discharged_term (i:int) (at:t): term =
   (** The [i]th term of the current environment with all assumptions
       discharged.
    *)
@@ -106,6 +112,21 @@ let implication (i:int) (at:t): term =
         term)
     (Seq.elem at.seq i).term
     at.entry.req
+
+
+let term (i:int) (at:t): term * int =
+  (** The [i]th proved term with the number of variables of its environment.
+   *)
+  assert (i < count at);
+  let desc = Seq.elem at.seq i in
+  desc.term, desc.nbenv0
+
+
+let nbenv_term (i:int) (at:t): int =
+  (** The number of variables of the environment of the  [i]th proved term.
+   *)
+  assert (i < count at);
+  (Seq.elem at.seq i).nbenv0
 
 
 
@@ -135,14 +156,6 @@ let add (t:term) (pt:proof_term) (at:t): unit =
       raw_add ();
       at.entry.req     <- idx :: at.entry.req;
   | _ -> raw_add ()
-
-
-
-let add_axiom (t:term) (at:t): unit =
-  add t (Axiom t) at
-
-let add_assumption (t:term) (at:t): unit =
-  add t (Assumption t) at
 
 
 
@@ -195,7 +208,7 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
       Array.iter
         (fun pt -> add (term_of_pt pt at) pt at)
         pt_arr;
-      let term = implication res_idx at in
+      let term = discharged_term res_idx at in
       pop at;  (* bug: verify that no unused argument has
                   been used in the proof terms! *)
 
@@ -207,6 +220,27 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
         term
       else
         Term.quantified (all_id at) nused [||] term
+
+
+
+let add_axiom (t:term) (at:t): unit =
+  add t (Axiom t) at
+
+
+let add_assumption (t:term) (at:t): unit =
+  add t (Assumption t) at
+
+
+let add_mp (t:term) (i:int) (j:int) (at:t): unit =
+  let pt = Detached (i,j) in
+  assert (Term.equal_wo_names t (term_of_pt pt at));
+  add t pt at
+
+
+let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
+  let pt = Specialize (i,args) in
+  assert (Term.equal_wo_names t (term_of_pt pt at));
+  add t pt at
 
 
 
@@ -249,7 +283,7 @@ let discharged (i:int) (at:t): int * int array * term * proof_term =
           Axiom _ -> true
         | _       -> false)
       (used_assertions i at [])
-  and term  = implication i at
+  and term  = discharged_term i at
   and nargs = nbenv_local at
   and nms   = names at
   in
