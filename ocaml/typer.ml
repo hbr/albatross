@@ -12,7 +12,7 @@ module Accu: sig
   type t
   val signature:         t -> Sign.t
   val ntvars:            t -> int
-  val make:              type_term -> Context.t -> t
+  val make:              type_term -> TVars_sub.t -> t
   val add_term:          int ->  TVars.t -> Sign.t -> t -> t
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
@@ -29,13 +29,12 @@ end = struct
 
   let ntvars (acc:t): int = TVars_sub.count acc.tvars
 
-  let make (expected:type_term) (c:Context.t): t =
+  let make (e:type_term) (tvars:TVars_sub.t): t =
     (** New accumulator for an expression with the expected type [e] in the
-        context [c] *)
-    assert (not (Context.is_basic c));
+        context with the type variables [tvars] *)
     {tlist = [];
-     sign  = Sign.make_const expected;
-     tvars = Context.type_variables c}
+     sign  = Sign.make_const e;
+     tvars = tvars}
 
 
   let add_global (cs:constraints) (acc:t): t =
@@ -167,7 +166,7 @@ module Accus: sig
   type t
   exception Untypeable of (Sign.t*int) list
 
-  val make:            type_term -> Context.t -> t
+  val make:            type_term -> TVars_sub.t -> t
   val is_empty:        t -> bool
   val is_singleton:    t -> bool
   val is_complete:     t -> bool
@@ -195,9 +194,8 @@ end = struct
 
   let is_stack_empty (accs:t): bool = Mylist.is_empty accs.stack
 
-  let make (exp: type_term) (c:Context.t): t =
-    assert (not (Context.is_basic c));
-    {accus           = [Accu.make exp c];
+  let make (exp: type_term) (tvars:TVars_sub.t): t =
+    {accus           = [Accu.make exp tvars];
      nterms_expected = 1;
      nterms          = 0;
      arity           = 0;
@@ -393,7 +391,7 @@ let analyze_expression
 
   in
 
-  let accs   = Accus.make expected context in
+  let accs   = Accus.make expected (Context.type_variables context) in
   analyze exp accs;
   assert (Accus.is_complete accs);
   assert (not (Accus.is_empty accs));

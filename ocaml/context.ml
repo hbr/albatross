@@ -228,9 +228,6 @@ end = struct
             let i,tvs,s = Local_context.argument name loc
             in
             if (Sign.arity s) = nargs then begin
-              let nfgs_c,nargs_c = count_formals c in
-              assert (nfgs_c0  = nfgs_c);
-              assert (nargs_c0 = nargs_c);
               [i,tvs,s]
             end else
               raise Wrong_signature
@@ -254,14 +251,7 @@ end = struct
         signature.
       *)
     let nfgs_c0, nargs_c0 = count_formals c in
-    let rec feat (c:t): (int * TVars.t * Sign.t) list =
-      match c with
-        Basic loc ->
-          find_funcs fn nargs nfgs_c0 nargs_c0 (Local_context.ft loc)
-      | Combined (loc,c) ->
-            feat c
-    in
-    feat c
+    find_funcs fn nargs nfgs_c0 nargs_c0 (Local_context.ft (local c))
 
 
   let type_variables (c:t): TVars_sub.t =
