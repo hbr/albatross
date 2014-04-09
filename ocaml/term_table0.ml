@@ -32,7 +32,7 @@ Each node of the tree has the following information
            variable to the set of assertion id's where the other variable
            appears at this position.
 
-- cvars:   This is a list of pairs (nb,map) which might be empty. For each
+- fvars:   This is a list of pairs (nb,map) which might be empty. For each
            pair nb is the number of bound variables of the environment (i.e. 0
            for the global environment) and in the map there is an entry for
            each constant variable (i.e. variables which are neither bound by
@@ -58,39 +58,40 @@ open Term
 
 type submap = Term_sub.t IntMap.t   (* idx -> sub *)
 
-type nd = {
+type t = {
+    terms: (int*int*int*term) list;               (* idx,nargs,nbenv *)
     avars: (int*int) IntMap.t;  (* idx -> (argument variable, nargs) *)
     bvars: submap IntMap.t;     (* bvar -> idx -> sub *)
-    cvars: (int * submap IntMap.t) list; (* [nbenv, cvar -> idx -> sub] *)
-    fapps: (nd * nd array) IntMap.t;
+    fvars: (int * submap IntMap.t) list; (* [nbenv, fvar -> idx -> sub] *)
+    fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
-    lams:  nd IntMap.t        (* one for each number of bindings *)
+    lams:  t IntMap.t         (* one for each number of bindings *)
   }
 
-type t = {node:nd;  next_idx: int}
 
-
-let empty_node = {
+let empty = {
+  terms = [];
   avars = IntMap.empty;
   bvars = IntMap.empty;
-  cvars = [];
+  fvars = [];
   fapps = IntMap.empty;
   lams  = IntMap.empty}
 
-let empty = {node     = empty_node;
-             next_idx = 0}
 
-
+let next_index (tab:t): int =
+  match tab.terms with
+    [] -> 0
+  | (idx,_,_,_)::_ -> idx+1
 
 
 exception Term_found of term
 
 
-let termtab (idx:int) (nargs:int) (tab:nd) (nb:int): term =
+let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
   (** The term associated with index [idx] having [nargs] argument variables
       of the node [tab] with [nb] bound variables.
    *)
-  let rec termtab0 (tab:nd) (nb:int): term =
+  let rec termtab0 (tab:t) (nb:int): term =
     let aterm (avar: (int*int) IntMap.t): unit =
       try
         let i,_ = IntMap.find idx avar in
@@ -106,7 +107,7 @@ let termtab (idx:int) (nargs:int) (tab:nd) (nb:int): term =
             raise (Term_found (Variable (ovar+n)))
         )
         ovars
-    and fapp_term (fapp: (nd * nd array) IntMap.t): unit =
+    and fapp_term (fapp: (t * t array) IntMap.t): unit =
       IntMap.iter
         (fun len (ftab,argtabs) ->
           assert (len = (Array.length argtabs));
@@ -119,7 +120,7 @@ let termtab (idx:int) (nargs:int) (tab:nd) (nb:int): term =
             ()
         )
         fapp
-    and lam_term (lam: nd IntMap.t): unit =
+    and lam_term (lam: t IntMap.t): unit =
       IntMap.iter
         (fun n ttab ->
           let t = termtab0 ttab (nb+n) in
@@ -132,7 +133,7 @@ let termtab (idx:int) (nargs:int) (tab:nd) (nb:int): term =
       List.iter
         (fun (_,map) ->
           oterm map (nb+nargs))
-        tab.cvars;
+        tab.fvars;
       aterm     tab.avars;
       lam_term  tab.lams;
       raise Not_found
@@ -148,7 +149,7 @@ let term (idx:int) (nargs:int) (table:t): term =
   (** The term associated with index [idx] with [nargs] arguments  in the
       table [table].
    *)
-  termtab idx nargs table.node 0
+  termtab idx nargs table 0
 
 
 
@@ -193,11 +194,19 @@ let merge_map (m1: submap) (m2: submap)
 
 
 
+
+
+
+
 let map_to_list(map: submap): (int * Term_sub.t) list =
   IntMap.fold
     (fun i sub lst -> (i,sub)::lst)
     map
     []
+
+
+
+
 
 
 let unify (t:term) (nbt:int) (table:t)
@@ -208,8 +217,13 @@ let unify (t:term) (nbt:int) (table:t)
       The result is a list of tuples (idx,sub) where the unified
       term [ut] has the index [idx], and applying
       the substitution [sub] to [ut] yields the term [t].
+
+      Note: The substitutions are valid in the enviroment of [t] because
+            they consist of subterms of [t]. Before applying them to the
+            the term [ut] at the corresponding index [idx] the term [ut]
+            has to be transformed into the environment of [t].
    *)
-  let rec uni (t:term) (tab:nd) (nb:int): submap =
+  let rec uni (t:term) (tab:t) (nb:int): submap =
     assert (nb=0); (* as long as there are no lambda terms *)
     let basic_subs: submap =
       IntMap.map (fun (avar,nargs) -> Term_sub.singleton avar t) tab.avars
@@ -234,7 +248,7 @@ let unify (t:term) (nbt:int) (table:t)
             else
               base)
           basic_subs
-          tab.cvars
+          tab.fvars
     | Application (f,args) ->
         let res =
         begin
@@ -261,50 +275,12 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
   in
-  map_to_list (uni t table.node 0)
+  map_to_list (uni t table 0)
 
 
 
-(*
-let closed_terms (table:t): (term * int) list =
-  (** The list of all closed terms in the table together with the
-      indices.
-   *)
-  let rec terms (tab:nd) (nb:int) (lst:(term*int)list): (term * int) list =
-    let idxset2lst (idxset:IntSet.t) (lst:(term*int)list) (var:int)
-        : (term*int)list =
-      let t = Variable var in
-      IntSet.fold
-        (fun idx lst ->
-          (t,idx)::lst)
-        idxset
-        lst
-    in
-    let bterms lst =
-      IntMap.fold
-        (fun bvar idxset lst ->
-          assert (bvar < nb);
-          idxset2lst idxset lst bvar)
-        tab.bvars
-        lst
-    and cterms lst =
-      List.fold_left
-        (fun lst (nbenv,idxmap) ->
-          IntMap.fold
-            (fun cvar idxset lst->
-              idxset2lst idxset lst (cvar+nb))
-            idxmap
-            lst
-        )
-        lst
-        tab.cvars
-    and fapps lst = assert false
-    and lams  lst = assert false
-    in
-    lams (fapps (cterms (bterms lst)))
-  in
-  terms table.node 0 []
-*)
+
+
 
 
 let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
@@ -314,19 +290,70 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
 
       The result is a list of tuples (idx,sub) where applying the substitution
       [sub] to the term [t] yields the term at [idx].
+
+      Note: The substitutions are valid in the environment of the term
+            at idx. Before applying it to [t] they have to be transformed
+            into the environment of [t].
    *)
   let rec uniw (t:term) (tab:t) (nb:int): submap =
     match t with
       Variable i when i < nb ->
-        assert false
+        (* bound variable of [t] *)
+        IntMap.find i tab.bvars
+    | Variable i when i < nb+nargs ->
+        (* argument variable of [t] *)
+        List.fold_left
+          (fun map (idx,nargs_0,nbenv_0,t_0) ->
+            assert (nbenv_0 <= nbenv);
+            assert (not (IntMap.mem idx map));
+            if nargs_0 = 0 then
+              let t_0 = assert false in (* adaption to nbenv? *)
+              IntMap.add idx (Term_sub.singleton i t_0) map
+            else map)
+          IntMap.empty
+          tab.terms
     | Variable i ->
-        assert false
+        (* free variable of [t] *)
+        let fvar = i - nargs - nb in
+        let submap =
+          List.fold_left
+            (fun map (nbenv_1,fvar2submap) ->
+              assert (nbenv_1 <= nbenv);
+              let fvar = fvar - (nbenv - nbenv_1) in
+              if 0 < fvar then
+                try
+                  let submap = IntMap.find fvar fvar2submap in
+                  join_map submap map
+                with Not_found ->
+                  map
+              else
+                map
+            )
+            IntMap.empty
+            tab.fvars
+        in
+        if IntMap.is_empty submap then
+          raise Not_found
+        else
+          submap
     | Application (f,args) ->
-        assert false
+        let len = Array.length args in
+        let ftab, argtabs = IntMap.find len tab.fapps in
+        let fmap = ref (uniw f ftab nb) in
+        Array.iteri
+          (fun i a ->
+            let amap = uniw a argtabs.(i) nb in
+            fmap := merge_map !fmap amap)
+          args;
+        !fmap
     | Lam (n,_,t) ->
-        assert false
+        let ttab = IntMap.find n tab.lams in
+        uniw t ttab (nb+n)
   in
-  map_to_list (uniw t table 0)
+  try
+    map_to_list (uniw t table 0)
+  with Not_found ->
+    []
 
 
 
@@ -340,7 +367,7 @@ let add
       environment with [nvenv] variables to the index [idx]
       within the node [tab].
    *)
-  assert (table.next_idx <= idx);
+  assert (next_index table <= idx);
   let newmap (i:int) (map: submap IntMap.t): submap IntMap.t =
     try
       let idxmap = IntMap.find i map in
@@ -350,7 +377,8 @@ let add
     with Not_found ->
       IntMap.add i (IntMap.singleton idx Term_sub.empty) map
   in
-  let rec add0 (t:term) (nb:int) (tab:nd): nd =
+  let rec add0 (t:term) (nb:int) (tab:t): t =
+    assert (next_index tab <= idx);
     let tab =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
@@ -359,17 +387,17 @@ let add
           {tab with avars = IntMap.add idx ((i-nb),nargs) tab.avars}
       | Variable i when nb+nargs <= i ->
           (* variable is a constant (i.e. not substitutable *)
-          {tab with cvars =
-           let cvars = tab.cvars in
-           match cvars with
+          {tab with fvars =
+           let fvars = tab.fvars in
+           match fvars with
              [] ->
-               (nbenv, newmap (i-nargs-nb) IntMap.empty) :: cvars
+               (nbenv, newmap (i-nargs-nb) IntMap.empty) :: fvars
            | (nbnd,map)::tl ->
                assert (nbnd <= nbenv);
                if nbnd = nbenv then
                  (nbnd, newmap (i-nargs-nb) map) :: tl
                else
-                 (nbenv, newmap (i-nargs-nb) IntMap.empty) :: cvars}
+                 (nbenv, newmap (i-nargs-nb) IntMap.empty) :: fvars}
       | Variable i ->
           (* variable is bound by some abstraction *)
           assert (i < nb);
@@ -380,7 +408,7 @@ let add
             try
               IntMap.find len tab.fapps
             with Not_found ->
-              empty_node, Array.make len empty_node
+              empty, Array.make len empty
           in
           let ftab    = add0 f nb ftab
           and argtabs =
@@ -390,11 +418,11 @@ let add
       | Lam (n,_,t) ->
           let ttab =
             try IntMap.find n tab.lams
-            with Not_found -> empty_node
+            with Not_found -> empty
           in
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
     in
-    tab
+    {tab with terms = (idx,nargs,nbenv,t)::tab.terms}
   in
-  {node = add0 t 0 table.node; next_idx = idx+1}
+  add0 t 0 table
