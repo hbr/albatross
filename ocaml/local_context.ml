@@ -139,7 +139,7 @@ let reset_visibility (loc:t): unit =
 
 
 
-let tvars_sub (loc:t): TVars_sub.t = loc.tvars_sub
+let type_variables (loc:t): TVars_sub.t = loc.tvars_sub
 
 let boolean (loc:t): term =
   Class_table.boolean_type (ntvs loc)
@@ -265,3 +265,87 @@ let put_global_assertion
     | Some pt -> "proved")
     (string_of_assertion t loc);
   Assertion_table.put_assertion t (arity loc) pt_opt loc.ft loc.at
+
+
+let put_formal_generic
+    (name:int withinfo)
+    (concept:type_t withinfo)
+    (loc:t)
+    : unit =
+  (** Add the formal generic [name] with its [concept] to the formal
+      generics.
+   *)
+  assert (is_basic loc);
+  Class_table.put_formal name concept loc.ct
+
+
+
+let put_class (hm:header_mark withinfo) (cn:int withinfo) (loc:t): unit =
+  assert (is_basic loc);
+  Class_table.put hm cn loc.ct
+
+
+
+
+
+let find_funcs
+    (fn:feature_name) (nargs:int)
+    (nfgs:int) (nvars:int)
+    (ft:Feature_table.t)
+    : (int*TVars.t*Sign.t) list =
+  let lst = Feature_table.find_funcs fn nargs ft
+  in
+  let lst = List.rev_map
+      (fun (i,tvs,s) ->
+        let start = TVars.count tvs in
+        i+nvars, tvs, Sign.up_from nfgs start s)
+      lst
+  in
+  lst
+
+exception Wrong_signature
+
+let find_identifier
+    (name:int)
+    (nargs_id:int)
+    (loc:t)
+    : (int * TVars.t * Sign.t) list =
+  (** Find the identifier named [name] which accepts [nargs] arguments
+      in one of the local contexts or in the global feature table. Return
+      the list of variables together with their signature
+   *)
+  let nfgs_c0  = nfgs loc
+  and nargs_c0 = nargs loc
+  in
+  if is_basic loc then
+    find_funcs (FNname name) nargs_id nfgs_c0 nargs_c0 loc.ft
+  else
+    try
+      let i,tvs,s = argument name loc
+      in
+      if (Sign.arity s) = nargs_id then begin
+        [i,tvs,s]
+      end else
+        raise Wrong_signature
+    with
+      Not_found ->
+        find_funcs
+          (FNname name) nargs_id nfgs_c0 nargs_c0 loc.ft
+    | Wrong_signature ->
+        raise Not_found
+
+
+
+let find_feature
+    (fn:feature_name)
+    (nargs_feat:int)
+    (loc:t)
+    : (int * TVars.t * Sign.t) list =
+  (** Find the feature named [fn] which accepts [nargs] arguments global
+      feature table. Return the list of variables together with their
+      signature.
+   *)
+  let nfgs_c0  = nfgs loc
+  and nargs_c0 = nargs loc
+  in
+  find_funcs fn nargs_feat nfgs_c0 nargs_c0 loc.ft

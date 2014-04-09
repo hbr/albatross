@@ -287,7 +287,8 @@ let analyze_expression
       in the context [context] and return the term.
    *)
   assert (not (Context.is_basic context));
-  let info, exp = ie.i, ie.v in
+  let loc = Context.local context
+  and info, exp = ie.i, ie.v in
 
   let arg_array (e:expression): expression array =
     match e with
@@ -312,13 +313,13 @@ let analyze_expression
         try
           (*Printf.printf "Try to find \"%s\" with %d arguments\n"
             (feature_name_to_string fn) nargs;*)
-          Context.find_feature fn nargs context
+          Local_context.find_feature fn nargs loc
         with Not_found ->
           cannot_find (feature_name_to_string fn)
     and id_fun (name:int) =
       fun () ->
         try
-          Context.find_identifier name nargs context
+          Local_context.find_identifier name nargs loc
         with Not_found ->
           cannot_find (ST.string name)
     and do_leaf (f: unit -> (int*TVars.t*Sign.t) list): unit =
@@ -330,7 +331,6 @@ let analyze_expression
              ","
              (List.map
                 (fun (i,tvs,s) ->
-                  let loc     = Context.local context in
                   let ct      = Local_context.ct loc
                   and ntvs    = TVars.count tvs
                   in
@@ -346,7 +346,6 @@ let analyze_expression
                  ","
                  (List.map
                     (fun (sign,ntvs) ->
-                      let loc     = Context.local context in
                       let fgnames = Local_context.fgnames loc
                       and ct      = Local_context.ct loc
                       in
@@ -391,7 +390,7 @@ let analyze_expression
 
   in
 
-  let accs   = Accus.make expected (Context.type_variables context) in
+  let accs   = Accus.make expected (Local_context.type_variables loc) in
   analyze exp accs;
   assert (Accus.is_complete accs);
   assert (not (Accus.is_empty accs));
@@ -402,7 +401,7 @@ let analyze_expression
       ("The expression " ^ (string_of_expression exp) ^ " is ambiguous");
 
   let term,tvars_sub = Accus.result accs in
-  Context.update_type_variables tvars_sub context;
+  Local_context.update_type_variables tvars_sub loc;
   (*Printf.printf "\tterm: %s\n"
     (Context.string_of_term term context);*)
   term

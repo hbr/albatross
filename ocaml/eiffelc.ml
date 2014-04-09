@@ -105,6 +105,8 @@ let put_feature
 let analyze(ast:declaration list): unit =
   let context = Context.make ()
   in
+  let loc = Context.local context
+  in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
@@ -112,7 +114,7 @@ let analyze(ast:declaration list): unit =
           assert (fgens.v = []);
           assert (inherits = []);
           assert (decl_blocks = []);
-          Context.put_class hm cname context;
+          Local_context.put_class hm cname loc;
       | Declaration_block (Feature_block (visi,dlist)) ->
           Context.set_visibility visi context;
           analyz dlist;
@@ -122,7 +124,7 @@ let analyze(ast:declaration list): unit =
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
-          Context.put_formal_generic name concept context
+          Local_context.put_formal_generic name concept loc
       | _ ->
           Context.print context;
           assert false

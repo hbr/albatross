@@ -32,20 +32,7 @@ module Context: sig
   val implication_id:    t -> int
   val put_assertion: term -> proof_term option -> t -> unit
 
-  val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
-  val put_class: header_mark withinfo -> int withinfo -> t -> unit
-
   val print: t -> unit
-
-  val find_identifier: int -> int -> t
-    -> (int * TVars.t * Sign.t) list
-
-  val find_feature:    feature_name -> int -> t
-    -> (int * TVars.t * Sign.t) list
-
-  val type_variables:  t -> TVars_sub.t
-
-  val update_type_variables: TVars_sub.t -> t -> unit
 
 end = struct
 
@@ -146,6 +133,14 @@ end = struct
       : unit =
     (** Put the function [fn] into the corresponding table.
      *)
+    (*assert (is_basic c);
+    Local_context.put_global_function
+      fn
+      (is_private c)
+      impstat
+      term_opt
+      loc*)
+
     assert (not (is_basic c));
     match c with
       Combined (loc, Basic _) ->
@@ -160,109 +155,11 @@ end = struct
     | _ -> assert false (* illegal path *)
 
 
-  let put_class (hm:header_mark withinfo) (cn:int withinfo) (c:t): unit =
-    assert (is_basic c);
-    Class_table.put hm cn (Local_context.ct (local c))
-
-
-
-
-  let put_formal_generic
-      (name:int withinfo)
-      (concept:type_t withinfo)
-      (c:t)
-      : unit =
-    (** Add the formal generic [name] with its [concept] to the formal
-        generics.
-     *)
-    assert (is_basic c);
-    Class_table.put_formal name concept (Local_context.ct (local c))
-
-
-
   let print (c:t): unit =
     assert (is_basic c);
     let loc = local c in
     let ct,ft = Local_context.ct loc, Local_context.ft loc in
     Class_table.print ct;
     Feature_table.print ct ft
-
-
-
-  let find_funcs
-      (fn:feature_name) (nargs:int)
-      (nfgs:int) (nvars:int)
-      (ft:Feature_table.t)
-      : (int*TVars.t*Sign.t) list =
-    let lst = Feature_table.find_funcs fn nargs ft
-    in
-    let lst = List.rev_map
-        (fun (i,tvs,s) ->
-          let start = TVars.count tvs in
-          i+nvars, tvs, Sign.up_from nfgs start s)
-        lst
-    in
-    lst
-
-  exception Wrong_signature
-
-  let find_identifier
-      (name:int)
-      (nargs:int)
-      (c:t)
-      : (int * TVars.t * Sign.t) list =
-    (** Find the identifier named [name] which accepts [nargs] arguments
-        in one of the local contexts or in the global feature table. Return
-        the list of variables together with their signature
-     *)
-    let nfgs_c0,nargs_c0 = count_formals c
-    in
-    let ident (c:t)
-        :(int * TVars.t * Sign.t) list =
-      match c with
-        Basic loc ->
-          find_funcs (FNname name) nargs nfgs_c0 nargs_c0
-            (Local_context.ft loc)
-      | Combined (loc,cprev) ->
-          try
-            let i,tvs,s = Local_context.argument name loc
-            in
-            if (Sign.arity s) = nargs then begin
-              [i,tvs,s]
-            end else
-              raise Wrong_signature
-          with
-            Not_found ->
-              find_funcs
-                (FNname name) nargs nfgs_c0 nargs_c0 (Local_context.ft loc)
-          | Wrong_signature ->
-              raise Not_found
-    in
-    ident c
-
-
-  let find_feature
-      (fn:feature_name)
-      (nargs:int)
-      (c:t)
-      : (int * TVars.t * Sign.t) list =
-    (** Find the feature named [fn] which accepts [nargs] arguments global
-        feature table. Return the list of variables together with their
-        signature.
-      *)
-    let nfgs_c0, nargs_c0 = count_formals c in
-    find_funcs fn nargs nfgs_c0 nargs_c0 (Local_context.ft (local c))
-
-
-  let type_variables (c:t): TVars_sub.t =
-    assert (not (is_basic c));
-    match c with
-      Basic _ -> assert false (* illegal path *)
-    | Combined (loc,_) -> Local_context.tvars_sub loc
-
-  let update_type_variables (tv:TVars_sub.t) (c:t): unit =
-    assert (not (is_basic c));
-    let loc = local c in
-    Local_context.update_type_variables tv loc
 
 end (* Context *)

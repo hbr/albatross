@@ -28,7 +28,7 @@ val ct:      t -> Class_table.t
 val ft:      t -> Feature_table.t
 val at:      t -> Assertion_table.t
 
-val tvars_sub: t -> TVars_sub.t
+val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
@@ -39,6 +39,9 @@ val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
 
+val find_identifier: int ->          int -> t -> (int * TVars.t * Sign.t) list
+val find_feature:    feature_name -> int -> t -> (int * TVars.t * Sign.t) list
+
 val put_global_function:
     feature_name withinfo -> bool -> Feature_table.implementation_status ->
       term option -> t -> unit
@@ -47,3 +50,6 @@ val implication_id: t -> int
 
 val put_global_assertion:
     term -> proof_term option -> t -> unit
+
+val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
+val put_class: header_mark withinfo -> int withinfo -> t -> unit
