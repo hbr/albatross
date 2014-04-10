@@ -280,12 +280,12 @@ end (* Accus *)
 let analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
-    (loc:       Local_context.t)
+    (c:         Context.t)
     : term =
   (** Analyse the expression [ie] with the expected type [expected]
       in the context [context] and return the term.
    *)
-  assert (not (Local_context.is_global loc));
+  assert (not (Context.is_global c));
   let info, exp = ie.i, ie.v in
 
   let arg_array (e:expression): expression array =
@@ -311,13 +311,13 @@ let analyze_expression
         try
           (*Printf.printf "Try to find \"%s\" with %d arguments\n"
             (feature_name_to_string fn) nargs;*)
-          Local_context.find_feature fn nargs loc
+          Context.find_feature fn nargs c
         with Not_found ->
           cannot_find (feature_name_to_string fn)
     and id_fun (name:int) =
       fun () ->
         try
-          Local_context.find_identifier name nargs loc
+          Context.find_identifier name nargs c
         with Not_found ->
           cannot_find (ST.string name)
     and do_leaf (f: unit -> (int*TVars.t*Sign.t) list): unit =
@@ -329,7 +329,7 @@ let analyze_expression
              ","
              (List.map
                 (fun (i,tvs,s) ->
-                  let ct      = Local_context.ct loc
+                  let ct      = Context.ct c
                   and ntvs    = TVars.count tvs
                   in
                   Class_table.string_of_signature s ntvs [||] ct)
@@ -344,8 +344,8 @@ let analyze_expression
                  ","
                  (List.map
                     (fun (sign,ntvs) ->
-                      let fgnames = Local_context.fgnames loc
-                      and ct      = Local_context.ct loc
+                      let fgnames = Context.fgnames c
+                      and ct      = Context.ct c
                       in
                       Class_table.string_of_signature sign ntvs fgnames ct)
                     exp_sign_lst))
@@ -388,7 +388,7 @@ let analyze_expression
 
   in
 
-  let accs   = Accus.make expected (Local_context.type_variables loc) in
+  let accs   = Accus.make expected (Context.type_variables c) in
   analyze exp accs;
   assert (Accus.is_complete accs);
   assert (not (Accus.is_empty accs));
@@ -399,30 +399,30 @@ let analyze_expression
       ("The expression " ^ (string_of_expression exp) ^ " is ambiguous");
 
   let term,tvars_sub = Accus.result accs in
-  Local_context.update_type_variables tvars_sub loc;
+  Context.update_type_variables tvars_sub c;
   (*Printf.printf "\tterm: %s\n"
-    (Local_context.string_of_term term loc);*)
+    (Context.string_of_term term c);*)
   term
 
 
 
 let result_term
-    (ie:    info_expression)
-    (loc:   Local_context.t)
+    (ie:  info_expression)
+    (c:   Context.t)
     : term =
   (** Analyse the expression [ie] as the result expression of the
       context [context] and return the term.
    *)
-  assert (not (Local_context.is_global loc));
-  analyze_expression ie (Local_context.result_type loc) loc
+  assert (not (Context.is_global c));
+  analyze_expression ie (Context.result_type c) c
 
 
 let boolean_term
-    (ie:   info_expression)
-    (loc:  Local_context.t)
+    (ie: info_expression)
+    (c:  Context.t)
     : term =
   (** Analyse the expression [ie] as a boolean expression in the
       context [context] and return the term.
    *)
-  assert (not (Local_context.is_global loc));
-  analyze_expression ie (Local_context.boolean loc) loc
+  assert (not (Context.is_global c));
+  analyze_expression ie (Context.boolean c) c

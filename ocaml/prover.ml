@@ -34,28 +34,28 @@ let reset_goals () =  ngoals  := 0; nfailed := 0
 
 
 let prove
-    (pre: compound)
-    (chck: compound)
-    (post: compound)
-    (loc:  Local_context.t)
+    (pre:     compound)
+    (chck:    compound)
+    (post:    compound)
+    (context: Context.t)
     : (term * proof_term) list =
   (* Prove the top level assertion with the formal arguments 'argnames' and
      'argtypes' and the body 'pre' (preconditions), 'chck' (the intermediate
      assertions) and 'post' (postconditions) and return the list of all
      discharged terms and proof terms of the postconditions
    *)
-  let ft  = Local_context.ft loc
-  and at  = Local_context.at loc
+  let ft  = Context.ft context
+  and at  = Context.at context
   in
   let traceflag = ref (Options.is_tracing_proof ()) in
   let do_trace (f:unit->unit): unit =
     if !traceflag then f () else ()
   in
-  let arglen    = Local_context.nargs loc
-  and imp_id    = Local_context.implication_id loc
+  let arglen    = Context.nargs context
+  and imp_id    = Context.implication_id context
   in
-  let exp2term ie = Typer.boolean_term ie loc
-  and term2string t = Local_context.string_of_term t loc
+  let exp2term ie = Typer.boolean_term ie context
+  and term2string t = Context.string_of_term t context
   and split t = Term.binary_split t imp_id
   and chain t = Term.implication_chain t imp_id
   and normal (t:term): term =
@@ -79,7 +79,7 @@ let prove
 
   let trace_header (): unit =
     Printf.printf "\nall%s\n"
-      (Local_context.named_signature_string loc)
+      (Context.named_signature_string context)
 
   and trace_string (str:string) (l:int) (): unit =
     Printf.printf "%3d %s%s\n" l (level_string l) str
@@ -434,17 +434,17 @@ let prove
 (*   Public functions *)
 
 let prove_and_store
-    (entlst: entities list withinfo)
-    (bdy:    feature_body)
-    (loc: Local_context.t)
+    (entlst:  entities list withinfo)
+    (bdy:     feature_body)
+    (context: Context.t)
     : unit =
-  assert (Local_context.is_global loc);
-  Local_context.push entlst None loc;
+  assert (Context.is_global context);
+  Context.push entlst None context;
   let push_axiom (t:term) =
-    Local_context.put_global_assertion t None loc
+    Context.put_global_assertion t None context
 
   and push_proved (t:term) (pt:proof_term): unit =
-    Local_context.put_global_assertion t (Some pt) loc
+    Context.put_global_assertion t (Some pt) context
   in
 
   begin
@@ -470,7 +470,7 @@ let prove_and_store
             [] ->
             List.iter
                 (fun ie ->
-                  let term = Typer.boolean_term ie loc in
+                  let term = Typer.boolean_term ie context in
                   push_axiom term)
                 (* bug: store deferred assertions in class table, because
                    they have to be proved in descendants !!!*)
@@ -481,10 +481,10 @@ let prove_and_store
           not_yet_implemented entlst.i "Assertions with do block"
         else
           let lst =
-            prove rlst clst elst loc
+            prove rlst clst elst context
           in
         List.iter
             (fun (t,pt) -> push_proved t pt)
             lst
   end;
-  Local_context.pop loc
+  Context.pop context

@@ -67,8 +67,8 @@ let put_feature
     (entlst: entities list withinfo)
     (rt: return_type)
     (bdy: feature_body option)
-    (loc: Local_context.t): unit =
-  Local_context.push entlst rt loc;
+    (context: Context.t): unit =
+  Context.push entlst rt context;
   let impstat,term_opt =
     match bdy with
       None ->
@@ -84,7 +84,7 @@ let put_feature
               let term =
                 Typer.result_term
                   (withinfo ens.i def)
-                  loc
+                  context
               in
               Feature_table.No_implementation,
               Some term
@@ -98,12 +98,12 @@ let put_feature
      | _ -> not_yet_implemented fn.i
            "functions with implementation/preconditions"
   in
-  Local_context.put_global_function fn impstat term_opt loc;
-  Local_context.pop loc
+  Context.put_global_function fn impstat term_opt context;
+  Context.pop context
 
 
 let analyze(ast:declaration list): unit =
-  let loc = Local_context.make ()
+  let context = Context.make ()
   in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
@@ -112,19 +112,19 @@ let analyze(ast:declaration list): unit =
           assert (fgens.v = []);
           assert (inherits = []);
           assert (decl_blocks = []);
-          Local_context.put_class hm cname loc;
+          Context.put_class hm cname context;
       | Declaration_block (Feature_block (visi,dlist)) ->
-          Local_context.set_visibility visi loc;
+          Context.set_visibility visi context;
           analyz dlist;
-          Local_context.reset_visibility loc;
+          Context.reset_visibility context;
       | Named_feature (fn, entlst, rt, body) ->
-          put_feature fn entlst rt body loc;
+          put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
-          Prover.prove_and_store entlst body loc
+          Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
-          Local_context.put_formal_generic name concept loc
+          Context.put_formal_generic name concept context
       | _ ->
-          Local_context.print loc;
+          Context.print context;
           assert false
     in
     match ast with
@@ -132,7 +132,7 @@ let analyze(ast:declaration list): unit =
       | f::t -> one_decl f; analyz t
   in
   analyz ast;
-  Local_context.print loc
+  Context.print context
 
 
 
