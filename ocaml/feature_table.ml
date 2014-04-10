@@ -26,8 +26,6 @@ type descriptor = {fname:       feature_name;
                    priv:        definition option;
                    mutable pub: definition option option}
 
-type key        = {name: feature_name; sign: Sign.t}
-
 type t          = {mutable map: int ESignature_map.t Key_map.t;
                    features: descriptor seq}
 
