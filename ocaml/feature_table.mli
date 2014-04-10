@@ -6,9 +6,14 @@ type t
 
 type implementation_status = No_implementation | Builtin | Deferred
 
-val base_table: unit -> t
+val count:      t -> int
 
 val implication_index: int
+val all_index:         int
+val some_index:        int
+
+val base_table: unit -> t
+
 
 val implication_term: term -> term -> int -> t -> term
 

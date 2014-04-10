@@ -38,6 +38,21 @@ let empty (): t =
 
 
 
+let count (ft:t): int =
+  Seq.count ft.features
+
+
+let descriptor (i:int) (ft:t): descriptor =
+  assert (i < count ft);
+  Seq.elem ft.features i
+
+
+
+let implication_index: int = 0
+let all_index:         int = 2
+let some_index:        int = 3
+
+
 let base_table () : t =
   (** Construct a basic table which contains at least implication.
    *)
@@ -57,7 +72,7 @@ let base_table () : t =
      argnames = [||];
      sign     = signimp;
      priv     = None;
-     pub      = Some None};
+     pub      = Some None};  (* 0: implication *)
   ft.map <- Key_map.add
       (fnimp,2)
       (ESignature_map.singleton ([||],signimp) idximp)
@@ -86,19 +101,19 @@ let base_table () : t =
       Sign.make_func [|p_tp;g_tp|] bool1
     in
     Seq.push ft.features {entry with fname = FNoperator Parenop;
-                          sign = sign};
+                          sign = sign};  (* 1: "()" *)
     ft.map <- Key_map.add (FNoperator Parenop,2)
         (ESignature_map.singleton ([|any|],sign) idx)
         ft.map
   end;
-  Seq.push ft.features entry;
-  Seq.push ft.features {entry with fname = FNsome};
+  Seq.push ft.features entry;                        (* 2: all  *)
+  Seq.push ft.features {entry with fname = FNsome};  (* 3: some *)
+  assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
+  assert ((descriptor all_index ft).fname         = FNall);
+  assert ((descriptor some_index ft).fname        = FNsome);
   ft
 
 
-
-
-let implication_index: int = 0
 
 
 let implication_term (a:term) (b:term) (nbound:int) (ft:t)

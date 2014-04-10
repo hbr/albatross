@@ -22,6 +22,7 @@ type t = {
     ct:            Class_table.t;
     ft:            Feature_table.t;
     at:            Assertion_table.t;
+    pc:            Proof_context.t
   }
 
 
@@ -59,55 +60,6 @@ let is_toplevel (loc:t): bool =
   match loc.stack with
     [_] -> true
   | _   -> false
-
-
-let make (): t =
-  {entry = empty_entry;
-   stack = [];
-   visi      = Public;
-   ct        = Class_table.base_table ();
-   ft        = Feature_table.base_table ();
-   at        = Assertion_table.empty ()}
-
-
-let push
-    (entlst: entities list withinfo)
-    (rt: return_type)
-    (loc: t)
-    : unit =
-  (** Make a next local context with the argument list [entlst] and the
-      return type [rt] based on previous local global context [loc]
-   *)
-  let entry = loc.entry in
-  let fgnames, concepts, argnames, argtypes, ntvs, sign =
-    let ntvs0 = TVars_sub.count_local loc.entry.tvars_sub
-    in
-    Class_table.signature entlst rt
-      entry.fgnames entry.concepts entry.argnames entry.argtypes ntvs0 loc.ct
-  in
-  loc.entry <-
-    next_entry fgnames concepts argnames argtypes entlst.i sign
-      (TVars_sub.add_local ntvs loc.entry.tvars_sub);
-  loc.stack <- entry::loc.stack
-
-
-
-let pop (loc:t): unit =
-  (** Pop the inner context
-   *)
-  assert (not (is_global loc));
-  loc.entry <- List.hd loc.stack;
-  loc.stack <- List.tl loc.stack
-
-
-
-
-let print (loc:t): unit =
-  assert (is_global loc);
-  Class_table.print   loc.ct;
-  Feature_table.print loc.ct loc.ft
-
-
 
 
 
@@ -160,6 +112,72 @@ let fgnames (loc:t): int array=
       previous contexts
    *)
   loc.entry.fgnames
+
+
+
+let last_argnames (c:t): int array =
+  (** The argument names of the last push *)
+  Array.sub c.entry.argnames 0 (arity c)
+
+
+
+let make (): t =
+  {entry = empty_entry;
+   stack = [];
+   visi      = Public;
+   ct        = Class_table.base_table ();
+   ft        = Feature_table.base_table ();
+   at        = Assertion_table.empty ();
+   pc        =
+   Proof_context.make
+     Feature_table.implication_index
+     Feature_table.all_index
+ }
+
+
+let push
+    (entlst: entities list withinfo)
+    (rt: return_type)
+    (loc: t)
+    : unit =
+  (** Make a next local context with the argument list [entlst] and the
+      return type [rt] based on previous local global context [loc]
+   *)
+  let entry = loc.entry in
+  let fgnames, concepts, argnames, argtypes, ntvs, sign =
+    let ntvs0 = TVars_sub.count_local loc.entry.tvars_sub
+    in
+    Class_table.signature entlst rt
+      entry.fgnames entry.concepts entry.argnames entry.argtypes ntvs0 loc.ct
+  in
+  loc.entry <-
+    next_entry fgnames concepts argnames argtypes entlst.i sign
+      (TVars_sub.add_local ntvs loc.entry.tvars_sub);
+  loc.stack <- entry::loc.stack;
+
+  Proof_context.push (arity loc) (last_argnames loc) loc.pc
+
+
+
+let pop (loc:t): unit =
+  (** Pop the last context
+   *)
+  assert (not (is_global loc));
+  loc.entry <- List.hd loc.stack;
+  loc.stack <- List.tl loc.stack;
+  Proof_context.pop loc.pc
+
+
+
+
+let print (loc:t): unit =
+  assert (is_global loc);
+  Class_table.print   loc.ct;
+  Feature_table.print loc.ct loc.ft
+
+
+
+
 
 
 let ct (loc:t): Class_table.t    = loc.ct
