@@ -52,66 +52,66 @@ let next_entry
    tvars_sub = tvars}
 
 
-let is_global (loc:t): bool =
-  loc.stack = []
+let is_global (c:t): bool =
+  c.stack = []
 
 
-let is_toplevel (loc:t): bool =
-  match loc.stack with
+let is_toplevel (c:t): bool =
+  match c.stack with
     [_] -> true
   | _   -> false
 
 
 
-let arity     (loc:t): int = Sign.arity loc.entry.signature
+let arity     (c:t): int = Sign.arity c.entry.signature
 
-let argument (name:int) (loc:t): int * TVars.t * Sign.t =
+let argument (name:int) (c:t): int * TVars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
-  let i = Search.array_find_min (fun n -> n=name) loc.entry.argnames in
-  i, TVars_sub.tvars loc.entry.tvars_sub, Sign.argument i loc.entry.signature
+  let i = Search.array_find_min (fun n -> n=name) c.entry.argnames in
+  i, TVars_sub.tvars c.entry.tvars_sub, Sign.argument i c.entry.signature
     (* bug: argnames are cumulated and signature not!! *)
 
 
-let has_result (loc:t): bool =
-  Sign.has_result loc.entry.signature
+let has_result (c:t): bool =
+  Sign.has_result c.entry.signature
 
-let result_type (loc:t): type_term =
+let result_type (c:t): type_term =
   (** The result type of the context
    *)
-  assert (has_result loc);
-  Sign.result loc.entry.signature
+  assert (has_result c);
+  Sign.result c.entry.signature
 
-let count_type_variables (loc:t): int =
+let count_type_variables (c:t): int =
   (** The number of cumulated type variables in this context and all
       preceeding contexts
    *)
-  TVars_sub.count loc.entry.tvars_sub
+  TVars_sub.count c.entry.tvars_sub
 
 
-let nfgs (loc:t): int =
+let nfgs (c:t): int =
   (** The cumulated number of formal generics in this context and all
       previous contexts
    *)
-  Array.length loc.entry.fgnames
+  Array.length c.entry.fgnames
 
-let nargs (loc:t): int =
+let nargs (c:t): int =
   (** The cumulated number of formal arguments in this context and all
       previous contexts
    *)
-  Array.length loc.entry.argnames
+  Array.length c.entry.argnames
 
-let ntvs (loc:t): int =
+let ntvs (c:t): int =
   (** The cumulated number of formal generics and type variables in
       this context and all previous contexts
    *)
-  (nfgs loc) + (count_type_variables loc)
+  (nfgs c) + (count_type_variables c)
 
 
-let fgnames (loc:t): int array=
+let fgnames (c:t): int array=
   (** The cumulated formal generic names of this context and all
       previous contexts
    *)
-  loc.entry.fgnames
+  c.entry.fgnames
 
 
 
@@ -135,115 +135,120 @@ let make (): t =
  }
 
 
+let push_empty (c:t): unit =
+  c.stack <- c.entry::c.stack;
+  Proof_context.push 0 [||] c.pc
+
+
 let push
     (entlst: entities list withinfo)
     (rt: return_type)
-    (loc: t)
+    (c: t)
     : unit =
   (** Make a next local context with the argument list [entlst] and the
-      return type [rt] based on previous local global context [loc]
+      return type [rt] based on previous local global context [c]
    *)
-  let entry = loc.entry in
+  let entry = c.entry in
   let fgnames, concepts, argnames, argtypes, ntvs, sign =
-    let ntvs0 = TVars_sub.count_local loc.entry.tvars_sub
+    let ntvs0 = TVars_sub.count_local c.entry.tvars_sub
     in
     Class_table.signature entlst rt
-      entry.fgnames entry.concepts entry.argnames entry.argtypes ntvs0 loc.ct
+      entry.fgnames entry.concepts entry.argnames entry.argtypes ntvs0 c.ct
   in
-  loc.entry <-
+  c.entry <-
     next_entry fgnames concepts argnames argtypes entlst.i sign
-      (TVars_sub.add_local ntvs loc.entry.tvars_sub);
-  loc.stack <- entry::loc.stack;
+      (TVars_sub.add_local ntvs c.entry.tvars_sub);
+  c.stack <- entry::c.stack;
 
-  Proof_context.push (arity loc) (last_argnames loc) loc.pc
+  Proof_context.push (arity c) (last_argnames c) c.pc
 
 
 
-let pop (loc:t): unit =
+let pop (c:t): unit =
   (** Pop the last context
    *)
-  assert (not (is_global loc));
-  loc.entry <- List.hd loc.stack;
-  loc.stack <- List.tl loc.stack;
-  Proof_context.pop loc.pc
+  assert (not (is_global c));
+  c.entry <- List.hd c.stack;
+  c.stack <- List.tl c.stack;
+  Proof_context.pop c.pc
 
 
 
 
-let print (loc:t): unit =
-  assert (is_global loc);
-  Class_table.print   loc.ct;
-  Feature_table.print loc.ct loc.ft
+let print (c:t): unit =
+  assert (is_global c);
+  Class_table.print   c.ct;
+  Feature_table.print c.ct c.ft
 
 
 
 
 
 
-let ct (loc:t): Class_table.t    = loc.ct
-let ft (loc:t): Feature_table.t  = loc.ft
+let ct (c:t): Class_table.t    = c.ct
+let ft (c:t): Feature_table.t  = c.ft
 let at (g:t): Assertion_table.t  = g.at
 
-let is_private (loc:t): bool =
-  match loc.visi with
+let is_private (c:t): bool =
+  match c.visi with
     Private -> true
   | _ -> false
 
-let is_public (loc:t): bool = not (is_private loc)
+let is_public (c:t): bool = not (is_private c)
 
-let set_visibility (v:visibility) (loc:t): unit =
-  assert (is_global loc);
-  loc.visi <- v
+let set_visibility (v:visibility) (c:t): unit =
+  assert (is_global c);
+  c.visi <- v
 
-let reset_visibility (loc:t): unit =
-  assert (is_global loc);
-  loc.visi <- Public
-
-
-
-let type_variables (loc:t): TVars_sub.t = loc.entry.tvars_sub
-
-let boolean (loc:t): term =
-  Class_table.boolean_type (ntvs loc)
+let reset_visibility (c:t): unit =
+  assert (is_global c);
+  c.visi <- Public
 
 
-let update_type_variables (tvs:TVars_sub.t) (loc:t): unit =
+
+let type_variables (c:t): TVars_sub.t = c.entry.tvars_sub
+
+let boolean (c:t): term =
+  Class_table.boolean_type (ntvs c)
+
+
+let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
   (** Update the type variables of the current context with [tvs]
    *)
   try
-    TVars_sub.update loc.entry.tvars_sub tvs
+    TVars_sub.update c.entry.tvars_sub tvs
   with Term_capture ->
-    not_yet_implemented loc.entry.info "Type inference of formal generics"
+    not_yet_implemented c.entry.info "Type inference of formal generics"
 
 
 
 
-let string_of_term (t:term) (loc:t): string =
-  Feature_table.term_to_string t loc.entry.argnames loc.ft
+let string_of_term (t:term) (c:t): string =
+  Feature_table.term_to_string t c.entry.argnames c.ft
 
 
 
-let sign2string (s:Sign.t) (loc:t): string =
+let sign2string (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
     s
-    (count_type_variables loc)
-    loc.entry.fgnames
-    loc.ct
+    (count_type_variables c)
+    c.entry.fgnames
+    c.ct
 
 
 
-let signature_string (loc:t): string =
-  (** Print the signature of the context [loc].
+let signature_string (c:t): string =
+  (** Print the signature of the context [c].
    *)
-  sign2string loc.entry.signature loc
+  sign2string c.entry.signature c
 
 
 
-let named_signature_string (loc:t): string =
-  (** Print the signature of the context [loc] with all argument names.
+let named_signature_string (c:t): string =
+  (** Print the signature of the context [c] with all argument names.
    *)
-  let nargs = arity loc in
-  let has_res = has_result loc
+  let nargs = arity c in
+  let has_res = has_result c
   and has_args = (nargs <> 0) in
   let argsstr =
     if not has_args then
@@ -251,8 +256,8 @@ let named_signature_string (loc:t): string =
     else
       let zipped = Array.to_list (Array.init nargs
                                     (fun i ->
-                                      loc.entry.argnames.(i),
-                                      loc.entry.argtypes.(i)))
+                                      c.entry.argnames.(i),
+                                      c.entry.argtypes.(i)))
       in
       let llst = List.fold_left
           (fun ll (n,tp) -> match ll with
@@ -270,12 +275,12 @@ let named_signature_string (loc:t): string =
              (fun (ns,tp) ->
                (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
                ^ ":"
-               ^ (Class_table.type2string tp 0 loc.entry.fgnames loc.ct))
+               ^ (Class_table.type2string tp 0 c.entry.fgnames c.ct))
              llst)
       ^ ")"
   and resstr =
     if has_res then
-      Class_table.type2string (result_type loc) 0 loc.entry.fgnames loc.ct
+      Class_table.type2string (result_type c) 0 c.entry.fgnames c.ct
     else ""
   in
   if has_args && has_res then argsstr ^ ": " ^ resstr
@@ -291,62 +296,62 @@ let put_global_function
     (fn:       feature_name withinfo)
     (impstat:  Feature_table.implementation_status)
     (term_opt: term option)
-    (loc:      t)
+    (c:      t)
     : unit =
-  assert (is_toplevel loc);
+  assert (is_toplevel c);
   Feature_table.put_function
     fn
-    loc.entry.fgnames
-    loc.entry.concepts
-    loc.entry.argnames
-    loc.entry.signature
-    (is_private loc)
+    c.entry.fgnames
+    c.entry.concepts
+    c.entry.argnames
+    c.entry.signature
+    (is_private c)
     impstat
     term_opt
-    loc.ft
+    c.ft
 
 
-let implication_id (loc:t): int =
-  Feature_table.implication_index + (nargs loc)
+let implication_id (c:t): int =
+  Feature_table.implication_index + (nargs c)
 
 
-let string_of_assertion (t:term) (loc: t): string =
+let string_of_assertion (t:term) (c: t): string =
   "all"
-  ^ (named_signature_string loc) ^ " "
-  ^ (string_of_term t loc)
+  ^ (named_signature_string c) ^ " "
+  ^ (string_of_term t c)
 
 
 let put_global_assertion
-    (t:term) (pt_opt: proof_term option) (loc:t): unit =
+    (t:term) (pt_opt: proof_term option) (c:t): unit =
   (** Put the assertion [t] with its optional proof term [pt_opt]
       into the global assertion table.
    *)
-  assert (is_toplevel loc);
+  assert (is_toplevel c);
   Printf.printf "%3d %s  %s\n"
-    (Assertion_table.count loc.at)
+    (Assertion_table.count c.at)
     (match pt_opt with
       None    -> "axiom "
     | Some pt -> "proved")
-    (string_of_assertion t loc);
-  Assertion_table.put_assertion t (arity loc) pt_opt loc.ft loc.at
+    (string_of_assertion t c);
+  Assertion_table.put_assertion t (arity c) pt_opt c.ft c.at
 
 
 let put_formal_generic
     (name:int withinfo)
     (concept:type_t withinfo)
-    (loc:t)
+    (c:t)
     : unit =
   (** Add the formal generic [name] with its [concept] to the formal
       generics.
    *)
-  assert (is_global loc);
-  Class_table.put_formal name concept loc.ct
+  assert (is_global c);
+  Class_table.put_formal name concept c.ct
 
 
 
-let put_class (hm:header_mark withinfo) (cn:int withinfo) (loc:t): unit =
-  assert (is_global loc);
-  Class_table.put hm cn loc.ct
+let put_class (hm:header_mark withinfo) (cn:int withinfo) (c:t): unit =
+  assert (is_global c);
+  Class_table.put hm cn c.ct
 
 
 
@@ -372,20 +377,20 @@ exception Wrong_signature
 let find_identifier
     (name:int)
     (nargs_id:int)
-    (loc:t)
+    (c:t)
     : (int * TVars.t * Sign.t) list =
   (** Find the identifier named [name] which accepts [nargs] arguments
       in one of the local contexts or in the global feature table. Return
       the list of variables together with their signature
    *)
-  let nfgs_c0  = nfgs loc
-  and nargs_c0 = nargs loc
+  let nfgs_c0  = nfgs c
+  and nargs_c0 = nargs c
   in
-  if is_global loc then
-    find_funcs (FNname name) nargs_id nfgs_c0 nargs_c0 loc.ft
+  if is_global c then
+    find_funcs (FNname name) nargs_id nfgs_c0 nargs_c0 c.ft
   else
     try
-      let i,tvs,s = argument name loc
+      let i,tvs,s = argument name c
       in
       if (Sign.arity s) = nargs_id then begin
         [i,tvs,s]
@@ -394,7 +399,7 @@ let find_identifier
     with
       Not_found ->
         find_funcs
-          (FNname name) nargs_id nfgs_c0 nargs_c0 loc.ft
+          (FNname name) nargs_id nfgs_c0 nargs_c0 c.ft
     | Wrong_signature ->
         raise Not_found
 
@@ -403,13 +408,18 @@ let find_identifier
 let find_feature
     (fn:feature_name)
     (nargs_feat:int)
-    (loc:t)
+    (c:t)
     : (int * TVars.t * Sign.t) list =
   (** Find the feature named [fn] which accepts [nargs] arguments global
       feature table. Return the list of variables together with their
       signature.
    *)
-  let nfgs_c0  = nfgs loc
-  and nargs_c0 = nargs loc
+  let nfgs_c0  = nfgs c
+  and nargs_c0 = nargs c
   in
-  find_funcs fn nargs_feat nfgs_c0 nargs_c0 loc.ft
+  find_funcs fn nargs_feat nfgs_c0 nargs_c0 c.ft
+
+
+
+let add_assumption (t:term) (c:t): unit =
+  Proof_context.add_assumption t c.pc

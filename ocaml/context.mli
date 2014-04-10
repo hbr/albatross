@@ -5,6 +5,7 @@ open Proof
 
 type t
 val make:  unit -> t
+val push_empty: t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
 val pop:   t -> unit
 val print: t -> unit
@@ -55,3 +56,6 @@ val put_global_assertion:
 
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val put_class: header_mark withinfo -> int withinfo -> t -> unit
+
+
+val add_assumption: term -> t -> unit
