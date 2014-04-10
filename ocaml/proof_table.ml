@@ -82,7 +82,7 @@ let make (imp_id:int) (all_id:int): t =
 
 
 let push (nbenv:int) (names: int array) (at:t): unit =
-  assert (let len = Array.length names in len=0 || len=nbenv);
+  assert (nbenv = Array.length names);
   at.entry.count <- Seq.count at.seq;
   at.stack       <- at.entry :: at.stack;
   at.entry       <-
@@ -292,11 +292,14 @@ let discharged (i:int) (at:t): int * int array * term * proof_term =
   and nused     = Array.length used_args
   and nnames    = Array.length nms
   in
-  let nms       =
-    if nnames=0 then nms
-    else
-      (assert (nnames=nargs);
-       Array.init nused (fun i -> nms.(i)))
+  assert (nnames = nargs);
+  assert (nused <= nargs);
+  let nms = Array.init
+      nused
+      (fun i ->
+        let j = used_args.(i) in
+        assert (j < nargs);
+        nms.(j))
   in
   let pt =
     if axiom then
