@@ -85,7 +85,7 @@ let base_table () : t =
                            [|g_tp|])
   in
   let entry =
-    {fname    = FNall;
+    {fname    = FNoperator Allop;
      impstat  = Builtin;
      fgnames  = [|g|];
      concepts = [|any|];
@@ -104,11 +104,11 @@ let base_table () : t =
         (ESignature_map.singleton ([|any|],sign) idx)
         ft.map
   end;
-  Seq.push ft.features entry;                        (* 2: all  *)
-  Seq.push ft.features {entry with fname = FNsome};  (* 3: some *)
+  Seq.push ft.features entry;                                   (* 2: all  *)
+  Seq.push ft.features {entry with fname = FNoperator Someop};  (* 3: some *)
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
-  assert ((descriptor all_index ft).fname         = FNall);
-  assert ((descriptor some_index ft).fname        = FNsome);
+  assert ((descriptor all_index ft).fname         = FNoperator Allop);
+  assert ((descriptor some_index ft).fname        = FNoperator Someop );
   ft
 
 
@@ -176,8 +176,6 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
 
 
 
-
-
 let term_to_string
     (t:term)
     (names: int array)
@@ -213,17 +211,45 @@ let term_to_string
             | _ -> raise Not_found
           end
       | _ -> raise Not_found
-    and op2str (op:operator) (args: term array): string =
+    and args2str (n:int) (nms:int array): string =
+      let nnms  = Array.length nms in
+      assert (nnms=0 || nnms = n);
+      let fargs  = Array.init
+          n
+          (if nnms=0 then anon2str else (fun i -> ST.string nms.(i)))
+      in
+      String.concat "," (Array.to_list fargs)
+    in
+    let lam_inner2str (n:int) (nms:int array) (t:term): string =
+      let names = Array.append nms names
+      and nnms  = Array.length nms in
+      to_string t names (nanon+n-nnms) None
+    in
+    let q2str (qstr:string) (args:term array): string =
       let nargs = Array.length args in
-      if nargs = 1 then
-        (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(0) names nanon (Some (op,false)))
-      else begin
-        assert (nargs=2); (* only unary and binary operators *)
-        (to_string args.(0) names nanon (Some (op,true)))
-        ^ " " ^ (operator_to_rawstring op) ^ " "
+      assert (nargs = 1);
+      match args.(0) with
+        Lam (n,nms,t) ->
+          let argsstr = args2str n nms
+          and tstr    = lam_inner2str n nms t in
+          qstr ^ "(" ^ argsstr ^ ") " ^ tstr
+      | _ -> assert false  (* cannot happen *)
+    in
+    let op2str (op:operator) (args: term array): string =
+      match op with
+        Allop  -> q2str "all"  args
+      | Someop -> q2str "some" args
+      | _ ->
+          let nargs = Array.length args in
+          if nargs = 1 then
+            (operator_to_rawstring op) ^ " "
+            ^ (to_string args.(0) names nanon (Some (op,false)))
+          else begin
+            assert (nargs=2); (* only unary and binary operators *)
+            (to_string args.(0) names nanon (Some (op,true)))
+            ^ " " ^ (operator_to_rawstring op) ^ " "
         ^ (to_string args.(1) names nanon (Some (op,false)))
-      end
+          end
     and app2str (f:term) (args: term array): string =
       (to_string f names nanon None)
       ^ "("
@@ -234,13 +260,8 @@ let term_to_string
               (Array.to_list args)))
       ^ ")"
     and lam2str (n:int) (nms: int array) (t:term): string =
-      let names = Array.append nms names
-      and nnms  = Array.length nms in
-      assert (nnms=0 || nnms = n);
-      let fargs  = Array.init n (if nnms=0 then anon2str else ST.string)
-      in
-      let argstr = String.concat "," (Array.to_list fargs)
-      and tstr   = to_string t (Array.append nms names) (nanon+n-nnms) None
+      let argstr = args2str n nms
+      and tstr   = lam_inner2str n nms t
       in
       "((" ^ argstr ^ ") -> " ^ tstr ^ ")"
     in

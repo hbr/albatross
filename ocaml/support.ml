@@ -343,6 +343,8 @@ type operator =
   | DColonop
   | Inop
   | Notinop
+  | Allop
+  | Someop
   | Freeop  of int
   | RFreeop of int
 
@@ -375,7 +377,9 @@ let operator_data op =
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
   | Inop      -> "in",  60,  Nonassoc
-  | Notinop      -> "/in",  60, Nonassoc
+  | Notinop   -> "/in",  60, Nonassoc
+  | Allop     -> "all", 10,  Nonassoc
+  | Someop    -> "some", 10, Nonassoc
   | Freeop  i -> ST.string i, 60,  Left
   | RFreeop i -> ST.string i, 61,  Right
 
@@ -392,7 +396,7 @@ let is_binary (op:operator): bool =
 
 let is_unary (op:operator): bool =
   match op with
-    Plusop | Minusop | Notop | Oldop  -> true
+    Plusop | Minusop | Notop | Oldop | Allop | Someop -> true
   | Freeop i | RFreeop i -> true
   | _ -> false
 
@@ -673,8 +677,6 @@ type feature_name =
   | FNtrue
   | FNfalse
   | FNnumber of int
-  | FNall
-  | FNsome
 
 let feature_name_to_string (fn:feature_name): string =
   match fn with
@@ -682,8 +684,6 @@ let feature_name_to_string (fn:feature_name): string =
   | FNoperator op -> operator_to_rawstring op
   | FNtrue ->  "true"
   | FNfalse -> "false"
-  | FNall   -> "@all"
-  | FNsome  -> "@some"
 
 type name_sig = feature_name * type_t list
 
