@@ -174,7 +174,7 @@ let local_term (i:int) (at:t): term =
 
 
 
-let add (t:term) (pt:proof_term) (at:t): unit =
+let add_proved (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
@@ -238,7 +238,7 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
       in
       if pt_len <= res_idx then raise Not_found;
       Array.iter
-        (fun pt -> add (term_of_pt pt at) pt at)
+        (fun pt -> add_proved (term_of_pt pt at) pt at)
         pt_arr;
       let term = discharged_term res_idx at in
       pop at;
@@ -247,23 +247,23 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
 
 
 let add_axiom (t:term) (at:t): unit =
-  add t (Axiom t) at
+  add_proved t (Axiom t) at
 
 
 let add_assumption (t:term) (at:t): unit =
-  add t (Assumption t) at
+  add_proved t (Assumption t) at
 
 
 let add_mp (t:term) (i:int) (j:int) (at:t): unit =
   let pt = Detached (i,j) in
   assert (Term.equal_wo_names t (term_of_pt pt at));
-  add t pt at
+  add_proved t pt at
 
 
 let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   let pt = Specialize (i,args) in
   assert (Term.equal_wo_names t (term_of_pt pt at));
-  add t pt at
+  add_proved t pt at
 
 
 

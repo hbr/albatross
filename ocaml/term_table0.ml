@@ -224,7 +224,6 @@ let unify (t:term) (nbt:int) (table:t)
             has to be transformed into the environment of [t].
    *)
   let rec uni (t:term) (tab:t) (nb:int): submap =
-    assert (nb=0); (* as long as there are no lambda terms *)
     let basic_subs: submap =
       IntMap.map (fun (avar,nargs) -> Term_sub.singleton avar t) tab.avars
     and subs

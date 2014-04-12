@@ -31,6 +31,13 @@ let empty_entry =
      used_mp = IntSet.empty;
      count = 0}
 
+let copied_entry (e:entry): entry =
+  {prvd    = e.prvd;
+   bwd     = e.bwd;
+   fwd     = e.fwd;
+   used_mp = e.used_mp;
+   count   = e.count}
+
 
 type proof_term = Proof_table.proof_term
 
@@ -529,7 +536,7 @@ let push (nbenv:int) (names:int array) (pc:t): unit =
   assert (not (has_work pc));
   Proof_table.push nbenv names pc.base;
   pc.entry.count <- Seq.count pc.terms;
-  pc.stack <- pc.entry::pc.stack
+  pc.stack <- (copied_entry pc.entry)::pc.stack
 
 
 
@@ -574,3 +581,12 @@ let discharged (i:int) (pc:t): term * proof_term =
       assumptions discharged together with its proof term.
    *)
   Proof_table.discharged i pc.base
+
+
+let add_proved (t:term) (pterm:proof_term) (pc:t): unit =
+  if has t pc then
+    ()
+  else begin
+    Proof_table.add_proved t pterm pc.base;
+    add_new t IntSet.empty pc
+  end

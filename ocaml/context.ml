@@ -515,3 +515,7 @@ let add_axiom (t:term) (c:t): int =
 
 let discharged (i:int) (c:t): term * proof_term =
   Proof_context.discharged i c.pc
+
+
+let add_proved (t:term) (pterm:proof_term) (c:t): unit =
+  Proof_context.add_proved t pterm c.pc

@@ -63,6 +63,7 @@ val expanded_term:  term -> t -> term
 val add_assumption: term -> t -> int
 val add_axiom:      term -> t -> int
 val discharged:     int -> t -> term * proof_term
+val add_proved:     term -> proof_term -> t -> unit
 
 val print_all_local_assertions: t -> unit
 val print_global_assertions:    t -> unit

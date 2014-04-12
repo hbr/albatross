@@ -31,7 +31,7 @@ val make: int -> int -> t
 val push: int -> int array -> t -> unit
 val pop:  t -> unit
 
-val add:            term -> proof_term -> t -> unit
+val add_proved: term -> proof_term -> t -> unit
 
 val term_of_pt: proof_term -> t -> term
 
