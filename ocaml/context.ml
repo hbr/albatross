@@ -15,6 +15,10 @@ type entry = {
     mutable tvars_sub: TVars_sub.t; (* cumulated        *)
   }
 
+type proof_term_0 = proof_term
+
+type proof_term = Proof_context.proof_term
+
 type t = {
     mutable entry: entry;
     mutable stack: entry list;
@@ -244,20 +248,20 @@ let signature_string (c:t): string =
 
 
 
-let named_signature_string (c:t): string =
-  (** Print the signature of the context [c] with all argument names.
+
+let arguments_string (e:entry) (ct:Class_table.t): string =
+  (** The string "(a:A, b1,b2:B, ... )" of all local arguments of the entry [e].
+      In case that there are no arguments the empty string is returned and
+      not "()".
    *)
-  let nargs = arity c in
-  let has_res = has_result c
-  and has_args = (nargs <> 0) in
-  let argsstr =
-    if not has_args then
+  let nargs = Sign.arity e.signature in
+    if nargs = 0 then
       ""
     else
       let zipped = Array.to_list (Array.init nargs
                                     (fun i ->
-                                      c.entry.argnames.(i),
-                                      c.entry.argtypes.(i)))
+                                      e.argnames.(i),
+                                      e.argtypes.(i)))
       in
       let llst = List.fold_left
           (fun ll (n,tp) -> match ll with
@@ -275,18 +279,33 @@ let named_signature_string (c:t): string =
              (fun (ns,tp) ->
                (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
                ^ ":"
-               ^ (Class_table.type2string tp 0 c.entry.fgnames c.ct))
+               ^ (Class_table.type2string tp 0 e.fgnames ct))
              llst)
       ^ ")"
-  and resstr =
-    if has_res then
-      Class_table.type2string (result_type c) 0 c.entry.fgnames c.ct
-    else ""
-  in
-  if has_args && has_res then argsstr ^ ": " ^ resstr
-  else if has_args then       argsstr
-  else                        resstr
 
+
+
+let result_string (e:entry) (ct:Class_table.t): string =
+  if Sign.has_result e.signature then
+    Class_table.type2string (Sign.result e.signature) 0 e.fgnames ct
+  else ""
+
+
+let named_signature_string (c:t): string =
+  (** Print the signature of the context [c] with all argument names.
+   *)
+  let argsstr = arguments_string c.entry c.ct
+  and resstr  = result_string    c.entry c.ct
+  in
+  let has_args = argsstr <> ""
+  and has_res  = resstr <> ""
+  in
+  if has_args && has_res then
+    argsstr ^ ": " ^ resstr
+  else if has_args then
+    argsstr
+  else
+    resstr
 
 
 
@@ -322,7 +341,7 @@ let string_of_assertion (t:term) (c: t): string =
 
 
 let put_global_assertion
-    (t:term) (pt_opt: proof_term option) (c:t): unit =
+    (t:term) (pt_opt: proof_term_0 option) (c:t): unit =
   (** Put the assertion [t] with its optional proof term [pt_opt]
       into the global assertion table.
    *)
@@ -420,6 +439,79 @@ let find_feature
   find_funcs fn nargs_feat nfgs_c0 nargs_c0 c.ft
 
 
+let print_assertions (e:entry) (c0:int) (c1:int) (c:t): unit =
+  let argsstr = arguments_string e c.ct in
+  if argsstr <> "" then
+    Printf.printf "%s\n" argsstr;
+  let rec print (i:int): unit =
+    if i = c1 then ()
+    else begin
+      let t,nbenv = Proof_context.term i c.pc in
+      assert (nbenv = Array.length e.argnames);
+      let tstr = Feature_table.term_to_string t e.argnames c.ft in
+      Printf.printf "%3d\t%s\n" i tstr;
+      print (i+1)
+    end
+  in
+  print c0
 
-let add_assumption (t:term) (c:t): unit =
+
+
+let print_global_assertions (c:t): unit =
+  let cnt = Proof_context.count_global c.pc
+  and e   =
+    if c.stack = [] then c.entry
+    else
+      let rec get_e0 (lst: entry list): entry =
+        match lst with
+          []    -> assert false
+        | [e]   -> e
+        | _::lst -> get_e0 lst
+      in
+      get_e0 c.stack
+  in
+  print_assertions e 0 cnt c
+
+
+
+let print_all_local_assertions (c:t): unit =
+  let rec print (elst: entry list) (clst: int list): unit =
+    match elst, clst with
+      [], []
+    | [_], [_] ->
+        ()
+    | e1::e0::elst, c1::c0::clst ->
+        print (e0::elst) (c0::clst);
+        print_assertions e1 c0 c1 c
+    | _, _ -> assert false (* shall never happen, elst and clst must have
+                              equal length *)
+  in
+  let clst = Proof_context.stacked_counts c.pc
+  in
+  print c.stack clst;
+  print_assertions
+    c.entry
+    (Proof_context.count_previous c.pc)
+    (Proof_context.count          c.pc)
+    c
+
+
+let all_quantified_outer (t:term) (c:t): term =
+  Proof_context.all_quantified_outer t c.pc
+
+let implication_chain (ps:term list) (tgt:term) (c:t): term =
+  Proof_context.implication_chain ps tgt c.pc
+
+let expanded_term (t:term) (c:t): term =
+  let nbenv = nargs c in
+  Feature_table.normalize_term t nbenv c.ft
+
+
+let add_assumption (t:term) (c:t): int =
   Proof_context.add_assumption t c.pc
+
+let add_axiom (t:term) (c:t): int =
+  Proof_context.add_axiom t c.pc
+
+let discharged (i:int) (c:t): term * proof_term =
+  Proof_context.discharged i c.pc

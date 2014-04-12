@@ -49,6 +49,10 @@ let make (imp_id:int) (all_id:int): t  =
    stack    = []}
 
 
+let stacked_counts (pc:t): int list =
+  Proof_table.stacked_counts pc.base
+
+
 let is_global (at:t): bool =
   Proof_table.is_global at.base
 
@@ -62,7 +66,13 @@ let nbenv (at:t): int = Proof_table.nbenv at.base
 
 let nbenv_local (at:t): int = Proof_table.nbenv_local at.base
 
-let count (pc:t): int = Seq.count pc.terms
+let count (pc:t): int =
+  let res = Seq.count pc.terms in
+  assert (res = Proof_table.count pc.base);
+  res
+
+let count_previous (pc:t): int = Proof_table.count_previous pc.base
+let count_global(pc:t): int = Proof_table.count_global pc.base
 
 let depth (at:t): int = Proof_table.depth at.base
 
@@ -70,11 +80,23 @@ let all_id(at:t): int = Proof_table.all_id at.base
 
 let imp_id(at:t): int = Proof_table.imp_id at.base
 
+let term (i:int) (pc:t): term * int =
+  (** The [i]th proved term with the number of variables of its environment.
+   *)
+  assert (i < count pc);
+  Proof_table.term i pc.base
+
 let implication (a:term) (b:term) (pc:t) =
   Proof_table.implication a b pc.base
 
-let quantified (nargs:int) (names:int array) (t:term) (pc:t) =
-  Proof_table.quantified nargs names t pc.base
+let all_quantified (nargs:int) (names:int array) (t:term) (pc:t) =
+  Proof_table.all_quantified nargs names t pc.base
+
+let all_quantified_outer(t:term) (pc:t): term  =
+  Proof_table.all_quantified_outer t pc.base
+
+let implication_chain (ps:term list) (tgt:term) (pc:t): term  =
+  Proof_table.implication_chain ps tgt pc.base
 
 
 let work (pc:t): int list = pc.work
@@ -243,7 +265,7 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
   (** Add the new term [t] to the context [pc].
    *)
   let td = analyze t pc
-  and idx = count pc
+  and idx = Seq.count pc.terms
   in
   let add_to_proved (): unit =
     pc.entry.prvd <-
@@ -272,6 +294,7 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
   add_to_forward  ();
   add_to_backward ();
   add_to_work     ()
+
 
 
 
@@ -339,7 +362,7 @@ let specialized_forward
   in
   let b =
     if gp1 < nargs then
-      quantified (nargs-gp1) [||] b pc
+      all_quantified (nargs-gp1) [||] b pc
     else
       b
   in
@@ -439,10 +462,11 @@ let add_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
 
 
 
-let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): unit =
+let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   (** Add the term [t] as an assumption or an axiom to the context [pc].
    *)
-  let has = has t pc
+  let idx = count pc
+  and has = has t pc
   in
   if is_axiom then
     Proof_table.add_axiom t pc.base
@@ -451,7 +475,8 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): unit =
   if not has then begin
     add_new t IntSet.empty pc
   end else
-    Seq.push pc.terms {td = analyze t pc; used_fwd = IntSet.empty}
+    Seq.push pc.terms {td = analyze t pc; used_fwd = IntSet.empty};
+  idx
 
 
 
@@ -461,14 +486,14 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): unit =
       (* Public functions *)
 
 
-let add_assumption (t:term) (pc:t): unit =
+let add_assumption (t:term) (pc:t): int =
   (** Add the term [t] as an assumption to the context [pc].
    *)
   add_assumption_or_axiom t false pc
 
 
 
-let add_axiom (t:term) (pc:t): unit =
+let add_axiom (t:term) (pc:t): int =
   (** Add the term [t] as an axiom to the context [pc].
    *)
   add_assumption_or_axiom t true pc
@@ -544,9 +569,8 @@ let pull_backward (t:term) (pc:t): int * term list =
   assert false
 
 
-let discharged (i:int) (pc:t): int * int array * term * proof_term =
-  (** The [i]th term (with number and names of arguments) of the current
-      environment with all assumptions discharged together with
-      its proof term.
+let discharged (i:int) (pc:t): term * proof_term =
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged together with its proof term.
    *)
   Proof_table.discharged i pc.base

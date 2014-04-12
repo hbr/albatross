@@ -125,13 +125,14 @@ end = struct
     | Lam(nargs,names,t) ->
         let nnames = Array.length names in
         assert (nnames=0 || nnames=nargs);
-        let args = Array.init nargs
+        let args = Array.init nargs string_of_int
+        (*let args = Array.init nargs
             (fun i ->
               if nnames = 0 then (string_of_int i)
-              else ST.string names.(i))
+              else ST.string names.(i))*)
         in
         let argsstr = String.concat "," (Array.to_list args) in
-        "([" ^ argsstr ^ "]->" ^ (to_string t) ^ ")"
+        "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
 
 
   let variable (t:term): int =
@@ -508,9 +509,11 @@ end = struct
 
 
   let quantified (quantid:int) (nargs:int) (names:int array) (t:term): term =
-    assert (0 < nargs);
     assert (let nnms = Array.length names in nnms=0 || nnms = nargs);
-    unary quantid (Lam (nargs,names,t))
+    if nargs = 0 then
+      t
+    else
+      unary quantid (Lam (nargs,names,t))
 
 
 

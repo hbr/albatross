@@ -1,9 +1,9 @@
 open Signature
 open Support
 open Term
-open Proof
 
 type t
+type proof_term
 val make:  unit -> t
 val push_empty: t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
@@ -52,10 +52,17 @@ val put_global_function:
 val implication_id: t -> int
 
 val put_global_assertion:
-    term -> proof_term option -> t -> unit
+    term -> Proof.proof_term option -> t -> unit
 
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val put_class: header_mark withinfo -> int withinfo -> t -> unit
 
+val all_quantified_outer: term -> t -> term
+val implication_chain:  term list -> term -> t -> term
+val expanded_term:  term -> t -> term
+val add_assumption: term -> t -> int
+val add_axiom:      term -> t -> int
+val discharged:     int -> t -> term * proof_term
 
-val add_assumption: term -> t -> unit
+val print_all_local_assertions: t -> unit
+val print_global_assertions:    t -> unit

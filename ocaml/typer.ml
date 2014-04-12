@@ -353,21 +353,24 @@ let analyze_expression
           in
           error_info info str
     in
-      match e with
-        Identifier name     -> do_leaf (id_fun name)
-      | Expfalse            -> do_leaf (feat_fun FNfalse)
-      | Exptrue             -> do_leaf (feat_fun FNtrue)
-      | Expop op            -> do_leaf (feat_fun (FNoperator op))
-      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
-      | Unexp  (op,e)       -> application (Expop op) [|e|] accs
-      | Funapp (f,args)     -> application f (arg_array args) accs
-      | Expparen e          -> analyze e accs
-      | Taggedexp (label,e) -> analyze e accs
+    match e with
+      Expproof (_,_,_)
+    | Expquantified (_,_,Expproof (_,_,_)) ->
+        error_info info "Proof not allowed here"
+    | Identifier name     -> do_leaf (id_fun name)
+    | Expfalse            -> do_leaf (feat_fun FNfalse)
+    | Exptrue             -> do_leaf (feat_fun FNtrue)
+    | Expop op            -> do_leaf (feat_fun (FNoperator op))
+    | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
+    | Unexp  (op,e)       -> application (Expop op) [|e|] accs
+    | Funapp (f,args)     -> application f (arg_array args) accs
+    | Expparen e          -> analyze e accs
+    | Taggedexp (label,e) -> analyze e accs
 
-      | _ -> not_yet_implemented ie.i
-            ("(others)Typing of expression " ^
-             (string_of_expression e))
-             (*assert false (* nyi: all alternatives *)*)
+    | _ -> not_yet_implemented ie.i
+          ("(others)Typing of expression " ^
+           (string_of_expression e))
+          (*assert false (* nyi: all alternatives *)*)
 
   and application
       (f:expression)

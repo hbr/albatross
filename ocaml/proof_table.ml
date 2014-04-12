@@ -8,9 +8,9 @@ type proof_term =
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
   | Subproof   of int        (* nargs *)
-        * int array  (* used  *)
-        * int        (* res *)
-        * proof_term array
+                * int array  (* names *)
+                * int        (* res *)
+                * proof_term array
 
 type desc = {nbenv0:     int;
              term:       term;
@@ -50,6 +50,23 @@ let count_previous (at:t): int =
     (List.hd at.stack).count
 
 
+let count_global (pt:t): int =
+  let rec count (lst: entry list): int =
+    match lst with
+      []     -> assert false
+    | [e]    -> e.count
+    | _::lst -> count lst
+  in
+  if pt.stack = []
+  then
+    Seq.count pt.seq
+  else
+    count pt.stack
+
+
+let count_last_local (pt:t): int =
+  (count pt) - (count_previous pt)
+
 let nbenv (at:t): int = at.entry.nbenv
 
 let nbenv_local (at:t): int =
@@ -64,11 +81,27 @@ let imp_id (at:t): int =
 let all_id (at:t): int =
   at.entry.all_id
 
+
 let implication (a:term) (b:term) (at:t): term =
   Term.binary at.entry.imp_id a b
 
-let quantified (nargs:int) (names:int array) (t:term) (at:t): term =
+let implication_chain (ps: term list) (tgt:term) (at:t): term =
+  Term.make_implication_chain ps tgt (imp_id at)
+
+let split_implication_chain (t:term) (at:t): term list * term =
+  Term.split_implication_chain t (imp_id at)
+
+let all_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
   Term.quantified at.entry.all_id nargs names t
+
+let all_quantified_outer (t:term) (at:t): term =
+  let nargs  = nbenv_local at          in
+  let all_id = at.entry.all_id - nargs in
+  Term.quantified all_id nargs at.entry.names t
+
+let rec stacked_counts (pt:t): int list =
+  List.map (fun e -> e.count) pt.stack
+
 
 let make (imp_id:int) (all_id:int): t =
   {seq   = Seq.empty ();
@@ -100,18 +133,17 @@ let pop (at:t): unit =
   Seq.keep at.seq at.entry.count
 
 
+
 let discharged_term (i:int) (at:t): term =
-  (** The [i]th term of the current environment with all assumptions
-      discharged.
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged.
    *)
-  List.fold_left
-    (fun term i_req ->
-      Term.binary
-        at.entry.imp_id
-        (Seq.elem at.seq i_req).term
-        term)
-    (Seq.elem at.seq i).term
-    at.entry.req
+  let ps = List.map (fun i -> (Seq.elem at.seq i).term) at.entry.req
+  and tgt = (Seq.elem at.seq i).term
+  in
+  let t = implication_chain ps tgt at
+  in
+  all_quantified_outer t at
 
 
 let term (i:int) (at:t): term * int =
@@ -200,8 +232,8 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
              b)
       else
         tsub
-  | Subproof (nargs,used,res_idx,pt_arr) ->
-      push nargs [||] at;
+  | Subproof (nargs,names,res_idx,pt_arr) ->
+      push nargs names at;
       let pt_len = Array.length pt_arr
       in
       if pt_len <= res_idx then raise Not_found;
@@ -209,17 +241,8 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
         (fun pt -> add (term_of_pt pt at) pt at)
         pt_arr;
       let term = discharged_term res_idx at in
-      pop at;  (* bug: verify that no unused argument has
-                  been used in the proof terms! *)
-
-      if used <> (Term.used_args term nargs) then
-        raise Not_found;
-      let term = Term.keep_used used term nargs in
-      let nused = Array.length used             in
-      if nused = 0 then
-        term
-      else
-        Term.quantified (all_id at) nused [||] term
+      pop at;
+      term
 
 
 
@@ -270,22 +293,54 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
 
 
 
-let discharged (i:int) (at:t): int * int array * term * proof_term =
+
+let discharged (i:int) (pt:t): term * proof_term =
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged together with its proof term.
+   *)
+  let cnt0 = count_previous pt
+  and axiom = List.exists
+      (fun i ->
+        assert (i < (count pt));
+        match (Seq.elem pt.seq i).proof_term with
+          Axiom _ -> true
+        | _       -> false)
+      (used_assertions i pt [])
+  and term  = discharged_term i pt
+  and nargs = nbenv_local pt
+  and nms   = names pt
+  in
+  let pterm =
+    if axiom then
+      Axiom term
+    else
+      let pt_arr =
+        Array.init
+          (i-cnt0)
+          (fun j -> (Seq.elem pt.seq (j+cnt0)).proof_term)
+      in
+      Subproof (nargs,nms,i,pt_arr)
+  in
+  term, pterm
+
+
+(*
+let discharged (i:int) (pt:t): int * int array * term * proof_term =
   (** The [i]th term (with number and names of arguments) of the current
       environment with all assumptions discharged together with
       its proof term.
    *)
-  let cnt0 = count_previous at
+  let cnt0 = count_previous pt
   and axiom = List.exists
       (fun i ->
-        assert (i < (count at));
-        match (Seq.elem at.seq i).proof_term with
+        assert (i < (count pt));
+        match (Seq.elem pt.seq i).proof_term with
           Axiom _ -> true
         | _       -> false)
-      (used_assertions i at [])
-  and term  = discharged_term i at
-  and nargs = nbenv_local at
-  and nms   = names at
+      (used_assertions i pt [])
+  and term  = discharged_term i pt
+  and nargs = nbenv_local pt
+  and nms   = names pt
   in
   let used_args = Term.used_args term nargs in
   let term      = Term.keep_used used_args term nargs
@@ -308,8 +363,9 @@ let discharged (i:int) (at:t): int * int array * term * proof_term =
       let pt_arr =
         Array.init
           (i-cnt0)
-          (fun j -> (Seq.elem at.seq (j+cnt0)).proof_term)
+          (fun j -> (Seq.elem pt.seq (j+cnt0)).proof_term)
       in
       Subproof (nargs, used_args,i,pt_arr)
   in
   nused, nms, term, pt
+*)
