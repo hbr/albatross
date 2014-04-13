@@ -490,7 +490,7 @@ end = struct
 
 
   let binary (binid:int) (left:term) (right:term): term =
-    let args = [| right; left |] in
+    let args = [| left; right |] in
     Application (Variable binid, args)
 
 
