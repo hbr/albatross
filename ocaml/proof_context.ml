@@ -25,6 +25,16 @@ type entry = {mutable prvd: Term_table0.t;
               mutable used_mp: IntSet.t;
               mutable count: int}
 
+type proof_term = Proof_table.proof_term
+
+type t = {base:     Proof_table.t;
+          terms:    desc  Seq.sequence;
+          mutable do_fwd: bool;
+          mutable work:   int list;
+          mutable entry:  entry;
+          mutable stack:  entry list}
+
+
 let empty_entry =
   let e = Term_table0.empty in
     {prvd=e; bwd=e; fwd=e;
@@ -39,22 +49,22 @@ let copied_entry (e:entry): entry =
    count   = e.count}
 
 
-type proof_term = Proof_table.proof_term
-
-type t = {base:     Proof_table.t;
-          terms:    desc  Seq.sequence;
-          mutable work:  int list;
-          mutable entry: entry;
-          mutable stack: entry list}
-
-
 let make (imp_id:int) (all_id:int): t  =
   {base     = Proof_table.make imp_id all_id;
    terms    = Seq.empty ();
+   do_fwd   = false;
    work     = [];
    entry    = empty_entry;
    stack    = []}
 
+let do_forward (pc:t): bool =
+  pc.do_fwd || Options.is_prover_local ()
+
+let set_forward (pc:t): unit =
+  pc.do_fwd <- true
+
+let reset_forward (pc:t): unit =
+  pc.do_fwd <- false
 
 let stacked_counts (pc:t): int list =
   Proof_table.stacked_counts pc.base
@@ -73,10 +83,12 @@ let nbenv (at:t): int = Proof_table.nbenv at.base
 
 let nbenv_local (at:t): int = Proof_table.nbenv_local at.base
 
-let count (pc:t): int =
-  let res = Seq.count pc.terms in
-  assert (res = Proof_table.count pc.base);
-  res
+let count_0 (pc:t): int = Seq.count pc.terms
+
+let count (pc:t): int = Proof_table.count pc.base
+
+let is_consistent (pc:t): bool =
+  count_0 pc = count pc
 
 let count_previous (pc:t): int = Proof_table.count_previous pc.base
 let count_global(pc:t): int = Proof_table.count_global pc.base
@@ -87,11 +99,19 @@ let all_id(at:t): int = Proof_table.all_id at.base
 
 let imp_id(at:t): int = Proof_table.imp_id at.base
 
-let term (i:int) (pc:t): term * int =
+let term_orig (i:int) (pc:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
    *)
+  assert (is_consistent pc);
   assert (i < count pc);
   Proof_table.term i pc.base
+
+let term (i:int) (pc:t): term =
+  (** The [i]th proved term in the current environment.
+   *)
+  assert (is_consistent pc);
+  assert (i < count pc);
+  Proof_table.local_term i pc.base
 
 let implication (a:term) (b:term) (pc:t) =
   Proof_table.implication a b pc.base
@@ -112,6 +132,7 @@ let has_work (pc:t): bool = pc.work <> []
 
 
 let is_forward_simplification (i:int) (pc:t): bool =
+  assert (is_consistent pc);
   assert (i < count pc);
   let desc = Seq.elem pc.terms i in
   assert (Option.has desc.td.fwddat);
@@ -121,6 +142,7 @@ let is_forward_simplification (i:int) (pc:t): bool =
 
 
 let used_forward (i:int) (pc:t): IntSet.t =
+  assert (is_consistent pc);
   assert (i < count pc);
   (Seq.elem pc.terms i).used_fwd
 
@@ -292,10 +314,8 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
       Term_table0.add td.bwddat.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
 
   and add_to_work (): unit =
-    if Options.is_prover_local () then
-      pc.work <- idx::pc.work
-    else
-      ()
+    pc.work <- idx::pc.work
+
   in
   add_to_proved   ();
   add_to_forward  ();
@@ -308,10 +328,13 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
 
 let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   assert (not (has t pc));
-  pc.entry.used_mp <- IntSet.add j pc.entry.used_mp;
-  Proof_table.add_mp t i j pc.base;
-  let used_fwd = IntSet.union (used_forward i pc) (used_forward j pc) in
-  add_new t used_fwd pc
+  if do_forward pc then begin
+    let used_fwd = IntSet.union (used_forward i pc) (used_forward j pc) in
+    pc.entry.used_mp <- IntSet.add j pc.entry.used_mp;
+    Proof_table.add_mp t i j pc.base;
+    add_new t used_fwd pc
+  end else
+    ()
 
 
 
@@ -322,7 +345,6 @@ let add_specialize
       specialized with the arguments [args] to the proof context [pc].
    *)
   assert (not (has t pc));
-  Proof_table.add_specialize t i args pc.base;
   let used_fwd = used_forward i pc in
   let used_fwd =
     if is_forward_simplification i pc then
@@ -330,6 +352,7 @@ let add_specialize
     else
       IntSet.add i used_fwd
   in
+  Proof_table.add_specialize t i args pc.base;
   add_new t used_fwd pc
 
 
@@ -347,6 +370,7 @@ let specialized_forward
 
       Note: The results are all valid in the current environment!
    *)
+  assert (is_consistent pc);
   assert (i < count pc);
   let td_imp    = (Seq.elem pc.terms i).td
   and nbenv_imp = Proof_table.nbenv_term i pc.base
@@ -385,6 +409,7 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
 
       Note: [sub] comes from the enviroment of the term [i]!
    *)
+  assert (is_consistent pc);
   assert (i < count pc);
   assert (j < count pc);
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
@@ -408,10 +433,12 @@ let add_consequences_premise (i:int) (td:term_data) (pc:t): unit =
   (** Add the consequences of the analyzed term [i] with data [td] by using
       the term as a premise for already available implications.
    *)
-  let sublst = Term_table0.unify td.term td.nbenv pc.entry.fwd in
   assert (td.nbenv = (nbenv pc));
+  let sublst = Term_table0.unify td.term td.nbenv pc.entry.fwd in
+  let sublst = List.rev sublst in
   List.iter
     (fun (idx,sub) ->
+      assert (is_consistent pc);
       assert (idx < count pc);
       add_consequence i idx sub pc)
     sublst
@@ -430,8 +457,10 @@ let add_consequences_implication (i:int) (td:term_data) (pc:t): unit =
       let sublst =
         Term_table0.unify_with a td.nargs td.nbenv pc.entry.prvd
       in
+      let sublst = List.rev sublst in
       List.iter
         (fun (idx,sub) ->
+          assert (is_consistent pc);
           assert (idx < count pc);
           add_consequence idx i sub pc)
         sublst
@@ -454,6 +483,7 @@ let add_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
   (** Add the schematic rule [idx] substituted by [sub] to the
       proof context [pc].
    *)
+  assert (is_consistent pc);
   assert (idx < count pc);
   assert (not (Term_sub.is_empty sub));
   let desc = Seq.elem pc.terms idx              in
@@ -472,6 +502,7 @@ let add_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
 let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   (** Add the term [t] as an assumption or an axiom to the context [pc].
    *)
+  assert (is_consistent pc);
   let idx = count pc
   and has = has t pc
   in
@@ -544,9 +575,17 @@ let pop (pc:t): unit =
   assert (is_local pc);
   assert (not (has_work pc));
   Proof_table.pop pc.base;
+  pc.work  <- [];
   pc.entry <- List.hd pc.stack;
   pc.stack <- List.tl pc.stack;
   Seq.keep pc.terms pc.entry.count
+
+
+let pop_keep (pc:t): unit =
+  assert (is_local pc);
+  assert (not (has_work pc));
+  Proof_table.pop_keep pc.base;
+  pc.stack <- List.tl pc.stack
 
 
 
@@ -590,3 +629,15 @@ let add_proved (t:term) (pterm:proof_term) (pc:t): unit =
     Proof_table.add_proved t pterm pc.base;
     add_new t IntSet.empty pc
   end
+
+
+let backward_set (t:term) (pc:t): int list =
+  let sublst = Term_table0.unify t (nbenv pc) pc.entry.bwd in
+  List.fold_left
+    (fun lst (idx,sub) ->
+      if Term_sub.is_empty sub then
+        idx::lst
+      else
+        lst)
+    []
+    sublst

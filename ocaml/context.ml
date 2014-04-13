@@ -177,6 +177,15 @@ let pop (c:t): unit =
   Proof_context.pop c.pc
 
 
+let pop_keep_assertions (c:t): unit =
+  (** Pop the last context but keep all assertions
+   *)
+  assert (not (is_global c));
+  c.entry <- List.hd c.stack;
+  c.stack <- List.tl c.stack;
+  Proof_context.pop_keep c.pc
+
+
 
 
 let print (c:t): unit =
@@ -439,6 +448,12 @@ let find_feature
   find_funcs fn nargs_feat nfgs_c0 nargs_c0 c.ft
 
 
+
+
+let assertion (i:int) (c:t): term =
+  Proof_context.term i c.pc
+
+
 let print_assertions (e:entry) (c0:int) (c1:int) (c:t): unit =
   let argsstr = arguments_string e c.ct in
   if argsstr <> "" then
@@ -446,7 +461,7 @@ let print_assertions (e:entry) (c0:int) (c1:int) (c:t): unit =
   let rec print (i:int): unit =
     if i = c1 then ()
     else begin
-      let t,nbenv = Proof_context.term i c.pc in
+      let t,nbenv = Proof_context.term_orig i c.pc in
       assert (nbenv = Array.length e.argnames);
       let tstr = Feature_table.term_to_string t e.argnames c.ft in
       Printf.printf "%3d\t%s\n" i tstr;
@@ -508,14 +523,25 @@ let expanded_term (t:term) (c:t): term =
 
 
 let add_assumption (t:term) (c:t): int =
-  Proof_context.add_assumption t c.pc
+  let res = Proof_context.add_assumption t c.pc
+  in
+  Proof_context.close c.pc;
+  res
 
 let add_axiom (t:term) (c:t): int =
-  Proof_context.add_axiom t c.pc
+  let res = Proof_context.add_axiom t c.pc in
+  Proof_context.close c.pc;
+  res
+
 
 let discharged (i:int) (c:t): term * proof_term =
   Proof_context.discharged i c.pc
 
 
 let add_proved (t:term) (pterm:proof_term) (c:t): unit =
-  Proof_context.add_proved t pterm c.pc
+  Proof_context.add_proved t pterm c.pc;
+  Proof_context.close c.pc
+
+
+let backward_set (t:term) (c:t): int list =
+  Proof_context.backward_set t c.pc

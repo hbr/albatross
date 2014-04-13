@@ -134,6 +134,12 @@ let pop (at:t): unit =
 
 
 
+let pop_keep (at:t): unit =
+  assert (is_local at);
+  at.stack  <- List.tl at.stack
+
+
+
 let discharged_term (i:int) (at:t): term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged.

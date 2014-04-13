@@ -1,6 +1,7 @@
 open Signature
 open Support
 open Term
+open Container
 
 type t
 type proof_term
@@ -8,6 +9,7 @@ val make:  unit -> t
 val push_empty: t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
 val pop:   t -> unit
+val pop_keep_assertions: t -> unit
 val print: t -> unit
 
 val is_global:   t -> bool
@@ -64,6 +66,8 @@ val add_assumption: term -> t -> int
 val add_axiom:      term -> t -> int
 val discharged:     int -> t -> term * proof_term
 val add_proved:     term -> proof_term -> t -> unit
+val assertion:      int -> t -> term
+val backward_set:   term -> t -> int list
 
 val print_all_local_assertions: t -> unit
 val print_global_assertions:    t -> unit

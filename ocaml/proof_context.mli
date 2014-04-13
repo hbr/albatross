@@ -10,6 +10,7 @@ val make:      int -> int -> t
 
 val push:      int -> int array -> t -> unit
 val pop:       t -> unit
+val pop_keep:  t -> unit
 
 val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
@@ -19,6 +20,8 @@ val add_backward:       term -> t -> unit
 val pull_backward:      term -> t -> int * term list
 val discharged:         int  -> t -> term * proof_term
 val add_proved:         term -> proof_term -> t -> unit
+val backward_set:       term -> t -> int list
+
 val all_quantified_outer: term -> t -> term
 val implication_chain:  term list -> term -> t -> term
 (*
@@ -36,4 +39,5 @@ val count:          t -> int
 val count_previous: t -> int
 val count_global:   t -> int
 
-val term: int -> t -> term * int
+val term_orig: int -> t -> term * int
+val term:      int -> t -> term

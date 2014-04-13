@@ -30,6 +30,7 @@ val stacked_counts: t -> int list
 val make: int -> int -> t
 val push: int -> int array -> t -> unit
 val pop:  t -> unit
+val pop_keep: t -> unit
 
 val add_proved: term -> proof_term -> t -> unit
 
@@ -39,10 +40,5 @@ val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit
 val add_mp:         term -> int -> int -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
-
-
-    (*val implication: int -> t -> term*)
-
-    (*val used_assertions: int -> t -> int list -> int list*)
 
 val discharged:   int -> t -> term * proof_term
