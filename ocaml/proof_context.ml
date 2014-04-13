@@ -262,7 +262,7 @@ let analyze (t:term)  (pc:t): term_data =
 let has (t:term) (pc:t): bool =
   (** Is the term [t] already in the proof context [pc]?
    *)
-  let sublst = Term_table0.unify t  (nbenv pc) pc.entry.prvd in
+  let sublst = Term_table0.unify_with t 0 (nbenv pc) pc.entry.prvd in
   sublst <> []
 
 
@@ -276,7 +276,7 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
   in
   let add_to_proved (): unit =
     pc.entry.prvd <-
-      Term_table0.add td.term 0 td.nbenv idx pc.entry.prvd;
+      Term_table0.add t 0 td.nbenv idx pc.entry.prvd;
     Seq.push pc.terms {td=td; used_fwd = used_fwd}
 
   and add_to_forward (): unit =

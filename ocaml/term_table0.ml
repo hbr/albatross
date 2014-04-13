@@ -86,6 +86,14 @@ let next_index (tab:t): int =
 
 exception Term_found of term
 
+let print_tab (nb:int) (tab:t): unit =
+  let terms = List.rev tab.terms in
+  List.iter
+    (fun (idx,nargs,nbenv,t) ->
+      Printf.printf "\tnb %d, idx %d, nargs %d, nbenv %d, t %s\n"
+        nb idx nargs nbenv (Term.to_string t))
+    terms
+
 
 let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
   (** The term associated with index [idx] having [nargs] argument variables
@@ -319,7 +327,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             (fun map (nbenv_1,fvar2submap) ->
               assert (nbenv_1 <= nbenv);
               let fvar = fvar - (nbenv - nbenv_1) in
-              if 0 < fvar then
+              if 0 <= fvar then
                 try
                   let submap = IntMap.find fvar fvar2submap in
                   join_map submap map
@@ -369,10 +377,10 @@ let add
   assert (next_index table <= idx);
   let newmap (i:int) (map: submap IntMap.t): submap IntMap.t =
     try
-      let idxmap = IntMap.find i map in
-      assert (not (IntMap.mem idx idxmap));
-      let idxmap = IntMap.add idx Term_sub.empty idxmap in
-      IntMap.add i idxmap map
+      let submap = IntMap.find i map in
+      assert (not (IntMap.mem idx submap));
+      let submap = IntMap.add idx Term_sub.empty submap in
+      IntMap.add i submap map
     with Not_found ->
       IntMap.add i (IntMap.singleton idx Term_sub.empty) map
   in
@@ -385,18 +393,19 @@ let add
           assert (not (IntMap.mem idx tab.avars));
           {tab with avars = IntMap.add idx ((i-nb),nargs) tab.avars}
       | Variable i when nb+nargs <= i ->
-          (* variable is a constant (i.e. not substitutable *)
+          (* variable is a free variable (i.e. not substitutable *)
+          let fvar = i-nargs-nb in
           {tab with fvars =
            let fvars = tab.fvars in
            match fvars with
              [] ->
-               (nbenv, newmap (i-nargs-nb) IntMap.empty) :: fvars
+               (nbenv, newmap fvar IntMap.empty) :: fvars
            | (nbnd,map)::tl ->
                assert (nbnd <= nbenv);
                if nbnd = nbenv then
-                 (nbnd, newmap (i-nargs-nb) map) :: tl
+                 (nbnd, newmap fvar map) :: tl
                else
-                 (nbenv, newmap (i-nargs-nb) IntMap.empty) :: fvars}
+                 (nbenv, newmap fvar IntMap.empty) :: fvars}
       | Variable i ->
           (* variable is bound by some abstraction *)
           assert (i < nb);
