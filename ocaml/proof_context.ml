@@ -372,24 +372,25 @@ let specialized_forward
    *)
   assert (is_consistent pc);
   assert (i < count pc);
-  let td_imp    = (Seq.elem pc.terms i).td
-  and nbenv_imp = Proof_table.nbenv_term i pc.base
-  and nbenv     = nbenv pc
-  in
+  let td_imp    = (Seq.elem pc.terms i).td in
   assert (Option.has td_imp.fwddat);
-  assert (nbenv_sub <= nbenv);
-  assert (nbenv_imp <= nbenv);
   let nargs     = td_imp.nargs
   and a,b,gp1,_ = Option.value td_imp.fwddat in
   assert (gp1 <= nargs);
   assert (Term_sub.count sub = gp1);
+  let nbenv_imp = Proof_table.nbenv_term i pc.base
+  and nbenv     = nbenv pc
+  in
+  assert (nbenv_sub <= nbenv);
+  assert (nbenv_imp <= nbenv);
   let args  = Term_sub.arguments gp1 sub in
   Array.iteri
     (fun i t -> args.(i) <- Term.up (nbenv-nbenv_sub) t)
     args;
-  let a = Term.down_from (nargs-gp1) gp1 a in
-  let a = Term.part_sub a gp1   args (nbenv-nbenv_imp)
+  let a = Term.part_sub a nargs args (nbenv-nbenv_imp)
   and b = Term.part_sub b nargs args (nbenv-nbenv_imp)
+  in
+  let a = Term.down (nargs-gp1) a
   in
   let b =
     if gp1 < nargs then
