@@ -195,13 +195,15 @@ let term_to_string
               is the left operand of the outer operator
      *)
     let nnames = Array.length names
-    and anon2str (i:int): string = "$" ^ (string_of_int (nanon+i))
+    and anon2sym (i:int): int =
+      ST.symbol ("$" ^ (string_of_int (nanon+i)))
     in
     let var2str (i:int): string =
-      if i<nnames then
+      if i < nnames then
         ST.string names.(i)
       else
-        feature_name_to_string (Seq.elem ft.features (i-nnames)).fname
+        feature_name_to_string
+          (Seq.elem ft.features (i-nnames)).fname
     and find_op (f:term): operator  =
       match f with
         Variable i when nnames <= i ->
@@ -213,25 +215,29 @@ let term_to_string
       | _ -> raise Not_found
     and args2str (n:int) (nms:int array): string =
       let nnms  = Array.length nms in
-      assert (nnms=0 || nnms = n);
-      let fargs  = Array.init
-          n
-          (if nnms=0 then anon2str else (fun i -> ST.string nms.(i)))
-      in
-      String.concat "," (Array.to_list fargs)
+      assert (nnms = n);
+      let argsstr = Array.init n (fun i -> ST.string nms.(i)) in
+      String.concat "," (Array.to_list argsstr)
     in
-    let lam_inner2str (n:int) (nms:int array) (t:term): string =
-      let names = Array.append nms names
-      and nnms  = Array.length nms in
-      to_string t names (nanon+n-nnms) None
+    let local_names (n:int) (nms:int array): int * int array =
+      let nnms  = Array.length nms in
+      if n = nnms then
+        nanon, nms
+      else
+        nanon+n, Array.init n anon2sym
+    in
+    let lam_strs (n:int) (nms:int array) (t:term): string * string =
+      let nanon, nms = local_names n nms in
+      let names = Array.append nms names in
+      args2str n nms,
+      to_string t names nanon None
     in
     let q2str (qstr:string) (args:term array): string =
       let nargs = Array.length args in
       assert (nargs = 1);
       match args.(0) with
         Lam (n,nms,t) ->
-          let argsstr = args2str n nms
-          and tstr    = lam_inner2str n nms t in
+          let argsstr, tstr = lam_strs n nms t in
           qstr ^ "(" ^ argsstr ^ ") " ^ tstr
       | _ -> assert false  (* cannot happen *)
     in
@@ -260,10 +266,8 @@ let term_to_string
               (Array.to_list args)))
       ^ ")"
     and lam2str (n:int) (nms: int array) (t:term): string =
-      let argstr = args2str n nms
-      and tstr   = lam_inner2str n nms t
-      in
-      "((" ^ argstr ^ ") -> " ^ tstr ^ ")"
+      let argsstr, tstr = lam_strs n nms t in
+      "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
     in
     let inop, str =
       match t with
