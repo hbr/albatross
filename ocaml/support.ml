@@ -377,9 +377,9 @@ let operator_data op =
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
   | Inop      -> "in",  60,  Nonassoc
-  | Notinop   -> "/in",  60, Nonassoc
-  | Allop     -> "all", 10,  Nonassoc
-  | Someop    -> "some", 10, Nonassoc
+  | Notinop   -> "/in", 60, Nonassoc
+  | Allop     -> "all", 21,  Nonassoc
+  | Someop    -> "some",21, Nonassoc
   | Freeop  i -> ST.string i, 60,  Left
   | RFreeop i -> ST.string i, 61,  Right
 
