@@ -52,6 +52,7 @@ module TVars_sub: sig
   val count_local:  t -> int
   val tvars:        t -> TVars.t
   val sub:          t -> Term_sub_arr.t
+  val args:         t -> term array
   val add_global:   constraints -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
@@ -79,6 +80,8 @@ end = struct
   let tvars (tv:t): TVars.t = tv.vars
 
   let sub (tv:t): Term_sub_arr.t = tv.sub
+
+  let args (tv:t): term array = Term_sub_arr.args tv.sub
 
   let add_global (cs:constraints) (tv:t): t =
     {vars = TVars.add_global cs tv.vars;

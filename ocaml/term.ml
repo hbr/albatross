@@ -393,7 +393,7 @@ end = struct
 
 
   let sub (t:term) (args:term array) (nbound:int): term =
-    (** substitute the free variables 0,1,args.len-1 in term [t] by the
+    (** substitute the free variables 0,1,args.len-1 of the term [t] by the
         arguments [args] which are from an environment with [nbound] bound
         variables more than the variable of the term [t], i.e. all free
         variables above [len] are shifted up by [nbound-args.len]

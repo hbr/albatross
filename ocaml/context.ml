@@ -229,7 +229,12 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
   (** Update the type variables of the current context with [tvs]
    *)
   try
-    TVars_sub.update c.entry.tvars_sub tvs
+    TVars_sub.update c.entry.tvars_sub tvs;
+    let args = TVars_sub.args c.entry.tvars_sub in
+    let ntvs = Array.length args                in
+    Array.iteri
+      (fun i t -> c.entry.argtypes.(i) <- Term.sub t args ntvs)
+      c.entry.argtypes
   with Term_capture ->
     not_yet_implemented c.entry.info "Type inference of formal generics"
 
@@ -286,9 +291,10 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
           ","
           (List.rev_map
              (fun (ns,tp) ->
+               let ntvs = TVars_sub.count e.tvars_sub in
                (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
                ^ ":"
-               ^ (Class_table.type2string tp 0 e.fgnames ct))
+               ^ (Class_table.type2string tp ntvs e.fgnames ct))
              llst)
       ^ ")"
 
