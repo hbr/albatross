@@ -110,12 +110,14 @@ end = struct
     and ndown = (count_global tvnew) - (count_global tv)
     in
     let rec updt (i:int): unit =
-      if i = nloc then ()
+      if i = nloc then
+        ()
       else begin
-        Term_sub_arr.add
-          i
-          (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
-          tv.sub;
+        if Term_sub_arr.has i tvnew.sub then
+          Term_sub_arr.add
+            i
+            (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
+            tv.sub;
         updt (i+1)
       end
     in updt 0

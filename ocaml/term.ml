@@ -744,6 +744,7 @@ module Term_sub_arr: sig
   val get:   int -> t -> term
   val flags: t -> bool array
   val args:  t -> term array
+  val has:   int -> t -> bool
   val add:   int -> term -> t -> unit
   val extend:int -> t -> t
   val extend_bottom: int -> t -> t
@@ -757,12 +758,17 @@ end = struct
   let flags (s:t): bool array = s.flags
   let args  (s:t): term array = s.args
 
+
   let make (n:int): t =
     {n     = n;
      args  = Array.init n (fun i -> Variable i);
      flags = Array.make n false}
 
   let count (s:t): int = s.n
+
+  let has (i:int) (s:t): bool =
+    assert (i < count s);
+    s.flags.(i)
 
   let get (i:int) (s:t): term =
     assert (i < (count s));
