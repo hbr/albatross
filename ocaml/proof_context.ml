@@ -57,8 +57,11 @@ let make (imp_id:int) (all_id:int): t  =
    entry    = empty_entry;
    stack    = []}
 
-let do_forward (pc:t): bool =
+let is_using_forward (pc:t): bool =
   pc.do_fwd || Options.is_prover_local ()
+
+let is_using_forced_forward (pc:t): bool =
+  pc.do_fwd && not (Options.is_prover_local ())
 
 let set_forward (pc:t): unit =
   pc.do_fwd <- true
@@ -113,10 +116,18 @@ let term (i:int) (pc:t): term =
   assert (i < count pc);
   Proof_table.local_term i pc.base
 
-let implication (a:term) (b:term) (pc:t) =
+
+
+let split_implication (t:term) (pc:t): term * term =
+  Proof_table.split_implication t pc.base
+
+let split_all_quantified (t:term) (pc:t): int * int array * term =
+  Proof_table.split_all_quantified t pc.base
+
+let implication (a:term) (b:term) (pc:t): term =
   Proof_table.implication a b pc.base
 
-let all_quantified (nargs:int) (names:int array) (t:term) (pc:t) =
+let all_quantified (nargs:int) (names:int array) (t:term) (pc:t): term =
   Proof_table.all_quantified nargs names t pc.base
 
 let all_quantified_outer(t:term) (pc:t): term  =
@@ -223,12 +234,13 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data =
         and avars_tgt, fvars_tgt = Term.split_variables tgt nargs
         in
         let is_simpl = nmax <= ntgt in
-        let push =
+        let ok =
           (IntSet.cardinal avars_tgt) = nargs
-        || is_simpl
-        || IntSet.exists (fun i -> not (IntSet.mem i fvars)) fvars_tgt
+            &&
+          (is_simpl
+         || IntSet.exists (fun i -> not (IntSet.mem i fvars)) fvars_tgt)
         in
-        if push then
+        if not ok then
           let tgt = Term.binary imp_id p tgt in
           ana_bwd ps_rest tgt
         else
@@ -280,18 +292,34 @@ let analyze (t:term)  (pc:t): term_data =
 
 
 
+let find (t:term) (pc:t): int =
+  (** The index of the assertion [t].
+   *)
+  let sublst = Term_table0.unify_with t 0 (nbenv pc) pc.entry.prvd in
+  match sublst with
+    []          -> raise Not_found
+  | [(idx,sub)] -> idx
+  | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
+
+
 
 let has (t:term) (pc:t): bool =
   (** Is the term [t] already in the proof context [pc]?
    *)
-  let sublst = Term_table0.unify_with t 0 (nbenv pc) pc.entry.prvd in
-  sublst <> []
+  try
+    let _ = find t pc in
+    true
+  with Not_found ->
+    false
 
 
 
 
 let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
   (** Add the new term [t] to the context [pc].
+
+      Note: The term has to be added to the proof context outside
+      this function
    *)
   let td = analyze t pc
   and idx = Seq.count pc.terms
@@ -328,7 +356,7 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
 
 let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   assert (not (has t pc));
-  if do_forward pc then begin
+  if is_using_forward pc then begin
     let used_fwd = IntSet.union (used_forward i pc) (used_forward j pc) in
     pc.entry.used_mp <- IntSet.add j pc.entry.used_mp;
     Proof_table.add_mp t i j pc.base;
@@ -338,7 +366,7 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
 
 
 
-let add_specialize
+let add_specialized_forward
     (t:term)
     (i:int) (args: term array) (pc:t): unit =
   (** Add the new term [t] which is a specialization of the term [i]
@@ -423,7 +451,7 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
     let imp  = implication a b pc
     and idx  = count pc
     in
-    add_specialize imp j args pc;
+    add_specialized_forward imp j args pc;
     add_mp b i idx pc
   end
 
@@ -480,7 +508,7 @@ let add_consequences (i:int) (pc:t): unit =
 
 
 
-let add_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
+let add_specialized_backward (idx:int) (sub:Term_sub.t) (pc:t): unit =
   (** Add the schematic rule [idx] substituted by [sub] to the
       proof context [pc].
    *)
@@ -492,10 +520,14 @@ let add_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
   assert (td.nargs = Term_sub.count sub);
   let args = Term_sub.arguments td.nargs sub    in
   let t    = Proof_table.local_term idx pc.base in
+  let n,nms,t = split_all_quantified t pc       in
+  assert (n = Array.length args);
   let t    = Term.apply t args                  in
-  if not (has t pc) then
-    add_new t desc.used_fwd pc
-  else
+  if not (has t pc) then begin
+    Proof_table.add_specialize t idx args pc.base;
+    add_new t desc.used_fwd pc;
+    assert (is_consistent pc)
+  end else
     ()
 
 
@@ -598,10 +630,14 @@ let add_backward (t:term) (pc:t): unit =
   List.iter
     (fun (idx,sub) ->
       if Term_sub.is_empty sub then
-        ()
+        if is_using_forced_forward pc then
+          pc.work <- idx :: pc.work
+        else
+          ()
       else
-        add_specialized idx sub pc)
+        add_specialized_backward idx sub pc)
     sublst
+
 
 
 let pull_backward (t:term) (pc:t): int * term list =

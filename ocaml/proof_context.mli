@@ -12,16 +12,22 @@ val push:      int -> int array -> t -> unit
 val pop:       t -> unit
 val pop_keep:  t -> unit
 
+val find:               term -> t -> int
+val has:                term -> t -> bool
 val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
 val close_step:         t -> unit
 val close:              t -> unit
+val set_forward:        t -> unit
+val reset_forward:      t -> unit
 val add_backward:       term -> t -> unit
 val pull_backward:      term -> t -> int * term list
 val discharged:         int  -> t -> term * proof_term
 val add_proved:         term -> proof_term -> t -> unit
 val backward_set:       term -> t -> int list
 
+val split_implication:  term -> t -> term * term
+val split_all_quantified: term -> t -> int * int array * term
 val all_quantified_outer: term -> t -> term
 val implication_chain:  term list -> term -> t -> term
 (*

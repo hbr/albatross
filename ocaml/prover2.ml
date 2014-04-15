@@ -11,21 +11,36 @@ type proof_term = Context.proof_term
 
 exception Proof_found of int
 
-type entry = {ens_lst: int list}
-
-let empty_entry = {ens_lst = []}
-
 type t = {context: Context.t;
-          entry:   entry;
-          stack:   entry list}
+          mutable goal:  term;
+          mutable stack: term list;
+          mutable depth: int}
 
 
-
-let make (c:Context.t): t =
-  {context = c; entry = empty_entry; stack = []}
-
+let start (t:term) (c:Context.t): t =
+  {context=c; goal=t; stack=[]; depth=0}
 
 
+let analyze_imp_opt
+    (info:    info)
+    (imp_opt: implementation option)
+    : kind * compound =
+  let kind,is_do,clst =
+    match imp_opt with
+      None ->             PNormal,  false, []
+    | Some Impdeferred -> PDeferred,false, []
+    | Some Impbuiltin ->  PAxiom,   false, []
+    | Some Impevent ->
+        error_info info "Assertion cannot be an event"
+    | Some (Impdefined (Some locs,is_do,cmp)) ->
+        not_yet_implemented info "Local variables in assertions"
+    | Some (Impdefined (None,is_do,cmp)) ->
+        PNormal,is_do,cmp
+  in
+  if is_do then
+    not_yet_implemented info "Assertions with do block"
+  else
+    kind, clst
 
 
 let analyze_body (info:info) (bdy: feature_body)
@@ -38,22 +53,11 @@ let analyze_body (info:info) (bdy: feature_body)
         match rlst_opt with
           None   -> []
         | Some l -> l
-      and kind,is_do,clst =
-        match imp_opt with
-          None ->             PNormal,  false, []
-        | Some Impdeferred -> PDeferred,false, []
-        | Some Impbuiltin ->  PAxiom,   false, []
-        | Some Impevent ->
-            error_info info "Assertion cannot be an event"
-        | Some (Impdefined (Some locs,is_do,cmp)) ->
-            not_yet_implemented info "Local variables in assertions"
-        | Some (Impdefined (None,is_do,cmp)) ->
-            PNormal,is_do,cmp
+      and kind,clst =
+        analyze_imp_opt info imp_opt
       in
-      if is_do then
-        not_yet_implemented info "Assertions with do block"
-      else
-        kind, rlst, clst, elst
+      kind, rlst, clst, elst
+
 
 
 
@@ -64,7 +68,13 @@ let get_term (ie: info_expression) (c:Context.t): term * term =
 
 
 
+let string_of_term (t:term) (p:t): string =
+  Context.string_of_term t p.context
 
+let string_of_index (i:int) (p:t): string =
+  assert (i < Context.count_assertions p.context);
+  let t = Context.assertion i p.context in
+  string_of_term t p
 
 
 let add_assumptions_or_axioms
@@ -109,29 +119,140 @@ let print_global (c:Context.t): unit =
   Printf.printf "\n"
 
 
+let print_pair (p:t): unit =
+  Context.print_all_local_assertions p.context;
+  Printf.printf "--------------------\n";
+  Printf.printf "\t%s\n\n" (string_of_term p.goal p)
+
+let split_implication (p:t): term * term =
+  Context.split_implication p.goal p.context
+
+let split_all_quantified (p:t): int * int array * term =
+  Context.split_all_quantified p.goal p.context
 
 
-let prove_term (t:term) (c:Context.t): int =
-  let bwd_set = Context.backward_set t c in
+let add_backward (p:t): unit =
+  Context.add_backward p.goal p.context
+
+let push (names:int array) (t:term) (p:t): unit =
+  Context.push_untyped names p.context;
+  p.stack <- p.goal::p.stack;
+  p.goal  <- t;
+  p.depth <- p.depth + 1
+
+
+let pop (idx:int) (p:t): int =
+  assert (p.depth <> 0);
+  let t,pterm = Context.discharged idx p.context in
+  Context.pop p.context;
+  (*if Context.has_assertion t p.context then
+    Printf.printf "already in context %s\n"
+      (Context.string_of_term t p.context);*)
+  (*assert (not (Context.has_assertion t p.context));*)
+  Context.add_proved t pterm p.context;
+  let res = Context.find_assertion t p.context in
+  p.goal  <- List.hd p.stack;
+  p.stack <- List.tl p.stack;
+  p.depth <- p.depth - 1;
+  assert (0 <= p.depth);
+  res
+
+
+
+let push_empty (p:t): unit =
+  push [||] p.goal p
+
+
+let check_goal (p:t): unit =
+  (*Printf.printf "try to check %s\n" (Context.string_of_term p.goal p.context);*)
   try
-    List.iter
-      (fun i ->
-        Context.push_empty c;
-        Printf.printf "using bwd rule %s\n"
-          (Context.string_of_term (Context.assertion i c) c);
-        assert false)
-      bwd_set;
-    raise Not_found
+    add_backward p;
+    let idx = Context.find_assertion p.goal p.context in
+    raise (Proof_found idx)
+  with Not_found ->
+    ()
+
+
+let enter (p:t): unit =
+  let rec do_implication (): unit =
+    try
+      (*Printf.printf "try to split %s\n"
+        (Context.string_of_term p.goal p.context);*)
+      let a,b = split_implication p in
+      let _ = Context.add_assumption a p.context in
+      p.goal <- b;
+      check_goal p;
+      do_implication ()
+    with Not_found ->
+      do_all_quantified ()
+  and do_all_quantified (): unit =
+    try
+      let n,names,t = split_all_quantified p in
+      assert (n = Array.length names);
+      push names t p;
+      check_goal p;
+      do_implication ()
+    with Not_found ->
+      ()
+  in
+  (*Printf.printf "try to enter %s\n"
+    (Context.string_of_term p.goal p.context);*)
+  do_implication ()
+
+
+
+
+
+let prove_term (p:t): int =
+  let depth = p.depth
+  and goal  = p.goal in
+  (*Printf.printf "prove term depth %d\n" depth;*)
+  push_empty p;
+  try
+    check_goal p;
+    enter p;
+    if Options.is_prover_smart () then
+      assert false (* nyi: iterated backward reasoning *)
+    else
+      raise Not_found
   with Proof_found idx ->
-    Context.pop_keep_assertions c;
-    idx
+    Printf.printf "Trying to prove %s\n" (string_of_term goal p);
+    print_pair p;
+    (*Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
+      (string_of_term goal p) idx (string_of_index idx p)
+      (string_of_term p.goal p);*)
+    let rec popr (idx:int): int =
+      if depth = p.depth then
+        idx
+      else begin
+        (*Printf.printf "pop depth %d term %s\n"
+          p.depth (string_of_index idx p);*)
+        let idx = pop idx p in
+        popr idx
+      end
+    in
+    popr idx
 
 
 
 
 
+let rec prove_proof
+    (kind:kind)
+    (entlst:  entities list withinfo)
+    (rlst: compound)
+    (clst: compound)
+    (elst: compound)
+    (c:    Context.t)
+    : unit =
+  Context.push entlst None c;
+  add_assumptions rlst c;
+  prove_check clst c;
+  let pair_lst = prove_ensure elst kind c in
+  Context.pop c;
+  add_proved pair_lst c
 
-let rec prove_check (lst:compound) (c:Context.t): unit =
+and prove_check (lst:compound) (c:Context.t): unit =
   List.iter
     (fun ie -> let _ = prove_expression ie true c in ())
     lst
@@ -154,7 +275,13 @@ and prove_expression (ie:info_expression) (sub:bool) (c:Context.t): int =
           Universal ->
             if not sub then
               error_info ie.i "Proof expressions not allowed here";
-            assert false  (* nyi: subproofs *)
+            let kind, clst =
+              analyze_imp_opt
+                entlst.i
+                imp_opt
+            in
+            assert false
+            (*prove_proof kind entlst rlst clst elst c*)
         | Existential ->
             error_info ie.i "Only \"all\" allowed here"
       end
@@ -164,30 +291,14 @@ and prove_expression (ie:info_expression) (sub:bool) (c:Context.t): int =
       assert false  (* nyi: subproofs *)
   | _ ->
       let tn,_ = get_term ie c in
-      Printf.printf "try to prove %s\n" (Context.string_of_term tn c);
-      prove_term tn c
+      let p = start tn c in
+      (*Printf.printf "try to prove %s\n" (Context.string_of_term tn c);*)
+      try
+        prove_term p
+      with Not_found ->
+        error_info ie.i "Cannot prove"
 
 
-
-
-
-
-let prove_assertion_feature
-    (entlst:  entities list withinfo)
-    (bdy:     feature_body)
-    (c:       Context.t)
-    : unit =
-  Context.push entlst None c;
-  let kind, rlst, clst, elst = analyze_body entlst.i bdy
-  in
-  add_assumptions rlst c;
-  print_local c;
-  prove_check clst c;
-  let pair_lst = prove_ensure elst kind c in
-
-  Context.pop c;
-  add_proved pair_lst c;
-  print_global c
 
 
 
@@ -198,4 +309,6 @@ let prove_and_store
     (bdy:     feature_body)
     (context: Context.t)
     : unit =
-  prove_assertion_feature entlst bdy context
+  let kind, rlst, clst, elst = analyze_body entlst.i bdy
+  in
+  prove_proof kind entlst rlst clst elst context

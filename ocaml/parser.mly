@@ -720,7 +720,7 @@ cexpression:
 }
 
 |   quantifier LPAREN entity_list RPAREN optsemi expression %prec COLON {
-  Expquantified ($1,$3,$6) }
+  Expquantified ($1, withinfo (rhs_info 3) $3, $6) }
 
 |   expression PLUS expression   { Binexp (Plusop,$1,$3) }
 

@@ -6,8 +6,9 @@ open Container
 type t
 type proof_term
 val make:  unit -> t
-val push_empty: t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
+val push_empty: t -> unit
+val push_untyped: int array -> t -> unit
 val pop:   t -> unit
 val pop_keep_assertions: t -> unit
 val print: t -> unit
@@ -61,11 +62,18 @@ val put_class: header_mark withinfo -> int withinfo -> t -> unit
 
 val all_quantified_outer: term -> t -> term
 val implication_chain:  term list -> term -> t -> term
+val split_implication:    term -> t -> term * term
+val split_all_quantified: term -> t -> int * int array * term
+
+val count_assertions: t -> int
+val find_assertion: term -> t -> int
+val has_assertion:  term -> t -> bool
 val expanded_term:  term -> t -> term
 val add_assumption: term -> t -> int
 val add_axiom:      term -> t -> int
 val discharged:     int -> t -> term * proof_term
 val add_proved:     term -> proof_term -> t -> unit
+val add_backward:   term -> t -> unit
 val assertion:      int -> t -> term
 val backward_set:   term -> t -> int list
 

@@ -82,6 +82,12 @@ let all_id (at:t): int =
   at.entry.all_id
 
 
+let split_implication (t:term) (at:t): term * term =
+  Term.binary_split t at.entry.imp_id
+
+let split_all_quantified (t:term) (at:t): int * int array * term =
+  Term.quantifier_split t at.entry.all_id
+
 let implication (a:term) (b:term) (at:t): term =
   Term.binary at.entry.imp_id a b
 
@@ -120,6 +126,7 @@ let push (nbenv:int) (names: int array) (at:t): unit =
   at.stack       <- at.entry :: at.stack;
   at.entry       <-
     {at.entry with
+     req    = [];
      nbenv  = at.entry.nbenv + nbenv;
      names  = names;
      imp_id = at.entry.imp_id + nbenv;

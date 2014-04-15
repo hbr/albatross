@@ -139,11 +139,6 @@ let make (): t =
  }
 
 
-let push_empty (c:t): unit =
-  c.stack <- c.entry::c.stack;
-  Proof_context.push 0 [||] c.pc
-
-
 let push
     (entlst: entities list withinfo)
     (rt: return_type)
@@ -166,6 +161,26 @@ let push
 
   Proof_context.push (arity c) (last_argnames c) c.pc
 
+
+
+let push_untyped (names:int array) (c:t): unit =
+  let n = Array.length names
+  and entry = c.entry
+  in
+  c.entry <-
+    (let tps = Array.init n (fun i -> Variable 0) in
+    {entry with
+     (*info = UNKNOWN;*)
+     argnames  = Array.append names entry.argnames;
+     argtypes  = Array.append tps   entry.argtypes;
+     tvars_sub = TVars_sub.add_local n entry.tvars_sub;
+     signature = Sign.make_args tps});
+  c.stack <- entry::c.stack;
+  Proof_context.push n names c.pc
+
+
+let push_empty (c:t): unit =
+  push_untyped [||] c
 
 
 let pop (c:t): unit =
@@ -517,6 +532,21 @@ let print_all_local_assertions (c:t): unit =
     c
 
 
+let count_assertions (c:t): int =
+  Proof_context.count c.pc
+
+let find_assertion (t:term) (c:t): int =
+  Proof_context.find t c.pc
+
+let has_assertion (t:term) (c:t): bool =
+  Proof_context.has t c.pc
+
+let split_implication (t:term) (c:t): term * term =
+  Proof_context.split_implication t c.pc
+
+let split_all_quantified (t:term) (c:t): int * int array * term =
+  Proof_context.split_all_quantified t c.pc
+
 let all_quantified_outer (t:term) (c:t): term =
   Proof_context.all_quantified_outer t c.pc
 
@@ -548,6 +578,11 @@ let add_proved (t:term) (pterm:proof_term) (c:t): unit =
   Proof_context.add_proved t pterm c.pc;
   Proof_context.close c.pc
 
+let add_backward (t:term) (c:t): unit =
+  Proof_context.set_forward c.pc;
+  Proof_context.add_backward t c.pc;
+  Proof_context.close c.pc;
+  Proof_context.reset_forward c.pc
 
 let backward_set (t:term) (c:t): int list =
   Proof_context.backward_set t c.pc

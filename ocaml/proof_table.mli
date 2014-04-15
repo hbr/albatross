@@ -16,6 +16,8 @@ val names:       t -> int array
 val all_id:      t -> int
 val imp_id:      t -> int
 
+val split_implication: term -> t -> term * term
+val split_all_quantified: term -> t -> int * int array * term
 val implication: term -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val all_quantified_outer: term -> t -> term

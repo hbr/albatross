@@ -464,7 +464,7 @@ type expression =
       info_expression
         * (info_expression * compound) list
   | Expproof      of compound * implementation option * compound
-  | Expquantified of quantifier * entities list * expression
+  | Expquantified of quantifier * entities list withinfo * expression
 
 and
       info_expression = expression withinfo
@@ -586,7 +586,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
 
   | Expquantified (q,elist,exp) ->
       (match q with Universal -> "all" | Existential -> "some")
-      ^ "(" ^ (string_of_formals elist) ^ ") "  ^ (string_of_expression exp)
+      ^ "(" ^ (string_of_formals elist.v) ^ ") "  ^ (string_of_expression exp)
 
 and string_of_compound comp =
   string_of_list comp (fun ie -> string_of_expression ie.v) ";"

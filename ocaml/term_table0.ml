@@ -314,7 +314,6 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             assert (nbenv_0 <= nbenv);
             assert (not (IntMap.mem idx map));
             if nargs_0 = 0 then
-              let t_0 = assert false in (* adaption to nbenv? *)
               IntMap.add idx (Term_sub.singleton i t_0) map
             else map)
           IntMap.empty
