@@ -216,8 +216,8 @@ let prove_term (p:t): int =
     else
       raise Not_found
   with Proof_found idx ->
-    Printf.printf "Trying to prove %s\n" (string_of_term goal p);
-    print_pair p;
+    (*Printf.printf "Trying to prove %s\n" (string_of_term goal p);
+    print_pair p;*)
     (*Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
       (string_of_term goal p) idx (string_of_index idx p)
       (string_of_term p.goal p);*)
@@ -234,70 +234,75 @@ let prove_term (p:t): int =
     popr idx
 
 
+let prove_basic_expression (ie:info_expression) (c:Context.t): int =
+  let tn,_ = get_term ie c in
+  let p = start tn c in
+  try
+    prove_term p
+  with Not_found ->
+    print_pair p;
+    error_info ie.i "Cannot prove"
 
 
 
 let rec prove_proof
     (kind:kind)
-    (entlst:  entities list withinfo)
     (rlst: compound)
     (clst: compound)
     (elst: compound)
     (c:    Context.t)
     : unit =
-  Context.push entlst None c;
   add_assumptions rlst c;
   prove_check clst c;
   let pair_lst = prove_ensure elst kind c in
   Context.pop c;
   add_proved pair_lst c
 
+
 and prove_check (lst:compound) (c:Context.t): unit =
   List.iter
-    (fun ie -> let _ = prove_expression ie true c in ())
+    (fun ie -> prove_check_expression ie c)
     lst
 
-and prove_ensure (lst:compound) (k:kind) (c:Context.t): (term*proof_term) list =
+and prove_ensure
+    (lst:compound)
+    (k:kind)
+    (c:Context.t)
+    : (term*proof_term) list =
   let idx_lst =
     match k with
       PAxiom | PDeferred ->
         add_axioms lst c
     | PNormal ->
-        List.map (fun ie -> prove_expression ie false c) lst
+        List.map (fun ie -> prove_basic_expression ie c) lst
   in
   List.map (fun idx -> Context.discharged idx c) idx_lst
 
-and prove_expression (ie:info_expression) (sub:bool) (c:Context.t): int =
+and prove_check_expression
+    (ie:info_expression)
+    (c:Context.t): unit =
   match ie.v with
     Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
       begin
         match q with
           Universal ->
-            if not sub then
-              error_info ie.i "Proof expressions not allowed here";
             let kind, clst =
               analyze_imp_opt
                 entlst.i
                 imp_opt
             in
-            assert false
-            (*prove_proof kind entlst rlst clst elst c*)
+            Context.push entlst None c;
+            prove_proof kind rlst clst elst c
         | Existential ->
             error_info ie.i "Only \"all\" allowed here"
       end
   | Expproof (rlst,imp_opt,elst) ->
-      if not sub then
-        error_info ie.i "Proof expressions not allowed here";
-      assert false  (* nyi: subproofs *)
+      let kind, clst = analyze_imp_opt ie.i imp_opt in
+      Context.push_empty c;
+      prove_proof kind rlst clst elst c
   | _ ->
-      let tn,_ = get_term ie c in
-      let p = start tn c in
-      (*Printf.printf "try to prove %s\n" (Context.string_of_term tn c);*)
-      try
-        prove_term p
-      with Not_found ->
-        error_info ie.i "Cannot prove"
-
+      let _ = prove_basic_expression ie c in
+      ()
 
 
 
@@ -311,4 +316,5 @@ let prove_and_store
     : unit =
   let kind, rlst, clst, elst = analyze_body entlst.i bdy
   in
-  prove_proof kind entlst rlst clst elst context
+  Context.push entlst None context;
+  prove_proof kind rlst clst elst context

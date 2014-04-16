@@ -69,13 +69,6 @@ let is_toplevel (c:t): bool =
 
 let arity     (c:t): int = Sign.arity c.entry.signature
 
-let argument (name:int) (c:t): int * TVars.t * Sign.t =
-  (** The term and the signature of the argument named [name] *)
-  let i = Search.array_find_min (fun n -> n=name) c.entry.argnames in
-  i, TVars_sub.tvars c.entry.tvars_sub, Sign.argument i c.entry.signature
-    (* bug: argnames are cumulated and signature not!! *)
-
-
 let has_result (c:t): bool =
   Sign.has_result c.entry.signature
 
@@ -125,6 +118,36 @@ let last_argnames (c:t): int array =
 
 
 
+let string_of_term (t:term) (c:t): string =
+  Feature_table.term_to_string t c.entry.argnames c.ft
+
+
+
+let sign2string (s:Sign.t) (c:t): string =
+  Class_table.string_of_signature
+    s
+    (count_type_variables c)
+    c.entry.fgnames
+    c.ct
+
+
+
+let signature_string (c:t): string =
+  (** Print the signature of the context [c].
+   *)
+  sign2string c.entry.signature c
+
+
+
+let argument (name:int) (c:t): int * TVars.t * Sign.t =
+  (** The term and the signature of the argument named [name] *)
+  let i = Search.array_find_min (fun n -> n=name) c.entry.argnames in
+  let sign = Sign.make_const c.entry.argtypes.(i) in
+  i,
+  TVars_sub.tvars c.entry.tvars_sub,
+  sign
+
+
 let make (): t =
   {entry = empty_entry;
    stack = [];
@@ -168,7 +191,7 @@ let push_untyped (names:int array) (c:t): unit =
   and entry = c.entry
   in
   c.entry <-
-    (let tps = Array.init n (fun i -> Variable 0) in
+    (let tps = Array.init n (fun i -> Variable i) in
     {entry with
      (*info = UNKNOWN;*)
      argnames  = Array.append names entry.argnames;
@@ -200,13 +223,6 @@ let pop_keep_assertions (c:t): unit =
   c.stack <- List.tl c.stack;
   Proof_context.pop_keep c.pc
 
-
-
-
-let print (c:t): unit =
-  assert (is_global c);
-  Class_table.print   c.ct;
-  Feature_table.print c.ct c.ft
 
 
 
@@ -254,26 +270,6 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
     not_yet_implemented c.entry.info "Type inference of formal generics"
 
 
-
-
-let string_of_term (t:term) (c:t): string =
-  Feature_table.term_to_string t c.entry.argnames c.ft
-
-
-
-let sign2string (s:Sign.t) (c:t): string =
-  Class_table.string_of_signature
-    s
-    (count_type_variables c)
-    c.entry.fgnames
-    c.ct
-
-
-
-let signature_string (c:t): string =
-  (** Print the signature of the context [c].
-   *)
-  sign2string c.entry.signature c
 
 
 
@@ -586,3 +582,10 @@ let add_backward (t:term) (c:t): unit =
 
 let backward_set (t:term) (c:t): int list =
   Proof_context.backward_set t c.pc
+
+
+let print (c:t): unit =
+  assert (is_global c);
+  Class_table.print   c.ct;
+  Feature_table.print c.ct c.ft;
+  print_global_assertions c

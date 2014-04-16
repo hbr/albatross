@@ -327,9 +327,17 @@ let discharged (i:int) (pt:t): term * proof_term =
     if axiom then
       Axiom term
     else
+      let narr =
+        if cnt0 <= i then i - cnt0
+        else
+          match pt.entry.req with
+            [] -> 0
+          | i_last_assumption::_ -> i_last_assumption + 1 - cnt0
+      in
+      assert (0 <= narr);
       let pt_arr =
         Array.init
-          (i-cnt0)
+          narr
           (fun j -> (Seq.elem pt.seq (j+cnt0)).proof_term)
       in
       Subproof (nargs,nms,i,pt_arr)

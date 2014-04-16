@@ -369,20 +369,24 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
 let add_specialized_forward
     (t:term)
     (i:int) (args: term array) (pc:t): unit =
-  (** Add the new term [t] which is a specialization of the term [i]
-      specialized with the arguments [args] to the proof context [pc].
+  (** Add the term [t] which is a specialization of the term [i]
+      specialized with the arguments [args] to the proof context [pc]
+      if it is not yet in.
    *)
-  assert (not (has t pc));
-  let used_fwd = used_forward i pc in
-  let used_fwd =
-    if is_forward_simplification i pc then
-      used_fwd
-    else
-      IntSet.add i used_fwd
-  in
-  Proof_table.add_specialize t i args pc.base;
-  add_new t used_fwd pc
-
+  if has t pc then
+    ()
+  else begin
+    assert (not (has t pc));
+    let used_fwd = used_forward i pc in
+    let used_fwd =
+      if is_forward_simplification i pc then
+        used_fwd
+      else
+        IntSet.add i used_fwd
+    in
+    Proof_table.add_specialize t i args pc.base;
+    add_new t used_fwd pc
+  end
 
 
 
@@ -483,6 +487,8 @@ let add_consequences_implication (i:int) (td:term_data) (pc:t): unit =
   match td.fwddat with
     None -> ()
   | Some (a,b,gp1,_) ->
+      (*Printf.printf "Search for a premise matching %s, nargs %d, gp1 %d\n"
+        (Term.to_string a) td.nargs gp1;*)
       let sublst =
         Term_table0.unify_with a td.nargs td.nbenv pc.entry.prvd
       in
