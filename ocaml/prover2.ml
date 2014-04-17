@@ -61,8 +61,13 @@ let analyze_body (info:info) (bdy: feature_body)
 
 
 
+let untagged (ie: info_expression): info_expression =
+  match ie.v with
+    Taggedexp (tag,e) -> withinfo ie.i e
+  | _                 -> ie
+
 let get_term (ie: info_expression) (c:Context.t): term * term =
-  let tn = Typer.boolean_term ie c in
+  let tn = Typer.boolean_term (untagged ie) c in
   let t  = Context.expanded_term tn c in
   tn, t
 
@@ -164,7 +169,7 @@ let push_empty (p:t): unit =
 
 
 let check_goal (p:t): unit =
-  (*Printf.printf "try to check %s\n" (Context.string_of_term p.goal p.context);*)
+  Printf.printf "try to check %s\n" (Context.string_of_term p.goal p.context);
   try
     add_backward p;
     let idx = Context.find_assertion p.goal p.context in
@@ -176,8 +181,8 @@ let check_goal (p:t): unit =
 let enter (p:t): unit =
   let rec do_implication (): unit =
     try
-      (*Printf.printf "try to split %s\n"
-        (Context.string_of_term p.goal p.context);*)
+      Printf.printf "try to split %s\n"
+        (Context.string_of_term p.goal p.context);
       let a,b = split_implication p in
       let _ = Context.add_assumption a p.context in
       p.goal <- b;
@@ -195,8 +200,8 @@ let enter (p:t): unit =
     with Not_found ->
       ()
   in
-  (*Printf.printf "try to enter %s\n"
-    (Context.string_of_term p.goal p.context);*)
+  Printf.printf "try to enter %s\n"
+    (Context.string_of_term p.goal p.context);
   do_implication ()
 
 
@@ -206,7 +211,7 @@ let enter (p:t): unit =
 let prove_term (p:t): int =
   let depth = p.depth
   and goal  = p.goal in
-  (*Printf.printf "prove term depth %d\n" depth;*)
+  Printf.printf "prove term depth %d\n" depth;
   push_empty p;
   try
     check_goal p;
@@ -216,17 +221,17 @@ let prove_term (p:t): int =
     else
       raise Not_found
   with Proof_found idx ->
-    (*Printf.printf "Trying to prove %s\n" (string_of_term goal p);
-    print_pair p;*)
-    (*Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
+    Printf.printf "Trying to prove %s\n" (string_of_term goal p);
+    print_pair p;
+    Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
       (string_of_term goal p) idx (string_of_index idx p)
-      (string_of_term p.goal p);*)
+      (string_of_term p.goal p);
     let rec popr (idx:int): int =
       if depth = p.depth then
         idx
       else begin
-        (*Printf.printf "pop depth %d term %s\n"
-          p.depth (string_of_index idx p);*)
+        Printf.printf "pop depth %d term %s\n"
+          p.depth (string_of_index idx p);
         let idx = pop idx p in
         popr idx
       end
@@ -281,6 +286,7 @@ and prove_ensure
 and prove_check_expression
     (ie:info_expression)
     (c:Context.t): unit =
+  let ie = untagged ie in
   match ie.v with
     Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
       begin
@@ -317,4 +323,5 @@ let prove_and_store
   let kind, rlst, clst, elst = analyze_body entlst.i bdy
   in
   Context.push entlst None context;
-  prove_proof kind rlst clst elst context
+  prove_proof kind rlst clst elst context;
+  print_global context

@@ -16,14 +16,14 @@ type term_data = {term:     term;  (* inner term [if nargs<>0] *)
 
 
 type desc = {td:       term_data;
-             used_fwd: IntSet.t}
+             used_gen: IntSet.t}
 
 
 type entry = {mutable prvd:  Term_table0.t;  (* all proved terms *)
               mutable prvd2: Term_table0.t;  (* as schematic terms *)
               mutable bwd:   Term_table0.t;
               mutable fwd:   Term_table0.t;
-              mutable used_mp: IntSet.t;
+              mutable used_fwd: IntSet.t;
               mutable count: int}
 
 type proof_term = Proof_table.proof_term
@@ -39,16 +39,16 @@ type t = {base:     Proof_table.t;
 let empty_entry =
   let e = Term_table0.empty in
     {prvd=e; prvd2=e; bwd=e; fwd=e;
-     used_mp = IntSet.empty;
+     used_fwd = IntSet.empty;
      count = 0}
 
 let copied_entry (e:entry): entry =
-  {prvd    = e.prvd;
-   prvd2   = e.prvd2;
-   bwd     = e.bwd;
-   fwd     = e.fwd;
-   used_mp = e.used_mp;
-   count   = e.count}
+  {prvd     = e.prvd;
+   prvd2    = e.prvd2;
+   bwd      = e.bwd;
+   fwd      = e.fwd;
+   used_fwd = e.used_fwd;
+   count    = e.count}
 
 
 let make (imp_id:int) (all_id:int): t  =
@@ -119,6 +119,10 @@ let term (i:int) (pc:t): term =
   Proof_table.local_term i pc.base
 
 
+let is_assumption (i:int) (pc:t): bool =
+  assert (i < count pc);
+  Proof_table.is_assumption i pc.base
+
 
 let split_implication (t:term) (pc:t): term * term =
   Proof_table.split_implication t pc.base
@@ -143,21 +147,28 @@ let work (pc:t): int list = pc.work
 
 let has_work (pc:t): bool = pc.work <> []
 
+let is_used_forward (i:int) (pc:t): bool =
+  (** Has the rule [i] already been used as a forward rule in the proof
+      context [pc]?
+   *)
+  assert (i < count pc);
+  IntSet.mem i pc.entry.used_fwd
+
 
 let is_forward_simplification (i:int) (pc:t): bool =
   assert (is_consistent pc);
   assert (i < count pc);
   let desc = Seq.elem pc.terms i in
-  assert (Option.has desc.td.fwddat);
+  assert (Option.has desc.td.fwddat); (* [i] must be a forward rule *)
   let _,_,_,simpl = Option.value desc.td.fwddat in
   simpl
 
 
 
-let used_forward (i:int) (pc:t): IntSet.t =
+let used_schematic (i:int) (pc:t): IntSet.t =
   assert (is_consistent pc);
   assert (i < count pc);
-  (Seq.elem pc.terms i).used_fwd
+  (Seq.elem pc.terms i).used_gen
 
 
 
@@ -360,10 +371,10 @@ let has_equivalent (t:term) (pc:t): bool =
 
 
 
-let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
+let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
   (** Add the new term [t] to the context [pc].
 
-      Note: The term has to be added to the proof context outside
+      Note: The term has to be added to the proof table outside
       this function
    *)
   assert (not (has_equivalent t pc));
@@ -375,7 +386,7 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
       Term_table0.add t 0 td.nbenv idx pc.entry.prvd;
     pc.entry.prvd2 <-
       Term_table0.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
-    Seq.push pc.terms {td=td; used_fwd = used_fwd}
+    Seq.push pc.terms {td=td; used_gen = used_gen}
 
   and add_to_forward (): unit =
     match td.fwddat with
@@ -403,12 +414,23 @@ let add_new (t:term) (used_fwd:IntSet.t) (pc:t): unit =
 
 
 let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
-  assert (not (has_equivalent t pc));
-  if is_using_forward pc then begin
-    let used_fwd = IntSet.union (used_forward i pc) (used_forward j pc) in
-    pc.entry.used_mp <- IntSet.add j pc.entry.used_mp;
+  (** Add the term [t] which is a consequence of [i] as a premise and [j]
+      as an implication using the modus ponens rule to the context [pc].
+   *)
+  (*assert (not (has_equivalent t pc));*)
+  assert (i < count pc);
+  assert (j < count pc);
+  let used_gen_i = used_schematic i pc
+  and used_gen_j = used_schematic j pc
+  in
+  if is_using_forward pc
+      (*&& IntSet.is_empty (IntSet.inter used_gen_i used_gen_j)*)
+      && not (has_equivalent t pc)
+  then begin
+    let used_gen = IntSet.union used_gen_i used_gen_j in
+    pc.entry.used_fwd <- IntSet.add j pc.entry.used_fwd;
     Proof_table.add_mp t i j pc.base;
-    add_new t used_fwd pc
+    add_new t used_gen pc
   end else
     ()
 
@@ -421,20 +443,18 @@ let add_specialized_forward
       specialized with the arguments [args] to the proof context [pc]
       if it is not yet in.
    *)
+  assert (i < count pc);
+  assert (not (has t pc));
   if has t pc then  (* The term [t] is a specialization, therefore cannot be
                        all quantified, therefore cannot have equivalents
                        which are not identical *)
     ()
   else begin
-    let used_fwd = used_forward i pc in
-    let used_fwd =
-      if is_forward_simplification i pc then
-        used_fwd
-      else
-        IntSet.add i used_fwd
+    let used_gen = used_schematic i pc in
+    let used_gen = IntSet.add i used_gen
     in
     Proof_table.add_specialize t i args pc.base;
-    add_new t used_fwd pc
+    add_new t used_gen pc
   end
 
 
@@ -495,19 +515,27 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
   assert (i < count pc);
   assert (j < count pc);
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
-  let a, b, args = specialized_forward j sub nbenv_sub pc in
-  if has_equivalent b pc then (* [b] might be all quantified *)
+  let a, b, args = specialized_forward j sub nbenv_sub pc
+  and used_gen_i = used_schematic i pc
+  in
+  let j_in_used_gen_i = IntSet.mem j used_gen_i
+  in
+  if j_in_used_gen_i || has_equivalent b pc then
+                                  (* [b] might be all quantified *)
     ()
   else if args = [||] then begin
     add_mp b i j pc
   end else begin
-    let imp  = implication a b pc
-    and idx  = count pc
-    in
-    add_specialized_forward imp j args pc;
-    add_mp b i idx pc
+    let imp  = implication a b pc in
+    if has imp pc then
+      ()
+    else begin
+      let idx  = count pc
+      in
+      add_specialized_forward imp j args pc;
+      add_mp b i idx pc
+    end
   end
-
 
 
 
@@ -530,27 +558,85 @@ let add_consequences_premise (i:int) (pc:t): unit =
 
 
 
-let add_consequences_implication (i:int)(pc:t): unit =
-  (** Add the consequences of the analyzed term [i] by using the term as an
-      implication and searching for a matching premises.
+let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
+  (** Add the schematic rule [idx] substituted by [sub] to the
+      proof context [pc].
+
+      Note: The substitution [sub] has to be complete and not partial!
    *)
-  let td = (Seq.elem pc.terms i).td
+  assert (is_consistent pc);
+  assert (idx < count pc);
+  assert (not (Term_sub.is_empty sub));
+  let desc    = Seq.elem pc.terms idx              in
+  let td      = desc.td                            in
+  assert (td.nargs = Term_sub.count sub);
+  let args    = Term_sub.arguments td.nargs sub    in
+  let t       = Proof_table.local_term idx pc.base in
+  let n,nms,t = split_all_quantified t pc          in
+  assert (n = Array.length args);
+  let t       = Term.apply t args                  in
+  if has t pc then (* [t] is a complete specialization, therefore
+                      cannot be schematic *)
+    ()
+  else begin
+    let used_gen = IntSet.add idx desc.used_gen in
+    Proof_table.add_specialize t idx args pc.base;
+    add_new t used_gen pc;
+    assert (is_consistent pc)
+  end
+
+
+
+let add_consequences_implication (i:int)(pc:t): unit =
+  (** Add the consequences of the term [i] by using the term as an
+      implication and searching for matching premises.
+   *)
+  let desc = Seq.elem pc.terms i in
+  let td   = desc.td
   in
   match td.fwddat with
     None -> ()
   | Some (a,b,gp1,_) ->
-      (*Printf.printf "Search for a premise matching %s, nargs %d, gp1 %d\n"
-        (Term.to_string a) td.nargs gp1;*)
-      let sublst =
-        Term_table0.unify_with a td.nargs td.nbenv pc.entry.prvd
-      in
-      let sublst = List.rev sublst in
-      List.iter
-        (fun (idx,sub) ->
-          assert (is_consistent pc);
-          assert (idx < count pc);
-          add_consequence idx i sub pc)
-        sublst
+      if 0 < td.nargs then  (* the implication is schematic *)
+        let sublst =
+          Term_table0.unify_with a td.nargs td.nbenv pc.entry.prvd
+        in
+        let sublst = List.rev sublst in
+        List.iter
+          (fun (idx,sub) ->
+            assert (is_consistent pc);
+            assert (idx < count pc);
+            add_consequence idx i sub pc)
+          sublst
+      else  (* the implication is not schematic *)
+        let sublst = Term_table0.unify a td.nbenv pc.entry.prvd2
+        in
+        let sublst_exact =
+          List.filter (fun (idx,sub) -> Term_sub.is_empty sub) sublst
+        in
+        match sublst_exact with
+          [idx,_] ->
+            assert (nbenv pc = td.nbenv);
+            add_mp b idx i pc
+        | []      ->
+            (* no exact match *)
+            begin
+              match sublst with
+                [] -> ()
+              | (idx,sub)::_ ->
+                  (* the schematic rule [idx] matches the premise of [i]*)
+                  begin
+                    let idx_premise = count pc in
+                    assert (not (has a pc)); (* because there is no exact
+                                                match *)
+                    add_fully_specialized idx sub pc;
+                    assert (idx_premise + 1 = count pc); (* specialized is
+                                                            new *)
+                    add_mp b idx_premise i pc
+                  end
+            end
+        | _ ->
+            assert false
 
 
 
@@ -561,32 +647,6 @@ let add_consequences (i:int) (pc:t): unit =
    *)
   add_consequences_premise     i pc;
   add_consequences_implication i pc
-
-
-
-let add_specialized_backward (idx:int) (sub:Term_sub.t) (pc:t): unit =
-  (** Add the schematic rule [idx] substituted by [sub] to the
-      proof context [pc].
-   *)
-  assert (is_consistent pc);
-  assert (idx < count pc);
-  assert (not (Term_sub.is_empty sub));
-  let desc = Seq.elem pc.terms idx              in
-  let td   = desc.td                            in
-  assert (td.nargs = Term_sub.count sub);
-  let args = Term_sub.arguments td.nargs sub    in
-  let t    = Proof_table.local_term idx pc.base in
-  let n,nms,t = split_all_quantified t pc       in
-  assert (n = Array.length args);
-  let t    = Term.apply t args                  in
-  if has t pc then (* [t] is a specialization of a backward rule, therefore
-                      cannot be schematic *)
-    ()
-  else begin
-    Proof_table.add_specialize t idx args pc.base;
-    add_new t desc.used_fwd pc;
-    assert (is_consistent pc)
-  end
 
 
 
@@ -604,7 +664,7 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   if not has then begin
     add_new t IntSet.empty pc
   end else
-    Seq.push pc.terms {td = analyze t pc; used_fwd = IntSet.empty};
+    Seq.push pc.terms {td = analyze t pc; used_gen = IntSet.empty};
   idx
 
 
@@ -640,10 +700,10 @@ let close_step (pc:t): unit =
 
 let close (pc:t): unit =
   let rec cls (n:int): unit =
-    if n > 1000 then assert false;  (* 'infinite' loop detection *)
+    if n > 50 then assert false;  (* 'infinite' loop detection *)
     if has_work pc then begin
       close_step pc;
-      cls (n-1)
+      cls (n+1)
     end else
       ()
   in
@@ -693,7 +753,7 @@ let add_backward (t:term) (pc:t): unit =
         else
           ()
       else
-        add_specialized_backward idx sub pc)
+        add_fully_specialized idx sub pc)
     sublst
 
 

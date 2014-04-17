@@ -18,6 +18,9 @@ val find_equivalent:    term -> t -> int
 val has_equivalent:     term -> t -> bool
 val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
+val has_work:           t -> bool
+val work:               t -> int list
+val is_used_forward:    int -> t -> bool
 val close_step:         t -> unit
 val close:              t -> unit
 val set_forward:        t -> unit
@@ -47,5 +50,6 @@ val count:          t -> int
 val count_previous: t -> int
 val count_global:   t -> int
 
-val term_orig: int -> t -> term * int
-val term:      int -> t -> term
+val term_orig:      int -> t -> term * int
+val term:           int -> t -> term
+val is_assumption:  int -> t -> bool

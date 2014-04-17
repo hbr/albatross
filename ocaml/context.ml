@@ -480,8 +480,12 @@ let print_assertions (e:entry) (c0:int) (c1:int) (c:t): unit =
     else begin
       let t,nbenv = Proof_context.term_orig i c.pc in
       assert (nbenv = Array.length e.argnames);
-      let tstr = Feature_table.term_to_string t e.argnames c.ft in
-      Printf.printf "%3d\t%s\n" i tstr;
+      let tstr = Feature_table.term_to_string t e.argnames c.ft
+      and used =
+        if Proof_context.is_used_forward i c.pc then "  used: "
+        else ""
+      in
+      Printf.printf "%3d\t%s%s\n" i used tstr;
       print (i+1)
     end
   in
@@ -574,10 +578,36 @@ let add_proved (t:term) (pterm:proof_term) (c:t): unit =
   Proof_context.add_proved t pterm c.pc;
   Proof_context.close c.pc
 
+
+let close (c:t): unit =
+  let rec cls (n:int): unit =
+    if Proof_context.has_work c.pc then begin
+      assert (n < 100);
+      Printf.printf "Close step %d: before .....\n" n;
+      print_all_local_assertions c;
+      Printf.printf "Work to be done ... \n";
+      let work = Proof_context.work c.pc in
+      List.iter
+        (fun i ->
+          let t = Proof_context.term i c.pc in
+          Printf.printf "\t%s\n" (string_of_term t c);
+        )
+        work;
+      Proof_context.close_step c.pc;
+      Printf.printf "........... after\n";
+      print_all_local_assertions c;
+      Printf.printf "\n";
+      cls (n+1)
+    end else
+      ()
+  in
+  cls 0
+
 let add_backward (t:term) (c:t): unit =
   Proof_context.set_forward c.pc;
   Proof_context.add_backward t c.pc;
   Proof_context.close c.pc;
+  (*close c;*)
   Proof_context.reset_forward c.pc
 
 let backward_set (t:term) (c:t): int list =
