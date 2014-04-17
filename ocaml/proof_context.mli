@@ -14,6 +14,8 @@ val pop_keep:  t -> unit
 
 val find:               term -> t -> int
 val has:                term -> t -> bool
+val find_equivalent:    term -> t -> int
+val has_equivalent:     term -> t -> bool
 val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
 val close_step:         t -> unit
