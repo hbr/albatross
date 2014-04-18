@@ -182,7 +182,7 @@ let forward_data (t:term) (nargs:int) (pc:t): term * term * int * bool =
   let imp_id = nargs + imp_id pc       in
   let a,b = Term.binary_split t imp_id in
   if nargs = 0 then
-    a, b, 0, true
+    a, b, 0, (Term.nodes b) <= (Term.nodes a)
   else begin
     let gp1   = Term.greatestp1_arg a nargs
     and avars = Term.bound_variables a nargs
@@ -420,17 +420,21 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   (*assert (not (has_equivalent t pc));*)
   assert (i < count pc);
   assert (j < count pc);
-  let used_gen_i = used_schematic i pc
-  and used_gen_j = used_schematic j pc
+  let td = (Seq.elem pc.terms j).td in
+  let _,_,_,simpl = Option.value td.fwddat in
+  let gen_i = used_schematic i pc
+  and gen_j = used_schematic j pc
   in
+  let fwd_ok = simpl || IntSet.is_empty (IntSet.inter gen_i gen_j) in
   if is_using_forward pc
-      (*&& IntSet.is_empty (IntSet.inter used_gen_i used_gen_j)*)
+      && fwd_ok
       && not (has_equivalent t pc)
   then begin
-    let used_gen = IntSet.union used_gen_i used_gen_j in
+    let gen = if simpl then gen_i else IntSet.union gen_i gen_j
+    in
     pc.entry.used_fwd <- IntSet.add j pc.entry.used_fwd;
     Proof_table.add_mp t i j pc.base;
-    add_new t used_gen pc
+    add_new t gen pc
   end else
     ()
 
