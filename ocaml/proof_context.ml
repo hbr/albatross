@@ -4,6 +4,7 @@ open Support
 
 
 type backward_data = {bwd_ps:    term list;
+                      bwd_set:   TermSet.t;
                       bwd_tgt:   term;
                       bwd_simpl: bool}
 
@@ -12,7 +13,7 @@ type term_data = {term:     term;  (* inner term [if nargs<>0] *)
                   nargs:    int;
                   nbenv:    int;
                   fwddat:   (term*term*int*bool) option;
-                  bwddat:   backward_data}
+                  bwddat:   backward_data option}
 
 
 type desc = {td:       term_data;
@@ -209,10 +210,11 @@ let forward_data (t:term) (nargs:int) (pc:t): term * term * int * bool =
 
 
 
+let term_list_to_set (ts: term list): TermSet.t =
+  List.fold_left (fun set t -> TermSet.add t set) TermSet.empty ts
 
 
-
-let analyze_backward (t:term) (nargs:int) (pc:t): backward_data =
+let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
   (** Analyze the schematic term [t] with [nargs] arguments as a backward
       rule.
    *)
@@ -262,7 +264,11 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data =
   let ps, tgt = split [] t 0  IntSet.empty in
   let ps, tgt, simpl = ana_bwd ps tgt
   in
-  {bwd_ps = ps; bwd_tgt = tgt; bwd_simpl = simpl}
+  match ps with
+    [] -> None
+  | _::_ ->
+      let bwd_set = term_list_to_set ps in
+      Some {bwd_ps = ps; bwd_set = bwd_set; bwd_tgt = tgt; bwd_simpl = simpl}
 
 
 
@@ -294,7 +300,12 @@ let analyze (t:term)  (pc:t): term_data =
     in
     let ps, tgt = Term.split_implication_chain t imp_id in
     let bwd =
-      {bwd_ps = List.rev ps; bwd_tgt = tgt; bwd_simpl = true}
+      match ps with
+        [] -> None
+      | _::_ ->
+          let set = term_list_to_set ps in
+          Some {bwd_ps = List.rev ps; bwd_set = set; bwd_tgt = tgt;
+                bwd_simpl = true}
     in
     {term   = t;
      nargs  = 0;
@@ -397,8 +408,23 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
           Term_table0.add a td.nargs td.nbenv idx pc.entry.fwd
 
   and add_to_backward (): unit =
-    pc.entry.bwd <-
-      Term_table0.add td.bwddat.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
+    match td.bwddat with
+      None -> ()
+    | Some bwd ->
+        let has_similar =
+          td.nargs = 0 &&
+          let sublst = Term_table0.unify_with t 0 td.nbenv pc.entry.bwd in
+          List.exists
+            (fun (idx,_) ->
+              bwd.bwd_set =
+              let bwddat = (Seq.elem pc.terms idx).td.bwddat in
+              assert (Option.has bwddat);
+              (Option.value bwddat).bwd_set)
+            sublst
+        in
+        if not has_similar then
+          pc.entry.bwd <-
+            Term_table0.add bwd.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
 
   and add_to_work (): unit =
     pc.work <- idx::pc.work
