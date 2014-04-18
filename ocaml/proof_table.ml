@@ -185,6 +185,12 @@ let local_term (i:int) (at:t): term =
   Term.up n_up desc.term
 
 
+let is_assumption (i:int) (at:t): bool =
+  assert (i < count at);
+  let desc = Seq.elem at.seq i in
+  match desc.proof_term with
+    Assumption _ -> true
+  | _            -> false
 
 
 let add_proved (t:term) (pt:proof_term) (at:t): unit =

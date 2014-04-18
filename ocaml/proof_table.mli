@@ -23,9 +23,10 @@ val all_quantified:  int -> int array -> term -> t -> term
 val all_quantified_outer: term -> t -> term
 val implication_chain: term list -> term -> t -> term
 
-val term:        int -> t -> term * int
-val nbenv_term:  int -> t -> int
-val local_term:  int -> t -> term
+val term:          int -> t -> term * int
+val nbenv_term:    int -> t -> int
+val local_term:    int -> t -> term
+val is_assumption: int -> t -> bool
 
 val stacked_counts: t -> int list
 
