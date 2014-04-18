@@ -492,12 +492,13 @@ let print_assertions
       assert (nbenv = Array.length e.argnames);
       let tstr = Feature_table.term_to_string t e.argnames c.ft
       in
-      Printf.printf "%s%3d   %s%s%s\n"
-        prefix
-        i
-        (if global || is_hypo then "" else ". ")
-        tstr
-        (if is_used then " <used>" else "");
+      if not is_used then
+        Printf.printf "%s%3d   %s%s%s\n"
+          prefix
+          i
+          (if global || is_hypo then "" else ". ")
+          tstr
+          (if is_used then " <used>" else "");
       print (i+1)
     end
   in
