@@ -277,7 +277,7 @@ end (* Accus *)
 
 
 
-let analyze_expression
+let rec analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
     (c:         Context.t)
@@ -309,8 +309,6 @@ let analyze_expression
     let feat_fun (fn:feature_name) =
       fun () ->
         try
-          (*Printf.printf "Try to find \"%s\" with %d arguments\n"
-            (feature_name_to_string fn) nargs;*)
           Context.find_feature fn nargs c
         with Not_found ->
           cannot_find (feature_name_to_string fn)
@@ -323,17 +321,6 @@ let analyze_expression
     and do_leaf (f: unit -> (int*TVars.t*Sign.t) list): unit =
       try
         let lst = f () in
-        (*Printf.printf "found %s with {%s}\n"
-          (string_of_expression e)
-          (String.concat
-             ","
-             (List.map
-                (fun (i,tvs,s) ->
-                  let ct      = Context.ct c
-                  and ntvs    = TVars.count tvs
-                  in
-                  Class_table.string_of_signature s ntvs [||] ct)
-                lst));*)
         Accus.add_leaf lst accs
       with
         Accus.Untypeable exp_sign_lst ->
@@ -366,6 +353,18 @@ let analyze_expression
     | Funapp (f,args)     -> application f (arg_array args) accs
     | Expparen e          -> analyze e accs
     | Taggedexp (label,e) -> analyze e accs
+    | Expquantified (q,entlst,exp) ->
+        Context.push entlst None c;
+        let t0 = boolean_term (withinfo entlst.i exp) c in
+        let t  =
+          match q with
+            Universal -> Context.all_quantified_outer t0 c
+          | Existential -> assert false (* nyi: *)
+        in
+        Printf.printf "inner term %s\n" (Context.string_of_term t0 c);
+        Context.pop c;
+        Printf.printf "outer term %s\n" (Context.string_of_term t  c);
+        not_yet_implemented ie.i "typing of quantified expressions";
 
     | _ -> not_yet_implemented ie.i
           ("(others)Typing of expression " ^
@@ -409,7 +408,7 @@ let analyze_expression
 
 
 
-let result_term
+and result_term
     (ie:  info_expression)
     (c:   Context.t)
     : term =
@@ -420,7 +419,7 @@ let result_term
   analyze_expression ie (Context.result_type c) c
 
 
-let boolean_term
+and boolean_term
     (ie: info_expression)
     (c:  Context.t)
     : term =
