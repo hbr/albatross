@@ -127,7 +127,9 @@ let print_global (c:Context.t): unit =
 let print_pair (p:t): unit =
   Context.print_all_local_assertions p.context;
   Printf.printf "--------------------\n";
-  Printf.printf "\t%s\n\n" (string_of_term p.goal p)
+  let depth = Context.depth p.context in
+  let prefix = String.make (2*(depth-1)) ' ' in
+  Printf.printf "%s      %s\n\n" prefix (string_of_term p.goal p)
 
 let split_implication (p:t): term * term =
   Context.split_implication p.goal p.context

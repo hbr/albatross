@@ -138,6 +138,8 @@ let signature_string (c:t): string =
   sign2string c.entry.signature c
 
 
+let depth (c:t): int =
+  List.length c.stack
 
 let argument (name:int) (c:t): int * TVars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
@@ -471,21 +473,31 @@ let assertion (i:int) (c:t): term =
   Proof_context.term i c.pc
 
 
-let print_assertions (e:entry) (c0:int) (c1:int) (c:t): unit =
+let print_assertions
+    (prefix:string)
+    (e:entry)
+    (c0:int)
+    (c1:int)
+    (global:bool)
+    (c:t): unit =
   let argsstr = arguments_string e c.ct in
   if argsstr <> "" then
-    Printf.printf "%s\n" argsstr;
+    Printf.printf "%s%s\n" prefix argsstr;
   let rec print (i:int): unit =
     if i = c1 then ()
     else begin
-      let t,nbenv = Proof_context.term_orig i c.pc in
+      let t,nbenv = Proof_context.term_orig i c.pc
+      and is_hypo = Proof_context.is_assumption i c.pc
+      and is_used = Proof_context.is_used_forward i c.pc in
       assert (nbenv = Array.length e.argnames);
       let tstr = Feature_table.term_to_string t e.argnames c.ft
-      and used =
-        if Proof_context.is_used_forward i c.pc then "  used: "
-        else ""
       in
-      Printf.printf "%3d\t%s%s\n" i used tstr;
+      Printf.printf "%s%3d   %s%s%s\n"
+        prefix
+        i
+        (if global || is_hypo then "" else ". ")
+        tstr
+        (if is_used then " <used>" else "");
       print (i+1)
     end
   in
@@ -506,29 +518,31 @@ let print_global_assertions (c:t): unit =
       in
       get_e0 c.stack
   in
-  print_assertions e 0 cnt c
+  print_assertions "" e 0 cnt true c
 
 
 
 let print_all_local_assertions (c:t): unit =
-  let rec print (elst: entry list) (clst: int list): unit =
-    match elst, clst with
-      [], []
-    | [_], [_] ->
-        ()
-    | e1::e0::elst, c1::c0::clst ->
-        print (e0::elst) (c0::clst);
-        print_assertions e1 c0 c1 c
-    | _, _ -> assert false (* shall never happen, elst and clst must have
-                              equal length *)
+  let rec print (elst: entry list) (clst: int list): string =
+      match elst, clst with
+        [], []
+      | [_], [_] -> ""
+      | e1::e0::elst, c1::c0::clst ->
+          let prefix = print (e0::elst) (c0::clst) in
+          print_assertions prefix e1 c0 c1 false c;
+          "  " ^ prefix
+      | _, _ -> assert false (* shall never happen, elst and clst must have
+                                equal length *)
   in
   let clst = Proof_context.stacked_counts c.pc
   in
-  print c.stack clst;
+  let prefix = print c.stack clst in
   print_assertions
+    prefix
     c.entry
     (Proof_context.count_previous c.pc)
     (Proof_context.count          c.pc)
+    false
     c
 
 

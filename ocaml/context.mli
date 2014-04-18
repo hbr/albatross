@@ -15,6 +15,7 @@ val print: t -> unit
 
 val is_global:   t -> bool
 val is_toplevel: t -> bool
+val depth:       t -> int
 val is_private:  t -> bool
 val is_public:   t -> bool
 val set_visibility: visibility -> t -> unit
