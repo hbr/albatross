@@ -1,3 +1,4 @@
+open Container
 open Support
 open Term
 
@@ -141,6 +142,8 @@ let split_all_quantified (p:t): int * int array * term =
 let add_backward (p:t): unit =
   Context.add_backward p.goal p.context
 
+
+
 let push (names:int array) (t:term) (p:t): unit =
   Context.push_untyped names p.context;
   p.stack <- p.goal::p.stack;
@@ -148,30 +151,58 @@ let push (names:int array) (t:term) (p:t): unit =
   p.depth <- p.depth + 1
 
 
-let pop (idx:int) (p:t): int =
-  assert (p.depth <> 0);
-  let t,pterm = Context.discharged idx p.context in
-  Context.pop p.context;
-  (*if Context.has_assertion t p.context then
-    Printf.printf "already in context %s\n"
-      (Context.string_of_term t p.context);*)
-  (*assert (not (Context.has_assertion t p.context));*)
-  Context.add_proved t pterm p.context;
-  let res = Context.find_assertion t p.context in
-  p.goal  <- List.hd p.stack;
-  p.stack <- List.tl p.stack;
-  p.depth <- p.depth - 1;
-  assert (0 <= p.depth);
-  res
-
-
-
 let push_empty (p:t): unit =
   push [||] p.goal p
 
 
+let push_goal (t:term) (p:t): unit =
+  push [||] t p
+
+
+let pop (p:t): unit =
+  assert (0 < p.depth);
+  Context.pop p.context;
+  p.goal  <- List.hd p.stack;
+  p.stack <- List.tl p.stack;
+  p.depth <- p.depth - 1
+
+
+let rec pop_downto (i:int) (p:t): unit =
+  assert (i <= p.depth);
+  if p.depth = i then
+    ()
+  else begin
+    pop p;
+    pop_downto i p
+  end
+
+
+let discharge (idx:int) (p:t): int =
+  (** Discharge the term [idx], pop one local context, insert the
+      discharged term into the outer context and return the index
+      of the discharged term in the outer context.
+   *)
+  assert (p.depth <> 0);
+  let t,pterm = Context.discharged idx p.context in
+  pop p;
+  Context.add_proved t pterm p.context;
+  Context.find_assertion t p.context
+
+
+let rec discharge_downto (i:int) (idx:int) (p:t): int =
+  (** Iterate 'pop' down to the stack level [i] starting by discharging
+      the term [idx].
+   *)
+  assert (0 <= i);
+  assert (i <= p.depth);
+  if p.depth = i then
+    idx
+  else
+    let idx = discharge idx p in
+    discharge_downto i idx p
+
+
 let check_goal (p:t): unit =
-  Printf.printf "try to check %s\n" (Context.string_of_term p.goal p.context);
   try
     add_backward p;
     let idx = Context.find_assertion p.goal p.context in
@@ -183,8 +214,6 @@ let check_goal (p:t): unit =
 let enter (p:t): unit =
   let rec do_implication (): unit =
     try
-      Printf.printf "try to split %s\n"
-        (Context.string_of_term p.goal p.context);
       let a,b = split_implication p in
       let _ = Context.add_assumption a p.context in
       p.goal <- b;
@@ -202,53 +231,80 @@ let enter (p:t): unit =
     with Not_found ->
       ()
   in
-  Printf.printf "try to enter %s\n"
-    (Context.string_of_term p.goal p.context);
   do_implication ()
 
 
 
 
+let rec prove_goal (p:t): unit =
+  (** Prove the goal of [p] in a clean context (i.e. a context into which
+      assumptions can be pushed).
 
-let prove_term (p:t): int =
-  let depth = p.depth
-  and goal  = p.goal in
-  Printf.printf "prove term depth %d\n" depth;
-  push_empty p;
-  try
-    check_goal p;
-    enter p;
-    if Options.is_prover_backward () then
-      assert false (* nyi: iterated backward reasoning *)
-    else
-      raise Not_found
-  with Proof_found idx ->
-    Printf.printf "Trying to prove %s\n" (string_of_term goal p);
+      The function does not return. It either raises [Not_found] or
+      [Proof_found idx] where [idx] points to the index of the goal
+      in the context.
+
+      Note that an arbitrary number of contexts can be pushed and [idx]
+      points to an inner context. The caller has to pop the corresponding
+      inner contexts and discharge the proved term.
+   *)
+  check_goal p;
+  enter p;
+  if Options.is_prover_backward () then
+    let bwd_set = Context.backward_set p.goal p.context in
     print_pair p;
-    Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
-      (string_of_term goal p) idx (string_of_index idx p)
-      (string_of_term p.goal p);
-    let rec popr (idx:int): int =
-      if depth = p.depth then
-        idx
-      else begin
-        Printf.printf "pop depth %d term %s\n"
-          p.depth (string_of_index idx p);
-        let idx = pop idx p in
-        popr idx
-      end
-    in
-    popr idx
+    Printf.printf "goal=%s, bwd_set={%s}\n"
+      (string_of_term p.goal p)
+      (String.concat "," (List.map string_of_int bwd_set));
+    prove_alternatives bwd_set p;
+    raise Not_found
+  else
+    raise Not_found
+
+and prove_alternatives (bwds: int list) (p:t): unit =
+  List.iter
+    (fun i ->
+      assert false)
+    bwds
+
+and prove_premises (ps:term list) (p:t): unit =
+  (** Prove all premises [ps] of the goal of [p] and insert them one by one
+      into the context.
+   *)
+  List.iter
+    (fun t ->
+      let depth = p.depth in
+      push_goal t p;
+      try
+        prove_goal p
+      with Proof_found idx ->
+        let _ = discharge_downto depth idx p in
+        ())
+    ps
+
+
+
+
+
 
 
 let prove_basic_expression (ie:info_expression) (c:Context.t): int =
   let tn,_ = get_term ie c in
   let p = start tn c in
+  push_empty p;
   try
-    prove_term p
-  with Not_found ->
+    prove_goal p;
+    assert false  (* prove_goal shall never return *)
+  with Proof_found idx ->
+    Printf.printf "Trying to prove %s\n" (string_of_term tn p);
     print_pair p;
-    error_info ie.i "Cannot prove"
+    Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
+      (string_of_term tn p) idx (string_of_index idx p)
+      (string_of_term p.goal p);
+    discharge_downto 0 idx p
+  | Not_found ->
+      print_pair p;
+      error_info ie.i "Cannot prove"
 
 
 
