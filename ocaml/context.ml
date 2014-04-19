@@ -488,16 +488,22 @@ let print_assertions
     else begin
       let t,nbenv = Proof_context.term_orig i c.pc
       and is_hypo = Proof_context.is_assumption i c.pc
-      and is_used = Proof_context.is_used_forward i c.pc in
+      and is_used = Proof_context.is_used_forward i c.pc
+      and used_gen = Proof_context.used_schematic i c.pc
+      in
       assert (nbenv = Array.length e.argnames);
       let tstr = Feature_table.term_to_string t e.argnames c.ft
+      and used_gen_str =
+        if IntSet.is_empty used_gen then ""
+        else " " ^ (intset_to_string used_gen)
       in
       if not is_used then
-        Printf.printf "%s%3d   %s%s%s\n"
+        Printf.printf "%s%3d   %s%s%s%s\n"
           prefix
           i
           (if global || is_hypo then "" else ". ")
           tstr
+          used_gen_str
           (if is_used then " <used>" else "");
       print (i+1)
     end
@@ -573,31 +579,10 @@ let expanded_term (t:term) (c:t): term =
   Feature_table.normalize_term t nbenv c.ft
 
 
-let add_assumption (t:term) (c:t): int =
-  let res = Proof_context.add_assumption t c.pc
-  in
-  Proof_context.close c.pc;
-  res
-
-let add_axiom (t:term) (c:t): int =
-  let res = Proof_context.add_axiom t c.pc in
-  Proof_context.close c.pc;
-  res
-
-
-let discharged (i:int) (c:t): term * proof_term =
-  Proof_context.discharged i c.pc
-
-
-let add_proved (t:term) (pterm:proof_term) (c:t): unit =
-  Proof_context.add_proved t pterm c.pc;
-  Proof_context.close c.pc
-
-
 let close (c:t): unit =
   let rec cls (n:int): unit =
     if Proof_context.has_work c.pc then begin
-      assert (n < 100);
+      assert (n < 50);
       Printf.printf "Close step %d: before .....\n" n;
       print_all_local_assertions c;
       Printf.printf "Work to be done ... \n";
@@ -617,6 +602,28 @@ let close (c:t): unit =
       ()
   in
   cls 0
+
+let add_assumption (t:term) (c:t): int =
+  let res = Proof_context.add_assumption t c.pc
+  in
+  Proof_context.close c.pc;
+  (*close c;*)
+  res
+
+let add_axiom (t:term) (c:t): int =
+  let res = Proof_context.add_axiom t c.pc in
+  Proof_context.close c.pc;
+  res
+
+
+let discharged (i:int) (c:t): term * proof_term =
+  Proof_context.discharged i c.pc
+
+
+let add_proved (t:term) (pterm:proof_term) (c:t): unit =
+  Proof_context.add_proved t pterm c.pc;
+  Proof_context.close c.pc
+
 
 let add_backward (t:term) (c:t): unit =
   Proof_context.set_forward c.pc;

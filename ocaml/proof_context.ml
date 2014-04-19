@@ -293,8 +293,9 @@ let analyze (t:term)  (pc:t): term_data =
     let imp_id = (imp_id pc) in
     let fwd =
       try
-        let a,b = Term.binary_split t imp_id in
-        Some (a,b,0,true)
+        let a,b = Term.binary_split t imp_id      in
+        let simpl = Term.nodes b <= Term.nodes a  in
+        Some (a,b,0,simpl)
       with Not_found ->
         None
     in

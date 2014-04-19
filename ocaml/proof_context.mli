@@ -1,3 +1,4 @@
+open Container
 open Term
 
 
@@ -53,3 +54,4 @@ val count_global:   t -> int
 val term_orig:      int -> t -> term * int
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
+val used_schematic: int -> t -> IntSet.t
