@@ -27,14 +27,14 @@ let parse_arguments (): unit =
   and set_prover (str:string): unit =
     if str = "basic" then
       Options.set_prover_basic ()
-    else if str = "local" then
-      Options.set_prover_local ()
+    else if str = "forward" then
+      Options.set_prover_forward ()
     else
       raise (Arg.Bad "")
   in
   Arg.parse
-    [("-trace",  Arg.String set_tracer,"{proof,failed-proof}");
-     ("-prover", Arg.String set_prover, "{basic,local}");
+    [("-trace",  Arg.String set_tracer, "{proof,failed-proof}");
+     ("-prover", Arg.String set_prover, "{basic,forward}");
      ("-statistics", Arg.Unit Options.set_statistics, "");
      ("-goal-limit",
       Arg.Int

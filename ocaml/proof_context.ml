@@ -61,10 +61,10 @@ let make (imp_id:int) (all_id:int): t  =
    stack    = []}
 
 let is_using_forward (pc:t): bool =
-  pc.do_fwd || Options.is_prover_local ()
+  pc.do_fwd || Options.is_prover_forward ()
 
 let is_using_forced_forward (pc:t): bool =
-  pc.do_fwd && not (Options.is_prover_local ())
+  pc.do_fwd && not (Options.is_prover_forward ())
 
 let set_forward (pc:t): unit =
   pc.do_fwd <- true
@@ -300,13 +300,15 @@ let analyze (t:term)  (pc:t): term_data =
         None
     in
     let ps, tgt = Term.split_implication_chain t imp_id in
+    let n_tgt   = Term.nodes tgt in
+    let simpl   = List.for_all (fun t -> Term.nodes t <= n_tgt) ps in
     let bwd =
       match ps with
         [] -> None
       | _::_ ->
           let set = term_list_to_set ps in
           Some {bwd_ps = List.rev ps; bwd_set = set; bwd_tgt = tgt;
-                bwd_simpl = true}
+                bwd_simpl = simpl}
     in
     {term   = t;
      nargs  = 0;

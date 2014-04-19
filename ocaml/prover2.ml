@@ -218,7 +218,7 @@ let prove_term (p:t): int =
   try
     check_goal p;
     enter p;
-    if Options.is_prover_smart () then
+    if Options.is_prover_backward () then
       assert false (* nyi: iterated backward reasoning *)
     else
       raise Not_found

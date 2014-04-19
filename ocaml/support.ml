@@ -5,11 +5,11 @@
 *)
 
 module Options: sig
-  val is_prover_basic:  unit -> bool
-  val is_prover_local:  unit -> bool
-  val is_prover_smart:  unit -> bool
-  val set_prover_basic: unit -> unit
-  val set_prover_local: unit -> unit
+  val is_prover_basic:    unit -> bool
+  val is_prover_forward:  unit -> bool
+  val is_prover_backward: unit -> bool
+  val set_prover_basic:   unit -> unit
+  val set_prover_forward: unit -> unit
 
   val is_tracing_failed_proof: unit -> bool
   val is_tracing_proof:        unit -> bool
@@ -44,12 +44,12 @@ end = struct
 
   let prover = ref 10
 
-  let is_prover_basic () = (0 <= !prover)
-  let is_prover_local () = (1 <= !prover)
-  let is_prover_smart () = (1 <  !prover)
+  let is_prover_basic ()    = (0 <= !prover)
+  let is_prover_forward ()  = (1 <= !prover)
+  let is_prover_backward () = (1 <  !prover)
 
-  let set_prover_basic () = prover := 0
-  let set_prover_local () = prover := 1
+  let set_prover_basic   () = prover := 0
+  let set_prover_forward () = prover := 1
 
   let trace = ref 0
 
