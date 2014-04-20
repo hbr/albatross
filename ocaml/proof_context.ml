@@ -832,3 +832,10 @@ let backward_set (t:term) (pc:t): int list =
         lst)
     []
     sublst
+
+let backward_data (idx:int) (pc:t): term list * IntSet.t =
+  let desc = Seq.elem pc.terms idx in
+  assert (Option.has desc.td.bwddat);
+  let bwd = Option.value desc.td.bwddat in
+  bwd.bwd_ps,
+  desc.used_gen

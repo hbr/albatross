@@ -135,8 +135,8 @@ let analyze(ast:declaration list): unit =
       [] -> ()
       | f::t -> one_decl f; analyz t
   in
-  analyz ast;
-  Context.print context
+  analyz ast(*;
+  Context.print context*)
 
 
 

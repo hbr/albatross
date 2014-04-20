@@ -635,6 +635,9 @@ let add_backward (t:term) (c:t): unit =
 let backward_set (t:term) (c:t): int list =
   Proof_context.backward_set t c.pc
 
+let backward_data (idx:int) (c:t): term list * IntSet.t =
+  Proof_context.backward_data idx c.pc
+
 
 let print (c:t): unit =
   assert (is_global c);

@@ -12,16 +12,26 @@ type kind =
 
 type proof_term = Context.proof_term
 
-type entry = {mutable goal: term; used_gen: IntSet.t}
+type entry = {mutable goal: term;
+              used_gen: IntSet.t;
+              used_bwd: IntSet.t}
 
 type t = {context: Context.t;
           mutable entry: entry;
           mutable stack: entry list;
-          mutable depth: int}
+          mutable depth: int;
+          mutable trace: bool}
 
 
 let start (t:term) (c:Context.t): t =
-  {context=c; entry={goal=t; used_gen=IntSet.empty}; stack=[]; depth=0}
+  let entry = {goal=t;
+               used_gen=IntSet.empty;
+               used_bwd=IntSet.empty} in
+  {context= c;
+   entry  = entry;
+   stack  = [];
+   depth  = 0;
+   trace  = Options.is_tracing_proof ()}
 
 
 let analyze_imp_opt
@@ -70,8 +80,8 @@ let untagged (ie: info_expression): info_expression =
   | _                 -> ie
 
 let get_term (ie: info_expression) (c:Context.t): term * term =
-  let tn = Typer.boolean_term (untagged ie) c in
-  let t  = Context.expanded_term tn c in
+  let t  = Typer.boolean_term (untagged ie) c in
+  let tn = Context.expanded_term t c in
   tn, t
 
 
@@ -123,16 +133,16 @@ let print_local (c:Context.t): unit =
 
 let print_global (c:Context.t): unit =
   Printf.printf "global assertions\n";
-  Context.print_global_assertions c;
-  Printf.printf "\n"
+  Context.print_global_assertions c
 
 
 let print_pair (p:t): unit =
+  Printf.printf "\n";
   Context.print_all_local_assertions p.context;
-  Printf.printf "--------------------\n";
+  Printf.printf "--------------------------------------\n";
   let depth = Context.depth p.context in
   let prefix = String.make (2*(depth-1)) ' ' in
-  Printf.printf "%s      %s\n\n" prefix (string_of_term p.entry.goal p)
+  Printf.printf "%s      %s\n" prefix (string_of_term p.entry.goal p)
 
 let split_implication (p:t): term * term =
   Context.split_implication p.entry.goal p.context
@@ -145,23 +155,32 @@ let add_backward (p:t): unit =
   Context.add_backward p.entry.goal p.context
 
 
-let push (names:int array) (t:term) (used_gen:IntSet.t) (p:t): unit =
+let push
+    (names:int array)
+    (t:term)
+    (used_gen:IntSet.t)
+    (used_bwd:IntSet.t)
+    (p:t): unit =
   Context.push_untyped names p.context;
   p.stack <- p.entry :: p.stack;
-  p.entry <- {goal=t; used_gen=used_gen};
+  p.entry <- {goal=t; used_gen=used_gen; used_bwd=used_bwd};
   p.depth <- p.depth + 1
 
 
 let push_context (names:int array) (t:term) (p:t): unit =
-  push names t IntSet.empty p
+  push names t IntSet.empty IntSet.empty p
 
 
 let push_empty (p:t): unit =
-  push [||] p.entry.goal p.entry.used_gen p
+  push [||] p.entry.goal p.entry.used_gen p.entry.used_bwd p
 
 
 let push_goal (t:term) (used_gen:IntSet.t) (p:t): unit =
-  push [||] t used_gen p
+  push [||] t used_gen p.entry.used_bwd p
+
+let push_alternative (idx:int) (p:t): unit =
+  let used_bwd = IntSet.add idx p.entry.used_bwd in
+  push [||] p.entry.goal p.entry.used_gen used_bwd p
 
 
 let pop (p:t): unit =
@@ -239,6 +258,8 @@ let enter (p:t): unit =
   do_implication ()
 
 
+let prefix (p:t): string =
+  String.make (2*p.depth) ' '
 
 
 let rec prove_goal (p:t): unit =
@@ -255,21 +276,53 @@ let rec prove_goal (p:t): unit =
    *)
   check_goal p;
   enter p;
+  if p.trace && p.depth = 1 then begin
+    if not (Options.is_tracing_proof ()) then
+      print_global p.context;
+    print_pair p
+  end;
   if Options.is_prover_backward () then
-    let bwd_set = Context.backward_set p.entry.goal p.context in
-    print_pair p;
-    Printf.printf "goal=%s, bwd_set={%s}\n"
-      (string_of_term p.entry.goal p)
-      (String.concat "," (List.map string_of_int bwd_set));
-    prove_alternatives bwd_set p;
+    let bwd_lst = Context.backward_set p.entry.goal p.context in
+    let bwd_lst =
+      List.filter
+        (fun idx -> not (IntSet.mem idx p.entry.used_bwd))
+        bwd_lst
+    in
+    prove_alternatives bwd_lst p;
     raise Not_found
   else
     raise Not_found
 
 and prove_alternatives (bwds: int list) (p:t): unit =
-  List.iter
-    (fun i ->
-      assert false)
+  List.iteri
+    (fun i idx ->
+      let ps, used_gen = Context.backward_data idx p.context in
+      let imp = Context.assertion idx p.context in
+      let goal  = p.entry.goal
+      and depth = p.depth in
+      try
+        if p.trace then begin
+          let n    = List.length bwds
+          and pre  = (prefix p)
+          and tstr = string_of_term imp p
+          in
+          if n=1 then
+            Printf.printf "%susing %s\n" pre tstr
+          else
+            Printf.printf "%salternative %d: %s\n" pre i tstr
+        end;
+        push_alternative idx p;
+        prove_premises ps used_gen p;
+        (* all premises succeeded, i.e. the target is in the context *)
+        let idx = Context.find_assertion goal p.context in
+        let idx = discharge idx p in
+        if p.trace then
+          Printf.printf "%s... succeeded\n" (prefix p);
+        raise (Proof_found idx)
+      with Not_found ->
+        pop_downto depth p;
+        if p.trace then
+          Printf.printf "%s... failed\n" (prefix p))
     bwds
 
 and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
@@ -277,10 +330,10 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
       rule with the set of used general rules [used_gen] and insert them
       one by one into the context.
    *)
-  assert (not (IntSet.is_empty used_gen));
+  (*assert (not (IntSet.is_empty used_gen));*)
   let ngoal = Term.nodes p.entry.goal in
-  List.iter
-    (fun t ->
+  List.iteri
+    (fun i t ->
       let depth = p.depth in
       let nt = Term.nodes t in
       let used_gen =
@@ -288,10 +341,21 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
           p.entry.used_gen
         else
           let inter = IntSet.inter p.entry.used_gen used_gen in
-          if not (IntSet.is_empty inter) then
-            raise Not_found;
+          if not (IntSet.is_empty inter) then begin
+            raise Not_found
+          end;
           IntSet.union p.entry.used_gen used_gen
       in
+      if p.trace then begin
+        let n    = List.length ps
+        and pre  = prefix p
+        and tstr = string_of_term t p
+        in
+        if n=1 then
+          Printf.printf "%spremise: %s\n" pre tstr
+        else
+          Printf.printf "%spremise %d: %s\n" pre i tstr
+      end;
       push_goal t used_gen p;
       try
         prove_goal p
@@ -309,21 +373,24 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
 let prove_basic_expression (ie:info_expression) (c:Context.t): int =
   let tn,_ = get_term ie c in
   let p = start tn c in
-  push_empty p;
-  try
-    prove_goal p;
-    assert false  (* prove_goal shall never return *)
-  with Proof_found idx ->
-    Printf.printf "Trying to prove %s\n" (string_of_term tn p);
-    print_pair p;
-    Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
-      (string_of_term tn p) idx (string_of_index idx p)
-      (string_of_term p.entry.goal p);
-    discharge_downto 0 idx p
-  | Not_found ->
-      print_pair p;
-      error_info ie.i "Cannot prove"
-
+  let rec prove (retry:bool): int =
+    push_empty p;
+    try
+      prove_goal p;
+      assert false  (* prove_goal shall never return *)
+    with Proof_found idx ->
+      discharge_downto 0 idx p
+    | Not_found ->
+        if not retry && not p.trace && Options.is_tracing_failed_proof ()
+        then begin
+          pop_downto 0 p;
+          p.trace <- true;
+          prove true
+        end else begin
+          error_info ie.i "Cannot prove"
+        end
+  in
+  prove false
 
 
 let rec prove_proof
@@ -400,4 +467,3 @@ let prove_and_store
   in
   Context.push entlst None context;
   prove_proof kind rlst clst elst context;
-  print_global context
