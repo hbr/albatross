@@ -3,6 +3,8 @@ open Support
 open Term
 
 
+exception Proof_found of int
+
 type kind =
     PAxiom
   | PDeferred
@@ -10,16 +12,16 @@ type kind =
 
 type proof_term = Context.proof_term
 
-exception Proof_found of int
+type entry = {mutable goal: term; used_gen: IntSet.t}
 
 type t = {context: Context.t;
-          mutable goal:  term;
-          mutable stack: term list;
+          mutable entry: entry;
+          mutable stack: entry list;
           mutable depth: int}
 
 
 let start (t:term) (c:Context.t): t =
-  {context=c; goal=t; stack=[]; depth=0}
+  {context=c; entry={goal=t; used_gen=IntSet.empty}; stack=[]; depth=0}
 
 
 let analyze_imp_opt
@@ -130,39 +132,42 @@ let print_pair (p:t): unit =
   Printf.printf "--------------------\n";
   let depth = Context.depth p.context in
   let prefix = String.make (2*(depth-1)) ' ' in
-  Printf.printf "%s      %s\n\n" prefix (string_of_term p.goal p)
+  Printf.printf "%s      %s\n\n" prefix (string_of_term p.entry.goal p)
 
 let split_implication (p:t): term * term =
-  Context.split_implication p.goal p.context
+  Context.split_implication p.entry.goal p.context
 
 let split_all_quantified (p:t): int * int array * term =
-  Context.split_all_quantified p.goal p.context
+  Context.split_all_quantified p.entry.goal p.context
 
 
 let add_backward (p:t): unit =
-  Context.add_backward p.goal p.context
+  Context.add_backward p.entry.goal p.context
 
 
-
-let push (names:int array) (t:term) (p:t): unit =
+let push (names:int array) (t:term) (used_gen:IntSet.t) (p:t): unit =
   Context.push_untyped names p.context;
-  p.stack <- p.goal::p.stack;
-  p.goal  <- t;
+  p.stack <- p.entry :: p.stack;
+  p.entry <- {goal=t; used_gen=used_gen};
   p.depth <- p.depth + 1
 
 
+let push_context (names:int array) (t:term) (p:t): unit =
+  push names t IntSet.empty p
+
+
 let push_empty (p:t): unit =
-  push [||] p.goal p
+  push [||] p.entry.goal p.entry.used_gen p
 
 
-let push_goal (t:term) (p:t): unit =
-  push [||] t p
+let push_goal (t:term) (used_gen:IntSet.t) (p:t): unit =
+  push [||] t used_gen p
 
 
 let pop (p:t): unit =
   assert (0 < p.depth);
   Context.pop p.context;
-  p.goal  <- List.hd p.stack;
+  p.entry <- List.hd p.stack;
   p.stack <- List.tl p.stack;
   p.depth <- p.depth - 1
 
@@ -205,7 +210,7 @@ let rec discharge_downto (i:int) (idx:int) (p:t): int =
 let check_goal (p:t): unit =
   try
     add_backward p;
-    let idx = Context.find_assertion p.goal p.context in
+    let idx = Context.find_assertion p.entry.goal p.context in
     raise (Proof_found idx)
   with Not_found ->
     ()
@@ -216,7 +221,7 @@ let enter (p:t): unit =
     try
       let a,b = split_implication p in
       let _ = Context.add_assumption a p.context in
-      p.goal <- b;
+      p.entry.goal <- b;
       check_goal p;
       do_implication ()
     with Not_found ->
@@ -225,7 +230,7 @@ let enter (p:t): unit =
     try
       let n,names,t = split_all_quantified p in
       assert (n = Array.length names);
-      push names t p;
+      push_context names t p;
       check_goal p;
       do_implication ()
     with Not_found ->
@@ -251,10 +256,10 @@ let rec prove_goal (p:t): unit =
   check_goal p;
   enter p;
   if Options.is_prover_backward () then
-    let bwd_set = Context.backward_set p.goal p.context in
+    let bwd_set = Context.backward_set p.entry.goal p.context in
     print_pair p;
     Printf.printf "goal=%s, bwd_set={%s}\n"
-      (string_of_term p.goal p)
+      (string_of_term p.entry.goal p)
       (String.concat "," (List.map string_of_int bwd_set));
     prove_alternatives bwd_set p;
     raise Not_found
@@ -267,14 +272,27 @@ and prove_alternatives (bwds: int list) (p:t): unit =
       assert false)
     bwds
 
-and prove_premises (ps:term list) (p:t): unit =
-  (** Prove all premises [ps] of the goal of [p] and insert them one by one
-      into the context.
+and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
+  (** Prove all premises [ps] of the goal of [p] coming from a backward
+      rule with the set of used general rules [used_gen] and insert them
+      one by one into the context.
    *)
+  assert (not (IntSet.is_empty used_gen));
+  let ngoal = Term.nodes p.entry.goal in
   List.iter
     (fun t ->
       let depth = p.depth in
-      push_goal t p;
+      let nt = Term.nodes t in
+      let used_gen =
+        if nt <= ngoal then
+          p.entry.used_gen
+        else
+          let inter = IntSet.inter p.entry.used_gen used_gen in
+          if not (IntSet.is_empty inter) then
+            raise Not_found;
+          IntSet.union p.entry.used_gen used_gen
+      in
+      push_goal t used_gen p;
       try
         prove_goal p
       with Proof_found idx ->
@@ -300,7 +318,7 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
     print_pair p;
     Printf.printf "found a proof for %s (%d,%s), subgoal %s\n"
       (string_of_term tn p) idx (string_of_index idx p)
-      (string_of_term p.goal p);
+      (string_of_term p.entry.goal p);
     discharge_downto 0 idx p
   | Not_found ->
       print_pair p;

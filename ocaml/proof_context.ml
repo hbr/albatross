@@ -824,7 +824,9 @@ let backward_set (t:term) (pc:t): int list =
   let sublst = Term_table0.unify t (nbenv pc) pc.entry.bwd in
   List.fold_left
     (fun lst (idx,sub) ->
-      if Term_sub.is_empty sub then
+      if Term_sub.is_empty sub
+          && not (IntSet.mem idx pc.entry.used_fwd)
+      then
         idx::lst
       else
         lst)
