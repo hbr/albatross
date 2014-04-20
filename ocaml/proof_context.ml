@@ -20,10 +20,10 @@ type desc = {td:       term_data;
              used_gen: IntSet.t}
 
 
-type entry = {mutable prvd:  Term_table0.t;  (* all proved terms *)
-              mutable prvd2: Term_table0.t;  (* as schematic terms *)
-              mutable bwd:   Term_table0.t;
-              mutable fwd:   Term_table0.t;
+type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
+              mutable prvd2: Term_table.t;  (* as schematic terms *)
+              mutable bwd:   Term_table.t;
+              mutable fwd:   Term_table.t;
               mutable used_fwd: IntSet.t;
               mutable count: int}
 
@@ -38,7 +38,7 @@ type t = {base:     Proof_table.t;
 
 
 let empty_entry =
-  let e = Term_table0.empty in
+  let e = Term_table.empty in
     {prvd=e; prvd2=e; bwd=e; fwd=e;
      used_fwd = IntSet.empty;
      count = 0}
@@ -322,7 +322,7 @@ let analyze (t:term)  (pc:t): term_data =
 let find (t:term) (pc:t): int =
   (** The index of the assertion [t].
    *)
-  let sublst = Term_table0.unify_with t 0 (nbenv pc) pc.entry.prvd in
+  let sublst = Term_table.unify_with t 0 (nbenv pc) pc.entry.prvd in
   match sublst with
     []          -> raise Not_found
   | [(idx,sub)] -> idx
@@ -359,7 +359,7 @@ let find_equivalent (t:term) (pc:t): int =
     with Not_found ->
       0, [||], t
   in
-  let submap = Term_table0.unify t0 (n+(nbenv pc)) pc.entry.prvd2 in
+  let submap = Term_table.unify t0 (n+(nbenv pc)) pc.entry.prvd2 in
   let submap =
     List.filter
       (fun (idx,sub) ->
@@ -397,9 +397,9 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
   in
   let add_to_proved (): unit =
     pc.entry.prvd <-
-      Term_table0.add t 0 td.nbenv idx pc.entry.prvd;
+      Term_table.add t 0 td.nbenv idx pc.entry.prvd;
     pc.entry.prvd2 <-
-      Term_table0.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
+      Term_table.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
     Seq.push pc.terms {td=td; used_gen = used_gen}
 
   and add_to_forward (): unit =
@@ -408,7 +408,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
         ()  (* do nothing, not a valid forward rule *)
     | Some (a,b,gp1,_) ->
         pc.entry.fwd <-
-          Term_table0.add a td.nargs td.nbenv idx pc.entry.fwd
+          Term_table.add a td.nargs td.nbenv idx pc.entry.fwd
 
   and add_to_backward (): unit =
     match td.bwddat with
@@ -416,7 +416,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
     | Some bwd ->
         let has_similar =
           td.nargs = 0 &&
-          let sublst = Term_table0.unify_with t 0 td.nbenv pc.entry.bwd in
+          let sublst = Term_table.unify_with t 0 td.nbenv pc.entry.bwd in
           List.exists
             (fun (idx,_) ->
               bwd.bwd_set =
@@ -427,7 +427,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
         in
         if not has_similar then
           pc.entry.bwd <-
-            Term_table0.add bwd.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
+            Term_table.add bwd.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
 
   and add_to_work (): unit =
     pc.work <- idx::pc.work
@@ -578,7 +578,7 @@ let add_consequences_premise (i:int) (pc:t): unit =
    *)
   let t,nbenvt = Proof_table.term i pc.base in
   assert (nbenvt = (nbenv pc));
-  let sublst = Term_table0.unify t nbenvt pc.entry.fwd in
+  let sublst = Term_table.unify t nbenvt pc.entry.fwd in
   let sublst = List.rev sublst in
   List.iter
     (fun (idx,sub) ->
@@ -632,7 +632,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
   | Some (a,b,gp1,_) ->
       if 0 < td.nargs then  (* the implication is schematic *)
         let sublst =
-          Term_table0.unify_with a td.nargs td.nbenv pc.entry.prvd
+          Term_table.unify_with a td.nargs td.nbenv pc.entry.prvd
         in
         let sublst = List.rev sublst in
         List.iter
@@ -642,7 +642,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
             add_consequence idx i sub pc)
           sublst
       else  (* the implication is not schematic *)
-        let sublst = Term_table0.unify a td.nbenv pc.entry.prvd2
+        let sublst = Term_table.unify a td.nbenv pc.entry.prvd2
         in
         let sublst_exact =
           List.filter (fun (idx,sub) -> Term_sub.is_empty sub) sublst
@@ -778,7 +778,7 @@ let pop_keep (pc:t): unit =
 let add_backward (t:term) (pc:t): unit =
   (** Add all backward rules which have [t] as a target to the context [pc].
    *)
-  let sublst = Term_table0.unify t (nbenv pc) pc.entry.bwd in
+  let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
   List.iter
     (fun (idx,sub) ->
       if Term_sub.is_empty sub then
@@ -821,7 +821,7 @@ let add_proved (t:term) (pterm:proof_term) (pc:t): unit =
 
 
 let backward_set (t:term) (pc:t): int list =
-  let sublst = Term_table0.unify t (nbenv pc) pc.entry.bwd in
+  let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
   List.fold_left
     (fun lst (idx,sub) ->
       if Term_sub.is_empty sub

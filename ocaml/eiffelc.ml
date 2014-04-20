@@ -120,11 +120,7 @@ let analyze(ast:declaration list): unit =
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
-          let new_prover = true in
-          if new_prover then
-            Prover2.prove_and_store entlst body context
-          else
-            Prover.prove_and_store entlst body context
+          Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
           Context.put_formal_generic name concept context
       | _ ->

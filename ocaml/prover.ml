@@ -1,490 +1,469 @@
 open Container
-open Term
-open Proof
 open Support
-
-exception Cannot_prove
-exception Cannot_prove_info of info
-exception Goal_limit
-exception Goal_limit_info of info
-exception Proof_found of proof_term
+open Term
 
 
+exception Proof_found of int
+
+type kind =
+    PAxiom
+  | PDeferred
+  | PNormal
+
+type proof_term = Context.proof_term
+
+type entry = {mutable goal: term;
+              used_gen: IntSet.t;
+              used_bwd: IntSet.t}
+
+type t = {context: Context.t;
+          mutable entry: entry;
+          mutable stack: entry list;
+          mutable depth: int;
+          mutable trace: bool}
+
+
+let start (t:term) (c:Context.t): t =
+  let entry = {goal=t;
+               used_gen=IntSet.empty;
+               used_bwd=IntSet.empty} in
+  {context= c;
+   entry  = entry;
+   stack  = [];
+   depth  = 0;
+   trace  = Options.is_tracing_proof ()}
+
+
+let analyze_imp_opt
+    (info:    info)
+    (imp_opt: implementation option)
+    : kind * compound =
+  let kind,is_do,clst =
+    match imp_opt with
+      None ->             PNormal,  false, []
+    | Some Impdeferred -> PDeferred,false, []
+    | Some Impbuiltin ->  PAxiom,   false, []
+    | Some Impevent ->
+        error_info info "Assertion cannot be an event"
+    | Some (Impdefined (Some locs,is_do,cmp)) ->
+        not_yet_implemented info "Local variables in assertions"
+    | Some (Impdefined (None,is_do,cmp)) ->
+        PNormal,is_do,cmp
+  in
+  if is_do then
+    not_yet_implemented info "Assertions with do block"
+  else
+    kind, clst
+
+
+let analyze_body (info:info) (bdy: feature_body)
+    : kind * compound * compound * compound =
+  match bdy with
+    _, _, None ->
+      error_info info "Assertion must have an ensure clause"
+  | rlst_opt, imp_opt, Some elst ->
+      let rlst =
+        match rlst_opt with
+          None   -> []
+        | Some l -> l
+      and kind,clst =
+        analyze_imp_opt info imp_opt
+      in
+      kind, rlst, clst, elst
 
 
 
 
+let untagged (ie: info_expression): info_expression =
+  match ie.v with
+    Taggedexp (tag,e) -> withinfo ie.i e
+  | _                 -> ie
+
+let get_term (ie: info_expression) (c:Context.t): term * term =
+  let t  = Typer.boolean_term (untagged ie) c in
+  let tn = Context.expanded_term t c in
+  tn, t
+
+
+
+let string_of_term (t:term) (p:t): string =
+  Context.string_of_term t p.context
+
+let string_of_index (i:int) (p:t): string =
+  assert (i < Context.count_assertions p.context);
+  let t = Context.assertion i p.context in
+  string_of_term t p
+
+
+let add_assumptions_or_axioms
+    (lst:compound) (is_axiom:bool) (c:Context.t): int list =
+  List.map
+    (fun ie ->
+      let tn,_ = get_term ie c in
+      if is_axiom then
+        Context.add_axiom tn c
+      else
+        Context.add_assumption tn c)
+    lst
+
+
+let add_assumptions (lst:compound) (c:Context.t): unit =
+  let _ = add_assumptions_or_axioms lst false c in ()
+
+
+
+let add_axioms (lst:compound) (c:Context.t): int list =
+  add_assumptions_or_axioms lst true c
+
+
+
+let add_proved (lst: (term*proof_term) list) (c:Context.t): unit =
+  List.iter
+    (fun (t,pterm) ->
+      Context.add_proved t pterm c
+    )
+    lst
 
 
 
 
-type tried_map    = Local_ass_context.t TermMap.t
+let print_local (c:Context.t): unit =
+  Printf.printf "local assertions\n";
+  Context.print_all_local_assertions c
+
+let print_global (c:Context.t): unit =
+  Printf.printf "global assertions\n";
+  Context.print_global_assertions c
 
 
+let print_pair (p:t): unit =
+  Printf.printf "\n";
+  Context.print_all_local_assertions p.context;
+  Printf.printf "--------------------------------------\n";
+  let depth = Context.depth p.context in
+  let prefix = String.make (2*(depth-1)) ' ' in
+  Printf.printf "%s      %s\n" prefix (string_of_term p.entry.goal p)
 
-let ngoals = ref 0
-let nfailed = ref 0
-let inc_goals ()   =  ngoals  := !ngoals + 1
-let inc_failed ()  =  nfailed := !nfailed + 1
-let reset_goals () =  ngoals  := 0; nfailed := 0
+let split_implication (p:t): term * term =
+  Context.split_implication p.entry.goal p.context
+
+let split_all_quantified (p:t): int * int array * term =
+  Context.split_all_quantified p.entry.goal p.context
 
 
+let add_backward (p:t): unit =
+  Context.add_backward p.entry.goal p.context
 
 
+let push
+    (names:int array)
+    (t:term)
+    (used_gen:IntSet.t)
+    (used_bwd:IntSet.t)
+    (p:t): unit =
+  Context.push_untyped names p.context;
+  p.stack <- p.entry :: p.stack;
+  p.entry <- {goal=t; used_gen=used_gen; used_bwd=used_bwd};
+  p.depth <- p.depth + 1
 
 
-let prove
-    (pre:     compound)
-    (chck:    compound)
-    (post:    compound)
-    (context: Context.t)
-    : (term * proof_term) list =
-  (* Prove the top level assertion with the formal arguments 'argnames' and
-     'argtypes' and the body 'pre' (preconditions), 'chck' (the intermediate
-     assertions) and 'post' (postconditions) and return the list of all
-     discharged terms and proof terms of the postconditions
+let push_context (names:int array) (t:term) (p:t): unit =
+  push names t IntSet.empty IntSet.empty p
+
+
+let push_empty (p:t): unit =
+  push [||] p.entry.goal p.entry.used_gen p.entry.used_bwd p
+
+
+let push_goal (t:term) (used_gen:IntSet.t) (p:t): unit =
+  push [||] t used_gen p.entry.used_bwd p
+
+let push_alternative (idx:int) (p:t): unit =
+  let used_bwd = IntSet.add idx p.entry.used_bwd in
+  push [||] p.entry.goal p.entry.used_gen used_bwd p
+
+
+let pop (p:t): unit =
+  assert (0 < p.depth);
+  Context.pop p.context;
+  p.entry <- List.hd p.stack;
+  p.stack <- List.tl p.stack;
+  p.depth <- p.depth - 1
+
+
+let rec pop_downto (i:int) (p:t): unit =
+  assert (i <= p.depth);
+  if p.depth = i then
+    ()
+  else begin
+    pop p;
+    pop_downto i p
+  end
+
+
+let discharge (idx:int) (p:t): int =
+  (** Discharge the term [idx], pop one local context, insert the
+      discharged term into the outer context and return the index
+      of the discharged term in the outer context.
    *)
-  let ft  = Context.ft context
-  and at  = Context.at context
-  in
-  let traceflag = ref (Options.is_tracing_proof ()) in
-  let do_trace (f:unit->unit): unit =
-    if !traceflag then f () else ()
-  in
-  let arglen    = Context.nargs context
-  and imp_id    = Context.implication_id context
-  in
-  let exp2term ie = Typer.boolean_term ie context
-  and term2string t = Context.string_of_term t context
-  and split t = Term.binary_split t imp_id
-  and chain t = Term.implication_chain t imp_id
-  and normal (t:term): term =
-    let texp = Feature_table.expand_term t arglen ft in
-    Term.reduce texp
-  in
+  assert (p.depth <> 0);
+  let t,pterm = Context.discharged idx p.context in
+  pop p;
+  Context.add_proved t pterm p.context;
+  Context.find_assertion t p.context
 
-  let blank_string (i:int): string =
-    assert (0<=i);
-    let rec str i s =
-      if i=0 then s
-      else str (i-1) (s ^ " ")
+
+let rec discharge_downto (i:int) (idx:int) (p:t): int =
+  (** Iterate 'pop' down to the stack level [i] starting by discharging
+      the term [idx].
+   *)
+  assert (0 <= i);
+  assert (i <= p.depth);
+  if p.depth = i then
+    idx
+  else
+    let idx = discharge idx p in
+    discharge_downto i idx p
+
+
+let check_goal (p:t): unit =
+  try
+    add_backward p;
+    let idx = Context.find_assertion p.entry.goal p.context in
+    raise (Proof_found idx)
+  with Not_found ->
+    ()
+
+
+let enter (p:t): unit =
+  let rec do_implication (): unit =
+    try
+      let a,b = split_implication p in
+      let _ = Context.add_assumption a p.context in
+      p.entry.goal <- b;
+      check_goal p;
+      do_implication ()
+    with Not_found ->
+      do_all_quantified ()
+  and do_all_quantified (): unit =
+    try
+      let n,names,t = split_all_quantified p in
+      assert (n = Array.length names);
+      push_context names t p;
+      check_goal p;
+      do_implication ()
+    with Not_found ->
+      ()
+  in
+  do_implication ()
+
+
+let prefix (p:t): string =
+  String.make (2*p.depth) ' '
+
+
+let rec prove_goal (p:t): unit =
+  (** Prove the goal of [p] in a clean context (i.e. a context into which
+      assumptions can be pushed).
+
+      The function does not return. It either raises [Not_found] or
+      [Proof_found idx] where [idx] points to the index of the goal
+      in the context.
+
+      Note that an arbitrary number of contexts can be pushed and [idx]
+      points to an inner context. The caller has to pop the corresponding
+      inner contexts and discharge the proved term.
+   *)
+  check_goal p;
+  enter p;
+  if p.trace && p.depth = 1 then begin
+    if not (Options.is_tracing_proof ()) then
+      print_global p.context;
+    print_pair p
+  end;
+  if Options.is_prover_backward () then
+    let bwd_lst = Context.backward_set p.entry.goal p.context in
+    let bwd_lst =
+      List.filter
+        (fun idx -> not (IntSet.mem idx p.entry.used_bwd))
+        bwd_lst
     in
-    str i ""
-  in
+    prove_alternatives bwd_lst p;
+    raise Not_found
+  else
+    raise Not_found
 
-  let level_string (i:int): string =
-    assert (0<=i);
-    blank_string (2*i)
-  in
-
-  let trace_header (): unit =
-    Printf.printf "\nall%s\n"
-      (Context.named_signature_string context)
-
-  and trace_string (str:string) (l:int) (): unit =
-    Printf.printf "%3d %s%s\n" l (level_string l) str
-
-  and trace_term (str:string) (t:term) (l:int) (): unit =
-    Printf.printf "%3d %s%-12s %s\n" l (level_string l) str (term2string t)
-
-  and trace_premises (lst:term list) (l:int) (): unit =
-    let n = List.length lst in
-    if n>0 then
-      let lstr = String.concat "," (List.map term2string lst) in
-      Printf.printf "%3d %sPremises [%s]\n" l (level_string l) lstr
-    else
-      Printf.printf "%3d %sGoal already in the context\n" l (level_string l)
-
-  and trace_context (c:Local_ass_context.t) (l:int) (): unit =
-    let lst = Local_ass_context.proved_terms c in
-    let len = List.length lst in
-    if len > 0 then
-      (Printf.printf "%3d %sContext\n" l (level_string l);
-       Mylist.iteri
-         (fun i (t,_) ->
-           Printf.printf "%3d %s%2d: %s\n" l (level_string l) i (term2string t)
-         )
-         lst)
-    else
-      Printf.printf "%3d %sContext is empty\n" l (level_string l)
-  in
-
-  let pre_terms: term list = List.rev_map exp2term pre
-  in
-  let add_one_ctxt
-      (t:term)
-      (pt:proof_term)
-      (level:int)
-      (split: term -> term*term)
-      (chain: term -> (term list * term) list)
-      (c:Local_ass_context.t)
-      : Local_ass_context.t =
-    (* Add the term 't' with the proof term 'pt' to the term map 'tm' *)
-    let c = Local_ass_context.add_proof t pt c in
-    let c =
+and prove_alternatives (bwds: int list) (p:t): unit =
+  List.iteri
+    (fun i idx ->
+      let ps, used_gen = Context.backward_data idx p.context in
+      let imp = Context.assertion idx p.context in
+      let goal  = p.entry.goal
+      and depth = p.depth in
       try
-      let a,b = split t in
-      Local_ass_context.add_forward a b pt c
-      with Not_found ->
-        c
-    in
-    let chn = chain t in
-    let res =
-      Local_ass_context.add_backward chn pt c
-    in
-    assert (Local_ass_context.is_proved t res);
-    res
-  in
-
-  let add_ctxt_close
-      (t:term)
-      (pt:proof_term)
-      (level: int)
-      (split: term -> term*term)
-      (chain: term -> (term list * term) list)
-      (c:Local_ass_context.t)
-      : Local_ass_context.t =
-    (* Add the term 't' with the proof term 'pt' to the context 'c' and
-       close it *)
-    let step_close
-        (t:term)
-        (pt:proof_term)
-        (lst: proof_pair list)
-        (c:Local_ass_context.t)
-        : proof_pair list =
-      let lglobal =
-        (Assertion_table.consequences t arglen at)
-      in
-      let l1 =
-        (Local_ass_context.consequences t pt c)
-        @ (List.map (fun ((t,pt),_) -> t,pt) lglobal)
-        @ lst in
-      try
-        let a,b = split t in
-        let pta = Local_ass_context.proof_term a c in
-        (b, MP(pta,pt)) :: l1
-      with Not_found -> l1
-    in
-    let rec add
-        (lst: proof_pair list) (c:Local_ass_context.t): Local_ass_context.t =
-      match lst with
-        [] -> c
-      | (t,pt)::tl ->
-          if Local_ass_context.is_proved t c then
-            add tl c
+        if p.trace then begin
+          let n    = List.length bwds
+          and pre  = (prefix p)
+          and tstr = string_of_term imp p
+          in
+          if n=1 then
+            Printf.printf "%susing %s\n" pre tstr
           else
-            add
-              (step_close t pt tl c)
-              (add_one_ctxt t pt level split chain c)
-    in
-    add [t,pt] c
-  in
+            Printf.printf "%salternative %d: %s\n" pre i tstr
+        end;
+        push_alternative idx p;
+        prove_premises ps used_gen p;
+        (* all premises succeeded, i.e. the target is in the context *)
+        let idx = Context.find_assertion goal p.context in
+        let idx = discharge idx p in
+        if p.trace then
+          Printf.printf "%s... succeeded\n" (prefix p);
+        raise (Proof_found idx)
+      with Not_found ->
+        pop_downto depth p;
+        if p.trace then
+          Printf.printf "%s... failed\n" (prefix p))
+    bwds
 
-
-  let rec prove_one
-      (t:term)
-      (c:Local_ass_context.t)
-      (tried: tried_map)
-      (level: int)
-      : proof_term =
-    (* Prove the term 't' within the term map 'tm' where all terms
-       within the map 'tried' have been tried already on the stack
-       with a corresponding term map.
-
-       The function either returns a proof term for 't' or it raises
-       the exception 'Cannot_prove'.
-     *)
-    assert (level < 500); (* to detect potential endless loops !! *)
-
-    let global_backward (t:term) (c:Local_ass_context.t): Local_ass_context.t =
-      (* The backward set from the global assertion table *)
-      let bwd_glob =
-        Assertion_table.find_backward t arglen at
+and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
+  (** Prove all premises [ps] of the goal of [p] coming from a backward
+      rule with the set of used general rules [used_gen] and insert them
+      one by one into the context.
+   *)
+  (*assert (not (IntSet.is_empty used_gen));*)
+  let ngoal = Term.nodes p.entry.goal in
+  List.iteri
+    (fun i t ->
+      let depth = p.depth in
+      let nt = Term.nodes t in
+      let used_gen =
+        if nt <= ngoal then
+          p.entry.used_gen
+        else
+          let inter = IntSet.inter p.entry.used_gen used_gen in
+          if not (IntSet.is_empty inter) then begin
+            raise Not_found
+          end;
+          IntSet.union p.entry.used_gen used_gen
       in
-      List.fold_left
-        (fun c ((t,pt),idx) ->
-          (*do_trace (trace_tagged_string
-                      "Global(bwd)"
-                      (Assertion_table.to_string idx ct ft at)
-                      level);*)
-          add_ctxt_close t pt (level+1) split chain c
-        )
-        c
-        bwd_glob
-    in
-    let do_backward (t:term) (c:Local_ass_context.t) (tried:tried_map): unit =
-      (* Backward reasoning *)
-      let c = global_backward t c in
-      do_trace (trace_context c (level+1));
-      let bwd_set = Local_ass_context.backward_set t c in
-      begin
-        let n = BwdSet.cardinal bwd_set in
-        if n>0 then begin
-          do_trace (trace_string
-                      ("Trying up to "
-                       ^ (string_of_int n)
-                       ^ " alternative(s)")
-                      level)
-        end
-          else ()
+      if p.trace then begin
+        let n    = List.length ps
+        and pre  = prefix p
+        and tstr = string_of_term t p
+        in
+        if n=1 then
+          Printf.printf "%spremise: %s\n" pre tstr
+        else
+          Printf.printf "%spremise %d: %s\n" pre i tstr
       end;
-      let _ = BwdSet.fold
-          (fun (nps,pset,premises,pt) c ->
-            try
-              do_trace (trace_premises premises (level+1));
-              let c1 = Local_ass_context.prune_backward_set
-                  t (nps,pset,premises,pt) c
-              in
-              let pt_lst =
-                List.rev_map
-                  (fun t -> prove_one t c1 tried (level+2))
-                  premises
-              in
-              let rec use_premises
-                  (lst: proof_term list)
-                  (pt:  proof_term)
-                  : proof_term =
-                match lst with
-                    [] -> pt
-                | pt1::tl ->
-                    MP (pt1, use_premises tl pt)
-                in
-              do_trace (trace_term "Success" t level);
-              raise (Proof_found (use_premises pt_lst pt))
-            with Cannot_prove -> c
-          )
-          bwd_set
-          c
-      in
-      (* All alternatives failed (or maybe there are no alternatives) *)
+      push_goal t used_gen p;
+      try
+        prove_goal p
+      with Proof_found idx ->
+        let _ = discharge_downto depth idx p in
+        ())
+    ps
+
+
+
+
+
+
+
+let prove_basic_expression (ie:info_expression) (c:Context.t): int =
+  let tn,_ = get_term ie c in
+  let p = start tn c in
+  let rec prove (retry:bool): int =
+    push_empty p;
+    try
+      prove_goal p;
+      assert false  (* prove_goal shall never return *)
+    with Proof_found idx ->
+      discharge_downto 0 idx p
+    | Not_found ->
+        if not retry && not p.trace && Options.is_tracing_failed_proof ()
+        then begin
+          pop_downto 0 p;
+          p.trace <- true;
+          prove true
+        end else begin
+          error_info ie.i "Cannot prove"
+        end
+  in
+  prove false
+
+
+let rec prove_proof
+    (kind:kind)
+    (rlst: compound)
+    (clst: compound)
+    (elst: compound)
+    (c:    Context.t)
+    : unit =
+  add_assumptions rlst c;
+  prove_check clst c;
+  let pair_lst = prove_ensure elst kind c in
+  Context.pop c;
+  add_proved pair_lst c
+
+
+and prove_check (lst:compound) (c:Context.t): unit =
+  List.iter
+    (fun ie -> prove_check_expression ie c)
+    lst
+
+and prove_ensure
+    (lst:compound)
+    (k:kind)
+    (c:Context.t)
+    : (term*proof_term) list =
+  let idx_lst =
+    match k with
+      PAxiom | PDeferred ->
+        add_axioms lst c
+    | PNormal ->
+        List.map (fun ie -> prove_basic_expression ie c) lst
+  in
+  List.map (fun idx -> Context.discharged idx c) idx_lst
+
+and prove_check_expression
+    (ie:info_expression)
+    (c:Context.t): unit =
+  let ie = untagged ie in
+  match ie.v with
+    Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
+      begin
+        match q with
+          Universal ->
+            let kind, clst =
+              analyze_imp_opt
+                entlst.i
+                imp_opt
+            in
+            Context.push entlst None c;
+            prove_proof kind rlst clst elst c
+        | Existential ->
+            error_info ie.i "Only \"all\" allowed here"
+      end
+  | Expproof (rlst,imp_opt,elst) ->
+      let kind, clst = analyze_imp_opt ie.i imp_opt in
+      Context.push_empty c;
+      prove_proof kind rlst clst elst c
+  | _ ->
+      let _ = prove_basic_expression ie c in
       ()
 
-    and enter (t:term) (c:Local_ass_context.t): term * Local_ass_context.t =
-      (* Check the term and split implications recursively *)
-      let direct (t:term) (c:Local_ass_context.t): Local_ass_context.t =
-        let c = global_backward t c in
-        try
-          let pt = Local_ass_context.proof_term t c in
-          do_trace (trace_term "Success" t level);
-          raise (Proof_found pt);
-        with Not_found ->
-          c
-      in
-      let rec ent (t:term) (c:Local_ass_context.t) (entered:bool)
-          : term * Local_ass_context.t * bool =
-        try
-          let a,b = split t in
-          do_trace (trace_term "Enter" a level);
-          let c = add_ctxt_close a (Assume a) (level+1) split chain c in
-          let c = direct b c in
-          ent b c true
-        with Not_found ->
-          t,c,false
-      in
-      let c = direct t c in
-      let t,c,entered = ent t c false in
-      if entered then
-        (do_trace (trace_term "Goal" t level);
-         t,c)
-      else
-        t,c
-
-    in
-    do_trace (trace_term "Goal" t level);
-    begin
-      (* Bail out if the goal has already been tried in the same context *)
-      try
-        let c0 = TermMap.find t tried in
-        if (Local_ass_context.count c0) < (Local_ass_context.count c) then
-          ()
-        else
-           (do_trace (trace_term  "Failure (loop)"  t level);
-            inc_failed ();
-           raise Cannot_prove)
-      with Not_found ->
-        ()
-    end;
-    let tried = TermMap.add t c tried
-    in
-
-    begin (* Bail out if goal limit is exceeded *)
-      if (Options.has_goal_limit ())
-          && (Options.goal_limit ()) <= !ngoals then
-        (do_trace (trace_term "Failure (goal-limit)" t level);
-         reset_goals ();
-         raise Goal_limit)
-      else
-        ()
-    end;
-    inc_goals ();
-    begin
-      try
-        let t,c = enter t c in
-        do_backward t c tried;
-        do_trace (trace_term "Failure" t level);
-        inc_failed ();
-        raise Cannot_prove
-      with
-        Proof_found pt -> pt
-    end
-  in
-
-  let prove_compound
-      (c:compound)
-      (ctxt:Local_ass_context.t)
-      (level: int)
-      : Local_ass_context.t * (term*proof_term) list =
-    List.fold_left
-      (fun res ie ->
-        let ctxt,lst = res in
-        let t = exp2term ie in
-        let tnormal = normal t in
-        let pt =
-          try
-            do_trace (trace_term "User goal" t level);
-            prove_one tnormal ctxt TermMap.empty (level+1)
-          with Cannot_prove ->
-            do_trace (trace_term "User failure" t level);
-            raise (Cannot_prove_info  ie.i)
-          | Goal_limit ->
-            do_trace (trace_term "User failure(goal limit)" t level);
-            raise (Goal_limit_info  ie.i)
-        in
-        do_trace (trace_term "User success" t level);
-        Statistics.proof_done !ngoals !nfailed;
-        reset_goals ();
-        add_ctxt_close tnormal pt (level+1) split chain ctxt,
-        (t,pt)::lst
-      )
-      (ctxt,[])
-      c
-  in
-
-  let prove_toplevel () : (proof_pair) list =
-    do_trace trace_header;
-    let tm_pre: Local_ass_context.t =
-      List.fold_left
-        (fun c t ->
-          do_trace (trace_term "Assumption" t 1);
-          let tn = normal t in
-          add_ctxt_close tn (Assume tn) 2 split chain c)
-        Local_ass_context.empty
-        pre_terms
-    in
-    let tm_inter,_ = prove_compound chck tm_pre 1
-    in
-    let _,revlst = prove_compound post tm_inter 1
-    in
-    let rec discharge (pre: term list) (t:term) (pt:proof_term)
-        : term * proof_term =
-      match pre with
-        [] -> t,pt
-      | f::tl ->
-          discharge
-            tl
-            (Feature_table.implication_term f t arglen ft)
-            (Discharge (f,pt))
-    in
-    List.rev_map
-      (fun (t,pt) ->
-        discharge pre_terms t pt)
-      revlst
-
-  in
-
-  try
-    prove_toplevel ()
-
-  with Cannot_prove_info i ->
-    if not !traceflag && (Options.is_tracing_failed_proof ()) then
-      begin
-        traceflag := true;
-        try
-          prove_toplevel ()
-        with Cannot_prove_info i ->
-          error_info i "Cannot prove"
-      end
-    else
-      error_info i "Cannot prove"
-
-  | Goal_limit_info i ->
-      let str = "Cannot prove (goal limit "
-        ^ (string_of_int (Options.goal_limit ()))
-        ^ " exceeded)\n)"
-      in
-      if not !traceflag && (Options.is_tracing_failed_proof ()) then
-        begin
-          traceflag := true;
-          try
-            prove_toplevel ()
-          with Goal_limit_info i ->
-          error_info i str
-          | _ -> assert false
-        end
-      else
-        error_info i str
 
 
 
 
-
-
-
-
-(*   Public functions *)
 
 let prove_and_store
     (entlst:  entities list withinfo)
     (bdy:     feature_body)
     (context: Context.t)
     : unit =
-  assert (Context.is_global context);
-  Context.push entlst None context;
-  let push_axiom (t:term) =
-    Context.put_global_assertion t None context
-
-  and push_proved (t:term) (pt:proof_term): unit =
-    Context.put_global_assertion t (Some pt) context
+  let kind, rlst, clst, elst = analyze_body entlst.i bdy
   in
-
-  begin
-    match bdy with
-      _, _, None ->
-        error_info entlst.i "Assertion must have an ensure clause"
-    | rlst_opt, imp_opt, Some elst ->
-        let rlst = match rlst_opt with None -> [] | Some l -> l
-        and axiom,defer,is_do,clst =
-          match imp_opt with
-            None -> false,false,false,[]
-          | Some Impdeferred -> false,true,false,[]
-          | Some Impbuiltin -> true,false,false,[]
-          | Some Impevent ->
-            error_info entlst.i "Assertion cannot be an event"
-          | Some (Impdefined (Some locs,is_do,cmp)) ->
-              not_yet_implemented entlst.i "Local variables in assertions"
-          | Some (Impdefined (None,is_do,cmp)) ->
-              false,false,is_do,cmp
-        in
-        if axiom || defer then
-          match rlst with
-            [] ->
-            List.iter
-                (fun ie ->
-                  let term = Typer.boolean_term ie context in
-                  push_axiom term)
-                (* bug: store deferred assertions in class table, because
-                   they have to be proved in descendants !!!*)
-                elst
-          | _ ->
-              not_yet_implemented entlst.i "axioms with preconditions"
-        else if is_do then
-          not_yet_implemented entlst.i "Assertions with do block"
-        else
-          let lst =
-            prove rlst clst elst context
-          in
-        List.iter
-            (fun (t,pt) -> push_proved t pt)
-            lst
-  end;
-  Context.pop context
+  Context.push entlst None context;
+  prove_proof kind rlst clst elst context;

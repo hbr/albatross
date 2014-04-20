@@ -1,17 +1,14 @@
 open Term
 
-type 'a t
+type t
 
-val global: 'a t
+val empty: t
 
-val local: int -> 'a t -> 'a t
+val term:  int -> int -> t -> term
 
-val count: 'a t -> int
+val unify: term -> int -> t -> (int * Term_sub.t) list
 
-val data:  int -> 'a t -> int * 'a
+val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
 
-val term:  int -> 'a t -> term
+val add: term -> int -> int -> int -> t -> t
 
-val unify: term -> int -> 'a t -> (int * int * 'a * substitution) list
-
-val add: term -> int -> 'a -> 'a t -> 'a t

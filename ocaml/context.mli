@@ -33,7 +33,6 @@ val nargs:   t -> int
 val fgnames: t -> int array
 val ct:      t -> Class_table.t
 val ft:      t -> Feature_table.t
-val at:      t -> Assertion_table.t
 
 val type_variables: t -> TVars_sub.t
 
@@ -54,9 +53,6 @@ val put_global_function:
       term option -> t -> unit
 
 val implication_id: t -> int
-
-val put_global_assertion:
-    term -> Proof.proof_term option -> t -> unit
 
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val put_class: header_mark withinfo -> int withinfo -> t -> unit

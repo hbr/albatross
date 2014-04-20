@@ -25,7 +25,6 @@ type t = {
     mutable visi:  visibility;
     ct:            Class_table.t;
     ft:            Feature_table.t;
-    at:            Assertion_table.t;
     pc:            Proof_context.t
   }
 
@@ -156,7 +155,6 @@ let make (): t =
    visi      = Public;
    ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
-   at        = Assertion_table.empty ();
    pc        =
    Proof_context.make
      Feature_table.implication_index
@@ -233,7 +231,6 @@ let pop_keep_assertions (c:t): unit =
 
 let ct (c:t): Class_table.t    = c.ct
 let ft (c:t): Feature_table.t  = c.ft
-let at (g:t): Assertion_table.t  = g.at
 
 let is_private (c:t): bool =
   match c.visi with
@@ -366,21 +363,6 @@ let string_of_assertion (t:term) (c: t): string =
   "all"
   ^ (named_signature_string c) ^ " "
   ^ (string_of_term t c)
-
-
-let put_global_assertion
-    (t:term) (pt_opt: proof_term_0 option) (c:t): unit =
-  (** Put the assertion [t] with its optional proof term [pt_opt]
-      into the global assertion table.
-   *)
-  assert (is_toplevel c);
-  Printf.printf "%3d %s  %s\n"
-    (Assertion_table.count c.at)
-    (match pt_opt with
-      None    -> "axiom "
-    | Some pt -> "proved")
-    (string_of_assertion t c);
-  Assertion_table.put_assertion t (arity c) pt_opt c.ft c.at
 
 
 let put_formal_generic
