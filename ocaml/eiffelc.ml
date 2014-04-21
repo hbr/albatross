@@ -31,6 +31,10 @@ let parse_arguments (): unit =
       Options.set_prover_forward ()
     else
       raise (Arg.Bad "")
+  and set_trace_level (i:int): unit =
+    if i<= 0 then raise (Arg.Bad "")
+    else
+      Options.set_trace_level i
   in
   Arg.parse
     [("-trace",  Arg.String set_tracer, "{proof,failed-proof}");
@@ -44,7 +48,8 @@ let parse_arguments (): unit =
           else
             Options.set_goal_limit i),
       "maximum number of goals per proof");
-     ("-no-limit", Arg.Unit Options.set_no_limit, "")
+     ("-no-limit", Arg.Unit Options.set_no_limit, "");
+     ("-trace-level", Arg.Int set_trace_level, "trace level")
    ]
     anon_fun
     usage_string;

@@ -27,9 +27,8 @@ val close:              t -> unit
 val set_forward:        t -> unit
 val reset_forward:      t -> unit
 val add_backward:       term -> t -> unit
-val pull_backward:      term -> t -> int * term list
 val discharged:         int  -> t -> term * proof_term
-val add_proved:         term -> proof_term -> t -> unit
+val add_proved:         term -> proof_term -> IntSet.t -> t -> unit
 val backward_set:       term -> t -> int list
 val backward_data:      int  -> t -> term list * IntSet.t
 

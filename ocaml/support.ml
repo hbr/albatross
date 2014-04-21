@@ -13,8 +13,10 @@ module Options: sig
 
   val is_tracing_failed_proof: unit -> bool
   val is_tracing_proof:        unit -> bool
+  val trace_level:             unit -> int
   val set_trace_failed_proof:  unit -> unit
   val set_trace_proof:         unit -> unit
+  val set_trace_level:         int  -> unit
 
   val is_statistics:           unit -> bool
   val set_statistics:          unit -> unit
@@ -42,7 +44,7 @@ end = struct
   let set_no_limit () : unit =
     glimit := None
 
-  let prover = ref 10
+  let prover   = ref 10
 
   let is_prover_basic ()    = (0 <= !prover)
   let is_prover_forward ()  = (1 <= !prover)
@@ -51,12 +53,15 @@ end = struct
   let set_prover_basic   () = prover := 0
   let set_prover_forward () = prover := 1
 
-  let trace = ref 0
+  let trace    = ref 0
+  let tr_level = ref 0
 
   let is_tracing_failed_proof () = (1 <= !trace)
   let is_tracing_proof ()        = (2 <= !trace)
+  let trace_level ()             = !tr_level
   let set_trace_failed_proof ()  = trace := 1
   let set_trace_proof ()         = trace := 2
+  let set_trace_level (i:int)    = tr_level := i
 
   let statistics = ref false
   let is_statistics () = !statistics

@@ -612,7 +612,16 @@ let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
                       cannot be schematic *)
     ()
   else begin
-    let used_gen = IntSet.add idx desc.used_gen in
+    (*let used_gen =
+      if not is_bwd then IntSet.add idx desc.used_gen
+      else
+        match desc.td.bwddat with
+          None -> desc.used_gen
+        | Some bwd ->
+            if bwd.bwd_simpl then desc.used_gen
+            else IntSet.add idx desc.used_gen*)
+    let used_gen = IntSet.add idx desc.used_gen
+    in
     Proof_table.add_specialize t idx args pc.base;
     add_new t used_gen pc;
     assert (is_consistent pc)
@@ -734,7 +743,7 @@ let close_step (pc:t): unit =
 
 let close (pc:t): unit =
   let rec cls (n:int): unit =
-    if n > 50 then assert false;  (* 'infinite' loop detection *)
+    if n > 200 then assert false;  (* 'infinite' loop detection *)
     if has_work pc then begin
       close_step pc;
       cls (n+1)
@@ -792,18 +801,6 @@ let add_backward (t:term) (pc:t): unit =
 
 
 
-let pull_backward (t:term) (pc:t): int * term list =
-  (** Find a backward rule for the target [t] in the context [pc], remove
-      the rule as a backward rule and return the rule and the list of
-      premises for the target.
-
-      If the list of premises is empty then the target is identical with the
-      returned rule. In case that no backward rule exists for the target
-      then [Not_found] is raised.
-   *)
-  assert false
-
-
 let discharged (i:int) (pc:t): term * proof_term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged together with its proof term.
@@ -811,12 +808,12 @@ let discharged (i:int) (pc:t): term * proof_term =
   Proof_table.discharged i pc.base
 
 
-let add_proved (t:term) (pterm:proof_term) (pc:t): unit =
+let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (pc:t): unit =
   if has_equivalent t pc then
     ()
   else begin
     Proof_table.add_proved t pterm pc.base;
-    add_new t IntSet.empty pc
+    add_new t used_gen pc
   end
 
 

@@ -23,6 +23,7 @@ type t = {
     mutable entry: entry;
     mutable stack: entry list;
     mutable visi:  visibility;
+    trace:         bool;
     ct:            Class_table.t;
     ft:            Feature_table.t;
     pc:            Proof_context.t
@@ -152,6 +153,7 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
 let make (): t =
   {entry = empty_entry;
    stack = [];
+   trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
    visi      = Public;
    ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
@@ -182,6 +184,7 @@ let push
       (TVars_sub.add_local ntvs c.entry.tvars_sub);
   c.stack <- entry::c.stack;
 
+  assert (not (Proof_context.has_work c.pc));
   Proof_context.push (arity c) (last_argnames c) c.pc
 
 
@@ -560,41 +563,47 @@ let expanded_term (t:term) (c:t): term =
   let nbenv = nargs c in
   Feature_table.normalize_term t nbenv c.ft
 
+let prefix (c:t): string =
+  String.make (2*(depth c)+2) ' '
 
 let close (c:t): unit =
+  let rec print (c0:int) (c1:int): unit =
+    assert (c0 <= c1);
+    if c0 = c1 then ()
+    else begin
+      Printf.printf "%s%3d >       %s\n"
+        (prefix c) c0 (string_of_term (assertion c0 c) c);
+      print (c0+1) c1
+    end
+  in
   let rec cls (n:int): unit =
     if Proof_context.has_work c.pc then begin
       assert (n < 50);
-      Printf.printf "Close step %d: before .....\n" n;
-      print_all_local_assertions c;
-      Printf.printf "Work to be done ... \n";
-      let work = Proof_context.work c.pc in
-      List.iter
-        (fun i ->
-          let t = Proof_context.term i c.pc in
-          Printf.printf "\t%3d %s\n" i (string_of_term t c);
-        )
-        work;
+      let cnt = count_assertions c in
       Proof_context.close_step c.pc;
-      Printf.printf "........... after\n";
-      print_all_local_assertions c;
-      Printf.printf "\n";
+      if c.trace then print cnt (count_assertions c);
       cls (n+1)
     end else
       ()
   in
-  cls 0
+  cls 0;
+  assert (not (Proof_context.has_work c.pc))
 
 let add_assumption (t:term) (c:t): int =
   let res = Proof_context.add_assumption t c.pc
   in
-  Proof_context.close c.pc;
-  (*close c;*)
+  if c.trace then
+    Printf.printf "%s%3d hypo:   %s\n" (prefix c) res (string_of_term t c);
+  (*Proof_context.close c.pc;*)
+  close c;
   res
 
 let add_axiom (t:term) (c:t): int =
   let res = Proof_context.add_axiom t c.pc in
-  Proof_context.close c.pc;
+  if c.trace then
+    Printf.printf "%s%3d axiom:  %s\n" (prefix c) res (string_of_term t c);
+  (*Proof_context.close c.pc;*)
+  close c;
   res
 
 
@@ -602,18 +611,22 @@ let discharged (i:int) (c:t): term * proof_term =
   Proof_context.discharged i c.pc
 
 
-let add_proved (t:term) (pterm:proof_term) (c:t): unit =
-  Proof_context.add_proved t pterm c.pc;
-  Proof_context.close c.pc
-  (*close c*)
+let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (c:t): unit =
+  Proof_context.add_proved t pterm used_gen c.pc;
+  if c.trace then begin
+    let idx = find_assertion t c in
+    Printf.printf "%s%3d proved: %s\n" (prefix c) idx (string_of_term t c)
+  end;
+  (*Proof_context.close c.pc*)
+  close c
 
 
 let add_backward (t:term) (c:t): unit =
   Proof_context.set_forward c.pc;
   Proof_context.add_backward t c.pc;
   Proof_context.close c.pc;
-  (*close c;*)
-  Proof_context.reset_forward c.pc
+  close c
+  (*Proof_context.reset_forward c.pc*)
 
 let backward_set (t:term) (c:t): int list =
   Proof_context.backward_set t c.pc

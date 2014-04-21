@@ -69,7 +69,7 @@ val expanded_term:  term -> t -> term
 val add_assumption: term -> t -> int
 val add_axiom:      term -> t -> int
 val discharged:     int -> t -> term * proof_term
-val add_proved:     term -> proof_term -> t -> unit
+val add_proved:     term -> proof_term -> IntSet.t -> t -> unit
 val add_backward:   term -> t -> unit
 val assertion:      int -> t -> term
 val backward_set:   term -> t -> int list

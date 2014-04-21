@@ -13,6 +13,8 @@ type kind =
 type proof_term = Context.proof_term
 
 type entry = {mutable goal: term;
+              mutable alter: bool;
+              nbenv:    int;
               used_gen: IntSet.t;
               used_bwd: IntSet.t}
 
@@ -25,6 +27,8 @@ type t = {context: Context.t;
 
 let start (t:term) (c:Context.t): t =
   let entry = {goal=t;
+               alter=false;
+               nbenv=0;
                used_gen=IntSet.empty;
                used_bwd=IntSet.empty} in
   {context= c;
@@ -117,10 +121,10 @@ let add_axioms (lst:compound) (c:Context.t): int list =
 
 
 
-let add_proved (lst: (term*proof_term) list) (c:Context.t): unit =
+let add_proved (lst: (term*proof_term*IntSet.t) list) (c:Context.t): unit =
   List.iter
-    (fun (t,pterm) ->
-      Context.add_proved t pterm c
+    (fun (t,pterm,used_gen) ->
+      Context.add_proved t pterm used_gen c
     )
     lst
 
@@ -155,15 +159,32 @@ let add_backward (p:t): unit =
   Context.add_backward p.entry.goal p.context
 
 
+let has_duplicate_goal (p:t): bool =
+  let rec has_dup (i:int) (stack: entry list): bool =
+    match stack with
+      [] -> false
+    | e::stack ->
+        assert (e.nbenv <= p.entry.nbenv);
+        if e.nbenv < p.entry.nbenv then
+          false
+        else if e.alter && p.entry.goal = e.goal then begin
+          true
+        end else
+          has_dup (i+1) stack
+  in
+  has_dup 0 p.stack
+
 let push
     (names:int array)
     (t:term)
     (used_gen:IntSet.t)
     (used_bwd:IntSet.t)
     (p:t): unit =
+  let nbenv = p.entry.nbenv + Array.length names in
   Context.push_untyped names p.context;
   p.stack <- p.entry :: p.stack;
-  p.entry <- {goal=t; used_gen=used_gen; used_bwd=used_bwd};
+  p.entry <- {goal=t; alter=false; nbenv=nbenv;
+              used_gen=used_gen; used_bwd=used_bwd};
   p.depth <- p.depth + 1
 
 
@@ -180,6 +201,7 @@ let push_goal (t:term) (used_gen:IntSet.t) (p:t): unit =
 
 let push_alternative (idx:int) (p:t): unit =
   let used_bwd = IntSet.add idx p.entry.used_bwd in
+  p.entry.alter <- true;
   push [||] p.entry.goal p.entry.used_gen used_bwd p
 
 
@@ -208,8 +230,13 @@ let discharge (idx:int) (p:t): int =
    *)
   assert (p.depth <> 0);
   let t,pterm = Context.discharged idx p.context in
+  assert ((Context.assertion idx p.context) = p.entry.goal);
   pop p;
-  Context.add_proved t pterm p.context;
+  let used_gen_tgt =
+    let cnt = Context.count_assertions p.context in
+    IntSet.filter (fun j -> j < cnt) p.entry.used_gen
+  in
+  Context.add_proved t pterm used_gen_tgt p.context;
   Context.find_assertion t p.context
 
 
@@ -288,7 +315,10 @@ let rec prove_goal (p:t): unit =
         (fun idx -> not (IntSet.mem idx p.entry.used_bwd))
         bwd_lst
     in
-    prove_alternatives bwd_lst p;
+    if has_duplicate_goal p then
+      ()
+    else
+      prove_alternatives bwd_lst p;
     raise Not_found
   else
     raise Not_found
@@ -320,9 +350,10 @@ and prove_alternatives (bwds: int list) (p:t): unit =
         push_alternative idx p;
         prove_premises ps used_gen p;
         (* all premises succeeded, i.e. the target is in the context *)
-        let idx_tgt =
+        let idx_tgt = Context.find_assertion goal p.context
+        (*let idx_tgt =
           try Context.find_assertion goal p.context
-          with Not_found -> assert false
+          with Not_found -> assert false*)
         in
         let idx_tgt = discharge idx_tgt p in
         if p.trace then
@@ -425,7 +456,7 @@ and prove_ensure
     (lst:compound)
     (k:kind)
     (c:Context.t)
-    : (term*proof_term) list =
+    : (term*proof_term*IntSet.t) list =
   let idx_lst =
     match k with
       PAxiom | PDeferred ->
@@ -433,7 +464,11 @@ and prove_ensure
     | PNormal ->
         List.map (fun ie -> prove_basic_expression ie c) lst
   in
-  List.map (fun idx -> Context.discharged idx c) idx_lst
+  List.map
+    (fun idx ->
+      let t,pterm = Context.discharged idx c in
+      t, pterm, IntSet.empty)
+    idx_lst
 
 and prove_check_expression
     (ie:info_expression)
