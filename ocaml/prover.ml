@@ -294,6 +294,11 @@ let rec prove_goal (p:t): unit =
     raise Not_found
 
 and prove_alternatives (bwds: int list) (p:t): unit =
+  if p.trace then begin
+    let n = List.length bwds in
+    Printf.printf "%strying %d alternative(s)\n"
+      (prefix p) n
+  end;
   List.iteri
     (fun i idx ->
       let ps, used_gen = Context.backward_data idx p.context in
@@ -307,18 +312,22 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           and tstr = string_of_term imp p
           in
           if n=1 then
-            Printf.printf "%susing %s\n" pre tstr
+            (assert (i=0);
+            Printf.printf "%susing(%d) %s\n" pre idx tstr)
           else
-            Printf.printf "%salternative %d: %s\n" pre i tstr
+            Printf.printf "%salternative %d(%d): %s\n" pre i idx tstr
         end;
         push_alternative idx p;
         prove_premises ps used_gen p;
         (* all premises succeeded, i.e. the target is in the context *)
-        let idx = Context.find_assertion goal p.context in
-        let idx = discharge idx p in
+        let idx_tgt =
+          try Context.find_assertion goal p.context
+          with Not_found -> assert false
+        in
+        let idx_tgt = discharge idx_tgt p in
         if p.trace then
           Printf.printf "%s... succeeded\n" (prefix p);
-        raise (Proof_found idx)
+        raise (Proof_found idx_tgt)
       with Not_found ->
         pop_downto depth p;
         if p.trace then

@@ -572,7 +572,7 @@ let close (c:t): unit =
       List.iter
         (fun i ->
           let t = Proof_context.term i c.pc in
-          Printf.printf "\t%s\n" (string_of_term t c);
+          Printf.printf "\t%3d %s\n" i (string_of_term t c);
         )
         work;
       Proof_context.close_step c.pc;
@@ -605,6 +605,7 @@ let discharged (i:int) (c:t): term * proof_term =
 let add_proved (t:term) (pterm:proof_term) (c:t): unit =
   Proof_context.add_proved t pterm c.pc;
   Proof_context.close c.pc
+  (*close c*)
 
 
 let add_backward (t:term) (c:t): unit =
