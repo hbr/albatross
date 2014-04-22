@@ -13,10 +13,14 @@ type kind =
 type proof_term = Context.proof_term
 
 type entry = {mutable goal: term;
-              mutable alter: bool;
+              mutable alter: bool; (* stack entry used for exploring
+                                      alternatives *)
               nbenv:    int;
-              used_gen: IntSet.t;
-              used_bwd: IntSet.t}
+              used_gen: IntSet.t;  (* used non simplifying schematic rules
+                                      to generate the goal *)
+              used_bwd: IntSet.t   (* already used backward rules to
+                                      generate the goal *)
+            }
 
 type t = {context: Context.t;
           mutable entry: entry;
@@ -343,9 +347,9 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           in
           if n=1 then
             (assert (i=0);
-            Printf.printf "%susing(%d) %s\n" pre idx tstr)
+            Printf.printf "%susing  %d %s\n" pre idx tstr)
           else
-            Printf.printf "%salternative %d(%d): %s\n" pre i idx tstr
+            Printf.printf "%salternative %d: %d %s\n" pre i idx tstr;
         end;
         push_alternative idx p;
         prove_premises ps used_gen p;
@@ -424,6 +428,8 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
         if not retry && not p.trace && Options.is_tracing_failed_proof ()
         then begin
           pop_downto 0 p;
+          Options.set_trace_proof ();
+          Context.read_trace_info p.context;
           p.trace <- true;
           prove true
         end else begin

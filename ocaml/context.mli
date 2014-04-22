@@ -12,6 +12,7 @@ val push_untyped: int array -> t -> unit
 val pop:   t -> unit
 val pop_keep_assertions: t -> unit
 val print: t -> unit
+val read_trace_info: t -> unit
 
 val is_global:   t -> bool
 val is_toplevel: t -> bool

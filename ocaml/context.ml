@@ -23,7 +23,7 @@ type t = {
     mutable entry: entry;
     mutable stack: entry list;
     mutable visi:  visibility;
-    trace:         bool;
+    mutable trace: bool;
     ct:            Class_table.t;
     ft:            Feature_table.t;
     pc:            Proof_context.t
@@ -149,6 +149,9 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
   TVars_sub.tvars c.entry.tvars_sub,
   sign
 
+
+let read_trace_info (c:t): unit =
+  c.trace <- Options.is_tracing_proof () && Options.trace_level () > 0
 
 let make (): t =
   {entry = empty_entry;
