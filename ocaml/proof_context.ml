@@ -497,10 +497,10 @@ let specialized_forward
     (sub:Term_sub.t)
     (nbenv_sub:int)
     (pc:t)
-    : term * term  * term array =
-  (** The antecedent, the consequent and the arguments of the term [i]
-      specialized with the substitution [sub] which comes from an environment
-      with [nbenv_sub] variables.
+    : term * term  * term array * int =
+  (** The antecedent, the consequent, the arguments and the number of
+      arguments of the term [i] specialized with the substitution [sub] which
+      comes from an environment with [nbenv_sub] variables.
 
       Note: The results are all valid in the current environment!
    *)
@@ -532,7 +532,7 @@ let specialized_forward
     else
       b
   in
-  a, b, args
+  a, b, args, nargs
 
 
 
@@ -548,7 +548,7 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
   assert (i < count pc);
   assert (j < count pc);
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
-  let a, b, args = specialized_forward j sub nbenv_sub pc
+  let a, b, args, nargs = specialized_forward j sub nbenv_sub pc
   and used_gen_i = used_schematic i pc
   in
   let j_in_used_gen_i = IntSet.mem j used_gen_i
@@ -556,9 +556,9 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
   if j_in_used_gen_i || has_equivalent b pc then
                                   (* [b] might be all quantified *)
     ()
-  else if args = [||] then begin
+  else if nargs=0 then
     add_mp b i j pc
-  end else begin
+  else begin
     let imp  = implication a b pc in
     if has imp pc then
       ()
@@ -795,8 +795,9 @@ let add_backward (t:term) (pc:t): unit =
           pc.work <- idx :: pc.work
         else
           ()
-      else
-        add_fully_specialized idx sub pc)
+      else begin
+        add_fully_specialized idx sub pc
+       end)
     sublst
 
 
