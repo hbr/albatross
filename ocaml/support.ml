@@ -185,6 +185,56 @@ let parse_error_fun : (string->unit) ref =
   ref (fun str -> Printf.eprintf "%s\n" str;  failwith "Syntax error")
 
 
+module Parse_info: sig
+
+  val file_name:     unit -> string
+  val last_position: unit -> Lexing.position
+  val is_interface:  unit -> bool
+  val is_module:     unit -> bool
+
+  val set_file_name:     string -> unit
+  val set_last_position: Lexing.position -> unit
+  val set_interface:     unit -> unit
+  val set_module:        unit -> unit
+
+  val print_error:  Lexing.position -> string -> unit
+  val print_unexpected: unit -> unit
+
+end = struct
+
+  let fname:string ref              = ref ""
+  let last_pos: Lexing.position ref = ref (Lexing.dummy_pos)
+  let iface: bool ref               = ref false
+
+  let file_name (): string =
+    !fname
+
+  let last_position (): Lexing.position =
+    !last_pos
+
+  let is_interface (): bool = !iface
+  let is_module(): bool     = not !iface
+  let set_interface (): unit =
+    iface := true
+  let set_module (): unit =
+    iface := false
+
+  let set_file_name (fn: string): unit =
+    fname := fn
+
+  let set_last_position (pos: Lexing.position): unit =
+    last_pos := pos
+
+  let print_error (pos:Lexing.position) (str:string): unit =
+    let line = pos.Lexing.pos_lnum
+    and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1
+    in
+    Printf.eprintf "%s:%d:%d: %s\n" !fname line col str
+
+  let print_unexpected (): unit =
+    print_error !last_pos "Syntax error: Unexpected token"
+end (* Parse_info *)
+
 
 (*
 -----------------------------------------------------------------------------
@@ -724,3 +774,8 @@ and declaration_block =
   | Create_block  of visibility * declaration list
   | Invariant_block of visibility * compound
   | Import_block    of visibility * int list list
+
+
+type use_block = int withinfo list
+
+type module_declaration = use_block * declaration list

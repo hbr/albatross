@@ -8,6 +8,9 @@ Usage:
 "
 
 let file_name = ref ""
+let dir_name  = ref ""
+let base_name = ref ""
+let mod_name  = ref ""
 
 let parse_arguments (): unit =
   let anon_fun str =
@@ -15,8 +18,12 @@ let parse_arguments (): unit =
       raise (Arg.Bad "Only one source file allowed")
     else if not (Filename.check_suffix str ".e") then
       raise (Arg.Bad "Eiffel source file must have suffix \".e\"")
-    else
+    else begin
       file_name := str;
+      dir_name  := Filename.dirname str;
+      base_name := Filename.basename str;
+      mod_name  := Filename.chop_extension !base_name
+    end
   and set_tracer (str:string): unit =
     if str = "proof" then
       Options.set_trace_proof ()
@@ -57,12 +64,12 @@ let parse_arguments (): unit =
     raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string))
 
 
-let parse_file fn =
+let parse_file (fn:string): use_block * declaration list =
+  Support.Parse_info.set_file_name fn;
   let lexbuf = Lexing.from_channel (open_in fn)
   in
   lexbuf.Lexing.lex_curr_p <-
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = fn};
-  Support.parse_error_fun := Lexer.print_unexpected;
   Parser.main Lexer.token lexbuf
 
 
@@ -107,16 +114,14 @@ let put_feature
   Context.pop context
 
 
-let analyze(ast:declaration list): unit =
-  let context = Context.make ()
-  in
+let analyze(ast: declaration list) (context:Context.t): unit =
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
         Class_declaration (hm, cname, fgens, inherits, decl_blocks) ->
-          assert (fgens.v = []);
-          assert (inherits = []);
-          assert (decl_blocks = []);
+          assert (fgens.v = []);     (* nyi: formal generics *)
+          assert (inherits = []);    (* nyi: inheritance     *)
+          assert (decl_blocks = []); (* nyi: class features  *)
           Context.put_class hm cname context;
       | Declaration_block (Feature_block (visi,dlist)) ->
           Context.set_visibility visi context;
@@ -141,15 +146,31 @@ let analyze(ast:declaration list): unit =
 
 
 
+let rec process_use (use_blk: use_block) (c:Context.t): unit =
+  List.iter
+    (fun name ->
+      let nmestr = Filename.concat !dir_name  ((ST.string name.v) ^ ".ei") in
+      let use_blk, ast = parse_file nmestr in
+      process_use use_blk c;
+      analyze ast c)
+    use_blk
+
 let _ =
   try
     parse_arguments ();
     try
-      let ast = parse_file !file_name in
-      analyze ast;
+      let use_blk,ast  = parse_file !file_name in
+      let context = Context.make ()
+      in
+      Support.Parse_info.set_interface ();
+      process_use use_blk context;
+      Support.Parse_info.set_module ();
+      Support.Parse_info.set_file_name !file_name;
+      analyze ast context;
       Statistics.write ();
     with Support.Error_info (inf,str) ->
-      raise (Support.Error_fileinfo (!file_name,inf,str))
+      let fn = Support.Parse_info.file_name () in
+      raise (Support.Error_fileinfo (fn,inf,str))
   with
     Support.Eiffel_error str
   | Sys_error str ->  prerr_string (str ^ "\n"); exit 1

@@ -46,11 +46,22 @@ let analyze_imp_opt
     (info:    info)
     (imp_opt: implementation option)
     : kind * compound =
+  let iface = Parse_info.is_interface () in
   let kind,is_do,clst =
     match imp_opt with
-      None ->             PNormal,  false, []
-    | Some Impdeferred -> PDeferred,false, []
-    | Some Impbuiltin ->  PAxiom,   false, []
+      None ->
+        if iface then
+          PAxiom,  false, []
+        else
+          PNormal, false, []
+    | Some Impdeferred ->
+        if iface then
+          error_info info "not allowed in interface file";
+        PDeferred,false, []
+    | Some Impbuiltin ->
+        if iface then
+          error_info info "not allowed in interface file";
+        PAxiom,   false, []
     | Some Impevent ->
         error_info info "Assertion cannot be an event"
     | Some (Impdefined (Some locs,is_do,cmp)) ->
@@ -431,6 +442,7 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
           Options.set_trace_proof ();
           Context.read_trace_info p.context;
           p.trace <- true;
+          Context.print_global_assertions p.context;
           prove true
         end else begin
           error_info ie.i "Cannot prove"

@@ -1,8 +1,12 @@
 %{
-
-let parse_error str = !Support.parse_error_fun str
-
 open Support
+
+
+
+(* The generated parser calls [parse_error "syntax error"] if it reaches an
+   error state *)
+let parse_error (_:string): unit =
+  Parse_info.print_unexpected ()
 
 let filename ()    =  (symbol_start_pos ()).Lexing.pos_fname
 let symbol_info () =  info_from_position (symbol_start_pos ())
@@ -107,7 +111,7 @@ let expression_from_entities entlist =
 %token KWredefine  KWrename       KWrequire
 %token KWsome
 %token KWthen      KWtrue
-%token KWundefine
+%token KWundefine  KWuse
 
 %token ARROW
 %token ASSIGN
@@ -179,16 +183,25 @@ let expression_from_entities entlist =
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
 %start main
-%type <Support.declaration list> main
+%type <Support.module_declaration> main
 
 
 
 
 %%
 
+main: use_block toplevel_declarations {$1, List.rev $2}
 
 
-main: toplevel_declarations { List.rev $1 }
+use_block:
+  { [] }
+| KWuse module_list KWend { List.rev $2 }
+
+module_list:
+    one_module  { [$1] }
+|   one_module module_list { $1 :: $2 }
+
+one_module: LIDENTIFIER  { withinfo (rhs_info 1) $1 }
 
 
 toplevel_declarations:
@@ -510,18 +523,6 @@ feature_implementation:
 implementation_block:
     local_block do_block    { Impdefined($1,true, $2) }
 |   local_block check_block { Impdefined($1,false,$2) }
-
-/*
-require_list:
-    require_block { [$1] }
-|   require_block require_list { $1::$2 }
-*/
-
-/*
-ensure_list:
-    ensure_block { [$1] }
-|   ensure_block ensure_list { $1::$2 }
-*/
 
 
 require_block:

@@ -1,7 +1,5 @@
 {
 
-let last_pos = ref (Lexing.dummy_pos)
-
 let last_is_endtok = ref false
 
 type extended_token = Parser.token*(bool*bool)
@@ -18,17 +16,9 @@ let cached_tok: (extended_token * Lexing.position) option ref
 
 
 
-let print_error pos str =
-  let name = pos.Lexing.pos_fname
-  and line = pos.Lexing.pos_lnum
-  and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1
-  in
-  Printf.eprintf "%s:%d:%d: %s\n" name line col str
-
-let print_unexpected (str:string) =
-  print_error !last_pos "Syntax error: Unexpected token"
-
-let print_illegal pos = print_error pos "Illegal token"
+let print_illegal (pos:Lexing.position): unit =
+  Support.Parse_info.print_error pos "Illegal token"
+  (*print_error pos "Illegal token"*)
 
 
 
@@ -98,6 +88,7 @@ let _ =
      ("then",      Parser.KWthen);
      ("true",      Parser.KWtrue);
      ("undefine",  Parser.KWundefine);
+     ("use",       Parser.KWuse);
 
      ("->",        Parser.ARROW);
      (":=",        Parser.ASSIGN);
@@ -273,7 +264,7 @@ let cache_next lexbuf =
 
 let return_tok tok isend pos =
   last_is_endtok := isend;
-  last_pos       := pos;
+  Support.Parse_info.set_last_position pos;
   tok
 
 let rec token lexbuf =

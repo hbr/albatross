@@ -787,18 +787,25 @@ let pop_keep (pc:t): unit =
 let add_backward (t:term) (pc:t): unit =
   (** Add all backward rules which have [t] as a target to the context [pc].
    *)
-  let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
-  List.iter
-    (fun (idx,sub) ->
-      if Term_sub.is_empty sub then
-        if is_using_forced_forward pc then
-          pc.work <- idx :: pc.work
-        else
-          ()
-      else begin
-        add_fully_specialized idx sub pc
-       end)
-    sublst
+  let add_lst (sublst: (int*Term_sub.t) list): unit =
+    List.iter
+      (fun (idx,sub) ->
+        if Term_sub.is_empty sub then
+          if is_using_forced_forward pc then
+            pc.work <- idx :: pc.work
+          else
+            ()
+        else begin
+          add_fully_specialized idx sub pc
+        end)
+      sublst
+  in
+  let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
+  if sublst <> [] then
+    add_lst sublst
+  else
+    let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
+    add_lst sublst
 
 
 
