@@ -121,26 +121,31 @@ end
 
 
 module Seq: sig
-  type 'a sequence
-  val empty: unit -> 'a sequence
-  val singleton: 'a -> 'a sequence
-  val count: 'a sequence -> int
-  val elem:  'a sequence -> int -> 'a
-  val push:  'a sequence -> 'a -> unit
-  val pop:   'a sequence -> int -> unit
-  val keep:  'a sequence -> int -> unit
-  val iter:  ('a->unit) -> 'a sequence -> unit
-  val iteri: (int->'a->unit) -> 'a sequence -> unit
+  type 'a t
+  val empty: unit -> 'a t
+  val singleton: 'a -> 'a t
+  val count: 'a t -> int
+  val elem:  int -> 'a t -> 'a
+  val push:  'a -> 'a t -> unit
+  val pop:   int -> 'a t -> unit
+  val keep:  int -> 'a t -> unit
+  val iter:  ('a->unit) -> 'a t -> unit
+  val iteri: (int->'a->unit) -> 'a t -> unit
 end = struct
-  type 'a sequence = {mutable cnt:int;
+  type 'a t = {mutable cnt:int;
                       mutable arr: 'a array}
+
   let empty () = {cnt=0; arr=[||]}
-  let singleton e = {cnt=1; arr=Array.make 1 e}
-  let count seq  = seq.cnt
-  let elem seq i =
+
+  let singleton (e:'a) = {cnt=1; arr=Array.make 1 e}
+
+  let count (seq:'a t): int  = seq.cnt
+
+  let elem (i:int) (seq:'a t): 'a =
     assert (i<seq.cnt);
     seq.arr.(i)
-  let push seq elem =
+
+  let push (elem:'a) (seq:'a t): unit =
     let cnt = seq.cnt
     in
     let _ =
@@ -156,84 +161,82 @@ end = struct
     assert (cnt < Array.length seq.arr);
     seq.cnt <- cnt+1
 
-  let pop (seq: 'a sequence) (n:int): unit =
+  let pop (n:int) (seq: 'a t): unit =
     assert (n <= count seq);
     seq.cnt <- seq.cnt - n
 
-  let keep (seq: 'a sequence) (n:int): unit =
+  let keep (n:int) (seq: 'a t): unit =
     assert (n <= count seq);
     seq.cnt <- n
 
-  let iter f s =
+  let iter (f:'a->unit) (s:'a t) =
     let rec iter0 i =
       if i=s.cnt then ()
       else begin
-        f (elem s i);
+        f (elem i s);
         iter0 (i+1)
       end
     in iter0 0
 
-  let iteri f s =
+  let iteri (f:int->'a->unit) (s:'a t) =
     let rec iter0 i =
       if i=s.cnt then ()
       else begin
-        f i (elem s i);
+        f i (elem i s);
         iter0 (i+1)
       end
     in iter0 0
 end
 
-type 'a seq = 'a Seq.sequence
+type 'a seq = 'a Seq.t
 
 
 
 
 
 module Key_table: sig
-  type 'a table
-  val empty:  unit -> 'a table
-  val count:  'a table -> int
-  val index:  'a table -> 'a -> int
-  val key:    'a table -> int -> 'a
-  val find:   'a table -> 'a  -> int
-  val iter:   ('a -> unit) -> 'a table -> unit
-  val iteri:  (int->'a->unit) -> 'a table -> unit
+  type 'a t
+  val empty:  unit -> 'a t
+  val count:  'a t -> int
+  val index:  'a t -> 'a -> int
+  val key:    'a t -> int -> 'a
+  val find:   'a t -> 'a  -> int
+  val iter:   ('a -> unit) -> 'a t -> unit
+  val iteri:  (int->'a->unit) -> 'a t -> unit
 end = struct
-  type 'a table = {seq: 'a Seq.sequence;
-                   map: ('a,int) Hashtbl.t}
+  type 'a t = {seq: 'a Seq.t;
+               map: ('a,int) Hashtbl.t}
 
   let empty () = {seq=Seq.empty (); map=Hashtbl.create 53}
 
-  let count st   = Seq.count st.seq
+  let count (st:'a t)   = Seq.count st.seq
 
-  let added st elem =
+  let added (st:'a t) elem =
     let cnt = Seq.count st.seq
     in
-    Seq.push st.seq elem;
+    Seq.push elem st.seq;
     Hashtbl.add st.map elem cnt;
     cnt
 
-  let find  st elem = Hashtbl.find st.map elem
+  let find  (st:'a t) (elem:'a) = Hashtbl.find st.map elem
 
-  let index st elem =
+  let index (st:'a t) (elem:'a) =
     try
       Hashtbl.find st.map elem
     with
       Not_found ->
         added st elem
 
-  let key st (s:int) =
+  let key (st:'a t) (s:int) =
     assert (s < Seq.count st.seq);
-    Seq.elem st.seq s
+    Seq.elem s st.seq
 
-  let iter f t =
+  let iter (f:'a->unit) (t:'a t) =
     Seq.iter f t.seq
 
-  let iteri f t =
+  let iteri (f:int->'a->unit) (t:'a t) =
     Seq.iteri f t.seq
 end
-
-type 'a key_table = 'a Key_table.table
 
 
 
@@ -242,26 +245,26 @@ type 'a key_table = 'a Key_table.table
 
 
 module type Set = sig
-  type 'a set
-  val empty:      unit -> 'a set
-  val mem:        'a -> 'a set -> bool
-  val plus_elem:  'a -> 'a set -> 'a set
-  val plus_set:   'a set -> 'a set -> 'a set
+  type 'a t
+  val empty:      unit -> 'a t
+  val mem:        'a -> 'a t -> bool
+  val plus_elem:  'a -> 'a t -> 'a t
+  val plus_set:   'a t -> 'a t -> 'a t
   val test:       unit -> unit
 end
 
 
 module ArrayedSet: Set = struct
-  type 'a set = 'a array
+  type 'a t = 'a array
 
   let empty () = Array.init 0 (fun _ -> assert false)
 
-  let mem (el:'a) (set:'a set) =
+  let mem (el:'a) (set:'a t) =
     let idx = Search.binsearch_max el set
     in
     0<idx && set.(idx-1)=el
 
-  let plus_elem (el:'a) (set:'a set): 'a set =
+  let plus_elem (el:'a) (set:'a t): 'a t =
     let i = Search.binsearch_max el set;
     and len = Array.length set
     in
@@ -274,7 +277,7 @@ module ArrayedSet: Set = struct
           else if j=i then el
           else set.(j-1))
 
-  let plus_set (s1:'a set) (s2:'a set): 'a set =
+  let plus_set (s1:'a t) (s2:'a t): 'a t =
     let rec plus i =
       if i=0 then s1
       else plus_elem s2.(i-1) s1
@@ -294,11 +297,6 @@ module ArrayedSet: Set = struct
       if n=0 then true
       else ((n-1)=set.(n-1)) && mem (n-1) set && check (n-1)
     in
-    (*Printf.printf "arr = [";
-    Array.iter (fun e -> Printf.printf "%d " e) set;
-    Printf.printf "]\n";*)
     assert (check len);
     assert (not (mem len set))
 end
-
-type 'a arrayed_set = 'a ArrayedSet.set

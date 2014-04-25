@@ -152,14 +152,14 @@ let withinfo i v = {i=i; v=v}
 
 let noinfo v = {i=UNKNOWN; v=v}
 
-let info_string (name:string) (i:info) =
+let info_string (name:string) (i:info): string =
   match i with
     FINFO(l,c) ->
       name ^ ":" ^ (string_of_int l) ^ ":" ^ (string_of_int c) ^ ":"
   | UNKNOWN    ->
       name ^":"
 
-let info_from_position pos =
+let info_from_position (pos:Lexing.position) =
   let l = pos.Lexing.pos_lnum
   and c = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1
   in

@@ -14,7 +14,7 @@ type descriptor =
      fgnames: int array; constraints: term array;
      parents: TypSet.t}
 
-type t = {names:   int key_table;
+type t = {names:   int Key_table.t;
           classes: descriptor seq;
           mutable fgens: term IntMap.t}
 
@@ -37,7 +37,7 @@ let class_name (i:int) (c:t) =
 let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
   try
     let idx = Key_table.find c.names cn.v in
-    let desc = Seq.elem c.classes idx in
+    let desc = Seq.elem idx c.classes in
     if hm.v <> desc.hmark then
       let str =
         "Header mark should be \""
@@ -308,29 +308,29 @@ let base_table (): t =
   and fga = ST.symbol "A"
   and fgb = ST.symbol "B"
   in
-  Seq.push cc {hmark = No_hmark;
-               fgnames = [||]; constraints = [||];
-               parents = TypSet.empty }; (*@ZERO*)
+  Seq.push {hmark = No_hmark;
+            fgnames = [||]; constraints = [||];
+            parents = TypSet.empty } cc; (*@ZERO*)
 
-  Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [||]; constraints = [||];
-               parents = TypSet.empty}; (*BOOLEAN*)
+  Seq.push {hmark = Immutable_hmark;
+            fgnames = [||]; constraints = [||];
+            parents = TypSet.empty} cc; (*BOOLEAN*)
 
-  Seq.push cc {hmark = Deferred_hmark;
-               fgnames = [||]; constraints = [||];
-               parents = TypSet.empty }; (*ANY*)
+  Seq.push {hmark = Deferred_hmark;
+            fgnames = [||]; constraints = [||];
+            parents = TypSet.empty } cc; (*ANY*)
 
-  Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fgg|]; constraints = [|any 0|];
-               parents = TypSet.empty}; (*PREDICATE*)
+  Seq.push {hmark = Immutable_hmark;
+            fgnames = [|fgg|]; constraints = [|any 0|];
+            parents = TypSet.empty} cc; (*PREDICATE*)
 
-  Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
-               parents = TypSet.empty}; (*FUNCTION*)
+  Seq.push {hmark = Immutable_hmark;
+            fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
+            parents = TypSet.empty} cc; (*FUNCTION*)
 
-  Seq.push cc {hmark = Immutable_hmark;
-               fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
-               parents =TypSet.empty}; (*TUPLE*)
+  Seq.push {hmark = Immutable_hmark;
+            fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
+            parents =TypSet.empty} cc; (*TUPLE*)
   {names=kt; classes=cc; fgens=bt.fgens}
 
 
@@ -418,7 +418,7 @@ let string_of_signature
 
 let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
-  let desc = Seq.elem  ctxt.classes i in
+  let desc = Seq.elem  i ctxt.classes in
   let ngen = Array.length desc.constraints in
   assert (ngen = Array.length desc.fgnames);
   let con2string =

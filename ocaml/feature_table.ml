@@ -42,7 +42,7 @@ let count (ft:t): int =
 
 let descriptor (i:int) (ft:t): descriptor =
   assert (i < count ft);
-  Seq.elem ft.features i
+  Seq.elem i ft.features
 
 
 
@@ -62,7 +62,6 @@ let base_table () : t =
   in
   (* boolean *)
   Seq.push
-    ft.features
     {fname    = fnimp;
      impstat  = Builtin;
      fgnames  = [||];
@@ -70,7 +69,8 @@ let base_table () : t =
      argnames = [||];
      sign     = signimp;
      priv     = None;
-     pub      = Some None};  (* 0: implication *)
+     pub      = Some None}  (* 0: implication *)
+    ft.features;
   ft.map <- Key_map.add
       (fnimp,2)
       (ESignature_map.singleton ([||],signimp) idximp)
@@ -98,14 +98,14 @@ let base_table () : t =
     let idx,fn,sign = 1, FNoperator Parenop,
       Sign.make_func [|p_tp;g_tp|] bool1
     in
-    Seq.push ft.features {entry with fname = FNoperator Parenop;
-                          sign = sign};  (* 1: "()" *)
+    Seq.push {entry with fname = FNoperator Parenop;
+              sign = sign}  ft.features;  (* 1: "()" *)
     ft.map <- Key_map.add (FNoperator Parenop,2)
         (ESignature_map.singleton ([|any|],sign) idx)
         ft.map
   end;
-  Seq.push ft.features entry;                                   (* 2: all  *)
-  Seq.push ft.features {entry with fname = FNoperator Someop};  (* 3: some *)
+  Seq.push entry ft.features;                                   (* 2: all  *)
+  Seq.push{entry with fname = FNoperator Someop} ft.features ;  (* 3: some *)
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
@@ -155,7 +155,7 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
       else
         let idx = i-n in
         assert (idx < (Seq.count ft.features));
-        let desc = Seq.elem ft.features idx in
+        let desc = Seq.elem idx ft.features in
         match desc.priv with
           None -> Variable i
         | Some def ->
@@ -203,12 +203,12 @@ let term_to_string
         ST.string names.(i)
       else
         feature_name_to_string
-          (Seq.elem ft.features (i-nnames)).fname
+          (Seq.elem (i-nnames) ft.features).fname
     and find_op (f:term): operator  =
       match f with
         Variable i when nnames <= i ->
           begin
-            match (Seq.elem ft.features (i-nnames)).fname with
+            match (Seq.elem (i-nnames) ft.features).fname with
               FNoperator op -> op
             | _ -> raise Not_found
           end
@@ -357,7 +357,6 @@ let put_function
     with Not_found -> cnt in
   if idx=cnt then begin (* new feature *)
     Seq.push
-      ft.features
       {fname    = fn.v;
        impstat  = impstat;
        fgnames  = fgnames;
@@ -365,13 +364,14 @@ let put_function
        argnames = argnames;
        sign     = sign;
        priv     = term_opt;
-       pub      = if is_priv then None else Some term_opt};
+       pub      = if is_priv then None else Some term_opt}
+      ft.features;
     ft.map <- Key_map.add
         (fn.v,nargs)
         (ESignature_map.add (concepts,sign) idx sig_map)
         ft.map;
   end else begin        (* feature update *)
-    let desc = Seq.elem ft.features idx
+    let desc = Seq.elem idx ft.features
     and not_match str =
       let str = "The " ^ str ^ " of \""
         ^ (feature_name_to_string fn.v)

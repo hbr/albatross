@@ -30,7 +30,7 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
 type proof_term = Proof_table.proof_term
 
 type t = {base:     Proof_table.t;
-          terms:    desc  Seq.sequence;
+          terms:    desc  Seq.t;
           mutable do_fwd: bool;
           mutable work:   int list;
           mutable entry:  entry;
@@ -159,7 +159,7 @@ let is_used_forward (i:int) (pc:t): bool =
 let is_forward_simplification (i:int) (pc:t): bool =
   assert (is_consistent pc);
   assert (i < count pc);
-  let desc = Seq.elem pc.terms i in
+  let desc = Seq.elem i pc.terms in
   assert (Option.has desc.td.fwddat); (* [i] must be a forward rule *)
   let _,_,_,simpl = Option.value desc.td.fwddat in
   simpl
@@ -169,7 +169,7 @@ let is_forward_simplification (i:int) (pc:t): bool =
 let used_schematic (i:int) (pc:t): IntSet.t =
   assert (is_consistent pc);
   assert (i < count pc);
-  (Seq.elem pc.terms i).used_gen
+  (Seq.elem i pc.terms).used_gen
 
 
 
@@ -363,7 +363,7 @@ let find_equivalent (t:term) (pc:t): int =
   let submap =
     List.filter
       (fun (idx,sub) ->
-        n=(Seq.elem pc.terms idx).td.nargs && Term_sub.is_injective sub)
+        n=(Seq.elem idx pc.terms).td.nargs && Term_sub.is_injective sub)
       submap
   in match submap with
     []        -> raise Not_found
@@ -400,7 +400,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
       Term_table.add t 0 td.nbenv idx pc.entry.prvd;
     pc.entry.prvd2 <-
       Term_table.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
-    Seq.push pc.terms {td=td; used_gen = used_gen}
+    Seq.push {td=td; used_gen = used_gen} pc.terms
 
   and add_to_forward (): unit =
     match td.fwddat with
@@ -420,7 +420,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
           List.exists
             (fun (idx,_) ->
               bwd.bwd_set =
-              let bwddat = (Seq.elem pc.terms idx).td.bwddat in
+              let bwddat = (Seq.elem idx pc.terms).td.bwddat in
               assert (Option.has bwddat);
               (Option.value bwddat).bwd_set)
             sublst
@@ -449,7 +449,7 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   (*assert (not (has_equivalent t pc));*)
   assert (i < count pc);
   assert (j < count pc);
-  let td = (Seq.elem pc.terms j).td in
+  let td = (Seq.elem j pc.terms).td in
   let _,_,_,simpl = Option.value td.fwddat in
   let gen_i = used_schematic i pc
   and gen_j = used_schematic j pc
@@ -506,7 +506,7 @@ let specialized_forward
    *)
   assert (is_consistent pc);
   assert (i < count pc);
-  let td_imp    = (Seq.elem pc.terms i).td in
+  let td_imp    = (Seq.elem i pc.terms).td in
   assert (Option.has td_imp.fwddat);
   let nargs     = td_imp.nargs
   and a,b,gp1,_ = Option.value td_imp.fwddat in
@@ -600,7 +600,7 @@ let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
   assert (is_consistent pc);
   assert (idx < count pc);
   assert (not (Term_sub.is_empty sub));
-  let desc    = Seq.elem pc.terms idx              in
+  let desc    = Seq.elem idx pc.terms              in
   let td      = desc.td                            in
   assert (td.nargs = Term_sub.count sub);
   let args    = Term_sub.arguments td.nargs sub    in
@@ -633,7 +633,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
   (** Add the consequences of the term [i] by using the term as an
       implication and searching for matching premises.
    *)
-  let desc = Seq.elem pc.terms i in
+  let desc = Seq.elem i pc.terms in
   let td   = desc.td
   in
   match td.fwddat with
@@ -707,7 +707,7 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   if not has then begin
     add_new t IntSet.empty pc
   end else
-    Seq.push pc.terms {td = analyze t pc; used_gen = IntSet.empty};
+    Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;
   idx
 
 
@@ -772,7 +772,7 @@ let pop (pc:t): unit =
   pc.work  <- [];
   pc.entry <- List.hd pc.stack;
   pc.stack <- List.tl pc.stack;
-  Seq.keep pc.terms pc.entry.count
+  Seq.keep pc.entry.count pc.terms
 
 
 let pop_keep (pc:t): unit =
@@ -839,7 +839,7 @@ let backward_set (t:term) (pc:t): int list =
     sublst
 
 let backward_data (idx:int) (pc:t): term list * IntSet.t =
-  let desc = Seq.elem pc.terms idx in
+  let desc = Seq.elem idx pc.terms in
   assert (Option.has desc.td.bwddat);
   let bwd = Option.value desc.td.bwddat
   and nbenv_idx = Proof_table.nbenv_term idx pc.base

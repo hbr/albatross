@@ -8,17 +8,22 @@ open Support
 let parse_error (_:string): unit =
   Parse_info.print_unexpected ()
 
-let filename ()    =  (symbol_start_pos ()).Lexing.pos_fname
-let symbol_info () =  info_from_position (symbol_start_pos ())
-let rhs_info i     =  info_from_position (rhs_start_pos i)
+let filename (): string =
+  (Parsing.symbol_start_pos ()).Lexing.pos_fname
 
-let cinfo (i:info) =  info_string (filename ()) i
+let symbol_info (): info =
+  info_from_position (Parsing.symbol_start_pos ())
+
+let rhs_info (i:int): info =
+  info_from_position (rhs_start_pos i)
+
+let cinfo (i:info): string =  info_string (filename ()) i
 
 
 let syntax_error () = raise (Parsing.Parse_error)
 
 
-let expression_from_dotted_id (l: int list) =
+let expression_from_dotted_id (l: int list): expression =
   match List.rev l with
     f::t -> 
       let func e i = Expdot (e, Identifier i)

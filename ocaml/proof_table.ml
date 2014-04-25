@@ -23,7 +23,7 @@ type entry = {nbenv:  int;
               mutable count:   int;
               mutable req:     int list}
 
-type t = {seq: desc Seq.sequence;
+type t = {seq: desc Seq.t;
           mutable entry: entry;
           mutable stack: entry list}
 
@@ -137,7 +137,7 @@ let pop (at:t): unit =
   assert (is_local at);
   at.entry  <- List.hd at.stack;
   at.stack  <- List.tl at.stack;
-  Seq.keep at.seq at.entry.count
+  Seq.keep at.entry.count at.seq
 
 
 
@@ -151,8 +151,8 @@ let discharged_term (i:int) (at:t): term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged.
    *)
-  let ps = List.map (fun i -> (Seq.elem at.seq i).term) at.entry.req
-  and tgt = (Seq.elem at.seq i).term
+  let ps = List.map (fun i -> (Seq.elem i at.seq).term) at.entry.req
+  and tgt = (Seq.elem i at.seq).term
   in
   let t = implication_chain ps tgt at
   in
@@ -163,7 +163,7 @@ let term (i:int) (at:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
    *)
   assert (i < count at);
-  let desc = Seq.elem at.seq i in
+  let desc = Seq.elem i at.seq in
   desc.term, desc.nbenv0
 
 
@@ -171,7 +171,7 @@ let nbenv_term (i:int) (at:t): int =
   (** The number of variables of the environment of the  [i]th proved term.
    *)
   assert (i < count at);
-  (Seq.elem at.seq i).nbenv0
+  (Seq.elem i at.seq).nbenv0
 
 
 
@@ -179,7 +179,7 @@ let local_term (i:int) (at:t): term =
   (** The [i]th proved term in the local environment.
    *)
   assert (i < count at);
-  let desc = Seq.elem at.seq i in
+  let desc = Seq.elem i at.seq in
   let n_up = at.entry.nbenv - desc.nbenv0
   in
   Term.up n_up desc.term
@@ -187,7 +187,7 @@ let local_term (i:int) (at:t): term =
 
 let is_assumption (i:int) (at:t): bool =
   assert (i < count at);
-  let desc = Seq.elem at.seq i in
+  let desc = Seq.elem i at.seq in
   match desc.proof_term with
     Assumption _ -> true
   | _            -> false
@@ -197,9 +197,9 @@ let add_proved (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
-    Seq.push at.seq {nbenv0 = at.entry.nbenv;
-                     term   = t;
-                     proof_term = pt}
+    Seq.push {nbenv0 = at.entry.nbenv;
+              term   = t;
+              proof_term = pt} at.seq
   in
   match pt with
     Assumption _ ->
@@ -297,7 +297,7 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
 
   let used (lst:int list): int list =
     assert (cnt0 <= i);
-    let desc = Seq.elem at.seq i in
+    let desc = Seq.elem i at.seq in
     match desc.proof_term with
       Axiom _
     | Assumption _       -> lst
@@ -321,7 +321,7 @@ let discharged (i:int) (pt:t): term * proof_term =
   and axiom = List.exists
       (fun i ->
         assert (i < (count pt));
-        match (Seq.elem pt.seq i).proof_term with
+        match (Seq.elem i pt.seq).proof_term with
           Axiom _ -> true
         | _       -> false)
       (used_assertions i pt [])
@@ -344,55 +344,8 @@ let discharged (i:int) (pt:t): term * proof_term =
       let pt_arr =
         Array.init
           narr
-          (fun j -> (Seq.elem pt.seq (j+cnt0)).proof_term)
+          (fun j -> (Seq.elem (j+cnt0) pt.seq).proof_term)
       in
       Subproof (nargs,nms,i,pt_arr)
   in
   term, pterm
-
-
-(*
-let discharged (i:int) (pt:t): int * int array * term * proof_term =
-  (** The [i]th term (with number and names of arguments) of the current
-      environment with all assumptions discharged together with
-      its proof term.
-   *)
-  let cnt0 = count_previous pt
-  and axiom = List.exists
-      (fun i ->
-        assert (i < (count pt));
-        match (Seq.elem pt.seq i).proof_term with
-          Axiom _ -> true
-        | _       -> false)
-      (used_assertions i pt [])
-  and term  = discharged_term i pt
-  and nargs = nbenv_local pt
-  and nms   = names pt
-  in
-  let used_args = Term.used_args term nargs in
-  let term      = Term.keep_used used_args term nargs
-  and nused     = Array.length used_args
-  and nnames    = Array.length nms
-  in
-  assert (nnames = nargs);
-  assert (nused <= nargs);
-  let nms = Array.init
-      nused
-      (fun i ->
-        let j = used_args.(i) in
-        assert (j < nargs);
-        nms.(j))
-  in
-  let pt =
-    if axiom then
-      Axiom term
-    else
-      let pt_arr =
-        Array.init
-          (i-cnt0)
-          (fun j -> (Seq.elem pt.seq (j+cnt0)).proof_term)
-      in
-      Subproof (nargs, used_args,i,pt_arr)
-  in
-  nused, nms, term, pt
-*)
