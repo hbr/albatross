@@ -581,7 +581,7 @@ let close (c:t): unit =
   in
   let rec cls (n:int): unit =
     if Proof_context.has_work c.pc then begin
-      assert (n < 50);
+      (*assert (n < 50);*)
       let cnt = count_assertions c in
       Proof_context.close_step c.pc;
       if c.trace then print cnt (count_assertions c);
