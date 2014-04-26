@@ -687,8 +687,7 @@ let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
    *)
-  if not (is_using_forced_forward pc) || Options.is_prover_forward () then
-    add_consequences_premise     i pc;
+  add_consequences_premise     i pc;
   add_consequences_implication i pc
 
 

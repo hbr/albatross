@@ -485,7 +485,7 @@ let print_assertions
         if IntSet.is_empty used_gen then ""
         else " " ^ (intset_to_string used_gen)
       in
-      if not is_used then
+      if c.trace || not is_used then
         Printf.printf "%s%3d   %s%s%s%s\n"
           prefix
           i
