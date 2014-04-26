@@ -244,7 +244,7 @@ let unify (t:term) (nbt:int) (table:t)
     in
     match t with
       Variable i when i < nb ->
-        subs i tab.bvars basic_subs
+        IntMap.find i tab.bvars
     | Variable i ->
         assert (nb <= i);
         List.fold_left
@@ -282,7 +282,10 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
   in
-  map_to_list (uni t table 0)
+  try
+    map_to_list (uni t table 0)
+  with Not_found ->
+    []
 
 
 
