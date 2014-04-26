@@ -719,6 +719,10 @@ cexpression:
   Expproof ($1,Some $2, $3)
 }
 
+|   implementation_block ensure_block KWend {
+  Expproof ([],Some $1, $2)
+}
+
 |   expression COMMA expression {
   match $3 with
     Explist l -> Explist ($1::l)
@@ -811,14 +815,7 @@ quantifier:
          avoid the check ambiguity !!!
 */
 
-compound: compound_list {
-  (*let _ =
-    Printf.printf "%s compound: %s\n"
-      (cinfo (rhs_info 1))
-      (string_of_compound $1)
-  in*)
-  $1
-}
+compound: compound_list { $1 }
 
 
 compound_list:
