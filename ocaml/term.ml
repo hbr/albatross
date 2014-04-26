@@ -753,18 +753,17 @@ module Term_sub_arr: sig
 
 end = struct
 
-  type t = {n:int; args: term array; flags: bool array}
+  type t = {args: term array; flags: bool array}
 
   let flags (s:t): bool array = s.flags
   let args  (s:t): term array = s.args
 
 
   let make (n:int): t =
-    {n     = n;
-     args  = Array.init n (fun i -> Variable i);
+    {args  = Array.init n (fun i -> Variable i);
      flags = Array.make n false}
 
-  let count (s:t): int = s.n
+  let count (s:t): int = Array.length s.args
 
   let has (i:int) (s:t): bool =
     assert (i < count s);
@@ -779,10 +778,11 @@ end = struct
         apply to [t] all already available substitutions and check for
         circularity and apply [i ~~> t] to all available substitutions.
      *)
-    assert (i <= s.n);
+    let n = count s in
+    assert (i <= n);
     assert (not (Term.is_variable_i t i));
-    let t = Term.sub t s.args s.n in
-    if IntSet.mem i (Term.bound_variables t s.n) then
+    let t = Term.sub t s.args n in
+    if IntSet.mem i (Term.bound_variables t n) then
       raise Not_found (* circular substitution *)
     else begin
       Array.iteri
@@ -802,9 +802,10 @@ end = struct
     (** Introduce [n] new variables at the top, i.e. all
           terms are just copied into the new larger substitution.
      *)
-    let snew = make (n+s.n) in
-    Array.blit s.args  0  snew.args  0  s.n;
-    Array.blit s.flags 0  snew.flags 0  s.n;
+    let sn = count s in
+    let snew = make (n+sn) in
+    Array.blit s.args  0  snew.args  0  sn;
+    Array.blit s.flags 0  snew.flags 0  sn;
     snew
 
 
@@ -812,9 +813,10 @@ end = struct
     (** Introduce [n] new variables at the bottom, i.e. shift all
           terms up by [n].
      *)
-    let snew = make (n+s.n) in
+    let sn   = count s in
+    let snew = make (n+sn) in
     Array.iteri (fun i t -> snew.args.(i+n) <- Term.up n t) s.args;
-    Array.blit s.flags 0 snew.flags n  s.n;
+    Array.blit s.flags 0 snew.flags n  sn;
     snew
 
 
@@ -823,11 +825,12 @@ end = struct
     (** Remove [n] variables from the bottom, i.e. shift all
           terms down by [n].
      *)
-    assert (n <= (count s));
-    let snew = make (s.n-n) in
+    let sn = count s in
+    assert (n <= sn);
+    let snew = make (sn-n) in
     Array.iteri
       (fun i _ -> snew.args.(i) <- Term.down n s.args.(i+n)) snew.args;
-    Array.blit s.flags n   snew.flags 0   (s.n-n);
+    Array.blit s.flags n   snew.flags 0   (sn-n);
     snew
 
 
@@ -847,8 +850,6 @@ end = struct
           else
             let lo,hi = if i<=j then i,j else j,i in
             add (lo-nb) (Variable (hi-nb)) subst
-              (*Variable j when i=j ->
-                ()*)
       | _ ->
           let i,t =
             try i-nb, Term.down nb t
@@ -909,11 +910,6 @@ module Term_sub: sig
   val add:            int -> term ->  t -> t
   val merge:          t -> t -> t
   val arguments:      int -> t -> term array
-  val domain:         t -> IntSet.t
-  val is_covering:    term -> int -> t -> bool
-  val apply_0:        term -> int -> t -> bool -> term
-  val apply_covering: term -> int -> t -> term
-  val apply:          term -> int -> t -> term * int
 end = struct
 
   type t = term IntMap.t
@@ -997,82 +993,6 @@ end = struct
         args.(i) <- t)
       sub;
     args
-
-
-  let domain (sub:t): IntSet.t =
-    IntMap.fold
-      (fun i _ set -> IntSet.add i set)
-      sub
-      IntSet.empty
-
-
-  let up (n:int) (sub:t): t =
-    IntMap.map (fun t -> Term.up n t) sub
-
-  let is_covering (t:term) (nargs:int) (sub:t): bool =
-    (* Does the substitution 'sub' cover all argument variables in the
-       term 't'  which has 'nargs' formal arguments?
-     *)
-    let openvars
-        = IntSet.diff (Term.bound_variables t nargs) (domain sub)
-    in
-    IntSet.is_empty openvars
-
-
-
-  let apply_0 (t:term) (nargs:int) (sub:t) (covers:bool): term =
-    (* Apply to the term 't' with 'nargs' formal arguments the substitution
-       'sub'. If the substitution covers all formal arguments of 't' then
-       all free variables (i.e. variables above 'nargs') are shifted down
-       by nargs.
-
-       Note that all substitution terms have to be shifted up by 'nargs'
-       if the substitution is not covering.
-     *)
-    let nargs_res, sub =
-      if covers then
-        0, sub
-      else
-        nargs, up nargs sub
-    in
-    let args  = Array.init nargs (fun i -> Variable i)
-    in
-    IntMap.iter
-      (fun i t ->
-        assert (i<nargs);
-        args.(i) <- t
-      )
-      sub;
-    Term.sub t args nargs_res
-
-
-
-  let apply_covering (t:term) (nargs:int) (sub:t): term =
-    (* Apply to the term 't' with 'nargs' formal arguments the substitution
-       'sub' assuming that the substitution covers all formal arguments
-       contained in 't'
-     *)
-    assert ((domain sub) = (Term.bound_variables t nargs));
-    apply_0 t nargs sub true
-
-
-
-
-  let apply (t:term) (nargs:int) (sub:t): term * int =
-    (* Apply to the term 't' with 'nargs' formal arguments the substitution
-       'sub'. If the substitution covers all formal arguments of 't' then
-       all free variables (i.e. variables above 'nargs') are shifted down
-       by nargs and 0 is returned with the result term.
-
-       Note that all substitution terms have to be shifted up by 'nargs'
-       if the substitution is not covering.
-     *)
-    let covers = is_covering t nargs sub in
-    let nargs_res = if covers then 0 else nargs
-    in
-    apply_0 t nargs sub covers, nargs_res
-
-
 end
 
 
