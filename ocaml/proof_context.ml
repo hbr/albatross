@@ -3,9 +3,9 @@ open Term
 open Support
 
 
-type backward_data = {bwd_ps:    term list;
-                      bwd_set:   TermSet.t;
-                      bwd_tgt:   term;
+type backward_data = {ps:        term list;
+                      ps_set:    TermSet.t;
+                      tgt:       term;
                       bwd_simpl: bool}
 
 
@@ -267,8 +267,8 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
   match ps with
     [] -> None
   | _::_ ->
-      let bwd_set = term_list_to_set ps in
-      Some {bwd_ps = ps; bwd_set = bwd_set; bwd_tgt = tgt; bwd_simpl = simpl}
+      let ps_set = term_list_to_set ps in
+      Some {ps = ps; ps_set = ps_set; tgt = tgt; bwd_simpl = simpl}
 
 
 
@@ -307,7 +307,7 @@ let analyze (t:term)  (pc:t): term_data =
         [] -> None
       | _::_ ->
           let set = term_list_to_set ps in
-          Some {bwd_ps = List.rev ps; bwd_set = set; bwd_tgt = tgt;
+          Some {ps = List.rev ps; ps_set = set; tgt = tgt;
                 bwd_simpl = simpl}
     in
     {term   = t;
@@ -419,15 +419,15 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
           let sublst = Term_table.unify_with t 0 td.nbenv pc.entry.bwd in
           List.exists
             (fun (idx,_) ->
-              bwd.bwd_set =
+              bwd.ps_set =
               let bwddat = (Seq.elem idx pc.terms).td.bwddat in
               assert (Option.has bwddat);
-              (Option.value bwddat).bwd_set)
+              (Option.value bwddat).ps_set)
             sublst
         in
         if not has_similar then
           pc.entry.bwd <-
-            Term_table.add bwd.bwd_tgt td.nargs td.nbenv idx pc.entry.bwd
+            Term_table.add bwd.tgt td.nargs td.nbenv idx pc.entry.bwd
 
   and add_to_work (): unit =
     pc.work <- idx::pc.work
@@ -844,7 +844,7 @@ let backward_data (idx:int) (pc:t): term list * IntSet.t =
   and nbenv_idx = Proof_table.nbenv_term idx pc.base
   and nbenv = nbenv pc
   in
-  let ps = List.map (fun t -> Term.up (nbenv-nbenv_idx) t) bwd.bwd_ps
+  let ps = List.map (fun t -> Term.up (nbenv-nbenv_idx) t) bwd.ps
   in
   ps,
   desc.used_gen
