@@ -185,20 +185,28 @@ let merge_map (m1: submap) (m2: submap)
      where the corresponding substitutions are mergeable (i.e. do not have
      different terms for the same variable).
    *)
-  IntMap.fold
-    (fun idx sub1 res ->
-      try
-        let sub2 = IntMap.find idx m2 in
+  if IntMap.is_empty m1 || IntMap.is_empty m2 then
+    raise Not_found;
+  let merged_res =
+    IntMap.fold
+      (fun idx sub1 res ->
         try
-          let sub  = Term_sub.merge sub1 sub2 in
+          let sub2 = IntMap.find idx m2 in
+          try
+            let sub  = Term_sub.merge sub1 sub2 in
           IntMap.add idx sub res
+          with Not_found ->
+            res
         with Not_found ->
           res
-      with Not_found ->
-        res
-    )
-    m1
-    IntMap.empty
+      )
+      m1
+      IntMap.empty
+  in
+  if IntMap.is_empty merged_res then
+    raise Not_found
+  else
+    merged_res
 
 
 
@@ -262,14 +270,17 @@ let unify (t:term) (nbt:int) (table:t)
           try
             let len           = Array.length args in
             let ftab, argtabs = IntMap.find len tab.fapps in
-            let fmap = ref (uni f ftab nb) in
-            Array.iteri
-              (fun i a ->
-                let amap = uni a argtabs.(i) nb in
-                fmap := merge_map !fmap amap;
-              )
-              args;
-            join_map basic_subs !fmap
+            let map_of (t:term) (tab:t): submap =
+              let res = uni t tab nb in
+              if IntMap.is_empty res then raise Not_found;
+              res
+            in
+            let res_map = ref (map_of f ftab) in
+            for i=0 to len-1 do
+              let amap = map_of args.(i) argtabs.(i) in
+              res_map := merge_map !res_map amap
+            done;
+            join_map basic_subs !res_map
           with Not_found ->
             basic_subs
         end in
