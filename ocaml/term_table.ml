@@ -56,7 +56,9 @@ Each node of the tree has the following information
 open Container
 open Term
 
-type submap = Term_sub.t IntMap.t   (* idx -> sub *)
+type submap  = Term_sub.t IntMap.t   (* idx -> sub *)
+type sublist = (int*Term_sub.t) list
+
 
 type t = {
     terms: (int*int*int*term) list;               (* idx,nargs,nbenv *)
@@ -160,6 +162,50 @@ let term (idx:int) (nargs:int) (table:t): term =
   termtab idx nargs table 0
 
 
+let join_lists (l1: sublist) (l2:sublist): sublist =
+  (** Join the two disjoint lists [l1] and [l2].
+   *)
+  let rec join l1 l2 res =
+    match l1, l2 with
+      [], _  -> List.rev_append l2 res
+    | _, []  -> List.rev_append l1 res
+    | (idx1,sub1)::tail1, (idx2,sub2)::tail2 ->
+        assert (idx1 <> idx2);
+        if idx1 < idx2 then
+          join l1 tail2 ((idx2,sub2)::res)
+        else
+          join tail1 l2 ((idx1,sub1)::res)
+  in
+  List.rev (join l1 l2 [])
+
+
+
+let merge_lists (l1: sublist) (l2:sublist): sublist =
+  (** Merge the two lists [l1] and [l2].
+
+      The merged list contains only the indices which occur in both lists
+      and on which the substitutions of both lists are mergable.
+   *)
+  let rec merge l1 l2 res =
+    match l1, l2 with
+      [], _  -> res
+    | _ , [] -> res
+    | (idx1,sub1)::tail1, (idx2,sub2)::tail2 ->
+        if idx1 < idx2 then
+          merge l1 tail2 res
+        else if idx1 > idx2 then
+          merge tail1 l2 res
+        else begin
+          try
+            let sub = Term_sub.merge sub1 sub2 in
+            merge tail1 tail2 ((idx1,sub)::res)
+          with Not_found ->
+            merge tail1 tail2 res
+        end
+  in
+  List.rev (merge l1 l2 [])
+
+
 
 
 
@@ -194,7 +240,7 @@ let merge_map (m1: submap) (m2: submap)
           let sub2 = IntMap.find idx m2 in
           try
             let sub  = Term_sub.merge sub1 sub2 in
-          IntMap.add idx sub res
+            IntMap.add idx sub res
           with Not_found ->
             res
         with Not_found ->
