@@ -12,3 +12,5 @@ val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
 
 val add: term -> int -> int -> int -> t -> t
 
+val print_tab: int -> t -> unit
+
