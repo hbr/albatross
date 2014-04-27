@@ -3,6 +3,10 @@ open Term
 open Support
 
 
+type slot_data = {ndown:int;
+                  sprvd: int TermMap.t}
+
+
 type backward_data = {ps:        term list;
                       ps_set:    TermSet.t;
                       tgt:       term;
@@ -24,6 +28,7 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable prvd2: Term_table.t;  (* as schematic terms *)
               mutable bwd:   Term_table.t;
               mutable fwd:   Term_table.t;
+              mutable slots: slot_data array;
               mutable used_fwd: IntSet.t;
               mutable count: int}
 
@@ -40,6 +45,7 @@ type t = {base:     Proof_table.t;
 let empty_entry =
   let e = Term_table.empty in
     {prvd=e; prvd2=e; bwd=e; fwd=e;
+     slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty};
      used_fwd = IntSet.empty;
      count = 0}
 
@@ -48,6 +54,7 @@ let copied_entry (e:entry): entry =
    prvd2    = e.prvd2;
    bwd      = e.bwd;
    fwd      = e.fwd;
+   slots    = e.slots;
    used_fwd = e.used_fwd;
    count    = e.count}
 
@@ -317,9 +324,24 @@ let analyze (t:term)  (pc:t): term_data =
      bwddat = bwd}
 
 
+let find_slot (t:term) (pc:t): int * term =
+  let least_free = Term.least_free t
+  and nslots = Array.length pc.entry.slots in
+  let i = ref 0 in
+  while !i < nslots
+      && least_free < pc.entry.slots.(!i).ndown
+  do i:=!i+1 done;
+  assert (!i<nslots);
+  !i,
+  Term.down pc.entry.slots.(!i).ndown t
 
 
-let find (t:term) (pc:t): int =
+let find_in_slot (t:term) (pc:t): int =
+  let i, ti = find_slot t pc in
+  TermMap.find ti pc.entry.slots.(i).sprvd
+
+
+let find_in_tab (t:term) (pc:t): int =
   (** The index of the assertion [t].
    *)
   let sublst = Term_table.unify_with t 0 (nbenv pc) pc.entry.prvd in
@@ -328,6 +350,12 @@ let find (t:term) (pc:t): int =
   | [(idx,sub)] -> idx
   | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
 
+
+let find (t:term) (pc:t): int = find_in_tab t pc
+  (*let idx1 = try find_in_slot t pc with Not_found -> -1 in
+  let idx2 = try find_in_tab  t pc with Not_found -> -1 in
+  assert (idx1 = idx2 );
+  if 0 <= idx1  then idx1 else raise Not_found*)
 
 
 let has (t:term) (pc:t): bool =
@@ -400,6 +428,9 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
       Term_table.add t 0 td.nbenv idx pc.entry.prvd;
     pc.entry.prvd2 <-
       Term_table.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
+    let slot,ts = find_slot t pc in
+    let sd   = pc.entry.slots.(slot) in
+    pc.entry.slots.(slot) <- {sd with sprvd = TermMap.add ts idx sd.sprvd};
     Seq.push {td=td; used_gen = used_gen} pc.terms
 
   and add_to_forward (): unit =
@@ -754,13 +785,30 @@ let close (pc:t): unit =
   ()
 
 
+let push_slots (nbenv:int) (pc:t): unit =
+  pc.entry.slots <-
+    if nbenv=0 then
+      Array.copy pc.entry.slots
+    else
+      let len = Array.length pc.entry.slots in
+      Array.init
+        (len+1)
+        (fun i ->
+          if i<len then
+            let sd = pc.entry.slots.(i) in
+            {sd with ndown = sd.ndown+nbenv}
+          else
+            {ndown=0; sprvd=TermMap.empty})
+
 
 let push (nbenv:int) (names:int array) (pc:t): unit =
   assert (let len = Array.length names in len=0 || len=nbenv);
   assert (not (has_work pc));
   Proof_table.push nbenv names pc.base;
   pc.entry.count <- Seq.count pc.terms;
-  pc.stack <- (copied_entry pc.entry)::pc.stack
+  pc.stack <- (copied_entry pc.entry)::pc.stack;
+  push_slots nbenv pc
+
 
 
 
