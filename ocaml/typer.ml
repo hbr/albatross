@@ -108,7 +108,6 @@ end = struct
      *)
     assert (i < (TVars_sub.count_local acc.tvars));
     acc.sign <- Sign.make_const (TVars_sub.get i acc.tvars)
-    (*acc.sign <- Sign.make_const (Variable i)*)
 
 
 
@@ -260,7 +259,7 @@ end = struct
         )
         []
         accus;
-    if Mylist.is_empty accs.accus then
+    if accs.accus = [] then
       raise (Untypeable
                (List.map
                   (fun acc -> Accu.signature acc, Accu.ntvars acc)
@@ -380,13 +379,10 @@ let rec analyze_expression
     assert (0 < nargs);
     Accus.expect_function nargs accs;
     analyze f accs;
-    let rec do_args_from (i:int): unit =
-      if i=nargs then ()
-      else (Accus.expect_argument accs;
-            analyze args.(i) accs;
-            do_args_from (i+1))
-    in
-    do_args_from 0
+    for i=0 to nargs-1 do
+      Accus.expect_argument accs;
+      analyze args.(i) accs
+    done
 
   in
 

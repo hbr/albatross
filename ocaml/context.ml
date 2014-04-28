@@ -429,10 +429,7 @@ let find_feature
       feature table. Return the list of variables together with their
       signature.
    *)
-  let nfgs_c0  = nfgs c
-  and nargs_c0 = nargs c
-  in
-  find_funcs fn nargs_feat nfgs_c0 nargs_c0 c.ft
+  find_funcs fn nargs_feat (nfgs c) (nargs c) c.ft
 
 
 

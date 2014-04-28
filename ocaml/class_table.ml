@@ -215,7 +215,12 @@ let signature
   (** Analyze the syntactic signature [entlst,rt] based on an environment
       which has already the formal generics [fgnames0] with their constraints
       [concepts0] and the arguments [argnames0] and the number of type
-      variables [ntvs0]
+      variables [ntvs0].
+
+      Return the formal generics, constraints, arguments, argtypes,the
+      number of type variables (all cumulated) and the signature for the
+      new environment (all types (argtypes and signature) are valid in the
+      new environment).
    *)
   let fgens, ntvs = (* Set of formal generics names and number of type vars *)
     collect_formal_generics entlst rt ct

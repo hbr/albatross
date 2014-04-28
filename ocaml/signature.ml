@@ -112,18 +112,13 @@ end = struct
     let nloc  = count_local tv
     and ndown = (count_global tvnew) - (count_global tv)
     in
-    let rec updt (i:int): unit =
-      if i = nloc then
-        ()
-      else begin
-        if Term_sub_arr.has i tvnew.sub then
-          Term_sub_arr.add
-            i
-            (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
-            tv.sub;
-        updt (i+1)
-      end
-    in updt 0
+    for i=0 to nloc-1 do
+      if Term_sub_arr.has i tvnew.sub then
+        Term_sub_arr.add
+          i
+          (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
+          tv.sub
+    done
 
 end (* TVars_sub *)
 
@@ -266,5 +261,7 @@ end = struct
     let subst = TVars_sub.sub tvars_sub in
     if has_res then
       Term_sub_arr.unify (result s1) (result s2) subst;
-    Array.iteri (fun i t -> Term_sub_arr.unify t s2.args.(i) subst) s1.args
+    for i=0 to Array.length s1.args-1 do
+      Term_sub_arr.unify s1.args.(i) s2.args.(i) subst
+    done
 end (* Sign *)
