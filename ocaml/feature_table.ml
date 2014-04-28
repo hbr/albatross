@@ -337,7 +337,6 @@ let put_function
     (concepts: type_term array)
     (argnames: int array)
     (sign:     Sign.t)
-    (is_priv:  bool)
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
@@ -345,6 +344,7 @@ let put_function
       their constraints [concepts], the arguments [argnames], the
       signature [sign] to the feature table
    *)
+  let is_priv = Parse_info.is_module () in
   let cnt   = Seq.count ft.features
   and nargs = Sign.arity sign
   in

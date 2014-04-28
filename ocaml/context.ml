@@ -22,7 +22,6 @@ type proof_term = Proof_context.proof_term
 type t = {
     mutable entry: entry;
     mutable stack: entry list;
-    mutable visi:  visibility;
     mutable trace: bool;
     ct:            Class_table.t;
     ft:            Feature_table.t;
@@ -157,7 +156,6 @@ let make (): t =
   {entry = empty_entry;
    stack = [];
    trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
-   visi      = Public;
    ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
    pc        =
@@ -237,23 +235,6 @@ let pop_keep_assertions (c:t): unit =
 
 let ct (c:t): Class_table.t    = c.ct
 let ft (c:t): Feature_table.t  = c.ft
-
-let is_private (c:t): bool =
-  match c.visi with
-    Private -> true
-  | _ -> false
-
-let is_public (c:t): bool = not (is_private c)
-
-let set_visibility (v:visibility) (c:t): unit =
-  assert (is_global c);
-  c.visi <- v
-
-let reset_visibility (c:t): unit =
-  assert (is_global c);
-  c.visi <- Public
-
-
 
 let type_variables (c:t): TVars_sub.t = c.entry.tvars_sub
 
@@ -355,7 +336,6 @@ let put_global_function
     c.entry.concepts
     c.entry.argnames
     c.entry.signature
-    (is_private c)
     impstat
     term_opt
     c.ft

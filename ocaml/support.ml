@@ -189,13 +189,16 @@ module Parse_info: sig
 
   val file_name:     unit -> string
   val last_position: unit -> Lexing.position
-  val is_interface:  unit -> bool
-  val is_module:     unit -> bool
+  val is_use_interface:   unit -> bool
+  val is_check_interface: unit -> bool
+  val is_interface:       unit -> bool
+  val is_module:          unit -> bool
 
   val set_file_name:     string -> unit
   val set_last_position: Lexing.position -> unit
-  val set_interface:     unit -> unit
-  val set_module:        unit -> unit
+  val set_use_interface:   unit -> unit
+  val set_check_interface: unit -> unit
+  val set_module:          unit -> unit
 
   val print_error:  Lexing.position -> string -> unit
   val print_unexpected: unit -> unit
@@ -204,7 +207,8 @@ end = struct
 
   let fname:string ref              = ref ""
   let last_pos: Lexing.position ref = ref (Lexing.dummy_pos)
-  let iface: bool ref               = ref false
+  let uiface: bool ref              = ref false
+  let ciface: bool ref              = ref false
 
   let file_name (): string =
     !fname
@@ -212,12 +216,16 @@ end = struct
   let last_position (): Lexing.position =
     !last_pos
 
-  let is_interface (): bool = !iface
-  let is_module(): bool     = not !iface
-  let set_interface (): unit =
-    iface := true
+  let is_use_interface   (): bool = !uiface
+  let is_check_interface (): bool = !ciface
+  let is_interface ():       bool = !uiface || !ciface
+  let is_module(): bool     = not (!uiface || !ciface)
+  let set_use_interface (): unit =
+    uiface := true; ciface := false
+  let set_check_interface (): unit =
+    uiface := false; ciface := true
   let set_module (): unit =
-    iface := false
+    uiface := false; ciface := false
 
   let set_file_name (fn: string): unit =
     fname := fn
@@ -509,6 +517,7 @@ type expression =
   | Exppred       of entities list * expression
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
+  | Tupleexp      of expression * expression
   | Typedexp      of expression * type_t
   | Taggedexp     of int * expression
   | Explist       of expression list
@@ -594,6 +603,10 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
 
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp
+
+  | Tupleexp (e1,e2) ->
+      "(" ^ (strexp e1) ^ "," ^ (strexp e2) ^ ")"
+
   | Explist l ->
       withparen (string_of_list l strexp ",") wp
 
@@ -719,12 +732,12 @@ type classname = int withinfo
 
 type formal_generics = int list withinfo
 
-
+(*
 type visibility =
     Public
   | Private
   | Protected of int list withinfo
-
+*)
 
 type feature_name =
     FNname of int
@@ -751,7 +764,7 @@ type adaptation_clause =
 
 type parent = type_t * adaptation_clause list
 
-type inherit_clause = visibility * parent list
+type inherit_clause = parent list
 
 
 type declaration =
@@ -770,10 +783,10 @@ type declaration =
         * declaration_block list
   | Declaration_block of declaration_block
 and declaration_block =
-    Feature_block of visibility * declaration list
-  | Create_block  of visibility * declaration list
-  | Invariant_block of visibility * compound
-  | Import_block    of visibility * int list list
+    Feature_block of declaration list
+  | Create_block  of declaration list
+  | Invariant_block of compound
+  | Import_block    of int list list
 
 
 type use_block = int withinfo list

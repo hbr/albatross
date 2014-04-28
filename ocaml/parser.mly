@@ -169,6 +169,7 @@ let expression_from_entities entlist =
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
 /* 10 */ %right    COMMA     SEMICOL
+/* ?? */ %nonassoc KWall     KWsome
 /* ?? */ %right    ARROW
 /* 15 */ %left     COLON
 /* 20 */ %right    DARROW
@@ -187,15 +188,28 @@ let expression_from_entities entlist =
 /* 90 */ %nonassoc UMINUS
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
-%start main
-%type <Support.module_declaration> main
+%start file
+%type <Support.module_declaration> file
 
 
 
 
 %%
+/* ------------------------------------------------------------------------- */
+/*  file structure  */
+/* ------------------------------------------------------------------------- */
 
-main: use_block toplevel_declarations {$1, List.rev $2}
+file: use_block decls {$1, List.rev $2}
+
+decls:
+    { [] }
+|   decls optsemi decl { $3::$1 }
+
+decl:
+    class_declaration { $1 }
+|   named_feature     { $1 }
+|   formal_generic    { $1 }
+|   ass_feat          { $1 }
 
 
 use_block:
@@ -208,59 +222,15 @@ module_list:
 
 one_module: LIDENTIFIER  { withinfo (rhs_info 1) $1 }
 
-
+/*
 toplevel_declarations:
     { [] }
 |   toplevel_declarations optsemi declaration { $3::$1 }
 |   toplevel_declarations declaration_block KWend {
   (Declaration_block $2)::$1
 }
+*/
 
-
-/* ------------------------------------------------------------------------- */
-/* Declaration blocks */
-/* ------------------------------------------------------------------------- */
-
-declaration_block:
-    KWfeature visibility optsemi declarations {
-  Feature_block ($2,List.rev $4)
-}
-|   KWcreate visibility  optsemi declarations {
-  Create_block  ($2,List.rev $4)
-}
-|   KWinvariant  compound {
-  Invariant_block (Public,$2)
-}
-|   KWinvariant LBRACE KWNONE RBRACE  compound {
-  Invariant_block (Private,$5)
-}
-|   KWimport visibility optsemi imports {
-  Import_block ($2,$4)
-}
-
-visibility:
-    { Public }
-|   LBRACE KWNONE RBRACE { Private }
-|   LBRACE uidentifier_list RBRACE { Protected (withinfo (rhs_info 2) $2) }
-
-
-declarations:
-    %prec LOWEST_PREC { [] }
-|   declarations optsemi declaration { $3::$1 }
-
-
-declaration:
-    class_declaration { $1 }
-|   named_feature     { $1 }
-|   assertion_feature { $1 }
-|   formal_generic    { $1 }
-
-
-imports:
-    one_import { [$1] }
-|   one_import SEMICOL imports { $1::$3 } 
-
-one_import: dotted_id_list { List.rev $1 }
 
 /* ------------------------------------------------------------------------- */
 /* Formal generics */
@@ -272,6 +242,76 @@ formal_generic:
 
 
 
+/* ------------------------------------------------------------------------- */
+/*  assertions  */
+/* ------------------------------------------------------------------------- */
+
+ass_feat: proof_all_expr {
+  let entlst, req, impl, ens = $1 in
+  let bdy = Some req, Some impl, Some ens in
+  Assertion_feature (None, entlst, bdy)
+}
+
+ass_req: KWrequire ass_seq { List.rev $2 }
+
+ass_req_opt:
+    { [] }
+|   ass_req { $1 }
+
+ass_check: KWcheck proof_seq { List.rev $2 }
+
+/*
+ass_check_opt:
+    { [] }
+|   ass_check  { $1 }
+*/
+
+ass_ens: KWensure ass_seq { List.rev $2 }
+
+ass_seq:
+    info_expr                           { [$1] }
+|   ass_seq separator info_expr         { $3::$1 }
+
+proof_seq:
+    proof_expr { [$1] }
+|   proof_seq separator proof_expr { $3::$1 }
+
+
+proof_expr:
+    info_expr { $1 }
+|   proof_all_expr {
+  let entlst,req,impl,ens = $1 in
+  let exp = Expquantified (Universal,
+                           entlst,
+                           Expproof(req, Some impl, ens)) in
+  withinfo (rhs_info 1) exp
+}
+|   ass_req ass_check ass_ens KWend {
+  let is_do = false in
+  let impl  = Impdefined (None,is_do,$2) in
+  let exp   = Expproof ($1, Some impl, $3) in
+  withinfo (rhs_info 1) exp
+}
+
+proof_all_expr: KWall formal_arguments_opt opt_nl
+                ass_req_opt
+                ass_imp
+                ass_ens KWend {
+  let entlst = withinfo (rhs_info 2) $2 in
+  entlst, $4, $5, $6
+}
+
+ass_imp:
+    { Impdefined (None,false,[]) }
+|   ass_check           { Impdefined (None,false,$1) }
+|   KWdeferred          { Impdeferred }
+|   implementation_note {
+  match $1 with
+    Impbuiltin -> $1
+  | _ ->
+      Printf.eprintf "%s Not allowed in assertions\n" (cinfo (rhs_info 1));
+      syntax_error ()
+}
 
 
 
@@ -293,13 +333,12 @@ header_mark:
 class_declaration:
   header_mark KWclass UIDENTIFIER class_generics
   inheritance
-  class_blocks
   KWend {
   Class_declaration( withinfo (rhs_info 1) $1,
                      withinfo (rhs_info 3) $3,
                      withinfo (rhs_info 4) $4,
                      $5,
-                     $6
+                     []
                     )
 }
 
@@ -314,18 +353,12 @@ inheritance:
 |   inherit_clause inheritance { $1::$2 }
 
 
-class_blocks:
-    { [] }
-|   class_blocks declaration_block { $2::$1 }
-
-
-
 
 /* ------------------------------------------------------------------------- */
 /* Inheritance */
 /* ------------------------------------------------------------------------- */
 
-inherit_clause: KWinherit visibility optsemi parent_list { $2,$4 }
+inherit_clause: KWinherit optsemi parent_list { $3 }
 
 parent_list:
     parent { [$1] }
@@ -436,7 +469,7 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 /* Features */
 /* ------------------------------------------------------------------------- */
 
-
+/*
 assertion_feature:
     KWall formal_arguments_opt optsemi feature_body {
   Assertion_feature (None, (withinfo (rhs_info 2) $2), $4)
@@ -444,7 +477,7 @@ assertion_feature:
 |   LIDENTIFIER COLON KWall formal_arguments_opt optsemi feature_body {
   Assertion_feature ((Some $1), (withinfo (rhs_info 4) $4), $6)
 }
-
+*/
 named_feature:
     nameopconst formal_arguments return_type_opt optsemi feature_body_opt {
   Named_feature ((withinfo (rhs_info 1) $1),
@@ -550,7 +583,7 @@ local_list:
 
 local_declaration:
     entity_list { Unassigned $1 }
-|   entity_list ASSIGN expression { Assigned ($1,$3) }
+|   entity_list ASSIGN expr { Assigned ($1,$3) }
 |   LIDENTIFIER LPAREN entity_list RPAREN return_type_opt feature_body {
   Local_feature ($1,$3,$5,$6)
 }
@@ -561,12 +594,11 @@ local_declaration:
 implementation_note: KWnote LIDENTIFIER {
   let str = ST.string $2
   in
-  if str = "built_in" then Impbuiltin
+  if str = "built_in" || str = "axiom" then Impbuiltin
   else if str = "event" then Impevent
   else
     (Printf.eprintf
-       "%s Syntax error: only \"note built_in\" or \"note event\" \
-       possible here\n"
+       "%s Syntax error: must be one of {built_in,axiom,event}\n"
        (cinfo (rhs_info 1));
      syntax_error ())
 }
@@ -601,12 +633,182 @@ formal_arguments: LPAREN entity_list RPAREN { $2 }
 
 
 
+/* todo: distinguish between expressions which can occur within expressions
+         only and expressions which can occur in imperative constructs to
+         avoid the check ambiguity !!!
+*/
 
+compound: compound_list { $1 }
+
+
+compound_list:
+    info_expr  optsemi { [$1] }
+|   info_expr SEMICOL compound_list { $1::$3 }
+
+
+
+
+
+
+/* ------------------------------------------------------------------------- */
+/*  expressions  */
+/* ------------------------------------------------------------------------- */
+
+info_expr: expr { withinfo (rhs_info 1) $1 }
+
+
+
+expr:
+    atomic_expr                   { $1 }
+|   operator_expr                 { $1 }
+|   LPAREN expr RPAREN            { Expparen $2 }
+|   LPAREN operator RPAREN        { Expop $2 }
+|   LBRACKET expr RBRACKET        { Expbracket $2 }
+|   expr COMMA expr               { Tupleexp ($1,$3) }
+|   expr LPAREN expr RPAREN       { Funapp ($1,$3) }
+|   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
+|   expr DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
+|   quantifier LPAREN entity_list RPAREN opt_nl expr %prec KWall {
+  Expquantified ($1, withinfo (rhs_info 3) $3, $6) }
+
+
+quantifier:
+    KWall  %prec LOWEST_PREC { Universal   }
+|   KWsome { Existential }
+
+
+
+atomic_expr:
+    KWResult                      { ExpResult }
+|   NUMBER                        { Number $1 }
+|   KWfalse                       { Expfalse }
+|   KWtrue                        { Exptrue }
+|   dotted_id_list %prec LOWEST_PREC {
+  expression_from_dotted_id $1
+}
+
+operator_expr:
+    expr PLUS expr                { Binexp (Plusop,$1,$3) }
+
+|   expr MINUS expr               { Binexp (Minusop,$1,$3) }
+
+|   MINUS expr                    { Unexp (Minusop,$2) }
+
+|   expr TIMES expr               { Binexp (Timesop,$1,$3) }
+
+|   expr DIVIDE expr              { Binexp (Divideop,$1,$3) }
+
+|   expr CARET  expr              { Binexp (Caretop,$1,$3) }
+
+|   expr KWin expr                { Binexp (Inop,$1,$3) }
+
+|   expr NOTIN expr               { Binexp (Notinop,$1,$3) }
+
+|   expr EQ  expr                 { Binexp (Eqop,$1,$3) }
+
+|   expr LT  expr                 { Binexp (LTop,$1,$3) }
+
+|   expr LE  expr                 { Binexp (LEop,$1,$3) }
+
+|   expr GT  expr                 { Binexp (GTop,$1,$3) }
+
+|   expr GE  expr                 { Binexp (GEop,$1,$3) }
+
+|   expr KWand  expr              { Binexp (Andop,$1,$3) }
+
+|   expr KWor   expr              { Binexp (Orop,$1,$3)  }
+
+|   KWnot   expr                  { Unexp (Notop,$2) }
+
+|   KWold   expr                  { Unexp (Oldop,$2) }
+
+|   expr DCOLON expr              { Binexp (DColonop,$1,$3) }
+
+|   expr COLON expr               { Expcolon ($1,$3) }
+
+|   expr BAR  expr                { Binexp (Barop,$1,$3) }
+
+|   expr DBAR expr                { Binexp (DBarop,$1,$3) }
+
+|   expr DARROW expr              { Binexp (DArrowop,$1,$3) }
+
+
+
+
+
+
+/* ------------------------------------------------------------------------- */
+/*  operators  */
+/* ------------------------------------------------------------------------- */
+
+
+
+operator:
+    PLUS      { Plusop }
+|   MINUS     { Minusop }
+|   TIMES     { Timesop }
+|   DIVIDE    { Divideop }
+|   EQ        { Eqop }
+|   EQV       { Eqvop }
+|   NEQ       { NEqop }
+|   NEQV      { NEqvop }
+|   LT        { LTop }
+|   LE        { LEop }
+|   GT        { GTop }
+|   GE        { GEop }
+|   CARET     { Caretop }
+|   KWand     { Andop }
+|   KWor      { Orop }
+|   KWnot     { Notop }
+|   KWin      { Inop  }
+|   NOTIN     { Notinop }
+|   BAR       { Barop }
+|   DBAR      { DBarop }
+|   ARROW     { Arrowop }
+|   DARROW    { DArrowop }
+|   DCOLON    { DColonop }
+|   OPERATOR  { Freeop $1 }
+|   ROPERATOR { RFreeop $1 }
+|   PARENOP   { Parenop }
+|   BRACKETOP { Bracketop }
+
+
+
+/* ------------------------------------------------------------------------- */
+/*  general rules  */
+/* ------------------------------------------------------------------------- */
+
+
+
+optsemi:
+    %prec LOWEST_PREC {()}
+|   optsemi SEMICOL {()}
+
+
+uidentifier_list:
+    UIDENTIFIER { [$1] }
+|   UIDENTIFIER COMMA uidentifier_list { $1::$3 }
+
+
+opt_nl:
+    {()}
+|   SEMICOL {()}
+|   NEWLINE {()}
+
+separator:
+    SEMICOL  {()}
+|   NEWLINE  {()}
+
+
+/* ------------------------------------------------------------------------- */
+/*  old grammar rules  */
+/* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
 /* Flow control */
 /* ------------------------------------------------------------------------- */
 
+/*   UNUSED!!!
 conditional:
     KWif then_part_list else_part KWend { Expif ($2,$3) }
 
@@ -615,7 +817,7 @@ then_part_list:
 |   then_part KWelseif then_part_list  { $1::$3 }
 
 then_part:
-    expression KWthen compound { withinfo (rhs_info 1) $1, $3 }
+    expr KWthen compound { withinfo (rhs_info 1) $1, $3 }
 
 else_part:
     { None }
@@ -624,13 +826,18 @@ else_part:
 
 
 inspect:
-    KWinspect info_expression case_list KWend { Expinspect ($2, $3) }
+    KWinspect info_expr case_list KWend { Expinspect ($2, $3) }
 
 case_list:
     case_part { [$1] }
 |   case_part case_list { $1::$2 }
 
-case_part:  KWcase info_expression KWthen compound { $2,$4 }
+case_part:  KWcase info_expr KWthen compound { $2,$4 }
+*/
+
+
+
+
 
 
 
@@ -638,8 +845,7 @@ case_part:  KWcase info_expression KWthen compound { $2,$4 }
 /* Expressions */
 /* ------------------------------------------------------------------------- */
 
-
-
+/*    UNUSED!!!
 expression:
     pexpression %prec LOWEST_PREC  { $1 }
 |   cexpression %prec LOWEST_PREC  { $1 }
@@ -804,23 +1010,6 @@ cexpression:
 
 arrow_exp: expression ARROW { $1 }
 
-quantifier:
-    KWall  %prec LOWEST_PREC { Universal   }
-|   KWsome { Existential }
-
-
-
-/* todo: distinguish between expressions which can occur within expressions
-         only and expressions which can occur in imperative constructs to
-         avoid the check ambiguity !!!
-*/
-
-compound: compound_list { $1 }
-
-
-compound_list:
-    info_expression  optsemi { [$1] }
-|   info_expression SEMICOL compound_list { $1::$3 }
 
 
 
@@ -849,56 +1038,4 @@ tagged_expression:
   | _ ->
       $1
 }
-
-
-
-
-
-
-operator:
-    PLUS      { Plusop }
-|   MINUS     { Minusop }
-|   TIMES     { Timesop }
-|   DIVIDE    { Divideop }
-|   EQ        { Eqop }
-|   EQV       { Eqvop }
-|   NEQ       { NEqop }
-|   NEQV      { NEqvop }
-|   LT        { LTop }
-|   LE        { LEop }
-|   GT        { GTop }
-|   GE        { GEop }
-|   CARET     { Caretop }
-|   KWand     { Andop }
-|   KWor      { Orop }
-|   KWnot     { Notop }
-|   KWin      { Inop  }
-|   NOTIN     { Notinop }
-|   BAR       { Barop }
-|   DBAR      { DBarop }
-|   ARROW     { Arrowop }
-|   DARROW    { DArrowop }
-|   DCOLON    { DColonop }
-|   OPERATOR  { Freeop $1 }
-|   ROPERATOR { RFreeop $1 }
-|   PARENOP   { Parenop }
-|   BRACKETOP { Bracketop }
-
-
-
-/* ------------------------------------------------------------------------- */
-/*  General rules  */
-/* ------------------------------------------------------------------------- */
-
-
-
-optsemi:
-    %prec LOWEST_PREC {()}
-|   optsemi SEMICOL {()}
-
-
-uidentifier_list:
-    UIDENTIFIER { [$1] }
-|   UIDENTIFIER COMMA uidentifier_list { $1::$3 }
-
-
+*/

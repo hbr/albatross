@@ -70,7 +70,7 @@ let parse_file (fn:string): use_block * declaration list =
   in
   lexbuf.Lexing.lex_curr_p <-
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = fn};
-  Parser.main Lexer.token lexbuf
+  Parser.file Lexer.token lexbuf
 
 
 
@@ -123,10 +123,8 @@ let analyze(ast: declaration list) (context:Context.t): unit =
           assert (inherits = []);    (* nyi: inheritance     *)
           assert (decl_blocks = []); (* nyi: class features  *)
           Context.put_class hm cname context;
-      | Declaration_block (Feature_block (visi,dlist)) ->
-          Context.set_visibility visi context;
-          analyz dlist;
-          Context.reset_visibility context;
+      | Declaration_block (Feature_block dlist) ->
+          analyz dlist
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
@@ -162,7 +160,7 @@ let _ =
       let use_blk,ast  = parse_file !file_name in
       let context = Context.make ()
       in
-      Support.Parse_info.set_interface ();
+      Support.Parse_info.set_use_interface ();
       process_use use_blk context;
       Support.Parse_info.set_module ();
       Support.Parse_info.set_file_name !file_name;

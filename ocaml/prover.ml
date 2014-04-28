@@ -46,7 +46,7 @@ let analyze_imp_opt
     (info:    info)
     (imp_opt: implementation option)
     : kind * compound =
-  let iface = Parse_info.is_interface () in
+  let iface = Parse_info.is_use_interface () in
   let kind,is_do,clst =
     match imp_opt with
       None ->
@@ -67,7 +67,12 @@ let analyze_imp_opt
     | Some (Impdefined (Some locs,is_do,cmp)) ->
         not_yet_implemented info "Local variables in assertions"
     | Some (Impdefined (None,is_do,cmp)) ->
-        PNormal,is_do,cmp
+        if iface then begin
+          if is_do || cmp <> [] then
+            error_info info "not allowed in interface file";
+          PAxiom,  false, []
+        end else
+          PNormal, false, cmp
   in
   if is_do then
     not_yet_implemented info "Assertions with do block"
