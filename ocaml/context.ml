@@ -190,6 +190,7 @@ let push
 
 
 
+
 let push_untyped (names:int array) (c:t): unit =
   let n = Array.length names
   and entry = c.entry
@@ -197,13 +198,13 @@ let push_untyped (names:int array) (c:t): unit =
   c.entry <-
     (let tps = Array.init n (fun i -> Variable i) in
     {entry with
-     (*info = UNKNOWN;*)
      argnames  = Array.append names entry.argnames;
      argtypes  = Array.append tps   entry.argtypes;
      tvars_sub = TVars_sub.add_local n entry.tvars_sub;
      signature = Sign.make_args tps});
   c.stack <- entry::c.stack;
   Proof_context.push n names c.pc
+
 
 
 let push_empty (c:t): unit =

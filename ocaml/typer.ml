@@ -122,26 +122,22 @@ end = struct
 
         Note: The signature is meaningless (it is just the expected signature
         of the last argument. If there are more arguments to come, then
-        [expect_argument] will put a new expected signature into the accumulator
+        [expect_argument] will put a new expected signature into the
+        accumulator.
      *)
     (*Printf.printf
       "Complete a function with %d arguments and %d terms on stack\n"
       nargs (List.length acc.tlist);*)
     let arglst = ref [] in
-    let rec pop_args (n:int): unit =
-      if n=0 then ()
-      else begin
-        assert (not (Mylist.is_empty acc.tlist));
-        let t = List.hd acc.tlist in
-        acc.tlist <- List.tl acc.tlist;
-        arglst := t :: !arglst;
-        pop_args (n-1)
-      end
-    in
-    pop_args nargs;
+    for i = 1 to nargs do  (* pop arguments *)
+      assert (not (Mylist.is_empty acc.tlist));
+      let t = List.hd acc.tlist in
+      acc.tlist <- List.tl acc.tlist;
+      arglst := t :: !arglst;
+    done;
     let f = List.hd acc.tlist in
     acc.tlist <- List.tl acc.tlist;
-    acc.tlist <- (Application (f,Array.of_list !arglst)) :: acc.tlist;
+    acc.tlist <- (Application (f, Array.of_list !arglst)) :: acc.tlist;
     acc.tvars <- TVars_sub.remove_local nargs acc.tvars
 
 
