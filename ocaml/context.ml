@@ -1,7 +1,6 @@
 open Container
 open Signature
 open Term
-open Proof
 open Support
 
 
@@ -15,7 +14,6 @@ type entry = {
     mutable tvars_sub: TVars_sub.t; (* cumulated        *)
   }
 
-type proof_term_0 = proof_term
 
 type proof_term = Proof_context.proof_term
 
