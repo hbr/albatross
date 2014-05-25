@@ -376,11 +376,15 @@ let find_funcs
     (nfgs:int) (nvars:int)
     (ft:Feature_table.t)
     : (int*TVars.t*Sign.t) list =
+  (** Find all the functions with name [fn] and [nargs] arguments in the
+      global feature table and transform them into the context.
+   *)
   let lst = Feature_table.find_funcs fn nargs ft
   in
   let lst = List.rev_map
       (fun (i,tvs,s) ->
         let start = TVars.count tvs in
+        assert (TVars.count_local tvs = 0);
         i+nvars, tvs, Sign.up_from nfgs start s)
       lst
   in

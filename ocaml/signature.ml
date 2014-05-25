@@ -7,6 +7,110 @@ type constraints = type_term array
 
 
 
+module Term_sub_arr: sig
+
+  type t
+  val make: int -> t
+  val count: t -> int
+  val get:   int -> t -> term
+  val flags: t -> bool array
+  val args:  t -> term array
+  val has:   int -> t -> bool
+  val add:   int -> term -> t -> unit
+  val extend:int -> t -> t
+  val extend_bottom: int -> t -> t
+  val remove_bottom: int -> t -> t
+
+end = struct
+
+  type t = {args: term array; flags: bool array}
+
+  let flags (s:t): bool array = s.flags
+  let args  (s:t): term array = s.args
+
+
+  let make (n:int): t =
+    {args  = Array.init n (fun i -> Variable i);
+     flags = Array.make n false}
+
+  let count (s:t): int = Array.length s.args
+
+  let has (i:int) (s:t): bool =
+    assert (i < count s);
+    s.flags.(i)
+
+  let get (i:int) (s:t): term =
+    assert (i < (count s));
+    s.args.(i)
+
+  let add (i:int) (t:term) (s:t): unit =
+    (** Add the substitution [i ~~> t] to the substitution [s] i.e.
+        apply to [t] all already available substitutions and check for
+        circularity and apply [i ~~> t] to all available substitutions.
+     *)
+    let n = count s in
+    assert (i <= n);
+    assert (not (Term.is_variable_i t i));
+    let t = Term.sub t s.args n in
+    if IntSet.mem i (Term.bound_variables t n) then
+      raise Not_found (* circular substitution *)
+    else begin
+      Array.iteri
+        (fun j e ->
+          if s.flags.(j) then s.args.(j) <- Term.sub_var i e t
+          else ())
+        s.args;
+      if not s.flags.(i) then
+        (s.args.(i)<-t; s.flags.(i)<-true)
+      else if t = s.args.(i) then
+        ()
+      else
+        raise Not_found
+    end
+
+  let extend (n:int) (s:t): t =
+    (** Introduce [n] new variables at the top, i.e. all substitutions term
+        above [count s] are shifted up by [n] and just copied into the new
+        larger substitution.
+     *)
+    let sn   = count s in
+    let args = Array.map (fun t -> Term.upbound n sn t) s.args in
+    let snew = make (n+sn) in
+    Array.blit args    0  snew.args  0  sn;
+    Array.blit s.flags 0  snew.flags 0  sn;
+    snew
+
+
+  let extend_bottom (n:int) (s:t): t =
+    (** Introduce [n] new variables at the bottom, i.e. shift all
+        terms up by [n].
+     *)
+    let sn   = count s in
+    let snew = make (n+sn) in
+    Array.iteri (fun i t -> snew.args.(i+n) <- Term.up n t) s.args;
+    Array.blit s.flags 0 snew.flags n  sn;
+    snew
+
+
+
+  let remove_bottom (n:int) (s:t): t =
+    (** Remove [n] variables from the bottom, i.e. shift all
+          terms down by [n].
+     *)
+    let sn = count s in
+    assert (n <= sn);
+    let snew = make (sn-n) in
+    Array.iteri
+      (fun i _ -> snew.args.(i) <- Term.down n s.args.(i+n)) snew.args;
+    Array.blit s.flags n   snew.flags 0   (sn-n);
+    snew
+  end (* Term_sub_arr *)
+
+
+
+
+
+
 module TVars: sig
 
   type t
@@ -53,6 +157,7 @@ module TVars_sub: sig
   val tvars:        t -> TVars.t
   val sub:          t -> Term_sub_arr.t
   val args:         t -> term array
+  val add_substitution: int -> term -> t -> unit
   val add_global:   constraints -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
@@ -80,6 +185,9 @@ end = struct
   let tvars (tv:t): TVars.t = tv.vars
 
   let sub (tv:t): Term_sub_arr.t = tv.sub
+
+  let add_substitution (i:int) (t:term) (tv:t): unit =
+    Term_sub_arr.add i t tv.sub
 
   let args (tv:t): term array = Term_sub_arr.args tv.sub
 
@@ -149,7 +257,6 @@ module Sign: sig
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
   val to_function: int -> t -> t
-  val unify:       t -> t -> TVars_sub.t -> unit
 
 end = struct
 
@@ -250,18 +357,4 @@ end = struct
     assert (is_constant s);
     {args   = Array.init nargs (fun i -> Variable i);
      result = Some (Term.up nargs (result s),false)}
-
-
-
-  let unify (s1:t) (s2:t) (tvars_sub: TVars_sub.t): unit =
-    let n,has_res = (arity s1), (has_result s1) in
-    if not (n = (arity s2) && has_res = (has_result s2)) then
-      raise Not_found;
-
-    let subst = TVars_sub.sub tvars_sub in
-    if has_res then
-      Term_sub_arr.unify (result s1) (result s2) subst;
-    for i=0 to Array.length s1.args-1 do
-      Term_sub_arr.unify s1.args.(i) s2.args.(i) subst
-    done
 end (* Sign *)

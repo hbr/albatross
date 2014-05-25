@@ -5,6 +5,106 @@ open Support
 
 
 
+let add_substitution
+    (i:int)
+    (t:term)
+    (tvars_sub:TVars_sub.t)
+    (c:Context.t): unit =
+    (** Substitute the variable [i] by the term [t] in the substitution
+        [tvars_sub] using the contect [c].
+     *)
+  Printf.printf "add substitution %d -> %s\n" i (Term.to_string t);
+  if i < TVars_sub.count_local tvars_sub then
+    TVars_sub.add_substitution i t tvars_sub
+  else
+    assert false
+
+
+let unify
+    (t1:term)
+    (t2:term)
+    (tvars_sub: TVars_sub.t)
+    (c:Context.t): unit =
+  (** Unify the terms [t1] and [t2] using the substitution [subst] in the
+      context [c] , i.e.  apply first the substitution [subst] to both terms
+      and then add substitutions to [subst] so that when applied to both terms
+      makes them identical.
+   *)
+  let nvars = TVars_sub.count tvars_sub
+  in
+  let do_sub (i:int) (t:term) (nb:int): unit =
+    (** Substitute the variable [i] by the term [t] in an environment with
+        [nb] bound variables.
+     *)
+    assert (nb<=i); assert (i<nb+nvars);
+    match t with
+      Variable j when nb<=j && j<nb+nvars ->
+        if i=j then ()
+        else
+          let lo,hi = if i<=j then i,j else j,i in
+          add_substitution (lo-nb) (Variable (hi-nb)) tvars_sub c
+    | _ ->
+        let i,t =
+          try i-nb, Term.down nb t
+          with Term_capture -> raise Not_found
+        in
+        add_substitution i t tvars_sub c
+  in
+  let rec uni (t1:term) (t2:term) (nb:int): unit =
+    match t1,t2 with
+      Variable i, _ when nb<=i && i<nb+nvars ->
+        do_sub i t2 nb
+    | _, Variable j when nb<=j && j<nb+nvars ->
+        do_sub j t1 nb
+    | Variable i, Variable j ->
+        assert (i<nb||nb+nvars<=i);
+        assert (j<nb||nb+nvars<=j);
+        if i=j then
+          ()
+        else
+          raise Not_found
+    | Application(f1,args1), Application(f2,args2) ->
+            if (Array.length args1) <> (Array.length args2) then
+              raise Not_found;
+        uni f1 f2 nb;
+        Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
+    | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
+        if nb1=nb2 then
+          uni t1 t2 (nb+nb1)
+        else
+          raise Not_found
+    | _ -> raise Not_found
+  in
+  uni t1 t2 0;
+  assert ((Term.sub t1 (TVars_sub.args  tvars_sub) nvars)
+            = (Term.sub t2 (TVars_sub.args tvars_sub) nvars))
+
+
+
+
+
+
+let unify_sign
+    (s1:Sign.t)
+    (s2:Sign.t)
+    (tvars_sub: TVars_sub.t)
+    (c:Context.t)
+    : unit =
+  (** Unify the signatures [s1] and [s2] by adding substitutions to
+      [tvars_sub] within the context [c] *)
+  Printf.printf "unify signatures %s, %s\n" (Sign.to_string s1)
+    (Sign.to_string s2);
+  let n,has_res = (Sign.arity s1), (Sign.has_result s1) in
+  if not (n = (Sign.arity s2) && has_res = (Sign.has_result s2)) then
+    raise Not_found;
+  if has_res then
+    unify (Sign.result s1) (Sign.result s2) tvars_sub c;
+  for i=0 to (Sign.arity s1)-1 do
+    unify (Sign.arguments s1).(i) (Sign.arguments s2).(i) tvars_sub c
+  done
+
+
+
 
 module Accu: sig
 
@@ -12,7 +112,7 @@ module Accu: sig
   val signature:         t -> Sign.t
   val ntvars:            t -> int
   val make:              type_term -> TVars_sub.t -> t
-  val add_term:          int ->  TVars.t -> Sign.t -> t -> t
+  val add_term:          int ->  TVars.t -> Sign.t -> Context.t ->  t -> t
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
@@ -41,7 +141,7 @@ end = struct
      *)
     let n = Array.length cs
     and start = TVars_sub.count acc.tvars in
-    (*Printf.printf "\tadd %d globals above %d\n" n start;*)
+    Printf.printf "\tadd %d globals above %d\n" n start;
     {acc with
      sign  = Sign.up_from n start acc.sign;
      tvars = TVars_sub.add_global cs acc.tvars}
@@ -53,23 +153,29 @@ end = struct
       (i:int)
       (tvs:TVars.t)
       (s:Sign.t)
+      (c:Context.t)
       (acc:t): t =
-    (** Add the term [i,tvs,s] to the accumulator [acc]
+    (** Add the term [i,tvs,s] of the context [c] to the accumulator [acc]
      *)
-    (*Printf.printf "\tadd term: sign %s, expected %s\n"
-      (Sign.to_string s)
-      (Sign.to_string acc.sign);*)
-    let acc = add_global (TVars.constraints tvs) acc
-    in
+    assert (not (TVars.count_local tvs > 0 && TVars.count_global tvs > 0));
+    Printf.printf "add_term %d sig %s\n" i (Sign.to_string s);
     let s =
-      let n = (TVars_sub.count_local acc.tvars) - TVars.count_local tvs
+      (* If [i] comes from a global environment, then it has no local type
+         variables and space must be made for all type variables (locals and
+         globals) of [acc.tvars].
+
+         If [i] comes from a local environment then it has no global type
+         variables. But the locals already in conincide with the locals of
+         [acc.tvars]. Space has to be made for all type variables (globals
+         and locals) of [acc.tvars] which are not yet in [tvs].
+       *)
+      let n = (TVars_sub.count acc.tvars) - TVars.count_local tvs
       in
       Sign.up n s
     in
-    (*Printf.printf "\tunify %s with expected %s\n"
-      (Sign.to_string s)
-      (Sign.to_string acc.sign);*)
-    Sign.unify s acc.sign acc.tvars;
+    let acc = add_global (TVars.constraints tvs) acc
+    in
+    unify_sign s acc.sign acc.tvars c;
     {acc with tlist = (Variable i)::acc.tlist}
 
 
@@ -107,6 +213,9 @@ end = struct
     (** Expect the argument [i] as the next term.
      *)
     assert (i < (TVars_sub.count_local acc.tvars));
+    Printf.printf "expect argument %d:%s\n"
+      i
+      (Term.to_string (TVars_sub.get i acc.tvars));
     acc.sign <- Sign.make_const (TVars_sub.get i acc.tvars)
 
 
@@ -165,7 +274,7 @@ module Accus: sig
   val is_singleton:    t -> bool
   val is_complete:     t -> bool
   val expected_arity:  t -> int
-  val add_leaf:        (int*TVars.t*Sign.t) list -> t -> unit
+  val add_leaf:        (int*TVars.t*Sign.t) list -> Context.t -> t -> unit
   val expect_function: int -> t -> unit
   val expect_argument: t -> unit
   val result:          t -> term * TVars_sub.t
@@ -220,6 +329,7 @@ end = struct
     List.iter (fun acc -> Accu.expect_argument (accs.nterms-1) acc) accs.accus
 
 
+
   let rec pop (accs:t): unit =
     (** Pop pushed function application as long as possible *)
     if (is_function_complete accs) && not (is_stack_empty accs) then
@@ -236,11 +346,14 @@ end = struct
       end
     else ()
 
+
   let add_leaf
       (terms: (int*TVars.t*Sign.t) list)
+      (c:Context.t)
       (accs:   t)
       : unit =
-    (** Add the terms from the list [terms] to the accumulators [accs]
+    (** Add the terms from the list [terms] of the context [c] to the
+        accumulators [accs]
      *)
     let accus = accs.accus in
     accs.accus <-
@@ -248,7 +361,7 @@ end = struct
         (fun lst acc ->
           List.fold_left
             (fun lst (i,tvs,s) ->
-              try (Accu.add_term i tvs s acc) :: lst
+              try (Accu.add_term i tvs s c acc) :: lst
               with Not_found -> lst)
             lst
           terms
@@ -316,7 +429,7 @@ let rec analyze_expression
     and do_leaf (f: unit -> (int*TVars.t*Sign.t) list): unit =
       try
         let lst = f () in
-        Accus.add_leaf lst accs
+        Accus.add_leaf lst c accs
       with
         Accus.Untypeable exp_sign_lst ->
           let str = "The expression "
