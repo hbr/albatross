@@ -190,7 +190,9 @@ let push
 
 
 let push_untyped (names:int array) (c:t): unit =
-  let n = Array.length names
+  let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
+  push entlst None c
+  (*let n = Array.length names
   and entry = c.entry
   in
   c.entry <-
@@ -201,7 +203,7 @@ let push_untyped (names:int array) (c:t): unit =
      tvars_sub = TVars_sub.add_local n entry.tvars_sub;
      signature = Sign.make_args tps});
   c.stack <- entry::c.stack;
-  Proof_context.push n names c.pc
+  Proof_context.push n names c.pc*)
 
 
 
