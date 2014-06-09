@@ -154,6 +154,7 @@ module TVars_sub: sig
   val get:          int -> t -> term
   val count_global: t -> int
   val count_local:  t -> int
+  val concept:      int -> t -> term
   val tvars:        t -> TVars.t
   val sub:          t -> Term_sub_arr.t
   val args:         t -> term array
@@ -162,6 +163,7 @@ module TVars_sub: sig
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
   val update:       t -> t -> unit
+
 end = struct
 
   type t = {vars: TVars.t;
@@ -181,6 +183,11 @@ end = struct
 
   let count_local (tv:t): int =
     TVars.count_local tv.vars
+
+  let concept (i:int) (tv:t): term =
+    assert (count_local tv <= i);
+    assert (i < count tv);
+    (TVars.constraints tv.vars).(i - count_local tv)
 
   let tvars (tv:t): TVars.t = tv.vars
 

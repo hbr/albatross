@@ -17,6 +17,10 @@ let add_substitution
   if i < TVars_sub.count_local tvars_sub then
     TVars_sub.add_substitution i t tvars_sub
   else
+    let concept = TVars_sub.concept i tvars_sub in
+    Printf.printf "Does term %s satisfy the concept %s[%d]?\n"
+      (Term.to_string t)
+      (Term.to_string concept) i;
     assert false
 
 
@@ -25,10 +29,10 @@ let unify
     (t2:term)
     (tvars_sub: TVars_sub.t)
     (c:Context.t): unit =
-  (** Unify the terms [t1] and [t2] using the substitution [subst] in the
-      context [c] , i.e.  apply first the substitution [subst] to both terms
-      and then add substitutions to [subst] so that when applied to both terms
-      makes them identical.
+  (** Unify the terms [t1] and [t2] using the substitution [tvars_sub] in the
+      context [c] , i.e.  apply first the substitution [tvars_sub] to both
+      terms and then add substitutions to [tvars_sub] so that when applied to
+      both terms makes them identical.
    *)
   let nvars = TVars_sub.count tvars_sub
   in
@@ -396,12 +400,6 @@ let rec analyze_expression
   assert (not (Context.is_global c));
   let info, exp = ie.i, ie.v in
 
-  let arg_array (e:expression): expression array =
-    match e with
-      Explist lst -> Array.of_list lst
-    | _ -> [|e|]
-  in
-
   let rec analyze
       (e:expression)
       (accs: Accus.t)
@@ -458,7 +456,13 @@ let rec analyze_expression
     | Expop op            -> do_leaf (feat_fun (FNoperator op))
     | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
     | Unexp  (op,e)       -> application (Expop op) [|e|] accs
-    | Funapp (f,args)     -> application f (arg_array args) accs
+    | Funapp (f,args)     ->
+        let arg_array (e:expression): expression array =
+          match e with
+            Explist lst -> Array.of_list lst
+          | _ -> [|e|]
+        in
+        application f (arg_array args) accs
     | Expparen e          -> analyze e accs
     | Taggedexp (label,e) -> analyze e accs
     | Expquantified (q,entlst,exp) ->
