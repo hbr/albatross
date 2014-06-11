@@ -220,17 +220,6 @@ let pop (c:t): unit =
   Proof_context.pop c.pc
 
 
-let pop_keep_assertions (c:t): unit =
-  (** Pop the last context but keep all assertions
-   *)
-  assert (not (is_global c));
-  c.entry <- List.hd c.stack;
-  c.stack <- List.tl c.stack;
-  Proof_context.pop_keep c.pc
-
-
-
-
 
 
 

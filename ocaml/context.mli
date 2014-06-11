@@ -10,7 +10,6 @@ val push:  entities list withinfo -> return_type -> t -> unit
 val push_empty: t -> unit
 val push_untyped: int array -> t -> unit
 val pop:   t -> unit
-val pop_keep_assertions: t -> unit
 val print: t -> unit
 val read_trace_info: t -> unit
 
