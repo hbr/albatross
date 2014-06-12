@@ -239,12 +239,54 @@ end (* TVars_sub *)
 
 
 
+module Result_type: sig
+
+  type t
+  val empty:        t
+  val make_func:    type_term -> t
+  val make_proc:    type_term -> t
+  val has_result:   t -> bool
+  val result:       t -> type_term
+  val is_procedure: t -> bool
+  val up_from:      int -> int -> t -> t
+  val up:           int -> t -> t
+
+end = struct
+
+  type t = (type_term * bool) option
+  let empty = None
+  let make_func (tp:type_term): t = Some (tp,false)
+  let make_proc (tp:type_term): t = Some (tp,true)
+
+  let has_result (rt:t): bool = Option.has rt
+
+  let result(rt:t): type_term =
+    assert (has_result rt);
+    match rt with
+      None -> assert false
+    | Some (tp,proc) -> tp
+
+  let  is_procedure (rt:t): bool =
+    match rt with
+      None -> true
+    | Some (_,proc) -> proc
+
+  let up_from (n:int) (start:int) (rt:t): t =
+    match rt with
+      None -> None
+    | Some (tp,proc) -> Some (Term.upbound n start tp, proc)
+
+  let up (n:int) (rt:t): t = up_from n 0 rt
+end
+
+
 
 
 
 module Sign: sig
   type t
   val empty:       t
+  val make:        type_term array -> Result_type.t -> t
   val make_func:   type_term array -> type_term -> t
   val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
@@ -255,6 +297,7 @@ module Sign: sig
   val arguments:   t -> type_term array
   val arg_type:    int -> t -> type_term
   val argument:    int -> t -> t
+  val result_type: t -> Result_type.t
   val has_result:  t -> bool
   val is_binary:   t -> bool
   val is_unary:    t -> bool
@@ -268,21 +311,24 @@ module Sign: sig
 end = struct
 
   type t = {args: type_term array;
-            result: (type_term*bool) option}
+            rt:   Result_type.t}
 
-  let empty: t = {args = [||]; result = None}
+  let empty: t = {args = [||]; rt = Result_type.empty (*result = None*)}
+
+  let make (args: type_term array) (rt:Result_type.t): t =
+    {args = args; rt = rt}
 
   let make_func (args: type_term array) (result:type_term): t =
-    {args = args; result = Some (result,false)}
+    {args = args; rt = Result_type.make_func result}
 
   let make_args (args: type_term array): t =
-    {args = args; result = None}
+    {args = args; rt = Result_type.empty}
 
   let make_const (result:type_term): t =
-    {args = [||]; result = Some (result,false)}
+    {args = [||]; rt = Result_type.make_func result}
 
   let make_proc (args: type_term array) (result:type_term): t =
-    {args = args; result = Some (result,true)}
+    {args = args; rt = Result_type.make_proc result}
 
   let arity (s:t): int = Array.length s.args
 
@@ -298,20 +344,18 @@ end = struct
     assert (i < (arity s));
     make_func [||] s.args.(i)
 
-  let has_result (s:t): bool =
-    Option.has s.result
+  let result_type (s:t): Result_type.t = s.rt
+
+  let has_result (s:t): bool = Result_type.has_result s.rt
 
   let is_binary (s:t): bool = (has_result s) && ((arity s) = 2)
   let is_unary  (s:t): bool = (has_result s) && ((arity s) = 1)
 
   let result (s:t): type_term =
     assert (has_result s);
-    let r,_ = Option.value s.result in r
+    Result_type.result s.rt
 
-  let is_procedure (s:t): bool =
-    match s.result with
-      None -> true
-    | Some (r,proc) -> proc
+  let is_procedure (s:t): bool = Result_type.is_procedure s.rt
 
 
   let to_string (s:t): string =
@@ -334,9 +378,7 @@ end = struct
     (** Shift all types up by [n] starting from [start].
      *)
     {args = Array.map (fun t -> Term.upbound n start t) s.args;
-     result = match s.result with
-       None   -> None
-     | Some (t,proc) -> Some (Term.upbound n start t,proc)}
+     rt   = Result_type.up_from n start s.rt}
 
 
   let up (n:int) (s:t): t =
@@ -363,5 +405,6 @@ end = struct
     assert (has_result s);
     assert (is_constant s);
     {args   = Array.init nargs (fun i -> Variable i);
-     result = Some (Term.up nargs (result s),false)}
+     rt     = Result_type.up nargs s.rt}
+
 end (* Sign *)

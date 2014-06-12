@@ -9,8 +9,10 @@ type entry = {
     concepts:  type_term array;     (* cumulated        *)
     argnames:  int array;           (* cumulated        *)
     argtypes:  type_term array;     (* cumulated        *)
+    result:    Result_type.t;
+    nfgs:      int;
+    nfargs:    int;
     info:      info;
-    mutable signature: Sign.t;      (* from declaration *)
     mutable tvars_sub: TVars_sub.t; (* cumulated        *)
   }
 
@@ -32,8 +34,10 @@ let empty_entry: entry =
    concepts = [||];
    argnames = [||];
    argtypes = [||];
+   result   = Result_type.empty;
+   nfgs     = 0;
+   nfargs   = 0;
    info      = UNKNOWN;
-   signature = Sign.empty;
    tvars_sub = TVars_sub.make 0}
 
 let next_entry
@@ -48,8 +52,10 @@ let next_entry
    concepts = concepts;
    argnames = argnames;
    argtypes = argtypes;
+   result   = Sign.result_type sign;
+   nfgs     = 0; (* bug: need to be given exactly *)
+   nfargs   = Sign.arity sign;
    info     = info;
-   signature = sign;
    tvars_sub = tvars}
 
 
@@ -64,16 +70,16 @@ let is_toplevel (c:t): bool =
 
 
 
-let arity     (c:t): int = Sign.arity c.entry.signature
+let arity     (c:t): int = c.entry.nfargs (*Sign.arity c.entry.signature*)
 
-let has_result (c:t): bool =
-  Sign.has_result c.entry.signature
+let has_result (c:t): bool = Result_type.has_result c.entry.result
 
 let result_type (c:t): type_term =
   (** The result type of the context
    *)
   assert (has_result c);
-  Sign.result c.entry.signature
+  Result_type.result c.entry.result
+
 
 let count_type_variables (c:t): int =
   (** The number of cumulated type variables in this context and all
@@ -129,10 +135,26 @@ let sign2string (s:Sign.t) (c:t): string =
 
 
 
+
+
+let entry_signature (e:entry) (c:t): Sign.t =
+  (** The signature of the entry [e] in the context [c].  *)
+  let argtypes = Array.init e.nfargs (fun i -> e.argtypes.(i)) in
+  Sign.make argtypes e.result
+
+
+
+
+let signature (c:t): Sign.t =
+  (** The signature of the context [c].  *)
+  entry_signature c.entry c
+
+
 let signature_string (c:t): string =
   (** Print the signature of the context [c].
    *)
-  sign2string c.entry.signature c
+  sign2string (signature c) c
+  (*sign2string c.entry.signature c*)
 
 
 let depth (c:t): int =
@@ -192,18 +214,6 @@ let push
 let push_untyped (names:int array) (c:t): unit =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None c
-  (*let n = Array.length names
-  and entry = c.entry
-  in
-  c.entry <-
-    (let tps = Array.init n (fun i -> Variable i) in
-    {entry with
-     argnames  = Array.append names entry.argnames;
-     argtypes  = Array.append tps   entry.argtypes;
-     tvars_sub = TVars_sub.add_local n entry.tvars_sub;
-     signature = Sign.make_args tps});
-  c.stack <- entry::c.stack;
-  Proof_context.push n names c.pc*)
 
 
 
@@ -255,7 +265,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
       In case that there are no arguments the empty string is returned and
       not "()".
    *)
-  let nargs = Sign.arity e.signature in
+  let nargs = e.nfargs in (*Sign.arity e.signature in*)
     if nargs = 0 then
       ""
     else
@@ -288,8 +298,8 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
 
 
 let result_string (e:entry) (ct:Class_table.t): string =
-  if Sign.has_result e.signature then
-    Class_table.type2string (Sign.result e.signature) 0 e.fgnames ct
+  if Result_type.has_result e.result then
+      Class_table.type2string (Result_type.result e.result) 0 e.fgnames ct
   else ""
 
 
@@ -325,7 +335,7 @@ let put_global_function
     c.entry.fgnames
     c.entry.concepts
     c.entry.argnames
-    c.entry.signature
+    (signature c) (*c.entry.signature*)
     impstat
     term_opt
     c.ft
