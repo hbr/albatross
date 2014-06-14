@@ -3,6 +3,8 @@ open Term
 open Signature
 open Container
 
+type formal = int * type_term
+
 type t
 
 val zero_index:      int
@@ -26,14 +28,17 @@ val boolean_type:   int -> term
 val is_boolean_binary: Sign.t -> int -> bool
 val is_boolean_unary:  Sign.t -> int -> bool
 
-val signature:
-    entities list withinfo -> return_type
-    -> int array -> type_term array -> int array -> type_term array -> int
-    -> t
-    -> int array * type_term array * int array * type_term array * int * Sign.t
+val formal_generics:
+    entities list withinfo -> return_type -> formal array -> t
+      -> (int*type_term) array * int
 
-val argument_signature: entities list withinfo -> t ->
-  int array * term array * int array * term array
+val formal_arguments:
+    entities list withinfo -> int -> formal array -> t
+      -> formal array
+
+val result_type:
+    return_type -> int -> formal array -> t
+      -> Result_type.t
 
 val print: t -> unit
 

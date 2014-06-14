@@ -28,8 +28,6 @@ val result_type: t -> type_term
 
 val count_type_variables: t -> int
 
-val nfgs:    t -> int
-val nargs:   t -> int
 val fgnames: t -> int array
 val ct:      t -> Class_table.t
 val ft:      t -> Feature_table.t

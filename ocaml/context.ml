@@ -3,17 +3,17 @@ open Signature
 open Term
 open Support
 
+type formal = Class_table.formal
 
 type entry = {
-    fgnames:   int array;           (* cumulated        *)
-    concepts:  type_term array;     (* cumulated        *)
-    argnames:  int array;           (* cumulated        *)
-    argtypes:  type_term array;     (* cumulated        *)
+    mutable tvars_sub: TVars_sub.t;    (* cumulated *)
+    fgs:          formal array;        (* cumulated *)
+    fargs:        formal array;        (* cumulated *)
+    ntvs_delta:   int;
+    nfgs_delta:   int;
+    nfargs_delta: int;
     result:    Result_type.t;
-    nfgs:      int;
-    nfargs:    int;
     info:      info;
-    mutable tvars_sub: TVars_sub.t; (* cumulated        *)
   }
 
 
@@ -30,33 +30,28 @@ type t = {
 
 
 let empty_entry: entry =
-  {fgnames  = [||];
-   concepts = [||];
-   argnames = [||];
-   argtypes = [||];
+  {fgs          = [||];
+   fargs        = [||];
+   ntvs_delta   = 0;
+   nfgs_delta   = 0;
+   nfargs_delta = 0;
    result   = Result_type.empty;
-   nfgs     = 0;
-   nfargs   = 0;
    info      = UNKNOWN;
    tvars_sub = TVars_sub.make 0}
 
-let next_entry
-    (fgnames:  int array)
-    (concepts: type_term array)
-    (argnames: int array)
-    (argtypes: type_term array)
-    (info:     info)
-    (sign:     Sign.t)
-    (tvars:    TVars_sub.t): entry =
-  {fgnames  = fgnames;
-   concepts = concepts;
-   argnames = argnames;
-   argtypes = argtypes;
-   result   = Sign.result_type sign;
-   nfgs     = 0; (* bug: need to be given exactly *)
-   nfargs   = Sign.arity sign;
-   info     = info;
-   tvars_sub = tvars}
+
+
+let zip_arrays (a: 'a array) (b: 'b array): ('a*'b) array =
+  let n = Array.length a in
+  assert (n = Array.length b);
+  Array.init n (fun i -> a.(i),b.(i))
+
+let unzip_array (c: ('a*'b) array): 'a array * 'b array =
+  let a = Array.map (fun (x,_) -> x) c
+  and b = Array.map (fun (_,y) -> y) c in
+  a,b
+
+
 
 
 let is_global (c:t): bool =
@@ -69,8 +64,12 @@ let is_toplevel (c:t): bool =
   | _   -> false
 
 
+let entry_nfargs (e:entry): int = Array.length e.fargs
 
-let arity     (c:t): int = c.entry.nfargs (*Sign.arity c.entry.signature*)
+let entry_arity (e:entry): int = e.nfargs_delta
+
+let arity     (c:t): int = entry_arity c.entry
+
 
 let has_result (c:t): bool = Result_type.has_result c.entry.result
 
@@ -88,17 +87,22 @@ let count_type_variables (c:t): int =
   TVars_sub.count c.entry.tvars_sub
 
 
+let entry_nfgs (e:entry): int = Array.length e.fgs
+
 let nfgs (c:t): int =
   (** The cumulated number of formal generics in this context and all
       previous contexts
    *)
-  Array.length c.entry.fgnames
+  entry_nfgs c.entry
 
-let nargs (c:t): int =
+
+
+let nfargs (c:t): int =
   (** The cumulated number of formal arguments in this context and all
       previous contexts
    *)
-  Array.length c.entry.argnames
+  entry_nfargs c.entry
+
 
 let ntvs (c:t): int =
   (** The cumulated number of formal generics and type variables in
@@ -107,22 +111,42 @@ let ntvs (c:t): int =
   (nfgs c) + (count_type_variables c)
 
 
-let fgnames (c:t): int array=
-  (** The cumulated formal generic names of this context and all
+let formal_generics (c:t): formal array =
+  (** The cumulated formal generics of this context and all
       previous contexts
    *)
-  c.entry.fgnames
+  c.entry.fgs
 
 
 
-let last_argnames (c:t): int array =
+let last_fargs (c:t): int array =
   (** The argument names of the last push *)
-  Array.sub c.entry.argnames 0 (arity c)
+  assert false
+  (*Array.sub c.entry.fargs 0 (arity c)*)
 
+
+let last_fargnames (c:t): int array =
+  let n = arity c in
+  Array.init n (fun i -> fst c.entry.fargs.(i))
+
+
+
+
+let entry_fargnames (e:entry): int array =
+  Array.map (fun (n,_) -> n) e.fargs
+
+
+let fargnames (c:t): int array = entry_fargnames c.entry
+
+
+let entry_fgnames (e:entry): int array =
+  Array.map (fun (n,_) -> n) e.fgs
+
+let fgnames (c:t): int array = entry_fgnames c.entry
 
 
 let string_of_term (t:term) (c:t): string =
-  Feature_table.term_to_string t c.entry.argnames c.ft
+  Feature_table.term_to_string t (fargnames c) c.ft
 
 
 
@@ -130,7 +154,7 @@ let sign2string (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
     s
     (count_type_variables c)
-    c.entry.fgnames
+    (fgnames c)
     c.ct
 
 
@@ -139,7 +163,7 @@ let sign2string (s:Sign.t) (c:t): string =
 
 let entry_signature (e:entry) (c:t): Sign.t =
   (** The signature of the entry [e] in the context [c].  *)
-  let argtypes = Array.init e.nfargs (fun i -> e.argtypes.(i)) in
+  let argtypes = Array.init (entry_nfargs e) (fun i -> snd e.fargs.(i)) in
   Sign.make argtypes e.result
 
 
@@ -151,19 +175,18 @@ let signature (c:t): Sign.t =
 
 
 let signature_string (c:t): string =
-  (** Print the signature of the context [c].
-   *)
+  (** Print the signature of the context [c].  *)
   sign2string (signature c) c
-  (*sign2string c.entry.signature c*)
 
 
 let depth (c:t): int =
   List.length c.stack
 
+
 let argument (name:int) (c:t): int * TVars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
-  let i = Search.array_find_min (fun n -> n=name) c.entry.argnames in
-  let sign = Sign.make_const c.entry.argtypes.(i) in
+  let i = Search.array_find_min (fun (n,_) -> n=name) c.entry.fargs in
+  let sign = Sign.make_const (snd c.entry.fargs.(i)) in
   i,
   TVars_sub.tvars c.entry.tvars_sub,
   sign
@@ -193,20 +216,35 @@ let push
   (** Make a next local context with the argument list [entlst] and the
       return type [rt] based on previous local global context [c]
    *)
-  let entry = c.entry in
-  let fgnames, concepts, argnames, argtypes, ntvs, sign =
-    let ntvs0 = TVars_sub.count_local c.entry.tvars_sub
-    in
-    Class_table.signature entlst rt
-      entry.fgnames entry.concepts entry.argnames entry.argtypes ntvs0 c.ct
+  let entry      = c.entry in
+  let ntvs0      = TVars_sub.count_local entry.tvars_sub                in
+  let fgs1,ntvs1 = Class_table.formal_generics entlst rt entry.fgs c.ct in
+  let nfgs1      = Array.length fgs1                                    in
+  let ntvs,fgs   = ntvs1+ntvs0, Array.append fgs1 entry.fgs             in
+  let res        = Class_table.result_type rt ntvs fgs c.ct             in
+  let fargs1     = Class_table.formal_arguments entlst ntvs fgs c.ct    in
+  let fargs      =
+    Array.append
+      fargs1
+      (Array.map
+         (fun (n,t) -> n, Term.up ntvs1 (Term.upbound nfgs1 ntvs0 t))
+         entry.fargs)
+  in
+  let tvars_sub = TVars_sub.add_local ntvs1 entry.tvars_sub
   in
   c.entry <-
-    next_entry fgnames concepts argnames argtypes entlst.i sign
-      (TVars_sub.add_local ntvs c.entry.tvars_sub);
+    {tvars_sub    = tvars_sub;
+     fgs          = fgs;
+     fargs        = fargs;
+     ntvs_delta   = ntvs1;
+     nfgs_delta   = nfgs1;
+     nfargs_delta = Array.length fargs1;
+     result       = res;
+     info         = entlst.i};
   c.stack <- entry::c.stack;
 
   assert (not (Proof_context.has_work c.pc));
-  Proof_context.push (arity c) (last_argnames c) c.pc
+  Proof_context.push (arity c) (last_fargnames c) c.pc
 
 
 
@@ -250,8 +288,8 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
     let args = TVars_sub.args c.entry.tvars_sub in
     let ntvs = Array.length args                in
     Array.iteri
-      (fun i t -> c.entry.argtypes.(i) <- Term.sub t args ntvs)
-      c.entry.argtypes
+      (fun i (nme,t) -> c.entry.fargs.(i) <- (nme, Term.sub t args ntvs))
+      c.entry.fargs
   with Term_capture ->
     not_yet_implemented c.entry.info "Type inference of formal generics"
 
@@ -265,41 +303,39 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
       In case that there are no arguments the empty string is returned and
       not "()".
    *)
-  let nargs = e.nfargs in (*Sign.arity e.signature in*)
-    if nargs = 0 then
-      ""
-    else
-      let zipped = Array.to_list (Array.init nargs
-                                    (fun i ->
-                                      e.argnames.(i),
-                                      e.argtypes.(i)))
-      in
-      let llst = List.fold_left
-          (fun ll (n,tp) -> match ll with
-            [] -> [[n],tp]
-          | (ns,tp1)::tl ->
-              if tp=tp1 then [n::ns,tp]
-              else           ([n],tp)::ll )
-          []
-          zipped
-      in
-      "("
-      ^  String.concat
-          ","
-          (List.rev_map
-             (fun (ns,tp) ->
-               let ntvs = TVars_sub.count e.tvars_sub in
-               (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
-               ^ ":"
-               ^ (Class_table.type2string tp ntvs e.fgnames ct))
-             llst)
-      ^ ")"
+  let nargs = entry_arity e in (*Sign.arity e.signature in*)
+  if nargs = 0 then
+    ""
+  else
+    let fargs = Array.to_list (Array.sub e.fargs 0 nargs)
+    in
+    let llst = List.fold_left
+        (fun ll (n,tp) -> match ll with
+          [] -> [[n],tp]
+        | (ns,tp1)::tl ->
+            if tp=tp1 then [n::ns,tp]
+            else           ([n],tp)::ll )
+        []
+        fargs
+    in
+    "("
+    ^  String.concat
+        ","
+        (List.rev_map
+           (fun (ns,tp) ->
+             let ntvs = TVars_sub.count e.tvars_sub in
+             (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
+             ^ ":"
+             ^ (Class_table.type2string tp ntvs (entry_fgnames e) ct))
+           llst)
+    ^ ")"
 
 
 
 let result_string (e:entry) (ct:Class_table.t): string =
   if Result_type.has_result e.result then
-      Class_table.type2string (Result_type.result e.result) 0 e.fgnames ct
+    Class_table.type2string
+      (Result_type.result e.result) 0 (entry_fgnames e) ct
   else ""
 
 
@@ -330,11 +366,12 @@ let put_global_function
     (c:      t)
     : unit =
   assert (is_toplevel c);
+  let fgnames, concepts = unzip_array c.entry.fgs in
   Feature_table.put_function
     fn
-    c.entry.fgnames
-    c.entry.concepts
-    c.entry.argnames
+    fgnames
+    concepts
+    (fargnames c)
     (signature c) (*c.entry.signature*)
     impstat
     term_opt
@@ -342,7 +379,7 @@ let put_global_function
 
 
 let implication_id (c:t): int =
-  Feature_table.implication_index + (nargs c)
+  Feature_table.implication_index + (nfargs c)
 
 
 let string_of_assertion (t:term) (c: t): string =
@@ -403,7 +440,7 @@ let find_identifier
       the list of variables together with their signature
    *)
   let nfgs_c0  = nfgs c
-  and nargs_c0 = nargs c
+  and nargs_c0 = nfargs c
   in
   if is_global c then
     find_funcs (FNname name) nargs_id nfgs_c0 nargs_c0 c.ft
@@ -433,7 +470,7 @@ let find_feature
       feature table. Return the list of variables together with their
       signature.
    *)
-  find_funcs fn nargs_feat (nfgs c) (nargs c) c.ft
+  find_funcs fn nargs_feat (nfgs c) (nfargs c) c.ft
 
 
 
@@ -460,8 +497,8 @@ let print_assertions
       and is_used = Proof_context.is_used_forward i c.pc
       and used_gen = Proof_context.used_schematic i c.pc
       in
-      assert (nbenv = Array.length e.argnames);
-      let tstr = Feature_table.term_to_string t e.argnames c.ft
+      assert (nbenv = Array.length e.fargs);
+      let tstr = Feature_table.term_to_string t (entry_fargnames e) c.ft
       and used_gen_str =
         if IntSet.is_empty used_gen then ""
         else " " ^ (intset_to_string used_gen)
@@ -544,7 +581,7 @@ let implication_chain (ps:term list) (tgt:term) (c:t): term =
   Proof_context.implication_chain ps tgt c.pc
 
 let expanded_term (t:term) (c:t): term =
-  let nbenv = nargs c in
+  let nbenv = nfargs c in
   Feature_table.normalize_term t nbenv c.ft
 
 let prefix (c:t): string =

@@ -245,6 +245,7 @@ module Result_type: sig
   val empty:        t
   val make_func:    type_term -> t
   val make_proc:    type_term -> t
+  val make:         type_term -> bool -> t
   val has_result:   t -> bool
   val result:       t -> type_term
   val is_procedure: t -> bool
@@ -257,6 +258,7 @@ end = struct
   let empty = None
   let make_func (tp:type_term): t = Some (tp,false)
   let make_proc (tp:type_term): t = Some (tp,true)
+  let make (tp:type_term) (proc:bool): t = Some (tp,proc)
 
   let has_result (rt:t): bool = Option.has rt
 

@@ -8,6 +8,7 @@ module TypSet = Set.Make(struct
   type t = term
 end)
 
+type formal = int * type_term
 
 type descriptor =
     {hmark:header_mark;
@@ -69,6 +70,81 @@ let is_boolean_unary (s:Sign.t) (ntvs:int): bool =
   (Sign.result s)     = (boolean_type ntvs)
 
 
+let get_type
+    (tp:type_t withinfo)
+    (ntvs: int)
+    (fgs: (int*type_term) array)
+    (ct:t)
+    : term =
+  (** Convert the syntactic type [tp] in an environment with [ntvs] type
+      variables and then formal generics [fgs] into a type term *)
+  let nfgs = Array.length fgs in
+  let n    = ntvs + nfgs in
+  let cls_idx (name:int): int =
+    try
+      ntvs + (Search.array_find_min (fun (n,_) -> n=name) fgs)
+    with Not_found ->
+      try
+        n + (Key_table.find ct.names name)
+      with Not_found ->
+        error_info tp.i ("Class " ^ (ST.string name)
+                         ^ " does not exist")
+  in
+  match tp.v with
+    Normal_type (path,name,actuals) ->
+      assert (actuals = []); (* nyi: generic types *)
+      Variable (cls_idx name)
+  | _ -> not_yet_implemented tp.i "types other than normal types"
+
+
+
+let get_type0
+    (tp:type_t withinfo)
+    (fgnames: int array)
+    (ct:t)
+    : term =
+  (** Convert the syntactic type [tp] in an environment with the formal
+      generic names [fgnames] into a type term
+   *)
+  let nfgs = Array.length fgnames in
+  let cls_idx (name:int): int =
+    try
+      Search.array_find_min (fun n -> n=name) fgnames
+    with Not_found ->
+      try
+        (Key_table.find ct.names name) + nfgs
+      with Not_found ->
+        error_info tp.i ("Class " ^ (ST.string name)
+                         ^ " does not exist")
+  in
+  match tp.v with
+    Normal_type (path,name,actuals) ->
+      assert (actuals = []); (* nyi: generic types *)
+      Variable (cls_idx name)
+  | _ -> not_yet_implemented tp.i "types other than normal types"
+
+
+
+
+
+
+
+let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
+  (** Add the formal generic with [name] and [concept] to the formal generics
+      of the class table [ct] *)
+  if IntMap.mem name.v ct.fgens then
+    error_info
+      name.i
+      ("formal generic " ^ (ST.string name.v) ^ " already defined")
+  else
+    ct.fgens <- IntMap.add
+        name.v
+        (get_type concept  0 [||] ct)
+        ct.fgens
+
+
+
+
 let collect_formal_generics
     (entlst: entities list withinfo)
     (rt:return_type)
@@ -120,166 +196,63 @@ let collect_formal_generics
 
 
 
-
-
-let get_type
-    (tp:type_t withinfo)
-    (fgnames: int array)
-    (ct:t)
-    : term =
-  (** Convert the syntactic type [tp] in an environment with the formal
-      generic names [fgnames] into a type term
-   *)
-  let nfgs = Array.length fgnames in
-  let cls_idx (name:int): int =
-    try
-      Search.array_find_min (fun n -> n=name) fgnames
-    with Not_found ->
-      try
-        (Key_table.find ct.names name) + nfgs
-      with Not_found ->
-        error_info tp.i ("Class " ^ (ST.string name)
-                         ^ " does not exist")
-  in
-  match tp.v with
-    Normal_type (path,name,actuals) ->
-      assert (actuals = []); (* nyi: generic types *)
-      Variable (cls_idx name)
-  | _ -> not_yet_implemented tp.i "types other than normal types"
-
-
-
-let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
-  (* Add the formal generic with name and concept to the formal generics of
-     the class table *)
-  if IntMap.mem name.v ct.fgens then
-    error_info
-      name.i
-      ("formal generic " ^ (ST.string name.v) ^ " already defined")
-  else
-    ct.fgens <- IntMap.add
-        name.v
-        (get_type concept  [||] ct)
-        ct.fgens
-
-
-
-
-let arguments
+let formal_generics
     (entlst: entities list withinfo)
-    (fgnames: int array)
-    (ct:t)
-    : int array * type_term array =
-  let args: (int*term) list =
-    List.flatten
-      (List.map
-         (fun es ->
-           match es with
-             Untyped_entities lst ->
-               List.mapi (fun i name -> name, Variable i) lst
-           | Typed_entities (lst,tp) ->
-               let t = get_type (withinfo entlst.i tp) fgnames ct
-               in
-               List.map (fun name -> name,t) lst)
-         entlst.v)
+    (rt:     return_type)
+    (fgs:    formal array)
+    (ct:     t)
+    : formal array * int =
+  (** The formal generics and number of type variables of the entity list
+      [entlst] and the return type [rt] in an environment with the formal
+      generics [fgs]. *)
+  let fgset, n = collect_formal_generics entlst rt ct in
+  let fgset =
+    Array.fold_left (fun set (name,_) -> IntSet.remove name set) fgset fgs
   in
-  let argnames = List.map (fun e -> let n,_ = e in n) args
-  and argtypes = List.map (fun e -> let _,t = e in t) args
+  let fglst_rev = IntSet.fold
+      (fun name lst -> (name, IntMap.find name ct.fgens)::lst)
+      fgset
+      []
   in
-  let rec check_names (namelst: int list) =
-    match namelst with
-      [] -> ()
-    | f::t ->
-        if List.mem f t then
-          error_info entlst.i
-            ("Duplicate argument \"" ^ (ST.string f) ^ "\"" )
-        else check_names t
-  in
-  check_names argnames;
-  (Array.of_list argnames), (Array.of_list argtypes)
+  Array.of_list (List.rev fglst_rev),
+  n
 
 
-
-
-let signature
+let formal_arguments
     (entlst: entities list withinfo)
+    (ntvs: int)
+    (fgs: formal array)
+    (ct:t)
+    : formal array =
+  (** The formal arguments of the entity list [entlst] in an environment with
+      the formal generics [fgs] and [ntvs] type variables *)
+  let fargs (es: entities): formal list =
+    match es with
+      Untyped_entities lst ->
+        assert (List.length lst <= ntvs);
+        List.mapi (fun i name -> name, Variable i) lst
+    | Typed_entities (lst,tp) ->
+        let t = get_type (withinfo entlst.i tp) ntvs fgs ct in
+        List.map (fun name -> name,t) lst
+  in
+  let arglst = List.concat (List.map fargs entlst.v) in
+  Array.of_list arglst
+
+
+let result_type
     (rt:return_type)
-    (fgnames0:  int array)
-    (concepts0: type_term array)
-    (argnames0: int array)
-    (argtypes0: type_term array)
-    (ntvs0:     int)
+    (ntvs: int)
+    (fgs: formal array)
     (ct:t)
-    : int array * type_term array * int array * type_term array
-    * int * Sign.t =
-  (** Analyze the syntactic signature [entlst,rt] based on an environment
-      which has already the formal generics [fgnames0] with their constraints
-      [concepts0] and the arguments [argnames0] and the number of type
-      variables [ntvs0].
-
-      Return the formal generics, constraints, arguments, argtypes,the
-      number of type variables (all cumulated) and the signature for the
-      new environment (all types (argtypes and signature) are valid in the
-      new environment).
-   *)
-  let fgens, ntvs = (* Set of formal generics names and number of type vars *)
-    collect_formal_generics entlst rt ct
-  in
-  let fgens =
-    Array.fold_left (fun set name -> IntSet.remove name set) fgens fgnames0
-  in
-  let fgnames,concepts =
-    let ns,cs =
-      IntSet.fold
-        (fun name (ns,cs) ->
-          name::ns,
-          (IntMap.find name ct.fgens)::cs)
-        fgens
-        ([], [])
-    in
-    Array.of_list (List.rev ns), Array.of_list (List.rev cs)
-  in
-  let nfgs  = Array.length fgnames
-  in
-  let fgnames  = Array.append fgnames  fgnames0
-  and concepts = Array.append concepts concepts0
-  in
-  let argnames,argtypes = arguments entlst fgnames ct
-  in
-  let sign =
-    match rt with
-      None -> Sign.make_args argtypes
-    | Some tpinf ->
-        let tp,proc = tpinf.v in
-        let t = get_type (withinfo tpinf.i tp) fgnames ct in
-        if proc then Sign.make_proc argtypes t
-        else Sign.make_func argtypes t
-  in
-  let argnames = Array.append argnames argnames0
-  and argtypes =
-    Array.append
-      argtypes
-      (Array.map (fun t -> Term.up ntvs (Term.upbound nfgs ntvs0 t)) argtypes0)
-  in
-  fgnames, concepts, argnames, argtypes, (ntvs0+ntvs), sign
-
-
-
-
-let argument_signature
-    (entlst: entities list withinfo)
-    (ct:t)
-    : int array * type_term array * int array * type_term array =
-  let fgnames, concepts, argnames, _, _, sign =
-    signature entlst None [||] [||] [||] [||]  0 ct
-  in
-  fgnames, concepts, argnames, Sign.arguments sign
-
-
-
-
-
-
+    : Result_type.t =
+  (** The result type with corresponds to the return type [rt] in an
+      environment with the formal generics [fgs] and [ntvs] type variables *)
+  match rt with
+    None -> Result_type.empty
+  | Some tpinf ->
+      let tp,proc = tpinf.v in
+      let t = get_type (withinfo tpinf.i tp) ntvs fgs ct in
+      Result_type.make t proc
 
 
 let empty_table (): t =
