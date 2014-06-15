@@ -255,6 +255,20 @@ let result_type
       Result_type.make t proc
 
 
+let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
+    : bool =
+  (** Does the type [t] which might contain the formal generics [fgs] satisfy
+      the concept [cpt]?  *)
+  let nfgs = Array.length fgs in
+  match t1 with
+    Variable i when i < nfgs ->
+      let cpt_t1 = snd fgs.(i) in
+      satisfies cpt_t1 [||] cpt ct
+  | _ ->
+      (Array.length fgs = 0 && t1 = cpt) ||
+      assert false
+
+
 let empty_table (): t =
   let cc = Seq.empty ()
   and kt = Key_table.empty ()

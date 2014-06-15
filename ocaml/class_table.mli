@@ -40,6 +40,8 @@ val result_type:
     return_type -> int -> formal array -> t
       -> Result_type.t
 
+val satisfies: type_term -> formal array -> type_term -> t -> bool
+
 val print: t -> unit
 
 val type2string: term -> int -> int array -> t -> string

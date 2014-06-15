@@ -192,6 +192,18 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
   sign
 
 
+let concept_satisfies_concept (cpt1:type_term) (cpt2:type_term) (c:t): bool =
+  (** Does the concept [cpt1] satisfy the concept [cpt2] in [c]?  *)
+  Class_table.satisfies cpt1 [||] cpt2 c.ct
+
+let type_satisfies_concept (t:type_term) (cpt:type_term) (c:t): bool =
+  (** Does the type [t] satisfy the concept [cpt] in [c]?
+
+      Note: Type 0 is the first formal generic and not the first type
+      variable!  *)
+  Class_table.satisfies t (formal_generics c) cpt c.ct
+
+
 let read_trace_info (c:t): unit =
   c.trace <- Options.is_tracing_proof () && Options.trace_level () > 0
 

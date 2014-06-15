@@ -36,6 +36,9 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
+val concept_satisfies_concept: type_term -> type_term -> t -> bool
+val type_satisfies_concept:    type_term -> type_term -> t -> bool
+
 val update_type_variables: TVars_sub.t -> t -> unit
 
 val string_of_term: term -> t -> string
