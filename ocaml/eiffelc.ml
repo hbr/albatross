@@ -4,25 +4,24 @@ open Term
 
 let usage_string = "\
 Usage:
-    eiffelc options srcfile.e
+    eiffelc options src1.e src2.e ...
 "
 
-let file_name = ref ""
-let dir_name  = ref ""
-let base_name = ref ""
-let mod_name  = ref ""
+type file_name = {name: string; dir: string; base: string; modnme: string}
+
+let files = ref []
+
 
 let parse_arguments (): unit =
   let anon_fun str =
-    if !file_name <> "" then
-      raise (Arg.Bad "Only one source file allowed")
-    else if not (Filename.check_suffix str ".e") then
+    if not (Filename.check_suffix str ".e") then
       raise (Arg.Bad "Eiffel source file must have suffix \".e\"")
     else begin
-      file_name := str;
-      dir_name  := Filename.dirname str;
-      base_name := Filename.basename str;
-      mod_name  := Filename.chop_extension !base_name
+      let base = Filename.basename str in
+      files := {name   = str;
+                dir    = Filename.dirname str;
+                base   = base;
+                modnme = Filename.chop_extension base} :: !files;
     end
   and set_tracer (str:string): unit =
     if str = "proof" then
@@ -60,7 +59,7 @@ let parse_arguments (): unit =
    ]
     anon_fun
     usage_string;
-  if !file_name = "" then
+  if !files = [] then
     raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string))
 
 
@@ -144,31 +143,42 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 
 
 
-let rec process_use (use_blk: use_block) (c:Context.t): unit =
+
+let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
   List.iter
     (fun name ->
-      let nmestr = Filename.concat !dir_name  ((ST.string name.v) ^ ".ei") in
+      let nmestr = Filename.concat f.dir  ((ST.string name.v) ^ ".ei") in
       let use_blk, ast = parse_file nmestr in
-      process_use use_blk c;
+      process_use use_blk f c;
       analyze ast c)
     use_blk
+
+
+
+
+
+let compile (f: file_name) (context:Context.t): unit =
+  Printf.printf "Compiling file %s ...\n" f.name;
+  try
+    let use_blk,ast  = parse_file f.name in
+    Support.Parse_info.set_use_interface ();
+    process_use use_blk f context;
+    Support.Parse_info.set_module ();
+    Support.Parse_info.set_file_name f.name;
+    analyze ast context;
+    Statistics.write ();
+  with Support.Error_info (inf,str) ->
+    let fn = Support.Parse_info.file_name () in
+    raise (Support.Error_fileinfo (fn,inf,str))
+
+
 
 let _ =
   try
     parse_arguments ();
-    try
-      let use_blk,ast  = parse_file !file_name in
-      let context = Context.make ()
-      in
-      Support.Parse_info.set_use_interface ();
-      process_use use_blk context;
-      Support.Parse_info.set_module ();
-      Support.Parse_info.set_file_name !file_name;
-      analyze ast context;
-      Statistics.write ();
-    with Support.Error_info (inf,str) ->
-      let fn = Support.Parse_info.file_name () in
-      raise (Support.Error_fileinfo (fn,inf,str))
+    files := List.rev !files;
+    let context = Context.make () in
+    List.iter (fun f -> compile f context) !files
   with
     Support.Eiffel_error str
   | Sys_error str ->  prerr_string (str ^ "\n"); exit 1
