@@ -36,6 +36,9 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
+val has_module: int -> t -> bool
+val put_module: int -> t -> unit
+
 val concept_satisfies_concept: type_term -> type_term -> t -> bool
 val type_satisfies_concept:    type_term -> type_term -> t -> bool
 

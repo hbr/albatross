@@ -23,6 +23,7 @@ type t = {
     mutable entry: entry;
     mutable stack: entry list;
     mutable trace: bool;
+    mutable mt:    IntSet.t;
     ct:            Class_table.t;
     ft:            Feature_table.t;
     pc:            Proof_context.t
@@ -211,6 +212,7 @@ let make (): t =
   {entry = empty_entry;
    stack = [];
    trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
+   mt        = IntSet.empty;
    ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
    pc        =
@@ -369,6 +371,12 @@ let named_signature_string (c:t): string =
 
 
 
+let has_module(mname:int) (c:t): bool =
+  IntSet.mem mname c.mt
+
+let put_module(mname: int) (c:t): unit =
+  assert (is_global c);
+  c.mt <- IntSet.add mname c.mt
 
 
 let put_global_function

@@ -265,8 +265,7 @@ let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
       let cpt_t1 = snd fgs.(i) in
       satisfies cpt_t1 [||] cpt ct
   | _ ->
-      (Array.length fgs = 0 && t1 = cpt) ||
-      assert false
+      (Array.length fgs = 0 && t1 = cpt)
 
 
 let empty_table (): t =

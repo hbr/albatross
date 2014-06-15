@@ -147,10 +147,13 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
   List.iter
     (fun name ->
-      let nmestr = Filename.concat f.dir  ((ST.string name.v) ^ ".ei") in
-      let use_blk, ast = parse_file nmestr in
-      process_use use_blk f c;
-      analyze ast c)
+      if Context.has_module name.v c then ()
+      else begin
+        let nmestr = Filename.concat f.dir  ((ST.string name.v) ^ ".ei") in
+        let use_blk, ast = parse_file nmestr in
+        process_use use_blk f c;
+        analyze ast c
+      end)
     use_blk
 
 
@@ -165,6 +168,7 @@ let compile (f: file_name) (context:Context.t): unit =
     process_use use_blk f context;
     Support.Parse_info.set_module ();
     Support.Parse_info.set_file_name f.name;
+    Context.put_module (ST.symbol f.modnme) context;
     analyze ast context;
     Statistics.write ();
   with Support.Error_info (inf,str) ->

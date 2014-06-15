@@ -29,21 +29,16 @@ let add_substitution
           let cpt_t = TVars_sub.concept i tvars_sub in
           Context.concept_satisfies_concept cpt_t cpt c
       | _ ->
-          let t = Term.down cnt t in
-          try Context.type_satisfies_concept t cpt c
-          with Term_capture -> assert false (* should not happen! *)
+          let t =
+            try Term.down cnt t
+            with Term_capture -> assert false (* should not happen! *)
+          in
+          Context.type_satisfies_concept t cpt c
     end in
-  if ok then TVars_sub.add_substitution i t tvars_sub
-  else assert false
-
-  (*if i < TVars_sub.count_local tvars_sub then
+  if ok then
     TVars_sub.add_substitution i t tvars_sub
   else
-    let concept = TVars_sub.concept i tvars_sub in
-    Printf.printf "Does term %s satisfy the concept %s[%d]?\n"
-      (Term.to_string t)
-      (Term.to_string concept) i;
-    assert false*)
+    raise Not_found
 
 
 let unify
