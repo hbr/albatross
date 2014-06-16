@@ -257,15 +257,15 @@ module ST : sig
 end = struct
   open Container
   let kt                   = Key_table.empty ()
-  let symbol (str:string)  = Key_table.index kt str
-  let string (i:int)       = Key_table.key   kt i
+  let symbol (str:string)  = Key_table.index str kt
+  let string (i:int)       = Key_table.key   i   kt
   let count ()             = Key_table.count kt
 end
 
 open Container
 let path_table                = Key_table.empty ()
-let path_symbol (p: int list) = Key_table.index path_table p
-let symbol_path (s:int)       = Key_table.key path_table s
+let path_symbol (p: int list) = Key_table.index p path_table
+let symbol_path (s:int)       = Key_table.key   s path_table
 
 
 (*

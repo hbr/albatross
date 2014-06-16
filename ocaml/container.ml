@@ -198,9 +198,9 @@ module Key_table: sig
   type 'a t
   val empty:  unit -> 'a t
   val count:  'a t -> int
-  val index:  'a t -> 'a -> int
-  val key:    'a t -> int -> 'a
-  val find:   'a t -> 'a  -> int
+  val index:  'a  -> 'a t -> int
+  val key:    int -> 'a t -> 'a
+  val find:   'a -> 'a t -> int
   val iter:   ('a -> unit) -> 'a t -> unit
   val iteri:  (int->'a->unit) -> 'a t -> unit
 end = struct
@@ -211,23 +211,23 @@ end = struct
 
   let count (st:'a t)   = Seq.count st.seq
 
-  let added (st:'a t) elem =
+  let added (elem:'a) (st:'a t): int =
     let cnt = Seq.count st.seq
     in
     Seq.push elem st.seq;
     Hashtbl.add st.map elem cnt;
     cnt
 
-  let find  (st:'a t) (elem:'a) = Hashtbl.find st.map elem
+  let find (elem:'a)  (st:'a t): int = Hashtbl.find st.map elem
 
-  let index (st:'a t) (elem:'a) =
+  let index (elem:'a) (st:'a t): int =
     try
       Hashtbl.find st.map elem
     with
       Not_found ->
-        added st elem
+        added elem st
 
-  let key (st:'a t) (s:int) =
+  let key (s:int) (st:'a t): 'a =
     assert (s < Seq.count st.seq);
     Seq.elem s st.seq
 
