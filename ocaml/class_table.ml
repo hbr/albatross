@@ -8,6 +8,11 @@ module TypSet = Set.Make(struct
   type t = term
 end)
 
+module Int_table = Map_table.Make(struct
+  let  compare = Pervasives.compare
+  type t       = int
+end)
+
 type formal = int * type_term
 
 type descriptor =
@@ -15,7 +20,7 @@ type descriptor =
      fgnames: int array; constraints: term array;
      parents: TypSet.t}
 
-type t = {names:   int Key_table.t;
+type t = {names:   Int_table.t;
           classes: descriptor seq;
           mutable fgens: term IntMap.t}
 
@@ -31,13 +36,13 @@ let count (c:t) =
 
 let class_name (i:int) (c:t) =
   assert (i<count c);
-  Support.ST.string (Key_table.key i c.names)
+  Support.ST.string (Int_table.key i c.names)
 
 
 
 let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
   try
-    let idx = Key_table.find cn.v c.names in
+    let idx = Int_table.find cn.v c.names in
     let desc = Seq.elem idx c.classes in
     if hm.v <> desc.hmark then
       let str =
@@ -85,7 +90,7 @@ let get_type
       ntvs + (Search.array_find_min (fun (n,_) -> n=name) fgs)
     with Not_found ->
       try
-        n + (Key_table.find name ct.names)
+        n + (Int_table.find name ct.names)
       with Not_found ->
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
@@ -112,7 +117,7 @@ let get_type0
       Search.array_find_min (fun n -> n=name) fgnames
     with Not_found ->
       try
-        (Key_table.find name ct.names) + nfgs
+        (Int_table.find name ct.names) + nfgs
       with Not_found ->
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
@@ -270,7 +275,7 @@ let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
 
 let empty_table (): t =
   let cc = Seq.empty ()
-  and kt = Key_table.empty ()
+  and kt = Int_table.make_empty ()
   in
   {names=kt; classes=cc; fgens=IntMap.empty}
 
@@ -280,7 +285,7 @@ let base_table (): t =
   let cc = bt.classes
   and kt = bt.names
   in
-  let index cname = Key_table.index (Support.ST.symbol cname) kt
+  let index cname = Int_table.index (Support.ST.symbol cname) kt
   in
   let zero_idx  = index "@ZERO"
   and bool_idx  = index "BOOLEAN"
