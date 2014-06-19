@@ -822,13 +822,6 @@ let pop (pc:t): unit =
   Seq.keep pc.entry.count pc.terms
 
 
-let pop_keep (pc:t): unit =
-  assert (is_local pc);
-  assert (not (has_work pc));
-  Proof_table.pop_keep pc.base;
-  pc.stack <- List.tl pc.stack
-
-
 
 
 let add_backward (t:term) (pc:t): unit =

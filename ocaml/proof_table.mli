@@ -33,7 +33,6 @@ val stacked_counts: t -> int list
 val make: int -> int -> t
 val push: int -> int array -> t -> unit
 val pop:  t -> unit
-val pop_keep: t -> unit
 
 val add_proved: term -> proof_term -> t -> unit
 

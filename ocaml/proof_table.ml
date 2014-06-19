@@ -133,17 +133,13 @@ let push (nbenv:int) (names: int array) (at:t): unit =
      all_id = at.entry.all_id + nbenv}
 
 
+
 let pop (at:t): unit =
   assert (is_local at);
   at.entry  <- List.hd at.stack;
   at.stack  <- List.tl at.stack;
   Seq.keep at.entry.count at.seq
 
-
-
-let pop_keep (at:t): unit =
-  assert (is_local at);
-  at.stack  <- List.tl at.stack
 
 
 

@@ -11,7 +11,6 @@ val make:      int -> int -> t
 
 val push:      int -> int array -> t -> unit
 val pop:       t -> unit
-val pop_keep:  t -> unit
 
 val find:               term -> t -> int
 val has:                term -> t -> bool
