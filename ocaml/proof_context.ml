@@ -643,14 +643,6 @@ let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
                       cannot be schematic *)
     ()
   else begin
-    (*let used_gen =
-      if not is_bwd then IntSet.add idx desc.used_gen
-      else
-        match desc.td.bwddat with
-          None -> desc.used_gen
-        | Some bwd ->
-            if bwd.bwd_simpl then desc.used_gen
-            else IntSet.add idx desc.used_gen*)
     let used_gen = IntSet.add idx desc.used_gen
     in
     Proof_table.add_specialize t idx args pc.base;
