@@ -13,15 +13,15 @@ let add_substitution
     (** Substitute the type variable [i] by the term [t] in the substitution
         [tvars_sub] using the context [c].
      *)
-  Printf.printf "add substitution %d -> %s\n" i (Term.to_string t);
+  (*Printf.printf "add substitution %d -> %s\n" i (Term.to_string t);*)
   let ok =
     begin
       i < TVars_sub.count_local tvars_sub
     ||
       let cpt = TVars_sub.concept i tvars_sub in
-      Printf.printf "Does term %s satisfy the concept %s[%d]?\n"
+      (*Printf.printf "Does term %s satisfy the concept %s[%d]?\n"
         (Term.to_string t)
-        (Term.to_string cpt) i;
+        (Term.to_string cpt) i;*)
       let cnt = TVars_sub.count tvars_sub in
       match t with
         Variable i when i < cnt ->
@@ -113,8 +113,8 @@ let unify_sign
     : unit =
   (** Unify the signatures [s1] and [s2] by adding substitutions to
       [tvars_sub] within the context [c] *)
-  Printf.printf "unify signatures %s, %s\n" (Sign.to_string s1)
-    (Sign.to_string s2);
+  (*Printf.printf "unify signatures %s, %s\n" (Sign.to_string s1)
+    (Sign.to_string s2);*)
   let n,has_res = (Sign.arity s1), (Sign.has_result s1) in
   if not (n = (Sign.arity s2) && has_res = (Sign.has_result s2)) then
     raise Not_found;
@@ -162,7 +162,7 @@ end = struct
      *)
     let n = Array.length cs
     and start = TVars_sub.count acc.tvars in
-    Printf.printf "\tadd %d globals above %d\n" n start;
+    (*Printf.printf "\tadd %d globals above %d\n" n start;*)
     {acc with
      sign  = Sign.up_from n start acc.sign;
      tvars = TVars_sub.add_global cs acc.tvars}
@@ -179,7 +179,7 @@ end = struct
     (** Add the term [i,tvs,s] of the context [c] to the accumulator [acc]
      *)
     assert (not (TVars.count_local tvs > 0 && TVars.count_global tvs > 0));
-    Printf.printf "add_term %d sig %s\n" i (Sign.to_string s);
+    (*Printf.printf "add_term %d sig %s\n" i (Sign.to_string s);*)
     let s =
       (* If [i] comes from a global environment, then it has no local type
          variables and space must be made for all type variables (locals and
@@ -234,9 +234,9 @@ end = struct
     (** Expect the argument [i] as the next term.
      *)
     assert (i < (TVars_sub.count_local acc.tvars));
-    Printf.printf "expect argument %d:%s\n"
+    (*Printf.printf "expect argument %d:%s\n"
       i
-      (Term.to_string (TVars_sub.get i acc.tvars));
+      (Term.to_string (TVars_sub.get i acc.tvars));*)
     acc.sign <- Sign.make_const (TVars_sub.get i acc.tvars)
 
 
