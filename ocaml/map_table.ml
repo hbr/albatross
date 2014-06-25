@@ -14,6 +14,7 @@ module type S =
       val make_empty: unit -> t
       val count:      t -> int
       val find:       key -> t -> int
+      val has:        key -> t -> bool
       val index:      key -> t -> int
       val key:        int -> t -> key
       val iter:       (key -> unit)    -> t -> unit
@@ -34,6 +35,10 @@ module Make (Ord:OrderedType) = struct
   let count (mt: t) = Seq.count mt.seq
 
   let find (e:key) (mt:t): int = Map.find e mt.map
+
+  let has (e:key) (mt:t): bool =
+    try let _ = find e mt in true
+    with Not_found -> false
 
   let mem (e:key) (mt:t): bool =
     try

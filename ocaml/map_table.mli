@@ -11,6 +11,7 @@ module type S =
       val make_empty: unit -> t
       val count:      t -> int
       val find:       key -> t -> int
+      val has:        key -> t -> bool
       val index:      key -> t -> int
       val key:        int -> t -> key
       val iter:       (key -> unit)    -> t -> unit
