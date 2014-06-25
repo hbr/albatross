@@ -11,6 +11,14 @@ open Container
 type t
 type proof_term
 val make:  unit -> t
+
+val has_current_module: t -> bool
+val current_module:     t -> int
+val find_module:        int -> int list -> t -> int
+val add_used_modules:   int -> info     -> t -> unit
+val push_module:        int -> int list -> t -> unit
+val pop_module:         t -> unit
+
 val push:  entities list withinfo -> return_type -> t -> unit
 val push_empty: t -> unit
 val push_untyped: int array -> t -> unit
@@ -35,9 +43,6 @@ val ft:      t -> Feature_table.t
 val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
-
-val has_module: int -> t -> bool
-val put_module: int -> t -> unit
 
 val concept_satisfies_concept: type_term -> type_term -> t -> bool
 val type_satisfies_concept:    type_term -> type_term -> t -> bool

@@ -7,7 +7,7 @@ Usage:
     eiffelc options src1.e src2.e ...
 "
 
-type file_name = {name: string; dir: string; base: string; modnme: string}
+type file_name = {name: string; dir: string; base: string; mdlnme: string}
 
 let files = ref []
 
@@ -21,7 +21,7 @@ let parse_arguments (): unit =
       files := {name   = str;
                 dir    = Filename.dirname str;
                 base   = base;
-                modnme = Filename.chop_extension base} :: !files;
+                mdlnme = Filename.chop_extension base} :: !files;
     end
   and set_tracer (str:string): unit =
     if str = "proof" then
@@ -147,12 +147,17 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
   List.iter
     (fun name ->
-      if Context.has_module name.v c then ()
-      else begin
+      try
+        let mdl = Context.find_module name.v [] c in
+        Context.add_used_modules mdl name.i c
+      with Not_found -> begin
+        Context.push_module name.v [] c;
         let nmestr = Filename.concat f.dir  ((ST.string name.v) ^ ".ei") in
+        Printf.printf "Parsing file \"%s\"\n" nmestr;
         let use_blk, ast = parse_file nmestr in
         process_use use_blk f c;
-        analyze ast c
+        analyze ast c;
+        Context.pop_module c
       end)
     use_blk
 
@@ -161,15 +166,17 @@ let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
 
 
 let compile (f: file_name) (context:Context.t): unit =
-  Printf.printf "Compiling file %s ...\n" f.name;
+  Printf.printf "Compiling file \"%s\"\n" f.name;
   try
     let use_blk,ast  = parse_file f.name in
+    let mdlnme = ST.symbol f.mdlnme      in
+    Context.push_module mdlnme [] context;
     Support.Parse_info.set_use_interface ();
     process_use use_blk f context;
     Support.Parse_info.set_module ();
     Support.Parse_info.set_file_name f.name;
-    Context.put_module (ST.symbol f.modnme) context;
     analyze ast context;
+    Context.pop_module context;
     Statistics.write ();
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in

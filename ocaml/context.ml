@@ -23,7 +23,7 @@ type t = {
     mutable entry: entry;
     mutable stack: entry list;
     mutable trace: bool;
-    mutable mt:    IntSet.t;
+    mt:            Module_table.t;
     ct:            Class_table.t;
     ft:            Feature_table.t;
     pc:            Proof_context.t
@@ -52,6 +52,25 @@ let unzip_array (c: ('a*'b) array): 'a array * 'b array =
   and b = Array.map (fun (_,y) -> y) c in
   a,b
 
+
+
+let has_current_module (c:t): bool =
+  Module_table.has_current c.mt
+
+let current_module (c:t): int =
+  Module_table.current c.mt
+
+let find_module (name:int) (lib:int list) (c:t): int =
+  Module_table.find name lib c.mt
+
+let add_used_modules (mdl:int) (inf:info) (c:t): unit =
+  Module_table.add_used mdl inf c.mt
+
+let push_module (name:int) (lib:int list) (c:t): unit =
+  Module_table.push name lib c.mt
+
+let pop_module (c:t): unit =
+  Module_table.pop c.mt
 
 
 
@@ -212,7 +231,7 @@ let make (): t =
   {entry = empty_entry;
    stack = [];
    trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
-   mt        = IntSet.empty;
+   mt        = Module_table.make ();
    ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
    pc        =
@@ -370,13 +389,6 @@ let named_signature_string (c:t): string =
     resstr
 
 
-
-let has_module(mname:int) (c:t): bool =
-  IntSet.mem mname c.mt
-
-let put_module(mname: int) (c:t): unit =
-  assert (is_global c);
-  c.mt <- IntSet.add mname c.mt
 
 
 let put_global_function
