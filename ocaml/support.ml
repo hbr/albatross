@@ -780,13 +780,6 @@ type declaration =
         * classname
         * formal_generics
         * inherit_clause list
-        * declaration_block list
-  | Declaration_block of declaration_block
-and declaration_block =
-    Feature_block of declaration list
-  | Create_block  of declaration list
-  | Invariant_block of compound
-  | Import_block    of int list list
 
 
 type use_block = int withinfo list

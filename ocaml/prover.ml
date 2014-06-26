@@ -55,8 +55,8 @@ let analyze_imp_opt
         else
           PNormal, false, []
     | Some Impdeferred ->
-        if iface then
-          error_info info "not allowed in interface file";
+        (*if iface then
+          error_info info "not allowed in interface file";*)
         PDeferred,false, []
     | Some Impbuiltin ->
         if iface then

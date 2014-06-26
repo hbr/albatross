@@ -222,15 +222,6 @@ module_list:
 
 one_module: LIDENTIFIER  { withinfo (rhs_info 1) $1 }
 
-/*
-toplevel_declarations:
-    { [] }
-|   toplevel_declarations optsemi declaration { $3::$1 }
-|   toplevel_declarations declaration_block KWend {
-  (Declaration_block $2)::$1
-}
-*/
-
 
 /* ------------------------------------------------------------------------- */
 /* Formal generics */
@@ -337,9 +328,7 @@ class_declaration:
   Class_declaration( withinfo (rhs_info 1) $1,
                      withinfo (rhs_info 3) $3,
                      withinfo (rhs_info 4) $4,
-                     $5,
-                     []
-                    )
+                     $5)
 }
 
 

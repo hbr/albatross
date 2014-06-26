@@ -117,22 +117,16 @@ let analyze(ast: declaration list) (context:Context.t): unit =
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
-        Class_declaration (hm, cname, fgens, inherits, decl_blocks) ->
+        Class_declaration (hm, cname, fgens, inherits) ->
           assert (fgens.v = []);     (* nyi: formal generics *)
           assert (inherits = []);    (* nyi: inheritance     *)
-          assert (decl_blocks = []); (* nyi: class features  *)
           Context.put_class hm cname context;
-      | Declaration_block (Feature_block dlist) ->
-          analyz dlist
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body context
       | Formal_generic (name, concept) ->
           Context.put_formal_generic name concept context
-      | _ ->
-          Context.print context;
-          assert false
     in
     match ast with
       [] -> ()
