@@ -15,50 +15,43 @@ end)
 
 type formal = int * type_term
 
-type descriptor =
-    {hmark:header_mark;
-     fgnames: int array; constraints: term array;
-     parents: TypSet.t}
+type base_descriptor = { hmark:   header_mark;
+                         fgs:     formal array;
+                         mutable parents: TypSet.t}
 
-type t = {names:   Int_table.t;
-          classes: descriptor seq;
+type descriptor      = { mutable mdl:  int;
+                         name: int;
+                         priv: base_descriptor;
+                         mutable publ: base_descriptor option}
+
+type t = {mutable map:   int IntMap.t;
+          classes:       descriptor seq;
           mutable fgens: term IntMap.t}
 
-let zero_index      = 0
-let boolean_index   = 1
-let any_index       = 2
-let predicate_index = 3
-let function_index  = 4
-let tuple_index     = 5
+let boolean_index   = 0
+let any_index       = 1
+let predicate_index = 2
+let function_index  = 3
+let tuple_index     = 4
+
+
 
 let count (c:t) =
   Seq.count c.classes
 
-let class_name (i:int) (c:t) =
-  assert (i<count c);
-  Support.ST.string (Int_table.key i c.names)
+
+let class_symbol (i:int) (ct:t): int =
+  assert (i<count ct);
+  (Seq.elem i ct.classes).name
+
+let class_name (i:int) (ct:t): string =
+  ST.string (class_symbol i ct)
 
 
 
-let put (hm:header_mark withinfo) (cn:int withinfo) (c:t) =
-  try
-    let idx = Int_table.find cn.v c.names in
-    let desc = Seq.elem idx c.classes in
-    if hm.v <> desc.hmark then
-      let str =
-        "Header mark should be \""
-        ^ (hmark2string desc.hmark)
-        ^ "\"\n"
-      in
-      error_info hm.i str
-    else
-      ()
-  with Not_found ->
-    not_yet_implemented cn.i "Insertion of new classes"
 
 let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
 let any (ntvs:int)           = Variable (any_index+ntvs)
-let zero (ntvs:int)          = Variable (zero_index+ntvs)
 let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
 
 
@@ -73,6 +66,199 @@ let is_boolean_unary (s:Sign.t) (ntvs:int): bool =
   (Sign.is_unary s) &&
   (Sign.arg_type 0 s) = (boolean_type ntvs) &&
   (Sign.result s)     = (boolean_type ntvs)
+
+
+
+let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
+  (** Convert the type term [t] in an environment with [nb] type variables
+      and the formal generics [fgnames] to a string.
+   *)
+  let nfgs = Array.length fgnames
+  in
+  let rec to_string(t:term) (nb:int) (prec:int): string =
+    let args_to_string (tarr:term array) (nb:int): string =
+      "["
+      ^ (String.concat ","
+           (Array.to_list (Array.map (fun t -> to_string t nb 1) tarr)))
+      ^ "]"
+    in
+    let inner_prec, str =
+      match t with
+        Variable j ->
+          1,
+          if j<nb then
+            string_of_int j
+          else if j < nb+nfgs then
+            ST.string fgnames.(j-nb)
+          else class_name (j-nb-nfgs) ct
+      | Application (Variable j,tarr) ->
+          let j1 = j-nb-nfgs
+          and tarrlen = Array.length tarr in
+          if j1 = predicate_index then begin
+            assert (tarrlen=1);
+            1, ((to_string tarr.(0) nb 1) ^ "?")
+          end else if j1 = function_index then begin
+            assert (tarrlen=2);
+            1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
+          end else if j1 = tuple_index then begin
+            assert (tarrlen=2);
+            0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
+          end else begin
+            1,
+            (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
+          end
+      | Application (class_exp,args) -> assert false (*not yet implemented*)
+      | Lam (len,names,t) ->
+          assert false (*nyi*)
+          (*let len = Array.length arr in
+          1,
+          (args_to_string arr nb) ^ (to_string t (nb+len) 1)*)
+    in
+    if inner_prec < prec then "(" ^ str ^ ")" else str
+  in
+  to_string t nb 0
+
+
+
+let find (cn: int) (ct:t): int =
+  IntMap.find cn ct.map
+
+let find_in_module (cn:int) (mt:Module_table.t) (ct:t): int =
+  assert (Module_table.has_current mt);
+  let idx  = find cn ct in
+  let desc = Seq.elem idx ct.classes
+  and mdl  = Module_table.current mt in
+  if desc.mdl = (-1) || desc.mdl = mdl then
+    idx
+  else
+    raise Not_found
+
+
+let class_formal_generics (fgens: formal_generics) (ct:t): formal array =
+  Array.of_list
+    (List.map
+       (fun nme ->
+         try
+           nme, IntMap.find nme ct.fgens
+         with Not_found ->
+           let str = "Unknown formal generic " ^ (ST.string nme) in
+           error_info fgens.i str)
+       fgens.v)
+
+
+let check_class_formal_generic
+    (i:info) (nme:int) (tp1:term) (tp2:term)
+    (ct:t)
+    : unit =
+  (** Check if the constraint [tp1] of the formal generic [nme] is equal to
+      [tp2] *)
+    if tp1 <> tp2 then
+      error_info
+        i
+        ("Formal generic " ^ (ST.string nme) ^
+         " must satisfy " ^ (type2string tp2 0 [||] ct))
+
+
+
+let update_base_descriptor
+    (hm:    header_mark withinfo)
+    (fgens: formal_generics)
+    (desc:  base_descriptor)
+    (ct:    t)
+    : unit =
+  if hm.v <> desc.hmark then
+    (let str =
+      "Header mark should be \""
+      ^ (hmark2string desc.hmark)
+      ^ "\"\n"
+    in
+    error_info hm.i str);
+  let fgs = class_formal_generics fgens ct in
+  let nfgs = Array.length desc.fgs in
+  if nfgs <> Array.length fgs then
+    (let str = "Class must have " ^ (string_of_int nfgs) ^ " formal generics" in
+    error_info fgens.i str);
+  for i = 0 to nfgs-1 do
+    let nme,tp1 = fgs.(i)
+    and _,  tp2 = desc.fgs.(i) in
+    check_class_formal_generic fgens.i nme tp1 tp2 ct;
+    desc.fgs.(i) <- nme,tp2
+  done
+
+
+
+
+let export
+    (idx:   int)
+    (hm:    header_mark withinfo)
+    (fgens: formal_generics)
+    (ct:    t)
+    : unit =
+  let desc = Seq.elem idx ct.classes in
+  let hm1, hm2 = desc.priv.hmark, hm.v in
+  begin
+    match hm1, hm2 with
+      Case_hmark, Immutable_hmark -> ()
+    | _, _ when hm1=hm2 -> ()
+    | _, _ ->
+        error_info
+          hm.i
+          ("Header mark is not consistent with private header mark \"" ^
+           (hmark2string hm1))
+  end;
+  let fgs = class_formal_generics fgens ct in
+  let nfgs = Array.length fgs        in
+  if nfgs > Array.length desc.priv.fgs then
+    error_info fgens.i "More formal generics than in private definition";
+  for i = 0 to nfgs-1 do
+    let _,  tp1 = desc.priv.fgs.(i)
+    and nme,tp2 = fgs.(i) in
+    if tp1 <> tp2 then
+      error_info fgens.i
+        ("The");
+    desc.publ <- Some {hmark=hm2; fgs=fgs; parents=TypSet.empty}
+  done
+
+
+
+
+
+let update
+    (idx:   int)
+    (hm:    header_mark withinfo)
+    (fgens: formal_generics)
+    (mt:    Module_table.t)
+    (ct:    t)
+    : unit =
+  assert (Module_table.has_current mt);
+  let desc = Seq.elem idx ct.classes
+  and mdl  = Module_table.current mt
+  in
+  if desc.mdl = -1 then
+    desc.mdl <- mdl
+  else if desc.mdl = mdl then
+    ()
+  else
+    assert false; (* Cannot update a class from a different module *)
+  if Module_table.is_private mt then
+    update_base_descriptor hm fgens desc.priv ct
+  else
+    match desc.publ with
+      None ->       export idx hm fgens ct
+    | Some bdesc -> update_base_descriptor hm fgens bdesc ct
+
+
+
+let add
+    (hm:    header_mark withinfo)
+    (cn:    int withinfo)
+    (fgens: formal_generics)
+    (mt:    Module_table.t)
+    (ct:    t)
+    : unit =
+  assert false (* nyi: insertion of new classes *)
+
+
 
 
 let get_type
@@ -90,7 +276,7 @@ let get_type
       ntvs + (Search.array_find_min (fun (n,_) -> n=name) fgs)
     with Not_found ->
       try
-        n + (Int_table.find name ct.names)
+        n + (find name ct)
       with Not_found ->
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
@@ -100,37 +286,6 @@ let get_type
       assert (actuals = []); (* nyi: generic types *)
       Variable (cls_idx name)
   | _ -> not_yet_implemented tp.i "types other than normal types"
-
-
-
-let get_type0
-    (tp:type_t withinfo)
-    (fgnames: int array)
-    (ct:t)
-    : term =
-  (** Convert the syntactic type [tp] in an environment with the formal
-      generic names [fgnames] into a type term
-   *)
-  let nfgs = Array.length fgnames in
-  let cls_idx (name:int): int =
-    try
-      Search.array_find_min (fun n -> n=name) fgnames
-    with Not_found ->
-      try
-        (Int_table.find name ct.names) + nfgs
-      with Not_found ->
-        error_info tp.i ("Class " ^ (ST.string name)
-                         ^ " does not exist")
-  in
-  match tp.v with
-    Normal_type (path,name,actuals) ->
-      assert (actuals = []); (* nyi: generic types *)
-      Variable (cls_idx name)
-  | _ -> not_yet_implemented tp.i "types other than normal types"
-
-
-
-
 
 
 
@@ -275,111 +430,69 @@ let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
 
 let empty_table (): t =
   let cc = Seq.empty ()
-  and kt = Int_table.make_empty ()
   in
-  {names=kt; classes=cc; fgens=IntMap.empty}
+  {map=IntMap.empty; classes=cc; fgens=IntMap.empty}
+
+
+
+let add_base_class
+    (name:int)
+    (desc:base_descriptor)
+    (ct:t)
+    : unit =
+  let priv = desc
+  and publ = Some desc
+  and idx  = Seq.count ct.classes
+  in
+  Seq.push {mdl=(-1); name=name; priv=priv; publ=publ} ct.classes;
+  ct.map <- IntMap.add name idx ct.map
+
+
+
+let check_base_classes (ct:t): unit =
+  assert (tuple_index < (count ct));
+  assert ((class_name boolean_index   ct) = "BOOLEAN");
+  assert ((class_name any_index       ct) = "ANY");
+  assert ((class_name predicate_index ct) = "PREDICATE");
+  assert ((class_name function_index  ct) = "FUNCTION");
+  assert ((class_name tuple_index     ct) = "TUPLE");
+  ()
 
 
 let base_table (): t =
-  let bt = empty_table () in
-  let cc = bt.classes
-  and kt = bt.names
-  in
-  let index cname = Int_table.index (Support.ST.symbol cname) kt
-  in
-  let zero_idx  = index "@ZERO"
-  and bool_idx  = index "BOOLEAN"
-  and any_idx   = index "ANY"
-  and pred_idx  = index "PREDICATE"
-  and func_idx  = index "FUNCTION"
-  and tuple_idx = index "TUPLE"
-  in
-  assert (zero_idx=zero_index);
-  assert (bool_idx=boolean_index);
-  assert (any_idx=any_index);
-  assert (pred_idx=predicate_index);
-  assert (func_idx=function_index);
-  assert (tuple_idx=tuple_index);
   let fgg = ST.symbol "G"
   and fga = ST.symbol "A"
   and fgb = ST.symbol "B"
-  in
-  Seq.push {hmark = No_hmark;
-            fgnames = [||]; constraints = [||];
-            parents = TypSet.empty } cc; (*@ZERO*)
-
-  Seq.push {hmark = Immutable_hmark;
-            fgnames = [||]; constraints = [||];
-            parents = TypSet.empty} cc; (*BOOLEAN*)
-
-  Seq.push {hmark = Deferred_hmark;
-            fgnames = [||]; constraints = [||];
-            parents = TypSet.empty } cc; (*ANY*)
-
-  Seq.push {hmark = Immutable_hmark;
-            fgnames = [|fgg|]; constraints = [|any 0|];
-            parents = TypSet.empty} cc; (*PREDICATE*)
-
-  Seq.push {hmark = Immutable_hmark;
-            fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
-            parents = TypSet.empty} cc; (*FUNCTION*)
-
-  Seq.push {hmark = Immutable_hmark;
-            fgnames = [|fga;fgb|]; constraints = [|any 0; any 0|];
-            parents =TypSet.empty} cc; (*TUPLE*)
-  {names=kt; classes=cc; fgens=bt.fgens}
-
-
+  and anycon = Variable any_index
+  and emppar = TypSet.empty
+  and ct = empty_table ()   in
+  add_base_class
+    (ST.symbol "BOOLEAN")
+    {hmark=Immutable_hmark; fgs=[||]; parents=emppar}
+    ct;
+  add_base_class
+    (ST.symbol "ANY")
+    {hmark=Deferred_hmark; fgs=[||]; parents=emppar}
+    ct;
+  add_base_class
+    (ST.symbol "PREDICATE")
+    {hmark=Deferred_hmark; fgs=[|fgg,anycon|]; parents=emppar}
+    ct;
+  add_base_class
+    (ST.symbol "FUNCTION")
+    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; parents=emppar}
+    ct;
+  add_base_class
+    (ST.symbol "TUPLE")
+    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; parents=emppar}
+    ct;
+  check_base_classes ct;
+  ct
 
 
-let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
-  (** Convert the type term [t] in an environment with [nb] type variables
-      and the formal generics [fgnames] to a string.
-   *)
-  let nfgs = Array.length fgnames
-  in
-  let rec to_string(t:term) (nb:int) (prec:int): string =
-    let args_to_string (tarr:term array) (nb:int): string =
-      "["
-      ^ (String.concat ","
-           (Array.to_list (Array.map (fun t -> to_string t nb 1) tarr)))
-      ^ "]"
-    in
-    let inner_prec, str =
-      match t with
-        Variable j ->
-          1,
-          if j<nb then
-            string_of_int j
-          else if j < nb+nfgs then
-            ST.string fgnames.(j-nb)
-          else class_name (j-nb-nfgs) ct
-      | Application (Variable j,tarr) ->
-          let j1 = j-nb-nfgs
-          and tarrlen = Array.length tarr in
-          if j1 = predicate_index then begin
-            assert (tarrlen=1);
-            1, ((to_string tarr.(0) nb 1) ^ "?")
-          end else if j1 = function_index then begin
-            assert (tarrlen=2);
-            1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
-          end else if j1 = tuple_index then begin
-            assert (tarrlen=2);
-            0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
-          end else begin
-            1,
-            (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
-          end
-      | Application (class_exp,args) -> assert false (*not yet implemented*)
-      | Lam (len,names,t) ->
-          assert false (*nyi*)
-          (*let len = Array.length arr in
-          1,
-          (args_to_string arr nb) ^ (to_string t (nb+len) 1)*)
-    in
-    if inner_prec < prec then "(" ^ str ^ ")" else str
-  in
-  to_string t nb 0
+
+
+
 
 
 
@@ -411,7 +524,7 @@ let string_of_signature
   argsstr ^ colon ^ retstr
 
 
-
+(*
 let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
   let desc = Seq.elem  i ctxt.classes in
@@ -446,8 +559,9 @@ let class2string (i:int) (ctxt:t): string =
   ^ (if TypSet.is_empty desc.parents then ""
   else" inherit " ^ par2string)
   ^ " end"
-
+*)
 let print ctxt =
-  Seq.iteri
+  (*Seq.iteri
     (fun i c -> Printf.printf "%s\n" (class2string i ctxt))
-    ctxt.classes
+    ctxt.classes*)
+  assert false

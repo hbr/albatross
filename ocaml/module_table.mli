@@ -7,6 +7,8 @@ val has:         int -> int list -> t -> bool
 val has_current: t -> bool
 val current:     t -> int
 val is_toplevel: t -> bool
+    (** Is the module table in the normal processing of a module i.e. does it
+        have only one module on the stack?  *)
 
 val is_public:   t -> bool
 val is_private:  t -> bool

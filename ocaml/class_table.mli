@@ -7,7 +7,6 @@ type formal = int * type_term
 
 type t
 
-val zero_index:      int
 val boolean_index:   int
 val any_index:       int
 val predicate_index: int
@@ -21,7 +20,18 @@ val base_table: unit -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
-val put: header_mark withinfo -> int withinfo -> t -> unit
+
+val count: t -> int
+
+val find:  int -> t -> int
+val find_in_module: int -> Module_table.t -> t -> int
+
+val update: int -> header_mark withinfo -> formal_generics
+    -> Module_table.t -> t -> unit
+
+val add: header_mark withinfo -> int withinfo -> formal_generics
+    -> Module_table.t -> t -> unit
+
 
 val boolean_type:   int -> term
 

@@ -433,9 +433,29 @@ let put_formal_generic
 
 
 
-let put_class (hm:header_mark withinfo) (cn:int withinfo) (c:t): unit =
+let put_class
+    (hm:       header_mark withinfo)
+    (cn:       int withinfo)
+    (fgs:      formal_generics)
+    (inherits: inherit_clause list)
+    (c:t)
+    : unit =
+  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
+      corresponding class.  *)
   assert (is_global c);
-  Class_table.put hm cn c.ct
+  assert (fgs.v = []);
+  assert (inherits = []);
+  let idx =
+    try
+      let idx = Class_table.find_in_module cn.v c.mt c.ct in
+      Class_table.update idx hm fgs c.mt c.ct;
+      idx
+    with Not_found ->
+      let idx = Class_table.count c.ct in
+      Class_table.add hm cn fgs c.mt c.ct;
+      idx
+  in
+  ()
 
 
 
