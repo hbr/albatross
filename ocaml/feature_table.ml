@@ -16,11 +16,11 @@ module Key_map = Map.Make(struct
 end)
 
 type definition = term
+type formal     = int * term
 
 type descriptor = {fname:       feature_name;
                    impstat:     implementation_status;
-                   fgnames:     int array;
-                   concepts:    term array;
+                   fgs:         formal array;
                    argnames:    int array;
                    sign:        Sign.t;
                    priv:        definition option;
@@ -45,6 +45,24 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.features
 
 
+let names_of_formals (farr: formal array): int array =
+  Array.map (fun (name,_) -> name) farr
+
+let terms_of_formals (farr: formal array): term array =
+  Array.map (fun (_,t) -> t) farr
+
+
+let fgnames (desc: descriptor): int array =
+  names_of_formals desc.fgs
+
+let constraints (desc: descriptor): type_term array =
+  terms_of_formals desc.fgs
+
+
+let argnames (desc: descriptor): int array =
+  desc.argnames
+
+
 
 let implication_index: int = 0
 let all_index:         int = 2
@@ -64,8 +82,7 @@ let base_table () : t =
   Seq.push
     {fname    = fnimp;
      impstat  = Builtin;
-     fgnames  = [||];
-     concepts = [||];
+     fgs      = [||];
      argnames = [||];
      sign     = signimp;
      priv     = None;
@@ -87,8 +104,7 @@ let base_table () : t =
   let entry =
     {fname    = FNoperator Allop;
      impstat  = Builtin;
-     fgnames  = [|g|];
-     concepts = [|any|];
+     fgs      = [|g,any|];
      argnames = [|p|];
      sign     = Sign.make_func [|p_tp|] bool1;
      priv     = None;
@@ -314,11 +330,11 @@ let print (ct:Class_table.t)  (ft:t): unit =
     (fun i fdesc ->
       let name = feature_name_to_string fdesc.fname
       and tname =
-        Class_table.string_of_signature fdesc.sign 0 fdesc.fgnames ct
+        Class_table.string_of_signature fdesc.sign 0 (fgnames fdesc) ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
-        | Some def -> term_to_string def fdesc.argnames ft
+        | Some def -> term_to_string def (argnames fdesc) ft
       in
       match fdesc.pub with
         None ->
@@ -333,17 +349,14 @@ let print (ct:Class_table.t)  (ft:t): unit =
 
 let put_function
     (fn:       feature_name withinfo)
-    (fgnames:  int array)
-    (concepts: type_term array)
+    (fgs:      formal array)
     (argnames: int array)
     (sign:     Sign.t)
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  (** Add the function with then name [fn], the formal generics [fgnames] with
-      their constraints [concepts], the arguments [argnames], the
-      signature [sign] to the feature table
-   *)
+  (** Add the function with then name [fn], the formal generics [fgs], the
+      arguments [argnames], the signature [sign] to the feature table *)
   let is_priv = Parse_info.is_module () in
   let cnt   = Seq.count ft.features
   and nargs = Sign.arity sign
@@ -351,6 +364,7 @@ let put_function
   let sig_map =
     try Key_map.find (fn.v,nargs) ft.map
     with Not_found -> ESignature_map.empty
+  and concepts = Array.map (fun (_,tp) -> tp) fgs
   in
   let idx =
     try ESignature_map.find (concepts,sign) sig_map
@@ -359,8 +373,7 @@ let put_function
     Seq.push
       {fname    = fn.v;
        impstat  = impstat;
-       fgnames  = fgnames;
-       concepts = concepts;
+       fgs      = fgs;
        argnames = argnames;
        sign     = sign;
        priv     = term_opt;

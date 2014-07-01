@@ -24,7 +24,7 @@ val normalize_term: term->int->t->term
 val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
 val put_function:
-    feature_name withinfo -> int array -> type_term array -> int array
+    feature_name withinfo -> (int*type_term) array -> int array
       -> Sign.t -> implementation_status -> term option -> t -> unit
 
 val term_to_string: term -> int array -> t -> string

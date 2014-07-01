@@ -398,13 +398,11 @@ let put_global_function
     (c:      t)
     : unit =
   assert (is_toplevel c);
-  let fgnames, concepts = unzip_array c.entry.fgs in
   Feature_table.put_function
     fn
-    fgnames
-    concepts
+    c.entry.fgs
     (fargnames c)
-    (signature c) (*c.entry.signature*)
+    (signature c)
     impstat
     term_opt
     c.ft
