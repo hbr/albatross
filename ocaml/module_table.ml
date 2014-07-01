@@ -45,8 +45,13 @@ let current (mt:t): int =
   assert (has_current mt);
   List.hd mt.stack
 
-let is_public  (mt:t): bool = mt.is_pub
-let is_private (mt:t): bool = not mt.is_pub
+let is_public  (mt:t): bool =
+  match mt.stack with
+    []   -> false
+  | [_]  -> mt.is_pub
+  | _    -> true
+
+let is_private (mt:t): bool = not (is_public mt)
 
 let set_public (mt:t): unit =
   assert (is_toplevel mt);
