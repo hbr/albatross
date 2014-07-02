@@ -88,6 +88,12 @@ let next_index (tab:t): int =
 
 exception Term_found of term
 
+
+let terms (tab:t): (int*int*int*term) list =
+  (** All the terms as a list [idx,nargs,nbenv,term] of the table [tab] in the
+      reverse order in which they have been inserted.  *)
+  tab.terms
+
 let print_tab (nb:int) (tab:t): unit =
   let terms = List.rev tab.terms in
   List.iter

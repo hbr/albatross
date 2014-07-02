@@ -4,6 +4,8 @@ type t
 
 val empty: t
 
+val terms: t -> (int*int*int*term) list
+
 val term:  int -> int -> t -> term
 
 val unify: term -> int -> t -> (int * Term_sub.t) list
