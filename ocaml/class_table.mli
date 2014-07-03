@@ -56,3 +56,5 @@ val print: t -> unit
 
 val type2string: term -> int -> int array -> t -> string
 val string_of_signature: Sign.t -> int -> int array -> t -> string
+
+val type_of_signature: Sign.t -> int -> type_term

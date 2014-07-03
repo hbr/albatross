@@ -493,6 +493,37 @@ let base_table (): t =
 
 
 
+let type_of_signature
+    (s:Sign.t)
+    (ntvs: int)
+    : type_term =
+  (** The type term which corresponds to the signature [s] in an environment
+      with [ntvs] type variables.  *)
+  let argtypes = Sign.arguments s
+  and nargs    = Sign.arity s
+  and tuple_index    = tuple_index    + ntvs
+  and function_index = function_index + ntvs
+  in
+  if Sign.has_result s && not (Sign.is_procedure s) then
+    let rt = Sign.result s in
+    if nargs = 0 then
+      rt
+    else if nargs = 1 then
+      Application(Variable function_index, [|argtypes.(0);rt|])
+    else
+      let rec tuple (i:int) (tup:term): term =
+        if i=0 then tup
+        else
+          let i   = i - 1 in
+          let tup = Application(Variable tuple_index, [|argtypes.(i);tup|]) in
+          tuple i tup
+      in
+      tuple
+        (nargs-2)
+        (Application(Variable tuple_index,
+                     [|argtypes.(nargs-2); argtypes.(nargs-1)|]))
+  else
+    assert false (* nyi: procedures *)
 
 
 
