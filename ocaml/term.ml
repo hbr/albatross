@@ -733,6 +733,7 @@ module Term_sub: sig
   val count:          t -> int
   val is_injective:   t -> bool
   val empty:          t
+  val identity:       int -> t
   val is_empty:       t -> bool
   val singleton:      int -> term -> t
   val find:           int -> t -> term
@@ -796,6 +797,14 @@ end = struct
   let add (i:int) (t:term) (sub:t): t =
     assert (not (mem i sub));
     IntMap.add i t sub
+
+  let identity (n:int): t =
+    assert (0 <= n);
+    let res = ref empty in
+    for i = 0 to n-1 do
+      res := add i (Variable i) !res
+    done;
+    !res
 
   let merge (sub1:t) (sub2:t): t =
     let res = ref sub2 in
