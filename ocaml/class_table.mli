@@ -14,23 +14,23 @@ val function_index:  int
 val tuple_index:     int
 
 
-val empty_table: unit -> t
+(*val empty_table: unit -> t*)
 
 val base_table: unit -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
 
+val module_table: t -> Module_table.t
+
 val count: t -> int
 
 val find:  int -> t -> int
-val find_in_module: int -> Module_table.t -> t -> int
+val find_in_module: int -> t -> int
 
-val update: int -> header_mark withinfo -> formal_generics
-    -> Module_table.t -> t -> unit
+val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
-val add: header_mark withinfo -> int withinfo -> formal_generics
-    -> Module_table.t -> t -> unit
+val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 
 
 val boolean_type:   int -> term

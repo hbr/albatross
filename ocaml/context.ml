@@ -23,8 +23,6 @@ type t = {
     mutable entry: entry;
     mutable stack: entry list;
     mutable trace: bool;
-    mt:            Module_table.t;
-    ct:            Class_table.t;
     ft:            Feature_table.t;
     pc:            Proof_context.t
   }
@@ -53,24 +51,29 @@ let unzip_array (c: ('a*'b) array): 'a array * 'b array =
   a,b
 
 
+let class_table(c:t): Class_table.t     = Feature_table.class_table c.ft
+let feature_table(c:t): Feature_table.t = c.ft
+
+let module_table (c:t): Module_table.t =
+  Feature_table.module_table c.ft
 
 let has_current_module (c:t): bool =
-  Module_table.has_current c.mt
+  Module_table.has_current (module_table c)
 
 let current_module (c:t): int =
-  Module_table.current c.mt
+  Module_table.current (module_table c)
 
 let find_module (name:int) (lib:int list) (c:t): int =
-  Module_table.find name lib c.mt
+  Module_table.find name lib (module_table c)
 
 let add_used_modules (mdl:int) (inf:info) (c:t): unit =
-  Module_table.add_used mdl inf c.mt
+  Module_table.add_used mdl inf (module_table c)
 
 let push_module (name:int) (lib:int list) (c:t): unit =
-  Module_table.push name lib c.mt
+  Module_table.push name lib (module_table c)
 
 let pop_module (c:t): unit =
-  Module_table.pop c.mt
+  Module_table.pop (module_table c)
 
 
 
@@ -175,7 +178,7 @@ let sign2string (s:Sign.t) (c:t): string =
     s
     (count_type_variables c)
     (fgnames c)
-    c.ct
+    (class_table c)
 
 
 
@@ -214,14 +217,14 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
 
 let concept_satisfies_concept (cpt1:type_term) (cpt2:type_term) (c:t): bool =
   (** Does the concept [cpt1] satisfy the concept [cpt2] in [c]?  *)
-  Class_table.satisfies cpt1 [||] cpt2 c.ct
+  Class_table.satisfies cpt1 [||] cpt2 (class_table c)
 
 let type_satisfies_concept (t:type_term) (cpt:type_term) (c:t): bool =
   (** Does the type [t] satisfy the concept [cpt] in [c]?
 
       Note: Type 0 is the first formal generic and not the first type
       variable!  *)
-  Class_table.satisfies t (formal_generics c) cpt c.ct
+  Class_table.satisfies t (formal_generics c) cpt (class_table c)
 
 
 let read_trace_info (c:t): unit =
@@ -231,8 +234,6 @@ let make (): t =
   {entry = empty_entry;
    stack = [];
    trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
-   mt        = Module_table.make ();
-   ct        = Class_table.base_table ();
    ft        = Feature_table.base_table ();
    pc        =
    Proof_context.make
@@ -249,13 +250,14 @@ let push
   (** Make a next local context with the argument list [entlst] and the
       return type [rt] based on previous local global context [c]
    *)
-  let entry      = c.entry in
-  let ntvs0      = TVars_sub.count_local entry.tvars_sub                in
-  let fgs1,ntvs1 = Class_table.formal_generics entlst rt entry.fgs c.ct in
-  let nfgs1      = Array.length fgs1                                    in
-  let ntvs,fgs   = ntvs1+ntvs0, Array.append fgs1 entry.fgs             in
-  let res        = Class_table.result_type rt ntvs fgs c.ct             in
-  let fargs1     = Class_table.formal_arguments entlst ntvs fgs c.ct    in
+  let entry      = c.entry
+  and ct         = class_table c in
+  let ntvs0      = TVars_sub.count_local entry.tvars_sub              in
+  let fgs1,ntvs1 = Class_table.formal_generics entlst rt entry.fgs ct in
+  let nfgs1      = Array.length fgs1                                  in
+  let ntvs,fgs   = ntvs1+ntvs0, Array.append fgs1 entry.fgs           in
+  let res        = Class_table.result_type rt ntvs fgs ct             in
+  let fargs1     = Class_table.formal_arguments entlst ntvs fgs ct    in
   let fargs      =
     Array.append
       fargs1
@@ -303,9 +305,10 @@ let pop (c:t): unit =
 
 
 
-
+(*
 let ct (c:t): Class_table.t    = c.ct
 let ft (c:t): Feature_table.t  = c.ft
+*)
 
 let type_variables (c:t): TVars_sub.t = c.entry.tvars_sub
 
@@ -375,8 +378,9 @@ let result_string (e:entry) (ct:Class_table.t): string =
 let named_signature_string (c:t): string =
   (** Print the signature of the context [c] with all argument names.
    *)
-  let argsstr = arguments_string c.entry c.ct
-  and resstr  = result_string    c.entry c.ct
+  let ct = class_table c in
+  let argsstr = arguments_string c.entry ct
+  and resstr  = result_string    c.entry ct
   in
   let has_args = argsstr <> ""
   and has_res  = resstr <> ""
@@ -427,7 +431,7 @@ let put_formal_generic
       generics.
    *)
   assert (is_global c);
-  Class_table.put_formal name concept c.ct
+  Class_table.put_formal name concept (class_table c)
 
 
 
@@ -443,14 +447,15 @@ let put_class
   assert (is_global c);
   assert (fgs.v = []);
   assert (inherits = []);
+  let ct = class_table c in
   let idx =
     try
-      let idx = Class_table.find_in_module cn.v c.mt c.ct in
-      Class_table.update idx hm fgs c.mt c.ct;
+      let idx = Class_table.find_in_module cn.v ct in
+      Class_table.update idx hm fgs  ct;
       idx
     with Not_found ->
-      let idx = Class_table.count c.ct in
-      Class_table.add hm cn fgs c.mt c.ct;
+      let idx = Class_table.count ct in
+      Class_table.add hm cn fgs ct;
       idx
   in
   ()
@@ -536,7 +541,7 @@ let print_assertions
     (c1:int)
     (global:bool)
     (c:t): unit =
-  let argsstr = arguments_string e c.ct in
+  let argsstr = arguments_string e (class_table c) in
   if argsstr <> "" then
     Printf.printf "%s%s\n" prefix argsstr;
   let rec print (i:int): unit =
@@ -708,6 +713,6 @@ let backward_data (idx:int) (c:t): term list * IntSet.t =
 
 let print (c:t): unit =
   assert (is_global c);
-  Class_table.print   c.ct;
-  Feature_table.print c.ct c.ft;
+  Class_table.print   (class_table c);
+  Feature_table.print c.ft;
   print_global_assertions c

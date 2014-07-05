@@ -12,6 +12,9 @@ type t
 type proof_term
 val make:  unit -> t
 
+val class_table: t -> Class_table.t
+val feature_table:t -> Feature_table.t
+
 val has_current_module: t -> bool
 val current_module:     t -> int
 val find_module:        int -> int list -> t -> int
@@ -37,8 +40,6 @@ val result_type: t -> type_term
 val count_type_variables: t -> int
 
 val fgnames: t -> int array
-val ct:      t -> Class_table.t
-val ft:      t -> Feature_table.t
 
 val type_variables: t -> TVars_sub.t
 

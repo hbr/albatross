@@ -366,8 +366,10 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
       [sub] to the term [t] yields the term at [idx].
 
       Note: The substitutions are valid in the environment of the term
-            at idx. Before applying it to [t] they have to be transformed
-            into the environment of [t].
+            at idx because they are subterms of the term at [idx]. Before
+            applying the substitutions to [t] [t] has to be transformed
+            into the environment of the term at [idx] (e.g. in the term [t]
+            space has to be made for the variables of the term at [idx]).
    *)
   let rec uniw (t:term) (tab:t) (nb:int): sublist =
     match t with
@@ -380,9 +382,9 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
           (fun lst (idx,nargs_0,nbenv_0,t_0) ->
             assert (nbenv_0 <= nbenv);
             assert (not (List.exists (fun (i,_) -> i=idx) lst));
-            if nargs_0 = 0 then
+            (*if nargs_0 = 0 then*)  (* has to be checked!!! *)
               (idx, Term_sub.singleton (i-nb) t_0)::lst
-            else lst)
+            (*else lst*))
           []
           (List.rev tab.terms)
     | Variable i ->

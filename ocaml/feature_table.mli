@@ -14,6 +14,8 @@ val some_index:        int
 
 val base_table: unit -> t
 
+val module_table: t -> Module_table.t
+val class_table:  t -> Class_table.t
 
 val implication_term: term -> term -> int -> t -> term
 
@@ -29,5 +31,5 @@ val put_function:
 
 val term_to_string: term -> int array -> t -> string
 
-val print: Class_table.t -> t -> unit
+val print: t -> unit
 

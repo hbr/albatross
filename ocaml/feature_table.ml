@@ -27,13 +27,17 @@ type descriptor = {fname:       feature_name;
                    mutable pub: definition option option}
 
 type t          = {mutable map: int ESignature_map.t Key_map.t;
-                   features: descriptor seq}
+                   features:    descriptor seq;
+                   ct:          Class_table.t}
 
 
 let empty (): t =
   {map  = Key_map.empty;
-   features = Seq.empty ()}
+   features = Seq.empty ();
+   ct       = Class_table.base_table ()}
 
+let class_table (ft:t):  Class_table.t   = ft.ct
+let module_table (ft:t): Module_table.t  = Class_table.module_table ft.ct
 
 
 let count (ft:t): int =
@@ -325,12 +329,12 @@ let term_to_string
 
 
 
-let print (ct:Class_table.t)  (ft:t): unit =
+let print (ft:t): unit =
   Seq.iteri
     (fun i fdesc ->
       let name = feature_name_to_string fdesc.fname
       and tname =
-        Class_table.string_of_signature fdesc.sign 0 (fgnames fdesc) ct
+        Class_table.string_of_signature fdesc.sign 0 (fgnames fdesc) ft.ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"

@@ -26,7 +26,8 @@ type descriptor      = { mutable mdl:  int;
 
 type t = {mutable map:   int IntMap.t;
           classes:       descriptor seq;
-          mutable fgens: term IntMap.t}
+          mutable fgens: term IntMap.t;
+          mt:            Module_table.t}
 
 let boolean_index   = 0
 let any_index       = 1
@@ -35,6 +36,9 @@ let function_index  = 3
 let tuple_index     = 4
 
 
+
+let module_table (ct:t): Module_table.t =
+  ct.mt
 
 let count (c:t) =
   Seq.count c.classes
@@ -123,11 +127,11 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
 let find (cn: int) (ct:t): int =
   IntMap.find cn ct.map
 
-let find_in_module (cn:int) (mt:Module_table.t) (ct:t): int =
-  assert (Module_table.has_current mt);
+let find_in_module (cn:int) (ct:t): int =
+  assert (Module_table.has_current (module_table ct));
   let idx  = find cn ct in
   let desc = Seq.elem idx ct.classes
-  and mdl  = Module_table.current mt in
+  and mdl  = Module_table.current ct.mt in
   if desc.mdl = (-1) || desc.mdl = mdl then
     idx
   else
@@ -227,12 +231,11 @@ let update
     (idx:   int)
     (hm:    header_mark withinfo)
     (fgens: formal_generics)
-    (mt:    Module_table.t)
     (ct:    t)
     : unit =
-  assert (Module_table.has_current mt);
+  assert (Module_table.has_current (module_table ct));
   let desc = Seq.elem idx ct.classes
-  and mdl  = Module_table.current mt
+  and mdl  = Module_table.current ct.mt
   in
   if desc.mdl = -1 then
     desc.mdl <- mdl
@@ -240,7 +243,7 @@ let update
     ()
   else
     assert false; (* Cannot update a class from a different module *)
-  if Module_table.is_private mt then
+  if Module_table.is_private ct.mt then
     update_base_descriptor hm fgens desc.priv ct
   else
     match desc.publ with
@@ -253,7 +256,6 @@ let add
     (hm:    header_mark withinfo)
     (cn:    int withinfo)
     (fgens: formal_generics)
-    (mt:    Module_table.t)
     (ct:    t)
     : unit =
   assert false (* nyi: insertion of new classes *)
@@ -431,7 +433,7 @@ let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
 let empty_table (): t =
   let cc = Seq.empty ()
   in
-  {map=IntMap.empty; classes=cc; fgens=IntMap.empty}
+  {map=IntMap.empty; classes=cc; fgens=IntMap.empty; mt=Module_table.make ()}
 
 
 
@@ -555,7 +557,7 @@ let string_of_signature
   argsstr ^ colon ^ retstr
 
 
-(*
+(* needs to be adapted for private and public views !!
 let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
   let desc = Seq.elem  i ctxt.classes in
@@ -591,6 +593,7 @@ let class2string (i:int) (ctxt:t): string =
   else" inherit " ^ par2string)
   ^ " end"
 *)
+
 let print ctxt =
   (*Seq.iteri
     (fun i c -> Printf.printf "%s\n" (class2string i ctxt))

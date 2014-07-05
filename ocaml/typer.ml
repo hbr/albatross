@@ -455,7 +455,7 @@ let rec analyze_expression
                  (List.map
                     (fun (sign,ntvs) ->
                       let fgnames = Context.fgnames c
-                      and ct      = Context.ct c
+                      and ct      = Context.class_table c
                       in
                       Class_table.string_of_signature sign ntvs fgnames ct)
                     exp_sign_lst))
