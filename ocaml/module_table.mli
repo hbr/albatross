@@ -14,6 +14,8 @@ val is_public:   t -> bool
 val is_private:  t -> bool
 val set_public:  t -> unit
 
+val name:        int -> t -> string
+
 val make: unit -> t
 
 val add_used:    int -> info -> t -> unit

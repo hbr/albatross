@@ -18,7 +18,8 @@ end)
 type definition = term
 type formal     = int * term
 
-type descriptor = {fname:       feature_name;
+type descriptor = {mutable mdl: int;
+                   fname:       feature_name;
                    impstat:     implementation_status;
                    fgs:         formal array;
                    argnames:    int array;
@@ -84,7 +85,8 @@ let base_table () : t =
   in
   (* boolean *)
   Seq.push
-    {fname    = fnimp;
+    {mdl      = -1;
+     fname    = fnimp;
      impstat  = Builtin;
      fgs      = [||];
      argnames = [||];
@@ -106,7 +108,8 @@ let base_table () : t =
                            [|g_tp|])
   in
   let entry =
-    {fname    = FNoperator Allop;
+    {mdl      = -1;
+     fname    = FNoperator Allop;
      impstat  = Builtin;
      fgs      = [|g,any|];
      argnames = [|p|];
@@ -332,8 +335,13 @@ let term_to_string
 let print (ft:t): unit =
   Seq.iteri
     (fun i fdesc ->
-      let name = feature_name_to_string fdesc.fname
-      and tname =
+      let name   = feature_name_to_string fdesc.fname
+      and mdlnme =
+        if fdesc.mdl = -1
+        then ""
+        else
+          Module_table.name fdesc.mdl (module_table ft)
+      and tname  =
         Class_table.string_of_signature fdesc.sign 0 (fgnames fdesc) ft.ct
       and bdyname def_opt =
         match def_opt with
@@ -342,10 +350,11 @@ let print (ft:t): unit =
       in
       match fdesc.pub with
         None ->
-          Printf.printf "%-7s  %s = (%s)\n" name tname (bdyname fdesc.priv)
+          Printf.printf "%-15s %-7s %s = (%s)\n"
+            mdlnme name tname (bdyname fdesc.priv)
       | Some pdef ->
-          Printf.printf "%-7s  %s = (%s, %s)\n"
-            name tname (bdyname fdesc.priv) (bdyname pdef))
+          Printf.printf "%-15s %-7s %s = (%s, %s)\n"
+            mdlnme name tname (bdyname fdesc.priv) (bdyname pdef))
     ft.features
 
 
@@ -373,9 +382,11 @@ let put_function
   let idx =
     try ESignature_map.find (concepts,sign) sig_map
     with Not_found -> cnt in
+  let mdl = Module_table.current (module_table ft) in
   if idx=cnt then begin (* new feature *)
     Seq.push
-      {fname    = fn.v;
+      {mdl      = mdl;
+       fname    = fn.v;
        impstat  = impstat;
        fgs      = fgs;
        argnames = argnames;
@@ -396,7 +407,7 @@ let put_function
       in
       error_info fn.i str
     in
-
+    desc.mdl <- mdl;
     if is_priv then begin
       if impstat <> desc.impstat then
         not_match "implementation status";
