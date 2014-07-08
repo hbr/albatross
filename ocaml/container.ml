@@ -120,6 +120,32 @@ end = struct
 end
 
 
+
+
+module Myarray: sig
+
+  val combine: 'a array -> 'b array -> ('a*'b) array
+  val split:   ('a*'b) array -> 'a array * 'b array
+
+end = struct
+
+  let combine (a: 'a array) (b: 'b array): ('a*'b) array =
+    let n = Array.length a in
+    assert (n = Array.length b);
+    Array.init n (fun i -> a.(i),b.(i))
+
+  let split (c: ('a*'b) array): 'a array * 'b array =
+    let a = Array.map (fun (x,_) -> x) c
+    and b = Array.map (fun (_,y) -> y) c in
+    a,b
+
+end
+
+
+
+
+
+
 module Seq: sig
   type 'a t
   val empty: unit -> 'a t

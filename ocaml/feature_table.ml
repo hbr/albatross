@@ -22,33 +22,34 @@ type descriptor = {mutable mdl: int;
                    cls:         int;
                    fname:       feature_name;
                    impstat:     implementation_status;
-                   fgs:         formal array;
+                   fgnames:     int array;
+                   concepts:    type_term array;
                    argnames:    int array;
                    sign:        Sign.t;
                    priv:        definition option;
                    mutable pub: definition option option}
 
 type t          = {mutable map: int ESignature_map.t Key_map.t;
-                   features:    descriptor seq;
+                   seq:         descriptor seq;
                    ct:          Class_table.t}
 
 
 let empty (): t =
   {map  = Key_map.empty;
-   features = Seq.empty ();
-   ct       = Class_table.base_table ()}
+   seq  = Seq.empty ();
+   ct   = Class_table.base_table ()}
 
 let class_table (ft:t):  Class_table.t   = ft.ct
 let module_table (ft:t): Module_table.t  = Class_table.module_table ft.ct
 
 
 let count (ft:t): int =
-  Seq.count ft.features
+  Seq.count ft.seq
 
 
 let descriptor (i:int) (ft:t): descriptor =
   assert (i < count ft);
-  Seq.elem i ft.features
+  Seq.elem i ft.seq
 
 
 let names_of_formals (farr: formal array): int array =
@@ -58,15 +59,6 @@ let terms_of_formals (farr: formal array): term array =
   Array.map (fun (_,t) -> t) farr
 
 
-let fgnames (desc: descriptor): int array =
-  names_of_formals desc.fgs
-
-let constraints (desc: descriptor): type_term array =
-  terms_of_formals desc.fgs
-
-
-let argnames (desc: descriptor): int array =
-  desc.argnames
 
 
 
@@ -76,13 +68,36 @@ let all_index:         int = 2
 let some_index:        int = 3
 
 
+let add_key (i:int) (ft:t): unit =
+  (** Add the key of the feature [i] to the key table. *)
+  assert (i < count ft);
+  let desc  = Seq.elem i ft.seq
+  in
+  let fn    = desc.fname
+  and nargs = Sign.arity desc.sign
+  in
+  let esign_map =
+    try Key_map.find (fn,nargs) ft.map
+    with Not_found -> ESignature_map.empty
+  in
+  ft.map <-
+    Key_map.add
+      (fn,nargs)
+      (ESignature_map.add (desc.concepts,desc.sign) i esign_map)
+      ft.map
+
+
+let add_keys (ft:t): unit =
+  for i = 0 to (count ft)-1 do
+    add_key i ft
+  done
+
+
 let base_table () : t =
-  (** Construct a basic table which contains at least implication.
-   *)
+  (** Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
   let ft      = empty ()
   and fnimp   = FNoperator DArrowop
-  and idximp  = 0
   and signimp = Sign.make_func [|bool;bool|] bool
   in
   (* boolean *)
@@ -93,16 +108,13 @@ let base_table () : t =
      cls      = Class_table.boolean_index;
      fname    = fnimp;
      impstat  = Builtin;
-     fgs      = [||];
+     fgnames  = [||];
+     concepts = [||];
      argnames = [||];
      sign     = signimp;
      priv     = None;
      pub      = Some None}  (* 0: implication *)
-    ft.features;
-  ft.map <- Key_map.add
-      (fnimp,2)
-      (ESignature_map.singleton ([||],signimp) idximp)
-      ft.map;
+    ft.seq;
   (* predicate *)
   let g = ST.symbol "G"
   and p = ST.symbol "p"
@@ -117,7 +129,8 @@ let base_table () : t =
      cls      = Class_table.predicate_index;
      fname    = FNoperator Allop;
      impstat  = Builtin;
-     fgs      = [|g,any|];
+     fgnames  = [|g|];
+     concepts = [|any|];
      argnames = [|p|];
      sign     = Sign.make_func [|p_tp|] bool1;
      priv     = None;
@@ -129,16 +142,15 @@ let base_table () : t =
     in
     Class_table.add_feature paren_index Class_table.function_index false ft.ct;
     Seq.push {entry with fname = FNoperator Parenop;
-              sign = sign}  ft.features;  (* 1: "()" *)
-    ft.map <- Key_map.add (FNoperator Parenop,2)
-        (ESignature_map.singleton ([|any|],sign) idx)
-        ft.map
+              sign = sign}  ft.seq;  (* 1: "()" *)
   end;
   Class_table.add_feature all_index  Class_table.predicate_index false ft.ct;
   Class_table.add_feature some_index Class_table.predicate_index false ft.ct;
-  Seq.push entry ft.features;                                   (* 2: all  *)
-  Seq.push{entry with fname = FNoperator Someop} ft.features ;  (* 3: some *)
+  Seq.push entry ft.seq;                                   (* 2: all  *)
+  Seq.push{entry with fname = FNoperator Someop} ft.seq;   (* 3: some *)
+  add_keys ft;
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
+  assert ((descriptor paren_index ft).fname       = FNoperator Parenop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
   ft
@@ -155,6 +167,19 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 
 
+
+
+
+let find
+    (fn:feature_name)
+    (nargs:int)
+    (concepts:type_term array)
+    (sign:Sign.t)
+    (ft:t)
+    : int =
+  ESignature_map.find
+    (concepts,sign)
+    (Key_map.find (fn,nargs) ft.map)
 
 
 
@@ -186,8 +211,8 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
         Variable i
       else
         let idx = i-n in
-        assert (idx < (Seq.count ft.features));
-        let desc = Seq.elem idx ft.features in
+        assert (idx < (Seq.count ft.seq));
+        let desc = Seq.elem idx ft.seq in
         match desc.priv with
           None -> Variable i
         | Some def ->
@@ -235,12 +260,12 @@ let term_to_string
         ST.string names.(i)
       else
         feature_name_to_string
-          (Seq.elem (i-nnames) ft.features).fname
+          (Seq.elem (i-nnames) ft.seq).fname
     and find_op (f:term): operator  =
       match f with
         Variable i when nnames <= i ->
           begin
-            match (Seq.elem (i-nnames) ft.features).fname with
+            match (Seq.elem (i-nnames) ft.seq).fname with
               FNoperator op -> op
             | _ -> raise Not_found
           end
@@ -351,11 +376,11 @@ let print (ft:t): unit =
         else
           Module_table.name fdesc.mdl (module_table ft)
       and tname  =
-        Class_table.string_of_signature fdesc.sign 0 (fgnames fdesc) ft.ct
+        Class_table.string_of_signature fdesc.sign 0 fdesc.fgnames ft.ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
-        | Some def -> term_to_string def (argnames fdesc) ft
+        | Some def -> term_to_string def fdesc.argnames ft
       and clsnme =
         if fdesc.cls = -1 then ""
         else Class_table.class_name fdesc.cls ft.ct
@@ -367,7 +392,7 @@ let print (ft:t): unit =
       | Some pdef ->
           Printf.printf "%s.%s: %s %s = (%s, %s)\n"
             mdlnme clsnme name tname (bdyname fdesc.priv) (bdyname pdef))
-    ft.features
+    ft.seq
 
 
 
@@ -383,17 +408,14 @@ let put_function
   (** Add the function with then name [fn], the formal generics [fgs], the
       arguments [argnames], the signature [sign] to the feature table *)
   let is_priv = Parse_info.is_module () in
-  let cnt   = Seq.count ft.features
+  let cnt   = Seq.count ft.seq
   and nargs = Sign.arity sign
-  in
-  let sig_map =
-    try Key_map.find (fn.v,nargs) ft.map
-    with Not_found -> ESignature_map.empty
-  and concepts = Array.map (fun (_,tp) -> tp) fgs
+  and fgnames, concepts = Myarray.split fgs
   in
   let idx =
-    try ESignature_map.find (concepts,sign) sig_map
-    with Not_found -> cnt in
+     try find fn.v nargs concepts sign ft
+     with Not_found -> cnt
+  in
   let mdl = Module_table.current (module_table ft) in
   let cls = Class_table.owner mdl concepts sign ft.ct in
   if idx=cnt then begin (* new feature *)
@@ -402,18 +424,16 @@ let put_function
        cls      = cls;
        fname    = fn.v;
        impstat  = impstat;
-       fgs      = fgs;
+       fgnames  = fgnames;
+       concepts = concepts;
        argnames = argnames;
        sign     = sign;
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt}
-      ft.features;
-    ft.map <- Key_map.add
-        (fn.v,nargs)
-        (ESignature_map.add (concepts,sign) idx sig_map)
-        ft.map;
+      ft.seq;
+    add_key cnt ft
   end else begin        (* feature update *)
-    let desc = Seq.elem idx ft.features
+    let desc = Seq.elem idx ft.seq
     and not_match str =
       let str = "The " ^ str ^ " of \""
         ^ (feature_name_to_string fn.v)

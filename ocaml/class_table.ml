@@ -29,7 +29,7 @@ type descriptor      = { mutable mdl:  int;
                          mutable publ: base_descriptor option}
 
 type t = {mutable map:   int IntMap.t;
-          classes:       descriptor seq;
+          seq:           descriptor seq;
           mutable fgens: term IntMap.t;
           mt:            Module_table.t}
 
@@ -45,12 +45,12 @@ let module_table (ct:t): Module_table.t =
   ct.mt
 
 let count (c:t) =
-  Seq.count c.classes
+  Seq.count c.seq
 
 
 let class_symbol (i:int) (ct:t): int =
   assert (i<count ct);
-  (Seq.elem i ct.classes).name
+  (Seq.elem i ct.seq).name
 
 let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
@@ -134,7 +134,7 @@ let find (cn: int) (ct:t): int =
 let find_in_module (cn:int) (ct:t): int =
   assert (Module_table.has_current (module_table ct));
   let idx  = find cn ct in
-  let desc = Seq.elem idx ct.classes
+  let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt in
   if desc.mdl = (-1) || desc.mdl = mdl then
     idx
@@ -202,7 +202,7 @@ let export
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  let desc = Seq.elem idx ct.classes in
+  let desc = Seq.elem idx ct.seq in
   let hm1, hm2 = desc.priv.hmark, hm.v in
   begin
     match hm1, hm2 with
@@ -238,7 +238,7 @@ let update
     (ct:    t)
     : unit =
   assert (Module_table.has_current (module_table ct));
-  let desc = Seq.elem idx ct.classes
+  let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt
   in
   if desc.mdl = -1 then
@@ -261,7 +261,7 @@ let add_feature (fidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   (** Add the feature [fidx] to the class [cidx] as deferred or effecitive
       feature depending on [is_deferred].  *)
   assert (cidx < count ct);
-  let desc = Seq.elem cidx ct.classes in
+  let desc = Seq.elem cidx ct.seq in
   if is_deferred then
     desc.def_features <- IntSet.add fidx desc.def_features
   else
@@ -274,7 +274,7 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   (** Add the assertion [aidx] to the class [cidx] as deferred or effecitive
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
-  let desc = Seq.elem cidx ct.classes in
+  let desc = Seq.elem cidx ct.seq in
   if is_deferred then
     desc.def_asserts <- IntSet.add aidx desc.def_asserts
   else
@@ -301,8 +301,8 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
     if cidx2 = -1         then cidx1
     else if cidx1 = cidx2 then cidx1
     else begin
-      let desc1 = Seq.elem cidx1 ct.classes
-      and desc2 = Seq.elem cidx2 ct.classes in
+      let desc1 = Seq.elem cidx1 ct.seq
+      and desc2 = Seq.elem cidx2 ct.seq in
       let mdl1  = desc1.mdl
       and mdl2  = desc2.mdl in
       assert (not (mdl1 = -1 && mdl2 = -1));
@@ -516,7 +516,7 @@ let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
 let empty_table (): t =
   let cc = Seq.empty ()
   in
-  {map=IntMap.empty; classes=cc; fgens=IntMap.empty; mt=Module_table.make ()}
+  {map=IntMap.empty; seq=cc; fgens=IntMap.empty; mt=Module_table.make ()}
 
 
 
@@ -527,13 +527,13 @@ let add_base_class
     : unit =
   let priv = desc
   and publ = Some desc
-  and idx  = Seq.count ct.classes
+  and idx  = Seq.count ct.seq
   and eset = IntSet.empty
   in
   Seq.push {mdl=(-1); name=name;
             def_features=eset; eff_features=eset;
             def_asserts=eset;  eff_asserts=eset;
-            priv=priv; publ=publ} ct.classes;
+            priv=priv; publ=publ} ct.seq;
   ct.map <- IntMap.add name idx ct.map
 
 
@@ -647,7 +647,7 @@ let string_of_signature
 (* needs to be adapted for private and public views !!
 let class2string (i:int) (ctxt:t): string =
   assert (i < count ctxt);
-  let desc = Seq.elem  i ctxt.classes in
+  let desc = Seq.elem  i ctxt.seq in
   let ngen = Array.length desc.constraints in
   assert (ngen = Array.length desc.fgnames);
   let con2string =
@@ -684,5 +684,5 @@ let class2string (i:int) (ctxt:t): string =
 let print ctxt =
   (*Seq.iteri
     (fun i c -> Printf.printf "%s\n" (class2string i ctxt))
-    ctxt.classes*)
+    ctxt.seq*)
   assert false

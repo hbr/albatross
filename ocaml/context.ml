@@ -40,17 +40,6 @@ let empty_entry: entry =
 
 
 
-let zip_arrays (a: 'a array) (b: 'b array): ('a*'b) array =
-  let n = Array.length a in
-  assert (n = Array.length b);
-  Array.init n (fun i -> a.(i),b.(i))
-
-let unzip_array (c: ('a*'b) array): 'a array * 'b array =
-  let a = Array.map (fun (x,_) -> x) c
-  and b = Array.map (fun (_,y) -> y) c in
-  a,b
-
-
 let class_table(c:t): Class_table.t     = Feature_table.class_table c.ft
 let feature_table(c:t): Feature_table.t = c.ft
 
