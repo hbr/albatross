@@ -14,7 +14,6 @@ val function_index:  int
 val tuple_index:     int
 
 
-(*val empty_table: unit -> t*)
 
 val base_table: unit -> t
 
@@ -24,6 +23,14 @@ val put_formal: int withinfo -> type_t withinfo -> t -> unit
 val module_table: t -> Module_table.t
 
 val count: t -> int
+
+val class_symbol: int -> t -> int
+val class_name:   int -> t -> string
+
+val add_feature:    int -> int -> bool -> t -> unit
+val add_assertion:  int -> int -> bool -> t -> unit
+
+val owner:          int -> type_term array -> Sign.t -> t -> int
 
 val find:  int -> t -> int
 val find_in_module: int -> t -> int

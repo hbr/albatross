@@ -21,6 +21,10 @@ type base_descriptor = { hmark:   header_mark;
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
+                         mutable def_features: IntSet.t;
+                         mutable eff_features: IntSet.t;
+                         mutable def_asserts:  IntSet.t;
+                         mutable eff_asserts:  IntSet.t;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -252,6 +256,32 @@ let update
 
 
 
+let add_feature (fidx:int) (cidx:int) (is_deferred:bool) (ct:t)
+    : unit =
+  (** Add the feature [fidx] to the class [cidx] as deferred or effecitive
+      feature depending on [is_deferred].  *)
+  assert (cidx < count ct);
+  let desc = Seq.elem cidx ct.classes in
+  if is_deferred then
+    desc.def_features <- IntSet.add fidx desc.def_features
+  else
+    desc.eff_features <- IntSet.add fidx desc.eff_features
+
+
+
+let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
+    : unit =
+  (** Add the assertion [aidx] to the class [cidx] as deferred or effecitive
+      assertion depending on [is_deferred].  *)
+  assert (cidx < count ct);
+  let desc = Seq.elem cidx ct.classes in
+  if is_deferred then
+    desc.def_asserts <- IntSet.add aidx desc.def_asserts
+  else
+    desc.eff_asserts <- IntSet.add aidx desc.eff_asserts
+
+
+
 let add
     (hm:    header_mark withinfo)
     (cn:    int withinfo)
@@ -259,6 +289,59 @@ let add
     (ct:    t)
     : unit =
   assert false (* nyi: insertion of new classes *)
+
+
+
+
+
+let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
+  let max (cidx1:int) (cidx2:int): int =
+    assert (0 <= cidx1 && cidx1 < count ct);
+    assert (cidx2 = -1 || (0 <= cidx2 && cidx2 < count ct));
+    if cidx2 = -1         then cidx1
+    else if cidx1 = cidx2 then cidx1
+    else begin
+      let desc1 = Seq.elem cidx1 ct.classes
+      and desc2 = Seq.elem cidx2 ct.classes in
+      let mdl1  = desc1.mdl
+      and mdl2  = desc2.mdl in
+      assert (not (mdl1 = -1 && mdl2 = -1));
+      if mdl1 = -1                       then cidx2
+      else if mdl2 = -1                  then cidx1
+      else if mdl1 < mdl2 && mdl2 <= mdl then cidx2
+      else begin
+        assert (mdl2 < mdl1 && mdl1 <= mdl);
+        cidx1
+      end
+    end
+  in
+  let owner_tp (tp:type_term) (nb:int) (cidx_prev:int): int =
+    Term.fold
+      (fun cidx_prev var ->
+        if var < nb then cidx_prev
+        else max (var-nb) cidx_prev)
+      cidx_prev
+      tp
+  in
+  let nfgs = Array.length concepts in
+  let cidx = Array.fold_left
+      (fun cidx_prev tp -> owner_tp tp 0 cidx_prev)
+      (-1)
+      concepts
+  in
+  let cidx = Array.fold_left
+      (fun cidx_prev tp -> owner_tp tp nfgs cidx_prev)
+      cidx
+      (Sign.arguments sign)
+  in
+  let rt = Sign.result_type sign in
+  let cidx =
+    if Result_type.has_result rt then
+      owner_tp (Result_type.result rt) nfgs cidx
+    else
+      cidx
+  in
+  cidx
 
 
 
@@ -445,8 +528,12 @@ let add_base_class
   let priv = desc
   and publ = Some desc
   and idx  = Seq.count ct.classes
+  and eset = IntSet.empty
   in
-  Seq.push {mdl=(-1); name=name; priv=priv; publ=publ} ct.classes;
+  Seq.push {mdl=(-1); name=name;
+            def_features=eset; eff_features=eset;
+            def_asserts=eset;  eff_asserts=eset;
+            priv=priv; publ=publ} ct.classes;
   ct.map <- IntMap.add name idx ct.map
 
 

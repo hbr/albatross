@@ -19,6 +19,7 @@ type definition = term
 type formal     = int * term
 
 type descriptor = {mutable mdl: int;
+                   cls:         int;
                    fname:       feature_name;
                    impstat:     implementation_status;
                    fgs:         formal array;
@@ -70,6 +71,7 @@ let argnames (desc: descriptor): int array =
 
 
 let implication_index: int = 0
+let paren_index:       int = 1
 let all_index:         int = 2
 let some_index:        int = 3
 
@@ -84,8 +86,11 @@ let base_table () : t =
   and signimp = Sign.make_func [|bool;bool|] bool
   in
   (* boolean *)
+  Class_table.add_feature
+    implication_index Class_table.boolean_index false ft.ct;
   Seq.push
     {mdl      = -1;
+     cls      = Class_table.boolean_index;
      fname    = fnimp;
      impstat  = Builtin;
      fgs      = [||];
@@ -109,6 +114,7 @@ let base_table () : t =
   in
   let entry =
     {mdl      = -1;
+     cls      = Class_table.predicate_index;
      fname    = FNoperator Allop;
      impstat  = Builtin;
      fgs      = [|g,any|];
@@ -121,12 +127,15 @@ let base_table () : t =
     let idx,fn,sign = 1, FNoperator Parenop,
       Sign.make_func [|p_tp;g_tp|] bool1
     in
+    Class_table.add_feature paren_index Class_table.function_index false ft.ct;
     Seq.push {entry with fname = FNoperator Parenop;
               sign = sign}  ft.features;  (* 1: "()" *)
     ft.map <- Key_map.add (FNoperator Parenop,2)
         (ESignature_map.singleton ([|any|],sign) idx)
         ft.map
   end;
+  Class_table.add_feature all_index  Class_table.predicate_index false ft.ct;
+  Class_table.add_feature some_index Class_table.predicate_index false ft.ct;
   Seq.push entry ft.features;                                   (* 2: all  *)
   Seq.push{entry with fname = FNoperator Someop} ft.features ;  (* 3: some *)
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
@@ -347,14 +356,17 @@ let print (ft:t): unit =
         match def_opt with
           None -> "Basic"
         | Some def -> term_to_string def (argnames fdesc) ft
+      and clsnme =
+        if fdesc.cls = -1 then ""
+        else Class_table.class_name fdesc.cls ft.ct
       in
       match fdesc.pub with
         None ->
-          Printf.printf "%-15s %-7s %s = (%s)\n"
-            mdlnme name tname (bdyname fdesc.priv)
+          Printf.printf "%s.%s: %s %s = (%s)\n"
+            mdlnme clsnme name tname (bdyname fdesc.priv)
       | Some pdef ->
-          Printf.printf "%-15s %-7s %s = (%s, %s)\n"
-            mdlnme name tname (bdyname fdesc.priv) (bdyname pdef))
+          Printf.printf "%s.%s: %s %s = (%s, %s)\n"
+            mdlnme clsnme name tname (bdyname fdesc.priv) (bdyname pdef))
     ft.features
 
 
@@ -383,9 +395,11 @@ let put_function
     try ESignature_map.find (concepts,sign) sig_map
     with Not_found -> cnt in
   let mdl = Module_table.current (module_table ft) in
+  let cls = Class_table.owner mdl concepts sign ft.ct in
   if idx=cnt then begin (* new feature *)
     Seq.push
       {mdl      = mdl;
+       cls      = cls;
        fname    = fn.v;
        impstat  = impstat;
        fgs      = fgs;
@@ -408,6 +422,7 @@ let put_function
       error_info fn.i str
     in
     desc.mdl <- mdl;
+    assert (cls = desc.cls);
     if is_priv then begin
       if impstat <> desc.impstat then
         not_match "implementation status";
