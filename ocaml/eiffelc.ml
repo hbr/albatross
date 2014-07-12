@@ -118,8 +118,6 @@ let analyze(ast: declaration list) (context:Context.t): unit =
     let one_decl (d:declaration) =
       match d with
         Class_declaration (hm, cname, fgens, inherits) ->
-          assert (fgens.v = []);     (* nyi: formal generics *)
-          assert (inherits = []);    (* nyi: inheritance     *)
           Context.put_class hm cname fgens inherits context;
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;

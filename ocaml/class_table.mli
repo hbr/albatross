@@ -40,6 +40,8 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 
 
+val get_parent_type: type_t withinfo -> int -> t -> type_term
+
 val boolean_type:   int -> term
 
 val is_boolean_binary: Sign.t -> int -> bool

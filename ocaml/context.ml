@@ -434,8 +434,6 @@ let put_class
   (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
       corresponding class.  *)
   assert (is_global c);
-  assert (fgs.v = []);
-  assert (inherits = []);
   let ct = class_table c in
   let idx =
     try
@@ -447,7 +445,15 @@ let put_class
       Class_table.add hm cn fgs ct;
       idx
   in
-  ()
+  List.iter
+    (fun par_lst ->
+      List.iter
+        (fun (tp_inf,adapt_lst) ->
+          assert (adapt_lst = [] ); (* nyi: feature adaption *)
+          let p_tp = Class_table.get_parent_type tp_inf idx ct in
+          assert false)
+        par_lst)
+    inherits
 
 
 

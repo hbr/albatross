@@ -353,7 +353,7 @@ parent_list:
     parent { [$1] }
 |   parent parent_list { $1::$2 }
 
-parent: type_nt feature_adaptation { $1,$2 }
+parent: type_nt feature_adaptation { withinfo (rhs_info 1) $1, $2 }
 
 feature_adaptation:
     { [] }
@@ -412,11 +412,14 @@ type_nt:
 | LPAREN type_nt RPAREN { Paren_type $2 }
 
 
+type_list_min2:
+  type_nt COMMA type_nt { [$1;$3] }
+| type_nt COMMA type_list_min2 { $1::$3 }
+
+
 type_list:
   type_nt { [$1]}
-| type_nt COMMA type_list {
-  $1::$3
-}
+| type_list_min2 { $1 }
 
 
 
@@ -448,7 +451,8 @@ arrow_type: type_nt ARROW type_nt {
 ghost_type: KWghost type_nt { Ghost_type $2 }
 
 
-tuple_type: LBRACKET type_list RBRACKET { Tuple_type $2 }
+tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
+
 
 qmark_type: type_nt QMARK   { QMark_type $1 }
 

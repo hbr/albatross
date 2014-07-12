@@ -317,7 +317,7 @@ let rec split_list (l: 'a list) (sep: 'a -> bool): 'a list list =
 
 type type_t =
     Normal_type of int * int * type_t list   (* kernel.ANY,
-                                                 kernel.ARRAY[NATURAL] *)
+                                                kernel.ARRAY[NATURAL] *)
   | Current_type of type_t list
   | Arrow_type of type_t * type_t        (* A -> B              *)
   | Ghost_type of type_t
@@ -762,7 +762,7 @@ type adaptation_clause =
   | Redefine of name_sig list
   | Undefine of name_sig list
 
-type parent = type_t * adaptation_clause list
+type parent = type_t withinfo * adaptation_clause list
 
 type inherit_clause = parent list
 

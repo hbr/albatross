@@ -2,22 +2,13 @@ open Support
 open Term
 open Signature
 open Container
-
-module TypSet = Set.Make(struct
-  let compare = Pervasives.compare
-  type t = term
-end)
-
-module Int_table = Map_table.Make(struct
-  let  compare = Pervasives.compare
-  type t       = int
-end)
+open Printf
 
 type formal = int * type_term
 
 type base_descriptor = { hmark:   header_mark;
                          fgs:     formal array;
-                         mutable parents: TypSet.t}
+                         mutable ancestors: type_term array IntMap.t}
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
@@ -55,6 +46,23 @@ let class_symbol (i:int) (ct:t): int =
 let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
 
+
+let split_type_term (tp:type_term) (nfgs:int): int * type_term array =
+  let i,args =
+    match tp with
+      Variable i -> i, [||]
+    | Application (Variable i,args) -> i, args
+    | _ -> assert false
+  in
+  assert (nfgs <= i );
+  i-nfgs, args
+
+
+let combine_type_term (cls_idx:int) (args: type_term array): type_term =
+  if 0 < Array.length args then
+    Application (Variable cls_idx, args)
+  else
+    Variable cls_idx
 
 
 
@@ -222,9 +230,11 @@ let export
     let _,  tp1 = desc.priv.fgs.(i)
     and nme,tp2 = fgs.(i) in
     if tp1 <> tp2 then
-      error_info fgens.i
-        ("The");
-    desc.publ <- Some {hmark=hm2; fgs=fgs; parents=TypSet.empty}
+      error_info
+        fgens.i
+        ("The constraint of " ^ (ST.string nme) ^
+         " is not consistent with private definition");
+    desc.publ <- Some {hmark=hm2; fgs=fgs; ancestors=IntMap.empty}
   done
 
 
@@ -349,11 +359,11 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
 let get_type
     (tp:type_t withinfo)
     (ntvs: int)
-    (fgs: (int*type_term) array)
+    (fgs: formal array)
     (ct:t)
     : term =
   (** Convert the syntactic type [tp] in an environment with [ntvs] type
-      variables and then formal generics [fgs] into a type term *)
+      variables and the formal generics [fgs] into a type term *)
   let nfgs = Array.length fgs in
   let n    = ntvs + nfgs in
   let cls_idx (name:int): int =
@@ -366,11 +376,112 @@ let get_type
         error_info tp.i ("Class " ^ (ST.string name)
                          ^ " does not exist")
   in
-  match tp.v with
-    Normal_type (path,name,actuals) ->
-      assert (actuals = []); (* nyi: generic types *)
-      Variable (cls_idx name)
-  | _ -> not_yet_implemented tp.i "types other than normal types"
+  let info = tp.i in
+  let rec get_tp (tp:type_t): type_term =
+    match tp with
+      Normal_type (path,name,actuals) ->
+        if actuals = [] then
+          Variable (cls_idx name)
+        else
+          let args = List.map (fun tp -> get_tp tp) actuals in
+          let args = Array.of_list args in
+          Application (Variable (cls_idx name), args)
+    | Paren_type tp ->
+        get_tp tp
+    | QMark_type tp ->
+        let t = get_tp tp in
+        Application(Variable(n+predicate_index),[|t|])
+    | Arrow_type (tpa,tpb) ->
+        let ta = get_tp tpa
+        and tb = get_tp tpb in
+        Application(Variable(n+function_index),[|ta;tb|])
+    | Tuple_type tp_lst ->
+        let rec tuple (tp_list: type_t list): type_term =
+          match tp_list with
+            [tpa;tpb] ->
+              let ta = get_tp tpa
+              and tb = get_tp tpb in
+              Application(Variable(n+tuple_index),[|ta;tb|])
+          | tpa::tail ->
+              let ta = get_tp tpa
+              and tb = tuple tail in
+              Application(Variable(n+tuple_index),[|ta;tb|])
+          | _ -> assert false (* tuple type must have at least two types *)
+        in
+        tuple tp_lst
+    | _ -> not_yet_implemented info "types other than normal types"
+  in
+  get_tp tp.v
+
+
+
+
+
+
+let base_descriptor (idx:int) (ct:t): base_descriptor =
+  let desc = Seq.elem idx ct.seq in
+  if desc.mdl = (Module_table.current (module_table ct)) then
+    desc.priv
+  else begin
+    assert (Option.has desc.publ);
+    Option.value desc.publ
+  end
+
+
+
+
+let has_ancestor (cls:int) (anc:int) (ct:t): bool =
+  (** Does the class [cls] have [anc] as an ancestor ? *)
+  cls = anc ||
+  let bdesc = base_descriptor cls ct in
+  IntMap.mem anc bdesc.ancestors
+
+
+
+
+let get_parent_type (tp: type_t withinfo) (cls_idx:int) (ct:t): type_term =
+  (** Convert the syntactic type [tp] of a parent of the class [cls_idx] into
+      a type term. *)
+  assert (cls_idx < count ct);
+  let bdesc = base_descriptor cls_idx ct
+  in
+  let tp_term = get_type tp 0 bdesc.fgs ct
+  in
+  (let fgnames,_ = Myarray.split bdesc.fgs in
+  printf "parent type: %s of class %s\n"
+    (type2string tp_term 0 fgnames ct)
+    (class_name cls_idx ct)
+  );
+  let nfgs = Array.length bdesc.fgs in
+  let parent_idx,parent_ags = split_type_term tp_term nfgs in
+  if has_ancestor parent_idx cls_idx ct then
+    error_info tp.i "Cyclic inheritance";
+  let bdesc_parent = base_descriptor parent_idx ct
+  in
+  IntMap.iter
+    (fun ancestor_cls ancestor_args ->
+      let anc_args_sub =
+        Array.map
+          (fun tp ->
+            Term.sub tp parent_ags nfgs)
+          ancestor_args
+      in
+      try
+        let anc_args = IntMap.find ancestor_cls bdesc.ancestors in
+        if anc_args <> anc_args_sub then
+          let fgnames,_ = Myarray.split bdesc.fgs
+          and anc0 = combine_type_term ancestor_cls anc_args
+          and anc1 = combine_type_term ancestor_cls anc_args_sub in
+          let ancstr0 = type2string anc0 0 fgnames ct
+          and ancstr1 = type2string anc1 0 fgnames ct in
+          error_info tp.i
+            ("Cannot inherit " ^ ancstr1 ^ " because " ^
+             ancstr0 ^ " is already an ancestor")
+      with Not_found ->
+        bdesc.ancestors <-
+          IntMap.add ancestor_cls anc_args_sub bdesc.ancestors)
+    bdesc_parent.ancestors;
+  tp_term
 
 
 
@@ -490,7 +601,7 @@ let result_type
     (fgs: formal array)
     (ct:t)
     : Result_type.t =
-  (** The result type with corresponds to the return type [rt] in an
+  (** The result type which corresponds to the return type [rt] in an
       environment with the formal generics [fgs] and [ntvs] type variables *)
   match rt with
     None -> Result_type.empty
@@ -553,27 +664,27 @@ let base_table (): t =
   and fga = ST.symbol "A"
   and fgb = ST.symbol "B"
   and anycon = Variable any_index
-  and emppar = TypSet.empty
+  and emppar = IntMap.empty
   and ct = empty_table ()   in
   add_base_class
     (ST.symbol "BOOLEAN")
-    {hmark=Immutable_hmark; fgs=[||]; parents=emppar}
+    {hmark=Immutable_hmark; fgs=[||]; ancestors=emppar}
     ct;
   add_base_class
     (ST.symbol "ANY")
-    {hmark=Deferred_hmark; fgs=[||]; parents=emppar}
+    {hmark=Deferred_hmark; fgs=[||]; ancestors=emppar}
     ct;
   add_base_class
     (ST.symbol "PREDICATE")
-    {hmark=Deferred_hmark; fgs=[|fgg,anycon|]; parents=emppar}
+    {hmark=Deferred_hmark; fgs=[|fgg,anycon|]; ancestors=emppar}
     ct;
   add_base_class
     (ST.symbol "FUNCTION")
-    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; parents=emppar}
+    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; ancestors=emppar}
     ct;
   add_base_class
     (ST.symbol "TUPLE")
-    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; parents=emppar}
+    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; ancestors=emppar}
     ct;
   check_base_classes ct;
   ct
