@@ -355,6 +355,79 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
 
 
 
+let base_descriptor (idx:int) (ct:t): base_descriptor =
+  assert (0 <= idx);
+  assert (idx < count ct);
+  let desc = Seq.elem idx ct.seq in
+  if desc.mdl = (Module_table.current (module_table ct)) then
+    desc.priv
+  else begin
+    assert (Option.has desc.publ);
+    Option.value desc.publ
+  end
+
+
+
+let rec satisfies
+    (t1:type_term)
+    (ntvs:int)
+    (fgs: formal array)
+    (cpt:type_term)
+    (ct:t)
+    : bool =
+  (** Does the type [t] in an environment with [ntvs] type variables and the
+      formal generics [fgs] satisfy the concept [cpt]?  *)
+  let nfgs = Array.length fgs in
+  match t1 with
+    Variable i when i < nfgs ->
+      let cpt_t1 = snd fgs.(i) in
+      satisfies cpt_t1 0 [||] cpt ct
+  | _ ->
+      (Array.length fgs = 0 && t1 = cpt)
+
+
+
+
+
+let valid_type
+    (cls_idx:int)
+    (args: type_term array)
+    (ntvs: int)
+    (fgs: formal array)
+    (ct:t): type_term =
+  (** The valid type term [cls_idx[args.(0),args.(1),...] in an environment
+      with [ntvs] type variables and the formal generics [fgs].
+
+      If the type term is not valid then [Not_found] is raised.
+
+      To check: do all actual generics [args] satisfy their corresponding
+      concepts *)
+  let nfgs  = Array.length fgs
+  and nargs = Array.length args in
+  if cls_idx < ntvs then
+    assert false (* shall never happen *)
+  else if cls_idx < ntvs + nfgs then begin
+    if nargs <> 0 then
+      raise Not_found
+    else
+      Variable cls_idx
+  end else begin
+    let cls_idx_0 = cls_idx - ntvs - nfgs in
+    let bdesc = base_descriptor cls_idx_0 ct in
+    if nargs <> Array.length bdesc.fgs then
+      raise Not_found;
+    for i = 0 to nargs-1 do
+      if not (satisfies args.(i) ntvs fgs (snd bdesc.fgs.(i)) ct) then
+        raise Not_found
+    done;
+    if nargs = 0 then
+      Variable cls_idx
+    else
+      Application (Variable cls_idx, args)
+  end
+
+
+
 
 let get_type
     (tp:type_t withinfo)
@@ -366,7 +439,7 @@ let get_type
       variables and the formal generics [fgs] into a type term *)
   let nfgs = Array.length fgs in
   let n    = ntvs + nfgs in
-  let cls_idx (name:int): int =
+  let class_index (name:int): int =
     try
       ntvs + (Search.array_find_min (fun (n,_) -> n=name) fgs)
     with Not_found ->
@@ -378,35 +451,38 @@ let get_type
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
+    let valid_tp (idx:int) (args:type_term array): type_term =
+      try
+        valid_type idx args ntvs fgs ct
+      with Not_found ->
+        error_info info ((string_of_type tp) ^ " is not a valid type")
+    in
     match tp with
       Normal_type (path,name,actuals) ->
-        if actuals = [] then
-          Variable (cls_idx name)
-        else
-          let args = List.map (fun tp -> get_tp tp) actuals in
-          let args = Array.of_list args in
-          Application (Variable (cls_idx name), args)
+        let args = List.map (fun tp -> get_tp tp) actuals in
+        let args = Array.of_list args in
+        valid_tp (class_index name) args
     | Paren_type tp ->
         get_tp tp
     | QMark_type tp ->
         let t = get_tp tp in
-        Application(Variable(n+predicate_index),[|t|])
+        valid_tp (n+predicate_index) [|t|]
     | Arrow_type (tpa,tpb) ->
         let ta = get_tp tpa
         and tb = get_tp tpb in
-        Application(Variable(n+function_index),[|ta;tb|])
+        valid_tp (n+function_index) [|ta;tb|]
     | Tuple_type tp_lst ->
         let rec tuple (tp_list: type_t list): type_term =
-          match tp_list with
-            [tpa;tpb] ->
-              let ta = get_tp tpa
-              and tb = get_tp tpb in
-              Application(Variable(n+tuple_index),[|ta;tb|])
+          let ta, tb =
+            match tp_list with
+              [tpa;tpb] ->
+                get_tp tpa, get_tp tpb
           | tpa::tail ->
-              let ta = get_tp tpa
-              and tb = tuple tail in
-              Application(Variable(n+tuple_index),[|ta;tb|])
-          | _ -> assert false (* tuple type must have at least two types *)
+              get_tp tpa, tuple tail
+          | _ ->
+              assert false (* tuple type must have at least two types *)
+          in
+          valid_tp (n+tuple_index) [|ta;tb|]
         in
         tuple tp_lst
     | _ -> not_yet_implemented info "types other than normal types"
@@ -414,18 +490,6 @@ let get_type
   get_tp tp.v
 
 
-
-
-
-
-let base_descriptor (idx:int) (ct:t): base_descriptor =
-  let desc = Seq.elem idx ct.seq in
-  if desc.mdl = (Module_table.current (module_table ct)) then
-    desc.priv
-  else begin
-    assert (Option.has desc.publ);
-    Option.value desc.publ
-  end
 
 
 
@@ -610,18 +674,6 @@ let result_type
       let t = get_type (withinfo tpinf.i tp) ntvs fgs ct in
       Result_type.make t proc
 
-
-let rec satisfies (t1:type_term) (fgs: formal array) (cpt:type_term) (ct:t)
-    : bool =
-  (** Does the type [t] which might contain the formal generics [fgs] satisfy
-      the concept [cpt]?  *)
-  let nfgs = Array.length fgs in
-  match t1 with
-    Variable i when i < nfgs ->
-      let cpt_t1 = snd fgs.(i) in
-      satisfies cpt_t1 [||] cpt ct
-  | _ ->
-      (Array.length fgs = 0 && t1 = cpt)
 
 
 let empty_table (): t =

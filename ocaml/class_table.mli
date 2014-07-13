@@ -59,7 +59,7 @@ val result_type:
     return_type -> int -> formal array -> t
       -> Result_type.t
 
-val satisfies: type_term -> formal array -> type_term -> t -> bool
+val satisfies: type_term -> int -> formal array -> type_term -> t -> bool
 
 val print: t -> unit
 

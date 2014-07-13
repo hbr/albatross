@@ -206,14 +206,14 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
 
 let concept_satisfies_concept (cpt1:type_term) (cpt2:type_term) (c:t): bool =
   (** Does the concept [cpt1] satisfy the concept [cpt2] in [c]?  *)
-  Class_table.satisfies cpt1 [||] cpt2 (class_table c)
+  Class_table.satisfies cpt1 0 [||] cpt2 (class_table c)
 
 let type_satisfies_concept (t:type_term) (cpt:type_term) (c:t): bool =
   (** Does the type [t] satisfy the concept [cpt] in [c]?
 
       Note: Type 0 is the first formal generic and not the first type
       variable!  *)
-  Class_table.satisfies t (formal_generics c) cpt (class_table c)
+  Class_table.satisfies t 0 (formal_generics c) cpt (class_table c)
 
 
 let read_trace_info (c:t): unit =
