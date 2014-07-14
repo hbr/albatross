@@ -48,8 +48,8 @@ val is_boolean_binary: Sign.t -> int -> bool
 val is_boolean_unary:  Sign.t -> int -> bool
 
 val formal_generics:
-    entities list withinfo -> return_type -> formal array -> t
-      -> (int*type_term) array * int
+    entities list withinfo -> return_type -> int -> formal array -> t
+      -> int * formal array
 
 val formal_arguments:
     entities list withinfo -> int -> formal array -> t

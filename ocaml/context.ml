@@ -241,10 +241,13 @@ let push
    *)
   let entry      = c.entry
   and ct         = class_table c in
-  let ntvs0      = TVars_sub.count_local entry.tvars_sub              in
-  let fgs1,ntvs1 = Class_table.formal_generics entlst rt entry.fgs ct in
-  let nfgs1      = Array.length fgs1                                  in
-  let ntvs,fgs   = ntvs1+ntvs0, Array.append fgs1 entry.fgs           in
+  let ntvs0      = TVars_sub.count_local entry.tvars_sub
+  in
+  let ntvs,fgs   = Class_table.formal_generics entlst rt ntvs0 entry.fgs ct
+  in
+  let ntvs1 = ntvs - ntvs0
+  and nfgs1 = Array.length fgs - Array.length entry.fgs
+  in
   let res        = Class_table.result_type rt ntvs fgs ct             in
   let fargs1     = Class_table.formal_arguments entlst ntvs fgs ct    in
   let fargs      =

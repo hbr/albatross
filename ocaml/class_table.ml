@@ -21,7 +21,7 @@ type descriptor      = { mutable mdl:  int;
 
 type t = {mutable map:   int IntMap.t;
           seq:           descriptor seq;
-          mutable fgens: term IntMap.t;
+          mutable fgens: type_term IntMap.t;
           mt:            Module_table.t}
 
 let boolean_index   = 0
@@ -565,77 +565,78 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
 
 
 
-let collect_formal_generics
-    (entlst: entities list withinfo)
-    (rt:return_type)
-    (ct:t)
-    : IntSet.t * int =
-  (** Collect the names of all formal generics and the number of untyped
-      entities of the entity list [entlst] and the return type [rt]
+
+let collect_fgs (tp: type_t) (fgs:formal list) (ct:t): formal list =
+  (** Collect the formal generics in the type [tp] in the order in
+      which they appear and prepend them to [fgs] if not yet in.
    *)
-  let rec fgs (tp:type_t) (fgens: IntSet.t): IntSet.t =
+  let rec collect (tp:type_t) (fgs:formal list): formal list =
+    let add (path:int list) (name:int) (fgs:formal list): formal list =
+      if path = [] &&
+        not (List.exists (fun (nme,_) -> nme=name) fgs)
+      then
+        try
+          let cpt = IntMap.find name ct.fgens in
+          (name,cpt) :: fgs
+        with Not_found ->
+          fgs
+      else
+        fgs
+    in
     match tp with
       Normal_type (path,name,args) ->
-        let fgens =
-          try
-            let _ = IntMap.find name ct.fgens
-            in
-            match args with
-              [] -> IntSet.add name fgens
-            | _ -> error_info entlst.i
-                  ("Formal generic " ^  (ST.string name) ^
-                   "cannot have actual generics")
-          with Not_found -> fgens
+        let fgnms = List.fold_left
+            (fun lst tp -> collect tp lst)
+            fgs
+            args
         in
-        fgs_list fgens args
+        add path name fgnms
     | Current_type lst ->
         assert false (* nyi: but might be eliminated from the language *)
     | Arrow_type (tpa,tpb) ->
-        fgs tpb (fgs tpa fgens)
+        collect tpb (collect tpa fgs)
     | Ghost_type tp | QMark_type tp | Paren_type tp ->
-        fgs tp fgens
+        collect tp fgs
     | Tuple_type lst ->
-        fgs_list fgens lst
-  and fgs_list (set:IntSet.t) (lst: type_t list) =
-    List.fold_left (fun set tp -> fgs tp set) set lst
+        List.fold_left (fun fgs tp -> collect tp fgs) fgs lst
   in
-  let l: type_t list =
-    match rt with None -> []
-    | Some tp ->
-        let t,_ = tp.v in [t]
-  in
-  let l,ntvs  = List.fold_left
-      (fun (lst,ntvs) ent->
-        match ent with
-          Untyped_entities vars -> lst, ntvs+(List.length vars)
-        | Typed_entities (_,tp) -> tp::lst,ntvs)
-      (l,0)
-      entlst.v
-  in
-  fgs_list IntSet.empty l, ntvs
+  collect tp fgs
+
 
 
 
 let formal_generics
     (entlst: entities list withinfo)
     (rt:     return_type)
+    (ntvs:   int)
     (fgs:    formal array)
     (ct:     t)
-    : formal array * int =
-  (** The formal generics and number of type variables of the entity list
-      [entlst] and the return type [rt] in an environment with the formal
-      generics [fgs]. *)
-  let fgset, n = collect_formal_generics entlst rt ct in
-  let fgset =
-    Array.fold_left (fun set (name,_) -> IntSet.remove name set) fgset fgs
+    : int * formal array =
+  (** The cumulated number of type variables and the cumulated formal generics
+      of the entity list [entlst] and the return type [rt] in an environment
+      with [ntvs] type variables and the formal generics [fgs]. *)
+  let fgs_rev = List.rev (Array.to_list fgs) in
+  let ntvs, fgs_rev =
+    List.fold_left
+      (fun (ntvs,fgs_rev) ent ->
+        match ent with
+          Untyped_entities vars ->
+            ntvs + List.length vars, fgs_rev
+        | Typed_entities (_,tp) ->
+            ntvs, collect_fgs tp fgs_rev ct)
+      (ntvs,fgs_rev)
+      entlst.v
   in
-  let fglst_rev = IntSet.fold
-      (fun name lst -> (name, IntMap.find name ct.fgens)::lst)
-      fgset
-      []
+  let fgs_rev =
+    match rt with
+      None -> fgs_rev
+    | Some tp -> collect_fgs (fst tp.v) fgs_rev ct
   in
-  Array.of_list (List.rev fglst_rev),
-  n
+  ntvs,
+  Array.of_list (List.rev fgs_rev)
+
+
+
 
 
 let formal_arguments

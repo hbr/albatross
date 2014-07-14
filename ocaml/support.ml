@@ -262,11 +262,6 @@ end = struct
   let count ()             = Key_table.count kt
 end
 
-open Container
-let path_table                = Key_table.empty ()
-let path_symbol (p: int list) = Key_table.index p path_table
-let symbol_path (s:int)       = Key_table.key   s path_table
-
 
 (*
 -----------------------------------------------------------------------------
@@ -316,7 +311,7 @@ let rec split_list (l: 'a list) (sep: 'a -> bool): 'a list list =
 (* Types *)
 
 type type_t =
-    Normal_type of int * int * type_t list   (* kernel.ANY,
+    Normal_type of (int list) * int * type_t list   (* kernel.ANY,
                                                 kernel.ARRAY[NATURAL] *)
   | Current_type of type_t list
   | Arrow_type of type_t * type_t        (* A -> B              *)
@@ -337,7 +332,7 @@ let rec string_of_type (t:type_t) =
   in
   match t with
     Normal_type (p,n,l) ->
-      let ps = string_of_path (symbol_path p)
+      let ps = string_of_path p
       in
       ps ^ (ST.string n) ^ (actuals l)
   | Current_type l -> "CURRENT" ^ (actuals l)
@@ -731,13 +726,6 @@ let hmark2string_wblank (hm:header_mark) =
 type classname = int withinfo
 
 type formal_generics = int list withinfo
-
-(*
-type visibility =
-    Public
-  | Private
-  | Protected of int list withinfo
-*)
 
 type feature_name =
     FNname of int
