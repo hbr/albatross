@@ -222,7 +222,7 @@ let export
           ("Header mark is not consistent with private header mark \"" ^
            (hmark2string hm1))
   end;
-  let fgs = class_formal_generics fgens ct in
+  let fgs  = class_formal_generics fgens ct in
   let nfgs = Array.length fgs        in
   if nfgs > Array.length desc.priv.fgs then
     error_info fgens.i "More formal generics than in private definition";
@@ -234,7 +234,11 @@ let export
         fgens.i
         ("The constraint of " ^ (ST.string nme) ^
          " is not consistent with private definition");
-    desc.publ <- Some {hmark=hm2; fgs=fgs; ancestors=IntMap.empty}
+    desc.publ <-
+      Some { hmark=hm2;
+             fgs=fgs;
+             ancestors =
+             IntMap.singleton idx (Array.init nfgs (fun i -> Variable i))}
   done
 
 
@@ -684,21 +688,34 @@ let empty_table (): t =
 
 
 
+
+
 let add_base_class
-    (name:int)
-    (desc:base_descriptor)
+    (name:string)
+    (hm:  header_mark)
+    (fgs: formal array)
     (ct:t)
     : unit =
-  let priv = desc
-  and publ = Some desc
-  and idx  = Seq.count ct.seq
+  let idx  = count ct
   and eset = IntSet.empty
+  and nfgs = Array.length fgs
+  and nme  = ST.symbol name
   in
-  Seq.push {mdl=(-1); name=name;
-            def_features=eset; eff_features=eset;
-            def_asserts=eset;  eff_asserts=eset;
-            priv=priv; publ=publ} ct.seq;
-  ct.map <- IntMap.add name idx ct.map
+  let args = Array.init nfgs (fun i -> Variable i) in
+  let anc  = IntMap.singleton idx args in
+  let bdesc = {hmark=hm; fgs=fgs; ancestors=anc} in
+  Seq.push
+    {mdl=(-1);
+     name = nme;
+     def_features = eset;
+     eff_features = eset;
+     def_asserts  = eset;
+     eff_asserts  = eset;
+     priv=bdesc;
+     publ= Some bdesc}
+    ct.seq;
+  ct.map <- IntMap.add nme idx ct.map
+
 
 
 
@@ -712,34 +729,19 @@ let check_base_classes (ct:t): unit =
   ()
 
 
+
+
 let base_table (): t =
   let fgg = ST.symbol "G"
   and fga = ST.symbol "A"
   and fgb = ST.symbol "B"
   and anycon = Variable any_index
-  and emppar = IntMap.empty
   and ct = empty_table ()   in
-  add_base_class
-    (ST.symbol "BOOLEAN")
-    {hmark=Immutable_hmark; fgs=[||]; ancestors=emppar}
-    ct;
-  add_base_class
-    (ST.symbol "ANY")
-    {hmark=Deferred_hmark; fgs=[||]; ancestors=emppar}
-    ct;
-  add_base_class
-    (ST.symbol "PREDICATE")
-    {hmark=Deferred_hmark; fgs=[|fgg,anycon|]; ancestors=emppar}
-    ct;
-  add_base_class
-    (ST.symbol "FUNCTION")
-    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; ancestors=emppar}
-    ct;
-  add_base_class
-    (ST.symbol "TUPLE")
-    {hmark=Deferred_hmark; fgs=[|(fga,anycon); (fgb,anycon)|]; ancestors=emppar}
-    ct;
-  check_base_classes ct;
+  add_base_class "BOOLEAN"   Immutable_hmark [||] ct;
+  add_base_class "ANY"       Deferred_hmark  [||] ct;
+  add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;
+  add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "TUPLE"     Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
   ct
 
 
