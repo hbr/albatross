@@ -373,21 +373,49 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
 
 
 let rec satisfies
-    (t1:type_term)
+    (tp:type_term)
     (ntvs:int)
     (fgs: formal array)
     (cpt:type_term)
     (ct:t)
     : bool =
-  (** Does the type [t] in an environment with [ntvs] type variables and the
+  (** Does the type [tp] in an environment with [ntvs] type variables and the
       formal generics [fgs] satisfy the concept [cpt]?  *)
   let nfgs = Array.length fgs in
-  match t1 with
-    Variable i when i < nfgs ->
-      let cpt_t1 = snd fgs.(i) in
-      satisfies cpt_t1 0 [||] cpt ct
+  let sat (i:int) (tp_args:type_term array): bool =
+    assert (ntvs + nfgs <= i);
+    let cls_idx           = i - ntvs - nfgs in
+    let bdesc             = base_descriptor cls_idx ct in
+    let cpt_cls, cpt_args = split_type_term cpt 0 in
+    begin
+      try
+        let anc_args = IntMap.find cpt_cls bdesc.ancestors in
+        let nargs    = Array.length anc_args in
+        assert (nargs = Array.length cpt_args);
+        let anc_args =
+          Array.map (fun t -> Term.sub t tp_args (ntvs+nfgs)) anc_args
+        in
+        for i = 0 to nargs-1 do
+          if not (satisfies anc_args.(i) ntvs fgs cpt_args.(i) ct) then
+            raise Not_found;
+        done;
+        true
+      with Not_found ->
+        false
+    end
+  in
+  match tp with
+    Variable i when i < ntvs ->
+      assert false (* shall never happen *)
+  | Variable i when i < ntvs + nfgs ->
+      let fg_cpt = snd fgs.(i-ntvs) in
+      satisfies fg_cpt 0 [||] cpt ct
+  | Variable i ->
+      sat i [||]
+  | Application(Variable i, tp_args) ->
+      sat i tp_args
   | _ ->
-      (Array.length fgs = 0 && t1 = cpt)
+      assert false (* shall never happen *)
 
 
 
@@ -404,15 +432,15 @@ let valid_type
 
       If the type term is not valid then [Not_found] is raised.
 
-      To check: do all actual generics [args] satisfy their corresponding
-      concepts *)
+      To check: Do all actual generics [args] satisfy their corresponding
+      concepts? *)
   let nfgs  = Array.length fgs
   and nargs = Array.length args in
   if cls_idx < ntvs then
     assert false (* shall never happen *)
   else if cls_idx < ntvs + nfgs then begin
     if nargs <> 0 then
-      raise Not_found
+      raise Not_found (* Generics cannot have actual generics *)
     else
       Variable cls_idx
   end else begin
