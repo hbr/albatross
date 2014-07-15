@@ -39,8 +39,8 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 
-
-val get_parent_type: type_t withinfo -> int -> t -> type_term
+val parent_type:    int -> type_t withinfo -> t -> int * type_term array
+val inherit_parent: int -> type_t withinfo -> t -> (int * type_term array) list
 
 val boolean_type:   int -> term
 

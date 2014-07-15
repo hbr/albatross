@@ -47,15 +47,11 @@ let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
 
 
-let split_type_term (tp:type_term) (nfgs:int): int * type_term array =
-  let i,args =
-    match tp with
-      Variable i -> i, [||]
-    | Application (Variable i,args) -> i, args
-    | _ -> assert false
-  in
-  assert (nfgs <= i );
-  i-nfgs, args
+let split_type_term (tp:type_term): int * type_term array =
+  match tp with
+    Variable i -> i, [||]
+  | Application (Variable i,args) -> i, args
+  | _ -> assert false
 
 
 let combine_type_term (cls_idx:int) (args: type_term array): type_term =
@@ -386,7 +382,7 @@ let rec satisfies
     assert (ntvs + nfgs <= i);
     let cls_idx           = i - ntvs - nfgs in
     let bdesc             = base_descriptor cls_idx ct in
-    let cpt_cls, cpt_args = split_type_term cpt 0 in
+    let cpt_cls, cpt_args = split_type_term cpt in
     begin
       try
         let anc_args = IntMap.find cpt_cls bdesc.ancestors in
@@ -535,49 +531,58 @@ let has_ancestor (cls:int) (anc:int) (ct:t): bool =
 
 
 
-let get_parent_type (tp: type_t withinfo) (cls_idx:int) (ct:t): type_term =
-  (** Convert the syntactic type [tp] of a parent of the class [cls_idx] into
-      a type term. *)
+
+
+let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
+    : int * type_term array =
   assert (cls_idx < count ct);
   let bdesc = base_descriptor cls_idx ct
   in
   let tp_term = get_type tp 0 bdesc.fgs ct
+  and nfgs = Array.length bdesc.fgs
   in
-  (let fgnames,_ = Myarray.split bdesc.fgs in
-  printf "parent type: %s of class %s\n"
-    (type2string tp_term 0 fgnames ct)
-    (class_name cls_idx ct)
-  );
-  let nfgs = Array.length bdesc.fgs in
-  let parent_idx,parent_ags = split_type_term tp_term nfgs in
-  if has_ancestor parent_idx cls_idx ct then
-    error_info tp.i "Cyclic inheritance";
-  let bdesc_parent = base_descriptor parent_idx ct
+  let i, args = split_type_term tp_term
   in
-  IntMap.iter
-    (fun ancestor_cls ancestor_args ->
-      let anc_args_sub =
-        Array.map
-          (fun tp ->
-            Term.sub tp parent_ags nfgs)
-          ancestor_args
-      in
+  if i < nfgs then
+    error_info tp.i "Formal generic not allowed as parent class";
+  i-nfgs, args
+
+
+
+
+
+
+
+let inherit_parent (cls_idx:int) (tp: type_t withinfo) (ct:t)
+    : (int*type_term array) list =
+  (** Let the class [cls_idx] inherit the parent [tp], return all explicitly
+      and implicitly newly inherited ancestors.  *)
+  let par_idx, par_args = parent_type cls_idx tp ct in
+  let par_bdesc = base_descriptor par_idx ct
+  and cls_bdesc = base_descriptor cls_idx ct in
+  let cls_nfgs  = Array.length cls_bdesc.fgs in
+  IntMap.fold
+    (fun anc_idx anc_args lst ->
+      let anc_args =
+        Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
       try
-        let anc_args = IntMap.find ancestor_cls bdesc.ancestors in
-        if anc_args <> anc_args_sub then
-          let fgnames,_ = Myarray.split bdesc.fgs
-          and anc0 = combine_type_term ancestor_cls anc_args
-          and anc1 = combine_type_term ancestor_cls anc_args_sub in
-          let ancstr0 = type2string anc0 0 fgnames ct
-          and ancstr1 = type2string anc1 0 fgnames ct in
+        let anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
+        if anc_args <> anc_args_0 then
           error_info tp.i
-            ("Cannot inherit " ^ ancstr1 ^ " because " ^
-             ancstr0 ^ " is already an ancestor")
+            ("Cannot inherit "  ^
+             (class_name anc_idx ct) ^
+             " with different actual generics")
+        else
+          lst
       with Not_found ->
-        bdesc.ancestors <-
-          IntMap.add ancestor_cls anc_args_sub bdesc.ancestors)
-    bdesc_parent.ancestors;
-  tp_term
+        cls_bdesc.ancestors <-
+          IntMap.add anc_idx anc_args cls_bdesc.ancestors;
+        (anc_idx, anc_args) :: lst)
+    par_bdesc.ancestors
+    []
+
+
+
 
 
 
