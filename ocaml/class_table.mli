@@ -18,6 +18,7 @@ val tuple_index:     int
 val base_table: unit -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
+val reset_formal_generics: t -> unit
 
 
 val module_table: t -> Module_table.t

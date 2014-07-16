@@ -58,13 +58,16 @@ let find_module (name:int) (lib:int list) (c:t): int =
   Module_table.find name lib (module_table c)
 
 let add_module (name:int) (lib:int list) (c:t): unit =
-  Module_table.add name lib (module_table c)
+  Module_table.add name lib (module_table c);
+  Class_table.reset_formal_generics (class_table c)
 
 let set_used_modules (used:IntSet.t) (c:t): unit =
-  Module_table.set_used used (module_table c)
+  Module_table.set_used used (module_table c);
+  Class_table.reset_formal_generics (class_table c)
 
 let set_interface_use (c:t): unit =
-  Module_table.set_interface_use (module_table c)
+  Module_table.set_interface_use (module_table c);
+  Class_table.reset_formal_generics (class_table c)
 
 let set_interface_check (c:t): unit =
   Module_table.set_interface_check (module_table c)

@@ -586,6 +586,8 @@ let inherit_parent (cls_idx:int) (tp: type_t withinfo) (ct:t)
 
 
 
+let reset_formal_generics (ct:t): unit =
+  ct.fgens <- IntMap.empty
 
 
 let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
