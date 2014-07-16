@@ -136,6 +136,52 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 
 
 
+let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
+  let add_module (name:int): unit =
+    Context.add_module name [] c
+  and set_used (used: IntSet.t): unit =
+    Context.set_used_modules used c
+  and set_interface_use (): unit =
+    Context.set_interface_use c
+  in
+  let rec used (use_blk: use_block) (stack: int list) (set:IntSet.t)
+      : IntSet.t =
+    let push (nme:int withinfo): int list =
+      if List.exists (fun n -> n=nme.v) stack then
+        error_info nme.i "Cyclic module dependency"
+      else
+        nme.v :: stack
+    in
+    List.fold_left
+      (fun set nme ->
+        let used_set =
+          try
+            let mdl = Context.find_module nme.v [] c in
+            let used_set = Context.used_modules mdl c in
+            IntSet.union set used_set
+          with Not_found ->
+            let nmestr = Filename.concat f.dir  ((ST.string nme.v) ^ ".ei") in
+            Printf.printf "Parsing file \"%s\"\n" nmestr;
+            let use_blk, ast = parse_file nmestr in
+            let set = used use_blk (push nme) set in
+            add_module nme.v;
+            set_interface_use ();
+            set_used set;
+            analyze ast c;
+            IntSet.add (Context.current_module c) set
+        in
+        IntSet.union used_set set)
+      set
+      use_blk
+  in
+  let used_set = used use_blk [] IntSet.empty in
+  add_module (ST.symbol f.mdlnme);
+  set_used used_set
+
+
+
+
+(*
 let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
   List.iter
     (fun name ->
@@ -152,7 +198,7 @@ let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
         Context.pop_module c
       end)
     use_blk
-
+*)
 
 
 
@@ -161,14 +207,11 @@ let compile (f: file_name) (context:Context.t): unit =
   Printf.printf "Compiling file \"%s\"\n" f.name;
   try
     let use_blk,ast  = parse_file f.name in
-    let mdlnme = ST.symbol f.mdlnme      in
-    Context.push_module mdlnme [] context;
     Support.Parse_info.set_use_interface ();
     process_use use_blk f context;
     Support.Parse_info.set_module ();
     Support.Parse_info.set_file_name f.name;
     analyze ast context;
-    Context.pop_module context;
     Statistics.write ();
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in

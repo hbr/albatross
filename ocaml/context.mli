@@ -17,10 +17,13 @@ val feature_table:t -> Feature_table.t
 
 val has_current_module: t -> bool
 val current_module:     t -> int
+val count_modules:      t -> int
+val used_modules:       int -> t -> IntSet.t
+val add_module:         int -> int list -> t -> unit
+val set_used_modules:   IntSet.t -> t -> unit
+val set_interface_use:  t -> unit
+val set_interface_check:t -> unit
 val find_module:        int -> int list -> t -> int
-val add_used_modules:   int -> info     -> t -> unit
-val push_module:        int -> int list -> t -> unit
-val pop_module:         t -> unit
 
 val push:  entities list withinfo -> return_type -> t -> unit
 val push_empty: t -> unit

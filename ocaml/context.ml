@@ -52,17 +52,25 @@ let has_current_module (c:t): bool =
 let current_module (c:t): int =
   Module_table.current (module_table c)
 
+let count_modules (c:t): int = Module_table.count (module_table c)
+
 let find_module (name:int) (lib:int list) (c:t): int =
   Module_table.find name lib (module_table c)
 
-let add_used_modules (mdl:int) (inf:info) (c:t): unit =
-  Module_table.add_used mdl inf (module_table c)
+let add_module (name:int) (lib:int list) (c:t): unit =
+  Module_table.add name lib (module_table c)
 
-let push_module (name:int) (lib:int list) (c:t): unit =
-  Module_table.push name lib (module_table c)
+let set_used_modules (used:IntSet.t) (c:t): unit =
+  Module_table.set_used used (module_table c)
 
-let pop_module (c:t): unit =
-  Module_table.pop (module_table c)
+let set_interface_use (c:t): unit =
+  Module_table.set_interface_use (module_table c)
+
+let set_interface_check (c:t): unit =
+  Module_table.set_interface_check (module_table c)
+
+let used_modules (mdl:int) (c:t): IntSet.t =
+  Module_table.used mdl (module_table c)
 
 
 

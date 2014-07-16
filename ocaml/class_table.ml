@@ -320,6 +320,8 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
       else if mdl2 = -1                  then cidx1
       else if mdl1 < mdl2 && mdl2 <= mdl then cidx2
       else begin
+        printf "max mdl:%d %d:%s(%d) %d:%s(%d)\n"
+          mdl cidx1 (class_name cidx1 ct) mdl1 cidx2 (class_name cidx2 ct) mdl2;
         assert (mdl2 < mdl1 && mdl1 <= mdl);
         cidx1
       end

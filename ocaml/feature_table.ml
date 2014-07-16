@@ -2,6 +2,7 @@ open Container
 open Support
 open Term
 open Signature
+open Printf
 
 type implementation_status = No_implementation | Builtin | Deferred
 
@@ -464,6 +465,8 @@ let put_function
       error_info fn.i str
     in
     desc.mdl <- mdl;
+    if cls <> desc.cls then
+      printf "put_function: owner cls %d, desc.cls %d\n" cls desc.cls;
     assert (cls = desc.cls);
     if is_priv then begin
       if impstat <> desc.impstat then
