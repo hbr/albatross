@@ -432,14 +432,12 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
 
 
 
-
-
 let add
     (t:term) (nargs:int) (nbenv:int)
     (idx:int)
     (table:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
-      environment with [nvenv] variables to the index [idx]
+      environment with [nbenv] variables to the index [idx]
       within the node [tab].
    *)
   assert (next_index table <= idx);
@@ -502,3 +500,23 @@ let add
     {tab with terms = (idx,nargs,nbenv,t)::tab.terms}
   in
   add0 t 0 table
+
+
+
+
+let unify_unique (t:term) (nbt:int) (table:t)
+    : int * Term_sub.t =
+  let lst = unify t nbt table in
+  match lst with
+    []  -> raise Not_found
+  | [e] -> e
+  | _   -> assert false
+
+
+let unify_unique_with (t:term) (nargs:int) (nbenv:int) (table:t)
+    : int * Term_sub.t =
+  let lst = unify_with t nargs nbenv table in
+  match lst with
+    []  -> raise Not_found
+  | [e] -> e
+  | _   -> assert false
