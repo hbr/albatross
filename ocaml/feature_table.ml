@@ -144,9 +144,14 @@ let base_table () : t =
   and p = ST.symbol "p"
   and any   = Variable Class_table.any_index
   and bool1 = Variable (Class_table.boolean_index+1)
-  and g_tp  = Variable 0 in
+  and bool2 = Variable (Class_table.boolean_index+2)
+  and g_tp  = Variable 0
+  and a_tp  = Variable 0
+  and b_tp  = Variable 1 in
   let p_tp  = Application (Variable (Class_table.predicate_index+1),
                            [|g_tp|])
+  and f_tp  = Application (Variable (Class_table.function_index+2),
+                           [|a_tp;b_tp|])
   in
   let entry =
     {mdl      = -1;
@@ -162,7 +167,7 @@ let base_table () : t =
   in
   begin
     let idx,fn,sign = 1, FNoperator Parenop,
-      Sign.make_func [|p_tp;g_tp|] bool1
+      Sign.make_func [|f_tp;a_tp|] bool2
     in
     Seq.push {entry with fname = FNoperator Parenop;
               cls  = Class_table.function_index;
