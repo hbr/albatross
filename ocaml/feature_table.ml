@@ -10,11 +10,6 @@ module ESignature_map = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
-module Key_map = Map.Make(struct
-  type t = feature_name * int (* name, # of arguments *)
-  let compare = Pervasives.compare
-end)
-
 type definition = term
 type formal     = int * term
 
@@ -29,13 +24,13 @@ type descriptor = {mutable mdl: int;
                    priv:        definition option;
                    mutable pub: definition option option}
 
-type t          = {mutable map: int ESignature_map.t Key_map.t;
+type t          = {mutable map: int ESignature_map.t Feature_map.t;
                    seq:         descriptor seq;
                    ct:          Class_table.t}
 
 
 let empty (): t =
-  {map  = Key_map.empty;
+  {map  = Feature_map.empty;
    seq  = Seq.empty ();
    ct   = Class_table.base_table ()}
 
@@ -50,6 +45,12 @@ let count (ft:t): int =
 let descriptor (i:int) (ft:t): descriptor =
   assert (i < count ft);
   Seq.elem i ft.seq
+
+
+let is_deferred (desc:descriptor): bool =
+  match desc.impstat with
+    Deferred -> true
+  | _        -> false
 
 
 let names_of_formals (farr: formal array): int array =
@@ -68,6 +69,28 @@ let all_index:         int = 2
 let some_index:        int = 3
 
 
+
+let add_class_feature (i:int) (ft:t): unit =
+  (** Add the feature [i] as a class feature to the corresponding owner
+      class. *)
+  assert (i < count ft);
+  let desc  = Seq.elem i ft.seq
+  in
+  Class_table.add_feature
+    i
+    desc.cls
+    (is_deferred desc)
+    ft.ct
+
+
+
+let add_class_features (ft:t): unit =
+  for i = 0 to (count ft)-1 do
+    add_class_feature i ft
+  done
+
+
+
 let add_key (i:int) (ft:t): unit =
   (** Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
@@ -77,11 +100,11 @@ let add_key (i:int) (ft:t): unit =
   and nargs = Sign.arity desc.sign
   in
   let esign_map =
-    try Key_map.find (fn,nargs) ft.map
+    try Feature_map.find (fn,nargs) ft.map
     with Not_found -> ESignature_map.empty
   in
   ft.map <-
-    Key_map.add
+    Feature_map.add
       (fn,nargs)
       (ESignature_map.add (desc.concepts,desc.sign) i esign_map)
       ft.map
@@ -93,6 +116,8 @@ let add_keys (ft:t): unit =
   done
 
 
+
+
 let base_table () : t =
   (** Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
@@ -101,8 +126,6 @@ let base_table () : t =
   and signimp = Sign.make_func [|bool;bool|] bool
   in
   (* boolean *)
-  Class_table.add_feature
-    implication_index Class_table.boolean_index false ft.ct;
   Seq.push
     {mdl      = -1;
      cls      = Class_table.boolean_index;
@@ -140,15 +163,14 @@ let base_table () : t =
     let idx,fn,sign = 1, FNoperator Parenop,
       Sign.make_func [|p_tp;g_tp|] bool1
     in
-    Class_table.add_feature paren_index Class_table.function_index false ft.ct;
     Seq.push {entry with fname = FNoperator Parenop;
+              cls  = Class_table.function_index;
               sign = sign}  ft.seq;  (* 1: "()" *)
   end;
-  Class_table.add_feature all_index  Class_table.predicate_index false ft.ct;
-  Class_table.add_feature some_index Class_table.predicate_index false ft.ct;
   Seq.push entry ft.seq;                                   (* 2: all  *)
   Seq.push{entry with fname = FNoperator Someop} ft.seq;   (* 3: some *)
   add_keys ft;
+  add_class_features ft;
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor paren_index ft).fname       = FNoperator Parenop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
@@ -179,7 +201,7 @@ let find
     : int =
   ESignature_map.find
     (concepts,sign)
-    (Key_map.find (fn,nargs) ft.map)
+    (Feature_map.find (fn,nargs) ft.map)
 
 
 
@@ -194,7 +216,7 @@ let find_funcs
    *)
   ESignature_map.fold
     (fun (cs,sign) i lst -> (i,TVars.make 0 cs,sign)::lst)
-    (Key_map.find (fn,nargs) ft.map)
+    (Feature_map.find (fn,nargs) ft.map)
     []
 
 
@@ -457,3 +479,15 @@ let put_function
           if def <> term_opt then
             not_match "public definition"
   end
+
+
+
+
+let inherit_features
+    (cls_idx:int)
+    (par_idx:int)
+    (par_args: type_term array)
+    (ft:t): unit =
+  (** Let the class [cls_idx] inherit the features from the parent
+      [par_idx[par_args]]. *)
+  assert false

@@ -453,6 +453,7 @@ let put_class
       List.iter
         (fun (tp_inf,adapt_lst) ->
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
+          let par_idx, par_args = Class_table.parent_type idx tp_inf ct in
           let anc_lst = Class_table.inherit_parent idx tp_inf ct in
           ())
         par_lst)

@@ -734,6 +734,14 @@ type feature_name =
   | FNfalse
   | FNnumber of int
 
+
+module Feature_map = Map.Make(struct
+  type t = feature_name * int (* name, # of arguments *)
+  let compare = Pervasives.compare
+end)
+
+
+
 let feature_name_to_string (fn:feature_name): string =
   match fn with
     FNname i | FNnumber i -> ST.string i
