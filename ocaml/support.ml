@@ -345,7 +345,7 @@ let rec string_of_type (t:type_t) =
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
 
 
-type return_type = (type_t*bool) withinfo option
+type return_type = (type_t*bool*bool) withinfo option
 
 
 (* Formal arguments *)
@@ -666,9 +666,10 @@ and string_of_locals loc =
           (ST.string id) ^ "(" ^ (string_of_formals elist) ^")"
           ^
           (match rt with Some t ->
-            let tp,exclam = t.v
+            let tp,exclam,ghost = t.v
             in
             (if exclam then "!:" else ":")
+            ^ (if ghost then " ghost " else "")
             ^ (string_of_type tp)
           | None -> "")
           ^ " " ^ (string_of_body body)

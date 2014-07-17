@@ -406,7 +406,6 @@ type_nt:
   simple_type  { $1 }
 | current_type { $1 }
 | arrow_type   { $1 }
-| ghost_type   { $1 }
 | tuple_type   { $1 }
 | qmark_type   { $1 }
 | LPAREN type_nt RPAREN { Paren_type $2 }
@@ -448,9 +447,6 @@ arrow_type: type_nt ARROW type_nt {
 }
 
 
-ghost_type: KWghost type_nt { Ghost_type $2 }
-
-
 tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
 
 
@@ -462,15 +458,6 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 /* Features */
 /* ------------------------------------------------------------------------- */
 
-/*
-assertion_feature:
-    KWall formal_arguments_opt optsemi feature_body {
-  Assertion_feature (None, (withinfo (rhs_info 2) $2), $4)
-}
-|   LIDENTIFIER COLON KWall formal_arguments_opt optsemi feature_body {
-  Assertion_feature ((Some $1), (withinfo (rhs_info 4) $4), $6)
-}
-*/
 named_feature:
     nameopconst formal_arguments return_type_opt optsemi feature_body_opt {
   Named_feature ((withinfo (rhs_info 1) $1),
@@ -495,11 +482,11 @@ name_rtype:
 }
 |   LIDENTIFIER  COLON type_nt {
   (withinfo (rhs_info 1) (FNname $1)),
-  (Some (withinfo (rhs_info 3) ($3,false)))
+  (Some (withinfo (rhs_info 3) ($3,false,false)))
 }
 |   LIDENTIFIER  EXCLAM COLON type_nt {
   (withinfo (rhs_info 1) (FNname $1)),
-  (Some (withinfo (rhs_info 4) ($4,true)))
+  (Some (withinfo (rhs_info 4) ($4,true,false)))
 }
 |   featopconst return_type_opt {
   (withinfo (rhs_info 1) $1),
@@ -520,8 +507,9 @@ featopconst:
 
 
 return_type:
-    COLON type_nt { withinfo (rhs_info 2) ($2,false) }
-|   EXCLAM COLON type_nt { withinfo (rhs_info 3) ($3,true) }
+    COLON type_nt         { withinfo (rhs_info 2) ($2,false,false) }
+|   COLON KWghost type_nt { withinfo (rhs_info 3) ($3,false,true)  }
+|   EXCLAM COLON type_nt  { withinfo (rhs_info 3) ($3,true,false)  }
 
 
 return_type_opt:

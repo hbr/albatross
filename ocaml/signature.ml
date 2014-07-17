@@ -243,22 +243,31 @@ module Result_type: sig
 
   type t
   val empty:        t
+  val normal:       t -> t
   val make_func:    type_term -> t
+  val make_ghost:   type_term -> t
   val make_proc:    type_term -> t
-  val make:         type_term -> bool -> t
+  val make:         type_term -> bool -> bool -> t
   val has_result:   t -> bool
   val result:       t -> type_term
   val is_procedure: t -> bool
+  val is_ghost:     t -> bool
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
 
 end = struct
 
-  type t = (type_term * bool) option
+  type t = (type_term * bool * bool) option
   let empty = None
-  let make_func (tp:type_term): t = Some (tp,false)
-  let make_proc (tp:type_term): t = Some (tp,true)
-  let make (tp:type_term) (proc:bool): t = Some (tp,proc)
+  let make_func (tp:type_term): t = Some (tp,false,false)
+  let make_ghost(tp:type_term): t = Some (tp,false,true)
+  let make_proc (tp:type_term): t = Some (tp,true,false)
+  let make (tp:type_term) (proc:bool) (ghost:bool): t = Some (tp,proc,ghost)
+
+  let normal (rt:t): t =
+    match rt with
+      None -> rt
+    | Some(tp,_,_) -> Some(tp,false,false)
 
   let has_result (rt:t): bool = Option.has rt
 
@@ -266,17 +275,22 @@ end = struct
     assert (has_result rt);
     match rt with
       None -> assert false
-    | Some (tp,proc) -> tp
+    | Some (tp,_,_) -> tp
 
   let  is_procedure (rt:t): bool =
     match rt with
-      None -> true
-    | Some (_,proc) -> proc
+      None            -> true
+    | Some (_,proc,_) -> proc
+
+  let is_ghost (rt:t): bool =
+    match rt with
+      None             -> false
+    | Some (_,_,ghost) -> ghost
 
   let up_from (n:int) (start:int) (rt:t): t =
     match rt with
       None -> None
-    | Some (tp,proc) -> Some (Term.upbound n start tp, proc)
+    | Some (tp,proc,ghost) -> Some (Term.upbound n start tp, proc, ghost)
 
   let up (n:int) (rt:t): t = up_from n 0 rt
 end
@@ -293,6 +307,7 @@ module Sign: sig
   val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
   val make_args:   type_term array -> t
+  val normal:      t -> t
   val to_string:   t -> string
   val arity:       t -> int
   val is_constant: t -> bool
@@ -305,6 +320,7 @@ module Sign: sig
   val is_unary:    t -> bool
   val result:      t -> type_term
   val is_procedure:t -> bool
+  val is_ghost:    t -> bool
   val up_from:     int -> int -> t -> t
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
@@ -332,6 +348,8 @@ end = struct
   let make_proc (args: type_term array) (result:type_term): t =
     {args = args; rt = Result_type.make_proc result}
 
+  let normal (s:t): t = make s.args (Result_type.normal s.rt)
+
   let arity (s:t): int = Array.length s.args
 
   let is_constant (s:t): bool = (arity s) = 0
@@ -358,6 +376,7 @@ end = struct
     Result_type.result s.rt
 
   let is_procedure (s:t): bool = Result_type.is_procedure s.rt
+  let is_ghost     (s:t): bool = Result_type.is_ghost     s.rt
 
 
   let to_string (s:t): string =

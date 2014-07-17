@@ -99,6 +99,7 @@ let add_key (i:int) (ft:t): unit =
   in
   let fn    = desc.fname
   and nargs = Sign.arity desc.sign
+  and sign  = Sign.normal desc.sign
   in
   let esign_map =
     try Feature_map.find (fn,nargs) ft.map
@@ -107,7 +108,7 @@ let add_key (i:int) (ft:t): unit =
   ft.map <-
     Feature_map.add
       (fn,nargs)
-      (ESignature_map.add (desc.concepts,desc.sign) i esign_map)
+      (ESignature_map.add (desc.concepts,sign) i esign_map)
       ft.map
 
 

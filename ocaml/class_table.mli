@@ -36,6 +36,15 @@ val owner:          int -> type_term array -> Sign.t -> t -> int
 val find:  int -> t -> int
 val find_in_module: int -> t -> int
 
+val downgrade_signature: int -> Sign.t -> int -> Sign.t
+  (** [downgrade_signature ntvs sign nargs] downgrades the constant signature
+      [ntvs,sign] (i.e. a signature which has no arguments and is therefore
+      not callable) into a function signature with [nargs] arguments.
+
+      This is possible only if the result type of [sign] is a function or a
+      predicate type and the corresponding actual generic is a tuple with the
+      corresponding number of elements in case that [nargs > 1] *)
+
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit

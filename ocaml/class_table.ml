@@ -135,6 +135,8 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
 let find (cn: int) (ct:t): int =
   IntMap.find cn ct.map
 
+
+
 let find_in_module (cn:int) (ct:t): int =
   assert (Module_table.has_current (module_table ct));
   let idx  = find cn ct in
@@ -144,6 +146,58 @@ let find_in_module (cn:int) (ct:t): int =
     idx
   else
     raise Not_found
+
+
+
+let extract_from_tuple
+    (nargs:int) (ntvs:int) (tp:type_term): type_term array =
+  assert (0 < nargs);
+  let tup_idx = ntvs + tuple_index in
+  let rec extract
+      (n:int) (tp:type_term) (lst:type_term list): type_term list =
+    let cls_idx, args = split_type_term tp in
+    if 2 <= n && cls_idx = tup_idx then
+      extract (n-1) args.(1) (args.(0)::lst)
+    else
+      raise Not_found
+  in
+  if nargs = 1 then
+    [|tp|]
+  else
+    let lst = extract nargs tp [] in
+    Array.of_list (List.rev lst)
+
+
+
+
+
+let downgrade_signature
+    (ntvs:int) (sign:Sign.t) (nargs:int): Sign.t =
+  assert (Sign.is_constant sign);
+  assert (0 < nargs);
+  let pred_idx = predicate_index + ntvs
+  and func_idx = function_index  + ntvs
+  in
+  let tp = Sign.result sign in
+  let cls_idx,args = split_type_term tp in
+  if cls_idx < ntvs then
+    raise Not_found
+  else if cls_idx = pred_idx then begin
+    assert (Array.length args = 1);
+    Sign.make_func
+      (extract_from_tuple nargs ntvs args.(0))
+      (boolean_type ntvs)
+  end else if cls_idx = func_idx then begin
+    printf "ntvs %d Sign %s\n" ntvs (Sign.to_string sign);
+    assert (Array.length args = 2);
+    Sign.make_func
+      (extract_from_tuple nargs ntvs args.(0))
+      args.(1)
+  end else
+    raise Not_found
+
+
+
 
 
 let class_formal_generics (fgens: formal_generics) (ct:t): formal array =
@@ -156,6 +210,9 @@ let class_formal_generics (fgens: formal_generics) (ct:t): formal array =
            let str = "Unknown formal generic " ^ (ST.string nme) in
            error_info fgens.i str)
        fgens.v)
+
+
+
 
 
 let check_class_formal_generic
@@ -671,7 +728,9 @@ let formal_generics
   let fgs_rev =
     match rt with
       None -> fgs_rev
-    | Some tp -> collect_fgs (fst tp.v) fgs_rev ct
+    | Some tp ->
+        let t,_,_ = tp.v in
+        collect_fgs t fgs_rev ct
   in
   ntvs,
   Array.of_list (List.rev fgs_rev)
@@ -701,6 +760,7 @@ let formal_arguments
   Array.of_list arglst
 
 
+
 let result_type
     (rt:return_type)
     (ntvs: int)
@@ -712,9 +772,9 @@ let result_type
   match rt with
     None -> Result_type.empty
   | Some tpinf ->
-      let tp,proc = tpinf.v in
+      let tp,proc,ghost = tpinf.v in
       let t = get_type (withinfo tpinf.i tp) ntvs fgs ct in
-      Result_type.make t proc
+      Result_type.make t proc ghost
 
 
 

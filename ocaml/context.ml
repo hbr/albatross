@@ -513,10 +513,15 @@ let find_identifier
     try
       let i,tvs,s = argument name c
       in
-      if (Sign.arity s) = nargs_id then begin
-        [i,tvs,s]
-      end else
-        raise Wrong_signature
+      if (Sign.arity s) = nargs_id then [i,tvs,s]
+      else
+        try
+          let s =
+            Class_table.downgrade_signature
+              (ntvs c) s nargs_id in
+          [i,tvs,s]
+        with Not_found ->
+          raise Wrong_signature
     with
       Not_found ->
         find_funcs
