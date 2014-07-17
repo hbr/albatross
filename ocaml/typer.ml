@@ -168,8 +168,6 @@ end = struct
      tvars = TVars_sub.add_global cs acc.tvars}
 
 
-
-
   let add_term
       (i:int)
       (tvs:TVars.t)
@@ -203,7 +201,7 @@ end = struct
 
 
   let expect_function (nargs:int) (acc:t): unit =
-    (** Convert the currently expected signature into a function signature
+    (** Convert the currently expected signature to a function signature
         with [nargs] arguments and add to the type variables [nargs] fresh
         type variables, one for each argument.
      *)
@@ -253,14 +251,13 @@ end = struct
         Note: The signature is meaningless (it is just the expected signature
         of the last argument. If there are more arguments to come, then
         [expect_argument] will put a new expected signature into the
-        accumulator.
-     *)
+        accumulator.  *)
     (*Printf.printf
       "Complete a function with %d arguments and %d terms on stack\n"
       nargs (List.length acc.tlist);*)
     let arglst = ref [] in
     for i = 1 to nargs do  (* pop arguments *)
-      assert (not (Mylist.is_empty acc.tlist));
+      assert (acc.tlist <> []);
       let t = List.hd acc.tlist in
       acc.tlist <- List.tl acc.tlist;
       arglst := t :: !arglst;
@@ -272,8 +269,8 @@ end = struct
 
 
   let result (acc:t): term * TVars_sub.t =
-    (** Return the term and the calculated substitutions of the type variables
-     *)
+    (** Return the term and the calculated substitutions for the type
+        variables *)
     assert (Mylist.is_singleton acc.tlist);
     List.hd acc.tlist, acc.tvars
 
@@ -406,6 +403,59 @@ end (* Accus *)
 
 
 
+
+let cannot_find (name:string) (nargs:int) (info:info) =
+  let str = "Cannot find \"" ^ name
+    ^ "\" with " ^ (string_of_int nargs) ^ " arguments"
+  in
+  error_info info str
+
+
+let features (fn:feature_name) (nargs:int) (info:info) (c:Context.t)
+    : (int * TVars.t * Sign.t) list =
+  try
+    Context.find_feature fn nargs c
+  with Not_found ->
+    cannot_find (feature_name_to_string fn) nargs info
+
+
+let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
+    : (int * TVars.t * Sign.t) list =
+  try
+    Context.find_identifier name nargs c
+  with Not_found ->
+    cannot_find (ST.string name) nargs info
+
+
+let process_leaf
+    (lst: (int*TVars.t*Sign.t) list)
+    (e:expression)
+    (c:Context.t)
+    (info:info)
+    (accs: Accus.t)
+    : unit =
+  try
+    Accus.add_leaf lst c accs
+  with
+    Accus.Untypeable exp_sign_lst ->
+      let str = "The expression "
+        ^ (string_of_expression e)
+        ^ " does not satisfy any of the expected types in {"
+        ^ (String.concat
+             ","
+             (List.map
+                (fun (sign,ntvs) ->
+                  let fgnames = Context.fgnames c
+                  and ct      = Context.class_table c
+                  in
+                  Class_table.string_of_signature sign ntvs fgnames ct)
+                exp_sign_lst))
+        ^ "}"
+      in
+      error_info info str
+
+
+
 let rec analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
@@ -423,54 +473,19 @@ let rec analyze_expression
       : unit =
     let nargs = Accus.expected_arity accs
     in
-    let cannot_find (name:string) =
-      let str = "Cannot find \"" ^ name
-        ^ "\" with " ^ (string_of_int nargs) ^ " arguments"
-      in
-      error_info info str
-    in
-    let feat_fun (fn:feature_name) =
-      fun () ->
-        try
-          Context.find_feature fn nargs c
-        with Not_found ->
-          cannot_find (feature_name_to_string fn)
-    and id_fun (name:int) =
-      fun () ->
-        try
-          Context.find_identifier name nargs c
-        with Not_found ->
-          cannot_find (ST.string name)
-    and do_leaf (f: unit -> (int*TVars.t*Sign.t) list): unit =
-      try
-        let lst = f () in
-        Accus.add_leaf lst c accs
-      with
-        Accus.Untypeable exp_sign_lst ->
-          let str = "The expression "
-            ^ (string_of_expression e)
-            ^ " does not satisfy any of the expected types in {"
-            ^ (String.concat
-                 ","
-                 (List.map
-                    (fun (sign,ntvs) ->
-                      let fgnames = Context.fgnames c
-                      and ct      = Context.class_table c
-                      in
-                      Class_table.string_of_signature sign ntvs fgnames ct)
-                    exp_sign_lst))
-            ^ "}"
-          in
-          error_info info str
+    let feat (fn:feature_name) = features fn nargs info c
+    and id   (name:int)        = identifiers name nargs info c
+    and do_leaf (lst: (int*TVars.t*Sign.t) list): unit =
+      process_leaf lst e c info accs
     in
     match e with
       Expproof (_,_,_)
     | Expquantified (_,_,Expproof (_,_,_)) ->
         error_info info "Proof not allowed here"
-    | Identifier name     -> do_leaf (id_fun name)
-    | Expfalse            -> do_leaf (feat_fun FNfalse)
-    | Exptrue             -> do_leaf (feat_fun FNtrue)
-    | Expop op            -> do_leaf (feat_fun (FNoperator op))
+    | Identifier name     -> do_leaf (id name)
+    | Expfalse            -> do_leaf (feat FNfalse)
+    | Exptrue             -> do_leaf (feat FNtrue)
+    | Expop op            -> do_leaf (feat (FNoperator op))
     | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
     | Unexp  (op,e)       -> application (Expop op) [|e|] accs
     | Funapp (f,args)     ->
@@ -483,6 +498,7 @@ let rec analyze_expression
     | Expparen e          -> analyze e accs
     | Taggedexp (label,e) -> analyze e accs
     | Expquantified (q,entlst,exp) ->
+        quantified q entlst exp accs;
         Context.push entlst None c;
         let t0 = boolean_term (withinfo entlst.i exp) c in
         let t  =
@@ -513,6 +529,19 @@ let rec analyze_expression
       Accus.expect_argument accs;
       analyze args.(i) accs
     done
+
+  and quantified
+      (q:quantifier)
+      (entlst:entities list withinfo)
+      (e:expression)
+      (accs: Accus.t)
+      : unit =
+    Accus.expect_function 1 accs;
+    let qop = match q with Universal -> Allop | Existential -> Someop in
+    process_leaf (features (FNoperator qop) 1 info c) e c info accs;
+    Accus.expect_argument accs;
+    Context.push entlst None c;
+    assert false
 
   in
 
