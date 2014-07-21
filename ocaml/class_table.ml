@@ -67,6 +67,18 @@ let any (ntvs:int)           = Variable (any_index+ntvs)
 let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
 
 
+let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
+  let cls_idx,args = split_type_term tp in
+  if cls_idx = ntvs + predicate_index then begin
+    assert (Array.length args = 1);
+    boolean_type ntvs
+  end else if cls_idx = ntvs + function_index then begin
+    assert (Array.length args = 2);
+    args.(1)
+  end else
+    raise Not_found
+
+
 
 let is_boolean_binary (s:Sign.t) (ntvs:int): bool =
   (Sign.is_binary s) &&
@@ -377,8 +389,6 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
       else if mdl2 = -1                  then cidx1
       else if mdl1 < mdl2 && mdl2 <= mdl then cidx2
       else begin
-        printf "max mdl:%d %d:%s(%d) %d:%s(%d)\n"
-          mdl cidx1 (class_name cidx1 ct) mdl1 cidx2 (class_name cidx2 ct) mdl2;
         assert (mdl2 < mdl1 && mdl1 <= mdl);
         cidx1
       end
@@ -902,7 +912,7 @@ let string_of_signature
     if has_res then
       type2string (Sign.result s) ntvs fgnames ct
     else ""
-  and colon = if has_args && has_res then ": " else ""
+  and colon = if has_args && has_res then ":" else ""
   in
   argsstr ^ colon ^ retstr
 

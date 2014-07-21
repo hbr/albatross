@@ -109,10 +109,13 @@ let count_type_variables (c:t): int =
    *)
   TVars_sub.count c.entry.tvars_sub
 
+let count_local_type_variables (c:t): int =
+  c.entry.ntvs_delta
+
 
 let entry_nfgs (e:entry): int = Array.length e.fgs
 
-let nfgs (c:t): int =
+let count_formal_generics (c:t): int =
   (** The cumulated number of formal generics in this context and all
       previous contexts
    *)
@@ -131,7 +134,7 @@ let ntvs (c:t): int =
   (** The cumulated number of formal generics and type variables in
       this context and all previous contexts
    *)
-  (nfgs c) + (count_type_variables c)
+  (count_formal_generics c) + (count_type_variables c)
 
 
 let formal_generics (c:t): formal array =
@@ -139,6 +142,11 @@ let formal_generics (c:t): formal array =
       previous contexts
    *)
   c.entry.fgs
+
+
+
+let entry_fargnames (e:entry): int array =
+  Array.init e.nfargs_delta (fun i -> fst e.fargs.(i))
 
 
 
@@ -151,6 +159,9 @@ let last_fargs (c:t): int array =
 let last_fargnames (c:t): int array =
   let n = arity c in
   Array.init n (fun i -> fst c.entry.fargs.(i))
+
+
+let local_fargnames (c:t): int array = entry_fargnames c.entry
 
 
 
@@ -242,20 +253,22 @@ let make (): t =
  }
 
 
-let push
+let push_with_gap
     (entlst: entities list withinfo)
     (rt: return_type)
+    (ntvs_gap)
     (c: t)
     : unit =
-  (** Make a next local context with the argument list [entlst] and the
-      return type [rt] based on previous local global context [c]
-   *)
+  (** Push the new type variables, formal generics and the formal arguments of
+      [entlst,rt] to the context [c] leaving a gap of [ntvs_gap] above the
+      possibly newly introduced type variables of the signature. *)
   let entry      = c.entry
   and ct         = class_table c in
   let ntvs0      = TVars_sub.count_local entry.tvars_sub
   in
   let ntvs,fgs   = Class_table.formal_generics entlst rt ntvs0 entry.fgs ct
   in
+  let ntvs  = ntvs + ntvs_gap in
   let ntvs1 = ntvs - ntvs0
   and nfgs1 = Array.length fgs - Array.length entry.fgs
   in
@@ -283,6 +296,18 @@ let push
 
   assert (not (Proof_context.has_work c.pc));
   Proof_context.push (arity c) (last_fargnames c) c.pc
+
+
+
+
+let push
+    (entlst: entities list withinfo)
+    (rt: return_type)
+    (c: t)
+    : unit =
+  (** Push the new type variables, formal generics and the formal arguments of
+      [entlst,rt] to the context [c]. *)
+  push_with_gap entlst rt 0 c
 
 
 
@@ -475,20 +500,25 @@ let put_class
 
 
 let find_funcs
-    (fn:feature_name) (nargs:int)
-    (nfgs:int) (nvars:int)
-    (ft:Feature_table.t)
+    (fn:feature_name)
+    (nargs:int)
+    (c:t)
     : (int*TVars.t*Sign.t) list =
   (** Find all the functions with name [fn] and [nargs] arguments in the
       global feature table and transform them into the context.
    *)
-  let lst = Feature_table.find_funcs fn nargs ft
+  let lst = Feature_table.find_funcs fn nargs c.ft
+  and nfgs = count_formal_generics c
   in
   let lst = List.rev_map
       (fun (i,tvs,s) ->
+        (* make space for formal generics *)
         let start = TVars.count tvs in
         assert (TVars.count_local tvs = 0);
-        i+nvars, tvs, Sign.up_from nfgs start s)
+        let sign = Sign.up_from nfgs start s in
+        (*(* make space for type variables *)
+        let sign = Sign.up (count_type_variables c) s in*)
+        i+(nfargs c), tvs, sign)
       lst
   in
   lst
@@ -504,11 +534,8 @@ let find_identifier
       in one of the local contexts or in the global feature table. Return
       the list of variables together with their signature
    *)
-  let nfgs_c0  = nfgs c
-  and nargs_c0 = nfargs c
-  in
   if is_global c then
-    find_funcs (FNname name) nargs_id nfgs_c0 nargs_c0 c.ft
+    find_funcs (FNname name) nargs_id c
   else
     try
       let i,tvs,s = argument name c
@@ -525,7 +552,7 @@ let find_identifier
     with
       Not_found ->
         find_funcs
-          (FNname name) nargs_id nfgs_c0 nargs_c0 c.ft
+          (FNname name) nargs_id c
     | Wrong_signature ->
         raise Not_found
 
@@ -540,7 +567,7 @@ let find_feature
       feature table. Return the list of variables together with their
       signature.
    *)
-  find_funcs fn nargs_feat (nfgs c) (nfargs c) c.ft
+  find_funcs fn nargs_feat c
 
 
 

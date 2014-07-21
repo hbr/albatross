@@ -14,6 +14,7 @@ val function_index:  int
 val tuple_index:     int
 
 
+val result_type_of_compound: term -> int -> term
 
 val base_table: unit -> t
 

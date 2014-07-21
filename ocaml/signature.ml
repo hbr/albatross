@@ -254,7 +254,7 @@ module Result_type: sig
   val is_ghost:     t -> bool
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
-
+  val sub:          t -> type_term array -> int -> t
 end = struct
 
   type t = (type_term * bool * bool) option
@@ -293,6 +293,11 @@ end = struct
     | Some (tp,proc,ghost) -> Some (Term.upbound n start tp, proc, ghost)
 
   let up (n:int) (rt:t): t = up_from n 0 rt
+
+  let sub (rt:t) (sub_arr:type_term array) (ntvs:int): t =
+    match rt with
+      None -> None
+    | Some (tp,proc,ghost) -> Some(Term.sub tp sub_arr ntvs,proc,ghost)
 end
 
 
@@ -325,7 +330,8 @@ module Sign: sig
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
   val to_function: int -> t -> t
-
+  val sub:         t -> type_term array -> int -> t
+  val substitute:  t -> TVars_sub.t -> t
 end = struct
 
   type t = {args: type_term array;
@@ -428,4 +434,13 @@ end = struct
     {args   = Array.init nargs (fun i -> Variable i);
      rt     = Result_type.up nargs s.rt}
 
+  let sub (s:t) (sub_arr:type_term array) (ntvs:int): t =
+    let args = Array.map (fun tp -> Term.sub tp sub_arr ntvs) s.args
+    and rt   = Result_type.sub s.rt sub_arr ntvs in
+    make args rt
+
+  let substitute (s:t) (tvars_sub:TVars_sub.t): t =
+    let args = TVars_sub.args tvars_sub in
+    let ntvs = Array.length args in
+    sub s args ntvs
 end (* Sign *)

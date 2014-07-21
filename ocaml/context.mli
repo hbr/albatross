@@ -25,6 +25,7 @@ val set_interface_use:  t -> unit
 val set_interface_check:t -> unit
 val find_module:        int -> int list -> t -> int
 
+val push_with_gap:  entities list withinfo -> return_type -> int -> t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
 val push_empty: t -> unit
 val push_untyped: int array -> t -> unit
@@ -41,8 +42,19 @@ val argument:  int -> t -> int * TVars.t * Sign.t
 val result_type: t -> type_term
 
 val count_type_variables: t -> int
+    (** The number of cumulated type variables in this context and all
+        preceeding contexts *)
 
-val fgnames: t -> int array
+val count_local_type_variables: t -> int
+    (** The number of type variables in this context without all preceeding
+        contexts *)
+
+val count_formal_generics: t -> int
+    (** The number of formal generics in this context and all preceeding
+        contexts *)
+
+val fgnames: t   -> int array
+val local_fargnames: t -> int array
 
 val type_variables: t -> TVars_sub.t
 

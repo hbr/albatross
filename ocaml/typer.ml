@@ -2,7 +2,7 @@ open Container
 open Term
 open Signature
 open Support
-
+open Printf
 
 
 let add_substitution
@@ -19,9 +19,6 @@ let add_substitution
       i < TVars_sub.count_local tvars_sub
     ||
       let cpt = TVars_sub.concept i tvars_sub in
-      (*Printf.printf "Does term %s satisfy the concept %s[%d]?\n"
-        (Term.to_string t)
-        (Term.to_string cpt) i;*)
       let cnt = TVars_sub.count tvars_sub in
       match t with
         Variable i when i < cnt ->
@@ -113,8 +110,6 @@ let unify_sign
     : unit =
   (** Unify the signatures [s1] and [s2] by adding substitutions to
       [tvars_sub] within the context [c] *)
-  (*Printf.printf "unify signatures %s, %s\n" (Sign.to_string s1)
-    (Sign.to_string s2);*)
   let n,has_res = (Sign.arity s1), (Sign.has_result s1) in
   if not (n = (Sign.arity s2) && has_res = (Sign.has_result s2)) then
     raise Not_found;
@@ -122,7 +117,12 @@ let unify_sign
     unify (Sign.result s1) (Sign.result s2) tvars_sub c;
   for i=0 to (Sign.arity s1)-1 do
     unify (Sign.arguments s1).(i) (Sign.arguments s2).(i) tvars_sub c
-  done
+  done;
+  assert begin
+    let s1_sub = Sign.substitute s1 tvars_sub
+    and s2_sub = Sign.substitute s2 tvars_sub in
+    s1_sub = s2_sub
+  end
 
 
 
@@ -131,11 +131,15 @@ module Accu: sig
 
   type t
   val signature:         t -> Sign.t
+  val signature_string:  t -> string
+  val substitution_string: t -> string
   val ntvars:            t -> int
-  val make:              type_term -> TVars_sub.t -> t
-  val add_term:          int ->  TVars.t -> Sign.t -> Context.t ->  t -> t
+  val make:              type_term -> Context.t -> t
+  val add_leaf:          int ->  TVars.t -> Sign.t ->  t -> t
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
+  val expect_lambda:     int -> t -> unit
+  val complete_lambda:   int -> int array -> t -> unit
   val complete_function: int -> t -> unit
   val result:            t -> term * TVars_sub.t
 
@@ -143,58 +147,82 @@ end = struct
 
   type t = {mutable tlist: term list;
             mutable sign:  Sign.t;  (* expected *)
-            mutable tvars: TVars_sub.t}
+            mutable tvars: TVars_sub.t;
+            c: Context.t}
 
-  let signature (acc:t): Sign.t = acc.sign
+  let signature (acc:t): Sign.t = Sign.substitute acc.sign acc.tvars
 
   let ntvars (acc:t): int = TVars_sub.count acc.tvars
 
-  let make (e:type_term) (tvars:TVars_sub.t): t =
+  let string_of_signature (s:Sign.t) (acc:t): string =
+    let ntvs    = ntvars acc
+    and fgnames = Context.fgnames acc.c
+    and ct      = Context.class_table acc.c in
+    Class_table.string_of_signature s ntvs fgnames ct
+
+  let signature_string (acc:t): string =
+    let s       = signature acc in
+    string_of_signature s acc
+
+  let substitution_string (acc:t): string =
+    let sub_lst  = Array.to_list (TVars_sub.args acc.tvars)
+    and ntvs     = ntvars acc
+    and fnames   = Context.fgnames acc.c
+    and ct       = Context.class_table acc.c
+    in
+    "[" ^
+    (String.concat
+       ","
+       (List.map
+          (fun tp -> Class_table.type2string tp ntvs fnames ct)
+          sub_lst)) ^
+    "]"
+
+  let make (e:type_term) (c:Context.t): t =
     (** New accumulator for an expression with the expected type [e] in the
         context with the type variables [tvars] *)
     {tlist = [];
      sign  = Sign.make_const e;
-     tvars = tvars}
+     tvars = (Context.type_variables c);
+     c     = c}
 
 
   let add_global (cs:constraints) (acc:t): t =
-    (** Add the constraints [cs] to the accumulator [acc]
-     *)
+    (** Add the constraints [cs] to the accumulator [acc] *)
     let n = Array.length cs
     and start = TVars_sub.count acc.tvars in
-    (*Printf.printf "\tadd %d globals above %d\n" n start;*)
     {acc with
      sign  = Sign.up_from n start acc.sign;
      tvars = TVars_sub.add_global cs acc.tvars}
 
 
-  let add_term
+  let add_leaf
       (i:int)
       (tvs:TVars.t)
       (s:Sign.t)
-      (c:Context.t)
       (acc:t): t =
     (** Add the term [i,tvs,s] of the context [c] to the accumulator [acc]
      *)
     assert (not (TVars.count_local tvs > 0 && TVars.count_global tvs > 0));
-    (*Printf.printf "add_term %d sig %s\n" i (Sign.to_string s);*)
     let s =
       (* If [i] comes from a global environment, then it has no local type
          variables and space must be made for all type variables (locals and
          globals) of [acc.tvars].
 
          If [i] comes from a local environment then it has no global type
-         variables. But the locals already in conincide with the locals of
+         variables. But the locals already in coincide with the locals of
          [acc.tvars]. Space has to be made for all type variables (globals
          and locals) of [acc.tvars] which are not yet in [tvs].
        *)
-      let n = (TVars_sub.count acc.tvars) - TVars.count_local tvs
+      let nglob = TVars_sub.count_global acc.tvars
+      and nloc  = TVars_sub.count_local  acc.tvars - TVars.count_local tvs
+      and start = TVars.count_local tvs
       in
-      Sign.up n s
+      Sign.up nloc (Sign.up_from nglob start s)
     in
     let acc = add_global (TVars.constraints tvs) acc
     in
-    unify_sign s acc.sign acc.tvars c;
+    unify_sign s acc.sign acc.tvars acc.c;
     {acc with tlist = (Variable i)::acc.tlist}
 
 
@@ -232,9 +260,6 @@ end = struct
     (** Expect the argument [i] as the next term.
      *)
     assert (i < (TVars_sub.count_local acc.tvars));
-    (*Printf.printf "expect argument %d:%s\n"
-      i
-      (Term.to_string (TVars_sub.get i acc.tvars));*)
     acc.sign <- Sign.make_const (TVars_sub.get i acc.tvars)
 
 
@@ -252,9 +277,6 @@ end = struct
         of the last argument. If there are more arguments to come, then
         [expect_argument] will put a new expected signature into the
         accumulator.  *)
-    (*Printf.printf
-      "Complete a function with %d arguments and %d terms on stack\n"
-      nargs (List.length acc.tlist);*)
     let arglst = ref [] in
     for i = 1 to nargs do  (* pop arguments *)
       assert (acc.tlist <> []);
@@ -266,6 +288,32 @@ end = struct
     acc.tlist <- List.tl acc.tlist;
     acc.tlist <- (Application (f, Array.of_list !arglst)) :: acc.tlist;
     acc.tvars <- TVars_sub.remove_local nargs acc.tvars
+
+
+
+  let expect_lambda (ntvs:int) (acc:t): unit =
+    assert (Sign.is_constant acc.sign);
+    assert (Sign.has_result acc.sign);
+    acc.tvars <- TVars_sub.add_local ntvs acc.tvars;
+    acc.sign  <- Sign.up ntvs acc.sign;
+    let rt = Sign.result acc.sign in
+    acc.sign <-
+      try
+        let ntvs = (ntvars acc) + (Context.count_formal_generics acc.c) in
+        Sign.make_const (Class_table.result_type_of_compound rt ntvs)
+      with Not_found ->
+        assert false (* cannot happen *)
+
+
+
+  let complete_lambda (ntvs:int) (names:int array) (acc:t): unit =
+    assert (acc.tlist <> []);
+    let nargs = Array.length names in
+    assert (0 < nargs);
+    acc.tvars <- TVars_sub.remove_local ntvs acc.tvars;
+    let t = List.hd acc.tlist in
+    acc.tlist <- List.tl acc.tlist;
+    acc.tlist <- Lam (nargs, names, t) :: acc.tlist
 
 
   let result (acc:t): term * TVars_sub.t =
@@ -287,87 +335,82 @@ module Accus: sig
   type t
   exception Untypeable of (Sign.t*int) list
 
-  val make:            type_term -> TVars_sub.t -> t
-  val is_empty:        t -> bool
-  val is_singleton:    t -> bool
-  val is_complete:     t -> bool
-  val expected_arity:  t -> int
-  val add_leaf:        (int*TVars.t*Sign.t) list -> Context.t -> t -> unit
-  val expect_function: int -> t -> unit
-  val expect_argument: t -> unit
-  val result:          t -> term * TVars_sub.t
+  val make:              type_term -> Context.t -> t
+  val is_empty:          t -> bool
+  val is_singleton:      t -> bool
+  val ntvs_added:        t -> int
+  val expected_arity:    t -> int
+  val expected_signatures_string: t -> string
+  val substitutions_string: t -> string
+  val add_leaf:          (int*TVars.t*Sign.t) list -> t -> unit
+  val expect_function:   int -> t -> unit
+  val expect_argument:   int -> t -> unit
+  val complete_function: int -> t -> unit
+  val expect_lambda:     int -> t -> unit
+  val complete_lambda:   int -> int array -> t -> unit
+  val result:            t -> term * TVars_sub.t
 
 end = struct
 
   type t = {mutable accus: Accu.t list;
-            mutable nterms_expected: int;
-            mutable nterms: int;
+            mutable ntvs_added: int;
             mutable arity:  int;
-            mutable stack:  (int*int) list}
+            c: Context.t}
 
   exception Untypeable of (Sign.t*int) list
 
-  let nterms_missing (accs:t): int =
-    accs.nterms_expected - accs.nterms
 
-  let is_function_complete (accs:t): bool =
-    (nterms_missing accs) = 0
-
-  let is_stack_empty (accs:t): bool = Mylist.is_empty accs.stack
-
-  let make (exp: type_term) (tvars:TVars_sub.t): t =
-    {accus           = [Accu.make exp tvars];
-     nterms_expected = 1;
-     nterms          = 0;
+  let make (exp: type_term) (c:Context.t): t =
+    {accus           = [Accu.make exp c];
+     ntvs_added      = 0;
      arity           = 0;
-     stack           = []}
+     c               = c}
 
   let is_empty     (accs:t): bool =   Mylist.is_empty     accs.accus
 
   let is_singleton (accs:t): bool =   Mylist.is_singleton accs.accus
 
-  let is_complete  (accs:t): bool =
-    (is_function_complete accs) && (is_stack_empty accs)
+  let ntvs_added (accs:t): int = accs.ntvs_added
 
   let expected_arity (accs:t): int = accs.arity
 
+  let expected_signatures_string (accs:t): string =
+    "{" ^
+    (String.concat
+      ","
+      (List.map (fun acc -> Accu.signature_string acc) accs.accus)) ^
+    "}"
+
+  let substitutions_string (accs:t): string =
+    "{" ^
+    (String.concat
+       ","
+       (List.map (fun acc -> Accu.substitution_string acc) accs.accus)) ^
+    "}"
+
+
   let expect_function (nargs:int) (accs:t): unit =
-    accs.stack <- (accs.nterms_expected,accs.nterms)::accs.stack;
-    accs.nterms_expected <- nargs + 1;
-    accs.nterms          <- 0;
     accs.arity           <- nargs;
+    accs.ntvs_added      <- nargs + accs.ntvs_added;
     List.iter (fun acc -> Accu.expect_function nargs acc) accs.accus
 
 
-  let expect_argument (accs:t): unit =
+  let complete_function (nargs:int) (accs:t): unit =
+    accs.ntvs_added <- accs.ntvs_added - nargs;
+    List.iter
+      (fun acc -> Accu.complete_function nargs acc)
+      accs.accus
+
+
+
+  let expect_argument (i:int) (accs:t): unit =
     (** Expect the next argument of the current application *)
-    assert ((nterms_missing accs) > 0);
-    assert (accs.nterms > 0);
     accs.arity <- 0;
-    List.iter (fun acc -> Accu.expect_argument (accs.nterms-1) acc) accs.accus
-
-
-
-  let rec pop (accs:t): unit =
-    (** Pop pushed function application as long as possible *)
-    if (is_function_complete accs) && not (is_stack_empty accs) then
-      begin
-        assert (accs.nterms > 1);
-        List.iter
-          (fun acc -> Accu.complete_function (accs.nterms-1) acc)
-          accs.accus;
-        let ne,n = List.hd accs.stack in
-        accs.stack <- List.tl accs.stack;
-        accs.nterms_expected <- ne;
-        accs.nterms <- n+1;
-        pop accs
-      end
-    else ()
+    List.iter (fun acc -> Accu.expect_argument i acc) accs.accus
 
 
   let add_leaf
       (terms: (int*TVars.t*Sign.t) list)
-      (c:Context.t)
       (accs:   t)
       : unit =
     (** Add the terms from the list [terms] of the context [c] to the
@@ -379,7 +422,7 @@ end = struct
         (fun lst acc ->
           List.fold_left
             (fun lst (i,tvs,s) ->
-              try (Accu.add_term i tvs s c acc) :: lst
+              try (Accu.add_leaf i tvs s acc) :: lst
               with Not_found -> lst)
             lst
           terms
@@ -390,12 +433,15 @@ end = struct
       raise (Untypeable
                (List.map
                   (fun acc -> Accu.signature acc, Accu.ntvars acc)
-                  accus));
-    accs.nterms <- accs.nterms + 1;
-    pop accs
+                  accus))
+
+  let expect_lambda (ntvs:int) (accs:t): unit =
+    List.iter (fun acc -> Accu.expect_lambda ntvs acc) accs.accus
+
+  let complete_lambda (ntvs:int) (nms:int array) (accs:t): unit =
+    List.iter (fun acc -> Accu.complete_lambda ntvs nms acc) accs.accus
 
   let result (accs:t): term * TVars_sub.t =
-    assert (is_complete accs);
     assert (is_singleton accs);
     Accu.result (List.hd accs.accus)
 end (* Accus *)
@@ -435,7 +481,7 @@ let process_leaf
     (accs: Accus.t)
     : unit =
   try
-    Accus.add_leaf lst c accs
+    Accus.add_leaf lst accs
   with
     Accus.Untypeable exp_sign_lst ->
       let str = "The expression "
@@ -445,6 +491,7 @@ let process_leaf
              ","
              (List.map
                 (fun (sign,ntvs) ->
+                  printf "ntvs %d\n" ntvs;
                   let fgnames = Context.fgnames c
                   and ct      = Context.class_table c
                   in
@@ -498,7 +545,7 @@ let rec analyze_expression
     | Expparen e          -> analyze e accs
     | Taggedexp (label,e) -> analyze e accs
     | Expquantified (q,entlst,exp) ->
-        quantified q entlst exp accs;
+        quantified q entlst exp accs(*;
         Context.push entlst None c;
         let t0 = boolean_term (withinfo entlst.i exp) c in
         let t  =
@@ -509,7 +556,7 @@ let rec analyze_expression
         Printf.printf "inner term %s\n" (Context.string_of_term t0 c);
         Context.pop c;
         Printf.printf "outer term %s\n" (Context.string_of_term t  c);
-        not_yet_implemented ie.i "typing of quantified expressions";
+        not_yet_implemented ie.i "typing of quantified expressions";*)
 
     | _ -> not_yet_implemented ie.i
           ("(others)Typing of expression " ^
@@ -526,9 +573,10 @@ let rec analyze_expression
     Accus.expect_function nargs accs;
     analyze f accs;
     for i=0 to nargs-1 do
-      Accus.expect_argument accs;
+      Accus.expect_argument i accs;
       analyze args.(i) accs
-    done
+    done;
+    Accus.complete_function nargs accs
 
   and quantified
       (q:quantifier)
@@ -538,16 +586,23 @@ let rec analyze_expression
       : unit =
     Accus.expect_function 1 accs;
     let qop = match q with Universal -> Allop | Existential -> Someop in
-    process_leaf (features (FNoperator qop) 1 info c) e c info accs;
-    Accus.expect_argument accs;
-    Context.push entlst None c;
-    assert false
+    process_leaf
+      (features (FNoperator qop) 1 info c) e c info accs (*e is a dummy*);
+    Accus.expect_argument 0 accs;
+    let ntvs_gap = Accus.ntvs_added accs in
+    Context.push_with_gap entlst None ntvs_gap c;
+    let ntvs      = Context.count_local_type_variables c
+    and fargnames = Context.local_fargnames c in
+    Accus.expect_lambda (ntvs-ntvs_gap) accs;
+    analyze e accs;
+    Accus.complete_lambda (ntvs-ntvs_gap) fargnames accs;
+    Context.pop c;
+    Accus.complete_function 1 accs
 
   in
 
-  let accs   = Accus.make expected (Context.type_variables c) in
+  let accs   = Accus.make expected c in
   analyze exp accs;
-  assert (Accus.is_complete accs);
   assert (not (Accus.is_empty accs));
 
   if not (Accus.is_singleton accs) then
@@ -557,8 +612,6 @@ let rec analyze_expression
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;
-  (*Printf.printf "\tterm: %s\n"
-    (Context.string_of_term term c);*)
   term
 
 
