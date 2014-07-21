@@ -545,19 +545,9 @@ let rec analyze_expression
     | Expparen e          -> analyze e accs
     | Taggedexp (label,e) -> analyze e accs
     | Expquantified (q,entlst,exp) ->
-        quantified q entlst exp accs(*;
-        Context.push entlst None c;
-        let t0 = boolean_term (withinfo entlst.i exp) c in
-        let t  =
-          match q with
-            Universal -> Context.all_quantified_outer t0 c
-          | Existential -> assert false (* nyi: *)
-        in
-        Printf.printf "inner term %s\n" (Context.string_of_term t0 c);
-        Context.pop c;
-        Printf.printf "outer term %s\n" (Context.string_of_term t  c);
-        not_yet_implemented ie.i "typing of quantified expressions";*)
-
+        quantified q entlst exp accs
+    | Exppred (entlst,e) ->
+        lambda entlst e accs
     | _ -> not_yet_implemented ie.i
           ("(others)Typing of expression " ^
            (string_of_expression e))
@@ -589,6 +579,14 @@ let rec analyze_expression
     process_leaf
       (features (FNoperator qop) 1 info c) e c info accs (*e is a dummy*);
     Accus.expect_argument 0 accs;
+    lambda entlst e accs;
+    Accus.complete_function 1 accs
+
+  and lambda
+      (entlst:entities list withinfo)
+      (e:expression)
+      (accs: Accus.t)
+      : unit =
     let ntvs_gap = Accus.ntvs_added accs in
     Context.push_with_gap entlst None ntvs_gap c;
     let ntvs      = Context.count_local_type_variables c
@@ -596,8 +594,7 @@ let rec analyze_expression
     Accus.expect_lambda (ntvs-ntvs_gap) accs;
     analyze e accs;
     Accus.complete_lambda (ntvs-ntvs_gap) fargnames accs;
-    Context.pop c;
-    Accus.complete_function 1 accs
+    Context.pop c
 
   in
 

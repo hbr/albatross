@@ -168,10 +168,11 @@ let expression_from_entities entlist =
 
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
-/* 10 */ %right    COMMA     SEMICOL
-/* ?? */ %nonassoc KWall     KWsome
-/* ?? */ %right    ARROW
+/*  8 */ %nonassoc KWall     KWsome  /* greedy */
+/* 10 */ %right    SEMICOL
+/* 13 */ %right    ARROW     /* ??? */
 /* 15 */ %left     COLON
+/* 18 */ %right    COMMA
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %left     EQ        NEQ       EQV     NEQV
@@ -649,8 +650,17 @@ expr:
 |   expr LPAREN expr RPAREN       { Funapp ($1,$3) }
 |   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
 |   expr DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
+|   expr COLON type_nt            { Typedexp ($1,$3) }
 |   quantifier LPAREN entity_list RPAREN opt_nl expr %prec KWall {
   Expquantified ($1, withinfo (rhs_info 3) $3, $6) }
+|   LBRACE expr RBRACE            {
+  match $2 with
+    Expcolon (fargs,exp) ->
+      let elist = formals_from_expression2 fargs (rhs_info 2)
+      in
+      Exppred (withinfo (rhs_info 2) elist, exp)
+  | _ -> assert false
+}
 
 
 quantifier:

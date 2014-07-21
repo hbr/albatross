@@ -429,15 +429,15 @@ let operator_data op =
   | Notop     -> "not", 65,  Nonassoc
   | Barop     -> "|",   40,  Left
   | DBarop    -> "||",  40,  Left
-  | Arrowop   -> "->",  20,  Right
+  | Arrowop   -> "->",  13,  Right
   | Parenop   -> "()",  1000, Nonassoc
   | Bracketop -> "[]",  1000, Nonassoc
   | DArrowop  -> "=>",  20,  Right
   | DColonop  -> "::",  55,  Right
   | Inop      -> "in",  60,  Nonassoc
   | Notinop   -> "/in", 60, Nonassoc
-  | Allop     -> "all", 21,  Nonassoc
-  | Someop    -> "some",21, Nonassoc
+  | Allop     -> "all",  8,  Nonassoc
+  | Someop    -> "some", 8, Nonassoc
   | Freeop  i -> ST.string i, 60,  Left
   | RFreeop i -> ST.string i, 61,  Right
 
@@ -509,7 +509,7 @@ type expression =
   | Bracketapp    of expression * expression
   | Expdot        of expression * expression
   | Expset        of expression
-  | Exppred       of entities list * expression
+  | Exppred       of entities list withinfo * expression
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
   | Tupleexp      of expression * expression
@@ -585,7 +585,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       "{" ^  (strexp s) ^ "}"
 
   | Exppred (elist,exp) ->
-      "{" ^ (string_of_formals elist) ^ ":" ^ (string_of_expression exp)^ "}"
+      "{" ^ (string_of_formals elist.v) ^ ":" ^ (string_of_expression exp)^ "}"
 
   | Binexp (op,e1,e2) ->
       withparen ((strexp e1) ^ (operator_to_string op) ^ (strexp e2)) wp
