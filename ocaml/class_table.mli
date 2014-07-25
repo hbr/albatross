@@ -7,6 +7,7 @@ type formal = int * type_term
 
 type t
 
+val dummy_index:     int
 val boolean_index:   int
 val any_index:       int
 val predicate_index: int
@@ -43,8 +44,9 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
       not callable) into a function signature with [nargs] arguments.
 
       This is possible only if the result type of [sign] is a function or a
-      predicate type and the corresponding actual generic is a tuple with the
-      corresponding number of elements in case that [nargs > 1] *)
+      predicate or a dummy type and the corresponding actual generic is a
+      tuple with the corresponding number of elements in case that [nargs > 1]
+      *)
 
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 

@@ -122,6 +122,19 @@ let count_formal_generics (c:t): int =
   entry_nfgs c.entry
 
 
+let count_last_arguments (c:t): int = c.entry.nfargs_delta
+
+let count_arguments (c:t): int = Array.length c.entry.fargs
+
+let argument_name (i:int) (c:t): int =
+  assert (i < count_arguments c);
+  fst c.entry.fargs.(i)
+
+
+let argument_type (i:int) (c:t): type_term =
+  assert (i < count_arguments c);
+  snd c.entry.fargs.(i)
+
 
 let nfargs (c:t): int =
   (** The cumulated number of formal arguments in this context and all
@@ -215,6 +228,16 @@ let signature_string (c:t): string =
 
 let depth (c:t): int =
   List.length c.stack
+
+
+let is_untyped (i:int) (c:t): bool =
+  (* Is the argument [i] untyped? *)
+  assert (i < nfargs c);
+  let tp = snd c.entry.fargs.(i) in
+  match tp with
+    Variable j when j < count_type_variables c -> true
+  | _ -> false
+
 
 
 let argument (name:int) (c:t): int * TVars.t * Sign.t =
@@ -333,10 +356,6 @@ let pop (c:t): unit =
 
 
 
-(*
-let ct (c:t): Class_table.t    = c.ct
-let ft (c:t): Feature_table.t  = c.ft
-*)
 
 let type_variables (c:t): TVars_sub.t = c.entry.tvars_sub
 
@@ -540,12 +559,11 @@ let find_identifier
     try
       let i,tvs,s = argument name c
       in
-      if (Sign.arity s) = nargs_id then [i,tvs,s]
+      if (Sign.arity s) = nargs_id || is_untyped i c then
+        [i,tvs,s]
       else
         try
-          let s =
-            Class_table.downgrade_signature
-              (ntvs c) s nargs_id in
+          let s = Class_table.downgrade_signature (ntvs c) s nargs_id in
           [i,tvs,s]
         with Not_found ->
           raise Wrong_signature

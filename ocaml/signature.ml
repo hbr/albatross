@@ -16,6 +16,9 @@ module Term_sub_arr: sig
   val flags: t -> bool array
   val args:  t -> term array
   val has:   int -> t -> bool
+  val put:   int -> term -> t -> unit
+  val add_new: int -> term -> t -> unit
+  val update:int -> term -> t -> unit
   val add:   int -> term -> t -> unit
   val extend:int -> t -> t
   val extend_bottom: int -> t -> t
@@ -23,7 +26,9 @@ module Term_sub_arr: sig
 
 end = struct
 
-  type t = {args: term array; flags: bool array}
+  type t = {args: term array;
+            flags: bool array;
+            used:  int list array}
 
   let flags (s:t): bool array = s.flags
   let args  (s:t): term array = s.args
@@ -31,7 +36,8 @@ end = struct
 
   let make (n:int): t =
     {args  = Array.init n (fun i -> Variable i);
-     flags = Array.make n false}
+     flags = Array.make n false;
+     used  = Array.make n []}
 
   let count (s:t): int = Array.length s.args
 
@@ -42,6 +48,93 @@ end = struct
   let get (i:int) (s:t): term =
     assert (i < (count s));
     s.args.(i)
+
+
+  let is_used (i:int) (j:int) (s:t): bool =
+    (* Is the type variable [i] used directly or indirectly in the
+       substitution of the type variable [j] *)
+    assert (i < count s);
+    let rec isused_in (j:int) (n:int): bool =
+      assert (0 < n);
+      assert (j < count s);
+      List.exists (fun k -> k = i || isused_in k (n-1)) s.used.(j)
+    in
+    isused_in j (count s)
+
+
+
+
+  let sub_star (t:term) (s:t): term =
+    (* Apply to the term [t] the substitution [s] until no more substitutions
+       are possible.  *)
+    let cnt = count s in
+    let rec gstar (i:int) (n:int): term =
+      (* n: number of substitutions still possible *)
+      assert (0 < n);
+      sub (get i s) (n-1)
+    and sub (t:term) (n:int): term =
+      match t with
+        Variable j when j < cnt -> gstar j n
+      | Variable _ -> t
+      | Application (c,args) ->
+          Application (sub c n, Array.map (fun t -> sub t n) args)
+      | Lam (n,nms,t) ->
+          Lam (n,nms, sub t n)
+    in
+    sub t cnt
+
+
+  let get_star (i:int) (s:t): term =
+    (* Get the [i]th substitution term and apply the substitution [s] until no
+       more substitutions are possible.  *)
+    assert (i < count s);
+    sub_star (get i s) s
+
+
+
+  let add_new (i:int) (t:term) (s:t): unit =
+    (* Add the new substitution [i~>t] to the substitutions [s]. Raise
+       [Not_found] if the insertion would create circularity *)
+    assert (not (has i s));
+    let cnt = count s in
+    assert (i < cnt);
+    let used = Term.bound_variables t cnt in
+    let lst = IntSet.fold
+        (fun j lst ->
+          if is_used i j s then
+            raise Not_found
+          else
+            j::lst)
+        used []
+    in
+    s.args.(i)  <- t;
+    s.flags.(i) <- true;
+    s.used.(i)  <- lst
+
+
+  let update (i:int) (t:term) (s:t): unit =
+    assert (i < count s);
+    assert (has i s);
+    let used = Term.bound_variables t (count s) in
+    let set = List.fold_left
+        (fun set i -> IntSet.add i set) IntSet.empty s.used.(i)
+    in
+    if set = used then
+      s.args.(i) <- t
+    else
+      raise Not_found
+
+
+  let put (i:int) (t:term) (s:t): unit =
+    if has i s then
+      if get i s <> t then
+        raise Not_found
+      else
+        ()
+    else
+      add_new i t s
+
+
 
   let add (i:int) (t:term) (s:t): unit =
     (** Add the substitution [i ~~> t] to the substitution [s] i.e.
@@ -68,8 +161,9 @@ end = struct
         raise Not_found
     end
 
+
   let extend (n:int) (s:t): t =
-    (** Introduce [n] new variables at the top, i.e. all substitutions term
+    (** Introduce [n] new variables at the top, i.e. all substitution terms
         above [count s] are shifted up by [n] and just copied into the new
         larger substitution.
      *)
@@ -78,6 +172,7 @@ end = struct
     let snew = make (n+sn) in
     Array.blit args    0  snew.args  0  sn;
     Array.blit s.flags 0  snew.flags 0  sn;
+    Array.blit s.used  0  snew.used  0  sn;
     snew
 
 
@@ -87,22 +182,33 @@ end = struct
      *)
     let sn   = count s in
     let snew = make (n+sn) in
-    Array.iteri (fun i t -> snew.args.(i+n) <- Term.up n t) s.args;
+    for i = 0 to sn-1 do
+      snew.args.(i+n) <- Term.up n s.args.(i);
+      snew.used.(i+n) <- List.map (fun j -> j+n) s.used.(i)
+    done;
     Array.blit s.flags 0 snew.flags n  sn;
     snew
 
 
 
   let remove_bottom (n:int) (s:t): t =
-    (** Remove [n] variables from the bottom, i.e. shift all
-          terms down by [n].
-     *)
+    (** Remove [n] variables from the bottom, i.e. shift all terms down by
+        [n].  *)
     let sn = count s in
     assert (n <= sn);
-    let snew = make (sn-n) in
-    Array.iteri
-      (fun i _ -> snew.args.(i) <- Term.down n s.args.(i+n)) snew.args;
+    let args_bot = Array.sub s.args 0 n
+    and snew = make (sn-n) in
     Array.blit s.flags n   snew.flags 0   (sn-n);
+    for i = 0 to sn-n-1 do
+      if snew.flags.(i) then begin
+        let tp   = Term.apply s.args.(i+n) args_bot in
+        let used = Term.bound_variables tp (sn-n) in
+        let lst  = IntSet.fold (fun j lst -> j::lst) used [] in
+        snew.args.(i) <- tp;
+        snew.used.(i) <- lst
+        (*snew.args.(i) <- Term.down n s.args.(i+n)*)
+      end
+    done;
     snew
   end (* Term_sub_arr *)
 
@@ -151,6 +257,7 @@ module TVars_sub: sig
   type t
   val make:         int -> t
   val count:        t -> int
+  val has:          int -> t -> bool
   val get:          int -> t -> term
   val count_global: t -> int
   val count_local:  t -> int
@@ -158,6 +265,9 @@ module TVars_sub: sig
   val tvars:        t -> TVars.t
   val sub:          t -> Term_sub_arr.t
   val args:         t -> term array
+  val add_sub:      int -> term -> t -> unit
+  val update_sub:   int -> term -> t -> unit
+  val put_sub:      int -> term -> t -> unit
   val add_substitution: int -> term -> t -> unit
   val add_global:   constraints -> t -> t
   val add_local:    int -> t -> t
@@ -173,6 +283,9 @@ end = struct
     {vars = TVars.make_local ntvs; sub = Term_sub_arr.make ntvs}
 
   let count (tvars:t): int = TVars.count tvars.vars
+
+  let has (i:int) (tvars:t): bool =
+    Term_sub_arr.has i tvars.sub
 
   let get (i:int) (tvars:t): term =
     assert (i < (count tvars));
@@ -192,6 +305,17 @@ end = struct
   let tvars (tv:t): TVars.t = tv.vars
 
   let sub (tv:t): Term_sub_arr.t = tv.sub
+
+
+  let add_sub (i:int) (t:term) (tv:t): unit =
+    Term_sub_arr.add_new i t tv.sub
+
+  let update_sub (i:int) (t:term) (tv:t): unit =
+    Term_sub_arr.update i t tv.sub
+
+
+  let put_sub (i:int) (t:term) (tv:t): unit =
+    Term_sub_arr.put i t tv.sub
 
   let add_substitution (i:int) (t:term) (tv:t): unit =
     Term_sub_arr.add i t tv.sub

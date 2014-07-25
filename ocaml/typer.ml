@@ -5,128 +5,6 @@ open Support
 open Printf
 
 
-let add_substitution
-    (i:int)
-    (t:term)
-    (tvars_sub:TVars_sub.t)
-    (c:Context.t): unit =
-    (** Substitute the type variable [i] by the term [t] in the substitution
-        [tvars_sub] using the context [c].
-     *)
-  (*Printf.printf "add substitution %d -> %s\n" i (Term.to_string t);*)
-  let ok =
-    begin
-      i < TVars_sub.count_local tvars_sub
-    ||
-      let cpt = TVars_sub.concept i tvars_sub in
-      let cnt = TVars_sub.count tvars_sub in
-      match t with
-        Variable i when i < cnt ->
-          assert (TVars_sub.count_local tvars_sub <= i);
-          let cpt_t = TVars_sub.concept i tvars_sub in
-          Context.concept_satisfies_concept cpt_t cpt c
-      | _ ->
-          let t =
-            try Term.down cnt t
-            with Term_capture -> assert false (* should not happen! *)
-          in
-          Context.type_satisfies_concept t cpt c
-    end in
-  if ok then
-    TVars_sub.add_substitution i t tvars_sub
-  else
-    raise Not_found
-
-
-let unify
-    (t1:term)
-    (t2:term)
-    (tvars_sub: TVars_sub.t)
-    (c:Context.t): unit =
-  (** Unify the terms [t1] and [t2] using the substitution [tvars_sub] in the
-      context [c] , i.e.  apply first the substitution [tvars_sub] to both
-      terms and then add substitutions to [tvars_sub] so that when applied to
-      both terms makes them identical.
-   *)
-  let nvars = TVars_sub.count tvars_sub
-  in
-  let do_sub (i:int) (t:term) (nb:int): unit =
-    (** Substitute the variable [i] by the term [t] in an environment with
-        [nb] bound variables.
-     *)
-    assert (nb<=i); assert (i<nb+nvars);
-    match t with
-      Variable j when nb<=j && j<nb+nvars ->
-        if i=j then ()
-        else
-          let lo,hi = if i<=j then i,j else j,i in
-          add_substitution (lo-nb) (Variable (hi-nb)) tvars_sub c
-    | _ ->
-        let i,t =
-          try i-nb, Term.down nb t
-          with Term_capture -> raise Not_found
-        in
-        add_substitution i t tvars_sub c
-  in
-  let rec uni (t1:term) (t2:term) (nb:int): unit =
-    match t1,t2 with
-      Variable i, _ when nb<=i && i<nb+nvars ->
-        do_sub i t2 nb
-    | _, Variable j when nb<=j && j<nb+nvars ->
-        do_sub j t1 nb
-    | Variable i, Variable j ->
-        assert (i<nb||nb+nvars<=i);
-        assert (j<nb||nb+nvars<=j);
-        if i=j then
-          ()
-        else
-          raise Not_found
-    | Application(f1,args1), Application(f2,args2) ->
-            if (Array.length args1) <> (Array.length args2) then
-              raise Not_found;
-        uni f1 f2 nb;
-        Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
-    | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
-        if nb1=nb2 then
-          uni t1 t2 (nb+nb1)
-        else
-          raise Not_found
-    | _ -> raise Not_found
-  in
-  uni t1 t2 0;
-  assert ((Term.sub t1 (TVars_sub.args  tvars_sub) nvars)
-            = (Term.sub t2 (TVars_sub.args tvars_sub) nvars))
-
-
-
-
-
-
-let unify_sign
-    (s1:Sign.t)
-    (s2:Sign.t)
-    (tvars_sub: TVars_sub.t)
-    (c:Context.t)
-    : unit =
-  (** Unify the signatures [s1] and [s2] by adding substitutions to
-      [tvars_sub] within the context [c] *)
-  let n,has_res = (Sign.arity s1), (Sign.has_result s1) in
-  if not (n = (Sign.arity s2) && has_res = (Sign.has_result s2)) then
-    raise Not_found;
-  if has_res then
-    unify (Sign.result s1) (Sign.result s2) tvars_sub c;
-  for i=0 to (Sign.arity s1)-1 do
-    unify (Sign.arguments s1).(i) (Sign.arguments s2).(i) tvars_sub c
-  done;
-  assert begin
-    let s1_sub = Sign.substitute s1 tvars_sub
-    and s2_sub = Sign.substitute s2 tvars_sub in
-    s1_sub = s2_sub
-  end
-
-
-
-
 module Accu: sig
 
   type t
@@ -141,6 +19,7 @@ module Accu: sig
   val expect_lambda:     int -> t -> unit
   val complete_lambda:   int -> int array -> t -> unit
   val complete_function: int -> t -> unit
+  val check_type_variables: info -> t -> unit
   val result:            t -> term * TVars_sub.t
 
 end = struct
@@ -177,6 +56,240 @@ end = struct
           (fun tp -> Class_table.type2string tp ntvs fnames ct)
           sub_lst)) ^
     "]"
+
+
+
+
+
+  let add_sub (ok:bool) (i:int) (t:term) (acc:t): unit =
+    if ok then
+      TVars_sub.put_sub i t acc.tvars
+    else
+      raise Not_found
+
+
+
+  let do_sub (i:int) (t:term) (acc:t): unit =
+    (** Substitute the variable [i] by the term [t].
+     *)
+    let cnt     = TVars_sub.count acc.tvars
+    and cnt_loc = TVars_sub.count_local acc.tvars
+    in
+    assert (i<cnt);
+    match t with
+      Variable j when j<cnt ->
+        if i=j then ()
+        else
+          let lo,hi = if i<=j then i,j else j,i in
+          let thi   = Variable hi in
+          let ok =
+            lo < cnt_loc ||
+            Context.concept_satisfies_concept
+              (TVars_sub.concept hi acc.tvars)
+              (TVars_sub.concept lo acc.tvars)
+              acc.c
+          in
+          add_sub ok lo thi acc
+    | _ ->
+        let ok =
+          i < cnt_loc ||
+          Context.type_satisfies_concept
+            (try Term.down cnt t with Term_capture -> assert false)
+            (TVars_sub.concept i acc.tvars)
+            acc.c
+        in
+        add_sub ok i t acc
+
+
+
+
+  let unify
+      (t1:term)
+      (t2:term)
+      (acc:t)
+      : unit =
+    (** Unify the terms [t1] and [t2] using the substitution [tvars_sub] in the
+        context [c] , i.e.  apply first the substitution [tvars_sub] to both
+        terms and then add substitutions to [tvars_sub] so that when applied to
+        both terms makes them identical.
+     *)
+    let nvars = TVars_sub.count acc.tvars
+    in
+    let rec uni (t1:term) (t2:term) (nb:int): unit =
+      match t1,t2 with
+        Variable i, _ when nb<=i && i<nb+nvars ->
+          do_sub (i-nb) (Term.down nb t2) acc
+      | _, Variable j when nb<=j && j<nb+nvars ->
+          do_sub (j-nb) (Term.down nb t1) acc
+      | Variable i, Variable j ->
+          assert (i<nb||nb+nvars<=i);
+          assert (j<nb||nb+nvars<=j);
+          if i=j then
+            ()
+          else
+            raise Not_found
+      | Application(f1,args1), Application(f2,args2) ->
+          if (Array.length args1) <> (Array.length args2) then
+            raise Not_found;
+          uni f1 f2 nb;
+          Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
+      | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
+          if nb1=nb2 then
+            uni t1 t2 (nb+nb1)
+          else
+            raise Not_found
+      | _ -> raise Not_found
+    in
+    (try
+      uni t1 t2 0
+    with Term_capture ->
+      assert false);
+    assert ((Term.sub t1 (TVars_sub.args  acc.tvars) nvars)
+              = (Term.sub t2 (TVars_sub.args acc.tvars) nvars))
+
+
+
+  let unify_sign_0
+      (sig_req:Sign.t)
+      (sig_act:Sign.t)
+      (acc:t)
+      : unit =
+    let n         = (Sign.arity sig_req)
+    and has_res   = (Sign.has_result sig_req) in
+    if not (n = (Sign.arity sig_act) &&
+            has_res = (Sign.has_result sig_act)) then
+      raise Not_found;
+    if has_res then
+      unify (Sign.result sig_req) (Sign.result sig_act) acc;
+    for i=0 to (Sign.arity sig_req)-1 do
+      unify (Sign.arguments sig_req).(i) (Sign.arguments sig_act).(i) acc
+    done
+
+
+
+  let downgrade (tp:type_term) (nargs:int) (acc:t): Sign.t =
+    let ntvs  = ntvars acc
+    and nfgs  = Context.count_formal_generics acc.c
+    and sign  = Sign.make_const tp
+    in
+    Class_table.downgrade_signature (ntvs+nfgs) sign nargs
+
+
+
+  let to_dummy (sign:Sign.t) (acc:t): type_term =
+    assert (Sign.has_result sign);
+    let n = Sign.arity sign in
+    assert (0 < n);
+    let ntvs_all = ntvars acc + Context.count_formal_generics acc.c in
+    let dum_idx  = ntvs_all + Class_table.dummy_index
+    and tup_idx  = ntvs_all + Class_table.tuple_index
+    and args     = Sign.arguments sign
+    in
+    let rec tuple (i:int) (tp:type_term): type_term =
+      if i = 0 then
+        tp
+      else
+        let i = i - 1 in
+        let tp = Application(Variable tup_idx,[|args.(i);tp|]) in
+        tuple (i-1) tp
+    in
+    let tup = tuple (n-1) args.(n-1) in
+    Application(Variable dum_idx, [|tup;Sign.result sign|])
+
+
+
+
+  let update_tv
+      (sig_req:Sign.t)
+      (sig_act:Sign.t)
+      (itv:int)
+      (acc:t)
+      : unit =
+    (** The required and actual signatures [sig_req,sig_act] are constant
+        signatures, the type of the actual signature is the type variable
+        [itv] which has already a substitution.
+
+        Special case: The substitution of [itv] is callable (i.e. a dummy
+        type) and the required type is either a function or a predicate and in
+        case of a predicate the return type of [itv] is boolean:
+        - unify the arguments
+        - unify the return type for a function
+        - update the substitution
+
+        Otherwise: Do the usual unification *)
+    assert (Sign.is_constant sig_req);
+    assert (Sign.is_constant sig_act);
+    let ntvs_all = ntvars acc + Context.count_formal_generics acc.c in
+    let dum_idx  = ntvs_all + Class_table.dummy_index
+    and pred_idx = ntvs_all + Class_table.predicate_index
+    and fun_idx  = ntvs_all + Class_table.function_index
+    and bool_tp  = Variable (ntvs_all + Class_table.boolean_index)
+    and tp_req   = Sign.result sig_req
+    and tp_act   = TVars_sub.get itv acc.tvars
+    in
+    match tp_req, tp_act with
+      Application(Variable idx_req,args_req),
+      Application(Variable idx_act,args_act)->
+        if idx_req= pred_idx && idx_act = dum_idx then begin
+          if args_act.(1) <> bool_tp then raise Not_found;
+          unify args_req.(0) args_act.(0) acc;
+          TVars_sub.update_sub
+            itv
+            (Application(Variable pred_idx, [|args_act.(0)|]))
+            acc.tvars
+        end else if idx_req = fun_idx && idx_act = dum_idx then begin
+          unify args_req.(0) args_act.(0) acc;
+          unify args_req.(1) args_act.(1) acc;
+          TVars_sub.update_sub
+            itv
+            (Application(Variable fun_idx, [|args_act.(0);args_act.(1)|]))
+            acc.tvars
+        end else
+          unify_sign_0 sig_req sig_act acc
+    | _ ->
+        unify_sign_0 sig_req sig_act acc
+
+
+
+
+  let unify_sign
+      (sig_req:Sign.t)
+      (sig_act:Sign.t)
+      (acc:t)
+      : unit =
+    (** Unify the signatures [sig_req] and [sig_act] by adding substitutions
+        to [acc] *)
+    let n         = (Sign.arity sig_req)
+    and is_tv,itv =
+      let ntvs = TVars_sub.count acc.tvars in
+      if Sign.is_constant sig_act then
+        match Sign.result sig_act with
+          Variable i when i < ntvs ->
+            true, i
+        | _ ->
+            false, -1
+      else
+        false, -1
+    in
+    if n > 0 && is_tv then
+      if TVars_sub.has itv acc.tvars then
+        let tp        = TVars_sub.get itv acc.tvars in
+        let sig_act_1 = downgrade tp n acc
+        in
+        unify_sign_0 sig_req sig_act_1 acc
+      else
+        TVars_sub.add_sub itv (to_dummy sig_req acc) acc.tvars
+    else if Sign.is_constant sig_req  && is_tv &&
+      TVars_sub.has itv acc.tvars
+    then
+      update_tv sig_req sig_act itv acc
+    else
+      unify_sign_0 sig_req sig_act acc
+
+
+
+
+
 
   let make (e:type_term) (c:Context.t): t =
     (** New accumulator for an expression with the expected type [e] in the
@@ -222,7 +335,7 @@ end = struct
     in
     let acc = add_global (TVars.constraints tvs) acc
     in
-    unify_sign s acc.sign acc.tvars acc.c;
+    unify_sign acc.sign s acc;
     {acc with tlist = (Variable i)::acc.tlist}
 
 
@@ -316,6 +429,28 @@ end = struct
     acc.tlist <- Lam (nargs, names, t) :: acc.tlist
 
 
+  let check_type_variables (inf:info) (acc:t): unit =
+    let ntvs_ctxt = Context.count_type_variables acc.c
+    and ntvs_loc  = TVars_sub.count_local acc.tvars in
+    assert (ntvs_ctxt = ntvs_loc);
+    let ntvs_all = ntvars acc + Context.count_formal_generics acc.c in
+    let dum_idx  = ntvs_all + Class_table.dummy_index
+    in
+    for i = 0 to Context.count_last_arguments acc.c - 1 do
+      match Context.argument_type i acc.c with
+        Variable j when j < ntvs_loc -> begin
+          match TVars_sub.get j acc.tvars with
+          Application(Variable idx,_) when idx = dum_idx ->
+            error_info
+              inf
+              ("Cannot infer a complete type for " ^
+               (ST.string (Context.argument_name i acc.c)))
+          | _ -> ()
+        end
+      | _ -> ()
+    done
+
+
   let result (acc:t): term * TVars_sub.t =
     (** Return the term and the calculated substitutions for the type
         variables *)
@@ -348,6 +483,7 @@ module Accus: sig
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> t -> unit
   val complete_lambda:   int -> int array -> t -> unit
+  val check_type_variables: info -> t -> unit
   val result:            t -> term * TVars_sub.t
 
 end = struct
@@ -440,6 +576,9 @@ end = struct
 
   let complete_lambda (ntvs:int) (nms:int array) (accs:t): unit =
     List.iter (fun acc -> Accu.complete_lambda ntvs nms acc) accs.accus
+
+  let check_type_variables (inf:info) (accs:t): unit =
+    List.iter (fun acc -> Accu.check_type_variables inf acc) accs.accus
 
   let result (accs:t): term * TVars_sub.t =
     assert (is_singleton accs);
@@ -593,6 +732,7 @@ let rec analyze_expression
     and fargnames = Context.local_fargnames c in
     Accus.expect_lambda (ntvs-ntvs_gap) accs;
     analyze e accs;
+    Accus.check_type_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) fargnames accs;
     Context.pop c
 
@@ -606,6 +746,8 @@ let rec analyze_expression
     error_info
       info
       ("The expression " ^ (string_of_expression exp) ^ " is ambiguous");
+
+  Accus.check_type_variables ie.i accs;
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;

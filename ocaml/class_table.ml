@@ -24,11 +24,12 @@ type t = {mutable map:   int IntMap.t;
           mutable fgens: type_term IntMap.t;
           mt:            Module_table.t}
 
-let boolean_index   = 0
-let any_index       = 1
-let predicate_index = 2
-let function_index  = 3
-let tuple_index     = 4
+let dummy_index     = 0
+let boolean_index   = 1
+let any_index       = 2
+let predicate_index = 3
+let function_index  = 4
+let tuple_index     = 5
 
 
 
@@ -189,6 +190,7 @@ let downgrade_signature
   assert (0 < nargs);
   let pred_idx = predicate_index + ntvs
   and func_idx = function_index  + ntvs
+  and dum_idx  = dummy_index     + ntvs
   in
   let tp = Sign.result sign in
   let cls_idx,args = split_type_term tp in
@@ -199,7 +201,7 @@ let downgrade_signature
     Sign.make_func
       (extract_from_tuple nargs ntvs args.(0))
       (boolean_type ntvs)
-  end else if cls_idx = func_idx then begin
+  end else if cls_idx = func_idx || cls_idx = dum_idx then begin
     printf "ntvs %d Sign %s\n" ntvs (Sign.to_string sign);
     assert (Array.length args = 2);
     Sign.make_func
@@ -844,6 +846,7 @@ let base_table (): t =
   and fgb = ST.symbol "B"
   and anycon = Variable any_index
   and ct = empty_table ()   in
+  add_base_class "@DUMMY"    Immutable_hmark [||] ct;
   add_base_class "BOOLEAN"   Immutable_hmark [||] ct;
   add_base_class "ANY"       Deferred_hmark  [||] ct;
   add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;

@@ -53,6 +53,20 @@ val count_formal_generics: t -> int
     (** The number of formal generics in this context and all preceeding
         contexts *)
 
+val count_last_arguments:  t -> int
+    (** The number of formal arguments in this context without the preceeding
+        contexts *)
+
+val count_arguments:  t -> int
+    (** The number of formal arguments in this context and all preceeding
+        contexts *)
+
+val argument_name: int -> t -> int
+    (** The name of the [i]th formal argument *)
+
+val argument_type: int -> t -> type_term
+    (** The type of the [i]th formal argument *)
+
 val fgnames: t   -> int array
 val local_fargnames: t -> int array
 
