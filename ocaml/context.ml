@@ -730,7 +730,6 @@ let add_assumption (t:term) (c:t): int =
   in
   if c.trace then
     Printf.printf "%s%3d hypo:   %s\n" (prefix c) res (string_of_term t c);
-  (*Proof_context.close c.pc;*)
   close c;
   res
 
@@ -738,7 +737,6 @@ let add_axiom (t:term) (c:t): int =
   let res = Proof_context.add_axiom t c.pc in
   if c.trace then
     Printf.printf "%s%3d axiom:  %s\n" (prefix c) res (string_of_term t c);
-  (*Proof_context.close c.pc;*)
   close c;
   res
 
@@ -753,16 +751,14 @@ let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (c:t): unit =
     let idx = find_assertion t c in
     Printf.printf "%s%3d proved: %s\n" (prefix c) idx (string_of_term t c)
   end;
-  (*Proof_context.close c.pc*)
   close c
 
 
 let add_backward (t:term) (c:t): unit =
   Proof_context.set_forward c.pc;
   Proof_context.add_backward t c.pc;
-  Proof_context.close c.pc;
   close c
-  (*Proof_context.reset_forward c.pc*)
+
 
 let backward_set (t:term) (c:t): int list =
   Proof_context.backward_set t c.pc

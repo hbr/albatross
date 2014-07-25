@@ -352,10 +352,6 @@ let find_in_tab (t:term) (pc:t): int =
 
 
 let find (t:term) (pc:t): int = find_in_tab t pc
-  (*let idx1 = try find_in_slot t pc with Not_found -> -1 in
-  let idx2 = try find_in_tab  t pc with Not_found -> -1 in
-  assert (idx1 = idx2 );
-  if 0 <= idx1  then idx1 else raise Not_found*)
 
 
 let has (t:term) (pc:t): bool =
@@ -674,34 +670,26 @@ let add_consequences_implication (i:int)(pc:t): unit =
             add_consequence idx i sub pc)
           sublst
       else  (* the implication is not schematic *)
-        let sublst = Term_table.unify a td.nbenv pc.entry.prvd2
-        in
-        let sublst_exact =
-          List.filter (fun (idx,sub) -> Term_sub.is_empty sub) sublst
-        in
-        match sublst_exact with
-          [idx,_] ->
-            assert (nbenv pc = td.nbenv);
-            add_mp b idx i pc
-        | []      ->
-            (* no exact match *)
-            begin
-              match sublst with
-                [] -> ()
-              | (idx,sub)::_ ->
-                  (* the schematic rule [idx] matches the premise of [i]*)
-                  begin
-                    let idx_premise = count pc in
-                    assert (not (has a pc)); (* because there is no exact
-                                                match *)
-                    add_fully_specialized idx sub pc;
-                    assert (idx_premise + 1 = count pc); (* specialized is
-                                                            new *)
-                    add_mp b idx_premise i pc
-                  end
-            end
-        | _ ->
-            assert false
+        try
+          let idx = find a pc in   (* check for exact match *)
+          assert (nbenv pc = td.nbenv);
+          add_mp b idx i pc
+        with Not_found -> (* no exact match *)
+          let sublst = Term_table.unify a td.nbenv pc.entry.prvd2
+          in
+          match sublst with
+            [] -> ()
+          | (idx,sub)::_ ->
+              (* the schematic rule [idx] matches the premise of [i]*)
+              begin
+                let idx_premise = count pc in
+                assert (not (has a pc)); (* because there is no exact
+                                            match *)
+                add_fully_specialized idx sub pc;
+                assert (idx_premise + 1 = count pc); (* specialized is
+                                                        new *)
+                add_mp b idx_premise i pc
+              end
 
 
 
@@ -827,17 +815,16 @@ let add_backward (t:term) (pc:t): unit =
             pc.work <- idx :: pc.work
           else
             ()
-        else begin
-          add_fully_specialized idx sub pc
-        end)
+        else
+          add_fully_specialized idx sub pc)
       sublst
   in
   let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
-  if sublst <> [] then
+  (if sublst <> [] then
     add_lst sublst
   else
     let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
-    add_lst sublst
+    add_lst sublst)
 
 
 
