@@ -202,7 +202,6 @@ let downgrade_signature
       (extract_from_tuple nargs ntvs args.(0))
       (boolean_type ntvs)
   end else if cls_idx = func_idx || cls_idx = dum_idx then begin
-    printf "ntvs %d Sign %s\n" ntvs (Sign.to_string sign);
     assert (Array.length args = 2);
     Sign.make_func
       (extract_from_tuple nargs ntvs args.(0))

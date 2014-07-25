@@ -252,11 +252,6 @@ ass_req_opt:
 
 ass_check: KWcheck proof_seq { List.rev $2 }
 
-/*
-ass_check_opt:
-    { [] }
-|   ass_check  { $1 }
-*/
 
 ass_ens: KWensure ass_seq { List.rev $2 }
 
@@ -271,7 +266,7 @@ proof_seq:
 
 proof_expr:
     info_expr { $1 }
-|   proof_all_expr {
+|   proof_all_expr_inner {
   let entlst,req,impl,ens = $1 in
   let exp = Expquantified (Universal,
                            entlst,
@@ -289,6 +284,17 @@ proof_all_expr: KWall formal_arguments_opt opt_nl
                 ass_req_opt
                 ass_imp
                 ass_ens KWend {
+  let entlst = withinfo (rhs_info 2) $2 in
+  entlst, $4, $5, $6
+}
+
+
+proof_all_expr_inner:
+    KWall formal_arguments opt_nl
+       ass_req_opt
+       ass_imp
+       ass_ens
+    KWend {
   let entlst = withinfo (rhs_info 2) $2 in
   entlst, $4, $5, $6
 }
@@ -651,8 +657,13 @@ expr:
 |   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
 |   expr DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
 |   expr COLON type_nt            { Typedexp ($1,$3) }
-|   quantifier LPAREN entity_list RPAREN opt_nl expr %prec KWall {
-  Expquantified ($1, withinfo (rhs_info 3) $3, $6) }
+
+|   KWall  formal_arguments opt_nl expr {
+  Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }
+
+|   KWsome formal_arguments opt_nl expr {
+  Expquantified (Existential, withinfo (rhs_info 2) $2, $4) }
+
 |   LBRACE expr RBRACE            {
   match $2 with
     Expcolon (fargs,exp) ->
@@ -661,11 +672,6 @@ expr:
       Exppred (withinfo (rhs_info 2) elist, exp)
   | _ -> assert false
 }
-
-
-quantifier:
-    KWall  %prec LOWEST_PREC { Universal   }
-|   KWsome { Existential }
 
 
 
