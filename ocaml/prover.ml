@@ -1,6 +1,7 @@
 open Container
 open Support
 open Term
+open Printf
 
 
 exception Proof_found of int
@@ -105,10 +106,10 @@ let untagged (ie: info_expression): info_expression =
     Taggedexp (tag,e) -> withinfo ie.i e
   | _                 -> ie
 
-let get_term (ie: info_expression) (c:Context.t): term * term =
+let get_term (ie: info_expression) (c:Context.t): term =
   let t  = Typer.boolean_term (untagged ie) c in
   let tn = Context.expanded_term t c in
-  tn, t
+  tn
 
 
 
@@ -125,7 +126,7 @@ let add_assumptions_or_axioms
     (lst:compound) (is_axiom:bool) (c:Context.t): int list =
   List.map
     (fun ie ->
-      let tn,_ = get_term ie c in
+      let tn = get_term ie c in
       if is_axiom then
         Context.add_axiom tn c
       else
@@ -154,21 +155,21 @@ let add_proved (lst: (term*proof_term*IntSet.t) list) (c:Context.t): unit =
 
 
 let print_local (c:Context.t): unit =
-  Printf.printf "local assertions\n";
+  printf "local assertions\n";
   Context.print_all_local_assertions c
 
 let print_global (c:Context.t): unit =
-  Printf.printf "global assertions\n";
+  printf "global assertions\n";
   Context.print_global_assertions c
 
 
 let print_pair (p:t): unit =
-  Printf.printf "\n";
+  printf "\n";
   Context.print_all_local_assertions p.context;
-  Printf.printf "--------------------------------------\n";
+  printf "--------------------------------------\n";
   let depth = Context.depth p.context in
   let prefix = String.make (2*(depth-1)) ' ' in
-  Printf.printf "%s      %s\n" prefix (string_of_term p.entry.goal p)
+  printf "%s      %s\n" prefix (string_of_term p.entry.goal p)
 
 let split_implication (p:t): term * term =
   Context.split_implication p.entry.goal p.context
@@ -349,7 +350,7 @@ let rec prove_goal (p:t): unit =
 and prove_alternatives (bwds: int list) (p:t): unit =
   if p.trace then begin
     let n = List.length bwds in
-    Printf.printf "%strying %d alternative(s)\n"
+    printf "%strying %d alternative(s)\n"
       (prefix p) n
   end;
   List.iteri
@@ -366,9 +367,9 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           in
           if n=1 then
             (assert (i=0);
-            Printf.printf "%susing  %d %s\n" pre idx tstr)
+            printf "%susing  %d %s\n" pre idx tstr)
           else
-            Printf.printf "%salternative %d: %d %s\n" pre i idx tstr;
+            printf "%salternative %d: %d %s\n" pre i idx tstr;
         end;
         push_alternative idx p;
         prove_premises ps used_gen p;
@@ -380,12 +381,12 @@ and prove_alternatives (bwds: int list) (p:t): unit =
         in
         let idx_tgt = discharge idx_tgt p in
         if p.trace then
-          Printf.printf "%s... succeeded\n" (prefix p);
+          printf "%s... succeeded\n" (prefix p);
         raise (Proof_found idx_tgt)
       with Not_found ->
         pop_downto depth p;
         if p.trace then
-          Printf.printf "%s... failed\n" (prefix p))
+          printf "%s... failed\n" (prefix p))
     bwds
 
 and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
@@ -415,9 +416,9 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
         and tstr = string_of_term t p
         in
         if n=1 then
-          Printf.printf "%spremise: %s\n" pre tstr
+          printf "%spremise: %s\n" pre tstr
         else
-          Printf.printf "%spremise %d: %s\n" pre i tstr
+          printf "%spremise %d: %s\n" pre i tstr
       end;
       push_goal t used_gen p;
       try
@@ -434,7 +435,7 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
 
 
 let prove_basic_expression (ie:info_expression) (c:Context.t): int =
-  let tn,_ = get_term ie c in
+  let tn = get_term ie c in
   let p = start tn c in
   let rec prove (retry:bool): int =
     push_empty p;

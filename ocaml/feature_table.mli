@@ -20,8 +20,17 @@ val class_table:  t -> Class_table.t
 val implication_term: term -> term -> int -> t -> term
 
 val expand_term: term->int->t->term
+  (** [expand_term t nbound ft] expands the definitions of the term [t] within
+      an environment with [nbound] bound variables, i.e. a variable [i] with
+      [nbound<=i] refers to the global feature [i-nbound] *)
+
 
 val normalize_term: term->int->t->term
+  (** [normalize_term t nbound ft] expands the definitions of the term [t] and
+     beta reduce it within an environment with [nbound] bound variables,
+     i.e. a variable [i] with [nbound<=i] refers to the global feature
+     [i-nbound] *)
+
 
 val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
