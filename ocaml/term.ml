@@ -438,7 +438,7 @@ end = struct
       match f with
         Lam(nargs,_,t) ->
           assert (nargs=(Array.length args));
-          apply t args
+          reduce (apply t args)
       | _ -> Application (f,args)
     in
     match t with
