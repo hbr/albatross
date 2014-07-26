@@ -23,7 +23,9 @@ module Term_sub_arr: sig
   val extend:int -> t -> t
   val extend_bottom: int -> t -> t
   val remove_bottom: int -> t -> t
-
+  val sub_star:      term -> t -> term
+      (** Apply to the term [t] the substitution [s] until no more substitutions
+          are possible.  *)
 end = struct
 
   type t = {args: term array;
@@ -71,7 +73,8 @@ end = struct
     let rec gstar (i:int) (n:int): term =
       (* n: number of substitutions still possible *)
       assert (0 < n);
-      sub (get i s) (n-1)
+      if s.flags.(i) then sub (get i s) (n-1)
+      else                Variable i
     and sub (t:term) (n:int): term =
       match t with
         Variable j when j < cnt -> gstar j n
@@ -273,6 +276,9 @@ module TVars_sub: sig
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
   val update:       t -> t -> unit
+  val sub_star:     term -> t -> term
+      (** [sub_star t s]: apply to the term [t] the substitution [s] until no
+          more substitutions are possible.  *)
 
 end = struct
 
@@ -358,6 +364,9 @@ end = struct
           (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
           tv.sub
     done
+
+  let sub_star (t:type_term) (s:t): term =
+    Term_sub_arr.sub_star t s.sub
 
 end (* TVars_sub *)
 

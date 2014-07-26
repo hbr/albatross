@@ -33,6 +33,14 @@ end = struct
 
   let ntvars (acc:t): int = TVars_sub.count acc.tvars
 
+
+  let string_of_type (tp:type_term) (acc:t): string =
+    let ntvs    = ntvars acc
+    and fgnames = Context.fgnames acc.c
+    and ct      = Context.class_table acc.c in
+    Class_table.type2string tp  ntvs fgnames ct
+
+
   let string_of_signature (s:Sign.t) (acc:t): string =
     let ntvs    = ntvars acc
     and fgnames = Context.fgnames acc.c
@@ -144,8 +152,8 @@ end = struct
       uni t1 t2 0
     with Term_capture ->
       assert false);
-    assert ((Term.sub t1 (TVars_sub.args  acc.tvars) nvars)
-              = (Term.sub t2 (TVars_sub.args acc.tvars) nvars))
+    assert ((TVars_sub.sub_star t1 acc.tvars)
+              = (TVars_sub.sub_star t2 acc.tvars))
 
 
 
