@@ -26,6 +26,7 @@ type t = {context: Context.t;
           mutable entry: entry;
           mutable stack: entry list;
           mutable depth: int;
+          mutable trace_ctxt: bool;
           mutable trace: bool}
 
 
@@ -39,6 +40,7 @@ let start (t:term) (c:Context.t): t =
    entry  = entry;
    stack  = [];
    depth  = 0;
+   trace_ctxt = true;
    trace  = Options.is_tracing_proof ()}
 
 
@@ -323,10 +325,11 @@ let rec prove_goal (p:t): unit =
    *)
   check_goal p;
   enter p;
-  if p.trace && p.depth = 1 then begin
+  if p.trace && p.trace_ctxt then begin
     if not (Options.is_tracing_proof ()) then
       print_global p.context;
-    print_pair p
+    print_pair p;
+    p.trace_ctxt <- false
   end;
   if Options.is_prover_backward () then
     let bwd_lst = Context.backward_set p.entry.goal p.context in
