@@ -432,17 +432,20 @@ end = struct
 
 
   let expect_lambda (ntvs:int) (acc:t): unit =
-    assert (Sign.is_constant acc.sign);
     assert (Sign.has_result acc.sign);
     acc.tvars <- TVars_sub.add_local ntvs acc.tvars;
     acc.sign  <- Sign.up ntvs acc.sign;
     let rt = Sign.result acc.sign in
-    acc.sign <-
-      try
-        let ntvs = (ntvars acc) + (Context.count_formal_generics acc.c) in
-        Sign.make_const (Class_table.result_type_of_compound rt ntvs)
-      with Not_found ->
-        assert false (* cannot happen *)
+    if not (Sign.is_constant acc.sign) then
+      (acc.sign <- Sign.make_const rt;
+       printf "\texpected sign: %s\n" (signature_string acc))
+    else
+      acc.sign <-
+        try
+          let ntvs = (ntvars acc) + (Context.count_formal_generics acc.c) in
+          Sign.make_const (Class_table.result_type_of_compound rt ntvs)
+        with Not_found ->
+          assert false (* cannot happen *)
 
 
 
@@ -599,6 +602,7 @@ end = struct
                   accus))
 
   let expect_lambda (ntvs:int) (accs:t): unit =
+    accs.arity <- 0;
     List.iter (fun acc -> Accu.expect_lambda ntvs acc) accs.accus
 
   let complete_lambda (ntvs:int) (nms:int array) (accs:t): unit =

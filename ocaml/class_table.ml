@@ -73,7 +73,9 @@ let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
   if cls_idx = ntvs + predicate_index then begin
     assert (Array.length args = 1);
     boolean_type ntvs
-  end else if cls_idx = ntvs + function_index then begin
+  end else if cls_idx = ntvs + function_index ||
+              cls_idx = ntvs + dummy_index
+  then begin
     assert (Array.length args = 2);
     args.(1)
   end else
