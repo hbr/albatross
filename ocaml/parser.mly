@@ -677,7 +677,7 @@ expr:
 
 atomic_expr:
     KWResult                      { ExpResult }
-|   NUMBER                        { Number $1 }
+|   NUMBER                        { Expnumber $1 }
 |   KWfalse                       { Expfalse }
 |   KWtrue                        { Exptrue }
 |   dotted_id_list %prec LOWEST_PREC {

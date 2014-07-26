@@ -11,6 +11,7 @@ module Accu: sig
   val signature:         t -> Sign.t
   val signature_string:  t -> string
   val substitution_string: t -> string
+  val concepts_string:   t -> string
   val ntvars:            t -> int
   val make:              type_term -> Context.t -> t
   val add_leaf:          int ->  TVars.t -> Sign.t ->  t -> t
@@ -65,6 +66,17 @@ end = struct
           sub_lst)) ^
     "]"
 
+  let concepts_string (acc:t): string =
+    let cpt_lst = Array.to_list (TVars_sub.concepts acc.tvars)
+    and ct      = Context.class_table acc.c
+    in
+    "[" ^
+    (String.concat
+       ","
+       (List.map
+          (fun tp -> Class_table.type2string tp 0 [||] ct)
+          cpt_lst)) ^
+    "]"
 
 
 
@@ -88,7 +100,11 @@ end = struct
       Variable j when j<cnt ->
         if i=j then ()
         else
-          let lo,hi = if i<=j then i,j else j,i in
+          let lo,hi =
+            if (cnt_loc<=j && j<=i) || (i<cnt_loc && i<=j) then
+              i,j
+            else
+              j,i in
           let thi   = Variable hi in
           let ok =
             lo < cnt_loc ||
@@ -137,10 +153,13 @@ end = struct
           else
             raise Not_found
       | Application(f1,args1), Application(f2,args2) ->
-          if (Array.length args1) <> (Array.length args2) then
+          let nargs = Array.length args1 in
+          if nargs <> (Array.length args2) then
             raise Not_found;
           uni f1 f2 nb;
-          Array.iteri (fun i t1 ->  uni t1 args2.(i) nb) args1
+          for i = 0 to nargs-1 do
+            uni args1.(i) args2.(i) nb
+          done
       | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
           if nb1=nb2 then
             uni t1 t2 (nb+nb1)
@@ -638,7 +657,6 @@ let process_leaf
              ","
              (List.map
                 (fun (sign,ntvs) ->
-                  printf "ntvs %d\n" ntvs;
                   let fgnames = Context.fgnames c
                   and ct      = Context.class_table c
                   in
@@ -679,6 +697,7 @@ let rec analyze_expression
     | Identifier name     -> do_leaf (id name)
     | Expfalse            -> do_leaf (feat FNfalse)
     | Exptrue             -> do_leaf (feat FNtrue)
+    | Expnumber num       -> do_leaf (feat (FNnumber num))
     | Expop op            -> do_leaf (feat (FNoperator op))
     | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
     | Unexp  (op,e)       -> application (Expop op) [|e|] accs

@@ -496,7 +496,7 @@ type is_do_block = bool
 
 type expression =
     Identifier    of int
-  | Number        of int
+  | Expnumber     of int
   | ExpResult
   | ExpCurrent
   | Exptrue
@@ -553,7 +553,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   match e with
     Identifier id -> ST.string id
 
-  | Number num    -> ST.string num
+  | Expnumber num  -> ST.string num
 
   | ExpResult     -> "Result"
 
