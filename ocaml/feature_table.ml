@@ -6,6 +6,15 @@ open Printf
 
 type implementation_status = No_implementation | Builtin | Deferred
 
+
+
+module Feature_map = Map.Make(struct
+  type t = feature_name
+  let compare = Pervasives.compare
+end)
+
+
+
 module ESignature_map = Map.Make(struct
   type t = constraints * Sign.t
   let compare = Pervasives.compare
@@ -98,16 +107,15 @@ let add_key (i:int) (ft:t): unit =
   let desc  = Seq.elem i ft.seq
   in
   let fn    = desc.fname
-  and nargs = Sign.arity desc.sign
   and sign  = Sign.normal desc.sign
   in
   let esign_map =
-    try Feature_map.find (fn,nargs) ft.map
+    try Feature_map.find fn ft.map
     with Not_found -> ESignature_map.empty
   in
   ft.map <-
     Feature_map.add
-      (fn,nargs)
+      fn
       (ESignature_map.add (desc.concepts,sign) i esign_map)
       ft.map
 
@@ -208,7 +216,7 @@ let find
     : int =
   ESignature_map.find
     (concepts,sign)
-    (Feature_map.find (fn,nargs) ft.map)
+    (Feature_map.find fn ft.map)
 
 
 
@@ -222,8 +230,23 @@ let find_funcs
       and signature
    *)
   ESignature_map.fold
-    (fun (cs,sign) i lst -> (i,TVars.make 0 cs,sign)::lst)
-    (Feature_map.find (fn,nargs) ft.map)
+    (fun (cs,sign) i lst ->
+      let arity = Sign.arity sign
+      and tvs   = TVars.make 0 cs
+      in
+      if arity = nargs then
+        (i,tvs,sign) :: lst
+      else if arity < nargs then (* downgrade *)
+        let nfgs = Array.length cs in
+        try
+          let s = Class_table.downgrade_signature nfgs sign nargs in
+          (i,tvs,s) :: lst
+        with Not_found ->
+          lst
+      else (* upgrade *)
+        lst (* nyi: upgrade of signature *)
+    )
+    (Feature_map.find fn ft.map)
     []
 
 

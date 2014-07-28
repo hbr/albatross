@@ -523,7 +523,6 @@ let put_class
 
 
 
-
 let find_funcs
     (fn:feature_name)
     (nargs:int)
@@ -541,8 +540,6 @@ let find_funcs
         let start = TVars.count tvs in
         assert (TVars.count_local tvs = 0);
         let sign = Sign.up_from nfgs start s in
-        (*(* make space for type variables *)
-        let sign = Sign.up (count_type_variables c) s in*)
         i+(nfargs c), tvs, sign)
       lst
   in
