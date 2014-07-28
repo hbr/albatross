@@ -449,12 +449,10 @@ end = struct
         in
         app fr argsr
     | Lam(nargs,names,t) ->
-        (* assert (0 < nargs); (* bug: why not? *) *)
+        assert (0 < nargs);
         let tred = reduce t in
-        if 0 < nargs then
           Lam (nargs, names, tred)
-        else
-          tred  (* ??? *)
+
 
 
   let lambda_split (t:term): int * int array * term =

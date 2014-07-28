@@ -247,7 +247,10 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
         | Some def ->
             let nargs = Sign.arity desc.sign in
             let t = expand_term def nargs ft in
-            Lam (nargs, [||], Term.upbound n nargs t)
+            let tup = Term.upbound n nargs t in
+            if nargs = 0 then tup
+            else
+              Lam (nargs, [||], tup)
     )
     t
 
