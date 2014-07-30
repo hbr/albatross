@@ -61,8 +61,10 @@ end = struct
     "[" ^
     (String.concat
        ","
-       (List.map
-          (fun tp -> Class_table.type2string tp ntvs fnames ct)
+       (List.mapi
+          (fun i tp ->
+            (string_of_int i) ^ "~>" ^
+            Class_table.type2string tp ntvs fnames ct)
           sub_lst)) ^
     "]"
 
@@ -83,7 +85,7 @@ end = struct
 
   let add_sub (ok:bool) (i:int) (t:term) (acc:t): unit =
     if ok then
-      TVars_sub.put_sub i t acc.tvars
+      TVars_sub.add_sub i t acc.tvars
     else
       raise Not_found
 
@@ -118,13 +120,18 @@ end = struct
         let ok =
           i < cnt_loc ||
           Context.type_satisfies_concept
-            (try Term.down cnt t with Term_capture -> assert false)
+            t
+            (TVars_sub.tvars acc.tvars)
             (TVars_sub.concept i acc.tvars)
             acc.c
         in
         add_sub ok i t acc
 
 
+
+  let has_sub (i:int) (acc:t): bool = TVars_sub.has i acc.tvars
+
+  let get_sub (i:int) (acc:t): type_term = TVars_sub.get i acc.tvars
 
 
   let unify
@@ -140,11 +147,18 @@ end = struct
     let nvars = TVars_sub.count acc.tvars
     in
     let rec uni (t1:term) (t2:term) (nb:int): unit =
+      let do_sub0 (i:int) (t:type_term): unit =
+        let i,t = i-nb, Term.down nb t in
+        if has_sub i acc then
+          uni t (get_sub i acc) 0
+        else
+          do_sub i t acc
+      in
       match t1,t2 with
         Variable i, _ when nb<=i && i<nb+nvars ->
-          do_sub (i-nb) (Term.down nb t2) acc
+          do_sub0 i t2
       | _, Variable j when nb<=j && j<nb+nvars ->
-          do_sub (j-nb) (Term.down nb t1) acc
+          do_sub0 j t1
       | Variable i, Variable j ->
           assert (i<nb||nb+nvars<=i);
           assert (j<nb||nb+nvars<=j);
@@ -437,8 +451,7 @@ end = struct
     acc.sign  <- Sign.up ntvs acc.sign;
     let rt = Sign.result acc.sign in
     if not (Sign.is_constant acc.sign) then
-      (acc.sign <- Sign.make_const rt;
-       printf "\texpected sign: %s\n" (signature_string acc))
+      acc.sign <- Sign.make_const rt
     else
       acc.sign <-
         try
@@ -498,7 +511,7 @@ end (* Accu *)
 module Accus: sig
 
   type t
-  exception Untypeable of (Sign.t*int) list
+  exception Untypeable of Accu.t list
 
   val make:              type_term -> Context.t -> t
   val is_empty:          t -> bool
@@ -523,7 +536,7 @@ end = struct
             mutable arity:  int;
             c: Context.t}
 
-  exception Untypeable of (Sign.t*int) list
+  exception Untypeable of Accu.t list
 
 
   let make (exp: type_term) (c:Context.t): t =
@@ -596,10 +609,8 @@ end = struct
         []
         accus;
     if accs.accus = [] then
-      raise (Untypeable
-               (List.map
-                  (fun acc -> Accu.signature acc, Accu.ntvars acc)
-                  accus))
+      raise (Untypeable accus)
+
 
   let expect_lambda (ntvs:int) (accs:t): unit =
     accs.arity <- 0;
@@ -653,19 +664,19 @@ let process_leaf
   try
     Accus.add_leaf lst accs
   with
-    Accus.Untypeable exp_sign_lst ->
+    Accus.Untypeable acc_lst ->
       let str = "The expression "
         ^ (string_of_expression e)
         ^ " does not satisfy any of the expected types in {"
         ^ (String.concat
              ","
              (List.map
-                (fun (sign,ntvs) ->
-                  let fgnames = Context.fgnames c
-                  and ct      = Context.class_table c
-                  in
-                  Class_table.string_of_signature sign ntvs fgnames ct)
-                exp_sign_lst))
+                (fun acc ->
+                  (string_of_int (Accu.ntvars acc)) ^
+                  (Accu.concepts_string acc) ^
+                  (Accu.substitution_string acc) ^
+                  (Accu.signature_string acc))
+                acc_lst))
         ^ "}"
       in
       error_info info str

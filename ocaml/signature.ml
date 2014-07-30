@@ -16,7 +16,6 @@ module Term_sub_arr: sig
   val flags: t -> bool array
   val args:  t -> term array
   val has:   int -> t -> bool
-  val put:   int -> term -> t -> unit
   val add_new: int -> term -> t -> unit
   val update:int -> term -> t -> unit
   val add:   int -> term -> t -> unit
@@ -120,22 +119,13 @@ end = struct
     assert (has i s);
     let used = Term.bound_variables t (count s) in
     let set = List.fold_left
-        (fun set i -> IntSet.add i set) IntSet.empty s.used.(i)
+        (fun set i -> IntSet.add i set)
+        IntSet.empty s.used.(i)
     in
     if set = used then
       s.args.(i) <- t
     else
       raise Not_found
-
-
-  let put (i:int) (t:term) (s:t): unit =
-    if has i s then
-      if get i s <> t then
-        raise Not_found
-      else
-        ()
-    else
-      add_new i t s
 
 
 
@@ -209,7 +199,6 @@ end = struct
         let lst  = IntSet.fold (fun j lst -> j::lst) used [] in
         snew.args.(i) <- tp;
         snew.used.(i) <- lst
-        (*snew.args.(i) <- Term.down n s.args.(i+n)*)
       end
     done;
     snew
@@ -223,11 +212,13 @@ end = struct
 module TVars: sig
 
   type t
+  val empty: t
   val make: int -> constraints -> t
   val make_local: int -> t
   val count_local: t -> int
   val count_global: t -> int
   val count: t -> int
+  val concept:     int -> t -> type_term
   val constraints: t -> constraints
   val add_global: constraints -> t -> t
   val add_local:  int -> t -> t
@@ -237,11 +228,18 @@ end = struct
 
   type t = {nlocal:int; constraints: constraints}
 
+  let empty: t = {nlocal=0;constraints=[||]}
   let make (ntvs:int) (cs:constraints): t = {nlocal=ntvs;constraints=cs}
   let make_local (ntvs:int) : t           = {nlocal=ntvs;constraints=[||]}
   let count_local (tvs:t): int = tvs.nlocal
   let count_global (tvs:t): int = Array.length tvs.constraints
   let count (tvs:t): int = tvs.nlocal + (count_global tvs)
+
+  let concept (i:int) (tvs:t): type_term =
+    assert (count_local tvs <= i);
+    assert (i < count tvs);
+    tvs.constraints.(i - count_local tvs)
+
   let constraints (tvs:t): constraints = tvs.constraints
   let add_global (cs:constraints) (tvs:t): t =
     {tvs with constraints = Array.append tvs.constraints cs}
@@ -271,8 +269,7 @@ module TVars_sub: sig
   val args:         t -> term array
   val add_sub:      int -> term -> t -> unit
   val update_sub:   int -> term -> t -> unit
-  val put_sub:      int -> term -> t -> unit
-  val add_substitution: int -> term -> t -> unit
+  (*val put_sub:      int -> term -> t -> unit*)
   val add_global:   constraints -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
@@ -323,11 +320,8 @@ end = struct
     Term_sub_arr.update i t tv.sub
 
 
-  let put_sub (i:int) (t:term) (tv:t): unit =
-    Term_sub_arr.put i t tv.sub
-
-  let add_substitution (i:int) (t:term) (tv:t): unit =
-    Term_sub_arr.add i t tv.sub
+  (*let put_sub (i:int) (t:term) (tv:t): unit =
+    Term_sub_arr.put i t tv.sub*)
 
   let args (tv:t): term array = Term_sub_arr.args tv.sub
 

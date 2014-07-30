@@ -75,7 +75,12 @@ val type_variables: t -> TVars_sub.t
 val boolean: t -> term
 
 val concept_satisfies_concept: type_term -> type_term -> t -> bool
-val type_satisfies_concept:    type_term -> type_term -> t -> bool
+    (** [concept_satisfies_concept cpt1 cpt2 c] Does the concept [cpt1]
+        satisfy the concept [cpt2] in [c]? *)
+
+val type_satisfies_concept:    type_term -> TVars.t -> type_term -> t -> bool
+    (** [type_satisfies_concept t tvs cpt c]: Does the type [t] with the type
+        variables [tvs] satisfy the concept [cpt] in [c]?  *)
 
 val update_type_variables: TVars_sub.t -> t -> unit
 

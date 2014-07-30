@@ -72,7 +72,9 @@ val result_type:
     return_type -> int -> formal array -> t
       -> Result_type.t
 
-val satisfies: type_term -> int -> formal array -> type_term -> t -> bool
+val satisfies: type_term -> TVars.t -> formal array -> type_term -> t -> bool
+  (** Does the type [tp] in an environment with the [tvs] type variables and
+      the formal generics [fgs] satisfy the concept [cpt]?  *)
 
 val print: t -> unit
 

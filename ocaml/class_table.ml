@@ -441,15 +441,15 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
 
 
 let rec satisfies
-    (tp:type_term)
-    (ntvs:int)
+    (tp:  type_term)
+    (tvs: TVars.t)
     (fgs: formal array)
-    (cpt:type_term)
+    (cpt: type_term)
     (ct:t)
     : bool =
-  (** Does the type [tp] in an environment with [ntvs] type variables and the
-      formal generics [fgs] satisfy the concept [cpt]?  *)
-  let nfgs = Array.length fgs in
+  let nfgs = Array.length fgs
+  and ntvs = TVars.count  tvs
+  and ntvs_loc = TVars.count_local tvs in
   let sat (i:int) (tp_args:type_term array): bool =
     assert (ntvs + nfgs <= i);
     let cls_idx           = i - ntvs - nfgs in
@@ -464,7 +464,7 @@ let rec satisfies
           Array.map (fun t -> Term.sub t tp_args (ntvs+nfgs)) anc_args
         in
         for i = 0 to nargs-1 do
-          if not (satisfies anc_args.(i) ntvs fgs cpt_args.(i) ct) then
+          if not (satisfies anc_args.(i) tvs fgs cpt_args.(i) ct) then
             raise Not_found;
         done;
         true
@@ -473,11 +473,13 @@ let rec satisfies
     end
   in
   match tp with
-    Variable i when i < ntvs ->
+    Variable i when i < ntvs_loc ->
       assert false (* shall never happen *)
+  | Variable i when i < ntvs ->
+      satisfies (TVars.concept i tvs) TVars.empty [||] cpt ct
   | Variable i when i < ntvs + nfgs ->
       let fg_cpt = snd fgs.(i-ntvs) in
-      satisfies fg_cpt 0 [||] cpt ct
+      satisfies fg_cpt TVars.empty [||] cpt ct
   | Variable i ->
       sat i [||]
   | Application(Variable i, tp_args) ->
@@ -492,17 +494,18 @@ let rec satisfies
 let valid_type
     (cls_idx:int)
     (args: type_term array)
-    (ntvs: int)
+    (tvs: TVars.t)
     (fgs: formal array)
     (ct:t): type_term =
-  (** The valid type term [cls_idx[args.(0),args.(1),...] in an environment
-      with [ntvs] type variables and the formal generics [fgs].
+  (* The valid type term [cls_idx[args.(0),args.(1),...] in an environment
+     with the [tvs] type variables and the formal generics [fgs].
 
-      If the type term is not valid then [Not_found] is raised.
+     If the type term is not valid then [Not_found] is raised.
 
-      To check: Do all actual generics [args] satisfy their corresponding
-      concepts? *)
+     To check: Do all actual generics [args] satisfy their corresponding
+     concepts? *)
   let nfgs  = Array.length fgs
+  and ntvs  = TVars.count tvs
   and nargs = Array.length args in
   if cls_idx < ntvs then
     assert false (* shall never happen *)
@@ -517,7 +520,7 @@ let valid_type
     if nargs <> Array.length bdesc.fgs then
       raise Not_found;
     for i = 0 to nargs-1 do
-      if not (satisfies args.(i) ntvs fgs (snd bdesc.fgs.(i)) ct) then
+      if not (satisfies args.(i) tvs fgs (snd bdesc.fgs.(i)) ct) then
         raise Not_found
     done;
     if nargs = 0 then
@@ -531,13 +534,14 @@ let valid_type
 
 let get_type
     (tp:type_t withinfo)
-    (ntvs: int)
+    (tvs: TVars.t)
     (fgs: formal array)
     (ct:t)
     : term =
-  (** Convert the syntactic type [tp] in an environment with [ntvs] type
-      variables and the formal generics [fgs] into a type term *)
-  let nfgs = Array.length fgs in
+  (* Convert the syntactic type [tp] in an environment the [tvs] type
+     variables and the formal generics [fgs] into a type term *)
+  let nfgs = Array.length fgs
+  and ntvs = TVars.count tvs in
   let n    = ntvs + nfgs in
   let class_index (name:int): int =
     try
@@ -553,7 +557,7 @@ let get_type
   let rec get_tp (tp:type_t): type_term =
     let valid_tp (idx:int) (args:type_term array): type_term =
       try
-        valid_type idx args ntvs fgs ct
+        valid_type idx args tvs fgs ct
       with Not_found ->
         error_info info ((string_of_type tp) ^ " is not a valid type")
     in
@@ -610,7 +614,7 @@ let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
   assert (cls_idx < count ct);
   let bdesc = base_descriptor cls_idx ct
   in
-  let tp_term = get_type tp 0 bdesc.fgs ct
+  let tp_term = get_type tp TVars.empty bdesc.fgs ct
   and nfgs = Array.length bdesc.fgs
   in
   let i, args = split_type_term tp_term
@@ -670,7 +674,7 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
   else
     ct.fgens <- IntMap.add
         name.v
-        (get_type concept  0 [||] ct)
+        (get_type concept  TVars.empty [||] ct)
         ct.fgens
 
 
@@ -766,7 +770,8 @@ let formal_arguments
         assert (List.length lst <= ntvs);
         List.mapi (fun i name -> name, Variable i) lst
     | Typed_entities (lst,tp) ->
-        let t = get_type (withinfo entlst.i tp) ntvs fgs ct in
+        let t =
+          get_type (withinfo entlst.i tp) (TVars.make_local ntvs) fgs ct in
         List.map (fun name -> name,t) lst
   in
   let arglst = List.concat (List.map fargs entlst.v) in
@@ -786,7 +791,8 @@ let result_type
     None -> Result_type.empty
   | Some tpinf ->
       let tp,proc,ghost = tpinf.v in
-      let t = get_type (withinfo tpinf.i tp) ntvs fgs ct in
+      let t =
+        get_type (withinfo tpinf.i tp) (TVars.make_local ntvs) fgs ct in
       Result_type.make t proc ghost
 
 
