@@ -81,8 +81,8 @@ let some_index:        int = 3
 
 
 let add_class_feature (i:int) (ft:t): unit =
-  (** Add the feature [i] as a class feature to the corresponding owner
-      class. *)
+  (* Add the feature [i] as a class feature to the corresponding owner
+     class. *)
   assert (i < count ft);
   let desc  = Seq.elem i ft.seq
   in
@@ -225,10 +225,6 @@ let find_funcs
     (fn:feature_name)
     (nargs:int) (ft:t)
     : (int * TVars.t * Sign.t) list =
-  (** Find all functions with name [fn] and [nargs] arguments in the feature
-      table [ft]. Return the indices with the corresponding type variables
-      and signature
-   *)
   ESignature_map.fold
     (fun (cs,sign) i lst ->
       let arity = Sign.arity sign
@@ -451,6 +447,12 @@ let print (ft:t): unit =
 
 
 
+let add_function (desc:descriptor) (ft:t): unit =
+  let cnt = count ft in
+  Seq.push desc ft.seq;
+  add_key cnt ft;
+  add_class_feature cnt ft
+
 
 let put_function
     (fn:       feature_name withinfo)
@@ -460,8 +462,6 @@ let put_function
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  (** Add the function with then name [fn], the formal generics [fgs], the
-      arguments [argnames], the signature [sign] to the feature table *)
   let is_priv = Parse_info.is_module () in
   let cnt   = Seq.count ft.seq
   and nargs = Sign.arity sign
@@ -474,7 +474,7 @@ let put_function
   let mdl = Module_table.current (module_table ft) in
   let cls = Class_table.owner mdl concepts sign ft.ct in
   if idx=cnt then begin (* new feature *)
-    Seq.push
+    let desc =
       {mdl      = mdl;
        cls      = cls;
        fname    = fn.v;
@@ -485,8 +485,8 @@ let put_function
        sign     = sign;
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt}
-      ft.seq;
-    add_key cnt ft
+    in
+    add_function desc ft
   end else begin        (* feature update *)
     let desc = Seq.elem idx ft.seq
     and not_match str =
@@ -518,11 +518,18 @@ let put_function
 
 
 
-let inherit_features
+let do_inherit
     (cls_idx:int)
     (par_idx:int)
     (par_args: type_term array)
+    (info:info)
     (ft:t): unit =
-  (** Let the class [cls_idx] inherit the features from the parent
-      [par_idx[par_args]]. *)
-  assert false
+  (* Go through all deferred features of the parent class [par_idx] and verify
+     that the class [cls_idx] has all these deferred features.
+
+     Then inherit all effective features of the class [par_idx] into the class
+     [cls_idx]
+   *)
+  let ct = class_table ft in
+  let flst = Class_table.deferred_features cls_idx ct in
+  List.iter (fun i -> ()) flst

@@ -488,6 +488,15 @@ let put_formal_generic
 
 
 
+let inherit_parent_assertions
+    (cls_idx:int)
+    (par_idx:int)
+    (par_args:type_term array)
+    (info:info)
+    (c:t)
+    : unit =
+  ()
+
 let put_class
     (hm:       header_mark withinfo)
     (cn:       int withinfo)
@@ -498,7 +507,8 @@ let put_class
   (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
       corresponding class.  *)
   assert (is_global c);
-  let ct = class_table c in
+  let ct = class_table c
+  and ft = feature_table c in
   let idx =
     try
       let idx = Class_table.find_in_module cn.v ct in
@@ -512,11 +522,12 @@ let put_class
   List.iter
     (fun par_lst ->
       List.iter
-        (fun (tp_inf,adapt_lst) ->
+        (fun (tp,adapt_lst) ->
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
-          let par_idx, par_args = Class_table.parent_type idx tp_inf ct in
-          let anc_lst = Class_table.inherit_parent idx tp_inf ct in
-          ())
+          let par_idx, par_args = Class_table.parent_type idx tp ct in
+          Class_table.do_inherit idx par_idx par_args tp.i ct;
+          Feature_table.do_inherit idx par_idx par_args tp.i ft;
+          inherit_parent_assertions idx par_idx par_args tp.i c)
         par_lst)
     inherits
 

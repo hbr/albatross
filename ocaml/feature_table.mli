@@ -2,11 +2,14 @@ open Support
 open Term
 open Signature
 
+(** Structure that implements a table of all global features in the system *)
+
 type t
 
 type implementation_status = No_implementation | Builtin | Deferred
 
 val count:      t -> int
+    (** The number of features in the table *)
 
 val implication_index: int
 val all_index:         int
@@ -33,12 +36,27 @@ val normalize_term: term->int->t->term
 
 
 val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
+  (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
+      arguments in the feature table [ft] and returns the indices with the
+      corresponding type variables and signatures. The signatures will be up-
+      or downgraded if necessary and possible to match the requirement to have
+      [nargs] arguments. *)
+
 
 val put_function:
     feature_name withinfo -> (int*type_term) array -> int array
       -> Sign.t -> implementation_status -> term option -> t -> unit
+  (** [put_function fn fgs fnms sign imp_stat term_opt ft] adds the function
+      with then name [fn], the formal generics [fgs], the arguments [fnms],
+      the signature [sign] the implementation status [imp_stat] and an
+      optional definition term [term_opt] to the feature table [ft] *)
+
 
 val term_to_string: term -> int array -> t -> string
+
+val do_inherit: int -> int -> type_term array -> info -> t -> unit
+  (** [do_inherit cls_idx par_idx par_args info ft] let the class [cls_idx]
+      inherit the features from the parent [par_idx[par_args]]. *)
 
 val print: t -> unit
 

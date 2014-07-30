@@ -1,3 +1,12 @@
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
+*)
+
+(** Structure that implements a table of all classes in the system *)
+
+
 open Support
 open Term
 open Signature
@@ -31,7 +40,14 @@ val class_symbol: int -> t -> int
 val class_name:   int -> t -> string
 
 val add_feature:    int -> int -> bool -> t -> unit
+    (** [add_feature cls fidx is_def ct] adds the feature [fidx] to the class
+        [cls] as deferred or effective depending on the value of [is_def] *)
+
 val add_assertion:  int -> int -> bool -> t -> unit
+
+val deferred_features: int -> t -> int list
+   (** [deferred features cls ct]: The list of deferred features of the class
+       [cls] *)
 
 val owner:          int -> type_term array -> Sign.t -> t -> int
 
@@ -53,12 +69,28 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
-val inherit_parent: int -> type_t withinfo -> t -> (int * type_term array) list
+
+val do_inherit: int -> int -> type_term array -> info -> t -> unit
+    (** [inherit_parent cls_idx par_idx par_args info ct] let the class
+        [cls_idx] inherit the parent [par_idx[par_args]].  *)
 
 val boolean_type:   int -> term
 
 val is_boolean_binary: Sign.t -> int -> bool
 val is_boolean_unary:  Sign.t -> int -> bool
+
+val to_dummy: int -> Sign.t -> type_term
+   (** [to_dummy ntvs s] converts the signature [s] with [ntvs] type variables
+       into the dummy type [dum[tup,rt]] where [tup] is a single type or a
+       tuple which represents the arguments and [rt] is the return type of the
+       signature.
+
+       In case that [s] is a constant signature which is a
+       predicate or a function, the class is updated by the dummy index.
+
+       If the constant signature is neither a predicate nor a function then
+       the result type of the signature is returned. *)
+
 
 val formal_generics:
     entities list withinfo -> return_type -> int -> formal array -> t

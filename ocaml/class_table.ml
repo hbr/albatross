@@ -1,3 +1,9 @@
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
+*)
+
 open Support
 open Term
 open Signature
@@ -12,10 +18,10 @@ type base_descriptor = { hmark:   header_mark;
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
-                         mutable def_features: IntSet.t;
-                         mutable eff_features: IntSet.t;
-                         mutable def_asserts:  IntSet.t;
-                         mutable eff_asserts:  IntSet.t;
+                         mutable def_features: int list;
+                         mutable eff_features: int list;
+                         mutable def_asserts:  int list;
+                         mutable eff_asserts:  int list;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -61,6 +67,35 @@ let combine_type_term (cls_idx:int) (args: type_term array): type_term =
   else
     Variable cls_idx
 
+
+let to_tuple (ntvs:int) (args:type_term array): type_term =
+  let n = Array.length args in
+  assert (n > 0);
+  let rec tuple (i:int) (tp:type_term): type_term =
+    if i = 0 then
+      tp
+    else
+      let i = i - 1 in
+      let tp = Application(Variable (ntvs+tuple_index),[|args.(i);tp|]) in
+      tuple (i-1) tp
+  in
+  tuple (n-1) args.(n-1)
+
+
+
+let to_dummy (ntvs:int) (s:Sign.t): type_term =
+  assert (Sign.arity s > 0);
+  assert (Sign.has_result s);
+  if Sign.arity s = 0 then
+    let res = Sign.result s in
+    let cls,args = split_type_term res in
+    if cls = ntvs+predicate_index || cls = ntvs+function_index then
+      Application(Variable (ntvs+dummy_index), args)
+    else
+      res
+  else
+    let tup = to_tuple ntvs (Sign.arguments s) in
+    Application(Variable (ntvs+dummy_index), [|tup;Sign.result s|])
 
 
 let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
@@ -345,9 +380,9 @@ let add_feature (fidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   assert (cidx < count ct);
   let desc = Seq.elem cidx ct.seq in
   if is_deferred then
-    desc.def_features <- IntSet.add fidx desc.def_features
+    desc.def_features <- fidx :: desc.def_features
   else
-    desc.eff_features <- IntSet.add fidx desc.eff_features
+    desc.eff_features <- fidx :: desc.eff_features
 
 
 
@@ -358,10 +393,15 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   assert (cidx < count ct);
   let desc = Seq.elem cidx ct.seq in
   if is_deferred then
-    desc.def_asserts <- IntSet.add aidx desc.def_asserts
+    desc.def_asserts <- aidx :: desc.def_asserts
   else
-    desc.eff_asserts <- IntSet.add aidx desc.eff_asserts
+    desc.eff_asserts <- aidx :: desc.eff_asserts
 
+
+
+let deferred_features (cidx:int) (ct:t): int list =
+  assert (cidx < count ct);
+  (Seq.elem cidx ct.seq).def_features
 
 
 let add
@@ -628,34 +668,30 @@ let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
 
 
 
-
-let inherit_parent (cls_idx:int) (tp: type_t withinfo) (ct:t)
-    : (int*type_term array) list =
-  (** Let the class [cls_idx] inherit the parent [tp], return all explicitly
-      and implicitly newly inherited ancestors.  *)
-  let par_idx, par_args = parent_type cls_idx tp ct in
+let do_inherit
+    (cls_idx:int)
+    (par_idx:int)
+    (par_args:type_term array)
+    (info:info)
+    (ct:t): unit =
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
   let cls_nfgs  = Array.length cls_bdesc.fgs in
-  IntMap.fold
-    (fun anc_idx anc_args lst ->
+  IntMap.iter
+    (fun anc_idx anc_args ->
       let anc_args =
         Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
       try
         let anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
         if anc_args <> anc_args_0 then
-          error_info tp.i
+          error_info info
             ("Cannot inherit "  ^
              (class_name anc_idx ct) ^
              " with different actual generics")
-        else
-          lst
       with Not_found ->
         cls_bdesc.ancestors <-
-          IntMap.add anc_idx anc_args cls_bdesc.ancestors;
-        (anc_idx, anc_args) :: lst)
+          IntMap.add anc_idx anc_args cls_bdesc.ancestors)
     par_bdesc.ancestors
-    []
 
 
 
@@ -813,7 +849,6 @@ let add_base_class
     (ct:t)
     : unit =
   let idx  = count ct
-  and eset = IntSet.empty
   and nfgs = Array.length fgs
   and nme  = ST.symbol name
   in
@@ -823,10 +858,10 @@ let add_base_class
   Seq.push
     {mdl=(-1);
      name = nme;
-     def_features = eset;
-     eff_features = eset;
-     def_asserts  = eset;
-     eff_asserts  = eset;
+     def_features = [];
+     eff_features = [];
+     def_asserts  = [];
+     eff_asserts  = [];
      priv=bdesc;
      publ= Some bdesc}
     ct.seq;

@@ -206,20 +206,7 @@ let to_dummy (sign:Sign.t) (tb:t): type_term =
   let n = Sign.arity sign in
   assert (0 < n);
   let ntvs_all = ntvars tb + Context.count_formal_generics tb.c in
-  let dum_idx  = ntvs_all + Class_table.dummy_index
-  and tup_idx  = ntvs_all + Class_table.tuple_index
-  and args     = Sign.arguments sign
-  in
-  let rec tuple (i:int) (tp:type_term): type_term =
-    if i = 0 then
-      tp
-    else
-      let i = i - 1 in
-      let tp = Application(Variable tup_idx,[|args.(i);tp|]) in
-      tuple (i-1) tp
-  in
-  let tup = tuple (n-1) args.(n-1) in
-  Application(Variable dum_idx, [|tup;Sign.result sign|])
+  Class_table.to_dummy ntvs_all sign
 
 
 
@@ -285,7 +272,7 @@ let unify_sign
   (** Unify the signatures [sig_req] and [sig_act] by adding substitutions
       to [tb] *)
   let n         = (Sign.arity sig_req)
-  and is_tv,itv =
+  and is_tv,tv =
     let ntvs = TVars_sub.count tb.tvars in
     if Sign.is_constant sig_act then
       match Sign.result sig_act with
@@ -297,17 +284,17 @@ let unify_sign
       false, -1
   in
   if n > 0 && is_tv then
-    if TVars_sub.has itv tb.tvars then
-      let tp        = TVars_sub.get itv tb.tvars in
+    if TVars_sub.has tv tb.tvars then
+      let tp        = TVars_sub.get tv tb.tvars in
       let sig_act_1 = downgrade tp n tb
       in
       unify_sign_0 sig_req sig_act_1 tb
     else
-      TVars_sub.add_sub itv (to_dummy sig_req tb) tb.tvars
+      TVars_sub.add_sub tv (to_dummy sig_req tb) tb.tvars
   else if Sign.is_constant sig_req  && is_tv &&
-    TVars_sub.has itv tb.tvars
+    TVars_sub.has tv tb.tvars
   then
-    update_tv sig_req sig_act itv tb
+    update_tv sig_req sig_act tv tb
   else
     unify_sign_0 sig_req sig_act tb
 

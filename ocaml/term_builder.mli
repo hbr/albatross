@@ -10,8 +10,9 @@ open Signature
 open Term
 
 type t
-      (** The type of the structure. It consists of the expected signature, An
-          array of type variable with its substitutions and a list of terms. *)
+      (** The type of the structure. It consists of the expected signature, an
+          array of type variables with their substitutions and a list of
+          terms. *)
 
 val signature:         t -> Sign.t
     (** The expected signature *)
