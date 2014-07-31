@@ -729,6 +729,8 @@ module Term_sub: sig
   type t
   val to_string:      t -> string
   val count:          t -> int
+  val for_all:        (int -> term -> bool) -> t -> bool
+  val is_identity:    t -> bool
   val is_injective:   t -> bool
   val empty:          t
   val identity:       int -> t
@@ -755,9 +757,12 @@ end = struct
   let count (sub:t): int =
     IntMap.cardinal sub
 
-  let for_all (f: int -> term -> bool) (sub:t): bool =
-    IntMap.fold (fun i t res -> res && f i t) sub true
+  let for_all (f:int-> term -> bool) (sub:t): bool =
+    IntMap.for_all f sub
 
+
+  let is_identity (sub:t): bool =
+    IntMap.for_all (fun i t -> Variable i = t) sub
 
   let inverse (sub:t): t =
     IntMap.fold
@@ -776,7 +781,6 @@ end = struct
       true
     with Not_found ->
       false
-
 
 
   let empty = IntMap.empty
@@ -830,7 +834,9 @@ end = struct
         args.(i) <- t)
       sub;
     args
-end
+
+
+end (* Term_sub *)
 
 
 type substitution = Term_sub.t

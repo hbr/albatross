@@ -72,19 +72,19 @@ let to_tuple (ntvs:int) (args:type_term array): type_term =
   let n = Array.length args in
   assert (n > 0);
   let rec tuple (i:int) (tp:type_term): type_term =
+    assert (0 <= i);
     if i = 0 then
       tp
     else
       let i = i - 1 in
       let tp = Application(Variable (ntvs+tuple_index),[|args.(i);tp|]) in
-      tuple (i-1) tp
+      tuple i tp
   in
   tuple (n-1) args.(n-1)
 
 
 
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
-  assert (Sign.arity s > 0);
   assert (Sign.has_result s);
   if Sign.arity s = 0 then
     let res = Sign.result s in

@@ -15,12 +15,8 @@ end)
 
 
 
-module ESignature_map = Map.Make(struct
-  type t = constraints * Sign.t
-  let compare = Pervasives.compare
-end)
-
 type definition = term
+
 type formal     = int * term
 
 type descriptor = {mutable mdl: int;
@@ -29,12 +25,14 @@ type descriptor = {mutable mdl: int;
                    impstat:     implementation_status;
                    fgnames:     int array;
                    concepts:    type_term array;
+                   mutable anchored: int array;
                    argnames:    int array;
                    sign:        Sign.t;
+                   mutable tp:  type_term;
                    priv:        definition option;
                    mutable pub: definition option option}
 
-type t          = {mutable map: int ESignature_map.t Feature_map.t;
+type t          = {mutable map: Term_table.t ref Feature_map.t;
                    seq:         descriptor seq;
                    ct:          Class_table.t}
 
@@ -100,24 +98,29 @@ let add_class_features (ft:t): unit =
   done
 
 
+let has_equivalent (i:int) (ft:t): bool =
+  false
 
 let add_key (i:int) (ft:t): unit =
   (** Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
-  let desc  = Seq.elem i ft.seq
+  let desc  = Seq.elem i ft.seq in
+  let ntvs  = Array.length desc.concepts
   in
-  let fn    = desc.fname
-  and sign  = Sign.normal desc.sign
+  desc.tp <- Class_table.to_dummy ntvs desc.sign;
+  let tab =
+    try Feature_map.find desc.fname ft.map
+    with Not_found ->
+      let tab = ref Term_table.empty in
+      ft.map <- Feature_map.add desc.fname tab ft.map;
+      tab
   in
-  let esign_map =
-    try Feature_map.find fn ft.map
-    with Not_found -> ESignature_map.empty
-  in
-  ft.map <-
-    Feature_map.add
-      fn
-      (ESignature_map.add (desc.concepts,sign) i esign_map)
-      ft.map
+  if has_equivalent i ft then
+    assert false  (* raise some exception *)
+  else
+    tab := Term_table.add desc.tp ntvs 0 i !tab
+
+
 
 
 let add_keys (ft:t): unit =
@@ -134,6 +137,7 @@ let base_table () : t =
   let ft      = empty ()
   and fnimp   = FNoperator DArrowop
   and signimp = Sign.make_func [|bool;bool|] bool
+  and dum_0   = Variable (-1)
   in
   (* boolean *)
   Seq.push
@@ -143,8 +147,10 @@ let base_table () : t =
      impstat  = Builtin;
      fgnames  = [||];
      concepts = [||];
+     anchored = [||];
      argnames = [||];
      sign     = signimp;
+     tp       = dum_0;
      priv     = None;
      pub      = Some None}  (* 0: implication *)
     ft.seq;
@@ -163,14 +169,17 @@ let base_table () : t =
                            [|a_tp;b_tp|])
   in
   let entry =
+    let sign = Sign.make_func [|p_tp|] bool1 in
     {mdl      = -1;
      cls      = Class_table.predicate_index;
      fname    = FNoperator Allop;
      impstat  = Builtin;
      fgnames  = [|g|];
      concepts = [|any|];
+     anchored = [||];
      argnames = [|p|];
-     sign     = Sign.make_func [|p_tp|] bool1;
+     sign     = sign;
+     tp       = dum_0;
      priv     = None;
      pub      = Some None}
   in
@@ -180,7 +189,8 @@ let base_table () : t =
     in
     Seq.push {entry with fname = FNoperator Parenop;
               cls  = Class_table.function_index;
-              sign = sign}  ft.seq;  (* 1: "()" *)
+              sign = sign;
+              tp   = dum_0}  ft.seq;  (* 1: "()" *)
   end;
   Seq.push entry ft.seq;                                   (* 2: all  *)
   Seq.push{entry with fname = FNoperator Someop} ft.seq;   (* 3: some *)
@@ -214,9 +224,43 @@ let find
     (sign:Sign.t)
     (ft:t)
     : int =
-  ESignature_map.find
-    (concepts,sign)
-    (Feature_map.find fn ft.map)
+  (* Find the feature with the characteristics.  *)
+  let tab = Feature_map.find fn ft.map in
+  let ntvs = Array.length concepts in
+  let tp   = Class_table.to_dummy ntvs sign in
+  let fgs = Array.map (fun t -> (-1),t) concepts in (* !!! to be fixed *)
+  let lst  = Term_table.unify tp ntvs !tab in
+  let idx_lst =
+    List.fold_left
+      (fun lst (i,sub) ->
+        (* For all type variables of i there is one subterm of tp in sub.
+
+           Each type variable in i has a concept. The corresponding subterm of
+           tp has to satisfy the concept
+         *)
+        let desc = descriptor i ft in
+        if concepts = desc.concepts && Term_sub.is_identity sub then
+          i :: lst
+        else
+          let ok =
+            Term_sub.for_all
+              (fun j t ->
+                Class_table.satisfies
+                  t TVars.empty fgs desc.concepts.(j) ft.ct)
+              sub
+          in
+          if ok then
+            assert false
+          else
+            lst)
+      []
+      lst
+  in
+  match idx_lst with
+    [] -> raise Not_found
+  | idx::rest ->
+      assert (List.for_all (fun i -> i=idx) rest);
+      idx
 
 
 
@@ -225,15 +269,18 @@ let find_funcs
     (fn:feature_name)
     (nargs:int) (ft:t)
     : (int * TVars.t * Sign.t) list =
-  ESignature_map.fold
-    (fun (cs,sign) i lst ->
+  let tab = Feature_map.find fn ft.map in
+  List.fold_left
+    (fun lst (i,_,_,_) ->
+      let desc = descriptor i ft in
+      let sign = desc.sign in
       let arity = Sign.arity sign
-      and tvs   = TVars.make 0 cs
+      and tvs   = TVars.make 0 desc.concepts
       in
       if arity = nargs then
         (i,tvs,sign) :: lst
       else if arity < nargs then (* downgrade *)
-        let nfgs = Array.length cs in
+        let nfgs = Array.length desc.concepts in
         try
           let s = Class_table.downgrade_signature nfgs sign nargs in
           (i,tvs,s) :: lst
@@ -242,8 +289,8 @@ let find_funcs
       else (* upgrade *)
         lst (* nyi: upgrade of signature *)
     )
-    (Feature_map.find fn ft.map)
     []
+    (Term_table.terms !tab)
 
 
 
@@ -449,9 +496,19 @@ let print (ft:t): unit =
 
 let add_function (desc:descriptor) (ft:t): unit =
   let cnt = count ft in
+  desc.tp <- Class_table.to_dummy (Array.length desc.concepts) desc.sign;
+  let anch = ref [] in
+  for i = 0 to Array.length desc.concepts - 1 do
+    match desc.concepts.(i) with
+      Variable i when i = desc.cls ->
+        anch := i :: !anch
+    | _ -> ()
+  done;
+  desc.anchored <- Array.of_list (List.rev !anch);
   Seq.push desc ft.seq;
   add_key cnt ft;
   add_class_feature cnt ft
+
 
 
 let put_function
@@ -483,6 +540,8 @@ let put_function
        concepts = concepts;
        argnames = argnames;
        sign     = sign;
+       tp       = Variable 0;
+       anchored = [||];
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt}
     in
