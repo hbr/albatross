@@ -44,12 +44,13 @@ val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
 
 val put_function:
-    feature_name withinfo -> (int*type_term) array -> int array
+    feature_name withinfo -> int array -> type_term array -> int array
       -> Sign.t -> implementation_status -> term option -> t -> unit
-  (** [put_function fn fgs fnms sign imp_stat term_opt ft] adds the function
-      with then name [fn], the formal generics [fgs], the arguments [fnms],
-      the signature [sign] the implementation status [imp_stat] and an
-      optional definition term [term_opt] to the feature table [ft] *)
+  (** [put_function fn fgnames concepts fnms sign imp_stat term_opt ft] adds
+      the function with then name [fn], the formal generics
+      [fgnames,concepts], the arguments [fnms], the signature [sign] the
+      implementation status [imp_stat] and an optional definition term
+      [term_opt] to the feature table [ft] *)
 
 
 val term_to_string: term -> int array -> t -> string

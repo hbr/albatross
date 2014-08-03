@@ -8,7 +8,8 @@ type formal = Class_table.formal
 
 type entry = {
     mutable tvars_sub: TVars_sub.t;    (* cumulated *)
-    fgs:          formal array;        (* cumulated *)
+    fgnames:      int array;           (* cumulated *)
+    concepts:     type_term array;     (* cumulated *)
     fargs:        formal array;        (* cumulated *)
     ntvs_delta:   int;
     nfgs_delta:   int;
@@ -30,7 +31,8 @@ type t = {
 
 
 let empty_entry: entry =
-  {fgs          = [||];
+  {fgnames      = [||];
+   concepts     = [||];
    fargs        = [||];
    ntvs_delta   = 0;
    nfgs_delta   = 0;
@@ -114,7 +116,7 @@ let count_local_type_variables (c:t): int =
   c.entry.ntvs_delta
 
 
-let entry_nfgs (e:entry): int = Array.length e.fgs
+let entry_nfgs (e:entry): int = Array.length e.fgnames
 
 let count_formal_generics (c:t): int =
   (** The cumulated number of formal generics in this context and all
@@ -151,11 +153,14 @@ let ntvs (c:t): int =
   (count_formal_generics c) + (count_type_variables c)
 
 
+(*
 let formal_generics (c:t): formal array =
   (** The cumulated formal generics of this context and all
       previous contexts
    *)
   c.entry.fgs
+*)
+let concepts (c:t): type_term array = c.entry.concepts
 
 
 
@@ -187,8 +192,7 @@ let entry_fargnames (e:entry): int array =
 let fargnames (c:t): int array = entry_fargnames c.entry
 
 
-let entry_fgnames (e:entry): int array =
-  Array.map (fun (n,_) -> n) e.fgs
+let entry_fgnames (e:entry): int array = e.fgnames
 
 let fgnames (c:t): int array = entry_fgnames c.entry
 
@@ -264,7 +268,7 @@ let type_satisfies_concept
     (tvs:TVars.t)
     (cpt:type_term)
     (c:t): bool =
-  Class_table.satisfies t tvs (formal_generics c) cpt (class_table c)
+  Class_table.satisfies t tvs (concepts c) cpt (class_table c)
 
 
 let read_trace_info (c:t): unit =
@@ -294,15 +298,18 @@ let push_with_gap
   let entry      = c.entry
   and ct         = class_table c in
   let ntvs0      = TVars_sub.count_local entry.tvars_sub
+  and fgs        = Myarray.combine entry.fgnames entry.concepts
   in
-  let ntvs,fgs   = Class_table.formal_generics entlst rt ntvs0 entry.fgs ct
+  let ntvs,fgs   = Class_table.formal_generics entlst rt ntvs0 fgs ct
   in
   let ntvs  = ntvs + ntvs_gap in
   let ntvs1 = ntvs - ntvs0
-  and nfgs1 = Array.length fgs - Array.length entry.fgs
+  and nfgs1 = Array.length fgs - Array.length fgs
+  and fgnames,concepts = Myarray.split fgs
   in
-  let res        = Class_table.result_type rt ntvs fgs ct             in
-  let fargs1     = Class_table.formal_arguments entlst ntvs fgs ct    in
+  let res        = Class_table.result_type rt ntvs fgnames concepts ct in
+  let fargs1     = Class_table.formal_arguments entlst ntvs fgnames concepts ct
+  in
   let fargs      =
     Array.append
       fargs1
@@ -314,7 +321,8 @@ let push_with_gap
   in
   c.entry <-
     {tvars_sub    = tvars_sub;
-     fgs          = fgs;
+     fgnames      = fgnames;
+     concepts     = concepts;
      fargs        = fargs;
      ntvs_delta   = ntvs1;
      nfgs_delta   = nfgs1;
@@ -457,7 +465,8 @@ let put_global_function
   assert (is_toplevel c);
   Feature_table.put_function
     fn
-    c.entry.fgs
+    c.entry.fgnames
+    c.entry.concepts
     (fargnames c)
     (signature c)
     impstat

@@ -97,16 +97,17 @@ val formal_generics:
       -> int * formal array
 
 val formal_arguments:
-    entities list withinfo -> int -> formal array -> t
+    entities list withinfo -> int -> int array -> type_term array -> t
       -> formal array
 
 val result_type:
-    return_type -> int -> formal array -> t
+    return_type -> int -> int array -> type_term array -> t
       -> Result_type.t
 
-val satisfies: type_term -> TVars.t -> formal array -> type_term -> t -> bool
-  (** Does the type [tp] in an environment with the [tvs] type variables and
-      the formal generics [fgs] satisfy the concept [cpt]?  *)
+val satisfies: type_term -> TVars.t -> type_term array -> type_term -> t -> bool
+  (** [satisfies tp tvs cpts cpt ct]: Does the type [tp] in an environment
+      with the [tvs] type variables and the formal generics [cpts] satisfy the
+      concept [cpt]?  *)
 
 val print: t -> unit
 

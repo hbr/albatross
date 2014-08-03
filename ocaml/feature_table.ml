@@ -228,7 +228,6 @@ let find
   let tab = Feature_map.find fn ft.map in
   let ntvs = Array.length concepts in
   let tp   = Class_table.to_dummy ntvs sign in
-  let fgs = Array.map (fun t -> (-1),t) concepts in (* !!! to be fixed *)
   let lst  = Term_table.unify tp ntvs !tab in
   let idx_lst =
     List.fold_left
@@ -246,7 +245,7 @@ let find
             Term_sub.for_all
               (fun j t ->
                 Class_table.satisfies
-                  t TVars.empty fgs desc.concepts.(j) ft.ct)
+                  t TVars.empty concepts desc.concepts.(j) ft.ct)
               sub
           in
           if ok then
@@ -513,7 +512,8 @@ let add_function (desc:descriptor) (ft:t): unit =
 
 let put_function
     (fn:       feature_name withinfo)
-    (fgs:      formal array)
+    (fgnames:  int array)
+    (concepts: type_term array)
     (argnames: int array)
     (sign:     Sign.t)
     (impstat:  implementation_status)
@@ -522,7 +522,6 @@ let put_function
   let is_priv = Parse_info.is_module () in
   let cnt   = Seq.count ft.seq
   and nargs = Sign.arity sign
-  and fgnames, concepts = Myarray.split fgs
   in
   let idx =
      try find fn.v nargs concepts sign ft
