@@ -23,10 +23,15 @@ val has_current_module: t -> bool
 val current_module:     t -> int
 val count_modules:      t -> int
 val used_modules:       int -> t -> IntSet.t
-val add_module:         int -> int list -> t -> unit
-val set_used_modules:   IntSet.t -> t -> unit
+
+val add_module:         int -> int list -> bool -> IntSet.t -> t -> unit
+    (** [add_module name lib pub used c] adds the module [lib.name] to the
+        module table, put it into interface use mode if [pub] is set and set
+        the used modules to [used] *)
+
+(*val set_used_modules:   IntSet.t -> t -> unit
 val set_interface_use:  t -> unit
-val set_interface_check:t -> unit
+val set_interface_check:t -> unit*)
 val find_module:        int -> int list -> t -> int
 
 val push_with_gap:  entities list withinfo -> return_type -> int -> t -> unit

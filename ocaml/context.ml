@@ -46,37 +46,27 @@ let empty_entry: entry =
 let class_table(c:t): Class_table.t     = Feature_table.class_table c.ft
 let feature_table(c:t): Feature_table.t = c.ft
 
-let module_table (c:t): Module_table.t =
-  Feature_table.module_table c.ft
 
 let has_current_module (c:t): bool =
-  Module_table.has_current (module_table c)
+  Feature_table.has_current_module c.ft
 
 let current_module (c:t): int =
-  Module_table.current (module_table c)
+  Feature_table.current_module c.ft
 
-let count_modules (c:t): int = Module_table.count (module_table c)
+let count_modules (c:t): int =
+  Feature_table.count_modules c.ft
 
 let find_module (name:int) (lib:int list) (c:t): int =
-  Module_table.find name lib (module_table c)
+  Feature_table.find_module name lib c.ft
 
-let add_module (name:int) (lib:int list) (c:t): unit =
-  Module_table.add name lib (module_table c);
-  Class_table.reset_formal_generics (class_table c)
 
-let set_used_modules (used:IntSet.t) (c:t): unit =
-  Module_table.set_used used (module_table c);
-  Class_table.reset_formal_generics (class_table c)
 
-let set_interface_use (c:t): unit =
-  Module_table.set_interface_use (module_table c);
-  Class_table.reset_formal_generics (class_table c)
-
-let set_interface_check (c:t): unit =
-  Module_table.set_interface_check (module_table c)
+let add_module
+    (name:int) (lib:int list) (pub:bool) (used:IntSet.t) (c:t): unit =
+  Feature_table.add_module name lib pub used c.ft
 
 let used_modules (mdl:int) (c:t): IntSet.t =
-  Module_table.used mdl (module_table c)
+  Feature_table.used_modules mdl c.ft
 
 
 

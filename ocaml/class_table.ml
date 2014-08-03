@@ -28,6 +28,7 @@ type descriptor      = { mutable mdl:  int;
 
 type t = {mutable map:   int IntMap.t;
           seq:           descriptor seq;
+          mutable base:  int IntMap.t; (* module name -> class index *)
           mutable fgens: type_term IntMap.t;
           mt:            Module_table.t}
 
@@ -40,8 +41,43 @@ let tuple_index     = 5
 
 
 
-let module_table (ct:t): Module_table.t =
-  ct.mt
+let has_current_module (ct:t): bool = Module_table.has_current ct.mt
+
+let current_module (ct:t): int =
+  assert (has_current_module ct);
+  Module_table.current ct.mt
+
+let count_modules (ct:t): int = Module_table.count ct.mt
+
+let find_module (name:int) (lib:int list) (ct:t): int =
+  Module_table.find name lib ct.mt
+
+let used_modules (mdl:int) (ct:t): IntSet.t =
+  Module_table.used mdl ct.mt
+
+let module_name (mdl:int) (ct:t): string = Module_table.name mdl ct.mt
+
+let add_base_classes (mdl_nme:int) (ct:t): unit =
+  try
+    let idx = IntMap.find mdl_nme ct.base in
+    let desc = Seq.elem idx ct.seq in
+    assert (desc.mdl = -1);
+    desc.mdl <- current_module ct;
+    ct.map <- IntMap.add desc.name idx ct.map
+  with Not_found ->
+    ()
+
+
+let add_module
+    (name:int) (lib:int list) (pub:bool) (used:IntSet.t) (ct:t)
+    : unit =
+  ct.fgens <- IntMap.empty;
+  Module_table.add name lib ct.mt;
+  if pub then
+    Module_table.set_interface_use ct.mt;
+  Module_table.set_used used ct.mt;
+  add_base_classes name ct
+
 
 let count (c:t) =
   Seq.count c.seq
@@ -189,7 +225,7 @@ let find (cn: int) (ct:t): int =
 
 
 let find_in_module (cn:int) (ct:t): int =
-  assert (Module_table.has_current (module_table ct));
+  assert (has_current_module ct);
   let idx  = find cn ct in
   let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt in
@@ -357,7 +393,7 @@ let update
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  assert (Module_table.has_current (module_table ct));
+  assert (has_current_module ct);
   let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt
   in
@@ -474,7 +510,7 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
   let desc = Seq.elem idx ct.seq in
-  if desc.mdl = (Module_table.current (module_table ct)) then
+  if desc.mdl = current_module ct then
     desc.priv
   else begin
     assert (Option.has desc.publ);
@@ -850,7 +886,10 @@ let result_type
 let empty_table (): t =
   let cc = Seq.empty ()
   in
-  {map=IntMap.empty; seq=cc; fgens=IntMap.empty; mt=Module_table.make ()}
+  {map   = IntMap.empty;
+   seq   = cc;
+   base  = IntMap.empty;
+   fgens = IntMap.empty; mt=Module_table.make ()}
 
 
 
@@ -880,7 +919,10 @@ let add_base_class
      priv=bdesc;
      publ= Some bdesc}
     ct.seq;
-  ct.map <- IntMap.add nme idx ct.map
+  let mdl_nme = ST.symbol (String.lowercase name) in
+  assert (not (IntMap.mem mdl_nme ct.base));
+  ct.base <- IntMap.add mdl_nme idx ct.base(*;
+  ct.map <- IntMap.add nme idx ct.map*)
 
 
 

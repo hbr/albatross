@@ -43,8 +43,28 @@ let empty (): t =
    ct   = Class_table.base_table ()}
 
 let class_table (ft:t):  Class_table.t   = ft.ct
-let module_table (ft:t): Module_table.t  = Class_table.module_table ft.ct
 
+
+let has_current_module (ft:t): bool =
+  Class_table.has_current_module ft.ct
+
+let current_module (ft:t): int =
+  Class_table.current_module ft.ct
+
+let count_modules (ft:t): int =
+  Class_table.count_modules ft.ct
+
+let used_modules (mdl:int) (ft:t): IntSet.t =
+  Class_table.used_modules mdl ft.ct
+
+let find_module (name:int) (lib:int list) (ft:t): int =
+  Class_table.find_module name lib ft.ct
+
+let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
+
+let add_module
+    (name:int) (lib: int list) (pub:bool) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_module name lib pub used ft.ct
 
 let count (ft:t): int =
   Seq.count ft.seq
@@ -471,7 +491,7 @@ let print (ft:t): unit =
         if fdesc.mdl = -1
         then ""
         else
-          Module_table.name fdesc.mdl (module_table ft)
+          Class_table.module_name fdesc.mdl ft.ct
       and tname  =
         Class_table.string_of_signature fdesc.sign 0 fdesc.fgnames ft.ct
       and bdyname def_opt =
@@ -527,7 +547,7 @@ let put_function
      try find fn.v nargs concepts sign ft
      with Not_found -> cnt
   in
-  let mdl = Module_table.current (module_table ft) in
+  let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner mdl concepts sign ft.ct in
   if idx=cnt then begin (* new feature *)
     let desc =
@@ -589,5 +609,8 @@ let do_inherit
      [cls_idx]
    *)
   let ct = class_table ft in
-  let flst = Class_table.deferred_features cls_idx ct in
-  List.iter (fun i -> ()) flst
+  let flst = Class_table.deferred_features par_idx ct in
+  List.iter
+    (fun i ->
+      ())
+    flst

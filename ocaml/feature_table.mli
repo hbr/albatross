@@ -1,3 +1,4 @@
+open Container
 open Support
 open Term
 open Signature
@@ -17,8 +18,31 @@ val some_index:        int
 
 val base_table: unit -> t
 
-val module_table: t -> Module_table.t
 val class_table:  t -> Class_table.t
+
+val has_current_module: t -> bool
+    (** Is there a current module? *)
+
+val current_module:  t -> int
+    (** The current module *)
+
+val count_modules: t -> int
+    (** The number of modules in the system *)
+
+val find_module: int -> int list -> t -> int
+    (** [find_module name lib ft] finds the module [lib.name] in [ft] *)
+
+val module_name: int -> t -> string
+    (** [module_name mdl ft] returns the name of the module [mdl] *)
+
+val used_modules: int -> t -> IntSet.t
+  (** [used_modules mdl ft] returns the used modules of module [mdl] *)
+
+val add_module: int -> int list -> bool -> IntSet.t -> t -> unit
+    (** [add_module name lib pub used c] adds the module [lib.name] to the
+        module table, put it into interface use mode if [pub] is set and set
+        the used modules to [used] *)
+
 
 val implication_term: term -> term -> int -> t -> term
 
@@ -60,4 +84,3 @@ val do_inherit: int -> int -> type_term array -> info -> t -> unit
       inherit the features from the parent [par_idx[par_args]]. *)
 
 val print: t -> unit
-

@@ -137,13 +137,6 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 
 
 let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
-  let add_module (name:int): unit =
-    Context.add_module name [] c
-  and set_used (used: IntSet.t): unit =
-    Context.set_used_modules used c
-  and set_interface_use (): unit =
-    Context.set_interface_use c
-  in
   let rec used (use_blk: use_block) (stack: int list) (set:IntSet.t)
       : IntSet.t =
     let push (nme:int withinfo): int list =
@@ -164,9 +157,7 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
             Printf.printf "Parsing file \"%s\"\n" nmestr;
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
-            add_module nme.v;
-            set_interface_use ();
-            set_used set;
+            Context.add_module nme.v [] true set c;
             analyze ast c;
             IntSet.add (Context.current_module c) set
         in
@@ -175,30 +166,9 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
       use_blk
   in
   let used_set = used use_blk [] IntSet.empty in
-  add_module (ST.symbol f.mdlnme);
-  set_used used_set
+  Context.add_module (ST.symbol f.mdlnme) [] false used_set c
 
 
-
-
-(*
-let rec process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
-  List.iter
-    (fun name ->
-      try
-        let mdl = Context.find_module name.v [] c in
-        Context.add_used_modules mdl name.i c
-      with Not_found -> begin
-        Context.push_module name.v [] c;
-        let nmestr = Filename.concat f.dir  ((ST.string name.v) ^ ".ei") in
-        Printf.printf "Parsing file \"%s\"\n" nmestr;
-        let use_blk, ast = parse_file nmestr in
-        process_use use_blk f c;
-        analyze ast c;
-        Context.pop_module c
-      end)
-    use_blk
-*)
 
 
 

@@ -29,10 +29,34 @@ val result_type_of_compound: term -> int -> term
 val base_table: unit -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
-val reset_formal_generics: t -> unit
 
 
-val module_table: t -> Module_table.t
+val has_current_module: t -> bool
+    (** Is there a current module? *)
+
+val current_module: t -> int
+    (** The current module *)
+
+val count_modules: t -> int
+    (** The number of modules in the system *)
+
+val find_module: int -> int list -> t -> int
+    (** [find_module name lib ct] finds the module [lib.name] in [ct] *)
+
+val used_modules: int -> t -> IntSet.t
+  (** [used_modules mdl ct] returns the used modules of module [mdl] *)
+
+
+val module_name: int -> t -> string
+    (** [module_name mdl ct] returns the name of the module [mdl] *)
+
+
+val add_module:   int -> int list -> bool -> IntSet.t -> t -> unit
+    (** [add_module name lib pub used ct] adds the module [name,lib] to the
+        module table, puts it into interface use mode depending on [pub] and
+        sets the used modules to [used]. It resets the formal generics of the
+        class table [ct] and in case of private mode adds all builtin classes
+        which belong to this module. *)
 
 val count: t -> int
 
