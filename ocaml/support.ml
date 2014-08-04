@@ -257,7 +257,7 @@ module ST : sig
 end = struct
   open Container
   let kt                   = Key_table.empty ()
-  let symbol (str:string)  = Key_table.index str kt
+  let symbol (str:string)  = Key_table.index (String.copy str) kt
   let string (i:int)       = Key_table.key   i   kt
   let count ()             = Key_table.count kt
 end
