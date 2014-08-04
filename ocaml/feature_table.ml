@@ -19,52 +19,37 @@ type definition = term
 
 type formal     = int * term
 
-type descriptor = {mutable mdl: int;
-                   cls:         int;
-                   fname:       feature_name;
-                   impstat:     implementation_status;
-                   fgnames:     int array;
-                   concepts:    type_term array;
-                   mutable anchored: int array;
-                   argnames:    int array;
-                   sign:        Sign.t;
-                   mutable tp:  type_term;
-                   priv:        definition option;
-                   mutable pub: definition option option}
+type descriptor = {
+    mutable mdl: int;
+    cls:         int;
+    fname:       feature_name;
+    impstat:     implementation_status;
+    fgnames:     int array;
+    concepts:    type_term array;
+    mutable anchored: int array;
+    argnames:    int array;
+    sign:        Sign.t;
+    mutable tp:  type_term;
+    priv:        definition option;
+    mutable pub: definition option option
+  }
 
-type t          = {mutable map: Term_table.t ref Feature_map.t;
-                   seq:         descriptor seq;
-                   ct:          Class_table.t}
+type t = {
+    mutable map: Term_table.t ref Feature_map.t;
+    seq:         descriptor seq;
+    mutable base:int list ref IntMap.t; (* module name -> list of features *)
+    ct:          Class_table.t
+  }
 
 
 let empty (): t =
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
+   base = IntMap.empty;
    ct   = Class_table.base_table ()}
 
 let class_table (ft:t):  Class_table.t   = ft.ct
 
-
-let has_current_module (ft:t): bool =
-  Class_table.has_current_module ft.ct
-
-let current_module (ft:t): int =
-  Class_table.current_module ft.ct
-
-let count_modules (ft:t): int =
-  Class_table.count_modules ft.ct
-
-let used_modules (mdl:int) (ft:t): IntSet.t =
-  Class_table.used_modules mdl ft.ct
-
-let find_module (name:int) (lib:int list) (ft:t): int =
-  Class_table.find_module name lib ft.ct
-
-let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
-
-let add_module
-    (name:int) (lib: int list) (pub:bool) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_module name lib pub used ft.ct
 
 let count (ft:t): int =
   Seq.count ft.seq
@@ -92,9 +77,10 @@ let terms_of_formals (farr: formal array): term array =
 
 
 let implication_index: int = 0
-let paren_index:       int = 1
+let fparen_index:      int = 1
 let all_index:         int = 2
 let some_index:        int = 3
+let pparen_index:      int = 4
 
 
 
@@ -149,37 +135,65 @@ let add_keys (ft:t): unit =
   done
 
 
+let names_0 (c:char) (size:int): int array =
+  let code = Char.code c in
+  Array.init size (fun i -> ST.symbol (String.make 1 (Char.chr (i + code))))
+
+let fgnames_0 (size:int): int array =
+  names_0 'A' size
+
+let argnames_0 (size:int): int array =
+  names_0 'a' size
+
+
+let add_builtin
+    (mdl_nme: string)
+    (cls: int)
+    (fn:feature_name)
+    (concepts: type_term array)
+    (argtypes: type_term array)
+    (res:  type_term)
+    (ft:t)
+    : unit =
+  let mdl_nme            = ST.symbol mdl_nme
+  in
+  let sign = Sign.make_func argtypes res
+  and ntvs = Array.length concepts
+  in
+  let lst =
+    try IntMap.find mdl_nme ft.base
+    with Not_found ->
+      let lst = ref [] in
+      ft.base <- IntMap.add mdl_nme lst ft.base;
+      lst
+  and desc = {
+    mdl = -1;
+    fname    = fn;
+    cls      = cls;
+    impstat  = Builtin;
+    fgnames  = fgnames_0 ntvs;
+    concepts = concepts;
+    anchored = [||];     (* ??? *)
+    argnames = argnames_0 (Array.length argtypes);
+    sign     = sign;
+    tp       = Class_table.to_dummy ntvs sign;
+    priv     = None;
+    pub      = None
+  }
+  and cnt = count ft
+  in
+  Seq.push desc ft.seq;
+  lst := cnt :: !lst
+
 
 
 let base_table () : t =
   (** Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
   let ft      = empty ()
-  and fnimp   = FNoperator DArrowop
-  and signimp = Sign.make_func [|bool;bool|] bool
-  and dum_0   = Variable (-1)
   in
-  (* boolean *)
-  Seq.push
-    {mdl      = -1;
-     cls      = Class_table.boolean_index;
-     fname    = fnimp;
-     impstat  = Builtin;
-     fgnames  = [||];
-     concepts = [||];
-     anchored = [||];
-     argnames = [||];
-     sign     = signimp;
-     tp       = dum_0;
-     priv     = None;
-     pub      = Some None}  (* 0: implication *)
-    ft.seq;
-  (* predicate *)
-  let g = ST.symbol "G"
-  and p = ST.symbol "p"
-  and any   = Variable Class_table.any_index
+  let any   = Variable Class_table.any_index
   and bool1 = Variable (Class_table.boolean_index+1)
-  and bool2 = Variable (Class_table.boolean_index+2)
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
@@ -188,36 +202,24 @@ let base_table () : t =
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|])
   in
-  let entry =
-    let sign = Sign.make_func [|p_tp|] bool1 in
-    {mdl      = -1;
-     cls      = Class_table.predicate_index;
-     fname    = FNoperator Allop;
-     impstat  = Builtin;
-     fgnames  = [|g|];
-     concepts = [|any|];
-     anchored = [||];
-     argnames = [|p|];
-     sign     = sign;
-     tp       = dum_0;
-     priv     = None;
-     pub      = Some None}
-  in
-  begin
-    let idx,fn,sign = 1, FNoperator Parenop,
-      Sign.make_func [|f_tp;a_tp|] bool2
-    in
-    Seq.push {entry with fname = FNoperator Parenop;
-              cls  = Class_table.function_index;
-              sign = sign;
-              tp   = dum_0}  ft.seq;  (* 1: "()" *)
-  end;
-  Seq.push entry ft.seq;                                   (* 2: all  *)
-  Seq.push{entry with fname = FNoperator Someop} ft.seq;   (* 3: some *)
-  add_keys ft;
-  add_class_features ft;
+  add_builtin
+    "boolean" Class_table.boolean_index (FNoperator DArrowop)
+    [||] [|bool;bool|] bool ft;
+
+  add_builtin
+    "function" Class_table.function_index (FNoperator Parenop)
+    [|any;any|] [|f_tp;a_tp|] b_tp ft;
+
+  add_builtin
+    "boolean" Class_table.predicate_index (FNoperator Allop)
+    [|any|] [|p_tp|] bool1 ft;
+
+  add_builtin
+    "boolean" Class_table.predicate_index (FNoperator Someop)
+    [|any|] [|p_tp|] bool1 ft;
+
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
-  assert ((descriptor paren_index ft).fname       = FNoperator Parenop);
+  assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
   ft
@@ -614,3 +616,44 @@ let do_inherit
     (fun i ->
       ())
     flst
+
+
+
+let has_current_module (ft:t): bool =
+  Class_table.has_current_module ft.ct
+
+let current_module (ft:t): int =
+  Class_table.current_module ft.ct
+
+let count_modules (ft:t): int =
+  Class_table.count_modules ft.ct
+
+let used_modules (mdl:int) (ft:t): IntSet.t =
+  Class_table.used_modules mdl ft.ct
+
+let find_module (name:int) (lib:int list) (ft:t): int =
+  Class_table.find_module name lib ft.ct
+
+let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
+
+
+let add_base_features (mdl_name:int) (ft:t): unit =
+  try
+    let lst = IntMap.find mdl_name ft.base in
+    let curr_mdl = current_module ft in
+    List.iter
+      (fun idx ->
+        let desc = descriptor idx ft in
+        assert (desc.mdl = -1);
+        desc.mdl <- curr_mdl ;
+        add_key idx ft;
+        add_class_feature idx ft)
+      !lst
+  with Not_found ->
+    ()
+
+
+let add_module
+    (name:int) (lib: int list) (pub:bool) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_module name lib pub used ft.ct;
+  add_base_features name ft

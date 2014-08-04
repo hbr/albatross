@@ -951,6 +951,7 @@ let base_table (): t =
   add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;
   add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
   add_base_class "TUPLE"     Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
+  check_base_classes ct;
   ct
 
 
