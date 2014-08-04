@@ -58,6 +58,12 @@ val add_module:   int -> int list -> bool -> IntSet.t -> t -> unit
         class table [ct] and in case of private mode adds all builtin classes
         which belong to this module. *)
 
+val is_private: t -> bool
+   (** Are we within the implementation of a module? *)
+
+val is_public:  t -> bool
+   (** Are we either in checking or using an interface? *)
+
 val count: t -> int
 
 val class_symbol: int -> t -> int

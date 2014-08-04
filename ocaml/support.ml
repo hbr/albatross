@@ -190,14 +190,14 @@ module Parse_info: sig
   val file_name:     unit -> string
   val last_position: unit -> Lexing.position
   val is_use_interface:   unit -> bool
-  val is_check_interface: unit -> bool
+  (*val is_check_interface: unit -> bool
   val is_interface:       unit -> bool
-  val is_module:          unit -> bool
+  val is_module:          unit -> bool*)
 
   val set_file_name:     string -> unit
   val set_last_position: Lexing.position -> unit
   val set_use_interface:   unit -> unit
-  val set_check_interface: unit -> unit
+  (*val set_check_interface: unit -> unit*)
   val set_module:          unit -> unit
 
   val print_error:  Lexing.position -> string -> unit

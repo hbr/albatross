@@ -50,6 +50,9 @@ let empty (): t =
 
 let class_table (ft:t):  Class_table.t   = ft.ct
 
+let is_private (ft:t): bool = Class_table.is_private ft.ct
+let is_public  (ft:t): bool = Class_table.is_public ft.ct
+
 
 let count (ft:t): int =
   Seq.count ft.seq
@@ -515,7 +518,7 @@ let print (ft:t): unit =
 
 
 
-let add_function (desc:descriptor) (ft:t): unit =
+let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let cnt = count ft in
   desc.tp <- Class_table.to_dummy (Array.length desc.concepts) desc.sign;
   let anch = ref [] in
@@ -526,6 +529,13 @@ let add_function (desc:descriptor) (ft:t): unit =
     | _ -> ()
   done;
   desc.anchored <- Array.of_list (List.rev !anch);
+  if is_deferred desc && Array.length desc.anchored <> 1 then begin
+    let str =
+      "Deferred feature does not have one formal generic which \
+        is based on the owner class"
+    in
+    error_info info str
+  end;
   Seq.push desc ft.seq;
   add_key cnt ft;
   add_class_feature cnt ft
@@ -541,7 +551,7 @@ let put_function
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  let is_priv = Parse_info.is_module () in
+  let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   and nargs = Sign.arity sign
   in
@@ -566,7 +576,7 @@ let put_function
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt}
     in
-    add_function desc ft
+    add_function desc fn.i ft
   end else begin        (* feature update *)
     let desc = Seq.elem idx ft.seq
     and not_match str =

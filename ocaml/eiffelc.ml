@@ -158,6 +158,7 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
             Context.add_module nme.v [] true set c;
+            Support.Parse_info.set_file_name nmestr;
             analyze ast c;
             IntSet.add (Context.current_module c) set
         in

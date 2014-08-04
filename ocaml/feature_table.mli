@@ -43,6 +43,13 @@ val add_module: int -> int list -> bool -> IntSet.t -> t -> unit
         module table, put it into interface use mode if [pub] is set and set
         the used modules to [used] *)
 
+val is_private: t -> bool
+   (** Are we within the implementation of a module? *)
+
+val is_public:  t -> bool
+   (** Are we either in checking or using an interface? *)
+
+
 
 val implication_term: term -> term -> int -> t -> term
 

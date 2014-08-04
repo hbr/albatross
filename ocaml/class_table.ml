@@ -79,6 +79,9 @@ let add_module
   add_base_classes name ct
 
 
+let is_private (ct:t): bool = Module_table.is_private ct.mt
+let is_public  (ct:t): bool = Module_table.is_public ct.mt
+
 let count (c:t) =
   Seq.count c.seq
 
