@@ -69,18 +69,18 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
 
 
 let add_module
-    (name:int) (lib:int list) (pub:bool) (used:IntSet.t) (ct:t)
+    (name:int) (lib:int list) (mode:int) (used:IntSet.t) (ct:t)
     : unit =
   ct.fgens <- IntMap.empty;
-  Module_table.add name lib ct.mt;
-  if pub then
-    Module_table.set_interface_use ct.mt;
+  Module_table.add name lib mode ct.mt;
   Module_table.set_used used ct.mt;
   add_base_classes name ct
 
 
 let is_private (ct:t): bool = Module_table.is_private ct.mt
 let is_public  (ct:t): bool = Module_table.is_public ct.mt
+let is_interface_use (ct:t): bool = Module_table.is_interface_use ct.mt
+
 
 let count (c:t) =
   Seq.count c.seq

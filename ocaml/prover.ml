@@ -48,8 +48,9 @@ let start (t:term) (c:Context.t): t =
 let analyze_imp_opt
     (info:    info)
     (imp_opt: implementation option)
+    (c:Context.t)
     : kind * compound =
-  let iface = Parse_info.is_use_interface () in
+  let iface = Context.is_interface_use c in
   let kind,is_do,clst =
     match imp_opt with
       None ->
@@ -58,8 +59,6 @@ let analyze_imp_opt
         else
           PNormal, false, []
     | Some Impdeferred ->
-        (*if iface then
-          error_info info "not allowed in interface file";*)
         PDeferred,false, []
     | Some Impbuiltin ->
         if iface then
@@ -83,7 +82,7 @@ let analyze_imp_opt
     kind, clst
 
 
-let analyze_body (info:info) (bdy: feature_body)
+let analyze_body (info:info) (bdy: feature_body) (c:Context.t)
     : kind * compound * compound * compound =
   match bdy with
     _, _, None ->
@@ -94,7 +93,7 @@ let analyze_body (info:info) (bdy: feature_body)
           None   -> []
         | Some l -> l
       and kind,clst =
-        analyze_imp_opt info imp_opt
+        analyze_imp_opt info imp_opt c
       in
       kind, rlst, clst, elst
 
@@ -507,9 +506,7 @@ and prove_check_expression
         match q with
           Universal ->
             let kind, clst =
-              analyze_imp_opt
-                entlst.i
-                imp_opt
+              analyze_imp_opt entlst.i imp_opt c
             in
             Context.push entlst None c;
             prove_proof kind rlst clst elst c
@@ -517,7 +514,7 @@ and prove_check_expression
             error_info ie.i "Only \"all\" allowed here"
       end
   | Expproof (rlst,imp_opt,elst) ->
-      let kind, clst = analyze_imp_opt ie.i imp_opt in
+      let kind, clst = analyze_imp_opt ie.i imp_opt c in
       Context.push_empty c;
       prove_proof kind rlst clst elst c
   | _ ->
@@ -534,7 +531,7 @@ let prove_and_store
     (bdy:     feature_body)
     (context: Context.t)
     : unit =
-  let kind, rlst, clst, elst = analyze_body entlst.i bdy
+  let kind, rlst, clst, elst = analyze_body entlst.i bdy context
   in
   Context.push entlst None context;
   prove_proof kind rlst clst elst context;

@@ -10,8 +10,7 @@ val current:     t -> int
 
 val is_public:   t -> bool
 val is_private:  t -> bool
-val set_interface_use:   t -> unit
-val set_interface_check: t -> unit
+val is_interface_use: t -> bool
 
 val name:        int -> t -> string
 
@@ -19,5 +18,5 @@ val make: unit -> t
 
 val used: int -> t -> IntSet.t
 val has:  int -> int list -> t -> bool
-val add:  int -> int list -> t -> unit
+val add:  int -> int list -> int -> t -> unit
 val set_used: IntSet.t -> t -> unit

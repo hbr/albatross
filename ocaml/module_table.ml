@@ -52,6 +52,8 @@ let is_public  (mt:t): bool =
 
 let is_private (mt:t): bool = not (is_public mt)
 
+let is_interface_use (mt:t): bool =
+  has_current mt && mt.mode = 2
 
 let used (mdl:int) (mt:t): IntSet.t =
   (* The publicly used modules of the module [mdl]. *)
@@ -65,14 +67,16 @@ let used_priv (mdl:int) (mt:t): IntSet.t =
 
 
 
-let add (name:int) (lib:int list) (mt:t): unit =
+let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
+  assert (0 <= mode);
+  assert (mode <= 2);
   printf "add module %s\n" (ST.string name);
   assert (not (has name lib mt));
   let n = count mt
   and cont = {used=IntSet.empty; clss=IntSet.empty} in
   Seq.push {name=name; lib=lib; priv=cont; pub=cont} mt.seq;
   mt.map   <- Modmap.add (name,lib) n mt.map;
-  mt.mode  <- 0
+  mt.mode  <- mode
 
 
 let set_used (set:IntSet.t) (mt:t): unit =
@@ -87,16 +91,6 @@ let set_used (set:IntSet.t) (mt:t): unit =
 
 
 
-
-let set_interface_use (mt:t): unit =
-  assert (has_current mt);
-  mt.mode <- 2
-
-
-
-let set_interface_check (mt:t): unit =
-  assert (has_current mt);
-  mt.mode <- 2
 
 
 let make (): t =

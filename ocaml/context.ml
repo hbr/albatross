@@ -62,12 +62,13 @@ let find_module (name:int) (lib:int list) (c:t): int =
 
 
 let add_module
-    (name:int) (lib:int list) (pub:bool) (used:IntSet.t) (c:t): unit =
-  Feature_table.add_module name lib pub used c.ft
+    (name:int) (lib:int list) (mode:int) (used:IntSet.t) (c:t): unit =
+  Feature_table.add_module name lib mode used c.ft
 
 let used_modules (mdl:int) (c:t): IntSet.t =
   Feature_table.used_modules mdl c.ft
 
+let is_interface_use (c:t): bool = Feature_table.is_interface_use c.ft
 
 
 let is_global (c:t): bool =

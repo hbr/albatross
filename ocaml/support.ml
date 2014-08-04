@@ -189,16 +189,9 @@ module Parse_info: sig
 
   val file_name:     unit -> string
   val last_position: unit -> Lexing.position
-  val is_use_interface:   unit -> bool
-  (*val is_check_interface: unit -> bool
-  val is_interface:       unit -> bool
-  val is_module:          unit -> bool*)
 
   val set_file_name:     string -> unit
   val set_last_position: Lexing.position -> unit
-  val set_use_interface:   unit -> unit
-  (*val set_check_interface: unit -> unit*)
-  val set_module:          unit -> unit
 
   val print_error:  Lexing.position -> string -> unit
   val print_unexpected: unit -> unit
@@ -207,25 +200,12 @@ end = struct
 
   let fname:string ref              = ref ""
   let last_pos: Lexing.position ref = ref (Lexing.dummy_pos)
-  let uiface: bool ref              = ref false
-  let ciface: bool ref              = ref false
 
   let file_name (): string =
     !fname
 
   let last_position (): Lexing.position =
     !last_pos
-
-  let is_use_interface   (): bool = !uiface
-  let is_check_interface (): bool = !ciface
-  let is_interface ():       bool = !uiface || !ciface
-  let is_module(): bool     = not (!uiface || !ciface)
-  let set_use_interface (): unit =
-    uiface := true; ciface := false
-  let set_check_interface (): unit =
-    uiface := false; ciface := true
-  let set_module (): unit =
-    uiface := false; ciface := false
 
   let set_file_name (fn: string): unit =
     fname := fn

@@ -157,7 +157,7 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
             Printf.printf "Parsing file \"%s\"\n" nmestr;
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
-            Context.add_module nme.v [] true set c;
+            Context.add_module nme.v [] 2 set c;
             Support.Parse_info.set_file_name nmestr;
             analyze ast c;
             IntSet.add (Context.current_module c) set
@@ -167,7 +167,7 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
       use_blk
   in
   let used_set = used use_blk [] IntSet.empty in
-  Context.add_module (ST.symbol f.mdlnme) [] false used_set c
+  Context.add_module (ST.symbol f.mdlnme) [] 0 used_set c
 
 
 
@@ -178,9 +178,9 @@ let compile (f: file_name) (context:Context.t): unit =
   Printf.printf "Compiling file \"%s\"\n" f.name;
   try
     let use_blk,ast  = parse_file f.name in
-    Support.Parse_info.set_use_interface ();
+    (*Support.Parse_info.set_use_interface ();*)
     process_use use_blk f context;
-    Support.Parse_info.set_module ();
+    (*Support.Parse_info.set_module ();*)
     Support.Parse_info.set_file_name f.name;
     analyze ast context;
     Statistics.write ();

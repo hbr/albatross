@@ -667,6 +667,8 @@ let add_base_features (mdl_name:int) (ft:t): unit =
 
 
 let add_module
-    (name:int) (lib: int list) (pub:bool) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_module name lib pub used ft.ct;
+    (name:int) (lib: int list) (mode:int) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_module name lib mode used ft.ct;
   add_base_features name ft
+
+let is_interface_use (ft:t): bool = Class_table.is_interface_use ft.ct
