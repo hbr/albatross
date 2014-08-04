@@ -312,7 +312,7 @@ let make (e:type_term) (c:Context.t): t =
    c     = c}
 
 
-let add_global (cs:constraints) (tb:t): t =
+let add_global (cs:type_term array) (tb:t): t =
   (** Add the constraints [cs] to the accumulator [tb] *)
   let n = Array.length cs
   and start = TVars_sub.count tb.tvars in
@@ -343,7 +343,7 @@ let add_leaf
     in
     Sign.up nloc (Sign.up_from nglob start s)
   in
-  let tb = add_global (TVars.constraints tvs) tb
+  let tb = add_global (TVars.concepts tvs) tb
   in
   unify_sign tb.sign s tb;
   {tb with tlist = (Variable i)::tb.tlist}

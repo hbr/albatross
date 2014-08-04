@@ -240,28 +240,18 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 
 
-
-
 let find
     (fn:feature_name)
-    (nargs:int)
     (concepts:type_term array)
-    (sign:Sign.t)
+    (tp:type_term)
     (ft:t)
     : int =
-  (* Find the feature with the characteristics.  *)
-  let tab = Feature_map.find fn ft.map in
-  let ntvs = Array.length concepts in
-  let tp   = Class_table.to_dummy ntvs sign in
+  let ntvs = Array.length concepts
+  and tab = Feature_map.find fn ft.map in
   let lst  = Term_table.unify tp ntvs !tab in
   let idx_lst =
     List.fold_left
       (fun lst (i,sub) ->
-        (* For all type variables of i there is one subterm of tp in sub.
-
-           Each type variable in i has a concept. The corresponding subterm of
-           tp has to satisfy the concept
-         *)
         let desc = descriptor i ft in
         if concepts = desc.concepts && Term_sub.is_identity sub then
           i :: lst
@@ -286,6 +276,19 @@ let find
       assert (List.for_all (fun i -> i=idx) rest);
       idx
 
+
+
+
+let find_with_signature
+    (fn:feature_name)
+    (concepts:type_term array)
+    (sign:Sign.t)
+    (ft:t)
+    : int =
+  (* Find the feature with the characteristics.  *)
+  let ntvs = Array.length concepts in
+  let tp   = Class_table.to_dummy ntvs sign in
+  find fn concepts tp ft
 
 
 
@@ -553,10 +556,9 @@ let put_function
     (ft:       t): unit =
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
-  and nargs = Sign.arity sign
   in
   let idx =
-     try find fn.v nargs concepts sign ft
+     try find_with_signature fn.v concepts sign ft
      with Not_found -> cnt
   in
   let mdl = Class_table.current_module ft.ct in
@@ -624,6 +626,7 @@ let do_inherit
   let flst = Class_table.deferred_features par_idx ct in
   List.iter
     (fun i ->
+      let desc = descriptor i ft in
       ())
     flst
 

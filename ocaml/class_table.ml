@@ -613,6 +613,16 @@ let valid_type
 
 
 
+let class_index (name:int) (fgnames:int array) (info:info) (ct:t): int =
+  try
+      Search.array_find_min (fun n -> n=name) fgnames
+  with Not_found ->
+    try
+      (Array.length fgnames) + (find name ct)
+    with Not_found ->
+        error_info info ("Class " ^ (ST.string name)
+                         ^ " does not exist")
+
 
 let get_type
     (tp:type_t withinfo)
@@ -621,20 +631,12 @@ let get_type
     (concepts: type_term array)
     (ct:t)
     : term =
-  (* Convert the syntactic type [tp] in an environment the [tvs] type
+  (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term *)
   let nfgs = Array.length fgnames
   and ntvs = TVars.count tvs in
   let n    = ntvs + nfgs in
-  let class_index (name:int): int =
-    try
-      ntvs + (Search.array_find_min (fun n -> n=name) fgnames)
-    with Not_found ->
-      try
-        n + (find name ct)
-      with Not_found ->
-        error_info tp.i ("Class " ^ (ST.string name)
-                         ^ " does not exist")
+  let class_index0 (name:int): int = class_index name fgnames tp.i ct
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
@@ -644,11 +646,23 @@ let get_type
       with Not_found ->
         error_info info ((string_of_type tp) ^ " is not a valid type")
     in
+    let rec tuple (tp_list: type_t list): type_term =
+      let ta, tb =
+        match tp_list with
+          [tpa;tpb] ->
+            get_tp tpa, get_tp tpb
+        | tpa::tail ->
+            get_tp tpa, tuple tail
+        | _ ->
+            assert false (* tuple type must have at least two types *)
+      in
+      valid_tp (n+tuple_index) [|ta;tb|]
+    in
     match tp with
       Normal_type (path,name,actuals) ->
         let args = List.map (fun tp -> get_tp tp) actuals in
         let args = Array.of_list args in
-        valid_tp (class_index name) args
+        valid_tp (class_index0 name) args
     | Paren_type tp ->
         get_tp tp
     | QMark_type tp ->
@@ -659,18 +673,6 @@ let get_type
         and tb = get_tp tpb in
         valid_tp (n+function_index) [|ta;tb|]
     | Tuple_type tp_lst ->
-        let rec tuple (tp_list: type_t list): type_term =
-          let ta, tb =
-            match tp_list with
-              [tpa;tpb] ->
-                get_tp tpa, get_tp tpb
-          | tpa::tail ->
-              get_tp tpa, tuple tail
-          | _ ->
-              assert false (* tuple type must have at least two types *)
-          in
-          valid_tp (n+tuple_index) [|ta;tb|]
-        in
         tuple tp_lst
     | _ -> not_yet_implemented info "types other than normal types"
   in
@@ -761,8 +763,10 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
 
 
 let collect_fgs (tp: type_t) (fgs:formal list) (ct:t): formal list =
-  (** Collect the formal generics in the type [tp] in the order in
-      which they appear and prepend them to [fgs] if not yet in.
+  (* Collect the formal generics in the type [tp] in the order in
+     which they appear and prepend them to [fgs] if not yet in.
+
+     Note that [fgs] is in reversed order!
    *)
   let rec collect (tp:type_t) (fgs:formal list): formal list =
     let add (path:int list) (name:int) (fgs:formal list): formal list =

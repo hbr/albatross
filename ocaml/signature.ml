@@ -1,11 +1,6 @@
 open Container
 open Term
 
-type type_term   = term
-type constraints = type_term array
-
-
-
 
 module Term_sub_arr: sig
 
@@ -27,7 +22,7 @@ module Term_sub_arr: sig
           are possible.  *)
 end = struct
 
-  type t = {args: term array;
+  type t = {args:  term array;
             flags: bool array;
             used:  int list array}
 
@@ -213,36 +208,36 @@ module TVars: sig
 
   type t
   val empty: t
-  val make: int -> constraints -> t
+  val make: int -> type_term array -> t
   val make_local: int -> t
   val count_local: t -> int
   val count_global: t -> int
   val count: t -> int
   val concept:     int -> t -> type_term
-  val constraints: t -> constraints
-  val add_global: constraints -> t -> t
+  val concepts:    t -> type_term array
+  val add_global: type_term array -> t -> t
   val add_local:  int -> t -> t
   val remove_local: int -> t -> t
 
 end = struct
 
-  type t = {nlocal:int; constraints: constraints}
+  type t = {nlocal:int; concepts: type_term array}
 
-  let empty: t = {nlocal=0;constraints=[||]}
-  let make (ntvs:int) (cs:constraints): t = {nlocal=ntvs;constraints=cs}
-  let make_local (ntvs:int) : t           = {nlocal=ntvs;constraints=[||]}
+  let empty: t = {nlocal=0;concepts=[||]}
+  let make (ntvs:int) (cs:type_term array): t = {nlocal=ntvs;concepts=cs}
+  let make_local (ntvs:int) : t           = {nlocal=ntvs;concepts=[||]}
   let count_local (tvs:t): int = tvs.nlocal
-  let count_global (tvs:t): int = Array.length tvs.constraints
+  let count_global (tvs:t): int = Array.length tvs.concepts
   let count (tvs:t): int = tvs.nlocal + (count_global tvs)
 
   let concept (i:int) (tvs:t): type_term =
     assert (count_local tvs <= i);
     assert (i < count tvs);
-    tvs.constraints.(i - count_local tvs)
+    tvs.concepts.(i - count_local tvs)
 
-  let constraints (tvs:t): constraints = tvs.constraints
-  let add_global (cs:constraints) (tvs:t): t =
-    {tvs with constraints = Array.append tvs.constraints cs}
+  let concepts (tvs:t): type_term array = tvs.concepts
+  let add_global (cs:type_term array) (tvs:t): t =
+    {tvs with concepts = Array.append tvs.concepts cs}
   let add_local (n:int) (tvs:t): t =
     {tvs with nlocal = tvs.nlocal + n}
   let remove_local (n:int) (tvs:t): t =
@@ -269,8 +264,7 @@ module TVars_sub: sig
   val args:         t -> term array
   val add_sub:      int -> term -> t -> unit
   val update_sub:   int -> term -> t -> unit
-  (*val put_sub:      int -> term -> t -> unit*)
-  val add_global:   constraints -> t -> t
+  val add_global:   type_term array -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
   val update:       t -> t -> unit
@@ -304,9 +298,9 @@ end = struct
   let concept (i:int) (tv:t): term =
     assert (count_local tv <= i);
     assert (i < count tv);
-    (TVars.constraints tv.vars).(i - count_local tv)
+    TVars.concept i tv.vars
 
-  let concepts (tv:t): term array = TVars.constraints tv.vars
+  let concepts (tv:t): term array = TVars.concepts tv.vars
 
   let tvars (tv:t): TVars.t = tv.vars
 
@@ -320,12 +314,9 @@ end = struct
     Term_sub_arr.update i t tv.sub
 
 
-  (*let put_sub (i:int) (t:term) (tv:t): unit =
-    Term_sub_arr.put i t tv.sub*)
-
   let args (tv:t): term array = Term_sub_arr.args tv.sub
 
-  let add_global (cs:constraints) (tv:t): t =
+  let add_global (cs:type_term array) (tv:t): t =
     {vars = TVars.add_global cs tv.vars;
      sub  = Term_sub_arr.extend (Array.length cs) tv.sub}
 
