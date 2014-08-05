@@ -13,8 +13,7 @@ open Printf
 type formal = int * type_term
 
 type base_descriptor = { hmark:    header_mark;
-                         fgnames:  int array;
-                         concepts: type_term array;
+                         tvs:      TVars.t;
                          mutable ancestors: type_term array IntMap.t}
 
 type descriptor      = { mutable mdl:  int;
@@ -92,6 +91,31 @@ let class_symbol (i:int) (ct:t): int =
 
 let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
+
+
+let base_descriptor (idx:int) (ct:t): base_descriptor =
+  assert (0 <= idx);
+  assert (idx < count ct);
+  let desc = Seq.elem idx ct.seq in
+  if desc.mdl = current_module ct then
+    desc.priv
+  else begin
+    assert (Option.has desc.publ);
+    Option.value desc.publ
+  end
+
+
+let class_type (i:int) (ct:t): type_term * TVars.t =
+  assert (i < count ct);
+  let bdesc = base_descriptor i ct in
+  let nfgs  = TVars.count_fgs bdesc.tvs in
+  let tp =
+    if nfgs = 0 then
+      Variable i
+    else
+      Application(Variable (i+nfgs), Array.init nfgs (fun i -> Variable i))
+  in
+  tp, bdesc.tvs
 
 
 let split_type_term (tp:type_term): int * type_term array =
@@ -333,15 +357,17 @@ let update_base_descriptor
     in
     error_info hm.i str);
   let fgs = class_formal_generics fgens ct in
-  let nfgs = Array.length desc.fgnames in
+  let fgnames    = TVars.fgnames desc.tvs
+  and fgconcepts = TVars.fgconcepts desc.tvs in
+  let nfgs = Array.length fgnames in
   if nfgs <> Array.length fgs then
     (let str = "Class must have " ^ (string_of_int nfgs) ^ " formal generics" in
     error_info fgens.i str);
   for i = 0 to nfgs-1 do
     let nme,tp1 = fgs.(i)
-    and tp2     = desc.concepts.(i) in
+    and tp2     = fgconcepts.(i) in
     check_class_formal_generic fgens.i nme tp1 tp2 ct;
-    desc.fgnames.(i) <- nme
+    fgnames.(i) <- nme
   done
 
 
@@ -366,11 +392,12 @@ let export
            (hmark2string hm1))
   end;
   let fgs  = class_formal_generics fgens ct in
-  let nfgs = Array.length fgs        in
-  if nfgs > Array.length desc.priv.concepts then
+  let nfgs = Array.length fgs in
+  let fgconcepts = TVars.fgconcepts desc.priv.tvs in
+  if nfgs > Array.length fgconcepts then
     error_info fgens.i "More formal generics than in private definition";
   for i = 0 to nfgs-1 do
-    let tp1     = desc.priv.concepts.(i)
+    let tp1     = fgconcepts.(i)
     and nme,tp2 = fgs.(i) in
     if tp1 <> tp2 then
       error_info
@@ -379,9 +406,9 @@ let export
          " is not consistent with private definition");
     desc.publ <-
       let fgnames,concepts = Myarray.split fgs in
+      let tvs = TVars.make_fgs fgnames concepts in
       Some { hmark=hm2;
-             fgnames   = fgnames;
-             concepts  = concepts;
+             tvs       = tvs;
              ancestors =
              IntMap.singleton idx (Array.init nfgs (fun i -> Variable i))}
   done
@@ -509,66 +536,43 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
 
 
 
-let base_descriptor (idx:int) (ct:t): base_descriptor =
-  assert (0 <= idx);
-  assert (idx < count ct);
-  let desc = Seq.elem idx ct.seq in
-  if desc.mdl = current_module ct then
-    desc.priv
-  else begin
-    assert (Option.has desc.publ);
-    Option.value desc.publ
-  end
-
-
-
-let rec satisfies
-    (tp:  type_term)
-    (tvs: TVars.t)
-    (concepts: type_term array)
-    (cpt: type_term)
-    (ct:t)
+let rec satisfies (tp1:type_term) (tvs1:TVars.t) (tp2:type_term) (tvs2:TVars.t) (ct:t)
     : bool =
-  let nfgs = Array.length concepts
-  and ntvs = TVars.count  tvs
-  and ntvs_loc = TVars.count_local tvs in
-  let sat (i:int) (tp_args:type_term array): bool =
-    assert (ntvs + nfgs <= i);
-    let cls_idx           = i - ntvs - nfgs in
-    let bdesc             = base_descriptor cls_idx ct in
-    let cpt_cls, cpt_args = split_type_term cpt in
-    begin
+  let ntvs1 = TVars.count_local tvs1
+  and nall1 = TVars.count_all   tvs1
+  and ntvs2 = TVars.count_local tvs2
+  and nall2 = TVars.count_all   tvs2
+  in
+  match tp1, tp2 with
+    Variable i, Variable j when i < ntvs1 ->
+      assert false (* shall never happen *)
+  | Variable i, Variable j when j < ntvs2 ->
+      true
+  | Variable i, Variable j when i < nall1 ->
+      let tp1 = TVars.concept i tvs1 in
+      satisfies tp1 TVars.empty tp2 tvs2 ct
+  | Variable i, Variable j when j < nall2 ->
+      let tp2 = TVars.concept j tvs2 in
+      satisfies tp1 tvs1 tp2 TVars.empty ct
+  | _ ->
+      let idx1,args1 = split_type_term tp1
+      and idx2,args2 = split_type_term tp2 in
+      let bdesc1 = base_descriptor (idx1-nall1) ct in
       try
-        let anc_args = IntMap.find cpt_cls bdesc.ancestors in
+        let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
         let nargs    = Array.length anc_args in
-        assert (nargs = Array.length cpt_args);
-        let anc_args =
-          Array.map (fun t -> Term.sub t tp_args (ntvs+nfgs)) anc_args
+        assert (nargs = Array.length args2);
+        let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
         in
         for i = 0 to nargs-1 do
-          if not (satisfies anc_args.(i) tvs concepts cpt_args.(i) ct) then
-            raise Not_found;
+          if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
+            ()
+          else
+            raise Not_found
         done;
         true
       with Not_found ->
         false
-    end
-  in
-  match tp with
-    Variable i when i < ntvs_loc ->
-      assert false (* shall never happen *)
-  | Variable i when i < ntvs ->
-      satisfies (TVars.concept i tvs) TVars.empty [||] cpt ct
-  | Variable i when i < ntvs + nfgs ->
-      let fg_cpt = concepts.(i-ntvs) in
-      satisfies fg_cpt TVars.empty [||] cpt ct
-  | Variable i ->
-      sat i [||]
-  | Application(Variable i, tp_args) ->
-      sat i tp_args
-  | _ ->
-      assert false (* shall never happen *)
-
 
 
 
@@ -577,32 +581,33 @@ let valid_type
     (cls_idx:int)
     (args: type_term array)
     (tvs: TVars.t)
-    (concepts: type_term array)
     (ct:t): type_term =
-  (* The valid type term [cls_idx[args.(0),args.(1),...] in an environment
-     with the [tvs] type variables and the formal generics [concepts].
+  (* The valid type term [cls_idx[args.(0),args.(1),...] in a type environment [tvs].
 
      If the type term is not valid then [Not_found] is raised.
 
      To check: Do all actual generics [args] satisfy their corresponding
      concepts? *)
-  let nfgs  = Array.length concepts
-  and ntvs  = TVars.count tvs
+  let ntvs  = TVars.count tvs
+  and nall  = TVars.count_all tvs
   and nargs = Array.length args in
   if cls_idx < ntvs then
     assert false (* shall never happen *)
-  else if cls_idx < ntvs + nfgs then begin
+  else if cls_idx < nall then begin
     if nargs <> 0 then
       raise Not_found (* Generics cannot have actual generics *)
     else
       Variable cls_idx
   end else begin
-    let cls_idx_0 = cls_idx - ntvs - nfgs in
+    let cls_idx_0 = cls_idx - nall in
     let bdesc = base_descriptor cls_idx_0 ct in
-    if nargs <> Array.length bdesc.concepts then
+    let fgconcepts = TVars.fgconcepts bdesc.tvs in
+    if nargs <> Array.length fgconcepts then
       raise Not_found;
     for i = 0 to nargs-1 do
-      if not (satisfies args.(i) tvs concepts bdesc.concepts.(i) ct) then
+      if satisfies args.(i) tvs fgconcepts.(i) TVars.empty ct then
+        ()
+      else
         raise Not_found
     done;
     if nargs = 0 then
@@ -627,22 +632,20 @@ let class_index (name:int) (fgnames:int array) (info:info) (ct:t): int =
 let get_type
     (tp:type_t withinfo)
     (tvs: TVars.t)
-    (fgnames: int array)
-    (concepts: type_term array)
     (ct:t)
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term *)
-  let nfgs = Array.length fgnames
-  and ntvs = TVars.count tvs in
-  let n    = ntvs + nfgs in
+  let fgnames = TVars.fgnames tvs
+  and n = TVars.count_all tvs
+  in
   let class_index0 (name:int): int = class_index name fgnames tp.i ct
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
     let valid_tp (idx:int) (args:type_term array): type_term =
       try
-        valid_type idx args tvs concepts ct
+        valid_type idx args tvs ct
       with Not_found ->
         error_info info ((string_of_type tp) ^ " is not a valid type")
     in
@@ -697,16 +700,16 @@ let has_ancestor (cls:int) (anc:int) (ct:t): bool =
 let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
     : int * type_term array =
   assert (cls_idx < count ct);
-  let bdesc = base_descriptor cls_idx ct
+  let tvs = (base_descriptor cls_idx ct).tvs
   in
-  let tp_term = get_type tp TVars.empty bdesc.fgnames bdesc.concepts ct
-  and nfgs = Array.length bdesc.fgnames
+  let tp_term = get_type tp tvs ct
+  and n = TVars.count_all tvs
   in
   let i, args = split_type_term tp_term
   in
-  if i < nfgs then
+  if i < n then
     error_info tp.i "Formal generic not allowed as parent class";
-  i-nfgs, args
+  i-n, args
 
 
 
@@ -721,7 +724,7 @@ let do_inherit
     (ct:t): unit =
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
-  let cls_nfgs  = Array.length cls_bdesc.fgnames in
+  let cls_nfgs  = TVars.count_fgs cls_bdesc.tvs in
   IntMap.iter
     (fun anc_idx anc_args ->
       let anc_args =
@@ -745,6 +748,7 @@ let reset_formal_generics (ct:t): unit =
   ct.fgens <- IntMap.empty
 
 
+
 let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
   (** Add the formal generic with [name] and [concept] to the formal generics
       of the class table [ct] *)
@@ -755,40 +759,54 @@ let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
   else
     ct.fgens <- IntMap.add
         name.v
-        (get_type concept  TVars.empty [||] [||] ct)
+        (get_type concept TVars.empty ct)
         ct.fgens
 
 
 
 
+let add_fg
+    (name:int)
+    (path: int list)
+    (fgs: formal list)
+    (tvs:TVars_sub.t)
+    (ct:t)
+    : formal list =
+  (* Check if [name] is a new formal generic and if yes prepend it to [fgs].
 
-let collect_fgs (tp: type_t) (fgs:formal list) (ct:t): formal list =
-  (* Collect the formal generics in the type [tp] in the order in
-     which they appear and prepend them to [fgs] if not yet in.
+     Note: [fgs] is reversed *)
+  if path = [] &&
+    not (List.exists (fun (nme,_)-> nme=name) fgs) &&
+    not (TVars_sub.has_fg name tvs)
+  then
+    try
+      let cpt = IntMap.find name ct.fgens in
+      (name,cpt) :: fgs
+    with Not_found ->
+      fgs
+  else
+    fgs
 
-     Note that [fgs] is in reversed order!
-   *)
+
+let collect_fgs
+    (tp:type_t)
+    (fgs:formal list)
+    (tvs:TVars_sub.t)
+    (ct:t)
+    : formal list =
+  (* Collect the formal generics of the type [tp] and prepend them to [fgs] if
+     they are new.
+
+     Note: [fgs] is reversed *)
   let rec collect (tp:type_t) (fgs:formal list): formal list =
-    let add (path:int list) (name:int) (fgs:formal list): formal list =
-      if path = [] &&
-        not (List.exists (fun (nme,_) -> nme=name) fgs)
-      then
-        try
-          let cpt = IntMap.find name ct.fgens in
-          (name,cpt) :: fgs
-        with Not_found ->
-          fgs
-      else
-        fgs
-    in
     match tp with
       Normal_type (path,name,args) ->
-        let fgnms = List.fold_left
+        let fgs = List.fold_left
             (fun lst tp -> collect tp lst)
             fgs
             args
         in
-        add path name fgnms
+        add_fg name path fgs tvs ct
     | Current_type lst ->
         assert false (* nyi: but might be eliminated from the language *)
     | Arrow_type (tpa,tpb) ->
@@ -802,38 +820,40 @@ let collect_fgs (tp: type_t) (fgs:formal list) (ct:t): formal list =
 
 
 
-
 let formal_generics
-    (entlst: entities list withinfo)
-    (rt:     return_type)
-    (ntvs:   int)
-    (fgs:    formal array)
-    (ct:     t)
-    : int * formal array =
+    (entlst:   entities list withinfo)
+    (rt:       return_type)
+    (ntvs_gap: int)
+    (tvs:      TVars_sub.t)
+    (ct:       t)
+    : TVars_sub.t =
   (** The cumulated number of type variables and the cumulated formal generics
       of the entity list [entlst] and the return type [rt] in an environment
       with [ntvs] type variables and the formal generics [fgs]. *)
-  let fgs_rev = List.rev (Array.to_list fgs) in
-  let ntvs, fgs_rev =
+  let ntvs,fgs =
     List.fold_left
-      (fun (ntvs,fgs_rev) ent ->
+      (fun (ntvs,fgs) ent ->
         match ent with
           Untyped_entities vars ->
-            ntvs + List.length vars, fgs_rev
+            let ntvs = ntvs + List.length vars in
+            ntvs, fgs
         | Typed_entities (_,tp) ->
-            ntvs, collect_fgs tp fgs_rev ct)
-      (ntvs,fgs_rev)
+            ntvs, collect_fgs tp fgs tvs ct)
+      (0,[])
       entlst.v
   in
-  let fgs_rev =
+  let fgs =
     match rt with
-      None -> fgs_rev
+      None -> fgs
     | Some tp ->
         let t,_,_ = tp.v in
-        collect_fgs t fgs_rev ct
+        collect_fgs t fgs tvs ct
   in
-  ntvs,
-  Array.of_list (List.rev fgs_rev)
+  let fgs = Array.of_list (List.rev fgs) in
+  let fgnames,fgconcepts = Myarray.split fgs in
+  TVars_sub.augment (ntvs+ntvs_gap) fgnames fgconcepts tvs
+
+
 
 
 
@@ -841,9 +861,7 @@ let formal_generics
 
 let formal_arguments
     (entlst: entities list withinfo)
-    (ntvs: int)
-    (fgnames: int array)
-    (concepts: type_term array)
+    (tvs:TVars.t)
     (ct:t)
     : formal array =
   (** The formal arguments of the entity list [entlst] in an environment with
@@ -851,14 +869,13 @@ let formal_arguments
   let fargs (es: entities): formal list =
     match es with
       Untyped_entities lst ->
-        assert (List.length lst <= ntvs);
+        assert (List.length lst <= TVars.count_local tvs);
         List.mapi (fun i name -> name, Variable i) lst
     | Typed_entities (lst,tp) ->
         let t =
           get_type
             (withinfo entlst.i tp)
-            (TVars.make_local ntvs)
-            fgnames concepts
+            tvs
             ct in
         List.map (fun name -> name,t) lst
   in
@@ -869,9 +886,7 @@ let formal_arguments
 
 let result_type
     (rt:return_type)
-    (ntvs: int)
-    (fgnames:  int array)
-    (concepts: type_term array)
+    (tvs:TVars.t)
     (ct:t)
     : Result_type.t =
   (** The result type which corresponds to the return type [rt] in an
@@ -882,9 +897,7 @@ let result_type
   | Some tpinf ->
       let tp,proc,ghost = tpinf.v in
       let t =
-        get_type (withinfo tpinf.i tp)
-          (TVars.make_local ntvs) fgnames concepts
-          ct
+        get_type (withinfo tpinf.i tp) tvs ct
       in
       Result_type.make t proc ghost
 
@@ -915,7 +928,8 @@ let add_base_class
   in
   let args = Array.init nfgs (fun i -> Variable i) in
   let anc  = IntMap.singleton idx args in
-  let bdesc = {hmark=hm; fgnames=fgnames; concepts=concepts; ancestors=anc} in
+  let tvs  = TVars.augment_fgs fgnames concepts TVars.empty in
+  let bdesc = {hmark=hm; tvs=tvs; ancestors=anc} in
   Seq.push
     {mdl=(-1);
      name = nme;

@@ -403,6 +403,13 @@ let complete_function (nargs:int) (tb:t): unit =
 let expect_lambda (ntvs:int) (tb:t): unit =
   assert (Sign.has_result tb.sign);
   tb.tvars <- TVars_sub.add_local ntvs tb.tvars;
+  tb.tvars <- TVars_sub.add_fgs (Context.type_variables tb.c) tb.tvars;
+
+  assert (TVars_sub.count_local tb.tvars =
+          TVars_sub.count_local (Context.type_variables tb.c));
+  assert (TVars_sub.count_fgs tb.tvars =
+          TVars_sub.count_fgs (Context.type_variables tb.c));
+
   tb.sign  <- Sign.up ntvs tb.sign;
   let rt = Sign.result tb.sign in
   if not (Sign.is_constant tb.sign) then
@@ -422,6 +429,7 @@ let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
   let nargs = Array.length names in
   assert (0 < nargs);
   tb.tvars <- TVars_sub.remove_local ntvs tb.tvars;
+  tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
   tb.tlist <- Lam (nargs, names, t) :: tb.tlist

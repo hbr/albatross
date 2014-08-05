@@ -7,15 +7,13 @@ open Printf
 type formal = Class_table.formal
 
 type entry = {
-    mutable tvars_sub: TVars_sub.t;    (* cumulated *)
-    fgnames:      int array;           (* cumulated *)
-    concepts:     type_term array;     (* cumulated *)
-    fargs:        formal array;        (* cumulated *)
+    tvs_sub:      TVars_sub.t;        (* cumulated *)
+    fargs:        formal array;       (* cumulated *)
     ntvs_delta:   int;
     nfgs_delta:   int;
     nfargs_delta: int;
-    result:    Result_type.t;
-    info:      info;
+    result:       Result_type.t;
+    info:         info;
   }
 
 
@@ -31,15 +29,13 @@ type t = {
 
 
 let empty_entry: entry =
-  {fgnames      = [||];
-   concepts     = [||];
+  {tvs_sub      = TVars_sub.empty;
    fargs        = [||];
    ntvs_delta   = 0;
    nfgs_delta   = 0;
    nfargs_delta = 0;
    result   = Result_type.empty;
-   info      = UNKNOWN;
-   tvars_sub = TVars_sub.make 0}
+   info      = UNKNOWN}
 
 
 
@@ -101,13 +97,13 @@ let count_type_variables (c:t): int =
   (** The number of cumulated type variables in this context and all
       preceeding contexts
    *)
-  TVars_sub.count c.entry.tvars_sub
+  TVars_sub.count c.entry.tvs_sub
 
 let count_local_type_variables (c:t): int =
   c.entry.ntvs_delta
 
 
-let entry_nfgs (e:entry): int = Array.length e.fgnames
+let entry_nfgs (e:entry): int = TVars_sub.count_fgs e.tvs_sub
 
 let count_formal_generics (c:t): int =
   (** The cumulated number of formal generics in this context and all
@@ -151,7 +147,7 @@ let formal_generics (c:t): formal array =
    *)
   c.entry.fgs
 *)
-let concepts (c:t): type_term array = c.entry.concepts
+let concepts (c:t): type_term array = TVars_sub.fgconcepts c.entry.tvs_sub
 
 
 
@@ -183,7 +179,7 @@ let entry_fargnames (e:entry): int array =
 let fargnames (c:t): int array = entry_fargnames c.entry
 
 
-let entry_fgnames (e:entry): int array = e.fgnames
+let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
 
 let fgnames (c:t): int array = entry_fgnames c.entry
 
@@ -241,12 +237,12 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
   let i = Search.array_find_min (fun (n,_) -> n=name) c.entry.fargs in
   let sign = Sign.make_const (snd c.entry.fargs.(i)) in
   i,
-  TVars_sub.tvars c.entry.tvars_sub,
+  TVars_sub.tvars c.entry.tvs_sub,
   sign
 
 let concept_satisfies_concept (cpt1:type_term) (cpt2:type_term) (c:t): bool =
-  let res =
-    Class_table.satisfies cpt1 TVars.empty [||] cpt2 (class_table c) in
+  let ct  = class_table c in
+  let res = Class_table.satisfies cpt1 TVars.empty cpt2 TVars.empty ct in
   if not res then
     printf "concept %s does not satisfy %s\n"
       (Class_table.type2string cpt1 0 [||] (class_table c))
@@ -259,7 +255,9 @@ let type_satisfies_concept
     (tvs:TVars.t)
     (cpt:type_term)
     (c:t): bool =
-  Class_table.satisfies t tvs (concepts c) cpt (class_table c)
+  let ct = class_table c in
+  assert (TVars.count_fgs tvs = Array.length (concepts c));
+  Class_table.satisfies t tvs cpt TVars.empty ct
 
 
 let read_trace_info (c:t): unit =
@@ -277,6 +275,28 @@ let make (): t =
  }
 
 
+let string_of_tvars (tv:TVars_sub.t) (c:t): string =
+  let ct = class_table c
+  and ntvs       = TVars_sub.count_local tv
+  and fgnames    = TVars_sub.fgnames tv
+  and fgconcepts = TVars_sub.fgconcepts tv
+  and concepts   = Array.to_list (TVars_sub.concepts tv)
+  in
+  let fgs = Array.to_list (Myarray.combine fgnames fgconcepts) in
+  let fgstring =
+    String.concat ","
+       (List.map
+          (fun (nme,cpt) ->
+            (ST.string nme) ^ ":" ^ Class_table.type2string cpt 0 [||] ct)
+          fgs)
+  and cptstring =
+    String.concat ","
+      (List.map (fun cpt -> Class_table.type2string cpt 0 [||] ct) concepts)
+  in
+  (string_of_int ntvs) ^ "[" ^ cptstring ^ "]["  ^ fgstring ^ "]"
+
+
+
 let push_with_gap
     (entlst: entities list withinfo)
     (rt: return_type)
@@ -288,18 +308,18 @@ let push_with_gap
       possibly newly introduced type variables of the signature. *)
   let entry      = c.entry
   and ct         = class_table c in
-  let ntvs0      = TVars_sub.count_local entry.tvars_sub
-  and fgs        = Myarray.combine entry.fgnames entry.concepts
+  let tvs_sub  =
+    Class_table.formal_generics entlst rt ntvs_gap entry.tvs_sub ct in
+  let tvs = TVars_sub.tvars tvs_sub
   in
-  let ntvs,fgs   = Class_table.formal_generics entlst rt ntvs0 fgs ct
+  let ntvs0 = TVars_sub.count_local entry.tvs_sub
+  and nfgs0 = TVars_sub.count_fgs entry.tvs_sub
   in
-  let ntvs  = ntvs + ntvs_gap in
-  let ntvs1 = ntvs - ntvs0
-  and nfgs1 = Array.length fgs - Array.length fgs
-  and fgnames,concepts = Myarray.split fgs
+  let ntvs1 = TVars.count_local tvs - ntvs0
+  and nfgs1 = TVars.count_fgs tvs   - nfgs0
   in
-  let res        = Class_table.result_type rt ntvs fgnames concepts ct in
-  let fargs1     = Class_table.formal_arguments entlst ntvs fgnames concepts ct
+  let res        = Class_table.result_type rt tvs ct in
+  let fargs1     = Class_table.formal_arguments entlst tvs ct
   in
   let fargs      =
     Array.append
@@ -308,12 +328,8 @@ let push_with_gap
          (fun (n,t) -> n, Term.up ntvs1 (Term.upbound nfgs1 ntvs0 t))
          entry.fargs)
   in
-  let tvars_sub = TVars_sub.add_local ntvs1 entry.tvars_sub
-  in
   c.entry <-
-    {tvars_sub    = tvars_sub;
-     fgnames      = fgnames;
-     concepts     = concepts;
+    {tvs_sub    = tvs_sub;
      fargs        = fargs;
      ntvs_delta   = ntvs1;
      nfgs_delta   = nfgs1;
@@ -362,7 +378,7 @@ let pop (c:t): unit =
 
 
 
-let type_variables (c:t): TVars_sub.t = c.entry.tvars_sub
+let type_variables (c:t): TVars_sub.t = c.entry.tvs_sub
 
 let boolean (c:t): term =
   Class_table.boolean_type (ntvs c)
@@ -372,8 +388,8 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
   (** Update the type variables of the current context with [tvs]
    *)
   try
-    TVars_sub.update c.entry.tvars_sub tvs;
-    let args = TVars_sub.args c.entry.tvars_sub in
+    TVars_sub.update_subs c.entry.tvs_sub tvs;
+    let args = TVars_sub.args c.entry.tvs_sub in
     let ntvs = Array.length args                in
     Array.iteri
       (fun i (nme,t) -> c.entry.fargs.(i) <- (nme, Term.sub t args ntvs))
@@ -411,7 +427,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
         ","
         (List.rev_map
            (fun (ns,tp) ->
-             let ntvs = TVars_sub.count e.tvars_sub in
+             let ntvs = TVars_sub.count e.tvs_sub in
              (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
              ^ ":"
              ^ (Class_table.type2string tp ntvs (entry_fgnames e) ct))
@@ -456,8 +472,8 @@ let put_global_function
   assert (is_toplevel c);
   Feature_table.put_function
     fn
-    c.entry.fgnames
-    c.entry.concepts
+    (TVars_sub.fgnames    c.entry.tvs_sub)
+    (TVars_sub.fgconcepts c.entry.tvs_sub)
     (fargnames c)
     (signature c)
     impstat

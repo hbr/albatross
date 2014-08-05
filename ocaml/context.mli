@@ -2,7 +2,7 @@
 
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation.
-*)
+ *)
 
 (** Context with stacked declarations of formal arguments *)
 
@@ -30,7 +30,7 @@ val add_module:         int -> int list -> int -> IntSet.t -> t -> unit
         [used] *)
 
 val is_interface_use:  t -> bool
-   (** Are we using an interface? *)
+    (** Are we using an interface? *)
 
 
 val find_module:        int -> int list -> t -> int
@@ -81,6 +81,7 @@ val fgnames: t   -> int array
 val local_fargnames: t -> int array
 
 val type_variables: t -> TVars_sub.t
+    (** The type variables and their substitutions *)
 
 val boolean: t -> term
 

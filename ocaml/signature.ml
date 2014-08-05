@@ -1,3 +1,9 @@
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
+*)
+
 open Container
 open Term
 
@@ -5,26 +11,31 @@ open Term
 module Term_sub_arr: sig
 
   type t
-  val make: int -> t
-  val count: t -> int
-  val get:   int -> t -> term
-  val flags: t -> bool array
-  val args:  t -> term array
-  val has:   int -> t -> bool
-  val add_new: int -> term -> t -> unit
-  val update:int -> term -> t -> unit
-  val add:   int -> term -> t -> unit
-  val extend:int -> t -> t
-  val extend_bottom: int -> t -> t
-  val remove_bottom: int -> t -> t
-  val sub_star:      term -> t -> term
+  val empty:          t
+  val make:           int -> t
+  val count:          t -> int
+  val get:            int -> t -> term
+  val flags:          t -> bool array
+  val args:           t -> term array
+  val has:            int -> t -> bool
+  val add_new:        int -> term -> t -> unit
+  val update:         int -> term -> t -> unit
+  val up_above_top:   int -> t -> t
+  val down_above_top: int -> t -> t
+  val add_top:        int -> t -> t
+  val add_bottom:     int -> t -> t
+  val remove_bottom:  int -> t -> t
+  val sub_star:       term -> t -> term
       (** Apply to the term [t] the substitution [s] until no more substitutions
           are possible.  *)
 end = struct
 
-  type t = {args:  term array;
-            flags: bool array;
-            used:  int list array}
+  type t = {
+      args:  term array;
+      flags: bool array;
+      used: int list array (* a list of used type variables for each
+                              substitution *)
+    }
 
   let flags (s:t): bool array = s.flags
   let args  (s:t): term array = s.args
@@ -34,6 +45,8 @@ end = struct
     {args  = Array.init n (fun i -> Variable i);
      flags = Array.make n false;
      used  = Array.make n []}
+
+  let empty: t = make 0
 
   let count (s:t): int = Array.length s.args
 
@@ -109,13 +122,22 @@ end = struct
     s.used.(i)  <- lst
 
 
+
+  let set_of_list (lst:int list): IntSet.t =
+    List.fold_left
+      (fun set i -> IntSet.add i set)
+      IntSet.empty
+      lst
+
+
   let update (i:int) (t:term) (s:t): unit =
+    (* Update the [i]th substitution with [i~>t]. Raise [Not_found] if the new
+       term [t] uses different type variables than the already existing
+       term. *)
     assert (i < count s);
     assert (has i s);
     let used = Term.bound_variables t (count s) in
-    let set = List.fold_left
-        (fun set i -> IntSet.add i set)
-        IntSet.empty s.used.(i)
+    let set  = set_of_list s.used.(i)
     in
     if set = used then
       s.args.(i) <- t
@@ -123,34 +145,42 @@ end = struct
       raise Not_found
 
 
-
-  let add (i:int) (t:term) (s:t): unit =
-    (** Add the substitution [i ~~> t] to the substitution [s] i.e.
-        apply to [t] all already available substitutions and check for
-        circularity and apply [i ~~> t] to all available substitutions.
-     *)
-    let n = count s in
-    assert (i <= n);
-    assert (not (Term.is_variable_i t i));
-    let t = Term.sub t s.args n in
-    if IntSet.mem i (Term.bound_variables t n) then
-      raise Not_found (* circular substitution *)
+  let up_above_top (n:int) (s:t): t =
+    (* Shift all variables above the top in the substitutions up by [n]. This
+        is necessary because new formal generics can be introduced.  *)
+    if n = 0 then
+      s
     else begin
-      Array.iteri
-        (fun j e ->
-          if s.flags.(j) then s.args.(j) <- Term.sub_var i e t
-          else ())
-        s.args;
-      if not s.flags.(i) then
-        (s.args.(i)<-t; s.flags.(i)<-true)
-      else if t = s.args.(i) then
-        ()
-      else
-        raise Not_found
+      let args = Array.copy s.args
+      and cnt  = count s
+      in
+      for i = 0 to cnt - 1 do
+        args.(i) <- Term.upbound n cnt args.(i)
+      done;
+      {args = args; flags = s.flags; used = s.used}
     end
 
 
-  let extend (n:int) (s:t): t =
+  let down_above_top (n:int) (s:t): t =
+    (* Shift all variables above the top in the substitutions down by [n]. This
+        is necessary because formal generics can be removed.  *)
+    if n = 0 then
+      s
+    else begin
+      let args = Array.copy s.args
+      and cnt  = count s
+      in
+      for i = 0 to cnt - 1 do
+        try
+          args.(i) <- Term.down_from n cnt args.(i)
+        with Term_capture ->
+          assert false (* cannot happen *)
+      done;
+      {args = args; flags = s.flags; used = s.used}
+    end
+
+
+  let add_top (n:int) (s:t): t =
     (** Introduce [n] new variables at the top, i.e. all substitution terms
         above [count s] are shifted up by [n] and just copied into the new
         larger substitution.
@@ -164,7 +194,7 @@ end = struct
     snew
 
 
-  let extend_bottom (n:int) (s:t): t =
+  let add_bottom (n:int) (s:t): t =
     (** Introduce [n] new variables at the bottom, i.e. shift all
         terms up by [n].
      *)
@@ -208,41 +238,112 @@ module TVars: sig
 
   type t
   val empty: t
+  val fgconcepts: t -> type_term array
+  val fgnames:    t -> int array
+  val has_fg:     int -> t -> bool
   val make: int -> type_term array -> t
   val make_local: int -> t
-  val count_local: t -> int
+  val make_fgs:    int array -> type_term array -> t
+  val count_local:  t -> int
   val count_global: t -> int
-  val count: t -> int
-  val concept:     int -> t -> type_term
-  val concepts:    t -> type_term array
-  val add_global: type_term array -> t -> t
-  val add_local:  int -> t -> t
+  val count:        t -> int
+  val count_fgs:    t -> int
+  val count_all:    t -> int
+  val concept:      int -> t -> type_term
+  val concepts:     t -> type_term array
+  val add_fgs:      t -> t -> t
+  val remove_fgs:   t -> t -> t
+  val add_global:   type_term array -> t -> t
+  val add_local:    int -> t -> t
   val remove_local: int -> t -> t
+  val augment_fgs:  int array -> type_term array -> t -> t
 
 end = struct
 
-  type t = {nlocal:int; concepts: type_term array}
+  type t = {
+      nlocal:int;                  (* local type variables without concept *)
+      concepts: type_term array;   (* global type variables with concept
+                                      coming from used functions           *)
+      fgconcepts: type_term array; (* concepts of the formal generics      *)
+      fgnames:    int array        (* names of the formal generics         *)
+    }
 
-  let empty: t = {nlocal=0;concepts=[||]}
-  let make (ntvs:int) (cs:type_term array): t = {nlocal=ntvs;concepts=cs}
-  let make_local (ntvs:int) : t           = {nlocal=ntvs;concepts=[||]}
+  let empty: t =
+    {nlocal=0;concepts=[||];fgconcepts=[||];fgnames=[||]}
+
+
+  let count_fgs (tvs:t): int = Array.length tvs.fgnames
+
+  let fgconcepts (tvs:t): type_term array = tvs.fgconcepts
+
+  let fgnames (tvs:t): int array = tvs.fgnames
+
+  exception Found
+
+  let has_fg (name:int) (tvs:t): bool =
+    try
+      Array.iter
+        (fun nme -> if nme=name then raise Found else ())
+        tvs.fgnames;
+      false
+    with Found ->
+      true
+
+
+  let make (ntvs:int) (cs:type_term array): t =
+    {nlocal=ntvs;concepts=cs;fgconcepts=[||];fgnames=[||]}
+
+  let make_local (ntvs:int) : t =
+    {nlocal=ntvs;concepts=[||];fgconcepts=[||];fgnames=[||]}
+
+  let make_fgs (nms: int array) (cpts:type_term array): t =
+    {nlocal=0;concepts=[||];fgnames=nms;fgconcepts=cpts}
+
   let count_local (tvs:t): int = tvs.nlocal
   let count_global (tvs:t): int = Array.length tvs.concepts
-  let count (tvs:t): int = tvs.nlocal + (count_global tvs)
+  let count (tvs:t): int    = tvs.nlocal + count_global tvs
+  let count_all(tvs:t): int = tvs.nlocal + count_global tvs + count_fgs tvs
 
   let concept (i:int) (tvs:t): type_term =
     assert (count_local tvs <= i);
-    assert (i < count tvs);
-    tvs.concepts.(i - count_local tvs)
+    assert (i < count_all tvs);
+    if i < count tvs then
+      tvs.concepts.(i - count_local tvs)
+    else
+      tvs.fgconcepts.(i - count tvs)
 
   let concepts (tvs:t): type_term array = tvs.concepts
+
+  let add_fgs (tvs_new:t) (tvs:t): t =
+    let cnt = count_fgs tvs in
+    assert (cnt <= count_fgs tvs_new);
+    assert (tvs.fgnames    = Array.sub tvs_new.fgnames 0 cnt);
+    assert (tvs.fgconcepts = Array.sub tvs_new.fgconcepts 0 cnt);
+    {tvs with fgnames=tvs_new.fgnames; fgconcepts=tvs_new.fgconcepts}
+
+  let remove_fgs (tvs_new:t) (tvs:t): t =
+    let cnt = count_fgs tvs_new in
+    assert (cnt <= count_fgs tvs);
+    {tvs with fgnames=tvs_new.fgnames; fgconcepts=tvs_new.fgconcepts}
+
   let add_global (cs:type_term array) (tvs:t): t =
     {tvs with concepts = Array.append tvs.concepts cs}
+
   let add_local (n:int) (tvs:t): t =
     {tvs with nlocal = tvs.nlocal + n}
+
   let remove_local (n:int) (tvs:t): t =
     assert (n <= (count_local tvs));
     {tvs with nlocal = tvs.nlocal - n}
+
+  let augment_fgs
+      (fgnames: int array)
+      (fgconcepts:type_term array)
+      (tvs:t): t =
+    assert (Array.length fgnames = Array.length fgconcepts);
+    {tvs with
+     fgnames    = Array.append fgnames    tvs.fgnames;
+     fgconcepts = Array.append fgconcepts tvs.fgconcepts}
 end (* TVars *)
 
 
@@ -252,6 +353,11 @@ module TVars_sub: sig
 
   type t
   val make:         int -> t
+  val empty:        t
+  val count_fgs:    t -> int
+  val fgconcepts:   t -> type_term array
+  val fgnames:      t -> int array
+  val has_fg:       int -> t -> bool
   val count:        t -> int
   val has:          int -> t -> bool
   val get:          int -> t -> term
@@ -264,10 +370,13 @@ module TVars_sub: sig
   val args:         t -> term array
   val add_sub:      int -> term -> t -> unit
   val update_sub:   int -> term -> t -> unit
+  val add_fgs:      t -> t -> t
+  val remove_fgs:   t -> t -> t
   val add_global:   type_term array -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
-  val update:       t -> t -> unit
+  val augment:      int -> int array -> type_term array -> t -> t
+  val update_subs:  t -> t -> unit
   val sub_star:     term -> t -> term
       (** [sub_star t s]: apply to the term [t] the substitution [s] until no
           more substitutions are possible.  *)
@@ -276,6 +385,21 @@ end = struct
 
   type t = {vars: TVars.t;
             sub:  Term_sub_arr.t}
+
+  let empty: t =
+    {vars = TVars.empty; sub = Term_sub_arr.empty}
+
+  let count_fgs (tvs:t): int =
+    TVars.count_fgs tvs.vars
+
+  let fgconcepts (tvs:t): type_term array =
+    TVars.fgconcepts tvs.vars
+
+  let fgnames (tvs:t): int array =
+    TVars.fgnames tvs.vars
+
+  let has_fg (name:int) (tvs:t): bool =
+    TVars.has_fg name tvs.vars
 
   let make (ntvs: int): t =
     {vars = TVars.make_local ntvs; sub = Term_sub_arr.make ntvs}
@@ -295,9 +419,12 @@ end = struct
   let count_local (tv:t): int =
     TVars.count_local tv.vars
 
+  let count_all (tv:t): int =
+    TVars.count_all tv.vars
+
   let concept (i:int) (tv:t): term =
     assert (count_local tv <= i);
-    assert (i < count tv);
+    assert (i < count_all tv);
     TVars.concept i tv.vars
 
   let concepts (tv:t): term array = TVars.concepts tv.vars
@@ -316,16 +443,26 @@ end = struct
 
   let args (tv:t): term array = Term_sub_arr.args tv.sub
 
+  let add_fgs (tv_new:t) (tv:t): t =
+    let n = count_fgs tv_new - count_fgs tv in
+    {vars = TVars.add_fgs tv_new.vars tv.vars;
+     sub  = Term_sub_arr.up_above_top n tv.sub}
+
+  let remove_fgs (tv_new:t) (tv:t): t =
+    let n = count_fgs tv - count_fgs tv_new in
+    {vars = TVars.remove_fgs tv_new.vars tv.vars;
+     sub  = Term_sub_arr.down_above_top n tv.sub}
+
   let add_global (cs:type_term array) (tv:t): t =
     {vars = TVars.add_global cs tv.vars;
-     sub  = Term_sub_arr.extend (Array.length cs) tv.sub}
+     sub  = Term_sub_arr.add_top (Array.length cs) tv.sub}
 
   let add_local (n:int) (tv:t): t =
     (** Add [n] local (fresh) type variables without constraints to [tv]
         and shift all type variables up by [n].
      *)
     {vars = TVars.add_local n tv.vars;
-     sub  = Term_sub_arr.extend_bottom n tv.sub}
+     sub  = Term_sub_arr.add_bottom n tv.sub}
 
   let remove_local (n:int) (tv:t): t =
     (** Remove [n] local type variables (without constraints) from [tv] and
@@ -334,23 +471,41 @@ end = struct
     {vars = TVars.remove_local n tv.vars;
      sub  = Term_sub_arr.remove_bottom n tv.sub}
 
-  let update (tv:t) (tvnew:t): unit =
+  let augment
+      (ntvs:int)
+      (fgnames: int array)
+      (fgconcepts:type_term array)
+      (tv:t): t =
+    let n  = Array.length fgnames in
+    assert (n = Array.length fgconcepts);
+    let tv = add_local ntvs tv in
+    {vars = TVars.augment_fgs fgnames fgconcepts tv.vars;
+     sub  = Term_sub_arr.up_above_top n tv.sub}
+
+
+
+  let update_subs (tv:t) (tvnew:t): unit =
     (** Update the type variables in [tv] with the type variables in [tvnew].
 
         This requires that [tv] and [tvnew] have the same number of local type
-        variables and [tvnew] might have more globals than [tv]
-     *)
+        variables and formal generics and [tvnew] might have more globals than
+        [tv] *)
     assert ((count tv) <= (count tvnew));
     assert ((count_local tv) = (count_local tvnew));
+    assert ((count_fgs tv) = (count_fgs tvnew));
     let nloc  = count_local tv
     and ndown = (count_global tvnew) - (count_global tv)
     in
     for i=0 to nloc-1 do
-      if Term_sub_arr.has i tvnew.sub then
-        Term_sub_arr.add
+      if Term_sub_arr.has i tvnew.sub &&
+        not (Term_sub_arr.has i tv.sub)
+      then
+        Term_sub_arr.add_new
           i
           (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
           tv.sub
+      else
+        assert ((get i tv) = (get i tvnew))
     done
 
   let sub_star (t:type_term) (s:t): term =

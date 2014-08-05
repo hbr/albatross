@@ -246,6 +246,7 @@ let find
     (tp:type_term)
     (ft:t)
     : int =
+  let tvs  = TVars.make 0 concepts in
   let ntvs = Array.length concepts
   and tab = Feature_map.find fn ft.map in
   let lst  = Term_table.unify tp ntvs !tab in
@@ -259,8 +260,7 @@ let find
           let ok =
             Term_sub.for_all
               (fun j t ->
-                Class_table.satisfies
-                  t TVars.empty concepts desc.concepts.(j) ft.ct)
+                Class_table.satisfies t tvs desc.concepts.(j) TVars.empty ft.ct)
               sub
           in
           if ok then

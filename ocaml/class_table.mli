@@ -127,21 +127,16 @@ val to_dummy: int -> Sign.t -> type_term
 
 
 val formal_generics:
-    entities list withinfo -> return_type -> int -> formal array -> t
-      -> int * formal array
+    entities list withinfo -> return_type -> int -> TVars_sub.t -> t
+      -> TVars_sub.t
 
-val formal_arguments:
-    entities list withinfo -> int -> int array -> type_term array -> t
-      -> formal array
+val formal_arguments: entities list withinfo -> TVars.t -> t -> formal array
 
-val result_type:
-    return_type -> int -> int array -> type_term array -> t
-      -> Result_type.t
+val result_type: return_type -> TVars.t -> t -> Result_type.t
 
-val satisfies: type_term -> TVars.t -> type_term array -> type_term -> t -> bool
-  (** [satisfies tp tvs cpts cpt ct]: Does the type [tp] in an environment
-      with the [tvs] type variables and the formal generics [cpts] satisfy the
-      concept [cpt]?  *)
+val satisfies: type_term -> TVars.t -> type_term -> TVars.t -> t -> bool
+  (** [satisfies tp1 tvs1 tp2 tvs2 ct]: Does the type [tp1,tvs1] satisfy the
+      type [tp2,tvs2] *)
 
 val print: t -> unit
 
