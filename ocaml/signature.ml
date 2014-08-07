@@ -242,7 +242,6 @@ module TVars: sig
   val fgnames:    t -> int array
   val has_fg:     int -> t -> bool
   val make: int -> type_term array -> t
-  val make_local: int -> t
   val make_fgs:    int array -> type_term array -> t
   val count_local:  t -> int
   val count_global: t -> int
@@ -292,9 +291,6 @@ end = struct
 
   let make (ntvs:int) (cs:type_term array): t =
     {nlocal=ntvs;concepts=cs;fgconcepts=[||];fgnames=[||]}
-
-  let make_local (ntvs:int) : t =
-    {nlocal=ntvs;concepts=[||];fgconcepts=[||];fgnames=[||]}
 
   let make_fgs (nms: int array) (cpts:type_term array): t =
     {nlocal=0;concepts=[||];fgnames=nms;fgconcepts=cpts}
@@ -352,7 +348,6 @@ end (* TVars *)
 module TVars_sub: sig
 
   type t
-  val make:         int -> t
   val empty:        t
   val count_fgs:    t -> int
   val fgconcepts:   t -> type_term array
@@ -400,9 +395,6 @@ end = struct
 
   let has_fg (name:int) (tvs:t): bool =
     TVars.has_fg name tvs.vars
-
-  let make (ntvs: int): t =
-    {vars = TVars.make_local ntvs; sub = Term_sub_arr.make ntvs}
 
   let count (tvars:t): int = TVars.count tvars.vars
 
