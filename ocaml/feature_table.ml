@@ -240,19 +240,18 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 let find
     (fn:feature_name)
-    (concepts:type_term array)
+    (tvs: TVars.t)
     (tp:type_term)
     (ft:t)
     : int =
-  let tvs  = TVars.make 0 concepts in
-  let ntvs = Array.length concepts
+  let ntvs = TVars.count_all tvs
   and tab = Feature_map.find fn ft.map in
   let lst  = Term_table.unify tp ntvs !tab in
   let idx_lst =
     List.fold_left
       (fun lst (i,sub) ->
         let desc = descriptor i ft in
-        if concepts = TVars.fgconcepts desc.tvs && Term_sub.is_identity sub then
+        if tvs = desc.tvs && Term_sub.is_identity sub then
           i :: lst
         else
           let ok =
@@ -282,14 +281,14 @@ let find
 
 let find_with_signature
     (fn:feature_name)
-    (concepts:type_term array)
+    (tvs: TVars.t)
     (sign:Sign.t)
     (ft:t)
     : int =
   (* Find the feature with the characteristics.  *)
-  let ntvs = Array.length concepts in
+  let ntvs = TVars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
-  find fn concepts tp ft
+  find fn tvs tp ft
 
 
 
@@ -552,23 +551,22 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
 
 let put_function
     (fn:       feature_name withinfo)
-    (fgnames:  int array)
-    (concepts: type_term array)
+    (tvs:      TVars.t)
     (argnames: int array)
     (sign:     Sign.t)
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  let tvs = TVars.make_fgs fgnames concepts in
+  assert (TVars.count tvs = 0);  (* only formal generics, no untyped *)
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   in
   let idx =
-     try find_with_signature fn.v concepts sign ft
+     try find_with_signature fn.v tvs sign ft
      with Not_found -> cnt
   in
   let mdl = Class_table.current_module ft.ct in
-  let cls = Class_table.owner mdl concepts sign ft.ct in
+  let cls = Class_table.owner mdl tvs sign ft.ct in
   if idx=cnt then begin (* new feature *)
     let desc =
       {mdl      = mdl;

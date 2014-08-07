@@ -472,8 +472,7 @@ let put_global_function
   assert (is_toplevel c);
   Feature_table.put_function
     fn
-    (TVars_sub.fgnames    c.entry.tvs_sub)
-    (TVars_sub.fgconcepts c.entry.tvs_sub)
+    (TVars_sub.tvars c.entry.tvs_sub)
     (fargnames c)
     (signature c)
     impstat

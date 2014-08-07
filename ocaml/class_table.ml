@@ -485,7 +485,7 @@ let add
 
 
 
-let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
+let owner (mdl:int) (tvs:TVars.t) (sign:Sign.t) (ct:t): int =
   let max (cidx1:int) (cidx2:int): int =
     assert (0 <= cidx1 && cidx1 < count ct);
     assert (cidx2 = -1 || (0 <= cidx2 && cidx2 < count ct));
@@ -514,21 +514,21 @@ let owner (mdl:int) (concepts:type_term array) (sign:Sign.t) (ct:t): int =
       cidx_prev
       tp
   in
-  let nfgs = Array.length concepts in
+  let ntvs = TVars.count_all tvs in
   let cidx = Array.fold_left
       (fun cidx_prev tp -> owner_tp tp 0 cidx_prev)
       (-1)
-      concepts
+      (TVars.fgconcepts tvs)
   in
   let cidx = Array.fold_left
-      (fun cidx_prev tp -> owner_tp tp nfgs cidx_prev)
+      (fun cidx_prev tp -> owner_tp tp ntvs cidx_prev)
       cidx
       (Sign.arguments sign)
   in
   let rt = Sign.result_type sign in
   let cidx =
     if Result_type.has_result rt then
-      owner_tp (Result_type.result rt) nfgs cidx
+      owner_tp (Result_type.result rt) ntvs cidx
     else
       cidx
   in
@@ -928,7 +928,7 @@ let add_base_class
   in
   let args = Array.init nfgs (fun i -> Variable i) in
   let anc  = IntMap.singleton idx args in
-  let tvs  = TVars.augment_fgs fgnames concepts TVars.empty in
+  let tvs  = TVars.make_fgs fgnames concepts in
   let bdesc = {hmark=hm; tvs=tvs; ancestors=anc} in
   Seq.push
     {mdl=(-1);
