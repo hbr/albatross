@@ -169,6 +169,21 @@ let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
     cannot_find (ST.string name) nargs info
 
 
+let string_of_signature (tvs:TVars.t) (s:Sign.t) (c:Context.t): string =
+  let ntvs = TVars.count tvs
+  and fgnames = TVars.fgnames tvs in
+  Class_table.string_of_signature s ntvs fgnames (Context.class_table c)
+
+
+let string_of_signatures (lst:(int*TVars.t*Sign.t) list) (c:Context.t): string =
+  "{" ^
+  (String.concat
+     ","
+     (List.map (fun (_,tvs,s) -> string_of_signature tvs s c) lst)) ^
+  "}"
+
+
+
 let process_leaf
     (lst: (int*TVars.t*Sign.t) list)
     (e:expression)
@@ -182,6 +197,8 @@ let process_leaf
     Accus.Untypeable acc_lst ->
       let str = "The expression "
         ^ (string_of_expression e)
+        ^ " with types "
+        ^ (string_of_signatures lst c)
         ^ " does not satisfy any of the expected types in {"
         ^ (String.concat
              ","
