@@ -131,5 +131,7 @@ val assertion:      int -> t -> term
 val backward_set:   term -> t -> int list
 val backward_data:  int  -> t -> term list * IntSet.t
 
+val print_local_contexts:       t -> unit
+
 val print_all_local_assertions: t -> unit
 val print_global_assertions:    t -> unit

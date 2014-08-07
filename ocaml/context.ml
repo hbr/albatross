@@ -662,6 +662,24 @@ let print_assertions
   print c0
 
 
+let print_local_contexts (c:t): unit =
+  let ct = class_table c in
+  let args_str (e:entry): string =
+    let str = arguments_string e ct in
+    if str = "" then "<empty>" else str
+  in
+  let rec print_stack (stack: entry list): unit =
+    match stack with
+      []
+    | [_] ->
+        ()
+    | e::tail ->
+        print_stack tail;
+        printf "%s\n" (args_str e)
+  in
+  printf "local contexts\n";
+  print_stack c.stack;
+  printf "%s\n" (args_str c.entry)
 
 let print_global_assertions (c:t): unit =
   let cnt = Proof_context.count_global c.pc

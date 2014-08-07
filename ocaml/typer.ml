@@ -111,6 +111,7 @@ end = struct
 
 
   let expect_lambda (ntvs:int) (accs:t): unit =
+    assert (0 < ntvs);
     accs.arity <- 0;
     List.iter (fun acc -> Term_builder.expect_lambda ntvs acc) accs.accus
 
@@ -179,25 +180,27 @@ let string_of_signatures (lst:(int*TVars.t*Sign.t) list) (c:Context.t): string =
   "{" ^
   (String.concat
      ","
-     (List.map (fun (_,tvs,s) -> string_of_signature tvs s c) lst)) ^
+     (List.map (fun (_,tvs,s) ->
+       string_of_signature tvs s c) lst)) ^
   "}"
 
 
 
 let process_leaf
     (lst: (int*TVars.t*Sign.t) list)
-    (e:expression)
     (c:Context.t)
     (info:info)
     (accs: Accus.t)
     : unit =
+  assert (lst <> []);
   try
     Accus.add_leaf lst accs
   with
     Accus.Untypeable acc_lst ->
-      let str = "The expression "
-        ^ (string_of_expression e)
-        ^ " with types "
+      let i,_,_ = List.hd lst in
+      let str = "The expression \""
+        ^ (Context.string_of_term (Variable i) c)
+        ^ "\" with types "
         ^ (string_of_signatures lst c)
         ^ " does not satisfy any of the expected types in {"
         ^ (String.concat
@@ -211,6 +214,7 @@ let process_leaf
                 acc_lst))
         ^ "}"
       in
+      Context.print_local_contexts c;
       error_info info str
 
 
@@ -235,7 +239,7 @@ let rec analyze_expression
     let feat (fn:feature_name) = features fn nargs info c
     and id   (name:int)        = identifiers name nargs info c
     and do_leaf (lst: (int*TVars.t*Sign.t) list): unit =
-      process_leaf lst e c info accs
+      process_leaf lst c info accs
     in
     match e with
       Expproof (_,_,_)
@@ -289,8 +293,7 @@ let rec analyze_expression
       : unit =
     Accus.expect_function 1 accs;
     let qop = match q with Universal -> Allop | Existential -> Someop in
-    process_leaf
-      (features (FNoperator qop) 1 info c) e c info accs (*e is a dummy*);
+    process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
     lambda entlst e accs;
     Accus.complete_function 1 accs
