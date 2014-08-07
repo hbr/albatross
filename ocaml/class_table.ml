@@ -362,14 +362,14 @@ let update_base_descriptor
     error_info hm.i str);
   let fgs = class_formal_generics fgens ct in
   let fgnames    = TVars.fgnames desc.tvs
-  and fgconcepts = TVars.fgconcepts desc.tvs in
+  in
   let nfgs = Array.length fgnames in
   if nfgs <> Array.length fgs then
     (let str = "Class must have " ^ (string_of_int nfgs) ^ " formal generics" in
     error_info fgens.i str);
   for i = 0 to nfgs-1 do
     let nme,tp1 = fgs.(i)
-    and tp2     = fgconcepts.(i) in
+    and tp2     = TVars.concept i desc.tvs in
     check_class_formal_generic fgens.i nme tp1 tp2 ct;
     fgnames.(i) <- nme
   done
@@ -745,7 +745,7 @@ let add_fg
     (tvs:TVars_sub.t)
     (ct:t)
     : formal list =
-  (* Check if [name] is a new formal generic and if yes prepend it to [fgs].
+  (* Check if [name] is a new formal generic. If yes prepend it to [fgs].
 
      Note: [fgs] is reversed *)
   if path = [] &&
@@ -800,31 +800,27 @@ let formal_generics
     (tvs:      TVars_sub.t)
     (ct:       t)
     : TVars_sub.t =
-  (** The cumulated number of type variables and the cumulated formal generics
-      of the entity list [entlst] and the return type [rt] in an environment
-      with [ntvs] type variables and the formal generics [fgs]. *)
-  let ntvs,fgs =
+  let ntvs_new,fgs_new =
     List.fold_left
       (fun (ntvs,fgs) ent ->
         match ent with
           Untyped_entities vars ->
-            let ntvs = ntvs + List.length vars in
-            ntvs, fgs
+            ntvs + List.length vars, fgs
         | Typed_entities (_,tp) ->
             ntvs, collect_fgs tp fgs tvs ct)
       (0,[])
       entlst.v
   in
-  let fgs =
+  let fgs_new =
     match rt with
-      None -> fgs
+      None -> fgs_new
     | Some tp ->
         let t,_,_ = tp.v in
-        collect_fgs t fgs tvs ct
+        collect_fgs t fgs_new tvs ct
   in
-  let fgs = Array.of_list (List.rev fgs) in
-  let fgnames,fgconcepts = Myarray.split fgs in
-  TVars_sub.augment (ntvs+ntvs_gap) fgnames fgconcepts tvs
+  let fgs_new = Array.of_list (List.rev fgs_new) in
+  let fgnames,fgconcepts = Myarray.split fgs_new in
+  TVars_sub.augment (ntvs_new+ntvs_gap) fgnames fgconcepts tvs
 
 
 

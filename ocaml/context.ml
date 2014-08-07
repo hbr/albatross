@@ -540,9 +540,9 @@ let put_class
         (fun (tp,adapt_lst) ->
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
           let par_idx, par_args = Class_table.parent_type idx tp ct in
-          Class_table.do_inherit idx par_idx par_args tp.i ct;
           Feature_table.do_inherit idx par_idx par_args tp.i ft;
-          inherit_parent_assertions idx par_idx par_args tp.i c)
+          inherit_parent_assertions idx par_idx par_args tp.i c;
+          Class_table.do_inherit idx par_idx par_args tp.i ct)
         par_lst)
     inherits
 

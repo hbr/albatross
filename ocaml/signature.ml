@@ -241,7 +241,6 @@ module TVars: sig
   val fgconcepts: t -> type_term array
   val fgnames:    t -> int array
   val has_fg:     int -> t -> bool
-  val make: int -> type_term array -> t
   val make_fgs:    int array -> type_term array -> t
   val count_local:  t -> int
   val count_global: t -> int
@@ -279,20 +278,13 @@ end = struct
 
   let fgnames (tvs:t): int array = tvs.fgnames
 
-  exception Found
-
   let has_fg (name:int) (tvs:t): bool =
     try
-      Array.iter
-        (fun nme -> if nme=name then raise Found else ())
-        tvs.fgnames;
-      false
-    with Found ->
+      let _ = Search.array_find_min (fun n -> n=name) tvs.fgnames in
       true
+    with Not_found ->
+      false
 
-
-  let make (ntvs:int) (cs:type_term array): t =
-    {nlocal=ntvs;concepts=cs;fgconcepts=[||];fgnames=[||]}
 
   let make_fgs (nms: int array) (cpts:type_term array): t =
     {nlocal=0;concepts=[||];fgnames=nms;fgconcepts=cpts}
