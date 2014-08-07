@@ -256,6 +256,7 @@ module TVars: sig
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
   val augment_fgs:  int array -> type_term array -> t -> t
+  val fgs_to_global: t -> t
 
 end = struct
 
@@ -340,6 +341,13 @@ end = struct
     {tvs with
      fgnames    = Array.append fgnames    tvs.fgnames;
      fgconcepts = Array.append fgconcepts tvs.fgconcepts}
+
+  let fgs_to_global (tvs:t):t =
+    assert (count tvs = 0);
+    {nlocal   = 0;
+     concepts = tvs.fgconcepts;
+     fgnames  = [||];
+     fgconcepts = [||]}
 end (* TVars *)
 
 

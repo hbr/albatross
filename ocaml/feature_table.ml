@@ -24,8 +24,7 @@ type descriptor = {
     cls:         int;
     fname:       feature_name;
     impstat:     implementation_status;
-    fgnames:     int array;
-    concepts:    type_term array;
+    tvs:         TVars.t;
     mutable anchored: int array;
     argnames:    int array;
     sign:        Sign.t;
@@ -114,7 +113,7 @@ let add_key (i:int) (ft:t): unit =
   (** Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
   let desc  = Seq.elem i ft.seq in
-  let ntvs  = Array.length desc.concepts
+  let ntvs  = TVars.count_all desc.tvs
   in
   desc.tp <- Class_table.to_dummy ntvs desc.sign;
   let tab =
@@ -138,15 +137,15 @@ let add_keys (ft:t): unit =
   done
 
 
-let names_0 (c:char) (size:int): int array =
+let n_names_with_start (c:char) (size:int): int array =
   let code = Char.code c in
   Array.init size (fun i -> ST.symbol (String.make 1 (Char.chr (i + code))))
 
-let fgnames_0 (size:int): int array =
-  names_0 'A' size
+let standard_fgnames (size:int): int array =
+  n_names_with_start 'A' size
 
-let argnames_0 (size:int): int array =
-  names_0 'a' size
+let standard_argnames (size:int): int array =
+  n_names_with_start 'a' size
 
 
 let add_builtin
@@ -174,10 +173,9 @@ let add_builtin
     fname    = fn;
     cls      = cls;
     impstat  = Builtin;
-    fgnames  = fgnames_0 ntvs;
-    concepts = concepts;
+    tvs      = TVars.make_fgs (standard_fgnames ntvs) concepts;
     anchored = [||];     (* ??? *)
-    argnames = argnames_0 (Array.length argtypes);
+    argnames = standard_argnames (Array.length argtypes);
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
     priv     = None;
@@ -254,13 +252,16 @@ let find
     List.fold_left
       (fun lst (i,sub) ->
         let desc = descriptor i ft in
-        if concepts = desc.concepts && Term_sub.is_identity sub then
+        if concepts = TVars.fgconcepts desc.tvs && Term_sub.is_identity sub then
           i :: lst
         else
           let ok =
             Term_sub.for_all
               (fun j t ->
-                Class_table.satisfies t tvs desc.concepts.(j) TVars.empty ft.ct)
+                Class_table.satisfies
+                  t tvs
+                  (TVars.concept j desc.tvs) TVars.empty
+                  ft.ct)
               sub
           in
           if ok then
@@ -302,14 +303,15 @@ let find_funcs
       let desc = descriptor i ft in
       let sign = desc.sign in
       let arity = Sign.arity sign
-      and tvs   = TVars.make 0 desc.concepts
+      and tvs   = TVars.fgs_to_global desc.tvs
       in
       if arity = nargs then
         (i,tvs,sign) :: lst
       else if arity < nargs then (* downgrade *)
-        let nfgs = Array.length desc.concepts in
+        let nfgs = TVars.count_all tvs in
         try
-          let s = Class_table.downgrade_signature nfgs sign nargs in
+          let s = Class_table.downgrade_signature nfgs sign nargs
+          in
           (i,tvs,s) :: lst
         with Not_found ->
           lst
@@ -501,7 +503,8 @@ let print (ft:t): unit =
         else
           Class_table.module_name fdesc.mdl ft.ct
       and tname  =
-        Class_table.string_of_signature fdesc.sign 0 fdesc.fgnames ft.ct
+        Class_table.string_of_signature
+          fdesc.sign 0 (TVars.fgnames fdesc.tvs) (*fdesc.fgnames*) ft.ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
@@ -522,11 +525,13 @@ let print (ft:t): unit =
 
 
 let add_function (desc:descriptor) (info:info) (ft:t): unit =
-  let cnt = count ft in
-  desc.tp <- Class_table.to_dummy (Array.length desc.concepts) desc.sign;
+  let cnt = count ft
+  and nfgs = TVars.count_all desc.tvs
+  in
+  desc.tp <- Class_table.to_dummy nfgs desc.sign;
   let anch = ref [] in
-  for i = 0 to Array.length desc.concepts - 1 do
-    match desc.concepts.(i) with
+  for i = 0 to nfgs - 1 do
+    match TVars.concept i desc.tvs with
       Variable i when i = desc.cls ->
         anch := i :: !anch
     | _ -> ()
@@ -554,6 +559,7 @@ let put_function
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
+  let tvs = TVars.make_fgs fgnames concepts in
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   in
@@ -569,8 +575,7 @@ let put_function
        cls      = cls;
        fname    = fn.v;
        impstat  = impstat;
-       fgnames  = fgnames;
-       concepts = concepts;
+       tvs      = tvs;
        argnames = argnames;
        sign     = sign;
        tp       = Variable 0;
