@@ -566,7 +566,7 @@ let put_function
      with Not_found -> cnt
   in
   let mdl = Class_table.current_module ft.ct in
-  let cls = Class_table.owner mdl tvs sign ft.ct in
+  let cls = Class_table.owner tvs sign ft.ct in
   if idx=cnt then begin (* new feature *)
     let desc =
       {mdl      = mdl;

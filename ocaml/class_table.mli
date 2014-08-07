@@ -83,7 +83,7 @@ val deferred_features: int -> t -> int list
    (** [deferred features cls ct]: The list of deferred features of the class
        [cls] *)
 
-val owner: int -> TVars.t -> Sign.t -> t -> int
+val owner: TVars.t -> Sign.t -> t -> int
 
 val find:  int -> t -> int
 val find_in_module: int -> t -> int

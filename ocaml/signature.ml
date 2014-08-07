@@ -257,6 +257,7 @@ module TVars: sig
   val remove_local: int -> t -> t
   val augment_fgs:  int array -> type_term array -> t -> t
   val fgs_to_global: t -> t
+  val involved_classes: type_term -> t -> IntSet.t -> IntSet.t
 
 end = struct
 
@@ -348,6 +349,26 @@ end = struct
      concepts = tvs.fgconcepts;
      fgnames  = [||];
      fgconcepts = [||]}
+
+  let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
+    let rec clss (tp:type_term) (tvs:t) (set0:IntSet.t) (n:int): IntSet.t =
+      assert (0 <= n);
+      let nloc = count_local tvs
+      and nall = count_all   tvs in
+      Term.fold
+        (fun set i ->
+          if i < nloc then
+            set
+          else if i < nall then
+            clss (concept i tvs) empty set (n-1)
+          else
+            IntSet.add i set
+        )
+        set0
+        tp
+    in
+    clss tp tvs set0 (count_all tvs)
+
 end (* TVars *)
 
 
@@ -531,6 +552,8 @@ module Result_type: sig
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
   val sub:          t -> type_term array -> int -> t
+  val involved_classes: TVars.t -> t -> IntSet.t
+
 end = struct
 
   type t = (type_term * bool * bool) option
@@ -574,6 +597,12 @@ end = struct
     match rt with
       None -> None
     | Some (tp,proc,ghost) -> Some(Term.sub tp sub_arr ntvs,proc,ghost)
+
+  let involved_classes (tvs:TVars.t) (rt:t): IntSet.t =
+    match rt with
+      None -> IntSet.empty
+    | Some (tp,_,_)  ->
+        TVars.involved_classes tp tvs IntSet.empty
 end
 
 
@@ -608,6 +637,7 @@ module Sign: sig
   val to_function: int -> t -> t
   val sub:         t -> type_term array -> int -> t
   val substitute:  t -> TVars_sub.t -> t
+  val involved_classes: TVars.t -> t -> IntSet.t
 end = struct
 
   type t = {args: type_term array;
@@ -719,4 +749,12 @@ end = struct
     let args = TVars_sub.args tvars_sub in
     let ntvs = Array.length args in
     sub s args ntvs
+
+  let involved_classes (tvs:TVars.t) (s:t): IntSet.t =
+    let set = Result_type.involved_classes tvs s.rt in
+    Array.fold_left
+      (fun set tp ->
+        TVars.involved_classes tp tvs set)
+      set
+      s.args
 end (* Sign *)

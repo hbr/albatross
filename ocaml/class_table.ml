@@ -93,10 +93,14 @@ let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
 
 
+let descriptor (idx:int) (ct:t): descriptor =
+  assert (idx < count ct);
+  Seq.elem idx ct.seq
+
 let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
-  let desc = Seq.elem idx ct.seq in
+  let desc = descriptor idx ct in
   if desc.mdl = current_module ct then
     desc.priv
   else begin
@@ -483,56 +487,25 @@ let add
 
 
 
-
-
-let owner (mdl:int) (tvs:TVars.t) (sign:Sign.t) (ct:t): int =
+let owner (tvs:TVars.t) (s:Sign.t) (ct:t): int =
+  assert (Sign.has_result s || Sign.arity s > 0);
   let max (cidx1:int) (cidx2:int): int =
-    assert (0 <= cidx1 && cidx1 < count ct);
-    assert (cidx2 = -1 || (0 <= cidx2 && cidx2 < count ct));
-    if cidx2 = -1         then cidx1
-    else if cidx1 = cidx2 then cidx1
-    else begin
-      let desc1 = Seq.elem cidx1 ct.seq
-      and desc2 = Seq.elem cidx2 ct.seq in
-      let mdl1  = desc1.mdl
-      and mdl2  = desc2.mdl in
-      assert (not (mdl1 = -1 && mdl2 = -1));
-      if mdl1 = -1                       then cidx2
-      else if mdl2 = -1                  then cidx1
-      else if mdl1 < mdl2 && mdl2 <= mdl then cidx2
-      else begin
-        assert (mdl2 < mdl1 && mdl1 <= mdl);
-        cidx1
-      end
-    end
-  in
-  let owner_tp (tp:type_term) (nb:int) (cidx_prev:int): int =
-    Term.fold
-      (fun cidx_prev var ->
-        if var < nb then cidx_prev
-        else max (var-nb) cidx_prev)
-      cidx_prev
-      tp
-  in
-  let ntvs = TVars.count_all tvs in
-  let cidx = Array.fold_left
-      (fun cidx_prev tp -> owner_tp tp 0 cidx_prev)
-      (-1)
-      (TVars.fgconcepts tvs)
-  in
-  let cidx = Array.fold_left
-      (fun cidx_prev tp -> owner_tp tp ntvs cidx_prev)
-      cidx
-      (Sign.arguments sign)
-  in
-  let rt = Sign.result_type sign in
-  let cidx =
-    if Result_type.has_result rt then
-      owner_tp (Result_type.result rt) ntvs cidx
+    if cidx1 = cidx2 then
+      cidx1
     else
-      cidx
+      let mdl1 = (descriptor cidx1 ct).mdl
+      and mdl2 = (descriptor cidx2 ct).mdl in
+      if mdl1 = mdl2 then
+        assert false (* nyi: multiple classes in the same module *)
+      else
+        if mdl1 < mdl2 then cidx2 else cidx1
   in
-  cidx
+  let set = Sign.involved_classes tvs s in
+  assert (not (IntSet.is_empty set));
+  IntSet.fold
+    (fun i idx_max -> if idx_max = -1 then i else max i idx_max)
+    set
+    (-1)
 
 
 
