@@ -370,6 +370,7 @@ let update_base_descriptor
   for i = 0 to nfgs-1 do
     let nme,tp1 = fgs.(i)
     and tp2     = TVars.concept i desc.tvs in
+    let tp1 = Term.up nfgs tp1 in
     check_class_formal_generic fgens.i nme tp1 tp2 ct;
     fgnames.(i) <- nme
   done
@@ -410,6 +411,7 @@ let export
          " is not consistent with private definition");
     desc.publ <-
       let fgnames,concepts = Myarray.split fgs in
+      let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
       let tvs = TVars.make_fgs fgnames concepts in
       Some { hmark=hm2;
              tvs       = tvs;
@@ -523,10 +525,10 @@ let rec satisfies (tp1:type_term) (tvs1:TVars.t) (tp2:type_term) (tvs2:TVars.t) 
       true
   | Variable i, Variable j when i < nall1 ->
       let tp1 = TVars.concept i tvs1 in
-      satisfies tp1 TVars.empty tp2 tvs2 ct
+      satisfies tp1 tvs1 tp2 tvs2 ct
   | Variable i, Variable j when j < nall2 ->
       let tp2 = TVars.concept j tvs2 in
-      satisfies tp1 tvs1 tp2 TVars.empty ct
+      satisfies tp1 tvs1 tp2 tvs2 ct
   | _ ->
       let idx1,args1 = split_type_term tp1
       and idx2,args2 = split_type_term tp2 in
@@ -578,7 +580,7 @@ let valid_type
     if nargs <> Array.length fgconcepts then
       raise Not_found;
     for i = 0 to nargs-1 do
-      if satisfies args.(i) tvs fgconcepts.(i) TVars.empty ct then
+      if satisfies args.(i) tvs fgconcepts.(i) bdesc.tvs ct then
         ()
       else
         raise Not_found
@@ -820,6 +822,8 @@ let formal_generics
   in
   let fgs_new = Array.of_list (List.rev fgs_new) in
   let fgnames,fgconcepts = Myarray.split fgs_new in
+  let nfgs_new = Array.length fgconcepts in
+  let fgconcepts = Array.map (fun tp -> Term.up nfgs_new tp) fgconcepts in
   TVars_sub.augment (ntvs_new+ntvs_gap) fgnames fgconcepts tvs
 
 
@@ -897,6 +901,7 @@ let add_base_class
   in
   let args = Array.init nfgs (fun i -> Variable i) in
   let anc  = IntMap.singleton idx args in
+  let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = TVars.make_fgs fgnames concepts in
   let bdesc = {hmark=hm; tvs=tvs; ancestors=anc} in
   Seq.push

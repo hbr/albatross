@@ -193,7 +193,8 @@ let base_table () : t =
   let bool    = Class_table.boolean_type 0 in
   let ft      = empty ()
   in
-  let any   = Variable Class_table.any_index
+  let any1  = Variable (Class_table.any_index+1)
+  and any2  = Variable (Class_table.any_index+2)
   and bool1 = Variable (Class_table.boolean_index+1)
   and g_tp  = Variable 0
   and a_tp  = Variable 0
@@ -209,15 +210,15 @@ let base_table () : t =
 
   add_builtin
     "function" Class_table.function_index (FNoperator Parenop)
-    [|any;any|] [|f_tp;a_tp|] b_tp ft;
+    [|any2;any2|] [|f_tp;a_tp|] b_tp ft;
 
   add_builtin
     "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any|] [|p_tp|] bool1 ft;
+    [|any1|] [|p_tp|] bool1 ft;
 
   add_builtin
     "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any|] [|p_tp|] bool1 ft;
+    [|any1|] [|p_tp|] bool1 ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
@@ -259,7 +260,7 @@ let find
               (fun j t ->
                 Class_table.satisfies
                   t tvs
-                  (TVars.concept j desc.tvs) TVars.empty
+                  (TVars.concept j desc.tvs) desc.tvs
                   ft.ct)
               sub
           in
@@ -531,7 +532,7 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let anch = ref [] in
   for i = 0 to nfgs - 1 do
     match TVars.concept i desc.tvs with
-      Variable i when i = desc.cls ->
+      Variable i when i = desc.cls + nfgs ->
         anch := i :: !anch
     | _ -> ()
   done;

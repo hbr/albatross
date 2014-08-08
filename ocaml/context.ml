@@ -240,24 +240,6 @@ let argument (name:int) (c:t): int * TVars.t * Sign.t =
   TVars_sub.tvars c.entry.tvs_sub,
   sign
 
-let concept_satisfies_concept (cpt1:type_term) (cpt2:type_term) (c:t): bool =
-  let ct  = class_table c in
-  let res = Class_table.satisfies cpt1 TVars.empty cpt2 TVars.empty ct in
-  if not res then
-    printf "concept %s does not satisfy %s\n"
-      (Class_table.type2string cpt1 0 [||] (class_table c))
-      (Class_table.type2string cpt2 0 [||] (class_table c));
-  res
-
-
-let type_satisfies_concept
-    (t:type_term)
-    (tvs:TVars.t)
-    (cpt:type_term)
-    (c:t): bool =
-  let ct = class_table c in
-  assert (TVars.count_fgs tvs = Array.length (concepts c));
-  Class_table.satisfies t tvs cpt TVars.empty ct
 
 
 let read_trace_info (c:t): unit =

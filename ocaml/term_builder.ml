@@ -55,12 +55,13 @@ let substitution_string (tb:t): string =
 let concepts_string (tb:t): string =
   let cpt_lst = Array.to_list (TVars_sub.concepts tb.tvars)
   and ct      = Context.class_table tb.c
+  and nall    = TVars_sub.count_all tb.tvars
   in
   "[" ^
   (String.concat
      ","
      (List.map
-        (fun tp -> Class_table.type2string tp 0 [||] ct)
+        (fun tp -> Class_table.type2string tp nall [||] ct)
         cpt_lst)) ^
   "]"
 
@@ -78,8 +79,10 @@ let add_sub (ok:bool) (i:int) (t:term) (tb:t): unit =
 let do_sub (i:int) (t:term) (tb:t): unit =
   (** Substitute the variable [i] by the term [t].
    *)
-  let cnt     = TVars_sub.count tb.tvars
-  and cnt_loc = TVars_sub.count_local tb.tvars
+  let tvs     = TVars_sub.tvars tb.tvars in
+  let cnt     = TVars.count tvs
+  and cnt_loc = TVars.count_local tvs
+  and ct      = Context.class_table tb.c
   in
   assert (i<cnt);
   match t with
@@ -94,20 +97,19 @@ let do_sub (i:int) (t:term) (tb:t): unit =
         let thi   = Variable hi in
         let ok =
           lo < cnt_loc ||
-          Context.concept_satisfies_concept
-            (TVars_sub.concept hi tb.tvars)
-            (TVars_sub.concept lo tb.tvars)
-            tb.c
+          Class_table.satisfies
+            (TVars.concept hi tvs) tvs
+            (TVars.concept lo tvs) tvs
+            ct
         in
         add_sub ok lo thi tb
   | _ ->
       let ok =
         i < cnt_loc ||
-        Context.type_satisfies_concept
-          t
-          (TVars_sub.tvars tb.tvars)
-          (TVars_sub.concept i tb.tvars)
-          tb.c
+        Class_table.satisfies
+          t tvs
+          (TVars_sub.concept i tb.tvars) tvs
+          ct
       in
       add_sub ok i t tb
 
@@ -343,7 +345,8 @@ let add_leaf
     in
     Sign.up nloc (Sign.up_from nglob start s)
   in
-  let tb = add_global (TVars.concepts tvs) tb
+  let tb = add_global (TVars.concepts tvs) tb (* empty, if [tvs] doen't come from
+                                                 global *)
   in
   unify_sign tb.sign s tb;
   {tb with tlist = (Variable i)::tb.tlist}
@@ -428,8 +431,8 @@ let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  tb.tvars <- TVars_sub.remove_local ntvs tb.tvars;
   tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars;
+  tb.tvars <- TVars_sub.remove_local ntvs tb.tvars;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
   tb.tlist <- Lam (nargs, names, t) :: tb.tlist

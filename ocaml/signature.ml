@@ -304,36 +304,110 @@ end = struct
 
   let concepts (tvs:t): type_term array = tvs.concepts
 
+
+
   let add_fgs (tvs_new:t) (tvs:t): t =
-    let cnt = count_fgs tvs in
-    assert (cnt <= count_fgs tvs_new);
-    assert (tvs.fgnames    = Array.sub tvs_new.fgnames 0 cnt);
-    assert (tvs.fgconcepts = Array.sub tvs_new.fgconcepts 0 cnt);
-    {tvs with fgnames=tvs_new.fgnames; fgconcepts=tvs_new.fgconcepts}
+    let nfgs0   = count_fgs tvs in
+    let nfgs_delta = count_fgs tvs_new - nfgs0 in
+    assert (0 <= nfgs_delta);
+    assert (tvs.fgnames =
+            Array.sub tvs_new.fgnames nfgs_delta nfgs0);
+    assert (nfgs_delta = 0); (* remove the first time greater 0 *)
+    let cnt0 = count tvs
+    and cnt1 = count tvs_new in
+    assert (cnt1 <= cnt0);
+    let cnt_delta = cnt0 - cnt1 in
+    let fgconcepts =
+      Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
+    and concepts =
+      Array.map (fun tp -> Term.upbound  nfgs_delta cnt0 tp) tvs.concepts
+    in
+    {tvs with
+     concepts   = concepts;
+     fgnames    = tvs_new.fgnames;
+     fgconcepts = fgconcepts}
+
+
 
   let remove_fgs (tvs_new:t) (tvs:t): t =
-    let cnt = count_fgs tvs_new in
-    assert (cnt <= count_fgs tvs);
-    {tvs with fgnames=tvs_new.fgnames; fgconcepts=tvs_new.fgconcepts}
+    let nfgs0      = count_fgs tvs in
+    let nfgs_delta = nfgs0 - count_fgs tvs_new in
+    assert (0 <= nfgs_delta);
+    assert (nfgs_delta = 0); (* remove the first time greater 0 *)
+    let cnt0 = count tvs
+    and cnt1 = count tvs_new in
+    assert (cnt1 <= cnt0);
+    let cnt_delta = cnt0 - cnt1 in
+    try
+      let fgconcepts =
+        Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
+      and concepts =
+        Array.map (fun tp -> Term.down_from nfgs_delta cnt0 tp) tvs.concepts
+      in
+      {tvs with
+       concepts   = concepts;
+       fgnames    = tvs_new.fgnames;
+       fgconcepts = fgconcepts}
+    with Term_capture ->
+      assert false (* cannot happen *)
+
+
+
 
   let add_global (cs:type_term array) (tvs:t): t =
-    {tvs with concepts = Array.append tvs.concepts cs}
+    let nglob1 = Array.length cs
+    and cnt    = count tvs
+    and nfgs0  = count_fgs tvs
+    in
+    let concepts0 = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.concepts
+    and concepts1 = Array.map (fun tp -> Term.upbound nfgs0 nglob1 tp) cs
+    in
+    let concepts1 = Array.map (fun tp -> Term.up cnt tp) concepts1 in
+    {tvs with
+     concepts   = Array.append concepts0 concepts1;
+     fgconcepts = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.fgconcepts}
+
+
+
 
   let add_local (n:int) (tvs:t): t =
-    {tvs with nlocal = tvs.nlocal + n}
+    {tvs with
+     nlocal     = tvs.nlocal + n;
+     concepts   = Array.map (fun tp -> Term.up n tp) tvs.concepts;
+     fgconcepts = Array.map (fun tp -> Term.up n tp) tvs.fgconcepts}
+
+
 
   let remove_local (n:int) (tvs:t): t =
     assert (n <= (count_local tvs));
-    {tvs with nlocal = tvs.nlocal - n}
+    try
+      {tvs with
+       nlocal     = tvs.nlocal - n;
+       concepts   = Array.map (fun tp -> Term.down n tp) tvs.concepts;
+       fgconcepts = Array.map (fun tp -> Term.down n tp) tvs.fgconcepts}
+    with Term_capture ->
+      assert false (* cannot happen *)
+
+
 
   let augment_fgs
       (fgnames: int array)
       (fgconcepts:type_term array)
       (tvs:t): t =
-    assert (Array.length fgnames = Array.length fgconcepts);
+    let nfgs1 = Array.length fgconcepts in
+    assert (Array.length fgnames = nfgs1);
+    let cnt = count tvs
+    and nfgs0 = count_fgs tvs in
+    let fgconcepts0 =
+      Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.fgconcepts
+    and fgconcepts1 =
+      Array.map (fun tp -> Term.upbound nfgs0 nfgs1 tp) fgconcepts
+    in
+    let fgconcepts1 = Array.map (fun tp -> Term.up cnt tp) fgconcepts1 in
     {tvs with
      fgnames    = Array.append fgnames    tvs.fgnames;
-     fgconcepts = Array.append fgconcepts tvs.fgconcepts}
+     fgconcepts = Array.append fgconcepts1 fgconcepts0}
+
 
   let fgs_to_global (tvs:t):t =
     assert (count tvs = 0);
@@ -341,6 +415,7 @@ end = struct
      concepts = tvs.fgconcepts;
      fgnames  = [||];
      fgconcepts = [||]}
+
 
   let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
     let rec clss (tp:type_term) (tvs:t) (set0:IntSet.t) (n:int): IntSet.t =
@@ -371,6 +446,7 @@ module TVars_sub: sig
   type t
   val empty:        t
   val count_fgs:    t -> int
+  val count_all:    t -> int
   val fgconcepts:   t -> type_term array
   val fgnames:      t -> int array
   val has_fg:       int -> t -> bool
