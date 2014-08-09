@@ -57,6 +57,44 @@ let concept (i:int) (tvs:t): type_term =
 let concepts (tvs:t): type_term array = tvs.concepts
 
 
+let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
+  let nall1 = count_all tvs1
+  and nall2 = count_all tvs2
+  and nloc1 = count_local tvs1
+  and nloc2 = count_local tvs2
+  in
+  let rec is_eq (tp1:type_term) (tp2:type_term) (nmax:int): bool =
+    match tp1, tp2 with
+      Variable i, Variable j when i < nloc1 || j < nloc2 ->
+        false
+    | Variable i, Variable j when i < nall1 && j < nall2 ->
+        assert (0 < nmax);
+        is_eq (concept i tvs1) (concept j tvs2) (nmax-1)
+    | Variable i, Variable j when nall1 <= i && nall2 <= j ->
+        (i - count_all tvs1) = (j - count_all tvs2)
+    | Application (Variable i,args1), Application(Variable j,args2) ->
+        let n1 = Array.length args1
+        and n2 = Array.length args2 in
+        let res = ref (n1 = n2 && is_eq (Variable i) (Variable j) nmax) in
+        begin
+          try
+            for k = 0 to n1-1 do
+              res := !res && is_eq args1.(k) args2.(k) nmax;
+            if not !res then raise Not_found
+            done;
+            true
+          with Not_found -> false
+        end
+    | _ -> false
+  in
+  is_eq
+    tp1
+    tp2
+    (let n1,n2 = nall1-nloc1,nall2-nloc2 in
+    if n1<=n2 then n2 else n1)
+
+
+
 
 let add_fgs (tvs_new:t) (tvs:t): t =
   let nfgs0   = count_fgs tvs in
