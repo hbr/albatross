@@ -232,7 +232,7 @@ let is_untyped (i:int) (c:t): bool =
 
 
 
-let argument (name:int) (c:t): int * TVars.t * Sign.t =
+let argument (name:int) (c:t): int * Tvars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
   let i = Search.array_find_min (fun (n,_) -> n=name) c.entry.fargs in
   let sign = Sign.make_const (snd c.entry.fargs.(i)) in
@@ -297,8 +297,8 @@ let push_with_gap
   let ntvs0 = TVars_sub.count_local entry.tvs_sub
   and nfgs0 = TVars_sub.count_fgs entry.tvs_sub
   in
-  let ntvs1 = TVars.count_local tvs - ntvs0
-  and nfgs1 = TVars.count_fgs tvs   - nfgs0
+  let ntvs1 = Tvars.count_local tvs - ntvs0
+  and nfgs1 = Tvars.count_fgs tvs   - nfgs0
   in
   let res        = Class_table.result_type rt tvs ct in
   let fargs1     = Class_table.formal_arguments entlst tvs ct
@@ -535,7 +535,7 @@ let find_funcs
     (fn:feature_name)
     (nargs:int)
     (c:t)
-    : (int*TVars.t*Sign.t) list =
+    : (int*Tvars.t*Sign.t) list =
   (** Find all the functions with name [fn] and [nargs] arguments in the
       global feature table and transform them into the context.
    *)
@@ -545,8 +545,8 @@ let find_funcs
   let lst = List.rev_map
       (fun (i,tvs,s) ->
         (* make space for formal generics *)
-        let start = TVars.count tvs in
-        assert (TVars.count_local tvs = 0);
+        let start = Tvars.count tvs in
+        assert (Tvars.count_local tvs = 0);
         let sign = Sign.up_from nfgs start s in
         i+(nfargs c), tvs, sign)
       lst
@@ -559,7 +559,7 @@ let find_identifier
     (name:int)
     (nargs_id:int)
     (c:t)
-    : (int * TVars.t * Sign.t) list =
+    : (int * Tvars.t * Sign.t) list =
   (** Find the identifier named [name] which accepts [nargs] arguments
       in one of the local contexts or in the global feature table. Return
       the list of variables together with their signature
@@ -591,7 +591,7 @@ let find_feature
     (fn:feature_name)
     (nargs_feat:int)
     (c:t)
-    : (int * TVars.t * Sign.t) list =
+    : (int * Tvars.t * Sign.t) list =
   (** Find the feature named [fn] which accepts [nargs] arguments global
       feature table. Return the list of variables together with their
       signature.

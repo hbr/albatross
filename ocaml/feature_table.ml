@@ -24,7 +24,7 @@ type descriptor = {
     cls:         int;
     fname:       feature_name;
     impstat:     implementation_status;
-    tvs:         TVars.t;
+    tvs:         Tvars.t;
     mutable anchored: int array;
     argnames:    int array;
     sign:        Sign.t;
@@ -113,7 +113,7 @@ let add_key (i:int) (ft:t): unit =
   (** Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
   let desc  = Seq.elem i ft.seq in
-  let ntvs  = TVars.count_all desc.tvs
+  let ntvs  = Tvars.count_all desc.tvs
   in
   desc.tp <- Class_table.to_dummy ntvs desc.sign;
   let tab =
@@ -173,7 +173,7 @@ let add_builtin
     fname    = fn;
     cls      = cls;
     impstat  = Builtin;
-    tvs      = TVars.make_fgs (standard_fgnames ntvs) concepts;
+    tvs      = Tvars.make_fgs (standard_fgnames ntvs) concepts;
     anchored = [||];     (* ??? *)
     argnames = standard_argnames (Array.length argtypes);
     sign     = sign;
@@ -241,11 +241,11 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
 
 let find
     (fn:feature_name)
-    (tvs: TVars.t)
+    (tvs: Tvars.t)
     (tp:type_term)
     (ft:t)
     : int =
-  let ntvs = TVars.count_all tvs
+  let ntvs = Tvars.count_all tvs
   and tab = Feature_map.find fn ft.map in
   let lst  = Term_table.unify tp ntvs !tab in
   let idx_lst =
@@ -260,7 +260,7 @@ let find
               (fun j t ->
                 Class_table.satisfies
                   t tvs
-                  (TVars.concept j desc.tvs) desc.tvs
+                  (Tvars.concept j desc.tvs) desc.tvs
                   ft.ct)
               sub
           in
@@ -282,12 +282,12 @@ let find
 
 let find_with_signature
     (fn:feature_name)
-    (tvs: TVars.t)
+    (tvs: Tvars.t)
     (sign:Sign.t)
     (ft:t)
     : int =
   (* Find the feature with the characteristics.  *)
-  let ntvs = TVars.count_all tvs in
+  let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
   find fn tvs tp ft
 
@@ -296,19 +296,19 @@ let find_with_signature
 let find_funcs
     (fn:feature_name)
     (nargs:int) (ft:t)
-    : (int * TVars.t * Sign.t) list =
+    : (int * Tvars.t * Sign.t) list =
   let tab = Feature_map.find fn ft.map in
   List.fold_left
     (fun lst (i,_,_,_) ->
       let desc = descriptor i ft in
       let sign = desc.sign in
       let arity = Sign.arity sign
-      and tvs   = TVars.fgs_to_global desc.tvs
+      and tvs   = Tvars.fgs_to_global desc.tvs
       in
       if arity = nargs then
         (i,tvs,sign) :: lst
       else if arity < nargs then (* downgrade *)
-        let nfgs = TVars.count_all tvs in
+        let nfgs = Tvars.count_all tvs in
         try
           let s = Class_table.downgrade_signature nfgs sign nargs
           in
@@ -504,7 +504,7 @@ let print (ft:t): unit =
           Class_table.module_name fdesc.mdl ft.ct
       and tname  =
         Class_table.string_of_signature
-          fdesc.sign 0 (TVars.fgnames fdesc.tvs) (*fdesc.fgnames*) ft.ct
+          fdesc.sign 0 (Tvars.fgnames fdesc.tvs) (*fdesc.fgnames*) ft.ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
@@ -526,12 +526,12 @@ let print (ft:t): unit =
 
 let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let cnt = count ft
-  and nfgs = TVars.count_all desc.tvs
+  and nfgs = Tvars.count_all desc.tvs
   in
   desc.tp <- Class_table.to_dummy nfgs desc.sign;
   let anch = ref [] in
   for i = 0 to nfgs - 1 do
-    match TVars.concept i desc.tvs with
+    match Tvars.concept i desc.tvs with
       Variable i when i = desc.cls + nfgs ->
         anch := i :: !anch
     | _ -> ()
@@ -552,13 +552,13 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
 
 let put_function
     (fn:       feature_name withinfo)
-    (tvs:      TVars.t)
+    (tvs:      Tvars.t)
     (argnames: int array)
     (sign:     Sign.t)
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  assert (TVars.count tvs = 0);  (* only formal generics, no untyped *)
+  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   in

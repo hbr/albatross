@@ -47,7 +47,7 @@ val is_global:   t -> bool
 val is_toplevel: t -> bool
 val depth:       t -> int
 val arity:     t -> int
-val argument:  int -> t -> int * TVars.t * Sign.t
+val argument:  int -> t -> int * Tvars.t * Sign.t
 
 val result_type: t -> type_term
 
@@ -92,8 +92,8 @@ val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
 
-val find_identifier: int ->          int -> t -> (int * TVars.t * Sign.t) list
-val find_feature:    feature_name -> int -> t -> (int * TVars.t * Sign.t) list
+val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
+val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 
 val put_global_function:
     feature_name withinfo  -> Feature_table.implementation_status ->

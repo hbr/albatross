@@ -69,7 +69,7 @@ val normalize_term: term->int->t->term
      [i-nbound] *)
 
 
-val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
+val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
       arguments in the feature table [ft] and returns the indices with the
       corresponding type variables and signatures. The signatures will be up-
@@ -78,7 +78,7 @@ val find_funcs: feature_name -> int -> t -> (int * TVars.t * Sign.t) list
 
 
 val put_function:
-    feature_name withinfo -> TVars.t -> int array
+    feature_name withinfo -> Tvars.t -> int array
       -> Sign.t -> implementation_status -> term option -> t -> unit
   (** [put_function fn tvs fnms sign imp_stat term_opt ft] adds the function
       with then name [fn], the formal generics of [tvs], the arguments [fnms],

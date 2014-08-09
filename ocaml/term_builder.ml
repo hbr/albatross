@@ -80,8 +80,8 @@ let do_sub (i:int) (t:term) (tb:t): unit =
   (** Substitute the variable [i] by the term [t].
    *)
   let tvs     = TVars_sub.tvars tb.tvars in
-  let cnt     = TVars.count tvs
-  and cnt_loc = TVars.count_local tvs
+  let cnt     = Tvars.count tvs
+  and cnt_loc = Tvars.count_local tvs
   and ct      = Context.class_table tb.c
   in
   assert (i<cnt);
@@ -98,8 +98,8 @@ let do_sub (i:int) (t:term) (tb:t): unit =
         let ok =
           lo < cnt_loc ||
           Class_table.satisfies
-            (TVars.concept hi tvs) tvs
-            (TVars.concept lo tvs) tvs
+            (Tvars.concept hi tvs) tvs
+            (Tvars.concept lo tvs) tvs
             ct
         in
         add_sub ok lo thi tb
@@ -325,10 +325,10 @@ let add_global (cs:type_term array) (tb:t): t =
 
 let add_leaf
     (i:int)
-    (tvs:TVars.t)
+    (tvs:Tvars.t)
     (s:Sign.t)
     (tb:t): t =
-  assert (not (TVars.count_local tvs > 0 && TVars.count_global tvs > 0));
+  assert (not (Tvars.count_local tvs > 0 && Tvars.count_global tvs > 0));
   let s =
     (* If [i] comes from a global environment, then it has no local type
        variables and space must be made for all type variables (locals and
@@ -340,12 +340,12 @@ let add_leaf
        and locals) of [tb.tvars] which are not yet in [tvs].
      *)
     let nglob = TVars_sub.count_global tb.tvars
-    and nloc  = TVars_sub.count_local  tb.tvars - TVars.count_local tvs
-    and start = TVars.count_local tvs
+    and nloc  = TVars_sub.count_local  tb.tvars - Tvars.count_local tvs
+    and start = Tvars.count_local tvs
     in
     Sign.up nloc (Sign.up_from nglob start s)
   in
-  let tb = add_global (TVars.concepts tvs) tb (* empty, if [tvs] doen't come from
+  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doen't come from
                                                  global *)
   in
   unify_sign tb.sign s tb;

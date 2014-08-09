@@ -59,7 +59,7 @@ val expect_argument:   int -> t -> unit
       signature *)
 
 
-val add_leaf:          int ->  TVars.t -> Sign.t ->  t -> t
+val add_leaf:          int ->  Tvars.t -> Sign.t ->  t -> t
   (** [add_leaf i tvs s tb] adds the term [i,tvs,s] as an elementary term to
       the term builder [tb] *)
 

@@ -234,213 +234,6 @@ end = struct
 
 
 
-module TVars: sig
-
-  type t
-  val empty: t
-  val fgconcepts: t -> type_term array
-  val fgnames:    t -> int array
-  val has_fg:     int -> t -> bool
-  val make_fgs:    int array -> type_term array -> t
-  val count_local:  t -> int
-  val count_global: t -> int
-  val count:        t -> int
-  val count_fgs:    t -> int
-  val count_all:    t -> int
-  val concept:      int -> t -> type_term
-  val concepts:     t -> type_term array
-  val add_fgs:      t -> t -> t
-  val remove_fgs:   t -> t -> t
-  val add_global:   type_term array -> t -> t
-  val add_local:    int -> t -> t
-  val remove_local: int -> t -> t
-  val augment_fgs:  int array -> type_term array -> t -> t
-  val fgs_to_global: t -> t
-  val involved_classes: type_term -> t -> IntSet.t -> IntSet.t
-
-end = struct
-
-  type t = {
-      nlocal:int;                  (* local type variables without concept *)
-      concepts: type_term array;   (* global type variables with concept
-                                      coming from used functions           *)
-      fgconcepts: type_term array; (* concepts of the formal generics      *)
-      fgnames:    int array        (* names of the formal generics         *)
-    }
-
-  let empty: t =
-    {nlocal=0;concepts=[||];fgconcepts=[||];fgnames=[||]}
-
-
-  let count_fgs (tvs:t): int = Array.length tvs.fgnames
-
-  let fgconcepts (tvs:t): type_term array = tvs.fgconcepts
-
-  let fgnames (tvs:t): int array = tvs.fgnames
-
-  let has_fg (name:int) (tvs:t): bool =
-    try
-      let _ = Search.array_find_min (fun n -> n=name) tvs.fgnames in
-      true
-    with Not_found ->
-      false
-
-
-  let make_fgs (nms: int array) (cpts:type_term array): t =
-    {nlocal=0;concepts=[||];fgnames=nms;fgconcepts=cpts}
-
-  let count_local (tvs:t): int = tvs.nlocal
-  let count_global (tvs:t): int = Array.length tvs.concepts
-  let count (tvs:t): int    = tvs.nlocal + count_global tvs
-  let count_all(tvs:t): int = tvs.nlocal + count_global tvs + count_fgs tvs
-
-  let concept (i:int) (tvs:t): type_term =
-    assert (count_local tvs <= i);
-    assert (i < count_all tvs);
-    if i < count tvs then
-      tvs.concepts.(i - count_local tvs)
-    else
-      tvs.fgconcepts.(i - count tvs)
-
-  let concepts (tvs:t): type_term array = tvs.concepts
-
-
-
-  let add_fgs (tvs_new:t) (tvs:t): t =
-    let nfgs0   = count_fgs tvs in
-    let nfgs_delta = count_fgs tvs_new - nfgs0 in
-    assert (0 <= nfgs_delta);
-    assert (tvs.fgnames =
-            Array.sub tvs_new.fgnames nfgs_delta nfgs0);
-    assert (nfgs_delta = 0); (* remove the first time greater 0 *)
-    let cnt0 = count tvs
-    and cnt1 = count tvs_new in
-    assert (cnt1 <= cnt0);
-    let cnt_delta = cnt0 - cnt1 in
-    let fgconcepts =
-      Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
-    and concepts =
-      Array.map (fun tp -> Term.upbound  nfgs_delta cnt0 tp) tvs.concepts
-    in
-    {tvs with
-     concepts   = concepts;
-     fgnames    = tvs_new.fgnames;
-     fgconcepts = fgconcepts}
-
-
-
-  let remove_fgs (tvs_new:t) (tvs:t): t =
-    let nfgs0      = count_fgs tvs in
-    let nfgs_delta = nfgs0 - count_fgs tvs_new in
-    assert (0 <= nfgs_delta);
-    assert (nfgs_delta = 0); (* remove the first time greater 0 *)
-    let cnt0 = count tvs
-    and cnt1 = count tvs_new in
-    assert (cnt1 <= cnt0);
-    let cnt_delta = cnt0 - cnt1 in
-    try
-      let fgconcepts =
-        Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
-      and concepts =
-        Array.map (fun tp -> Term.down_from nfgs_delta cnt0 tp) tvs.concepts
-      in
-      {tvs with
-       concepts   = concepts;
-       fgnames    = tvs_new.fgnames;
-       fgconcepts = fgconcepts}
-    with Term_capture ->
-      assert false (* cannot happen *)
-
-
-
-
-  let add_global (cs:type_term array) (tvs:t): t =
-    let nglob1 = Array.length cs
-    and cnt    = count tvs
-    and nfgs0  = count_fgs tvs
-    in
-    let concepts0 = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.concepts
-    and concepts1 = Array.map (fun tp -> Term.upbound nfgs0 nglob1 tp) cs
-    in
-    let concepts1 = Array.map (fun tp -> Term.up cnt tp) concepts1 in
-    {tvs with
-     concepts   = Array.append concepts0 concepts1;
-     fgconcepts = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.fgconcepts}
-
-
-
-
-  let add_local (n:int) (tvs:t): t =
-    {tvs with
-     nlocal     = tvs.nlocal + n;
-     concepts   = Array.map (fun tp -> Term.up n tp) tvs.concepts;
-     fgconcepts = Array.map (fun tp -> Term.up n tp) tvs.fgconcepts}
-
-
-
-  let remove_local (n:int) (tvs:t): t =
-    assert (n <= (count_local tvs));
-    try
-      {tvs with
-       nlocal     = tvs.nlocal - n;
-       concepts   = Array.map (fun tp -> Term.down n tp) tvs.concepts;
-       fgconcepts = Array.map (fun tp -> Term.down n tp) tvs.fgconcepts}
-    with Term_capture ->
-      assert false (* cannot happen *)
-
-
-
-  let augment_fgs
-      (fgnames: int array)
-      (fgconcepts:type_term array)
-      (tvs:t): t =
-    let nfgs1 = Array.length fgconcepts in
-    assert (Array.length fgnames = nfgs1);
-    let cnt = count tvs
-    and nfgs0 = count_fgs tvs in
-    let fgconcepts0 =
-      Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.fgconcepts
-    and fgconcepts1 =
-      Array.map (fun tp -> Term.upbound nfgs0 nfgs1 tp) fgconcepts
-    in
-    let fgconcepts1 = Array.map (fun tp -> Term.up cnt tp) fgconcepts1 in
-    {tvs with
-     fgnames    = Array.append fgnames    tvs.fgnames;
-     fgconcepts = Array.append fgconcepts1 fgconcepts0}
-
-
-  let fgs_to_global (tvs:t):t =
-    assert (count tvs = 0);
-    {nlocal   = 0;
-     concepts = tvs.fgconcepts;
-     fgnames  = [||];
-     fgconcepts = [||]}
-
-
-  let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
-    let rec clss (tp:type_term) (tvs:t) (set0:IntSet.t) (n:int): IntSet.t =
-      assert (0 <= n);
-      let nloc = count_local tvs
-      and nall = count_all   tvs in
-      Term.fold
-        (fun set i ->
-          if i < nloc then
-            set
-          else if i < nall then
-            clss (concept i tvs) empty set (n-1)
-          else
-            IntSet.add i set
-        )
-        set0
-        tp
-    in
-    clss tp tvs set0 (count_all tvs)
-
-end (* TVars *)
-
-
-
-
 module TVars_sub: sig
 
   type t
@@ -457,7 +250,7 @@ module TVars_sub: sig
   val count_local:  t -> int
   val concept:      int -> t -> term
   val concepts:     t -> term array
-  val tvars:        t -> TVars.t
+  val tvars:        t -> Tvars.t
   val sub:          t -> Term_sub_arr.t
   val args:         t -> term array
   val add_sub:      int -> term -> t -> unit
@@ -475,25 +268,25 @@ module TVars_sub: sig
 
 end = struct
 
-  type t = {vars: TVars.t;
+  type t = {vars: Tvars.t;
             sub:  Term_sub_arr.t}
 
   let empty: t =
-    {vars = TVars.empty; sub = Term_sub_arr.empty}
+    {vars = Tvars.empty; sub = Term_sub_arr.empty}
 
   let count_fgs (tvs:t): int =
-    TVars.count_fgs tvs.vars
+    Tvars.count_fgs tvs.vars
 
   let fgconcepts (tvs:t): type_term array =
-    TVars.fgconcepts tvs.vars
+    Tvars.fgconcepts tvs.vars
 
   let fgnames (tvs:t): int array =
-    TVars.fgnames tvs.vars
+    Tvars.fgnames tvs.vars
 
   let has_fg (name:int) (tvs:t): bool =
-    TVars.has_fg name tvs.vars
+    Tvars.has_fg name tvs.vars
 
-  let count (tvars:t): int = TVars.count tvars.vars
+  let count (tvars:t): int = Tvars.count tvars.vars
 
   let has (i:int) (tvars:t): bool =
     Term_sub_arr.has i tvars.sub
@@ -503,22 +296,22 @@ end = struct
     Term_sub_arr.get i tvars.sub
 
   let count_global (tv:t): int =
-    TVars.count_global tv.vars
+    Tvars.count_global tv.vars
 
   let count_local (tv:t): int =
-    TVars.count_local tv.vars
+    Tvars.count_local tv.vars
 
   let count_all (tv:t): int =
-    TVars.count_all tv.vars
+    Tvars.count_all tv.vars
 
   let concept (i:int) (tv:t): term =
     assert (count_local tv <= i);
     assert (i < count_all tv);
-    TVars.concept i tv.vars
+    Tvars.concept i tv.vars
 
-  let concepts (tv:t): term array = TVars.concepts tv.vars
+  let concepts (tv:t): term array = Tvars.concepts tv.vars
 
-  let tvars (tv:t): TVars.t = tv.vars
+  let tvars (tv:t): Tvars.t = tv.vars
 
   let sub (tv:t): Term_sub_arr.t = tv.sub
 
@@ -534,30 +327,30 @@ end = struct
 
   let add_fgs (tv_new:t) (tv:t): t =
     let n = count_fgs tv_new - count_fgs tv in
-    {vars = TVars.add_fgs tv_new.vars tv.vars;
+    {vars = Tvars.add_fgs tv_new.vars tv.vars;
      sub  = Term_sub_arr.up_above_top n tv.sub}
 
   let remove_fgs (tv_new:t) (tv:t): t =
     let n = count_fgs tv - count_fgs tv_new in
-    {vars = TVars.remove_fgs tv_new.vars tv.vars;
+    {vars = Tvars.remove_fgs tv_new.vars tv.vars;
      sub  = Term_sub_arr.down_above_top n tv.sub}
 
   let add_global (cs:type_term array) (tv:t): t =
-    {vars = TVars.add_global cs tv.vars;
+    {vars = Tvars.add_global cs tv.vars;
      sub  = Term_sub_arr.add_top (Array.length cs) tv.sub}
 
   let add_local (n:int) (tv:t): t =
     (** Add [n] local (fresh) type variables without constraints to [tv]
         and shift all type variables up by [n].
      *)
-    {vars = TVars.add_local n tv.vars;
+    {vars = Tvars.add_local n tv.vars;
      sub  = Term_sub_arr.add_bottom n tv.sub}
 
   let remove_local (n:int) (tv:t): t =
     (** Remove [n] local type variables (without constraints) from [tv] and
         shift all type variables down by [n].
      *)
-    {vars = TVars.remove_local n tv.vars;
+    {vars = Tvars.remove_local n tv.vars;
      sub  = Term_sub_arr.remove_bottom n tv.sub}
 
   let augment
@@ -568,7 +361,7 @@ end = struct
     let n  = Array.length fgnames in
     assert (n = Array.length fgconcepts);
     let tv = add_local ntvs tv in
-    {vars = TVars.augment_fgs fgnames fgconcepts tv.vars;
+    {vars = Tvars.augment_fgs fgnames fgconcepts tv.vars;
      sub  = Term_sub_arr.up_above_top n tv.sub}
 
 
@@ -620,7 +413,7 @@ module Result_type: sig
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
   val sub:          t -> type_term array -> int -> t
-  val involved_classes: TVars.t -> t -> IntSet.t
+  val involved_classes: Tvars.t -> t -> IntSet.t
 
 end = struct
 
@@ -666,11 +459,11 @@ end = struct
       None -> None
     | Some (tp,proc,ghost) -> Some(Term.sub tp sub_arr ntvs,proc,ghost)
 
-  let involved_classes (tvs:TVars.t) (rt:t): IntSet.t =
+  let involved_classes (tvs:Tvars.t) (rt:t): IntSet.t =
     match rt with
       None -> IntSet.empty
     | Some (tp,_,_)  ->
-        TVars.involved_classes tp tvs IntSet.empty
+        Tvars.involved_classes tp tvs IntSet.empty
 end
 
 
@@ -705,7 +498,7 @@ module Sign: sig
   val to_function: int -> t -> t
   val sub:         t -> type_term array -> int -> t
   val substitute:  t -> TVars_sub.t -> t
-  val involved_classes: TVars.t -> t -> IntSet.t
+  val involved_classes: Tvars.t -> t -> IntSet.t
 end = struct
 
   type t = {args: type_term array;
@@ -818,11 +611,11 @@ end = struct
     let ntvs = Array.length args in
     sub s args ntvs
 
-  let involved_classes (tvs:TVars.t) (s:t): IntSet.t =
+  let involved_classes (tvs:Tvars.t) (s:t): IntSet.t =
     let set = Result_type.involved_classes tvs s.rt in
     Array.fold_left
       (fun set tp ->
-        TVars.involved_classes tp tvs set)
+        Tvars.involved_classes tp tvs set)
       set
       s.args
 end (* Sign *)

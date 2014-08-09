@@ -17,7 +17,7 @@ module Accus: sig
   val expected_arity:    t -> int
   val expected_signatures_string: t -> string
   val substitutions_string: t -> string
-  val add_leaf:          (int*TVars.t*Sign.t) list -> t -> unit
+  val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
@@ -87,7 +87,7 @@ end = struct
 
 
   let add_leaf
-      (terms: (int*TVars.t*Sign.t) list)
+      (terms: (int*Tvars.t*Sign.t) list)
       (accs:   t)
       : unit =
     (** Add the terms from the list [terms] of the context [c] to the
@@ -155,7 +155,7 @@ let cannot_find (name:string) (nargs:int) (info:info) =
 
 
 let features (fn:feature_name) (nargs:int) (info:info) (c:Context.t)
-    : (int * TVars.t * Sign.t) list =
+    : (int * Tvars.t * Sign.t) list =
   try
     Context.find_feature fn nargs c
   with Not_found ->
@@ -163,20 +163,20 @@ let features (fn:feature_name) (nargs:int) (info:info) (c:Context.t)
 
 
 let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
-    : (int * TVars.t * Sign.t) list =
+    : (int * Tvars.t * Sign.t) list =
   try
     Context.find_identifier name nargs c
   with Not_found ->
     cannot_find (ST.string name) nargs info
 
 
-let string_of_signature (tvs:TVars.t) (s:Sign.t) (c:Context.t): string =
-  let ntvs = TVars.count tvs
-  and fgnames = TVars.fgnames tvs in
+let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
+  let ntvs = Tvars.count tvs
+  and fgnames = Tvars.fgnames tvs in
   Class_table.string_of_signature s ntvs fgnames (Context.class_table c)
 
 
-let string_of_signatures (lst:(int*TVars.t*Sign.t) list) (c:Context.t): string =
+let string_of_signatures (lst:(int*Tvars.t*Sign.t) list) (c:Context.t): string =
   "{" ^
   (String.concat
      ","
@@ -187,7 +187,7 @@ let string_of_signatures (lst:(int*TVars.t*Sign.t) list) (c:Context.t): string =
 
 
 let process_leaf
-    (lst: (int*TVars.t*Sign.t) list)
+    (lst: (int*Tvars.t*Sign.t) list)
     (c:Context.t)
     (info:info)
     (accs: Accus.t)
@@ -238,7 +238,7 @@ let rec analyze_expression
     in
     let feat (fn:feature_name) = features fn nargs info c
     and id   (name:int)        = identifiers name nargs info c
-    and do_leaf (lst: (int*TVars.t*Sign.t) list): unit =
+    and do_leaf (lst: (int*Tvars.t*Sign.t) list): unit =
       process_leaf lst c info accs
     in
     match e with

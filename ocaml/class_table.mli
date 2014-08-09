@@ -83,7 +83,7 @@ val deferred_features: int -> t -> int list
    (** [deferred features cls ct]: The list of deferred features of the class
        [cls] *)
 
-val owner: TVars.t -> Sign.t -> t -> int
+val owner: Tvars.t -> Sign.t -> t -> int
 
 val find:  int -> t -> int
 val find_in_module: int -> t -> int
@@ -136,11 +136,11 @@ val formal_generics: entities list withinfo -> return_type -> int -> TVars_sub.t
 
 
 
-val formal_arguments: entities list withinfo -> TVars.t -> t -> formal array
+val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal array
 
-val result_type: return_type -> TVars.t -> t -> Result_type.t
+val result_type: return_type -> Tvars.t -> t -> Result_type.t
 
-val satisfies: type_term -> TVars.t -> type_term -> TVars.t -> t -> bool
+val satisfies: type_term -> Tvars.t -> type_term -> Tvars.t -> t -> bool
   (** [satisfies tp1 tvs1 tp2 tvs2 ct]: Does the type [tp1,tvs1] satisfy the
       type [tp2,tvs2] *)
 
