@@ -142,19 +142,6 @@ let pop (at:t): unit =
 
 
 
-
-let discharged_term (i:int) (at:t): term =
-  (** The [i]th term of the current environment with all local variables and
-      assumptions discharged.
-   *)
-  let ps = List.map (fun i -> (Seq.elem i at.seq).term) at.entry.req
-  and tgt = (Seq.elem i at.seq).term
-  in
-  let t = implication_chain ps tgt at
-  in
-  all_quantified_outer t at
-
-
 let term (i:int) (at:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
    *)
@@ -179,6 +166,19 @@ let local_term (i:int) (at:t): term =
   let n_up = at.entry.nbenv - desc.nbenv0
   in
   Term.up n_up desc.term
+
+
+
+let discharged_term (i:int) (at:t): term =
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged.
+   *)
+  let ps = List.map (fun j -> local_term j at) at.entry.req
+  and tgt = local_term i at
+  in
+  let t = implication_chain ps tgt at
+  in
+  all_quantified_outer t at
 
 
 let is_assumption (i:int) (at:t): bool =
