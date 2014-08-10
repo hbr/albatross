@@ -25,9 +25,16 @@ module Term_sub_arr: sig
   val add_top:        int -> t -> t
   val add_bottom:     int -> t -> t
   val remove_bottom:  int -> t -> t
+
   val sub_star:       term -> t -> term
-      (** Apply to the term [t] the substitution [s] until no more substitutions
-          are possible.  *)
+      (** [sub_star t s] applies to the term [t] the substitution [s] until no
+          more substitutions are possible.  *)
+
+  val get_star:       int -> t -> term
+    (** [get_star i s] gets the [i]th substitution term and applies the
+        substitution [s] until no more substitutions are possible.  *)
+
+
 end = struct
 
   type t = {
@@ -263,8 +270,12 @@ module TVars_sub: sig
   val augment:      int -> int array -> type_term array -> t -> t
   val update_subs:  t -> t -> unit
   val sub_star:     term -> t -> term
-      (** [sub_star t s]: apply to the term [t] the substitution [s] until no
+      (** [sub_star t s]: applies to the term [t] the substitution [s] until no
           more substitutions are possible.  *)
+
+  val get_star:       int -> t -> term
+    (** [get_star i s] gets the [i]th substitution term and applies the
+        substitution [s] until no more substitutions are possible.  *)
 
 end = struct
 
@@ -390,8 +401,12 @@ end = struct
         assert ((get i tv) = (get i tvnew))
     done
 
+
   let sub_star (t:type_term) (s:t): term =
     Term_sub_arr.sub_star t s.sub
+
+  let get_star (i:int) (s:t): term =
+    Term_sub_arr.get_star i s.sub
 
 end (* TVars_sub *)
 

@@ -56,10 +56,41 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
+let count_fgs (i:int) (ft:t): int =
+  assert (i < count ft);
+  Tvars.count_fgs (descriptor i ft).tvs
+
+let anchor (i:int) (ft:t): int =
+  let desc = descriptor i ft in
+  if Array.length desc.anchored = 1 then
+    desc.anchored.(0)
+  else
+    raise Not_found
+
+
+
+let variant (i:int) (cls:int) (ft:t): int =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  try
+    IntMap.find cls desc.variants
+  with Not_found ->
+    assert false (* illegal call *)
+
+
 let is_deferred (desc:descriptor): bool =
   match desc.impstat with
     Deferred -> true
   | _        -> false
+
+
+let string_of_signature (i:int) (ft:t): string =
+  let desc = descriptor i ft in
+  (feature_name_to_string desc.fname) ^
+  (Class_table.string_of_signature desc.sign
+     (Tvars.count desc.tvs)
+     (Tvars.fgnames desc.tvs)
+     ft.ct)
 
 
 let names_of_formals (farr: formal array): int array =
@@ -176,7 +207,7 @@ let add_builtin
     priv     = None;
     pub      = None;
     seeds    = IntSet.singleton cnt;
-    variants = IntMap.empty
+    variants = IntMap.singleton cls cnt
   }
   in
   Seq.push desc ft.seq;
@@ -577,7 +608,7 @@ let put_function
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt;
        seeds    = IntSet.singleton cnt;
-       variants = IntMap.empty}
+       variants = IntMap.singleton cls cnt}
     in
     add_function desc fn.i ft
   end else begin        (* feature update *)
@@ -625,29 +656,18 @@ let find_variant (i:int) (cls:int) (ft:t): int*Term_sub.t =
       (fun (idx,sub) ->
         try
           let desc_heir = descriptor idx ft in
-          printf "heir feature %s%s\n"
-            (feature_name_to_string desc_heir.fname)
-            (Class_table.string_of_signature
-               desc_heir.sign (Tvars.count_all desc_heir.tvs) [||] ct);
           for k = 0 to Tvars.count_all desc.tvs - 1 do
             let tp1  = Term_sub.find k sub
             and tvs1 = desc_heir.tvs in
             if k = fg_anchor then
               let tp2,tvs2 = Class_table.class_type desc_heir.cls ct
               in
-              printf "tp1 %s, tp2 %s\n"
-                (Class_table.type2string
-                   tp1 (Tvars.count tvs1) (Tvars.fgnames tvs1) ct)
-                (Class_table.type2string
-                   tp2 (Tvars.count tvs2) (Tvars.fgnames tvs2) ct);
               if Tvars.is_equal_or_fg tp1 tvs1 tp2 tvs2
-              then (printf "is_equal_or_fg\n";())
-              else
-                (printf "not is_equal_or_fg\n"; raise Not_found)
+              then ()
+              else raise Not_found
             else if Tvars.is_equal tp1 tvs1 (Variable k) desc.tvs
-            then (printf "is_equal\n"; ())
-            else
-              (printf "not is_equal\n"; raise Not_found)
+            then ()
+            else raise Not_found
           done;
           true
         with Not_found ->
@@ -689,8 +709,9 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
               IntMap.find cls desc_seed.variants = idx);
       desc_seed.variants <- IntMap.add cls idx desc_seed.variants;
       desc_idx.seeds     <- IntSet.add idx_seed desc_idx.seeds)
-    desc.seeds
-  (* Remove feature idx from the feature map !!!! still missing *)
+    desc.seeds;
+  let tab = Feature_map.find desc_idx.fname ft.map in
+  tab := Term_table.remove idx !tab
 
 
 

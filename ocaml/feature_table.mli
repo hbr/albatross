@@ -12,6 +12,19 @@ type implementation_status = No_implementation | Builtin | Deferred
 val count:      t -> int
     (** The number of features in the table *)
 
+val count_fgs:  int -> t -> int
+    (** [count_fgs i ft] returns the number of formal generics of the feature [i] *)
+
+val anchor: int -> t -> int
+    (** [anchor i ft] returns the formal generic which serves as an anchor for
+        inheritance. Raises [Not_found] if there is no unique anchor *)
+
+val variant: int -> int -> t -> int
+    (** [variant idx cls ft] returns the variant of the feature [idx] in the
+        class [cls] *)
+
+val string_of_signature: int -> t -> string
+
 val implication_index: int
 val all_index:         int
 val some_index:        int

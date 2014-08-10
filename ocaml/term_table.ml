@@ -503,6 +503,17 @@ let add
 
 
 
+let remove (i:int) (tab:t): t =
+  let lst = List.rev tab.terms in
+  List.fold_left
+    (fun tab (idx,nargs,nbenv,term) ->
+      if idx <> i then
+        add term nargs nbenv idx tab
+      else
+        tab)
+    empty
+    lst
+
 
 let unify_unique (t:term) (nbt:int) (table:t)
     : int * Term_sub.t =

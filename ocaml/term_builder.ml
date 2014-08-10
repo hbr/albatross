@@ -460,6 +460,54 @@ let check_type_variables (inf:info) (tb:t): unit =
   done
 
 
+let update_term (tb:t): unit =
+  assert (Mylist.is_singleton tb.tlist);
+  let ft = Context.feature_table tb.c
+  and tvs = TVars_sub.tvars tb.tvars
+  in
+  let rec upd (t:term) (nargs:int) (nglob:int): int*term =
+    match t with
+      Variable i when i < nargs ->
+        nglob, t
+    | Variable i ->
+        let i = i - nargs in
+        let nfgs = Feature_table.count_fgs i ft in
+        begin
+          try
+            let anchor = Feature_table.anchor i ft in
+            assert (anchor < nfgs);
+            let tv  = Tvars.count_local tvs + nglob + anchor in
+            assert (tv < Tvars.count_all tvs);
+            let tvtp = TVars_sub.get_star tv tb.tvars in
+            let pcls = Tvars.principal_class tvtp tvs in
+            let i_var = Feature_table.variant i pcls ft in
+            nglob+nfgs, Variable (nargs + i_var)
+          with Not_found ->
+            nglob+nfgs, t
+        end
+    | Application (f,args) ->
+        let nglob,f = upd f nargs nglob in
+        let nglob,arglst = Array.fold_left
+            (fun (nglob,lst) t ->
+              let nglob,t = upd t nargs nglob in
+              nglob, t::lst)
+            (nglob,[])
+            args
+        in
+        let args = Array.of_list (List.rev arglst) in
+        nglob, Application (f,args)
+    | Lam (n,nms,t) ->
+        let nglob, t = upd t (nargs+n) nglob in
+        nglob, Lam (n,nms,t)
+  in
+  let nargs = Context.count_arguments tb.c
+  and t     = List.hd tb.tlist in
+  let nglob, t = upd t nargs 0 in
+  assert (nglob = TVars_sub.count_global tb.tvars);
+  tb.tlist <- [t]
+
+
+
 let result (tb:t): term * TVars_sub.t =
   (** Return the term and the calculated substitutions for the type
       variables *)

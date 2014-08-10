@@ -80,6 +80,11 @@ val check_type_variables: Support.info -> t -> unit
    (** Check that the substitutions contain no dummy types (i.e. incomplete
        types which should be updated either to FUNCTION or PREDICATE *)
 
+
+val update_term: t -> unit
+    (** [update_term tb] substitutes all features in the result term by the
+        most specific feature *)
+
 val result:            t -> term * TVars_sub.t
    (** The result term and the corresponding substitutions for the used type
        variables. *)

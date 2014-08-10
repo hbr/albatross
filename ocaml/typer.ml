@@ -47,6 +47,15 @@ end = struct
 
   let is_singleton (accs:t): bool =   Mylist.is_singleton accs.accus
 
+  let is_unique (accs:t): bool =
+    match accs.accus with
+      [] -> assert false
+    | [_] -> true
+    | hd::tl ->
+        let res,_ = Term_builder.result hd in
+        List.for_all (fun tb -> res = fst (Term_builder.result tb)) tl
+
+
   let ntvs_added (accs:t): int = accs.ntvs_added
 
   let expected_arity (accs:t): int = accs.arity
@@ -119,6 +128,7 @@ end = struct
     List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus
 
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
+    List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
     if is_singleton accs then
       ()
     else begin
@@ -139,7 +149,7 @@ end = struct
     List.iter (fun acc -> Term_builder.check_type_variables inf acc) accs.accus
 
   let result (accs:t): term * TVars_sub.t =
-    assert (is_singleton accs);
+    assert (is_unique accs);
     Term_builder.result (List.hd accs.accus)
 end (* Accus *)
 
