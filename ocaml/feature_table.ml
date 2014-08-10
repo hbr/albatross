@@ -527,10 +527,9 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
   desc.tp <- Class_table.to_dummy nfgs desc.sign;
   let anch = ref [] in
   for i = 0 to nfgs - 1 do
-    match Tvars.concept i desc.tvs with
-      Variable j when j = desc.cls + nfgs ->
-        anch := i :: !anch
-    | _ -> ()
+    let pcls = Tvars.principal_class (Variable i) desc.tvs in
+    if pcls = desc.cls then
+        anch := i :: !anch;
   done;
   desc.anchored <- Array.of_list (List.rev !anch);
   if is_deferred desc && Array.length desc.anchored <> 1 then begin

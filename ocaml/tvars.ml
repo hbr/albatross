@@ -102,6 +102,27 @@ let is_equal_or_fg (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
   | _ -> is_equal tp1 tvs1 tp2 tvs2
 
 
+
+let principal_class (tp:type_term) (tvs:t): int =
+  let nloc = count_local tvs
+  and nall = count_all tvs
+  in
+  let rec pcls (tp:type_term): int =
+    match tp with
+      Variable i when i < nloc ->
+        assert false
+    | Variable i when i < nall ->
+        pcls (concept i tvs)
+    | Variable i ->
+        i - nall
+    | Application (Variable i,_) ->
+        pcls (Variable i)
+    | _ ->
+        assert false
+  in
+  pcls tp
+
+
 let add_fgs (tvs_new:t) (tvs:t): t =
   let nfgs0   = count_fgs tvs in
   let nfgs_delta = count_fgs tvs_new - nfgs0 in
