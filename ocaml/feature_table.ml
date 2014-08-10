@@ -7,14 +7,6 @@ open Printf
 type implementation_status = No_implementation | Builtin | Deferred
 
 
-
-module Feature_map = Map.Make(struct
-  type t = feature_name
-  let compare = Pervasives.compare
-end)
-
-
-
 type definition = term
 
 type formal     = int * term
@@ -93,7 +85,7 @@ let add_class_feature (i:int) (ft:t): unit =
   let desc  = Seq.elem i ft.seq
   in
   Class_table.add_feature
-    i
+    (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
     (is_deferred desc)
     ft.ct
@@ -532,7 +524,7 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let anch = ref [] in
   for i = 0 to nfgs - 1 do
     match Tvars.concept i desc.tvs with
-      Variable i when i = desc.cls + nfgs ->
+      Variable j when j = desc.cls + nfgs ->
         anch := i :: !anch
     | _ -> ()
   done;
@@ -613,6 +605,74 @@ let put_function
 
 
 
+let find_variant (i:int) (cls:int) (ft:t): int*Term_sub.t =
+  (* Find the variant of the feature [i] in the class [cls] *)
+  let ct = class_table ft
+  and desc = descriptor i ft in
+  assert (Array.length desc.anchored = 1);
+  let fg_anchor = desc.anchored.(0) in
+  let candidates = Class_table.find_features
+      (desc.fname, desc.tp, Tvars.count_all desc.tvs)
+      cls
+      ct
+  in
+  let lst = List.filter
+      (fun (idx,sub) ->
+        try
+          let desc_heir = descriptor idx ft in
+          printf "heir feature %s%s\n"
+            (feature_name_to_string desc_heir.fname)
+            (Class_table.string_of_signature
+               desc_heir.sign (Tvars.count_all desc_heir.tvs) [||] ct);
+          for k = 0 to Tvars.count_all desc.tvs - 1 do
+            let tp1  = Term_sub.find k sub
+            and tvs1 = desc_heir.tvs in
+            if k = fg_anchor then
+              let tp2,tvs2 = Class_table.class_type desc_heir.cls ct
+              in
+              printf "tp1 %s, tp2 %s\n"
+                (Class_table.type2string
+                   tp1 (Tvars.count tvs1) (Tvars.fgnames tvs1) ct)
+                (Class_table.type2string
+                   tp2 (Tvars.count tvs2) (Tvars.fgnames tvs2) ct);
+              if Tvars.is_equal_or_fg tp1 tvs1 tp2 tvs2
+              then (printf "is_equal_or_fg\n";())
+              else
+                (printf "not is_equal_or_fg\n"; raise Not_found)
+            else if Tvars.is_equal tp1 tvs1 (Variable k) desc.tvs
+            then (printf "is_equal\n"; ())
+            else
+              (printf "not is_equal\n"; raise Not_found)
+          done;
+          true
+        with Not_found ->
+          false)
+      candidates
+  in
+  match lst with
+    [] -> raise Not_found
+  | [hd] -> hd
+  | _ -> assert false (* cannot happen *)
+
+
+let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
+  (* Inherit the deferred feature [i] in the class [cls] *)
+  let idx,sub =
+    try find_variant i cls ft
+    with Not_found ->
+      let desc = descriptor i ft in
+      let ct   = class_table ft  in
+      let str =
+        "The class " ^ (Class_table.class_name cls ct) ^
+        " does not have a feature unifyable with \"" ^
+        (feature_name_to_string desc.fname) ^
+        (Class_table.string_of_signature
+           desc.sign (Tvars.count_all desc.tvs) [||] ct) ^
+        "\" with proper substitutions of the type variables" in
+      error_info info str
+  in
+  ()
+
 
 let do_inherit
     (cls_idx:int)
@@ -628,11 +688,7 @@ let do_inherit
    *)
   let ct = class_table ft in
   let flst = Class_table.deferred_features par_idx ct in
-  List.iter
-    (fun i ->
-      let desc = descriptor i ft in
-      ())
-    flst
+  List.iter (fun i -> inherit_deferred i cls_idx info ft) flst
 
 
 

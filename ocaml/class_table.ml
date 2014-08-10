@@ -18,6 +18,7 @@ type base_descriptor = { hmark:    header_mark;
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
+                         mutable fmap:  Term_table.t ref Feature_map.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
@@ -448,17 +449,43 @@ let update
 
 
 
-let add_feature (fidx:int) (cidx:int) (is_deferred:bool) (ct:t)
+let add_feature
+    (f:(int*feature_name*type_term*int))
+    (cidx:int)
+    (is_deferred:bool)
+    (ct:t)
     : unit =
-  (** Add the feature [fidx] to the class [cidx] as deferred or effecitive
-      feature depending on [is_deferred].  *)
   assert (cidx < count ct);
-  let desc = Seq.elem cidx ct.seq in
+  let fidx,fn,tp,nfgs = f
+  and desc = descriptor cidx ct in
+  let tab =
+    try Feature_map.find fn desc.fmap
+    with Not_found ->
+      let tab = ref Term_table.empty in
+      desc.fmap <- Feature_map.add fn tab desc.fmap;
+      tab
+  in
+  tab := Term_table.add tp nfgs 0 fidx !tab;
   if is_deferred then
     desc.def_features <- fidx :: desc.def_features
   else
     desc.eff_features <- fidx :: desc.eff_features
 
+
+
+let find_features
+    (f:(feature_name*type_term*int))
+    (cls:int)
+    (ct:t)
+    : (int*Term_sub.t) list =
+  assert (cls < count ct);
+  let fn,tp,ntvs = f in
+  let desc = descriptor cls ct in
+  try
+    let tab = Feature_map.find fn desc.fmap in
+    Term_table.unify_with tp ntvs 0 !tab
+  with Not_found ->
+    []
 
 
 let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
@@ -907,6 +934,7 @@ let add_base_class
   Seq.push
     {mdl=(-1);
      name = nme;
+     fmap = Feature_map.empty;
      def_features = [];
      eff_features = [];
      def_asserts  = [];

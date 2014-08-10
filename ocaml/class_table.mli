@@ -73,9 +73,17 @@ val count: t -> int
 val class_symbol: int -> t -> int
 val class_name:   int -> t -> string
 
-val add_feature:    int -> int -> bool -> t -> unit
-    (** [add_feature cls fidx is_def ct] adds the feature [fidx] to the class
-        [cls] as deferred or effective depending on the value of [is_def] *)
+val class_type: int -> t -> type_term*Tvars.t
+
+val add_feature:  (int*feature_name*type_term*int) -> int -> bool -> t -> unit
+    (** [add_feature (fidx,fn,tp,nfgs) cls is_def ct] adds the feature
+        [fidx,fn,tp,tvs] to the class [cls] as deferred or effective depending on
+        the value of [is_def] *)
+
+val find_features: (feature_name*type_term*int) -> int -> t -> (int*Term_sub.t) list
+    (** [find_features (fn,tp,nfgs) cls ct] finds all features of the class
+        [cls] with the name [fn] which can be unified with [tp] with [nfgs]
+        formal generics *)
 
 val add_assertion:  int -> int -> bool -> t -> unit
 

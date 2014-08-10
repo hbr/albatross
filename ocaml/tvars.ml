@@ -95,6 +95,12 @@ let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
 
 
 
+let is_equal_or_fg (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
+  match tp1 with
+    Variable i when count_local tvs1 <= i && i < count_all tvs1 ->
+      is_equal (concept i tvs1) tvs1 tp2 tvs2
+  | _ -> is_equal tp1 tvs1 tp2 tvs2
+
 
 let add_fgs (tvs_new:t) (tvs:t): t =
   let nfgs0   = count_fgs tvs in
