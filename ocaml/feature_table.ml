@@ -22,7 +22,9 @@ type descriptor = {
     sign:        Sign.t;
     mutable tp:  type_term;
     priv:        definition option;
-    mutable pub: definition option option
+    mutable pub: definition option option;
+    mutable seeds:    IntSet.t;
+    mutable variants: int IntMap.t  (* cls -> fidx *)
   }
 
 type t = {
@@ -153,6 +155,7 @@ let add_builtin
   in
   let sign = Sign.make_func argtypes res
   and ntvs = Array.length concepts
+  and cnt  = count ft
   in
   let lst =
     try IntMap.find mdl_nme ft.base
@@ -171,9 +174,10 @@ let add_builtin
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
     priv     = None;
-    pub      = None
+    pub      = None;
+    seeds    = IntSet.singleton cnt;
+    variants = IntMap.empty
   }
-  and cnt = count ft
   in
   Seq.push desc ft.seq;
   lst := cnt :: !lst
@@ -572,7 +576,9 @@ let put_function
        tp       = Variable 0;
        anchored = [||];
        priv     = term_opt;
-       pub      = if is_priv then None else Some term_opt}
+       pub      = if is_priv then None else Some term_opt;
+       seeds    = IntSet.singleton cnt;
+       variants = IntMap.empty}
     in
     add_function desc fn.i ft
   end else begin        (* feature update *)
@@ -655,12 +661,15 @@ let find_variant (i:int) (cls:int) (ft:t): int*Term_sub.t =
   | _ -> assert false (* cannot happen *)
 
 
+
+
 let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
+  let desc = descriptor i ft in
+  assert (cls <> desc.cls);
   let idx,sub =
     try find_variant i cls ft
     with Not_found ->
-      let desc = descriptor i ft in
       let ct   = class_table ft  in
       let str =
         "The class " ^ (Class_table.class_name cls ct) ^
@@ -671,7 +680,21 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
-  ()
+  let desc_idx = descriptor idx ft in
+  assert (cls = desc_idx.cls);
+  desc_idx.seeds <- IntSet.remove idx desc_idx.seeds;
+  IntSet.iter
+    (fun idx_seed -> (* add variant to seed and seed to variant*)
+      let desc_seed = descriptor idx_seed ft in
+      assert (not (IntMap.mem cls desc_seed.variants) ||
+              IntMap.find cls desc_seed.variants = idx);
+      desc_seed.variants <- IntMap.add cls idx desc_seed.variants;
+      desc_idx.seeds     <- IntSet.add idx_seed desc_idx.seeds)
+    desc.seeds
+  (* Remove feature idx from the feature map !!!! still missing *)
+
+
+
 
 
 let do_inherit
