@@ -120,7 +120,7 @@ end = struct
 
 
   let expect_lambda (ntvs:int) (accs:t): unit =
-    assert (0 < ntvs);
+    assert (0 <= ntvs);
     accs.arity <- 0;
     List.iter (fun acc -> Term_builder.expect_lambda ntvs acc) accs.accus
 

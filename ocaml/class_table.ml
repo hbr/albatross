@@ -640,9 +640,9 @@ let valid_type
   let ntvs  = Tvars.count tvs
   and nall  = Tvars.count_all tvs
   and nargs = Array.length args in
-  if cls_idx < ntvs then
+  if cls_idx < ntvs then begin
     assert false (* shall never happen *)
-  else if cls_idx < nall then begin
+  end else if cls_idx < nall then begin
     if nargs <> 0 then
       raise Not_found (* Generics cannot have actual generics *)
     else
@@ -667,12 +667,16 @@ let valid_type
 
 
 
-let class_index (name:int) (fgnames:int array) (info:info) (ct:t): int =
+let class_index (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
+  let ntvs    = Tvars.count tvs
+  and fgnames = Tvars.fgnames tvs
+  and nall    = Tvars.count_all tvs
+  in
   try
-      Search.array_find_min (fun n -> n=name) fgnames
+      ntvs + Search.array_find_min (fun n -> n=name) fgnames
   with Not_found ->
     try
-      (Array.length fgnames) + (find name ct)
+      nall + (find name ct)
     with Not_found ->
         error_info info ("Class " ^ (ST.string name)
                          ^ " does not exist")
@@ -685,10 +689,9 @@ let get_type
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term *)
-  let fgnames = Tvars.fgnames tvs
-  and n = Tvars.count_all tvs
+  let n = Tvars.count_all tvs
   in
-  let class_index0 (name:int): int = class_index name fgnames tp.i ct
+  let class_index0 (name:int): int = class_index name tvs tp.i ct
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
