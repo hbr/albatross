@@ -91,6 +91,10 @@ val deferred_features: int -> t -> int list
    (** [deferred features cls ct]: The list of deferred features of the class
        [cls] *)
 
+val effective_features: int -> t -> int list
+   (** [effective features cls ct]: The list of effective features of the class
+       [cls] *)
+
 val owner: Tvars.t -> Sign.t -> t -> int
 
 val find:  int -> t -> int
@@ -155,6 +159,15 @@ val satisfies: type_term -> Tvars.t -> type_term -> Tvars.t -> t -> bool
 val print: t -> unit
 
 val type2string: term -> int -> int array -> t -> string
+
 val string_of_signature: Sign.t -> int -> int array -> t -> string
+
+val string_of_type: type_term -> Tvars.t -> t -> string
+
+val string_of_concepts: Tvars.t -> t -> string
+
+val string_of_fgconcepts: Tvars.t -> t -> string
+
+val string_of_tvs: Tvars.t -> t -> string
 
 val type_of_signature: Sign.t -> int -> type_term

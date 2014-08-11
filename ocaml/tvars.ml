@@ -169,6 +169,53 @@ let remove_fgs (tvs_new:t) (tvs:t): t =
     assert false (* cannot happen *)
 
 
+let dummy_fgnames (n:int): int array =
+  Array.init
+    n
+    (fun i ->
+      let str = "@" ^ (string_of_int i) in
+      Support.ST.symbol str)
+
+
+let insert_fgs (tvs1:t) (i:int) (tvs2:t): t =
+  assert (count tvs1 = 0);
+  assert (count tvs2 = 0);
+  assert (i <= count_fgs tvs1);
+  let nfgs1  = count_fgs tvs1
+  and nfgs2  = count_fgs tvs2 in
+  let fgnames1 = dummy_fgnames nfgs1 in
+  let fgnames =
+    Array.init
+      (nfgs1 + nfgs2)
+      (fun j ->
+        if j < i then
+          fgnames1.(j)
+        else if j < i + nfgs2 then
+          tvs2.fgnames.(j - i)
+        else
+          fgnames1.(j - i - nfgs2))
+  and fgconcepts =
+    Array.init
+      (nfgs1 + nfgs2)
+      (fun j ->
+        if j < i then
+          Term.upbound nfgs2 i tvs1.fgconcepts.(j)
+        else if j < i + nfgs2 then
+          let cpt = Term.upbound (nfgs1-i) nfgs2 tvs2.fgconcepts.(j-i) in
+          Term.up i cpt
+        else
+          Term.up nfgs2 tvs1.fgconcepts.(j-i-nfgs2))
+  in
+  {tvs1 with fgnames=fgnames; fgconcepts=fgconcepts}
+
+
+
+let update_fg (i:int) (cpt:type_term) (tvs:t): t =
+  assert (count tvs = 0);
+  assert (i < count_fgs tvs);
+  let fgconcepts = Array.copy tvs.fgconcepts in
+  fgconcepts.(i) <- cpt;
+  {tvs with fgconcepts = fgconcepts}
 
 
 

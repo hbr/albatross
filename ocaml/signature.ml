@@ -429,7 +429,7 @@ module Result_type: sig
   val up:           int -> t -> t
   val sub:          t -> type_term array -> int -> t
   val involved_classes: Tvars.t -> t -> IntSet.t
-
+  val transform:    (type_term->type_term) -> t -> t
 end = struct
 
   type t = (type_term * bool * bool) option
@@ -479,6 +479,12 @@ end = struct
       None -> IntSet.empty
     | Some (tp,_,_)  ->
         Tvars.involved_classes tp tvs IntSet.empty
+
+  let transform (f:type_term->type_term) (rt:t): t =
+    match rt with
+      None -> None
+    | Some (tp,proc,ghost) ->
+        Some(f tp, proc, ghost)
 end
 
 
@@ -514,6 +520,7 @@ module Sign: sig
   val sub:         t -> type_term array -> int -> t
   val substitute:  t -> TVars_sub.t -> t
   val involved_classes: Tvars.t -> t -> IntSet.t
+  val transform:   (type_term->type_term) -> t -> t
 end = struct
 
   type t = {args: type_term array;
@@ -633,4 +640,9 @@ end = struct
         Tvars.involved_classes tp tvs set)
       set
       s.args
+
+  let transform (f:type_term->type_term) (s:t): t =
+    let args = Array.map f s.args
+    and rt   = Result_type.transform f s.rt in
+    make args rt
 end (* Sign *)

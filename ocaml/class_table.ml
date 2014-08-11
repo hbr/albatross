@@ -250,6 +250,46 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
   to_string t nb 0
 
 
+let string_of_type (tp:type_term) (tvs:Tvars.t) (ct:t): string =
+  type2string tp (Tvars.count tvs) (Tvars.fgnames tvs) ct
+
+
+let string_of_concepts (tvs:Tvars.t) (ct:t): string =
+  let cpt_lst = Array.to_list (Tvars.concepts tvs) in
+  String.concat
+     ","
+     (List.map (fun tp -> string_of_type tp tvs ct) cpt_lst)
+
+
+let string_of_fgconcepts (tvs:Tvars.t) (ct:t): string =
+  let cptsarr = Myarray.combine (Tvars.fgnames tvs) (Tvars.fgconcepts tvs) in
+  let lst = Array.to_list cptsarr in
+  String.concat
+    ","
+    (List.map (fun (n,tp) ->
+      (ST.string n) ^ ":" ^ (string_of_type tp tvs ct)) lst)
+
+
+let string_of_tvs (tvs:Tvars.t) (ct:t): string =
+  let str1 =
+    if Tvars.count_local tvs = 0 then
+      ""
+    else
+      string_of_int (Tvars.count_local tvs)
+  and str2 = string_of_concepts tvs ct
+  and str3 = string_of_fgconcepts tvs ct in
+  let strcpts =
+    if str2="" && str3="" then
+      ""
+    else if str3="" then
+      "[" ^ str2 ^ "]"
+    else if str2="" then
+      "[" ^ str3 ^ "]"
+    else
+      "[" ^ str2 ^ "," ^ str3 ^ "]"
+  in
+  str1 ^ strcpts
+
 
 let find (cn: int) (ct:t): int =
   IntMap.find cn ct.map
@@ -506,6 +546,11 @@ let deferred_features (cidx:int) (ct:t): int list =
   (Seq.elem cidx ct.seq).def_features
 
 
+let effective_features (cidx:int) (ct:t): int list =
+  assert (cidx < count ct);
+  (Seq.elem cidx ct.seq).eff_features
+
+
 let add
     (hm:    header_mark withinfo)
     (cn:    int withinfo)
@@ -584,12 +629,14 @@ let valid_type
     (args: type_term array)
     (tvs: Tvars.t)
     (ct:t): type_term =
-  (* The valid type term [cls_idx[args.(0),args.(1),...] in a type environment [tvs].
+  (* The valid type term [cls_idx[args.(0),args.(1),...] in a type environment
+     [tvs].
 
      If the type term is not valid then [Not_found] is raised.
 
      To check: Do all actual generics [args] satisfy their corresponding
      concepts? *)
+
   let ntvs  = Tvars.count tvs
   and nall  = Tvars.count_all tvs
   and nargs = Array.length args in
@@ -649,7 +696,7 @@ let get_type
       try
         valid_type idx args tvs ct
       with Not_found ->
-        error_info info ((string_of_type tp) ^ " is not a valid type")
+        error_info info ((Support.string_of_type tp) ^ " is not a valid type")
     in
     let rec tuple (tp_list: type_t list): type_term =
       let ta, tb =

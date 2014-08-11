@@ -3,8 +3,8 @@ open Term
 
 (** An environment for types
 
-    It contains the number of type variable without a concepts, the concepts
-    of type variables imported from global feature and the names and concepts
+    It contains the number of type variables without a concepts, the concepts
+    of type variables imported from global features and the names and concepts
     of all formal generices of the local environment
 
     Note: All concepts are valid in (i.e. relative to) the environment *)
@@ -46,6 +46,16 @@ val principal_class: type_term -> t -> int
 
 val add_fgs:      t -> t -> t
 val remove_fgs:   t -> t -> t
+
+val insert_fgs:   t -> int -> t -> t
+    (** [insert_fgs tvs1 i tvs2] inserts in [tvs1] at [i] the concepts of the
+        formal generics of [tvs2] *)
+
+val update_fg: int -> type_term -> t -> t
+    (** [update_fg i tp tvs] updates the concept of the formal generic [i]
+        with the type [tp]*)
+
+
 val add_global:   type_term array -> t -> t
 val add_local:    int -> t -> t
 val remove_local: int -> t -> t

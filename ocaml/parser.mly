@@ -703,6 +703,8 @@ operator_expr:
 
 |   expr EQ  expr                 { Binexp (Eqop,$1,$3) }
 
+|   expr NEQ  expr                { Binexp (NEqop,$1,$3) }
+
 |   expr LT  expr                 { Binexp (LTop,$1,$3) }
 
 |   expr LE  expr                 { Binexp (LEop,$1,$3) }

@@ -64,6 +64,8 @@ module Term: sig
 
   val map: (int->int->term) -> term -> term
 
+  val map_free: (int->term) -> term -> int -> term
+
   val down_from: int -> int -> term -> term
 
   val down: int -> term -> term
@@ -344,6 +346,20 @@ end = struct
   let up (n:int) (t:term): term =
     (* Shift all free variables up by 'n' in the term 't' *)
     upbound n 0 t
+
+
+
+  let map_free (f:int->term) (t:term) (start:int): term =
+    (* Map the free variable 'i' of the term 't' to 'f i *)
+    let fb (i:int) (nb:int): term =
+      if i < nb+start then
+        Variable i
+      else
+        up (nb+start) (f (i-nb-start))
+    in
+    map fb t
+
+
 
 
 

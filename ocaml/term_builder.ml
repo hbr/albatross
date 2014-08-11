@@ -14,16 +14,16 @@ type t = {mutable tlist: term list;
           mutable tvars: TVars_sub.t;
           c: Context.t}
 
+let class_table (tb:t): Class_table.t = Context.class_table tb.c
+
 let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
 
 let ntvars (tb:t): int = TVars_sub.count tb.tvars
 
 
 let string_of_type (tp:type_term) (tb:t): string =
-  let ntvs    = ntvars tb
-  and fgnames = Context.fgnames tb.c
-  and ct      = Context.class_table tb.c in
-  Class_table.type2string tp  ntvs fgnames ct
+  let ct = class_table tb in
+  Class_table.string_of_type tp (TVars_sub.tvars tb.tvars) ct
 
 
 let string_of_signature (s:Sign.t) (tb:t): string =
@@ -53,7 +53,9 @@ let substitution_string (tb:t): string =
   "]"
 
 let concepts_string (tb:t): string =
-  let cpt_lst = Array.to_list (TVars_sub.concepts tb.tvars)
+  let ct      = Context.class_table tb.c in
+  Class_table.string_of_concepts (TVars_sub.tvars tb.tvars) ct
+  (*let cpt_lst = Array.to_list (TVars_sub.concepts tb.tvars)
   and ct      = Context.class_table tb.c
   and nall    = TVars_sub.count_all tb.tvars
   in
@@ -63,7 +65,7 @@ let concepts_string (tb:t): string =
      (List.map
         (fun tp -> Class_table.type2string tp nall [||] ct)
         cpt_lst)) ^
-  "]"
+  "]"*)
 
 
 
