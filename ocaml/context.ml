@@ -726,7 +726,7 @@ let implication_chain (ps:term list) (tgt:term) (c:t): term =
 
 let expanded_term (t:term) (c:t): term =
   let nbenv = nfargs c in
-  Feature_table.normalize_term t nbenv c.ft
+  Feature_table.expand_term t nbenv c.ft
 
 let prefix (c:t): string =
   String.make (2*(depth c)+2) ' '

@@ -25,6 +25,7 @@ type entry = {mutable goal: term;
 
 type t = {context: Context.t;
           mutable entry: entry;
+          mutable beta:  bool;  (* goal already beta reduced? *)
           mutable stack: entry list;
           mutable depth: int;
           mutable trace_ctxt: bool;
@@ -33,12 +34,13 @@ type t = {context: Context.t;
 
 let start (t:term) (c:Context.t): t =
   let entry = {goal=t;
-               alter=false;
-               nbenv=0;
+               alter= false;
+               nbenv= 0;
                used_gen=IntSet.empty;
                used_bwd=IntSet.empty} in
   {context= c;
    entry  = entry;
+   beta   = false;
    stack  = [];
    depth  = 0;
    trace_ctxt = true;
@@ -178,7 +180,12 @@ let split_all_quantified (p:t): int * int array * term =
 
 
 let add_backward (p:t): unit =
-  Context.add_backward p.entry.goal p.context
+  Context.add_backward p.entry.goal p.context;
+  if not p.beta then begin
+    p.beta <- true;
+    p.entry.goal <- Term.reduce p.entry.goal;
+    Context.add_backward p.entry.goal p.context
+  end
 
 
 let has_duplicate_goal (p:t): bool =
@@ -434,8 +441,8 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
 
 
 let prove_basic_expression (ie:info_expression) (c:Context.t): int =
-  let tn = get_term ie c in
-  let p = start tn c in
+  let t = get_term ie c in
+  let p = start t c in
   let rec prove (retry:bool): int =
     push_empty p;
     try

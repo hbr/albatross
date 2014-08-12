@@ -232,21 +232,24 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
         if n < nargs then raise Not_found
         else Term.part_sub t0 n args 0
       in
-      if nargs < n then
-        let imp_id0 = (imp_id at)           in
-        let imp_id1 = imp_id0 + (n-nargs)   in
-        let a,b = Term.binary_split tsub imp_id1 in
-        Term.binary
-          imp_id0
-          (try Term.down (n-nargs) a
-          with Term_capture -> raise Not_found)
-          (Term.quantified
-             (all_id at)
-             (n-nargs)
-             (Array.sub nms nargs (n-nargs))
-             b)
-      else
-        tsub
+      let res =
+        if nargs < n then
+          let imp_id0 = (imp_id at)           in
+          let imp_id1 = imp_id0 + (n-nargs)   in
+          let a,b = Term.binary_split tsub imp_id1 in
+          Term.binary
+            imp_id0
+            (try Term.down (n-nargs) a
+            with Term_capture -> raise Not_found)
+            (Term.quantified
+               (all_id at)
+               (n-nargs)
+               (Array.sub nms nargs (n-nargs))
+               b)
+        else
+          tsub
+      in
+      Term.reduce res
   | Subproof (nargs,names,res_idx,pt_arr) ->
       push nargs names at;
       let pt_len = Array.length pt_arr
