@@ -62,6 +62,16 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
+let definition (desc:descriptor) (ft:t): definition option =
+  if is_private ft then
+    desc.priv
+  else
+    match desc.pub with
+      None -> None
+    | Some(def_opt) -> def_opt
+
+
+
 let count_fgs (i:int) (ft:t): int =
   assert (i < count ft);
   Tvars.count_fgs (descriptor i ft).tvs
@@ -368,9 +378,10 @@ let rec expand_term (t:term) (nbound:int) (ft:t): term =
         Variable i
       else
         let idx = i-n in
-        assert (idx < (Seq.count ft.seq));
-        let desc = Seq.elem idx ft.seq in
-        match desc.priv with
+        assert (idx < count ft);
+        let desc = descriptor idx ft in
+        let def_opt = definition desc ft in
+        match def_opt with
           None -> Variable i
         | Some def ->
             let nargs = Sign.arity desc.sign in

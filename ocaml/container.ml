@@ -5,9 +5,8 @@ end = struct
   let has (o: 'a option): bool =
     match o with None -> false | Some _ -> true
   let value (o: 'a option): 'a =
-    assert (has o);
     match o with
-      None -> assert false
+      None -> assert false (* illegal call *)
     | Some x -> x
 end
 
