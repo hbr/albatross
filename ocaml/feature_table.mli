@@ -75,10 +75,14 @@ val is_interface_use:  t -> bool
 
 val implication_term: term -> term -> int -> t -> term
 
+
 val expand_term: term->int->t->term
   (** [expand_term t nbound ft] expands the definitions of the term [t] within
       an environment with [nbound] bound variables, i.e. a variable [i] with
-      [nbound<=i] refers to the global feature [i-nbound] *)
+      [nbound<=i] refers to the global feature [i-nbound]
+
+      Note: [expand_term] doesn't do any beta reductions in the term [t] which
+      would have been possible before the expansion. *)
 
 
 val normalize_term: term->int->t->term

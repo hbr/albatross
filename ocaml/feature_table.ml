@@ -367,31 +367,53 @@ let find_funcs
 
 
 
-let rec expand_term (t:term) (nbound:int) (ft:t): term =
+let expand_term (t:term) (nbound:int) (ft:t): term =
   (* Expand the definitions of the term 't' within an environment with
-     'nbound' bound variables, i.e. a variable i with nbound<=i refers to
-     the global feature i-nbound *)
-  Term.map
-    (fun i nb ->
-      let n = nb+nbound in
-      if i<n then
-        Variable i
-      else
-        let idx = i-n in
+     'nbound' bound variables, i.e. a variable i with nbound<=i refers to the
+     global feature i-nbound
+
+     Note: [expand_term] doesn't do any beta reductions in the term [t] which
+     would have been possible before the expansion. *)
+  let rec expand (t:term) (nb:int): term =
+    let apply (f:term) (args:term array): term =
+      match f with
+        Lam (n,nms,t) ->
+          assert (n = Array.length args);
+          Term.apply t args
+      | _ -> Application (f,args)
+    in
+    match t with
+      Variable i when i < nb ->
+        t
+    | Variable i ->
+        let idx = i-nb in
         assert (idx < count ft);
         let desc = descriptor idx ft in
-        let def_opt = definition desc ft in
-        match def_opt with
-          None -> Variable i
-        | Some def ->
-            let nargs = Sign.arity desc.sign in
-            let t = expand_term def nargs ft in
-            let tup = Term.upbound n nargs t in
-            if nargs = 0 then tup
-            else
-              Lam (nargs, [||], tup)
-    )
-    t
+        let def_opt = definition desc ft in begin
+          match def_opt with
+            None -> t
+          | Some def ->
+              let nargs = Sign.arity desc.sign in
+              let t = expand def nargs in
+              let tup = Term.upbound nb nargs t in
+              if nargs = 0 then tup
+              else
+                Lam (nargs, [||], tup)
+        end
+    | Application (Lam(n,nms,t),args) ->
+        let t    = expand t (nb+n)
+        and args = Array.map (fun t -> expand t nb) args in
+        Application(Lam(n,nms,t),args)
+    | Application (f,args) ->
+        let f    = expand f nb
+        and args = Array.map (fun t -> expand t nb) args in
+        apply f args
+    | Lam (n,nms,t) ->
+        let t = expand t (nb+n) in
+        Lam (n,nms,t)
+  in
+  expand t nbound
+
 
 
 
@@ -401,6 +423,7 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
      environment with 'nbound' bound variables, i.e. a variable i with
      nbound<=i refers to the global feature i-nbound *)
   Term.reduce (expand_term t nbound ft)
+
 
 
 
