@@ -226,7 +226,11 @@ end = struct
     Array.blit s.flags n   snew.flags 0   (sn-n);
     for i = 0 to sn-n-1 do
       if snew.flags.(i) then begin
-        let tp   = Term.apply s.args.(i+n) args_bot in
+        let tp   = Term.sub s.args.(i+n) args_bot n in
+        let tp   =
+          try Term.down n tp
+          with Not_found -> assert false
+        in
         let used = Term.bound_variables tp (sn-n) in
         let lst  = IntSet.fold (fun j lst -> j::lst) used [] in
         snew.args.(i) <- tp;

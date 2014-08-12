@@ -217,9 +217,9 @@ let process_leaf
              ","
              (List.map
                 (fun acc ->
-                  (string_of_int (Term_builder.ntvars acc)) ^
-                  (Term_builder.concepts_string acc) ^
-                  (Term_builder.substitution_string acc) ^
+                  (*(string_of_int (Term_builder.ntvars acc)) ^
+                  "[" ^ (Term_builder.concepts_string acc) ^ "]" ^
+                  (Term_builder.substitution_string acc) ^*)
                   (Term_builder.signature_string acc))
                 acc_lst))
         ^ "}"
