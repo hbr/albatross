@@ -358,6 +358,7 @@ inherit_clause: KWinherit optsemi parent_list { $3 }
 
 parent_list:
     parent { [$1] }
+|   KWghost parent { [$2] }
 |   parent parent_list { $1::$2 }
 
 parent: type_nt feature_adaptation { withinfo (rhs_info 1) $1, $2 }
