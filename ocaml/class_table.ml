@@ -291,6 +291,23 @@ let string_of_tvs (tvs:Tvars.t) (ct:t): string =
   str1 ^ strcpts
 
 
+let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
+  let subs = TVars_sub.subs tvs
+  and tvs  = TVars_sub.tvars tvs in
+  let subsstr =
+    String.concat ","
+      (List.map
+         (fun (i,t1,t2) ->
+           (string_of_int i) ^ ":=" ^
+           (string_of_type t1 tvs ct) ^
+           "(" ^ (string_of_type t2 tvs ct) ^ ")"
+         ) subs)
+  in
+  let subsstr = if subsstr = "" then "" else "[" ^ subsstr ^ "]" in
+  (string_of_tvs tvs ct) ^ subsstr
+
+
+
 let find (cn: int) (ct:t): int =
   IntMap.find cn ct.map
 
@@ -1095,8 +1112,7 @@ let type_of_signature
 
 let string_of_signature
     (s:Sign.t)
-    (ntvs:int)
-    (fgnames: int array)
+    (tvs:Tvars.t)
     (ct:t)
     : string =
   let has_args = (Sign.arity s) <> 0
@@ -1109,16 +1125,24 @@ let string_of_signature
       ^ (String.concat
            ","
            (List.map
-              (fun tp -> type2string tp ntvs fgnames ct)
+              (fun tp -> string_of_type tp tvs ct)
               (Array.to_list (Sign.arguments s))))
       ^ ")"
   and retstr =
     if has_res then
-      type2string (Sign.result s) ntvs fgnames ct
+      string_of_type (Sign.result s) tvs ct
     else ""
   and colon = if has_args && has_res then ":" else ""
   in
   argsstr ^ colon ^ retstr
+
+
+let string_of_complete_signature
+    (s:Sign.t)
+    (tvs:Tvars.t)
+    (ct:t)
+    : string =
+  (string_of_tvs tvs ct) ^ (string_of_signature s tvs ct)
 
 
 (* needs to be adapted for private and public views !!

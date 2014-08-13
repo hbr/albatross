@@ -181,9 +181,9 @@ let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
 
 
 let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
-  let ntvs = Tvars.count tvs
-  and fgnames = Tvars.fgnames tvs in
-  Class_table.string_of_signature s ntvs fgnames (Context.class_table c)
+  let ct = Context.class_table c  in
+  (Class_table.string_of_tvs tvs ct) ^
+  (Class_table.string_of_signature s tvs ct)
 
 
 let string_of_signatures (lst:(int*Tvars.t*Sign.t) list) (c:Context.t): string =

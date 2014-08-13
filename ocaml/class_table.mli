@@ -163,7 +163,9 @@ val print: t -> unit
 
 val type2string: term -> int -> int array -> t -> string
 
-val string_of_signature: Sign.t -> int -> int array -> t -> string
+val string_of_signature: Sign.t -> Tvars.t -> t -> string
+
+val string_of_complete_signature: Sign.t -> Tvars.t -> t -> string
 
 val string_of_type: type_term -> Tvars.t -> t -> string
 
@@ -172,5 +174,7 @@ val string_of_concepts: Tvars.t -> t -> string
 val string_of_fgconcepts: Tvars.t -> t -> string
 
 val string_of_tvs: Tvars.t -> t -> string
+
+val string_of_tvs_sub: TVars_sub.t -> t -> string
 
 val type_of_signature: Sign.t -> int -> type_term

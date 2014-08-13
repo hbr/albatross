@@ -183,6 +183,7 @@ let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
 
 let fgnames (c:t): int array = entry_fgnames c.entry
 
+let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
 let string_of_term (t:term) (c:t): string =
   Feature_table.term_to_string t (fargnames c) c.ft
@@ -192,8 +193,7 @@ let string_of_term (t:term) (c:t): string =
 let sign2string (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
     s
-    (count_type_variables c)
-    (fgnames c)
+    (tvs c)
     (class_table c)
 
 

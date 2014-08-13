@@ -34,6 +34,7 @@ module Term_sub_arr: sig
     (** [get_star i s] gets the [i]th substitution term and applies the
         substitution [s] until no more substitutions are possible.  *)
 
+  val subs:           t -> (int*term*term) list
 
 end = struct
 
@@ -238,6 +239,16 @@ end = struct
       end
     done;
     snew
+
+  let subs (s:t): (int*term*term) list =
+    let lst = ref []  in
+    for i = 0 to count s - 1 do
+      if not s.flags.(i) then
+        ()
+      else
+        lst := (i, s.args.(i), get_star i s) :: !lst
+    done;
+    List.rev !lst
   end (* Term_sub_arr *)
 
 
@@ -281,6 +292,7 @@ module TVars_sub: sig
     (** [get_star i s] gets the [i]th substitution term and applies the
         substitution [s] until no more substitutions are possible.  *)
 
+  val subs: t -> (int*term*term) list
 end = struct
 
   type t = {vars: Tvars.t;
@@ -411,6 +423,8 @@ end = struct
 
   let get_star (i:int) (s:t): term =
     Term_sub_arr.get_star i s.sub
+
+  let subs (s:t): (int*term*term) list = Term_sub_arr.subs s.sub
 
 end (* TVars_sub *)
 

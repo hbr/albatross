@@ -20,17 +20,21 @@ let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
 
 let ntvars (tb:t): int = TVars_sub.count tb.tvars
 
+let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
 
 let string_of_type (tp:type_term) (tb:t): string =
   let ct = class_table tb in
-  Class_table.string_of_type tp (TVars_sub.tvars tb.tvars) ct
+  Class_table.string_of_type tp (tvs tb) ct
 
 
 let string_of_signature (s:Sign.t) (tb:t): string =
-  let ntvs    = ntvars tb
-  and fgnames = Context.fgnames tb.c
-  and ct      = Context.class_table tb.c in
-  Class_table.string_of_signature s ntvs fgnames ct
+  let ct      = Context.class_table tb.c in
+  Class_table.string_of_signature s (tvs tb) ct
+
+
+let string_of_complete_signature (s:Sign.t) (tb:t): string =
+  let ct      = Context.class_table tb.c in
+  Class_table.string_of_complete_signature s (tvs tb) ct
 
 let signature_string (tb:t): string =
   let s       = signature tb in
@@ -55,18 +59,11 @@ let substitution_string (tb:t): string =
 let concepts_string (tb:t): string =
   let ct      = Context.class_table tb.c in
   Class_table.string_of_concepts (TVars_sub.tvars tb.tvars) ct
-  (*let cpt_lst = Array.to_list (TVars_sub.concepts tb.tvars)
-  and ct      = Context.class_table tb.c
-  and nall    = TVars_sub.count_all tb.tvars
-  in
-  "[" ^
-  (String.concat
-     ","
-     (List.map
-        (fun tp -> Class_table.type2string tp nall [||] ct)
-        cpt_lst)) ^
-  "]"*)
 
+
+let string_of_tvs_sub (tb:t): string =
+  let ct  = Context.class_table tb.c in
+  Class_table.string_of_tvs_sub tb.tvars ct
 
 
 
@@ -301,7 +298,6 @@ let unify_sign
     update_tv sig_req sig_act tv tb
   else
     unify_sign_0 sig_req sig_act tb
-
 
 
 

@@ -103,10 +103,7 @@ let is_deferred (desc:descriptor): bool =
 let string_of_signature (i:int) (ft:t): string =
   let desc = descriptor i ft in
   (feature_name_to_string desc.fname) ^
-  (Class_table.string_of_signature desc.sign
-     (Tvars.count desc.tvs)
-     (Tvars.fgnames desc.tvs)
-     ft.ct)
+  (Class_table.string_of_signature desc.sign desc.tvs ft.ct)
 
 
 let names_of_formals (farr: formal array): int array =
@@ -571,7 +568,7 @@ let print (ft:t): unit =
           Class_table.module_name fdesc.mdl ft.ct
       and tname  =
         Class_table.string_of_signature
-          fdesc.sign 0 (Tvars.fgnames fdesc.tvs) (*fdesc.fgnames*) ft.ct
+          fdesc.sign fdesc.tvs ft.ct
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
@@ -759,7 +756,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
         " does not have a feature unifyable with \"" ^
         (feature_name_to_string desc.fname) ^
         (Class_table.string_of_signature
-           desc.sign (Tvars.count_all desc.tvs) [||] ct) ^
+           desc.sign desc.tvs  ct) ^
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
@@ -784,7 +781,7 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
         " has already a feature unifyable with \"" ^
         (feature_name_to_string desc.fname) ^
         (Class_table.string_of_signature
-           desc.sign (Tvars.count_all desc.tvs) [||] ct) ^
+           desc.sign desc.tvs ct) ^
         "\"" in
       error_info info str
     with Not_found ->
