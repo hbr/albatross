@@ -332,28 +332,36 @@ let extract_from_tuple
 
 let downgrade_signature
     (ntvs:int) (sign:Sign.t) (nargs:int): Sign.t =
-  assert (Sign.is_constant sign);
-  assert (0 < nargs);
+  assert (Sign.arity sign < nargs);
+  if not (Sign.is_constant sign || Sign.arity sign = 1) then
+    raise Not_found;
   let pred_idx = predicate_index + ntvs
   and func_idx = function_index  + ntvs
   and dum_idx  = dummy_index     + ntvs
   in
-  let tp = Sign.result sign in
-  let cls_idx,args = split_type_term tp in
-  if cls_idx < ntvs then
-    raise Not_found
-  else if cls_idx = pred_idx then begin
+  if Sign.is_constant sign then
+    let tp = Sign.result sign in
+    let cls_idx,args = split_type_term tp in
+    if cls_idx < ntvs then
+      raise Not_found
+    else if cls_idx = pred_idx then begin
+      assert (Array.length args = 1);
+      Sign.make_func
+        (extract_from_tuple nargs ntvs args.(0))
+        (boolean_type ntvs)
+    end else if cls_idx = func_idx || cls_idx = dum_idx then begin
+      assert (Array.length args = 2);
+      Sign.make_func
+        (extract_from_tuple nargs ntvs args.(0))
+        args.(1)
+    end else
+      raise Not_found
+  else begin
+    let args, rt = Sign.arguments sign, Sign.result_type sign in
     assert (Array.length args = 1);
-    Sign.make_func
-      (extract_from_tuple nargs ntvs args.(0))
-      (boolean_type ntvs)
-  end else if cls_idx = func_idx || cls_idx = dum_idx then begin
-    assert (Array.length args = 2);
-    Sign.make_func
-      (extract_from_tuple nargs ntvs args.(0))
-      args.(1)
-  end else
-    raise Not_found
+    let args = extract_from_tuple nargs ntvs args.(0) in
+    Sign.make args rt
+  end
 
 
 
