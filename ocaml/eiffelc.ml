@@ -11,6 +11,9 @@ type file_name = {name: string; dir: string; base: string; mdlnme: string}
 
 let files = ref []
 
+let print_version (): unit =
+  Printf.printf "version: tbd  sha1 %s\n" Sha1.sha1;
+  exit 0
 
 let parse_arguments (): unit =
   let anon_fun str =
@@ -46,6 +49,7 @@ let parse_arguments (): unit =
     [("-trace",  Arg.String set_tracer, "{proof,failed-proof}");
      ("-prover", Arg.String set_prover, "{basic,forward}");
      ("-statistics", Arg.Unit Options.set_statistics, "");
+     ("-version",    Arg.Unit print_version, "");
      ("-goal-limit",
       Arg.Int
         (fun i ->
