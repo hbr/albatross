@@ -293,20 +293,20 @@ let fgs_to_global (tvs:t):t =
 
 
 let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
-  let rec clss (tp:type_term) (tvs:t) (set0:IntSet.t) (n:int): IntSet.t =
+  let nloc = count_local tvs
+  and nall = count_all   tvs in
+  let rec clss (tp:type_term) (set0:IntSet.t) (n:int): IntSet.t =
     assert (0 <= n);
-    let nloc = count_local tvs
-    and nall = count_all   tvs in
     Term.fold
       (fun set i ->
         if i < nloc then
           set
         else if i < nall then
-          clss (concept i tvs) empty set (n-1)
+          clss (concept i tvs) set (n-1)
         else
-          IntSet.add i set
+          IntSet.add (i-nall) set
       )
       set0
       tp
   in
-  clss tp tvs set0 (count_all tvs)
+  clss tp set0 (count_all tvs)
