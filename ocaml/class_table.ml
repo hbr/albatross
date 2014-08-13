@@ -557,7 +557,28 @@ let add
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  assert false (* nyi: insertion of new classes *)
+  let fgs = class_formal_generics fgens ct in
+  let idx  = count ct
+  and nfgs = Array.length fgs
+  and fgnames,concepts = Myarray.split fgs
+  in
+  let args = Array.init nfgs (fun i -> Variable i) in
+  let anc  = IntMap.singleton idx args in
+  let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
+  let tvs  = Tvars.make_fgs fgnames concepts in
+  let bdesc = {hmark=hm.v; tvs=tvs; ancestors=anc} in
+  Seq.push
+    {mdl  = current_module ct;
+     name = cn.v;
+     fmap = Feature_map.empty;
+     def_features = [];
+     eff_features = [];
+     def_asserts  = [];
+     eff_asserts  = [];
+     priv=bdesc;
+     publ= if is_public ct then Some bdesc else None}
+    ct.seq;
+    ct.map <- IntMap.add cn.v idx ct.map
 
 
 
@@ -994,8 +1015,7 @@ let add_base_class
     ct.seq;
   let mdl_nme = ST.symbol (String.lowercase name) in
   assert (not (IntMap.mem mdl_nme ct.base));
-  ct.base <- IntMap.add mdl_nme idx ct.base(*;
-  ct.map <- IntMap.add nme idx ct.map*)
+  ct.base <- IntMap.add mdl_nme idx ct.base
 
 
 
