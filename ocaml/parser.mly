@@ -219,7 +219,7 @@ use_block:
 
 module_list:
     one_module  { [$1] }
-|   one_module module_list { $1 :: $2 }
+|   one_module separator module_list { $1 :: $3 }
 
 one_module: LIDENTIFIER  { withinfo (rhs_info 1) $1 }
 
