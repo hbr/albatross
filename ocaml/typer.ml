@@ -229,7 +229,7 @@ let process_leaf
 
 
 
-let rec analyze_expression
+let analyze_expression
     (ie:        info_expression)
     (expected:  type_term)
     (c:         Context.t)
@@ -239,7 +239,6 @@ let rec analyze_expression
    *)
   assert (not (Context.is_global c));
   let info, exp = ie.i, ie.v in
-
   let rec analyze
       (e:expression)
       (accs: Accus.t)
@@ -338,7 +337,7 @@ let rec analyze_expression
 
 
 
-and result_term
+let result_term
     (ie:  info_expression)
     (c:   Context.t)
     : term =
@@ -349,7 +348,7 @@ and result_term
   analyze_expression ie (Context.result_type c) c
 
 
-and boolean_term
+let boolean_term
     (ie: info_expression)
     (c:  Context.t)
     : term =
