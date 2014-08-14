@@ -122,6 +122,8 @@ let string_of_index (i:int) (p:t): string =
   let t = Context.assertion i p.context in
   string_of_term t p
 
+let string_of_goal (p:t): string =
+  string_of_term p.entry.goal p
 
 let add_assumptions_or_axioms
     (lst:compound) (is_axiom:bool) (c:Context.t): int list =
@@ -442,8 +444,8 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
 
 let prove_basic_expression (ie:info_expression) (c:Context.t): int =
   let t = get_term ie c in
-  let p = start t c in
   let rec prove (retry:bool): int =
+    let p = start t c in
     push_empty p;
     try
       prove_goal p;
