@@ -67,12 +67,6 @@ let string_of_tvs_sub (tb:t): string =
 
 
 
-let add_sub (ok:bool) (i:int) (t:term) (tb:t): unit =
-  if ok then
-    TVars_sub.add_sub i t tb.tvars
-  else
-    raise Not_found
-
 
 
 let do_sub (i:int) (t:term) (tb:t): unit =
@@ -84,24 +78,26 @@ let do_sub (i:int) (t:term) (tb:t): unit =
   and ct      = Context.class_table tb.c
   in
   assert (i<cnt);
+  let add_sub (i:int) (t:term): unit = TVars_sub.add_sub i t tb.tvars
+  in
   match t with
-    Variable j when j<cnt ->
+    Variable j when j < cnt_loc ->
       if i=j then ()
       else
-        let lo,hi =
-          if (cnt_loc<=j && j<=i) || (i<cnt_loc && i<=j) then
-            i,j
-          else
-            j,i in
-        let thi   = Variable hi in
-        let ok =
-          lo < cnt_loc ||
-          Class_table.satisfies
-            (Tvars.concept hi tvs) tvs
-            (Tvars.concept lo tvs) tvs
-            ct
-        in
-        add_sub ok lo thi tb
+        let lo,hi = if j<=i then j,i else i,j in
+        add_sub lo (Variable hi)
+  | Variable j when j < cnt ->
+      if i < cnt_loc then
+        add_sub i t
+      else (* both have a concept *)
+        let lo,hi = if i<=j then i,j else j,i in
+        let cpt_lo, cpt_hi = Tvars.concept lo tvs, Tvars.concept hi tvs in
+        if Class_table.satisfies cpt_lo tvs cpt_hi tvs ct then
+          add_sub hi (Variable lo)
+        else if Class_table.satisfies cpt_hi tvs cpt_lo tvs ct then
+          add_sub lo (Variable hi)
+        else
+          raise Not_found
   | _ ->
       let ok =
         i < cnt_loc ||
@@ -110,7 +106,10 @@ let do_sub (i:int) (t:term) (tb:t): unit =
           (TVars_sub.concept i tb.tvars) tvs
           ct
       in
-      add_sub ok i t tb
+      if ok then
+        add_sub i t
+      else
+        raise Not_found
 
 
 

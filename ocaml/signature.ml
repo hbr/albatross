@@ -344,6 +344,7 @@ end = struct
 
 
   let add_sub (i:int) (t:term) (tv:t): unit =
+    assert (not (has i tv));
     Term_sub_arr.add_new i t tv.sub
 
   let update_sub (i:int) (t:term) (tv:t): unit =
