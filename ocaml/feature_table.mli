@@ -111,8 +111,9 @@ val put_function:
 
 val term_to_string: term -> int array -> t -> string
 
-val do_inherit: int -> int -> type_term array -> info -> t -> unit
-  (** [do_inherit cls_idx par_idx par_args info ft] let the class [cls_idx]
-      inherit the features from the parent [par_idx[par_args]]. *)
+val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
+  (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the
+      features from all ancestors [par_idx[par_args]] in the ancestor list
+      [anc_lst]. *)
 
 val print: t -> unit

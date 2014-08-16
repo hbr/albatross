@@ -119,9 +119,24 @@ val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 
-val do_inherit: int -> int -> type_term array -> info -> t -> unit
-    (** [inherit_parent cls_idx par_idx par_args info ct] let the class
-        [cls_idx] inherit the parent [par_idx[par_args]].  *)
+val inherited_ancestors:
+    int -> int -> type_term array -> info -> t -> (int * type_term array) list
+   (** [inherited_ancestors cls par par_args info ct] calculates a list of
+       inherited ancestors in case the class [cls] inherits
+       [par[par_args]]. The returned list contains [par[par_args]] and all
+       implicitly inherited ancestors unless they are already in the set of
+       ancestors.
+
+       If [par[par_args]] is already in the set of ancestors, then the
+       returned list is empty. However it is checked if the actual generics
+       coincide with the actual generics of the parent which is already in the
+       set of ancestors. If this is not the case an error message is
+       triggered.  *)
+
+val do_inherit: int -> (int * type_term array) list -> t -> unit
+   (** [do_inherit cls anc_lst ct] let the class [cls] inherit all ancestors
+       of the list [anc_lst] *)
+
 
 val boolean_type:   int -> term
 

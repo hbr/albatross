@@ -813,19 +813,19 @@ let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
 
 
 
-
-let do_inherit
+let inherited_ancestors
     (cls_idx:int)
     (par_idx:int)
     (par_args:type_term array)
     (info:info)
-    (ct:t): unit =
+    (ct:t)
+    : (int * type_term array) list =
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
-  IntMap.iter
-    (fun anc_idx anc_args ->
-      let anc_args =
+  IntMap.fold
+    (fun anc_idx anc_args lst->
+      let anc_args: type_term array =
         Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
       try
         let anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
@@ -834,11 +834,26 @@ let do_inherit
             ("Cannot inherit "  ^
              (class_name anc_idx ct) ^
              " with different actual generics")
+        else
+          lst
       with Not_found ->
-        cls_bdesc.ancestors <-
-          IntMap.add anc_idx anc_args cls_bdesc.ancestors)
+        (anc_idx,anc_args) :: lst)
     par_bdesc.ancestors
+    []
 
+
+
+let do_inherit
+    (cls_idx:int)
+    (anc_lst: (int*type_term array) list)
+    (ct:t)
+    : unit =
+  let cls_bdesc = base_descriptor cls_idx ct in
+  List.iter
+    (fun (anc_idx,anc_args) ->
+      cls_bdesc.ancestors <-
+        IntMap.add anc_idx anc_args cls_bdesc.ancestors)
+    anc_lst
 
 
 

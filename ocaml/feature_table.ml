@@ -835,22 +835,28 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
 
 
 let do_inherit
-    (cls_idx:int)
-    (par_idx:int)
-    (par_args: type_term array)
+    (cls:int)
+    (anc_lst: (int * type_term array) list)
     (info:info)
-    (ft:t): unit =
-  (* Go through all deferred features of the parent class [par_idx] and verify
-     that the class [cls_idx] has all these deferred features.
+    (ft:t)
+    : unit =
+  (* For all ancestors in the list [anc_lst]:
+
+     Go through all deferred features of the parent class [par_idx] and verify
+     that the class [cls] has all these deferred features.
 
      Then inherit all effective features of the class [par_idx] into the class
      [cls_idx]
    *)
   let ct = class_table ft in
-  let flst = Class_table.deferred_features par_idx ct in
-  List.iter (fun i -> inherit_deferred i cls_idx info ft) flst;
-  let flst = Class_table.effective_features par_idx ct in
-  List.iter (fun i -> inherit_effective i cls_idx info ft) flst
+  List.iter
+    (fun (par,par_args) ->
+      let flst = Class_table.deferred_features par ct in
+      List.iter (fun i -> inherit_deferred i cls info ft) flst;
+      let flst = Class_table.effective_features par ct in
+      List.iter (fun i -> inherit_effective i cls info ft) flst
+    )
+    anc_lst
 
 
 
