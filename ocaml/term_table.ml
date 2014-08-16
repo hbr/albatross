@@ -86,6 +86,9 @@ let next_index (tab:t): int =
   | (idx,_,_,_)::_ -> idx+1
 
 
+let count  (tab:t): int =
+  List.length tab.terms
+
 exception Term_found of term
 
 

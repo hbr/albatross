@@ -23,6 +23,7 @@ type descriptor      = { mutable mdl:  int;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
+                         mutable descendants:  IntSet.t;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -499,19 +500,34 @@ let update
   let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt
   in
-  if desc.mdl = -1 then
-    desc.mdl <- mdl
-  else if desc.mdl = mdl then
-    ()
+  if desc.mdl = -1 || desc.mdl = mdl then begin
+    if desc.mdl = -1 then
+      desc.mdl <- mdl;
+    if Module_table.is_private ct.mt then
+      update_base_descriptor hm fgens desc.priv ct
+    else
+      match desc.publ with
+        None ->       export idx hm fgens ct
+      | Some bdesc -> update_base_descriptor hm fgens bdesc ct
+  end
   else
-    assert false; (* Cannot update a class from a different module *)
-  if Module_table.is_private ct.mt then
-    update_base_descriptor hm fgens desc.priv ct
-  else
-    match desc.publ with
-      None ->       export idx hm fgens ct
-    | Some bdesc -> update_base_descriptor hm fgens bdesc ct
+    () (* cannot update a class from a different module *)
 
+
+
+let find_features
+    (f:(feature_name*type_term*int))
+    (cls:int)
+    (ct:t)
+    : (int*Term_sub.t) list =
+  assert (cls < count ct);
+  let fn,tp,ntvs = f in
+  let desc = descriptor cls ct in
+  try
+    let tab = Feature_map.find fn desc.fmap in
+    Term_table.unify_with tp ntvs 0 !tab
+  with Not_found ->
+    []
 
 
 let add_feature
@@ -530,27 +546,17 @@ let add_feature
       desc.fmap <- Feature_map.add fn tab desc.fmap;
       tab
   in
+  assert (Feature_map.mem fn desc.fmap);
   tab := Term_table.add tp nfgs 0 fidx !tab;
-  if is_deferred then
+  (if is_deferred then
     desc.def_features <- fidx :: desc.def_features
   else
-    desc.eff_features <- fidx :: desc.eff_features
+    desc.eff_features <- fidx :: desc.eff_features);
+  assert begin
+    let lst = find_features (fn,tp,nfgs) cidx ct in
+    lst <> []
+  end
 
-
-
-let find_features
-    (f:(feature_name*type_term*int))
-    (cls:int)
-    (ct:t)
-    : (int*Term_sub.t) list =
-  assert (cls < count ct);
-  let fn,tp,ntvs = f in
-  let desc = descriptor cls ct in
-  try
-    let tab = Feature_map.find fn desc.fmap in
-    Term_table.unify_with tp ntvs 0 !tab
-  with Not_found ->
-    []
 
 
 let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
@@ -600,6 +606,7 @@ let add
      eff_features = [];
      def_asserts  = [];
      eff_asserts  = [];
+     descendants  = IntSet.empty;
      priv=bdesc;
      publ= if is_public ct then Some bdesc else None}
     ct.seq;
@@ -629,7 +636,28 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
 
 
 
-let rec satisfies (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
+
+let check_deferred  (owner:int) (info:info) (ct:t): unit =
+  let desc = descriptor owner ct in
+  let mdl = current_module ct in
+  if mdl <> desc.mdl then
+    let str =
+      "Deferred feature/assertion for owner \"" ^
+      (class_name owner ct) ^
+      "\" can be defined only in the module \"" ^
+      (Module_table.name desc.mdl ct.mt) ^
+      "\""
+    in
+    error_info info str
+  else if not (IntSet.is_empty desc.descendants) then
+    let str =
+      "Owner class " ^ (class_name owner ct) ^" has already descendants" in
+    error_info info str
+
+
+
+let rec satisfies
+    (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
     : bool =
   let ntvs1 = Tvars.count_local tvs1
   and nall1 = Tvars.count_all   tvs1
@@ -851,8 +879,11 @@ let do_inherit
   let cls_bdesc = base_descriptor cls_idx ct in
   List.iter
     (fun (anc_idx,anc_args) ->
+      let anc_desc = descriptor anc_idx ct in
       cls_bdesc.ancestors <-
-        IntMap.add anc_idx anc_args cls_bdesc.ancestors)
+        IntMap.add anc_idx anc_args cls_bdesc.ancestors;
+      assert (not (IntSet.mem cls_idx anc_desc.descendants));
+      anc_desc.descendants <- IntSet.add cls_idx anc_desc.descendants)
     anc_lst
 
 
@@ -1050,6 +1081,7 @@ let add_base_class
      eff_features = [];
      def_asserts  = [];
      eff_asserts  = [];
+     descendants  = IntSet.empty;
      priv=bdesc;
      publ= Some bdesc}
     ct.seq;

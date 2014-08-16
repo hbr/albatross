@@ -4,6 +4,8 @@ type t
 
 val empty: t
 
+val count: t -> int
+
 val terms: t -> (int*int*int*term) list
 
 val term:  int -> int -> t -> term

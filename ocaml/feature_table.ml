@@ -632,6 +632,10 @@ let put_function
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct in
   if idx=cnt then begin (* new feature *)
+    (match impstat with
+      Deferred ->
+        Class_table.check_deferred cls fn.i ft.ct
+    | _ -> ());
     let desc =
       {mdl      = mdl;
        cls      = cls;
@@ -658,8 +662,6 @@ let put_function
       error_info fn.i str
     in
     desc.mdl <- mdl;
-    if cls <> desc.cls then
-      printf "put_function: owner cls %d, desc.cls %d\n" cls desc.cls;
     assert (cls = desc.cls);
     if is_priv then begin
       if impstat <> desc.impstat then

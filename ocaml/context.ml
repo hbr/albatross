@@ -508,7 +508,7 @@ let put_class
   and ft = feature_table c in
   let idx =
     try
-      let idx = Class_table.find_in_module cn.v ct in
+      let idx = Class_table.find cn.v ct in
       Class_table.update idx hm fgs  ct;
       idx
     with Not_found ->
