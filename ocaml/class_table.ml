@@ -111,6 +111,10 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
   end
 
 
+let descendants (i:int) (ct:t): IntSet.t =
+  assert (i < count ct);
+  (descriptor i ct).descendants
+
 let class_type (i:int) (ct:t): type_term * Tvars.t =
   assert (i < count ct);
   let bdesc = base_descriptor i ct in

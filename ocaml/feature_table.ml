@@ -89,9 +89,15 @@ let variant (i:int) (cls:int) (ft:t): int =
   assert (i < count ft);
   let desc = descriptor i ft in
   try
-    IntMap.find cls desc.variants
+    let seed_desc = descriptor (IntSet.min_elt desc.seeds) ft in
+    IntMap.find cls seed_desc.variants
   with Not_found ->
-    assert false (* illegal call *)
+    i
+
+
+let variant_term (t:term) (nb:int) (cls:int) (ft:t): term =
+  let f (j:int): term = Variable (variant j cls ft) in
+  Term.map_free f t nb
 
 
 let is_deferred (desc:descriptor): bool =
@@ -587,6 +593,185 @@ let print (ft:t): unit =
     ft.seq
 
 
+let find_variant (i:int) (cls:int) (ft:t): int =
+  (* Find the variant of the feature [i] in the class [cls] *)
+  let ct = class_table ft
+  and desc = descriptor i ft in
+  assert (Array.length desc.anchored = 1);
+  let fg_anchor = desc.anchored.(0) in
+  let candidates = Class_table.find_features
+      (desc.fname, desc.tp, Tvars.count_all desc.tvs)
+      cls
+      ct
+  in
+  let lst = List.filter
+      (fun (idx,sub) ->
+        try
+          let desc_heir = descriptor idx ft in
+          for k = 0 to Tvars.count_all desc.tvs - 1 do
+            let tp1  = Term_sub.find k sub
+            and tvs1 = desc_heir.tvs in
+            if k = fg_anchor then
+              let tp2,tvs2 = Class_table.class_type desc_heir.cls ct
+              in
+              if Tvars.is_equal_or_fg tp1 tvs1 tp2 tvs2
+              then ()
+              else raise Not_found
+            else if Tvars.is_equal tp1 tvs1 (Variable k) desc.tvs
+            then ()
+            else raise Not_found
+          done;
+          true
+        with Not_found ->
+          false)
+      candidates
+  in
+  match lst with
+    [] -> raise Not_found
+  | [i_variant,_] -> i_variant
+  | _ -> assert false (* cannot happen *)
+
+
+
+
+let inherit_feature (i0:int) (i1:int) (ft:t): unit =
+  (* Inherit the feature [i0] as the feature [i1], i.e. add [i1] as a variant
+     to all seeds of [i0] and add all seeds of [i0] as seeds of
+     [i1]. Furthermore [i1] is no longer it own seed and cannot be found via
+     the feature map
+   *)
+  assert (i0 < count ft);
+  assert (i1 < count ft);
+  let desc0 = descriptor i0 ft
+  and desc1 = descriptor i1 ft
+  in
+  desc1.seeds <- IntSet.remove i1 desc1.seeds;
+  IntSet.iter
+    (fun i_seed -> (* add variant to seed and seed to variant*)
+      let desc_seed = descriptor i_seed ft in
+      assert (not (IntMap.mem desc1.cls desc_seed.variants) ||
+              IntMap.find desc1.cls desc_seed.variants = i1);
+      desc_seed.variants <- IntMap.add desc1.cls i1 desc_seed.variants;
+      desc1.seeds        <- IntSet.add i_seed desc1.seeds
+    )
+    desc0.seeds;
+  let tab = Feature_map.find desc1.fname ft.map in
+  tab := Term_table.remove i1 !tab
+
+
+
+let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
+  (* Inherit the deferred feature [i] in the class [cls] *)
+  let desc = descriptor i ft in
+  assert (cls <> desc.cls);
+  let idx =
+    try find_variant i cls ft
+    with Not_found ->
+      let ct   = class_table ft  in
+      let str =
+        "The class " ^ (Class_table.class_name cls ct) ^
+        " does not have a feature unifyable with \"" ^
+        (feature_name_to_string desc.fname) ^
+        (Class_table.string_of_signature
+           desc.sign desc.tvs  ct) ^
+        "\" with proper substitutions of the type variables" in
+      error_info info str
+  in
+  inherit_feature i idx ft
+
+
+
+
+
+
+let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
+  (* Inherit the effective  feature [i] in the class [cls] *)
+  let desc = descriptor i ft in
+  assert (cls <> desc.cls);
+  if not (Array.length desc.anchored = 1) then
+    ()
+  else
+    try
+      let _ = find_variant i cls ft in
+      let ct   = class_table ft  in
+      let str =
+        "The class " ^ (Class_table.class_name cls ct) ^
+        " has already a feature unifyable with \"" ^
+        (feature_name_to_string desc.fname) ^
+        (Class_table.string_of_signature
+           desc.sign desc.tvs ct) ^
+        "\"" in
+      error_info info str
+    with Not_found ->
+      let ctp,tvs = Class_table.class_type cls ft.ct
+      and anchor  = desc.anchored.(0) in
+      let ntvs    = Tvars.count_all tvs
+      and ntvs_i  = Tvars.count_all desc.tvs
+      in
+      let tvs1 = Tvars.insert_fgs desc.tvs anchor tvs in
+      let ctp  = Term.upbound (ntvs_i-anchor) ntvs ctp in
+      let ctp  = Term.up anchor ctp in
+      let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
+      let f_tp(tp:type_term): type_term =
+        Term.upbound ntvs anchor tp in
+      let def_opt =
+        match desc.pub with
+          None -> desc.priv
+        | Some (def_opt) -> def_opt in
+      let def =
+        match def_opt with
+          None -> None
+        | Some(term) ->
+            let nargs = Array.length desc.argnames in
+            Some (variant_term term nargs cls ft)
+      in
+      let cnt = count ft in
+      Seq.push
+        {mdl       = Class_table.current_module ft.ct;
+         fname     = desc.fname;
+         cls       = cls;
+         impstat   = desc.impstat;
+         tvs       = tvs1;
+         anchored  = Array.make 1 (anchor+ntvs);
+         argnames  = desc.argnames;
+         sign      = Sign.transform f_tp desc.sign;
+         tp        = f_tp desc.tp;
+         priv      = def;
+         pub       = if is_public ft then Some def else None;
+         seeds     = IntSet.singleton cnt;
+         variants  = IntMap.singleton cls cnt
+       } ft.seq;
+      inherit_feature i cnt ft
+
+
+
+
+let do_inherit
+    (cls:int)
+    (anc_lst: (int * type_term array) list)
+    (info:info)
+    (ft:t)
+    : unit =
+  (* For all ancestors in the list [anc_lst]:
+
+     Go through all deferred features of the parent class [par_idx] and verify
+     that the class [cls] has all these deferred features.
+
+     Then inherit all effective features of the class [par_idx] into the class
+     [cls_idx]
+   *)
+  let ct = class_table ft in
+  List.iter
+    (fun (par,par_args) ->
+      let flst = Class_table.deferred_features par ct in
+      List.iter (fun i -> inherit_deferred i cls info ft) flst;
+      let flst = Class_table.effective_features par ct in
+      List.iter (fun i -> inherit_effective i cls info ft) flst
+    )
+    anc_lst
+
+
+
 
 let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let cnt = count ft
@@ -600,16 +785,23 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
         anch := i :: !anch;
   done;
   desc.anchored <- Array.of_list (List.rev !anch);
-  if is_deferred desc && Array.length desc.anchored <> 1 then begin
-    let str =
-      "Deferred feature does not have one formal generic which \
-        is based on the owner class"
-    in
-    error_info info str
+  let nanchors = Array.length desc.anchored in
+  begin
+    if is_deferred desc && nanchors <> 1 then
+      let str =
+        "Deferred feature does not have one formal generic which \
+          is based on the owner class"
+      in
+      error_info info str
   end;
   Seq.push desc ft.seq;
   add_key cnt ft;
-  add_class_feature cnt ft
+  add_class_feature cnt ft;
+  if not (is_deferred desc) && nanchors = 1 then
+    let descs = Class_table.descendants desc.cls ft.ct in
+    IntSet.iter
+      (fun des -> inherit_effective cnt des info ft)
+      descs
 
 
 
@@ -678,187 +870,6 @@ let put_function
             not_match "public definition"
   end
 
-
-
-let find_variant (i:int) (cls:int) (ft:t): int =
-  (* Find the variant of the feature [i] in the class [cls] *)
-  let ct = class_table ft
-  and desc = descriptor i ft in
-  assert (Array.length desc.anchored = 1);
-  let fg_anchor = desc.anchored.(0) in
-  let candidates = Class_table.find_features
-      (desc.fname, desc.tp, Tvars.count_all desc.tvs)
-      cls
-      ct
-  in
-  let lst = List.filter
-      (fun (idx,sub) ->
-        try
-          let desc_heir = descriptor idx ft in
-          for k = 0 to Tvars.count_all desc.tvs - 1 do
-            let tp1  = Term_sub.find k sub
-            and tvs1 = desc_heir.tvs in
-            if k = fg_anchor then
-              let tp2,tvs2 = Class_table.class_type desc_heir.cls ct
-              in
-              if Tvars.is_equal_or_fg tp1 tvs1 tp2 tvs2
-              then ()
-              else raise Not_found
-            else if Tvars.is_equal tp1 tvs1 (Variable k) desc.tvs
-            then ()
-            else raise Not_found
-          done;
-          true
-        with Not_found ->
-          false)
-      candidates
-  in
-  match lst with
-    [] -> raise Not_found
-  | [i_variant,_] -> i_variant
-  | _ -> assert false (* cannot happen *)
-
-
-let inherit_feature (i0:int) (i1:int) (ft:t): unit =
-  (* Inherit the feature [i0] as the feature [i1], i.e. add [i1] as a variant
-     to all seeds of [i0] and add all seeds of [i0] as seeds of
-     [i1]. Furthermore [i1] is no longer it own seed and cannot be found via
-     the feature map
-   *)
-  assert (i0 < count ft);
-  assert (i1 < count ft);
-  let desc0 = descriptor i0 ft
-  and desc1 = descriptor i1 ft
-  in
-  desc1.seeds <- IntSet.remove i1 desc1.seeds;
-  IntSet.iter
-    (fun i_seed -> (* add variant to seed and seed to variant*)
-      let desc_seed = descriptor i_seed ft in
-      assert (not (IntMap.mem desc1.cls desc_seed.variants) ||
-              IntMap.find desc1.cls desc_seed.variants = i1);
-      desc_seed.variants <- IntMap.add desc1.cls i1 desc_seed.variants;
-      desc1.seeds        <- IntSet.add i_seed desc1.seeds
-    )
-    desc0.seeds;
-  let tab = Feature_map.find desc1.fname ft.map in
-  tab := Term_table.remove i1 !tab
-
-
-
-let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
-  (* Inherit the deferred feature [i] in the class [cls] *)
-  let desc = descriptor i ft in
-  assert (cls <> desc.cls);
-  let idx =
-    try find_variant i cls ft
-    with Not_found ->
-      let ct   = class_table ft  in
-      let str =
-        "The class " ^ (Class_table.class_name cls ct) ^
-        " does not have a feature unifyable with \"" ^
-        (feature_name_to_string desc.fname) ^
-        (Class_table.string_of_signature
-           desc.sign desc.tvs  ct) ^
-        "\" with proper substitutions of the type variables" in
-      error_info info str
-  in
-  inherit_feature i idx ft
-
-
-
-
-
-
-let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
-  let desc = descriptor i ft in
-  assert (cls <> desc.cls);
-  if not (Array.length desc.anchored = 1) then
-    ()
-  else
-    try
-      let _ = find_variant i cls ft in
-      let ct   = class_table ft  in
-      let str =
-        "The class " ^ (Class_table.class_name cls ct) ^
-        " has already a feature unifyable with \"" ^
-        (feature_name_to_string desc.fname) ^
-        (Class_table.string_of_signature
-           desc.sign desc.tvs ct) ^
-        "\"" in
-      error_info info str
-    with Not_found ->
-      let ctp,tvs = Class_table.class_type cls ft.ct
-      and anchor  = desc.anchored.(0) in
-      let ntvs    = Tvars.count_all tvs
-      and ntvs_i  = Tvars.count_all desc.tvs
-      in
-      let tvs1 = Tvars.insert_fgs desc.tvs anchor tvs in
-      let ctp  = Term.upbound (ntvs_i-anchor) ntvs ctp in
-      let ctp  = Term.up anchor ctp in
-      let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
-      let f_tp(tp:type_term): type_term =
-        Term.upbound ntvs anchor tp in
-      let def =
-        match desc.pub with
-          None -> assert false (* feature must be public *)
-        | Some (None) -> None
-        | Some (Some term) ->
-            let nargs = Array.length desc.argnames in
-            let f (j:int): term =
-              let jvar =
-                if (descriptor j ft).cls = desc.cls then
-                  variant j cls ft
-                else
-                  j
-              in
-              Variable jvar
-            in
-            Some (Term.map_free f term nargs)
-      in
-      let cnt = count ft in
-      Seq.push
-        {mdl       = Class_table.current_module ft.ct;
-         fname     = desc.fname;
-         cls       = cls;
-         impstat   = desc.impstat;
-         tvs       = tvs1;
-         anchored  = Array.make 1 (anchor+ntvs);
-         argnames  = desc.argnames;
-         sign      = Sign.transform f_tp desc.sign;
-         tp        = f_tp desc.tp;
-         priv      = def;
-         pub       = if is_public ft then Some def else None;
-         seeds     = IntSet.singleton cnt;
-         variants  = IntMap.singleton cls cnt
-       } ft.seq;
-      inherit_feature i cnt ft
-
-
-
-
-let do_inherit
-    (cls:int)
-    (anc_lst: (int * type_term array) list)
-    (info:info)
-    (ft:t)
-    : unit =
-  (* For all ancestors in the list [anc_lst]:
-
-     Go through all deferred features of the parent class [par_idx] and verify
-     that the class [cls] has all these deferred features.
-
-     Then inherit all effective features of the class [par_idx] into the class
-     [cls_idx]
-   *)
-  let ct = class_table ft in
-  List.iter
-    (fun (par,par_args) ->
-      let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> inherit_deferred i cls info ft) flst;
-      let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> inherit_effective i cls info ft) flst
-    )
-    anc_lst
 
 
 

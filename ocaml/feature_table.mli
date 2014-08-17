@@ -29,6 +29,10 @@ val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
 
+val variant_term: term -> int -> int -> t -> term
+    (** [variant t nb cls ft] returns the variant of the term [t] with [nb]
+        bound variables in the class [cls] *)
+
 val string_of_signature: int -> t -> string
 
 val implication_index: int

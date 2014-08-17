@@ -71,9 +71,13 @@ val is_interface_use:  t -> bool
 val count: t -> int
 
 val class_symbol: int -> t -> int
+
 val class_name:   int -> t -> string
 
 val class_type: int -> t -> type_term*Tvars.t
+
+val descendants: int -> t -> IntSet.t
+    (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
 val add_feature:  (int*feature_name*type_term*int) -> int -> bool -> t -> unit
     (** [add_feature (fidx,fn,tp,nfgs) cls is_def ct] adds the feature
