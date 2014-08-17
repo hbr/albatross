@@ -37,11 +37,10 @@ val find_module:        int -> int list -> t -> int
 
 val push_with_gap:  entities list withinfo -> return_type -> int -> t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit
-val push_empty: t -> unit
 val push_untyped: int array -> t -> unit
 val pop:   t -> unit
 val print: t -> unit
-val read_trace_info: t -> unit
+val get_trace_info: t -> unit
 
 val is_global:   t -> bool
 val is_toplevel: t -> bool

@@ -494,7 +494,6 @@ type expression =
   | Unexp         of operator * expression
   | Tupleexp      of expression * expression
   | Typedexp      of expression * type_t
-  | Taggedexp     of int * expression
   | Explist       of expression list
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
@@ -572,9 +571,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
 
   | Unexp (op,e) ->
       withparen ((operator_to_string op) ^ (strexp e)) wp
-
-  | Taggedexp (t,e) ->
-      withparen ((ST.string t) ^ ":" ^ (strexp e)) wp
 
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp

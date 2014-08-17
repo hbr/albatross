@@ -118,12 +118,12 @@ let count_last_arguments (c:t): int = c.entry.nfargs_delta
 let count_arguments (c:t): int = Array.length c.entry.fargs
 
 let argument_name (i:int) (c:t): int =
-  assert (i < count_arguments c);
+  assert (i < count_last_arguments c);
   fst c.entry.fargs.(i)
 
 
 let argument_type (i:int) (c:t): type_term =
-  assert (i < count_arguments c);
+  assert (i < count_last_arguments c);
   snd c.entry.fargs.(i)
 
 
@@ -141,36 +141,14 @@ let ntvs (c:t): int =
   (count_formal_generics c) + (count_type_variables c)
 
 
-(*
-let formal_generics (c:t): formal array =
-  (** The cumulated formal generics of this context and all
-      previous contexts
-   *)
-  c.entry.fgs
-*)
-let concepts (c:t): type_term array = TVars_sub.fgconcepts c.entry.tvs_sub
 
 
 
-let entry_fargnames (e:entry): int array =
+let entry_local_fargnames (e:entry): int array =
   Array.init e.nfargs_delta (fun i -> fst e.fargs.(i))
 
 
-
-let last_fargs (c:t): int array =
-  (** The argument names of the last push *)
-  assert false
-  (*Array.sub c.entry.fargs 0 (arity c)*)
-
-
-let last_fargnames (c:t): int array =
-  let n = arity c in
-  Array.init n (fun i -> fst c.entry.fargs.(i))
-
-
-let local_fargnames (c:t): int array = entry_fargnames c.entry
-
-
+let local_fargnames (c:t): int array = entry_local_fargnames c.entry
 
 
 let entry_fargnames (e:entry): int array =
@@ -243,7 +221,7 @@ let argument (name:int) (c:t): int * Tvars.t * Sign.t =
 
 
 
-let read_trace_info (c:t): unit =
+let get_trace_info (c:t): unit =
   c.trace <- Options.is_tracing_proof () && Options.trace_level () > 0
 
 let make (): t =
@@ -323,7 +301,7 @@ let push_with_gap
   c.stack <- entry::c.stack;
 
   assert (not (Proof_context.has_work c.pc));
-  Proof_context.push (arity c) (last_fargnames c) c.pc
+  Proof_context.push (arity c) (local_fargnames c) c.pc
 
 
 
@@ -344,10 +322,6 @@ let push_untyped (names:int array) (c:t): unit =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None c
 
-
-
-let push_empty (c:t): unit =
-  push_untyped [||] c
 
 
 let pop (c:t): unit =

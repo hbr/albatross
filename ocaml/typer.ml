@@ -269,7 +269,6 @@ let analyze_expression
         in
         application f (arg_array args) accs
     | Expparen e          -> analyze e accs
-    | Taggedexp (label,e) -> analyze e accs
     | Expquantified (q,entlst,exp) ->
         quantified q entlst exp accs
     | Exppred (entlst,e) ->

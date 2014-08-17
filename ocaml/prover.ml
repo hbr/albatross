@@ -102,13 +102,8 @@ let analyze_body (info:info) (bdy: feature_body) (c:Context.t)
 
 
 
-let untagged (ie: info_expression): info_expression =
-  match ie.v with
-    Taggedexp (tag,e) -> withinfo ie.i e
-  | _                 -> ie
-
 let get_term (ie: info_expression) (c:Context.t): term =
-  let t  = Typer.boolean_term (untagged ie) c in
+  let t  = Typer.boolean_term ie c in
   let tn = Context.expanded_term t c in
   tn
 
@@ -457,7 +452,7 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
         then begin
           pop_downto 0 p;
           Options.set_trace_proof ();
-          Context.read_trace_info p.context;
+          Context.get_trace_info p.context;
           p.trace <- true;
           Context.print_global_assertions p.context;
           prove true
@@ -468,26 +463,7 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
   prove false
 
 
-let rec prove_proof
-    (kind:kind)
-    (rlst: compound)
-    (clst: compound)
-    (elst: compound)
-    (c:    Context.t)
-    : unit =
-  add_assumptions rlst c;
-  prove_check clst c;
-  let pair_lst = prove_ensure elst kind c in
-  Context.pop c;
-  add_proved pair_lst c
-
-
-and prove_check (lst:compound) (c:Context.t): unit =
-  List.iter
-    (fun ie -> prove_check_expression ie c)
-    lst
-
-and prove_ensure
+let prove_ensure
     (lst:compound)
     (k:kind)
     (c:Context.t)
@@ -505,32 +481,44 @@ and prove_ensure
       t, pterm, IntSet.empty)
     idx_lst
 
-and prove_check_expression
-    (ie:info_expression)
-    (c:Context.t): unit =
-  let ie = untagged ie in
-  match ie.v with
-    Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
-      begin
-        match q with
-          Universal ->
-            let kind, clst =
-              analyze_imp_opt entlst.i imp_opt c
-            in
-            Context.push entlst None c;
-            prove_proof kind rlst clst elst c
-        | Existential ->
-            error_info ie.i "Only \"all\" allowed here"
-      end
-  | Expproof (rlst,imp_opt,elst) ->
-      let kind, clst = analyze_imp_opt ie.i imp_opt c in
-      Context.push_empty c;
-      prove_proof kind rlst clst elst c
-  | _ ->
-      let _ = prove_basic_expression ie c in
-      ()
 
 
+let rec make_proof
+    (entlst: entities list withinfo)
+    (kind:kind)
+    (rlst: compound)
+    (clst: compound)
+    (elst: compound)
+    (c:    Context.t)
+    : unit =
+  let prove_check_expression
+      (ie:info_expression)
+      (c:Context.t): unit =
+    match ie.v with
+      Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
+        begin
+          match q with
+            Universal ->
+              let kind, clst =
+                analyze_imp_opt entlst.i imp_opt c
+              in
+              make_proof entlst kind rlst clst elst c
+          | Existential ->
+              error_info ie.i "Only \"all\" allowed here"
+        end
+    | Expproof (rlst,imp_opt,elst) ->
+        let kind, clst = analyze_imp_opt ie.i imp_opt c in
+        make_proof (withinfo UNKNOWN []) kind rlst clst elst c
+    | _ ->
+        let _ = prove_basic_expression ie c in
+        ()
+  in
+  Context.push entlst None c;
+  add_assumptions rlst c;
+  List.iter (fun ie -> prove_check_expression ie c) clst;
+  let pair_lst = prove_ensure elst kind c in
+  Context.pop c;
+  add_proved pair_lst c
 
 
 
@@ -542,5 +530,4 @@ let prove_and_store
     : unit =
   let kind, rlst, clst, elst = analyze_body entlst.i bdy context
   in
-  Context.push entlst None context;
-  prove_proof kind rlst clst elst context;
+  make_proof entlst kind rlst clst elst context;
