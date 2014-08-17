@@ -41,6 +41,7 @@ let empty_entry: entry =
 
 let class_table(c:t): Class_table.t     = Feature_table.class_table c.ft
 let feature_table(c:t): Feature_table.t = c.ft
+let module_table(c:t): Module_table.t   = Class_table.module_table (class_table c)
 
 
 let has_current_module (c:t): bool =
@@ -289,9 +290,10 @@ let push_with_gap
       [entlst,rt] to the context [c] leaving a gap of [ntvs_gap] above the
       possibly newly introduced type variables of the signature. *)
   let entry      = c.entry
-  and ct         = class_table c in
+  and ct         = class_table c
+  and mt         = module_table c in
   let tvs_sub  =
-    Class_table.formal_generics entlst rt ntvs_gap entry.tvs_sub ct in
+    Module_table.formal_generics entlst rt ntvs_gap entry.tvs_sub mt in
   let tvs = TVars_sub.tvars tvs_sub
   in
   let ntvs0 = TVars_sub.count_local entry.tvs_sub

@@ -30,6 +30,7 @@ val base_table: unit -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
+val module_table: t -> Module_table.t
 
 val has_current_module: t -> bool
     (** Is there a current module? *)
@@ -160,15 +161,6 @@ val to_dummy: int -> Sign.t -> type_term
 
        If the constant signature is neither a predicate nor a function then
        the result type of the signature is returned. *)
-
-
-val formal_generics: entities list withinfo -> return_type -> int -> TVars_sub.t -> t
-  -> TVars_sub.t
-   (** [formal_generics entlst rt ntvs_gap tvs ct] cumulates the formal
-       generics encountered in the signature [entlst,rt] to the type context
-       [tvs] if not yet in. Between the untyped arguments of the signature
-       [entlst,rt] and the free type variables already contained in [tvs] a gap
-       of [ntvs_gap] is left. *)
 
 
 

@@ -30,7 +30,6 @@ type descriptor      = { mutable mdl:  int;
 type t = {mutable map:   int IntMap.t;
           seq:           descriptor seq;
           mutable base:  int IntMap.t; (* module name -> class index *)
-          mutable fgens: type_term IntMap.t;
           mt:            Module_table.t}
 
 let dummy_index     = 0
@@ -41,6 +40,7 @@ let function_index  = 4
 let tuple_index     = 5
 
 
+let module_table (ct:t): Module_table.t = ct.mt
 
 let has_current_module (ct:t): bool = Module_table.has_current ct.mt
 
@@ -72,7 +72,6 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
 let add_module
     (name:int) (lib:int list) (mode:int) (used:IntSet.t) (ct:t)
     : unit =
-  ct.fgens <- IntMap.empty;
   Module_table.add name lib mode ct.mt;
   Module_table.set_used used ct.mt;
   add_base_classes name ct
@@ -389,20 +388,6 @@ let downgrade_signature
 
 
 
-let class_formal_generics (fgens: formal_generics) (ct:t): formal array =
-  Array.of_list
-    (List.map
-       (fun nme ->
-         try
-           nme, IntMap.find nme ct.fgens
-         with Not_found ->
-           let str = "Unknown formal generic " ^ (ST.string nme) in
-           error_info fgens.i str)
-       fgens.v)
-
-
-
-
 
 let check_class_formal_generic
     (i:info) (nme:int) (tp1:term) (tp2:term)
@@ -431,7 +416,7 @@ let update_base_descriptor
       ^ "\"\n"
     in
     error_info hm.i str);
-  let fgs = class_formal_generics fgens ct in
+  let fgs = Module_table.class_formal_generics fgens ct.mt in
   let fgnames    = Tvars.fgnames desc.tvs
   in
   let nfgs = Array.length fgnames in
@@ -467,7 +452,7 @@ let export
           ("Header mark is not consistent with private header mark \"" ^
            (hmark2string hm1))
   end;
-  let fgs  = class_formal_generics fgens ct in
+  let fgs  = Module_table.class_formal_generics fgens ct.mt in
   let nfgs = Array.length fgs in
   let fgconcepts = Tvars.fgconcepts desc.priv.tvs in
   if nfgs > Array.length fgconcepts then
@@ -592,7 +577,7 @@ let add
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  let fgs = class_formal_generics fgens ct in
+  let fgs = Module_table.class_formal_generics fgens ct.mt in
   let idx  = count ct
   and nfgs = Array.length fgs
   and fgnames,concepts = Myarray.split fgs
@@ -906,105 +891,8 @@ let do_inherit
 let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
   (** Add the formal generic with [name] and [concept] to the formal generics
       of the class table [ct] *)
-  if IntMap.mem name.v ct.fgens then
-    error_info
-      name.i
-      ("formal generic " ^ (ST.string name.v) ^ " already defined")
-  else
-    ct.fgens <- IntMap.add
-        name.v
-        (get_type concept Tvars.empty ct)
-        ct.fgens
-
-
-
-
-let add_fg
-    (name:int)
-    (path: int list)
-    (fgs: formal list)
-    (tvs:TVars_sub.t)
-    (ct:t)
-    : formal list =
-  (* Check if [name] is a new formal generic. If yes prepend it to [fgs].
-
-     Note: [fgs] is reversed *)
-  if path = [] &&
-    not (List.exists (fun (nme,_)-> nme=name) fgs) &&
-    not (TVars_sub.has_fg name tvs)
-  then
-    try
-      let cpt = IntMap.find name ct.fgens in
-      (name,cpt) :: fgs
-    with Not_found ->
-      fgs
-  else
-    fgs
-
-
-let collect_fgs
-    (tp:type_t)
-    (fgs:formal list)
-    (tvs:TVars_sub.t)
-    (ct:t)
-    : formal list =
-  (* Collect the formal generics of the type [tp] and prepend them to [fgs] if
-     they are new.
-
-     Note: [fgs] is reversed *)
-  let rec collect (tp:type_t) (fgs:formal list): formal list =
-    match tp with
-      Normal_type (path,name,args) ->
-        let fgs = List.fold_left
-            (fun lst tp -> collect tp lst)
-            fgs
-            args
-        in
-        add_fg name path fgs tvs ct
-    | Current_type lst ->
-        assert false (* nyi: but might be eliminated from the language *)
-    | Arrow_type (tpa,tpb) ->
-        collect tpb (collect tpa fgs)
-    | Ghost_type tp | QMark_type tp | Paren_type tp ->
-        collect tp fgs
-    | Tuple_type lst ->
-        List.fold_left (fun fgs tp -> collect tp fgs) fgs lst
-  in
-  collect tp fgs
-
-
-
-let formal_generics
-    (entlst:   entities list withinfo)
-    (rt:       return_type)
-    (ntvs_gap: int)
-    (tvs:      TVars_sub.t)
-    (ct:       t)
-    : TVars_sub.t =
-  let ntvs_new,fgs_new =
-    List.fold_left
-      (fun (ntvs,fgs) ent ->
-        match ent with
-          Untyped_entities vars ->
-            ntvs + List.length vars, fgs
-        | Typed_entities (_,tp) ->
-            ntvs, collect_fgs tp fgs tvs ct)
-      (0,[])
-      entlst.v
-  in
-  let fgs_new =
-    match rt with
-      None -> fgs_new
-    | Some tp ->
-        let t,_,_ = tp.v in
-        collect_fgs t fgs_new tvs ct
-  in
-  let fgs_new = Array.of_list (List.rev fgs_new) in
-  let fgnames,fgconcepts = Myarray.split fgs_new in
-  let nfgs_new = Array.length fgconcepts in
-  let fgconcepts = Array.map (fun tp -> Term.up nfgs_new tp) fgconcepts in
-  TVars_sub.augment (ntvs_new+ntvs_gap) fgnames fgconcepts tvs
-
+  let cpt = get_type concept Tvars.empty ct in
+  Module_table.put_formal name cpt ct.mt
 
 
 
@@ -1061,7 +949,7 @@ let empty_table (): t =
   {map   = IntMap.empty;
    seq   = cc;
    base  = IntMap.empty;
-   fgens = IntMap.empty; mt=Module_table.make ()}
+   mt=Module_table.make ()}
 
 
 
