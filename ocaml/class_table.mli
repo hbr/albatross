@@ -176,8 +176,6 @@ val satisfies: type_term -> Tvars.t -> type_term -> Tvars.t -> t -> bool
   (** [satisfies tp1 tvs1 tp2 tvs2 ct]: Does the type [tp1,tvs1] satisfy the
       type [tp2,tvs2] *)
 
-val print: t -> unit
-
 val type2string: term -> int -> int array -> t -> string
 
 val string_of_signature: Sign.t -> Tvars.t -> t -> string
@@ -193,5 +191,3 @@ val string_of_fgconcepts: Tvars.t -> t -> string
 val string_of_tvs: Tvars.t -> t -> string
 
 val string_of_tvs_sub: TVars_sub.t -> t -> string
-
-val type_of_signature: Sign.t -> int -> type_term

@@ -823,18 +823,28 @@ let has_ancestor (cls:int) (anc:int) (ct:t): bool =
 
 
 
-let parent_type (cls_idx:int) (tp:type_t withinfo) (ct:t)
+let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
     : int * type_term array =
-  assert (cls_idx < count ct);
-  let tvs = (base_descriptor cls_idx ct).tvs
+  assert (cls < count ct);
+  let tvs = (base_descriptor cls ct).tvs
   in
   let tp_term = get_type tp tvs ct
   and n = Tvars.count_all tvs
   in
   let i, args = split_type_term tp_term
   in
-  if i < n then
-    error_info tp.i "Formal generic not allowed as parent class";
+  begin
+    if i < n then
+      error_info tp.i "Formal generic not allowed as parent class"
+    else
+      if is_private ct && (descriptor cls ct).mdl <> current_module ct then
+        let str =
+          "Cannot inherit to " ^ (class_name cls ct) ^
+          " in the implementation file of module \"" ^
+          (module_name (current_module ct) ct) ^
+          "\"" in
+        error_info tp.i str
+  end;
   i-n, args
 
 
@@ -886,10 +896,6 @@ let do_inherit
       anc_desc.descendants <- IntSet.add cls_idx anc_desc.descendants)
     anc_lst
 
-
-
-let reset_formal_generics (ct:t): unit =
-  ct.fgens <- IntMap.empty
 
 
 
@@ -1123,40 +1129,6 @@ let base_table (): t =
 
 
 
-let type_of_signature
-    (s:Sign.t)
-    (ntvs: int)
-    : type_term =
-  (** The type term which corresponds to the signature [s] in an environment
-      with [ntvs] type variables.  *)
-  let argtypes = Sign.arguments s
-  and nargs    = Sign.arity s
-  and tuple_index    = tuple_index    + ntvs
-  and function_index = function_index + ntvs
-  in
-  if Sign.has_result s && not (Sign.is_procedure s) then
-    let rt = Sign.result s in
-    if nargs = 0 then
-      rt
-    else if nargs = 1 then
-      Application(Variable function_index, [|argtypes.(0);rt|])
-    else
-      let rec tuple (i:int) (tup:term): term =
-        if i=0 then tup
-        else
-          let i   = i - 1 in
-          let tup = Application(Variable tuple_index, [|argtypes.(i);tup|]) in
-          tuple i tup
-      in
-      tuple
-        (nargs-2)
-        (Application(Variable tuple_index,
-                     [|argtypes.(nargs-2); argtypes.(nargs-1)|]))
-  else
-    assert false (* nyi: procedures *)
-
-
-
 let string_of_signature
     (s:Sign.t)
     (tvs:Tvars.t)
@@ -1190,47 +1162,3 @@ let string_of_complete_signature
     (ct:t)
     : string =
   (string_of_tvs tvs ct) ^ (string_of_signature s tvs ct)
-
-
-(* needs to be adapted for private and public views !!
-let class2string (i:int) (ctxt:t): string =
-  assert (i < count ctxt);
-  let desc = Seq.elem  i ctxt.seq in
-  let ngen = Array.length desc.constraints in
-  assert (ngen = Array.length desc.fgnames);
-  let con2string =
-    if ngen = 0 then ""
-    else
-      "["
-      ^ (String.concat
-             ","
-           (Array.to_list
-              (Array.mapi
-                 (fun i c ->
-                   (ST.string desc.fgnames.(i))
-                   ^ ":"
-                   ^ (type2string c 0 [||] ctxt))
-                 desc.constraints) )
-        )
-      ^ "]"
-  and par2string =
-    String.concat
-      ";"
-      (List.rev (TypSet.fold
-                   (fun el lst -> (type2string el 0 desc.fgnames ctxt)::lst)
-                   desc.parents
-                   []))
-  in
-  (hmark2string_wblank desc.hmark)
-  ^ "class " ^ (class_name i ctxt)
-  ^ con2string
-  ^ (if TypSet.is_empty desc.parents then ""
-  else" inherit " ^ par2string)
-  ^ " end"
-*)
-
-let print ctxt =
-  (*Seq.iteri
-    (fun i c -> Printf.printf "%s\n" (class2string i ctxt))
-    ctxt.seq*)
-  assert false

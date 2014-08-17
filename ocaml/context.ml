@@ -800,6 +800,5 @@ let backward_data (idx:int) (c:t): term list * IntSet.t =
 
 let print (c:t): unit =
   assert (is_global c);
-  Class_table.print   (class_table c);
   Feature_table.print c.ft;
   print_global_assertions c
