@@ -624,24 +624,42 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
     (-1)
 
 
+let anchored (tvs:Tvars.t) (cls:int) (ct:t): int array =
+  let nfgs = Tvars.count_all tvs
+  in
+  let anch = ref [] in
+  for i = 0 to nfgs - 1 do
+    let pcls = Tvars.principal_class (Variable i) tvs in
+    if pcls = cls then
+        anch := i :: !anch;
+  done;
+  Array.of_list (List.rev !anch)
 
 
-let check_deferred  (owner:int) (info:info) (ct:t): unit =
-  let desc = descriptor owner ct in
+let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
+  let desc  = descriptor owner ct
+  and bdesc = base_descriptor owner ct in
   let mdl = current_module ct in
+  (match bdesc.hmark with
+    Deferred_hmark -> ()
+  | _ ->
+      error_info info
+        ("The owner class " ^ (class_name owner ct) ^ " is not deferred")
+  );
   if mdl <> desc.mdl then
-    let str =
-      "Deferred feature/assertion for owner \"" ^
-      (class_name owner ct) ^
-      "\" can be defined only in the module \"" ^
-      (Module_table.name desc.mdl ct.mt) ^
-      "\""
-    in
-    error_info info str
+    error_info info
+      ("Can be defined only in the module \"" ^
+       (Module_table.name desc.mdl ct.mt) ^
+       "\" of the owner class " ^
+       (class_name owner ct))
   else if not (IntSet.is_empty desc.descendants) then
-    let str =
-      "Owner class " ^ (class_name owner ct) ^" has already descendants" in
-    error_info info str
+    error_info info
+      ("Owner class " ^ (class_name owner ct) ^" has already descendants")
+  else if nanchors <> 1 then
+    error_info info
+      ("There must be a unique formal generic anchored to the owner class " ^
+       (class_name owner ct))
+
 
 
 

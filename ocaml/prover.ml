@@ -488,6 +488,7 @@ let prove_ensure
 
 
 let rec make_proof
+    (i:int)
     (entlst: entities list withinfo)
     (kind:kind)
     (rlst: compound)
@@ -495,9 +496,7 @@ let rec make_proof
     (elst: compound)
     (pc:   Proof_context.t)
     : unit =
-  let prove_check_expression
-      (ie:info_expression)
-      (pc:Proof_context.t): unit =
+  let prove_check_expression (ie:info_expression): unit =
     let c = Proof_context.context pc in
     match ie.v with
       Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
@@ -507,20 +506,20 @@ let rec make_proof
               let kind, clst =
                 analyze_imp_opt entlst.i imp_opt c
               in
-              make_proof entlst kind rlst clst elst pc
+              make_proof (i+1) entlst kind rlst clst elst pc
           | Existential ->
               error_info ie.i "Only \"all\" allowed here"
         end
     | Expproof (rlst,imp_opt,elst) ->
         let kind, clst = analyze_imp_opt ie.i imp_opt c in
-        make_proof (withinfo UNKNOWN []) kind rlst clst elst pc
+        make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
     | _ ->
         let _ = prove_basic_expression ie pc in
         ()
   in
   Proof_context.push entlst pc;
   add_assumptions rlst pc;
-  List.iter (fun ie -> prove_check_expression ie pc) clst;
+  List.iter (fun ie -> prove_check_expression ie) clst;
   let pair_lst = prove_ensure elst kind pc in
   Proof_context.pop pc;
   add_proved pair_lst pc
@@ -536,4 +535,4 @@ let prove_and_store
   let c = Proof_context.context pc in
   let kind, rlst, clst, elst = analyze_body entlst.i bdy c
   in
-  make_proof entlst kind rlst clst elst pc;
+  make_proof 0 entlst kind rlst clst elst pc;

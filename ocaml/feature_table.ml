@@ -776,24 +776,9 @@ let do_inherit
 let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let cnt = count ft
   and nfgs = Tvars.count_all desc.tvs
+  and nanchors = Array.length desc.anchored
   in
   desc.tp <- Class_table.to_dummy nfgs desc.sign;
-  let anch = ref [] in
-  for i = 0 to nfgs - 1 do
-    let pcls = Tvars.principal_class (Variable i) desc.tvs in
-    if pcls = desc.cls then
-        anch := i :: !anch;
-  done;
-  desc.anchored <- Array.of_list (List.rev !anch);
-  let nanchors = Array.length desc.anchored in
-  begin
-    if is_deferred desc && nanchors <> 1 then
-      let str =
-        "Deferred feature does not have one formal generic which \
-          is based on the owner class"
-      in
-      error_info info str
-  end;
   Seq.push desc ft.seq;
   add_key cnt ft;
   add_class_feature cnt ft;
@@ -823,10 +808,12 @@ let put_function
   in
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct in
+  let anchored = Class_table.anchored tvs cls ft.ct in
+  let nanchors = Array.length anchored in
   if idx=cnt then begin (* new feature *)
     (match impstat with
       Deferred ->
-        Class_table.check_deferred cls fn.i ft.ct
+        Class_table.check_deferred cls nanchors fn.i ft.ct
     | _ -> ());
     let desc =
       {mdl      = mdl;
@@ -837,7 +824,7 @@ let put_function
        argnames = argnames;
        sign     = sign;
        tp       = Variable 0;
-       anchored = [||];
+       anchored = anchored;
        priv     = term_opt;
        pub      = if is_priv then None else Some term_opt;
        seeds    = IntSet.singleton cnt;

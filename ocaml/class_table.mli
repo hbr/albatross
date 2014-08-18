@@ -101,8 +101,8 @@ val effective_features: int -> t -> int list
        [cls] *)
 
 val owner: Tvars.t -> Sign.t -> t -> int
-
-val check_deferred:  int -> info -> t -> unit
+val anchored: Tvars.t -> int -> t -> int array
+val check_deferred:  int -> int -> info -> t -> unit
 
 val find:  int -> t -> int
 val find_in_module: int -> t -> int
