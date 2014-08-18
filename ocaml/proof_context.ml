@@ -1,6 +1,7 @@
 open Container
 open Term
 open Support
+open Printf
 
 
 type slot_data = {ndown:int;
@@ -39,8 +40,16 @@ type t = {base:     Proof_table.t;
           mutable do_fwd: bool;
           mutable work:   int list;
           mutable entry:  entry;
-          mutable stack:  entry list}
+          mutable stack:  entry list;
+          mutable trace:  bool}
 
+
+let context (pc:t): Context.t = Proof_table.context pc.base
+
+let depth (pc:t): int =
+  let res = Context.depth (context pc) in
+  assert (res = List.length pc.stack);
+  res
 
 let empty_entry =
   let e = Term_table.empty in
@@ -59,13 +68,24 @@ let copied_entry (e:entry): entry =
    count    = e.count}
 
 
-let make (imp_id:int) (all_id:int): t  =
-  {base     = Proof_table.make imp_id all_id;
-   terms    = Seq.empty ();
-   do_fwd   = false;
-   work     = [];
-   entry    = empty_entry;
-   stack    = []}
+let get_trace_info (pc:t): unit =
+  pc.trace <- Options.is_tracing_proof () && Options.trace_level () > 0
+
+
+
+let make (): t  =
+  let res =
+    {base     = Proof_table.make ();
+     terms    = Seq.empty ();
+     do_fwd   = false;
+     work     = [];
+     entry    = empty_entry;
+     stack    = [];
+     trace    = false}
+  in
+  get_trace_info res;
+  res
+
 
 let is_using_forward (pc:t): bool =
   pc.do_fwd || Options.is_prover_forward ()
@@ -78,9 +98,6 @@ let set_forward (pc:t): unit =
 
 let reset_forward (pc:t): unit =
   pc.do_fwd <- false
-
-let stacked_counts (pc:t): int list =
-  Proof_table.stacked_counts pc.base
 
 
 let is_global (at:t): bool =
@@ -408,6 +425,80 @@ let has_equivalent (t:term) (pc:t): bool =
     false
 
 
+let string_of_term (t:term) (pc:t): string =
+  Context.string_of_term t (context pc)
+
+
+let print_assertions
+    (prefix:string)
+    (level:int)
+    (c0:int)
+    (c1:int)
+    (global:bool)
+    (pc:t): unit =
+  let c = context pc in
+  let argsstr = Context.ith_arguments_string level c in
+  if argsstr <> "" then
+    printf "%s%s\n" prefix argsstr;
+  let rec print (i:int): unit =
+    if i = c1 then ()
+    else begin
+      let t        = term i pc
+      and is_hypo  = is_assumption   i pc
+      and is_used  = is_used_forward i pc
+      and used_gen = used_schematic  i pc
+      in
+      let tstr = Context.string_of_term t c
+      and used_gen_str =
+        if IntSet.is_empty used_gen then ""
+        else " " ^ (intset_to_string used_gen)
+      in
+      if pc.trace || not is_used then
+        printf "%s%3d   %s%s%s%s\n"
+          prefix
+          i
+          (if global || is_hypo then "" else ". ")
+          tstr
+          used_gen_str
+          (if is_used then " <used>" else "");
+      print (i+1)
+    end
+  in
+  print c0
+
+
+
+
+let print_all_local_assertions (pc:t): unit =
+  let rec print (level:int) (clst: int list): string =
+      match clst with
+        []
+      | [_] -> ""
+      | c1::c0::clst ->
+          let prefix = print (level+1) (c0::clst) in
+          print_assertions prefix level c0 c1 false pc;
+          "  " ^ prefix
+  in
+  let clst = Proof_table.stacked_counts pc.base
+  in
+  let prefix = print 1 clst in
+  print_assertions
+    prefix
+    0
+    (count_previous pc)
+    (count          pc)
+    false
+    pc
+
+
+
+let print_global_assertions (pc:t): unit =
+  let cnt = count_global pc
+  and level = List.length pc.stack
+  in
+  print_assertions "" level 0 cnt true pc
+
+
 
 let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
   (** Add the new term [t] to the context [pc].
@@ -704,6 +795,43 @@ let add_consequences (i:int) (pc:t): unit =
 
 
 
+
+let close_step (pc:t): unit =
+  assert (has_work pc);
+  let i = List.hd pc.work in
+  pc.work <- List.tl pc.work;
+  add_consequences i pc
+
+
+let prefix (pc:t): string = String.make (2*(depth pc)+2) ' '
+
+
+let close (pc:t): unit =
+  let rec print (c0:int) (c1:int): unit =
+    assert (c0 <= c1);
+    if c0 = c1 then ()
+    else begin
+      printf "%s%3d >       %s\n"
+        (prefix pc) c0 (string_of_term (term c0 pc) pc);
+      print (c0+1) c1
+    end
+  in
+  let rec cls (n:int): unit =
+    if n > 200 then assert false;  (* 'infinite' loop detection *)
+    if has_work pc then begin
+      let cnt = count pc in
+      close_step pc;
+      if pc.trace then print cnt (count pc);
+      cls (n+1)
+    end else
+      ()
+  in
+  cls 0;
+  assert (not (has_work pc))
+
+
+
+
 let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   (** Add the term [t] as an assumption or an axiom to the context [pc].
    *)
@@ -719,6 +847,9 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
     add_new t IntSet.empty pc
   end else
     Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;
+  if pc.trace then
+    printf "%s%3d hypo:   %s\n" (prefix pc) idx (string_of_term t pc);
+  close pc;
   idx
 
 
@@ -744,28 +875,6 @@ let add_axiom (t:term) (pc:t): int =
 
 
 
-let close_step (pc:t): unit =
-  assert (has_work pc);
-  let i = List.hd pc.work in
-  pc.work <- List.tl pc.work;
-  add_consequences i pc
-
-
-
-let close (pc:t): unit =
-  let rec cls (n:int): unit =
-    if n > 200 then assert false;  (* 'infinite' loop detection *)
-    if has_work pc then begin
-      close_step pc;
-      cls (n+1)
-    end else
-      ()
-  in
-  cls 0;
-  assert (not (has_work pc));
-  ()
-
-
 let push_slots (nbenv:int) (pc:t): unit =
   pc.entry.slots <-
     if nbenv=0 then
@@ -782,14 +891,30 @@ let push_slots (nbenv:int) (pc:t): unit =
             {ndown=0; sprvd=TermMap.empty})
 
 
-let push (nbenv:int) (names:int array) (pc:t): unit =
-  assert (let len = Array.length names in len=0 || len=nbenv);
+
+let push (entlst:entities list withinfo) (pc:t): unit =
   assert (not (has_work pc));
+  let c = context pc in
+  Context.push entlst None c;
+  let nbenv = Context.arity c
+  and names = Context.local_fargnames c in
+  assert (nbenv = Array.length names);
   Proof_table.push nbenv names pc.base;
   pc.entry.count <- Seq.count pc.terms;
   pc.stack <- (copied_entry pc.entry)::pc.stack;
   push_slots nbenv pc
 
+
+let push_untyped (names:int array) (pc:t): unit =
+  assert (not (has_work pc));
+  let c = context pc in
+  Context.push_untyped names c;
+  let nbenv = Context.arity c in
+  assert (nbenv = Array.length names);
+  Proof_table.push nbenv names pc.base;
+  pc.entry.count <- Seq.count pc.terms;
+  pc.stack <- (copied_entry pc.entry)::pc.stack;
+  push_slots nbenv pc
 
 
 
@@ -800,7 +925,8 @@ let pop (pc:t): unit =
   pc.work  <- [];
   pc.entry <- List.hd pc.stack;
   pc.stack <- List.tl pc.stack;
-  Seq.keep pc.entry.count pc.terms
+  Seq.keep pc.entry.count pc.terms;
+  Context.pop (context pc)
 
 
 
@@ -808,6 +934,7 @@ let pop (pc:t): unit =
 let add_backward (t:term) (pc:t): unit =
   (** Add all backward rules which have [t] as a target to the context [pc].
    *)
+  set_forward pc;
   let add_lst (sublst: (int*Term_sub.t) list): unit =
     List.iter
       (fun (idx,sub) ->
@@ -825,7 +952,8 @@ let add_backward (t:term) (pc:t): unit =
     add_lst sublst
   else
     let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
-    add_lst sublst)
+    add_lst sublst);
+  close pc
 
 
 
@@ -842,7 +970,12 @@ let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (pc:t): unit =
   else begin
     Proof_table.add_proved t pterm pc.base;
     add_new t used_gen pc
-  end
+  end;
+  if pc.trace then begin
+    let idx = find_equivalent t pc in
+    printf "%s%3d proved: %s\n" (prefix pc) idx (string_of_term t pc)
+  end;
+  close pc
 
 
 let backward_set (t:term) (pc:t): int list =

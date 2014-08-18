@@ -1,3 +1,4 @@
+open Support
 open Container
 open Term
 
@@ -5,12 +6,20 @@ open Term
 type t
 type proof_term
 
-val stacked_counts: t -> int list
+val context: t -> Context.t
 
-val make:      int -> int -> t
+val print_all_local_assertions: t -> unit
+val print_global_assertions:   t -> unit
 
-val push:      int -> int array -> t -> unit
-val pop:       t -> unit
+val get_trace_info: t -> unit
+
+val make:      unit -> t
+
+val push: entities list withinfo -> t -> unit
+val push_untyped: int array -> t -> unit
+val pop:          t -> unit
+
+val depth:     t -> int
 
 val find:               term -> t -> int
 val has:                term -> t -> bool
@@ -35,16 +44,6 @@ val split_implication:  term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
 val all_quantified_outer: term -> t -> term
 val implication_chain:  term list -> term -> t -> term
-(*
-  val is_global:   t -> bool
-  val is_local:    t -> bool
-  val nbenv:       t -> int
-  val nbenv_local: t -> int
-  val count:       t -> int
-  val all_id:      t -> int
-  val imp_id:      t -> int
- *)
-
 
 val count:          t -> int
 val count_previous: t -> int

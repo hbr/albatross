@@ -17,14 +17,10 @@ type entry = {
   }
 
 
-type proof_term = Proof_context.proof_term
-
 type t = {
     mutable entry: entry;
     mutable stack: entry list;
-    mutable trace: bool;
-    ft:            Feature_table.t;
-    pc:            Proof_context.t
+    ft:            Feature_table.t
   }
 
 
@@ -221,18 +217,10 @@ let argument (name:int) (c:t): int * Tvars.t * Sign.t =
 
 
 
-let get_trace_info (c:t): unit =
-  c.trace <- Options.is_tracing_proof () && Options.trace_level () > 0
-
 let make (): t =
   {entry = empty_entry;
    stack = [];
-   trace =  Options.is_tracing_proof () && Options.trace_level () > 0;
-   ft        = Feature_table.base_table ();
-   pc        =
-   Proof_context.make
-     Feature_table.implication_index
-     Feature_table.all_index
+   ft        = Feature_table.base_table ()
  }
 
 
@@ -298,10 +286,7 @@ let push_with_gap
      nfargs_delta = Array.length fargs1;
      result       = res;
      info         = entlst.i};
-  c.stack <- entry::c.stack;
-
-  assert (not (Proof_context.has_work c.pc));
-  Proof_context.push (arity c) (local_fargnames c) c.pc
+  c.stack <- entry::c.stack
 
 
 
@@ -329,8 +314,7 @@ let pop (c:t): unit =
    *)
   assert (not (is_global c));
   c.entry <- List.hd c.stack;
-  c.stack <- List.tl c.stack;
-  Proof_context.pop c.pc
+  c.stack <- List.tl c.stack
 
 
 
@@ -391,6 +375,14 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
              ^ (Class_table.type2string tp ntvs (entry_fgnames e) ct))
            llst)
     ^ ")"
+
+
+let ith_arguments_string (i:int) (c:t): string =
+  assert (i <= depth c);
+  let e = if i=0 then c.entry else List.nth c.stack (i-1)
+  and ct = class_table c
+  in
+  arguments_string e ct
 
 
 
@@ -577,50 +569,6 @@ let find_feature
   find_funcs fn nargs_feat c
 
 
-
-
-let assertion (i:int) (c:t): term =
-  Proof_context.term i c.pc
-
-
-let print_assertions
-    (prefix:string)
-    (e:entry)
-    (c0:int)
-    (c1:int)
-    (global:bool)
-    (c:t): unit =
-  let argsstr = arguments_string e (class_table c) in
-  if argsstr <> "" then
-    printf "%s%s\n" prefix argsstr;
-  let rec print (i:int): unit =
-    if i = c1 then ()
-    else begin
-      let t,nbenv = Proof_context.term_orig i c.pc
-      and is_hypo = Proof_context.is_assumption i c.pc
-      and is_used = Proof_context.is_used_forward i c.pc
-      and used_gen = Proof_context.used_schematic i c.pc
-      in
-      assert (nbenv = Array.length e.fargs);
-      let tstr = Feature_table.term_to_string t (entry_fargnames e) c.ft
-      and used_gen_str =
-        if IntSet.is_empty used_gen then ""
-        else " " ^ (intset_to_string used_gen)
-      in
-      if c.trace || not is_used then
-        printf "%s%3d   %s%s%s%s\n"
-          prefix
-          i
-          (if global || is_hypo then "" else ". ")
-          tstr
-          used_gen_str
-          (if is_used then " <used>" else "");
-      print (i+1)
-    end
-  in
-  print c0
-
-
 let print_local_contexts (c:t): unit =
   let ct = class_table c in
   let args_str (e:entry): string =
@@ -640,141 +588,13 @@ let print_local_contexts (c:t): unit =
   print_stack c.stack;
   printf "%s\n" (args_str c.entry)
 
-let print_global_assertions (c:t): unit =
-  let cnt = Proof_context.count_global c.pc
-  and e   =
-    if c.stack = [] then c.entry
-    else
-      let rec get_e0 (lst: entry list): entry =
-        match lst with
-          []    -> assert false
-        | [e]   -> e
-        | _::lst -> get_e0 lst
-      in
-      get_e0 c.stack
-  in
-  print_assertions "" e 0 cnt true c
-
-
-
-let print_all_local_assertions (c:t): unit =
-  let rec print (elst: entry list) (clst: int list): string =
-      match elst, clst with
-        [], []
-      | [_], [_] -> ""
-      | e1::e0::elst, c1::c0::clst ->
-          let prefix = print (e0::elst) (c0::clst) in
-          print_assertions prefix e1 c0 c1 false c;
-          "  " ^ prefix
-      | _, _ -> assert false (* shall never happen, elst and clst must have
-                                equal length *)
-  in
-  let clst = Proof_context.stacked_counts c.pc
-  in
-  let prefix = print c.stack clst in
-  print_assertions
-    prefix
-    c.entry
-    (Proof_context.count_previous c.pc)
-    (Proof_context.count          c.pc)
-    false
-    c
-
-
-let count_assertions (c:t): int =
-  Proof_context.count c.pc
-
-let find_assertion (t:term) (c:t): int =
-  Proof_context.find t c.pc
-
-let has_assertion (t:term) (c:t): bool =
-  Proof_context.has t c.pc
-
-let split_implication (t:term) (c:t): term * term =
-  Proof_context.split_implication t c.pc
-
-let split_all_quantified (t:term) (c:t): int * int array * term =
-  Proof_context.split_all_quantified t c.pc
-
-let all_quantified_outer (t:term) (c:t): term =
-  Proof_context.all_quantified_outer t c.pc
-
-let implication_chain (ps:term list) (tgt:term) (c:t): term =
-  Proof_context.implication_chain ps tgt c.pc
 
 let expanded_term (t:term) (c:t): term =
   let nbenv = nfargs c in
   Feature_table.expand_term t nbenv c.ft
 
-let prefix (c:t): string =
-  String.make (2*(depth c)+2) ' '
-
-let close (c:t): unit =
-  let rec print (c0:int) (c1:int): unit =
-    assert (c0 <= c1);
-    if c0 = c1 then ()
-    else begin
-      printf "%s%3d >       %s\n"
-        (prefix c) c0 (string_of_term (assertion c0 c) c);
-      print (c0+1) c1
-    end
-  in
-  let rec cls (n:int): unit =
-    if Proof_context.has_work c.pc then begin
-      (*assert (n < 50);*)
-      let cnt = count_assertions c in
-      Proof_context.close_step c.pc;
-      if c.trace then print cnt (count_assertions c);
-      cls (n+1)
-    end else
-      ()
-  in
-  cls 0;
-  assert (not (Proof_context.has_work c.pc))
-
-let add_assumption (t:term) (c:t): int =
-  let res = Proof_context.add_assumption t c.pc
-  in
-  if c.trace then
-    printf "%s%3d hypo:   %s\n" (prefix c) res (string_of_term t c);
-  close c;
-  res
-
-let add_axiom (t:term) (c:t): int =
-  let res = Proof_context.add_axiom t c.pc in
-  if c.trace then
-    printf "%s%3d axiom:  %s\n" (prefix c) res (string_of_term t c);
-  close c;
-  res
-
-
-let discharged (i:int) (c:t): term * proof_term =
-  Proof_context.discharged i c.pc
-
-
-let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (c:t): unit =
-  Proof_context.add_proved t pterm used_gen c.pc;
-  if c.trace then begin
-    let idx = find_assertion t c in
-    printf "%s%3d proved: %s\n" (prefix c) idx (string_of_term t c)
-  end;
-  close c
-
-
-let add_backward (t:term) (c:t): unit =
-  Proof_context.set_forward c.pc;
-  Proof_context.add_backward t c.pc;
-  close c
-
-
-let backward_set (t:term) (c:t): int list =
-  Proof_context.backward_set t c.pc
-
-let backward_data (idx:int) (c:t): term list * IntSet.t =
-  Proof_context.backward_data idx c.pc
 
 
 let print (c:t): unit =
   assert (is_global c);
-  Feature_table.print c.ft;
-  print_global_assertions c
+  Feature_table.print c.ft

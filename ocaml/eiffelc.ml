@@ -117,7 +117,8 @@ let put_feature
   Context.pop context
 
 
-let analyze(ast: declaration list) (context:Context.t): unit =
+let analyze(ast: declaration list) (pc:Proof_context.t): unit =
+  let context = Proof_context.context pc in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
@@ -126,7 +127,7 @@ let analyze(ast: declaration list) (context:Context.t): unit =
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->
-          Prover.prove_and_store entlst body context
+          Prover.prove_and_store entlst body pc
       | Formal_generic (name, concept) ->
           Context.put_formal_generic name concept context
     in
@@ -140,7 +141,8 @@ let analyze(ast: declaration list) (context:Context.t): unit =
 
 
 
-let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
+let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
+  let c = Proof_context.context pc in
   let rec used (use_blk: use_block) (stack: int list) (set:IntSet.t)
       : IntSet.t =
     let push (nme:int withinfo): int list =
@@ -163,7 +165,7 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
             let set = used use_blk (push nme) set in
             Context.add_module nme.v [] 2 set c;
             Support.Parse_info.set_file_name nmestr;
-            analyze ast c;
+            analyze ast pc;
             IntSet.add (Context.current_module c) set
         in
         IntSet.union used_set set)
@@ -178,15 +180,15 @@ let process_use (use_blk: use_block) (f:file_name) (c:Context.t): unit =
 
 
 
-let compile (f: file_name) (context:Context.t): unit =
+let compile (f: file_name) (pc:Proof_context.t): unit =
   Printf.printf "Compiling file \"%s\"\n" f.name;
   try
     let use_blk,ast  = parse_file f.name in
     (*Support.Parse_info.set_use_interface ();*)
-    process_use use_blk f context;
+    process_use use_blk f pc;
     (*Support.Parse_info.set_module ();*)
     Support.Parse_info.set_file_name f.name;
-    analyze ast context;
+    analyze ast pc;
     Statistics.write ();
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in
@@ -198,8 +200,8 @@ let _ =
   try
     parse_arguments ();
     files := List.rev !files;
-    let context = Context.make () in
-    List.iter (fun f -> compile f context) !files
+    let pc = Proof_context.make () in
+    List.iter (fun f -> compile f pc) !files
   with
     Support.Eiffel_error str
   | Sys_error str ->  prerr_string (str ^ "\n"); exit 1

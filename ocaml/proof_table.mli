@@ -3,6 +3,8 @@ open Term
 type t
 type proof_term
 
+val context: t -> Context.t
+
 val depth:       t -> int
 val is_global:   t -> bool
 val is_local:    t -> bool
@@ -30,7 +32,7 @@ val is_assumption: int -> t -> bool
 
 val stacked_counts: t -> int list
 
-val make: int -> int -> t
+val make: unit -> t
 val push: int -> int array -> t -> unit
 val pop:  t -> unit
 

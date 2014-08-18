@@ -11,7 +11,7 @@ type kind =
   | PDeferred
   | PNormal
 
-type proof_term = Context.proof_term
+type proof_term = Proof_context.proof_term
 
 type entry = {mutable goal: term;
               mutable alter: bool; (* stack entry used for exploring
@@ -23,7 +23,7 @@ type entry = {mutable goal: term;
                                       generate the goal *)
             }
 
-type t = {context: Context.t;
+type t = {pc: Proof_context.t;
           mutable entry: entry;
           mutable beta:  bool;  (* goal already beta reduced? *)
           mutable stack: entry list;
@@ -32,13 +32,15 @@ type t = {context: Context.t;
           mutable trace: bool}
 
 
-let start (t:term) (c:Context.t): t =
+let context (p:t): Context.t = Proof_context.context p.pc
+
+let start (t:term) (pc:Proof_context.t): t =
   let entry = {goal=t;
                alter= false;
                nbenv= 0;
                used_gen=IntSet.empty;
                used_bwd=IntSet.empty} in
-  {context= c;
+  {pc     = pc;
    entry  = entry;
    beta   = false;
    stack  = [];
@@ -102,7 +104,8 @@ let analyze_body (info:info) (bdy: feature_body) (c:Context.t)
 
 
 
-let get_term (ie: info_expression) (c:Context.t): term =
+let get_term (ie: info_expression) (pc:Proof_context.t): term =
+  let c = Proof_context.context pc in
   let t  = Typer.boolean_term ie c in
   let tn = Context.expanded_term t c in
   tn
@@ -110,78 +113,79 @@ let get_term (ie: info_expression) (c:Context.t): term =
 
 
 let string_of_term (t:term) (p:t): string =
-  Context.string_of_term t p.context
+  Context.string_of_term t (context p)
 
 let string_of_index (i:int) (p:t): string =
-  assert (i < Context.count_assertions p.context);
-  let t = Context.assertion i p.context in
+  assert (i < Proof_context.count p.pc);
+  let t = Proof_context.term i p.pc in
   string_of_term t p
 
 let string_of_goal (p:t): string =
   string_of_term p.entry.goal p
 
 let add_assumptions_or_axioms
-    (lst:compound) (is_axiom:bool) (c:Context.t): int list =
+    (lst:compound) (is_axiom:bool) (pc:Proof_context.t): int list =
   List.map
     (fun ie ->
-      let tn = get_term ie c in
+      let tn = get_term ie pc in
       if is_axiom then
-        Context.add_axiom tn c
+        Proof_context.add_axiom tn pc
       else
-        Context.add_assumption tn c)
+        Proof_context.add_assumption tn pc)
     lst
 
 
-let add_assumptions (lst:compound) (c:Context.t): unit =
-  let _ = add_assumptions_or_axioms lst false c in ()
+let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
+  let _ = add_assumptions_or_axioms lst false pc in ()
 
 
 
-let add_axioms (lst:compound) (c:Context.t): int list =
-  add_assumptions_or_axioms lst true c
+let add_axioms (lst:compound) (pc:Proof_context.t): int list =
+  add_assumptions_or_axioms lst true pc
 
 
 
-let add_proved (lst: (term*proof_term*IntSet.t) list) (c:Context.t): unit =
+let add_proved (lst: (term*proof_term*IntSet.t) list) (pc:Proof_context.t): unit =
   List.iter
     (fun (t,pterm,used_gen) ->
-      Context.add_proved t pterm used_gen c
+      Proof_context.add_proved t pterm used_gen pc
     )
     lst
 
 
 
 
-let print_local (c:Context.t): unit =
+let print_local (pc:Proof_context.t): unit =
   printf "local assertions\n";
-  Context.print_all_local_assertions c
+  Proof_context.print_all_local_assertions pc
 
-let print_global (c:Context.t): unit =
+let print_global (pc:Proof_context.t): unit =
   printf "global assertions\n";
-  Context.print_global_assertions c
+  Proof_context.print_global_assertions pc
 
 
 let print_pair (p:t): unit =
   printf "\n";
-  Context.print_all_local_assertions p.context;
+  print_local p.pc;
   printf "--------------------------------------\n";
-  let depth = Context.depth p.context in
+  let depth = Proof_context.depth p.pc in
   let prefix = String.make (2*(depth-1)) ' ' in
   printf "%s      %s\n" prefix (string_of_term p.entry.goal p)
 
+
 let split_implication (p:t): term * term =
-  Context.split_implication p.entry.goal p.context
+  Proof_context.split_implication p.entry.goal p.pc
 
 let split_all_quantified (p:t): int * int array * term =
-  Context.split_all_quantified p.entry.goal p.context
+  Proof_context.split_all_quantified p.entry.goal p.pc
 
 
 let add_backward (p:t): unit =
-  Context.add_backward p.entry.goal p.context;
+  Proof_context.add_backward p.entry.goal p.pc;
   if not p.beta then begin
     p.beta <- true;
     p.entry.goal <- Term.reduce p.entry.goal;
-    Context.add_backward p.entry.goal p.context
+    Proof_context.add_backward p.entry.goal p.pc
   end
 
 
@@ -207,7 +211,7 @@ let push
     (used_bwd:IntSet.t)
     (p:t): unit =
   let nbenv = p.entry.nbenv + Array.length names in
-  Context.push_untyped names p.context;
+  Proof_context.push_untyped names p.pc;
   p.stack <- p.entry :: p.stack;
   p.entry <- {goal=t; alter=false; nbenv=nbenv;
               used_gen=used_gen; used_bwd=used_bwd};
@@ -233,7 +237,7 @@ let push_alternative (idx:int) (p:t): unit =
 
 let pop (p:t): unit =
   assert (0 < p.depth);
-  Context.pop p.context;
+  Proof_context.pop p.pc;
   p.entry <- List.hd p.stack;
   p.stack <- List.tl p.stack;
   p.depth <- p.depth - 1
@@ -255,15 +259,15 @@ let discharge (idx:int) (p:t): int =
       of the discharged term in the outer context.
    *)
   assert (p.depth <> 0);
-  let t,pterm = Context.discharged idx p.context in
-  assert ((Context.assertion idx p.context) = p.entry.goal);
+  let t,pterm = Proof_context.discharged idx p.pc in
+  assert ((Proof_context.term idx p.pc) = p.entry.goal);
   pop p;
   let used_gen_tgt =
-    let cnt = Context.count_assertions p.context in
+    let cnt = Proof_context.count p.pc in
     IntSet.filter (fun j -> j < cnt) p.entry.used_gen
   in
-  Context.add_proved t pterm used_gen_tgt p.context;
-  Context.find_assertion t p.context
+  Proof_context.add_proved t pterm used_gen_tgt p.pc;
+  Proof_context.find t p.pc
 
 
 let rec discharge_downto (i:int) (idx:int) (p:t): int =
@@ -282,7 +286,7 @@ let rec discharge_downto (i:int) (idx:int) (p:t): int =
 let check_goal (p:t): unit =
   try
     add_backward p;
-    let idx = Context.find_assertion p.entry.goal p.context in
+    let idx = Proof_context.find p.entry.goal p.pc in
     raise (Proof_found idx)
   with Not_found ->
     ()
@@ -292,7 +296,7 @@ let enter (p:t): unit =
   let rec do_implication (): unit =
     try
       let a,b = split_implication p in
-      let _ = Context.add_assumption a p.context in
+      let _ = Proof_context.add_assumption a p.pc in
       p.entry.goal <- b;
       check_goal p;
       do_implication ()
@@ -331,12 +335,12 @@ let rec prove_goal (p:t): unit =
   enter p;
   if p.trace && p.trace_ctxt then begin
     if not (Options.is_tracing_proof ()) then
-      print_global p.context;
+      print_global p.pc;
     print_pair p;
     p.trace_ctxt <- false
   end;
   if Options.is_prover_backward () then
-    let bwd_lst = Context.backward_set p.entry.goal p.context in
+    let bwd_lst = Proof_context.backward_set p.entry.goal p.pc in
     let bwd_lst =
       List.filter
         (fun idx -> not (IntSet.mem idx p.entry.used_bwd))
@@ -358,8 +362,8 @@ and prove_alternatives (bwds: int list) (p:t): unit =
   end;
   List.iteri
     (fun i idx ->
-      let ps, used_gen = Context.backward_data idx p.context in
-      let imp = Context.assertion idx p.context in
+      let ps, used_gen = Proof_context.backward_data idx p.pc in
+      let imp = Proof_context.term idx p.pc in
       let goal  = p.entry.goal
       and depth = p.depth in
       try
@@ -377,7 +381,7 @@ and prove_alternatives (bwds: int list) (p:t): unit =
         push_alternative idx p;
         prove_premises ps used_gen p;
         (* all premises succeeded, i.e. the target is in the context *)
-        let idx_tgt = Context.find_assertion goal p.context
+        let idx_tgt = Proof_context.find goal p.pc
         (*let idx_tgt =
           try Context.find_assertion goal p.context
           with Not_found -> assert false*)
@@ -437,10 +441,10 @@ and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
 
 
 
-let prove_basic_expression (ie:info_expression) (c:Context.t): int =
-  let t = get_term ie c in
+let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
+  let t = get_term ie pc in
   let rec prove (retry:bool): int =
-    let p = start t c in
+    let p = start t pc in
     push_empty p;
     try
       prove_goal p;
@@ -452,9 +456,9 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
         then begin
           pop_downto 0 p;
           Options.set_trace_proof ();
-          Context.get_trace_info p.context;
+          Proof_context.get_trace_info p.pc;
           p.trace <- true;
-          Context.print_global_assertions p.context;
+          Proof_context.print_global_assertions p.pc;
           prove true
         end else begin
           error_info ie.i "Cannot prove"
@@ -466,18 +470,18 @@ let prove_basic_expression (ie:info_expression) (c:Context.t): int =
 let prove_ensure
     (lst:compound)
     (k:kind)
-    (c:Context.t)
+    (pc:Proof_context.t)
     : (term*proof_term*IntSet.t) list =
   let idx_lst =
     match k with
       PAxiom | PDeferred ->
-        add_axioms lst c
+        add_axioms lst pc
     | PNormal ->
-        List.map (fun ie -> prove_basic_expression ie c) lst
+        List.map (fun ie -> prove_basic_expression ie pc) lst
   in
   List.map
     (fun idx ->
-      let t,pterm = Context.discharged idx c in
+      let t,pterm = Proof_context.discharged idx pc in
       t, pterm, IntSet.empty)
     idx_lst
 
@@ -489,11 +493,12 @@ let rec make_proof
     (rlst: compound)
     (clst: compound)
     (elst: compound)
-    (c:    Context.t)
+    (pc:   Proof_context.t)
     : unit =
   let prove_check_expression
       (ie:info_expression)
-      (c:Context.t): unit =
+      (pc:Proof_context.t): unit =
+    let c = Proof_context.context pc in
     match ie.v with
       Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
         begin
@@ -502,23 +507,23 @@ let rec make_proof
               let kind, clst =
                 analyze_imp_opt entlst.i imp_opt c
               in
-              make_proof entlst kind rlst clst elst c
+              make_proof entlst kind rlst clst elst pc
           | Existential ->
               error_info ie.i "Only \"all\" allowed here"
         end
     | Expproof (rlst,imp_opt,elst) ->
         let kind, clst = analyze_imp_opt ie.i imp_opt c in
-        make_proof (withinfo UNKNOWN []) kind rlst clst elst c
+        make_proof (withinfo UNKNOWN []) kind rlst clst elst pc
     | _ ->
-        let _ = prove_basic_expression ie c in
+        let _ = prove_basic_expression ie pc in
         ()
   in
-  Context.push entlst None c;
-  add_assumptions rlst c;
-  List.iter (fun ie -> prove_check_expression ie c) clst;
-  let pair_lst = prove_ensure elst kind c in
-  Context.pop c;
-  add_proved pair_lst c
+  Proof_context.push entlst pc;
+  add_assumptions rlst pc;
+  List.iter (fun ie -> prove_check_expression ie pc) clst;
+  let pair_lst = prove_ensure elst kind pc in
+  Proof_context.pop pc;
+  add_proved pair_lst pc
 
 
 
@@ -526,8 +531,9 @@ let rec make_proof
 let prove_and_store
     (entlst:  entities list withinfo)
     (bdy:     feature_body)
-    (context: Context.t)
+    (pc: Proof_context.t)
     : unit =
-  let kind, rlst, clst, elst = analyze_body entlst.i bdy context
+  let c = Proof_context.context pc in
+  let kind, rlst, clst, elst = analyze_body entlst.i bdy c
   in
-  make_proof entlst kind rlst clst elst context;
+  make_proof entlst kind rlst clst elst pc;

@@ -25,7 +25,10 @@ type entry = {nbenv:  int;
 
 type t = {seq: desc Seq.t;
           mutable entry: entry;
-          mutable stack: entry list}
+          mutable stack: entry list;
+          c: Context.t}
+
+let context (at:t): Context.t = at.c
 
 let depth (at:t): int =
   List.length at.stack
@@ -109,15 +112,16 @@ let rec stacked_counts (pt:t): int list =
   List.map (fun e -> e.count) pt.stack
 
 
-let make (imp_id:int) (all_id:int): t =
+let make (): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
             nbenv   = 0;
             req     = [];
-            imp_id  = imp_id;
-            all_id  = all_id};
-   stack = []}
+            imp_id  = Feature_table.implication_index;
+            all_id  = Feature_table.all_index};
+   stack = [];
+   c = Context.make ()}
 
 
 let push (nbenv:int) (names: int array) (at:t): unit =
