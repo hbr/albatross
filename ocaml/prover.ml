@@ -50,6 +50,7 @@ let start (t:term) (pc:Proof_context.t): t =
 
 
 let analyze_imp_opt
+    (i:int)
     (info:    info)
     (imp_opt: implementation option)
     (c:Context.t)
@@ -63,10 +64,14 @@ let analyze_imp_opt
         else
           PNormal, false, []
     | Some Impdeferred ->
+        if 0 < i then
+          error_info info "Deferred not allowed here";
         PDeferred,false, []
     | Some Impbuiltin ->
+        if 0 < i then
+          error_info info "Axiom not allowed here";
         if iface then
-          error_info info "not allowed in interface file";
+          error_info info "Axiom not allowed in interface file";
         PAxiom,   false, []
     | Some Impevent ->
         error_info info "Assertion cannot be an event"
@@ -86,7 +91,7 @@ let analyze_imp_opt
     kind, clst
 
 
-let analyze_body (info:info) (bdy: feature_body) (c:Context.t)
+let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
     : kind * compound * compound * compound =
   match bdy with
     _, _, None ->
@@ -97,7 +102,7 @@ let analyze_body (info:info) (bdy: feature_body) (c:Context.t)
           None   -> []
         | Some l -> l
       and kind,clst =
-        analyze_imp_opt info imp_opt c
+        analyze_imp_opt i info imp_opt c
       in
       kind, rlst, clst, elst
 
@@ -145,10 +150,15 @@ let add_axioms (lst:compound) (pc:Proof_context.t): int list =
 
 
 
-let add_proved (lst: (term*proof_term*IntSet.t) list) (pc:Proof_context.t): unit =
+let add_proved
+    (defer: bool)
+    (owner: int)
+    (lst: (term*proof_term*IntSet.t) list)
+    (pc:Proof_context.t)
+    : unit =
   List.iter
     (fun (t,pterm,used_gen) ->
-      Proof_context.add_proved t pterm used_gen pc
+      Proof_context.add_proved defer owner t pterm used_gen pc
     )
     lst
 
@@ -266,7 +276,7 @@ let discharge (idx:int) (p:t): int =
     let cnt = Proof_context.count p.pc in
     IntSet.filter (fun j -> j < cnt) p.entry.used_gen
   in
-  Proof_context.add_proved t pterm used_gen_tgt p.pc;
+  Proof_context.add_proved false (-1) t pterm used_gen_tgt p.pc;
   Proof_context.find t p.pc
 
 
@@ -490,7 +500,7 @@ let prove_ensure
 let rec make_proof
     (i:int)
     (entlst: entities list withinfo)
-    (kind:kind)
+    (kind: kind)
     (rlst: compound)
     (clst: compound)
     (elst: compound)
@@ -504,25 +514,34 @@ let rec make_proof
           match q with
             Universal ->
               let kind, clst =
-                analyze_imp_opt entlst.i imp_opt c
+                analyze_imp_opt (i+1) entlst.i imp_opt c
               in
               make_proof (i+1) entlst kind rlst clst elst pc
           | Existential ->
               error_info ie.i "Only \"all\" allowed here"
         end
     | Expproof (rlst,imp_opt,elst) ->
-        let kind, clst = analyze_imp_opt ie.i imp_opt c in
+        let kind, clst = analyze_imp_opt (i+1) ie.i imp_opt c in
         make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
     | _ ->
         let _ = prove_basic_expression ie pc in
         ()
   in
   Proof_context.push entlst pc;
+  let defer, owner =
+    (match kind with PDeferred ->
+      assert (i=0);
+      Proof_context.check_deferred pc;
+      true
+    | _ ->
+        false),
+    Proof_context.owner pc
+  in
   add_assumptions rlst pc;
   List.iter (fun ie -> prove_check_expression ie) clst;
   let pair_lst = prove_ensure elst kind pc in
   Proof_context.pop pc;
-  add_proved pair_lst pc
+  add_proved defer owner pair_lst pc
 
 
 
@@ -533,6 +552,6 @@ let prove_and_store
     (pc: Proof_context.t)
     : unit =
   let c = Proof_context.context pc in
-  let kind, rlst, clst, elst = analyze_body entlst.i bdy c
+  let kind, rlst, clst, elst = analyze_body 0 entlst.i bdy c
   in
   make_proof 0 entlst kind rlst clst elst pc;

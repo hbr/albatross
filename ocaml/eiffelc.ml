@@ -77,6 +77,46 @@ let parse_file (fn:string): use_block * declaration list =
 
 
 
+let put_class
+    (hm:       header_mark withinfo)
+    (cn:       int withinfo)
+    (fgs:      formal_generics)
+    (inherits: inherit_clause list)
+    (pc: Proof_context.t)
+    : unit =
+  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
+      corresponding class.  *)
+  assert (Proof_context.is_global pc);
+  let ft = Proof_context.feature_table pc in
+  let ct = Feature_table.class_table ft in
+  let idx =
+    try
+      let idx = Class_table.find cn.v ct in
+      Class_table.update idx hm fgs  ct;
+      idx
+    with Not_found ->
+      let idx = Class_table.count ct in
+      Class_table.add hm cn fgs ct;
+      idx
+  in
+  List.iter
+    (fun par_lst ->
+      List.iter
+        (fun (tp,adapt_lst) ->
+          assert (adapt_lst = [] ); (* nyi: feature adaption *)
+          let par_idx, par_args = Class_table.parent_type idx tp ct in
+          let lst = Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
+          Class_table.do_inherit idx lst ct;
+
+          Feature_table.do_inherit idx lst tp.i ft;
+          Proof_context.do_inherit idx lst tp.i pc)
+        par_lst)
+    inherits
+
+
+
+
+
 let put_feature
     (fn: feature_name withinfo)
     (entlst: entities list withinfo)
@@ -123,7 +163,7 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
     let one_decl (d:declaration) =
       match d with
         Class_declaration (hm, cname, fgens, inherits) ->
-          Context.put_class hm cname fgens inherits context;
+          put_class hm cname fgens inherits pc
       | Named_feature (fn, entlst, rt, body) ->
           put_feature fn entlst rt body context;
       | Assertion_feature (label, entlst, body) ->

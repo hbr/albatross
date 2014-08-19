@@ -46,6 +46,15 @@ type t = {base:     Proof_table.t;
 
 let context (pc:t): Context.t = Proof_table.context pc.base
 
+let feature_table (pc:t): Feature_table.t =
+  let c = context pc in
+  Context.feature_table c
+
+let class_table (pc:t): Class_table.t =
+  let c = context pc in
+  Context.class_table c
+
+
 let depth (pc:t): int =
   let res = Context.depth (context pc) in
   assert (res = List.length pc.stack);
@@ -964,11 +973,22 @@ let discharged (i:int) (pc:t): term * proof_term =
   Proof_table.discharged i pc.base
 
 
-let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (pc:t): unit =
+
+let add_proved
+    (defer:bool)
+    (owner:int)
+    (t:term)
+    (pterm:proof_term)
+    (used_gen:IntSet.t)
+    (pc:t)
+    : unit =
   if has_equivalent t pc then
     ()
   else begin
-    Proof_table.add_proved t pterm pc.base;
+    if is_global pc then
+      Proof_table.add_proved_global defer owner t pterm pc.base
+    else
+      Proof_table.add_proved t pterm pc.base;
     add_new t used_gen pc
   end;
   if pc.trace then begin
@@ -976,6 +996,10 @@ let add_proved (t:term) (pterm:proof_term) (used_gen:IntSet.t) (pc:t): unit =
     printf "%s%3d proved: %s\n" (prefix pc) idx (string_of_term t pc)
   end;
   close pc
+
+
+
+
 
 
 let backward_set (t:term) (pc:t): int list =
@@ -1002,3 +1026,57 @@ let backward_data (idx:int) (pc:t): term list * IntSet.t =
   in
   ps,
   desc.used_gen
+
+let check_deferred (pc:t): unit = Context.check_deferred (context pc)
+
+let owner (pc:t): int = Context.owner (context pc)
+
+let variant (i:int) (cls:int) (pc:t): term =
+  let ft = feature_table pc in
+  let t = term i pc in
+  let t = Feature_table.variant_term t 0 cls ft in
+  Feature_table.expand_term  t 0 ft
+
+
+
+let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
+  (* Inherit the deferred assertion [i] in the class [cls] *)
+  assert (i < count pc);
+  let t = variant i cls pc in
+  if not (has t pc) then
+    error_info info ("The deferred assertion \""  ^
+                     (string_of_term t pc) ^
+                     "\" is missing in the class " ^
+                     (Class_table.class_name cls (class_table pc)))
+
+
+
+let inherit_effective (i:int) (cls:int) (info:info) (pc:t): unit =
+  (* Inherit the effective assertion [i] in the class [cls] *)
+  let t = variant i cls pc in
+  printf "inherit assertion %s\n" (string_of_term t pc);
+  if not (has_equivalent t pc) then begin
+    Proof_table.add_inherited t i cls pc.base;
+    add_new t IntSet.empty pc;
+    close pc
+  end
+
+
+
+
+
+let do_inherit
+    (cls:int)
+    (anc_lst: (int * type_term array) list)
+    (info:info)
+    (pc:t)
+    : unit =
+  let ct = class_table pc in
+  List.iter
+    (fun (par,_) ->
+      let deflst = Class_table.deferred_assertions par ct in
+      List.iter (fun i -> inherit_deferred i cls info pc) deflst;
+      let efflst = Class_table.effective_assertions par ct in
+      List.iter (fun i -> inherit_effective i cls info pc) efflst
+    )
+    anc_lst

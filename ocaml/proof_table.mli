@@ -4,6 +4,7 @@ type t
 type proof_term
 
 val context: t -> Context.t
+val class_table: t -> Class_table.t
 
 val depth:       t -> int
 val is_global:   t -> bool
@@ -36,7 +37,8 @@ val make: unit -> t
 val push: int -> int array -> t -> unit
 val pop:  t -> unit
 
-val add_proved: term -> proof_term -> t -> unit
+val add_proved_global: bool -> int -> term -> proof_term -> t -> unit
+val add_proved:        term -> proof_term -> t -> unit
 
 val term_of_pt: proof_term -> t -> term
 
@@ -44,5 +46,6 @@ val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit
 val add_mp:         term -> int -> int -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
+val add_inherited:  term -> int -> int -> t -> unit
 
 val discharged:   int -> t -> term * proof_term

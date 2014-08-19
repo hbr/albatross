@@ -91,6 +91,10 @@ val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
 
+
+val owner:          t -> int
+val check_deferred: t -> unit
+
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 
@@ -101,9 +105,6 @@ val put_global_function:
 val implication_id: t -> int
 
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
-val put_class: header_mark withinfo -> int withinfo
-  -> formal_generics -> inherit_clause list -> t -> unit
-
 
 val print_local_contexts:       t -> unit
 

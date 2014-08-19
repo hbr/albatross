@@ -571,6 +571,16 @@ let effective_features (cidx:int) (ct:t): int list =
   (Seq.elem cidx ct.seq).eff_features
 
 
+let deferred_assertions (cidx:int) (ct:t): int list =
+  assert (cidx < count ct);
+  (Seq.elem cidx ct.seq).def_asserts
+
+
+let effective_assertions (cidx:int) (ct:t): int list =
+  assert (cidx < count ct);
+  (Seq.elem cidx ct.seq).eff_asserts
+
+
 let add
     (hm:    header_mark withinfo)
     (cn:    int withinfo)
@@ -604,7 +614,6 @@ let add
 
 
 let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
-  assert (Sign.has_result s || Sign.arity s > 0);
   let max (cidx1:int) (cidx2:int): int =
     if cidx1 = cidx2 then
       cidx1
@@ -617,7 +626,6 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
         if mdl1 < mdl2 then cidx2 else cidx1
   in
   let set = Sign.involved_classes tvs s in
-  assert (not (IntSet.is_empty set));
   IntSet.fold
     (fun i idx_max -> if idx_max = -1 then i else max i idx_max)
     set

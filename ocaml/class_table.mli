@@ -91,13 +91,23 @@ val find_features: (feature_name*type_term*int) -> int -> t -> (int*Term_sub.t) 
         formal generics *)
 
 val add_assertion:  int -> int -> bool -> t -> unit
+   (** [add_assertion aidx cls defer ct] adds the assertion [aidx] to the
+       assertion of the class [cls] *)
 
 val deferred_features: int -> t -> int list
-   (** [deferred features cls ct]: The list of deferred features of the class
+   (** [deferred_features cls ct]: The list of deferred features of the class
        [cls] *)
 
 val effective_features: int -> t -> int list
-   (** [effective features cls ct]: The list of effective features of the class
+   (** [effective_features cls ct]: The list of effective features of the class
+       [cls] *)
+
+val deferred_assertions: int -> t -> int list
+   (** [deferred_assertions cls ct]: The list of deferred assertions of the class
+       [cls] *)
+
+val effective_assertions: int -> t -> int list
+   (** [effective_assertions cls ct]: The list of effective assertions of the class
        [cls] *)
 
 val owner: Tvars.t -> Sign.t -> t -> int

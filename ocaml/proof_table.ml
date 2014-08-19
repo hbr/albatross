@@ -11,10 +11,13 @@ type proof_term =
                 * int array  (* names *)
                 * int        (* res *)
                 * proof_term array
+  | Inherit    of int * int  (* assertion, descendant class *)
 
 type desc = {nbenv0:     int;
              term:       term;
              proof_term: proof_term}
+
+type gdesc = {defer: bool; owner:int}
 
 type entry = {nbenv:  int;
               names:  int array;
@@ -23,12 +26,14 @@ type entry = {nbenv:  int;
               mutable count:   int;
               mutable req:     int list}
 
-type t = {seq: desc Seq.t;
+type t = {seq:  desc Seq.t;
+          gseq: gdesc Seq.t;
           mutable entry: entry;
           mutable stack: entry list;
           c: Context.t}
 
 let context (at:t): Context.t = at.c
+let class_table (at:t): Class_table.t = Context.class_table at.c
 
 let depth (at:t): int =
   List.length at.stack
@@ -114,6 +119,7 @@ let rec stacked_counts (pt:t): int list =
 
 let make (): t =
   {seq   = Seq.empty ();
+   gseq  = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
             nbenv   = 0;
@@ -205,8 +211,23 @@ let add_proved (t:term) (pt:proof_term) (at:t): unit =
     Assumption _ ->
       let idx = count at in
       raw_add ();
-      at.entry.req     <- idx :: at.entry.req;
-  | _ -> raw_add ()
+      at.entry.req <- idx :: at.entry.req
+  | _ ->
+      raw_add ()
+
+
+
+let add_proved_global
+    (defer:bool) (owner:int) (t:term) (pt:proof_term) (at:t): unit =
+  (** Add the term [t] and its proof term [pt] to the table.
+   *)
+  assert (is_global at);
+  let cnt = count at in
+  add_proved t pt at;
+  Seq.push {defer=defer; owner=owner} at.gseq;
+  let ct = class_table at in
+  if owner <> (-1) then
+    Class_table.add_assertion cnt owner defer ct
 
 
 
@@ -265,6 +286,8 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
       let term = discharged_term res_idx at in
       pop at;
       term
+  | Inherit (idx,cls) ->
+      assert false
 
 
 
@@ -275,6 +298,9 @@ let add_axiom (t:term) (at:t): unit =
 let add_assumption (t:term) (at:t): unit =
   add_proved t (Assumption t) at
 
+let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
+  assert (is_global at);
+  add_proved t (Inherit (idx,cls)) at
 
 let add_mp (t:term) (i:int) (j:int) (at:t): unit =
   let pt = Detached (i,j) in
@@ -309,6 +335,8 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
     | Detached (i,j) ->
         let used_i = used_assertions i at lst in
         used_assertions j at used_i
+    | Inherit (idx,cls) ->
+        assert false
   in
   if i < cnt0 then lst
   else used (i::lst)

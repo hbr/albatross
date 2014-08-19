@@ -7,6 +7,9 @@ type t
 type proof_term
 
 val context: t -> Context.t
+val feature_table: t -> Feature_table.t
+
+val is_global: t -> bool
 
 val print_all_local_assertions: t -> unit
 val print_global_assertions:   t -> unit
@@ -36,7 +39,7 @@ val set_forward:        t -> unit
 val reset_forward:      t -> unit
 val add_backward:       term -> t -> unit
 val discharged:         int  -> t -> term * proof_term
-val add_proved:         term -> proof_term -> IntSet.t -> t -> unit
+val add_proved:         bool -> int -> term -> proof_term -> IntSet.t -> t -> unit
 val backward_set:       term -> t -> int list
 val backward_data:      int  -> t -> term list * IntSet.t
 
@@ -53,3 +56,11 @@ val term_orig:      int -> t -> term * int
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
 val used_schematic: int -> t -> IntSet.t
+
+val check_deferred: t -> unit
+val owner:          t -> int
+
+val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
+  (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the
+      assertions from all ancestors [par_idx[par_args]] in the ancestor list
+      [anc_lst]. *)

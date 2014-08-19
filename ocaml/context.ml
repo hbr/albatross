@@ -138,8 +138,6 @@ let ntvs (c:t): int =
 
 
 
-
-
 let entry_local_fargnames (e:entry): int array =
   Array.init e.nfargs_delta (fun i -> fst e.fargs.(i))
 
@@ -191,6 +189,31 @@ let signature (c:t): Sign.t =
 let signature_string (c:t): string =
   (** Print the signature of the context [c].  *)
   sign2string (signature c) c
+
+
+let owner (c:t): int =
+  if is_toplevel c then
+    let ct  = class_table c
+    and tvs = TVars_sub.tvars c.entry.tvs_sub
+    and s   = signature c
+    in
+    Class_table.owner tvs s ct
+  else
+    -1
+
+
+
+let check_deferred (c:t): unit =
+  assert (is_toplevel c);
+  let ct  = class_table c
+  and tvs = TVars_sub.tvars c.entry.tvs_sub
+  and s   = signature c
+  in
+  let owner = Class_table.owner tvs s ct in
+  let anchored = Class_table.anchored tvs owner ct in
+  let nanchors = Array.length anchored in
+  Class_table.check_deferred owner nanchors c.entry.info ct
+
 
 
 let depth (c:t): int =
@@ -450,53 +473,6 @@ let put_formal_generic
    *)
   assert (is_global c);
   Class_table.put_formal name concept (class_table c)
-
-
-
-let inherit_parent_assertions
-    (cls_idx:int)
-    (par_idx:int)
-    (par_args:type_term array)
-    (info:info)
-    (c:t)
-    : unit =
-  ()
-
-let put_class
-    (hm:       header_mark withinfo)
-    (cn:       int withinfo)
-    (fgs:      formal_generics)
-    (inherits: inherit_clause list)
-    (c:t)
-    : unit =
-  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
-      corresponding class.  *)
-  assert (is_global c);
-  let ct = class_table c
-  and ft = feature_table c in
-  let idx =
-    try
-      let idx = Class_table.find cn.v ct in
-      Class_table.update idx hm fgs  ct;
-      idx
-    with Not_found ->
-      let idx = Class_table.count ct in
-      Class_table.add hm cn fgs ct;
-      idx
-  in
-  List.iter
-    (fun par_lst ->
-      List.iter
-        (fun (tp,adapt_lst) ->
-          assert (adapt_lst = [] ); (* nyi: feature adaption *)
-          let par_idx, par_args = Class_table.parent_type idx tp ct in
-          let lst = Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
-          Class_table.do_inherit idx lst ct;
-
-          Feature_table.do_inherit idx lst tp.i ft;
-          inherit_parent_assertions idx par_idx par_args tp.i c)
-        par_lst)
-    inherits
 
 
 
