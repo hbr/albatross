@@ -332,7 +332,7 @@ class_declaration:
   header_mark KWclass UIDENTIFIER class_generics
   inheritance
   KWend {
-  Class_declaration( withinfo (rhs_info 1) $1,
+  Class_declaration( withinfo (rhs_info 3) $1,
                      withinfo (rhs_info 3) $3,
                      withinfo (rhs_info 4) $4,
                      $5)
