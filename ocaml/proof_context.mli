@@ -35,6 +35,7 @@ val work:               t -> int list
 val is_used_forward:    int -> t -> bool
 val close_step:         t -> unit
 val close:              t -> unit
+val close_assumptions:  t -> unit
 val set_forward:        t -> unit
 val reset_forward:      t -> unit
 val add_backward:       term -> t -> unit

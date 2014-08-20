@@ -130,15 +130,18 @@ let string_of_goal (p:t): string =
 
 let add_assumptions_or_axioms
     (lst:compound) (is_axiom:bool) (pc:Proof_context.t): int list =
-  List.map
-    (fun ie ->
-      let tn = get_term ie pc in
-      if is_axiom then
-        Proof_context.add_axiom tn pc
-      else
-        Proof_context.add_assumption tn pc)
+  let res =
+    List.map
+      (fun ie ->
+        let tn = get_term ie pc in
+        if is_axiom then
+          Proof_context.add_axiom tn pc
+        else
+          Proof_context.add_assumption tn pc)
     lst
-
+  in
+  Proof_context.close_assumptions pc;
+  res
 
 let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
   let _ = add_assumptions_or_axioms lst false pc in ()
@@ -148,6 +151,12 @@ let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
 let add_axioms (lst:compound) (pc:Proof_context.t): int list =
   add_assumptions_or_axioms lst true pc
 
+
+let add_assumption (t:term) (p:t): unit =
+  let _ = Proof_context.add_assumption t p.pc in ()
+
+let close_assumptions (p:t): unit =
+  Proof_context.close_assumptions p.pc
 
 
 let add_proved
@@ -306,18 +315,18 @@ let enter (p:t): unit =
   let rec do_implication (): unit =
     try
       let a,b = split_implication p in
-      let _ = Proof_context.add_assumption a p.pc in
+      add_assumption a p;
       p.entry.goal <- b;
-      check_goal p;
       do_implication ()
     with Not_found ->
+      close_assumptions p;
+      check_goal p;
       do_all_quantified ()
   and do_all_quantified (): unit =
     try
       let n,names,t = split_all_quantified p in
       assert (n = Array.length names);
       push_context names t p;
-      check_goal p;
       do_implication ()
     with Not_found ->
       ()
@@ -341,7 +350,8 @@ let rec prove_goal (p:t): unit =
       points to an inner context. The caller has to pop the corresponding
       inner contexts and discharge the proved term.
    *)
-  check_goal p;
+  (*check_goal p;*)
+  add_backward p;
   enter p;
   if p.trace && p.trace_ctxt then begin
     if not (Options.is_tracing_proof ()) then

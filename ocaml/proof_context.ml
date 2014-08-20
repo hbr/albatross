@@ -839,6 +839,10 @@ let close (pc:t): unit =
   assert (not (has_work pc))
 
 
+let close_assumptions (pc:t): unit =
+  pc.work <- List.rev pc.work;
+  close pc
+
 
 
 let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
@@ -858,7 +862,6 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
     Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;
   if pc.trace then
     printf "%s%3d hypo:   %s\n" (prefix pc) idx (string_of_term t pc);
-  close pc;
   idx
 
 
