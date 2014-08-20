@@ -900,42 +900,35 @@ let push_slots (nbenv:int) (pc:t): unit =
             {ndown=0; sprvd=TermMap.empty})
 
 
-
-let push (entlst:entities list withinfo) (pc:t): unit =
-  assert (not (has_work pc));
-  let c = context pc in
-  Context.push entlst None c;
-  let nbenv = Context.arity c
-  and names = Context.local_fargnames c in
-  assert (nbenv = Array.length names);
-  Proof_table.push nbenv names pc.base;
+let push0 (nbenv:int) (pc:t): unit =
   pc.entry.count <- Seq.count pc.terms;
   pc.stack <- (copied_entry pc.entry)::pc.stack;
   push_slots nbenv pc
+
+
+let push (entlst:entities list withinfo) (pc:t): unit =
+  assert (not (has_work pc));
+  Proof_table.push entlst pc.base;
+  let nbenv = Proof_table.nbenv pc.base in
+  push0 nbenv pc
 
 
 let push_untyped (names:int array) (pc:t): unit =
   assert (not (has_work pc));
-  let c = context pc in
-  Context.push_untyped names c;
-  let nbenv = Context.arity c in
-  assert (nbenv = Array.length names);
-  Proof_table.push nbenv names pc.base;
-  pc.entry.count <- Seq.count pc.terms;
-  pc.stack <- (copied_entry pc.entry)::pc.stack;
-  push_slots nbenv pc
+  Proof_table.push_untyped names pc.base;
+  let nbenv = Proof_table.nbenv pc.base in
+  push0 nbenv pc
 
 
 
 let pop (pc:t): unit =
   assert (is_local pc);
   assert (not (has_work pc));
-  Proof_table.pop pc.base;
   pc.work  <- [];
   pc.entry <- List.hd pc.stack;
   pc.stack <- List.tl pc.stack;
   Seq.keep pc.entry.count pc.terms;
-  Context.pop (context pc)
+  Proof_table.pop pc.base
 
 
 

@@ -1,5 +1,6 @@
 open Term
 open Container
+open Support
 
 
 type proof_term =
@@ -33,7 +34,8 @@ type t = {seq:  desc Seq.t;
           c: Context.t}
 
 let context (at:t): Context.t = at.c
-let class_table (at:t): Class_table.t = Context.class_table at.c
+let class_table (at:t):   Class_table.t   = Context.class_table at.c
+let feature_table (at:t): Feature_table.t = Context.feature_table at.c
 
 let depth (at:t): int =
   List.length at.stack
@@ -117,6 +119,10 @@ let rec stacked_counts (pt:t): int list =
   List.map (fun e -> e.count) pt.stack
 
 
+let string_of_term (t:term) (at:t): string =
+  Context.string_of_term t at.c
+
+
 let make (): t =
   {seq   = Seq.empty ();
    gseq  = Seq.empty ();
@@ -130,7 +136,7 @@ let make (): t =
    c = Context.make ()}
 
 
-let push (nbenv:int) (names: int array) (at:t): unit =
+let push0 (nbenv:int) (names: int array) (at:t): unit =
   assert (nbenv = Array.length names);
   at.entry.count <- Seq.count at.seq;
   at.stack       <- at.entry :: at.stack;
@@ -144,8 +150,30 @@ let push (nbenv:int) (names: int array) (at:t): unit =
 
 
 
+let push (entlst:entities list withinfo) (at:t): unit =
+  let c = context at in
+  assert (depth at = Context.depth c);
+  Context.push entlst None c;
+  let nbenv = Context.arity c
+  and names = Context.local_fargnames c in
+  assert (nbenv = Array.length names);
+  push0 nbenv names at
+
+
+let push_untyped (names:int array) (at:t): unit =
+  let c = context at in
+  Context.push_untyped names c;
+  let nbenv = Context.arity c in
+  assert (nbenv = Array.length names);
+  assert (names = Context.local_fargnames c);
+  push0 nbenv names at
+
+
+
 let pop (at:t): unit =
   assert (is_local at);
+  assert (depth at = Context.depth (context at));
+  Context.pop (context at);
   at.entry  <- List.hd at.stack;
   at.stack  <- List.tl at.stack;
   Seq.keep at.entry.count at.seq
@@ -178,6 +206,12 @@ let local_term (i:int) (at:t): term =
   Term.up n_up desc.term
 
 
+let variant (i:int) (cls:int) (at:t): term =
+  let ft = feature_table at in
+  let t,nbenv = term i at   in
+  Feature_table.variant_term t nbenv cls ft
+
+
 
 let discharged_term (i:int) (at:t): term =
   (** The [i]th term of the current environment with all local variables and
@@ -199,7 +233,7 @@ let is_assumption (i:int) (at:t): bool =
   | _            -> false
 
 
-let add_proved (t:term) (pt:proof_term) (at:t): unit =
+let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
@@ -217,19 +251,6 @@ let add_proved (t:term) (pt:proof_term) (at:t): unit =
 
 
 
-let add_proved_global
-    (defer:bool) (owner:int) (t:term) (pt:proof_term) (at:t): unit =
-  (** Add the term [t] and its proof term [pt] to the table.
-   *)
-  assert (is_global at);
-  let cnt = count at in
-  add_proved t pt at;
-  Seq.push {defer=defer; owner=owner} at.gseq;
-  let ct = class_table at in
-  if owner <> (-1) then
-    Class_table.add_assertion cnt owner defer ct
-
-
 
 let rec term_of_pt (pt:proof_term) (at:t): term =
   (** Construct a term from the proof term [pt].
@@ -240,22 +261,37 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
     Axiom t  -> t
   | Assumption t -> t
   | Detached (a,b) ->
-      if cnt <= a || cnt <= b then raise Not_found;
+      assert (a < cnt && b < cnt);
       let ta = local_term a at
       and tb = local_term b at
       in
-      let b1,b2 = Term.binary_split tb (imp_id at) in
-      if ta <> b1 then raise Not_found
-      else b2
+      let b1,b2 =
+        try Term.binary_split tb (imp_id at)
+        with Not_found ->
+          Printf.printf "ta <%d:%s> tb <%d:%s>\n"
+            a (string_of_term ta at)
+            b (string_of_term tb at);
+          assert false
+      in
+      if ta <> b1 then
+        Printf.printf "ta <%d:%s>, b1 <%s>, tb <%d:%s>, b2 <%s>\n"
+          a (string_of_term ta at)
+          (string_of_term b1 at)
+          b (string_of_term tb at)
+          (string_of_term b2 at);
+      assert (ta = b1);
+      b2
   | Specialize (i,args) ->
-      if cnt <= i then raise Not_found;
+      assert (i < cnt);
       let nargs = Array.length args
       and t = local_term i at
       in
-      let n,nms,t0 = Term.quantifier_split t (all_id at) in
-      let tsub =
-        if n < nargs then raise Not_found
-        else Term.part_sub t0 n args 0
+      let n,nms,t0 =
+        try Term.quantifier_split t (all_id at)
+        with Not_found -> assert false
+      in
+      assert (nargs <= n);
+      let tsub = Term.part_sub t0 n args 0
       in
       let res =
         if nargs < n then
@@ -265,7 +301,7 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
           Term.binary
             imp_id0
             (try Term.down (n-nargs) a
-            with Term_capture -> raise Not_found)
+            with Term_capture -> assert false)
             (Term.quantified
                (all_id at)
                (n-nargs)
@@ -276,41 +312,73 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
       in
       Term.reduce res
   | Subproof (nargs,names,res_idx,pt_arr) ->
-      push nargs names at;
+      push_untyped names at;
       let pt_len = Array.length pt_arr
+      and cnt    = count at
       in
-      if pt_len <= res_idx then raise Not_found;
-      Array.iter
-        (fun pt -> add_proved (term_of_pt pt at) pt at)
+      assert (res_idx < cnt + pt_len);
+      Array.iteri
+        (fun i pt -> add_proved_0 (term_of_pt pt at) pt at)
         pt_arr;
       let term = discharged_term res_idx at in
       pop at;
       term
   | Inherit (idx,cls) ->
-      assert false
+      variant idx cls at
+
+
+let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
+  Term.equal_wo_names t (term_of_pt pt at)
+
+
+let add_proved (t:term) (pt:proof_term) (at:t): unit =
+  (** Add the term [t] and its proof term [pt] to the table.
+   *)
+  add_proved_0 t pt at
+
+
+let add_proved_global
+    (defer:bool) (owner:int) (t:term) (pt:proof_term) (at:t): unit =
+  (** Add the term [t] and its proof term [pt] to the table.
+   *)
+  assert (is_global at);
+  let cnt = count at in
+  (*assert (is_proof_pair t pt at);*)
+  add_proved t pt at;
+  Seq.push {defer=defer; owner=owner} at.gseq;
+  let ct = class_table at in
+  if owner <> (-1) then
+    Class_table.add_assertion cnt owner defer ct
 
 
 
 let add_axiom (t:term) (at:t): unit =
-  add_proved t (Axiom t) at
+  let pt = Axiom t in
+  assert (is_proof_pair t pt at);
+  add_proved t pt at
 
 
 let add_assumption (t:term) (at:t): unit =
-  add_proved t (Assumption t) at
+  let pt = Assumption t in
+  assert (is_proof_pair t pt at);
+  add_proved t pt at
 
 let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
   assert (is_global at);
-  add_proved t (Inherit (idx,cls)) at
+  let pt = Inherit (idx,cls) in
+  (*assert (is_proof_pair t pt at);*)
+  add_proved t pt at
+
 
 let add_mp (t:term) (i:int) (j:int) (at:t): unit =
   let pt = Detached (i,j) in
-  assert (Term.equal_wo_names t (term_of_pt pt at));
+  assert (is_proof_pair t pt at);
   add_proved t pt at
 
 
 let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   let pt = Specialize (i,args) in
-  assert (Term.equal_wo_names t (term_of_pt pt at));
+  assert (is_proof_pair t pt at);
   add_proved t pt at
 
 
@@ -344,30 +412,30 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
 
 
 
-let discharged (i:int) (pt:t): term * proof_term =
+let discharged (i:int) (at:t): term * proof_term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged together with its proof term.
    *)
-  let cnt0 = count_previous pt
+  let cnt0 = count_previous at
   and axiom = List.exists
       (fun i ->
-        assert (i < (count pt));
-        match (Seq.elem i pt.seq).proof_term with
+        assert (i < (count at));
+        match (Seq.elem i at.seq).proof_term with
           Axiom _ -> true
         | _       -> false)
-      (used_assertions i pt [])
-  and term  = discharged_term i pt
-  and nargs = nbenv_local pt
-  and nms   = names pt
+      (used_assertions i at [])
+  and term  = discharged_term i at
+  and nargs = nbenv_local at
+  and nms   = names at
   in
   let pterm =
     if axiom then
       Axiom term
     else
       let narr =
-        if cnt0 <= i then i - cnt0
+        if cnt0 <= i then i + 1 - cnt0
         else
-          match pt.entry.req with
+          match at.entry.req with
             [] -> 0
           | i_last_assumption::_ -> i_last_assumption + 1 - cnt0
       in
@@ -375,7 +443,7 @@ let discharged (i:int) (pt:t): term * proof_term =
       let pt_arr =
         Array.init
           narr
-          (fun j -> (Seq.elem (j+cnt0) pt.seq).proof_term)
+          (fun j -> (Seq.elem (j+cnt0) at.seq).proof_term)
       in
       Subproof (nargs,nms,i,pt_arr)
   in

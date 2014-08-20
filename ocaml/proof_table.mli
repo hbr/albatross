@@ -1,4 +1,5 @@
 open Term
+open Support
 
 type t
 type proof_term
@@ -34,7 +35,8 @@ val is_assumption: int -> t -> bool
 val stacked_counts: t -> int list
 
 val make: unit -> t
-val push: int -> int array -> t -> unit
+val push: entities list withinfo -> t -> unit
+val push_untyped: int array -> t -> unit
 val pop:  t -> unit
 
 val add_proved_global: bool -> int -> term -> proof_term -> t -> unit
