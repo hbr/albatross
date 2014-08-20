@@ -295,9 +295,11 @@ let unify (t:term) (nbt:int) (table:t)
    *)
   let rec uni (t:term) (tab:t) (nb:int): sublist =
     let basic_subs: sublist =
-      List.map
-        (fun (idx,avar,nargs) -> idx, Term_sub.singleton avar t)
-        tab.avars
+      try
+        let t = Term.down nb t in
+        List.map (fun (idx,avar,nargs) -> idx,Term_sub.singleton avar t) tab.avars
+      with Term_capture ->
+        []
     and subs
         (i:int)
         (mp: sublist IntMap.t)
