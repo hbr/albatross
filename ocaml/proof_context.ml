@@ -964,9 +964,35 @@ let add_backward (t:term) (pc:t): unit =
 
 let discharged (i:int) (pc:t): term * proof_term =
   (** The [i]th term of the current environment with all local variables and
-      assumptions discharged together with its proof term.
+      assumptions discharged together with its proof term and its base index.
    *)
   Proof_table.discharged i pc.base
+
+
+
+let add_proved_0
+    (defer:bool)
+    (owner:int)
+    (t:term)
+    (pterm:proof_term)
+    (delta:int)
+    (used_gen:IntSet.t)
+    (pc:t)
+    : unit =
+  if has_equivalent t pc then
+    ()
+  else begin
+    if is_global pc then
+      Proof_table.add_proved_global defer owner t pterm delta pc.base
+    else
+      Proof_table.add_proved t pterm delta pc.base;
+    add_new t used_gen pc
+  end;
+  if pc.trace then begin
+    let idx = find_equivalent t pc in
+    printf "%s%3d proved: %s\n" (prefix pc) idx (string_of_term t pc)
+  end;
+  close pc
 
 
 
@@ -978,23 +1004,22 @@ let add_proved
     (used_gen:IntSet.t)
     (pc:t)
     : unit =
-  if has_equivalent t pc then
-    ()
-  else begin
-    if is_global pc then
-      Proof_table.add_proved_global defer owner t pterm pc.base
-    else
-      Proof_table.add_proved t pterm pc.base;
-    add_new t used_gen pc
-  end;
-  if pc.trace then begin
-    let idx = find_equivalent t pc in
-    printf "%s%3d proved: %s\n" (prefix pc) idx (string_of_term t pc)
-  end;
-  close pc
+  add_proved_0 defer owner t pterm 0 used_gen pc
 
 
 
+let add_proved_list
+    (defer:bool)
+    (owner:int)
+    (lst: (term*proof_term) list)
+    (pc:t)
+    : unit =
+  let cnt = count pc in
+  List.iter
+    (fun (t,pt) ->
+      let delta = count pc - cnt in
+      add_proved_0 defer owner t pt delta IntSet.empty pc)
+    lst
 
 
 
@@ -1028,10 +1053,7 @@ let check_deferred (pc:t): unit = Context.check_deferred (context pc)
 let owner (pc:t): int = Context.owner (context pc)
 
 let variant (i:int) (cls:int) (pc:t): term =
-  let ft = feature_table pc in
-  let t = term i pc in
-  let t = Feature_table.variant_term t 0 cls ft in
-  Feature_table.expand_term  t 0 ft
+  Proof_table.variant i cls pc.base
 
 
 

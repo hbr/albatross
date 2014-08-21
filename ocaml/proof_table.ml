@@ -1,7 +1,7 @@
 open Term
 open Container
 open Support
-
+open Printf
 
 type proof_term =
     Axiom      of term
@@ -16,7 +16,7 @@ type proof_term =
 
 type desc = {nbenv0:     int;
              term:       term;
-             proof_term: proof_term}
+             proof_term: proof_term;}
 
 type gdesc = {defer: bool; owner:int}
 
@@ -209,7 +209,8 @@ let local_term (i:int) (at:t): term =
 let variant (i:int) (cls:int) (at:t): term =
   let ft = feature_table at in
   let t,nbenv = term i at   in
-  Feature_table.variant_term t nbenv cls ft
+  let t = Feature_table.variant_term t nbenv cls ft in
+  Feature_table.expand_term t 0 ft
 
 
 
@@ -250,67 +251,186 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
       raw_add ()
 
 
+exception Illegal_proof_term
+
+let term_of_mp (a:int) (b:int) (at:t): term =
+  assert (a < count at);
+  assert (b < count at);
+  let ta = local_term a at
+  and tb = local_term b at
+  in
+  let b1,b2 =
+    try Term.binary_split tb (imp_id at)
+    with Not_found ->
+      printf "tb is not an implication\n";
+      printf "  ta %d:%s\n" a (string_of_term ta at);
+      printf "  tb %d:%s\n" b (string_of_term tb at);
+      raise Illegal_proof_term
+  in
+  if ta <> b1 then begin
+    printf "antecedent of tb does not conincide with ta\n";
+      printf "  ta %d:%s\n" a (string_of_term ta at);
+      printf "  tb %d:%s\n" b (string_of_term tb at);
+    raise Illegal_proof_term
+  end;
+  b2
 
 
+let term_of_specialize (i:int) (args:term array) (at:t): term =
+  assert (i < count at);
+  let nargs = Array.length args
+  and t = local_term i at
+  in
+  let n,nms,t0 =
+    try Term.quantifier_split t (all_id at)
+    with Not_found -> assert false
+  in
+  assert (nargs <= n);
+  let tsub = Term.part_sub t0 n args 0
+  in
+  let res =
+    if nargs < n then
+      let imp_id0 = (imp_id at)           in
+      let imp_id1 = imp_id0 + (n-nargs)   in
+      try
+        let a,b = Term.binary_split tsub imp_id1 in
+        Term.binary
+          imp_id0
+          (Term.down (n-nargs) a)
+          (Term.quantified
+             (all_id at)
+             (n-nargs)
+             (Array.sub nms nargs (n-nargs))
+             b)
+      with Term_capture ->
+        printf "term capture\n";
+        raise Illegal_proof_term
+      | Not_found ->
+          printf "not found\n";
+          raise Illegal_proof_term
+    else
+      tsub
+  in
+  Term.reduce res
+
+
+
+let count_assumptions (pt_arr:proof_term array): int =
+  let p (pt:proof_term): bool =
+    match pt with
+      Assumption _ -> false | _ -> true
+  in
+  try
+    Search.array_find_min p pt_arr
+  with Not_found ->
+    Array.length pt_arr
+
+
+
+
+let arguments_string (at:t): string =
+  let names = Array.to_list at.entry.names in
+  let str = String.concat "," (List.map ST.string names) in
+  if str = "" then str
+  else "(" ^ str ^ ")"
+
+
+
+
+let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
+  assert (delta <= cnt);
+  let base = cnt - delta in
+  let index (i:int): int =
+    if i < base then i else i + delta
+  in
+  let rec adapt (pt:proof_term): proof_term =
+    match pt with
+      Axiom _ | Assumption _ -> pt
+    | Detached (a,b) ->
+        Detached (index a, index b)
+    | Specialize (i,args) ->
+        Specialize (index i, args)
+    | Inherit (i,cls) ->
+        Inherit (index i, cls)
+    | Subproof (nargs,names,res,pt_arr) ->
+        Subproof (nargs,names, index res, Array.map adapt pt_arr)
+  in
+  if delta = 0 then pt else adapt pt
+
+
+
+let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
+  let depth_0 = depth at in
+  let prefix (d:int): string = String.make (4*(d-depth_0)) ' '
+  in
+  let print (t:term) =
+    printf "%s%3d %s"
+      (prefix (depth at)) (count at) (string_of_term t at)
+  and print_all () =
+    let pre = prefix (depth at - 1) in
+    printf "%s%3d all%s\n%s    require\n"
+      pre (count at) (arguments_string at) pre
+  and print_str (str:string):unit =
+    let pre = prefix (depth at - 1) in
+    printf "%s    %s\n" pre str
+  in
+  let print0 (t:term) = print t; printf "\n"
+  and print1 (t:term) (i:int) = print t; printf "\t{%d}\n" i
+  and print2 (t:term) (i:int) (j:int) = print t; printf "\t{%d,%d}\n" i j
+  in
+  let rec reconstruct (pt:proof_term): term =
+    let cnt = count at in
+    match pt with
+      Axiom t | Assumption t ->
+        if trace then print0 t;
+        t
+    | Detached (a,b) ->
+        let t = term_of_mp a b at in
+        if trace then print2 t a b;
+        t
+    | Specialize (i,args) ->
+        let t = term_of_specialize i args at in
+        if trace then print1 t i;
+        t
+    | Inherit (idx,cls) ->
+        let t =  variant idx cls at in
+        if trace then print1 t idx;
+        t
+    | Subproof (nargs,names,res_idx,pt_arr) ->
+        push_untyped names at;
+        let pt_len = Array.length pt_arr in
+        let pt_nass =
+          if trace then count_assumptions pt_arr else 0
+        in
+        assert (res_idx < cnt + pt_len);
+        if trace then print_all ();
+        for i = 0 to pt_len - 1 do
+          if trace && i = pt_nass then print_str "check";
+          let t = reconstruct pt_arr.(i) in
+          add_proved_0 t pt_arr.(i) at
+        done;
+        if trace then begin
+          print_str "ensure";
+          print1 (local_term res_idx at) res_idx;
+          print_str "end";
+        end;
+        let term = discharged_term res_idx at in
+        pop at;
+        term
+  in
+  reconstruct pt
+
+
+(*
 let rec term_of_pt (pt:proof_term) (at:t): term =
   (** Construct a term from the proof term [pt].
    *)
-  let seq = at.seq in
-  let cnt = Seq.count seq in
   match pt with
-    Axiom t  -> t
-  | Assumption t -> t
-  | Detached (a,b) ->
-      assert (a < cnt && b < cnt);
-      let ta = local_term a at
-      and tb = local_term b at
-      in
-      let b1,b2 =
-        try Term.binary_split tb (imp_id at)
-        with Not_found ->
-          Printf.printf "ta <%d:%s> tb <%d:%s>\n"
-            a (string_of_term ta at)
-            b (string_of_term tb at);
-          assert false
-      in
-      if ta <> b1 then
-        Printf.printf "ta <%d:%s>, b1 <%s>, tb <%d:%s>, b2 <%s>\n"
-          a (string_of_term ta at)
-          (string_of_term b1 at)
-          b (string_of_term tb at)
-          (string_of_term b2 at);
-      assert (ta = b1);
-      b2
-  | Specialize (i,args) ->
-      assert (i < cnt);
-      let nargs = Array.length args
-      and t = local_term i at
-      in
-      let n,nms,t0 =
-        try Term.quantifier_split t (all_id at)
-        with Not_found -> assert false
-      in
-      assert (nargs <= n);
-      let tsub = Term.part_sub t0 n args 0
-      in
-      let res =
-        if nargs < n then
-          let imp_id0 = (imp_id at)           in
-          let imp_id1 = imp_id0 + (n-nargs)   in
-          let a,b = Term.binary_split tsub imp_id1 in
-          Term.binary
-            imp_id0
-            (try Term.down (n-nargs) a
-            with Term_capture -> assert false)
-            (Term.quantified
-               (all_id at)
-               (n-nargs)
-               (Array.sub nms nargs (n-nargs))
-               b)
-        else
-          tsub
-      in
-      Term.reduce res
+    Axiom t             -> t
+  | Assumption t        -> t
+  | Detached (a,b)      -> term_of_mp a b at
+  | Specialize (i,args) -> term_of_specialize i args at
+  | Inherit (idx,cls)   -> variant idx cls at
   | Subproof (nargs,names,res_idx,pt_arr) ->
       push_untyped names at;
       let pt_len = Array.length pt_arr
@@ -323,28 +443,40 @@ let rec term_of_pt (pt:proof_term) (at:t): term =
       let term = discharged_term res_idx at in
       pop at;
       term
-  | Inherit (idx,cls) ->
-      variant idx cls at
-
+*)
 
 let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
-  Term.equal_wo_names t (term_of_pt pt at)
+  try
+    let treconstr = reconstruct_term pt true at in
+    let res = Term.equal_wo_names t treconstr in
+    if not res then begin
+      printf "unequal t         %s\n" (string_of_term t at);
+      printf "        treconstr %s\n" (string_of_term treconstr at)
+    end;
+    res
+  with Illegal_proof_term ->
+    false
 
 
-let add_proved (t:term) (pt:proof_term) (at:t): unit =
+let add_proved (t:term) (pt:proof_term) (delta:int) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
+  let cnt = count at in
+  let pt = adapt_proof_term cnt delta pt in
   add_proved_0 t pt at
 
 
 let add_proved_global
-    (defer:bool) (owner:int) (t:term) (pt:proof_term) (at:t): unit =
+    (defer:bool) (owner:int) (t:term) (pt:proof_term) (delta:int) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   assert (is_global at);
   let cnt = count at in
-  (*assert (is_proof_pair t pt at);*)
-  add_proved t pt at;
+  assert begin
+    let pt = adapt_proof_term cnt delta pt in
+    is_proof_pair t pt at
+  end;
+  add_proved t pt delta at;
   Seq.push {defer=defer; owner=owner} at.gseq;
   let ct = class_table at in
   if owner <> (-1) then
@@ -354,32 +486,28 @@ let add_proved_global
 
 let add_axiom (t:term) (at:t): unit =
   let pt = Axiom t in
-  assert (is_proof_pair t pt at);
-  add_proved t pt at
+  add_proved_0 t pt at
 
 
 let add_assumption (t:term) (at:t): unit =
   let pt = Assumption t in
-  assert (is_proof_pair t pt at);
-  add_proved t pt at
+  add_proved_0 t pt at
 
 let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
   assert (is_global at);
   let pt = Inherit (idx,cls) in
   (*assert (is_proof_pair t pt at);*)
-  add_proved t pt at
+  add_proved_0 t pt at
 
 
 let add_mp (t:term) (i:int) (j:int) (at:t): unit =
   let pt = Detached (i,j) in
-  assert (is_proof_pair t pt at);
-  add_proved t pt at
+  add_proved_0 t pt  at
 
 
 let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   let pt = Specialize (i,args) in
-  assert (is_proof_pair t pt at);
-  add_proved t pt at
+  add_proved_0 t pt  at
 
 
 
@@ -440,11 +568,14 @@ let discharged (i:int) (at:t): term * proof_term =
           | i_last_assumption::_ -> i_last_assumption + 1 - cnt0
       in
       assert (0 <= narr);
-      let pt_arr =
-        Array.init
-          narr
-          (fun j -> (Seq.elem (j+cnt0) at.seq).proof_term)
-      in
-      Subproof (nargs,nms,i,pt_arr)
+      if nargs = 0 && narr = 1 && at.entry.req = [] then
+        (Seq.elem cnt0 at.seq).proof_term
+      else
+        let pt_arr =
+          Array.init
+            narr
+            (fun j -> (Seq.elem (cnt0+j) at.seq).proof_term)
+        in
+        Subproof (nargs,nms,i,pt_arr)
   in
   term, pterm

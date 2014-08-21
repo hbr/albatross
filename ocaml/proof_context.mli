@@ -40,7 +40,8 @@ val set_forward:        t -> unit
 val reset_forward:      t -> unit
 val add_backward:       term -> t -> unit
 val discharged:         int  -> t -> term * proof_term
-val add_proved:         bool -> int -> term -> proof_term -> IntSet.t -> t -> unit
+val add_proved:   bool -> int -> term -> proof_term -> IntSet.t -> t -> unit
+val add_proved_list:   bool -> int -> (term*proof_term) list -> t -> unit
 val backward_set:       term -> t -> int list
 val backward_data:      int  -> t -> term list * IntSet.t
 

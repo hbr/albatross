@@ -162,14 +162,10 @@ let close_assumptions (p:t): unit =
 let add_proved
     (defer: bool)
     (owner: int)
-    (lst: (term*proof_term*IntSet.t) list)
+    (lst: (term*proof_term) list)
     (pc:Proof_context.t)
     : unit =
-  List.iter
-    (fun (t,pterm,used_gen) ->
-      Proof_context.add_proved defer owner t pterm used_gen pc
-    )
-    lst
+  Proof_context.add_proved_list defer owner lst pc
 
 
 
@@ -350,8 +346,8 @@ let rec prove_goal (p:t): unit =
       points to an inner context. The caller has to pop the corresponding
       inner contexts and discharge the proved term.
    *)
-  (*check_goal p;*)
-  add_backward p;
+  check_goal p;
+  (*add_backward p;*)
   enter p;
   if p.trace && p.trace_ctxt then begin
     if not (Options.is_tracing_proof ()) then
@@ -491,7 +487,7 @@ let prove_ensure
     (lst:compound)
     (k:kind)
     (pc:Proof_context.t)
-    : (term*proof_term*IntSet.t) list =
+    : (term*proof_term) list =
   let idx_lst =
     match k with
       PAxiom | PDeferred ->
@@ -502,7 +498,7 @@ let prove_ensure
   List.map
     (fun idx ->
       let t,pterm = Proof_context.discharged idx pc in
-      t, pterm, IntSet.empty)
+      t,pterm)
     idx_lst
 
 

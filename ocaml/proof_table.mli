@@ -31,6 +31,7 @@ val term:          int -> t -> term * int
 val nbenv_term:    int -> t -> int
 val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool
+val variant:       int -> int -> t -> term
 
 val stacked_counts: t -> int list
 
@@ -39,10 +40,10 @@ val push: entities list withinfo -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:  t -> unit
 
-val add_proved_global: bool -> int -> term -> proof_term -> t -> unit
-val add_proved:        term -> proof_term -> t -> unit
+val add_proved_global: bool -> int -> term -> proof_term -> int -> t -> unit
+val add_proved:        term -> proof_term -> int -> t -> unit
 
-val term_of_pt: proof_term -> t -> term
+(*val term_of_pt: proof_term -> t -> term*)
 
 val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit
