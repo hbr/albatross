@@ -21,6 +21,7 @@ val make:      unit -> t
 val push: entities list withinfo -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:          t -> unit
+val keep:         int -> t -> unit
 
 val depth:     t -> int
 

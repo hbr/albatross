@@ -16,11 +16,12 @@ type proof_term = Proof_context.proof_term
 type entry = {mutable goal: term;
               mutable alter: bool; (* stack entry used for exploring
                                       alternatives *)
+              mutable alter_cnt: int; (* start point for alternative checking *)
               nbenv:    int;
               used_gen: IntSet.t;  (* used non simplifying schematic rules
                                       to generate the goal *)
-              used_bwd: IntSet.t   (* already used backward rules to
-                                      generate the goal *)
+              mutable used_bwd: IntSet.t   (* already used backward rules to
+                                              generate the goal *)
             }
 
 type t = {pc: Proof_context.t;
@@ -37,6 +38,7 @@ let context (p:t): Context.t = Proof_context.context p.pc
 let start (t:term) (pc:Proof_context.t): t =
   let entry = {goal=t;
                alter= false;
+               alter_cnt = 0;
                nbenv= 0;
                used_gen=IntSet.empty;
                used_bwd=IntSet.empty} in
@@ -228,7 +230,7 @@ let push
   let nbenv = p.entry.nbenv + Array.length names in
   Proof_context.push_untyped names p.pc;
   p.stack <- p.entry :: p.stack;
-  p.entry <- {goal=t; alter=false; nbenv=nbenv;
+  p.entry <- {goal=t; alter=false; alter_cnt=0; nbenv=nbenv;
               used_gen=used_gen; used_bwd=used_bwd};
   p.depth <- p.depth + 1
 
@@ -244,10 +246,19 @@ let push_empty (p:t): unit =
 let push_goal (t:term) (used_gen:IntSet.t) (p:t): unit =
   push [||] t used_gen p.entry.used_bwd p
 
-let push_alternative (idx:int) (p:t): unit =
-  let used_bwd = IntSet.add idx p.entry.used_bwd in
+let alternative_start (idx:int) (p:t): unit =
   p.entry.alter <- true;
-  push [||] p.entry.goal p.entry.used_gen used_bwd p
+  p.entry.alter_cnt <- Proof_context.count p.pc;
+  p.entry.used_bwd <- IntSet.add idx p.entry.used_bwd
+
+let alternative_fail (idx:int) (p:t): unit =
+  p.entry.used_bwd <- IntSet.remove idx p.entry.used_bwd;
+  Proof_context.keep p.entry.alter_cnt p.pc
+
+let alternative_succeed (idx:int) (p:t): unit =
+  p.entry.used_bwd <- IntSet.remove idx p.entry.used_bwd;
+  p.entry.alter <- false
+
 
 
 let pop (p:t): unit =
@@ -308,12 +319,12 @@ let check_goal (p:t): unit =
 
 
 let enter (p:t): unit =
-  let rec do_implication (): unit =
+  let rec do_implication (tgts:term list): unit =
     try
       let a,b = split_implication p in
       add_assumption a p;
       p.entry.goal <- b;
-      do_implication ()
+      do_implication (b::tgts)
     with Not_found ->
       close_assumptions p;
       check_goal p;
@@ -323,11 +334,11 @@ let enter (p:t): unit =
       let n,names,t = split_all_quantified p in
       assert (n = Array.length names);
       push_context names t p;
-      do_implication ()
+      do_implication ([])
     with Not_found ->
       ()
   in
-  do_implication ()
+  do_implication ([])
 
 
 let prefix (p:t): string =
@@ -376,12 +387,12 @@ and prove_alternatives (bwds: int list) (p:t): unit =
     printf "%strying %d alternative(s)\n"
       (prefix p) n
   end;
+  let goal  = p.entry.goal
+  and depth = p.depth in
   List.iteri
     (fun i idx ->
       let ps, used_gen = Proof_context.backward_data idx p.pc in
       let imp = Proof_context.term idx p.pc in
-      let goal  = p.entry.goal
-      and depth = p.depth in
       try
         if p.trace then begin
           let n    = List.length bwds
@@ -394,7 +405,7 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           else
             printf "%salternative %d: %d %s\n" pre i idx tstr;
         end;
-        push_alternative idx p;
+        alternative_start idx p;
         prove_premises ps used_gen p;
         (* all premises succeeded, i.e. the target is in the context *)
         let idx_tgt = Proof_context.find goal p.pc
@@ -402,12 +413,14 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           try Context.find_assertion goal p.context
           with Not_found -> assert false*)
         in
+        alternative_succeed idx p;
         let idx_tgt = discharge idx_tgt p in
         if p.trace then
           printf "%s... succeeded\n" (prefix p);
         raise (Proof_found idx_tgt)
       with Not_found ->
         pop_downto depth p;
+        alternative_fail idx p;
         if p.trace then
           printf "%s... failed\n" (prefix p))
     bwds

@@ -923,6 +923,10 @@ let push_untyped (names:int array) (pc:t): unit =
   push0 nbenv pc
 
 
+let keep (cnt:int) (pc:t): unit =
+  assert (count_previous pc <= cnt);
+  Seq.keep cnt pc.terms
+
 
 let pop (pc:t): unit =
   assert (is_local pc);

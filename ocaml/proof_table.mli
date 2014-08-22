@@ -39,6 +39,7 @@ val make: unit -> t
 val push: entities list withinfo -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:  t -> unit
+val keep: int -> t -> unit
 
 val add_proved_global: bool -> int -> term -> proof_term -> int -> t -> unit
 val add_proved:        term -> proof_term -> int -> t -> unit

@@ -172,6 +172,11 @@ let push_untyped (names:int array) (at:t): unit =
 
 
 
+let keep (cnt:int) (at:t): unit =
+  assert (count_previous at <= cnt);
+  Seq.keep cnt at.seq
+
+
 let pop (at:t): unit =
   assert (is_local at);
   assert (depth at = Context.depth (context at));
