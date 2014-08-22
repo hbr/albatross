@@ -26,8 +26,9 @@ type entry = {nbenv:  int;
               names:  int array;
               imp_id: int;
               all_id: int;
-              mutable count:   int;
-              mutable req:     int list}
+              mutable count: int;
+              mutable nreq:  int   (* number of local assumptions *)
+            }
 
 type t = {seq:  desc Seq.t;
           gseq: gdesc Seq.t;
@@ -131,7 +132,7 @@ let make (): t =
    entry = {count   = 0;
             names   = [||];
             nbenv   = 0;
-            req     = [];
+            nreq    = 0;
             imp_id  = Feature_table.implication_index;
             all_id  = Feature_table.all_index};
    stack = [];
@@ -144,7 +145,7 @@ let push0 (nbenv:int) (names: int array) (at:t): unit =
   at.stack       <- at.entry :: at.stack;
   at.entry       <-
     {at.entry with
-     req    = [];
+     nreq   = 0;
      nbenv  = at.entry.nbenv + nbenv;
      names  = names;
      imp_id = at.entry.imp_id + nbenv;
@@ -225,12 +226,14 @@ let discharged_term (i:int) (at:t): term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged.
    *)
-  let ps = List.map (fun j -> local_term j at) at.entry.req
+  let cnt0 = count_previous at
   and tgt = local_term i at
   in
-  let t = implication_chain ps tgt at
-  in
-  all_quantified_outer t at
+  let tref = ref tgt in
+  for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
+    tref := implication (local_term k at) !tref at
+  done;
+  all_quantified_outer !tref at
 
 
 let is_assumption (i:int) (at:t): bool =
@@ -252,8 +255,9 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   match pt with
     Assumption _ ->
       let idx = count at in
+      assert (idx = count_previous at + at.entry.nreq);
       raw_add ();
-      at.entry.req <- idx :: at.entry.req
+      at.entry.nreq <- at.entry.nreq + 1
   | _ ->
       raw_add ()
 
@@ -387,7 +391,9 @@ let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
 
 
 let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
-  let depth_0 = depth at in
+  let depth_0 = depth at
+  and cnt0    = count at
+  in
   let prefix (d:int): string = String.make (4*(d-depth_0)) ' '
   in
   let print (t:term) =
@@ -453,43 +459,39 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         pop at;
         term
   in
-  reconstruct pt
+  try
+    reconstruct pt
+  with Illegal_proof_term ->
+    for k = depth_0 to depth at - 1 do pop at done;
+    keep cnt0 at;
+    raise Illegal_proof_term
 
 
-(*
-let rec term_of_pt (pt:proof_term) (at:t): term =
+
+
+let term_of_pt (pt:proof_term) (at:t): term =
   (** Construct a term from the proof term [pt].
    *)
-  match pt with
-    Axiom t             -> t
-  | Assumption t        -> t
-  | Detached (a,b)      -> term_of_mp a b at
-  | Specialize (i,args) -> term_of_specialize i args at
-  | Inherit (idx,cls)   -> variant idx cls at
-  | Subproof (nargs,names,res_idx,pt_arr) ->
-      push_untyped names at;
-      let pt_len = Array.length pt_arr
-      and cnt    = count at
-      in
-      assert (res_idx < cnt + pt_len);
-      Array.iteri
-        (fun i pt -> add_proved_0 (term_of_pt pt at) pt at)
-        pt_arr;
-      let term = discharged_term res_idx at in
-      pop at;
-      term
-*)
+  reconstruct_term pt false at
+
+
+let print_pt (pt:proof_term) (at:t): unit =
+  let _ = reconstruct_term pt true at in ()
+
+
 
 let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
   try
-    let treconstr = reconstruct_term pt true at in
-    let res = Term.equal_wo_names t treconstr in
+    let t_pt = term_of_pt pt at in
+    let res = Term.equal_wo_names t t_pt in
     if not res then begin
-      printf "unequal t         %s\n" (string_of_term t at);
-      printf "        treconstr %s\n" (string_of_term treconstr at)
+      printf "unequal t    %s\n" (string_of_term t at);
+      printf "        t_pt %s\n" (string_of_term t_pt at)
     end;
     res
   with Illegal_proof_term ->
+    printf "Illegal proof term\n";
+    print_pt pt at;
     false
 
 
@@ -507,10 +509,10 @@ let add_proved_global
    *)
   assert (is_global at);
   let cnt = count at in
-  (*assert begin
+  assert begin
     let pt = adapt_proof_term cnt delta pt in
     is_proof_pair t pt at
-  end;*)
+  end;
   add_proved t pt delta at;
   Seq.push {defer=defer; owner=owner} at.gseq;
   let ct = class_table at in
@@ -598,14 +600,13 @@ let discharged (i:int) (at:t): term * proof_term =
       Axiom term
     else
       let narr =
-        if cnt0 <= i then i + 1 - cnt0
+        if cnt0 + at.entry.nreq <= i then
+          i + 1 - cnt0
         else
-          match at.entry.req with
-            [] -> 0
-          | i_last_assumption::_ -> i_last_assumption + 1 - cnt0
+          at.entry.nreq
       in
       assert (0 <= narr);
-      if nargs = 0 && narr = 1 && at.entry.req = [] then
+      if nargs = 0 && narr = 1 && at.entry.nreq = 0 then
         (Seq.elem cnt0 at.seq).proof_term
       else
         let pt_arr =
