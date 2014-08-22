@@ -62,13 +62,24 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
-let definition (desc:descriptor) (ft:t): definition option =
-  if is_private ft then
-    desc.priv
-  else
-    match desc.pub with
-      None -> None
-    | Some(def_opt) -> def_opt
+
+let definition (i:int) (nb:int) (ft:t): term =
+  (* The definition of the feature [i] as a lambda term (if there are arguments)
+     transformed into an environment with [nb] bound variables. Raises [Not_found]
+     in case that there is no definition *)
+  let desc = descriptor i ft in
+  let nargs = Sign.arity desc.sign in
+  let def (def_opt: definition option) =
+    match def_opt with
+      None -> raise Not_found
+    | Some t ->
+        let t = Term.upbound nb nargs t in
+        if nargs = 0 then t else Lam (nargs,[||],t)
+  in
+  if is_private ft then def desc.priv
+  else match desc.pub with
+    None -> raise Not_found (*assert false *)(* not possible in public view *)
+  | Some (def_opt) -> def def_opt
 
 
 
@@ -368,6 +379,37 @@ let find_funcs
     (Term_table.terms !tab)
 
 
+let expand_focus_term (t:term) (nb:int) (ft:t): term =
+  (* Expand the variable in the focus of [t] within an environment with [nb] bound
+     variables (i.e. a variable [i] with [nb<=i] refers to the global feature
+     [i-nb])
+
+     A variable is in the focus of [t] if it is the toplevel variable of [t]
+
+     Note: The function doesn't do any beta reductions in the term [t] which
+     would have been possible before the expansion. *)
+  let apply (f:term) (args:term array): term =
+    match f with
+      Lam (n,_,t) ->
+        assert (n = Array.length args);
+        Term.apply t args
+    | _ ->
+        Application (f,args)
+  and def (i:int) = definition (i-nb) nb ft
+  in
+  let rec expand (t:term): term =
+    match t with
+      Variable i when nb <= i -> def i
+    | Application (Variable i ,args) when nb <= i->
+        apply (def i) args
+    | Application (Application (Variable i,args0), args1) ->
+        let f = apply (def i) args0 in
+        apply f args1
+    | _ ->
+        raise Not_found
+  in
+  expand t
+
 
 
 let expand_term (t:term) (nbound:int) (ft:t): term =
@@ -391,18 +433,8 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
     | Variable i ->
         let idx = i-nb in
         assert (idx < count ft);
-        let desc = descriptor idx ft in
-        let def_opt = definition desc ft in begin
-          match def_opt with
-            None -> t
-          | Some def ->
-              let nargs = Sign.arity desc.sign in
-              let t = expand def nargs in
-              let tup = Term.upbound nb nargs t in
-              if nargs = 0 then tup
-              else
-                Lam (nargs, [||], tup)
-        end
+        (try expand (definition idx nb ft) nb
+        with Not_found -> t)
     | Application (Lam(n,nms,t),args) ->
         let t    = expand t (nb+n)
         and args = Array.map (fun t -> expand t nb) args in

@@ -79,6 +79,14 @@ val is_interface_use:  t -> bool
 
 val implication_term: term -> term -> int -> t -> term
 
+val expand_focus_term: term -> int -> t -> term
+    (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
+        within an environment with [nb] bound variables (i.e. a variable [i]
+        with [nb<=i] refers to the global feature [i-nb])
+
+        Note: The function doesn't do any beta reductions in the term [t]
+        which would have been possible before the expansion. *)
+
 
 val expand_term: term->int->t->term
   (** [expand_term t nbound ft] expands the definitions of the term [t] within

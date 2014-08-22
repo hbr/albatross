@@ -8,6 +8,8 @@ type proof_term =
   | Assumption of term
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
+  | Expand     of int
+  | Expand_bwd of term
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
                 * int        (* res *)
@@ -276,6 +278,22 @@ let term_of_mp (a:int) (b:int) (at:t): term =
   b2
 
 
+let expand_term (t:term) (at:t): term =
+  let ft = feature_table at
+  and nb = nbenv at in
+  try
+    Feature_table.expand_focus_term t nb ft
+  with Not_found ->
+    raise Illegal_proof_term
+
+
+let term_of_expand (i:int) (at:t): term =
+  expand_term (local_term i at) at
+
+let term_of_expand_bwd (t:term) (at:t): term =
+  implication (expand_term t at) t at
+
+
 let term_of_specialize (i:int) (args:term array) (at:t): term =
   assert (i < count at);
   let nargs = Array.length args
@@ -352,6 +370,10 @@ let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
         Specialize (index i, args)
     | Inherit (i,cls) ->
         Inherit (index i, cls)
+    | Expand i ->
+        Expand (index i)
+    | Expand_bwd t ->
+        Expand_bwd t
     | Subproof (nargs,names,res,pt_arr) ->
         Subproof (nargs,names, index res, Array.map adapt pt_arr)
   in
@@ -391,6 +413,14 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
     | Specialize (i,args) ->
         let t = term_of_specialize i args at in
         if trace then print1 t i;
+        t
+    | Expand i ->
+        let t = term_of_expand i at in
+        if trace then print1 t i;
+        t
+    | Expand_bwd t ->
+        let t = term_of_expand_bwd t at in
+        if trace then print t;
         t
     | Inherit (idx,cls) ->
         let t =  variant idx cls at in
@@ -472,10 +502,10 @@ let add_proved_global
    *)
   assert (is_global at);
   let cnt = count at in
-  assert begin
+  (*assert begin
     let pt = adapt_proof_term cnt delta pt in
     is_proof_pair t pt at
-  end;
+  end;*)
   add_proved t pt delta at;
   Seq.push {defer=defer; owner=owner} at.gseq;
   let ct = class_table at in
@@ -518,15 +548,17 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
       The list includes [i] if it is in the current context.
    *)
   assert (i < (count at));
-  let cnt0 = count_previous at in
-
+  let cnt0 = count_previous at
+  in
   let used (lst:int list): int list =
     assert (cnt0 <= i);
     let desc = Seq.elem i at.seq in
     match desc.proof_term with
       Axiom _
-    | Assumption _       -> lst
+    | Assumption _
+    | Expand_bwd _       -> lst
     | Specialize (j,_)   -> used_assertions j at lst
+    | Expand i           -> used_assertions i at lst
     | Subproof (_,_,_,_) -> lst
     | Detached (i,j) ->
         let used_i = used_assertions i at lst in
