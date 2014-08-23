@@ -474,9 +474,11 @@ let term_to_string
       (t:term)
       (names: int array)
       (nanon: int)
+      (is_fun: bool)
       (outop: (operator*bool) option)
       : string =
     (* nanon: number of already used anonymous variables
+       is_fun: the term is used in a function position
        outop: the optional outer operator and a flag if the current term
               is the left operand of the outer operator
      *)
@@ -516,7 +518,7 @@ let term_to_string
       let nanon, nms = local_names n nms in
       let names = Array.append nms names in
       args2str n nms,
-      to_string t names nanon None
+      to_string t names nanon false None
     in
     let q2str (qstr:string) (args:term array): string =
       let nargs = Array.length args in
@@ -535,20 +537,20 @@ let term_to_string
           let nargs = Array.length args in
           if nargs = 1 then
             (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(0) names nanon (Some (op,false)))
+            ^ (to_string args.(0) names nanon false (Some (op,false)))
           else begin
             assert (nargs=2); (* only unary and binary operators *)
-            (to_string args.(0) names nanon (Some (op,true)))
+            (to_string args.(0) names nanon false (Some (op,true)))
             ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(1) names nanon (Some (op,false)))
+        ^ (to_string args.(1) names nanon false (Some (op,false)))
           end
     and app2str (f:term) (args: term array): string =
-      (to_string f names nanon None)
+      (to_string f names nanon true None)
       ^ "("
       ^ (String.concat
            ","
            (List.map
-              (fun t -> to_string t names nanon None)
+              (fun t -> to_string t names nanon false None)
               (Array.to_list args)))
       ^ ")"
     and lam2str (n:int) (nms: int array) (t:term): string =
@@ -587,9 +589,11 @@ let term_to_string
           "(" ^ str ^ ")"
         else
           str
+    | Some iop, None when is_fun ->
+        "(" ^ str ^ ")"
     | _ -> str
   in
-  to_string t names 0 None
+  to_string t names 0 false None
 
 
 
