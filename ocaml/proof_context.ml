@@ -283,10 +283,11 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
         in
         let is_simpl = nmax <= ntgt in
         let ok =
+          ntgt > 1 && (* avoid catch all *)
           (IntSet.cardinal avars_tgt) = nargs
-            &&
+            (*&&
           (is_simpl
-         || IntSet.exists (fun i -> not (IntSet.mem i fvars)) fvars_tgt)
+         || IntSet.exists (fun i -> not (IntSet.mem i fvars)) fvars_tgt)*)
         in
         if not ok then
           let tgt = Term.binary imp_id p tgt in
