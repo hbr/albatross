@@ -189,6 +189,11 @@ let is_used_forward (i:int) (pc:t): bool =
   IntSet.mem i pc.entry.used_fwd
 
 
+let string_of_term (t:term) (pc:t): string =
+  Context.string_of_term t (context pc)
+
+
+
 let is_forward_simplification (i:int) (pc:t): bool =
   assert (is_consistent pc);
   assert (i < count pc);
@@ -323,7 +328,7 @@ let analyze (t:term)  (pc:t): term_data =
      fwddat    = fwd;
      bwddat    = bwd}
   with Not_found ->
-    (* Not a useful quantified statement *)
+    (* Not a quantified assertion or not a useful quantified assertion *)
     let imp_id = (imp_id pc) in
     let fwd =
       try
@@ -393,17 +398,18 @@ let has (t:term) (pc:t): bool =
 
 
 
-let find_equivalent (t:term) (pc:t): int =
-  (** The index of the assertion which is equivalent to [t].
+let find_stronger (t:term) (pc:t): int =
+  (** The index of the assertion which is stronger as [t] (or equivalent).
 
-      If [t] is schematic, an equivalent assertion is schematic with the same
-      number of arguments and can be transformed into [t] by just permuting
-      the variables.
+      If [t] is schematic, a stronger or equivalent assertion is schematic
+      with the a less or equal number of arguments and can be transformed into
+      [t] by using an injective substitution.
 
       If [t] is not schematic an equivalent assertion is identical.
 
       Note: The term [t] must be valid in the current context!
    *)
+
   let n, _, t0 =
     try
       split_all_quantified t pc
@@ -414,7 +420,7 @@ let find_equivalent (t:term) (pc:t): int =
   let submap =
     List.filter
       (fun (idx,sub) ->
-        n=(Seq.elem idx pc.terms).td.nargs && Term_sub.is_injective sub)
+        n >= (Seq.elem idx pc.terms).td.nargs && Term_sub.is_injective sub)
       submap
   in match submap with
     []        -> raise Not_found
@@ -423,20 +429,17 @@ let find_equivalent (t:term) (pc:t): int =
 
 
 
-let has_equivalent (t:term) (pc:t): bool =
-  (** Is there a term equivalent to [t] already in the proof context [pc]?
+let has_stronger (t:term) (pc:t): bool =
+  (** Is there a term stronger as [t] (or equivalent) already in the proof
+      context [pc]?
 
       Note: The term [t] must be valid in the current context!
    *)
   try
-    let _ = find_equivalent t pc in
+    let _ = find_stronger t pc in
     true
   with Not_found ->
     false
-
-
-let string_of_term (t:term) (pc:t): string =
-  Context.string_of_term t (context pc)
 
 
 let print_assertions
@@ -516,7 +519,7 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
       Note: The term has to be added to the proof table outside
       this function
    *)
-  assert (not (has_equivalent t pc));
+  assert (not (has_stronger t pc));
   let td = analyze t pc
   and idx = Seq.count pc.terms
   in
@@ -574,7 +577,7 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   (** Add the term [t] which is a consequence of [i] as a premise and [j]
       as an implication using the modus ponens rule to the context [pc].
    *)
-  (*assert (not (has_equivalent t pc));*)
+  (*assert (not (has_stronger t pc));*)
   assert (i < count pc);
   assert (j < count pc);
   let td = (Seq.elem j pc.terms).td in
@@ -585,7 +588,7 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   let fwd_ok = simpl || IntSet.is_empty (IntSet.inter gen_i gen_j) in
   if is_using_forward pc
       && fwd_ok
-      && not (has_equivalent t pc)
+      && not (has_stronger t pc)
   then begin
     let gen = if simpl then gen_i else IntSet.union gen_i gen_j
     in
@@ -680,7 +683,7 @@ let add_consequence (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
   in
   let j_in_used_gen_i = IntSet.mem j used_gen_i
   in
-  if j_in_used_gen_i || has_equivalent b pc then
+  if j_in_used_gen_i || has_stronger b pc then
                                   (* [b] might be all quantified *)
     ()
   else if nargs=0 then
@@ -805,7 +808,7 @@ let add_consequences_expansion (i:int) (pc:t): unit =
   in
   try
     let texpand = Feature_table.expand_focus_term t nbenv ft in
-    if has_equivalent texpand pc then
+    if has_stronger texpand pc then
       ()
     else begin
       (*printf "add_consequences_expansion t:\"%s\"  texp:\"%s\"\n"
@@ -874,7 +877,7 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
    *)
   assert (is_consistent pc);
   let idx = count pc
-  and has = has_equivalent t pc
+  and has = has_stronger t pc
   in
   if is_axiom then
     Proof_table.add_axiom t pc.base
@@ -962,6 +965,60 @@ let pop (pc:t): unit =
   Proof_table.pop pc.base
 
 
+let check_deferred (pc:t): unit = Context.check_deferred (context pc)
+
+let owner (pc:t): int = Context.owner (context pc)
+
+let variant (i:int) (cls:int) (pc:t): term =
+  Proof_table.variant i cls pc.base
+
+
+
+let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
+  (* Inherit the deferred assertion [i] in the class [cls] *)
+  assert (i < count pc);
+  let t = variant i cls pc in
+  if not (has t pc) then
+    error_info info ("The deferred assertion \""  ^
+                     (string_of_term t pc) ^
+                     "\" is missing in the class " ^
+                     (Class_table.class_name cls (class_table pc)))
+
+
+
+let inherit_effective (i:int) (cls:int) (pc:t): unit =
+  (* Inherit the effective assertion [i] in the class [cls] *)
+  let t = variant i cls pc in
+  let ct = class_table pc in
+  printf "inherit assertion \"%s\" in the class %s\n"
+    (string_of_term t pc)
+    (Class_table.class_name cls ct);
+  if not (has_stronger t pc) then begin
+    Proof_table.add_inherited t i cls pc.base;
+    add_new t IntSet.empty pc;
+    close pc
+  end
+
+
+
+
+
+let do_inherit
+    (cls:int)
+    (anc_lst: (int * type_term array) list)
+    (info:info)
+    (pc:t)
+    : unit =
+  let ct = class_table pc in
+  List.iter
+    (fun (par,_) ->
+      let deflst = Class_table.deferred_assertions par ct in
+      List.iter (fun i -> inherit_deferred i cls info pc) deflst;
+      let efflst = Class_table.effective_assertions par ct in
+      List.iter (fun i -> inherit_effective i cls pc) efflst
+    )
+    anc_lst
+
 
 let add_backward_expansion (t:term) (pc:t): unit =
   let ft    = feature_table pc
@@ -970,7 +1027,7 @@ let add_backward_expansion (t:term) (pc:t): unit =
   try
     let texpand = Feature_table.expand_focus_term t nbenv ft in
     let impl = implication texpand t pc in
-    if has_equivalent impl pc then
+    if has_stronger impl pc then
       ()
     else begin
       (*printf "add_backward_expansion t:\"%s\"  texp:\"%s\"  impl:\"%s\"\n"
@@ -1026,17 +1083,25 @@ let add_proved_0
     (used_gen:IntSet.t)
     (pc:t)
     : unit =
-  if has_equivalent t pc then
+  if has_stronger t pc then
     ()
   else begin
+    let cnt = count pc in
     if is_global pc then
       Proof_table.add_proved_global defer owner t pterm delta pc.base
     else
       Proof_table.add_proved t pterm delta pc.base;
-    add_new t used_gen pc
+    add_new t used_gen pc;
+    if is_global pc && not defer && owner <> -1 then begin
+      let ct = class_table pc in
+      let descendants = Class_table.descendants owner ct in
+      IntSet.iter
+        (fun descendant -> inherit_effective cnt descendant pc)
+        descendants
+    end
   end;
   if pc.trace then begin
-    let idx = find_equivalent t pc in
+    let idx = find_stronger t pc in
     printf "%s%3d proved: %s\n" (prefix pc) idx (string_of_term t pc)
   end;
   close pc
@@ -1094,54 +1159,3 @@ let backward_data (idx:int) (pc:t): term list * IntSet.t =
   in
   ps,
   desc.used_gen
-
-let check_deferred (pc:t): unit = Context.check_deferred (context pc)
-
-let owner (pc:t): int = Context.owner (context pc)
-
-let variant (i:int) (cls:int) (pc:t): term =
-  Proof_table.variant i cls pc.base
-
-
-
-let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
-  (* Inherit the deferred assertion [i] in the class [cls] *)
-  assert (i < count pc);
-  let t = variant i cls pc in
-  if not (has t pc) then
-    error_info info ("The deferred assertion \""  ^
-                     (string_of_term t pc) ^
-                     "\" is missing in the class " ^
-                     (Class_table.class_name cls (class_table pc)))
-
-
-
-let inherit_effective (i:int) (cls:int) (info:info) (pc:t): unit =
-  (* Inherit the effective assertion [i] in the class [cls] *)
-  let t = variant i cls pc in
-  printf "inherit assertion %s\n" (string_of_term t pc);
-  if not (has_equivalent t pc) then begin
-    Proof_table.add_inherited t i cls pc.base;
-    add_new t IntSet.empty pc;
-    close pc
-  end
-
-
-
-
-
-let do_inherit
-    (cls:int)
-    (anc_lst: (int * type_term array) list)
-    (info:info)
-    (pc:t)
-    : unit =
-  let ct = class_table pc in
-  List.iter
-    (fun (par,_) ->
-      let deflst = Class_table.deferred_assertions par ct in
-      List.iter (fun i -> inherit_deferred i cls info pc) deflst;
-      let efflst = Class_table.effective_assertions par ct in
-      List.iter (fun i -> inherit_effective i cls info pc) efflst
-    )
-    anc_lst
