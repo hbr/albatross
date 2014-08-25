@@ -8,8 +8,8 @@ type proof_term =
   | Assumption of term
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
-  | Expand     of int
-  | Expand_bwd of term
+  | Expand     of int        (* index of term which is expanded *)
+  | Expand_bwd of term       (* term which is backward expanded *)
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
                 * int        (* res *)
@@ -218,7 +218,7 @@ let variant (i:int) (cls:int) (at:t): term =
   let ft = feature_table at in
   let t,nbenv = term i at   in
   let t = Feature_table.variant_term t nbenv cls ft in
-  Feature_table.expand_term t 0 ft
+  (*t*) Feature_table.expand_term t 0 ft
 
 
 
@@ -530,6 +530,7 @@ let add_assumption (t:term) (at:t): unit =
   let pt = Assumption t in
   add_proved_0 t pt at
 
+
 let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
   assert (is_global at);
   let pt = Inherit (idx,cls) in
@@ -546,6 +547,14 @@ let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   let pt = Specialize (i,args) in
   add_proved_0 t pt  at
 
+
+let add_expand (t:term) (i:int) (at:t): unit =
+  add_proved_0 t (Expand i) at
+
+
+let add_expand_backward (t:term) (impl:term) (at:t): unit =
+  (* [impl = (texpanded => t)] *)
+  add_proved_0 impl (Expand_bwd t) at
 
 
 let rec used_assertions (i:int) (at:t) (lst:int list): int list =

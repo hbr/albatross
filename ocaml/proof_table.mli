@@ -49,6 +49,8 @@ val add_proved:        term -> proof_term -> int -> t -> unit
 val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit
 val add_mp:         term -> int -> int -> t -> unit
+val add_expand:     term -> int -> t -> unit
+val add_expand_backward:  term -> term -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
 val add_inherited:  term -> int -> int -> t -> unit
 

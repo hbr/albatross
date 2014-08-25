@@ -115,7 +115,7 @@ let get_term (ie: info_expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
   let t  = Typer.boolean_term ie c in
   let tn = Context.expanded_term t c in
-  tn
+  (*t*) tn
 
 
 

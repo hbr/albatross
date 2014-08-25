@@ -605,7 +605,6 @@ let add_specialized_forward
       if it is not yet in.
    *)
   assert (i < count pc);
-  assert (not (has t pc));
   if has t pc then  (* The term [t] is a specialization, therefore cannot be
                        all quantified, therefore cannot have equivalents
                        which are not identical *)
@@ -795,13 +794,37 @@ let add_consequences_implication (i:int)(pc:t): unit =
 
 
 
+let add_consequences_expansion (i:int) (pc:t): unit =
+  (* Add the focussed expansion of the term [i] in case that there is one if
+     it is not yet in the proof context [pc] to the proof context and to the
+     work items.  *)
+  let t        = term i pc
+  and used_gen = used_schematic i pc
+  and ft       = feature_table pc
+  and nbenv    = nbenv pc
+  in
+  try
+    let texpand = Feature_table.expand_focus_term t nbenv ft in
+    if has_equivalent texpand pc then
+      ()
+    else begin
+      (*printf "add_consequences_expansion t:\"%s\"  texp:\"%s\"\n"
+        (string_of_term t pc) (string_of_term texpand pc);*)
+      Proof_table.add_expand texpand i pc.base;
+      add_new texpand used_gen pc
+    end
+  with Not_found ->
+    ()
+
+
 
 let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
    *)
   add_consequences_premise     i pc;
-  add_consequences_implication i pc
+  add_consequences_implication i pc;
+  add_consequences_expansion   i pc
 
 
 
@@ -940,6 +963,24 @@ let pop (pc:t): unit =
 
 
 
+let add_backward_expansion (t:term) (pc:t): unit =
+  let ft    = feature_table pc
+  and nbenv = nbenv pc
+  in
+  try
+    let texpand = Feature_table.expand_focus_term t nbenv ft in
+    let impl = implication texpand t pc in
+    if has_equivalent impl pc then
+      ()
+    else begin
+      (*printf "add_backward_expansion t:\"%s\"  texp:\"%s\"  impl:\"%s\"\n"
+        (string_of_term t pc) (string_of_term texpand pc) (string_of_term impl pc);*)
+      Proof_table.add_expand_backward t impl pc.base;
+      add_new impl IntSet.empty pc
+    end
+  with Not_found ->
+    ()
+
 
 let add_backward (t:term) (pc:t): unit =
   (** Add all backward rules which have [t] as a target to the context [pc].
@@ -957,6 +998,7 @@ let add_backward (t:term) (pc:t): unit =
           add_fully_specialized idx sub pc)
       sublst
   in
+  add_backward_expansion t pc;
   let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
   (if sublst <> [] then
     add_lst sublst
