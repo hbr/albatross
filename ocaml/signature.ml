@@ -268,6 +268,7 @@ module TVars_sub: sig
   val count:        t -> int
   val has:          int -> t -> bool
   val get:          int -> t -> term
+  val get_star:     int -> t -> term
   val count_global: t -> int
   val count_local:  t -> int
   val concept:      int -> t -> term
@@ -321,6 +322,10 @@ end = struct
   let get (i:int) (tvars:t): term =
     assert (i < (count tvars));
     Term_sub_arr.get i tvars.sub
+
+  let get_star (i:int) (tvars:t): term =
+    assert (i < (count tvars));
+    Term_sub_arr.get_star i tvars.sub
 
   let count_global (tv:t): int =
     Tvars.count_global tv.vars
@@ -412,10 +417,10 @@ end = struct
       then
         Term_sub_arr.add_new
           i
-          (Term.down_from ndown nloc (Term_sub_arr.args tvnew.sub).(i))
+          (Term.down_from ndown nloc (get_star i tvnew))
           tv.sub
       else
-        assert ((get i tv) = (get i tvnew))
+        assert ((get i tv) = (Term.down_from ndown nloc (get_star i tvnew)))
     done
 
 
@@ -634,13 +639,11 @@ end = struct
 
   let to_function (nargs:int) (s:t): t =
     (** Convert the constant signature [s] into a function signature with
-        [nargs] arguments. The [nargs] argument types are fresh type variables,
-        therefore the result type of [s] has to be shifted up by [nargs].
+        [nargs] arguments. The [nargs] argument types are fresh type variables.
      *)
     assert (has_result s);
     assert (is_constant s);
-    {args   = Array.init nargs (fun i -> Variable i);
-     rt     = Result_type.up nargs s.rt}
+    {s with args   = Array.init nargs (fun i -> Variable i)}
 
   let sub (s:t) (sub_arr:type_term array) (ntvs:int): t =
     let args = Array.map (fun tp -> Term.sub tp sub_arr ntvs) s.args

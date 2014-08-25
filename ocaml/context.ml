@@ -486,15 +486,9 @@ let find_funcs
       global feature table and transform them into the context.
    *)
   let lst = Feature_table.find_funcs fn nargs c.ft
-  and nfgs = count_formal_generics c
   in
   let lst = List.rev_map
-      (fun (i,tvs,s) ->
-        (* make space for formal generics *)
-        let start = Tvars.count tvs in
-        assert (Tvars.count_local tvs = 0);
-        let sign = Sign.up_from nfgs start s in
-        i+(nfargs c), tvs, sign)
+      (fun (i,tvs,s) -> i+(nfargs c), tvs, s)
       lst
   in
   lst

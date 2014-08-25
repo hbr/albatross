@@ -182,7 +182,7 @@ let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
 
 let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
   let ct = Context.class_table c  in
-  (Class_table.string_of_tvs tvs ct) ^
+  (Class_table.string_of_tvs tvs ct) ^ ", " ^
   (Class_table.string_of_signature s tvs ct)
 
 

@@ -61,12 +61,39 @@ let concepts_string (tb:t): string =
   Class_table.string_of_concepts (TVars_sub.tvars tb.tvars) ct
 
 
+let string_of_tvs (tvs:Tvars.t) (tb:t): string =
+  let ct  = Context.class_table tb.c in
+  Class_table.string_of_tvs tvs ct
+
+
 let string_of_tvs_sub (tb:t): string =
   let ct  = Context.class_table tb.c in
   Class_table.string_of_tvs_sub tb.tvars ct
 
 
 
+
+let add_local (ntvs:int) (tb:t): unit =
+  tb.tvars <- TVars_sub.add_local ntvs tb.tvars;
+  tb.sign  <- Sign.up ntvs tb.sign
+
+let remove_local (ntvs:int) (tb:t): unit =
+  (* signature is irrelevant *)
+  tb.tvars <- TVars_sub.remove_local ntvs tb.tvars
+
+
+let add_fgs (tb:t): unit =
+  let tvars_sub = Context.type_variables tb.c in
+  let n = TVars_sub.count_fgs tvars_sub - TVars_sub.count_fgs tb.tvars
+  and start = TVars_sub.count tb.tvars
+  in
+  tb.tvars <- TVars_sub.add_fgs tvars_sub tb.tvars;
+  tb.sign  <- Sign.up_from n start tb.sign
+
+
+let remove_fgs (tb:t): unit =
+  (* signature is irrelevant *)
+  tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars
 
 
 let do_sub (i:int) (t:term) (tb:t): unit =
@@ -129,6 +156,11 @@ let unify
       both terms makes them identical.
    *)
   let nvars = TVars_sub.count tb.tvars
+  and nall  = TVars_sub.count_all tb.tvars
+  in
+  let pred_idx = nall + Class_table.predicate_index
+  and func_idx = nall + Class_table.function_index
+  and dum_idx  = nall + Class_table.dummy_index
   in
   let rec uni (t1:term) (t2:term) (nb:int): unit =
     let do_sub0 (i:int) (t:type_term): unit =
@@ -137,6 +169,20 @@ let unify
         uni t (get_sub i tb) 0
       else
         do_sub i t tb
+    in
+    let do_dummy
+        (dum_args:type_term array)
+        (j:int) (j_args:type_term array): unit =
+      assert (Array.length dum_args = 2);
+      if j = pred_idx then begin
+        assert (Array.length j_args = 1);
+        uni dum_args.(0) j_args.(0) nb
+      end else if j = func_idx then begin
+        assert (Array.length j_args = 2);
+        uni dum_args.(0) j_args.(0) nb;
+        uni dum_args.(1) j_args.(1) nb
+      end else
+        raise Not_found
     in
     match t1,t2 with
       Variable i, _ when nb<=i && i<nb+nvars ->
@@ -150,6 +196,12 @@ let unify
           ()
         else
           raise Not_found
+    | Application(Variable i,args1),
+          Application(Variable j,args2) when i=dum_idx || j=dum_idx ->
+        if i = dum_idx then
+          do_dummy args1 j args2
+        else
+          do_dummy args2 i args1
     | Application(f1,args1), Application(f2,args2) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
@@ -168,9 +220,9 @@ let unify
   (try
     uni t1 t2 0
   with Term_capture ->
-    assert false);
+    assert false)(*;
   assert ((TVars_sub.sub_star t1 tb.tvars)
-            = (TVars_sub.sub_star t2 tb.tvars))
+            = (TVars_sub.sub_star t2 tb.tvars))*)
 
 
 
@@ -326,25 +378,32 @@ let add_leaf
     (s:Sign.t)
     (tb:t): t =
   assert (not (Tvars.count_local tvs > 0 && Tvars.count_global tvs > 0));
-  let s =
-    (* If [i] comes from a global environment, then it has no local type
-       variables and space must be made for all type variables (locals and
-       globals) of [tb.tvars].
-
-       If [i] comes from a local environment then it has no global type
-       variables. But the locals already in coincide with the locals of
-       [tb.tvars]. Space has to be made for all type variables (globals
-       and locals) of [tb.tvars] which are not yet in [tvs].
-     *)
-    let nglob = TVars_sub.count_global tb.tvars
-    and nloc  = TVars_sub.count_local  tb.tvars - Tvars.count_local tvs
-    and start = Tvars.count_local tvs
-    in
-    Sign.up nloc (Sign.up_from nglob start s)
-  in
-  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doen't come from
+  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doesn't come from
                                                  global *)
   in
+  (* If [i] comes from a global environment, then it has no local type
+     variables and space must be made for all type variables (locals and
+     globals) of [tb.tvars]. ??? Formal generics ???
+
+     If [i] comes from a local environment then it has no global type
+     variables. But the locals already in coincide with the locals of
+     [tb.tvars]. Space has to be made for all type variables (globals
+     and locals) of [tb.tvars] which are not yet in [tvs].
+   *)
+  let nloctb  = TVars_sub.count_local  tb.tvars
+  and nglobtb = TVars_sub.count_global tb.tvars
+  and nfgstb  = TVars_sub.count_fgs    tb.tvars
+  and nloc    = Tvars.count_local  tvs
+  and nglob   = Tvars.count_global tvs
+  and nfgs    = Tvars.count_fgs    tvs
+  in
+  assert (nloc=0 || nglob=0);
+  assert (nloc <= nloctb);
+  assert (nfgs=0 ||  nfgs=nfgstb);
+  assert (nglob <= nglobtb);
+  let s = Sign.up_from (nfgstb-nfgs) (nloc+nglob) s in
+  let s = Sign.up_from (nglobtb-nglob) nloc s       in
+  let s = Sign.up (nloctb-nloc) s in
   unify_sign tb.sign s tb;
   {tb with tlist = (Variable i)::tb.tlist}
 
@@ -356,11 +415,11 @@ let expect_function (nargs:int) (tb:t): unit =
       with [nargs] arguments and add to the type variables [nargs] fresh
       type variables, one for each argument.
    *)
-  tb.tvars <- TVars_sub.add_local nargs tb.tvars;
+  add_local nargs tb;
   let s = tb.sign in
   let s =
     if Sign.is_constant s then s
-    else
+    else begin
       (* Convert the function signature into a constant signature with
          a function type as result type. This is always possible because
          we are strengthening the expectations.
@@ -372,8 +431,8 @@ let expect_function (nargs:int) (tb:t): unit =
          introduce the corresponding constraints for the fresh type
          variables.
        *)
-      assert false (* nyi: conversion from a function signature
-                      into a function object *)
+      Sign.make_const (to_dummy s tb)
+    end
   in
   tb.sign  <- Sign.to_function nargs s
 
@@ -396,21 +455,18 @@ let complete_function (nargs:int) (tb:t): unit =
   let f = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
   tb.tlist <- (Application (f, Array.of_list !arglst)) :: tb.tlist;
-  tb.tvars <- TVars_sub.remove_local nargs tb.tvars
+  remove_local nargs tb
 
 
 
 let expect_lambda (ntvs:int) (tb:t): unit =
   assert (Sign.has_result tb.sign);
-  tb.tvars <- TVars_sub.add_local ntvs tb.tvars;
-  tb.tvars <- TVars_sub.add_fgs (Context.type_variables tb.c) tb.tvars;
-
+  add_local ntvs tb;
+  add_fgs tb;
   assert (TVars_sub.count_local tb.tvars =
           TVars_sub.count_local (Context.type_variables tb.c));
   assert (TVars_sub.count_fgs tb.tvars =
           TVars_sub.count_fgs (Context.type_variables tb.c));
-
-  tb.sign  <- Sign.up ntvs tb.sign;
   let rt = Sign.result tb.sign in
   if not (Sign.is_constant tb.sign) then
     tb.sign <- Sign.make_const rt
@@ -428,8 +484,8 @@ let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars;
-  tb.tvars <- TVars_sub.remove_local ntvs tb.tvars;
+  remove_fgs tb;
+  remove_local ntvs tb;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
   tb.tlist <- Lam (nargs, names, t) :: tb.tlist
