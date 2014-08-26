@@ -218,7 +218,7 @@ let variant (i:int) (cls:int) (at:t): term =
   let ft = feature_table at in
   let t,nbenv = term i at   in
   let t = Feature_table.variant_term t nbenv cls ft in
-  (*t*) Feature_table.expand_term t 0 ft
+  t
 
 
 
@@ -278,8 +278,9 @@ let term_of_mp (a:int) (b:int) (at:t): term =
       printf "  tb %d:%s\n" b (string_of_term tb at);
       raise Illegal_proof_term
   in
-  if ta <> b1 then begin
-    printf "antecedent of tb does not conincide with ta\n";
+  let ok = Term.equal_wo_names ta b1 in
+  if not ok then begin
+    printf "antecedent of tb does not conincide with ta (ok %b)\n" ok;
       printf "  ta %d:%s\n" a (string_of_term ta at);
       printf "  tb %d:%s\n" b (string_of_term tb at);
     raise Illegal_proof_term

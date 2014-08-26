@@ -113,9 +113,7 @@ let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
 
 let get_term (ie: info_expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
-  let t  = Typer.boolean_term ie c in
-  let tn = Context.expanded_term t c in
-  (*t*) tn
+  Typer.boolean_term ie c
 
 
 
