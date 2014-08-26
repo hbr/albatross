@@ -14,11 +14,12 @@ type backward_data = {ps:        term list;
                       bwd_simpl: bool}
 
 
-type term_data = {term:     term;  (* inner term [if nargs<>0] *)
-                  nargs:    int;
-                  nbenv:    int;
-                  fwddat:   (term*term*int*bool) option;
-                  bwddat:   backward_data option}
+type term_data = {
+    term:     term;  (* inner term [if nargs<>0] *)
+    nargs:    int;
+    nbenv:    int;
+    fwddat:   (term*term*int*bool*bool) option; (* a, b, gp1, simpl, elim *)
+    bwddat:   backward_data option}
 
 
 type desc = {td:       term_data;
@@ -194,15 +195,8 @@ let string_of_term (t:term) (pc:t): string =
 
 
 
-let is_forward_simplification (i:int) (pc:t): bool =
-  assert (is_consistent pc);
-  assert (i < count pc);
-  let desc = Seq.elem i pc.terms in
-  assert (Option.has desc.td.fwddat); (* [i] must be a forward rule *)
-  let _,_,_,simpl = Option.value desc.td.fwddat in
-  simpl
-
-
+let term_data (i:int) (pc:t): term_data =
+  (Seq.elem i pc.terms).td
 
 let used_schematic (i:int) (pc:t): IntSet.t =
   assert (is_consistent pc);
@@ -211,17 +205,21 @@ let used_schematic (i:int) (pc:t): IntSet.t =
 
 
 
-let forward_data (t:term) (nargs:int) (pc:t): term * term * int * bool =
-  (** The forward data of the term [t] with [nargs] arguments.
+let forward_data
+    (t:term) (nargs:int) (elim:bool) (pc:t)
+    : term * term * int * bool * bool =
+  (** The forward data of the term [t] with [nargs] arguments. The [elim] flag
+      specifies if the term comes from a partially applied elimination rule.
 
       The term is an applicable forward rule if it is an implication and
       the premise contains a complete prefix of the arguments and the
       implication is a simplification or an elimination rule
    *)
+  assert (not elim || nargs > 0);
   let imp_id = nargs + imp_id pc       in
   let a,b = Term.binary_split t imp_id in
   if nargs = 0 then
-    a, b, 0, (Term.nodes b) <= (Term.nodes a)
+    a, b, 0, (Term.nodes b) <= (Term.nodes a), elim
   else begin
     let gp1   = Term.greatestp1_arg a nargs
     and avars = Term.bound_variables a nargs
@@ -232,15 +230,17 @@ let forward_data (t:term) (nargs:int) (pc:t): term * term * int * bool =
     and nb = Term.nodes b
     in
     let is_simpl = nb <= na in
-    let ok =
-      is_simpl ||
-      let fvars_a = Term.free_variables a nargs
-      and fvars_b = Term.free_variables b nargs
-      in
-      IntSet.exists (fun ia -> not (IntSet.mem ia fvars_b)) fvars_a
+    let elim =
+      if is_simpl  then false
+      else if elim then true
+      else
+        let fvars_a = Term.free_variables a nargs
+        and fvars_b = Term.free_variables b nargs
+        in
+        IntSet.exists (fun ia -> not (IntSet.mem ia fvars_b)) fvars_a
     in
-    if ok then
-      a, b, gp1, is_simpl
+    if is_simpl || elim  then
+      a, b, gp1, is_simpl, elim
     else
       raise Not_found
   end
@@ -312,13 +312,13 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
 
 
 
-let analyze (t:term)  (pc:t): term_data =
+let analyze (t:term) (elim:bool) (pc:t): term_data =
   try
     let nargs, nms, t = Term.quantifier_split t (all_id pc) in
     if IntSet.cardinal (Term.bound_variables t nargs) <> nargs then
       raise Not_found;
     let fwd =
-      try Some (forward_data t nargs pc)
+      try Some (forward_data t nargs elim pc)
       with Not_found -> None
     and bwd = analyze_backward t nargs pc
     in
@@ -334,7 +334,7 @@ let analyze (t:term)  (pc:t): term_data =
       try
         let a,b = Term.binary_split t imp_id      in
         let simpl = Term.nodes b <= Term.nodes a  in
-        Some (a,b,0,simpl)
+        Some (a,b,0,simpl,elim)
       with Not_found ->
         None
     in
@@ -512,15 +512,16 @@ let print_global_assertions (pc:t): unit =
   print_assertions "" level 0 cnt true pc
 
 
-
-let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
+let add_new_0
+    (t:term) (used_gen:IntSet.t) (work:bool) (tabs:bool) (elim:bool) (pc:t)
+    : unit =
   (** Add the new term [t] to the context [pc].
 
       Note: The term has to be added to the proof table outside
       this function
    *)
-  assert (not (has_stronger t pc));
-  let td = analyze t pc
+  assert (not tabs || not (has_stronger t pc));
+  let td = analyze t elim pc
   and idx = Seq.count pc.terms
   in
   let add_to_proved (): unit =
@@ -530,14 +531,13 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
       Term_table.add td.term td.nargs td.nbenv idx pc.entry.prvd2;
     let slot,ts = find_slot t pc in
     let sd   = pc.entry.slots.(slot) in
-    pc.entry.slots.(slot) <- {sd with sprvd = TermMap.add ts idx sd.sprvd};
-    Seq.push {td=td; used_gen = used_gen} pc.terms
+    pc.entry.slots.(slot) <- {sd with sprvd = TermMap.add ts idx sd.sprvd}
 
   and add_to_forward (): unit =
     match td.fwddat with
       None ->
         ()  (* do nothing, not a valid forward rule *)
-    | Some (a,b,gp1,_) ->
+    | Some (a,b,gp1,_,_) ->
         pc.entry.fwd <-
           Term_table.add a td.nargs td.nbenv idx pc.entry.fwd
 
@@ -564,11 +564,26 @@ let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
     pc.work <- idx::pc.work
 
   in
-  add_to_proved   ();
-  add_to_forward  ();
-  add_to_backward ();
-  add_to_work     ()
+  if tabs then begin
+    add_to_proved   ();
+    add_to_forward  ();
+    add_to_backward ()
+  end;
+  if work then
+    add_to_work     ();
+  Seq.push {td=td; used_gen = used_gen} pc.terms
 
+
+let with_work = true
+let wo_work   = false
+let with_tabs = true
+let wo_tabs   = false
+let with_elim = true
+let wo_elim   = false
+
+
+let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
+  add_new_0 t used_gen with_work with_tabs wo_elim pc
 
 
 
@@ -581,11 +596,11 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   assert (i < count pc);
   assert (j < count pc);
   let td = (Seq.elem j pc.terms).td in
-  let _,_,_,simpl = Option.value td.fwddat in
+  let _,_,_,simpl,elim = Option.value td.fwddat in
   let gen_i = used_schematic i pc
   and gen_j = used_schematic j pc
   in
-  let fwd_ok = simpl || IntSet.is_empty (IntSet.inter gen_i gen_j) in
+  let fwd_ok = simpl || elim || IntSet.is_empty (IntSet.inter gen_i gen_j) in
   if is_using_forward pc
       && fwd_ok
       && not (has_stronger t pc)
@@ -594,7 +609,7 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
     in
     pc.entry.used_fwd <- IntSet.add j pc.entry.used_fwd;
     Proof_table.add_mp t i j pc.base;
-    add_new t gen pc
+    add_new_0 t gen with_work with_tabs elim pc
   end else
     ()
 
@@ -615,9 +630,12 @@ let add_specialized_forward
   else begin
     let used_gen = used_schematic i pc in
     let used_gen = IntSet.add i used_gen
+    and td = term_data i pc in
+    let _,_,gp1,_,elim = Option.value td.fwddat  (* must have forward data *)
     in
+    let elim = elim && gp1 < td.nargs in
     Proof_table.add_specialize t i args pc.base;
-    add_new t used_gen pc
+    add_new_0 t used_gen wo_work with_tabs elim pc
   end
 
 
@@ -639,7 +657,7 @@ let specialized_forward
   let td_imp    = (Seq.elem i pc.terms).td in
   assert (Option.has td_imp.fwddat);
   let nargs     = td_imp.nargs
-  and a,b,gp1,_ = Option.value td_imp.fwddat in
+  and a,b,gp1,_,_ = Option.value td_imp.fwddat in
   assert (gp1 <= nargs);
   assert (Term_sub.count sub = gp1);
   let nbenv_imp = Proof_table.nbenv_term i pc.base
@@ -761,7 +779,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
   in
   match td.fwddat with
     None -> ()
-  | Some (a,b,gp1,_) ->
+  | Some (a,b,gp1,_,_) ->
       if 0 < td.nargs then  (* the implication is schematic *)
         let sublst =
           Term_table.unify_with a td.nargs td.nbenv pc.entry.prvd
@@ -847,17 +865,20 @@ let close (pc:t): unit =
     assert (c0 <= c1);
     if c0 = c1 then ()
     else begin
-      printf "%s%3d >       %s\n"
-        (prefix pc) c0 (string_of_term (term c0 pc) pc);
+      let used_gen = (Seq.elem c0 pc.terms).used_gen in
+      let used_gen_str = intset_to_string used_gen in
+      printf "%s%3d >       %s %s\n"
+        (prefix pc) c0 (string_of_term (term c0 pc) pc) used_gen_str;
       print (c0+1) c1
     end
   in
   let rec cls (n:int): unit =
-    if n > 200 then assert false;  (* 'infinite' loop detection *)
+    if n > 30 then assert false;  (* 'infinite' loop detection *)
     if has_work pc then begin
       let cnt = count pc in
       close_step pc;
       if pc.trace then print cnt (count pc);
+      (*print cnt (count pc);*)
       cls (n+1)
     end else
       ()
@@ -886,7 +907,8 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   if not has then begin
     add_new t IntSet.empty pc
   end else
-    Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;
+    add_new_0 t IntSet.empty wo_work wo_tabs wo_elim pc;
+    (*Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;*)
   if pc.trace then
     printf "%s%3d hypo:   %s\n" (prefix pc) idx (string_of_term t pc);
   idx
