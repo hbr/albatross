@@ -18,9 +18,19 @@ let class_table (tb:t): Class_table.t = Context.class_table tb.c
 
 let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
 
-let ntvars (tb:t): int = TVars_sub.count tb.tvars
+let count_local (tb:t): int = TVars_sub.count_local tb.tvars
+
+let count (tb:t): int = TVars_sub.count tb.tvars
+
+let concept (i:int) (tb:t): type_term = TVars_sub.concept i tb.tvars
 
 let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
+
+let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
+  let ct  = class_table tb
+  and tvs = tvs tb in
+  Class_table.satisfies t1 tvs t2 tvs ct
+
 
 let string_of_type (tp:type_term) (tb:t): string =
   let ct = class_table tb in
@@ -42,7 +52,7 @@ let signature_string (tb:t): string =
 
 let substitution_string (tb:t): string =
   let sub_lst  = Array.to_list (TVars_sub.args tb.tvars)
-  and ntvs     = ntvars tb
+  and ntvs     = count tb
   and fnames   = Context.fgnames tb.c
   and ct       = Context.class_table tb.c
   in
@@ -96,53 +106,42 @@ let remove_fgs (tb:t): unit =
   tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars
 
 
-let do_sub (i:int) (t:term) (tb:t): unit =
-  (** Substitute the variable [i] by the term [t].
-   *)
-  let tvs     = TVars_sub.tvars tb.tvars in
-  let cnt     = Tvars.count tvs
-  and cnt_loc = Tvars.count_local tvs
-  and ct      = Context.class_table tb.c
-  in
-  assert (i<cnt);
-  let add_sub (i:int) (t:term): unit = TVars_sub.add_sub i t tb.tvars
-  in
-  match t with
-    Variable j when j < cnt_loc ->
-      if i=j then ()
-      else
-        let lo,hi = if j<=i then j,i else i,j in
-        add_sub lo (Variable hi)
-  | Variable j when j < cnt ->
-      if i < cnt_loc then
-        add_sub i t
-      else (* both have a concept *)
-        let lo,hi = if i<=j then i,j else j,i in
-        let cpt_lo, cpt_hi = Tvars.concept lo tvs, Tvars.concept hi tvs in
-        if Class_table.satisfies cpt_lo tvs cpt_hi tvs ct then
-          add_sub hi (Variable lo)
-        else if Class_table.satisfies cpt_hi tvs cpt_lo tvs ct then
-          add_sub lo (Variable hi)
-        else
-          raise Not_found
-  | _ ->
-      let ok =
-        i < cnt_loc ||
-        Class_table.satisfies
-          t tvs
-          (TVars_sub.concept i tb.tvars) tvs
-          ct
-      in
-      if ok then
-        add_sub i t
-      else
-        raise Not_found
-
-
-
 let has_sub (i:int) (tb:t): bool = TVars_sub.has i tb.tvars
 
 let get_sub (i:int) (tb:t): type_term = TVars_sub.get i tb.tvars
+
+
+let do_sub_var (i:int) (j:int) (tb:t): unit =
+  (** Substitute the variable [i] by the variable [j] or vice versa, neither
+      has substitutions *)
+  assert (not (has_sub i tb));
+  assert (not (has_sub j tb));
+  if i=j then ();
+  let add_sub (i:int) (j:int): unit =
+    TVars_sub.add_sub i (Variable j) tb.tvars
+  in
+  let cnt_loc = count_local tb in
+  let lo,hi = if i < j then i,j else j,i in
+  if hi < cnt_loc || lo < cnt_loc then
+    add_sub lo hi
+  else begin
+    assert (cnt_loc <= i);
+    assert (cnt_loc <= j);
+    let cpt_i, cpt_j = concept i tb, concept j tb in
+    if satisfies cpt_j cpt_i tb then
+      add_sub i j
+    else if satisfies cpt_i cpt_j tb then
+      add_sub j i
+    else
+      raise Not_found
+  end
+
+
+
+let add_sub (i:int) (t:term) (tb:t): unit =
+  assert (not (has_sub i tb));
+  TVars_sub.add_sub i t tb.tvars
+
 
 
 let unify
@@ -157,18 +156,34 @@ let unify
    *)
   let nvars = TVars_sub.count tb.tvars
   and nall  = TVars_sub.count_all tb.tvars
+  and nloc  = count_local tb
   in
   let pred_idx = nall + Class_table.predicate_index
   and func_idx = nall + Class_table.function_index
   and dum_idx  = nall + Class_table.dummy_index
   in
   let rec uni (t1:term) (t2:term) (nb:int): unit =
-    let do_sub0 (i:int) (t:type_term): unit =
+    let rec do_sub0 (i:int) (t:type_term) (nb:int): unit =
       let i,t = i-nb, Term.down nb t in
       if has_sub i tb then
         uni t (get_sub i tb) 0
       else
-        do_sub i t tb
+        match t with
+          Variable j when j < nvars ->
+            do_sub1 i j
+        | _ ->
+            if i < nloc || satisfies t (concept i tb) tb then
+              add_sub i t tb
+            else
+              raise Not_found
+    and do_sub1 (i:int) (j:int): unit =
+      assert (not (has_sub i tb));
+      if not (has_sub j tb) then
+        do_sub_var i j tb
+      else if i < nloc then
+        add_sub i (Variable j) tb
+      else
+        do_sub0 i (get_sub j tb) 0
     in
     let do_dummy
         (dum_args:type_term array)
@@ -186,9 +201,9 @@ let unify
     in
     match t1,t2 with
       Variable i, _ when nb<=i && i<nb+nvars ->
-        do_sub0 i t2
+        do_sub0 i t2 nb
     | _, Variable j when nb<=j && j<nb+nvars ->
-        do_sub0 j t1
+        do_sub0 j t1 nb
     | Variable i, Variable j ->
         assert (i<nb||nb+nvars<=i);
         assert (j<nb||nb+nvars<=j);
@@ -217,12 +232,10 @@ let unify
           raise Not_found
     | _ -> raise Not_found
   in
-  (try
+  try
     uni t1 t2 0
   with Term_capture ->
-    assert false)(*;
-  assert ((TVars_sub.sub_star t1 tb.tvars)
-            = (TVars_sub.sub_star t2 tb.tvars))*)
+    assert false
 
 
 
@@ -245,7 +258,7 @@ let unify_sign_0
 
 
 let downgrade (tp:type_term) (nargs:int) (tb:t): Sign.t =
-  let ntvs  = ntvars tb
+  let ntvs  = count tb
   and nfgs  = Context.count_formal_generics tb.c
   and sign  = Sign.make_const tp
   in
@@ -257,7 +270,7 @@ let to_dummy (sign:Sign.t) (tb:t): type_term =
   assert (Sign.has_result sign);
   let n = Sign.arity sign in
   assert (0 < n);
-  let ntvs_all = ntvars tb + Context.count_formal_generics tb.c in
+  let ntvs_all = count tb + Context.count_formal_generics tb.c in
   Class_table.to_dummy ntvs_all sign
 
 
@@ -283,7 +296,7 @@ let update_tv
       Otherwise: Do the usual unification *)
   assert (Sign.is_constant sig_req);
   assert (Sign.is_constant sig_act);
-  let ntvs_all = ntvars tb + Context.count_formal_generics tb.c in
+  let ntvs_all = count tb + Context.count_formal_generics tb.c in
   let dum_idx  = ntvs_all + Class_table.dummy_index
   and pred_idx = ntvs_all + Class_table.predicate_index
   and fun_idx  = ntvs_all + Class_table.function_index
@@ -473,7 +486,7 @@ let expect_lambda (ntvs:int) (tb:t): unit =
   else
     tb.sign <-
       try
-        let ntvs = (ntvars tb) + (Context.count_formal_generics tb.c) in
+        let ntvs = (count tb) + (Context.count_formal_generics tb.c) in
         Sign.make_const (Class_table.result_type_of_compound rt ntvs)
       with Not_found ->
         assert false (* cannot happen *)
@@ -495,7 +508,7 @@ let check_type_variables (inf:info) (tb:t): unit =
   let ntvs_ctxt = Context.count_type_variables tb.c
   and ntvs_loc  = TVars_sub.count_local tb.tvars in
   assert (ntvs_ctxt = ntvs_loc);
-  let ntvs_all = ntvars tb + Context.count_formal_generics tb.c in
+  let ntvs_all = count tb + Context.count_formal_generics tb.c in
   let dum_idx  = ntvs_all + Class_table.dummy_index
   in
   for i = 0 to Context.count_last_arguments tb.c - 1 do

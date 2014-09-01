@@ -26,8 +26,8 @@ val substitution_string: t -> string
 val concepts_string:   t -> string
     (** The concepts of the type variables as a string *)
 
-val ntvars:            t -> int
-    (** The number of type variable with and without concept. *)
+val count:            t -> int
+    (** The number of type variables with and without concept. *)
 
 val make:              type_term -> Context.t -> t
     (** [make tp c] makes a term builder for a term with the expected type
