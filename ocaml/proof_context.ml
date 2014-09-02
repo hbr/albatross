@@ -839,13 +839,34 @@ let add_consequences_expansion (i:int) (pc:t): unit =
 
 
 
+let add_consequences_reduce (i:int) (pc:t): unit =
+  (* Add the beta reduction of the term [i] in case that there is one if
+     it is not yet in the proof context [pc] to the proof context and to the
+     work items.  *)
+  let t        = term i pc
+  and used_gen = used_schematic i pc
+  in
+  try
+    let tred = Term.reduce_top t in
+    if has_stronger tred pc then
+      ()
+    else begin
+      Proof_table.add_reduce tred i pc.base;
+      add_new tred used_gen pc
+    end
+  with Not_found ->
+    ()
+
+
+
 let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
    *)
   add_consequences_premise     i pc;
   add_consequences_implication i pc;
-  add_consequences_expansion   i pc
+  add_consequences_expansion   i pc;
+  add_consequences_reduce      i pc
 
 
 
@@ -1052,9 +1073,21 @@ let add_backward_expansion (t:term) (pc:t): unit =
     if has_stronger impl pc then
       ()
     else begin
-      (*printf "add_backward_expansion t:\"%s\"  texp:\"%s\"  impl:\"%s\"\n"
-        (string_of_term t pc) (string_of_term texpand pc) (string_of_term impl pc);*)
       Proof_table.add_expand_backward t impl pc.base;
+      add_new impl IntSet.empty pc
+    end
+  with Not_found ->
+    ()
+
+
+let add_backward_reduce (t:term) (pc:t): unit =
+  try
+    let tred = Term.reduce_top t in
+    let impl = implication tred t pc in
+    if has_stronger impl pc then
+      ()
+    else begin
+      Proof_table.add_reduce_backward t impl pc.base;
       add_new impl IntSet.empty pc
     end
   with Not_found ->
@@ -1078,6 +1111,7 @@ let add_backward (t:term) (pc:t): unit =
       sublst
   in
   add_backward_expansion t pc;
+  add_backward_reduce t pc;
   let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
   (if sublst <> [] then
     add_lst sublst

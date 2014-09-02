@@ -86,6 +86,8 @@ module Term: sig
 
   val reduce: term -> term
 
+  val reduce_top: term -> term
+
   val lambda_split: term -> int * int array * term
 
   val unary: int -> term -> term
@@ -476,6 +478,13 @@ end = struct
         let tred = reduce t in
           Lam (nargs, names, tred)
 
+
+  let reduce_top (t:term): term =
+    match t with
+      Application (Lam (n,nms,t), args) ->
+        assert (n = Array.length args);
+        apply t args
+    | _ -> raise Not_found
 
 
   let lambda_split (t:term): int * int array * term =

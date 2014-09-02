@@ -10,11 +10,13 @@ type proof_term =
   | Specialize of int * term array
   | Expand     of int        (* index of term which is expanded *)
   | Expand_bwd of term       (* term which is backward expanded *)
+  | Reduce     of int        (* index of term which is reduced  *)
+  | Reduce_bwd of term       (* term which is backward reduced  *)
+  | Inherit    of int * int  (* assertion, descendant class *)
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
                 * int        (* res *)
                 * proof_term array
-  | Inherit    of int * int  (* assertion, descendant class *)
 
 type desc = {nbenv0:     int;
              term:       term;
@@ -296,12 +298,23 @@ let expand_term (t:term) (at:t): term =
   with Not_found ->
     raise Illegal_proof_term
 
+let reduce_term (t:term) (at:t): term =
+  try Term.reduce_top t
+  with Not_found -> raise Illegal_proof_term
+
 
 let term_of_expand (i:int) (at:t): term =
   expand_term (local_term i at) at
 
 let term_of_expand_bwd (t:term) (at:t): term =
   implication (expand_term t at) t at
+
+
+let term_of_reduce (i:int) (at:t): term =
+  reduce_term (local_term i at) at
+
+let term_of_reduce_bwd (t:term) (at:t): term =
+  implication (reduce_term t at) t at
 
 
 let term_of_specialize (i:int) (args:term array) (at:t): term =
@@ -380,10 +393,10 @@ let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
         Specialize (index i, args)
     | Inherit (i,cls) ->
         Inherit (index i, cls)
-    | Expand i ->
-        Expand (index i)
-    | Expand_bwd t ->
-        Expand_bwd t
+    | Expand i     -> Expand (index i)
+    | Expand_bwd t -> Expand_bwd t
+    | Reduce i     -> Reduce (index i)
+    | Reduce_bwd t -> Reduce_bwd t
     | Subproof (nargs,names,res,pt_arr) ->
         Subproof (nargs,names, index res, Array.map adapt pt_arr)
   in
@@ -432,6 +445,14 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Expand_bwd t ->
         let t = term_of_expand_bwd t at in
+        if trace then print t;
+        t
+    | Reduce i ->
+        let t = term_of_reduce i at in
+        if trace then print1 t i;
+        t
+    | Reduce_bwd t ->
+        let t = term_of_reduce_bwd t at in
         if trace then print t;
         t
     | Inherit (idx,cls) ->
@@ -558,6 +579,15 @@ let add_expand_backward (t:term) (impl:term) (at:t): unit =
   add_proved_0 impl (Expand_bwd t) at
 
 
+let add_reduce (t:term) (i:int) (at:t): unit =
+  add_proved_0 t (Reduce i) at
+
+
+let add_reduce_backward (t:term) (impl:term) (at:t): unit =
+  (* [impl = (tred => t)] *)
+  add_proved_0 impl (Reduce_bwd t) at
+
+
 let rec used_assertions (i:int) (at:t) (lst:int list): int list =
   (** The assertions of the local context which are needed to prove
       assertion [i] in [at] cumulated to list [lst].
@@ -574,8 +604,10 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
       Axiom _
     | Assumption _
     | Expand_bwd _       -> lst
+    | Reduce_bwd _       -> lst
     | Specialize (j,_)   -> used_assertions j at lst
-    | Expand i           -> used_assertions i at lst
+    | Expand i
+    | Reduce i           -> used_assertions i at lst
     | Subproof (_,_,_,_) -> lst
     | Detached (i,j) ->
         let used_i = used_assertions i at lst in
