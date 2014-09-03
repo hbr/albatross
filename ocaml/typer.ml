@@ -250,6 +250,11 @@ let analyze_expression
     and do_leaf (lst: (int*Tvars.t*Sign.t) list): unit =
       process_leaf lst c info accs
     in
+    let arg_list (e:expression): expression list =
+      match e with
+        Explist lst -> lst
+      | _ -> [e]
+    in
     match e with
       Expproof (_,_,_)
     | Expquantified (_,_,Expproof (_,_,_)) ->
@@ -261,18 +266,19 @@ let analyze_expression
     | Expop op            -> do_leaf (feat (FNoperator op))
     | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
     | Unexp  (op,e)       -> application (Expop op) [|e|] accs
+    | Funapp (Expdot(tgt,f),args) ->
+        let arg_lst = tgt :: (arg_list args) in
+        let args = Array.of_list arg_lst in
+        application f args accs
     | Funapp (f,args)     ->
-        let arg_array (e:expression): expression array =
-          match e with
-            Explist lst -> Array.of_list lst
-          | _ -> [|e|]
-        in
-        application f (arg_array args) accs
+        application f (Array.of_list (arg_list args)) accs
     | Expparen e          -> analyze e accs
     | Expquantified (q,entlst,exp) ->
         quantified q entlst exp accs
     | Exppred (entlst,e) ->
         lambda entlst e accs
+    | Expdot (tgt,f) ->
+        application f [|tgt|] accs
     | _ -> not_yet_implemented ie.i
           ("(others)Typing of expression " ^
            (string_of_expression e))
