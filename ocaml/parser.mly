@@ -1,5 +1,7 @@
 %{
 open Support
+open Printf
+open Container
 
 
 
@@ -200,7 +202,9 @@ let expression_from_entities entlist =
 /*  file structure  */
 /* ------------------------------------------------------------------------- */
 
-file: use_block decls {$1, List.rev $2}
+file:
+  use_block optsemi decls {$1, List.rev $3}
+| decls {[], List.rev $1 }
 
 decls:
     { [] }
@@ -214,8 +218,7 @@ decl:
 
 
 use_block:
-  { [] }
-| KWuse module_list KWend { List.rev $2 }
+    KWuse module_list KWend { List.rev $2 }
 
 module_list:
     one_module  { [$1] }
@@ -410,13 +413,50 @@ dotted_id_list:
 |   dotted_id_list DOT LIDENTIFIER { $3::$1 }
 
 
+
+
 type_nt:
-  simple_type  { $1 }
-| current_type { $1 }
-| arrow_type   { $1 }
-| tuple_type   { $1 }
-| qmark_type   { $1 }
-| LPAREN type_nt RPAREN { Paren_type $2 }
+    elem_type { $1 }
+|   arrow_type    { $1 }
+
+
+
+elem_type:
+    simple_type  { $1 }
+|   current_type { $1 }
+|   tuple_type   { $1 }
+|   qmark_type   { $1 }
+|   LPAREN type_nt RPAREN { Paren_type $2 }
+
+
+
+simple_type:
+    UIDENTIFIER actual_generics {
+  Normal_type ([],$1,$2)
+}
+|   LPAREN path UIDENTIFIER actual_generics RPAREN {
+  Normal_type (List.rev $2,$3,$4)
+}
+
+
+actual_generics:
+    %prec LOWEST_PREC {[]}
+|   LBRACKET type_list RBRACKET { $2 }
+
+
+
+current_type: KWCURRENT actual_generics { Current_type $2 }
+
+
+arrow_type: elem_type ARROW type_nt {
+  Arrow_type ($1,$3)
+}
+
+
+qmark_type: elem_type QMARK   { QMark_type $1 }
+
+
+tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
 
 
 type_list_min2:
@@ -430,35 +470,6 @@ type_list:
 
 
 
-actual_generics:
-    %prec LOWEST_PREC {[]}
-|   LBRACKET type_list RBRACKET { $2 }
-
-
-
-
-simple_type:
-    UIDENTIFIER actual_generics {
-  Normal_type ([],$1,$2)
-}
-|   path UIDENTIFIER actual_generics {
-  Normal_type (List.rev $1,$2,$3)
-}
-
-
-
-current_type: KWCURRENT actual_generics { Current_type $2 }
-
-
-arrow_type: type_nt ARROW type_nt {
-  Arrow_type ($1,$3)
-}
-
-
-tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
-
-
-qmark_type: type_nt QMARK   { QMark_type $1 }
 
 
 
@@ -467,40 +478,34 @@ qmark_type: type_nt QMARK   { QMark_type $1 }
 /* ------------------------------------------------------------------------- */
 
 named_feature:
-    nameopconst formal_arguments return_type_opt optsemi feature_body_opt {
-  Named_feature ((withinfo (rhs_info 1) $1),
-                 (withinfo (rhs_info 2) $2),
-                 $3,
-                 $5)
+    nameopconst_info
+    formal_arguments_info
+    return_type_opt
+    optsemi
+    feature_body_opt {
+  Named_feature ($1, $2, $3, $5, None)
 }
-|
-    name_rtype optsemi feature_body_opt {
-  let name,rt = $1
-  in
-  Named_feature (name,
-                 (noinfo []),
-                 rt,
-                 $3)
+|   nameopconst_info
+    return_type
+    optsemi
+    feature_body_opt {
+  Named_feature ($1, noinfo [], Some $2, $4, None)
 }
-
-name_rtype:
-    LIDENTIFIER {
-  (withinfo (rhs_info 1) (FNname $1)),
-  None
+|   nameopconst_info
+    formal_arguments_info
+    return_type
+    ARROW
+    info_expr {
+  Named_feature ($1, $2, Some $3, None, Some $5)
 }
-|   LIDENTIFIER  COLON type_nt {
-  (withinfo (rhs_info 1) (FNname $1)),
-  (Some (withinfo (rhs_info 3) ($3,false,false)))
-}
-|   LIDENTIFIER  EXCLAM COLON type_nt {
-  (withinfo (rhs_info 1) (FNname $1)),
-  (Some (withinfo (rhs_info 4) ($4,true,false)))
-}
-|   featopconst return_type_opt {
-  (withinfo (rhs_info 1) $1),
-  $2
+|   nameopconst_info
+    return_type
+    EQ
+    info_expr {
+  Named_feature ($1, noinfo [], Some $2, None, Some $4)
 }
 
+nameopconst_info: nameopconst { withinfo (rhs_info 1) $1 }
 
 nameopconst:
     LIDENTIFIER        { FNname $1 }
@@ -508,16 +513,16 @@ nameopconst:
 
 
 featopconst:
-    operator           { FNoperator $1}
-|   KWtrue             { FNtrue }
-|   KWfalse            { FNfalse }
-|   NUMBER             { FNnumber $1 }
+    LPAREN operator RPAREN { FNoperator $2}
+|   KWtrue                 { FNtrue }
+|   KWfalse                { FNfalse }
+|   NUMBER                 { FNnumber $1 }
 
 
 return_type:
-    COLON type_nt         { withinfo (rhs_info 2) ($2,false,false) }
-|   COLON KWghost type_nt { withinfo (rhs_info 3) ($3,false,true)  }
-|   EXCLAM COLON type_nt  { withinfo (rhs_info 3) ($3,true,false)  }
+    COLON elem_type         { withinfo (rhs_info 2) ($2,false,false) }
+|   COLON KWghost elem_type { withinfo (rhs_info 3) ($3,false,true)  }
+|   EXCLAM COLON elem_type  { withinfo (rhs_info 3) ($3,true,false)  }
 
 
 return_type_opt:
@@ -614,6 +619,8 @@ identifier_list:
 
 
 
+formal_arguments_info: formal_arguments { withinfo (rhs_info 1) $1 }
+
 formal_arguments_opt:
     { [] }
 |   formal_arguments { $1 }
@@ -643,7 +650,7 @@ compound_list:
 /*  expressions  */
 /* ------------------------------------------------------------------------- */
 
-info_expr: expr { withinfo (rhs_info 1) $1 }
+info_expr: expr %prec LOWEST_PREC { withinfo (rhs_info 1) $1 }
 
 
 
@@ -764,7 +771,7 @@ operator:
 |   NOTIN     { Notinop }
 |   BAR       { Barop }
 |   DBAR      { DBarop }
-|   ARROW     { Arrowop }
+/*|   ARROW     { Arrowop }*/
 |   DARROW    { DArrowop }
 |   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
@@ -782,7 +789,7 @@ operator:
 
 optsemi:
     %prec LOWEST_PREC {()}
-|   optsemi SEMICOL {()}
+|   SEMICOL {()}
 
 
 uidentifier_list:

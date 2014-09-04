@@ -122,10 +122,46 @@ let put_feature
     (entlst: entities list withinfo)
     (rt: return_type)
     (bdy: feature_body option)
+    (exp: info_expression option)
     (context: Context.t): unit =
   Context.push entlst rt context;
   let impstat,term_opt =
-    match bdy with
+    match bdy, exp with
+      None, None ->
+        Feature_table.No_implementation,
+        None
+    | None, Some ie ->
+        let term = Typer.result_term ie context in
+        Feature_table.No_implementation,
+        Some term
+    | Some bdy, None ->
+        begin
+          match bdy with
+            None, Some Impbuiltin, None ->
+              Feature_table.Builtin,
+              None
+          | None, None, Some [ens] ->
+              begin
+                match ens.v with
+                  Binexp (Eqop, ExpResult,def) ->
+                    let term =
+                      Typer.result_term
+                        (withinfo ens.i def)
+                        context
+                    in
+                    Feature_table.No_implementation,
+                    Some term
+                | _ -> not_yet_implemented ens.i
+                      "functions not defined with \"Result = ...\""
+              end
+          | None, Some Impdeferred, None ->
+              Feature_table.Deferred,
+              None
+          | _ -> not_yet_implemented fn.i
+                "functions with implementation/preconditions"
+        end
+    | _ -> assert false (* cannot happen *)
+    (*match bdy with
       None ->
         Feature_table.No_implementation,
         None
@@ -151,10 +187,14 @@ let put_feature
         None
 
      | _ -> not_yet_implemented fn.i
-           "functions with implementation/preconditions"
+           "functions with implementation/preconditions"*)
   in
   Context.put_global_function fn impstat term_opt context;
   Context.pop context
+
+
+
+
 
 
 let analyze(ast: declaration list) (pc:Proof_context.t): unit =
@@ -164,8 +204,8 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
       match d with
         Class_declaration (hm, cname, fgens, inherits) ->
           put_class hm cname fgens inherits pc
-      | Named_feature (fn, entlst, rt, body) ->
-          put_feature fn entlst rt body context;
+      | Named_feature (fn, entlst, rt, body, expr) ->
+          put_feature fn entlst rt body expr context
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body pc
       | Formal_generic (name, concept) ->

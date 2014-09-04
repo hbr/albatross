@@ -325,7 +325,7 @@ let rec string_of_type (t:type_t) =
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
 
 
-type return_type = (type_t*bool*bool) withinfo option
+type return_type = (type_t*bool*bool) withinfo option (* tp,proc,ghost *)
 
 
 (* Formal arguments *)
@@ -746,6 +746,7 @@ type declaration =
         * entities list withinfo
         * return_type
         * feature_body option
+        * info_expression option
   | Formal_generic of int withinfo * type_t withinfo
   | Class_declaration of
       header_mark withinfo
