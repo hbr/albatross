@@ -379,12 +379,21 @@ let find_funcs
     (Term_table.terms !tab)
 
 
-let expand_focus_term (t:term) (nb:int) (ft:t): term =
+exception Expand_found
+
+let expand_focus_term_new (t:term) (nb:int) (ft:t): term =
   (* Expand the variable in the focus of [t] within an environment with [nb] bound
      variables (i.e. a variable [i] with [nb<=i] refers to the global feature
      [i-nb])
 
-     A variable is in the focus of [t] if it is the toplevel variable of [t]
+     A variable is in the focus of [t]:
+
+     - It is the toplevel variable of [t]
+
+     - The toplevel is an application and it is the variable of the function term
+
+     - The toplevel is an application and the function term is not an expandable
+       variable and it is the first argument which allows a focussed expansion
 
      Note: The function doesn't do any beta reductions in the term [t] which
      would have been possible before the expansion. *)
@@ -397,7 +406,59 @@ let expand_focus_term (t:term) (nb:int) (ft:t): term =
         Application (f,args)
   and def (i:int) = definition (i-nb) nb ft
   in
-  let rec expand (t:term): term =
+  let rec expand (t:term) (level:int) (is_arg:bool): term =
+    if level > 2 then raise Not_found;
+    match t with
+      Variable i when nb <= i -> def i
+    | Application (f,args) ->
+        begin
+          try
+            let fexp = expand f (level+1) is_arg in
+            apply fexp args
+          with Not_found ->
+            let args = Array.copy args in
+            if is_arg then raise Not_found
+            else
+              try
+                Array.iteri
+                  (fun i arg ->
+                    try
+                      let arg_exp = expand arg level true in
+                      args.(i) <- arg_exp;
+                      raise Expand_found
+                    with Not_found -> ())
+                  args;
+                raise Not_found
+              with Expand_found ->
+                Application (f,args)
+        end
+    | _ ->
+        raise Not_found
+  in
+  expand t 0 false
+
+
+
+let expand_focus_term_old (t:term) (nb:int) (ft:t): term =
+  (* Expand the variable in the focus of [t] within an environment with [nb] bound
+     variables (i.e. a variable [i] with [nb<=i] refers to the global feature
+     [i-nb])
+
+     A variable is in the focus of [t] if it is the toplevel variable of [t] or
+     it is the function term of [t]
+
+     Note: The function doesn't do any beta reductions in the term [t] which
+     would have been possible before the expansion. *)
+  let apply (f:term) (args:term array): term =
+    match f with
+      Lam (n,_,t) ->
+        assert (n = Array.length args);
+        Term.apply t args
+    | _ ->
+        Application (f,args)
+  and def (i:int) = definition (i-nb) nb ft
+  in
+  let expand (t:term): term =
     match t with
       Variable i when nb <= i -> def i
     | Application (Variable i ,args) when nb <= i->
@@ -410,6 +471,9 @@ let expand_focus_term (t:term) (nb:int) (ft:t): term =
   in
   expand t
 
+
+let expand_focus_term (t:term) (nb:int) (ft:t): term =
+  expand_focus_term_old t nb ft
 
 
 let expand_term (t:term) (nbound:int) (ft:t): term =
