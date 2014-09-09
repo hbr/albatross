@@ -161,33 +161,6 @@ let put_feature
                 "functions with implementation/preconditions"
         end
     | _ -> assert false (* cannot happen *)
-    (*match bdy with
-      None ->
-        Feature_table.No_implementation,
-        None
-    | Some (None, Some Impbuiltin, None) ->
-        Feature_table.Builtin,
-        None
-    | Some (None, None, Some [ens]) ->
-        begin
-          match ens.v with
-            Binexp (Eqop, ExpResult,def) ->
-              let term =
-                Typer.result_term
-                  (withinfo ens.i def)
-                  context
-              in
-              Feature_table.No_implementation,
-              Some term
-          | _ -> not_yet_implemented ens.i
-                "functions not defined with \"Result = ...\""
-        end
-    | Some (None, Some Impdeferred, None) ->
-        Feature_table.Deferred,
-        None
-
-     | _ -> not_yet_implemented fn.i
-           "functions with implementation/preconditions"*)
   in
   Context.put_global_function fn impstat term_opt context;
   Context.pop context
