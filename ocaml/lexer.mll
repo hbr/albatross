@@ -14,6 +14,9 @@ let is_end_token   (tok:extended_token): bool = snd (snd tok)
 let cached_tok: (extended_token * Lexing.position) option ref
     = ref None
 
+let reset (): unit =
+  last_is_endtok := false;
+  cached_tok     := None
 
 
 let print_illegal (pos:Lexing.position): unit =

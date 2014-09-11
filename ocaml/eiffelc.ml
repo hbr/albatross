@@ -1,6 +1,7 @@
 open Container
 open Support
 open Term
+open Printf
 
 let usage_string = "\
 Usage:
@@ -67,14 +68,38 @@ let parse_arguments (): unit =
     raise (Support.Eiffel_error ("Need a source file\n" ^ usage_string))
 
 
-let parse_file (fn:string): use_block * declaration list =
+
+let parse_use_block (fn:string): use_block =
+  Lexer.reset ();
   Support.Parse_info.set_file_name fn;
-  let lexbuf = Lexing.from_channel (open_in fn)
+  let ch_in = open_in fn in
+  let lexbuf = Lexing.from_channel ch_in
   in
   lexbuf.Lexing.lex_curr_p <-
     {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = fn};
-  Parser.file Lexer.token lexbuf
+  let res = Parser.use_block_opt Lexer.token lexbuf in
+  close_in ch_in;
+  res
 
+
+
+let parse_file (fn:string): use_block * declaration list =
+  Lexer.reset ();
+  Support.Parse_info.set_file_name fn;
+  let ch_in = open_in fn in
+  let lexbuf = Lexing.from_channel ch_in
+  in
+  lexbuf.Lexing.lex_curr_p <-
+    {lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = fn};
+  let res = Parser.file Lexer.token lexbuf in
+  close_in ch_in;
+  res
+
+
+let use_block (fn:string): unit =
+  let lst = parse_use_block fn in
+  printf "parse use_block: %s\n" fn;
+  List.iter (fun nme -> printf "\t%s\n" (ST.string nme.v)) lst
 
 
 let put_class
@@ -237,9 +262,7 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
   Printf.printf "Compiling file \"%s\"\n" f.name;
   try
     let use_blk,ast  = parse_file f.name in
-    (*Support.Parse_info.set_use_interface ();*)
     process_use use_blk f pc;
-    (*Support.Parse_info.set_module ();*)
     Support.Parse_info.set_file_name f.name;
     analyze ast pc;
     Statistics.write ();

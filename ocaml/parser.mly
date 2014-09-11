@@ -191,8 +191,9 @@ let expression_from_entities entlist =
 /* 90 */ %nonassoc UMINUS
 /*100 */ %nonassoc HIGHEST_PREC        KWdeferred
 
-%start file
+%start file use_block_opt
 %type <Support.module_declaration> file
+%type <int Support.withinfo list> use_block_opt
 
 
 
@@ -215,6 +216,12 @@ decl:
 |   named_feature     { $1 }
 |   formal_generic    { $1 }
 |   ass_feat          { $1 }
+
+
+use_block_opt:
+    { [] }
+| decl { [] }
+| use_block { $1 }
 
 
 use_block:
