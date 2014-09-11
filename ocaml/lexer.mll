@@ -16,8 +16,6 @@ let cached_tok: (extended_token * Lexing.position) option ref
 
 
 
-let comment_level: int ref = ref 0
-
 let print_illegal (pos:Lexing.position): unit =
   Support.Parse_info.print_error pos "Illegal token"
   (*print_error pos "Illegal token"*)
@@ -150,7 +148,7 @@ rule next_token = parse
 
 | "-- " [^'\n']*  { next_token lexbuf }
 
-| "{:"            { comment_level:= !comment_level+1; comment lexbuf }
+| "{:"            { comment 0 lexbuf }
 
 | '\n'            { Lexing.new_line lexbuf; Parser.NEWLINE, (false,false) }
 
@@ -240,22 +238,20 @@ rule next_token = parse
   raise (Sys_error "error during lexical analyis")
 }
 
-and comment = parse
+and comment level = parse
 
-  ':'           { comment lexbuf }
+  ':'           { comment level lexbuf }
 
-| '{'           { comment lexbuf }
+| '{'           { comment level lexbuf }
 
-| [^':' '{']+   { comment lexbuf }
+| [^':' '{']+   { comment level lexbuf }
 
-| "{:"          { comment_level := !comment_level+1;
-                  comment lexbuf}
+| "{:"          { comment (level+1) lexbuf}
 
-| ":}"          { comment_level := !comment_level-1;
-                  if !comment_level = 0 then
+| ":}"          { if level = 0 then
                     next_token lexbuf
                   else
-                    comment lexbuf}
+                    comment (level-1) lexbuf}
 
 
 (* Trailer *)
