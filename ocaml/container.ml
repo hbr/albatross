@@ -143,6 +143,27 @@ end
 
 
 
+module Mystring: sig
+  val split: string -> char -> string list
+end = struct
+  let split (str:string) (sep:char): string list =
+    let start    = ref 0
+    and lst      = ref []
+    and len      = String.length str
+    in
+    while !start < len do
+      try
+        let nxt = String.index_from str !start sep in
+      if !start < nxt then
+        lst := (String.sub str !start (nxt - !start)) :: !lst;
+        start := nxt + 1
+      with Not_found ->
+        lst := (String.sub str !start (len - !start)) :: !lst;
+        start := len
+    done;
+    List.rev !lst
+end
+
 
 
 module Seq: sig
