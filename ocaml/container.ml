@@ -75,6 +75,18 @@ let intset_to_string (set:IntSet.t): string =
 
 
 
+module StringSet = Set.Make(struct
+  let compare = Pervasives.compare
+  type t = string
+end)
+
+module StringMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = string
+end)
+
+
+
 module Mylist: sig
 
   val is_empty:     'a list -> bool
