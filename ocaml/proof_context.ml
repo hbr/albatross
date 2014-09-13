@@ -680,7 +680,7 @@ let specialized_forward
     else
       b
   in
-  (Term.reduce a), (Term.reduce b), args, nargs
+  a, b, args, nargs
 
 
 
@@ -756,7 +756,6 @@ let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
   let n,nms,t = split_all_quantified t pc          in
   assert (n = Array.length args);
   let t       = Term.apply t args                  in
-  let t       = Term.reduce t                      in
   if has t pc then (* [t] is a complete specialization, therefore
                       cannot be schematic *)
     ()

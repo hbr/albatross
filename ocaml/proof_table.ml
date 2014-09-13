@@ -329,30 +329,27 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
   assert (nargs <= n);
   let tsub = Term.part_sub t0 n args 0
   in
-  let res =
-    if nargs < n then
-      let imp_id0 = (imp_id at)           in
-      let imp_id1 = imp_id0 + (n-nargs)   in
-      try
-        let a,b = Term.binary_split tsub imp_id1 in
-        Term.binary
-          imp_id0
-          (Term.down (n-nargs) a)
-          (Term.quantified
-             (all_id at)
-             (n-nargs)
-             (Array.sub nms nargs (n-nargs))
-             b)
-      with Term_capture ->
-        printf "term capture\n";
+  if nargs < n then
+    let imp_id0 = (imp_id at)           in
+    let imp_id1 = imp_id0 + (n-nargs)   in
+    try
+      let a,b = Term.binary_split tsub imp_id1 in
+      Term.binary
+        imp_id0
+        (Term.down (n-nargs) a)
+        (Term.quantified
+           (all_id at)
+           (n-nargs)
+           (Array.sub nms nargs (n-nargs))
+           b)
+    with Term_capture ->
+      printf "term capture\n";
+      raise Illegal_proof_term
+    | Not_found ->
+        printf "not found\n";
         raise Illegal_proof_term
-      | Not_found ->
-          printf "not found\n";
-          raise Illegal_proof_term
-    else
-      tsub
-  in
-  Term.reduce res
+  else
+    tsub
 
 
 
@@ -445,7 +442,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Expand_bwd t ->
         let t = term_of_expand_bwd t at in
-        if trace then print t;
+        if trace then print0 t;
         t
     | Reduce i ->
         let t = term_of_reduce i at in
@@ -453,7 +450,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Reduce_bwd t ->
         let t = term_of_reduce_bwd t at in
-        if trace then print t;
+        if trace then print0 t;
         t
     | Inherit (idx,cls) ->
         let t =  variant idx cls at in

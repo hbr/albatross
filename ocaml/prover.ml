@@ -26,7 +26,6 @@ type entry = {mutable goal: term;
 
 type t = {pc: Proof_context.t;
           mutable entry: entry;
-          mutable beta:  bool;  (* goal already beta reduced? *)
           mutable stack: entry list;
           mutable depth: int;
           mutable trace_ctxt: bool;
@@ -44,7 +43,6 @@ let start (t:term) (pc:Proof_context.t): t =
                used_bwd=IntSet.empty} in
   {pc     = pc;
    entry  = entry;
-   beta   = false;
    stack  = [];
    depth  = 0;
    trace_ctxt = true;
@@ -196,12 +194,7 @@ let split_all_quantified (p:t): int * int array * term =
 
 
 let add_backward (p:t): unit =
-  Proof_context.add_backward p.entry.goal p.pc;
-  if not p.beta then begin
-    p.beta <- true;
-    p.entry.goal <- Term.reduce p.entry.goal;
-    Proof_context.add_backward p.entry.goal p.pc
-  end
+  Proof_context.add_backward p.entry.goal p.pc
 
 
 let has_duplicate_goal (p:t): bool =
