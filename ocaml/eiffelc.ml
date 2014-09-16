@@ -263,9 +263,7 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
   try
     let use_blk,ast  = parse_file f.name in
     process_use use_blk f pc;
-    Support.Parse_info.set_file_name f.name;
     analyze ast pc;
-    Statistics.write ();
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in
     raise (Support.Error_fileinfo (fn,inf,str))

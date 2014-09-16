@@ -69,60 +69,6 @@ end = struct
 end
 
 
-(*
------------------------------------------------------------------------------
-   Statistics
------------------------------------------------------------------------------
-*)
-
-module Statistics: sig
-  val n_goals:       unit -> int
-  val max_goals:     unit -> int
-  val average_goals: unit -> int
-  val n_proofs:      unit -> int
-
-  val proof_done:    int -> int -> unit
-
-  val write: unit -> unit
-end = struct
-  let n       = ref 0
-  let nf      = ref 0
-  let max     = ref 0
-  let maxf    = ref 0
-  let np      = ref 0
-
-  let n_goals ()        = !n
-  let max_goals ()      = !max
-  let n_proofs ()       = !np
-  let average_goals ()  = if !np<>0 then !n  / !np else 1
-  let average_failed () = if !np<>0 then !nf / !np else 1
-
-  let proof_done (i:int) (ifailed:int): unit =
-    assert (0 < i);
-    n  := !n  + i;
-    nf := !nf + ifailed;
-    np := !np + 1;
-    begin
-      if !max  < i       then max  := i else ();
-      if !maxf < ifailed then maxf := ifailed else ()
-    end
-
-  let write (): unit =
-    if Options.is_statistics () then
-      Printf.printf "\
-Statistics
-    proofs %4d
-    goals (failed)
-        per proof  max %d(%d), avg %d(%d)
-        total %d(%d)
-"
-        !np
-        !max  !maxf (average_goals ()) (average_failed ())
-        !n !nf
-    else
-      ()
-
-end
 
 
 (*
