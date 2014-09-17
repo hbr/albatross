@@ -14,16 +14,16 @@ type formal = int * type_term
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
-                         mutable ancestors: type_term array IntMap.t}
-
-type descriptor      = { mutable mdl:  int;
-                         name: int;
                          mutable fmap:  Term_table.t ref Feature_map.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
                          mutable descendants:  IntSet.t;
+                         mutable ancestors: type_term array IntMap.t}
+
+type descriptor      = { mutable mdl:  int;
+                         name: int;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -115,7 +115,7 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
 
 let descendants (i:int) (ct:t): IntSet.t =
   assert (i < count ct);
-  (descriptor i ct).descendants
+  (base_descriptor i ct).descendants
 
 let class_type (i:int) (ct:t): type_term * Tvars.t =
   assert (i < count ct);
@@ -472,8 +472,14 @@ let export
       let fgnames,concepts = Myarray.split fgs in
       let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
       let tvs = Tvars.make_fgs fgnames concepts in
-      Some { hmark=hm2;
+      Some { hmark     = hm2;
              tvs       = tvs;
+             fmap      = Feature_map.empty;
+             def_features = [];
+             eff_features = [];
+             def_asserts  = [];
+             eff_asserts  = [];
+             descendants  = IntSet.empty;
              ancestors =
              IntMap.singleton idx (Array.init nfgs (fun i -> Variable i))}
   done
@@ -514,9 +520,9 @@ let find_features
     : (int*Term_sub.t) list =
   assert (cls < count ct);
   let fn,tp,ntvs = f in
-  let desc = descriptor cls ct in
+  let bdesc = base_descriptor cls ct in
   try
-    let tab = Feature_map.find fn desc.fmap in
+    let tab = Feature_map.find fn bdesc.fmap in
     Term_table.unify_with tp ntvs 0 !tab
   with Not_found ->
     []
@@ -530,20 +536,20 @@ let add_feature
     : unit =
   assert (cidx < count ct);
   let fidx,fn,tp,nfgs = f
-  and desc = descriptor cidx ct in
+  and bdesc = base_descriptor cidx ct in
   let tab =
-    try Feature_map.find fn desc.fmap
+    try Feature_map.find fn bdesc.fmap
     with Not_found ->
       let tab = ref Term_table.empty in
-      desc.fmap <- Feature_map.add fn tab desc.fmap;
+      bdesc.fmap <- Feature_map.add fn tab bdesc.fmap;
       tab
   in
-  assert (Feature_map.mem fn desc.fmap);
+  assert (Feature_map.mem fn bdesc.fmap);
   tab := Term_table.add tp nfgs 0 fidx !tab;
   (if is_deferred then
-    desc.def_features <- fidx :: desc.def_features
+    bdesc.def_features <- fidx :: bdesc.def_features
   else
-    desc.eff_features <- fidx :: desc.eff_features);
+    bdesc.eff_features <- fidx :: bdesc.eff_features);
   assert begin
     let lst = find_features (fn,tp,nfgs) cidx ct in
     lst <> []
@@ -556,32 +562,32 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   (** Add the assertion [aidx] to the class [cidx] as deferred or effecitive
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
-  let desc = Seq.elem cidx ct.seq in
+  let bdesc = base_descriptor cidx ct in
   if is_deferred then
-    desc.def_asserts <- aidx :: desc.def_asserts
+    bdesc.def_asserts <- aidx :: bdesc.def_asserts
   else
-    desc.eff_asserts <- aidx :: desc.eff_asserts
+    bdesc.eff_asserts <- aidx :: bdesc.eff_asserts
 
 
 
 let deferred_features (cidx:int) (ct:t): int list =
   assert (cidx < count ct);
-  (Seq.elem cidx ct.seq).def_features
+  (base_descriptor cidx ct).def_features
 
 
 let effective_features (cidx:int) (ct:t): int list =
   assert (cidx < count ct);
-  (Seq.elem cidx ct.seq).eff_features
+  (base_descriptor cidx ct).eff_features
 
 
 let deferred_assertions (cidx:int) (ct:t): int list =
   assert (cidx < count ct);
-  (Seq.elem cidx ct.seq).def_asserts
+  (base_descriptor cidx ct).def_asserts
 
 
 let effective_assertions (cidx:int) (ct:t): int list =
   assert (cidx < count ct);
-  (Seq.elem cidx ct.seq).eff_asserts
+  (base_descriptor cidx ct).eff_asserts
 
 
 let add
@@ -599,16 +605,19 @@ let add
   let anc  = IntMap.singleton idx args in
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
-  let bdesc = {hmark=hm.v; tvs=tvs; ancestors=anc} in
+  let bdesc = {
+    hmark=hm.v;
+    tvs=tvs;
+    fmap = Feature_map.empty;
+    def_features = [];
+    eff_features = [];
+    def_asserts  = [];
+    eff_asserts  = [];
+    descendants  = IntSet.empty;
+    ancestors=anc} in
   Seq.push
     {mdl  = current_module ct;
      name = cn.v;
-     fmap = Feature_map.empty;
-     def_features = [];
-     eff_features = [];
-     def_asserts  = [];
-     eff_asserts  = [];
-     descendants  = IntSet.empty;
      priv=bdesc;
      publ= if is_public ct then Some bdesc else None}
     ct.seq;
@@ -663,7 +672,7 @@ let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
        (Module_table.name desc.mdl ct.mt) ^
        "\" of the owner class " ^
        (class_name owner ct))
-  else if not (IntSet.is_empty desc.descendants) then
+  else if not (IntSet.is_empty bdesc.descendants) then
     error_info info
       ("Owner class " ^ (class_name owner ct) ^" has already descendants")
   else if nanchors <> 1 then
@@ -907,11 +916,11 @@ let do_inherit
   let cls_bdesc = base_descriptor cls_idx ct in
   List.iter
     (fun (anc_idx,anc_args) ->
-      let anc_desc = descriptor anc_idx ct in
+      let anc_bdesc = base_descriptor anc_idx ct in
       cls_bdesc.ancestors <-
         IntMap.add anc_idx anc_args cls_bdesc.ancestors;
-      assert (not (IntSet.mem cls_idx anc_desc.descendants));
-      anc_desc.descendants <- IntSet.add cls_idx anc_desc.descendants)
+      assert (not (IntSet.mem cls_idx anc_bdesc.descendants));
+      anc_bdesc.descendants <- IntSet.add cls_idx anc_bdesc.descendants)
     anc_lst
 
 
@@ -999,16 +1008,19 @@ let add_base_class
   let anc  = IntMap.singleton idx args in
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
-  let bdesc = {hmark=hm; tvs=tvs; ancestors=anc} in
+  let bdesc = {
+    hmark=hm;
+    tvs=tvs;
+    fmap = Feature_map.empty;
+    def_features = [];
+    eff_features = [];
+    def_asserts  = [];
+    eff_asserts  = [];
+    descendants  = IntSet.empty;
+    ancestors=anc} in
   Seq.push
     {mdl=(-1);
      name = nme;
-     fmap = Feature_map.empty;
-     def_features = [];
-     eff_features = [];
-     def_asserts  = [];
-     eff_asserts  = [];
-     descendants  = IntSet.empty;
      priv=bdesc;
      publ= Some bdesc}
     ct.seq;
