@@ -61,16 +61,18 @@ val module_name: int -> t -> string
 val used_modules: int -> t -> IntSet.t
   (** [used_modules mdl ft] returns the used modules of module [mdl] *)
 
-val add_module: int -> int list -> int -> IntSet.t -> t -> unit
-    (** [add_module name lib mode used c] adds the module [lib.name] to the
-        module table, put it into the mode [mode] and set the used modules to
-        [used] *)
+val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_current_module: int -> IntSet.t -> t -> unit
+val set_interface_check: IntSet.t -> t -> unit
 
 val is_private: t -> bool
    (** Are we within the implementation of a module? *)
 
 val is_public:  t -> bool
-   (** Are we either in checking or using an interface? *)
+   (** Are we either using or  checking an interface? *)
+
+val is_interface_check:  t -> bool
+   (** Are we checking an interface? *)
 
 val is_interface_use:  t -> bool
    (** Are we using an interface? *)

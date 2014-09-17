@@ -50,7 +50,9 @@ let empty (): t =
 let class_table (ft:t):  Class_table.t   = ft.ct
 
 let is_private (ft:t): bool = Class_table.is_private ft.ct
-let is_public  (ft:t): bool = Class_table.is_public ft.ct
+let is_public  (ft:t): bool = Class_table.is_public  ft.ct
+let is_interface_check  (ft:t): bool = Class_table.is_interface_check ft.ct
+let is_interface_use (ft:t): bool = Class_table.is_interface_use ft.ct
 
 
 let count (ft:t): int =
@@ -994,9 +996,13 @@ let add_base_features (mdl_name:int) (ft:t): unit =
     ()
 
 
-let add_module
-    (name:int) (lib: int list) (mode:int) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_module name lib mode used ft.ct;
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_used_module name lib used ft.ct;
   add_base_features name ft
 
-let is_interface_use (ft:t): bool = Class_table.is_interface_use ft.ct
+let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_current_module name used ft.ct;
+  add_base_features name ft
+
+let set_interface_check (used:IntSet.t) (ft:t): unit =
+  Class_table.set_interface_check used ft.ct

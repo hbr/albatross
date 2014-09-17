@@ -12,13 +12,10 @@ end)
 
 type formal = int * type_term
 
-type content = {mutable used: IntSet.t;
-                mutable clss: IntSet.t}
-
 type desc = { name: int;
               lib:  int list;
-              priv: content;
-              pub:  content
+              mutable priv: IntSet.t;
+              mutable pub:  IntSet.t
             }
 
 
@@ -55,7 +52,11 @@ let current (mt:t): int =
 let is_public  (mt:t): bool =
   has_current mt && mt.mode > 0
 
-let is_private (mt:t): bool = not (is_public mt)
+let is_private (mt:t): bool =
+  has_current mt && mt.mode = 0
+
+let is_interface_check (mt:t): bool =
+  has_current mt && mt.mode = 1
 
 let is_interface_use (mt:t): bool =
   has_current mt && mt.mode = 2
@@ -63,45 +64,12 @@ let is_interface_use (mt:t): bool =
 let used (mdl:int) (mt:t): IntSet.t =
   (* The publicly used modules of the module [mdl]. *)
   assert (mdl < count mt);
-  (Seq.elem mdl mt.seq).pub.used
+  (Seq.elem mdl mt.seq).pub
 
 let used_priv (mdl:int) (mt:t): IntSet.t =
   (* The privately used modules of the module [mdl]. *)
   assert (mdl < count mt);
-  (Seq.elem mdl mt.seq).priv.used
-
-
-
-let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
-  assert (0 <= mode);
-  assert (mode <= 2);
-  printf "add module %s\n" (ST.string name);
-  assert (not (has name lib mt));
-  let n = count mt
-  and cont = {used=IntSet.empty; clss=IntSet.empty} in
-  Seq.push {name=name; lib=lib; priv=cont; pub=cont} mt.seq;
-  mt.map   <- Modmap.add (name,lib) n mt.map;
-  mt.mode  <- mode;
-  mt.fgens <- IntMap.empty
-
-
-let set_used (set:IntSet.t) (mt:t): unit =
-  assert (has_current mt);
-  let mdl = current mt           in
-  let desc = Seq.elem mdl mt.seq
-  and set  = IntSet.add mdl set  in
-  if is_public mt then
-    desc.pub.used <- set
-  else
-    desc.priv.used <- set
-
-
-
-
-
-let make (): t =
-  {map=Modmap.empty; seq=Seq.empty (); mode=0; fgens = IntMap.empty}
-
+  (Seq.elem mdl mt.seq).priv
 
 
 let name (mdl:int) (mt:t): string =
@@ -113,6 +81,73 @@ let name (mdl:int) (mt:t): string =
   let libstr = if libstr = "" then "" else libstr ^ "."
   in
   libstr ^ nmestr
+
+
+
+let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
+  printf "add module %s\n" (ST.string name);
+  assert (not (has name lib mt));
+  let n = count mt in
+  Seq.push {name=name; lib=lib; priv=used; pub=used} mt.seq;
+  mt.map   <- Modmap.add (name,lib) n mt.map;
+  mt.mode  <- 2;
+  mt.fgens <- IntMap.empty
+
+
+
+let add_current (name:int) (used:IntSet.t) (mt:t): unit =
+  printf "add current %s\n" (ST.string name);
+  assert (not (has name [] mt));
+  let n = count mt in
+  Seq.push {name=name; lib=[]; priv=used; pub=IntSet.empty} mt.seq;
+  mt.map   <- Modmap.add (name,[]) n mt.map;
+  mt.mode  <- 0;
+  mt.fgens <- IntMap.empty
+
+
+
+let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
+  assert (has_current mt);
+  assert (is_private mt);
+  assert (IntSet.subset pub_used (used_priv (current mt) mt));
+  let desc = Seq.elem (current mt) mt.seq in
+  desc.pub  <- pub_used;
+  mt.mode   <- 1;
+  mt.fgens  <- IntMap.empty
+
+
+
+
+let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
+  assert (0 <= mode);
+  assert (mode <= 2);
+  printf "add module %s\n" (ST.string name);
+  assert (not (has name lib mt));
+  let n = count mt
+  and empty = IntSet.empty in
+  Seq.push {name=name; lib=lib; priv=empty; pub=empty} mt.seq;
+  mt.map   <- Modmap.add (name,lib) n mt.map;
+  mt.mode  <- mode;
+  mt.fgens <- IntMap.empty
+
+
+let set_used (set:IntSet.t) (mt:t): unit =
+  assert (has_current mt);
+  let mdl = current mt           in
+  let desc = Seq.elem mdl mt.seq
+  and set  = IntSet.add mdl set  in
+  if is_public mt then
+    desc.pub <- set
+  else
+    desc.priv <- set
+
+
+
+
+
+let make (): t =
+  {map=Modmap.empty; seq=Seq.empty (); mode=0; fgens = IntMap.empty}
+
 
 
 let find_formal (name: int) (mt:t): type_term =

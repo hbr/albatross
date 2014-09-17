@@ -68,17 +68,20 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
   with Not_found ->
     ()
 
-
-let add_module
-    (name:int) (lib:int list) (mode:int) (used:IntSet.t) (ct:t)
-    : unit =
-  Module_table.add name lib mode ct.mt;
-  Module_table.set_used used ct.mt;
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ct:t): unit =
+  Module_table.add_used name lib used ct.mt;
   add_base_classes name ct
 
+let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
+  Module_table.add_current name used ct.mt;
+  add_base_classes name ct
+
+let set_interface_check (used:IntSet.t) (ct:t): unit =
+  Module_table.set_interface_check used ct.mt
 
 let is_private (ct:t): bool = Module_table.is_private ct.mt
-let is_public  (ct:t): bool = Module_table.is_public ct.mt
+let is_public (ct:t):  bool = Module_table.is_public ct.mt
+let is_interface_check  (ct:t): bool = Module_table.is_interface_check ct.mt
 let is_interface_use (ct:t): bool = Module_table.is_interface_use ct.mt
 
 

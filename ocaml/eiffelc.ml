@@ -85,8 +85,8 @@ let parse_use_block (fn:string): use_block =
 
 let parse_file (fn:string): use_block * declaration list =
   Lexer.reset ();
-  Support.Parse_info.set_file_name fn;
   let ch_in = open_in fn in
+  Support.Parse_info.set_file_name fn;
   let lexbuf = Lexing.from_channel ch_in
   in
   lexbuf.Lexing.lex_curr_p <-
@@ -213,10 +213,11 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
       [] -> ()
       | f::t -> one_decl f; analyz t
   in
-  analyz ast(*;
-  Context.print context*)
+  analyz ast
 
 
+let analyze_interface(ast: declaration list) (pc:Proof_context.t): unit =
+  ()
 
 
 let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
@@ -241,8 +242,7 @@ let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
             Printf.printf "Parsing file \"%s\"\n" nmestr;
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
-            Context.add_module nme.v [] 2 set c;
-            Support.Parse_info.set_file_name nmestr;
+            Context.add_used_module nme.v [] set c;
             analyze ast pc;
             IntSet.add (Context.current_module c) set
         in
@@ -251,9 +251,20 @@ let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
       use_blk
   in
   let used_set = used use_blk [] IntSet.empty in
-  Context.add_module (ST.symbol f.mdlnme) [] 0 used_set c
+  Context.add_current_module (ST.symbol f.mdlnme) used_set c
 
 
+
+
+let verify_interface (f:file_name) (pc:Proof_context.t): unit =
+  try
+    let fn = f.dir ^ "/" ^ f.mdlnme ^ ".ei" in
+    Printf.printf "Verifying interface \"%s\"\n" fn;
+    let use_blk, ast = parse_file fn in
+    process_use use_blk f pc;
+    analyze_interface ast pc
+  with Sys_error _ ->
+    ()
 
 
 
@@ -264,6 +275,7 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
     let use_blk,ast  = parse_file f.name in
     process_use use_blk f pc;
     analyze ast pc;
+    (*verify_interface f pc*)
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in
     raise (Support.Error_fileinfo (fn,inf,str))

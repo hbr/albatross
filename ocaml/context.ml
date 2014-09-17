@@ -40,23 +40,22 @@ let feature_table(c:t): Feature_table.t = c.ft
 let module_table(c:t): Module_table.t   = Class_table.module_table (class_table c)
 
 
-let has_current_module (c:t): bool =
-  Feature_table.has_current_module c.ft
-
 let current_module (c:t): int =
   Feature_table.current_module c.ft
-
-let count_modules (c:t): int =
-  Feature_table.count_modules c.ft
 
 let find_module (name:int) (lib:int list) (c:t): int =
   Feature_table.find_module name lib c.ft
 
 
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (c:t): unit =
+  Feature_table.add_used_module name lib used c.ft
 
-let add_module
-    (name:int) (lib:int list) (mode:int) (used:IntSet.t) (c:t): unit =
-  Feature_table.add_module name lib mode used c.ft
+let add_current_module (name:int) (used:IntSet.t) (c:t): unit =
+  Feature_table.add_current_module name used c.ft
+
+let set_interface_check (pub_used:IntSet.t) (c:t): unit =
+  Feature_table.set_interface_check pub_used c.ft
+
 
 let used_modules (mdl:int) (c:t): IntSet.t =
   Feature_table.used_modules mdl c.ft

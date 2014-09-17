@@ -18,15 +18,11 @@ val make:  unit -> t
 val class_table: t -> Class_table.t
 val feature_table:t -> Feature_table.t
 
-val has_current_module: t -> bool
 val current_module:     t -> int
-val count_modules:      t -> int
 val used_modules:       int -> t -> IntSet.t
-
-val add_module:         int -> int list -> int -> IntSet.t -> t -> unit
-    (** [add_module name lib pub used c] adds the module [lib.name] to the
-        module table, put it into the mode [mode] and set the used modules to
-        [used] *)
+val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_current_module: int -> IntSet.t -> t -> unit
+val set_interface_check: IntSet.t -> t -> unit
 
 val is_interface_use:  t -> bool
     (** Are we using an interface? *)
