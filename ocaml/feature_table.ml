@@ -17,6 +17,12 @@ type definition = term
 
 type formal     = int * term
 
+type base_descriptor = {
+    definition:       term option;
+    mutable seeds:    IntSet.t;
+    mutable variants: int IntMap.t  (* cls -> fidx *)
+  }
+
 type descriptor = {
     mutable mdl: int;
     cls:         int;
@@ -27,10 +33,8 @@ type descriptor = {
     argnames:    int array;
     sign:        Sign.t;
     mutable tp:  type_term;
-    priv:        definition option;
-    mutable pub: definition option option;
-    mutable seeds:    IntSet.t;
-    mutable variants: int IntMap.t  (* cls -> fidx *)
+    priv:        base_descriptor;
+    mutable pub: base_descriptor option;
   }
 
 type t = {
@@ -46,6 +50,12 @@ let empty (): t =
    seq  = Seq.empty ();
    base = IntMap.empty;
    ct   = Class_table.base_table ()}
+
+let standard_bdesc (i:int) (cls:int) (def_opt: term option): base_descriptor =
+  {seeds      = IntSet.singleton i;
+   variants   = IntMap.singleton cls i;
+   definition = def_opt}
+
 
 let class_table (ft:t):  Class_table.t   = ft.ct
 
@@ -64,30 +74,36 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
+let base_descriptor (i:int) (ft:t): base_descriptor =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  if is_private ft then
+    desc.priv
+  else
+    match desc.pub with
+      None -> assert false (* cannot happen in public view *)
+    | Some bdesc -> bdesc
+
 
 let definition (i:int) (nb:int) (ft:t): term =
   (* The definition of the feature [i] as a lambda term (if there are arguments)
      transformed into an environment with [nb] bound variables. Raises [Not_found]
      in case that there is no definition *)
-  let desc = descriptor i ft in
+  let desc  = descriptor i ft
+  and bdesc = base_descriptor i ft in
   let nargs = Sign.arity desc.sign in
-  let def (def_opt: definition option) =
-    match def_opt with
-      None -> raise Not_found
-    | Some t ->
-        let t = Term.upbound nb nargs t in
-        if nargs = 0 then t else Lam (nargs,[||],t)
-  in
-  if is_private ft then def desc.priv
-  else match desc.pub with
-    None -> raise Not_found (*assert false *)(* not possible in public view *)
-  | Some (def_opt) -> def def_opt
+  match bdesc.definition with
+    None -> raise Not_found
+  | Some t ->
+      let t = Term.upbound nb nargs t in
+      if nargs = 0 then t else Lam (nargs,[||],t)
 
 
 
 let count_fgs (i:int) (ft:t): int =
   assert (i < count ft);
   Tvars.count_fgs (descriptor i ft).tvs
+
 
 let anchor (i:int) (ft:t): int =
   let desc = descriptor i ft in
@@ -100,10 +116,10 @@ let anchor (i:int) (ft:t): int =
 
 let variant (i:int) (cls:int) (ft:t): int =
   assert (i < count ft);
-  let desc = descriptor i ft in
+  let bdesc = base_descriptor i ft in
   try
-    let seed_desc = descriptor (IntSet.min_elt desc.seeds) ft in
-    IntMap.find cls seed_desc.variants
+    let seed_bdesc = base_descriptor (IntSet.min_elt bdesc.seeds) ft in
+    IntMap.find cls seed_bdesc.variants
   with Not_found ->
     i
 
@@ -220,6 +236,8 @@ let add_builtin
   and ntvs = Array.length concepts
   and cnt  = count ft
   in
+  let bdesc = standard_bdesc cnt cls None
+  in
   let lst =
     try IntMap.find mdl_nme ft.base
     with Not_found ->
@@ -236,10 +254,8 @@ let add_builtin
     argnames = standard_argnames (Array.length argtypes);
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
-    priv     = None;
-    pub      = None;
-    seeds    = IntSet.singleton cnt;
-    variants = IntMap.singleton cls cnt
+    priv     = bdesc;
+    pub      = Some bdesc
   }
   in
   Seq.push desc ft.seq;
@@ -688,11 +704,14 @@ let print (ft:t): unit =
       match fdesc.pub with
         None ->
           Printf.printf "%s.%s: %s %s = (%s)\n"
-            mdlnme clsnme name tname (bdyname fdesc.priv)
+            mdlnme clsnme name tname (bdyname fdesc.priv.definition)
       | Some pdef ->
           Printf.printf "%s.%s: %s %s = (%s, %s)\n"
-            mdlnme clsnme name tname (bdyname fdesc.priv) (bdyname pdef))
+            mdlnme clsnme name tname
+            (bdyname fdesc.priv.definition) (bdyname pdef.definition))
     ft.seq
+
+
 
 
 let find_variant (i:int) (cls:int) (ft:t): int =
@@ -744,19 +763,20 @@ let inherit_feature (i0:int) (i1:int) (ft:t): unit =
    *)
   assert (i0 < count ft);
   assert (i1 < count ft);
-  let desc0 = descriptor i0 ft
-  and desc1 = descriptor i1 ft
+  let bdesc0 = base_descriptor i0 ft
+  and bdesc1 = base_descriptor i1 ft
+  and desc1  = descriptor i1 ft
   in
-  desc1.seeds <- IntSet.remove i1 desc1.seeds;
+  bdesc1.seeds <- IntSet.remove i1 bdesc1.seeds;
   IntSet.iter
     (fun i_seed -> (* add variant to seed and seed to variant*)
-      let desc_seed = descriptor i_seed ft in
-      assert (not (IntMap.mem desc1.cls desc_seed.variants) ||
-              IntMap.find desc1.cls desc_seed.variants = i1);
-      desc_seed.variants <- IntMap.add desc1.cls i1 desc_seed.variants;
-      desc1.seeds        <- IntSet.add i_seed desc1.seeds
+      let bdesc_seed = base_descriptor i_seed ft in
+      assert (not (IntMap.mem desc1.cls bdesc_seed.variants) ||
+              IntMap.find desc1.cls bdesc_seed.variants = i1);
+      bdesc_seed.variants <- IntMap.add desc1.cls i1 bdesc_seed.variants;
+      bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
     )
-    desc0.seeds;
+    bdesc0.seeds;
   let tab = Feature_map.find desc1.fname ft.map in
   tab := Term_table.remove i1 !tab
 
@@ -800,8 +820,7 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
         "The class " ^ (Class_table.class_name cls ct) ^
         " has already a feature unifyable with \"" ^
         (feature_name_to_string desc.fname) ^
-        (Class_table.string_of_signature
-           desc.sign desc.tvs ct) ^
+        (Class_table.string_of_signature desc.sign desc.tvs ct) ^
         "\"" in
       error_info info str
     with Not_found ->
@@ -815,8 +834,15 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
       let ctp  = Term.up anchor ctp in
       let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
       let f_tp(tp:type_term): type_term =
-        Term.upbound ntvs anchor tp in
-      let def_opt =
+        Term.upbound ntvs anchor tp
+      and def_opt =
+        match (base_descriptor i ft).definition with
+          None -> None
+        | Some t ->
+          let nargs = Array.length desc.argnames in
+          Some (variant_term t nargs cls ft)
+      in
+      (*let def_opt =
         match desc.pub with
           None -> desc.priv
         | Some (def_opt) -> def_opt in
@@ -826,8 +852,10 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
         | Some(term) ->
             let nargs = Array.length desc.argnames in
             Some (variant_term term nargs cls ft)
-      in
+      in*)
       let cnt = count ft in
+      let bdesc = standard_bdesc cnt cls def_opt
+      in
       Seq.push
         {mdl       = Class_table.current_module ft.ct;
          fname     = desc.fname;
@@ -838,10 +866,8 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
          argnames  = desc.argnames;
          sign      = Sign.transform f_tp desc.sign;
          tp        = f_tp desc.tp;
-         priv      = def;
-         pub       = if is_public ft then Some def else None;
-         seeds     = IntSet.singleton cnt;
-         variants  = IntMap.singleton cls cnt
+         priv      = bdesc;
+         pub       = if is_public ft then Some bdesc else None
        } ft.seq;
       inherit_feature i cnt ft
 
@@ -917,6 +943,7 @@ let put_function
       Deferred ->
         Class_table.check_deferred cls nanchors fn.i ft.ct
     | _ -> ());
+    let bdesc = standard_bdesc cnt cls term_opt in
     let desc =
       {mdl      = mdl;
        cls      = cls;
@@ -927,14 +954,12 @@ let put_function
        sign     = sign;
        tp       = Variable 0;
        anchored = anchored;
-       priv     = term_opt;
-       pub      = if is_priv then None else Some term_opt;
-       seeds    = IntSet.singleton cnt;
-       variants = IntMap.singleton cls cnt}
+       priv     = bdesc;
+       pub      = if is_priv then None else Some bdesc}
     in
     add_function desc fn.i ft
   end else begin        (* feature update *)
-    let desc = Seq.elem idx ft.seq
+    let desc = descriptor idx ft
     and not_match str =
       let str = "The " ^ str ^ " of \""
         ^ (feature_name_to_string fn.v)
@@ -947,15 +972,15 @@ let put_function
     if is_priv then begin
       if impstat <> desc.impstat then
         not_match "implementation status";
-      if term_opt <> desc.priv
+      if term_opt <> desc.priv.definition
       then
         not_match "private definition"
     end else
       match desc.pub with
         None ->
-          desc.pub <- Some term_opt
-      | Some def ->
-          if def <> term_opt then
+          desc.pub <- Some (standard_bdesc idx cls term_opt)
+      | Some bdesc ->
+          if bdesc.definition <> term_opt then
             not_match "public definition"
   end
 
