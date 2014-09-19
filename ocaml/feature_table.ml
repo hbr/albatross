@@ -24,12 +24,12 @@ type base_descriptor = {
   }
 
 type descriptor = {
-    mutable mdl: int;
-    cls:         int;
+    mutable mdl: int;             (* -1: base feature, module not yet assigned*)
+    cls:         int;             (* owner class *)
     fname:       feature_name;
     impstat:     implementation_status;
-    tvs:         Tvars.t;
-    mutable anchored: int array;
+    tvs:         Tvars.t;         (* only formal generics *)
+    mutable anchored: int array;  (* formal generics anchored to the owner class *)
     argnames:    int array;
     sign:        Sign.t;
     mutable tp:  type_term;
@@ -51,9 +51,11 @@ let empty (): t =
    base = IntMap.empty;
    ct   = Class_table.base_table ()}
 
+
+
 let standard_bdesc (i:int) (cls:int) (def_opt: term option): base_descriptor =
-  {seeds      = IntSet.singleton i;
-   variants   = IntMap.singleton cls i;
+  {seeds      = IntSet.singleton i;     (* each feature is its own seed *)
+   variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    definition = def_opt}
 
 
@@ -718,10 +720,12 @@ let find_variant (i:int) (cls:int) (ft:t): int =
   (* Find the variant of the feature [i] in the class [cls] *)
   let ct = class_table ft
   and desc = descriptor i ft in
-  assert (Array.length desc.anchored = 1);
-  let fg_anchor = desc.anchored.(0) in
+  assert (Array.length desc.anchored = 1); (* exactly one formal generic anchored
+                                              to the owner class *)
+  let nfgs = Tvars.count_all desc.tvs
+  and fg_anchor = desc.anchored.(0) in
   let candidates = Class_table.find_features
-      (desc.fname, desc.tp, Tvars.count_all desc.tvs)
+      (desc.fname, desc.tp, nfgs)
       cls
       ct
   in
@@ -729,7 +733,7 @@ let find_variant (i:int) (cls:int) (ft:t): int =
       (fun (idx,sub) ->
         try
           let desc_heir = descriptor idx ft in
-          for k = 0 to Tvars.count_all desc.tvs - 1 do
+          for k = 0 to nfgs - 1 do
             let tp1  = Term_sub.find k sub
             and tvs1 = desc_heir.tvs in
             if k = fg_anchor then
@@ -758,7 +762,7 @@ let find_variant (i:int) (cls:int) (ft:t): int =
 let inherit_feature (i0:int) (i1:int) (ft:t): unit =
   (* Inherit the feature [i0] as the feature [i1], i.e. add [i1] as a variant
      to all seeds of [i0] and add all seeds of [i0] as seeds of
-     [i1]. Furthermore [i1] is no longer it own seed and cannot be found via
+     [i1]. Furthermore [i1] is no longer its own seed and cannot be found via
      the feature map
    *)
   assert (i0 < count ft);
@@ -779,6 +783,8 @@ let inherit_feature (i0:int) (i1:int) (ft:t): unit =
     bdesc0.seeds;
   let tab = Feature_map.find desc1.fname ft.map in
   tab := Term_table.remove i1 !tab
+
+
 
 
 
@@ -842,17 +848,6 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
           let nargs = Array.length desc.argnames in
           Some (variant_term t nargs cls ft)
       in
-      (*let def_opt =
-        match desc.pub with
-          None -> desc.priv
-        | Some (def_opt) -> def_opt in
-      let def =
-        match def_opt with
-          None -> None
-        | Some(term) ->
-            let nargs = Array.length desc.argnames in
-            Some (variant_term term nargs cls ft)
-      in*)
       let cnt = count ft in
       let bdesc = standard_bdesc cnt cls def_opt
       in
