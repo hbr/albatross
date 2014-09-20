@@ -1025,4 +1025,11 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   add_base_features name ft
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =
-  Class_table.set_interface_check used ft.ct
+  Class_table.set_interface_check used ft.ct;
+  ft.map <- Feature_map.empty;
+  let mdl = current_module ft in
+  for i = 0 to count ft - 1 do
+    let desc = descriptor i ft in
+    if desc.mdl = mdl || IntSet.mem desc.mdl used then
+      add_key i ft
+  done

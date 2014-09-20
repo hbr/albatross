@@ -58,36 +58,14 @@ let used_modules (mdl:int) (ct:t): IntSet.t =
 
 let module_name (mdl:int) (ct:t): string = Module_table.name mdl ct.mt
 
-let add_base_classes (mdl_nme:int) (ct:t): unit =
-  try
-    let idx = IntMap.find mdl_nme ct.base in
-    let desc = Seq.elem idx ct.seq in
-    assert (desc.mdl = -1);
-    desc.mdl <- current_module ct;
-    ct.map <- IntMap.add desc.name idx ct.map
-  with Not_found ->
-    ()
-
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ct:t): unit =
-  Module_table.add_used name lib used ct.mt;
-  add_base_classes name ct
-
-let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
-  Module_table.add_current name used ct.mt;
-  add_base_classes name ct
-
-let set_interface_check (used:IntSet.t) (ct:t): unit =
-  Module_table.set_interface_check used ct.mt
-
 let is_private (ct:t): bool = Module_table.is_private ct.mt
 let is_public (ct:t):  bool = Module_table.is_public ct.mt
 let is_interface_check  (ct:t): bool = Module_table.is_interface_check ct.mt
 let is_interface_use (ct:t): bool = Module_table.is_interface_use ct.mt
 
 
-let count (c:t) =
-  Seq.count c.seq
-
+let count (ct:t):int =
+  Seq.count ct.seq
 
 let class_symbol (i:int) (ct:t): int =
   assert (i<count ct);
@@ -112,6 +90,35 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
     Option.value desc.publ
   end
 
+
+
+let add_base_classes (mdl_nme:int) (ct:t): unit =
+  try
+    let idx = IntMap.find mdl_nme ct.base in
+    let desc = Seq.elem idx ct.seq in
+    assert (desc.mdl = -1);
+    desc.mdl <- current_module ct;
+    ct.map <- IntMap.add desc.name idx ct.map
+  with Not_found ->
+    ()
+
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ct:t): unit =
+  Module_table.add_used name lib used ct.mt;
+  add_base_classes name ct
+
+let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
+  Module_table.add_current name used ct.mt;
+  add_base_classes name ct
+
+let set_interface_check (used:IntSet.t) (ct:t): unit =
+  Module_table.set_interface_check used ct.mt;
+  ct.map <- IntMap.empty;
+  let mdl = current_module ct in
+  for i = 0 to count ct - 1 do
+    let desc = descriptor i ct in
+    if desc.mdl = mdl || IntSet.mem desc.mdl used then
+      ct.map <- IntMap.add desc.name i ct.map
+  done
 
 let descendants (i:int) (ct:t): IntSet.t =
   assert (i < count ct);
