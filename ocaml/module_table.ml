@@ -72,6 +72,26 @@ let used_priv (mdl:int) (mt:t): IntSet.t =
   (Seq.elem mdl mt.seq).priv
 
 
+let descriptor (i:int) (mt:t): desc =
+  assert (i < count mt);
+  Seq.elem i mt.seq
+
+
+let interface_used (used_blk: int withinfo list) (mt:t): IntSet.t =
+  assert (has_current mt);
+  List.fold_left
+    (fun set mdl ->
+      try
+        let i = find mdl.v [] mt in
+        let desc = descriptor i mt in
+        IntSet.union set desc.priv
+      with Not_found ->
+        error_info mdl.i ("module `" ^ (ST.string mdl.v) ^
+                          "'not used in implementation file"))
+    (IntSet.singleton (current mt))
+    used_blk
+
+
 let name (mdl:int) (mt:t): string =
   assert (mdl < count mt);
   let desc = Seq.elem mdl mt.seq in
@@ -88,6 +108,7 @@ let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
   printf "add module %s\n" (ST.string name);
   assert (not (has name lib mt));
   let n = count mt in
+  let used = IntSet.add n used in
   Seq.push {name=name; lib=lib; priv=used; pub=used} mt.seq;
   mt.map   <- Modmap.add (name,lib) n mt.map;
   mt.mode  <- 2;
@@ -99,6 +120,7 @@ let add_current (name:int) (used:IntSet.t) (mt:t): unit =
   printf "add current %s\n" (ST.string name);
   assert (not (has name [] mt));
   let n = count mt in
+  let used = IntSet.add n used in
   Seq.push {name=name; lib=[]; priv=used; pub=IntSet.empty} mt.seq;
   mt.map   <- Modmap.add (name,[]) n mt.map;
   mt.mode  <- 0;

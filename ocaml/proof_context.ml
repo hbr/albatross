@@ -47,6 +47,10 @@ type t = {base:     Proof_table.t;
 
 let context (pc:t): Context.t = Proof_table.context pc.base
 
+let module_table (pc:t): Module_table.t =
+  let c = context pc in
+  Context.module_table c
+
 let feature_table (pc:t): Feature_table.t =
   let c = context pc in
   Context.feature_table c
@@ -54,6 +58,17 @@ let feature_table (pc:t): Feature_table.t =
 let class_table (pc:t): Class_table.t =
   let c = context pc in
   Context.class_table c
+
+
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (pc:t): unit =
+  Proof_table.add_used_module name lib used pc.base
+
+let add_current_module (name:int) (used:IntSet.t) (pc:t): unit =
+  Proof_table.add_current_module name used pc.base
+
+let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
+  Proof_table.set_interface_check pub_used pc.base
+
 
 
 let depth (pc:t): int =

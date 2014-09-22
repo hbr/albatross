@@ -891,11 +891,13 @@ let inherited_ancestors
     (par_args:type_term array)
     (info:info)
     (ct:t)
-    : (int * type_term array) list =
+    : (int * type_term array) list * (int * type_term array) list =
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
-  IntMap.fold
+  assert (IntSet.is_empty cls_bdesc.descendants); (* nyi: inheritance to
+                                                     descendants*)
+  let res = IntMap.fold
     (fun anc_idx anc_args lst->
       let anc_args: type_term array =
         Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
@@ -912,6 +914,25 @@ let inherited_ancestors
         (anc_idx,anc_args) :: lst)
     par_bdesc.ancestors
     []
+  in
+  if is_interface_check ct then
+    let cls_bdesc_priv = (descriptor cls_idx ct).priv in
+    List.partition
+        (fun (anc_idx,anc_args) ->
+          try
+            let anc_args_0 = IntMap.find anc_idx cls_bdesc_priv.ancestors in
+            if anc_args <> anc_args_0 then
+              error_info info
+                ("Cannot inherit "  ^
+                 (class_name anc_idx ct) ^
+                 " with different actual generics than inherited privately")
+            else
+              false
+          with Not_found ->
+            true)
+        res
+  else
+    res, []
 
 
 

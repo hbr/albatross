@@ -130,4 +130,10 @@ val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
       features from all ancestors [par_idx[par_args]] in the ancestor list
       [anc_lst]. *)
 
+val export_inherited: int -> (int * type_term array) list  -> t -> unit
+  (** [export_inherited cls anc_lst ft] let the class [cls] export all
+      inherited features from all ancestors [par_idx[par_args]] in the
+      ancestor list [anc_lst]. *)
+
+
 val print: t -> unit

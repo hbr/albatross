@@ -76,6 +76,13 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
+let base_descriptor_priv (i:int) (ft:t): base_descriptor =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  desc.priv
+
+
+
 let base_descriptor (i:int) (ft:t): base_descriptor =
   assert (i < count ft);
   let desc = descriptor i ft in
@@ -85,6 +92,7 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
     match desc.pub with
       None -> assert false (* cannot happen in public view *)
     | Some bdesc -> bdesc
+
 
 
 let definition (i:int) (nb:int) (ft:t): term =
@@ -117,18 +125,26 @@ let anchor (i:int) (ft:t): int =
 
 
 let variant (i:int) (cls:int) (ft:t): int =
+  (* The variant of the feature [i] in the class [cls] *)
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
-  try
-    let seed_bdesc = base_descriptor (IntSet.min_elt bdesc.seeds) ft in
-    IntMap.find cls seed_bdesc.variants
-  with Not_found ->
-    i
+  let seed_bdesc = base_descriptor (IntSet.min_elt bdesc.seeds) ft
+  in
+  IntMap.find cls seed_bdesc.variants
+
+
 
 
 let variant_term (t:term) (nb:int) (cls:int) (ft:t): term =
-  let f (j:int): term = Variable (variant j cls ft) in
+  let f (j:int): term =
+    let var_j =
+      try variant j cls ft
+      with Not_found -> j
+    in
+    Variable var_j
+  in
   Term.map_free f t nb
+
 
 
 let is_deferred (desc:descriptor): bool =
@@ -165,20 +181,13 @@ let add_class_feature (i:int) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class. *)
   assert (i < count ft);
-  let desc  = Seq.elem i ft.seq
-  in
+  let desc  = Seq.elem i ft.seq in
   Class_table.add_feature
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
     (is_deferred desc)
     ft.ct
 
-
-
-let add_class_features (ft:t): unit =
-  for i = 0 to (count ft)-1 do
-    add_class_feature i ft
-  done
 
 
 let has_equivalent (i:int) (ft:t): bool =
@@ -788,6 +797,7 @@ let inherit_feature (i0:int) (i1:int) (ft:t): unit =
 
 
 
+
 let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
   let desc = descriptor i ft in
@@ -891,6 +901,43 @@ let do_inherit
       let flst = Class_table.effective_features par ct in
       List.iter (fun i -> inherit_effective i cls info ft) flst
     )
+    anc_lst
+
+
+
+
+let export_inherited_variant (i:int) (cls:int) (ft:t): unit =
+  (* Export the inherited variant of the feature [i] in the class [cls] *)
+  assert (is_interface_check ft);
+  let desc  = descriptor i ft in
+  let nanchors = Array.length desc.anchored in
+  if nanchors = 1 then
+    let bdesc = base_descriptor_priv i ft in
+    let seed_bdesc = base_descriptor_priv (IntSet.min_elt bdesc.seeds) ft in
+    try
+      let idx = IntMap.find cls seed_bdesc.variants in
+      let desc = descriptor idx ft in
+      desc.pub <- Some (standard_bdesc idx cls desc.priv.definition);
+      inherit_feature i idx ft
+    with Not_found ->
+      assert false (* cannot happen *)
+
+
+
+let export_inherited
+    (cls:int)
+    (anc_lst: (int * type_term array) list)
+    (ft:t)
+    : unit =
+  (* Export all inherited features from all classes in the ancestor list [anc_lst]
+     in the class [cls] *)
+  let ct = class_table ft in
+  List.iter
+    (fun (par,par_args) ->
+      let flst = Class_table.deferred_features par ct in
+      List.iter (fun i -> export_inherited_variant i cls ft) flst;
+      let flst = Class_table.effective_features par ct in
+      List.iter (fun i -> export_inherited_variant i cls ft) flst)
     anc_lst
 
 

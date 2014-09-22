@@ -22,6 +22,10 @@ val make: unit -> t
 val used: int -> t -> IntSet.t
 val has:  int -> int list -> t -> bool
 
+val interface_used: int withinfo list -> t -> IntSet.t
+    (** [interface_used use_blk mt] returns the used modules in [use_blk] and all
+        indirectly used modules including the current module
+     *)
 
 val add_used: int -> int list -> IntSet.t -> t -> unit
     (** [add_used name lib used mt] adds the used module (lib,name) which uses

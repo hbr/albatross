@@ -7,7 +7,13 @@ type t
 type proof_term
 
 val context: t -> Context.t
+val module_table: t  -> Module_table.t
+val class_table: t   -> Class_table.t
 val feature_table: t -> Feature_table.t
+
+val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_current_module: int -> IntSet.t -> t -> unit
+val set_interface_check: IntSet.t -> t -> unit
 
 val is_global: t -> bool
 

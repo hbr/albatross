@@ -1,11 +1,17 @@
 open Term
 open Support
+open Container
 
 type t
 type proof_term
 
 val context: t -> Context.t
 val class_table: t -> Class_table.t
+
+val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_current_module: int -> IntSet.t -> t -> unit
+val set_interface_check: IntSet.t -> t -> unit
+
 
 val depth:       t -> int
 val is_global:   t -> bool
@@ -43,8 +49,6 @@ val keep: int -> t -> unit
 
 val add_proved_global: bool -> int -> term -> proof_term -> int -> t -> unit
 val add_proved:        term -> proof_term -> int -> t -> unit
-
-(*val term_of_pt: proof_term -> t -> term*)
 
 val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit

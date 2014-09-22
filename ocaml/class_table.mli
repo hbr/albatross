@@ -136,12 +136,14 @@ val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 
 val inherited_ancestors:
-    int -> int -> type_term array -> info -> t -> (int * type_term array) list
+    int -> int -> type_term array -> info -> t
+      -> (int * type_term array) list * (int * type_term array) list
    (** [inherited_ancestors cls par par_args info ct] calculates a list of
        inherited ancestors in case the class [cls] inherits
        [par[par_args]]. The returned list contains [par[par_args]] and all
        implicitly inherited ancestors unless they are already in the set of
-       ancestors.
+       ancestors. The second list contains all [par[par_args]] which are already
+       privately inherited.
 
        If [par[par_args]] is already in the set of ancestors, then the
        returned list is empty. However it is checked if the actual generics

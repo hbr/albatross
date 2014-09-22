@@ -130,10 +130,13 @@ let put_class
         (fun (tp,adapt_lst) ->
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
           let par_idx, par_args = Class_table.parent_type idx tp ct in
-          let lst = Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
+          let lst, lst_priv =
+            Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
+          assert (lst_priv = []);
           Class_table.do_inherit idx lst ct;
-
+          Class_table.do_inherit idx lst_priv ct;
           Feature_table.do_inherit idx lst tp.i ft;
+          Feature_table.export_inherited idx lst_priv ft;
           Proof_context.do_inherit idx lst tp.i pc)
         par_lst)
     inherits
@@ -242,7 +245,7 @@ let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
             Printf.printf "Parsing file \"%s\"\n" nmestr;
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
-            Context.add_used_module nme.v [] set c;
+            Proof_context.add_used_module nme.v [] set pc;
             Support.Parse_info.set_file_name nmestr;
             analyze ast pc;
             IntSet.add (Context.current_module c) set
@@ -252,7 +255,7 @@ let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
       use_blk
   in
   let used_set = used use_blk [] IntSet.empty in
-  Context.add_current_module (ST.symbol f.mdlnme) used_set c
+  Proof_context.add_current_module (ST.symbol f.mdlnme) used_set pc
 
 
 
@@ -262,8 +265,9 @@ let verify_interface (f:file_name) (pc:Proof_context.t): unit =
     let fn = f.dir ^ "/" ^ f.mdlnme ^ ".ei" in
     Printf.printf "Verifying interface \"%s\"\n" fn;
     let use_blk, ast = parse_file fn in
-    process_use use_blk f pc;
-    Support.Parse_info.set_file_name fn;
+    let mt = Proof_context.module_table pc in
+    let used = Module_table.interface_used use_blk mt in
+    Proof_context.set_interface_check used pc;
     analyze_interface ast pc
   with Sys_error _ ->
     ()
@@ -278,7 +282,7 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
     process_use use_blk f pc;
     Support.Parse_info.set_file_name f.name;
     analyze ast pc;
-    (*verify_interface f pc*)
+    verify_interface f pc
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in
     raise (Support.Error_fileinfo (fn,inf,str))

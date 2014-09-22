@@ -42,6 +42,16 @@ let context (at:t): Context.t = at.c
 let class_table (at:t):   Class_table.t   = Context.class_table at.c
 let feature_table (at:t): Feature_table.t = Context.feature_table at.c
 
+let add_used_module (name:int) (lib:int list) (used:IntSet.t) (at:t): unit =
+  Context.add_used_module name lib used at.c
+
+let add_current_module (name:int) (used:IntSet.t) (at:t): unit =
+  Context.add_current_module name used at.c
+
+let set_interface_check (pub_used:IntSet.t) (at:t): unit =
+  Context.set_interface_check pub_used at.c
+
+
 let depth (at:t): int =
   List.length at.stack
 

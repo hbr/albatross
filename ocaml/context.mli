@@ -15,7 +15,8 @@ open Container
 type t
 val make:  unit -> t
 
-val class_table: t -> Class_table.t
+val module_table: t -> Module_table.t
+val class_table: t  -> Class_table.t
 val feature_table:t -> Feature_table.t
 
 val current_module:     t -> int
