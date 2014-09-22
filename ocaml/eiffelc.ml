@@ -243,6 +243,7 @@ let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
             let use_blk, ast = parse_file nmestr in
             let set = used use_blk (push nme) set in
             Context.add_used_module nme.v [] set c;
+            Support.Parse_info.set_file_name nmestr;
             analyze ast pc;
             IntSet.add (Context.current_module c) set
         in
@@ -262,6 +263,7 @@ let verify_interface (f:file_name) (pc:Proof_context.t): unit =
     Printf.printf "Verifying interface \"%s\"\n" fn;
     let use_blk, ast = parse_file fn in
     process_use use_blk f pc;
+    Support.Parse_info.set_file_name fn;
     analyze_interface ast pc
   with Sys_error _ ->
     ()
@@ -274,6 +276,7 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
   try
     let use_blk,ast  = parse_file f.name in
     process_use use_blk f pc;
+    Support.Parse_info.set_file_name f.name;
     analyze ast pc;
     (*verify_interface f pc*)
   with Support.Error_info (inf,str) ->
