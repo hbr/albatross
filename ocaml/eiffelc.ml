@@ -116,7 +116,7 @@ let put_class
   let ct = Feature_table.class_table ft in
   let idx =
     try
-      let idx = Class_table.find cn.v ct in
+      let idx = Class_table.find_2 cn.v ct in
       Class_table.update idx hm fgs  ct;
       idx
     with Not_found ->
@@ -132,7 +132,8 @@ let put_class
           let par_idx, par_args = Class_table.parent_type idx tp ct in
           let lst, lst_priv =
             Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
-          assert (lst_priv = []);
+          if lst_priv <> [] then
+            printf "lst_priv for class %s\n" (Class_table.class_name idx ct);
           Class_table.do_inherit idx lst ct;
           Class_table.do_inherit idx lst_priv ct;
           Feature_table.do_inherit idx lst tp.i ft;
@@ -206,6 +207,7 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
         Class_declaration (hm, cname, fgens, inherits) ->
           put_class hm cname fgens inherits pc
       | Named_feature (fn, entlst, rt, body, expr) ->
+          (*assert (not (Proof_context.is_interface_check pc));*)
           put_feature fn entlst rt body expr context
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body pc
@@ -218,9 +220,6 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
   in
   analyz ast
 
-
-let analyze_interface(ast: declaration list) (pc:Proof_context.t): unit =
-  ()
 
 
 let process_use (use_blk: use_block) (f:file_name) (pc:Proof_context.t): unit =
@@ -268,7 +267,7 @@ let verify_interface (f:file_name) (pc:Proof_context.t): unit =
     let mt = Proof_context.module_table pc in
     let used = Module_table.interface_used use_blk mt in
     Proof_context.set_interface_check used pc;
-    analyze_interface ast pc
+    (*analyze ast pc*)
   with Sys_error _ ->
     ()
 

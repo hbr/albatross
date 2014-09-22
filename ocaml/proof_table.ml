@@ -42,6 +42,13 @@ let context (at:t): Context.t = at.c
 let class_table (at:t):   Class_table.t   = Context.class_table at.c
 let feature_table (at:t): Feature_table.t = Context.feature_table at.c
 
+
+let is_private (at:t): bool = Context.is_private at.c
+let is_public  (at:t): bool = Context.is_public  at.c
+let is_interface_use   (at:t): bool = Context.is_interface_use  at.c
+let is_interface_check (at:t): bool = Context.is_interface_check  at.c
+
+
 let add_used_module (name:int) (lib:int list) (used:IntSet.t) (at:t): unit =
   Context.add_used_module name lib used at.c
 

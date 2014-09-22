@@ -79,10 +79,11 @@ val class_type: int -> t -> type_term*Tvars.t
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
-val add_feature:  (int*feature_name*type_term*int) -> int -> bool -> t -> unit
-    (** [add_feature (fidx,fn,tp,nfgs) cls is_def ct] adds the feature
-        [fidx,fn,tp,tvs] to the class [cls] as deferred or effective depending on
-        the value of [is_def] *)
+val add_feature:  (int*feature_name*type_term*int) -> int -> bool -> bool -> t
+  -> unit
+    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only ct] adds the
+        feature [fidx,fn,tp,tvs] to the class [cls] as deferred or effective
+        depending on the value of [is_def] *)
 
 val find_features: (feature_name*type_term*int) -> int -> t -> (int*Term_sub.t) list
     (** [find_features (fn,tp,nfgs) cls ct] finds all features of the class
@@ -113,8 +114,8 @@ val owner: Tvars.t -> Sign.t -> t -> int
 val anchored: Tvars.t -> int -> t -> int array
 val check_deferred:  int -> int -> info -> t -> unit
 
-val find:  int -> t -> int
-val find_in_module: int -> t -> int
+val find:   int -> t -> int
+val find_2: int -> t -> int
 
 val downgrade_signature: int -> Sign.t -> int -> Sign.t
   (** [downgrade_signature ntvs sign nargs] downgrades the constant signature

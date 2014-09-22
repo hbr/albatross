@@ -177,7 +177,7 @@ let pparen_index:      int = 4
 
 
 
-let add_class_feature (i:int) (ft:t): unit =
+let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class. *)
   assert (i < count ft);
@@ -186,6 +186,7 @@ let add_class_feature (i:int) (ft:t): unit =
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
     (is_deferred desc)
+    priv_only
     ft.ct
 
 
@@ -350,8 +351,9 @@ let find
                   ft.ct)
               sub
           in
-          if ok then
-            assert false
+          if ok then (
+            printf "find fn %s\n" (feature_name_to_string fn);
+            assert false)
           else
             lst)
       []
@@ -391,7 +393,9 @@ let find_funcs
       let arity = Sign.arity sign
       and tvs   = Tvars.fgs_to_global desc.tvs
       in
-      if arity = nargs then
+      if is_public ft && not (Option.has desc.pub) then
+        lst
+      else if arity = nargs then
         (i,tvs,sign) :: lst
       else if arity < nargs then (* downgrade *)
         let nfgs = Tvars.count_all tvs in
@@ -801,6 +805,10 @@ let inherit_feature (i0:int) (i1:int) (ft:t): unit =
 let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
   let desc = descriptor i ft in
+  printf "inherit deferred %s %s in class %s\n"
+    (Class_table.class_name desc.cls ft.ct)
+    (feature_name_to_string desc.fname)
+    (Class_table.class_name cls ft.ct);
   assert (cls <> desc.cls);
   let idx =
     try find_variant i cls ft
@@ -825,6 +833,10 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
 let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the effective  feature [i] in the class [cls] *)
   let desc = descriptor i ft in
+  printf "inherit effective %s %s in class %s\n"
+    (Class_table.class_name desc.cls ft.ct)
+    (feature_name_to_string desc.fname)
+    (Class_table.class_name cls ft.ct);
   assert (cls <> desc.cls);
   if not (Array.length desc.anchored = 1) then
     ()
@@ -894,6 +906,7 @@ let do_inherit
      [cls_idx]
    *)
   let ct = class_table ft in
+  printf "do inheritance for class %s\n" (Class_table.class_name cls ct);
   List.iter
     (fun (par,par_args) ->
       let flst = Class_table.deferred_features par ct in
@@ -951,7 +964,7 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
   desc.tp <- Class_table.to_dummy nfgs desc.sign;
   Seq.push desc ft.seq;
   add_key cnt ft;
-  add_class_feature cnt ft;
+  add_class_feature cnt false ft;
   if not (is_deferred desc) && nanchors = 1 then
     let descs = Class_table.descendants desc.cls ft.ct in
     IntSet.iter
@@ -972,6 +985,9 @@ let put_function
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   in
+  if is_interface_check ft then begin
+    printf "put_function %s\n" (feature_name_to_string fn.v)
+  end;
   let idx =
      try find_with_signature fn.v tvs sign ft
      with Not_found -> cnt
@@ -1057,7 +1073,8 @@ let add_base_features (mdl_name:int) (ft:t): unit =
         assert (desc.mdl = -1);
         desc.mdl <- curr_mdl ;
         add_key idx ft;
-        add_class_feature idx ft)
+        if idx <> all_index && idx <> some_index then
+          add_class_feature idx true ft)
       !lst
   with Not_found ->
     ()

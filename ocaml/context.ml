@@ -60,6 +60,11 @@ let set_interface_check (pub_used:IntSet.t) (c:t): unit =
 let used_modules (mdl:int) (c:t): IntSet.t =
   Feature_table.used_modules mdl c.ft
 
+
+let is_private (c:t): bool = Feature_table.is_private c.ft
+let is_public  (c:t): bool = Feature_table.is_public  c.ft
+let is_interface_check (c:t): bool = Feature_table.is_interface_check  c.ft
+
 let is_interface_use (c:t): bool = Feature_table.is_interface_use c.ft
 
 

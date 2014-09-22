@@ -75,6 +75,21 @@ let class_name (i:int) (ct:t): string =
   ST.string (class_symbol i ct)
 
 
+let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
+    : base_descriptor =
+  let args = Array.init nfgs (fun i -> Variable i) in
+  let anc  = IntMap.singleton idx args in
+  {hmark = hm;
+   tvs   = tvs;
+   fmap  = Feature_map.empty;
+   def_features = [];
+   eff_features = [];
+   def_asserts  = [];
+   eff_asserts  = [];
+   descendants  = IntSet.empty;
+   ancestors=anc}
+
+
 let descriptor (idx:int) (ct:t): descriptor =
   assert (idx < count ct);
   Seq.elem idx ct.seq
@@ -83,12 +98,15 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
   let desc = descriptor idx ct in
-  if desc.mdl = current_module ct then
+  if is_private ct then
     desc.priv
-  else begin
-    assert (Option.has desc.publ);
-    Option.value desc.publ
-  end
+  else
+    match desc.publ with
+      None ->
+        printf "class %s is not public\n" (class_name idx ct);
+        assert false (* cannot happen in public view *)
+    | Some bdesc ->
+        bdesc
 
 
 
@@ -98,6 +116,9 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
     let desc = Seq.elem idx ct.seq in
     assert (desc.mdl = -1);
     desc.mdl <- current_module ct;
+    (*if is_public ct then (
+      printf "make base class of module %s public\n" (ST.string mdl_nme);
+      desc.publ <- Some desc.priv);*)
     ct.map <- IntMap.add desc.name idx ct.map
   with Not_found ->
     ()
@@ -322,21 +343,19 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
 
 
 
-let find (cn: int) (ct:t): int =
-  IntMap.find cn ct.map
-
-
-
-let find_in_module (cn:int) (ct:t): int =
-  assert (has_current_module ct);
-  let idx  = find cn ct in
-  let desc = Seq.elem idx ct.seq
-  and mdl  = Module_table.current ct.mt in
-  if desc.mdl = (-1) || desc.mdl = mdl then
+let find_base (cn:int) (findall:bool) (ct:t): int =
+  let idx = IntMap.find cn ct.map in
+  if findall || is_private ct then
     idx
   else
-    raise Not_found
+    match (descriptor idx ct).publ with
+      None -> printf "\tnot found\n"; raise Not_found
+    | Some _ -> idx
 
+
+let find_2 (cn:int) (ct:t): int = find_base cn true ct
+
+let find (cn: int) (ct:t): int = find_base cn false ct
 
 
 let extract_from_tuple
@@ -450,6 +469,8 @@ let export
     (fgens: formal_generics)
     (ct:    t)
     : unit =
+  if is_interface_check ct then
+    printf "export class %s\n" (class_name idx ct);
   let desc = Seq.elem idx ct.seq in
   let hm1, hm2 = desc.priv.hmark, hm.v in
   begin
@@ -470,26 +491,19 @@ let export
   for i = 0 to nfgs-1 do
     let tp1     = fgconcepts.(i)
     and nme,tp2 = fgs.(i) in
+    let tp2 = Term.up nfgs tp2 in
     if tp1 <> tp2 then
       error_info
         fgens.i
         ("The constraint of " ^ (ST.string nme) ^
          " is not consistent with private definition");
-    desc.publ <-
-      let fgnames,concepts = Myarray.split fgs in
-      let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
-      let tvs = Tvars.make_fgs fgnames concepts in
-      Some { hmark     = hm2;
-             tvs       = tvs;
-             fmap      = Feature_map.empty;
-             def_features = [];
-             eff_features = [];
-             def_asserts  = [];
-             eff_asserts  = [];
-             descendants  = IntSet.empty;
-             ancestors =
-             IntMap.singleton idx (Array.init nfgs (fun i -> Variable i))}
-  done
+  done;
+  desc.publ <-
+    let fgnames,concepts = Myarray.split fgs in
+    let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
+    let tvs = Tvars.make_fgs fgnames concepts in
+    let bdesc = standard_bdesc hm2 nfgs tvs idx in
+    Some bdesc
 
 
 
@@ -502,17 +516,18 @@ let update
     (ct:    t)
     : unit =
   assert (has_current_module ct);
+  printf "update class %s\n" (class_name idx ct);
   let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt
   in
   if desc.mdl = -1 || desc.mdl = mdl then begin
     if desc.mdl = -1 then
       desc.mdl <- mdl;
-    if Module_table.is_private ct.mt then
+    if is_private ct then
       update_base_descriptor hm fgens desc.priv ct
     else
       match desc.publ with
-        None ->       export idx hm fgens ct
+        None ->       printf "\texport\n"; export idx hm fgens ct
       | Some bdesc -> update_base_descriptor hm fgens bdesc ct
   end
   else
@@ -535,15 +550,12 @@ let find_features
     []
 
 
-let add_feature
+let add_feature_bdesc
     (f:(int*feature_name*type_term*int))
-    (cidx:int)
     (is_deferred:bool)
-    (ct:t)
-    : unit =
-  assert (cidx < count ct);
-  let fidx,fn,tp,nfgs = f
-  and bdesc = base_descriptor cidx ct in
+    (bdesc:base_descriptor)
+    :unit =
+  let fidx,fn,tp,nfgs = f in
   let tab =
     try Feature_map.find fn bdesc.fmap
     with Not_found ->
@@ -553,15 +565,36 @@ let add_feature
   in
   assert (Feature_map.mem fn bdesc.fmap);
   tab := Term_table.add tp nfgs 0 fidx !tab;
-  (if is_deferred then
+  if is_deferred then
     bdesc.def_features <- fidx :: bdesc.def_features
   else
-    bdesc.eff_features <- fidx :: bdesc.eff_features);
-  assert begin
-    let lst = find_features (fn,tp,nfgs) cidx ct in
-    lst <> []
+    bdesc.eff_features <- fidx :: bdesc.eff_features
+
+
+
+
+let add_feature
+    (f:(int*feature_name*type_term*int))
+    (cidx:int)
+    (is_deferred:bool)
+    (priv_only: bool)
+    (ct:t)
+    : unit =
+  assert (cidx < count ct);
+  if priv_only || is_private ct then
+    add_feature_bdesc f is_deferred (descriptor cidx ct).priv
+  else begin
+    add_feature_bdesc f is_deferred (descriptor cidx ct).priv;
+    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
   end
 
+
+let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
+    : unit =
+  if is_deferred then
+    bdesc.def_asserts <- aidx :: bdesc.def_asserts
+  else
+    bdesc.eff_asserts <- aidx :: bdesc.eff_asserts
 
 
 let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
@@ -570,10 +603,12 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
   let bdesc = base_descriptor cidx ct in
-  if is_deferred then
-    bdesc.def_asserts <- aidx :: bdesc.def_asserts
-  else
-    bdesc.eff_asserts <- aidx :: bdesc.eff_asserts
+  if is_private ct then
+    add_assertion_bdesc aidx is_deferred bdesc
+  else begin
+    add_assertion_bdesc aidx is_deferred bdesc;
+    add_assertion_bdesc aidx is_deferred (descriptor cidx ct).priv
+  end
 
 
 
@@ -603,30 +638,24 @@ let add
     (fgens: formal_generics)
     (ct:    t)
     : unit =
+  printf "add %s class %s\n" (if is_public ct then "public" else "private")
+    (ST.string cn.v);
   let fgs = Module_table.class_formal_generics fgens ct.mt in
   let idx  = count ct
   and nfgs = Array.length fgs
   and fgnames,concepts = Myarray.split fgs
   in
-  let args = Array.init nfgs (fun i -> Variable i) in
-  let anc  = IntMap.singleton idx args in
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
-  let bdesc = {
-    hmark=hm.v;
-    tvs=tvs;
-    fmap = Feature_map.empty;
-    def_features = [];
-    eff_features = [];
-    def_asserts  = [];
-    eff_asserts  = [];
-    descendants  = IntSet.empty;
-    ancestors=anc} in
+  let bdesc = standard_bdesc hm.v nfgs tvs idx
+  and bdesc_opt =
+    if is_public ct then Some (standard_bdesc hm.v nfgs tvs idx) else None
+  in
   Seq.push
     {mdl  = current_module ct;
      name = cn.v;
-     priv=bdesc;
-     publ= if is_public ct then Some bdesc else None}
+     priv = bdesc;
+     publ = bdesc_opt}
     ct.seq;
     ct.map <- IntMap.add cn.v idx ct.map
 
@@ -713,6 +742,10 @@ let rec satisfies
       let idx1,args1 = split_type_term tp1
       and idx2,args2 = split_type_term tp2 in
       let bdesc1 = base_descriptor (idx1-nall1) ct in
+      if is_interface_check ct then
+        printf "does class %s inherit class %s?\n"
+          (class_name (idx1-nall1) ct)
+          (class_name (idx2-nall2) ct);
       try
         let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
         let nargs    = Array.length anc_args in
@@ -725,8 +758,12 @@ let rec satisfies
           else
             raise Not_found
         done;
+        if is_interface_check ct then
+          printf "\tyes\n";
         true
       with Not_found ->
+        if is_interface_check ct then
+          printf "\tno\n";
         false
 
 
@@ -936,21 +973,49 @@ let inherited_ancestors
 
 
 
+
+let one_inherit
+    (cls_idx: int)
+    (cls_bdesc:base_descriptor)
+    (anc_idx: int)
+    (anc_args: type_term array)
+    (anc_bdesc:base_descriptor)
+    : unit =
+  cls_bdesc.ancestors <-
+    IntMap.add anc_idx anc_args cls_bdesc.ancestors;
+  assert (not (IntSet.mem cls_idx anc_bdesc.descendants));
+  anc_bdesc.descendants <- IntSet.add cls_idx anc_bdesc.descendants
+
+
+
 let do_inherit
     (cls_idx:int)
     (anc_lst: (int*type_term array) list)
     (ct:t)
     : unit =
+  if is_public ct then begin
+    let cls_bdesc = (descriptor cls_idx ct).priv in
+    List.iter
+      (fun (anc_idx,anc_args) ->
+        let anc_bdesc = (descriptor anc_idx ct).priv in
+        one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
+      anc_lst
+  end;
   let cls_bdesc = base_descriptor cls_idx ct in
   List.iter
     (fun (anc_idx,anc_args) ->
       let anc_bdesc = base_descriptor anc_idx ct in
-      cls_bdesc.ancestors <-
-        IntMap.add anc_idx anc_args cls_bdesc.ancestors;
-      assert (not (IntSet.mem cls_idx anc_bdesc.descendants));
-      anc_bdesc.descendants <- IntSet.add cls_idx anc_bdesc.descendants)
+      one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
     anc_lst
 
+
+let export_inherited
+    (cls_idx:int)
+    (anc_lst: (int*type_term array) list)
+    (ct:t)
+    : unit =
+  assert (is_interface_check ct);
+  assert false
 
 
 
@@ -1032,25 +1097,17 @@ let add_base_class
   and nme  = ST.symbol name
   and fgnames,concepts = Myarray.split fgs
   in
-  let args = Array.init nfgs (fun i -> Variable i) in
-  let anc  = IntMap.singleton idx args in
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
-  let bdesc = {
-    hmark=hm;
-    tvs=tvs;
-    fmap = Feature_map.empty;
-    def_features = [];
-    eff_features = [];
-    def_asserts  = [];
-    eff_asserts  = [];
-    descendants  = IntSet.empty;
-    ancestors=anc} in
+  let bdesc = standard_bdesc hm nfgs tvs idx
+  and bdesc_opt =
+    if is_public ct then Some (standard_bdesc hm nfgs tvs idx) else None
+  in
   Seq.push
     {mdl=(-1);
      name = nme;
-     priv=bdesc;
-     publ= Some bdesc}
+     priv = bdesc;
+     publ = bdesc_opt}
     ct.seq;
   let mdl_nme = ST.symbol (String.lowercase name) in
   assert (not (IntMap.mem mdl_nme ct.base));

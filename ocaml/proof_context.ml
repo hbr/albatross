@@ -59,6 +59,10 @@ let class_table (pc:t): Class_table.t =
   let c = context pc in
   Context.class_table c
 
+let is_private (pc:t): bool = Proof_table.is_private pc.base
+let is_public  (pc:t): bool = Proof_table.is_public  pc.base
+let is_interface_use   (pc:t): bool = Proof_table.is_interface_use  pc.base
+let is_interface_check (pc:t): bool = Proof_table.is_interface_check  pc.base
 
 let add_used_module (name:int) (lib:int list) (used:IntSet.t) (pc:t): unit =
   Proof_table.add_used_module name lib used pc.base
