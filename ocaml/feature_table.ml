@@ -19,6 +19,7 @@ type formal     = int * term
 
 type base_descriptor = {
     definition:       term option;
+    mutable is_inh:   bool;
     mutable seeds:    IntSet.t;
     mutable variants: int IntMap.t  (* cls -> fidx *)
   }
@@ -54,7 +55,8 @@ let empty (): t =
 
 
 let standard_bdesc (i:int) (cls:int) (def_opt: term option): base_descriptor =
-  {seeds      = IntSet.singleton i;     (* each feature is its own seed *)
+  {is_inh     = false;
+   seeds      = IntSet.singleton i;     (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    definition = def_opt}
 
@@ -781,19 +783,20 @@ let find_variant (i:int) (cls:int) (ft:t): int =
 
 
 
-let inherit_feature (i0:int) (i1:int) (cls:int) (ft:t): unit =
+let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   (* Inherit the feature [i0] as the feature [i1] in the class [cls], i.e. add
      [i1] as a variant to all seeds of [i0] and add all seeds of [i0] as seeds
      of [i1]. Furthermore [i1] is no longer its own seed and cannot be found
      via the feature map *)
-
+  assert (not export || is_interface_check ft);
   assert (i0 < count ft);
   assert (i1 < count ft);
   assert (cls = (descriptor i1 ft).cls);
   let bdesc0 = base_descriptor i0 ft
   and bdesc1 = base_descriptor i1 ft
   in
-  bdesc1.seeds <- IntSet.remove i1 bdesc1.seeds;
+  bdesc1.seeds  <- IntSet.remove i1 bdesc1.seeds;
+  bdesc1.is_inh <- true;
   IntSet.iter
     (fun i_seed -> (* add variant to seed and seed to variant*)
       let bdesc_seed = base_descriptor i_seed ft in
@@ -803,6 +806,26 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (ft:t): unit =
       bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
     )
     bdesc0.seeds;
+  if not export && is_public ft then begin (* do the same for the private view *)
+    let bdesc0 = base_descriptor_priv i0 ft
+    and bdesc1 = base_descriptor_priv i1 ft
+    in
+    if bdesc1.is_inh then
+      printf "The feature %s %s is already inherited\n"
+        (Class_table.class_name cls ft.ct)
+        (feature_name_to_string (descriptor i1 ft).fname);
+    bdesc1.seeds  <- IntSet.remove i1 bdesc1.seeds;
+    bdesc1.is_inh <- true;
+    IntSet.iter
+      (fun i_seed -> (* add variant to seed and seed to variant*)
+        let bdesc_seed = base_descriptor_priv i_seed ft in
+        assert (not (IntMap.mem cls bdesc_seed.variants) ||
+        IntMap.find cls bdesc_seed.variants = i1);
+      bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
+        bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
+      )
+      bdesc0.seeds;
+  end;
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
   tab := Term_table.remove i1 !tab
@@ -833,7 +856,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
-  inherit_feature i idx cls ft
+  inherit_feature i idx cls false ft
 
 
 
@@ -882,6 +905,8 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
       in
       let cnt = count ft in
       let bdesc = standard_bdesc cnt cls def_opt
+      and bdesc_opt =
+        if is_public ft then Some (standard_bdesc cnt cls def_opt) else None
       in
       Seq.push
         {mdl       = Class_table.current_module ft.ct;
@@ -894,9 +919,9 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
          sign      = Sign.transform f_tp desc.sign;
          tp        = f_tp desc.tp;
          priv      = bdesc;
-         pub       = if is_public ft then Some bdesc else None
+         pub       = bdesc_opt
        } ft.seq;
-      inherit_feature i cnt cls ft
+      inherit_feature i cnt cls false ft
 
 
 
@@ -941,7 +966,7 @@ let export_inherited_variant (i:int) (cls:int) (ft:t): unit =
       let idx = IntMap.find cls seed_bdesc.variants in
       let desc = descriptor idx ft in
       desc.pub <- Some (standard_bdesc idx cls desc.priv.definition);
-      inherit_feature i idx cls ft
+      inherit_feature i idx cls true ft
     with Not_found ->
       assert false (* cannot happen *)
 
@@ -1008,7 +1033,10 @@ let put_function
       Deferred ->
         Class_table.check_deferred cls nanchors fn.i ft.ct
     | _ -> ());
-    let bdesc = standard_bdesc cnt cls term_opt in
+    let bdesc = standard_bdesc cnt cls term_opt
+    and bdesc_opt =
+      if is_priv then None else Some (standard_bdesc cnt cls term_opt)
+    in
     let desc =
       {mdl      = mdl;
        cls      = cls;
@@ -1020,7 +1048,7 @@ let put_function
        tp       = Variable 0;
        anchored = anchored;
        priv     = bdesc;
-       pub      = if is_priv then None else Some bdesc}
+       pub      = bdesc_opt}
     in
     add_function desc fn.i ft
   end else begin        (* feature update *)
@@ -1102,5 +1130,11 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
   for i = 0 to count ft - 1 do
     let desc = descriptor i ft in
     if desc.mdl = mdl || IntSet.mem desc.mdl used then
-      add_key i ft
+      match desc.pub with
+        Some bdesc ->
+          assert (not (IntSet.is_empty bdesc.seeds));
+          if not bdesc.is_inh then
+            add_key i ft
+      | None ->
+          if desc.mdl = mdl then add_key i ft
   done

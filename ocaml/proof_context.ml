@@ -1039,6 +1039,10 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
   (* Inherit the deferred assertion [i] in the class [cls] *)
   assert (i < count pc);
   let t = variant i cls pc in
+  let ct = class_table pc in
+  printf "inherit deferred assertion \"%s\" in the class %s\n"
+    (string_of_term t pc)
+    (Class_table.class_name cls ct);
   if not (has t pc) then
     error_info info ("The deferred assertion \""  ^
                      (string_of_term t pc) ^
