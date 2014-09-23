@@ -249,6 +249,11 @@ let add_builtin
   and cnt  = count ft
   in
   let bdesc = standard_bdesc cnt cls None
+  and bdesc_opt =
+    match fn with
+      FNoperator Allop
+    | FNoperator Someop -> Some (standard_bdesc cnt cls None)
+    | _ -> None
   in
   let lst =
     try IntMap.find mdl_nme ft.base
@@ -267,7 +272,7 @@ let add_builtin
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
     priv     = bdesc;
-    pub      = Some bdesc
+    pub      = bdesc_opt
   }
   in
   Seq.push desc ft.seq;
@@ -386,30 +391,34 @@ let find_funcs
     (nargs:int) (ft:t)
     : (int * Tvars.t * Sign.t) list =
   let tab = Feature_map.find fn ft.map in
-  List.fold_left
-    (fun lst (i,_,_,_) ->
-      let desc = descriptor i ft in
-      let sign = desc.sign in
-      let arity = Sign.arity sign
-      and tvs   = Tvars.fgs_to_global desc.tvs
-      in
-      if is_public ft && not (Option.has desc.pub) then
-        lst
-      else if arity = nargs then
-        (i,tvs,sign) :: lst
-      else if arity < nargs then (* downgrade *)
-        let nfgs = Tvars.count_all tvs in
-        try
-          let s = Class_table.downgrade_signature nfgs sign nargs
-          in
-          (i,tvs,s) :: lst
-        with Not_found ->
+  let lst =
+    List.fold_left
+      (fun lst (i,_,_,_) ->
+        let desc = descriptor i ft in
+        let sign = desc.sign in
+        let arity = Sign.arity sign
+        and tvs   = Tvars.fgs_to_global desc.tvs
+        in
+        if is_public ft && not (Option.has desc.pub) then
           lst
-      else (* upgrade *)
-        lst (* nyi: upgrade of signature *)
-    )
-    []
-    (Term_table.terms !tab)
+        else if arity = nargs then
+          (i,tvs,sign) :: lst
+        else if arity < nargs then (* downgrade *)
+          let nfgs = Tvars.count_all tvs in
+          try
+            let s = Class_table.downgrade_signature nfgs sign nargs
+            in
+            (i,tvs,s) :: lst
+          with Not_found ->
+            lst
+        else (* upgrade *)
+          lst (* nyi: upgrade of signature *)
+      )
+      []
+      (Term_table.terms !tab)
+  in
+  if lst = [] then raise Not_found
+  else lst
 
 
 exception Expand_found
@@ -772,29 +781,30 @@ let find_variant (i:int) (cls:int) (ft:t): int =
 
 
 
-let inherit_feature (i0:int) (i1:int) (ft:t): unit =
-  (* Inherit the feature [i0] as the feature [i1], i.e. add [i1] as a variant
-     to all seeds of [i0] and add all seeds of [i0] as seeds of
-     [i1]. Furthermore [i1] is no longer its own seed and cannot be found via
-     the feature map
-   *)
+let inherit_feature (i0:int) (i1:int) (cls:int) (ft:t): unit =
+  (* Inherit the feature [i0] as the feature [i1] in the class [cls], i.e. add
+     [i1] as a variant to all seeds of [i0] and add all seeds of [i0] as seeds
+     of [i1]. Furthermore [i1] is no longer its own seed and cannot be found
+     via the feature map *)
+
   assert (i0 < count ft);
   assert (i1 < count ft);
+  assert (cls = (descriptor i1 ft).cls);
   let bdesc0 = base_descriptor i0 ft
   and bdesc1 = base_descriptor i1 ft
-  and desc1  = descriptor i1 ft
   in
   bdesc1.seeds <- IntSet.remove i1 bdesc1.seeds;
   IntSet.iter
     (fun i_seed -> (* add variant to seed and seed to variant*)
       let bdesc_seed = base_descriptor i_seed ft in
-      assert (not (IntMap.mem desc1.cls bdesc_seed.variants) ||
-              IntMap.find desc1.cls bdesc_seed.variants = i1);
-      bdesc_seed.variants <- IntMap.add desc1.cls i1 bdesc_seed.variants;
+      assert (not (IntMap.mem cls bdesc_seed.variants) ||
+              IntMap.find cls bdesc_seed.variants = i1);
+      bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
       bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
     )
     bdesc0.seeds;
-  let tab = Feature_map.find desc1.fname ft.map in
+  let fn  = (descriptor i1 ft).fname in
+  let tab = Feature_map.find fn ft.map in
   tab := Term_table.remove i1 !tab
 
 
@@ -823,7 +833,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
-  inherit_feature i idx ft
+  inherit_feature i idx cls ft
 
 
 
@@ -886,7 +896,7 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
          priv      = bdesc;
          pub       = if is_public ft then Some bdesc else None
        } ft.seq;
-      inherit_feature i cnt ft
+      inherit_feature i cnt cls ft
 
 
 
@@ -931,7 +941,7 @@ let export_inherited_variant (i:int) (cls:int) (ft:t): unit =
       let idx = IntMap.find cls seed_bdesc.variants in
       let desc = descriptor idx ft in
       desc.pub <- Some (standard_bdesc idx cls desc.priv.definition);
-      inherit_feature i idx ft
+      inherit_feature i idx cls ft
     with Not_found ->
       assert false (* cannot happen *)
 
@@ -985,9 +995,6 @@ let put_function
   let is_priv = is_private ft in
   let cnt   = Seq.count ft.seq
   in
-  if is_interface_check ft then begin
-    printf "put_function %s\n" (feature_name_to_string fn.v)
-  end;
   let idx =
      try find_with_signature fn.v tvs sign ft
      with Not_found -> cnt

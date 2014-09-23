@@ -742,10 +742,6 @@ let rec satisfies
       let idx1,args1 = split_type_term tp1
       and idx2,args2 = split_type_term tp2 in
       let bdesc1 = base_descriptor (idx1-nall1) ct in
-      if is_interface_check ct then
-        printf "does class %s inherit class %s?\n"
-          (class_name (idx1-nall1) ct)
-          (class_name (idx2-nall2) ct);
       try
         let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
         let nargs    = Array.length anc_args in
@@ -758,12 +754,8 @@ let rec satisfies
           else
             raise Not_found
         done;
-        if is_interface_check ct then
-          printf "\tyes\n";
         true
       with Not_found ->
-        if is_interface_check ct then
-          printf "\tno\n";
         false
 
 
@@ -1014,8 +1006,14 @@ let export_inherited
     (anc_lst: (int*type_term array) list)
     (ct:t)
     : unit =
+  assert (anc_lst <> [] );
   assert (is_interface_check ct);
-  assert false
+  let cls_bdesc = base_descriptor cls_idx ct in
+  List.iter
+    (fun (anc_idx,anc_args) ->
+      let anc_bdesc = base_descriptor anc_idx ct in
+      one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
+    anc_lst
 
 
 

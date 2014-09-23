@@ -135,7 +135,8 @@ let put_class
           if lst_priv <> [] then
             printf "lst_priv for class %s\n" (Class_table.class_name idx ct);
           Class_table.do_inherit idx lst ct;
-          Class_table.do_inherit idx lst_priv ct;
+          if lst_priv <> [] then
+            Class_table.export_inherited idx lst_priv ct;
           Feature_table.do_inherit idx lst tp.i ft;
           Feature_table.export_inherited idx lst_priv ft;
           Proof_context.do_inherit idx lst tp.i pc)
@@ -267,7 +268,7 @@ let verify_interface (f:file_name) (pc:Proof_context.t): unit =
     let mt = Proof_context.module_table pc in
     let used = Module_table.interface_used use_blk mt in
     Proof_context.set_interface_check used pc;
-    (*analyze ast pc*)
+    analyze ast pc
   with Sys_error _ ->
     ()
 

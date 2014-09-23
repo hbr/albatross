@@ -156,6 +156,10 @@ val do_inherit: int -> (int * type_term array) list -> t -> unit
    (** [do_inherit cls anc_lst ct] let the class [cls] inherit all ancestors
        of the list [anc_lst] *)
 
+val export_inherited: int -> (int * type_term array) list -> t -> unit
+   (** [export_inherited cls anc_lst ct] let the class [cls] export all
+       privately inherited ancestors of the list [anc_lst] *)
+
 
 val boolean_type:   int -> term
 
