@@ -132,41 +132,15 @@ let parse_error_fun : (string->unit) ref =
 
 
 module Parse_info: sig
-
   val file_name:     unit -> string
-  val last_position: unit -> Lexing.position
-
   val set_file_name:     string -> unit
-  val set_last_position: Lexing.position -> unit
-
-  val print_error:  Lexing.position -> string -> unit
-  val print_unexpected: unit -> unit
-
 end = struct
-
   let fname:string ref              = ref ""
-  let last_pos: Lexing.position ref = ref (Lexing.dummy_pos)
-
   let file_name (): string =
     !fname
 
-  let last_position (): Lexing.position =
-    !last_pos
-
   let set_file_name (fn: string): unit =
     fname := fn
-
-  let set_last_position (pos: Lexing.position): unit =
-    last_pos := pos
-
-  let print_error (pos:Lexing.position) (str:string): unit =
-    let line = pos.Lexing.pos_lnum
-    and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1
-    in
-    Printf.eprintf "%s:%d:%d: %s\n" !fname line col str
-
-  let print_unexpected (): unit =
-    print_error !last_pos "Syntax error: Unexpected token"
 end (* Parse_info *)
 
 

@@ -1,7 +1,4 @@
 {
-
-let last_is_endtok = ref false
-
 type extended_token = Parser.token*(bool*bool)
               (* [token, [can_start_line,can_end_line]] *)
 
@@ -11,36 +8,39 @@ let is_start_token (tok:extended_token): bool = fst (snd tok)
 
 let is_end_token   (tok:extended_token): bool = snd (snd tok)
 
+
+let last_is_endtok: bool ref      = ref false
+
+let last_pos: Lexing.position ref = ref Lexing.dummy_pos
+
 let cached_tok: (extended_token * Lexing.position) option ref
     = ref None
 
 let reset (): unit =
   last_is_endtok := false;
+  last_pos       := Lexing.dummy_pos;
   cached_tok     := None
 
 
-let print_illegal (pos:Lexing.position): unit =
-  Support.Parse_info.print_error pos "Illegal token"
-  (*print_error pos "Illegal token"*)
+
+let info_of_pos (pos:Lexing.position): Support.info =
+  let line = pos.Lexing.pos_lnum
+  and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
+  Support.FINFO (line,col)
+
+let info_of_last_pos (): Support.info =
+  info_of_pos !last_pos
 
 
-
-let info lexbuf =
-      let pos = Lexing.lexeme_start_p lexbuf
-      in
-      Support.FINFO(
-        pos.Lexing.pos_lnum, (pos.Lexing.pos_cnum - pos.Lexing.pos_bol))
+let info_of_lexbuf (lexbuf:Lexing.lexbuf): Support.info =
+  let pos = Lexing.lexeme_start_p lexbuf in
+  info_of_pos pos
 
 
-let print_pos lexbuf =
-  let pos = Lexing.lexeme_start_p lexbuf
-  in
-  let name = pos.Lexing.pos_fname
-  and line = pos.Lexing.pos_lnum
-  and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1
-  in
-  Printf.printf "%s:%d:%d: token <%s>\n" name line col (Lexing.lexeme lexbuf)
-
+let illegal_token (tok:string) (lexbuf:Lexing.lexbuf) =
+  Support.error_info
+    (info_of_lexbuf lexbuf)
+    ("Illegal token: " ^ tok)
 
 
 
@@ -228,17 +228,14 @@ rule next_token = parse
     kwtoken id
   with
     Not_found ->
-      Printf.eprintf "Illegal token %s\n" id;
-      print_illegal (Lexing.lexeme_start_p lexbuf);
-      raise (Sys_error "error during lexical analyis")
+      illegal_token id lexbuf
 }
 
 | eof   { Parser.EOF, (false,false) }
 
 
-| _     {
-  print_illegal (Lexing.lexeme_start_p lexbuf);
-  raise (Sys_error "error during lexical analyis")
+| _  as ch   {
+  illegal_token  (String.make 1 ch) lexbuf
 }
 
 and comment level = parse
@@ -283,7 +280,7 @@ let cache_next lexbuf =
 
 let return_tok tok isend pos =
   last_is_endtok := isend;
-  Support.Parse_info.set_last_position pos;
+  last_pos       := pos;
   tok
 
 let rec token lexbuf =
@@ -309,6 +306,3 @@ let rec token lexbuf =
 
 
 }
-
-
-

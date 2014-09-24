@@ -286,6 +286,10 @@ let compile (f: file_name) (pc:Proof_context.t): unit =
   with Support.Error_info (inf,str) ->
     let fn = Support.Parse_info.file_name () in
     raise (Support.Error_fileinfo (fn,inf,str))
+  | Parsing.Parse_error ->
+      let fn = Support.Parse_info.file_name () in
+      let info = Lexer.info_of_last_pos () in
+      raise (Support.Error_fileinfo (fn,info,"Unexpected token"))
 
 
 

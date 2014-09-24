@@ -8,7 +8,7 @@ open Container
 (* The generated parser calls [parse_error "syntax error"] if it reaches an
    error state *)
 let parse_error (_:string): unit =
-  Parse_info.print_unexpected ()
+  raise Parsing.Parse_error
 
 let filename (): string =
   (Parsing.symbol_start_pos ()).Lexing.pos_fname
