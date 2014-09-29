@@ -990,21 +990,26 @@ let export_inherited
 
 
 
+let inherit_to_descendants (i:int) (info:info) (ft:t): unit =
+  let desc = descriptor i ft in
+  let nanchors = Array.length desc.anchored in
+  if not (is_deferred desc) && nanchors = 1 then
+    let descendants = Class_table.descendants desc.cls ft.ct in
+    IntSet.iter
+      (fun cls -> inherit_effective i cls info ft)
+      descendants
+
+
 
 let add_function (desc:descriptor) (info:info) (ft:t): unit =
   let cnt = count ft
   and nfgs = Tvars.count_all desc.tvs
-  and nanchors = Array.length desc.anchored
   in
   desc.tp <- Class_table.to_dummy nfgs desc.sign;
   Seq.push desc ft.seq;
   add_key cnt ft;
   add_class_feature cnt false ft;
-  if not (is_deferred desc) && nanchors = 1 then
-    let descs = Class_table.descendants desc.cls ft.ct in
-    IntSet.iter
-      (fun des -> inherit_effective cnt des info ft)
-      descs
+  inherit_to_descendants cnt info ft
 
 
 
@@ -1068,13 +1073,18 @@ let put_function
       if term_opt <> desc.priv.definition
       then
         not_match "private definition"
-    end else
+    end else begin
+      if Option.has term_opt && desc.priv.definition <> term_opt then
+        not_match "public definition";
       match desc.pub with
         None ->
-          desc.pub <- Some (standard_bdesc idx cls term_opt)
+          desc.pub <- Some (standard_bdesc idx cls term_opt);
+          add_class_feature idx false ft;
+          inherit_to_descendants idx fn.i ft
       | Some bdesc ->
           if bdesc.definition <> term_opt then
             not_match "public definition"
+    end
   end
 
 
