@@ -105,7 +105,6 @@ let name (mdl:int) (mt:t): string =
 
 
 let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
-  printf "add module %s\n" (ST.string name);
   assert (not (has name lib mt));
   let n = count mt in
   let used = IntSet.add n used in
@@ -117,7 +116,6 @@ let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
 
 
 let add_current (name:int) (used:IntSet.t) (mt:t): unit =
-  printf "add current %s\n" (ST.string name);
   assert (not (has name [] mt));
   let n = count mt in
   let used = IntSet.add n used in

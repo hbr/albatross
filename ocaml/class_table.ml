@@ -505,8 +505,6 @@ let export
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  if is_interface_check ct then
-    printf "export class %s\n" (class_name idx ct);
   let desc = Seq.elem idx ct.seq in
   let hm1, hm2 = desc.priv.hmark, hm.v in
   begin
@@ -552,7 +550,6 @@ let update
     (ct:    t)
     : unit =
   assert (has_current_module ct);
-  printf "update class %s\n" (class_name idx ct);
   let desc = Seq.elem idx ct.seq
   and mdl  = Module_table.current ct.mt
   in
@@ -563,7 +560,7 @@ let update
       update_base_descriptor hm fgens desc.priv ct
     else
       match desc.publ with
-        None ->       printf "\texport\n"; export idx hm fgens ct
+        None ->       export idx hm fgens ct
       | Some bdesc -> update_base_descriptor hm fgens bdesc ct
   end
   else

@@ -1040,7 +1040,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
   assert (i < count pc);
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "inherit deferred assertion \"%s\" in the class %s\n"
+  printf "    inherit deferred assertion \"%s\" in the class %s\n"
     (string_of_term t pc)
     (Class_table.class_name cls ct);
   if not (has t pc) then
@@ -1055,7 +1055,7 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
   (* Inherit the effective assertion [i] in the class [cls] *)
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "inherit assertion \"%s\" in the class %s\n"
+  printf "    inherit assertion \"%s\" in the class %s\n"
     (string_of_term t pc)
     (Class_table.class_name cls ct);
   if not (has_stronger t pc) then begin
