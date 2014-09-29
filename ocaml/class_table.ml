@@ -12,15 +12,48 @@ open Printf
 
 type formal = int * type_term
 
+
+module Tab: sig
+  type 'a t
+  val make: unit -> 'a t
+  val count: 'a t -> int
+  val add:   term -> int -> int -> 'a -> 'a t -> unit
+  val unify_with: term -> int -> int -> 'a t -> ('a * Term_sub.t) list
+end = struct
+  type 'a t = {mutable tab: Term_table.t;
+               seq: 'a seq}
+
+  let make (): 'a t = {tab = Term_table.empty; seq = Seq.empty ()}
+
+  let count (t:'a t): int = Seq.count t.seq
+
+  let add (t:term) (nargs:int) (nbenv:int) (e:'a) (tab:'a t): unit =
+    let cnt = count tab in
+    tab.tab <- Term_table.add t nargs nbenv cnt tab.tab;
+    Seq.push e tab.seq
+
+  let unify_with
+      (t:term) (nargs:int) (nbenv:int) (tab:'a t)
+      : ('a * Term_sub.t) list =
+    let lst = Term_table.unify_with t nargs nbenv tab.tab in
+    List.map
+      (fun (idx,sub) ->
+        assert (idx < count tab);
+        Seq.elem idx tab.seq, sub)
+      lst
+end
+
+
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
-                         mutable fmap:  Term_table.t ref Feature_map.t;
+                         mutable fmap:  int Tab.t Feature_map.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
                          mutable descendants:  IntSet.t;
                          mutable ancestors: type_term array IntMap.t}
+
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
@@ -31,6 +64,9 @@ type t = {mutable map:   int IntMap.t;
           seq:           descriptor seq;
           mutable base:  int IntMap.t; (* module name -> class index *)
           mt:            Module_table.t}
+
+
+
 
 let dummy_index     = 0
 let boolean_index   = 1
@@ -545,7 +581,7 @@ let find_features
   let bdesc = base_descriptor cls ct in
   try
     let tab = Feature_map.find fn bdesc.fmap in
-    Term_table.unify_with tp ntvs 0 !tab
+    Tab.unify_with tp ntvs 0 tab
   with Not_found ->
     []
 
@@ -559,12 +595,12 @@ let add_feature_bdesc
   let tab =
     try Feature_map.find fn bdesc.fmap
     with Not_found ->
-      let tab = ref Term_table.empty in
+      let tab = Tab.make () in
       bdesc.fmap <- Feature_map.add fn tab bdesc.fmap;
       tab
   in
   assert (Feature_map.mem fn bdesc.fmap);
-  tab := Term_table.add tp nfgs 0 fidx !tab;
+  Tab.add tp nfgs 0 fidx tab;
   if is_deferred then
     bdesc.def_features <- fidx :: bdesc.def_features
   else
