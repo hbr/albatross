@@ -80,7 +80,7 @@ let depth (pc:t): int =
   assert (res = List.length pc.stack);
   res
 
-let empty_entry =
+let make_entry () =
   let e = Term_table.empty in
     {prvd=e; prvd2=e; bwd=e; fwd=e;
      slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty};
@@ -108,7 +108,7 @@ let make (): t  =
      terms    = Seq.empty ();
      do_fwd   = false;
      work     = [];
-     entry    = empty_entry;
+     entry    = make_entry ();
      stack    = [];
      trace    = false}
   in
