@@ -62,6 +62,7 @@ let standard_bdesc (i:int) (cls:int) (def_opt: term option): base_descriptor =
 
 
 let class_table (ft:t):  Class_table.t   = ft.ct
+let module_table (ft:t): Module_table.t = Class_table.module_table ft.ct
 
 let is_private (ft:t): bool = Class_table.is_private ft.ct
 let is_public  (ft:t): bool = Class_table.is_public  ft.ct
@@ -1147,4 +1148,16 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
             add_key i ft
       | None ->
           if desc.mdl = mdl then add_key i ft
+  done
+
+let check_interface (ft:t): unit =
+  assert (is_interface_check ft);
+  let mt = module_table ft in
+  let curr = Module_table.current mt in
+  for i = 0 to count ft - 1 do
+    let desc = descriptor i ft in
+    if curr = desc.mdl && is_deferred desc && not (Option.has desc.pub) then
+      error_info (FINFO (1,0))
+        ("deferred feature `" ^ (string_of_signature i ft) ^
+         "' is not public")
   done

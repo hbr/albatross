@@ -137,3 +137,5 @@ val export_inherited: int -> (int * type_term array) list  -> t -> unit
 
 
 val print: t -> unit
+
+val check_interface: t -> unit

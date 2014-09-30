@@ -36,8 +36,13 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
 
 type proof_term = Proof_table.proof_term
 
+type gdesc = {mutable pub: bool;
+              mdl: int;
+              mutable defer: bool}
+
 type t = {base:     Proof_table.t;
           terms:    desc  Seq.t;
+          gseq:     gdesc Seq.t;
           mutable do_fwd: bool;
           mutable work:   int list;
           mutable entry:  entry;
@@ -106,6 +111,7 @@ let make (): t  =
   let res =
     {base     = Proof_table.make ();
      terms    = Seq.empty ();
+     gseq     = Seq.empty ();
      do_fwd   = false;
      work     = [];
      entry    = make_entry ();
@@ -590,7 +596,14 @@ let add_new_0
   end;
   if work then
     add_to_work     ();
-  Seq.push {td=td; used_gen = used_gen} pc.terms
+  Seq.push {td=td; used_gen = used_gen} pc.terms;
+  if is_global pc then begin
+    let mt = module_table pc in
+    let mdl = Module_table.current mt in
+    Seq.push {pub = is_public pc; defer = false; mdl = mdl} pc.gseq;
+    assert (count pc = Seq.count pc.gseq);
+  end
+
 
 
 let with_work = true
@@ -1152,6 +1165,18 @@ let discharged (i:int) (pc:t): term * proof_term =
 
 
 
+let inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
+  assert (is_global pc);
+  assert (owner <> -1);
+  let ct = class_table pc in
+  if not defer then
+    let descendants = Class_table.descendants owner ct in
+    IntSet.iter
+      (fun descendant -> inherit_effective i descendant pc)
+      descendants
+
+
+
 let add_proved_0
     (defer:bool)
     (owner:int)
@@ -1161,21 +1186,28 @@ let add_proved_0
     (used_gen:IntSet.t)
     (pc:t)
     : unit =
-  if has_stronger t pc then
-    ()
-  else begin
+  let ct = class_table pc in
+  try
+    let idx = find_stronger t pc in
+    assert (not (is_global pc) || idx < Seq.count pc.gseq);
+    if
+      is_global pc &&
+      owner <> -1  &&
+      is_public pc &&
+      not (Seq.elem idx pc.gseq).pub
+    then begin
+      Class_table.add_assertion idx owner defer ct;
+      inherit_to_descendants idx defer owner pc;
+      (Seq.elem idx pc.gseq).pub <- true
+    end
+  with Not_found -> begin
     let cnt = count pc in
-    if is_global pc then
-      Proof_table.add_proved_global defer owner t pterm delta pc.base
-    else
-      Proof_table.add_proved t pterm delta pc.base;
+    Proof_table.add_proved t pterm delta pc.base;
     add_new t used_gen pc;
-    if is_global pc && not defer && owner <> -1 then begin
-      let ct = class_table pc in
-      let descendants = Class_table.descendants owner ct in
-      IntSet.iter
-        (fun descendant -> inherit_effective cnt descendant pc)
-        descendants
+    if is_global pc && owner <> -1 then begin
+      (Seq.elem cnt pc.gseq).defer <- defer;
+      Class_table.add_assertion cnt owner defer ct;
+      inherit_to_descendants cnt defer owner pc
     end
   end;
   if pc.trace then begin
@@ -1237,3 +1269,17 @@ let backward_data (idx:int) (pc:t): term list * IntSet.t =
   in
   ps,
   desc.used_gen
+
+
+let check_interface (pc:t): unit =
+  assert (is_interface_check pc);
+  let ft = feature_table pc in
+  Feature_table.check_interface ft;
+  assert (count pc = Seq.count pc.gseq);
+  for i = 0 to count pc - 1 do
+    let gdesc = Seq.elem i pc.gseq in
+    if gdesc.defer && not gdesc.pub then
+      error_info (FINFO (1,0))
+        ("deferred assertion `" ^ (string_of_term (term i pc) pc) ^
+         "' is not public")
+  done

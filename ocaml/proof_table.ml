@@ -22,8 +22,6 @@ type desc = {nbenv0:     int;
              term:       term;
              proof_term: proof_term;}
 
-type gdesc = {defer: bool; owner:int}
-
 type entry = {nbenv:  int;
               names:  int array;
               imp_id: int;
@@ -33,7 +31,6 @@ type entry = {nbenv:  int;
             }
 
 type t = {seq:  desc Seq.t;
-          gseq: gdesc Seq.t;
           mutable entry: entry;
           mutable stack: entry list;
           c: Context.t}
@@ -147,7 +144,6 @@ let string_of_term (t:term) (at:t): string =
 
 let make (): t =
   {seq   = Seq.empty ();
-   gseq  = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
             nbenv   = 0;
@@ -536,25 +532,8 @@ let add_proved (t:term) (pt:proof_term) (delta:int) (at:t): unit =
    *)
   let cnt = count at in
   let pt = adapt_proof_term cnt delta pt in
+  assert (not (is_global at) || is_proof_pair t pt at);
   add_proved_0 t pt at
-
-
-let add_proved_global
-    (defer:bool) (owner:int) (t:term) (pt:proof_term) (delta:int) (at:t): unit =
-  (** Add the term [t] and its proof term [pt] to the table.
-   *)
-  assert (is_global at);
-  let cnt = count at in
-  assert begin
-    let pt = adapt_proof_term cnt delta pt in
-    is_proof_pair t pt at
-  end;
-  add_proved t pt delta at;
-  Seq.push {defer=defer; owner=owner} at.gseq;
-  let ct = class_table at in
-  if owner <> (-1) then
-    Class_table.add_assertion cnt owner defer ct
-
 
 
 let add_axiom (t:term) (at:t): unit =
@@ -570,7 +549,6 @@ let add_assumption (t:term) (at:t): unit =
 let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
   assert (is_global at);
   let pt = Inherit (idx,cls) in
-  (*assert (is_proof_pair t pt at);*)
   add_proved_0 t pt at
 
 

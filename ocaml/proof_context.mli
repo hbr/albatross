@@ -75,3 +75,5 @@ val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
   (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the
       assertions from all ancestors [par_idx[par_args]] in the ancestor list
       [anc_lst]. *)
+
+val check_interface: t -> unit
