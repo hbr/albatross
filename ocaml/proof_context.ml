@@ -1053,13 +1053,13 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
   assert (i < count pc);
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "    inherit deferred assertion \"%s\" in the class %s\n"
+  printf "    inherit deferred \"%s\" in %s\n"
     (string_of_term t pc)
     (Class_table.class_name cls ct);
   if not (has t pc) then
     error_info info ("The deferred assertion \""  ^
                      (string_of_term t pc) ^
-                     "\" is missing in the class " ^
+                     "\" is missing in " ^
                      (Class_table.class_name cls (class_table pc)))
 
 
@@ -1068,7 +1068,7 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
   (* Inherit the effective assertion [i] in the class [cls] *)
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "    inherit assertion \"%s\" in the class %s\n"
+  printf "    inherit \"%s\" in %s\n"
     (string_of_term t pc)
     (Class_table.class_name cls ct);
   if not (has_stronger t pc) then begin

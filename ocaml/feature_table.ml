@@ -839,7 +839,7 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
   let desc = descriptor i ft in
-  printf "    inherit deferred %s %s in class %s\n"
+  printf "    inherit deferred %s %s in %s\n"
     (Class_table.class_name desc.cls ft.ct)
     (feature_name_to_string desc.fname)
     (Class_table.class_name cls ft.ct);
@@ -865,9 +865,9 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
 
 
 let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
-  (* Inherit the effective  feature [i] in the class [cls] *)
+  (* Inherit the effective  feature [i] in [cls] *)
   let desc = descriptor i ft in
-  printf "    inherit effective %s %s in class %s\n"
+  printf "    inherit %s %s in %s\n"
     (Class_table.class_name desc.cls ft.ct)
     (feature_name_to_string desc.fname)
     (Class_table.class_name cls ft.ct);

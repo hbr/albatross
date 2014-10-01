@@ -671,8 +671,6 @@ let add
     (fgens: formal_generics)
     (ct:    t)
     : unit =
-  printf "add %s class %s\n" (if is_public ct then "public" else "private")
-    (ST.string cn.v);
   let fgs = Module_table.class_formal_generics fgens ct.mt in
   let idx  = count ct
   and nfgs = Array.length fgs
