@@ -22,6 +22,14 @@ val make: unit -> t
 val used: int -> t -> IntSet.t
 val has:  int -> int list -> t -> bool
 
+val current_used: t -> IntSet.t
+    (** [current_used mt] The set of all publicly used modules of the current
+        module *)
+
+val current_used_priv: t -> IntSet.t
+    (** [current_used mt] The set of all privately used modules of the current
+        module *)
+
 val interface_used: int withinfo list -> t -> IntSet.t
     (** [interface_used use_blk mt] returns the used modules in [use_blk] and all
         indirectly used modules including the current module

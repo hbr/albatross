@@ -72,6 +72,14 @@ let used_priv (mdl:int) (mt:t): IntSet.t =
   (Seq.elem mdl mt.seq).priv
 
 
+let current_used (mt:t): IntSet.t =
+  assert (has_current mt);
+  used (current mt) mt
+
+let current_used_priv (mt:t): IntSet.t =
+  assert (has_current mt);
+  used_priv (current mt) mt
+
 let descriptor (i:int) (mt:t): desc =
   assert (i < count mt);
   Seq.elem i mt.seq
