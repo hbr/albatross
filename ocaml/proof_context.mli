@@ -15,7 +15,7 @@ val is_private:         t -> bool
 val is_public:          t -> bool
 val is_interface_use:   t -> bool
 val is_interface_check: t -> bool
-val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
 val set_interface_check: IntSet.t -> t -> unit
 

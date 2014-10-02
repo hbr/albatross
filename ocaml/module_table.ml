@@ -30,13 +30,13 @@ let count (mt:t): int =
   Seq.count mt.seq
 
 
-let find (name:int) (lib:int list) (mt:t): int =
+let find ((name,lib):int * int list) (mt:t): int =
   Modmap.find (name,lib) mt.map
 
 
-let has (name:int) (lib: int list) (mt:t): bool =
+let has (nme:int*int list) (mt:t): bool =
   (* Is the module [lib.name] in the table?  *)
-  try let _ = find name lib mt in true
+  try let _ = find nme mt in true
   with Not_found ->               false
 
 
@@ -85,12 +85,12 @@ let descriptor (i:int) (mt:t): desc =
   Seq.elem i mt.seq
 
 
-let interface_used (used_blk: int withinfo list) (mt:t): IntSet.t =
+let interface_used (used_blk: use_block) (mt:t): IntSet.t =
   assert (has_current mt);
   List.fold_left
     (fun set mdl ->
       try
-        let i = find mdl.v [] mt in
+        let i = find (mdl.v,[]) mt in
         let desc = descriptor i mt in
         IntSet.union set desc.priv
       with Not_found ->
@@ -112,8 +112,8 @@ let name (mdl:int) (mt:t): string =
 
 
 
-let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
-  assert (not (has name lib mt));
+let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
+  assert (not (has (name,lib) mt));
   let n = count mt in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=lib; priv=used; pub=used} mt.seq;
@@ -124,7 +124,7 @@ let add_used (name:int) (lib:int list) (used:IntSet.t) (mt:t): unit =
 
 
 let add_current (name:int) (used:IntSet.t) (mt:t): unit =
-  assert (not (has name [] mt));
+  assert (not (has (name,[]) mt));
   let n = count mt in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=[]; priv=used; pub=IntSet.empty} mt.seq;
@@ -145,7 +145,7 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
 
 
 
-
+(*
 let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
   assert (0 <= mode);
   assert (mode <= 2);
@@ -157,9 +157,9 @@ let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
   mt.map   <- Modmap.add (name,lib) n mt.map;
   mt.mode  <- mode;
   mt.fgens <- IntMap.empty
+*)
 
-
-let set_used (set:IntSet.t) (mt:t): unit =
+(*let set_used (set:IntSet.t) (mt:t): unit =
   assert (has_current mt);
   let mdl = current mt           in
   let desc = Seq.elem mdl mt.seq
@@ -168,7 +168,7 @@ let set_used (set:IntSet.t) (mt:t): unit =
     desc.pub <- set
   else
     desc.priv <- set
-
+*)
 
 
 

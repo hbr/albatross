@@ -193,7 +193,7 @@ let expression_from_entities entlist =
 
 %start file use_block_opt
 %type <Support.module_declaration> file
-%type <int Support.withinfo list> use_block_opt
+%type <Support.use_block> use_block_opt
 
 
 

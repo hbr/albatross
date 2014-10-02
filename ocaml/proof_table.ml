@@ -46,8 +46,8 @@ let is_interface_use   (at:t): bool = Context.is_interface_use  at.c
 let is_interface_check (at:t): bool = Context.is_interface_check  at.c
 
 
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (at:t): unit =
-  Context.add_used_module name lib used at.c
+let add_used_module (name:int*int list) (used:IntSet.t) (at:t): unit =
+  Context.add_used_module name used at.c
 
 let add_current_module (name:int) (used:IntSet.t) (at:t): unit =
   Context.add_current_module name used at.c

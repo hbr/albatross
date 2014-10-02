@@ -43,12 +43,12 @@ let module_table(c:t): Module_table.t   = Class_table.module_table (class_table 
 let current_module (c:t): int =
   Feature_table.current_module c.ft
 
-let find_module (name:int) (lib:int list) (c:t): int =
-  Feature_table.find_module name lib c.ft
+let find_module (name:int*int list) (c:t): int =
+  Feature_table.find_module name c.ft
 
 
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (c:t): unit =
-  Feature_table.add_used_module name lib used c.ft
+let add_used_module (name:int*int list) (used:IntSet.t) (c:t): unit =
+  Feature_table.add_used_module name used c.ft
 
 let add_current_module (name:int) (used:IntSet.t) (c:t): unit =
   Feature_table.add_current_module name used c.ft

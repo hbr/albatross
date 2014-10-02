@@ -348,6 +348,9 @@ let set_argument (ad:t) (str:string): unit =
 
 
 let get_module_states (ad:t): unit =
+  (* Read the names of all source files (.al,.ali), compile a list of all
+     modules in the package, get the states of all modules (new, modified,
+     unchanged) and mark the modules which are affected indirectly.  *)
   let f1 (set:IntSet.t) (fn:string): IntSet.t =
     try
       let mdlstr =
@@ -541,7 +544,11 @@ let analyze_used
         assert (ext="ali" || rest=[]);
         try
           let umdl =
-            List.find (fun m -> not (Module_table.has m.v [] mt)) use_blk in
+            List.find
+              (fun m ->
+                not (Module_table.has (m.v,[]) mt))
+              use_blk
+          in
           used (push umdl) set
         with Not_found ->
           if ext="al" then set
@@ -549,7 +556,7 @@ let analyze_used
             if 0 < ad.verbosity then
               printf " use `%s'\n" (ST.string mdl);
             let fn = file_path mdl ext ad in
-            Proof_context.add_used_module mdl [] set pc;
+            Proof_context.add_used_module (mdl,[]) set pc;
             let use_blk2,ast = parse_file fn in
             assert (use_blk = use_blk2);
             analyze ast fn pc;

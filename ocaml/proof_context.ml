@@ -69,8 +69,8 @@ let is_public  (pc:t): bool = Proof_table.is_public  pc.base
 let is_interface_use   (pc:t): bool = Proof_table.is_interface_use  pc.base
 let is_interface_check (pc:t): bool = Proof_table.is_interface_check  pc.base
 
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (pc:t): unit =
-  Proof_table.add_used_module name lib used pc.base
+let add_used_module (name:int*int list) (used:IntSet.t) (pc:t): unit =
+  Proof_table.add_used_module name used pc.base
 
 let add_current_module (name:int) (used:IntSet.t) (pc:t): unit =
   Proof_table.add_current_module name used pc.base

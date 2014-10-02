@@ -21,7 +21,7 @@ val feature_table:t -> Feature_table.t
 
 val current_module:     t -> int
 val used_modules:       int -> t -> IntSet.t
-val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
 val set_interface_check: IntSet.t -> t -> unit
 
@@ -32,7 +32,7 @@ val is_interface_use:  t -> bool
     (** Are we using an interface? *)
 
 
-val find_module:        int -> int list -> t -> int
+val find_module:        (int * int list) -> t -> int
 
 val push_with_gap:  entities list withinfo -> return_type -> int -> t -> unit
 val push:  entities list withinfo -> return_type -> t -> unit

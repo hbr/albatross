@@ -5,8 +5,8 @@ open Signature
 
 type t
 val count:       t -> int
-val find:        int -> int list -> t -> int
-val has:         int -> int list -> t -> bool
+val find:        (int * int list) -> t -> int
+val has:         (int * int list) -> t -> bool
 val has_current: t -> bool
 val current:     t -> int
 
@@ -20,7 +20,7 @@ val name:        int -> t -> string
 val make: unit -> t
 
 val used: int -> t -> IntSet.t
-val has:  int -> int list -> t -> bool
+
 
 val current_used: t -> IntSet.t
     (** [current_used mt] The set of all publicly used modules of the current
@@ -35,8 +35,8 @@ val interface_used: int withinfo list -> t -> IntSet.t
         indirectly used modules including the current module
      *)
 
-val add_used: int -> int list -> IntSet.t -> t -> unit
-    (** [add_used name lib used mt] adds the used module (lib,name) which uses
+val add_used: (int * int list) -> IntSet.t -> t -> unit
+    (** [add_used (name,lib= used mt] adds the used module [lib,name] which uses
         the modules [used] to the module table [mt]. It sets the current
         module to [lib,name] and puts it to interface-use mode *)
 
@@ -51,8 +51,9 @@ val set_interface_check: IntSet.t -> t -> unit
         in private mode) to interface-check mode and set the publicly used modules
         to [used] in the module table [mt]. *)
 
-val add:  int -> int list -> int -> t -> unit
-val set_used: IntSet.t -> t -> unit
+(*val add:  int -> int list -> int -> t -> unit*)
+
+(*val set_used: IntSet.t -> t -> unit*)
 
 
 val put_formal: int withinfo -> type_term -> t -> unit

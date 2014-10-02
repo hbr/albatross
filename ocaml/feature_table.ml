@@ -1103,8 +1103,8 @@ let count_modules (ft:t): int =
 let used_modules (mdl:int) (ft:t): IntSet.t =
   Class_table.used_modules mdl ft.ct
 
-let find_module (name:int) (lib:int list) (ft:t): int =
-  Class_table.find_module name lib ft.ct
+let find_module (name:int*int list)  (ft:t): int =
+  Class_table.find_module name ft.ct
 
 let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
 
@@ -1126,9 +1126,9 @@ let add_base_features (mdl_name:int) (ft:t): unit =
     ()
 
 
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_used_module name lib used ft.ct;
-  add_base_features name ft
+let add_used_module (name:int*int list) (used:IntSet.t) (ft:t): unit =
+  Class_table.add_used_module name used ft.ct;
+  add_base_features (fst name) ft
 
 let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   Class_table.add_current_module name used ft.ct;

@@ -52,7 +52,7 @@ val current_module:  t -> int
 val count_modules: t -> int
     (** The number of modules in the system *)
 
-val find_module: int -> int list -> t -> int
+val find_module: (int * int list) -> t -> int
     (** [find_module name lib ft] finds the module [lib.name] in [ft] *)
 
 val module_name: int -> t -> string
@@ -61,7 +61,7 @@ val module_name: int -> t -> string
 val used_modules: int -> t -> IntSet.t
   (** [used_modules mdl ft] returns the used modules of module [mdl] *)
 
-val add_used_module:    int -> int list -> IntSet.t -> t -> unit
+val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
 val set_interface_check: IntSet.t -> t -> unit
 

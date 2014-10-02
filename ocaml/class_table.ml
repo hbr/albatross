@@ -86,8 +86,8 @@ let current_module (ct:t): int =
 
 let count_modules (ct:t): int = Module_table.count ct.mt
 
-let find_module (name:int) (lib:int list) (ct:t): int =
-  Module_table.find name lib ct.mt
+let find_module (name:int*int list) (ct:t): int =
+  Module_table.find name ct.mt
 
 let used_modules (mdl:int) (ct:t): IntSet.t =
   Module_table.used mdl ct.mt
@@ -159,9 +159,10 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
   with Not_found ->
     ()
 
-let add_used_module (name:int) (lib:int list) (used:IntSet.t) (ct:t): unit =
-  Module_table.add_used name lib used ct.mt;
-  add_base_classes name ct
+let add_used_module (name:int*int list) (used:IntSet.t) (ct:t): unit =
+  Module_table.add_used name used ct.mt;
+  add_base_classes (fst name) ct
+
 
 let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
   Module_table.add_current name used ct.mt;
