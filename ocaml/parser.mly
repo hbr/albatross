@@ -231,7 +231,9 @@ module_list:
     one_module  { [$1] }
 |   one_module separator module_list { $1 :: $3 }
 
-one_module: LIDENTIFIER  { withinfo (rhs_info 1) $1 }
+one_module: dotted_id_list  {
+  withinfo (rhs_info 1) (List.hd $1, List.rev (List.tl $1))
+}
 
 
 /* ------------------------------------------------------------------------- */

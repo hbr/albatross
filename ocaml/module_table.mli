@@ -30,7 +30,7 @@ val current_used_priv: t -> IntSet.t
     (** [current_used mt] The set of all privately used modules of the current
         module *)
 
-val interface_used: int withinfo list -> t -> IntSet.t
+val interface_used: use_block -> t -> IntSet.t
     (** [interface_used use_blk mt] returns the used modules in [use_blk] and all
         indirectly used modules including the current module
      *)

@@ -19,7 +19,7 @@ type desc = { name: int;
             }
 
 
-type t = {mutable map:    int Modmap.t;
+type t = {mutable map:    int Module_map.t;
           seq:            desc Seq.t;
           mutable mode:   int;
           mutable fgens: type_term IntMap.t}
@@ -31,7 +31,7 @@ let count (mt:t): int =
 
 
 let find ((name,lib):int * int list) (mt:t): int =
-  Modmap.find (name,lib) mt.map
+  Module_map.find (name,lib) mt.map
 
 
 let has (nme:int*int list) (mt:t): bool =
@@ -90,11 +90,11 @@ let interface_used (used_blk: use_block) (mt:t): IntSet.t =
   List.fold_left
     (fun set mdl ->
       try
-        let i = find (mdl.v,[]) mt in
+        let i = find mdl.v mt in
         let desc = descriptor i mt in
         IntSet.union set desc.priv
       with Not_found ->
-        error_info mdl.i ("module `" ^ (ST.string mdl.v) ^
+        error_info mdl.i ("module `" ^ (string_of_module mdl.v) ^
                           "'not used in implementation file"))
     (IntSet.singleton (current mt))
     used_blk
@@ -117,7 +117,7 @@ let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
   let n = count mt in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=lib; priv=used; pub=used} mt.seq;
-  mt.map   <- Modmap.add (name,lib) n mt.map;
+  mt.map   <- Module_map.add (name,lib) n mt.map;
   mt.mode  <- 2;
   mt.fgens <- IntMap.empty
 
@@ -128,7 +128,7 @@ let add_current (name:int) (used:IntSet.t) (mt:t): unit =
   let n = count mt in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=[]; priv=used; pub=IntSet.empty} mt.seq;
-  mt.map   <- Modmap.add (name,[]) n mt.map;
+  mt.map   <- Module_map.add (name,[]) n mt.map;
   mt.mode  <- 0;
   mt.fgens <- IntMap.empty
 
@@ -145,36 +145,8 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
 
 
 
-(*
-let add (name:int) (lib:int list) (mode:int) (mt:t): unit =
-  assert (0 <= mode);
-  assert (mode <= 2);
-  printf "add module %s\n" (ST.string name);
-  assert (not (has name lib mt));
-  let n = count mt
-  and empty = IntSet.empty in
-  Seq.push {name=name; lib=lib; priv=empty; pub=empty} mt.seq;
-  mt.map   <- Modmap.add (name,lib) n mt.map;
-  mt.mode  <- mode;
-  mt.fgens <- IntMap.empty
-*)
-
-(*let set_used (set:IntSet.t) (mt:t): unit =
-  assert (has_current mt);
-  let mdl = current mt           in
-  let desc = Seq.elem mdl mt.seq
-  and set  = IntSet.add mdl set  in
-  if is_public mt then
-    desc.pub <- set
-  else
-    desc.priv <- set
-*)
-
-
-
-
 let make (): t =
-  {map=Modmap.empty; seq=Seq.empty (); mode=0; fgens = IntMap.empty}
+  {map=Module_map.empty; seq=Seq.empty (); mode=0; fgens = IntMap.empty}
 
 
 

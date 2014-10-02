@@ -156,9 +156,10 @@ end
 
 
 module Mystring: sig
+  val rev_split: string -> char -> string list
   val split: string -> char -> string list
 end = struct
-  let split (str:string) (sep:char): string list =
+  let rev_split (str:string) (sep:char): string list =
     let start    = ref 0
     and lst      = ref []
     and len      = String.length str
@@ -173,7 +174,10 @@ end = struct
         lst := (String.sub str !start (len - !start)) :: !lst;
         start := len
     done;
-    List.rev !lst
+    !lst
+
+  let split (str:string) (sep:char): string list =
+    List.rev (rev_split str sep)
 end
 
 
