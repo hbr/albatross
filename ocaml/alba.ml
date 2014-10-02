@@ -86,15 +86,30 @@ let basic_lib_paths: string list =
 
 
 let make (): t = {
-  work_dir  = Filename.current_dir_name;
-  to_compile = [];
-  modules   = [];
+  work_dir      = Filename.current_dir_name;
+  to_compile    = [];
+  modules       = [];
   module_states = IntMap.empty;
-  lib_paths = basic_lib_paths;
-  lib_map   = Library_map.empty;
-  command   = Nocommand;
-  trace_proof = false;
-  trace_failed = false;
+  lib_paths     = basic_lib_paths;
+  lib_map       = Library_map.empty;
+  command       = Nocommand;
+  trace_proof   = false;
+  trace_failed  = false;
+  verbosity = 0;
+  force = false;
+}
+
+
+let make_lib (lib_dir:string) (ad:t) = {
+  work_dir      = lib_dir;
+  to_compile    = [];
+  modules       = [];
+  module_states = IntMap.empty;
+  lib_paths     = ad.lib_paths;
+  lib_map       = Library_map.empty;
+  command       = Nocommand;
+  trace_proof   = false;
+  trace_failed  = false;
   verbosity = 0;
   force = false;
 }
@@ -110,6 +125,14 @@ let my_opendir (dirname:string): dir_handle =
   with
     Unix_error _ ->
       raise (Sys_error ("Cannot open directory `" ^ dirname ^ "'"))
+
+
+let my_closedir (h:dir_handle): unit =
+  try
+    closedir h
+  with Unix_error _ ->
+      raise (Sys_error "Cannot close directory")
+
 
 
 let my_mkdir (dirname:string): unit =
@@ -145,7 +168,7 @@ let dir_fold (f: 'a -> string -> 'a) (a:'a) (dirname:string): 'a =
 
 
 
-let dir_iter (f:string -> unit) (dirname:string): 'a =
+let dir_iter (f:string -> unit) (dirname:string): unit =
   let dir = my_opendir dirname in
   let rec iter (): unit =
     try
@@ -155,45 +178,93 @@ let dir_iter (f:string -> unit) (dirname:string): 'a =
     with End_of_file ->
       ()
   in
-  iter ()
+  iter ();
+  my_closedir dir
 
 
-
-
-let check_alba_dir (ad:t): unit =
-  let illegal (): unit =
-    raise (Arg.Bad
-             ("working directory `" ^
-              ad.work_dir ^ "' is not an albatross directory"))
+let dir_find (f:string -> bool) (dirname:string): string =
+  let dir = my_opendir dirname in
+  let rec find (): string =
+    try
+      let fn = readdir dir in
+      if f fn then fn
+      else find ()
+    with End_of_file ->
+      raise Not_found
   in
+  let res = find () in
+  my_closedir dir;
+  res
+
+
+let dir_has (fn:string) (dirname:string): bool =
+  try
+    let _ = dir_find (fun n -> n=fn) dirname in
+    true
+  with Not_found ->
+    false
+
+
+
+let has_alba_dir (ad:t): bool =
   try
     let alba_dir = Filename.concat ad.work_dir ".alba" in
     let stat = stat alba_dir in
     if stat.st_kind = S_DIR then
-      ()
+      true
     else
-      illegal ()
+      false
   with Unix_error (err,str1,str2) ->
-    if err = ENOENT then
-      illegal ()
-    else
-      assert false
+    false
 
+
+let check_alba_dir (ad:t): unit =
+  if has_alba_dir ad then
+    ()
+  else
+    raise (Arg.Bad
+             ("working directory `" ^
+              ad.work_dir ^ "' is not an albatross directory"))
+
+
+
+let find_lib_dir (lib:library_name) (ad:t): string =
+  let lib_str = string_of_library lib in
+  let rec find (paths:string list): string =
+    match paths with
+      [] -> raise Not_found
+    | path::rest ->
+        if dir_has lib_str path then
+          Filename.concat path lib_str
+        else
+          find rest
+  in
+  find ad.lib_paths
 
 
 
 let file_path (mdl:int) (ext:string) (ad:t): string =
   Filename.concat ad.work_dir ((ST.string mdl) ^ "." ^ ext)
 
+
 let dfile_path (mdl:int) (ext:string) (ad:t): string =
   let alba_dir = Filename.concat ad.work_dir ".alba" in
   Filename.concat alba_dir ((ST.string mdl) ^ ".d" ^ ext)
 
-let file_path_used ((m,lib):module_name) (ad:t): string =
-  if lib = [] then
-    file_path m "ali" ad
-  else
-    assert false (* nyi: libraries *)
+
+
+let file_status (mdlname: int) (ext:string) (ad:t): bool * bool =
+  let dfname = dfile_path mdlname ext ad
+  and fname  = file_path mdlname ext ad
+  in
+  let stat = my_stat fname in
+  try
+    let mstat = my_stat dfname in
+    let modified = mstat.st_mtime < stat.st_mtime in
+      modified, false
+  with Not_found ->
+    false, true
+
 
 
 
@@ -216,21 +287,6 @@ let used (mdlname:int) (ext:string) (ad:t): module_name list =
   let lst = read [] in
   close_in ch_in;
   List.rev lst
-
-
-
-
-let file_status (mdlname: int) (ext:string) (ad:t): bool * bool =
-  let dfname = dfile_path mdlname ext ad
-  and fname  = file_path mdlname ext ad
-  in
-  let stat = my_stat fname in
-  try
-    let mstat = my_stat dfname in
-    let modified = mstat.st_mtime < stat.st_mtime in
-      modified, false
-  with Not_found ->
-    false, true
 
 
 
@@ -263,6 +319,69 @@ let module_states (ad:t): (state*state) IntMap.t =
         IntMap.add nme (st,sti) map)
     IntMap.empty
     ad.modules
+
+
+
+
+let get_module_states (ad:t): unit =
+  (* Read the names of all source files (.al,.ali), compile a list of all
+     modules in the package, get the states of all modules (new, modified,
+     unchanged) and mark the modules which are affected indirectly.  *)
+  assert (has_alba_dir ad);
+  let f1 (set:IntSet.t) (fn:string): IntSet.t =
+    try
+      let mdlstr =
+        if Filename.check_suffix fn ".al" then
+          Filename.chop_suffix fn ".al"
+        else if Filename.check_suffix fn ".ali" then
+          Filename.chop_suffix fn ".ali"
+        else
+          raise Not_found
+      in
+      IntSet.add (ST.symbol mdlstr) set
+    with Not_found ->
+      set
+  and check_affected (nme:int) (st:state): unit =
+    List.iter
+      (fun (used,lib) ->
+        if lib <> [] then
+          () (* nyi: libraries *)
+        else
+          try
+            let _,stui = IntMap.find used ad.module_states in
+            if not stui.is_avail || stui.modified || stui.is_new then
+              st.affected <- true
+          with Not_found ->
+            st.affected <- true)
+      st.used
+  in
+  let set = dir_fold f1 IntSet.empty ad.work_dir in
+  ad.modules <- IntSet.elements set;
+  ad.module_states <- module_states ad;
+  IntMap.iter
+    (fun nme (st,sti) ->
+      check_affected nme st;
+      check_affected nme sti)
+    ad.module_states
+
+
+
+
+let find_lib_ad (lib:library_name) (ad:t): t =
+  if lib = [] then
+    ad
+  else
+    try
+      Library_map.find lib ad.lib_map
+    with Not_found ->
+      let dirname = find_lib_dir lib ad in
+      let lib_ad  = make_lib dirname ad in
+      if has_alba_dir lib_ad then begin
+        get_module_states lib_ad;
+        ad.lib_map <- Library_map.add lib lib_ad ad.lib_map;
+        lib_ad
+      end else
+        raise Not_found
 
 
 
@@ -358,50 +477,6 @@ let set_argument (ad:t) (str:string): unit =
 
 
 
-let get_module_states (ad:t): unit =
-  (* Read the names of all source files (.al,.ali), compile a list of all
-     modules in the package, get the states of all modules (new, modified,
-     unchanged) and mark the modules which are affected indirectly.  *)
-  let f1 (set:IntSet.t) (fn:string): IntSet.t =
-    try
-      let mdlstr =
-        if Filename.check_suffix fn ".al" then
-          Filename.chop_suffix fn ".al"
-        else if Filename.check_suffix fn ".ali" then
-          Filename.chop_suffix fn ".ali"
-        else
-          raise Not_found
-      in
-      IntSet.add (ST.symbol mdlstr) set
-    with Not_found ->
-      set
-  and check_affected (nme:int) (st:state): unit =
-    List.iter
-      (fun (used,lib) ->
-        if lib <> [] then
-          assert false (* nyi: libraries *)
-        else
-          try
-            let _,stui = IntMap.find used ad.module_states in
-            if not stui.is_avail || stui.modified || stui.is_new then
-              st.affected <- true
-          with Not_found ->
-            st.affected <- true)
-      st.used
-  in
-  check_alba_dir ad;
-  let set = dir_fold f1 IntSet.empty ad.work_dir in
-  ad.modules <- IntSet.elements set;
-  ad.module_states <- module_states ad;
-  IntMap.iter
-    (fun nme (st,sti) ->
-      check_affected nme st;
-      check_affected nme sti)
-    ad.module_states
-
-
-
-
 let make_from_arguments (): t =
   let do_nothing (): unit = () in
   let ad = make () in
@@ -423,6 +498,7 @@ let make_from_arguments (): t =
       exit 0
   | Compile
   | Status ->
+      check_alba_dir ad;
       get_module_states ad
   | _ ->
       ());
@@ -510,6 +586,19 @@ let parse_file (fn:string): use_block * declaration list =
   parse fn Parser.file
 
 
+let file_path_used (um:module_name withinfo) (fn:string) (ad:t): string =
+  let m,lib = um.v in
+  if lib = [] then
+    file_path m "ali" ad
+  else
+    try
+      let lib_ad = find_lib_ad lib ad in
+      file_path m "ali" lib_ad
+    with Not_found ->
+        info_abort fn um.i ("library `" ^ (string_of_library lib) ^ "' not found")
+
+
+
 
 let find (mdl:int) (ad:t): state*state =
   try
@@ -528,62 +617,63 @@ let analyze (ast:declaration list) (fn:string) (pc:Proof_context.t): unit =
 
 
 let analyze_used
-    (mdl:int) (use_blk: use_block) (pc:Proof_context.t) (ad:t): IntSet.t =
+    (fn:string) (mdl:int) (use_blk: use_block) (pc:Proof_context.t) (ad:t)
+    : IntSet.t =
   (* Parse all directly and indirectly used modules of [use_blk] of the module
-     [mdl] and return the complete set of all used modules.  *)
+     [mdl] within the file [fn] and return the complete set of all used modules.  *)
   let mt = Proof_context.module_table pc
   in
   assert (List.for_all
             (fun m -> let nme,lib = m.v in lib <> [] || nme <> mdl)
             use_blk);
-  let rec used (stack:(module_name*string*use_block) list) (set:IntSet.t): IntSet.t =
-    let push (umdl:module_name withinfo): (module_name*string*use_block) list =
-      if List.exists (fun (m,_,_) -> m=umdl.v) stack then
-        let (mdl,lib),ext,_ = List.hd stack in
-        assert (lib = []); (* nyi: libraries *)
-        let fn = file_path mdl ext ad in
+  let rec used (stack:(module_name*string*string*use_block) list) (set:IntSet.t)
+      : IntSet.t =
+    let push (umdl:module_name withinfo) (fn:string)
+        : (module_name*string*string*use_block) list =
+      if List.exists (fun (m,_,_,_) -> m=umdl.v) stack then
         info_abort fn umdl.i
           ("circular module usage [" ^
            (String.concat ","
               (List.map
-                 (fun (m,_,_) -> string_of_module m)
-                 (List.rev ((umdl.v,"ali",[])::stack)))) ^
+                 (fun (m,_,_,_) -> string_of_module m)
+                 (List.rev ((umdl.v,"","ali",[])::stack)))) ^
            "]")
       else
         let m,lib = umdl.v in
-        if lib <> [] then
-          printf "library module %s\n" (string_of_module (m,lib));
-        assert (lib = []); (* nyi: libraries *)
-        let fn = file_path m "ali" ad in
+        let fn = file_path_used umdl fn ad in
         let use_blk = parse_use_block fn in
-        (umdl.v, "ali", use_blk) :: stack
+        let use_blk =
+          if lib=[] then use_blk
+          else List.map
+              (fun mdl ->
+                let m,l = mdl.v in
+                if l=[] then withinfo mdl.i (m,snd umdl.v) else mdl)
+              use_blk
+        in
+        (umdl.v, fn, "ali", use_blk) :: stack
     in
     match stack with
       [] -> assert false
-    | (mdl,ext,use_blk)::rest ->
+    | (mdl,fn,ext,use_blk)::rest ->
         assert (ext="ali" || rest=[]);
         try
           let umdl =
             List.find (fun m -> not (Module_table.has m.v mt)) use_blk
           in
-          used (push umdl) set
+          used (push umdl fn) set
         with Not_found ->
           if ext="al" then set
           else begin
             if 0 < ad.verbosity then
               printf " use `%s'\n" (string_of_module mdl);
-            let m,lib = mdl in
-            assert (lib = []); (* nyi: libraries *)
-            let fn = file_path m ext ad in
             Proof_context.add_used_module mdl set pc;
             let use_blk2,ast = parse_file fn in
-            assert (use_blk = use_blk2);
             analyze ast fn pc;
             let set = IntSet.add (Module_table.current mt) set in
             used rest set
           end
   in
-  used [(mdl,[]),"al",use_blk] IntSet.empty
+  used [(mdl,[]),fn,"al",use_blk] IntSet.empty
 
 
 let update_depend (nme:int) (pub:bool) (pc:Proof_context.t) (ad:t): unit =
@@ -629,7 +719,7 @@ let verify_implementation (nme:int) (pc:Proof_context.t) (ad:t): unit =
     printf " verify implementation `%s'\n" (ST.string nme);
   let fn = file_path nme "al" ad        in
   let use_blk = parse_use_block fn      in
-  let used = analyze_used nme use_blk pc ad in
+  let used = analyze_used fn nme use_blk pc ad in
   let use_blk2,ast = parse_file fn      in
   assert (use_blk = use_blk2);
   Proof_context.add_current_module nme used pc;
