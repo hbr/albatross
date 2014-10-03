@@ -679,13 +679,18 @@ type library_name = int list
 
 type module_name = int * library_name
 
+
 let string_of_library (lib:library_name): string =
   String.concat "." (List.map ST.string lib)
 
 
 let string_of_module ((m,lib):module_name): string =
-  let libstr = string_of_library lib in
-  libstr ^ "." ^ (ST.string m)
+  if lib = [] then
+    ST.string m
+  else
+    let libstr = string_of_library lib in
+    libstr ^ "." ^ (ST.string m)
+
 
 module Library_map = Map.Make(struct
   type t = library_name
