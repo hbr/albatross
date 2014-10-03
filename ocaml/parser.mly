@@ -104,21 +104,24 @@ let expression_from_entities entlist =
 %token KWPrecursor KWProcess
 %token KWResult
 
-%token KWall       KWand          KWas
+%token KWall       KWand          KWas         KWassert
 %token KWcase      KWclass        KWcheck      KWcreate
 %token KWdeferred  KWdo
 %token KWelse      KWelseif       KWend        KWensure
-%token KWfalse     KWfeature
+%token KWfalse     KWfeature      KWfrom
 %token KWghost
 %token KWif        KWimmutable    KWimport     KWin
        KWinherit   KWinspect      KWinvariant
 %token KWlocal
 %token KWnot       KWnote
 %token KWold       KWor
+%token KWproof
 %token KWredefine  KWrename       KWrequire
 %token KWsome
 %token KWthen      KWtrue
 %token KWundefine  KWuse
+%token KWvariant
+%token KWwhile
 
 %token ARROW
 %token ASSIGN
@@ -263,6 +266,7 @@ ass_req_opt:
 |   ass_req { $1 }
 
 ass_check: KWcheck proof_seq { List.rev $2 }
+ass_check: KWproof proof_seq { List.rev $2 }
 
 
 ass_ens: KWensure ass_seq { List.rev $2 }

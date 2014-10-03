@@ -59,6 +59,7 @@ let _ =
      ("all",       Parser.KWall);
      ("and",       Parser.KWand);
      ("as",        Parser.KWas);
+     ("assert",    Parser.KWas);
      ("case",      Parser.KWcase);
      ("check",     Parser.KWcheck);
      ("class",     Parser.KWclass);
@@ -71,6 +72,7 @@ let _ =
      ("ensure",    Parser.KWensure);
      ("false",     Parser.KWfalse);
      ("feature",   Parser.KWfeature);
+     ("from",      Parser.KWfrom);
      ("ghost",     Parser.KWghost);
      ("if",        Parser.KWif);
      ("immutable", Parser.KWimmutable);
@@ -84,6 +86,7 @@ let _ =
      ("note",      Parser.KWnote);
      ("old",       Parser.KWold);
      ("or",        Parser.KWor);
+     ("proof",     Parser.KWproof);
      ("redefine",  Parser.KWredefine);
      ("rename",    Parser.KWrename);
      ("require",   Parser.KWrequire);
@@ -92,6 +95,8 @@ let _ =
      ("true",      Parser.KWtrue);
      ("undefine",  Parser.KWundefine);
      ("use",       Parser.KWuse);
+     ("variant",   Parser.KWvariant);
+     ("while",     Parser.KWwhile);
 
      ("->",        Parser.ARROW);
      (":=",        Parser.ASSIGN);
