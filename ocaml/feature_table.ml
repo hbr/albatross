@@ -19,6 +19,7 @@ type formal     = int * term
 
 type base_descriptor = {
     definition:       term option;
+    level:            int;
     mutable is_inh:   bool;
     mutable seeds:    IntSet.t;
     mutable variants: int IntMap.t  (* cls -> fidx *)
@@ -51,14 +52,6 @@ let empty (): t =
    seq  = Seq.empty ();
    base = IntMap.empty;
    ct   = Class_table.base_table ()}
-
-
-
-let standard_bdesc (i:int) (cls:int) (def_opt: term option): base_descriptor =
-  {is_inh     = false;
-   seeds      = IntSet.singleton i;     (* each feature is its own seed *)
-   variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
-   definition = def_opt}
 
 
 let class_table (ft:t):  Class_table.t   = ft.ct
@@ -111,6 +104,42 @@ let definition (i:int) (nb:int) (ft:t): term =
       let t = Term.upbound nb nargs t in
       if nargs = 0 then t else Lam (nargs,[||],t)
 
+
+
+
+
+let function_level (i:int) (ft:t): int =
+  assert (i < count ft);
+  (base_descriptor i ft).level
+
+
+
+
+let term_level (t:term) (nb:int) (ft:t): int =
+  Term.fold
+    (fun level i ->
+      if nb <= i then
+        let ilev = function_level (i-nb) ft in
+        if level < ilev then ilev else level
+      else level
+    )
+    0
+    t
+
+
+
+let standard_bdesc (i:int) (cls:int) (def_opt: term option) (nb:int) (ft:t)
+    : base_descriptor =
+  let level =
+    match def_opt with
+      None -> 0
+    | Some t -> term_level t nb ft + 1
+  in
+  {is_inh     = false;
+   seeds      = IntSet.singleton i;     (* each feature is its own seed *)
+   variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
+   level      = level;
+   definition = def_opt}
 
 
 let count_fgs (i:int) (ft:t): int =
@@ -250,12 +279,13 @@ let add_builtin
   let sign = Sign.make_func argtypes res
   and ntvs = Array.length concepts
   and cnt  = count ft
+  and nargs = Array.length argtypes
   in
-  let bdesc = standard_bdesc cnt cls None
+  let bdesc = standard_bdesc cnt cls None nargs ft
   and bdesc_opt =
     match fn with
       FNoperator Allop
-    | FNoperator Someop -> Some (standard_bdesc cnt cls None)
+    | FNoperator Someop -> Some (standard_bdesc cnt cls None nargs ft)
     | _ -> None
   in
   let lst =
@@ -271,7 +301,7 @@ let add_builtin
     impstat  = Builtin;
     tvs      = Tvars.make_fgs (standard_fgnames ntvs) concepts;
     anchored = [||];     (* ??? *)
-    argnames = standard_argnames (Array.length argtypes);
+    argnames = standard_argnames nargs;
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
     priv     = bdesc;
@@ -573,12 +603,16 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
 
 let term_to_string
     (t:term)
+    (nanon: int)
     (names: int array)
     (ft:t)
     : string =
   (** Convert the term [t] in an environment with the named variables [names]
       to a string.
    *)
+  let anon_symbol (i:int) (nanon:int): int =
+      ST.symbol ("$" ^ (string_of_int (nanon+i)))
+  in
   let rec to_string
       (t:term)
       (names: int array)
@@ -592,8 +626,8 @@ let term_to_string
               is the left operand of the outer operator
      *)
     let nnames = Array.length names
-    and anon2sym (i:int): int =
-      ST.symbol ("$" ^ (string_of_int (nanon+i)))
+    and anon2sym (i:int): int = anon_symbol i nanon
+      (*ST.symbol ("$" ^ (string_of_int (nanon+i)))*)
     in
     let var2str (i:int): string =
       if i < nnames then
@@ -702,7 +736,13 @@ let term_to_string
         "(" ^ str ^ ")"
     | _ -> str
   in
-  to_string t names 0 false None
+  let nnames = Array.length names in
+  let names = Array.init (nnames + nanon)
+      (fun i ->
+        if i<nanon then anon_symbol i 0
+        else names.(i-nanon))
+  in
+  to_string t names nanon false None
 
 
 
@@ -723,7 +763,7 @@ let print (ft:t): unit =
       and bdyname def_opt =
         match def_opt with
           None -> "Basic"
-        | Some def -> term_to_string def fdesc.argnames ft
+        | Some def -> term_to_string def 0 fdesc.argnames ft
       and clsnme =
         if fdesc.cls = -1 then ""
         else Class_table.class_name fdesc.cls ft.ct
@@ -904,10 +944,13 @@ let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
           let nargs = Array.length desc.argnames in
           Some (variant_term t nargs cls ft)
       in
-      let cnt = count ft in
-      let bdesc = standard_bdesc cnt cls def_opt
+      let cnt = count ft
+      and nargs = Array.length desc.argnames
+      in
+      let bdesc = standard_bdesc cnt cls def_opt nargs ft
       and bdesc_opt =
-        if is_public ft then Some (standard_bdesc cnt cls def_opt) else None
+        if is_public ft then Some (standard_bdesc cnt cls def_opt nargs ft)
+        else None
       in
       Seq.push
         {mdl       = Class_table.current_module ft.ct;
@@ -966,7 +1009,8 @@ let export_inherited_variant (i:int) (cls:int) (ft:t): unit =
     try
       let idx = IntMap.find cls seed_bdesc.variants in
       let desc = descriptor idx ft in
-      desc.pub <- Some (standard_bdesc idx cls desc.priv.definition);
+      let nargs = Array.length desc.argnames in
+      desc.pub <- Some (standard_bdesc idx cls desc.priv.definition nargs ft);
       inherit_feature i idx cls true ft
     with Not_found ->
       assert false (* cannot happen *)
@@ -1039,9 +1083,10 @@ let put_function
       Deferred ->
         Class_table.check_deferred cls nanchors fn.i ft.ct
     | _ -> ());
-    let bdesc = standard_bdesc cnt cls term_opt
+    let nargs = Array.length argnames in
+    let bdesc = standard_bdesc cnt cls term_opt nargs ft
     and bdesc_opt =
-      if is_priv then None else Some (standard_bdesc cnt cls term_opt)
+      if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
     in
     let desc =
       {mdl      = mdl;
@@ -1079,7 +1124,8 @@ let put_function
         not_match "public definition";
       match desc.pub with
         None ->
-          desc.pub <- Some (standard_bdesc idx cls term_opt);
+          let nargs = Array.length desc.argnames in
+          desc.pub <- Some (standard_bdesc idx cls term_opt nargs ft);
           add_class_feature idx false ft;
           inherit_to_descendants idx fn.i ft
       | Some bdesc ->

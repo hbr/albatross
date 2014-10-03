@@ -106,6 +106,16 @@ val normalize_term: term->int->t->term
      [i-nbound] *)
 
 
+val function_level: int -> t -> int
+    (** [function_level i ft] returns the level of the function [i]. A basic
+        function has level [0]. A function whose maximum function level in its
+        definition is [n] has level [n+1]
+     *)
+
+val term_level: term -> int -> t -> int
+    (** [term_level t nb ft] returns the level of the term [t] which is valid in
+        and environment with [nb] variables. *)
+
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
       arguments in the feature table [ft] and returns the indices with the
@@ -123,7 +133,7 @@ val put_function:
       optional definition term [term_opt] to the feature table [ft] *)
 
 
-val term_to_string: term -> int array -> t -> string
+val term_to_string: term -> int -> int array -> t -> string
 
 val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
   (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the

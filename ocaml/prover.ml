@@ -116,7 +116,7 @@ let get_term (ie: info_expression) (pc:Proof_context.t): term =
 
 
 let string_of_term (t:term) (p:t): string =
-  Context.string_of_term t (context p)
+  Context.string_of_term t 0 (context p)
 
 let string_of_index (i:int) (p:t): string =
   assert (i < Proof_context.count p.pc);

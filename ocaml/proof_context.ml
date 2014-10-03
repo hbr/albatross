@@ -216,7 +216,11 @@ let is_used_forward (i:int) (pc:t): bool =
 
 
 let string_of_term (t:term) (pc:t): string =
-  Context.string_of_term t (context pc)
+  Context.string_of_term t 0 (context pc)
+
+
+let string_of_term_anon (t:term) (nb:int) (pc:t): string =
+  Context.string_of_term t nb (context pc)
 
 
 
@@ -227,6 +231,13 @@ let used_schematic (i:int) (pc:t): IntSet.t =
   assert (is_consistent pc);
   assert (i < count pc);
   (Seq.elem i pc.terms).used_gen
+
+
+
+let term_level (t:term) (nb:int) (pc:t): int =
+  let ft = feature_table pc in
+  let nb = nb + nbenv pc in
+  Feature_table.term_level t nb ft
 
 
 
@@ -277,57 +288,91 @@ let term_list_to_set (ts: term list): TermSet.t =
   List.fold_left (fun set t -> TermSet.add t set) TermSet.empty ts
 
 
+
+
+let is_backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): bool =
+  let ntgt,ltgt = Term.nodes tgt, term_level tgt nargs pc in
+  List.for_all
+    (fun p ->
+      let np,lp = Term.nodes p, term_level p nargs pc in
+      (*if np <= ntgt && lp > ltgt then
+        printf "backward_simpl premise %s has higher level than target %s\n"
+          (string_of_term_anon p nargs pc)
+          (string_of_term_anon tgt nargs pc);*)
+      np <= ntgt (* lp <= ltgt && np <= ntgt *))
+    ps
+
+
+
+let backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): (term*bool) list =
+  (* Analyze the premises of a backward rule and add the information if they
+     are not more complicated than the target. More complicated means a higher
+     level or more nodes. *)
+
+  let ntgt,ltgt = Term.nodes tgt, term_level tgt nargs pc in
+  List.rev_map
+    (fun p ->
+      let np,lp = Term.nodes p, term_level p nargs pc in
+      (*if np <= ntgt && lp > ltgt then
+        printf "backward_simpl premise %s has higher level than target %s\n"
+          (string_of_term_anon p nargs pc)
+          (string_of_term_anon tgt nargs pc);*)
+      let simpl = np <= ntgt (* lp <= ltgt && np <= ntgt *)
+      in
+      p,simpl
+    )
+    ps
+
+
+let split_backward (t:term) (nargs:int) (pc:t): term list * term * bool =
+  (* Split the term [t] into a list of premises and a target and indicates if
+     the term applied as a backward rule is simplifying. A backward rule is
+     simplifying if all premises are not more complicated than the target. More
+     complicated means more nodes or a higher level.
+
+     [t] is the implication chain (degenerate case [t=z])
+
+         a => b => c => d => ... => z
+
+     The chain is splitted into
+
+         [c,b,a], d=>...=>z
+
+     such that [d=>...=>z] is the shortest tail which contains all [nargs]
+     variables and is not a single variable (no catchall).
+   *)
+  let imp_id = nargs + imp_id pc in
+  let rec tail (ps:term list) (tgt:term) (avars_tgt:IntSet.t): term list * term =
+    assert (0 < nargs);
+    match ps with
+      [] -> ps, tgt
+    | p::rest ->
+        let ntgt = Term.nodes tgt in
+        if ntgt = 1 || IntSet.cardinal avars_tgt < nargs then
+          let avars = IntSet.union avars_tgt (Term.bound_variables p nargs) in
+          let tgt = Term.binary imp_id p tgt in
+          tail rest tgt avars
+        else
+          ps, tgt
+  in
+  let ps,tgt = Term.split_implication_chain t imp_id in
+  let ps,tgt =
+    if nargs = 0 then ps,tgt
+    else tail ps tgt (Term.bound_variables tgt nargs)
+  in
+  let simpl = is_backward_simpl ps tgt nargs pc in
+  ps, tgt, simpl
+
+
+
+
 let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
   (** Analyze the schematic term [t] with [nargs] arguments as a backward
       rule.
    *)
   assert (0 < nargs);
-  let imp_id = nargs + (imp_id pc) in
-  let rec split
-      (ps: (term*int*IntSet.t) list)
-      (tgt:term)
-      (max_nodes:int)
-      (fvars:IntSet.t)
-      : (term*int*IntSet.t) list * term =
-    try
-      let a,b = Term.binary_split tgt imp_id in
-      let na  = Term.nodes a in
-      let max_nodes =
-        if max_nodes < na then na
-        else max_nodes
-      and fvars = IntSet.union fvars (Term.free_variables a nargs)
-      in
-      split ((a,max_nodes,fvars)::ps) b max_nodes fvars
-    with Not_found ->
-      ps, tgt
-  in
-  let rec ana_bwd
-      (ps:(term*int*IntSet.t) list) (tgt: term)
-      : term list * term * bool =
-    match ps with
-      [] ->
-        [], tgt, true
-    | (p,nmax,fvars)::ps_rest ->
-        let ntgt = Term.nodes tgt
-        and avars_tgt, fvars_tgt = Term.split_variables tgt nargs
-        in
-        let is_simpl = nmax <= ntgt in
-        let ok =
-          ntgt > 1 && (* avoid catch all *)
-          (IntSet.cardinal avars_tgt) = nargs
-            (*&&
-          (is_simpl
-         || IntSet.exists (fun i -> not (IntSet.mem i fvars)) fvars_tgt)*)
-        in
-        if not ok then
-          let tgt = Term.binary imp_id p tgt in
-          ana_bwd ps_rest tgt
-        else
-          (List.rev_map (fun (p,_,_) -> p) ps), tgt, is_simpl
-  in
-  let ps, tgt = split [] t 0  IntSet.empty in
-  let ps, tgt, simpl = ana_bwd ps tgt
-  in
+  let ps, tgt, simpl = split_backward t nargs pc in
+  let ps = List.rev ps in
   match ps with
     [] -> None
   | _::_ ->
@@ -363,9 +408,7 @@ let analyze (t:term) (elim:bool) (pc:t): term_data =
       with Not_found ->
         None
     in
-    let ps, tgt = Term.split_implication_chain t imp_id in
-    let n_tgt   = Term.nodes tgt in
-    let simpl   = List.for_all (fun t -> Term.nodes t <= n_tgt) ps in
+    let ps,tgt,simpl = split_backward t 0 pc in
     let bwd =
       match ps with
         [] -> None
@@ -486,7 +529,7 @@ let print_assertions
       and is_used  = is_used_forward i pc
       and used_gen = used_schematic  i pc
       in
-      let tstr = Context.string_of_term t c
+      let tstr = string_of_term t pc
       and used_gen_str =
         if IntSet.is_empty used_gen then ""
         else " " ^ (intset_to_string used_gen)

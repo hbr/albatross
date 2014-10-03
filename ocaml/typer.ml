@@ -139,7 +139,7 @@ end = struct
         (fun acc ->
           let t,_ = Term_builder.result acc in
           printf "\t%s, %s\n"
-            (Context.string_of_term t accs.c)
+            (Context.string_of_term t 0 accs.c)
             (Term.to_string t))
         accs.accus;
       error_info inf ("The expression " ^ estr ^ " is ambiguous")
@@ -209,7 +209,7 @@ let process_leaf
     Accus.Untypeable acc_lst ->
       let i,_,_ = List.hd lst in
       let str = "The expression \""
-        ^ (Context.string_of_term (Variable i) c)
+        ^ (Context.string_of_term (Variable i) 0 c)
         ^ "\" with types "
         ^ (string_of_signatures lst c)
         ^ " does not satisfy any of the expected types in {"

@@ -139,7 +139,7 @@ let rec stacked_counts (pt:t): int list =
 
 
 let string_of_term (t:term) (at:t): string =
-  Context.string_of_term t at.c
+  Context.string_of_term t 0 at.c
 
 
 let make (): t =

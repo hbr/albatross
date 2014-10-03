@@ -162,8 +162,8 @@ let fgnames (c:t): int array = entry_fgnames c.entry
 
 let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
-let string_of_term (t:term) (c:t): string =
-  Feature_table.term_to_string t (fargnames c) c.ft
+let string_of_term (t:term) (nanon:int) (c:t): string =
+  Feature_table.term_to_string t nanon (fargnames c) c.ft
 
 
 
@@ -464,7 +464,7 @@ let implication_id (c:t): int =
 let string_of_assertion (t:term) (c: t): string =
   "all"
   ^ (named_signature_string c) ^ " "
-  ^ (string_of_term t c)
+  ^ (string_of_term t 0 c)
 
 
 let put_formal_generic
