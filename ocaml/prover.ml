@@ -417,19 +417,16 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           printf "%s... failed\n" (prefix p))
     bwds
 
-and prove_premises (ps:term list) (used_gen: IntSet.t) (p:t): unit =
+and prove_premises (ps:(term*bool) list) (used_gen: IntSet.t) (p:t): unit =
   (** Prove all premises [ps] of the goal of [p] coming from a backward
       rule with the set of used general rules [used_gen] and insert them
       one by one into the context.
    *)
-  (*assert (not (IntSet.is_empty used_gen));*)
-  let ngoal = Term.nodes p.entry.goal in
   List.iteri
-    (fun i t ->
+    (fun i (t,simpl) ->
       let depth = p.depth in
-      let nt = Term.nodes t in
       let used_gen =
-        if nt <= ngoal then
+        if simpl then
           p.entry.used_gen
         else
           let inter = IntSet.inter p.entry.used_gen used_gen in

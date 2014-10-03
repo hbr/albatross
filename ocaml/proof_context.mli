@@ -52,7 +52,7 @@ val discharged:         int  -> t -> term * proof_term
 val add_proved:   bool -> int -> term -> proof_term -> IntSet.t -> t -> unit
 val add_proved_list:   bool -> int -> (term*proof_term) list -> t -> unit
 val backward_set:       term -> t -> int list
-val backward_data:      int  -> t -> term list * IntSet.t
+val backward_data:      int  -> t -> (term*bool) list * IntSet.t
 
 val split_implication:  term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term

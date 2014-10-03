@@ -8,10 +8,9 @@ type slot_data = {ndown:int;
                   sprvd: int TermMap.t}
 
 
-type backward_data = {ps:        term list;
+type backward_data = {ps:        (term*bool) list;
                       ps_set:    TermSet.t;
-                      tgt:       term;
-                      bwd_simpl: bool}
+                      tgt:       term}
 
 
 type term_data = {
@@ -284,23 +283,9 @@ let forward_data
 
 
 
-let term_list_to_set (ts: term list): TermSet.t =
-  List.fold_left (fun set t -> TermSet.add t set) TermSet.empty ts
+let premise_list_to_set (ts: (term*bool) list): TermSet.t =
+  List.fold_left (fun set (t,_) -> TermSet.add t set) TermSet.empty ts
 
-
-
-
-let is_backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): bool =
-  let ntgt,ltgt = Term.nodes tgt, term_level tgt nargs pc in
-  List.for_all
-    (fun p ->
-      let np,lp = Term.nodes p, term_level p nargs pc in
-      (*if np <= ntgt && lp > ltgt then
-        printf "backward_simpl premise %s has higher level than target %s\n"
-          (string_of_term_anon p nargs pc)
-          (string_of_term_anon tgt nargs pc);*)
-      np <= ntgt (* lp <= ltgt && np <= ntgt *))
-    ps
 
 
 
@@ -308,23 +293,18 @@ let backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): (term*bool) lis
   (* Analyze the premises of a backward rule and add the information if they
      are not more complicated than the target. More complicated means a higher
      level or more nodes. *)
-
   let ntgt,ltgt = Term.nodes tgt, term_level tgt nargs pc in
   List.rev_map
     (fun p ->
       let np,lp = Term.nodes p, term_level p nargs pc in
-      (*if np <= ntgt && lp > ltgt then
-        printf "backward_simpl premise %s has higher level than target %s\n"
-          (string_of_term_anon p nargs pc)
-          (string_of_term_anon tgt nargs pc);*)
-      let simpl = np <= ntgt (* lp <= ltgt && np <= ntgt *)
+      let simpl = (*np <= ntgt*) lp <= ltgt && np <= ntgt
       in
       p,simpl
     )
     ps
 
 
-let split_backward (t:term) (nargs:int) (pc:t): term list * term * bool =
+let split_backward (t:term) (nargs:int) (pc:t): (term*bool) list * term =
   (* Split the term [t] into a list of premises and a target and indicates if
      the term applied as a backward rule is simplifying. A backward rule is
      simplifying if all premises are not more complicated than the target. More
@@ -360,8 +340,8 @@ let split_backward (t:term) (nargs:int) (pc:t): term list * term * bool =
     if nargs = 0 then ps,tgt
     else tail ps tgt (Term.bound_variables tgt nargs)
   in
-  let simpl = is_backward_simpl ps tgt nargs pc in
-  ps, tgt, simpl
+  let ps = backward_simpl ps tgt nargs pc in
+  ps, tgt
 
 
 
@@ -371,13 +351,12 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
       rule.
    *)
   assert (0 < nargs);
-  let ps, tgt, simpl = split_backward t nargs pc in
-  let ps = List.rev ps in
+  let ps, tgt = split_backward t nargs pc in
   match ps with
     [] -> None
   | _::_ ->
-      let ps_set = term_list_to_set ps in
-      Some {ps = ps; ps_set = ps_set; tgt = tgt; bwd_simpl = simpl}
+      let ps_set = premise_list_to_set ps in
+      Some {ps = ps; ps_set = ps_set; tgt = tgt}
 
 
 
@@ -408,14 +387,13 @@ let analyze (t:term) (elim:bool) (pc:t): term_data =
       with Not_found ->
         None
     in
-    let ps,tgt,simpl = split_backward t 0 pc in
+    let ps,tgt = split_backward t 0 pc in
     let bwd =
       match ps with
         [] -> None
       | _::_ ->
-          let set = term_list_to_set ps in
-          Some {ps = List.rev ps; ps_set = set; tgt = tgt;
-                bwd_simpl = simpl}
+          let set = premise_list_to_set ps in
+          Some {ps = ps; ps_set = set; tgt = tgt}
     in
     {term   = t;
      nargs  = 0;
@@ -1301,14 +1279,14 @@ let backward_set (t:term) (pc:t): int list =
     []
     sublst
 
-let backward_data (idx:int) (pc:t): term list * IntSet.t =
+let backward_data (idx:int) (pc:t): (term*bool) list * IntSet.t =
   let desc = Seq.elem idx pc.terms in
   assert (Option.has desc.td.bwddat);
   let bwd = Option.value desc.td.bwddat
   and nbenv_idx = Proof_table.nbenv_term idx pc.base
   and nbenv = nbenv pc
   in
-  let ps = List.map (fun t -> Term.up (nbenv-nbenv_idx) t) bwd.ps
+  let ps = List.map (fun (t,simpl) -> Term.up (nbenv-nbenv_idx) t, simpl) bwd.ps
   in
   ps,
   desc.used_gen
