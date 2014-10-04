@@ -240,6 +240,12 @@ let term_level (t:term) (nb:int) (pc:t): int =
 
 
 
+let is_simpler (a:term) (b:term) (nargs:int) (pc:t): bool =
+  Term.nodes a <= Term.nodes b &&
+  term_level a nargs pc <= term_level b nargs pc
+
+
+
 let forward_data
     (t:term) (nargs:int) (elim:bool) (pc:t)
     : term * term * int * bool * bool =
@@ -261,10 +267,7 @@ let forward_data
     in
     if gp1 <> IntSet.cardinal avars then
       raise Not_found;
-    let na = Term.nodes a
-    and nb = Term.nodes b
-    in
-    let is_simpl = nb <= na in
+    let is_simpl = is_simpler b a nargs pc in
     let elim =
       if is_simpl  then false
       else if elim then true
@@ -390,7 +393,7 @@ let analyze (t:term) (elim:bool) (pc:t): term_data =
     let fwd =
       try
         let a,b = Term.binary_split t imp_id      in
-        let simpl = Term.nodes b <= Term.nodes a  in
+        let simpl = is_simpler b a 0 pc in
         Some (a,b,0,simpl,elim)
       with Not_found ->
         None
