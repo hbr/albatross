@@ -691,7 +691,8 @@ expr:
       let elist = formals_from_expression2 fargs (rhs_info 2)
       in
       Exppred (withinfo (rhs_info 2) elist, exp)
-  | _ -> assert false
+  | _ ->
+      set_of_expression $2
 }
 
 
@@ -710,9 +711,13 @@ operator_expr:
 
 |   expr MINUS expr               { Binexp (Minusop,$1,$3) }
 
+|   PLUS expr                     { Unexp (Plusop,$2) }
+
 |   MINUS expr                    { Unexp (Minusop,$2) }
 
 |   expr TIMES expr               { Binexp (Timesop,$1,$3) }
+
+|   TIMES expr                    { Unexp (Timesop,$2) }
 
 |   expr DIVIDE expr              { Binexp (Divideop,$1,$3) }
 

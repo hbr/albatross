@@ -445,6 +445,33 @@ and locals          = local_declaration list
 and feature_body = compound option * implementation option * compound option
 
 
+
+let expression_list (e:expression): expression list =
+  let rec list (e:expression) (lst:expression list): expression list =
+    match e with
+      Tupleexp (a,b) ->
+        list b (a::lst)
+    | _ -> e::lst
+  in
+  list e []
+
+
+let set_of_expression (e:expression): expression =
+  let lst = expression_list e
+  and singleton = Identifier (ST.symbol "singleton")
+  in
+  let singl (e:expression) = Funapp (singleton,e)
+  in
+  match lst with
+    [] -> assert false (* cannot happen, list has at least the element [e] *)
+  | hd::tl ->
+      List.fold_left
+        (fun res e ->
+          Binexp (Plusop, res, singl e))
+        (singl hd)
+        tl
+
+
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
