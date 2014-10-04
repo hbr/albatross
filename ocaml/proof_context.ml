@@ -304,6 +304,27 @@ let backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): (term*bool) lis
     ps
 
 
+
+let backward_tail (ps:term list) (tgt:term) (nargs:int) (pc:t): term list * term =
+  assert (0 < nargs);
+  let imp_id = nargs + imp_id pc in
+  let rec tail (ps:term list) (tgt:term) (avars_tgt:IntSet.t): term list * term =
+    assert (0 < nargs);
+    match ps with
+      [] -> ps, tgt
+    | p::rest ->
+        let ntgt = Term.nodes tgt in
+        if ntgt = 1 || IntSet.cardinal avars_tgt < nargs then
+          let avars = IntSet.union avars_tgt (Term.bound_variables p nargs) in
+          let tgt = Term.binary imp_id p tgt in
+          tail rest tgt avars
+        else
+          ps, tgt
+  in
+  tail ps tgt (Term.bound_variables tgt nargs)
+
+
+
 let split_backward (t:term) (nargs:int) (pc:t): (term*bool) list * term =
   (* Split the term [t] into a list of premises and a target and indicates if
      the term applied as a backward rule is simplifying. A backward rule is
@@ -322,23 +343,10 @@ let split_backward (t:term) (nargs:int) (pc:t): (term*bool) list * term =
      variables and is not a single variable (no catchall).
    *)
   let imp_id = nargs + imp_id pc in
-  let rec tail (ps:term list) (tgt:term) (avars_tgt:IntSet.t): term list * term =
-    assert (0 < nargs);
-    match ps with
-      [] -> ps, tgt
-    | p::rest ->
-        let ntgt = Term.nodes tgt in
-        if ntgt = 1 || IntSet.cardinal avars_tgt < nargs then
-          let avars = IntSet.union avars_tgt (Term.bound_variables p nargs) in
-          let tgt = Term.binary imp_id p tgt in
-          tail rest tgt avars
-        else
-          ps, tgt
-  in
   let ps,tgt = Term.split_implication_chain t imp_id in
   let ps,tgt =
     if nargs = 0 then ps,tgt
-    else tail ps tgt (Term.bound_variables tgt nargs)
+    else backward_tail ps tgt nargs pc
   in
   let ps = backward_simpl ps tgt nargs pc in
   ps, tgt
