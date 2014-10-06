@@ -390,12 +390,15 @@ and prove_alternatives (bwds: int list) (p:t): unit =
           let n    = List.length bwds
           and pre  = (prefix p)
           and tstr = string_of_term imp p
+          and used_gen_str =
+            if IntSet.is_empty used_gen then ""
+            else " " ^ (intset_to_string used_gen)
           in
           if n=1 then
             (assert (i=0);
-            printf "%susing  %d %s\n" pre idx tstr)
+            printf "%susing  %d %s%s\n" pre idx tstr used_gen_str)
           else
-            printf "%salternative %d: %d %s\n" pre i idx tstr;
+            printf "%salternative %d: %d %s%s\n" pre i idx tstr used_gen_str;
         end;
         alternative_start idx p;
         prove_premises ps used_gen p;
@@ -439,11 +442,14 @@ and prove_premises (ps:(term*bool) list) (used_gen: IntSet.t) (p:t): unit =
         let n    = List.length ps
         and pre  = prefix p
         and tstr = string_of_term t p
+        and used_gen_str =
+          if IntSet.is_empty used_gen then ""
+          else " " ^ (intset_to_string used_gen)
         in
         if n=1 then
-          printf "%spremise: %s\n" pre tstr
+          printf "%spremise: %s%s simpl %b\n" pre tstr used_gen_str simpl
         else
-          printf "%spremise %d: %s\n" pre i tstr
+          printf "%spremise %d: %s%s simpl %b\n" pre i tstr used_gen_str simpl
       end;
       push_goal t used_gen p;
       try

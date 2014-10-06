@@ -4,6 +4,8 @@ open Support
 open Printf
 
 
+type simpl_data = int * int (* #nodes, level *)
+
 type slot_data = {ndown:int;
                   sprvd: int TermMap.t}
 
@@ -240,9 +242,17 @@ let term_level (t:term) (nb:int) (pc:t): int =
 
 
 
+let simplification_data (t:term) (nargs:int) (pc:t): simpl_data =
+  let ft = feature_table pc in
+  let nargs = nargs + nbenv pc in
+  let t_exp = Feature_table.expand_term t nargs ft in
+  Term.nodes t_exp, 0
+
+let is_sd_simpler ((na,la):simpl_data) ((nb,lb):simpl_data): bool =
+  na <= nb
+
 let is_simpler (a:term) (b:term) (nargs:int) (pc:t): bool =
-  Term.nodes a <= Term.nodes b &&
-  term_level a nargs pc <= term_level b nargs pc
+  is_sd_simpler (simplification_data a nargs pc) (simplification_data b nargs pc)
 
 
 
@@ -296,11 +306,11 @@ let backward_simpl (ps:term list) (tgt:term) (nargs:int) (pc:t): (term*bool) lis
   (* Analyze the premises of a backward rule and add the information if they
      are not more complicated than the target. More complicated means a higher
      level or more nodes. *)
-  let ntgt,ltgt = Term.nodes tgt, term_level tgt nargs pc in
+  let sd_tgt = simplification_data tgt nargs pc in
   List.rev_map
     (fun p ->
-      let np,lp = Term.nodes p, term_level p nargs pc in
-      let simpl = (*np <= ntgt*) lp <= ltgt && np <= ntgt
+      let sd_p = simplification_data p nargs pc in
+      let simpl =  is_sd_simpler sd_p sd_tgt
       in
       p,simpl
     )
@@ -957,7 +967,7 @@ let close (pc:t): unit =
     end
   in
   let rec cls (n:int): unit =
-    if n > 30 then assert false;  (* 'infinite' loop detection *)
+    if n > 100 then assert false;  (* 'infinite' loop detection *)
     if has_work pc then begin
       let cnt = count pc in
       close_step pc;
