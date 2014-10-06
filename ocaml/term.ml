@@ -772,6 +772,7 @@ module Term_sub: sig
   val mem:            int -> t -> bool
   val add:            int -> term ->  t -> t
   val merge:          t -> t -> t
+  val to_list:        t -> (int*term) list
   val arguments:      int -> t -> term array
 end = struct
 
@@ -857,6 +858,10 @@ end = struct
       )
       sub1;
     !res
+
+  let to_list (sub:t): (int*term) list =
+    let lst = IntMap.fold (fun i t lst -> (i,t)::lst) sub [] in
+    List.rev lst
 
   let arguments (nargs:int) (sub:t): term array =
     let args = Array.make nargs (Variable 0) in

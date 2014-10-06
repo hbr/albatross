@@ -192,11 +192,13 @@ module Seq: sig
   val push:  'a -> 'a t -> unit
   val pop:   int -> 'a t -> unit
   val keep:  int -> 'a t -> unit
+  val remove: int -> 'a t -> unit
   val iter:  ('a->unit) -> 'a t -> unit
   val iteri: (int->'a->unit) -> 'a t -> unit
+  val find_min: ('a -> bool) -> 'a t -> int
 end = struct
   type 'a t = {mutable cnt:int;
-                      mutable arr: 'a array}
+               mutable arr: 'a array}
 
   let empty () = {cnt=0; arr=[||]}
 
@@ -253,6 +255,28 @@ end = struct
         iter0 (i+1)
       end
     in iter0 0
+
+  let find_min (f:'a->bool) (s:'a t): int =
+    let cnt = count s in
+    let rec find (start:int): int =
+      if start = cnt then
+        raise Not_found
+      else if f (elem start s) then
+        start
+      else
+        find (start+1)
+    in
+    find 0
+
+  let remove (i:int) (s:'a t): unit =
+    assert (i < count s);
+    s.arr <-
+      Array.init
+        (Array.length s.arr - 1)
+        (fun j ->
+          if j < i then s.arr.(j)
+          else s.arr.(j+1));
+    s.cnt <- s.cnt - 1
 end
 
 type 'a seq = 'a Seq.t
