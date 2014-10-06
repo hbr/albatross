@@ -31,7 +31,9 @@ val count_all:    t -> int
 val concept:      int -> t -> type_term
 val concepts:     t -> type_term array
 
-val is_equal:     type_term -> t -> type_term -> t -> bool
+val is_equivalent:  t -> t -> bool
+
+val is_equal:       type_term -> t -> type_term -> t -> bool
     (** [is_equal tp1 tvs1 tp2 tvs2]: Are the types [tp1] from the environment
         [tvs1] and [tp2] from the environment [tvs2] equal? *)
 

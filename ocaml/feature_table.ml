@@ -377,7 +377,7 @@ let find
     List.fold_left
       (fun lst (i,sub) ->
         let desc = descriptor i ft in
-        if tvs = desc.tvs && Term_sub.is_identity sub then
+        if Tvars.is_equivalent tvs desc.tvs && Term_sub.is_identity sub then
           i :: lst
         else
           let ok =

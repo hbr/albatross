@@ -56,6 +56,11 @@ let concept (i:int) (tvs:t): type_term =
 
 let concepts (tvs:t): type_term array = tvs.concepts
 
+let is_equivalent (tvs1:t) (tvs2:t): bool =
+  tvs1.nlocal     =  tvs2.nlocal &&
+  tvs1.concepts   =  tvs2.concepts &&
+  tvs1.fgconcepts =  tvs2.fgconcepts
+
 
 let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
   let nall1 = count_all tvs1
