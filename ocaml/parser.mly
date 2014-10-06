@@ -72,10 +72,7 @@ let formals_from_expression2 (e:expression)(i:info) =
     formals_from_expression e
   with
     Failure _ ->
-      Printf.eprintf "%s %s is not an argument list\n"
-        (cinfo i)
-        (string_of_expression e);
-      syntax_error ()
+      error_info i ((string_of_expression e) ^ " is not an argument list")
 
 (*
 let expression_from_entities entlist =
@@ -323,8 +320,7 @@ ass_imp:
   match $1 with
     Impbuiltin -> $1
   | _ ->
-      Printf.eprintf "%s Not allowed in assertions\n" (cinfo (rhs_info 1));
-      syntax_error ()
+      error_info (rhs_info 1) "Not allowed in assertions"
 }
 
 
@@ -604,10 +600,7 @@ implementation_note: KWnote LIDENTIFIER {
   if str = "built_in" || str = "axiom" then Impbuiltin
   else if str = "event" then Impevent
   else
-    (Printf.eprintf
-       "%s Syntax error: must be one of {built_in,axiom,event}\n"
-       (cinfo (rhs_info 1));
-     syntax_error ())
+    error_info (rhs_info 1) "must be one of {built_in,axiom,event}"
 }
 
 
