@@ -314,7 +314,7 @@ let module_states (ad:t): (state*state) IntMap.t =
         let st  = state nme "al"
         and sti = state nme "ali"
         in
-        if st.affected then
+        if st.affected && sti.is_avail then
           sti.affected <- true;
         IntMap.add nme (st,sti) map)
     IntMap.empty
