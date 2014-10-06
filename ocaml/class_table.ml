@@ -13,40 +13,10 @@ open Printf
 type formal = int * type_term
 
 
-module Tab: sig
-  type 'a t
-  val make: unit -> 'a t
-  val count: 'a t -> int
-  val add:   term -> int -> int -> 'a -> 'a t -> unit
-  val unify_with: term -> int -> int -> 'a t -> ('a * Term_sub.t) list
-end = struct
-  type 'a t = {mutable tab: Term_table.t;
-               seq: 'a seq}
-
-  let make (): 'a t = {tab = Term_table.empty; seq = Seq.empty ()}
-
-  let count (t:'a t): int = Seq.count t.seq
-
-  let add (t:term) (nargs:int) (nbenv:int) (e:'a) (tab:'a t): unit =
-    let cnt = count tab in
-    tab.tab <- Term_table.add t nargs nbenv cnt tab.tab;
-    Seq.push e tab.seq
-
-  let unify_with
-      (t:term) (nargs:int) (nbenv:int) (tab:'a t)
-      : ('a * Term_sub.t) list =
-    let lst = Term_table.unify_with t nargs nbenv tab.tab in
-    List.map
-      (fun (idx,sub) ->
-        assert (idx < count tab);
-        Seq.elem idx tab.seq, sub)
-      lst
-end
-
-
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
-                         mutable fmap:  int Tab.t Feature_map.t;
+                         mutable fmap:  int Term_table2.t Feature_map.t;
+                         mutable fset:  IntSet.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
@@ -118,6 +88,7 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   {hmark = hm;
    tvs   = tvs;
    fmap  = Feature_map.empty;
+   fset  = IntSet.empty;
    def_features = [];
    eff_features = [];
    def_asserts  = [];
@@ -363,6 +334,19 @@ let string_of_tvs (tvs:Tvars.t) (ct:t): string =
   str1 ^ strcpts
 
 
+let string_of_sub (sub:Term_sub.t) (tvs:Tvars.t) (ct:t): string =
+  let lst = Term_sub.to_list sub in
+  let str =
+    String.concat ","
+      (List.map
+         (fun (i,t) ->
+           (string_of_int i) ^ ":=" ^ (string_of_type t tvs ct))
+         lst)
+  in
+  "[" ^ str ^ "]"
+
+
+
 let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
   let subs = TVars_sub.subs tvs
   and tvs  = TVars_sub.tvars tvs in
@@ -579,7 +563,7 @@ let find_features
   let bdesc = base_descriptor cls ct in
   try
     let tab = Feature_map.find fn bdesc.fmap in
-    Tab.unify_with tp ntvs 0 tab
+    Term_table2.unify_with tp ntvs 0 tab
   with Not_found ->
     []
 
@@ -593,16 +577,21 @@ let add_feature_bdesc
   let tab =
     try Feature_map.find fn bdesc.fmap
     with Not_found ->
-      let tab = Tab.make () in
+      let tab = Term_table2.make () in
       bdesc.fmap <- Feature_map.add fn tab bdesc.fmap;
       tab
   in
   assert (Feature_map.mem fn bdesc.fmap);
-  Tab.add tp nfgs 0 fidx tab;
-  if is_deferred then
-    bdesc.def_features <- fidx :: bdesc.def_features
-  else
-    bdesc.eff_features <- fidx :: bdesc.eff_features
+  if IntSet.mem fidx bdesc.fset then
+    ()
+  else begin
+    if is_deferred then
+      bdesc.def_features <- fidx :: bdesc.def_features
+    else
+      bdesc.eff_features <- fidx :: bdesc.eff_features;
+    Term_table2.add tp nfgs 0 fidx tab;
+    bdesc.fset <- IntSet.add fidx bdesc.fset
+  end
 
 
 

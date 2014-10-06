@@ -200,6 +200,8 @@ val string_of_concepts: Tvars.t -> t -> string
 
 val string_of_fgconcepts: Tvars.t -> t -> string
 
+val string_of_sub: Term_sub.t -> Tvars.t -> t -> string
+
 val string_of_tvs: Tvars.t -> t -> string
 
 val string_of_tvs_sub: TVars_sub.t -> t -> string

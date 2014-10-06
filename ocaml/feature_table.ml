@@ -40,7 +40,7 @@ type descriptor = {
   }
 
 type t = {
-    mutable map: Term_table.t ref Feature_map.t;
+    mutable map: int Term_table2.t Feature_map.t;
     seq:         descriptor seq;
     mutable base:int list ref IntMap.t; (* module name -> list of features *)
     ct:          Class_table.t
@@ -201,14 +201,6 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
-let implication_index: int = 0
-let fparen_index:      int = 1
-let all_index:         int = 2
-let some_index:        int = 3
-let pparen_index:      int = 4
-
-
-
 let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class. *)
@@ -236,14 +228,17 @@ let add_key (i:int) (ft:t): unit =
   let tab =
     try Feature_map.find desc.fname ft.map
     with Not_found ->
-      let tab = ref Term_table.empty in
+      let tab = Term_table2.make () in
       ft.map <- Feature_map.add desc.fname tab ft.map;
       tab
   in
   if has_equivalent i ft then
     assert false  (* raise some exception *)
-  else
-    tab := Term_table.add desc.tp ntvs 0 i !tab
+  else(
+    (*if Term_table2.has i tab then
+      printf "add_key feature %d %s already in the table\n"
+        i (feature_name_to_string desc.fname);*)
+    Term_table2.add desc.tp ntvs 0 i tab)
 
 
 
@@ -265,13 +260,14 @@ let standard_argnames (size:int): int array =
   n_names_with_start 'a' size
 
 
-let add_builtin
+let add_base
     (mdl_nme: string)
     (cls: int)
     (fn:feature_name)
     (concepts: type_term array)
     (argtypes: type_term array)
     (res:  type_term)
+    (defer: bool)
     (ft:t)
     : unit =
   let mdl_nme            = ST.symbol mdl_nme
@@ -288,6 +284,8 @@ let add_builtin
     | FNoperator Someop -> Some (standard_bdesc cnt cls None nargs ft)
     | _ -> None
   in
+  let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
+  let anchored = Class_table.anchored tvs cls ft.ct in
   let lst =
     try IntMap.find mdl_nme ft.base
     with Not_found ->
@@ -298,9 +296,9 @@ let add_builtin
     mdl = -1;
     fname    = fn;
     cls      = cls;
-    impstat  = Builtin;
-    tvs      = Tvars.make_fgs (standard_fgnames ntvs) concepts;
-    anchored = [||];     (* ??? *)
+    impstat  = if defer then Deferred else Builtin;
+    tvs      = tvs;
+    anchored = anchored;
     argnames = standard_argnames nargs;
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
@@ -310,6 +308,15 @@ let add_builtin
   in
   Seq.push desc ft.seq;
   lst := cnt :: !lst
+
+
+
+let implication_index: int = 0
+let fparen_index:      int = 1
+let all_index:         int = 2
+let some_index:        int = 3
+let pparen_index:      int = 4
+let eq_index:          int = 5
 
 
 
@@ -329,26 +336,36 @@ let base_table () : t =
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|])
   in
-  add_builtin
+  add_base
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
-    [||] [|bool;bool|] bool ft;
+    [||] [|bool;bool|] bool false ft;
 
-  add_builtin
+  add_base
     "function" Class_table.function_index (FNoperator Parenop)
-    [|any2;any2|] [|f_tp;a_tp|] b_tp ft;
+    [|any2;any2|] [|f_tp;a_tp|] b_tp false ft;
 
-  add_builtin
+  add_base
     "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 ft;
+    [|any1|] [|p_tp|] bool1 false ft;
 
-  add_builtin
+  add_base
     "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 ft;
+    [|any1|] [|p_tp|] bool1 false ft;
+
+  add_base
+    "predicate" Class_table.predicate_index (FNoperator Parenop)
+    [|any1|] [|p_tp;g_tp|] bool1 false ft;
+
+  add_base
+    "any" Class_table.any_index (FNoperator Eqop)
+    [|any1|] [|g_tp;g_tp|] bool1 true ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
+  assert ((descriptor pparen_index ft).fname      = FNoperator Parenop);
+  assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
   ft
 
 
@@ -372,7 +389,7 @@ let find
     : int =
   let ntvs = Tvars.count_all tvs
   and tab = Feature_map.find fn ft.map in
-  let lst  = Term_table.unify tp ntvs !tab in
+  let lst  = Term_table2.unify tp ntvs tab in
   let idx_lst =
     List.fold_left
       (fun lst (i,sub) ->
@@ -448,7 +465,7 @@ let find_funcs
           lst (* nyi: upgrade of signature *)
       )
       []
-      (Term_table.terms !tab)
+      (Term_table2.terms tab)
   in
   if lst = [] then raise Not_found
   else lst
@@ -869,7 +886,11 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   end;
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
-  tab := Term_table.remove i1 !tab
+  (*if not (Term_table2.has i1 tab) then
+    printf "feature %s(%d) in %s is not in term table\n"
+      (feature_name_to_string fn) i1
+      (Class_table.class_name cls ft.ct);*)
+  Term_table2.remove i1 tab
 
 
 
