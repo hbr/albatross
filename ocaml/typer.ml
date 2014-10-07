@@ -22,7 +22,7 @@ module Accus: sig
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> t -> unit
-  val complete_lambda:   int -> int array -> t -> unit
+  val complete_lambda:   int -> int -> int array -> t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_type_variables: info -> t -> unit
   val result:            t -> term * TVars_sub.t
@@ -119,13 +119,18 @@ end = struct
       raise (Untypeable accus)
 
 
+
   let expect_lambda (ntvs:int) (accs:t): unit =
     assert (0 <= ntvs);
-    accs.arity <- 0;
+    accs.arity      <- 0;
+    accs.ntvs_added <- 0;
     List.iter (fun acc -> Term_builder.expect_lambda ntvs acc) accs.accus
 
-  let complete_lambda (ntvs:int) (nms:int array) (accs:t): unit =
-    List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus
+
+  let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
+    List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus;
+    accs.ntvs_added <- ntvs_added
+
 
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
     List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
@@ -324,7 +329,7 @@ let analyze_expression
     Accus.expect_lambda (ntvs-ntvs_gap) accs;
     analyze e accs;
     Accus.check_type_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) fargnames accs;
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;
     Context.pop c
 
   in
