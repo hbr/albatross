@@ -457,7 +457,9 @@ let set_argument (ad:t) (str:string): unit =
       else
         raise (Arg.Bad ("unknown command `" ^ str ^ "'"))
   | Compile ->
-      ad.to_compile <- (ST.symbol str) :: ad.to_compile
+      let mdl = ST.symbol str in
+      if not (List.mem mdl ad.to_compile) then
+        ad.to_compile <- (ST.symbol str) :: ad.to_compile
   | Status ->
       illegal ()
   | Init ->
