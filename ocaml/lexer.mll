@@ -249,7 +249,9 @@ and comment level = parse
 
 | '{'           { comment level lexbuf }
 
-| [^':' '{']+   { comment level lexbuf }
+| [^':' '\n' '{']+   { comment level lexbuf }
+
+| '\n'          { Lexing.new_line lexbuf; comment level lexbuf }
 
 | "{:"          { comment (level+1) lexbuf}
 
