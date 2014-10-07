@@ -61,9 +61,9 @@ type sublist = (int*Term_sub.t) list
 
 
 type t = {
-    terms: (int*int*int*term) list; (* idx,nargs,nbenv,term *)
-    avars: (int*int*int) list;      (* [idx, argument variable, nargs] *)
-    bvars: sublist IntMap.t;        (* bvar -> [idx,sub] *)
+    terms: (int*int*int*int*term) list;   (* idx,nb,nargs,nbenv,term *)
+    avars: (int*int*int) list;            (* [idx, argument variable, nargs] *)
+    bvars: sublist IntMap.t;              (* bvar -> [idx,sub] *)
     fvars: (int * sublist IntMap.t) list; (* [nbenv, fvar -> [idx,sub]] *)
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
@@ -83,7 +83,7 @@ let empty = {
 let next_index (tab:t): int =
   match tab.terms with
     [] -> 0
-  | (idx,_,_,_)::_ -> idx+1
+  | (idx,_,_,_,_)::_ -> idx+1
 
 
 let count  (tab:t): int =
@@ -92,18 +92,17 @@ let count  (tab:t): int =
 exception Term_found of term
 
 
-let terms (tab:t): (int*int*int*term) list =
-  (** All the terms as a list [idx,nargs,nbenv,term] of the table [tab] in the
+let terms0 (tab:t): (int*int*int*int*term) list =
+  (** All the terms as a list [idx,nb,nargs,nbenv,term] of the table [tab] in the
       reverse order in which they have been inserted.  *)
   tab.terms
 
-let print_tab (nb:int) (tab:t): unit =
-  let terms = List.rev tab.terms in
-  List.iter
-    (fun (idx,nargs,nbenv,t) ->
-      Printf.printf "\tnb %d, idx %d, nargs %d, nbenv %d, t %s\n"
-        nb idx nargs nbenv (Term.to_string t))
-    terms
+
+let terms (tab:t): (int*int*int*term) list =
+  (** All the terms as a list [idx,nargs,nbenv,term] of the table [tab] in the
+      order in which they have been inserted.  *)
+  List.rev_map (fun (idx,_,nargs,nbenv,term) -> idx,nargs,nbenv,term) tab.terms
+
 
 
 let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
@@ -384,12 +383,14 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | Variable i when i < nb+nargs ->
         (* argument variable of [t] *)
         List.fold_left
-          (fun lst (idx,nargs_0,nbenv_0,t_0) ->
+          (fun lst (idx,nb_0,nargs_0,nbenv_0,t_0) ->
             assert (nbenv_0 <= nbenv);
             assert (not (List.exists (fun (i,_) -> i=idx) lst));
-            (*if nargs_0 = 0 then*)  (* has to be checked!!! *)
+            try
+              let t_0 = Term.down nb_0 t_0 in
               (idx, Term_sub.singleton (i-nb) t_0)::lst
-            (*else lst*))
+            with Term_capture ->
+              lst)
           []
           (List.rev tab.terms)
     | Variable i ->
@@ -436,6 +437,16 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     []
 
 
+let newmap (i:int) (idx:int) (map: sublist IntMap.t): sublist IntMap.t =
+  try
+    let sublist = IntMap.find i map in
+    assert (not (List.exists (fun (i,_) -> i=idx) sublist));
+    let sublist = (idx,Term_sub.empty):: sublist in
+    IntMap.add i sublist map
+  with Not_found ->
+    IntMap.add i [idx,Term_sub.empty] map
+
+
 
 let add
     (t:term) (nargs:int) (nbenv:int)
@@ -446,15 +457,6 @@ let add
       within the node [tab].
    *)
   assert (next_index table <= idx);
-  let newmap (i:int) (map: sublist IntMap.t): sublist IntMap.t =
-    try
-      let sublist = IntMap.find i map in
-      assert (not (List.exists (fun (i,_) -> i=idx) sublist));
-      let sublist = (idx,Term_sub.empty):: sublist in
-      IntMap.add i sublist map
-    with Not_found ->
-      IntMap.add i [idx,Term_sub.empty] map
-  in
   let rec add0 (t:term) (nb:int) (tab:t): t =
     assert (next_index tab <= idx);
     let tab =
@@ -470,17 +472,17 @@ let add
            let fvars = tab.fvars in
            match fvars with
              [] ->
-               (nbenv, newmap fvar IntMap.empty) :: fvars
+               (nbenv, newmap fvar idx IntMap.empty) :: fvars
            | (nbnd,map)::tl ->
                assert (nbnd <= nbenv);
                if nbnd = nbenv then
-                 (nbnd, newmap fvar map) :: tl
+                 (nbnd, newmap fvar idx map) :: tl
                else
-                 (nbenv, newmap fvar IntMap.empty) :: fvars}
+                 (nbenv, newmap fvar idx IntMap.empty) :: fvars}
       | Variable i ->
           (* variable is bound by some abstraction *)
           assert (i < nb);
-          {tab with bvars = newmap i tab.bvars}
+          {tab with bvars = newmap i idx tab.bvars}
       | Application (f,args) ->
           let len = Array.length args in
           let ftab,argtabs =
@@ -502,14 +504,14 @@ let add
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
     in
-    {tab with terms = (idx,nargs,nbenv,t)::tab.terms}
+    {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
   add0 t 0 table
 
 
 
 let remove (i:int) (tab:t): t =
-  let lst = List.rev tab.terms in
+  let lst = terms tab in
   List.fold_left
     (fun tab (idx,nargs,nbenv,term) ->
       if idx <> i then
@@ -518,21 +520,3 @@ let remove (i:int) (tab:t): t =
         tab)
     empty
     lst
-
-
-let unify_unique (t:term) (nbt:int) (table:t)
-    : int * Term_sub.t =
-  let lst = unify t nbt table in
-  match lst with
-    []  -> raise Not_found
-  | [e] -> e
-  | _   -> assert false
-
-
-let unify_unique_with (t:term) (nargs:int) (nbenv:int) (table:t)
-    : int * Term_sub.t =
-  let lst = unify_with t nargs nbenv table in
-  match lst with
-    []  -> raise Not_found
-  | [e] -> e
-  | _   -> assert false
