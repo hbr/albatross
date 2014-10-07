@@ -431,33 +431,33 @@ let expect_function (nargs:int) (tb:t): unit =
   add_local nargs tb;
   let s = tb.sign in
   let s =
-    if Sign.is_constant s then s
-    else begin
-      (* Convert the function signature into a constant signature with
-         a function type as result type. This is always possible because
-         we are strengthening the expectations.
-
-         However the argument types of the function signature might be
-         fresh type variables without concept. These cannot be used to
-         form a function type and/or a tuple type (in case of more than
-         one argument). In order to do this without problems we have to
-         introduce the corresponding constraints for the fresh type
-         variables.
-       *)
+    if Sign.is_constant s then
+      s
+    else
       Sign.make_const (to_dummy s tb)
-    end
   in
   tb.sign  <- Sign.to_function nargs s
 
 
 
 let expect_argument (i:int) (tb:t): unit =
+  (** Expect the [i]th argument of a function call [f(a,b,c,...)].  *)
   assert (i < (TVars_sub.count_local tb.tvars));
   tb.sign <- Sign.make_const (TVars_sub.get i tb.tvars)
 
 
 
 let complete_function (nargs:int) (tb:t): unit =
+  (** Complete the function call [f(a,b,c,...)] with [nargs] arguments. The
+      function term and all arguments are on the top of the term list
+      [tb.tlist] in reverse order, ie. [tb.tlist = [...,c,b,a,f]. The terms
+      are popped of the list, the corresponding function application is
+      generated and pushed onto the list and the [nargs] most recent type
+      variables are removed.
+
+      Note: The expected signature is no longer valid. This is no problem,
+      because either we are ready, or the next action is a further call to
+      [complete_function] or a call to [expect_argument]. *)
   let arglst = ref [] in
   for i = 1 to nargs do  (* pop arguments *)
     assert (tb.tlist <> []);
@@ -473,6 +473,12 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 let expect_lambda (ntvs:int) (tb:t): unit =
+  (** Expect the term of a lambda expression. It is assumed that all local
+      variables of the lambda expression have been pushed to the context and
+      the argument list of the lambda expression contained [ntvs] untyped
+      variables. Furthermore the argument list of the lambda expression might
+      have formal generics which are considered as type constants. *)
+
   assert (Sign.has_result tb.sign);
   add_local ntvs tb;
   add_fgs tb;
