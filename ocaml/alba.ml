@@ -10,6 +10,7 @@ Commands:
     init           initialize an albatross working directory
     compile        compile a list of modules (default: all modules)
     status         show the compile status of the modules
+    help           give help
 "
 
 
