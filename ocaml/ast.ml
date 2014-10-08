@@ -1,3 +1,4 @@
+open Term
 open Support
 open Printf
 
@@ -42,6 +43,25 @@ let put_class
 
 
 
+let assertion_list (lst:compound) (context:Context.t): term list =
+  List.map (fun e -> Typer.boolean_term e context) lst
+
+
+let result_term (lst:info_expression list) (context:Context.t): term =
+  match lst with
+    [] -> assert false
+  | [e] -> begin
+      match e.v with
+        Binexp (Eqop, ExpResult,def) ->
+          Typer.result_term
+            (withinfo e.i def)
+            context
+      | _ ->
+          raise Not_found
+  end
+  | _ -> raise Not_found
+
+
 
 
 let put_feature
@@ -67,20 +87,18 @@ let put_feature
             None, Some Impbuiltin, None ->
               Feature_table.Builtin,
               None
-          | None, None, Some [ens] ->
-              begin
-                match ens.v with
-                  Binexp (Eqop, ExpResult,def) ->
-                    let term =
-                      Typer.result_term
-                        (withinfo ens.i def)
-                        context
-                    in
-                    Feature_table.No_implementation,
-                    Some term
-                | _ -> not_yet_implemented ens.i
-                      "functions not defined with \"Result = ...\""
-              end
+          | Some reqlst, Some Impbuiltin, None ->
+              let _ = assertion_list reqlst context in
+              Feature_table.Builtin,
+              None
+          | Some reqlst, None, Some enslst ->
+              (try
+                let term = result_term enslst context in
+                let _ = assertion_list reqlst context in
+                Feature_table.No_implementation, Some term
+              with Not_found ->
+                not_yet_implemented fn.i
+                  "functions not defined with `Result = ...'")
           | None, Some Impdeferred, None ->
               Feature_table.Deferred,
               None
