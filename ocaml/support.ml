@@ -213,9 +213,7 @@ let rec split_list (l: 'a list) (sep: 'a -> bool): 'a list list =
 type type_t =
     Normal_type of (int list) * int * type_t list   (* kernel.ANY,
                                                 kernel.ARRAY[NATURAL] *)
-  | Current_type of type_t list
   | Arrow_type of type_t * type_t        (* A -> B              *)
-  | Ghost_type of type_t
   | Tuple_type of type_t list
   | QMark_type of type_t
   | Paren_type of type_t
@@ -235,11 +233,8 @@ let rec string_of_type (t:type_t) =
       let ps = string_of_path p
       in
       ps ^ (ST.string n) ^ (actuals l)
-  | Current_type l -> "CURRENT" ^ (actuals l)
   | Arrow_type (t1,t2) ->
       (string_of_type t1) ^ "->" ^ (string_of_type t2)
-  | Ghost_type t ->
-      "ghost " ^  (string_of_type t)
   | Tuple_type l -> actuals l
   | QMark_type t -> (string_of_type t) ^ "?"
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"

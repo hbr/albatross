@@ -209,11 +209,9 @@ let collect_fgs
             args
         in
         add_fg name path fgs tvs mt
-    | Current_type lst ->
-        assert false (* nyi: but might be eliminated from the language *)
     | Arrow_type (tpa,tpb) ->
         collect tpb (collect tpa fgs)
-    | Ghost_type tp | QMark_type tp | Paren_type tp ->
+    | QMark_type tp | Paren_type tp ->
         collect tp fgs
     | Tuple_type lst ->
         List.fold_left (fun fgs tp -> collect tp fgs) fgs lst
