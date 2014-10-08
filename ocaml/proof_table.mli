@@ -28,10 +28,12 @@ val nbenv:       t -> int
 val nbenv_local: t -> int
 val names:       t -> int array
 val all_id:      t -> int
+val some_id:     t -> int
 val imp_id:      t -> int
 
 val split_implication: term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
+val split_some_quantified: term -> t -> int * int array * term
 val implication: term -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val all_quantified_outer: term -> t -> term
@@ -60,6 +62,7 @@ val add_expand:     term -> int -> t -> unit
 val add_expand_backward:  term -> term -> t -> unit
 val add_reduce:     term -> int -> t -> unit
 val add_reduce_backward:  term -> term -> t -> unit
+val add_witness:    term -> int -> term -> term array -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
 val add_inherited:  term -> int -> int -> t -> unit
 

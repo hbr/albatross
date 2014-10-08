@@ -12,6 +12,9 @@ type proof_term =
   | Expand_bwd of term       (* term which is backward expanded *)
   | Reduce     of int        (* index of term which is reduced  *)
   | Reduce_bwd of term       (* term which is backward reduced  *)
+  | Witness    of int * term * term array
+        (* term [i] is a witness for [some (a,b,...) term] where
+           [a,b,..] are substituted by the arguments in the term array *)
   | Inherit    of int * int  (* assertion, descendant class *)
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
@@ -110,12 +113,17 @@ let imp_id (at:t): int =
 let all_id (at:t): int =
   at.entry.all_id
 
+let some_id (at:t): int =
+  nbenv at + Feature_table.some_index
 
 let split_implication (t:term) (at:t): term * term =
   Term.binary_split t at.entry.imp_id
 
 let split_all_quantified (t:term) (at:t): int * int array * term =
   Term.quantifier_split t at.entry.all_id
+
+let split_some_quantified (t:term) (at:t): int * int array * term =
+  Term.quantifier_split t (some_id at)
 
 let implication (a:term) (b:term) (at:t): term =
   Term.binary at.entry.imp_id a b
@@ -128,6 +136,9 @@ let split_implication_chain (t:term) (at:t): term list * term =
 
 let all_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
   Term.quantified at.entry.all_id nargs names t
+
+let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
+  Term.quantified (some_id at) nargs names t
 
 let all_quantified_outer (t:term) (at:t): term =
   let nargs  = nbenv_local at          in
@@ -365,6 +376,22 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
     tsub
 
 
+let term_of_witness (i:int) (t:term) (args:term array) (at:t): term =
+  let nargs = Array.length args in
+  let some_term = some_quantified nargs [||] t at in
+  let ti  = local_term i at in
+  let wt  = Term.apply t args in
+  if Term.equal_wo_names ti wt then ()
+  else begin
+    printf "illegal witness ti %s, wt %s, for %s\n"
+      (string_of_term ti at)
+      (string_of_term wt at)
+      (string_of_term some_term at);
+    raise Illegal_proof_term
+  end;
+  implication ti some_term at
+
+
 
 let count_assumptions (pt_arr:proof_term array): int =
   let p (pt:proof_term): bool =
@@ -407,6 +434,8 @@ let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
     | Expand_bwd t -> Expand_bwd t
     | Reduce i     -> Reduce (index i)
     | Reduce_bwd t -> Reduce_bwd t
+    | Witness (i,t,args) ->
+        Witness (index i,t,args)
     | Subproof (nargs,names,res,pt_arr) ->
         Subproof (nargs,names, index res, Array.map adapt pt_arr)
   in
@@ -463,6 +492,10 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Reduce_bwd t ->
         let t = term_of_reduce_bwd t at in
+        if trace then print0 t;
+        t
+    | Witness (idx,t,args) ->
+        let t = term_of_witness idx t args at in
         if trace then print0 t;
         t
     | Inherit (idx,cls) ->
@@ -580,6 +613,9 @@ let add_reduce_backward (t:term) (impl:term) (at:t): unit =
   add_proved_0 impl (Reduce_bwd t) at
 
 
+let add_witness (impl:term) (i:int) (t:term) (args:term array) (at:t): unit =
+  add_proved_0 impl (Witness (i,t,args)) at
+
 let rec used_assertions (i:int) (at:t) (lst:int list): int list =
   (** The assertions of the local context which are needed to prove
       assertion [i] in [at] cumulated to list [lst].
@@ -598,6 +634,7 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
     | Expand_bwd _       -> lst
     | Reduce_bwd _       -> lst
     | Specialize (j,_)   -> used_assertions j at lst
+    | Witness (i,_,_)
     | Expand i
     | Reduce i           -> used_assertions i at lst
     | Subproof (_,_,_,_) -> lst

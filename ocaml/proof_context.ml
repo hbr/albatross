@@ -191,6 +191,9 @@ let split_implication (t:term) (pc:t): term * term =
 let split_all_quantified (t:term) (pc:t): int * int array * term =
   Proof_table.split_all_quantified t pc.base
 
+let split_some_quantified (t:term) (pc:t): int * int array * term =
+  Proof_table.split_some_quantified t pc.base
+
 let implication (a:term) (b:term) (pc:t): term =
   Proof_table.implication a b pc.base
 
@@ -451,6 +454,19 @@ let find_in_tab (t:term) (pc:t): int =
 
 
 let find (t:term) (pc:t): int = find_in_tab t pc
+
+
+let find_witness (t:term) (nargs:int) (pc:t): int * Term_sub.t =
+  (** The index and substitution of the assertion which can be used as a
+      witness for the assertion [some(a,b,...) t]. The substitution contains
+      the variable substitutions for [a,b,...] valid in the environment of the
+      found assertion.*)
+  let sublst = Term_table.unify_with t nargs (nbenv pc) pc.entry.prvd in
+  match sublst with
+    []          -> raise Not_found
+  | [x] -> x
+  | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
+
 
 
 let has (t:term) (pc:t): bool =
@@ -1171,6 +1187,24 @@ let add_backward_reduce (t:term) (pc:t): unit =
     ()
 
 
+let add_backward_witness (t:term) (pc:t): unit =
+  try
+    let nargs,_,tt = split_some_quantified t pc in
+    let idx,sub = find_witness tt nargs pc in
+    let witness = term idx pc in
+    let impl    = implication witness t pc in
+    printf "witness %s found for %s\n" (string_of_term witness pc)
+      (string_of_term t pc);
+    if has_stronger impl pc then
+      ()
+    else begin
+      Proof_table.add_witness impl idx tt (Term_sub.arguments nargs sub) pc.base;
+      add_new impl IntSet.empty pc
+    end
+  with Not_found ->
+    ()
+
+
 let add_backward (t:term) (pc:t): unit =
   (** Add all backward rules which have [t] as a target to the context [pc].
    *)
@@ -1189,6 +1223,7 @@ let add_backward (t:term) (pc:t): unit =
   in
   add_backward_expansion t pc;
   add_backward_reduce t pc;
+  add_backward_witness t pc;
   let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
   (if sublst <> [] then
     add_lst sublst
