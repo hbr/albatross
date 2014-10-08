@@ -1193,8 +1193,6 @@ let add_backward_witness (t:term) (pc:t): unit =
     let idx,sub = find_witness tt nargs pc in
     let witness = term idx pc in
     let impl    = implication witness t pc in
-    printf "witness %s found for %s\n" (string_of_term witness pc)
-      (string_of_term t pc);
     if has_stronger impl pc then
       ()
     else begin
