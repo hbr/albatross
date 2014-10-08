@@ -785,7 +785,8 @@ let rec satisfies
 let valid_type
     (cls_idx:int)
     (args: type_term array)
-    (tvs: Tvars.t)
+    (info: info)
+    (tvs:  Tvars.t)
     (ct:t): type_term =
   (* The valid type term [cls_idx[args.(0),args.(1),...] in a type environment
      [tvs].
@@ -794,7 +795,6 @@ let valid_type
 
      To check: Do all actual generics [args] satisfy their corresponding
      concepts? *)
-
   let ntvs  = Tvars.count tvs
   and nall  = Tvars.count_all tvs
   and nargs = Array.length args in
@@ -802,7 +802,7 @@ let valid_type
     assert false (* shall never happen *)
   end else if cls_idx < nall then begin
     if nargs <> 0 then
-      raise Not_found (* Generics cannot have actual generics *)
+      error_info info "Generics cannot have actual generics"
     else
       Variable cls_idx
   end else begin
@@ -810,12 +810,13 @@ let valid_type
     let bdesc = base_descriptor cls_idx_0 ct in
     let fgconcepts = Tvars.fgconcepts bdesc.tvs in
     if nargs <> Array.length fgconcepts then
-      raise Not_found;
+      error_info info "number of actual generics wrong";
     for i = 0 to nargs-1 do
       if satisfies args.(i) tvs fgconcepts.(i) bdesc.tvs ct then
         ()
       else
-        raise Not_found
+        error_info info ("actual generic #" ^ (string_of_int i) ^
+                         " does not satisfy the required concept")
     done;
     if nargs = 0 then
       Variable cls_idx
@@ -854,10 +855,7 @@ let get_type
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
     let valid_tp (idx:int) (args:type_term array): type_term =
-      try
-        valid_type idx args tvs ct
-      with Not_found ->
-        error_info info ((Support.string_of_type tp) ^ " is not a valid type")
+        valid_type idx args info tvs ct
     in
     let rec tuple (tp_list: type_t list): type_term =
       let ta, tb =
@@ -887,7 +885,6 @@ let get_type
         valid_tp (n+function_index) [|ta;tb|]
     | Tuple_type tp_lst ->
         tuple tp_lst
-    | _ -> not_yet_implemented info "types other than normal types"
   in
   get_tp tp.v
 
