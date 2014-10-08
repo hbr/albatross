@@ -946,6 +946,19 @@ let add_consequences_reduce (i:int) (pc:t): unit =
   with Not_found ->
     ()
 
+let add_consequences_someelim (i:int) (pc:t): unit =
+  try
+    let some_cons = Proof_table.someelim i pc.base
+    and used_gen = used_schematic i pc
+    in
+    if has_stronger some_cons pc then
+      ()
+    else begin
+      Proof_table.add_someelim i some_cons pc.base;
+      add_new some_cons used_gen pc
+    end
+  with Not_found ->
+    ()
 
 
 let add_consequences (i:int) (pc:t): unit =
@@ -955,7 +968,8 @@ let add_consequences (i:int) (pc:t): unit =
   add_consequences_premise     i pc;
   add_consequences_implication i pc;
   add_consequences_expansion   i pc;
-  add_consequences_reduce      i pc
+  add_consequences_reduce      i pc;
+  add_consequences_someelim    i pc
 
 
 

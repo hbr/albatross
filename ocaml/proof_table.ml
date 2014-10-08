@@ -15,6 +15,7 @@ type proof_term =
   | Witness    of int * term * term array
         (* term [i] is a witness for [some (a,b,...) term] where
            [a,b,..] are substituted by the arguments in the term array *)
+  | Someelim   of int        (* index of the existenially quantified term *)
   | Inherit    of int * int  (* assertion, descendant class *)
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
@@ -392,6 +393,38 @@ let term_of_witness (i:int) (t:term) (args:term array) (at:t): term =
   implication ti some_term at
 
 
+let someelim (i:int) (at:t): term =
+  (** Transform the term [i] if it has the form [some(a,b,...) e1] into
+      [all(e2) (all(a,b,...) e1 => e2) => e2]. Otherwise [raise Not_found]
+   *)
+  assert (i < count at);
+  let t = local_term i at in
+  let nargs,nms,tt = split_some_quantified t at in
+  let tt = Term.upbound 1 nargs tt in
+  let imp_id  = imp_id at
+  and all_id  = all_id at
+  in
+  let imp_id1 = imp_id + (nargs+1)
+  and imp_id2 = imp_id + 1
+  and all_id1 = all_id + 1
+  and all_id2 = all_id
+  in
+  let impl1   = Term.binary imp_id1 tt (Variable nargs) in
+  let lam1    = Lam (nargs,nms,impl1) in
+  let all1    = Term.unary all_id1 lam1 in
+  let impl2   = Term.binary imp_id2 all1 (Variable 0) in
+  let lam2    = Lam (1,[||],impl2) in
+  let all2    = Term.unary all_id2 lam2 in
+  all2
+
+
+
+let term_of_someelim (i:int) (at:t): term =
+  try
+    someelim i at
+  with Not_found ->
+    raise Illegal_proof_term
+
 
 let count_assumptions (pt_arr:proof_term array): int =
   let p (pt:proof_term): bool =
@@ -436,6 +469,7 @@ let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
     | Reduce_bwd t -> Reduce_bwd t
     | Witness (i,t,args) ->
         Witness (index i,t,args)
+    | Someelim i   -> Someelim (index i)
     | Subproof (nargs,names,res,pt_arr) ->
         Subproof (nargs,names, index res, Array.map adapt pt_arr)
   in
@@ -496,6 +530,10 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Witness (idx,t,args) ->
         let t = term_of_witness idx t args at in
+        if trace then print0 t;
+        t
+    | Someelim idx ->
+        let t = term_of_someelim idx at in
         if trace then print0 t;
         t
     | Inherit (idx,cls) ->
@@ -616,6 +654,10 @@ let add_reduce_backward (t:term) (impl:term) (at:t): unit =
 let add_witness (impl:term) (i:int) (t:term) (args:term array) (at:t): unit =
   add_proved_0 impl (Witness (i,t,args)) at
 
+
+let add_someelim (i:int) (t:term) (at:t): unit =
+  add_proved_0 t (Someelim i) at
+
 let rec used_assertions (i:int) (at:t) (lst:int list): int list =
   (** The assertions of the local context which are needed to prove
       assertion [i] in [at] cumulated to list [lst].
@@ -635,6 +677,7 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
     | Reduce_bwd _       -> lst
     | Specialize (j,_)   -> used_assertions j at lst
     | Witness (i,_,_)
+    | Someelim i
     | Expand i
     | Reduce i           -> used_assertions i at lst
     | Subproof (_,_,_,_) -> lst
