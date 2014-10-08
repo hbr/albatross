@@ -26,7 +26,7 @@ let put_class
   List.iter
     (fun par_lst ->
       List.iter
-        (fun (tp,adapt_lst) ->
+        (fun (ghost,tp,adapt_lst) ->
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
           let par_idx, par_args = Class_table.parent_type idx tp ct in
           let lst, lst_priv =

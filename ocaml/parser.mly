@@ -366,14 +366,13 @@ inheritance:
 /* Inheritance */
 /* ------------------------------------------------------------------------- */
 
-inherit_clause: KWinherit optsemi parent_list { $3 }
+inherit_clause: KWinherit parent_list { $2 }
 
 parent_list:
     parent { [$1] }
-|   KWghost parent { [$2] }
 |   parent parent_list { $1::$2 }
 
-parent: type_nt feature_adaptation { withinfo (rhs_info 1) $1, $2 }
+parent: optghost type_nt feature_adaptation { $1, withinfo (rhs_info 2) $2, $3 }
 
 feature_adaptation:
     { [] }
@@ -432,7 +431,6 @@ type_nt:
 
 elem_type:
     simple_type  { $1 }
-|   current_type { $1 }
 |   tuple_type   { $1 }
 |   qmark_type   { $1 }
 |   LPAREN type_nt RPAREN { Paren_type $2 }
@@ -453,8 +451,6 @@ actual_generics:
 |   LBRACKET type_list RBRACKET { $2 }
 
 
-
-current_type: KWCURRENT actual_generics { Current_type $2 }
 
 
 arrow_type: elem_type ARROW type_nt {
@@ -782,7 +778,6 @@ operator:
 |   NOTIN     { Notinop }
 |   BAR       { Barop }
 |   DBAR      { DBarop }
-/*|   ARROW     { Arrowop }*/
 |   DARROW    { DArrowop }
 |   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
@@ -797,6 +792,9 @@ operator:
 /* ------------------------------------------------------------------------- */
 
 
+optghost:
+    { false }
+| KWghost { true }
 
 optsemi:
     %prec LOWEST_PREC {()}

@@ -681,7 +681,7 @@ type adaptation_clause =
   | Redefine of name_sig list
   | Undefine of name_sig list
 
-type parent = type_t withinfo * adaptation_clause list
+type parent = bool * type_t withinfo * adaptation_clause list
 
 type inherit_clause = parent list
 
