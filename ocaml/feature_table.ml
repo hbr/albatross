@@ -107,7 +107,6 @@ let definition (i:int) (nb:int) (ft:t): term =
 
 
 
-
 let function_level (i:int) (ft:t): int =
   assert (i < count ft);
   (base_descriptor i ft).level
@@ -125,6 +124,33 @@ let term_level (t:term) (nb:int) (ft:t): int =
     )
     0
     t
+
+
+let is_ghost_function (i:int) (ft:t): bool =
+  assert (i < count ft);
+  Sign.is_ghost (descriptor i ft).sign
+
+
+let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
+  let rec is_ghost (t:term) (nb:int): bool =
+    let rec ghost_args (args:term array) (i:int) (n:int): bool =
+      if i = n then false
+      else
+        let ghost = is_ghost args.(i) nb in
+        ghost || ghost_args args (i+1) n
+    in
+    match t with
+      Variable i when i < nb+nargs -> false
+    | Variable i ->
+        is_ghost_function (i-nb-nargs) ft
+    | Lam (n,_,t) ->
+        is_ghost t (nb+n)
+    | Application (f,args) ->
+        let fghost = is_ghost f nb in
+        fghost || ghost_args args 0 (Array.length args)
+  in
+  is_ghost t 0
+
 
 
 
@@ -268,11 +294,16 @@ let add_base
     (argtypes: type_term array)
     (res:  type_term)
     (defer: bool)
+    (ghost: bool)
     (ft:t)
     : unit =
   let mdl_nme            = ST.symbol mdl_nme
   in
-  let sign = Sign.make_func argtypes res
+  let sign =
+    if ghost then
+      Sign.make_ghost argtypes res
+    else
+      Sign.make_func argtypes res
   and ntvs = Array.length concepts
   and cnt  = count ft
   and nargs = Array.length argtypes
@@ -338,27 +369,27 @@ let base_table () : t =
   in
   add_base
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
-    [||] [|bool;bool|] bool false ft;
+    [||] [|bool;bool|] bool false false ft;
 
   add_base
     "function" Class_table.function_index (FNoperator Parenop)
-    [|any2;any2|] [|f_tp;a_tp|] b_tp false ft;
+    [|any2;any2|] [|f_tp;a_tp|] b_tp false false ft;
 
   add_base
     "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 false ft;
+    [|any1|] [|p_tp|] bool1 false true ft;
 
   add_base
     "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 false ft;
+    [|any1|] [|p_tp|] bool1 false true ft;
 
   add_base
     "predicate" Class_table.predicate_index (FNoperator Parenop)
-    [|any1|] [|p_tp;g_tp|] bool1 false ft;
+    [|any1|] [|p_tp;g_tp|] bool1 false false ft;
 
   add_base
     "any" Class_table.any_index (FNoperator Eqop)
-    [|any1|] [|g_tp;g_tp|] bool1 true ft;
+    [|any1|] [|g_tp;g_tp|] bool1 true false ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
@@ -1078,7 +1109,6 @@ let add_function (desc:descriptor) (info:info) (ft:t): unit =
   inherit_to_descendants cnt info ft
 
 
-
 let put_function
     (fn:       feature_name withinfo)
     (tvs:      Tvars.t)
@@ -1088,9 +1118,14 @@ let put_function
     (term_opt: term option)
     (ft:       t): unit =
   assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
-  let is_priv = is_private ft in
-  let cnt   = Seq.count ft.seq
+  let is_priv = is_private ft
+  and cnt     = Seq.count ft.seq
+  and nargs   = Array.length argnames
   in
+  (match term_opt with
+    Some t when is_ghost_term t nargs ft && not (Sign.is_ghost sign) ->
+      error_info fn.i "Must be a ghost function"
+  | _ -> ());
   let idx =
      try find_with_signature fn.v tvs sign ft
      with Not_found -> cnt
@@ -1104,7 +1139,6 @@ let put_function
       Deferred ->
         Class_table.check_deferred cls nanchors fn.i ft.ct
     | _ -> ());
-    let nargs = Array.length argnames in
     let bdesc = standard_bdesc cnt cls term_opt nargs ft
     and bdesc_opt =
       if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
@@ -1145,6 +1179,8 @@ let put_function
         not_match "public definition";
       match desc.pub with
         None ->
+          if Sign.is_ghost desc.sign && not (Sign.is_ghost sign) then
+            error_info fn.i "Must be a ghost function";
           let nargs = Array.length desc.argnames in
           desc.pub <- Some (standard_bdesc idx cls term_opt nargs ft);
           add_class_feature idx false ft;

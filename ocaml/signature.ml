@@ -520,6 +520,7 @@ module Sign: sig
   val empty:       t
   val make:        type_term array -> Result_type.t -> t
   val make_func:   type_term array -> type_term -> t
+  val make_ghost:  type_term array -> type_term -> t
   val make_proc:   type_term array -> type_term -> t
   val make_const:  type_term -> t
   val make_args:   type_term array -> t
@@ -557,6 +558,9 @@ end = struct
 
   let make_func (args: type_term array) (result:type_term): t =
     {args = args; rt = Result_type.make_func result}
+
+  let make_ghost (args: type_term array) (result:type_term): t =
+    {args = args; rt = Result_type.make_ghost result}
 
   let make_args (args: type_term array): t =
     {args = args; rt = Result_type.empty}
