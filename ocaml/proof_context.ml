@@ -19,7 +19,8 @@ type term_data = {
     term:     term;  (* inner term [if nargs<>0] *)
     nargs:    int;
     nbenv:    int;
-    fwddat:   (term*term*int*bool*bool) option; (* a, b, gp1, simpl, elim *)
+    fwddat:   (term*term*int*bool*bool*bool) option;
+               (* a, b, gp1, simpl, elim, bwd *)
     bwddat:   backward_data option}
 
 
@@ -260,21 +261,25 @@ let is_simpler (a:term) (b:term) (nargs:int) (pc:t): bool =
 
 
 let forward_data
-    (t:term) (nargs:int) (elim:bool) (pc:t)
-    : term * term * int * bool * bool =
+    (t:term) (nargs:int) (elim:bool) (bwd:bool) (pc:t)
+    : term * term * int * bool * bool * bool =
   (** The forward data of the term [t] with [nargs] arguments. The [elim] flag
-      specifies if the term comes from a partially applied elimination rule.
+      specifies if the term comes from a partially applied elimination
+      rule. The [bwd] specifies if the term is introduced as a backward rule.
 
       The term is an applicable forward rule if it is an implication and
       the premise contains a complete prefix of the arguments and the
       implication is a simplification or an elimination rule
    *)
   assert (not elim || nargs > 0);
+  assert (not bwd  || nargs = 0);
   let imp_id = nargs + imp_id pc       in
   let a,b = Term.binary_split t imp_id in
   if nargs = 0 then
-    a, b, 0, (Term.nodes b) <= (Term.nodes a), elim
+    let is_simpl = bwd || is_simpler b a nargs pc in
+    a, b, 0, is_simpl, elim, bwd
   else begin
+    assert (not bwd);
     let gp1   = Term.greatestp1_arg a nargs
     and avars = Term.bound_variables a nargs
     in
@@ -291,7 +296,7 @@ let forward_data
         IntSet.exists (fun ia -> not (IntSet.mem ia fvars_b)) fvars_a
     in
     if is_simpl || elim  then
-      a, b, gp1, is_simpl, elim
+      a, b, gp1, is_simpl, elim, bwd
     else
       raise Not_found
   end
@@ -385,13 +390,13 @@ let analyze_backward (t:term) (nargs:int) (pc:t): backward_data option =
 
 
 
-let analyze (t:term) (elim:bool) (pc:t): term_data =
+let analyze (t:term) (elim:bool) (is_bwd:bool) (pc:t): term_data =
   try
     let nargs, nms, t = Term.quantifier_split t (all_id pc) in
     if IntSet.cardinal (Term.bound_variables t nargs) <> nargs then
       raise Not_found;
     let fwd =
-      try Some (forward_data t nargs elim pc)
+      try Some (forward_data t nargs elim is_bwd pc)
       with Not_found -> None
     and bwd = analyze_backward t nargs pc
     in
@@ -407,7 +412,7 @@ let analyze (t:term) (elim:bool) (pc:t): term_data =
       try
         let a,b = Term.binary_split t imp_id      in
         let simpl = is_simpler b a 0 pc in
-        Some (a,b,0,simpl,elim)
+        Some (a,b,0,simpl,elim,is_bwd)
       with Not_found ->
         None
     in
@@ -596,7 +601,8 @@ let print_global_assertions (pc:t): unit =
 
 
 let add_new_0
-    (t:term) (used_gen:IntSet.t) (work:bool) (tabs:bool) (elim:bool) (pc:t)
+    (t:term) (used_gen:IntSet.t) (bwd:bool)
+    (work:bool) (tabs:bool) (elim:bool) (pc:t)
     : unit =
   (** Add the new term [t] to the context [pc].
 
@@ -604,7 +610,7 @@ let add_new_0
       this function
    *)
   assert (not tabs || not (has_stronger t pc));
-  let td = analyze t elim pc
+  let td = analyze t elim bwd pc
   and idx = Seq.count pc.terms
   in
   let add_to_proved (): unit =
@@ -620,7 +626,7 @@ let add_new_0
     match td.fwddat with
       None ->
         ()  (* do nothing, not a valid forward rule *)
-    | Some (a,b,gp1,_,_) ->
+    | Some (a,b,gp1,_,_,_) ->
         pc.entry.fwd <-
           Term_table.add a td.nargs td.nbenv idx pc.entry.fwd
 
@@ -672,8 +678,8 @@ let with_elim = true
 let wo_elim   = false
 
 
-let add_new (t:term) (used_gen:IntSet.t) (pc:t): unit =
-  add_new_0 t used_gen with_work with_tabs wo_elim pc
+let add_new (t:term) (used_gen:IntSet.t) (bwd:bool) (pc:t): unit =
+  add_new_0 t used_gen bwd with_work with_tabs wo_elim pc
 
 
 
@@ -686,20 +692,21 @@ let add_mp (t:term) (i:int) (j:int) (pc:t): unit =
   assert (i < count pc);
   assert (j < count pc);
   let td = (Seq.elem j pc.terms).td in
-  let _,_,_,simpl,elim = Option.value td.fwddat in
+  let _,_,_,simpl,elim,bwd = Option.value td.fwddat in
   let gen_i = used_schematic i pc
   and gen_j = used_schematic j pc
   in
-  let fwd_ok = simpl || elim || IntSet.is_empty (IntSet.inter gen_i gen_j) in
+  let fwd_ok = simpl || elim || bwd ||
+     IntSet.is_empty (IntSet.inter gen_i gen_j) in
   if is_using_forward pc
       && fwd_ok
       && not (has_stronger t pc)
   then begin
-    let gen = if simpl then gen_i else IntSet.union gen_i gen_j
+    let gen = if simpl || bwd then gen_i else IntSet.union gen_i gen_j
     in
     pc.entry.used_fwd <- IntSet.add j pc.entry.used_fwd;
     Proof_table.add_mp t i j pc.base;
-    add_new_0 t gen with_work with_tabs elim pc
+    add_new_0 t gen bwd with_work with_tabs elim pc
   end else
     ()
 
@@ -721,11 +728,12 @@ let add_specialized_forward
     let used_gen = used_schematic i pc in
     let used_gen = IntSet.add i used_gen
     and td = term_data i pc in
-    let _,_,gp1,_,elim = Option.value td.fwddat  (* must have forward data *)
+    let _,_,gp1,_,elim,_ =
+      Option.value td.fwddat  (* must have forward data *)
     in
     let elim = elim && gp1 < td.nargs in
     Proof_table.add_specialize t i args pc.base;
-    add_new_0 t used_gen wo_work with_tabs elim pc
+    add_new_0 t used_gen false wo_work with_tabs elim pc
   end
 
 
@@ -747,7 +755,7 @@ let specialized_forward
   let td_imp    = (Seq.elem i pc.terms).td in
   assert (Option.has td_imp.fwddat);
   let nargs     = td_imp.nargs
-  and a,b,gp1,_,_ = Option.value td_imp.fwddat in
+  and a,b,gp1,_,_,_ = Option.value td_imp.fwddat in
   assert (gp1 <= nargs);
   assert (Term_sub.count sub = gp1);
   let nbenv_imp = Proof_table.nbenv_term i pc.base
@@ -829,9 +837,9 @@ let add_consequences_premise (i:int) (pc:t): unit =
 
 
 
-let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
+let add_fully_specialized (idx:int) (sub:Term_sub.t) (bwd:bool) (pc:t): unit =
   (** Add the schematic rule [idx] substituted by [sub] to the
-      proof context [pc].
+      proof context [pc]. [bwd] flags if [idx] is entered as a backward rule
 
       Note: The substitution [sub] has to be complete and not partial!
    *)
@@ -853,7 +861,7 @@ let add_fully_specialized (idx:int) (sub:Term_sub.t) (pc:t): unit =
     let used_gen = IntSet.add idx desc.used_gen
     in
     Proof_table.add_specialize t idx args pc.base;
-    add_new t used_gen pc;
+    add_new t used_gen bwd pc;
     assert (is_consistent pc)
   end
 
@@ -868,7 +876,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
   in
   match td.fwddat with
     None -> ()
-  | Some (a,b,gp1,_,_) ->
+  | Some (a,b,gp1,_,_,bwd) ->
       if 0 < td.nargs then  (* the implication is schematic *)
         let sublst =
           Term_table.unify_with a td.nargs td.nbenv pc.entry.prvd
@@ -896,7 +904,7 @@ let add_consequences_implication (i:int)(pc:t): unit =
                 let idx_premise = count pc in
                 assert (not (has a pc)); (* because there is no exact
                                             match *)
-                add_fully_specialized idx sub pc;
+                add_fully_specialized idx sub false pc;
                 assert (idx_premise + 1 = count pc); (* specialized is
                                                         new *)
                 add_mp b idx_premise i pc
@@ -918,10 +926,8 @@ let add_consequences_expansion (i:int) (pc:t): unit =
     if has_stronger texpand pc then
       ()
     else begin
-      (*printf "add_consequences_expansion t:\"%s\"  texp:\"%s\"\n"
-        (string_of_term t pc) (string_of_term texpand pc);*)
       Proof_table.add_expand texpand i pc.base;
-      add_new texpand used_gen pc
+      add_new texpand used_gen false pc
     end
   with Not_found ->
     ()
@@ -941,7 +947,7 @@ let add_consequences_reduce (i:int) (pc:t): unit =
       ()
     else begin
       Proof_table.add_reduce tred i pc.base;
-      add_new tred used_gen pc
+      add_new tred used_gen false pc
     end
   with Not_found ->
     ()
@@ -955,7 +961,7 @@ let add_consequences_someelim (i:int) (pc:t): unit =
       ()
     else begin
       Proof_table.add_someelim i some_cons pc.base;
-      add_new some_cons used_gen pc
+      add_new some_cons used_gen false pc
     end
   with Not_found ->
     ()
@@ -1029,10 +1035,9 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
   else
     Proof_table.add_assumption t pc.base;
   if not has then begin
-    add_new t IntSet.empty pc
+    add_new t IntSet.empty false pc
   end else
-    add_new_0 t IntSet.empty wo_work wo_tabs wo_elim pc;
-    (*Seq.push {td = analyze t pc; used_gen = IntSet.empty} pc.terms;*)
+    add_new_0 t IntSet.empty false wo_work wo_tabs wo_elim pc;
   if pc.trace then
     printf "%s%3d hypo:   %s\n" (prefix pc) idx (string_of_term t pc);
   idx
@@ -1145,7 +1150,7 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
     (Class_table.class_name cls ct);
   if not (has_stronger t pc) then begin
     Proof_table.add_inherited t i cls pc.base;
-    add_new t IntSet.empty pc;
+    add_new t IntSet.empty false pc;
     close pc
   end
 
@@ -1181,7 +1186,7 @@ let add_backward_expansion (t:term) (pc:t): unit =
       ()
     else begin
       Proof_table.add_expand_backward t impl pc.base;
-      add_new impl IntSet.empty pc
+      add_new impl IntSet.empty false pc
     end
   with Not_found ->
     ()
@@ -1195,7 +1200,7 @@ let add_backward_reduce (t:term) (pc:t): unit =
       ()
     else begin
       Proof_table.add_reduce_backward t impl pc.base;
-      add_new impl IntSet.empty pc
+      add_new impl IntSet.empty false pc
     end
   with Not_found ->
     ()
@@ -1211,7 +1216,7 @@ let add_backward_witness (t:term) (pc:t): unit =
       ()
     else begin
       Proof_table.add_witness impl idx tt (Term_sub.arguments nargs sub) pc.base;
-      add_new impl IntSet.empty pc
+      add_new impl IntSet.empty false pc
     end
   with Not_found ->
     ()
@@ -1230,7 +1235,7 @@ let add_backward (t:term) (pc:t): unit =
           else
             ()
         else
-          add_fully_specialized idx sub pc)
+          add_fully_specialized idx sub true pc)
       sublst
   in
   add_backward_expansion t pc;
@@ -1292,7 +1297,7 @@ let add_proved_0
   with Not_found -> begin
     let cnt = count pc in
     Proof_table.add_proved t pterm delta pc.base;
-    add_new t used_gen pc;
+    add_new t used_gen false pc;
     if is_global pc && owner <> -1 then begin
       (Seq.elem cnt pc.gseq).defer <- defer;
       Class_table.add_assertion cnt owner defer ct;
