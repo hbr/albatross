@@ -1,26 +1,8 @@
 open Term
+open Proof
 open Container
 open Support
 open Printf
-
-type proof_term =
-    Axiom      of term
-  | Assumption of term
-  | Detached   of int * int  (* modus ponens *)
-  | Specialize of int * term array
-  | Expand     of int        (* index of term which is expanded *)
-  | Expand_bwd of term       (* term which is backward expanded *)
-  | Reduce     of int        (* index of term which is reduced  *)
-  | Reduce_bwd of term       (* term which is backward reduced  *)
-  | Witness    of int * term * term array
-        (* term [i] is a witness for [some (a,b,...) term] where
-           [a,b,..] are substituted by the arguments in the term array *)
-  | Someelim   of int        (* index of the existenially quantified term *)
-  | Inherit    of int * int  (* assertion, descendant class *)
-  | Subproof   of int        (* nargs *)
-                * int array  (* names *)
-                * int        (* res *)
-                * proof_term array
 
 type desc = {nbenv0:     int;
              term:       term;
@@ -453,35 +435,6 @@ let arguments_string (at:t): string =
 
 
 
-let adapt_proof_term (cnt:int) (delta:int) (pt:proof_term): proof_term =
-  assert (delta <= cnt);
-  let base = cnt - delta in
-  let index (i:int): int =
-    if i < base then i else i + delta
-  in
-  let rec adapt (pt:proof_term): proof_term =
-    match pt with
-      Axiom _ | Assumption _ -> pt
-    | Detached (a,b) ->
-        Detached (index a, index b)
-    | Specialize (i,args) ->
-        Specialize (index i, args)
-    | Inherit (i,cls) ->
-        Inherit (index i, cls)
-    | Expand i     -> Expand (index i)
-    | Expand_bwd t -> Expand_bwd t
-    | Reduce i     -> Reduce (index i)
-    | Reduce_bwd t -> Reduce_bwd t
-    | Witness (i,t,args) ->
-        Witness (index i,t,args)
-    | Someelim i   -> Someelim (index i)
-    | Subproof (nargs,names,res,pt_arr) ->
-        Subproof (nargs,names, index res, Array.map adapt pt_arr)
-  in
-  if delta = 0 then pt else adapt pt
-
-
-
 let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at
   and cnt0    = count at
@@ -606,8 +559,9 @@ let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
 let add_proved (t:term) (pt:proof_term) (delta:int) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
-  let cnt = count at in
-  let pt = adapt_proof_term cnt delta pt in
+  assert (delta <= count at);
+  let start = count at - delta in
+  let pt = Proof_term.adapt start delta pt in
   assert (not (is_global at) || is_proof_pair t pt at);
   add_proved_0 t pt at
 

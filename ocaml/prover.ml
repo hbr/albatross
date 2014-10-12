@@ -1,6 +1,7 @@
 open Container
 open Support
 open Term
+open Proof
 open Printf
 
 
@@ -10,8 +11,6 @@ type kind =
     PAxiom
   | PDeferred
   | PNormal
-
-type proof_term = Proof_context.proof_term
 
 type entry = {mutable goal: term;
               mutable alter: bool; (* stack entry used for exploring

@@ -1,5 +1,6 @@
 open Container
 open Term
+open Proof
 open Support
 open Printf
 
@@ -35,8 +36,6 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable slots: slot_data array;
               mutable used_fwd: IntSet.t;
               mutable count: int}
-
-type proof_term = Proof_table.proof_term
 
 type gdesc = {mutable pub: bool;
               mdl: int;

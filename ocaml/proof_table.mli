@@ -1,9 +1,9 @@
 open Term
+open Proof
 open Support
 open Container
 
 type t
-type proof_term
 
 val context: t -> Context.t
 val class_table: t -> Class_table.t
