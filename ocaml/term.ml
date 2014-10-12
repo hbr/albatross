@@ -864,7 +864,7 @@ end = struct
     List.rev lst
 
   let arguments (nargs:int) (sub:t): term array =
-    let args = Array.make nargs (Variable 0) in
+    let args = Array.make nargs (Variable (-1)) in
     IntMap.iter
       (fun i t ->
         assert (i<nargs);

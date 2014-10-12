@@ -379,6 +379,11 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
 
 let term_of_witness (i:int) (t:term) (args:term array) (at:t): term =
   let nargs = Array.length args in
+  Array.iter (fun t ->
+    match t with Variable i when i = -1 ->
+      raise Illegal_proof_term
+    | _ -> ())
+    args;
   let some_term = some_quantified nargs [||] t at in
   let ti  = local_term i at in
   let wt  = Term.apply t args in

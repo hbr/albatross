@@ -467,10 +467,7 @@ let find_witness (t:term) (nargs:int) (pc:t): int * Term_sub.t =
       the variable substitutions for [a,b,...] valid in the environment of the
       found assertion.*)
   let sublst = Term_table.unify_with t nargs (nbenv pc) pc.entry.prvd in
-  match sublst with
-    []          -> raise Not_found
-  | [x] -> x
-  | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
+  List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst
 
 
 
