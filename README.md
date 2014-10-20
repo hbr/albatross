@@ -12,6 +12,11 @@ language.
 
 # Installation
 
+Prerequisites: In order to compile the Albatross compiler you need the `OCaml`
+compiler. The OCaml compiler is available at no cost through
+[caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
+platforms.
+
 Get the tarball `albatross.tgz` and create a directory where you want the
 albatross compiler unpacked.
 
