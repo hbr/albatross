@@ -230,10 +230,8 @@ let variant (i:int) (cls:int) (at:t): term =
   t
 
 
-
-let discharged_term (i:int) (at:t): term =
-  (** The [i]th term of the current environment with all local variables and
-      assumptions discharged.
+let discharged_assumptions (i:int) (at:t): term =
+  (** The [i]th term of the current environment with all assumptions discharged.
    *)
   let cnt0 = count_previous at
   and tgt = local_term i at
@@ -242,7 +240,15 @@ let discharged_term (i:int) (at:t): term =
   for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
     tref := implication (local_term k at) !tref at
   done;
-  all_quantified_outer !tref at
+  !tref
+
+
+let discharged_term (i:int) (at:t): term =
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged.
+   *)
+  let t = discharged_assumptions i at in
+  all_quantified_outer t at
 
 
 let is_assumption (i:int) (at:t): bool =
@@ -686,6 +692,10 @@ let discharged (i:int) (at:t): term * proof_term =
           Array.init
             narr
             (fun j -> (Seq.elem (cnt0+j) at.seq).proof_term)
+        in
+        let i, pt_arr =
+          if narr=0 then i, pt_arr
+          else Proof_term.remove_unused i cnt0 pt_arr
         in
         Subproof (nargs,nms,i,pt_arr)
   in

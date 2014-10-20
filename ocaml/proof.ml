@@ -1,4 +1,6 @@
+open Container
 open Term
+open Printf
 
 type reduction =
     RVar of int
@@ -32,10 +34,19 @@ type proof_term =
 
 module Proof_term: sig
   type t = proof_term
+
   val adapt: int -> int -> t -> t
+
+  val remove_unused: int -> int -> t array -> int * t array
+
+  val print_pt_arr:  string -> int -> t array -> unit
+
 end = struct
+
   type t = proof_term
+
   let adapt (start:int) (delta:int) (pt:t): t =
+    (* Shift the assertion indices from [start] on up by [delta]. *)
     let index (i:int): int =
       if i < start then i else i + delta
     in
@@ -59,4 +70,220 @@ end = struct
           Subproof (nargs,names, index res, Array.map adapt pt_arr)
     in
     if delta = 0 then pt else adapt pt
+
+
+  let count_assumptions (pt_array: t array): int =
+    let n = Array.length pt_array in
+    let rec count (i:int): int =
+      assert (i <= n);
+      if i = n then n
+      else
+        match pt_array.(i) with
+          Assumption _ -> count (i+1)
+        | _ -> i
+    in
+    count 0
+
+
+  let used (k:int) (start:int) (pt_arr:t array): IntSet.t =
+    (* The set of used proof terms in [pt_arr] which are needed to proof the
+       term [k].  The index [k] is absolute, numbering in [pt_arr] starts at
+       [start]. The returned set contains absolute numbers. *)
+    let rec usd
+        (k:int)
+        (start_inner:int)
+        (extern:bool)  (* look for used terms below [start_inner] *)
+        (pt_arr: t array)
+        (set:IntSet.t)
+        : IntSet.t =
+      let n = Array.length pt_arr in
+      assert (k < start_inner + n);
+      if k < start then
+        set
+      else if k < start_inner then
+        if extern then IntSet.add k set else set
+      else
+        let set = if extern then set else IntSet.add k set
+        in
+        match pt_arr.(k-start_inner) with
+          Axiom _ | Assumption _ | Reduce_bwd _ | Expand_bwd _ ->
+            set
+        | Detached (i,j) ->
+            assert (i < k);
+            assert (j < k);
+            let set = usd i start_inner extern pt_arr set in
+            usd j start_inner extern pt_arr set
+        | Specialize (i,_) | Expand i | Reduce i | Witness (i,_,_) | Someelim i ->
+            assert (i < k);
+            usd i start_inner extern pt_arr set
+        | Subproof (_,_,k1,pt_arr1) ->
+            let usd2 = usd k1 k true pt_arr1 IntSet.empty in
+            let set =
+            IntSet.fold
+              (fun i set -> usd i start_inner extern pt_arr set)
+              usd2
+              set in
+            set
+        | Inherit (i,cls) ->
+            assert false
+    in
+    usd k start false pt_arr IntSet.empty
+
+
+  let reindex (start:int) (map: (int*int) array) (k:int) (pt_arr:t array)
+      : int * t array =
+    (* Remove unused proof terms and reindex the proof terms in the array [pt_arr]
+
+       start: index of the first proof term in [pt_arr]
+
+       n_rem: number of removed terms
+
+       map: old index -> new index,n_removed (-1: indicates that the term is unused)
+            n_removed: number of removed terms below [old_index]
+            note: indices in map are relative
+     *)
+    let n = Array.length pt_arr in
+    assert (n = Array.length map);
+    let rec reidx (start_inner:int) (below:int) (n_rem:int) (k:int) (pt_arr:t array)
+        : int * t array =
+      assert (n_rem <= n);
+      let is_inner = below <= start_inner in
+      assert (is_inner || start = start_inner);
+      let index (i:int): int =
+        if i < start then i
+        else if i < below then
+          (let idx,_ = map.(i-start) in
+          assert (idx <> -1);
+          idx + start)
+        else
+          i - n_rem
+      in
+      let transform (i:int) (pt:proof_term): proof_term =
+        match pt with
+          Axiom _ | Assumption _ | Reduce_bwd _ | Expand_bwd _ ->
+            pt
+        | Detached (i,j) -> Detached (index i, index j)
+        | Expand i       -> Expand (index i)
+        | Reduce i       -> Reduce (index i)
+        | Specialize (i,args) -> Specialize (index i, args)
+        | Witness (i,t,args)  -> Witness (index i, t, args)
+        | Someelim i -> Someelim (index i)
+        | Subproof (nargs,nms,k,pt_arr1) ->
+            let start_inner = start_inner + i in
+            let below = if is_inner then below else start_inner in
+            let n_rem = if is_inner then n_rem else snd map.(i) in
+            let k,pt_arr = reidx start_inner below n_rem k pt_arr1 in
+            assert (k < start_inner + Array.length pt_arr);
+            Subproof (nargs, nms, k, pt_arr)
+        | Inherit (i,cls) ->
+            assert false
+      in
+      let lst,i =
+        Array.fold_left
+          (fun (lst,i) pt ->
+            assert (is_inner || i < n);
+            let add = is_inner || (fst map.(i)) <> -1 in
+            if add then
+              (transform i pt)::lst, i+1
+            else
+              lst, i+1)
+          ([],0)
+          pt_arr
+      in
+      assert (i = Array.length pt_arr);
+      (index k), Array.of_list (List.rev lst)
+    in
+    reidx start (start+n) 0 k pt_arr
+
+
+
+  let remove_unused (k:int) (start:int) (pt_arr:t array): int * t array =
+    let n = Array.length pt_arr in
+    assert (0 < n);
+    assert (k < start + n);
+    let usd  = used k start pt_arr
+    and nreq = count_assumptions pt_arr
+    and map  = Array.make n (-1,0)
+    in
+    let pos   = ref nreq
+    in
+    for i = 0 to nreq-1 do (* all assumptions *)
+      map.(i) <- i, 0
+    done;
+    let n_rem = ref 0
+    and next  = ref nreq in
+    IntSet.iter
+      (fun i ->
+        assert (i < start + n);
+        if start + nreq <= i then begin (* used, but not assumption *)
+          let i_rel = i - start in
+          assert (!next <= i_rel);
+          assert (!n_rem <= n);
+          n_rem := !n_rem + (i_rel - !next);
+          map.(i_rel) <- !pos, !n_rem;
+          pos   := !pos + 1;
+          next  := i_rel + 1
+        end)
+      usd;
+    reindex start map k pt_arr
+
+
+
+  let permute (nargs:int) (map: int IntMap.t) (pt:t): t =
+    let dest  = Array.make nargs (-1)
+    and flags = Array.make nargs false in
+    IntMap.iter
+      (fun i i_dest ->
+        dest.(i)  <- i_dest;
+        flags.(i) <- true)
+      map;
+    let rec perm (nb:int) (pt:t): t =
+      match pt with
+        Axiom t ->
+          assert false
+      | Assumption t ->
+          assert false
+      | Detached (i,j) ->
+          assert false
+      | Specialize (i,args) ->
+          assert false
+      | Expand i ->
+          assert false
+      | Expand_bwd t ->
+          assert false
+      | Reduce i ->
+          assert false
+      | Reduce_bwd t ->
+          assert false
+      | Witness (i,t,args) ->
+          assert false
+      | Someelim i ->
+          assert false
+      | Subproof (nb,nms,i,pt_arr) ->
+          assert false
+      | Inherit (i,cls) ->
+          assert false
+    in
+    perm 0 pt
+
+  let rec print_pt_arr (prefix:string) (start:int) (pt_arr: t array): unit =
+    let n = Array.length pt_arr in
+    for k = 0 to n-1 do
+      let print_prefix () = printf "%s%3d " prefix (start+k) in
+      match pt_arr.(k) with
+        Axiom t             -> print_prefix (); printf "Axiom\n"
+      | Assumption t        -> print_prefix (); printf "Assumption\n"
+      | Detached (i,j)      -> print_prefix (); printf "Detached %d %d\n" i j
+      | Specialize (i,args) -> print_prefix (); printf "Specialize %d\n" i
+      | Expand i            -> print_prefix (); printf "Expand %d\n" i
+      | Expand_bwd t        -> print_prefix (); printf "Expand_bwd\n"
+      | Reduce i            -> print_prefix (); printf "Reduce %d\n" i
+      | Reduce_bwd t        -> print_prefix (); printf "Reduce_bwd\n"
+      | Witness (i,t,args)  -> print_prefix (); printf "Witness %d\n" i
+      | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
+      | Subproof (nb,nms,i,pt_arr) ->
+          print_prefix (); printf "Subproof nb %d, i %d\n" nb i;
+          print_pt_arr (prefix^"  ") (start+k) pt_arr
+      | Inherit (i,cls)     -> print_prefix (); printf "Inherit %d\n" i
+    done
 end
