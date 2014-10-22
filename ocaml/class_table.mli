@@ -132,7 +132,7 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
 
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
-val add: header_mark withinfo -> int withinfo -> formal_generics -> t -> unit
+val add: header_mark withinfo -> classname -> formal_generics -> t -> unit
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 

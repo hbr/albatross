@@ -341,7 +341,7 @@ header_mark:
 
 
 class_declaration:
-  header_mark KWclass UIDENTIFIER class_generics
+  header_mark KWclass class_name class_generics
   inheritance
   KWend {
   Class_declaration( withinfo (rhs_info 3) $1,
@@ -349,6 +349,10 @@ class_declaration:
                      withinfo (rhs_info 4) $4,
                      $5)
 }
+
+class_name:
+    UIDENTIFIER { [], $1 }
+|   path UIDENTIFIER { $1, $2 }
 
 
 class_generics:
@@ -441,8 +445,8 @@ simple_type:
     UIDENTIFIER actual_generics {
   Normal_type ([],$1,$2)
 }
-|   LPAREN path UIDENTIFIER actual_generics RPAREN {
-  Normal_type (List.rev $2,$3,$4)
+|    path UIDENTIFIER actual_generics {  (* No parentheses needed? *)
+  Normal_type ($1,$2,$3)
 }
 
 

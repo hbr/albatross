@@ -4,7 +4,7 @@ open Printf
 
 let put_class
     (hm:       header_mark withinfo)
-    (cn:       int withinfo)
+    (cn:       classname)
     (fgs:      formal_generics)
     (inherits: inherit_clause list)
     (pc: Proof_context.t)
@@ -16,7 +16,7 @@ let put_class
   let ct = Feature_table.class_table ft in
   let idx =
     try
-      let idx = Class_table.find_2 cn.v ct in
+      let idx = Class_table.find_2 (snd cn.v) ct in
       Class_table.update idx hm fgs  ct;
       idx
     with Not_found ->

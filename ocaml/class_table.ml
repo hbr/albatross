@@ -657,7 +657,7 @@ let effective_assertions (cidx:int) (ct:t): int list =
 
 let add
     (hm:    header_mark withinfo)
-    (cn:    int withinfo)
+    (cn:    classname)
     (fgens: formal_generics)
     (ct:    t)
     : unit =
@@ -674,11 +674,11 @@ let add
   in
   Seq.push
     {mdl  = current_module ct;
-     name = cn.v;
+     name = snd cn.v;
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;
-    ct.map <- IntMap.add cn.v idx ct.map
+    ct.map <- IntMap.add (snd cn.v) idx ct.map
 
 
 

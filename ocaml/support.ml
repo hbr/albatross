@@ -642,7 +642,7 @@ let hmark2string_wblank (hm:header_mark) =
 
 (* Features *)
 
-type classname = int withinfo
+type classname = (int list * int) withinfo
 
 type formal_generics = int list withinfo
 
