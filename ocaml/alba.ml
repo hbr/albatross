@@ -184,7 +184,10 @@ let dir_iter (f:string -> unit) (dirname:string): unit =
 
 
 let dir_find (f:string -> bool) (dirname:string): string =
-  let dir = my_opendir dirname in
+  let dir =
+    try my_opendir dirname
+    with Sys_error _ -> raise Not_found
+  in
   let rec find (): string =
     try
       let fn = readdir dir in
