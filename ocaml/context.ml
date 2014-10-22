@@ -155,6 +155,10 @@ let entry_fargnames (e:entry): int array =
 
 let fargnames (c:t): int array = entry_fargnames c.entry
 
+let outer_fargnames (c:t): int array =
+  assert (not (is_global c));
+  entry_fargnames (List.hd c.stack)
+
 
 let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
 
@@ -165,6 +169,11 @@ let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 let string_of_term (t:term) (nanon:int) (c:t): string =
   Feature_table.term_to_string t nanon (fargnames c) c.ft
 
+let string_of_term_outer (t:term) (nanon:int) (c:t): string =
+  Feature_table.term_to_string t
+    nanon
+    (outer_fargnames c)
+    c.ft
 
 
 let sign2string (s:Sign.t) (c:t): string =

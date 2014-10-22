@@ -96,6 +96,9 @@ let imp_id (at:t): int =
 let all_id (at:t): int =
   at.entry.all_id
 
+let all_id_outer (at:t): int =
+  at.entry.all_id - nbenv_local at
+
 let some_id (at:t): int =
   nbenv at + Feature_table.some_index
 
@@ -134,6 +137,9 @@ let rec stacked_counts (pt:t): int list =
 
 let string_of_term (t:term) (at:t): string =
   Context.string_of_term t 0 at.c
+
+let string_of_term_outer (t:term) (at:t): string =
+  Context.string_of_term_outer t 0 at.c
 
 
 let make (): t =
@@ -251,12 +257,25 @@ let discharged_term (i:int) (at:t): term =
   all_quantified_outer t at
 
 
+let is_axiom (i:int) (at:t): bool =
+  assert (i < count at);
+  let desc = Seq.elem i at.seq in
+  match desc.proof_term with
+    Axiom _ -> true
+  | _            -> false
+
+
 let is_assumption (i:int) (at:t): bool =
   assert (i < count at);
   let desc = Seq.elem i at.seq in
   match desc.proof_term with
     Assumption _ -> true
   | _            -> false
+
+
+let proof_term (i:int) (at:t): proof_term =
+  assert (i < count at);
+  (Seq.elem i at.seq).proof_term
 
 
 let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
@@ -573,6 +592,7 @@ let add_proved (t:term) (pt:proof_term) (delta:int) (at:t): unit =
 
 
 let add_axiom (t:term) (at:t): unit =
+  assert (is_toplevel at);
   let pt = Axiom t in
   add_proved_0 t pt at
 
@@ -623,6 +643,7 @@ let add_witness (impl:term) (i:int) (t:term) (args:term array) (at:t): unit =
 let add_someelim (i:int) (t:term) (at:t): unit =
   add_proved_0 t (Someelim i) at
 
+(*
 let rec used_assertions (i:int) (at:t) (lst:int list): int list =
   (** The assertions of the local context which are needed to prove
       assertion [i] in [at] cumulated to list [lst].
@@ -654,7 +675,7 @@ let rec used_assertions (i:int) (at:t) (lst:int list): int list =
   in
   if i < cnt0 then lst
   else used (i::lst)
-
+*)
 
 
 
@@ -663,40 +684,66 @@ let discharged (i:int) (at:t): term * proof_term =
       assumptions discharged together with its proof term.
    *)
   let cnt0 = count_previous at
-  and axiom = List.exists
+  and axiom = is_axiom i at
+  (*and axiom = List.exists
       (fun i ->
         assert (i < (count at));
         match (Seq.elem i at.seq).proof_term with
           Axiom _ -> true
         | _       -> false)
-      (used_assertions i at [])
-  and term  = discharged_term i at
+      (used_assertions i at [])*)
+  and nreq  = at.entry.nreq
   and nargs = nbenv_local at
   and nms   = names at
+  and term_inner = discharged_assumptions i at
   in
-  let pterm =
-    if axiom then
-      Axiom term
+  assert (not axiom || cnt0 <= i);
+  assert (not axiom || is_toplevel at);
+  let narr =
+    if cnt0 + at.entry.nreq <= i then
+      i + 1 - cnt0
     else
-      let narr =
-        if cnt0 + at.entry.nreq <= i then
-          i + 1 - cnt0
-        else
-          at.entry.nreq
-      in
-      assert (0 <= narr);
-      if nargs = 0 && narr = 1 && at.entry.nreq = 0 then
-        (Seq.elem cnt0 at.seq).proof_term
-      else
-        let pt_arr =
-          Array.init
-            narr
-            (fun j -> (Seq.elem (cnt0+j) at.seq).proof_term)
-        in
-        let i, pt_arr =
-          if narr=0 then i, pt_arr
-          else Proof_term.remove_unused i cnt0 pt_arr
-        in
-        Subproof (nargs,nms,i,pt_arr)
+      at.entry.nreq
   in
-  term, pterm
+  assert (0 <= narr);
+  if nargs = 0 && narr = 1 && at.entry.nreq = 0 then
+    term_inner, proof_term cnt0 at
+  else
+    let pt_arr = Array.init narr (fun j -> proof_term (cnt0+j) at)
+    in
+    let i, pt_arr =
+      if narr=0 then i,pt_arr else Proof_term.remove_unused i cnt0 pt_arr
+    in
+    assert (not axiom || (i = cnt0+nreq && Array.length pt_arr = nreq+1));
+    if nargs = 0 then
+      term_inner, Subproof (0,[||],i,pt_arr)
+    else begin
+      let uvars_t = Term.used_variables term_inner nargs in
+      let nargs1  = List.length uvars_t in
+      assert (nargs1 <= nargs);
+      let uvars_pt = Proof_term.used_variables nargs pt_arr in
+      if not (nargs1 = IntSet.cardinal uvars_pt &&
+              List.for_all (fun i -> IntSet.mem i uvars_pt) uvars_t)
+      then
+        (printf "used variables of term %s and its proof do not coincide\n"
+           (string_of_term term_inner at);
+         raise Not_found);
+      let args = Array.make nargs (Variable (-1))
+      and nms1 = Array.make nargs1 (-1) in
+      List.iteri
+        (fun pos i -> assert (i < nargs);
+          let pos1 = nargs1 - pos - 1 in
+          args.(i)   <- Variable pos1;
+          nms1.(pos1) <- nms.(i))
+        uvars_t;
+      let term_inner1 = Term.sub term_inner args nargs1
+      in
+      let term1 = Term.quantified (all_id_outer at) nargs1 nms1 term_inner1 in
+      let pt =
+        if axiom then Axiom term1
+        else
+          let pt_arr1 = Proof_term.remove_unused_variables args nargs1 pt_arr
+          in Subproof (nargs1,nms1,i,pt_arr1)
+      in
+      term1, pt
+    end

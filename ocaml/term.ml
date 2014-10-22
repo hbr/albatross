@@ -59,6 +59,8 @@ module Term: sig
 
   val bound_variables: term -> int -> IntSet.t
 
+  val used_variables: term -> int -> int list
+
   val wo_names: term -> term
   val equal_wo_names: term -> term -> bool
 
@@ -76,7 +78,11 @@ module Term: sig
 
   val sub_var: int -> term -> term -> term
 
+  val part_sub_from: term -> int -> int -> term array -> int -> term
+
   val part_sub: term -> int -> term array -> int -> term
+
+  val sub_from: term -> int -> term array -> int -> term
 
   val sub:   term -> term array -> int -> term
 
@@ -137,10 +143,6 @@ end = struct
         let nnames = Array.length names in
         assert (nnames=0 || nnames=nargs);
         let args = Array.init nargs string_of_int
-        (*let args = Array.init nargs
-            (fun i ->
-              if nnames = 0 then (string_of_int i)
-              else ST.string names.(i))*)
         in
         let argsstr = String.concat "," (Array.to_list args) in
         "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
@@ -272,6 +274,22 @@ end = struct
     bvars
 
 
+  let used_variables (t:term) (nvars:int): int list =
+    (* The list of variables of the term [t] below [nvars] in reversed order in
+       which they appear *)
+    let lst,_ =
+      fold
+        (fun (lst,set) ivar ->
+          if nvars <= ivar || IntSet.mem ivar set then
+            lst,set
+          else
+            ivar::lst, IntSet.add ivar set)
+        ([], IntSet.empty)
+        t
+    in
+    lst
+
+
   let rec wo_names (t:term): term =
     (** The term [t] with all names in abstractions erased.
      *)
@@ -377,6 +395,45 @@ end = struct
       )
       t
 
+  let part_sub_from
+      (t:term)
+      (start:int)
+      (nargs:int)
+      (args:term array)
+      (n_delta:int)
+      : term =
+    (** Perform a partial substitution.
+
+        The term [t] has above [start] [nargs] argument variables. The first
+        [Array.length args] of them will be substituted by the corresponding
+        term in [args] and the others will be shifted down appropriately so
+        that the new term has [(Array.length args)-nargs] argument variables.
+
+        The arguments come from an environment with [n_delta] variables more
+        than the term [t]. Therefore the variables in [t] above [start+nargs]
+        have to be shifted up by [n_delta] to transform them into the
+        environment of the arguments.  *)
+    let len = Array.length args in
+    assert (len <= nargs);
+    map
+      (fun j nb ->
+        let nb1 = nb + start in
+        if j < nb1 then
+          Variable(j)
+        else
+          let jfree = j - nb1 in
+          if jfree < len then
+            let arg = args.(jfree) in
+            assert (arg <> Variable (-1));
+            up (nb1+nargs-len) arg
+          else if jfree < nargs then
+            Variable (j-len)
+          else
+            Variable(j+n_delta-len)
+      )
+      t
+
+
   let part_sub (t:term) (nargs:int) (args:term array) (n_delta:int): term =
     (** Perform a partial substitution.
 
@@ -390,22 +447,17 @@ end = struct
         to be shifted up by [n_delta] to transform them into the environment
         of the arguments.
      *)
+    part_sub_from t 0 nargs args n_delta
+
+
+  let sub_from (t:term) (start:int) (args:term array) (nbound:int): term =
+    (** substitute the free variables start,start+1,..,start+args.len-1 of the
+        term [t] by the arguments [args] which are from an environment with
+        [nbound] bound variables more than the variable of the term [t],
+        i.e. all free variables above [len] are shifted up by
+        [nbound-args.len] *)
     let len = Array.length args in
-    assert (len <= nargs);
-    map
-      (fun j nb ->
-        if j<nb then
-          Variable(j)
-        else
-          let jfree = j-nb in
-          if jfree < len then
-            up (nb+nargs-len) args.(jfree)
-          else if jfree < nargs then
-            Variable (j-len)
-          else
-            Variable(j+n_delta-len)
-      )
-      t
+    part_sub_from t start len args nbound
 
 
   let sub (t:term) (args:term array) (nbound:int): term =
@@ -864,6 +916,7 @@ end = struct
     List.rev lst
 
   let arguments (nargs:int) (sub:t): term array =
+    assert (IntMap.cardinal sub = nargs);
     let args = Array.make nargs (Variable (-1)) in
     IntMap.iter
       (fun i t ->
@@ -871,7 +924,6 @@ end = struct
         args.(i) <- t)
       sub;
     args
-
 
 end (* Term_sub *)
 

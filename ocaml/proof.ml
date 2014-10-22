@@ -39,6 +39,10 @@ module Proof_term: sig
 
   val remove_unused: int -> int -> t array -> int * t array
 
+  val used_variables: int -> t array -> IntSet.t
+
+  val remove_unused_variables: term array -> int -> t array -> t array
+
   val print_pt_arr:  string -> int -> t array -> unit
 
 end = struct
@@ -229,42 +233,116 @@ end = struct
 
 
 
-  let permute (nargs:int) (map: int IntMap.t) (pt:t): t =
-    let dest  = Array.make nargs (-1)
-    and flags = Array.make nargs false in
-    IntMap.iter
-      (fun i i_dest ->
-        dest.(i)  <- i_dest;
-        flags.(i) <- true)
-      map;
-    let rec perm (nb:int) (pt:t): t =
-      match pt with
-        Axiom t ->
-          assert false
-      | Assumption t ->
-          assert false
-      | Detached (i,j) ->
-          assert false
-      | Specialize (i,args) ->
-          assert false
-      | Expand i ->
-          assert false
-      | Expand_bwd t ->
-          assert false
-      | Reduce i ->
-          assert false
-      | Reduce_bwd t ->
-          assert false
-      | Witness (i,t,args) ->
-          assert false
-      | Someelim i ->
-          assert false
-      | Subproof (nb,nms,i,pt_arr) ->
-          assert false
-      | Inherit (i,cls) ->
-          assert false
+
+  let used_in_term (nb:int) (nargs:int) (t:term) (set:IntSet.t): IntSet.t =
+    Term.fold
+      (fun set ivar ->
+        if ivar < nb || nb + nargs <= ivar then
+          set
+        else
+          IntSet.add (ivar-nb) set
+      )
+      set
+      t
+
+
+
+  let used_variables (nargs:int) (pt_arr: t array): IntSet.t =
+    assert (0 < nargs);
+    let rec uvars (nb:int) (pt_arr: t array) (set:IntSet.t): IntSet.t =
+      let uvars_term (t:term) (set:IntSet.t): IntSet.t =
+        used_in_term nb nargs t set
+      in
+      let uvars_args (args: term array) (set:IntSet.t): IntSet.t =
+        Array.fold_left
+          (fun set t -> uvars_term t set)
+          set
+          args
+      in
+      Array.fold_left
+        (fun set pt ->
+          match pt with
+            Axiom t
+          | Assumption t
+          | Expand_bwd t
+          | Reduce_bwd t ->
+              uvars_term t set
+          | Detached (i,_)
+          | Expand i
+          | Reduce i
+          | Someelim i ->
+              set
+          | Specialize (i,args)
+          | Witness (i,_,args) ->
+              uvars_args args set
+          | Subproof (nb1,nms,i,pt_arr) ->
+              uvars (nb+nb1) pt_arr set
+          | Inherit (i,cls) ->
+              assert false
+        )
+          set
+        pt_arr
+      in
+    uvars 0 pt_arr IntSet.empty
+
+
+  let remove_unused_variables
+      (args:term array)
+      (nargs: int)
+      (pt_arr:t array)
+      : t array =
+    (* Remove unused variables in [pt_arr]. The array of proof term [pt_arr]
+       has [args.length] variables only [nargs] of them are unused. The [args]
+       array maps variables to their new names ([i -> Variable j]: i: old
+       variable, j: new variable). The unused variable map to [Variable
+       (-1)]. *)
+    assert (nargs <= Array.length args);
+    let rec shrink (nb:int) (pt_arr:t array): t array =
+      let shrink_inner (t:term) (nb1:int): term =
+        Term.sub_from t (nb+nb1) args nargs
+      in
+      let shrink_term (t:term): term =
+        shrink_inner t 0
+      in
+      let shrink_args (args:term array): term array =
+        Array.map shrink_term args
+      in
+      Array.map
+        (fun pt ->
+          match pt with
+            Axiom t ->
+              Axiom (shrink_term t)
+          | Assumption t ->
+              Assumption (shrink_term t)
+          | Detached (i,j) ->
+              pt
+          | Specialize (i,args) ->
+              Specialize (i, shrink_args args)
+          | Expand i ->
+              Expand i
+          | Expand_bwd t ->
+              Expand_bwd (shrink_term t)
+          | Reduce i ->
+              pt
+          | Reduce_bwd t ->
+              Reduce_bwd (shrink_term t)
+          | Witness (i,t,args) ->
+              let nargs = Array.length args in
+              let args  = shrink_args args in
+              let t = shrink_inner t nargs in
+              Witness (i,t,args)
+          | Someelim i ->
+              Someelim i
+          | Subproof (nb1,nms,i,pt_arr) ->
+              Subproof (nb1,nms,i, shrink (nb+nb1) pt_arr)
+          | Inherit (i,cls) ->
+              assert false
+        )
+        pt_arr
     in
-    perm 0 pt
+    shrink 0 pt_arr
+
+
 
   let rec print_pt_arr (prefix:string) (start:int) (pt_arr: t array): unit =
     let n = Array.length pt_arr in
