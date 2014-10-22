@@ -4,23 +4,21 @@ open Term
 open Signature
 open Printf
 
-module Modmap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = int * int list
-end)
-
 
 type formal = int * type_term
 
 type desc = { name: int;
-              lib:  int list;
+              lib:  int;
               mutable priv: IntSet.t;
               mutable pub:  IntSet.t
             }
 
 
+
 type t = {mutable map:    int Module_map.t;
+          mutable libmap: int Library_map.t;
           seq:            desc Seq.t;
+          libseq:         library_name Seq.t;
           mutable mode:   int;
           mutable fgens: type_term IntMap.t}
 
@@ -29,15 +27,23 @@ type t = {mutable map:    int Module_map.t;
 let count (mt:t): int =
   Seq.count mt.seq
 
+let count_libraries (mt:t): int =
+  Seq.count mt.libseq
 
 let find ((name,lib):int * int list) (mt:t): int =
   Module_map.find (name,lib) mt.map
 
+let find_library (lib:int list) (mt:t): int =
+  Library_map.find lib mt.libmap
 
 let has (nme:int*int list) (mt:t): bool =
   (* Is the module [lib.name] in the table?  *)
   try let _ = find nme mt in true
-  with Not_found ->               false
+  with Not_found ->          false
+
+let has_library (lib:int list) (mt:t): bool =
+  try let _ = find_library lib mt in true
+  with Not_found ->                 false
 
 
 let has_current (mt:t): bool =
@@ -100,10 +106,21 @@ let interface_used (used_blk: use_block) (mt:t): IntSet.t =
     used_blk
 
 
+let library (lib_id:int) (mt:t): int list =
+  assert (lib_id < count_libraries mt);
+  Seq.elem lib_id mt.libseq
+
+
+let library_name (lib_id:int) (mt:t): string =
+  assert (lib_id < count_libraries mt);
+  let lib = library lib_id mt in
+  String.concat "." (List.rev_map ST.string lib)
+
+
 let name (mdl:int) (mt:t): string =
   assert (mdl < count mt);
   let desc = Seq.elem mdl mt.seq in
-  let libstr = String.concat "." (List.map ST.string desc.lib)
+  let libstr = library_name desc.lib mt
   and nmestr = ST.string desc.name
   in
   let libstr = if libstr = "" then "" else libstr ^ "."
@@ -115,8 +132,14 @@ let name (mdl:int) (mt:t): string =
 let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
   assert (not (has (name,lib) mt));
   let n = count mt in
+  let lib_id =
+    try find_library lib mt
+    with Not_found ->
+      let id = count_libraries mt in
+      Seq.push lib mt.libseq; id
+  in
   let used = IntSet.add n used in
-  Seq.push {name=name; lib=lib; priv=used; pub=used} mt.seq;
+  Seq.push {name=name; lib=lib_id; priv=used; pub=used} mt.seq;
   mt.map   <- Module_map.add (name,lib) n mt.map;
   mt.mode  <- 2;
   mt.fgens <- IntMap.empty
@@ -127,7 +150,7 @@ let add_current (name:int) (used:IntSet.t) (mt:t): unit =
   assert (not (has (name,[]) mt));
   let n = count mt in
   let used = IntSet.add n used in
-  Seq.push {name=name; lib=[]; priv=used; pub=IntSet.empty} mt.seq;
+  Seq.push {name=name; lib=0; priv=used; pub=IntSet.empty} mt.seq;
   mt.map   <- Module_map.add (name,[]) n mt.map;
   mt.mode  <- 0;
   mt.fgens <- IntMap.empty
@@ -146,7 +169,14 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
 
 
 let make (): t =
-  {map=Module_map.empty; seq=Seq.empty (); mode=0; fgens = IntMap.empty}
+  let libseq = Seq.empty() in
+  Seq.push [] libseq;
+  {map     = Module_map.empty;
+   libmap  = Library_map.singleton [] 0;
+   seq     = Seq.empty ();
+   libseq  = libseq;
+   mode    = 0;
+   fgens   = IntMap.empty}
 
 
 

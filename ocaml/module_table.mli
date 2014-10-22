@@ -7,6 +7,11 @@ type t
 val count:       t -> int
 val find:        (int * int list) -> t -> int
 val has:         (int * int list) -> t -> bool
+
+val count_libraries: t -> int
+val find_library:    int list -> t -> int
+val has_library:     int list -> t -> bool
+
 val has_current: t -> bool
 val current:     t -> int
 
