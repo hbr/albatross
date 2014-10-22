@@ -13,6 +13,7 @@ module Accus: sig
   val make:              type_term -> Context.t -> t
   val is_empty:          t -> bool
   val is_singleton:      t -> bool
+  val count:             t -> int
   val ntvs_added:        t -> int
   val expected_arity:    t -> int
   val expected_signatures_string: t -> string
@@ -55,6 +56,7 @@ end = struct
         let res,_ = Term_builder.result hd in
         List.for_all (fun tb -> res = fst (Term_builder.result tb)) tl
 
+  let count (accs:t): int = List.length accs.accus
 
   let ntvs_added (accs:t): int = accs.ntvs_added
 
@@ -139,7 +141,7 @@ end = struct
     else begin
       let estr = string_of_expression e
       in
-      printf "Ambiguous expression %s\n" estr;
+      printf "Ambiguous expression %s (%d)\n" estr (count accs);
       List.iter
         (fun acc ->
           let t,_ = Term_builder.result acc in
@@ -147,6 +149,11 @@ end = struct
             (Context.string_of_term t 0 accs.c)
             (Term.to_string t))
         accs.accus;
+      let ct = Context.class_table accs.c
+      and t1,tvars1 = Term_builder.result (List.hd accs.accus)
+      and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus)) in
+      printf "tvs1 %s\n" (Class_table.string_of_tvs_sub tvars1 ct);
+      printf "tvs2 %s\n" (Class_table.string_of_tvs_sub tvars2 ct);
       error_info inf ("The expression " ^ estr ^ " is ambiguous")
     end
 
@@ -255,9 +262,11 @@ let analyze_expression
     and do_leaf (lst: (int*Tvars.t*Sign.t) list): unit =
       process_leaf lst c info accs
     in
-    let arg_list (e:expression): expression list =
+    let rec arg_list (e:expression): expression list =
       match e with
         Explist lst -> lst
+      | Tupleexp (a,b) ->
+          a :: arg_list b
       | _ -> [e]
     in
     match e with
@@ -284,10 +293,30 @@ let analyze_expression
         lambda entlst e accs
     | Expdot (tgt,f) ->
         application f [|tgt|] accs
-    | _ -> not_yet_implemented ie.i
-          ("(others)Typing of expression " ^
-           (string_of_expression e))
-          (*assert false (* nyi: all alternatives *)*)
+    | ExpResult ->
+        not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
+    | Exparrow(_,_) ->
+        not_yet_implemented ie.i ("Exparrow Typing of "^ (string_of_expression e))
+    | Expbracket _ ->
+        not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
+    | Bracketapp (_,_) ->
+        not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
+    | Expset _ ->
+        not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
+    | Explist _ ->
+        not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
+    | Tupleexp (_,_) ->
+        not_yet_implemented ie.i ("Tupleexp Typing of "^ (string_of_expression e))
+    | Expcolon (_,_) ->
+        not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
+    | Expassign (_,_) ->
+        not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
+    | Expif (_,_) ->
+        not_yet_implemented ie.i ("Expif Typing of "^ (string_of_expression e))
+    | Expinspect (_,_) ->
+        not_yet_implemented ie.i ("Expinspect Typing of "^ (string_of_expression e))
+    | Typedexp (_,_) ->
+        not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
 
   and application
       (f:expression)

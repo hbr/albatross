@@ -393,7 +393,6 @@ type expression =
     Identifier    of int
   | Expnumber     of int
   | ExpResult
-  | ExpCurrent
   | Exptrue
   | Expfalse
   | Expparen      of expression
@@ -477,8 +476,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expnumber num  -> ST.string num
 
   | ExpResult     -> "Result"
-
-  | ExpCurrent    -> "Current"
 
   | Exptrue       -> "true"
 
