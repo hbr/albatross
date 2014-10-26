@@ -34,8 +34,9 @@ val is_interface_use:  t -> bool
 
 val find_module:        (int * int list) -> t -> int
 
-val push_with_gap:  entities list withinfo -> return_type -> int -> t -> unit
-val push:  entities list withinfo -> return_type -> t -> unit
+val push_with_gap:  entities list withinfo -> return_type -> bool -> bool
+  -> int -> t -> unit
+val push:  entities list withinfo -> return_type -> bool -> bool -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:   t -> unit
 val print: t -> unit

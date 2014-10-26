@@ -253,6 +253,7 @@ let collect_fgs
 let formal_generics
     (entlst:   entities list withinfo)
     (rt:       return_type)
+    (is_func:  bool)
     (ntvs_gap: int)
     (tvs:      TVars_sub.t)
     (mt:       t)
@@ -268,12 +269,13 @@ let formal_generics
       (0,[])
       entlst.v
   in
-  let fgs_new =
+  let ntvs_new, fgs_new =
     match rt with
-      None -> fgs_new
+      None when is_func -> ntvs_new + 1, fgs_new
+    | None -> ntvs_new, fgs_new
     | Some tp ->
         let t,_,_ = tp.v in
-        collect_fgs t fgs_new tvs mt
+        ntvs_new, collect_fgs t fgs_new tvs mt
   in
   let fgs_new = Array.of_list (List.rev fgs_new) in
   let fgnames,fgconcepts = Myarray.split fgs_new in

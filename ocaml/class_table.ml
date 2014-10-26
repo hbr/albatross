@@ -153,6 +153,14 @@ let descendants (i:int) (ct:t): IntSet.t =
   assert (i < count ct);
   (base_descriptor i ct).descendants
 
+
+let concepts_of_class (i:int) (ct:t): type_term array =
+  assert (i < count ct);
+  let tvs = (base_descriptor i ct).tvs in
+  assert (Tvars.count tvs = 0);
+  Tvars.fgconcepts tvs
+
+
 let class_type (i:int) (ct:t): type_term * Tvars.t =
   assert (i < count ct);
   let bdesc = base_descriptor i ct in
@@ -355,8 +363,8 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
       (List.map
          (fun (i,t1,t2) ->
            (string_of_int i) ^ ":=" ^
-           (string_of_type t1 tvs ct) ^
-           "(" ^ (string_of_type t2 tvs ct) ^ ")"
+           (string_of_type t1 tvs ct) (*^
+           "(" ^ (string_of_type t2 tvs ct) ^ ")"*)
          ) subs)
   in
   let subsstr = if subsstr = "" then "" else "[" ^ subsstr ^ "]" in
@@ -1050,13 +1058,16 @@ let formal_arguments
     (entlst: entities list withinfo)
     (tvs:Tvars.t)
     (ct:t)
-    : formal array =
+    : formal array * int =
   (** The formal arguments of the entity list [entlst] in an environment with
       the formal generics [fgnames,concepts] and [ntvs] type variables *)
+  let n_untyped = ref 0 in
   let fargs (es: entities): formal list =
     match es with
       Untyped_entities lst ->
         assert (List.length lst <= Tvars.count_local tvs);
+        assert (!n_untyped = 0);
+        n_untyped := List.length lst;
         List.mapi (fun i name -> name, Variable i) lst
     | Typed_entities (lst,tp) ->
         let t =
@@ -1067,12 +1078,15 @@ let formal_arguments
         List.map (fun name -> name,t) lst
   in
   let arglst = List.concat (List.map fargs entlst.v) in
-  Array.of_list arglst
+  Array.of_list arglst, !n_untyped
 
 
 
 let result_type
     (rt:return_type)
+    (is_pred: bool)
+    (is_func: bool)
+    (n_untyped: int)
     (tvs:Tvars.t)
     (ct:t)
     : Result_type.t =
@@ -1080,7 +1094,13 @@ let result_type
       environment with the formal generics [fgnames,concepts] and [ntvs] type
       variables *)
   match rt with
-    None -> Result_type.empty
+    None when is_pred ->
+      let t = boolean_type (Tvars.count_all tvs) in
+      Result_type.make t false false
+  | None when is_func ->
+      assert (n_untyped < Tvars.count_local tvs);
+      Result_type.make (Variable n_untyped) false false
+  | None -> Result_type.empty
   | Some tpinf ->
       let tp,proc,ghost = tpinf.v in
       let t =

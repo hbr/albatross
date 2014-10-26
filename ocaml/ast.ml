@@ -68,10 +68,11 @@ let put_feature
     (fn: feature_name withinfo)
     (entlst: entities list withinfo)
     (rt: return_type)
+    (is_func: bool)
     (bdy: feature_body option)
     (exp: info_expression option)
     (context: Context.t): unit =
-  Context.push entlst rt context;
+  Context.push entlst rt false is_func context;
   let impstat,term_opt =
     match bdy, exp with
       None, None ->
@@ -122,8 +123,8 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
       match d with
         Class_declaration (hm, cname, fgens, inherits) ->
           put_class hm cname fgens inherits pc
-      | Named_feature (fn, entlst, rt, body, expr) ->
-          put_feature fn entlst rt body expr context
+      | Named_feature (fn, entlst, rt, is_func, body, expr) ->
+          put_feature fn entlst rt is_func body expr context
       | Assertion_feature (label, entlst, body) ->
           Prover.prove_and_store entlst body pc
       | Formal_generic (name, concept) ->

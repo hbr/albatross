@@ -8,6 +8,7 @@ open Signature
 open Term
 open Support
 open Container
+open Printf
 
 type t = {mutable tlist: term list;
           mutable sign:  Sign.t;  (* expected *)
@@ -472,13 +473,15 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 
-let expect_lambda (ntvs:int) (tb:t): unit =
+let expect_lambda (ntvs:int) (is_pred:bool) (is_func:bool) (tb:t): unit =
   (** Expect the term of a lambda expression. It is assumed that all local
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
       variables. Furthermore the argument list of the lambda expression might
       have formal generics which are considered as type constants. *)
-
+  (*printf "expect lambda tvs %s, sign %s\n"
+    (string_of_tvs_sub tb) (signature_string tb);
+  let ct = class_table tb in*)
   assert (Sign.has_result tb.sign);
   add_local ntvs tb;
   add_fgs tb;

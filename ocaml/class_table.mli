@@ -74,6 +74,8 @@ val class_symbol: int -> t -> int
 
 val class_name:   int -> t -> string
 
+val concepts_of_class: int -> t -> type_term array
+
 val class_type: int -> t -> type_term*Tvars.t
 
 val descendants: int -> t -> IntSet.t
@@ -180,9 +182,9 @@ val to_dummy: int -> Sign.t -> type_term
 
 
 
-val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal array
+val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal array * int
 
-val result_type: return_type -> Tvars.t -> t -> Result_type.t
+val result_type: return_type -> bool -> bool -> int -> Tvars.t -> t -> Result_type.t
 
 val satisfies: type_term -> Tvars.t -> type_term -> Tvars.t -> t -> bool
   (** [satisfies tp1 tvs1 tp2 tvs2 ct]: Does the type [tp1,tvs1] satisfy the

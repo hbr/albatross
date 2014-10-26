@@ -30,7 +30,7 @@ val count_fgs:    t -> int
 val count_all:    t -> int
 val concept:      int -> t -> type_term
 val concepts:     t -> type_term array
-
+val fgconcepts:   t -> type_term array
 val is_equivalent:  t -> t -> bool
 
 val is_equal:       type_term -> t -> type_term -> t -> bool

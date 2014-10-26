@@ -63,13 +63,13 @@ val add_leaf:          int ->  Tvars.t -> Sign.t ->  t -> t
   (** [add_leaf i tvs s tb] adds the term [i,tvs,s] as an elementary term to
       the term builder [tb] *)
 
-val expect_lambda:     int -> t -> unit
-   (** [expect_lambda nargs tb] prepares the term builder [tb] to expect a
-       lambda expression with [nargs] arguments. It assumes that the currently
-       expected signature is either callable i.e. has [nargs] arguments and a
-       result type or the result type is downgradable (PREDICATE or
-       FUNCTION). It puts a constant signature with the expected return type
-       of the lambda expression as the expected signature. *)
+val expect_lambda:     int -> bool -> bool -> t -> unit
+   (** [expect_lambda nargs is_pred is_func tb] prepares the term builder [tb]
+       to expect a lambda expression with [nargs] arguments. It assumes that
+       the currently expected signature is either callable i.e. has [nargs]
+       arguments and a result type or the result type is downgradable
+       (PREDICATE or FUNCTION). It puts a constant signature with the expected
+       return type of the lambda expression as the expected signature. *)
 
 val complete_lambda:   int -> int array -> t -> unit
    (** [complete_lambda nargs names tb] converts the term on top the term list

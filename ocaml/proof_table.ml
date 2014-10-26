@@ -171,7 +171,7 @@ let push0 (nbenv:int) (names: int array) (at:t): unit =
 let push (entlst:entities list withinfo) (at:t): unit =
   let c = context at in
   assert (depth at = Context.depth c);
-  Context.push entlst None c;
+  Context.push entlst None true false c;
   let nbenv = Context.arity c
   and names = Context.local_fargnames c in
   assert (nbenv = Array.length names);

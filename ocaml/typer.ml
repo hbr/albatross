@@ -22,7 +22,7 @@ module Accus: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val expect_lambda:     int -> t -> unit
+  val expect_lambda:     int -> bool -> bool -> t -> unit
   val complete_lambda:   int -> int -> int array -> t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_type_variables: info -> t -> unit
@@ -122,11 +122,13 @@ end = struct
 
 
 
-  let expect_lambda (ntvs:int) (accs:t): unit =
+  let expect_lambda (ntvs:int) (is_pred:bool) (is_func:bool) (accs:t): unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
-    List.iter (fun acc -> Term_builder.expect_lambda ntvs acc) accs.accus
+    List.iter
+      (fun acc -> Term_builder.expect_lambda ntvs is_pred is_func acc)
+      accs.accus
 
 
   let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
@@ -290,12 +292,12 @@ let analyze_expression
     | Expquantified (q,entlst,exp) ->
         quantified q entlst exp accs
     | Exppred (entlst,e) ->
-        lambda entlst e accs
+        lambda entlst e true false accs
     | Expdot (tgt,f) ->
         application f [|tgt|] accs
     | ExpResult ->
         not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
-    | Exparrow(_,_) ->
+    | Exparrow(entlst,e) ->
         not_yet_implemented ie.i ("Exparrow Typing of "^ (string_of_expression e))
     | Expbracket _ ->
         not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
@@ -343,19 +345,21 @@ let analyze_expression
     let qop = match q with Universal -> Allop | Existential -> Someop in
     process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
-    lambda entlst e accs;
+    lambda entlst e false false accs;
     Accus.complete_function 1 accs
 
   and lambda
       (entlst:entities list withinfo)
       (e:expression)
+      (is_pred: bool)
+      (is_func: bool)
       (accs: Accus.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    Context.push_with_gap entlst None ntvs_gap c;
+    Context.push_with_gap entlst None is_pred is_func ntvs_gap c;
     let ntvs      = Context.count_local_type_variables c
     and fargnames = Context.local_fargnames c in
-    Accus.expect_lambda (ntvs-ntvs_gap) accs;
+    Accus.expect_lambda (ntvs-ntvs_gap) is_pred is_func accs;
     analyze e accs;
     Accus.check_type_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;

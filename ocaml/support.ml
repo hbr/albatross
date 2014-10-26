@@ -684,6 +684,7 @@ type declaration =
       feature_name withinfo
         * entities list withinfo
         * return_type
+        * bool  (* is function without explicit return type *)
         * feature_body option
         * info_expression option
   | Formal_generic of int withinfo * type_t withinfo

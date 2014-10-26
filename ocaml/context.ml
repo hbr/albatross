@@ -285,6 +285,8 @@ let string_of_tvars (tv:TVars_sub.t) (c:t): string =
 let push_with_gap
     (entlst: entities list withinfo)
     (rt: return_type)
+    (is_pred: bool)
+    (is_func: bool)
     (ntvs_gap)
     (c: t)
     : unit =
@@ -295,7 +297,7 @@ let push_with_gap
   and ct         = class_table c
   and mt         = module_table c in
   let tvs_sub  =
-    Module_table.formal_generics entlst rt ntvs_gap entry.tvs_sub mt in
+    Module_table.formal_generics entlst rt is_func ntvs_gap entry.tvs_sub mt in
   let tvs = TVars_sub.tvars tvs_sub
   in
   let ntvs0 = TVars_sub.count_local entry.tvs_sub
@@ -304,8 +306,8 @@ let push_with_gap
   let ntvs1 = Tvars.count_local tvs - ntvs0
   and nfgs1 = Tvars.count_fgs tvs   - nfgs0
   in
-  let res        = Class_table.result_type rt tvs ct in
-  let fargs1     = Class_table.formal_arguments entlst tvs ct
+  let fargs1, n_untyped = Class_table.formal_arguments entlst tvs ct in
+  let res  = Class_table.result_type rt is_pred is_func n_untyped tvs ct
   in
   let fargs      =
     Array.append
@@ -330,18 +332,20 @@ let push_with_gap
 let push
     (entlst: entities list withinfo)
     (rt: return_type)
+    (is_pred: bool)
+    (is_func: bool)
     (c: t)
     : unit =
   (** Push the new type variables, formal generics and the formal arguments of
       [entlst,rt] to the context [c]. *)
-  push_with_gap entlst rt 0 c
+  push_with_gap entlst rt is_pred is_func 0 c
 
 
 
 
 let push_untyped (names:int array) (c:t): unit =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
-  push entlst None c
+  push entlst None true false c
 
 
 

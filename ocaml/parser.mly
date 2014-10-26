@@ -492,26 +492,26 @@ named_feature:
     return_type_opt
     optsemi
     feature_body_opt {
-  Named_feature ($1, $2, $3, $5, None)
+  Named_feature ($1, $2, $3, false, $5, None)
 }
 |   nameopconst_info
     return_type
     optsemi
     feature_body_opt {
-  Named_feature ($1, noinfo [], Some $2, $4, None)
+  Named_feature ($1, noinfo [], Some $2, false, $4, None)
 }
 |   nameopconst_info
     formal_arguments_info
-    return_type
+    return_type_opt
     ARROW
     info_expr {
-  Named_feature ($1, $2, Some $3, None, Some $5)
+  Named_feature ($1, $2, $3, true, None, Some $5)
 }
 |   nameopconst_info
     return_type
     EQ
     info_expr {
-  Named_feature ($1, noinfo [], Some $2, None, Some $4)
+  Named_feature ($1, noinfo [], Some $2, false, None, Some $4)
 }
 
 nameopconst_info: nameopconst { withinfo (rhs_info 1) $1 }
