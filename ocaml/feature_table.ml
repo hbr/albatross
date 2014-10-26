@@ -214,7 +214,7 @@ let is_deferred (desc:descriptor): bool =
 let string_of_signature (i:int) (ft:t): string =
   let desc = descriptor i ft in
   (feature_name_to_string desc.fname) ^
-  (Class_table.string_of_signature desc.sign desc.tvs ft.ct)
+  (Class_table.string_of_complete_signature desc.sign desc.tvs ft.ct)
 
 
 let names_of_formals (farr: formal array): int array =

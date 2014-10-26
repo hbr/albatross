@@ -136,6 +136,26 @@ end = struct
     accs.ntvs_added <- ntvs_added
 
 
+
+
+  let get_diff (t1:term) (t2:term) (accs:t): string * string =
+    let nargs = Context.count_arguments accs.c
+    and ft    = Context.feature_table accs.c
+    in
+    let vars1 = Term.used_variables_from t1 nargs
+    and vars2 = Term.used_variables_from t2 nargs in
+    let lst =
+      try List.combine vars1 vars2
+      with Invalid_argument _ -> assert false (* cannot happen *)
+    in
+    let i,j = List.find (fun (i,j) -> i<>j) (List.rev lst) in
+    let str1 = Feature_table.string_of_signature (i-nargs) ft
+    and str2 = Feature_table.string_of_signature (j-nargs) ft in
+    str1, str2
+
+
+
+
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
     List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
     if is_singleton accs then
@@ -143,20 +163,13 @@ end = struct
     else begin
       let estr = string_of_expression e
       in
-      printf "Ambiguous expression %s (%d)\n" estr (count accs);
-      List.iter
-        (fun acc ->
-          let t,_ = Term_builder.result acc in
-          printf "\t%s, %s\n"
-            (Context.string_of_term t 0 accs.c)
-            (Term.to_string t))
-        accs.accus;
-      let ct = Context.class_table accs.c
-      and t1,tvars1 = Term_builder.result (List.hd accs.accus)
-      and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus)) in
-      printf "tvs1 %s\n" (Class_table.string_of_tvs_sub tvars1 ct);
-      printf "tvs2 %s\n" (Class_table.string_of_tvs_sub tvars2 ct);
-      error_info inf ("The expression " ^ estr ^ " is ambiguous")
+      let t1,tvars1 = Term_builder.result (List.hd accs.accus)
+      and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus))
+      in
+      let str1, str2 = get_diff t1 t2 accs in
+      error_info inf
+        ("The expression " ^ estr ^ " is ambiguous \"" ^
+        str1 ^ "\" or \"" ^ str2 ^ "\""  )
     end
 
   let check_type_variables (inf:info) (accs:t): unit =

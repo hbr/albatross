@@ -59,7 +59,8 @@ module Term: sig
 
   val bound_variables: term -> int -> IntSet.t
 
-  val used_variables: term -> int -> int list
+  val used_variables:       term -> int -> int list
+  val used_variables_from:  term -> int -> int list
 
   val wo_names: term -> term
   val equal_wo_names: term -> term -> bool
@@ -274,13 +275,13 @@ end = struct
     bvars
 
 
-  let used_variables (t:term) (nvars:int): int list =
-    (* The list of variables of the term [t] below [nvars] in reversed order in
-       which they appear *)
+  let used_variables_filtered (t:term) (f:int->bool): int list =
+    (* The list of variables of the term [t] which satisfy [f] in reversed
+       order in which they appear *)
     let lst,_ =
       fold
         (fun (lst,set) ivar ->
-          if nvars <= ivar || IntSet.mem ivar set then
+          if not (f ivar) || IntSet.mem ivar set then
             lst,set
           else
             ivar::lst, IntSet.add ivar set)
@@ -288,6 +289,18 @@ end = struct
         t
     in
     lst
+
+
+  let used_variables (t:term) (nvars:int): int list =
+    (* The list of variables of the term [t] below [nvars] in reversed order in
+       which they appear *)
+    used_variables_filtered t (fun i -> i < nvars)
+
+
+  let used_variables_from (t:term) (nvars:int): int list =
+    (* The list of variables of the term [t] from [nvars] on in reversed order in
+       which they appear *)
+    used_variables_filtered t (fun i -> nvars <= i)
 
 
   let rec wo_names (t:term): term =
