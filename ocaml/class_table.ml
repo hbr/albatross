@@ -417,17 +417,18 @@ let extract_from_tuple
   let tup_idx = ntvs + tuple_index in
   let rec extract
       (n:int) (tp:type_term) (lst:type_term list): type_term list =
-    let cls_idx, args = split_type_term tp in
-    if 2 <= n && cls_idx = tup_idx then
-      extract (n-1) args.(1) (args.(0)::lst)
+    assert (0 < n);
+    if n = 1 then
+      tp :: lst
     else
-      raise Not_found
+      let cls_idx, args = split_type_term tp in
+      if cls_idx = tup_idx then
+        extract (n-1) args.(1) (args.(0)::lst)
+      else
+         raise Not_found
   in
-  if nargs = 1 then
-    [|tp|]
-  else
-    let lst = extract nargs tp [] in
-    Array.of_list (List.rev lst)
+  let lst = extract nargs tp [] in
+  Array.of_list (List.rev lst)
 
 
 
