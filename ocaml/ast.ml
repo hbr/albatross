@@ -44,7 +44,7 @@ let put_class
 
 
 let assertion_list (lst:compound) (context:Context.t): term list =
-  List.map (fun e -> Typer.boolean_term e context) lst
+  List.map (fun e -> Typer.result_term e context) lst
 
 
 let result_term (lst:info_expression list) (context:Context.t): term =

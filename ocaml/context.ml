@@ -88,8 +88,7 @@ let arity     (c:t): int = entry_arity c.entry
 let has_result (c:t): bool = Result_type.has_result c.entry.result
 
 let result_type (c:t): type_term =
-  (** The result type of the context
-   *)
+  (* The result type of the context *)
   assert (has_result c);
   Result_type.result c.entry.result
 
@@ -188,7 +187,7 @@ let sign2string (s:Sign.t) (c:t): string =
 
 let entry_signature (e:entry) (c:t): Sign.t =
   (** The signature of the entry [e] in the context [c].  *)
-  let argtypes = Array.init (entry_nfargs e) (fun i -> snd e.fargs.(i)) in
+  let argtypes = Array.init (entry_arity e) (fun i -> snd e.fargs.(i)) in
   Sign.make argtypes e.result
 
 
@@ -389,7 +388,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
       In case that there are no arguments the empty string is returned and
       not "()".
    *)
-  let nargs = entry_arity e in (*Sign.arity e.signature in*)
+  let nargs = entry_arity e in
   if nargs = 0 then
     ""
   else

@@ -10,7 +10,7 @@ module Accus: sig
   type t
   exception Untypeable of Term_builder.t list
 
-  val make:              type_term -> Context.t -> t
+  val make:              Context.t -> t
   val is_empty:          t -> bool
   val is_singleton:      t -> bool
   val count:             t -> int
@@ -38,8 +38,8 @@ end = struct
   exception Untypeable of Term_builder.t list
 
 
-  let make (exp: type_term) (c:Context.t): t =
-    {accus           = [Term_builder.make exp c];
+  let make (c:Context.t): t =
+    {accus           = [Term_builder.make c];
      ntvs_added      = 0;
      arity           = 0;
      c               = c}
@@ -122,13 +122,27 @@ end = struct
 
 
 
-  let expect_lambda (ntvs:int) (is_pred:bool) (is_func:bool) (accs:t): unit =
+  let expect_lambda (ntvs:int) (is_quant:bool) (is_pred:bool) (accs:t): unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
-    List.iter
-      (fun acc -> Term_builder.expect_lambda ntvs is_pred is_func acc)
-      accs.accus
+    accs.accus <-
+      List.fold_left
+        (fun lst acc ->
+          try
+            Term_builder.expect_lambda ntvs is_quant is_pred acc;
+            acc::lst
+          with Not_found ->
+            lst)
+        []
+        accs.accus;
+    if accs.accus = [] then
+      assert false (* must be handled *)
+    (*List.iter
+      (fun acc ->
+        try Term_builder.expect_lambda ntvs is_quant is_pred acc
+        with Not_found -> assert false (* must be handled*))
+      accs.accus*)
 
 
   let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
@@ -209,7 +223,7 @@ let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
 
 let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
   let ct = Context.class_table c  in
-  (Class_table.string_of_tvs tvs ct) ^ ", " ^
+  (Class_table.string_of_tvs tvs ct) ^
   (Class_table.string_of_signature s tvs ct)
 
 
@@ -244,9 +258,10 @@ let process_leaf
              ","
              (List.map
                 (fun acc ->
-                  (*(string_of_int (Term_builder.ntvars acc)) ^
+                  (*(string_of_int (Term_builder.count_local acc)) ^
                   "[" ^ (Term_builder.concepts_string acc) ^ "]" ^
                   (Term_builder.substitution_string acc) ^*)
+                  (Term_builder.string_of_tvs_sub acc) ^
                   (Term_builder.signature_string acc))
                 acc_lst))
         ^ "}"
@@ -258,11 +273,9 @@ let process_leaf
 
 let analyze_expression
     (ie:        info_expression)
-    (expected:  type_term)
     (c:         Context.t)
     : term =
-  (** Analyse the expression [ie] with the expected type [expected]
-      in the context [context] and return the term.
+  (** Analyse the expression [ie] in the context [context] and return the term.
    *)
   assert (not (Context.is_global c));
   let info, exp = ie.i, ie.v in
@@ -305,7 +318,7 @@ let analyze_expression
     | Expquantified (q,entlst,exp) ->
         quantified q entlst exp accs
     | Exppred (entlst,e) ->
-        lambda entlst e true false accs
+        lambda entlst e false true false accs
     | Expdot (tgt,f) ->
         application f [|tgt|] accs
     | ExpResult ->
@@ -358,12 +371,13 @@ let analyze_expression
     let qop = match q with Universal -> Allop | Existential -> Someop in
     process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
-    lambda entlst e false false accs;
+    lambda entlst e true true false accs;
     Accus.complete_function 1 accs
 
   and lambda
       (entlst:entities list withinfo)
       (e:expression)
+      (is_quant: bool)
       (is_pred: bool)
       (is_func: bool)
       (accs: Accus.t)
@@ -372,7 +386,7 @@ let analyze_expression
     Context.push_with_gap entlst None is_pred is_func ntvs_gap c;
     let ntvs      = Context.count_local_type_variables c
     and fargnames = Context.local_fargnames c in
-    Accus.expect_lambda (ntvs-ntvs_gap) is_pred is_func accs;
+    Accus.expect_lambda (ntvs-ntvs_gap) is_quant is_pred accs;
     analyze e accs;
     Accus.check_type_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;
@@ -380,7 +394,7 @@ let analyze_expression
 
   in
 
-  let accs   = Accus.make expected c in
+  let accs   = Accus.make c in
   analyze exp accs;
   assert (not (Accus.is_empty accs));
 
@@ -400,16 +414,6 @@ let result_term
   (** Analyse the expression [ie] as the result expression of the
       context [context] and return the term.
    *)
+  (*printf "trying to type %s\n" (string_of_expression ie.v);*)
   assert (not (Context.is_global c));
-  analyze_expression ie (Context.result_type c) c
-
-
-let boolean_term
-    (ie: info_expression)
-    (c:  Context.t)
-    : term =
-  (** Analyse the expression [ie] as a boolean expression in the
-      context [context] and return the term.
-   *)
-  assert (not (Context.is_global c));
-  analyze_expression ie (Context.boolean c) c
+  analyze_expression ie c

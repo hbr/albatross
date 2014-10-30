@@ -47,6 +47,7 @@ val depth:       t -> int
 val arity:     t -> int
 val argument:  int -> t -> int * Tvars.t * Sign.t
 
+val has_result:  t -> bool
 val result_type: t -> type_term
 
 val count_type_variables: t -> int
@@ -92,6 +93,7 @@ val string_of_term_outer: term -> int -> t -> string
 val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
+val signature:  t -> Sign.t
 
 
 val owner:          t -> int

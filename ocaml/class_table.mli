@@ -168,6 +168,8 @@ val boolean_type:   int -> term
 val is_boolean_binary: Sign.t -> int -> bool
 val is_boolean_unary:  Sign.t -> int -> bool
 
+val to_tuple: int -> int -> type_term array -> type_term
+
 val to_dummy: int -> Sign.t -> type_term
    (** [to_dummy ntvs s] converts the signature [s] with [ntvs] type variables
        into the dummy type [dum[tup,rt]] where [tup] is a single type or a
@@ -180,6 +182,7 @@ val to_dummy: int -> Sign.t -> type_term
        If the constant signature is neither a predicate nor a function then
        the result type of the signature is returned. *)
 
+val upgrade_signature: int -> bool -> Sign.t -> type_term
 
 
 val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal array * int
@@ -195,6 +198,8 @@ val type2string: term -> int -> int array -> t -> string
 val string_of_signature: Sign.t -> Tvars.t -> t -> string
 
 val string_of_complete_signature: Sign.t -> Tvars.t -> t -> string
+
+val string_of_complete_signature_sub: Sign.t -> TVars_sub.t -> t -> string
 
 val string_of_type: type_term -> Tvars.t -> t -> string
 

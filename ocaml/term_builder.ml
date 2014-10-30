@@ -19,9 +19,15 @@ let class_table (tb:t): Class_table.t = Context.class_table tb.c
 
 let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
 
-let count_local (tb:t): int = TVars_sub.count_local tb.tvars
+let count_local (tb:t): int  = TVars_sub.count_local tb.tvars
+
+let count_global (tb:t): int = TVars_sub.count_global tb.tvars
 
 let count (tb:t): int = TVars_sub.count tb.tvars
+
+let count_fgs (tb:t): int = TVars_sub.count_fgs tb.tvars
+
+let count_all (tb:t): int = TVars_sub.count_all tb.tvars
 
 let concept (i:int) (tb:t): type_term = TVars_sub.concept i tb.tvars
 
@@ -46,6 +52,10 @@ let string_of_signature (s:Sign.t) (tb:t): string =
 let string_of_complete_signature (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
   Class_table.string_of_complete_signature s (tvs tb) ct
+
+let string_of_complete_signature_sub (s:Sign.t) (tb:t): string =
+  let ct      = Context.class_table tb.c in
+  Class_table.string_of_complete_signature_sub s tb.tvars ct
 
 let signature_string (tb:t): string =
   let s       = signature tb in
@@ -81,6 +91,29 @@ let string_of_tvs_sub (tb:t): string =
   let ct  = Context.class_table tb.c in
   Class_table.string_of_tvs_sub tb.tvars ct
 
+
+
+let context_signature (tb:t): Sign.t =
+  (* The signature of the context transformed into the environment of the term
+     builder [tb]. *)
+  let s = Context.signature tb.c
+  and tvs = TVars_sub.tvars (Context.type_variables tb.c) in
+  let nlocs  = count_local tb
+  and nglobs = count_global tb
+  in
+  let nlocs_delta = nlocs - Tvars.count_local tvs in
+  assert (0 <= nlocs_delta);
+  assert (Tvars.count_global tvs = 0);
+  assert (Tvars.count_fgs tvs = count_fgs tb);
+  let s = Sign.up nlocs_delta s in
+  Sign.up_from nglobs nlocs s
+
+
+let upgrade_signature (s:Sign.t) (is_pred:bool) (tb:t): Sign.t =
+  (* The signature [s] upgraded to a predicate or a function. *)
+  let ntvs = count_all tb  in
+  let tp = Class_table.upgrade_signature ntvs is_pred s in
+  Sign.make_const tp
 
 
 
@@ -138,6 +171,39 @@ let do_sub_var (i:int) (j:int) (tb:t): unit =
   end
 
 
+let is_anchor (i:int) (tb:t): bool =
+  assert (i < count tb);
+  TVars_sub.anchor i tb.tvars = i
+
+
+let upgrade_dummy (i:int) (t:term) (tb:t): unit =
+  (* Upgrade a potential dummy in the type variable [i] to a predicate or a
+  function, if possible. *)
+  assert (i < count tb);
+  assert (is_anchor i tb);
+  assert (has_sub i tb);
+  let nall = count_all tb in
+  let t_i = get_sub i tb
+  and t   = TVars_sub.sub_star t tb.tvars
+  in
+  match t_i, t with
+    Application(Variable idx1, args1),
+    Application(Variable idx2, args2)
+    when idx1 = nall + Class_table.dummy_index ->
+      if idx2 = nall + Class_table.predicate_index then
+        let t_new = Application(Variable idx2, [|args1.(0)|]) in
+        TVars_sub.update_sub i t_new tb.tvars
+      else if idx2 = nall + Class_table.function_index then
+        let t_new = Application(Variable idx2, args1) in
+        TVars_sub.update_sub i t_new tb.tvars
+      else if idx2 = nall + Class_table.dummy_index then
+        ()
+      else
+        assert false
+  | _ ->
+      ()
+
+
 
 let add_sub (i:int) (t:term) (tb:t): unit =
   assert (not (has_sub i tb));
@@ -155,19 +221,26 @@ let unify
       terms and then add substitutions to [tvars_sub] so that when applied to
       both terms makes them identical.
    *)
+  (*printf "    unify t1 %s\n" (string_of_type t1 tb);
+  printf "          t2 %s\n" (string_of_type t2 tb);*)
   let nvars = TVars_sub.count tb.tvars
   and nall  = TVars_sub.count_all tb.tvars
   and nloc  = count_local tb
   in
-  let pred_idx = nall + Class_table.predicate_index
-  and func_idx = nall + Class_table.function_index
-  and dum_idx  = nall + Class_table.dummy_index
-  in
   let rec uni (t1:term) (t2:term) (nb:int): unit =
+    assert (nb = 0);
+    let pred_idx = nall + nb + Class_table.predicate_index
+    and func_idx = nall + nb + Class_table.function_index
+    and dum_idx  = nall + nb + Class_table.dummy_index
+    in
     let rec do_sub0 (i:int) (t:type_term) (nb:int): unit =
+      (*printf "    do_sub0 i %d, t %s\n" i (string_of_type t tb);*)
       let i,t = i-nb, Term.down nb t in
+      let i = TVars_sub.anchor i tb.tvars in
       if has_sub i tb then
-        uni t (get_sub i tb) 0
+        ((*printf "    has_sub %s\n" (string_of_type (get_sub i tb) tb);*)
+        uni t (get_sub i tb) 0;
+        upgrade_dummy i t tb)
       else
         match t with
           Variable j when j < nvars ->
@@ -179,6 +252,7 @@ let unify
               raise Not_found
     and do_sub1 (i:int) (j:int): unit =
       assert (not (has_sub i tb));
+      (*printf "    do_sub1 i %d, j %d\n" i j;*)
       if not (has_sub j tb) then
         do_sub_var i j tb
       else if i < nloc then
@@ -226,11 +300,14 @@ let unify
         for i = 0 to nargs-1 do
           uni args1.(i) args2.(i) nb
         done
-    | Lam (nb1,_,t1), Lam (nb2,_,t2) ->
+    | Lam (_,_,_), _
+    | _ , Lam (_,_,_) ->
+        assert false
+    (*| Lam (nb1,_,t1), Lam (nb2,_,t2) ->
         if nb1=nb2 then
           uni t1 t2 (nb+nb1)
         else
-          raise Not_found
+          raise Not_found*)
     | _ -> raise Not_found
   in
   try
@@ -240,16 +317,48 @@ let unify
 
 
 
+let adapt_arity (s:Sign.t) (n:int) (tb:t): Sign.t =
+  assert (n <= Sign.arity s);
+  let args = Sign.arguments s
+  and rt   = Sign.result_type s in
+  let tup = Class_table.to_tuple (count_all tb) n args in
+  let args =
+    Array.init n
+      (fun i ->
+        if i < n - 1 then args.(i)
+        else tup) in
+  Sign.make args rt
+
+
+
+let align_arity (s1:Sign.t) (s2:Sign.t) (tb:t): Sign.t * Sign.t =
+  (* What if one of them is a predicate, dummy or function?  *)
+  let n1,n2 = Sign.arity s1, Sign.arity s2 in
+  if n1 < n2 then
+    s1, adapt_arity s2 n1 tb
+  else if n2 < n1 then
+    adapt_arity s1 n2 tb, s2
+  else
+    s1,s2
+
+
+
 let unify_sign_0
     (sig_req:Sign.t)
     (sig_act:Sign.t)
     (tb:t)
     : unit =
-  let n         = (Sign.arity sig_req)
+  (*printf "  unify sign 0 req %s\n" (string_of_complete_signature_sub sig_req tb);
+  printf "               act %s\n" (string_of_complete_signature_sub sig_act tb);*)
+  let sig_req,sig_act = align_arity sig_req sig_act tb in
+  let has_res = Sign.has_result sig_req in
+  if has_res <> Sign.has_result sig_act then
+    raise Not_found;
+  (*let n         = (Sign.arity sig_req)
   and has_res   = (Sign.has_result sig_req) in
   if not (n = (Sign.arity sig_act) &&
           has_res = (Sign.has_result sig_act)) then
-    raise Not_found;
+    raise Not_found;*)
   if has_res then
     unify (Sign.result sig_req) (Sign.result sig_act) tb;
   for i=0 to (Sign.arity sig_req)-1 do
@@ -277,56 +386,6 @@ let to_dummy (sign:Sign.t) (tb:t): type_term =
 
 
 
-let update_tv
-    (sig_req:Sign.t)
-    (sig_act:Sign.t)
-    (itv:int)
-    (tb:t)
-    : unit =
-  (** The required and actual signatures [sig_req,sig_act] are constant
-      signatures, the type of the actual signature is the type variable
-      [itv] which has already a substitution.
-
-      Special case: The substitution of [itv] is callable (i.e. a dummy
-      type) and the required type is either a function or a predicate and in
-      case of a predicate the return type of [itv] is boolean:
-      - unify the arguments
-      - unify the return type for a function
-      - update the substitution
-
-      Otherwise: Do the usual unification *)
-  assert (Sign.is_constant sig_req);
-  assert (Sign.is_constant sig_act);
-  let ntvs_all = count tb + Context.count_formal_generics tb.c in
-  let dum_idx  = ntvs_all + Class_table.dummy_index
-  and pred_idx = ntvs_all + Class_table.predicate_index
-  and fun_idx  = ntvs_all + Class_table.function_index
-  and bool_tp  = Variable (ntvs_all + Class_table.boolean_index)
-  and tp_req   = Sign.result sig_req
-  and tp_act   = TVars_sub.get itv tb.tvars
-  in
-  match tp_req, tp_act with
-    Application(Variable idx_req,args_req),
-    Application(Variable idx_act,args_act)->
-      if idx_req= pred_idx && idx_act = dum_idx then begin
-        if args_act.(1) <> bool_tp then raise Not_found;
-        unify args_req.(0) args_act.(0) tb;
-        TVars_sub.update_sub
-          itv
-          (Application(Variable pred_idx, [|args_act.(0)|]))
-          tb.tvars
-      end else if idx_req = fun_idx && idx_act = dum_idx then begin
-        unify args_req.(0) args_act.(0) tb;
-        unify args_req.(1) args_act.(1) tb;
-        TVars_sub.update_sub
-          itv
-          (Application(Variable fun_idx, [|args_act.(0);args_act.(1)|]))
-          tb.tvars
-      end else
-        unify_sign_0 sig_req sig_act tb
-  | _ ->
-      unify_sign_0 sig_req sig_act tb
-
 
 
 
@@ -337,42 +396,34 @@ let unify_sign
     : unit =
   (** Unify the signatures [sig_req] and [sig_act] by adding substitutions
       to [tb] *)
-  let n         = (Sign.arity sig_req)
-  and is_tv,tv =
-    let ntvs = TVars_sub.count tb.tvars in
-    if Sign.is_constant sig_act then
-      match Sign.result sig_act with
-        Variable i when i < ntvs ->
-          true, i
-      | _ ->
-          false, -1
-    else
-      false, -1
+  (*printf "unify sign req %s\n" (string_of_complete_signature_sub sig_req tb);
+  printf "           act %s\n" (string_of_complete_signature_sub sig_act tb);*)
+  let n = Sign.arity sig_req
+  and n_act = Sign.arity sig_act
   in
-  if n > 0 && is_tv then
-    if TVars_sub.has tv tb.tvars then
-      let tp        = TVars_sub.get tv tb.tvars in
-      let sig_act_1 = downgrade tp n tb
-      in
-      unify_sign_0 sig_req sig_act_1 tb
-    else
-      TVars_sub.add_sub tv (to_dummy sig_req tb) tb.tvars
-  else if Sign.is_constant sig_req  && is_tv &&
-    TVars_sub.has tv tb.tvars
-  then
-    update_tv sig_req sig_act tv tb
-  else
+  if n > 0 && n_act = 0 then begin
+    (*printf ".. sign req has to be upgraded\n";*)
+    let tp_req = to_dummy sig_req tb
+    and tp_act = Sign.result sig_act in
+    unify tp_req tp_act tb
+  end else if n = 0 && n_act > 0 then begin
+    (*printf ".. sign act has to be upgraded\n";*)
+    assert false (* nyi: *)
+  end else begin
+    (*printf ".. both are constant or callable\n";*)
     unify_sign_0 sig_req sig_act tb
+  end
 
 
 
 
 
-let make (e:type_term) (c:Context.t): t =
+let make (c:Context.t): t =
   (** New accumulator for an expression with the expected type [e] in the
       context with the type variables [tvars] *)
+  assert (Context.has_result c);
   {tlist = [];
-   sign  = Sign.make_const e;
+   sign  = Sign.make_const (Context.result_type c);
    tvars = (Context.type_variables c);
    c     = c}
 
@@ -473,15 +524,12 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 
-let expect_lambda (ntvs:int) (is_pred:bool) (is_func:bool) (tb:t): unit =
-  (** Expect the term of a lambda expression. It is assumed that all local
+let expect_lambda (ntvs:int) (is_quant: bool) (is_pred:bool) (tb:t): unit =
+  (*  Expect the term of a lambda expression. It is assumed that all local
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
       variables. Furthermore the argument list of the lambda expression might
       have formal generics which are considered as type constants. *)
-  (*printf "expect lambda tvs %s, sign %s\n"
-    (string_of_tvs_sub tb) (signature_string tb);
-  let ct = class_table tb in*)
   assert (Sign.has_result tb.sign);
   add_local ntvs tb;
   add_fgs tb;
@@ -489,16 +537,23 @@ let expect_lambda (ntvs:int) (is_pred:bool) (is_func:bool) (tb:t): unit =
           TVars_sub.count_local (Context.type_variables tb.c));
   assert (TVars_sub.count_fgs tb.tvars =
           TVars_sub.count_fgs (Context.type_variables tb.c));
-  let rt = Sign.result tb.sign in
-  if not (Sign.is_constant tb.sign) then
-    tb.sign <- Sign.make_const rt
-  else
-    tb.sign <-
-      try
-        let ntvs = (count tb) + (Context.count_formal_generics tb.c) in
-        Sign.make_const (Class_table.result_type_of_compound rt ntvs)
-      with Not_found ->
-        assert false (* cannot happen *)
+  (*printf "expect lambda tvs %s, req sign %s\n"
+    (string_of_tvs_sub tb) (signature_string tb);*)
+  let csig = context_signature tb in
+  if not is_quant then begin
+    let upsig = upgrade_signature csig is_pred tb in
+    (*printf "    csig  %s\n" (string_of_complete_signature_sub csig tb);
+    printf "    upsig %s\n" (string_of_complete_signature_sub upsig tb);*)
+    assert (Sign.has_result csig);
+    (try
+      unify_sign tb.sign upsig tb
+    with Not_found ->
+      printf "  cannot unify\n";
+      raise Not_found)
+  end;
+  tb.sign <- Sign.make_const (Sign.result csig)
+
+
 
 
 

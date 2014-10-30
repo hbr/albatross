@@ -18,6 +18,7 @@ module Term_sub_arr: sig
   val flags:          t -> bool array
   val args:           t -> term array
   val has:            int -> t -> bool
+  val anchor:         int -> t -> int
   val add_new:        int -> term -> t -> unit
   val update:         int -> term -> t -> unit
   val up_above_top:   int -> t -> t
@@ -107,6 +108,29 @@ end = struct
        more substitutions are possible.  *)
     assert (i < count s);
     sub_star (get i s) s
+
+
+
+
+  let anchor (i:int) (s:t): int =
+    (* Find the anchor of the type variable [i] following substitutions until
+       there is no more substitution or the substitution is no type variable. *)
+    assert (i < count s);
+    let cnt = count s
+    in
+    let rec find (i:int) (n:int): int =
+      assert (n <= cnt);  (* infinite recursion breaker *)
+      if not s.flags.(i) then
+        i
+      else
+        let t = s.args.(i) in
+        match t with
+          Variable j when j < cnt ->
+            find j (n+1)
+        | _ -> i
+    in
+    find i 0
+
 
 
 
@@ -268,7 +292,6 @@ module TVars_sub: sig
   val count:        t -> int
   val has:          int -> t -> bool
   val get:          int -> t -> term
-  val get_star:     int -> t -> term
   val count_global: t -> int
   val count_local:  t -> int
   val concept:      int -> t -> term
@@ -292,6 +315,8 @@ module TVars_sub: sig
   val get_star:       int -> t -> term
     (** [get_star i s] gets the [i]th substitution term and applies the
         substitution [s] until no more substitutions are possible.  *)
+
+  val anchor:       int -> t -> int
 
   val subs: t -> (int*term*term) list
 end = struct
@@ -326,6 +351,10 @@ end = struct
   let get_star (i:int) (tvars:t): term =
     assert (i < (count tvars));
     Term_sub_arr.get_star i tvars.sub
+
+  let anchor (i:int) (tvars:t): int =
+    assert (i < (count tvars));
+    Term_sub_arr.anchor i tvars.sub
 
   let count_global (tv:t): int =
     Tvars.count_global tv.vars

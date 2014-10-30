@@ -188,12 +188,12 @@ let combine_type_term (cls_idx:int) (args: type_term array): type_term =
     Variable cls_idx
 
 
-let to_tuple (ntvs:int) (args:type_term array): type_term =
+let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
   let n = Array.length args in
   assert (n > 0);
   let rec tuple (i:int) (tp:type_term): type_term =
     assert (0 <= i);
-    if i = 0 then
+    if i = start then
       tp
     else
       let i = i - 1 in
@@ -204,7 +204,17 @@ let to_tuple (ntvs:int) (args:type_term array): type_term =
 
 
 
+
+let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
+let any (ntvs:int)           = Variable (any_index+ntvs)
+let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
+
+
+
+
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
+  (* Convert the callable signature [0,1,...]:RT to the dummy signature
+     @DUMMY[(0,(1,...)),RT].  *)
   assert (Sign.has_result s);
   if Sign.arity s = 0 then
     let res = Sign.result s in
@@ -214,13 +224,27 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     else
       res
   else
-    let tup = to_tuple ntvs (Sign.arguments s) in
+    let tup = to_tuple ntvs 0 (Sign.arguments s) in
     Application(Variable (ntvs+dummy_index), [|tup;Sign.result s|])
 
 
-let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
-let any (ntvs:int)           = Variable (any_index+ntvs)
-let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
+let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
+  (* Convert the callable signature [0,1,...]:RT to a predicate (0,1,...)? or to a
+     function signature (0,(1,...)) -> RT.  *)
+  assert (Sign.has_result s);
+  assert (Sign.arity s > 0);
+  assert (not is_pred || Sign.result s = boolean_type ntvs);
+  let tup = to_tuple ntvs 0 (Sign.arguments s)
+  in
+  let idx, args =
+    if is_pred then
+      predicate_index,  [|tup|]
+    else
+      function_index, [|tup;Sign.result s|]
+  in
+  let idx = idx + ntvs in
+  Application(Variable idx, args)
+
 
 
 let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
@@ -1100,7 +1124,8 @@ let result_type
   | None when is_func ->
       assert (n_untyped < Tvars.count_local tvs);
       Result_type.make (Variable n_untyped) false false
-  | None -> Result_type.empty
+  | None ->
+      Result_type.empty
   | Some tpinf ->
       let tp,proc,ghost = tpinf.v in
       let t =
@@ -1216,3 +1241,11 @@ let string_of_complete_signature
     (ct:t)
     : string =
   (string_of_tvs tvs ct) ^ (string_of_signature s tvs ct)
+
+let string_of_complete_signature_sub
+    (s:Sign.t)
+    (tvs_sub:TVars_sub.t)
+    (ct:t)
+    : string =
+  let tvs = TVars_sub.tvars tvs_sub in
+  (string_of_tvs_sub tvs_sub ct) ^ (string_of_signature s tvs ct)

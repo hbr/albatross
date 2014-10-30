@@ -26,12 +26,17 @@ val substitution_string: t -> string
 val concepts_string:   t -> string
     (** The concepts of the type variables as a string *)
 
+val string_of_tvs_sub: t -> string
+
+val count_local:      t -> int
+    (** The number of type variables without concept. *)
+
 val count:            t -> int
     (** The number of type variables with and without concept. *)
 
-val make:              type_term -> Context.t -> t
-    (** [make tp c] makes a term builder for a term with the expected type
-        [tp] in the contexct [c]. *)
+val make:             Context.t -> t
+    (** [make c] makes a term builder for the contexct [c] where the expected
+    type is the result type of the context [c]. *)
 
 val expect_function:   int -> t -> unit
     (** [expect_function nargs tb] converts the currently expected signature
@@ -64,10 +69,10 @@ val add_leaf:          int ->  Tvars.t -> Sign.t ->  t -> t
       the term builder [tb] *)
 
 val expect_lambda:     int -> bool -> bool -> t -> unit
-   (** [expect_lambda nargs is_pred is_func tb] prepares the term builder [tb]
-       to expect a lambda expression with [nargs] arguments. It assumes that
-       the currently expected signature is either callable i.e. has [nargs]
-       arguments and a result type or the result type is downgradable
+   (** [expect_lambda nargs is_quant is_pred tb] prepares the term builder
+       [tb] to expect a lambda expression with [nargs] arguments. It assumes
+       that the currently expected signature is either callable i.e. has
+       [nargs] arguments and a result type or the result type is downgradable
        (PREDICATE or FUNCTION). It puts a constant signature with the expected
        return type of the lambda expression as the expected signature. *)
 
