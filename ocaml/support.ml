@@ -327,7 +327,7 @@ let operator_data op =
   | Arrowop   -> "->",  13,  Right
   | Parenop   -> "()",  1000, Nonassoc
   | Bracketop -> "[]",  1000, Nonassoc
-  | DArrowop  -> "=>",  20,  Right
+  | DArrowop  -> "==>", 20,  Right
   | DColonop  -> "::",  55,  Right
   | Inop      -> "in",  60,  Nonassoc
   | Notinop   -> "/in", 60, Nonassoc

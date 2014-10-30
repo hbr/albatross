@@ -104,6 +104,7 @@ let _ =
      ("^",         Parser.CARET);
      (":",         Parser.COLON);
      ("=>",        Parser.DARROW);
+     ("==>",       Parser.DARROW);
      ("||",        Parser.DBAR);
      ("::",        Parser.DCOLON);
      ("/",         Parser.DIVIDE);
