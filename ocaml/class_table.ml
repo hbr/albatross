@@ -772,6 +772,8 @@ let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
 
 
 
+
+
 let rec satisfies
     (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
     : bool =
@@ -780,36 +782,46 @@ let rec satisfies
   and ntvs2 = Tvars.count_local tvs2
   and nall2 = Tvars.count_all   tvs2
   in
-  match tp1, tp2 with
-    Variable i, Variable j when i < ntvs1 ->
-      assert false (* shall never happen *)
-  | Variable i, Variable j when j < ntvs2 ->
+  let sat0 (tp1:type_term) (tp2:type_term): bool =
+    let idx1,args1 = split_type_term tp1
+    and idx2,args2 = split_type_term tp2 in
+    assert (nall1 <= idx1);
+    assert (nall2 <= idx2);
+    let bdesc1 = base_descriptor (idx1-nall1) ct in
+    try
+      let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
+      let nargs    = Array.length anc_args in
+      assert (nargs = Array.length args2);
+      let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
+      in
+      for i = 0 to nargs-1 do
+        if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
+          ()
+        else
+          raise Not_found
+      done;
       true
-  | Variable i, Variable j when i < nall1 ->
-      let tp1 = Tvars.concept i tvs1 in
-      satisfies tp1 tvs1 tp2 tvs2 ct
-  | Variable i, Variable j when j < nall2 ->
+    with Not_found ->
+      false
+  in
+  let sat1 (tp1:type_term) (tp2:type_term): bool =
+    match tp1 with
+      Variable i when i < ntvs1 -> assert false (* shall never happen *)
+    | Variable i when i < nall1 ->
+        let tp1 = Tvars.concept i tvs1 in
+        sat0 tp1 tp2
+    | _ ->
+        sat0 tp1 tp2
+  in
+  match tp2 with
+    Variable j when j < ntvs2 -> true
+  | Variable j when j < nall2 ->
       let tp2 = Tvars.concept j tvs2 in
-      satisfies tp1 tvs1 tp2 tvs2 ct
+      sat1 tp1 tp2
   | _ ->
-      let idx1,args1 = split_type_term tp1
-      and idx2,args2 = split_type_term tp2 in
-      let bdesc1 = base_descriptor (idx1-nall1) ct in
-      try
-        let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
-        let nargs    = Array.length anc_args in
-        assert (nargs = Array.length args2);
-        let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
-        in
-        for i = 0 to nargs-1 do
-          if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
-            ()
-          else
-            raise Not_found
-        done;
-        true
-      with Not_found ->
-        false
+      sat1 tp1 tp2
+
+
 
 
 
@@ -848,7 +860,10 @@ let valid_type
         ()
       else
         error_info info ("actual generic #" ^ (string_of_int i) ^
-                         " does not satisfy the required concept")
+                         " " ^ (string_of_type args.(i) tvs ct) ^
+                         " of class " ^ (class_name cls_idx_0 ct) ^
+                         " does not satisfy the required concept " ^
+                         (string_of_type fgconcepts.(i) bdesc.tvs ct))
     done;
     if nargs = 0 then
       Variable cls_idx
@@ -872,6 +887,10 @@ let class_index (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
         error_info info ("Class " ^ (ST.string name)
                          ^ " does not exist")
 
+let tuple_name     = ST.symbol "TUPLE"
+let predicate_name = ST.symbol "PREDICATE"
+let function_name  = ST.symbol "FUNCTION"
+
 
 let get_type
     (tp:type_t withinfo)
@@ -880,8 +899,6 @@ let get_type
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term *)
-  let n = Tvars.count_all tvs
-  in
   let class_index0 (name:int): int = class_index name tvs tp.i ct
   in
   let info = tp.i in
@@ -899,7 +916,7 @@ let get_type
         | _ ->
             assert false (* tuple type must have at least two types *)
       in
-      valid_tp (n+tuple_index) [|ta;tb|]
+      valid_tp (class_index0 tuple_name) [|ta;tb|]
     in
     match tp with
       Normal_type (path,name,actuals) ->
@@ -910,11 +927,11 @@ let get_type
         get_tp tp
     | QMark_type tp ->
         let t = get_tp tp in
-        valid_tp (n+predicate_index) [|t|]
+        valid_tp (class_index0 predicate_name) [|t|]
     | Arrow_type (tpa,tpb) ->
         let ta = get_tp tpa
         and tb = get_tp tpb in
-        valid_tp (n+function_index) [|ta;tb|]
+        valid_tp (class_index0 function_name) [|ta;tb|]
     | Tuple_type tp_lst ->
         tuple tp_lst
   in

@@ -398,17 +398,19 @@ let unify_sign
       to [tb] *)
   (*printf "unify sign req %s\n" (string_of_complete_signature_sub sig_req tb);
   printf "           act %s\n" (string_of_complete_signature_sub sig_act tb);*)
-  let n = Sign.arity sig_req
+  let n_req = Sign.arity sig_req
   and n_act = Sign.arity sig_act
   in
-  if n > 0 && n_act = 0 then begin
-    (*printf ".. sign req has to be upgraded\n";*)
+  if n_req > 0 && n_act = 0 then begin
+    (*printf ".. sig_req has to be upgraded\n";*)
     let tp_req = to_dummy sig_req tb
     and tp_act = Sign.result sig_act in
     unify tp_req tp_act tb
-  end else if n = 0 && n_act > 0 then begin
-    (*printf ".. sign act has to be upgraded\n";*)
-    assert false (* nyi: *)
+  end else if n_req = 0 && n_act > 0 then begin
+    (*printf ".. sig_act has to be upgraded\n";*)
+    let tp_req = Sign.result sig_req
+    and tp_act = to_dummy sig_act tb in
+    unify tp_req tp_act tb
   end else begin
     (*printf ".. both are constant or callable\n";*)
     unify_sign_0 sig_req sig_act tb
