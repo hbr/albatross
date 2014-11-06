@@ -26,7 +26,7 @@ val print_global_assertions:   t -> unit
 
 val get_trace_info: t -> unit
 
-val make:      unit -> t
+val make:      int -> t
 
 val push: entities list withinfo -> t -> unit
 val push_untyped: int array -> t -> unit

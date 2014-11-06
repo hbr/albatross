@@ -72,7 +72,10 @@ type t = {
     mutable command: command;
     mutable trace_proof: bool;
     mutable trace_failed: bool;
-    mutable verbosity: int;
+    mutable verbosity: int; (* 0: nothing, just errors
+                               1: compile status (module, use, verify)
+                               2: toplevel (classes, functions, assertions)
+                               3: proof trace *)
     mutable force: bool
   }
 
@@ -780,7 +783,7 @@ let compile (ad:t): unit =
         with Not_found ->
           if 0 < ad.verbosity then
             printf "Compile module `%s'\n" (ST.string mdl);
-          let pc = Proof_context.make () in
+          let pc = Proof_context.make ad.verbosity in
           verify_implementation mdl pc ad;
           if sti.is_avail then
             verify_interface mdl pc ad;

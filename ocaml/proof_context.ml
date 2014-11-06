@@ -48,7 +48,8 @@ type t = {base:     Proof_table.t;
           mutable work:   int list;
           mutable entry:  entry;
           mutable stack:  entry list;
-          mutable trace:  bool}
+          mutable trace:  bool;
+          verbosity: int}
 
 
 let context (pc:t): Context.t = Proof_table.context pc.base
@@ -108,16 +109,17 @@ let get_trace_info (pc:t): unit =
 
 
 
-let make (): t  =
+let make (verbosity:int): t  =
   let res =
-    {base     = Proof_table.make ();
+    {base     = Proof_table.make verbosity;
      terms    = Seq.empty ();
      gseq     = Seq.empty ();
      do_fwd   = false;
      work     = [];
      entry    = make_entry ();
      stack    = [];
-     trace    = false}
+     trace    = false;
+     verbosity= verbosity}
   in
   get_trace_info res;
   res

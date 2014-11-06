@@ -43,15 +43,17 @@ type t = {
     mutable map: int Term_table2.t Feature_map.t;
     seq:         descriptor seq;
     mutable base:int list ref IntMap.t; (* module name -> list of features *)
-    ct:          Class_table.t
+    ct:          Class_table.t;
+    verbosity:   int
   }
 
 
-let empty (): t =
+let empty (verbosity:int): t =
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
    base = IntMap.empty;
-   ct   = Class_table.base_table ()}
+   ct   = Class_table.base_table ();
+   verbosity = verbosity}
 
 
 let class_table (ft:t):  Class_table.t   = ft.ct
@@ -351,10 +353,10 @@ let eq_index:          int = 5
 
 
 
-let base_table () : t =
+let base_table (verbosity:int) : t =
   (** Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
-  let ft      = empty ()
+  let ft      = empty verbosity
   in
   let any1  = Variable (Class_table.any_index+1)
   and any2  = Variable (Class_table.any_index+2)

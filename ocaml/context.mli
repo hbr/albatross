@@ -13,7 +13,7 @@ open Term
 open Container
 
 type t
-val make:  unit -> t
+val make:  int -> t
 
 val module_table: t -> Module_table.t
 val class_table: t  -> Class_table.t

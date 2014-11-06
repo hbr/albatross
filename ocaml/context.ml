@@ -20,7 +20,8 @@ type entry = {
 type t = {
     mutable entry: entry;
     mutable stack: entry list;
-    ft:            Feature_table.t
+    ft:            Feature_table.t;
+    verbosity:     int
   }
 
 
@@ -252,10 +253,11 @@ let argument (name:int) (c:t): int * Tvars.t * Sign.t =
 
 
 
-let make (): t =
+let make (verbosity:int): t =
   {entry = empty_entry;
    stack = [];
-   ft        = Feature_table.base_table ()
+   ft    = Feature_table.base_table verbosity;
+   verbosity = verbosity
  }
 
 

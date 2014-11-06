@@ -48,7 +48,7 @@ val variant:       int -> int -> t -> term
 
 val stacked_counts: t -> int list
 
-val make: unit -> t
+val make: int -> t
 val push: entities list withinfo -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:  t -> unit

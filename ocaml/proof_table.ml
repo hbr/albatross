@@ -19,7 +19,8 @@ type entry = {nbenv:  int;
 type t = {seq:  desc Seq.t;
           mutable entry: entry;
           mutable stack: entry list;
-          c: Context.t}
+          c: Context.t;
+          verbosity: int}
 
 let context (at:t): Context.t = at.c
 let class_table (at:t):   Class_table.t   = Context.class_table at.c
@@ -142,7 +143,7 @@ let string_of_term_outer (t:term) (at:t): string =
   Context.string_of_term_outer t 0 at.c
 
 
-let make (): t =
+let make (verbosity:int): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
@@ -151,7 +152,8 @@ let make (): t =
             imp_id  = Feature_table.implication_index;
             all_id  = Feature_table.all_index};
    stack = [];
-   c = Context.make ()}
+   c = Context.make verbosity;
+   verbosity = verbosity}
 
 
 let push0 (nbenv:int) (names: int array) (at:t): unit =

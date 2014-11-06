@@ -39,7 +39,7 @@ val implication_index: int
 val all_index:         int
 val some_index:        int
 
-val base_table: unit -> t
+val base_table: int -> t
 
 val class_table:  t -> Class_table.t
 
