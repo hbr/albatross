@@ -55,9 +55,13 @@ module Term: sig
 
   val split_variables: term -> int -> IntSet.t * IntSet.t
 
+  val variables_filtered: term -> (int->bool) -> IntSet.t
+
   val free_variables: term -> int -> IntSet.t
 
   val bound_variables: term -> int -> IntSet.t
+
+  val range_variables: term -> int -> int -> IntSet.t
 
   val used_variables:       term -> int -> int list
   val used_variables_from:  term -> int -> int list
@@ -259,20 +263,32 @@ end = struct
       t
 
 
+  let variables_filtered (t:term) (f:int->bool): IntSet.t =
+    (* The set of variables which satisfy the predicate [f] *)
+    fold
+      (fun set i ->
+        if f i then
+          IntSet.add i set
+        else
+          set)
+      IntSet.empty
+      t
+
 
   let free_variables (t:term) (nb:int): IntSet.t =
     (* The set of free variables above 'n' in the term 't' *)
-    let _,fvars = split_variables t nb
-    in
-    fvars
+    variables_filtered t (fun i -> nb <= i)
 
 
 
   let bound_variables (t:term) (nb:int): IntSet.t =
     (* The set of bound variables strictly below 'n' in the term 't' *)
-    let bvars,_ = split_variables t nb
-    in
-    bvars
+    variables_filtered t (fun i -> i < nb)
+
+
+  let range_variables (t:term) (start:int) (beyond:int): IntSet.t =
+    (* The set of variables [i] with [start <= i < beyond] *)
+    variables_filtered t (fun i -> start <= i && i < beyond)
 
 
   let used_variables_filtered (t:term) (f:int->bool): int list =
@@ -338,24 +354,27 @@ end = struct
 
 
   let down_from (n:int) (start:int) (t:term): term =
-    (** Shift all free variables of [t] above [start] down by [n]. In case
-        that free variables get captured raise 'Term_capture'
-     *)
-    map
-      (fun j nb ->
-        if j < nb+start then
-          Variable j
-        else if n <= j-nb-start then
-          Variable (j-n)
-        else
-          raise Term_capture
-      )
+    (* Shift all free variables of [t] above [start] down by [n]. In case that
+       free variables get captured raise 'Term_capture' *)
+    if n = 0 then
       t
+    else
+      map
+        (fun j nb ->
+          if j < nb+start then
+            Variable j
+          else if n <= j-nb-start then
+            Variable (j-n)
+          else
+            raise Term_capture
+        )
+        t
+
 
 
   let down (n:int) (t:term): term =
     (* Shift all free variables of 't' down by 'n', require that there
-       are no free variables 0,1,...,n-1
+       are no free variables 0,1,...,n-1, otherwise raise [Term_capture].
      *)
     down_from n 0 t
 
