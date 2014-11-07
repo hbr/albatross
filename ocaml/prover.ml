@@ -309,13 +309,13 @@ let check_goal (p:t): unit =
 
 
 let enter (p:t): unit =
-  let rec do_implication (clean:bool) (tgts:term list): unit =
+  let rec do_implication (clean:bool): unit =
     try
       let a,b = split_implication p in
       if not clean then push_empty p;
       add_assumption a p;
       p.entry.goal <- b;
-      do_implication true (b::tgts)
+      do_implication true
     with Not_found ->
       close_assumptions p;
       check_goal p;
@@ -325,11 +325,11 @@ let enter (p:t): unit =
       let n,names,t = split_all_quantified p in
       assert (n = Array.length names);
       push_context names t p;
-      do_implication true []
+      do_implication true
     with Not_found ->
       ()
   in
-  do_implication false []
+  do_implication false
 
 
 let prefix (p:t): string =
