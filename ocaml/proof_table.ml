@@ -314,7 +314,8 @@ let term_of_mp (a:int) (b:int) (at:t): term =
       printf "  tb %d:%s\n" b (string_of_term tb at);
       raise Illegal_proof_term
   in
-  let ok = Term.equal_wo_names ta b1 in
+  let ok = (ta = b1) in
+  (*let ok = Term.equal_wo_names ta b1 in*)
   if not ok then begin
     printf "antecedent of tb does not conincide with ta (ok %b)\n" ok;
       printf "  ta %d:%s\n" a (string_of_term ta at);
@@ -386,17 +387,18 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
     tsub
 
 
-let term_of_witness (i:int) (t:term) (args:term array) (at:t): term =
+let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
+    : term =
   let nargs = Array.length args in
   Array.iter (fun t ->
     match t with Variable i when i = -1 ->
       raise Illegal_proof_term
     | _ -> ())
     args;
-  let some_term = some_quantified nargs [||] t at in
+  let some_term = some_quantified nargs nms t at in
   let ti  = local_term i at in
   let wt  = Term.apply t args in
-  if Term.equal_wo_names ti wt then ()
+  if ti = wt (*Term.equal_wo_names ti wt*) then ()
   else begin
     printf "illegal witness ti %s, wt %s, for %s\n"
       (string_of_term ti at)
@@ -513,8 +515,8 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         let t = term_of_reduce_bwd t at in
         if trace then print0 t;
         t
-    | Witness (idx,t,args) ->
-        let t = term_of_witness idx t args at in
+    | Witness (idx,nms,t,args) ->
+        let t = term_of_witness idx nms t args at in
         if trace then print0 t;
         t
     | Someelim idx ->
@@ -571,7 +573,7 @@ let print_pt (pt:proof_term) (at:t): unit =
 let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
   try
     let t_pt = term_of_pt pt at in
-    let res = Term.equal_wo_names t t_pt in
+    let res = (t = t_pt) (*Term.equal_wo_names t t_pt*) in
     if not res then begin
       printf "unequal t    %s\n" (string_of_term t at);
       printf "        t_pt %s\n" (string_of_term t_pt at)
@@ -638,8 +640,11 @@ let add_reduce_backward (t:term) (impl:term) (at:t): unit =
   add_proved_0 impl (Reduce_bwd t) at
 
 
-let add_witness (impl:term) (i:int) (t:term) (args:term array) (at:t): unit =
-  add_proved_0 impl (Witness (i,t,args)) at
+let add_witness
+    (impl:term) (i:int)
+    (nms:int array) (t:term)
+    (args:term array) (at:t): unit =
+  add_proved_0 impl (Witness (i,nms,t,args)) at
 
 
 let add_someelim (i:int) (t:term) (at:t): unit =

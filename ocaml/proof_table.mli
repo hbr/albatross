@@ -63,7 +63,7 @@ val add_expand:     term -> int -> t -> unit
 val add_expand_backward:  term -> term -> t -> unit
 val add_reduce:     term -> int -> t -> unit
 val add_reduce_backward:  term -> term -> t -> unit
-val add_witness:    term -> int -> term -> term array -> t -> unit
+val add_witness:    term -> int -> int array -> term -> term array -> t -> unit
 val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
 val add_inherited:  term -> int -> int -> t -> unit

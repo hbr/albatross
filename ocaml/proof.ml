@@ -21,7 +21,7 @@ type proof_term =
   | Expand_bwd of term       (* term which is backward expanded *)
   | Reduce     of int        (* index of term which is reduced  *)
   | Reduce_bwd of term       (* term which is backward reduced  *)
-  | Witness    of int * term * term array
+  | Witness    of int * int array * term * term array
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
@@ -67,8 +67,8 @@ end = struct
       | Expand_bwd t -> Expand_bwd t
       | Reduce i     -> Reduce (index i)
       | Reduce_bwd t -> Reduce_bwd t
-      | Witness (i,t,args) ->
-          Witness (index i,t,args)
+      | Witness (i,nms,t,args) ->
+          Witness (index i,nms,t,args)
       | Someelim i   -> Someelim (index i)
       | Subproof (nargs,names,res,pt_arr) ->
           Subproof (nargs,names, index res, Array.map adapt pt_arr)
@@ -117,7 +117,7 @@ end = struct
             assert (j < k);
             let set = usd i start_inner extern pt_arr set in
             usd j start_inner extern pt_arr set
-        | Specialize (i,_) | Expand i | Reduce i | Witness (i,_,_) | Someelim i ->
+        | Specialize (i,_) | Expand i | Reduce i | Witness (i,_,_,_) | Someelim i ->
             assert (i < k);
             usd i start_inner extern pt_arr set
         | Subproof (_,_,k1,pt_arr1) ->
@@ -170,7 +170,7 @@ end = struct
         | Expand i       -> Expand (index i)
         | Reduce i       -> Reduce (index i)
         | Specialize (i,args) -> Specialize (index i, args)
-        | Witness (i,t,args)  -> Witness (index i, t, args)
+        | Witness (i,nms,t,args)  -> Witness (index i, nms, t, args)
         | Someelim i -> Someelim (index i)
         | Subproof (nargs,nms,k,pt_arr1) ->
             let start_inner = start_inner + i in
@@ -273,7 +273,7 @@ end = struct
           | Someelim i ->
               set
           | Specialize (i,args)
-          | Witness (i,_,args) ->
+          | Witness (i,_,_,args) ->
               uvars_args args set
           | Subproof (nb1,nms,i,pt_arr) ->
               uvars (nb+nb1) pt_arr set
@@ -326,11 +326,11 @@ end = struct
               pt
           | Reduce_bwd t ->
               Reduce_bwd (shrink_term t)
-          | Witness (i,t,args) ->
+          | Witness (i,nms,t,args) ->
               let nargs = Array.length args in
               let args  = shrink_args args in
               let t = shrink_inner t nargs in
-              Witness (i,t,args)
+              Witness (i,nms,t,args)
           | Someelim i ->
               Someelim i
           | Subproof (nb1,nms,i,pt_arr) ->
@@ -357,7 +357,7 @@ end = struct
       | Expand_bwd t        -> print_prefix (); printf "Expand_bwd\n"
       | Reduce i            -> print_prefix (); printf "Reduce %d\n" i
       | Reduce_bwd t        -> print_prefix (); printf "Reduce_bwd\n"
-      | Witness (i,t,args)  -> print_prefix (); printf "Witness %d\n" i
+      | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
       | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
       | Subproof (nb,nms,i,pt_arr) ->
           print_prefix (); printf "Subproof nb %d, i %d\n" nb i;

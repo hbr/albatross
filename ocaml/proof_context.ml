@@ -1206,14 +1206,15 @@ let add_backward_reduce (t:term) (pc:t): unit =
 
 let add_backward_witness (t:term) (pc:t): unit =
   try
-    let nargs,_,tt = split_some_quantified t pc in
+    let nargs,nms,tt = split_some_quantified t pc in
     let idx,sub = find_witness tt nargs pc in
     let witness = term idx pc in
     let impl    = implication witness t pc in
     if has_stronger impl pc then
       ()
     else begin
-      Proof_table.add_witness impl idx tt (Term_sub.arguments nargs sub) pc.base;
+      let args = Term_sub.arguments nargs sub in
+      Proof_table.add_witness impl idx nms tt args pc.base;
       add_new impl IntSet.empty false pc
     end
   with Not_found ->
