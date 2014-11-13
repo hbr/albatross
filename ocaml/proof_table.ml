@@ -692,13 +692,6 @@ let discharged (i:int) (at:t): term * proof_term =
    *)
   let cnt0 = count_previous at
   and axiom = is_axiom i at
-  (*and axiom = List.exists
-      (fun i ->
-        assert (i < (count at));
-        match (Seq.elem i at.seq).proof_term with
-          Axiom _ -> true
-        | _       -> false)
-      (used_assertions i at [])*)
   and nreq  = at.entry.nreq
   and nargs = nbenv_local at
   and nms   = names at
@@ -734,7 +727,8 @@ let discharged (i:int) (at:t): term * proof_term =
       then
         (printf "used variables of term %s and its proof do not coincide\n"
            (string_of_term term_inner at);
-         raise Not_found);
+         assert false (* nyi: handling of this exception
+         raise Not_found*));
       let args = Array.make nargs (Variable (-1))
       and nms1 = Array.make nargs1 (-1) in
       List.iteri
