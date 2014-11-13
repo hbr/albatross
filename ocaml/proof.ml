@@ -45,6 +45,10 @@ module Proof_term: sig
 
   val print_pt_arr:  string -> int -> t array -> unit
 
+  val term_up: int -> t -> t
+
+  val split_subproof: t -> int * int array * int * t array
+
 end = struct
 
   type t = proof_term
@@ -341,6 +345,40 @@ end = struct
         pt_arr
     in
     shrink 0 pt_arr
+
+
+
+  let term_up (n:int) (pt:t): t =
+    (* Shift all terms used in the proof term [pt] up by [n]. *)
+    let rec trm_up nb pt =
+      let up t = Term.upbound n nb t in
+      let upargs args = Array.map up args in
+      match pt with
+        Axiom t        -> Axiom (up t)
+      | Assumption t   -> Assumption (up t)
+      | Detached (i,j) -> pt
+      | Specialize (i,args) -> Specialize (i, upargs args)
+      | Expand i       -> pt
+      | Expand_bwd t   -> Expand_bwd (up t)
+      | Reduce i       -> pt
+      | Reduce_bwd t   -> Reduce_bwd (up t)
+      | Witness (i,nms,t,args) ->
+          let t = up t
+          and args = upargs args in
+          Witness (i,nms,t,args)
+      | Someelim i     -> pt
+      | Subproof (nb1,nms,i,pt_arr) ->
+          let pt_arr = Array.map (fun pt -> trm_up (nb+nb1) pt) pt_arr in
+          Subproof (nb1,nms,i,pt_arr)
+      | Inherit (i,cls)-> pt
+    in
+    trm_up 0 pt
+
+
+  let split_subproof (pt:t): int * int array * int * t array =
+    match pt with
+      Subproof (nb,nms,i,pt_arr) -> nb,nms,i,pt_arr
+    | _ -> raise Not_found
 
 
 
