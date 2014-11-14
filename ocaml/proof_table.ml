@@ -650,40 +650,6 @@ let add_witness
 let add_someelim (i:int) (t:term) (at:t): unit =
   add_proved_0 t (Someelim i) at
 
-(*
-let rec used_assertions (i:int) (at:t) (lst:int list): int list =
-  (** The assertions of the local context which are needed to prove
-      assertion [i] in [at] cumulated to list [lst].
-
-      The list includes [i] if it is in the current context.
-   *)
-  assert (i < (count at));
-  let cnt0 = count_previous at
-  in
-  let used (lst:int list): int list =
-    assert (cnt0 <= i);
-    let desc = Seq.elem i at.seq in
-    match desc.proof_term with
-      Axiom _
-    | Assumption _
-    | Expand_bwd _       -> lst
-    | Reduce_bwd _       -> lst
-    | Specialize (j,_)   -> used_assertions j at lst
-    | Witness (i,_,_)
-    | Someelim i
-    | Expand i
-    | Reduce i           -> used_assertions i at lst
-    | Subproof (_,_,_,_) -> lst
-    | Detached (i,j) ->
-        let used_i = used_assertions i at lst in
-        used_assertions j at used_i
-    | Inherit (idx,cls) ->
-        assert false
-  in
-  if i < cnt0 then lst
-  else used (i::lst)
-*)
-
 
 
 let discharged (i:int) (at:t): term * proof_term =
