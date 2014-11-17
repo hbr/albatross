@@ -318,7 +318,6 @@ let enter (p:t): unit =
       do_implication true
     with Not_found ->
       close_assumptions p;
-      check_goal p;
       do_all_quantified ()
   and do_all_quantified (): unit =
     try
@@ -348,9 +347,9 @@ let rec prove_goal (p:t): unit =
       points to an inner context. The caller has to pop the corresponding
       inner contexts and discharge the proved term.
    *)
-  check_goal p;
-  (*add_backward p;*)
+  check_goal p; (* needed as long as partial specialization is missing *)
   enter p;
+  check_goal p;
   if p.trace && p.trace_ctxt then begin
     if not (Options.is_tracing_proof ()) then
       print_global p.pc;

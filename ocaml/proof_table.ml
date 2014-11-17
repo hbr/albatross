@@ -83,6 +83,7 @@ let count_global (pt:t): int =
 let count_last_local (pt:t): int =
   (count pt) - (count_previous pt)
 
+
 let nbenv (at:t): int = at.entry.nbenv
 
 let nbenv_local (at:t): int =
@@ -652,6 +653,104 @@ let add_someelim (i:int) (t:term) (at:t): unit =
 
 
 
+let discharged_assumptions_2 (i:int) (at:t): int * int array * term =
+  (* The [i]th term of the current environment with all quantified variables and
+     assumptions discharged.
+
+     Note: If [i] is not in the current environment it cannot be quantified!
+   *)
+  let cnt0 = count_previous at
+  and tgt  = local_term i at in
+  let n,nms,tgt =
+    try
+      let n,nms,t = split_all_quantified tgt at in
+      if i < cnt0 then
+        printf "  i %d, cnt0 %d tgt %s\n" i cnt0 (string_of_term tgt at);
+      assert (cnt0 <= i);
+      n,nms,t
+    with Not_found -> 0,[||],tgt
+  in
+  let imp_id = n + imp_id at in
+  let tref = ref tgt in
+  for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
+    let t = local_term k at in
+    let t = Term.up n t in
+    tref := Term.binary imp_id t !tref
+  done;
+  n,nms,!tref
+
+
+
+
+let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
+  (* The [i]th term of the current environment with all quantified variables and
+     assumptions discharged.
+
+     Note: If [i] is not in the current environment it cannot be quantified!
+   *)
+  let cnt0 = count_previous at
+  and nreq = at.entry.nreq
+  and pt   = proof_term i at in
+  let n,nms,pt =
+    try
+      let n,nms,idx,pt_arr = Proof_term.split_subproof pt in
+      assert (n=0 || cnt0 <= i);
+      n,nms, Subproof (0,[||],idx,pt_arr)
+    with Not_found ->
+      0, [||], pt
+  in
+  let narr = if cnt0+nreq<=i  then i+1-cnt0 else nreq in
+  let pterm j =
+    let pt = proof_term (cnt0+j) at in
+    Proof_term.term_up n pt
+  in
+  let pt_arr = Array.init narr (fun j -> if cnt0+j=i then pt else pterm j)
+  in
+  n, nms, pt_arr
+
+
+
+
+
+
+let discharged (i:int) (at:t): term * proof_term =  (* new version *)
+  let n1,nms1,t = discharged_assumptions_2 i at
+  in
+  let nargs = n1 + nbenv_local at
+  and nms   = Array.append nms1 (names at)
+  and nreq  = at.entry.nreq
+  and cnt0  = count_previous at
+  and axiom = is_axiom i at
+  in
+  let len, pt_arr =
+    let n2,nms2,pt_arr = discharged_proof_term i at in
+    (if not axiom && n1 <> n2 then
+      let t_inner = discharged_assumptions i at in
+      printf "n1 %d n2 %d t_inner %s\n" n1 n2 (string_of_term t_inner at));
+    assert (axiom || n1 = n2);
+    assert (axiom || nms1 = nms2);
+    Array.length pt_arr, pt_arr
+  in
+  if nargs = 0 && nreq = 0 && len = 1 then
+    t, pt_arr.(0)
+  else
+    let i,pt_arr =
+      if len=0 then i,pt_arr else Proof_term.remove_unused i cnt0 pt_arr
+    in
+    let nargs,nms,t,pt_arr =
+      try Proof_term.normalize_pair nargs nms t pt_arr
+      with Not_found -> assert false (* nyi *)
+    in
+    let t  = Term.quantified (all_id_outer at) nargs nms t
+    in
+    let pt = if axiom then Axiom t else Subproof (nargs,nms,i,pt_arr)
+    in
+    printf "  proved term %s\n" (string_of_term_outer t at);
+    t, pt
+
+
+
+
 let discharged (i:int) (at:t): term * proof_term =
   (** The [i]th term of the current environment with all local variables and
       assumptions discharged together with its proof term.
@@ -666,13 +765,13 @@ let discharged (i:int) (at:t): term * proof_term =
   assert (not axiom || cnt0 <= i);
   assert (not axiom || is_toplevel at);
   let narr =
-    if cnt0 + at.entry.nreq <= i then
+    if cnt0 + nreq <= i then
       i + 1 - cnt0
     else
       at.entry.nreq
   in
   assert (0 <= narr);
-  if nargs = 0 && narr = 1 && at.entry.nreq = 0 then
+  if nargs = 0 && narr = 1 && nreq = 0 then
     term_inner, proof_term cnt0 at
   else
     let pt_arr = Array.init narr (fun j -> proof_term (cnt0+j) at)

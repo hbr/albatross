@@ -4,6 +4,7 @@ open Proof
 open Support
 open Printf
 
+(*module RD = Rule_data*)
 
 type simpl_data = int * int (* #nodes, level *)
 
@@ -19,10 +20,12 @@ type backward_data = {ps:        (term*bool) list;
 type term_data = {
     term:     term;  (* inner term [if nargs<>0] *)
     nargs:    int;
-    nbenv:    int;
+    nbenv:    int;  (* number of variables between the arguments and the
+                       global variables *)
     fwddat:   (term*term*int*bool*bool*bool) option;
                (* a, b, gp1, simpl, elim, bwd *)
-    bwddat:   backward_data option}
+    bwddat:   backward_data option;
+  }
 
 
 type desc = {td:       term_data;
@@ -247,6 +250,7 @@ let term_level (t:term) (nb:int) (pc:t): int =
 
 
 
+
 let simplification_data (t:term) (nargs:int) (pc:t): simpl_data =
   let ft = feature_table pc in
   let nargs = nargs + nbenv pc in
@@ -255,6 +259,7 @@ let simplification_data (t:term) (nargs:int) (pc:t): simpl_data =
 
 let is_sd_simpler ((na,la):simpl_data) ((nb,lb):simpl_data): bool =
   na <= nb
+
 
 let is_simpler (a:term) (b:term) (nargs:int) (pc:t): bool =
   is_sd_simpler (simplification_data a nargs pc) (simplification_data b nargs pc)
@@ -485,7 +490,7 @@ let has (t:term) (pc:t): bool =
 
 
 let find_stronger (t:term) (pc:t): int =
-  (** The index of the assertion which is stronger as [t] (or equivalent).
+  (** The index of the assertion which is stronger than [t] (or equivalent).
 
       If [t] is schematic, a stronger or equivalent assertion is schematic
       with the a less or equal number of arguments and can be transformed into
@@ -1237,15 +1242,16 @@ let add_backward (t:term) (pc:t): unit =
           add_fully_specialized idx sub true pc)
       sublst
   in
-  add_backward_expansion t pc;
-  add_backward_reduce t pc;
-  add_backward_witness t pc;
   let sublst = Term_table.unify t (nbenv pc) pc.entry.prvd2 in
-  (if sublst <> [] then
+  if sublst <> [] then
     add_lst sublst
-  else
+  else begin
+    add_backward_expansion t pc;
+    add_backward_reduce t pc;
+    add_backward_witness t pc;
     let sublst = Term_table.unify t (nbenv pc) pc.entry.bwd in
-    add_lst sublst);
+    add_lst sublst
+  end;
   close pc
 
 

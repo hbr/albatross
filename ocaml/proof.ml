@@ -43,11 +43,16 @@ module Proof_term: sig
 
   val remove_unused_variables: term array -> int -> t array -> t array
 
+  val normalize_pair: int -> int array -> term -> t array
+    -> int * int array * term * t array
+
   val print_pt_arr:  string -> int -> t array -> unit
 
   val term_up: int -> t -> t
 
   val split_subproof: t -> int * int array * int * t array
+
+  val is_subproof: t -> bool
 
 end = struct
 
@@ -252,7 +257,6 @@ end = struct
 
 
   let used_variables (nargs:int) (pt_arr: t array): IntSet.t =
-    assert (0 < nargs);
     let rec uvars (nb:int) (pt_arr: t array) (set:IntSet.t): IntSet.t =
       let uvars_term (t:term) (set:IntSet.t): IntSet.t =
         used_in_term nb nargs t set
@@ -287,7 +291,10 @@ end = struct
           set
         pt_arr
       in
-    uvars 0 pt_arr IntSet.empty
+    if nargs = 0 then
+      IntSet.empty
+    else
+      uvars 0 pt_arr IntSet.empty
 
 
   let remove_unused_variables
@@ -347,6 +354,31 @@ end = struct
     shrink 0 pt_arr
 
 
+  let normalize_pair (nargs:int) (nms:int array) (t:term) (pt_arr: t array)
+      : int * int array * term  * t array =
+    let uvars_t = Term.used_variables t nargs in
+    let nargs1  = List.length uvars_t in
+    assert (nargs1 <= nargs);
+    let uvars_pt = used_variables nargs pt_arr in
+    if not (nargs1 = IntSet.cardinal uvars_pt &&
+            List.for_all (fun i -> IntSet.mem i uvars_pt) uvars_t)
+    then
+      raise Not_found;
+    let args = Array.make nargs (Variable (-1))
+    and nms1 = Array.make nargs1 (-1) in
+    List.iteri
+      (fun pos i -> assert (i < nargs);
+        let pos1 = nargs1 - pos - 1 in
+        args.(i)   <- Variable pos1;
+        nms1.(pos1) <- nms.(i))
+      uvars_t;
+    let t      = Term.sub t args nargs1
+    and pt_arr = remove_unused_variables args nargs1 pt_arr
+    in
+    nargs1, nms1, t, pt_arr
+
+
+
 
   let term_up (n:int) (pt:t): t =
     (* Shift all terms used in the proof term [pt] up by [n]. *)
@@ -372,7 +404,7 @@ end = struct
           Subproof (nb1,nms,i,pt_arr)
       | Inherit (i,cls)-> pt
     in
-    trm_up 0 pt
+    if n = 0 then pt else trm_up 0 pt
 
 
   let split_subproof (pt:t): int * int array * int * t array =
@@ -380,6 +412,9 @@ end = struct
       Subproof (nb,nms,i,pt_arr) -> nb,nms,i,pt_arr
     | _ -> raise Not_found
 
+  let is_subproof (pt:t): bool =
+    try let _ = split_subproof pt in true
+    with Not_found -> false
 
 
   let rec print_pt_arr (prefix:string) (start:int) (pt_arr: t array): unit =
