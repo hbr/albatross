@@ -54,6 +54,7 @@ module Proof_term: sig
 
   val is_subproof: t -> bool
 
+  val short_string: t -> string
 end = struct
 
   type t = proof_term
@@ -437,4 +438,19 @@ end = struct
           print_pt_arr (prefix^"  ") (start+k) pt_arr
       | Inherit (i,cls)     -> print_prefix (); printf "Inherit %d\n" i
     done
+
+  let short_string (pt:t): string =
+    match pt with
+      Axiom _  -> "ax"
+    | Assumption _ -> "ass"
+    | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
+    | Specialize (i,args) -> "spec " ^ (string_of_int i)
+    | Inherit (i,cls)     -> "inh " ^ (string_of_int i)
+    | Expand i            -> "exp " ^ (string_of_int i)
+    | Expand_bwd t        -> "exp"
+    | Reduce i            -> "beta " ^ (string_of_int i)
+    | Reduce_bwd t        -> "beta"
+    | Witness (i,nms,t,args) -> "wit " ^ (string_of_int i)
+    | Someelim i             -> "selim " ^ (string_of_int i)
+    | Subproof (nargs,names,res,pt_arr) -> "sub"
 end

@@ -41,6 +41,7 @@ val implication_chain: term list -> term -> t -> term
 val someelim:  int -> t -> term
 
 val term:          int -> t -> term * int
+val proof_term:    int -> t -> proof_term
 val nbenv_term:    int -> t -> int
 val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool

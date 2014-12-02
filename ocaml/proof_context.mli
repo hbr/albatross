@@ -21,10 +21,9 @@ val set_interface_check: IntSet.t -> t -> unit
 
 val is_global: t -> bool
 
-val print_all_local_assertions: t -> unit
-val print_global_assertions:   t -> unit
 
-val get_trace_info: t -> unit
+val string_of_term: term -> t -> string
+val string_of_term_i: int -> t -> string
 
 val make:      int -> t
 
@@ -39,20 +38,30 @@ val find:               term -> t -> int
 val has:                term -> t -> bool
 val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
+val add_mp:             int -> int -> bool -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
-val is_used_forward:    int -> t -> bool
 val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
-val set_forward:        t -> unit
-val reset_forward:      t -> unit
-val add_backward:       term -> t -> unit
 val discharged:         int  -> t -> term * proof_term
-val add_proved:   bool -> int -> term -> proof_term -> IntSet.t -> t -> unit
-val add_proved_list:   bool -> int -> (term*proof_term) list -> t -> unit
-val backward_set:       term -> t -> int list
-val backward_data:      int  -> t -> (term*bool) list * IntSet.t
+val add_proved:         bool -> int -> term -> proof_term -> t -> int
+val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
+val premises:           int -> t -> (term*bool) list
+val previous_schematic: int  -> t -> int option
+val trying_goal:        term -> t -> unit
+val failed_goal:        term -> t -> unit
+val proved_goal:        term -> t -> unit
+
+val find_goal:          term -> t -> int
+    (** Find a term which exactly matches the goal or which can be specialized to
+        match the goal. Add the specialization if necessary and return the index
+        of the term which exactly matches or raise [Not_found]. *)
+
+val find_backward_goal: term -> IntSet.t -> t -> int list
+    (** Add all possible fully specialized backward rules whose target matches the
+        goal by specialization, expansion, beta reduction.
+        Return the backward rules whose target matches the goal exactly. *)
 
 val split_implication:  term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
@@ -66,7 +75,6 @@ val count_global:   t -> int
 val term_orig:      int -> t -> term * int
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
-val used_schematic: int -> t -> IntSet.t
 
 val check_deferred: t -> unit
 val owner:          t -> int

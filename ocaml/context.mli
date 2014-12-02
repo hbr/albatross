@@ -80,6 +80,7 @@ val fgnames: t   -> int array
 val local_fargnames: t -> int array
 
 val ith_arguments_string: int -> t -> string
+val local_arguments_string: t -> string
 
 val type_variables: t -> TVars_sub.t
     (** The type variables and their substitutions *)

@@ -239,25 +239,46 @@ let variant (i:int) (cls:int) (at:t): term =
   t
 
 
-let discharged_assumptions (i:int) (at:t): term =
-  (** The [i]th term of the current environment with all assumptions discharged.
+
+let discharged_assumptions (i:int) (at:t): int * int array * term =
+  (* The [i]th term of the current environment with all quantified variables
+     of the term and assumptions discharged. A potential quantifier in the
+     term is moved up (prenex normal form) all assumptions.
+
+     Note: If [i] is not in the current environment it cannot be quantified!
    *)
   let cnt0 = count_previous at
-  and tgt = local_term i at
+  and tgt  = local_term i at in
+  let n,nms,tgt =
+    try
+      let n,nms,t = split_all_quantified tgt at in
+      if i < cnt0 then
+        printf "  i %d, cnt0 %d tgt %s\n" i cnt0 (string_of_term tgt at);
+      assert (cnt0 <= i);
+      n,nms,t
+    with Not_found -> 0,[||],tgt
   in
+  let imp_id = n + imp_id at in
   let tref = ref tgt in
   for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
-    tref := implication (local_term k at) !tref at
+    let t = local_term k at in
+    let t = Term.up n t in
+    tref := Term.binary imp_id t !tref
   done;
-  !tref
+  n,nms,!tref
+
+
 
 
 let discharged_term (i:int) (at:t): term =
-  (** The [i]th term of the current environment with all local variables and
-      assumptions discharged.
+  (* The [i]th term of the current environment with all local variables and
+     assumptions discharged.
    *)
-  let t = discharged_assumptions i at in
-  all_quantified_outer t at
+  let n1,nms1,t = discharged_assumptions i at in
+  let nargs = n1 + nbenv_local at
+  and nms   = Array.append nms1 (names at) in
+  Term.quantified (all_id_outer at) nargs nms t
+
 
 
 let is_axiom (i:int) (at:t): bool =
@@ -653,35 +674,6 @@ let add_someelim (i:int) (t:term) (at:t): unit =
 
 
 
-let discharged_assumptions_2 (i:int) (at:t): int * int array * term =
-  (* The [i]th term of the current environment with all quantified variables and
-     assumptions discharged.
-
-     Note: If [i] is not in the current environment it cannot be quantified!
-   *)
-  let cnt0 = count_previous at
-  and tgt  = local_term i at in
-  let n,nms,tgt =
-    try
-      let n,nms,t = split_all_quantified tgt at in
-      if i < cnt0 then
-        printf "  i %d, cnt0 %d tgt %s\n" i cnt0 (string_of_term tgt at);
-      assert (cnt0 <= i);
-      n,nms,t
-    with Not_found -> 0,[||],tgt
-  in
-  let imp_id = n + imp_id at in
-  let tref = ref tgt in
-  for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
-    let t = local_term k at in
-    let t = Term.up n t in
-    tref := Term.binary imp_id t !tref
-  done;
-  n,nms,!tref
-
-
-
-
 let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
   (* The [i]th term of the current environment with all quantified variables and
      assumptions discharged.
@@ -714,7 +706,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
 
 
 let discharged (i:int) (at:t): term * proof_term =  (* new version *)
-  let n1,nms1,t = discharged_assumptions_2 i at
+  let n1,nms1,t = discharged_assumptions i at
   in
   let nargs = n1 + nbenv_local at
   and nms   = Array.append nms1 (names at)
@@ -724,9 +716,6 @@ let discharged (i:int) (at:t): term * proof_term =  (* new version *)
   in
   let len, pt_arr =
     let n2,nms2,pt_arr = discharged_proof_term i at in
-    (if not axiom && n1 <> n2 then
-      let t_inner = discharged_assumptions i at in
-      printf "n1 %d n2 %d t_inner %s\n" n1 n2 (string_of_term t_inner at));
     assert (axiom || n1 = n2);
     assert (axiom || nms1 = nms2);
     Array.length pt_arr, pt_arr
@@ -745,71 +734,4 @@ let discharged (i:int) (at:t): term * proof_term =  (* new version *)
     in
     let pt = if axiom then Axiom t else Subproof (nargs,nms,i,pt_arr)
     in
-    printf "  proved term %s\n" (string_of_term_outer t at);
     t, pt
-
-
-
-
-let discharged (i:int) (at:t): term * proof_term =
-  (** The [i]th term of the current environment with all local variables and
-      assumptions discharged together with its proof term.
-   *)
-  let cnt0 = count_previous at
-  and axiom = is_axiom i at
-  and nreq  = at.entry.nreq
-  and nargs = nbenv_local at
-  and nms   = names at
-  and term_inner = discharged_assumptions i at
-  in
-  assert (not axiom || cnt0 <= i);
-  assert (not axiom || is_toplevel at);
-  let narr =
-    if cnt0 + nreq <= i then
-      i + 1 - cnt0
-    else
-      at.entry.nreq
-  in
-  assert (0 <= narr);
-  if nargs = 0 && narr = 1 && nreq = 0 then
-    term_inner, proof_term cnt0 at
-  else
-    let pt_arr = Array.init narr (fun j -> proof_term (cnt0+j) at)
-    in
-    let i, pt_arr =
-      if narr=0 then i,pt_arr else Proof_term.remove_unused i cnt0 pt_arr
-    in
-    assert (not axiom || (i = cnt0+nreq && Array.length pt_arr = nreq+1));
-    if nargs = 0 then
-      term_inner, Subproof (0,[||],i,pt_arr)
-    else begin
-      let uvars_t = Term.used_variables term_inner nargs in
-      let nargs1  = List.length uvars_t in
-      assert (nargs1 <= nargs);
-      let uvars_pt = Proof_term.used_variables nargs pt_arr in
-      if not (nargs1 = IntSet.cardinal uvars_pt &&
-              List.for_all (fun i -> IntSet.mem i uvars_pt) uvars_t)
-      then
-        (printf "used variables of term %s and its proof do not coincide\n"
-           (string_of_term term_inner at);
-         assert false (* nyi: handling of this exception
-         raise Not_found*));
-      let args = Array.make nargs (Variable (-1))
-      and nms1 = Array.make nargs1 (-1) in
-      List.iteri
-        (fun pos i -> assert (i < nargs);
-          let pos1 = nargs1 - pos - 1 in
-          args.(i)   <- Variable pos1;
-          nms1.(pos1) <- nms.(i))
-        uvars_t;
-      let term_inner1 = Term.sub term_inner args nargs1
-      in
-      let term1 = Term.quantified (all_id_outer at) nargs1 nms1 term_inner1 in
-      let pt =
-        if axiom then Axiom term1
-        else
-          let pt_arr1 = Proof_term.remove_unused_variables args nargs1 pt_arr
-          in Subproof (nargs1,nms1,i,pt_arr1)
-      in
-      term1, pt
-    end

@@ -3,6 +3,8 @@ open Unix
 open Container
 open Support
 
+module PC = Proof_context
+
 let usage = "\
 usage: alba [-work-dir <path>] [-I <path>] <command> <args>
 
@@ -618,7 +620,7 @@ let find (mdl:int) (ad:t): state*state =
 
 
 
-let analyze (ast:declaration list) (fn:string) (pc:Proof_context.t): unit =
+let analyze (ast:declaration list) (fn:string) (pc:PC.t): unit =
   try
     Ast.analyze ast pc
   with Error_info (info,str) ->
@@ -626,11 +628,11 @@ let analyze (ast:declaration list) (fn:string) (pc:Proof_context.t): unit =
 
 
 let analyze_used
-    (fn:string) (mdl:int) (use_blk: use_block) (pc:Proof_context.t) (ad:t)
+    (fn:string) (mdl:int) (use_blk: use_block) (pc:PC.t) (ad:t)
     : IntSet.t =
   (* Parse all directly and indirectly used modules of [use_blk] of the module
      [mdl] within the file [fn] and return the complete set of all used modules.  *)
-  let mt = Proof_context.module_table pc
+  let mt = PC.module_table pc
   in
   assert (List.for_all
             (fun m -> let nme,lib = m.v in lib <> [] || nme <> mdl)
@@ -675,7 +677,7 @@ let analyze_used
           else begin
             if 0 < ad.verbosity then
               printf " use `%s'\n" (string_of_module mdl);
-            Proof_context.add_used_module mdl set pc;
+            PC.add_used_module mdl set pc;
             let use_blk2,ast = parse_file fn in
             analyze ast fn pc;
             let set = IntSet.add (Module_table.current mt) set in
@@ -685,8 +687,8 @@ let analyze_used
   used [(mdl,[]),fn,"al",use_blk] IntSet.empty
 
 
-let update_depend (nme:int) (pub:bool) (pc:Proof_context.t) (ad:t): unit =
-  let mt = Proof_context.module_table pc in
+let update_depend (nme:int) (pub:bool) (pc:PC.t) (ad:t): unit =
+  let mt = PC.module_table pc in
   let used, fn =
     if pub then
       Module_table.current_used mt,
@@ -709,21 +711,21 @@ let update_depend (nme:int) (pub:bool) (pc:Proof_context.t) (ad:t): unit =
     abort str
 
 
-let verify_interface (nme:int) (pc:Proof_context.t) (ad:t): unit =
+let verify_interface (nme:int) (pc:PC.t) (ad:t): unit =
   if 0 < ad.verbosity then
     printf " verify interface `%s'\n" (ST.string nme);
   let fn = file_path nme "ali" ad      in
   let use_blk,ast = parse_file fn      in
-  let mt = Proof_context.module_table pc in
+  let mt = PC.module_table pc in
   let used = Module_table.interface_used use_blk mt in
-  Proof_context.set_interface_check used pc;
+  PC.set_interface_check used pc;
   analyze ast fn pc;
   update_depend nme true pc ad
 
 
 
 
-let verify_implementation (nme:int) (pc:Proof_context.t) (ad:t): unit =
+let verify_implementation (nme:int) (pc:PC.t) (ad:t): unit =
   if 0 < ad.verbosity then
     printf " verify implementation `%s'\n" (ST.string nme);
   let fn = file_path nme "al" ad        in
@@ -731,7 +733,7 @@ let verify_implementation (nme:int) (pc:Proof_context.t) (ad:t): unit =
   let used = analyze_used fn nme use_blk pc ad in
   let use_blk2,ast = parse_file fn      in
   assert (use_blk = use_blk2);
-  Proof_context.add_current_module nme used pc;
+  PC.add_current_module nme used pc;
   analyze ast fn pc;
   update_depend nme false pc ad
 
@@ -783,7 +785,7 @@ let compile (ad:t): unit =
         with Not_found ->
           if 0 < ad.verbosity then
             printf "Compile module `%s'\n" (ST.string mdl);
-          let pc = Proof_context.make ad.verbosity in
+          let pc = PC.make ad.verbosity in
           verify_implementation mdl pc ad;
           if sti.is_avail then
             verify_interface mdl pc ad;

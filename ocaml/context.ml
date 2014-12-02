@@ -426,6 +426,10 @@ let ith_arguments_string (i:int) (c:t): string =
   arguments_string e ct
 
 
+let local_arguments_string (c:t): string =
+  let ct = class_table c in
+  arguments_string c.entry ct
+
 
 let result_string (e:entry) (ct:Class_table.t): string =
   if Result_type.has_result e.result then

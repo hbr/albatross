@@ -75,6 +75,15 @@ let intset_to_string (set:IntSet.t): string =
 
 
 
+let intlist_to_string (lst:int list): string =
+  "{"
+  ^ String.concat
+      ","
+      (List.map string_of_int lst)
+  ^ "}"
+
+
+
 module StringSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = string

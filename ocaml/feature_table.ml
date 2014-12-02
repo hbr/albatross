@@ -92,6 +92,10 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
     | Some bdesc -> bdesc
 
 
+let feature_name (i:int) (ft:t): string =
+  let desc = descriptor i ft in
+  feature_name_to_string desc.fname
+
 
 let definition (i:int) (nb:int) (ft:t): term =
   (* The definition of the feature [i] as a lambda term (if there are arguments)
@@ -601,56 +605,6 @@ let expand_focus_term (t:term) (nb:int) (ft:t): term =
   expand_focus_term_old t nb ft
 
 
-let expand_term (t:term) (nbound:int) (ft:t): term =
-  (* Expand the definitions of the term 't' within an environment with
-     'nbound' bound variables, i.e. a variable i with nbound<=i refers to the
-     global feature i-nbound
-
-     Note: [expand_term] doesn't do any beta reductions in the term [t] which
-     would have been possible before the expansion. *)
-  let rec expand (t:term) (nb:int): term =
-    let apply (f:term) (args:term array): term =
-      match f with
-        Lam (n,nms,t) ->
-          assert (n = Array.length args);
-          Term.apply t args
-      | _ -> Application (f,args)
-    in
-    match t with
-      Variable i when i < nb ->
-        t
-    | Variable i ->
-        let idx = i-nb in
-        assert (idx < count ft);
-        (try expand (definition idx nb ft) nb
-        with Not_found -> t)
-    | Application (Lam(n,nms,t),args) ->
-        let t    = expand t (nb+n)
-        and args = Array.map (fun t -> expand t nb) args in
-        Application(Lam(n,nms,t),args)
-    | Application (f,args) ->
-        let f    = expand f nb
-        and args = Array.map (fun t -> expand t nb) args in
-        apply f args
-    | Lam (n,nms,t) ->
-        let t = expand t (nb+n) in
-        Lam (n,nms,t)
-  in
-  expand t nbound
-
-
-
-
-
-let rec normalize_term (t:term) (nbound:int) (ft:t): term =
-  (* Expand the definitions of the term 't' and beta reduce it within an
-     environment with 'nbound' bound variables, i.e. a variable i with
-     nbound<=i refers to the global feature i-nbound *)
-  Term.reduce (expand_term t nbound ft)
-
-
-
-
 let term_to_string
     (t:term)
     (nanon: int)
@@ -794,6 +748,56 @@ let term_to_string
   in
   to_string t names nanon false None
 
+
+
+
+
+let expand_term (t:term) (nbound:int) (ft:t): term =
+  (* Expand the definitions of the term 't' within an environment with
+     'nbound' bound variables, i.e. a variable i with nbound<=i refers to the
+     global feature i-nbound
+
+     Note: [expand_term] doesn't do any beta reductions in the term [t] which
+     would have been possible before the expansion. *)
+  let rec expand (t:term) (nb:int): term =
+    let apply (f:term) (args:term array): term =
+      match f with
+        Lam (n,nms,t) ->
+          assert (n = Array.length args);
+          Term.apply t args
+      | _ -> Application (f,args)
+    in
+    match t with
+      Variable i when i < nb ->
+        t
+    | Variable i ->
+        let idx = i-nb in
+        assert (idx < count ft);
+        (try expand (definition idx nb ft) nb
+        with Not_found -> t)
+    | Application (Lam(n,nms,t),args) ->
+        let t    = expand t (nb+n)
+        and args = Array.map (fun t -> expand t nb) args in
+        Application(Lam(n,nms,t),args)
+    | Application (f,args) ->
+        let f    = expand f nb
+        and args = Array.map (fun t -> expand t nb) args in
+        apply f args
+    | Lam (n,nms,t) ->
+        let t = expand t (nb+n) in
+        Lam (n,nms,t)
+  in
+  expand t nbound
+
+
+
+
+
+let rec normalize_term (t:term) (nbound:int) (ft:t): term =
+  (* Expand the definitions of the term 't' and beta reduce it within an
+     environment with 'nbound' bound variables, i.e. a variable i with
+     nbound<=i refers to the global feature i-nbound *)
+  Term.reduce (expand_term t nbound ft)
 
 
 
