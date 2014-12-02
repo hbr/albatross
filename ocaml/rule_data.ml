@@ -70,7 +70,7 @@ let is_forward (rd:t): bool =
 let is_backward (rd:t): bool =
   is_implication rd &&
   (rd.nbwd = 0 &&
-   (0 < rd.ndropped || not (is_argument rd.target rd.nargs)))
+   ((*0 < rd.ndropped || *)not (is_argument rd.target rd.nargs)))
 
 
 let short_string (rd:t): string =
