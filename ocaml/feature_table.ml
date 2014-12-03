@@ -22,7 +22,8 @@ type base_descriptor = {
     level:            int;
     mutable is_inh:   bool;
     mutable seeds:    IntSet.t;
-    mutable variants: int IntMap.t  (* cls -> fidx *)
+    mutable variants: int IntMap.t;  (* cls -> fidx *)
+    mutable is_eq:    bool (* is equality inherited from ANY *)
   }
 
 type descriptor = {
@@ -171,7 +172,8 @@ let standard_bdesc (i:int) (cls:int) (def_opt: term option) (nb:int) (ft:t)
    seeds      = IntSet.singleton i;     (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    level      = level;
-   definition = def_opt}
+   definition = def_opt;
+   is_eq      = false}
 
 
 let count_fgs (i:int) (ft:t): int =
@@ -876,6 +878,41 @@ let find_variant (i:int) (cls:int) (ft:t): int =
   | _ -> assert false (* cannot happen *)
 
 
+let split_equality (t:term) (nbenv:int) (ft:t): int * term * term =
+  let all_id = nbenv + all_index in
+  let nargs, t =
+    try
+      let n,nms,t0 = Term.quantifier_split t all_id in
+      n, t0
+    with Not_found ->
+      0, t
+  in
+  let nbenv = nbenv + nargs in
+  match t with
+    Application (Variable i, args) when nbenv <= i ->
+      let i = i - nbenv in
+      assert (i < count ft);
+      if (base_descriptor i ft).is_eq then begin
+        assert (Array.length args = 2);
+        nargs, args.(0), args.(1)
+      end else
+        raise Not_found
+  | _ -> raise Not_found
+
+
+let is_equality (t:term) (nbenv:int) (ft:t): bool =
+  try
+    let _ = split_equality t nbenv ft in true
+  with Not_found -> false
+
+
+
+let update_equality (seed:int) (bdesc:base_descriptor): unit =
+  (* If the feature [seed] is the equality feature of ANY then mark the base
+     descriptor [bdesc] as equality. *)
+  if seed = eq_index then
+    bdesc.is_eq <- true
+
 
 
 let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
@@ -898,7 +935,8 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
       assert (not (IntMap.mem cls bdesc_seed.variants) ||
               IntMap.find cls bdesc_seed.variants = i1);
       bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-      bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
+      bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
+      update_equality i_seed bdesc1
     )
     bdesc0.seeds;
   if not export && is_public ft then begin (* do the same for the private view *)

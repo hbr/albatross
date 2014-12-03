@@ -15,6 +15,8 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable prvd2: Term_table.t;  (* as schematic terms *)
               mutable bwd:   Term_table.t;
               mutable fwd:   Term_table.t;
+              mutable left:  Term_table.t;
+              mutable right: Term_table.t;
               mutable slots: slot_data array;
               mutable count: int}
 
@@ -67,7 +69,7 @@ let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
 
 let make_entry () =
   let e = Term_table.empty in
-    {prvd=e; prvd2=e; bwd=e; fwd=e;
+    {prvd=e; prvd2=e; bwd=e; fwd=e; left=e; right=e;
      slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty};
      count = 0}
 
@@ -76,6 +78,8 @@ let copied_entry (e:entry): entry =
    prvd2    = e.prvd2;
    bwd      = e.bwd;
    fwd      = e.fwd;
+   left     = e.left;
+   right    = e.right;
    slots    = e.slots;
    count    = e.count}
 
@@ -289,6 +293,26 @@ let has (t:term) (pc:t): bool =
     false
 
 
+let add_to_equalities (t:term) (idx:int) (pc:t): unit =
+  let nbenv = nbenv pc in
+  try
+    let nargs, left,right =
+      Feature_table.split_equality t nbenv (feature_table pc) in
+    printf "equality %s\n" (string_of_term t pc);
+    if nargs = 0 then begin
+      printf "   left  %s\n" (string_of_term left pc);
+      printf "   right %s\n" (string_of_term right pc)
+    end;
+    let is_ok t =
+      not (Term.is_argument t nargs) &&
+      IntSet.cardinal (Term.bound_variables t nargs) = nargs
+    in
+    if is_ok left then
+      pc.entry.left  <- Term_table.add left nargs nbenv idx pc.entry.left;
+    if is_ok right then
+      pc.entry.right  <- Term_table.add right nargs nbenv idx pc.entry.right
+  with Not_found ->
+    ()
 
 
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
@@ -327,6 +351,7 @@ let add_last_to_tables (pc:t): unit =
   add_to_proved   t rd idx pc;
   add_to_forward  rd idx pc;
   add_to_backward rd idx pc;
+  add_to_equalities t idx pc;
   assert (has t pc)
 
 

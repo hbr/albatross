@@ -18,10 +18,6 @@ type t = {
     target:   term;
   }
 
-let is_argument (t:term) (nargs:int): bool =
-  match t with
-    Variable i when i < nargs -> true
-  | _                         -> false
 
 let nbenv (rd:t): int = rd.nbenv
 
@@ -57,7 +53,7 @@ let allows_partial_specialization (rd:t): bool =
 let is_forward_catchall (rd:t): bool =
   is_implication rd &&
   let _,_,p = List.hd rd.premises in
-  is_argument p rd.nargs
+  Term.is_argument p rd.nargs
 
 
 
@@ -70,7 +66,7 @@ let is_forward (rd:t): bool =
 let is_backward (rd:t): bool =
   is_implication rd &&
   (rd.nbwd = 0 &&
-   ((*0 < rd.ndropped || *)not (is_argument rd.target rd.nargs)))
+   ((*0 < rd.ndropped || *)not (Term.is_argument rd.target rd.nargs)))
 
 
 let short_string (rd:t): string =

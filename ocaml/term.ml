@@ -40,6 +40,7 @@ module Term: sig
 
   val variable:    term -> int
   val is_variable: term -> bool
+  val is_argument: term -> int -> bool
 
   val nodes: term -> int
 
@@ -165,6 +166,13 @@ end = struct
       true
     with Not_found ->
       false
+
+
+  let is_argument (t:term) (nargs:int): bool =
+    try
+      let i = variable t in i < nargs
+    with Not_found -> false
+
 
 
   let rec nodes (t:term): int =

@@ -81,6 +81,14 @@ val is_interface_use:  t -> bool
 
 val implication_term: term -> term -> int -> t -> term
 
+val split_equality: term -> int -> t -> int * term * term
+    (** [split_equality t nbenv ft] returns the number of arguments and the
+        left and right hand side of an equality or raises [Not_found] if
+        [t] is not an equality. *)
+
+val is_equality: term -> int -> t -> bool
+    (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
+
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
         within an environment with [nb] bound variables (i.e. a variable [i]
