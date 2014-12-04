@@ -89,6 +89,15 @@ val split_equality: term -> int -> t -> int * term * term
 val is_equality: term -> int -> t -> bool
     (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
 
+
+val definition: int -> int -> t -> term
+    (** [definition idx nb ft] returns the definition of the feature [idx] as
+        a term (lambda term in case of arguments). Raises [Not_found] if
+        feature [idx] has no definition *)
+
+val feature_name: int -> t -> string
+
+
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
         within an environment with [nb] bound variables (i.e. a variable [i]

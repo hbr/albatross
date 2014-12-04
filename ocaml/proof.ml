@@ -3,12 +3,11 @@ open Term
 open Printf
 
 type reduction =
-    RVar of int
-  | RApply of int (* nargs *)
-  | RLam of int * int array  (* nargs, names *)
+    RTerm of term
+  | RExpand of int*int (* index of function to expand, number of bound variables *)
+  | RApply of int      (* nargs *)
   | RBeta
-  | RExpand
-  | REqual of int  (* index of the equality assertion *)
+  | RSimp of int       (* index of the simplifying equality assertion *)
 
 
 

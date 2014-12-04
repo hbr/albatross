@@ -293,6 +293,76 @@ let has (t:term) (pc:t): bool =
     false
 
 
+
+let reduced_term_2 (t:term) (pc:t): term * reduction list =
+  let nbenv = nbenv pc
+  and ft    = feature_table pc in
+  let def i lst =
+    try
+      Feature_table.definition (i-nbenv) nbenv ft, RExpand (i-nbenv,0)::lst
+    with Not_found ->
+      let t = Variable i in
+      t, (RTerm t)::lst
+  and beta n t args lst =
+    assert (n = Array.length args);
+    Term.apply t args, RBeta::lst
+  and push_and_apply n args lst =
+    let lst = Array.fold_left (fun lst t -> (RTerm t)::lst) lst args in
+    (RApply n)::lst
+  in
+  let rec reduce t lst =
+    match t with
+      Variable i when nbenv <= i ->
+        def i lst
+    | Application (Lam(n,nms,t), args) ->
+        let lst = (RTerm (Lam(n,nms,t)))::lst in
+        let lst = push_and_apply n args lst in
+        beta n t args lst
+    | Application (f,args) ->
+        let n     = Array.length args in
+        let f,lst = reduce f lst in
+        let lst   = push_and_apply n args lst in
+        begin match f with
+          Lam (n,nms,t) ->
+            beta n t args lst
+        | _ ->
+            Application (f,args), lst
+        end
+    | _ ->
+        t, (RTerm t)::lst
+  in
+  let tred,lst = reduce t [] in
+  let lst = List.rev lst in
+  let t2,tr2 = Proof_table.reconstruct_reduction lst pc.base in
+  assert (t    = t2);
+  assert (tred = tr2);
+  assert (lst <> [] || t = tred);
+  tred, lst
+
+
+
+
+let reduced_term (t:term) (pc:t): term =
+  let tred,rlst = reduced_term_2 t pc in
+  if rlst = [] then raise Not_found else tred
+
+
+
+
+let string_of_reduced_term (t:term) (pc:t): string =
+  try
+    let tred = reduced_term t pc in
+    string_of_term tred pc
+  with Not_found ->
+    string_of_term t pc
+
+let print_reduced_term (t:term) (pc:t): unit =
+  (*printf "reduce term     \"%s\"\n" (string_of_term t pc);
+    printf "       reduced  \"%s\"\n" (string_of_reduced_term t pc)*)
+  ()
+
+
+
 let add_to_equalities (t:term) (idx:int) (pc:t): unit =
   let nbenv = nbenv pc in
   try
@@ -555,6 +625,7 @@ let add_consequences_expansion (i:int) (pc:t): unit =
   and nbenv    = nbenv pc
   in
   try
+    print_reduced_term t pc;
     let texpand = Feature_table.expand_focus_term t nbenv ft in
     if has texpand pc then
       ()
@@ -575,6 +646,7 @@ let add_consequences_reduce (i:int) (pc:t): unit =
   let t        = term i pc
   in
   try
+    print_reduced_term t pc;
     let tred = Term.reduce_top t in
     if has tred pc then
       ()
@@ -911,7 +983,6 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
       let rdi = rule_data i pc
       and rdj = rule_data j pc in
       compare (RD.count_premises rdi) (RD.count_premises rdj))
-      (*compare (RD.count_premises rdj) (RD.count_premises rdi))*)
     lst
 
 
@@ -919,6 +990,7 @@ let backward_expand (g:term) (lst:int list) (pc:t): int list =
   let nbenv = nbenv pc
   and ft    = feature_table pc in
   try
+    print_reduced_term g pc;
     let texpand = Feature_table.expand_focus_term g nbenv ft in
     let impl = implication texpand g pc in
     if has impl pc then
@@ -935,6 +1007,7 @@ let backward_expand (g:term) (lst:int list) (pc:t): int list =
 
 let backward_reduce (g:term) (lst:int list) (pc:t): int list =
   try
+    print_reduced_term g pc;
     let tred = Term.reduce_top g in
     let impl = implication tred g pc in
     if has impl pc then

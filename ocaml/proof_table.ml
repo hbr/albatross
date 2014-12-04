@@ -485,6 +485,62 @@ let arguments_string (at:t): string =
 
 
 
+let reconstruct_reduction (rlst:reduction list) (at:t): term*term =
+  let stack =
+    List.fold_left
+      (fun stack red ->
+        match red with
+          RTerm t ->
+            (t,t)::stack
+        | RExpand (i,nb) ->
+            begin try
+              let nbenv = nb + nbenv at in
+              let fdef = Feature_table.definition i nbenv (feature_table at) in
+              (Variable (i+nbenv), fdef)::stack
+            with Not_found ->
+              assert false (* cannot happen *)
+            end
+        | RApply nargs ->
+            let rec pop_args n stack argsa argsb =
+              assert (0 <= n);
+              if n = 0 then
+                argsa, argsb, stack
+              else begin
+                assert (stack <> []);
+                let ta,tb = List.hd stack in
+                pop_args (n-1) (List.tl stack) (ta::argsa) (tb::argsb)
+              end
+            in
+            let argsa, argsb, stack = pop_args nargs stack [] [] in
+            let argsa, argsb = Array.of_list argsa, Array.of_list argsb in
+            assert (stack <> []);
+            let fa,fb = List.hd stack
+            and stack = List.tl stack in
+            (Application (fa,argsa), Application (fb,argsb))::stack
+        | RBeta ->
+            printf "  beta\n";
+            assert (stack <> []);
+            let ta,tb = List.hd stack
+            and stack = List.tl stack in
+            begin match tb with
+              Application (Lam (n,nms,t), args) ->
+                assert (n = Array.length args);
+                let tb = Term.apply t args in
+                (ta,tb)::stack
+            | _ ->
+                assert false
+            end
+        | RSimp i ->
+            assert false (* nyi *)
+      )
+      []
+      rlst
+  in
+  match stack with
+    [ta,tb] -> ta,tb
+  | _ -> assert false
+
+
 
 let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at

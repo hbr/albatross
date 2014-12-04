@@ -47,6 +47,8 @@ val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool
 val variant:       int -> int -> t -> term
 
+val reconstruct_reduction: reduction list -> t -> term*term
+
 val stacked_counts: t -> int list
 
 val make: int -> t
