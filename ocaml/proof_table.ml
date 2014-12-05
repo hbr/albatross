@@ -322,6 +322,62 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
 
 exception Illegal_proof_term
 
+let reconstruct_evaluation (eval:evaluation) (at:t): term*term =
+  let stack =
+    List.fold_left
+      (fun stack red ->
+        match red with
+          Eval_term t ->
+            (t,t)::stack
+        | Eval_expand (i,nb) ->
+            begin try
+              let nbenv = nb + nbenv at in
+              let fdef = Feature_table.definition i nbenv (feature_table at) in
+              (Variable (i+nbenv), fdef)::stack
+            with Not_found ->
+              assert false (* cannot happen *)
+            end
+        | Eval_apply nargs ->
+            let rec pop_args n stack argsa argsb =
+              assert (0 <= n);
+              if n = 0 then
+                argsa, argsb, stack
+              else begin
+                assert (stack <> []);
+                let ta,tb = List.hd stack in
+                pop_args (n-1) (List.tl stack) (ta::argsa) (tb::argsb)
+              end
+            in
+            let argsa, argsb, stack = pop_args nargs stack [] [] in
+            let argsa, argsb = Array.of_list argsa, Array.of_list argsb in
+            assert (stack <> []);
+            let fa,fb = List.hd stack
+            and stack = List.tl stack in
+            (Application (fa,argsa), Application (fb,argsb))::stack
+        | Eval_beta ->
+            assert (stack <> []);
+            let ta,tb = List.hd stack
+            and stack = List.tl stack in
+            begin match tb with
+              Application (Lam (n,nms,t), args) ->
+                assert (n = Array.length args);
+                let tb = Term.apply t args in
+                (ta,tb)::stack
+            | _ ->
+                assert false
+            end
+        | Eval_simp i ->
+            assert false (* nyi *)
+      )
+      []
+      eval
+  in
+  match stack with
+    [ta,tb] -> ta,tb
+  | _ -> assert false
+
+
+
 let term_of_mp (a:int) (b:int) (at:t): term =
   assert (a < count at);
   assert (b < count at);
@@ -347,31 +403,33 @@ let term_of_mp (a:int) (b:int) (at:t): term =
   b2
 
 
-let expand_term (t:term) (at:t): term =
-  let ft = feature_table at
-  and nb = nbenv at in
-  try
-    Feature_table.expand_focus_term t nb ft
-  with Not_found ->
+
+let term_of_eval (i:int) (e:evaluation) (at:t): term =
+  let ta,tb = reconstruct_evaluation e at
+  and t = local_term i at in
+  let ok = (t = ta) in
+  if not ok then begin
+    printf "evaluated terms do not coincide\n";
+    printf "   term %3d  %s\n" i (string_of_term t at);
+    printf "   eval      %s\n" (string_of_term ta at);
+    printf "   evaluated %s\n" (string_of_term tb at);
     raise Illegal_proof_term
-
-let reduce_term (t:term) (at:t): term =
-  try Term.reduce_top t
-  with Not_found -> raise Illegal_proof_term
+  end;
+  tb
 
 
-let term_of_expand (i:int) (at:t): term =
-  expand_term (local_term i at) at
+let term_of_eval_bwd (t:term) (e:evaluation) (at:t): term =
+  let ta,tb = reconstruct_evaluation e at in
+  let ok = (t = ta) in
+  if not ok then begin
+    printf "evaluated terms do not coincide\n";
+    printf "   term      %s\n" (string_of_term t at);
+    printf "   eval      %s\n" (string_of_term ta at);
+    printf "   evaluated %s\n" (string_of_term tb at);
+    raise Illegal_proof_term
+  end;
+  implication tb ta at
 
-let term_of_expand_bwd (t:term) (at:t): term =
-  implication (expand_term t at) t at
-
-
-let term_of_reduce (i:int) (at:t): term =
-  reduce_term (local_term i at) at
-
-let term_of_reduce_bwd (t:term) (at:t): term =
-  implication (reduce_term t at) t at
 
 
 let term_of_specialize (i:int) (args:term array) (at:t): term =
@@ -485,63 +543,6 @@ let arguments_string (at:t): string =
 
 
 
-let reconstruct_reduction (rlst:reduction list) (at:t): term*term =
-  let stack =
-    List.fold_left
-      (fun stack red ->
-        match red with
-          RTerm t ->
-            (t,t)::stack
-        | RExpand (i,nb) ->
-            begin try
-              let nbenv = nb + nbenv at in
-              let fdef = Feature_table.definition i nbenv (feature_table at) in
-              (Variable (i+nbenv), fdef)::stack
-            with Not_found ->
-              assert false (* cannot happen *)
-            end
-        | RApply nargs ->
-            let rec pop_args n stack argsa argsb =
-              assert (0 <= n);
-              if n = 0 then
-                argsa, argsb, stack
-              else begin
-                assert (stack <> []);
-                let ta,tb = List.hd stack in
-                pop_args (n-1) (List.tl stack) (ta::argsa) (tb::argsb)
-              end
-            in
-            let argsa, argsb, stack = pop_args nargs stack [] [] in
-            let argsa, argsb = Array.of_list argsa, Array.of_list argsb in
-            assert (stack <> []);
-            let fa,fb = List.hd stack
-            and stack = List.tl stack in
-            (Application (fa,argsa), Application (fb,argsb))::stack
-        | RBeta ->
-            printf "  beta\n";
-            assert (stack <> []);
-            let ta,tb = List.hd stack
-            and stack = List.tl stack in
-            begin match tb with
-              Application (Lam (n,nms,t), args) ->
-                assert (n = Array.length args);
-                let tb = Term.apply t args in
-                (ta,tb)::stack
-            | _ ->
-                assert false
-            end
-        | RSimp i ->
-            assert false (* nyi *)
-      )
-      []
-      rlst
-  in
-  match stack with
-    [ta,tb] -> ta,tb
-  | _ -> assert false
-
-
-
 let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at
   and cnt0    = count at
@@ -577,20 +578,12 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         let t = term_of_specialize i args at in
         if trace then print1 t i;
         t
-    | Expand i ->
-        let t = term_of_expand i at in
+    | Eval (i,e) ->
+        let t = term_of_eval i e at in
         if trace then print1 t i;
         t
-    | Expand_bwd t ->
-        let t = term_of_expand_bwd t at in
-        if trace then print0 t;
-        t
-    | Reduce i ->
-        let t = term_of_reduce i at in
-        if trace then print1 t i;
-        t
-    | Reduce_bwd t ->
-        let t = term_of_reduce_bwd t at in
+    | Eval_bwd (t,e) ->
+        let t = term_of_eval_bwd t e at in
         if trace then print0 t;
         t
     | Witness (idx,nms,t,args) ->
@@ -700,22 +693,14 @@ let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   add_proved_0 t pt  at
 
 
-let add_expand (t:term) (i:int) (at:t): unit =
-  add_proved_0 t (Expand i) at
+let add_eval (t:term) (i:int) (e:evaluation) (at:t): unit =
+  add_proved_0 t (Eval (i,e)) at
 
 
-let add_expand_backward (t:term) (impl:term) (at:t): unit =
-  (* [impl = (texpanded => t)] *)
-  add_proved_0 impl (Expand_bwd t) at
+let add_eval_backward (t:term) (impl:term) (e:evaluation) (at:t): unit =
+  (* [impl = (teval => t)] *)
+  add_proved_0 impl (Eval_bwd (t,e)) at
 
-
-let add_reduce (t:term) (i:int) (at:t): unit =
-  add_proved_0 t (Reduce i) at
-
-
-let add_reduce_backward (t:term) (impl:term) (at:t): unit =
-  (* [impl = (tred => t)] *)
-  add_proved_0 impl (Reduce_bwd t) at
 
 
 let add_witness

@@ -294,72 +294,60 @@ let has (t:term) (pc:t): bool =
 
 
 
-let reduced_term_2 (t:term) (pc:t): term * reduction list =
+let evaluated_term (t:term) (pc:t): term * evaluation =
   let nbenv = nbenv pc
   and ft    = feature_table pc in
   let def i lst =
     try
-      Feature_table.definition (i-nbenv) nbenv ft, RExpand (i-nbenv,0)::lst
+      Feature_table.definition (i-nbenv) nbenv ft, Eval_expand (i-nbenv,0)::lst
     with Not_found ->
       let t = Variable i in
-      t, (RTerm t)::lst
+      t, (Eval_term t)::lst
   and beta n t args lst =
     assert (n = Array.length args);
-    Term.apply t args, RBeta::lst
+    Term.apply t args, Eval_beta::lst
   and push_and_apply n args lst =
-    let lst = Array.fold_left (fun lst t -> (RTerm t)::lst) lst args in
-    (RApply n)::lst
+    let lst = Array.fold_left (fun lst a -> (Eval_term a)::lst) lst args in
+    (Eval_apply n)::lst
   in
-  let rec reduce t lst =
+  let rec eval t lst =
     match t with
       Variable i when nbenv <= i ->
         def i lst
     | Application (Lam(n,nms,t), args) ->
-        let lst = (RTerm (Lam(n,nms,t)))::lst in
+        let lst = (Eval_term (Lam(n,nms,t)))::lst in
         let lst = push_and_apply n args lst in
         beta n t args lst
     | Application (f,args) ->
         let n     = Array.length args in
-        let f,lst = reduce f lst in
-        let lst   = push_and_apply n args lst in
-        begin match f with
-          Lam (n,nms,t) ->
-            beta n t args lst
-        | _ ->
-            Application (f,args), lst
-        end
+        let feval,flst = eval f lst in
+        if feval = f then
+          t, (Eval_term t)::lst
+        else
+          let alst   = push_and_apply n args flst in
+          begin match feval with
+            Lam (n,nms,t) ->
+              beta n t args alst
+          | _ ->
+              Application (feval,args), alst
+          end
     | _ ->
-        t, (RTerm t)::lst
+        t, (Eval_term t)::lst
   in
-  let tred,lst = reduce t [] in
+  let teval,lst = eval t [] in
   let lst = List.rev lst in
-  let t2,tr2 = Proof_table.reconstruct_reduction lst pc.base in
+  let t2,tr2 = Proof_table.reconstruct_evaluation lst pc.base in
   assert (t    = t2);
-  assert (tred = tr2);
-  assert (lst <> [] || t = tred);
-  tred, lst
+  assert (teval = tr2);
+  assert (lst <> []);
+  if t <> teval then begin
+    printf "evaluate term   \"%s\"\n" (string_of_term t pc);
+    printf "         eval   \"%s\"\n" (string_of_term teval pc)
+  end;
+  teval, lst
 
 
 
-
-let reduced_term (t:term) (pc:t): term =
-  let tred,rlst = reduced_term_2 t pc in
-  if rlst = [] then raise Not_found else tred
-
-
-
-
-let string_of_reduced_term (t:term) (pc:t): string =
-  try
-    let tred = reduced_term t pc in
-    string_of_term tred pc
-  with Not_found ->
-    string_of_term t pc
-
-let print_reduced_term (t:term) (pc:t): unit =
-  (*printf "reduce term     \"%s\"\n" (string_of_term t pc);
-    printf "       reduced  \"%s\"\n" (string_of_reduced_term t pc)*)
-  ()
 
 
 
@@ -615,44 +603,21 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
           end
 
 
-
-let add_consequences_expansion (i:int) (pc:t): unit =
-  (* Add the focussed expansion of the term [i] in case that there is one if
-     it is not yet in the proof context [pc] to the proof context and to the
-     work items.  *)
-  let t        = term i pc
-  and ft       = feature_table pc
-  and nbenv    = nbenv pc
-  in
-  try
-    print_reduced_term t pc;
-    let texpand = Feature_table.expand_focus_term t nbenv ft in
-    if has texpand pc then
-      ()
-    else begin
-      Proof_table.add_expand texpand i pc.base;
-      let _ = raw_add texpand true pc in ();
-      add_last_to_work pc
-    end
-  with Not_found ->
-    ()
-
-
-
-let add_consequences_reduce (i:int) (pc:t): unit =
-  (* Add the beta reduction of the term [i] in case that there is one if
+let add_consequences_evaluation (i:int) (pc:t): unit =
+  (* Add the evaluation of the term [i] in case that there is one if
      it is not yet in the proof context [pc] to the proof context and to the
      work items.  *)
   let t        = term i pc
   in
   try
-    print_reduced_term t pc;
-    let tred = Term.reduce_top t in
-    if has tred pc then
+    let teval,eval = evaluated_term t pc in
+    if teval = t then
+      raise Not_found;
+    if has teval pc then
       ()
     else begin
-      Proof_table.add_reduce tred i pc.base;
-      let _ = raw_add tred true pc in ();
+      Proof_table.add_eval teval i eval pc.base;
+      let _ = raw_add teval true pc in ();
       add_last_to_work pc
     end
   with Not_found ->
@@ -683,8 +648,7 @@ let add_consequences (i:int) (pc:t): unit =
     add_consequences_premise i pc;
   if RD.is_implication rd then
     add_consequences_implication i rd pc;
-  add_consequences_expansion i pc;
-  add_consequences_reduce    i pc;
+  add_consequences_evaluation i pc;
   add_consequences_someelim  i pc
 
 
@@ -986,46 +950,27 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
     lst
 
 
-let backward_expand (g:term) (lst:int list) (pc:t): int list =
-  let nbenv = nbenv pc
-  and ft    = feature_table pc in
-  try
-    print_reduced_term g pc;
-    let texpand = Feature_table.expand_focus_term g nbenv ft in
-    let impl = implication texpand g pc in
+
+
+let eval_reduce (g:term) (lst:int list) (pc:t): int list =
+  let teval,eval = evaluated_term g pc in
+  if teval = g then
+    lst
+  else
+    let impl = implication teval g pc in
     if has impl pc then
       lst
     else begin
-      Proof_table.add_expand_backward g impl pc.base;
+      Proof_table.add_eval_backward g impl eval pc.base;
       let idx_impl = raw_add impl false pc in
       idx_impl :: lst
     end
-  with Not_found ->
-    lst
-
-
-
-let backward_reduce (g:term) (lst:int list) (pc:t): int list =
-  try
-    print_reduced_term g pc;
-    let tred = Term.reduce_top g in
-    let impl = implication tred g pc in
-    if has impl pc then
-      lst
-    else begin
-      Proof_table.add_reduce_backward g impl pc.base;
-      let idx_impl = raw_add impl false pc in
-      idx_impl :: lst
-    end
-  with Not_found ->
-    lst
 
 
 
 let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   let lst = backward_in_table g blacklst pc in
-  let lst = backward_expand g lst pc in
-  let lst = backward_reduce g lst pc in
+  let lst = eval_reduce g lst pc in
   if pc.trace && is_trace_extended pc then begin
     let prefix = trace_prefix pc
     and str = intlist_to_string lst in

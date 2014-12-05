@@ -2,24 +2,24 @@ open Container
 open Term
 open Printf
 
-type reduction =
-    RTerm of term
-  | RExpand of int*int (* index of function to expand, number of bound variables *)
-  | RApply of int      (* nargs *)
-  | RBeta
-  | RSimp of int       (* index of the simplifying equality assertion *)
+type evaluation_step =
+    Eval_term of term
+  | Eval_expand of int*int (* index of function to expand,
+                              number of bound variables *)
+  | Eval_apply of int      (* nargs *)
+  | Eval_beta
+  | Eval_simp of int       (* index of the simplifying equality assertion *)
 
 
+type evaluation = evaluation_step list
 
 type proof_term =
     Axiom      of term
   | Assumption of term
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
-  | Expand     of int        (* index of term which is expanded *)
-  | Expand_bwd of term       (* term which is backward expanded *)
-  | Reduce     of int        (* index of term which is reduced  *)
-  | Reduce_bwd of term       (* term which is backward reduced  *)
+  | Eval       of int*evaluation  (* index of the term evaluated,evaluation *)
+  | Eval_bwd   of term*evaluation (* term which is backward evaluated, evaluation *)
   | Witness    of int * int array * term * term array
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
@@ -72,10 +72,8 @@ end = struct
           Specialize (index i, args)
       | Inherit (i,cls) ->
           Inherit (index i, cls)
-      | Expand i     -> Expand (index i)
-      | Expand_bwd t -> Expand_bwd t
-      | Reduce i     -> Reduce (index i)
-      | Reduce_bwd t -> Reduce_bwd t
+      | Eval (i,e)   -> Eval (index i,e)
+      | Eval_bwd (t,e)-> Eval_bwd (t,e)
       | Witness (i,nms,t,args) ->
           Witness (index i,nms,t,args)
       | Someelim i   -> Someelim (index i)
@@ -119,14 +117,15 @@ end = struct
         let set = if extern then set else IntSet.add k set
         in
         match pt_arr.(k-start_inner) with
-          Axiom _ | Assumption _ | Reduce_bwd _ | Expand_bwd _ ->
+          Axiom _ | Assumption _ | Eval_bwd _ ->
             set
         | Detached (i,j) ->
             assert (i < k);
             assert (j < k);
             let set = usd i start_inner extern pt_arr set in
             usd j start_inner extern pt_arr set
-        | Specialize (i,_) | Expand i | Reduce i | Witness (i,_,_,_) | Someelim i ->
+        | Specialize (i,_) | Eval (i,_)
+        | Witness (i,_,_,_)| Someelim i ->
             assert (i < k);
             usd i start_inner extern pt_arr set
         | Subproof (_,_,k1,pt_arr1) ->
@@ -173,11 +172,10 @@ end = struct
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
-          Axiom _ | Assumption _ | Reduce_bwd _ | Expand_bwd _ ->
+          Axiom _ | Assumption _ | Eval_bwd _ ->
             pt
         | Detached (i,j) -> Detached (index i, index j)
-        | Expand i       -> Expand (index i)
-        | Reduce i       -> Reduce (index i)
+        | Eval (i,e)     -> Eval   (index i,e)
         | Specialize (i,args) -> Specialize (index i, args)
         | Witness (i,nms,t,args)  -> Witness (index i, nms, t, args)
         | Someelim i -> Someelim (index i)
@@ -272,12 +270,10 @@ end = struct
           match pt with
             Axiom t
           | Assumption t
-          | Expand_bwd t
-          | Reduce_bwd t ->
+          | Eval_bwd (t,_) ->
               uvars_term t set
           | Detached (i,_)
-          | Expand i
-          | Reduce i
+          | Eval   (i,_)
           | Someelim i ->
               set
           | Specialize (i,args)
@@ -306,7 +302,10 @@ end = struct
        has [args.length] variables only [nargs] of them are unused. The [args]
        array maps variables to their new names ([i -> Variable j]: i: old
        variable, j: new variable). The unused variable map to [Variable
-       (-1)]. *)
+       (-1)].
+
+       Note: It might be possible that no variables are removed, but that the
+       variables are permuted. *)
     assert (nargs <= Array.length args);
     let rec shrink (nb:int) (pt_arr:t array): t array =
       let shrink_inner (t:term) (nb1:int): term =
@@ -317,6 +316,14 @@ end = struct
       in
       let shrink_args (args:term array): term array =
         Array.map shrink_term args
+      in
+      let shrink_eval (e:evaluation): evaluation =
+        List.map
+          (fun step ->
+            match step with
+              Eval_term t -> Eval_term (shrink_term t)
+            | _           -> step)
+          e
       in
       Array.map
         (fun pt ->
@@ -329,14 +336,8 @@ end = struct
               pt
           | Specialize (i,args) ->
               Specialize (i, shrink_args args)
-          | Expand i ->
-              Expand i
-          | Expand_bwd t ->
-              Expand_bwd (shrink_term t)
-          | Reduce i ->
-              pt
-          | Reduce_bwd t ->
-              Reduce_bwd (shrink_term t)
+          | Eval (i,e)     -> Eval (i, shrink_eval e)
+          | Eval_bwd (t,e) -> Eval_bwd (shrink_term t, shrink_eval e)
           | Witness (i,nms,t,args) ->
               let nargs = Array.length args in
               let args  = shrink_args args in
@@ -390,10 +391,8 @@ end = struct
       | Assumption t   -> Assumption (up t)
       | Detached (i,j) -> pt
       | Specialize (i,args) -> Specialize (i, upargs args)
-      | Expand i       -> pt
-      | Expand_bwd t   -> Expand_bwd (up t)
-      | Reduce i       -> pt
-      | Reduce_bwd t   -> Reduce_bwd (up t)
+      | Eval _         -> pt
+      | Eval_bwd (t,e) -> Eval_bwd (up t,e)
       | Witness (i,nms,t,args) ->
           let t = up t
           and args = upargs args in
@@ -426,10 +425,8 @@ end = struct
       | Assumption t        -> print_prefix (); printf "Assumption\n"
       | Detached (i,j)      -> print_prefix (); printf "Detached %d %d\n" i j
       | Specialize (i,args) -> print_prefix (); printf "Specialize %d\n" i
-      | Expand i            -> print_prefix (); printf "Expand %d\n" i
-      | Expand_bwd t        -> print_prefix (); printf "Expand_bwd\n"
-      | Reduce i            -> print_prefix (); printf "Reduce %d\n" i
-      | Reduce_bwd t        -> print_prefix (); printf "Reduce_bwd\n"
+      | Eval (i,_)          -> print_prefix (); printf "Eval %d\n" i
+      | Eval_bwd _          -> print_prefix (); printf "Eval_bwd\n"
       | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
       | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
       | Subproof (nb,nms,i,pt_arr) ->
@@ -445,10 +442,8 @@ end = struct
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
     | Specialize (i,args) -> "spec " ^ (string_of_int i)
     | Inherit (i,cls)     -> "inh " ^ (string_of_int i)
-    | Expand i            -> "exp " ^ (string_of_int i)
-    | Expand_bwd t        -> "exp"
-    | Reduce i            -> "beta " ^ (string_of_int i)
-    | Reduce_bwd t        -> "beta"
+    | Eval (i,_)          -> "eval " ^ (string_of_int i)
+    | Eval_bwd _          -> "eval"
     | Witness (i,nms,t,args) -> "wit " ^ (string_of_int i)
     | Someelim i             -> "selim " ^ (string_of_int i)
     | Subproof (nargs,names,res,pt_arr) -> "sub"
