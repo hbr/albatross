@@ -113,6 +113,10 @@ let definition (i:int) (nb:int) (ft:t): term =
 
 
 
+let owner (i:int) (ft:t): int =
+  assert (i < count ft);
+  (descriptor i ft).cls
+
 
 let function_level (i:int) (ft:t): int =
   assert (i < count ft);

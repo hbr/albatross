@@ -98,6 +98,8 @@ val definition: int -> int -> t -> term
 val feature_name: int -> t -> string
 
 
+val owner: int -> t -> int
+
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
         within an environment with [nb] bound variables (i.e. a variable [i]
