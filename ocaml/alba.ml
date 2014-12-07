@@ -726,11 +726,11 @@ let verify_interface (nme:int) (pc:PC.t) (ad:t): unit =
 
 
 let verify_implementation (nme:int) (pc:PC.t) (ad:t): unit =
-  if 0 < ad.verbosity then
-    printf " verify implementation `%s'\n" (ST.string nme);
   let fn = file_path nme "al" ad        in
   let use_blk = parse_use_block fn      in
   let used = analyze_used fn nme use_blk pc ad in
+  if 0 < ad.verbosity then
+    printf " verify implementation `%s'\n" (ST.string nme);
   let use_blk2,ast = parse_file fn      in
   assert (use_blk = use_blk2);
   PC.add_current_module nme used pc;
