@@ -294,57 +294,82 @@ let has (t:term) (pc:t): bool =
 
 
 
-let evaluated_term (t:term) (pc:t): term * evaluation =
+let triggers_evaluation (t:term) (pc:t): bool =
+  (* Does the term [t] trigger a full evaluation when used as a top level function
+     term, i.e. is it a variable which describes a function which has no expansion
+     and is not owned by BOOLEAN? *)
   let nbenv = nbenv pc
   and ft    = feature_table pc in
-  let def i lst =
-    try
-      Feature_table.definition (i-nbenv) nbenv ft, Eval_expand (i-nbenv,0)::lst
-    with Not_found ->
-      let t = Variable i in
-      t, (Eval_term t)::lst
-  and beta n t args lst =
-    assert (n = Array.length args);
-    Term.apply t args, Eval_beta::lst
-  and push_and_apply n args lst =
-    let lst = Array.fold_left (fun lst a -> (Eval_term a)::lst) lst args in
-    (Eval_apply n)::lst
-  in
-  let rec eval t lst =
+  match t with
+    Variable i when nbenv <= i ->
+      let idx = i - nbenv in begin
+        try
+          let _ = Feature_table.definition idx nbenv ft in
+          false
+        with Not_found ->
+          Feature_table.owner idx ft <> Class_table.boolean_index &&
+          idx <> Feature_table.all_index &&
+          idx <> Feature_table.some_index
+      end
+  | _ ->
+      false
+
+
+
+let evaluated_term (t:term) (pc:t): term * Eval.t * bool =
+  let rec eval t nb full =
+    let apply f fe modi args full =
+      let modi_ref = ref modi in
+      let args = Array.map
+          (fun a ->
+            if full then
+              let a,e,modi_a = eval a nb full in
+              modi_ref := (modi_a || !modi_ref);
+              a,e
+            else a, Eval.Term a)
+          args in
+      let args,argse = Myarray.split args in
+      let e = Eval.Apply (fe,argse) in
+      match f with
+        Lam (n,nms,t0) ->
+          Term.apply t0 args, Eval.Beta e, true
+      | _ ->
+          Application (f,args), e, !modi_ref
+    in
     match t with
-      Variable i when nbenv <= i ->
-        def i lst
-    | Application (Lam(n,nms,t), args) ->
-        let lst = (Eval_term (Lam(n,nms,t)))::lst in
-        let lst = push_and_apply n args lst in
-        beta n t args lst
+      Variable i when i < nb -> t, Eval.Term t, false
+    | Variable i ->
+        begin try
+          let fdef = Proof_table.definition (i-nb) nb pc.base in
+          fdef, Eval.Expand i, true
+        with Not_found ->
+          t, Eval.Term t, false
+        end
     | Application (f,args) ->
-        let n     = Array.length args in
-        let feval,flst = eval f lst in
-        if feval = f then
-          t, (Eval_term t)::lst
-        else
-          let alst   = push_and_apply n args flst in
-          begin match feval with
-            Lam (n,nms,t) ->
-              beta n t args alst
-          | _ ->
-              Application (feval,args), alst
-          end
-    | _ ->
-        t, (Eval_term t)::lst
+        let full = full || triggers_evaluation f pc in
+        (*if not full && triggers_evaluation f pc && nb = 0 then begin
+          printf "full2 %b full evaluation of %s\n" full2 (string_of_term t pc) end;*)
+        let f,fe,fmodi = eval f nb full in
+        apply f fe fmodi args full
+    | Lam (n,nms,t) ->
+        let t,e,tmodi = eval t (n+nb) full in
+        Lam (n,nms,t), Eval.Lam (n,nms,e), tmodi
   in
-  let teval,lst = eval t [] in
-  let lst = List.rev lst in
-  let t2,tr2 = Proof_table.reconstruct_evaluation lst pc.base in
-  assert (t    = t2);
-  assert (teval = tr2);
-  assert (lst <> []);
-  if t <> teval then begin
-    printf "evaluate term   \"%s\"\n" (string_of_term t pc);
-    printf "         eval   \"%s\"\n" (string_of_term teval pc)
-  end;
-  teval, lst
+  let tres,eres,modi = eval t 0 false in
+  let ta,tb = Proof_table.reconstruct_evaluation eres pc.base in
+  assert (ta = t);
+  (*if tb <> tres then begin
+    printf "eval term 2  t    %s\n" (string_of_term t pc);
+    printf "             tres %s\n" (string_of_term tres pc);
+    printf "             ta   %s\n" (string_of_term ta pc);
+    printf "             tb   %s\n" (string_of_term tb pc)
+  end;*)
+  assert (tb = tres);
+  assert (modi = (tres <> t));
+  (*printf "evaluate term   \"%s\"\n" (string_of_term t pc);
+  printf "         eval   \"%s\"\n" (string_of_term tres pc);*)
+  tres, eres, modi
+
 
 
 
@@ -610,8 +635,8 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
   let t        = term i pc
   in
   try
-    let teval,eval = evaluated_term t pc in
-    if teval = t then
+    let teval,eval,modi = evaluated_term t pc in
+    if not modi then
       raise Not_found;
     if has teval pc then
       ()
@@ -953,8 +978,8 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
 
 
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
-  let teval,eval = evaluated_term g pc in
-  if teval = g then
+  let teval,eval,modi = evaluated_term g pc in
+  if not modi then
     lst
   else
     let impl = implication teval g pc in

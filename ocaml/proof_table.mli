@@ -47,7 +47,7 @@ val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool
 val variant:       int -> int -> t -> term
 
-val reconstruct_evaluation: evaluation -> t -> term*term
+val reconstruct_evaluation: Eval.t -> t -> term*term
 
 val stacked_counts: t -> int list
 
@@ -57,13 +57,15 @@ val push_untyped: int array -> t -> unit
 val pop:  t -> unit
 val keep: int -> t -> unit
 
+val definition: int -> int -> t -> term
+
 val add_proved:        term -> proof_term -> int -> t -> unit
 
 val add_axiom:      term -> t -> unit
 val add_assumption: term -> t -> unit
 val add_mp:         term -> int -> int -> t -> unit
-val add_eval:       term -> int -> evaluation -> t -> unit
-val add_eval_backward:   term -> term -> evaluation -> t -> unit
+val add_eval:       term -> int -> Eval.t -> t -> unit
+val add_eval_backward:   term -> term -> Eval.t -> t -> unit
 val add_witness:    term -> int -> int array -> term -> term array -> t -> unit
 val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit

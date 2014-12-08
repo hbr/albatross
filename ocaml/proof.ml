@@ -2,24 +2,25 @@ open Container
 open Term
 open Printf
 
-type evaluation_step =
-    Eval_term of term
-  | Eval_expand of int*int (* index of function to expand,
-                              number of bound variables *)
-  | Eval_apply of int      (* nargs *)
-  | Eval_beta
-  | Eval_simp of int       (* index of the simplifying equality assertion *)
 
+module Eval = struct
+  type t =
+      Term of term
+    | Expand of int (* idx of function, bound variables *)
+    | Apply of t * t array
+    | Lam of int * int array * t
+    | Beta of t
+    | Simpl of t * int    (* e, idx of simplifying equality assertion *)
+end
 
-type evaluation = evaluation_step list
 
 type proof_term =
     Axiom      of term
   | Assumption of term
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
-  | Eval       of int*evaluation  (* index of the term evaluated,evaluation *)
-  | Eval_bwd   of term*evaluation (* term which is backward evaluated, evaluation *)
+  | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
+  | Eval_bwd   of term*Eval.t (* term which is backward evaluated, evaluation *)
   | Witness    of int * int array * term * term array
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
@@ -299,13 +300,13 @@ end = struct
       (pt_arr:t array)
       : t array =
     (* Remove unused variables in [pt_arr]. The array of proof term [pt_arr]
-       has [args.length] variables only [nargs] of them are unused. The [args]
+       has [args.length] variables and only [nargs] of them are unused. The [args]
        array maps variables to their new names ([i -> Variable j]: i: old
-       variable, j: new variable). The unused variable map to [Variable
+       variable, j: new variable). The unused variables map to [Variable
        (-1)].
 
        Note: It might be possible that no variables are removed, but that the
-       variables are permuted. *)
+       variables are just permuted. *)
     assert (nargs <= Array.length args);
     let rec shrink (nb:int) (pt_arr:t array): t array =
       let shrink_inner (t:term) (nb1:int): term =
@@ -317,13 +318,29 @@ end = struct
       let shrink_args (args:term array): term array =
         Array.map shrink_term args
       in
-      let shrink_eval (e:evaluation): evaluation =
-        List.map
-          (fun step ->
-            match step with
-              Eval_term t -> Eval_term (shrink_term t)
-            | _           -> step)
-          e
+      let shrink_eval (e:Eval.t): Eval.t =
+        let var t =
+          assert (Term.is_variable t);
+          Term.variable t
+        in
+        let rec shrnk e nb =
+          match e with
+            Eval.Term t ->
+              Eval.Term (shrink_inner t nb)
+          | Eval.Expand idx ->
+              Eval.Expand (var (shrink_inner (Variable idx) nb))
+          | Eval.Apply(f,args) ->
+              let f = shrnk f nb
+              and args = Array.map (fun e -> shrnk e nb) args in
+              Eval.Apply (f,args)
+          | Eval.Lam (n,nms,e) ->
+              Eval.Lam (n,nms,shrnk e (nb+n))
+          | Eval.Beta e ->
+              Eval.Beta (shrnk e nb)
+          | Eval.Simpl (e,idx) ->
+              Eval.Simpl (shrnk e nb, idx)
+        in
+        shrnk e 0
       in
       Array.map
         (fun pt ->

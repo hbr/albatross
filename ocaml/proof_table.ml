@@ -322,59 +322,50 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
 
 exception Illegal_proof_term
 
-let reconstruct_evaluation (eval:evaluation) (at:t): term*term =
-  let stack =
-    List.fold_left
-      (fun stack red ->
-        match red with
-          Eval_term t ->
-            (t,t)::stack
-        | Eval_expand (i,nb) ->
-            begin try
-              let nbenv = nb + nbenv at in
-              let fdef = Feature_table.definition i nbenv (feature_table at) in
-              (Variable (i+nbenv), fdef)::stack
-            with Not_found ->
-              assert false (* cannot happen *)
-            end
-        | Eval_apply nargs ->
-            let rec pop_args n stack argsa argsb =
-              assert (0 <= n);
-              if n = 0 then
-                argsa, argsb, stack
-              else begin
-                assert (stack <> []);
-                let ta,tb = List.hd stack in
-                pop_args (n-1) (List.tl stack) (ta::argsa) (tb::argsb)
-              end
-            in
-            let argsa, argsb, stack = pop_args nargs stack [] [] in
-            let argsa, argsb = Array.of_list argsa, Array.of_list argsb in
-            assert (stack <> []);
-            let fa,fb = List.hd stack
-            and stack = List.tl stack in
-            (Application (fa,argsa), Application (fb,argsb))::stack
-        | Eval_beta ->
-            assert (stack <> []);
-            let ta,tb = List.hd stack
-            and stack = List.tl stack in
-            begin match tb with
-              Application (Lam (n,nms,t), args) ->
-                assert (n = Array.length args);
-                let tb = Term.apply t args in
-                (ta,tb)::stack
-            | _ ->
-                assert false
-            end
-        | Eval_simp i ->
-            assert false (* nyi *)
-      )
-      []
-      eval
+
+let definition (idx:int) (nb:int) (at:t): term =
+  let nbenv = nbenv at in
+  if idx < nbenv then
+    raise Not_found
+  else
+    let idx = idx - nbenv in
+    Feature_table.definition idx (nb + nbenv) (feature_table at)
+
+
+
+let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
+  let rec reconstruct e nb =
+    match e with
+      Eval.Term t -> t,t
+    | Eval.Expand idx ->
+        begin try
+          Variable idx,
+          definition (idx-nb) nb at
+        with Not_found ->
+          raise Illegal_proof_term end
+    | Eval.Apply (f,args) ->
+        let fa,fb = reconstruct f nb
+        and nargs = Array.length args in
+        let args  = Array.map (fun e -> reconstruct e nb) args in
+        let argsa = Array.init nargs (fun i -> fst args.(i))
+        and argsb = Array.init nargs (fun i -> snd args.(i)) in
+        Application (fa,argsa), Application (fb,argsb)
+    | Eval.Lam (n,nms,e) ->
+        let ta,tb = reconstruct e (nb+n) in
+        Lam (n,nms,ta), Lam (n,nms,tb)
+    | Eval.Beta e ->
+        let ta,tb = reconstruct e nb in
+        begin match tb with
+          Application(Lam(n,nms,t0),args) ->
+            assert (n = Array.length args);
+            let tb = Term.apply t0 args in
+            ta,tb
+        | _ -> raise Illegal_proof_term end
+    | Eval.Simpl (e,idx) ->
+        assert false
   in
-  match stack with
-    [ta,tb] -> ta,tb
-  | _ -> assert false
+  reconstruct e 0
+
 
 
 
@@ -404,7 +395,7 @@ let term_of_mp (a:int) (b:int) (at:t): term =
 
 
 
-let term_of_eval (i:int) (e:evaluation) (at:t): term =
+let term_of_eval (i:int) (e:Eval.t) (at:t): term =
   let ta,tb = reconstruct_evaluation e at
   and t = local_term i at in
   let ok = (t = ta) in
@@ -418,7 +409,7 @@ let term_of_eval (i:int) (e:evaluation) (at:t): term =
   tb
 
 
-let term_of_eval_bwd (t:term) (e:evaluation) (at:t): term =
+let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
   let ta,tb = reconstruct_evaluation e at in
   let ok = (t = ta) in
   if not ok then begin
@@ -693,11 +684,11 @@ let add_specialize (t:term) (i:int) (args:term array) (at:t): unit =
   add_proved_0 t pt  at
 
 
-let add_eval (t:term) (i:int) (e:evaluation) (at:t): unit =
+let add_eval (t:term) (i:int) (e:Eval.t) (at:t): unit =
   add_proved_0 t (Eval (i,e)) at
 
 
-let add_eval_backward (t:term) (impl:term) (e:evaluation) (at:t): unit =
+let add_eval_backward (t:term) (impl:term) (e:Eval.t) (at:t): unit =
   (* [impl = (teval => t)] *)
   add_proved_0 impl (Eval_bwd (t,e)) at
 
