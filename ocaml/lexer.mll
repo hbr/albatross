@@ -127,6 +127,8 @@ let kwtoken id =
   in
   match kw with
     Parser.KWrequire -> kw, (true,false)
+  | Parser.KWproof   -> kw, (true,false)
+  | Parser.KWensure  -> kw, (true,false)
   | Parser.KWall     -> kw, (true,false)
   | Parser.KWend     -> kw, (false,true)
   | Parser.KWnot     -> kw, (true,false)

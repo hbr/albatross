@@ -27,7 +27,7 @@ let syntax_error () = raise (Parsing.Parse_error)
 
 let expression_from_dotted_id (l: int list): expression =
   match List.rev l with
-    f::t -> 
+    f::t ->
       let func e i = Expdot (e, Identifier i)
       in
       List.fold_left func (Identifier f) t
@@ -256,14 +256,16 @@ ass_feat: proof_all_expr {
   Assertion_feature (None, entlst, bdy)
 }
 
-ass_req: KWrequire ass_seq { List.rev $2 }
+ass_req:
+    KWrequire ass_seq { List.rev $2 }
+|   KWrequire ass_seq separator { List.rev $2 }
 
 ass_req_opt:
     { [] }
 |   ass_req { $1 }
 
 ass_check: KWcheck proof_seq { List.rev $2 }
-ass_check: KWproof proof_seq { List.rev $2 }
+ass_check: KWproof proof_seq separator { List.rev $2 }
 
 
 ass_ens: KWensure ass_seq { List.rev $2 }
@@ -279,6 +281,7 @@ proof_seq:
 
 proof_expr:
     info_expr { $1 }
+|   proof_expr_struct { $1 }
 |   proof_all_expr_inner {
   let entlst,req,impl,ens = $1 in
   let exp = Expquantified (Universal,
@@ -286,12 +289,7 @@ proof_expr:
                            Expproof(req, Some impl, ens)) in
   withinfo (rhs_info 1) exp
 }
-|   ass_req ass_check ass_ens KWend {
-  let is_do = false in
-  let impl  = Impdefined (None,is_do,$2) in
-  let exp   = Expproof ($1, Some impl, $3) in
-  withinfo (rhs_info 1) exp
-}
+
 
 proof_all_expr: KWall formal_arguments_opt opt_nl
                 ass_req_opt
@@ -311,6 +309,26 @@ proof_all_expr_inner:
   let entlst = withinfo (rhs_info 2) $2 in
   entlst, $4, $5, $6
 }
+
+
+proof_expr_struct:
+    ass_req ass_check ass_ens KWend{
+  let is_do = false in
+  let impl  = Impdefined (None,is_do,$2) in
+  let exp   = Expproof ($1, Some impl, $3) in
+  withinfo (rhs_info 1) exp
+}
+|   ass_check ass_ens KWend {
+  let is_do = false in
+  let impl  = Impdefined (None,is_do,$1) in
+  let exp   = Expproof ([], Some impl, $2) in
+  withinfo (rhs_info 1) exp
+}
+|   ass_req ass_ens KWend {
+  let exp   = Expproof ($1, None, $2) in
+  withinfo (rhs_info 1) exp
+}
+
 
 ass_imp:
     { Impdefined (None,false,[]) }
@@ -594,7 +612,7 @@ local_declaration:
 
 
 
-implementation_note: KWnote LIDENTIFIER {
+implementation_note: KWnote LIDENTIFIER optsemi {
   let str = ST.string $2
   in
   if str = "built_in" || str = "axiom" then Impbuiltin
