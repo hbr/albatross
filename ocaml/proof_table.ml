@@ -147,6 +147,10 @@ let string_of_term_outer (t:term) (at:t): string =
   Context.string_of_term_outer t 0 at.c
 
 
+let expand_term (t:term) (at:t): term =
+  Context.expanded_term t at.c
+
+
 let make (verbosity:int): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
@@ -327,12 +331,7 @@ exception Illegal_proof_term
 
 
 let definition (idx:int) (nb:int) (at:t): term =
-  let nbenv = nbenv at in
-  if idx < nbenv then
-    raise Not_found
-  else
-    let idx = idx - nbenv in
-    Feature_table.definition idx (nb + nbenv) (feature_table at)
+  Context.definition idx nb (context at)
 
 
 

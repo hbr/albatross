@@ -31,6 +31,7 @@ val all_id:      t -> int
 val some_id:     t -> int
 val imp_id:      t -> int
 
+val expand_term: term -> t -> term
 val split_implication: term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
 val split_some_quantified: term -> t -> int * int array * term

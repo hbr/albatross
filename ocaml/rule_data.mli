@@ -2,7 +2,7 @@ open Term
 
 type t
 
-val make: term -> int -> Feature_table.t -> t
+val make: term ->  Context.t -> t
 
 val nbenv:                t -> int
 val is_schematic:         t -> bool
@@ -16,9 +16,9 @@ val previous_schematic:   t -> int option
 val premises:             t -> int -> (term*bool) list
 val count_premises:       t -> int
 val short_string:         t -> string
-val specialize: t -> term array -> int -> int -> Feature_table.t -> t
+val specialize: t -> term array -> int -> Context.t -> t
 
-val drop: t -> Feature_table.t -> t
+val drop: t -> Context.t -> t
 
 val schematic_premise: t -> int * int * term
 val schematic_target:  t -> int * int * term

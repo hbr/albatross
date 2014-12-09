@@ -287,12 +287,14 @@ let triggers_evaluation (t:term) (pc:t): bool =
   let nbenv = nbenv pc
   and ft    = feature_table pc in
   match t with
-    Variable i when nbenv <= i ->
-      let idx = i - nbenv in begin
+    Variable i ->
+      begin
         try
-          let _ = Feature_table.definition idx nbenv ft in
+          let _ = Context.definition i 0 (context pc) in
           false
         with Not_found ->
+          nbenv <= i &&
+          let idx = i - nbenv in
           Feature_table.owner idx ft <> Class_table.boolean_index &&
           idx <> Feature_table.all_index &&
           idx <> Feature_table.some_index
@@ -379,7 +381,7 @@ let split_equality (t:term) (pc:t): int * term * term =
 
 
 let expand_term (t:term) (pc:t): term =
-  Feature_table.expand_term t (nbenv pc) (feature_table pc)
+  Proof_table.expand_term t pc.base
 
 
 let add_to_equalities (t:term) (idx:int) (pc:t): unit =
@@ -445,7 +447,7 @@ let add_last_to_work (pc:t): unit =
 
 
 let get_rule_data (t:term) (pc:t): RD.t =
-  RD.make t (nbenv pc) (feature_table pc)
+  RD.make t (context pc)
 
 
 let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
@@ -488,7 +490,7 @@ let specialized
     begin assert (Term_sub.count sub = 0); idx end
   else
     let args  = arguments_of_sub sub (nbenv-nbenv_sub) in
-    let rd    = RD.specialize rd args nbenv idx (feature_table pc) in
+    let rd    = RD.specialize rd args idx (context pc) in
     let t     = RD.term rd nbenv in
     try
       find t pc
@@ -502,7 +504,7 @@ let add_mp0 (t:term) (i:int) (j:int) (search:bool) (pc:t): int =
   (* Add the term [t] by applying the modus ponens rule with [i] as the premise
      and [j] as the implication. *)
   let cnt = count pc
-  and rd  = RD.drop (rule_data j pc) (feature_table pc)
+  and rd  = RD.drop (rule_data j pc) (context pc)
   in
   Proof_table.add_mp t i j pc.base;
   (if RD.is_implication rd then

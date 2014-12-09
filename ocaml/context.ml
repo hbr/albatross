@@ -585,6 +585,13 @@ let expanded_term (t:term) (c:t): term =
   let nbenv = nfargs c in
   Feature_table.expand_term t nbenv c.ft
 
+let definition (idx:int) (nb:int) (c:t): term =
+  let nbenv = count_arguments c in
+  if idx < nbenv then
+    raise Not_found
+  else
+    let idx = idx - nbenv in
+    Feature_table.definition idx (nb + nbenv) (feature_table c)
 
 
 let print (c:t): unit =

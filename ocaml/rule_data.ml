@@ -65,8 +65,7 @@ let is_forward (rd:t): bool =
 
 let is_backward (rd:t): bool =
   is_implication rd &&
-  (rd.nbwd = 0 &&
-   ((*0 < rd.ndropped || *)not (Term.is_argument rd.target rd.nargs)))
+  (rd.nbwd = 0 && not (Term.is_argument rd.target rd.nargs))
 
 
 let short_string (rd:t): string =
@@ -131,6 +130,10 @@ let complexity (t:term) (nbenv:int) (ft:Feature_table.t): int =
   let t_exp = Feature_table.expand_term t nbenv ft in
   Term.nodes t_exp
 
+let complexity (t:term) (c:Context.t): int =
+  let t_exp = Context.expanded_term t c in
+  Term.nodes t_exp
+
 
 
 let split_term (t:term) (nbenv:int) (ft:Feature_table.t)
@@ -152,7 +155,9 @@ let split_term (t:term) (nbenv:int) (ft:Feature_table.t)
 
 
 
-let make (t:term) (nbenv:int) (ft:Feature_table.t): t =
+let make (t:term) (c:Context.t): t =
+  let nbenv = Context.count_arguments c
+  and ft    = Context.feature_table c in
   let nargs, nms, ps, tgt = split_term t nbenv ft
   in
   let rec nbwdfun n gp1 ps set =
@@ -186,10 +191,10 @@ let make (t:term) (nbenv:int) (ft:Feature_table.t): t =
 
 
 
-let specialize (rd:t) (args:term array) (nbenv:int) (orig:int)
-    (ft:Feature_table.t)
+let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
     : t =
-  let nargs = Array.length args in
+  let nargs = Array.length args
+  and nbenv = Context.count_arguments c in
   assert (rd.nbenv <= nbenv);
   assert (not (is_specialized rd));
   assert (nargs <= rd.nargs);
@@ -215,11 +220,11 @@ let specialize (rd:t) (args:term array) (nbenv:int) (orig:int)
   in
   let ps,fwd_blckd =
     if full then
-      let ntgt = complexity tgt nbenv ft in
+      let ntgt = complexity tgt c in
       let ps,max_nds =
         List.fold_left
           (fun (ps,max_nds) (gp1,cons,p) ->
-            let nds  = complexity p nbenv ft in
+            let nds  = complexity p c in
             let cons = nds <= ntgt in
             let nds  = max nds max_nds in
             let ps   = (gp1,cons,p)::ps in
@@ -275,18 +280,29 @@ let schematic_term (rd:t): int * int * term =
   rd.nargs, rd.nbenv, t
 
 
-let drop (rd:t) (ft:Feature_table.t): t =
+let drop (rd:t) (c:Context.t): t =
   assert (is_specialized rd);
   assert (is_implication rd);
+  assert (rd.nbenv <= Context.count_arguments c);
+  let nbenv = Context.count_arguments c in
+  let nbenv_delta = nbenv - rd.nbenv in
   let gp1,_,p = List.hd rd.premises in
   assert (gp1 = 0);
   let p = Term.down rd.nargs p in
+  let p = Term.up nbenv_delta p
+  and ps = List.map
+      (fun (gp1,cons,p) -> gp1,cons,Term.upbound nbenv_delta rd.nargs p)
+      (List.tl rd.premises)
+  and tgt = Term.upbound nbenv_delta rd.nargs rd.target
+  in
   {rd with
    spec     = rd.nargs = 0;
    nbwd     = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
    ndropped = rd.ndropped + 1;
-   nds_dropped = max rd.nds_dropped (complexity p rd.nbenv ft);
-   premises = List.tl rd.premises}
+   nds_dropped = max rd.nds_dropped (complexity p c);
+   nbenv    = nbenv;
+   premises = ps;
+   target   = tgt}
 
 
 
