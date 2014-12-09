@@ -140,6 +140,9 @@ let rec stacked_counts (pt:t): int list =
 let string_of_term (t:term) (at:t): string =
   Context.string_of_term t 0 at.c
 
+let string_of_term_anon (t:term) (nb:int) (at:t): string =
+  Context.string_of_term t nb at.c
+
 let string_of_term_outer (t:term) (at:t): string =
   Context.string_of_term_outer t 0 at.c
 
@@ -333,6 +336,28 @@ let definition (idx:int) (nb:int) (at:t): term =
 
 
 
+let split_equality (t:term) (nb:int) (at:t): int * term * term =
+  Feature_table.split_equality t (nb + nbenv at) (feature_table at)
+
+
+
+let specialized (i:int) (args:term array) (nb:int) (at:t): term =
+  assert (i < count at);
+  let nbenv = nbenv at in
+  let t, nbenv_t = term i at in
+  assert (nbenv_t <= nbenv);
+  let nbenv_delta = nb + nbenv - nbenv_t in
+  if Array.length args = 0 then
+    Term.up nbenv_delta t
+  else
+    let all_id       = nbenv_t + Feature_table.all_index in
+    let nargs, _, t0 = Term.quantifier_split t all_id in
+    assert (nargs = Array.length args);
+    Term.sub t0 args nbenv_delta
+
+
+
+
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   let rec reconstruct e nb =
     match e with
@@ -361,8 +386,19 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             let tb = Term.apply t0 args in
             ta,tb
         | _ -> raise Illegal_proof_term end
-    | Eval.Simpl (e,idx) ->
-        assert false
+    | Eval.Simpl (e,idx,args) ->
+        let eq = specialized idx args nb at in
+        let n,left,right = split_equality eq nb at in
+        assert (n = 0);
+        let ta,tb = reconstruct e nb in
+        if tb <> left then begin
+          printf "reconstruct ta    %s\n" (string_of_term_anon ta nb at);
+          printf "            tb    %s\n" (string_of_term_anon tb nb at);
+          printf "            left  %s\n" (string_of_term_anon left nb at);
+          printf "            right %s\n" (string_of_term_anon right nb at);
+          raise Illegal_proof_term
+        end;
+        ta,right
   in
   reconstruct e 0
 

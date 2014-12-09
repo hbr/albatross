@@ -10,7 +10,8 @@ module Eval = struct
     | Apply of t * t array
     | Lam of int * int array * t
     | Beta of t
-    | Simpl of t * int    (* e, idx of simplifying equality assertion *)
+    | Simpl of t * int * term array  (* e, idx of simplifying equality assertion,
+                                        specialization arguments *)
 end
 
 
@@ -110,6 +111,19 @@ end = struct
         : IntSet.t =
       let n = Array.length pt_arr in
       assert (k < start_inner + n);
+      let rec usd_eval (e:Eval.t) (set:IntSet.t): IntSet.t =
+        match e with
+          Eval.Term t   -> set
+        | Eval.Expand i -> set
+        | Eval.Apply (f,args)   ->
+            let set = usd_eval f set in
+            Array.fold_left (fun set e -> usd_eval e set) set args
+        | Eval.Lam (n,nms,e)    -> usd_eval e set
+        | Eval.Beta e           -> usd_eval e set
+        | Eval.Simpl (e,i,args) ->
+            let set = usd i start_inner extern pt_arr set in
+            usd_eval e set
+      in
       if k < start then
         set
       else if k < start_inner then
@@ -118,17 +132,21 @@ end = struct
         let set = if extern then set else IntSet.add k set
         in
         match pt_arr.(k-start_inner) with
-          Axiom _ | Assumption _ | Eval_bwd _ ->
-            set
+          Axiom _ | Assumption _ -> set
         | Detached (i,j) ->
             assert (i < k);
             assert (j < k);
             let set = usd i start_inner extern pt_arr set in
             usd j start_inner extern pt_arr set
-        | Specialize (i,_) | Eval (i,_)
-        | Witness (i,_,_,_)| Someelim i ->
+        | Specialize (i,_) | Witness (i,_,_,_)| Someelim i ->
             assert (i < k);
             usd i start_inner extern pt_arr set
+        | Eval (i,e) ->
+            assert (i < k);
+            let set = usd i start_inner extern pt_arr set in
+            usd_eval e set
+        | Eval_bwd (t,e) ->
+            usd_eval e set
         | Subproof (_,_,k1,pt_arr1) ->
             let usd2 = usd k1 k true pt_arr1 IntSet.empty in
             let set =
@@ -171,12 +189,23 @@ end = struct
         else
           i - n_rem
       in
+      let rec transform_eval (e:Eval.t): Eval.t =
+        match e with
+          Eval.Term _
+        | Eval.Expand _ ->  e
+        | Eval.Apply (f,args) ->
+            Eval.Apply (transform_eval f, Array.map transform_eval args)
+        | Eval.Lam (n,nms,e)    -> Eval.Lam (n,nms,transform_eval e)
+        | Eval.Beta e           -> Eval.Beta (transform_eval e)
+        | Eval.Simpl (e,i,args) -> Eval.Simpl (transform_eval e, index i,args)
+      in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
-          Axiom _ | Assumption _ | Eval_bwd _ ->
+          Axiom _ | Assumption _  ->
             pt
         | Detached (i,j) -> Detached (index i, index j)
-        | Eval (i,e)     -> Eval   (index i,e)
+        | Eval (i,e)     -> Eval   (index i, transform_eval e)
+        | Eval_bwd (t,e) -> Eval_bwd (t, transform_eval e)
         | Specialize (i,args) -> Specialize (index i, args)
         | Witness (i,nms,t,args)  -> Witness (index i, nms, t, args)
         | Someelim i -> Someelim (index i)
@@ -312,11 +341,12 @@ end = struct
       let shrink_inner (t:term) (nb1:int): term =
         Term.sub_from t (nb+nb1) args nargs
       in
-      let shrink_term (t:term): term =
-        shrink_inner t 0
+      let shrink_term (t:term): term = shrink_inner t 0
       in
-      let shrink_args (args:term array): term array =
-        Array.map shrink_term args
+      let shrink_args_inner (args:term array) (nb:int): term array =
+        Array.map (fun a -> shrink_inner a nb) args
+      in
+      let shrink_args (args:term array): term array = shrink_args_inner args 0
       in
       let shrink_eval (e:Eval.t): Eval.t =
         let var t =
@@ -337,8 +367,8 @@ end = struct
               Eval.Lam (n,nms,shrnk e (nb+n))
           | Eval.Beta e ->
               Eval.Beta (shrnk e nb)
-          | Eval.Simpl (e,idx) ->
-              Eval.Simpl (shrnk e nb, idx)
+          | Eval.Simpl (e,idx,args) ->
+              Eval.Simpl (shrnk e nb, idx, shrink_args_inner args nb)
         in
         shrnk e 0
       in

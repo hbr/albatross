@@ -34,6 +34,7 @@ val imp_id:      t -> int
 val split_implication: term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
 val split_some_quantified: term -> t -> int * int array * term
+val split_equality: term -> int -> t -> int * term * term
 val implication: term -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val all_quantified_outer: term -> t -> term
@@ -47,6 +48,7 @@ val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool
 val variant:       int -> int -> t -> term
 
+val specialized: int -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
 val stacked_counts: t -> int list

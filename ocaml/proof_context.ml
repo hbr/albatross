@@ -16,7 +16,6 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable bwd:   Term_table.t;
               mutable fwd:   Term_table.t;
               mutable left:  Term_table.t;
-              mutable right: Term_table.t;
               mutable slots: slot_data array;
               mutable count: int}
 
@@ -69,7 +68,7 @@ let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
 
 let make_entry () =
   let e = Term_table.empty in
-    {prvd=e; prvd2=e; bwd=e; fwd=e; left=e; right=e;
+    {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
      slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty};
      count = 0}
 
@@ -79,7 +78,6 @@ let copied_entry (e:entry): entry =
    bwd      = e.bwd;
    fwd      = e.fwd;
    left     = e.left;
-   right    = e.right;
    slots    = e.slots;
    count    = e.count}
 
@@ -272,17 +270,6 @@ let find (t:term) (pc:t): int = find_in_tab t (nbenv pc) pc
 
 
 
-let find_witness (t:term) (nargs:int) (pc:t): int * Term_sub.t =
-  (** The index and substitution of the assertion which can be used as a
-      witness for the assertion [some(a,b,...) t]. The substitution contains
-      the variable substitutions for [a,b,...] valid in the environment of the
-      found assertion.*)
-  assert false
-  (*let sublst = Term_table.unify_with t nargs (nbenv pc) pc.entry.prvd in
-  List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst*)
-
-
-
 let has (t:term) (pc:t): bool =
   (** Is the term [t] already in the proof context [pc]?
    *)
@@ -291,7 +278,6 @@ let has (t:term) (pc:t): bool =
     true
   with Not_found ->
     false
-
 
 
 let triggers_evaluation (t:term) (pc:t): bool =
@@ -316,7 +302,8 @@ let triggers_evaluation (t:term) (pc:t): bool =
 
 
 
-let evaluated_term (t:term) (pc:t): term * Eval.t * bool =
+let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
+  let nbenv = nbenv pc in
   let rec eval t nb full =
     let apply f fe modi args full =
       let modi_ref = ref modi in
@@ -336,64 +323,77 @@ let evaluated_term (t:term) (pc:t): term * Eval.t * bool =
       | _ ->
           Application (f,args), e, !modi_ref
     in
-    match t with
-      Variable i when i < nb -> t, Eval.Term t, false
-    | Variable i ->
-        begin try
-          let fdef = Proof_table.definition (i-nb) nb pc.base in
-          fdef, Eval.Expand i, true
-        with Not_found ->
-          t, Eval.Term t, false
+    let expand t =
+      match t with
+        Variable i when i < nb -> t, Eval.Term t, false
+      | Variable i ->
+          begin try
+            let fdef = Proof_table.definition (i-nb) nb pc.base in
+            fdef, Eval.Expand i, true
+          with Not_found ->
+            t, Eval.Term t, false
+          end
+      | Application (f,args) ->
+          let full = full || triggers_evaluation f pc in
+          let f,fe,fmodi = eval f nb full in
+          apply f fe fmodi args full
+      | Lam (n,nms,t) ->
+          let t,e,tmodi = eval t (n+nb) full in
+          Lam (n,nms,t), Eval.Lam (n,nms,e), tmodi
+    in
+    let tred, ered, modi = expand t in
+    let sublst = Term_table.unify tred (nb+nbenv) pc.entry.left in
+    let sublst = List.filter (fun (idx,sub) -> idx < below_idx) sublst in
+    let sublst1,sublst2 =
+      List.partition (fun (idx,sub) -> Term_sub.is_empty sub) sublst in
+    let simplify idx sub =
+      let args = Term_sub.arguments (Term_sub.count sub) sub in
+      let eq = Proof_table.specialized idx args nb pc.base in
+      let nargs, left, right = Proof_table.split_equality eq nb pc.base in
+      assert (nargs = 0);
+      assert (tred = left);
+      right, Eval.Simpl (ered,idx,args), true
+    in
+    match sublst1 with
+      [] ->
+        begin match sublst2 with
+          [idx,sub] -> simplify idx sub
+        | _ -> tred, ered, modi
         end
-    | Application (f,args) ->
-        let full = full || triggers_evaluation f pc in
-        (*if not full && triggers_evaluation f pc && nb = 0 then begin
-          printf "full2 %b full evaluation of %s\n" full2 (string_of_term t pc) end;*)
-        let f,fe,fmodi = eval f nb full in
-        apply f fe fmodi args full
-    | Lam (n,nms,t) ->
-        let t,e,tmodi = eval t (n+nb) full in
-        Lam (n,nms,t), Eval.Lam (n,nms,e), tmodi
+    | [idx,sub] -> simplify idx sub
+    | _ ->
+        tred, ered, modi
   in
-  let tres,eres,modi = eval t 0 false in
-  let ta,tb = Proof_table.reconstruct_evaluation eres pc.base in
+  let tred,ered,modi = eval t 0 false in
+  let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
   assert (ta = t);
-  (*if tb <> tres then begin
-    printf "eval term 2  t    %s\n" (string_of_term t pc);
-    printf "             tres %s\n" (string_of_term tres pc);
-    printf "             ta   %s\n" (string_of_term ta pc);
-    printf "             tb   %s\n" (string_of_term tb pc)
-  end;*)
-  assert (tb = tres);
-  assert (modi = (tres <> t));
-  (*printf "evaluate term   \"%s\"\n" (string_of_term t pc);
-  printf "         eval   \"%s\"\n" (string_of_term tres pc);*)
-  tres, eres, modi
+  assert (tb = tred);
+  assert (modi = (tred <> t));
+  tred, ered, modi
 
 
 
 
+let split_equality (t:term) (pc:t): int * term * term =
+  Proof_table.split_equality t 0 pc.base
 
+
+let expand_term (t:term) (pc:t): term =
+  Feature_table.expand_term t (nbenv pc) (feature_table pc)
 
 
 let add_to_equalities (t:term) (idx:int) (pc:t): unit =
   let nbenv = nbenv pc in
   try
-    let nargs, left,right =
-      Feature_table.split_equality t nbenv (feature_table pc) in
-    printf "equality %s\n" (string_of_term t pc);
-    if nargs = 0 then begin
-      printf "   left  %s\n" (string_of_term left pc);
-      printf "   right %s\n" (string_of_term right pc)
-    end;
-    let is_ok t =
-      not (Term.is_argument t nargs) &&
-      IntSet.cardinal (Term.bound_variables t nargs) = nargs
+    let nargs, left,right = split_equality t pc in
+    let is_simpl =
+      if 0 < nargs then Term.nodes right < Term.nodes left
+      else
+        let left, right = expand_term left pc, expand_term right pc in
+        Term.nodes right < Term.nodes left
     in
-    if is_ok left then
-      pc.entry.left  <- Term_table.add left nargs nbenv idx pc.entry.left;
-    if is_ok right then
-      pc.entry.right  <- Term_table.add right nargs nbenv idx pc.entry.right
+    if is_simpl then
+      pc.entry.left <- Term_table.add left nargs nbenv idx pc.entry.left;
   with Not_found ->
     ()
 
@@ -635,7 +635,7 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
   let t        = term i pc
   in
   try
-    let teval,eval,modi = evaluated_term t pc in
+    let teval,eval,modi = evaluated_term t i pc in
     if not modi then
       raise Not_found;
     if has teval pc then
@@ -887,7 +887,15 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
   end
 
 
-
+let add_potential_equalities (cls:int) (pc:t): unit =
+  let ct = class_table pc in
+  let cls_lst1 = Class_table.deferred_assertions cls ct in
+  let cls_lst2 = Class_table.effective_assertions cls ct in
+  let add_equalities lst =
+    let lst = List.rev lst in
+    List.iter (fun i -> add_to_equalities (term i pc) i pc) lst in
+  add_equalities cls_lst1;
+  add_equalities cls_lst2
 
 
 let do_inherit
@@ -899,6 +907,8 @@ let do_inherit
   let ct = class_table pc in
   List.iter
     (fun (par,_) ->
+      if par = Class_table.any_index then
+        add_potential_equalities cls pc;
       let deflst = Class_table.deferred_assertions par ct in
       List.iter (fun i -> inherit_deferred i cls info pc) deflst;
       let efflst = Class_table.effective_assertions par ct in
@@ -978,7 +988,7 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
 
 
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
-  let teval,eval,modi = evaluated_term g pc in
+  let teval,eval,modi = evaluated_term g (count pc) pc in
   if not modi then
     lst
   else
