@@ -968,4 +968,38 @@ end = struct
 end (* Term_sub *)
 
 
-type substitution = Term_sub.t
+module Term_algo = struct
+  let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
+    (* Unify the term [t1] with the term [t2] i.e. find a substitution for the
+        [nargs] arguments which applied to [t2] makes it equal with t1
+     *)
+    let rec uni t1 t2 nb sub =
+      match t1, t2 with
+        Variable i, Variable j when i<nb || j<nb || nb+nargs<=i || nb+nargs<=j->
+          if i = j then sub else raise Not_found
+      | Variable i, _ ->
+          assert (nb <= i);
+          assert (i < nb+nargs);
+          begin try
+            let t = Term_sub.find (i-nb) sub in
+            if t = t2 then sub else raise Not_found
+          with Not_found ->
+            Term_sub.add (i-nb) t2 sub
+          end
+      | Application (f1,args1), Application (f2,args2)
+        when Array.length args1 = Array.length args2 ->
+          let sub = ref (uni f1 f2 nb sub) in
+          for i = 0 to Array.length args1 - 1 do
+            sub := uni args1.(i) args2.(i) nb !sub
+          done;
+          !sub
+      | Lam(n1,nms1,t1), Lam(n2,nms2,t2) when n1 = n2 ->
+          uni t1 t2 (n1+nb) sub
+      | _ ->
+          raise Not_found
+    in
+    let sub = uni t1 t2 0 Term_sub.empty in
+    assert (let args = Term_sub.arguments nargs sub in
+    Term.sub t2 args nargs = t1);
+    sub
+end
