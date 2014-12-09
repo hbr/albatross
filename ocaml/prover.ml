@@ -108,7 +108,7 @@ let calc_blacklist (cons:bool) (idx:int) (used:IntSet.t) (pc:PC.t): IntSet.t =
    Note: A catch all rule is always possible
  *)
 
-let prove (goal:term) (pc:PC.t): int =
+let prove (goal:term) (strength:int) (pc:PC.t): int =
   let rec prove0 (goal:term) (black:IntSet.t) (level:int): int =
     assert (level < 20); (* debug: infinite loop detection *)
     let rec alternatives (lst: int list) (goal:term): int =
@@ -146,6 +146,8 @@ let prove (goal:term) (pc:PC.t): int =
       try
         PC.find_goal goal pc
       with Not_found ->
+        if strength = 0 && 1 <= level then
+          raise Not_found;
         let lst = PC.find_backward_goal goal black pc in
         alternatives lst goal
     in

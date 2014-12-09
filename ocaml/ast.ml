@@ -119,9 +119,13 @@ let add_proved
 
 
 let prove_basic_expression (ie:info_expression) (pc:PC.t): int =
+  let strength =
+    if Proof_context.is_interface_check pc then 0
+    else 2
+  in
   let t = get_term ie pc in
   try
-    Prover.prove t pc
+    Prover.prove t strength pc
   with Not_found ->
     error_info ie.i "Cannot prove"
 
