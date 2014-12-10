@@ -113,6 +113,6 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 
 val print_local_contexts:       t -> unit
 
-val expanded_term:  term -> t -> term
+val expanded_term:  term -> int -> t -> term
 
 val definition: int -> int -> t -> term

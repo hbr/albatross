@@ -866,6 +866,7 @@ module Term_sub: sig
   val merge:          t -> t -> t
   val to_list:        t -> (int*term) list
   val arguments:      int -> t -> term array
+  val has_only_variables: t -> bool
 end = struct
 
   type t = term IntMap.t
@@ -965,21 +966,32 @@ end = struct
       sub;
     args
 
+  let has_only_variables (sub:t): bool =
+    for_all
+      (fun i t ->
+        match t with
+          Variable i -> true
+        | _ -> false)
+      sub
+
 end (* Term_sub *)
 
 
 module Term_algo = struct
   let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
     (* Unify the term [t1] with the term [t2] i.e. find a substitution for the
-        [nargs] arguments which applied to [t2] makes it equal with t1
+        [nargs] arguments which applied to [t1] makes it equal to t2
      *)
     let rec uni t1 t2 nb sub =
       match t1, t2 with
-        Variable i, Variable j when i<nb || j<nb || nb+nargs<=i || nb+nargs<=j->
-          if i = j then sub else raise Not_found
+        Variable i, _ when i < nb || nb+nargs <= i ->
+          if t1 = t2 then sub else raise Not_found
       | Variable i, _ ->
           assert (nb <= i);
           assert (i < nb+nargs);
+          let t2 =
+            try Term.down nb t2
+            with Term_capture -> raise Not_found in
           begin try
             let t = Term_sub.find (i-nb) sub in
             if t = t2 then sub else raise Not_found
@@ -1000,6 +1012,6 @@ module Term_algo = struct
     in
     let sub = uni t1 t2 0 Term_sub.empty in
     assert (let args = Term_sub.arguments nargs sub in
-    Term.sub t2 args nargs = t1);
+    Term.sub t1 args nargs = t2);
     sub
 end

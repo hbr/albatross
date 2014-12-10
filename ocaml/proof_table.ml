@@ -148,7 +148,7 @@ let string_of_term_outer (t:term) (at:t): string =
 
 
 let expand_term (t:term) (at:t): term =
-  Context.expanded_term t at.c
+  Context.expanded_term t 0 at.c
 
 
 let make (verbosity:int): t =
@@ -364,7 +364,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Expand idx ->
         begin try
           Variable idx,
-          definition (idx-nb) nb at
+          definition idx nb at
         with Not_found ->
           raise Illegal_proof_term end
     | Eval.Apply (f,args) ->

@@ -10,6 +10,7 @@ type t = {
     spec:      bool;  (* is specialized *)
     nms:       int array;
     fwd_blckd: bool;  (* is blocked as forward rule *)
+    bwd_blckd: bool;  (* is blocked as backward rule *)
     nbwd:      int;   (* number of premises until backward rule *)
     ndropped:  int;   (* number of dropped premises *)
     nds_dropped:int;  (* max nodes of dropped premises *)
@@ -65,7 +66,7 @@ let is_forward (rd:t): bool =
 
 let is_backward (rd:t): bool =
   is_implication rd &&
-  (rd.nbwd = 0 && not (Term.is_argument rd.target rd.nargs))
+  (rd.nbwd = 0 && not rd.bwd_blckd && not (Term.is_argument rd.target rd.nargs))
 
 
 let short_string (rd:t): string =
@@ -126,13 +127,37 @@ let term (rd:t) (nbenv:int): term =
 
 
 
-let complexity (t:term) (nbenv:int) (ft:Feature_table.t): int =
-  let t_exp = Feature_table.expand_term t nbenv ft in
-  Term.nodes t_exp
 
 let complexity (t:term) (c:Context.t): int =
-  let t_exp = Context.expanded_term t c in
+  let t_exp = Context.expanded_term t 0 c in
   Term.nodes t_exp
+
+
+let is_backward_blocked
+    (ps:(int*bool*term)list) (tgt:term) (nargs:int) (c:Context.t): bool =
+  if nargs = 0 then
+    false
+  else if IntSet.cardinal (Term.bound_variables tgt nargs) < nargs then
+    true
+  else
+    let expand t = Context.expanded_term t nargs c in
+    let tgt_exp  = expand tgt in
+    let rec blocked ps =
+      match ps with
+        [] -> false
+      | (_,_,p)::ps ->
+          let p_exp = expand p in
+          try
+            let sub = Term_algo.unify tgt_exp p_exp nargs in
+            let triv = Term_sub.has_only_variables sub in
+            if not triv then
+              true
+            else
+              blocked ps
+          with Not_found ->
+            blocked ps
+    in blocked ps
+
 
 
 
@@ -174,12 +199,18 @@ let make (t:term) (c:Context.t): t =
       | _ -> assert false
   in
   let nbwd = nbwdfun 0 0 ps (Term.bound_variables tgt nargs) in
+  let bwd_blckd =
+    if 0 < nbwd then false
+    else
+      is_backward_blocked ps tgt nargs c
+  in
   let rd = { orig      = None;
              nbenv     = nbenv;
              nargs     = nargs;
              spec      = nargs = 0;
              nms       = nms;
              fwd_blckd = false;
+             bwd_blckd = bwd_blckd;
              nbwd      = nbwd;
              ndropped  = 0;
              nds_dropped = 0;
@@ -295,14 +326,20 @@ let drop (rd:t) (c:Context.t): t =
       (List.tl rd.premises)
   and tgt = Term.upbound nbenv_delta rd.nargs rd.target
   in
+  let bwd_blockd =
+    0 < rd.nargs &&
+    (Term.is_argument tgt rd.nargs ||
+    is_backward_blocked ps tgt rd.nargs c)
+  in
   {rd with
-   spec     = rd.nargs = 0;
-   nbwd     = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
-   ndropped = rd.ndropped + 1;
+   spec      = rd.nargs = 0;
+   nbwd      = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
+   ndropped  = rd.ndropped + 1;
    nds_dropped = max rd.nds_dropped (complexity p c);
-   nbenv    = nbenv;
-   premises = ps;
-   target   = tgt}
+   nbenv     = nbenv;
+   bwd_blckd = bwd_blockd;
+   premises  = ps;
+   target    = tgt}
 
 
 

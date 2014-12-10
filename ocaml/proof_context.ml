@@ -290,7 +290,7 @@ let triggers_evaluation (t:term) (pc:t): bool =
     Variable i ->
       begin
         try
-          let _ = Context.definition i 0 (context pc) in
+          let _ = Proof_table.definition i 0 pc.base in
           false
         with Not_found ->
           nbenv <= i &&
@@ -330,7 +330,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let fdef = Proof_table.definition (i-nb) nb pc.base in
+            let fdef = Proof_table.definition i nb pc.base in
             fdef, Eval.Expand i, true
           with Not_found ->
             t, Eval.Term t, false

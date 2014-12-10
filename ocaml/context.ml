@@ -581,17 +581,18 @@ let print_local_contexts (c:t): unit =
   printf "%s\n" (args_str c.entry)
 
 
-let expanded_term (t:term) (c:t): term =
+let expanded_term (t:term) (nb:int) (c:t): term =
   let nbenv = nfargs c in
-  Feature_table.expand_term t nbenv c.ft
+  Feature_table.expand_term t (nb+nbenv) c.ft
+
 
 let definition (idx:int) (nb:int) (c:t): term =
   let nbenv = count_arguments c in
-  if idx < nbenv then
+  if idx < nb + nbenv then
     raise Not_found
-  else
-    let idx = idx - nbenv in
+  else begin
     Feature_table.definition idx (nb + nbenv) (feature_table c)
+  end
 
 
 let print (c:t): unit =

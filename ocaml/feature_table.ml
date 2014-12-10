@@ -102,6 +102,8 @@ let definition (i:int) (nb:int) (ft:t): term =
   (* The definition of the feature [i] as a lambda term (if there are arguments)
      transformed into an environment with [nb] bound variables. Raises [Not_found]
      in case that there is no definition *)
+  assert (nb <= i);
+  let i = i - nb in
   let desc  = descriptor i ft
   and bdesc = base_descriptor i ft in
   let nargs = Sign.arity desc.sign in
@@ -777,9 +779,8 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
       Variable i when i < nb ->
         t
     | Variable i ->
-        let idx = i-nb in
-        assert (idx < count ft);
-        (try expand (definition idx nb ft) nb
+        assert (i-nb < count ft);
+        (try expand (definition i nb ft) nb
         with Not_found -> t)
     | Application (Lam(n,nms,t),args) ->
         let t    = expand t (nb+n)
