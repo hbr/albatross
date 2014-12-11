@@ -309,8 +309,10 @@ let add_base
     (res:  type_term)
     (defer: bool)
     (ghost: bool)
+    (def: term option)
     (ft:t)
     : unit =
+  assert (not defer || not (Option.has def));
   let mdl_nme            = ST.symbol mdl_nme
   in
   let sign =
@@ -322,7 +324,7 @@ let add_base
   and cnt  = count ft
   and nargs = Array.length argtypes
   in
-  let bdesc = standard_bdesc cnt cls None nargs ft
+  let bdesc = standard_bdesc cnt cls def nargs ft
   and bdesc_opt =
     match fn with
       FNoperator Allop
@@ -341,7 +343,10 @@ let add_base
     mdl = -1;
     fname    = fn;
     cls      = cls;
-    impstat  = if defer then Deferred else Builtin;
+    impstat  =
+    if Option.has def then No_implementation
+    else if defer then Deferred
+    else Builtin;
     tvs      = tvs;
     anchored = anchored;
     argnames = standard_argnames nargs;
@@ -362,6 +367,9 @@ let all_index:         int = 2
 let some_index:        int = 3
 let pparen_index:      int = 4
 let eq_index:          int = 5
+let false_index:       int = 6
+let not_index:         int = 7
+let or_index:          int = 8
 
 
 
@@ -381,29 +389,53 @@ let base_table (verbosity:int) : t =
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|])
   in
-  add_base
+  add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
-    [||] [|bool;bool|] bool false false ft;
+    [||] [|bool;bool|] bool false false None ft;
 
-  add_base
+  add_base (* function application *)
     "function" Class_table.function_index (FNoperator Parenop)
-    [|any2;any2|] [|f_tp;a_tp|] b_tp false false ft;
+    [|any2;any2|] [|f_tp;a_tp|] b_tp false false None ft;
 
-  add_base
+  add_base (* all *)
     "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 false true ft;
+    [|any1|] [|p_tp|] bool1 false true None ft;
 
-  add_base
+  add_base (* some *)
     "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 false true ft;
+    [|any1|] [|p_tp|] bool1 false true None ft;
 
-  add_base
+  add_base (* predicate application *)
     "predicate" Class_table.predicate_index (FNoperator Parenop)
-    [|any1|] [|p_tp;g_tp|] bool1 false false ft;
+    [|any1|] [|p_tp;g_tp|] bool1 false false None ft;
 
-  add_base
+  add_base (* equality *)
     "any" Class_table.any_index (FNoperator Eqop)
-    [|any1|] [|g_tp;g_tp|] bool1 true false ft;
+    [|any1|] [|g_tp;g_tp|] bool1 true false None ft;
+
+  add_base (* false *)
+    "boolean" Class_table.boolean_index FNfalse
+    [||] [||] bool false false None ft;
+
+  let imp_id1   = 1 + implication_index
+  and false_id1 = 1 + false_index
+  and imp_id2   = 2 + implication_index
+  and not_id2   = 2 + not_index
+  in
+  let not_term =
+    Application(Variable imp_id1,[|Variable 0; Variable false_id1|])
+  and or_term =
+    Application(Variable imp_id2,
+                [| Application(Variable not_id2, [|Variable 0|]);
+                   Variable 1|])
+  in
+  add_base (* not *)
+    "boolean" Class_table.boolean_index (FNoperator Notop)
+    [||] [|bool|] bool false false (Some not_term) ft;
+
+  add_base (* or *)
+    "boolean" Class_table.boolean_index (FNoperator Orop)
+    [||] [|bool;bool|] bool false false (Some or_term) ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
@@ -411,6 +443,9 @@ let base_table (verbosity:int) : t =
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
   assert ((descriptor pparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
+  assert ((descriptor false_index ft).fname       = FNfalse);
+  assert ((descriptor not_index ft).fname         = FNoperator Notop);
+  assert ((descriptor or_index ft).fname          = FNoperator Orop);
   ft
 
 
@@ -1220,8 +1255,7 @@ let put_function
     if is_priv then begin
       if impstat <> desc.impstat then
         not_match "implementation status";
-      if term_opt <> desc.priv.definition
-      then
+      if term_opt <> desc.priv.definition then
         not_match "private definition"
     end else begin
       if Option.has term_opt && desc.priv.definition <> term_opt then
@@ -1308,7 +1342,10 @@ let check_interface (ft:t): unit =
   let curr = Module_table.current mt in
   for i = 0 to count ft - 1 do
     let desc = descriptor i ft in
-    if curr = desc.mdl && is_deferred desc && not (Option.has desc.pub) then
+    if curr = desc.mdl
+        && is_deferred desc
+        && not (Option.has desc.pub)
+        && Class_table.is_class_public desc.cls ft.ct then
       error_info (FINFO (1,0))
         ("deferred feature `" ^ (string_of_signature i ft) ^
          "' is not public")
