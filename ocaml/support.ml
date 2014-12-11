@@ -456,7 +456,7 @@ let set_of_expression (e:expression): expression =
   in
   let singl (e:expression) = Funapp (singleton,e)
   in
-  match lst with
+  match List.rev lst with
     [] -> assert false (* cannot happen, list has at least the element [e] *)
   | hd::tl ->
       List.fold_left
