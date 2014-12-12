@@ -6,7 +6,7 @@ open Printf
 module Eval = struct
   type t =
       Term of term
-    | Expand of int (* idx of function, bound variables *)
+    | Expand of int (* idx of function *)
     | Apply of t * t array
     | Lam of int * int array * t
     | Beta of t
@@ -56,6 +56,7 @@ module Proof_term: sig
   val is_subproof: t -> bool
 
   val short_string: t -> string
+
 end = struct
 
   type t = proof_term
@@ -64,6 +65,13 @@ end = struct
     (* Shift the assertion indices from [start] on up by [delta]. *)
     let index (i:int): int =
       if i < start then i else i + delta
+    in
+    let rec adapt_eval (e:Eval.t): Eval.t =
+      match e with
+        Eval.Simpl (e,eq_idx,args) ->
+          Eval.Simpl (adapt_eval e, index eq_idx, args)
+      | _ ->
+          e
     in
     let rec adapt (pt:t): t =
       match pt with
@@ -74,8 +82,8 @@ end = struct
           Specialize (index i, args)
       | Inherit (i,cls) ->
           Inherit (index i, cls)
-      | Eval (i,e)   -> Eval (index i,e)
-      | Eval_bwd (t,e)-> Eval_bwd (t,e)
+      | Eval (i,e)    -> Eval (index i, adapt_eval e)
+      | Eval_bwd (t,e)-> Eval_bwd (t, adapt_eval e)
       | Witness (i,nms,t,args) ->
           Witness (index i,nms,t,args)
       | Someelim i   -> Someelim (index i)
