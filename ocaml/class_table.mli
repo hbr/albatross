@@ -78,6 +78,8 @@ val concepts_of_class: int -> t -> type_term array
 
 val class_type: int -> t -> type_term*Tvars.t
 
+val is_class_public: int -> t -> bool
+
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
@@ -116,8 +118,8 @@ val owner: Tvars.t -> Sign.t -> t -> int
 val anchored: Tvars.t -> int -> t -> int array
 val check_deferred:  int -> int -> info -> t -> unit
 
-val find:   int -> t -> int
-val find_2: int -> t -> int
+val find:   int list -> int -> t -> int
+val find_for_declaration: int list*int -> t -> int
 
 val downgrade_signature: int -> Sign.t -> int -> Sign.t
   (** [downgrade_signature ntvs sign nargs] downgrades the constant signature
@@ -134,7 +136,7 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
 
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
-val add: header_mark withinfo -> classname -> formal_generics -> t -> unit
+val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 

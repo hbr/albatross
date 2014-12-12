@@ -12,6 +12,10 @@ open Printf
 
 type formal = int * type_term
 
+module CMap = Map.Make(struct
+  type t = int list * int
+  let compare = Pervasives.compare
+end)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
@@ -30,9 +34,10 @@ type descriptor      = { mutable mdl:  int;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
-type t = {mutable map:   int IntMap.t;
+type t = {mutable map:   int CMap.t;
           seq:           descriptor seq;
           mutable base:  int IntMap.t; (* module name -> class index *)
+          mutable locs:  IntSet.t;
           mt:            Module_table.t}
 
 
@@ -101,6 +106,12 @@ let descriptor (idx:int) (ct:t): descriptor =
   assert (idx < count ct);
   Seq.elem idx ct.seq
 
+
+let is_class_public (cls:int) (ct:t): bool =
+  assert (cls < count ct);
+  Option.has (descriptor cls ct).publ
+
+
 let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
@@ -116,37 +127,67 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
         bdesc
 
 
+let add_to_map (cls:int) (ct:t): unit =
+  (* Add the class [cls] to the map in order to be able to find it.
+   *)
+  assert (cls < count ct);
+  let desc = descriptor cls ct in
+  assert (desc.mdl <> -1);
+  let is_main =
+    String.lowercase (ST.string desc.name) =
+    Module_table.simple_name desc.mdl ct.mt
+  and mdl_sym = Module_table.name_symbol desc.mdl ct.mt
+  in
+  if is_interface_use ct then begin
+    if not is_main then
+      ct.locs <- IntSet.add cls ct.locs;
+    ct.map <- CMap.add ([],desc.name) cls ct.map;
+    ct.map <- CMap.add ([mdl_sym],desc.name) cls ct.map;
+    let lib = Module_table.library_of_module desc.mdl ct.mt in
+    if lib <> [] then
+      ct.map <- CMap.add (mdl_sym::lib,desc.name) cls ct.map;
+    if lib <> [] && is_main then
+      ct.map <- CMap.add (lib,desc.name) cls ct.map
+  end else begin
+    ct.map <- CMap.add ([],desc.name) cls ct.map;
+    ct.map <- CMap.add ([mdl_sym],desc.name) cls ct.map
+  end
+
+
 
 let add_base_classes (mdl_nme:int) (ct:t): unit =
   try
-    let idx = IntMap.find mdl_nme ct.base in
-    let desc = Seq.elem idx ct.seq in
+    let cls = IntMap.find mdl_nme ct.base in
+    let desc = Seq.elem cls ct.seq in
     assert (desc.mdl = -1);
     desc.mdl <- current_module ct;
-    (*if is_public ct then (
-      printf "make base class of module %s public\n" (ST.string mdl_nme);
-      desc.publ <- Some desc.priv);*)
-    ct.map <- IntMap.add desc.name idx ct.map
+    add_to_map cls ct
   with Not_found ->
     ()
+
+
 
 let add_used_module (name:int*int list) (used:IntSet.t) (ct:t): unit =
   Module_table.add_used name used ct.mt;
   add_base_classes (fst name) ct
 
 
+
+
 let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
   Module_table.add_current name used ct.mt;
   add_base_classes name ct
 
+
+
 let set_interface_check (used:IntSet.t) (ct:t): unit =
   Module_table.set_interface_check used ct.mt;
-  ct.map <- IntMap.empty;
+  ct.map <- CMap.empty;
   let mdl = current_module ct in
   for i = 0 to count ct - 1 do
     let desc = descriptor i ct in
     if desc.mdl = mdl || IntSet.mem desc.mdl used then
-      ct.map <- IntMap.add desc.name i ct.map
+      add_to_map i ct
   done
 
 let descendants (i:int) (ct:t): IntSet.t =
@@ -396,19 +437,27 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
 
 
 
-let find_base (cn:int) (findall:bool) (ct:t): int =
-  let idx = IntMap.find cn ct.map in
-  if findall || is_private ct then
+let find_base (path:int list) (cn:int) (findpriv:bool) (ct:t): int =
+  let idx = CMap.find (path,cn) ct.map in
+  if findpriv || is_private ct then
     idx
   else
     match (descriptor idx ct).publ with
-      None -> printf "\tnot found\n"; raise Not_found
+      None   -> raise Not_found
     | Some _ -> idx
 
 
-let find_2 (cn:int) (ct:t): int = find_base cn true ct
+let find_for_declaration (cn:int list*int) (ct:t): int =
+  let path, cn = cn in
+  let idx = find_base path cn true ct in
+  let desc = descriptor idx ct in
+  if path = [] && desc.mdl <> current_module ct then
+    raise Not_found
+  else
+    idx
 
-let find (cn: int) (ct:t): int = find_base cn false ct
+
+let find (path:int list) (cn: int) (ct:t): int = find_base path cn false ct
 
 
 let extract_from_tuple
@@ -690,7 +739,7 @@ let effective_assertions (cidx:int) (ct:t): int list =
 
 let add
     (hm:    header_mark withinfo)
-    (cn:    classname)
+    (cn:    int)
     (fgens: formal_generics)
     (ct:    t)
     : unit =
@@ -707,11 +756,11 @@ let add
   in
   Seq.push
     {mdl  = current_module ct;
-     name = snd cn.v;
+     name = cn;
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;
-    ct.map <- IntMap.add (snd cn.v) idx ct.map
+  add_to_map idx ct
 
 
 
@@ -874,19 +923,25 @@ let valid_type
 
 
 
-let class_index (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
+let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
   let ntvs    = Tvars.count tvs
   and fgnames = Tvars.fgnames tvs
   and nall    = Tvars.count_all tvs
   in
   try
+    if path = [] then
       ntvs + Search.array_find_min (fun n -> n=name) fgnames
+    else
+      raise Not_found
   with Not_found ->
     try
-      nall + (find name ct)
+      nall + (find path name ct)
     with Not_found ->
-        error_info info ("Class " ^ (ST.string name)
+        error_info info ("Class " ^ (string_of_classname path name)
                          ^ " does not exist")
+
+
+
 
 let tuple_name     = ST.symbol "TUPLE"
 let predicate_name = ST.symbol "PREDICATE"
@@ -900,7 +955,7 @@ let get_type
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term *)
-  let class_index0 (name:int): int = class_index name tvs tp.i ct
+  let class_index0 path name: int = class_index path name tvs tp.i ct
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =
@@ -917,22 +972,22 @@ let get_type
         | _ ->
             assert false (* tuple type must have at least two types *)
       in
-      valid_tp (class_index0 tuple_name) [|ta;tb|]
+      valid_tp (class_index0 [] tuple_name) [|ta;tb|]
     in
     match tp with
       Normal_type (path,name,actuals) ->
         let args = List.map (fun tp -> get_tp tp) actuals in
         let args = Array.of_list args in
-        valid_tp (class_index0 name) args
+        valid_tp (class_index0 path name) args
     | Paren_type tp ->
         get_tp tp
     | QMark_type tp ->
         let t = get_tp tp in
-        valid_tp (class_index0 predicate_name) [|t|]
+        valid_tp (class_index0 [] predicate_name) [|t|]
     | Arrow_type (tpa,tpb) ->
         let ta = get_tp tpa
         and tb = get_tp tpb in
-        valid_tp (class_index0 function_name) [|ta;tb|]
+        valid_tp (class_index0 [] function_name) [|ta;tb|]
     | Tuple_type tp_lst ->
         tuple tp_lst
   in
@@ -1156,9 +1211,10 @@ let result_type
 let empty_table (): t =
   let cc = Seq.empty ()
   in
-  {map   = IntMap.empty;
+  {map   = CMap.empty;
    seq   = cc;
    base  = IntMap.empty;
+   locs  = IntSet.empty;
    mt=Module_table.make ()}
 
 

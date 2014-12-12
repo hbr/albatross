@@ -637,17 +637,18 @@ let analyze_used
   assert (List.for_all
             (fun m -> let nme,lib = m.v in lib <> [] || nme <> mdl)
             use_blk);
-  let rec used (stack:(module_name*string*string*use_block) list) (set:IntSet.t)
+  let rec used (stack:(module_name withinfo*string*string*use_block) list)
+      (set:IntSet.t)
       : IntSet.t =
     let push (umdl:module_name withinfo) (fn:string)
-        : (module_name*string*string*use_block) list =
-      if List.exists (fun (m,_,_,_) -> m=umdl.v) stack then
+        : (module_name withinfo*string*string*use_block) list =
+      if List.exists (fun (m,_,_,_) -> m.v=umdl.v) stack then
         info_abort fn umdl.i
           ("circular module usage [" ^
            (String.concat ","
               (List.map
-                 (fun (m,_,_,_) -> string_of_module m)
-                 (List.rev ((umdl.v,"","ali",[])::stack)))) ^
+                 (fun (m,_,_,_) -> string_of_module m.v)
+                 (List.rev ((umdl,"","ali",[])::stack)))) ^
            "]")
       else
         let m,lib = umdl.v in
@@ -661,7 +662,7 @@ let analyze_used
                 if l=[] then withinfo mdl.i (m,snd umdl.v) else mdl)
               use_blk
         in
-        (umdl.v, fn, "ali", use_blk) :: stack
+        (umdl, fn, "ali", use_blk) :: stack
     in
     match stack with
       [] -> assert false
@@ -676,15 +677,20 @@ let analyze_used
           if ext="al" then set
           else begin
             if 0 < ad.verbosity then
-              printf " use `%s'\n" (string_of_module mdl);
-            PC.add_used_module mdl set pc;
+              printf " use `%s'\n" (string_of_module mdl.v);
+            let mt = Proof_context.module_table pc in
+            let nme = fst mdl.v in
+            if Module_table.has_base nme mt then
+              info_abort fn mdl.i ("Duplicate base module " ^ (ST.string nme));
+            PC.add_used_module mdl.v set pc;
             let use_blk2,ast = parse_file fn in
             analyze ast fn pc;
             let set = IntSet.add (Module_table.current mt) set in
             used rest set
           end
   in
-  used [(mdl,[]),fn,"al",use_blk] IntSet.empty
+  let mdl = withinfo UNKNOWN (mdl,[]) in
+  used [mdl,fn,"al",use_blk] IntSet.empty
 
 
 let update_depend (nme:int) (pub:bool) (pc:PC.t) (ad:t): unit =

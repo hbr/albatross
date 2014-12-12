@@ -73,17 +73,6 @@ end
 
 (*
 -----------------------------------------------------------------------------
-   Exceptions
------------------------------------------------------------------------------
-*)
-
-exception Exit_error of string
-exception Tohandle of string
-exception Eiffel_error of string
-
-
-(*
------------------------------------------------------------------------------
    Line and column info
 -----------------------------------------------------------------------------
 *)
@@ -112,8 +101,11 @@ let info_from_position (pos:Lexing.position) =
   create_info l c
 
 
+exception Error_string of string
 exception Error_info of info*string
 exception Error_fileinfo of string*info*string
+
+let error_string (str:string) = raise (Error_string str)
 
 let error_info (i:info) (str:string) =
   raise (Error_info (i,str))
@@ -640,6 +632,14 @@ let hmark2string_wblank (hm:header_mark) =
 (* Features *)
 
 type classname = (int list * int) withinfo
+
+let string_of_classname (path:int list) (cn:int): string =
+  if path = [] then
+    ST.string cn
+  else
+    let strlst = List.rev_map ST.string path in
+    (String.concat "." strlst) ^ "." ^ (ST.string cn)
+
 
 type formal_generics = int list withinfo
 

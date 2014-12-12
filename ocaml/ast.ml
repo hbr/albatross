@@ -213,12 +213,16 @@ let put_class
   let ct = Feature_table.class_table ft in
   let idx =
     try
-      let idx = Class_table.find_2 (snd cn.v) ct in
+      let idx = Class_table.find_for_declaration cn.v ct in
       Class_table.update idx hm fgs  ct;
       idx
     with Not_found ->
+      let path, cn0 = cn.v in
+      if path <> [] then
+        error_info cn.i
+          ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
       let idx = Class_table.count ct in
-      Class_table.add hm cn fgs ct;
+      Class_table.add hm cn0 fgs ct;
       idx
   in
   List.iter

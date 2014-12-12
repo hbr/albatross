@@ -7,10 +7,14 @@ type t
 val count:       t -> int
 val find:        (int * int list) -> t -> int
 val has:         (int * int list) -> t -> bool
+val has_base:    int -> t -> bool
 
 val count_libraries: t -> int
 val find_library:    int list -> t -> int
 val has_library:     int list -> t -> bool
+val library:         int -> t -> int list
+val library_of_module: int -> t -> int list
+val current_library: t -> int list
 
 val has_current: t -> bool
 val current:     t -> int
@@ -20,6 +24,9 @@ val is_private:  t -> bool
 val is_interface_use: t -> bool
 val is_interface_check: t -> bool
 
+
+val name_symbol: int -> t -> int
+val simple_name: int -> t -> string
 val name:        int -> t -> string
 
 val make: unit -> t

@@ -21,6 +21,7 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
 
 type gdesc = {mutable pub: bool;
               mdl: int;
+              cls: int;
               mutable defer: bool}
 
 type t = {base:     Proof_table.t;
@@ -844,7 +845,7 @@ let variant (i:int) (cls:int) (pc:t): term =
   Proof_table.variant i cls pc.base
 
 
-let add_global (defer:bool) (pc:t): unit =
+let add_global (defer:bool) (cls:int) (pc:t): unit =
   assert (is_global pc);
   if count pc <> Seq.count pc.gseq + 1 then
     printf "add_global count pc = %d, Seq.count pc.gseq = %d\n"
@@ -852,7 +853,7 @@ let add_global (defer:bool) (pc:t): unit =
   assert (count pc = Seq.count pc.gseq + 1);
   let mt = module_table pc in
   let mdl = Module_table.current mt in
-  Seq.push {pub = is_public pc; defer = defer; mdl = mdl} pc.gseq;
+  Seq.push {pub = is_public pc; defer = defer; cls = cls; mdl = mdl} pc.gseq;
   assert (count pc = Seq.count pc.gseq)
 
 
@@ -885,7 +886,7 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
   if not (has t pc) then begin
     Proof_table.add_inherited t i cls pc.base;
     let _ = raw_add t true pc in ();
-    add_global false pc
+    add_global false cls pc
   end
 
 
@@ -1049,7 +1050,7 @@ let add_proved_0
   if not dup && not (is_global pc) then
     add_last_to_work pc;
   if is_global pc then
-    add_global defer pc;
+    add_global defer owner pc;
   if is_global pc && owner <> -1 then
     if dup && is_public pc && not (Seq.elem idx pc.gseq).pub then begin
       (* export the original assertion *)
@@ -1115,7 +1116,10 @@ let check_interface (pc:t): unit =
   assert (count pc = Seq.count pc.gseq);
   for i = 0 to count pc - 1 do
     let gdesc = Seq.elem i pc.gseq in
-    if gdesc.defer && not gdesc.pub then
+    if gdesc.defer
+        && not gdesc.pub
+        && Class_table.is_class_public gdesc.cls (class_table pc)
+    then
       error_info (FINFO (1,0))
         ("deferred assertion `" ^ (string_of_term (term i pc) pc) ^
          "' is not public")

@@ -19,6 +19,8 @@ type t = {mutable map:    int Module_map.t;
           mutable libmap: int Library_map.t;
           seq:            desc Seq.t;
           libseq:         library_name Seq.t;
+          base:           IntSet.t;
+          mutable base_added:     IntSet.t;
           mutable mode:   int;
           mutable fgens: type_term IntMap.t}
 
@@ -46,6 +48,9 @@ let has_library (lib:int list) (mt:t): bool =
   with Not_found ->                 false
 
 
+let has_base (nme:int) (mt:t): bool =
+  IntSet.mem nme mt.base_added
+
 let has_current (mt:t): bool =
   0 < count mt
 
@@ -58,8 +63,7 @@ let current (mt:t): int =
 let is_public  (mt:t): bool =
   has_current mt && mt.mode > 0
 
-let is_private (mt:t): bool =
-  has_current mt && mt.mode = 0
+let is_private (mt:t): bool = not (is_public mt)
 
 let is_interface_check (mt:t): bool =
   has_current mt && mt.mode = 1
@@ -117,6 +121,26 @@ let library_name (lib_id:int) (mt:t): string =
   String.concat "." (List.rev_map ST.string lib)
 
 
+let library_of_module (mdl:int) (mt:t): int list =
+  assert (mdl < count mt);
+  library (descriptor mdl mt).lib mt
+
+
+let current_library (mt:t): int list =
+  assert (has_current mt);
+  let mdl = current mt in
+  library_of_module mdl mt
+
+
+let name_symbol (mdl:int) (mt:t): int =
+  assert (mdl < count mt);
+  (descriptor mdl mt).name
+
+let simple_name (mdl:int) (mt:t): string =
+  assert (mdl < count mt);
+  ST.string (name_symbol mdl mt)
+
+
 let name (mdl:int) (mt:t): string =
   assert (mdl < count mt);
   let desc = Seq.elem mdl mt.seq in
@@ -131,6 +155,7 @@ let name (mdl:int) (mt:t): string =
 
 let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
   assert (not (has (name,lib) mt));
+  assert (not (has_base name mt));
   let n = count mt in
   let lib_id =
     try find_library lib mt
@@ -140,6 +165,8 @@ let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
   in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=lib_id; priv=used; pub=used} mt.seq;
+  if IntSet.mem name mt.base then
+    mt.base_added <- IntSet.add name mt.base_added;
   mt.map   <- Module_map.add (name,lib) n mt.map;
   mt.mode  <- 2;
   mt.fgens <- IntMap.empty
@@ -148,9 +175,12 @@ let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
 
 let add_current (name:int) (used:IntSet.t) (mt:t): unit =
   assert (not (has (name,[]) mt));
+  assert (not (has_base name mt));
   let n = count mt in
   let used = IntSet.add n used in
   Seq.push {name=name; lib=0; priv=used; pub=IntSet.empty} mt.seq;
+  if IntSet.mem name mt.base then
+    mt.base_added <- IntSet.add name mt.base_added;
   mt.map   <- Module_map.add (name,[]) n mt.map;
   mt.mode  <- 0;
   mt.fgens <- IntMap.empty
@@ -168,6 +198,14 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
 
 
 
+let base_set: IntSet.t =
+  List.fold_left
+    (fun set nme -> IntSet.add (ST.symbol nme) set)
+    IntSet.empty
+    ["boolean";"any";"predicate";"tuple";"function"]
+
+
+
 let make (): t =
   let libseq = Seq.empty() in
   Seq.push [] libseq;
@@ -175,6 +213,8 @@ let make (): t =
    libmap  = Library_map.singleton [] 0;
    seq     = Seq.empty ();
    libseq  = libseq;
+   base    = base_set;
+   base_added = IntSet.empty;
    mode    = 0;
    fgens   = IntMap.empty}
 
