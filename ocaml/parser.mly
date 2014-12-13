@@ -264,7 +264,6 @@ ass_req_opt:
     { [] }
 |   ass_req { $1 }
 
-ass_check: KWcheck proof_seq { List.rev $2 }
 ass_check: KWproof proof_seq separator { List.rev $2 }
 
 
@@ -581,14 +580,14 @@ feature_implementation:
 
 implementation_block:
     local_block do_block    { Impdefined($1,true, $2) }
-|   local_block check_block { Impdefined($1,false,$2) }
+|   local_block proof_block { Impdefined($1,false,$2) }
 
 
 require_block:
     KWrequire compound { $2 }
 
-check_block:
-    KWcheck compound { $2 }
+proof_block:
+    KWproof compound { $2 }
 
 do_block: KWdo compound { $2 }
 
