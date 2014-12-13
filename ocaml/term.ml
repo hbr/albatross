@@ -992,11 +992,13 @@ module Term_algo = struct
           let t2 =
             try Term.down nb t2
             with Term_capture -> raise Not_found in
-          begin try
-            let t = Term_sub.find (i-nb) sub in
-            if t = t2 then sub else raise Not_found
-          with Not_found ->
-            Term_sub.add (i-nb) t2 sub
+          let t_opt =
+            try let t = Term_sub.find (i-nb) sub in Some t
+            with Not_found -> None in
+          begin match t_opt with
+            None -> Term_sub.add (i-nb) t2 sub
+          | Some t when t <> t2 -> raise Not_found
+          | Some t -> assert (t=t2); sub
           end
       | Application (f1,args1), Application (f2,args2)
         when Array.length args1 = Array.length args2 ->
