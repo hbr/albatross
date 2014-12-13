@@ -18,12 +18,12 @@ type definition = term
 type formal     = int * term
 
 type base_descriptor = {
-    definition:       term option;
-    level:            int;
-    mutable is_inh:   bool;
-    mutable seeds:    IntSet.t;
-    mutable variants: int IntMap.t;  (* cls -> fidx *)
-    mutable is_eq:    bool (* is equality inherited from ANY *)
+    mutable definition: term option;
+    mutable level:      int;
+    mutable is_inh:     bool;
+    mutable seeds:      IntSet.t;
+    mutable variants:   int IntMap.t;  (* cls -> fidx *)
+    mutable is_eq:      bool (* is equality inherited from ANY *)
   }
 
 type descriptor = {
@@ -1318,7 +1318,12 @@ let add_used_module (name:int*int list) (used:IntSet.t) (ft:t): unit =
 
 let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   Class_table.add_current_module name used ft.ct;
-  add_base_features name ft
+  add_base_features name ft;
+  if name <> ST.symbol "boolean" then begin
+    let or_desc = descriptor or_index ft in
+    or_desc.priv.definition <- None;
+    or_desc.priv.level <- 0
+  end
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =
   Class_table.set_interface_check used ft.ct;

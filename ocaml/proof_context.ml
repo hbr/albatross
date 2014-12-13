@@ -296,9 +296,10 @@ let triggers_evaluation (t:term) (pc:t): bool =
         with Not_found ->
           nbenv <= i &&
           let idx = i - nbenv in
-          Feature_table.owner idx ft <> Class_table.boolean_index &&
-          idx <> Feature_table.all_index &&
-          idx <> Feature_table.some_index
+          idx = Feature_table.or_index ||
+          (Feature_table.owner idx ft <> Class_table.boolean_index &&
+           idx <> Feature_table.all_index &&
+           idx <> Feature_table.some_index)
       end
   | _ ->
       false

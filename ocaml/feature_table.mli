@@ -38,6 +38,9 @@ val string_of_signature: int -> t -> string
 val implication_index: int
 val all_index:         int
 val some_index:        int
+val false_index:       int
+val not_index:         int
+val or_index:          int
 
 val base_table: int -> t
 
