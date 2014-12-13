@@ -302,14 +302,14 @@ let operator_data op =
   | Timesop   -> "*",   50,  Left
   | Divideop  -> "/",   50,  Left
   | Caretop   -> "^",   55,  Right
-  | Eqop      -> "=",   35,  Left
-  | NEqop     -> "/=",  35,  Left
-  | Eqvop     -> "~",   35,  Left
-  | NEqvop    -> "/~",  35,  Left
-  | LTop      -> "<",   35,  Left
-  | LEop      -> "<=",  35,  Left
-  | GTop      -> ">",   35,  Left
-  | GEop      -> ">=",  35,  Left
+  | Eqop      -> "=",   35,  Nonassoc
+  | NEqop     -> "/=",  35,  Nonassoc
+  | Eqvop     -> "~",   35,  Nonassoc
+  | NEqvop    -> "/~",  35,  Nonassoc
+  | LTop      -> "<",   35,  Nonassoc
+  | LEop      -> "<=",  35,  Nonassoc
+  | GTop      -> ">",   35,  Nonassoc
+  | GEop      -> ">=",  35,  Nonassoc
   | Andop     -> "and", 25,  Left
   | Orop      -> "or",  25,  Left
   | Oldop     -> "old", 65,  Nonassoc

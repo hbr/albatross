@@ -177,7 +177,7 @@ let expression_from_entities entlist =
 /* 18 */ %right    COMMA
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
-/* 35 */ %left     EQ        NEQ       EQV     NEQV
+/* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
                    LE        LT        GE      GT
 /* 40 */ %left     BAR       DBAR
 /* 45 */ %left     PLUS      MINUS
