@@ -293,6 +293,9 @@ let put_feature
               let _ = assertion_list reqlst context in
               Feature_table.Builtin,
               None
+          | Some reqlst, None, None ->
+              let _ = assertion_list reqlst context in
+              Feature_table.No_implementation, None
           | Some reqlst, None, Some enslst ->
               (try
                 let term = result_term enslst context in
