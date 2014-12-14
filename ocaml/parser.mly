@@ -34,66 +34,54 @@ let expression_from_dotted_id (l: int list): expression =
   | _    -> assert false
 
 
-let rec formals_from_expression (e:expression) =
-  let rec entlist (l: expression list) =
-    match l with
-      [Typedexp ((Identifier id),t)] -> Typed_entities ([id],t)
-    | [(Identifier id)] -> Untyped_entities [id]
-    | (Identifier id)::t ->
-        (let u = entlist t
-        in
-        match u with
-          Untyped_entities l -> Untyped_entities (id::l)
-        | Typed_entities (l,t) -> Typed_entities ((id::l),t)
-        )
-    | _ ->
-        (match l with
-          [] -> Printf.eprintf "entlist failure: empty expression list\n"
-        | _::_ ->
-            Printf.eprintf
-              "entlist failure with %s\n"
-              (string_of_expression (Explist l)));
-        failwith "entlist"
+let set_of_expression_list (lst:expression list): expression =
+  let singleton = Identifier (ST.symbol "singleton")
   in
-  match e with
-  | Explist l  ->
-      let ll = split_list
-          l
-          (fun el ->
-            match el with
-              Typedexp (_,_) -> true | _ -> false)
-      in
-      List.map entlist ll
-  | _ -> [entlist [e]]
-
-
-let formals_from_expression2 (e:expression)(i:info) =
-  try
-    formals_from_expression e
-  with
-    Failure _ ->
-      error_info i ((string_of_expression e) ^ " is not an argument list")
-
-(*
-let expression_from_entities entlist =
-  let egroup grp =
-    match grp with
-      Typed_entities (l,tp) ->
-        let lr = List.rev l
-        in
-        (match lr with
-          f::t ->
-            let lrmapped =
-              (Typedexp ((Identifier f),tp))
-              :: (List.map (function id -> Identifier id) t)
-            in
-            List.rev lrmapped
-        | _ -> assert false)
-    | Untyped_entities l ->
-        List.map (function id -> Identifier id) l
+  let singl (e:expression) = Funapp (singleton,e)
   in
-  Explist (List.concat (List.map egroup entlist))
-*)
+  match List.rev lst with
+    [] -> assert false (* cannot happen, list has at least the element [e] *)
+  | hd::tl ->
+      List.fold_left
+        (fun res e ->
+          Binexp (Plusop, res, singl e))
+        (singl hd)
+        tl
+
+
+let entities_of_expression (info:info) (lst: expression list): entities list =
+  let rec entlist lst idlst entlst =
+    match lst with
+      [] ->
+        begin match idlst with
+          [] -> entlst
+        | _  -> Untyped_entities (List.rev idlst) :: entlst
+        end
+    | (Identifier id)::lst ->
+        entlist lst (id::idlst) entlst
+    | (Typedexp (Identifier id,tp))::lst ->
+        let idlst = List.rev (id::idlst) in
+        let entlst = (Typed_entities (idlst,tp))::entlst in
+        entlist lst [] entlst
+    | e::lst ->
+        error_info info ("\"" ^ (string_of_expression e) ^ "\" is not an argument")
+  in
+  List.rev (entlist lst [] [])
+
+
+
+let predicate_of_expression (info:info) (e:expression): expression =
+  let lst = expression_list e in
+  match lst with
+    [] -> assert false (* never empty *)
+  | Expcolon(last_arg,pexp)::rest ->
+      (* predicate *)
+      let lst = List.rev (last_arg::rest) in
+      let entlst = entities_of_expression info lst in
+      Exppred (withinfo info entlst,pexp)
+  | _ -> (* enumerated set *)
+      set_of_expression_list lst
+
 %}
 
 %token KWCURRENT KWCurrent
@@ -173,8 +161,8 @@ let expression_from_entities entlist =
 /*  8 */ %nonassoc KWall     KWsome  /* greedy */
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
-/* 15 */ %left     COLON
-/* 18 */ %right    COMMA
+/* 15 */ %right    COMMA
+/* 18 */ %left     COLON
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
@@ -676,7 +664,6 @@ compound_list:
 info_expr: expr %prec LOWEST_PREC { withinfo (rhs_info 1) $1 }
 
 
-
 expr:
     atomic_expr                   { $1 }
 |   operator_expr                 { $1 }
@@ -696,13 +683,7 @@ expr:
   Expquantified (Existential, withinfo (rhs_info 2) $2, $4) }
 
 |   LBRACE expr RBRACE            {
-  match $2 with
-    Expcolon (fargs,exp) ->
-      let elist = formals_from_expression2 fargs (rhs_info 2)
-      in
-      Exppred (withinfo (rhs_info 2) elist, exp)
-  | _ ->
-      set_of_expression $2
+  predicate_of_expression (rhs_info 2) $2
 }
 
 
