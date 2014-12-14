@@ -433,6 +433,8 @@ and feature_body = compound option * implementation option * compound option
 
 
 let expression_list (e:expression): expression list =
+  (* break up a tuple into a list, note: the returned list contains the
+     elements reversed *)
   let rec list (e:expression) (lst:expression list): expression list =
     match e with
       Tupleexp (a,b) ->
