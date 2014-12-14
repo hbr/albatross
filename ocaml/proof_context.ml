@@ -865,9 +865,10 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
   assert (i < count pc);
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "    inherit deferred \"%s\" in %s\n"
-    (string_of_term t pc)
-    (Class_table.class_name cls ct);
+  if 1 < pc.verbosity then
+    printf "   inherit deferred \"%s\" in %s\n"
+      (string_of_term t pc)
+      (Class_table.class_name cls ct);
   if not (has t pc) then
     error_info info ("The deferred assertion \""  ^
                      (string_of_term t pc) ^
@@ -881,9 +882,10 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
   assert (is_global pc);
   let t = variant i cls pc in
   let ct = class_table pc in
-  printf "    inherit \"%s\" in %s\n"
-    (string_of_term t pc)
-    (Class_table.class_name cls ct);
+  if 1 < pc.verbosity then
+    printf "   inherit \"%s\" in %s\n"
+      (string_of_term t pc)
+      (Class_table.class_name cls ct);
   if not (has t pc) then begin
     Proof_table.add_inherited t i cls pc.base;
     let _ = raw_add t true pc in ();

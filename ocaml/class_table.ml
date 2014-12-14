@@ -78,14 +78,6 @@ let is_interface_use (ct:t): bool = Module_table.is_interface_use ct.mt
 let count (ct:t):int =
   Seq.count ct.seq
 
-let class_symbol (i:int) (ct:t): int =
-  assert (i<count ct);
-  (Seq.elem i ct.seq).name
-
-let class_name (i:int) (ct:t): string =
-  ST.string (class_symbol i ct)
-
-
 let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
     : base_descriptor =
   let args = Array.init nfgs (fun i -> Variable i) in
@@ -105,6 +97,30 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
 let descriptor (idx:int) (ct:t): descriptor =
   assert (idx < count ct);
   Seq.elem idx ct.seq
+
+
+let class_symbol (i:int) (ct:t): int =
+  assert (i<count ct);
+  (descriptor i ct).name
+
+let class_name (i:int) (ct:t): string =
+  let desc = descriptor i ct in
+  if desc.mdl = -1 then
+    ST.string desc.name
+  else
+    let lib = Module_table.library_of_module desc.mdl ct.mt
+    and mdlsym = Module_table.name_symbol desc.mdl ct.mt
+    in
+    let lst =
+      if Module_table.has_current ct.mt &&
+        desc.mdl = Module_table.current ct.mt then
+        [desc.name]
+      else if ST.string mdlsym = String.lowercase (ST.string desc.name) then
+        desc.name :: lib
+      else
+        desc.name :: mdlsym :: lib
+    in
+    String.concat "." (List.rev_map ST.string lst)
 
 
 let is_class_public (cls:int) (ct:t): bool =

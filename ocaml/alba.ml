@@ -101,7 +101,7 @@ let make (): t = {
   command       = Nocommand;
   trace_proof   = false;
   trace_failed  = false;
-  verbosity = 0;
+  verbosity = 1;
   force = false;
 }
 
@@ -676,7 +676,7 @@ let analyze_used
         with Not_found ->
           if ext="al" then set
           else begin
-            if 0 < ad.verbosity then
+            if 1 < ad.verbosity then
               printf " use `%s'\n" (string_of_module mdl.v);
             let mt = Proof_context.module_table pc in
             let nme = fst mdl.v in
@@ -718,7 +718,7 @@ let update_depend (nme:int) (pub:bool) (pc:PC.t) (ad:t): unit =
 
 
 let verify_interface (nme:int) (pc:PC.t) (ad:t): unit =
-  if 0 < ad.verbosity then
+  if 1 < ad.verbosity then
     printf " verify interface `%s'\n" (ST.string nme);
   let fn = file_path nme "ali" ad      in
   let use_blk,ast = parse_file fn      in
@@ -735,7 +735,7 @@ let verify_implementation (nme:int) (pc:PC.t) (ad:t): unit =
   let fn = file_path nme "al" ad        in
   let use_blk = parse_use_block fn      in
   let used = analyze_used fn nme use_blk pc ad in
-  if 0 < ad.verbosity then
+  if 1 < ad.verbosity then
     printf " verify implementation `%s'\n" (ST.string nme);
   let use_blk2,ast = parse_file fn      in
   assert (use_blk = use_blk2);

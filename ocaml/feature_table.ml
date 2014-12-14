@@ -1015,10 +1015,12 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
   let desc = descriptor i ft in
-  printf "    inherit deferred %s %s in %s\n"
-    (Class_table.class_name desc.cls ft.ct)
-    (feature_name_to_string desc.fname)
-    (Class_table.class_name cls ft.ct);
+  if 1 < ft.verbosity then
+    printf "   inherit deferred \"%s %s\" in %s\n"
+      (Class_table.class_name desc.cls ft.ct)
+      (string_of_signature i ft)
+      (*(feature_name_to_string desc.fname)*)
+      (Class_table.class_name cls ft.ct);
   assert (cls <> desc.cls);
   let idx =
     try find_variant i cls ft
@@ -1043,10 +1045,12 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
 let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
   (* Inherit the effective  feature [i] in [cls] *)
   let desc = descriptor i ft in
-  printf "    inherit %s %s in %s\n"
-    (Class_table.class_name desc.cls ft.ct)
-    (feature_name_to_string desc.fname)
-    (Class_table.class_name cls ft.ct);
+  if 1 < ft.verbosity then
+    printf "   inherit \"%s %s\" in %s\n"
+      (Class_table.class_name desc.cls ft.ct)
+      (string_of_signature i ft)
+      (*(feature_name_to_string desc.fname)*)
+      (Class_table.class_name cls ft.ct);
   assert (cls <> desc.cls);
   if not (Array.length desc.anchored = 1) then
     ()
@@ -1121,7 +1125,6 @@ let do_inherit
      [cls_idx]
    *)
   let ct = class_table ft in
-  printf "    do inheritance for class %s\n" (Class_table.class_name cls ct);
   List.iter
     (fun (par,par_args) ->
       let flst = Class_table.deferred_features par ct in
