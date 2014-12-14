@@ -3,8 +3,6 @@ open Proof
 open Support
 open Printf
 
-module PC = Proof_context
-
 
 type kind =
     PAxiom
@@ -78,31 +76,31 @@ let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
 
 
 
-let get_term (ie: info_expression) (pc:PC.t): term =
-  let c = PC.context pc in
+let get_term (ie: info_expression) (pc:Proof_context.t): term =
+  let c = Proof_context.context pc in
   Typer.result_term ie c
 
 
 
 let add_assumptions_or_axioms
-    (lst:compound) (is_axiom:bool) (pc:PC.t): int list =
+    (lst:compound) (is_axiom:bool) (pc:Proof_context.t): int list =
   let res =
     List.map
       (fun ie ->
         let t = get_term ie pc in
         if is_axiom then
-          PC.add_axiom t pc
+          Proof_context.add_axiom t pc
         else
-          PC.add_assumption t pc)
+          Proof_context.add_assumption t pc)
     lst
   in
-  if not is_axiom then PC.close_assumptions pc;
+  if not is_axiom then Proof_context.close_assumptions pc;
   res
 
-let add_assumptions (lst:compound) (pc:PC.t): unit =
+let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
   let _ = add_assumptions_or_axioms lst false pc in ()
 
-let add_axioms (lst:compound) (pc:PC.t): int list =
+let add_axioms (lst:compound) (pc:Proof_context.t): int list =
   add_assumptions_or_axioms lst true pc
 
 
@@ -111,14 +109,14 @@ let add_proved
     (defer: bool)
     (owner: int)
     (lst: (term*proof_term) list)
-    (pc:PC.t)
+    (pc:Proof_context.t)
     : unit =
-  PC.add_proved_list defer owner lst pc
+  Proof_context.add_proved_list defer owner lst pc
 
 
 
 
-let prove_basic_expression (ie:info_expression) (pc:PC.t): int =
+let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
   let strength =
     if Proof_context.is_interface_check pc then 0
     else 2
@@ -131,7 +129,7 @@ let prove_basic_expression (ie:info_expression) (pc:PC.t): int =
 
 
 
-let prove_ensure (lst:compound) (k:kind) (pc:PC.t): (term*proof_term) list =
+let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t): (term*proof_term) list =
   let idx_lst =
     match k with
       PAxiom | PDeferred ->
@@ -140,7 +138,7 @@ let prove_ensure (lst:compound) (k:kind) (pc:PC.t): (term*proof_term) list =
         let res = List.map (fun ie -> prove_basic_expression ie pc) lst in
         res
   in
-  List.map (fun idx -> PC.discharged idx pc) idx_lst
+  List.map (fun idx -> Proof_context.discharged idx pc) idx_lst
 
 
 
@@ -151,10 +149,10 @@ let rec make_proof
     (rlst: compound)
     (clst: compound)
     (elst: compound)
-    (pc:   PC.t)
+    (pc:   Proof_context.t)
     : unit =
   let prove_check_expression (ie:info_expression): unit =
-    let c = PC.context pc in
+    let c = Proof_context.context pc in
     match ie.v with
       Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
         begin
@@ -174,25 +172,25 @@ let rec make_proof
         let _ = prove_basic_expression ie pc in
         ()
   in
-  PC.push entlst pc;
+  Proof_context.push entlst pc;
   let defer = is_deferred kind
-  and owner = PC.owner pc
+  and owner = Proof_context.owner pc
   in
   if defer then
-    PC.check_deferred pc;  (* owner class has to be deferred *)
+    Proof_context.check_deferred pc;  (* owner class has to be deferred *)
   add_assumptions rlst pc;
   List.iter (fun ie -> prove_check_expression ie) clst;
   let pair_lst = prove_ensure elst kind pc in
-  PC.pop pc;
+  Proof_context.pop pc;
   add_proved defer owner pair_lst pc
 
 
 let prove_and_store
     (entlst:  entities list withinfo)
     (bdy:     feature_body)
-    (pc: PC.t)
+    (pc: Proof_context.t)
     : unit =
-  let c = PC.context pc in
+  let c = Proof_context.context pc in
   let kind, rlst, clst, elst = analyze_body 0 entlst.i bdy c
   in
   make_proof 0 entlst kind rlst clst elst pc
@@ -204,12 +202,12 @@ let put_class
     (cn:       classname)
     (fgs:      formal_generics)
     (inherits: inherit_clause list)
-    (pc: PC.t)
+    (pc: Proof_context.t)
     : unit =
   (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
       corresponding class.  *)
-  assert (PC.is_global pc);
-  let ft = PC.feature_table pc in
+  assert (Proof_context.is_global pc);
+  let ft = Proof_context.feature_table pc in
   let ct = Feature_table.class_table ft in
   let idx =
     try
@@ -238,7 +236,7 @@ let put_class
             Class_table.export_inherited idx lst_priv ct;
           Feature_table.do_inherit idx lst tp.i ft;
           Feature_table.export_inherited idx lst_priv ft;
-          PC.do_inherit idx lst tp.i pc)
+          Proof_context.do_inherit idx lst tp.i pc)
         par_lst)
     inherits
 
@@ -320,8 +318,8 @@ let put_feature
 
 
 
-let analyze(ast: declaration list) (pc:PC.t): unit =
-  let context = PC.context pc in
+let analyze(ast: declaration list) (pc:Proof_context.t): unit =
+  let context = Proof_context.context pc in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
@@ -339,5 +337,5 @@ let analyze(ast: declaration list) (pc:PC.t): unit =
       | f::t -> one_decl f; analyz t
   in
   analyz ast;
-  if PC.is_interface_check pc then
-    PC.check_interface pc
+  if Proof_context.is_interface_check pc then
+    Proof_context.check_interface pc
