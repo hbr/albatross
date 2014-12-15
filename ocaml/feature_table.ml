@@ -720,7 +720,6 @@ let term_to_string
      *)
     let nnames = Array.length names
     and anon2sym (i:int): int = anon_symbol i nanon
-      (*ST.symbol ("$" ^ (string_of_int (nanon+i)))*)
     in
     let var2str (i:int): string =
       if i < nnames then
@@ -816,9 +815,9 @@ let term_to_string
         let paren1 = iprec < oprec
         and paren2 = (iop = oop) &&
           match oassoc with
-            Left  -> not is_left
-          | Right -> is_left
-          | _     -> false
+            Left     -> not is_left
+          | Right    -> is_left
+          | Nonassoc -> true
         and paren3 = (iprec = oprec) && (iop <> oop)
         in
         if  paren1 || paren2 || paren3 then
