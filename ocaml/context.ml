@@ -458,22 +458,6 @@ let named_signature_string (c:t): string =
 
 
 
-let put_global_function
-    (fn:       feature_name withinfo)
-    (impstat:  Feature_table.implementation_status)
-    (term_opt: term option)
-    (c:      t)
-    : unit =
-  assert (is_toplevel c);
-  Feature_table.put_function
-    fn
-    (TVars_sub.tvars c.entry.tvs_sub)
-    (fargnames c)
-    (signature c)
-    impstat
-    term_opt
-    c.ft
-
 
 let implication_id (c:t): int =
   Feature_table.implication_index + (nfargs c)

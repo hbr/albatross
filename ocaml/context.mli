@@ -77,7 +77,10 @@ val argument_type: int -> t -> type_term
     (** The type of the [i]th formal argument *)
 
 val fgnames: t   -> int array
+
 val local_fargnames: t -> int array
+
+val tvs: t -> Tvars.t
 
 val ith_arguments_string: int -> t -> string
 val local_arguments_string: t -> string
@@ -102,10 +105,6 @@ val check_deferred: t -> unit
 
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
-
-val put_global_function:
-    feature_name withinfo  -> Feature_table.implementation_status ->
-      term option -> t -> unit
 
 val implication_id: t -> int
 

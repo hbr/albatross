@@ -1038,14 +1038,14 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
   begin
     if i < n then
       error_info tp.i "Formal generic not allowed as parent class"
-    else
+    (*else
       if is_private ct && (descriptor cls ct).mdl <> current_module ct then
         let str =
           "Cannot inherit to " ^ (class_name cls ct) ^
           " in the implementation file of module \"" ^
           (module_name (current_module ct) ct) ^
           "\"" in
-        error_info tp.i str
+        error_info tp.i str*)
   end;
   i-n, args
 
@@ -1060,6 +1060,9 @@ let inherited_ancestors
     (info:info)
     (ct:t)
     : (int * type_term array) list * (int * type_term array) list =
+  (* The inherited ancestors of the parent [par_idx[par_args]] in the class [cls_idx]
+     partitioned in a list which occur only publicly and a list which occur both
+     publicly and privatly. *)
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
@@ -1093,9 +1096,8 @@ let inherited_ancestors
               error_info info
                 ("Cannot inherit "  ^
                  (class_name anc_idx ct) ^
-                 " with different actual generics than inherited privately")
-            else
-              false
+                 " with different actual generics than inherited privately");
+            false
           with Not_found ->
             true)
         res

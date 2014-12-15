@@ -70,6 +70,8 @@ let count (ft:t): int =
   Seq.count ft.seq
 
 
+let verbosity (ft:t): int = ft.verbosity
+
 let descriptor (i:int) (ft:t): descriptor =
   assert (i < count ft);
   Seq.elem i ft.seq
@@ -91,6 +93,12 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
     match desc.pub with
       None -> assert false (* cannot happen in public view *)
     | Some bdesc -> bdesc
+
+
+
+let is_feature_public (i:int) (ft:t): bool =
+  assert (i < count ft);
+  Option.has (descriptor i ft).pub
 
 
 let feature_name (i:int) (ft:t): string =
@@ -187,12 +195,22 @@ let count_fgs (i:int) (ft:t): int =
   Tvars.count_fgs (descriptor i ft).tvs
 
 
+let get_class (i:int) (ft:t): int =
+  assert (i < count ft);
+  (descriptor i ft).cls
+
+
 let anchor (i:int) (ft:t): int =
   let desc = descriptor i ft in
   if Array.length desc.anchored = 1 then
     desc.anchored.(0)
   else
     raise Not_found
+
+
+let has_anchor (i:int) (ft:t): bool =
+  try let _ = anchor i ft in true
+  with Not_found -> false
 
 
 
@@ -202,6 +220,15 @@ let variant (i:int) (cls:int) (ft:t): int =
   let bdesc = base_descriptor i ft in
   let seed_bdesc = base_descriptor (IntSet.min_elt bdesc.seeds) ft
   in
+  IntMap.find cls seed_bdesc.variants
+
+
+
+let private_variant (i:int) (cls:int) (ft:t): int =
+  (* The privat variant of the feature [i] in the class [cls] *)
+  assert (i < count ft);
+  let bdesc      = base_descriptor_priv i ft in
+  let seed_bdesc = base_descriptor_priv (IntSet.min_elt bdesc.seeds) ft in
   IntMap.find cls seed_bdesc.variants
 
 
@@ -219,10 +246,15 @@ let variant_term (t:term) (nb:int) (cls:int) (ft:t): term =
 
 
 
-let is_deferred (desc:descriptor): bool =
+let is_desc_deferred (desc:descriptor): bool =
   match desc.impstat with
     Deferred -> true
   | _        -> false
+
+
+let is_deferred (i:int) (ft:t): bool =
+  assert (i < count ft);
+  is_desc_deferred (descriptor i ft)
 
 
 let string_of_signature (i:int) (ft:t): string =
@@ -239,6 +271,17 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
+let export_feature (i:int) (ft:t): unit =
+  (* Export the feature [i] unless it is already publicly available. *)
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  match desc.pub with
+    None ->
+      let nargs = Array.length desc.argnames in
+      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.definition nargs ft)
+  | Some _ ->
+      ()
+
 
 
 let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
@@ -249,7 +292,7 @@ let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
   Class_table.add_feature
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
-    (is_deferred desc)
+    (is_desc_deferred desc)
     priv_only
     ft.ct
 
@@ -503,16 +546,19 @@ let find
 
 
 
-let find_with_signature
-    (fn:feature_name)
-    (tvs: Tvars.t)
-    (sign:Sign.t)
-    (ft:t)
-    : int =
+let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
   (* Find the feature with the characteristics.  *)
   let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
   find fn tvs tp ft
+
+
+let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
+  try
+    let _ = find_with_signature fn tvs sign ft in true
+  with Not_found -> false
+
+
 
 
 
@@ -918,6 +964,13 @@ let find_variant (i:int) (cls:int) (ft:t): int =
   | _ -> assert false (* cannot happen *)
 
 
+
+let has_variant (i:int) (cls:int) (ft:t): bool =
+  (* Has the feature [i] a variant in the class [cls]? *)
+  try let _ = find_variant i cls ft in true
+  with Not_found -> false
+
+
 let split_equality (t:term) (nbenv:int) (ft:t): int * term * term =
   let all_id = nbenv + all_index in
   let nargs, t =
@@ -983,10 +1036,6 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
     let bdesc0 = base_descriptor_priv i0 ft
     and bdesc1 = base_descriptor_priv i1 ft
     in
-    if bdesc1.is_inh then
-      printf "The feature %s %s is already inherited\n"
-        (Class_table.class_name cls ft.ct)
-        (feature_name_to_string (descriptor i1 ft).fname);
     bdesc1.seeds  <- IntSet.remove i1 bdesc1.seeds;
     bdesc1.is_inh <- true;
     IntSet.iter
@@ -1001,10 +1050,6 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   end;
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
-  (*if not (Term_table2.has i1 tab) then
-    printf "feature %s(%d) in %s is not in term table\n"
-      (feature_name_to_string fn) i1
-      (Class_table.class_name cls ft.ct);*)
   Term_table2.remove i1 tab
 
 
@@ -1012,191 +1057,54 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 
 
 
-let inherit_deferred (i:int) (cls:int) (info:info) (ft:t): unit =
-  (* Inherit the deferred feature [i] in the class [cls] *)
+let inherit_effective (i:int) (cls:int) (ft:t): unit =
   let desc = descriptor i ft in
-  if 1 < ft.verbosity then
-    printf "   inherit deferred \"%s %s\" in %s\n"
-      (Class_table.class_name desc.cls ft.ct)
-      (string_of_signature i ft)
-      (*(feature_name_to_string desc.fname)*)
-      (Class_table.class_name cls ft.ct);
-  assert (cls <> desc.cls);
-  let idx =
-    try find_variant i cls ft
-    with Not_found ->
-      let ct   = class_table ft  in
-      let str =
-        "The class " ^ (Class_table.class_name cls ct) ^
-        " does not have a feature unifyable with \"" ^
-        (feature_name_to_string desc.fname) ^
-        (Class_table.string_of_signature
-           desc.sign desc.tvs  ct) ^
-        "\" with proper substitutions of the type variables" in
-      error_info info str
+  let ctp,tvs = Class_table.class_type cls ft.ct
+  and anchor  = desc.anchored.(0) in
+  let ntvs    = Tvars.count_all tvs
+  and ntvs_i  = Tvars.count_all desc.tvs
   in
-  inherit_feature i idx cls false ft
-
-
-
-
-
-
-let inherit_effective (i:int) (cls:int) (info:info) (ft:t): unit =
-  (* Inherit the effective  feature [i] in [cls] *)
-  let desc = descriptor i ft in
-  if 1 < ft.verbosity then
-    printf "   inherit \"%s %s\" in %s\n"
-      (Class_table.class_name desc.cls ft.ct)
-      (string_of_signature i ft)
-      (*(feature_name_to_string desc.fname)*)
-      (Class_table.class_name cls ft.ct);
-  assert (cls <> desc.cls);
-  if not (Array.length desc.anchored = 1) then
-    ()
-  else
-    try
-      let _ = find_variant i cls ft in
-      let ct   = class_table ft  in
-      let str =
-        "The class " ^ (Class_table.class_name cls ct) ^
-        " has already a feature unifyable with \"" ^
-        (feature_name_to_string desc.fname) ^
-        (Class_table.string_of_signature desc.sign desc.tvs ct) ^
-        "\"" in
-      error_info info str
-    with Not_found ->
-      let ctp,tvs = Class_table.class_type cls ft.ct
-      and anchor  = desc.anchored.(0) in
-      let ntvs    = Tvars.count_all tvs
-      and ntvs_i  = Tvars.count_all desc.tvs
-      in
-      let tvs1 = Tvars.insert_fgs desc.tvs anchor tvs in
-      let ctp  = Term.upbound (ntvs_i-anchor) ntvs ctp in
-      let ctp  = Term.up anchor ctp in
-      let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
-      let f_tp(tp:type_term): type_term =
-        Term.upbound ntvs anchor tp
-      and def_opt =
-        match (base_descriptor i ft).definition with
-          None -> None
-        | Some t ->
-          let nargs = Array.length desc.argnames in
-          Some (variant_term t nargs cls ft)
-      in
-      let cnt = count ft
-      and nargs = Array.length desc.argnames
-      in
-      let bdesc = standard_bdesc cnt cls def_opt nargs ft
-      and bdesc_opt =
-        if is_public ft then Some (standard_bdesc cnt cls def_opt nargs ft)
-        else None
-      in
-      Seq.push
-        {mdl       = Class_table.current_module ft.ct;
-         fname     = desc.fname;
-         cls       = cls;
-         impstat   = desc.impstat;
-         tvs       = tvs1;
-         anchored  = Array.make 1 (anchor+ntvs);
-         argnames  = desc.argnames;
-         sign      = Sign.transform f_tp desc.sign;
-         tp        = f_tp desc.tp;
-         priv      = bdesc;
-         pub       = bdesc_opt
-       } ft.seq;
-      inherit_feature i cnt cls false ft
-
-
-
-
-let do_inherit
-    (cls:int)
-    (anc_lst: (int * type_term array) list)
-    (info:info)
-    (ft:t)
-    : unit =
-  (* For all ancestors in the list [anc_lst]:
-
-     Go through all deferred features of the parent class [par_idx] and verify
-     that the class [cls] has all these deferred features.
-
-     Then inherit all effective features of the class [par_idx] into the class
-     [cls_idx]
-   *)
-  let ct = class_table ft in
-  List.iter
-    (fun (par,par_args) ->
-      let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> inherit_deferred i cls info ft) flst;
-      let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> inherit_effective i cls info ft) flst
-    )
-    anc_lst
-
-
-
-
-let export_inherited_variant (i:int) (cls:int) (ft:t): unit =
-  (* Export the inherited variant of the feature [i] in the class [cls] *)
-  assert (is_interface_check ft);
-  let desc  = descriptor i ft in
-  let nanchors = Array.length desc.anchored in
-  if nanchors = 1 then
-    let bdesc = base_descriptor_priv i ft in
-    let seed_bdesc = base_descriptor_priv (IntSet.min_elt bdesc.seeds) ft in
-    try
-      let idx = IntMap.find cls seed_bdesc.variants in
-      let desc = descriptor idx ft in
-      let nargs = Array.length desc.argnames in
-      desc.pub <- Some (standard_bdesc idx cls desc.priv.definition nargs ft);
-      inherit_feature i idx cls true ft
-    with Not_found ->
-      assert false (* cannot happen *)
-
-
-
-let export_inherited
-    (cls:int)
-    (anc_lst: (int * type_term array) list)
-    (ft:t)
-    : unit =
-  (* Export all inherited features from all classes in the ancestor list [anc_lst]
-     in the class [cls] *)
-  let ct = class_table ft in
-  List.iter
-    (fun (par,par_args) ->
-      let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst;
-      let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst)
-    anc_lst
-
-
-
-let inherit_to_descendants (i:int) (info:info) (ft:t): unit =
-  let desc = descriptor i ft in
-  let nanchors = Array.length desc.anchored in
-  if not (is_deferred desc) && nanchors = 1 then
-    let descendants = Class_table.descendants desc.cls ft.ct in
-    IntSet.iter
-      (fun cls -> inherit_effective i cls info ft)
-      descendants
-
-
-
-let add_function (desc:descriptor) (info:info) (ft:t): unit =
+  let tvs1 = Tvars.insert_fgs desc.tvs anchor tvs in
+  let ctp  = Term.upbound (ntvs_i-anchor) ntvs ctp in
+  let ctp  = Term.up anchor ctp in
+  let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
+  let f_tp(tp:type_term): type_term =
+    Term.upbound ntvs anchor tp
+  and def_opt =
+    match (base_descriptor i ft).definition with
+      None -> None
+    | Some t ->
+        let nargs = Array.length desc.argnames in
+        Some (variant_term t nargs cls ft)
+  in
   let cnt = count ft
-  and nfgs = Tvars.count_all desc.tvs
+  and nargs = Array.length desc.argnames
   in
-  desc.tp <- Class_table.to_dummy nfgs desc.sign;
-  Seq.push desc ft.seq;
-  add_key cnt ft;
-  add_class_feature cnt false ft;
-  inherit_to_descendants cnt info ft
+  let bdesc = standard_bdesc cnt cls def_opt nargs ft
+  and bdesc_opt =
+    if is_public ft then Some (standard_bdesc cnt cls def_opt nargs ft)
+    else None
+  in
+  Seq.push
+    {mdl       = Class_table.current_module ft.ct;
+     fname     = desc.fname;
+     cls       = cls;
+     impstat   = desc.impstat;
+     tvs       = tvs1;
+     anchored  = Array.make 1 (anchor+ntvs);
+     argnames  = desc.argnames;
+     sign      = Sign.transform f_tp desc.sign;
+     tp        = f_tp desc.tp;
+     priv      = bdesc;
+     pub       = bdesc_opt
+   } ft.seq;
+  inherit_feature i cnt cls false ft
 
 
-let put_function
+
+
+
+let add_function
     (fn:       feature_name withinfo)
     (tvs:      Tvars.t)
     (argnames: int array)
@@ -1204,78 +1112,91 @@ let put_function
     (impstat:  implementation_status)
     (term_opt: term option)
     (ft:       t): unit =
-  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
+  assert (not (has_with_signature fn.v tvs sign ft));
   let is_priv = is_private ft
   and cnt     = Seq.count ft.seq
   and nargs   = Array.length argnames
   in
-  (match term_opt with
+  begin match term_opt with
     Some t when is_ghost_term t nargs ft && not (Sign.is_ghost sign) ->
       error_info fn.i "Must be a ghost function"
-  | _ -> ());
-  let idx =
-     try find_with_signature fn.v tvs sign ft
-     with Not_found -> cnt
-  in
+  | _ -> ()
+  end;
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct in
   let anchored = Class_table.anchored tvs cls ft.ct in
   let nanchors = Array.length anchored in
-  if idx=cnt then begin (* new feature *)
-    (match impstat with
-      Deferred ->
-        Class_table.check_deferred cls nanchors fn.i ft.ct
-    | _ -> ());
-    let bdesc = standard_bdesc cnt cls term_opt nargs ft
-    and bdesc_opt =
-      if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
+  begin match impstat with
+    Deferred ->
+      Class_table.check_deferred cls nanchors fn.i ft.ct
+  | _ -> ()
+  end;
+  let bdesc = standard_bdesc cnt cls term_opt nargs ft
+  and bdesc_opt =
+    if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
+  and nfgs = Tvars.count_all tvs
+  in
+  let desc =
+    {mdl      = mdl;
+     cls      = cls;
+     fname    = fn.v;
+     impstat  = impstat;
+     tvs      = tvs;
+     argnames = argnames;
+     sign     = sign;
+     tp       = Class_table.to_dummy nfgs sign;
+     anchored = anchored;
+     priv     = bdesc;
+     pub      = bdesc_opt}
+  in
+  Seq.push desc ft.seq;
+  add_key cnt ft;
+  add_class_feature cnt false ft
+
+
+
+let update_function
+    (idx: int)
+    (info:info)
+    (impstat:  implementation_status)
+    (is_ghost: bool)
+    (term_opt: term option)
+    (ft:       t): unit =
+  let desc    = descriptor idx ft
+  and mdl     = Class_table.current_module ft.ct
+  and is_priv = is_private ft
+  in
+  let not_match str =
+    let str = "The " ^ str ^ " of \""
+      ^ (feature_name_to_string desc.fname)
+      ^ "\" does not match the previous definition"
     in
-    let desc =
-      {mdl      = mdl;
-       cls      = cls;
-       fname    = fn.v;
-       impstat  = impstat;
-       tvs      = tvs;
-       argnames = argnames;
-       sign     = sign;
-       tp       = Variable 0;
-       anchored = anchored;
-       priv     = bdesc;
-       pub      = bdesc_opt}
-    in
-    add_function desc fn.i ft
-  end else begin        (* feature update *)
-    let desc = descriptor idx ft
-    and not_match str =
-      let str = "The " ^ str ^ " of \""
-        ^ (feature_name_to_string fn.v)
-        ^ "\" does not match the previous definition"
-      in
-      error_info fn.i str
-    in
-    desc.mdl <- mdl;
-    assert (cls = desc.cls);
-    if is_priv then begin
-      if impstat <> desc.impstat then
-        not_match "implementation status";
-      if term_opt <> desc.priv.definition then
-        not_match "private definition"
-    end else begin
-      if Option.has term_opt && desc.priv.definition <> term_opt then
-        not_match "public definition";
-      match desc.pub with
-        None ->
-          if Sign.is_ghost desc.sign && not (Sign.is_ghost sign) then
-            error_info fn.i "Must be a ghost function";
-          let nargs = Array.length desc.argnames in
-          desc.pub <- Some (standard_bdesc idx cls term_opt nargs ft);
-          add_class_feature idx false ft;
-          inherit_to_descendants idx fn.i ft
-      | Some bdesc ->
-          if bdesc.definition <> term_opt then
-            not_match "public definition"
-    end
+    error_info info str
+  in
+  desc.mdl <- mdl;
+  if is_priv then begin
+    if impstat <> desc.impstat then
+      not_match "implementation status";
+    if term_opt <> desc.priv.definition then
+      not_match "private definition"
+  end else begin
+    if Option.has term_opt && desc.priv.definition <> term_opt then
+      not_match "public definition";
+    match desc.pub with
+      None ->
+        if Sign.is_ghost desc.sign && not is_ghost then
+          error_info info "Must be a ghost function";
+        let nargs = Array.length desc.argnames in
+        desc.pub <- Some (standard_bdesc idx desc.cls term_opt nargs ft);
+        add_class_feature idx false ft
+    | Some bdesc ->
+        if bdesc.definition <> term_opt then
+          not_match "public definition"
   end
+
+
+
+
 
 
 
@@ -1351,7 +1272,7 @@ let check_interface (ft:t): unit =
   for i = 0 to count ft - 1 do
     let desc = descriptor i ft in
     if curr = desc.mdl
-        && is_deferred desc
+        && is_desc_deferred desc
         && not (Option.has desc.pub)
         && Class_table.is_class_public desc.cls ft.ct then
       error_info (FINFO (1,0))

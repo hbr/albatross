@@ -1,5 +1,6 @@
 open Term
 open Proof
+open Signature
 open Support
 open Printf
 
@@ -234,8 +235,8 @@ let put_class
           Class_table.do_inherit idx lst ct;
           if lst_priv <> [] then
             Class_table.export_inherited idx lst_priv ct;
-          Feature_table.do_inherit idx lst tp.i ft;
-          Feature_table.export_inherited idx lst_priv ft;
+          Inherit.do_inherit idx lst tp.i ft;
+          Inherit.export_inherited idx lst_priv ft;
           Proof_context.do_inherit idx lst tp.i pc)
         par_lst)
     inherits
@@ -263,7 +264,33 @@ let result_term (lst:info_expression list) (context:Context.t): term =
 
 
 
-let put_feature
+let put_function
+    (fn:       feature_name withinfo)
+    (tvs:      Tvars.t)
+    (argnames: int array)
+    (sign:     Sign.t)
+    (impstat:  Feature_table.implementation_status)
+    (term_opt: term option)
+    (ft:       Feature_table.t): unit =
+  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
+  try
+    let idx = Feature_table.find_with_signature fn.v tvs sign ft in
+    let inh =
+      Feature_table.is_public ft && not (Feature_table.is_feature_public idx ft)
+    and is_ghost = Sign.is_ghost sign
+    in
+    Feature_table.update_function idx fn.i impstat is_ghost term_opt ft;
+    if inh then
+      Inherit.inherit_to_descendants idx fn.i ft
+  with Not_found ->
+    let idx = Feature_table.count ft in
+    Feature_table.add_function fn tvs argnames sign impstat term_opt ft;
+    Inherit.inherit_to_descendants idx fn.i ft
+
+
+
+
+let analyze_feature
     (fn: feature_name withinfo)
     (entlst: entities list withinfo)
     (rt: return_type)
@@ -310,8 +337,13 @@ let put_feature
         end
     | _ -> assert false (* cannot happen *)
   in
-  Context.put_global_function fn impstat term_opt context;
-  Context.pop context
+  let argnames = Context.local_fargnames context
+  and sign     = Context.signature context
+  and tvs      = Context.tvs context
+  and ft       = Context.feature_table context
+  in
+  Context.pop context;
+  put_function fn tvs argnames sign impstat term_opt ft
 
 
 
@@ -326,7 +358,7 @@ let analyze(ast: declaration list) (pc:Proof_context.t): unit =
         Class_declaration (hm, cname, fgens, inherits) ->
           put_class hm cname fgens inherits pc
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
-          put_feature fn entlst rt is_func body expr context
+          analyze_feature fn entlst rt is_func body expr context
       | Assertion_feature (label, entlst, body) ->
           prove_and_store entlst body pc
       | Formal_generic (name, concept) ->

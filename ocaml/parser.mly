@@ -409,8 +409,9 @@ rename_item:
     name_sig KWas nameopconst  { $1,$3 }
 
 name_sig:
-    nameopconst { $1,[] }
-|   nameopconst LPAREN type_list RPAREN { $1,$3 }
+    nameopconst { $1,[],None }
+|   nameopconst LPAREN type_list RPAREN { $1,$3,None }
+|   nameopconst LPAREN type_list RPAREN COLON type_nt { $1,$3, Some $6 }
 
 
 

@@ -15,6 +15,8 @@ type t
 
 type implementation_status = No_implementation | Builtin | Deferred
 
+val verbosity:  t -> int
+
 val count:      t -> int
     (** The number of features in the table *)
 
@@ -25,9 +27,22 @@ val anchor: int -> t -> int
     (** [anchor i ft] returns the formal generic which serves as an anchor for
         inheritance. Raises [Not_found] if there is no unique anchor *)
 
+
+val get_class:  int -> t -> int
+
+val has_anchor: int -> t -> bool
+
+val is_deferred: int -> t -> bool
+
 val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
+
+val find_variant: int -> int -> t -> int
+
+val private_variant: int -> int -> t -> int
+
+val has_variant: int -> int -> t -> bool
 
 val variant_term: term -> int -> int -> t -> term
     (** [variant t nb cls ft] returns the variant of the term [t] with [nb]
@@ -100,6 +115,7 @@ val definition: int -> int -> t -> term
 
 val feature_name: int -> t -> string
 
+val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
@@ -146,27 +162,40 @@ val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
       [nargs] arguments. *)
 
 
-val put_function:
+val find_with_signature: feature_name -> Tvars.t -> Sign.t -> t -> int
+
+val add_function:
     feature_name withinfo -> Tvars.t -> int array
       -> Sign.t -> implementation_status -> term option -> t -> unit
-  (** [put_function fn tvs fnms sign imp_stat term_opt ft] adds the function
+  (** [add_function fn tvs fnms sign imp_stat term_opt ft] adds the function
+      with then name [fn], the formal generics of [tvs], the arguments [fnms],
+      the signature [sign] the implementation status [imp_stat] and an
+      optional definition term [term_opt] to the feature table [ft] *)
+
+val add_function:
+    feature_name withinfo -> Tvars.t -> int array
+      -> Sign.t -> implementation_status -> term option -> t -> unit
+  (** [add_function fn tvs fnms sign imp_stat term_opt ft] adds the function
+      with then name [fn], the formal generics of [tvs], the arguments [fnms],
+      the signature [sign] the implementation status [imp_stat] and an
+      optional definition term [term_opt] to the feature table [ft] *)
+
+val update_function:
+    int -> info -> implementation_status -> bool -> term option -> t -> unit
+  (** [update_function fn tvs fnms sign imp_stat term_opt ft] updates the function
       with then name [fn], the formal generics of [tvs], the arguments [fnms],
       the signature [sign] the implementation status [imp_stat] and an
       optional definition term [term_opt] to the feature table [ft] *)
 
 
+
 val term_to_string: term -> int -> int array -> t -> string
 
-val do_inherit: int -> (int * type_term array) list -> info -> t -> unit
-  (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the
-      features from all ancestors [par_idx[par_args]] in the ancestor list
-      [anc_lst]. *)
+val inherit_effective: int -> int -> t -> unit
 
-val export_inherited: int -> (int * type_term array) list  -> t -> unit
-  (** [export_inherited cls anc_lst ft] let the class [cls] export all
-      inherited features from all ancestors [par_idx[par_args]] in the
-      ancestor list [anc_lst]. *)
+val inherit_feature: int -> int -> int -> bool -> t -> unit
 
+val export_feature: int -> t -> unit
 
 val print: t -> unit
 

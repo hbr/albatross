@@ -666,7 +666,7 @@ let feature_name_to_string (fn:feature_name): string =
   | FNtrue ->  "true"
   | FNfalse -> "false"
 
-type name_sig = feature_name * type_t list
+type name_sig = feature_name * type_t list * type_t option
 
 type rename_item = name_sig * feature_name
 
