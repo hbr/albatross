@@ -80,12 +80,6 @@ let empty = {
   lams  = IntMap.empty}
 
 
-let next_index (tab:t): int =
-  match tab.terms with
-    [] -> 0
-  | (idx,_,_,_,_)::_ -> idx+1
-
-
 let count  (tab:t): int =
   List.length tab.terms
 
@@ -447,6 +441,9 @@ let newmap (i:int) (idx:int) (map: sublist IntMap.t): sublist IntMap.t =
     IntMap.add i [idx,Term_sub.empty] map
 
 
+let has (idx:int) (table:t): bool =
+  List.exists (fun (i,_,_,_,_) -> i = idx) table.terms
+
 
 let add
     (t:term) (nargs:int) (nbenv:int)
@@ -456,9 +453,8 @@ let add
       environment with [nbenv] variables to the index [idx]
       within the node [tab].
    *)
-  assert (next_index table <= idx);
+  assert (not (has idx table));
   let rec add0 (t:term) (nb:int) (tab:t): t =
-    assert (next_index tab <= idx);
     let tab =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
