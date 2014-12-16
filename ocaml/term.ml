@@ -68,7 +68,7 @@ module Term: sig
   val used_variables_from:  term -> int -> int list
 
   val wo_names: term -> term
-  val equal_wo_names: term -> term -> bool
+  val equivalent: term -> term -> bool
 
   val map: (int->int->term) -> term -> term
 
@@ -338,7 +338,7 @@ end = struct
     | Lam (n,_,t) -> Lam (n, [||], wo_names t)
 
 
-  let equal_wo_names (t1:term) (t2:term): bool =
+  let equivalent (t1:term) (t2:term): bool =
     let u1 = wo_names t1
     and u2 = wo_names t2
     in

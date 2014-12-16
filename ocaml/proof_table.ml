@@ -418,8 +418,7 @@ let term_of_mp (a:int) (b:int) (at:t): term =
       printf "  tb %d:%s\n" b (string_of_term tb at);
       raise Illegal_proof_term
   in
-  let ok = (ta = b1) in
-  (*let ok = Term.equal_wo_names ta b1 in*)
+  let ok = Term.equivalent ta b1 in
   if not ok then begin
     printf "antecedent of tb does not conincide with ta (ok %b)\n" ok;
       printf "  ta %d:%s\n" a (string_of_term ta at);

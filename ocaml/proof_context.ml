@@ -530,7 +530,7 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
   assert (RD.is_specialized rdj);
   assert (RD.is_implication rdj);
   let t = RD.term_b rdj nbenv in
-  assert (term i pc = RD.term_a rdj nbenv);
+  assert (Term.equivalent (term i pc) (RD.term_a rdj nbenv));
   try
     find t pc
   with Not_found ->
