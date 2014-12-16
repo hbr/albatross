@@ -105,7 +105,7 @@ let interface_used (used_blk: use_block) (mt:t): IntSet.t =
         IntSet.union set desc.priv
       with Not_found ->
         error_info mdl.i ("module `" ^ (string_of_module mdl.v) ^
-                          "'not used in implementation file"))
+                          "' not used in implementation file"))
     (IntSet.singleton (current mt))
     used_blk
 

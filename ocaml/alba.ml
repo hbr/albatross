@@ -723,8 +723,12 @@ let verify_interface (nme:int) (pc:PC.t) (ad:t): unit =
   let fn = file_path nme "ali" ad      in
   let use_blk,ast = parse_file fn      in
   let mt = PC.module_table pc in
-  let used = Module_table.interface_used use_blk mt in
-  PC.set_interface_check used pc;
+  begin try
+    let used = Module_table.interface_used use_blk mt in
+    PC.set_interface_check used pc
+  with Error_info(info,str) ->
+    info_abort fn info str
+  end;
   analyze ast fn pc;
   update_depend nme true pc ad
 
