@@ -789,7 +789,10 @@ let compile (ad:t): unit =
     match work,stack with
       [], []        -> ()
     | mdl::rest, [] ->
-        push_and_comp mdl rest stack
+        if List.mem mdl ready then
+          comp rest stack ready
+        else
+          push_and_comp mdl rest stack
     | _,  (mdl,st,sti)::rest ->
         try
           let umdl =
