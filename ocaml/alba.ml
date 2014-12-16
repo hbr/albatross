@@ -789,8 +789,10 @@ let compile (ad:t): unit =
           assert (snd umdl = []);
           push_and_comp (fst umdl) work stack
         with Not_found ->
-          if 0 < ad.verbosity then
+          if 0 < ad.verbosity then begin
             printf "Compile module `%s'\n" (ST.string mdl);
+            flush_all ()
+          end;
           let pc = PC.make ad.verbosity in
           verify_implementation mdl pc ad;
           if sti.is_avail then
