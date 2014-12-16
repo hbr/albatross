@@ -205,8 +205,7 @@ rule next_token = parse
     kwtoken op
   with
     Not_found ->
-      let _ = assert ((String.length op) > 0)
-      in
+      assert ((String.length op) > 0);
       let last = op.[(String.length op)-1]
       and sym  = Support.ST.symbol op
       in
