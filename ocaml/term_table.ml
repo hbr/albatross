@@ -1,56 +1,7 @@
-(*
-We use a tree like datastructure which contains the structure of all terms in
-the table.
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
 
-A term is a recursive structure which is either a variable, an application
-(i.e. a function term and a sequence of argument terms) or a lambda
-abstraction (i.e. a number of arguments which are bound in the abstraction and
-a term).
-
-We need to distinguish three type of variables:
-
-- Argument variables: They can be substituted by any term
-
-- Bound variables: These are variables bound by some lambda abstraction. They
-                   can be unified only with the same variable
-
-- Constants: They refer to some global features and can be unified only with
-             the same variable
-
-
-The first type of variables are called `avar's` (argument variables), the
-second and third type are called `ovar's` (other variables).
-
-Each node of the tree has the following information
-
-- avars:   There is an entry in this map for each assertion which has an
-           argument variable in this position. It maps assertion ids to the
-           corresponding argument variable
-
-- bvars:   There is an entry in this map for each bound variable which appears
-           in any of the assertions at this position. The map maps the bound
-           variable to the set of assertion id's where the other variable
-           appears at this position.
-
-- fvars:   This is a list of pairs (nb,map) which might be empty. For each
-           pair nb is the number of bound variables of the environment (i.e. 0
-           for the global environment) and in the map there is an entry for
-           each constant variable (i.e. variables which are neither bound by
-           an abstraction nor substitutable argument variables) which appears
-           in any of the assertions at this position. The map maps the
-           constant variable to the set of assertion is's where the constant
-           variable appears at this position.
-
-- fapps:   There is an entry in this map for each number of arguments where a
-           function application appears in any of the assertions with this
-           number of arguments at that position. The map maps the number of
-           arguments to a node (for the function term) and a node array (for
-           the argument terms).
-
-- lams:    There is an entry in this map for each number of arguments where a
-           lambda term appears in any of the assertions with this number of
-           arguments at that position. The map maps the number of bound
-           variables to a node for the abstracted term.
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
 open Container

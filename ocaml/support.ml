@@ -292,6 +292,12 @@ type operator =
   | Someop
   | Freeop  of int
   | RFreeop of int
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
+*)
+
 
 type associativity = Left | Right | Nonassoc
 

@@ -1,3 +1,9 @@
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
+*)
+
 {
 type extended_token = Parser.token*(bool*bool)
               (* [token, [can_start_line,can_end_line]] *)
@@ -310,8 +316,4 @@ let rec token lexbuf =
 
   | _ ->
       return_tok (fst tok) (is_end_token tok) pos
-
-
-
-
 }
