@@ -19,6 +19,7 @@ end)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
+                         mutable eq_feat:  int;
                          mutable fmap:  int Term_table2.t Feature_map.t;
                          mutable fset:  IntSet.t;
                          mutable def_features: int list;
@@ -84,6 +85,7 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   let anc  = IntMap.singleton idx args in
   {hmark = hm;
    tvs   = tvs;
+   eq_feat = -1;
    fmap  = Feature_map.empty;
    fset  = IntSet.empty;
    def_features = [];
@@ -1130,6 +1132,9 @@ let do_inherit
     let cls_bdesc = (descriptor cls_idx ct).priv in
     List.iter
       (fun (anc_idx,anc_args) ->
+        (*printf "%s inherit private %s\n"
+          (class_name cls_idx ct)
+          (class_name anc_idx ct);*)
         let anc_bdesc = (descriptor anc_idx ct).priv in
         one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
       anc_lst
@@ -1137,6 +1142,9 @@ let do_inherit
   let cls_bdesc = base_descriptor cls_idx ct in
   List.iter
     (fun (anc_idx,anc_args) ->
+        (*printf "%s inherit public or private %s\n"
+          (class_name cls_idx ct)
+          (class_name anc_idx ct);*)
       let anc_bdesc = base_descriptor anc_idx ct in
       one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
     anc_lst

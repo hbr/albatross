@@ -47,7 +47,7 @@ val proof_term:    int -> t -> proof_term
 val nbenv_term:    int -> t -> int
 val local_term:    int -> t -> term
 val is_assumption: int -> t -> bool
-val variant:       int -> int -> t -> term
+val variant:       int -> int -> int -> t -> term
 
 val specialized: int -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
@@ -72,6 +72,6 @@ val add_eval_backward:   term -> term -> Eval.t -> t -> unit
 val add_witness:    term -> int -> int array -> term -> term array -> t -> unit
 val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
-val add_inherited:  term -> int -> int -> t -> unit
+val add_inherited:  term -> int -> int -> int -> t -> unit
 
 val discharged:   int -> t -> term * proof_term

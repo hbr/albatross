@@ -1,30 +1,36 @@
 open Support
 open Term
 open Container
+open Signature
 open Printf
 
 module FT = Feature_table
-
-
-let class_table (ft:FT.t):Class_table.t =
-  Feature_table.class_table ft
+module PC = Proof_context
 
 
 
-let inherit_deferred (i:int) (cls:int) (info:info) (ft:FT.t): unit =
+let class_table (pc:PC.t):Class_table.t =
+  Proof_context.class_table pc
+
+
+
+
+
+let inherit_deferred (i:int) (cls:int) (info:info) (pc:PC.t): unit =
   (* Inherit the deferred feature [i] in the class [cls] *)
+  let ft = Proof_context.feature_table pc in
   if 1 < Feature_table.verbosity ft then begin
-    let ct   = class_table ft in
-    let icls = Feature_table.get_class i ft in
+    let ct   = class_table pc in
+    let icls = Feature_table.class_of_feature i ft in
     printf "   inherit deferred \"%s %s\" in %s\n"
       (Class_table.class_name icls ct)
       (Feature_table.string_of_signature i ft)
       (Class_table.class_name cls ct) end;
-  assert (cls <> Feature_table.get_class i ft);
+  assert (cls <> Feature_table.class_of_feature i ft);
   let idx =
     try Feature_table.find_variant i cls ft
     with Not_found ->
-      let ct   = class_table ft  in
+      let ct   = class_table pc  in
       let str =
         "The class " ^ (Class_table.class_name cls ct) ^
         " does not have a feature unifyable with \"" ^
@@ -38,77 +44,104 @@ let inherit_deferred (i:int) (cls:int) (info:info) (ft:FT.t): unit =
 
 
 
+let prove (t:term) (pc:PC.t): unit =
+  if PC.is_interface_use pc then
+    ()
+  else begin
+    let ifc_check = PC.is_interface_check pc
+    and strength  = PC.prover_strength pc
+    in
+    let push () =
+      if ifc_check then PC.push_untyped [||] pc
+    and pop () =
+      if ifc_check then PC.pop pc
+    in
+    try
+      push ();
+      let _ = Prover.prove t strength pc in
+      pop ()
+    with Not_found ->
+      pop ();
+      raise Not_found
+  end
 
 
-let inherit_effective (i:int) (cls:int) (info:info) (ft:FT.t): unit =
-  if 1 < Feature_table.verbosity ft then begin
-    let ct = class_table ft in
-    let icls = Feature_table.get_class i ft in
-    printf "   inherit \"%s %s\" in %s\n"
-      (Class_table.class_name icls ct)
-      (Feature_table.string_of_signature i ft)
-      (Class_table.class_name cls ct) end;
+
+let inherit_effective (i:int) (cls:int) (info:info) (pc:PC.t): unit =
+  let ft = Proof_context.feature_table pc in
+  let ct = class_table pc in
+  let class_name cls  = Class_table.class_name cls ct
+  and feat_sign  i    = Feature_table.string_of_signature i ft
+  and result_class i  =
+    let tvs,sign = Feature_table.signature i ft in
+    assert (Sign.has_result sign);
+    Tvars.principal_class (Sign.result sign) tvs
+  in
   if not (Feature_table.has_anchor i ft) then
     ()
-  else if not (Feature_table.has_variant i cls ft) then
-    Feature_table.inherit_effective i cls ft
-  else
-    let ct   = class_table ft  in
-    let str =
-      "The class " ^ (Class_table.class_name cls ct) ^
-      " has already a feature unifyable with \"" ^
-      (Feature_table.string_of_signature i ft) ^
-      "\"" in
-    error_info info str
-
-
-let export_inherited_variant (i:int) (cls:int) (ft:FT.t): unit =
-  (* Export the inherited variant of the feature [i] in the class [cls] *)
-  assert (Feature_table.is_interface_check ft);
-  if Feature_table.has_anchor i ft then
+  else begin
+    if 1 < Feature_table.verbosity ft then begin
+      let icls = Feature_table.class_of_feature i ft in
+      printf "   inherit \"%s %s\" in %s\n"
+        (class_name icls) (feat_sign i) (class_name cls) end;
     try
-      let idx = Feature_table.private_variant i cls ft in
-      Feature_table.export_feature idx ft;
-      Feature_table.inherit_feature i idx cls true ft
+      let idx = Feature_table.find_variant i cls ft in
+      Feature_table.inherit_feature i idx cls false ft;
+      let eq_term =
+        try Feature_table.definition_equality i ft
+        with Not_found ->
+          assert (Feature_table.has_definition i ft);
+          let res_cls = result_class i  in
+          assert (Class_table.has_ancestor res_cls Class_table.any_index ct);
+          let str =
+            "Cannot prove equivalence of \"" ^ (feat_sign idx) ^ "\" and \"" ^
+            (feat_sign i) ^ " because class " ^ (class_name res_cls) ^
+            "(" ^ (string_of_int res_cls) ^ ")" ^
+            " does not inherit ANY" in
+          error_info info str
+      in
+      let icls = Feature_table.class_of_feature i ft in
+      let var_eq_term = Feature_table.variant_term eq_term 0 icls cls ft in
+      begin try
+        prove var_eq_term pc
+      with Not_found ->
+        let str =
+          "The class " ^ (class_name cls) ^ " redefines the feature \"" ^
+          (feat_sign i) ^ "\" of class " ^ (class_name icls) ^
+          " but the equivalence of the definitions i.e.\n   " ^
+          (Feature_table.term_to_string var_eq_term 0 [||] ft) ^
+          "\ncannot be proven"
+        in
+        error_info info str
+      end
     with Not_found ->
-      assert (not (Feature_table.is_deferred i ft));
-      assert (not (Feature_table.has_variant i cls ft));
-      inherit_effective i cls UNKNOWN ft
+      Feature_table.inherit_effective i cls ft
+  end
 
 
 
-let export_inherited
-    (cls:int)
-    (anc_lst: (int * type_term array) list)
-    (ft:FT.t)
-    : unit =
-  (* Export all inherited features from all classes in the ancestor list [anc_lst]
-     in the class [cls] *)
-  let ct = class_table ft in
-  List.iter
-    (fun (par,par_args) ->
-      let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst;
-      let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst)
-    anc_lst
 
 
 
-let inherit_to_descendants (i:int) (info:info) (ft:FT.t): unit =
+let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
+  let ft = Proof_context.feature_table pc in
   if not (Feature_table.is_deferred i ft) && Feature_table.has_anchor i ft then
-    let ct = class_table ft in
-    let cls = Feature_table.get_class i ft in
+    let ct = class_table pc in
+    let cls = Feature_table.class_of_feature i ft in
     let descendants = Class_table.descendants cls ct in
     IntSet.iter
-      (fun cls -> inherit_effective i cls info ft)
+      (fun cls -> inherit_effective i cls info pc)
       descendants
+
+
+
+
 
 let do_inherit
     (cls:int)
     (anc_lst: (int * type_term array) list)
     (info:info)
-    (ft:FT.t)
+    (pc:PC.t)
     : unit =
   (* For all ancestors in the list [anc_lst]:
 
@@ -118,21 +151,22 @@ let do_inherit
      Then inherit all effective features of the class [par_idx] into the class
      [cls_idx]
    *)
-  let ct = class_table ft in
+  let ct = class_table pc in
   List.iter
     (fun (par,par_args) ->
       let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> inherit_deferred i cls info ft) flst;
+      List.iter (fun i -> inherit_deferred i cls info pc) (List.rev flst);
       let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> inherit_effective i cls info ft) flst
+      List.iter (fun i -> inherit_effective i cls info pc) (List.rev flst)
     )
     anc_lst
 
 
 
 
-let export_inherited_variant (i:int) (cls:int) (ft:FT.t): unit =
+let export_inherited_variant (i:int) (cls:int) (pc:PC.t): unit =
   (* Export the inherited variant of the feature [i] in the class [cls] *)
+  let ft = Proof_context.feature_table pc in
   assert (Feature_table.is_interface_check ft);
   if Feature_table.has_anchor i ft then
     try
@@ -142,32 +176,33 @@ let export_inherited_variant (i:int) (cls:int) (ft:FT.t): unit =
     with Not_found ->
       assert (not (Feature_table.is_deferred i ft));
       assert (not (Feature_table.has_variant i cls ft));
-      inherit_effective i cls UNKNOWN ft
+      inherit_effective i cls UNKNOWN pc
 
 
 
 let export_inherited
     (cls:int)
     (anc_lst: (int * type_term array) list)
-    (ft:FT.t)
+    (pc:PC.t)
     : unit =
   (* Export all inherited features from all classes in the ancestor list [anc_lst]
      in the class [cls] *)
-  let ct = class_table ft in
+  let ct = class_table pc in
   List.iter
     (fun (par,par_args) ->
       let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst;
+      List.iter (fun i -> export_inherited_variant i cls pc) (List.rev flst);
       let flst = Class_table.effective_features par ct in
-      List.iter (fun i -> export_inherited_variant i cls ft) flst)
+      List.iter (fun i -> export_inherited_variant i cls pc) (List.rev flst))
     anc_lst
 
 
-let inherit_to_descendants (i:int) (info:info) (ft:FT.t): unit =
+let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
+  let ft = Proof_context.feature_table pc in
   if not (Feature_table.is_deferred i ft) &&  Feature_table.has_anchor i ft then
-    let ct  = class_table ft in
-    let cls = Feature_table.get_class i ft in
+    let ct  = class_table pc in
+    let cls = Feature_table.class_of_feature i ft in
     let descendants = Class_table.descendants cls ct in
     IntSet.iter
-      (fun cls -> inherit_effective i cls info ft)
+      (fun cls -> inherit_effective i cls info pc)
       descendants

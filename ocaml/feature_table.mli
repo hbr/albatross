@@ -28,7 +28,7 @@ val anchor: int -> t -> int
         inheritance. Raises [Not_found] if there is no unique anchor *)
 
 
-val get_class:  int -> t -> int
+val class_of_feature:  int -> t -> int
 
 val has_anchor: int -> t -> bool
 
@@ -44,9 +44,10 @@ val private_variant: int -> int -> t -> int
 
 val has_variant: int -> int -> t -> bool
 
-val variant_term: term -> int -> int -> t -> term
-    (** [variant t nb cls ft] returns the variant of the term [t] with [nb]
-        bound variables in the class [cls] *)
+val variant_term: term -> int -> int -> int -> t -> term
+    (** [variant t nb base_cls cls ft] returns the variant of the term [t]
+        with [nb] bound variables of the base class [base_cls] in the class
+        [cls] *)
 
 val string_of_signature: int -> t -> string
 
@@ -113,7 +114,13 @@ val definition: int -> int -> t -> term
         a term (lambda term in case of arguments). Raises [Not_found] if
         feature [idx] has no definition *)
 
+val has_definition: int -> t -> bool
+
+val definition_equality: int -> t -> term
+
 val feature_name: int -> t -> string
+
+val signature: int -> t -> Tvars.t * Sign.t
 
 val is_feature_public: int -> t -> bool
 

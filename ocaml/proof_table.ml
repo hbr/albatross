@@ -239,10 +239,10 @@ let local_term (i:int) (at:t): term =
   Term.up n_up desc.term
 
 
-let variant (i:int) (cls:int) (at:t): term =
+let variant (i:int) (bcls:int) (cls:int) (at:t): term =
   let ft = feature_table at in
   let t,nbenv = term i at   in
-  let t = Feature_table.variant_term t nbenv cls ft in
+  let t = Feature_table.variant_term t nbenv bcls cls ft in
   t
 
 
@@ -620,8 +620,8 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         let t = term_of_someelim idx at in
         if trace then print0 t;
         t
-    | Inherit (idx,cls) ->
-        let t =  variant idx cls at in
+    | Inherit (idx,bcls,cls) ->
+        let t =  variant idx bcls cls at in
         if trace then print1 t idx;
         t
     | Subproof (nargs,names,res_idx,pt_arr) ->
@@ -703,9 +703,9 @@ let add_assumption (t:term) (at:t): unit =
   add_proved_0 t pt at
 
 
-let add_inherited (t:term) (idx:int) (cls:int) (at:t): unit =
+let add_inherited (t:term) (idx:int) (bcls:int) (cls:int) (at:t): unit =
   assert (is_global at);
-  let pt = Inherit (idx,cls) in
+  let pt = Inherit (idx,bcls,cls) in
   add_proved_0 t pt at
 
 

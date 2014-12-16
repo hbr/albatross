@@ -49,6 +49,17 @@ type t = {
   }
 
 
+let implication_index: int = 0
+let fparen_index:      int = 1
+let all_index:         int = 2
+let some_index:        int = 3
+let pparen_index:      int = 4
+let eq_index:          int = 5
+let false_index:       int = 6
+let not_index:         int = 7
+let or_index:          int = 8
+
+
 let empty (verbosity:int): t =
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
@@ -84,16 +95,18 @@ let base_descriptor_priv (i:int) (ft:t): base_descriptor =
 
 
 
-let base_descriptor (i:int) (ft:t): base_descriptor =
-  assert (i < count ft);
+let signature (i:int) (ft:t): Tvars.t * Sign.t =
   let desc = descriptor i ft in
-  if is_private ft then
-    desc.priv
-  else
-    match desc.pub with
-      None -> assert false (* cannot happen in public view *)
-    | Some bdesc -> bdesc
+  desc.tvs, desc.sign
 
+let class_of_feature (i:int) (ft:t): int =
+  (descriptor i ft).cls
+
+
+let string_of_signature (i:int) (ft:t): string =
+  let desc = descriptor i ft in
+  (feature_name_to_string desc.fname) ^
+  (Class_table.string_of_complete_signature desc.sign desc.tvs ft.ct)
 
 
 let is_feature_public (i:int) (ft:t): bool =
@@ -104,6 +117,20 @@ let is_feature_public (i:int) (ft:t): bool =
 let feature_name (i:int) (ft:t): string =
   let desc = descriptor i ft in
   feature_name_to_string desc.fname
+
+
+let base_descriptor (i:int) (ft:t): base_descriptor =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  if is_private ft then
+    desc.priv
+  else
+    match desc.pub with
+      None ->
+        printf "feature %d \"%s\" is not public\n" i (string_of_signature i ft);
+        assert false (* cannot happen in public view *)
+    | Some bdesc -> bdesc
+
 
 
 let definition (i:int) (nb:int) (ft:t): term =
@@ -120,6 +147,13 @@ let definition (i:int) (nb:int) (ft:t): term =
   | Some t ->
       let t = Term.upbound nb nargs t in
       if nargs = 0 then t else Lam (nargs,[||],t)
+
+
+
+
+let has_definition (i:int) (ft:t): bool =
+  try let _ = definition i 0 ft in true
+  with Not_found -> false
 
 
 
@@ -195,11 +229,6 @@ let count_fgs (i:int) (ft:t): int =
   Tvars.count_fgs (descriptor i ft).tvs
 
 
-let get_class (i:int) (ft:t): int =
-  assert (i < count ft);
-  (descriptor i ft).cls
-
-
 let anchor (i:int) (ft:t): int =
   let desc = descriptor i ft in
   if Array.length desc.anchored = 1 then
@@ -234,15 +263,47 @@ let private_variant (i:int) (cls:int) (ft:t): int =
 
 
 
-let variant_term (t:term) (nb:int) (cls:int) (ft:t): term =
+let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
+  assert (Class_table.has_ancestor cls base_cls ft.ct);
   let f (j:int): term =
     let var_j =
-      try variant j cls ft
-      with Not_found -> j
+      if class_of_feature j ft = base_cls && has_anchor j ft then
+        try variant j cls ft
+        with Not_found ->
+          assert false (* If [cls] inherits [base_cls] then there has to be a variant
+                          in the descendant *)
+      else
+        j
     in
     Variable var_j
   in
   Term.map_free f t nb
+
+
+
+let definition_equality (i:int) (ft:t): term =
+  assert (i < count ft);
+  assert (has_definition i ft);
+  let desc  = descriptor i ft
+  and bdesc = base_descriptor i ft in
+  assert (Sign.has_result desc.sign);
+  let nargs   = Sign.arity desc.sign
+  and res_cls = Tvars.principal_class (Sign.result desc.sign) desc.tvs in
+  assert (desc.cls <> -1);
+  let eq_id = variant eq_index res_cls ft in
+  let eq_id = nargs + eq_id
+  and f_id  = nargs + i
+  in
+  let t = Option.value bdesc.definition in
+  let f =
+    if nargs = 0 then Variable f_id
+    else Application (Variable f_id, Array.init nargs (fun i -> Variable i))
+  in
+  let eq_term = Term.binary eq_id f t in
+  if nargs = 0 then
+    eq_term
+  else
+    Term.quantified all_index nargs desc.argnames eq_term
 
 
 
@@ -255,12 +316,6 @@ let is_desc_deferred (desc:descriptor): bool =
 let is_deferred (i:int) (ft:t): bool =
   assert (i < count ft);
   is_desc_deferred (descriptor i ft)
-
-
-let string_of_signature (i:int) (ft:t): string =
-  let desc = descriptor i ft in
-  (feature_name_to_string desc.fname) ^
-  (Class_table.string_of_complete_signature desc.sign desc.tvs ft.ct)
 
 
 let names_of_formals (farr: formal array): int array =
@@ -401,18 +456,6 @@ let add_base
   in
   Seq.push desc ft.seq;
   lst := cnt :: !lst
-
-
-
-let implication_index: int = 0
-let fparen_index:      int = 1
-let all_index:         int = 2
-let some_index:        int = 3
-let pparen_index:      int = 4
-let eq_index:          int = 5
-let false_index:       int = 6
-let not_index:         int = 7
-let or_index:          int = 8
 
 
 
@@ -999,11 +1042,15 @@ let is_equality (t:term) (nbenv:int) (ft:t): bool =
 
 
 
-let update_equality (seed:int) (bdesc:base_descriptor): unit =
+let update_equality (seed:int) (i:int) (ft:t): unit =
   (* If the feature [seed] is the equality feature of ANY then mark the base
      descriptor [bdesc] as equality. *)
-  if seed = eq_index then
-    bdesc.is_eq <- true
+  if seed = eq_index then begin
+    let desc  = descriptor i ft
+    and bdesc = base_descriptor i ft in
+    bdesc.is_eq <- true;
+    assert (desc.cls <> -1)
+  end
 
 
 
@@ -1028,7 +1075,7 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
               IntMap.find cls bdesc_seed.variants = i1);
       bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
       bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
-      update_equality i_seed bdesc1
+      update_equality i_seed i1 ft
     )
     bdesc0.seeds;
   if not export && is_public ft then begin (* do the same for the private view *)
@@ -1074,7 +1121,7 @@ let inherit_effective (i:int) (cls:int) (ft:t): unit =
       None -> None
     | Some t ->
         let nargs = Array.length desc.argnames in
-        Some (variant_term t nargs cls ft)
+        Some (variant_term t nargs desc.cls cls ft)
   in
   let cnt = count ft
   and nargs = Array.length desc.argnames

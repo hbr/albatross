@@ -55,6 +55,8 @@ let is_private (pc:t): bool = Proof_table.is_private pc.base
 let is_public  (pc:t): bool = Proof_table.is_public  pc.base
 let is_interface_use   (pc:t): bool = Proof_table.is_interface_use  pc.base
 let is_interface_check (pc:t): bool = Proof_table.is_interface_check  pc.base
+let prover_strength (pc:t): int =
+  if is_interface_check pc then 0 else 1
 
 let add_used_module (name:int*int list) (used:IntSet.t) (pc:t): unit =
   Proof_table.add_used_module name used pc.base
@@ -842,8 +844,8 @@ let check_deferred (pc:t): unit = Context.check_deferred (context pc)
 
 let owner (pc:t): int = Context.owner (context pc)
 
-let variant (i:int) (cls:int) (pc:t): term =
-  Proof_table.variant i cls pc.base
+let variant (i:int) (bcls:int) (cls:int) (pc:t): term =
+  Proof_table.variant i bcls cls pc.base
 
 
 let add_global (defer:bool) (cls:int) (pc:t): unit =
@@ -862,8 +864,9 @@ let add_global (defer:bool) (cls:int) (pc:t): unit =
 
 let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
   (* Inherit the deferred assertion [i] in the class [cls] *)
-  assert (i < count pc);
-  let t = variant i cls pc in
+  assert (i < count_global pc);
+  let bcls = (Seq.elem i pc.gseq).cls in
+  let t = variant i bcls cls pc in
   let ct = class_table pc in
   if 1 < pc.verbosity then
     printf "   inherit deferred \"%s\" in %s\n"
@@ -880,14 +883,17 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
 let inherit_effective (i:int) (cls:int) (pc:t): unit =
   (* Inherit the effective assertion [i] in the class [cls] *)
   assert (is_global pc);
-  let t = variant i cls pc in
+  assert (i < count_global pc);
+  let bcls = (Seq.elem i pc.gseq).cls in
+  let t = variant i bcls cls pc in
   let ct = class_table pc in
   if 1 < pc.verbosity then
-    printf "   inherit \"%s\" in %s\n"
+    printf "   inherit \"%s\" of \"%s\" in %s\n"
       (string_of_term t pc)
+      (Class_table.class_name bcls ct)
       (Class_table.class_name cls ct);
   if not (has t pc) then begin
-    Proof_table.add_inherited t i cls pc.base;
+    Proof_table.add_inherited t i bcls cls pc.base;
     let _ = raw_add t true pc in ();
     add_global false cls pc
   end

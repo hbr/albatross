@@ -26,7 +26,7 @@ type proof_term =
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
-  | Inherit    of int * int  (* assertion, descendant class *)
+  | Inherit    of int * int * int (* assertion, base/descendant class *)
   | Subproof   of int        (* nargs *)
                 * int array  (* names *)
                 * int        (* res *)
@@ -80,8 +80,8 @@ end = struct
           Detached (index a, index b)
       | Specialize (i,args) ->
           Specialize (index i, args)
-      | Inherit (i,cls) ->
-          Inherit (index i, cls)
+      | Inherit (i,bcls,cls) ->
+          Inherit (index i, bcls, cls)
       | Eval (i,e)    -> Eval (index i, adapt_eval e)
       | Eval_bwd (t,e)-> Eval_bwd (t, adapt_eval e)
       | Witness (i,nms,t,args) ->
@@ -163,7 +163,7 @@ end = struct
               usd2
               set in
             set
-        | Inherit (i,cls) ->
+        | Inherit (i,bcls,cls) ->
             assert false
     in
     usd k start false pt_arr IntSet.empty
@@ -224,7 +224,7 @@ end = struct
             let k,pt_arr = reidx start_inner below n_rem k pt_arr1 in
             assert (k < start_inner + Array.length pt_arr);
             Subproof (nargs, nms, k, pt_arr)
-        | Inherit (i,cls) ->
+        | Inherit (i,bcls,cls) ->
             assert false
       in
       let lst,i =
@@ -319,7 +319,7 @@ end = struct
               uvars_args args set
           | Subproof (nb1,nms,i,pt_arr) ->
               uvars (nb+nb1) pt_arr set
-          | Inherit (i,cls) ->
+          | Inherit (i,bcls,cls) ->
               assert false
         )
           set
@@ -402,7 +402,7 @@ end = struct
               Someelim i
           | Subproof (nb1,nms,i,pt_arr) ->
               Subproof (nb1,nms,i, shrink (nb+nb1) pt_arr)
-          | Inherit (i,cls) ->
+          | Inherit (i,bcls,cls) ->
               assert false
         )
         pt_arr
@@ -456,7 +456,7 @@ end = struct
       | Subproof (nb1,nms,i,pt_arr) ->
           let pt_arr = Array.map (fun pt -> trm_up (nb+nb1) pt) pt_arr in
           Subproof (nb1,nms,i,pt_arr)
-      | Inherit (i,cls)-> pt
+      | Inherit (i,bcls,cls)-> pt
     in
     if n = 0 then pt else trm_up 0 pt
 
@@ -487,7 +487,7 @@ end = struct
       | Subproof (nb,nms,i,pt_arr) ->
           print_prefix (); printf "Subproof nb %d, i %d\n" nb i;
           print_pt_arr (prefix^"  ") (start+k) pt_arr
-      | Inherit (i,cls)     -> print_prefix (); printf "Inherit %d\n" i
+      | Inherit (i,bcls,cls)  -> print_prefix (); printf "Inherit %d\n" i
     done
 
   let short_string (pt:t): string =
@@ -496,7 +496,7 @@ end = struct
     | Assumption _ -> "ass"
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
     | Specialize (i,args) -> "spec " ^ (string_of_int i)
-    | Inherit (i,cls)     -> "inh " ^ (string_of_int i)
+    | Inherit (i,bcls,cls)     -> "inh " ^ (string_of_int i)
     | Eval (i,_)          -> "eval " ^ (string_of_int i)
     | Eval_bwd _          -> "eval"
     | Witness (i,nms,t,args) -> "wit " ^ (string_of_int i)

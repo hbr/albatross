@@ -134,9 +134,12 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
       or if the signature is callable with a tuple and the tuple has enough
       argments.  *)
 
+
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit
+
+val has_ancestor: int -> int -> t -> bool
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 
