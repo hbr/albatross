@@ -539,19 +539,14 @@ let expect_lambda (ntvs:int) (is_quant: bool) (is_pred:bool) (tb:t): unit =
           TVars_sub.count_local (Context.type_variables tb.c));
   assert (TVars_sub.count_fgs tb.tvars =
           TVars_sub.count_fgs (Context.type_variables tb.c));
-  (*printf "expect lambda tvs %s, req sign %s\n"
-    (string_of_tvs_sub tb) (signature_string tb);*)
   let csig = context_signature tb in
   if not is_quant then begin
     let upsig = upgrade_signature csig is_pred tb in
-    (*printf "    csig  %s\n" (string_of_complete_signature_sub csig tb);
-    printf "    upsig %s\n" (string_of_complete_signature_sub upsig tb);*)
     assert (Sign.has_result csig);
-    (try
+    try
       unify_sign tb.sign upsig tb
     with Not_found ->
-      printf "  cannot unify\n";
-      raise Not_found)
+      raise Not_found
   end;
   tb.sign <- Sign.make_const (Sign.result csig)
 
