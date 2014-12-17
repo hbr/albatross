@@ -58,6 +58,9 @@ let eq_index:          int = 5
 let false_index:       int = 6
 let not_index:         int = 7
 let or_index:          int = 8
+let tuple_index:       int = 9
+let first_index:       int = 10
+let second_index:      int = 11
 
 
 let empty (verbosity:int): t =
@@ -474,6 +477,8 @@ let base_table (verbosity:int) : t =
                            [|g_tp|])
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|])
+  and tup_tp= Application (Variable (Class_table.tuple_index+2),
+                           [|a_tp;b_tp|])
   in
   add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
@@ -523,6 +528,18 @@ let base_table (verbosity:int) : t =
     "boolean" Class_table.boolean_index (FNoperator Orop)
     [||] [|bool;bool|] bool false false (Some or_term) ft;
 
+  add_base (* tuple *)
+    "tuple" Class_table.tuple_index (FNname ST.tuple)
+    [|any2;any2|] [|a_tp;b_tp|] tup_tp false false None ft;
+
+  add_base (* first *)
+    "first" Class_table.tuple_index (FNname ST.first)
+    [|any2;any2|] [|tup_tp|] a_tp false false None ft;
+
+  add_base (* second *)
+    "second" Class_table.tuple_index (FNname ST.second)
+    [|any2;any2|] [|tup_tp|] b_tp false false None ft;
+
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
@@ -532,6 +549,9 @@ let base_table (verbosity:int) : t =
   assert ((descriptor false_index ft).fname       = FNfalse);
   assert ((descriptor not_index ft).fname         = FNoperator Notop);
   assert ((descriptor or_index ft).fname          = FNoperator Orop);
+  assert ((descriptor tuple_index ft).fname       = FNname ST.tuple);
+  assert ((descriptor first_index ft).fname       = FNname ST.first);
+  assert ((descriptor second_index ft).fname      = FNname ST.second);
   ft
 
 
@@ -805,7 +825,27 @@ let term_to_string
         Lam (n,nms,t) ->
           let argsstr, tstr = lam_strs n nms t in
           qstr ^ "(" ^ argsstr ^ ") " ^ tstr
-      | _ -> assert false  (* cannot happen *)
+      | _ ->
+          (* very rare case that a quantor is applied directly to a predicate *)
+          qstr ^ ".(" ^ (to_string args.(0) names nanon false None) ^ ")"
+    in
+    let funapp2str (f:term) (argsstr:string): string =
+      let default f =
+        (to_string f names nanon true None) ^ "(" ^ argsstr ^ ")" in
+      match f with
+        Variable i when nnames <= i ->
+          let fn = (descriptor (i-nnames) ft).fname in
+          begin match fn with
+            FNname fsym ->
+              if fsym = (ST.symbol "singleton") then
+                "{" ^ argsstr ^ "}"
+              else if fsym = ST.tuple then
+                "(" ^ argsstr ^ ")"
+              else
+                default f
+          | _ -> default f
+          end
+      | _ -> default f
     in
     let op2str (op:operator) (args: term array): string =
       match op with
@@ -823,14 +863,22 @@ let term_to_string
         ^ (to_string args.(1) names nanon false (Some (op,false)))
           end
     and app2str (f:term) (args: term array): string =
-      (to_string f names nanon true None)
+      let argsstr =
+        String.concat
+          ","
+          (List.map
+             (fun t -> to_string t names nanon false None)
+             (Array.to_list args)) in
+      funapp2str f argsstr
+      (*(to_string f names nanon true None) ^ "(" ^ argsstr ^ ")"*)
+      (*(to_string f names nanon true None)
       ^ "("
       ^ (String.concat
            ","
            (List.map
               (fun t -> to_string t names nanon false None)
               (Array.to_list args)))
-      ^ ")"
+      ^ ")"*)
     and lam2str (n:int) (nms: int array) (t:term): string =
       let argsstr, tstr = lam_strs n nms t in
       "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
