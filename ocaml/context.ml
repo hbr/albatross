@@ -91,6 +91,7 @@ let entry_arity (e:entry): int = e.nfargs_delta
 
 let arity     (c:t): int = entry_arity c.entry
 
+let verbosity (c:t): int = c.verbosity
 
 let has_result (c:t): bool = Result_type.has_result c.entry.result
 

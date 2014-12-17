@@ -93,3 +93,5 @@ val update_term: t -> unit
 val result:            t -> term * TVars_sub.t
    (** The result term and the corresponding substitutions for the used type
        variables. *)
+
+val terms:  t -> term list

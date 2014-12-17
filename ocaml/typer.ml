@@ -30,6 +30,7 @@ module Accus: sig
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> bool -> bool -> t -> unit
   val complete_lambda:   int -> int -> int array -> t -> unit
+  val update_terms:      t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_type_variables: info -> t -> unit
   val result:            t -> term * TVars_sub.t
@@ -39,6 +40,7 @@ end = struct
   type t = {mutable accus: Term_builder.t list;
             mutable ntvs_added: int;
             mutable arity:  int;
+            trace: bool;
             c: Context.t}
 
   exception Untypeable of Term_builder.t list
@@ -48,6 +50,7 @@ end = struct
     {accus           = [Term_builder.make c];
      ntvs_added      = 0;
      arity           = 0;
+     trace           = 5 <= Context.verbosity c;
      c               = c}
 
   let is_empty     (accs:t): bool =   Mylist.is_empty     accs.accus
@@ -83,24 +86,54 @@ end = struct
     "}"
 
 
+  let trace_accus (accs:t): unit =
+    let accus = accs.accus in
+    List.iteri
+      (fun i acc ->
+        let ts = Term_builder.terms acc in
+        let str =
+          String.concat ", "
+            (List.rev_map
+               (fun t -> "\"" ^
+                 (Context.string_of_term t 0 accs.c) ^ "." ^
+                 (Term.to_string t) ^
+                 "\"")
+               ts) in
+        printf "  %d %s\n" i str)
+      accus
+
+
   let expect_function (nargs:int) (accs:t): unit =
     accs.arity           <- nargs;
     accs.ntvs_added      <- nargs + accs.ntvs_added;
-    List.iter (fun acc -> Term_builder.expect_function nargs acc) accs.accus
+    List.iter (fun acc -> Term_builder.expect_function nargs acc) accs.accus;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "expect function\n";
+      trace_accus accs
+    end
+
 
 
   let complete_function (nargs:int) (accs:t): unit =
     accs.ntvs_added <- accs.ntvs_added - nargs;
     List.iter
       (fun acc -> Term_builder.complete_function nargs acc)
-      accs.accus
+      accs.accus;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "complete function\n";
+      trace_accus accs
+    end
 
 
 
   let expect_argument (i:int) (accs:t): unit =
     (** Expect the next argument of the current application *)
     accs.arity <- 0;
-    List.iter (fun acc -> Term_builder.expect_argument i acc) accs.accus
+    List.iter (fun acc -> Term_builder.expect_argument i acc) accs.accus;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "expect argument\n";
+      trace_accus accs
+    end
 
 
   let add_leaf
@@ -123,6 +156,19 @@ end = struct
         )
         []
         accus;
+    if accs.trace && 1 < List.length terms then begin
+      let ct = Context.class_table accs.c in
+      printf "multiple leafs\n";
+      List.iter
+        (fun (i,tvs,sign) ->
+          printf "  %d %s %s\n" i (Context.string_of_term (Variable i) 0 accs.c)
+            (Class_table.string_of_complete_signature sign tvs ct))
+        terms
+    end;
+    if accs.trace && 1 < List.length accus then begin
+      printf "add_leaf\n";
+      trace_accus accs
+    end;
     if accs.accus = [] then
       raise (Untypeable accus)
 
@@ -142,18 +188,21 @@ end = struct
             lst)
         []
         accs.accus;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "expect lambda\n";
+      trace_accus accs
+    end;
     if accs.accus = [] then
       assert false (* must be handled *)
-    (*List.iter
-      (fun acc ->
-        try Term_builder.expect_lambda ntvs is_quant is_pred acc
-        with Not_found -> assert false (* must be handled*))
-      accs.accus*)
 
 
   let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
     List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus;
-    accs.ntvs_added <- ntvs_added
+    accs.ntvs_added <- ntvs_added;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "complete lambda\n";
+      trace_accus accs
+    end
 
 
 
@@ -174,23 +223,33 @@ end = struct
     str1, str2
 
 
-
+  let update_terms (accs:t): unit =
+    List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
+    if accs.trace && 1 < List.length accs.accus then begin
+      printf "update terms\n";
+      trace_accus accs
+    end
 
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
-    List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
-    if is_singleton accs then
-      ()
-    else begin
-      let estr = string_of_expression e
-      in
-      let t1,tvars1 = Term_builder.result (List.hd accs.accus)
-      and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus))
-      in
-      let str1, str2 = get_diff t1 t2 accs in
-      error_info inf
-        ("The expression " ^ estr ^ " is ambiguous \"" ^
-        str1 ^ "\" or \"" ^ str2 ^ "\""  )
-    end
+    match accs.accus with
+      [] -> assert false
+    | hd::tl when let res = Term_builder.result hd in
+      List.exists (fun acc -> Term_builder.result acc = res) tl ->
+        let estr = string_of_expression e
+        in
+        let t1,tvars1 = Term_builder.result (List.hd accs.accus)
+        and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus))
+        in
+        printf "ambiguous expression %s (%d)\n" (string_of_expression e)
+          (List.length accs.accus);
+        printf "    t1 %s\n" (Term.to_string t1);
+        printf "    t2 %s\n" (Term.to_string t2);
+        let str1, str2 = get_diff t1 t2 accs in
+        error_info inf
+          ("The expression " ^ estr ^ " is ambiguous \"" ^
+           str1 ^ "\" or \"" ^ str2 ^ "\""  )
+    | _ ->
+        ()
 
   let check_type_variables (inf:info) (accs:t): unit =
     List.iter (fun acc -> Term_builder.check_type_variables inf acc) accs.accus
@@ -284,6 +343,8 @@ let analyze_expression
   (** Analyse the expression [ie] in the context [context] and return the term.
    *)
   assert (not (Context.is_global c));
+  if 5 <= Context.verbosity c then
+    printf "typer analyze %s\n" (string_of_expression ie.v);
   let info, exp = ie.i, ie.v in
   let rec analyze
       (e:expression)
@@ -339,8 +400,8 @@ let analyze_expression
         not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
     | Explist _ ->
         not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
-    | Tupleexp (_,_) ->
-        not_yet_implemented ie.i ("Tupleexp Typing of "^ (string_of_expression e))
+    | Tupleexp (a,b) ->
+        application (Identifier ST.tuple) [|a;b|] accs
     | Expcolon (_,_) ->
         not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
     | Expassign (_,_) ->
@@ -404,6 +465,7 @@ let analyze_expression
   analyze exp accs;
   assert (not (Accus.is_empty accs));
 
+  Accus.update_terms accs;
   Accus.check_uniqueness info exp accs;
   Accus.check_type_variables ie.i accs;
 

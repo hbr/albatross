@@ -31,6 +31,7 @@ val is_interface_check:t -> bool
 val is_interface_use:  t -> bool
     (** Are we using an interface? *)
 
+val verbosity: t -> int
 
 val find_module:        (int * int list) -> t -> int
 
