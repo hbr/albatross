@@ -41,7 +41,7 @@ let expression_from_dotted_id (l: int list): expression =
 
 
 let set_of_expression_list (lst:expression list): expression =
-  let singleton = Identifier (ST.symbol "singleton")
+  let singleton = Identifier (ST.singleton)
   in
   let singl (e:expression) = Funapp (singleton,e)
   in
@@ -226,7 +226,7 @@ module_list:
 |   one_module separator module_list { $1 :: $3 }
 
 one_module: dotted_id_list  {
-  withinfo (rhs_info 1) (List.hd $1, List.rev (List.tl $1))
+  withinfo (rhs_info 1) (List.hd $1, List.tl $1)
 }
 
 
