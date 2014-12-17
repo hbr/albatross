@@ -444,9 +444,7 @@ let trace_failed (ad:t) (): unit =
 let set_verbosity (ad:t) (level:int): unit =
   check_compile "unknown option `-verbosity'" ad;
   if 0 <= level then
-    ad.verbosity <- level;
-  if 0 < level then Options.set_trace_failed_proof ();
-  if 1 < level then Options.set_trace_proof ()
+    ad.verbosity <- level
 
 
 let set_force (ad:t) (): unit =

@@ -1,75 +1,8 @@
-(*
------------------------------------------------------------------------------
-   Command line options
------------------------------------------------------------------------------
+(* Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation.
 *)
-
-module Options: sig
-  val is_prover_basic:    unit -> bool
-  val is_prover_forward:  unit -> bool
-  val is_prover_backward: unit -> bool
-  val set_prover_basic:   unit -> unit
-  val set_prover_forward: unit -> unit
-
-  val is_tracing_failed_proof: unit -> bool
-  val is_tracing_proof:        unit -> bool
-  val trace_level:             unit -> int
-  val set_trace_failed_proof:  unit -> unit
-  val set_trace_proof:         unit -> unit
-  val set_trace_level:         int  -> unit
-
-  val is_statistics:           unit -> bool
-  val set_statistics:          unit -> unit
-
-  val has_goal_limit:   unit -> bool
-  val goal_limit:       unit -> int
-  val set_goal_limit:   int  -> unit
-  val set_no_limit:     unit -> unit
-end = struct
-
-  let glimit = ref (Some 200)
-
-  let has_goal_limit (): bool =
-    match !glimit with None -> false | Some _ -> true
-
-  let goal_limit (): int =
-    assert (has_goal_limit ());
-    match !glimit with
-      None -> assert false
-    | Some n -> n
-
-  let set_goal_limit (i:int): unit =
-    glimit := Some i
-
-  let set_no_limit () : unit =
-    glimit := None
-
-  let prover   = ref 10
-
-  let is_prover_basic ()    = (0 <= !prover)
-  let is_prover_forward ()  = (1 <= !prover)
-  let is_prover_backward () = (1 <  !prover)
-
-  let set_prover_basic   () = prover := 0
-  let set_prover_forward () = prover := 1
-
-  let trace    = ref 0
-  let tr_level = ref 0
-
-  let is_tracing_failed_proof () = (1 <= !trace)
-  let is_tracing_proof ()        = (2 <= !trace)
-  let trace_level ()             = !tr_level
-  let set_trace_failed_proof ()  = trace := 1
-  let set_trace_proof ()         = trace := 2
-  let set_trace_level (i:int)    = tr_level := i
-
-  let statistics = ref false
-  let is_statistics () = !statistics
-  let set_statistics () = statistics := true
-end
-
-
-
 
 (*
 -----------------------------------------------------------------------------
@@ -138,7 +71,7 @@ end (* Parse_info *)
 
 (*
 -----------------------------------------------------------------------------
-   Symbol tables
+   Symbol table
 -----------------------------------------------------------------------------
 *)
 
@@ -162,7 +95,7 @@ module ST : sig
 end = struct
   open Container
   let kt                   = Key_table.empty ()
-  let symbol (str:string)  = Key_table.index (String.copy str) kt
+  let symbol (str:string)  = Key_table.index str kt
   let string (i:int)       = Key_table.key   i   kt
   let count ()             = Key_table.count kt
   let tuple           = symbol "tuple"
