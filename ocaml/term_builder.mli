@@ -94,4 +94,5 @@ val result:            t -> term * TVars_sub.t
    (** The result term and the corresponding substitutions for the used type
        variables. *)
 
-val terms:  t -> term list
+val has_term:   t -> bool
+val head_term:  t -> term

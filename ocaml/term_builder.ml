@@ -33,7 +33,9 @@ let concept (i:int) (tb:t): type_term = TVars_sub.concept i tb.tvars
 
 let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
 
-let terms (tb:t): term list = tb.tlist
+let has_term (tb:t): bool = tb.tlist <> []
+
+let head_term (tb:t): term = assert (has_term tb); List.hd tb.tlist
 
 let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   let ct  = class_table tb

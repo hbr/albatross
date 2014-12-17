@@ -86,31 +86,22 @@ end = struct
     "}"
 
 
-  let trace_accus (accs:t): unit =
+  let trace_accus (outer:bool) (accs:t): unit =
     let accus = accs.accus in
+    let string_of_term t =
+      if outer then Context.string_of_term_outer t 0 accs.c
+      else Context.string_of_term t 0 accs.c in
     List.iteri
       (fun i acc ->
-        let ts = Term_builder.terms acc in
-        let str =
-          String.concat ", "
-            (List.rev_map
-               (fun t -> "\"" ^
-                 (Context.string_of_term t 0 accs.c) ^ "." ^
-                 (Term.to_string t) ^
-                 "\"")
-               ts) in
-        printf "  %d %s\n" i str)
+        let t = Term_builder.head_term acc in
+        printf "    %d: \"%s\"  \"%s\"\n" i (string_of_term t) (Term.to_string t))
       accus
 
 
   let expect_function (nargs:int) (accs:t): unit =
     accs.arity           <- nargs;
     accs.ntvs_added      <- nargs + accs.ntvs_added;
-    List.iter (fun acc -> Term_builder.expect_function nargs acc) accs.accus;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "expect function\n";
-      trace_accus accs
-    end
+    List.iter (fun acc -> Term_builder.expect_function nargs acc) accs.accus
 
 
 
@@ -119,9 +110,9 @@ end = struct
     List.iter
       (fun acc -> Term_builder.complete_function nargs acc)
       accs.accus;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "complete function\n";
-      trace_accus accs
+    if accs.trace then begin
+      printf "  complete function with %d arguments\n" nargs;
+      trace_accus false accs
     end
 
 
@@ -129,11 +120,7 @@ end = struct
   let expect_argument (i:int) (accs:t): unit =
     (** Expect the next argument of the current application *)
     accs.arity <- 0;
-    List.iter (fun acc -> Term_builder.expect_argument i acc) accs.accus;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "expect argument\n";
-      trace_accus accs
-    end
+    List.iter (fun acc -> Term_builder.expect_argument i acc) accs.accus
 
 
   let add_leaf
@@ -165,9 +152,9 @@ end = struct
             (Class_table.string_of_complete_signature sign tvs ct))
         terms
     end;
-    if accs.trace && 1 < List.length accus then begin
-      printf "add_leaf\n";
-      trace_accus accs
+    if accs.trace then begin
+      printf "  add_leaf\n";
+      trace_accus false accs
     end;
     if accs.accus = [] then
       raise (Untypeable accus)
@@ -188,10 +175,6 @@ end = struct
             lst)
         []
         accs.accus;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "expect lambda\n";
-      trace_accus accs
-    end;
     if accs.accus = [] then
       assert false (* must be handled *)
 
@@ -199,9 +182,9 @@ end = struct
   let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
     List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus;
     accs.ntvs_added <- ntvs_added;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "complete lambda\n";
-      trace_accus accs
+    if accs.trace then begin
+      printf "  complete lambda\n";
+      trace_accus true accs
     end
 
 
@@ -225,9 +208,9 @@ end = struct
 
   let update_terms (accs:t): unit =
     List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
-    if accs.trace && 1 < List.length accs.accus then begin
-      printf "update terms\n";
-      trace_accus accs
+    if accs.trace then begin
+      printf "  update terms\n";
+      trace_accus false accs
     end
 
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
