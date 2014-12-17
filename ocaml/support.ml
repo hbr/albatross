@@ -146,12 +146,38 @@ module ST : sig
   val symbol: string -> int
   val string: int    -> string
   val count:  unit   -> int
+  val tuple:           int
+  val first:           int
+  val second:          int
+  val singleton:       int
+  val class_boolean:   int
+  val class_any:       int
+  val class_tuple:     int
+  val class_function:  int
+  val class_predicate: int
+  val generic_a:       int
+  val generic_b:       int
+  val generic_g:       int
+  val generic_h:       int
 end = struct
   open Container
   let kt                   = Key_table.empty ()
   let symbol (str:string)  = Key_table.index (String.copy str) kt
   let string (i:int)       = Key_table.key   i   kt
   let count ()             = Key_table.count kt
+  let tuple           = symbol "tuple"
+  let first           = symbol "first"
+  let second          = symbol "second"
+  let singleton       = symbol "singleton"
+  let class_tuple     = symbol "TUPLE"
+  let class_boolean   = symbol "BOOLEAN"
+  let class_any       = symbol "ANY"
+  let class_function  = symbol "FUNCTION"
+  let class_predicate = symbol "PREDICATE"
+  let generic_a       = symbol "A"
+  let generic_b       = symbol "B"
+  let generic_g       = symbol "G"
+  let generic_h       = symbol "H"
 end
 
 
@@ -450,22 +476,6 @@ let expression_list (e:expression): expression list =
   list e []
 
 
-let set_of_expression (e:expression): expression =
-  let lst = expression_list e
-  and singleton = Identifier (ST.symbol "singleton")
-  in
-  let singl (e:expression) = Funapp (singleton,e)
-  in
-  match List.rev lst with
-    [] -> assert false (* cannot happen, list has at least the element [e] *)
-  | hd::tl ->
-      List.fold_left
-        (fun res e ->
-          Binexp (Plusop, res, singl e))
-        (singl hd)
-        tl
-
-
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
@@ -709,7 +719,7 @@ type module_name = int * library_name
 
 
 let string_of_library (lib:library_name): string =
-  String.concat "." (List.map ST.string lib)
+  String.concat "." (List.rev_map ST.string lib)
 
 
 let string_of_module ((m,lib):module_name): string =
