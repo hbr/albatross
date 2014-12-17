@@ -643,6 +643,7 @@ let analyze_used
             use_blk);
   let rec used (stack:(module_name withinfo*string*string*use_block) list)
       (set:IntSet.t)
+      (fn_outer:string)
       : IntSet.t =
     let push (umdl:module_name withinfo) (fn:string)
         : (module_name withinfo*string*string*use_block) list =
@@ -676,7 +677,7 @@ let analyze_used
           let umdl =
             List.find (fun m -> not (Module_table.has m.v mt)) use_blk
           in
-          used (push umdl fn) set
+          used (push umdl fn) set fn
         with Not_found ->
           if ext="al" then set
           else begin
@@ -685,16 +686,16 @@ let analyze_used
             let mt = Proof_context.module_table pc in
             let nme = fst mdl.v in
             if Module_table.has_base nme mt then
-              info_abort fn mdl.i ("Duplicate base module " ^ (ST.string nme));
+              info_abort fn_outer mdl.i ("Duplicate base module " ^ (ST.string nme));
             PC.add_used_module mdl.v set pc;
             let use_blk2,ast = parse_file fn in
             analyze ast fn pc;
             let set = IntSet.add (Module_table.current mt) set in
-            used rest set
+            used rest set fn
           end
   in
   let mdl = withinfo UNKNOWN (mdl,[]) in
-  used [mdl,fn,"al",use_blk] IntSet.empty
+  used [mdl,fn,"al",use_blk] IntSet.empty fn
 
 
 let update_depend (nme:int) (pub:bool) (pc:PC.t) (ad:t): unit =
