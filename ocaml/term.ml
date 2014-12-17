@@ -854,6 +854,7 @@ module Term_sub: sig
   val to_string:      t -> string
   val count:          t -> int
   val for_all:        (int -> term -> bool) -> t -> bool
+  val iter:           (int -> term -> unit) -> t -> unit
   val is_identity:    t -> bool
   val is_injective:   t -> bool
   val empty:          t
@@ -886,6 +887,8 @@ end = struct
   let for_all (f:int-> term -> bool) (sub:t): bool =
     IntMap.for_all f sub
 
+  let iter (f:int -> term -> unit) (sub:t): unit =
+    IntMap.iter f sub
 
   let is_identity (sub:t): bool =
     IntMap.for_all (fun i t -> Variable i = t) sub
