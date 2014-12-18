@@ -305,9 +305,9 @@ let triggers_evaluation (t:term) (pc:t): bool =
           nbenv <= i &&
           let idx = i - nbenv in
           idx = Feature_table.or_index ||
+          idx = Feature_table.some_index ||
           (Feature_table.owner idx ft <> Class_table.boolean_index &&
-           idx <> Feature_table.all_index &&
-           idx <> Feature_table.some_index)
+           idx <> Feature_table.all_index)
       end
   | _ ->
       false
