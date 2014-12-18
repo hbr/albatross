@@ -52,8 +52,7 @@ val is_equal_or_fg: type_term -> t -> type_term -> t -> bool
 val principal_class: type_term -> t -> int
     (** [principal_class tp tvs] returns the principal class of the type [tp] *)
 
-val add_fgs:      t -> t -> t
-val remove_fgs:   t -> t -> t
+val add_fgs:      int -> t -> t -> t
 
 val insert_fgs:   t -> int -> t -> t
     (** [insert_fgs tvs1 i tvs2] inserts in [tvs1] at [i] the concepts of the

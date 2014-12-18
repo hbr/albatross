@@ -136,50 +136,42 @@ let principal_class (tp:type_term) (tvs:t): int =
   pcls tp
 
 
-let add_fgs (tvs_new:t) (tvs:t): t =
-  let nfgs0   = count_fgs tvs in
-  let nfgs_delta = count_fgs tvs_new - nfgs0 in
-  assert (0 <= nfgs_delta);
-  assert (tvs.fgnames =
-          Array.sub tvs_new.fgnames nfgs_delta nfgs0);
-  assert (nfgs_delta = 0); (* remove the first time greater 0 *)
-  let cnt0 = count tvs
-  and cnt1 = count tvs_new in
-  assert (cnt1 <= cnt0);
-  let cnt_delta = cnt0 - cnt1 in
-  let fgconcepts =
-    Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
-  and concepts =
-    Array.map (fun tp -> Term.upbound  nfgs_delta cnt0 tp) tvs.concepts
-  in
-  {tvs with
-   concepts   = concepts;
-   fgnames    = tvs_new.fgnames;
-   fgconcepts = fgconcepts}
+let add_fgs (nfgs:int) (tvs_new:t) (tvs:t): t =
+  (* Add the first [nfgs] formal generics of [tvs_new] to [tvs] assuming that the
+     formal generics above nfgs are already at the end of [tvs].
 
-
-
-let remove_fgs (tvs_new:t) (tvs:t): t =
-  let nfgs0      = count_fgs tvs in
-  let nfgs_delta = nfgs0 - count_fgs tvs_new in
-  assert (0 <= nfgs_delta);
-  assert (nfgs_delta = 0); (* remove the first time greater 0 *)
-  let cnt0 = count tvs
-  and cnt1 = count tvs_new in
-  assert (cnt1 <= cnt0);
-  let cnt_delta = cnt0 - cnt1 in
-  try
-    let fgconcepts =
-      Array.map (fun tp -> Term.up cnt_delta tp) tvs_new.fgconcepts
-    and concepts =
-      Array.map (fun tp -> Term.down_from nfgs_delta cnt0 tp) tvs.concepts
+     tvs_new:         locs  +                 fgs1 + fgs2  (len(fgs1) = nfgs
+     tvs:     blocs + locs  +  globs + garb    +     fgs2
+   *)
+  if nfgs = 0 then
+    tvs
+  else
+    let up n arr = Array.map (fun tp -> Term.up n tp) arr
+    and up_from n start arr = Array.map (fun tp -> Term.upbound n start tp) arr
+    in
+    let nlocs  = count_local tvs_new in
+    let nblocs = count_local tvs - nlocs in
+    let nfgs2  = count_global tvs_new - nfgs in
+    let nglobs = count_global tvs
+    and ngarb  = count_fgs tvs - nfgs2
+    in
+    assert (nblocs = 0);
+    let fgnames1    = Array.sub tvs_new.fgnames    0 nfgs
+    and fgconcepts1 = Array.sub tvs_new.fgconcepts 0 nfgs in
+    let fgconcepts1 = up nblocs fgconcepts1 in
+    let fgconcepts1 = up_from (nglobs+ngarb) (nblocs+nlocs) fgconcepts1
+    in
+    let start = nblocs+nlocs+nglobs+ngarb in
+    let fgconcepts2 = up_from nfgs start tvs.fgconcepts
+    and concepts    = up_from nfgs start tvs.concepts
     in
     {tvs with
      concepts   = concepts;
-     fgnames    = tvs_new.fgnames;
-     fgconcepts = fgconcepts}
-  with Term_capture ->
-    assert false (* cannot happen *)
+     fgnames    = Array.append fgnames1 tvs.fgnames;
+     fgconcepts = Array.append fgconcepts1 fgconcepts2}
+
+
+
 
 
 let dummy_fgnames (n:int): int array =

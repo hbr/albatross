@@ -120,6 +120,12 @@ let count_formal_generics (c:t): int =
   entry_nfgs c.entry
 
 
+let count_last_formal_generics (c:t): int =
+  (* The number of  formal generics introduced in this context.
+   *)
+  c.entry.nfgs_delta
+
+
 let count_last_arguments (c:t): int = c.entry.nfargs_delta
 
 let count_arguments (c:t): int = Array.length c.entry.fargs

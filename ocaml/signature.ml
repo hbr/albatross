@@ -301,8 +301,7 @@ module TVars_sub: sig
   val args:         t -> term array
   val add_sub:      int -> term -> t -> unit
   val update_sub:   int -> term -> t -> unit
-  val add_fgs:      t -> t -> t
-  val remove_fgs:   t -> t -> t
+  val add_fgs:      int -> t -> t -> t
   val add_global:   type_term array -> t -> t
   val add_local:    int -> t -> t
   val remove_local: int -> t -> t
@@ -387,15 +386,11 @@ end = struct
 
   let args (tv:t): term array = Term_sub_arr.args tv.sub
 
-  let add_fgs (tv_new:t) (tv:t): t =
+  let add_fgs (nfgs:int) (tv_new:t) (tv:t): t =
     let n = count_fgs tv_new - count_fgs tv in
-    {vars = Tvars.add_fgs tv_new.vars tv.vars;
+    assert (n = nfgs);
+    {vars = Tvars.add_fgs nfgs tv_new.vars tv.vars;
      sub  = Term_sub_arr.up_above_top n tv.sub}
-
-  let remove_fgs (tv_new:t) (tv:t): t =
-    let n = count_fgs tv - count_fgs tv_new in
-    {vars = Tvars.remove_fgs tv_new.vars tv.vars;
-     sub  = Term_sub_arr.down_above_top n tv.sub}
 
   let add_global (cs:type_term array) (tv:t): t =
     {vars = Tvars.add_global cs tv.vars;
@@ -429,13 +424,38 @@ end = struct
 
 
   let update_subs (tv:t) (tvnew:t): unit =
-    (** Update the type variables in [tv] with the type variables in [tvnew].
+    (* Update the type variables in [tv] with the type variables in [tvnew].
 
-        This requires that [tv] and [tvnew] have the same number of local type
-        variables and formal generics and [tvnew] might have more globals than
-        [tv] *)
-    assert ((count tv) <= (count tvnew));
-    assert ((count_local tv) = (count_local tvnew));
+       This requires that [tv] and [tvnew] have the same number of local type
+       variables and formal generics and [tvnew] might have more globals than
+       [tv]
+
+       tv:    loc              fgs
+       tvnew: loc  glob   garb fgs
+     *)
+    assert (count tv     <= count tvnew);
+    assert (count_fgs tv <= count_fgs tvnew);
+    assert (count_local tv = count_local tvnew);
+    assert (count_global tv = 0);
+    let nloc  = count_local tv
+    and nglob = count_global tvnew
+    and ngarb = count_fgs tvnew - count_fgs tv
+    in
+    let ndown = nglob + ngarb in
+    for i=0 to nloc-1 do
+      if Term_sub_arr.has i tvnew.sub &&
+        not (Term_sub_arr.has i tv.sub)
+      then
+        Term_sub_arr.add_new
+          i
+          (Term.down_from ndown nloc (get_star i tvnew))
+          tv.sub
+      else
+        assert ((get i tv) = (Term.down_from ndown nloc (get_star i tvnew)))
+    done
+    (*assert (count tv <= count tvnew);
+    assert (count_local tv = count_local tvnew);
+    assert (count_global tv = 0);
     assert ((count_fgs tv) = (count_fgs tvnew));
     let nloc  = count_local tv
     and ndown = (count_global tvnew) - (count_global tv)
@@ -450,7 +470,7 @@ end = struct
           tv.sub
       else
         assert ((get i tv) = (Term.down_from ndown nloc (get_star i tvnew)))
-    done
+    done*)
 
 
   let sub_star (t:type_term) (s:t): term =

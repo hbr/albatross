@@ -28,7 +28,7 @@ module Accus: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val expect_lambda:     int -> bool -> bool -> t -> unit
+  val expect_lambda:     int -> int -> bool -> bool -> t -> unit
   val complete_lambda:   int -> int -> int array -> t -> unit
   val update_terms:      t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
@@ -161,7 +161,8 @@ end = struct
 
 
 
-  let expect_lambda (ntvs:int) (is_quant:bool) (is_pred:bool) (accs:t): unit =
+  let expect_lambda
+      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool) (accs:t): unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
@@ -169,7 +170,7 @@ end = struct
       List.fold_left
         (fun lst acc ->
           try
-            Term_builder.expect_lambda ntvs is_quant is_pred acc;
+            Term_builder.expect_lambda ntvs nfgs is_quant is_pred acc;
             acc::lst
           with Not_found ->
             lst)
@@ -435,8 +436,9 @@ let analyze_expression
     let ntvs_gap = Accus.ntvs_added accs in
     Context.push_with_gap entlst None is_pred is_func ntvs_gap c;
     let ntvs      = Context.count_local_type_variables c
-    and fargnames = Context.local_fargnames c in
-    Accus.expect_lambda (ntvs-ntvs_gap) is_quant is_pred accs;
+    and fargnames = Context.local_fargnames c
+    and nfgs      = Context.count_last_formal_generics c in
+    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred accs;
     analyze e accs;
     Accus.check_type_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;

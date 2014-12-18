@@ -15,6 +15,19 @@ type t = {mutable tlist: term list;
           mutable tvars: TVars_sub.t;
           c: Context.t}
 
+(* The type variables of the term builder and the context differ.
+
+   context:          locs         +           fgs
+   builder:  blocs + locs + globs + garbfgs + fgs
+
+   Transformation from the context to the builder means
+   - make space for the additional locals at the bottom
+   - make space for the globals and the garbage formal generics in the middle
+
+   Note: The context never has global type variables. These appear only in the
+   term builder from the global functions with formal generics.
+*)
+
 let class_table (tb:t): Class_table.t = Context.class_table tb.c
 
 let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
@@ -99,18 +112,26 @@ let string_of_tvs_sub (tb:t): string =
 
 let context_signature (tb:t): Sign.t =
   (* The signature of the context transformed into the environment of the term
-     builder [tb]. *)
+     builder [tb].
+
+     context:           loc          +         fgs
+
+     builder:    bloc + loc  + glob  +  garb + fgs
+
+   *)
   let s = Context.signature tb.c
   and tvs = TVars_sub.tvars (Context.type_variables tb.c) in
   let nlocs  = count_local tb
   and nglobs = count_global tb
+  and ngarb  = count_fgs tb - Tvars.count_fgs tvs
   in
+  assert (ngarb = 0); (* remove the first time not valid *)
   let nlocs_delta = nlocs - Tvars.count_local tvs in
   assert (0 <= nlocs_delta);
   assert (Tvars.count_global tvs = 0);
   assert (Tvars.count_fgs tvs = count_fgs tb);
   let s = Sign.up nlocs_delta s in
-  Sign.up_from nglobs nlocs s
+  Sign.up_from (nglobs+ngarb) nlocs s
 
 
 let upgrade_signature (s:Sign.t) (is_pred:bool) (tb:t): Sign.t =
@@ -130,18 +151,28 @@ let remove_local (ntvs:int) (tb:t): unit =
   tb.tvars <- TVars_sub.remove_local ntvs tb.tvars
 
 
-let add_fgs (tb:t): unit =
+let add_fgs (nfgs:int) (tb:t): unit =
+  (* Add [nfgs] additional formal generics from the context.
+
+     context:    loc          +         fgs1 + fgs2
+
+     builder:    loc  + glob  +  garb +        fgs2
+
+   *)
+  let nlocs     = count_local tb in
   let tvars_sub = Context.type_variables tb.c in
-  let n = TVars_sub.count_fgs tvars_sub - TVars_sub.count_fgs tb.tvars
-  and start = TVars_sub.count tb.tvars
+  assert (nlocs = TVars_sub.count_local tvars_sub);
+  assert (nfgs <= TVars_sub.count_fgs tvars_sub);
+  let nfgs2 = TVars_sub.count_fgs tvars_sub - nfgs in
+  assert (nfgs2 <= count_fgs tb);
+  let ngarb = count_fgs tb - nfgs2 in
+  let start = count tb + ngarb
   in
-  tb.tvars <- TVars_sub.add_fgs tvars_sub tb.tvars;
-  tb.sign  <- Sign.up_from n start tb.sign
+  tb.sign  <- Sign.up_from nfgs start tb.sign;
+  tb.tvars <- TVars_sub.add_fgs nfgs tvars_sub tb.tvars
 
 
-let remove_fgs (tb:t): unit =
-  (* signature is irrelevant *)
-  tb.tvars <- TVars_sub.remove_fgs (Context.type_variables tb.c) tb.tvars
+
 
 
 let has_sub (i:int) (tb:t): bool = TVars_sub.has i tb.tvars
@@ -448,10 +479,6 @@ let add_leaf
     (tvs:Tvars.t)
     (s:Sign.t)
     (tb:t): t =
-  assert (not (Tvars.count_local tvs > 0 && Tvars.count_global tvs > 0));
-  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doesn't come from
-                                                 global *)
-  in
   (* If [i] comes from a global environment, then it has no local type
      variables and space must be made for all type variables (locals and
      globals) of [tb.tvars]. ??? Formal generics ???
@@ -460,7 +487,20 @@ let add_leaf
      variables. But the locals already in coincide with the locals of
      [tb.tvars]. Space has to be made for all type variables (globals
      and locals) of [tb.tvars] which are not yet in [tvs].
+
+     tvs global:                       glob
+
+     tvs local:         loc      +                        fgs
+
+     builder:    bloc + loc  + glob0           +   garb + fgs
+
+     builder:    bloc + loc  + glob0 + glob    +   garb + fgs
+     after add_global
    *)
+  assert (not (Tvars.count_local tvs > 0 && Tvars.count_global tvs > 0));
+  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doesn't come from
+                                                 global *)
+  in
   let nloctb  = TVars_sub.count_local  tb.tvars
   and nglobtb = TVars_sub.count_global tb.tvars
   and nfgstb  = TVars_sub.count_fgs    tb.tvars
@@ -470,7 +510,8 @@ let add_leaf
   in
   assert (nloc=0 || nglob=0);
   assert (nloc <= nloctb);
-  assert (nfgs=0 ||  nfgs=nfgstb);
+  assert (nfgs <= nfgstb);
+  (*assert (nfgs=0 ||  nfgs=nfgstb);*)
   assert (nglob <= nglobtb);
   let s = Sign.up_from (nfgstb-nfgs) (nloc+nglob) s in
   let s = Sign.up_from (nglobtb-nglob) nloc s       in
@@ -530,19 +571,20 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 
-let expect_lambda (ntvs:int) (is_quant: bool) (is_pred:bool) (tb:t): unit =
-  (*  Expect the term of a lambda expression. It is assumed that all local
+let expect_lambda
+    (ntvs:int) (nfgs:int) (is_quant: bool) (is_pred:bool) (tb:t): unit =
+  (* Expect the term of a lambda expression. It is assumed that all local
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
-      variables. Furthermore the argument list of the lambda expression might
-      have formal generics which are considered as type constants. *)
+      variables and [nfgs] formal generics. Furthermore the argument list of
+      the lambda expression has [nfgs] formal generics which are considered as
+      type constants. *)
+
   assert (Sign.has_result tb.sign);
   add_local ntvs tb;
-  add_fgs tb;
+  add_fgs   nfgs tb;
   assert (TVars_sub.count_local tb.tvars =
           TVars_sub.count_local (Context.type_variables tb.c));
-  assert (TVars_sub.count_fgs tb.tvars =
-          TVars_sub.count_fgs (Context.type_variables tb.c));
   let csig = context_signature tb in
   if not is_quant then begin
     let upsig = upgrade_signature csig is_pred tb in
@@ -562,7 +604,6 @@ let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  remove_fgs tb;
   remove_local ntvs tb;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;

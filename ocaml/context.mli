@@ -67,6 +67,10 @@ val count_last_arguments:  t -> int
     (** The number of formal arguments in this context without the preceeding
         contexts *)
 
+val count_last_formal_generics:  t -> int
+    (** The number of formal generics in this context without the preceeding
+        contexts *)
+
 val count_arguments:  t -> int
     (** The number of formal arguments in this context and all preceeding
         contexts *)
