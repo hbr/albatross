@@ -185,25 +185,27 @@ let do_sub_var (i:int) (j:int) (tb:t): unit =
       has substitutions *)
   assert (not (has_sub i tb));
   assert (not (has_sub j tb));
-  if i=j then ();
-  let add_sub (i:int) (j:int): unit =
-    TVars_sub.add_sub i (Variable j) tb.tvars
-  in
-  let cnt_loc = count_local tb in
-  let lo,hi = if i < j then i,j else j,i in
-  if hi < cnt_loc || lo < cnt_loc then
-    add_sub lo hi
-  else begin
-    assert (cnt_loc <= i);
-    assert (cnt_loc <= j);
-    let cpt_i, cpt_j = concept i tb, concept j tb in
-    if satisfies cpt_j cpt_i tb then
-      add_sub i j
-    else if satisfies cpt_i cpt_j tb then
-      add_sub j i
-    else
-      raise Not_found
-  end
+  if i=j then
+    ()
+  else
+    let add_sub (i:int) (j:int): unit =
+      TVars_sub.add_sub i (Variable j) tb.tvars
+    in
+    let cnt_loc = count_local tb in
+    let lo,hi = if i < j then i,j else j,i in
+    if hi < cnt_loc || lo < cnt_loc then
+      add_sub lo hi
+    else begin
+      assert (cnt_loc <= i);
+      assert (cnt_loc <= j);
+      let cpt_i, cpt_j = concept i tb, concept j tb in
+      if satisfies cpt_j cpt_i tb then
+        add_sub i j
+      else if satisfies cpt_i cpt_j tb then
+        add_sub j i
+      else
+        raise Not_found
+    end
 
 
 let is_anchor (i:int) (tb:t): bool =

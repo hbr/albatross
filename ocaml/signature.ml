@@ -79,7 +79,17 @@ end = struct
     in
     isused_in j (count s)
 
-
+  let to_string (s:t): string =
+    let str = ref ""
+    and nsub = ref 0 in
+    for i = 0 to count s - 1 do
+      if s.flags.(i) then begin
+        if 0 < !nsub then str := !str ^ ",";
+        nsub := 1 + !nsub;
+        str := !str ^ (string_of_int i) ^ "~>" ^ (Term.to_string s.args.(i))
+      end
+    done;
+    "[" ^ !str ^ "]"
 
 
   let sub_star (t:term) (s:t): term =
@@ -143,7 +153,7 @@ end = struct
     let used = Term.bound_variables t cnt in
     let lst = IntSet.fold
         (fun j lst ->
-          if is_used i j s then
+          if i=j || is_used i j s then
             raise Not_found
           else
             j::lst)
