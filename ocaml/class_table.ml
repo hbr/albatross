@@ -237,7 +237,7 @@ let split_type_term (tp:type_term): int * type_term array =
   match tp with
     Variable i -> i, [||]
   | Application (Variable i,args) -> i, args
-  | _ -> assert false
+  | _ -> assert false (* other cases not possible with types *)
 
 
 let combine_type_term (cls_idx:int) (args: type_term array): type_term =
@@ -372,12 +372,10 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
             1,
             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
           end
-      | Application (class_exp,args) -> assert false (*not yet implemented*)
+      | Application (class_exp,args) ->
+          assert false (* cannot happen with types *)
       | Lam (len,names,t) ->
-          assert false (*nyi*)
-          (*let len = Array.length arr in
-          1,
-          (args_to_string arr nb) ^ (to_string t (nb+len) 1)*)
+          assert false (* cannot happen with types *)
     in
     if inner_prec < prec then "(" ^ str ^ ")" else str
   in
