@@ -94,7 +94,8 @@ end = struct
     List.iteri
       (fun i acc ->
         let t = Term_builder.head_term acc in
-        printf "    %d: \"%s\"  \"%s\"\n" i (string_of_term t) (Term.to_string t))
+        printf "    %d: \"%s\"  \"%s\" %s\n" i (string_of_term t) (Term.to_string t)
+          (Term_builder.string_of_tvs_sub acc))
       accus
 
 
