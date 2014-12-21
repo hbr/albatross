@@ -1061,8 +1061,10 @@ let add_proved_0
   and ct = class_table pc in
   Proof_table.add_proved t pterm delta pc.base;
   let idx = raw_add t true pc in
-  let dup = idx < cnt in
-  if not dup && not (is_global pc) then
+  let dup = idx < cnt
+  and is_glob = idx < count_global pc
+  in
+  if (not dup || is_glob) && not (is_global pc) then
     add_last_to_work pc;
   if is_global pc then
     add_global defer owner pc;

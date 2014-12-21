@@ -210,6 +210,24 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
   is_ghost t 0
 
 
+let is_total (i:int) (ft:t): bool =
+  assert (i < count ft);
+  true  (* nyi: features with preconditions *)
+
+let is_predicate (i:int) (ft:t): bool =
+  let desc = descriptor i ft in
+  let sign = desc.sign
+  and tvs  = desc.tvs in
+  let nfgs = Tvars.count_all tvs in
+  0 < Sign.arity sign &&
+  is_total i ft &&
+  Sign.has_result sign &&
+  let res = Sign.result sign in
+  match res with
+    Variable i when nfgs <= i ->
+      i - nfgs = Class_table.boolean_index
+  | _ ->
+      false
 
 
 let standard_bdesc (i:int) (cls:int) (def_opt: term option) (nb:int) (ft:t)
@@ -638,20 +656,25 @@ let find_funcs
         let arity = Sign.arity sign
         and tvs   = Tvars.fgs_to_global desc.tvs
         in
+        let nfgs = Tvars.count_all tvs in
         if is_public ft && not (Option.has desc.pub) then
           lst
         else if arity = nargs then
           (i,tvs,sign) :: lst
         else if arity < nargs then (* downgrade *)
-          let nfgs = Tvars.count_all tvs in
           try
-            let s = Class_table.downgrade_signature nfgs sign nargs
-            in
+            let s = Class_table.downgrade_signature nfgs sign nargs in
             (i,tvs,s) :: lst
           with Not_found ->
             lst
-        else (* upgrade *)
-          lst (* nyi: upgrade of signature *)
+        else if nargs = 0 then begin (* upgrade *)
+          assert (0 < arity);
+          let is_pred = is_predicate i ft in
+          let tp = Class_table.upgrade_signature nfgs is_pred sign in
+          let s  = Sign.make_const tp in
+          (i,tvs,s) :: lst
+        end else
+          lst
       )
       []
       (Term_table2.terms tab)
