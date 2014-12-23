@@ -16,7 +16,7 @@ module Accus: sig
   type t
   exception Untypeable of Term_builder.t list
 
-  val make:              Context.t -> t
+  val make:              bool -> Context.t -> t
   val is_empty:          t -> bool
   val is_singleton:      t -> bool
   val count:             t -> int
@@ -46,8 +46,14 @@ end = struct
   exception Untypeable of Term_builder.t list
 
 
-  let make (c:Context.t): t =
-    {accus           = [Term_builder.make c];
+  let make (is_bool:bool) (c:Context.t): t =
+    let tb =
+      if is_bool then
+        Term_builder.make_boolean c
+      else
+        Term_builder.make c
+    in
+    {accus           = [tb];
      ntvs_added      = 0;
      arity           = 0;
      trace           = 5 <= Context.verbosity c;
@@ -323,6 +329,7 @@ let process_leaf
 
 let analyze_expression
     (ie:        info_expression)
+    (is_bool:   bool)
     (c:         Context.t)
     : term =
   (** Analyse the expression [ie] in the context [context] and return the term.
@@ -447,7 +454,7 @@ let analyze_expression
 
   in
 
-  let accs   = Accus.make c in
+  let accs   = Accus.make is_bool c in
   analyze exp accs;
   assert (not (Accus.is_empty accs));
 
@@ -468,6 +475,10 @@ let result_term
   (** Analyse the expression [ie] as the result expression of the
       context [context] and return the term.
    *)
-  (*printf "trying to type %s\n" (string_of_expression ie.v);*)
   assert (not (Context.is_global c));
-  analyze_expression ie c
+  analyze_expression ie false c
+
+
+let boolean_term (ie: info_expression) (c:Context.t): term =
+  assert (not (Context.is_global c));
+  analyze_expression ie true c

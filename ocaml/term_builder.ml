@@ -458,12 +458,21 @@ let unify_sign
 
 
 let make (c:Context.t): t =
-  (** New accumulator for an expression with the expected type [e] in the
-      context with the type variables [tvars] *)
+  (* New accumulator for an expressionin the context [c] *)
   assert (Context.has_result c);
   {tlist = [];
    sign  = Sign.make_const (Context.result_type c);
    tvars = (Context.type_variables c);
+   c     = c}
+
+
+let make_boolean (c:Context.t): t =
+  let tvs = Context.type_variables c in
+  let ntvs = TVars_sub.count_all tvs in
+  let bool = Variable (ntvs + Class_table.boolean_index) in
+  {tlist = [];
+   tvars = tvs;
+   sign  = Sign.make_const bool;
    c     = c}
 
 

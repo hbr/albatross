@@ -38,6 +38,10 @@ val make:             Context.t -> t
     (** [make c] makes a term builder for the contexct [c] where the expected
     type is the result type of the context [c]. *)
 
+val make_boolean:     Context.t -> t
+    (** [make c] makes a term builder for the contexct [c] where the expected
+    type is boolean. *)
+
 val expect_function:   int -> t -> unit
     (** [expect_function nargs tb] converts the currently expected signature
         to a function signature with [nargs] arguments and adds [nargs] fresh
