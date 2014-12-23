@@ -112,6 +112,8 @@ module Term: sig
 
   val binary: int -> term -> term -> term
 
+  val binary_split_0: term -> int * term * term
+
   val binary_split: term -> int -> term * term
 
   val binary_right: term -> int -> term list
@@ -607,17 +609,20 @@ end = struct
     Application (Variable binid, args)
 
 
-  let binary_split (t:term) (binid:int): term * term =
+  let binary_split_0 (t:term): int * term * term =
     match t with
-      Application (f,args) ->
-        let nargs = Array.length args in
-        (match f with
-          Variable i when i=binid ->
-            if nargs = 2 then
-              (args.(0), args.(1))
-            else assert false
-        | _ -> raise Not_found)
-    | _ -> raise Not_found
+      Application(Variable i,args) when Array.length args = 2 ->
+        i, args.(0), args.(1)
+    | _ ->
+        raise Not_found
+
+
+  let binary_split (t:term) (binid:int): term * term =
+    let i,a,b = binary_split_0 t in
+    if i = binid then
+      a,b
+    else
+      raise Not_found
 
 
 

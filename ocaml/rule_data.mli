@@ -17,6 +17,7 @@ val is_backward:          t -> bool
 val is_specialized:       t -> bool
 val is_fully_specialized: t -> bool
 val is_implication:       t -> bool
+val is_transitivity:       t -> bool
 val is_intermediate:      t -> bool
 val previous_schematic:   t -> int option
 val premises:             t -> int -> (term*bool) list
