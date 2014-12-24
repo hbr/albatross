@@ -7,9 +7,10 @@
 open Support
 open Term
 
+type parent_descriptor = Class_table.parent_descriptor
 
-val do_inherit: int -> (int*type_term array)list -> info -> Proof_context.t -> unit
+val do_inherit: int -> (int*parent_descriptor)list -> info -> Proof_context.t -> unit
 
-val export_inherited: int -> (int*type_term array)list -> Proof_context.t -> unit
+val export_inherited: int -> (int*parent_descriptor)list -> Proof_context.t -> unit
 
 val inherit_to_descendants: int -> info -> Proof_context.t -> unit

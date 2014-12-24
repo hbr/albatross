@@ -237,7 +237,7 @@ let put_class
           assert (adapt_lst = [] ); (* nyi: feature adaption *)
           let par_idx, par_args = Class_table.parent_type idx tp ct in
           let lst, lst_priv =
-            Class_table.inherited_ancestors idx par_idx par_args tp.i ct in
+            Class_table.inherited_ancestors idx ghost par_idx par_args tp.i ct in
           Class_table.do_inherit idx lst ct;
           if lst_priv <> [] then
             Class_table.export_inherited idx lst_priv ct;

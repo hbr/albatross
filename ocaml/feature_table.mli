@@ -34,6 +34,8 @@ val has_anchor: int -> t -> bool
 
 val is_deferred: int -> t -> bool
 
+val is_ghost_function: int -> t -> bool
+
 val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)

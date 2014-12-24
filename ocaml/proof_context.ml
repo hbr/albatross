@@ -918,7 +918,7 @@ let add_potential_equalities (cls:int) (pc:t): unit =
 
 let do_inherit
     (cls:int)
-    (anc_lst: (int * type_term array) list)
+    (anc_lst: (int * (bool * type_term array)) list)
     (info:info)
     (pc:t)
     : unit =

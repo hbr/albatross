@@ -17,6 +17,8 @@ module CMap = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
+type parent_descriptor = bool * type_term array
+
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
                          mutable eq_feat:  int;
@@ -27,7 +29,7 @@ type base_descriptor = { hmark:    header_mark;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
                          mutable descendants:  IntSet.t;
-                         mutable ancestors: type_term array IntMap.t}
+                         mutable ancestors: parent_descriptor IntMap.t}
 
 
 type descriptor      = { mutable mdl:  int;
@@ -82,7 +84,7 @@ let count (ct:t):int =
 let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
     : base_descriptor =
   let args = Array.init nfgs (fun i -> Variable i) in
-  let anc  = IntMap.singleton idx args in
+  let anc  = IntMap.singleton idx (false,args) in
   {hmark = hm;
    tvs   = tvs;
    eq_feat = -1;
@@ -855,7 +857,7 @@ let rec satisfies
     assert (nall2 <= idx2);
     let bdesc1 = base_descriptor (idx1-nall1) ct in
     try
-      let anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
+      let _,anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
       let nargs    = Array.length anc_args in
       assert (nargs = Array.length args2);
       let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
@@ -1035,18 +1037,8 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
   in
   let i, args = split_type_term tp_term
   in
-  begin
-    if i < n then
-      error_info tp.i "Formal generic not allowed as parent class"
-    (*else
-      if is_private ct && (descriptor cls ct).mdl <> current_module ct then
-        let str =
-          "Cannot inherit to " ^ (class_name cls ct) ^
-          " in the implementation file of module \"" ^
-          (module_name (current_module ct) ct) ^
-          "\"" in
-        error_info tp.i str*)
-  end;
+  if i < n then
+    error_info tp.i "Formal generic not allowed as parent class";
   i-n, args
 
 
@@ -1055,25 +1047,27 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
 
 let inherited_ancestors
     (cls_idx:int)
+    (ghost: bool)
     (par_idx:int)
     (par_args:type_term array)
     (info:info)
     (ct:t)
-    : (int * type_term array) list * (int * type_term array) list =
-  (* The inherited ancestors of the parent [par_idx[par_args]] in the class [cls_idx]
-     partitioned in a list which occur only publicly and a list which occur both
-     publicly and privatly. *)
+    : (int * parent_descriptor) list * (int * parent_descriptor) list =
+  (* The inherited ancestors of the parent [par_idx[par_args]] in the class
+     [cls_idx] partitioned in a list which occur only publicly and a list
+     which occur both publicly and privatly. [ghost] indicates if [par_idx] is
+     inherited in the class [cls_idx] as a ghost. *)
   let par_bdesc = base_descriptor par_idx ct
   and cls_bdesc = base_descriptor cls_idx ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
   assert (IntSet.is_empty cls_bdesc.descendants); (* nyi: inheritance to
                                                      descendants*)
   let res = IntMap.fold
-    (fun anc_idx anc_args lst->
+    (fun anc_idx (is_ghost,anc_args) lst->
       let anc_args: type_term array =
         Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
       try
-        let anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
+        let _,anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
         if anc_args <> anc_args_0 then
           error_info info
             ("Cannot inherit "  ^
@@ -1082,16 +1076,16 @@ let inherited_ancestors
         else
           lst
       with Not_found ->
-        (anc_idx,anc_args) :: lst)
+        (anc_idx,(ghost||is_ghost,anc_args)) :: lst)
     par_bdesc.ancestors
     []
   in
   if is_interface_check ct then
     let cls_bdesc_priv = (descriptor cls_idx ct).priv in
     List.partition
-        (fun (anc_idx,anc_args) ->
+        (fun (anc_idx,(_,anc_args)) ->
           try
-            let anc_args_0 = IntMap.find anc_idx cls_bdesc_priv.ancestors in
+            let _,anc_args_0 = IntMap.find anc_idx cls_bdesc_priv.ancestors in
             if anc_args <> anc_args_0 then
               error_info info
                 ("Cannot inherit "  ^
@@ -1111,11 +1105,11 @@ let one_inherit
     (cls_idx: int)
     (cls_bdesc:base_descriptor)
     (anc_idx: int)
-    (anc_args: type_term array)
+    (anc: parent_descriptor)
     (anc_bdesc:base_descriptor)
     : unit =
   cls_bdesc.ancestors <-
-    IntMap.add anc_idx anc_args cls_bdesc.ancestors;
+    IntMap.add anc_idx anc cls_bdesc.ancestors;
   assert (not (IntSet.mem cls_idx anc_bdesc.descendants));
   anc_bdesc.descendants <- IntSet.add cls_idx anc_bdesc.descendants
 
@@ -1123,16 +1117,13 @@ let one_inherit
 
 let do_inherit
     (cls_idx:int)
-    (anc_lst: (int*type_term array) list)
+    (anc_lst: (int*parent_descriptor) list)
     (ct:t)
     : unit =
   if is_public ct then begin
     let cls_bdesc = (descriptor cls_idx ct).priv in
     List.iter
       (fun (anc_idx,anc_args) ->
-        (*printf "%s inherit private %s\n"
-          (class_name cls_idx ct)
-          (class_name anc_idx ct);*)
         let anc_bdesc = (descriptor anc_idx ct).priv in
         one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
       anc_lst
@@ -1150,7 +1141,7 @@ let do_inherit
 
 let export_inherited
     (cls_idx:int)
-    (anc_lst: (int*type_term array) list)
+    (anc_lst: (int*parent_descriptor) list)
     (ct:t)
     : unit =
   assert (anc_lst <> [] );

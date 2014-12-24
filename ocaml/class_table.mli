@@ -14,6 +14,8 @@ open Container
 
 type formal = int * type_term
 
+type parent_descriptor = bool * type_term array
+
 type t
 
 val dummy_index:     int
@@ -144,8 +146,8 @@ val has_ancestor: int -> int -> t -> bool
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 
 val inherited_ancestors:
-    int -> int -> type_term array -> info -> t
-      -> (int * type_term array) list * (int * type_term array) list
+    int -> bool -> int -> type_term array -> info -> t
+      -> (int * parent_descriptor) list * (int * parent_descriptor) list
    (** [inherited_ancestors cls par par_args info ct] calculates a list of
        inherited ancestors in case the class [cls] inherits
        [par[par_args]]. The returned list contains [par[par_args]] and all
@@ -159,11 +161,11 @@ val inherited_ancestors:
        set of ancestors. If this is not the case an error message is
        triggered.  *)
 
-val do_inherit: int -> (int * type_term array) list -> t -> unit
+val do_inherit: int -> (int * parent_descriptor) list -> t -> unit
    (** [do_inherit cls anc_lst ct] let the class [cls] inherit all ancestors
        of the list [anc_lst] *)
 
-val export_inherited: int -> (int * type_term array) list -> t -> unit
+val export_inherited: int -> (int * parent_descriptor) list -> t -> unit
    (** [export_inherited cls anc_lst ct] let the class [cls] export all
        privately inherited ancestors of the list [anc_lst] *)
 

@@ -13,7 +13,7 @@ open Printf
 module FT = Feature_table
 module PC = Proof_context
 
-
+type parent_descriptor = Class_table.parent_descriptor
 
 let class_table (pc:PC.t):Class_table.t =
   Proof_context.class_table pc
@@ -22,8 +22,11 @@ let class_table (pc:PC.t):Class_table.t =
 
 
 
-let inherit_deferred (i:int) (cls:int) (info:info) (pc:PC.t): unit =
-  (* Inherit the deferred feature [i] in the class [cls] *)
+let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): unit =
+  (* Inherit the deferred feature [i] in the class [cls]
+
+     [is_ghost] flags if the inheritance is a ghost inheritance
+   *)
   let ft = Proof_context.feature_table pc in
   if 1 < Feature_table.verbosity ft then begin
     let ct   = class_table pc in
@@ -44,6 +47,10 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:PC.t): unit =
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
+  let is_i_ghost   = Feature_table.is_ghost_function i ft
+  and is_idx_ghost = Feature_table.is_ghost_function idx ft in
+  if is_idx_ghost && not is_i_ghost && not is_ghost then
+    error_info info "Must be ghost inheritance";
   Feature_table.inherit_feature i idx cls false ft
 
 
@@ -145,7 +152,7 @@ let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
 
 let do_inherit
     (cls:int)
-    (anc_lst: (int * type_term array) list)
+    (anc_lst: (int * parent_descriptor) list)
     (info:info)
     (pc:PC.t)
     : unit =
@@ -159,9 +166,9 @@ let do_inherit
    *)
   let ct = class_table pc in
   List.iter
-    (fun (par,par_args) ->
+    (fun (par,(is_ghost,_)) ->
       let flst = Class_table.deferred_features par ct in
-      List.iter (fun i -> inherit_deferred i cls info pc) (List.rev flst);
+      List.iter (fun i -> inherit_deferred i cls is_ghost info pc) (List.rev flst);
       let flst = Class_table.effective_features par ct in
       List.iter (fun i -> inherit_effective i cls info pc) (List.rev flst)
     )
@@ -188,7 +195,7 @@ let export_inherited_variant (i:int) (cls:int) (pc:PC.t): unit =
 
 let export_inherited
     (cls:int)
-    (anc_lst: (int * type_term array) list)
+    (anc_lst: (int * parent_descriptor) list)
     (pc:PC.t)
     : unit =
   (* Export all inherited features from all classes in the ancestor list [anc_lst]
