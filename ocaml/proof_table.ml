@@ -756,12 +756,22 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
   and nreq = at.entry.nreq
   and pt   = proof_term i at in
   let n,nms,pt =
-    try
-      let n,nms,idx,pt_arr = Proof_term.split_subproof pt in
-      assert (n=0 || cnt0 <= i);
-      n,nms, Subproof (0,[||],idx,pt_arr)
-    with Not_found ->
-      0, [||], pt
+    match pt with
+      Axiom t -> begin
+        try
+          let n,nms,t = split_all_quantified t at in
+          n, nms, Axiom t
+        with Not_found ->
+          0,[||],pt
+      end
+    | _ -> begin
+        try
+          let n,nms,idx,pt_arr = Proof_term.split_subproof pt in
+          assert (n=0 || cnt0 <= i);
+          n,nms, Subproof (0,[||],idx,pt_arr)
+        with Not_found ->
+          0, [||], pt
+    end
   in
   let narr = if cnt0+nreq<=i  then i+1-cnt0 else nreq in
   let pterm j =
@@ -777,7 +787,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
 
 
 
-let discharged (i:int) (at:t): term * proof_term =  (* new version *)
+let discharged (i:int) (at:t): term * proof_term =
   let n1,nms1,t = discharged_assumptions i at
   in
   let nargs = n1 + nbenv_local at
@@ -788,8 +798,8 @@ let discharged (i:int) (at:t): term * proof_term =  (* new version *)
   in
   let len, pt_arr =
     let n2,nms2,pt_arr = discharged_proof_term i at in
-    assert (axiom || n1 = n2);
-    assert (axiom || nms1 = nms2);
+    assert (n1 = n2);
+    assert (nms1 = nms2);
     Array.length pt_arr, pt_arr
   in
   if nargs = 0 && nreq = 0 && len = 1 then
