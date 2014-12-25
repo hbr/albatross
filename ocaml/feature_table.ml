@@ -54,16 +54,17 @@ type t = {
 let implication_index: int =  0
 let false_index:       int =  1
 let not_index:         int =  2
-let or_index:          int =  3
-let all_index:         int =  4
-let some_index:        int =  5
-let eq_index:          int =  6
-let pparen_index:      int =  7
-let domain_index:      int =  8
-let fparen_index:      int =  9
-let tuple_index:       int = 10
-let first_index:       int = 11
-let second_index:      int = 12
+let and_index:         int =  3
+let or_index:          int =  4
+let all_index:         int =  5
+let some_index:        int =  6
+let eq_index:          int =  7
+let pparen_index:      int =  8
+let domain_index:      int =  9
+let fparen_index:      int = 10
+let tuple_index:       int = 11
+let first_index:       int = 12
+let second_index:      int = 13
 
 
 let empty (verbosity:int): t =
@@ -109,6 +110,10 @@ let class_of_feature (i:int) (ft:t): int =
   (descriptor i ft).cls
 
 
+let arity (i:int) (ft:t): int =
+  Sign.arity (descriptor i ft).sign
+
+
 let string_of_signature (i:int) (ft:t): string =
   let desc = descriptor i ft in
   (feature_name_to_string desc.fname) ^
@@ -151,11 +156,6 @@ let definition (i:int) (nb:int) (ft:t): term =
   let t = Feature.Spec.definition_term bdesc.spec in
   let t = Term.upbound nb nargs t in
   if nargs = 0 then t else Lam (nargs,[||],t)
-  (*match bdesc.definition with
-    None -> raise Not_found
-  | Some t ->
-      let t = Term.upbound nb nargs t in
-      if nargs = 0 then t else Lam (nargs,[||],t)*)
 
 
 
@@ -164,6 +164,22 @@ let has_definition (i:int) (ft:t): bool =
   try let _ = definition i 0 ft in true
   with Not_found -> false
 
+
+
+let preconditions (i:int) (nb:int) (ft:t): int * term list =
+  (* The preconditions (if there are some) of the feature [i] as optional number of
+     arguments and a list of expressions transformed into an environment with [nb]
+     bound variables.*)
+  assert (nb <= i);
+  let i = i - nb in
+  let spec = (base_descriptor i ft).spec in
+  let n = arity i ft in
+  if Feature.Spec.has_preconditions spec then
+    let lst = Feature.Spec.preconditions spec in
+    let lst = List.map (fun t -> Term.upbound nb n t) lst in
+    n, lst
+  else
+    n, []
 
 
 let owner (i:int) (ft:t): int =
@@ -520,15 +536,25 @@ let base_table (verbosity:int) : t =
 
   let imp_id1   = 1 + implication_index
   and false_id1 = 1 + false_index
+  and false_id2 = 2 + false_index
   and imp_id2   = 2 + implication_index
   and not_id2   = 2 + not_index
   in
   let not_term = Term.binary imp_id1 (Variable 0) (Variable false_id1)
-  and or_term =  Term.binary imp_id2 (Term.unary not_id2 (Variable 0)) (Variable 1)
+  and or_term  =  Term.binary imp_id2 (Term.unary not_id2 (Variable 0)) (Variable 1)
+  and and_term =
+    Term.unary  not_id2
+      (Term.binary imp_id2
+         (Variable 0)
+         (Term.binary imp_id2 (Variable 1) (Variable false_id2)))
   in
   add_base (* not *)
     "boolean" Class_table.boolean_index (FNoperator Notop)
     [||] [|bool|] bool false false (spec_term not_term) ft;
+
+  add_base (* and *)
+    "boolean" Class_table.boolean_index (FNoperator Andop)
+    [||] [|bool;bool|] bool false false (spec_term and_term) ft;
 
   add_base (* or *)
     "boolean" Class_table.boolean_index (FNoperator Orop)
@@ -576,6 +602,7 @@ let base_table (verbosity:int) : t =
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor false_index ft).fname       = FNfalse);
   assert ((descriptor not_index ft).fname         = FNoperator Notop);
+  assert ((descriptor and_index ft).fname         = FNoperator Andop);
   assert ((descriptor or_index ft).fname          = FNoperator Orop);
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
@@ -598,9 +625,6 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   let args = [|a;b|] in
   Application (Variable (implication_index+nbound), args)
 
-
-let preconditions (i:int) (ft:t): term list =
-  assert false
 
 let find
     (fn:feature_name)
@@ -1392,9 +1416,12 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   Class_table.add_current_module name used ft.ct;
   add_base_features name ft;
   if name <> ST.symbol "boolean" then begin
-    let or_desc = descriptor or_index ft in
-    or_desc.priv.spec <- Feature.Spec.make_func None [] [];
-    or_desc.priv.level <- 0
+    let or_desc  = descriptor or_index ft
+    and and_desc = descriptor and_index ft in
+    or_desc.priv.spec   <- Feature.Spec.make_func None [] [];
+    or_desc.priv.level  <- 0;
+    and_desc.priv.spec  <- Feature.Spec.make_func None [] [];
+    and_desc.priv.level <- 0
   end
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =

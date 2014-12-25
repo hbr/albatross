@@ -120,3 +120,5 @@ val print_local_contexts:       t -> unit
 val expanded_term:  term -> int -> t -> term
 
 val definition: int -> int -> t -> term
+
+val preconditions: int -> int -> t -> int * term list

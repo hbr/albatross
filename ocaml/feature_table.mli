@@ -58,6 +58,7 @@ val all_index:         int
 val some_index:        int
 val false_index:       int
 val not_index:         int
+val and_index:         int
 val or_index:          int
 val eq_index:          int
 val false_index:       int
@@ -136,7 +137,7 @@ val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
-val preconditions: int -> t -> term list
+val preconditions: int -> int -> t -> int * term list
 
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]

@@ -592,6 +592,15 @@ let definition (idx:int) (nb:int) (c:t): term =
   end
 
 
+let preconditions (idx:int) (nb:int) (c:t): int * term list =
+  let nbenv = count_arguments c in
+  if idx < nb + nbenv then
+    0, []
+  else
+    Feature_table.preconditions idx (nb+nbenv) (feature_table c)
+
+
+
 let print (c:t): unit =
   assert (is_global c);
   Feature_table.print c.ft
