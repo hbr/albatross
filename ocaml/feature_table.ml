@@ -10,6 +10,8 @@ open Term
 open Signature
 open Printf
 
+module FDef = Feature.Spec
+
 type implementation_status = No_implementation | Builtin | Deferred
 
 
@@ -18,7 +20,7 @@ type definition = term
 type formal     = int * term
 
 type base_descriptor = {
-    mutable definition: term option;
+    mutable spec:       Feature.Spec.t;
     mutable level:      int;
     mutable is_inh:     bool;
     mutable seeds:      IntSet.t;
@@ -30,7 +32,7 @@ type descriptor = {
     mutable mdl: int;             (* -1: base feature, module not yet assigned*)
     cls:         int;             (* owner class *)
     fname:       feature_name;
-    impstat:     implementation_status;
+    impl:        Feature.implementation;
     tvs:         Tvars.t;         (* only formal generics *)
     mutable anchored: int array;  (* formal generics anchored to the owner class *)
     argnames:    int array;
@@ -49,18 +51,19 @@ type t = {
   }
 
 
-let implication_index: int = 0
-let fparen_index:      int = 1
-let all_index:         int = 2
-let some_index:        int = 3
-let pparen_index:      int = 4
-let eq_index:          int = 5
-let false_index:       int = 6
-let not_index:         int = 7
-let or_index:          int = 8
-let tuple_index:       int = 9
-let first_index:       int = 10
-let second_index:      int = 11
+let implication_index: int =  0
+let false_index:       int =  1
+let not_index:         int =  2
+let or_index:          int =  3
+let all_index:         int =  4
+let some_index:        int =  5
+let eq_index:          int =  6
+let pparen_index:      int =  7
+let domain_index:      int =  8
+let fparen_index:      int =  9
+let tuple_index:       int = 10
+let first_index:       int = 11
+let second_index:      int = 12
 
 
 let empty (verbosity:int): t =
@@ -145,11 +148,14 @@ let definition (i:int) (nb:int) (ft:t): term =
   let desc  = descriptor i ft
   and bdesc = base_descriptor i ft in
   let nargs = Sign.arity desc.sign in
-  match bdesc.definition with
+  let t = Feature.Spec.definition_term bdesc.spec in
+  let t = Term.upbound nb nargs t in
+  if nargs = 0 then t else Lam (nargs,[||],t)
+  (*match bdesc.definition with
     None -> raise Not_found
   | Some t ->
       let t = Term.upbound nb nargs t in
-      if nargs = 0 then t else Lam (nargs,[||],t)
+      if nargs = 0 then t else Lam (nargs,[||],t)*)
 
 
 
@@ -230,18 +236,17 @@ let is_predicate (i:int) (ft:t): bool =
       false
 
 
-let standard_bdesc (i:int) (cls:int) (def_opt: term option) (nb:int) (ft:t)
+let standard_bdesc (i:int) (cls:int) (spec: Feature.Spec.t) (nb:int) (ft:t)
     : base_descriptor =
   let level =
-    match def_opt with
-      None -> 0
-    | Some t -> term_level t nb ft + 1
+    try let t = Feature.Spec.definition_term spec in 1 + term_level t nb ft
+    with Not_found -> 0
   in
   {is_inh     = false;
    seeds      = IntSet.singleton i;     (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    level      = level;
-   definition = def_opt;
+   spec       = spec;
    is_eq      = false}
 
 
@@ -315,7 +320,7 @@ let definition_equality (i:int) (ft:t): term =
   let eq_id = nargs + eq_id
   and f_id  = nargs + i
   in
-  let t = Option.value bdesc.definition in
+  let t = Option.value (Feature.Spec.definition bdesc.spec) in
   let f =
     if nargs = 0 then Variable f_id
     else Application (Variable f_id, Array.init nargs (fun i -> Variable i))
@@ -329,9 +334,9 @@ let definition_equality (i:int) (ft:t): term =
 
 
 let is_desc_deferred (desc:descriptor): bool =
-  match desc.impstat with
-    Deferred -> true
-  | _        -> false
+  match desc.impl with
+    Feature.Deferred -> true
+  | _                -> false
 
 
 let is_deferred (i:int) (ft:t): bool =
@@ -354,7 +359,7 @@ let export_feature (i:int) (ft:t): unit =
   match desc.pub with
     None ->
       let nargs = Array.length desc.argnames in
-      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.definition nargs ft)
+      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.spec nargs ft)
   | Some _ ->
       ()
 
@@ -429,10 +434,10 @@ let add_base
     (res:  type_term)
     (defer: bool)
     (ghost: bool)
-    (def: term option)
+    (spec: Feature.Spec.t)
     (ft:t)
     : unit =
-  assert (not defer || not (Option.has def));
+  assert (not defer || not (Feature.Spec.has_definition spec));
   let mdl_nme            = ST.symbol mdl_nme
   in
   let sign =
@@ -444,11 +449,12 @@ let add_base
   and cnt  = count ft
   and nargs = Array.length argtypes
   in
-  let bdesc = standard_bdesc cnt cls def nargs ft
+  let bdesc = standard_bdesc cnt cls spec nargs ft
   and bdesc_opt =
     match fn with
       FNoperator Allop
-    | FNoperator Someop -> Some (standard_bdesc cnt cls None nargs ft)
+    | FNoperator Someop ->
+        Some (standard_bdesc cnt cls spec nargs ft)
     | _ -> None
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
@@ -463,10 +469,10 @@ let add_base
     mdl = -1;
     fname    = fn;
     cls      = cls;
-    impstat  =
-    if Option.has def then No_implementation
-    else if defer then Deferred
-    else Builtin;
+    impl     =
+    if Feature.Spec.has_definition spec then Feature.Empty
+    else if defer then Feature.Deferred
+    else Feature.Builtin;
     tvs      = tvs;
     anchored = anchored;
     argnames = standard_argnames nargs;
@@ -494,80 +500,89 @@ let base_table (verbosity:int) : t =
   and b_tp  = Variable 1 in
   let p_tp  = Application (Variable (Class_table.predicate_index+1),
                            [|g_tp|])
+  and p_tp2 = Application (Variable (Class_table.predicate_index+2),
+                           [|a_tp|])
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|])
   and tup_tp= Application (Variable (Class_table.tuple_index+2),
                            [|a_tp;b_tp|])
+  and spec_none = Feature.Spec.make_func None [] []
+  and spec_term t = Feature.Spec.make_func (Some t) [] []
+  and spec_pre t  = Feature.Spec.make_func None [t] []
   in
   add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
-    [||] [|bool;bool|] bool false false None ft;
-
-  add_base (* function application *)
-    "function" Class_table.function_index (FNoperator Parenop)
-    [|any2;any2|] [|f_tp;a_tp|] b_tp false false None ft;
-
-  add_base (* all *)
-    "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 false true None ft;
-
-  add_base (* some *)
-    "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 false true None ft;
-
-  add_base (* predicate application *)
-    "predicate" Class_table.predicate_index (FNoperator Parenop)
-    [|any1|] [|p_tp;g_tp|] bool1 false false None ft;
-
-  add_base (* equality *)
-    "any" Class_table.any_index (FNoperator Eqop)
-    [|any1|] [|g_tp;g_tp|] bool1 true false None ft;
+    [||] [|bool;bool|] bool false false spec_none ft;
 
   add_base (* false *)
     "boolean" Class_table.boolean_index FNfalse
-    [||] [||] bool false false None ft;
+    [||] [||] bool false false spec_none ft;
 
   let imp_id1   = 1 + implication_index
   and false_id1 = 1 + false_index
   and imp_id2   = 2 + implication_index
   and not_id2   = 2 + not_index
   in
-  let not_term =
-    Application(Variable imp_id1,[|Variable 0; Variable false_id1|])
-  and or_term =
-    Application(Variable imp_id2,
-                [| Application(Variable not_id2, [|Variable 0|]);
-                   Variable 1|])
+  let not_term = Term.binary imp_id1 (Variable 0) (Variable false_id1)
+  and or_term =  Term.binary imp_id2 (Term.unary not_id2 (Variable 0)) (Variable 1)
   in
   add_base (* not *)
     "boolean" Class_table.boolean_index (FNoperator Notop)
-    [||] [|bool|] bool false false (Some not_term) ft;
+    [||] [|bool|] bool false false (spec_term not_term) ft;
 
   add_base (* or *)
     "boolean" Class_table.boolean_index (FNoperator Orop)
-    [||] [|bool;bool|] bool false false (Some or_term) ft;
+    [||] [|bool;bool|] bool false false (spec_term or_term) ft;
+
+  add_base (* all *)
+    "boolean" Class_table.predicate_index (FNoperator Allop)
+    [|any1|] [|p_tp|] bool1 false true spec_none ft;
+
+  add_base (* some *)
+    "boolean" Class_table.predicate_index (FNoperator Someop)
+    [|any1|] [|p_tp|] bool1 false true spec_none ft;
+
+  add_base (* equality *)
+    "any" Class_table.any_index (FNoperator Eqop)
+    [|any1|] [|g_tp;g_tp|] bool1 true false spec_none ft;
+
+  add_base (* predicate application *)
+    "predicate" Class_table.predicate_index (FNoperator Parenop)
+    [|any1|] [|p_tp;g_tp|] bool1 false false spec_none ft;
+
+  add_base (* domain *)
+    "function" Class_table.function_index (FNname ST.domain)
+  [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
+
+  let dom2 = domain_index + 2 in
+  let fpre = Application (Term.unary dom2 (Variable 0), [|Variable 1|])
+  in
+  add_base (* function application *)
+    "function" Class_table.function_index (FNoperator Parenop)
+    [|any2;any2|] [|f_tp;a_tp|] b_tp false false (spec_pre fpre) ft;
 
   add_base (* tuple *)
     "tuple" Class_table.tuple_index (FNname ST.tuple)
-    [|any2;any2|] [|a_tp;b_tp|] tup_tp false false None ft;
+    [|any2;any2|] [|a_tp;b_tp|] tup_tp false false spec_none ft;
 
   add_base (* first *)
-    "first" Class_table.tuple_index (FNname ST.first)
-    [|any2;any2|] [|tup_tp|] a_tp false false None ft;
+    "tuple" Class_table.tuple_index (FNname ST.first)
+    [|any2;any2|] [|tup_tp|] a_tp false false spec_none ft;
 
   add_base (* second *)
-    "second" Class_table.tuple_index (FNname ST.second)
-    [|any2;any2|] [|tup_tp|] b_tp false false None ft;
+    "tuple" Class_table.tuple_index (FNname ST.second)
+    [|any2;any2|] [|tup_tp|] b_tp false false spec_none ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
-  assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
-  assert ((descriptor all_index ft).fname         = FNoperator Allop);
-  assert ((descriptor some_index ft).fname        = FNoperator Someop );
-  assert ((descriptor pparen_index ft).fname      = FNoperator Parenop);
-  assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
   assert ((descriptor false_index ft).fname       = FNfalse);
   assert ((descriptor not_index ft).fname         = FNoperator Notop);
   assert ((descriptor or_index ft).fname          = FNoperator Orop);
+  assert ((descriptor all_index ft).fname         = FNoperator Allop);
+  assert ((descriptor some_index ft).fname        = FNoperator Someop );
+  assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
+  assert ((descriptor pparen_index ft).fname      = FNoperator Parenop);
+  assert ((descriptor domain_index ft).fname      = FNname ST.domain);
+  assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor tuple_index ft).fname       = FNname ST.tuple);
   assert ((descriptor first_index ft).fname       = FNname ST.first);
   assert ((descriptor second_index ft).fname      = FNname ST.second);
@@ -584,7 +599,8 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   Application (Variable (implication_index+nbound), args)
 
 
-
+let preconditions (i:int) (ft:t): term list =
+  assert false
 
 let find
     (fn:feature_name)
@@ -682,6 +698,10 @@ let find_funcs
   in
   if lst = [] then raise Not_found
   else lst
+
+
+
+
 
 
 exception Expand_found
@@ -1016,7 +1036,8 @@ let print (ft:t): unit =
       and tname  =
         Class_table.string_of_signature
           fdesc.sign fdesc.tvs ft.ct
-      and bdyname def_opt =
+      and bdyname spec =
+        let def_opt = Feature.Spec.definition spec in
         match def_opt with
           None -> "Basic"
         | Some def -> term_to_string def 0 fdesc.argnames ft
@@ -1027,11 +1048,11 @@ let print (ft:t): unit =
       match fdesc.pub with
         None ->
           Printf.printf "%s.%s: %s %s = (%s)\n"
-            mdlnme clsnme name tname (bdyname fdesc.priv.definition)
+            mdlnme clsnme name tname (bdyname fdesc.priv.spec)
       | Some pdef ->
           Printf.printf "%s.%s: %s %s = (%s, %s)\n"
             mdlnme clsnme name tname
-            (bdyname fdesc.priv.definition) (bdyname pdef.definition))
+            (bdyname fdesc.priv.spec) (bdyname pdef.spec))
     ft.seq
 
 
@@ -1189,25 +1210,28 @@ let inherit_effective (i:int) (cls:int) (ft:t): unit =
   let f_tp(tp:type_term): type_term =
     Term.upbound ntvs anchor tp
   and def_opt =
-    match (base_descriptor i ft).definition with
+    let bdesc = base_descriptor i ft in
+    assert (not (Feature.Spec.has_preconditions bdesc.spec)); (* nyi *)
+    match Feature.Spec.definition bdesc.spec with
       None -> None
     | Some t ->
         let nargs = Array.length desc.argnames in
         Some (variant_term t nargs desc.cls cls ft)
   in
+  let spec = Feature.Spec.make_func def_opt [] [] in
   let cnt = count ft
   and nargs = Array.length desc.argnames
   in
-  let bdesc = standard_bdesc cnt cls def_opt nargs ft
+  let bdesc = standard_bdesc cnt cls spec nargs ft
   and bdesc_opt =
-    if is_public ft then Some (standard_bdesc cnt cls def_opt nargs ft)
+    if is_public ft then Some (standard_bdesc cnt cls spec nargs ft)
     else None
   in
   Seq.push
     {mdl       = Class_table.current_module ft.ct;
      fname     = desc.fname;
      cls       = cls;
-     impstat   = desc.impstat;
+     impl      = desc.impl;
      tvs       = tvs1;
      anchored  = Array.make 1 (anchor+ntvs);
      argnames  = desc.argnames;
@@ -1227,15 +1251,15 @@ let add_function
     (tvs:      Tvars.t)
     (argnames: int array)
     (sign:     Sign.t)
-    (impstat:  implementation_status)
-    (term_opt: term option)
+    (body:     Feature.body)
     (ft:       t): unit =
   assert (not (has_with_signature fn.v tvs sign ft));
   let is_priv = is_private ft
   and cnt     = Seq.count ft.seq
   and nargs   = Array.length argnames
+  and spec,impl = body
   in
-  begin match term_opt with
+  begin match Feature.Spec.definition spec with
     Some t when is_ghost_term t nargs ft && not (Sign.is_ghost sign) ->
       error_info fn.i "Must be a ghost function"
   | _ -> ()
@@ -1244,22 +1268,23 @@ let add_function
   let cls = Class_table.owner tvs sign ft.ct in
   let anchored = Class_table.anchored tvs cls ft.ct in
   let nanchors = Array.length anchored in
-  begin match impstat with
-    Deferred ->
+  begin match impl with
+    Feature.Deferred ->
       Class_table.check_deferred cls nanchors fn.i ft.ct
   | _ -> ()
   end;
-  let bdesc = standard_bdesc cnt cls term_opt nargs ft
+  let bdesc = standard_bdesc cnt cls spec nargs ft
   and bdesc_opt =
-    if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
+    if is_priv then None else Some (standard_bdesc cnt cls spec nargs ft)
   and nfgs = Tvars.count_all tvs
-  and base = (is_private ft || is_interface_use ft) && not (Option.has term_opt)
+  and base = (is_private ft || is_interface_use ft) &&
+    not (Feature.Spec.has_definition spec)
   in
   let desc =
     {mdl      = mdl;
      cls      = cls;
      fname    = fn.v;
-     impstat  = impstat;
+     impl     = impl;
      tvs      = tvs;
      argnames = argnames;
      sign     = sign;
@@ -1277,9 +1302,8 @@ let add_function
 let update_function
     (idx: int)
     (info:info)
-    (impstat:  implementation_status)
     (is_ghost: bool)
-    (term_opt: term option)
+    ((spec,impl):  Feature.body)
     (ft:       t): unit =
   let desc    = descriptor idx ft
   and mdl     = Class_table.current_module ft.ct
@@ -1294,22 +1318,26 @@ let update_function
   in
   desc.mdl <- mdl;
   if is_priv then begin
-    if impstat <> desc.impstat then
+    if impl <> desc.impl then
       not_match "implementation status";
-    if term_opt <> desc.priv.definition then
+    if spec <> desc.priv.spec then
       not_match "private definition"
   end else begin
-    if Option.has term_opt && desc.priv.definition <> term_opt then
+    let def_opt = Feature.Spec.definition spec
+    and def_priv_opt = Feature.Spec.definition desc.priv.spec in
+    if Option.has def_opt && def_opt <> def_priv_opt then
       not_match "public definition";
     match desc.pub with
       None ->
         if Sign.is_ghost desc.sign && not is_ghost then
           error_info info "Must be a ghost function";
         let nargs = Array.length desc.argnames in
-        desc.pub <- Some (standard_bdesc idx desc.cls term_opt nargs ft);
+        desc.pub <- Some (standard_bdesc idx desc.cls spec nargs ft);
         add_class_feature idx false false ft
     | Some bdesc ->
-        if bdesc.definition <> term_opt then
+        let def_opt = Feature.Spec.definition spec
+        and def_bdesc_opt = Feature.Spec.definition bdesc.spec in
+        if def_bdesc_opt <> def_opt then
           not_match "public definition"
   end
 
@@ -1345,7 +1373,7 @@ let add_base_features (mdl_name:int) (ft:t): unit =
     List.iter
       (fun idx ->
         let desc = descriptor idx ft in
-        let base = not (Option.has desc.priv.definition) in
+        let base = not (Feature.Spec.has_definition desc.priv.spec) in
         assert (desc.mdl = -1);
         desc.mdl <- curr_mdl;
         add_key idx ft;
@@ -1365,7 +1393,7 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   add_base_features name ft;
   if name <> ST.symbol "boolean" then begin
     let or_desc = descriptor or_index ft in
-    or_desc.priv.definition <- None;
+    or_desc.priv.spec <- Feature.Spec.make_func None [] [];
     or_desc.priv.level <- 0
   end
 

@@ -136,6 +136,8 @@ val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
+val preconditions: int -> t -> term list
+
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
         within an environment with [nb] bound variables (i.e. a variable [i]
@@ -182,23 +184,15 @@ val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val find_with_signature: feature_name -> Tvars.t -> Sign.t -> t -> int
 
 val add_function:
-    feature_name withinfo -> Tvars.t -> int array
-      -> Sign.t -> implementation_status -> term option -> t -> unit
-  (** [add_function fn tvs fnms sign imp_stat term_opt ft] adds the function
-      with then name [fn], the formal generics of [tvs], the arguments [fnms],
-      the signature [sign] the implementation status [imp_stat] and an
-      optional definition term [term_opt] to the feature table [ft] *)
-
-val add_function:
-    feature_name withinfo -> Tvars.t -> int array
-      -> Sign.t -> implementation_status -> term option -> t -> unit
+    feature_name withinfo -> Tvars.t -> int array -> Sign.t
+      -> Feature.body -> t -> unit
   (** [add_function fn tvs fnms sign imp_stat term_opt ft] adds the function
       with then name [fn], the formal generics of [tvs], the arguments [fnms],
       the signature [sign] the implementation status [imp_stat] and an
       optional definition term [term_opt] to the feature table [ft] *)
 
 val update_function:
-    int -> info -> implementation_status -> bool -> term option -> t -> unit
+    int -> info  -> bool -> Feature.body -> t -> unit
   (** [update_function fn tvs fnms sign imp_stat term_opt ft] updates the function
       with then name [fn], the formal generics of [tvs], the arguments [fnms],
       the signature [sign] the implementation status [imp_stat] and an

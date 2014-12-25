@@ -280,8 +280,7 @@ let put_function
     (tvs:      Tvars.t)
     (argnames: int array)
     (sign:     Sign.t)
-    (impstat:  Feature_table.implementation_status)
-    (term_opt: term option)
+    (body:     Feature.body)
     (pc:       Proof_context.t): unit =
   assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
   let ft = Proof_context.feature_table pc in
@@ -291,12 +290,12 @@ let put_function
       Feature_table.is_public ft && not (Feature_table.is_feature_public idx ft)
     and is_ghost = Sign.is_ghost sign
     in
-    Feature_table.update_function idx fn.i impstat is_ghost term_opt ft;
+    Feature_table.update_function idx fn.i is_ghost body ft;
     if inh then
       Inherit.inherit_to_descendants idx fn.i pc
   with Not_found ->
     let idx = Feature_table.count ft in
-    Feature_table.add_function fn tvs argnames sign impstat term_opt ft;
+    Feature_table.add_function fn tvs argnames sign body ft;
     Inherit.inherit_to_descendants idx fn.i pc
 
 
@@ -312,39 +311,41 @@ let analyze_feature
     (pc: Proof_context.t): unit =
   let context = Proof_context.context pc in
   Context.push entlst rt false is_func context;
-  let impstat,term_opt =
+  let body =
     match bdy, exp with
       None, None ->
-        Feature_table.No_implementation,
-        None
+        (Feature.Spec.make_func None [] []),
+        Feature.Empty
     | None, Some ie ->
         let term = Typer.result_term ie context in
-        Feature_table.No_implementation,
-        Some term
+        (Feature.Spec.make_func (Some term) [] []),
+        Feature.Empty
     | Some bdy, None ->
         begin
           match bdy with
             None, Some Impbuiltin, None ->
-              Feature_table.Builtin,
-              None
+              (Feature.Spec.make_func None [] []),
+              Feature.Builtin
           | Some reqlst, Some Impbuiltin, None ->
-              let _ = assertion_list reqlst context in
-              Feature_table.Builtin,
-              None
+              let pres = assertion_list reqlst context in
+              (Feature.Spec.make_func None pres []),
+              Feature.Builtin
           | Some reqlst, None, None ->
-              let _ = assertion_list reqlst context in
-              Feature_table.No_implementation, None
+              let pres = assertion_list reqlst context in
+              (Feature.Spec.make_func None pres []),
+              Feature.Empty
           | Some reqlst, None, Some enslst ->
               (try
                 let term = result_term enslst context in
-                let _ = assertion_list reqlst context in
-                Feature_table.No_implementation, Some term
+                let pres = assertion_list reqlst context in
+                (Feature.Spec.make_func (Some term) pres []),
+                Feature.Empty
               with Not_found ->
                 not_yet_implemented fn.i
                   "functions not defined with `Result = ...'")
           | None, Some Impdeferred, None ->
-              Feature_table.Deferred,
-              None
+              (Feature.Spec.make_func None [] []),
+              Feature.Deferred
           | _ -> not_yet_implemented fn.i
                 "functions with implementation/preconditions"
         end
@@ -355,7 +356,7 @@ let analyze_feature
   and tvs      = Context.tvs context
   in
   Context.pop context;
-  put_function fn tvs argnames sign impstat term_opt pc
+  put_function fn tvs argnames sign body pc
 
 
 

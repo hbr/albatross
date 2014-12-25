@@ -79,6 +79,7 @@ module ST : sig
   val symbol: string -> int
   val string: int    -> string
   val count:  unit   -> int
+  val domain:          int
   val tuple:           int
   val first:           int
   val second:          int
@@ -98,6 +99,7 @@ end = struct
   let symbol (str:string)  = Key_table.index str kt
   let string (i:int)       = Key_table.key   i   kt
   let count ()             = Key_table.count kt
+  let domain          = symbol "domain"
   let tuple           = symbol "tuple"
   let first           = symbol "first"
   let second          = symbol "second"
