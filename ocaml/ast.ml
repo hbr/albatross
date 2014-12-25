@@ -230,6 +230,7 @@ let put_class
       Class_table.add hm cn0 fgs ct;
       idx
   in
+  let has_any = ref (Proof_context.is_public pc || Class_table.inherits_any idx ct) in
   List.iter
     (fun par_lst ->
       List.iter
@@ -243,7 +244,11 @@ let put_class
             Class_table.export_inherited idx lst_priv ct;
           Inherit.do_inherit idx lst tp.i pc;
           Inherit.export_inherited idx lst_priv pc;
-          Proof_context.do_inherit idx lst tp.i pc)
+          Proof_context.do_inherit idx lst tp.i pc;
+          if not !has_any && Class_table.inherits_any idx ct then begin
+            has_any := true;
+            Inherit.check_base_features idx pc
+          end)
         par_lst)
     inherits
 

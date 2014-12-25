@@ -34,6 +34,7 @@ type base_descriptor = { hmark:    header_mark;
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
+                         mutable base_features: int list;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -701,13 +702,18 @@ let add_feature
     (cidx:int)
     (is_deferred:bool)
     (priv_only: bool)
+    (base:bool)
     (ct:t)
     : unit =
   assert (cidx < count ct);
+  let desc = descriptor cidx ct in
+  if base || is_deferred then begin
+    let fidx,_,_,_ = f in
+    desc.base_features <- fidx :: desc.base_features end;
   if priv_only || is_private ct then
-    add_feature_bdesc f is_deferred (descriptor cidx ct).priv
+    add_feature_bdesc f is_deferred desc.priv
   else begin
-    add_feature_bdesc f is_deferred (descriptor cidx ct).priv;
+    add_feature_bdesc f is_deferred desc.priv;
     add_feature_bdesc f is_deferred (base_descriptor cidx ct)
   end
 
@@ -722,7 +728,7 @@ let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
 
 let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
     : unit =
-  (** Add the assertion [aidx] to the class [cidx] as deferred or effecitive
+  (** Add the assertion [aidx] to the class [cidx] as deferred or effective
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
   let bdesc = base_descriptor cidx ct in
@@ -733,6 +739,10 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
     add_assertion_bdesc aidx is_deferred (descriptor cidx ct).priv
   end
 
+
+
+let base_features (cidx:int) (ct:t): int list =
+  (descriptor cidx ct).base_features
 
 
 let deferred_features (cidx:int) (ct:t): int list =
@@ -775,6 +785,7 @@ let add
   Seq.push
     {mdl  = current_module ct;
      name = cn;
+     base_features = [];
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;
@@ -1023,7 +1034,9 @@ let has_ancestor (cls:int) (anc:int) (ct:t): bool =
   IntMap.mem anc bdesc.ancestors
 
 
-
+let inherits_any (cls:int) (ct:t): bool =
+  cls <> any_index &&
+  has_ancestor cls any_index ct
 
 
 
@@ -1256,6 +1269,7 @@ let add_base_class
   Seq.push
     {mdl=(-1);
      name = nme;
+     base_features = [];
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;

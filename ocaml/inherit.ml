@@ -16,10 +16,7 @@ module PC = Proof_context
 type parent_descriptor = Class_table.parent_descriptor
 
 let class_table (pc:PC.t):Class_table.t =
-  Proof_context.class_table pc
-
-
-
+  PC.class_table pc
 
 
 let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): unit =
@@ -27,7 +24,7 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
 
      [is_ghost] flags if the inheritance is a ghost inheritance
    *)
-  let ft = Proof_context.feature_table pc in
+  let ft = PC.feature_table pc in
   if 1 < Feature_table.verbosity ft then begin
     let ct   = class_table pc in
     let icls = Feature_table.class_of_feature i ft in
@@ -81,7 +78,7 @@ let prove (t:term) (pc:PC.t): unit =
 
 
 let inherit_effective (i:int) (cls:int) (info:info) (pc:PC.t): unit =
-  let ft = Proof_context.feature_table pc in
+  let ft = PC.feature_table pc in
   let ct = class_table pc in
   let class_name cls  = Class_table.class_name cls ct
   and feat_sign  i    = Feature_table.string_of_signature i ft
@@ -137,7 +134,7 @@ let inherit_effective (i:int) (cls:int) (info:info) (pc:PC.t): unit =
 
 
 let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
-  let ft = Proof_context.feature_table pc in
+  let ft = PC.feature_table pc in
   if not (Feature_table.is_deferred i ft) && Feature_table.has_anchor i ft then
     let ct = class_table pc in
     let cls = Feature_table.class_of_feature i ft in
@@ -179,7 +176,7 @@ let do_inherit
 
 let export_inherited_variant (i:int) (cls:int) (pc:PC.t): unit =
   (* Export the inherited variant of the feature [i] in the class [cls] *)
-  let ft = Proof_context.feature_table pc in
+  let ft = PC.feature_table pc in
   assert (Feature_table.is_interface_check ft);
   if Feature_table.has_anchor i ft then
     try
@@ -211,7 +208,7 @@ let export_inherited
 
 
 let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
-  let ft = Proof_context.feature_table pc in
+  let ft = PC.feature_table pc in
   if not (Feature_table.is_deferred i ft) &&  Feature_table.has_anchor i ft then
     let ct  = class_table pc in
     let cls = Feature_table.class_of_feature i ft in
@@ -219,3 +216,26 @@ let inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
     IntSet.iter
       (fun cls -> inherit_effective i cls info pc)
       descendants
+
+
+
+
+let check_base_features (cls:int) (pc:PC.t): unit =
+  let ct  = class_table pc
+  and ft  = PC.feature_table pc in
+  let lst =
+    if cls = Class_table.boolean_index then
+      [Feature_table.implication_index]
+    else
+      Class_table.base_features cls ct
+  in
+  let fname i = Feature_table.feature_name i ft in
+  let eq_index = Feature_table.variant Feature_table.eq_index cls ft in
+  if Feature_table.is_deferred eq_index ft then
+    ()
+  else begin
+    (*printf "check base features of class %d %s\n"
+      cls (Class_table.class_name cls ct);
+    List.iter (fun i -> printf "   %s\n" (fname i)) lst;*)
+    ()
+  end

@@ -14,3 +14,5 @@ val do_inherit: int -> (int*parent_descriptor)list -> info -> Proof_context.t ->
 val export_inherited: int -> (int*parent_descriptor)list -> Proof_context.t -> unit
 
 val inherit_to_descendants: int -> info -> Proof_context.t -> unit
+
+val check_base_features: int -> Proof_context.t -> unit

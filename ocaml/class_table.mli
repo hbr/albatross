@@ -85,9 +85,9 @@ val is_class_public: int -> t -> bool
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
-val add_feature:  (int*feature_name*type_term*int) -> int -> bool -> bool -> t
-  -> unit
-    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only ct] adds the
+val add_feature:  (int*feature_name*type_term*int)
+  -> int -> bool -> bool -> bool -> t -> unit
+    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only base ct] adds the
         feature [fidx,fn,tp,tvs] to the class [cls] as deferred or effective
         depending on the value of [is_def] *)
 
@@ -99,6 +99,8 @@ val find_features: (feature_name*type_term*int) -> int -> t -> (int*Term_sub.t) 
 val add_assertion:  int -> int -> bool -> t -> unit
    (** [add_assertion aidx cls defer ct] adds the assertion [aidx] to the
        assertion of the class [cls] *)
+
+val base_features: int -> t -> int list
 
 val deferred_features: int -> t -> int list
    (** [deferred_features cls ct]: The list of deferred features of the class
@@ -142,6 +144,8 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
+
+val inherits_any: int -> t -> bool
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 

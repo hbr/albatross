@@ -360,7 +360,7 @@ let export_feature (i:int) (ft:t): unit =
 
 
 
-let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
+let add_class_feature (i:int) (priv_only:bool) (base:bool) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class. *)
   assert (i < count ft);
@@ -370,6 +370,7 @@ let add_class_feature (i:int) (priv_only:bool) (ft:t): unit =
     desc.cls
     (is_desc_deferred desc)
     priv_only
+    base
     ft.ct
 
 
@@ -1252,6 +1253,7 @@ let add_function
   and bdesc_opt =
     if is_priv then None else Some (standard_bdesc cnt cls term_opt nargs ft)
   and nfgs = Tvars.count_all tvs
+  and base = (is_private ft || is_interface_use ft) && not (Option.has term_opt)
   in
   let desc =
     {mdl      = mdl;
@@ -1268,7 +1270,7 @@ let add_function
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
-  add_class_feature cnt false ft
+  add_class_feature cnt false base ft
 
 
 
@@ -1305,7 +1307,7 @@ let update_function
           error_info info "Must be a ghost function";
         let nargs = Array.length desc.argnames in
         desc.pub <- Some (standard_bdesc idx desc.cls term_opt nargs ft);
-        add_class_feature idx false ft
+        add_class_feature idx false false ft
     | Some bdesc ->
         if bdesc.definition <> term_opt then
           not_match "public definition"
@@ -1343,11 +1345,12 @@ let add_base_features (mdl_name:int) (ft:t): unit =
     List.iter
       (fun idx ->
         let desc = descriptor idx ft in
+        let base = not (Option.has desc.priv.definition) in
         assert (desc.mdl = -1);
-        desc.mdl <- curr_mdl ;
+        desc.mdl <- curr_mdl;
         add_key idx ft;
         if idx <> all_index && idx <> some_index then
-          add_class_feature idx true ft)
+          add_class_feature idx true base ft)
       !lst
   with Not_found ->
     ()

@@ -59,6 +59,13 @@ val some_index:        int
 val false_index:       int
 val not_index:         int
 val or_index:          int
+val eq_index:          int
+val false_index:       int
+val not_index:         int
+val or_index:          int
+val tuple_index:       int
+val first_index:       int
+val second_index:      int
 
 val base_table: int -> t
 
@@ -122,6 +129,7 @@ val definition_equality: int -> t -> term
 
 val feature_name: int -> t -> string
 
+val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
 
 val is_feature_public: int -> t -> bool
