@@ -512,7 +512,6 @@ let find_funcs
   in
   lst
 
-exception Wrong_signature
 
 let find_identifier
     (name:int)
@@ -527,22 +526,11 @@ let find_identifier
     find_funcs (FNname name) nargs_id c
   else
     try
-      let i,tvs,s = argument name c
-      in
-      if (Sign.arity s) = nargs_id || is_untyped i c then
-        [i,tvs,s]
-      else
-        try
-          let s = Class_table.downgrade_signature (ntvs c) s nargs_id in
-          [i,tvs,s]
-        with Not_found ->
-          raise Wrong_signature
+      [argument name c]
     with
       Not_found ->
         find_funcs
           (FNname name) nargs_id c
-    | Wrong_signature ->
-        raise Not_found
 
 
 
@@ -592,10 +580,10 @@ let definition (idx:int) (nb:int) (c:t): term =
   end
 
 
-let preconditions (idx:int) (nb:int) (c:t): int * term list =
+let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
   let nbenv = count_arguments c in
   if idx < nb + nbenv then
-    0, []
+    0, [||], []
   else
     Feature_table.preconditions idx (nb+nbenv) (feature_table c)
 

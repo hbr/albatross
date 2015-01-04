@@ -121,4 +121,4 @@ val expanded_term:  term -> int -> t -> term
 
 val definition: int -> int -> t -> term
 
-val preconditions: int -> int -> t -> int * term list
+val preconditions: int -> int -> t -> int * int array * term list

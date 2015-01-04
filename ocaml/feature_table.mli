@@ -54,16 +54,15 @@ val variant_term: term -> int -> int -> int -> t -> term
 val string_of_signature: int -> t -> string
 
 val implication_index: int
-val all_index:         int
-val some_index:        int
 val false_index:       int
 val not_index:         int
 val and_index:         int
 val or_index:          int
+val all_index:         int
+val some_index:        int
 val eq_index:          int
-val false_index:       int
-val not_index:         int
-val or_index:          int
+val domain_index:      int
+val ddomain_index:     int
 val tuple_index:       int
 val first_index:       int
 val second_index:      int
@@ -137,7 +136,7 @@ val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
-val preconditions: int -> int -> t -> int * term list
+val preconditions: int -> int -> t -> int * int array * term list
 
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]

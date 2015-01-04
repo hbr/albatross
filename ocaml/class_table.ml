@@ -47,9 +47,9 @@ type t = {mutable map:   int CMap.t;
 
 
 
-let dummy_index     = 0
-let boolean_index   = 1
-let any_index       = 2
+let boolean_index   = 0
+let any_index       = 1
+let dummy_index     = 2
 let predicate_index = 3
 let function_index  = 4
 let tuple_index     = 5
@@ -1284,6 +1284,7 @@ let check_base_classes (ct:t): unit =
   assert (tuple_index < (count ct));
   assert ((class_name boolean_index   ct) = "BOOLEAN");
   assert ((class_name any_index       ct) = "ANY");
+  assert ((class_name dummy_index     ct) = "@DUMMY");
   assert ((class_name predicate_index ct) = "PREDICATE");
   assert ((class_name function_index  ct) = "FUNCTION");
   assert ((class_name tuple_index     ct) = "TUPLE");
@@ -1298,9 +1299,9 @@ let base_table (): t =
   and fgb = ST.symbol "B"
   and anycon = Variable any_index
   and ct = empty_table ()   in
-  add_base_class "@DUMMY"    Immutable_hmark [||] ct;
   add_base_class "BOOLEAN"   Immutable_hmark [||] ct;
   add_base_class "ANY"       Deferred_hmark  [||] ct;
+  add_base_class "@DUMMY"    Immutable_hmark [||] ct;
   add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;
   add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
   add_base_class "TUPLE"     Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;

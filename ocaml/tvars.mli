@@ -49,6 +49,8 @@ val is_equal_or_fg: type_term -> t -> type_term -> t -> bool
         [tvs1] and [tp2] from the environment [tvs2] equal or is [tp1] a
         formal generic and its concept is equal with [tp2]? *)
 
+val principal_variable: type_term -> t -> int
+
 val principal_class: type_term -> t -> int
     (** [principal_class tp tvs] returns the principal class of the type [tp] *)
 

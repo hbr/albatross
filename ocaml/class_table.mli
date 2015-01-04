@@ -125,6 +125,8 @@ val check_deferred:  int -> int -> info -> t -> unit
 val find:   int list -> int -> t -> int
 val find_for_declaration: int list*int -> t -> int
 
+val split_type_term: type_term -> int * type_term array
+
 val downgrade_signature: int -> Sign.t -> int -> Sign.t
   (** [downgrade_signature ntvs sign nargs] downgrades the constant signature
       [ntvs,sign] (i.e. a signature which has no arguments and is therefore

@@ -61,10 +61,11 @@ let some_index:        int =  6
 let eq_index:          int =  7
 let pparen_index:      int =  8
 let domain_index:      int =  9
-let fparen_index:      int = 10
-let tuple_index:       int = 11
-let first_index:       int = 12
-let second_index:      int = 13
+let ddomain_index:     int = 10
+let fparen_index:      int = 11
+let tuple_index:       int = 12
+let first_index:       int = 13
+let second_index:      int = 14
 
 
 let empty (verbosity:int): t =
@@ -155,7 +156,7 @@ let definition (i:int) (nb:int) (ft:t): term =
   let nargs = Sign.arity desc.sign in
   let t = Feature.Spec.definition_term bdesc.spec in
   let t = Term.upbound nb nargs t in
-  if nargs = 0 then t else Lam (nargs,[||],t)
+  if nargs = 0 then t else Lam (nargs,desc.argnames,t)
 
 
 
@@ -166,20 +167,21 @@ let has_definition (i:int) (ft:t): bool =
 
 
 
-let preconditions (i:int) (nb:int) (ft:t): int * term list =
+let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   (* The preconditions (if there are some) of the feature [i] as optional number of
      arguments and a list of expressions transformed into an environment with [nb]
      bound variables.*)
   assert (nb <= i);
   let i = i - nb in
+  let desc = descriptor i ft in
   let spec = (base_descriptor i ft).spec in
   let n = arity i ft in
   if Feature.Spec.has_preconditions spec then
     let lst = Feature.Spec.preconditions spec in
     let lst = List.map (fun t -> Term.upbound nb n t) lst in
-    n, lst
+    n, desc.argnames, lst
   else
-    n, []
+    n, desc.argnames, []
 
 
 let owner (i:int) (ft:t): int =
@@ -580,6 +582,10 @@ let base_table (verbosity:int) : t =
     "function" Class_table.function_index (FNname ST.domain)
   [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
 
+  add_base (* dummy domain *)
+    "function" Class_table.function_index (FNname (ST.symbol "@domain"))
+  [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
+
   let dom2 = domain_index + 2 in
   let fpre = Application (Term.unary dom2 (Variable 0), [|Variable 1|])
   in
@@ -700,14 +706,8 @@ let find_funcs
         let nfgs = Tvars.count_all tvs in
         if is_public ft && not (Option.has desc.pub) then
           lst
-        else if arity = nargs then
+        else if arity <= nargs then
           (i,tvs,sign) :: lst
-        else if arity < nargs then (* downgrade *)
-          try
-            let s = Class_table.downgrade_signature nfgs sign nargs in
-            (i,tvs,s) :: lst
-          with Not_found ->
-            lst
         else if nargs = 0 then begin (* upgrade *)
           assert (0 < arity);
           let is_pred = is_predicate i ft in
