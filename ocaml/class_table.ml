@@ -17,7 +17,7 @@ module CMap = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
-type parent_descriptor = bool * type_term array
+type parent_descriptor = bool * type_term array (* is_ghost, actual generics *)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;

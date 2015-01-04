@@ -621,12 +621,7 @@ type name_sig = feature_name * type_t list * type_t option
 
 type rename_item = name_sig * feature_name
 
-type adaptation_clause =
-    Rename of rename_item list
-  | Redefine of name_sig list
-  | Undefine of name_sig list
-
-type parent = bool * type_t withinfo * adaptation_clause list
+type parent = bool * type_t withinfo * rename_item list
 
 type inherit_clause = parent list
 
@@ -645,7 +640,7 @@ type declaration =
       header_mark withinfo
         * classname
         * formal_generics
-        * inherit_clause list
+        * inherit_clause
 
 
 type library_name = int list

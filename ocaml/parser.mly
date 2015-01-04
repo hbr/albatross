@@ -353,7 +353,7 @@ header_mark:
 
 class_declaration:
   header_mark KWclass class_name class_generics
-  inheritance
+  inherit_clause
   KWend {
   Class_declaration( withinfo (rhs_info 3) $1,
                      withinfo (rhs_info 3) $3,
@@ -371,45 +371,30 @@ class_generics:
 |   LBRACKET uidentifier_list RBRACKET { $2 }
 
 
-inheritance:
-    { [] }
-|   inherit_clause inheritance { $1::$2 }
-
 
 
 /* ------------------------------------------------------------------------- */
 /* Inheritance */
 /* ------------------------------------------------------------------------- */
 
-inherit_clause: KWinherit parent_list { $2 }
+inherit_clause:
+    { [] }
+| KWinherit parent_list { $2 }
 
 parent_list:
     parent { [$1] }
-|   parent parent_list { $1::$2 }
+|   parent optsemi parent_list { $1::$3 }
 
 parent: optghost type_nt feature_adaptation { $1, withinfo (rhs_info 2) $2, $3 }
 
 feature_adaptation:
     { [] }
-|   adaptation_list KWend { $1 }
-
-adaptation_list:
-    adaptation_clause  { [$1] }
-|   adaptation_clause adaptation_list { $1::$2 }
-
-adaptation_clause:
-    KWrename rename_list         { Rename $2   }
-|   KWredefine feature_name_list { Redefine $2 }
-|   KWundefine feature_name_list { Undefine $2 }
-
-feature_name_list:
-    name_sig   { [$1] }
-|   name_sig  COMMA feature_name_list { $1::$3 }
+|   KWrename rename_list KWend { $2 }
 
 
 rename_list:
     rename_item  { [$1] }
-|   rename_item  COMMA rename_list { $1::$3 }
+|   rename_item  optsemi rename_list { $1::$3 }
 
 rename_item:
     name_sig KWas nameopconst  { $1,$3 }

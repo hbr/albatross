@@ -208,7 +208,7 @@ let put_class
     (hm:       header_mark withinfo)
     (cn:       classname)
     (fgs:      formal_generics)
-    (inherits: inherit_clause list)
+    (inherits: inherit_clause)
     (pc: Proof_context.t)
     : unit =
   (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
@@ -232,24 +232,23 @@ let put_class
   in
   let has_any = ref (Proof_context.is_public pc || Class_table.inherits_any idx ct) in
   List.iter
-    (fun par_lst ->
-      List.iter
-        (fun (ghost,tp,adapt_lst) ->
-          assert (adapt_lst = [] ); (* nyi: feature adaption *)
-          let par_idx, par_args = Class_table.parent_type idx tp ct in
-          let lst, lst_priv =
-            Class_table.inherited_ancestors idx ghost par_idx par_args tp.i ct in
-          Class_table.do_inherit idx lst ct;
-          if lst_priv <> [] then
-            Class_table.export_inherited idx lst_priv ct;
-          Inherit.do_inherit idx lst tp.i pc;
-          Inherit.export_inherited idx lst_priv pc;
-          Proof_context.do_inherit idx lst tp.i pc;
-          if not !has_any && Class_table.inherits_any idx ct then begin
-            has_any := true;
-            Inherit.check_base_features idx pc
-          end)
-        par_lst)
+    (fun (ghost,tp,rename_lst) ->
+      if rename_lst <> [] then
+        not_yet_implemented tp.i "rename";
+      assert (rename_lst = [] ); (* nyi: feature adaption *)
+      let par_idx, par_args = Class_table.parent_type idx tp ct in
+      let lst, lst_priv =
+        Class_table.inherited_ancestors idx ghost par_idx par_args tp.i ct in
+      Class_table.do_inherit idx lst ct;
+      if lst_priv <> [] then
+        Class_table.export_inherited idx lst_priv ct;
+      Inherit.do_inherit idx lst tp.i pc;
+      Inherit.export_inherited idx lst_priv pc;
+      Proof_context.do_inherit idx lst tp.i pc;
+      if not !has_any && Class_table.inherits_any idx ct then begin
+        has_any := true;
+        Inherit.check_base_features idx pc
+      end)
     inherits
 
 
