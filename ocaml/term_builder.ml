@@ -355,10 +355,10 @@ let unify
 
 
 let adapt_arity (s:Sign.t) (n:int) (tb:t): Sign.t =
-  assert (n <= Sign.arity s);
+  assert (n < Sign.arity s);
   let args = Sign.arguments s
   and rt   = Sign.result_type s in
-  let tup = Class_table.to_tuple (count_all tb) n args in
+  let tup = Class_table.to_tuple (count_all tb) (n-1) args in
   let args =
     Array.init n
       (fun i ->
