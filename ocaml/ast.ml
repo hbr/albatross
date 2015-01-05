@@ -30,7 +30,7 @@ let analyze_imp_opt
     (imp_opt: implementation option)
     (c:Context.t)
     : kind * compound =
-  let iface = Context.is_interface_use c in
+  let iface = Context.is_interface_use c || Context.is_interface_check c in
   let kind,is_do,clst =
     match imp_opt with
       None ->
@@ -55,7 +55,7 @@ let analyze_imp_opt
     | Some (Impdefined (None,is_do,cmp)) ->
         if iface then begin
           if is_do || cmp <> [] then
-            error_info info "not allowed in interface file";
+            error_info info "proof not allowed in interface file";
           PAxiom,  false, []
         end else
           PNormal, false, cmp
