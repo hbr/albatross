@@ -21,7 +21,6 @@ type formal     = int * term
 
 type base_descriptor = {
     mutable spec:       Feature.Spec.t;
-    mutable level:      int;
     mutable is_inh:     bool;
     mutable seeds:      IntSet.t;
     mutable variants:   int IntMap.t;  (* cls -> fidx *)
@@ -188,7 +187,7 @@ let owner (i:int) (ft:t): int =
   assert (i < count ft);
   (descriptor i ft).cls
 
-
+(*
 let function_level (i:int) (ft:t): int =
   assert (i < count ft);
   (base_descriptor i ft).level
@@ -206,7 +205,7 @@ let term_level (t:term) (nb:int) (ft:t): int =
     )
     0
     t
-
+*)
 
 let is_ghost_function (i:int) (ft:t): bool =
   assert (i < count ft);
@@ -256,14 +255,9 @@ let is_predicate (i:int) (ft:t): bool =
 
 let standard_bdesc (i:int) (cls:int) (spec: Feature.Spec.t) (nb:int) (ft:t)
     : base_descriptor =
-  let level =
-    try let t = Feature.Spec.definition_term spec in 1 + term_level t nb ft
-    with Not_found -> 0
-  in
   {is_inh     = false;
    seeds      = IntSet.singleton i;     (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
-   level      = level;
    spec       = spec;
    is_eq      = false}
 
@@ -632,12 +626,11 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   Application (Variable (implication_index+nbound), args)
 
 
-let find
-    (fn:feature_name)
-    (tvs: Tvars.t)
-    (tp:type_term)
-    (ft:t)
-    : int =
+
+let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
+  (* Find the feature with the characteristics.  *)
+  let ntvs = Tvars.count_all tvs in
+  let tp   = Class_table.to_dummy ntvs sign in
   let ntvs = Tvars.count_all tvs
   and tab = Feature_map.find fn ft.map in
   let lst  = Term_table2.unify tp ntvs tab in
@@ -657,10 +650,14 @@ let find
                   ft.ct)
               sub
           in
-          if ok then (
-            printf "find fn %s\n" (feature_name_to_string fn);
-            assert false)
-          else
+          if ok then begin
+            let owner = Class_table.owner tvs sign ft.ct in
+            try
+              let ivar = variant i owner ft in
+              ivar :: lst
+            with Not_found ->
+              assert false (* cannot happen, feature must be inherited *)
+          end else
             lst)
       []
       lst
@@ -670,15 +667,6 @@ let find
   | idx::rest ->
       assert (List.for_all (fun i -> i=idx) rest);
       idx
-
-
-
-
-let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
-  (* Find the feature with the characteristics.  *)
-  let ntvs = Tvars.count_all tvs in
-  let tp   = Class_table.to_dummy ntvs sign in
-  find fn tvs tp ft
 
 
 let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
@@ -1419,9 +1407,7 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
     let or_desc  = descriptor or_index ft
     and and_desc = descriptor and_index ft in
     or_desc.priv.spec   <- Feature.Spec.make_func None [] [];
-    or_desc.priv.level  <- 0;
-    and_desc.priv.spec  <- Feature.Spec.make_func None [] [];
-    and_desc.priv.level <- 0
+    and_desc.priv.spec  <- Feature.Spec.make_func None [] []
   end
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =

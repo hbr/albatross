@@ -162,17 +162,6 @@ val normalize_term: term->int->t->term
      i.e. a variable [i] with [nbound<=i] refers to the global feature
      [i-nbound] *)
 
-
-val function_level: int -> t -> int
-    (** [function_level i ft] returns the level of the function [i]. A basic
-        function has level [0]. A function whose maximum function level in its
-        definition is [n] has level [n+1]
-     *)
-
-val term_level: term -> int -> t -> int
-    (** [term_level t nb ft] returns the level of the term [t] which is valid in
-        and environment with [nb] variables. *)
-
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
       arguments in the feature table [ft] and returns the indices with the
