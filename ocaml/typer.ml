@@ -32,7 +32,8 @@ module Accus: sig
   val complete_lambda:   int -> int -> int array -> t -> unit
   val update_terms:      t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
-  val check_type_variables: info -> t -> unit
+  val check_untyped_variables: info -> t -> unit
+  val remove_dummies:    info_expression -> t -> unit
   val result:            t -> term * TVars_sub.t
 
 end = struct
@@ -224,26 +225,41 @@ end = struct
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
     match accs.accus with
       [] -> assert false
-    | hd::tl when let res = Term_builder.result hd in
-      List.exists (fun acc -> Term_builder.result acc = res) tl ->
-        let estr = string_of_expression e
-        in
-        let t1,tvars1 = Term_builder.result (List.hd accs.accus)
-        and t2,tvars2 = Term_builder.result (List.hd (List.tl accs.accus))
-        in
-        printf "ambiguous expression %s (%d)\n" (string_of_expression e)
-          (List.length accs.accus);
-        printf "    t1 %s\n" (Term.to_string t1);
-        printf "    t2 %s\n" (Term.to_string t2);
-        let str1, str2 = get_diff t1 t2 accs in
-        error_info inf
-          ("The expression " ^ estr ^ " is ambiguous \"" ^
-           str1 ^ "\" or \"" ^ str2 ^ "\""  )
-    | _ ->
-        ()
+    | hd::tl ->
+        let t1,tvars2 = Term_builder.result hd in
+        try
+          let acc = List.find (fun acc -> fst (Term_builder.result acc) <> t1) tl in
+          let t2,tvars2 = Term_builder.result acc
+          and estr = string_of_expression e in
+          printf "ambiguous expression %s (%d)\n" (string_of_expression e)
+            (List.length accs.accus);
+          printf "    t1 %s\n" (Term.to_string t1);
+          printf "    t2 %s\n" (Term.to_string t2);
+          let str1, str2 = get_diff t1 t2 accs in
+          error_info inf
+            ("The expression " ^ estr ^ " is ambiguous \"" ^
+             str1 ^ "\" or \"" ^ str2 ^ "\""  )
+        with Not_found ->
+          ()
 
-  let check_type_variables (inf:info) (accs:t): unit =
-    List.iter (fun acc -> Term_builder.check_type_variables inf acc) accs.accus
+  let check_untyped_variables (inf:info) (accs:t): unit =
+    List.iter (fun acc -> Term_builder.check_untyped_variables inf acc) accs.accus
+
+
+  let remove_dummies (ie:info_expression) (accs:t): unit =
+    accs.accus <-
+      List.fold_left
+        (fun lst acc ->
+          if Term_builder.has_dummy acc then lst
+          else acc::lst)
+        []
+        accs.accus;
+    if accs.accus = [] then
+      error_info ie.i ("Cannot type the expression \"" ^
+                       (string_of_expression ie.v) ^
+                       "\"")
+
+
 
   let result (accs:t): term * TVars_sub.t =
     assert (is_unique accs);
@@ -448,7 +464,7 @@ let analyze_expression
     and nfgs      = Context.count_last_formal_generics c in
     Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred accs;
     analyze e accs;
-    Accus.check_type_variables entlst.i accs;
+    Accus.check_untyped_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;
     Context.pop c
 
@@ -458,9 +474,10 @@ let analyze_expression
   analyze exp accs;
   assert (not (Accus.is_empty accs));
 
+  Accus.remove_dummies ie accs;
   Accus.update_terms accs;
+  Accus.check_untyped_variables ie.i accs;
   Accus.check_uniqueness info exp accs;
-  Accus.check_type_variables ie.i accs;
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;

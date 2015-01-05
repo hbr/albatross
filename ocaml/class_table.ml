@@ -866,22 +866,25 @@ let rec satisfies
     and idx2,args2 = split_type_term tp2 in
     assert (nall1 <= idx1);
     assert (nall2 <= idx2);
-    let bdesc1 = base_descriptor (idx1-nall1) ct in
-    try
-      let _,anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
-      let nargs    = Array.length anc_args in
-      assert (nargs = Array.length args2);
-      let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
-      in
-      for i = 0 to nargs-1 do
-        if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
-          ()
-        else
-          raise Not_found
-      done;
+    if idx1 = nall1 + dummy_index then
       true
-    with Not_found ->
-      false
+    else
+      let bdesc1 = base_descriptor (idx1-nall1) ct in
+      try
+        let _,anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
+        let nargs    = Array.length anc_args in
+        assert (nargs = Array.length args2);
+        let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
+        in
+        for i = 0 to nargs-1 do
+          if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
+            ()
+          else
+            raise Not_found
+        done;
+        true
+      with Not_found ->
+        false
   in
   let sat1 (tp1:type_term) (tp2:type_term): bool =
     match tp1 with

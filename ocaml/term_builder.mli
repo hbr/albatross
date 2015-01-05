@@ -85,10 +85,11 @@ val complete_lambda:   int -> int array -> t -> unit
        into a lamda term with [nargs] arguments and the argument names
        [names]. *)
 
-val check_type_variables: Support.info -> t -> unit
+val check_untyped_variables: Support.info -> t -> unit
    (** Check that the substitutions contain no dummy types (i.e. incomplete
        types which should be updated either to FUNCTION or PREDICATE *)
 
+val has_dummy: t -> bool
 
 val update_term: t -> unit
     (** [update_term tb] substitutes all features in the result term by the

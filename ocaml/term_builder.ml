@@ -223,16 +223,22 @@ let upgrade_dummy (i:int) (t:term) (tb:t): unit =
   let t_i = get_sub i tb
   and t   = TVars_sub.sub_star t tb.tvars
   in
+  let update_with t =
+    if i < count_local tb || satisfies t (concept i tb) tb then
+      TVars_sub.update_sub i t tb.tvars
+    else
+      raise Not_found
+  in
   match t_i, t with
     Application(Variable idx1, args1),
     Application(Variable idx2, args2)
     when idx1 = nall + Class_table.dummy_index ->
       if idx2 = nall + Class_table.predicate_index then
         let t_new = Application(Variable idx2, [|args1.(0)|]) in
-        TVars_sub.update_sub i t_new tb.tvars
+        update_with t_new
       else if idx2 = nall + Class_table.function_index then
         let t_new = Application(Variable idx2, args1) in
-        TVars_sub.update_sub i t_new tb.tvars
+        update_with t_new
       else if idx2 = nall + Class_table.dummy_index then
         ()
       else
@@ -621,9 +627,10 @@ let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
   tb.tlist <- Lam (nargs, names, t) :: tb.tlist
 
 
-let check_type_variables (inf:info) (tb:t): unit =
+
+let check_untyped_variables (inf:info) (tb:t): unit =
   let ntvs_ctxt = Context.count_type_variables tb.c
-  and ntvs_loc  = TVars_sub.count_local tb.tvars in
+  and ntvs_loc  = count_local tb in
   assert (ntvs_ctxt = ntvs_loc);
   let ntvs_all = count tb + Context.count_formal_generics tb.c in
   let dum_idx  = ntvs_all + Class_table.dummy_index
@@ -641,6 +648,23 @@ let check_type_variables (inf:info) (tb:t): unit =
       end
     | _ -> ()
   done
+
+
+
+let has_dummy (tb:t): bool =
+  let n = count tb in
+  let nall = count_all tb in
+  let dum_idx = nall + Class_table.dummy_index in
+  let rec has n =
+    if n = 0 then false
+    else
+      let n = n - 1 in
+      match TVars_sub.get n tb.tvars with
+        Application(Variable idx,_)  when idx = dum_idx -> true
+      | _ -> has n
+  in
+  has n
+
 
 
 let update_term (tb:t): unit =
