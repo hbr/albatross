@@ -1264,7 +1264,7 @@ let add_base_class
   let tvs  = Tvars.make_fgs fgnames concepts in
   let bdesc = standard_bdesc hm nfgs tvs idx
   and bdesc_opt =
-    if is_public ct then Some (standard_bdesc hm nfgs tvs idx) else None
+    if name = "@DUMMY" then Some (standard_bdesc hm nfgs tvs idx) else None
   in
   Seq.push
     {mdl=(-1);
