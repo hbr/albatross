@@ -362,7 +362,7 @@ let analyze_feature
 
 
 
-let analyze(ast: declaration list) (pc:Proof_context.t): unit =
+let analyze (ast: declaration list) (pc:Proof_context.t): unit =
   let context = Proof_context.context pc in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
