@@ -299,7 +299,9 @@ let private_variant (i:int) (cls:int) (ft:t): int =
   IntMap.find cls seed_bdesc.variants
 
 
-
+let has_variant (i:int) (cls:int) (ft:t): bool =
+  try let _ = variant i cls ft in true
+  with Not_found -> false
 
 let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
   assert (Class_table.has_ancestor cls base_cls ft.ct);
@@ -308,6 +310,9 @@ let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
       if class_of_feature j ft = base_cls && has_anchor j ft then
         try variant j cls ft
         with Not_found ->
+          printf "there is no variant of \"%s\" in class %s\n"
+            (string_of_signature j ft)
+            (Class_table.class_name cls ft.ct);
           assert false (* If [cls] inherits [base_cls] then there has to be a variant
                           in the descendant *)
       else
@@ -1070,7 +1075,7 @@ let print (ft:t): unit =
 
 
 
-let find_variant (i:int) (cls:int) (ft:t): int =
+let find_variant_candidate (i:int) (cls:int) (ft:t): int =
   (* Find the variant of the feature [i] in the class [cls] *)
   let ct = class_table ft
   and desc = descriptor i ft in
@@ -1112,9 +1117,9 @@ let find_variant (i:int) (cls:int) (ft:t): int =
 
 
 
-let has_variant (i:int) (cls:int) (ft:t): bool =
+let has_variant_candidate (i:int) (cls:int) (ft:t): bool =
   (* Has the feature [i] a variant in the class [cls]? *)
-  try let _ = find_variant i cls ft in true
+  try let _ = find_variant_candidate i cls ft in true
   with Not_found -> false
 
 

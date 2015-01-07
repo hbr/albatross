@@ -40,16 +40,18 @@ val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
 
-val find_variant: int -> int -> t -> int
-
 val private_variant: int -> int -> t -> int
-
-val has_variant: int -> int -> t -> bool
 
 val variant_term: term -> int -> int -> int -> t -> term
     (** [variant t nb base_cls cls ft] returns the variant of the term [t]
         with [nb] bound variables of the base class [base_cls] in the class
         [cls] *)
+
+val has_variant: int -> int -> t -> bool
+
+val find_variant_candidate: int -> int -> t -> int
+
+val has_variant_candidate: int -> int -> t -> bool
 
 val string_of_signature: int -> t -> string
 

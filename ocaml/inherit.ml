@@ -34,12 +34,12 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
       (Class_table.class_name cls ct) end;
   assert (cls <> Feature_table.class_of_feature i ft);
   let idx =
-    try Feature_table.find_variant i cls ft
+    try Feature_table.find_variant_candidate i cls ft
     with Not_found ->
       let ct   = class_table pc  in
       let str =
         "The class " ^ (Class_table.class_name cls ct) ^
-        " does not have a feature unifyable with \"" ^
+        " does not have a feature unifiable with \"" ^
         (Feature_table.string_of_signature i ft) ^
         "\" with proper substitutions of the type variables" in
       error_info info str
@@ -95,7 +95,7 @@ let inherit_effective (i:int) (cls:int) (info:info) (pc:PC.t): unit =
       printf "   inherit \"%s %s\" in %s\n"
         (class_name icls) (feat_sign i) (class_name cls) end;
     try
-      let idx = Feature_table.find_variant i cls ft in
+      let idx = Feature_table.find_variant_candidate i cls ft in
       Feature_table.inherit_feature i idx cls false ft;
       let eq_term =
         try Feature_table.definition_equality i ft
