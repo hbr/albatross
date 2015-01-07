@@ -237,6 +237,8 @@ let put_class
         not_yet_implemented tp.i "rename";
       assert (rename_lst = [] ); (* nyi: feature adaption *)
       let par_idx, par_args = Class_table.parent_type idx tp ct in
+      if Class_table.has_ancestor par_idx idx ct then
+        error_info tp.i "Circular inheritance";
       let lst, lst_priv =
         Class_table.inherited_ancestors idx ghost par_idx par_args tp.i ct in
       Class_table.do_inherit idx lst ct;
