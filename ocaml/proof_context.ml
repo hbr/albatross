@@ -289,6 +289,21 @@ let has (t:term) (pc:t): bool =
     false
 
 
+let has_in_view (t:term) (pc:t): bool =
+  assert (is_global pc);
+  try
+    let i = find t pc in
+    assert (i < count_global pc);
+    if is_private pc then
+      true
+    else
+      let gdesc = Seq.elem i pc.gseq in
+      gdesc.pub
+  with Not_found ->
+    false
+
+
+
 let triggers_evaluation (t:term) (pc:t): bool =
   (* Does the term [t] trigger a full evaluation when used as a top level function
      term, i.e. is it a variable which describes a function which has no expansion
@@ -878,7 +893,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
     printf "   inherit deferred \"%s\" in %s\n"
       (string_of_term t pc)
       (Class_table.class_name cls ct);
-  if not (has t pc) then
+  if not (has_in_view t pc) then
     error_info info ("The deferred assertion \""  ^
                      (string_of_term t pc) ^
                      "\" is missing in " ^
