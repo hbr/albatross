@@ -508,6 +508,7 @@ module Result_type: sig
   val result:       t -> type_term
   val is_procedure: t -> bool
   val is_ghost:     t -> bool
+  val to_ghost:     t -> t
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
   val sub:          t -> type_term array -> int -> t
@@ -544,6 +545,12 @@ end = struct
     match rt with
       None             -> false
     | Some (_,_,ghost) -> ghost
+
+  let to_ghost (rt:t): t =
+    assert (has_result rt);
+    match rt with
+      None -> assert false
+    | Some (tp,proc,ghost) -> Some (tp,proc,true)
 
   let up_from (n:int) (start:int) (rt:t): t =
     match rt with
@@ -597,6 +604,7 @@ module Sign: sig
   val result:      t -> type_term
   val is_procedure:t -> bool
   val is_ghost:    t -> bool
+  val to_ghost:    t -> t
   val up_from:     int -> int -> t -> t
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
@@ -658,8 +666,12 @@ end = struct
     Result_type.result s.rt
 
   let is_procedure (s:t): bool = Result_type.is_procedure s.rt
+
   let is_ghost     (s:t): bool = Result_type.is_ghost     s.rt
 
+  let to_ghost (s:t): t =
+    assert (has_result s);
+    {s with rt = Result_type.to_ghost s.rt}
 
   let to_string (s:t): string =
     let argsstr =
