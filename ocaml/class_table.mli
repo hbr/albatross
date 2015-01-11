@@ -86,8 +86,8 @@ val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
 val add_feature:  (int*feature_name*type_term*int)
-  -> int -> bool -> bool -> bool -> t -> unit
-    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only base ct] adds the
+  -> int -> bool -> bool -> bool -> bool -> t -> unit
+    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only pub_only base ct] adds the
         feature [fidx,fn,tp,tvs] to the class [cls] as deferred or effective
         depending on the value of [is_def] *)
 
@@ -146,35 +146,16 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
+val ancestor:     int -> int -> t -> parent_descriptor
+val has_private_ancestor: int -> int -> t -> bool
+val private_ancestor:     int -> int -> t -> parent_descriptor
 
 val inherits_any: int -> t -> bool
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 
-val inherited_ancestors:
-    int -> bool -> int -> type_term array -> info -> t
-      -> (int * parent_descriptor) list * (int * parent_descriptor) list
-   (** [inherited_ancestors cls par par_args info ct] calculates a list of
-       inherited ancestors in case the class [cls] inherits
-       [par[par_args]]. The returned list contains [par[par_args]] and all
-       implicitly inherited ancestors unless they are already in the set of
-       ancestors. The second list contains all [par[par_args]] which are already
-       privately inherited.
 
-       If [par[par_args]] is already in the set of ancestors, then the
-       returned list is empty. However it is checked if the actual generics
-       coincide with the actual generics of the parent which is already in the
-       set of ancestors. If this is not the case an error message is
-       triggered.  *)
-
-val do_inherit: int -> (int * parent_descriptor) list -> t -> unit
-   (** [do_inherit cls anc_lst ct] let the class [cls] inherit all ancestors
-       of the list [anc_lst] *)
-
-val export_inherited: int -> (int * parent_descriptor) list -> t -> unit
-   (** [export_inherited cls anc_lst ct] let the class [cls] export all
-       privately inherited ancestors of the list [anc_lst] *)
-
+val inherit_parent: int  -> int -> type_term array -> bool -> info -> t -> unit
 
 val boolean_type:   int -> term
 

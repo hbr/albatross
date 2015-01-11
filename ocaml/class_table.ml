@@ -23,7 +23,6 @@ type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
                          mutable eq_feat:  int;
                          mutable fmap:  int Term_table2.t Feature_map.t;
-                         mutable fset:  IntSet.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
@@ -90,7 +89,6 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
    tvs   = tvs;
    eq_feat = -1;
    fmap  = Feature_map.empty;
-   fset  = IntSet.empty;
    def_features = [];
    eff_features = [];
    def_asserts  = [];
@@ -131,6 +129,11 @@ let class_name (i:int) (ct:t): string =
 let is_class_public (cls:int) (ct:t): bool =
   assert (cls < count ct);
   Option.has (descriptor cls ct).publ
+
+
+
+let base_descriptor_priv (idx:int) (ct:t): base_descriptor =
+  (descriptor idx ct).priv
 
 
 let base_descriptor (idx:int) (ct:t): base_descriptor =
@@ -682,16 +685,13 @@ let add_feature_bdesc
       bdesc.fmap <- Feature_map.add fn tab bdesc.fmap;
       tab
   in
-  assert (Feature_map.mem fn bdesc.fmap);
-  if IntSet.mem fidx bdesc.fset then
-    ()
-  else begin
-    if is_deferred then
-      bdesc.def_features <- fidx :: bdesc.def_features
-    else
-      bdesc.eff_features <- fidx :: bdesc.eff_features;
-    Term_table2.add tp nfgs 0 fidx tab;
-    bdesc.fset <- IntSet.add fidx bdesc.fset
+  Term_table2.add tp nfgs 0 fidx tab;
+  if is_deferred then begin
+    assert (not (List.mem fidx bdesc.def_features));
+    bdesc.def_features <- fidx :: bdesc.def_features
+  end else begin
+    assert (not (List.mem fidx bdesc.eff_features));
+    bdesc.eff_features <- fidx :: bdesc.eff_features;
   end
 
 
@@ -702,28 +702,43 @@ let add_feature
     (cidx:int)
     (is_deferred:bool)
     (priv_only: bool)
+    (pub_only)
     (base:bool)
     (ct:t)
     : unit =
   assert (cidx < count ct);
+  assert (not (priv_only && pub_only));
   let desc = descriptor cidx ct in
   if base || is_deferred then begin
     let fidx,_,_,_ = f in
     desc.base_features <- fidx :: desc.base_features end;
   if priv_only || is_private ct then
     add_feature_bdesc f is_deferred desc.priv
-  else begin
+  else if is_interface_check ct then
+    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
+  else if pub_only then begin
+    assert (is_interface_use ct);
+    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
+  end else begin
+    assert (is_interface_use ct);
     add_feature_bdesc f is_deferred desc.priv;
     add_feature_bdesc f is_deferred (base_descriptor cidx ct)
   end
+  (*else begin
+    add_feature_bdesc f is_deferred desc.priv;
+    add_feature_bdesc f is_deferred (base_descriptor cidx ct);
+  end*)
 
 
 let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
     : unit =
-  if is_deferred then
+  if is_deferred then begin
+    assert (not (List.mem aidx bdesc.def_asserts));
     bdesc.def_asserts <- aidx :: bdesc.def_asserts
-  else
+  end else begin
+    assert (not (List.mem aidx bdesc.eff_asserts));
     bdesc.eff_asserts <- aidx :: bdesc.eff_asserts
+  end
 
 
 let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
@@ -732,7 +747,7 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
   let bdesc = base_descriptor cidx ct in
-  if is_private ct then
+  if is_private ct || is_interface_check ct then
     add_assertion_bdesc aidx is_deferred bdesc
   else begin
     add_assertion_bdesc aidx is_deferred bdesc;
@@ -1029,12 +1044,28 @@ let get_type
 
 
 
+let ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
+  let bdesc = base_descriptor cls ct in
+  IntMap.find anc bdesc.ancestors
+
 
 let has_ancestor (cls:int) (anc:int) (ct:t): bool =
   (** Does the class [cls] have [anc] as an ancestor ? *)
   cls = anc ||
-  let bdesc = base_descriptor cls ct in
-  IntMap.mem anc bdesc.ancestors
+  try let _ = ancestor cls anc ct in true
+  with Not_found -> false
+
+
+let private_ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
+  let bdesc = (descriptor cls ct).priv in
+  IntMap.find anc bdesc.ancestors
+
+let has_private_ancestor (cls:int) (anc:int) (ct:t): bool =
+  (* Does the class [cls] have [anc] as a private ancestor ? *)
+  cls = anc ||
+  try let _ = private_ancestor cls anc ct in true
+  with Not_found -> false
+
 
 
 let inherits_any (cls:int) (ct:t): bool =
@@ -1061,62 +1092,6 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
 
 
 
-let inherited_ancestors
-    (cls_idx:int)
-    (ghost: bool)
-    (par_idx:int)
-    (par_args:type_term array)
-    (info:info)
-    (ct:t)
-    : (int * parent_descriptor) list * (int * parent_descriptor) list =
-  (* The inherited ancestors of the parent [par_idx[par_args]] in the class
-     [cls_idx] partitioned in a list which occur only publicly and a list
-     which occur both publicly and privatly. [ghost] indicates if [par_idx] is
-     inherited in the class [cls_idx] as a ghost. *)
-  let par_bdesc = base_descriptor par_idx ct
-  and cls_bdesc = base_descriptor cls_idx ct in
-  let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
-  assert (IntSet.is_empty cls_bdesc.descendants); (* nyi: inheritance to
-                                                     descendants*)
-  let res = IntMap.fold
-    (fun anc_idx (is_ghost,anc_args) lst->
-      let anc_args: type_term array =
-        Array.map (fun t -> Term.sub t par_args cls_nfgs) anc_args in
-      try
-        let _,anc_args_0 = IntMap.find anc_idx cls_bdesc.ancestors in
-        if anc_args <> anc_args_0 then
-          error_info info
-            ("Cannot inherit "  ^
-             (class_name anc_idx ct) ^
-             " with different actual generics")
-        else
-          lst
-      with Not_found ->
-        (anc_idx,(ghost||is_ghost,anc_args)) :: lst)
-    par_bdesc.ancestors
-    []
-  in
-  if is_interface_check ct then
-    let cls_bdesc_priv = (descriptor cls_idx ct).priv in
-    List.partition
-        (fun (anc_idx,(_,anc_args)) ->
-          try
-            let _,anc_args_0 = IntMap.find anc_idx cls_bdesc_priv.ancestors in
-            if anc_args <> anc_args_0 then
-              error_info info
-                ("Cannot inherit "  ^
-                 (class_name anc_idx ct) ^
-                 " with different actual generics than inherited privately");
-            false
-          with Not_found ->
-            true)
-        res
-  else
-    res, []
-
-
-
-
 let one_inherit
     (cls_idx: int)
     (cls_bdesc:base_descriptor)
@@ -1131,43 +1106,46 @@ let one_inherit
 
 
 
-let do_inherit
-    (cls_idx:int)
-    (anc_lst: (int*parent_descriptor) list)
-    (ct:t)
-    : unit =
-  if is_public ct then begin
-    let cls_bdesc = (descriptor cls_idx ct).priv in
-    List.iter
-      (fun (anc_idx,anc_args) ->
-        let anc_bdesc = (descriptor anc_idx ct).priv in
-        one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
-      anc_lst
-  end;
-  let cls_bdesc = base_descriptor cls_idx ct in
-  List.iter
-    (fun (anc_idx,anc_args) ->
-        (*printf "%s inherit public or private %s\n"
-          (class_name cls_idx ct)
-          (class_name anc_idx ct);*)
-      let anc_bdesc = base_descriptor anc_idx ct in
-      one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
-    anc_lst
+let rec inherit_parent
+    (cls:int) (par:int) (args:type_term array) (ghost:bool)
+    (info:info) (ct:t): unit =
+  (* Inherit the parent [par,args] in the class [cls] and in the descendants of
+     [cls]. *)
+  let par_bdesc      = base_descriptor par ct
+  and cls_bdesc_priv = base_descriptor_priv cls ct
+  and cls_bdesc      = base_descriptor cls ct in
+  let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
+  let inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc =
+    try
+      let ghost0,anc_args0 = IntMap.find anc cls_bdesc.ancestors in
+      if anc_args <> anc_args0 then
+        error_info info ("Cannot inherit " ^ (class_name anc ct) ^
+                         " in " ^ (class_name cls ct) ^
+                         " with different actual generics")
+      else if ghost <> ghost0 then
+        error_info info ("Cannot change ghost status of " ^ (class_name anc ct) ^
+                         " in " ^ (class_name cls ct))
+      else
+        () (* ancestor already consistently available *)
+    with Not_found ->
+      one_inherit cls cls_bdesc anc (ghost,anc_args) anc_bdesc
+  in
+  IntMap.iter
+    (fun anc (is_ghost,anc_args) ->
+      let anc_args = Array.map (fun t -> Term.sub t args cls_nfgs) anc_args in
+      let anc_bdesc = base_descriptor anc ct in
+      inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc;
+      if is_interface_use ct then
+        let anc_bdesc_priv = base_descriptor_priv anc ct in
+        inherit_ancestor anc anc_args is_ghost anc_bdesc_priv cls_bdesc_priv)
+    par_bdesc.ancestors;
+  IntSet.iter
+    (fun desc ->
+      let ghost,cls_args = ancestor desc cls ct in
+      inherit_parent desc cls cls_args ghost info ct)
+    cls_bdesc.descendants
 
 
-let export_inherited
-    (cls_idx:int)
-    (anc_lst: (int*parent_descriptor) list)
-    (ct:t)
-    : unit =
-  assert (anc_lst <> [] );
-  assert (is_interface_check ct);
-  let cls_bdesc = base_descriptor cls_idx ct in
-  List.iter
-    (fun (anc_idx,anc_args) ->
-      let anc_bdesc = base_descriptor anc_idx ct in
-      one_inherit cls_idx cls_bdesc anc_idx anc_args anc_bdesc)
-    anc_lst
 
 
 

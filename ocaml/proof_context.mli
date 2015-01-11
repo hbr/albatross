@@ -86,9 +86,9 @@ val is_assumption:  int -> t -> bool
 val check_deferred: t -> unit
 val owner:          t -> int
 
-val do_inherit: int -> (int * (bool*type_term array)) list -> info -> t -> unit
-  (** [do_inherit cls anc_lst info ft] let the class [cls] inherit the
-      assertions from all ancestors [par_idx[par_args]] in the ancestor list
-      [anc_lst]. *)
+val inherit_parent: int -> int -> type_term array -> info -> t -> unit
+    (** [inherit_parent cls par par_args info pc] *)
+
+val add_potential_equalities: int -> t -> unit
 
 val check_interface: t -> unit

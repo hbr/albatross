@@ -420,7 +420,7 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
         Term.nodes right < Term.nodes left
     in
     if is_simpl then
-      pc.entry.left <- Term_table.add left nargs nbenv idx pc.entry.left;
+      pc.entry.left <- Term_table.add left nargs nbenv idx pc.entry.left
   with Not_found ->
     ()
 
@@ -901,7 +901,7 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
 
 
 
-let inherit_effective (i:int) (cls:int) (pc:t): unit =
+let rec inherit_effective (i:int) (cls:int) (to_descs:bool) (pc:t): unit =
   (* Inherit the effective assertion [i] in the class [cls] *)
   assert (is_global pc);
   assert (i < count_global pc);
@@ -915,9 +915,27 @@ let inherit_effective (i:int) (cls:int) (pc:t): unit =
       (Class_table.class_name cls ct);
   if not (has t pc) then begin
     Proof_table.add_inherited t i bcls cls pc.base;
-    let _ = raw_add t true pc in ();
-    add_global false cls pc
+    let idx = raw_add t true pc in ();
+    add_global false cls pc;
+    if to_descs then
+      inherit_to_descendants idx false cls pc
   end
+
+and inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
+  assert (is_global pc);
+  assert (owner <> -1);
+  let ct = class_table pc in
+  let descendants = Class_table.descendants owner ct in
+  IntSet.iter
+    (fun descendant ->
+      assert (not defer); (* deferred assertion cannot be added to class
+                             with descendants *)
+   inherit_effective i descendant false pc)
+   descendants
+
+
+
+
 
 
 let add_potential_equalities (cls:int) (pc:t): unit =
@@ -931,27 +949,14 @@ let add_potential_equalities (cls:int) (pc:t): unit =
   add_equalities cls_lst2
 
 
-let do_inherit
-    (cls:int)
-    (anc_lst: (int * (bool * type_term array)) list)
-    (info:info)
-    (pc:t)
-    : unit =
+
+let inherit_parent
+    (cls:int) (par:int) (par_args:type_term array) (info:info) (pc:t): unit =
   let ct = class_table pc in
-  List.iter
-    (fun (par,_) ->
-      if par = Class_table.any_index then
-        add_potential_equalities cls pc;
-      let deflst = Class_table.deferred_assertions par ct in
-      List.iter (fun i -> inherit_deferred i cls info pc) deflst;
-      let efflst = Class_table.effective_assertions par ct in
-      List.iter (fun i -> inherit_effective i cls pc) efflst
-    )
-    anc_lst
-
-
-
-
+  let deflst = Class_table.deferred_assertions par ct in
+  List.iter (fun i -> inherit_deferred i cls info pc) deflst;
+  let efflst = Class_table.effective_assertions par ct in
+  List.iter (fun i -> inherit_effective i cls true pc) efflst
 
 
 
@@ -1056,17 +1061,6 @@ let discharged (i:int) (pc:t): term * proof_term =
    *)
   Proof_table.discharged i pc.base
 
-
-
-let inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
-  assert (is_global pc);
-  assert (owner <> -1);
-  let ct = class_table pc in
-  if not defer then
-    let descendants = Class_table.descendants owner ct in
-    IntSet.iter
-      (fun descendant -> inherit_effective i descendant pc)
-      descendants
 
 
 let add_proved_0

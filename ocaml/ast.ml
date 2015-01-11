@@ -230,28 +230,7 @@ let put_class
       Class_table.add hm cn0 fgs ct;
       idx
   in
-  let has_any = ref (Proof_context.is_public pc || Class_table.inherits_any idx ct) in
-  List.iter
-    (fun (ghost,tp,rename_lst) ->
-      if rename_lst <> [] then
-        not_yet_implemented tp.i "rename";
-      assert (rename_lst = [] ); (* nyi: feature adaption *)
-      let par_idx, par_args = Class_table.parent_type idx tp ct in
-      if Class_table.has_ancestor par_idx idx ct then
-        error_info tp.i "Circular inheritance";
-      let lst, lst_priv =
-        Class_table.inherited_ancestors idx ghost par_idx par_args tp.i ct in
-      Class_table.do_inherit idx lst ct;
-      if lst_priv <> [] then
-        Class_table.export_inherited idx lst_priv ct;
-      Inherit.do_inherit idx lst tp.i pc;
-      Inherit.export_inherited idx lst_priv pc;
-      Proof_context.do_inherit idx lst tp.i pc;
-      if not !has_any && Class_table.inherits_any idx ct then begin
-        has_any := true;
-        Inherit.check_base_features idx pc
-      end)
-    inherits
+  Inherit.inherit_parents idx inherits pc
 
 
 

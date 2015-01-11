@@ -48,6 +48,7 @@ val variant_term: term -> int -> int -> int -> t -> term
         [cls] *)
 
 val has_variant: int -> int -> t -> bool
+val has_private_variant: int -> int -> t -> bool
 
 val find_variant_candidate: int -> int -> t -> int
 
@@ -193,7 +194,7 @@ val update_function:
 
 val term_to_string: term -> int -> int array -> t -> string
 
-val inherit_effective: int -> int -> t -> unit
+val inherit_new_effective: int -> int -> bool -> t -> int
 
 val inherit_feature: int -> int -> int -> bool -> t -> unit
 

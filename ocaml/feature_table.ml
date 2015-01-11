@@ -303,6 +303,10 @@ let has_variant (i:int) (cls:int) (ft:t): bool =
   try let _ = variant i cls ft in true
   with Not_found -> false
 
+let has_private_variant (i:int) (cls:int) (ft:t): bool =
+  try let _ = private_variant i cls ft in true
+  with Not_found -> false
+
 let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
   assert (Class_table.has_ancestor cls base_cls ft.ct);
   let f (j:int): term =
@@ -369,31 +373,35 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
-let export_feature (i:int) (ft:t): unit =
-  (* Export the feature [i] unless it is already publicly available. *)
-  assert (i < count ft);
-  let desc = descriptor i ft in
-  match desc.pub with
-    None ->
-      let nargs = Array.length desc.argnames in
-      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.spec nargs ft)
-  | Some _ ->
-      ()
-
-
-
-let add_class_feature (i:int) (priv_only:bool) (base:bool) (ft:t): unit =
+let add_class_feature (i:int) (priv_only:bool) (pub_only) (base:bool) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class. *)
   assert (i < count ft);
-  let desc  = Seq.elem i ft.seq in
+  assert (not (priv_only && pub_only));
+  let desc  = descriptor i ft in
   Class_table.add_feature
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
     (is_desc_deferred desc)
     priv_only
+    pub_only
     base
     ft.ct
+
+
+
+let export_feature (i:int) (ft:t): unit =
+  (* Export the feature [i] unless it is already publicly available. *)
+  assert (is_interface_check ft);
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  match desc.pub with
+    None ->
+      let nargs = Array.length desc.argnames in
+      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.spec nargs ft);
+      add_class_feature i false true false ft;
+  | Some _ ->
+      ()
 
 
 
@@ -1077,12 +1085,12 @@ let print (ft:t): unit =
 
 let find_variant_candidate (i:int) (cls:int) (ft:t): int =
   (* Find the variant of the feature [i] in the class [cls] *)
+  assert (has_anchor i ft); (* exactly one formal generic anchored
+                               to the owner class *)
   let ct = class_table ft
   and desc = descriptor i ft in
-  assert (Array.length desc.anchored = 1); (* exactly one formal generic anchored
-                                              to the owner class *)
   let nfgs = Tvars.count_all desc.tvs
-  and fg_anchor = desc.anchored.(0) in
+  and fg_anchor = anchor i ft in
   let candidates = Class_table.find_features
       (desc.fname, desc.tp, nfgs)
       cls
@@ -1213,7 +1221,7 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 
 
 
-let inherit_effective (i:int) (cls:int) (ft:t): unit =
+let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   let desc = descriptor i ft in
   let ctp,tvs = Class_table.class_type cls ft.ct
   and anchor  = desc.anchored.(0) in
@@ -1243,7 +1251,9 @@ let inherit_effective (i:int) (cls:int) (ft:t): unit =
   and bdesc_opt =
     if is_public ft then Some (standard_bdesc cnt cls spec nargs ft)
     else None
+  and sign = Sign.transform f_tp desc.sign
   in
+  let sign = if ghost then Sign.to_ghost sign else sign in
   Seq.push
     {mdl       = Class_table.current_module ft.ct;
      fname     = desc.fname;
@@ -1252,12 +1262,14 @@ let inherit_effective (i:int) (cls:int) (ft:t): unit =
      tvs       = tvs1;
      anchored  = Array.make 1 (anchor+ntvs);
      argnames  = desc.argnames;
-     sign      = Sign.transform f_tp desc.sign;
+     sign      = sign;
      tp        = f_tp desc.tp;
      priv      = bdesc;
      pub       = bdesc_opt
    } ft.seq;
-  inherit_feature i cnt cls false ft
+  add_class_feature cnt false false false ft;
+  inherit_feature i cnt cls false ft;
+  cnt
 
 
 
@@ -1312,7 +1324,7 @@ let add_function
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
-  add_class_feature cnt false base ft
+  add_class_feature cnt false false base ft
 
 
 
@@ -1350,7 +1362,7 @@ let update_function
           error_info info "Must be a ghost function";
         let nargs = Array.length desc.argnames in
         desc.pub <- Some (standard_bdesc idx desc.cls spec nargs ft);
-        add_class_feature idx false false ft
+        add_class_feature idx false true false ft
     | Some bdesc ->
         let def_opt = Feature.Spec.definition spec
         and def_bdesc_opt = Feature.Spec.definition bdesc.spec in
@@ -1395,15 +1407,20 @@ let add_base_features (mdl_name:int) (ft:t): unit =
         desc.mdl <- curr_mdl;
         add_key idx ft;
         if idx <> all_index && idx <> some_index then
-          add_class_feature idx true base ft)
+          add_class_feature idx true false base ft)
       !lst
   with Not_found ->
     ()
 
 
+
+
 let add_used_module (name:int*int list) (used:IntSet.t) (ft:t): unit =
   Class_table.add_used_module name used ft.ct;
   add_base_features (fst name) ft
+
+
+
 
 let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   Class_table.add_current_module name used ft.ct;
@@ -1414,6 +1431,8 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
     or_desc.priv.spec   <- Feature.Spec.make_func None [] [];
     and_desc.priv.spec  <- Feature.Spec.make_func None [] []
   end
+
+
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =
   Class_table.set_interface_check used ft.ct;
