@@ -19,6 +19,7 @@ Commands:
     compile        compile a list of modules (default: all modules)
     status         show the compile status of the modules
     help           give help
+    version        print version
 "
 
 
@@ -31,12 +32,14 @@ let usage_init   = "usage: alba init\n"
 
 let usage_help   = "usage: alba help <command>\n"
 
+let alba_version = "v0.1-"
 
 type command =
     Nocommand
   | Compile
   | Init
   | Status
+  | Version
   | Help
 
 
@@ -467,6 +470,8 @@ let set_argument (ad:t) (str:string): unit =
         ad.command <- Init
       else if str = "help" then
         ad.command <- Help
+      else if str = "version" then
+        ad.command <- Version
       else
         raise (Arg.Bad ("unknown command `" ^ str ^ "'"))
   | Compile ->
@@ -477,6 +482,8 @@ let set_argument (ad:t) (str:string): unit =
       illegal ()
   | Init ->
       illegal ()
+  | Version ->
+      assert false (* cannot happen *)
   | Help ->
       if str = "compile" then
         (printf "%s" usage_compile; exit 0)
@@ -841,5 +848,7 @@ let _ =
       alba_status ad
   | Compile ->
       alba_compile ad
+  | Version ->
+      printf "version %s\n" alba_version; exit 0
   | Help ->
       printf "%s" usage_help
