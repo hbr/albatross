@@ -243,6 +243,8 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
       ""
   in
   printf "%s%s%s\n" prefix ext str;
+  if is_trace_extended pc then
+    printf "%s\t%s\n" prefix (Term.to_string t);
   if is_global pc then printf "\n"
 
 
@@ -798,9 +800,13 @@ let trace_pop (pc:t): unit =
   printf "%send\n" (trace_prefix_0 pc)
 
 let trying_goal (g:term) (pc:t): unit =
-  if pc.trace then
+  if pc.trace then begin
+    let prefix = trace_prefix pc in
     printf "%strying to prove: %s\n"
-      (trace_prefix pc) (string_of_term g pc)
+      prefix (string_of_term g pc);
+    if is_trace_extended pc then
+      printf "%s\t%s\n" prefix (Term.to_string g);
+  end
 
 
 let failed_goal (g:term) (pc:t): unit =
