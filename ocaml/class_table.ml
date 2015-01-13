@@ -820,7 +820,9 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
       else
         if mdl1 < mdl2 then cidx2 else cidx1
   in
-  let set = Sign.involved_classes tvs s in
+  let set =
+    if Sign.arity s > 0 then Sign.involved_classes_arguments tvs s
+    else Sign.involved_classes tvs s in
   IntSet.fold
     (fun i idx_max -> if idx_max = -1 then i else max i idx_max)
     set

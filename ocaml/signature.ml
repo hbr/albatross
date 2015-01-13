@@ -611,6 +611,7 @@ module Sign: sig
   val to_function: int -> t -> t
   val sub:         t -> type_term array -> int -> t
   val substitute:  t -> TVars_sub.t -> t
+  val involved_classes_arguments: Tvars.t -> t -> IntSet.t
   val involved_classes: Tvars.t -> t -> IntSet.t
   val transform:   (type_term->type_term) -> t -> t
 end = struct
@@ -729,6 +730,14 @@ end = struct
     let args = TVars_sub.args tvars_sub in
     let ntvs = Array.length args in
     sub s args ntvs
+
+
+  let involved_classes_arguments (tvs:Tvars.t) (s:t): IntSet.t =
+    Array.fold_left
+      (fun set tp ->
+        Tvars.involved_classes tp tvs set)
+      IntSet.empty
+      s.args
 
   let involved_classes (tvs:Tvars.t) (s:t): IntSet.t =
     let set = Result_type.involved_classes tvs s.rt in
