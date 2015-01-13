@@ -172,6 +172,7 @@ end = struct
   let expect_lambda
       (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool) (accs:t): unit =
     assert (0 <= ntvs);
+    let accus = accs.accus in
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
     accs.accus <-
@@ -185,7 +186,7 @@ end = struct
         []
         accs.accus;
     if accs.accus = [] then
-      assert false (* must be handled *)
+      raise (Untypeable accus)
 
 
   let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
@@ -393,7 +394,13 @@ let analyze_expression
     | Expquantified (q,entlst,exp) ->
         quantified q entlst exp accs
     | Exppred (entlst,e) ->
-        lambda entlst e false true false accs
+        begin try
+          lambda entlst e false true false accs
+        with Accus.Untypeable _ ->
+          error_info entlst.i ("Predicate " ^
+                               (string_of_expression (Exppred (entlst,e))) ^
+                               " does not fit expected type")
+        end
     | Expdot (tgt,f) ->
         application f [|tgt|] accs
     | ExpResult ->
@@ -446,7 +453,10 @@ let analyze_expression
     let qop = match q with Universal -> Allop | Existential -> Someop in
     process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
-    lambda entlst e true true false accs;
+    begin try
+      lambda entlst e true true false accs
+    with Accus.Untypeable _  -> assert false (* cannot happen in quantified *)
+    end;
     Accus.complete_function 1 accs
 
   and lambda
