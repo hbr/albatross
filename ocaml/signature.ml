@@ -13,6 +13,7 @@ module Term_sub_arr: sig
   type t
   val empty:          t
   val make:           int -> t
+  val copy:           t -> t
   val count:          t -> int
   val get:            int -> t -> term
   val flags:          t -> bool array
@@ -274,6 +275,11 @@ end = struct
     done;
     snew
 
+
+  let copy (s:t): t =
+    add_bottom 0 s
+
+
   let subs (s:t): (int*term*term) list =
     let lst = ref []  in
     for i = 0 to count s - 1 do
@@ -294,6 +300,7 @@ module TVars_sub: sig
 
   type t
   val empty:        t
+  val copy:         t -> t
   val count_fgs:    t -> int
   val count_all:    t -> int
   val fgconcepts:   t -> type_term array
@@ -335,6 +342,9 @@ end = struct
 
   let empty: t =
     {vars = Tvars.empty; sub = Term_sub_arr.empty}
+
+  let copy (tvs:t): t =
+    {tvs with sub = Term_sub_arr.copy tvs.sub}
 
   let count_fgs (tvs:t): int =
     Tvars.count_fgs tvs.vars
