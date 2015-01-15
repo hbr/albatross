@@ -677,6 +677,17 @@ expr:
 |   LBRACE expr RBRACE            {
   predicate_of_expression (rhs_info 2) $2
 }
+|   LPAREN expr RPAREN ARROW expr {
+  let lst  = expression_list $2
+  and info = rhs_info 2 in
+  let entlst = entities_of_expression info lst in
+  Exparrow (withinfo info entlst,$5)
+}
+|   LIDENTIFIER ARROW expr {
+  let info = rhs_info 1 in
+  let entlst = entities_of_expression info [Identifier $1] in
+  Exparrow (withinfo info entlst, $3)
+}
 
 
 

@@ -406,7 +406,13 @@ let analyze_expression
     | ExpResult ->
         not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
     | Exparrow(entlst,e) ->
-        not_yet_implemented ie.i ("Exparrow Typing of "^ (string_of_expression e))
+        begin try
+          lambda entlst e false false true accs
+        with Accus.Untypeable _ ->
+          error_info entlst.i ("Function " ^
+                               (string_of_expression (Exparrow (entlst,e))) ^
+                               " does not fit expected type")
+        end
     | Expbracket _ ->
         not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
     | Bracketapp (_,_) ->
