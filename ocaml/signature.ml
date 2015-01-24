@@ -106,10 +106,10 @@ end = struct
       match t with
         Variable j when j < cnt -> gstar j n
       | Variable _ -> t
-      | Application (c,args) ->
-          Application (sub c n, Array.map (fun t -> sub t n) args)
-      | Lam (n,nms,t) ->
-          Lam (n,nms, sub t n)
+      | Application (c,args,pr) ->
+          Application (sub c n, Array.map (fun t -> sub t n) args, pr)
+      | Lam (n,nms,t,pred) ->
+          Lam (n,nms, sub t n, pred)
     in
     sub t cnt
 

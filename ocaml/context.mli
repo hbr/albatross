@@ -38,6 +38,7 @@ val find_module:        (int * int list) -> t -> int
 val push_with_gap:  entities list withinfo -> return_type -> bool -> bool
   -> int -> t -> unit
 val push:  entities list withinfo -> return_type -> bool -> bool -> t -> unit
+val push_untyped_with_gap: int array -> bool -> int -> t -> unit
 val push_untyped: int array -> t -> unit
 val pop:   t -> unit
 val print: t -> unit
@@ -75,6 +76,10 @@ val count_arguments:  t -> int
     (** The number of formal arguments in this context and all preceeding
         contexts *)
 
+
+val all_index:  t -> int
+val some_index: t -> int
+
 val argument_name: int -> t -> int
     (** The name of the [i]th formal argument *)
 
@@ -110,6 +115,7 @@ val check_deferred: t -> unit
 
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
+val variable_data:   int -> t -> Tvars.t * Sign.t
 
 val implication_id: t -> int
 

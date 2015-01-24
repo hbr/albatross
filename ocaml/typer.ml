@@ -29,8 +29,8 @@ module Accus: sig
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> int -> bool -> bool -> t -> unit
-  val complete_lambda:   int -> int -> int array -> t -> unit
-  val update_terms:      t -> unit
+  val complete_lambda:   int -> int -> int array -> bool -> t -> unit
+  val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_untyped_variables: info -> t -> unit
   val remove_dummies:    info_expression -> t -> unit
@@ -189,8 +189,10 @@ end = struct
       raise (Untypeable accus)
 
 
-  let complete_lambda (ntvs:int) (ntvs_added:int) (nms:int array) (accs:t): unit =
-    List.iter (fun acc -> Term_builder.complete_lambda ntvs nms acc) accs.accus;
+  let complete_lambda
+      (ntvs:int) (ntvs_added:int) (nms:int array) (is_pred:bool) (accs:t): unit =
+    List.iter
+      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs.accus;
     accs.ntvs_added <- ntvs_added;
     if accs.trace then begin
       printf "  complete lambda\n";
@@ -216,8 +218,8 @@ end = struct
     str1, str2
 
 
-  let update_terms (accs:t): unit =
-    List.iter (fun tb -> Term_builder.update_term tb) accs.accus;
+  let specialize_terms (accs:t): unit =
+    List.iter (fun tb -> Term_builder.specialize_term tb) accs.accus;
     if accs.trace then begin
       printf "  update terms\n";
       trace_accus false accs
@@ -244,7 +246,15 @@ end = struct
           ()
 
   let check_untyped_variables (inf:info) (accs:t): unit =
-    List.iter (fun acc -> Term_builder.check_untyped_variables inf acc) accs.accus
+    List.iter
+      (fun acc ->
+        try
+          Term_builder.check_untyped_variables acc
+        with Term_builder.Incomplete_type i ->
+          error_info inf
+            ("Cannot infer a complete type for " ^
+             ST.string (Context.argument_name i accs.c)))
+      accs.accus
 
 
   let remove_dummies (ie:info_expression) (accs:t): unit =
@@ -342,6 +352,11 @@ let process_leaf
       Context.print_local_contexts c;
       error_info info str
 
+
+
+let term_builder (is_bool:bool) (c:Context.t): Term_builder.t =
+  if is_bool then Term_builder.make_boolean c
+  else Term_builder.make c
 
 
 let analyze_expression
@@ -481,7 +496,7 @@ let analyze_expression
     Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred accs;
     analyze e accs;
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames accs;
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs;
     Context.pop c
 
   in
@@ -491,12 +506,21 @@ let analyze_expression
   assert (not (Accus.is_empty accs));
 
   Accus.remove_dummies ie accs;
-  Accus.update_terms accs;
+  Accus.specialize_terms accs;
   Accus.check_untyped_variables ie.i accs;
   Accus.check_uniqueness info exp accs;
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;
+  assert begin
+    (*printf "  check term %s\n" (Context.string_of_term term 0 c);
+    printf "             %s\n" (Term.to_string term);*)
+    let tb = term_builder is_bool c in
+    try
+      let _ = Term_builder.check_term term tb in true
+    with Not_found ->
+      false
+  end;
   term
 
 

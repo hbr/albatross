@@ -234,7 +234,9 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
     if nfgs = 0 then
       Variable i
     else
-      Application(Variable (i+nfgs), Array.init nfgs (fun i -> Variable i))
+      Application(Variable (i+nfgs),
+                  Array.init nfgs (fun i -> Variable i),
+                  false)
   in
   tp, bdesc.tvs
 
@@ -242,13 +244,13 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
 let split_type_term (tp:type_term): int * type_term array =
   match tp with
     Variable i -> i, [||]
-  | Application (Variable i,args) -> i, args
+  | Application (Variable i,args,_) -> i, args
   | _ -> assert false (* other cases not possible with types *)
 
 
 let combine_type_term (cls_idx:int) (args: type_term array): type_term =
   if 0 < Array.length args then
-    Application (Variable cls_idx, args)
+    Application (Variable cls_idx, args, false)
   else
     Variable cls_idx
 
@@ -262,7 +264,7 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
       tp
     else
       let i = i - 1 in
-      let tp = Application(Variable (ntvs+tuple_index),[|args.(i);tp|]) in
+      let tp = Application(Variable (ntvs+tuple_index),[|args.(i);tp|],false) in
       tuple i tp
   in
   tuple (n-1) args.(n-1)
@@ -272,7 +274,7 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
 
 let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
 let any (ntvs:int)           = Variable (any_index+ntvs)
-let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|])
+let func nb dom ran = Application(Variable(nb+function_index),[|dom;ran|],false)
 
 
 
@@ -285,12 +287,12 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     let res = Sign.result s in
     let cls,args = split_type_term res in
     if cls = ntvs+predicate_index || cls = ntvs+function_index then
-      Application(Variable (ntvs+dummy_index), args)
+      Application(Variable (ntvs+dummy_index), args,false)
     else
       res
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    Application(Variable (ntvs+dummy_index), [|tup;Sign.result s|])
+    Application(Variable (ntvs+dummy_index), [|tup;Sign.result s|],false)
 
 
 let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
@@ -308,7 +310,7 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
       function_index, [|tup;Sign.result s|]
   in
   let idx = idx + ntvs in
-  Application(Variable idx, args)
+  Application(Variable idx, args,false)
 
 
 
@@ -362,7 +364,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           else if j < nb+nfgs then
             ST.string fgnames.(j-nb)
           else class_name (j-nb-nfgs) ct
-      | Application (Variable j,tarr) ->
+      | Application (Variable j,tarr,_) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
@@ -378,9 +380,9 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
             1,
             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
           end
-      | Application (class_exp,args) ->
+      | Application (class_exp,args,_) ->
           assert false (* cannot happen with types *)
-      | Lam (len,names,t) ->
+      | Lam (len,names,t,_) ->
           assert false (* cannot happen with types *)
     in
     if inner_prec < prec then "(" ^ str ^ ")" else str
@@ -967,7 +969,7 @@ let valid_type
     if nargs = 0 then
       Variable cls_idx
     else
-      Application (Variable cls_idx, args)
+      Application (Variable cls_idx, args, false)
   end
 
 

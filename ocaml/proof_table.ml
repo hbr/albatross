@@ -373,20 +373,20 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           definition idx nb at
         with Not_found ->
           raise Illegal_proof_term end
-    | Eval.Apply (f,args) ->
+    | Eval.Apply (f,args,pr) ->
         let fa,fb = reconstruct f nb
         and nargs = Array.length args in
         let args  = Array.map (fun e -> reconstruct e nb) args in
         let argsa = Array.init nargs (fun i -> fst args.(i))
         and argsb = Array.init nargs (fun i -> snd args.(i)) in
-        Application (fa,argsa), Application (fb,argsb)
-    | Eval.Lam (n,nms,e) ->
+        Application (fa,argsa,pr), Application (fb,argsb,pr)
+    | Eval.Lam (n,nms,e,pr) ->
         let ta,tb = reconstruct e (nb+n) in
-        Lam (n,nms,ta), Lam (n,nms,tb)
+        Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
-          Application(Lam(n,nms,t0),args) ->
+          Application(Lam(n,nms,t0,_),args,_) ->
             assert (n = Array.length args);
             let tb = Term.apply t0 args in
             ta,tb
@@ -537,10 +537,10 @@ let someelim (i:int) (at:t): term =
   and all_id2 = all_id
   in
   let impl1   = Term.binary imp_id1 tt (Variable nargs) in
-  let lam1    = Lam (nargs,nms,impl1) in
+  let lam1    = Lam (nargs,nms,impl1,true) in
   let all1    = Term.unary all_id1 lam1 in
   let impl2   = Term.binary imp_id2 all1 (Variable 0) in
-  let lam2    = Lam (1,[||],impl2) in
+  let lam2    = Lam (1,[||],impl2,true) in
   let all2    = Term.unary all_id2 lam2 in
   all2
 

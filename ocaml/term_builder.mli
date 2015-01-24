@@ -80,19 +80,22 @@ val expect_lambda:     int -> int -> bool -> bool -> t -> unit
        (PREDICATE or FUNCTION). It puts a constant signature with the expected
        return type of the lambda expression as the expected signature. *)
 
-val complete_lambda:   int -> int array -> t -> unit
-   (** [complete_lambda nargs names tb] converts the term on top the term list
-       into a lamda term with [nargs] arguments and the argument names
-       [names]. *)
+val complete_lambda:   int -> int array -> bool -> t -> unit
+   (** [complete_lambda nargs names is_pred tb] converts the term on top the
+       term list into a lamda term with [nargs] arguments and the argument
+       names [names]. *)
 
-val check_untyped_variables: Support.info -> t -> unit
+
+exception Incomplete_type of int
+
+val check_untyped_variables: t -> unit
    (** Check that the substitutions contain no dummy types (i.e. incomplete
        types which should be updated either to FUNCTION or PREDICATE *)
 
 val has_dummy: t -> bool
 
-val update_term: t -> unit
-    (** [update_term tb] substitutes all features in the result term by the
+val specialize_term: t -> unit
+    (** [specialize_term tb] substitutes all features in the result term by the
         most specific feature *)
 
 val result:            t -> term * TVars_sub.t
@@ -101,3 +104,5 @@ val result:            t -> term * TVars_sub.t
 
 val has_term:   t -> bool
 val head_term:  t -> term
+
+val check_term: term -> t -> t

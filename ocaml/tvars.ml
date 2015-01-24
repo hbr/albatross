@@ -85,7 +85,7 @@ let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
         is_eq (concept i tvs1) (concept j tvs2) (nmax-1)
     | Variable i, Variable j when nall1 <= i && nall2 <= j ->
         (i - count_all tvs1) = (j - count_all tvs2)
-    | Application (Variable i,args1), Application(Variable j,args2) ->
+    | Application (Variable i,args1,_), Application(Variable j,args2,_) ->
         let n1 = Array.length args1
         and n2 = Array.length args2 in
         let res = ref (n1 = n2 && is_eq (Variable i) (Variable j) nmax) in
@@ -128,7 +128,7 @@ let principal_variable (tp:type_term) (tvs:t): int =
         pvar (concept i tvs)
     | Variable i ->
         i
-    | Application (Variable i,_) ->
+    | Application (Variable i,_,_) ->
         pvar (Variable i)
     | _ ->
         assert false
@@ -143,23 +143,6 @@ let principal_class (tp:type_term) (tvs:t): int =
     pvar - nall
   else
     assert false
-  (*let nloc = count_local tvs
-  and nall = count_all tvs
-  in
-  let rec pcls (tp:type_term): int =
-    match tp with
-      Variable i when i < nloc ->
-        assert false
-    | Variable i when i < nall ->
-        pcls (concept i tvs)
-    | Variable i ->
-        i - nall
-    | Application (Variable i,_) ->
-        pcls (Variable i)
-    | _ ->
-        assert false
-  in
-  pcls tp*)
 
 
 let add_fgs (nfgs:int) (tvs_new:t) (tvs:t): t =

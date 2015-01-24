@@ -130,6 +130,15 @@ let count_last_arguments (c:t): int = c.entry.nfargs_delta
 
 let count_arguments (c:t): int = Array.length c.entry.fargs
 
+
+let all_index (c:t): int =
+  count_arguments c + Feature_table.all_index
+
+let some_index (c:t): int =
+  count_arguments c + Feature_table.some_index
+
+
+
 let argument_name (i:int) (c:t): int =
   assert (i < count_last_arguments c);
   fst c.entry.fargs.(i)
@@ -256,13 +265,17 @@ let is_untyped (i:int) (c:t): bool =
 
 
 
+let argument_data (i:int) (c:t): Tvars.t * Sign.t =
+  assert (i < count_arguments c);
+  TVars_sub.tvars c.entry.tvs_sub,
+  Sign.make_const (snd c.entry.fargs.(i))
+
+
 let argument (name:int) (c:t): int * Tvars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
   let i = Search.array_find_min (fun (n,_) -> n=name) c.entry.fargs in
-  let sign = Sign.make_const (snd c.entry.fargs.(i)) in
-  i,
-  TVars_sub.tvars c.entry.tvs_sub,
-  sign
+  let tvs,s = argument_data i c in
+  i,tvs,s
 
 
 
@@ -307,6 +320,7 @@ let push_with_gap
   (** Push the new type variables, formal generics and the formal arguments of
       [entlst,rt] to the context [c] leaving a gap of [ntvs_gap] above the
       possibly newly introduced type variables of the signature. *)
+  assert (not (is_pred && is_func));
   let entry      = c.entry
   and ct         = class_table c
   and mt         = module_table c in
@@ -355,6 +369,12 @@ let push
   push_with_gap entlst rt is_pred is_func 0 c
 
 
+
+
+let push_untyped_with_gap
+    (names:int array) (is_func:bool) (ntvs_gap:int) (c:t): unit =
+  let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
+  push_with_gap entlst None (not is_func) is_func ntvs_gap c
 
 
 let push_untyped (names:int array) (c:t): unit =
@@ -544,6 +564,18 @@ let find_feature
       signature.
    *)
   find_funcs fn nargs_feat c
+
+
+
+let variable_data (i:int) (c:t): Tvars.t * Sign.t =
+  let nfargs = count_arguments c in
+  if i < nfargs then
+    argument_data i c
+  else
+    let idx = i - nfargs in
+    let tvs,s = Feature_table.signature idx (feature_table c) in
+    Tvars.fgs_to_global tvs, s
+
 
 
 let print_local_contexts (c:t): unit =

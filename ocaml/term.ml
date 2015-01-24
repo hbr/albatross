@@ -10,8 +10,8 @@ open Container
 
 type term =
     Variable    of int
-  | Application of term * term array
-  | Lam         of int * int array * term
+  | Application of term * term array * bool      (* fterm, args, is_pred *)
+  | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
 
 type type_term = term
 
@@ -140,14 +140,14 @@ end = struct
   let rec to_string (t:term): string =
     match t with
       Variable i -> string_of_int i
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         let fstr = to_string f
         and argsstr = Array.to_list (Array.map to_string args)
         in
         fstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Lam(nargs,names,t) ->
+    | Lam(nargs,names,t,pred) ->
         let nnames = Array.length names in
         assert (nnames=0 || nnames=nargs);
         let args = Array.init nargs string_of_int
@@ -181,9 +181,9 @@ end = struct
     (* The number of nodes in the term t *)
     match t with
       Variable _ -> 1
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
-    | Lam (_,_,t) ->
+    | Lam (_,_,t,_) ->
         1 + (nodes t)
 
 
@@ -191,9 +191,9 @@ end = struct
     (* The depth of the term t *)
     match t with
       Variable _ -> 0
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,_,t) ->
+    | Lam (_,_,t,_) ->
         1 + (depth t)
 
 
@@ -207,10 +207,10 @@ end = struct
       match t with
         Variable i ->
           if nb <= i then f a (i-nb) level else a
-      | Application (f,args) ->
+      | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
-      | Lam (n,_,t) ->
+      | Lam (n,_,t,_) ->
           fld a t (level+1) (nb+n)
     in
     fld a t 0 0
@@ -334,10 +334,11 @@ end = struct
      *)
     match t with
       Variable _ -> t
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         Application (wo_names f,
-                     Array.map (fun t -> wo_names t) args)
-    | Lam (n,_,t) -> Lam (n, [||], wo_names t)
+                     Array.map (fun t -> wo_names t) args,
+                     false)
+    | Lam (n,_,t,_) -> Lam (n, [||], wo_names t, false)
 
 
   let equivalent (t1:term) (t2:term): bool =
@@ -354,10 +355,10 @@ end = struct
     let rec mapr nb t =
       match t with
         Variable j -> f j nb
-      | Application (a,b) ->
-          Application (mapr nb a, Array.map (fun t -> mapr nb t) b)
-      | Lam (nargs,names,t) ->
-          Lam(nargs, names, mapr (nb+nargs) t)
+      | Application (a,b,pred) ->
+          Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
+      | Lam (nargs,names,t,pred) ->
+          Lam(nargs, names, mapr (nb+nargs) t, pred)
     in
     mapr 0 t
 
@@ -553,29 +554,29 @@ end = struct
 
   let rec reduce (t:term): term =
     (* Do all possible beta reductions in the term 't' *)
-    let app (f:term) (args: term array): term =
+    let app (f:term) (args: term array) (pr:bool): term =
       match f with
-        Lam(nargs,_,t) ->
+        Lam(nargs,_,t,pr) ->
           assert (nargs=(Array.length args));
           reduce (apply t args)
-      | _ -> Application (f,args)
+      | _ -> Application (f,args,pr)
     in
     match t with
       Variable _ -> t
-    | Application (f,args) ->
+    | Application (f,args,pr) ->
         let fr = reduce f
         and argsr = Array.map reduce args
         in
-        app fr argsr
-    | Lam(nargs,names,t) ->
+        app fr argsr pr
+    | Lam(nargs,names,t,pred) ->
         assert (0 < nargs);
         let tred = reduce t in
-          Lam (nargs, names, tred)
+          Lam (nargs, names, tred, pred)
 
 
   let reduce_top (t:term): term =
     match t with
-      Application (Lam (n,nms,t), args) ->
+      Application (Lam (n,nms,t,_), args, _) ->
         assert (n = Array.length args);
         apply t args
     | _ -> raise Not_found
@@ -583,18 +584,18 @@ end = struct
 
   let lambda_split (t:term): int * int array * term =
     match t with
-      Lam (n,names,t) -> n,names,t
+      Lam (n,names,t,_) -> n,names,t
     | _ -> raise Not_found
 
 
   let unary (unid:int) (t:term): term =
     let args = [| t |] in
-    Application (Variable unid, args)
+    Application (Variable unid, args, false)
 
 
   let unary_split (t:term) (unid:int): term =
     match t with
-      Application (f,args) ->
+      Application (f,args,_) ->
         let nargs = Array.length args in
         (match f with
           Variable i when i=unid ->
@@ -606,12 +607,12 @@ end = struct
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| left; right |] in
-    Application (Variable binid, args)
+    Application (Variable binid, args,false)
 
 
   let binary_split_0 (t:term): int * term * term =
     match t with
-      Application(Variable i,args) when Array.length args = 2 ->
+      Application(Variable i,args,_) when Array.length args = 2 ->
         i, args.(0), args.(1)
     | _ ->
         raise Not_found
@@ -631,7 +632,7 @@ end = struct
     if nargs = 0 then
       t
     else
-      unary quantid (Lam (nargs,names,t))
+      unary quantid (Lam (nargs,names,t,true))
 
 
 
@@ -645,7 +646,7 @@ end = struct
   let rec binary_right (t:term) (binid:int): term list =
     let rec binr (t:term) (lst:term list): term list =
       match t with
-        Application (f,args) when Array.length args = 2 ->
+        Application (f,args,_) when Array.length args = 2 ->
           begin
             match f with
               Variable i when i = binid ->
@@ -1008,14 +1009,14 @@ module Term_algo = struct
           | Some t when t <> t2 -> raise Not_found
           | Some t -> assert (t=t2); sub
           end
-      | Application (f1,args1), Application (f2,args2)
-        when Array.length args1 = Array.length args2 ->
+      | Application (f1,args1,pr1), Application (f2,args2,pr2)
+        when Array.length args1 = Array.length args2  && pr1 = pr2 ->
           let sub = ref (uni f1 f2 nb sub) in
           for i = 0 to Array.length args1 - 1 do
             sub := uni args1.(i) args2.(i) nb !sub
           done;
           !sub
-      | Lam(n1,nms1,t1), Lam(n2,nms2,t2) when n1 = n2 ->
+      | Lam(n1,nms1,t1,pr1), Lam(n2,nms2,t2,pr2) when n1 = n2 && pr1 = pr2 ->
           uni t1 t2 (n1+nb) sub
       | _ ->
           raise Not_found

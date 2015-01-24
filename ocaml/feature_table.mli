@@ -140,7 +140,7 @@ val is_feature_public: int -> t -> bool
 val owner: int -> t -> int
 
 val preconditions: int -> int -> t -> int * int array * term list
-
+(*
 val expand_focus_term: term -> int -> t -> term
     (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
         within an environment with [nb] bound variables (i.e. a variable [i]
@@ -148,7 +148,7 @@ val expand_focus_term: term -> int -> t -> term
 
         Note: The function doesn't do any beta reductions in the term [t]
         which would have been possible before the expansion. *)
-
+*)
 
 val expand_term: term->int->t->term
   (** [expand_term t nbound ft] expands the definitions of the term [t] within

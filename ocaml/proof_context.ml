@@ -334,7 +334,7 @@ let triggers_evaluation (t:term) (pc:t): bool =
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let nbenv = nbenv pc in
   let rec eval t nb full =
-    let apply f fe modi args full =
+    let apply f fe modi args is_pred full =
       let modi_ref = ref modi in
       let args = Array.map
           (fun a ->
@@ -345,12 +345,12 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             else a, Eval.Term a)
           args in
       let args,argse = Myarray.split args in
-      let e = Eval.Apply (fe,argse) in
+      let e = Eval.Apply (fe,argse,is_pred) in
       match f with
-        Lam (n,nms,t0) ->
+        Lam (n,nms,t0,_) ->
           Term.apply t0 args, Eval.Beta e, true
       | _ ->
-          Application (f,args), e, !modi_ref
+          Application (f,args,is_pred), e, !modi_ref
     in
     let expand t =
       match t with
@@ -362,13 +362,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           with Not_found ->
             t, Eval.Term t, false
           end
-      | Application (f,args) ->
+      | Application (f,args,pr) ->
           let full = full || triggers_evaluation f pc in
           let f,fe,fmodi = eval f nb full in
-          apply f fe fmodi args full
-      | Lam (n,nms,t) ->
+          apply f fe fmodi args pr full
+      | Lam (n,nms,t,pred) ->
           let t,e,tmodi = eval t (n+nb) full in
-          Lam (n,nms,t), Eval.Lam (n,nms,e), tmodi
+          Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
     in
     let tred, ered, modi = expand t in
     let sublst = Term_table.unify tred (nb+nbenv) pc.entry.left in

@@ -356,7 +356,7 @@ type expression =
   | Expfalse
   | Expparen      of expression
   | Expbracket    of expression
-  | Exparrow      of entities list * expression
+  | Exparrow      of entities list withinfo * expression
   | Expop         of operator
   | Funapp        of expression * expression
   | Bracketapp    of expression * expression
@@ -431,7 +431,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expbracket e -> "[" ^ (strexp e) ^"]"
 
   | Exparrow  (l,e) ->
-      (string_of_formals l) ^ "->" ^ (string_of_expression e)
+      (string_of_formals l.v) ^ "->" ^ (string_of_expression e)
 
   | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 

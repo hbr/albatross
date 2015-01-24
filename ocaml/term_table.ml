@@ -49,7 +49,7 @@ let terms (tab:t): (int*int*int*term) list =
   List.rev_map (fun (idx,_,nargs,nbenv,term) -> idx,nargs,nbenv,term) tab.terms
 
 
-
+(*
 let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
   (** The term associated with index [idx] having [nargs] argument variables
       of the node [tab] with [nb] bound variables.
@@ -86,7 +86,7 @@ let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
       IntMap.iter
         (fun n ttab ->
           let t = termtab0 ttab (nb+n) in
-          raise (Term_found (Lam (n,[||],t))))
+          raise (Term_found (Lam (n,[||],t,false))))
         lam
     in
     try
@@ -112,7 +112,7 @@ let term (idx:int) (nargs:int) (table:t): term =
       table [table].
    *)
   termtab idx nargs table 0
-
+*)
 
 let join_lists (l1: sublist) (l2:sublist): sublist =
   (** Join the two disjoint lists [l1] and [l2].
@@ -266,7 +266,7 @@ let unify (t:term) (nbt:int) (table:t)
               base)
           basic_subs
           tab.fvars
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         let res =
         begin
           try
@@ -287,7 +287,7 @@ let unify (t:term) (nbt:int) (table:t)
             basic_subs
         end in
         res
-    | Lam (n,_,t) ->
+    | Lam (n,_,t,_) ->
         try
           let ttab = IntMap.find n tab.lams in
           let tlst = uni t ttab (nb+n) in
@@ -362,7 +362,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
           raise Not_found
         else
           sublist
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         let len = Array.length args in
         let ftab, argtabs = IntMap.find len tab.fapps in
         let flst = ref (uniw f ftab nb) in
@@ -372,7 +372,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             flst := merge_lists !flst alst)
           args;
         !flst
-    | Lam (n,_,t) ->
+    | Lam (n,_,t,_) ->
         let ttab = IntMap.find n tab.lams in
         uniw t ttab (nb+n)
   in
@@ -430,7 +430,7 @@ let add
           (* variable is bound by some abstraction *)
           assert (i < nb);
           {tab with bvars = newmap i idx tab.bvars}
-      | Application (f,args) ->
+      | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =
             try
@@ -443,7 +443,7 @@ let add
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
-      | Lam (n,_,t) ->
+      | Lam (n,_,t,_) ->
           let ttab =
             try IntMap.find n tab.lams
             with Not_found -> empty

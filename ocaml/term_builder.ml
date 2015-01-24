@@ -42,6 +42,8 @@ let count_fgs (tb:t): int = TVars_sub.count_fgs tb.tvars
 
 let count_all (tb:t): int = TVars_sub.count_all tb.tvars
 
+let count_terms (tb:t): int = List.length tb.tlist
+
 let concept (i:int) (tb:t): type_term = TVars_sub.concept i tb.tvars
 
 let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
@@ -54,6 +56,15 @@ let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   let ct  = class_table tb
   and tvs = tvs tb in
   Class_table.satisfies t1 tvs t2 tvs ct
+
+
+let string_of_term (t:term) (tb:t): string =
+  Context.string_of_term t 0 tb.c
+
+
+let string_of_head_term (tb:t): string =
+  assert (has_term tb);
+  string_of_term (head_term tb) tb
 
 
 let string_of_type (tp:type_term) (tb:t): string =
@@ -77,6 +88,10 @@ let string_of_complete_signature_sub (s:Sign.t) (tb:t): string =
 let signature_string (tb:t): string =
   let s       = signature tb in
   string_of_signature s tb
+
+let complete_signature_string (tb:t): string =
+  let s = signature tb in
+  string_of_complete_signature s tb
 
 let substitution_string (tb:t): string =
   let sub_lst  = Array.to_list (TVars_sub.args tb.tvars)
@@ -230,14 +245,14 @@ let upgrade_dummy (i:int) (t:term) (tb:t): unit =
       raise Not_found
   in
   match t_i, t with
-    Application(Variable idx1, args1),
-    Application(Variable idx2, args2)
+    Application(Variable idx1, args1,_),
+    Application(Variable idx2, args2,_)
     when idx1 = nall + Class_table.dummy_index ->
       if idx2 = nall + Class_table.predicate_index then
-        let t_new = Application(Variable idx2, [|args1.(0)|]) in
+        let t_new = Application(Variable idx2, [|args1.(0)|],false) in
         update_with t_new
       else if idx2 = nall + Class_table.function_index then
-        let t_new = Application(Variable idx2, args1) in
+        let t_new = Application(Variable idx2, args1,false) in
         update_with t_new
       else if idx2 = nall + Class_table.dummy_index then
         ()
@@ -282,8 +297,8 @@ let unify
       let i = TVars_sub.anchor i tb.tvars in
       if has_sub i tb then
         ((*printf "    has_sub %s\n" (string_of_type (get_sub i tb) tb);*)
-        uni t (get_sub i tb) 0;
-        upgrade_dummy i t tb)
+         uni t (get_sub i tb) 0;
+         upgrade_dummy i t tb)
       else
         match t with
           Variable j when j < nvars ->
@@ -329,13 +344,13 @@ let unify
           ()
         else
           raise Not_found
-    | Application(Variable i,args1),
-          Application(Variable j,args2) when i=dum_idx || j=dum_idx ->
+    | Application(Variable i,args1,_), Application(Variable j,args2,_)
+      when (i=dum_idx || j=dum_idx) && not (i=dum_idx && j=dum_idx) ->
         if i = dum_idx then
           do_dummy args1 j args2
         else
           do_dummy args2 i args1
-    | Application(f1,args1), Application(f2,args2) ->
+    | Application(f1,args1,_), Application(f2,args2,_) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
           raise Not_found;
@@ -343,15 +358,11 @@ let unify
         for i = 0 to nargs-1 do
           uni args1.(i) args2.(i) nb
         done
-    | Lam (_,_,_), _
-    | _ , Lam (_,_,_) ->
-        assert false
-    (*| Lam (nb1,_,t1), Lam (nb2,_,t2) ->
-        if nb1=nb2 then
-          uni t1 t2 (nb+nb1)
-        else
-          raise Not_found*)
-    | _ -> raise Not_found
+    | Lam (_,_,_,_), _
+    | _ , Lam (_,_,_,_) ->
+        assert false (* lambda terms not used for types *)
+    | _ ->
+        raise Not_found
   in
   try
     uni t1 t2 0
@@ -583,7 +594,7 @@ let complete_function (nargs:int) (tb:t): unit =
   done;
   let f = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- (Application (f, Array.of_list !arglst)) :: tb.tlist;
+  tb.tlist <- (Application (f, Array.of_list !arglst,false)) :: tb.tlist;
   remove_local nargs tb
 
 
@@ -593,9 +604,7 @@ let expect_lambda
   (* Expect the term of a lambda expression. It is assumed that all local
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
-      variables and [nfgs] formal generics. Furthermore the argument list of
-      the lambda expression has [nfgs] formal generics which are considered as
-      type constants. *)
+      variables and [nfgs] formal generics. *)
 
   assert (Sign.has_result tb.sign);
   add_local ntvs tb;
@@ -617,18 +626,50 @@ let expect_lambda
 
 
 
-let complete_lambda (ntvs:int) (names:int array) (tb:t): unit =
+let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
   remove_local ntvs tb;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- Lam (nargs, names, t) :: tb.tlist
+  tb.tlist <- Lam (nargs, names, t,is_pred) :: tb.tlist
 
 
 
-let check_untyped_variables (inf:info) (tb:t): unit =
+
+
+let update_untyped_variables (tb:t): unit =
+  assert (has_term tb);
+  let nargs = Context.count_last_arguments tb.c
+  in
+  let is_pred i =
+    assert false
+  in
+  let rec update (t:term) (nb:int): term =
+    match t with
+      Variable _ ->
+        t
+    | Application (Variable i,args,pr) when not pr && nb <= i && i < nb + nargs ->
+        let args = Array.map (fun a -> update a nb) args in
+        Application (Variable i, args, is_pred (i-nb))
+    | Application (f,args,pr) ->
+        let f = update f nb
+        and args = Array.map (fun a -> update a nb) args in
+        Application (f,args,pr)
+    | Lam(n,nms,t,pr) ->
+        let t = update t (n+nb) in
+        Lam(n,nms,t,pr)
+  in
+  let t = List.hd tb.tlist in
+  tb.tlist <- List.tl tb.tlist;
+  tb.tlist <- (update t 0) :: tb.tlist
+
+
+
+exception Incomplete_type of int
+
+let check_untyped_variables (tb:t): unit =
   let ntvs_ctxt = Context.count_type_variables tb.c
   and ntvs_loc  = count_local tb in
   assert (ntvs_ctxt = ntvs_loc);
@@ -638,12 +679,9 @@ let check_untyped_variables (inf:info) (tb:t): unit =
   for i = 0 to Context.count_last_arguments tb.c - 1 do
     match Context.argument_type i tb.c with
       Variable j when j < ntvs_loc -> begin
-        match TVars_sub.get j tb.tvars with
-          Application(Variable idx,_) when idx = dum_idx ->
-            error_info
-              inf
-              ("Cannot infer a complete type for " ^
-               (ST.string (Context.argument_name i tb.c)))
+        match TVars_sub.get_star j tb.tvars with
+          Application(Variable idx,_,_) when idx = dum_idx ->
+            raise (Incomplete_type i)
         | _ -> ()
       end
     | _ -> ()
@@ -660,14 +698,17 @@ let has_dummy (tb:t): bool =
     else
       let n = n - 1 in
       match TVars_sub.get n tb.tvars with
-        Application(Variable idx,_)  when idx = dum_idx -> true
+        Application(Variable idx,_,_)  when idx = dum_idx -> true
       | _ -> has n
   in
   has n
 
 
 
-let update_term (tb:t): unit =
+let specialize_term (tb:t): unit =
+  (* Substitute all functions with the most specific ones. E.g. the term builder
+     might have used [=] of ANY. But since the arguments are of type LATTICE it
+     specializes [=] of ANY to [=] of LATTICE. *)
   assert (Mylist.is_singleton tb.tlist);
   let ft = Context.feature_table tb.c
   and tvs = TVars_sub.tvars tb.tvars
@@ -692,7 +733,7 @@ let update_term (tb:t): unit =
           with Not_found ->
             nglob+nfgs, t
         end
-    | Application (f,args) ->
+    | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
         let nglob,arglst = Array.fold_left
             (fun (nglob,lst) t ->
@@ -702,10 +743,10 @@ let update_term (tb:t): unit =
             args
         in
         let args = Array.of_list (List.rev arglst) in
-        nglob, Application (f,args)
-    | Lam (n,nms,t) ->
+        nglob, Application (f,args,pr)
+    | Lam (n,nms,t,pr) ->
         let nglob, t = upd t (nargs+n) nglob in
-        nglob, Lam (n,nms,t)
+        nglob, Lam (n,nms,t,pr)
   in
   let nargs = Context.count_arguments tb.c
   and t     = List.hd tb.tlist in
@@ -720,3 +761,77 @@ let result (tb:t): term * TVars_sub.t =
       variables *)
   assert (Mylist.is_singleton tb.tlist);
   List.hd tb.tlist, tb.tvars
+
+
+
+
+let check_term (t:term) (tb:t): t =
+  let rec check t tb =
+    let all_id  = Context.all_index tb.c
+    and some_id = Context.some_index tb.c in
+    let lambda n nms t is_quant is_pred tb =
+      let ntvs_gap = count_local tb - Context.count_type_variables tb.c
+      and is_func = not is_pred in
+      Context.push_untyped_with_gap nms is_func ntvs_gap tb.c;
+      (*printf "lambda entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
+      let ntvs    = Context.count_local_type_variables tb.c - ntvs_gap
+      and nfgs    = 0 in
+      expect_lambda ntvs nfgs is_quant is_pred tb;
+      let tb = check t tb in
+      (*begin try
+        check_untyped_variables tb
+      with Incomplete_type _ ->
+        raise Not_found
+      end;*)
+      complete_lambda ntvs nms is_pred tb;
+      Context.pop tb.c;
+      (*printf "lambda exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
+      tb
+    in
+    match t with
+      Variable i ->
+        let tvs,s = Context.variable_data i tb.c in
+        begin try add_leaf i tvs s tb
+        with Not_found ->
+          let ct = Context.class_table tb.c in
+          printf "illegal term \"%s\"\n" (string_of_term t tb);
+          printf "  type     %s\n"
+            (Class_table.string_of_complete_signature s tvs ct);
+          printf "  expected %s\n" (complete_signature_string tb);
+          assert false
+        end
+    | Application (Variable i, [|Lam(n,nms,t0,is_pred)|],_)
+      when i = all_id || i = some_id ->
+        assert is_pred;
+        assert (n = Array.length nms);
+        (*printf "quant entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
+        expect_function 1 tb;
+        let tb = check (Variable i) tb in
+        expect_argument 0 tb;
+        let tb = lambda n nms t0 true is_pred tb in
+        complete_function 1 tb;
+        (*printf "quant exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
+        tb
+    | Application (f,args,_) ->
+        (*printf "app entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
+        let nargs = Array.length args in
+        expect_function nargs tb;
+        let tb = check f tb in
+        let tb,_ = Array.fold_left
+            (fun (tb,i) a ->
+              expect_argument i tb;
+              check a tb, i+1)
+            (tb,0)
+            args
+        in
+        complete_function nargs tb;
+        (*printf "app exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
+        tb
+    | Lam(n,nms,t,is_pred) ->
+        lambda n nms t false is_pred tb
+  in
+  let depth = Context.depth tb.c in
+  let tb = check t tb
+  in
+  assert (depth = Context.depth tb.c);
+  tb

@@ -155,7 +155,7 @@ let definition (i:int) (nb:int) (ft:t): term =
   let nargs = Sign.arity desc.sign in
   let t = Feature.Spec.definition_term bdesc.spec in
   let t = Term.upbound nb nargs t in
-  if nargs = 0 then t else Lam (nargs,desc.argnames,t)
+  if nargs = 0 then t else Lam (nargs,desc.argnames,t,false)
 
 
 
@@ -224,9 +224,9 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
       Variable i when i < nb+nargs -> false
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
-    | Lam (n,_,t) ->
+    | Lam (n,_,t,_) ->
         is_ghost t (nb+n)
-    | Application (f,args) ->
+    | Application (f,args,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
   in
@@ -344,7 +344,7 @@ let definition_equality (i:int) (ft:t): term =
   let t = Option.value (Feature.Spec.definition bdesc.spec) in
   let f =
     if nargs = 0 then Variable f_id
-    else Application (Variable f_id, Array.init nargs (fun i -> Variable i))
+    else Application (Variable f_id, Array.init nargs (fun i -> Variable i),false)
   in
   let eq_term = Term.binary eq_id f t in
   if nargs = 0 then
@@ -524,13 +524,13 @@ let base_table (verbosity:int) : t =
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
   let p_tp  = Application (Variable (Class_table.predicate_index+1),
-                           [|g_tp|])
+                           [|g_tp|], false)
   and p_tp2 = Application (Variable (Class_table.predicate_index+2),
-                           [|a_tp|])
+                           [|a_tp|], false)
   and f_tp  = Application (Variable (Class_table.function_index+2),
-                           [|a_tp;b_tp|])
+                           [|a_tp;b_tp|], false)
   and tup_tp= Application (Variable (Class_table.tuple_index+2),
-                           [|a_tp;b_tp|])
+                           [|a_tp;b_tp|], false)
   and spec_none = Feature.Spec.make_func None [] []
   and spec_term t = Feature.Spec.make_func (Some t) [] []
   and spec_pre t  = Feature.Spec.make_func None [t] []
@@ -594,7 +594,7 @@ let base_table (verbosity:int) : t =
   [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
 
   let dom2 = domain_index + 2 in
-  let fpre = Application (Term.unary dom2 (Variable 0), [|Variable 1|])
+  let fpre = Application (Term.unary dom2 (Variable 0), [|Variable 1|], false)
   in
   add_base (* function application *)
     "function" Class_table.function_index (FNoperator Parenop)
@@ -636,7 +636,7 @@ let implication_term (a:term) (b:term) (nbound:int) (ft:t)
   (* The implication term a=>b in an environment with 'nbound' bound variables
    *)
   let args = [|a;b|] in
-  Application (Variable (implication_index+nbound), args)
+  Application (Variable (implication_index+nbound), args, false)
 
 
 
@@ -728,104 +728,6 @@ let find_funcs
 
 
 
-
-exception Expand_found
-
-let expand_focus_term_new (t:term) (nb:int) (ft:t): term =
-  (* Expand the variable in the focus of [t] within an environment with [nb] bound
-     variables (i.e. a variable [i] with [nb<=i] refers to the global feature
-     [i-nb])
-
-     A variable is in the focus of [t]:
-
-     - It is the toplevel variable of [t]
-
-     - The toplevel is an application and it is the variable of the function term
-
-     - The toplevel is an application and the function term is not an expandable
-       variable and it is the first argument which allows a focussed expansion
-
-     Note: The function doesn't do any beta reductions in the term [t] which
-     would have been possible before the expansion. *)
-  let apply (f:term) (args:term array): term =
-    match f with
-      Lam (n,_,t) ->
-        assert (n = Array.length args);
-        Term.apply t args
-    | _ ->
-        Application (f,args)
-  and def (i:int) = definition (i-nb) nb ft
-  in
-  let rec expand (t:term) (level:int) (is_arg:bool): term =
-    if level > 2 then raise Not_found;
-    match t with
-      Variable i when nb <= i -> def i
-    | Application (f,args) ->
-        begin
-          try
-            let fexp = expand f (level+1) is_arg in
-            apply fexp args
-          with Not_found ->
-            let args = Array.copy args in
-            if is_arg then raise Not_found
-            else
-              try
-                Array.iteri
-                  (fun i arg ->
-                    try
-                      let arg_exp = expand arg level true in
-                      args.(i) <- arg_exp;
-                      raise Expand_found
-                    with Not_found -> ())
-                  args;
-                raise Not_found
-              with Expand_found ->
-                Application (f,args)
-        end
-    | _ ->
-        raise Not_found
-  in
-  expand t 0 false
-
-
-
-let expand_focus_term_old (t:term) (nb:int) (ft:t): term =
-  (* Expand the variable in the focus of [t] within an environment with [nb] bound
-     variables (i.e. a variable [i] with [nb<=i] refers to the global feature
-     [i-nb])
-
-     A variable is in the focus of [t] if it is the toplevel variable of [t] or
-     it is the function term of [t]
-
-     Note: The function doesn't do any beta reductions in the term [t] which
-     would have been possible before the expansion. *)
-  let apply (f:term) (args:term array): term =
-    match f with
-      Lam (n,_,t) ->
-        assert (n = Array.length args);
-        Term.apply t args
-    | _ ->
-        Application (f,args)
-  and def (i:int) = definition (i-nb) nb ft
-  in
-  let expand (t:term): term =
-    match t with
-      Variable i when nb <= i -> def i
-    | Application (Variable i ,args) when nb <= i->
-        apply (def i) args
-    | Application (Application (Variable i,args0), args1) ->
-        let f = apply (def i) args0 in
-        apply f args1
-    | _ ->
-        raise Not_found
-  in
-  expand t
-
-
-let expand_focus_term (t:term) (nb:int) (ft:t): term =
-  expand_focus_term_old t nb ft
-
-
 let term_to_string
     (t:term)
     (nanon: int)
@@ -891,7 +793,7 @@ let term_to_string
       let nargs = Array.length args in
       assert (nargs = 1);
       match args.(0) with
-        Lam (n,nms,t) ->
+        Lam (n,nms,t,_) ->
           let argsstr, tstr = lam_strs n nms t in
           qstr ^ "(" ^ argsstr ^ ") " ^ tstr
       | _ ->
@@ -956,7 +858,7 @@ let term_to_string
       match t with
         Variable i ->
           None, var2str i
-      | Application (f,args) ->
+      | Application (f,args,pr) ->
           begin
             try
               let op = find_op f in
@@ -964,7 +866,7 @@ let term_to_string
             with Not_found ->
               None, app2str f args
           end
-      | Lam (n,nms,t) ->
+      | Lam (n,nms,t,pr) ->
           None, lam2str n nms t
     in
     match inop, outop with
@@ -1008,12 +910,12 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
      Note: [expand_term] doesn't do any beta reductions in the term [t] which
      would have been possible before the expansion. *)
   let rec expand (t:term) (nb:int): term =
-    let apply (f:term) (args:term array): term =
+    let apply (f:term) (args:term array) (pr:bool): term =
       match f with
-        Lam (n,nms,t) ->
+        Lam (n,nms,t,_) ->
           assert (n = Array.length args);
           Term.apply t args
-      | _ -> Application (f,args)
+      | _ -> Application (f,args,pr)
     in
     match t with
       Variable i when i < nb ->
@@ -1022,17 +924,17 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
         assert (i-nb < count ft);
         (try expand (definition i nb ft) nb
         with Not_found -> t)
-    | Application (Lam(n,nms,t),args) ->
+    | Application (Lam(n,nms,t,pr),args,pr2) ->
         let t    = expand t (nb+n)
         and args = Array.map (fun t -> expand t nb) args in
-        Application(Lam(n,nms,t),args)
-    | Application (f,args) ->
+        Application(Lam(n,nms,t,pr),args,pr2)
+    | Application (f,args,pr) ->
         let f    = expand f nb
         and args = Array.map (fun t -> expand t nb) args in
-        apply f args
-    | Lam (n,nms,t) ->
+        apply f args pr
+    | Lam (n,nms,t,pr) ->
         let t = expand t (nb+n) in
-        Lam (n,nms,t)
+        Lam (n,nms,t,pr)
   in
   expand t nbound
 
@@ -1142,7 +1044,7 @@ let split_equality (t:term) (nbenv:int) (ft:t): int * term * term =
   in
   let nbenv = nbenv + nargs in
   match t with
-    Application (Variable i, args) when nbenv <= i ->
+    Application (Variable i, args, _) when nbenv <= i ->
       let i = i - nbenv in
       assert (i < count ft);
       if (base_descriptor i ft).is_eq then begin
