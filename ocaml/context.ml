@@ -145,7 +145,7 @@ let argument_name (i:int) (c:t): int =
 
 
 let argument_type (i:int) (c:t): type_term =
-  assert (i < count_last_arguments c);
+  assert (i < count_arguments c);
   snd c.entry.fargs.(i)
 
 

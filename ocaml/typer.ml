@@ -249,7 +249,8 @@ end = struct
     List.iter
       (fun acc ->
         try
-          Term_builder.check_untyped_variables acc
+          Term_builder.check_untyped_variables acc;
+          Term_builder.update_called_variables acc
         with Term_builder.Incomplete_type i ->
           error_info inf
             ("Cannot infer a complete type for " ^

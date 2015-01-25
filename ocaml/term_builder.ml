@@ -408,11 +408,6 @@ let unify_sign_0
   let has_res = Sign.has_result sig_req in
   if has_res <> Sign.has_result sig_act then
     raise Not_found;
-  (*let n         = (Sign.arity sig_req)
-  and has_res   = (Sign.has_result sig_req) in
-  if not (n = (Sign.arity sig_act) &&
-          has_res = (Sign.has_result sig_act)) then
-    raise Not_found;*)
   if has_res then
     unify (Sign.result sig_req) (Sign.result sig_act) tb;
   for i=0 to (Sign.arity sig_req)-1 do
@@ -475,7 +470,7 @@ let unify_sign
 
 
 let make (c:Context.t): t =
-  (* New accumulator for an expressionin the context [c] *)
+  (* New accumulator for an expression in the context [c] *)
   assert (Context.has_result c);
   {tlist = [];
    sign  = Sign.make_const (Context.result_type c);
@@ -574,6 +569,8 @@ let expect_argument (i:int) (tb:t): unit =
 
 
 
+
+
 let complete_function (nargs:int) (tb:t): unit =
   (** Complete the function call [f(a,b,c,...)] with [nargs] arguments. The
       function term and all arguments are on the top of the term list
@@ -596,6 +593,8 @@ let complete_function (nargs:int) (tb:t): unit =
   tb.tlist <- List.tl tb.tlist;
   tb.tlist <- (Application (f, Array.of_list !arglst,false)) :: tb.tlist;
   remove_local nargs tb
+
+
 
 
 
@@ -637,20 +636,66 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
 
 
 
+let argument_type (i:int) (tb:t): type_term =
+  (* The type of the argument [i] transformed into the term builder
 
-
-let update_untyped_variables (tb:t): unit =
-  assert (has_term tb);
-  let nargs = Context.count_last_arguments tb.c
+     tvs context:         loc      +              fgs
+     builder:      bloc + loc  + glob  +   garb + fgs
+  *)
+  assert (i < Context.count_arguments tb.c);
+  let ntvs_ctxt = Context.count_type_variables tb.c
+  and ntvs_loc  = count_local tb
+  and nfgs_ctxt = Context.count_formal_generics tb.c
+  and nfgs      = count_fgs tb
+  and nglobs    = count_global tb
   in
+  assert (ntvs_ctxt <= ntvs_loc);
+  assert (nfgs_ctxt <= nfgs);
+  let tp = Context.argument_type i tb.c in
+  let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_loc tp in
+  Term.up (ntvs_loc-ntvs_ctxt) tp
+
+
+
+let update_called_variables (tb:t): unit =
+  (* Arguments of the context might be called. E.g. if [a] is an argument there might
+     be a subexpression [a(x)]. This requires that [a] has either a function or a
+     predicate type.
+
+     If the argument has predicate type then the predicate flag will be set in the
+     application.
+
+     Only arguments of the inner context will be updated and it is assumed that the
+     arguments of the inner context have a complete type (no dummy). Variables of
+     outer context might still have dummy types.
+  *)
+  assert (has_term tb);
+  let nargs     = Context.count_last_arguments tb.c
+  and ntvs_loc  = count_local tb in
+  assert (ntvs_loc = Context.count_type_variables tb.c);
+  let ntvs_all  = count tb + Context.count_formal_generics tb.c
+  in
+  let dum_idx = ntvs_all + Class_table.dummy_index
+  and f_idx   = ntvs_all + Class_table.function_index
+  and p_idx   = ntvs_all + Class_table.predicate_index in
   let is_pred i =
-    assert false
+    assert (i < nargs);
+    let tp = argument_type i tb in
+    let tp = TVars_sub.sub_star tp tb.tvars in
+    match tp with
+      Application(Variable idx,_,_) ->
+        assert (idx <> dum_idx);
+        assert (idx = p_idx || idx = f_idx);
+        idx = p_idx
+    | _ ->
+        false
   in
   let rec update (t:term) (nb:int): term =
     match t with
       Variable _ ->
         t
-    | Application (Variable i,args,pr) when not pr && nb <= i && i < nb + nargs ->
+    | Application (Variable i,args,pr)
+      when not pr && nb <= i && i < nb + nargs ->
         let args = Array.map (fun a -> update a nb) args in
         Application (Variable i, args, is_pred (i-nb))
     | Application (f,args,pr) ->
@@ -670,9 +715,8 @@ let update_untyped_variables (tb:t): unit =
 exception Incomplete_type of int
 
 let check_untyped_variables (tb:t): unit =
-  let ntvs_ctxt = Context.count_type_variables tb.c
-  and ntvs_loc  = count_local tb in
-  assert (ntvs_ctxt = ntvs_loc);
+  let ntvs_loc  = count_local tb in
+  assert (ntvs_loc = Context.count_type_variables tb.c);
   let ntvs_all = count tb + Context.count_formal_generics tb.c in
   let dum_idx  = ntvs_all + Class_table.dummy_index
   in
@@ -765,27 +809,62 @@ let result (tb:t): term * TVars_sub.t =
 
 
 
+let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
+  (* Check if variable [i] is an untyped variable which has a dummy type. If
+     yes, upgrade it to a function or a predicate depending on the flag [pr] *)
+  let nall = count_all tb in
+  let dum_idx  = nall + Class_table.dummy_index
+  and p_idx    = nall + Class_table.predicate_index
+  and f_idx    = nall + Class_table.function_index
+  and bool_idx = nall + Class_table.boolean_index
+  in
+  let tp = argument_type i tb in
+  match tp with
+    Variable i when i < count_local tb ->
+      let i  = TVars_sub.anchor i tb.tvars in
+      let tp = TVars_sub.get i tb.tvars in
+      begin match tp with
+        Application (Variable j,args,_) when j = dum_idx ->
+          assert (Array.length args = 2);
+          assert (not pr || args.(1) = Variable bool_idx);
+          let tp =
+            if pr then Application(Variable p_idx, [|args.(0)|],false)
+            else Application (Variable f_idx, args, false) in
+          TVars_sub.update_sub i tp tb.tvars
+      | _ ->
+          ()
+      end
+  | _ ->
+      ()
+
+
 let check_term (t:term) (tb:t): t =
   let rec check t tb =
     let all_id  = Context.all_index tb.c
-    and some_id = Context.some_index tb.c in
+    and some_id = Context.some_index tb.c
+    and nargs   = Context.count_last_arguments tb.c in
+    let upgrade_potential_dummy f pr tb =
+      match f with
+        Variable i when i < nargs ->
+          upgrade_potential_dummy i pr tb
+      | _ ->
+          ()
+    in
     let lambda n nms t is_quant is_pred tb =
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
       Context.push_untyped_with_gap nms is_func ntvs_gap tb.c;
-      (*printf "lambda entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
       let ntvs    = Context.count_local_type_variables tb.c - ntvs_gap
       and nfgs    = 0 in
       expect_lambda ntvs nfgs is_quant is_pred tb;
       let tb = check t tb in
-      (*begin try
+      begin try
         check_untyped_variables tb
       with Incomplete_type _ ->
         raise Not_found
-      end;*)
+      end;
       complete_lambda ntvs nms is_pred tb;
       Context.pop tb.c;
-      (*printf "lambda exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
       tb
     in
     match t with
@@ -804,16 +883,13 @@ let check_term (t:term) (tb:t): t =
       when i = all_id || i = some_id ->
         assert is_pred;
         assert (n = Array.length nms);
-        (*printf "quant entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
         expect_function 1 tb;
         let tb = check (Variable i) tb in
         expect_argument 0 tb;
         let tb = lambda n nms t0 true is_pred tb in
         complete_function 1 tb;
-        (*printf "quant exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
         tb
-    | Application (f,args,_) ->
-        (*printf "app entry %d %s\n" (count_terms tb) (string_of_term t tb);*)
+    | Application (f,args,pr) ->
         let nargs = Array.length args in
         expect_function nargs tb;
         let tb = check f tb in
@@ -825,7 +901,7 @@ let check_term (t:term) (tb:t): t =
             args
         in
         complete_function nargs tb;
-        (*printf "app exit %d %s\n" (count_terms tb) (string_of_head_term tb);*)
+        upgrade_potential_dummy f pr tb;
         tb
     | Lam(n,nms,t,is_pred) ->
         lambda n nms t false is_pred tb

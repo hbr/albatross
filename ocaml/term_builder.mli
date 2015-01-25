@@ -92,6 +92,9 @@ val check_untyped_variables: t -> unit
    (** Check that the substitutions contain no dummy types (i.e. incomplete
        types which should be updated either to FUNCTION or PREDICATE *)
 
+val update_called_variables: t -> unit
+
+
 val has_dummy: t -> bool
 
 val specialize_term: t -> unit
