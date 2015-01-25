@@ -850,9 +850,12 @@ let term_to_string
               (fun t -> to_string t names nanon false None)
               (Array.to_list args)))
       ^ ")"*)
-    and lam2str (n:int) (nms: int array) (t:term): string =
+    and lam2str (n:int) (nms: int array) (t:term) (pr:bool): string =
       let argsstr, tstr = lam_strs n nms t in
-      "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
+      if pr then
+        "{" ^ argsstr ^ ": " ^ tstr ^ "}"
+      else
+        "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
     in
     let inop, str =
       match t with
@@ -867,7 +870,7 @@ let term_to_string
               None, app2str f args
           end
       | Lam (n,nms,t,pr) ->
-          None, lam2str n nms t
+          None, lam2str n nms t pr
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->

@@ -90,6 +90,18 @@ let intlist_to_string (lst:int list): string =
 
 
 
+let interval_for_all (f: int -> bool) (start:int) (beyond:int): bool =
+  let rec for_all i =
+    if beyond <= i then
+      true
+    else
+      f i && for_all (i+1)
+  in
+  for_all start
+
+
+
+
 module StringSet = Set.Make(struct
   let compare = Pervasives.compare
   type t = string

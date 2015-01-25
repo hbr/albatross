@@ -67,7 +67,6 @@ module Term: sig
   val used_variables:       term -> int -> int list
   val used_variables_from:  term -> int -> int list
 
-  val wo_names: term -> term
   val equivalent: term -> term -> bool
 
   val map: (int->int->term) -> term -> term
@@ -140,11 +139,12 @@ end = struct
   let rec to_string (t:term): string =
     match t with
       Variable i -> string_of_int i
-    | Application (f,args,_) ->
+    | Application (f,args,pr) ->
         let fstr = to_string f
         and argsstr = Array.to_list (Array.map to_string args)
+        and predstr = if pr then "p" else ""
         in
-        fstr ^ "(" ^
+        fstr ^ predstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
     | Lam(nargs,names,t,pred) ->
@@ -153,7 +153,10 @@ end = struct
         let args = Array.init nargs string_of_int
         in
         let argsstr = String.concat "," (Array.to_list args) in
-        "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
+        if pred then
+          "{" ^ argsstr ^ ": " ^ (to_string t) ^ "}"
+        else
+          "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
 
 
   let variable (t:term): int =
@@ -329,23 +332,27 @@ end = struct
     used_variables_filtered t (fun i -> nvars <= i)
 
 
-  let rec wo_names (t:term): term =
-    (** The term [t] with all names in abstractions erased.
-     *)
-    match t with
-      Variable _ -> t
-    | Application (f,args,_) ->
-        Application (wo_names f,
-                     Array.map (fun t -> wo_names t) args,
-                     false)
-    | Lam (n,_,t,_) -> Lam (n, [||], wo_names t, false)
-
-
   let equivalent (t1:term) (t2:term): bool =
-    let u1 = wo_names t1
-    and u2 = wo_names t2
+    (* Are the terms [t1] and [t2] equivalent ignoring names and predicate flags? *)
+    let rec eq t1 t2 nb =
+      match t1, t2 with
+        Variable i, Variable j ->
+          i = j
+      | Application (f1,args1,_), Application (f2,args2,_) ->
+          let n = Array.length args1 in
+          n = Array.length args2 &&
+          eq f1 f2 nb &&
+          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
+      | Lam(n1,nms1,t1,_), Lam(n2,nms2,t2,_) when n1 = n2 ->
+          eq t1 t2 (n1+nb)
+      | _, _ ->
+          false
     in
-    u1 = u2
+    eq t1 t2 0
+
+
+
+
 
 
   let map (f:int->int->term) (t:term): term =
