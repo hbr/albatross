@@ -513,15 +513,7 @@ let analyze_expression
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;
-  assert begin
-    (*printf "  check term %s\n" (Context.string_of_term term 0 c);
-    printf "             %s\n" (Term.to_string term);*)
-    let tb = term_builder is_bool c in
-    try
-      let _ = Term_builder.check_term term tb in true
-    with Not_found ->
-      false
-  end;
+  assert (Term_builder.is_valid term is_bool c);
   term
 
 

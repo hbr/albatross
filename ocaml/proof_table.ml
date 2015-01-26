@@ -438,12 +438,12 @@ let term_of_mp (a:int) (b:int) (at:t): term =
 let term_of_eval (i:int) (e:Eval.t) (at:t): term =
   let ta,tb = reconstruct_evaluation e at
   and t = local_term i at in
-  let ok = (t = ta) in
+  let ok = (Term.equivalent t  ta) in
   if not ok then begin
     printf "evaluated terms do not coincide\n";
-    printf "   term %3d  %s\n" i (string_of_term t at);
-    printf "   eval      %s\n" (string_of_term ta at);
-    printf "   evaluated %s\n" (string_of_term tb at);
+    printf "   term %3d  %s %s\n" i (string_of_term t at) (Term.to_string t);
+    printf "   eval      %s %s\n" (string_of_term ta at) (Term.to_string ta);
+    printf "   evaluated %s %s\n" (string_of_term tb at) (Term.to_string tb);
     raise Illegal_proof_term
   end;
   tb
@@ -498,6 +498,8 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
     tsub
 
 
+
+
 let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
     : term =
   let nargs = Array.length args in
@@ -535,12 +537,13 @@ let someelim (i:int) (at:t): term =
   and imp_id2 = imp_id + 1
   and all_id1 = all_id + 1
   and all_id2 = all_id
+  and e_name = ST.symbol "$e"
   in
   let impl1   = Term.binary imp_id1 tt (Variable nargs) in
   let lam1    = Lam (nargs,nms,impl1,true) in
   let all1    = Term.unary all_id1 lam1 in
   let impl2   = Term.binary imp_id2 all1 (Variable 0) in
-  let lam2    = Lam (1,[||],impl2,true) in
+  let lam2    = Lam (1,[|e_name|],impl2,true) in
   let all2    = Term.unary all_id2 lam2 in
   all2
 

@@ -838,6 +838,8 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
       ()
 
 
+exception Illegal_term
+
 let check_term (t:term) (tb:t): t =
   let rec check t tb =
     let all_id  = Context.all_index tb.c
@@ -851,6 +853,8 @@ let check_term (t:term) (tb:t): t =
           ()
     in
     let lambda n nms t is_quant is_pred tb =
+      assert (0 < n);
+      assert (Array.length nms = n);
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
       Context.push_untyped_with_gap nms is_func ntvs_gap tb.c;
@@ -861,7 +865,7 @@ let check_term (t:term) (tb:t): t =
       begin try
         check_untyped_variables tb
       with Incomplete_type _ ->
-        raise Not_found
+        raise Illegal_term
       end;
       complete_lambda ntvs nms is_pred tb;
       Context.pop tb.c;
@@ -870,14 +874,15 @@ let check_term (t:term) (tb:t): t =
     match t with
       Variable i ->
         let tvs,s = Context.variable_data i tb.c in
-        begin try add_leaf i tvs s tb
-        with Not_found ->
-          let ct = Context.class_table tb.c in
-          printf "illegal term \"%s\"\n" (string_of_term t tb);
-          printf "  type     %s\n"
-            (Class_table.string_of_complete_signature s tvs ct);
-          printf "  expected %s\n" (complete_signature_string tb);
-          assert false
+        begin
+          try add_leaf i tvs s tb
+          with Not_found ->
+            let ct = Context.class_table tb.c in
+            printf "illegal term \"%s\"\n" (string_of_term t tb);
+            printf "  type     %s\n"
+              (Class_table.string_of_complete_signature s tvs ct);
+            printf "  expected %s\n" (complete_signature_string tb);
+            raise Illegal_term
         end
     | Application (Variable i, [|Lam(n,nms,t0,is_pred)|],_)
       when i = all_id || i = some_id ->
@@ -903,11 +908,38 @@ let check_term (t:term) (tb:t): t =
         complete_function nargs tb;
         upgrade_potential_dummy f pr tb;
         tb
-    | Lam(n,nms,t,is_pred) ->
-        lambda n nms t false is_pred tb
+    | Lam(n,nms,t0,is_pred) ->
+        assert (0 < n);
+        if n <> Array.length nms then
+          printf "%s\n" (string_of_term t tb);
+        assert (n = Array.length nms);
+        lambda n nms t0 false is_pred tb
   in
   let depth = Context.depth tb.c in
   let tb = check t tb
   in
   assert (depth = Context.depth tb.c);
   tb
+
+
+
+
+let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
+  let tb =
+    if is_bool then make_boolean c
+    else make c in
+  try
+    let _ = check_term t tb in true
+  with Illegal_term ->
+    false
+
+
+let specialize_assertion (t:term) (c:Context.t): term =
+  (* Calculate the most specific version of the assertion [t] in the context [c] *)
+  let tb = make_boolean c in
+  try
+    let tb = check_term t tb in
+    specialize_term tb;
+    head_term tb
+  with Not_found ->
+    assert false

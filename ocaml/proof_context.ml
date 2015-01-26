@@ -589,9 +589,12 @@ let add_consequence
   assert (j < count pc);
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
   assert (nbenv_sub <= nbenv pc);
-  let j = specialized j sub nbenv_sub false pc
-  in
-  add_mp_fwd i j pc
+  try
+    let j = specialized j sub nbenv_sub false pc
+    in
+    add_mp_fwd i j pc
+  with Not_found ->
+    ()
 
 
 
@@ -652,8 +655,11 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
       | (idx,sub)::_ ->
           (* the schematic rule [idx] matches the premise of [i]*)
           begin
-            let idx_premise = specialized idx sub nbenv_a false pc in
-            add_mp_fwd idx_premise i pc
+            try
+              let idx_premise = specialized idx sub nbenv_a false pc in
+              add_mp_fwd idx_premise i pc
+            with Not_found ->
+              ()
           end
 
 
@@ -994,7 +1000,8 @@ let find_goal (g:term) (pc:t): int =
       idx
     with Not_found ->
       let idx,sub = List.hd sublst in
-      specialized idx sub nbenv false pc
+      try specialized idx sub nbenv false pc
+      with Not_found -> assert false (* specialization not type safe ? *)
 
 
 

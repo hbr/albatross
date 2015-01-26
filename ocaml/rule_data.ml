@@ -102,17 +102,35 @@ let premises (rd:t) (nbenv:int): (term*bool) list =
   List.map (fun (gp1,cons,p) -> up p,cons) rd.premises
 
 
+let implication_chain (ps:(int*bool*term) list) (tgt:term) (nbenv:int): term =
+  let imp_id = nbenv + Feature_table.implication_index in
+  List.fold_right
+    (fun (_,_,p) tgt -> Term.binary imp_id p tgt)
+    ps
+    tgt
+
+
+let update_ps_tgt (ps:(int*bool*term) list) (imp:term) (nbenv:int):
+    (int*bool*term) list * term =
+  let imp_id = nbenv + Feature_table.implication_index in
+  let tgt, ps_rev =
+    List.fold_left
+      (fun (tgt,ps_rev) (gp1,cons,p) ->
+        try
+          let a,b = Term.binary_split tgt imp_id in
+          b, (gp1,cons,a)::ps_rev
+        with Not_found ->
+          assert false)
+      (imp,[])
+      ps
+  in
+  List.rev ps_rev, tgt
+
 
 let prepend_premises (ps:(int*bool*term) list) (rd:t)
     : term =
   let all_id  = rd.nbenv + Feature_table.all_index in
-  let imp_id  = rd.nargs + rd.nbenv + Feature_table.implication_index in
-  let t = List.fold_right
-      (fun (_,_,p) tgt ->
-        Term.binary imp_id p tgt)
-      ps
-      rd.target
-  in
+  let t = implication_chain ps rd.target (rd.nargs + rd.nbenv) in
   Term.quantified all_id rd.nargs rd.nms t
   
 
@@ -267,13 +285,18 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
   assert (nargs = rd.nargs || is_implication rd);
   assert (nargs = rd.nargs || let gp1,_,_ = List.hd rd.premises in nargs = gp1);
   let full        = nargs = rd.nargs
-  and nbenv_delta = nbenv - rd.nbenv in
+  and nbenv_delta = nbenv - rd.nbenv
+  and nms =
+    if Array.length rd.nms = 0 then rd.nms
+    else Array.sub rd.nms nargs (rd.nargs - nargs)
+  in
+  (*if not full then Context.push_untyped nms c;*)
   let sub t = Term.part_sub t rd.nargs args nbenv_delta
   in
-  assert ( match rd.premises with
+  assert begin match rd.premises with
     [] -> nargs = rd.nargs
   | (gp1,_,_)::_ ->
-      nargs = rd.nargs || nargs = gp1);
+      nargs = rd.nargs || nargs = gp1 end;
   let tgt  = sub rd.target in
   let ps_rev =
     List.fold_left
@@ -301,20 +324,24 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
       ps, max_nds <= ntgt
     else
       List.rev ps_rev, false
-  and nms =
-    if Array.length rd.nms = 0 then rd.nms
-    else Array.sub rd.nms nargs (rd.nargs - nargs)
   in
-  {rd with
-   orig  = Some orig;
-   spec  = true;
-   fwd_blckd = fwd_blckd;
-   nbenv = nbenv;
-   nargs = rd.nargs - nargs;
-   nms   = nms;
-   premises = ps;
-   target   = tgt}
-
+  let nargs_new = rd.nargs - nargs in
+  (*let chain = implication_chain ps tgt (nbenv+nargs_new) in
+  try
+    let chain2 = Term_builder.specialize_assertion chain c in
+    if not full then Context.pop c;*)
+    {rd with
+     orig  = Some orig;
+     spec  = true;
+     fwd_blckd = fwd_blckd;
+     nbenv = nbenv;
+     nargs = nargs_new;
+     nms   = nms;
+     premises = ps;
+     target   = tgt}
+  (*with Term_builder.Illegal_term ->
+    Printf.printf "rule_data  illegal term\n";
+    raise Not_found*)
 
 
 
@@ -344,6 +371,8 @@ let schematic_term (rd:t): int * int * term =
       rd.premises
   in
   rd.nargs, rd.nbenv, t
+
+
 
 
 let drop (rd:t) (c:Context.t): t =
