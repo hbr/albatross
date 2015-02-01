@@ -30,8 +30,8 @@ val is_toplevel: t -> bool
 val count:       t -> int
 val count_previous: t -> int
 val count_global:   t -> int
-val nbenv:       t -> int
-val nbenv_local: t -> int
+val count_arguments:       t -> int
+val count_last_arguments: t -> int
 val names:       t -> int array
 val all_id:      t -> int
 val some_id:     t -> int

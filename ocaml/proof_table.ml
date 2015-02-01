@@ -14,8 +14,7 @@ type desc = {nbenv0:     int;
              term:       term;
              proof_term: proof_term;}
 
-type entry = {nbenv:  int;
-              names:  int array;
+type entry = {names:  int array;
               mutable count: int;
               mutable nreq:  int   (* number of local assumptions *)
             }
@@ -88,10 +87,9 @@ let count_last_local (pt:t): int =
   (count pt) - (count_previous pt)
 
 
-let nbenv (at:t): int = at.entry.nbenv
+let count_arguments (at:t): int = Context.count_arguments at.c
 
-let nbenv_local (at:t): int =
-  at.entry.nbenv - if at.stack = [] then 0 else (List.hd at.stack).nbenv
+let count_last_arguments (at:t): int = Context.count_last_arguments at.c
 
 let names (at:t): int array =
   at.entry.names
@@ -103,7 +101,7 @@ let all_id (at:t): int =
   Context.all_index at.c
 
 let all_id_outer (at:t): int =
-  all_id at - nbenv_local at
+  all_id at - count_last_arguments at
 
 let some_id (at:t): int =
   Context.some_index at.c
@@ -133,7 +131,7 @@ let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
   Term.quantified (some_id at) nargs names t
 
 let all_quantified_outer (t:term) (at:t): term =
-  let nargs  = nbenv_local at          in
+  let nargs  = count_last_arguments at          in
   let all_id = (all_id at) - nargs in
   Term.quantified all_id nargs at.entry.names t
 
@@ -159,7 +157,6 @@ let make (verbosity:int): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
-            nbenv   = 0;
             nreq    = 0};
    stack = [];
    c = Context.make verbosity;
@@ -173,7 +170,6 @@ let push0 (nbenv:int) (names: int array) (at:t): unit =
   at.entry       <-
     {at.entry with
      nreq   = 0;
-     nbenv  = at.entry.nbenv + nbenv;
      names  = names}
 
 
@@ -236,7 +232,7 @@ let local_term (i:int) (at:t): term =
    *)
   assert (i < count at);
   let desc = Seq.elem i at.seq in
-  let n_up = at.entry.nbenv - desc.nbenv0
+  let n_up = count_arguments at - desc.nbenv0
   in
   Term.up n_up desc.term
 
@@ -284,7 +280,7 @@ let discharged_term (i:int) (at:t): term =
      assumptions discharged.
    *)
   let n1,nms1,t = discharged_assumptions i at in
-  let nargs = n1 + nbenv_local at
+  let nargs = n1 + count_last_arguments at
   and nms   = Array.append nms1 (names at) in
   Term.quantified (all_id_outer at) nargs nms t
 
@@ -315,7 +311,7 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
-    Seq.push {nbenv0 = at.entry.nbenv;
+    Seq.push {nbenv0 = count_arguments at;
               term   = t;
               proof_term = pt} at.seq
   in
@@ -338,13 +334,13 @@ let definition (idx:int) (nb:int) (at:t): term =
 
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
-  Feature_table.split_equality t (nb + nbenv at) (feature_table at)
+  Feature_table.split_equality t (nb + count_arguments at) (feature_table at)
 
 
 
 let specialized (i:int) (args:term array) (nb:int) (at:t): term =
   assert (i < count at);
-  let nbenv = nbenv at in
+  let nbenv = count_arguments at in
   let t, nbenv_t = term i at in
   assert (nbenv_t <= nbenv);
   let nbenv_delta = nb + nbenv - nbenv_t in
@@ -789,7 +785,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
 let discharged (i:int) (at:t): term * proof_term =
   let n1,nms1,t = discharged_assumptions i at
   in
-  let nargs = n1 + nbenv_local at
+  let nargs = n1 + count_last_arguments at
   and nms   = Array.append nms1 (names at)
   and nreq  = at.entry.nreq
   and cnt0  = count_previous at

@@ -118,9 +118,9 @@ let is_local (at:t): bool =
 let is_toplevel (at:t): bool =
   Proof_table.is_toplevel at.base
 
-let nbenv (at:t): int = Proof_table.nbenv at.base
+let nbenv (at:t): int = Proof_table.count_arguments at.base
 
-let nbenv_local (at:t): int = Proof_table.nbenv_local at.base
+let nbenv_local (at:t): int = Proof_table.count_last_arguments at.base
 
 let count_base (pc:t): int = Proof_table.count pc.base
 
@@ -845,7 +845,7 @@ let push (entlst:entities list withinfo) (pc:t): unit =
   close pc;
   assert (not (has_work pc));
   Proof_table.push entlst pc.base;
-  let nbenv = Proof_table.nbenv pc.base in
+  let nbenv = Proof_table.count_arguments pc.base in
   push0 nbenv pc
 
 
@@ -853,7 +853,7 @@ let push_untyped (names:int array) (pc:t): unit =
   close pc;
   assert (not (has_work pc));
   Proof_table.push_untyped names pc.base;
-  let nbenv = Proof_table.nbenv pc.base in
+  let nbenv = Proof_table.count_arguments pc.base in
   push0 nbenv pc
 
 
