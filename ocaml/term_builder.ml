@@ -13,7 +13,7 @@ open Printf
 type t = {mutable tlist: term list;
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
-          c: Context.t}
+          mutable c: Context.t}
 
 (* The type variables of the term builder and the context differ.
 
@@ -599,13 +599,14 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 let expect_lambda
-    (ntvs:int) (nfgs:int) (is_quant: bool) (is_pred:bool) (tb:t): unit =
+    (ntvs:int) (nfgs:int) (is_quant: bool) (is_pred:bool) (c:Context.t) (tb:t): unit =
   (* Expect the term of a lambda expression. It is assumed that all local
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
       variables and [nfgs] formal generics. *)
 
   assert (Sign.has_result tb.sign);
+  tb.c <- c;
   add_local ntvs tb;
   add_fgs   nfgs tb;
   assert (TVars_sub.count_local tb.tvars =
@@ -632,7 +633,8 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
   remove_local ntvs tb;
   let t = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- Lam (nargs, names, t,is_pred) :: tb.tlist
+  tb.tlist <- Lam (nargs, names, t,is_pred) :: tb.tlist;
+  tb.c <- Context.pop tb.c
 
 
 
@@ -857,10 +859,10 @@ let check_term (t:term) (tb:t): t =
       assert (Array.length nms = n);
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
-      Context.push_untyped_with_gap nms is_func ntvs_gap tb.c;
-      let ntvs    = Context.count_local_type_variables tb.c - ntvs_gap
+      let c = Context.push_untyped_with_gap nms is_func ntvs_gap tb.c in
+      let ntvs    = Context.count_local_type_variables c - ntvs_gap
       and nfgs    = 0 in
-      expect_lambda ntvs nfgs is_quant is_pred tb;
+      expect_lambda ntvs nfgs is_quant is_pred c tb;
       let tb = check t tb in
       begin try
         check_untyped_variables tb
@@ -868,7 +870,6 @@ let check_term (t:term) (tb:t): t =
         raise Illegal_term
       end;
       complete_lambda ntvs nms is_pred tb;
-      Context.pop tb.c;
       tb
     in
     match t with

@@ -24,8 +24,9 @@ type entry = {
 
 
 type t = {
-    mutable entry: entry;
-    mutable stack: entry list;
+    entry: entry;
+    prev:  t option;
+    depth: int;
     ft:            Feature_table.t;
     verbosity:     int
   }
@@ -76,14 +77,18 @@ let is_interface_use (c:t): bool = Feature_table.is_interface_use c.ft
 
 
 let is_global (c:t): bool =
-  c.stack = []
+  c.prev = None
 
 
 let is_toplevel (c:t): bool =
-  match c.stack with
-    [_] -> true
+  match c.prev with
+    Some prev -> is_global prev
   | _   -> false
 
+
+let previous (c:t): t =
+  assert (not (is_global c));
+  Option.value c.prev
 
 let entry_nfargs (e:entry): int = Array.length e.fargs
 
@@ -137,6 +142,10 @@ let all_index (c:t): int =
 let some_index (c:t): int =
   count_arguments c + Feature_table.some_index
 
+let implication_index (c:t): int =
+  count_arguments c + Feature_table.implication_index
+
+
 
 
 let argument_name (i:int) (c:t): int =
@@ -179,7 +188,7 @@ let fargnames (c:t): int array = entry_fargnames c.entry
 
 let outer_fargnames (c:t): int array =
   assert (not (is_global c));
-  entry_fargnames (List.hd c.stack)
+  entry_fargnames ((previous c).entry)
 
 
 let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
@@ -251,9 +260,12 @@ let check_deferred (c:t): unit =
 
 
 
-let depth (c:t): int =
-  List.length c.stack
+let depth (c:t): int = c.depth
 
+let rec ith_entry (i:int) (c:t): entry =
+  assert (i <= depth c);
+  if i = 0 then c.entry
+  else ith_entry (i-1) (previous c)
 
 let is_untyped (i:int) (c:t): bool =
   (* Is the argument [i] untyped? *)
@@ -281,7 +293,8 @@ let argument (name:int) (c:t): int * Tvars.t * Sign.t =
 
 let make (verbosity:int): t =
   {entry = empty_entry;
-   stack = [];
+   prev  = None;
+   depth = 0;
    ft    = Feature_table.base_table verbosity;
    verbosity = verbosity
  }
@@ -316,7 +329,7 @@ let push_with_gap
     (is_func: bool)
     (ntvs_gap)
     (c: t)
-    : unit =
+    : t =
   (** Push the new type variables, formal generics and the formal arguments of
       [entlst,rt] to the context [c] leaving a gap of [ntvs_gap] above the
       possibly newly introduced type variables of the signature. *)
@@ -344,15 +357,17 @@ let push_with_gap
          (fun (n,t) -> n, Term.up ntvs1 (Term.upbound nfgs1 ntvs0 t))
          entry.fargs)
   in
-  c.entry <-
-    {tvs_sub    = tvs_sub;
-     fargs        = fargs;
-     ntvs_delta   = ntvs1;
-     nfgs_delta   = nfgs1;
-     nfargs_delta = Array.length fargs1;
-     result       = res;
-     info         = entlst.i};
-  c.stack <- entry::c.stack
+  {c with
+   entry =
+   {tvs_sub    = tvs_sub;
+    fargs        = fargs;
+    ntvs_delta   = ntvs1;
+    nfgs_delta   = nfgs1;
+    nfargs_delta = Array.length fargs1;
+    result       = res;
+    info         = entlst.i};
+   prev  = Some c;
+   depth = 1 + c.depth}
 
 
 
@@ -363,7 +378,7 @@ let push
     (is_pred: bool)
     (is_func: bool)
     (c: t)
-    : unit =
+    : t =
   (** Push the new type variables, formal generics and the formal arguments of
       [entlst,rt] to the context [c]. *)
   push_with_gap entlst rt is_pred is_func 0 c
@@ -372,23 +387,22 @@ let push
 
 
 let push_untyped_with_gap
-    (names:int array) (is_func:bool) (ntvs_gap:int) (c:t): unit =
+    (names:int array) (is_func:bool) (ntvs_gap:int) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push_with_gap entlst None (not is_func) is_func ntvs_gap c
 
 
-let push_untyped (names:int array) (c:t): unit =
+let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None true false c
 
 
 
-let pop (c:t): unit =
+let pop (c:t): t =
   (** Pop the last context
    *)
   assert (not (is_global c));
-  c.entry <- List.hd c.stack;
-  c.stack <- List.tl c.stack
+  previous c
 
 
 
@@ -453,7 +467,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
 
 let ith_arguments_string (i:int) (c:t): string =
   assert (i <= depth c);
-  let e = if i=0 then c.entry else List.nth c.stack (i-1)
+  let e = ith_entry i c
   and ct = class_table c
   in
   arguments_string e ct
@@ -490,10 +504,6 @@ let named_signature_string (c:t): string =
 
 
 
-
-
-let implication_id (c:t): int =
-  Feature_table.implication_index + (nfargs c)
 
 
 let string_of_assertion (t:term) (c: t): string =
@@ -579,7 +589,8 @@ let variable_data (i:int) (c:t): Tvars.t * Sign.t =
 
 
 let print_local_contexts (c:t): unit =
-  let ct = class_table c in
+  assert false
+  (*let ct = class_table c in
   let args_str (e:entry): string =
     let str = arguments_string e ct in
     if str = "" then "<empty>" else str
@@ -595,7 +606,7 @@ let print_local_contexts (c:t): unit =
   in
   printf "local contexts\n";
   print_stack c.stack;
-  printf "%s\n" (args_str c.entry)
+  printf "%s\n" (args_str c.entry)*)
 
 
 let expanded_term (t:term) (nb:int) (c:t): term =
@@ -618,9 +629,3 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
     0, [||], []
   else
     Feature_table.preconditions idx (nb+nbenv) (feature_table c)
-
-
-
-let print (c:t): unit =
-  assert (is_global c);
-  Feature_table.print c.ft

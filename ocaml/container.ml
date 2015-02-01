@@ -215,6 +215,7 @@ module Seq: sig
   val singleton: 'a -> 'a t
   val count: 'a t -> int
   val elem:  int -> 'a t -> 'a
+  val copy:  'a t -> 'a t
   val put:   int -> 'a -> 'a t -> unit
   val push:  'a -> 'a t -> unit
   val pop:   int -> 'a t -> unit
@@ -236,6 +237,9 @@ end = struct
   let elem (i:int) (seq:'a t): 'a =
     assert (i<seq.cnt);
     seq.arr.(i)
+
+  let copy (s:'a t): 'a t =
+    {cnt = s.cnt; arr = Array.copy s.arr}
 
   let put (i:int) (e:'a) (seq:'a t): unit =
     assert (i<seq.cnt);

@@ -72,7 +72,7 @@ val add_leaf:          int ->  Tvars.t -> Sign.t ->  t -> t
   (** [add_leaf i tvs s tb] adds the term [i,tvs,s] as an elementary term to
       the term builder [tb] *)
 
-val expect_lambda:     int -> int -> bool -> bool -> t -> unit
+val expect_lambda:     int -> int -> bool -> bool -> Context.t -> t -> unit
    (** [expect_lambda ntvs nfgs is_quant is_pred tb] prepares the term builder
        [tb] to expect a lambda expression with [ntvs] untyped variables. It
        assumes that the currently expected signature is either callable

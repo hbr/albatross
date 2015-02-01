@@ -36,12 +36,11 @@ val verbosity: t -> int
 val find_module:        (int * int list) -> t -> int
 
 val push_with_gap:  entities list withinfo -> return_type -> bool -> bool
-  -> int -> t -> unit
-val push:  entities list withinfo -> return_type -> bool -> bool -> t -> unit
-val push_untyped_with_gap: int array -> bool -> int -> t -> unit
-val push_untyped: int array -> t -> unit
-val pop:   t -> unit
-val print: t -> unit
+  -> int -> t -> t
+val push:  entities list withinfo -> return_type -> bool -> bool -> t -> t
+val push_untyped_with_gap: int array -> bool -> int -> t -> t
+val push_untyped: int array -> t -> t
+val pop:   t -> t
 
 val is_global:   t -> bool
 val is_toplevel: t -> bool
@@ -79,6 +78,8 @@ val count_arguments:  t -> int
 
 val all_index:  t -> int
 val some_index: t -> int
+val implication_index: t -> int
+
 
 val argument_name: int -> t -> int
     (** The name of the [i]th formal argument *)
@@ -117,11 +118,9 @@ val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val variable_data:   int -> t -> Tvars.t * Sign.t
 
-val implication_id: t -> int
-
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 
-val print_local_contexts:       t -> unit
+(*val print_local_contexts:       t -> unit*)
 
 val expanded_term:  term -> int -> t -> term
 

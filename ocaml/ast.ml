@@ -290,7 +290,7 @@ let analyze_feature
     (exp: info_expression option)
     (pc: Proof_context.t): unit =
   let context = Proof_context.context pc in
-  Context.push entlst rt false is_func context;
+  let context = Context.push entlst rt false is_func context in
   let body =
     match bdy, exp with
       None, None ->
@@ -335,7 +335,6 @@ let analyze_feature
   and sign     = Context.signature context
   and tvs      = Context.tvs context
   in
-  Context.pop context;
   put_function fn tvs argnames sign body pc
 
 

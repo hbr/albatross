@@ -28,7 +28,7 @@ module Accus: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val expect_lambda:     int -> int -> bool -> bool -> t -> unit
+  val expect_lambda:     int -> int -> bool -> bool -> Context.t -> t -> unit
   val complete_lambda:   int -> int -> int array -> bool -> t -> unit
   val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
@@ -170,7 +170,8 @@ end = struct
 
 
   let expect_lambda
-      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool) (accs:t): unit =
+      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool)
+      (c:Context.t) (accs:t): unit =
     assert (0 <= ntvs);
     let accus = accs.accus in
     accs.arity      <- 0;
@@ -179,7 +180,7 @@ end = struct
       List.fold_left
         (fun lst acc ->
           try
-            Term_builder.expect_lambda ntvs nfgs is_quant is_pred acc;
+            Term_builder.expect_lambda ntvs nfgs is_quant is_pred c acc;
             acc::lst
           with Not_found ->
             lst)
@@ -350,7 +351,6 @@ let process_leaf
                 acc_lst))
         ^ "}"
       in
-      Context.print_local_contexts c;
       error_info info str
 
 
@@ -374,6 +374,7 @@ let analyze_expression
   let rec analyze
       (e:expression)
       (accs: Accus.t)
+      (c:Context.t)
       : unit =
     let nargs = Accus.expected_arity accs
     in
@@ -398,32 +399,32 @@ let analyze_expression
     | Exptrue             -> do_leaf (feat FNtrue)
     | Expnumber num       -> do_leaf (feat (FNnumber num))
     | Expop op            -> do_leaf (feat (FNoperator op))
-    | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs
-    | Unexp  (op,e)       -> application (Expop op) [|e|] accs
+    | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
+    | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
     | Funapp (Expdot(tgt,f),args) ->
         let arg_lst = tgt :: (arg_list args) in
         let args = Array.of_list arg_lst in
-        application f args accs
+        application f args accs c
     | Funapp (f,args)     ->
-        application f (Array.of_list (arg_list args)) accs
-    | Expparen e          -> analyze e accs
+        application f (Array.of_list (arg_list args)) accs c
+    | Expparen e          -> analyze e accs c
     | Expquantified (q,entlst,exp) ->
-        quantified q entlst exp accs
+        quantified q entlst exp accs c
     | Exppred (entlst,e) ->
         begin try
-          lambda entlst e false true false accs
+          lambda entlst e false true false accs c
         with Accus.Untypeable _ ->
           error_info entlst.i ("Predicate " ^
                                (string_of_expression (Exppred (entlst,e))) ^
                                " does not fit expected type")
         end
     | Expdot (tgt,f) ->
-        application f [|tgt|] accs
+        application f [|tgt|] accs c
     | ExpResult ->
         not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
     | Exparrow(entlst,e) ->
         begin try
-          lambda entlst e false false true accs
+          lambda entlst e false false true accs c
         with Accus.Untypeable _ ->
           error_info entlst.i ("Function " ^
                                (string_of_expression (Exparrow (entlst,e))) ^
@@ -438,7 +439,7 @@ let analyze_expression
     | Explist _ ->
         not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
     | Tupleexp (a,b) ->
-        application (Identifier ST.tuple) [|a;b|] accs
+        application (Identifier ST.tuple) [|a;b|] accs c
     | Expcolon (_,_) ->
         not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
     | Expassign (_,_) ->
@@ -454,14 +455,15 @@ let analyze_expression
       (f:expression)
       (args: expression array) (* unreversed, i.e. as in the source code *)
       (accs: Accus.t)
+      (c:Context.t)
       : unit =
     let nargs = Array.length args in
     assert (0 < nargs);
     Accus.expect_function nargs accs;
-    analyze f accs;
+    analyze f accs c;
     for i=0 to nargs-1 do
       Accus.expect_argument i accs;
-      analyze args.(i) accs
+      analyze args.(i) accs c
     done;
     Accus.complete_function nargs accs
 
@@ -470,13 +472,14 @@ let analyze_expression
       (entlst:entities list withinfo)
       (e:expression)
       (accs: Accus.t)
+      (c:Context.t)
       : unit =
     Accus.expect_function 1 accs;
     let qop = match q with Universal -> Allop | Existential -> Someop in
     process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
     begin try
-      lambda entlst e true true false accs
+      lambda entlst e true true false accs c
     with Accus.Untypeable _  -> assert false (* cannot happen in quantified *)
     end;
     Accus.complete_function 1 accs
@@ -488,22 +491,21 @@ let analyze_expression
       (is_pred: bool)
       (is_func: bool)
       (accs: Accus.t)
+      (c:Context.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    Context.push_with_gap entlst None is_pred is_func ntvs_gap c;
+    let c = Context.push_with_gap entlst None is_pred is_func ntvs_gap c in
     let ntvs      = Context.count_local_type_variables c
     and fargnames = Context.local_fargnames c
     and nfgs      = Context.count_last_formal_generics c in
-    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred accs;
-    analyze e accs;
+    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred c accs;
+    analyze e accs c;
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs;
-    Context.pop c
-
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs
   in
 
   let accs   = Accus.make is_bool c in
-  analyze exp accs;
+  analyze exp accs c;
   assert (not (Accus.is_empty accs));
 
   Accus.remove_dummies ie accs;

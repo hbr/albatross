@@ -16,8 +16,6 @@ type desc = {nbenv0:     int;
 
 type entry = {nbenv:  int;
               names:  int array;
-              imp_id: int;
-              all_id: int;
               mutable count: int;
               mutable nreq:  int   (* number of local assumptions *)
             }
@@ -25,7 +23,7 @@ type entry = {nbenv:  int;
 type t = {seq:  desc Seq.t;
           mutable entry: entry;
           mutable stack: entry list;
-          c: Context.t;
+          mutable c: Context.t;
           verbosity: int}
 
 let context (at:t): Context.t = at.c
@@ -99,28 +97,28 @@ let names (at:t): int array =
   at.entry.names
 
 let imp_id (at:t): int =
-  at.entry.imp_id
+  Context.implication_index at.c
 
 let all_id (at:t): int =
-  at.entry.all_id
+  Context.all_index at.c
 
 let all_id_outer (at:t): int =
-  at.entry.all_id - nbenv_local at
+  all_id at - nbenv_local at
 
 let some_id (at:t): int =
-  nbenv at + Feature_table.some_index
+  Context.some_index at.c
 
 let split_implication (t:term) (at:t): term * term =
-  Term.binary_split t at.entry.imp_id
+  Term.binary_split t (imp_id at)
 
 let split_all_quantified (t:term) (at:t): int * int array * term =
-  Term.quantifier_split t at.entry.all_id
+  Term.quantifier_split t (all_id at)
 
 let split_some_quantified (t:term) (at:t): int * int array * term =
   Term.quantifier_split t (some_id at)
 
 let implication (a:term) (b:term) (at:t): term =
-  Term.binary at.entry.imp_id a b
+  Term.binary (imp_id at) a b
 
 let implication_chain (ps: term list) (tgt:term) (at:t): term =
   Term.make_implication_chain ps tgt (imp_id at)
@@ -129,14 +127,14 @@ let split_implication_chain (t:term) (at:t): term list * term =
   Term.split_implication_chain t (imp_id at)
 
 let all_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
-  Term.quantified at.entry.all_id nargs names t
+  Term.quantified (all_id at) nargs names t
 
 let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
   Term.quantified (some_id at) nargs names t
 
 let all_quantified_outer (t:term) (at:t): term =
   let nargs  = nbenv_local at          in
-  let all_id = at.entry.all_id - nargs in
+  let all_id = (all_id at) - nargs in
   Term.quantified all_id nargs at.entry.names t
 
 let rec stacked_counts (pt:t): int list =
@@ -162,9 +160,7 @@ let make (verbosity:int): t =
    entry = {count   = 0;
             names   = [||];
             nbenv   = 0;
-            nreq    = 0;
-            imp_id  = Feature_table.implication_index;
-            all_id  = Feature_table.all_index};
+            nreq    = 0};
    stack = [];
    c = Context.make verbosity;
    verbosity = verbosity}
@@ -178,16 +174,15 @@ let push0 (nbenv:int) (names: int array) (at:t): unit =
     {at.entry with
      nreq   = 0;
      nbenv  = at.entry.nbenv + nbenv;
-     names  = names;
-     imp_id = at.entry.imp_id + nbenv;
-     all_id = at.entry.all_id + nbenv}
+     names  = names}
 
 
 
 let push (entlst:entities list withinfo) (at:t): unit =
   let c = context at in
   assert (depth at = Context.depth c);
-  Context.push entlst None true false c;
+  let c = Context.push entlst None true false c in
+  at.c <- c;
   let nbenv = Context.arity c
   and names = Context.local_fargnames c in
   assert (nbenv = Array.length names);
@@ -196,7 +191,8 @@ let push (entlst:entities list withinfo) (at:t): unit =
 
 let push_untyped (names:int array) (at:t): unit =
   let c = context at in
-  Context.push_untyped names c;
+  let c = Context.push_untyped names c in
+  at.c <- c;
   let nbenv = Context.arity c in
   assert (nbenv = Array.length names);
   assert (names = Context.local_fargnames c);
@@ -212,7 +208,7 @@ let keep (cnt:int) (at:t): unit =
 let pop (at:t): unit =
   assert (is_local at);
   assert (depth at = Context.depth (context at));
-  Context.pop (context at);
+  at.c <- Context.pop (context at);
   at.entry  <- List.hd at.stack;
   at.stack  <- List.tl at.stack;
   Seq.keep at.entry.count at.seq
