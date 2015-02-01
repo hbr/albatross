@@ -331,7 +331,7 @@ let analyze_feature
         end
     | _ -> assert false (* cannot happen *)
   in
-  let argnames = Context.local_fargnames context
+  let argnames = Context.local_argnames context
   and sign     = Context.signature context
   and tvs      = Context.tvs context
   in

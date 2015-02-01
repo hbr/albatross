@@ -15,7 +15,9 @@ type desc = {nbenv0:     int;
              proof_term: proof_term;}
 
 type entry = {names:  int array;
-              mutable count: int;
+              new_ctxt: bool;
+              mutable count: int;  (* number of assertions at the start
+                                      of the context *)
               mutable nreq:  int   (* number of local assumptions *)
             }
 
@@ -89,7 +91,11 @@ let count_last_local (pt:t): int =
 
 let count_arguments (at:t): int = Context.count_arguments at.c
 
-let count_last_arguments (at:t): int = Context.count_last_arguments at.c
+let count_last_arguments (at:t): int =
+  if at.entry.new_ctxt then
+    Context.count_last_arguments at.c
+  else
+    0
 
 let names (at:t): int array =
   at.entry.names
@@ -157,19 +163,21 @@ let make (verbosity:int): t =
   {seq   = Seq.empty ();
    entry = {count   = 0;
             names   = [||];
+            new_ctxt = true;
             nreq    = 0};
    stack = [];
    c = Context.make verbosity;
    verbosity = verbosity}
 
 
-let push0 (nbenv:int) (names: int array) (at:t): unit =
-  assert (nbenv = Array.length names);
+let push0 (names: int array) (new_ctxt:bool) (at:t): unit =
+  assert (0 = Array.length names || new_ctxt);
   at.entry.count <- Seq.count at.seq;
   at.stack       <- at.entry :: at.stack;
   at.entry       <-
     {at.entry with
      nreq   = 0;
+     new_ctxt = new_ctxt;
      names  = names}
 
 
@@ -179,20 +187,21 @@ let push (entlst:entities list withinfo) (at:t): unit =
   assert (depth at = Context.depth c);
   let c = Context.push entlst None true false c in
   at.c <- c;
-  let nbenv = Context.arity c
-  and names = Context.local_fargnames c in
-  assert (nbenv = Array.length names);
-  push0 nbenv names at
+  let names = Context.local_argnames c in
+  push0 names true at
+
 
 
 let push_untyped (names:int array) (at:t): unit =
-  let c = context at in
-  let c = Context.push_untyped names c in
-  at.c <- c;
-  let nbenv = Context.arity c in
-  assert (nbenv = Array.length names);
-  assert (names = Context.local_fargnames c);
-  push0 nbenv names at
+  let nargs = Array.length names in
+  if 0 < nargs then begin
+    let c = context at in
+    let c = Context.push_untyped names c in
+    at.c <- c;
+    assert (names = Context.local_argnames c);
+    push0 names true at
+  end else
+    push0 names false at
 
 
 
@@ -203,8 +212,9 @@ let keep (cnt:int) (at:t): unit =
 
 let pop (at:t): unit =
   assert (is_local at);
-  assert (depth at = Context.depth (context at));
-  at.c <- Context.pop (context at);
+  assert (depth at >= Context.depth (context at));
+  if at.entry.new_ctxt then
+    at.c <- Context.pop (context at);
   at.entry  <- List.hd at.stack;
   at.stack  <- List.tl at.stack;
   Seq.keep at.entry.count at.seq

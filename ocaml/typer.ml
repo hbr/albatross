@@ -496,7 +496,7 @@ let analyze_expression
     let ntvs_gap = Accus.ntvs_added accs in
     let c = Context.push_with_gap entlst None is_pred is_func ntvs_gap c in
     let ntvs      = Context.count_local_type_variables c
-    and fargnames = Context.local_fargnames c
+    and fargnames = Context.local_argnames c
     and nfgs      = Context.count_last_formal_generics c in
     Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred c accs;
     analyze e accs c;

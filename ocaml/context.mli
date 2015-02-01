@@ -89,7 +89,7 @@ val argument_type: int -> t -> type_term
 
 val fgnames: t   -> int array
 
-val local_fargnames: t -> int array
+val local_argnames: t -> int array
 
 val tvs: t -> Tvars.t
 

@@ -173,22 +173,22 @@ let ntvs (c:t): int =
 
 
 
-let entry_local_fargnames (e:entry): int array =
+let entry_local_argnames (e:entry): int array =
   Array.init e.nfargs_delta (fun i -> fst e.fargs.(i))
 
 
-let local_fargnames (c:t): int array = entry_local_fargnames c.entry
+let local_argnames (c:t): int array = entry_local_argnames c.entry
 
 
-let entry_fargnames (e:entry): int array =
+let entry_argnames (e:entry): int array =
   Array.map (fun (n,_) -> n) e.fargs
 
 
-let fargnames (c:t): int array = entry_fargnames c.entry
+let argnames (c:t): int array = entry_argnames c.entry
 
-let outer_fargnames (c:t): int array =
+let outer_argnames (c:t): int array =
   assert (not (is_global c));
-  entry_fargnames ((previous c).entry)
+  entry_argnames ((previous c).entry)
 
 
 let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
@@ -198,12 +198,12 @@ let fgnames (c:t): int array = entry_fgnames c.entry
 let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
 let string_of_term (t:term) (nanon:int) (c:t): string =
-  Feature_table.term_to_string t nanon (fargnames c) c.ft
+  Feature_table.term_to_string t nanon (argnames c) c.ft
 
 let string_of_term_outer (t:term) (nanon:int) (c:t): string =
   Feature_table.term_to_string t
     nanon
-    (outer_fargnames c)
+    (outer_argnames c)
     c.ft
 
 
