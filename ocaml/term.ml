@@ -12,6 +12,8 @@ type term =
     Variable    of int
   | Application of term * term array * bool      (* fterm, args, is_pred *)
   | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
+and formal  = int * term (* name, type *)
+and formals = formal array
 
 type type_term = term
 

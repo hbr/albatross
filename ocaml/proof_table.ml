@@ -10,21 +10,20 @@ open Container
 open Support
 open Printf
 
+module ASeq = Ass_seq
+
 type desc = {nbenv0:     int;
              term:       term;
              proof_term: proof_term;}
 
-type entry = {names:  int array;
-              new_ctxt: bool;
-              mutable count: int;  (* number of assertions at the start
-                                      of the context *)
-              mutable nreq:  int   (* number of local assumptions *)
-            }
-
-type t = {seq:  desc Seq.t;
-          mutable entry: entry;
-          mutable stack: entry list;
-          mutable c: Context.t;
+type t = {seq:       desc Ass_seq.t;
+          names:     int array;
+          new_ctxt:  bool;
+          c:         Context.t;
+          depth:     int;
+          count0:    int;      (* number of assertions at the start of the context *)
+          mutable nreq:  int;  (* number of local assumptions *)
+          prev:      t option;
           verbosity: int}
 
 let context (at:t): Context.t = at.c
@@ -48,41 +47,33 @@ let set_interface_check (pub_used:IntSet.t) (at:t): unit =
   Context.set_interface_check pub_used at.c
 
 
-let depth (at:t): int =
-  List.length at.stack
+let depth (at:t): int = at.depth
 
-let is_global (at:t): bool =
-  at.stack = []
+let is_global (at:t): bool = not (Option.has at.prev)
 
 let is_local (at:t): bool =
   not (is_global at)
 
+let previous (at:t): t =
+  match at.prev with
+    None -> assert false
+  | Some x -> x
+
+
 let is_toplevel (at:t): bool =
-  Mylist.is_singleton at.stack
+  not (is_global at) && is_global (previous at)
+
 
 let count (at:t): int =
-  Seq.count at.seq
-
+  Ass_seq.count at.seq
 
 let count_previous (at:t): int =
-  if is_global at then
-    0
-  else
-    (List.hd at.stack).count
+  at.count0
 
 
-let count_global (pt:t): int =
-  let rec count (lst: entry list): int =
-    match lst with
-      []     -> assert false
-    | [e]    -> e.count
-    | _::lst -> count lst
-  in
-  if pt.stack = []
-  then
-    Seq.count pt.seq
-  else
-    count pt.stack
+
+let count_global (at:t): int =
+  Ass_seq.count_first at.seq
 
 
 let count_last_local (pt:t): int =
@@ -92,13 +83,18 @@ let count_last_local (pt:t): int =
 let count_arguments (at:t): int = Context.count_arguments at.c
 
 let count_last_arguments (at:t): int =
-  if at.entry.new_ctxt then
+  if at.new_ctxt then
     Context.count_last_arguments at.c
   else
     0
 
+let descriptor (i:int) (at:t): desc =
+  assert (i < count at);
+  Ass_seq.elem i at.seq
+
+
 let names (at:t): int array =
-  at.entry.names
+  at.names
 
 let imp_id (at:t): int =
   Context.implication_index at.c
@@ -139,11 +135,7 @@ let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
 let all_quantified_outer (t:term) (at:t): term =
   let nargs  = count_last_arguments at          in
   let all_id = (all_id at) - nargs in
-  Term.quantified all_id nargs at.entry.names t
-
-let rec stacked_counts (pt:t): int list =
-  List.map (fun e -> e.count) pt.stack
-
+  Term.quantified all_id nargs at.names t
 
 let string_of_term (t:term) (at:t): string =
   Context.string_of_term t 0 at.c
@@ -160,64 +152,56 @@ let expand_term (t:term) (at:t): term =
 
 
 let make (verbosity:int): t =
-  {seq   = Seq.empty ();
-   entry = {count   = 0;
-            names   = [||];
-            new_ctxt = true;
-            nreq    = 0};
-   stack = [];
+  {seq      = Ass_seq.empty ();
+   depth    = 0;
+   count0   = 0;
+   names    = [||];
+   new_ctxt = true;
+   nreq    = 0;
+   prev    = None;
    c = Context.make verbosity;
    verbosity = verbosity}
 
 
-let push0 (names: int array) (new_ctxt:bool) (at:t): unit =
+let push0 (names: int array) (new_ctxt:bool) (c:Context.t) (at:t): t =
   assert (0 = Array.length names || new_ctxt);
-  at.entry.count <- Seq.count at.seq;
-  at.stack       <- at.entry :: at.stack;
-  at.entry       <-
-    {at.entry with
-     nreq   = 0;
-     new_ctxt = new_ctxt;
-     names  = names}
+  {at with
+   seq = Ass_seq.clone at.seq;
+   names = names;
+   new_ctxt = new_ctxt;
+   c        = c;
+   depth    = 1 + at.depth;
+   count0   = count at;
+   nreq     = 0;
+   prev     = Some at}
 
 
 
-let push (entlst:entities list withinfo) (at:t): unit =
+let push (entlst:entities list withinfo) (at:t): t =
   let c = context at in
   assert (depth at = Context.depth c);
   let c = Context.push entlst None true false c in
-  at.c <- c;
   let names = Context.local_argnames c in
-  push0 names true at
+  push0 names true c at
 
 
 
-let push_untyped (names:int array) (at:t): unit =
+let push_untyped (names:int array) (at:t): t =
   let nargs = Array.length names in
+  let c = context at in
   if 0 < nargs then begin
-    let c = context at in
     let c = Context.push_untyped names c in
-    at.c <- c;
     assert (names = Context.local_argnames c);
-    push0 names true at
+    push0 names true c at
   end else
-    push0 names false at
+    push0 names false c at
 
 
 
-let keep (cnt:int) (at:t): unit =
-  assert (count_previous at <= cnt);
-  Seq.keep cnt at.seq
-
-
-let pop (at:t): unit =
+let pop (at:t): t =
   assert (is_local at);
   assert (depth at >= Context.depth (context at));
-  if at.entry.new_ctxt then
-    at.c <- Context.pop (context at);
-  at.entry  <- List.hd at.stack;
-  at.stack  <- List.tl at.stack;
-  Seq.keep at.entry.count at.seq
+  previous at
 
 
 
@@ -225,7 +209,7 @@ let term (i:int) (at:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
    *)
   assert (i < count at);
-  let desc = Seq.elem i at.seq in
+  let desc = descriptor i at in
   desc.term, desc.nbenv0
 
 
@@ -233,7 +217,7 @@ let nbenv_term (i:int) (at:t): int =
   (** The number of variables of the environment of the  [i]th proved term.
    *)
   assert (i < count at);
-  (Seq.elem i at.seq).nbenv0
+  (descriptor i at).nbenv0
 
 
 
@@ -241,7 +225,7 @@ let local_term (i:int) (at:t): term =
   (** The [i]th proved term in the local environment.
    *)
   assert (i < count at);
-  let desc = Seq.elem i at.seq in
+  let desc = descriptor i at in
   let n_up = count_arguments at - desc.nbenv0
   in
   Term.up n_up desc.term
@@ -275,7 +259,7 @@ let discharged_assumptions (i:int) (at:t): int * int array * term =
   in
   let imp_id = n + imp_id at in
   let tref = ref tgt in
-  for k = cnt0 + at.entry.nreq - 1 downto cnt0 do
+  for k = cnt0 + at.nreq - 1 downto cnt0 do
     let t = local_term k at in
     let t = Term.up n t in
     tref := Term.binary imp_id t !tref
@@ -298,15 +282,15 @@ let discharged_term (i:int) (at:t): term =
 
 let is_axiom (i:int) (at:t): bool =
   assert (i < count at);
-  let desc = Seq.elem i at.seq in
+  let desc = descriptor i at in
   match desc.proof_term with
     Axiom _ -> true
-  | _            -> false
+  | _       -> false
 
 
 let is_assumption (i:int) (at:t): bool =
   assert (i < count at);
-  let desc = Seq.elem i at.seq in
+  let desc = descriptor i at in
   match desc.proof_term with
     Assumption _ -> true
   | _            -> false
@@ -314,23 +298,23 @@ let is_assumption (i:int) (at:t): bool =
 
 let proof_term (i:int) (at:t): proof_term =
   assert (i < count at);
-  (Seq.elem i at.seq).proof_term
+  (descriptor i at).proof_term
 
 
 let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
-    Seq.push {nbenv0 = count_arguments at;
-              term   = t;
-              proof_term = pt} at.seq
+    Ass_seq.push {nbenv0 = count_arguments at;
+                  term   = t;
+                  proof_term = pt} at.seq
   in
   match pt with
     Assumption _ ->
       let idx = count at in
-      assert (idx = count_previous at + at.entry.nreq);
+      assert (idx = count_previous at + at.nreq);
       raw_add ();
-      at.entry.nreq <- at.entry.nreq + 1
+      at.nreq <- at.nreq + 1
   | _ ->
       raw_add ()
 
@@ -572,7 +556,7 @@ let count_assumptions (pt_arr:proof_term array): int =
 
 
 let arguments_string (at:t): string =
-  let names = Array.to_list at.entry.names in
+  let names = Array.to_list at.names in
   let str = String.concat "," (List.map ST.string names) in
   if str = "" then str
   else "(" ^ str ^ ")"
@@ -583,24 +567,24 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at
   and cnt0    = count at
   in
-  let prefix (d:int): string = String.make (4*(d-depth_0)) ' '
-  in
-  let print (t:term) =
-    printf "%s%3d %s"
-      (prefix (depth at)) (count at) (string_of_term t at)
-  and print_all () =
-    let pre = prefix (depth at - 1) in
-    printf "%s%3d all%s\n%s    require\n"
-      pre (count at) (arguments_string at) pre
-  and print_str (str:string):unit =
-    let pre = prefix (depth at - 1) in
-    printf "%s    %s\n" pre str
-  in
-  let print0 (t:term) = print t; printf "\n"
-  and print1 (t:term) (i:int) = print t; printf "\t{%d}\n" i
-  and print2 (t:term) (i:int) (j:int) = print t; printf "\t{%d,%d}\n" i j
-  in
-  let rec reconstruct (pt:proof_term): term =
+  let rec reconstruct (pt:proof_term) (at:t): term =
+    let prefix (d:int): string = String.make (4*(d-depth_0)) ' '
+    in
+    let print (t:term) =
+      printf "%s%3d %s"
+        (prefix (depth at)) (count at) (string_of_term t at)
+    and print_all () =
+      let pre = prefix (depth at - 1) in
+      printf "%s%3d all%s\n%s    require\n"
+        pre (count at) (arguments_string at) pre
+    and print_str (str:string):unit =
+      let pre = prefix (depth at - 1) in
+      printf "%s    %s\n" pre str
+    in
+    let print0 (t:term) = print t; printf "\n"
+    and print1 (t:term) (i:int) = print t; printf "\t{%d}\n" i
+    and print2 (t:term) (i:int) (j:int) = print t; printf "\t{%d,%d}\n" i j
+    in
     let cnt = count at in
     match pt with
       Axiom t | Assumption t ->
@@ -635,7 +619,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         if trace then print1 t idx;
         t
     | Subproof (nargs,names,res_idx,pt_arr) ->
-        push_untyped names at;
+        let at = push_untyped names at in
         let pt_len = Array.length pt_arr in
         let pt_nass =
           if trace then count_assumptions pt_arr else 0
@@ -644,7 +628,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         if trace then print_all ();
         for i = 0 to pt_len - 1 do
           if trace && i = pt_nass then print_str "check";
-          let t = reconstruct pt_arr.(i) in
+          let t = reconstruct pt_arr.(i) at in
           add_proved_0 t pt_arr.(i) at
         done;
         if trace then begin
@@ -653,15 +637,9 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
           print_str "end";
         end;
         let term = discharged_term res_idx at in
-        pop at;
         term
   in
-  try
-    reconstruct pt
-  with Illegal_proof_term ->
-    for k = depth_0 to depth at - 1 do pop at done;
-    keep cnt0 at;
-    raise Illegal_proof_term
+  reconstruct pt at
 
 
 
@@ -758,7 +736,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
      Note: If [i] is not in the current environment it cannot be quantified!
    *)
   let cnt0 = count_previous at
-  and nreq = at.entry.nreq
+  and nreq = at.nreq
   and pt   = proof_term i at in
   let n,nms,pt =
     match pt with
@@ -797,7 +775,7 @@ let discharged (i:int) (at:t): term * proof_term =
   in
   let nargs = n1 + count_last_arguments at
   and nms   = Array.append nms1 (names at)
-  and nreq  = at.entry.nreq
+  and nreq  = at.nreq
   and cnt0  = count_previous at
   and axiom = is_axiom i at
   in

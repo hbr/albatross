@@ -58,13 +58,10 @@ val variant:       int -> int -> int -> t -> term
 val specialized: int -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
-val stacked_counts: t -> int list
-
 val make: int -> t
-val push: entities list withinfo -> t -> unit
-val push_untyped: int array -> t -> unit
-val pop:  t -> unit
-val keep: int -> t -> unit
+val push: entities list withinfo -> t -> t
+val push_untyped: int array -> t -> t
+val pop:  t -> t
 
 val definition: int -> int -> t -> term
 

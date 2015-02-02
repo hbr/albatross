@@ -30,7 +30,7 @@ type gdesc = {mutable pub: bool;
               cls: int;
               mutable defer: bool}
 
-type t = {base:     Proof_table.t;
+type t = {mutable base: Proof_table.t;
           terms:    RD.t Seq.t;
           gseq:     gdesc Seq.t;
           mutable depth:    int;
@@ -844,7 +844,7 @@ let push0 (nbenv:int) (pc:t): unit =
 let push (entlst:entities list withinfo) (pc:t): unit =
   close pc;
   assert (not (has_work pc));
-  Proof_table.push entlst pc.base;
+  pc.base <- Proof_table.push entlst pc.base;
   let nbenv = Proof_table.count_arguments pc.base in
   push0 nbenv pc
 
@@ -852,7 +852,7 @@ let push (entlst:entities list withinfo) (pc:t): unit =
 let push_untyped (names:int array) (pc:t): unit =
   close pc;
   assert (not (has_work pc));
-  Proof_table.push_untyped names pc.base;
+  pc.base <- Proof_table.push_untyped names pc.base;
   let nbenv = Proof_table.count_arguments pc.base in
   push0 nbenv pc
 
@@ -870,7 +870,7 @@ let pop (pc:t): unit =
   Seq.keep pc.entry.count pc.terms;
   pc.bwd_used <-
     List.filter (fun i -> i < pc.entry.count) pc.bwd_used;
-  Proof_table.pop pc.base
+  pc.base <- Proof_table.pop pc.base
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
