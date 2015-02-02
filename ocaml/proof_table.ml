@@ -565,7 +565,6 @@ let arguments_string (at:t): string =
 
 let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at
-  and cnt0    = count at
   in
   let rec reconstruct (pt:proof_term) (at:t): term =
     let prefix (d:int): string = String.make (4*(d-depth_0)) ' '

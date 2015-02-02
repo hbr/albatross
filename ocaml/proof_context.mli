@@ -21,6 +21,10 @@ val is_private:         t -> bool
 val is_public:          t -> bool
 val is_interface_use:   t -> bool
 val is_interface_check: t -> bool
+val is_tracing:         t -> bool
+val verbosity:          t -> int
+val trace_prefix:       t -> string
+val trace_prefix_0:     t -> string
 val prover_strength:    t -> int
 val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
@@ -34,10 +38,9 @@ val string_of_term_i: int -> t -> string
 
 val make:      int -> t
 
-val push: entities list withinfo -> t -> unit
-val push_untyped: int array -> t -> unit
-val pop:          t -> unit
-val keep:         int -> t -> unit
+val push: entities list withinfo -> t -> t
+val push_untyped: int array -> t -> t
+val pop:          t -> t
 
 val depth:     t -> int
 
@@ -52,6 +55,7 @@ val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
 val discharged:         int  -> t -> term * proof_term
+val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> term -> proof_term -> t -> int
 val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
 val premises:           int -> t -> (term*bool) list

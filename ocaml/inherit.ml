@@ -61,18 +61,12 @@ let prove (t:term) (pc:PC.t): unit =
     let ifc_check = PC.is_interface_check pc
     and strength  = PC.prover_strength pc
     in
-    let push () =
+    let pc =
       if ifc_check then PC.push_untyped [||] pc
-    and pop () =
-      if ifc_check then PC.pop pc
+      else pc
     in
-    try
-      push ();
-      let _ = Prover.prove t strength pc in
-      pop ()
-    with Not_found ->
-      pop ();
-      raise Not_found
+    let _ = Prover.prove t strength pc in
+    ()
   end
 
 

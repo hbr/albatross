@@ -24,71 +24,55 @@ let close_assumptions (pc:PC.t): unit =
   PC.close_assumptions pc
 
 
-let push (nms:int array) (pc:PC.t): unit =
+let push (nms:int array) (pc:PC.t): PC.t =
   PC.push_untyped nms pc
 
 
-let push_empty (pc:PC.t): unit =
+let push_empty (pc:PC.t): PC.t =
   push [||] pc
 
 
-let push_alternative (pc:PC.t): unit =
-  push_empty pc;
-  close_assumptions pc
-
-
-
-let discharge (idx:int) (pc:PC.t): int =
+let discharge (idx:int) (pc:PC.t): int * PC.t =
   assert (not (PC.is_global pc));
   let t,pt = PC.discharged idx pc in
-  PC.pop pc;
-  PC.add_proved false (-1) t pt pc
+  let pc = PC.pop pc in
+  let idx = PC.add_proved false (-1) t pt pc in
+  idx, pc
 
 
 
-let rec discharge_downto (i:int) (idx:int) (pc:PC.t): int =
+let rec discharge_downto (i:int) (idx:int) (pc:PC.t): int * PC.t =
   assert (0 <= i);
   assert (i <= PC.depth pc);
   if PC.depth pc = i then
-    idx
+    idx, pc
   else begin
-    let idx = discharge idx pc in
+    let idx,pc = discharge idx pc in
     discharge_downto i idx pc
   end
 
 
-let rec pop_downto (i:int) (pc:PC.t): unit =
-  assert (0 <= i);
-  assert (i <= PC.depth pc);
-  if PC.depth pc = i then
-    ()
-  else begin
-    PC.pop pc;
-    pop_downto i pc
-  end
 
-
-
-let enter (t:term) (pc:PC.t): term =
+let enter (t:term) (pc:PC.t): term * PC.t =
   (* Context has to be clean so that assumptions can be pushed. *)
-  let rec do_implication (t:term): term =
+  let rec do_implication (t:term) (pc:PC.t): term * PC.t =
     try
       let a,b = PC.split_implication t pc in
       add_assumption a pc;
-      do_implication b
+      do_implication b pc
     with Not_found ->
       close_assumptions pc;
-      do_all_quantified t
-  and do_all_quantified (t:term): term =
+      do_all_quantified t pc
+  and do_all_quantified (t:term) (pc:PC.t): term * PC.t =
     try
       let n,names,t = PC.split_all_quantified t pc in
       assert (n = Array.length names);
-      push names pc;
-      do_implication t
+      let pc = push names pc in
+      do_implication t pc
     with Not_found ->
-      t
+      t, pc
   in
-  do_implication t
+  do_implication t pc
 
 
 
@@ -115,38 +99,38 @@ let calc_blacklist (cons:bool) (idx:int) (used:IntSet.t) (pc:PC.t): IntSet.t =
  *)
 
 let prove (goal:term) (strength:int) (pc:PC.t): int =
-  let rec prove0 (goal:term) (black:IntSet.t) (level:int): int =
+  let rec prove0 (goal:term) (black:IntSet.t) (level:int) (pc:PC.t): int =
     assert (level < 20); (* debug: infinite loop detection *)
-    let rec alternatives (lst: int list) (goal:term): int =
-      let alternative (a_idx:int): int =
-        let rec premises (ps:(term*bool) list) (i:int): int =
+    let rec alternatives (lst: int list) (goal:term) (pc:PC.t): int =
+      let alternative (a_idx:int) (pc:PC.t): int =
+        let rec premises (ps:(term*bool) list) (i:int) (pc:PC.t): int =
           match ps with
             [] -> i
           | (p,cons)::ps ->
-              let p_idx = prove0 p (calc_blacklist cons a_idx black pc) (level+1) in
+              let p_idx =
+                prove0 p (calc_blacklist cons a_idx black pc) (level+1) pc in
               let i = PC.add_mp p_idx i false pc in
-              premises ps i
+              premises ps i pc
         in
-        push_alternative pc;
+        let pc = push_empty pc in
         let ps = PC.premises a_idx pc in
-        let idx = premises ps a_idx in
-        discharge idx pc
+        let idx = premises ps a_idx pc in
+        let idx,_ = discharge idx pc in
+        idx
       in
       match lst with
         [] ->
           PC.failed_goal goal pc;
           raise Not_found
       | idx::lst ->
-          let depth = PC.depth pc in
           try
-            alternative idx
+            alternative idx pc
           with Not_found ->
-            pop_downto depth pc;
-            alternatives lst goal
+            alternatives lst goal pc
     in
     let depth = PC.depth pc in
-    push_empty pc;
-    let goal = enter goal pc in
+    let pc = push_empty pc in
+    let goal,pc = enter goal pc in
     PC.trying_goal goal pc;
     let res =
       try
@@ -155,17 +139,11 @@ let prove (goal:term) (strength:int) (pc:PC.t): int =
         if strength = 0 && 1 <= level then
           raise Not_found;
         let lst = PC.find_backward_goal goal black pc in
-        alternatives lst goal
+        alternatives lst goal pc
     in
     PC.proved_goal goal pc;
-    let res = discharge_downto depth res pc in
+    let res,pc = discharge_downto depth res pc in
     assert (res < count_terms pc);
     res
   in
-  let depth = PC.depth pc in
-  try
-    let res = prove0 goal IntSet.empty 0 in
-    res
-  with Not_found ->
-    pop_downto depth pc;
-    raise Not_found
+  prove0 goal IntSet.empty 0 pc

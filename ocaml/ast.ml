@@ -10,6 +10,7 @@ open Signature
 open Support
 open Printf
 
+module PC = Proof_context
 
 type kind =
     PAxiom
@@ -158,7 +159,7 @@ let rec make_proof
     (elst: compound)
     (pc:   Proof_context.t)
     : unit =
-  let prove_check_expression (ie:info_expression): unit =
+  let prove_check_expression (ie:info_expression) (pc:PC.t): unit =
     let c = Proof_context.context pc in
     match ie.v with
       Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
@@ -179,16 +180,15 @@ let rec make_proof
         let _ = prove_basic_expression ie pc in
         ()
   in
-  Proof_context.push entlst pc;
+  let pc1 = Proof_context.push entlst pc in
   let defer = is_deferred kind
-  and owner = Proof_context.owner pc
+  and owner = Proof_context.owner pc1
   in
   if defer then
-    Proof_context.check_deferred pc;  (* owner class has to be deferred *)
-  add_assumptions rlst pc;
-  List.iter (fun ie -> prove_check_expression ie) clst;
-  let pair_lst = prove_ensure elst kind pc in
-  Proof_context.pop pc;
+    Proof_context.check_deferred pc1;  (* owner class has to be deferred *)
+  add_assumptions rlst pc1;
+  List.iter (fun ie -> prove_check_expression ie pc1) clst;
+  let pair_lst = prove_ensure elst kind pc1 in
   add_proved defer owner pair_lst pc
 
 

@@ -22,24 +22,25 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable bwd:   Term_table.t;
               mutable fwd:   Term_table.t;
               mutable left:  Term_table.t;
-              mutable slots: slot_data array;
-              mutable count: int}
+              mutable slots: slot_data array}
 
 type gdesc = {mutable pub: bool;
               mdl: int;
               cls: int;
               mutable defer: bool}
 
-type t = {mutable base: Proof_table.t;
-          terms:    RD.t Seq.t;
-          gseq:     gdesc Seq.t;
-          mutable depth:    int;
+type t = {base:   Proof_table.t;
+          terms:  RD.t Ass_seq.t;
+          gseq:   gdesc Seq.t;
+          depth:  int;
           mutable work:   int list;
-          mutable entry:  entry;
-          mutable stack:  entry list;
-          mutable trace:  bool;
-          mutable bwd_used:  int list;
+          count0: int;
+          entry:  entry;
+          prev:   t option;
+          trace:  bool;
           verbosity: int}
+
+let verbosity (pc:t): int = pc.verbosity
 
 let is_tracing (pc:t): bool = pc.verbosity >= 3
 
@@ -78,8 +79,7 @@ let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
 let make_entry () =
   let e = Term_table.empty in
     {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
-     slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty};
-     count = 0}
+     slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
 
 let copied_entry (e:entry): entry =
   {prvd     = e.prvd;
@@ -87,8 +87,7 @@ let copied_entry (e:entry): entry =
    bwd      = e.bwd;
    fwd      = e.fwd;
    left     = e.left;
-   slots    = e.slots;
-   count    = e.count}
+   slots    = Array.copy e.slots}
 
 
 
@@ -96,13 +95,13 @@ let copied_entry (e:entry): entry =
 let make (verbosity:int): t  =
   let res =
     {base     = Proof_table.make verbosity;
-     terms    = Seq.empty ();
+     terms    = Ass_seq.empty ();
      gseq     = Seq.empty ();
      depth    = 0;
-     bwd_used = [];
+     prev     = None;
      work     = [];
+     count0   = 0;
      entry    = make_entry ();
-     stack    = [];
      trace    = verbosity >= 3;
      verbosity= verbosity}
   in
@@ -124,7 +123,7 @@ let nbenv_local (at:t): int = Proof_table.count_last_arguments at.base
 
 let count_base (pc:t): int = Proof_table.count pc.base
 
-let count (pc:t): int = Seq.count pc.terms
+let count (pc:t): int = Ass_seq.count pc.terms
 
 let is_consistent (pc:t): bool =
   count_base pc = count pc
@@ -155,7 +154,7 @@ let depth (pc:t): int = pc.depth
 
 let rule_data (idx:int) (pc:t): RD.t =
   assert (idx < count pc);
-  Seq.elem idx pc.terms
+  Ass_seq.elem idx pc.terms
 
 
 
@@ -483,7 +482,7 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
   let res = try find t pc with Not_found -> cnt in
   let dup = res <> cnt in
   if pc.trace then trace_term t rd search dup pc;
-  Seq.push rd pc.terms;
+  Ass_seq.push rd pc.terms;
   if search && not dup then
     add_last_to_tables pc;
   res
@@ -827,50 +826,44 @@ let proved_goal (g:term) (pc:t): unit =
       (trace_prefix pc) (string_of_term g pc)
 
 
-let keep (cnt:int) (pc:t): unit =
-  assert (count_previous pc <= cnt);
-  Seq.keep cnt pc.terms
+let push0 (base:Proof_table.t) (pc:t): t =
+  let nbenv = Proof_table.count_arguments base in
+  let res = {pc with
+             base  = base;
+             terms = Ass_seq.clone pc.terms;
+             work  = pc.work;
+             depth = 1 + pc.depth;
+             count0 = count pc;
+             entry  = copied_entry pc.entry;
+             prev   = Some pc} in
+  push_slots nbenv res;
+  if res.trace then
+    trace_push res;
+  res
 
 
-let push0 (nbenv:int) (pc:t): unit =
-  pc.entry.count <- Seq.count pc.terms;
-  pc.stack <- (copied_entry pc.entry)::pc.stack;
-  push_slots nbenv pc;
-  pc.depth <- pc.depth + 1;
-  if pc.trace then
-    trace_push pc
 
-
-let push (entlst:entities list withinfo) (pc:t): unit =
+let push (entlst:entities list withinfo) (pc:t): t =
   close pc;
   assert (not (has_work pc));
-  pc.base <- Proof_table.push entlst pc.base;
-  let nbenv = Proof_table.count_arguments pc.base in
-  push0 nbenv pc
+  let base = Proof_table.push entlst pc.base in
+  push0 base pc
 
 
-let push_untyped (names:int array) (pc:t): unit =
+let push_untyped (names:int array) (pc:t): t =
   close pc;
   assert (not (has_work pc));
-  pc.base <- Proof_table.push_untyped names pc.base;
-  let nbenv = Proof_table.count_arguments pc.base in
-  push0 nbenv pc
+  let base = Proof_table.push_untyped names pc.base in
+  push0 base pc
 
 
-let pop (pc:t): unit =
+let pop (pc:t): t =
   assert (is_local pc);
-  clear_work pc;
-  assert (not (has_work pc));
   if pc.trace then
     trace_pop pc;
-  pc.work  <- [];
-  pc.entry <- List.hd pc.stack;
-  pc.stack <- List.tl pc.stack;
-  pc.depth <- pc.depth - 1;
-  Seq.keep pc.entry.count pc.terms;
-  pc.bwd_used <-
-    List.filter (fun i -> i < pc.entry.count) pc.bwd_used;
-  pc.base <- Proof_table.pop pc.base
+  match pc.prev with
+    None -> assert false
+  | Some x -> x
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
