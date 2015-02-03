@@ -42,7 +42,7 @@ end = struct
             mutable ntvs_added: int;
             mutable arity:  int;
             trace: bool;
-            c: Context.t}
+            mutable c: Context.t}
 
   exception Untypeable of Term_builder.t list
 
@@ -93,11 +93,9 @@ end = struct
     "}"
 
 
-  let trace_accus (outer:bool) (accs:t): unit =
+  let trace_accus (accs:t): unit =
     let accus = accs.accus in
-    let string_of_term t =
-      if outer then Context.string_of_term_outer t 0 accs.c
-      else Context.string_of_term t 0 accs.c in
+    let string_of_term t = Context.string_of_term t 0 accs.c in
     List.iteri
       (fun i acc ->
         let t = Term_builder.head_term acc in
@@ -120,7 +118,7 @@ end = struct
       accs.accus;
     if accs.trace then begin
       printf "  complete function with %d arguments\n" nargs;
-      trace_accus false accs
+      trace_accus accs
     end
 
 
@@ -162,7 +160,7 @@ end = struct
     end;
     if accs.trace then begin
       printf "  add_leaf\n";
-      trace_accus false accs
+      trace_accus accs
     end;
     if accs.accus = [] then
       raise (Untypeable accus)
@@ -176,6 +174,7 @@ end = struct
     let accus = accs.accus in
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
+    accs.c          <- c;
     accs.accus <-
       List.fold_left
         (fun lst acc ->
@@ -195,9 +194,10 @@ end = struct
     List.iter
       (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs.accus;
     accs.ntvs_added <- ntvs_added;
+    accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete lambda\n";
-      trace_accus true accs
+      trace_accus accs
     end
 
 
@@ -223,7 +223,7 @@ end = struct
     List.iter (fun tb -> Term_builder.specialize_term tb) accs.accus;
     if accs.trace then begin
       printf "  update terms\n";
-      trace_accus false accs
+      trace_accus accs
     end
 
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
