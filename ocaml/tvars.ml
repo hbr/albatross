@@ -285,11 +285,14 @@ let augment_fgs
   and nfgs0 = count_fgs tvs in
   let fgconcepts0 =
     Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.fgconcepts
+  and concepts =
+    Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.concepts
   and fgconcepts1 =
     Array.map (fun tp -> Term.upbound nfgs0 nfgs1 tp) fgconcepts
   in
   let fgconcepts1 = Array.map (fun tp -> Term.up cnt tp) fgconcepts1 in
   {tvs with
+   concepts   = concepts;
    fgnames    = Array.append fgnames    tvs.fgnames;
    fgconcepts = Array.append fgconcepts1 fgconcepts0}
 
