@@ -88,6 +88,13 @@ let count_last_arguments (at:t): int =
   else
     0
 
+
+let last_arguments_string (at:t): string =
+  if at.new_ctxt then
+    Context.local_arguments_string at.c
+  else
+    ""
+
 let descriptor (i:int) (at:t): desc =
   assert (i < count at);
   Ass_seq.elem i at.seq

@@ -131,7 +131,7 @@ let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
   in
   let t = get_term ie pc in
   try
-    Prover.prove t strength pc
+    Prover2.prove t strength pc
   with Not_found ->
     error_info ie.i "Cannot prove"
 

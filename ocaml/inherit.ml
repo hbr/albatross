@@ -65,7 +65,7 @@ let prove (t:term) (pc:PC.t): unit =
       if ifc_check then PC.push_untyped [||] pc
       else pc
     in
-    let _ = Prover.prove t strength pc in
+    let _ = Prover2.prove t strength pc in
     ()
   end
 

@@ -31,7 +31,8 @@ val count:       t -> int
 val count_previous: t -> int
 val count_global:   t -> int
 val count_arguments:       t -> int
-val count_last_arguments: t -> int
+val count_last_arguments:  t -> int
+val last_arguments_string: t -> string
 val names:       t -> int array
 val all_id:      t -> int
 val some_id:     t -> int

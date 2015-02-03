@@ -794,8 +794,7 @@ let push_slots (nbenv:int) (pc:t): unit =
 
 
 let trace_push (pc:t): unit =
-  let c = context pc in
-  let str = Context.local_arguments_string c in
+  let str = Proof_table.last_arguments_string pc.base in
   let prefix = trace_prefix_0 pc in
   if str <> "" then printf "%sall%s\n" prefix str;
   printf "%srequire\n" prefix
