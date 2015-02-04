@@ -55,6 +55,8 @@ module Proof_term: sig
 
   val print_pt_arr:  string -> int -> t array -> unit
 
+  val print_pt: string -> int -> t -> unit
+
   val term_up: int -> t -> t
 
   val split_subproof: t -> int * int array * int * t array
@@ -509,12 +511,17 @@ end = struct
     for k = 0 to n-1 do
       let print_prefix () = printf "%s%3d " prefix (start+k) in
       match pt_arr.(k) with
-        Axiom t             -> print_prefix (); printf "Axiom\n"
-      | Assumption t        -> print_prefix (); printf "Assumption\n"
-      | Detached (i,j)      -> print_prefix (); printf "Detached %d %d\n" i j
-      | Specialize (i,args) -> print_prefix (); printf "Specialize %d\n" i
+        Axiom t             ->
+          print_prefix (); printf "Axiom %s\n" (Term.to_string t)
+      | Assumption t        ->
+          print_prefix (); printf "Assumption %s\n" (Term.to_string t)
+      | Detached (i,j)      ->
+          print_prefix (); printf "Detached %d %d\n" i j
+      | Specialize (i,args) ->
+          print_prefix (); printf "Specialize %d\n" i
       | Eval (i,_)          -> print_prefix (); printf "Eval %d\n" i
-      | Eval_bwd _          -> print_prefix (); printf "Eval_bwd\n"
+      | Eval_bwd (t,_)      ->
+          print_prefix (); printf "Eval_bwd %s\n" (Term.to_string t)
       | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
       | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
       | Subproof (nb,nms,i,pt_arr) ->
@@ -522,6 +529,10 @@ end = struct
           print_pt_arr (prefix^"  ") (start+k) pt_arr
       | Inherit (i,bcls,cls)  -> print_prefix (); printf "Inherit %d\n" i
     done
+
+  let print_pt (prefix:string) (start:int) (pt:t): unit =
+    print_pt_arr prefix start [|pt|]
+
 
   let short_string (pt:t): string =
     match pt with

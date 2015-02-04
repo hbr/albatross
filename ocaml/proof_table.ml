@@ -434,9 +434,9 @@ let term_of_eval (i:int) (e:Eval.t) (at:t): term =
   let ok = (Term.equivalent t  ta) in
   if not ok then begin
     printf "evaluated terms do not coincide\n";
-    printf "   term %3d  %s %s\n" i (string_of_term t at) (Term.to_string t);
-    printf "   eval      %s %s\n" (string_of_term ta at) (Term.to_string ta);
-    printf "   evaluated %s %s\n" (string_of_term tb at) (Term.to_string tb);
+    printf "   term %3d  %s\n" i (string_of_term t at);
+    printf "   eval      %s\n" (string_of_term ta at);
+    printf "   evaluated %s\n" (string_of_term tb at);
     raise Illegal_proof_term
   end;
   tb
@@ -446,7 +446,7 @@ let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
   let ta,tb = reconstruct_evaluation e at in
   let ok = (t = ta) in
   if not ok then begin
-    printf "evaluated terms do not coincide\n";
+    printf "evaluated terms (bwd) do not coincide\n";
     printf "   term      %s\n" (string_of_term t at);
     printf "   eval      %s\n" (string_of_term ta at);
     printf "   evaluated %s\n" (string_of_term tb at);
@@ -574,55 +574,55 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
   let depth_0 = depth at
   in
   let rec reconstruct (pt:proof_term) (at:t): term =
-    let prefix (d:int): string = String.make (4*(d-depth_0)) ' '
+    let prefix (d:int): string = String.make (4*(d+1-depth_0)) ' '
     in
-    let print (t:term) =
+    let print (t:term) (at:t) =
       printf "%s%3d %s"
         (prefix (depth at)) (count at) (string_of_term t at)
-    and print_all () =
+    and print_all (at:t) =
       let pre = prefix (depth at - 1) in
       printf "%s%3d all%s\n%s    require\n"
         pre (count at) (arguments_string at) pre
-    and print_str (str:string):unit =
+    and print_str (str:string) (at:t):unit =
       let pre = prefix (depth at - 1) in
       printf "%s    %s\n" pre str
     in
-    let print0 (t:term) = print t; printf "\n"
-    and print1 (t:term) (i:int) = print t; printf "\t{%d}\n" i
-    and print2 (t:term) (i:int) (j:int) = print t; printf "\t{%d,%d}\n" i j
+    let print0 (t:term) at = print t at; printf "\n"
+    and print1 (t:term) (i:int) at = print t at; printf "\t{%d}\n" i
+    and print2 (t:term) (i:int) (j:int) at = print t at; printf "\t{%d,%d}\n" i j
     in
     let cnt = count at in
     match pt with
       Axiom t | Assumption t ->
-        if trace then print0 t;
+        if trace then print0 t at;
         t
     | Detached (a,b) ->
         let t = term_of_mp a b at in
-        if trace then print2 t a b;
+        if trace then print2 t a b at;
         t
     | Specialize (i,args) ->
         let t = term_of_specialize i args at in
-        if trace then print1 t i;
+        if trace then print1 t i at;
         t
     | Eval (i,e) ->
         let t = term_of_eval i e at in
-        if trace then print1 t i;
+        if trace then print1 t i at;
         t
     | Eval_bwd (t,e) ->
         let t = term_of_eval_bwd t e at in
-        if trace then print0 t;
+        if trace then print0 t at;
         t
     | Witness (idx,nms,t,args) ->
         let t = term_of_witness idx nms t args at in
-        if trace then print0 t;
+        if trace then print0 t at;
         t
     | Someelim idx ->
         let t = term_of_someelim idx at in
-        if trace then print0 t;
+        if trace then print0 t at;
         t
     | Inherit (idx,bcls,cls) ->
         let t =  variant idx bcls cls at in
-        if trace then print1 t idx;
+        if trace then print1 t idx at;
         t
     | Subproof (nargs,names,res_idx,pt_arr) ->
         let at = push_untyped names at in
@@ -631,16 +631,16 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
           if trace then count_assumptions pt_arr else 0
         in
         assert (res_idx < cnt + pt_len);
-        if trace then print_all ();
+        if trace then print_all at;
         for i = 0 to pt_len - 1 do
-          if trace && i = pt_nass then print_str "check";
+          if trace && i = pt_nass then print_str "check" at;
           let t = reconstruct pt_arr.(i) at in
           add_proved_0 t pt_arr.(i) at
         done;
         if trace then begin
-          print_str "ensure";
-          print1 (local_term res_idx at) res_idx;
-          print_str "end";
+          print_str "ensure" at;
+          print1 (local_term res_idx at) res_idx at;
+          print_str "end" at;
         end;
         let term = discharged_term res_idx at in
         term
@@ -764,8 +764,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
   in
   let narr = if cnt0+nreq<=i  then i+1-cnt0 else nreq in
   let pterm j =
-    let pt = proof_term (cnt0+j) at in
-    Proof_term.term_up n pt
+    let pt = proof_term (cnt0+j) at in Proof_term.term_up n pt
   in
   let pt_arr = Array.init narr (fun j -> if cnt0+j=i then pt else pterm j)
   in
