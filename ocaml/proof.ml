@@ -445,15 +445,42 @@ end = struct
   let term_up (n:int) (pt:t): t =
     (* Shift all terms used in the proof term [pt] up by [n]. *)
     let rec trm_up nb pt =
-      let up t = Term.upbound n nb t in
+      let up_inner t nb1 = Term.upbound n (nb1+nb) t in
+      let up t = up_inner t 0 in
+      let upargs_inner args nb =
+        Array.map (fun a -> up_inner a nb) args
+      in
       let upargs args = Array.map up args in
+      let var t =
+        assert (Term.is_variable t);
+        Term.variable t
+      in
+      let rec upeval e nb =
+        match e with
+          Eval.Term t ->
+            Eval.Term (up_inner t nb)
+        | Eval.Expand idx ->
+            Eval.Expand (var (up_inner (Variable idx) nb))
+	| Eval.Apply(f,args,pr) ->
+            let f = upeval f nb
+            and args = Array.map (fun e -> upeval e nb) args in
+            Eval.Apply(f,args,pr)
+        | Eval.Lam (n,nms,e,pr) ->
+            Eval.Lam (n, nms, upeval e (n+nb), pr)
+        | Eval.Beta e ->
+            Eval.Beta (upeval e nb)
+        | Eval.Simpl (e,idx,args) ->
+            Eval.Simpl (upeval e nb, idx, upargs_inner args nb)
+      in
+      let upeval_0 e = upeval e 0
+      in
       match pt with
         Axiom t        -> Axiom (up t)
       | Assumption t   -> Assumption (up t)
       | Detached (i,j) -> pt
       | Specialize (i,args) -> Specialize (i, upargs args)
-      | Eval _         -> pt
-      | Eval_bwd (t,e) -> Eval_bwd (up t,e)
+      | Eval (i,e)     -> Eval (i, upeval_0 e)
+      | Eval_bwd (t,e) -> Eval_bwd (up t, upeval_0 e)
       | Witness (i,nms,t,args) ->
           let t = up t
           and args = upargs args in
