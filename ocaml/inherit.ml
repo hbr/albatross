@@ -58,12 +58,8 @@ let prove (t:term) (pc:PC.t): unit =
   if PC.is_interface_use pc then
     ()
   else begin
-    let ifc_check = PC.is_interface_check pc
-    and strength  = PC.prover_strength pc
-    in
-    let pc =
-      if ifc_check then PC.push_untyped [||] pc
-      else pc
+    let strength  = PC.prover_strength pc
+    and pc = PC.push_untyped [||] pc
     in
     let _ = Prover2.prove t strength pc in
     ()
@@ -137,6 +133,11 @@ let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
 
 let rec inherit_effective
     (i:int) (cls:int) (ghost:bool) (to_descs:bool) (info:info) (pc:PC.t): unit =
+  (* Inherit the effective feature [i] in the class [cls]
+
+     [ghost]:    inheritance is a ghost inheritance
+     [to_descs]: the feature has to be inherited to the descendants of [cls] as well.
+   *)
   let ft = Proof_context.feature_table pc
   in
   if not (Feature_table.has_anchor i ft) || Feature_table.has_variant i cls ft
@@ -182,6 +183,8 @@ let inherit_features
     (cls:int)
     (par:int) (par_args:type_term array) (ghost:bool)
     (info:info) (pc:PC.t): unit =
+  (* Inherit in the class [cls] the features from the parent [par[par_args]] where
+     [ghost] indicates if the inheritance relation is a ghost inheritance. *)
   let ct = Proof_context.class_table pc
   and ft = Proof_context.feature_table pc
   in

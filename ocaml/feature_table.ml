@@ -30,6 +30,7 @@ type base_descriptor = {
 type descriptor = {
     mutable mdl: int;             (* -1: base feature, module not yet assigned*)
     cls:         int;             (* owner class *)
+    anchor_cls:  int;
     fname:       feature_name;
     impl:        Feature.implementation;
     tvs:         Tvars.t;         (* only formal generics *)
@@ -307,7 +308,13 @@ let has_private_variant (i:int) (cls:int) (ft:t): bool =
   try let _ = private_variant i cls ft in true
   with Not_found -> false
 
+
+
+
 let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
+  (* The variant of the term [t] with [nb] bound variables in the class [cls] where
+     all features of [t] from the class [base_class] are transformed into their
+     inherited variant in class [cls] *)
   assert (Class_table.has_ancestor cls base_cls ft.ct);
   let f (j:int): term =
     let var_j =
@@ -375,13 +382,23 @@ let terms_of_formals (farr: formal array): term array =
 
 let add_class_feature (i:int) (priv_only:bool) (pub_only) (base:bool) (ft:t): unit =
   (* Add the feature [i] as a class feature to the corresponding owner
-     class. *)
+     class and to the anchor class. *)
   assert (i < count ft);
   assert (not (priv_only && pub_only));
   let desc  = descriptor i ft in
+  assert (0 <= desc.cls);
   Class_table.add_feature
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
     desc.cls
+    (is_desc_deferred desc)
+    priv_only
+    pub_only
+    base
+    ft.ct;
+  if desc.anchor_cls <> -1 && desc.anchor_cls <> desc.cls then
+  Class_table.add_feature
+    (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
+    desc.anchor_cls
     (is_desc_deferred desc)
     priv_only
     pub_only
@@ -494,6 +511,7 @@ let add_base
     mdl = -1;
     fname    = fn;
     cls      = cls;
+    anchor_cls = Class_table.anchor_class tvs sign ft.ct;
     impl     =
     if Feature.Spec.has_definition spec then Feature.Empty
     else if defer then Feature.Deferred
@@ -1163,6 +1181,7 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
     {mdl       = Class_table.current_module ft.ct;
      fname     = desc.fname;
      cls       = cls;
+     anchor_cls = Class_table.anchor_class tvs1 sign ft.ct;
      impl      = desc.impl;
      tvs       = tvs1;
      anchored  = Array.make 1 (anchor+ntvs);
@@ -1199,7 +1218,8 @@ let add_function
   | _ -> ()
   end;
   let mdl = Class_table.current_module ft.ct in
-  let cls = Class_table.owner tvs sign ft.ct in
+  let cls = Class_table.owner tvs sign ft.ct
+  and anchor_cls = Class_table.anchor_class tvs sign ft.ct in
   let anchored = Class_table.anchored tvs cls ft.ct in
   let nanchors = Array.length anchored in
   begin match impl with
@@ -1217,6 +1237,7 @@ let add_function
   let desc =
     {mdl      = mdl;
      cls      = cls;
+     anchor_cls = anchor_cls;
      fname    = fn.v;
      impl     = impl;
      tvs      = tvs;

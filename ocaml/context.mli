@@ -112,6 +112,7 @@ val signature:  t -> Sign.t
 
 
 val owner:          t -> int
+val anchor_class:   t -> int
 val check_deferred: t -> unit
 
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list

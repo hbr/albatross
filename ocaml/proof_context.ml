@@ -25,8 +25,9 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable slots: slot_data array}
 
 type gdesc = {mutable pub: bool;
-              mdl: int;
               cls: int;
+              anchor_cls: int;
+              mdl: int;
               mutable defer: bool}
 
 type t = {base:   Proof_table.t;
@@ -869,11 +870,13 @@ let check_deferred (pc:t): unit = Context.check_deferred (context pc)
 
 let owner (pc:t): int = Context.owner (context pc)
 
+let anchor_class (pc:t): int = Context.anchor_class (context pc)
+
 let variant (i:int) (bcls:int) (cls:int) (pc:t): term =
   Proof_table.variant i bcls cls pc.base
 
 
-let add_global (defer:bool) (cls:int) (pc:t): unit =
+let add_global (defer:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
   assert (is_global pc);
   if count pc <> Seq.count pc.gseq + 1 then
     printf "add_global count pc = %d, Seq.count pc.gseq = %d\n"
@@ -881,17 +884,18 @@ let add_global (defer:bool) (cls:int) (pc:t): unit =
   assert (count pc = Seq.count pc.gseq + 1);
   let mt = module_table pc in
   let mdl = Module_table.current mt in
-  Seq.push {pub = is_public pc; defer = defer; cls = cls; mdl = mdl} pc.gseq;
+  Seq.push {pub = is_public pc; defer = defer;
+            cls = cls; anchor_cls = anchor_cls;
+            mdl = mdl} pc.gseq;
   assert (count pc = Seq.count pc.gseq)
 
 
 
 
-let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
+let inherit_deferred (i:int) (base_cls:int) (cls:int) (info:info) (pc:t): unit =
   (* Inherit the deferred assertion [i] in the class [cls] *)
   assert (i < count_global pc);
-  let bcls = (Seq.elem i pc.gseq).cls in
-  let t = variant i bcls cls pc in
+  let t = variant i base_cls cls pc in
   let ct = class_table pc in
   if 1 < pc.verbosity then
     printf "   inherit deferred \"%s\" in %s\n"
@@ -905,22 +909,22 @@ let inherit_deferred (i:int) (cls:int) (info:info) (pc:t): unit =
 
 
 
-let rec inherit_effective (i:int) (cls:int) (to_descs:bool) (pc:t): unit =
+let rec inherit_effective
+    (i:int) (base_cls:int) (cls:int) (to_descs:bool) (pc:t): unit =
   (* Inherit the effective assertion [i] in the class [cls] *)
   assert (is_global pc);
   assert (i < count_global pc);
-  let bcls = (Seq.elem i pc.gseq).cls in
-  let t = variant i bcls cls pc in
+  let t = variant i base_cls cls pc in
   let ct = class_table pc in
   if 1 < pc.verbosity then
     printf "   inherit \"%s\" of \"%s\" in %s\n"
       (string_of_term t pc)
-      (Class_table.class_name bcls ct)
+      (Class_table.class_name base_cls ct)
       (Class_table.class_name cls ct);
   if not (has t pc) then begin
-    Proof_table.add_inherited t i bcls cls pc.base;
+    Proof_table.add_inherited t i base_cls cls pc.base;
     let idx = raw_add t true pc in ();
-    add_global false cls pc;
+    add_global false cls cls pc;
     if to_descs then
       inherit_to_descendants idx false cls pc
   end
@@ -934,7 +938,7 @@ and inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
     (fun descendant ->
       assert (not defer); (* deferred assertion cannot be added to class
                              with descendants *)
-   inherit_effective i descendant false pc)
+      inherit_effective i owner descendant false pc)
    descendants
 
 
@@ -958,9 +962,9 @@ let inherit_parent
     (cls:int) (par:int) (par_args:type_term array) (info:info) (pc:t): unit =
   let ct = class_table pc in
   let deflst = Class_table.deferred_assertions par ct in
-  List.iter (fun i -> inherit_deferred i cls info pc) deflst;
+  List.iter (fun i -> inherit_deferred i par cls info pc) deflst;
   let efflst = Class_table.effective_assertions par ct in
-  List.iter (fun i -> inherit_effective i cls true pc) efflst
+  List.iter (fun i -> inherit_effective i par cls true pc) efflst
 
 
 
@@ -1069,7 +1073,8 @@ let discharged (i:int) (pc:t): term * proof_term =
 
 
 let add_proved_0
-    (defer:bool) (owner:int) (t:term) (pterm:proof_term) (delta:int) (pc:t)
+    (defer:bool) (owner:int) (anchor_cls:int)
+    (t:term) (pterm:proof_term) (delta:int) (pc:t)
     : int =
   let cnt = count pc
   and ct = class_table pc in
@@ -1081,18 +1086,28 @@ let add_proved_0
   if (not dup || is_glob) && not (is_global pc) then
     add_last_to_work pc;
   if is_global pc then
-    add_global defer owner pc;
-  if is_global pc && owner <> -1 then
-    if dup && is_public pc && not (Seq.elem idx pc.gseq).pub then begin
-      (* export the original assertion *)
+    add_global defer owner anchor_cls pc;
+  if is_global pc && owner = -1 then
+    printf "global without owner %s\n" (string_of_term t pc);
+  assert (not (is_global pc) || owner <> -1);
+  if is_global pc && owner <> -1 then begin
+    let add_assertion idx =
       Class_table.add_assertion idx owner defer ct;
       inherit_to_descendants idx defer owner pc;
+      if anchor_cls <> -1 && anchor_cls <> owner then begin
+        Class_table.add_assertion idx anchor_cls defer ct;
+        inherit_to_descendants idx defer anchor_cls pc
+      end
+    in
+    if dup && is_public pc && not (Seq.elem idx pc.gseq).pub then begin
+      (* export the original assertion *)
+      add_assertion idx;
       (Seq.elem idx pc.gseq).pub <- true
     end else if not dup then begin
       assert (idx = cnt);
-      Class_table.add_assertion cnt owner defer ct;
-      inherit_to_descendants cnt defer owner pc
-    end;
+      add_assertion cnt
+    end
+  end;
   cnt
 
 
@@ -1100,11 +1115,12 @@ let add_proved_0
 let add_proved
     (defer:bool)
     (owner:int)
+    (anchor_cls:int)
     (t:term)
     (pterm:proof_term)
     (pc:t)
     : int =
-  add_proved_0 defer owner t pterm 0 pc
+  add_proved_0 defer owner anchor_cls t pterm 0 pc
 
 
 
@@ -1112,6 +1128,7 @@ let add_proved
 let add_proved_list
     (defer:bool)
     (owner:int)
+    (anchor_cls:int)
     (lst: (term*proof_term) list)
     (pc:t)
     : unit =
@@ -1119,7 +1136,7 @@ let add_proved_list
   List.iter
     (fun (t,pt) ->
       let delta = count pc - cnt in
-      let _ = add_proved_0 defer owner t pt delta pc in ())
+      let _ = add_proved_0 defer owner anchor_cls t pt delta pc in ())
     lst
 
 

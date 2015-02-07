@@ -246,6 +246,17 @@ let owner (c:t): int =
     -1
 
 
+let anchor_class (c:t): int =
+  if is_toplevel c then
+    let ct  = class_table c
+    and tvs = TVars_sub.tvars c.entry.tvs_sub
+    and s   = signature c
+    in
+    Class_table.anchor_class tvs s ct
+  else
+    -1
+
+
 
 let check_deferred (c:t): unit =
   assert (is_toplevel c);

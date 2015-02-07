@@ -119,7 +119,9 @@ val effective_assertions: int -> t -> int list
        [cls] *)
 
 val owner: Tvars.t -> Sign.t -> t -> int
+val anchor_class: Tvars.t -> Sign.t -> t -> int
 val anchored: Tvars.t -> int -> t -> int array
+val anchor_formal_generics: Tvars.t -> Sign.t -> t -> int array
 val check_deferred:  int -> int -> info -> t -> unit
 
 val find:   int list -> int -> t -> int

@@ -55,9 +55,9 @@ val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
 val discharged:         int  -> t -> term * proof_term
-val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
-val add_proved:         bool -> int -> term -> proof_term -> t -> int
-val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
+val add_proved_0:       bool -> int -> int -> term -> proof_term -> int -> t -> int
+val add_proved:         bool -> int -> int -> term -> proof_term -> t -> int
+val add_proved_list:    bool -> int -> int -> (term*proof_term) list -> t -> unit
 val premises:           int -> t -> (term*bool) list
 val previous_schematic: int  -> t -> int option
 val trying_goal:        term -> t -> unit
@@ -89,6 +89,7 @@ val is_assumption:  int -> t -> bool
 
 val check_deferred: t -> unit
 val owner:          t -> int
+val anchor_class:   t -> int
 
 val inherit_parent: int -> int -> type_term array -> info -> t -> unit
     (** [inherit_parent cls par par_args info pc] *)

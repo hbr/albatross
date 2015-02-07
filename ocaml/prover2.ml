@@ -145,7 +145,7 @@ let discharged (pos:int) (pc:PC.t): int * PC.t =
   and pc = PC.pop pc in
   assert (cnt0 <= PC.count pc);
   let delta = PC.count pc - cnt0 in
-  let pos = PC.add_proved_0 false (-1) t pt delta pc in
+  let pos = PC.add_proved_0 false (-1) (-1) t pt delta pc in
   pos, pc
 
 

@@ -71,12 +71,16 @@ let is_equivalent (tvs1:t) (tvs2:t): bool =
 
 
 let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
+  (* Are the types [tp1,tvs1] and [tp2,tvs2] equal in the sense that they have
+     identical structures and each absolute used type is identical in both and
+     if formal generics occur then their concepts are equal? *)
   let nall1 = count_all tvs1
   and nall2 = count_all tvs2
   and nloc1 = count_local tvs1
   and nloc2 = count_local tvs2
   in
   let rec is_eq (tp1:type_term) (tp2:type_term) (nmax:int): bool =
+    (* nmax: infinite recursion protection *)
     match tp1, tp2 with
       Variable i, Variable j when i < nloc1 || j < nloc2 ->
         false
@@ -109,6 +113,8 @@ let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
 
 
 let is_equal_or_fg (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
+  (* Is the type [tp1,tvs1] equal to [tp2,tvs2] or is tp1 a formal generic and
+     its concept is equal to [tp2,tvs2]? *)
   match tp1 with
     Variable i when count_local tvs1 <= i && i < count_all tvs1 ->
       is_equal (concept i tvs1) tvs1 tp2 tvs2

@@ -36,7 +36,7 @@ let discharge (idx:int) (pc:PC.t): int * PC.t =
   assert (not (PC.is_global pc));
   let t,pt = PC.discharged idx pc in
   let pc = PC.pop pc in
-  let idx = PC.add_proved false (-1) t pt pc in
+  let idx = PC.add_proved false (-1) (-1) t pt pc in
   idx, pc
 
 

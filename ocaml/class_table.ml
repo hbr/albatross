@@ -810,6 +810,42 @@ let add
 
 
 
+let anchor_formal_generics (tvs:Tvars.t) (s:Sign.t) (ct:t): int array =
+  assert (Tvars.count tvs = 0);
+  let nfgs = Tvars.count_fgs tvs
+  in
+  let add_formal_generic tp fgs =
+    match tp with
+      Variable i when i < nfgs ->
+        IntSet.add i fgs
+    | _ ->
+        fgs
+  in
+  let fgs =
+    Array.fold_left
+      (fun fgs tp -> add_formal_generic tp fgs)
+      IntSet.empty
+      (Sign.arguments s)
+  in
+  let fgs =
+    if Sign.has_result s then
+      add_formal_generic (Sign.result s) fgs
+    else
+      fgs
+  in
+  Array.of_list (IntSet.elements fgs)
+
+
+
+let anchor_class (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
+  let anchfgs = anchor_formal_generics tvs s ct in
+  if Array.length anchfgs = 1 then
+    Tvars.principal_class (Variable anchfgs.(0)) tvs
+  else
+    -1
+
+
+
 let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
   let max (cidx1:int) (cidx2:int): int =
     if cidx1 = cidx2 then
@@ -832,6 +868,7 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
 
 
 let anchored (tvs:Tvars.t) (cls:int) (ct:t): int array =
+  assert (Tvars.count tvs = 0);
   let nfgs = Tvars.count_all tvs
   in
   let anch = ref [] in
