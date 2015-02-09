@@ -157,7 +157,8 @@ let rule_data (idx:int) (pc:t): RD.t =
   assert (idx < count pc);
   Ass_seq.elem idx pc.terms
 
-
+let is_fully_specialized (idx:int) (pc:t): bool =
+  RD.is_fully_specialized (rule_data idx pc)
 
 let is_assumption (i:int) (pc:t): bool =
   assert (i < count pc);
@@ -1070,6 +1071,10 @@ let discharged (i:int) (pc:t): term * proof_term =
    *)
   Proof_table.discharged i pc.base
 
+
+
+let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
+  Proof_table.is_proof_pair t pt pc.base
 
 
 let add_proved_0
