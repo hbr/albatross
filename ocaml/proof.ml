@@ -76,10 +76,17 @@ end = struct
     in
     let rec adapt_eval (e:Eval.t): Eval.t =
       match e with
-        Eval.Simpl (e,eq_idx,args) ->
+        Eval.Term t   -> e
+      | Eval.Expand i -> e
+      | Eval.Apply (f,args,pr) ->
+          let f = adapt_eval f
+          and args = Array.map (fun e -> adapt_eval e) args in
+          Eval.Apply (f,args,pr)
+      | Eval.Lam (n,nms,e,pr) ->
+          Eval.Lam (n, nms, adapt_eval e, pr)
+      | Eval.Beta e -> Eval.Beta (adapt_eval e)
+      | Eval.Simpl (e,eq_idx,args) ->
           Eval.Simpl (adapt_eval e, index eq_idx, args)
-      | _ ->
-          e
     in
     let rec adapt (pt:t): t =
       match pt with
