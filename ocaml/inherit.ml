@@ -117,17 +117,21 @@ let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
   in
   let icls = Feature_table.class_of_feature i ft in
   let var_eq_term = Feature_table.variant_term eq_term 0 icls cls ft in
+  let error_string () =
+    "The class " ^ (class_name cls) ^ " redefines the feature \"" ^
+    (feat_sign i) ^ "\" of class " ^ (class_name icls) ^
+    " but the equivalence of the definitions i.e.\n   " ^
+    (Feature_table.term_to_string var_eq_term 0 [||] ft) ^
+    "\ncannot be proven"
+  in
   try
     prove var_eq_term pc
   with Not_found ->
-    let str =
-      "The class " ^ (class_name cls) ^ " redefines the feature \"" ^
-      (feat_sign i) ^ "\" of class " ^ (class_name icls) ^
-      " but the equivalence of the definitions i.e.\n   " ^
-      (Feature_table.term_to_string var_eq_term 0 [||] ft) ^
-      "\ncannot be proven"
-    in
-    error_info info str
+    error_info info (error_string ())
+  | Proof.Limit_exceeded limit ->
+      let str = string_of_int limit in
+      error_info info ((error_string ()) ^ " because the goal limit " ^
+                       str ^ " is exceeded")
 
 
 

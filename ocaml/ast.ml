@@ -135,6 +135,9 @@ let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
     Prover2.prove t strength pc
   with Not_found ->
     error_info ie.i "Cannot prove"
+  | Limit_exceeded limit ->
+      let str = string_of_int limit in
+      error_info ie.i ("Cannot prove, goal limit " ^ str ^ " exceeded")
 
 
 

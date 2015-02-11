@@ -364,14 +364,36 @@ let generate_subgoals (i:int) (gs:t): unit =
 
 
 
+let ancestors (i:int) (gs:t): int list =
+  let rec ancs i lst =
+    let g = item i gs in
+    match g.parent with
+      None -> i :: lst
+    | Some (ipar,_,_) ->
+        ancs ipar (i::lst)
+  in
+  ancs i []
+
+
+let trace_ancestors (i:int) (gs:t): unit =
+  let g = item i gs in
+  let ancs = ancestors i gs in
+  let str = String.concat "," (List.map string_of_int ancs) in
+  let prefix = PC.trace_prefix g.ctxt.pc in
+  printf "%sancestors [%s]\n" prefix str
+
+
 let trace_visit (i:int) (gs:t): unit =
   let g = item i gs in
   let prefix = PC.trace_prefix g.ctxt.pc in
-  printf "\n%svisit goal %d: %s\n" prefix i (PC.string_of_term g.goal g.ctxt.pc);
+  printf "\n%svisit goal %d(%d): %s\n"
+    prefix i (PC.depth g.ctxt.pc)
+    (PC.string_of_term g.goal g.ctxt.pc);
   match g.parent with
     None -> ()
   | Some (ipar,ialt,isub) ->
       let par = item ipar gs in
+      trace_ancestors i gs;
       printf "%s  parent %s\n" prefix (PC.string_of_term par.goal par.ctxt.pc);
       if par.goal <> par.target then
         printf "%s  parent target %s\n"
@@ -413,6 +435,8 @@ let prove (g:term) (strength:int) (pc:PC.t): int =
   let rec round (i:int) (start:int): unit =
     if strength = 0 && 1 < i then
       raise Not_found;
+    if 500 <= start then
+      raise (Limit_exceeded 500);
     if PC.is_tracing pc then
       printf "%s-- round %d --\n" (PC.trace_prefix pc) i;
     let cnt = count gs in

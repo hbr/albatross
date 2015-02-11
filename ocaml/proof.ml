@@ -8,6 +8,7 @@ open Container
 open Term
 open Printf
 
+exception Limit_exceeded of int
 
 module Eval = struct
   type t =
