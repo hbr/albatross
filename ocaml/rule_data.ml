@@ -168,24 +168,7 @@ let is_backward_blocked
   else if IntSet.cardinal (Term.bound_variables tgt nargs) < nargs then
     true
   else
-    let expand t = Context.expanded_term t nargs c in
-    let tgt_exp  = expand tgt in
-    let rec blocked ps =
-      match ps with
-        [] -> false
-      | (_,_,p)::ps ->
-          let p_exp = expand p in
-          try
-            let sub = Term_algo.unify tgt_exp p_exp nargs in
-            let triv = Term_sub.has_only_variables sub in
-            if not triv then
-              true
-            else
-              blocked ps
-          with Not_found ->
-            blocked ps
-    in blocked ps
-
+    false
 
 
 
