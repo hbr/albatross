@@ -149,7 +149,7 @@ let implication_index (c:t): int =
 
 
 let argument_name (i:int) (c:t): int =
-  assert (i < count_last_arguments c);
+  assert (i < count_arguments c);
   fst c.entry.fargs.(i)
 
 
@@ -235,6 +235,10 @@ let signature_string (c:t): string =
   sign2string (signature c) c
 
 
+let argument_index (nme:int) (c:t): int =
+  Search.array_find_min (fun (n,_) -> n = nme) c.entry.fargs
+
+
 let owner (c:t): int =
   if is_toplevel c then
     let ct  = class_table c
@@ -244,6 +248,7 @@ let owner (c:t): int =
     Class_table.owner tvs s ct
   else
     -1
+
 
 
 let anchor_class (c:t): int =
@@ -296,7 +301,7 @@ let argument_data (i:int) (c:t): Tvars.t * Sign.t =
 
 let argument (name:int) (c:t): int * Tvars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
-  let i = Search.array_find_min (fun (n,_) -> n=name) c.entry.fargs in
+  let i = argument_index name c in
   let tvs,s = argument_data i c in
   i,tvs,s
 

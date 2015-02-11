@@ -25,6 +25,7 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable slots: slot_data array}
 
 type gdesc = {mutable pub: bool;
+              inh: bool;
               cls: int;
               anchor_cls: int;
               mdl: int;
@@ -160,9 +161,19 @@ let rule_data (idx:int) (pc:t): RD.t =
 let is_fully_specialized (idx:int) (pc:t): bool =
   RD.is_fully_specialized (rule_data idx pc)
 
+
 let is_assumption (i:int) (pc:t): bool =
   assert (i < count pc);
   Proof_table.is_assumption i pc.base
+
+
+let is_available (i:int) (pc:t): bool =
+  assert (i < count pc);
+  is_private pc ||
+  count_global pc <= i ||
+  let gdesc = Seq.elem i pc.gseq in
+  not gdesc.inh ||
+  gdesc.pub
 
 
 let split_implication (t:term) (pc:t): term * term =
@@ -417,7 +428,7 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
   try
     let nargs, left,right = split_equality t pc in
     let is_simpl =
-      if 0 < nargs then Term.nodes right < Term.nodes left
+      if 0 < nargs then false (*Term.nodes right < Term.nodes left*)
       else
         let left, right = expand_term left pc, expand_term right pc in
         Term.nodes right < Term.nodes left
@@ -615,7 +626,8 @@ let add_consequences_premise (i:int) (pc:t): unit =
     (fun (idx,sub) ->
       assert (is_consistent pc);
       assert (idx < count pc);
-      add_consequence i idx sub pc)
+      if is_available idx pc then
+        add_consequence i idx sub pc)
     sublst
 
 
@@ -641,7 +653,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
     let sublst = List.rev sublst in
     List.iter
       (fun (idx,sub) ->
-        if not (RD.is_intermediate (rule_data idx pc)) then
+        if is_available idx pc && not (RD.is_intermediate (rule_data idx pc)) then
           add_consequence idx i sub pc)
       sublst
   else (* the implication is not schematic *)
@@ -877,7 +889,7 @@ let variant (i:int) (bcls:int) (cls:int) (pc:t): term =
   Proof_table.variant i bcls cls pc.base
 
 
-let add_global (defer:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
+let add_global (defer:bool) (inh:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
   assert (is_global pc);
   if count pc <> Seq.count pc.gseq + 1 then
     printf "add_global count pc = %d, Seq.count pc.gseq = %d\n"
@@ -885,7 +897,9 @@ let add_global (defer:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
   assert (count pc = Seq.count pc.gseq + 1);
   let mt = module_table pc in
   let mdl = Module_table.current mt in
-  Seq.push {pub = is_public pc; defer = defer;
+  Seq.push {pub = is_public pc;
+            defer = defer;
+            inh   = inh;
             cls = cls; anchor_cls = anchor_cls;
             mdl = mdl} pc.gseq;
   assert (count pc = Seq.count pc.gseq)
@@ -925,7 +939,7 @@ let rec inherit_effective
   if not (has t pc) then begin
     Proof_table.add_inherited t i base_cls cls pc.base;
     let idx = raw_add t true pc in ();
-    add_global false cls cls pc;
+    add_global false true cls cls pc;
     if to_descs then
       inherit_to_descendants idx false cls pc
   end
@@ -1091,7 +1105,7 @@ let add_proved_0
   if (not dup || is_glob) && not (is_global pc) then
     add_last_to_work pc;
   if is_global pc then
-    add_global defer owner anchor_cls pc;
+    add_global defer false owner anchor_cls pc;
   if is_global pc && owner = -1 then
     printf "global without owner %s\n" (string_of_term t pc);
   assert (not (is_global pc) || owner <> -1);
