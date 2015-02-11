@@ -35,7 +35,7 @@ let analyze_imp_opt
   let kind,is_do,clst =
     match imp_opt with
       None ->
-        if iface then
+        if Context.is_interface_use c then
           PAxiom,  false, []
         else
           PNormal, false, []
@@ -54,7 +54,7 @@ let analyze_imp_opt
     | Some (Impdefined (Some locs,is_do,cmp)) ->
         not_yet_implemented info "Local variables in assertions"
     | Some (Impdefined (None,is_do,cmp)) ->
-        if iface then begin
+        if Context.is_interface_use c then begin
           if is_do || cmp <> [] then
             error_info info "proof not allowed in interface file";
           PAxiom,  false, []
