@@ -14,7 +14,6 @@ type t = {
                          global variables *)
     nargs:     int;
     spec:      bool;  (* is specialized *)
-    trans:     bool;
     nms:       int array;
     fwd_blckd: bool;  (* is blocked as forward rule *)
     bwd_blckd: bool;  (* is blocked as backward rule *)
@@ -45,8 +44,6 @@ let is_implication (rd:t): bool = rd.premises <> []
 let is_intermediate (rd:t): bool =
   is_implication rd && is_orig_schematic rd
 
-let is_transitivity (rd:t): bool = rd.trans && is_implication rd
-
 let is_specialized (rd:t): bool = rd.spec
 
 let is_fully_specialized (rd:t): bool =
@@ -68,14 +65,12 @@ let is_forward_catchall (rd:t): bool =
 
 let is_forward (rd:t): bool =
   is_implication rd &&
-  (rd.trans ||
   (not (is_forward_catchall rd) &&
-   (not rd.fwd_blckd || allows_partial_specialization rd)))
+   (not rd.fwd_blckd || allows_partial_specialization rd))
 
 
 let is_backward (rd:t): bool =
   is_implication rd &&
-  not rd.trans &&
   (rd.nbwd = 0 && not rd.bwd_blckd && not (Term.is_argument rd.target rd.nargs))
 
 
@@ -191,34 +186,10 @@ let split_term (t:term) (nbenv:int) (ft:Feature_table.t)
 
 
 
-let is_trans (ps:(int*bool*term)list) (tgt:term): bool =
-  match ps with
-    [(_,_,t1);(_,_,t2)] ->
-      begin try
-        let op1,a1,b1 = Term.binary_split_0 t1
-        and op2,a2,b2 = Term.binary_split_0 t2
-        and op3,a3,b3 = Term.binary_split_0 tgt in
-        if op1 = op2 && op2 = op3 && b1 = a2 && b2 = b3 then
-          match a1, b1, b3 with
-            Variable i, Variable j, Variable k when i=0 && j=1 && k=2 ->
-              true
-          | _ ->
-              false
-        else
-          false
-      with Not_found ->
-        false
-      end
-  | _ ->
-      false
-
-
 let make (t:term) (c:Context.t): t =
   let nbenv = Context.count_arguments c
   and ft    = Context.feature_table c in
   let nargs, nms, ps, tgt = split_term t nbenv ft
-  in
-  let trans = false (*is_trans ps tgt*)
   in
   let rec nbwdfun n gp1 ps set =
     assert (IntSet.cardinal set <= nargs - gp1);
@@ -243,7 +214,6 @@ let make (t:term) (c:Context.t): t =
              nbenv     = nbenv;
              nargs     = nargs;
              spec      = nargs = 0;
-             trans     = trans;
              nms       = nms;
              fwd_blckd = false;
              bwd_blckd = bwd_blckd;
@@ -291,7 +261,7 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
       rd.premises
   in
   let ps,fwd_blckd =
-    if full && not rd.trans then
+    if full then
       let ntgt = complexity tgt c in
       let ps,max_nds =
         List.fold_left
