@@ -940,6 +940,7 @@ let rec inherit_effective
     Proof_table.add_inherited t i base_cls cls pc.base;
     let idx = raw_add t true pc in ();
     add_global false true cls cls pc;
+    Class_table.add_assertion idx cls false ct;
     if to_descs then
       inherit_to_descendants idx false cls pc
   end
@@ -977,9 +978,9 @@ let inherit_parent
     (cls:int) (par:int) (par_args:type_term array) (info:info) (pc:t): unit =
   let ct = class_table pc in
   let deflst = Class_table.deferred_assertions par ct in
-  List.iter (fun i -> inherit_deferred i par cls info pc) deflst;
+  List.iter (fun i -> inherit_deferred i par cls info pc) (List.rev deflst);
   let efflst = Class_table.effective_assertions par ct in
-  List.iter (fun i -> inherit_effective i par cls true pc) efflst
+  List.iter (fun i -> inherit_effective i par cls true pc) (List.rev efflst)
 
 
 
