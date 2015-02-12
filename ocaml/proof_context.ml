@@ -331,7 +331,7 @@ let triggers_evaluation (t:term) (pc:t): bool =
           let _ = Proof_table.definition i 0 pc.base in
           false
         with Not_found ->
-          nbenv <= i &&
+          i < nbenv ||
           let idx = i - nbenv in
           idx = Feature_table.or_index ||
           idx = Feature_table.some_index ||
