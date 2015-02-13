@@ -140,8 +140,7 @@ let imp_id(at:t): int = Proof_table.imp_id at.base
 let term_orig (i:int) (pc:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
    *)
-  assert (is_consistent pc);
-  assert (i < count pc);
+  assert (i < count_base pc);
   Proof_table.term i pc.base
 
 let term (i:int) (pc:t): term =
@@ -218,6 +217,33 @@ let string_of_term_i (i:int) (pc:t): string =
   string_of_term (term i pc) pc
 
 
+let is_substitution_ok (sub:Term_sub.t) (nbenv:int): bool =
+  let all_id =  nbenv + Feature_table.all_index
+  and some_id = nbenv + Feature_table.some_index in
+  Term_sub.for_all
+    (fun i t ->
+      match t with
+        Variable i when i = all_id || i = some_id -> false
+      | _ -> true)
+    sub
+
+
+let unify
+    (t:term) (nbenv:int) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
+  let sublst = Term_table.unify t nbenv tab in
+  List.filter (fun (idx,sub) -> is_substitution_ok sub nbenv) sublst
+
+let unify_with
+    (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
+    : (int * Term_sub.t) list =
+  let sublst = Term_table.unify_with t nargs nbenv tab in
+  List.filter
+    (fun (idx,sub) ->
+      let _,nbenv = term_orig idx pc in
+      is_substitution_ok sub nbenv)
+    sublst
+
+
 let trace_prefix_0 (pc:t): string =
   assert (not (is_global pc));
   String.make (3 + 2*(pc.depth-1)) ' '
@@ -282,7 +308,7 @@ let find_in_slot (t:term) (pc:t): int =
 let find_in_tab (t:term) (nbenv:int) (pc:t): int =
   (** The index of the assertion [t].
    *)
-  let sublst = Term_table.unify_with t 0 nbenv pc.entry.prvd in
+  let sublst = unify_with t 0 nbenv pc.entry.prvd pc in
   match sublst with
     []          -> raise Not_found
   | [(idx,sub)] -> idx
@@ -383,7 +409,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
     in
     let tred, ered, modi = expand t in
-    let sublst = Term_table.unify tred (nb+nbenv) pc.entry.left in
+    let sublst = unify tred (nb+nbenv) pc.entry.left pc in
     let sublst = List.filter (fun (idx,sub) -> idx < below_idx) sublst in
     let sublst1,sublst2 =
       List.partition (fun (idx,sub) -> Term_sub.is_empty sub) sublst in
@@ -620,7 +646,7 @@ let add_consequences_premise (i:int) (pc:t): unit =
   let nbenv = nbenv pc in
   let t,nbenv_t = Proof_table.term i pc.base in
   assert (nbenv = nbenv_t);
-  let sublst = Term_table.unify t nbenv_t pc.entry.fwd in
+  let sublst = unify t nbenv_t pc.entry.fwd pc in
   let sublst = List.rev sublst in
   List.iter
     (fun (idx,sub) ->
@@ -647,8 +673,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   let gp1,nbenv_a,a = RD.schematic_premise rd in
   assert (nbenv_a = nbenv);
   if RD.is_schematic rd then (* the implication is schematic *)
-    let sublst =
-      Term_table.unify_with a gp1 nbenv_a pc.entry.prvd
+    let sublst = unify_with a gp1 nbenv_a pc.entry.prvd pc
     in
     let sublst = List.rev sublst in
     List.iter
@@ -661,7 +686,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
       let idx = find a pc in   (* check for exact match *)
       add_mp_fwd idx i pc
     with Not_found -> (* no exact match *)
-      let sublst = Term_table.unify a nbenv_a pc.entry.prvd2
+      let sublst = unify a nbenv_a pc.entry.prvd2 pc
       in
       match sublst with
         [] -> ()
@@ -739,7 +764,7 @@ let prefix (pc:t): string = String.make (2*(depth pc)+2) ' '
 
 let close (pc:t): unit =
   let rec cls (n:int): unit =
-    if n > 100 then assert false;  (* 'infinite' loop detection *)
+    if n > 500 then assert false;  (* 'infinite' loop detection *)
     if has_work pc then begin
       close_step pc;
       cls (n+1)
@@ -986,7 +1011,7 @@ let inherit_parent
 
 let backward_witness (t:term) (pc:t): int =
     let nargs,nms,tt = split_some_quantified t pc in
-    let sublst  = Term_table.unify_with tt nargs (nbenv pc) pc.entry.prvd in
+    let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
     let idx,sub = List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst
     in
     let witness = term idx pc in
@@ -1003,7 +1028,7 @@ let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
   let nbenv = nbenv pc in
-  let sublst = Term_table.unify g nbenv pc.entry.prvd2 in
+  let sublst = unify g nbenv pc.entry.prvd2 pc in
   if sublst = [] then
     backward_witness g pc
   else
@@ -1020,7 +1045,7 @@ let find_goal (g:term) (pc:t): int =
 
 let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
   let nbenv = nbenv pc in
-  let sublst = Term_table.unify g nbenv pc.entry.bwd in
+  let sublst = unify g nbenv pc.entry.bwd pc in
   let lst =
     List.fold_left
       (fun lst (idx,sub) ->
