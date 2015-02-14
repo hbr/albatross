@@ -344,17 +344,17 @@ let has_in_view (t:term) (pc:t): bool =
 
 
 
-let triggers_evaluation (t:term) (pc:t): bool =
+let triggers_evaluation (t:term) (nb:int) (pc:t): bool =
   (* Does the term [t] trigger a full evaluation when used as a top level function
      term, i.e. is it a variable which describes a function which has no expansion
      and is not owned by BOOLEAN? *)
-  let nbenv = nbenv pc
+  let nbenv = nb + nbenv pc
   and ft    = feature_table pc in
   match t with
     Variable i ->
       begin
         try
-          let _ = Proof_table.definition i 0 pc.base in
+          let _ = Proof_table.definition i nb pc.base in
           false
         with Not_found ->
           i < nbenv ||
@@ -408,7 +408,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             t, Eval.Term t, false
           end
       | Application (f,args,pr) ->
-          let full = full || triggers_evaluation f pc in
+          let full = full || triggers_evaluation f nb pc in
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
       | Lam (n,nms,t,pred) ->
