@@ -126,6 +126,8 @@ val definition: int -> int -> t -> term
         a term (lambda term in case of arguments). Raises [Not_found] if
         feature [idx] has no definition *)
 
+val expanded_definition: int -> int -> t -> term
+
 val has_definition: int -> t -> bool
 
 val definition_equality: int -> t -> term

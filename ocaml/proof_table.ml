@@ -332,6 +332,9 @@ exception Illegal_proof_term
 let definition (idx:int) (nb:int) (at:t): term =
   Context.definition idx nb (context at)
 
+let expanded_definition (idx:int) (nb:int) (at:t): term =
+  Context.expanded_definition idx nb (context at)
+
 
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
@@ -360,10 +363,10 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   let rec reconstruct e nb =
     match e with
       Eval.Term t -> t,t
-    | Eval.Expand idx ->
+    | Eval.Expand (idx,full) ->
         begin try
           Variable idx,
-          definition idx nb at
+          if full then expanded_definition idx nb at else definition idx nb at
         with Not_found ->
           raise Illegal_proof_term end
     | Eval.Apply (f,args,pr) ->

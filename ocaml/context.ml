@@ -639,6 +639,15 @@ let definition (idx:int) (nb:int) (c:t): term =
   end
 
 
+let expanded_definition (idx:int) (nb:int) (c:t): term =
+  let nbenv = count_arguments c in
+  if idx < nb + nbenv then
+    raise Not_found
+  else begin
+    Feature_table.expanded_definition idx (nb + nbenv) (feature_table c)
+  end
+
+
 let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
   let nbenv = count_arguments c in
   if idx < nb + nbenv then

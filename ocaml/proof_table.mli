@@ -65,6 +65,7 @@ val push_untyped: int array -> t -> t
 val pop:  t -> t
 
 val definition: int -> int -> t -> term
+val expanded_definition: int -> int -> t -> term
 
 val is_proof_pair:  term -> proof_term -> t -> bool
 

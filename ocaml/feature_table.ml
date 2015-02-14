@@ -970,6 +970,38 @@ let rec normalize_term (t:term) (nbound:int) (ft:t): term =
   Term.reduce (expand_term t nbound ft)
 
 
+let fully_expanded (t:term) (nb:int) (ft:t): term =
+  let rec expand t nb =
+    match t with
+      Variable i when i < nb -> t
+    | Variable i ->
+        begin try
+          let def = definition i nb ft in
+          expand def nb
+        with Not_found ->
+          t
+        end
+    | Application (f,args,pr) ->
+        let f = expand f nb in
+        let args = Array.map (fun t -> expand t nb) args in
+        Application (f,args,pr)
+    | Lam (n,nms,t,pr) ->
+        Lam (n, nms, expand t (n+nb), pr)
+  in
+  let t = expand t nb in
+  Term.reduce t
+
+
+let expanded_definition (idx:int) (nb:int) (ft:t): term =
+  assert (nb <= idx);
+  assert (idx <= nb + count ft);
+  let def = fully_expanded (Variable idx) nb ft in
+  match def with
+    Variable i ->
+      assert(i = idx);
+      raise Not_found
+  | _ -> def
+
 
 
 let print (ft:t): unit =

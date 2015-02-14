@@ -13,7 +13,7 @@ exception Limit_exceeded of int
 module Eval = struct
   type t =
       Term of term
-    | Expand of int (* idx of function *)
+    | Expand of (int * bool) (* idx of function, full expansion *)
     | Apply of t * t array * bool
     | Lam of int * int array * t * bool
     | Beta of t
@@ -381,8 +381,8 @@ end = struct
           match e with
             Eval.Term t ->
               Eval.Term (shrink_inner t nb)
-          | Eval.Expand idx ->
-              Eval.Expand (var (shrink_inner (Variable idx) nb))
+          | Eval.Expand (idx,full) ->
+              Eval.Expand (var (shrink_inner (Variable idx) nb),full)
           | Eval.Apply(f,args,pr) ->
               let f = shrnk f nb
               and args = Array.map (fun e -> shrnk e nb) args in
@@ -469,8 +469,8 @@ end = struct
         match e with
           Eval.Term t ->
             Eval.Term (up_inner t nb)
-        | Eval.Expand idx ->
-            Eval.Expand (var (up_inner (Variable idx) nb))
+        | Eval.Expand (idx,full) ->
+            Eval.Expand (var (up_inner (Variable idx) nb), full)
 	| Eval.Apply(f,args,pr) ->
             let f = upeval f nb
             and args = Array.map (fun e -> upeval e nb) args in

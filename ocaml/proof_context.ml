@@ -370,6 +370,11 @@ let triggers_evaluation (t:term) (pc:t): bool =
 
 
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
+  (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
+     structure and a flag which tells if the term [t] and its evaluation are
+     different.
+
+     [below_idx]: consider only rules below [below_idx] for equality. *)
   let nbenv = nbenv pc in
   let rec eval t nb full =
     let apply f fe modi args is_pred full =
@@ -395,8 +400,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let fdef = Proof_table.definition i nb pc.base in
-            fdef, Eval.Expand i, true
+            let fdef =
+              if full then Proof_table.expanded_definition i nb pc.base
+              else         Proof_table.definition i nb pc.base in
+            fdef, Eval.Expand (i,full), true
           with Not_found ->
             t, Eval.Term t, false
           end
