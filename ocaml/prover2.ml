@@ -46,6 +46,9 @@ type t = {
 
 
 
+let goal_limit_ref = ref 100
+
+let goal_limit () = !goal_limit_ref
 
 
 let goal (g:term) (black:IntSet.t) (par:(int*int*int) option) (pc: PC.t): goal =
@@ -386,15 +389,16 @@ let trace_ancestors (i:int) (gs:t): unit =
 let trace_visit (i:int) (gs:t): unit =
   let g = item i gs in
   let prefix = PC.trace_prefix g.ctxt.pc in
-  printf "\n%svisit goal %d(%d): %s\n"
-    prefix i (PC.depth g.ctxt.pc)
+  printf "\n%svisit goal %d: %s\n"
+    prefix i
     (PC.string_of_term g.goal g.ctxt.pc);
   match g.parent with
     None -> ()
   | Some (ipar,ialt,isub) ->
       let par = item ipar gs in
       trace_ancestors i gs;
-      printf "%s  parent %s\n" prefix (PC.string_of_term par.goal par.ctxt.pc);
+      printf "%s  parent %d %s\n" prefix ipar
+        (PC.string_of_term par.goal par.ctxt.pc);
       if par.goal <> par.target then
         printf "%s  parent target %s\n"
           prefix (PC.string_of_term par.target par.tgt_ctxt.pc)(*;
@@ -435,11 +439,11 @@ let prove (g:term) (strength:int) (pc:PC.t): int =
   let rec round (i:int) (start:int): unit =
     if strength = 0 && 1 < i then
       raise Not_found;
-    if 500 <= start then
-      raise (Limit_exceeded 500);
-    if PC.is_tracing pc then
-      printf "%s-- round %d --\n" (PC.trace_prefix pc) i;
+    if goal_limit () <= start then
+      raise (Limit_exceeded (goal_limit ()));
     let cnt = count gs in
+    if PC.is_tracing pc then
+      printf "%s-- round %d with %d goals --\n" (PC.trace_prefix pc) i (cnt - start);
     for j = start to cnt - 1 do
       if is_visitable j gs then
         visit j gs

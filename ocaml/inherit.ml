@@ -147,7 +147,14 @@ let rec inherit_effective
   if not (Feature_table.has_anchor i ft) || Feature_table.has_variant i cls ft
   then
     ()
-  else
+  else begin
+    if 1 < Feature_table.verbosity ft then begin
+      let ct   = class_table pc in
+      let icls = Feature_table.class_of_feature i ft in
+      printf "   inherit effective \"%s %s\" in %s\n"
+        (Class_table.class_name icls ct)
+        (Feature_table.string_of_signature i ft)
+        (Class_table.class_name cls ct) end;
     try
       let idx = Feature_table.private_variant i cls ft in
       assert (PC.is_interface_check pc);
@@ -163,6 +170,7 @@ let rec inherit_effective
         if to_descs then
           inherit_to_descendants idx info pc
       end
+  end
 
 and inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
   let ft = PC.feature_table pc in
