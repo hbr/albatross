@@ -59,13 +59,11 @@ let or_index:          int =  4
 let all_index:         int =  5
 let some_index:        int =  6
 let eq_index:          int =  7
-let pparen_index:      int =  8
-let domain_index:      int =  9
-let ddomain_index:     int = 10
-let fparen_index:      int = 11
-let tuple_index:       int = 12
-let first_index:       int = 13
-let second_index:      int = 14
+let domain_index:      int =  8
+let ddomain_index:     int =  9
+let tuple_index:       int = 10
+let first_index:       int = 11
+let second_index:      int = 12
 
 
 let empty (verbosity:int): t =
@@ -395,15 +393,16 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only) (base:bool) (ft:t): un
     pub_only
     base
     ft.ct;
-  if desc.anchor_cls <> -1 && desc.anchor_cls <> desc.cls then
-  Class_table.add_feature
-    (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
-    desc.anchor_cls
-    (is_desc_deferred desc)
-    priv_only
-    pub_only
-    base
-    ft.ct
+  if desc.anchor_cls <> -1 && desc.anchor_cls <> desc.cls then begin
+    Class_table.add_feature
+      (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
+      desc.anchor_cls
+      (is_desc_deferred desc)
+      priv_only
+      pub_only
+      base
+      ft.ct
+  end
 
 
 
@@ -551,7 +550,6 @@ let base_table (verbosity:int) : t =
                            [|a_tp;b_tp|], false)
   and spec_none = Feature.Spec.make_func None [] []
   and spec_term t = Feature.Spec.make_func (Some t) [] []
-  and spec_pre t  = Feature.Spec.make_func None [t] []
   in
   add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
@@ -599,10 +597,6 @@ let base_table (verbosity:int) : t =
     "any" Class_table.any_index (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false spec_none ft;
 
-  add_base (* predicate application *)
-    "predicate" Class_table.predicate_index (FNoperator Parenop)
-    [|any1|] [|p_tp;g_tp|] bool1 false false spec_none ft;
-
   add_base (* domain *)
     "function" Class_table.function_index (FNname ST.domain)
   [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
@@ -610,13 +604,6 @@ let base_table (verbosity:int) : t =
   add_base (* dummy domain *)
     "function" Class_table.function_index (FNname (ST.symbol "@domain"))
   [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
-
-  let dom2 = domain_index + 2 in
-  let fpre = Application (Term.unary dom2 (Variable 0), [|Variable 1|], false)
-  in
-  add_base (* function application *)
-    "function" Class_table.function_index (FNoperator Parenop)
-    [|any2;any2|] [|f_tp;a_tp|] b_tp false false (spec_pre fpre) ft;
 
   add_base (* tuple *)
     "tuple" Class_table.tuple_index (FNname ST.tuple)
@@ -638,9 +625,7 @@ let base_table (verbosity:int) : t =
   assert ((descriptor all_index ft).fname         = FNoperator Allop);
   assert ((descriptor some_index ft).fname        = FNoperator Someop );
   assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
-  assert ((descriptor pparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor domain_index ft).fname      = FNname ST.domain);
-  assert ((descriptor fparen_index ft).fname      = FNoperator Parenop);
   assert ((descriptor tuple_index ft).fname       = FNname ST.tuple);
   assert ((descriptor first_index ft).fname       = FNname ST.first);
   assert ((descriptor second_index ft).fname      = FNname ST.second);
