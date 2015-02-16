@@ -150,6 +150,10 @@ let term (i:int) (pc:t): term =
   assert (i < count pc);
   Proof_table.local_term i pc.base
 
+let term_up (i:int) (n:int) (pc:t): term =
+  assert (0 <= n);
+  Term.up n (term i pc)
+
 let depth (pc:t): int = pc.depth
 
 
@@ -374,6 +378,63 @@ let triggers_evaluation (t:term) (nb:int) (pc:t): bool =
       end
   | _ ->
       false
+
+
+let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
+  (* Simplify the term [t] and return the simplified term, the corresponding Eval
+     structure and a flag which tells if the term [t] and its simplification are
+     different.
+
+     [below_idx]: consider only rules below [below_idx] for equality. *)
+  let nbenv = nbenv pc in
+  let rec simp t nb =
+    let do_subterms t nb =
+      match t with
+        Variable _ ->
+          t, Eval.Term t, false
+      | Application(f,args,pr) ->
+          let fsimp,fe,fmodi = simp f nb in
+          let arglst, modi =
+            Array.fold_left
+              (fun (arglst,modi) a ->
+                let asimp,ae,amodi = simp a nb in
+                (asimp,ae)::arglst, modi || amodi)
+              ([],fmodi)
+              args
+          in
+          let args, argse = Myarray.split (Array.of_list (List.rev arglst)) in
+          Application(fsimp, args, pr),
+          Eval.Apply(fe,argse,pr),
+          modi
+      | Lam(n,nms,t0,pr) ->
+          let tsimp,te,tmodi = simp t0 (n+nb) in
+          Lam(n,nms,tsimp,pr), Eval.Lam(n,nms,te,pr), tmodi
+    in
+    let sublst = unify t (nb+nbenv) pc.entry.left pc in
+    let sublst =
+      List.filter (fun (idx,sub) -> idx < below_idx && Term_sub.is_empty sub) sublst
+    in
+    match sublst with
+      [idx,_] ->
+        let eq = term_up idx nb pc in
+        let nargs, left, right = Proof_table.split_equality eq nb pc.base in
+        assert (nargs = 0);
+        assert (t = left);
+        right, Eval.Simpl(Eval.Term t,idx,[||]), true
+    | _ ->
+        do_subterms t nb
+  in
+  let tsimp, te, modi = simp t 0 in
+  let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
+  assert (ta = t);
+  assert (tb = tsimp);
+  assert (modi = (tsimp <> t));
+  (*if modi then begin
+    printf "term    %s\n" (string_of_term t pc);
+    printf "simpl   %s\n" (string_of_term tsimp pc);
+  end;*)
+  tsimp, te, modi
+
 
 
 
@@ -726,19 +787,25 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
   (* Add the evaluation of the term [i] in case that there is one if
      it is not yet in the proof context [pc] to the proof context and to the
      work items.  *)
-  let t        = term i pc
+  let t = term i pc
   in
-  try
-    let teval,eval,modi = evaluated_term t i pc in
-    if not modi then
-      raise Not_found;
-    if has teval pc then
+  let add_eval t e =
+    if has t pc then
       ()
     else begin
-      Proof_table.add_eval teval i eval pc.base;
-      let _ = raw_add teval true pc in ();
+      Proof_table.add_eval t i e pc.base;
+      let _ = raw_add t true pc in ();
       add_last_to_work pc
     end
+  in
+  try
+    let t,e,modi = simplified_term t i pc in
+    if not modi then begin
+      let t,e,modi = evaluated_term t i pc in
+      if not modi then raise Not_found;
+      add_eval t e
+    end else
+      add_eval t e
   with Not_found ->
     ()
 
@@ -1119,18 +1186,24 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
 
 
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
-  let teval,eval,modi = evaluated_term g (count pc) pc in
-  if not modi then
-    lst
-  else
-    let impl = implication teval g pc in
+  let add_eval t e =
+    let impl = implication t g pc in
     if has impl pc then
       lst
     else begin
-      Proof_table.add_eval_backward g impl eval pc.base;
+      Proof_table.add_eval_backward g impl e pc.base;
       let idx_impl = raw_add impl false pc in
       idx_impl :: lst
     end
+  in
+  let t,e,modi = simplified_term g (count pc) pc in
+  if not modi then
+    let t,e,modi = evaluated_term g (count pc) pc in
+    if not modi then lst
+    else
+      add_eval t e
+  else
+    add_eval t e
 
 
 
