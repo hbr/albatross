@@ -413,7 +413,9 @@ let expanded_definition (idx:int) (nb:int) (at:t): term =
 
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
-  Feature_table.split_equality t (nb + count_arguments at) (feature_table at)
+  let nargs, eq_id, left, right =
+    Feature_table.split_equality t (nb + count_arguments at) (feature_table at) in
+  nargs,left,right
 
 
 

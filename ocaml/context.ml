@@ -263,6 +263,9 @@ let anchor_class (c:t): int =
 
 
 
+let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
+  Feature_table.split_equality t (nb + count_arguments c) c.ft
+
 let check_deferred (c:t): unit =
   assert (is_toplevel c);
   let ct  = class_table c

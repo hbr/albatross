@@ -23,6 +23,7 @@ type t = {
     premises:  (int * bool * term) list;
               (* gp1, cons,  term *)
     target:   term;
+    eq:        (int * term * term) option (* equality id, left, right *)
   }
 
 
@@ -72,6 +73,17 @@ let is_forward (rd:t): bool =
 let is_backward (rd:t): bool =
   is_implication rd &&
   (rd.nbwd = 0 && not rd.bwd_blckd && not (Term.is_argument rd.target rd.nargs))
+
+
+let is_equality (rd:t): bool =
+  Option.has rd.eq
+
+
+let equality_data (rd:t): int * int * term * term =
+  match rd.eq with
+    None -> raise Not_found
+  | Some(eq_id, left, right) ->
+      rd.nargs, eq_id, left, right
 
 
 let short_string (rd:t): string =
@@ -127,7 +139,7 @@ let prepend_premises (ps:(int*bool*term) list) (rd:t)
   let all_id  = rd.nbenv + Feature_table.all_index in
   let t = implication_chain ps rd.target (rd.nargs + rd.nbenv) in
   Term.quantified all_id rd.nargs rd.nms t
-  
+
 
 
 let term (rd:t) (nbenv:int): term =
@@ -210,6 +222,15 @@ let make (t:term) (c:Context.t): t =
     else
       is_backward_blocked ps tgt nargs c
   in
+  let eq =
+    if ps = [] then
+      try
+        let neq,eq_id,left,right = Context.split_equality tgt nargs c in
+        assert (neq = 0);
+        Some (eq_id,left,right)
+      with Not_found -> None
+    else None
+  in
   let rd = { orig      = None;
              nbenv     = nbenv;
              nargs     = nargs;
@@ -221,7 +242,8 @@ let make (t:term) (c:Context.t): t =
              ndropped  = 0;
              nds_dropped = 0;
              premises  = ps;
-             target    = tgt}
+             target    = tgt;
+             eq        = eq}
   in
   assert (term rd nbenv = t);
   rd

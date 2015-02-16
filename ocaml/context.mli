@@ -125,6 +125,7 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 
 val expanded_term:  term -> int -> t -> term
 
+val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> t -> term
 val expanded_definition: int -> int -> t -> term
 

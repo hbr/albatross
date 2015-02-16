@@ -18,6 +18,8 @@ val is_specialized:       t -> bool
 val is_fully_specialized: t -> bool
 val is_implication:       t -> bool
 val is_intermediate:      t -> bool
+val is_equality:          t -> bool
+val equality_data:        t -> int * int * term * term
 val previous_schematic:   t -> int option
 val premises:             t -> int -> (term*bool) list
 val count_premises:       t -> int

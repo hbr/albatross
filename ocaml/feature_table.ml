@@ -1071,7 +1071,8 @@ let has_variant_candidate (i:int) (cls:int) (ft:t): bool =
   with Not_found -> false
 
 
-let split_equality (t:term) (nbenv:int) (ft:t): int * term * term =
+let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
+  (* Return [nargs, eq_id, left, right] if the term is an equality. *)
   let all_id = nbenv + all_index in
   let nargs, t =
     try
@@ -1087,7 +1088,7 @@ let split_equality (t:term) (nbenv:int) (ft:t): int * term * term =
       assert (i < count ft);
       if (base_descriptor i ft).is_eq then begin
         assert (Array.length args = 2);
-        nargs, args.(0), args.(1)
+        nargs, i, args.(0), args.(1)
       end else
         raise Not_found
   | _ -> raise Not_found

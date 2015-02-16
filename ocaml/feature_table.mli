@@ -112,10 +112,10 @@ val is_interface_use:  t -> bool
 
 val implication_term: term -> term -> int -> t -> term
 
-val split_equality: term -> int -> t -> int * term * term
-    (** [split_equality t nbenv ft] returns the number of arguments and the
-        left and right hand side of an equality or raises [Not_found] if
-        [t] is not an equality. *)
+val split_equality: term -> int -> t -> int * int * term * term
+    (** [split_equality t nbenv ft] returns the number of arguments, the
+        equality in and the left and right hand side of an equality or raises
+        [Not_found] if [t] is not an equality. *)
 
 val is_equality: term -> int -> t -> bool
     (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
