@@ -158,6 +158,81 @@ let expand_term (t:term) (at:t): term =
   Context.expanded_term t 0 at.c
 
 
+let prenex_term (t:term) (at:t): term =
+  (* The term [t] in prenex normal form with respect to universal quantifiers *)
+  let all_id = all_id at
+  and imp_id = imp_id at in
+  let rec pterm
+      (t:term) (all_id:int) (imp_id:int): int * int array * term =
+    try
+      let n0,nms0,t0 = Term.quantifier_split t all_id in
+      let n1,nms1,t1 = pterm t0 (n0+all_id) (n0+imp_id) in
+      n0+n1, Array.append nms0 nms1, t1
+    with Not_found ->
+      try
+        let a,b = Term.binary_split t imp_id in
+        let n,nms,b1 = pterm b all_id imp_id in
+        let t = Term.binary (n+imp_id) (Term.up n a) b1 in
+        n, nms, t
+      with Not_found ->
+        0, [||], t
+  in
+  let n,nms,t = pterm t all_id imp_id in
+  Term.quantified all_id n nms t
+
+
+let equivalent (t1:term) (t2:term) (at:t): bool =
+  (* Are the terms equivalent without regarding names and positions of the
+     all quantifiers? *)
+  let rec equiv t1 t2 all_id imp_id =
+    let split (t:term): int * term option * term =
+      let n, t0 =
+        try
+          let n,nms,t0 = Term.quantifier_split t all_id in n,t0
+        with Not_found -> 0, t in
+      let a, b =
+        try
+          let a,b = Term.binary_split t0 (n+imp_id) in Some a, b
+        with Not_found -> None, t0
+      in
+      n, a, b
+    in
+    let n1, a1, b1 = split t1
+    and n2, a2, b2 = split t2 in
+    match a1, a2 with
+      None, None when n1 = n2 ->
+        true
+    | Some a1, Some a2 ->
+        if n1 = n2 then
+          let all_id, imp_id = n1 + all_id, n1 + imp_id in
+          equiv a1 a2 all_id imp_id &&
+          equiv b1 b2 all_id imp_id
+        else
+          let first_less n1 a1 b1 n2 a2 b2 =
+            assert (n1 <= n2);
+            let gp1_a1 = Term.greatestp1_arg a1 n1
+            and gp1_a2 = Term.greatestp1_arg a2 n2 in
+            gp1_a1 = gp1_a2 &&
+            let all_id, imp_id = gp1_a1+all_id, gp1_a1+imp_id
+            and nargs1, nargs2 = n1-gp1_a1, n2-gp1_a2 in
+            equiv
+              (Term.down_from nargs1 gp1_a1 a1)
+              (Term.down_from nargs2 gp1_a2 a2)
+              all_id imp_id &&
+            equiv
+              (Term.quantified all_id nargs1 [||] b1)
+              (Term.quantified all_id nargs2 [||] b2)
+              all_id imp_id
+          in
+          if n1 <= n2 then first_less n1 a1 b1 n2 a2 b2
+          else first_less n2 a2 b2 n1 a1 b1
+    | _, _ ->
+        false
+  in
+  equiv t1 t2 (all_id at) (imp_id at)
+
+
+
 let make (verbosity:int): t =
   {seq      = Ass_seq.empty ();
    depth    = 0;

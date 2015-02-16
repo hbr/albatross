@@ -598,7 +598,13 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
   assert (RD.is_specialized rdj);
   assert (RD.is_implication rdj);
   let t = RD.term_b rdj nbenv in
-  assert (Term.equivalent (term i pc) (RD.term_a rdj nbenv));
+  if not (Proof_table.equivalent (term i pc) (RD.term_a rdj nbenv) pc.base)
+  then begin
+    printf "add_mp premise     %d %s\n" i (string_of_term_i i pc);
+    printf "       implication %d %s\n" j (string_of_term_i j pc);
+    printf "       term_a         %s\n" (string_of_term (RD.term_a rdj nbenv) pc)
+  end;
+  assert (Proof_table.equivalent (term i pc) (RD.term_a rdj nbenv) pc.base);
   try
     find t pc
   with Not_found ->
@@ -795,6 +801,11 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
    *)
   assert (is_consistent pc);
   let cnt = count pc in
+  let t =
+    if is_axiom then
+      Proof_table.prenex_term t pc.base
+    else t
+  in
   if is_axiom then
     Proof_table.add_axiom t pc.base
   else
