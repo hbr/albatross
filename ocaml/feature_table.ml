@@ -1101,14 +1101,11 @@ let is_equality (t:term) (nbenv:int) (ft:t): bool =
 
 
 
-let update_equality (seed:int) (i:int) (ft:t): unit =
+let update_equality (seed:int) (bdesc:base_descriptor) (ft:t): unit =
   (* If the feature [seed] is the equality feature of ANY then mark the base
      descriptor [bdesc] as equality. *)
   if seed = eq_index then begin
-    let desc  = descriptor i ft
-    and bdesc = base_descriptor i ft in
     bdesc.is_eq <- true;
-    assert (desc.cls <> -1)
   end
 
 
@@ -1134,7 +1131,7 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
               IntMap.find cls bdesc_seed.variants = i1);
       bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
       bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
-      update_equality i_seed i1 ft
+      update_equality i_seed bdesc1 ft
     )
     bdesc0.seeds;
   if not export && is_public ft then begin (* do the same for the private view *)
@@ -1148,8 +1145,9 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
         let bdesc_seed = base_descriptor_priv i_seed ft in
         assert (not (IntMap.mem cls bdesc_seed.variants) ||
         IntMap.find cls bdesc_seed.variants = i1);
-      bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-        bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds
+        bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
+        bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
+        update_equality i_seed bdesc1 ft
       )
       bdesc0.seeds;
   end;
