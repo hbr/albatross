@@ -217,6 +217,14 @@ let string_of_term_i (i:int) (pc:t): string =
   string_of_term (term i pc) pc
 
 
+let string_of_term_array (args: term array) (pc:t): string =
+  "[" ^
+  (String.concat ","
+     (List.map (fun t -> string_of_term t pc) (Array.to_list args)))
+  ^
+  "]"
+
+
 let is_substitution_ok (sub:Term_sub.t) (nbenv:int): bool =
   let all_id =  nbenv + Feature_table.all_index
   and some_id = nbenv + Feature_table.some_index in
@@ -1045,6 +1053,23 @@ let backward_witness (t:term) (pc:t): int =
 let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
+  (*begin try
+    let nargs, eq_id, left, right = Context.split_equality g 0 (context pc) in
+    if nargs = 0 then begin
+      printf "goal is equality %s\n" (string_of_term g pc);
+      printf " left   %s\n" (string_of_term left pc);
+      printf " right  %s\n" (string_of_term right pc);
+      try
+        let lam, args1, args2 = Term_algo.compare left right in
+        printf " lambda %s\n" (string_of_term lam pc);
+        printf " args1  %s\n" (string_of_term_array args1 pc);
+        printf " args2  %s\n\n" (string_of_term_array args2 pc);
+      with Not_found ->
+        printf " no different subterms\n\n"
+    end
+  with Not_found ->
+    ()
+  end;*)
   let nbenv = nbenv pc in
   let sublst = unify g nbenv pc.entry.prvd2 pc in
   if sublst = [] then
