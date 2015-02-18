@@ -67,7 +67,8 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
 
 
 
-let compare (t1:term) (t2:term): term * term array * term array =
+let compare (t1:term) (t2:term) (eq:term->term->'a)
+    : term * 'a array * term array * term array =
   (* Compare the terms and return a lambda term and two argument arrays so that
      the lambda term applied to the fist argument array results in the first term
      and the lambda term applied to the second argument array results in the second
@@ -77,48 +78,50 @@ let compare (t1:term) (t2:term): term * term array * term array =
      positions with different subterms,
      pair list of different subterms *)
   let rec comp (t1:term) (t2:term) (nb:int)
-      (pos:int) (poslst:int list) (tlst:(term*term) list)
-      : int * int list * (term*term) list =
-    let different t1 t2 pos poslst tlst =
+      (pos:int) (poslst:int list) (elst:'a list) (tlst:(term*term) list)
+      : int * int list * 'a list * (term*term) list =
+    let different t1 t2 pos poslst elst tlst =
       try
         let t1 = Term.down nb t1
         and t2 = Term.down nb t2 in
-        pos+1, pos::poslst, (t1,t2)::tlst
+        let e = eq t1 t2 in
+        pos+1, pos::poslst, e::elst, (t1,t2)::tlst
       with Term_capture ->
         raise Not_found
     in
     match t1, t2 with
       Variable k, _ when k < nb ->
-        if t1 = t2 then pos+1, poslst, tlst
+        if t1 = t2 then pos+1, poslst, elst, tlst
         else raise Not_found
     | _ , Variable k when k < nb ->
-        if t1 = t2 then pos+1, poslst, tlst
+        if t1 = t2 then pos+1, poslst, elst, tlst
         else raise Not_found
     | Variable k, Variable l when k = l ->
-        pos+1, poslst, tlst
+        pos+1, poslst, elst, tlst
     | Application(f1,args1,pr1), Application(f2,args2,pr2)
       when Array.length args1 = Array.length args2 && pr1 = pr2 ->
         begin try
-          let pos,poslst,tlst = comp f1 f2 nb (pos+1) poslst tlst in
+          let pos,poslst,elst,tlst = comp f1 f2 nb (pos+1) poslst elst tlst in
           let args = Myarray.combine args1 args2 in
           Array.fold_left
-            (fun (pos,poslst,tlst) (a1,a2) -> comp a1 a2 nb pos poslst tlst)
-            (pos,poslst,tlst)
+            (fun (pos,poslst,elst,tlst) (a1,a2) ->
+              comp a1 a2 nb pos poslst elst tlst)
+            (pos,poslst,elst,tlst)
             args
         with Not_found ->
-          different t1 t2 pos poslst tlst
+          different t1 t2 pos poslst elst tlst
         end
     | Lam(n1,nms1,t01,pr1), Lam(n2,nms2,t02,pr2)
       when n1 = n2 && pr1 = pr2 ->
         begin try
-          comp t01 t02 (n1+nb) (pos+1) poslst tlst
+          comp t01 t02 (n1+nb) (pos+1) poslst elst tlst
         with Not_found ->
-          different t1 t2 pos poslst tlst
+          different t1 t2 pos poslst elst tlst
         end
     | _, _ ->
-        different t1 t2 pos poslst tlst
+        different t1 t2 pos poslst elst tlst
   in
-  let npos, poslst, tlst = comp t1 t2 0 0 [] [] in
+  let npos, poslst, elst, tlst = comp t1 t2 0 0 [] [] [] in
   let nargs = List.length poslst
   and poslst  = List.rev poslst in
   if nargs = 0 then raise Not_found;
@@ -165,7 +168,8 @@ let compare (t1:term) (t2:term): term * term array * term array =
   let lam = Lam (nargs,[||],tlam,false) in
   assert (nextvar = nargs);
   assert (poslst = []);
-  let tarr = Array.of_list (List.rev tlst) in
+  let tarr = Array.of_list (List.rev tlst)
+  and earr = Array.of_list (List.rev elst) in
   let args1, args2 = Myarray.split tarr in
   let equi t1 t2 =
     if Term.equivalent t1 t2 then true
@@ -183,4 +187,4 @@ let compare (t1:term) (t2:term): term * term array * term array =
   in
   assert (equi (Term.apply tlam args1) t1);
   assert (equi (Term.apply tlam args2) t2);
-  lam, args1, args2
+  lam, earr, args1, args2

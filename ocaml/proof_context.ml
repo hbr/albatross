@@ -783,20 +783,27 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
           end
 
 
+
+let fwd_evaluation (t:term) (i:int) (e:Eval.t) (full:bool) (pc:t): int =
+  (* Add the term [t] which is an evaluation of the term [i] to the proof context
+     if it is not yet in and return the index  *)
+  try
+    find t pc
+  with Not_found ->
+    Proof_table.add_eval t i e pc.base;
+    let res = raw_add t full pc in ();
+    if full then add_last_to_work pc;
+    res
+
+
+
 let add_consequences_evaluation (i:int) (pc:t): unit =
   (* Add the evaluation of the term [i] in case that there is one if
      it is not yet in the proof context [pc] to the proof context and to the
      work items.  *)
-  let t = term i pc
-  in
+  let t = term i pc in
   let add_eval t e =
-    if has t pc then
-      ()
-    else begin
-      Proof_table.add_eval t i e pc.base;
-      let _ = raw_add t true pc in ();
-      add_last_to_work pc
-    end
+    let _ = fwd_evaluation t i e true pc in ()
   in
   try
     let t,e,modi = simplified_term t i pc in
@@ -1102,6 +1109,120 @@ let inherit_parent
 
 
 
+let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
+  (* Add [imp] as an evaluation where [imp] has the form [teval ==> tgt] and
+     [teval] is the term [tgt] evaluation with [e]. *)
+  Proof_table.add_eval_backward tgt imp e pc.base;
+  raw_add imp false pc
+
+
+let find_match (g:term) (pc:t): int =
+  let nbenv = nbenv pc in
+  let sublst = unify g nbenv pc.entry.prvd2 pc in
+  if sublst = [] then raise Not_found;
+  try
+    let idx,_ = List.find (fun (_,sub) -> Term_sub.is_empty sub) sublst in
+    idx
+  with Not_found ->
+    let idx,sub = List.hd sublst in
+    try specialized idx sub nbenv false pc
+    with Not_found -> assert false (* specialization not type safe ? *)
+
+
+
+
+(* Subterm equality:
+
+      The goal has the form             lhs  = rhs
+      which we can get into the form    f(a1,a2,..) = f(b1,b2,..)
+      as a lambda term [f]
+      and two argument arrays [a1,a2,..], [b1,b2,..]
+
+      and we have found the leibniz rules  all(p) p(ai) ==> p(bi) for all
+      arguments
+
+   start:   f(a1,a2,..) = f(a1,a2,..)                        reflexivity
+
+   step i:  f(a1,a2,..) = f(b1,b2,..,ai,ai+1,..)             start point
+
+            {x: f(a1,a2,..) = f(b1,b2,..,x,ai+1,..)}(ai)     Eval_bwd
+
+            {x:..}(ai) ==> {x:..}(bi)                        specialize leibniz
+
+            {x:..}(bi)                                       modus ponens
+
+            f(a1,a2,..) = f(b1,b2,..,bi,ai+1,..)             Eval
+
+   last:    f(a1,a2,..) = f(b1,b2,..)
+
+   result:  lhs = rhs                                        Eval
+
+*)
+let prove_equality (g:term) (pc:t): int =
+  let nargs, eq_id, left, right = Context.split_equality g 0 (context pc) in
+  let eq_id = nbenv pc + eq_id in
+  if 0 < nargs then raise Not_found;
+  let all_id = all_id pc
+  and imp_id = 1 + imp_id pc in
+  let find_leibniz t1 t2 =
+    let p t = Application(Variable 0, [|Term.up 1 t|], true) in
+    let imp = Term.binary imp_id (p t1) (p t2) in
+    let t  = Term.quantified all_id 1 [||] imp in
+    find t pc
+  in
+  let lam, leibniz, args1, args2 =
+    Term_algo.compare left right find_leibniz in
+  let nargs = Array.length args1 in
+  assert (nargs = Array.length args2);
+  assert (0 < nargs);
+  let lam_1up = Term.up 1 lam
+  and args1_up1 = Term.array_up 1 args1
+  and args2_up1 = Term.array_up 1 args2 in
+  try
+    let flhs_1up  = Application(lam_1up,args1_up1,false)
+    and frhs_x i =
+      Application(lam_1up,
+                  Array.init nargs
+                    (fun j ->
+                      if j < i then args1_up1.(j)
+                      else if j = i then Variable 0
+                      else args2_up1.(j)),
+                  false) in
+    let pred_inner i = Term.binary (eq_id+1) flhs_1up (frhs_x i)
+    in
+    let start_term =
+      Term.binary eq_id
+        (Application(lam,args1,true)) (Application(lam,args1,true)) in
+    let start_idx  = find_match start_term pc in
+    let result = ref start_idx in
+    for i = 0 to nargs - 1 do
+      let pred_inner_i = pred_inner i in
+      let pred_i = Lam(1,[||],pred_inner_i,true) in
+      let ai_abstracted = Application(pred_i, [|args1.(i)|],true) in
+      let imp = implication (term !result pc) ai_abstracted pc in
+      let idx2 = eval_backward ai_abstracted imp
+          (Eval.Beta (Eval.Term ai_abstracted)) pc in
+      let idx = add_mp !result idx2 false pc in
+      let sub = Term_sub.singleton 0 pred_i in
+      let idx2 = specialized leibniz.(i) sub (nbenv pc) false pc in
+      let idx = add_mp idx idx2 false pc in
+      let t = Term.apply pred_inner_i [|args2.(i)|]
+      and e = Eval.Beta (Eval.Term (term idx pc)) in
+      Proof_table.add_eval t idx e pc.base;
+      result := raw_add t false pc
+    done;
+    let e =
+      let ev args = Eval.Beta (Eval.Term (Application(lam,args,true))) in
+      Eval.Apply(Eval.Term (Variable eq_id), [|ev args1; ev args2|], true)
+    in
+    result := fwd_evaluation g !result e false pc;
+    !result
+  with Not_found ->
+    assert false (* cannot happen *)
+
+
+
+
 let backward_witness (t:term) (pc:t): int =
     let nargs,nms,tt = split_some_quantified t pc in
     let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
@@ -1116,39 +1237,15 @@ let backward_witness (t:term) (pc:t): int =
 
 
 
-
 let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
-  (*begin try
-    let nargs, eq_id, left, right = Context.split_equality g 0 (context pc) in
-    if nargs = 0 then begin
-      printf "goal is equality %s\n" (string_of_term g pc);
-      printf " left   %s\n" (string_of_term left pc);
-      printf " right  %s\n" (string_of_term right pc);
-      try
-        let lam, args1, args2 = Term_algo.compare left right in
-        printf " lambda %s\n" (string_of_term lam pc);
-        printf " args1  %s\n" (string_of_term_array args1 pc);
-        printf " args2  %s\n\n" (string_of_term_array args2 pc);
-      with Not_found ->
-        printf " no different subterms\n\n"
-    end
+  try
+    find_match g pc
   with Not_found ->
-    ()
-  end;*)
-  let nbenv = nbenv pc in
-  let sublst = unify g nbenv pc.entry.prvd2 pc in
-  if sublst = [] then
-    backward_witness g pc
-  else
-    try
-      let idx,_ = List.find (fun (_,sub) -> Term_sub.is_empty sub) sublst in
-      idx
+    try backward_witness g pc
     with Not_found ->
-      let idx,sub = List.hd sublst in
-      try specialized idx sub nbenv false pc
-      with Not_found -> assert false (* specialization not type safe ? *)
+      prove_equality g pc
 
 
 
@@ -1183,18 +1280,13 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
     lst
 
 
-
-
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
   let add_eval t e =
     let impl = implication t g pc in
     if has impl pc then
       lst
-    else begin
-      Proof_table.add_eval_backward g impl e pc.base;
-      let idx_impl = raw_add impl false pc in
-      idx_impl :: lst
-    end
+    else
+      (eval_backward g impl e pc) :: lst
   in
   let t,e,modi = simplified_term g (count pc) pc in
   if not modi then

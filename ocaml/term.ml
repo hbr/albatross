@@ -83,6 +83,8 @@ module Term: sig
 
   val up: int->term->term
 
+  val array_up: int -> term array -> term array
+
   val sub_var: int -> term -> term -> term
 
   val part_sub_from: term -> int -> int -> term array -> int -> term
@@ -419,6 +421,10 @@ end = struct
     (* Shift all free variables up by 'n' in the term 't' *)
     upbound n 0 t
 
+
+  let array_up (n:int) (arr:term array): term array =
+    if n = 0 then arr
+    else Array.map (fun t -> up n t) arr
 
 
   let map_free (f:int->term) (t:term) (start:int): term =
@@ -964,7 +970,7 @@ end = struct
           None ->
               res := IntMap.add i t1 !res
         | Some t2 ->
-            if t1=t2 then ()
+            if Term.equivalent t1 t2 then ()
             else ((*Printf.printf "    Cannot merge sub\n";*) raise Not_found)
       )
       sub1;
