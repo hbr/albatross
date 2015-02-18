@@ -666,6 +666,15 @@ expr:
 |   expr LPAREN expr RPAREN       { Funapp ($1,$3) }
 |   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
 |   expr DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
+|   expr DOT LBRACE expr RBRACE   {
+  Expdot($1, predicate_of_expression (rhs_info 4) $4)
+}
+|   dotted_id_list DOT LPAREN expr RPAREN   {
+  Expdot (expression_from_dotted_id $1, $4) }
+
+|   dotted_id_list DOT LBRACE expr RBRACE   {
+  Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
+}
 |   expr COLON type_nt            { Typedexp ($1,$3) }
 
 |   KWall  formal_arguments opt_nl expr {
