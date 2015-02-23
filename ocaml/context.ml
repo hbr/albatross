@@ -145,6 +145,12 @@ let some_index (c:t): int =
 let implication_index (c:t): int =
   count_arguments c + Feature_table.implication_index
 
+let and_index (c:t): int =
+  count_arguments c + Feature_table.and_index
+
+let or_index (c:t): int =
+  count_arguments c + Feature_table.or_index
+
 
 
 
@@ -633,6 +639,37 @@ let expanded_term (t:term) (nb:int) (c:t): term =
   Feature_table.expand_term t (nb+nbenv) c.ft
 
 
+
+let to_tuple (args:term array) (nb:int) (c:t): term =
+  let tup_id = nb + count_arguments c + Feature_table.tuple_index in
+  let n = Array.length args in
+  assert (1 < n);
+  let rec to_tup i t =
+    if i = 0 then
+      t
+    else
+      let i = i - 1 in
+      let t = Application(Variable tup_id, [|args.(i);t|],false) in
+      to_tup i t
+  in
+  to_tup (n-1) args.(n-1)
+
+
+let adapt_arguments (n:int) (args:term array) (nb:int) (c:t): term array =
+  let n2 = Array.length args in
+  assert (0 < n);
+  assert (0 < n2);
+  assert (n = n2 || n = 1 || n2 = 1);
+  if n = 1 && n2 > 1 then
+    [|to_tuple args nb c|]
+  else if n2 = 1 && n > 1 then
+    assert false (* nyi: providing a tuple to a multiargument function *)
+  else
+    args
+
+
+
+
 let definition (idx:int) (nb:int) (c:t): term =
   let nbenv = count_arguments c in
   if idx < nb + nbenv then
@@ -657,3 +694,103 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
     0, [||], []
   else
     Feature_table.preconditions idx (nb+nbenv) (feature_table c)
+
+
+(* Calculation of preconditions:
+
+       a ==> b:   pa0, pa1, ..., a ==> pb0, a ==> pb1, ...
+
+       a and b:   same as 'a ==> b'
+
+
+       a or b:    pa0, pa1, ..., not a ==> pb0, not a ==> pb1, ...
+
+       if c then a else b end:
+                  pc0,pc1,...,
+                  c or not c,
+                  c ==> pa0,c==>pa1,...,
+                  not c ==> pb0, not c ==> pb1,...
+
+
+       all(x,y,...) e:
+                  all(x,y,...) pe0, all(x,y,...) pe1, ...
+
+       some(x,y,...) e:
+                  same as 'all(x,y,...) e'
+
+       {x,y,...: e}:
+                  same as 'all(x,y,...) e'
+
+       (x,y,...) -> e:
+                  no preconditions
+
+       f(x,y,...):
+                  pf0, pf1, ...
+                  px0,...,py0,...,...
+                  (x,y,...).(f.domain)
+ *)
+(*
+  (x -> y -> exp) (x) ~> (y -> exp)
+ *)
+let specification i c = assert false
+
+let term_preconditions (t:term)  (c:t): term list =
+  let rec pres (t:term) (lst:term list) (c:t): term list * Feature.Spec.t =
+    let all_id = all_index c
+    and some_id = some_index c
+    and imp_id  = implication_index c
+    and and_id  = and_index c
+    and or_id   = or_index c in
+    let do_pred n nms t =
+      let c = push_untyped nms c in
+      let ps,_ = pres t [] c in
+      List.fold_right
+        (fun p lst -> (Term.quantified all_id n nms p)::lst)
+        ps
+        lst in
+   match t with
+    | Variable i ->
+        lst,
+        specification i c
+    | Application (Variable i, args, pr) when i = imp_id || i = and_id ->
+        assert false
+    | Application (Variable i, args, pr) when i = or_id ->
+        assert false
+    | Application (Variable i, args, pr) when i = all_id || i = some_id ->
+        assert (Array.length args = 1);
+        begin try
+          let n,nms,t0 = Term.lambda_split args.(0) in
+          let lst = do_pred n nms t0 in
+          lst, assert false
+        with Not_found ->
+          assert false (* cannot happen *)
+        end
+    | Application (f,args,pr) ->
+        let lst,fspec = pres f lst c in
+        assert (Array.length args = Feature.Spec.count_arguments fspec);
+        begin try
+          let def = Feature.Spec.definition_term fspec in
+          let exp = Term.apply def args in
+          pres exp lst c
+        with Not_found ->
+          let lst = Array.fold_left
+              (fun lst arg ->
+                let lst,_ = pres arg lst c in lst)
+              lst
+              args in
+          let lst = List.fold_left
+              (fun lst pre -> assert false)
+              lst
+              (Feature.Spec.preconditions fspec)
+          in
+          lst, assert false
+        end
+    | Lam (n,nms,t0,pr) when pr ->
+        let lst = do_pred n nms t0 in
+        lst, assert false
+    | Lam (n,nms,t0,pr) ->
+        lst,
+        Feature.Spec.make_func_def nms (Some t0)
+  in
+  let ps,_ = pres t [] c in
+  ps

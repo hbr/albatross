@@ -123,6 +123,8 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 
 (*val print_local_contexts:       t -> unit*)
 
+val adapt_arguments: int -> term array -> int -> t -> term array
+
 val expanded_term:  term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term

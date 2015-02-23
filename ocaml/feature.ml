@@ -2,13 +2,24 @@ open Term
 open Container
 
 module Spec = struct
-  type t = {def:   term option;
+  type t = {nms:   int array;
+            def:   term option;
             pres:  term list;
             posts: term list}
 
-  let make_func (def: term option) (pres: term list) (posts: term list): t =
-    assert (posts = [] || not (Option.has def));
-    {def = def; pres = pres; posts = posts}
+  let make_func_def (nms:int array) (def: term option): t =
+    {nms = nms; def = def; pres = []; posts = []}
+
+
+  let make_func_spec (nms:int array) (pres: term list) (posts: term list): t =
+    {nms = nms; def = None; pres = pres; posts = posts}
+
+  let names (spec:t): int * int array =
+    Array.length spec.nms, spec.nms
+
+
+  let count_arguments (spec:t): int =
+    Array.length spec.nms
 
   let has_definition (spec:t): bool =
     Option.has spec.def
@@ -26,6 +37,11 @@ module Spec = struct
 
   let preconditions (spec:t): term list =
     spec.pres
+
+
+  let equivalent (s1:t) (s2:t): bool =
+    s1.def = s2.def && s1.pres = s2.pres && s1.posts = s2.posts
+
 end
 
 

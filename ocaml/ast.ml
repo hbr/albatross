@@ -296,40 +296,41 @@ let analyze_feature
     (pc: Proof_context.t): unit =
   let context = Proof_context.context pc in
   let context = Context.push entlst rt false is_func context in
+  let nms = Context.local_argnames context in
   let body =
     match bdy, exp with
       None, None ->
-        (Feature.Spec.make_func None [] []),
+        (Feature.Spec.make_func_def nms None),
         Feature.Empty
     | None, Some ie ->
         let term = Typer.result_term ie context in
-        (Feature.Spec.make_func (Some term) [] []),
+        (Feature.Spec.make_func_def nms (Some term)),
         Feature.Empty
     | Some bdy, None ->
         begin
           match bdy with
             None, Some Impbuiltin, None ->
-              (Feature.Spec.make_func None [] []),
+              (Feature.Spec.make_func_def nms None),
               Feature.Builtin
           | Some reqlst, Some Impbuiltin, None ->
               let pres = assertion_list reqlst context in
-              (Feature.Spec.make_func None pres []),
+              (Feature.Spec.make_func_spec nms pres []),
               Feature.Builtin
           | Some reqlst, None, None ->
               let pres = assertion_list reqlst context in
-              (Feature.Spec.make_func None pres []),
+              (Feature.Spec.make_func_spec nms pres []),
               Feature.Empty
           | Some reqlst, None, Some enslst ->
               (try
                 let term = result_term enslst context in
                 let pres = assertion_list reqlst context in
-                (Feature.Spec.make_func (Some term) pres []),
+                assert false (*(Feature.Spec.make_func (Some term) pres [])*),
                 Feature.Empty
               with Not_found ->
                 not_yet_implemented fn.i
                   "functions not defined with `Result = ...'")
           | None, Some Impdeferred, None ->
-              (Feature.Spec.make_func None [] []),
+              (Feature.Spec.make_func_def nms None),
               Feature.Deferred
           | _ -> not_yet_implemented fn.i
                 "functions with implementation/preconditions"

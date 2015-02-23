@@ -460,6 +460,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
         Lam (n,nms,t0,_) ->
+          (*let args = Proof_table.adapt_arguments n args nb pc.base in*)
+          assert (n = Array.length args);
           Term.apply t0 args, Eval.Beta e, true
       | _ ->
           Application (f,args,is_pred), e, !modi_ref
@@ -510,6 +512,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let tred,ered,modi = eval t 0 false in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
   assert (ta = t);
+  if tb <> tred then begin
+    printf "tb   %s\n" (string_of_term tb pc);
+    printf "tred %s\n" (string_of_term tred pc)
+  end;
   assert (tb = tred);
   assert (modi = (tred <> t));
   tred, ered, modi

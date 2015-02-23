@@ -10,8 +10,6 @@ open Term
 open Signature
 open Printf
 
-module FDef = Feature.Spec
-
 type implementation_status = No_implementation | Builtin | Deferred
 
 
@@ -548,16 +546,16 @@ let base_table (verbosity:int) : t =
                            [|a_tp;b_tp|], false)
   and tup_tp= Application (Variable (Class_table.tuple_index+2),
                            [|a_tp;b_tp|], false)
-  and spec_none = Feature.Spec.make_func None [] []
-  and spec_term t = Feature.Spec.make_func (Some t) [] []
+  and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None
+  and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t)
   in
   add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
-    [||] [|bool;bool|] bool false false spec_none ft;
+    [||] [|bool;bool|] bool false false (spec_none 2) ft;
 
   add_base (* false *)
     "boolean" Class_table.boolean_index FNfalse
-    [||] [||] bool false false spec_none ft;
+    [||] [||] bool false false (spec_none 0) ft;
 
   let imp_id1   = 1 + implication_index
   and false_id1 = 1 + false_index
@@ -575,47 +573,47 @@ let base_table (verbosity:int) : t =
   in
   add_base (* not *)
     "boolean" Class_table.boolean_index (FNoperator Notop)
-    [||] [|bool|] bool false false (spec_term not_term) ft;
+    [||] [|bool|] bool false false (spec_term 1 not_term) ft;
 
   add_base (* and *)
     "boolean" Class_table.boolean_index (FNoperator Andop)
-    [||] [|bool;bool|] bool false false (spec_term and_term) ft;
+    [||] [|bool;bool|] bool false false (spec_term 2 and_term) ft;
 
   add_base (* or *)
     "boolean" Class_table.boolean_index (FNoperator Orop)
-    [||] [|bool;bool|] bool false false (spec_term or_term) ft;
+    [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
   add_base (* all *)
     "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 false true spec_none ft;
+    [|any1|] [|p_tp|] bool1 false true (spec_none 1) ft;
 
   add_base (* some *)
     "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 false true spec_none ft;
+    [|any1|] [|p_tp|] bool1 false true (spec_none 1) ft;
 
   add_base (* equality *)
     "any" Class_table.any_index (FNoperator Eqop)
-    [|any1|] [|g_tp;g_tp|] bool1 true false spec_none ft;
+    [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 
   add_base (* domain *)
     "function" Class_table.function_index (FNname ST.domain)
-  [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
+  [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* dummy domain *)
     "function" Class_table.function_index (FNname (ST.symbol "@domain"))
-  [|any2;any2|] [|f_tp|] p_tp2 false true spec_none ft;
+  [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* tuple *)
     "tuple" Class_table.tuple_index (FNname ST.tuple)
-    [|any2;any2|] [|a_tp;b_tp|] tup_tp false false spec_none ft;
+    [|any2;any2|] [|a_tp;b_tp|] tup_tp false false (spec_none 2) ft;
 
   add_base (* first *)
     "tuple" Class_table.tuple_index (FNname ST.first)
-    [|any2;any2|] [|tup_tp|] a_tp false false spec_none ft;
+    [|any2;any2|] [|tup_tp|] a_tp false false (spec_none 1) ft;
 
   add_base (* second *)
     "tuple" Class_table.tuple_index (FNname ST.second)
-    [|any2;any2|] [|tup_tp|] b_tp false false spec_none ft;
+    [|any2;any2|] [|tup_tp|] b_tp false false (spec_none 1) ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor false_index ft).fname       = FNfalse);
@@ -1182,7 +1180,7 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
         let nargs = Array.length desc.argnames in
         Some (variant_term t nargs desc.cls cls ft)
   in
-  let spec = Feature.Spec.make_func def_opt [] [] in
+  let spec = Feature.Spec.make_func_def desc.argnames def_opt in
   let cnt = count ft
   and nargs = Array.length desc.argnames
   in
@@ -1291,7 +1289,7 @@ let update_function
   if is_priv then begin
     if impl <> desc.impl then
       not_match "implementation status";
-    if spec <> desc.priv.spec then
+    if not (Feature.Spec.equivalent spec desc.priv.spec) then
       not_match "private definition"
   end else begin
     let def_opt = Feature.Spec.definition spec
@@ -1370,8 +1368,8 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   if name <> ST.symbol "boolean" then begin
     let or_desc  = descriptor or_index ft
     and and_desc = descriptor and_index ft in
-    or_desc.priv.spec   <- Feature.Spec.make_func None [] [];
-    and_desc.priv.spec  <- Feature.Spec.make_func None [] []
+    or_desc.priv.spec   <- Feature.Spec.make_func_def or_desc.argnames  None;
+    and_desc.priv.spec  <- Feature.Spec.make_func_def and_desc.argnames None
   end
 
 

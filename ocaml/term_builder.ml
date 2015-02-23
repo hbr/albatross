@@ -10,7 +10,7 @@ open Support
 open Container
 open Printf
 
-type t = {mutable tlist: term list;
+type t = {mutable tlist: (term*int*Sign.t) list; (* term, count_all, sign *)
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
           mutable c: Context.t}
@@ -50,7 +50,15 @@ let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
 
 let has_term (tb:t): bool = tb.tlist <> []
 
-let head_term (tb:t): term = assert (has_term tb); List.hd tb.tlist
+let head_term (tb:t): term =
+  assert (has_term tb);
+  let t,_,_  = List.hd tb.tlist in
+  t
+
+let head_signature (tb:t): Sign.t =
+  assert (has_term tb);
+  let _,_,s = List.hd tb.tlist in
+  s
 
 let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   let ct  = class_table tb
@@ -76,6 +84,10 @@ let string_of_signature (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
   Class_table.string_of_signature s (tvs tb) ct
 
+
+let string_of_head_signature (tb:t): string =
+  assert (has_term tb);
+  string_of_signature (head_signature tb) tb
 
 let string_of_complete_signature (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
@@ -227,6 +239,41 @@ let is_anchor (i:int) (tb:t): bool =
   assert (i < count tb);
   TVars_sub.anchor i tb.tvars = i
 
+let dummy_index (tb:t): int =
+  count_all tb + Class_table.dummy_index
+
+let predicate_index (tb:t): int =
+  count_all tb + Class_table.predicate_index
+
+let function_index (tb:t): int =
+  count_all tb + Class_table.function_index
+
+
+let argument_type (i:int) (tb:t): type_term =
+  (* The type of the argument [i] transformed into the term builder
+
+     tvs context:         loc      +              fgs
+     builder:      bloc + loc  + glob  +   garb + fgs
+  *)
+  assert (i < Context.count_arguments tb.c);
+  let ntvs_ctxt = Context.count_type_variables tb.c
+  and ntvs_loc  = count_local tb
+  and nfgs_ctxt = Context.count_formal_generics tb.c
+  and nfgs      = count_fgs tb
+  and nglobs    = count_global tb
+  in
+  assert (ntvs_ctxt <= ntvs_loc);
+  assert (nfgs_ctxt <= nfgs);
+  let tp = Context.argument_type i tb.c in
+  let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_loc tp in
+  Term.up (ntvs_loc-ntvs_ctxt) tp
+
+
+let to_tuple (args:type_term array) (tb:t): type_term =
+  Class_table.to_tuple (count_all tb) 0 args
+
+let boolean_type (tb:t): type_term =
+  Variable (count_all tb + Class_table.boolean_index)
 
 let upgrade_dummy (i:int) (t:term) (tb:t): unit =
   (* Upgrade a potential dummy in the type variable [i] to a predicate or a
@@ -386,8 +433,10 @@ let adapt_arity (s:Sign.t) (n:int) (tb:t): Sign.t =
 
 
 let align_arity (s1:Sign.t) (s2:Sign.t) (tb:t): Sign.t * Sign.t =
-  (* What if one of them is a predicate, dummy or function?  *)
+  (* Both have to be constant or callable  *)
+  assert (Sign.is_constant s1 = Sign.is_constant s2);
   let n1,n2 = Sign.arity s1, Sign.arity s2 in
+  if n1 <> n2 then raise Not_found; (* remove when alignment is activated *)
   if n1 < n2 then
     s1, adapt_arity s2 n1 tb
   else if n2 < n1 then
@@ -415,14 +464,14 @@ let unify_sign_0
   done
 
 
-
+(*
 let downgrade (tp:type_term) (nargs:int) (tb:t): Sign.t =
   let ntvs  = count tb
   and nfgs  = Context.count_formal_generics tb.c
   and sign  = Sign.make_const tp
   in
   Class_table.downgrade_signature (ntvs+nfgs) sign nargs
-
+*)
 
 
 let to_dummy (sign:Sign.t) (tb:t): type_term =
@@ -540,7 +589,8 @@ let add_leaf
   let s = Sign.up_from (nglobtb-nglob) nloc s       in
   let s = Sign.up (nloctb-nloc) s in
   unify_sign tb.sign s tb;
-  {tb with tlist = (Variable i)::tb.tlist}
+  let s = Sign.transform (fun tp -> TVars_sub.sub_star tp tb.tvars) s in
+  {tb with tlist = (Variable i, count_all tb, s)::tb.tlist}
 
 
 
@@ -585,14 +635,37 @@ let complete_function (nargs:int) (tb:t): unit =
   let arglst = ref [] in
   for i = 1 to nargs do  (* pop arguments *)
     assert (tb.tlist <> []);
-    let t = List.hd tb.tlist in
+    let t,_,_ = List.hd tb.tlist in
     tb.tlist <- List.tl tb.tlist;
     arglst := t :: !arglst;
   done;
-  let f = List.hd tb.tlist in
+  let f,nf, fsig = List.hd tb.tlist in
+  assert (nf <= count_all tb);
+  let fsig = Sign.up_from (count_all tb - nf) (count_local tb) fsig in
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- (Application (f, Array.of_list !arglst,false)) :: tb.tlist;
-  remove_local nargs tb
+  let t = Application (f, Array.of_list !arglst,false) in
+  let ttp =
+    if Sign.is_constant fsig then
+      let dum_idx = dummy_index tb
+      and f_idx   = function_index tb
+      and p_idx   = predicate_index tb in
+      let res = TVars_sub.sub_star (Sign.result fsig) tb.tvars in
+      match res with
+        Application(Variable i,args,_) ->
+          let nargs = Array.length args in
+          if i = dum_idx || i = f_idx then begin
+            assert (nargs = 2); args.(1)
+          end else if i = p_idx then begin
+            assert (nargs = 1); boolean_type tb
+          end else
+            assert false (* cannot happen *)
+      | _ -> assert false (* cannot happen *)
+    else
+      TVars_sub.sub_star(Sign.result fsig) tb.tvars in
+  let ttp = try Term.down nargs ttp with Not_found -> assert false in
+  let s   = Sign.make_const ttp in
+  remove_local nargs tb;
+  tb.tlist <- (t, count_all tb, s) :: tb.tlist
 
 
 
@@ -604,7 +677,6 @@ let expect_lambda
       variables of the lambda expression have been pushed to the context and
       the argument list of the lambda expression contained [ntvs] untyped
       variables and [nfgs] formal generics. *)
-
   assert (Sign.has_result tb.sign);
   tb.c <- c;
   add_local ntvs tb;
@@ -630,32 +702,32 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  remove_local ntvs tb;
-  let t = List.hd tb.tlist in
+  let t,nt,tsig = List.hd tb.tlist in
+  assert (nt <= count_all tb);
+  let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
+  assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- Lam (nargs, names, t,is_pred) :: tb.tlist;
-  tb.c <- Context.pop tb.c
-
-
-
-let argument_type (i:int) (tb:t): type_term =
-  (* The type of the argument [i] transformed into the term builder
-
-     tvs context:         loc      +              fgs
-     builder:      bloc + loc  + glob  +   garb + fgs
-  *)
-  assert (i < Context.count_arguments tb.c);
-  let ntvs_ctxt = Context.count_type_variables tb.c
-  and ntvs_loc  = count_local tb
-  and nfgs_ctxt = Context.count_formal_generics tb.c
-  and nfgs      = count_fgs tb
-  and nglobs    = count_global tb
-  in
-  assert (ntvs_ctxt <= ntvs_loc);
-  assert (nfgs_ctxt <= nfgs);
-  let tp = Context.argument_type i tb.c in
-  let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_loc tp in
-  Term.up (ntvs_loc-ntvs_ctxt) tp
+  let lam = Lam (nargs, names, t,is_pred)
+  and s   =
+    let argtps = Array.init nargs
+        (fun i -> TVars_sub.sub_star (argument_type i tb) tb.tvars) in
+    let argtup = to_tuple argtps tb in
+    let res = Sign.result tsig in
+    let res = TVars_sub.sub_star res tb.tvars in
+    let res =
+      if is_pred then begin
+        assert (res = boolean_type tb);
+        Application(Variable (predicate_index tb),[|argtup|],false)
+      end else
+        Application(Variable (function_index tb), [|argtup;res|],false)
+    in
+    let res = try Term.down ntvs res with Term_capture ->
+      printf "Term_capture ntvs %d\n" ntvs;
+      raise Not_found in
+    Sign.make_const res in
+  remove_local ntvs tb;
+  tb.c <- Context.pop tb.c;
+  tb.tlist <- (lam, count_all tb, s) :: tb.tlist
 
 
 
@@ -708,9 +780,9 @@ let update_called_variables (tb:t): unit =
         let t = update t (n+nb) in
         Lam(n,nms,t,pr)
   in
-  let t = List.hd tb.tlist in
+  let t,nt,s = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
-  tb.tlist <- (update t 0) :: tb.tlist
+  tb.tlist <- (update t 0,nt,s) :: tb.tlist
 
 
 
@@ -795,10 +867,10 @@ let specialize_term (tb:t): unit =
         nglob, Lam (n,nms,t,pr)
   in
   let nargs = Context.count_arguments tb.c
-  and t     = List.hd tb.tlist in
+  and t,nt,s     = List.hd tb.tlist in
   let nglob, t = upd t nargs 0 in
   assert (nglob = TVars_sub.count_global tb.tvars);
-  tb.tlist <- [t]
+  tb.tlist <- [t,nt,s]
 
 
 
@@ -806,7 +878,8 @@ let result (tb:t): term * TVars_sub.t =
   (** Return the term and the calculated substitutions for the type
       variables *)
   assert (Mylist.is_singleton tb.tlist);
-  List.hd tb.tlist, tb.tvars
+  let t,_,_ =  List.hd tb.tlist in
+  t, tb.tvars
 
 
 
@@ -869,7 +942,10 @@ let check_term (t:term) (tb:t): t =
       with Incomplete_type _ ->
         raise Illegal_term
       end;
-      complete_lambda ntvs nms is_pred tb;
+      begin try
+        complete_lambda ntvs nms is_pred tb
+      with Not_found -> assert false
+      end;
       tb
     in
     match t with

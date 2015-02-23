@@ -19,6 +19,7 @@ module Accus: sig
   val make:              bool -> Context.t -> t
   val is_empty:          t -> bool
   val is_singleton:      t -> bool
+  val is_tracing:        t -> bool
   val count:             t -> int
   val ntvs_added:        t -> int
   val expected_arity:    t -> int
@@ -57,7 +58,7 @@ end = struct
     {accus           = [tb];
      ntvs_added      = 0;
      arity           = 0;
-     trace           = 5 <= Context.verbosity c;
+     trace           = (5 <= Context.verbosity c);
      c               = c}
 
   let is_empty     (accs:t): bool =   Mylist.is_empty     accs.accus
@@ -71,6 +72,8 @@ end = struct
     | hd::tl ->
         let res,_ = Term_builder.result hd in
         List.for_all (fun tb -> res = fst (Term_builder.result tb)) tl
+
+  let is_tracing (accs:t): bool = accs.trace
 
   let count (accs:t): int = List.length accs.accus
 
@@ -99,8 +102,9 @@ end = struct
     List.iteri
       (fun i acc ->
         let t = Term_builder.head_term acc in
-        printf "    %d: \"%s\"  \"%s\" %s\n" i (string_of_term t) (Term.to_string t)
-          (Term_builder.string_of_tvs_sub acc))
+        printf "    %d: \"%s\"  \"%s\" %s %s\n" i (string_of_term t) (Term.to_string t)
+          (Term_builder.string_of_tvs_sub acc)
+          (Term_builder.string_of_head_signature acc))
       accus
 
 
@@ -167,19 +171,13 @@ end = struct
 
 
 
-  let expect_lambda
-      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool)
-      (c:Context.t) (accs:t): unit =
-    assert (0 <= ntvs);
+  let iter_accus (f:Term_builder.t->unit) (accs:t): unit =
     let accus = accs.accus in
-    accs.arity      <- 0;
-    accs.ntvs_added <- 0;
-    accs.c          <- c;
     accs.accus <-
       List.fold_left
         (fun lst acc ->
           try
-            Term_builder.expect_lambda ntvs nfgs is_quant is_pred c acc;
+            f acc;
             acc::lst
           with Not_found ->
             lst)
@@ -189,10 +187,23 @@ end = struct
       raise (Untypeable accus)
 
 
+
+  let expect_lambda
+      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool)
+      (c:Context.t) (accs:t): unit =
+    assert (0 <= ntvs);
+    accs.arity      <- 0;
+    accs.ntvs_added <- 0;
+    accs.c          <- c;
+    iter_accus
+      (fun acc -> Term_builder.expect_lambda ntvs nfgs is_quant is_pred c acc)
+      accs
+
+
   let complete_lambda
       (ntvs:int) (ntvs_added:int) (nms:int array) (is_pred:bool) (accs:t): unit =
-    List.iter
-      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs.accus;
+    iter_accus
+      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -333,25 +344,23 @@ let process_leaf
     Accus.add_leaf lst accs
   with
     Accus.Untypeable acc_lst ->
-      let i,_,_ = List.hd lst in
-      let str = "The expression \""
-        ^ (Context.string_of_term (Variable i) 0 c)
-        ^ "\" with types "
-        ^ (string_of_signatures lst c)
-        ^ " does not satisfy any of the expected types in {"
-        ^ (String.concat
-             ","
-             (List.map
-                (fun acc ->
-                  (*(string_of_int (Term_builder.count_local acc)) ^
-                  "[" ^ (Term_builder.concepts_string acc) ^ "]" ^
-                  (Term_builder.substitution_string acc) ^*)
-                  (Term_builder.string_of_tvs_sub acc) ^
-                  (Term_builder.signature_string acc))
-                acc_lst))
-        ^ "}"
-      in
-      error_info info str
+      if Accus.is_tracing accs then begin
+        let i,_,_ = List.hd lst in
+        printf "    The expression \"%s\" has type(s):\n"
+          (Context.string_of_term (Variable i) 0 c);
+        List.iter
+          (fun (_,tvs,s) ->
+            printf "      %s\n" (string_of_signature tvs s c))
+          lst;
+        printf "    expected type(s):\n";
+        List.iter
+          (fun acc ->
+            printf "      %s %s\n"
+              (Term_builder.string_of_tvs_sub acc)
+              (Term_builder.signature_string acc))
+          acc_lst
+      end;
+      raise (Accus.Untypeable acc_lst)
 
 
 
@@ -390,66 +399,58 @@ let analyze_expression
           a :: arg_list b
       | _ -> [e]
     in
-    match e with
-      Expproof (_,_,_)
-    | Expquantified (_,_,Expproof (_,_,_)) ->
-        error_info info "Proof not allowed here"
-    | Identifier name     -> do_leaf (id name)
-    | Expfalse            -> do_leaf (feat FNfalse)
-    | Exptrue             -> do_leaf (feat FNtrue)
-    | Expnumber num       -> do_leaf (feat (FNnumber num))
-    | Expop op            -> do_leaf (feat (FNoperator op))
-    | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
-    | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
-    | Funapp (Expdot(tgt,f),args) ->
-        let arg_lst = tgt :: (arg_list args) in
-        let args = Array.of_list arg_lst in
-        application f args accs c
-    | Funapp (f,args)     ->
-        application f (Array.of_list (arg_list args)) accs c
-    | Expparen e          -> analyze e accs c
-    | Expquantified (q,entlst,exp) ->
-        quantified q entlst exp accs c
-    | Exppred (entlst,e) ->
-        begin try
+    try
+      match e with
+        Expproof (_,_,_)
+      | Expquantified (_,_,Expproof (_,_,_)) ->
+          error_info info "Proof not allowed here"
+      | Identifier name     -> do_leaf (id name)
+      | Expfalse            -> do_leaf (feat FNfalse)
+      | Exptrue             -> do_leaf (feat FNtrue)
+      | Expnumber num       -> do_leaf (feat (FNnumber num))
+      | Expop op            -> do_leaf (feat (FNoperator op))
+      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
+      | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
+      | Funapp (Expdot(tgt,f),args) ->
+          let arg_lst = tgt :: (arg_list args) in
+          let args = Array.of_list arg_lst in
+          application f args accs c
+      | Funapp (f,args)     ->
+          application f (Array.of_list (arg_list args)) accs c
+      | Expparen e          -> analyze e accs c
+      | Expquantified (q,entlst,exp) ->
+          quantified q entlst exp accs c
+      | Exppred (entlst,e) ->
           lambda entlst e false true false accs c
-        with Accus.Untypeable _ ->
-          error_info entlst.i ("Predicate " ^
-                               (string_of_expression (Exppred (entlst,e))) ^
-                               " does not fit expected type")
-        end
-    | Expdot (tgt,f) ->
-        application f [|tgt|] accs c
-    | ExpResult ->
-        not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
-    | Exparrow(entlst,e) ->
-        begin try
+      | Expdot (tgt,f) ->
+          application f [|tgt|] accs c
+      | ExpResult ->
+          not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
+      | Exparrow(entlst,e) ->
           lambda entlst e false false true accs c
-        with Accus.Untypeable _ ->
-          error_info entlst.i ("Function " ^
-                               (string_of_expression (Exparrow (entlst,e))) ^
-                               " does not fit expected type")
-        end
-    | Expbracket _ ->
-        not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
-    | Bracketapp (_,_) ->
-        not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
-    | Expset _ ->
-        not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
-    | Explist _ ->
-        not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
-    | Tupleexp (a,b) ->
-        application (Identifier ST.tuple) [|a;b|] accs c
-    | Expcolon (_,_) ->
-        not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
-    | Expassign (_,_) ->
-        not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
-    | Expif (_,_) ->
-        not_yet_implemented ie.i ("Expif Typing of "^ (string_of_expression e))
-    | Expinspect (_,_) ->
-        not_yet_implemented ie.i ("Expinspect Typing of "^ (string_of_expression e))
-    | Typedexp (_,_) ->
-        not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
+      | Expbracket _ ->
+          not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
+      | Bracketapp (_,_) ->
+          not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
+      | Expset _ ->
+          not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
+      | Explist _ ->
+          not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
+      | Tupleexp (a,b) ->
+          application (Identifier ST.tuple) [|a;b|] accs c
+      | Expcolon (_,_) ->
+          not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
+      | Expassign (_,_) ->
+          not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
+      | Expif (_,_) ->
+          not_yet_implemented ie.i ("Expif Typing of "^ (string_of_expression e))
+      | Expinspect (_,_) ->
+          not_yet_implemented ie.i ("Expinspect Typing of "^ (string_of_expression e))
+      | Typedexp (_,_) ->
+          not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
+    with Accus.Untypeable _ ->
+      error_info ie.i ("Expression \"" ^ (string_of_expression e) ^
+                           "\" is not typeable")
 
   and application
       (f:expression)
@@ -478,10 +479,7 @@ let analyze_expression
     let qop = match q with Universal -> Allop | Existential -> Someop in
     process_leaf (features (FNoperator qop) 1 info c) c info accs;
     Accus.expect_argument 0 accs;
-    begin try
-      lambda entlst e true true false accs c
-    with Accus.Untypeable _  -> assert false (* cannot happen in quantified *)
-    end;
+    lambda entlst e true true false accs c;
     Accus.complete_function 1 accs
 
   and lambda
