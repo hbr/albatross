@@ -185,6 +185,7 @@ end
 module Mystring: sig
   val rev_split: string -> char -> string list
   val split: string -> char -> string list
+  val for_all: (char -> bool) -> string -> bool
 end = struct
   let rev_split (str:string) (sep:char): string list =
     let start    = ref 0
@@ -205,6 +206,16 @@ end = struct
 
   let split (str:string) (sep:char): string list =
     List.rev (rev_split str sep)
+
+  let for_all (f:char->bool) (s:string): bool =
+    let n = String.length s in
+    let rec forall i =
+      if i = n then
+        true
+      else
+        f s.[i] && forall (i+1)
+    in
+    forall 0
 end
 
 

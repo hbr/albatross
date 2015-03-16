@@ -303,6 +303,16 @@ let get_module_states (ad:t): unit =
      modules in the package, get the states of all modules (new, modified,
      unchanged) and mark the modules which are affected indirectly.  *)
   assert (has_alba_dir ad);
+  let is_alpha_num (c:char): bool =
+    c = '_' ||
+    let code = Char.code c
+    and a    = Char.code 'a'
+    and z    = Char.code 'z'
+    and zero = Char.code '0'
+    and nine = Char.code '9' in
+    (a    <= code && code <= z) ||
+    (zero <= code && code <= nine)
+  in
   let f1 (set:IntSet.t) (fn:string): IntSet.t =
     try
       let mdlstr =
@@ -313,7 +323,10 @@ let get_module_states (ad:t): unit =
         else
           raise Not_found
       in
-      IntSet.add (ST.symbol mdlstr) set
+      if String.length mdlstr > 0 && Mystring.for_all is_alpha_num mdlstr then
+        IntSet.add (ST.symbol mdlstr) set
+      else
+        set
     with Not_found ->
       set
   and check_affected (nme:int) (st:state): unit =
