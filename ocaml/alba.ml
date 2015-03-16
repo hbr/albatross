@@ -5,7 +5,6 @@
 *)
 
 open Printf
-open Unix
 open Container
 open Support
 
@@ -93,7 +92,7 @@ type t = {
 
 let basic_lib_paths: string list =
   try
-    let str = getenv "ALBA_LIB_PATH" in
+    let str = Sys.getenv "ALBA_LIB_PATH" in
     Mystring.split str ':'
   with Not_found ->
     []
@@ -130,89 +129,50 @@ let make_lib (lib_dir:string) (ad:t) = {
 }
 
 
-let my_unlink (fname:string): unit =
-  handle_unix_error unlink fname
-
-
-let my_opendir (dirname:string): dir_handle =
-  try
-    opendir dirname
-  with
-    Unix_error _ ->
-      raise (Sys_error ("Cannot open directory `" ^ dirname ^ "'"))
-
-
-let my_closedir (h:dir_handle): unit =
-  try
-    closedir h
-  with Unix_error _ ->
-      raise (Sys_error "Cannot close directory")
-
-
-
 let my_mkdir (dirname:string): unit =
   try
-    mkdir dirname 0o0755
+    Unix.mkdir dirname 0o0755
   with
-    Unix_error _ ->
+    Unix.Unix_error _ ->
       raise (Sys_error ("Cannot open directory `" ^ dirname ^ "'"))
 
 
 
 
-let my_stat (fname:string): stats =
+let my_stat (fname:string): Unix.stats =
   try
-    stat fname
+    Unix.stat fname
   with
-    Unix_error _ ->
+    Unix.Unix_error _ ->
       raise Not_found
+
 
 
 
 let dir_fold (f: 'a -> string -> 'a) (a:'a) (dirname:string): 'a =
-  let dir = my_opendir dirname in
-  let rec fold (a:'a): 'a =
-    try
-      let fn = readdir dir in
-      fold (f a fn)
-    with End_of_file ->
-      a
-  in
-    fold a
-
+  let arr = Sys.readdir dirname in
+  Array.fold_left f a arr
 
 
 
 let dir_iter (f:string -> unit) (dirname:string): unit =
-  let dir = my_opendir dirname in
-  let rec iter (): unit =
-    try
-      let fn = readdir dir in
-      f fn;
-      iter ()
-    with End_of_file ->
-      ()
-  in
-  iter ();
-  my_closedir dir
+  let arr = Sys.readdir dirname in
+  Array.iter f arr
+
 
 
 let dir_find (f:string -> bool) (dirname:string): string =
-  let dir =
-    try my_opendir dirname
-    with Sys_error _ -> raise Not_found
-  in
-  let rec find (): string =
-    try
-      let fn = readdir dir in
-      if f fn then fn
-      else find ()
-    with End_of_file ->
+  let arr = Sys.readdir dirname in
+  let n   = Array.length arr in
+  let rec find i =
+    if i = n then
       raise Not_found
+    else if f arr.(i) then
+      arr.(i)
+    else
+      find (i+1)
   in
-  let res = find () in
-  my_closedir dir;
-  res
+  find 0
 
 
 let dir_has (fn:string) (dirname:string): bool =
@@ -227,13 +187,10 @@ let dir_has (fn:string) (dirname:string): bool =
 let has_alba_dir (ad:t): bool =
   try
     let alba_dir = Filename.concat ad.work_dir ".alba" in
-    let stat = stat alba_dir in
-    if stat.st_kind = S_DIR then
-      true
-    else
+    Sys.is_directory alba_dir
+  with
+    Sys_error _ ->
       false
-  with Unix_error (err,str1,str2) ->
-    false
 
 
 let check_alba_dir (ad:t): unit =
@@ -278,7 +235,7 @@ let file_status (mdlname: int) (ext:string) (ad:t): bool * bool =
   let stat = my_stat fname in
   try
     let mstat = my_stat dfname in
-    let modified = mstat.st_mtime < stat.st_mtime in
+    let modified = mstat.Unix.st_mtime < stat.Unix.st_mtime in
       modified, false
   with Not_found ->
     false, true
@@ -539,7 +496,7 @@ let alba_init (ad:t): unit =
         (fun fn ->
           if Filename.check_suffix fn ".dal" || Filename.check_suffix fn ".dali"
           then
-            my_unlink (Filename.concat dirname fn))
+            Sys.remove  (Filename.concat dirname fn))
         dirname
 
 
