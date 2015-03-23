@@ -332,6 +332,10 @@ let analyze_feature
           | None, Some Impdeferred, None ->
               (Feature.Spec.make_func_def nms None),
               Feature.Deferred
+          | Some reqlst, Some Impdeferred, None ->
+              let pres = assertion_list reqlst context in
+              (Feature.Spec.make_func_spec nms pres []),
+              Feature.Deferred
           | _ -> not_yet_implemented fn.i
                 "functions with implementation/preconditions"
         end
