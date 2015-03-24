@@ -76,7 +76,6 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
 
 val split_implication:  term -> t -> term * term
 val split_all_quantified: term -> t -> int * int array * term
-val all_quantified_outer: term -> t -> term
 val implication_chain:  term list -> term -> t -> term
 
 val count:          t -> int

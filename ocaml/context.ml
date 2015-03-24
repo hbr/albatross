@@ -152,8 +152,6 @@ let or_index (c:t): int =
   count_arguments c + Feature_table.or_index
 
 
-
-
 let argument_name (i:int) (c:t): int =
   assert (i < count_arguments c);
   fst c.entry.fargs.(i)
@@ -203,6 +201,13 @@ let fgnames (c:t): int array = entry_fgnames c.entry
 
 let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
+let sign2string (s:Sign.t) (c:t): string =
+  Class_table.string_of_signature
+    s
+    (tvs c)
+    (class_table c)
+
+
 let string_of_term (t:term) (nanon:int) (c:t): string =
   Feature_table.term_to_string t nanon (argnames c) c.ft
 
@@ -213,11 +218,26 @@ let string_of_term_outer (t:term) (nanon:int) (c:t): string =
     c.ft
 
 
-let sign2string (s:Sign.t) (c:t): string =
-  Class_table.string_of_signature
-    s
-    (tvs c)
-    (class_table c)
+let untupelize_inner (t:term) (nargs:int) (c:t): term =
+  let nbenv = count_arguments c in
+  Feature_table.untupelize_inner t nargs nbenv c.ft
+
+let tupelize_inner (t:term) (nargs:int) (c:t): term =
+  let nbenv = count_arguments c in
+  let res = Feature_table.tupelize_inner t nargs nbenv c.ft in
+  assert (t = untupelize_inner res nargs c);
+  res
+
+let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (c:t): term =
+  let _ = tupelize_inner t nargs c in
+  let q_id = if is_all then all_index c else some_index c in
+  Term.quantified q_id nargs nms t
+
+let all_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
+  quantified true nargs names t c
+
+let some_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
+  quantified false nargs names t c
 
 
 

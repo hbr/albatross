@@ -47,7 +47,6 @@ val split_some_quantified: term -> t -> int * int array * term
 val split_equality: term -> int -> t -> int * term * term
 val implication: term -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
-val all_quantified_outer: term -> t -> term
 val implication_chain: term list -> term -> t -> term
 val someelim:  int -> t -> term
 

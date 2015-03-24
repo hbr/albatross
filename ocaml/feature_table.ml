@@ -141,6 +141,157 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
 
 
 
+
+let to_tuple (args:term array) (nbenv:int) (ft:t): term =
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...).
+   *)
+  let tup_id    = nbenv + tuple_index
+  and nargs     = Array.length args in
+  assert (0 < nargs);
+  let rec to_tup (i:int) (t:term): term =
+    if i = 0 then
+      t
+    else
+      let i = i - 1 in
+      let t = Application(Variable tup_id, [|args.(i);t|],false) in
+      to_tup i t
+  in
+  let i = nargs - 1 in
+  let t = args.(i) in
+  to_tup i t
+
+
+
+
+let tupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
+  (* Convert the inner term [t] which has [nargs] arguments to a term with one
+     argument expecting an [nargs] tuple.
+
+     nargs = 4
+     args: [0.first, 0.second.first, 0.second.second.first, 0.second.second.second]
+   *)
+  let first_id  = 1 + nbenv + first_index
+  and second_id = 1 + nbenv + second_index in
+  let rec argument (i:int) (n:int) (t:term): term =
+    assert (0 <= i);
+    assert (i < n);
+    assert (2 <= n);
+    if i = 0 then
+      Application (Variable first_id, [|t|],false)
+    else if i = 1 && n = 2 then
+      Application (Variable second_id, [|t|],false)
+    else
+      let t = Application(Variable second_id, [|t|],false) in
+      argument (i-1) (n-1) t
+  in
+  if nargs <= 1 then
+    t
+  else
+    let args = Array.init nargs (fun i -> argument i nargs (Variable 0)) in
+    Term.sub t args 1
+
+
+
+(* untupelize:
+   We have to find pattern of the form
+
+      0.second.second...second.first
+      0.second.second...second.second
+
+   where the sequence of second is less or equal [nargs-2].
+
+   Example: nargs = 3
+
+   [a,b,c]  ~> [0.first, 0.second.first, 0.second.second]
+
+   There might be subexpressions of the following form in the original term:
+
+      a.first   ~>   0.first.first
+      a.second  ~>   0.first.second
+      b.first   ~>   0.second.first.first
+      b.second  ~>   0.second.first.second
+      c.first   ~>   0.second.second.first
+      c.second  ~>   0.second.second.second
+
+   There is no ambiguity because none of these expressions fits the pattern of
+   at most [nargs-2] seconds and a first or second as the outer function.
+ *)
+
+
+
+let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
+  (* Convert the inner term [t] which expects an [nargs] tuple back into its original
+     form expecting [nargs] arguments.
+
+     The function has to find subterms of the form
+        0.secs.first
+        0.secs.second
+     where
+        .secs
+     is is zero up to [nargs-2] applications of [second] and replace them by
+     the corresponding argument.  *)
+  let rec untup (t:term) (nb:int) (outer:int) (nsnds:int) : term * int * int =
+    let first_id  = nb + 1 + nbenv + first_index
+    and second_id = nb + 1 + nbenv + second_index
+    and appl i t pr = Application(Variable (i + nargs - 1), [|t|], pr), 0 , 0
+    in
+    match t with
+      Variable i when i < nb ->
+        t, 0, 0
+    | Variable i when i = nb ->
+        assert (0 < outer);
+        let nsnds2 = if nsnds <= nargs - 2 then nsnds else nargs - 2 in
+        Variable (i + nsnds2 + outer - 1),
+        outer,
+        nsnds2
+    | Variable i ->
+        Variable (i + nargs - 1), 0 , 0
+    | Application(Variable i,args,pr) when i = first_id ->
+        assert (Array.length args = 1);
+        let t,outer,nsnds = untup args.(0) nb 1 0 in
+        assert (outer = 0 || outer = 1);
+        assert (nsnds = 0);
+        if outer = 1 then
+          t, 0, 0
+        else
+          appl i t pr
+    | Application(Variable i,args,pr) when i = second_id && outer = 0 ->
+        assert (Array.length args = 1);
+        let t,outer,nsnds = untup args.(0) nb 2 0 in
+        assert (outer = 0 || outer = 2);
+        assert (nsnds = 0);
+        if outer = 2 then
+          t, 0, 0
+        else
+          appl i t pr
+    | Application(Variable i,args,pr) when i = second_id->
+        assert (Array.length args = 1);
+        assert (outer = 1 || outer = 2);
+        let t1,outer1,nsnds1 = untup args.(0) nb outer (nsnds+1) in
+        if outer1 = 0 || nsnds1 = 0 then
+          appl i t1 pr
+        else begin
+          assert (outer1 = outer);
+          t1, outer1, nsnds1-1
+        end
+    | Application(f,args,pr) ->
+        let f = untup0 f nb
+        and args = Array.map (fun t -> untup0 t nb) args in
+        Application(f,args,pr), 0, 0
+    | Lam (n,nms,t0,pr) ->
+        let t0 = untup0 t0 (n+nb) in
+        Lam(n,nms,t0,pr), 0, 0
+  and untup0 t nb =
+    let t,_,_ = untup t nb 0 0 in t
+  in
+  if nargs <= 1 then
+      t
+  else
+    untup0 t 0
+
+
+
+
 let definition (i:int) (nb:int) (ft:t): term =
   (* The definition of the feature [i] as a lambda term (if there are arguments)
      transformed into an environment with [nb] bound variables. Raises [Not_found]

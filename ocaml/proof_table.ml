@@ -133,16 +133,14 @@ let implication_chain (ps: term list) (tgt:term) (at:t): term =
 let split_implication_chain (t:term) (at:t): term list * term =
   Term.split_implication_chain t (imp_id at)
 
+let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (at:t): term =
+  Context.quantified is_all nargs nms t at.c
+
 let all_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
-  Term.quantified (all_id at) nargs names t
+  Context.all_quantified nargs names t at.c
 
 let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
-  Term.quantified (some_id at) nargs names t
-
-let all_quantified_outer (t:term) (at:t): term =
-  let nargs  = count_last_arguments at          in
-  let all_id = (all_id at) - nargs in
-  Term.quantified all_id nargs at.names t
+  Context.some_quantified nargs names t at.c
 
 let string_of_term (t:term) (at:t): string =
   Context.string_of_term t 0 at.c
@@ -355,10 +353,11 @@ let discharged_term (i:int) (at:t): term =
   (* The [i]th term of the current environment with all local variables and
      assumptions discharged.
    *)
+  assert (is_local at);
   let n1,nms1,t = discharged_assumptions i at in
   let nargs = n1 + count_last_arguments at
   and nms   = Array.append nms1 (names at) in
-  Term.quantified (all_id_outer at) nargs nms t
+  all_quantified nargs nms t (previous at)
 
 
 

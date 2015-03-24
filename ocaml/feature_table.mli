@@ -141,6 +141,9 @@ val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
+val tupelize_inner:   term -> int -> int -> t -> term
+val untupelize_inner: term -> int -> int -> t -> term
+
 val preconditions: int -> int -> t -> int * int array * term list
 (*
 val expand_focus_term: term -> int -> t -> term

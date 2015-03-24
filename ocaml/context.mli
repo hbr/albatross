@@ -80,6 +80,10 @@ val all_index:  t -> int
 val some_index: t -> int
 val implication_index: t -> int
 
+val quantified:      bool -> int -> int array -> term -> t -> term
+val all_quantified:  int -> int array -> term -> t -> term
+val some_quantified: int -> int array -> term -> t -> term
+
 
 val argument_name: int -> t -> int
     (** The name of the [i]th formal argument *)
