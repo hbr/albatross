@@ -16,7 +16,7 @@ module Eval = struct
     | Expand of (int * bool) (* idx of function, full expansion *)
     | Apply of t * t array * bool
     | Lam of int * int array * t * bool
-    | QLam of int * int array * t
+    | QLam of int * int array * t * bool
     | Beta of t
     | Simpl of t * int * term array  (* e, idx of simplifying equality assertion,
                                         specialization arguments *)
@@ -86,8 +86,8 @@ end = struct
           Eval.Apply (f,args,pr)
       | Eval.Lam (n,nms,e,pr) ->
           Eval.Lam (n, nms, adapt_eval e, pr)
-      | Eval.QLam (n,nms,e) ->
-          Eval.QLam (n, nms, adapt_eval e)
+      | Eval.QLam (n,nms,e,is_all) ->
+          Eval.QLam (n, nms, adapt_eval e, is_all)
       | Eval.Beta e -> Eval.Beta (adapt_eval e)
       | Eval.Simpl (e,eq_idx,args) ->
           Eval.Simpl (adapt_eval e, index eq_idx, args)
@@ -145,7 +145,7 @@ end = struct
         | Eval.Apply (f,args,_)   ->
             let set = usd_eval f set in
             Array.fold_left (fun set e -> usd_eval e set) set args
-        | Eval.Lam (n,nms,e,_) | Eval.QLam(n,nms,e) -> usd_eval e set
+        | Eval.Lam (n,nms,e,_) | Eval.QLam(n,nms,e,_) -> usd_eval e set
         | Eval.Beta e           -> usd_eval e set
         | Eval.Simpl (e,i,args) ->
             let set = usd i start_inner extern pt_arr set in
@@ -223,7 +223,7 @@ end = struct
         | Eval.Apply (f,args,pr) ->
             Eval.Apply (transform_eval f, Array.map transform_eval args,pr)
         | Eval.Lam (n,nms,e,pr) -> Eval.Lam (n,nms,transform_eval e,pr)
-        | Eval.QLam (n,nms,e)   -> Eval.QLam (n,nms,transform_eval e)
+        | Eval.QLam (n,nms,e,ia)-> Eval.QLam (n,nms,transform_eval e,ia)
         | Eval.Beta e           -> Eval.Beta (transform_eval e)
         | Eval.Simpl (e,i,args) -> Eval.Simpl (transform_eval e, index i,args)
       in
@@ -393,8 +393,8 @@ end = struct
               Eval.Apply (f,args,pr)
           | Eval.Lam (n,nms,e,pr) ->
               Eval.Lam (n,nms,shrnk e (nb+n),pr)
-          | Eval.QLam (n,nms,e) ->
-              Eval.QLam (n,nms,shrnk e (nb+n))
+          | Eval.QLam (n,nms,e,is_all) ->
+              Eval.QLam (n,nms,shrnk e (nb+n),is_all)
           | Eval.Beta e ->
               Eval.Beta (shrnk e nb)
           | Eval.Simpl (e,idx,args) ->
@@ -483,8 +483,8 @@ end = struct
             Eval.Apply(f,args,pr)
         | Eval.Lam (n,nms,e,pr) ->
             Eval.Lam (n, nms, upeval e (n+nb), pr)
-        | Eval.QLam (n,nms,e) ->
-            Eval.QLam (n, nms, upeval e (n+nb))
+        | Eval.QLam (n,nms,e,is_all) ->
+            Eval.QLam (n, nms, upeval e (n+nb),is_all)
         | Eval.Beta e ->
             Eval.Beta (upeval e nb)
         | Eval.Simpl (e,idx,args) ->

@@ -54,14 +54,12 @@ let false_index:       int =  1
 let not_index:         int =  2
 let and_index:         int =  3
 let or_index:          int =  4
-let all_index:         int =  5
-let some_index:        int =  6
-let eq_index:          int =  7
-let domain_index:      int =  8
-let ddomain_index:     int =  9
-let tuple_index:       int = 10
-let first_index:       int = 11
-let second_index:      int = 12
+let eq_index:          int =  5
+let domain_index:      int =  6
+let ddomain_index:     int =  7
+let tuple_index:       int =  8
+let first_index:       int =  9
+let second_index:      int = 10
 
 
 let empty (verbosity:int): t =
@@ -281,9 +279,9 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | Lam (n,nms,t0,pr) ->
         let t0 = untup0 t0 (n+nb) in
         Lam(n,nms,t0,pr), 0, 0
-    | QLam (n,nms,t0) ->
+    | QLam (n,nms,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
-        QLam(n,nms,t0), 0, 0
+        QLam(n,nms,t0,is_all), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   in
@@ -375,8 +373,10 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
       Variable i when i < nb+nargs -> false
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
-    | Lam (n,_,t,_) | QLam(n,_,t) ->
+    | Lam (n,_,t,_) ->
         is_ghost t (nb+n)
+    | QLam(_,_,_,_) ->
+        true
     | Application (f,args,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
@@ -507,7 +507,7 @@ let definition_equality (i:int) (ft:t): term =
   if nargs = 0 then
     eq_term
   else
-    Term.quantified all_index nargs desc.argnames eq_term
+    Term.all_quantified nargs desc.argnames eq_term
 
 
 
@@ -692,9 +692,7 @@ let base_table (verbosity:int) : t =
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
-  let p_tp  = Application (Variable (Class_table.predicate_index+1),
-                           [|g_tp|], false)
-  and p_tp2 = Application (Variable (Class_table.predicate_index+2),
+  let p_tp2 = Application (Variable (Class_table.predicate_index+2),
                            [|a_tp|], false)
   and f_tp  = Application (Variable (Class_table.function_index+2),
                            [|a_tp;b_tp|], false)
@@ -737,14 +735,6 @@ let base_table (verbosity:int) : t =
     "boolean" Class_table.boolean_index (FNoperator Orop)
     [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
-  add_base (* all *)
-    "boolean" Class_table.predicate_index (FNoperator Allop)
-    [|any1|] [|p_tp|] bool1 false true (spec_none 1) ft;
-
-  add_base (* some *)
-    "boolean" Class_table.predicate_index (FNoperator Someop)
-    [|any1|] [|p_tp|] bool1 false true (spec_none 1) ft;
-
   add_base (* equality *)
     "any" Class_table.any_index (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
@@ -774,8 +764,6 @@ let base_table (verbosity:int) : t =
   assert ((descriptor not_index ft).fname         = FNoperator Notop);
   assert ((descriptor and_index ft).fname         = FNoperator Andop);
   assert ((descriptor or_index ft).fname          = FNoperator Orop);
-  assert ((descriptor all_index ft).fname         = FNoperator Allop);
-  assert ((descriptor some_index ft).fname        = FNoperator Someop );
   assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
   assert ((descriptor domain_index ft).fname      = FNname ST.domain);
   assert ((descriptor tuple_index ft).fname       = FNname ST.tuple);
@@ -944,17 +932,6 @@ let term_to_string
       args2str n nms,
       to_string t names nanon false None
     in
-    let q2str (qstr:string) (args:term array): string =
-      let nargs = Array.length args in
-      assert (nargs = 1);
-      match args.(0) with
-        QLam (n,nms,t) ->
-          let argsstr, tstr = lam_strs n nms t in
-          qstr ^ "(" ^ argsstr ^ ") " ^ tstr
-      | _ ->
-          (* very rare case that a quantor is applied directly to a predicate *)
-          qstr ^ ".(" ^ (to_string args.(0) names nanon false None) ^ ")"
-    in
     let funapp2str (f:term) (argsstr:string): string =
       let default f =
         (to_string f names nanon true None) ^ "(" ^ argsstr ^ ")" in
@@ -975,8 +952,7 @@ let term_to_string
     in
     let op2str (op:operator) (args: term array): string =
       match op with
-        Allop  -> q2str "all"  args
-      | Someop -> q2str "some" args
+        Allop | Someop -> assert false (* cannot happen *)
       | _ ->
           let nargs = Array.length args in
           if nargs = 1 then
@@ -996,15 +972,6 @@ let term_to_string
              (fun t -> to_string t names nanon false None)
              (Array.to_list args)) in
       funapp2str f argsstr
-      (*(to_string f names nanon true None) ^ "(" ^ argsstr ^ ")"*)
-      (*(to_string f names nanon true None)
-      ^ "("
-      ^ (String.concat
-           ","
-           (List.map
-              (fun t -> to_string t names nanon false None)
-              (Array.to_list args)))
-      ^ ")"*)
     and lam2str (n:int) (nms: int array) (t:term) (pr:bool): string =
       let argsstr, tstr = lam_strs n nms t in
       if pr then
@@ -1026,8 +993,10 @@ let term_to_string
           end
       | Lam (n,nms,t,pr) ->
           None, lam2str n nms t pr
-      | QLam (n,nms,t) ->
-          None, lam2str n nms t true
+      | QLam (n,nms,t,is_all) ->
+          let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
+          and argsstr, tstr = lam_strs n nms t in
+          Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->
@@ -1095,9 +1064,9 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
     | Lam (n,nms,t,pr) ->
         let t = expand t (nb+n) in
         Lam (n,nms,t,pr)
-    | QLam (n,nms,t) ->
+    | QLam (n,nms,t,is_all) ->
         let t = expand t (nb+n) in
-        QLam (n,nms,t)
+        QLam (n,nms,t,is_all)
   in
   expand t nbound
 
@@ -1129,8 +1098,8 @@ let fully_expanded (t:term) (nb:int) (ft:t): term =
         Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
         Lam (n, nms, expand t (n+nb), pr)
-    | QLam (n,nms,t) ->
-        QLam (n, nms, expand t (n+nb))
+    | QLam (n,nms,t,is_all) ->
+        QLam (n, nms, expand t (n+nb),is_all)
   in
   let t = expand t nb in
   Term.reduce t
@@ -1232,10 +1201,9 @@ let has_variant_candidate (i:int) (cls:int) (ft:t): bool =
 
 let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
   (* Return [nargs, eq_id, left, right] if the term is an equality. *)
-  let all_id = nbenv + all_index in
   let nargs, t =
     try
-      let n,nms,t0 = Term.quantifier_split t all_id in
+      let n,nms,t0 = Term.all_quantifier_split t in
       n, t0
     with Not_found ->
       0, t
@@ -1507,8 +1475,7 @@ let add_base_features (mdl_name:int) (ft:t): unit =
         assert (desc.mdl = -1);
         desc.mdl <- curr_mdl;
         add_key idx ft;
-        if idx <> all_index && idx <> some_index then
-          add_class_feature idx true false base ft)
+        add_class_feature idx true false base ft)
       !lst
   with Not_found ->
     ()

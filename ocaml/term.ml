@@ -12,7 +12,7 @@ type term =
     Variable    of int
   | Application of term * term array * bool      (* fterm, args, is_pred *)
   | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
-  | QLam        of int * int array * term        (* n, names, t *)
+  | QLam        of int * int array * term * bool (* n, names, t, is_all *)
 and formal  = int * term (* name, type *)
 and formals = formal array
 
@@ -106,15 +106,23 @@ module Term: sig
 
   val lambda_split: term -> int * int array * term
 
-  val qlambda_split: term -> int * int array * term
+  val qlambda_split: term -> int * int array * term * bool
 
   val unary: int -> term -> term
 
   val unary_split: term -> int -> term
 
-  val quantified: int -> int -> int array -> term -> term
+  val quantified: bool -> int -> int array -> term -> term
 
-  val quantifier_split: term -> int -> int * int array * term
+  val all_quantified:  int -> int array -> term -> term
+
+  val some_quantified:  int -> int array -> term -> term
+
+  val quantifier_split: term -> bool -> int * int array * term
+
+  val all_quantifier_split: term-> int * int array * term
+
+  val some_quantifier_split: term -> int * int array * term
 
   val binary: int -> term -> term -> term
 
@@ -144,12 +152,14 @@ end = struct
 
 
   let rec to_string (t:term): string =
-    let strlam nargs names t pred =
+    let argsstr nargs names =
       let nnames = Array.length names in
       assert (nnames=0 || nnames=nargs);
-      let args = Array.init nargs string_of_int
-      in
-      let argsstr = String.concat "," (Array.to_list args) in
+      let args = Array.init nargs string_of_int in
+      String.concat "," (Array.to_list args)
+    in
+    let strlam nargs names t pred =
+      let argsstr = argsstr nargs names in
       if pred then
         "{" ^ argsstr ^ ": " ^ (to_string t) ^ "}"
       else
@@ -167,8 +177,10 @@ end = struct
         ^ ")"
     | Lam(nargs,names,t,pred) ->
         strlam nargs names t pred
-    | QLam (nargs,names,t) ->
-        strlam nargs names t true
+    | QLam (nargs,names,t,is_all) ->
+        let argsstr = argsstr nargs names in
+        let qstr    = if is_all then "all" else "some" in
+        qstr ^ "(" ^ argsstr ^ ")" ^ (to_string t)
 
 
   let variable (t:term): int =
@@ -198,7 +210,7 @@ end = struct
       Variable _ -> 1
     | Application (f,args,_) ->
         (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
-    | Lam (_,_,t,_) | QLam (_,_,t) ->
+    | Lam (_,_,t,_) | QLam (_,_,t,_) ->
         1 + (nodes t)
 
 
@@ -208,7 +220,7 @@ end = struct
       Variable _ -> 0
     | Application (f,args,_) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,_,t,_) | QLam (_,_,t)->
+    | Lam (_,_,t,_) | QLam (_,_,t,_)->
         1 + (depth t)
 
 
@@ -227,7 +239,7 @@ end = struct
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
       | Lam (n,_,t,_) ->
           fld a t (level+1) (nb+n)
-      | QLam (n,_,t) ->
+      | QLam (n,_,t,_) ->
           fld a t (level+1) (nb+n)
     in
     fld a t 0 0
@@ -359,7 +371,8 @@ end = struct
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
       | Lam(n1,nms1,t1,_), Lam(n2,nms2,t2,_) when n1 = n2 ->
           eq t1 t2 (n1+nb)
-      | QLam(n1,nms1,t1), QLam(n2,nms2,t2) when n1 = n2 ->
+      | QLam(n1,nms1,t1,is_all1), QLam(n2,nms2,t2,is_all2)
+        when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
       | _, _ ->
           false
@@ -382,8 +395,8 @@ end = struct
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
       | Lam (nargs,names,t,pred) ->
           Lam(nargs, names, mapr (nb+nargs) t, pred)
-      | QLam (nargs,names,t) ->
-          QLam(nargs, names, mapr (nb+nargs) t)
+      | QLam (nargs,names,t,is_all) ->
+          QLam(nargs, names, mapr (nb+nargs) t, is_all)
     in
     mapr 0 t
 
@@ -601,10 +614,10 @@ end = struct
         assert (0 < nargs);
         let tred = reduce t in
           Lam (nargs, names, tred, pred)
-    | QLam(nargs,names,t) ->
+    | QLam(nargs,names,t,is_all) ->
         assert (0 < nargs);
         let tred = reduce t in
-          QLam (nargs, names, tred)
+          QLam (nargs, names, tred, is_all)
 
 
   let reduce_top (t:term): term =
@@ -621,9 +634,9 @@ end = struct
     | _ -> raise Not_found
 
 
-  let qlambda_split (t:term): int * int array * term =
+  let qlambda_split (t:term): int * int array * term * bool =
     match t with
-      QLam (n,names,t) -> n,names,t
+      QLam (n,names,t,is_all) -> n,names,t,is_all
     | _ -> raise Not_found
 
 
@@ -666,20 +679,33 @@ end = struct
 
 
 
-  let quantified (quantid:int) (nargs:int) (names:int array) (t:term): term =
+  let quantified (is_all:bool) (nargs:int) (names:int array) (t:term): term =
     assert (let nnms = Array.length names in nnms=0 || nnms = nargs);
     if nargs = 0 then
       t
     else
-      unary quantid (QLam (nargs,names,t))
+      QLam (nargs,names,t,is_all)
 
 
+  let all_quantified (nargs:int) (names:int array) (t:term): term =
+    quantified true nargs names t
 
-  let quantifier_split (t:term) (quantid:int): int * int array * term =
-    let lam = unary_split t quantid in
-    try qlambda_split lam
-    with Not_found -> assert false
+  let some_quantified (nargs:int) (names:int array) (t:term): term =
+    quantified false nargs names t
 
+
+  let quantifier_split (t:term) (is_all:bool): int * int array * term =
+    let n,nms,t0,is_all0 = qlambda_split t in
+    if is_all = is_all0 then
+      n,nms,t0
+    else
+      raise Not_found
+
+  let all_quantifier_split (t:term): int * int array * term =
+    quantifier_split t true
+
+  let some_quantifier_split (t:term): int * int array * term =
+    quantifier_split t false
 
 
   let rec binary_right (t:term) (binid:int): term list =

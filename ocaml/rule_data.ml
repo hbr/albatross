@@ -136,9 +136,8 @@ let update_ps_tgt (ps:(int*bool*term) list) (imp:term) (nbenv:int):
 
 let prepend_premises (ps:(int*bool*term) list) (rd:t)
     : term =
-  let all_id  = rd.nbenv + Feature_table.all_index in
   let t = implication_chain ps rd.target (rd.nargs + rd.nbenv) in
-  Term.quantified all_id rd.nargs rd.nms t
+  Term.all_quantified rd.nargs rd.nms t
 
 
 
@@ -183,9 +182,8 @@ let split_term (t:term) (nbenv:int) (ft:Feature_table.t)
     : int * int array  * (int*bool*term) list * term =
   (* nargs,nms,simpl_fwd,premises,target
      premise: gp1,cons,term *)
-  let all_id = nbenv + Feature_table.all_index in
   let nargs,nms,t =
-    try Term.quantifier_split t all_id
+    try Term.all_quantifier_split t
     with Not_found -> 0,[||], t
   in
   let imp_id = nbenv + nargs + Feature_table.implication_index

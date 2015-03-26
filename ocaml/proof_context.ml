@@ -133,8 +133,6 @@ let is_consistent (pc:t): bool =
 let count_previous (pc:t): int = Proof_table.count_previous pc.base
 let count_global(pc:t): int = Proof_table.count_global pc.base
 
-let all_id(at:t): int = Proof_table.all_id at.base
-
 let imp_id(at:t): int = Proof_table.imp_id at.base
 
 let term_orig (i:int) (pc:t): term * int =
@@ -226,31 +224,14 @@ let string_of_term_array (args: term array) (pc:t): string =
   "]"
 
 
-let is_substitution_ok (sub:Term_sub.t) (nbenv:int): bool =
-  let all_id =  nbenv + Feature_table.all_index
-  and some_id = nbenv + Feature_table.some_index in
-  Term_sub.for_all
-    (fun i t ->
-      match t with
-        Variable i when i = all_id || i = some_id -> false
-      | _ -> true)
-    sub
-
-
 let unify
     (t:term) (nbenv:int) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
-  let sublst = Term_table.unify t nbenv tab in
-  List.filter (fun (idx,sub) -> is_substitution_ok sub nbenv) sublst
+  Term_table.unify t nbenv tab
 
 let unify_with
     (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
     : (int * Term_sub.t) list =
-  let sublst = Term_table.unify_with t nargs nbenv tab in
-  List.filter
-    (fun (idx,sub) ->
-      let _,nbenv = term_orig idx pc in
-      is_substitution_ok sub nbenv)
-    sublst
+  Term_table.unify_with t nargs nbenv tab
 
 
 let trace_prefix_0 (pc:t): string =
@@ -369,9 +350,7 @@ let triggers_evaluation (t:term) (nb:int) (pc:t): bool =
           i < nbenv ||
           let idx = i - nbenv in
           idx = Feature_table.or_index ||
-          idx = Feature_table.some_index ||
-          (Feature_table.owner idx ft <> Class_table.boolean_index &&
-           idx <> Feature_table.all_index)
+          Feature_table.owner idx ft <> Class_table.boolean_index
       end
   | _ ->
       false
@@ -406,9 +385,9 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Lam(n,nms,t0,pr) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
           Lam(n,nms,tsimp,pr), Eval.Lam(n,nms,te,pr), tmodi
-      | QLam(n,nms,t0) ->
+      | QLam(n,nms,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
-          QLam(n,nms,tsimp), Eval.QLam(n,nms,te), tmodi
+          QLam(n,nms,tsimp,is_all), Eval.QLam(n,nms,te,is_all), tmodi
     in
     let sublst = unify t (nb+nbenv) pc.entry.left pc in
     let sublst =
@@ -485,9 +464,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Lam (n,nms,t,pred) ->
           let t,e,tmodi = eval t (n+nb) full in
           Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
-      | QLam (n,nms,t) ->
+      | QLam (n,nms,t,is_all) ->
+          let full = full || not is_all in
           let t,e,tmodi = eval t (n+nb) full in
-          QLam (n,nms,t), Eval.QLam (n,nms,e), tmodi
+          QLam (n,nms,t,is_all), Eval.QLam (n,nms,e,is_all), tmodi
     in
     let tred, ered, modi = expand t in
     let sublst = unify tred (nb+nbenv) pc.entry.left pc in
@@ -1171,12 +1151,11 @@ let prove_equality (g:term) (pc:t): int =
   let nargs, eq_id, left, right = Context.split_equality g 0 (context pc) in
   let eq_id = nbenv pc + eq_id in
   if 0 < nargs then raise Not_found;
-  let all_id = all_id pc
-  and imp_id = 1 + imp_id pc in
+  let imp_id = 1 + imp_id pc in
   let find_leibniz t1 t2 =
     let p t = Application(Variable 0, [|Term.up 1 t|], true) in
     let imp = Term.binary imp_id (p t1) (p t2) in
-    let t  = Term.quantified all_id 1 [||] imp in
+    let t  = Term.all_quantified 1 [||] imp in
     find t pc
   in
   let lam, leibniz, args1, args2 =

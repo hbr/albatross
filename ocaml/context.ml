@@ -136,12 +136,6 @@ let count_last_arguments (c:t): int = c.entry.nfargs_delta
 let count_arguments (c:t): int = Array.length c.entry.fargs
 
 
-let all_index (c:t): int =
-  count_arguments c + Feature_table.all_index
-
-let some_index (c:t): int =
-  count_arguments c + Feature_table.some_index
-
 let implication_index (c:t): int =
   count_arguments c + Feature_table.implication_index
 
@@ -230,8 +224,7 @@ let tupelize_inner (t:term) (nargs:int) (c:t): term =
 
 let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (c:t): term =
   let _ = tupelize_inner t nargs c in
-  let q_id = if is_all then all_index c else some_index c in
-  Term.quantified q_id nargs nms t
+  Term.quantified is_all nargs nms t
 
 let all_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
   quantified true nargs names t c
@@ -756,16 +749,14 @@ let specification i c = assert false
 
 let term_preconditions (t:term)  (c:t): term list =
   let rec pres (t:term) (lst:term list) (c:t): term list * Feature.Spec.t =
-    let all_id = all_index c
-    and some_id = some_index c
-    and imp_id  = implication_index c
+    let imp_id  = implication_index c
     and and_id  = and_index c
     and or_id   = or_index c in
     let do_pred n nms t =
       let c = push_untyped nms c in
       let ps,_ = pres t [] c in
       List.fold_right
-        (fun p lst -> (Term.quantified all_id n nms p)::lst)
+        (fun p lst -> (Term.all_quantified n nms p)::lst)
         ps
         lst in
    match t with
@@ -776,15 +767,6 @@ let term_preconditions (t:term)  (c:t): term list =
         assert false
     | Application (Variable i, args, pr) when i = or_id ->
         assert false
-    | Application (Variable i, args, pr) when i = all_id || i = some_id ->
-        assert (Array.length args = 1);
-        begin try
-          let n,nms,t0 = Term.lambda_split args.(0) in
-          let lst = do_pred n nms t0 in
-          lst, assert false
-        with Not_found ->
-          assert false (* cannot happen *)
-        end
     | Application (f,args,pr) ->
         let lst,fspec = pres f lst c in
         assert (Array.length args = Feature.Spec.count_arguments fspec);
@@ -811,7 +793,7 @@ let term_preconditions (t:term)  (c:t): term list =
     | Lam (n,nms,t0,pr) ->
         lst,
         Feature.Spec.make_func_def nms (Some t0)
-    | QLam (n,nms,t0) ->
+    | QLam (n,nms,t0,is_all) ->
         assert false (* nyi *)
   in
   let ps,_ = pres t [] c in

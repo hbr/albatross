@@ -76,8 +76,6 @@ val count_arguments:  t -> int
         contexts *)
 
 
-val all_index:  t -> int
-val some_index: t -> int
 val implication_index: t -> int
 
 val quantified:      bool -> int -> int array -> term -> t -> term

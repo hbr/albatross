@@ -680,7 +680,7 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 let expect_lambda
-    (ntvs:int) (nfgs:int) (is_quant: bool) (is_pred:bool) (c:Context.t) (tb:t): unit =
+    (ntvs:int) (nfgs:int) (is_pred:bool) (c:Context.t) (tb:t): unit =
   (* Expect the term of a lambda expression. It is assumed that all local
      variables of the lambda expression have been pushed to the context and
      the argument list of the lambda expression contained [ntvs] untyped
@@ -692,7 +692,7 @@ let expect_lambda
   assert (TVars_sub.count_local tb.tvars =
           TVars_sub.count_local (Context.type_variables tb.c));
   let csig = context_signature tb in
-  if not is_quant then begin
+  begin
     let upsig = upgrade_signature csig is_pred tb in
     assert (Sign.has_result csig);
     try
@@ -706,7 +706,7 @@ let expect_lambda
 
 
 
-let complete_lambda (ntvs:int) (names:int array) (is_quant:bool) (is_pred:bool)
+let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
     (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
@@ -716,7 +716,7 @@ let complete_lambda (ntvs:int) (names:int array) (is_quant:bool) (is_pred:bool)
   let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  let lam = if is_quant then QLam(nargs,names,t) else Lam (nargs, names, t,is_pred)
+  let lam = Lam (nargs, names, t,is_pred)
   and s   =
     let argtps = Array.init nargs
         (fun i -> TVars_sub.sub_star (argument_type i tb) tb.tvars) in
@@ -828,9 +828,9 @@ let update_called_variables (tb:t): unit =
     | Lam(n,nms,t,pr) ->
         let t = update t (n+nb) in
         Lam(n,nms,t,pr)
-    | QLam(n,nms,t) ->
+    | QLam(n,nms,t,is_all) ->
         let t = update t (n+nb) in
-        QLam(n,nms,t)
+        QLam(n,nms,t,is_all)
   in
   let t,nt,s = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
@@ -884,8 +884,6 @@ let specialize_term (tb:t): unit =
   and tvs = TVars_sub.tvars tb.tvars
   in
   let rec upd (t:term) (nargs:int) (nglob:int): int*term =
-    let all_id  = nargs + Feature_table.all_index
-    and some_id = nargs + Feature_table.some_index in
     match t with
       Variable i when i < nargs ->
         nglob, t
@@ -905,10 +903,6 @@ let specialize_term (tb:t): unit =
           with Not_found ->
             nglob+nfgs, t
         end
-    | Application (Variable i, [|QLam(n,nms,t)|], pr)
-      when i = all_id || i = some_id ->
-        let nglob,t = upd t (nargs+n) nglob in
-        nglob, Application(Variable i,[|QLam(n,nms,t)|], pr)
     | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
         let nglob,arglst = Array.fold_left
@@ -923,9 +917,9 @@ let specialize_term (tb:t): unit =
     | Lam (n,nms,t,pr) ->
         let nglob, t = upd t (nargs+n) nglob in
         nglob, Lam (n,nms,t,pr)
-    | QLam (n,nms,t) ->
+    | QLam (n,nms,t,is_all) ->
         let nglob, t = upd t (nargs+n) nglob in
-        nglob, QLam (n,nms,t)
+        nglob, QLam (n,nms,t,is_all)
   in
   let nargs = Context.count_arguments tb.c
   and t,nt,s     = List.hd tb.tlist in
@@ -978,9 +972,7 @@ exception Illegal_term
 
 let check_term (t:term) (tb:t): t =
   let rec check t tb =
-    let all_id  = Context.all_index tb.c
-    and some_id = Context.some_index tb.c
-    and nargs   = Context.count_last_arguments tb.c in
+    let nargs   = Context.count_last_arguments tb.c in
     let upgrade_potential_dummy f pr tb =
       match f with
         Variable i when i < nargs ->
@@ -988,7 +980,7 @@ let check_term (t:term) (tb:t): t =
       | _ ->
           ()
     in
-    let lambda n nms t is_quant is_pred tb =
+    let lambda n nms t is_pred tb =
       assert (0 < n);
       assert (Array.length nms = n);
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
@@ -996,7 +988,7 @@ let check_term (t:term) (tb:t): t =
       let c = Context.push_untyped_with_gap nms is_func ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
       and nfgs    = 0 in
-      expect_lambda ntvs nfgs is_quant is_pred c tb;
+      expect_lambda ntvs nfgs is_pred c tb;
       let tb = check t tb in
       begin try
         check_untyped_variables tb
@@ -1004,7 +996,27 @@ let check_term (t:term) (tb:t): t =
         raise Illegal_term
       end;
       begin try
-        complete_lambda ntvs nms is_quant is_pred tb
+        complete_lambda ntvs nms is_pred tb
+      with Not_found -> assert false
+      end;
+      tb
+    in
+    let qlambda n nms t is_all tb =
+      assert (0 < n);
+      assert (Array.length nms = n);
+      let ntvs_gap = count_local tb - Context.count_type_variables tb.c in
+      let c = Context.push_untyped_with_gap nms false ntvs_gap tb.c in
+      let ntvs    = Context.count_local_type_variables c - ntvs_gap
+      and nfgs    = 0 in
+      expect_quantified ntvs nfgs c tb;
+      let tb = check t tb in
+      begin try
+        check_untyped_variables tb
+      with Incomplete_type _ ->
+        raise Illegal_term
+      end;
+      begin try
+        complete_quantified ntvs nms is_all tb
       with Not_found -> assert false
       end;
       tb
@@ -1022,15 +1034,6 @@ let check_term (t:term) (tb:t): t =
             printf "  expected %s\n" (complete_signature_string tb);
             raise Illegal_term
         end
-    | Application (Variable i, [|QLam(n,nms,t0)|],_)
-      when i = all_id || i = some_id ->
-        assert (n = Array.length nms);
-        expect_function 1 tb;
-        let tb = check (Variable i) tb in
-        expect_argument 0 tb;
-        let tb = lambda n nms t0 true true tb in
-        complete_function 1 tb;
-        tb
     | Application (f,args,pr) ->
         let nargs = Array.length args in
         expect_function nargs tb;
@@ -1050,9 +1053,12 @@ let check_term (t:term) (tb:t): t =
         if n <> Array.length nms then
           printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);
-        lambda n nms t0 false is_pred tb
-    | _ ->
-        assert false
+        lambda n nms t0 is_pred tb
+    | QLam(n,nms,t0,is_all) ->
+        if n <> Array.length nms then
+          printf "%s\n" (string_of_term t tb);
+        assert (n = Array.length nms);
+        qlambda n nms t0 is_all tb
   in
   let depth = Context.depth tb.c in
   let tb = check t tb

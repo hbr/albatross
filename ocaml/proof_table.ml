@@ -106,23 +106,14 @@ let names (at:t): int array =
 let imp_id (at:t): int =
   Context.implication_index at.c
 
-let all_id (at:t): int =
-  Context.all_index at.c
-
-let all_id_outer (at:t): int =
-  all_id at - count_last_arguments at
-
-let some_id (at:t): int =
-  Context.some_index at.c
-
 let split_implication (t:term) (at:t): term * term =
   Term.binary_split t (imp_id at)
 
 let split_all_quantified (t:term) (at:t): int * int array * term =
-  Term.quantifier_split t (all_id at)
+  Term.all_quantifier_split t
 
 let split_some_quantified (t:term) (at:t): int * int array * term =
-  Term.quantifier_split t (some_id at)
+  Term.some_quantifier_split t
 
 let implication (a:term) (b:term) (at:t): term =
   Term.binary (imp_id at) a b
@@ -158,35 +149,33 @@ let expand_term (t:term) (at:t): term =
 
 let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
-  let all_id = all_id at
-  and imp_id = imp_id at in
-  let rec pterm
-      (t:term) (all_id:int) (imp_id:int): int * int array * term =
+  let imp_id = imp_id at in
+  let rec pterm (t:term) (imp_id:int): int * int array * term =
     try
-      let n0,nms0,t0 = Term.quantifier_split t all_id in
-      let n1,nms1,t1 = pterm t0 (n0+all_id) (n0+imp_id) in
+      let n0,nms0,t0 = Term.all_quantifier_split t in
+      let n1,nms1,t1 = pterm t0 (n0+imp_id) in
       n0+n1, Array.append nms0 nms1, t1
     with Not_found ->
       try
         let a,b = Term.binary_split t imp_id in
-        let n,nms,b1 = pterm b all_id imp_id in
+        let n,nms,b1 = pterm b imp_id in
         let t = Term.binary (n+imp_id) (Term.up n a) b1 in
         n, nms, t
       with Not_found ->
         0, [||], t
   in
-  let n,nms,t = pterm t all_id imp_id in
-  Term.quantified all_id n nms t
+  let n,nms,t = pterm t imp_id in
+  Term.all_quantified n nms t
 
 
 let equivalent (t1:term) (t2:term) (at:t): bool =
   (* Are the terms equivalent without regarding names and positions of the
      all quantifiers? *)
-  let rec equiv t1 t2 all_id imp_id =
+  let rec equiv t1 t2 imp_id =
     let split (t:term): int * term option * term =
       let n, t0 =
         try
-          let n,nms,t0 = Term.quantifier_split t all_id in n,t0
+          let n,nms,t0 = Term.all_quantifier_split t in n,t0
         with Not_found -> 0, t in
       let a, b =
         try
@@ -202,32 +191,32 @@ let equivalent (t1:term) (t2:term) (at:t): bool =
         true
     | Some a1, Some a2 ->
         if n1 = n2 then
-          let all_id, imp_id = n1 + all_id, n1 + imp_id in
-          equiv a1 a2 all_id imp_id &&
-          equiv b1 b2 all_id imp_id
+          let imp_id = n1 + imp_id in
+          equiv a1 a2 imp_id &&
+          equiv b1 b2 imp_id
         else
           let first_less n1 a1 b1 n2 a2 b2 =
             assert (n1 <= n2);
             let gp1_a1 = Term.greatestp1_arg a1 n1
             and gp1_a2 = Term.greatestp1_arg a2 n2 in
             gp1_a1 = gp1_a2 &&
-            let all_id, imp_id = gp1_a1+all_id, gp1_a1+imp_id
+            let imp_id = gp1_a1+imp_id
             and nargs1, nargs2 = n1-gp1_a1, n2-gp1_a2 in
             equiv
               (Term.down_from nargs1 gp1_a1 a1)
               (Term.down_from nargs2 gp1_a2 a2)
-              all_id imp_id &&
+              imp_id &&
             equiv
-              (Term.quantified all_id nargs1 [||] b1)
-              (Term.quantified all_id nargs2 [||] b2)
-              all_id imp_id
+              (Term.all_quantified nargs1 [||] b1)
+              (Term.all_quantified nargs2 [||] b2)
+              imp_id
           in
           if n1 <= n2 then first_less n1 a1 b1 n2 a2 b2
           else first_less n2 a2 b2 n1 a1 b1
     | _, _ ->
         false
   in
-  equiv t1 t2 (all_id at) (imp_id at)
+  equiv t1 t2 (imp_id at)
 
 
 
@@ -428,8 +417,7 @@ let specialized (i:int) (args:term array) (nb:int) (at:t): term =
   if Array.length args = 0 then
     Term.up nbenv_delta t
   else
-    let all_id       = nbenv_t + Feature_table.all_index in
-    let nargs, _, t0 = Term.quantifier_split t all_id in
+    let nargs, _, t0 = Term.all_quantifier_split t in
     assert (nargs = Array.length args);
     Term.sub t0 args nbenv_delta
 
@@ -456,9 +444,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Lam (n,nms,e,pr) ->
         let ta,tb = reconstruct e (nb+n) in
         Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
-    | Eval.QLam (n,nms,e) ->
+    | Eval.QLam (n,nms,e,is_all) ->
         let ta,tb = reconstruct e (nb+n) in
-        QLam (n,nms,ta), QLam (n,nms,tb)
+        QLam (n,nms,ta,is_all), QLam (n,nms,tb,is_all)
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
@@ -550,7 +538,7 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
   and t = local_term i at
   in
   let n,nms,t0 =
-    try Term.quantifier_split t (all_id at)
+    try Term.all_quantifier_split t
     with Not_found -> assert false
   in
   assert (nargs <= n);
@@ -564,8 +552,7 @@ let term_of_specialize (i:int) (args:term array) (at:t): term =
       Term.binary
         imp_id0
         (Term.down (n-nargs) a)
-        (Term.quantified
-           (all_id at)
+        (Term.all_quantified
            (n-nargs)
            (Array.sub nms nargs (n-nargs))
            b)
@@ -612,20 +599,15 @@ let someelim (i:int) (at:t): term =
   let nargs,nms,tt = split_some_quantified t at in
   let tt = Term.upbound 1 nargs tt in
   let imp_id  = imp_id at
-  and all_id  = all_id at
   in
   let imp_id1 = imp_id + (nargs+1)
   and imp_id2 = imp_id + 1
-  and all_id1 = all_id + 1
-  and all_id2 = all_id
   and e_name = ST.symbol "$e"
   in
   let impl1   = Term.binary imp_id1 tt (Variable nargs) in
-  let lam1    = QLam (nargs,nms,impl1) in
-  let all1    = Term.unary all_id1 lam1 in
+  let all1    = Term.all_quantified nargs nms impl1 in
   let impl2   = Term.binary imp_id2 all1 (Variable 0) in
-  let lam2    = QLam (1,[|e_name|],impl2) in
-  let all2    = Term.unary all_id2 lam2 in
+  let all2    = Term.all_quantified 1 [|e_name|] impl2 in
   all2
 
 
@@ -888,7 +870,7 @@ let discharged (i:int) (at:t): term * proof_term =
       try Proof_term.normalize_pair nargs nms t pt_arr
       with Not_found -> assert false (* nyi *)
     in
-    let t  = Term.quantified (all_id_outer at) nargs nms t
+    let t  = Term.all_quantified nargs nms t
     in
     let pt = if axiom then Axiom t else Subproof (nargs,nms,i,pt_arr)
     in

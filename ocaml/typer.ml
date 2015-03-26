@@ -30,8 +30,8 @@ module Accus: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val expect_lambda:     int -> int -> bool -> bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int -> int array -> bool -> bool -> t -> unit
+  val expect_lambda:     int -> int -> bool -> Context.t -> t -> unit
+  val complete_lambda:   int -> int -> int array -> bool -> t -> unit
   val expect_quantified:     int -> int -> Context.t -> t -> unit
   val complete_quantified:   int -> int -> int array -> bool -> t -> unit
   val specialize_terms:  t -> unit
@@ -210,22 +210,21 @@ end = struct
 
 
   let expect_lambda
-      (ntvs:int) (nfgs:int) (is_quant:bool) (is_pred:bool)
-      (c:Context.t) (accs:t): unit =
+      (ntvs:int) (nfgs:int) (is_pred:bool) (c:Context.t) (accs:t): unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
     accs.c          <- c;
     iter_accus
-      (fun acc -> Term_builder.expect_lambda ntvs nfgs is_quant is_pred c acc)
+      (fun acc -> Term_builder.expect_lambda ntvs nfgs is_pred c acc)
       accs
 
 
   let complete_lambda
-      (ntvs:int) (ntvs_added:int) (nms:int array) (is_quant:bool) (is_pred:bool)
+      (ntvs:int) (ntvs_added:int) (nms:int array) (is_pred:bool)
       (accs:t): unit =
     iter_accus
-      (fun acc -> Term_builder.complete_lambda ntvs nms is_quant is_pred acc) accs;
+      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -470,13 +469,13 @@ let analyze_expression
       | Expquantified (q,entlst,exp) ->
           quantified q entlst exp accs c
       | Exppred (entlst,e) ->
-          lambda entlst e false true false accs c
+          lambda entlst e true false accs c
       | Expdot (tgt,f) ->
           application f [|tgt|] accs c
       | ExpResult ->
           not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
       | Exparrow(entlst,e) ->
-          lambda entlst e false false true accs c
+          lambda entlst e false true accs c
       | Expbracket _ ->
           not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
       | Bracketapp (_,_) ->
@@ -537,7 +536,6 @@ let analyze_expression
   and lambda
       (entlst:entities list withinfo)
       (e:expression)
-      (is_quant: bool)
       (is_pred: bool)
       (is_func: bool)
       (accs: Accus.t)
@@ -548,10 +546,10 @@ let analyze_expression
     let ntvs      = Context.count_local_type_variables c
     and fargnames = Context.local_argnames c
     and nfgs      = Context.count_last_formal_generics c in
-    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred c accs;
+    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_pred c accs;
     analyze e accs c;
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_quant is_pred accs
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs
   in
 
   let accs   = Accus.make is_bool c in

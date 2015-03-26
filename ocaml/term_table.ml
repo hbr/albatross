@@ -19,7 +19,8 @@ type t = {
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
     lams:  t IntMap.t;        (* one for each number of bindings *)
-    qlams: t IntMap.t         (* one for each number of bindings *)
+    alls:  t IntMap.t;        (* one for each number of bindings *)
+    somes: t IntMap.t         (* one for each number of bindings *)
   }
 
 
@@ -30,7 +31,8 @@ let empty = {
   fvars = [];
   fapps = IntMap.empty;
   lams  = IntMap.empty;
-  qlams = IntMap.empty}
+  alls  = IntMap.empty;
+  somes = IntMap.empty}
 
 
 let count  (tab:t): int =
@@ -222,7 +224,11 @@ let map_to_list(map: submap): (int * Term_sub.t) list =
 
 
 
-
+let qmap (is_all:bool) (tab:t): t IntMap.t =
+  if is_all then
+    tab.alls
+  else
+    tab.somes
 
 
 let unify (t:term) (nbt:int) (table:t)
@@ -297,9 +303,9 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
         end
-    | QLam (n,_,t) ->
+    | QLam (n,_,t,is_all) ->
         begin try
-          let ttab = IntMap.find n tab.qlams in
+          let ttab = IntMap.find n (qmap is_all tab) in
           let tlst = uni t ttab (nb+n) in
           join_lists basic_subs tlst
         with Not_found ->
@@ -386,8 +392,8 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | Lam (n,_,t,_) ->
         let ttab = IntMap.find n tab.lams in
         uniw t ttab (nb+n)
-    | QLam (n,_,t) ->
-        let ttab = IntMap.find n tab.qlams in
+    | QLam (n,_,t,is_all) ->
+        let ttab = IntMap.find n (qmap is_all tab) in
         uniw t ttab (nb+n)
   in
   try
@@ -464,13 +470,16 @@ let add
           in
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
-      | QLam (n,_,t) ->
+      | QLam (n,_,t,is_all) ->
           let ttab =
-            try IntMap.find n tab.qlams
+            try IntMap.find n (qmap is_all tab)
             with Not_found -> empty
           in
           let ttab = add0 t (nb+n) ttab in
-          {tab with qlams = IntMap.add n ttab tab.qlams}
+          if is_all then
+            {tab with alls = IntMap.add n ttab tab.alls}
+          else
+            {tab with somes = IntMap.add n ttab tab.somes}
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in

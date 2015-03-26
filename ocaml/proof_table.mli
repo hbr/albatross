@@ -34,8 +34,6 @@ val count_arguments:       t -> int
 val count_last_arguments:  t -> int
 val last_arguments_string: t -> string
 val names:       t -> int array
-val all_id:      t -> int
-val some_id:     t -> int
 val imp_id:      t -> int
 
 val prenex_term: term -> t -> term
