@@ -449,8 +449,7 @@ let analyze_expression
       | Typedexp (_,_) ->
           not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
     with Accus.Untypeable _ ->
-      error_info ie.i ("Expression \"" ^ (string_of_expression e) ^
-                           "\" is not typeable")
+      error_info ie.i ("Type error in expression \"" ^ (string_of_expression e))
 
   and application
       (f:expression)
