@@ -108,8 +108,8 @@ end = struct
       | Variable _ -> t
       | Application (c,args,pr) ->
           Application (sub c n, Array.map (fun t -> sub t n) args, pr)
-      | Lam (n,nms,t,pred) ->
-          Lam (n,nms, sub t n, pred)
+      | _ ->
+          assert false
     in
     sub t cnt
 

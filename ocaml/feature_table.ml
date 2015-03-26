@@ -281,6 +281,9 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | Lam (n,nms,t0,pr) ->
         let t0 = untup0 t0 (n+nb) in
         Lam(n,nms,t0,pr), 0, 0
+    | QLam (n,nms,t0) ->
+        let t0 = untup0 t0 (n+nb) in
+        QLam(n,nms,t0), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   in
@@ -372,7 +375,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
       Variable i when i < nb+nargs -> false
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
-    | Lam (n,_,t,_) ->
+    | Lam (n,_,t,_) | QLam(n,_,t) ->
         is_ghost t (nb+n)
     | Application (f,args,_) ->
         let fghost = is_ghost f nb in
@@ -945,7 +948,7 @@ let term_to_string
       let nargs = Array.length args in
       assert (nargs = 1);
       match args.(0) with
-        Lam (n,nms,t,_) ->
+        QLam (n,nms,t) ->
           let argsstr, tstr = lam_strs n nms t in
           qstr ^ "(" ^ argsstr ^ ") " ^ tstr
       | _ ->
@@ -1023,6 +1026,8 @@ let term_to_string
           end
       | Lam (n,nms,t,pr) ->
           None, lam2str n nms t pr
+      | QLam (n,nms,t) ->
+          None, lam2str n nms t true
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->
@@ -1090,6 +1095,9 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
     | Lam (n,nms,t,pr) ->
         let t = expand t (nb+n) in
         Lam (n,nms,t,pr)
+    | QLam (n,nms,t) ->
+        let t = expand t (nb+n) in
+        QLam (n,nms,t)
   in
   expand t nbound
 
@@ -1121,6 +1129,8 @@ let fully_expanded (t:term) (nb:int) (ft:t): term =
         Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
         Lam (n, nms, expand t (n+nb), pr)
+    | QLam (n,nms,t) ->
+        QLam (n, nms, expand t (n+nb))
   in
   let t = expand t nb in
   Term.reduce t

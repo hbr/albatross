@@ -537,6 +537,14 @@ let make_boolean (c:Context.t): t =
    c     = c}
 
 
+let expect_boolean (tb:t): unit =
+  let ntvs = count_all tb in
+  let tp   = Variable (ntvs + Class_table.boolean_index) in
+  let s    = Sign.make_const tp in
+  unify_sign tb.sign s tb
+
+
+
 let add_global (cs:type_term array) (tb:t): t =
   (** Add the constraints [cs] to the accumulator [tb] *)
   let n = Array.length cs
@@ -674,9 +682,9 @@ let complete_function (nargs:int) (tb:t): unit =
 let expect_lambda
     (ntvs:int) (nfgs:int) (is_quant: bool) (is_pred:bool) (c:Context.t) (tb:t): unit =
   (* Expect the term of a lambda expression. It is assumed that all local
-      variables of the lambda expression have been pushed to the context and
-      the argument list of the lambda expression contained [ntvs] untyped
-      variables and [nfgs] formal generics. *)
+     variables of the lambda expression have been pushed to the context and
+     the argument list of the lambda expression contained [ntvs] untyped
+     variables and [nfgs] formal generics. *)
   assert (Sign.has_result tb.sign);
   tb.c <- c;
   add_local ntvs tb;
@@ -698,7 +706,8 @@ let expect_lambda
 
 
 
-let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
+let complete_lambda (ntvs:int) (names:int array) (is_quant:bool) (is_pred:bool)
+    (tb:t): unit =
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
@@ -707,7 +716,7 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
   let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  let lam = Lam (nargs, names, t,is_pred)
+  let lam = if is_quant then QLam(nargs,names,t) else Lam (nargs, names, t,is_pred)
   and s   =
     let argtps = Array.init nargs
         (fun i -> TVars_sub.sub_star (argument_type i tb) tb.tvars) in
@@ -728,6 +737,46 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool) (tb:t): unit =
   remove_local ntvs tb;
   tb.c <- Context.pop tb.c;
   tb.tlist <- (lam, count_all tb, s) :: tb.tlist
+
+
+
+let expect_quantified
+    (ntvs:int) (nfgs:int)(c:Context.t) (tb:t): unit =
+  (* Expect the term of a quantified expression. It is assumed that all local
+     variables of the lambda expression have been pushed to the context and
+     the argument list of the lambda expression contained [ntvs] untyped
+     variables and [nfgs] formal generics. *)
+  assert (Sign.has_result tb.sign);
+  tb.c <- c;
+  add_local ntvs tb;
+  add_fgs   nfgs tb;
+  assert (TVars_sub.count_local tb.tvars =
+          TVars_sub.count_local (Context.type_variables tb.c));
+  expect_boolean tb
+
+
+
+let complete_quantified (ntvs:int) (names:int array) (is_all:bool) (tb:t): unit =
+  assert (tb.tlist <> []);
+  let nargs = Array.length names in
+  assert (0 < nargs);
+  let t,nt,tsig = List.hd tb.tlist in
+  assert (nt <= count_all tb);
+  let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
+  assert (Sign.is_constant tsig);
+  tb.tlist <- List.tl tb.tlist;
+  remove_local ntvs tb;
+  tb.c <- Context.pop tb.c;
+  let qexp =
+    if is_all then
+      Context.all_quantified nargs names t tb.c
+    else Context.some_quantified nargs names t tb.c in
+  let nall = count_all tb in
+  let tp   = Variable (nall + Class_table.boolean_index) in
+  let s    = Sign.make_const tp in
+  tb.tlist <- (qexp, nall, s) :: tb.tlist
+
+
 
 
 
@@ -779,6 +828,9 @@ let update_called_variables (tb:t): unit =
     | Lam(n,nms,t,pr) ->
         let t = update t (n+nb) in
         Lam(n,nms,t,pr)
+    | QLam(n,nms,t) ->
+        let t = update t (n+nb) in
+        QLam(n,nms,t)
   in
   let t,nt,s = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
@@ -832,6 +884,8 @@ let specialize_term (tb:t): unit =
   and tvs = TVars_sub.tvars tb.tvars
   in
   let rec upd (t:term) (nargs:int) (nglob:int): int*term =
+    let all_id  = nargs + Feature_table.all_index
+    and some_id = nargs + Feature_table.some_index in
     match t with
       Variable i when i < nargs ->
         nglob, t
@@ -851,6 +905,10 @@ let specialize_term (tb:t): unit =
           with Not_found ->
             nglob+nfgs, t
         end
+    | Application (Variable i, [|QLam(n,nms,t)|], pr)
+      when i = all_id || i = some_id ->
+        let nglob,t = upd t (nargs+n) nglob in
+        nglob, Application(Variable i,[|QLam(n,nms,t)|], pr)
     | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
         let nglob,arglst = Array.fold_left
@@ -865,6 +923,9 @@ let specialize_term (tb:t): unit =
     | Lam (n,nms,t,pr) ->
         let nglob, t = upd t (nargs+n) nglob in
         nglob, Lam (n,nms,t,pr)
+    | QLam (n,nms,t) ->
+        let nglob, t = upd t (nargs+n) nglob in
+        nglob, QLam (n,nms,t)
   in
   let nargs = Context.count_arguments tb.c
   and t,nt,s     = List.hd tb.tlist in
@@ -943,7 +1004,7 @@ let check_term (t:term) (tb:t): t =
         raise Illegal_term
       end;
       begin try
-        complete_lambda ntvs nms is_pred tb
+        complete_lambda ntvs nms is_quant is_pred tb
       with Not_found -> assert false
       end;
       tb
@@ -961,14 +1022,13 @@ let check_term (t:term) (tb:t): t =
             printf "  expected %s\n" (complete_signature_string tb);
             raise Illegal_term
         end
-    | Application (Variable i, [|Lam(n,nms,t0,is_pred)|],_)
+    | Application (Variable i, [|QLam(n,nms,t0)|],_)
       when i = all_id || i = some_id ->
-        assert is_pred;
         assert (n = Array.length nms);
         expect_function 1 tb;
         let tb = check (Variable i) tb in
         expect_argument 0 tb;
-        let tb = lambda n nms t0 true is_pred tb in
+        let tb = lambda n nms t0 true true tb in
         complete_function 1 tb;
         tb
     | Application (f,args,pr) ->
@@ -991,6 +1051,8 @@ let check_term (t:term) (tb:t): t =
           printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);
         lambda n nms t0 false is_pred tb
+    | _ ->
+        assert false
   in
   let depth = Context.depth tb.c in
   let tb = check t tb

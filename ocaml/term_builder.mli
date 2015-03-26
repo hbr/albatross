@@ -44,6 +44,8 @@ val make_boolean:     Context.t -> t
     (** [make c] makes a term builder for the contexct [c] where the expected
     type is boolean. *)
 
+val expect_boolean:   t -> unit
+
 val expect_function:   int -> t -> unit
     (** [expect_function nargs tb] converts the currently expected signature
         to a function signature with [nargs] arguments and adds [nargs] fresh
@@ -82,10 +84,17 @@ val expect_lambda:     int -> int -> bool -> bool -> Context.t -> t -> unit
        (PREDICATE or FUNCTION). It puts a constant signature with the expected
        return type of the lambda expression as the expected signature. *)
 
-val complete_lambda:   int -> int array -> bool -> t -> unit
-   (** [complete_lambda nargs names is_pred tb] converts the term on top the
-       term list into a lamda term with [nargs] arguments and the argument
-       names [names]. *)
+val complete_lambda:   int -> int array -> bool -> bool -> t -> unit
+   (** [complete_lambda nargs names is_quant -> is_pred tb] converts the term
+       on top the term list into a lamda term with [nargs] arguments and the
+       argument names [names]. *)
+
+val expect_quantified:   int -> int -> Context.t -> t -> unit
+   (** [expect_quantifed ntvs nfgs c tb] prepares the term builder to expect
+       the term of a quantified expression with [ntvs] untyped variables. It
+       assumes that the currently expected signature is boolean. *)
+
+val complete_quantified: int -> int array -> bool -> t -> unit
 
 
 exception Incomplete_type of int

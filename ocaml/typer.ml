@@ -25,12 +25,15 @@ module Accus: sig
   val expected_arity:    t -> int
   val expected_signatures_string: t -> string
   val substitutions_string: t -> string
+  val expect_boolean:    t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> int -> bool -> bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int -> int array -> bool -> t -> unit
+  val complete_lambda:   int -> int -> int array -> bool -> bool -> t -> unit
+  val expect_quantified:     int -> int -> Context.t -> t -> unit
+  val complete_quantified:   int -> int -> int array -> bool -> t -> unit
   val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_untyped_variables: info -> t -> unit
@@ -102,10 +105,28 @@ end = struct
     List.iteri
       (fun i acc ->
         let t = Term_builder.head_term acc in
-        printf "    %d: \"%s\"  \"%s\" %s %s\n" i (string_of_term t) (Term.to_string t)
+        printf "    %d: \"%s\"  \"%s\" %s %s\n"
+          i
+          (string_of_term t) (Term.to_string t)
           (Term_builder.string_of_tvs_sub acc)
           (Term_builder.string_of_head_signature acc))
       accus
+
+
+  let expect_boolean (accs:t): unit =
+    let accus = accs.accus in
+    accs.accus <-
+      List.fold_left
+        (fun lst acc ->
+          try
+            Term_builder.expect_boolean acc;
+            acc :: lst
+          with Not_found ->
+            lst)
+        []
+        accs.accus;
+    if accs.accus = [] then
+      raise (Untypeable accus)
 
 
   let expect_function (nargs:int) (accs:t): unit =
@@ -201,13 +222,41 @@ end = struct
 
 
   let complete_lambda
-      (ntvs:int) (ntvs_added:int) (nms:int array) (is_pred:bool) (accs:t): unit =
+      (ntvs:int) (ntvs_added:int) (nms:int array) (is_quant:bool) (is_pred:bool)
+      (accs:t): unit =
     iter_accus
-      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs;
+      (fun acc -> Term_builder.complete_lambda ntvs nms is_quant is_pred acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete lambda\n";
+      trace_accus accs
+    end
+
+
+
+
+  let expect_quantified
+      (ntvs:int) (nfgs:int)
+      (c:Context.t) (accs:t): unit =
+    assert (0 <= ntvs);
+    accs.arity      <- 0;
+    accs.ntvs_added <- 0;
+    accs.c          <- c;
+    iter_accus
+      (fun acc -> Term_builder.expect_quantified ntvs nfgs c acc)
+      accs
+
+
+  let complete_quantified
+      (ntvs:int) (ntvs_added:int) (nms:int array) (is_all:bool)
+      (accs:t): unit =
+    iter_accus
+      (fun acc -> Term_builder.complete_quantified ntvs nms is_all acc) accs;
+    accs.ntvs_added <- ntvs_added;
+    accs.c <- Context.pop accs.c;
+    if accs.trace then begin
+      printf "  complete quantified\n";
       trace_accus accs
     end
 
@@ -474,12 +523,16 @@ let analyze_expression
       (accs: Accus.t)
       (c:Context.t)
       : unit =
-    Accus.expect_function 1 accs;
-    let qop = match q with Universal -> Allop | Existential -> Someop in
-    process_leaf (features (FNoperator qop) 1 info c) c info accs;
-    Accus.expect_argument 0 accs;
-    lambda entlst e true true false accs c;
-    Accus.complete_function 1 accs
+    let ntvs_gap = Accus.ntvs_added accs in
+    let c = Context.push_with_gap entlst None true false ntvs_gap c in
+    let ntvs      = Context.count_local_type_variables c
+    and fargnames = Context.local_argnames c
+    and nfgs      = Context.count_last_formal_generics c in
+    Accus.expect_quantified (ntvs-ntvs_gap) nfgs c accs;
+    analyze e accs c;
+    Accus.check_untyped_variables entlst.i accs;
+    let is_all = match q with Universal -> true | Existential -> false in
+    Accus.complete_quantified (ntvs-ntvs_gap) ntvs_gap fargnames is_all accs
 
   and lambda
       (entlst:entities list withinfo)
@@ -498,7 +551,7 @@ let analyze_expression
     Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_quant is_pred c accs;
     analyze e accs c;
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_quant is_pred accs
   in
 
   let accs   = Accus.make is_bool c in

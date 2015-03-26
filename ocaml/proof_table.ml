@@ -456,6 +456,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Lam (n,nms,e,pr) ->
         let ta,tb = reconstruct e (nb+n) in
         Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
+    | Eval.QLam (n,nms,e) ->
+        let ta,tb = reconstruct e (nb+n) in
+        QLam (n,nms,ta), QLam (n,nms,tb)
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
@@ -618,10 +621,10 @@ let someelim (i:int) (at:t): term =
   and e_name = ST.symbol "$e"
   in
   let impl1   = Term.binary imp_id1 tt (Variable nargs) in
-  let lam1    = Lam (nargs,nms,impl1,true) in
+  let lam1    = QLam (nargs,nms,impl1) in
   let all1    = Term.unary all_id1 lam1 in
   let impl2   = Term.binary imp_id2 all1 (Variable 0) in
-  let lam2    = Lam (1,[|e_name|],impl2,true) in
+  let lam2    = QLam (1,[|e_name|],impl2) in
   let all2    = Term.unary all_id2 lam2 in
   all2
 

@@ -807,10 +807,12 @@ let term_preconditions (t:term)  (c:t): term list =
         end
     | Lam (n,nms,t0,pr) when pr ->
         let lst = do_pred n nms t0 in
-        lst, assert false
+        lst, assert false (* nyi *)
     | Lam (n,nms,t0,pr) ->
         lst,
         Feature.Spec.make_func_def nms (Some t0)
+    | QLam (n,nms,t0) ->
+        assert false (* nyi *)
   in
   let ps,_ = pres t [] c in
   ps

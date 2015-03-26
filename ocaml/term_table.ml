@@ -18,7 +18,8 @@ type t = {
     fvars: (int * sublist IntMap.t) list; (* [nbenv, fvar -> [idx,sub]] *)
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
-    lams:  t IntMap.t         (* one for each number of bindings *)
+    lams:  t IntMap.t;        (* one for each number of bindings *)
+    qlams: t IntMap.t         (* one for each number of bindings *)
   }
 
 
@@ -28,7 +29,8 @@ let empty = {
   bvars = IntMap.empty;
   fvars = [];
   fapps = IntMap.empty;
-  lams  = IntMap.empty}
+  lams  = IntMap.empty;
+  qlams = IntMap.empty}
 
 
 let count  (tab:t): int =
@@ -288,12 +290,21 @@ let unify (t:term) (nbt:int) (table:t)
         end in
         res
     | Lam (n,_,t,_) ->
-        try
+        begin try
           let ttab = IntMap.find n tab.lams in
           let tlst = uni t ttab (nb+n) in
           join_lists basic_subs tlst
         with Not_found ->
           basic_subs
+        end
+    | QLam (n,_,t) ->
+        begin try
+          let ttab = IntMap.find n tab.qlams in
+          let tlst = uni t ttab (nb+n) in
+          join_lists basic_subs tlst
+        with Not_found ->
+          basic_subs
+        end
   in
   try
     uni t table 0
@@ -375,6 +386,9 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | Lam (n,_,t,_) ->
         let ttab = IntMap.find n tab.lams in
         uniw t ttab (nb+n)
+    | QLam (n,_,t) ->
+        let ttab = IntMap.find n tab.qlams in
+        uniw t ttab (nb+n)
   in
   try
     uniw t table 0
@@ -450,6 +464,13 @@ let add
           in
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
+      | QLam (n,_,t) ->
+          let ttab =
+            try IntMap.find n tab.qlams
+            with Not_found -> empty
+          in
+          let ttab = add0 t (nb+n) ttab in
+          {tab with qlams = IntMap.add n ttab tab.qlams}
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
