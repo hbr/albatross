@@ -398,8 +398,8 @@ let definition (idx:int) (nb:int) (at:t): term =
 let expanded_definition (idx:int) (nb:int) (at:t): term =
   Context.expanded_definition idx nb (context at)
 
-let adapt_arguments (n:int) (args:term array) (nb:int) (at:t): term array =
-  Context.adapt_arguments n args nb at.c
+(*let adapt_arguments (n:int) (args:term array) (nb:int) (at:t): term array =
+  Context.adapt_arguments n args nb at.c*)
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
   let nargs, eq_id, left, right =
@@ -451,7 +451,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let ta,tb = reconstruct e nb in
         begin match tb with
           Application(Lam(n,nms,t0,_),args,_) ->
-            let args = adapt_arguments n args nb at in
+            (*let args = adapt_arguments n args nb at in*)
             if n <> Array.length args then begin
               printf "reconstruct eval n %d, length args %d\n" n (Array.length args);
               printf "  tb %s\n" (string_of_term_anon tb nb at);

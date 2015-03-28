@@ -65,7 +65,7 @@ val pop:  t -> t
 
 val definition: int -> int -> t -> term
 val expanded_definition: int -> int -> t -> term
-val adapt_arguments: int -> term array -> int -> t -> term array
+(*val adapt_arguments: int -> term array -> int -> t -> term array*)
 
 val is_proof_pair:  term -> proof_term -> t -> bool
 
