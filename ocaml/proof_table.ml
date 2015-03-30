@@ -448,9 +448,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Lam (n,nms,e,pr) ->
         let ta,tb = reconstruct e (nb+n) in
         Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
-    | Eval.QLam (n,nms,e,is_all) ->
+    | Eval.QExp (n,nms,e,is_all) ->
         let ta,tb = reconstruct e (nb+n) in
-        QLam (n,nms,ta,is_all), QLam (n,nms,tb,is_all)
+        QExp (n,nms,ta,is_all), QExp (n,nms,tb,is_all)
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with

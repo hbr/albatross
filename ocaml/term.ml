@@ -12,7 +12,7 @@ type term =
     Variable    of int
   | Application of term * term array * bool      (* fterm, args, is_pred *)
   | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
-  | QLam        of int * int array * term * bool (* n, names, t, is_all *)
+  | QExp        of int * int array * term * bool (* n, names, t, is_all *)
 and formal  = int * term (* name, type *)
 and formals = formal array
 
@@ -177,7 +177,7 @@ end = struct
         ^ ")"
     | Lam(nargs,names,t,pred) ->
         strlam nargs names t pred
-    | QLam (nargs,names,t,is_all) ->
+    | QExp (nargs,names,t,is_all) ->
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
         qstr ^ "(" ^ argsstr ^ ")" ^ (to_string t)
@@ -210,7 +210,7 @@ end = struct
       Variable _ -> 1
     | Application (f,args,_) ->
         (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
-    | Lam (_,_,t,_) | QLam (_,_,t,_) ->
+    | Lam (_,_,t,_) | QExp (_,_,t,_) ->
         1 + (nodes t)
 
 
@@ -220,7 +220,7 @@ end = struct
       Variable _ -> 0
     | Application (f,args,_) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,_,t,_) | QLam (_,_,t,_)->
+    | Lam (_,_,t,_) | QExp (_,_,t,_)->
         1 + (depth t)
 
 
@@ -239,7 +239,7 @@ end = struct
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
       | Lam (n,_,t,_) ->
           fld a t (level+1) (nb+n)
-      | QLam (n,_,t,_) ->
+      | QExp (n,_,t,_) ->
           fld a t (level+1) (nb+n)
     in
     fld a t 0 0
@@ -371,7 +371,7 @@ end = struct
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
       | Lam(n1,nms1,t1,_), Lam(n2,nms2,t2,_) when n1 = n2 ->
           eq t1 t2 (n1+nb)
-      | QLam(n1,nms1,t1,is_all1), QLam(n2,nms2,t2,is_all2)
+      | QExp(n1,nms1,t1,is_all1), QExp(n2,nms2,t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
       | _, _ ->
@@ -395,8 +395,8 @@ end = struct
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
       | Lam (nargs,names,t,pred) ->
           Lam(nargs, names, mapr (nb+nargs) t, pred)
-      | QLam (nargs,names,t,is_all) ->
-          QLam(nargs, names, mapr (nb+nargs) t, is_all)
+      | QExp (nargs,names,t,is_all) ->
+          QExp(nargs, names, mapr (nb+nargs) t, is_all)
     in
     mapr 0 t
 
@@ -614,10 +614,10 @@ end = struct
         assert (0 < nargs);
         let tred = reduce t in
           Lam (nargs, names, tred, pred)
-    | QLam(nargs,names,t,is_all) ->
+    | QExp(nargs,names,t,is_all) ->
         assert (0 < nargs);
         let tred = reduce t in
-          QLam (nargs, names, tred, is_all)
+          QExp (nargs, names, tred, is_all)
 
 
   let reduce_top (t:term): term =
@@ -636,7 +636,7 @@ end = struct
 
   let qlambda_split (t:term): int * int array * term * bool =
     match t with
-      QLam (n,names,t,is_all) -> n,names,t,is_all
+      QExp (n,names,t,is_all) -> n,names,t,is_all
     | _ -> raise Not_found
 
 
@@ -684,7 +684,7 @@ end = struct
     if nargs = 0 then
       t
     else
-      QLam (nargs,names,t,is_all)
+      QExp (nargs,names,t,is_all)
 
 
   let all_quantified (nargs:int) (names:int array) (t:term): term =

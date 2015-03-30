@@ -279,9 +279,9 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | Lam (n,nms,t0,pr) ->
         let t0 = untup0 t0 (n+nb) in
         Lam(n,nms,t0,pr), 0, 0
-    | QLam (n,nms,t0,is_all) ->
+    | QExp (n,nms,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
-        QLam(n,nms,t0,is_all), 0, 0
+        QExp(n,nms,t0,is_all), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   in
@@ -376,7 +376,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         is_ghost_function (i-nb-nargs) ft
     | Lam (n,_,t,_) ->
         is_ghost t (nb+n)
-    | QLam(_,_,_,_) ->
+    | QExp(_,_,_,_) ->
         true
     | Application (f,args,_) ->
         let fghost = is_ghost f nb in
@@ -994,7 +994,7 @@ let term_to_string
           end
       | Lam (n,nms,t,pr) ->
           None, lam2str n nms t pr
-      | QLam (n,nms,t,is_all) ->
+      | QExp (n,nms,t,is_all) ->
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           and argsstr, tstr = lam_strs n nms t in
           Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
@@ -1065,9 +1065,9 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
     | Lam (n,nms,t,pr) ->
         let t = expand t (nb+n) in
         Lam (n,nms,t,pr)
-    | QLam (n,nms,t,is_all) ->
+    | QExp (n,nms,t,is_all) ->
         let t = expand t (nb+n) in
-        QLam (n,nms,t,is_all)
+        QExp (n,nms,t,is_all)
   in
   expand t nbound
 
@@ -1092,8 +1092,8 @@ let fully_expanded (t:term) (nb:int) (ft:t): term =
         Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
         Lam (n, nms, expand t (n+nb), pr)
-    | QLam (n,nms,t,is_all) ->
-        QLam (n, nms, expand t (n+nb),is_all)
+    | QExp (n,nms,t,is_all) ->
+        QExp (n, nms, expand t (n+nb),is_all)
   in
   let t = expand t nb in
   Term.reduce t

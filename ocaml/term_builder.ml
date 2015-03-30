@@ -828,9 +828,9 @@ let update_called_variables (tb:t): unit =
     | Lam(n,nms,t,pr) ->
         let t = update t (n+nb) in
         Lam(n,nms,t,pr)
-    | QLam(n,nms,t,is_all) ->
+    | QExp(n,nms,t,is_all) ->
         let t = update t (n+nb) in
-        QLam(n,nms,t,is_all)
+        QExp(n,nms,t,is_all)
   in
   let t,nt,s = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
@@ -917,9 +917,9 @@ let specialize_term (tb:t): unit =
     | Lam (n,nms,t,pr) ->
         let nglob, t = upd t (nargs+n) nglob in
         nglob, Lam (n,nms,t,pr)
-    | QLam (n,nms,t,is_all) ->
+    | QExp (n,nms,t,is_all) ->
         let nglob, t = upd t (nargs+n) nglob in
-        nglob, QLam (n,nms,t,is_all)
+        nglob, QExp (n,nms,t,is_all)
   in
   let nargs = Context.count_arguments tb.c
   and t,nt,s     = List.hd tb.tlist in
@@ -1054,7 +1054,7 @@ let check_term (t:term) (tb:t): t =
           printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);
         lambda n nms t0 is_pred tb
-    | QLam(n,nms,t0,is_all) ->
+    | QExp(n,nms,t0,is_all) ->
         if n <> Array.length nms then
           printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);

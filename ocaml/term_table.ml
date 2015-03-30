@@ -303,7 +303,7 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
         end
-    | QLam (n,_,t,is_all) ->
+    | QExp (n,_,t,is_all) ->
         begin try
           let ttab = IntMap.find n (qmap is_all tab) in
           let tlst = uni t ttab (nb+n) in
@@ -392,7 +392,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | Lam (n,_,t,_) ->
         let ttab = IntMap.find n tab.lams in
         uniw t ttab (nb+n)
-    | QLam (n,_,t,is_all) ->
+    | QExp (n,_,t,is_all) ->
         let ttab = IntMap.find n (qmap is_all tab) in
         uniw t ttab (nb+n)
   in
@@ -470,7 +470,7 @@ let add
           in
           let ttab = add0 t (nb+n) ttab in
           {tab with lams = IntMap.add n ttab tab.lams}
-      | QLam (n,_,t,is_all) ->
+      | QExp (n,_,t,is_all) ->
           let ttab =
             try IntMap.find n (qmap is_all tab)
             with Not_found -> empty

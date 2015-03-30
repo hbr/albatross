@@ -363,9 +363,9 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Lam(n,nms,t0,pr) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
           Lam(n,nms,tsimp,pr), Eval.Lam(n,nms,te,pr), tmodi
-      | QLam(n,nms,t0,is_all) ->
+      | QExp(n,nms,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
-          QLam(n,nms,tsimp,is_all), Eval.QLam(n,nms,te,is_all), tmodi
+          QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
     in
     let sublst = unify t (nb+nbenv) pc.entry.left pc in
     let sublst =
@@ -476,10 +476,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Lam (n,nms,t,pred) ->
           let t,e,tmodi = eval t (n+nb) full in
           Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
-      | QLam (n,nms,t,is_all) ->
+      | QExp (n,nms,t,is_all) ->
           let full = full || not is_all in
           let t,e,tmodi = eval t (n+nb) full in
-          QLam (n,nms,t,is_all), Eval.QLam (n,nms,e,is_all), tmodi
+          QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
     in
     let tred, ered, modi = expand t in
     let sublst = unify tred (nb+nbenv) pc.entry.left pc in

@@ -118,7 +118,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | QLam(n1,nms1,t01,is_all1), QLam(n2,nms2,t02,is_all2)
+    | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
       when n1 = n2 && is_all1 = is_all2 ->
         begin try
           comp t01 t02 (n1+nb) (pos+1) poslst elst tlst
@@ -169,12 +169,12 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,t0 =
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
           nextpos, nextvar, poslst, Lam(n,nms,t0,pr)
-    | QLam(n,nms,t0,is_all) ->
+    | QExp(n,nms,t0,is_all) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,t0 =
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
-          nextpos, nextvar, poslst, QLam(n,nms,t0,is_all)
+          nextpos, nextvar, poslst, QExp(n,nms,t0,is_all)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
   if nextpos = 1 then raise Not_found;

@@ -744,8 +744,8 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         end*)
     | Lam (n,nms,t,pr) ->
         Lam (n, nms, expand t (n+nb), pr)
-    | QLam (n,nms,t,is_all) ->
-        QLam (n, nms, expand t (n+nb), is_all)
+    | QExp (n,nms,t,is_all) ->
+        QExp (n, nms, expand t (n+nb), is_all)
   in
   expand t nb
 
@@ -851,7 +851,7 @@ let term_preconditions (t:term)  (c:t): term list =
     | Lam (n,nms,t0,pr) ->
         lst,
         Feature.Spec.make_func_def nms (Some t0)
-    | QLam (n,nms,t0,is_all) ->
+    | QExp (n,nms,t0,is_all) ->
         assert false (* nyi *)
   in
   let ps,_ = pres t [] c in
