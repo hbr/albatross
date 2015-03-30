@@ -144,7 +144,7 @@ let string_of_term_outer (t:term) (at:t): string =
 
 
 let expand_term (t:term) (at:t): term =
-  Context.expanded_term t 0 at.c
+  Context.fully_expanded t 0 at.c
 
 
 let prenex_term (t:term) (at:t): term =
@@ -392,14 +392,10 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
 exception Illegal_proof_term
 
 
-let definition (idx:int) (nb:int) (at:t): term =
-  Context.definition idx nb (context at)
-
-let expanded_definition (idx:int) (nb:int) (at:t): term =
-  Context.expanded_definition idx nb (context at)
-
-(*let adapt_arguments (n:int) (args:term array) (nb:int) (at:t): term array =
-  Context.adapt_arguments n args nb at.c*)
+let definition (idx:int) (nb:int) (full:bool) (at:t): int * int array * term =
+  let c = context at in
+  if full then Context.expanded_definition idx nb c
+  else Context.definition idx nb c
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
   let nargs, eq_id, left, right =
@@ -428,12 +424,20 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   let rec reconstruct e nb =
     match e with
       Eval.Term t -> t,t
-    | Eval.Expand (idx,full) ->
-        begin try
-          Variable idx,
-          if full then expanded_definition idx nb at else definition idx nb at
-        with Not_found ->
-          raise Illegal_proof_term end
+    | Eval.Exp (idx,args,full) ->
+        let n,nms,t =
+          try definition idx nb full at
+          with Not_found -> raise Illegal_proof_term
+        in
+        assert (n = Array.length args);
+        if n = 0 then
+          Variable idx, t
+        else
+          let args = Array.map (fun e -> reconstruct e nb) args in
+          let argsa = Array.init n (fun i -> fst args.(i))
+          and argsb = Array.init n (fun i -> snd args.(i)) in
+          Application(Variable idx,argsa,false),
+          Term.apply t argsb
     | Eval.Apply (f,args,pr) ->
         let fa,fb = reconstruct f nb
         and nargs = Array.length args in
@@ -451,7 +455,6 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let ta,tb = reconstruct e nb in
         begin match tb with
           Application(Lam(n,nms,t0,_),args,_) ->
-            (*let args = adapt_arguments n args nb at in*)
             if n <> Array.length args then begin
               printf "reconstruct eval n %d, length args %d\n" n (Array.length args);
               printf "  tb %s\n" (string_of_term_anon tb nb at);

@@ -121,12 +121,9 @@ val is_equality: term -> int -> t -> bool
     (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
 
 
-val definition: int -> int -> t -> term
-    (** [definition idx nb ft] returns the definition of the feature [idx] as
-        a term (lambda term in case of arguments). Raises [Not_found] if
-        feature [idx] has no definition *)
-
-val expanded_definition: int -> int -> t -> term
+val definition2: int -> int -> t -> int * int array * term
+    (** [definition idx nb ft] returns the definition of the feature
+        [idx]. Raises [Not_found] if feature [idx] has no definition *)
 
 val has_definition: int -> t -> bool
 
@@ -163,12 +160,6 @@ val expand_term: term->int->t->term
       Note: [expand_term] doesn't do any beta reductions in the term [t] which
       would have been possible before the expansion. *)
 
-
-val normalize_term: term->int->t->term
-  (** [normalize_term t nbound ft] expands the definitions of the term [t] and
-     beta reduce it within an environment with [nbound] bound variables,
-     i.e. a variable [i] with [nbound<=i] refers to the global feature
-     [i-nbound] *)
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]

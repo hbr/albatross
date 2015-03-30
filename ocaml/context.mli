@@ -128,9 +128,10 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val adapt_arguments: int -> term array -> int -> t -> term array
 
 val expanded_term:  term -> int -> t -> term
+val fully_expanded: term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term
-val definition: int -> int -> t -> term
-val expanded_definition: int -> int -> t -> term
+val definition: int -> int -> t -> int * int array * term
+val expanded_definition: int -> int -> t -> int * int array * term
 
 val preconditions: int -> int -> t -> int * int array * term list

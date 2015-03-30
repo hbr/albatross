@@ -683,22 +683,80 @@ let adapt_arguments (n:int) (args:term array) (nb:int) (c:t): term array =
 
 
 
-let definition (idx:int) (nb:int) (c:t): term =
+let definition (idx:int) (nb:int) (c:t): int * int array * term =
   let nbenv = count_arguments c in
   if idx < nb + nbenv then
     raise Not_found
-  else begin
-    Feature_table.definition idx (nb + nbenv) (feature_table c)
-  end
+  else
+    Feature_table.definition2 idx (nb + nbenv) (feature_table c)
 
 
-let expanded_definition (idx:int) (nb:int) (c:t): term =
-  let nbenv = count_arguments c in
-  if idx < nb + nbenv then
-    raise Not_found
-  else begin
-    Feature_table.expanded_definition idx (nb + nbenv) (feature_table c)
-  end
+
+let fully_expanded (t:term) (nb:int) (c:t): term =
+  let rec expand t nb =
+    let expargs args = Array.map (fun arg -> expand arg nb) args in
+    let apply f args pr =
+      match f with
+        Lam(n,nms,t0,_) ->
+          assert (n = Array.length args);
+          Term.apply t0 args
+      | _ ->
+          Application (f,args,pr)
+    in
+    match t with
+      Variable i ->
+        begin try
+          let n,nms,t0 = definition i nb c in
+          if n <> 0 then begin
+            printf "n <> 0  t %s\n" (string_of_term t nb c)
+          end;
+          assert (n = 0);
+          t0
+        with Not_found ->
+          t
+        end
+    | Application (Variable i, args, pr) ->
+        let args = expargs args in
+        begin try
+          let n,nms,t0 = definition i nb c in
+          let t0 = expand t0 (n+nb) in
+          let args = expargs args in
+          if n = 0 then
+            apply t0 args false
+          else begin
+            assert (n = Array.length args);
+            Term.apply t0 args
+          end
+        with Not_found ->
+          Application (Variable i, args, pr)
+       end
+    | Application (f,args,pr) ->
+        let f    = expand f nb
+        and args = expargs args in
+        apply f args pr
+        (*begin
+          match f with
+            Lam(n,nms,t0,_) ->
+              assert (n = Array.length args);
+              Term.apply t0 args
+          | _ ->
+              Application (f,args,pr)
+        end*)
+    | Lam (n,nms,t,pr) ->
+        Lam (n, nms, expand t (n+nb), pr)
+    | QLam (n,nms,t,is_all) ->
+        QLam (n, nms, expand t (n+nb), is_all)
+  in
+  expand t nb
+
+
+
+let expanded_definition (idx:int) (nb:int) (c:t): int * int array * term =
+  let n, nms, t = definition idx nb c in
+  let t = fully_expanded t (n+nb) c in
+  n, nms, t
+
+
 
 
 let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =

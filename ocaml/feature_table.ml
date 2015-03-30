@@ -292,25 +292,26 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
 
 
 
-
-let definition (i:int) (nb:int) (ft:t): term =
-  (* The definition of the feature [i] as a lambda term (if there are arguments)
-     transformed into an environment with [nb] bound variables. Raises [Not_found]
-     in case that there is no definition *)
+let definition2 (i:int) (nb:int) (ft:t): int * int array * term =
   assert (nb <= i);
+  assert (i  <= nb + count ft);
   let i = i - nb in
   let desc  = descriptor i ft
   and bdesc = base_descriptor i ft in
   let nargs = Sign.arity desc.sign in
   let t = Feature.Spec.definition_term bdesc.spec in
   let t = Term.upbound nb nargs t in
-  if nargs = 0 then t else Lam (nargs,desc.argnames,t,false)
+  nargs, desc.argnames, t
 
 
+
+let definition (idx:int) (nb:int) (ft:t): term =
+  let n,nms,t = definition2 idx nb ft in
+  if n = 0 then t else Lam (n,nms,t,false)
 
 
 let has_definition (i:int) (ft:t): bool =
-  try let _ = definition i 0 ft in true
+  try let _ = definition2 i 0 ft in true
   with Not_found -> false
 
 
@@ -1072,13 +1073,6 @@ let expand_term (t:term) (nbound:int) (ft:t): term =
 
 
 
-
-
-let rec normalize_term (t:term) (nbound:int) (ft:t): term =
-  (* Expand the definitions of the term 't' and beta reduce it within an
-     environment with 'nbound' bound variables, i.e. a variable i with
-     nbound<=i refers to the global feature i-nbound *)
-  Term.reduce (expand_term t nbound ft)
 
 
 let fully_expanded (t:term) (nb:int) (ft:t): term =

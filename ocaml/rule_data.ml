@@ -299,10 +299,6 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
       List.rev ps_rev, false
   in
   let nargs_new = rd.nargs - nargs in
-  (*let chain = implication_chain ps tgt (nbenv+nargs_new) in
-  try
-    let chain2 = Term_builder.specialize_assertion chain c in
-    if not full then Context.pop c;*)
     {rd with
      orig  = Some orig;
      spec  = true;
@@ -312,9 +308,6 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
      nms   = nms;
      premises = ps;
      target   = tgt}
-  (*with Term_builder.Illegal_term ->
-    Printf.printf "rule_data  illegal term\n";
-    raise Not_found*)
 
 
 

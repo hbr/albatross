@@ -334,28 +334,6 @@ let has_in_view (t:term) (pc:t): bool =
 
 
 
-let triggers_evaluation (t:term) (nb:int) (pc:t): bool =
-  (* Does the term [t] trigger a full evaluation when used as a top level function
-     term, i.e. is it a variable which describes a function which has no expansion
-     and is not owned by BOOLEAN? *)
-  let nbenv = nb + nbenv pc
-  and ft    = feature_table pc in
-  match t with
-    Variable i ->
-      begin
-        try
-          let _ = Proof_table.definition i nb pc.base in
-          false
-        with Not_found ->
-          i < nbenv ||
-          let idx = i - nbenv in
-          idx = Feature_table.or_index ||
-          Feature_table.owner idx ft <> Class_table.boolean_index
-      end
-  | _ ->
-      false
-
-
 let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Simplify the term [t] and return the simplified term, the corresponding Eval
      structure and a flag which tells if the term [t] and its simplification are
@@ -417,6 +395,19 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
 
 
 
+let triggers_eval (i:int) (nb:int) (pc:t): bool =
+  (* Does the term [Variable i] trigger a full evaluation when used as a top
+     level function term, i.e. is it a variable which describes a function
+     which has no expansion and is not owned by BOOLEAN? *)
+  let nbenv = nb + nbenv pc
+  and ft    = feature_table pc in
+  i < nbenv ||
+  let idx = i - nbenv in
+  idx = Feature_table.or_index ||
+  Feature_table.owner idx ft <> Class_table.boolean_index
+
+
+
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
      structure and a flag which tells if the term [t] and its evaluation are
@@ -425,7 +416,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
      [below_idx]: consider only rules below [below_idx] for equality. *)
   let nbenv = nbenv pc in
   let rec eval t nb full =
-    let apply f fe modi args is_pred full =
+    let eval_args modi args full =
       let modi_ref = ref modi in
       let args = Array.map
           (fun a ->
@@ -436,29 +427,50 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             else a, Eval.Term a)
           args in
       let args,argse = Myarray.split args in
+      args, argse, !modi_ref
+    in
+    let apply f fe modi args is_pred full =
+      let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
         Lam (n,nms,t0,_) ->
-          (*let args = Proof_table.adapt_arguments n args nb pc.base in*)
           assert (n = Array.length args);
           Term.apply t0 args, Eval.Beta e, true
       | _ ->
-          Application (f,args,is_pred), e, !modi_ref
+          Application (f,args,is_pred), e, modi
     in
     let expand t =
       match t with
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let fdef =
-              if full then Proof_table.expanded_definition i nb pc.base
-              else         Proof_table.definition i nb pc.base in
-            fdef, Eval.Expand (i,full), true
+            let n,nms,t0 = Proof_table.definition i nb full pc.base in
+            assert (n = 0);
+            t0, Eval.Exp(i,[||],full), true
           with Not_found ->
             t, Eval.Term t, false
           end
+      | Application (Variable i,args,pr) ->
+          begin
+            try
+              let n,nms,t0 = Proof_table.definition i nb full pc.base in
+              if n = 0 then begin
+                let f, fe = t0, Eval.Exp(i,[||],full) in
+                apply f fe true args pr full
+              end else begin
+                assert (n = Array.length args);
+                let args, argse, _ = eval_args true args full in
+                Term.apply t0 args,
+                Eval.Exp(i,argse,full),
+                true
+              end
+            with Not_found ->
+              let full = full || triggers_eval i nb pc in
+              let f  = Variable i in
+              let fe = Eval.Term f in
+              apply f fe false args pr full
+          end
       | Application (f,args,pr) ->
-          let full = full || triggers_evaluation f nb pc in
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
       | Lam (n,nms,t,pred) ->
@@ -494,6 +506,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   in
   let tred,ered,modi = eval t 0 false in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
+  if ta <> t then begin
+    printf "t   %s\n" (string_of_term t pc);
+    printf "ta  %s\n" (string_of_term ta pc)
+  end;
   assert (ta = t);
   if tb <> tred then begin
     printf "tb   %s\n" (string_of_term tb pc);

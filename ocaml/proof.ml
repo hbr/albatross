@@ -13,7 +13,7 @@ exception Limit_exceeded of int
 module Eval = struct
   type t =
       Term of term
-    | Expand of (int * bool) (* idx of function, full expansion *)
+    | Exp of (int * t array * bool) (* idx of function, args, full expansion *)
     | Apply of t * t array * bool
     | Lam of int * int array * t * bool
     | QLam of int * int array * t * bool
@@ -77,12 +77,15 @@ end = struct
       if i < start then i else i + delta
     in
     let rec adapt_eval (e:Eval.t): Eval.t =
+      let adapt_args args = Array.map (fun e -> adapt_eval e) args
+      in
       match e with
         Eval.Term t   -> e
-      | Eval.Expand i -> e
+      | Eval.Exp (i,args,full) ->
+          Eval.Exp (i, adapt_args args, full)
       | Eval.Apply (f,args,pr) ->
           let f = adapt_eval f
-          and args = Array.map (fun e -> adapt_eval e) args in
+          and args = adapt_args args in
           Eval.Apply (f,args,pr)
       | Eval.Lam (n,nms,e,pr) ->
           Eval.Lam (n, nms, adapt_eval e, pr)
@@ -139,12 +142,14 @@ end = struct
       let n = Array.length pt_arr in
       assert (k < start_inner + n);
       let rec usd_eval (e:Eval.t) (set:IntSet.t): IntSet.t =
+        let usd_args set args =
+          Array.fold_left (fun set e -> usd_eval e set) set args in
         match e with
           Eval.Term t   -> set
-        | Eval.Expand i -> set
-        | Eval.Apply (f,args,_)   ->
+        | Eval.Exp (i,args,full) -> usd_args set args
+        | Eval.Apply (f,args,_) ->
             let set = usd_eval f set in
-            Array.fold_left (fun set e -> usd_eval e set) set args
+            usd_args set args
         | Eval.Lam (n,nms,e,_) | Eval.QLam(n,nms,e,_) -> usd_eval e set
         | Eval.Beta e           -> usd_eval e set
         | Eval.Simpl (e,i,args) ->
@@ -218,8 +223,9 @@ end = struct
       in
       let rec transform_eval (e:Eval.t): Eval.t =
         match e with
-          Eval.Term _
-        | Eval.Expand _ ->  e
+          Eval.Term _ -> e
+        | Eval.Exp (i,args,full) ->
+            Eval.Exp(i, Array.map transform_eval args, full)
         | Eval.Apply (f,args,pr) ->
             Eval.Apply (transform_eval f, Array.map transform_eval args,pr)
         | Eval.Lam (n,nms,e,pr) -> Eval.Lam (n,nms,transform_eval e,pr)
@@ -382,14 +388,16 @@ end = struct
           Term.variable t
         in
         let rec shrnk e nb =
+          let shrnk_eargs args = Array.map (fun e -> shrnk e nb) args in
           match e with
             Eval.Term t ->
               Eval.Term (shrink_inner t nb)
-          | Eval.Expand (idx,full) ->
-              Eval.Expand (var (shrink_inner (Variable idx) nb),full)
+          | Eval.Exp (idx,args,full) ->
+              Eval.Exp (var (shrink_inner (Variable idx) nb), shrnk_eargs args, full)
           | Eval.Apply(f,args,pr) ->
               let f = shrnk f nb
-              and args = Array.map (fun e -> shrnk e nb) args in
+              and args = shrnk_eargs args
+              (*and args = Array.map (fun e -> shrnk e nb) args*) in
               Eval.Apply (f,args,pr)
           | Eval.Lam (n,nms,e,pr) ->
               Eval.Lam (n,nms,shrnk e (nb+n),pr)
@@ -472,14 +480,15 @@ end = struct
         Term.variable t
       in
       let rec upeval e nb =
+        let upeval_args args = Array.map (fun e -> upeval e nb) args in
         match e with
           Eval.Term t ->
             Eval.Term (up_inner t nb)
-        | Eval.Expand (idx,full) ->
-            Eval.Expand (var (up_inner (Variable idx) nb), full)
+        | Eval.Exp (idx,args,full) ->
+            Eval.Exp (var (up_inner (Variable idx) nb), upeval_args args, full)
 	| Eval.Apply(f,args,pr) ->
             let f = upeval f nb
-            and args = Array.map (fun e -> upeval e nb) args in
+            and args = upeval_args (*Array.map (fun e -> upeval e nb)*) args in
             Eval.Apply(f,args,pr)
         | Eval.Lam (n,nms,e,pr) ->
             Eval.Lam (n, nms, upeval e (n+nb), pr)
