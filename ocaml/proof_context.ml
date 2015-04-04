@@ -343,20 +343,29 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let nbenv = nbenv pc in
   let rec simp t nb =
     let do_subterms t nb =
+      let simpl_args args modi =
+        let arglst, modi =
+          Array.fold_left
+            (fun (arglst,modi) a ->
+              let asimp,ae,amodi = simp a nb in
+              (asimp,ae)::arglst, modi || amodi)
+            ([],modi)
+            args
+        in
+        let args, argse = Myarray.split (Array.of_list (List.rev arglst)) in
+        args, argse, modi
+      in
       match t with
         Variable _ ->
           t, Eval.Term t, false
+      | VAppl (i,args) ->
+          let args, argse, modi = simpl_args args false in
+          VAppl(i,args),
+          Eval.VApply(i,argse),
+          modi
       | Application(f,args,pr) ->
           let fsimp,fe,fmodi = simp f nb in
-          let arglst, modi =
-            Array.fold_left
-              (fun (arglst,modi) a ->
-                let asimp,ae,amodi = simp a nb in
-                (asimp,ae)::arglst, modi || amodi)
-              ([],fmodi)
-              args
-          in
-          let args, argse = Myarray.split (Array.of_list (List.rev arglst)) in
+          let args, argse, modi = simpl_args args fmodi in
           Application(fsimp, args, pr),
           Eval.Apply(fe,argse,pr),
           modi
@@ -429,6 +438,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let args,argse = Myarray.split args in
       args, argse, !modi_ref
     in
+    let vapply i args full =
+      let args, argse, modi = eval_args false args full in
+      let e = Eval.VApply (i,argse) in
+      VAppl(i,args), e, modi
+    in
     let apply f fe modi args is_pred full =
       let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
@@ -450,6 +464,24 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           with Not_found ->
             t, Eval.Term t, false
           end
+      | VAppl (i,args) ->
+          begin
+            try
+              let n,nms,t0 = Proof_table.definition i nb full pc.base in
+              if n = 0 then begin
+                let f, fe = t0, Eval.Exp(i,[||],full) in
+                apply f fe true args false full
+              end else begin
+                assert (n = Array.length args);
+                let args, argse, _ = eval_args true args full in
+                Term.apply t0 args,
+                Eval.Exp(i,argse,full),
+                true
+              end
+            with Not_found ->
+              let full = full || triggers_eval i nb pc in
+              vapply i args full
+          end
       | Application (Variable i,args,pr) ->
           begin
             try
@@ -459,10 +491,12 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 apply f fe true args pr full
               end else begin
                 assert (n = Array.length args);
-                let args, argse, _ = eval_args true args full in
+                printf "expand %s\n" (string_of_term_anon t nb pc);
+                assert false; (* is this possible? *)
+                (*let args, argse, _ = eval_args true args full in
                 Term.apply t0 args,
                 Eval.Exp(i,argse,full),
-                true
+                true*)
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
@@ -507,8 +541,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let tred,ered,modi = eval t 0 false in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
   if ta <> t then begin
-    printf "t   %s\n" (string_of_term t pc);
-    printf "ta  %s\n" (string_of_term ta pc)
+    printf "t   %s  %s\n" (string_of_term t pc) (Term.to_string t);
+    printf "ta  %s  %s\n" (string_of_term ta pc) (Term.to_string ta)
   end;
   assert (ta = t);
   if tb <> tred then begin
@@ -1217,7 +1251,7 @@ let prove_equality (g:term) (pc:t): int =
     done;
     let e =
       let ev args = Eval.Beta (Eval.Term (Application(lam,args,true))) in
-      Eval.Apply(Eval.Term (Variable eq_id), [|ev args1; ev args2|], true)
+      Eval.VApply(eq_id, [|ev args1; ev args2|])
     in
     result := fwd_evaluation g !result e false pc;
     !result

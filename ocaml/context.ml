@@ -219,6 +219,12 @@ let untupelize_inner (t:term) (nargs:int) (c:t): term =
 let tupelize_inner (t:term) (nargs:int) (c:t): term =
   let nbenv = count_arguments c in
   let res = Feature_table.tupelize_inner t nargs nbenv c.ft in
+  if t <> untupelize_inner res nargs c then begin
+    let untup = untupelize_inner res nargs c in
+    printf "tupelize_inner  t   %s\n" (string_of_term t nargs c);
+    printf "                res %s\n" (string_of_term res 1 c);
+    printf "                t2  %s\n" (string_of_term untup nargs c);
+  end;
   assert (t = untupelize_inner res nargs c);
   res
 
@@ -626,61 +632,10 @@ let variable_data (i:int) (c:t): Tvars.t * Sign.t =
 
 
 
-let print_local_contexts (c:t): unit =
-  assert false
-  (*let ct = class_table c in
-  let args_str (e:entry): string =
-    let str = arguments_string e ct in
-    if str = "" then "<empty>" else str
-  in
-  let rec print_stack (stack: entry list): unit =
-    match stack with
-      []
-    | [_] ->
-        ()
-    | e::tail ->
-        print_stack tail;
-        printf "%s\n" (args_str e)
-  in
-  printf "local contexts\n";
-  print_stack c.stack;
-  printf "%s\n" (args_str c.entry)*)
-
-
-let expanded_term (t:term) (nb:int) (c:t): term =
-  let nbenv = nfargs c in
-  Feature_table.expand_term t (nb+nbenv) c.ft
-
-
 
 let to_tuple (args:term array) (nb:int) (c:t): term =
-  let tup_id = nb + count_arguments c + Feature_table.tuple_index in
-  let n = Array.length args in
-  assert (1 < n);
-  let rec to_tup i t =
-    if i = 0 then
-      t
-    else
-      let i = i - 1 in
-      let t = Application(Variable tup_id, [|args.(i);t|],false) in
-      to_tup i t
-  in
-  to_tup (n-1) args.(n-1)
-
-
-let adapt_arguments (n:int) (args:term array) (nb:int) (c:t): term array =
-  let n2 = Array.length args in
-  assert (0 < n);
-  assert (0 < n2);
-  assert (n = n2 || n = 1 || n2 = 1);
-  if n = 1 && n2 > 1 then
-    [|to_tuple args nb c|]
-  else if n2 = 1 && n > 1 then
-    assert false (* nyi: providing a tuple to a multiargument function *)
-  else
-    args
-
-
+  let nbenv = nb + count_arguments c in
+  Feature_table.to_tuple args nbenv c.ft
 
 
 let definition (idx:int) (nb:int) (c:t): int * int array * term =
@@ -688,7 +643,7 @@ let definition (idx:int) (nb:int) (c:t): int * int array * term =
   if idx < nb + nbenv then
     raise Not_found
   else
-    Feature_table.definition2 idx (nb + nbenv) (feature_table c)
+    Feature_table.definition idx (nb + nbenv) (feature_table c)
 
 
 
@@ -715,12 +670,25 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         with Not_found ->
           t
         end
+    | VAppl (i, args) ->
+        let args = expargs args in
+        begin try
+          let n,nms,t0 = definition i nb c in
+          let t0 = expand t0 (n+nb) in
+          if n = 0 then
+            apply t0 args false
+          else begin
+            assert (n = Array.length args);
+            Term.apply t0 args
+          end
+        with Not_found ->
+          VAppl (i, args)
+       end
     | Application (Variable i, args, pr) ->
         let args = expargs args in
         begin try
           let n,nms,t0 = definition i nb c in
           let t0 = expand t0 (n+nb) in
-          let args = expargs args in
           if n = 0 then
             apply t0 args false
           else begin
@@ -734,14 +702,6 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         let f    = expand f nb
         and args = expargs args in
         apply f args pr
-        (*begin
-          match f with
-            Lam(n,nms,t0,_) ->
-              assert (n = Array.length args);
-              Term.apply t0 args
-          | _ ->
-              Application (f,args,pr)
-        end*)
     | Lam (n,nms,t,pr) ->
         Lam (n, nms, expand t (n+nb), pr)
     | QExp (n,nms,t,is_all) ->
@@ -821,9 +781,11 @@ let term_preconditions (t:term)  (c:t): term list =
     | Variable i ->
         lst,
         specification i c
-    | Application (Variable i, args, pr) when i = imp_id || i = and_id ->
+    | VAppl (i, args) when i = imp_id || i = and_id ->
         assert false
-    | Application (Variable i, args, pr) when i = or_id ->
+    | VAppl (i, args) when i = or_id ->
+        assert false
+    | VAppl (i,args) ->
         assert false
     | Application (f,args,pr) ->
         let lst,fspec = pres f lst c in

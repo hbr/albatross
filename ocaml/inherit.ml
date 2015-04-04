@@ -91,7 +91,7 @@ let check_base_features (cls:int) (pc:PC.t): unit =
 
 
 let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
-  (* Check the equivalence of the feature [i] and its inherited variable [idx] in
+  (* Check the equivalence of the feature [i] and its inherited variant [idx] in
      the class [cls] *)
   let ft = PC.feature_table pc
   and ct = class_table pc in

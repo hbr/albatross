@@ -10,6 +10,7 @@ open Container
 
 type term =
     Variable    of int
+  | VAppl       of int * term array              (* fidx, args *)
   | Application of term * term array * bool      (* fterm, args, is_pred *)
   | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
   | QExp        of int * int array * term * bool (* n, names, t, is_all *)
@@ -72,9 +73,11 @@ module Term: sig
 
   val equivalent: term -> term -> bool
 
-  val map: (int->int->term) -> term -> term
+  val map: (int->int->int) -> term -> term
 
-  val map_free: (int->term) -> term -> int -> term
+  val map_to_term: (int->int->term) -> term -> term
+
+  val map_free: (int->int) -> term -> int -> term
 
   val down_from: int -> int -> term -> term
 
@@ -86,8 +89,6 @@ module Term: sig
 
   val array_up: int -> term array -> term array
 
-  val sub_var: int -> term -> term -> term
-
   val part_sub_from: term -> int -> int -> term array -> int -> term
 
   val part_sub: term -> int -> term array -> int -> term
@@ -97,8 +98,6 @@ module Term: sig
   val sub:   term -> term array -> int -> term
 
   val apply: term -> term array -> term
-
-  val abstract: term -> int array -> term
 
   val reduce: term -> term
 
@@ -129,8 +128,6 @@ module Term: sig
   val binary_split_0: term -> int * term * term
 
   val binary_split: term -> int -> term * term
-
-  val binary_right: term -> int -> term list
 
   val split_implication_chain: term -> int -> term list * term
   val make_implication_chain:  term list -> term -> int -> term
@@ -167,10 +164,17 @@ end = struct
     in
     match t with
       Variable i -> string_of_int i
+    | VAppl (i,args) ->
+        let fstr = string_of_int i
+        and argsstr = Array.to_list (Array.map to_string args)
+        in
+        fstr ^ "v(" ^
+        (String.concat "," argsstr)
+        ^ ")"
     | Application (f,args,pr) ->
         let fstr = to_string f
         and argsstr = Array.to_list (Array.map to_string args)
-        and predstr = if pr then "p" else ""
+        and predstr = if pr then "p" else "f"
         in
         fstr ^ predstr ^ "(" ^
         (String.concat "," argsstr)
@@ -180,7 +184,7 @@ end = struct
     | QExp (nargs,names,t,is_all) ->
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
-        qstr ^ "(" ^ argsstr ^ ")" ^ (to_string t)
+        qstr ^ "(" ^ argsstr ^ ") " ^ (to_string t)
 
 
   let variable (t:term): int =
@@ -208,8 +212,10 @@ end = struct
     (* The number of nodes in the term t *)
     match t with
       Variable _ -> 1
+    | VAppl (i,args) ->
+        Array.fold_left (fun sum t -> sum + (nodes t)) 1 args
     | Application (f,args,_) ->
-        (Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args)
+        Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args
     | Lam (_,_,t,_) | QExp (_,_,t,_) ->
         1 + (nodes t)
 
@@ -218,6 +224,8 @@ end = struct
     (* The depth of the term t *)
     match t with
       Variable _ -> 0
+    | VAppl (i,args) ->
+        Mylist.sum depth 1 (Array.to_list args)
     | Application (f,args,_) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
     | Lam (_,_,t,_) | QExp (_,_,t,_)->
@@ -231,9 +239,13 @@ end = struct
         accumulate the results in [a].
      *)
     let rec fld (a:'a) (t:term) (level) (nb:int): 'a =
+      let var i = if nb <= i then f a (i-nb) level else a
+      in
       match t with
-        Variable i ->
-          if nb <= i then f a (i-nb) level else a
+        Variable i -> var i
+      | VAppl (i,args) ->
+          let a = var i in
+          Array.fold_left (fun a t -> fld a t (level+1) nb) a args
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
@@ -364,6 +376,12 @@ end = struct
       match t1, t2 with
         Variable i, Variable j ->
           i = j
+      | VAppl(i1,args1), VAppl(i2,args2)
+        when i1 = i2 ->
+          let n1 = Array.length args1
+          and n2 = Array.length args2 in
+          n1 = n2 &&
+          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
       | Application (f1,args1,_), Application (f2,args2,_) ->
           let n = Array.length args1 in
           n = Array.length args2 &&
@@ -381,16 +399,36 @@ end = struct
 
 
 
+  let map (f:int->int->int) (t:term): term =
+    (* Map all variables 'j' of the term 't' to 'Variable(f j nb)' where 'nb'
+       is the number of bound variables in the context where 'j' appears.
+     *)
+    let rec mapr nb t =
+      let map_args args = Array.map (fun t -> mapr nb t) args
+      in
+      match t with
+        Variable j -> Variable (f j nb)
+      | VAppl (j,args) ->
+          VAppl (f j nb, map_args args)
+      | Application (a,b,pred) ->
+          Application (mapr nb a, map_args b, pred)
+      | Lam (nargs,names,t,pred) ->
+          Lam(nargs, names, mapr (nb+nargs) t, pred)
+      | QExp (nargs,names,t,is_all) ->
+          QExp(nargs, names, mapr (nb+nargs) t, is_all)
+    in
+    mapr 0 t
 
 
-
-  let map (f:int->int->term) (t:term): term =
+  let map_to_term (f:int->int->term) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
        number of bound variables in the context where 'j' appears
      *)
     let rec mapr nb t =
       match t with
         Variable j -> f j nb
+      | VAppl (j,args) ->
+          VAppl (j, Array.map (fun t -> mapr nb t) args)
       | Application (a,b,pred) ->
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
       | Lam (nargs,names,t,pred) ->
@@ -411,9 +449,9 @@ end = struct
       map
         (fun j nb ->
           if j < nb+start then
-            Variable j
+            j
           else if n <= j-nb-start then
-            Variable (j-n)
+            j - n
           else
             raise Term_capture
         )
@@ -437,8 +475,10 @@ end = struct
     else
       map
         (fun j nb ->
-          if j<nb+start then Variable(j)
-          else Variable(j+n))
+          if j<nb+start then
+            j
+          else
+            j + n)
         t
 
 
@@ -454,31 +494,19 @@ end = struct
     else Array.map (fun t -> up n t) arr
 
 
-  let map_free (f:int->term) (t:term) (start:int): term =
+  let map_free (f:int->int) (t:term) (start:int): term =
     (* Map the free variable 'i' of the term 't' to 'f i *)
-    let fb (i:int) (nb:int): term =
+    let fb (i:int) (nb:int): int =
       if i < nb+start then
-        Variable i
+        i
       else
-        up (nb+start) (f (i-nb-start))
+        nb + start + f (i-nb-start)
     in
     map fb t
 
 
 
 
-
-  let sub_var (i:int) (t:term) (u:term): term =
-    (* Substitute the free variabe 'i' in the term 't' by the term 'u' *)
-    assert (0<=i);
-    map
-      (fun k nb ->
-        if i+nb=k then
-          up nb u
-        else
-          Variable k
-      )
-      t
 
   let part_sub_from
       (t:term)
@@ -500,7 +528,7 @@ end = struct
         environment of the arguments.  *)
     let len = Array.length args in
     assert (len <= nargs);
-    map
+    map_to_term
       (fun j nb ->
         let nb1 = nb + start in
         if j < nb1 then
@@ -517,6 +545,50 @@ end = struct
             Variable(j+n_delta-len)
       )
       t
+
+
+  let part_sub_from
+      (t:term)
+      (start:int)
+      (nargs:int)
+      (args:term array)
+      (n_delta:int)
+      : term =
+    (** Perform a partial substitution.
+
+        The term [t] has above [start] [nargs] argument variables. The first
+        [Array.length args] of them will be substituted by the corresponding
+        term in [args] and the others will be shifted down appropriately so
+        that the new term has [(Array.length args)-nargs] argument variables.
+
+        The arguments come from an environment with [n_delta] variables more
+        than the term [t]. Therefore the variables in [t] above [start+nargs]
+        have to be shifted up by [n_delta] to transform them into the
+        environment of the arguments.  *)
+    let len = Array.length args in
+    assert (len <= nargs);
+    let rec sub t nb =
+      let sub_args args = Array.map (fun t -> sub t nb) args in
+      let nb1 = nb + start in
+      match t with
+        Variable i when i < nb1 -> t
+      | Variable i when i < nb1 + len ->
+          up (nb1+nargs-len) args.(i-nb1)
+      | Variable i when i < nb1 + nargs ->
+          Variable (i-len)
+      | Variable i ->
+          Variable (i + n_delta - len)
+      | VAppl (i,args) ->
+          assert (nb1 + nargs - len <= i);
+          VAppl (i + n_delta - len, sub_args args)
+      | Application(f,args,pr) ->
+          Application (sub f nb, sub_args args, pr)
+      | Lam(n,nms,t0,pr) ->
+          Lam (n, nms, sub t0 (n+nb), pr)
+      | QExp(n,nms,t0,is_all) ->
+          QExp (n, nms, sub t0 (n+nb), is_all)
+    in
+    sub t 0
 
 
   let part_sub (t:term) (nargs:int) (args:term array) (n_delta:int): term =
@@ -564,36 +636,6 @@ end = struct
     sub t args 0
 
 
-
-  let abstract (t:term) (args: int array): term =
-    (* Abstract the free variables in the 'args' array, i.e. make 'args.(0)'
-       to 'Variable 0', 'args.(1)' to 'Variable(1)' ... and all other
-       'Variable j' to 'Variable (j+len).
-     *)
-    let len = Array.length args
-    and mp  = ref IntMap.empty
-    in
-    Array.iteri
-      (fun i i0 -> mp := IntMap.add i0 i !mp)
-      args;
-    let res =
-      map
-        (fun j nb ->
-          if j < nb then Variable j
-          else
-            try
-              Variable (nb+(IntMap.find (j-nb) !mp))
-            with Not_found ->
-              Variable (j+len)
-        )
-        t
-    in
-    assert ((apply res (Array.map (fun i -> Variable i) args)) = t);
-    res
-
-
-
-
   let rec reduce (t:term): term =
     (* Do all possible beta reductions in the term 't' *)
     let app (f:term) (args: term array) (pr:bool): term =
@@ -604,7 +646,7 @@ end = struct
       | _ -> Application (f,args,pr)
     in
     match t with
-      Variable _ -> t
+      Variable _ | VAppl _ -> t
     | Application (f,args,pr) ->
         let fr = reduce f
         and argsr = Array.map reduce args
@@ -642,11 +684,17 @@ end = struct
 
   let unary (unid:int) (t:term): term =
     let args = [| t |] in
-    Application (Variable unid, args, false)
+    VAppl (unid, args)
+    (*Application (Variable unid, args, false)*)
 
 
   let unary_split (t:term) (unid:int): term =
     match t with
+      VAppl (i,args) when i = unid ->
+        assert (Array.length args = 1);
+        args.(0)
+    | _ -> raise Not_found
+    (*match t with
       Application (f,args,_) ->
         let nargs = Array.length args in
         (match f with
@@ -654,17 +702,19 @@ end = struct
             if nargs=1 then args.(0)
             else assert false
         | _ -> raise Not_found)
-    | _ -> raise Not_found
+    | _ -> raise Not_found*)
 
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| left; right |] in
-    Application (Variable binid, args,false)
+    VAppl (binid, args)
+    (*Application (Variable binid, args,false)*)
 
 
   let binary_split_0 (t:term): int * term * term =
     match t with
-      Application(Variable i,args,_) when Array.length args = 2 ->
+      VAppl(i,args) when Array.length args = 2 ->
+      (*Application(Variable i,args,_) when Array.length args = 2 ->*)
         i, args.(0), args.(1)
     | _ ->
         raise Not_found
@@ -706,23 +756,6 @@ end = struct
 
   let some_quantifier_split (t:term): int * int array * term =
     quantifier_split t false
-
-
-  let rec binary_right (t:term) (binid:int): term list =
-    let rec binr (t:term) (lst:term list): term list =
-      match t with
-        Application (f,args,_) when Array.length args = 2 ->
-          begin
-            match f with
-              Variable i when i = binid ->
-                binr args.(0) (args.(1) :: lst)
-            | _ -> t::lst
-          end
-      | _ -> t::lst
-    in
-    binr t []
-
-
 
 
   let split_implication_chain (t:term) (impid:int)

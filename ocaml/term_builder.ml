@@ -10,7 +10,7 @@ open Support
 open Container
 open Printf
 
-type t = {mutable tlist: (term*int*Sign.t) list; (* term, count_all, sign *)
+type t = {mutable tlist: (term*Tvars.t*Sign.t) list; (* term, count_all, sign *)
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
           mutable c: Context.t}
@@ -46,7 +46,7 @@ let count_terms (tb:t): int = List.length tb.tlist
 
 let concept (i:int) (tb:t): type_term = TVars_sub.concept i tb.tvars
 
-let tvs (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
+let tvars (tb:t): Tvars.t  = TVars_sub.tvars tb.tvars
 
 let has_term (tb:t): bool = tb.tlist <> []
 
@@ -62,7 +62,7 @@ let head_signature (tb:t): Sign.t =
 
 let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   let ct  = class_table tb
-  and tvs = tvs tb in
+  and tvs = tvars tb in
   Class_table.satisfies t1 tvs t2 tvs ct
 
 
@@ -77,12 +77,12 @@ let string_of_head_term (tb:t): string =
 
 let string_of_type (tp:type_term) (tb:t): string =
   let ct = class_table tb in
-  Class_table.string_of_type tp (tvs tb) ct
+  Class_table.string_of_type tp (tvars tb) ct
 
 
 let string_of_signature (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
-  Class_table.string_of_signature s (tvs tb) ct
+  Class_table.string_of_signature s (tvars tb) ct
 
 
 let string_of_head_signature (tb:t): string =
@@ -91,7 +91,7 @@ let string_of_head_signature (tb:t): string =
 
 let string_of_complete_signature (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
-  Class_table.string_of_complete_signature s (tvs tb) ct
+  Class_table.string_of_complete_signature s (tvars tb) ct
 
 let string_of_complete_signature_sub (s:Sign.t) (tb:t): string =
   let ct      = Context.class_table tb.c in
@@ -505,10 +505,12 @@ let unify_sign
     and tp_act = Sign.result sig_act in
     unify tp_req tp_act tb
   end else if n_req = 0 && n_act > 0 then begin
-    (*printf ".. sig_act has to be upgraded\n";*)
+    raise Not_found (* nyi: automatic upgrade of signature, because it is a
+                       conversion to a predicate or a function *)
+    (*printf ".. sig_act has to be upgraded\n";
     let tp_req = Sign.result sig_req
     and tp_act = to_dummy sig_act tb in
-    unify tp_req tp_act tb
+    unify tp_req tp_act tb*)
   end else begin
     (*printf ".. both are constant or callable\n";*)
     unify_sign_0 sig_req sig_act tb
@@ -591,14 +593,13 @@ let add_leaf
   assert (nloc=0 || nglob=0);
   assert (nloc <= nloctb);
   assert (nfgs <= nfgstb);
-  (*assert (nfgs=0 ||  nfgs=nfgstb);*)
   assert (nglob <= nglobtb);
   let s = Sign.up_from (nfgstb-nfgs) (nloc+nglob) s in
   let s = Sign.up_from (nglobtb-nglob) nloc s       in
   let s = Sign.up (nloctb-nloc) s in
   unify_sign tb.sign s tb;
   let s = Sign.transform (fun tp -> TVars_sub.sub_star tp tb.tvars) s in
-  {tb with tlist = (Variable i, count_all tb, s)::tb.tlist}
+  {tb with tlist = (Variable i, tvars tb, s)::tb.tlist}
 
 
 
@@ -643,15 +644,26 @@ let complete_function (nargs:int) (tb:t): unit =
   let arglst = ref [] in
   for i = 1 to nargs do  (* pop arguments *)
     assert (tb.tlist <> []);
-    let t,_,_ = List.hd tb.tlist in
+    let t,_,s = List.hd tb.tlist in
     tb.tlist <- List.tl tb.tlist;
+    assert (Sign.is_constant s); (* not valid for automatically upgraded
+                                    functions! *)
     arglst := t :: !arglst;
   done;
-  let f,nf, fsig = List.hd tb.tlist in
-  assert (nf <= count_all tb);
-  let fsig = Sign.up_from (count_all tb - nf) (count_local tb) fsig in
+  let f,tvs, fsig = List.hd tb.tlist in
+  assert (Tvars.count_all tvs <= count_all tb);
+  let fsig = Sign.up_from
+      (count_all tb - Tvars.count_all tvs) (count_local tb) fsig in
   tb.tlist <- List.tl tb.tlist;
-  let t = Application (f, Array.of_list !arglst,false) in
+  let t =
+    if Sign.is_constant fsig then
+      Application (f, Array.of_list !arglst,false)
+    else begin
+      assert (Sign.arity fsig = nargs);
+      assert (Term.is_variable f);
+      VAppl(Term.variable f, Array.of_list !arglst)
+    end
+  in
   let ttp =
     if Sign.is_constant fsig then
       let dum_idx = dummy_index tb
@@ -673,7 +685,7 @@ let complete_function (nargs:int) (tb:t): unit =
   let ttp = try Term.down nargs ttp with Not_found -> assert false in
   let s   = Sign.make_const ttp in
   remove_local nargs tb;
-  tb.tlist <- (t, count_all tb, s) :: tb.tlist
+  tb.tlist <- (t, tvars tb, s) :: tb.tlist
 
 
 
@@ -711,9 +723,10 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  let t,nt,tsig = List.hd tb.tlist in
-  assert (nt <= count_all tb);
-  let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
+  let t,ttvs,tsig = List.hd tb.tlist in
+  assert (Tvars.count_all ttvs <= count_all tb);
+  let tsig =
+    Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
   let lam = Lam (nargs, names, t,is_pred)
@@ -736,7 +749,7 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
     Sign.make_const res in
   remove_local ntvs tb;
   tb.c <- Context.pop tb.c;
-  tb.tlist <- (lam, count_all tb, s) :: tb.tlist
+  tb.tlist <- (lam, tvars tb, s) :: tb.tlist
 
 
 
@@ -760,9 +773,10 @@ let complete_quantified (ntvs:int) (names:int array) (is_all:bool) (tb:t): unit 
   assert (tb.tlist <> []);
   let nargs = Array.length names in
   assert (0 < nargs);
-  let t,nt,tsig = List.hd tb.tlist in
-  assert (nt <= count_all tb);
-  let tsig = Sign.up_from (count_all tb - nt) (count_local tb) tsig in
+  let t,ttvs,tsig = List.hd tb.tlist in
+  assert (Tvars.count_all ttvs <= count_all tb);
+  let tsig =
+    Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
   remove_local ntvs tb;
@@ -774,7 +788,7 @@ let complete_quantified (ntvs:int) (names:int array) (is_all:bool) (tb:t): unit 
   let nall = count_all tb in
   let tp   = Variable (nall + Class_table.boolean_index) in
   let s    = Sign.make_const tp in
-  tb.tlist <- (qexp, nall, s) :: tb.tlist
+  tb.tlist <- (qexp, tvars tb, s) :: tb.tlist
 
 
 
@@ -817,6 +831,9 @@ let update_called_variables (tb:t): unit =
     match t with
       Variable _ ->
         t
+    | VAppl (i,args) ->
+        let args = Array.map (fun a -> update a nb) args in
+        VAppl(i,args)
     | Application (Variable i,args,pr)
       when not pr && nb <= i && i < nb + nargs ->
         let args = Array.map (fun a -> update a nb) args in
@@ -884,25 +901,38 @@ let specialize_term (tb:t): unit =
   and tvs = TVars_sub.tvars tb.tvars
   in
   let rec upd (t:term) (nargs:int) (nglob:int): int*term =
+    let var (i:int): int * int =
+        let i = i - nargs in
+        let nfgs = Feature_table.count_fgs i ft in
+        try
+          let anchor = Feature_table.anchor i ft in
+          assert (anchor < nfgs);
+          let tv  = Tvars.count_local tvs + nglob + anchor in
+          assert (tv < Tvars.count_all tvs);
+            let tvtp = TVars_sub.get_star tv tb.tvars in
+            let pcls = Tvars.principal_class tvtp tvs in
+            let i_var = Feature_table.variant i pcls ft in
+            nglob+nfgs, nargs + i_var
+        with Not_found ->
+          nglob+nfgs, i+nargs
+    in
     match t with
       Variable i when i < nargs ->
         nglob, t
     | Variable i ->
-        let i = i - nargs in
-        let nfgs = Feature_table.count_fgs i ft in
-        begin
-          try
-            let anchor = Feature_table.anchor i ft in
-            assert (anchor < nfgs);
-            let tv  = Tvars.count_local tvs + nglob + anchor in
-            assert (tv < Tvars.count_all tvs);
-            let tvtp = TVars_sub.get_star tv tb.tvars in
-            let pcls = Tvars.principal_class tvtp tvs in
-            let i_var = Feature_table.variant i pcls ft in
-            nglob+nfgs, Variable (nargs + i_var)
-          with Not_found ->
-            nglob+nfgs, t
-        end
+        let nglob, i = var i in
+        nglob, Variable i
+    | VAppl (i,args) ->
+        let nglob, i = var i in
+        let nglob,arglst = Array.fold_left
+            (fun (nglob,lst) t ->
+              let nglob,t = upd t nargs nglob in
+              nglob, t::lst)
+            (nglob,[])
+            args
+        in
+        let args = Array.of_list (List.rev arglst) in
+        nglob, VAppl (i,args)
     | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
         let nglob,arglst = Array.fold_left
@@ -967,7 +997,7 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
   | _ ->
       ()
 
-
+(*
 exception Illegal_term
 
 let check_term (t:term) (tb:t): t =
@@ -1079,6 +1109,7 @@ let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
     false
 
 
+
 let specialize_assertion (t:term) (c:Context.t): term =
   (* Calculate the most specific version of the assertion [t] in the context [c] *)
   let tb = make_boolean c in
@@ -1088,3 +1119,4 @@ let specialize_assertion (t:term) (c:Context.t): term =
     head_term tb
   with Not_found ->
     assert false
+*)

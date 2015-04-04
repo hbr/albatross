@@ -436,8 +436,14 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           let args = Array.map (fun e -> reconstruct e nb) args in
           let argsa = Array.init n (fun i -> fst args.(i))
           and argsb = Array.init n (fun i -> snd args.(i)) in
-          Application(Variable idx,argsa,false),
+          VAppl(idx,argsa),
           Term.apply t argsb
+    | Eval.VApply (i,args) ->
+        let nargs = Array.length args in
+        let args  = Array.map (fun e -> reconstruct e nb) args in
+        let argsa = Array.init nargs (fun i -> fst args.(i))
+        and argsb = Array.init nargs (fun i -> snd args.(i)) in
+        VAppl (i,argsa), VAppl (i,argsb)
     | Eval.Apply (f,args,pr) ->
         let fa,fb = reconstruct f nb
         and nargs = Array.length args in
@@ -513,9 +519,9 @@ let term_of_eval (i:int) (e:Eval.t) (at:t): term =
   let ok = (Term.equivalent t  ta) in
   if not ok then begin
     printf "evaluated terms do not coincide\n";
-    printf "   term %3d  %s\n" i (string_of_term t at);
-    printf "   eval      %s\n" (string_of_term ta at);
-    printf "   evaluated %s\n" (string_of_term tb at);
+    printf "   term %3d  %s  %s\n" i (string_of_term t at)(Term.to_string t);
+    printf "   eval      %s  %s\n" (string_of_term ta at) (Term.to_string ta);
+    printf "   evaluated %s  %s\n" (string_of_term tb at) (Term.to_string tb);
     raise Illegal_proof_term
   end;
   tb

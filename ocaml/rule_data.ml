@@ -163,7 +163,7 @@ let term (rd:t) (nbenv:int): term =
 
 
 let complexity (t:term) (c:Context.t): int =
-  let t_exp = Context.expanded_term t 0 c in
+  let t_exp = Context.fully_expanded t 0 c in
   Term.nodes t_exp
 
 

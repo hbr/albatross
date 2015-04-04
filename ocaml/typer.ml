@@ -563,7 +563,7 @@ let analyze_expression
 
   let term,tvars_sub = Accus.result accs in
   Context.update_type_variables tvars_sub c;
-  assert (Term_builder.is_valid term is_bool c);
+  (*assert (Term_builder.is_valid term is_bool c);*)
   term
 
 

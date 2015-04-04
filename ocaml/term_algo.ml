@@ -73,7 +73,6 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
      the lambda term applied to the fist argument array results in the first term
      and the lambda term applied to the second argument array results in the second
      term. *)
-
   (* return n positions checked,
      positions with different subterms,
      pair list of different subterms *)
@@ -98,6 +97,19 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         else raise Not_found
     | Variable k, Variable l when k = l ->
         pos+1, poslst, elst, tlst
+    | VAppl(i1,args1), VAppl(i2,args2)
+      when i1 = i2 && Array.length args1 = Array.length args2 ->
+        begin try
+          let pos  = pos + 1
+          and args = Myarray.combine args1 args2 in
+          Array.fold_left
+            (fun (pos,poslst,elst,tlst) (a1,a2) ->
+              comp a1 a2 nb pos poslst elst tlst)
+            (pos,poslst,elst,tlst)
+            args
+        with Not_found ->
+          different t1 t2 pos poslst elst tlst
+        end
     | Application(f1,args1,pr1), Application(f2,args2,pr2)
       when Array.length args1 = Array.length args2 && pr1 = pr2 ->
         begin try
@@ -148,6 +160,20 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | Variable k ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else nextpos+1, nextvar, poslst, Variable (k+nargs)
+    | VAppl (i,args) ->
+        if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
+        else
+          let nextpos = nextpos + 1 in
+          let nextpos,nextvar,poslst,arglst =
+            Array.fold_left
+              (fun (nextpos,nextvar,poslst,arglst) arg ->
+                let nextpos,nextvar,poslst,arg =
+                  mklambda nextpos nextvar poslst arg nb in
+                nextpos, nextvar, poslst, arg::arglst)
+              (nextpos,nextvar,poslst,[])
+              args in
+          let args = Array.of_list (List.rev arglst) in
+          nextpos, nextvar, poslst, VAppl(i+nargs,args)
     | Application (f,args,pr) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
@@ -191,6 +217,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         (String.concat "," (List.map Term.to_string (Array.to_list args))) ^ "]"
       in
       Printf.printf " lam   %s\n" (Term.to_string lam);
+      Printf.printf " tlam  %s\n" (Term.to_string tlam);
       Printf.printf " args1 %s\n" (argsstr args1);
       Printf.printf " args2 %s\n" (argsstr args2);
       Printf.printf " tappl %s\n" (Term.to_string t1);

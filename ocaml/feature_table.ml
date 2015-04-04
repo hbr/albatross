@@ -151,7 +151,7 @@ let to_tuple (args:term array) (nbenv:int) (ft:t): term =
       t
     else
       let i = i - 1 in
-      let t = Application(Variable tup_id, [|args.(i);t|],false) in
+      let t = VAppl(tup_id, [|args.(i);t|]) in
       to_tup i t
   in
   let i = nargs - 1 in
@@ -175,11 +175,11 @@ let tupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     assert (i < n);
     assert (2 <= n);
     if i = 0 then
-      Application (Variable first_id, [|t|],false)
+      VAppl (first_id, [|t|])
     else if i = 1 && n = 2 then
-      Application (Variable second_id, [|t|],false)
+      VAppl (second_id, [|t|])
     else
-      let t = Application(Variable second_id, [|t|],false) in
+      let t = VAppl(second_id, [|t|]) in
       argument (i-1) (n-1) t
   in
   if nargs <= 1 then
@@ -229,9 +229,12 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
      is is zero up to [nargs-2] applications of [second] and replace them by
      the corresponding argument.  *)
   let rec untup (t:term) (nb:int) (outer:int) (nsnds:int) : term * int * int =
+    (* outer 0: neither first nor second
+             1: first
+             2: second *)
     let first_id  = nb + 1 + nbenv + first_index
     and second_id = nb + 1 + nbenv + second_index
-    and appl i t pr = Application(Variable (i + nargs - 1), [|t|], pr), 0 , 0
+    and vappl i t   = VAppl      (          i + nargs - 1 , [|t|])    , 0, 0
     in
     match t with
       Variable i when i < nb ->
@@ -244,7 +247,7 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         nsnds2
     | Variable i ->
         Variable (i + nargs - 1), 0 , 0
-    | Application(Variable i,args,pr) when i = first_id ->
+    | VAppl(i,args) when i = first_id ->
         assert (Array.length args = 1);
         let t,outer,nsnds = untup args.(0) nb 1 0 in
         assert (outer = 0 || outer = 1);
@@ -252,8 +255,8 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         if outer = 1 then
           t, 0, 0
         else
-          appl i t pr
-    | Application(Variable i,args,pr) when i = second_id && outer = 0 ->
+          vappl i t
+    | VAppl(i,args) when i = second_id && outer = 0 ->
         assert (Array.length args = 1);
         let t,outer,nsnds = untup args.(0) nb 2 0 in
         assert (outer = 0 || outer = 2);
@@ -261,17 +264,20 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         if outer = 2 then
           t, 0, 0
         else
-          appl i t pr
-    | Application(Variable i,args,pr) when i = second_id->
+          vappl i t
+    | VAppl(i,args) when i = second_id->
         assert (Array.length args = 1);
         assert (outer = 1 || outer = 2);
         let t1,outer1,nsnds1 = untup args.(0) nb outer (nsnds+1) in
         if outer1 = 0 || nsnds1 = 0 then
-          appl i t1 pr
+          vappl i t1
         else begin
           assert (outer1 = outer);
           t1, outer1, nsnds1-1
         end
+    | VAppl(i,args) ->
+        let args = Array.map (fun t -> untup0 t nb) args in
+        VAppl(i + nargs - 1,args), 0, 0
     | Application(f,args,pr) ->
         let f = untup0 f nb
         and args = Array.map (fun t -> untup0 t nb) args in
@@ -292,7 +298,7 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
 
 
 
-let definition2 (i:int) (nb:int) (ft:t): int * int array * term =
+let definition (i:int) (nb:int) (ft:t): int * int array * term =
   assert (nb <= i);
   assert (i  <= nb + count ft);
   let i = i - nb in
@@ -304,14 +310,8 @@ let definition2 (i:int) (nb:int) (ft:t): int * int array * term =
   nargs, desc.argnames, t
 
 
-
-let definition (idx:int) (nb:int) (ft:t): term =
-  let n,nms,t = definition2 idx nb ft in
-  if n = 0 then t else Lam (n,nms,t,false)
-
-
 let has_definition (i:int) (ft:t): bool =
-  try let _ = definition2 i 0 ft in true
+  try let _ = definition i 0 ft in true
   with Not_found -> false
 
 
@@ -378,6 +378,8 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         is_ghost t (nb+n)
     | QExp(_,_,_,_) ->
         true
+    | VAppl (i,args) ->
+        is_ghost_function (i-nb-nargs) ft
     | Application (f,args,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
@@ -467,20 +469,17 @@ let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
      all features of [t] from the class [base_class] are transformed into their
      inherited variant in class [cls] *)
   assert (Class_table.has_ancestor cls base_cls ft.ct);
-  let f (j:int): term =
-    let var_j =
-      if class_of_feature j ft = base_cls && has_anchor j ft then
-        try variant j cls ft
-        with Not_found ->
-          printf "there is no variant of \"%s\" in class %s\n"
-            (string_of_signature j ft)
-            (Class_table.class_name cls ft.ct);
+  let f (j:int): int =
+    if class_of_feature j ft = base_cls && has_anchor j ft then
+      try variant j cls ft
+      with Not_found ->
+        printf "there is no variant of \"%s\" in class %s\n"
+          (string_of_signature j ft)
+          (Class_table.class_name cls ft.ct);
           assert false (* If [cls] inherits [base_cls] then there has to be a variant
                           in the descendant *)
-      else
-        j
-    in
-    Variable var_j
+    else
+      j
   in
   Term.map_free f t nb
 
@@ -502,7 +501,7 @@ let definition_equality (i:int) (ft:t): term =
   let t = Option.value (Feature.Spec.definition bdesc.spec) in
   let f =
     if nargs = 0 then Variable f_id
-    else Application (Variable f_id, Array.init nargs (fun i -> Variable i),false)
+    else VAppl (f_id, Array.init nargs (fun i -> Variable i))
   in
   let eq_term = Term.binary eq_id f t in
   if nargs = 0 then
@@ -775,15 +774,6 @@ let base_table (verbosity:int) : t =
 
 
 
-let implication_term (a:term) (b:term) (nbound:int) (ft:t)
-    : term =
-  (* The implication term a=>b in an environment with 'nbound' bound variables
-   *)
-  let args = [|a;b|] in
-  Application (Variable (implication_index+nbound), args, false)
-
-
-
 let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
   (* Find the feature with the characteristics.  *)
   let ntvs = Tvars.count_all tvs in
@@ -899,6 +889,14 @@ let term_to_string
     let nnames = Array.length names
     and anon2sym (i:int): int = anon_symbol i nanon
     in
+    let find_op_int (i:int): operator =
+      if nnames <= i then
+        match (Seq.elem (i-nnames) ft.seq).fname with
+          FNoperator op -> op
+        | _ -> raise Not_found
+      else
+        raise Not_found
+    in
     let var2str (i:int): string =
       if i < nnames then
         ST.string names.(i)
@@ -907,12 +905,7 @@ let term_to_string
           (Seq.elem (i-nnames) ft.seq).fname
     and find_op (f:term): operator  =
       match f with
-        Variable i when nnames <= i ->
-          begin
-            match (Seq.elem (i-nnames) ft.seq).fname with
-              FNoperator op -> op
-            | _ -> raise Not_found
-          end
+        Variable i -> find_op_int i
       | _ -> raise Not_found
     and args2str (n:int) (nms:int array): string =
       let nnms  = Array.length nms in
@@ -933,23 +926,36 @@ let term_to_string
       args2str n nms,
       to_string t names nanon false None
     in
+    let default_fapp (f:term) (argsstr:string): string =
+      (to_string f names nanon true None) ^ "(" ^ argsstr ^ ")" in
+    let funiapp2str (i:int) (argsstr:string): string =
+      if nnames <= i then
+        let fn = (descriptor (i-nnames) ft).fname in
+        begin match fn with
+          FNname fsym ->
+            if fsym = (ST.symbol "singleton") then
+              "{" ^ argsstr ^ "}"
+            else if fsym = ST.tuple then
+              "(" ^ argsstr ^ ")"
+            else
+              default_fapp (Variable i) argsstr
+        | _ -> default_fapp (Variable i) argsstr
+        end
+      else
+        default_fapp (Variable i) argsstr
+    in
     let funapp2str (f:term) (argsstr:string): string =
-      let default f =
-        (to_string f names nanon true None) ^ "(" ^ argsstr ^ ")" in
       match f with
-        Variable i when nnames <= i ->
-          let fn = (descriptor (i-nnames) ft).fname in
-          begin match fn with
-            FNname fsym ->
-              if fsym = (ST.symbol "singleton") then
-                "{" ^ argsstr ^ "}"
-              else if fsym = ST.tuple then
-                "(" ^ argsstr ^ ")"
-              else
-                default f
-          | _ -> default f
-          end
-      | _ -> default f
+        Variable i ->
+          funiapp2str i argsstr
+      | _ -> default_fapp f argsstr
+    in
+    let argsstr (args: term array): string =
+      String.concat
+        ","
+        (List.map
+           (fun t -> to_string t names nanon false None)
+           (Array.to_list args))
     in
     let op2str (op:operator) (args: term array): string =
       match op with
@@ -965,14 +971,6 @@ let term_to_string
             ^ " " ^ (operator_to_rawstring op) ^ " "
         ^ (to_string args.(1) names nanon false (Some (op,false)))
           end
-    and app2str (f:term) (args: term array): string =
-      let argsstr =
-        String.concat
-          ","
-          (List.map
-             (fun t -> to_string t names nanon false None)
-             (Array.to_list args)) in
-      funapp2str f argsstr
     and lam2str (n:int) (nms: int array) (t:term) (pr:bool): string =
       let argsstr, tstr = lam_strs n nms t in
       if pr then
@@ -984,13 +982,20 @@ let term_to_string
       match t with
         Variable i ->
           None, var2str i
+      | VAppl (i,args) ->
+          begin try
+            let op = find_op_int i in
+            Some op, op2str op args
+          with Not_found ->
+            None, funiapp2str i (argsstr args)
+          end
       | Application (f,args,pr) ->
           begin
             try
               let op = find_op f in
               Some op, op2str op args
             with Not_found ->
-              None, app2str f args
+              None, funapp2str f (argsstr args)
           end
       | Lam (n,nms,t,pr) ->
           None, lam2str n nms t pr
@@ -1030,84 +1035,6 @@ let term_to_string
 
 
 
-
-
-let expand_term (t:term) (nbound:int) (ft:t): term =
-  (* Expand the definitions of the term 't' within an environment with
-     'nbound' bound variables, i.e. a variable i with nbound<=i refers to the
-     global feature i-nbound
-
-     Note: [expand_term] doesn't do any beta reductions in the term [t] which
-     would have been possible before the expansion. *)
-  let rec expand (t:term) (nb:int): term =
-    let apply (f:term) (args:term array) (pr:bool): term =
-      match f with
-        Lam (n,nms,t,_) ->
-          assert (n = Array.length args);
-          Term.apply t args
-      | _ -> Application (f,args,pr)
-    in
-    match t with
-      Variable i when i < nb ->
-        t
-    | Variable i ->
-        assert (i-nb < count ft);
-        (try expand (definition i nb ft) nb
-        with Not_found -> t)
-    | Application (Lam(n,nms,t,pr),args,pr2) ->
-        let t    = expand t (nb+n)
-        and args = Array.map (fun t -> expand t nb) args in
-        Application(Lam(n,nms,t,pr),args,pr2)
-    | Application (f,args,pr) ->
-        let f    = expand f nb
-        and args = Array.map (fun t -> expand t nb) args in
-        apply f args pr
-    | Lam (n,nms,t,pr) ->
-        let t = expand t (nb+n) in
-        Lam (n,nms,t,pr)
-    | QExp (n,nms,t,is_all) ->
-        let t = expand t (nb+n) in
-        QExp (n,nms,t,is_all)
-  in
-  expand t nbound
-
-
-
-
-
-let fully_expanded (t:term) (nb:int) (ft:t): term =
-  let rec expand t nb =
-    match t with
-      Variable i when i < nb -> t
-    | Variable i ->
-        begin try
-          let def = definition i nb ft in
-          expand def nb
-        with Not_found ->
-          t
-        end
-    | Application (f,args,pr) ->
-        let f = expand f nb in
-        let args = Array.map (fun t -> expand t nb) args in
-        Application (f,args,pr)
-    | Lam (n,nms,t,pr) ->
-        Lam (n, nms, expand t (n+nb), pr)
-    | QExp (n,nms,t,is_all) ->
-        QExp (n, nms, expand t (n+nb),is_all)
-  in
-  let t = expand t nb in
-  Term.reduce t
-
-
-let expanded_definition (idx:int) (nb:int) (ft:t): term =
-  assert (nb <= idx);
-  assert (idx <= nb + count ft);
-  let def = fully_expanded (Variable idx) nb ft in
-  match def with
-    Variable i ->
-      assert(i = idx);
-      raise Not_found
-  | _ -> def
 
 
 
@@ -1203,16 +1130,13 @@ let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
       0, t
   in
   let nbenv = nbenv + nargs in
-  match t with
-    Application (Variable i, args, _) when nbenv <= i ->
-      let i = i - nbenv in
-      assert (i < count ft);
-      if (base_descriptor i ft).is_eq then begin
-        assert (Array.length args = 2);
-        nargs, i, args.(0), args.(1)
-      end else
-        raise Not_found
-  | _ -> raise Not_found
+  let i,a,b = Term.binary_split_0 t in
+  let i = i - nbenv in
+  assert (i < count ft);
+  if (base_descriptor i ft).is_eq then begin
+    nargs, i, a, b
+  end else
+    raise Not_found
 
 
 let is_equality (t:term) (nbenv:int) (ft:t): bool =

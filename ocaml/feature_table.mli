@@ -110,8 +110,6 @@ val is_interface_use:  t -> bool
 
 
 
-val implication_term: term -> term -> int -> t -> term
-
 val split_equality: term -> int -> t -> int * int * term * term
     (** [split_equality t nbenv ft] returns the number of arguments, the
         equality in and the left and right hand side of an equality or raises
@@ -121,13 +119,15 @@ val is_equality: term -> int -> t -> bool
     (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
 
 
-val definition2: int -> int -> t -> int * int array * term
+val definition: int -> int -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature
         [idx]. Raises [Not_found] if feature [idx] has no definition *)
 
 val has_definition: int -> t -> bool
 
 val definition_equality: int -> t -> term
+
+val to_tuple: term array -> int -> t -> term
 
 val feature_name: int -> t -> string
 
@@ -142,24 +142,6 @@ val tupelize_inner:   term -> int -> int -> t -> term
 val untupelize_inner: term -> int -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
-(*
-val expand_focus_term: term -> int -> t -> term
-    (** [expand_focus_term t nb ft] expands the variable in the focus of [t]
-        within an environment with [nb] bound variables (i.e. a variable [i]
-        with [nb<=i] refers to the global feature [i-nb])
-
-        Note: The function doesn't do any beta reductions in the term [t]
-        which would have been possible before the expansion. *)
-*)
-
-val expand_term: term->int->t->term
-  (** [expand_term t nbound ft] expands the definitions of the term [t] within
-      an environment with [nbound] bound variables, i.e. a variable [i] with
-      [nbound<=i] refers to the global feature [i-nbound]
-
-      Note: [expand_term] doesn't do any beta reductions in the term [t] which
-      would have been possible before the expansion. *)
-
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]

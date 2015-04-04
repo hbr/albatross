@@ -16,6 +16,7 @@ type t = {
     avars: (int*int*int) list;            (* [idx, argument variable, nargs] *)
     bvars: sublist IntMap.t;              (* bvar -> [idx,sub] *)
     fvars: (int * sublist IntMap.t) list; (* [nbenv, fvar -> [idx,sub]] *)
+    apps:  (t array) IntMap.t; (* one for each function variable *)
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
     lams:  t IntMap.t;        (* one for each number of bindings *)
@@ -29,6 +30,7 @@ let empty = {
   avars = [];
   bvars = IntMap.empty;
   fvars = [];
+  apps  = IntMap.empty;
   fapps = IntMap.empty;
   lams  = IntMap.empty;
   alls  = IntMap.empty;
@@ -260,6 +262,23 @@ let unify (t:term) (nbt:int) (table:t)
         join_lists (IntMap.find i mp) base
       with Not_found -> base
     in
+    let list_of (t:term) (tab:t): sublist =
+      let res = uni t tab nb in
+      if res=[] then raise Not_found;
+      res
+    in
+    let arglst
+        (args:term array) (argtabs:t array) (lst:sublist) (use_lst:bool): sublist =
+      let len = Array.length args in
+      assert (len = Array.length argtabs);
+      let res_lst = ref lst in
+      for i=0 to len-1 do
+        let alst = list_of args.(i) argtabs.(i) in
+        res_lst :=
+          if i=0 && not use_lst then alst else merge_lists !res_lst alst
+      done;
+      join_lists basic_subs !res_lst
+    in
     match t with
       Variable i when i < nb ->
         IntMap.find i tab.bvars
@@ -274,27 +293,24 @@ let unify (t:term) (nbt:int) (table:t)
               base)
           basic_subs
           tab.fvars
+    | VAppl (i,args) ->
+        assert (nb + nbt <= i);
+        let idx = i - nb - nbt in
+        begin try
+          let argtabs = IntMap.find idx tab.apps in
+          arglst args argtabs [] false
+        with Not_found ->
+          basic_subs
+        end
     | Application (f,args,_) ->
-        let res =
         begin
           try
             let len           = Array.length args in
             let ftab, argtabs = IntMap.find len tab.fapps in
-            let list_of (t:term) (tab:t): sublist =
-              let res = uni t tab nb in
-              if res=[] then raise Not_found;
-              res
-            in
-            let res_lst = ref (list_of f ftab) in
-            for i=0 to len-1 do
-              let alst = list_of args.(i) argtabs.(i) in
-              res_lst := merge_lists !res_lst alst
-            done;
-            join_lists basic_subs !res_lst
+            arglst args argtabs (list_of f ftab) true
           with Not_found ->
             basic_subs
-        end in
-        res
+        end
     | Lam (n,_,t,_) ->
         begin try
           let ttab = IntMap.find n tab.lams in
@@ -379,6 +395,17 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
           raise Not_found
         else
           sublist
+    | VAppl (i,args) ->
+        assert (nb + nargs + nbenv <= i);
+        let idx = i - nb - nargs - nbenv in
+        let argtabs = IntMap.find idx tab.apps in
+        let lst = ref [] in
+        Array.iteri
+          (fun i a ->
+            let alst = uniw a argtabs.(i) nb in
+            lst := if i = 0 then alst else merge_lists !lst alst)
+          args;
+        !lst
     | Application (f,args,_) ->
         let len = Array.length args in
         let ftab, argtabs = IntMap.find len tab.fapps in
@@ -450,6 +477,16 @@ let add
           (* variable is bound by some abstraction *)
           assert (i < nb);
           {tab with bvars = newmap i idx tab.bvars}
+      | VAppl (i,args) ->
+          assert (nb + nargs + nbenv <= i);
+          let len = Array.length args in
+          let fidx = i - nb - nargs - nbenv in
+          let argtabs =
+            try IntMap.find fidx tab.apps
+            with Not_found -> Array.make len empty in
+          let argtabs =
+            Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs in
+          {tab with apps = IntMap.add fidx argtabs tab.apps}
       | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =

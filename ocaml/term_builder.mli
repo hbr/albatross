@@ -118,7 +118,7 @@ val result:            t -> term * TVars_sub.t
 
 val has_term:   t -> bool
 val head_term:  t -> term
-
+(*
 exception Illegal_term
 
 val check_term: term -> t -> t
@@ -126,3 +126,4 @@ val check_term: term -> t -> t
 val is_valid: term -> bool -> Context.t -> bool
 
 val specialize_assertion: term -> Context.t -> term
+*)

@@ -14,6 +14,7 @@ module Eval = struct
   type t =
       Term of term
     | Exp of (int * t array * bool) (* idx of function, args, full expansion *)
+    | VApply of int * t array
     | Apply of t * t array * bool
     | Lam of int * int array * t * bool
     | QExp of int * int array * t * bool
@@ -83,6 +84,8 @@ end = struct
         Eval.Term t   -> e
       | Eval.Exp (i,args,full) ->
           Eval.Exp (i, adapt_args args, full)
+      | Eval.VApply (i,args) ->
+          Eval.VApply (i, adapt_args args)
       | Eval.Apply (f,args,pr) ->
           let f = adapt_eval f
           and args = adapt_args args in
@@ -147,6 +150,7 @@ end = struct
         match e with
           Eval.Term t   -> set
         | Eval.Exp (i,args,full) -> usd_args set args
+        | Eval.VApply (i,args)   -> usd_args set args
         | Eval.Apply (f,args,_) ->
             let set = usd_eval f set in
             usd_args set args
@@ -226,6 +230,8 @@ end = struct
           Eval.Term _ -> e
         | Eval.Exp (i,args,full) ->
             Eval.Exp(i, Array.map transform_eval args, full)
+        | Eval.VApply (i,args) ->
+            Eval.VApply (i, Array.map transform_eval args)
         | Eval.Apply (f,args,pr) ->
             Eval.Apply (transform_eval f, Array.map transform_eval args,pr)
         | Eval.Lam (n,nms,e,pr) -> Eval.Lam (n,nms,transform_eval e,pr)
@@ -394,10 +400,13 @@ end = struct
               Eval.Term (shrink_inner t nb)
           | Eval.Exp (idx,args,full) ->
               Eval.Exp (var (shrink_inner (Variable idx) nb), shrnk_eargs args, full)
+          | Eval.VApply(i,args) ->
+              let i = var (shrink_inner (Variable i) nb)
+              and args = shrnk_eargs args in
+              Eval.VApply (i,args)
           | Eval.Apply(f,args,pr) ->
               let f = shrnk f nb
-              and args = shrnk_eargs args
-              (*and args = Array.map (fun e -> shrnk e nb) args*) in
+              and args = shrnk_eargs args in
               Eval.Apply (f,args,pr)
           | Eval.Lam (n,nms,e,pr) ->
               Eval.Lam (n,nms,shrnk e (nb+n),pr)
@@ -486,9 +495,13 @@ end = struct
             Eval.Term (up_inner t nb)
         | Eval.Exp (idx,args,full) ->
             Eval.Exp (var (up_inner (Variable idx) nb), upeval_args args, full)
+	| Eval.VApply(i,args) ->
+            let i    = var (up_inner (Variable i) nb)
+            and args = upeval_args args in
+            Eval.VApply(i,args)
 	| Eval.Apply(f,args,pr) ->
             let f = upeval f nb
-            and args = upeval_args (*Array.map (fun e -> upeval e nb)*) args in
+            and args = upeval_args args in
             Eval.Apply(f,args,pr)
         | Eval.Lam (n,nms,e,pr) ->
             Eval.Lam (n, nms, upeval e (n+nb), pr)
