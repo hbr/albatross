@@ -106,8 +106,8 @@ end = struct
       match t with
         Variable j when j < cnt -> gstar j n
       | Variable _ -> t
-      | Application (c,args,pr) ->
-          Application (sub c n, Array.map (fun t -> sub t n) args, pr)
+      | VAppl (c,args) ->
+          VAppl (c, Array.map (fun t -> sub t n) args)
       | _ ->
           assert false
     in

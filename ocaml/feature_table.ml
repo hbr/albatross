@@ -692,12 +692,9 @@ let base_table (verbosity:int) : t =
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
-  let p_tp2 = Application (Variable (Class_table.predicate_index+2),
-                           [|a_tp|], false)
-  and f_tp  = Application (Variable (Class_table.function_index+2),
-                           [|a_tp;b_tp|], false)
-  and tup_tp= Application (Variable (Class_table.tuple_index+2),
-                           [|a_tp;b_tp|], false)
+  let p_tp2 = VAppl (Class_table.predicate_index+2, [|a_tp|])
+  and f_tp  = VAppl (Class_table.function_index+2, [|a_tp;b_tp|])
+  and tup_tp= VAppl (Class_table.tuple_index+2, [|a_tp;b_tp|])
   and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None
   and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t)
   in

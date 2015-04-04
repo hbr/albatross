@@ -292,14 +292,14 @@ let upgrade_dummy (i:int) (t:term) (tb:t): unit =
       raise Not_found
   in
   match t_i, t with
-    Application(Variable idx1, args1,_),
-    Application(Variable idx2, args2,_)
+    VAppl(idx1, args1),
+    VAppl(idx2, args2)
     when idx1 = nall + Class_table.dummy_index ->
       if idx2 = nall + Class_table.predicate_index then
-        let t_new = Application(Variable idx2, [|args1.(0)|],false) in
+        let t_new = VAppl(idx2, [|args1.(0)|]) in
         update_with t_new
       else if idx2 = nall + Class_table.function_index then
-        let t_new = Application(Variable idx2, args1,false) in
+        let t_new = VAppl(idx2, args1) in
         update_with t_new
       else if idx2 = nall + Class_table.dummy_index then
         ()
@@ -391,17 +391,17 @@ let unify
           ()
         else
           raise Not_found
-    | Application(Variable i,args1,_), Application(Variable j,args2,_)
+    | VAppl(i,args1), VAppl(j,args2)
       when (i=dum_idx || j=dum_idx) && not (i=dum_idx && j=dum_idx) ->
         if i = dum_idx then
           do_dummy args1 j args2
         else
           do_dummy args2 i args1
-    | Application(f1,args1,_), Application(f2,args2,_) ->
+    | VAppl(f1,args1), VAppl(f2,args2) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
           raise Not_found;
-        uni f1 f2 nb;
+        uni (Variable f1) (Variable f2) nb;
         for i = 0 to nargs-1 do
           uni args1.(i) args2.(i) nb
         done
@@ -671,7 +671,7 @@ let complete_function (nargs:int) (tb:t): unit =
       and p_idx   = predicate_index tb in
       let res = TVars_sub.sub_star (Sign.result fsig) tb.tvars in
       match res with
-        Application(Variable i,args,_) ->
+        VAppl(i,args) ->
           let nargs = Array.length args in
           if i = dum_idx || i = f_idx then begin
             assert (nargs = 2); args.(1)
@@ -739,9 +739,9 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
     let res =
       if is_pred then begin
         assert (res = boolean_type tb);
-        Application(Variable (predicate_index tb),[|argtup|],false)
+        VAppl(predicate_index tb,[|argtup|])
       end else
-        Application(Variable (function_index tb), [|argtup;res|],false)
+        VAppl(function_index tb, [|argtup;res|])
     in
     let res = try Term.down ntvs res with Term_capture ->
       printf "Term_capture ntvs %d\n" ntvs;
@@ -820,7 +820,7 @@ let update_called_variables (tb:t): unit =
     let tp = argument_type i tb in
     let tp = TVars_sub.sub_star tp tb.tvars in
     match tp with
-      Application(Variable idx,_,_) ->
+      VAppl(idx,_) ->
         assert (idx <> dum_idx);
         assert (idx = p_idx || idx = f_idx);
         idx = p_idx
@@ -867,7 +867,7 @@ let check_untyped_variables (tb:t): unit =
     match Context.argument_type i tb.c with
       Variable j when j < ntvs_loc -> begin
         match TVars_sub.get_star j tb.tvars with
-          Application(Variable idx,_,_) when idx = dum_idx ->
+          VAppl(idx,_) when idx = dum_idx ->
             raise (Incomplete_type i)
         | _ -> ()
       end
@@ -885,7 +885,7 @@ let has_dummy (tb:t): bool =
     else
       let n = n - 1 in
       match TVars_sub.get n tb.tvars with
-        Application(Variable idx,_,_)  when idx = dum_idx -> true
+        VAppl(idx,_)  when idx = dum_idx -> true
       | _ -> has n
   in
   has n
@@ -984,12 +984,12 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
       let i  = TVars_sub.anchor i tb.tvars in
       let tp = TVars_sub.get i tb.tvars in
       begin match tp with
-        Application (Variable j,args,_) when j = dum_idx ->
+        VAppl (j,args) when j = dum_idx ->
           assert (Array.length args = 2);
           assert (not pr || args.(1) = Variable bool_idx);
           let tp =
-            if pr then Application(Variable p_idx, [|args.(0)|],false)
-            else Application (Variable f_idx, args, false) in
+            if pr then VAppl(p_idx, [|args.(0)|])
+            else VAppl (f_idx, args) in
           TVars_sub.update_sub i tp tb.tvars
       | _ ->
           ()
