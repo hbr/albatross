@@ -1202,8 +1202,17 @@ let formal_arguments
     (tvs:Tvars.t)
     (ct:t)
     : formal array * int =
-  (** The formal arguments of the entity list [entlst] in an environment with
-      the formal generics [fgnames,concepts] and [ntvs] type variables *)
+  (* The formal arguments of the entity list [entlst] in the type environment [tvs]
+   *)
+  let rec check_duplicates arglst =
+    match arglst with
+      [] -> ()
+    | (nme,_)::tail ->
+        if List.exists (fun (n,_) -> n = nme) tail then
+          error_info entlst.i ("Duplicate formal argument " ^ (ST.string nme))
+        else
+          check_duplicates tail
+  in
   let n_untyped = ref 0 in
   let fargs (es: entities): formal list =
     match es with
@@ -1221,6 +1230,7 @@ let formal_arguments
         List.map (fun name -> name,t) lst
   in
   let arglst = List.concat (List.map fargs entlst.v) in
+  check_duplicates arglst;
   Array.of_list arglst, !n_untyped
 
 
