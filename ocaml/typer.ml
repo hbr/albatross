@@ -30,10 +30,10 @@ module Accus: sig
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
-  val expect_lambda:     int -> int -> bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int -> int array -> bool -> t -> unit
-  val expect_quantified:     int -> int -> Context.t -> t -> unit
-  val complete_quantified:   int -> int -> int array -> bool -> t -> unit
+  val expect_lambda:     int -> bool -> Context.t -> t -> unit
+  val complete_lambda:   int -> int -> bool -> t -> unit
+  val expect_quantified: int -> Context.t -> t -> unit
+  val complete_quantified:   int -> int -> bool -> t -> unit
   val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_untyped_variables: info -> t -> unit
@@ -208,23 +208,37 @@ end = struct
       raise (Untypeable accus)
 
 
+  let map_accus (f:Term_builder.t->Term_builder.t) (accs:t): unit =
+    let lst =
+      List.fold_left
+        (fun lst acc ->
+          try
+            (f acc)::lst
+          with Not_found ->
+            lst)
+        []
+        accs.accus
+    in
+    if lst = [] then
+      raise (Untypeable accs.accus);
+    accs.accus <- lst
+
 
   let expect_lambda
-      (ntvs:int) (nfgs:int) (is_pred:bool) (c:Context.t) (accs:t): unit =
+      (ntvs:int) (is_pred:bool) (c:Context.t) (accs:t)
+      : unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
     accs.c          <- c;
-    iter_accus
-      (fun acc -> Term_builder.expect_lambda ntvs nfgs is_pred c acc)
+    map_accus
+      (fun acc -> Term_builder.expect_lambda ntvs is_pred c acc)
       accs
 
 
-  let complete_lambda
-      (ntvs:int) (ntvs_added:int) (nms:int array) (is_pred:bool)
-      (accs:t): unit =
+  let complete_lambda (ntvs:int) (ntvs_added:int) (is_pred:bool) (accs:t): unit =
     iter_accus
-      (fun acc -> Term_builder.complete_lambda ntvs nms is_pred acc) accs;
+      (fun acc -> Term_builder.complete_lambda ntvs is_pred acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -235,23 +249,20 @@ end = struct
 
 
 
-  let expect_quantified
-      (ntvs:int) (nfgs:int)
-      (c:Context.t) (accs:t): unit =
+  let expect_quantified (ntvs:int) (c:Context.t) (accs:t): unit =
     assert (0 <= ntvs);
     accs.arity      <- 0;
     accs.ntvs_added <- 0;
     accs.c          <- c;
     iter_accus
-      (fun acc -> Term_builder.expect_quantified ntvs nfgs c acc)
+      (fun acc -> Term_builder.expect_quantified ntvs c acc)
       accs
 
 
-  let complete_quantified
-      (ntvs:int) (ntvs_added:int) (nms:int array) (is_all:bool)
-      (accs:t): unit =
+  let complete_quantified (ntvs:int) (ntvs_added:int) (is_all:bool) (accs:t)
+      : unit =
     iter_accus
-      (fun acc -> Term_builder.complete_quantified ntvs nms is_all acc) accs;
+      (fun acc -> Term_builder.complete_quantified ntvs is_all acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -313,7 +324,7 @@ end = struct
           Term_builder.update_called_variables acc
         with Term_builder.Incomplete_type i ->
           error_info inf
-            ("Cannot infer a complete type for " ^
+            ("Cannot infer a type for " ^
              ST.string (Context.argument_name i accs.c)))
       accs.accus
 
@@ -524,14 +535,12 @@ let analyze_expression
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
     let c = Context.push_with_gap entlst None true false ntvs_gap c in
-    let ntvs      = Context.count_local_type_variables c
-    and fargnames = Context.local_argnames c
-    and nfgs      = Context.count_last_formal_generics c in
-    Accus.expect_quantified (ntvs-ntvs_gap) nfgs c accs;
+    let ntvs      = Context.count_local_type_variables c in
+    Accus.expect_quantified (ntvs-ntvs_gap) c accs;
     analyze e accs c;
     Accus.check_untyped_variables entlst.i accs;
     let is_all = match q with Universal -> true | Existential -> false in
-    Accus.complete_quantified (ntvs-ntvs_gap) ntvs_gap fargnames is_all accs
+    Accus.complete_quantified (ntvs-ntvs_gap) ntvs_gap is_all accs
 
   and lambda
       (entlst:entities list withinfo)
@@ -543,13 +552,11 @@ let analyze_expression
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
     let c = Context.push_with_gap entlst None is_pred is_func ntvs_gap c in
-    let ntvs      = Context.count_local_type_variables c
-    and fargnames = Context.local_argnames c
-    and nfgs      = Context.count_last_formal_generics c in
-    Accus.expect_lambda (ntvs-ntvs_gap) nfgs is_pred c accs;
+    let ntvs      = Context.count_local_type_variables c in
+    Accus.expect_lambda (ntvs-ntvs_gap) is_pred c accs;
     analyze e accs c;
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap fargnames is_pred accs
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap is_pred accs
   in
 
   let accs   = Accus.make is_bool c in
@@ -558,7 +565,7 @@ let analyze_expression
 
   Accus.remove_dummies ie accs;
   Accus.specialize_terms accs;
-  Accus.check_untyped_variables ie.i accs;
+  (*Accus.check_untyped_variables ie.i accs;*)
   Accus.check_uniqueness info exp accs;
 
   let term,tvars_sub = Accus.result accs in

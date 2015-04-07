@@ -76,25 +76,25 @@ val add_leaf:          int ->  Tvars.t -> Sign.t ->  t -> t
   (** [add_leaf i tvs s tb] adds the term [i,tvs,s] as an elementary term to
       the term builder [tb] *)
 
-val expect_lambda:     int -> int -> bool -> Context.t -> t -> unit
-   (** [expect_lambda ntvs nfgs is_pred tb] prepares the term builder
+val expect_lambda:  int -> bool -> Context.t -> t -> t
+   (** [expect_lambda ntvs is_pred tb] prepares the term builder
        [tb] to expect a lambda expression with [ntvs] untyped variables. It
        assumes that the currently expected signature is either callable
        i.e. has arguments and a result type or the result type is downgradable
        (PREDICATE or FUNCTION). It puts a constant signature with the expected
        return type of the lambda expression as the expected signature. *)
 
-val complete_lambda:   int -> int array -> bool -> t -> unit
+val complete_lambda:   int -> bool -> t -> unit
    (** [complete_lambda nargs names -> is_pred tb] converts the term
        on top the term list into a lamda term with [nargs] arguments and the
        argument names [names]. *)
 
-val expect_quantified:   int -> int -> Context.t -> t -> unit
-   (** [expect_quantifed ntvs nfgs c tb] prepares the term builder to expect
+val expect_quantified: int -> Context.t -> t -> unit
+   (** [expect_quantifed ntvs c tb] prepares the term builder to expect
        the term of a quantified expression with [ntvs] untyped variables. It
        assumes that the currently expected signature is boolean. *)
 
-val complete_quantified: int -> int array -> bool -> t -> unit
+val complete_quantified: int -> bool -> t -> unit
 
 
 exception Incomplete_type of int

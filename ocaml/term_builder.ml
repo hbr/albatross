@@ -169,16 +169,24 @@ let upgrade_signature (s:Sign.t) (is_pred:bool) (tb:t): Sign.t =
 
 
 
+let locals_added (ntvs:int) (tb:t): t =
+  {tb with
+   tvars = TVars_sub.add_local ntvs tb.tvars;
+   sign  = Sign.up ntvs tb.sign}
+
+
 let add_local (ntvs:int) (tb:t): unit =
-  tb.tvars <- TVars_sub.add_local ntvs tb.tvars;
-  tb.sign  <- Sign.up ntvs tb.sign
+  let tb1 = locals_added ntvs tb in
+  tb.tvars <- tb1.tvars;
+  tb.sign  <- tb1.sign
+
 
 let remove_local (ntvs:int) (tb:t): unit =
   (* signature is irrelevant *)
   tb.tvars <- TVars_sub.remove_local ntvs tb.tvars
 
 
-let add_fgs (nfgs:int) (tb:t): unit =
+let fgs_added (nfgs:int) (tb:t): t =
   (* Add [nfgs] additional formal generics from the context.
 
      context:    loc          +         fgs1 + fgs2
@@ -195,8 +203,15 @@ let add_fgs (nfgs:int) (tb:t): unit =
   let ngarb = count_fgs tb - nfgs2 in
   let start = count tb + ngarb
   in
-  tb.sign  <- Sign.up_from nfgs start tb.sign;
-  tb.tvars <- TVars_sub.add_fgs nfgs tvars_sub tb.tvars
+  {tb with
+   sign  = Sign.up_from nfgs start tb.sign;
+   tvars = TVars_sub.add_fgs nfgs tvars_sub tb.tvars}
+
+
+let add_fgs (nfgs:int) (tb:t): unit =
+  let tb1 = fgs_added nfgs tb in
+  tb.sign  <- tb1.sign;
+  tb.tvars <- tb1.tvars
 
 
 
@@ -547,13 +562,23 @@ let expect_boolean (tb:t): unit =
 
 
 
-let add_global (cs:type_term array) (tb:t): t =
+let globals_added (cs:type_term array) (tb:t): t =
   (** Add the constraints [cs] to the accumulator [tb] *)
   let n = Array.length cs
   and start = TVars_sub.count tb.tvars in
   {tb with
    sign  = Sign.up_from n start tb.sign;
    tvars = TVars_sub.add_global cs tb.tvars}
+
+
+
+let anys_added (n:int) (tb:t): t =
+  assert (0 <= n);
+  let any = Variable (n + Class_table.any_index) in
+  let anys = Array.init n (fun i -> any) in
+  globals_added anys tb
+
+
 
 
 let add_leaf
@@ -580,8 +605,8 @@ let add_leaf
      after add_global
    *)
   assert (not (Tvars.count_local tvs > 0 && Tvars.count_global tvs > 0));
-  let tb = add_global (Tvars.concepts tvs) tb (* empty, if [tvs] doesn't come from
-                                                 global *)
+  let tb = globals_added (Tvars.concepts tvs) tb (* empty, if [tvs] doesn't come
+                                                    from global *)
   in
   let nloctb  = TVars_sub.count_local  tb.tvars
   and nglobtb = TVars_sub.count_global tb.tvars
@@ -691,19 +716,28 @@ let complete_function (nargs:int) (tb:t): unit =
 
 
 
-let expect_lambda
-    (ntvs:int) (nfgs:int) (is_pred:bool) (c:Context.t) (tb:t): unit =
+let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
   (* Expect the term of a lambda expression. It is assumed that all local
      variables of the lambda expression have been pushed to the context and
      the argument list of the lambda expression contained [ntvs] untyped
      variables and [nfgs] formal generics. *)
   assert (Sign.has_result tb.sign);
-  tb.c <- c;
-  add_local ntvs tb;
-  add_fgs   nfgs tb;
+  let nargs = Context.count_last_arguments c
+  and nfgs  = Context.count_last_formal_generics c in
+  let tb = {tb with c = c} in
+  let tb = locals_added ntvs tb in
+  let tb = anys_added nargs tb in
+  let tb = fgs_added nfgs tb in
   assert (TVars_sub.count_local tb.tvars =
           TVars_sub.count_local (Context.type_variables tb.c));
-  let csig = context_signature tb in
+  let csig =
+    let csig  = context_signature tb
+    and start = count tb - nargs in
+    assert (Sign.arity csig = nargs);
+    for i = 0 to nargs - 1 do
+      unify (Sign.arg_type i csig) (Variable (start + i)) tb
+    done;
+    csig in
   begin
     let upsig = upgrade_signature csig is_pred tb in
     assert (Sign.has_result csig);
@@ -712,15 +746,17 @@ let expect_lambda
     with Not_found ->
       raise Not_found
   end;
-  tb.sign <- Sign.make_const (Sign.result csig)
+  tb.sign <- Sign.make_const (Sign.result csig);
+  tb
 
 
 
 
 
-let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
+let complete_lambda (ntvs:int) (is_pred:bool)
     (tb:t): unit =
   assert (tb.tlist <> []);
+  let names = Context.local_argnames tb.c in
   let nargs = Array.length names in
   assert (0 < nargs);
   let t,ttvs,tsig = List.hd tb.tlist in
@@ -753,13 +789,13 @@ let complete_lambda (ntvs:int) (names:int array) (is_pred:bool)
 
 
 
-let expect_quantified
-    (ntvs:int) (nfgs:int)(c:Context.t) (tb:t): unit =
+let expect_quantified (ntvs:int) (c:Context.t) (tb:t): unit =
   (* Expect the term of a quantified expression. It is assumed that all local
      variables of the lambda expression have been pushed to the context and
      the argument list of the lambda expression contained [ntvs] untyped
      variables and [nfgs] formal generics. *)
   assert (Sign.has_result tb.sign);
+  let nfgs = Context.count_last_formal_generics c in
   tb.c <- c;
   add_local ntvs tb;
   add_fgs   nfgs tb;
@@ -769,8 +805,9 @@ let expect_quantified
 
 
 
-let complete_quantified (ntvs:int) (names:int array) (is_all:bool) (tb:t): unit =
+let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   assert (tb.tlist <> []);
+  let names = Context.local_argnames tb.c in
   let nargs = Array.length names in
   assert (0 < nargs);
   let t,ttvs,tsig = List.hd tb.tlist in
@@ -860,14 +897,14 @@ exception Incomplete_type of int
 let check_untyped_variables (tb:t): unit =
   let ntvs_loc  = count_local tb in
   assert (ntvs_loc = Context.count_type_variables tb.c);
-  let ntvs_all = count tb + Context.count_formal_generics tb.c in
-  let dum_idx  = ntvs_all + Class_table.dummy_index
-  in
+  let dum_idx  = count_all tb + Class_table.dummy_index in
   for i = 0 to Context.count_last_arguments tb.c - 1 do
     match Context.argument_type i tb.c with
       Variable j when j < ntvs_loc -> begin
         match TVars_sub.get_star j tb.tvars with
           VAppl(idx,_) when idx = dum_idx ->
+            raise (Incomplete_type i)
+        | Variable k when k < ntvs_loc ->
             raise (Incomplete_type i)
         | _ -> ()
       end
@@ -945,7 +982,7 @@ let specialize_term (tb:t): unit =
         let args = Array.of_list (List.rev arglst) in
         nglob, Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
-        let nglob, t = upd t (nargs+n) nglob in
+        let nglob, t = upd t (nargs+n) (n+nglob) in
         nglob, Lam (n,nms,t,pr)
     | QExp (n,nms,t,is_all) ->
         let nglob, t = upd t (nargs+n) nglob in

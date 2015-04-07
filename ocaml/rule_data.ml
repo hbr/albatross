@@ -79,6 +79,9 @@ let is_equality (rd:t): bool =
   Option.has rd.eq
 
 
+let count_arguments (rd:t): int =
+  rd.nargs
+
 let equality_data (rd:t): int * int * term * term =
   match rd.eq with
     None -> raise Not_found
@@ -212,7 +215,8 @@ let make (t:term) (c:Context.t): t =
             if 0 < gp1 then IntSet.filter (fun i -> gp1 <=i) set
             else set in
           nbwdfun (n+1) gp1 ps set
-      | _ -> assert false
+      | _ -> raise Not_found (* only possible if the inner term does not contain
+                                all argument variables *)
   in
   let nbwd = nbwdfun 0 0 ps (Term.bound_variables tgt nargs) in
   let bwd_blckd =

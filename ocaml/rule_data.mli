@@ -16,6 +16,7 @@ val is_forward:           t -> bool
 val is_backward:          t -> bool
 val is_specialized:       t -> bool
 val is_fully_specialized: t -> bool
+val count_arguments:      t -> int
 val is_implication:       t -> bool
 val is_intermediate:      t -> bool
 val is_equality:          t -> bool

@@ -829,8 +829,9 @@ let fwd_evaluation (t:term) (i:int) (e:Eval.t) (full:bool) (pc:t): int =
   try
     find t pc
   with Not_found ->
+    let rd = get_rule_data t pc in
     Proof_table.add_eval t i e pc.base;
-    let res = raw_add t full pc in ();
+    let res = raw_add0 t rd full pc in ();
     if full then add_last_to_work pc;
     res
 
@@ -842,7 +843,10 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
      work items.  *)
   let t = term i pc in
   let add_eval t e =
-    let _ = fwd_evaluation t i e true pc in ()
+    try
+      let _ = fwd_evaluation t i e true pc in ()
+    with Not_found ->
+      ()
   in
   try
     let t,e,modi = simplified_term t i pc in
