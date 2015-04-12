@@ -204,11 +204,11 @@ let clear_work (pc:t): unit =
   pc.work <- []
 
 let string_of_term (t:term) (pc:t): string =
-  Context.string_of_term t 0 (context pc)
+  Context.string_of_term t true 0 (context pc)
 
 
 let string_of_term_anon (t:term) (nb:int) (pc:t): string =
-  Context.string_of_term t nb (context pc)
+  Context.string_of_term t true nb (context pc)
 
 
 let string_of_term_i (i:int) (pc:t): string =
@@ -370,7 +370,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Eval.Apply(fe,argse,pr),
           modi
       | Lam(n,nms,t0,pr) ->
-          let tsimp,te,tmodi = simp t0 (n+nb) in
+          let tsimp,te,tmodi = simp t0 (1+nb) in
           Lam(n,nms,tsimp,pr), Eval.Lam(n,nms,te,pr), tmodi
       | QExp(n,nms,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
@@ -417,6 +417,10 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
 
 
 
+let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (pc:t): term =
+  Proof_table.beta_reduce n t args nb pc.base
+
+
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
      structure and a flag which tells if the term [t] and its evaluation are
@@ -448,8 +452,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
         Lam (n,nms,t0,_) ->
-          assert (n = Array.length args);
-          Term.apply t0 args, Eval.Beta e, true
+          beta_reduce  n t0 args nb pc, Eval.Beta e, true
       | _ ->
           Application (f,args,is_pred), e, modi
     in
@@ -508,7 +511,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
       | Lam (n,nms,t,pred) ->
-          let t,e,tmodi = eval t (n+nb) full in
+          let t,e,tmodi = eval t (1+nb) full in
           Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
       | QExp (n,nms,t,is_all) ->
           let full = full || not is_all in
@@ -1212,9 +1215,10 @@ let prove_equality (g:term) (pc:t): int =
     let t  = Term.all_quantified 1 [||] imp in
     find t pc
   in
-  let lam, leibniz, args1, args2 =
+  let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
+  let lam = Lam(nargs,[||],tlam,false) in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
   let lam_1up = Term.up 1 lam

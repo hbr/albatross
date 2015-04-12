@@ -13,6 +13,7 @@ open Printf
 type t = {mutable tlist: (term*Tvars.t*Sign.t) list; (* term, count_all, sign *)
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
+          mutable norm:  bool; (* term is specialized and normalized *)
           mutable c: Context.t}
 
 (* The type variables of the term builder and the context differ.
@@ -67,7 +68,7 @@ let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
 
 
 let string_of_term (t:term) (tb:t): string =
-  Context.string_of_term t 0 tb.c
+  Context.string_of_term t tb.norm 0 tb.c
 
 
 let string_of_head_term (tb:t): string =
@@ -541,6 +542,7 @@ let make (c:Context.t): t =
   {tlist = [];
    sign  = Sign.make_const (Context.result_type c);
    tvars = (Context.type_variables c);
+   norm  = false;
    c     = c}
 
 
@@ -551,6 +553,7 @@ let make_boolean (c:Context.t): t =
   {tlist = [];
    tvars = tvs;
    sign  = Sign.make_const bool;
+   norm  = false;
    c     = c}
 
 
@@ -680,16 +683,7 @@ let complete_function (nargs:int) (tb:t): unit =
   let fsig = Sign.up_from
       (count_all tb - Tvars.count_all tvs) (count_local tb) fsig in
   tb.tlist <- List.tl tb.tlist;
-  let t =
-    if Sign.is_constant fsig then
-      Application (f, Array.of_list !arglst,false)
-    else begin
-      assert (Sign.arity fsig = nargs);
-      assert (Term.is_variable f);
-      VAppl(Term.variable f, Array.of_list !arglst)
-    end
-  in
-  let ttp =
+  let ttp, is_pred  =
     if Sign.is_constant fsig then
       let dum_idx = dummy_index tb
       and f_idx   = function_index tb
@@ -699,14 +693,24 @@ let complete_function (nargs:int) (tb:t): unit =
         VAppl(i,args) ->
           let nargs = Array.length args in
           if i = dum_idx || i = f_idx then begin
-            assert (nargs = 2); args.(1)
+            assert (nargs = 2); args.(1), false
           end else if i = p_idx then begin
-            assert (nargs = 1); boolean_type tb
+            assert (nargs = 1); boolean_type tb, true
           end else
             assert false (* cannot happen *)
       | _ -> assert false (* cannot happen *)
     else
-      TVars_sub.sub_star(Sign.result fsig) tb.tvars in
+      TVars_sub.sub_star(Sign.result fsig) tb.tvars, false in
+  let t =
+    if Sign.is_constant fsig then
+      Application (f, Array.of_list !arglst, is_pred)
+      (*Context.make_application f (Array.of_list !arglst) 0 is_pred tb.c*)
+    else begin
+      assert (Sign.arity fsig = nargs);
+      assert (Term.is_variable f);
+      VAppl(Term.variable f, Array.of_list !arglst)
+    end
+  in
   let ttp = try Term.down nargs ttp with Not_found -> assert false in
   let s   = Sign.make_const ttp in
   remove_local nargs tb;
@@ -756,7 +760,8 @@ let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
 let complete_lambda (ntvs:int) (is_pred:bool)
     (tb:t): unit =
   assert (tb.tlist <> []);
-  let names = Context.local_argnames tb.c in
+  let names = Context.local_argnames tb.c
+  and c     = Context.pop tb.c in
   let nargs = Array.length names in
   assert (0 < nargs);
   let t,ttvs,tsig = List.hd tb.tlist in
@@ -765,7 +770,8 @@ let complete_lambda (ntvs:int) (is_pred:bool)
     Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  let lam = Lam (nargs, names, t,is_pred)
+  (*let lam = Context.make_lambda nargs names t is_pred c*)
+  let lam = Lam (nargs,names,t,is_pred)
   and s   =
     let argtps = Array.init nargs
         (fun i -> TVars_sub.sub_star (argument_type i tb) tb.tvars) in
@@ -784,7 +790,7 @@ let complete_lambda (ntvs:int) (is_pred:bool)
       raise Not_found in
     Sign.make_const res in
   remove_local ntvs tb;
-  tb.c <- Context.pop tb.c;
+  tb.c     <- c;
   tb.tlist <- (lam, tvars tb, s) :: tb.tlist
 
 
@@ -851,7 +857,8 @@ let update_called_variables (tb:t): unit =
   in
   let dum_idx = ntvs_all + Class_table.dummy_index
   and f_idx   = ntvs_all + Class_table.function_index
-  and p_idx   = ntvs_all + Class_table.predicate_index in
+  and p_idx   = ntvs_all + Class_table.predicate_index
+  in
   let is_pred i =
     assert (i < nargs);
     let tp = argument_type i tb in
@@ -880,7 +887,7 @@ let update_called_variables (tb:t): unit =
         and args = Array.map (fun a -> update a nb) args in
         Application (f,args,pr)
     | Lam(n,nms,t,pr) ->
-        let t = update t (n+nb) in
+        let t = update t (1 + nb) in
         Lam(n,nms,t,pr)
     | QExp(n,nms,t,is_all) ->
         let t = update t (n+nb) in
@@ -929,7 +936,7 @@ let has_dummy (tb:t): bool =
 
 
 
-let specialize_term (tb:t): unit =
+let specialize_term_0 (tb:t): unit =
   (* Substitute all functions with the most specific ones. E.g. the term builder
      might have used [=] of ANY. But since the arguments are of type LATTICE it
      specializes [=] of ANY to [=] of LATTICE. *)
@@ -982,7 +989,7 @@ let specialize_term (tb:t): unit =
         let args = Array.of_list (List.rev arglst) in
         nglob, Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
-        let nglob, t = upd t (nargs+n) (n+nglob) in
+        let nglob, t = upd t (1 + nargs) (n+nglob) in
         nglob, Lam (n,nms,t,pr)
     | QExp (n,nms,t,is_all) ->
         let nglob, t = upd t (nargs+n) nglob in
@@ -991,10 +998,43 @@ let specialize_term (tb:t): unit =
   let nargs = Context.count_arguments tb.c
   and t,nt,s     = List.hd tb.tlist in
   let nglob, t = upd t nargs 0 in
+  if nglob <> TVars_sub.count_global tb.tvars then begin
+    printf "specialize_term nglob %d\n" nglob;
+    printf "                cnt   %d\n" (TVars_sub.count_global tb.tvars)
+  end;
   assert (nglob = TVars_sub.count_global tb.tvars);
   tb.tlist <- [t,nt,s]
 
 
+let normalize_lambdas (tb:t): unit =
+  assert (Mylist.is_singleton tb.tlist);
+  let rec norm t nb =
+    let norm_args args = Array.map (fun a -> norm a nb) args
+    in
+    match t with
+      Variable i ->
+        t
+    | VAppl (i,args) ->
+        VAppl (i, norm_args args)
+    | Application (f,args,pr) ->
+        let f    = norm f nb
+        and args = norm_args args in
+        Context.make_application f args nb pr tb.c
+    | Lam (n,nms,t,pr) ->
+        let t = norm t (n+nb) in
+        Context.make_lambda n nms t pr tb.c
+    | QExp (n,nms,t,is_all) ->
+        QExp (n, nms, norm t (n+nb), is_all)
+  in
+  let t,nt,s = List.hd tb.tlist in
+  let t = norm t 0 in
+  tb.tlist <- [t,nt,s]
+
+
+let specialize_term (tb:t): unit =
+  specialize_term_0 tb;
+  normalize_lambdas tb;
+  tb.norm <- true
 
 let result (tb:t): term * TVars_sub.t =
   (** Return the term and the calculated substitutions for the type

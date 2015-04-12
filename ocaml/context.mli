@@ -78,6 +78,10 @@ val count_arguments:  t -> int
 
 val implication_index: t -> int
 
+val make_lambda:      int -> int array -> term -> bool -> t -> term
+val make_application: term -> term array -> int -> bool -> t -> term
+val beta_reduce:      int -> term -> term array -> int -> t -> term
+
 val quantified:      bool -> int -> int array -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val some_quantified: int -> int array -> term -> t -> term
@@ -105,7 +109,7 @@ val boolean: t -> term
 
 val update_type_variables: TVars_sub.t -> t -> unit
 
-val string_of_term:       term -> int -> t -> string
+val string_of_term:       term -> bool -> int -> t -> string
 val string_of_term_outer: term -> int -> t -> string
 val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string

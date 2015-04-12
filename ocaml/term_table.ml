@@ -19,7 +19,7 @@ type t = {
     apps:  (t array) IntMap.t; (* one for each function variable *)
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
-    lams:  t IntMap.t;        (* one for each number of bindings *)
+    lams:  t option;
     alls:  t IntMap.t;        (* one for each number of bindings *)
     somes: t IntMap.t         (* one for each number of bindings *)
   }
@@ -32,7 +32,8 @@ let empty = {
   fvars = [];
   apps  = IntMap.empty;
   fapps = IntMap.empty;
-  lams  = IntMap.empty;
+  lams  = None;
+  (*lams  = IntMap.empty;*)
   alls  = IntMap.empty;
   somes = IntMap.empty}
 
@@ -41,6 +42,16 @@ let count  (tab:t): int =
   List.length tab.terms
 
 exception Term_found of term
+
+let find_lam (tab:t): t =
+  match tab.lams with
+    None -> raise Not_found
+  | Some tab -> tab
+  (*IntMap.find 1 tab.lams*)
+
+let add_lam (n:int) (lamtab:t) (tab:t): t =
+  {tab with lams = Some lamtab}
+  (*{tab with lams = IntMap.add 1 lamtab tab.lams}*)
 
 
 let terms0 (tab:t): (int*int*int*int*term) list =
@@ -54,71 +65,6 @@ let terms (tab:t): (int*int*int*term) list =
       order in which they have been inserted.  *)
   List.rev_map (fun (idx,_,nargs,nbenv,term) -> idx,nargs,nbenv,term) tab.terms
 
-
-(*
-let termtab (idx:int) (nargs:int) (tab:t) (nb:int): term =
-  (** The term associated with index [idx] having [nargs] argument variables
-      of the node [tab] with [nb] bound variables.
-   *)
-  let rec termtab0 (tab:t) (nb:int): term =
-    let aterm (avar: (int*int*int) list): unit =
-      try
-        let _,i,_ = List.find (fun (i,_,_) -> i = idx) avar in
-        (*let i,_ = IntMap.find idx avar in*)
-        raise (Term_found (Variable (nb+i)))
-      with Not_found ->
-        ()
-    and oterm (ovars: sublist IntMap.t) (n:int): unit =
-      IntMap.iter
-        (fun ovar lst ->
-          if List.exists (fun (i,_) -> i=idx) lst then
-            raise (Term_found (Variable (ovar+n)))
-        )
-        ovars
-    and fapp_term (fapp: (t * t array) IntMap.t): unit =
-      IntMap.iter
-        (fun len (ftab,argtabs) ->
-          assert (len = (Array.length argtabs));
-          try
-            let f = termtab0 ftab nb
-            and args = Array.map (fun tab -> termtab0 tab nb) argtabs
-            in
-            raise (Term_found (Application (f,args)))
-          with Not_found ->
-            ()
-        )
-        fapp
-    and lam_term (lam: t IntMap.t): unit =
-      IntMap.iter
-        (fun n ttab ->
-          let t = termtab0 ttab (nb+n) in
-          raise (Term_found (Lam (n,[||],t,false))))
-        lam
-    in
-    try
-      fapp_term tab.fapps;
-      oterm     tab.bvars 0;
-      List.iter
-        (fun (_,map) ->
-          oterm map (nb+nargs))
-        tab.fvars;
-      aterm     tab.avars;
-      lam_term  tab.lams;
-      raise Not_found
-    with Term_found t ->
-      t
-  in
-  termtab0 tab nb
-
-
-
-
-let term (idx:int) (nargs:int) (table:t): term =
-  (** The term associated with index [idx] with [nargs] arguments  in the
-      table [table].
-   *)
-  termtab idx nargs table 0
-*)
 
 let join_lists (l1: sublist) (l2:sublist): sublist =
   (** Join the two disjoint lists [l1] and [l2].
@@ -313,8 +259,8 @@ let unify (t:term) (nbt:int) (table:t)
         end
     | Lam (n,_,t,_) ->
         begin try
-          let ttab = IntMap.find n tab.lams in
-          let tlst = uni t ttab (nb+n) in
+          let ttab = find_lam tab in
+          let tlst = uni t ttab (1 + nb) in
           join_lists basic_subs tlst
         with Not_found ->
           basic_subs
@@ -322,7 +268,7 @@ let unify (t:term) (nbt:int) (table:t)
     | QExp (n,_,t,is_all) ->
         begin try
           let ttab = IntMap.find n (qmap is_all tab) in
-          let tlst = uni t ttab (nb+n) in
+          let tlst = uni t ttab (n+nb) in
           join_lists basic_subs tlst
         with Not_found ->
           basic_subs
@@ -417,11 +363,11 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
           args;
         !flst
     | Lam (n,_,t,_) ->
-        let ttab = IntMap.find n tab.lams in
-        uniw t ttab (nb+n)
+        let ttab = find_lam tab in
+        uniw t ttab (1 + nb)
     | QExp (n,_,t,is_all) ->
         let ttab = IntMap.find n (qmap is_all tab) in
-        uniw t ttab (nb+n)
+        uniw t ttab (n+nb)
   in
   try
     uniw t table 0
@@ -502,11 +448,11 @@ let add
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
       | Lam (n,_,t,_) ->
           let ttab =
-            try IntMap.find n tab.lams
+            try find_lam tab
             with Not_found -> empty
           in
-          let ttab = add0 t (nb+n) ttab in
-          {tab with lams = IntMap.add n ttab tab.lams}
+          let ttab = add0 t (1 + nb) ttab in
+          add_lam n ttab tab
       | QExp (n,_,t,is_all) ->
           let ttab =
             try IntMap.find n (qmap is_all tab)

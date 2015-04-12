@@ -127,7 +127,6 @@ val has_definition: int -> t -> bool
 
 val definition_equality: int -> t -> term
 
-val to_tuple: term array -> int -> t -> term
 
 val feature_name: int -> t -> string
 
@@ -138,8 +137,9 @@ val is_feature_public: int -> t -> bool
 
 val owner: int -> t -> int
 
-val tupelize_inner:   term -> int -> int -> t -> term
-val untupelize_inner: term -> int -> int -> t -> term
+val make_lambda:      int -> int array -> term -> bool -> int -> t -> term
+val make_application: term -> term array -> bool -> int -> t -> term
+val beta_reduce:      int -> term -> term array -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
 
@@ -170,7 +170,7 @@ val update_function:
 
 
 
-val term_to_string: term -> int -> int array -> t -> string
+val term_to_string: term -> bool -> int -> int array -> t -> string
 
 val inherit_new_effective: int -> int -> bool -> t -> int
 

@@ -26,6 +26,8 @@ val substitution_string: t -> string
 val concepts_string:   t -> string
     (** The concepts of the type variables as a string *)
 
+val string_of_head_term: t -> string
+
 val string_of_tvs_sub: t -> string
 
 val string_of_head_signature: t -> string

@@ -101,13 +101,12 @@ end = struct
 
   let trace_accus (accs:t): unit =
     let accus = accs.accus in
-    let string_of_term t = Context.string_of_term t 0 accs.c in
     List.iteri
       (fun i acc ->
         let t = Term_builder.head_term acc in
         printf "    %d: \"%s\"  \"%s\" %s %s\n"
           i
-          (string_of_term t) (Term.to_string t)
+          (Term_builder.string_of_head_term acc) (Term.to_string t)
           (Term_builder.string_of_tvs_sub acc)
           (Term_builder.string_of_head_signature acc))
       accus
@@ -179,7 +178,8 @@ end = struct
       printf "multiple leafs\n";
       List.iter
         (fun (i,tvs,sign) ->
-          printf "  %d %s %s\n" i (Context.string_of_term (Variable i) 0 accs.c)
+          printf "  %d %s %s\n" i
+            (Context.string_of_term (Variable i) false 0 accs.c)
             (Class_table.string_of_complete_signature sign tvs ct))
         terms
     end;
@@ -406,7 +406,7 @@ let process_leaf
       if Accus.is_tracing accs then begin
         let i,_,_ = List.hd lst in
         printf "    The expression \"%s\" has type(s):\n"
-          (Context.string_of_term (Variable i) 0 c);
+          (Context.string_of_term (Variable i) false 0 c);
         List.iter
           (fun (_,tvs,s) ->
             printf "      %s\n" (string_of_signature tvs s c))

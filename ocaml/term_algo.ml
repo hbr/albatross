@@ -32,7 +32,7 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
         done;
         !sub
     | Lam(n1,nms1,t1,pr1), Lam(n2,nms2,t2,pr2) when n1 = n2 && pr1 = pr2 ->
-        uni t1 t2 (n1+nb) sub
+        uni t1 t2 (1 + nb) sub
     | _ ->
         raise Not_found
   in
@@ -69,10 +69,10 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
 
 let compare (t1:term) (t2:term) (eq:term->term->'a)
     : term * 'a array * term array * term array =
-  (* Compare the terms and return a lambda term and two argument arrays so that
-     the lambda term applied to the fist argument array results in the first term
-     and the lambda term applied to the second argument array results in the second
-     term. *)
+  (* Compare the terms and return an inner lambda term and two argument arrays so
+     that the lambda term applied to the fist argument array results in the first
+     term and the lambda term applied to the second argument array results in the
+     second term. *)
   (* return n positions checked,
      positions with different subterms,
      pair list of different subterms *)
@@ -126,14 +126,14 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | Lam(n1,nms1,t01,pr1), Lam(n2,nms2,t02,pr2)
       when n1 = n2 && pr1 = pr2 ->
         begin try
-          comp t01 t02 (n1+nb) (pos+1) poslst elst tlst
+          comp t01 t02 (1 + nb) (pos+1) poslst elst tlst
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
     | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
       when n1 = n2 && is_all1 = is_all2 ->
         begin try
-          comp t01 t02 (n1+nb) (pos+1) poslst elst tlst
+          comp t01 t02 (1 + nb) (pos+1) poslst elst tlst
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
@@ -193,7 +193,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,t0 =
-            mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
+            mklambda (nextpos+1) nextvar poslst t0 (1 + nb) in
           nextpos, nextvar, poslst, Lam(n,nms,t0,pr)
     | QExp(n,nms,t0,is_all) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
@@ -204,7 +204,6 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
   if nextpos = 1 then raise Not_found;
-  let lam = Lam (nargs,[||],tlam,false) in
   assert (nextvar = nargs);
   assert (poslst = []);
   let tarr = Array.of_list (List.rev tlst)
@@ -216,7 +215,6 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
       let argsstr args = "[" ^
         (String.concat "," (List.map Term.to_string (Array.to_list args))) ^ "]"
       in
-      Printf.printf " lam   %s\n" (Term.to_string lam);
       Printf.printf " tlam  %s\n" (Term.to_string tlam);
       Printf.printf " args1 %s\n" (argsstr args1);
       Printf.printf " args2 %s\n" (argsstr args2);
@@ -227,4 +225,4 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
   in
   assert (equi (Term.apply tlam args1) t1);
   assert (equi (Term.apply tlam args2) t2);
-  lam, earr, args1, args2
+  tlam, earr, args1, args2

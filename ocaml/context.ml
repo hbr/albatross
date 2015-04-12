@@ -202,34 +202,40 @@ let sign2string (s:Sign.t) (c:t): string =
     (class_table c)
 
 
-let string_of_term (t:term) (nanon:int) (c:t): string =
-  Feature_table.term_to_string t nanon (argnames c) c.ft
+let string_of_term (t:term) (norm:bool) (nanon:int) (c:t): string =
+  Feature_table.term_to_string t norm nanon (argnames c) c.ft
 
 let string_of_term_outer (t:term) (nanon:int) (c:t): string =
   Feature_table.term_to_string t
+    true
     nanon
     (outer_argnames c)
     c.ft
 
-
-let untupelize_inner (t:term) (nargs:int) (c:t): term =
+let make_lambda (n:int) (nms:int array) (t:term) (pred:bool) (c:t): term =
+  (*if n > 1 then
+    printf "make_lambda %d args: %s\n" n (string_of_term t true n c); *)
   let nbenv = count_arguments c in
-  Feature_table.untupelize_inner t nargs nbenv c.ft
+  Feature_table.make_lambda n nms t pred nbenv c.ft
 
-let tupelize_inner (t:term) (nargs:int) (c:t): term =
+
+let make_application
+    (f:term) (args:term array) (nb:int) (pred:bool) (c:t): term =
   let nbenv = count_arguments c in
-  let res = Feature_table.tupelize_inner t nargs nbenv c.ft in
-  if t <> untupelize_inner res nargs c then begin
-    let untup = untupelize_inner res nargs c in
-    printf "tupelize_inner  t   %s\n" (string_of_term t nargs c);
-    printf "                res %s\n" (string_of_term res 1 c);
-    printf "                t2  %s\n" (string_of_term untup nargs c);
-  end;
-  assert (t = untupelize_inner res nargs c);
+  let res = Feature_table.make_application f args pred (nb+nbenv) c.ft in
+  (*if Array.length args > 1 then begin
+    printf "make_appl %d args %s\n" (Array.length args)
+      (string_of_term res true 0 c);
+    assert false
+  end;*)
   res
 
+
+let beta_reduce (n:int) (tlam:term) (args:term array) (nb:int )(c:t): term =
+  Feature_table.beta_reduce n tlam args (nb+count_arguments c) c.ft
+
+
 let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (c:t): term =
-  let _ = tupelize_inner t nargs c in
   Term.quantified is_all nargs nms t
 
 let all_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
@@ -553,7 +559,7 @@ let named_signature_string (c:t): string =
 let string_of_assertion (t:term) (c: t): string =
   "all"
   ^ (named_signature_string c) ^ " "
-  ^ (string_of_term t 0 c)
+  ^ (string_of_term t true 0 c)
 
 
 let put_formal_generic
@@ -632,12 +638,6 @@ let variable_data (i:int) (c:t): Tvars.t * Sign.t =
 
 
 
-
-let to_tuple (args:term array) (nb:int) (c:t): term =
-  let nbenv = nb + count_arguments c in
-  Feature_table.to_tuple args nbenv c.ft
-
-
 let definition (idx:int) (nb:int) (c:t): int * int array * term =
   let nbenv = count_arguments c in
   if idx < nb + nbenv then
@@ -653,8 +653,8 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
     let apply f args pr =
       match f with
         Lam(n,nms,t0,_) ->
-          assert (n = Array.length args);
-          Term.apply t0 args
+          (*assert (n = Array.length args);*)
+          beta_reduce n t0 args nb c
       | _ ->
           Application (f,args,pr)
     in
@@ -663,7 +663,7 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         begin try
           let n,nms,t0 = definition i nb c in
           if n <> 0 then begin
-            printf "n <> 0  t %s\n" (string_of_term t nb c)
+            printf "n <> 0  t %s\n" (string_of_term t true nb c)
           end;
           assert (n = 0);
           t0
@@ -693,7 +693,7 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
             apply t0 args false
           else begin
             assert (n = Array.length args);
-            Term.apply t0 args
+            beta_reduce n t0 args nb c
           end
         with Not_found ->
           Application (Variable i, args, pr)
@@ -703,7 +703,7 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         and args = expargs args in
         apply f args pr
     | Lam (n,nms,t,pr) ->
-        Lam (n, nms, expand t (n+nb), pr)
+        Lam (n, nms, expand t (1+nb), pr)
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, expand t (n+nb), is_all)
   in
@@ -792,7 +792,7 @@ let term_preconditions (t:term)  (c:t): term list =
         assert (Array.length args = Feature.Spec.count_arguments fspec);
         begin try
           let def = Feature.Spec.definition_term fspec in
-          let exp = Term.apply def args in
+          let exp = assert false (*Term.apply def args*) in
           pres exp lst c
         with Not_found ->
           let lst = Array.fold_left

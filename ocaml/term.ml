@@ -31,10 +31,14 @@ module TermMap = Map.Make(struct
   type t = term
 end)
 
-
-
-
-
+(*
+let string_of_lamargs (nargs:int): string =
+  if lambda_one then
+    string_of_int 0
+  else
+    let args = Array.init nargs string_of_int in
+    String.concat "," (Array.to_list args)
+*)
 
 module Term: sig
 
@@ -99,10 +103,6 @@ module Term: sig
 
   val apply: term -> term array -> term
 
-  val reduce: term -> term
-
-  val reduce_top: term -> term
-
   val lambda_split: term -> int * int array * term
 
   val qlambda_split: term -> int * int array * term * bool
@@ -156,7 +156,7 @@ end = struct
       String.concat "," (Array.to_list args)
     in
     let strlam nargs names t pred =
-      let argsstr = argsstr nargs names in
+      let argsstr = string_of_int 0 in
       if pred then
         "{" ^ argsstr ^ ": " ^ (to_string t) ^ "}"
       else
@@ -250,7 +250,7 @@ end = struct
           let a = fld a f (level+1) nb in
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
       | Lam (n,_,t,_) ->
-          fld a t (level+1) (nb+n)
+          fld a t (level+1) (1+nb)
       | QExp (n,_,t,_) ->
           fld a t (level+1) (nb+n)
     in
@@ -388,7 +388,7 @@ end = struct
           eq f1 f2 nb &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
       | Lam(n1,nms1,t1,_), Lam(n2,nms2,t2,_) when n1 = n2 ->
-          eq t1 t2 (n1+nb)
+          eq t1 t2 (1+nb)
       | QExp(n1,nms1,t1,is_all1), QExp(n2,nms2,t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
@@ -413,11 +413,25 @@ end = struct
       | Application (a,b,pred) ->
           Application (mapr nb a, map_args b, pred)
       | Lam (nargs,names,t,pred) ->
-          Lam(nargs, names, mapr (nb+nargs) t, pred)
+          Lam(nargs, names, mapr (1+nb) t, pred)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
     in
     mapr 0 t
+
+
+  let map_free (f:int->int) (t:term) (start:int): term =
+    (* Map the free variable 'i' of the term 't' to 'f i *)
+    let fb (i:int) (nb:int): int =
+      if i < nb+start then
+        i
+      else
+        nb + start + f (i-nb-start)
+    in
+    map fb t
+
+
+
 
 
   let map_to_term (f:int->int->term) (t:term): term =
@@ -432,7 +446,7 @@ end = struct
       | Application (a,b,pred) ->
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
       | Lam (nargs,names,t,pred) ->
-          Lam(nargs, names, mapr (nb+nargs) t, pred)
+          Lam(nargs, names, mapr (1+nargs) t, pred)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
     in
@@ -492,20 +506,6 @@ end = struct
   let array_up (n:int) (arr:term array): term array =
     if n = 0 then arr
     else Array.map (fun t -> up n t) arr
-
-
-  let map_free (f:int->int) (t:term) (start:int): term =
-    (* Map the free variable 'i' of the term 't' to 'f i *)
-    let fb (i:int) (nb:int): int =
-      if i < nb+start then
-        i
-      else
-        nb + start + f (i-nb-start)
-    in
-    map fb t
-
-
-
 
 
   let part_sub_from
@@ -584,7 +584,7 @@ end = struct
       | Application(f,args,pr) ->
           Application (sub f nb, sub_args args, pr)
       | Lam(n,nms,t0,pr) ->
-          Lam (n, nms, sub t0 (n+nb), pr)
+          Lam (n, nms, sub t0 (1+nb), pr)
       | QExp(n,nms,t0,is_all) ->
           QExp (n, nms, sub t0 (n+nb), is_all)
     in
@@ -634,40 +634,6 @@ end = struct
        apply the function ([v0,v1,...]->t) to the arguments in args
      *)
     sub t args 0
-
-
-  let rec reduce (t:term): term =
-    (* Do all possible beta reductions in the term 't' *)
-    let app (f:term) (args: term array) (pr:bool): term =
-      match f with
-        Lam(nargs,_,t,pr) ->
-          assert (nargs=(Array.length args));
-          reduce (apply t args)
-      | _ -> Application (f,args,pr)
-    in
-    match t with
-      Variable _ | VAppl _ -> t
-    | Application (f,args,pr) ->
-        let fr = reduce f
-        and argsr = Array.map reduce args
-        in
-        app fr argsr pr
-    | Lam(nargs,names,t,pred) ->
-        assert (0 < nargs);
-        let tred = reduce t in
-          Lam (nargs, names, tred, pred)
-    | QExp(nargs,names,t,is_all) ->
-        assert (0 < nargs);
-        let tred = reduce t in
-          QExp (nargs, names, tred, is_all)
-
-
-  let reduce_top (t:term): term =
-    match t with
-      Application (Lam (n,nms,t,_), args, _) ->
-        assert (n = Array.length args);
-        apply t args
-    | _ -> raise Not_found
 
 
   let lambda_split (t:term): int * int array * term =

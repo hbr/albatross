@@ -409,7 +409,7 @@ end = struct
               and args = shrnk_eargs args in
               Eval.Apply (f,args,pr)
           | Eval.Lam (n,nms,e,pr) ->
-              Eval.Lam (n,nms,shrnk e (nb+n),pr)
+              Eval.Lam (n,nms,shrnk e (1+nb),pr)
           | Eval.QExp (n,nms,e,is_all) ->
               Eval.QExp (n,nms,shrnk e (nb+n),is_all)
           | Eval.Beta e ->
@@ -504,7 +504,7 @@ end = struct
             and args = upeval_args args in
             Eval.Apply(f,args,pr)
         | Eval.Lam (n,nms,e,pr) ->
-            Eval.Lam (n, nms, upeval e (n+nb), pr)
+            Eval.Lam (n, nms, upeval e (1+nb), pr)
         | Eval.QExp (n,nms,e,is_all) ->
             Eval.QExp (n, nms, upeval e (n+nb),is_all)
         | Eval.Beta e ->

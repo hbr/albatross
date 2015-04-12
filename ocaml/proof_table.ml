@@ -134,10 +134,10 @@ let some_quantified (nargs:int) (names:int array) (t:term) (at:t): term =
   Context.some_quantified nargs names t at.c
 
 let string_of_term (t:term) (at:t): string =
-  Context.string_of_term t 0 at.c
+  Context.string_of_term t true 0 at.c
 
 let string_of_term_anon (t:term) (nb:int) (at:t): string =
-  Context.string_of_term t nb at.c
+  Context.string_of_term t true nb at.c
 
 let string_of_term_outer (t:term) (at:t): string =
   Context.string_of_term_outer t 0 at.c
@@ -418,6 +418,8 @@ let specialized (i:int) (args:term array) (nb:int) (at:t): term =
     Term.sub t0 args nbenv_delta
 
 
+let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
+  Context.beta_reduce n t args nb at.c
 
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
@@ -452,7 +454,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         and argsb = Array.init nargs (fun i -> snd args.(i)) in
         Application (fa,argsa,pr), Application (fb,argsb,pr)
     | Eval.Lam (n,nms,e,pr) ->
-        let ta,tb = reconstruct e (nb+n) in
+        let ta,tb = reconstruct e (1 + nb) in
         Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
     | Eval.QExp (n,nms,e,is_all) ->
         let ta,tb = reconstruct e (nb+n) in
@@ -461,12 +463,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let ta,tb = reconstruct e nb in
         begin match tb with
           Application(Lam(n,nms,t0,_),args,_) ->
-            if n <> Array.length args then begin
-              printf "reconstruct eval n %d, length args %d\n" n (Array.length args);
-              printf "  tb %s\n" (string_of_term_anon tb nb at);
-            end;
-            assert (n = Array.length args);
-            let tb = Term.apply t0 args in
+            let tb = beta_reduce n t0 args nb at in
             ta,tb
         | _ -> raise Illegal_proof_term end
     | Eval.Simpl (e,idx,args) ->
@@ -532,8 +529,8 @@ let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
   let ok = (t = ta) in
   if not ok then begin
     printf "evaluated terms (bwd) do not coincide\n";
-    printf "   term      %s\n" (string_of_term t at);
-    printf "   eval      %s\n" (string_of_term ta at);
+    printf "   term      %s  %s\n" (string_of_term t at) (Term.to_string t);
+    printf "   eval      %s  %s\n" (string_of_term ta at) (Term.to_string ta);
     printf "   evaluated %s\n" (string_of_term tb at);
     raise Illegal_proof_term
   end;
@@ -742,6 +739,7 @@ let print_pt (pt:proof_term) (at:t): unit =
 
 let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
   try
+    (*let t_pt = reconstruct_term pt true at in*)
     let t_pt = term_of_pt pt at in
     let res = (t = t_pt) (*Term.equal_wo_names t t_pt*) in
     if not res then begin

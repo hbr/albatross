@@ -25,13 +25,6 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
      [is_ghost] flags if the inheritance is a ghost inheritance
    *)
   let ft = PC.feature_table pc in
-  if 1 < Feature_table.verbosity ft then begin
-    let ct   = class_table pc in
-    let icls = Feature_table.class_of_feature i ft in
-    printf "   inherit deferred \"%s %s\" in %s\n"
-      (Class_table.class_name icls ct)
-      (Feature_table.string_of_signature i ft)
-      (Class_table.class_name cls ct) end;
   assert (cls <> Feature_table.class_of_feature i ft);
   let idx =
     try Feature_table.find_variant_candidate i cls ft
@@ -44,6 +37,14 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
         "\" with proper substitutions of the type variables" in
       error_info info str
   in
+  if 1 < Feature_table.verbosity ft then begin
+    let ct   = class_table pc in
+    let icls = Feature_table.class_of_feature i ft in
+    printf "   inherit deferred \"%s %s (%d)\" in %s (%d)\n"
+      (Class_table.class_name icls ct)
+      (Feature_table.string_of_signature i ft)
+      i
+      (Class_table.class_name cls ct) idx end;
   let is_i_ghost   = Feature_table.is_ghost_function i ft
   and is_idx_ghost = Feature_table.is_ghost_function idx ft in
   if is_idx_ghost && not is_i_ghost && not is_ghost then
@@ -121,7 +122,7 @@ let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
     "The class " ^ (class_name cls) ^ " redefines the feature \"" ^
     (feat_sign i) ^ "\" of class " ^ (class_name icls) ^
     " but the equivalence of the definitions i.e.\n   " ^
-    (Feature_table.term_to_string var_eq_term 0 [||] ft) ^
+    (Feature_table.term_to_string var_eq_term true 0 [||] ft) ^
     "\ncannot be proven"
   in
   try

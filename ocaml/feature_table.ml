@@ -140,57 +140,7 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
 
 
 
-let to_tuple (args:term array) (nbenv:int) (ft:t): term =
-  (* The arguments [a,b,...] transformed to a tuple (a,b,...).
-   *)
-  let tup_id    = nbenv + tuple_index
-  and nargs     = Array.length args in
-  assert (0 < nargs);
-  let rec to_tup (i:int) (t:term): term =
-    if i = 0 then
-      t
-    else
-      let i = i - 1 in
-      let t = VAppl(tup_id, [|args.(i);t|]) in
-      to_tup i t
-  in
-  let i = nargs - 1 in
-  let t = args.(i) in
-  to_tup i t
-
-
-
-
-let tupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
-  (* Convert the inner term [t] which has [nargs] arguments to a term with one
-     argument expecting an [nargs] tuple.
-
-     nargs = 4
-     args: [0.first, 0.second.first, 0.second.second.first, 0.second.second.second]
-   *)
-  let first_id  = 1 + nbenv + first_index
-  and second_id = 1 + nbenv + second_index in
-  let rec argument (i:int) (n:int) (t:term): term =
-    assert (0 <= i);
-    assert (i < n);
-    assert (2 <= n);
-    if i = 0 then
-      VAppl (first_id, [|t|])
-    else if i = 1 && n = 2 then
-      VAppl (second_id, [|t|])
-    else
-      let t = VAppl(second_id, [|t|]) in
-      argument (i-1) (n-1) t
-  in
-  if nargs <= 1 then
-    t
-  else
-    let args = Array.init nargs (fun i -> argument i nargs (Variable 0)) in
-    Term.sub t args 1
-
-
-
-(* untupelize:
+(* removal of tuple accessors:
    We have to find pattern of the form
 
       0.second.second...second.first
@@ -217,15 +167,15 @@ let tupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
 
 
 
-let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
-  (* Convert the inner term [t] which expects an [nargs] tuple back into its original
-     form expecting [nargs] arguments.
+let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
+  (* Convert the inner term [t] which expects an [nargs] tuple back into its
+     original form expecting [nargs] arguments.
 
      The function has to find subterms of the form
-        0.secs.first
-        0.secs.second
+        0.second...first
+        0.second...second
      where
-        .secs
+        .second..
      is is zero up to [nargs-2] applications of [second] and replace them by
      the corresponding argument.  *)
   let rec untup (t:term) (nb:int) (outer:int) (nsnds:int) : term * int * int =
@@ -234,7 +184,7 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
              2: second *)
     let first_id  = nb + 1 + nbenv + first_index
     and second_id = nb + 1 + nbenv + second_index
-    and vappl i t   = VAppl      (          i + nargs - 1 , [|t|])    , 0, 0
+    and vappl i t   = VAppl (i + nargs - 1 , [|t|]), 0, 0
     in
     match t with
       Variable i when i < nb ->
@@ -283,7 +233,7 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         and args = Array.map (fun t -> untup0 t nb) args in
         Application(f,args,pr), 0, 0
     | Lam (n,nms,t0,pr) ->
-        let t0 = untup0 t0 (n+nb) in
+        let t0 = untup0 t0 (1+nb) in
         Lam(n,nms,t0,pr), 0, 0
     | QExp (n,nms,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
@@ -295,6 +245,192 @@ let untupelize_inner (t:term) (nargs:int) (nbenv:int) (ft:t): term =
       t
   else
     untup0 t 0
+
+
+
+let beta_reduce_0
+    (tlam: term) (nbenv:int) (arg:term) (ndelta:int) (ft:t): term =
+  (* Beta reduce the term [tlam] which comes from an environment with [nbenv+1]
+     variables where variable 0 is the argument variable. [arg] is the argument
+     which is an optional tuple and comes from an environment with [nbenv+ndelta]
+     variables. All possible transformations of the form [(a,b).first ~> a] and
+     [(a,b).second ~> b] are done.
+
+     The reduced term is in an environment with [nbenv+ndelta] variables. *)
+  assert (ndelta = 0);
+  let rec reduce (t:term) (nb:int): term =
+    let first_id  = nb + 1 + nbenv + first_index
+    and second_id = nb + 1 + nbenv + second_index
+    and tuple_id  = nb + nbenv + ndelta + tuple_index
+    in
+    let reduce_args args = Array.map (fun a -> reduce a nb) args
+    in
+    let reduce_tuple arg fstsnd_id fstsnd =
+      assert (fstsnd = 0 || fstsnd = 1);
+      let tup = reduce arg nb in
+      match tup with
+        VAppl (i,args) when i = tuple_id ->
+          assert (Array.length args = 2);
+          args.(fstsnd)
+      | _ ->
+          VAppl (fstsnd_id - 1 + ndelta, [|tup|])
+    in
+    match t with
+      Variable i when i < nb ->
+        t
+    | Variable i when i = nb ->
+        Term.up nb arg
+    | Variable i ->
+        Variable (i - 1 + ndelta)
+    | VAppl (i,args) when i = first_id ->
+        assert (Array.length args = 1);
+        reduce_tuple args.(0) i 0
+    | VAppl (i,args) when i = second_id ->
+        assert (Array.length args = 1);
+        reduce_tuple args.(0) i 1
+    | VAppl (i,args) ->
+        let args = reduce_args args in
+        VAppl (i - 1 + ndelta, args)
+    | Application(f,args,pr) ->
+        let f    = reduce f nb
+        and args = reduce_args args in
+        Application(f,args,pr)
+    | Lam(n,nms,t0,pr) ->
+        Lam(n, nms, reduce t0 (1+nb), pr)
+    | QExp(n,nms,t0,is_all) ->
+        QExp(n, nms, reduce t0 (n + nb), is_all)
+  in
+  reduce tlam 0
+
+
+
+
+let args_of_tuple (t:term) (nbenv:int) (nargs:int) (ft:t): term array =
+  (* The tuple (a,b,...) transformed into an argument array [a,b,...].
+     If the tuple [t] is only an n-tuple and [m] arguments are needed with
+     [n < m] the last tuple element [l] is used to generated the missing
+     elements as
+
+         l.first,  l.second.first, l.second...first, l.second...second
+   *)
+  assert (0 < nargs);
+  let first_id  = nbenv + first_index
+  and second_id = nbenv + second_index
+  and tuple_id  = nbenv + tuple_index
+  in
+  let rec untup (t:term) (n:int) (lst:term list): int * term list =
+    assert (n < nargs);
+    if n + 1 = nargs then
+      n + 1, t::lst
+    else
+      match t with
+        VAppl(i,args) when i = tuple_id ->
+          assert (Array.length args = 2);
+          untup args.(1) (n+1) (args.(0)::lst)
+      | _ ->
+          n + 1, t::lst
+  in
+  let rec argument (i:int) (n:int) (t:term): term =
+    assert (0 <= i);
+    assert (i < n);
+    assert (2 <= n);
+    if i = 0 then
+      VAppl (first_id, [|t|])
+    else if i = 1 && n = 2 then
+      VAppl (second_id, [|t|])
+    else
+      let t = VAppl(second_id, [|t|]) in
+      argument (i-1) (n-1) t
+  in
+  let n, lst = untup t 0 [] in
+  let lst =
+    if n < nargs then begin
+      match lst with
+        [] ->
+          assert false
+      | h::tail ->
+          let delta = nargs - n + 1 in
+          let rec add_args_from i lst =
+            if i = delta then
+              lst
+            else
+              add_args_from (i + 1) ((argument i delta h) :: lst)
+          in
+          add_args_from 0 tail
+    end else
+      lst
+  in
+  assert (List.length lst = nargs);
+  Array.of_list (List.rev lst)
+
+
+
+
+let tuple_of_args (args:term array) (nbenv:int) (ft:t): term =
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...).
+   *)
+  let tup_id    = nbenv + tuple_index
+  and nargs     = Array.length args in
+  assert (0 < nargs);
+  let rec to_tup (i:int) (t:term): term =
+    if i = 0 then
+      t
+    else
+      let i = i - 1 in
+      let t = VAppl(tup_id, [|args.(i);t|]) in
+      to_tup i t
+  in
+  let i = nargs - 1 in
+  let t = args.(i) in
+  let res = to_tup i t in
+  assert (args = args_of_tuple res nbenv nargs ft);
+  res
+
+
+
+
+let add_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
+  (* Convert the inner term [t] which has [nargs] arguments to a term with one
+     argument expecting an [nargs] tuple.
+
+     nargs = 4
+     args: [0.first, 0.second.first, 0.second.second.first, 0.second.second.second]
+   *)
+  if nargs <= 1 then
+    t
+  else
+    let args = args_of_tuple (Variable 0) (nbenv+1) nargs ft in
+    (*let args = Array.init nargs (fun i -> argument i nargs (Variable 0)) in*)
+    Term.sub t args 1
+
+
+
+let make_lambda
+    (n:int) (nms:int array) (t:term) (pr:bool) (nbenv:int) (ft:t): term =
+  assert (0 < n);
+  assert (Array.length nms = 0 || Array.length nms = n);
+  let t0 = add_tuple_accessors t n nbenv ft in
+  Lam(n,nms,t0,pr)
+
+
+
+let make_application
+    (f:term) (args:term array) (pred:bool) (nbenv:int) (ft:t): term =
+  assert (Array.length args > 0);
+  let args = [|tuple_of_args args nbenv ft|]
+  in
+  Application (f, args, pred)
+
+
+
+let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term =
+  assert (0 < Array.length args);
+  assert (Array.length args <= n);
+  assert (Array.length args = 1);
+  let t0   = remove_tuple_accessors tlam n nbenv ft in
+  let args = args_of_tuple args.(0) nbenv n ft in
+  Term.apply t0 args
+
 
 
 
@@ -337,25 +473,6 @@ let owner (i:int) (ft:t): int =
   assert (i < count ft);
   (descriptor i ft).cls
 
-(*
-let function_level (i:int) (ft:t): int =
-  assert (i < count ft);
-  (base_descriptor i ft).level
-
-
-
-
-let term_level (t:term) (nb:int) (ft:t): int =
-  Term.fold
-    (fun level i ->
-      if nb <= i then
-        let ilev = function_level (i-nb) ft in
-        if level < ilev then ilev else level
-      else level
-    )
-    0
-    t
-*)
 
 let is_ghost_function (i:int) (ft:t): bool =
   assert (i < count ft);
@@ -375,7 +492,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
     | Lam (n,_,t,_) ->
-        is_ghost t (nb+n)
+        is_ghost t (1+nb)
     | QExp(_,_,_,_) ->
         true
     | VAppl (i,args) ->
@@ -856,11 +973,36 @@ let find_funcs
   else lst
 
 
-
+let adapt_names (nms:int array) (names:int array): int array =
+  let nms  = Array.copy nms in
+  let nnms = Array.length nms in
+  let patch i =
+    assert (i < nnms);
+    let str = "$" ^ (ST.string nms.(i)) in
+    nms.(i) <- ST.symbol str
+  and has i =
+    assert (i < nnms);
+    try
+      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
+      true
+    with Not_found ->
+      false
+  in
+  let rec patch_until_ok i =
+    if has i then begin
+      patch i;
+      patch_until_ok i
+    end
+  in
+  for i = 0 to nnms - 1 do
+    patch_until_ok i
+  done;
+  nms
 
 
 let term_to_string
     (t:term)
+    (norm:bool)
     (nanon: int)
     (names: int array)
     (ft:t)
@@ -874,17 +1016,17 @@ let term_to_string
   let rec to_string
       (t:term)
       (names: int array)
-      (nanon: int)
+      (nanonused: int)
       (is_fun: bool)
       (outop: (operator*bool) option)
       : string =
-    (* nanon: number of already used anonymous variables
+    (* nanonused: number of already used anonymous variables
        is_fun: the term is used in a function position
        outop: the optional outer operator and a flag if the current term
               is the left operand of the outer operator
      *)
     let nnames = Array.length names
-    and anon2sym (i:int): int = anon_symbol i nanon
+    and anon2sym (i:int): int = anon_symbol i nanonused
     in
     let find_op_int (i:int): operator =
       if nnames <= i then
@@ -913,18 +1055,18 @@ let term_to_string
     let local_names (n:int) (nms:int array): int * int array =
       let nnms  = Array.length nms in
       if n = nnms then
-        nanon, nms
+        nanonused, nms
       else
-        nanon+n, Array.init n anon2sym
+        nanonused+n, Array.init n anon2sym
     in
     let lam_strs (n:int) (nms:int array) (t:term): string * string =
-      let nanon, nms = local_names n nms in
+      let nanonused, nms = local_names n nms in
       let names = Array.append nms names in
       args2str n nms,
-      to_string t names nanon false None
+      to_string t names nanonused false None
     in
     let default_fapp (f:term) (argsstr:string): string =
-      (to_string f names nanon true None) ^ "(" ^ argsstr ^ ")" in
+      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")" in
     let funiapp2str (i:int) (argsstr:string): string =
       if nnames <= i then
         let fn = (descriptor (i-nnames) ft).fname in
@@ -951,7 +1093,7 @@ let term_to_string
       String.concat
         ","
         (List.map
-           (fun t -> to_string t names nanon false None)
+           (fun t -> to_string t names nanonused false None)
            (Array.to_list args))
     in
     let op2str (op:operator) (args: term array): string =
@@ -961,12 +1103,12 @@ let term_to_string
           let nargs = Array.length args in
           if nargs = 1 then
             (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(0) names nanon false (Some (op,false)))
+            ^ (to_string args.(0) names nanonused false (Some (op,false)))
           else begin
             assert (nargs=2); (* only unary and binary operators *)
-            (to_string args.(0) names nanon false (Some (op,true)))
+            (to_string args.(0) names nanonused false (Some (op,true)))
             ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(1) names nanon false (Some (op,false)))
+        ^ (to_string args.(1) names nanonused false (Some (op,false)))
           end
     and lam2str (n:int) (nms: int array) (t:term) (pr:bool): string =
       let argsstr, tstr = lam_strs n nms t in
@@ -995,8 +1137,12 @@ let term_to_string
               None, funapp2str f (argsstr args)
           end
       | Lam (n,nms,t,pr) ->
+          let nms = adapt_names nms names in
+          let nbenv = Array.length names in
+          let t = if norm then remove_tuple_accessors t n nbenv ft else t in
           None, lam2str n nms t pr
       | QExp (n,nms,t,is_all) ->
+          let nms = adapt_names nms names in
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           and argsstr, tstr = lam_strs n nms t in
           Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
@@ -1051,7 +1197,7 @@ let print (ft:t): unit =
         let def_opt = Feature.Spec.definition spec in
         match def_opt with
           None -> "Basic"
-        | Some def -> term_to_string def 0 fdesc.argnames ft
+        | Some def -> term_to_string def true 0 fdesc.argnames ft
       and clsnme =
         if fdesc.cls = -1 then ""
         else Class_table.class_name fdesc.cls ft.ct

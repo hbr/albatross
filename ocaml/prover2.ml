@@ -430,10 +430,16 @@ let prove (g:term) (strength:int) (pc:PC.t): int =
   let pc = PC.push_untyped [||] pc in
   PC.close_assumptions pc;
   let gs = init g pc in
-  if gs.trace then
-    printf "\n%strying to prove: %s\n\n"
+  if gs.trace then begin
+    printf "\n%strying to prove: %s\n"
       (PC.trace_prefix pc)
       (PC.string_of_term g pc);
+    if PC.verbosity pc > 3 then
+      printf "%s                 %s\n"
+        (PC.trace_prefix pc)
+        (Term.to_string g);
+    printf "\n"
+  end;
   if not (PC.is_global pc) then
     PC.close pc;
   let rec round (i:int) (start:int): unit =
