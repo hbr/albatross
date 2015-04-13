@@ -626,7 +626,6 @@ let add_leaf
   let s = Sign.up_from (nglobtb-nglob) nloc s       in
   let s = Sign.up (nloctb-nloc) s in
   unify_sign tb.sign s tb;
-  let s = Sign.transform (fun tp -> TVars_sub.sub_star tp tb.tvars) s in
   {tb with tlist = (Variable i, tvars tb, s)::tb.tlist}
 
 
@@ -678,7 +677,7 @@ let complete_function (nargs:int) (tb:t): unit =
                                     functions! *)
     arglst := t :: !arglst;
   done;
-  let f,tvs, fsig = List.hd tb.tlist in
+  let f,tvs,fsig = List.hd tb.tlist in
   assert (Tvars.count_all tvs <= count_all tb);
   let fsig = Sign.up_from
       (count_all tb - Tvars.count_all tvs) (count_local tb) fsig in
@@ -704,7 +703,6 @@ let complete_function (nargs:int) (tb:t): unit =
   let t =
     if Sign.is_constant fsig then
       Application (f, Array.of_list !arglst, is_pred)
-      (*Context.make_application f (Array.of_list !arglst) 0 is_pred tb.c*)
     else begin
       assert (Sign.arity fsig = nargs);
       assert (Term.is_variable f);

@@ -145,6 +145,12 @@ let and_index (c:t): int =
 let or_index (c:t): int =
   count_arguments c + Feature_table.or_index
 
+let not_index (c:t): int =
+  count_arguments c + Feature_table.not_index
+
+let domain_index (c:t): int =
+  count_arguments c + Feature_table.domain_index
+
 
 let argument_name (i:int) (c:t): int =
   assert (i < count_arguments c);
@@ -727,6 +733,14 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
     Feature_table.preconditions idx (nb+nbenv) (feature_table c)
 
 
+
+let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
+  let nbenv = nb + count_arguments c in
+  Feature_table.remove_tuple_accessors t nargs nbenv c.ft
+
+
+
+
 (* Calculation of preconditions:
 
        a ==> b:   pa0, pa1, ..., a ==> pb0, a ==> pb1, ...
@@ -755,6 +769,12 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
        (x,y,...) -> e:
                   no preconditions
 
+       f(x,y,...): px, py, ...               -- function object application
+                   (x,y,...) in f.domain
+
+       p(x,y,...): px, py, ...               -- predicate (relation) application
+                   no preconditions
+
        f(x,y,...):
                   pf0, pf1, ...
                   px0,...,py0,...,...
@@ -763,58 +783,75 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
 (*
   (x -> y -> exp) (x) ~> (y -> exp)
  *)
-let specification i c = assert false
-
 let term_preconditions (t:term)  (c:t): term list =
-  let rec pres (t:term) (lst:term list) (c:t): term list * Feature.Spec.t =
-    let imp_id  = implication_index c
-    and and_id  = and_index c
-    and or_id   = or_index c in
-    let do_pred n nms t =
-      let c = push_untyped nms c in
-      let ps,_ = pres t [] c in
-      List.fold_right
-        (fun p lst -> (Term.all_quantified n nms p)::lst)
-        ps
-        lst in
-   match t with
-    | Variable i ->
-        lst,
-        specification i c
-    | VAppl (i, args) when i = imp_id || i = and_id ->
-        assert false
-    | VAppl (i, args) when i = or_id ->
-        assert false
-    | VAppl (i,args) ->
-        assert false
-    | Application (f,args,pr) ->
-        let lst,fspec = pres f lst c in
-        assert (Array.length args = Feature.Spec.count_arguments fspec);
-        begin try
-          let def = Feature.Spec.definition_term fspec in
-          let exp = assert false (*Term.apply def args*) in
-          pres exp lst c
-        with Not_found ->
-          let lst = Array.fold_left
-              (fun lst arg ->
-                let lst,_ = pres arg lst c in lst)
-              lst
-              args in
-          let lst = List.fold_left
-              (fun lst pre -> assert false)
-              lst
-              (Feature.Spec.preconditions fspec)
-          in
-          lst, assert false
-        end
-    | Lam (n,nms,t0,pr) when pr ->
-        let lst = do_pred n nms t0 in
-        lst, assert false (* nyi *)
-    | Lam (n,nms,t0,pr) ->
-        lst,
-        Feature.Spec.make_func_def nms (Some t0)
-    | QExp (n,nms,t0,is_all) ->
-        assert false (* nyi *)
+  let imp_id0 = implication_index c
+  and and_id0 = and_index c
+  and or_id0  = or_index c
+  and not_id0 = not_index c
+  and dom_id0 = domain_index c
   in
-  let ps,_ = pres t [] c in
-  ps
+  let rec pres (t:term) (nb:int) (lst:term list): term list =
+    let imp_id  = nb + imp_id0
+    and and_id  = nb + and_id0
+    and or_id   = nb + or_id0
+    and not_id  = nb + not_id0
+    and dom_id  = nb + dom_id0
+    in
+    let pres_args args lst =
+      Array.fold_left
+        (fun lst t -> pres t nb lst)
+        lst
+        args
+    and pres_lam n nms t lst =
+      let lst0 = pres t (n+nb) [] in
+      List.fold_right
+        (fun t lst -> QExp(n,nms,t,true)::lst)
+        lst0
+        lst
+    in
+   match t with
+   | Variable i ->
+       lst
+    | VAppl (i, args) when i = imp_id || i = and_id ->
+        assert (Array.length args = 2);
+        let lst1 = pres args.(0) nb lst
+        and lst2 = pres args.(1) nb []  in
+        List.fold_right
+          (fun t lst -> (Term.binary imp_id args.(0) t)::lst)
+          lst2
+          lst1
+    | VAppl (i, args) when i = or_id ->
+        assert (Array.length args = 2);
+        let lst1  = pres args.(0) nb lst
+        and lst2  = pres args.(1) nb []
+        and not_t = Term.unary not_id args.(0) in
+        List.fold_right
+          (fun t lst -> (Term.binary imp_id not_t t)::lst)
+          lst2
+          lst1
+    | VAppl (i,args) ->
+        let n,nms,lst1 = preconditions i nb c in
+        assert (n = Array.length args);
+        let lst = pres_args args lst in
+        List.fold_left
+          (fun lst t -> (Term.apply t args)::lst)
+          lst
+          lst1
+    | Application (f,args,pr) when pr ->
+        let lst = pres f nb lst in
+        pres_args args lst
+    | Application (f,args,pr) ->
+        assert (Array.length args = 1);
+        let lst = pres f nb lst in
+        let lst = pres_args args lst in
+        Application(VAppl(dom_id,[|f|]),args,true)::lst
+    | Lam (n,nms,t0,pr) when pr ->
+        let t0 = remove_tuple_accessors t0 n nb c in
+        pres_lam n nms t0 lst
+    | Lam (n,nms,t0,pr) ->
+        lst
+    | QExp (n,nms,t0,is_all) ->
+        pres_lam n nms t0 lst
+  in
+  let ps = pres t 0 [] in
+  List.rev ps

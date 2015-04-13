@@ -134,3 +134,4 @@ val definition: int -> int -> t -> int * int array * term
 val expanded_definition: int -> int -> t -> int * int array * term
 
 val preconditions: int -> int -> t -> int * int array * term list
+val term_preconditions: term -> t -> term list

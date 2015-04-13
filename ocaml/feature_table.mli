@@ -140,6 +140,7 @@ val owner: int -> t -> int
 val make_lambda:      int -> int array -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
+val remove_tuple_accessors: term -> int -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
 
