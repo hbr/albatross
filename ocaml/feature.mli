@@ -2,7 +2,7 @@ open Term
 
 module Spec: sig
   type t
-  val make_func_def:   int array -> term option -> t
+  val make_func_def:   int array -> term option -> term list -> t
   val make_func_spec:  int array -> term list -> term list -> t
   val equivalent:      t -> t -> bool
   val has_definition:  t -> bool

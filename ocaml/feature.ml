@@ -7,8 +7,8 @@ module Spec = struct
             pres:  term list;
             posts: term list}
 
-  let make_func_def (nms:int array) (def: term option): t =
-    {nms = nms; def = def; pres = []; posts = []}
+  let make_func_def (nms:int array) (def: term option) (pres:term list): t =
+    {nms = nms; def = def; pres = pres; posts = []}
 
 
   let make_func_spec (nms:int array) (pres: term list) (posts: term list): t =

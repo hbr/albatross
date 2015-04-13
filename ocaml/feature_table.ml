@@ -812,8 +812,8 @@ let base_table (verbosity:int) : t =
   let p_tp2 = VAppl (Class_table.predicate_index+2, [|a_tp|])
   and f_tp  = VAppl (Class_table.function_index+2, [|a_tp;b_tp|])
   and tup_tp= VAppl (Class_table.tuple_index+2, [|a_tp;b_tp|])
-  and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None
-  and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t)
+  and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None []
+  and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t) []
   in
   add_base (* ==> *)
     "boolean" Class_table.boolean_index (FNoperator DArrowop)
@@ -1370,7 +1370,7 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
         let nargs = Array.length desc.argnames in
         Some (variant_term t nargs desc.cls cls ft)
   in
-  let spec = Feature.Spec.make_func_def desc.argnames def_opt in
+  let spec = Feature.Spec.make_func_def desc.argnames def_opt [] in
   let cnt = count ft
   and nargs = Array.length desc.argnames
   in
@@ -1557,8 +1557,8 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   if name <> ST.symbol "boolean" then begin
     let or_desc  = descriptor or_index ft
     and and_desc = descriptor and_index ft in
-    or_desc.priv.spec   <- Feature.Spec.make_func_def or_desc.argnames  None;
-    and_desc.priv.spec  <- Feature.Spec.make_func_def and_desc.argnames None
+    or_desc.priv.spec   <- Feature.Spec.make_func_def or_desc.argnames  None [];
+    and_desc.priv.spec  <- Feature.Spec.make_func_def and_desc.argnames None []
   end
 
 
