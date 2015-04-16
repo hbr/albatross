@@ -59,10 +59,7 @@ let prove (t:term) (pc:PC.t): unit =
   if PC.is_interface_use pc then
     ()
   else begin
-    let strength  = PC.prover_strength pc
-    and pc = PC.push_untyped [||] pc
-    in
-    let _ = Prover2.prove t strength pc in
+    let _ = Prover2.proof_term t pc in
     ()
   end
 
@@ -199,7 +196,6 @@ let inherit_features
   (* Inherit in the class [cls] the features from the parent [par[par_args]] where
      [ghost] indicates if the inheritance relation is a ghost inheritance. *)
   let ct = Proof_context.class_table pc
-  and ft = Proof_context.feature_table pc
   in
   let defs = List.rev (Class_table.deferred_features par ct) in
   List.iter (fun i -> inherit_deferred i cls ghost info pc) defs;

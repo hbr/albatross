@@ -64,8 +64,6 @@ let is_private (pc:t): bool = Proof_table.is_private pc.base
 let is_public  (pc:t): bool = Proof_table.is_public  pc.base
 let is_interface_use   (pc:t): bool = Proof_table.is_interface_use  pc.base
 let is_interface_check (pc:t): bool = Proof_table.is_interface_check  pc.base
-let prover_strength (pc:t): int =
-  if is_interface_check pc then 0 else 1
 
 let add_used_module (name:int*int list) (used:IntSet.t) (pc:t): unit =
   Proof_table.add_used_module name used pc.base
@@ -175,6 +173,14 @@ let is_available (i:int) (pc:t): bool =
   let gdesc = Seq.elem i pc.gseq in
   not gdesc.inh ||
   gdesc.pub
+
+
+let is_visible (i:int) (pc:t): bool =
+  not (is_interface_check pc) ||
+  let ft = feature_table pc
+  and nb = nbenv pc
+  and t  = term i pc in
+  Feature_table.is_term_public t nb ft
 
 
 let split_implication (t:term) (pc:t): term * term =
@@ -625,8 +631,10 @@ let add_last_to_tables (pc:t): unit =
 
 let add_last_to_work (pc:t): unit =
   assert (0 < count pc);
-  let idx = count pc - 1 in
-  pc.work <- idx :: pc.work
+  if not (is_global pc || is_interface_use pc) then
+    let idx = count pc - 1 in
+    pc.work <- idx :: pc.work
+
 
 
 let get_rule_data (t:term) (pc:t): RD.t =
@@ -745,7 +753,7 @@ let add_consequence
      implication by using the substitution [sub].
 
      Note: The substitution [sub] is valid in the environment of the term [i]!
-   *)
+         *)
   assert (is_consistent pc);
   assert (i < count pc);
   assert (j < count pc);
@@ -776,7 +784,7 @@ let add_consequences_premise (i:int) (pc:t): unit =
     (fun (idx,sub) ->
       assert (is_consistent pc);
       assert (idx < count pc);
-      if is_available idx pc then
+      if is_available idx pc && is_visible idx pc then
         add_consequence i idx sub pc)
     sublst
 
@@ -891,6 +899,8 @@ let add_consequences (i:int) (pc:t): unit =
   add_consequences_someelim  i pc
 
 
+let clear_work (pc:t): unit =
+  pc.work <- []
 
 
 let close_step (pc:t): unit =
@@ -902,7 +912,7 @@ let close_step (pc:t): unit =
 
 let prefix (pc:t): string = String.make (2*(depth pc)+2) ' '
 
-
+(*
 let close (pc:t): unit =
   let rec cls (n:int): unit =
     if n > 500 then assert false;  (* 'infinite' loop detection *)
@@ -914,10 +924,31 @@ let close (pc:t): unit =
   in
   cls 0;
   assert (not (has_work pc))
+*)
+
+
+let close (pc:t): unit =
+  if is_global pc then
+    ()
+  else
+    let cnt0 = count pc in
+    let rec cls (round:int): unit =
+      if count pc - cnt0 > 500 then assert false; (* 'infinite' loop detection *)
+      if has_work pc then begin
+        let lst = List.rev pc.work in
+      pc.work <- [];
+        List.iter (fun i -> add_consequences i pc) lst;
+        if is_interface_check pc then
+          pc.work <- []
+        else
+          cls (1+round)
+      end
+    in
+    cls 0
 
 
 let close_assumptions (pc:t): unit =
-  pc.work <- List.rev pc.work;
+  (*pc.work <- List.rev pc.work;*)
   if pc.trace then
     printf "%sproof\n" (trace_prefix_0 pc);
   close pc
@@ -1026,16 +1057,31 @@ let push0 (base:Proof_table.t) (pc:t): t =
   res
 
 
+let print_work (pc:t): unit =
+  if has_work pc then begin
+    printf "open work to close\n";
+    List.iter
+      (fun i -> printf "  %d %s\n" i (string_of_term_i i pc))
+      pc.work
+  end
 
-let push (entlst:entities list withinfo) (pc:t): t =
-  close pc;
+
+let push
+    (entlst:entities list withinfo)
+    (rt:return_type)
+    (is_pred:bool)
+    (is_func:bool)
+    (pc:t): t =
+  (*close pc;*)
+  if has_work pc then print_work pc;
   assert (not (has_work pc));
-  let base = Proof_table.push entlst pc.base in
+  let base = Proof_table.push entlst rt is_pred is_func pc.base in
   push0 base pc
 
 
 let push_untyped (names:int array) (pc:t): t =
-  close pc;
+  (*close pc;*)
+  if has_work pc then print_work pc;
   assert (not (has_work pc));
   let base = Proof_table.push_untyped names pc.base in
   push0 base pc
@@ -1357,6 +1403,8 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   lst
 
 
+let assumptions (pc:t): term list =
+  Proof_table.assumptions pc.base
 
 
 let discharged (i:int) (pc:t): term * proof_term =
@@ -1382,7 +1430,8 @@ let add_proved_0
   let dup = idx < cnt
   and is_glob = idx < count_global pc
   in
-  if (not dup || is_glob) && not (is_global pc) then
+  if not dup || is_glob then (* duplicates of globals must be added to work,
+                                because globals are not closed *)
     add_last_to_work pc;
   if is_global pc then
     add_global defer false owner anchor_cls pc;

@@ -790,7 +790,7 @@ let term_preconditions (t:term)  (c:t): term list =
   and not_id0 = not_index c
   and dom_id0 = domain_index c
   in
-  let rec pres (t:term) (nb:int) (lst:term list): term list =
+  let rec pres (t:term) (nb:int) (lst:term list): term list * term option =
     let imp_id  = nb + imp_id0
     and and_id  = nb + and_id0
     and or_id   = nb + or_id0
@@ -799,36 +799,39 @@ let term_preconditions (t:term)  (c:t): term list =
     in
     let pres_args args lst =
       Array.fold_left
-        (fun lst t -> pres t nb lst)
+        (fun lst t -> let lst,_ = pres t nb lst in lst)
         lst
         args
     and pres_lam n nms t lst =
-      let lst0 = pres t (n+nb) [] in
+      let lst0,_ = pres t (n+nb) [] in
       List.fold_right
         (fun t lst -> QExp(n,nms,t,true)::lst)
         lst0
         lst
     in
-   match t with
-   | Variable i ->
-       lst
+    let domain_t =  Some (VAppl (dom_id,[|t|])) in
+    match t with
+    | Variable i ->
+       lst, domain_t
     | VAppl (i, args) when i = imp_id || i = and_id ->
         assert (Array.length args = 2);
-        let lst1 = pres args.(0) nb lst
-        and lst2 = pres args.(1) nb []  in
+        let lst1,_ = pres args.(0) nb lst
+        and lst2,_ = pres args.(1) nb []  in
         List.fold_right
           (fun t lst -> (Term.binary imp_id args.(0) t)::lst)
           lst2
-          lst1
+          lst1,
+        domain_t
     | VAppl (i, args) when i = or_id ->
         assert (Array.length args = 2);
-        let lst1  = pres args.(0) nb lst
-        and lst2  = pres args.(1) nb []
+        let lst1,_  = pres args.(0) nb lst
+        and lst2,_  = pres args.(1) nb []
         and not_t = Term.unary not_id args.(0) in
         List.fold_right
           (fun t lst -> (Term.binary imp_id not_t t)::lst)
           lst2
-          lst1
+          lst1,
+        domain_t
     | VAppl (i,args) ->
         let n,nms,lst1 = preconditions i nb c in
         assert (n = Array.length args);
@@ -836,22 +839,35 @@ let term_preconditions (t:term)  (c:t): term list =
         List.fold_left
           (fun lst t -> (Term.apply t args)::lst)
           lst
-          lst1
+          lst1,
+        domain_t
     | Application (f,args,pr) when pr ->
-        let lst = pres f nb lst in
-        pres_args args lst
+        let lst,dom = pres f nb lst in
+        pres_args args lst,
+        None
     | Application (f,args,pr) ->
         assert (Array.length args = 1);
-        let lst = pres f nb lst in
+        let lst,dom = pres f nb lst in
         let lst = pres_args args lst in
-        Application(VAppl(dom_id,[|f|]),args,true)::lst
+        begin match dom with
+          Some dom ->
+            Application(dom,args,true)::lst
+        | None ->
+            lst
+        end,
+        (*Application(VAppl(dom_id,[|f|]),args,true)::lst,*)
+        domain_t
     | Lam (n,nms,t0,pr) when pr ->
         let t0 = remove_tuple_accessors t0 n nb c in
-        pres_lam n nms t0 lst
+        pres_lam n nms t0 lst,
+        None
     | Lam (n,nms,t0,pr) ->
-        lst
+        let t0 = remove_tuple_accessors t0 n nb c in
+        pres_lam n nms t0 lst,
+        None
     | QExp (n,nms,t0,is_all) ->
-        pres_lam n nms t0 lst
+        pres_lam n nms t0 lst,
+        None
   in
-  let ps = pres t 0 [] in
+  let ps,_ = pres t 0 [] in
   List.rev ps

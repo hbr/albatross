@@ -139,6 +139,41 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
 
 
 
+let is_term_public (t:term) (nbenv:int) (ft:t): bool =
+  let rec check_pub t nb =
+    let check_pub_i i =
+      let i = i - nb in
+      assert (i < count ft);
+      if not (is_feature_public i ft) then
+        raise Not_found
+      else
+        ()
+    and check_args args =
+      Array.iter (fun t -> check_pub t nb) args
+    in
+    match t with
+      Variable i when i < nb ->
+        ()
+    | Variable i ->
+        check_pub_i i
+    | VAppl(i,args) ->
+        check_pub_i i;
+        check_args args;
+    | Application(f,args,_) ->
+        check_pub f nb;
+        check_args args;
+    | Lam(n,nms,t0,_) ->
+        check_pub t0 (1+nb)
+    | QExp(n,nms,t0,_) ->
+        check_pub t0 (n+nb)
+  in
+  try
+    check_pub t nbenv;
+    true
+  with Not_found ->
+    false
+
+
 
 (* removal of tuple accessors:
    We have to find pattern of the form

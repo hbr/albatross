@@ -25,7 +25,6 @@ val is_tracing:         t -> bool
 val verbosity:          t -> int
 val trace_prefix:       t -> string
 val trace_prefix_0:     t -> string
-val prover_strength:    t -> int
 val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
 val set_interface_check: IntSet.t -> t -> unit
@@ -38,7 +37,7 @@ val string_of_term_i: int -> t -> string
 
 val make:      int -> t
 
-val push: entities list withinfo -> t -> t
+val push: entities list withinfo -> return_type -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val pop:          t -> t
 
@@ -51,9 +50,11 @@ val add_axiom:          term -> t -> int
 val add_mp:             int -> int -> bool -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
+val clear_work:         t -> unit
 val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
+val assumptions:        t -> term list
 val discharged:         int  -> t -> term * proof_term
 val add_proved_0:       bool -> int -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> int -> term -> proof_term -> t -> int

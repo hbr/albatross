@@ -246,10 +246,15 @@ let push0 (names: int array) (new_ctxt:bool) (c:Context.t) (at:t): t =
 
 
 
-let push (entlst:entities list withinfo) (at:t): t =
+let push
+    (entlst:entities list withinfo)
+    (rt:return_type)
+    (is_pred:bool)
+    (is_func:bool)
+    (at:t): t =
   let c = context at in
   assert (depth at = Context.depth c);
-  let c = Context.push entlst None true false c in
+  let c = Context.push entlst rt is_pred is_func c in
   let names = Context.local_argnames c in
   push0 names true c at
 
@@ -335,6 +340,15 @@ let discharged_assumptions (i:int) (at:t): int * int array * term =
   done;
   n,nms,!tref
 
+
+let assumptions (at:t): term list =
+  (* The assumptions of the current context *)
+  let cnt0 = count_previous at
+  and lst  = ref [] in
+  for i = cnt0 + at.nreq - 1 downto cnt0 do
+    lst := (local_term i at)::!lst
+  done;
+  !lst
 
 
 

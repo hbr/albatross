@@ -149,6 +149,7 @@ let discharged (pos:int) (pc:PC.t): int * PC.t =
   assert (cnt0 <= PC.count pc);
   let delta = PC.count pc - cnt0 in
   let pos = PC.add_proved_0 false (-1) (-1) t pt delta pc in
+  PC.clear_work pc;
   pos, pc
 
 
@@ -425,8 +426,7 @@ let visit (i:int) (gs:t): unit =
 
 
 
-
-let prove (g:term) (strength:int) (pc:PC.t): int =
+let proof_term (g:term) (pc:PC.t): term * proof_term =
   let pc = PC.push_untyped [||] pc in
   PC.close_assumptions pc;
   let gs = init g pc in
@@ -443,7 +443,7 @@ let prove (g:term) (strength:int) (pc:PC.t): int =
   if not (PC.is_global pc) then
     PC.close pc;
   let rec round (i:int) (start:int): unit =
-    if strength = 0 && 1 < i then
+    if PC.is_interface_check pc && 1 < i then
       raise Not_found;
     if goal_limit () <= start then
       raise (Limit_exceeded (goal_limit ()));
@@ -466,5 +466,22 @@ let prove (g:term) (strength:int) (pc:PC.t): int =
     let g = item 0 gs in
     assert (0 <= g.pos);
     assert (g.pos < PC.count g.ctxt.pc);
-    let pos,_ = discharged g.pos g.ctxt.pc in
-    pos
+    PC.discharged g.pos g.ctxt.pc
+
+
+
+
+let is_provable (g:term) (pc:PC.t): bool =
+  try
+    let _ = proof_term g pc in true
+  with Not_found | Limit_exceeded _ ->
+    false
+
+
+let prove (g:term) (pc:PC.t): unit =
+  let _ = proof_term g pc in ()
+
+
+let prove_and_insert (g:term) (pc:PC.t): int =
+  let t,pt = proof_term g pc in
+  PC.add_proved_0 false (-1) (-1) t pt 0 pc

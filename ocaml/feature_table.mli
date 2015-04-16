@@ -134,6 +134,7 @@ val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
 
 val is_feature_public: int -> t -> bool
+val is_term_public:    term -> int -> t -> bool
 
 val owner: int -> t -> int
 

@@ -84,29 +84,49 @@ let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
 
 
 
-let get_term (ie: info_expression) (pc:Proof_context.t): term =
+let get_boolean_term (ie: info_expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
-  Typer.result_term ie c
+  Typer.boolean_term ie c
 
+let term_preconditions (t:term) (pc:PC.t): term list =
+  let c = PC.context pc in
+  Context.term_preconditions t c
+
+
+let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
+  if PC.is_private pc then
+    let pres = term_preconditions t pc in
+    List.iter
+      (fun t ->
+        try Prover2.prove t pc
+        with
+          Not_found ->
+            error_info info ("Cannot prove precondition " ^ (PC.string_of_term t pc))
+        | Proof.Limit_exceeded limit ->
+            error_info info ("Cannot prove precondition "
+                             ^ (PC.string_of_term t pc)
+                             ^ ", goal limit " ^ (string_of_int limit) ^ " exceeded"))
+      pres
 
 
 let add_assumptions_or_axioms
     (lst:compound) (is_axiom:bool) (pc:Proof_context.t): int list =
-  let res =
-    List.map
-      (fun ie ->
-        let t = get_term ie pc in
-        if is_axiom then
-          Proof_context.add_axiom t pc
-        else
-          Proof_context.add_assumption t pc)
+  List.map
+    (fun ie ->
+      let t = get_boolean_term ie pc in
+      verify_preconditions t ie.i pc;
+      if is_axiom then
+        Proof_context.add_axiom t pc
+      else begin
+        Proof_context.add_assumption t pc
+      end)
     lst
-  in
-  if not is_axiom then Proof_context.close_assumptions pc;
-  res
+
 
 let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
-  let _ = add_assumptions_or_axioms lst false pc in ()
+  let _ = add_assumptions_or_axioms lst false pc in ();
+  PC.close pc
+
 
 let add_axioms (lst:compound) (pc:Proof_context.t): int list =
   add_assumptions_or_axioms lst true pc
@@ -126,13 +146,12 @@ let add_proved
 
 
 let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
-  let strength =
-    if Proof_context.is_interface_check pc then 0
-    else 2
-  in
-  let t = get_term ie pc in
+  let t = get_boolean_term ie pc in
+  verify_preconditions t ie.i pc;
   try
-    Prover2.prove t strength pc
+    let res = Prover2.prove_and_insert t pc in
+    PC.close pc;
+    res
   with Not_found ->
     error_info ie.i "Cannot prove"
   | Limit_exceeded limit ->
@@ -164,7 +183,7 @@ let rec make_proof
     (pc:   Proof_context.t)
     : unit =
   let prove_check_expression (ie:info_expression) (pc:PC.t): unit =
-    let c = Proof_context.context pc in
+    let c = PC.context pc in
     match ie.v with
       Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
         begin
@@ -184,7 +203,7 @@ let rec make_proof
         let _ = prove_basic_expression ie pc in
         ()
   in
-  let pc1 = Proof_context.push entlst pc in
+  let pc1 = Proof_context.push entlst None true false pc in
   let defer = is_deferred kind
   and owner = Proof_context.owner pc1
   and anchor_cls = Proof_context.anchor_class pc1
@@ -194,7 +213,8 @@ let rec make_proof
   add_assumptions rlst pc1;
   List.iter (fun ie -> prove_check_expression ie pc1) clst;
   let pair_lst = prove_ensure elst kind pc1 in
-  add_proved defer owner anchor_cls pair_lst pc
+  add_proved defer owner anchor_cls pair_lst pc;
+  PC.close pc
 
 
 let prove_and_store
@@ -243,7 +263,7 @@ let assertion_list (lst:compound) (context:Context.t): term list =
   List.map (fun e -> Typer.boolean_term e context) lst
 
 
-let result_term (lst:info_expression list) (context:Context.t): term =
+let result_term (lst:info_expression list) (context:Context.t): term * info =
   match lst with
     [] -> assert false
   | [e] -> begin
@@ -251,7 +271,8 @@ let result_term (lst:info_expression list) (context:Context.t): term =
         Binexp (Eqop, ExpResult,def) ->
           Typer.result_term
             (withinfo e.i def)
-            context
+            context,
+          e.i
       | _ ->
           raise Not_found
   end
@@ -285,7 +306,6 @@ let put_function
 
 
 
-
 let analyze_feature
     (fn: feature_name withinfo)
     (entlst: entities list withinfo)
@@ -294,8 +314,8 @@ let analyze_feature
     (bdy: feature_body option)
     (exp: info_expression option)
     (pc: Proof_context.t): unit =
-  let context = Proof_context.context pc in
-  let context = Context.push entlst rt false is_func context in
+  let pc1 = PC.push entlst rt false is_func pc in
+  let context = Proof_context.context pc1 in
   let nms = Context.local_argnames context in
   let body =
     match bdy, exp with
@@ -304,6 +324,7 @@ let analyze_feature
         Feature.Empty
     | None, Some ie ->
         let term = Typer.result_term ie context in
+        verify_preconditions term ie.i pc1;
         (Feature.Spec.make_func_def nms (Some term) []),
         Feature.Empty
     | Some bdy, None ->
@@ -313,16 +334,19 @@ let analyze_feature
               (Feature.Spec.make_func_def nms None []),
               Feature.Builtin
           | Some reqlst, Some Impbuiltin, None ->
-              let pres = assertion_list reqlst context in
+              add_assumptions reqlst pc1;
+              let pres = PC.assumptions pc1 in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Builtin
           | Some reqlst, None, None ->
-              let pres = assertion_list reqlst context in
+              add_assumptions reqlst pc1;
+              let pres = PC.assumptions pc1 in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Empty
           | None, None, Some enslst ->
               (try
-                let term = result_term enslst context in
+                let term,info = result_term enslst context in
+                verify_preconditions term info pc1;
                 (Feature.Spec.make_func_def nms (Some term) []),
                 Feature.Empty
               with Not_found ->
@@ -330,8 +354,10 @@ let analyze_feature
                   "functions not defined with `Result = ...'")
           | Some reqlst, None, Some enslst ->
               (try
-                let term = result_term enslst context in
-                let pres = assertion_list reqlst context in
+                add_assumptions reqlst pc1;
+                let pres = PC.assumptions pc1 in
+                let term,info = result_term enslst context in
+                verify_preconditions term info pc1;
                 (Feature.Spec.make_func_def nms (Some term) pres),
                 Feature.Empty
               with Not_found ->
@@ -341,7 +367,8 @@ let analyze_feature
               (Feature.Spec.make_func_def nms None []),
               Feature.Deferred
           | Some reqlst, Some Impdeferred, None ->
-              let pres = assertion_list reqlst context in
+              add_assumptions reqlst pc1;
+              let pres = PC.assumptions pc1 in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Deferred
           | _ -> not_yet_implemented fn.i

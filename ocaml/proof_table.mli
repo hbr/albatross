@@ -60,7 +60,7 @@ val beta_reduce: int -> term -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
 val make: int -> t
-val push: entities list withinfo -> t -> t
+val push: entities list withinfo -> return_type -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val pop:  t -> t
 
@@ -80,4 +80,5 @@ val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> term array -> t -> unit
 val add_inherited:  term -> int -> int -> int -> t -> unit
 
+val assumptions:  t   -> term list
 val discharged:   int -> t -> term * proof_term
