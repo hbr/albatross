@@ -203,7 +203,7 @@ let rec make_proof
         let _ = prove_basic_expression ie pc in
         ()
   in
-  let pc1 = Proof_context.push entlst None true false pc in
+  let pc1 = Proof_context.push entlst None false false pc in
   let defer = is_deferred kind
   and owner = Proof_context.owner pc1
   and anchor_cls = Proof_context.anchor_class pc1

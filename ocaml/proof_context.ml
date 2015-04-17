@@ -1435,9 +1435,6 @@ let add_proved_0
     add_last_to_work pc;
   if is_global pc then
     add_global defer false owner anchor_cls pc;
-  if is_global pc && owner = -1 then
-    printf "global without owner %s\n" (string_of_term t pc);
-  assert (not (is_global pc) || owner <> -1);
   if is_global pc && owner <> -1 then begin
     let add_assertion idx =
       Class_table.add_assertion idx owner defer ct;
