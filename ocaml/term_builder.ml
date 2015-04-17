@@ -755,8 +755,7 @@ let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
 
 
 
-let complete_lambda (ntvs:int) (is_pred:bool)
-    (tb:t): unit =
+let complete_lambda (ntvs:int) (is_pred:bool) (tb:t): unit =
   assert (tb.tlist <> []);
   let names = Context.local_argnames tb.c
   and c     = Context.pop tb.c in
@@ -1072,11 +1071,11 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
   | _ ->
       ()
 
-(*
+
 exception Illegal_term
 
 let check_term (t:term) (tb:t): t =
-  let rec check t tb =
+  let rec check (t:term) (tb:t): t =
     let nargs   = Context.count_last_arguments tb.c in
     let upgrade_potential_dummy f pr tb =
       match f with
@@ -1088,12 +1087,13 @@ let check_term (t:term) (tb:t): t =
     let lambda n nms t is_pred tb =
       assert (0 < n);
       assert (Array.length nms = n);
+      let nms = [|ST.symbol "$0"|] in
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
       let c = Context.push_untyped_with_gap nms is_func ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
-      and nfgs    = 0 in
-      expect_lambda ntvs nfgs is_pred c tb;
+      in
+      let tb = expect_lambda ntvs is_pred c tb in
       let tb = check t tb in
       begin try
         check_untyped_variables tb
@@ -1101,19 +1101,18 @@ let check_term (t:term) (tb:t): t =
         raise Illegal_term
       end;
       begin try
-        complete_lambda ntvs nms is_pred tb
+        complete_lambda ntvs is_pred tb
       with Not_found -> assert false
       end;
       tb
-    in
-    let qlambda n nms t is_all tb =
+    and qlambda n nms t is_all tb =
       assert (0 < n);
       assert (Array.length nms = n);
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c in
       let c = Context.push_untyped_with_gap nms false ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
-      and nfgs    = 0 in
-      expect_quantified ntvs nfgs c tb;
+      in
+      expect_quantified ntvs c tb;
       let tb = check t tb in
       begin try
         check_untyped_variables tb
@@ -1121,10 +1120,23 @@ let check_term (t:term) (tb:t): t =
         raise Illegal_term
       end;
       begin try
-        complete_quantified ntvs nms is_all tb
-      with Not_found -> assert false
+        complete_quantified ntvs is_all tb
+      with Not_found ->
+        assert false
       end;
       tb
+    and add_lf i =
+      let tvs,s = Context.variable_data i tb.c in
+      begin
+        try add_leaf i tvs s tb
+        with Not_found ->
+          let ct = Context.class_table tb.c in
+          printf "illegal term \"%s\"\n" (string_of_term t tb);
+          printf "  type     %s\n"
+            (Class_table.string_of_complete_signature s tvs ct);
+          printf "  expected %s\n" (complete_signature_string tb);
+          raise Illegal_term
+      end
     in
     match t with
       Variable i ->
@@ -1139,8 +1151,22 @@ let check_term (t:term) (tb:t): t =
             printf "  expected %s\n" (complete_signature_string tb);
             raise Illegal_term
         end
+    | VAppl(i,args) ->
+        let nargs = Array.length args in
+        expect_function nargs tb;
+        let tb   = add_lf i in
+        let tb,_ = Array.fold_left
+            (fun (tb,i) a ->
+              expect_argument i tb;
+              check a tb, i+1)
+            (tb,0)
+            args
+        in
+        complete_function nargs tb;
+        tb
     | Application (f,args,pr) ->
         let nargs = Array.length args in
+        assert (nargs = 1);
         expect_function nargs tb;
         let tb = check f tb in
         let tb,_ = Array.fold_left
@@ -1178,6 +1204,7 @@ let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
   let tb =
     if is_bool then make_boolean c
     else make c in
+  tb.norm <- true;
   try
     let _ = check_term t tb in true
   with Illegal_term ->
@@ -1194,4 +1221,3 @@ let specialize_assertion (t:term) (c:Context.t): term =
     head_term tb
   with Not_found ->
     assert false
-*)
