@@ -700,7 +700,7 @@ let add_feature
     (cidx:int)
     (is_deferred:bool)
     (priv_only: bool)
-    (pub_only)
+    (pub_only:bool)
     (base:bool)
     (ct:t)
     : unit =

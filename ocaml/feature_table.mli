@@ -61,11 +61,9 @@ val false_index:       int
 val not_index:         int
 val and_index:         int
 val or_index:          int
-(*val all_index:         int
-val some_index:        int*)
 val eq_index:          int
+val in_index:          int
 val domain_index:      int
-val ddomain_index:     int
 val tuple_index:       int
 val first_index:       int
 val second_index:      int

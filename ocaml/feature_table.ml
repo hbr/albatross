@@ -55,8 +55,8 @@ let not_index:         int =  2
 let and_index:         int =  3
 let or_index:          int =  4
 let eq_index:          int =  5
-let domain_index:      int =  6
-let ddomain_index:     int =  7
+let in_index:          int =  6
+let domain_index:      int =  7
 let tuple_index:       int =  8
 let first_index:       int =  9
 let second_index:      int = 10
@@ -682,7 +682,8 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
-let add_class_feature (i:int) (priv_only:bool) (pub_only) (base:bool) (ft:t): unit =
+let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t)
+    : unit =
   (* Add the feature [i] as a class feature to the corresponding owner
      class and to the anchor class. *)
   assert (i < count ft);
@@ -844,7 +845,8 @@ let base_table (verbosity:int) : t =
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
-  let p_tp2 = VAppl (Class_table.predicate_index+2, [|a_tp|])
+  let p_tp1 = VAppl (Class_table.predicate_index+1, [|g_tp|])
+  and p_tp2 = VAppl (Class_table.predicate_index+2, [|a_tp|])
   and f_tp  = VAppl (Class_table.function_index+2, [|a_tp;b_tp|])
   and tup_tp= VAppl (Class_table.tuple_index+2, [|a_tp;b_tp|])
   and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None []
@@ -888,13 +890,13 @@ let base_table (verbosity:int) : t =
     "any" Class_table.any_index (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 
+  add_base (* in *)
+    "predicate" Class_table.predicate_index (FNoperator Inop)
+    [|any1|] [|g_tp;p_tp1|] bool1 false false (spec_none 2) ft;
+
   add_base (* domain *)
     "function" Class_table.function_index (FNname ST.domain)
-  [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
-
-  add_base (* dummy domain *)
-    "function" Class_table.function_index (FNname (ST.symbol "@domain"))
-  [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
+    [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* tuple *)
     "tuple" Class_table.tuple_index (FNname ST.tuple)
