@@ -31,7 +31,7 @@ type t = {mutable tlist: (term*Tvars.t*Sign.t) list; (* term, count_all, sign *)
 
 let class_table (tb:t): Class_table.t = Context.class_table tb.c
 
-let signature (tb:t): Sign.t = Sign.substitute tb.sign tb.tvars
+let signature (tb:t): Sign.t = tb.sign
 
 let count_local (tb:t): int  = TVars_sub.count_local tb.tvars
 
@@ -138,30 +138,6 @@ let string_of_tvs_sub (tb:t): string =
 
 
 
-let context_signature (tb:t): Sign.t =
-  (* The signature of the context transformed into the environment of the term
-     builder [tb].
-
-     context:           loc          +         fgs
-
-     builder:    bloc + loc  + glob  +  garb + fgs
-
-   *)
-  let s = Context.signature tb.c
-  and tvs = TVars_sub.tvars (Context.type_variables tb.c) in
-  let nlocs  = count_local tb
-  and nglobs = count_global tb
-  and ngarb  = count_fgs tb - Tvars.count_fgs tvs
-  in
-  assert (ngarb = 0); (* remove the first time not valid *)
-  let nlocs_delta = nlocs - Tvars.count_local tvs in
-  assert (0 <= nlocs_delta);
-  assert (Tvars.count_global tvs = 0);
-  assert (Tvars.count_fgs tvs = count_fgs tb);
-  let s = Sign.up nlocs_delta s in
-  Sign.up_from (nglobs+ngarb) nlocs s
-
-
 let upgrade_signature (s:Sign.t) (is_pred:bool) (tb:t): Sign.t =
   (* The signature [s] upgraded to a predicate or a function. *)
   let ntvs = count_all tb  in
@@ -265,13 +241,12 @@ let function_index (tb:t): int =
   count_all tb + Class_table.function_index
 
 
-let argument_type (i:int) (tb:t): type_term =
-  (* The type of the argument [i] transformed into the term builder
+let transformed_type (tp:term) (tb:t): type_term =
+  (* The type 'tp' valid in the context of 'tb' transformed into the term builder
 
      tvs context:         loc      +              fgs
      builder:      bloc + loc  + glob  +   garb + fgs
   *)
-  assert (i < Context.count_arguments tb.c);
   let ntvs_ctxt = Context.count_type_variables tb.c
   and ntvs_loc  = count_local tb
   and nfgs_ctxt = Context.count_formal_generics tb.c
@@ -280,9 +255,36 @@ let argument_type (i:int) (tb:t): type_term =
   in
   assert (ntvs_ctxt <= ntvs_loc);
   assert (nfgs_ctxt <= nfgs);
-  let tp = Context.argument_type i tb.c in
   let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_loc tp in
   Term.up (ntvs_loc-ntvs_ctxt) tp
+
+
+let substituted_type (tp:term) (tb:t): type_term =
+  (* The type 'tp' valid in the in the term builder 'tb' with all substitutions done.
+   *)
+  TVars_sub.sub_star tp tb.tvars
+
+
+let argument_type (i:int) (tb:t): type_term =
+  assert (i < Context.count_arguments tb.c);
+  transformed_type (Context.argument_type i tb.c) tb
+
+
+let context_signature (tb:t): Sign.t =
+  (* The signature of the context transformed into the environment of the term
+     builder [tb].
+
+     context:           loc          +         fgs
+
+     builder:    bloc + loc  + glob  +  garb + fgs
+   *)
+  let s = Context.signature tb.c in
+  Sign.map (fun t -> transformed_type t tb) s
+
+
+let substituted_context_signature (tb:t): Sign.t =
+  let s = Context.signature tb.c in
+  Sign.map (fun t -> substituted_type (transformed_type t tb) tb) s
 
 
 let to_tuple (args:type_term array) (tb:t): type_term =
@@ -555,6 +557,7 @@ let make_boolean (c:Context.t): t =
    sign  = Sign.make_const bool;
    norm  = false;
    c     = c}
+
 
 
 let expect_boolean (tb:t): unit =
@@ -907,8 +910,10 @@ let check_untyped_variables (tb:t): unit =
       Variable j when j < ntvs_loc -> begin
         match TVars_sub.get_star j tb.tvars with
           VAppl(idx,_) when idx = dum_idx ->
+            printf "incompled type %d because of dummy\n" i;
             raise (Incomplete_type i)
         | Variable k when k < ntvs_loc ->
+            printf "incompled type %d because of local\n" i;
             raise (Incomplete_type i)
         | _ -> ()
       end
@@ -947,6 +952,8 @@ let specialize_term_0 (tb:t): unit =
         let nfgs = Feature_table.count_fgs i ft in
         try
           let anchor = Feature_table.anchor i ft in
+          if anchor = -1 then
+            raise Not_found;
           assert (anchor < nfgs);
           let tv  = Tvars.count_local tvs + nglob + anchor in
           assert (tv < Tvars.count_all tvs);
@@ -956,6 +963,15 @@ let specialize_term_0 (tb:t): unit =
             nglob+nfgs, nargs + i_var
         with Not_found ->
           nglob+nfgs, i+nargs
+    and upd_args nglob args =
+      let nglob,arglst = Array.fold_left
+          (fun (nglob,lst) t ->
+            let nglob,t = upd t nargs nglob in
+            nglob, t::lst)
+          (nglob,[])
+          args
+      in
+      nglob, Array.of_list (List.rev arglst)
     in
     match t with
       Variable i when i < nargs ->
@@ -965,25 +981,11 @@ let specialize_term_0 (tb:t): unit =
         nglob, Variable i
     | VAppl (i,args) ->
         let nglob, i = var i in
-        let nglob,arglst = Array.fold_left
-            (fun (nglob,lst) t ->
-              let nglob,t = upd t nargs nglob in
-              nglob, t::lst)
-            (nglob,[])
-            args
-        in
-        let args = Array.of_list (List.rev arglst) in
+        let nglob, args = upd_args nglob args in
         nglob, VAppl (i,args)
     | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
-        let nglob,arglst = Array.fold_left
-            (fun (nglob,lst) t ->
-              let nglob,t = upd t nargs nglob in
-              nglob, t::lst)
-            (nglob,[])
-            args
-        in
-        let args = Array.of_list (List.rev arglst) in
+        let nglob, args = upd_args nglob args in
         nglob, Application (f,args,pr)
     | Lam (n,nms,t,pr) ->
         let nglob, t = upd t (1 + nargs) (n+nglob) in
@@ -1070,6 +1072,26 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
       end
   | _ ->
       ()
+
+
+
+let upgrade_required (pr:bool) (tb:t): unit =
+  assert (Sign.arity tb.sign = 1);
+  assert (Sign.has_result tb.sign);
+  let res  = Sign.result tb.sign
+  and arg  = Sign.arg_type 0 tb.sign
+  and nall = count_all tb in
+  assert (not pr || res = boolean_type tb);
+  let tp =
+    if pr then
+      let pred_id = nall + Class_table.predicate_index in
+      VAppl(pred_id, [|arg|])
+    else
+      let fun_id = nall + Class_table.function_index in
+      VAppl(fun_id, [|arg;res|])
+  in
+  tb.sign <- Sign.make_const tp
+
 
 
 exception Illegal_term
@@ -1168,6 +1190,9 @@ let check_term (t:term) (tb:t): t =
         let nargs = Array.length args in
         assert (nargs = 1);
         expect_function nargs tb;
+        let tb = anys_added 1 tb in
+        unify (Variable 0) (Variable (count tb - 1)) tb;
+        upgrade_required pr tb;
         let tb = check f tb in
         let tb,_ = Array.fold_left
             (fun (tb,i) a ->
@@ -1198,13 +1223,15 @@ let check_term (t:term) (tb:t): t =
   tb
 
 
+let set_normalized (tb:t): unit =
+  tb.norm <- true
 
 
 let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
   let tb =
     if is_bool then make_boolean c
     else make c in
-  tb.norm <- true;
+  set_normalized tb;
   try
     let _ = check_term t tb in true
   with Illegal_term ->
@@ -1212,12 +1239,42 @@ let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
 
 
 
-let specialize_assertion (t:term) (c:Context.t): term =
-  (* Calculate the most specific version of the assertion [t] in the context [c] *)
-  let tb = make_boolean c in
-  try
-    let tb = check_term t tb in
-    specialize_term tb;
-    head_term tb
-  with Not_found ->
-    assert false
+let is_dummy (tp:term) (tb:t): bool =
+  match tp with
+    VAppl(i,args) ->
+      let ntvs_all = count_all tb in
+      let dum_id   = ntvs_all + Class_table.dummy_index in
+      i = dum_id
+  | _ ->
+      false
+
+
+
+let updated_context (tb:t): Context.t =
+  (* The context of 'tb' where all untyped variables are updated with their proper
+     type. *)
+  let used_tvs_below (below:int) (tp:term) (set:IntSet.t): IntSet.t =
+    Term.fold
+      (fun set i -> if i < below then IntSet.add i set else set)
+      set
+      tp
+  in
+  let s = Context.signature tb.c in
+  let s = Sign.map
+      (fun tp ->
+        let tp = transformed_type tp tb in
+        let tp = TVars_sub.sub_star tp tb.tvars in
+        assert (not (is_dummy tp tb));
+        tp)
+      s in
+  let ntvs  = count tb in
+  let tvset = Sign.fold (fun set tp -> used_tvs_below ntvs tp set) IntSet.empty s
+  in
+  let _, tvs, s =
+    IntSet.fold
+      (fun i (i0,tvs,s) ->
+        assert false)
+      tvset
+      (0, tvars tb, s)
+  in
+  assert false

@@ -521,9 +521,8 @@ module Result_type: sig
   val to_ghost:     t -> t
   val up_from:      int -> int -> t -> t
   val up:           int -> t -> t
-  val sub:          t -> type_term array -> int -> t
-  val involved_classes: Tvars.t -> t -> IntSet.t
-  val transform:    (type_term->type_term) -> t -> t
+  val map:    (type_term->type_term) -> t -> t
+  val fold:   ('a->type_term->'a) -> 'a -> t -> 'a
 end = struct
 
   type t = (type_term * bool * bool) option
@@ -562,30 +561,25 @@ end = struct
       None -> assert false
     | Some (tp,proc,ghost) -> Some (tp,proc,true)
 
-  let up_from (n:int) (start:int) (rt:t): t =
-    match rt with
-      None -> None
-    | Some (tp,proc,ghost) -> Some (Term.upbound n start tp, proc, ghost)
 
-  let up (n:int) (rt:t): t = up_from n 0 rt
-
-  let sub (rt:t) (sub_arr:type_term array) (ntvs:int): t =
-    match rt with
-      None -> None
-    | Some (tp,proc,ghost) -> Some(Term.sub tp sub_arr ntvs,proc,ghost)
-
-  let involved_classes (tvs:Tvars.t) (rt:t): IntSet.t =
-    match rt with
-      None -> IntSet.empty
-    | Some (tp,_,_)  ->
-        Tvars.involved_classes tp tvs IntSet.empty
-
-  let transform (f:type_term->type_term) (rt:t): t =
+  let map (f:type_term->type_term) (rt:t): t =
     match rt with
       None -> None
     | Some (tp,proc,ghost) ->
         Some(f tp, proc, ghost)
-end
+
+  let fold (f:'a->type_term->'a) (a:'a) (rt:t): 'a =
+    match rt with
+      None -> a
+    | Some (t,_,_) ->
+        f a t
+
+  let up_from (n:int) (start:int) (rt:t): t =
+    map (fun tp -> Term.upbound n start tp) rt
+
+  let up (n:int) (rt:t): t = up_from n 0 rt
+
+end (* Result_type *)
 
 
 
@@ -615,15 +609,15 @@ module Sign: sig
   val is_procedure:t -> bool
   val is_ghost:    t -> bool
   val to_ghost:    t -> t
+  val map:   (type_term->type_term) -> t -> t
+  val fold:        ('a -> type_term -> 'a) -> 'a -> t -> 'a
   val up_from:     int -> int -> t -> t
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
   val to_function: int -> t -> t
-  val sub:         t -> type_term array -> int -> t
-  val substitute:  t -> TVars_sub.t -> t
   val involved_classes_arguments: Tvars.t -> t -> IntSet.t
   val involved_classes: Tvars.t -> t -> IntSet.t
-  val transform:   (type_term->type_term) -> t -> t
+  val anchor: Tvars.t -> t -> int * int
 end = struct
 
   type t = {args: type_term array;
@@ -700,11 +694,19 @@ end = struct
     in
     argsstr ^ retstr
 
+  let map (f:type_term->type_term) (s:t): t =
+    let args = Array.map f s.args
+    and rt   = Result_type.map f s.rt in
+    make args rt
+
+  let fold (f:'a->type_term->'a) (a:'a) (s:t): 'a =
+    let a = Array.fold_left f a s.args in
+    Result_type.fold f a s.rt
+
   let up_from (n:int) (start:int) (s:t): t =
     (** Shift all types up by [n] starting from [start].
      *)
-    {args = Array.map (fun t -> Term.upbound n start t) s.args;
-     rt   = Result_type.up_from n start s.rt}
+    map (fun t -> Term.upbound n start t) s
 
 
   let up (n:int) (s:t): t =
@@ -722,7 +724,6 @@ end = struct
     up n2 (up_from n1 start s)
 
 
-
   let to_function (nargs:int) (s:t): t =
     (** Convert the constant signature [s] into a function signature with
         [nargs] arguments. The [nargs] argument types are fresh type variables.
@@ -730,16 +731,6 @@ end = struct
     assert (has_result s);
     assert (is_constant s);
     {s with args   = Array.init nargs (fun i -> Variable i)}
-
-  let sub (s:t) (sub_arr:type_term array) (ntvs:int): t =
-    let args = Array.map (fun tp -> Term.sub tp sub_arr ntvs) s.args
-    and rt   = Result_type.sub s.rt sub_arr ntvs in
-    make args rt
-
-  let substitute (s:t) (tvars_sub:TVars_sub.t): t =
-    let args = TVars_sub.args tvars_sub in
-    let ntvs = Array.length args in
-    sub s args ntvs
 
 
   let involved_classes_arguments (tvs:Tvars.t) (s:t): IntSet.t =
@@ -749,16 +740,52 @@ end = struct
       IntSet.empty
       s.args
 
-  let involved_classes (tvs:Tvars.t) (s:t): IntSet.t =
-    let set = Result_type.involved_classes tvs s.rt in
-    Array.fold_left
-      (fun set tp ->
-        Tvars.involved_classes tp tvs set)
-      set
-      s.args
 
-  let transform (f:type_term->type_term) (s:t): t =
-    let args = Array.map f s.args
-    and rt   = Result_type.transform f s.rt in
-    make args rt
+  let involved_classes (tvs:Tvars.t) (s:t): IntSet.t =
+    fold (fun set tp -> Tvars.involved_classes tp tvs set) IntSet.empty s
+
+
+  let anchor (tvs:Tvars.t) (s:t): int * int =
+    (* The anchor class of the signature [s] *)
+    let nlocs = Tvars.count_local tvs
+    and nall  = Tvars.count_all tvs
+    in
+    let used =
+      fold
+        (fun set t ->
+          match t with
+            Variable i when nlocs <= i && i < nall ->
+              IntSet.add i set
+          | _ ->
+              set)
+        IntSet.empty
+        s
+    in
+    if IntSet.cardinal used <> 1 then
+      -1, -1
+    else
+      let tv = IntSet.min_elt used
+      and involved =
+        fold
+          (fun set t ->
+            (Term.fold
+               (fun set i ->
+                 if i < nlocs then
+                   assert false
+                 else if nall <= i then
+                   set
+                 else
+                   IntSet.add i set)
+               set
+               t))
+          IntSet.empty
+          s
+      in
+      if IntSet.cardinal involved <> 1 || IntSet.min_elt involved <> tv then
+        -1, -1
+      else begin
+        assert (nlocs <= tv);
+        assert (tv < nall);
+        tv, Tvars.principal_class (Variable tv) tvs
+      end
 end (* Sign *)

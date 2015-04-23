@@ -38,6 +38,10 @@ val count_local:      t -> int
 val count:            t -> int
     (** The number of type variables with and without concept. *)
 
+val tvars:            t -> Tvars.t
+
+val substituted_context_signature: t -> Sign.t
+
 val make:             Context.t -> t
     (** [make c] makes a term builder for the contexct [c] where the expected
     type is the result type of the context [c]. *)
@@ -121,10 +125,10 @@ val result:            t -> term * TVars_sub.t
 val has_term:   t -> bool
 val head_term:  t -> term
 
+val set_normalized: t -> unit
+
 exception Illegal_term
 
 val check_term: term -> t -> t
 
 val is_valid: term -> bool -> Context.t -> bool
-
-val specialize_assertion: term -> Context.t -> term

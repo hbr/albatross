@@ -651,7 +651,6 @@ end = struct
   let unary (unid:int) (t:term): term =
     let args = [| t |] in
     VAppl (unid, args)
-    (*Application (Variable unid, args, false)*)
 
 
   let unary_split (t:term) (unid:int): term =
@@ -660,27 +659,16 @@ end = struct
         assert (Array.length args = 1);
         args.(0)
     | _ -> raise Not_found
-    (*match t with
-      Application (f,args,_) ->
-        let nargs = Array.length args in
-        (match f with
-          Variable i when i=unid ->
-            if nargs=1 then args.(0)
-            else assert false
-        | _ -> raise Not_found)
-    | _ -> raise Not_found*)
 
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| left; right |] in
     VAppl (binid, args)
-    (*Application (Variable binid, args,false)*)
 
 
   let binary_split_0 (t:term): int * term * term =
     match t with
       VAppl(i,args) when Array.length args = 2 ->
-      (*Application(Variable i,args,_) when Array.length args = 2 ->*)
         i, args.(0), args.(1)
     | _ ->
         raise Not_found

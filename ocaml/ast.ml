@@ -136,11 +136,10 @@ let add_axioms (lst:compound) (pc:Proof_context.t): int list =
 let add_proved
     (defer: bool)
     (owner: int)
-    (anchor_cls: int)
     (lst: (term*proof_term) list)
     (pc:Proof_context.t)
     : unit =
-  Proof_context.add_proved_list defer owner anchor_cls lst pc
+  Proof_context.add_proved_list defer owner lst pc
 
 
 
@@ -206,14 +205,13 @@ let rec make_proof
   let pc1 = Proof_context.push entlst None false false pc in
   let defer = is_deferred kind
   and owner = Proof_context.owner pc1
-  and anchor_cls = Proof_context.anchor_class pc1
   in
   if defer then
     Proof_context.check_deferred pc1;  (* owner class has to be deferred *)
   add_assumptions rlst pc1;
   List.iter (fun ie -> prove_check_expression ie pc1) clst;
   let pair_lst = prove_ensure elst kind pc1 in
-  add_proved defer owner anchor_cls pair_lst pc;
+  add_proved defer owner pair_lst pc;
   PC.close pc
 
 

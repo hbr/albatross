@@ -10,6 +10,7 @@ type t
 
 val make: term ->  Context.t -> t
 
+val anchor_class:         t -> int
 val nbenv:                t -> int
 val is_schematic:         t -> bool
 val is_forward:           t -> bool

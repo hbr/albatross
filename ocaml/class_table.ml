@@ -834,11 +834,12 @@ let anchor_formal_generics (tvs:Tvars.t) (s:Sign.t) (ct:t): int array =
 
 
 let anchor_class (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
-  let anchfgs = anchor_formal_generics tvs s ct in
+  let _,cls = Sign.anchor tvs s in cls
+  (*let anchfgs = anchor_formal_generics tvs s ct in
   if Array.length anchfgs = 1 then
     Tvars.principal_class (Variable anchfgs.(0)) tvs
   else
-    -1
+    -1*)
 
 
 

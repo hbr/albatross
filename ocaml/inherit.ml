@@ -196,6 +196,7 @@ let inherit_features
   (* Inherit in the class [cls] the features from the parent [par[par_args]] where
      [ghost] indicates if the inheritance relation is a ghost inheritance. *)
   let ct = Proof_context.class_table pc
+  and ft = Proof_context.feature_table pc
   in
   let defs = List.rev (Class_table.deferred_features par ct) in
   List.iter (fun i -> inherit_deferred i cls ghost info pc) defs;

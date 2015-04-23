@@ -450,7 +450,7 @@ let push_untyped_with_gap
 
 let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
-  push entlst None true false c
+  push entlst None false false c
 
 
 

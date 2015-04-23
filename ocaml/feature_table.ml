@@ -29,6 +29,7 @@ type descriptor = {
     mutable mdl: int;             (* -1: base feature, module not yet assigned*)
     cls:         int;             (* owner class *)
     anchor_cls:  int;
+    anchor_fg:   int;
     fname:       feature_name;
     impl:        Feature.implementation;
     tvs:         Tvars.t;         (* only formal generics *)
@@ -575,6 +576,11 @@ let count_fgs (i:int) (ft:t): int =
 
 let anchor (i:int) (ft:t): int =
   let desc = descriptor i ft in
+  (*let a = desc.anchor_fg in
+  if a = -1 then
+    raise Not_found
+  else
+    a*) (*anchor*)
   if Array.length desc.anchored = 1 then
     desc.anchored.(0)
   else
@@ -689,6 +695,7 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t
   assert (i < count ft);
   assert (not (priv_only && pub_only));
   let desc  = descriptor i ft in
+  let _, anchor = Sign.anchor desc.tvs desc.sign in
   assert (0 <= desc.cls);
   Class_table.add_feature
     (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
@@ -698,10 +705,13 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t
     pub_only
     base
     ft.ct;
-  if desc.anchor_cls <> -1 && desc.anchor_cls <> desc.cls then begin
+  if anchor <> -1 && anchor <> desc.cls then begin
+    (*printf "add feature %s to anchor class %s\n"
+      (string_of_signature i ft)
+      (Class_table.class_name anchor ft.ct);*)
     Class_table.add_feature
       (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
-      desc.anchor_cls
+      anchor
       (is_desc_deferred desc)
       priv_only
       pub_only
@@ -805,6 +815,7 @@ let add_base
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
   let anchored = Class_table.anchored tvs cls ft.ct in
+  let anchor_fg, anchor_cls = Sign.anchor tvs sign in
   let lst =
     try IntMap.find mdl_nme ft.base
     with Not_found ->
@@ -815,7 +826,8 @@ let add_base
     mdl = -1;
     fname    = fn;
     cls      = cls;
-    anchor_cls = Class_table.anchor_class tvs sign ft.ct;
+    anchor_cls = anchor_cls;
+    anchor_fg  = anchor_fg;
     impl     =
     if Feature.Spec.has_definition spec then Feature.Empty
     else if defer then Feature.Deferred
@@ -1388,7 +1400,8 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   let desc = descriptor i ft in
   let ctp,tvs = Class_table.class_type cls ft.ct
-  and anchor  = desc.anchored.(0) in
+  and anchor  = anchor i ft (*desc.anchored.(0)*) in
+  assert (anchor <> -1);
   let ntvs    = Tvars.count_all tvs
   and ntvs_i  = Tvars.count_all desc.tvs
   in
@@ -1406,6 +1419,7 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
     | Some t ->
         let nargs = Array.length desc.argnames in
         Some (variant_term t nargs desc.cls cls ft)
+        (*Some (variant_term t nargs desc.anchor_cls cls ft)*) (*anchor*)
   in
   let spec = Feature.Spec.make_func_def desc.argnames def_opt [] in
   let cnt = count ft
@@ -1415,14 +1429,16 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   and bdesc_opt =
     if is_public ft then Some (standard_bdesc cnt cls spec nargs ft)
     else None
-  and sign = Sign.transform f_tp desc.sign
+  and sign = Sign.map f_tp desc.sign
   in
   let sign = if ghost then Sign.to_ghost sign else sign in
+  let anchor_fg, anchor_cls = Sign.anchor tvs1 sign in
   Seq.push
     {mdl       = Class_table.current_module ft.ct;
      fname     = desc.fname;
      cls       = cls;
-     anchor_cls = Class_table.anchor_class tvs1 sign ft.ct;
+     anchor_cls = anchor_cls;
+     anchor_fg  = anchor_fg;
      impl      = desc.impl;
      tvs       = tvs1;
      anchored  = Array.make 1 (anchor+ntvs);
@@ -1460,7 +1476,7 @@ let add_function
   end;
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct
-  and anchor_cls = Class_table.anchor_class tvs sign ft.ct in
+  and anchor_fg, anchor_cls = Sign.anchor tvs sign in
   let anchored = Class_table.anchored tvs cls ft.ct in
   let nanchors = Array.length anchored in
   begin match impl with
@@ -1479,6 +1495,7 @@ let add_function
     {mdl      = mdl;
      cls      = cls;
      anchor_cls = anchor_cls;
+     anchor_fg  = anchor_fg;
      fname    = fn.v;
      impl     = impl;
      tvs      = tvs;

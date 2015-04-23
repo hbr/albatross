@@ -1348,7 +1348,7 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
   let lst =
     List.fold_left
       (fun lst (idx,sub) ->
-        if IntSet.mem idx blacklst then
+        if IntSet.mem idx blacklst || not (is_visible idx pc) then
           lst
         else if Term_sub.is_empty sub then
           idx :: lst
@@ -1420,7 +1420,7 @@ let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
 
 
 let add_proved_0
-    (defer:bool) (owner:int) (anchor_cls:int)
+    (defer:bool) (owner:int)
     (t:term) (pterm:proof_term) (delta:int) (pc:t)
     : int =
   let cnt = count pc
@@ -1433,6 +1433,7 @@ let add_proved_0
   if not dup || is_glob then (* duplicates of globals must be added to work,
                                 because globals are not closed *)
     add_last_to_work pc;
+  let anchor_cls = RD.anchor_class (rule_data idx pc) in
   if is_global pc then
     add_global defer false owner anchor_cls pc;
   if is_global pc && owner <> -1 then begin
@@ -1460,12 +1461,11 @@ let add_proved_0
 let add_proved
     (defer:bool)
     (owner:int)
-    (anchor_cls:int)
     (t:term)
     (pterm:proof_term)
     (pc:t)
     : int =
-  add_proved_0 defer owner anchor_cls t pterm 0 pc
+  add_proved_0 defer owner t pterm 0 pc
 
 
 
@@ -1473,7 +1473,6 @@ let add_proved
 let add_proved_list
     (defer:bool)
     (owner:int)
-    (anchor_cls:int)
     (lst: (term*proof_term) list)
     (pc:t)
     : unit =
@@ -1481,7 +1480,7 @@ let add_proved_list
   List.iter
     (fun (t,pt) ->
       let delta = count pc - cnt in
-      let _ = add_proved_0 defer owner anchor_cls t pt delta pc in ())
+      let _ = add_proved_0 defer owner t pt delta pc in ())
     lst
 
 

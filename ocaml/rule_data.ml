@@ -5,6 +5,7 @@
 *)
 
 open Term
+open Signature
 open Container
 
 
@@ -23,9 +24,12 @@ type t = {
     premises:  (int * bool * term) list;
               (* gp1, cons,  term *)
     target:   term;
-    eq:        (int * term * term) option (* equality id, left, right *)
+    eq:        (int * term * term) option; (* equality id, left, right *)
+    anchor:    int;   (* anchor class *)
   }
 
+
+let anchor_class (rd:t): int = rd.anchor
 
 let nbenv (rd:t): int = rd.nbenv
 
@@ -181,28 +185,43 @@ let is_backward_blocked
 
 
 
-let split_term (t:term) (nbenv:int) (ft:Feature_table.t)
-    : int * int array  * (int*bool*term) list * term =
-  (* nargs,nms,simpl_fwd,premises,target
-     premise: gp1,cons,term *)
-  let nargs,nms,t =
-    try Term.all_quantifier_split t
-    with Not_found -> 0,[||], t
-  in
+let split_term (t:term) (nargs:int) (nbenv:int): (int*bool*term) list * term =
   let imp_id = nbenv + nargs + Feature_table.implication_index
   in
   let ps, tgt = Term.split_implication_chain t imp_id
   in
   let ps = List.rev_map (fun p -> Term.greatestp1_arg p nargs, true,p) ps
   in
-  nargs, nms, ps, tgt
+  ps, tgt
 
 
+let get_anchor_class (nargs:int) (nms:int array) (t:term) (c:Context.t): int =
+  if not (Context.is_global c) || nargs = 0 then
+    -1
+  else begin
+    assert (nargs = Array.length nms);
+    let c1 = Context.push_untyped nms c in
+    let tb = Term_builder.make_boolean c1 in
+    Term_builder.set_normalized tb;
+    try
+      let tb  = Term_builder.check_term t tb in
+      let s   = Term_builder.substituted_context_signature tb
+      and tvs = Term_builder.tvars tb in
+      let _,cls = Sign.anchor tvs s in cls
+    with Term_builder.Illegal_term ->
+      Printf.printf "illegal term %s\n"
+        (Context.string_of_term (QExp (nargs,nms,t,true)) true 0 c);
+      assert false
+  end
 
 let make (t:term) (c:Context.t): t =
-  let nbenv = Context.count_arguments c
-  and ft    = Context.feature_table c in
-  let nargs, nms, ps, tgt = split_term t nbenv ft
+  let nargs,nms,t0 =
+    try Term.all_quantifier_split t
+    with Not_found -> 0,[||], t
+  in
+  let anch_cls = get_anchor_class nargs nms t0 c in
+  let nbenv = Context.count_arguments c in
+  let ps, tgt = split_term t0 nargs nbenv
   in
   let rec nbwdfun n gp1 ps set =
     assert (IntSet.cardinal set <= nargs - gp1);
@@ -245,7 +264,8 @@ let make (t:term) (c:Context.t): t =
              nds_dropped = 0;
              premises  = ps;
              target    = tgt;
-             eq        = eq}
+             eq        = eq;
+             anchor    = anch_cls}
   in
   assert (term rd nbenv = t);
   rd
