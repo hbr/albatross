@@ -982,7 +982,14 @@ let specialize_term_0 (tb:t): unit =
     | VAppl (i,args) ->
         let nglob, i = var i in
         let nglob, args = upd_args nglob args in
-        nglob, VAppl (i,args)
+        let t =
+          if i = nargs + Feature_table.in_index then begin
+            assert (Array.length args = 2);
+            Application (args.(1), [|args.(0)|], true)
+          end else
+            VAppl (i,args)
+        in
+        nglob, t
     | Application (f,args,pr) ->
         let nglob,f = upd f nargs nglob in
         let nglob, args = upd_args nglob args in
