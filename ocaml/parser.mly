@@ -173,11 +173,12 @@ let predicate_of_expression (info:info) (e:expression): expression =
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
                    LE        LT        GE      GT
+                   KWin      NOTIN
 /* 40 */ %left     BAR       DBAR
 /* 45 */ %left     PLUS      MINUS
 /* 50 */ %left     TIMES     DIVIDE
 /* 55 */ %right    CARET     DCOLON
-/* 60 */ %left     OPERATOR  KWin      NOTIN
+/* 60 */ %left     OPERATOR
 /* 61 */ %right    ROPERATOR
 /* 65 */ %nonassoc KWnot     KWold     QMARK
 /* 66 */ %left     DOT

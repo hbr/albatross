@@ -271,6 +271,8 @@ let operator_data op =
   | LEop      -> "<=",  35,  Nonassoc
   | GTop      -> ">",   35,  Nonassoc
   | GEop      -> ">=",  35,  Nonassoc
+  | Inop      -> "in",  35,  Nonassoc
+  | Notinop   -> "/in", 35,  Nonassoc
   | Andop     -> "and", 25,  Left
   | Orop      -> "or",  25,  Left
   | Oldop     -> "old", 65,  Nonassoc
@@ -282,8 +284,6 @@ let operator_data op =
   | Bracketop -> "[]",  1000, Nonassoc
   | DArrowop  -> "==>", 20,  Right
   | DColonop  -> "::",  55,  Right
-  | Inop      -> "in",  60,  Nonassoc
-  | Notinop   -> "/in", 60, Nonassoc
   | Allop     -> "all",  8,  Nonassoc
   | Someop    -> "some", 8, Nonassoc
   | Freeop  i -> ST.string i, 60,  Left
