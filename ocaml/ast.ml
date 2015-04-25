@@ -378,6 +378,8 @@ let analyze_feature
   and sign     = Context.signature context
   and tvs      = Context.tvs context
   in
+  if Tvars.count tvs > 0 then
+    not_yet_implemented entlst.i "Type inference for named functions";
   put_function fn tvs argnames sign body pc
 
 
