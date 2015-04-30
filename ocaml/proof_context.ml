@@ -1072,17 +1072,11 @@ let push
     (is_pred:bool)
     (is_func:bool)
     (pc:t): t =
-  (*close pc;*)
-  if has_work pc then print_work pc;
-  assert (not (has_work pc));
   let base = Proof_table.push entlst rt is_pred is_func pc.base in
   push0 base pc
 
 
 let push_untyped (names:int array) (pc:t): t =
-  (*close pc;*)
-  if has_work pc then print_work pc;
-  assert (not (has_work pc));
   let base = Proof_table.push_untyped names pc.base in
   push0 base pc
 
