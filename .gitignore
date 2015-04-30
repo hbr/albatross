@@ -1,0 +1,16 @@
+_build
+_draft
+doc
+*.native
+*.byte
+*.d.native
+*.p.byte
+*.docdir
+*.odocl
+*~
+\#*
+.\#*
+todo.md
+.emacs.*
+ocaml/makefile
+ocaml/sha1.ml
