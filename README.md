@@ -17,6 +17,9 @@ compiler. The OCaml compiler is available at no cost through
 [caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
 platforms.
 
+
+Compile the Albatross compiler with the commands:
+
     cd path/to/albatross/ocaml
 
     ocamlbuild -lib unix alba.native
@@ -35,14 +38,13 @@ have to compile it.
 
     alba compile
 
-A minimal version of the basic library is in
-`albatross/library/alba.base.minimal`. You can compile it in the same manner
-as the basic library.
+Set the environment variable `ALBA_LIB_PATH` to `path/to/albatross/library`
+(e.g. in the bash shell `export ALBA_LIB_PATH=/path/to/albatross/library`)
+and the compiler will find the libraries automatically.
 
-If you set the environment variable `ALBA_LIB_PATH` to
-`path/to/albatross/library` (e.g. in the bash shell `export
-ALBA_LIB_PATH=/path/to/albatross/library`) then the compiler will find the
-libraries automatically.
+For the emacs editor there is an albatross mode which does syntax
+highlighting. The file `albatross-mode.el` can be found in the directory
+`misc`. The file contains instructions to activate the mode in emacs.
 
 
 
