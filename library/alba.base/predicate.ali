@@ -1,0 +1,140 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+
+use any end
+
+G: ANY
+
+immutable class PREDICATE[G] end
+
+(in)  (a:G, p:G?): BOOLEAN
+(/in) (a:G, p:G?): BOOLEAN -> not p(a)
+
+(<=) (p,q:G?): ghost BOOLEAN -> all(x) p(x) ==> q(x)
+(=)  (p,q:G?): ghost BOOLEAN -> p <= q and q <= p
+
+
+all(p:G?) ensure p = p end
+
+immutable class PREDICATE[G]
+inherit         ghost ANY end
+
+
+{: Predicates can be formed with any type G which is based on the class
+   ANY. Predicates are used frequently in Albatross. Therefore the abbreviation
+   G? has been introduced into the language to be equivalend to the type
+   PREDICATE[G].
+
+   If p is a predicate of type G? and x is a element of the type G then p(x)
+   is a boolean value which tells if x satisfies the predicate p. Therefore
+   any predicate describes the set of all elements which satisfy the
+   predicate. The correpondence between sets and predicates is so strong that
+   sometimes we talk about the predicate p and sometimes we talk about the set
+   p.
+
+   The operator `<=` describes the subset relation. Two sets/predicates are
+   equal if they are mutually subset.
+
+   Predicate inherits ANY. Therefore we can form predicates of predicates
+   e.g. PREDICATE[PREDICATE[G]] or abbreviated G??. The type G?? describes
+   a set of sets of element type G.
+
+:}
+
+
+
+0: G? = {x: false}
+1: G? = {x: true}
+
+singleton (a:G): G? -> {x: x = a}
+
+(+)  (p,q:G?): G?  -> {x: p(x) or q(x)}
+(*)  (p,q:G?): G?  -> {x: p(x) and q(x)}
+(-)  (p,q:G?): G?  -> {x: p(x) and not q(x)}
+
+(-)  (p:G?): G?    -> {x: not p(x)}
+
+(+)  (pp:G??): ghost G?  -> {x: some(p) p(x) and pp(p)}
+(*)  (pp:G??): ghost G?  -> {x: all(p) pp(p) ==> p(x)}
+
+
+{: An elementary set/predicate is defined with the syntax
+
+       {x:   exp}
+       {x:G: exp}
+
+   where exp is a boolean expression which can contain the variable x. The
+   expression describes the set of all elements which make the boolean
+   expression exp true. Having this we can define the empty set, the universal
+   set and a singleton set.
+
+   The expressions `p(x)` and `x in p` are equivalent.
+
+   The binary operators `+`, `*` and `-` are set union, intersection and
+   difference, the unary operator `-` is used to define the complement of a
+   set.
+
+   The unary operators `+` and `*` are used to define the union/intersection
+   of all sets of a collection of sets.
+
+   Sets with more than one variable can be used define relations
+   e.g. {x,y,...: exp}.
+
+   The following rules should be fairly evident.
+
+:}
+
+
+all(a,b,c:G)
+    ensure
+        all(p:G?) a = b ==> p(a) ==> p(b)  -- leibniz rule
+
+        a = b ==> b = a
+
+        a = b ==> b = c ==> a = c
+
+        {a} /= 0
+    end
+
+
+all(p,q,r:G?)
+    ensure
+        p <= p
+        (p <= q) ==> (q <= p) ==> (p = q)
+        (p <= q) ==> (q <= r) ==> (p <= r)
+
+
+        p <= q ==> p * q = p
+        q <= p ==> p + q = p
+
+        p * p = p
+        p * q = q * p
+        (p * q) * r = p * (q * r)
+
+        p + p = p
+        p + q = q + p
+        (p + q) + r = p + (q + r)
+
+        (some(x) p(x)) ==> p /= 0
+
+        p /= 0         ==> some(x) p(x)
+
+        p /= 0 ==> p + q /= 0
+    end
+
+
+all(x:G,p:G?)
+    ensure
+        p(x) ==> {x} <= p
+    end
+
+all(p,q:G?)
+    require
+        some(x) p(x)
+        p <= q
+    ensure
+        some(x) q(x)
+    end

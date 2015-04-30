@@ -1,0 +1,113 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use predicate; function end
+
+deferred class PARTIAL_ORDER end
+
+PO:  PARTIAL_ORDER
+PO2: PARTIAL_ORDER
+
+
+-- Deferred functions and axioms
+
+(<=) (a,b:PO): BOOLEAN   deferred end
+
+(=)  (a,b:PO): BOOLEAN   deferred end
+
+
+all(a,b,c:PO)
+    deferred
+    ensure
+        a = a
+        a <= a                               -- reflexive
+        (a <= b) ==> (b <= a) ==> (a = b)    -- antisymmetric
+        (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive
+    end
+
+
+deferred class PARTIAL_ORDER
+inherit        ANY end
+
+
+-- More function definitions
+
+(<)  (a,b:PO): BOOLEAN -> a /= b and a <= b
+
+(>=) (a,b:PO): BOOLEAN -> b <= a
+
+(>)  (a,b:PO): BOOLEAN -> b < a
+
+is_lower_bound (a:PO, p:PO?): ghost BOOLEAN -> all(x) p(x) ==> a <= x
+
+is_upper_bound (a:PO, p:PO?): ghost BOOLEAN -> all(x) p(x) ==> x <= a
+
+is_least (a:PO, p:PO?): ghost BOOLEAN    -> p(a) and a.is_lower_bound(p)
+
+is_greatest (a:PO, p:PO?): ghost BOOLEAN -> p(a) and a.is_upper_bound(p)
+
+is_minimal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) x < a ==> not p(x)
+
+is_maximal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) a < x ==> not p(x)
+
+upper_bounds (p:PO?): ghost PO? -> {x: x.is_upper_bound(p)}
+
+lower_bounds (p:PO?): ghost PO? -> {x: x.is_lower_bound(p)}
+
+is_infimum (a:PO, p:PO?): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
+
+is_supremum (a:PO, p:PO?): ghost BOOLEAN -> a.is_least(p.upper_bounds)
+
+is_monotonic(f:PO->PO): ghost BOOLEAN ->
+    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
+
+is_antitonic(f:PO->PO): ghost BOOLEAN ->
+    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
+
+is_ascending(f:PO->PO): ghost BOOLEAN ->
+    all(a) (f.domain)(a) ==> a <= f(a)
+
+is_descending(f:PO->PO): ghost BOOLEAN ->
+    all(a) (f.domain)(a) ==> f(a) <= a
+
+
+
+all(a,b:PO)
+    ensure
+        a.is_lower_bound({a})
+        a <= b ==> a.is_lower_bound({b})
+    end
+
+all(a,b,c:PO, p,q:PO?)
+    ensure
+        a <= b ==> b < c  ==> a /= c
+        a < b  ==> b <= c ==> a /= c
+        a < b  ==> b < c  ==> a < c
+        
+        a.is_least(p)     ==> b.is_least(p)      ==> a = b
+        a.is_greatest(p)  ==> b.is_greatest(p)   ==> a = b
+        a.is_infimum(p)   ==> b.is_infimum(p)    ==> a = b
+        a.is_supremum(p)  ==> b.is_supremum(p)   ==> a = b
+
+        a <= b ==> b.is_lower_bound(p) ==> a.is_lower_bound(p)
+
+        a.is_lower_bound(p) ==> a.is_lower_bound(q) ==> ((p + q).lower_bounds)(a)
+
+        ((p + q).lower_bounds)(a) ==> a.is_lower_bound(p)
+        ((p + q).lower_bounds)(a) ==> a.is_lower_bound(q)
+
+        a.is_infimum(p) ==> b.is_infimum(q) ==> p <= q ==> b <= a
+
+        a.is_least(p) ==> a.is_infimum(p)
+
+        a.is_infimum({x: a <= x})
+    end
+
+
+G: ANY
+
+immutable class predicate.PREDICATE[G]
+inherit   ghost PARTIAL_ORDER
+end

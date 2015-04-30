@@ -1,0 +1,40 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use
+    partial_order
+end
+
+
+deferred class LINEAR_ORDER end
+
+LO: LINEAR_ORDER
+
+(=)  (a,b:LO): BOOLEAN    deferred end
+(<=) (a,b:LO): BOOLEAN    deferred end
+
+all(a,b,c:LO)
+    deferred
+    ensure
+        a = a
+        a <= b or b <= a
+        a <= b ==> b <= a ==> a = b
+        a <= b ==> b <= c ==> a <= c
+    end
+all(a:LO)
+    ensure
+        a <= a
+    end
+
+
+deferred class LINEAR_ORDER
+inherit        PARTIAL_ORDER end
+
+all(a,b:LO)
+    ensure
+        not (a <= b) ==>  b < a
+        not (a < b)  ==>  b <= a
+        a /= b  ==>  a < b or b < a
+    end

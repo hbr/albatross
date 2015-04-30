@@ -1,0 +1,22 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use boolean end
+
+deferred class ANY end
+
+G: ANY
+
+
+(=) (a,b:G): BOOLEAN    deferred end
+
+(/=) (a,b:G): BOOLEAN -> not (a = b)
+
+all(a:G) deferred ensure a = a end
+
+all(a:G) ensure a /= a ==> false end
+
+immutable class boolean.BOOLEAN
+inherit         ANY end

@@ -1,0 +1,48 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+immutable class BOOLEAN end
+
+false: BOOLEAN
+true:  BOOLEAN
+(==>) (a,b:BOOLEAN): BOOLEAN
+(and) (a,b:BOOLEAN): BOOLEAN
+(or)  (a,b:BOOLEAN): BOOLEAN
+(not) (a:BOOLEAN):   BOOLEAN -> a ==> false
+(=)   (a,b:BOOLEAN): BOOLEAN -> (a ==> b) and (b ==> a)
+
+all(a,b,c:BOOLEAN)
+    ensure
+        true
+
+        a = a
+
+        -- negation
+        (not a ==> false) ==> a       -- indirect proof
+        false ==> a                   -- ex falso
+
+        -- conjunction
+        a and b ==> a                 -- and elimination
+        a and b ==> b
+        a ==> b ==> a and b           -- and introduction
+
+        -- disjunction
+        a ==> a or b                  -- or introduction
+        b ==> a or b
+
+        a or b
+        ==> (a ==> c)
+        ==> (b ==> c)
+        ==> c                         -- or elimination
+
+        a or not a                    -- excluded middle
+        a or a ==> a
+        a or b ==> b or a
+        (a or b) or c ==> a or (b or c)
+        a or (b or c) ==> (a or b) or c
+
+        (not a ==> b) ==> a or b
+        a or b ==> not a ==> b
+    end

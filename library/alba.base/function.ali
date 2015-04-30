@@ -1,0 +1,56 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use predicate end
+
+A: ANY
+B: ANY
+
+immutable class FUNCTION[A,B] end
+
+domain(f:A->B): ghost A?
+
+
+(<=) (f,g:A->B): ghost BOOLEAN
+    -> f.domain <= g.domain and all(x) x in f.domain ==> f(x) = g(x)
+
+(=) (f,g:A->B): ghost BOOLEAN
+    -> f <= g and g <= f
+
+range (f:A->B): ghost B?
+    -> {b: some(a) a in f.domain and f(a) = b}
+
+image (f:A->B, p:A?): ghost B?
+     -> {y: some(x) (f.domain*p)(x) and f(x) = y}
+
+preimage (f:A->B, q:B?): ghost A?
+     -> {x: x in f.domain and f(x) in q}
+
+is_total (f:A->B): ghost BOOLEAN
+    -> all(a) a in f.domain
+
+is_injective (f:A->B): ghost BOOLEAN
+    -> all(x,y) x in f.domain ==> y in f.domain ==> f(x) = f(y) ==> x = y
+
+is_finite (p:A?): ghost BOOLEAN
+    -> all(f:A->A) f.is_injective
+                   ==> f.domain = p
+                   ==> f.range <= p
+                   ==> f.range = p
+
+is_choice (f:A?->A, p:A?): ghost BOOLEAN
+    -> {q: q <= p} <= f.domain and all(q) q <= p ==> f(q) in q
+
+is_iterable (f:A->A): ghost BOOLEAN
+    -> all(a) a in f.domain ==> f(a) in f.domain
+
+is_fixpoint (a:A, f:A->A): ghost BOOLEAN
+    -> a in f.domain and f(a) = a
+
+is_idempotent (f:A->A): ghost BOOLEAN
+    -> f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f)
+
+can_join (f,g:A->B): ghost BOOLEAN
+    -> some(h) f <= h and g <= h
