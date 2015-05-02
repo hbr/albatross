@@ -274,7 +274,7 @@ end = struct
 
 
   let get_diff (t1:term) (t2:term) (accs:t): string * string =
-    let nargs = Context.count_arguments accs.c
+    let nargs = Context.count_variables accs.c
     and ft    = Context.feature_table accs.c
     in
     let vars1 = Term.used_variables_from t1 nargs
@@ -325,7 +325,7 @@ end = struct
         with Term_builder.Incomplete_type i ->
           error_info inf
             ("Cannot infer a type for " ^
-             ST.string (Context.argument_name i accs.c)))
+             ST.string (Context.variable_name i accs.c)))
       accs.accus
 
 
@@ -535,7 +535,7 @@ let analyze_expression
       (c:Context.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    let c = Context.push_with_gap entlst None true false ntvs_gap c in
+    let c = Context.push_with_gap entlst None false false false ntvs_gap c in
     let ntvs      = Context.count_local_type_variables c in
     Accus.expect_quantified (ntvs-ntvs_gap) c accs;
     analyze e accs c;
@@ -552,7 +552,7 @@ let analyze_expression
       (c:Context.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    let c = Context.push_with_gap entlst None is_pred is_func ntvs_gap c in
+    let c = Context.push_with_gap entlst None is_pred is_func false ntvs_gap c in
     let ntvs      = Context.count_local_type_variables c in
     Accus.expect_lambda (ntvs-ntvs_gap) is_pred c accs;
     analyze e accs c;

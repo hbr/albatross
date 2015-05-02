@@ -181,9 +181,9 @@ val to_dummy: int -> Sign.t -> type_term
 val upgrade_signature: int -> bool -> Sign.t -> type_term
 
 
-val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal array * int
-
-val result_type: return_type -> bool -> bool -> int -> Tvars.t -> t -> Result_type.t
+val analyze_signature:
+    entities list withinfo -> return_type -> bool -> bool -> bool -> Tvars.t -> t
+      -> formal array * Result_type.t
 
 val satisfies: type_term -> Tvars.t -> type_term -> Tvars.t -> t -> bool
   (** [satisfies tp1 tvs1 tp2 tvs2 ct]: Does the type [tp1,tvs1] satisfy the

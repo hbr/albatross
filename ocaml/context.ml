@@ -17,7 +17,8 @@ type entry = {
     fargs:        formal array;       (* cumulated *)
     ntvs_delta:   int;
     nfgs_delta:   int;
-    nfargs_delta: int;
+    nargs_delta:  int;
+    rvar:         bool;
     result:       Result_type.t;
     info:         info;
   }
@@ -37,7 +38,8 @@ let empty_entry: entry =
    fargs        = [||];
    ntvs_delta   = 0;
    nfgs_delta   = 0;
-   nfargs_delta = 0;
+   nargs_delta  = 0;
+   rvar         = false;
    result   = Result_type.empty;
    info      = UNKNOWN}
 
@@ -90,13 +92,13 @@ let previous (c:t): t =
   assert (not (is_global c));
   Option.value c.prev
 
-let entry_nfargs (e:entry): int = Array.length e.fargs
-
-let entry_arity (e:entry): int = e.nfargs_delta
+let entry_arity (e:entry): int = e.nargs_delta
 
 let arity     (c:t): int = entry_arity c.entry
 
 let verbosity (c:t): int = c.verbosity
+
+let has_result_variable (c:t): bool = c.entry.rvar
 
 let has_result (c:t): bool = Result_type.has_result c.entry.result
 
@@ -131,43 +133,39 @@ let count_last_formal_generics (c:t): int =
   c.entry.nfgs_delta
 
 
-let count_last_arguments (c:t): int = c.entry.nfargs_delta
+let count_last_arguments (c:t): int = c.entry.nargs_delta
 
-let count_arguments (c:t): int = Array.length c.entry.fargs
+let count_last_variables (c:t): int =
+  c.entry.nargs_delta +
+  if has_result c then 1 else 0
+
+let count_variables (c:t): int = Array.length c.entry.fargs
 
 
 let implication_index (c:t): int =
-  count_arguments c + Feature_table.implication_index
+  count_variables c + Feature_table.implication_index
 
 let and_index (c:t): int =
-  count_arguments c + Feature_table.and_index
+  count_variables c + Feature_table.and_index
 
 let or_index (c:t): int =
-  count_arguments c + Feature_table.or_index
+  count_variables c + Feature_table.or_index
 
 let not_index (c:t): int =
-  count_arguments c + Feature_table.not_index
+  count_variables c + Feature_table.not_index
 
 let domain_index (c:t): int =
-  count_arguments c + Feature_table.domain_index
+  count_variables c + Feature_table.domain_index
 
 
-let argument_name (i:int) (c:t): int =
-  assert (i < count_arguments c);
+let variable_name (i:int) (c:t): int =
+  assert (i < count_variables c);
   fst c.entry.fargs.(i)
 
 
-let argument_type (i:int) (c:t): type_term =
-  assert (i < count_arguments c);
+let variable_type (i:int) (c:t): type_term =
+  assert (i < count_variables c);
   snd c.entry.fargs.(i)
-
-
-let nfargs (c:t): int =
-  (** The cumulated number of formal arguments in this context and all
-      previous contexts
-   *)
-  entry_nfargs c.entry
-
 
 let ntvs (c:t): int =
   (** The cumulated number of formal generics and type variables in
@@ -178,21 +176,18 @@ let ntvs (c:t): int =
 
 
 let entry_local_argnames (e:entry): int array =
-  Array.init e.nfargs_delta (fun i -> fst e.fargs.(i))
+  Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
 
 
 let local_argnames (c:t): int array = entry_local_argnames c.entry
 
 
-let entry_argnames (e:entry): int array =
+let entry_varnames (e:entry): int array =
   Array.map (fun (n,_) -> n) e.fargs
 
 
-let argnames (c:t): int array = entry_argnames c.entry
+let varnames (c:t): int array = entry_varnames c.entry
 
-let outer_argnames (c:t): int array =
-  assert (not (is_global c));
-  entry_argnames ((previous c).entry)
 
 
 let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
@@ -209,36 +204,23 @@ let sign2string (s:Sign.t) (c:t): string =
 
 
 let string_of_term (t:term) (norm:bool) (nanon:int) (c:t): string =
-  Feature_table.term_to_string t norm nanon (argnames c) c.ft
+  Feature_table.term_to_string t norm nanon (varnames c) c.ft
 
-let string_of_term_outer (t:term) (nanon:int) (c:t): string =
-  Feature_table.term_to_string t
-    true
-    nanon
-    (outer_argnames c)
-    c.ft
 
 let make_lambda (n:int) (nms:int array) (t:term) (pred:bool) (c:t): term =
-  (*if n > 1 then
-    printf "make_lambda %d args: %s\n" n (string_of_term t true n c); *)
-  let nbenv = count_arguments c in
+  let nbenv = count_variables c in
   Feature_table.make_lambda n nms t pred nbenv c.ft
 
 
 let make_application
     (f:term) (args:term array) (nb:int) (pred:bool) (c:t): term =
-  let nbenv = count_arguments c in
+  let nbenv = count_variables c in
   let res = Feature_table.make_application f args pred (nb+nbenv) c.ft in
-  (*if Array.length args > 1 then begin
-    printf "make_appl %d args %s\n" (Array.length args)
-      (string_of_term res true 0 c);
-    assert false
-  end;*)
   res
 
 
 let beta_reduce (n:int) (tlam:term) (args:term array) (nb:int )(c:t): term =
-  Feature_table.beta_reduce n tlam args (nb+count_arguments c) c.ft
+  Feature_table.beta_reduce n tlam args (nb+count_variables c) c.ft
 
 
 let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (c:t): term =
@@ -272,7 +254,7 @@ let signature_string (c:t): string =
   sign2string (signature c) c
 
 
-let argument_index (nme:int) (c:t): int =
+let variable_index (nme:int) (c:t): int =
   Search.array_find_min (fun (n,_) -> n = nme) c.entry.fargs
 
 
@@ -301,7 +283,7 @@ let anchor_class (c:t): int =
 
 
 let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
-  Feature_table.split_equality t (nb + count_arguments c) c.ft
+  Feature_table.split_equality t (nb + count_variables c) c.ft
 
 let check_deferred (c:t): unit =
   assert (is_toplevel c);
@@ -324,8 +306,8 @@ let rec ith_entry (i:int) (c:t): entry =
   else ith_entry (i-1) (previous c)
 
 let is_untyped (i:int) (c:t): bool =
-  (* Is the argument [i] untyped? *)
-  assert (i < nfargs c);
+  (* Is the variable [i] untyped? *)
+  assert (i < count_variables c);
   let tp = snd c.entry.fargs.(i) in
   match tp with
     Variable j when j < count_type_variables c -> true
@@ -333,16 +315,21 @@ let is_untyped (i:int) (c:t): bool =
 
 
 
-let argument_data (i:int) (c:t): Tvars.t * Sign.t =
-  assert (i < count_arguments c);
-  TVars_sub.tvars c.entry.tvs_sub,
-  Sign.make_const (snd c.entry.fargs.(i))
+let variable_data (i:int) (c:t): Tvars.t * Sign.t =
+  let nvars = count_variables c in
+  if i < nvars then
+    TVars_sub.tvars c.entry.tvs_sub,
+    Sign.make_const (snd c.entry.fargs.(i))
+  else
+    let idx = i - nvars in
+    let tvs,s = Feature_table.signature idx (feature_table c) in
+    Tvars.fgs_to_global tvs, s
 
 
-let argument (name:int) (c:t): int * Tvars.t * Sign.t =
+let variable (name:int) (c:t): int * Tvars.t * Sign.t =
   (** The term and the signature of the argument named [name] *)
-  let i = argument_index name c in
-  let tvs,s = argument_data i c in
+  let i = variable_index name c in
+  let tvs,s = variable_data i c in
   i,tvs,s
 
 
@@ -383,6 +370,7 @@ let push_with_gap
     (rt: return_type)
     (is_pred: bool)
     (is_func: bool)
+    (rvar:    bool)
     (ntvs_gap)
     (c: t)
     : t =
@@ -403,23 +391,26 @@ let push_with_gap
   let ntvs1 = Tvars.count_local tvs - ntvs0
   and nfgs1 = Tvars.count_fgs tvs   - nfgs0
   in
-  let fargs1, n_untyped = Class_table.formal_arguments entlst tvs ct in
-  let res  = Class_table.result_type rt is_pred is_func n_untyped tvs ct
-  in
-  let fargs      =
+  let fargs1, res =
+    Class_table.analyze_signature entlst rt is_pred is_func rvar tvs ct in
+  let fargs =
     Array.append
       fargs1
       (Array.map
          (fun (n,t) -> n, Term.up ntvs1 (Term.upbound nfgs1 ntvs0 t))
          entry.fargs)
+  and nargs_delta = Array.length fargs1 -
+    if rvar then 1 else 0 (*variables*)
   in
+  assert (0 <= nargs_delta);
   {c with
    entry =
    {tvs_sub    = tvs_sub;
     fargs        = fargs;
     ntvs_delta   = ntvs1;
     nfgs_delta   = nfgs1;
-    nfargs_delta = Array.length fargs1;
+    nargs_delta  = nargs_delta;
+    rvar         = Result_type.has_result res;
     result       = res;
     info         = entlst.i};
    prev  = Some c;
@@ -433,24 +424,26 @@ let push
     (rt: return_type)
     (is_pred: bool)
     (is_func: bool)
+    (rvar:    bool)
     (c: t)
     : t =
   (** Push the new type variables, formal generics and the formal arguments of
       [entlst,rt] to the context [c]. *)
-  push_with_gap entlst rt is_pred is_func 0 c
+  push_with_gap entlst rt is_pred is_func rvar 0 c
 
 
 
 
 let push_untyped_with_gap
-    (names:int array) (is_func:bool) (ntvs_gap:int) (c:t): t =
+    (names:int array) (is_pred:bool) (is_func:bool) (rvar:bool) (ntvs_gap:int) (c:t)
+    : t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
-  push_with_gap entlst None (not is_func) is_func ntvs_gap c
+  push_with_gap entlst None is_pred is_func rvar ntvs_gap c
 
 
 let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
-  push entlst None false false c
+  push entlst None false false false c
 
 
 
@@ -593,7 +586,7 @@ let find_funcs
   let lst = Feature_table.find_funcs fn nargs c.ft
   in
   let lst = List.rev_map
-      (fun (i,tvs,s) -> i+(nfargs c), tvs, s)
+      (fun (i,tvs,s) -> i+(count_variables c), tvs, s)
       lst
   in
   lst
@@ -612,7 +605,7 @@ let find_identifier
     find_funcs (FNname name) nargs_id c
   else
     try
-      [argument name c]
+      [variable name c]
     with
       Not_found ->
         find_funcs
@@ -633,19 +626,9 @@ let find_feature
 
 
 
-let variable_data (i:int) (c:t): Tvars.t * Sign.t =
-  let nfargs = count_arguments c in
-  if i < nfargs then
-    argument_data i c
-  else
-    let idx = i - nfargs in
-    let tvs,s = Feature_table.signature idx (feature_table c) in
-    Tvars.fgs_to_global tvs, s
-
-
 
 let definition (idx:int) (nb:int) (c:t): int * int array * term =
-  let nbenv = count_arguments c in
+  let nbenv = count_variables c in
   if idx < nb + nbenv then
     raise Not_found
   else
@@ -726,7 +709,7 @@ let expanded_definition (idx:int) (nb:int) (c:t): int * int array * term =
 
 
 let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
-  let nbenv = count_arguments c in
+  let nbenv = count_variables c in
   if idx < nb + nbenv then
     0, [||], []
   else
@@ -735,7 +718,7 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
 
 
 let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
-  let nbenv = nb + count_arguments c in
+  let nbenv = nb + count_variables c in
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 

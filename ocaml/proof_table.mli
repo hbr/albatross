@@ -30,7 +30,9 @@ val is_toplevel: t -> bool
 val count:       t -> int
 val count_previous: t -> int
 val count_global:   t -> int
-val count_arguments:       t -> int
+val count_arguments:t -> int
+val has_result:     t -> bool
+val has_result_variable:     t -> bool
 val count_last_arguments:  t -> int
 val last_arguments_string: t -> string
 val names:       t -> int array
@@ -60,7 +62,7 @@ val beta_reduce: int -> term -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
 val make: int -> t
-val push: entities list withinfo -> return_type -> bool -> bool -> t -> t
+val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val pop:  t -> t
 

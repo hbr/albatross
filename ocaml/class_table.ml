@@ -1202,7 +1202,7 @@ let formal_arguments
     (entlst: entities list withinfo)
     (tvs:Tvars.t)
     (ct:t)
-    : formal array * int =
+    : formal list * int =
   (* The formal arguments of the entity list [entlst] in the type environment [tvs]
    *)
   let rec check_duplicates arglst =
@@ -1232,7 +1232,7 @@ let formal_arguments
   in
   let arglst = List.concat (List.map fargs entlst.v) in
   check_duplicates arglst;
-  Array.of_list arglst, !n_untyped
+  arglst, !n_untyped
 
 
 
@@ -1262,6 +1262,28 @@ let result_type
         get_type (withinfo tpinf.i tp) tvs ct
       in
       Result_type.make t proc ghost
+
+
+let analyze_signature
+    (entlst: entities list withinfo)
+    (rt:return_type)
+    (is_pred: bool)
+    (is_func: bool)
+    (rvar: bool)
+    (tvs:Tvars.t)
+    (ct:t): formal array * Result_type.t  =
+  (*  The variable with names and types and the result type of [entlst,rt]
+   *)
+  let arglst, n_untyped = formal_arguments entlst tvs ct in
+  let rt = result_type rt is_pred is_func n_untyped tvs ct in
+  let arglst =
+    if rvar then begin
+      assert (Result_type.has_result rt);
+      arglst @ [ST.symbol "Result", Result_type.result rt]
+    end else
+      arglst
+  in
+  Array.of_list arglst, rt
 
 
 

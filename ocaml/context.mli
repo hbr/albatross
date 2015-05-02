@@ -35,10 +35,10 @@ val verbosity: t -> int
 
 val find_module:        (int * int list) -> t -> int
 
-val push_with_gap:  entities list withinfo -> return_type -> bool -> bool
+val push_with_gap:  entities list withinfo -> return_type -> bool -> bool -> bool
   -> int -> t -> t
-val push:  entities list withinfo -> return_type -> bool -> bool -> t -> t
-val push_untyped_with_gap: int array -> bool -> int -> t -> t
+val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
+val push_untyped_with_gap: int array -> bool -> bool -> bool -> int -> t -> t
 val push_untyped: int array -> t -> t
 val pop:   t -> t
 
@@ -46,9 +46,9 @@ val is_global:   t -> bool
 val is_toplevel: t -> bool
 val depth:       t -> int
 val arity:     t -> int
-val argument:  int -> t -> int * Tvars.t * Sign.t
 
 val has_result:  t -> bool
+val has_result_variable:  t -> bool
 val result_type: t -> type_term
 
 val count_type_variables: t -> int
@@ -67,12 +67,16 @@ val count_last_arguments:  t -> int
     (** The number of formal arguments in this context without the preceeding
         contexts *)
 
+val count_last_variables:  t -> int
+    (** The number of variables (arguments + result) in this context without
+        the preceeding contexts *)
+
 val count_last_formal_generics:  t -> int
     (** The number of formal generics in this context without the preceeding
         contexts *)
 
-val count_arguments:  t -> int
-    (** The number of formal arguments in this context and all preceeding
+val count_variables:  t -> int
+    (** The number of variables in this context and all preceeding
         contexts *)
 
 
@@ -87,11 +91,11 @@ val all_quantified:  int -> int array -> term -> t -> term
 val some_quantified: int -> int array -> term -> t -> term
 
 
-val argument_name: int -> t -> int
-    (** The name of the [i]th formal argument *)
+val variable_name: int -> t -> int
+    (** The name of the [i]th variable argument *)
 
-val argument_type: int -> t -> type_term
-    (** The type of the [i]th formal argument *)
+val variable_type: int -> t -> type_term
+    (** The type of the [i]th variable argument *)
 
 val fgnames: t   -> int array
 
@@ -110,7 +114,6 @@ val boolean: t -> term
 val update_type_variables: TVars_sub.t -> t -> unit
 
 val string_of_term:       term -> bool -> int -> t -> string
-val string_of_term_outer: term -> int -> t -> string
 val sign2string:    Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string

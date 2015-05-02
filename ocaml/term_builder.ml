@@ -265,9 +265,9 @@ let substituted_type (tp:term) (tb:t): type_term =
   TVars_sub.sub_star tp tb.tvars
 
 
-let argument_type (i:int) (tb:t): type_term =
-  assert (i < Context.count_arguments tb.c);
-  transformed_type (Context.argument_type i tb.c) tb
+let variable_type (i:int) (tb:t): type_term =
+  assert (i < Context.count_variables tb.c);
+  transformed_type (Context.variable_type i tb.c) tb
 
 
 let context_signature (tb:t): Sign.t =
@@ -744,6 +744,7 @@ let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
     done;
     csig in
   begin
+    assert (Sign.arity csig > 0);
     let upsig = upgrade_signature csig is_pred tb in
     assert (Sign.has_result csig);
     try
@@ -770,11 +771,10 @@ let complete_lambda (ntvs:int) (is_pred:bool) (tb:t): unit =
     Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  (*let lam = Context.make_lambda nargs names t is_pred c*)
   let lam = Lam (nargs,names,t,is_pred)
   and s   =
     let argtps = Array.init nargs
-        (fun i -> TVars_sub.sub_star (argument_type i tb) tb.tvars) in
+        (fun i -> TVars_sub.sub_star (variable_type i tb) tb.tvars) in
     let argtup = to_tuple argtps tb in
     let res = Sign.result tsig in
     let res = TVars_sub.sub_star res tb.tvars in
@@ -797,7 +797,7 @@ let complete_lambda (ntvs:int) (is_pred:bool) (tb:t): unit =
 
 let expect_quantified (ntvs:int) (c:Context.t) (tb:t): unit =
   (* Expect the term of a quantified expression. It is assumed that all local
-     variables of the lambda expression have been pushed to the context and
+     variables of the quantified expression have been pushed to the context and
      the argument list of the lambda expression contained [ntvs] untyped
      variables and [nfgs] formal generics. *)
   assert (Sign.has_result tb.sign);
@@ -861,7 +861,7 @@ let update_called_variables (tb:t): unit =
   in
   let is_pred i =
     assert (i < nargs);
-    let tp = argument_type i tb in
+    let tp = variable_type i tb in
     let tp = TVars_sub.sub_star tp tb.tvars in
     match tp with
       VAppl(idx,_) ->
@@ -906,7 +906,7 @@ let check_untyped_variables (tb:t): unit =
   assert (ntvs_loc = Context.count_type_variables tb.c);
   let dum_idx  = count_all tb + Class_table.dummy_index in
   for i = 0 to Context.count_last_arguments tb.c - 1 do
-    match Context.argument_type i tb.c with
+    match variable_type i tb with
       Variable j when j < ntvs_loc -> begin
         match TVars_sub.get_star j tb.tvars with
           VAppl(idx,_) when idx = dum_idx ->
@@ -1001,7 +1001,7 @@ let specialize_term_0 (tb:t): unit =
         let nglob, t = upd t (nargs+n) nglob in
         nglob, QExp (n,nms,t,is_all)
   in
-  let nargs = Context.count_arguments tb.c
+  let nargs = Context.count_variables tb.c
   and t,nt,s     = List.hd tb.tlist in
   let nglob, t = upd t nargs 0 in
   if nglob <> TVars_sub.count_global tb.tvars then begin
@@ -1061,7 +1061,7 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
   and f_idx    = nall + Class_table.function_index
   and bool_idx = nall + Class_table.boolean_index
   in
-  let tp = argument_type i tb in
+  let tp = variable_type i tb in
   match tp with
     Variable i when i < count_local tb ->
       let i  = TVars_sub.anchor i tb.tvars in
@@ -1119,7 +1119,7 @@ let check_term (t:term) (tb:t): t =
       let nms = [|ST.symbol "$0"|] in
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
-      let c = Context.push_untyped_with_gap nms is_func ntvs_gap tb.c in
+      let c = Context.push_untyped_with_gap nms is_pred is_func false ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
       in
       let tb = expect_lambda ntvs is_pred c tb in
@@ -1138,7 +1138,7 @@ let check_term (t:term) (tb:t): t =
       assert (0 < n);
       assert (Array.length nms = n);
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c in
-      let c = Context.push_untyped_with_gap nms false ntvs_gap tb.c in
+      let c = Context.push_untyped_with_gap nms false false false ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
       in
       expect_quantified ntvs c tb;
@@ -1160,7 +1160,7 @@ let check_term (t:term) (tb:t): t =
         try add_leaf i tvs s tb
         with Not_found ->
           let ct = Context.class_table tb.c in
-          printf "illegal term \"%s\"\n" (string_of_term t tb);
+          printf "illegal term \"%s\" %s\n" (string_of_term t tb) (Term.to_string t);
           printf "  type     %s\n"
             (Class_table.string_of_complete_signature s tvs ct);
           printf "  expected %s\n" (complete_signature_string tb);
@@ -1174,7 +1174,8 @@ let check_term (t:term) (tb:t): t =
           try add_leaf i tvs s tb
           with Not_found ->
             let ct = Context.class_table tb.c in
-            printf "illegal term \"%s\"\n" (string_of_term t tb);
+            printf "illegal term \"%s\" %s\n"
+              (string_of_term t tb) (Term.to_string t);
             printf "  type     %s\n"
               (Class_table.string_of_complete_signature s tvs ct);
             printf "  expected %s\n" (complete_signature_string tb);
@@ -1213,13 +1214,9 @@ let check_term (t:term) (tb:t): t =
         tb
     | Lam(n,nms,t0,is_pred) ->
         assert (0 < n);
-        if n <> Array.length nms then
-          printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);
         lambda n nms t0 is_pred tb
     | QExp(n,nms,t0,is_all) ->
-        if n <> Array.length nms then
-          printf "%s\n" (string_of_term t tb);
         assert (n = Array.length nms);
         qlambda n nms t0 is_all tb
   in

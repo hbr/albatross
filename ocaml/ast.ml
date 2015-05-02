@@ -8,6 +8,7 @@ open Term
 open Proof
 open Signature
 open Support
+open Container
 open Printf
 
 module PC = Proof_context
@@ -202,7 +203,7 @@ let rec make_proof
         let _ = prove_basic_expression ie pc in
         ()
   in
-  let pc1 = Proof_context.push entlst None false false pc in
+  let pc1 = Proof_context.push entlst None false false false pc in
   let defer = is_deferred kind
   and owner = Proof_context.owner pc1
   in
@@ -312,9 +313,23 @@ let analyze_feature
     (bdy: feature_body option)
     (exp: info_expression option)
     (pc: Proof_context.t): unit =
-  let pc1 = PC.push entlst rt false is_func pc in
+  let pc1 =
+    let rvar = is_func || Option.has rt in
+    PC.push entlst rt false is_func rvar pc in
   let context = Proof_context.context pc1 in
   let nms = Context.local_argnames context in
+  let nargs = Array.length nms in
+  let adapt_term t =
+    if PC.has_result_variable pc1 then
+      try
+        Term.down_from 1 nargs t
+      with Term_capture ->
+        not_yet_implemented fn.i "Features defined by properties"
+    else
+      t
+  in
+  let adapt_list lst = List.map adapt_term lst
+  in
   let body =
     match bdy, exp with
       None, None ->
@@ -323,6 +338,7 @@ let analyze_feature
     | None, Some ie ->
         let term = Typer.result_term ie context in
         verify_preconditions term ie.i pc1;
+        let term = adapt_term term in
         (Feature.Spec.make_func_def nms (Some term) []),
         Feature.Empty
     | Some bdy, None ->
@@ -334,17 +350,20 @@ let analyze_feature
           | Some reqlst, Some Impbuiltin, None ->
               add_assumptions reqlst pc1;
               let pres = PC.assumptions pc1 in
+              let pres = adapt_list pres in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Builtin
           | Some reqlst, None, None ->
               add_assumptions reqlst pc1;
               let pres = PC.assumptions pc1 in
+              let pres = adapt_list pres in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Empty
           | None, None, Some enslst ->
               (try
                 let term,info = result_term enslst context in
                 verify_preconditions term info pc1;
+                let term = adapt_term term in
                 (Feature.Spec.make_func_def nms (Some term) []),
                 Feature.Empty
               with Not_found ->
@@ -356,6 +375,7 @@ let analyze_feature
                 let pres = PC.assumptions pc1 in
                 let term,info = result_term enslst context in
                 verify_preconditions term info pc1;
+                let term,pres = adapt_term term, adapt_list pres in
                 (Feature.Spec.make_func_def nms (Some term) pres),
                 Feature.Empty
               with Not_found ->
@@ -367,6 +387,7 @@ let analyze_feature
           | Some reqlst, Some Impdeferred, None ->
               add_assumptions reqlst pc1;
               let pres = PC.assumptions pc1 in
+              let pres = adapt_list pres in
               (Feature.Spec.make_func_spec nms pres []),
               Feature.Deferred
           | _ -> not_yet_implemented fn.i
@@ -374,13 +395,12 @@ let analyze_feature
         end
     | _ -> assert false (* cannot happen *)
   in
-  let argnames = Context.local_argnames context
-  and sign     = Context.signature context
+  let sign     = Context.signature context
   and tvs      = Context.tvs context
   in
   if Tvars.count tvs > 0 then
     not_yet_implemented entlst.i "Type inference for named functions";
-  put_function fn tvs argnames sign body pc
+  put_function fn tvs nms sign body pc
 
 
 

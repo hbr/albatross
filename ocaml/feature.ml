@@ -40,6 +40,10 @@ module Spec = struct
 
 
   let equivalent (s1:t) (s2:t): bool =
+    if s1.def <> s2.def && Option.has s1.def && Option.has s2.def then
+      Printf.printf "definitions not equivalent %s %s\n"
+        (Term.to_string (Option.value s1.def))
+        (Term.to_string (Option.value s2.def));
     s1.def = s2.def && s1.pres = s2.pres && s1.posts = s2.posts
 
 end

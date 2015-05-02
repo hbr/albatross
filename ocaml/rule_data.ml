@@ -220,7 +220,7 @@ let make (t:term) (c:Context.t): t =
     with Not_found -> 0,[||], t
   in
   let anch_cls = get_anchor_class nargs nms t0 c in
-  let nbenv = Context.count_arguments c in
+  let nbenv = Context.count_variables c in
   let ps, tgt = split_term t0 nargs nbenv
   in
   let rec nbwdfun n gp1 ps set =
@@ -275,7 +275,7 @@ let make (t:term) (c:Context.t): t =
 let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
     : t =
   let nargs = Array.length args
-  and nbenv = Context.count_arguments c in
+  and nbenv = Context.count_variables c in
   assert (rd.nbenv <= nbenv);
   assert (not (is_specialized rd));
   assert (nargs <= rd.nargs);
@@ -368,8 +368,8 @@ let schematic_term (rd:t): int * int * term =
 let drop (rd:t) (c:Context.t): t =
   assert (is_specialized rd);
   assert (is_implication rd);
-  assert (rd.nbenv <= Context.count_arguments c);
-  let nbenv = Context.count_arguments c in
+  assert (rd.nbenv <= Context.count_variables c);
+  let nbenv = Context.count_variables c in
   let nbenv_delta = nbenv - rd.nbenv in
   let gp1,_,p = List.hd rd.premises in
   assert (gp1 = 0);

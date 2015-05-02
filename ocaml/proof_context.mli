@@ -29,6 +29,9 @@ val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
 val add_current_module: int -> IntSet.t -> t -> unit
 val set_interface_check: IntSet.t -> t -> unit
 
+val has_result: t -> bool
+val has_result_variable: t -> bool
+
 val is_global: t -> bool
 
 
@@ -37,7 +40,7 @@ val string_of_term_i: int -> t -> string
 
 val make:      int -> t
 
-val push: entities list withinfo -> return_type -> bool -> bool -> t -> t
+val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val pop:          t -> t
 

@@ -80,7 +80,8 @@ let count_last_local (pt:t): int =
   (count pt) - (count_previous pt)
 
 
-let count_arguments (at:t): int = Context.count_arguments at.c
+let count_arguments (at:t): int = Context.count_variables at.c
+
 
 let count_last_arguments (at:t): int =
   if at.new_ctxt then
@@ -88,6 +89,18 @@ let count_last_arguments (at:t): int =
   else
     0
 
+
+let has_result (at:t): bool =
+  if at.new_ctxt then
+    Context.has_result at.c
+  else
+    false
+
+let has_result_variable (at:t): bool =
+  if at.new_ctxt then
+    Context.has_result_variable at.c
+  else
+    false
 
 let last_arguments_string (at:t): string =
   if at.new_ctxt then
@@ -138,9 +151,6 @@ let string_of_term (t:term) (at:t): string =
 
 let string_of_term_anon (t:term) (nb:int) (at:t): string =
   Context.string_of_term t true nb at.c
-
-let string_of_term_outer (t:term) (at:t): string =
-  Context.string_of_term_outer t 0 at.c
 
 
 let expand_term (t:term) (at:t): term =
@@ -251,10 +261,11 @@ let push
     (rt:return_type)
     (is_pred:bool)
     (is_func:bool)
+    (rvar: bool)
     (at:t): t =
   let c = context at in
   assert (depth at = Context.depth c);
-  let c = Context.push entlst rt is_pred is_func c in
+  let c = Context.push entlst rt is_pred is_func rvar c in
   let names = Context.local_argnames c in
   push0 names true c at
 
@@ -357,6 +368,7 @@ let discharged_term (i:int) (at:t): term =
      assumptions discharged.
    *)
   assert (is_local at);
+  assert (not (has_result at));
   let n1,nms1,t = discharged_assumptions i at in
   let nargs = n1 + count_last_arguments at
   and nms   = Array.append nms1 (names at) in
@@ -867,6 +879,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
 
 
 let discharged (i:int) (at:t): term * proof_term =
+  assert (not (has_result at));
   let n1,nms1,t = discharged_assumptions i at
   in
   let nargs = n1 + count_last_arguments at

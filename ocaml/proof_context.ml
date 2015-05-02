@@ -119,8 +119,6 @@ let is_toplevel (at:t): bool =
 
 let nbenv (at:t): int = Proof_table.count_arguments at.base
 
-let nbenv_local (at:t): int = Proof_table.count_last_arguments at.base
-
 let count_base (pc:t): int = Proof_table.count pc.base
 
 let count (pc:t): int = Ass_seq.count pc.terms
@@ -208,6 +206,11 @@ let has_work (pc:t): bool = pc.work <> []
 
 let clear_work (pc:t): unit =
   pc.work <- []
+
+
+let has_result (pc:t): bool = Proof_table.has_result pc.base
+
+let has_result_variable (pc:t): bool = Proof_table.has_result_variable pc.base
 
 let string_of_term (t:term) (pc:t): string =
   Context.string_of_term t true 0 (context pc)
@@ -1071,8 +1074,9 @@ let push
     (rt:return_type)
     (is_pred:bool)
     (is_func:bool)
+    (rvar: bool)
     (pc:t): t =
-  let base = Proof_table.push entlst rt is_pred is_func pc.base in
+  let base = Proof_table.push entlst rt is_pred is_func rvar pc.base in
   push0 base pc
 
 
