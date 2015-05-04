@@ -62,6 +62,7 @@ let _ =
      ("Process",   Parser.KWProcess);
      ("Result",    Parser.KWResult);
 
+     ("agent",     Parser.KWagent);
      ("all",       Parser.KWall);
      ("and",       Parser.KWand);
      ("as",        Parser.KWas);

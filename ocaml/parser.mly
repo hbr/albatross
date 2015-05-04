@@ -95,7 +95,7 @@ let predicate_of_expression (info:info) (e:expression): expression =
 %token KWPrecursor KWProcess
 %token KWResult
 
-%token KWall       KWand          KWas         KWassert
+%token KWagent     KWall          KWand        KWas         KWassert
 %token KWcase      KWclass        KWcheck      KWcreate
 %token KWdeferred  KWdo
 %token KWelse      KWelseif       KWend        KWensure
@@ -567,6 +567,10 @@ implementation_block:
 require_block:
     KWrequire compound { $2 }
 
+require_block_opt:
+    { [] }
+|   require_block { $1 }
+
 proof_block:
     KWproof compound { $2 }
 
@@ -692,6 +696,12 @@ expr:
   and info = rhs_info 2 in
   let entlst = entities_of_expression info lst in
   Exparrow (withinfo info entlst,$5)
+}
+|   KWagent formal_arguments_info return_type_opt
+    require_block_opt
+    ensure_block
+    KWend {
+  not_yet_implemented (rhs_info 1) "agent expressions"
 }
 |   LIDENTIFIER ARROW expr {
   let info = rhs_info 1 in
