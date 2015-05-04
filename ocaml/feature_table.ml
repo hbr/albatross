@@ -488,6 +488,7 @@ let has_definition (i:int) (ft:t): bool =
 
 
 
+
 let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   (* The preconditions (if there are some) of the feature [i] as optional number of
      arguments and a list of expressions transformed into an environment with [nb]
@@ -503,6 +504,36 @@ let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
     n, desc.argnames, lst
   else
     n, desc.argnames, []
+
+
+
+let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
+  assert (nb <= i);
+  let i = i - nb in
+  let desc = descriptor i ft in
+  let spec = (base_descriptor i ft).spec in
+  let n = arity i ft in
+  if Feature.Spec.has_preconditions spec then
+    let lst = Feature.Spec.postconditions spec in
+    let lst = List.map (fun t -> Term.upbound nb n t) lst in
+    n, desc.argnames, lst
+  else
+    raise Not_found
+
+
+
+let specification (i:int) (nb:int) (ft:t): term list =
+  let n, nms,  posts = postconditions i nb ft
+  and n2,nms2, pres  = preconditions  i nb ft in
+  assert (n = n2);
+  assert (nms = nms2);
+  let imp_id = n + nb + implication_index in
+  List.map
+    (fun t ->
+      let chn = Term.make_implication_chain pres t imp_id in
+      QExp(n,nms,chn,true))
+    posts
+
 
 
 let owner (i:int) (ft:t): int =
@@ -622,13 +653,18 @@ let has_private_variant (i:int) (cls:int) (ft:t): bool =
 
 
 
-let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
-  (* The variant of the term [t] with [nb] bound variables in the class [cls] where
-     all features of [t] from the class [base_class] are transformed into their
-     inherited variant in class [cls] *)
+let variant_postcondition
+    (t:term) (i:int) (inew:int) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
+  (* The variant of the postcondition term [t] of the feature [i] with [nb]
+     bound variables in the class [cls] where all features of [t] from the
+     class [base_class] are transformed into their inherited variant in class
+     [cls] *)
   assert (Class_table.has_ancestor cls base_cls ft.ct);
+  let cnt = count ft in
   let f (j:int): int =
-    if class_of_feature j ft = base_cls && has_anchor j ft then
+    if inew <> (-1) && j = i then
+      cnt
+    else if class_of_feature j ft = base_cls && has_anchor j ft then
       try variant j cls ft
       with Not_found ->
         printf "there is no variant of \"%s\" in class %s\n"
@@ -641,6 +677,41 @@ let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
   in
   Term.map_free f t nb
 
+
+
+let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
+  (* The variant of the term [t] with [nb] bound variables in the class [cls] where
+     all features of [t] from the class [base_class] are transformed into their
+         inherited variant in class [cls] *)
+  variant_postcondition t (-1) (-1) nb base_cls cls ft
+
+
+
+let variant_spec (i:int) (inew:int) (base_cls:int) (cls:int) (ft:t)
+    : Feature.Spec.t =
+  (* The variant of the specification of the feature [i] in the class [cls] where
+     all features of [spec] from the class [base_class] are transformed into their
+     inherited variant in class [cls] *)
+  assert (i < count ft);
+  let bdesc = base_descriptor i ft in
+  let nargs,nms   = Feature.Spec.names bdesc.spec in
+  let pres = List.map
+      (fun t -> variant_term t nargs base_cls cls ft)
+      (Feature.Spec.preconditions bdesc.spec)
+  in
+  if Feature.Spec.has_postconditions bdesc.spec then
+    let posts =
+      List.map
+        (fun t -> variant_postcondition t i inew nargs base_cls cls ft)
+        (Feature.Spec.postconditions bdesc.spec) in
+    Feature.Spec.make_func_spec nms pres posts
+  else
+    let def = Feature.Spec.definition bdesc.spec in
+    match def with
+      None -> Feature.Spec.make_func_def nms None pres
+    | Some defterm ->
+        Feature.Spec.make_func_def
+          nms (Some (variant_term defterm nargs base_cls cls ft)) pres
 
 
 let definition_equality (i:int) (ft:t): term =
@@ -1411,20 +1482,11 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
   let f_tp(tp:type_term): type_term =
     Term.upbound ntvs anchor tp
-  and def_opt =
-    let bdesc = base_descriptor i ft in
-    assert (not (Feature.Spec.has_preconditions bdesc.spec)); (* nyi *)
-    match Feature.Spec.definition bdesc.spec with
-      None -> None
-    | Some t ->
-        let nargs = Array.length desc.argnames in
-        Some (variant_term t nargs desc.cls cls ft)
-        (*Some (variant_term t nargs desc.anchor_cls cls ft)*) (*anchor*)
   in
-  let spec = Feature.Spec.make_func_def desc.argnames def_opt [] in
   let cnt = count ft
   and nargs = Array.length desc.argnames
   in
+  let spec = variant_spec i cnt desc.cls cls ft in
   let bdesc = standard_bdesc cnt cls spec nargs ft
   and bdesc_opt =
     if is_public ft then Some (standard_bdesc cnt cls spec nargs ft)
@@ -1469,11 +1531,14 @@ let add_function
   and nargs   = Array.length argnames
   and spec,impl = body
   in
-  begin match Feature.Spec.definition spec with
-    Some t when is_ghost_term t nargs ft && not (Sign.is_ghost sign) ->
-      error_info fn.i "Must be a ghost function"
-  | _ -> ()
-  end;
+  let ghost_required =
+    Feature.Spec.has_postconditions spec ||
+    match Feature.Spec.definition spec with
+      Some t when is_ghost_term t nargs ft -> true
+    | _ -> false
+  in
+  if ghost_required && not (Sign.is_ghost sign) then
+      error_info fn.i "Must be a ghost function";
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct
   and anchor_fg, anchor_cls = Sign.anchor tvs sign in

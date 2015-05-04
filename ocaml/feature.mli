@@ -8,10 +8,12 @@ module Spec: sig
   val has_definition:  t -> bool
   val definition:      t -> term option
   val definition_term: t -> term
-  val has_preconditions: t -> bool
   val count_arguments: t -> int
   val names:           t -> int * int array
+  val has_preconditions: t -> bool
   val preconditions:   t -> term list
+  val has_postconditions: t -> bool
+  val postconditions:   t -> term list
 end
 
 type implementation =

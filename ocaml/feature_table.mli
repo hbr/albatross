@@ -123,6 +123,8 @@ val definition: int -> int -> t -> int * int array * term
 
 val has_definition: int -> t -> bool
 
+val specification: int -> int -> t -> term list
+
 val definition_equality: int -> t -> term
 
 
@@ -141,7 +143,8 @@ val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 val remove_tuple_accessors: term -> int -> int -> t -> term
 
-val preconditions: int -> int -> t -> int * int array * term list
+val preconditions:  int -> int -> t -> int * int array * term list
+val postconditions: int -> int -> t -> int * int array * term list
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]

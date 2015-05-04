@@ -21,7 +21,6 @@ type parent_descriptor = bool * type_term array (* is_ghost, actual generics *)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
-                         mutable eq_feat:  int;
                          mutable fmap:  int Term_table2.t Feature_map.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
@@ -87,7 +86,6 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   let anc  = IntMap.singleton idx (false,args) in
   {hmark = hm;
    tvs   = tvs;
-   eq_feat = -1;
    fmap  = Feature_map.empty;
    def_features = [];
    eff_features = [];

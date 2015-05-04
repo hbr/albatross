@@ -258,8 +258,17 @@ let put_class
 
 
 
-let assertion_list (lst:compound) (context:Context.t): term list =
-  List.map (fun e -> Typer.boolean_term e context) lst
+
+let function_property_list (lst:compound) (pc:PC.t): term list =
+  let pc1 = Proof_context.push_untyped [||] pc in
+  List.map
+    (fun e ->
+      let t = get_boolean_term e pc1 in
+      verify_preconditions t e.i pc1;
+      let _ = PC.add_assumption t pc1 in
+      t)
+    lst
+
 
 
 let result_term (lst:info_expression list) (context:Context.t): term * info =
@@ -280,7 +289,36 @@ let result_term (lst:info_expression list) (context:Context.t): term * info =
 
 
 
-let put_function
+let add_function
+    (fn:       feature_name withinfo)
+    (tvs:      Tvars.t)
+    (argnames: int array)
+    (sign:     Sign.t)
+    (body:     Feature.body)
+    (pc:       Proof_context.t): unit =
+  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
+  assert (PC.is_global pc);
+  let ft = Proof_context.feature_table pc in
+  let idx = Feature_table.count ft in
+  Feature_table.add_function fn tvs argnames sign body ft;
+  Inherit.inherit_to_descendants idx fn.i pc;
+  try
+    let c = PC.context pc in
+    let idx = idx + Context.count_variables c in
+    let n, nms,  posts = Context.postconditions idx 0 c
+    and n1,nms1, pres  = Context.preconditions  idx 0 c in
+    assert (n = n1); assert (nms = nms1); assert (n = Array.length nms);
+    let pc1 = PC.push_untyped nms pc in
+    List.iter (fun t -> let _ = PC.add_assumption t pc1 in ()) pres;
+    let lst = List.map (fun t -> PC.add_axiom t pc1) posts in
+    let lst = List.map (fun i -> PC.discharged i pc1) lst in
+    PC.add_proved_list false (-1) lst pc
+  with Not_found ->
+    ()
+
+
+let update_function
+    (idx:      int)
     (fn:       feature_name withinfo)
     (tvs:      Tvars.t)
     (argnames: int array)
@@ -289,20 +327,42 @@ let put_function
     (pc:       Proof_context.t): unit =
   assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
   let ft = Proof_context.feature_table pc in
-  try
-    let idx = Feature_table.find_with_signature fn.v tvs sign ft in
-    let inh =
-      Feature_table.is_public ft && not (Feature_table.is_feature_public idx ft)
-    and is_ghost = Sign.is_ghost sign
-    in
-    Feature_table.update_function idx fn.i is_ghost body ft;
-    if inh then
-      Inherit.inherit_to_descendants idx fn.i pc
-  with Not_found ->
-    let idx = Feature_table.count ft in
-    Feature_table.add_function fn tvs argnames sign body ft;
+  let inh =
+    Feature_table.is_public ft && not (Feature_table.is_feature_public idx ft)
+  and is_ghost = Sign.is_ghost sign
+  in
+  Feature_table.update_function idx fn.i is_ghost body ft;
+  if inh then
     Inherit.inherit_to_descendants idx fn.i pc
 
+
+
+
+(* Functions defined by properties
+
+      f(a:A,b:B,...):RT
+          require
+              r1; r2; ...
+          ensure
+              e1; e2; ...   -- 'ei' contains 'Result'
+          end
+
+   Proof obligations:
+
+   a) Existence:
+
+         some(x) e1[Result:=x] and e2[Result:=x] and ...
+
+   b) Uniqueness:  (requires that RT derives from ANY)
+
+         all(x,y) e1[Result:=x] ==> e2[Result:=x] ==> ...
+                  e2[Result:=y] ==> e2[Result:=y] ==> ...
+                  x = y
+
+   Assertions:
+
+        all(a,b,...) r1 ==> r2 ==> ... ==> ei[Result:=f(a,b,...)]
+ *)
 
 
 let analyze_feature
@@ -317,18 +377,59 @@ let analyze_feature
     let rvar = is_func || Option.has rt in
     PC.push entlst rt false is_func rvar pc in
   let context = Proof_context.context pc1 in
-  let nms = Context.local_argnames context in
+  let nms   = Context.local_argnames context in
   let nargs = Array.length nms in
+  let sign  = Context.signature context
+  and tvs   = Context.tvars context
+  in
+  let ft = Proof_context.feature_table pc in
+  let cnt = Feature_table.count ft in
+  let idx =
+    try Feature_table.find_with_signature fn.v tvs sign ft
+    with Not_found -> cnt
+  in
   let adapt_term t =
     if PC.has_result_variable pc1 then
       try
         Term.down_from 1 nargs t
       with Term_capture ->
-        not_yet_implemented fn.i "Features defined by properties"
+        error_info fn.i "\"Result\" cannot be used in here"
     else
-      t
-  in
-  let adapt_list lst = List.map adapt_term lst
+      t in
+  let adapt_list lst = List.map adapt_term lst in
+  let feature_spec reqlst enslst =
+    add_assumptions reqlst pc1;
+    let pres = adapt_list (PC.assumptions pc1) in
+    match enslst with
+      [] ->
+        Feature.Spec.make_func_spec nms pres []
+    | _ ->
+        begin try
+          let term,info = result_term enslst context in
+          verify_preconditions term info pc1;
+          let term = adapt_term term in
+          Feature.Spec.make_func_def nms (Some term) pres
+        with Not_found ->
+          let prove cond errstring =
+            try Prover2.prove cond pc1
+            with Not_found ->
+              error_info fn.i ("Cannot prove " ^ errstring ^ " of \"Result\"")
+          in
+          let posts = function_property_list enslst pc1 in
+          let exist = Context.existence_condition posts context in
+          printf "existence %s\n" (Context.string_of_term exist true 0 context);
+          let unique =
+            try Context.uniqueness_condition posts context
+            with Not_found ->
+              error_info fn.i "Result type does not inherit ANY"
+          in
+          printf "uniqueness %s\n" (Context.string_of_term unique true 0 context);
+          prove exist  "existence";
+          prove unique "uniqueness";
+          let posts = adapt_list (Context.function_postconditions idx posts context)
+          in
+          Feature.Spec.make_func_spec nms pres posts
+        end
   in
   let body =
     match bdy, exp with
@@ -348,59 +449,41 @@ let analyze_feature
               (Feature.Spec.make_func_def nms None []),
               Feature.Builtin
           | Some reqlst, Some Impbuiltin, None ->
-              add_assumptions reqlst pc1;
-              let pres = PC.assumptions pc1 in
-              let pres = adapt_list pres in
-              (Feature.Spec.make_func_spec nms pres []),
-              Feature.Builtin
+              feature_spec reqlst [], Feature.Builtin
           | Some reqlst, None, None ->
-              add_assumptions reqlst pc1;
-              let pres = PC.assumptions pc1 in
-              let pres = adapt_list pres in
-              (Feature.Spec.make_func_spec nms pres []),
-              Feature.Empty
+              feature_spec reqlst [], Feature.Empty
           | None, None, Some enslst ->
-              (try
-                let term,info = result_term enslst context in
-                verify_preconditions term info pc1;
-                let term = adapt_term term in
-                (Feature.Spec.make_func_def nms (Some term) []),
-                Feature.Empty
-              with Not_found ->
-                not_yet_implemented fn.i
-                  "functions not defined with `Result = ...'")
+              feature_spec [] enslst,
+              Feature.Empty
           | Some reqlst, None, Some enslst ->
-              (try
-                add_assumptions reqlst pc1;
-                let pres = PC.assumptions pc1 in
-                let term,info = result_term enslst context in
-                verify_preconditions term info pc1;
-                let term,pres = adapt_term term, adapt_list pres in
-                (Feature.Spec.make_func_def nms (Some term) pres),
-                Feature.Empty
-              with Not_found ->
-                not_yet_implemented fn.i
-                  "functions not defined with `Result = ...'")
+              feature_spec reqlst enslst,
+              Feature.Empty
           | None, Some Impdeferred, None ->
               (Feature.Spec.make_func_def nms None []),
               Feature.Deferred
           | Some reqlst, Some Impdeferred, None ->
-              add_assumptions reqlst pc1;
-              let pres = PC.assumptions pc1 in
-              let pres = adapt_list pres in
-              (Feature.Spec.make_func_spec nms pres []),
-              Feature.Deferred
+              feature_spec reqlst [], Feature.Deferred
           | _ -> not_yet_implemented fn.i
                 "functions with implementation/preconditions"
         end
     | _ -> assert false (* cannot happen *)
   in
-  let sign     = Context.signature context
-  and tvs      = Context.tvs context
-  in
   if Tvars.count tvs > 0 then
     not_yet_implemented entlst.i "Type inference for named functions";
-  put_function fn tvs nms sign body pc
+  if idx = cnt then begin
+    add_function fn tvs nms sign body pc;
+    let context = PC.context pc in
+    try
+      let idx = Context.count_variables context + cnt in
+      let lst = Context.specification idx 0 context in
+      printf "specification\n";
+      List.iter
+        (fun t -> printf "  %s\n" (Context.string_of_term t true 0 context))
+        lst
+    with Not_found ->
+      ()
+  end else
+    update_function idx fn tvs nms sign body pc
 
 
 

@@ -194,12 +194,12 @@ let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
 
 let fgnames (c:t): int array = entry_fgnames c.entry
 
-let tvs (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
+let tvars (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
 let sign2string (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
     s
-    (tvs c)
+    (tvars c)
     (class_table c)
 
 
@@ -331,7 +331,6 @@ let variable (name:int) (c:t): int * Tvars.t * Sign.t =
   let i = variable_index name c in
   let tvs,s = variable_data i c in
   i,tvs,s
-
 
 
 let make (verbosity:int): t =
@@ -635,6 +634,13 @@ let definition (idx:int) (nb:int) (c:t): int * int array * term =
     Feature_table.definition idx (nb + nbenv) (feature_table c)
 
 
+let specification (idx:int) (nb:int) (c:t): term list =
+  let nbenv = count_variables c in
+  if idx < nb + nbenv then
+    raise Not_found
+  else
+    Feature_table.specification idx (nb+nbenv) (feature_table c)
+
 
 let fully_expanded (t:term) (nb:int) (c:t): term =
   let rec expand t nb =
@@ -714,6 +720,15 @@ let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
     0, [||], []
   else
     Feature_table.preconditions idx (nb+nbenv) (feature_table c)
+
+
+
+let postconditions (idx:int) (nb:int) (c:t): int * int array * term list =
+  let nbenv = count_variables c in
+  if idx < nb + nbenv then
+    0, [||], []
+  else
+    Feature_table.postconditions idx (nb+nbenv) (feature_table c)
 
 
 
@@ -854,3 +869,93 @@ let term_preconditions (t:term)  (c:t): term list =
   in
   let ps,_ = pres t 0 [] in
   List.rev ps
+
+
+
+let existence_condition (posts:term list) (c:t): term =
+  (* Generate the existence condition
+
+         some(x) e1_x and e2_x and ...
+
+     where [ei_x] is the ith postcondition with the variable [Result] substituted
+     by [x].
+   *)
+  assert (has_result_variable c);
+  assert (posts <> []);
+  let nargs   = count_last_arguments c
+  and and_id  = 1 + and_index c
+  in
+  let args =
+    Array.init
+      (1 + nargs)
+      (fun i -> if i < nargs then Variable (1+i) else Variable 0) in
+  let replace t =
+    Term.sub t args (2 + nargs)
+  in
+  let term_inner =
+    List.fold_left
+      (fun inner p -> Term.binary and_id inner (replace p))
+      (replace (List.hd posts))
+      (List.tl posts) in
+  some_quantified 1 [|ST.symbol "x"|] term_inner c
+
+
+
+let uniqueness_condition (posts:term list) (c:t): term =
+  (* Generate the uniqueness condition
+
+         all(x,y) e1_x ==> e1_y ==> ...
+                  e2_x ==> e2_y ==> ... ==> x = y
+
+     where [ei_x]/[ei_y] is the ith postcondition with the variable [Result]
+     substituted by [x]/[y].  *)
+  assert (has_result_variable c);
+  assert (posts <> []);
+  let nargs   = count_last_arguments c
+  and imp_id  = 2 + implication_index c
+  and rt      = result_type c
+  and tvs     = tvars c
+  in
+  let cls = Tvars.principal_class rt tvs in
+  let eq_id  = 2 + (count_variables c)
+      + Feature_table.variant Feature_table.eq_index cls c.ft in
+  let args_var xyvar  =
+    assert (xyvar < 2);
+    Array.init
+      (1 + nargs)
+      (fun i -> if i < nargs then Variable (2+i) else Variable xyvar) in
+  let argsx = args_var 0
+  and argsy = args_var 1 in
+  let replace_by_args t args =
+    Term.sub t args (3 + nargs)
+  in
+  let term_inner =
+    List.fold_right
+      (fun t inner ->
+        let t1 = Term.binary imp_id (replace_by_args t argsy) inner in
+        Term.binary imp_id (replace_by_args t argsx) t1)
+      posts
+      (Term.binary eq_id (Variable 0) (Variable 1)) in
+  all_quantified 2 [|ST.symbol "x";ST.symbol "y"|] term_inner c
+
+
+
+
+
+let function_postconditions (idx:int) (posts:term list) (c:t): term list =
+  (* Generate the postconditions
+
+     [e1_f; e2_f; ...]
+
+     where [ei_f] is [ei] with the variable substituted by [f(a,b,...)] and
+     [idx] is the index of the function [f].
+   *)
+  assert (has_result_variable c);
+  assert (posts <> []);
+  let nargs   = count_last_arguments c in
+  let fargs = Array.init nargs (fun i -> Variable i) in
+  let fterm = VAppl (1+nargs+idx, fargs) in
+  let args  =
+    Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
+  let replace t = Term.sub t args (1+nargs) in
+  List.map replace posts

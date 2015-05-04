@@ -101,7 +101,7 @@ val fgnames: t   -> int array
 
 val local_argnames: t -> int array
 
-val tvs: t -> Tvars.t
+val tvars: t -> Tvars.t
 
 val ith_arguments_string: int -> t -> string
 val local_arguments_string: t -> string
@@ -134,7 +134,13 @@ val fully_expanded: term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> t -> int * int array * term
+val specification: int -> int -> t -> term list
 val expanded_definition: int -> int -> t -> int * int array * term
 
 val preconditions: int -> int -> t -> int * int array * term list
+val postconditions: int -> int -> t -> int * int array * term list
 val term_preconditions: term -> t -> term list
+
+val existence_condition: term list -> t -> term
+val uniqueness_condition: term list -> t -> term
+val function_postconditions: int -> term list -> t -> term list

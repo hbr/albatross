@@ -39,6 +39,13 @@ module Spec = struct
     spec.pres
 
 
+  let has_postconditions (spec:t): bool =
+    spec.posts <> []
+
+  let postconditions (spec:t): term list =
+    spec.posts
+
+
   let equivalent (s1:t) (s2:t): bool =
     if s1.def <> s2.def && Option.has s1.def && Option.has s2.def then
       Printf.printf "definitions not equivalent %s %s\n"

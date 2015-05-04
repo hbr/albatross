@@ -484,7 +484,7 @@ let analyze_expression
       | Expdot (tgt,f) ->
           application f [|tgt|] accs c
       | ExpResult ->
-          not_yet_implemented ie.i ("ExpResult Typing of "^ (string_of_expression e))
+          do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
           lambda entlst e false true accs c
       | Expbracket _ ->
