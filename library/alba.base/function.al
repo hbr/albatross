@@ -48,16 +48,16 @@ is_total (f:A->B): ghost BOOLEAN
 is_injective (f:A->B): ghost BOOLEAN
     ensure
         Result = all(x,y) x in f.domain
-                           ==> y in f.domain
-                           ==> f(x) = f(y)
-                           ==> x = y
+                      ==> y in f.domain
+                      ==> f(x) = f(y)
+                      ==> x = y
     end
 
 is_finite (p:A?): ghost BOOLEAN
     -> all(f:A->A) f.is_injective
-                   ==> f.domain = p
-                   ==> f.range <= p
-                   ==> f.range = p
+               ==> f.domain = p
+               ==> f.range <= p
+               ==> f.range = p
 
 is_choice (f:A?->A, p:A?): ghost BOOLEAN
     ensure
@@ -79,6 +79,40 @@ is_idempotent (f:A->A): ghost BOOLEAN
         Result = (f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f))
     end
 
+
+preimage(f:A->B, b:B): ghost A
+    require
+        f.is_injective
+        b in f.range
+    ensure
+        Result in f.domain
+        f(Result) = b
+    end
+
+
+all(x:A, f:A->B)
+    require
+        x in f.domain
+    proof
+        x in f.domain and f(x) = f(x)
+    ensure
+        f(x) in f.range
+    end
+{:
+inverse (f:A->B): ghost (B -> A)
+    require
+        f.is_injective
+    ensure
+        agent (b:B):A
+            require
+                b in f.range
+            ensure
+                Result = b.preimage(f)
+            end
+        -- Result.domain = f.range
+        -- all(x) x in f.domain ==> Result(f(x)) = x
+    end
+:}
 can_join (f,g:A->B): ghost BOOLEAN
     -> some(h) f <= h and g <= h
 
