@@ -16,7 +16,7 @@ module Eval = struct
     | Exp of (int * t array * bool) (* idx of function, args, full expansion *)
     | VApply of int * t array
     | Apply of t * t array * bool
-    | Lam of int * int array * t * bool
+    | Lam of int * int array * term list * t * bool
     | QExp of int * int array * t * bool
     | Beta of t
     | Simpl of t * int * term array  (* e, idx of simplifying equality assertion,
@@ -90,8 +90,8 @@ end = struct
           let f = adapt_eval f
           and args = adapt_args args in
           Eval.Apply (f,args,pr)
-      | Eval.Lam (n,nms,e,pr) ->
-          Eval.Lam (n, nms, adapt_eval e, pr)
+      | Eval.Lam (n,nms,pres,e,pr) ->
+          Eval.Lam (n, nms, pres, adapt_eval e, pr)
       | Eval.QExp (n,nms,e,is_all) ->
           Eval.QExp (n, nms, adapt_eval e, is_all)
       | Eval.Beta e -> Eval.Beta (adapt_eval e)
@@ -154,7 +154,7 @@ end = struct
         | Eval.Apply (f,args,_) ->
             let set = usd_eval f set in
             usd_args set args
-        | Eval.Lam (n,nms,e,_) | Eval.QExp(n,nms,e,_) -> usd_eval e set
+        | Eval.Lam (n,nms,_,e,_) | Eval.QExp(n,nms,e,_) -> usd_eval e set
         | Eval.Beta e           -> usd_eval e set
         | Eval.Simpl (e,i,args) ->
             let set = usd i start_inner extern pt_arr set in
@@ -234,7 +234,7 @@ end = struct
             Eval.VApply (i, Array.map transform_eval args)
         | Eval.Apply (f,args,pr) ->
             Eval.Apply (transform_eval f, Array.map transform_eval args,pr)
-        | Eval.Lam (n,nms,e,pr) -> Eval.Lam (n,nms,transform_eval e,pr)
+        | Eval.Lam (n,nms,pres,e,pr) -> Eval.Lam (n,nms,pres,transform_eval e,pr)
         | Eval.QExp (n,nms,e,ia)-> Eval.QExp (n,nms,transform_eval e,ia)
         | Eval.Beta e           -> Eval.Beta (transform_eval e)
         | Eval.Simpl (e,i,args) -> Eval.Simpl (transform_eval e, index i,args)
@@ -385,6 +385,8 @@ end = struct
       in
       let shrink_args_inner (args:term array) (nb:int): term array =
         Array.map (fun a -> shrink_inner a nb) args
+      and shrink_list_inner (lst:term list) (nb:int): term list =
+        List.map (fun a -> shrink_inner a nb) lst
       in
       let shrink_args (args:term array): term array = shrink_args_inner args 0
       in
@@ -408,8 +410,8 @@ end = struct
               let f = shrnk f nb
               and args = shrnk_eargs args in
               Eval.Apply (f,args,pr)
-          | Eval.Lam (n,nms,e,pr) ->
-              Eval.Lam (n,nms,shrnk e (1+nb),pr)
+          | Eval.Lam (n,nms,pres,e,pr) ->
+              Eval.Lam (n,nms,shrink_list_inner pres (1+nb),shrnk e (1+nb),pr)
           | Eval.QExp (n,nms,e,is_all) ->
               Eval.QExp (n,nms,shrnk e (nb+n),is_all)
           | Eval.Beta e ->
@@ -482,6 +484,8 @@ end = struct
       let up t = up_inner t 0 in
       let upargs_inner args nb =
         Array.map (fun a -> up_inner a nb) args
+      and uplist_inner lst nb =
+        List.map (fun a -> up_inner a nb) lst
       in
       let upargs args = Array.map up args in
       let var t =
@@ -503,8 +507,8 @@ end = struct
             let f = upeval f nb
             and args = upeval_args args in
             Eval.Apply(f,args,pr)
-        | Eval.Lam (n,nms,e,pr) ->
-            Eval.Lam (n, nms, upeval e (1+nb), pr)
+        | Eval.Lam (n,nms,pres,e,pr) ->
+            Eval.Lam (n, nms, uplist_inner pres (1+nb), upeval e (1+nb), pr)
         | Eval.QExp (n,nms,e,is_all) ->
             Eval.QExp (n, nms, upeval e (n+nb),is_all)
         | Eval.Beta e ->

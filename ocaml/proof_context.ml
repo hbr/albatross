@@ -378,9 +378,9 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Application(fsimp, args, pr),
           Eval.Apply(fe,argse,pr),
           modi
-      | Lam(n,nms,t0,pr) ->
+      | Lam(n,nms,pres,t0,pr) ->
           let tsimp,te,tmodi = simp t0 (1+nb) in
-          Lam(n,nms,tsimp,pr), Eval.Lam(n,nms,te,pr), tmodi
+          Lam(n,nms,pres,tsimp,pr), Eval.Lam(n,nms,pres,te,pr), tmodi
       | QExp(n,nms,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
           QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
@@ -460,7 +460,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
-        Lam (n,nms,t0,_) ->
+        Lam (n,nms,_,t0,_) ->
           beta_reduce  n t0 args nb pc, Eval.Beta e, true
       | _ ->
           Application (f,args,is_pred), e, modi
@@ -505,10 +505,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 assert (n = Array.length args);
                 printf "expand %s\n" (string_of_term_anon t nb pc);
                 assert false; (* is this possible? *)
-                (*let args, argse, _ = eval_args true args full in
-                Term.apply t0 args,
-                Eval.Exp(i,argse,full),
-                true*)
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
@@ -519,9 +515,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Application (f,args,pr) ->
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
-      | Lam (n,nms,t,pred) ->
+      | Lam (n,nms,pres,t,pred) ->
           let t,e,tmodi = eval t (1+nb) full in
-          Lam (n,nms,t,pred), Eval.Lam (n,nms,e,pred), tmodi
+          Lam (n,nms,pres,t,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
       | QExp (n,nms,t,is_all) ->
           let full = full || not is_all in
           let t,e,tmodi = eval t (n+nb) full in
@@ -1262,7 +1258,7 @@ let prove_equality (g:term) (pc:t): int =
   let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
-  let lam = Lam(nargs,[||],tlam,false) in
+  let lam = Lam(nargs,[||],[],tlam,false) in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
   let lam_1up = Term.up 1 lam
@@ -1287,7 +1283,7 @@ let prove_equality (g:term) (pc:t): int =
     let result = ref start_idx in
     for i = 0 to nargs - 1 do
       let pred_inner_i = pred_inner i in
-      let pred_i = Lam(1,[||],pred_inner_i,true) in
+      let pred_i = Lam(1,[||],[],pred_inner_i,true) in
       let ai_abstracted = Application(pred_i, [|args1.(i)|],true) in
       let imp = implication (term !result pc) ai_abstracted pc in
       let idx2 = eval_backward ai_abstracted imp

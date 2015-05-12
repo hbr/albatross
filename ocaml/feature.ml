@@ -43,7 +43,10 @@ module Spec = struct
     spec.posts <> []
 
   let postconditions (spec:t): term list =
-    spec.posts
+    if spec.posts = [] then
+      raise Not_found
+    else
+      spec.posts
 
 
   let equivalent (s1:t) (s2:t): bool =

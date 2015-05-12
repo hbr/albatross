@@ -697,11 +697,12 @@ expr:
   let entlst = entities_of_expression info lst in
   Exparrow (withinfo info entlst,$5)
 }
-|   KWagent formal_arguments_info return_type_opt
+|   KWagent formal_arguments_info return_type_opt optsemi
     require_block_opt
     ensure_block
     KWend {
-  not_yet_implemented (rhs_info 1) "agent expressions"
+  Expagent ($2,$3,$5,$6)
+  (*not_yet_implemented (rhs_info 1) "agent expressions"*)
 }
 |   LIDENTIFIER ARROW expr {
   let info = rhs_info 1 in

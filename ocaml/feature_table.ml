@@ -149,8 +149,8 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         raise Not_found
       else
         ()
-    and check_args args =
-      Array.iter (fun t -> check_pub t nb) args
+    and check_args args = Array.iter (fun t -> check_pub t nb) args
+    and check_lst  lst n = List.iter  (fun t -> check_pub t (n+nb)) lst
     in
     match t with
       Variable i when i < nb ->
@@ -163,7 +163,8 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
     | Application(f,args,_) ->
         check_pub f nb;
         check_args args;
-    | Lam(n,nms,t0,_) ->
+    | Lam(n,nms,pres0,t0,_) ->
+        check_lst pres0 (1+nb);
         check_pub t0 (1+nb)
     | QExp(n,nms,t0,_) ->
         check_pub t0 (n+nb)
@@ -268,14 +269,17 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         let f = untup0 f nb
         and args = Array.map (fun t -> untup0 t nb) args in
         Application(f,args,pr), 0, 0
-    | Lam (n,nms,t0,pr) ->
-        let t0 = untup0 t0 (1+nb) in
-        Lam(n,nms,t0,pr), 0, 0
+    | Lam (n,nms,pres0,t0,pr) ->
+        let t0 = untup0 t0 (1+nb)
+        and pres0 = untup0_lst pres0 (1+nb) in
+        Lam(n,nms,pres0,t0,pr), 0, 0
     | QExp (n,nms,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
         QExp(n,nms,t0,is_all), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
+  and untup0_lst lst nb =
+    List.map (fun t -> untup0 t nb) lst
   in
   if nargs <= 1 then
       t
@@ -331,8 +335,8 @@ let beta_reduce_0
         let f    = reduce f nb
         and args = reduce_args args in
         Application(f,args,pr)
-    | Lam(n,nms,t0,pr) ->
-        Lam(n, nms, reduce t0 (1+nb), pr)
+    | Lam(n,nms,pres0,t0,pr) ->
+        Lam(n, nms, pres0, reduce t0 (1+nb), pr)
     | QExp(n,nms,t0,is_all) ->
         QExp(n, nms, reduce t0 (n + nb), is_all)
   in
@@ -442,11 +446,14 @@ let add_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
 
 
 let make_lambda
-    (n:int) (nms:int array) (t:term) (pr:bool) (nbenv:int) (ft:t): term =
+    (n:int) (nms:int array) (pres:term list) (t:term) (pr:bool) (nbenv:int) (ft:t)
+    : term =
   assert (0 < n);
   assert (Array.length nms = 0 || Array.length nms = n);
-  let t0 = add_tuple_accessors t n nbenv ft in
-  Lam(n,nms,t0,pr)
+  let add_tup t = add_tuple_accessors t n nbenv ft in
+  let t0 = add_tup t
+  and pres0 = List.map add_tup pres in
+  Lam(n,nms,pres0,t0,pr)
 
 
 
@@ -525,12 +532,13 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
 let specification (i:int) (nb:int) (ft:t): term list =
   let n, nms,  posts = postconditions i nb ft
   and n2,nms2, pres  = preconditions  i nb ft in
+  let pres_rev = List.rev pres in
   assert (n = n2);
   assert (nms = nms2);
   let imp_id = n + nb + implication_index in
   List.map
     (fun t ->
-      let chn = Term.make_implication_chain pres t imp_id in
+      let chn = Term.make_implication_chain pres_rev t imp_id in
       QExp(n,nms,chn,true))
     posts
 
@@ -558,7 +566,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
       Variable i when i < nb+nargs -> false
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
-    | Lam (n,_,t,_) ->
+    | Lam (n,_,_,t,_) ->
         is_ghost t (1+nb)
     | QExp(_,_,_,_) ->
         true
@@ -1179,10 +1187,12 @@ let term_to_string
       else
         nanonused+n, Array.init n anon2sym
     in
-    let lam_strs (n:int) (nms:int array) (t:term): string * string =
+    let lam_strs (n:int) (nms:int array) (ps:term list) (t:term)
+        : string * string *string =
       let nanonused, nms = local_names n nms in
       let names = Array.append nms names in
       args2str n nms,
+      String.concat ";" (List.map (fun t -> to_string t names nanonused false None) ps),
       to_string t names nanonused false None
     in
     let default_fapp (f:term) (argsstr:string): string =
@@ -1230,12 +1240,16 @@ let term_to_string
             ^ " " ^ (operator_to_rawstring op) ^ " "
         ^ (to_string args.(1) names nanonused false (Some (op,false)))
           end
-    and lam2str (n:int) (nms: int array) (t:term) (pr:bool): string =
-      let argsstr, tstr = lam_strs n nms t in
+    and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool): string =
+      let argsstr, presstr, tstr = lam_strs n nms pres t in
       if pr then
         "{" ^ argsstr ^ ": " ^ tstr ^ "}"
       else
-        "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
+        match pres with
+          [] -> "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
+        | _ -> "agent (" ^ argsstr ^ ") require " ^
+            presstr ^
+            " ensure Result = " ^ tstr ^ " end"
     in
     let inop, str =
       match t with
@@ -1256,15 +1270,21 @@ let term_to_string
             with Not_found ->
               None, funapp2str f (argsstr args)
           end
-      | Lam (n,nms,t,pr) ->
+      | Lam (n,nms,pres,t,pr) ->
           let nms = adapt_names nms names in
           let nbenv = Array.length names in
-          let t = if norm then remove_tuple_accessors t n nbenv ft else t in
-          None, lam2str n nms t pr
+          let remove_tup t = remove_tuple_accessors t n nbenv ft in
+          let pres, t =
+            if norm then
+              List.map remove_tup pres,
+              remove_tup t
+            else
+              pres,t in
+          None, lam2str n nms pres t pr
       | QExp (n,nms,t,is_all) ->
           let nms = adapt_names nms names in
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
-          and argsstr, tstr = lam_strs n nms t in
+          and argsstr, _, tstr = lam_strs n nms [] t in
           Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
     in
     match inop, outop with

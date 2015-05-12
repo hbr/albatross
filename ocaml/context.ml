@@ -207,9 +207,10 @@ let string_of_term (t:term) (norm:bool) (nanon:int) (c:t): string =
   Feature_table.term_to_string t norm nanon (varnames c) c.ft
 
 
-let make_lambda (n:int) (nms:int array) (t:term) (pred:bool) (c:t): term =
+let make_lambda (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (c:t)
+    : term =
   let nbenv = count_variables c in
-  Feature_table.make_lambda n nms t pred nbenv c.ft
+  Feature_table.make_lambda n nms ps t pred nbenv c.ft
 
 
 let make_application
@@ -647,8 +648,7 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
     let expargs args = Array.map (fun arg -> expand arg nb) args in
     let apply f args pr =
       match f with
-        Lam(n,nms,t0,_) ->
-          (*assert (n = Array.length args);*)
+        Lam(n,_,_,t0,_) ->
           beta_reduce n t0 args nb c
       | _ ->
           Application (f,args,pr)
@@ -697,8 +697,8 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         let f    = expand f nb
         and args = expargs args in
         apply f args pr
-    | Lam (n,nms,t,pr) ->
-        Lam (n, nms, expand t (1+nb), pr)
+    | Lam (n,nms,pres,t,pr) ->
+        Lam (n, nms, pres, expand t (1+nb), pr)
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, expand t (n+nb), is_all)
   in
@@ -795,6 +795,10 @@ let term_preconditions (t:term)  (c:t): term list =
     and not_id  = nb + not_id0
     and dom_id  = nb + dom_id0
     in
+    let remove_tup t n = remove_tuple_accessors t n nb c in
+    let remove_tup_lst lst n =
+      List.map (fun t -> remove_tup t n) lst
+    in
     let pres_args args lst =
       Array.fold_left
         (fun lst t -> let lst,_ = pres t nb lst in lst)
@@ -853,16 +857,37 @@ let term_preconditions (t:term)  (c:t): term list =
         | None ->
             lst
         end,
-        (*Application(VAppl(dom_id,[|f|]),args,true)::lst,*)
         domain_t
-    | Lam (n,nms,t0,pr) when pr ->
-        let t0 = remove_tuple_accessors t0 n nb c in
-        pres_lam n nms t0 lst,
-        None
-    | Lam (n,nms,t0,pr) ->
-        let t0 = remove_tuple_accessors t0 n nb c in
-        pres_lam n nms t0 lst,
-        None
+    | Lam (n,nms,pres0,t0,pr) ->
+        let pres0     = remove_tup_lst pres0 n
+        and t0        = remove_tup t0 n
+        and imp_id    = n + imp_id in
+        let lst,_ = (* collect preconditions of preconditions *)
+          List.fold_left
+            (fun (lst,plst) p ->
+              let pres_p,_ = pres p (n+nb) [] in
+              let lst = List.fold_left
+                  (fun lst pre_p ->
+                    let chn = Term.make_implication_chain plst pre_p imp_id in
+                    QExp(n,nms,chn,true)::lst)
+                  lst
+                  pres_p
+              in
+              lst, p::plst)
+            (lst,[])
+            pres0
+        in
+        let pres_t0,_ = pres t0 (n+nb) [] in
+        let lst = (* preconditions have to imply the preconditions of the inner
+                     expression *)
+          let pres0_rev = List.rev pres0 in
+          List.fold_right
+            (fun tgt lst ->
+              let chn = Term.make_implication_chain pres0_rev tgt imp_id in
+              QExp(n,nms,chn,true)::lst)
+            pres_t0 (* is reversed *)
+            lst in
+        lst,None
     | QExp (n,nms,t0,is_all) ->
         pres_lam n nms t0 lst,
         None

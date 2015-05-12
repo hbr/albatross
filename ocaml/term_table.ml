@@ -19,7 +19,8 @@ type t = {
     apps:  (t array) IntMap.t; (* one for each function variable *)
     fapps: (t * t array) IntMap.t;
                               (* one for each number of arguments *)
-    lams:  t option;
+    lams:  (t list * t) IntMap.t;
+                              (* one for each number of preconditions *)
     alls:  t IntMap.t;        (* one for each number of bindings *)
     somes: t IntMap.t         (* one for each number of bindings *)
   }
@@ -32,7 +33,7 @@ let empty = {
   fvars = [];
   apps  = IntMap.empty;
   fapps = IntMap.empty;
-  lams  = None;
+  lams  = IntMap.empty;
   (*lams  = IntMap.empty;*)
   alls  = IntMap.empty;
   somes = IntMap.empty}
@@ -43,15 +44,11 @@ let count  (tab:t): int =
 
 exception Term_found of term
 
-let find_lam (tab:t): t =
-  match tab.lams with
-    None -> raise Not_found
-  | Some tab -> tab
-  (*IntMap.find 1 tab.lams*)
+let find_lam (n:int) (tab:t): t list * t =
+  IntMap.find n tab.lams
 
-let add_lam (n:int) (lamtab:t) (tab:t): t =
-  {tab with lams = Some lamtab}
-  (*{tab with lams = IntMap.add 1 lamtab tab.lams}*)
+let add_lam (n:int) (lamtab:t list * t) (tab:t): t =
+  {tab with lams = IntMap.add n lamtab tab.lams}
 
 
 let terms0 (tab:t): (int*int*int*int*term) list =
@@ -257,10 +254,22 @@ let unify (t:term) (nbt:int) (table:t)
           with Not_found ->
             basic_subs
         end
-    | Lam (n,_,t,_) ->
+    | Lam (n,_,pres,t,_) ->
+        let len = List.length pres in
         begin try
-          let ttab = find_lam tab in
+          let prestablst,ttab = find_lam len tab in
+          assert (prestablst = []);
           let tlst = uni t ttab (1 + nb) in
+          let rec addpres pres prestablst lst =
+            match pres, prestablst with
+              [], [] -> lst
+            | p::pres, tab::prestablst ->
+                let plst = uni p tab (1+nb) in
+                let lst = merge_lists plst lst in
+                addpres pres prestablst lst
+            | _ -> assert false (* list must have the same size *)
+          in
+          let tlst = addpres pres prestablst tlst in
           join_lists basic_subs tlst
         with Not_found ->
           basic_subs
@@ -362,9 +371,20 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             flst := merge_lists !flst alst)
           args;
         !flst
-    | Lam (n,_,t,_) ->
-        let ttab = find_lam tab in
-        uniw t ttab (1 + nb)
+    | Lam (n,_,pres,t,_) ->
+        let len = List.length pres in
+        let prestabs, ttab = find_lam len tab in
+        let rec addpres pres prestabs lst =
+          match pres, prestabs with
+            [], [] -> lst
+          | p::pres, tab::prestabs ->
+              let plst = uniw p tab (1+nb) in
+              let lst = merge_lists plst lst in
+              addpres pres prestabs lst
+          | _ -> assert false (* lists must have the same size *)
+        in
+        let tlst = uniw t ttab (1 + nb) in
+        addpres pres prestabs tlst
     | QExp (n,_,t,is_all) ->
         let ttab = IntMap.find n (qmap is_all tab) in
         uniw t ttab (n+nb)
@@ -446,13 +466,27 @@ let add
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
-      | Lam (n,_,t,_) ->
-          let ttab =
-            try find_lam tab
-            with Not_found -> empty
+      | Lam (n,_,pres,t,_) ->
+          let len = List.length pres in
+          let rec addpres pres prestablst =
+            match pres, prestablst with
+              [], [] -> []
+            | p::pres, tab::tablst ->
+                let tablst = addpres pres tablst in
+                (add0 p (1+nb) tab)::tablst
+            | _ ->
+                assert false (* lists must have the same length *)
           in
-          let ttab = add0 t (1 + nb) ttab in
-          add_lam n ttab tab
+          let prestab,ttab =
+            try find_lam len tab
+            with Not_found ->
+              let lst = Array.to_list (Array.make (List.length pres) empty) in
+              lst, empty
+          in
+          let ttab = add0 t (1 + nb) ttab
+          and prestab = addpres pres prestab
+          in
+          add_lam len (prestab,ttab) tab
       | QExp (n,_,t,is_all) ->
           let ttab =
             try IntMap.find n (qmap is_all tab)

@@ -26,12 +26,13 @@ module Accus: sig
   val expected_signatures_string: t -> string
   val substitutions_string: t -> string
   val expect_boolean:    t -> unit
+  val expect_inner_precondition:    t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
   val complete_function: int -> t -> unit
   val expect_lambda:     int -> bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int -> bool -> t -> unit
+  val complete_lambda:   int -> int -> int -> bool -> t -> unit
   val expect_quantified: int -> Context.t -> t -> unit
   val complete_quantified:   int -> int -> bool -> t -> unit
   val specialize_terms:  t -> unit
@@ -126,6 +127,12 @@ end = struct
         accs.accus;
     if accs.accus = [] then
       raise (Untypeable accus)
+
+
+  let expect_inner_precondition (accs:t): unit =
+    List.iter
+      (fun acc -> Term_builder.expect_inner_precondition acc)
+      accs.accus
 
 
   let expect_function (nargs:int) (accs:t): unit =
@@ -236,9 +243,10 @@ end = struct
       accs
 
 
-  let complete_lambda (ntvs:int) (ntvs_added:int) (is_pred:bool) (accs:t): unit =
+  let complete_lambda (ntvs:int) (ntvs_added:int) (npres:int) (is_pred:bool) (accs:t)
+      : unit =
     iter_accus
-      (fun acc -> Term_builder.complete_lambda ntvs is_pred acc) accs;
+      (fun acc -> Term_builder.complete_lambda ntvs npres is_pred acc) accs;
     accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -480,15 +488,27 @@ let analyze_expression
       | Expquantified (q,entlst,exp) ->
           quantified q entlst exp accs c
       | Exppred (entlst,e) ->
-          lambda entlst e true false accs c
+          lambda entlst None [] e true false accs c
       | Expdot (tgt,f) ->
           application f [|tgt|] accs c
       | ExpResult ->
           do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
-          lambda entlst e false true accs c
+          lambda entlst None [] e false true accs c
+      | Expagent (entlst,rt,pres,posts) ->
+          begin match posts with
+            [ie0] ->
+              begin match ie0.v with
+                Binexp (Eqop, ExpResult, exp) ->
+                  lambda entlst rt pres exp false true accs c
+              | _ ->
+                  not_yet_implemented ie.i "Agents defined with properties"
+              end
+          | _ ->
+              not_yet_implemented ie.i "Agents defined with properties"
+          end
       | Expbracket _ ->
-          not_yet_implemented ie.i ("Expbracket Typing of "^ (string_of_expression e))
+          not_yet_implemented ie.i ("Expbracket Typing of " ^ (string_of_expression e))
       | Bracketapp (_,_) ->
           not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
       | Expset _ ->
@@ -545,6 +565,8 @@ let analyze_expression
 
   and lambda
       (entlst:entities list withinfo)
+      (rt: return_type)
+      (pres: compound)
       (e:expression)
       (is_pred: bool)
       (is_func: bool)
@@ -554,10 +576,19 @@ let analyze_expression
     let ntvs_gap = Accus.ntvs_added accs in
     let c = Context.push_with_gap entlst None is_pred is_func false ntvs_gap c in
     let ntvs      = Context.count_local_type_variables c in
+    let rec anapres (pres:compound) (npres:int): int =
+      match pres with
+        [] -> npres
+      | p::pres ->
+          Accus.expect_inner_precondition accs;
+          analyze p.v accs c;
+          anapres pres (1+npres)
+    in
     Accus.expect_lambda (ntvs-ntvs_gap) is_pred c accs;
     analyze e accs c;
+    let npres = anapres pres 0 in
     Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap is_pred accs
+    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap npres is_pred accs
   in
 
   let accs   = Accus.make is_bool c in

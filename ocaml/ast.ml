@@ -417,13 +417,13 @@ let analyze_feature
           in
           let posts = function_property_list enslst pc1 in
           let exist = Context.existence_condition posts context in
-          printf "existence %s\n" (Context.string_of_term exist true 0 context);
+          (*printf "existence %s\n" (Context.string_of_term exist true 0 context);*)
           let unique =
             try Context.uniqueness_condition posts context
             with Not_found ->
               error_info fn.i "Result type does not inherit ANY"
           in
-          printf "uniqueness %s\n" (Context.string_of_term unique true 0 context);
+          (*printf "uniqueness %s\n" (Context.string_of_term unique true 0 context);*)
           prove exist  "existence";
           prove unique "uniqueness";
           let posts = adapt_list (Context.function_postconditions idx posts context)
@@ -470,19 +470,9 @@ let analyze_feature
   in
   if Tvars.count tvs > 0 then
     not_yet_implemented entlst.i "Type inference for named functions";
-  if idx = cnt then begin
-    add_function fn tvs nms sign body pc;
-    let context = PC.context pc in
-    try
-      let idx = Context.count_variables context + cnt in
-      let lst = Context.specification idx 0 context in
-      printf "specification\n";
-      List.iter
-        (fun t -> printf "  %s\n" (Context.string_of_term t true 0 context))
-        lst
-    with Not_found ->
-      ()
-  end else
+  if idx = cnt then
+    add_function fn tvs nms sign body pc
+  else
     update_function idx fn tvs nms sign body pc
 
 

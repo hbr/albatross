@@ -423,8 +423,8 @@ let unify
         for i = 0 to nargs-1 do
           uni args1.(i) args2.(i) nb
         done
-    | Lam (_,_,_,_), _
-    | _ , Lam (_,_,_,_) ->
+    | Lam (_,_,_,_,_), _
+    | _ , Lam (_,_,_,_,_) ->
         assert false (* lambda terms not used for types *)
     | _ ->
         raise Not_found
@@ -565,6 +565,14 @@ let expect_boolean (tb:t): unit =
   let tp   = Variable (ntvs + Class_table.boolean_index) in
   let s    = Sign.make_const tp in
   unify_sign tb.sign s tb
+
+
+
+let expect_inner_precondition (tb:t): unit =
+  let ntvs = count_all tb in
+  let tp   = Variable (ntvs + Class_table.boolean_index) in
+  let s    = Sign.make_const tp in
+  tb.sign <- s
 
 
 
@@ -759,19 +767,32 @@ let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
 
 
 
-let complete_lambda (ntvs:int) (is_pred:bool) (tb:t): unit =
+let complete_lambda (ntvs:int) (npres:int) (is_pred:bool) (tb:t): unit =
   assert (tb.tlist <> []);
   let names = Context.local_argnames tb.c
   and c     = Context.pop tb.c in
   let nargs = Array.length names in
   assert (0 < nargs);
+  let pop_pres (npres:int): term list =
+    let rec pop n lst =
+      if n = 0 then lst
+      else begin
+        assert (tb.tlist <> []);
+        let p,_,_ = List.hd tb.tlist in
+        tb.tlist <- List.tl tb.tlist;
+        pop (n-1) (p::lst)
+      end
+    in
+    List.rev (pop npres [])
+  in
+  let pres = pop_pres npres in
   let t,ttvs,tsig = List.hd tb.tlist in
   assert (Tvars.count_all ttvs <= count_all tb);
   let tsig =
     Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
   tb.tlist <- List.tl tb.tlist;
-  let lam = Lam (nargs,names,t,is_pred)
+  let lam = Lam (nargs,names,pres,t,is_pred)
   and s   =
     let argtps = Array.init nargs
         (fun i -> TVars_sub.sub_star (variable_type i tb) tb.tvars) in
@@ -886,9 +907,11 @@ let update_called_variables (tb:t): unit =
         let f = update f nb
         and args = Array.map (fun a -> update a nb) args in
         Application (f,args,pr)
-    | Lam(n,nms,t,pr) ->
-        let t = update t (1 + nb) in
-        Lam(n,nms,t,pr)
+    | Lam(n,nms,pres,t,pr) ->
+        let nb = 1 + nb in
+        let t = update t nb
+        and pres = List.map (fun p -> update p nb) pres in
+        Lam(n,nms,pres,t,pr)
     | QExp(n,nms,t,is_all) ->
         let t = update t (n+nb) in
         QExp(n,nms,t,is_all)
@@ -994,11 +1017,21 @@ let specialize_term_0 (tb:t): unit =
         let nglob,f = upd f nargs nglob in
         let nglob, args = upd_args nglob args in
         nglob, Application (f,args,pr)
-    | Lam (n,nms,t,pr) ->
-        let nglob, t = upd t (1 + nargs) (n+nglob) in
-        nglob, Lam (n,nms,t,pr)
+    | Lam (n,nms,pres,t,pr) ->
+        let nargs = 1 + nargs
+        and nglob = n + nglob in
+        let nglob,pres_rev =
+          List.fold_left
+            (fun (nglob,ps) p ->
+              let nglob,p = upd p nargs nglob in
+              nglob, p::ps)
+            (nglob,[])
+            pres in
+        let pres = List.rev pres_rev in
+        let nglob, t = upd t nargs nglob in
+        nglob, Lam (n,nms,pres,t,pr)
     | QExp (n,nms,t,is_all) ->
-        let nglob, t = upd t (nargs+n) nglob in
+        let nglob, t = upd t (n+nargs) nglob in
         nglob, QExp (n,nms,t,is_all)
   in
   let nargs = Context.count_variables tb.c
@@ -1026,9 +1059,10 @@ let normalize_lambdas (tb:t): unit =
         let f    = norm f nb
         and args = norm_args args in
         Context.make_application f args nb pr tb.c
-    | Lam (n,nms,t,pr) ->
-        let t = norm t (n+nb) in
-        Context.make_lambda n nms t pr tb.c
+    | Lam (n,nms,pres,t,pr) ->
+        let pres = List.map (fun p -> norm p (n+nb)) pres
+        and t = norm t (n+nb) in
+        Context.make_lambda n nms pres t pr tb.c
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, norm t (n+nb), is_all)
   in
@@ -1088,6 +1122,8 @@ let upgrade_required (pr:bool) (tb:t): unit =
   let res  = Sign.result tb.sign
   and arg  = Sign.arg_type 0 tb.sign
   and nall = count_all tb in
+  if not (not pr || res = boolean_type tb) then
+    printf "upgrade_required pr %b, res is bool %b\n" pr (res = boolean_type tb);
   assert (not pr || res = boolean_type tb);
   let tp =
     if pr then
@@ -1113,7 +1149,7 @@ let check_term (t:term) (tb:t): t =
       | _ ->
           ()
     in
-    let lambda n nms t is_pred tb =
+    let lambda n nms pres t is_pred tb =
       assert (0 < n);
       assert (Array.length nms = n);
       let nms = [|ST.symbol "$0"|] in
@@ -1124,13 +1160,22 @@ let check_term (t:term) (tb:t): t =
       in
       let tb = expect_lambda ntvs is_pred c tb in
       let tb = check t tb in
+      let rec check_pres (pres:term list) (tb:t): t =
+        match pres with
+          [] -> tb
+        | p::pres ->
+            let tb = check p tb in
+            check_pres pres tb
+      in
+      expect_inner_precondition tb;
+      let tb = check_pres pres tb in
       begin try
         check_untyped_variables tb
       with Incomplete_type _ ->
         raise Illegal_term
       end;
       begin try
-        complete_lambda ntvs is_pred tb
+        complete_lambda ntvs 0 is_pred tb
       with Not_found -> assert false
       end;
       tb
@@ -1212,10 +1257,10 @@ let check_term (t:term) (tb:t): t =
         complete_function nargs tb;
         upgrade_potential_dummy f pr tb;
         tb
-    | Lam(n,nms,t0,is_pred) ->
+    | Lam(n,nms,pres,t0,is_pred) ->
         assert (0 < n);
         assert (n = Array.length nms);
-        lambda n nms t0 is_pred tb
+        lambda n nms pres t0 is_pred tb
     | QExp(n,nms,t0,is_all) ->
         assert (n = Array.length nms);
         qlambda n nms t0 is_all tb

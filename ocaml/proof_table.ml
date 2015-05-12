@@ -479,16 +479,16 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let argsa = Array.init nargs (fun i -> fst args.(i))
         and argsb = Array.init nargs (fun i -> snd args.(i)) in
         Application (fa,argsa,pr), Application (fb,argsb,pr)
-    | Eval.Lam (n,nms,e,pr) ->
+    | Eval.Lam (n,nms,pres,e,pr) ->
         let ta,tb = reconstruct e (1 + nb) in
-        Lam (n,nms,ta,pr), Lam (n,nms,tb,pr)
+        Lam (n,nms,pres,ta,pr), Lam (n,nms,pres,tb,pr)
     | Eval.QExp (n,nms,e,is_all) ->
         let ta,tb = reconstruct e (nb+n) in
         QExp (n,nms,ta,is_all), QExp (n,nms,tb,is_all)
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
-          Application(Lam(n,nms,t0,_),args,_) ->
+          Application(Lam(n,nms,_,t0,_),args,_) ->
             let tb = beta_reduce n t0 args nb at in
             ta,tb
         | _ -> raise Illegal_proof_term end

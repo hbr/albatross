@@ -90,6 +90,7 @@ preimage(f:A->B, b:B): ghost A
     end
 
 
+
 all(x:A, f:A->B)
     require
         x in f.domain
@@ -98,21 +99,23 @@ all(x:A, f:A->B)
     ensure
         f(x) in f.range
     end
-{:
+
+
 inverse (f:A->B): ghost (B -> A)
     require
         f.is_injective
     ensure
-        agent (b:B):A
-            require
-                b in f.range
-            ensure
-                Result = b.preimage(f)
-            end
+        Result = agent (b:B):A
+                     require
+                         b in f.range
+                     ensure
+                         Result = f.preimage(b)
+                     end
         -- Result.domain = f.range
         -- all(x) x in f.domain ==> Result(f(x)) = x
     end
-:}
+
+
 can_join (f,g:A->B): ghost BOOLEAN
     -> some(h) f <= h and g <= h
 

@@ -12,7 +12,8 @@ type term =
     Variable    of int
   | VAppl       of int * term array              (* fidx, args *)
   | Application of term * term array * bool      (* fterm, args, is_pred *)
-  | Lam         of int * int array * term * bool (* n, names, t, is_pred *)
+  | Lam         of int * int array * term list * term * bool
+                   (* n, names, pres, t, is_pred *)
   | QExp        of int * int array * term * bool (* n, names, t, is_all *)
 and formal  = int * term (* name, type *)
 and formals = formal array
@@ -103,7 +104,7 @@ module Term: sig
 
   val apply: term -> term array -> term
 
-  val lambda_split: term -> int * int array * term
+  val lambda_split: term -> int * int array * term list * term
 
   val qlambda_split: term -> int * int array * term * bool
 
@@ -155,12 +156,19 @@ end = struct
       let args = Array.init nargs string_of_int in
       String.concat "," (Array.to_list args)
     in
-    let strlam nargs names t pred =
+    let strlam nargs names pres t pred =
       let argsstr = string_of_int 0 in
-      if pred then
+      if pred then begin
+        assert (pres = []); (* predicates don't have preconditions *)
         "{" ^ argsstr ^ ": " ^ (to_string t) ^ "}"
-      else
-        "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
+      end else
+        match pres with
+          [] -> "((" ^ argsstr ^ ")->" ^ (to_string t) ^ ")"
+        | _ ->
+            let presstr = String.concat ";" (List.map to_string pres) in
+            "(agent(" ^ argsstr ^ ") require " ^
+            presstr ^
+            " ensure Result = " ^ (to_string t) ^ " end)"
     in
     match t with
       Variable i -> string_of_int i
@@ -179,8 +187,8 @@ end = struct
         fstr ^ predstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Lam(nargs,names,t,pred) ->
-        strlam nargs names t pred
+    | Lam(nargs,names,pres,t,pred) ->
+        strlam nargs names pres t pred
     | QExp (nargs,names,t,is_all) ->
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
@@ -210,25 +218,35 @@ end = struct
 
   let rec nodes (t:term): int =
     (* The number of nodes in the term t *)
+    let nodeslst lst =
+      List.fold_left (fun n t -> n + nodes t) 0 lst
+    in
     match t with
       Variable _ -> 1
     | VAppl (i,args) ->
         Array.fold_left (fun sum t -> sum + (nodes t)) 1 args
     | Application (f,args,_) ->
         Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args
-    | Lam (_,_,t,_) | QExp (_,_,t,_) ->
+    | Lam (_,_,pres,t,_) ->
+        1 + nodeslst pres + nodes t
+    | QExp (_,_,t,_) ->
         1 + (nodes t)
 
 
   let rec depth (t:term): int =
     (* The depth of the term t *)
+    let depthlst lst =
+      List.fold_left (fun d t -> max d (depth t)) 0 lst
+    in
     match t with
       Variable _ -> 0
     | VAppl (i,args) ->
         Mylist.sum depth 1 (Array.to_list args)
     | Application (f,args,_) ->
         Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,_,t,_) | QExp (_,_,t,_)->
+    | Lam (_,_,pres,t,_) ->
+        1 + depthlst (t::pres)
+    | QExp (_,_,t,_)->
         1 + (depth t)
 
 
@@ -249,8 +267,11 @@ end = struct
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           Array.fold_left (fun a t -> fld a t (level+1) nb) a args
-      | Lam (n,_,t,_) ->
-          fld a t (level+1) (1+nb)
+      | Lam (n,_,pres,t,_) ->
+          let level = 1 + level
+          and nb    = 1 + nb in
+          let a = List.fold_left (fun a t -> fld a t level nb) a pres in
+          fld a t level nb
       | QExp (n,_,t,_) ->
           fld a t (level+1) (nb+n)
     in
@@ -387,8 +408,12 @@ end = struct
           n = Array.length args2 &&
           eq f1 f2 nb &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
-      | Lam(n1,nms1,t1,_), Lam(n2,nms2,t2,_) when n1 = n2 ->
-          eq t1 t2 (1+nb)
+      | Lam(n1,nms1,pres1,t1,_), Lam(n2,nms2,pres2,t2,_) when n1 = n2 ->
+          let nb = 1 + nb in
+          (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb) pres1 pres2
+          with Invalid_argument _ -> false)
+            &&
+          eq t1 t2 nb
       | QExp(n1,nms1,t1,is_all1), QExp(n2,nms2,t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
@@ -412,8 +437,11 @@ end = struct
           VAppl (f j nb, map_args args)
       | Application (a,b,pred) ->
           Application (mapr nb a, map_args b, pred)
-      | Lam (nargs,names,t,pred) ->
-          Lam(nargs, names, mapr (1+nb) t, pred)
+      | Lam (nargs,names,pres,t,pred) ->
+          let nb = 1 + nb in
+          let pres = List.map (fun t -> mapr nb t) pres
+          and t    = mapr nb t in
+          Lam(nargs, names, pres, t, pred)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
     in
@@ -445,8 +473,12 @@ end = struct
           VAppl (j, Array.map (fun t -> mapr nb t) args)
       | Application (a,b,pred) ->
           Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
-      | Lam (nargs,names,t,pred) ->
-          Lam(nargs, names, mapr (1+nargs) t, pred)
+      | Lam (nargs,names,pres,t,pred) ->
+          let nb = 1 + nb in
+          let pres = List.map (fun t -> mapr nb t) pres
+          and t = mapr nb t in
+          Lam(nargs, names, pres , t, pred)
+          (*Lam(nargs, names, mapr (1+nargs) t, pred) (* 1 + nargs??? *)*)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
     in
@@ -583,8 +615,11 @@ end = struct
           VAppl (i + n_delta - len, sub_args args)
       | Application(f,args,pr) ->
           Application (sub f nb, sub_args args, pr)
-      | Lam(n,nms,t0,pr) ->
-          Lam (n, nms, sub t0 (1+nb), pr)
+      | Lam(n,nms,pres0,t0,pr) ->
+          let nb = 1 + nb in
+          let pres0 = List.map (fun t -> sub t nb) pres0
+          and t0    = sub t0 nb in
+          Lam (n, nms, pres0, t0, pr)
       | QExp(n,nms,t0,is_all) ->
           QExp (n, nms, sub t0 (n+nb), is_all)
     in
@@ -636,9 +671,9 @@ end = struct
     sub t args 0
 
 
-  let lambda_split (t:term): int * int array * term =
+  let lambda_split (t:term): int * int array * term list * term =
     match t with
-      Lam (n,names,t,_) -> n,names,t
+      Lam (n,names,pres,t,_) -> n,names,pres,t
     | _ -> raise Not_found
 
 

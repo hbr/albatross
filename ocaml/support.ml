@@ -195,6 +195,15 @@ let rec string_of_type (t:type_t) =
 
 type return_type = (type_t*bool*bool) withinfo option (* tp,proc,ghost *)
 
+let string_of_return_type (rt:return_type): string =
+  match rt with
+    None -> ""
+  | Some rt ->
+      let tp,proc,ghost = rt.v in
+      ":" ^
+      (if ghost then "ghost " else "") ^
+      (string_of_type tp) ^
+      (if proc then "!" else "")
 
 (* Formal arguments *)
 
@@ -351,6 +360,7 @@ type expression =
   | Expparen      of expression
   | Expbracket    of expression
   | Exparrow      of entities list withinfo * expression
+  | Expagent      of entities list withinfo * return_type * compound * compound
   | Expop         of operator
   | Funapp        of expression * expression
   | Bracketapp    of expression * expression
@@ -427,6 +437,11 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Exparrow  (l,e) ->
       (string_of_formals l.v) ^ "->" ^ (string_of_expression e)
 
+  | Expagent (l,rt,pres,posts) ->
+      "agent(" ^ (string_of_formals l.v) ^ ")" ^ (string_of_return_type rt) ^
+      " require " ^ (string_of_compound pres) ^
+      " ensure " ^ (string_of_compound posts) ^
+      " end"
   | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 
   | Funapp (f,args) ->

@@ -1,11 +1,12 @@
 open Term
 open Container
 
-
+(*
 let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
   (* Unify the term [t1] with the term [t2] i.e. find a substitution for the
      [nargs] arguments which applied to [t1] makes it equal to t2
    *)
+  assert false;
   let rec uni t1 t2 nb sub =
     match t1, t2 with
       Variable i, _ when i < nb || nb+nargs <= i ->
@@ -24,6 +25,8 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
         | Some t when t <> t2 -> raise Not_found
         | Some t -> assert (t=t2); sub
         end
+    | VAppl (i1,args1), VAppl (i2,args2) when i1 = i2 ->
+        assert false
     | Application (f1,args1,pr1), Application (f2,args2,pr2)
       when Array.length args1 = Array.length args2  && pr1 = pr2 ->
         let sub = ref (uni f1 f2 nb sub) in
@@ -31,7 +34,9 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
           sub := uni args1.(i) args2.(i) nb !sub
         done;
         !sub
-    | Lam(n1,nms1,t1,pr1), Lam(n2,nms2,t2,pr2) when n1 = n2 && pr1 = pr2 ->
+    | Lam(n1,nms1,ps1,t1,pr1), Lam(n2,nms2,ps2,t2,pr2)
+      when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
+        assert (ps1 = []);
         uni t1 t2 (1 + nb) sub
     | _ ->
         raise Not_found
@@ -40,7 +45,7 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
   assert (let args = Term_sub.arguments nargs sub in
   Term.sub t1 args nargs = t2);
   sub
-
+*)
 
 (* Comparison of two terms and finding their differences
 
@@ -113,7 +118,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | Application(f1,args1,pr1), Application(f2,args2,pr2)
       when Array.length args1 = Array.length args2 && pr1 = pr2 ->
         begin try
-          let pos,poslst,elst,tlst = comp f1 f2 nb (pos+1) poslst elst tlst in
+          let pos,poslst,elst,tlst = comp f1 f2 nb (1+pos) poslst elst tlst in
           let args = Myarray.combine args1 args2 in
           Array.fold_left
             (fun (pos,poslst,elst,tlst) (a1,a2) ->
@@ -123,10 +128,17 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Lam(n1,nms1,t01,pr1), Lam(n2,nms2,t02,pr2)
-      when n1 = n2 && pr1 = pr2 ->
+    | Lam(n1,nms1,ps1,t01,pr1), Lam(n2,nms2,ps2,t02,pr2)
+      when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
+        let nb = 1 + nb in
         begin try
-          comp t01 t02 (1 + nb) (pos+1) poslst elst tlst
+          let pos,poslst,elst,tlst =
+            List.fold_left2
+              (fun (pos,poslst,elst,tlst) p1 p2 ->
+                comp p1 p2 nb pos poslst elst tlst)
+              (1+pos,poslst,elst,tlst)
+              ps1 ps2 in
+          comp t01 t02 nb pos poslst elst tlst
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
@@ -189,12 +201,22 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
               args in
           let args = Array.of_list (List.rev arglst) in
           nextpos, nextvar, poslst, Application(f,args,pr)
-    | Lam(n,nms,t0,pr) ->
+    | Lam(n,nms,pres,t0,pr) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
+          let nb = 1 + nb in
+          let nextpos,nextvar,poslst,pres_rev =
+            List.fold_left
+              (fun (nextpos,nextvar,poslst,ps) p ->
+                let nextpos,nextvar,poslst,p =
+                  mklambda nextpos nextvar poslst p nb in
+                nextpos, nextvar, poslst, p::ps)
+              (1+nextpos,nextvar,poslst,[])
+              pres in
+          let pres = List.rev pres_rev in
           let nextpos,nextvar,poslst,t0 =
-            mklambda (nextpos+1) nextvar poslst t0 (1 + nb) in
-          nextpos, nextvar, poslst, Lam(n,nms,t0,pr)
+            mklambda nextpos nextvar poslst t0 nb in
+          nextpos, nextvar, poslst, Lam(n,nms,pres,t0,pr)
     | QExp(n,nms,t0,is_all) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else

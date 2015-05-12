@@ -52,6 +52,8 @@ val make_boolean:     Context.t -> t
 
 val expect_boolean:   t -> unit
 
+val expect_inner_precondition:   t -> unit
+
 val expect_function:   int -> t -> unit
     (** [expect_function nargs tb] converts the currently expected signature
         to a function signature with [nargs] arguments and adds [nargs] fresh
@@ -90,8 +92,8 @@ val expect_lambda:  int -> bool -> Context.t -> t -> t
        (PREDICATE or FUNCTION). It puts a constant signature with the expected
        return type of the lambda expression as the expected signature. *)
 
-val complete_lambda:   int -> bool -> t -> unit
-   (** [complete_lambda nargs names -> is_pred tb] converts the term
+val complete_lambda:   int -> int -> bool -> t -> unit
+   (** [complete_lambda ntvs npres is_pred tb] converts the term
        on top the term list into a lamda term with [nargs] arguments and the
        argument names [names]. *)
 

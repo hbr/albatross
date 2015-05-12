@@ -82,7 +82,7 @@ val count_variables:  t -> int
 
 val implication_index: t -> int
 
-val make_lambda:      int -> int array -> term -> bool -> t -> term
+val make_lambda:      int -> int array -> term list -> term -> bool -> t -> term
 val make_application: term -> term array -> int -> bool -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 
