@@ -117,7 +117,7 @@ let is_local (at:t): bool =
 let is_toplevel (at:t): bool =
   Proof_table.is_toplevel at.base
 
-let nbenv (at:t): int = Proof_table.count_arguments at.base
+let nbenv (at:t): int = Proof_table.count_variables at.base
 
 let count_base (pc:t): int = Proof_table.count pc.base
 
@@ -466,6 +466,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Application (f,args,is_pred), e, modi
     in
     let expand t =
+      let domain_id = nb + nbenv + Feature_table.domain_index in
       match t with
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
@@ -476,6 +477,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           with Not_found ->
             t, Eval.Term t, false
           end
+      | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
+          assert (not pr);
+          let dom = Context.domain_lambda n nms pres nb (context pc) in
+          let argse = [|Eval.Term (Lam(n,nms,pres,t0,pr))|] in
+          dom, Eval.Exp(i,argse,full), true
       | VAppl (i,args) ->
           begin
             try
@@ -1041,7 +1047,7 @@ let proved_goal (g:term) (pc:t): unit =
 
 
 let push0 (base:Proof_table.t) (pc:t): t =
-  let nbenv = Proof_table.count_arguments base in
+  let nbenv = Proof_table.count_variables base in
   let res = {pc with
              base  = base;
              terms = Ass_seq.clone pc.terms;

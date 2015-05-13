@@ -141,6 +141,8 @@ val preconditions: int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
 val term_preconditions: term -> t -> term list
 
+val domain_lambda: int -> int array -> term list -> int -> t -> term
+
 val existence_condition: term list -> t -> term
 val uniqueness_condition: term list -> t -> term
 val function_postconditions: int -> term list -> t -> term list

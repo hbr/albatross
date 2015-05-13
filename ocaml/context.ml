@@ -732,6 +732,27 @@ let postconditions (idx:int) (nb:int) (c:t): int * int array * term list =
 
 
 
+let domain_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term =
+  (* Construct the domain of a lambda expression with the precondition [pres] where
+     the lambda expression if within an environment with [nb] variables more than the
+     context [c].
+   *)
+  let nbenv = count_variables c in
+  match pres with
+    [] ->
+      let true_id = 1 + nb + nbenv + Feature_table.true_index in
+      Lam(n,nms,[],Variable true_id,true)
+  | p::pres ->
+      let and_id  = 1 + nb + nbenv + Feature_table.and_index in
+      let inner =
+        List.fold_left
+          (fun t p -> Term.binary and_id t p)
+          p
+          pres in
+      Lam(n,nms,[],inner,true)
+
+
+
 let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
   let nbenv = nb + count_variables c in
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft

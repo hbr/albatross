@@ -80,7 +80,7 @@ let count_last_local (pt:t): int =
   (count pt) - (count_previous pt)
 
 
-let count_arguments (at:t): int = Context.count_variables at.c
+let count_variables (at:t): int = Context.count_variables at.c
 
 
 let count_last_arguments (at:t): int =
@@ -311,7 +311,7 @@ let local_term (i:int) (at:t): term =
    *)
   assert (i < count at);
   let desc = descriptor i at in
-  let n_up = count_arguments at - desc.nbenv0
+  let n_up = count_variables at - desc.nbenv0
   in
   Term.up n_up desc.term
 
@@ -401,7 +401,7 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   let raw_add () =
-    Ass_seq.push {nbenv0 = count_arguments at;
+    Ass_seq.push {nbenv0 = count_variables at;
                   term   = t;
                   proof_term = pt} at.seq
   in
@@ -425,14 +425,14 @@ let definition (idx:int) (nb:int) (full:bool) (at:t): int * int array * term =
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
   let nargs, eq_id, left, right =
-    Feature_table.split_equality t (nb + count_arguments at) (feature_table at) in
+    Feature_table.split_equality t (nb + count_variables at) (feature_table at) in
   nargs,left,right
 
 
 
 let specialized (i:int) (args:term array) (nb:int) (at:t): term =
   assert (i < count at);
-  let nbenv = count_arguments at in
+  let nbenv = count_variables at in
   let t, nbenv_t = term i at in
   assert (nbenv_t <= nbenv);
   let nbenv_delta = nb + nbenv - nbenv_t in
@@ -450,8 +450,20 @@ let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   let rec reconstruct e nb =
+    let domain_id = nb + count_variables at + Feature_table.domain_index in
     match e with
       Eval.Term t -> t,t
+    | Eval.Exp (idx,args,full) when idx = domain_id ->
+        assert (Array.length args = 1);
+        let args = Array.map (fun e -> reconstruct e nb) args in
+        let arga,argb = args.(0) in
+        begin match argb with
+          Lam(n,nms,pres,t0,pr) ->
+            if pr then raise Illegal_proof_term;
+            VAppl(idx,[|arga|]),
+            Context.domain_lambda n nms pres nb (context at)
+        | _ -> raise Illegal_proof_term
+        end
     | Eval.Exp (idx,args,full) ->
         let n,nms,t =
           try definition idx nb full at

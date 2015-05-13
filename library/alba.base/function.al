@@ -101,7 +101,7 @@ all(x:A, f:A->B)
     end
 
 
-inverse (f:A->B): ghost (B -> A)
+inverse0 (f:A->B): ghost (B -> A)
     require
         f.is_injective
     ensure
@@ -111,8 +111,14 @@ inverse (f:A->B): ghost (B -> A)
                      ensure
                          Result = f.preimage(b)
                      end
-        -- Result.domain = f.range
-        -- all(x) x in f.domain ==> Result(f(x)) = x
+    end
+
+
+all(f:A->B, b:B)
+    require
+        f.is_injective
+    ensure
+        (f.inverse0).domain = f.range
     end
 
 
@@ -149,6 +155,59 @@ all(f:A->B) ensure f = f end
 
 immutable class FUNCTION[A,B]
 inherit         ghost ANY end
+
+
+
+all(f:A->B)
+    require
+        f.is_injective
+    proof
+        f.inverse0.domain = f.range and all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
+    ensure
+        some(g) g.domain = f.range and all(x) x in f.domain ==> g(f(x)) = x
+    end
+
+all(f:A->B, g,h:B->A)
+    require
+        f.is_injective
+        g.domain = f.range
+        h.domain = f.range
+        all(x) x in f.domain ==> g(f(x)) = x
+        all(x) x in f.domain ==> h(f(x)) = x
+    proof
+        g.domain = h.domain
+        all(y)
+            require
+                y in f.range
+            proof
+                some(x) x in f.domain and f(x) = y
+                all(x)
+                    require
+                        x in f.domain and f(x) = y
+                    proof
+                        f(x) = y
+                        g(f(x)) = x
+                        h(f(x)) = x
+                        y in {y: y in g.domain and g(y) = h(y)}
+                    ensure
+                        g(y) = h(y)
+                    end
+            ensure
+                g(y) = h(y)
+            end
+    ensure
+        g = h
+    end
+
+inverse (f:A->B): ghost (B -> A)
+    require
+        f.is_injective
+    ensure
+        Result.domain = f.range
+        all(x) x in f.domain ==> Result(f(x)) = x
+    end
+
+
 
 all(a:A)
     ensure

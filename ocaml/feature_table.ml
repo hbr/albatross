@@ -52,15 +52,16 @@ type t = {
 
 let implication_index: int =  0
 let false_index:       int =  1
-let not_index:         int =  2
-let and_index:         int =  3
-let or_index:          int =  4
-let eq_index:          int =  5
-let in_index:          int =  6
-let domain_index:      int =  7
-let tuple_index:       int =  8
-let first_index:       int =  9
-let second_index:      int = 10
+let true_index:        int =  2
+let not_index:         int =  3
+let and_index:         int =  4
+let or_index:          int =  5
+let eq_index:          int =  6
+let in_index:          int =  7
+let domain_index:      int =  8
+let tuple_index:       int =  9
+let first_index:       int = 10
+let second_index:      int = 11
 
 
 let empty (verbosity:int): t =
@@ -964,7 +965,13 @@ let base_table (verbosity:int) : t =
       (Term.binary imp_id2
          (Variable 0)
          (Term.binary imp_id2 (Variable 1) (Variable false_id2)))
+  and true_term =
+    Term.binary implication_index (Variable false_index) (Variable false_index)
   in
+  add_base (* true *)
+    "boolean" Class_table.boolean_index FNtrue
+    [||] [||] bool false false (spec_term 0 true_term) ft;
+
   add_base (* not *)
     "boolean" Class_table.boolean_index (FNoperator Notop)
     [||] [|bool|] bool false false (spec_term 1 not_term) ft;

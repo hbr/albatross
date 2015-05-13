@@ -30,7 +30,7 @@ val is_toplevel: t -> bool
 val count:       t -> int
 val count_previous: t -> int
 val count_global:   t -> int
-val count_arguments:t -> int
+val count_variables:t -> int
 val has_result:     t -> bool
 val has_result_variable:     t -> bool
 val count_last_arguments:  t -> int

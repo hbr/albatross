@@ -1,3 +1,8 @@
+binary_relation.al*
+*lattice*.al*
+well*.al*
+endorelation.al*
+
 _build
 _draft
 doc
