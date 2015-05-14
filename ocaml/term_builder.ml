@@ -1116,12 +1116,14 @@ let upgrade_potential_dummy (i:int) (pr:bool) (tb:t): unit =
 
 
 
-let upgrade_required (pr:bool) (tb:t): unit =
+let upgrade_required_signature (pr:bool) (tb:t): unit =
   assert (Sign.arity tb.sign = 1);
   assert (Sign.has_result tb.sign);
   let res  = Sign.result tb.sign
   and arg  = Sign.arg_type 0 tb.sign
   and nall = count_all tb in
+  let res  = substituted_type res tb
+  and arg  = substituted_type arg tb in
   if not (not pr || res = boolean_type tb) then
     printf "upgrade_required pr %b, res is bool %b\n" pr (res = boolean_type tb);
   assert (not pr || res = boolean_type tb);
@@ -1243,9 +1245,10 @@ let check_term (t:term) (tb:t): t =
         let nargs = Array.length args in
         assert (nargs = 1);
         expect_function nargs tb;
-        let tb = anys_added 1 tb in
-        unify (Variable 0) (Variable (count tb - 1)) tb;
-        upgrade_required pr tb;
+        let tb = anys_added 2 tb in
+        unify (Sign.arg_type 0 tb.sign) (Variable (count tb - 2)) tb;
+        unify (Sign.result tb.sign)     (Variable (count tb - 1)) tb;
+        upgrade_required_signature pr tb;
         let tb = check f tb in
         let tb,_ = Array.fold_left
             (fun (tb,i) a ->
