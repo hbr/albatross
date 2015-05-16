@@ -561,10 +561,10 @@ let make_boolean (c:Context.t): t =
 
 
 let expect_boolean (tb:t): unit =
-  let ntvs = count_all tb in
-  let tp   = Variable (ntvs + Class_table.boolean_index) in
-  let s    = Sign.make_const tp in
-  unify_sign tb.sign s tb
+  if not (Sign.is_constant tb.sign) then
+    raise Not_found
+  else
+    unify (Sign.result tb.sign) (boolean_type tb) tb
 
 
 
@@ -980,10 +980,10 @@ let specialize_term_0 (tb:t): unit =
           assert (anchor < nfgs);
           let tv  = Tvars.count_local tvs + nglob + anchor in
           assert (tv < Tvars.count_all tvs);
-            let tvtp = TVars_sub.get_star tv tb.tvars in
-            let pcls = Tvars.principal_class tvtp tvs in
-            let i_var = Feature_table.variant i pcls ft in
-            nglob+nfgs, nargs + i_var
+          let tvtp = TVars_sub.get_star tv tb.tvars in
+          let pcls = Tvars.principal_class tvtp tvs in
+          let i_var = Feature_table.variant i pcls ft in
+          nglob+nfgs, nargs + i_var
         with Not_found ->
           nglob+nfgs, i+nargs
     and upd_args nglob args =
