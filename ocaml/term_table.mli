@@ -22,6 +22,8 @@ val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
 
 val add: term -> int -> int -> int -> t -> t
 
+val filter: (int->bool) -> t -> t
+
 val remove: int -> t -> t
     (** [remove i tab] removes the term with the index [i] from the table
         [tab] *)

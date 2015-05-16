@@ -504,13 +504,24 @@ let add
 
 
 
+
+
+let filter (f:int -> bool) (tab:t): t =
+  let filt_sub sublst = List.filter (fun (idx,_) -> f idx) sublst in
+  let rec filt tab =
+    {terms = List.filter (fun (idx,_,_,_,_) -> f idx) tab.terms;
+     avars = List.filter (fun (idx,_,_) ->     f idx) tab.avars;
+     bvars = IntMap.map filt_sub tab.bvars;
+     fvars = List.map (fun (nbenv,map) -> nbenv, IntMap.map filt_sub map) tab.fvars;
+     apps  = IntMap.map (fun args -> Array.map filt args) tab.apps;
+     fapps = IntMap.map (fun (f,args) -> filt f, Array.map filt args) tab.fapps;
+     lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
+     alls  = IntMap.map filt tab.alls;
+     somes = IntMap.map filt tab.somes}
+  in
+  filt tab
+
+
+
 let remove (i:int) (tab:t): t =
-  let lst = terms tab in
-  List.fold_left
-    (fun tab (idx,nargs,nbenv,term) ->
-      if idx <> i then
-        add term nargs nbenv idx tab
-      else
-        tab)
-    empty
-    lst
+  filter (fun idx -> idx <> i) tab
