@@ -31,7 +31,7 @@ let usage_init   = "usage: alba init\n"
 
 let usage_help   = "usage: alba help <command>\n"
 
-let alba_version = "v0.1-"
+let alba_version = "v0.1+"
 
 type command =
     Nocommand
