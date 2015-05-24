@@ -59,7 +59,7 @@ let prove (t:term) (pc:PC.t): unit =
   if PC.is_interface_use pc then
     ()
   else begin
-    let _ = Prover2.proof_term t pc in
+    let _ = Prover.proof_term t pc in
     ()
   end
 

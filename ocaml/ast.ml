@@ -99,7 +99,7 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
     let pres = term_preconditions t pc in
     List.iter
       (fun t ->
-        try Prover2.prove t pc
+        try Prover.prove t pc
         with
           Not_found ->
             error_info info ("Cannot prove precondition " ^ (PC.string_of_term t pc))
@@ -149,7 +149,7 @@ let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
   let t = get_boolean_term ie pc in
   verify_preconditions t ie.i pc;
   try
-    let res = Prover2.prove_and_insert t pc in
+    let res = Prover.prove_and_insert t pc in
     PC.close pc;
     res
   with Not_found ->
@@ -411,7 +411,7 @@ let analyze_feature
           Feature.Spec.make_func_def nms (Some term) pres
         with Not_found ->
           let prove cond errstring =
-            try Prover2.prove cond pc1
+            try Prover.prove cond pc1
             with Not_found ->
               error_info fn.i ("Cannot prove " ^ errstring ^ " of \"Result\"")
           in
