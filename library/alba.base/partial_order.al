@@ -119,8 +119,14 @@ supremum(p:PO?):  ghost PO
     ensure
         Result.is_supremum(p)
     end
-
-
+{:
+(*) (p:PO?): ghost PO
+    require
+        some(x) x.is_infimum(p)
+    ensure
+        Result.is_infimum(p)
+    end
+:}
 
 is_closure_system (p:PO?):  ghost BOOLEAN
     -> all(q) q <= p  ==> (some(x) x.is_infimum(q)) and q.infimum in p
@@ -263,6 +269,14 @@ all(p:PO?)
         p.infimum.is_infimum(p)
     end
 
+all(x:PO, p:PO?)
+    require
+        some(x) x.is_infimum(p)
+        x.is_infimum(p)
+    ensure
+        x = p.infimum
+    end
+
 all(p,q:PO?)
     require
         some(x) x.is_infimum(p)
@@ -365,6 +379,9 @@ all(pp:G??)
 
 is_closed (p:G?, r:(G,G)?): ghost BOOLEAN
     -> all(x,y) p(x) ==> r(x,y) ==> p(y)
+
+
+
 {:
 all(r:(G,G)?)
     proof
@@ -374,13 +391,55 @@ all(r:(G,G)?)
             proof
                 (*qq).is_infimum(qq)
 
+                all(x,y)
+                    require
+                        x in *qq
+                        r(x,y)
+                    proof
+                        all(p)
+                        require p in qq
+                        proof   x in p
+                                p in {p: p.is_closed(r)}
+                        ensure  y in p end
+                    ensure
+                        y in *qq
+                    end
+
+                (*qq).is_closed(r)
+
+                proof *qq = qq.infimum
+                ensure *qq <= qq.infimum
+                       qq.infimum <= *qq end
+
+
+                all(x,y)
+                    require
+                        x in qq.infimum
+                        r(x,y)
+                    proof
+                        x in *qq
+                        all(p)
+                            require p in qq
+                            proof   x in p
+                                    p in {p: p.is_closed(r)}
+                            ensure  y in p end
+                        y in *qq
+                    ensure
+                        y in qq.infimum
+                    end
+
+
                 (*qq) = qq.infimum
+
+                qq.infimum in {p: p.is_closed(r)}
+                qq.infimum.is_closed(r)
             ensure
                 qq.infimum in {p: p.is_closed(r)}
             end
     ensure
         {p: p.is_closed(r)}.is_closure_system
     end
+
 
 closed(p:G?, r:(G,G)?): ghost G?
     -> p.closed({q: q.is_closed(r)})
