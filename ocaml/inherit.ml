@@ -100,6 +100,8 @@ let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
     assert (Sign.has_result sign);
     Tvars.principal_class (Sign.result sign) tvs
   in
+  if not (Feature_table.has_definition i ft) then
+    not_yet_implemented info "inheritance of functions defined by properties";
   let eq_term =
     try Feature_table.definition_equality i ft
     with Not_found ->
