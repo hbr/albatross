@@ -417,13 +417,13 @@ let add
       environment with [nbenv] variables to the index [idx]
       within the node [tab].
    *)
-  assert (not (has idx table));
+  (*assert (not (has idx table));*)
   let rec add0 (t:term) (nb:int) (tab:t): t =
     let tab =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
           (* variable is a formal argument which can be substituted *)
-          assert (not (List.exists (fun (i,_,_) -> i=idx) tab.avars));
+          (*assert (not (List.exists (fun (i,_,_) -> i=idx) tab.avars));*)
           {tab with avars = (idx, (i-nb),nargs) :: tab.avars}
       | Variable i when nb+nargs <= i ->
           (* variable is a free variable (i.e. not substitutable *)
