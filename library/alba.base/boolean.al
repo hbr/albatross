@@ -29,18 +29,20 @@ all(a:BOOLEAN)
         not not a ==> a    -- double negation
     end
 
-all(a:BOOLEAN) require  false
-               proof    not not a
-               ensure   a end
-
-all(a:BOOLEAN) require  not a ==> false
-               proof    not not a
-               ensure   a end
+all(a:BOOLEAN)
+        -- indirect proof
+    require
+        not a ==> false
+    proof
+        not not a
+    ensure
+        a
+    end
 
 all ensure true end
 
 all(a,b:BOOLEAN)
-        -- and elimination
+        -- 'and' elimination
     require
         a and b
     proof
@@ -52,20 +54,29 @@ all(a,b:BOOLEAN)
     end
 
 all(a,b:BOOLEAN)
-        -- and introduction
+        -- 'and' introduction
     ensure
         a ==> b ==> a and b
     end
 
 all(a,b:BOOLEAN)
-        -- or introduction
+        -- 'or' introduction
+    proof
+        require
+            a
+            not a
+        proof
+            not not b
+        ensure
+            b
+        end
     ensure
         a ==> a or b
         b ==> a or b
     end
 
 all(a,b,c:BOOLEAN)
-        -- or elimination
+        -- 'or' elimination
     require
         a or b
         a ==> c
@@ -78,72 +89,6 @@ all(a,b,c:BOOLEAN)
 
 
 all(a:BOOLEAN)
-    proof
-        require  a or a
-        proof    a ==> a
-        ensure   a end
     ensure
-        a or (a ==> false)
-        a or not a    -- excluded middle
-        a or a ==> a
-    end
-
-all(a,b:BOOLEAN)
-    require a or b
-    proof   a ==> b or a
-    ensure  b or a
-    end
-
-all(a,b,c:BOOLEAN)
-    require
-        (a or b) or c
-    proof
-        require
-            a or b
-        proof
-            a ==> a or (b or c)
-        ensure
-            a or (b or c)
-        end
-    ensure
-        a or (b or c)
-    end
-
-all(a,b,c:BOOLEAN)
-    require
-        a or (b or c)
-    proof
-        a ==> (a or b) or c
-        require
-            b or c
-        proof
-            b ==> (a or b) or c
-        ensure
-            (a or b) or c
-        end
-    ensure
-        (a or b) or c
-    end
-
-
-all(a,b:BOOLEAN)
-    ensure
-        a or b ==> not a ==> b
-        (not a ==> b) ==> a or b
-    end
-
-
-all(a,b:BOOLEAN)
-        -- equal introduction
-    require
-        a ==> b
-        b ==> a
-    ensure
-        a = b
-    end
-
-all(a,b,c:BOOLEAN)
-    ensure
-       a = b ==> (a ==> c) ==> (b ==> c)
-       a = b ==> (c ==> a) ==> (c ==> b)
+        a = a
     end

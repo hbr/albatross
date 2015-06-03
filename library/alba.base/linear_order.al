@@ -4,6 +4,7 @@
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
 use
+    boolean_logic
     partial_order
 end
 
