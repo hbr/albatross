@@ -52,7 +52,7 @@
 
 (defvar alba-syntax-table (make-syntax-table))
 
-;(modify-syntax-entry ?_  "w  "  alba-syntax-table)
+(modify-syntax-entry ?_  "w  "  alba-syntax-table)
 (modify-syntax-entry ?\( "()  " alba-syntax-table)
 (modify-syntax-entry ?\) ")(  " alba-syntax-table)
 (modify-syntax-entry ?\[ "(]  " alba-syntax-table)
