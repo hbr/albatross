@@ -61,10 +61,19 @@ let allows_partial_specialization (rd:t): bool =
   gp1 < rd.nargs
 
 
+
+let is_catchall (t:term) (nargs:int): bool =
+  match t with
+    Variable i when i < nargs -> true
+  | Application(Variable i, [|Variable j|],pr) when i < nargs && j < nargs -> true
+  | _ -> false
+
+
+
 let is_forward_catchall (rd:t): bool =
   is_implication rd &&
   let _,_,p = List.hd rd.premises in
-  Term.is_argument p rd.nargs
+  is_catchall p rd.nargs
 
 
 
@@ -76,7 +85,7 @@ let is_forward (rd:t): bool =
 
 let is_backward (rd:t): bool =
   is_implication rd &&
-  (rd.nbwd = 0 && not rd.bwd_blckd && not (Term.is_argument rd.target rd.nargs))
+  (rd.nbwd = 0 && not rd.bwd_blckd && not (is_catchall rd.target rd.nargs))
 
 
 let is_equality (rd:t): bool =
