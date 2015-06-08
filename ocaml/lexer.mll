@@ -201,7 +201,7 @@ rule next_token = parse
 | "[]"            { Parser.BRACKETOP,(false,false) }
 
 
-| ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|']+ as op {
+| ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|' '^']+ as op {
   try
     kwtoken op
   with
