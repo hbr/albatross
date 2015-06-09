@@ -19,7 +19,15 @@ type t = {
 let empty: t =
   {nlocal=0;concepts=[||];fgconcepts=[||];fgnames=[||]}
 
-
+let make
+    (nlocs:int)
+    (concepts:type_term array)
+    (fgnames:int array) (fgconcepts:type_term array): t =
+  assert (Array.length fgnames = Array.length fgconcepts);
+  {nlocal = nlocs;
+   concepts = concepts;
+   fgnames  = fgnames;
+   fgconcepts = fgconcepts}
 
 let count_fgs (tvs:t): int = Array.length tvs.fgnames
 
@@ -59,6 +67,10 @@ let concept (i:int) (tvs:t): type_term =
     tvs.concepts.(i - count_local tvs)
   else
     tvs.fgconcepts.(i - count tvs)
+
+let name (i:int) (tvs:t): int =
+  assert (count tvs <= i);
+  tvs.fgnames.(i - count tvs)
 
 let concepts (tvs:t): type_term array = tvs.concepts
 

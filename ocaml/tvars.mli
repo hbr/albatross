@@ -19,6 +19,8 @@ type t
 val empty: t
     (** An empty type environment *)
 
+val make: int -> type_term array -> int array -> type_term array -> t
+
 val make_fgs:    int array -> type_term array -> t
     (** [make_fgs names cpts] makes a type enviroment from the formal generics
         with the names [names] and the concepts [cpts].
@@ -35,6 +37,7 @@ val count:        t -> int
 val count_fgs:    t -> int
 val count_all:    t -> int
 val concept:      int -> t -> type_term
+val name:         int -> t -> int
 val concepts:     t -> type_term array
 val fgconcepts:   t -> type_term array
 val is_equivalent:  t -> t -> bool

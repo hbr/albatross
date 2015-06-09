@@ -208,3 +208,7 @@ val string_of_sub: Term_sub.t -> Tvars.t -> t -> string
 val string_of_tvs: Tvars.t -> t -> string
 
 val string_of_tvs_sub: TVars_sub.t -> t -> string
+
+val string_of_detailed_tvs: Tvars.t -> t -> string
+
+val string_of_reduced_complete_signature: Sign.t -> Tvars.t -> t -> string

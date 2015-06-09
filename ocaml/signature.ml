@@ -614,6 +614,7 @@ module Sign: sig
   val up_from:     int -> int -> t -> t
   val up:          int -> t -> t
   val up2:         int -> int -> int -> t -> t
+  val down_from:   int -> int -> t -> t
   val to_function: int -> t -> t
   val involved_classes_arguments: Tvars.t -> t -> IntSet.t
   val involved_classes: Tvars.t -> t -> IntSet.t
@@ -722,6 +723,13 @@ end = struct
         0.
      *)
     up n2 (up_from n1 start s)
+
+
+
+  let down_from (n:int) (start:int) (s:t): t =
+    (* Shift all types above [start] down by [n].
+     *)
+    map (fun t -> Term.down_from n start t) s
 
 
   let to_function (nargs:int) (s:t): t =

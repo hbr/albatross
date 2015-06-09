@@ -435,7 +435,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expbracket e -> "[" ^ (strexp e) ^"]"
 
   | Exparrow  (l,e) ->
-      (string_of_formals l.v) ^ "->" ^ (string_of_expression e)
+      "(" ^ (string_of_formals l.v) ^ ")->" ^ (string_of_expression e)
 
   | Expagent (l,rt,pres,posts) ->
       "agent(" ^ (string_of_formals l.v) ^ ")" ^ (string_of_return_type rt) ^

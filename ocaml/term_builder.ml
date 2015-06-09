@@ -265,6 +265,19 @@ let substituted_type (tp:term) (tb:t): type_term =
   TVars_sub.sub_star tp tb.tvars
 
 
+let substituted_signature (tb:t): Sign.t =
+  (* The required signature of the term builder [tb] with all substitutions done..
+   *)
+  Sign.map (fun t -> substituted_type t tb) tb.sign
+
+
+let string_of_reduced_substituted_signature (tb:t): string =
+  let ct = class_table tb
+  and s  = substituted_signature tb
+  and tvs = tvars tb in
+  Class_table.string_of_reduced_complete_signature s tvs ct
+
+
 let variable_type (i:int) (tb:t): type_term =
   assert (i < Context.count_variables tb.c);
   transformed_type (Context.variable_type i tb.c) tb

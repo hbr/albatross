@@ -32,6 +32,8 @@ val string_of_tvs_sub: t -> string
 
 val string_of_head_signature: t -> string
 
+val string_of_reduced_substituted_signature: t -> string
+
 val count_local:      t -> int
     (** The number of type variables without concept. *)
 

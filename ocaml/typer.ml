@@ -386,8 +386,7 @@ let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
 
 let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
   let ct = Context.class_table c  in
-  (Class_table.string_of_tvs tvs ct) ^
-  (Class_table.string_of_signature s tvs ct)
+  (Class_table.string_of_complete_signature s tvs ct)
 
 
 let string_of_signatures (lst:(int*Tvars.t*Sign.t) list) (c:Context.t): string =
@@ -411,23 +410,19 @@ let process_leaf
     Accus.add_leaf lst accs
   with
     Accus.Untypeable acc_lst ->
-      if Accus.is_tracing accs then begin
-        let i,_,_ = List.hd lst in
-        printf "    The expression \"%s\" has type(s):\n"
-          (Context.string_of_term (Variable i) false 0 c);
-        List.iter
-          (fun (_,tvs,s) ->
-            printf "      %s\n" (string_of_signature tvs s c))
-          lst;
-        printf "    expected type(s):\n";
-        List.iter
-          (fun acc ->
-            printf "      %s %s\n"
-              (Term_builder.string_of_tvs_sub acc)
-              (Term_builder.signature_string acc))
-          acc_lst
-      end;
-      raise (Accus.Untypeable acc_lst)
+      let ct = Context.class_table c in
+      let i,_,_ = List.hd lst in
+      let str = "Type error \"" ^ (Context.string_of_term (Variable i) false 0 c) ^
+        "\"\n  Actual type(s):\n\t"
+      and actuals = String.concat "\n\t"
+          (List.map
+             (fun (_,tvs,s) ->
+               Class_table.string_of_reduced_complete_signature s tvs ct)
+             lst)
+      and reqs = String.concat "\n\t"
+          (List.map Term_builder.string_of_reduced_substituted_signature acc_lst)
+      in
+      error_info info (str ^ actuals ^ "\n  Required type(s):\n\t" ^ reqs)
 
 
 

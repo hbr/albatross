@@ -354,7 +354,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
     let inner_prec, str =
       match t with
         Variable j ->
-          1,
+          2,
           if j<nb then
             string_of_int j
           else if j < nb+nfgs then
@@ -373,7 +373,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
             assert (tarrlen=2);
             0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
           end else begin
-            1,
+            2,
             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
           end
       | _ ->
@@ -381,7 +381,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
     in
     if inner_prec < prec then "(" ^ str ^ ")" else str
   in
-  to_string t nb 0
+  to_string t nb 1
 
 
 let string_of_type (tp:type_term) (tvs:Tvars.t) (ct:t): string =
@@ -446,8 +446,7 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
       (List.map
          (fun (i,t1,t2) ->
            (string_of_int i) ^ ":=" ^
-           (string_of_type t1 tvs ct) (*^
-           "(" ^ (string_of_type t2 tvs ct) ^ ")"*)
+           (string_of_type t1 tvs ct)
          ) subs)
   in
   let subsstr = if subsstr = "" then "" else "[" ^ subsstr ^ "]" in
@@ -1395,6 +1394,8 @@ let string_of_complete_signature
     : string =
   (string_of_tvs tvs ct) ^ (string_of_signature s tvs ct)
 
+
+
 let string_of_complete_signature_sub
     (s:Sign.t)
     (tvs_sub:TVars_sub.t)
@@ -1402,3 +1403,99 @@ let string_of_complete_signature_sub
     : string =
   let tvs = TVars_sub.tvars tvs_sub in
   (string_of_tvs_sub tvs_sub ct) ^ (string_of_signature s tvs ct)
+
+
+
+let string_of_detailed_tvs (tvs:Tvars.t) (ct:t): string =
+  let nall = Tvars.count_all tvs in
+  if nall = 0 then
+    ""
+  else
+    let nlocs  = Tvars.count_local tvs
+    and nglobs = Tvars.count_global tvs in
+    let arr = Array.init nall
+        (fun i ->
+          if i < nlocs then
+            (string_of_int i) ^ ":_"
+          else if i < nlocs + nglobs then
+            (string_of_int i) ^ ":" ^ (string_of_type (Tvars.concept i tvs) tvs ct)
+          else
+            (ST.string (Tvars.name i tvs)) ^ ":" ^
+            (string_of_type (Tvars.concept i tvs) tvs ct)) in
+    "[" ^
+    (String.concat "," (Array.to_list arr)) ^
+    "] "
+
+
+
+let transformed (nall:int) (tvset:IntSet.t) (down_from: int->int->'a->'a) (x:'a)
+    : 'a =
+  let i0,n,x =
+    IntSet.fold
+      (fun i (i0,n,x) ->
+        if i = i0 + n then
+          i0+1, n, x
+        else begin
+          assert (i0 + n < i);
+          let ndelta = i - i0 - n in
+          let nnew   = n + ndelta in
+          i0+1, nnew, down_from ndelta i0 x
+        end)
+      tvset
+      (0,0,x) in
+  down_from (nall-i0-n) i0 x
+
+
+let string_of_reduced_complete_signature
+    (s:Sign.t)
+    (tvs: Tvars.t)
+    (ct:t): string =
+  let nall   = Tvars.count_all tvs
+  and nlocs  = Tvars.count_local tvs
+  and nglobs = Tvars.count_global tvs
+  in
+  let foldfun set tp = IntSet.union set (Term.bound_variables tp nall) in
+  let tvset = Sign.fold foldfun IntSet.empty s in
+  let tvset =
+    IntSet.fold
+      (fun i set ->
+        if i < nlocs then set
+        else IntSet.union set (Term.bound_variables (Tvars.concept i tvs) nall))
+      tvset
+      tvset in
+  let _,tvmap =
+    IntSet.fold
+      (fun i (n,set) -> n+1, IntMap.add n i set)
+      tvset
+      (0,IntMap.empty) in
+  let nlocs0,nglobs0,nfgs0 =
+    IntSet.fold
+      (fun i (nlocs0,nglobs0,nfgs0) ->
+        if i < nlocs then
+          nlocs0+1, nglobs0, nfgs0
+        else if i < nlocs+nglobs then
+          nlocs0, nglobs0+1, nfgs0
+        else
+          nlocs0, nglobs0, nfgs0+1)
+      tvset
+      (0,0,0)
+  in
+  let s0 = transformed nall tvset Sign.down_from s
+  in
+  let concepts = Array.init nglobs0
+      (fun i ->
+        let idx = IntMap.find (i+nlocs0) tvmap in
+        let tp = Tvars.concept idx tvs in
+        transformed nall tvset Term.down_from tp)
+  and fgconcepts = Array.init nfgs0
+      (fun i ->
+        let idx = IntMap.find (i+nlocs0+nglobs0) tvmap in
+        let tp = Tvars.concept idx tvs in
+        transformed nall tvset Term.down_from tp)
+  and fgnames = Array.init nfgs0
+      (fun i ->
+        let idx = IntMap.find (i+nlocs0+nglobs0) tvmap in
+        Tvars.name idx tvs) in
+  let tvs0 = Tvars.make nlocs0 concepts fgnames fgconcepts in
+  (string_of_detailed_tvs tvs0 ct) ^
+  (string_of_signature s0 tvs0 ct)
