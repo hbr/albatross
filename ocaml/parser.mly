@@ -692,7 +692,7 @@ expr:
   predicate_of_expression (rhs_info 2) $2
 }
 |   LPAREN expr RPAREN ARROW expr {
-  let lst  = expression_list $2
+  let lst  = List.rev (expression_list $2)
   and info = rhs_info 2 in
   let entlst = entities_of_expression info lst in
   Exparrow (withinfo info entlst,$5)
