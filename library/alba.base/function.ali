@@ -19,6 +19,10 @@ domain(f:A->B): ghost A?
 (=) (f,g:A->B): ghost BOOLEAN
     -> f <= g and g <= f
 
+all(f:A->B) ensure f = f end
+
+immutable class FUNCTION[A,B] inherit ghost ANY end
+
 range (f:A->B): ghost B?
     -> {b: some(a) a in f.domain and f(a) = b}
 
