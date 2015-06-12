@@ -752,17 +752,20 @@ let expect_lambda (ntvs:int) (is_pred:bool) (c:Context.t) (tb:t): t =
   and nfgs  = Context.count_last_formal_generics c in
   let tb = {tb with c = c} in
   let tb = locals_added ntvs tb in
-  let tb = anys_added nargs tb in
+  let nanys = nargs + if is_pred then 0 else 1 in
+  let tb = anys_added nanys tb in
   let tb = fgs_added nfgs tb in
   assert (TVars_sub.count_local tb.tvars =
           TVars_sub.count_local (Context.type_variables tb.c));
   let csig =
     let csig  = context_signature tb
-    and start = count tb - nargs in
+    and start = count tb - nanys in
     assert (Sign.arity csig = nargs);
     for i = 0 to nargs - 1 do
       unify (Sign.arg_type i csig) (Variable (start + i)) tb
     done;
+    if not is_pred then
+      unify (Sign.result csig) (Variable (start + nargs)) tb;
     csig in
   begin
     assert (Sign.arity csig > 0);
@@ -1032,7 +1035,7 @@ let specialize_term_0 (tb:t): unit =
         nglob, Application (f,args,pr)
     | Lam (n,nms,pres,t,pr) ->
         let nargs = n + nargs
-        and nglob = n + nglob in
+        and nglob = n + nglob + if pr then 0 else 1 in
         let nglob,pres_rev =
           List.fold_left
             (fun (nglob,ps) p ->
