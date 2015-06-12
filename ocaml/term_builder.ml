@@ -1031,7 +1031,7 @@ let specialize_term_0 (tb:t): unit =
         let nglob, args = upd_args nglob args in
         nglob, Application (f,args,pr)
     | Lam (n,nms,pres,t,pr) ->
-        let nargs = 1 + nargs
+        let nargs = n + nargs
         and nglob = n + nglob in
         let nglob,pres_rev =
           List.fold_left
