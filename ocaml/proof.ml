@@ -21,6 +21,36 @@ module Eval = struct
     | Beta of t
     | Simpl of t * int * term array  (* e, idx of simplifying equality assertion,
                                         specialization arguments *)
+  let rec print (prefix:string) (e:t): unit =
+    let print_args args =
+      let prefix = prefix ^ "  " in
+      Array.iter (fun e -> print prefix e) args
+    in
+    match e with
+      Term t -> printf "%s term %s\n" prefix (Term.to_string t)
+    | Exp (i,args,full) ->
+        printf "%s expand %d %b\n" prefix i full;
+        print_args args
+    | VApply (i,args) ->
+        printf "%s apply %d\n" prefix i;
+        print_args args
+    | Apply (f,args,pr) ->
+        printf "%s apply %s\n" prefix (if pr then "predicate" else "function");
+        print (prefix ^ "    ") f;
+        print_args args
+    | Lam (n,nms,pres,e,pr) ->
+        printf "%s lambda %s\n" prefix (if pr then "predicate" else "function");
+        print (prefix ^ "    ") e
+    | QExp (n,nms,e,is_all) ->
+        printf "%s qexp %s\n" prefix (if is_all then "all" else "some");
+        print (prefix ^ "    ") e
+    | Beta e ->
+        printf "%s beta\n" prefix;
+        print (prefix ^ "    ") e
+    | Simpl (e,idx,args) ->
+        printf "%s simpl eq_idx %d\n" prefix idx;
+        print (prefix ^ "    ") e
+
 end
 
 
@@ -71,6 +101,40 @@ module Proof_term: sig
 end = struct
 
   type t = proof_term
+
+
+
+  let rec print_pt_arr (prefix:string) (start:int) (pt_arr: t array): unit =
+    let n = Array.length pt_arr in
+    for k = 0 to n-1 do
+      let print_prefix () = printf "%s%3d " prefix (start+k) in
+      match pt_arr.(k) with
+        Axiom t             ->
+          print_prefix (); printf "Axiom %s\n" (Term.to_string t)
+      | Assumption t        ->
+          print_prefix (); printf "Assumption %s\n" (Term.to_string t)
+      | Detached (i,j)      ->
+          print_prefix (); printf "Detached %d %d\n" i j
+      | Specialize (i,args) ->
+          print_prefix (); printf "Specialize %d\n" i
+      | Eval (i,e)          ->
+          print_prefix (); printf "Eval %d\n" i;
+          Eval.print (prefix ^ "    ") e
+      | Eval_bwd (t,e)      ->
+          print_prefix ();
+          printf "Eval_bwd %s\n" (Term.to_string t);
+          Eval.print (prefix ^ "    ") e
+      | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
+      | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
+      | Subproof (nb,nms,i,pt_arr) ->
+          print_prefix (); printf "Subproof nb %d, i %d\n" nb i;
+          print_pt_arr (prefix^"  ") (start+k) pt_arr
+      | Inherit (i,bcls,cls)  -> print_prefix (); printf "Inherit %d\n" i
+    done
+
+  let print_pt (prefix:string) (start:int) (pt:t): unit =
+    print_pt_arr prefix start [|pt|]
+
 
   let adapt (start:int) (delta:int) (pt:t): t =
     (* Shift the assertion indices from [start] on up by [delta]. *)
@@ -588,36 +652,6 @@ end = struct
   let is_subproof (pt:t): bool =
     try let _ = split_subproof pt in true
     with Not_found -> false
-
-
-  let rec print_pt_arr (prefix:string) (start:int) (pt_arr: t array): unit =
-    let n = Array.length pt_arr in
-    for k = 0 to n-1 do
-      let print_prefix () = printf "%s%3d " prefix (start+k) in
-      match pt_arr.(k) with
-        Axiom t             ->
-          print_prefix (); printf "Axiom %s\n" (Term.to_string t)
-      | Assumption t        ->
-          print_prefix (); printf "Assumption %s\n" (Term.to_string t)
-      | Detached (i,j)      ->
-          print_prefix (); printf "Detached %d %d\n" i j
-      | Specialize (i,args) ->
-          print_prefix (); printf "Specialize %d\n" i
-      | Eval (i,_)          -> print_prefix (); printf "Eval %d\n" i
-      | Eval_bwd (t,_)      ->
-          print_prefix (); printf "Eval_bwd %s\n" (Term.to_string t)
-      | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
-      | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
-      | Subproof (nb,nms,i,pt_arr) ->
-          print_prefix (); printf "Subproof nb %d, i %d\n" nb i;
-          print_pt_arr (prefix^"  ") (start+k) pt_arr
-      | Inherit (i,bcls,cls)  -> print_prefix (); printf "Inherit %d\n" i
-    done
-
-  let print_pt (prefix:string) (start:int) (pt:t): unit =
-    print_pt_arr prefix start [|pt|]
-
-
   let short_string (pt:t): string =
     match pt with
       Axiom _  -> "ax"
