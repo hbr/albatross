@@ -140,10 +140,14 @@ let rec set_failed (i:int) (gs:t): unit =
       if par.nfailed = Array.length par.alternatives then
         set_failed ipar gs
 
-
+let pc_discharged (pos:int) (pc:PC.t): term * proof_term =
+  try
+    PC.discharged pos pc
+  with Not_found ->
+    assert false (* cannot happen in generated proof *)
 
 let discharged (pos:int) (pc:PC.t): int * PC.t =
-  let t,pt = PC.discharged pos pc
+  let t,pt = pc_discharged pos pc
   and cnt0 = PC.count_previous pc
   and pc = PC.pop pc in
   assert (cnt0 <= PC.count pc);
@@ -466,7 +470,7 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
     let g = item 0 gs in
     assert (0 <= g.pos);
     assert (g.pos < PC.count g.ctxt.pc);
-    PC.discharged g.pos g.ctxt.pc
+    pc_discharged g.pos g.ctxt.pc
 
 
 

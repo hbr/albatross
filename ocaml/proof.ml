@@ -83,7 +83,7 @@ module Proof_term: sig
 
   val remove_unused_variables: term array -> int -> t array -> t array
 
-  val normalize_pair: int -> int array -> term -> t array
+  val normalize_pair: int -> int array -> int -> term -> t array
     -> int * int array * term * t array
 
   val print_pt_arr:  string -> int -> t array -> unit
@@ -557,7 +557,7 @@ end = struct
     shrink 0 pt_arr
 
 
-  let normalize_pair (nargs:int) (nms:int array) (t:term) (pt_arr: t array)
+  let normalize_pair (nargs:int) (nms:int array) (start:int) (t:term) (pt_arr: t array)
       : int * int array * term  * t array =
     let uvars_t = Term.used_variables t nargs in
     let nargs1  = List.length uvars_t in

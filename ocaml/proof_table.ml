@@ -912,9 +912,7 @@ let discharged (i:int) (at:t): term * proof_term =
     let i,pt_arr =
       if len=0 then i,pt_arr else Proof_term.remove_unused i cnt0 pt_arr
     in
-    let nargs,nms,t,pt_arr =
-      try Proof_term.normalize_pair nargs nms t pt_arr
-      with Not_found -> assert false (* nyi *)
+    let nargs,nms,t,pt_arr = Proof_term.normalize_pair nargs nms cnt0 t pt_arr
     in
     let t  = Term.all_quantified nargs nms t
     in

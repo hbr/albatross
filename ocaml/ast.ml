@@ -111,16 +111,18 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
 
 
 let add_assumptions_or_axioms
-    (lst:compound) (is_axiom:bool) (pc:Proof_context.t): int list =
+    (lst:compound) (is_axiom:bool) (pc:Proof_context.t): (int*info) list =
   List.map
     (fun ie ->
       let t = get_boolean_term ie pc in
       verify_preconditions t ie.i pc;
-      if is_axiom then
-        Proof_context.add_axiom t pc
-      else begin
-        Proof_context.add_assumption t pc
-      end)
+      let idx =
+        if is_axiom then
+          Proof_context.add_axiom t pc
+        else begin
+          Proof_context.add_assumption t pc
+        end in
+      idx,ie.i)
     lst
 
 
@@ -129,7 +131,7 @@ let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
   PC.close pc
 
 
-let add_axioms (lst:compound) (pc:Proof_context.t): int list =
+let add_axioms (lst:compound) (pc:Proof_context.t): (int*info) list =
   add_assumptions_or_axioms lst true pc
 
 
@@ -145,13 +147,13 @@ let add_proved
 
 
 
-let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
+let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int * info =
   let t = get_boolean_term ie pc in
   verify_preconditions t ie.i pc;
   try
     let res = Prover.prove_and_insert t pc in
     PC.close pc;
-    res
+    res, ie.i
   with Not_found ->
     error_info ie.i "Cannot prove"
   | Limit_exceeded limit ->
@@ -161,15 +163,20 @@ let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int =
 
 
 let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t): (term*proof_term) list =
-  let idx_lst =
+  let idx_info_lst =
     match k with
       PAxiom | PDeferred ->
         add_axioms lst pc
     | PNormal ->
-        let res = List.map (fun ie -> prove_basic_expression ie pc) lst in
-        res
+        List.map (fun ie -> prove_basic_expression ie pc) lst
   in
-  List.map (fun idx -> Proof_context.discharged idx pc) idx_lst
+  List.map
+    (fun (idx,info) ->
+      try
+        Proof_context.discharged idx pc
+      with Not_found ->
+        error_info info "The proof uses more variables than the term")
+    idx_info_lst
 
 
 
