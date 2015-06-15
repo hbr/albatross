@@ -131,19 +131,66 @@ end = struct
     count 0
 
 
+
+
+
+  let rec used_below (start:int) (k:int) (below:int) (pt_arr:t array) (set:IntSet.t)
+      : IntSet.t =
+    (* The set of used proof terms in [pt_arr] which are below the index
+       [below] added to the set [set], the indices in [pt_arr] start at
+       [start]. It is assumed that [pt_arr] has no unused proof term.  *)
+    let add_idx i set =
+      if i < below then IntSet.add i set
+      else set
+    in
+    let rec used_eval (e:Eval.t) (set:IntSet.t): IntSet.t =
+      let used_args set args =
+        Array.fold_left (fun set e -> used_eval e set) set args in
+      match e with
+        Eval.Term t -> set
+      | Eval.Exp (i,args,full) -> used_args set args
+      | Eval.VApply(i,args)    -> used_args set args
+      | Eval.Apply (f,args,_)  -> used_args (used_eval f set) args
+      | Eval.Lam (n,nms,_,e,_) | Eval.QExp (n,nms,e,_) -> used_eval e set
+      | Eval.Beta e            -> used_eval e set
+      | Eval.Simpl (e,i,args)  -> used_eval e (add_idx i set)
+    in
+    let set = add_idx k set in
+    let i,set = Array.fold_left
+        (fun (k,set) pt ->
+          let set =
+            match pt with
+              Axiom _ | Assumption _ -> set
+            | Detached (i,j) ->
+                add_idx i (add_idx j set)
+            | Specialize (i,_) | Witness (i,_,_,_) | Someelim i ->
+                add_idx i set
+            | Eval (i,e) ->
+                let set = add_idx i set in
+                used_eval e set
+            | Eval_bwd (t,e) ->
+                used_eval e set
+            | Subproof (_,_,k1,pt_arr1) ->
+                used_below k k1 below pt_arr1 set
+            | Inherit (i,bcls,cls) ->
+                assert false
+          in
+          k+1, set)
+        (0,set)
+        pt_arr
+    in
+    assert (i = Array.length pt_arr);
+    set
+
+
+
   let used (k:int) (start:int) (pt_arr:t array): IntSet.t =
     (* The set of used proof terms in [pt_arr] which are needed to proof the
        term [k].  The index [k] is absolute, numbering in [pt_arr] starts at
        [start]. The returned set contains absolute numbers. *)
-    let rec usd
-        (k:int)
-        (start_inner:int)
-        (extern:bool)  (* look for used terms below [start_inner] *)
-        (pt_arr: t array)
-        (set:IntSet.t)
-        : IntSet.t =
+    let rec usd (k:int) (pt_arr: t array) (set:IntSet.t): IntSet.t =
       let n = Array.length pt_arr in
-      assert (k < start_inner + n);
+      assert (k < start + n);
       let rec usd_eval (e:Eval.t) (set:IntSet.t): IntSet.t =
         let usd_args set args =
           Array.fold_left (fun set e -> usd_eval e set) set args in
@@ -157,44 +204,39 @@ end = struct
         | Eval.Lam (n,nms,_,e,_) | Eval.QExp(n,nms,e,_) -> usd_eval e set
         | Eval.Beta e           -> usd_eval e set
         | Eval.Simpl (e,i,args) ->
-            let set = usd i start_inner extern pt_arr set in
+            let set = usd i pt_arr set in
             usd_eval e set
       in
       if k < start then
         set
-      else if k < start_inner then
-        if extern then IntSet.add k set else set
       else
-        let set = if extern then set else IntSet.add k set
-        in
-        match pt_arr.(k-start_inner) with
+        let set = IntSet.add k set in
+        match pt_arr.(k-start) with
           Axiom _ | Assumption _ -> set
         | Detached (i,j) ->
             assert (i < k);
             assert (j < k);
-            let set = usd i start_inner extern pt_arr set in
-            usd j start_inner extern pt_arr set
+            let set = usd i pt_arr set in
+            usd j pt_arr set
         | Specialize (i,_) | Witness (i,_,_,_)| Someelim i ->
             assert (i < k);
-            usd i start_inner extern pt_arr set
+            usd i pt_arr set
         | Eval (i,e) ->
             assert (i < k);
-            let set = usd i start_inner extern pt_arr set in
+            let set = usd i pt_arr set in
             usd_eval e set
         | Eval_bwd (t,e) ->
             usd_eval e set
         | Subproof (_,_,k1,pt_arr1) ->
-            let usd2 = usd k1 k true pt_arr1 IntSet.empty in
-            let set =
+            let set1 = used_below k k1 k pt_arr1 IntSet.empty in
             IntSet.fold
-              (fun i set -> usd i start_inner extern pt_arr set)
-              usd2
-              set in
-            set
+              (fun i set -> usd i pt_arr set)
+              set1
+              set
         | Inherit (i,bcls,cls) ->
             assert false
     in
-    usd k start false pt_arr IntSet.empty
+    usd k pt_arr IntSet.empty
 
 
   let reindex (start:int) (map: (int*int) array) (k:int) (pt_arr:t array)
@@ -354,7 +396,7 @@ end = struct
           | Inherit (i,bcls,cls) ->
               assert false
         )
-          set
+        set
         pt_arr
       in
     if nargs = 0 then
