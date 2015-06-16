@@ -374,7 +374,8 @@ type expression =
   | Explist       of expression list
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
-  | Expif         of (info_expression * compound) list * compound option
+  | Expif         of (expression * expression) list * expression option
+  | Cmdif         of (expression * compound) list   * compound option
   | Expinspect    of
       info_expression
         * (info_expression * compound) list
@@ -487,7 +488,24 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
            (fun tp ->
              let cond,comp = tp
              in
-             (string_of_expression cond.v)
+             (string_of_expression cond)
+             ^ " then "
+             ^ (string_of_expression comp))
+           " elseif ")
+      ^ (
+        match elsepart with
+          None -> ""
+        | Some e -> " else " ^ (string_of_expression e))
+      ^ " end"
+
+  | Cmdif (thenlist,elsepart) ->
+      "if "
+      ^ (string_of_list
+           thenlist
+           (fun tp ->
+             let cond,comp = tp
+             in
+             (string_of_expression cond)
              ^ " then "
              ^ (string_of_compound comp))
            " elseif ")

@@ -11,6 +11,7 @@ open Container
 open Printf
 
 type t = {mutable tlist: (term*Tvars.t*Sign.t) list; (* term, count_all, sign *)
+          mutable stack: (Tvars.t*Sign.t) list;
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
           mutable norm:  bool; (* term is specialized and normalized *)
@@ -555,6 +556,7 @@ let make (c:Context.t): t =
   (* New accumulator for an expression in the context [c] *)
   assert (Context.has_result c);
   {tlist = [];
+   stack = [];
    sign  = Sign.make_const (Context.result_type c);
    tvars = (Context.type_variables c);
    norm  = false;
@@ -566,6 +568,7 @@ let make_boolean (c:Context.t): t =
   let ntvs = TVars_sub.count_all tvs in
   let bool = Variable (ntvs + Class_table.boolean_index) in
   {tlist = [];
+   stack = [];
    tvars = tvs;
    sign  = Sign.make_const bool;
    norm  = false;
@@ -581,7 +584,7 @@ let expect_boolean (tb:t): unit =
 
 
 
-let expect_inner_precondition (tb:t): unit =
+let expect_boolean_expression (tb:t): unit =
   let ntvs = count_all tb in
   let tp   = Variable (ntvs + Class_table.boolean_index) in
   let s    = Sign.make_const tp in
@@ -606,6 +609,36 @@ let anys_added (n:int) (tb:t): t =
   globals_added anys tb
 
 
+
+let pop_term (tb:t): term * Tvars.t * Sign.t =
+  assert (tb.tlist <> []);
+  let t,tvs,s = List.hd tb.tlist in
+  tb.tlist <- List.tl tb.tlist;
+  t,tvs,s
+
+
+let push_expected (tb:t): unit =
+  (* Push the expected signature onto the stack *)
+  tb.stack <- (tvars tb,tb.sign)::tb.stack
+
+
+let get_expected (tb:t): unit =
+  (* Get the top expected signature from the stack *)
+  assert (tb.stack <> []);
+  let tvs,s = List.hd tb.stack in
+  assert (count_local tb = Tvars.count_local tvs);
+  assert (Tvars.count_global tvs <= count_global tb);
+  assert (Tvars.count_fgs tvs <= count_fgs tb);
+  let n = Tvars.count tvs
+  and ndelta = count_all tb - Tvars.count_all tvs in
+  let s = Sign.up_from ndelta n s in
+  tb.sign <- s
+
+
+let drop_expected (tb:t): unit =
+  (* Drop the top expected signature from the stack *)
+  assert (tb.stack <> []);
+  tb.stack <- List.tl tb.stack
 
 
 let add_leaf
@@ -871,6 +904,24 @@ let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   tb.tlist <- (qexp, tvars tb, s) :: tb.tlist
 
 
+let complete_if (has_else:bool) (tb:t): unit =
+  get_expected tb;
+  let args =
+    if has_else then begin
+      assert (List.length tb.tlist >= 3);
+      let t2,_,_ = pop_term tb in
+      let t1,_,_ = pop_term tb in
+      let cond,_,_ = pop_term tb in
+      [|cond;t1;t2|]
+    end else begin
+      assert (List.length tb.tlist >= 2);
+      let t1,_,_ = pop_term tb in
+      let cond,_,_ = pop_term tb in
+      [|cond;t1|]
+    end
+  in
+  let t = Flow (Ifexp,args) in
+  tb.tlist <- (t, tvars tb, tb.sign) :: tb.tlist
 
 
 
@@ -931,6 +982,8 @@ let update_called_variables (tb:t): unit =
     | QExp(n,nms,t,is_all) ->
         let t = update t (n+nb) in
         QExp(n,nms,t,is_all)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, Array.map (fun a -> update a nb) args)
   in
   let t,nt,s = List.hd tb.tlist in
   tb.tlist <- List.tl tb.tlist;
@@ -1049,6 +1102,9 @@ let specialize_term_0 (tb:t): unit =
     | QExp (n,nms,t,is_all) ->
         let nglob, t = upd t (n+nargs) nglob in
         nglob, QExp (n,nms,t,is_all)
+    | Flow (ctrl,args) ->
+        let nglob,args = upd_args nglob args in
+        nglob, Flow (ctrl,args)
   in
   let nargs = Context.count_variables tb.c
   and t,nt,s     = List.hd tb.tlist in
@@ -1081,6 +1137,8 @@ let normalize_lambdas (tb:t): unit =
         Context.make_lambda n nms pres t pr tb.c
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, norm t (n+nb), is_all)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, norm_args args)
   in
   let t,nt,s = List.hd tb.tlist in
   let t = norm t 0 in
@@ -1185,7 +1243,7 @@ let check_term (t:term) (tb:t): t =
             let tb = check p tb in
             check_pres pres tb
       in
-      expect_inner_precondition tb;
+      expect_boolean_expression tb;
       let tb = check_pres pres tb in
       begin try
         check_untyped_variables tb
@@ -1283,6 +1341,26 @@ let check_term (t:term) (tb:t): t =
     | QExp(n,nms,t0,is_all) ->
         assert (n = Array.length nms);
         qlambda n nms t0 is_all tb
+    | Flow (ctrl,args) ->
+        let len = Array.length args in
+        assert (2 <= len);
+        assert (len <= 3);
+        begin
+          match ctrl with
+            Ifexp ->
+              push_expected tb;
+              expect_boolean_expression tb;
+              let tb = check args.(0) tb in
+              get_expected tb;
+              let tb = check args.(1) tb in
+              let tb =
+                if len = 3 then begin
+                  get_expected tb;
+                  check args.(2) tb
+                end else tb in
+              drop_expected tb;
+              tb
+        end
   in
   let depth = Context.depth tb.c in
   let tb = check t tb

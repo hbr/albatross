@@ -54,7 +54,13 @@ val make_boolean:     Context.t -> t
 
 val expect_boolean:   t -> unit
 
-val expect_inner_precondition:   t -> unit
+val expect_boolean_expression:   t -> unit
+
+val push_expected:    t -> unit
+val get_expected:     t -> unit
+val drop_expected:    t -> unit
+
+val complete_if:     bool -> t -> unit
 
 val expect_function:   int -> t -> unit
     (** [expect_function nargs tb] converts the currently expected signature

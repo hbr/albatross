@@ -10,6 +10,11 @@ open Term
 type submap  = Term_sub.t IntMap.t   (* idx -> sub *)
 type sublist = (int*Term_sub.t) list
 
+module FlowMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = flow*int
+end)
+
 
 type t = {
     terms: (int*int*int*int*term) list;   (* idx,nb,nargs,nbenv,term *)
@@ -22,7 +27,9 @@ type t = {
     lams:  (t list * t) IntMap.t;
                               (* one for each number of preconditions *)
     alls:  t IntMap.t;        (* one for each number of bindings *)
-    somes: t IntMap.t         (* one for each number of bindings *)
+    somes: t IntMap.t;        (* one for each number of bindings *)
+    flows: (t array) FlowMap.t;
+         (* one for each flow control with the number of arguments*)
   }
 
 
@@ -34,9 +41,9 @@ let empty = {
   apps  = IntMap.empty;
   fapps = IntMap.empty;
   lams  = IntMap.empty;
-  (*lams  = IntMap.empty;*)
   alls  = IntMap.empty;
-  somes = IntMap.empty}
+  somes = IntMap.empty;
+  flows = FlowMap.empty}
 
 
 let count  (tab:t): int =
@@ -282,6 +289,14 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
         end
+    | Flow (ctrl,args) ->
+        let len = Array.length args in
+        begin try
+          let argtabs = FlowMap.find (ctrl,len) tab.flows in
+          arglst args argtabs [] false
+        with Not_found ->
+          basic_subs
+        end
   in
   try
     uni t table 0
@@ -388,7 +403,17 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | QExp (n,_,t,is_all) ->
         let ttab = IntMap.find n (qmap is_all tab) in
         uniw t ttab (n+nb)
-  in
+    | Flow (ctrl,args) ->
+        let len = Array.length args in
+        let argtabs = FlowMap.find (ctrl,len) tab.flows in
+        let lst = ref [] in
+        Array.iteri
+          (fun i a ->
+            let alst = uniw a argtabs.(i) nb in
+            lst := if i = 0 then alst else merge_lists !lst alst)
+          args;
+        !lst
+in
   try
     uniw t table 0
   with Not_found ->
@@ -417,7 +442,6 @@ let add
       environment with [nbenv] variables to the index [idx]
       within the node [tab].
    *)
-  (*assert (not (has idx table));*)
   let rec add0 (t:term) (nb:int) (tab:t): t =
     let tab =
       match t with
@@ -497,6 +521,15 @@ let add
             {tab with alls = IntMap.add n ttab tab.alls}
           else
             {tab with somes = IntMap.add n ttab tab.somes}
+      | Flow (ctrl,args) ->
+          let n = Array.length args in
+          let argtabs =
+            try FlowMap.find (ctrl,n) tab.flows
+            with Not_found -> Array.make n empty
+          in
+          let argtabs =
+            Array.mapi (fun i tab -> add0 args.(i) nb tab) argtabs in
+          {tab with flows = FlowMap.add (ctrl,n) argtabs tab.flows}
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
@@ -517,7 +550,8 @@ let filter (f:int -> bool) (tab:t): t =
      fapps = IntMap.map (fun (f,args) -> filt f, Array.map filt args) tab.fapps;
      lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
      alls  = IntMap.map filt tab.alls;
-     somes = IntMap.map filt tab.somes}
+     somes = IntMap.map filt tab.somes;
+     flows = FlowMap.map (fun args -> Array.map filt args) tab.flows}
   in
   filt tab
 

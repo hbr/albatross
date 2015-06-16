@@ -384,6 +384,8 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | QExp(n,nms,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
           QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
+      | Flow (ctrl,args) ->
+          assert false (* nyi *)
     in
     let sublst = unify t (nb+nbenv) pc.entry.left pc in
     let sublst =
@@ -528,6 +530,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let full = full || not is_all in
           let t,e,tmodi = eval t (n+nb) full in
           QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
+      | Flow (ctrl,args) ->
+          assert false (* nyi *)
     in
     let tred, ered, modi = expand t in
     let sublst = unify tred (nb+nbenv) pc.entry.left pc in

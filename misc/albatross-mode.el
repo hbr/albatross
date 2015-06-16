@@ -24,6 +24,7 @@
      "redefine" "rename"      "require"
      "Result"
      "some"
+     "then"
      "undefine" "until"    "use"
      "variant"
      "while"

@@ -702,14 +702,13 @@ expr:
     ensure_block
     KWend {
   Expagent ($2,$3,$5,$6)
-  (*not_yet_implemented (rhs_info 1) "agent expressions"*)
 }
 |   LIDENTIFIER ARROW expr {
   let info = rhs_info 1 in
   let entlst = entities_of_expression info [Identifier $1] in
   Exparrow (withinfo info entlst, $3)
 }
-
+|  exp_conditional { $1 }
 
 
 atomic_expr:
@@ -850,23 +849,23 @@ separator:
 /* Flow control */
 /* ------------------------------------------------------------------------- */
 
-/*   UNUSED!!!
-conditional:
-    KWif then_part_list else_part KWend { Expif ($2,$3) }
+exp_conditional:
+    KWif exp_then_part_list exp_else_part KWend { Expif ($2,$3) }
 
-then_part_list:
-    then_part { [$1] }
-|   then_part KWelseif then_part_list  { $1::$3 }
+exp_then_part_list:
+    exp_then_part { [$1] }
+|   exp_then_part KWelseif exp_then_part_list  { $1::$3 }
 
-then_part:
-    expr KWthen compound { withinfo (rhs_info 1) $1, $3 }
+exp_then_part:
+    expr KWthen expr { $1, $3 }
 
-else_part:
+exp_else_part:
     { None }
-|   KWelse compound { Some $2 }
+|   KWelse expr { Some $2 }
 
 
 
+/*   UNUSED!!!
 inspect:
     KWinspect info_expr case_list KWend { Expinspect ($2, $3) }
 

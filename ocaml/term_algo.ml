@@ -149,6 +149,9 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
+    | Flow(ctrl1,args1), Flow(ctrl2,args2)
+      when ctrl1=ctrl2 && Array.length args1 = Array.length args2 ->
+        assert false (* nyi *)
     | _, _ ->
         different t1 t2 pos poslst elst tlst
   in
@@ -223,6 +226,8 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,t0 =
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
           nextpos, nextvar, poslst, QExp(n,nms,t0,is_all)
+    | Flow (ctrl,args) ->
+        assert false
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
   if nextpos = 1 then raise Not_found;

@@ -160,15 +160,17 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         check_pub_i i
     | VAppl(i,args) ->
         check_pub_i i;
-        check_args args;
+        check_args args
     | Application(f,args,_) ->
         check_pub f nb;
-        check_args args;
+        check_args args
     | Lam(n,nms,pres0,t0,_) ->
         check_lst pres0 (1+nb);
         check_pub t0 (1+nb)
     | QExp(n,nms,t0,_) ->
         check_pub t0 (n+nb)
+    | Flow (ctrl,args) ->
+        check_args args
   in
   try
     check_pub t nbenv;
@@ -277,6 +279,8 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | QExp (n,nms,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
         QExp(n,nms,t0,is_all), 0, 0
+    | Flow (ctrl,args) ->
+        Flow (ctrl, Array.map (fun t -> untup0 t nb) args), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   and untup0_lst lst nb =
@@ -340,6 +344,8 @@ let beta_reduce_0
         Lam(n, nms, pres0, reduce t0 (1+nb), pr)
     | QExp(n,nms,t0,is_all) ->
         QExp(n, nms, reduce t0 (n + nb), is_all)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, reduce_args args)
   in
   reduce tlam 0
 
@@ -571,6 +577,8 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         is_ghost t (1+nb)
     | QExp(_,_,_,_) ->
         true
+    | Flow (ctrl, args) ->
+        ghost_args args 0 (Array.length args)
     | VAppl (i,args) ->
         is_ghost_function (i-nb-nargs) ft
     | Application (f,args,_) ->
@@ -1293,6 +1301,8 @@ let term_to_string
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           and argsstr, _, tstr = lam_strs n nms [] t in
           Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
+      | Flow (ctrl,args) ->
+          assert false (* nyi *)
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->

@@ -7,6 +7,8 @@
 open Support
 open Container
 
+type flow =
+    Ifexp
 
 type term =
     Variable    of int
@@ -15,6 +17,7 @@ type term =
   | Lam         of int * int array * term list * term * bool
                    (* n, names, pres, t, is_pred *)
   | QExp        of int * int array * term * bool (* n, names, t, is_all *)
+  | Flow        of flow * term array
 and formal  = int * term (* name, type *)
 and formals = formal array
 
@@ -193,6 +196,15 @@ end = struct
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
         qstr ^ "(" ^ argsstr ^ ") " ^ (to_string t)
+    | Flow (ctrl,args) ->
+        let argsstr = Array.to_list (Array.map to_string args) in
+        begin
+          match ctrl with
+            Ifexp ->
+              assert (Array.length args <= 3);
+              "if(" ^ (String.concat "," argsstr) ^ ")"
+        end
+
 
 
   let variable (t:term): int =
@@ -220,23 +232,28 @@ end = struct
     (* The number of nodes in the term t *)
     let nodeslst lst =
       List.fold_left (fun n t -> n + nodes t) 0 lst
+    and nodesarr arr =
+      Array.fold_left (fun sum t -> sum + (nodes t)) 0 arr
     in
     match t with
       Variable _ -> 1
-    | VAppl (i,args) ->
-        Array.fold_left (fun sum t -> sum + (nodes t)) 1 args
+    | VAppl (i,args) -> 1 + nodesarr args
     | Application (f,args,_) ->
-        Array.fold_left (fun sum t -> sum + (nodes t)) (nodes f) args
+        nodes f + nodesarr args
     | Lam (_,_,pres,t,_) ->
         1 + nodeslst pres + nodes t
     | QExp (_,_,t,_) ->
         1 + (nodes t)
+    | Flow (ctrl,args) ->
+        1 + nodesarr args
 
 
   let rec depth (t:term): int =
     (* The depth of the term t *)
     let depthlst lst =
       List.fold_left (fun d t -> max d (depth t)) 0 lst
+    and deptharr arr =
+      Array.fold_left (fun d t -> max d (depth t)) 0 arr
     in
     match t with
       Variable _ -> 0
@@ -248,6 +265,8 @@ end = struct
         1 + depthlst (t::pres)
     | QExp (_,_,t,_)->
         1 + (depth t)
+    | Flow (ctrl,args) ->
+        1 + deptharr args
 
 
 
@@ -258,15 +277,17 @@ end = struct
      *)
     let rec fld (a:'a) (t:term) (level) (nb:int): 'a =
       let var i = if nb <= i then f a (i-nb) level else a
+      and fldarr a arr =
+        Array.fold_left (fun a t -> fld a t (level+1) nb) a arr
       in
       match t with
         Variable i -> var i
       | VAppl (i,args) ->
           let a = var i in
-          Array.fold_left (fun a t -> fld a t (level+1) nb) a args
+          fldarr a args
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
-          Array.fold_left (fun a t -> fld a t (level+1) nb) a args
+          fldarr a args
       | Lam (n,_,pres,t,_) ->
           let level = 1 + level
           and nb    = 1 + nb in
@@ -274,6 +295,8 @@ end = struct
           fld a t level nb
       | QExp (n,_,t,_) ->
           fld a t (level+1) (nb+n)
+      | Flow (ctrl,args) ->
+          fldarr a args
     in
     fld a t 0 0
 
@@ -444,6 +467,8 @@ end = struct
           Lam(nargs, names, pres, t, pred)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
+      | Flow (ctrl,args) ->
+          Flow(ctrl,map_args args)
     in
     mapr 0 t
 
@@ -467,20 +492,22 @@ end = struct
        number of bound variables in the context where 'j' appears
      *)
     let rec mapr nb t =
+      let map_args args = Array.map (fun t -> mapr nb t) args in
       match t with
         Variable j -> f j nb
       | VAppl (j,args) ->
           VAppl (j, Array.map (fun t -> mapr nb t) args)
       | Application (a,b,pred) ->
-          Application (mapr nb a, Array.map (fun t -> mapr nb t) b, pred)
+          Application (mapr nb a, map_args b, pred)
       | Lam (nargs,names,pres,t,pred) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
           and t = mapr nb t in
           Lam(nargs, names, pres , t, pred)
-          (*Lam(nargs, names, mapr (1+nargs) t, pred) (* 1 + nargs??? *)*)
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
+      | Flow (ctrl,args) ->
+          Flow(ctrl, map_args args)
     in
     mapr 0 t
 
@@ -622,6 +649,8 @@ end = struct
           Lam (n, nms, pres0, t0, pr)
       | QExp(n,nms,t0,is_all) ->
           QExp (n, nms, sub t0 (n+nb), is_all)
+      | Flow (ctrl,args) ->
+          Flow (ctrl, sub_args args)
     in
     sub t 0
 

@@ -701,6 +701,9 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         Lam (n, nms, pres, expand t (1+nb), pr)
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, expand t (n+nb), is_all)
+    | Flow (ctrl,args) ->
+        let args = expargs args in
+        Flow (ctrl,args)
   in
   expand t nb
 
@@ -912,6 +915,35 @@ let term_preconditions (t:term)  (c:t): term list =
     | QExp (n,nms,t0,is_all) ->
         pres_lam n nms t0 lst,
         None
+    | Flow (ctrl,args) ->
+        let len = Array.length args in
+        begin
+          match ctrl with
+            Ifexp ->
+              assert (2 <= len);
+              assert (len <= 3);
+              let lst1,_ = pres args.(0) nb lst
+              and lst2,_ = pres args.(1) nb []
+              in
+              let reslst =
+                List.fold_right
+                  (fun t lst -> (Term.binary imp_id args.(0) t) :: lst)
+                  lst2
+                  lst1
+              in
+              let reslst =
+                if len = 2 then
+                  args.(0) :: reslst
+                else
+                  let neg = Term.unary not_id args.(0)
+                  and lst3,_ = pres args.(2) nb [] in
+                  List.fold_right
+                    (fun t lst -> (Term.binary imp_id neg t) :: lst)
+                    lst3
+                    reslst
+              in
+              reslst, domain_t
+        end
   in
   let ps,_ = pres t 0 [] in
   List.rev ps

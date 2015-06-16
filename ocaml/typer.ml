@@ -26,7 +26,11 @@ module Accus: sig
   val expected_signatures_string: t -> string
   val substitutions_string: t -> string
   val expect_boolean:    t -> unit
-  val expect_inner_precondition:    t -> unit
+  val expect_boolean_expression:    t -> unit
+  val push_expected:     t -> unit
+  val get_expected:      t -> unit
+  val drop_expected:     t -> unit
+  val complete_if:      bool -> t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   int -> t -> unit
@@ -129,9 +133,9 @@ end = struct
       raise (Untypeable accus)
 
 
-  let expect_inner_precondition (accs:t): unit =
+  let expect_boolean_expression (accs:t): unit =
     List.iter
-      (fun acc -> Term_builder.expect_inner_precondition acc)
+      (fun acc -> Term_builder.expect_boolean_expression acc)
       accs.accus
 
 
@@ -215,6 +219,14 @@ end = struct
       raise (Untypeable accus)
 
 
+
+  let iter_accus_save (f:Term_builder.t->unit) (accs:t): unit =
+    try
+      iter_accus f accs
+    with Untypeable _ ->
+      assert false
+
+
   let map_accus (f:Term_builder.t->Term_builder.t) (accs:t): unit =
     let lst =
       List.fold_left
@@ -229,6 +241,20 @@ end = struct
     if lst = [] then
       raise (Untypeable accs.accus);
     accs.accus <- lst
+
+
+  let push_expected (accs:t): unit =
+    iter_accus_save Term_builder.push_expected accs
+
+  let get_expected (accs:t): unit =
+    iter_accus_save Term_builder.get_expected accs
+
+  let drop_expected (accs:t): unit =
+    iter_accus_save Term_builder.drop_expected accs
+
+
+  let complete_if (has_else:bool) (accs:t): unit =
+    iter_accus_save (fun acc -> Term_builder.complete_if has_else acc) accs
 
 
   let expect_lambda
@@ -502,6 +528,8 @@ let analyze_expression
           | _ ->
               not_yet_implemented ie.i "Agents defined with properties"
           end
+      | Expif (thenlist,elsepart) ->
+          exp_if thenlist elsepart accs c
       | Expbracket _ ->
           not_yet_implemented ie.i ("Expbracket Typing of " ^ (string_of_expression e))
       | Bracketapp (_,_) ->
@@ -516,12 +544,13 @@ let analyze_expression
           not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
       | Expassign (_,_) ->
           not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
-      | Expif (_,_) ->
-          not_yet_implemented ie.i ("Expif Typing of "^ (string_of_expression e))
       | Expinspect (_,_) ->
           not_yet_implemented ie.i ("Expinspect Typing of "^ (string_of_expression e))
       | Typedexp (_,_) ->
           not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
+      | Cmdif (_,_) ->
+          not_yet_implemented ie.i ("Expif Typing of command "
+                                    ^ (string_of_expression e))
     with Accus.Untypeable _ ->
       error_info ie.i
         ("Type error in expression \"" ^ (string_of_expression e) ^ "\"")
@@ -575,7 +604,7 @@ let analyze_expression
       match pres with
         [] -> npres
       | p::pres ->
-          Accus.expect_inner_precondition accs;
+          Accus.expect_boolean_expression accs;
           analyze p.v accs c;
           anapres pres (1+npres)
     in
@@ -584,6 +613,44 @@ let analyze_expression
     let npres = anapres pres 0 in
     Accus.check_untyped_variables entlst.i accs;
     Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap npres is_pred accs
+
+  and exp_if
+      (thenlist: (expression * expression) list)
+      (elsepart: expression option)
+      (accs: Accus.t)
+      (c:Context.t)
+      : unit =
+    let rec do_exp_if (n:int) (thenlist:(expression * expression) list): unit =
+      let terminate has_else n =
+        if has_else then
+          Accus.complete_if true accs
+        else
+          Accus.complete_if false accs;
+        for i = 1 to n-1 do
+          Accus.complete_if true accs
+        done;
+        Accus.drop_expected accs
+      in
+      match thenlist with
+        [] ->
+          begin
+            match elsepart with
+              None ->
+                terminate false n
+            | Some e ->
+                Accus.get_expected accs;
+                analyze e accs c;
+                terminate true n
+          end
+      | (cond,e)::lst ->
+          Accus.expect_boolean_expression accs;
+          analyze cond accs c;
+          Accus.get_expected accs;
+          analyze e accs c;
+          do_exp_if (n+1) lst
+    in
+    Accus.push_expected accs;
+    do_exp_if 0 thenlist
   in
 
   let accs   = Accus.make is_bool c in
