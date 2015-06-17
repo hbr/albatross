@@ -137,6 +137,8 @@ val definition: int -> int -> t -> int * int array * term
 val specification: int -> int -> t -> term list
 val expanded_definition: int -> int -> t -> int * int array * term
 
+val tuple_of_args: term array -> int -> t -> term
+
 val preconditions: int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
 val term_preconditions: term -> t -> term list

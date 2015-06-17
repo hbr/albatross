@@ -467,7 +467,11 @@ let make_lambda
 let make_application
     (f:term) (args:term array) (pred:bool) (nbenv:int) (ft:t): term =
   assert (Array.length args > 0);
-  let args = [|tuple_of_args args nbenv ft|]
+  let args =
+    if Array.length args = 1 then
+      args
+    else
+      [|tuple_of_args args nbenv ft|]
   in
   Application (f, args, pred)
 

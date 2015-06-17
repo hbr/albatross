@@ -761,6 +761,9 @@ let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 
+let tuple_of_args (args:term array) (nb:int) (c:t): term =
+  let nbenv = nb + count_variables c in
+  Feature_table.tuple_of_args args nbenv c.ft
 
 
 (* Calculation of preconditions:
