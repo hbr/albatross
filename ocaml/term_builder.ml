@@ -1353,11 +1353,12 @@ let check_term (t:term) (tb:t): t =
               let tb = check args.(0) tb in
               get_expected tb;
               let tb = check args.(1) tb in
-              let tb =
+              let tb, has_else =
                 if len = 3 then begin
                   get_expected tb;
-                  check args.(2) tb
-                end else tb in
+                  check args.(2) tb, true
+                end else tb, false in
+              complete_if has_else tb;
               drop_expected tb;
               tb
         end
