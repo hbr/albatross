@@ -1269,6 +1269,25 @@ let term_to_string
         | _ -> "agent (" ^ argsstr ^ ") require " ^
             presstr ^
             " ensure Result = " ^ tstr ^ " end"
+    and if2str (args:term array): string =
+      let len = Array.length args in
+      assert(2 <= len); assert (len <= 3);
+      let to_str t = to_string t names nanonused false None in
+      let cond_exp (c:term) (e:term) (isif:bool): string =
+        (if isif then "if " else " elseif ") ^ (to_str c) ^ " then " ^ (to_str e)
+      in
+      let rec ifrest (t:term): string =
+        match t with
+          Flow (Ifexp,args) -> ifargs args false
+        | _                 -> " else " ^ (to_str t)
+      and ifargs (args: term array) (is_outer:bool): string =
+        let len = Array.length args in
+        assert(2 <= len); assert (len <= 3);
+        (cond_exp args.(0) args.(1) true) ^
+        (if len = 2 then "" else ifrest args.(2)) ^
+        (if is_outer then " end" else "")
+      in
+      ifargs args true
     in
     let inop, str =
       match t with
@@ -1306,7 +1325,10 @@ let term_to_string
           and argsstr, _, tstr = lam_strs n nms [] t in
           Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
       | Flow (ctrl,args) ->
-          assert false (* nyi *)
+          begin
+            match ctrl with
+              Ifexp -> None, if2str args
+          end
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->
