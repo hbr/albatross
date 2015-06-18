@@ -35,14 +35,9 @@ module TermMap = Map.Make(struct
   type t = term
 end)
 
-(*
-let string_of_lamargs (nargs:int): string =
-  if lambda_one then
-    string_of_int 0
-  else
-    let args = Array.init nargs string_of_int in
-    String.concat "," (Array.to_list args)
-*)
+let string_of_flow (ctrl:flow): string =
+  match ctrl with
+    Ifexp -> "if"
 
 module Term: sig
 
@@ -440,6 +435,12 @@ end = struct
       | QExp(n1,nms1,t1,is_all1), QExp(n2,nms2,t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
+      | Flow(ctrl1,args1), Flow(ctrl2,args2) ->
+          ctrl1 = ctrl2 &&
+          let n1 = Array.length args1
+          and n2 = Array.length args2 in
+          n1 = n2 &&
+          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
       | _, _ ->
           false
     in

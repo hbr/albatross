@@ -193,6 +193,10 @@ let split_some_quantified (t:term) (pc:t): int * int array * term =
 let implication (a:term) (b:term) (pc:t): term =
   Proof_table.implication a b pc.base
 
+let negation (a:term) (pc:t): term =
+  let nb = nbenv pc in
+  Term.unary (nb + Feature_table.not_index) a
+
 let all_quantified (nargs:int) (names:int array) (t:term) (pc:t): term =
   Proof_table.all_quantified nargs names t pc.base
 
@@ -343,237 +347,6 @@ let has_in_view (t:term) (pc:t): bool =
 
 
 
-let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
-  (* Simplify the term [t] and return the simplified term, the corresponding Eval
-     structure and a flag which tells if the term [t] and its simplification are
-     different.
-
-     [below_idx]: consider only rules below [below_idx] for equality. *)
-  let nbenv = nbenv pc in
-  let rec simp t nb =
-    let do_subterms t nb =
-      let simpl_args args modi =
-        let arglst, modi =
-          Array.fold_left
-            (fun (arglst,modi) a ->
-              let asimp,ae,amodi = simp a nb in
-              (asimp,ae)::arglst, modi || amodi)
-            ([],modi)
-            args
-        in
-        let args, argse = Myarray.split (Array.of_list (List.rev arglst)) in
-        args, argse, modi
-      in
-      match t with
-        Variable _ ->
-          t, Eval.Term t, false
-      | VAppl (i,args) ->
-          let args, argse, modi = simpl_args args false in
-          VAppl(i,args),
-          Eval.VApply(i,argse),
-          modi
-      | Application(f,args,pr) ->
-          let fsimp,fe,fmodi = simp f nb in
-          let args, argse, modi = simpl_args args fmodi in
-          Application(fsimp, args, pr),
-          Eval.Apply(fe,argse,pr),
-          modi
-      | Lam(n,nms,pres,t0,pr) ->
-          let tsimp,te,tmodi = simp t0 (1+nb) in
-          Lam(n,nms,pres,tsimp,pr), Eval.Lam(n,nms,pres,te,pr), tmodi
-      | QExp(n,nms,t0,is_all) ->
-          let tsimp,te,tmodi = simp t0 (n+nb) in
-          QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
-      | Flow (ctrl,args) ->
-          assert false (* nyi *)
-    in
-    let sublst = unify t (nb+nbenv) pc.entry.left pc in
-    let sublst =
-      List.filter (fun (idx,sub) -> idx < below_idx && Term_sub.is_empty sub) sublst
-    in
-    match sublst with
-      [idx,_] ->
-        let eq = term_up idx nb pc in
-        let nargs, left, right = Proof_table.split_equality eq nb pc.base in
-        assert (nargs = 0);
-        assert (t = left);
-        right, Eval.Simpl(Eval.Term t,idx,[||]), true
-    | _ ->
-        do_subterms t nb
-  in
-  let tsimp, te, modi = simp t 0 in
-  let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
-  assert (ta = t);
-  assert (tb = tsimp);
-  assert (modi = (tsimp <> t));
-  (*if modi then begin
-    printf "term    %s\n" (string_of_term t pc);
-    printf "simpl   %s\n" (string_of_term tsimp pc);
-  end;*)
-  tsimp, te, modi
-
-
-
-
-let triggers_eval (i:int) (nb:int) (pc:t): bool =
-  (* Does the term [Variable i] trigger a full evaluation when used as a top
-     level function term, i.e. is it a variable which describes a function
-     which has no expansion and is not owned by BOOLEAN? *)
-  let nbenv = nb + nbenv pc
-  and ft    = feature_table pc in
-  i < nbenv ||
-  let idx = i - nbenv in
-  idx = Feature_table.or_index ||
-  Feature_table.owner idx ft <> Class_table.boolean_index
-
-
-
-let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (pc:t): term =
-  Proof_table.beta_reduce n t args nb pc.base
-
-
-let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
-  (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
-     structure and a flag which tells if the term [t] and its evaluation are
-     different.
-
-     [below_idx]: consider only rules below [below_idx] for equality. *)
-  let nbenv = nbenv pc in
-  let rec eval t nb full =
-    let eval_args modi args full =
-      let modi_ref = ref modi in
-      let args = Array.map
-          (fun a ->
-            if full then
-              let a,e,modi_a = eval a nb full in
-              modi_ref := (modi_a || !modi_ref);
-              a,e
-            else a, Eval.Term a)
-          args in
-      let args,argse = Myarray.split args in
-      args, argse, !modi_ref
-    in
-    let vapply i args full =
-      let args, argse, modi = eval_args false args full in
-      let e = Eval.VApply (i,argse) in
-      VAppl(i,args), e, modi
-    in
-    let apply f fe modi args is_pred full =
-      let args, argse, modi = eval_args modi args full in
-      let e = Eval.Apply (fe,argse,is_pred) in
-      match f with
-        Lam (n,nms,_,t0,_) ->
-          beta_reduce  n t0 args nb pc, Eval.Beta e, true
-      | _ ->
-          Application (f,args,is_pred), e, modi
-    in
-    let expand t =
-      let domain_id = nb + nbenv + Feature_table.domain_index in
-      match t with
-        Variable i when i < nb -> t, Eval.Term t, false
-      | Variable i ->
-          begin try
-            let n,nms,t0 = Proof_table.definition i nb full pc.base in
-            assert (n = 0);
-            t0, Eval.Exp(i,[||],full), true
-          with Not_found ->
-            t, Eval.Term t, false
-          end
-      | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
-          assert (not pr);
-          let dom = Context.domain_lambda n nms pres nb (context pc) in
-          let argse = [|Eval.Term (Lam(n,nms,pres,t0,pr))|] in
-          dom, Eval.Exp(i,argse,full), true
-      | VAppl (i,args) ->
-          begin
-            try
-              let n,nms,t0 = Proof_table.definition i nb full pc.base in
-              if n = 0 then begin
-                let f, fe = t0, Eval.Exp(i,[||],full) in
-                apply f fe true args false full
-              end else begin
-                assert (n = Array.length args);
-                let args, argse, _ = eval_args true args full in
-                Term.apply t0 args,
-                Eval.Exp(i,argse,full),
-                true
-              end
-            with Not_found ->
-              let full = full || triggers_eval i nb pc in
-              vapply i args full
-          end
-      | Application (Variable i,args,pr) ->
-          begin
-            try
-              let n,nms,t0 = Proof_table.definition i nb full pc.base in
-              if n = 0 then begin
-                let f, fe = t0, Eval.Exp(i,[||],full) in
-                apply f fe true args pr full
-              end else begin
-                assert (n = Array.length args);
-                printf "expand %s\n" (string_of_term_anon t nb pc);
-                assert false; (* is this possible? *)
-              end
-            with Not_found ->
-              let full = full || triggers_eval i nb pc in
-              let f  = Variable i in
-              let fe = Eval.Term f in
-              apply f fe false args pr full
-          end
-      | Application (f,args,pr) ->
-          let f,fe,fmodi = eval f nb full in
-          apply f fe fmodi args pr full
-      | Lam (n,nms,pres,t,pred) ->
-          let t,e,tmodi = eval t (1+nb) full in
-          Lam (n,nms,pres,t,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
-      | QExp (n,nms,t,is_all) ->
-          let full = full || not is_all in
-          let t,e,tmodi = eval t (n+nb) full in
-          QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
-      | Flow (ctrl,args) ->
-          assert false (* nyi *)
-    in
-    let tred, ered, modi = expand t in
-    let sublst = unify tred (nb+nbenv) pc.entry.left pc in
-    let sublst = List.filter (fun (idx,sub) -> idx < below_idx) sublst in
-    let sublst1,sublst2 =
-      List.partition (fun (idx,sub) -> Term_sub.is_empty sub) sublst in
-    let simplify idx sub =
-      let args = Term_sub.arguments (Term_sub.count sub) sub in
-      let eq = Proof_table.specialized idx args nb pc.base in
-      let nargs, left, right = Proof_table.split_equality eq nb pc.base in
-      assert (nargs = 0);
-      assert (tred = left);
-      right, Eval.Simpl (ered,idx,args), true
-    in
-    match sublst1 with
-      [] ->
-        begin match sublst2 with
-          [idx,sub] -> simplify idx sub
-        | _ -> tred, ered, modi
-        end
-    | [idx,sub] -> simplify idx sub
-    | _ ->
-        tred, ered, modi
-  in
-  let tred,ered,modi = eval t 0 false in
-  let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
-  if ta <> t then begin
-    printf "t   %s  %s\n" (string_of_term t pc) (Term.to_string t);
-    printf "ta  %s  %s\n" (string_of_term ta pc) (Term.to_string ta)
-  end;
-  assert (ta = t);
-  if tb <> tred then begin
-    printf "tb   %s\n" (string_of_term tb pc);
-    printf "tred %s\n" (string_of_term tred pc)
-  end;
-  assert (tb = tred);
-  assert (modi = (tred <> t));
-  tred, ered, modi
-
-
-
-
 let split_equality (t:term) (pc:t): int * term * term =
   Proof_table.split_equality t 0 pc.base
 
@@ -697,6 +470,281 @@ let specialized
     with Not_found ->
       Proof_table.add_specialize t idx args pc.base;
       raw_add0 t rd search pc
+
+
+
+let find_match (g:term) (pc:t): int =
+  let nbenv = nbenv pc in
+  let sublst = unify g nbenv pc.entry.prvd2 pc in
+  if sublst = [] then raise Not_found;
+  try
+    let idx,_ = List.find (fun (_,sub) -> Term_sub.is_empty sub) sublst in
+    idx
+  with Not_found ->
+    let idx,sub = List.hd sublst in
+    try specialized idx sub nbenv false pc
+    with Not_found -> assert false (* specialization not type safe ? *)
+
+
+let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
+  (* Simplify the term [t] and return the simplified term, the corresponding Eval
+     structure and a flag which tells if the term [t] and its simplification are
+     different.
+
+     [below_idx]: consider only rules below [below_idx] for equality. *)
+  let nbenv = nbenv pc in
+  let rec simp t nb =
+    let do_subterms t nb =
+      let simpl_args args modi =
+        let arglst, modi =
+          Array.fold_left
+            (fun (arglst,modi) a ->
+              let asimp,ae,amodi = simp a nb in
+              (asimp,ae)::arglst, modi || amodi)
+            ([],modi)
+            args
+        in
+        let args, argse = Myarray.split (Array.of_list (List.rev arglst)) in
+        args, argse, modi
+      in
+      match t with
+        Variable _ ->
+          t, Eval.Term t, false
+      | VAppl (i,args) ->
+          let args, argse, modi = simpl_args args false in
+          VAppl(i,args),
+          Eval.VApply(i,argse),
+          modi
+      | Application(f,args,pr) ->
+          let fsimp,fe,fmodi = simp f nb in
+          let args, argse, modi = simpl_args args fmodi in
+          Application(fsimp, args, pr),
+          Eval.Apply(fe,argse,pr),
+          modi
+      | Lam(n,nms,pres,t0,pr) ->
+          let tsimp,te,tmodi = simp t0 (1+nb) in
+          Lam(n,nms,pres,tsimp,pr), Eval.Lam(n,nms,pres,te,pr), tmodi
+      | QExp(n,nms,t0,is_all) ->
+          let tsimp,te,tmodi = simp t0 (n+nb) in
+          QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
+      | Flow (ctrl,args) ->
+          let args, argse, modi = simpl_args args false in
+          Flow (ctrl,args),
+          Eval.Flow(ctrl,argse),
+          modi
+    in
+    let sublst = unify t (nb+nbenv) pc.entry.left pc in
+    let sublst =
+      List.filter (fun (idx,sub) -> idx < below_idx && Term_sub.is_empty sub) sublst
+    in
+    match sublst with
+      [idx,_] ->
+        let eq = term_up idx nb pc in
+        let nargs, left, right = Proof_table.split_equality eq nb pc.base in
+        assert (nargs = 0);
+        assert (t = left);
+        right, Eval.Simpl(Eval.Term t,idx,[||]), true
+    | _ ->
+        do_subterms t nb
+  in
+  let tsimp, te, modi = simp t 0 in
+  let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
+  assert (ta = t);
+  assert (tb = tsimp);
+  assert (modi = (tsimp <> t));
+  (*if modi then begin
+    printf "term    %s\n" (string_of_term t pc);
+    printf "simpl   %s\n" (string_of_term tsimp pc);
+  end;*)
+  tsimp, te, modi
+
+
+
+
+let triggers_eval (i:int) (nb:int) (pc:t): bool =
+  (* Does the term [Variable i] trigger a full evaluation when used as a top
+     level function term, i.e. is it a variable which describes a function
+     which has no expansion and is not owned by BOOLEAN? *)
+  let nbenv = nb + nbenv pc
+  and ft    = feature_table pc in
+  i < nbenv ||
+  let idx = i - nbenv in
+  idx = Feature_table.or_index ||
+  Feature_table.owner idx ft <> Class_table.boolean_index
+
+
+
+let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (pc:t): term =
+  Proof_table.beta_reduce n t args nb pc.base
+
+
+let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
+  (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
+     structure and a flag which tells if the term [t] and its evaluation are
+     different.
+
+     [below_idx]: consider only rules below [below_idx] for equality. *)
+  let nbenv = nbenv pc in
+  let rec eval (t:term) (nb:int) (full:bool): term * Eval.t * bool =
+    let eval_args modi args full =
+      let modi_ref = ref modi in
+      let args = Array.map
+          (fun a ->
+            if full then
+              let a,e,modi_a = eval a nb full in
+              modi_ref := (modi_a || !modi_ref);
+              a,e
+            else a, Eval.Term a)
+          args in
+      let args,argse = Myarray.split args in
+      args, argse, !modi_ref
+    in
+    let vapply i args full =
+      let args, argse, modi = eval_args false args full in
+      let e = Eval.VApply (i,argse) in
+      VAppl(i,args), e, modi
+    in
+    let apply f fe modi args is_pred full =
+      let args, argse, modi = eval_args modi args full in
+      let e = Eval.Apply (fe,argse,is_pred) in
+      match f with
+        Lam (n,nms,_,t0,_) ->
+          beta_reduce  n t0 args nb pc, Eval.Beta e, true
+      | _ ->
+          Application (f,args,is_pred), e, modi
+    in
+    let expand t =
+      let domain_id = nb + nbenv + Feature_table.domain_index in
+      match t with
+        Variable i when i < nb -> t, Eval.Term t, false
+      | Variable i ->
+          begin try
+            let n,nms,t0 = Proof_table.definition i nb full pc.base in
+            assert (n = 0);
+            t0, Eval.Exp(i,[||],full), true
+          with Not_found ->
+            t, Eval.Term t, false
+          end
+      | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
+          assert (not pr);
+          let dom = Context.domain_lambda n nms pres nb (context pc) in
+          let argse = [|Eval.Term (Lam(n,nms,pres,t0,pr))|] in
+          dom, Eval.Exp(i,argse,full), true
+      | VAppl (i,args) ->
+          begin
+            try
+              let n,nms,t0 = Proof_table.definition i nb full pc.base in
+              if n = 0 then begin
+                let f, fe = t0, Eval.Exp(i,[||],full) in
+                apply f fe true args false full
+              end else begin
+                assert (n = Array.length args);
+                let args, argse, _ = eval_args true args full in
+                Term.apply t0 args,
+                Eval.Exp(i,argse,full),
+                true
+              end
+            with Not_found ->
+              let full = full || triggers_eval i nb pc in
+              vapply i args full
+          end
+      | Application (Variable i,args,pr) ->
+          begin
+            try
+              let n,nms,t0 = Proof_table.definition i nb full pc.base in
+              if n = 0 then begin
+                let f, fe = t0, Eval.Exp(i,[||],full) in
+                apply f fe true args pr full
+              end else begin
+                assert (n = Array.length args);
+                printf "expand %s\n" (string_of_term_anon t nb pc);
+                assert false; (* is this possible? *)
+              end
+            with Not_found ->
+              let full = full || triggers_eval i nb pc in
+              let f  = Variable i in
+              let fe = Eval.Term f in
+              apply f fe false args pr full
+          end
+      | Application (f,args,pr) ->
+          let f,fe,fmodi = eval f nb full in
+          apply f fe fmodi args pr full
+      | Lam (n,nms,pres,t,pred) ->
+          let t,e,tmodi = eval t (1+nb) full in
+          Lam (n,nms,pres,t,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
+      | QExp (n,nms,t,is_all) ->
+          let full = full || not is_all in
+          let t,e,tmodi = eval t (n+nb) full in
+          QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
+      | Flow (ctrl,args) ->
+          let len = Array.length args in
+          begin
+            match ctrl with
+              Ifexp ->
+                assert (len = 2 || len = 3);
+                if len = 2 then
+                  assert false (* nyi *)
+                else
+                  begin try
+                    let idx = find_match args.(0) pc in
+                    let fst,fste,_ = eval args.(1) nb full
+                    and conde,snde = Eval.Term args.(0), Eval.Term args.(2) in
+                    fst, Eval.If(true,idx,[|conde;fste;snde|]), true
+                  with Not_found ->
+                    begin try
+                      let idx = find_match (negation args.(0) pc) pc in
+                      let snd,snde,_ = eval args.(2) nb full
+                      and conde,fste = Eval.Term args.(0), Eval.Term args.(1) in
+                    snd, Eval.If(false,idx,[|conde;fste;snde|]), true
+                    with Not_found ->
+                      t,
+                      Eval.Flow(Ifexp,
+                                [|Eval.Term args.(0);
+                                  Eval.Term args.(1);
+                                  Eval.Term args.(2)|]),
+                      false
+                    end
+                  end
+          end
+    in
+    let tred, ered, modi = expand t in
+    let sublst = unify tred (nb+nbenv) pc.entry.left pc in
+    let sublst = List.filter (fun (idx,sub) -> idx < below_idx) sublst in
+    let sublst1,sublst2 =
+      List.partition (fun (idx,sub) -> Term_sub.is_empty sub) sublst in
+    let simplify idx sub =
+      let args = Term_sub.arguments (Term_sub.count sub) sub in
+      let eq = Proof_table.specialized idx args nb pc.base in
+      let nargs, left, right = Proof_table.split_equality eq nb pc.base in
+      assert (nargs = 0);
+      assert (tred = left);
+      right, Eval.Simpl (ered,idx,args), true
+    in
+    match sublst1 with
+      [] ->
+        begin match sublst2 with
+          [idx,sub] -> simplify idx sub
+        | _ -> tred, ered, modi
+        end
+    | [idx,sub] -> simplify idx sub
+    | _ ->
+        tred, ered, modi
+  in
+  let tred,ered,modi = eval t 0 false in
+  let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
+  if ta <> t then begin
+    printf "t   %s  %s\n" (string_of_term t pc) (Term.to_string t);
+    printf "ta  %s  %s\n" (string_of_term ta pc) (Term.to_string ta)
+  end;
+  assert (ta = t);
+  if tb <> tred then begin
+    printf "tb   %s\n" (string_of_term tb pc);
+    printf "tred %s\n" (string_of_term tred pc)
+  end;
+  assert (tb = tred);
+  assert (modi = (tred <> t));
+  tred, ered, modi
+
 
 
 
@@ -1210,19 +1258,6 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
      [teval] is the term [tgt] evaluation with [e]. *)
   Proof_table.add_eval_backward tgt imp e pc.base;
   raw_add imp false pc
-
-
-let find_match (g:term) (pc:t): int =
-  let nbenv = nbenv pc in
-  let sublst = unify g nbenv pc.entry.prvd2 pc in
-  if sublst = [] then raise Not_found;
-  try
-    let idx,_ = List.find (fun (_,sub) -> Term_sub.is_empty sub) sublst in
-    idx
-  with Not_found ->
-    let idx,sub = List.hd sublst in
-    try specialized idx sub nbenv false pc
-    with Not_found -> assert false (* specialization not type safe ? *)
 
 
 let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)

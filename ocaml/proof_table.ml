@@ -450,7 +450,14 @@ let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   let rec reconstruct e nb =
-    let domain_id = nb + count_variables at + Feature_table.domain_index in
+    let domain_id = nb + count_variables at + Feature_table.domain_index
+    and reconstr_args args =
+      let n = Array.length args in
+      let args = Array.map (fun e -> reconstruct e nb) args in
+      let argsa = Array.init n (fun i -> fst args.(i))
+      and argsb = Array.init n (fun i -> snd args.(i)) in
+      argsa, argsb
+    in
     match e with
       Eval.Term t -> t,t
     | Eval.Exp (idx,args,full) when idx = domain_id ->
@@ -473,23 +480,15 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         if n = 0 then
           Variable idx, t
         else
-          let args = Array.map (fun e -> reconstruct e nb) args in
-          let argsa = Array.init n (fun i -> fst args.(i))
-          and argsb = Array.init n (fun i -> snd args.(i)) in
+          let argsa, argsb = reconstr_args args in
           VAppl(idx,argsa),
           Term.apply t argsb
     | Eval.VApply (i,args) ->
-        let nargs = Array.length args in
-        let args  = Array.map (fun e -> reconstruct e nb) args in
-        let argsa = Array.init nargs (fun i -> fst args.(i))
-        and argsb = Array.init nargs (fun i -> snd args.(i)) in
+        let argsa, argsb = reconstr_args args in
         VAppl (i,argsa), VAppl (i,argsb)
     | Eval.Apply (f,args,pr) ->
-        let fa,fb = reconstruct f nb
-        and nargs = Array.length args in
-        let args  = Array.map (fun e -> reconstruct e nb) args in
-        let argsa = Array.init nargs (fun i -> fst args.(i))
-        and argsb = Array.init nargs (fun i -> snd args.(i)) in
+        let fa,fb = reconstruct f nb in
+        let argsa, argsb = reconstr_args args in
         Application (fa,argsa,pr), Application (fb,argsb,pr)
     | Eval.Lam (n,nms,pres,e,pr) ->
         let ta,tb = reconstruct e (1 + nb) in
@@ -517,6 +516,13 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           raise Illegal_proof_term
         end;
         ta,right
+    | Eval.Flow (ctrl,args) ->
+        let argsa, argsb = reconstr_args args in
+        Flow (ctrl,argsa), Flow (ctrl,argsb)
+    | Eval.If (cond,idx,args) ->
+        assert (Array.length args = 3);
+        let argsa, argsb = reconstr_args args in
+        Flow (Ifexp,argsa), if cond then argsb.(1) else argsb.(2)
   in
   reconstruct e 0
 
