@@ -435,6 +435,7 @@ elem_type:
     simple_type  { $1 }
 |   tuple_type   { $1 }
 |   qmark_type   { $1 }
+|   star_type    { $1 }
 |   LPAREN type_nt RPAREN { Paren_type $2 }
 
 
@@ -461,6 +462,8 @@ arrow_type: elem_type ARROW type_nt {
 
 
 qmark_type: elem_type QMARK   { QMark_type $1 }
+
+star_type:  elem_type TIMES   { Star_type $1 }
 
 
 tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
@@ -680,7 +683,7 @@ expr:
 |   dotted_id_list DOT LBRACE expr RBRACE   {
   Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
 }
-|   expr COLON type_nt            { Typedexp ($1,$3) }
+|   LPAREN expr COLON type_nt RPAREN        { Typedexp ($2,$4) }
 
 |   KWall  formal_arguments opt_nl expr {
   Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }

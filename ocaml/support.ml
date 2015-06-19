@@ -169,6 +169,7 @@ type type_t =
   | Arrow_type of type_t * type_t        (* A -> B              *)
   | Tuple_type of type_t list
   | QMark_type of type_t
+  | Star_type  of type_t
   | Paren_type of type_t
 
 
@@ -190,6 +191,7 @@ let rec string_of_type (t:type_t) =
       (string_of_type t1) ^ "->" ^ (string_of_type t2)
   | Tuple_type l -> actuals l
   | QMark_type t -> (string_of_type t) ^ "?"
+  | Star_type t  -> (string_of_type t) ^ "*"
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
 
 
