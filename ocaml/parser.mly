@@ -426,7 +426,7 @@ dotted_id_list:
 
 
 type_nt:
-    elem_type { $1 }
+    elem_type     %prec LOWEST_PREC { $1 }
 |   arrow_type    { $1 }
 
 
@@ -683,7 +683,7 @@ expr:
 |   dotted_id_list DOT LBRACE expr RBRACE   {
   Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
 }
-|   LPAREN expr COLON type_nt RPAREN        { Typedexp ($2,$4) }
+|   expr COLON type_nt        { Typedexp ($1,$3) }
 
 |   KWall  formal_arguments opt_nl expr {
   Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }
