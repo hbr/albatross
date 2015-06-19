@@ -1017,11 +1017,7 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
    *)
   assert (is_consistent pc);
   let cnt = count pc in
-  let t =
-    if is_axiom then
-      Proof_table.prenex_term t pc.base
-    else t
-  in
+  let t = Proof_table.prenex_term t pc.base in
   if is_axiom then
     Proof_table.add_axiom t pc.base
   else

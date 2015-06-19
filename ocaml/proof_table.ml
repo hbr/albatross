@@ -160,22 +160,44 @@ let expand_term (t:term) (at:t): term =
 let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
   let imp_id = imp_id at in
-  let rec pterm (t:term) (imp_id:int): int * int array * term =
+  let rec pterm0 (t:term) (nt:int) (imp_id:int): int * int array * term =
     try
       let n0,nms0,t0 = Term.all_quantifier_split t in
-      let n1,nms1,t1 = pterm t0 (n0+imp_id) in
-      n0+n1, Array.append nms0 nms1, t1
+      let n1,nms1,t1 = pterm0 t0 (nt+n0) (n0+imp_id) in
+      let nms = Array.append nms0 nms1 in
+      let nms2 = Array.copy nms in
+      let t2 =
+        let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
+        assert (Array.length usd = n0+n1);
+        let args = Array.make (n0+n1) (Variable (-1)) in
+        for i = 0 to n0+n1-1 do
+          nms2.(i) <- nms.(usd.(i));
+          args.(usd.(i)) <- (Variable i)
+        done;
+        Term.sub t1 args (n0+n1)
+      in
+      n0+n1, nms2, t2
     with Not_found ->
       try
         let a,b = Term.binary_split t imp_id in
-        let n,nms,b1 = pterm b imp_id in
-        let t = Term.binary (n+imp_id) (Term.up n a) b1 in
+        let a = pterm a nt imp_id in
+        let n,nms,b1 = pterm0 b nt imp_id in
+        let b1 =
+          let args = Array.init (n+nt)
+              (fun i ->
+                if i < n then Variable (nt+i)
+                else Variable (i-n)) in
+          Term.sub b1 args (n+nt)
+        in
+        let t = Term.binary (n+imp_id) (Term.upbound n nt a) b1 in
         n, nms, t
       with Not_found ->
         0, [||], t
+  and pterm (t:term) (nt:int) (imp_id:int): term =
+    let n,nms,t = pterm0 t nt imp_id in
+    Term.all_quantified n nms t
   in
-  let n,nms,t = pterm t imp_id in
-  Term.all_quantified n nms t
+  pterm t 0 imp_id
 
 
 let equivalent (t1:term) (t2:term) (at:t): bool =
