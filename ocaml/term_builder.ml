@@ -895,6 +895,8 @@ let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   remove_local ntvs tb;
   tb.c <- Context.pop tb.c;
   let qexp =
+    if IntSet.cardinal (Term.bound_variables t nargs) <> nargs then
+      raise Not_found;
     if is_all then
       Context.all_quantified nargs names t tb.c
     else Context.some_quantified nargs names t tb.c in
@@ -1002,10 +1004,7 @@ let check_untyped_variables (tb:t): unit =
       Variable j when j < ntvs_loc -> begin
         match TVars_sub.get_star j tb.tvars with
           VAppl(idx,_) when idx = dum_idx ->
-            printf "incompled type %d because of dummy\n" i;
-            raise (Incomplete_type i)
-        | Variable k when k < ntvs_loc ->
-            printf "incompled type %d because of local\n" i;
+            printf "incomplete type %d because of dummy\n" i;
             raise (Incomplete_type i)
         | _ -> ()
       end

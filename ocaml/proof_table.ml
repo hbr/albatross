@@ -165,16 +165,17 @@ let prenex_term (t:term) (at:t): term =
       let n0,nms0,t0 = Term.all_quantifier_split t in
       let n1,nms1,t1 = pterm0 t0 (nt+n0) (n0+imp_id) in
       let nms = Array.append nms0 nms1 in
-      let nms2 = Array.copy nms in
-      let t2 =
+      let t2, nms2 =
         let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
-        assert (Array.length usd = n0+n1);
-        let args = Array.make (n0+n1) (Variable (-1)) in
-        for i = 0 to n0+n1-1 do
+        let n   = Array.length usd in
+        assert (n = n0+n1);
+        let args = Array.make n (Variable (-1))
+        and nms2 = Array.make n (-1) in
+        for i = 0 to n-1 do
           nms2.(i) <- nms.(usd.(i));
           args.(usd.(i)) <- (Variable i)
         done;
-        Term.sub t1 args (n0+n1)
+        Term.sub t1 args n, nms2
       in
       n0+n1, nms2, t2
     with Not_found ->
