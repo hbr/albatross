@@ -354,12 +354,14 @@ header_mark:
 
 class_declaration:
   header_mark KWclass class_name class_generics
+  create_clause
   inherit_clause
   KWend {
   Class_declaration( withinfo (rhs_info 3) $1,
                      withinfo (rhs_info 3) $3,
                      withinfo (rhs_info 4) $4,
-                     $5)
+                     $5,
+                     $6)
 }
 
 class_name:
@@ -407,6 +409,22 @@ name_sig:
 
 
 
+/* ------------------------------------------------------------------------- */
+/* Create clauses */
+/* ------------------------------------------------------------------------- */
+
+create_clause:
+    { withinfo UNKNOWN [] }
+| KWcreate constructor_list { withinfo (rhs_info 2) $2 }
+
+constructor_list:
+    constructor { [$1] }
+|   constructor separator constructor_list { $1::$3 }
+
+
+constructor: nameopconst_info formal_arguments_opt {
+  $1, $2
+   }
 
 
 /* ------------------------------------------------------------------------- */
@@ -712,6 +730,7 @@ expr:
   Exparrow (withinfo info entlst, $3)
 }
 |  exp_conditional { $1 }
+|  exp_inspect     { $1 }
 
 
 atomic_expr:
@@ -865,6 +884,18 @@ exp_then_part:
 exp_else_part:
     { None }
 |   KWelse expr { Some $2 }
+
+
+exp_inspect:
+    KWinspect expr exp_case_list KWend {
+  Expinspect ($2,$3)
+    }
+
+exp_case_list:
+    exp_case { [$1] }
+|   exp_case exp_case_list { $1 :: $2 }
+
+exp_case: KWcase expr KWthen expr { $2, $4 }
 
 
 

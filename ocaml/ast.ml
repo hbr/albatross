@@ -239,6 +239,7 @@ let put_class
     (hm:       header_mark withinfo)
     (cn:       classname)
     (fgs:      formal_generics)
+    (creators: (feature_name withinfo * entities list) list withinfo)
     (inherits: inherit_clause)
     (pc: Proof_context.t)
     : unit =
@@ -492,8 +493,8 @@ let analyze (ast: declaration list) (pc:Proof_context.t): unit =
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
-        Class_declaration (hm, cname, fgens, inherits) ->
-          put_class hm cname fgens inherits pc
+        Class_declaration (hm, cname, fgens, creators, inherits) ->
+          put_class hm cname fgens creators inherits pc
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
           analyze_feature fn entlst rt is_func body expr pc
       | Assertion_feature (label, entlst, body) ->

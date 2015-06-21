@@ -377,8 +377,9 @@ type expression =
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
+  | Expinspect    of expression * (expression*expression) list
   | Cmdif         of (expression * compound) list   * compound option
-  | Expinspect    of
+  | Cmdinspect    of
       info_expression
         * (info_expression * compound) list
   | Expproof      of compound * implementation option * compound
@@ -518,6 +519,16 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       ^ " end"
   | Expinspect (inspexp,caselist) ->
       "inspect "
+      ^ (string_of_expression inspexp)
+      ^ (string_of_list
+           caselist
+           (fun (pat,exp) ->
+             " case " ^ (string_of_expression pat)
+             ^ " then " ^  (string_of_expression exp))
+           "")
+      ^ " end"
+  | Cmdinspect (inspexp,caselist) ->
+      "inspect "
       ^ (string_of_expression inspexp.v)
       ^ (string_of_list
            caselist
@@ -654,6 +665,7 @@ type parent = bool * type_t withinfo * rename_item list
 
 type inherit_clause = parent list
 
+type create_clause = (feature_name withinfo * entities list) list withinfo
 
 type declaration =
     Assertion_feature of int option * entities list withinfo * feature_body
@@ -669,6 +681,7 @@ type declaration =
       header_mark withinfo
         * classname
         * formal_generics
+        * create_clause
         * inherit_clause
 
 

@@ -544,8 +544,11 @@ let analyze_expression
           not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
       | Expassign (_,_) ->
           not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
-      | Expinspect (_,_) ->
-          not_yet_implemented ie.i ("Expinspect Typing of "^ (string_of_expression e))
+      | Expinspect (inspexp,caselst) ->
+          not_yet_implemented ie.i ("Expinspect Typing of " ^ (string_of_expression e))
+      | Cmdinspect (_,_) ->
+          not_yet_implemented ie.i ("Expinspect Typing of command "^
+                                    (string_of_expression e))
       | Typedexp (_,_) ->
           not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
       | Cmdif (_,_) ->
