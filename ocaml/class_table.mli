@@ -152,6 +152,12 @@ val ancestor:     int -> int -> t -> parent_descriptor
 val has_private_ancestor: int -> int -> t -> bool
 val private_ancestor:     int -> int -> t -> parent_descriptor
 
+val descends_from_any: int -> t -> bool
+val type_descends_from_any: term -> Tvars.t -> t -> bool
+
+val has_any: t -> bool
+val has_predicate: t -> bool
+
 val inherits_any: int -> t -> bool
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array

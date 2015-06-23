@@ -69,6 +69,8 @@ val tuple_index:       int
 val first_index:       int
 val second_index:      int
 
+val standard_argnames: int -> int array
+
 val base_table: int -> t
 
 val class_table:  t -> Class_table.t
@@ -117,6 +119,12 @@ val split_equality: term -> int -> t -> int * int * term * term
 val is_equality: term -> int -> t -> bool
     (** [is_equality t nbenv ft] tells if the term [t] is an equality term *)
 
+
+val equality_index: int -> t -> int
+    (** [equality_index cls ft] returns the equality index of the class [cls]. *)
+
+val equality_index_of_type: term -> Tvars.t -> t -> int
+    (** [equality_index tp ft] returns the equality index of the type [tp]. *)
 
 val definition: int -> int -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature

@@ -735,6 +735,17 @@ let variant_spec (i:int) (inew:int) (base_cls:int) (cls:int) (ft:t)
           nms (Some (variant_term defterm nargs base_cls cls ft)) pres
 
 
+let equality_index (cls:int) (ft:t): int =
+  assert (Class_table.has_ancestor cls Class_table.any_index ft.ct);
+  variant eq_index cls ft
+
+
+let equality_index_of_type (tp:term) (tvs:Tvars.t) (ft:t): int =
+  let cls = Tvars.principal_class tp tvs in
+  equality_index cls ft
+
+
+
 let definition_equality (i:int) (ft:t): term =
   assert (i < count ft);
   assert (has_definition i ft);

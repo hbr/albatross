@@ -150,6 +150,17 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
         bdesc
 
 
+let has_any (ct:t): bool =
+  let desc = descriptor any_index ct in
+  desc.mdl <> -1
+
+
+let has_predicate (ct:t): bool =
+  let desc = descriptor predicate_index ct in
+  desc.mdl <> -1
+
+
+
 let add_to_map (cls:int) (ct:t): unit =
   (* Add the class [cls] to the map in order to be able to find it.
    *)
@@ -1115,6 +1126,14 @@ let inherits_any (cls:int) (ct:t): bool =
   cls <> any_index &&
   has_ancestor cls any_index ct
 
+
+let descends_from_any (cls:int) (ct:t): bool =
+  has_ancestor cls any_index ct
+
+
+let type_descends_from_any (tp:term) (tvs:Tvars.t) (ct:t): bool =
+  let cls = Tvars.principal_class tp tvs in
+  descends_from_any cls ct
 
 
 let parent_type (cls:int) (tp:type_t withinfo) (ct:t)

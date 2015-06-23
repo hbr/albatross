@@ -371,7 +371,7 @@ let push_with_gap
     (is_pred: bool)
     (is_func: bool)
     (rvar:    bool)
-    (ntvs_gap)
+    (ntvs_gap:int)
     (c: t)
     : t =
   (** Push the new type variables, formal generics and the formal arguments of

@@ -235,38 +235,6 @@ let prove_and_store
 
 
 
-let put_class
-    (hm:       header_mark withinfo)
-    (cn:       classname)
-    (fgs:      formal_generics)
-    (creators: (feature_name withinfo * entities list) list withinfo)
-    (inherits: inherit_clause)
-    (pc: Proof_context.t)
-    : unit =
-  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
-      corresponding class.  *)
-  assert (Proof_context.is_global pc);
-  let ft = Proof_context.feature_table pc in
-  let ct = Feature_table.class_table ft in
-  let idx =
-    try
-      let idx = Class_table.find_for_declaration cn.v ct in
-      Class_table.update idx hm fgs  ct;
-      idx
-    with Not_found ->
-      let path, cn0 = cn.v in
-      if path <> [] then
-        error_info cn.i
-          ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
-      let idx = Class_table.count ct in
-      Class_table.add hm cn0 fgs ct;
-      idx
-  in
-  Inherit.inherit_parents idx inherits pc
-
-
-
-
 let function_property_list (lst:compound) (pc:PC.t): term list =
   let pc1 = Proof_context.push_untyped [||] pc in
   List.map
@@ -484,6 +452,283 @@ let analyze_feature
     update_function idx fn tvs nms sign body pc
 
 
+
+
+
+let add_case_axiom (t:term) (pc:Proof_context.t): unit =
+  let _ = Proof_context.add_proved false (-1) t (Proof.Axiom t) pc in ()
+
+
+
+let add_case_induction
+    (cls:     int)
+    (clst_rev:int list)
+    (pc:      Proof_context.t): unit =
+  let pappl nb a = Application(Variable nb, [|a|],true) in
+  let ft = Proof_context.feature_table pc in
+  let imp_id0 = 2 + Feature_table.implication_index
+  and tgt = pappl 0 (Variable 1) in
+  let t =
+    List.fold_left
+      (fun tgt idx ->
+        let tvs,s = Feature_table.signature idx ft in
+        let args  = Sign.arguments s in
+        let p =
+          if Sign.arity s = 0 then
+            pappl 0 (Variable (2+idx))
+          else
+            let a0lst, a1lst, nargs =
+              Array.fold_left
+                (fun (a0lst,a1lst,i) tp ->
+                  if Tvars.principal_class tp tvs = cls then
+                    a0lst, i::a1lst, i+1
+                  else
+                    i::a0lst, a1lst, i+1)
+                ([],[],0)
+                args in
+            let alst = List.rev a1lst @ List.rev a0lst
+            and n_a1 = List.length a1lst in
+            let perm  = Array.of_list alst in
+            let perm2 = Array.make nargs (-1) in
+            for i = 0 to nargs-1 do
+              perm2.(perm.(i)) <- i
+            done;
+            let args    = Array.map (fun i -> Variable i) perm2
+            and imp_id1 = nargs + imp_id0 in
+            let tgt = pappl nargs (VAppl(idx+2+nargs,args)) in
+            let p, n1 =
+              List.fold_left
+                (fun (tgt,i) argi ->
+                  let p = pappl nargs (Variable (n_a1-i-1)) in
+                  Term.binary imp_id1 p tgt, i+1)
+                (tgt,0)
+                a1lst in
+            Term.all_quantified nargs (Feature_table.standard_argnames nargs) p
+        in
+        Term.binary imp_id0 p tgt)
+      tgt
+      clst_rev
+  in
+  let t = Term.all_quantified 2 [|ST.symbol "p";ST.symbol "a"|] t in
+  printf "induction %s\n" (Proof_context.string_of_term t pc);
+  add_case_axiom t pc
+
+
+
+let add_case_inversions
+    (cls:  int)
+    (clst: int list)
+    (pc:   Proof_context.t): unit =
+  let ft   = Proof_context.feature_table pc in
+  List.iter
+    (fun idx1 ->
+      List.iter
+        (fun idx2 ->
+          if idx1 = idx2 then
+            ()
+          else
+            let tvs1,s1 = Feature_table.signature idx1 ft
+            and tvs2,s2 = Feature_table.signature idx2 ft in
+            assert (tvs1 = tvs2);
+            let n1,n2 = Sign.arity s1, Sign.arity s2 in
+            let args1 = Array.init n1 (fun i -> Variable i)
+            and args2 = Array.init n2 (fun i -> Variable (n1+i)) in
+            let appl idx args =
+              let idx = n1 + n2 + idx in
+              if Array.length args = 0 then Variable idx
+              else VAppl (idx,args) in
+            let t1 = appl idx1 args1
+            and t2 = appl idx2 args2
+            and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
+            and imp_id   = n1 + n2 + Feature_table.implication_index
+            and false_id = n1 + n2 + Feature_table.false_index
+            in
+            let t = Term.binary imp_id
+                (Term.binary eq_id t1 t2)
+                (Variable false_id) in
+            let t = Term.all_quantified
+                (n1+n2)
+                (Feature_table.standard_argnames (n1+n2))
+                t in
+            printf "inversion %s\n"
+              (Proof_context.string_of_term t pc);
+            add_case_axiom t pc)
+        clst)
+    clst
+
+
+
+let add_case_injections
+    (clst: int list)
+    (pc:Proof_context.t): unit =
+  let ft   = Proof_context.feature_table pc in
+  List.iter
+    (fun idx ->
+      let tvs,s = Feature_table.signature idx ft in
+      let n = Sign.arity s in
+      if n = 0 then
+        ()
+      else
+        let args1 = Array.init n (fun i -> Variable i)
+        and args2 = Array.init n (fun i -> Variable (n+i))
+        and nms   = Feature_table.standard_argnames (2*n)
+        and idx   = 2*n + idx
+        and eq_id0 = 2*n  +
+            Feature_table.equality_index_of_type (Sign.result s) tvs ft
+        and imp_id = 2*n + Feature_table.implication_index in
+        let teq0 = Term.binary eq_id0 (VAppl(idx,args1)) (VAppl(idx,args2)) in
+        for i = 0 to n - 1 do
+          let eq_id1 = 2*n +
+              Feature_table.equality_index_of_type (Sign.arg_type i s) tvs ft in
+          let teq1 = Term.binary eq_id1 (Variable i) (Variable (n+i)) in
+          let t = Term.binary imp_id teq0 teq1 in
+          let t = Term.all_quantified (2*n) nms t in
+          printf "injection %s\n" (Proof_context.string_of_term t pc);
+          add_case_axiom t pc
+        done)
+    clst
+
+
+
+let put_creators
+    (cls: int)
+    (cls_is_new:bool)
+    (cls_tp: type_t)
+    (creators: (feature_name withinfo * entities list) list withinfo)
+    (pc: Proof_context.t)
+    : unit =
+  let rt = Some (withinfo UNKNOWN (cls_tp,false,false))
+  and c    = Proof_context.context pc
+  and info = creators.i in
+  let ft   = Context.feature_table c in
+  let ct   = Feature_table.class_table ft in
+  let c0lst, c1lst =
+    List.fold_left
+      (fun (c0lst,c1lst) (fn,ents) ->
+        let c1 = Context.push (withinfo info ents) rt false true false c in
+        let sign = Context.signature c1
+        and nms  = Context.local_argnames c1
+        and tvs  = Context.tvars c1
+        and cnt  = Feature_table.count ft in
+        let body = Feature.Spec.make_func_def nms None [], Feature.Empty in
+        printf "  %s  %s\n"
+          (feature_name_to_string fn.v)
+          (Context.sign2string sign c1);
+        let idx, is_new =
+          try Feature_table.find_with_signature fn.v tvs sign ft, false
+          with Not_found -> cnt, true
+        in
+        assert (not cls_is_new || is_new);
+        if Tvars.count tvs > 0 then
+          error_info fn.i "Type inference for constructors not allowed";
+        for i = 0 to Sign.arity sign - 1 do
+          let arg = Sign.arg_type i sign in
+          if not (Class_table.type_descends_from_any arg tvs ct)
+          then
+            error_info fn.i
+              ("Type " ^
+               (Class_table.string_of_type arg tvs ct) ^
+               " does not inherit ANY")
+        done;
+        if is_new then
+          add_function fn tvs nms sign body pc
+        else
+          update_function idx fn tvs nms sign body pc;
+        let tvs,sign = Feature_table.signature idx ft in
+        let is_base =
+          not (IntSet.mem cls (Sign.involved_classes_arguments tvs sign)) in
+        if is_base && c1lst <> [] then
+          error_info fn.i "Base constructors must be defined before other constructors"
+        else if not is_base && c0lst = [] then
+          error_info fn.i "No base constructors available";
+        if is_base then idx::c0lst, c1lst else c0lst, idx::c1lst)
+      ([],[])
+      creators.v in
+  let clst_rev = c1lst @ c0lst in
+  let clst = List.rev clst_rev in
+  add_case_induction cls clst_rev pc;
+  add_case_inversions cls clst pc;
+  add_case_injections clst pc;
+  ()
+
+
+
+let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
+  let simple_type (str:string): type_t =
+    Normal_type ([], ST.symbol str,[])
+  in
+  begin (* add equality *)
+    let argnames = Array.to_list (Feature_table.standard_argnames 2) in
+    let fn     = withinfo UNKNOWN (FNoperator Eqop)
+    and entlst = withinfo UNKNOWN [Typed_entities (argnames,cls_tp)]
+    and rt     =
+      Some (withinfo UNKNOWN (simple_type "BOOLEAN",false,false))
+    in
+    analyze_feature fn entlst rt true (Some (None,Some Impbuiltin,None)) None pc
+  end;
+  begin (* add reflexivity of equality *)
+    let arga     = ST.symbol "a"
+    and kind     = PAxiom in
+    let entlst = withinfo UNKNOWN [Typed_entities ([arga],cls_tp)]
+    and elst   = [withinfo UNKNOWN (Binexp (Eqop,Identifier arga,Identifier arga))]
+    in
+    make_proof 0 entlst kind [] [] elst pc
+  end;
+  begin (* inherit ANY *)
+    let parent = false, withinfo UNKNOWN (simple_type "ANY"), [] in
+    Inherit.inherit_parents cls [parent] pc
+  end
+
+
+let put_class
+    (hm:       header_mark withinfo)
+    (cn:       classname)
+    (fgs:      formal_generics)
+    (creators: (feature_name withinfo * entities list) list withinfo)
+    (inherits: inherit_clause)
+    (pc: Proof_context.t)
+    : unit =
+  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
+      corresponding class.  *)
+  assert (Proof_context.is_global pc);
+  let ft = Proof_context.feature_table pc in
+  let ct = Feature_table.class_table ft in
+  let idx,is_new =
+    try
+      let idx = Class_table.find_for_declaration cn.v ct in
+      Class_table.update idx hm fgs  ct;
+      idx, false
+    with Not_found ->
+      let path, cn0 = cn.v in
+      if path <> [] then
+        error_info cn.i
+          ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
+      let idx = Class_table.count ct in
+      Class_table.add hm cn0 fgs ct;
+      idx, true
+  in
+  let cls_tp =
+    let lib,cls = cn.v in
+    let fgtps   = List.map (fun nme -> Normal_type([],nme,[])) fgs.v in
+    Normal_type (lib, cls, fgtps) in
+  begin match hm.v with
+    Case_hmark ->
+      if not (Class_table.has_any ct) then
+        error_info hm.i "A case class needs the module \"any\"";
+      if not (Class_table.has_predicate ct) then
+        error_info hm.i "A case class needs the module \"predicate\"";
+      inherit_case_any idx cls_tp pc
+  | _ ->
+      ()
+  end;
+  if creators.v <> [] then begin
+    match hm.v with
+      Case_hmark ->
+        put_creators idx is_new cls_tp creators pc
+    | _ ->
+        error_info creators.i "Only case classes can have constructors"
+  end;
+  Inherit.inherit_parents idx inherits pc
 
 
 

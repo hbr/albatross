@@ -36,6 +36,7 @@ val is_global: t -> bool
 
 
 val string_of_term: term -> t -> string
+val string_of_term_anon: term -> int -> t -> string
 val string_of_term_i: int -> t -> string
 
 val make:      int -> t

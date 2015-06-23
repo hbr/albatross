@@ -415,7 +415,7 @@ name_sig:
 
 create_clause:
     { withinfo UNKNOWN [] }
-| KWcreate constructor_list { withinfo (rhs_info 2) $2 }
+| KWcreate constructor_list { withinfo (rhs_info 1) $2 }
 
 constructor_list:
     constructor { [$1] }
