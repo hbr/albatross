@@ -65,29 +65,6 @@ let prove (t:term) (pc:PC.t): unit =
 
 
 
-let check_base_features (cls:int) (pc:PC.t): unit =
-  let ct  = class_table pc
-  and ft  = PC.feature_table pc in
-  let lst =
-    if cls = Class_table.boolean_index then
-      [Feature_table.implication_index]
-    else
-      Class_table.base_features cls ct
-  in
-  let fname i = Feature_table.feature_name i ft in
-  let eq_index = Feature_table.variant Feature_table.eq_index cls ft in
-  if Feature_table.is_deferred eq_index ft then
-    ()
-  else begin
-    (*printf "check base features of class %d %s\n"
-      cls (Class_table.class_name cls ct);
-    List.iter (fun i -> printf "   %s\n" (fname i)) lst;*)
-    ()
-  end
-
-
-
-
 let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
   (* Check the equivalence of the feature [i] and its inherited variant [idx] in
      the class [cls] *)
@@ -198,7 +175,6 @@ let inherit_features
   (* Inherit in the class [cls] the features from the parent [par[par_args]] where
      [ghost] indicates if the inheritance relation is a ghost inheritance. *)
   let ct = Proof_context.class_table pc
-  and ft = Proof_context.feature_table pc
   in
   let defs = List.rev (Class_table.deferred_features par ct) in
   List.iter (fun i -> inherit_deferred i cls ghost info pc) defs;
@@ -238,8 +214,7 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
         PC.inherit_parent cls par par_args tp.i pc;
         if not !has_any && Class_table.inherits_any cls ct then begin
           has_any := true;
-          PC.add_potential_equalities cls pc;
-          check_base_features cls pc
+          PC.add_potential_equalities cls pc
         end
       end)
     clause
