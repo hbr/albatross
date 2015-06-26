@@ -71,14 +71,10 @@ let analyze_imp_opt
 let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
     : kind * compound * compound * compound =
   match bdy with
-    _, _, None ->
+    _, _, [] ->
       error_info info "Assertion must have an ensure clause"
-  | rlst_opt, imp_opt, Some elst ->
-      let rlst =
-        match rlst_opt with
-          None   -> []
-        | Some l -> l
-      and kind,clst =
+  | rlst, imp_opt, elst ->
+      let kind,clst =
         analyze_imp_opt i info imp_opt c
       in
       kind, rlst, clst, elst
@@ -265,19 +261,9 @@ let result_term (lst:info_expression list) (context:Context.t): term * info =
 
 
 
-let add_function
-    (fn:       feature_name withinfo)
-    (tvs:      Tvars.t)
-    (argnames: int array)
-    (sign:     Sign.t)
-    (body:     Feature.body)
-    (pc:       Proof_context.t): unit =
-  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
-  assert (PC.is_global pc);
-  let ft = Proof_context.feature_table pc in
-  let idx = Feature_table.count ft in
-  Feature_table.add_function fn tvs argnames sign body ft;
-  Inherit.inherit_to_descendants idx fn.i pc;
+let add_property_assertion
+    (idx:int)
+    (pc: PC.t): unit =
   try
     let c = PC.context pc in
     let idx = idx + Context.count_variables c in
@@ -293,25 +279,58 @@ let add_function
     ()
 
 
-let update_function
-    (idx:      int)
-    (fn:       feature_name withinfo)
-    (tvs:      Tvars.t)
-    (argnames: int array)
-    (sign:     Sign.t)
-    (body:     Feature.body)
-    (pc:       Proof_context.t): unit =
-  assert (Tvars.count tvs = 0);  (* only formal generics, no untyped *)
-  let ft = Proof_context.feature_table pc in
-  let inh =
-    Feature_table.is_public ft && not (Feature_table.is_feature_public idx ft)
-  and is_ghost = Sign.is_ghost sign
+
+let update_feature
+    (info:      info)
+    (idx:       int)
+    (is_new:    bool)
+    (is_export: bool)
+    (spec:      Feature.Spec.t)
+    (impl:      Feature.implementation)
+    (pc:        PC.t): unit =
+  assert (not (is_new && is_export));
+  let match_impl priv pub =
+    match priv,pub with
+      Feature.Deferred, Feature.Deferred |
+      Feature.Builtin,  Feature.Empty |
+      Feature.Empty,    Feature.Empty -> true
+    | _ -> false
   in
-  Feature_table.update_function idx fn.i is_ghost body ft;
-  if inh then
-    Inherit.inherit_to_descendants idx fn.i pc
-
-
+  let ft          = PC.feature_table pc in
+  let update (): unit =
+    let is_ghost = Feature_table.is_ghost_specification spec ft in
+    if is_ghost && not (Feature_table.is_ghost_function idx ft) then
+      error_info info "Must be a ghost function";
+    Feature_table.update_specification idx spec ft;
+    Inherit.inherit_to_descendants idx info pc
+  in
+  if PC.is_private pc || not (PC.is_interface_check pc) then begin
+    assert (not is_export);
+    if not is_new then begin
+      let spec0,impl0 = Feature_table.private_body idx ft in
+      if not (Feature.Spec.private_public_consistent spec0 spec) then
+        error_info info "Specification does not match the previous declaration";
+      if not ((PC.is_private pc && impl0=impl) || match_impl impl0 impl) then
+        error_info info
+          "Implementation status does not match the previous declaration";
+    end else
+      update ()
+  end else if is_export then begin
+    assert (PC.is_interface_check pc);
+    let spec0,impl0 = Feature_table.private_body idx ft in
+    if not (match_impl impl0 impl) then
+      error_info info "Implementation status is not consistent with private status";
+    if not (Feature.Spec.private_public_consistent spec0 spec) then
+      error_info info "Specification is not consistent with private specification";
+    update ()
+  end else begin
+    assert (PC.is_interface_check pc);
+    let spec0,impl0 = Feature_table.body idx ft in
+    if not (Feature.Spec.equivalent spec spec0) then
+      error_info info "Specification does not match the previous declaration";
+    if not (match_impl impl0 impl) then
+      error_info info "Implementation status is not consistent with private status"
+  end
 
 
 (* Functions defined by properties
@@ -340,6 +359,131 @@ let update_function
         all(a,b,...) r1 ==> r2 ==> ... ==> ei[Result:=f(a,b,...)]
  *)
 
+let adapt_inner_function_term
+    (info:info)
+    (t:term)
+    (nargs:int)
+    (pc: PC.t): term =
+  (* Functions have a result variable with number [nargs]. However all preconditions,
+     definition terms and postconditions finally don't contain the result variable.
+     If a function is defined by properties then the variable 'Result' is replaced
+     by the corresponding call. I.e. all variable starting from [nargs] are shifted
+     down by one. *)
+  if PC.has_result_variable pc then
+    try
+      Term.down_from 1 nargs t
+    with Term_capture ->
+      error_info info "illegal use of \"Result\""
+  else
+    t
+
+
+
+let is_feature_term_recursive (t:term) (idx:int) (pc:PC.t): bool =
+  let c = PC.context pc in
+  let nvars = Context.count_variables c in
+  let free  = Term.free_variables t nvars in
+  IntSet.mem (idx+nvars) free
+
+
+let feature_specification
+    (info:info)
+    (idx: int)
+    (nms: int array)
+    (reqlst: compound)
+    (enslst:compound)
+    (pc:PC.t): Feature.Spec.t =
+  let nargs = Array.length nms
+  and context = PC.context pc in
+  let adapt_term t = adapt_inner_function_term info t nargs pc in
+  let adapt_list lst = List.map adapt_term lst in
+  add_assumptions reqlst pc;
+  let pres = PC.assumptions pc in
+  if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
+    error_info info "Recursive calls not allowed in preconditions";
+  let pres = adapt_list pres in
+  match enslst with
+    [] ->
+      Feature.Spec.make_func_spec nms pres []
+  | _ ->
+      begin try
+        let term,info = result_term enslst context in
+        if is_feature_term_recursive term idx pc then
+          error_info info "Recursion not yet implemented";
+        verify_preconditions term info pc;
+        let term = adapt_term term in
+        Feature.Spec.make_func_def nms (Some term) pres
+      with Not_found ->
+        let prove cond errstring =
+          try Prover.prove cond pc
+          with Not_found ->
+            error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"")
+        in
+        let posts = function_property_list enslst pc in
+        if PC.is_private pc then begin
+          let exist = Context.existence_condition posts context in
+          let unique =
+            try Context.uniqueness_condition posts context
+            with Not_found ->
+              error_info info "Result type does not inherit ANY"
+          in
+          prove exist  "existence";
+          prove unique "uniqueness"
+        end;
+        let posts = Context.function_postconditions idx posts context in
+        assert (List.for_all (fun t -> is_feature_term_recursive t idx pc) posts);
+        let posts = adapt_list posts
+        in
+        Feature.Spec.make_func_spec nms pres posts
+      end
+
+
+let feature_specification_ast
+    (info:info)
+    (nms: int array)
+    (idx: int)
+    (bdy: feature_body option)
+    (exp: info_expression option)
+    (pc: Proof_context.t): Feature.Spec.t =
+  let nargs = Array.length nms in
+  let adapt_term t =
+    adapt_inner_function_term info t nargs pc in
+  let feature_spec reqlst enslst =
+    feature_specification info idx nms reqlst enslst pc in
+  let context = PC.context pc in
+  match bdy, exp with
+    None, None ->
+      Feature.Spec.make_empty nms
+  | None, Some ie ->
+      let term = Typer.result_term ie context in
+      if is_feature_term_recursive term idx pc then
+        error_info info "Recursion not yet implemented";
+      verify_preconditions term ie.i pc;
+      let term = adapt_term term in
+      (Feature.Spec.make_func_def nms (Some term) [])
+  | Some (reqlst,_,enslst), None ->
+      feature_spec reqlst enslst
+  | Some bdy, Some exp ->
+      assert false (* cannot happen *)
+
+
+
+let implementation_status
+    (info:info)
+    (bdy: feature_body option)
+    (pc: Proof_context.t): Feature.implementation =
+  match bdy with
+    None
+  | Some (_,None,_) -> Feature.Empty
+  | Some (_,Some Impbuiltin,_) -> Feature.Builtin
+  | Some (_,Some Impdeferred,_) -> Feature.Deferred
+  | Some (_,Some Impevent,_) ->
+      not_yet_implemented info "events"
+  | Some (_,Some Impdefined(_,_,_),_) ->
+      not_yet_implemented info "features with locals"
+
+
+
 
 let analyze_feature
     (fn: feature_name withinfo)
@@ -352,105 +496,41 @@ let analyze_feature
   let pc1 =
     let rvar = is_func || Option.has rt in
     PC.push entlst rt false is_func rvar pc in
-  let context = Proof_context.context pc1 in
-  let nms   = Context.local_argnames context in
-  let nargs = Array.length nms in
-  let sign  = Context.signature context
-  and tvs   = Context.tvars context
-  in
-  let ft = Proof_context.feature_table pc in
-  let cnt = Feature_table.count ft in
-  let idx =
-    try Feature_table.find_with_signature fn.v tvs sign ft
-    with Not_found -> cnt
-  in
-  let adapt_term t =
-    if PC.has_result_variable pc1 then
-      try
-        Term.down_from 1 nargs t
-      with Term_capture ->
-        error_info fn.i "\"Result\" cannot be used in here"
-    else
-      t in
-  let adapt_list lst = List.map adapt_term lst in
-  let feature_spec reqlst enslst =
-    add_assumptions reqlst pc1;
-    let pres = adapt_list (PC.assumptions pc1) in
-    match enslst with
-      [] ->
-        Feature.Spec.make_func_spec nms pres []
-    | _ ->
-        begin try
-          let term,info = result_term enslst context in
-          verify_preconditions term info pc1;
-          let term = adapt_term term in
-          Feature.Spec.make_func_def nms (Some term) pres
-        with Not_found ->
-          let prove cond errstring =
-            try Prover.prove cond pc1
-            with Not_found ->
-              error_info fn.i ("Cannot prove " ^ errstring ^ " of \"Result\"")
-          in
-          let posts = function_property_list enslst pc1 in
-          let exist = Context.existence_condition posts context in
-          (*printf "existence %s\n" (Context.string_of_term exist true 0 context);*)
-          let unique =
-            try Context.uniqueness_condition posts context
-            with Not_found ->
-              error_info fn.i "Result type does not inherit ANY"
-          in
-          (*printf "uniqueness %s\n" (Context.string_of_term unique true 0 context);*)
-          prove exist  "existence";
-          prove unique "uniqueness";
-          let posts = adapt_list (Context.function_postconditions idx posts context)
-          in
-          Feature.Spec.make_func_spec nms pres posts
-        end
-  in
-  let body =
-    match bdy, exp with
-      None, None ->
-        (Feature.Spec.make_func_def nms None []),
-        Feature.Empty
-    | None, Some ie ->
-        let term = Typer.result_term ie context in
-        verify_preconditions term ie.i pc1;
-        let term = adapt_term term in
-        (Feature.Spec.make_func_def nms (Some term) []),
-        Feature.Empty
-    | Some bdy, None ->
-        begin
-          match bdy with
-            None, Some Impbuiltin, None ->
-              (Feature.Spec.make_func_def nms None []),
-              Feature.Builtin
-          | Some reqlst, Some Impbuiltin, None ->
-              feature_spec reqlst [], Feature.Builtin
-          | Some reqlst, None, None ->
-              feature_spec reqlst [], Feature.Empty
-          | None, None, Some enslst ->
-              feature_spec [] enslst,
-              Feature.Empty
-          | Some reqlst, None, Some enslst ->
-              feature_spec reqlst enslst,
-              Feature.Empty
-          | None, Some Impdeferred, None ->
-              (Feature.Spec.make_func_def nms None []),
-              Feature.Deferred
-          | Some reqlst, Some Impdeferred, None ->
-              feature_spec reqlst [], Feature.Deferred
-          | _ -> not_yet_implemented fn.i
-                "functions with implementation/preconditions"
-        end
-    | _ -> assert false (* cannot happen *)
+  let nms, sign, tvs =
+    let c = Proof_context.context pc1 in
+    Context.local_argnames c,
+    Context.signature c,
+    Context.tvars c
   in
   if Tvars.count tvs > 0 then
     not_yet_implemented entlst.i "Type inference for named functions";
-  if idx = cnt then
-    add_function fn tvs nms sign body pc
-  else
-    update_function idx fn tvs nms sign body pc
-
+  let ft = Proof_context.feature_table pc in
+  let imp  = implementation_status fn.i bdy pc in
+  let idx, is_new, is_export =
+    try
+      let idx = Feature_table.find_with_signature fn.v tvs sign ft in
+      let is_export =
+        PC.is_interface_check pc && not (Feature_table.is_feature_public idx ft) in
+      if is_export && not (Sign.is_ghost sign) &&
+        Feature_table.is_ghost_function idx ft
+      then
+        error_info fn.i "Must be a ghost function";
+      if is_export then
+        Feature_table.export_feature idx false ft
+      else if PC.is_interface_use pc &&
+        not (Feature_table.is_feature_public idx ft)
+      then
+        Feature_table.export_feature idx true ft;
+      idx, false, is_export
+    with Not_found ->
+      let cnt = Feature_table.count ft in
+      Feature_table.add_feature fn tvs nms sign imp ft;
+      cnt, true, false
+  in
+  let spec = feature_specification_ast fn.i nms idx bdy exp pc1 in
+  update_feature fn.i idx is_new is_export spec imp pc;
+  if is_new then
+    add_property_assertion idx pc
 
 
 
@@ -610,17 +690,24 @@ let put_creators
         and nms  = Context.local_argnames c1
         and tvs  = Context.tvars c1
         and cnt  = Feature_table.count ft in
-        let body = Feature.Spec.make_func_def nms None [], Feature.Empty in
+        if Tvars.count tvs > 0 then
+          error_info fn.i "Type inference for constructors not allowed";
+        let spec = Feature.Spec.make_func_def nms None []
+        and imp  = Feature.Empty in
         printf "  %s  %s\n"
           (feature_name_to_string fn.v)
           (Context.sign2string sign c1);
-        let idx, is_new =
-          try Feature_table.find_with_signature fn.v tvs sign ft, false
-          with Not_found -> cnt, true
+        let idx, is_new, is_export =
+          try
+            let idx = Feature_table.find_with_signature fn.v tvs sign ft in
+            let is_export =
+              PC.is_interface_check pc &&
+              not (Feature_table.is_feature_public idx ft) in
+            idx, false, is_export
+          with Not_found ->
+            cnt, true, false
         in
         assert (not cls_is_new || is_new);
-        if Tvars.count tvs > 0 then
-          error_info fn.i "Type inference for constructors not allowed";
         for i = 0 to Sign.arity sign - 1 do
           let arg = Sign.arg_type i sign in
           if not (Class_table.type_descends_from_any arg tvs ct)
@@ -631,9 +718,10 @@ let put_creators
                " does not inherit ANY")
         done;
         if is_new then
-          add_function fn tvs nms sign body pc
-        else
-          update_function idx fn tvs nms sign body pc;
+          Feature_table.add_feature fn tvs nms sign imp ft
+        else if is_export then
+          Feature_table.export_feature idx false ft;
+        update_feature fn.i idx is_new is_export spec imp pc;
         let tvs,sign = Feature_table.signature idx ft in
         let is_base =
           not (IntSet.mem cls (Sign.involved_classes_arguments tvs sign)) in
@@ -663,8 +751,9 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
     and entlst = withinfo UNKNOWN [Typed_entities (argnames,cls_tp)]
     and rt     =
       Some (withinfo UNKNOWN (simple_type "BOOLEAN",false,false))
+    and imp    = if PC.is_public pc then None else Some Impbuiltin
     in
-    analyze_feature fn entlst rt true (Some (None,Some Impbuiltin,None)) None pc
+    analyze_feature fn entlst rt true (Some ([],imp,[])) None pc
   end;
   begin (* add reflexivity of equality *)
     let arga     = ST.symbol "a"

@@ -7,6 +7,9 @@ module Spec = struct
             pres:  term list;
             posts: term list}
 
+  let make_empty (nms:int array): t =
+    {nms = nms; def = None; pres = []; posts = []}
+
   let make_func_def (nms:int array) (def: term option) (pres:term list): t =
     {nms = nms; def = def; pres = pres; posts = []}
 
@@ -17,6 +20,8 @@ module Spec = struct
   let names (spec:t): int * int array =
     Array.length spec.nms, spec.nms
 
+  let is_empty (s:t): bool =
+    s.pres = [] && s.def = None && s.posts = []
 
   let count_arguments (spec:t): int =
     Array.length spec.nms
@@ -50,12 +55,17 @@ module Spec = struct
 
 
   let equivalent (s1:t) (s2:t): bool =
+    (* equivalent ignoring names *)
     if s1.def <> s2.def && Option.has s1.def && Option.has s2.def then
       Printf.printf "definitions not equivalent %s %s\n"
         (Term.to_string (Option.value s1.def))
         (Term.to_string (Option.value s2.def));
     s1.def = s2.def && s1.pres = s2.pres && s1.posts = s2.posts
 
+  let private_public_consistent (priv:t) (pub:t): bool =
+    priv.pres = pub.pres &&
+    (pub.def   = None || pub.def   = priv.def) &&
+    (pub.posts = []   || pub.posts = priv.posts)
 end
 
 

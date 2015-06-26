@@ -13,8 +13,6 @@ open Signature
 
 type t
 
-type implementation_status = No_implementation | Builtin | Deferred
-
 val verbosity:  t -> int
 
 val count:      t -> int
@@ -55,6 +53,9 @@ val find_variant_candidate: int -> int -> t -> int
 val has_variant_candidate: int -> int -> t -> bool
 
 val string_of_signature: int -> t -> string
+
+val is_ghost_term: term -> int -> t -> bool
+val is_ghost_specification: Feature.Spec.t -> t -> bool
 
 val implication_index: int
 val false_index:       int
@@ -141,6 +142,8 @@ val feature_name: int -> t -> string
 
 val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
+val private_body: int -> t -> Feature.body
+val body:         int -> t -> Feature.body
 
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
@@ -166,6 +169,13 @@ val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 
 val find_with_signature: feature_name -> Tvars.t -> Sign.t -> t -> int
 
+val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
+  -> Feature.implementation -> t -> unit
+
+val update_specification: int -> Feature.Spec.t -> t -> unit
+
+val export_feature: int -> bool -> t -> unit
+
 val add_function:
     feature_name withinfo -> Tvars.t -> int array -> Sign.t
       -> Feature.body -> t -> unit
@@ -189,7 +199,7 @@ val inherit_new_effective: int -> int -> bool -> t -> int
 
 val inherit_feature: int -> int -> int -> bool -> t -> unit
 
-val export_feature: int -> t -> unit
+val export_feature: int -> bool -> t -> unit
 
 val print: t -> unit
 

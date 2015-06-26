@@ -1028,7 +1028,7 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
 
      [e1_f; e2_f; ...]
 
-     where [ei_f] is [ei] with the variable substituted by [f(a,b,...)] and
+     where [ei_f] is [ei] with the variable [Result] substituted by [f(a,b,...)] and
      [idx] is the index of the function [f].
    *)
   assert (has_result_variable c);

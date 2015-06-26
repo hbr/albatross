@@ -10,8 +10,6 @@ open Term
 open Signature
 open Printf
 
-type implementation_status = No_implementation | Builtin | Deferred
-
 
 type definition = term
 
@@ -113,7 +111,7 @@ let arity (i:int) (ft:t): int =
 
 let string_of_signature (i:int) (ft:t): string =
   let desc = descriptor i ft in
-  (feature_name_to_string desc.fname) ^
+  (feature_name_to_string desc.fname) ^ " " ^
   (Class_table.string_of_complete_signature desc.sign desc.tvs ft.ct)
 
 
@@ -554,6 +552,18 @@ let specification (i:int) (nb:int) (ft:t): term list =
     posts
 
 
+let private_body (i:int) (ft:t): Feature.body =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  desc.priv.spec, desc.impl
+
+
+let body (i:int) (ft:t): Feature.body =
+  assert (i < count ft);
+  let desc = descriptor i ft
+  and bdesc = base_descriptor i ft in
+  bdesc.spec, desc.impl
+
 
 let owner (i:int) (ft:t): int =
   assert (i < count ft);
@@ -562,7 +572,8 @@ let owner (i:int) (ft:t): int =
 
 let is_ghost_function (i:int) (ft:t): bool =
   assert (i < count ft);
-  Sign.is_ghost (descriptor i ft).sign
+  let desc = descriptor i ft in
+  Sign.is_ghost desc.sign
 
 
 let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
@@ -590,6 +601,13 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         fghost || ghost_args args 0 (Array.length args)
   in
   is_ghost t 0
+
+
+let is_ghost_specification (spec:Feature.Spec.t) (ft:t): bool =
+  Feature.Spec.has_postconditions spec ||
+  (Feature.Spec.has_definition spec &&
+   let nargs = Feature.Spec.count_arguments spec in
+   is_ghost_term (Feature.Spec.definition_term spec) nargs ft)
 
 
 let is_total (i:int) (ft:t): bool =
@@ -791,6 +809,57 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
+let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
+  (* Find the feature with the characteristics.  *)
+  let ntvs = Tvars.count_all tvs in
+  let tp   = Class_table.to_dummy ntvs sign in
+  let ntvs = Tvars.count_all tvs
+  and tab = Feature_map.find fn ft.map in
+  let lst  = Term_table2.unify tp ntvs tab in
+  let idx_lst =
+    List.fold_left
+      (fun lst (i,sub) ->
+        let desc = descriptor i ft in
+        if Tvars.is_equivalent tvs desc.tvs && Term_sub.is_identity sub then
+          i :: lst
+        else
+          let ok =
+            Term_sub.for_all
+              (fun j t ->
+                Class_table.satisfies
+                  t tvs
+                  (Tvars.concept j desc.tvs) desc.tvs
+                  ft.ct)
+              sub
+          in
+          if ok then begin
+            let owner = Class_table.owner tvs sign ft.ct in
+            try
+              let ivar = variant i owner ft in
+              ivar :: lst
+            with Not_found ->
+              assert false (* cannot happen, feature must be inherited *)
+          end else
+            lst)
+      []
+      lst
+  in
+  match idx_lst with
+    [] -> raise Not_found
+  | idx::rest ->
+      assert (List.for_all (fun i -> i=idx) rest);
+      idx
+
+
+let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
+  try
+    let _ = find_with_signature fn tvs sign ft in true
+  with Not_found -> false
+
+
+
+
+
 let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t)
     : unit =
   (* Add the feature [i] as a class feature to the corresponding owner
@@ -823,25 +892,6 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t
   end
 
 
-
-let export_feature (i:int) (ft:t): unit =
-  (* Export the feature [i] unless it is already publicly available. *)
-  assert (is_interface_check ft);
-  assert (i < count ft);
-  let desc = descriptor i ft in
-  match desc.pub with
-    None ->
-      let nargs = Array.length desc.argnames in
-      desc.pub <- Some (standard_bdesc i desc.cls desc.priv.spec nargs ft);
-      add_class_feature i false true false ft;
-  | Some _ ->
-      ()
-
-
-
-let has_equivalent (i:int) (ft:t): bool =
-  false
-
 let add_key (i:int) (ft:t): unit =
   (** Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
@@ -856,13 +906,7 @@ let add_key (i:int) (ft:t): unit =
       ft.map <- Feature_map.add desc.fname tab ft.map;
       tab
   in
-  if has_equivalent i ft then
-    assert false  (* raise some exception *)
-  else(
-    (*if Term_table2.has i tab then
-      printf "add_key feature %d %s already in the table\n"
-        i (feature_name_to_string desc.fname);*)
-    Term_table2.add desc.tp ntvs 0 i tab)
+  Term_table2.add desc.tp ntvs 0 i tab
 
 
 
@@ -871,6 +915,92 @@ let add_keys (ft:t): unit =
   for i = 0 to (count ft)-1 do
     add_key i ft
   done
+
+
+let add_feature
+    (fn:       feature_name withinfo)
+    (tvs:      Tvars.t)
+    (argnames: int array)
+    (sign:     Sign.t)
+    (impl:     Feature.implementation)
+    (ft:       t): unit =
+  (* Add a new feature to the feature table with an empty specification *)
+  assert (not (has_with_signature fn.v tvs sign ft));
+  let is_priv = is_private ft
+  and cnt     = Seq.count ft.seq
+  and nargs   = Array.length argnames
+  and spec    = Feature.Spec.make_empty argnames
+  in
+  let mdl = Class_table.current_module ft.ct in
+  let cls = Class_table.owner tvs sign ft.ct
+  and anchor_fg, anchor_cls = Sign.anchor tvs sign in
+  let anchored = Class_table.anchored tvs cls ft.ct in
+  let nanchors = Array.length anchored in
+  begin match impl with
+    Feature.Deferred ->
+      Class_table.check_deferred cls nanchors fn.i ft.ct
+  | _ -> ()
+  end;
+  let bdesc = standard_bdesc cnt cls spec nargs ft
+  and bdesc_opt =
+    if is_priv then None else Some (standard_bdesc cnt cls spec nargs ft)
+  and nfgs = Tvars.count_all tvs
+  and base = (is_private ft || is_interface_use ft) &&
+    not (Feature.Spec.has_definition spec)
+  in
+  let desc =
+    {mdl      = mdl;
+     cls      = cls;
+     anchor_cls = anchor_cls;
+     anchor_fg  = anchor_fg;
+     fname    = fn.v;
+     impl     = impl;
+     tvs      = tvs;
+     argnames = argnames;
+     sign     = sign;
+     tp       = Class_table.to_dummy nfgs sign;
+     anchored = anchored;
+     priv     = bdesc;
+     pub      = bdesc_opt}
+  in
+  Seq.push desc ft.seq;
+  add_key cnt ft;
+  add_class_feature cnt false false base ft
+
+
+
+
+let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
+  assert (i < count ft);
+  let bdesc = base_descriptor i ft in
+  assert (Feature.Spec.is_empty bdesc.spec);
+  assert begin
+    not (is_interface_check ft) ||
+    Feature.Spec.private_public_consistent (base_descriptor_priv i ft).spec spec
+  end;
+  if is_interface_use ft then
+    (base_descriptor_priv i ft).spec <- spec;
+  bdesc.spec <- spec
+
+
+
+
+let export_feature (i:int) (withspec:bool) (ft:t): unit =
+  (* Export the feature [i] unless it is already publicly available. *)
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  match desc.pub with
+    None ->
+      let nargs = Array.length desc.argnames in
+      let spec  =
+        if withspec then desc.priv.spec
+        else Feature.Spec.make_func_spec desc.argnames [] []
+      in
+      desc.pub <- Some (standard_bdesc i desc.cls spec nargs ft);
+      add_class_feature i false true false ft;
+  | Some _ ->
+      ()
+
 
 
 let n_names_with_start (c:char) (size:int): int array =
@@ -1042,57 +1172,6 @@ let base_table (verbosity:int) : t =
   assert ((descriptor first_index ft).fname       = FNname ST.first);
   assert ((descriptor second_index ft).fname      = FNname ST.second);
   ft
-
-
-
-
-let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
-  (* Find the feature with the characteristics.  *)
-  let ntvs = Tvars.count_all tvs in
-  let tp   = Class_table.to_dummy ntvs sign in
-  let ntvs = Tvars.count_all tvs
-  and tab = Feature_map.find fn ft.map in
-  let lst  = Term_table2.unify tp ntvs tab in
-  let idx_lst =
-    List.fold_left
-      (fun lst (i,sub) ->
-        let desc = descriptor i ft in
-        if Tvars.is_equivalent tvs desc.tvs && Term_sub.is_identity sub then
-          i :: lst
-        else
-          let ok =
-            Term_sub.for_all
-              (fun j t ->
-                Class_table.satisfies
-                  t tvs
-                  (Tvars.concept j desc.tvs) desc.tvs
-                  ft.ct)
-              sub
-          in
-          if ok then begin
-            let owner = Class_table.owner tvs sign ft.ct in
-            try
-              let ivar = variant i owner ft in
-              ivar :: lst
-            with Not_found ->
-              assert false (* cannot happen, feature must be inherited *)
-          end else
-            lst)
-      []
-      lst
-  in
-  match idx_lst with
-    [] -> raise Not_found
-  | idx::rest ->
-      assert (List.for_all (fun i -> i=idx) rest);
-      idx
-
-
-let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
-  try
-    let _ = find_with_signature fn tvs sign ft in true
-  with Not_found -> false
-
 
 
 
@@ -1587,8 +1666,6 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   add_class_feature cnt false false false ft;
   inherit_feature i cnt cls false ft;
   cnt
-
-
 
 
 

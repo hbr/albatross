@@ -2,9 +2,12 @@ open Term
 
 module Spec: sig
   type t
+  val make_empty:      int array -> t
   val make_func_def:   int array -> term option -> term list -> t
   val make_func_spec:  int array -> term list -> term list -> t
+  val is_empty:        t -> bool
   val equivalent:      t -> t -> bool
+  val private_public_consistent: t -> t -> bool
   val has_definition:  t -> bool
   val definition:      t -> term option
   val definition_term: t -> term

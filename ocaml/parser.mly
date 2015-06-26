@@ -247,7 +247,7 @@ formal_generic:
 
 ass_feat: proof_all_expr {
   let entlst, req, impl, ens = $1 in
-  let bdy = Some req, Some impl, Some ens in
+  let bdy = req, Some impl, ens in
   Assertion_feature (None, entlst, bdy)
 }
 
@@ -564,13 +564,13 @@ feature_body_opt:
 
 feature_body:
     require_block feature_implementation ensure_block KWend
-    { Some $1, Some $2, Some $3 }
-|   require_block feature_implementation KWend  { Some $1, Some $2, None }
-|   feature_implementation ensure_block KWend   { None   , Some $1, Some $2 }
-|   require_block ensure_block KWend            { Some $1, None,    Some $2 }
-|   require_block KWend                         { Some $1, None,    None }
-|   feature_implementation KWend                { None,    Some $1, None }
-|   ensure_block KWend                          { None,    None,    Some $1 }
+    { $1, Some $2, $3 }
+|   require_block feature_implementation KWend  { $1, Some $2, [] }
+|   feature_implementation ensure_block KWend   { [], Some $1, $2 }
+|   require_block ensure_block KWend            { $1, None,    $2 }
+|   require_block KWend                         { $1, None,    [] }
+|   feature_implementation KWend                { [], Some $1, [] }
+|   ensure_block KWend                          { [], None,    $1 }
 
 
 

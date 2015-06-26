@@ -403,7 +403,7 @@ and local_declaration =
 
 and locals          = local_declaration list
 
-and feature_body = compound option * implementation option * compound option
+and feature_body = compound * implementation option * compound
 
 
 
@@ -592,12 +592,12 @@ and string_of_implementation imp =
 
 and string_of_body b =
   let rl,imp_opt,el = b in
-  (string_of_option rl (function e -> " require " ^ (string_of_compound e)))
+  (" require " ^ (string_of_compound rl))
   ^
     (match imp_opt with
       Some imp -> (string_of_implementation imp)
     | None -> "")
-  ^ (string_of_option rl (function e -> " ensure " ^ (string_of_compound e)))
+  ^ (" ensure " ^ (string_of_compound el))
   ^ " end"
 
 

@@ -90,7 +90,6 @@ val quantified:      bool -> int -> int array -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val some_quantified: int -> int array -> term -> t -> term
 
-
 val variable_name: int -> t -> int
     (** The name of the [i]th variable argument *)
 

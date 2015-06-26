@@ -135,7 +135,7 @@ let rec inherit_effective
     try
       let idx = Feature_table.private_variant i cls ft in
       assert (PC.is_interface_check pc);
-      Feature_table.export_feature idx ft;
+      Feature_table.export_feature idx true ft;
       Feature_table.inherit_feature i idx cls true ft
     with Not_found ->
       begin try
