@@ -480,13 +480,6 @@ let analyze_expression
     and do_leaf (lst: (int*Tvars.t*Sign.t) list): unit =
       process_leaf lst c info accs
     in
-    let rec arg_list (e:expression): expression list =
-      match e with
-        Explist lst -> lst
-      | Tupleexp (a,b) ->
-          a :: arg_list b
-      | _ -> [e]
-    in
     try
       match e with
         Expproof (_,_,_)
@@ -500,11 +493,11 @@ let analyze_expression
       | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
       | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
       | Funapp (Expdot(tgt,f),args) ->
-          let arg_lst = tgt :: (arg_list args) in
+          let arg_lst = tgt :: (expression_list args) in
           let args = Array.of_list arg_lst in
           application f args accs c
       | Funapp (f,args)     ->
-          application f (Array.of_list (arg_list args)) accs c
+          application f (Array.of_list (expression_list args)) accs c
       | Expparen e          -> analyze e accs c
       | Expquantified (q,entlst,exp) ->
           quantified q entlst exp accs c
@@ -536,8 +529,6 @@ let analyze_expression
           not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
       | Expset _ ->
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
-      | Explist _ ->
-          not_yet_implemented ie.i ("Explist Typing of "^ (string_of_expression e))
       | Tupleexp (a,b) ->
           application (Identifier ST.tuple) [|a;b|] accs c
       | Expcolon (_,_) ->

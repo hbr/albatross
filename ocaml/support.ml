@@ -373,7 +373,6 @@ type expression =
   | Unexp         of operator * expression
   | Tupleexp      of expression * expression
   | Typedexp      of expression * type_t
-  | Explist       of expression list
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
@@ -407,7 +406,7 @@ and feature_body = compound * implementation option * compound
 
 
 
-let expression_list (e:expression): expression list =
+let expression_list_rev (e:expression): expression list =
   (* break up a tuple into a list, note: the returned list contains the
      elements reversed *)
   let rec list (e:expression) (lst:expression list): expression list =
@@ -417,6 +416,12 @@ let expression_list (e:expression): expression list =
     | _ -> e::lst
   in
   list e []
+
+
+let expression_list (e:expression): expression list =
+  (* break up a tuple into a list.*)
+  List.rev (expression_list_rev e)
+
 
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
@@ -474,9 +479,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
 
   | Tupleexp (e1,e2) ->
       "(" ^ (strexp e1) ^ "," ^ (strexp e2) ^ ")"
-
-  | Explist l ->
-      withparen (string_of_list l strexp ",") wp
 
   | Expcolon (e1,e2) ->
       withparen ((strexp e1) ^ ":" ^ (strexp e2)) wp

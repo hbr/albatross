@@ -77,7 +77,7 @@ let entities_of_expression (info:info) (lst: expression list): entities list =
 
 
 let predicate_of_expression (info:info) (e:expression): expression =
-  let lst = expression_list e in
+  let lst = expression_list_rev e in
   match lst with
     [] -> assert false (* never empty *)
   | Expcolon(last_arg,pexp)::rest ->
@@ -713,7 +713,7 @@ expr:
   predicate_of_expression (rhs_info 2) $2
 }
 |   LPAREN expr RPAREN ARROW expr {
-  let lst  = List.rev (expression_list $2)
+  let lst  = expression_list $2
   and info = rhs_info 2 in
   let entlst = entities_of_expression info lst in
   Exparrow (withinfo info entlst,$5)
