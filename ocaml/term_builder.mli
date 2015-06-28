@@ -55,9 +55,10 @@ val make_boolean:     Context.t -> t
 val expect_boolean:   t -> unit
 
 val expect_boolean_expression:   t -> unit
-
+val expect_new_untyped: t -> unit
+val remove_untyped:     t -> unit
 val push_expected:    t -> unit
-val get_expected:     t -> unit
+val get_expected:     int -> t -> unit
 val drop_expected:    t -> unit
 
 val complete_if:     bool -> t -> unit
@@ -112,6 +113,10 @@ val expect_quantified: int -> Context.t -> t -> unit
 
 val complete_quantified: int -> bool -> t -> unit
 
+
+val expect_case: Context.t -> t -> unit
+val complete_case: t -> unit
+val complete_inspect: int -> t -> unit
 
 exception Incomplete_type of int
 

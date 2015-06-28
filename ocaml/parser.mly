@@ -738,6 +738,7 @@ atomic_expr:
 |   NUMBER                        { Expnumber $1 }
 |   KWfalse                       { Expfalse }
 |   KWtrue                        { Exptrue }
+|   USCORE                        { Expanon }
 |   dotted_id_list %prec LOWEST_PREC {
   expression_from_dotted_id $1
 }

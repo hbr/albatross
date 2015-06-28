@@ -592,6 +592,15 @@ let expect_boolean_expression (tb:t): unit =
 
 
 
+let expect_new_untyped (tb:t): unit =
+  add_local 1 tb;
+  tb.sign <- Sign.make_const (Variable 0)
+
+
+let remove_untyped (tb:t): unit =
+  remove_local 1 tb
+
+
 let globals_added (cs:type_term array) (tb:t): t =
   (** Add the constraints [cs] to the accumulator [tb] *)
   let n = Array.length cs
@@ -622,16 +631,20 @@ let push_expected (tb:t): unit =
   tb.stack <- (tvars tb,tb.sign)::tb.stack
 
 
-let get_expected (tb:t): unit =
+let get_expected (i:int) (tb:t): unit =
   (* Get the top expected signature from the stack *)
+  assert (0 <= i);
+  assert (i < List.length tb.stack);
   assert (tb.stack <> []);
-  let tvs,s = List.hd tb.stack in
-  assert (count_local tb = Tvars.count_local tvs);
+  let tvs,s = List.nth tb.stack i in
+  assert (Tvars.count_local tvs <= count_local tb);
   assert (Tvars.count_global tvs <= count_global tb);
   assert (Tvars.count_fgs tvs <= count_fgs tb);
+  let delta_loc = count_local tb - Tvars.count_local tvs in
   let n = Tvars.count tvs
-  and ndelta = count_all tb - Tvars.count_all tvs in
+  and ndelta = count_all tb - Tvars.count_all tvs - delta_loc in
   let s = Sign.up_from ndelta n s in
+  let s = Sign.up delta_loc s in
   tb.sign <- s
 
 
@@ -906,8 +919,59 @@ let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   tb.tlist <- (qexp, tvars tb, s) :: tb.tlist
 
 
+
+
+let expect_case (c:Context.t) (tb:t): unit =
+  let nargs = Context.count_last_arguments c in
+  tb.c <- c;
+  add_local nargs tb;
+  get_expected 0 tb
+
+
+
+let complete_case (tb:t): unit =
+  let nms = Context.local_argnames tb.c in
+  let n   = Array.length nms in
+  assert (2 <= List.length tb.tlist);
+  remove_local n tb;
+  tb.c <- Context.pop tb.c;
+  get_expected 1 tb;
+  let sres = tb.sign in
+  get_expected 0 tb;
+  let smtch = tb.sign in
+  let tvs = tvars tb in
+  let res,_,_  =  pop_term tb in
+  let mtch,_,_ =  pop_term tb in
+  tb.tlist <- (Term.some_quantified n nms mtch,tvs, smtch) :: tb.tlist;
+  tb.tlist <- (Term.some_quantified n nms res, tvs, sres)  :: tb.tlist
+
+
+
+let complete_inspect (n:int) (tb:t): unit =
+  let args = Array.make (2*n+1) (Variable (-1)) in
+  let rec do_cases (i:int): unit =
+    if i = 0 then ()
+    else begin
+      let i = i - 1 in
+      let res,_,_  = pop_term tb in
+      let mtch,_,_ = pop_term tb in
+      args.(1 + 2*i) <- mtch;
+      args.(2 + 2*i) <- res;
+      do_cases i
+    end
+  in
+  do_cases n;
+  let insp,_,_ = pop_term tb in
+  args.(0) <- insp;
+  get_expected 1 tb;
+  tb.tlist <- (Flow (Inspect, args), tvars tb, tb.sign) :: tb.tlist;
+  drop_expected tb;
+  drop_expected tb
+
+
+
 let complete_if (has_else:bool) (tb:t): unit =
-  get_expected tb;
+  get_expected 0 tb;
   let args =
     if has_else then begin
       assert (List.length tb.tlist >= 3);
@@ -1342,23 +1406,51 @@ let check_term (t:term) (tb:t): t =
         qlambda n nms t0 is_all tb
     | Flow (ctrl,args) ->
         let len = Array.length args in
-        assert (2 <= len);
-        assert (len <= 3);
         begin
           match ctrl with
             Ifexp ->
+              assert (2 <= len);
+              assert (len <= 3);
               push_expected tb;
               expect_boolean_expression tb;
               let tb = check args.(0) tb in
-              get_expected tb;
+              get_expected 0 tb;
               let tb = check args.(1) tb in
               let tb, has_else =
                 if len = 3 then begin
-                  get_expected tb;
+                  get_expected 0 tb;
                   check args.(2) tb, true
                 end else tb, false in
               complete_if has_else tb;
               drop_expected tb;
+              tb
+          | Inspect ->
+              assert (3 <= len);
+              assert (len mod 2 = 1);
+              let ncases = len / 2 in
+              let rec do_cases_from (i:int) (tb:t): t =
+                if i = ncases then
+                  tb
+                else
+                  let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
+                  and n1,nms1,res,_  = Term.qlambda_split_0 args.(2*i+2) in
+                  assert (n = n1);
+                  let c1 = Context.push_untyped nms tb.c in
+                  expect_case c1 tb;
+                  get_expected 0 tb;
+                  let tb = check mtch tb in
+                  get_expected 1 tb;
+                  let tb = check res tb in
+                  complete_case tb;
+                  do_cases_from (i+1) tb
+              in
+              push_expected tb;
+              expect_new_untyped tb;
+              push_expected tb;
+              let tb = check args.(0) tb in
+              let tb = do_cases_from 0 tb in
+              remove_untyped tb;
+              complete_inspect ncases tb;
               tb
         end
   in

@@ -9,6 +9,7 @@ open Container
 
 type flow =
     Ifexp
+  | Inspect
 
 type term =
     Variable    of int
@@ -38,6 +39,7 @@ end)
 let string_of_flow (ctrl:flow): string =
   match ctrl with
     Ifexp -> "if"
+  | Inspect -> "inspect"
 
 module Term: sig
 
@@ -104,6 +106,7 @@ module Term: sig
 
   val lambda_split: term -> int * int array * term list * term
 
+  val qlambda_split_0: term -> int * int array * term * bool
   val qlambda_split: term -> int * int array * term * bool
 
   val unary: int -> term -> term
@@ -198,6 +201,8 @@ end = struct
             Ifexp ->
               assert (Array.length args <= 3);
               "if(" ^ (String.concat "," argsstr) ^ ")"
+          | Inspect ->
+              "inspect(" ^ (String.concat "," argsstr) ^ ")"
         end
 
 
@@ -706,6 +711,12 @@ end = struct
       Lam (n,names,pres,t,_) -> n,names,pres,t
     | _ -> raise Not_found
 
+
+  let qlambda_split_0 (t:term): int * int array * term * bool =
+    match t with
+      QExp (n,names,t,is_all) -> n,names,t,is_all
+    | _ ->
+        0, [||], t, false
 
   let qlambda_split (t:term): int * int array * term * bool =
     match t with

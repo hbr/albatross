@@ -355,6 +355,7 @@ type is_do_block = bool
 
 type expression =
     Identifier    of int
+  | Expanon
   | Expnumber     of int
   | ExpResult
   | Exptrue
@@ -418,11 +419,24 @@ let expression_list_rev (e:expression): expression list =
   list e []
 
 
+
 let expression_list (e:expression): expression list =
   (* break up a tuple into a list.*)
   List.rev (expression_list_rev e)
 
 
+
+let tuple_of_list (lst:expression list): expression =
+  let rec tuple lst =
+    match lst with
+      [a;b]    ->
+        Tupleexp (a,b)
+    | a :: lst ->
+        Tupleexp (a,tuple lst)
+    | _ ->
+        assert false
+  in
+  tuple lst
 
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
@@ -430,6 +444,8 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   in
   match e with
     Identifier id -> ST.string id
+
+  | Expanon       -> "_"
 
   | Expnumber num  -> ST.string num
 

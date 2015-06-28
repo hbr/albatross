@@ -705,6 +705,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       false
                     end
                   end
+            | Inspect ->
+                assert false (* nyi *)
           end
     in
     let tred, ered, modi = expand t in

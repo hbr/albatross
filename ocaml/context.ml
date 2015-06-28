@@ -946,6 +946,8 @@ let term_preconditions (t:term)  (c:t): term list =
                     reslst
               in
               reslst, domain_t
+          | Inspect ->
+              assert false (* nyi *)
         end
   in
   let ps,_ = pres t 0 [] in

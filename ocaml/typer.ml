@@ -27,8 +27,10 @@ module Accus: sig
   val substitutions_string: t -> string
   val expect_boolean:    t -> unit
   val expect_boolean_expression:    t -> unit
+  val expect_new_untyped:t -> unit
+  val remove_untyped:    t -> unit
   val push_expected:     t -> unit
-  val get_expected:      t -> unit
+  val get_expected:      int -> t -> unit
   val drop_expected:     t -> unit
   val complete_if:      bool -> t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
@@ -39,6 +41,9 @@ module Accus: sig
   val complete_lambda:   int -> int -> int -> bool -> t -> unit
   val expect_quantified: int -> Context.t -> t -> unit
   val complete_quantified:   int -> int -> bool -> t -> unit
+  val expect_case:       Context.t -> t -> unit
+  val complete_case:      t -> unit
+  val complete_inspect:   int ->  t -> unit
   val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_untyped_variables: info -> t -> unit
@@ -137,6 +142,14 @@ end = struct
     List.iter
       (fun acc -> Term_builder.expect_boolean_expression acc)
       accs.accus
+
+
+  let expect_new_untyped (accs:t): unit =
+    List.iter Term_builder.expect_new_untyped accs.accus
+
+
+  let remove_untyped (accs:t): unit =
+    List.iter Term_builder.remove_untyped accs.accus
 
 
   let expect_function (nargs:int) (accs:t): unit =
@@ -246,8 +259,8 @@ end = struct
   let push_expected (accs:t): unit =
     iter_accus_save Term_builder.push_expected accs
 
-  let get_expected (accs:t): unit =
-    iter_accus_save Term_builder.get_expected accs
+  let get_expected (i:int) (accs:t): unit =
+    iter_accus_save (fun acc -> Term_builder.get_expected i acc) accs
 
   let drop_expected (accs:t): unit =
     iter_accus_save Term_builder.drop_expected accs
@@ -305,6 +318,19 @@ end = struct
     end
 
 
+
+  let expect_case (c:Context.t) (accs:t): unit =
+    accs.c <- c;
+    iter_accus_save (fun acc -> Term_builder.expect_case c acc) accs
+
+
+  let complete_case (accs:t): unit =
+    iter_accus_save Term_builder.complete_case accs;
+    accs.c <- Context.pop accs.c
+
+
+  let complete_inspect (ncases:int) (accs:t): unit =
+    iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs
 
 
   let get_diff (t1:term) (t2:term) (accs:t): string * string =
@@ -457,6 +483,62 @@ let term_builder (is_bool:bool) (c:Context.t): Term_builder.t =
   else Term_builder.make c
 
 
+let is_constant (nme:int) (c:Context.t): bool =
+  let nvars = Context.count_variables c in
+  try
+    let lst   = Context.find_identifier nme 0 c in
+    let lst = List.filter
+        (fun (idx,_,_) -> nvars <= idx ) lst in
+    lst <> []
+  with Not_found ->
+    false
+
+
+let case_variables (e:expression) (c:Context.t): expression * int array =
+  let rec vars (e:expression) (nanon:int) (lst:int list): expression * int * int list =
+    match e with
+      Expnumber _ | Exptrue | Expfalse ->
+        e, nanon, lst
+    | Identifier nme ->
+        let lst =
+          if List.mem nme lst || is_constant nme c then
+            lst
+          else
+            nme :: lst in
+        e,nanon,lst
+    | Expanon ->
+        let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
+        Identifier nme, 1+nanon, nme :: lst
+    | Unexp (op,exp) ->
+        let e,nanon,lst = vars exp nanon lst in
+        Unexp(op,e), nanon, lst
+    | Binexp (op,e1,e2) ->
+        let e1,nanon,lst = vars e1 nanon lst in
+        let e2,nanon,lst = vars e2 nanon lst in
+        Binexp(op,e1,e2), nanon, lst
+    | Funapp(f,args) ->
+        let args = expression_list args in
+        let f,nanon,lst = vars f nanon lst in
+        let arglst,nanon,lst =
+          List.fold_left
+            (fun (arglst,nanon,lst) e ->
+              let e,nanon,lst = vars e nanon lst in
+              e::arglst, nanon, lst)
+            ([],nanon,lst)
+            args in
+        Funapp(f,tuple_of_list (List.rev arglst)), nanon, lst
+    | Expdot (tgt,f) ->
+        let tgt, nanon,lst = vars tgt nanon lst in
+        let f, nanon, lst  = vars f nanon lst in
+        Expdot(tgt,f), nanon, lst
+    | _ ->
+        printf "case_variables %s\n" (string_of_expression e);
+        raise Not_found
+  in
+  let e, nanon, lst = vars e 0 [] in
+  e, Array.of_list (List.rev lst)
+
+
 let analyze_expression
     (ie:        info_expression)
     (is_bool:   bool)
@@ -486,6 +568,8 @@ let analyze_expression
       | Expquantified (_,_,Expproof (_,_,_)) ->
           error_info info "Proof not allowed here"
       | Identifier name     -> do_leaf (id name)
+      | Expanon             ->
+          not_yet_implemented ie.i ("Expanon Typing of "^ (string_of_expression e))
       | Expfalse            -> do_leaf (feat FNfalse)
       | Exptrue             -> do_leaf (feat FNtrue)
       | Expnumber num       -> do_leaf (feat (FNnumber num))
@@ -505,6 +589,8 @@ let analyze_expression
           lambda entlst None [] e true false accs c
       | Expdot (tgt,f) ->
           application f [|tgt|] accs c
+      | Tupleexp (a,b) ->
+          application (Identifier ST.tuple) [|a;b|] accs c
       | ExpResult ->
           do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
@@ -523,25 +609,23 @@ let analyze_expression
           end
       | Expif (thenlist,elsepart) ->
           exp_if thenlist elsepart accs c
+      | Expinspect (inspexp,caselst) ->
+          inspect ie.i inspexp caselst accs c
+      | Typedexp (_,_) ->
+          not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
       | Expbracket _ ->
           not_yet_implemented ie.i ("Expbracket Typing of " ^ (string_of_expression e))
       | Bracketapp (_,_) ->
           not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
       | Expset _ ->
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
-      | Tupleexp (a,b) ->
-          application (Identifier ST.tuple) [|a;b|] accs c
       | Expcolon (_,_) ->
           not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
       | Expassign (_,_) ->
           not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
-      | Expinspect (inspexp,caselst) ->
-          not_yet_implemented ie.i ("Expinspect Typing of " ^ (string_of_expression e))
       | Cmdinspect (_,_) ->
           not_yet_implemented ie.i ("Expinspect Typing of command "^
                                     (string_of_expression e))
-      | Typedexp (_,_) ->
-          not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
       | Cmdif (_,_) ->
           not_yet_implemented ie.i ("Expif Typing of command "
                                     ^ (string_of_expression e))
@@ -632,19 +716,51 @@ let analyze_expression
               None ->
                 terminate false n
             | Some e ->
-                Accus.get_expected accs;
+                Accus.get_expected 0 accs;
                 analyze e accs c;
                 terminate true n
           end
       | (cond,e)::lst ->
           Accus.expect_boolean_expression accs;
           analyze cond accs c;
-          Accus.get_expected accs;
+          Accus.get_expected 0 accs;
           analyze e accs c;
           do_exp_if (n+1) lst
     in
     Accus.push_expected accs;
     do_exp_if 0 thenlist
+
+  and inspect (info:info)
+      (insp:expression)
+      (caselst:(expression*expression) list)
+      (accs: Accus.t)
+      (c:Context.t)
+      :unit =
+    let do_case ((m,r):expression*expression):unit =
+      let m,nms = case_variables m c in
+      let c1   = Context.push_untyped nms c in
+      Accus.expect_case c1 accs;
+      Accus.get_expected 0 accs;
+      analyze m accs c1;
+      Accus.get_expected 1 accs;
+      analyze r accs c1;
+      Accus.complete_case accs
+    in
+    let rec do_case_list i lst =
+      match lst with
+        [] -> i
+      | c::lst ->
+          do_case c;
+          do_case_list (1+i) lst
+    in
+    Accus.push_expected accs;
+    Accus.expect_new_untyped accs;
+    Accus.push_expected accs;  (* stack = [match_type insp_type ...]*)
+    analyze insp accs c;
+    let ncases = do_case_list 0 caselst in
+    assert (0 < ncases);
+    Accus.remove_untyped accs;
+    Accus.complete_inspect ncases accs
   in
 
   let accs   = Accus.make is_bool c in

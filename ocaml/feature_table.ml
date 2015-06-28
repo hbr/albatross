@@ -965,7 +965,9 @@ let add_feature
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
-  add_class_feature cnt false false base ft
+  add_class_feature cnt false false base ft;
+  if ft.verbosity > 1 then
+    printf "  new feature %d %s\n" cnt (string_of_signature cnt ft)
 
 
 
@@ -988,6 +990,8 @@ let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
 let export_feature (i:int) (withspec:bool) (ft:t): unit =
   (* Export the feature [i] unless it is already publicly available. *)
   assert (i < count ft);
+  if ft.verbosity > 1 then
+    printf "  export feature %d %s\n" i (string_of_signature i ft);
   let desc = descriptor i ft in
   match desc.pub with
     None ->
@@ -1378,6 +1382,26 @@ let term_to_string
         (if is_outer then " end" else "")
       in
       ifargs args true
+    and insp2str (args:term array): string =
+      let len = Array.length args in
+      assert (len mod 2 = 1);
+      assert (3 <= len);
+      let ncases = len / 2 in
+      let case (i:int): string =
+        let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
+        and n1,nms1,res, _ = Term.qlambda_split_0 args.(2*i+2) in
+        let names1 = Array.append nms names in
+        let to_str t = to_string t names1 nanonused false None in
+        assert (n = n1);
+        " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
+      in
+      let rec cases_from (i:int) (str:string): string =
+        if i = ncases then
+          str
+        else
+          (cases_from (1+i) (str ^ (case i))) in
+      let to_str t = to_string t names nanonused false None in
+      "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
     in
     let inop, str =
       match t with
@@ -1418,6 +1442,7 @@ let term_to_string
           begin
             match ctrl with
               Ifexp -> None, if2str args
+            | Inspect -> None, insp2str args
           end
     in
     match inop, outop with
