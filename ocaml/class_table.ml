@@ -26,6 +26,7 @@ type base_descriptor = { hmark:    header_mark;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
+                         mutable constructors: IntSet.t;
                          mutable descendants:  IntSet.t;
                          mutable ancestors: parent_descriptor IntMap.t}
 
@@ -92,6 +93,7 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
    eff_features = [];
    def_asserts  = [];
    eff_asserts  = [];
+   constructors = IntSet.empty;
    descendants  = IntSet.empty;
    ancestors=anc}
 
@@ -594,6 +596,36 @@ let update_base_descriptor
     check_class_formal_generic fgens.i nme tp1 tp2 ct;
     fgnames.(i) <- nme
   done
+
+
+
+let constructors (cls:int) (ct:t): IntSet.t =
+  assert (cls < count ct);
+  let bdesc = base_descriptor cls ct in
+  bdesc.constructors
+
+
+let constructors_priv (cls:int) (ct:t): IntSet.t =
+  assert (cls < count ct);
+  let bdesc = base_descriptor_priv cls ct in
+  bdesc.constructors
+
+
+let has_constructors (cls:int) (ct:t): bool =
+  constructors cls ct <> IntSet.empty
+
+
+let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
+  assert (cls < count ct);
+  let bdesc = base_descriptor cls ct in
+  assert (bdesc.constructors = IntSet.empty);
+  assert (bdesc.hmark = Case_hmark);
+  if is_interface_check ct then begin
+    let bdesc_priv = base_descriptor_priv cls ct in
+    assert (bdesc_priv.constructors = set)
+  end;
+  bdesc.constructors <- set
+
 
 
 

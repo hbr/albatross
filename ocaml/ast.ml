@@ -737,6 +737,11 @@ let put_creators
   add_case_induction cls clst_rev pc;
   add_case_inversions cls clst pc;
   add_case_injections clst pc;
+  let cset = IntSet.of_list clst in
+  if Class_table.is_interface_check ct &&
+     Class_table.constructors_priv cls ct <> cset then
+    error_info info "Different constructors in implementation file";
+  Class_table.set_constructors cset cls ct;
   ()
 
 

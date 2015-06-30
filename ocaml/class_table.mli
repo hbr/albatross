@@ -147,6 +147,11 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
+val has_constructors: int -> t -> bool
+val constructors:     int -> t -> IntSet.t
+val constructors_priv:int -> t -> IntSet.t
+val set_constructors: IntSet.t -> int -> t -> unit
+
 val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor
 val has_private_ancestor: int -> int -> t -> bool

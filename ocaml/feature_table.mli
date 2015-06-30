@@ -145,6 +145,7 @@ val signature: int -> t -> Tvars.t * Sign.t
 val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
+val is_constructor: int -> t -> bool
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
 

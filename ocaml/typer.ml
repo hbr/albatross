@@ -539,6 +539,52 @@ let case_variables (e:expression) (c:Context.t): expression * int array =
   e, Array.of_list (List.rev lst)
 
 
+let validate_term (info:info) (t:term) (c:Context.t): unit =
+  (* Check that all match expression in inspect expressions have only constructors
+     and variables *)
+  let rec validate t c =
+    let val_args args c = Array.iter (fun arg -> validate arg c) args in
+    let val_lst  lst  c = List.iter  (fun t   -> validate t c)   lst  in
+    match t with
+      Variable i -> ()
+    | VAppl(_,args) -> val_args args c
+    | Application(f,args,pr) ->
+        validate f c; val_args args c
+    | Lam (n,nms,pres,t,pr) ->
+        let c = Context.push_untyped [|ST.symbol "$0"|] c in
+        val_lst pres c; validate t c
+    | QExp (n,nms,t,_) ->
+        let c = Context.push_untyped nms c in
+        validate t c
+    |  Flow (flow,args) ->
+        begin
+          match flow with
+            Ifexp ->
+              val_args args c
+          | Inspect ->
+              let len = Array.length args in
+              assert (3 <= len);
+              assert (len mod 2 = 1);
+              let ncases = len / 2 in
+              validate args.(0) c;
+              for i = 0 to ncases - 1 do
+                let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
+                and n1,nms1,res ,_ = Term.qlambda_split_0 args.(2*i+2) in
+                assert (n = n1);
+                let c = Context.push_untyped nms c in
+                validate res c;
+                if Context.is_case_match_expression mtch c then
+                  ()
+                else
+                  error_info info
+                    ("The term \"" ^ (Context.string_of_term mtch true 0 c) ^
+                     "\" is not a valid match expression")
+              done
+        end
+  in
+  validate t c
+
+
 let analyze_expression
     (ie:        info_expression)
     (is_bool:   bool)
@@ -773,6 +819,7 @@ let analyze_expression
   Accus.check_uniqueness info exp accs;
 
   let term,tvars_sub = Accus.result accs in
+  validate_term ie.i term c;
   Context.update_type_variables tvars_sub c;
   assert (Term_builder.is_valid term is_bool c);
   term

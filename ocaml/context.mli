@@ -123,6 +123,7 @@ val owner:          t -> int
 val anchor_class:   t -> int
 val check_deferred: t -> unit
 
+val is_case_match_expression: term -> t -> bool
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val variable_data:   int -> t -> Tvars.t * Sign.t

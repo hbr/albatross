@@ -139,6 +139,13 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
 
 
 
+let is_constructor (i:int) (ft:t): bool =
+  assert (i < count ft);
+  let desc = descriptor i ft in
+  assert (desc.cls <> -1);
+  IntSet.mem i (Class_table.constructors desc.cls ft.ct)
+
+
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =
   let rec check_pub t nb =
     let check_pub_i i =

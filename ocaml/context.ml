@@ -1042,3 +1042,24 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
   let replace t = Term.sub t args (1+nargs) in
   List.map replace posts
+
+
+let is_case_match_expression (t:term) (c:t): bool =
+  let nvars0 = count_last_variables c
+  and nvars  = count_variables c
+  in
+  let rec is_match t =
+    let is_match_args res args =
+      Array.fold_left (fun res arg -> res && is_match arg) res args in
+    match t with
+      Variable i when i < nvars0 -> true
+    | Variable i when i < nvars  -> false
+    | Variable i ->
+        Feature_table.is_constructor (i-nvars) c.ft
+    | VAppl(i,args) ->
+        let res = Feature_table.is_constructor (i-nvars) c.ft in
+        is_match_args res args
+    | _ ->
+        false
+  in
+  is_match t
