@@ -1,0 +1,52 @@
+use
+    predicate
+end
+
+
+G: ANY
+
+all(a,b,c:G)
+    ensure
+        a = b  ==>  b = a
+        a = b  ==>  b = c  ==>   a = c
+        {a} /= 0
+    end
+
+all(p,q,r:G?)
+    ensure
+        p <= p
+        (p <= q) ==> (q <= p) ==> (p = q)
+        (p <= q) ==> (q <= r) ==> (p <= r)
+
+
+        p <= q ==> p * q = p
+        q <= p ==> p + q = p
+
+        p * p = p
+        p * q = q * p
+        (p * q) * r = p * (q * r)
+
+        p + p = p
+        p + q = q + p
+        (p + q) + r = p + (q + r)
+
+        (some(x) p(x)) ==> p /= 0
+
+        p /= 0         ==> some(x) p(x)
+
+        p /= 0 ==> p + q /= 0
+    end
+
+
+all(x:G,p:G?)
+    ensure
+        p(x) ==> {x} <= p
+    end
+
+all(p,q:G?)
+    require
+        some(x) p(x)
+        p <= q
+    ensure
+        some(x) q(x)
+    end
