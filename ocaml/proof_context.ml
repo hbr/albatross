@@ -709,28 +709,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 assert false (* nyi *)
           end
     in
-    let tred, ered, modi = expand t in
-    let sublst = unify tred (nb+nbenv) pc.entry.left pc in
-    let sublst = List.filter (fun (idx,sub) -> idx < below_idx) sublst in
-    let sublst1,sublst2 =
-      List.partition (fun (idx,sub) -> Term_sub.is_empty sub) sublst in
-    let simplify idx sub =
-      let args = Term_sub.arguments (Term_sub.count sub) sub in
-      let eq = Proof_table.specialized idx args nb pc.base in
-      let nargs, left, right = Proof_table.split_equality eq nb pc.base in
-      assert (nargs = 0);
-      assert (tred = left);
-      right, Eval.Simpl (ered,idx,args), true
-    in
-    match sublst1 with
-      [] ->
-        begin match sublst2 with
-          [idx,sub] -> simplify idx sub
-        | _ -> tred, ered, modi
-        end
-    | [idx,sub] -> simplify idx sub
-    | _ ->
-        tred, ered, modi
+    expand t
   in
   let tred,ered,modi = eval t 0 false in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
@@ -893,7 +872,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
 
 
 
-let fwd_evaluation (t:term) (i:int) (e:Eval.t) (full:bool) (pc:t): int =
+let add_fwd_evaluation (t:term) (i:int) (e:Eval.t) (full:bool) (pc:t): int =
   (* Add the term [t] which is an evaluation of the term [i] to the proof context
      if it is not yet in and return the index  *)
   try
@@ -914,20 +893,16 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
   let t = term i pc in
   let add_eval t e =
     try
-      let _ = fwd_evaluation t i e true pc in ()
+      let _ = add_fwd_evaluation t i e true pc in ()
     with Not_found ->
       ()
   in
-  try
-    let t,e,modi = simplified_term t i pc in
-    if not modi then begin
-      let t,e,modi = evaluated_term t i pc in
-      if not modi then raise Not_found;
-      add_eval t e
-    end else
-      add_eval t e
-  with Not_found ->
-    ()
+  let t1,e,modi = simplified_term t i pc in
+  if modi then
+    add_eval t1 e;
+  let t1,e,modi = evaluated_term t i pc in
+  if modi then
+    add_eval t1 e
 
 
 
@@ -1363,7 +1338,7 @@ let prove_equality (g:term) (pc:t): int =
         Eval.Beta (Eval.Term (make_application lam args 0 true pc)) in
       Eval.VApply(eq_id, [|ev args1; ev args2|])
     in
-    result := fwd_evaluation g !result e false pc;
+    result := add_fwd_evaluation g !result e false pc;
     !result
   with Not_found ->
     assert false (* cannot happen *)
@@ -1429,21 +1404,17 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
 
 
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
-  let add_eval t e =
+  let add_eval t e lst =
     let impl = implication t g pc in
     if has impl pc then
       lst
     else
       (eval_backward g impl e pc) :: lst
   in
-  let t,e,modi = simplified_term g (count pc) pc in
-  if not modi then
-    let t,e,modi = evaluated_term g (count pc) pc in
-    if not modi then lst
-    else
-      add_eval t e
-  else
-    add_eval t e
+  let t1,e,modi = simplified_term g (count pc) pc in
+  let lst = if modi then add_eval t1 e lst else lst in
+  let t1,e,modi = evaluated_term g (count pc) pc in
+  if modi then add_eval t1 e lst else lst
 
 
 
