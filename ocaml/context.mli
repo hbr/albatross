@@ -39,7 +39,8 @@ val push_with_gap:  entities list withinfo -> return_type -> bool -> bool -> boo
   -> int -> t -> t
 val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped_with_gap: int array -> bool -> bool -> bool -> int -> t -> t
-val push_untyped: int array -> t -> t
+val push_untyped_gap: int array -> int -> t -> t
+val push_untyped:     int array -> t -> t
 val pop:   t -> t
 
 val is_global:   t -> bool
@@ -124,6 +125,7 @@ val anchor_class:   t -> int
 val check_deferred: t -> unit
 
 val is_case_match_expression: term -> t -> bool
+val is_case_matching: term -> int -> term -> int -> t -> bool
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val variable_data:   int -> t -> Tvars.t * Sign.t

@@ -85,14 +85,18 @@ let get_boolean_term (ie: info_expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
   Typer.boolean_term ie c
 
-let term_preconditions (t:term) (pc:PC.t): term list =
+let term_preconditions (info:info) (t:term) (pc:PC.t): term list =
   let c = PC.context pc in
-  Context.term_preconditions t c
+  try
+    Context.term_preconditions t c
+  with NYI ->
+    not_yet_implemented info ("Calculation of the preconditions of " ^
+                              (PC.string_of_term t pc))
 
 
 let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
   if PC.is_private pc then
-    let pres = term_preconditions t pc in
+    let pres = term_preconditions info t pc in
     List.iter
       (fun t ->
         try Prover.prove t pc

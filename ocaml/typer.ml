@@ -42,8 +42,9 @@ module Accus: sig
   val expect_quantified: int -> Context.t -> t -> unit
   val complete_quantified:   int -> int -> bool -> t -> unit
   val expect_case:       Context.t -> t -> unit
-  val complete_case:      t -> unit
-  val complete_inspect:   int ->  t -> unit
+  val complete_case:     int -> t -> unit
+  val complete_inspect:  int ->  t -> unit
+  val complete_as:       int -> t -> unit
   val specialize_terms:  t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
   val check_untyped_variables: info -> t -> unit
@@ -321,16 +322,22 @@ end = struct
 
   let expect_case (c:Context.t) (accs:t): unit =
     accs.c <- c;
+    accs.ntvs_added <- 0;
     iter_accus_save (fun acc -> Term_builder.expect_case c acc) accs
 
 
-  let complete_case (accs:t): unit =
+  let complete_case (ntvs_added:int) (accs:t): unit =
     iter_accus_save Term_builder.complete_case accs;
+    accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c
 
 
   let complete_inspect (ncases:int) (accs:t): unit =
     iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs
+
+  let complete_as (ntvs_added:int) (accs:t): unit =
+    iter_accus_save Term_builder.complete_as accs;
+    accs.ntvs_added <- ntvs_added
 
 
   let get_diff (t1:term) (t2:term) (accs:t): string * string =
@@ -494,14 +501,14 @@ let is_constant (nme:int) (c:Context.t): bool =
     false
 
 
-let case_variables (e:expression) (c:Context.t): expression * int array =
+let case_variables (e:expression) (c:Context.t): expression * int list =
   let rec vars (e:expression) (nanon:int) (lst:int list): expression * int * int list =
     match e with
       Expnumber _ | Exptrue | Expfalse ->
         e, nanon, lst
     | Identifier nme ->
         let lst =
-          if List.mem nme lst || is_constant nme c then
+          if is_constant nme c then
             lst
           else
             nme :: lst in
@@ -536,7 +543,7 @@ let case_variables (e:expression) (c:Context.t): expression * int array =
         raise Not_found
   in
   let e, nanon, lst = vars e 0 [] in
-  e, Array.of_list (List.rev lst)
+  e, List.rev lst
 
 
 let validate_term (info:info) (t:term) (c:Context.t): unit =
@@ -557,12 +564,20 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
         let c = Context.push_untyped nms c in
         validate t c
     |  Flow (flow,args) ->
+        let len = Array.length args in
+        let check_match mtch c =
+          if Context.is_case_match_expression mtch c then
+            ()
+          else
+            error_info info
+              ("The term \"" ^ (Context.string_of_term mtch true 0 c) ^
+               "\" is not a valid match expression")
+        in
         begin
           match flow with
             Ifexp ->
               val_args args c
           | Inspect ->
-              let len = Array.length args in
               assert (3 <= len);
               assert (len mod 2 = 1);
               let ncases = len / 2 in
@@ -573,13 +588,14 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
                 assert (n = n1);
                 let c = Context.push_untyped nms c in
                 validate res c;
-                if Context.is_case_match_expression mtch c then
-                  ()
-                else
-                  error_info info
-                    ("The term \"" ^ (Context.string_of_term mtch true 0 c) ^
-                     "\" is not a valid match expression")
+                check_match mtch c
               done
+          | Asexp ->
+              assert (len = 2);
+              validate args.(0) c;
+              let n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
+              let c = Context.push_untyped nms c in
+              check_match mtch c
         end
   in
   validate t c
@@ -620,6 +636,9 @@ let analyze_expression
       | Exptrue             -> do_leaf (feat FNtrue)
       | Expnumber num       -> do_leaf (feat (FNnumber num))
       | Expop op            -> do_leaf (feat (FNoperator op))
+      | Binexp (Asop,e1,mtch) ->
+          exp_as ie.i e1 mtch accs c
+          (*not_yet_implemented info  ("Typing of " ^ (string_of_expression e))*)
       | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
       | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
       | Funapp (Expdot(tgt,f),args) ->
@@ -782,21 +801,31 @@ let analyze_expression
       (accs: Accus.t)
       (c:Context.t)
       :unit =
-    let do_case ((m,r):expression*expression):unit =
-      let m,nms = case_variables m c in
-      let c1   = Context.push_untyped nms c in
+    let do_case (i:int) ((m,r):expression*expression): unit =
+      let m,nmslst = case_variables m c
+      and ntvs_gap = Accus.ntvs_added accs in
+      if Mylist.has_duplicates nmslst then
+        error_info info "Duplicate variable in inspect expression";
+      let nms = Array.of_list nmslst in
+      let c1   = Context.push_untyped_gap nms ntvs_gap c in
       Accus.expect_case c1 accs;
       Accus.get_expected 0 accs;
+      if i = 0 then
+        begin match m with
+          Identifier id when List.mem id nmslst ->
+            error_info info "First case cannot match all"
+        | _ -> ()
+        end;
       analyze m accs c1;
       Accus.get_expected 1 accs;
       analyze r accs c1;
-      Accus.complete_case accs
+      Accus.complete_case ntvs_gap accs
     in
     let rec do_case_list i lst =
       match lst with
         [] -> i
       | c::lst ->
-          do_case c;
+          do_case i c;
           do_case_list (1+i) lst
     in
     Accus.push_expected accs;
@@ -806,7 +835,34 @@ let analyze_expression
     let ncases = do_case_list 0 caselst in
     assert (0 < ncases);
     Accus.remove_untyped accs;
-    Accus.complete_inspect ncases accs
+    Accus.complete_inspect ncases accs;
+    Accus.drop_expected accs;
+    Accus.drop_expected accs
+
+  and exp_as
+      (info:info)
+      (e:expression)
+      (mtch:expression)
+      (accs:Accus.t)
+      (c:Context.t): unit =
+    Accus.expect_boolean accs;
+    Accus.push_expected accs;
+    Accus.expect_new_untyped accs;
+    Accus.push_expected accs;
+    analyze e accs c;
+    let mtch,nmslst = case_variables mtch c
+    and ntvs_gap = Accus.ntvs_added accs in
+    if Mylist.has_duplicates nmslst then
+      error_info info "Duplicate variable in as expression";
+    let nms = Array.of_list nmslst in
+    let c1 = Context.push_untyped_gap nms ntvs_gap c in
+    Accus.expect_case c1 accs;
+    Accus.get_expected 0 accs;
+    analyze mtch accs c1;
+    Accus.complete_as ntvs_gap accs;
+    Accus.remove_untyped accs;
+    Accus.drop_expected accs;
+    Accus.drop_expected accs
   in
 
   let accs   = Accus.make is_bool c in

@@ -173,7 +173,7 @@ let predicate_of_expression (info:info) (e:expression): expression =
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
                    LE        LT        GE      GT
-                   KWin      NOTIN
+                   KWin      NOTIN     KWas
 /* 40 */ %left     BAR       DBAR
 /* 45 */ %left     PLUS      MINUS
 /* 50 */ %left     TIMES     DIVIDE
@@ -775,6 +775,8 @@ operator_expr:
 |   expr GT  expr                 { Binexp (GTop,$1,$3) }
 
 |   expr GE  expr                 { Binexp (GEop,$1,$3) }
+
+|   expr KWas expr                { Binexp (Asop,$1,$3) }
 
 |   expr KWand  expr              { Binexp (Andop,$1,$3) }
 

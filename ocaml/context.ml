@@ -441,6 +441,9 @@ let push_untyped_with_gap
   push_with_gap entlst None is_pred is_func rvar ntvs_gap c
 
 
+let push_untyped_gap (names:int array) (ntvs_gap:int) (c:t): t =
+  push_untyped_with_gap names false false false ntvs_gap c
+
 let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None false false false c
@@ -702,8 +705,7 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, expand t (n+nb), is_all)
     | Flow (ctrl,args) ->
-        let args = expargs args in
-        Flow (ctrl,args)
+        t
   in
   expand t nb
 
@@ -764,6 +766,115 @@ let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
 let tuple_of_args (args:term array) (nb:int) (c:t): term =
   let nbenv = nb + count_variables c in
   Feature_table.tuple_of_args args nbenv c.ft
+
+
+
+
+let is_case_match_expression (t:term) (c:t): bool =
+  (* Is the term [t] a match expression (i.e. does it consist only of variables of
+     the inner context and constructors)? *)
+  let nvars0 = count_last_variables c
+  and nvars  = count_variables c
+  in
+  let rec is_match t =
+    let is_match_args res args =
+      Array.fold_left (fun res arg -> res && is_match arg) res args in
+    match t with
+      Variable i when i < nvars0 -> true
+    | Variable i when i < nvars  -> false
+    | Variable i ->
+        Feature_table.is_constructor (i-nvars) c.ft
+    | VAppl(i,args) ->
+        let res = Feature_table.is_constructor (i-nvars) c.ft in
+        is_match_args res args
+    | _ ->
+        false
+  in
+  is_match t
+
+
+
+
+let case_substitution
+    (nt:int) (t:term) (nmtch:int) (mtch:term) (nb:int) (c:t): (term array) option =
+  (* The substitutions for the match expression [mtch] which make the match
+     expression equivalent to the term [t] (with [nt] variables) or [None] if
+     the match definitely fails. The function raises [Not_found] if neither a
+     positive or a negative match is possible.  *)
+  let nvars = nb + count_variables c in
+  Feature_table.case_substitution nt t nmtch mtch nvars c.ft
+
+
+
+let is_case_matching (t:term) (n:int) (mtch:term) (nb:int) (c:t): bool =
+  (* Is the term [t] matching the match expression [mtch] with [n] variables?
+   *)
+  let nvars = nb + count_variables c in
+  Feature_table.is_case_matching t n mtch nvars c.ft
+
+
+
+let unmatched_inspect_cases (args:term array) (nb:int) (c:t): (int * term) list =
+  (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
+   *)
+  let len = Array.length args in
+  assert (3 <= len);
+  assert (len mod 2 = 1);
+  let ncases = len / 2 in
+  let case_sub n1 t1 n2 t2 =
+    try case_substitution n1 t1 n2 t2 nb c
+    with Not_found ->
+      assert false (* cannot happen *)
+  in
+  let unmatched_case i lst =
+    let n,nms,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
+    List.fold_left
+      (fun lst (nt,t) ->
+        match case_sub nt t n mtch with
+          Some _ -> (* mtch is more general *)
+            lst
+        | None -> begin
+            match case_sub n mtch nt t with
+              None ->
+                (nt,t)::lst
+            | Some args -> (* mtch is more special *)
+                assert false (* nyi *)
+        end)
+      []
+      lst
+  in
+  let rec cases_from (i:int) (lst: (int*term) list): (int*term) list =
+    if i = ncases then
+      lst
+    else
+      let lst = unmatched_case i lst in
+      cases_from (i+1) lst
+  in
+  let first_list: (int * term) list =
+    let n,_,mtch,_ = Term.qlambda_split_0 args.(1) in
+    let idx =
+      match mtch with
+        Variable idx | VAppl(idx,_) ->
+          assert (n + nb <= idx);
+          idx - n - nb
+      | _ ->
+          assert false (* cannot happen *)
+    in
+    let ct  = class_table c
+    and cls = Feature_table.class_of_feature idx c.ft in
+    assert (cls <> -1);
+    let cset = Class_table.constructors cls ct in
+    IntSet.fold
+      (fun idx lst ->
+        let n = Feature_table.arity idx c.ft in
+        let t = VAppl(idx+n+nb, Array.init n (fun i -> Variable i)) in
+        (n,t)::lst)
+      cset
+      []
+  in
+  List.rev (cases_from 0 first_list)
+
+
 
 
 (* Calculation of preconditions:
@@ -947,7 +1058,45 @@ let term_preconditions (t:term)  (c:t): term list =
               in
               reslst, domain_t
           | Inspect ->
-              assert false (* nyi *)
+              assert (3 <= len);
+              assert (len mod 2 = 1);
+              let ncases = len / 2
+              and nvars = count_variables c in
+              let unmatched =
+                Feature_table.unmatched_inspect_cases args (nb+nvars) c.ft
+              in
+              printf "unmatched cases\n";
+              List.iter
+                (fun (n,mtch) ->
+                  printf "  %s\n" (string_of_term mtch true (n+nb) c))
+                unmatched;
+              let lst = List.fold_left
+                  (fun lst (n,mtch) ->
+                    let nms = Feature_table.standard_argnames n in
+                    let q   = Term.some_quantified n nms mtch in
+                    let t = Flow(Asexp,[|args.(0);q|]) in
+                    let t = Term.unary not_id t in
+                    t :: lst)
+                  lst
+                  unmatched in
+              let rec cases_from (i:int) (lst:term list): term list =
+                if i = ncases then
+                  lst
+                else
+                  let n,nms,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
+                  let lst_inner,_ = pres args.(2*i+2) (nb+n) [] in
+                  let lst_inner   = List.rev lst_inner in
+                  List.fold_left
+                    (fun lst p ->
+                      raise NYI )
+                    lst
+                    lst_inner
+              in
+              let lst = cases_from 0 lst in
+              lst, domain_t
+          | Asexp ->
+              assert (len = 2);
+              pres args.(0) nb lst
         end
   in
   let ps,_ = pres t 0 [] in
@@ -1042,24 +1191,3 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
   let replace t = Term.sub t args (1+nargs) in
   List.map replace posts
-
-
-let is_case_match_expression (t:term) (c:t): bool =
-  let nvars0 = count_last_variables c
-  and nvars  = count_variables c
-  in
-  let rec is_match t =
-    let is_match_args res args =
-      Array.fold_left (fun res arg -> res && is_match arg) res args in
-    match t with
-      Variable i when i < nvars0 -> true
-    | Variable i when i < nvars  -> false
-    | Variable i ->
-        Feature_table.is_constructor (i-nvars) c.ft
-    | VAppl(i,args) ->
-        let res = Feature_table.is_constructor (i-nvars) c.ft in
-        is_match_args res args
-    | _ ->
-        false
-  in
-  is_match t

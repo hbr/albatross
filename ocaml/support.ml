@@ -37,6 +37,7 @@ let info_from_position (pos:Lexing.position) =
 exception Error_string of string
 exception Error_info of info*string
 exception Error_fileinfo of string*info*string
+exception NYI
 
 let error_string (str:string) = raise (Error_string str)
 
@@ -247,6 +248,7 @@ type operator =
   | LEop
   | GTop
   | GEop
+  | Asop
   | Andop
   | Orop
   | Oldop
@@ -284,6 +286,7 @@ let operator_data op =
   | GEop      -> ">=",  35,  Nonassoc
   | Inop      -> "in",  35,  Nonassoc
   | Notinop   -> "/in", 35,  Nonassoc
+  | Asop      -> "as",  35,  Nonassoc
   | Andop     -> "and", 25,  Left
   | Orop      -> "or",  25,  Left
   | Oldop     -> "old", 65,  Nonassoc
@@ -344,6 +347,7 @@ let operator_to_string op =
   | Notop ->  "not "
   | Inop  ->  " in "
   | Notinop -> " /in "
+  | Asop   -> " as "
   | _     ->
       let s,_,_ = operator_data op
       in

@@ -191,7 +191,7 @@ rule next_token = parse
 
 | ';'             { Parser.SEMICOL,  (false,false) }
 
-| '_'             { Parser.USCORE,   (false,false) }
+| '_'             { Parser.USCORE,   (true,true) }
 
 
 | "/in"           { Parser.NOTIN,    (false,false) }

@@ -546,6 +546,15 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         assert (Array.length args = 3);
         let argsa, argsb = reconstr_args args in
         Flow (Ifexp,argsa), if cond then argsb.(1) else argsb.(2)
+    | Eval.As (cond,args) ->
+        assert (Array.length args = 2);
+        let argsa, argsb = reconstr_args args in
+        let res =
+          let nvars = count_variables at in
+          if cond then Variable (nvars + Feature_table.true_index)
+          else Variable (nvars + Feature_table.false_index)
+        in
+        Flow (Asexp,argsa), res
   in
   reconstruct e 0
 

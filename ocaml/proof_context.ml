@@ -714,6 +714,37 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                   end
             | Inspect ->
                 assert false (* nyi *)
+            | Asexp ->
+                assert (len = 2);
+                let c = context pc
+                and n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
+                let _ =
+                  let nvars = Context.count_variables c in
+                  let ft    = feature_table pc in
+                  let lst   = Feature_table.peer_matches_of_match n mtch nvars ft in
+                  printf "  match expression\n    %s\n" (string_of_term_anon mtch n pc);
+                  printf "  peer matches\n";
+                  List.iter
+                    (fun (n,t) ->
+                      printf "    %s\n" (string_of_term_anon t n pc))
+                    lst;
+                in ();
+                try
+                  let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|] in
+                  if Context.is_case_matching args.(0) n mtch nb c then begin
+                    printf "is_matching %s\n" (string_of_term_anon t nb pc);
+                    Variable (nbenv+Feature_table.true_index),
+                    Eval.As(true,eargs),
+                    true
+                  end else begin
+                    printf "not is_matching %s\n" (string_of_term_anon t nb pc);
+                    Variable (nbenv+Feature_table.false_index),
+                    Eval.As(false,eargs),
+                    true
+                  end
+                with Not_found ->
+                  printf "not found %s\n" (string_of_term_anon t nb pc);
+                  t, Eval.Term t, false
           end
     in
     expand t

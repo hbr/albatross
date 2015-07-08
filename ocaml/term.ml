@@ -10,6 +10,7 @@ open Container
 type flow =
     Ifexp
   | Inspect
+  | Asexp
 
 type term =
     Variable    of int
@@ -38,8 +39,9 @@ end)
 
 let string_of_flow (ctrl:flow): string =
   match ctrl with
-    Ifexp -> "if"
+    Ifexp   -> "if"
   | Inspect -> "inspect"
+  | Asexp   -> "as"
 
 module Term: sig
 
@@ -203,6 +205,9 @@ end = struct
               "if(" ^ (String.concat "," argsstr) ^ ")"
           | Inspect ->
               "inspect(" ^ (String.concat "," argsstr) ^ ")"
+          | Asexp ->
+              assert (Array.length args = 2);
+              "as(" ^ (String.concat "," argsstr) ^ ")"
         end
 
 

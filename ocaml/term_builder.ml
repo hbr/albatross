@@ -964,10 +964,22 @@ let complete_inspect (n:int) (tb:t): unit =
   let insp,_,_ = pop_term tb in
   args.(0) <- insp;
   get_expected 1 tb;
-  tb.tlist <- (Flow (Inspect, args), tvars tb, tb.sign) :: tb.tlist;
-  drop_expected tb;
-  drop_expected tb
+  tb.tlist <- (Flow (Inspect, args), tvars tb, tb.sign) :: tb.tlist
 
+
+
+let complete_as (tb:t): unit =
+  let nms = Context.local_argnames tb.c in
+  let n   = Array.length nms in
+  remove_local n tb;
+  tb.c <- Context.pop tb.c;
+  let mtch,_,_ = pop_term tb in
+  let exp,_,_  = pop_term tb in
+  get_expected 1 tb;
+  let s = tb.sign (* must be boolean *)
+  and tvs = tvars tb in
+  tb.tlist <-
+    (Flow (Asexp, [|exp; Term.some_quantified n nms mtch|]), tvs, s) :: tb.tlist
 
 
 let complete_if (has_else:bool) (tb:t): unit =
@@ -1433,9 +1445,11 @@ let check_term (t:term) (tb:t): t =
                   tb
                 else
                   let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
-                  and n1,nms1,res,_  = Term.qlambda_split_0 args.(2*i+2) in
+                  and n1,nms1,res,_  = Term.qlambda_split_0 args.(2*i+2)
+                  and ntvs_gap = count_local tb - Context.count_type_variables tb.c
+                  in
                   assert (n = n1);
-                  let c1 = Context.push_untyped nms tb.c in
+                  let c1 = Context.push_untyped_gap nms ntvs_gap tb.c in
                   expect_case c1 tb;
                   get_expected 0 tb;
                   let tb = check mtch tb in
@@ -1451,6 +1465,25 @@ let check_term (t:term) (tb:t): t =
               let tb = do_cases_from 0 tb in
               remove_untyped tb;
               complete_inspect ncases tb;
+              drop_expected tb;
+              drop_expected tb;
+              tb
+          | Asexp ->
+              expect_boolean tb;
+              push_expected tb;
+              expect_new_untyped tb;
+              push_expected tb;
+              let tb = check args.(0) tb in
+              let n, nms, mtch,_ = Term.qlambda_split_0 args.(1)
+              and ntvs_gap = count_local tb - Context.count_type_variables tb.c in
+              let c1 = Context.push_untyped_gap nms ntvs_gap tb.c in
+              expect_case c1 tb;
+              get_expected 0 tb;
+              let tb = check mtch tb in
+              remove_untyped tb;
+              complete_as tb;
+              drop_expected tb;
+              drop_expected tb;
               tb
         end
   in

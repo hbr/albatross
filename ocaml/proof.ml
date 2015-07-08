@@ -23,6 +23,7 @@ module Eval = struct
                                         specialization arguments *)
     | Flow of flow * t array
     | If of (bool * int * t array) (* cond, idx cond, args *)
+    | As of bool * t array
   let rec print (prefix:string) (e:t): unit =
     let print_args args =
       let prefix = prefix ^ "  " in
@@ -57,6 +58,9 @@ module Eval = struct
         print_args args
     | If (cond,idx,args) ->
         printf "%s \"if\" %b idx %d\n" prefix cond idx;
+        print_args args
+    | As (cond,args) ->
+        printf "%s \"as\" %b\n" prefix cond;
         print_args args
 
 end
@@ -173,6 +177,8 @@ end = struct
           Eval.Flow (ctrl, adapt_args args)
       | Eval.If (cond,idx,args) ->
           Eval.If (cond, index idx, adapt_args args)
+      | Eval.As (cond,args) ->
+          Eval.As (cond, adapt_args args)
 
     in
     let rec adapt (pt:t): t =
@@ -233,6 +239,7 @@ end = struct
       | Eval.Simpl (e,i,args)  -> used_eval e (add_idx i set)
       | Eval.Flow (ctrl,args)  -> used_args set args
       | Eval.If (cond,idx,args)-> used_args (add_idx idx set) args
+      | Eval.As (cond,args)    -> used_args set args
     in
     let set = add_idx k set in
     let i,set = Array.fold_left
@@ -287,6 +294,7 @@ end = struct
             usd_eval e set
         | Eval.Flow (ctrl,args) -> usd_args set args
         | Eval.If (cond,idx,args) -> usd_args (usd idx pt_arr set) args
+        | Eval.As (cond,args)   -> usd_args set args
       in
       if k < start then
         set
@@ -363,6 +371,7 @@ end = struct
         | Eval.Simpl (e,i,args) -> Eval.Simpl (transform_eval e, index i,args)
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, Array.map transform_eval args)
         | Eval.If (cond,i,args) -> Eval.If(cond,index i, Array.map transform_eval args)
+        | Eval.As (cond,args)   -> Eval.As(cond,Array.map transform_eval args)
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
@@ -545,6 +554,7 @@ end = struct
               Eval.Simpl (shrnk e nb, idx, shrink_args_inner args nb)
           | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, shrnk_eargs args)
           | Eval.If(cond,idx,args)-> Eval.If(cond,idx,shrnk_eargs args)
+          | Eval.As(cond,args)    -> Eval.As(cond,shrnk_eargs args)
         in
         shrnk e 0
       in
@@ -644,6 +654,7 @@ end = struct
             Eval.Simpl (upeval e nb, idx, upargs_inner args nb)
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, upeval_args args)
         | Eval.If(cond,idx,args)-> Eval.If(cond,idx,upeval_args args)
+        | Eval.As(cond,args)    -> Eval.As(cond,upeval_args args)
       in
       let upeval_0 e = upeval e 0
       in

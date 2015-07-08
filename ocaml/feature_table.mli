@@ -27,6 +27,7 @@ val anchor: int -> t -> int
 
 
 val class_of_feature:  int -> t -> int
+val arity: int -> t -> int
 
 val has_anchor: int -> t -> bool
 
@@ -145,7 +146,14 @@ val signature: int -> t -> Tvars.t * Sign.t
 val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
-val is_constructor: int -> t -> bool
+val is_constructor:    int -> t -> bool
+val peer_constructors: int -> t -> IntSet.t
+val peer_matches:      int -> int -> t -> (int*term) list
+val peer_matches_of_match: int -> term -> int -> t -> (int*term) list
+val case_substitution: int -> term -> int -> term -> int -> t -> (term array) option
+val is_case_matching:  term -> int -> term -> int -> t -> bool
+val unmatched_inspect_cases: term array -> int -> t -> (int * term) list
+
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
 

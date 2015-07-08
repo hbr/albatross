@@ -114,9 +114,11 @@ val expect_quantified: int -> Context.t -> t -> unit
 val complete_quantified: int -> bool -> t -> unit
 
 
-val expect_case: Context.t -> t -> unit
-val complete_case: t -> unit
+val expect_case:      Context.t -> t -> unit
+val complete_case:    t -> unit
 val complete_inspect: int -> t -> unit
+
+val complete_as: t -> unit
 
 exception Incomplete_type of int
 

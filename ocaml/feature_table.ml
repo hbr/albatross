@@ -146,6 +146,7 @@ let is_constructor (i:int) (ft:t): bool =
   IntSet.mem i (Class_table.constructors desc.cls ft.ct)
 
 
+
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =
   let rec check_pub t nb =
     let check_pub_i i =
@@ -600,7 +601,29 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
     | QExp(_,_,_,_) ->
         true
     | Flow (ctrl, args) ->
-        ghost_args args 0 (Array.length args)
+        let len = Array.length args in
+        begin match ctrl with
+          Ifexp ->
+            ghost_args args 0 len
+        | Asexp ->
+            assert (len = 2);
+            is_ghost args.(0) nb
+        | Inspect ->
+            assert (3 <= len);
+            assert (len mod 2 = 1);
+            let ncases = len / 2 in
+            let rec cases_from i ghost =
+              if ghost || i = ncases then
+                ghost
+              else
+                let n,_,t,_ = Term.qlambda_split_0 args.(2*i+2) in
+                let ghost = is_ghost t (n+nb) in
+                cases_from (1+i) ghost
+            in
+            let ghost = is_ghost args.(0) nb in
+            cases_from 0 ghost
+        end
+        (* ghost_args args 0 (Array.length args)*)
     | VAppl (i,args) ->
         is_ghost_function (i-nb-nargs) ft
     | Application (f,args,_) ->
@@ -1348,7 +1371,7 @@ let term_to_string
     in
     let op2str (op:operator) (args: term array): string =
       match op with
-        Allop | Someop -> assert false (* cannot happen *)
+        Allop | Someop | Asop -> assert false (* cannot happen *)
       | _ ->
           let nargs = Array.length args in
           if nargs = 1 then
@@ -1358,7 +1381,7 @@ let term_to_string
             assert (nargs=2); (* only unary and binary operators *)
             (to_string args.(0) names nanonused false (Some (op,true)))
             ^ " " ^ (operator_to_rawstring op) ^ " "
-        ^ (to_string args.(1) names nanonused false (Some (op,false)))
+            ^ (to_string args.(1) names nanonused false (Some (op,false)))
           end
     and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool): string =
       let argsstr, presstr, tstr = lam_strs n nms pres t in
@@ -1409,6 +1432,15 @@ let term_to_string
           (cases_from (1+i) (str ^ (case i))) in
       let to_str t = to_string t names nanonused false None in
       "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
+    and as2str (args:term array): string =
+      let len = Array.length args in
+      assert (len = 2);
+      let str1 = to_string args.(0) names nanonused false (Some (Asop,true)) in
+      let str2 =
+        let n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
+        let names1 = Array.append nms names in
+        to_string mtch names1 nanonused false (Some (Asop,false)) in
+      str1 ^ " as " ^ str2
     in
     let inop, str =
       match t with
@@ -1450,6 +1482,7 @@ let term_to_string
             match ctrl with
               Ifexp -> None, if2str args
             | Inspect -> None, insp2str args
+            | Asexp   -> Some(Asop), as2str args
           end
     in
     match inop, outop with
@@ -1883,6 +1916,8 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
             desc.pub <- Some (desc.priv)
   done
 
+
+
 let check_interface (ft:t): unit =
   assert (is_interface_check ft);
   let mt = module_table ft in
@@ -1897,3 +1932,181 @@ let check_interface (ft:t): unit =
         ("deferred feature `" ^ (string_of_signature i ft) ^
          "' is not public")
   done
+
+
+
+
+
+let peer_constructors (i:int) (ft:t): IntSet.t =
+  assert (i < count ft);
+  assert (is_constructor i ft);
+  let cls = class_of_feature i ft in
+  assert (cls <> -1);
+  let set = Class_table.constructors cls ft.ct in
+  assert (IntSet.mem i set);
+  IntSet.remove i set
+
+
+
+let peer_matches (i:int) (nb:int) (ft:t): (int*term) list =
+  (* Match expressions for the peer constructors on the constructor [i] transformed
+     into an environment with [nb] variables. *)
+  assert (i < count ft);
+  assert (is_constructor i ft);
+  let set = peer_constructors i ft in
+  IntSet.fold
+    (fun i lst ->
+      assert (is_constructor i ft);
+      let n = arity i ft in
+      let t =
+        if n = 0 then
+          Variable (i + nb + n)
+        else
+          let args = Array.init n (fun i -> Variable i) in
+          VAppl (i + nb + n, args) in
+      (n,t)::lst)
+    set
+    []
+
+
+
+let peer_matches_of_match
+    (nmtch:int) (mtch:term)
+    (nb:int) (ft:t)
+    : (int*term) list =
+  let combine
+      (mlst:(int*term) list)        (* list of match expressions of an argument *)
+      (lst:(int * term list) list)  (* list of nvars, reversed argument list *)
+      : (int * term list) list =
+    List.fold_left
+      (fun res (nmtch,mtch) ->
+        List.fold_left
+          (fun res (n,args_rev) ->
+            ((n+nmtch), (Term.up n mtch)::args_rev) :: res)
+          res
+          lst)
+      []
+      mlst
+  in
+  let rec match_set (t:term): (int*term) list =
+    match t with
+      Variable i when i < nmtch ->
+        [1,Variable 0]
+    | Variable i ->
+        assert (nmtch + nb <= i);
+        let idx = i - nmtch - nb in
+        (0, Variable (idx+nb)) :: (peer_matches idx nb ft)
+    | VAppl (i,args) ->
+        assert (nmtch + nb <= i);
+        let args_lst: (int * term list) list =
+          Array.fold_left
+            (fun lst arg ->
+              let mlst = match_set arg in
+              combine mlst lst)
+            [0,[]]
+            args
+        in
+        let idx   = i - nmtch - nb
+        and nargs = Array.length args in
+        assert (nargs = arity idx ft);
+        List.fold_left
+          (fun lst (n,args_rev) ->
+            assert (List.length args_rev = nargs);
+            let args = Array.of_list (List.rev args_rev) in
+            (n, VAppl (idx+n+nb, args)) :: lst)
+          (peer_matches idx nb ft)
+          args_lst
+    | _ ->
+        assert false (* cannot happen in a match expression *)
+  in
+  let res = match_set mtch in
+  List.filter (fun e -> e <> (nmtch,mtch)) res
+
+
+
+let case_substitution
+    (nt:int) (t:term) (nmtch:int) (mtch:term) (nb:int) (ft:t): (term array) option =
+  (* The substitutions for the match expression [mtch] which make the match
+     expression equivalent to the term [t] (with [nt] variables) or [None] if
+     the match definitely fails. The function raises [Not_found] if neither a
+     positive or a negative match is possible.  *)
+  let subargs = Array.make nmtch (Variable (-1))
+  and subflgs = Array.make nmtch false
+  and hassub  = ref true in
+  let is_constr idx =
+    nt + nb <= idx && is_constructor (idx-nt-nb) ft
+  in
+  let rec do_match t mtch =
+    let match_args args1 args2 =
+      Array.iteri
+        (fun i arg ->
+          do_match arg args2.(i))
+        args1
+    in
+    match t, mtch with
+      _, Variable i when i < nmtch ->
+        assert (not subflgs.(i));
+        subflgs.(i) <- true;
+        subargs.(i) <- t
+    | Variable idx1, Variable idx2 when is_constr idx1 ->
+        hassub := !hassub && idx1 + nmtch = idx2
+    | Variable idx1, VAppl(idx2,args2) when is_constr idx1 ->
+        hassub := false
+    | VAppl (idx1,_) , Variable idx2 when is_constr idx1 ->
+        hassub := false
+    | VAppl(idx1,args1), VAppl(idx2,args2) when  is_constr idx1 ->
+        hassub :=  !hassub &&  idx1 + nmtch = idx2;
+        match_args args1 args2
+    | _ ->
+        raise Not_found
+  in
+  do_match t mtch;
+  assert (not !hassub || interval_for_all (fun i -> subflgs.(i)) 0 nmtch);
+  if !hassub then
+    Some subargs
+  else
+    None
+
+
+
+
+let is_case_matching (t:term) (n:int) (mtch:term) (nb:int) (ft:t): bool =
+  (* Is the term [t] matching the match expression [mtch] with [n] variables?
+   *)
+  match case_substitution 0 t n mtch nb ft with
+    None   -> false
+  | Some _ -> true
+
+
+
+let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list =
+  (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
+   *)
+  let len = Array.length args in
+  assert (3 <= len);
+  assert (len mod 2 = 1);
+  let ncases = len / 2 in
+  let rec unmatched_from (i:int) (lst:(int*term) list): (int*term) list =
+    assert (0 < i);
+    assert (i <= ncases);
+    if i = ncases then
+      lst
+    else
+      let n,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
+      let lst_i = peer_matches_of_match n mtch nb ft in
+      List.filter
+        (fun (n,mtch) ->
+          List.exists
+            (fun (n0,mtch0) ->
+              let sub =
+                try case_substitution n mtch n0 mtch0 nb ft
+                with Not_found -> assert false (* cannot happen *) in
+              Option.has sub)
+            lst)
+        lst_i
+  in
+  let first_list =
+    let n,_,mtch,_ = Term.qlambda_split_0 args.(1) in
+    peer_matches_of_match n mtch nb ft
+  in
+  unmatched_from 1 first_list

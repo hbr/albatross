@@ -123,6 +123,7 @@ module Mylist: sig
 
   val sum:          ('a -> int) -> int -> 'a list -> int
 
+  val has_duplicates: 'a list -> bool
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -155,6 +156,12 @@ end = struct
 
   let sum (f:'a->int) (start:int) (l:'a list): int =
     List.fold_left (fun cum e -> cum + f e) start l
+
+  let rec has_duplicates (l:'a list): bool =
+    match l with
+      [] -> false
+    | h::t ->
+        List.mem h t || has_duplicates t
 end
 
 
