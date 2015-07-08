@@ -365,8 +365,11 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
         let left, right = expand_term left pc, expand_term right pc in
         Term.nodes right < Term.nodes left
     in
-    if is_simpl then
+    if is_simpl then begin
+      (*printf "add_to_equalities %d %s   <%s>\n"
+        idx (string_of_term t pc) (Term.to_string t);*)
       pc.entry.left <- Term_table.add left nargs nbenv idx pc.entry.left
+    end
   with Not_found ->
     ()
 
@@ -538,7 +541,10 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       List.filter (fun (idx,sub) -> idx < below_idx && Term_sub.is_empty sub) sublst
     in
     match sublst with
-      [idx,_] ->
+      (idx,_) :: _ ->
+        (* Note: This is a workaround. Only single entries in the equality table
+                 should be accepted. But multiple entries are possible as long we
+                 do not make specializations type safe. *)
         let eq = term_up idx nb pc in
         let nargs, left, right = Proof_table.split_equality eq nb pc.base in
         assert (nargs = 0);
@@ -553,8 +559,9 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   assert (tb = tsimp);
   assert (modi = (tsimp <> t));
   (*if modi then begin
-    printf "term    %s\n" (string_of_term t pc);
-    printf "simpl   %s\n" (string_of_term tsimp pc);
+    printf "simplification found\n";
+    printf "  term    %s\n" (string_of_term t pc);
+    printf "  simpl   %s\n" (string_of_term tsimp pc);
   end;*)
   tsimp, te, modi
 

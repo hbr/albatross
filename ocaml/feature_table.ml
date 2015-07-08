@@ -643,7 +643,7 @@ let standard_bdesc (i:int) (cls:int) (spec: Feature.Spec.t) (nb:int) (ft:t)
    seeds      = IntSet.singleton i;     (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    spec       = spec;
-   is_eq      = false}
+   is_eq      = (i = eq_index)}
 
 
 let count_fgs (i:int) (ft:t): int =
@@ -1878,7 +1878,9 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
           if not bdesc.is_inh then
             add_key i ft
       | None ->
-          if desc.mdl = mdl then add_key i ft
+          add_key i ft;
+          if desc.mdl <> mdl then
+            desc.pub <- Some (desc.priv)
   done
 
 let check_interface (ft:t): unit =
