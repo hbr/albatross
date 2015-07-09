@@ -598,44 +598,86 @@ let add_case_induction
 
 
 
+
+let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
+  assert (idx1 <> idx2);
+  let ft = PC.feature_table pc in
+  let tvs1,s1 = Feature_table.signature idx1 ft
+  and tvs2,s2 = Feature_table.signature idx2 ft in
+  assert (tvs1 = tvs2);
+  let n1,n2 = Sign.arity s1, Sign.arity s2 in
+  let args1 = Array.init n1 (fun i -> Variable i)
+  and args2 = Array.init n2 (fun i -> Variable (n1+i)) in
+  let appl idx args =
+    let idx = n1 + n2 + idx in
+    if Array.length args = 0 then Variable idx
+    else VAppl (idx,args) in
+  let t1 = appl idx1 args1
+  and t2 = appl idx2 args2
+  and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
+  and imp_id   = n1 + n2 + Feature_table.implication_index
+  and false_id = n1 + n2 + Feature_table.false_index
+  in
+  let t = Term.binary imp_id
+      (Term.binary eq_id t1 t2)
+      (Variable false_id) in
+  let t = Term.all_quantified
+      (n1+n2)
+      (Feature_table.standard_argnames (n1+n2))
+      t in
+  printf "inversion %s\n"
+    (Proof_context.string_of_term t pc);
+  add_case_axiom t pc
+
+
+
+
+let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
+  (* Add case inversions
+
+     all(a:T) a as mtch1  ==>  a as mtch2  ==>  false
+   *)
+  assert (idx1 <> idx2);
+  let ft = PC.feature_table pc in
+  let make_match idx =
+    let n = Feature_table.arity idx ft in
+    if n = 0 then
+      Variable (1+idx)
+    else
+      let args = Array.init n (fun i -> Variable i)
+      and nms  = Feature_table.standard_argnames n in
+      let t    = VAppl(1+n+idx, args) in
+      Term.quantified false n nms t
+  in
+  let mtch1 = make_match idx1
+  and mtch2 = make_match idx2
+  and imp_id   = 1 + Feature_table.implication_index
+  and false_id = 1 + Feature_table.false_index in
+  let mtch1 = Flow(Asexp, [|Variable 0; mtch1|])
+  and mtch2 = Flow(Asexp, [|Variable 0; mtch2|]) in
+  let t = Term.binary imp_id mtch1 (Term.binary imp_id mtch2 (Variable false_id)) in
+  let q = Term.all_quantified 1 (Feature_table.standard_argnames 1) t in
+  printf "inversion %s\n" (PC.string_of_term q pc);
+  add_case_axiom q pc
+
+
+
+
 let add_case_inversions
     (cls:  int)
     (clst: int list)
     (pc:   Proof_context.t): unit =
-  let ft   = Proof_context.feature_table pc in
   List.iter
     (fun idx1 ->
       List.iter
         (fun idx2 ->
           if idx1 = idx2 then
             ()
-          else
-            let tvs1,s1 = Feature_table.signature idx1 ft
-            and tvs2,s2 = Feature_table.signature idx2 ft in
-            assert (tvs1 = tvs2);
-            let n1,n2 = Sign.arity s1, Sign.arity s2 in
-            let args1 = Array.init n1 (fun i -> Variable i)
-            and args2 = Array.init n2 (fun i -> Variable (n1+i)) in
-            let appl idx args =
-              let idx = n1 + n2 + idx in
-              if Array.length args = 0 then Variable idx
-              else VAppl (idx,args) in
-            let t1 = appl idx1 args1
-            and t2 = appl idx2 args2
-            and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
-            and imp_id   = n1 + n2 + Feature_table.implication_index
-            and false_id = n1 + n2 + Feature_table.false_index
-            in
-            let t = Term.binary imp_id
-                (Term.binary eq_id t1 t2)
-                (Variable false_id) in
-            let t = Term.all_quantified
-                (n1+n2)
-                (Feature_table.standard_argnames (n1+n2))
-                t in
-            printf "inversion %s\n"
-              (Proof_context.string_of_term t pc);
-            add_case_axiom t pc)
+          else begin
+            add_case_inversion_equal idx1 idx2 cls pc;
+            if idx1 < idx2 then
+              add_case_inversion_as idx1 idx2 cls pc
+          end)
         clst)
     clst
 
