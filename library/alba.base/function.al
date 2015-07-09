@@ -4,7 +4,8 @@
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
 use
-    predicate;tuple
+    predicate_logic
+    tuple
 end
 
 A: ANY

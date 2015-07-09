@@ -3,7 +3,7 @@
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
-use predicate; function end
+use predicate_logic; function end
 
 deferred class PARTIAL_ORDER end
 
@@ -105,7 +105,37 @@ all(a,b,c:PO, p,q:PO?)
         a.is_infimum({x: a <= x})
     end
 
+{: Cannot yet be inherited
+least(p:PO?): ghost PO
+    require
+        some(x) x.is_least(p)
+    ensure
+        Result.is_least(p)
+    end
 
+greatest(p:PO?): ghost PO
+    require
+        some(x) x.is_greatest(p)
+    ensure
+        Result.is_greatest(p)
+    end
+
+
+infimum(p:PO?): ghost PO
+    require
+        some(x) x.is_infimum(p)
+    ensure
+        Result.is_infimum(p)
+    end
+
+
+supremum(p:PO?):  ghost PO
+    require
+        some(x) x.is_supremum(p)
+    ensure
+        Result.is_supremum(p)
+    end
+:}
 G: ANY
 
 immutable class predicate.PREDICATE[G]

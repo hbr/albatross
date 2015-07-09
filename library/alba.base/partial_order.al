@@ -3,7 +3,7 @@
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
-use predicate; function; tuple end
+use predicate_logic; function; tuple end
 
 deferred class PARTIAL_ORDER end
 
@@ -328,7 +328,7 @@ all(a:PO, f:PO->PO)
 
         all(x)
             require
-                x.is_fixpoint(f)
+                x.is_fixpoint(f)   -- 'is_fixpoint' is not inherited!!
                 a <= x
             proof
                 f(a) <= f(x)
