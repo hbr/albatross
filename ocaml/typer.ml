@@ -146,11 +146,13 @@ end = struct
 
 
   let expect_new_untyped (accs:t): unit =
+    accs.ntvs_added <- accs.ntvs_added + 1;
     List.iter Term_builder.expect_new_untyped accs.accus
 
 
   let remove_untyped (accs:t): unit =
-    List.iter Term_builder.remove_untyped accs.accus
+    List.iter Term_builder.remove_untyped accs.accus;
+    accs.ntvs_added <- accs.ntvs_added - 1
 
 
   let expect_function (nargs:int) (accs:t): unit =

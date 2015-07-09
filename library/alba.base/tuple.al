@@ -15,6 +15,17 @@ create
 end
 
 
+
+first0 (t:(A,B)): A
+    -> inspect t
+       case tuple(a,_) then a
+       end
+
+second0 (t:(A,B)): B
+    -> inspect t
+       case tuple(_,b) then b
+       end
+
 first  (t:(A,B)): A     note built_in end  -- destructors still missing
 second (t:(A,B)): B     note built_in end
 

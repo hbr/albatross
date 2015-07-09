@@ -1065,7 +1065,8 @@ let term_preconditions (t:term)  (c:t): term list =
               let unmatched =
                 Feature_table.unmatched_inspect_cases args (nb+nvars) c.ft
               in
-              printf "unmatched cases\n";
+              if unmatched <> [] then
+                printf "unmatched cases\n";
               List.iter
                 (fun (n,mtch) ->
                   printf "  %s\n" (string_of_term mtch true (n+nb) c))
