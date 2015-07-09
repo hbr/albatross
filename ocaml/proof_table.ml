@@ -472,6 +472,7 @@ let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
 
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
+  (* Return the unevaluated and the evaluated term *)
   let rec reconstruct e nb =
     let domain_id = nb + count_variables at + Feature_table.domain_index
     and reconstr_args args =
@@ -555,6 +556,45 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           else Variable (nvars + Feature_table.false_index)
         in
         Flow (Asexp,argsa), res
+    | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+        let inspa,inspb = reconstruct inspe nb
+        and resa,resb   = reconstruct rese nb in
+        begin match t with
+          Flow(Inspect,args) ->
+            let len = Array.length args in
+            if len < 3 || len mod 2 <> 1 then raise Illegal_proof_term;
+            let ncases = len / 2 in
+            if icase < 0 || ncases <= icase then raise Illegal_proof_term;
+            let n1,_,mtch,_ = Term.qlambda_split_0 args.(2*icase+1)
+            and n2,_,res,_  = Term.qlambda_split_0 args.(2*icase+2) in
+            if n1 <> n2 then raise Illegal_proof_term;
+            let nvars = nb + count_variables at
+            and ft    = feature_table at in
+            let sub =
+              Feature_table.case_substitution 0 inspb n1 mtch nvars ft in
+            begin match sub with
+              None ->
+                printf "inspect no match\n";
+                printf "  term      %s\n" (string_of_term_anon inspa nb at);
+                printf "  eval      %s\n" (string_of_term_anon inspb nb at);
+                printf "  case %d   %s\n"
+                  icase (string_of_term_anon mtch (n1+nb) at);
+                raise Illegal_proof_term
+            | Some args ->
+                assert (Array.length args = n2);
+                let res = Term.apply res args in
+                if res <> resa then begin
+                  printf "inspect result different\n";
+                  printf "  res       %s\n" (string_of_term_anon res nb at);
+                  printf "  resa      %s\n" (string_of_term_anon resa nb at);
+                  raise Illegal_proof_term
+                end;
+                t, resb
+            end
+        | _ ->
+            printf "no inspect expression %s\n" (string_of_term_anon t nb at);
+            raise Illegal_proof_term
+        end
   in
   reconstruct e 0
 

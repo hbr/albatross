@@ -26,8 +26,15 @@ second0 (t:(A,B)): B
        case (_,b) then b
        end
 
+
 first  (t:(A,B)): A     note built_in end  -- destructors still missing
 second (t:(A,B)): B     note built_in end
+
+all(a:A,b:B)
+    ensure
+        (a,b).first0  = a
+        (a,b).second0 = b
+    end
 
 all(a:A,b:B)
     note axiom ensure

@@ -24,6 +24,8 @@ module Eval = struct
     | Flow of flow * t array
     | If of (bool * int * t array) (* cond, idx cond, args *)
     | As of bool * t array
+    | Inspect of (term * t * int * int * t)
+          (* uneval, eval insp, case, nvars, eval res *)
   let rec print (prefix:string) (e:t): unit =
     let print_args args =
       let prefix = prefix ^ "  " in
@@ -62,6 +64,8 @@ module Eval = struct
     | As (cond,args) ->
         printf "%s \"as\" %b\n" prefix cond;
         print_args args
+    | Inspect (t,inspe,icase,nvars,rese) ->
+        printf "%s \"inspect\" case %d\n" prefix icase
 
 end
 
@@ -179,6 +183,8 @@ end = struct
           Eval.If (cond, index idx, adapt_args args)
       | Eval.As (cond,args) ->
           Eval.As (cond, adapt_args args)
+      | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+          Eval.Inspect (t, adapt_eval inspe, icase, nvars, adapt_eval rese)
 
     in
     let rec adapt (pt:t): t =
@@ -240,6 +246,8 @@ end = struct
       | Eval.Flow (ctrl,args)  -> used_args set args
       | Eval.If (cond,idx,args)-> used_args (add_idx idx set) args
       | Eval.As (cond,args)    -> used_args set args
+      | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+          used_eval rese (used_eval inspe set)
     in
     let set = add_idx k set in
     let i,set = Array.fold_left
@@ -295,6 +303,8 @@ end = struct
         | Eval.Flow (ctrl,args) -> usd_args set args
         | Eval.If (cond,idx,args) -> usd_args (usd idx pt_arr set) args
         | Eval.As (cond,args)   -> usd_args set args
+        | Eval.Inspect(t,inspe,icase,nvars,rese) ->
+            usd_eval rese (usd_eval inspe set)
       in
       if k < start then
         set
@@ -372,6 +382,8 @@ end = struct
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, Array.map transform_eval args)
         | Eval.If (cond,i,args) -> Eval.If(cond,index i, Array.map transform_eval args)
         | Eval.As (cond,args)   -> Eval.As(cond,Array.map transform_eval args)
+        | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+            Eval.Inspect (t, transform_eval inspe, icase, nvars, transform_eval rese)
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
@@ -555,6 +567,11 @@ end = struct
           | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, shrnk_eargs args)
           | Eval.If(cond,idx,args)-> Eval.If(cond,idx,shrnk_eargs args)
           | Eval.As(cond,args)    -> Eval.As(cond,shrnk_eargs args)
+          | Eval.Inspect(t,inspe,icase,nvars,rese) ->
+              let t = shrink_inner t nb
+              and inspe = shrnk inspe nb
+              and rese  = shrnk rese  (nvars+nb) in
+              Eval.Inspect(t,inspe,icase,nvars,rese)
         in
         shrnk e 0
       in
@@ -655,6 +672,11 @@ end = struct
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, upeval_args args)
         | Eval.If(cond,idx,args)-> Eval.If(cond,idx,upeval_args args)
         | Eval.As(cond,args)    -> Eval.As(cond,upeval_args args)
+        | Eval.Inspect(t,inspe,icase,nvars,rese) ->
+            let t = up_inner t nb
+            and inspe = upeval inspe nb
+            and rese  = upeval rese  (nvars+nb) in
+            Eval.Inspect(t,inspe,icase,nvars,rese)
       in
       let upeval_0 e = upeval e 0
       in

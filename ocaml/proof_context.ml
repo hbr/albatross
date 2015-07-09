@@ -713,7 +713,35 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     end
                   end
             | Inspect ->
-                assert false (* nyi *)
+                assert (3 <= len);
+                assert (len mod 2 = 1);
+                let ncases       = len / 2
+                and ft           = feature_table pc
+                and nvars        = nb + nbenv
+                and insp,inspe,_ = eval args.(0) nb full in
+                let rec cases_from (i:int) =
+                  if i = ncases then begin (* no match found *)
+                    printf "no evaluation of %s\n" (string_of_term_anon t nb pc);
+                    t, Eval.Term t, false
+                  end else
+                    let n1,_,mtch,_ = Term.qlambda_split args.(2*i+1)
+                    and n2,_,res,_  = Term.qlambda_split args.(2*i+2) in
+                    assert (n1 = n2);
+                    let sub =
+                      Feature_table.case_substitution 0 insp n1 mtch nvars ft in
+                    match sub with
+                      None ->
+                        cases_from (i+1)
+                    | Some args ->
+                        assert (Array.length args = n2);
+                        let res = Term.apply res args in
+                        let res,rese,_ = eval res nb full in
+                        printf "evaluation found %s\n" (string_of_term_anon t nb pc);
+                        printf "   case %d matches\n" i;
+                        printf "   eval %s\n" (string_of_term_anon res nb pc);
+                        res, Eval.Inspect(t,inspe,i,n1,rese), true
+                in
+                cases_from 0
             | Asexp ->
                 assert (len = 2);
                 let c = context pc
