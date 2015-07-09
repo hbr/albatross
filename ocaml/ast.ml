@@ -309,7 +309,6 @@ let update_feature
     Inherit.inherit_to_descendants idx info pc
   in
   if PC.is_private pc || not (PC.is_interface_check pc) then begin
-    assert (not is_export);
     if not is_new then begin
       let spec0,impl0 = Feature_table.private_body idx ft in
       if not (Feature.Spec.private_public_consistent spec0 spec) then
@@ -705,7 +704,7 @@ let put_creators
           try
             let idx = Feature_table.find_with_signature fn.v tvs sign ft in
             let is_export =
-              PC.is_interface_check pc &&
+              PC.is_public pc &&
               not (Feature_table.is_feature_public idx ft) in
             idx, false, is_export
           with Not_found ->

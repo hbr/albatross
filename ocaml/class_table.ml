@@ -1412,7 +1412,7 @@ let base_table (): t =
   add_base_class "@DUMMY"    Immutable_hmark [||] ct;
   add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;
   add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
-  add_base_class "TUPLE"     Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "TUPLE"     Case_hmark      [|(fga,anycon);(fgb,anycon)|] ct;
   add_base_class "SEQUENCE"  Immutable_hmark [|fga,anycon|] ct;
   check_base_classes ct;
   ct
