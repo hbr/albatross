@@ -540,6 +540,12 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
         let tgt, nanon,lst = vars tgt nanon lst in
         let f, nanon, lst  = vars f nanon lst in
         Expdot(tgt,f), nanon, lst
+    | Tupleexp (e1,e2) ->
+        let e1,nanon,lst = vars e1 nanon lst in
+        let e2,nanon,lst = vars e2 nanon lst in
+        Tupleexp (e1,e2), nanon, lst
+    | Expparen e ->
+        vars e nanon lst
     | _ ->
         printf "case_variables %s\n" (string_of_expression e);
         raise Not_found
@@ -804,7 +810,12 @@ let analyze_expression
       (c:Context.t)
       :unit =
     let do_case (i:int) ((m,r):expression*expression): unit =
-      let m,nmslst = case_variables m c
+      let m,nmslst =
+        try case_variables m c
+        with Not_found ->
+          error_info info ("Cannot extract variables from \"case " ^
+                           (string_of_expression m) ^ " then " ^
+                           (string_of_expression r) ^ "\"")
       and ntvs_gap = Accus.ntvs_added accs in
       if Mylist.has_duplicates nmslst then
         error_info info "Duplicate variable in inspect expression";
