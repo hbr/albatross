@@ -676,9 +676,12 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Application (f,args,pr) ->
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
-      | Lam (n,nms,pres,t,pred) ->
-          let t,e,tmodi = eval t (1+nb) full in
-          Lam (n,nms,pres,t,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
+      | Lam (n,nms,pres,t0,pred) ->
+          if full then
+            let t0,e,tmodi = eval t0 (1+nb) full in
+            Lam (n,nms,pres,t0,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
+          else
+            t, Eval.Term t, false
       | QExp (n,nms,t,is_all) ->
           let full = full || not is_all in
           let t,e,tmodi = eval t (n+nb) full in
