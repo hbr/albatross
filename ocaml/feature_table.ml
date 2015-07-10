@@ -357,8 +357,26 @@ let beta_reduce_0
 
 
 
+let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
+  (* The tuple (a,b,...) transformed into an argument array [a,b,...].
+   *)
+  let tuple_id  = nbenv + tuple_index in
+  let rec collect t lst =
+    match t with
+      VAppl (i,args) when i = tuple_id ->
+        assert (Array.length args = 2);
+        let lst = args.(0) :: lst in
+        collect args.(1) lst
+    | _ ->
+        t :: lst
+  in
+  let lst = collect t [] in
+  Array.of_list (List.rev lst)
 
-let args_of_tuple (t:term) (nbenv:int) (nargs:int) (ft:t): term array =
+
+
+
+let args_of_tuple_ext (t:term) (nbenv:int) (nargs:int) (ft:t): term array =
   (* The tuple (a,b,...) transformed into an argument array [a,b,...].
      If the tuple [t] is only an n-tuple and [m] arguments are needed with
      [n < m] the last tuple element [l] is used to generated the missing
@@ -436,7 +454,8 @@ let tuple_of_args (args:term array) (nbenv:int) (ft:t): term =
   let i = nargs - 1 in
   let t = args.(i) in
   let res = to_tup i t in
-  assert (args = args_of_tuple res nbenv nargs ft);
+  assert (args = args_of_tuple_ext res nbenv nargs ft);
+  assert (args = args_of_tuple res nbenv ft);
   res
 
 
@@ -452,8 +471,7 @@ let add_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
   if nargs <= 1 then
     t
   else
-    let args = args_of_tuple (Variable 0) (nbenv+1) nargs ft in
-    (*let args = Array.init nargs (fun i -> argument i nargs (Variable 0)) in*)
+    let args = args_of_tuple_ext (Variable 0) (nbenv+1) nargs ft in
     Term.sub t args 1
 
 
@@ -488,7 +506,7 @@ let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term 
   assert (Array.length args <= n);
   assert (Array.length args = 1);
   let t0   = remove_tuple_accessors tlam n nbenv ft in
-  let args = args_of_tuple args.(0) nbenv n ft in
+  let args = args_of_tuple_ext args.(0) nbenv n ft in
   Term.apply t0 args
 
 

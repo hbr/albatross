@@ -381,12 +381,117 @@ let adapt_inner_function_term
     t
 
 
-
 let is_feature_term_recursive (t:term) (idx:int) (pc:PC.t): bool =
   let c = PC.context pc in
   let nvars = Context.count_variables c in
   let free  = Term.free_variables t nvars in
   IntSet.mem (idx+nvars) free
+
+
+
+let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
+  (* Check that the term [t] is a valid definition term for the feature [idx], i.e.
+     it has either no recursion or only valid recursive calls.
+
+     [idx] is absolute
+     [pc] is a valid environment for the term [t]
+   *)
+  assert (PC.is_toplevel pc);
+  let c = PC.context pc
+  and ft = PC.feature_table pc in
+  printf "check_recursion %s\n" (Context.string_of_term t true 0 c);
+  let nargs   = Context.count_last_arguments c
+  and nvars_0 = Context.count_variables c
+  in
+  let rec check (t:term) (nbranch:int) (carr:int option array) (c:Context.t): unit =
+    let nb = Context.count_variables c in
+    assert (Array.length carr = nb);
+    let is_orig_arg i = nb - nvars_0 <= i && i < nb - nvars_0 + nargs in
+    let orig_arg i =
+      assert (is_orig_arg i);
+      i - (nb-nvars_0) in
+    let check_args args =
+      Array.iter (fun args -> check args nbranch carr c) args in
+    match t with
+      Variable i when i = idx + nb ->
+        assert (nargs = 0);
+        assert (Feature_table.arity idx ft = 0);
+        error_info info ("Illegal recursive call of the constant " ^
+                         Feature_table.feature_name idx ft)
+    | Variable i ->
+        ()
+    | VAppl (i,args) when i = idx + nb ->
+        let len = Array.length args in
+        let is_lower_arg i =
+          assert (i < nargs);
+          match args.(i) with
+            Variable j when j < nb ->
+              begin match carr.(j) with
+                None   -> false
+              | Some k -> k = i
+              end
+          | _ ->
+              false
+        in
+        if not (interval_exist is_lower_arg 0 len) then
+          error_info info ("Illegal recursive call \"" ^
+                           (Context.string_of_term t true 0 c) ^ "\"")
+    | VAppl (i,args) ->
+        check_args args
+    | Flow (Inspect,args) ->
+        let len = Array.length args in
+        assert (3 <= len);
+        assert (len mod 2 = 1);
+        let ncases = len / 2 in
+        let insp_arr = Feature_table.args_of_tuple args.(0) nb ft in
+        let ninsp    = Array.length insp_arr in
+        interval_iter
+          (fun i ->
+            let n1,nms1,pat,_ = Term.qlambda_split_0 args.(2*i+1)
+            and n2,nms2,res,_  = Term.qlambda_split_0 args.(2*i+2) in
+            assert (n1 = n2);
+            let parr =
+              let arr = Feature_table.args_of_tuple pat (n1+nb) ft in
+              if Array.length arr > ninsp then
+                Feature_table.args_of_tuple_ext pat (n1+nb) ninsp ft
+              else arr in
+            assert (Array.length parr = ninsp); (* because only constructors and
+                                                   variables are allowed in patterns *)
+            let carr1 = Array.make n1 None in
+            Array.iteri
+              (fun i p ->
+                let vars = Term.bound_variables p n1 in
+                match insp_arr.(i) with
+                  Variable j when j < nb ->
+                    IntSet.iter
+                      (fun pvar ->
+                        assert (carr1.(pvar) = None);
+                        carr1.(pvar) <-
+                          if is_orig_arg j then
+                            Some (orig_arg j)
+                          else
+                            carr.(j))
+                      vars
+                | _ ->
+                    ())
+              parr;
+            let c = Context.push_untyped nms1 c
+            and carr = Array.append carr1 carr in
+            check res (nbranch+1) carr c)
+          0 ncases
+    | Flow (flow, args) ->
+        assert false
+    | _ ->
+        assert false
+  in
+  let nvars = Context.count_variables c in
+  let carr  = Array.make nvars None in
+  check t 0 carr c
+
+
+let check_recursion (info:info) (idx:int) (t:term) (pc:PC.t): unit =
+  if is_feature_term_recursive t idx pc then
+    check_recursion0 info idx t pc
 
 
 let feature_specification
@@ -411,8 +516,7 @@ let feature_specification
   | _ ->
       begin try
         let term,info = result_term enslst context in
-        if is_feature_term_recursive term idx pc then
-          error_info info "Recursion not yet implemented";
+        check_recursion info idx term pc;
         verify_preconditions term info pc;
         let term = adapt_term term in
         Feature.Spec.make_func_def nms (Some term) pres
@@ -459,8 +563,7 @@ let feature_specification_ast
       Feature.Spec.make_empty nms
   | None, Some ie ->
       let term = Typer.result_term ie context in
-      if is_feature_term_recursive term idx pc then
-        error_info info "Recursion not yet implemented";
+      check_recursion info idx term pc;
       verify_preconditions term ie.i pc;
       let term = adapt_term term in
       (Feature.Spec.make_func_def nms (Some term) [])

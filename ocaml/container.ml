@@ -90,7 +90,20 @@ let intlist_to_string (lst:int list): string =
 
 
 
+let interval_fold (f:'a->int->'a) (a0:'a) (start:int) (beyond:int): 'a =
+  assert (start <= beyond);
+  let rec fold i a =
+    if i = beyond then
+      a
+    else
+      fold (i+1) (f a i)
+  in
+  fold 0 a0
+
+
+
 let interval_for_all (f: int -> bool) (start:int) (beyond:int): bool =
+  assert (start <= beyond);
   let rec for_all i =
     if beyond <= i then
       true
@@ -98,6 +111,26 @@ let interval_for_all (f: int -> bool) (start:int) (beyond:int): bool =
       f i && for_all (i+1)
   in
   for_all start
+
+
+let interval_exist (f: int -> bool) (start:int) (beyond:int): bool =
+  assert (start <= beyond);
+  not (interval_for_all (fun i -> not (f i)) start beyond)
+
+
+
+
+let interval_iter (f:int -> unit) (start:int) (beyond:int): unit =
+  assert (start <= beyond);
+  let rec iter i =
+    if i = beyond then
+      ()
+    else begin
+      f i;
+      iter (i+1)
+    end
+  in
+  iter start
 
 
 

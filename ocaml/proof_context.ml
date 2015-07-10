@@ -722,27 +722,32 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 and ft           = feature_table pc
                 and nvars        = nb + nbenv
                 and insp,inspe,_ = eval args.(0) nb full in
+                printf "\nevaluate %s\n" (string_of_term_anon t nb pc);
                 let rec cases_from (i:int) =
                   if i = ncases then begin (* no match found *)
                     printf "no evaluation of %s\n" (string_of_term_anon t nb pc);
                     t, Eval.Term t, false
                   end else
-                    let n1,_,mtch,_ = Term.qlambda_split args.(2*i+1)
-                    and n2,_,res,_  = Term.qlambda_split args.(2*i+2) in
+                    let n1,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1)
+                    and n2,_,res,_  = Term.qlambda_split_0 args.(2*i+2) in
                     assert (n1 = n2);
-                    let sub =
-                      Feature_table.case_substitution 0 insp n1 mtch nvars ft in
-                    match sub with
-                      None ->
-                        cases_from (i+1)
-                    | Some args ->
-                        assert (Array.length args = n2);
-                        let res = Term.apply res args in
-                        let res,rese,_ = eval res nb full in
-                        printf "evaluation found %s\n" (string_of_term_anon t nb pc);
-                        printf "   case %d matches\n" i;
-                        printf "   eval %s\n" (string_of_term_anon res nb pc);
-                        res, Eval.Inspect(t,inspe,i,n1,rese), true
+                    try
+                      let sub =
+                        Feature_table.case_substitution 0 insp n1 mtch nvars ft in
+                      match sub with
+                        None ->
+                          cases_from (i+1)
+                      | Some args ->
+                          assert (Array.length args = n2);
+                          let res = Term.apply res args in
+                          let res,rese,_ = eval res nb full in
+                          printf "inspect evaluation found %s\n"
+                            (string_of_term_anon t nb pc);
+                          printf "   case %d matches\n" i;
+                          printf "   eval %s\n" (string_of_term_anon res nb pc);
+                          res, Eval.Inspect(t,inspe,i,n1,rese), true
+                    with Not_found ->
+                      cases_from (i+1)
                 in
                 cases_from 0
             | Asexp ->
@@ -791,6 +796,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     printf "tb   %s\n" (string_of_term tb pc);
     printf "tred %s\n" (string_of_term tred pc)
   end;
+  (*if modi then begin
+    printf "\nevaluation found\n";
+    printf "  term: %s\n" (string_of_term t pc);
+    printf "  eval: %s\n\n" (string_of_term tred pc);
+  end;*)
   assert (tb = tred);
   assert (modi = (tred <> t));
   tred, ered, modi

@@ -33,7 +33,7 @@ val has_result: t -> bool
 val has_result_variable: t -> bool
 
 val is_global: t -> bool
-
+val is_toplevel: t -> bool
 
 val string_of_term: term -> t -> string
 val string_of_term_anon: term -> int -> t -> string
