@@ -92,6 +92,13 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         pos+1, pos::poslst, e::elst, (t1,t2)::tlst
       with Term_capture ->
         raise Not_found
+    and comp_args pos poslst elst tlst args1 args2 =
+      let args = Myarray.combine args1 args2 in
+      Array.fold_left
+        (fun (pos,poslst,elst,tlst) (a1,a2) ->
+          comp a1 a2 nb pos poslst elst tlst)
+        (pos,poslst,elst,tlst)
+        args
     in
     match t1, t2 with
       Variable k, _ when k < nb ->
@@ -105,13 +112,8 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | VAppl(i1,args1), VAppl(i2,args2)
       when i1 = i2 && Array.length args1 = Array.length args2 ->
         begin try
-          let pos  = pos + 1
-          and args = Myarray.combine args1 args2 in
-          Array.fold_left
-            (fun (pos,poslst,elst,tlst) (a1,a2) ->
-              comp a1 a2 nb pos poslst elst tlst)
-            (pos,poslst,elst,tlst)
-            args
+          let pos  = pos + 1 in
+          comp_args pos poslst elst tlst args1 args2
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
@@ -119,12 +121,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
       when Array.length args1 = Array.length args2 && pr1 = pr2 ->
         begin try
           let pos,poslst,elst,tlst = comp f1 f2 nb (1+pos) poslst elst tlst in
-          let args = Myarray.combine args1 args2 in
-          Array.fold_left
-            (fun (pos,poslst,elst,tlst) (a1,a2) ->
-              comp a1 a2 nb pos poslst elst tlst)
-            (pos,poslst,elst,tlst)
-            args
+          comp_args pos poslst elst tlst args1 args2
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
@@ -145,13 +142,18 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
       when n1 = n2 && is_all1 = is_all2 ->
         begin try
-          comp t01 t02 (1 + nb) (pos+1) poslst elst tlst
+          comp t01 t02 (n1+nb) (1+pos) poslst elst tlst
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
     | Flow(ctrl1,args1), Flow(ctrl2,args2)
       when ctrl1=ctrl2 && Array.length args1 = Array.length args2 ->
-        assert false (* nyi *)
+        begin try
+          let pos  = pos + 1 in
+          comp_args pos poslst elst tlst args1 args2
+        with Not_found ->
+          different t1 t2 pos poslst elst tlst
+        end
     | _, _ ->
         different t1 t2 pos poslst elst tlst
   in
@@ -168,6 +170,17 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         [] -> -1,[]
       | hd::tl -> hd,tl
     in
+    let mk_args nextpos nextvar poslst args =
+      let nextpos,nextvar,poslst,arglst =
+        Array.fold_left
+          (fun (nextpos,nextvar,poslst,arglst) arg ->
+            let nextpos,nextvar,poslst,arg =
+              mklambda nextpos nextvar poslst arg nb in
+            nextpos, nextvar, poslst, arg::arglst)
+          (nextpos,nextvar,poslst,[])
+          args in
+      nextpos,nextvar,poslst, Array.of_list (List.rev arglst)
+    in
     match t with
       Variable k when k < nb ->
         assert (nextpos <> hd);
@@ -179,30 +192,16 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos = nextpos + 1 in
-          let nextpos,nextvar,poslst,arglst =
-            Array.fold_left
-              (fun (nextpos,nextvar,poslst,arglst) arg ->
-                let nextpos,nextvar,poslst,arg =
-                  mklambda nextpos nextvar poslst arg nb in
-                nextpos, nextvar, poslst, arg::arglst)
-              (nextpos,nextvar,poslst,[])
-              args in
-          let args = Array.of_list (List.rev arglst) in
+          let nextpos,nextvar,poslst,args =
+            mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, VAppl(i+nargs,args)
     | Application (f,args,pr) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,f =
             mklambda (nextpos+1) nextvar poslst f nb in
-          let nextpos,nextvar,poslst,arglst =
-            Array.fold_left
-              (fun (nextpos,nextvar,poslst,arglst) arg ->
-                let nextpos,nextvar,poslst,arg =
-                  mklambda nextpos nextvar poslst arg nb in
-                nextpos, nextvar, poslst, arg::arglst)
-              (nextpos,nextvar,poslst,[])
-              args in
-          let args = Array.of_list (List.rev arglst) in
+          let nextpos,nextvar,poslst,args =
+            mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, Application(f,args,pr)
     | Lam(n,nms,pres,t0,pr) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
@@ -227,7 +226,12 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
           nextpos, nextvar, poslst, QExp(n,nms,t0,is_all)
     | Flow (ctrl,args) ->
-        assert false
+        if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
+        else
+          let nextpos = nextpos + 1 in
+          let nextpos,nextvar,poslst,args =
+            mk_args nextpos nextvar poslst args in
+          nextpos, nextvar, poslst, Flow(ctrl,args)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
   if nextpos = 1 then raise Not_found;
