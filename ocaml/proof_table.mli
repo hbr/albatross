@@ -66,7 +66,7 @@ val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> 
 val push_untyped: int array -> t -> t
 val pop:  t -> t
 
-val definition: int -> int -> bool -> t -> int * int array * term
+val definition: int -> int -> t -> int * int array * term
 
 val is_proof_pair:  term -> proof_term -> t -> bool
 

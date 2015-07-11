@@ -441,10 +441,9 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
 exception Illegal_proof_term
 
 
-let definition (idx:int) (nb:int) (full:bool) (at:t): int * int array * term =
+let definition (idx:int) (nb:int) (at:t): int * int array * term =
   let c = context at in
-  if full then Context.expanded_definition idx nb c
-  else Context.definition idx nb c
+  Context.definition idx nb c
 
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
   let nargs, eq_id, left, right =
@@ -484,29 +483,31 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     in
     match e with
       Eval.Term t -> t,t
-    | Eval.Exp (idx,args,full) when idx = domain_id ->
-        assert (Array.length args = 1);
-        let args = Array.map (fun e -> reconstruct e nb) args in
-        let arga,argb = args.(0) in
-        begin match argb with
+    | Eval.Exp (idx,args,e) when idx = domain_id ->
+        let doma, domb = reconstruct e nb in
+        if doma <> domb then raise Illegal_proof_term;
+        if Array.length args <> 1 then raise Illegal_proof_term;
+        begin match args.(0) with
           Lam(n,nms,pres,t0,pr) ->
             if pr then raise Illegal_proof_term;
-            VAppl(idx,[|arga|]),
-            Context.domain_lambda n nms pres nb (context at)
-        | _ -> raise Illegal_proof_term
-        end
-    | Eval.Exp (idx,args,full) ->
+            if Context.domain_lambda n nms pres nb (context at) <> doma then
+              raise Illegal_proof_term
+        | _ -> ()
+        end;
+        VAppl(idx,args), doma
+    | Eval.Exp (idx,args,e) ->
         let n,nms,t =
-          try definition idx nb full at
+          try definition idx nb at
           with Not_found -> raise Illegal_proof_term
         in
-        assert (n = Array.length args);
-        if n = 0 then
-          Variable idx, t
-        else
-          let argsa, argsb = reconstr_args args in
-          VAppl(idx,argsa),
-          Term.apply t argsb
+        if n <> Array.length args then raise Illegal_proof_term;
+        let ta,tb = reconstruct e nb in
+        let uneval =
+          if n = 0 then Variable idx
+          else VAppl(idx,args) in
+        let exp = Term.apply t args in
+        if exp <> ta then raise Illegal_proof_term;
+        uneval, tb
     | Eval.VApply (i,args) ->
         let argsa, argsb = reconstr_args args in
         VAppl (i,argsa), VAppl (i,argsb)

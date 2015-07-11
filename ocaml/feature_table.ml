@@ -1994,13 +1994,20 @@ let peer_matches_of_match
     : (int*term) list =
   let combine
       (mlst:(int*term) list)        (* list of match expressions of an argument *)
-      (lst:(int * term list) list)  (* list of nvars, reversed argument list *)
-      : (int * term list) list =
+      (lst: (int*term list) list)   (* list of nvars, reversed argument list *)
+      : (int*term list) list =
     List.fold_left
       (fun res (nmtch,mtch) ->
         List.fold_left
           (fun res (n,args_rev) ->
-            ((n+nmtch), (Term.up n mtch)::args_rev) :: res)
+            let args_rev =
+              if n = 0 then
+                mtch :: args_rev
+              else
+                (Term.up n mtch) ::
+                (List.map (fun a -> Term.upbound n nmtch a) args_rev)
+            in
+            ((n+nmtch), args_rev) :: res)
           res
           lst)
       []
@@ -2116,10 +2123,15 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
         (fun (n,mtch) ->
           List.exists
             (fun (n0,mtch0) ->
-              let sub =
-                try case_substitution n mtch n0 mtch0 nb ft
-                with Not_found -> assert false (* cannot happen *) in
-              Option.has sub)
+              try
+                let sub = case_substitution n mtch n0 mtch0 nb ft in
+                Option.has sub
+              with Not_found ->
+                (*printf "unmatched_inspect_cases (not found) case %d\n" i;
+                printf "   mtch  %s\n" (term_to_string mtch  true (n+nb)  [||] ft);
+                printf "   mtch0 %s\n" (term_to_string mtch0 true (n0+nb) [||] ft);
+                (*assert false (* cannot happen *)*)*)
+                false)
             lst)
         lst_i
   in

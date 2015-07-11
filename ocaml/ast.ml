@@ -399,7 +399,6 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
   assert (PC.is_toplevel pc);
   let c = PC.context pc
   and ft = PC.feature_table pc in
-  printf "check_recursion %s\n" (Context.string_of_term t true 0 c);
   let nargs   = Context.count_last_arguments c
   and nvars_0 = Context.count_variables c
   in
@@ -889,8 +888,7 @@ let put_creators
   if Class_table.is_interface_check ct &&
      Class_table.constructors_priv cls ct <> cset then
     error_info info "Different constructors in implementation file";
-  Class_table.set_constructors cset cls ct;
-  ()
+  Class_table.set_constructors cset cls ct
 
 
 

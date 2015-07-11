@@ -711,14 +711,6 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
 
 
 
-let expanded_definition (idx:int) (nb:int) (c:t): int * int array * term =
-  let n, nms, t = definition idx nb c in
-  let t = fully_expanded t (n+nb) c in
-  n, nms, t
-
-
-
-
 let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
   let nbenv = count_variables c in
   if idx < nb + nbenv then
@@ -1065,12 +1057,12 @@ let term_preconditions (t:term)  (c:t): term list =
               let unmatched =
                 Feature_table.unmatched_inspect_cases args (nb+nvars) c.ft
               in
-              if unmatched <> [] then
+              (*if unmatched <> [] then
                 printf "unmatched cases\n";
               List.iter
                 (fun (n,mtch) ->
                   printf "  %s\n" (string_of_term mtch true (n+nb) c))
-                unmatched;
+                unmatched;*)
               let lst = List.fold_left
                   (fun lst (n,mtch) ->
                     let nms = Feature_table.standard_argnames n in

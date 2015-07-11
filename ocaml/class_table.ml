@@ -624,6 +624,10 @@ let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
     let bdesc_priv = base_descriptor_priv cls ct in
     assert (bdesc_priv.constructors = set)
   end;
+  if is_interface_use ct then begin
+    let bdesc_priv = base_descriptor_priv cls ct in
+    bdesc_priv.constructors <- set
+  end;
   bdesc.constructors <- set
 
 

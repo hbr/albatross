@@ -626,53 +626,38 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let n,nms,t0 = Proof_table.definition i nb full pc.base in
+            let n,nms,t0 = Proof_table.definition i nb pc.base in
             assert (n = 0);
-            t0, Eval.Exp(i,[||],full), true
+            let res,rese,_ = eval t0 nb full in
+            res, Eval.Exp(i,[||],rese), true
           with Not_found ->
             t, Eval.Term t, false
           end
       | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
           assert (not pr);
-          let dom = Context.domain_lambda n nms pres nb (context pc) in
-          let argse = [|Eval.Term (Lam(n,nms,pres,t0,pr))|] in
-          dom, Eval.Exp(i,argse,full), true
+          let args = [|Lam(n,nms,pres,t0,pr)|]
+          and dom = Context.domain_lambda n nms pres nb (context pc) in
+          dom, Eval.Exp(i, args, Eval.Term dom), true
       | VAppl (i,args) ->
           begin
             try
-              let n,nms,t0 = Proof_table.definition i nb full pc.base in
-              if n = 0 then begin
-                let f, fe = t0, Eval.Exp(i,[||],full) in
-                apply f fe true args false full
-              end else begin
-                assert (n = Array.length args);
-                let args, argse, _ = eval_args true args full in
-                Term.apply t0 args,
-                Eval.Exp(i,argse,full),
-                true
-              end
+              let n,nms,t0 = Proof_table.definition i nb pc.base in
+              assert (n = Array.length args);
+              let exp = Term.apply t0 args in
+              let res,rese,_ =
+                if full then
+                  eval exp nb full
+                else
+                  exp, Eval.Term exp, false in
+              res, Eval.Exp(i,args,rese), true
             with Not_found ->
               let full = full || triggers_eval i nb pc in
               vapply i args full
           end
-      | Application (Variable i,args,pr) ->
-          begin
-            try
-              let n,nms,t0 = Proof_table.definition i nb full pc.base in
-              if n = 0 then begin
-                let f, fe = t0, Eval.Exp(i,[||],full) in
-                apply f fe true args pr full
-              end else begin
-                assert (n = Array.length args);
-                printf "expand %s\n" (string_of_term_anon t nb pc);
-                assert false; (* is this possible? *)
-              end
-            with Not_found ->
-              let full = full || triggers_eval i nb pc in
-              let f  = Variable i in
-              let fe = Eval.Term f in
-              apply f fe false args pr full
-          end
+      | Application (Variable i,args,pr) when i < nb + nbenv ->
+          let f  = Variable i in
+          let fe = Eval.Term f in
+          apply f fe false args pr true
       | Application (f,args,pr) ->
           let f,fe,fmodi = eval f nb full in
           apply f fe fmodi args pr full
@@ -721,12 +706,18 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 let ncases       = len / 2
                 and ft           = feature_table pc
                 and nvars        = nb + nbenv
-                and insp,inspe,_ = eval args.(0) nb full in
-                printf "\nevaluate %s\n" (string_of_term_anon t nb pc);
+                and insp,inspe,inspmodi = eval args.(0) nb full in
                 let rec cases_from (i:int) =
                   if i = ncases then begin (* no match found *)
-                    printf "no evaluation of %s\n" (string_of_term_anon t nb pc);
-                    t, Eval.Term t, false
+                    if inspmodi then begin
+                      let argse = Array.map (fun t -> Eval.Term t) args
+                      and args  = Array.copy args in
+                      argse.(0) <- inspe;
+                      args.(0)  <- insp;
+                      Flow(Inspect,args), Eval.Flow(ctrl,argse), true
+                    end else begin
+                      t, Eval.Term t, false
+                    end
                   end else
                     let n1,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1)
                     and n2,_,res,_  = Term.qlambda_split_0 args.(2*i+2) in
@@ -740,12 +731,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       | Some args ->
                           assert (Array.length args = n2);
                           let res = Term.apply res args in
-                          let res,rese,_ = eval res nb full in
-                          printf "inspect evaluation found %s\n"
-                            (string_of_term_anon t nb pc);
-                          printf "   case %d matches\n" i;
-                          printf "   eval %s\n" (string_of_term_anon res nb pc);
-                          res, Eval.Inspect(t,inspe,i,n1,rese), true
+                          let res1,rese,_ = eval res nb full in
+                          res1, Eval.Inspect(t,inspe,i,n1,rese), true
                     with Not_found ->
                       cases_from (i+1)
                 in
@@ -754,32 +741,18 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 assert (len = 2);
                 let c = context pc
                 and n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
-                let _ =
-                  let nvars = Context.count_variables c in
-                  let ft    = feature_table pc in
-                  let lst   = Feature_table.peer_matches_of_match n mtch nvars ft in
-                  printf "  match expression\n    %s\n" (string_of_term_anon mtch n pc);
-                  printf "  peer matches\n";
-                  List.iter
-                    (fun (n,t) ->
-                      printf "    %s\n" (string_of_term_anon t n pc))
-                    lst;
-                in ();
                 try
                   let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|] in
                   if Context.is_case_matching args.(0) n mtch nb c then begin
-                    printf "is_matching %s\n" (string_of_term_anon t nb pc);
                     Variable (nbenv+Feature_table.true_index),
                     Eval.As(true,eargs),
                     true
                   end else begin
-                    printf "not is_matching %s\n" (string_of_term_anon t nb pc);
                     Variable (nbenv+Feature_table.false_index),
                     Eval.As(false,eargs),
                     true
                   end
                 with Not_found ->
-                  printf "not found %s\n" (string_of_term_anon t nb pc);
                   t, Eval.Term t, false
           end
     in

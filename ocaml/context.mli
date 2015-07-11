@@ -137,7 +137,6 @@ val fully_expanded: term -> int -> t -> term
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> t -> int * int array * term
 val specification: int -> int -> t -> term list
-val expanded_definition: int -> int -> t -> int * int array * term
 
 val tuple_of_args: term array -> int -> t -> term
 

@@ -1,0 +1,60 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use
+    predicate
+end
+
+
+case class
+    NATURAL
+create
+    0
+    successor (predecessor:NATURAL)
+end
+
+1: NATURAL = 0.successor
+2: NATURAL = 1.successor
+3: NATURAL = 2.successor
+4: NATURAL = 3.successor
+
+predecessor (n:NATURAL): NATURAL
+    require
+        n as _.successor
+    ensure
+        Result = inspect n
+                 case    m.successor then m
+                 end
+    end
+
+
+(+) (a,b: NATURAL): NATURAL
+    -> inspect b
+       case 0           then a
+       case n.successor then (a + n).successor
+       end
+
+(*) (a,b:NATURAL): NATURAL
+    -> inspect a
+       case 0           then 0
+       case n.successor then n*b + b
+       end
+
+
+(^) (a,b:NATURAL): NATURAL
+    -> inspect b
+       case 0           then 1
+       case n.successor then a^n * a
+       end
+
+
+all(a,b,c:NATURAL)
+    ensure
+        0 + a = a
+
+        a + b = b + a
+
+        a + b + c = a + (b + c)
+    end
