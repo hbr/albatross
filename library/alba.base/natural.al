@@ -124,3 +124,55 @@ all(a,b:NATURAL)
     ensure
         a + b = b + a
     end
+
+all(a:NATURAL)
+    proof
+       0 in {n:NATURAL: n * 0 = 0}
+       a in {n: n * 0 = 0}
+    ensure
+       a * 0 = 0
+    end
+
+all(a:NATURAL)
+    proof
+        0 * a = 0
+        1 * a = 0 * a + a -- '+' is evaluated before '*' and therefore '*' gets
+                          -- never evaluated
+    ensure
+        1 * a = a
+    end
+
+all(a,b,c:NATURAL) -- distributivity
+    proof
+        all(a,b,c,d:NATURAL)  -- lemma
+            proof
+               a + b + (c + d)   = a + (b + (c + d))
+
+               proof  b + (c + d) = b + c + d
+               ensure a + (b + (c + d)) = a + (b + c + d) end
+
+               proof  b + c = c + b
+               ensure a + (b + c + d) = a + (c + b + d) end
+
+               proof  c + b + d = c + (b + d)
+               ensure a + (c + b + d) = a + (c + (b + d)) end
+            ensure
+               a + b + (c + d) = a + c + (b + d)
+            end
+
+        0 in {n: n * (b + c) = n*b + n*c}
+
+        all(a)
+            require
+                a in {n: n * (b + c) = n*b + n*c}
+            proof
+                a.successor * (b + c) = a*(b + c) + (b + c)
+                a*(b + c) + (b + c)   = a*b + a*c + (b + c)
+                a*b + a*c + (b + c)   = a*b + b + (a*c + c)
+                a*b + b + (a*c + c)   = a.successor*b + a.successor*c
+            ensure
+                a.successor in {n: n * (b + c) = n*b + n*c}
+            end
+    ensure
+        a * (b + c) = a*b + a*c
+    end

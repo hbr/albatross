@@ -635,7 +635,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           end
       | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
           assert (not pr);
-          let args = [|Lam(n,nms,pres,t0,pr)|]
+          let args = [|Eval.Term (Lam(n,nms,pres,t0,pr))|]
           and dom = Context.domain_lambda n nms pres nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
       | VAppl (i,args) ->
@@ -643,13 +643,20 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             try
               let n,nms,t0 = Proof_table.definition i nb pc.base in
               assert (n = Array.length args);
+              let args,argse,_ =
+                if full then
+                  eval_args true args full
+                else
+                  args, Array.map (fun t -> Eval.Term t) args, false
+              in
               let exp = Term.apply t0 args in
               let res,rese,_ =
                 if full then
                   eval exp nb full
                 else
-                  exp, Eval.Term exp, false in
-              res, Eval.Exp(i,args,rese), true
+                  exp, Eval.Term exp, false
+              in
+              res, Eval.Exp(i,argse,rese), true
             with Not_found ->
               let full = full || triggers_eval i nb pc in
               vapply i args full

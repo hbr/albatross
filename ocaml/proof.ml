@@ -13,7 +13,7 @@ exception Limit_exceeded of int
 module Eval = struct
   type t =
       Term of term
-    | Exp of (int * term array * t) (* idx of function, args, eval of expansion *)
+    | Exp of (int * t array * t) (* idx of function, eval args, eval of expansion *)
     | VApply of int * t array
     | Apply of t * t array * bool
     | Lam of int * int array * term list * t * bool
@@ -163,7 +163,7 @@ end = struct
       match e with
         Eval.Term t   -> e
       | Eval.Exp (i,args,e) ->
-          Eval.Exp (i, args, adapt_eval e)
+          Eval.Exp (i, adapt_args args, adapt_eval e)
       | Eval.VApply (i,args) ->
           Eval.VApply (i, adapt_args args)
       | Eval.Apply (f,args,pr) ->
@@ -237,7 +237,7 @@ end = struct
         Array.fold_left (fun set e -> used_eval e set) set args in
       match e with
         Eval.Term t -> set
-      | Eval.Exp (i,args,e)    -> used_eval e set
+      | Eval.Exp (i,args,e)    -> used_eval e (used_args set args)
       | Eval.VApply(i,args)    -> used_args set args
       | Eval.Apply (f,args,_)  -> used_args (used_eval f set) args
       | Eval.Lam (n,nms,_,e,_) | Eval.QExp (n,nms,e,_) -> used_eval e set
@@ -290,7 +290,7 @@ end = struct
           Array.fold_left (fun set e -> usd_eval e set) set args in
         match e with
           Eval.Term t   -> set
-        | Eval.Exp (i,args,e)    -> usd_eval e set
+        | Eval.Exp (i,args,e)    -> usd_eval e (usd_args set args)
         | Eval.VApply (i,args)   -> usd_args set args
         | Eval.Apply (f,args,_) ->
             let set = usd_eval f set in
@@ -370,7 +370,7 @@ end = struct
         match e with
           Eval.Term _ -> e
         | Eval.Exp (i,args,e) ->
-            Eval.Exp(i, args, transform_eval e)
+            Eval.Exp(i, Array.map transform_eval args, transform_eval e)
         | Eval.VApply (i,args) ->
             Eval.VApply (i, Array.map transform_eval args)
         | Eval.Apply (f,args,pr) ->
@@ -548,7 +548,7 @@ end = struct
               Eval.Term (shrink_inner t nb)
           | Eval.Exp (idx,args,e) ->
               let idx  = var (shrink_inner (Variable idx) nb)
-              and args = shrink_args_inner args nb
+              and args = shrnk_eargs args
               and e    = shrnk e nb in
               Eval.Exp (idx,args,e)
           | Eval.VApply(i,args) ->
@@ -656,7 +656,7 @@ end = struct
             Eval.Term (up_inner t nb)
         | Eval.Exp (idx,args,e) ->
             let idx  = var (up_inner (Variable idx) nb)
-            and args = upargs_inner args nb
+            and args = upeval_args args
             and e    = upeval e nb in
             Eval.Exp (idx,args,e)
 	| Eval.VApply(i,args) ->

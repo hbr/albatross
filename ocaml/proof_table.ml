@@ -487,25 +487,28 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let doma, domb = reconstruct e nb in
         if doma <> domb then raise Illegal_proof_term;
         if Array.length args <> 1 then raise Illegal_proof_term;
-        begin match args.(0) with
+        let argsa,argsb = reconstr_args args in
+        assert (argsa = argsb); (* must be valid in case of domain_id *)
+        begin match argsa.(0) with
           Lam(n,nms,pres,t0,pr) ->
             if pr then raise Illegal_proof_term;
             if Context.domain_lambda n nms pres nb (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
         end;
-        VAppl(idx,args), doma
+        VAppl(idx,argsa), doma
     | Eval.Exp (idx,args,e) ->
         let n,nms,t =
           try definition idx nb at
           with Not_found -> raise Illegal_proof_term
         in
         if n <> Array.length args then raise Illegal_proof_term;
-        let ta,tb = reconstruct e nb in
+        let ta,tb = reconstruct e nb
+        and argsa,argsb = reconstr_args args in
         let uneval =
           if n = 0 then Variable idx
-          else VAppl(idx,args) in
-        let exp = Term.apply t args in
+          else VAppl(idx,argsa) in
+        let exp = Term.apply t argsb in
         if exp <> ta then raise Illegal_proof_term;
         uneval, tb
     | Eval.VApply (i,args) ->
