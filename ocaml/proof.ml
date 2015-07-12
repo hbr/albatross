@@ -573,7 +573,7 @@ end = struct
           | Eval.Inspect(t,inspe,icase,nvars,rese) ->
               let t = shrink_inner t nb
               and inspe = shrnk inspe nb
-              and rese  = shrnk rese  (nvars+nb) in
+              and rese  = shrnk rese  nb in
               Eval.Inspect(t,inspe,icase,nvars,rese)
         in
         shrnk e 0
@@ -681,7 +681,7 @@ end = struct
         | Eval.Inspect(t,inspe,icase,nvars,rese) ->
             let t = up_inner t nb
             and inspe = upeval inspe nb
-            and rese  = upeval rese  (nvars+nb) in
+            and rese  = upeval rese  nb in
             Eval.Inspect(t,inspe,icase,nvars,rese)
       in
       let upeval_0 e = upeval e 0
