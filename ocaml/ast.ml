@@ -841,9 +841,6 @@ let put_creators
           error_info fn.i "Type inference for constructors not allowed";
         let spec = Feature.Spec.make_func_def nms None []
         and imp  = Feature.Empty in
-        printf "  %s  %s\n"
-          (feature_name_to_string fn.v)
-          (Context.sign2string sign c1);
         let idx, is_new, is_export =
           try
             let idx = Feature_table.find_with_signature fn.v tvs sign ft in
@@ -854,6 +851,10 @@ let put_creators
           with Not_found ->
             cnt, true, false
         in
+        printf "  %d %s  %s\n"
+          idx
+          (feature_name_to_string fn.v)
+          (Context.sign2string sign c1);
         assert (not cls_is_new || is_new);
         for i = 0 to Sign.arity sign - 1 do
           let arg = Sign.arg_type i sign in
@@ -868,6 +869,7 @@ let put_creators
           Feature_table.add_feature fn tvs nms sign imp ft
         else if is_export then
           Feature_table.export_feature idx false ft;
+        Feature_table.set_owner_class idx cls ft;
         update_feature fn.i idx is_new is_export spec imp pc;
         let tvs,sign = Feature_table.signature idx ft in
         let is_base =

@@ -25,7 +25,7 @@ type base_descriptor = {
 
 type descriptor = {
     mutable mdl: int;             (* -1: base feature, module not yet assigned*)
-    cls:         int;             (* owner class *)
+    mutable cls: int;             (* owner class *)
     anchor_cls:  int;
     anchor_fg:   int;
     fname:       feature_name;
@@ -1033,6 +1033,10 @@ let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
   bdesc.spec <- spec
 
 
+
+let set_owner_class (idx:int) (cls:int) (ft:t): unit =
+  assert (idx < count ft);
+  (descriptor idx ft).cls <- cls
 
 
 let export_feature (i:int) (withspec:bool) (ft:t): unit =

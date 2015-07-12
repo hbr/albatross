@@ -339,7 +339,8 @@ end = struct
 
   let complete_as (ntvs_added:int) (accs:t): unit =
     iter_accus_save Term_builder.complete_as accs;
-    accs.ntvs_added <- ntvs_added
+    accs.ntvs_added <- ntvs_added;
+    accs.c <- Context.pop accs.c
 
 
   let get_diff (t1:term) (t2:term) (accs:t): string * string =
@@ -380,8 +381,8 @@ end = struct
           printf "    t2 %s\n" (Term.to_string t2);
           let str1, str2 = get_diff t1 t2 accs in
           error_info inf
-            ("The expression " ^ estr ^ " is ambiguous \"" ^
-             str1 ^ "\" or \"" ^ str2 ^ "\""  )
+            ("The expression " ^ estr ^ " is ambiguous\n    " ^
+             str1 ^ "\n    " ^ str2)
         with Not_found ->
           ()
 
@@ -508,7 +509,7 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
     match e with
       Expnumber _ | Exptrue | Expfalse ->
         e, nanon, lst
-    | Identifier nme ->
+    | Identifier nme | Typedexp(Identifier nme,_)->
         let lst =
           if is_constant nme c then
             lst
@@ -518,6 +519,9 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
     | Expanon ->
         let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
         Identifier nme, 1+nanon, nme :: lst
+    | Typedexp (Expanon,tp) ->
+        let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
+        Typedexp(Identifier nme,tp), 1+nanon, nme :: lst
     | Unexp (op,exp) ->
         let e,nanon,lst = vars exp nanon lst in
         Unexp(op,e), nanon, lst
@@ -535,7 +539,7 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
               e::arglst, nanon, lst)
             ([],nanon,lst)
             args in
-        Funapp(f,tuple_of_list (List.rev arglst)), nanon, lst
+        Funapp(f,expression_of_list (List.rev arglst)), nanon, lst
     | Expdot (tgt,f) ->
         let tgt, nanon,lst = vars tgt nanon lst in
         let f, nanon, lst  = vars f nanon lst in
@@ -579,7 +583,7 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
           else
             error_info info
               ("The term \"" ^ (Context.string_of_term mtch true 0 c) ^
-               "\" is not a valid match expression")
+               "\" is not a valid pattern")
         in
         begin
           match flow with

@@ -430,10 +430,11 @@ let expression_list (e:expression): expression list =
 
 
 
-let tuple_of_list (lst:expression list): expression =
+let expression_of_list (lst:expression list): expression =
   let rec tuple lst =
     match lst with
-      [a;b]    ->
+      [a]      -> a
+    | [a;b]    ->
         Tupleexp (a,b)
     | a :: lst ->
         Tupleexp (a,tuple lst)

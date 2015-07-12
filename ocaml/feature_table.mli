@@ -184,7 +184,7 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
   -> Feature.implementation -> t -> unit
 
 val update_specification: int -> Feature.Spec.t -> t -> unit
-
+val set_owner_class:      int -> int -> t -> unit
 val export_feature: int -> bool -> t -> unit
 
 val add_function:
