@@ -20,6 +20,10 @@ end
 3: NATURAL = 2.successor
 4: NATURAL = 3.successor
 
+(+) (a,b: NATURAL):  NATURAL
+(*) (a,b: NATURAL):  NATURAL
+(^) (a,b: NATURAL):  NATURAL
+
 predecessor (n:NATURAL): NATURAL
     require
         n as _.successor
@@ -30,33 +34,27 @@ predecessor (n:NATURAL): NATURAL
     end
 
 
-(+) (a,b: NATURAL): NATURAL
-    -> inspect b
-       case 0           then a
-       case n.successor then (a + n).successor
-       end
-
-(*) (a,b:NATURAL): NATURAL
-    -> inspect a
-       case 0           then 0
-       case n.successor then n*b + b
-       end
-
-
-(^) (a,b:NATURAL): NATURAL
-    -> inspect b
-       case 0           then 1
-       case n.successor then a^n * a
-       end
-
-
 all(a,b,c:NATURAL)
     ensure
+        -- addition
+        a + 0 = a
         0 + a = a
+        a + b.successor = (a + b).successor
+        a + 1 = a.successor
 
         a + b = b + a
-
         a + b + c = a + (b + c)
 
+        -- multiplication
+        a * 0 = 0
+        0 * a = 0
+        a.successor * b = a*b + b
+        1 * a = a
+
+        -- distributive laws
         a * (b + c) = a*b + a*c
+
+        -- exponentiation
+        a^0 = 1
+        a ^ b.successor = a^b * a
     end

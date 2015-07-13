@@ -61,9 +61,17 @@ predecessor (n:NATURAL): NATURAL
 
 
 
-all(n:NATURAL)
+all(a,b:NATURAL)
     ensure
-        n + 0 = n
+        a + 0 = a
+        a + b.successor = (a + b).successor
+        a + 1 = a.successor
+
+        0 * b = 0
+        a.successor * b = a*b + b
+
+        a^0 = 1
+        a ^ b.successor = a^b * a
     end
 
 
@@ -135,9 +143,7 @@ all(a:NATURAL)
 
 all(a:NATURAL)
     proof
-        0 * a = 0
-        1 * a = 0 * a + a -- '+' is evaluated before '*' and therefore '*' gets
-                          -- never evaluated
+        0 + a = a
     ensure
         1 * a = a
     end
@@ -145,6 +151,8 @@ all(a:NATURAL)
 all(a,b,c:NATURAL) -- distributivity
     proof
         all(a,b,c,d:NATURAL)  -- lemma
+            {: Note: This lemma is needed as long as the special treatment of
+                     commutative and associative operators is not implemented :}
             proof
                a + b + (c + d)   = a + (b + (c + d))
 
