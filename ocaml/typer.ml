@@ -690,8 +690,6 @@ let analyze_expression
           inspect ie.i inspexp caselst accs c
       | Typedexp (_,_) ->
           not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
-      | Expbracket _ ->
-          not_yet_implemented ie.i ("Expbracket Typing of " ^ (string_of_expression e))
       | Bracketapp (_,_) ->
           not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
       | Expset _ ->

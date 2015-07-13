@@ -365,7 +365,6 @@ type expression =
   | Exptrue
   | Expfalse
   | Expparen      of expression
-  | Expbracket    of expression
   | Exparrow      of entities list withinfo * expression
   | Expagent      of entities list withinfo * return_type * compound * compound
   | Expop         of operator
@@ -461,8 +460,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expfalse      -> "false"
 
   | Expparen e   -> "(" ^ (strexp e) ^")"
-
-  | Expbracket e -> "[" ^ (strexp e) ^"]"
 
   | Exparrow  (l,e) ->
       "(" ^ (string_of_formals l.v) ^ ")->" ^ (string_of_expression e)

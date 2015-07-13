@@ -687,7 +687,16 @@ expr:
 |   operator_expr                 { $1 }
 |   LPAREN expr RPAREN            { Expparen $2 }
 |   LPAREN operator RPAREN        { Expop $2 }
-|   LBRACKET expr RBRACKET        { Expbracket $2 }
+|   LBRACKET expr RBRACKET        {
+  let lst = expression_list $2 in
+  let rec brexp lst =
+    match lst with
+      []   -> Identifier (ST.symbol "nil")
+    | h::t ->
+        Binexp (Caretop, h, brexp t)
+  in
+  brexp lst
+}
 |   expr COMMA expr               { Tupleexp ($1,$3) }
 |   expr LPAREN expr RPAREN       { Funapp ($1,$3) }
 |   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
