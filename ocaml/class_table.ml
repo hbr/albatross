@@ -53,6 +53,7 @@ let predicate_index = 3
 let function_index  = 4
 let tuple_index     = 5
 let sequence_index  = 6
+let list_index      = 7
 
 
 let module_table (ct:t): Module_table.t = ct.mt
@@ -383,6 +384,9 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           end else if j1 = sequence_index then begin
             assert (tarrlen=1);
             1, ((to_string tarr.(0) nb 1) ^ "*")
+          end else if j1 = list_index then begin
+            assert (tarrlen=1);
+            1, ("[" ^ (to_string tarr.(0) nb 1) ^ "]")
           end else if j1 = function_index then begin
             assert (tarrlen=2);
             1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
@@ -1088,6 +1092,7 @@ let tuple_name     = ST.symbol "TUPLE"
 let predicate_name = ST.symbol "PREDICATE"
 let function_name  = ST.symbol "FUNCTION"
 let sequence_name  = ST.symbol "SEQUENCE"
+let list_name      = ST.symbol "LIST"
 
 
 let get_type
@@ -1129,6 +1134,9 @@ let get_type
     | Star_type tp ->
         let t = get_tp tp in
         valid_tp (class_index0 [] sequence_name) [|t|]
+    | List_type tp ->
+        let t = get_tp tp in
+        valid_tp (class_index0 [] list_name) [|t|]
     | Arrow_type (tpa,tpb) ->
         let ta = get_tp tpa
         and tb = get_tp tpb in
@@ -1408,6 +1416,7 @@ let check_base_classes (ct:t): unit =
   assert ((class_name function_index  ct) = "FUNCTION");
   assert ((class_name tuple_index     ct) = "TUPLE");
   assert ((class_name sequence_index  ct) = "SEQUENCE");
+  assert ((class_name list_index      ct) = "LIST");
   ()
 
 
@@ -1426,6 +1435,7 @@ let base_table (): t =
   add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
   add_base_class "TUPLE"     Case_hmark      [|(fga,anycon);(fgb,anycon)|] ct;
   add_base_class "SEQUENCE"  Immutable_hmark [|fga,anycon|] ct;
+  add_base_class "LIST"      Case_hmark      [|fga,anycon|] ct;
   check_base_classes ct;
   ct
 

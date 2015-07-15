@@ -13,10 +13,10 @@ case class
     LIST[G]
 create
     nil
-    (^) (head:G, tail:LIST[G])
+    (^) (head:G, tail:[G])   -- [G] is a shorthand for LIST[G]
 end
 
-head (a:LIST[G]): G
+head (a:[G]): G
     require
         a as x ^ t
     ensure
@@ -27,7 +27,7 @@ head (a:LIST[G]): G
 
 
 
-tail (a:LIST[G]): LIST[G]
+tail (a:[G]): [G]
     require
         a as x ^ t
     ensure
@@ -37,20 +37,20 @@ tail (a:LIST[G]): LIST[G]
     end
 
 
-(+) (a,b: LIST[G]): LIST[G]
+(+) (a,b: [G]): [G]
     -> inspect a
        case nil   then b
        case h ^ t then h ^ (t + b)
        end
 
-(-) (a:LIST[G]): LIST[G]
+(-) (a:[G]): [G]
     -> inspect a
        case nil   then nil
        case h ^ t then -t + h ^ nil
        end
 
 
-all(a:LIST[G], p:LIST[G]?)
+all(a:[G], p:[G]?)
     require
         p(nil)
         all(a,x) p(a) ==> p(x^a) 
@@ -58,7 +58,7 @@ all(a:LIST[G], p:LIST[G]?)
         p(a)
     end
 
-all(x:G,a:LIST[G])
+all(x:G,a:[G])
     ensure
        nil = x^a  ==>  false
        x^a = nil  ==>  false
@@ -67,7 +67,7 @@ all(x:G,a:LIST[G])
 
 
 
-all(x,y:G, a,b:LIST[G])
+all(x,y:G, a,b:[G])
     require
         x^a = y^b
     proof
@@ -78,7 +78,7 @@ all(x,y:G, a,b:LIST[G])
     end
 
 
-all(x:G, a,b:LIST[G])
+all(x:G, a,b:[G])
     ensure
         nil + b = b
         x^a + b = x^(a + b)
@@ -88,7 +88,7 @@ all(x:G, a,b:LIST[G])
         (-x^a = -a + [x])
     end
 
-all(a,b,c:LIST[G])
+all(a,b,c:[G])
     proof
         nil in {a: a + b + c = a + (b + c)}
         a   in {a: a + b + c = a + (b + c)}
@@ -96,7 +96,7 @@ all(a,b,c:LIST[G])
         a + b + c = a + (b + c)
     end
 
-all(a:LIST[G])
+all(a:[G])
     proof
         nil in {a: a + nil = a}
         a   in {a: a + nil = a}
@@ -105,7 +105,7 @@ all(a:LIST[G])
     end
 
 
-all(a,b:LIST[G])
+all(a,b:[G])
     proof
         proof   (-b) + nil = -b
                 (-(nil + b)) = -b + -nil

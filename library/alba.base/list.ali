@@ -14,16 +14,16 @@ case class
     LIST[G]
 create
     nil
-    (^) (head:G, tail:LIST[G])
+    (^) (head:G, tail:[G])  -- [G] is a shorthand for LIST[G]
 end
 
-(+) (a,b: LIST[G]): LIST[G]
+(+) (a,b: [G]): [G]
     -- The concatenation of the lists 'a' and 'b'.
 
-(-) (a:LIST[G]): LIST[G]
+(-) (a:[G]): [G]
     -- The reversed list 'a'.
 
-head (a:LIST[G]): G
+head (a:[G]): G
         -- The first element of the list 'a'.
     require
         a as x ^ t
@@ -33,7 +33,7 @@ head (a:LIST[G]): G
                  end
     end
 
-tail (a:LIST[G]): LIST[G]
+tail (a:[G]): [G]
         -- The list 'a' with the first element removed.
     require
         a as x ^ t
@@ -44,7 +44,7 @@ tail (a:LIST[G]): LIST[G]
     end
 
 
-all(a,b,c:LIST[G], x:G)
+all(a,b,c:[G], x:G)
     ensure
         -- concatenation of lists
         a   + nil =  a

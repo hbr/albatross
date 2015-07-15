@@ -287,7 +287,7 @@ let collect_fgs
         add_fg name path fgs tvs mt
     | Arrow_type (tpa,tpb) ->
         collect tpb (collect tpa fgs)
-    | QMark_type tp | Star_type tp | Paren_type tp ->
+    | QMark_type tp | Star_type tp | Paren_type tp | List_type tp ->
         collect tp fgs
     | Tuple_type lst ->
         List.fold_left (fun fgs tp -> collect tp fgs) fgs lst
