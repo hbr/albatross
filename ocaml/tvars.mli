@@ -73,4 +73,6 @@ val add_local:    int -> t -> t
 val remove_local: int -> t -> t
 val augment_fgs:  int array -> type_term array -> t -> t
 val fgs_to_global: t -> t
-val involved_classes: type_term -> t -> IntSet.t -> IntSet.t
+val add_involved_classes: type_term -> t -> IntSet.t -> IntSet.t
+val involved_classes:     type_term -> t -> IntSet.t
+val is_class_involved:    int -> type_term -> t -> bool

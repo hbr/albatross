@@ -611,6 +611,14 @@ let constructors_priv (cls:int) (ct:t): IntSet.t =
   bdesc.constructors
 
 
+let is_case_class (cls:int) (ct:t): bool =
+  assert (cls < count ct);
+  match (base_descriptor cls ct).hmark with
+    Case_hmark -> true
+  | _          -> false
+
+
+
 let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
 

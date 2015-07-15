@@ -147,6 +147,7 @@ val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
+val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
 val constructors_priv:int -> t -> IntSet.t

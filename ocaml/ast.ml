@@ -816,6 +816,81 @@ let add_case_injections
     clst
 
 
+let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
+  (* Can the case class [cls] be constructed without actual generics at the
+     positions [posset]?  *)
+  let ct = PC.class_table pc
+  and ft = PC.feature_table pc in
+  assert (Class_table.is_case_class cls ct);
+  let cset = Class_table.constructors cls ct in
+  IntSet.exists
+    (fun c ->
+      let tvs,sign = Feature_table.signature c ft in
+      assert (Tvars.count tvs = 0);
+      let nfgs = Tvars.count_fgs tvs in
+      let fgs =
+        match Sign.result sign with
+          VAppl(cls2,fgs) ->
+            assert (cls2 = cls + nfgs);
+            fgs
+        | _ ->
+            assert false (* cannot happen *) in
+      assert (IntSet.cardinal posset = Array.length fgs);
+      let fgenset:IntSet.t =
+        IntSet.fold
+          (fun pos set ->
+            assert (pos < Array.length fgs);
+            assert (Term.is_variable fgs.(pos));
+            IntSet.add (Term.variable fgs.(pos)) set)
+          posset
+          IntSet.empty in
+      List.for_all
+        (fun tp ->
+            let set = Term.bound_variables tp nfgs in
+            IntSet.inter set fgenset = IntSet.empty)
+          (Array.to_list (Sign.arguments sign)))
+    cset
+
+
+
+let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
+  let ct = PC.class_table pc
+  and ft = PC.feature_table pc in
+  let tvs,sign = Feature_table.signature idx ft in
+  let ntvs     = Tvars.count_all tvs in
+  let is_class_involved tp = Tvars.is_class_involved cls tp tvs
+  in
+  List.for_all
+    (fun tp ->
+      match tp with
+        Variable i when i = cls + ntvs ->
+          false
+      | VAppl(i,ags) when i = cls + ntvs ->
+          false
+      | VAppl(i,ags) ->
+          assert (ntvs <= i);
+          Class_table.is_case_class (i-ntvs) ct &&
+          begin
+            let nags = Array.length ags in
+            let rec get_posset_from k posset =
+              if k = nags then
+                posset
+              else
+                let posset =
+                  if is_class_involved ags.(k) then
+                    IntSet.add k posset
+                  else
+                    posset in
+                get_posset_from (k+1) posset
+            in
+            let posset = get_posset_from 0 IntSet.empty in
+            can_be_constructed_without (i-ntvs) posset pc
+          end
+      | _ ->
+          true)
+    (Array.to_list (Sign.arguments sign))
+
+
 
 let put_creators
     (cls: int)
@@ -871,9 +946,7 @@ let put_creators
           Feature_table.export_feature idx false ft;
         Feature_table.set_owner_class idx cls ft;
         update_feature fn.i idx is_new is_export spec imp pc;
-        let tvs,sign = Feature_table.signature idx ft in
-        let is_base =
-          not (IntSet.mem cls (Sign.involved_classes_arguments tvs sign)) in
+        let is_base = is_base_constructor idx cls pc in
         if is_base && c1lst <> [] then
           error_info fn.i "Base constructors must be defined before other constructors"
         else if not is_base && c0lst = [] then

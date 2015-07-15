@@ -744,13 +744,13 @@ end = struct
   let involved_classes_arguments (tvs:Tvars.t) (s:t): IntSet.t =
     Array.fold_left
       (fun set tp ->
-        Tvars.involved_classes tp tvs set)
+        Tvars.add_involved_classes tp tvs set)
       IntSet.empty
       s.args
 
 
   let involved_classes (tvs:Tvars.t) (s:t): IntSet.t =
-    fold (fun set tp -> Tvars.involved_classes tp tvs set) IntSet.empty s
+    fold (fun set tp -> Tvars.add_involved_classes tp tvs set) IntSet.empty s
 
 
   let anchor (tvs:Tvars.t) (s:t): int * int =

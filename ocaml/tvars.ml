@@ -327,7 +327,7 @@ let fgs_to_global (tvs:t):t =
 
 
 
-let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
+let add_involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
   let nloc = count_local tvs
   and nall = count_all   tvs in
   let rec clss (tp:type_term) (set0:IntSet.t) (n:int): IntSet.t =
@@ -345,3 +345,11 @@ let involved_classes (tp:type_term) (tvs:t) (set0:IntSet.t): IntSet.t =
       tp
   in
   clss tp set0 (count_all tvs)
+
+
+let involved_classes (tp:type_term) (tvs:t): IntSet.t =
+  add_involved_classes tp tvs IntSet.empty
+
+
+let is_class_involved (cls:int) (tp:type_term) (tvs:t): bool =
+  IntSet.mem cls (involved_classes tp tvs)
