@@ -1076,8 +1076,9 @@ let term_preconditions (t:term)  (c:t): term list =
                 if i = ncases then
                   lst
                 else
-                  let n,nms,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
-                  let lst_inner,_ = pres args.(2*i+2) (nb+n) [] in
+                  let n,nms,mtch,_  = Term.qlambda_split_0 args.(2*i+1) in
+                  let n2,nms2,res,_ = Term.qlambda_split_0 args.(2*i+2) in
+                  let lst_inner,_ = pres res (nb+n) [] in
                   let lst_inner   = List.rev lst_inner in
                   List.fold_left
                     (fun lst p ->
