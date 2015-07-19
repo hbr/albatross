@@ -2123,21 +2123,22 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
     else
       let n,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
       let lst_i = peer_matches_of_match n mtch nb ft in
-      List.filter
-        (fun (n,mtch) ->
-          List.exists
-            (fun (n0,mtch0) ->
-              try
-                let sub = case_substitution n mtch n0 mtch0 nb ft in
-                Option.has sub
-              with Not_found ->
-                (*printf "unmatched_inspect_cases (not found) case %d\n" i;
-                printf "   mtch  %s\n" (term_to_string mtch  true (n+nb)  [||] ft);
-                printf "   mtch0 %s\n" (term_to_string mtch0 true (n0+nb) [||] ft);
-                (*assert false (* cannot happen *)*)*)
-                false)
-            lst)
-        lst_i
+      let lst = List.filter
+          (fun (n,mtch) ->
+            List.exists
+              (fun (n0,mtch0) ->
+                try
+                  let sub = case_substitution n mtch n0 mtch0 nb ft in
+                  Option.has sub
+                with Not_found ->
+                  (*printf "unmatched_inspect_cases (not found) case %d\n" i;
+                    printf "   mtch  %s\n" (term_to_string mtch  true (n+nb)  [||] ft);
+                    printf "   mtch0 %s\n" (term_to_string mtch0 true (n0+nb) [||] ft);
+                    (*assert false (* cannot happen *)*)*)
+                  false)
+              lst)
+          lst_i in
+      unmatched_from (i+1) lst
   in
   let first_list =
     let n,_,mtch,_ = Term.qlambda_split_0 args.(1) in
