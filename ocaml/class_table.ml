@@ -910,9 +910,9 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
     else
       let mdl1 = (descriptor cidx1 ct).mdl
       and mdl2 = (descriptor cidx2 ct).mdl in
-      if mdl1 = mdl2 then
-        assert false (* nyi: multiple classes in the same module *)
-      else
+      if mdl1 = mdl2 then begin
+        if cidx1 < cidx2 then cidx2 else cidx1
+      end else
         if mdl1 < mdl2 then cidx2 else cidx1
   in
   let set =
