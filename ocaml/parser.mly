@@ -211,6 +211,8 @@ decl:
 |   named_feature     { $1 }
 |   formal_generic    { $1 }
 |   ass_feat          { $1 }
+|   class_list        { $1 }
+|   feature_list      { $1 }
 
 
 use_block_opt:
@@ -374,6 +376,11 @@ class_generics:
 |   LBRACKET uidentifier_list RBRACKET { $2 }
 
 
+class_list0:
+    class_declaration { [$1] }
+|   class_declaration optsemi class_list0 { $1::$3 }
+
+class_list: KWfeature class_list0 KWend { Class_list(withinfo (rhs_info 1) $2) }
 
 
 /* ------------------------------------------------------------------------- */
@@ -507,6 +514,14 @@ type_list:
 /* ------------------------------------------------------------------------- */
 /* Features */
 /* ------------------------------------------------------------------------- */
+
+feature_list: KWfeature feature_list0 KWend {
+  Feature_list (withinfo (rhs_info 1) $2)
+}
+
+feature_list0:
+    named_feature { [$1] }
+|   named_feature optsemi feature_list0 { $1 :: $3 }
 
 named_feature:
     nameopconst_info

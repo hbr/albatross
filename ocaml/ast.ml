@@ -995,6 +995,9 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
   end
 
 
+
+
+
 let put_class
     (hm:       header_mark withinfo)
     (cn:       classname)
@@ -1061,6 +1064,10 @@ let analyze (ast: declaration list) (pc:Proof_context.t): unit =
           prove_and_store entlst body pc
       | Formal_generic (name, concept) ->
           Context.put_formal_generic name concept context
+      | Class_list lst ->
+          not_yet_implemented lst.i "Mutually recursive types"
+      | Feature_list lst ->
+          not_yet_implemented lst.i "Mutually recursive features"
     in
     match ast with
       [] -> ()

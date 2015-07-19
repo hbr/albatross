@@ -705,6 +705,8 @@ type declaration =
         * formal_generics
         * create_clause
         * inherit_clause
+  | Class_list   of declaration list withinfo
+  | Feature_list of declaration list withinfo
 
 
 type library_name = int list
