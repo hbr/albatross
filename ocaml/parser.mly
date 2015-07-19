@@ -67,7 +67,7 @@ let entities_of_expression (info:info) (lst: expression list): entities list =
         entlist lst (id::idlst) entlst
     | (Typedexp (Identifier id,tp))::lst ->
         let idlst = List.rev (id::idlst) in
-        let entlst = (Typed_entities (idlst,tp))::entlst in
+        let entlst = (Typed_entities (idlst,tp.v))::entlst in
         entlist lst [] entlst
     | e::lst ->
         error_info info ("\"" ^ (string_of_expression e) ^ "\" is not an argument")
@@ -165,10 +165,10 @@ let predicate_of_expression (info:info) (e:expression): expression =
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
 /*  8 */ %nonassoc KWall     KWsome  /* greedy */
+/*  9 */ %left     COLON /* greedy */
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
 /* 15 */ %right    COMMA
-/* 18 */ %left     COLON
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
@@ -728,7 +728,7 @@ expr:
 |   dotted_id_list DOT LBRACE expr RBRACE   {
   Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
 }
-|   expr COLON type_nt        { Typedexp ($1,$3) }
+|   expr COLON type_nt        { Typedexp ($1, withinfo (rhs_info 3) $3) }
 
 |   KWall  formal_arguments opt_nl expr {
   Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }

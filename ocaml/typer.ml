@@ -26,6 +26,7 @@ module Accus: sig
   val expected_signatures_string: t -> string
   val substitutions_string: t -> string
   val expect_boolean:    t -> unit
+  val expect_type:       term -> t -> unit
   val expect_boolean_expression:    t -> unit
   val expect_new_untyped:t -> unit
   val remove_untyped:    t -> unit
@@ -121,22 +122,6 @@ end = struct
           (Term_builder.string_of_tvs_sub acc)
           (Term_builder.string_of_head_signature acc))
       accus
-
-
-  let expect_boolean (accs:t): unit =
-    let accus = accs.accus in
-    accs.accus <-
-      List.fold_left
-        (fun lst acc ->
-          try
-            Term_builder.expect_boolean acc;
-            acc :: lst
-          with Not_found ->
-            lst)
-        []
-        accs.accus;
-    if accs.accus = [] then
-      raise (Untypeable accus)
 
 
   let expect_boolean_expression (accs:t): unit =
@@ -257,6 +242,27 @@ end = struct
     if lst = [] then
       raise (Untypeable accs.accus);
     accs.accus <- lst
+
+
+  let expect_boolean (accs:t): unit =
+    let accus = accs.accus in
+    accs.accus <-
+      List.fold_left
+        (fun lst acc ->
+          try
+            Term_builder.expect_boolean acc;
+            acc :: lst
+          with Not_found ->
+            lst)
+        []
+        accs.accus;
+    if accs.accus = [] then
+      raise (Untypeable accus)
+
+
+
+  let expect_type (tp:type_term) (accs:t): unit =
+    iter_accus (fun acc -> Term_builder.expect_type tp acc) accs
 
 
   let push_expected (accs:t): unit =
@@ -688,8 +694,19 @@ let analyze_expression
           exp_if thenlist elsepart accs c
       | Expinspect (inspexp,caselst) ->
           inspect ie.i inspexp caselst accs c
-      | Typedexp (_,_) ->
-          not_yet_implemented ie.i ("Typedexp Typing of "^ (string_of_expression e))
+      | Typedexp (e0,tp) ->
+          let tp = Context.get_type tp c in
+          begin try
+            Accus.expect_type tp accs
+          with Accus.Untypeable lst ->
+            let str    = "Type error \"" ^ (string_of_expression e) ^
+              "\"\n  Actual type:\n\t"
+            and actual = Context.string_of_type tp c
+            and reqs = String.concat "\n\t"
+                (List.map Term_builder.string_of_reduced_substituted_signature lst) in
+            error_info info (str ^ actual ^ "\n  Required types(s):\n\t" ^ reqs)
+          end;
+          analyze e0 accs c
       | Bracketapp (_,_) ->
           not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
       | Expset _ ->

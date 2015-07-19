@@ -584,6 +584,16 @@ let expect_boolean (tb:t): unit =
 
 
 
+let expect_type (tp:term) (tb:t): unit =
+  if not (Sign.is_constant tb.sign) then
+    raise Not_found
+  else
+    let tp = transformed_type tp tb in
+    unify (Sign.result tb.sign) tp tb
+
+
+
+
 let expect_boolean_expression (tb:t): unit =
   let ntvs = count_all tb in
   let tp   = Variable (ntvs + Class_table.boolean_index) in

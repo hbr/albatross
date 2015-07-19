@@ -53,6 +53,7 @@ val make_boolean:     Context.t -> t
     type is boolean. *)
 
 val expect_boolean:   t -> unit
+val expect_type:      term -> t -> unit
 
 val expect_boolean_expression:   t -> unit
 val expect_new_untyped: t -> unit

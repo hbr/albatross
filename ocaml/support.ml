@@ -378,7 +378,7 @@ type expression =
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
   | Tupleexp      of expression * expression
-  | Typedexp      of expression * type_t
+  | Typedexp      of expression * type_t withinfo
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
@@ -495,7 +495,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       withparen ((operator_to_string op) ^ (strexp e)) wp
 
   | Typedexp (e,t) ->
-      withparen ((strexp e) ^ ":" ^ (string_of_type t)) wp
+      withparen ((strexp e) ^ ":" ^ (string_of_type t.v)) wp
 
   | Tupleexp (e1,e2) ->
       "(" ^ (strexp e1) ^ "," ^ (strexp e2) ^ ")"

@@ -80,6 +80,8 @@ val concepts_of_class: int -> t -> type_term array
 
 val class_type: int -> t -> type_term*Tvars.t
 
+val get_type: type_t withinfo -> Tvars.t -> t -> type_term
+
 val is_class_public: int -> t -> bool
 
 val descendants: int -> t -> IntSet.t

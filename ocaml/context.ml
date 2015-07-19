@@ -1185,3 +1185,11 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
   let replace t = Term.sub t args (1+nargs) in
   List.map replace posts
+
+
+let get_type (tp:type_t withinfo) (c:t): type_term =
+  let tvs = tvars c in
+  Class_table.get_type tp tvs (class_table c)
+
+let string_of_type (tp:type_term) (c:t): string =
+  Class_table.string_of_type tp (tvars c) (class_table c)
