@@ -15,6 +15,7 @@ type t = {mutable tlist: (term*Tvars.t*Sign.t) list; (* term, count_all, sign *)
           mutable sign:  Sign.t;  (* expected *)
           mutable tvars: TVars_sub.t;
           mutable norm:  bool; (* term is specialized and normalized *)
+          trace: bool;
           mutable c: Context.t}
 
 (* The type variables of the term builder and the context differ.
@@ -560,6 +561,7 @@ let make (c:Context.t): t =
    sign  = Sign.make_const (Context.result_type c);
    tvars = (Context.type_variables c);
    norm  = false;
+   trace = Context.verbosity c > 5;
    c     = c}
 
 
@@ -572,6 +574,7 @@ let make_boolean (c:Context.t): t =
    tvars = tvs;
    sign  = Sign.make_const bool;
    norm  = false;
+   trace = Context.verbosity c > 5;
    c     = c}
 
 
@@ -777,7 +780,8 @@ let complete_function (nargs:int) (tb:t): unit =
             assert (nargs = 1); boolean_type tb, true
           end else
             assert false (* cannot happen *)
-      | _ -> assert false (* cannot happen *)
+      | _ ->
+          assert false (* cannot happen *)
     else
       TVars_sub.sub_star(Sign.result fsig) tb.tvars, false in
   let t =
@@ -792,6 +796,8 @@ let complete_function (nargs:int) (tb:t): unit =
   let ttp = try Term.down nargs ttp with Not_found -> assert false in
   let s   = Sign.make_const ttp in
   remove_local nargs tb;
+  if tb.trace then
+    printf "\ncomplete_function %s\n\n" (string_of_term t tb);
   tb.tlist <- (t, tvars tb, s) :: tb.tlist
 
 
@@ -884,6 +890,8 @@ let complete_lambda (ntvs:int) (npres:int) (is_pred:bool) (tb:t): unit =
     Sign.make_const res in
   remove_local ntvs tb;
   tb.c     <- c;
+  if tb.trace then
+    printf "\ncomplete_lambda %s\n\n" (string_of_term lam tb);
   tb.tlist <- (lam, tvars tb, s) :: tb.tlist
 
 
@@ -926,6 +934,8 @@ let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   let nall = count_all tb in
   let tp   = Variable (nall + Class_table.boolean_index) in
   let s    = Sign.make_const tp in
+  if tb.trace then
+    printf "\ncomplete_quantified %s\n\n" (string_of_term qexp tb);
   tb.tlist <- (qexp, tvars tb, s) :: tb.tlist
 
 
@@ -974,7 +984,10 @@ let complete_inspect (n:int) (tb:t): unit =
   let insp,_,_ = pop_term tb in
   args.(0) <- insp;
   get_expected 1 tb;
-  tb.tlist <- (Flow (Inspect, args), tvars tb, tb.sign) :: tb.tlist
+  let term = Flow (Inspect, args) in
+  if tb.trace then
+    printf "\ncomplete_inspect %s\n\n" (string_of_term term tb);
+  tb.tlist <- (term, tvars tb, tb.sign) :: tb.tlist
 
 
 
@@ -988,8 +1001,11 @@ let complete_as (tb:t): unit =
   get_expected 1 tb;
   let s = tb.sign (* must be boolean *)
   and tvs = tvars tb in
-  tb.tlist <-
-    (Flow (Asexp, [|exp; Term.some_quantified n nms mtch|]), tvs, s) :: tb.tlist
+  let term = Flow (Asexp, [|exp; Term.some_quantified n nms mtch|]) in
+  if tb.trace then
+    printf "\ncomplete_inspect %s\n\n" (string_of_term term tb);
+   tb.tlist <-
+    (term, tvs, s) :: tb.tlist
 
 
 let complete_if (has_else:bool) (tb:t): unit =
@@ -1009,6 +1025,8 @@ let complete_if (has_else:bool) (tb:t): unit =
     end
   in
   let t = Flow (Ifexp,args) in
+  if tb.trace then
+    printf "\ncomplete_if %s\n\n" (string_of_term t tb);
   tb.tlist <- (t, tvars tb, tb.sign) :: tb.tlist
 
 
@@ -1321,22 +1339,22 @@ let check_term (t:term) (tb:t): t =
       in
       let tb = expect_lambda ntvs is_pred c tb in
       let tb = check t tb in
-      let rec check_pres (pres:term list) (tb:t): t =
+      let rec check_pres (pres:term list) (npres:int) (tb:t): int * t =
         match pres with
-          [] -> tb
+          [] -> npres, tb
         | p::pres ->
             let tb = check p tb in
-            check_pres pres tb
+            check_pres pres (npres+1) tb
       in
       expect_boolean_expression tb;
-      let tb = check_pres pres tb in
+      let npres, tb = check_pres pres 0 tb in
       begin try
         check_untyped_variables tb
       with Incomplete_type _ ->
         raise Illegal_term
       end;
       begin try
-        complete_lambda ntvs 0 is_pred tb
+        complete_lambda ntvs npres is_pred tb
       with Not_found -> assert false
       end;
       tb

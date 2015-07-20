@@ -265,7 +265,6 @@ let unify (t:term) (nbt:int) (table:t)
         let len = List.length pres in
         begin try
           let prestablst,ttab = find_lam len tab in
-          assert (prestablst = []);
           let tlst = uni t ttab (1 + nb) in
           let rec addpres pres prestablst lst =
             match pres, prestablst with
