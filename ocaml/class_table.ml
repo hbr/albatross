@@ -295,12 +295,7 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
      @DUMMY[(0,(1,...)),RT].  *)
   assert (Sign.has_result s);
   if Sign.arity s = 0 then
-    let res = Sign.result s in
-    let cls,args = split_type_term res in
-    if cls = ntvs+predicate_index || cls = ntvs+function_index then
-      VAppl(ntvs+dummy_index, args)
-    else
-      res
+    Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
     VAppl(ntvs+dummy_index, [|tup;Sign.result s|])
