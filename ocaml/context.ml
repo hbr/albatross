@@ -638,14 +638,6 @@ let definition (idx:int) (nb:int) (c:t): int * int array * term =
     Feature_table.definition idx (nb + nbenv) (feature_table c)
 
 
-let specification (idx:int) (nb:int) (c:t): term list =
-  let nbenv = count_variables c in
-  if idx < nb + nbenv then
-    raise Not_found
-  else
-    Feature_table.specification idx (nb+nbenv) (feature_table c)
-
-
 let fully_expanded (t:term) (nb:int) (c:t): term =
   let rec expand t nb =
     let expargs args = Array.map (fun arg -> expand arg nb) args in

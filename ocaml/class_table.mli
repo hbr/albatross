@@ -166,7 +166,7 @@ val type_descends_from_any: term -> Tvars.t -> t -> bool
 val has_any: t -> bool
 val has_predicate: t -> bool
 
-val inherits_any: int -> t -> bool
+val inherits_any:      int -> t -> bool
 
 val parent_type:    int -> type_t withinfo -> t -> int * type_term array
 

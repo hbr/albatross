@@ -66,7 +66,7 @@ end
 
 (+)  (pp:G??): ghost G?
         -- The union of all sets in the collection of sets 'pp'
-    -> {x: some(p) p(x) and pp(p)}
+    -> {x: some(p) pp(p) and p(x)}
 
 (*)  (pp:G??): ghost G?
         -- The intersection of all sets in the collection of sets 'pp'
@@ -78,3 +78,35 @@ singleton (a:G): G?
         --          '{a,b,...}' is an abbreviation for '{a} + {b} + ...'
     -> {x: x = a}
 
+
+is_lower_bound (p:G?, ps:G??): ghost BOOLEAN
+        -- Is the set 'p' a subset of all sets in the collection 'ps'?
+    -> all(q) ps(q) ==> p <= q
+
+is_upper_bound (p:G?, ps:G??): ghost BOOLEAN
+        -- Is the set 'p' a superset of all sets in the collection 'ps'?
+    -> all(q) ps(q) ==> q <= p
+
+lower_bounds(ps:G??): ghost G??
+        -- The set of subsets of all sets in the collection 'ps'.
+    -> {p: p.is_lower_bound(ps)}
+
+upper_bounds(ps:G??): ghost G??
+        -- The set of supersets of all sets in the collection 'ps'.
+    -> {p: p.is_upper_bound(ps)}
+
+is_least (p:G?, ps:G??): ghost BOOLEAN
+        -- Is 'p' the least set of the collection 'ps'?
+    -> ps(p) and p.is_lower_bound(ps)
+
+is_greatest (p:G?, ps:G??): ghost BOOLEAN
+        -- Is 'p' the greatest set of the collection 'ps'?
+    -> ps(p) and p.is_upper_bound(ps)
+
+is_infimum (p:G?, ps:G??): ghost BOOLEAN
+        -- Is 'p' the greatest set of all subsets of the collection 'ps'?
+    -> p.is_greatest(lower_bounds(ps))
+
+is_supremum (p:G?, ps:G??): ghost BOOLEAN
+        -- Is 'p' the least set of all supersets of the collection 'ps'?
+    -> p.is_least(upper_bounds(ps))

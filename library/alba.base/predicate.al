@@ -57,6 +57,30 @@ singleton (a:G): G? -> {x: x = a}
 0:G? = {x: false}
 1:G? = {x: true}
 
-(+) (pp:G??): ghost G? -> {x: some(p) p(x) and pp(p)}
+(+) (pp:G??): ghost G? -> {x: some(p) pp(p) and p(x)}
 
 (*) (pp:G??): ghost G? -> {x: all(p) pp(p) ==> p(x)}
+
+is_lower_bound (p:G?, ps:G??): ghost BOOLEAN
+    -> all(q) ps(q) ==> p <= q
+
+is_upper_bound (p:G?, ps:G??): ghost BOOLEAN
+    -> all(q) ps(q) ==> q <= p
+
+lower_bounds(ps:G??): ghost G??
+    -> {p: p.is_lower_bound(ps)}
+
+upper_bounds(ps:G??): ghost G??
+    -> {p: p.is_upper_bound(ps)}
+
+is_least (p:G?, ps:G??): ghost BOOLEAN
+    -> ps(p) and p.is_lower_bound(ps)
+
+is_greatest (p:G?, ps:G??): ghost BOOLEAN
+    -> ps(p) and p.is_upper_bound(ps)
+
+is_infimum (p:G?, ps:G??): ghost BOOLEAN
+    -> p.is_greatest(lower_bounds(ps))
+
+is_supremum (p:G?, ps:G??): ghost BOOLEAN
+    -> p.is_least(upper_bounds(ps))

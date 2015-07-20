@@ -179,3 +179,56 @@ all(p,q:G?)
     ensure
         some(x) q(x)
     end
+
+
+all(ps:G??)
+    proof
+        all(p,q,x)
+            require
+                p.is_lower_bound(ps)
+                x in p
+                q in ps
+            proof
+                p <= q
+            ensure
+                x in q
+            end
+    ensure
+        (*ps).is_infimum(ps)
+    end
+
+all(ps:G??)
+    proof
+        proof
+            all(q,x)
+                require
+                    q in ps
+                    x in q
+                proof
+                    q in ps and x in q
+                ensure
+                    x in +ps
+                end
+        ensure
+            (+ps) in upper_bounds(ps)
+        end
+
+        all(p,x)
+            require
+                p.is_upper_bound(ps)
+                x in +ps
+            proof
+                all(q)
+                    require
+                        q in ps and x in q
+                    proof
+                        q <= p
+                    ensure
+                        x in p
+                    end
+            ensure
+                x in p
+            end
+    ensure
+        (+ps).is_supremum(ps)
+    end

@@ -564,20 +564,6 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
 
 
 
-let specification (i:int) (nb:int) (ft:t): term list =
-  let n, nms,  posts = postconditions i nb ft
-  and n2,nms2, pres  = preconditions  i nb ft in
-  let pres_rev = List.rev pres in
-  assert (n = n2);
-  assert (nms = nms2);
-  let imp_id = n + nb + implication_index in
-  List.map
-    (fun t ->
-      let chn = Term.make_implication_chain pres_rev t imp_id in
-      QExp(n,nms,chn,true))
-    posts
-
-
 let private_body (i:int) (ft:t): Feature.body =
   assert (i < count ft);
   let desc = descriptor i ft in
@@ -802,7 +788,6 @@ let variant_spec (i:int) (inew:int) (base_cls:int) (cls:int) (ft:t)
 
 
 let equality_index (cls:int) (ft:t): int =
-  assert (Class_table.has_ancestor cls Class_table.any_index ft.ct);
   variant eq_index cls ft
 
 
@@ -818,10 +803,9 @@ let definition_equality (i:int) (ft:t): term =
   let desc  = descriptor i ft
   and bdesc = base_descriptor i ft in
   assert (Sign.has_result desc.sign);
-  let nargs   = Sign.arity desc.sign
-  and res_cls = Tvars.principal_class (Sign.result desc.sign) desc.tvs in
+  let nargs = Sign.arity desc.sign in
   assert (desc.cls <> -1);
-  let eq_id = variant eq_index res_cls ft in
+  let eq_id = equality_index_of_type (Sign.result desc.sign) desc.tvs ft in
   let eq_id = nargs + eq_id
   and f_id  = nargs + i
   in
@@ -830,11 +814,29 @@ let definition_equality (i:int) (ft:t): term =
     if nargs = 0 then Variable f_id
     else VAppl (f_id, Array.init nargs (fun i -> Variable i))
   in
-  let eq_term = Term.binary eq_id f t in
-  if nargs = 0 then
-    eq_term
-  else
-    Term.all_quantified nargs desc.argnames eq_term
+  Term.binary eq_id f t
+
+
+
+let specification (i:int) (ft:t): term list =
+  let desc = descriptor i ft in
+  let n, nms,  posts =
+    if has_definition i ft then
+      Sign.arity desc.sign, desc.argnames, [definition_equality i ft]
+    else
+      postconditions i 0 ft
+  and n2,nms2, pres  = preconditions  i 0 ft in
+  let pres_rev = List.rev pres in
+  assert (n = n2);
+  assert (nms = nms2);
+  assert (n = arity i ft);
+  let imp_id = n + implication_index in
+  List.map
+    (fun t ->
+      let chn = Term.make_implication_chain pres_rev t imp_id in
+      QExp(n,nms,chn,true))
+    posts
+
 
 
 

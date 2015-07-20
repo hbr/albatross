@@ -50,3 +50,10 @@ all(p,q:G?)
     ensure
         some(x) q(x)
     end
+
+
+all(ps:G??)
+    ensure
+        (*ps).is_infimum(ps)
+        (+ps).is_supremum(ps)
+    end

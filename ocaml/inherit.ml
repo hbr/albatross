@@ -65,8 +65,8 @@ let prove (t:term) (pc:PC.t): unit =
 
 
 
-let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
-  (* Check the equivalence of the feature [i] and its inherited variant [idx] in
+let check_validity (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
+  (* Check the validity of the feature [i] with inherited inherited variant [idx] in
      the class [cls] *)
   let ft = PC.feature_table pc
   and ct = class_table pc in
@@ -77,38 +77,44 @@ let check_equivalence (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
     assert (Sign.has_result sign);
     Tvars.principal_class (Sign.result sign) tvs
   in
-  if not (Feature_table.has_definition i ft) then
-    not_yet_implemented info "inheritance of functions defined by properties";
-  let eq_term =
-    try Feature_table.definition_equality i ft
+  (*if not (Feature_table.has_definition i ft) then
+    not_yet_implemented info "inheritance of functions defined by properties";*)
+  let specs =
+    try Feature_table.specification i ft
     with Not_found ->
       assert (Feature_table.has_definition i ft);
       let res_cls = result_class i  in
-      assert (Class_table.has_ancestor res_cls Class_table.any_index ct);
+      assert (Class_table.descends_from_any res_cls ct);
       let str =
-        "Cannot prove equivalence of \"" ^ (feat_sign idx) ^ "\" and \"" ^
-        (feat_sign i) ^ " because class " ^ (class_name res_cls) ^
+        "Cannot prove validity of \"" ^ (feat_sign i) ^
+        " in class " ^ (class_name cls) ^
+        " because class " ^ (class_name res_cls) ^
         "(" ^ (string_of_int res_cls) ^ ")" ^
         " does not inherit ANY" in
       error_info info str
   in
   let icls = Feature_table.class_of_feature i ft in
-  let var_eq_term = Feature_table.variant_term eq_term 0 icls cls ft in
-  let error_string () =
+  let error_string spec_term =
     "The class " ^ (class_name cls) ^ " redefines the feature \"" ^
     (feat_sign i) ^ "\" of class " ^ (class_name icls) ^
-    " but the equivalence of the definitions i.e.\n   " ^
-    (Feature_table.term_to_string var_eq_term true 0 [||] ft) ^
+    " but the validity of the specification\n   " ^
+    (Feature_table.term_to_string spec_term true 0 [||] ft) ^
     "\ncannot be proven"
   in
-  try
-    prove var_eq_term pc
-  with Not_found ->
-    error_info info (error_string ())
-  | Proof.Limit_exceeded limit ->
-      let str = string_of_int limit in
-      error_info info ((error_string ()) ^ " because the goal limit " ^
-                       str ^ " is exceeded")
+  assert (specs <> [] );
+  List.iter
+    (fun spec ->
+      let spec = Feature_table.variant_term spec 0 icls cls ft in
+      try
+        prove spec pc
+      with Not_found ->
+        error_info info (error_string spec)
+      | Proof.Limit_exceeded limit ->
+          let str = string_of_int limit in
+          error_info info ((error_string spec) ^ " because the goal limit " ^
+                           str ^ " is exceeded")
+    )
+    specs
 
 
 
@@ -141,7 +147,7 @@ let rec inherit_effective
       begin try
         let idx = Feature_table.find_variant_candidate i cls ft in
         Feature_table.inherit_feature i idx cls false ft;
-        check_equivalence i idx cls info pc
+        check_validity i idx cls info pc
       with Not_found ->
         let idx = Feature_table.inherit_new_effective i cls ghost ft in
         if to_descs then
@@ -206,6 +212,10 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
                            " does not inherit "  ^
                            (Class_table.class_name par ct) ^
                            " in implementation file");
+        if par <> Class_table.any_index &&
+          not (Class_table.inherits_any par ct) then
+          error_info tp.i ("Class " ^ (Class_table.class_name par ct) ^
+                           " does not inherit ANY");
         if 1 < Feature_table.verbosity ft then
           printf "   inherit %s in %s\n"
             (Class_table.class_name par ct) (Class_table.class_name cls ct);

@@ -3,7 +3,11 @@
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
-use predicate_logic; function; tuple end
+use
+    predicate_logic
+    function
+    tuple
+end
 
 deferred class PARTIAL_ORDER end
 
@@ -105,31 +109,23 @@ greatest(p:PO?): ghost PO
     end
 
 
-infimum(p:PO?): ghost PO
-    require
-        some(x) x.is_infimum(p)
-    ensure
-        Result.is_infimum(p)
-    end
-
-
-supremum(p:PO?):  ghost PO
-    require
-        some(x) x.is_supremum(p)
-    ensure
-        Result.is_supremum(p)
-    end
-{:
 (*) (p:PO?): ghost PO
     require
         some(x) x.is_infimum(p)
     ensure
         Result.is_infimum(p)
     end
-:}
+
+(+) (p:PO?):  ghost PO
+    require
+        some(x) x.is_supremum(p)
+    ensure
+        Result.is_supremum(p)
+    end
+
 
 is_closure_system (p:PO?):  ghost BOOLEAN
-    -> all(q) q <= p  ==> (some(x) x.is_infimum(q)) and q.infimum in p
+    -> all(q) q <= p  ==> (some(x) x.is_infimum(q)) and *q in p
 
 
 all(a:PO, p:PO?)
@@ -137,7 +133,7 @@ all(a:PO, p:PO?)
         p.is_closure_system
     proof
         (some(x) x.is_infimum({x: p(x) and a <= x}))
-        and {x: p(x) and a <= x}.infimum in p
+        and *{x: p(x) and a <= x} in p
     ensure
         some(x) x.is_infimum({x: p(x) and a <= x})
     end
@@ -148,7 +144,7 @@ closed (a:PO, p:PO?): ghost PO
     require
         p.is_closure_system
     ensure
-        Result = {x: p(x) and a <= x}.infimum
+        Result = *{x: p(x) and a <= x}
     end
 
 
@@ -266,7 +262,7 @@ all(p:PO?)
     require
         some(x) x.is_infimum(p)
     ensure
-        p.infimum.is_infimum(p)
+        (*p).is_infimum(p)
     end
 
 all(x:PO, p:PO?)
@@ -274,7 +270,7 @@ all(x:PO, p:PO?)
         some(x) x.is_infimum(p)
         x.is_infimum(p)
     ensure
-        x = p.infimum
+        x = *p
     end
 
 all(p,q:PO?)
@@ -283,10 +279,10 @@ all(p,q:PO?)
         some(x) x.is_infimum(q)
         p <= q
     proof
-        q.infimum.is_infimum(q)
-        p.infimum.is_infimum(p)
+        (*q).is_infimum(q)
+        (*p).is_infimum(p)
     ensure
-        q.infimum <= p.infimum
+        (*q) <= *p
     end
 
 
@@ -294,7 +290,7 @@ all(a:PO, p:PO?)
     require
         p.is_closure_system
     proof
-        {x: p(x) and a <= x}.infimum.is_infimum({x: p(x) and a <= x})
+        (*{x: p(x) and a <= x}).is_infimum({x: p(x) and a <= x})
     ensure
         a <= a.closed(p)
     end
@@ -346,35 +342,6 @@ G: ANY
 immutable class predicate.PREDICATE[G]
 inherit   ghost PARTIAL_ORDER
 end
-
-
-all(pp:G??)
-    proof
-        all(p)
-            require
-                p in pp.lower_bounds
-            proof
-                all(x)
-                    require
-                        x in p
-                    proof
-                        all(q)
-                            require
-                                q in pp
-                            proof
-                                p <= q
-                            ensure
-                                x in q
-                            end
-                    ensure
-                        x in *pp
-                    end
-            ensure
-                p <= *pp
-            end
-    ensure
-        (*pp).is_infimum(pp)
-    end
 
 
 is_closed (p:G?, r:(G,G)?): ghost BOOLEAN

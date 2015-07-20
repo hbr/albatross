@@ -134,10 +134,7 @@ val definition: int -> int -> t -> int * int array * term
 
 val has_definition: int -> t -> bool
 
-val specification: int -> int -> t -> term list
-
-val definition_equality: int -> t -> term
-
+val specification: int -> t -> term list
 
 val feature_name: int -> t -> string
 
