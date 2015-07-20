@@ -165,10 +165,10 @@ let predicate_of_expression (info:info) (e:expression): expression =
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
 /*  8 */ %nonassoc KWall     KWsome  /* greedy */
-/*  9 */ %left     COLON /* greedy */
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
 /* 15 */ %right    COMMA
+/* 18 */ %left     COLON /* greedy ???*/
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
