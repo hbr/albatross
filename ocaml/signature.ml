@@ -182,10 +182,11 @@ end = struct
     let used = Term.bound_variables t (count s) in
     let set  = set_of_list s.used.(i)
     in
-    if set = used then
+    if IntSet.equal set used then
       s.args.(i) <- t
     else
       raise Not_found
+
 
 
   let up_above_top (n:int) (s:t): t =
