@@ -321,8 +321,9 @@ let upgrade_dummy (i:int) (t:term) (tb:t): unit =
   let update_with t =
     if i < count_local tb || satisfies t (concept i tb) tb then
       TVars_sub.update_sub i t tb.tvars
-    else
+    else begin
       raise Not_found
+    end
   in
   match t_i, t with
     VAppl(idx1, args1),
@@ -365,19 +366,24 @@ let unify
   and nall  = TVars_sub.count_all tb.tvars
   and nloc  = count_local tb
   in
-  let rec uni (t1:term) (t2:term) (nb:int): unit =
-    assert (nb = 0);
-    let pred_idx = nall + nb + Class_table.predicate_index
-    and func_idx = nall + nb + Class_table.function_index
-    and dum_idx  = nall + nb + Class_table.dummy_index
+  let rec uni (t1:term) (t2:term): unit =
+    let pred_idx = nall + Class_table.predicate_index
+    and func_idx = nall + Class_table.function_index
+    and dum_idx  = nall + Class_table.dummy_index
     in
-    let rec do_sub0 (i:int) (t:type_term) (nb:int): unit =
+    let cannot_unify (str:string) =
+      (*printf "cannot unify because %s\n" str;
+      printf "  %s\n" (string_of_tvs_sub tb);
+      printf "  t1 %s\n" (string_of_type t1 tb);
+      printf "  t2 %s\n" (string_of_type t2 tb);*)
+      raise Not_found
+    in
+    let rec do_sub0 (i:int) (t:type_term): unit =
       (*printf "    do_sub0 i %d, t %s\n" i (string_of_type t tb);*)
-      let i,t = i-nb, Term.down nb t in
       let i = TVars_sub.anchor i tb.tvars in
       if has_sub i tb then
         ((*printf "    has_sub %s\n" (string_of_type (get_sub i tb) tb);*)
-         uni t (get_sub i tb) 0;
+         uni t (get_sub i tb);
          upgrade_dummy i t tb)
       else
         match t with
@@ -387,7 +393,7 @@ let unify
             if i < nloc || satisfies t (concept i tb) tb then
               add_sub i t tb
             else
-              raise Not_found
+              cannot_unify "add_sub"
     and do_sub1 (i:int) (j:int): unit =
       assert (not (has_sub i tb));
       (*printf "    do_sub1 i %d, j %d\n" i j;*)
@@ -396,7 +402,7 @@ let unify
       else if i < nloc then
         add_sub i (Variable j) tb
       else
-        do_sub0 i (get_sub j tb) 0
+        do_sub0 i (get_sub j tb)
     in
     let do_dummy
         (dum_args:type_term array)
@@ -404,48 +410,49 @@ let unify
       assert (Array.length dum_args = 2);
       if j = pred_idx then begin
         assert (Array.length j_args = 1);
-        uni dum_args.(0) j_args.(0) nb
+        uni dum_args.(0) j_args.(0)
       end else if j = func_idx then begin
         assert (Array.length j_args = 2);
-        uni dum_args.(0) j_args.(0) nb;
-        uni dum_args.(1) j_args.(1) nb
+        uni dum_args.(0) j_args.(0);
+        uni dum_args.(1) j_args.(1)
       end else
-        raise Not_found
+        cannot_unify "do_dummy"
     in
     match t1,t2 with
-      Variable i, _ when nb<=i && i<nb+nvars ->
-        do_sub0 i t2 nb
-    | _, Variable j when nb<=j && j<nb+nvars ->
-        do_sub0 j t1 nb
+      Variable i, _ when i < nvars ->
+        do_sub0 i t2
+    | _, Variable j when j < nvars ->
+        do_sub0 j t1
     | Variable i, Variable j ->
-        assert (i<nb||nb+nvars<=i);
-        assert (j<nb||nb+nvars<=j);
+        assert (nvars <= i);
+        assert (nvars <= j);
         if i=j then
           ()
         else
-          raise Not_found
+          cannot_unify "different classes"
     | VAppl(i,args1), VAppl(j,args2)
       when (i=dum_idx || j=dum_idx) && not (i=dum_idx && j=dum_idx) ->
-        if i = dum_idx then
-          do_dummy args1 j args2
-        else
-          do_dummy args2 i args1
+        begin try
+          if i = dum_idx then
+            do_dummy args1 j args2
+          else
+            do_dummy args2 i args1;
+        with Not_found ->
+          cannot_unify "one is dummy"
+        end
     | VAppl(f1,args1), VAppl(f2,args2) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
-          raise Not_found;
-        uni (Variable f1) (Variable f2) nb;
+          cannot_unify "different number of actual generics";
+        uni (Variable f1) (Variable f2);
         for i = 0 to nargs-1 do
-          uni args1.(i) args2.(i) nb
+          uni args1.(i) args2.(i)
         done
-    | Lam (_,_,_,_,_), _
-    | _ , Lam (_,_,_,_,_) ->
-        assert false (* lambda terms not used for types *)
     | _ ->
-        raise Not_found
+        cannot_unify "fall through"
   in
   try
-    uni t1 t2 0
+    uni t1 t2
   with Term_capture ->
     assert false
 
