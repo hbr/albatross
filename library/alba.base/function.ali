@@ -12,16 +12,28 @@ immutable class FUNCTION[A,B] end
 
 domain(f:A->B): ghost A?
 
+0: (A->B)
 
 (<=) (f,g:A->B): ghost BOOLEAN
-    -> f.domain <= g.domain and all(x) x in f.domain ==> f(x) = g(x)
+    -> f.domain <= g.domain
+       and all(x) x in f.domain ==> f(x) = g(x)
 
 (=) (f,g:A->B): ghost BOOLEAN
     -> f <= g and g <= f
 
-all(f:A->B) ensure f = f end
+all(f:A->B)
+    ensure
+        0.domain = 0
+        f = f
+    end
 
-immutable class FUNCTION[A,B] inherit ghost ANY end
+
+immutable class
+    FUNCTION[A,B]
+inherit
+    ghost ANY
+end
+
 
 range (f:A->B): ghost B?
     -> {b: some(a) a in f.domain and f(a) = b}
@@ -32,11 +44,35 @@ image (f:A->B, p:A?): ghost B?
 preimage (f:A->B, q:B?): ghost A?
      -> {x: x in f.domain and f(x) in q}
 
+(|) (f:A->B, p:A?): (A->B)
+    -> agent (a:A):B
+           require
+               a in f.domain
+               a in p
+           ensure
+               Result = f(a)
+           end
+
+(+) (f,g:A->B): ghost (A->B)
+    -> agent (a:A): B
+           require
+               a in (f.domain + g.domain)
+           ensure
+               Result = if a in f.domain then
+                           f(a)
+                        else
+                           g(a)
+                        end
+           end
+
 is_total (f:A->B): ghost BOOLEAN
     -> all(a) a in f.domain
 
 is_injective (f:A->B): ghost BOOLEAN
-    -> all(x,y) x in f.domain ==> y in f.domain ==> f(x) = f(y) ==> x = y
+    -> all(x,y) x in f.domain
+                ==> y in f.domain
+                ==> f(x) = f(y)
+                ==> x = y
 
 is_finite (p:A?): ghost BOOLEAN
     -> all(f:A->A) f.is_injective
@@ -56,5 +92,5 @@ is_fixpoint (a:A, f:A->A): ghost BOOLEAN
 is_idempotent (f:A->A): ghost BOOLEAN
     -> f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f)
 
-can_join (f,g:A->B): ghost BOOLEAN
-    -> some(h) f <= h and g <= h
+consistent (f,g:A->B): ghost BOOLEAN
+    -> all(x) x in f.domain  ==>  x in g.domain  ==> f(x) = g(x)

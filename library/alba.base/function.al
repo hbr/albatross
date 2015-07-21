@@ -4,6 +4,7 @@
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
 use
+    boolean_logic
     predicate_logic
     tuple
 end
@@ -16,6 +17,8 @@ immutable class FUNCTION[A,B] end
 
 domain (f:A->B): ghost A?   note built_in end
 
+0: (A->B)                   note built_in end
+
 (<=) (f,g:A->B): ghost BOOLEAN
     ensure
         Result = (f.domain <= g.domain
@@ -26,6 +29,12 @@ domain (f:A->B): ghost A?   note built_in end
 (=) (f,g:A->B): ghost BOOLEAN
     -> f <= g and g <= f
 
+all note axiom ensure 0.domain = 0 end
+
+all(f:A->B) ensure f = f end
+
+immutable class FUNCTION[A,B]
+inherit         ghost ANY end
 
 
 range (f:A->B): ghost B?
@@ -42,6 +51,27 @@ preimage (f:A->B, q:B?): ghost A?
     ensure
         Result = {x: x in f.domain and f(x) in q}
     end
+
+(|) (f:A->B, p:A?): (A->B)
+    -> agent (a:A):B
+           require
+               a in f.domain
+               a in p
+           ensure
+               Result = f(a)
+           end
+
+(+) (f,g:A->B): ghost (A->B)
+    -> agent (a:A): B
+           require
+               a in (f.domain + g.domain)
+           ensure
+               Result = if a in f.domain then
+                           f(a)
+                        else
+                           g(a)
+                        end
+           end
 
 is_total (f:A->B): ghost BOOLEAN
     -> all(a) a in f.domain
@@ -123,8 +153,8 @@ all(f:A->B, b:B)
     end
 
 
-can_join (f,g:A->B): ghost BOOLEAN
-    -> some(h) f <= h and g <= h
+consistent (f,g:A->B): ghost BOOLEAN
+    -> all(x) x in f.domain ==> x in g.domain ==> f(x) = g(x)
 
 
 all(f:A->A)
@@ -150,13 +180,6 @@ all(f:A->A)
         Result <= f
     end
 :}
-
-
-all(f:A->B) ensure f = f end
-
-immutable class FUNCTION[A,B]
-inherit         ghost ANY end
-
 
 
 all(f:A->B)
@@ -227,7 +250,6 @@ all(a:A)
                                    -- reconstruct the types
     end
 
-
 all(f,g,h:A->B)
     require
         f.domain = g.domain
@@ -246,11 +268,11 @@ all(f,g,h:A->B)
     ensure
         f = g
     end
-
+{:
 all(f,g:A->B)
     require
         f.domain = g.domain
-        f.can_join(g)
+        f.consistent(g)
     proof
         all(h) require
                    f <= h and g <= h
@@ -269,7 +291,7 @@ all(f,g:A->B)
     ensure
         f = g
     end
-
+:}
 
 
 {:

@@ -48,6 +48,10 @@ is_least (a:PO, p:PO?): ghost BOOLEAN    -> p(a) and a.is_lower_bound(p)
 
 is_greatest (a:PO, p:PO?): ghost BOOLEAN -> p(a) and a.is_upper_bound(p)
 
+has_least (p:PO?): ghost BOOLEAN -> some(x) x.is_least(p)
+
+has_greatest (p:PO?): ghost BOOLEAN -> some(x) x.is_greatest(p)
+
 is_minimal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) x < a ==> not p(x)
 
 is_maximal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) a < x ==> not p(x)
@@ -59,6 +63,10 @@ lower_bounds (p:PO?): ghost PO? -> {x: x.is_lower_bound(p)}
 is_infimum (a:PO, p:PO?): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
 
 is_supremum (a:PO, p:PO?): ghost BOOLEAN -> a.is_least(p.upper_bounds)
+
+has_infimum (p:PO?): ghost BOOLEAN -> some(x) x.is_infimum(p)
+
+has_supremum (p:PO?): ghost BOOLEAN -> some(x) x.is_supremum(p)
 
 least(p:PO?): ghost PO
         -- The least element of the set 'p'.
@@ -133,6 +141,11 @@ all(a,b,c:PO, p,q:PO?)
         a.is_infimum(p) ==> b.is_infimum(q) ==> p <= q ==> b <= a
 
         a.is_least(p) ==> a.is_infimum(p)
+        a.is_infimum(p) ==> a in p ==> a.is_least(p)
+
+        p.has_infimum ==> q.has_infimum ==> p <= q ==> *q <= *p
+
+        p.has_least ==> q.has_least ==> p <= q ==> least(q) <= least(p)
 
         a.is_infimum({x: a <= x})
     end

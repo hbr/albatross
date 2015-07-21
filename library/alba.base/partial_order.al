@@ -52,6 +52,10 @@ is_minimal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) x < a ==> not p(x)
 
 is_maximal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) a < x ==> not p(x)
 
+has_least (p:PO?): ghost BOOLEAN -> some(x) x.is_least(p)
+
+has_greatest (p:PO?): ghost BOOLEAN -> some(x) x.is_greatest(p)
+
 upper_bounds (p:PO?): ghost PO? -> {x: x.is_upper_bound(p)}
 
 lower_bounds (p:PO?): ghost PO? -> {x: x.is_lower_bound(p)}
@@ -59,6 +63,10 @@ lower_bounds (p:PO?): ghost PO? -> {x: x.is_lower_bound(p)}
 is_infimum (a:PO, p:PO?): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
 
 is_supremum (a:PO, p:PO?): ghost BOOLEAN -> a.is_least(p.upper_bounds)
+
+has_infimum (p:PO?): ghost BOOLEAN -> some(x) x.is_infimum(p)
+
+has_supremum (p:PO?): ghost BOOLEAN -> some(x) x.is_supremum(p)
 
 is_monotonic(f:PO->PO): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
@@ -71,13 +79,6 @@ is_ascending(f:PO->PO): ghost BOOLEAN ->
 
 is_descending(f:PO->PO): ghost BOOLEAN ->
     all(a) (f.domain)(a) ==> f(a) <= a
-
-
-is_closure_map(f:PO->PO): ghost BOOLEAN ->
-    f.is_total and
-    f.is_ascending and
-    f.is_monotonic and
-    f.is_idempotent
 
 
 
@@ -122,32 +123,6 @@ greatest(p:PO?): ghost PO
     ensure
         Result.is_supremum(p)
     end
-
-
-is_closure_system (p:PO?):  ghost BOOLEAN
-    -> all(q) q <= p  ==> (some(x) x.is_infimum(q)) and *q in p
-
-
-all(a:PO, p:PO?)
-    require
-        p.is_closure_system
-    proof
-        (some(x) x.is_infimum({x: p(x) and a <= x}))
-        and *{x: p(x) and a <= x} in p
-    ensure
-        some(x) x.is_infimum({x: p(x) and a <= x})
-    end
-
-
-
-closed (a:PO, p:PO?): ghost PO
-    require
-        p.is_closure_system
-    ensure
-        Result = *{x: p(x) and a <= x}
-    end
-
-
 
 
 all(a,b,c:PO)
@@ -250,6 +225,15 @@ all(a:PO, p:PO?)
         a.is_infimum(p)
     end
 
+all(a:PO, p:PO?)
+    require
+        a.is_infimum(p)
+        a in p
+    ensure
+        a.is_least(p)
+    end
+
+
 all(a:PO)
     proof
         a.is_least({x: a <= x})
@@ -275,8 +259,8 @@ all(x:PO, p:PO?)
 
 all(p,q:PO?)
     require
-        some(x) x.is_infimum(p)
-        some(x) x.is_infimum(q)
+        p.has_infimum
+        q.has_infimum
         p <= q
     proof
         (*q).is_infimum(q)
@@ -285,35 +269,17 @@ all(p,q:PO?)
         (*q) <= *p
     end
 
-
-all(a:PO, p:PO?)
+all(p,q:PO?)
     require
-        p.is_closure_system
+        p.has_least
+        q.has_least
+        p <= q
     proof
-        (*{x: p(x) and a <= x}).is_infimum({x: p(x) and a <= x})
+        least(q).is_least(q)
+        least(p).is_least(p)
     ensure
-        a <= a.closed(p)
+        least(q) <= least(p)
     end
-
-
-
-all(a,b:PO, p:PO?)
-    require
-        p.is_closure_system
-        a <= b
-    ensure
-        a.closed(p) <= b.closed(p)
-    end
-
-
-all(a:PO, p:PO?)
-    require
-        p.is_closure_system
-    ensure
-        a.closed(p) <= a.closed(p).closed(p)
-    end
-
-
 
 {:
 all(a:PO, f:PO->PO)
@@ -342,72 +308,3 @@ G: ANY
 immutable class predicate.PREDICATE[G]
 inherit   ghost PARTIAL_ORDER
 end
-
-
-is_closed (p:G?, r:(G,G)?): ghost BOOLEAN
-    -> all(x,y) p(x) ==> r(x,y) ==> p(y)
-
-
-
-{:
-all(r:(G,G)?)
-    proof
-        all(qq)
-            require
-                qq <= {p: p.is_closed(r)}
-            proof
-                (*qq).is_infimum(qq)
-
-                all(x,y)
-                    require
-                        x in *qq
-                        r(x,y)
-                    proof
-                        all(p)
-                        require p in qq
-                        proof   x in p
-                                p in {p: p.is_closed(r)}
-                        ensure  y in p end
-                    ensure
-                        y in *qq
-                    end
-
-                (*qq).is_closed(r)
-
-                proof *qq = qq.infimum
-                ensure *qq <= qq.infimum
-                       qq.infimum <= *qq end
-
-
-                all(x,y)
-                    require
-                        x in qq.infimum
-                        r(x,y)
-                    proof
-                        x in *qq
-                        all(p)
-                            require p in qq
-                            proof   x in p
-                                    p in {p: p.is_closed(r)}
-                            ensure  y in p end
-                        y in *qq
-                    ensure
-                        y in qq.infimum
-                    end
-
-
-                (*qq) = qq.infimum
-
-                qq.infimum in {p: p.is_closed(r)}
-                qq.infimum.is_closed(r)
-            ensure
-                qq.infimum in {p: p.is_closed(r)}
-            end
-    ensure
-        {p: p.is_closed(r)}.is_closure_system
-    end
-
-
-closed(p:G?, r:(G,G)?): ghost G?
-    -> p.closed({q: q.is_closed(r)})
-:}

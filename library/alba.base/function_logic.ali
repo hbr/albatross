@@ -1,0 +1,29 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+use
+    function
+end
+
+A: ANY
+B: ANY
+
+
+all(f,g,h:A->B)
+    ensure
+         f <= f
+         f <= g  ==>  g <= f  ==> f = g
+         f <= g  ==>  g <= h  ==> f <= h
+    end
+
+
+all(f,g:A->B)
+    ensure
+        f <= f + g
+        consistent(f,g) ==> consistent(g,f)
+        consistent(f,g) ==> g <= f + g
+        consistent(f,g) ==> some(h) f <= h and g <= h
+        (some(h) f <= h and g <= h) ==> consistent(f,g)
+    end
