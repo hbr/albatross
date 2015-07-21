@@ -20,7 +20,6 @@ type t = {
     bwd_blckd: bool;  (* is blocked as backward rule *)
     nbwd:      int;   (* number of premises until backward rule *)
     ndropped:  int;   (* number of dropped premises *)
-    nds_dropped:int;  (* max nodes of dropped premises *)
     premises:  (int * bool * term) list;
               (* gp1, cons,  term *)
     target:   term;
@@ -270,7 +269,6 @@ let make (t:term) (c:Context.t): t =
              bwd_blckd = bwd_blckd;
              nbwd      = nbwd;
              ndropped  = 0;
-             nds_dropped = 0;
              premises  = ps;
              target    = tgt;
              eq        = eq;
@@ -324,7 +322,7 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
             let nds  = max nds max_nds in
             let ps   = (gp1,cons,p)::ps in
             ps,nds)
-          ([],rd.nds_dropped)
+          ([],0)
           ps_rev
       in
       ps, max_nds <= ntgt
@@ -382,9 +380,7 @@ let drop (rd:t) (c:Context.t): t =
   let nbenv_delta = nbenv - rd.nbenv in
   let gp1,_,p = List.hd rd.premises in
   assert (gp1 = 0);
-  let p = Term.down rd.nargs p in
-  let p = Term.up nbenv_delta p
-  and ps = List.map
+  let ps = List.map
       (fun (gp1,cons,p) -> gp1,cons,Term.upbound nbenv_delta rd.nargs p)
       (List.tl rd.premises)
   and tgt = Term.upbound nbenv_delta rd.nargs rd.target
@@ -398,7 +394,6 @@ let drop (rd:t) (c:Context.t): t =
    spec      = rd.nargs = 0;
    nbwd      = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
    ndropped  = rd.ndropped + 1;
-   nds_dropped = max rd.nds_dropped (complexity p c);
    nbenv     = nbenv;
    bwd_blckd = bwd_blockd;
    premises  = ps;
