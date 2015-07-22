@@ -18,7 +18,7 @@ type formal     = int * term
 type base_descriptor = {
     mutable spec:       Feature.Spec.t;
     mutable is_inh:     bool;
-    mutable seeds:      IntSet.t;
+    mutable seed:       int;
     mutable variants:   int IntMap.t;  (* cls -> fidx *)
     mutable is_eq:      bool (* is equality inherited from ANY *)
   }
@@ -667,7 +667,7 @@ let is_predicate (i:int) (ft:t): bool =
 let standard_bdesc (i:int) (cls:int) (spec: Feature.Spec.t) (nb:int) (ft:t)
     : base_descriptor =
   {is_inh     = false;
-   seeds      = IntSet.singleton i;     (* each feature is its own seed *)
+   seed       = i;                      (* each feature is its own seed *)
    variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
    spec       = spec;
    is_eq      = (i = eq_index)}
@@ -701,7 +701,7 @@ let variant (i:int) (cls:int) (ft:t): int =
   (* The variant of the feature [i] in the class [cls] *)
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
-  let seed_bdesc = base_descriptor (IntSet.min_elt bdesc.seeds) ft
+  let seed_bdesc = base_descriptor bdesc.seed ft
   in
   IntMap.find cls seed_bdesc.variants
 
@@ -711,7 +711,7 @@ let private_variant (i:int) (cls:int) (ft:t): int =
   (* The privat variant of the feature [i] in the class [cls] *)
   assert (i < count ft);
   let bdesc      = base_descriptor_priv i ft in
-  let seed_bdesc = base_descriptor_priv (IntSet.min_elt bdesc.seeds) ft in
+  let seed_bdesc = base_descriptor_priv bdesc.seed ft in
   IntMap.find cls seed_bdesc.variants
 
 
@@ -1662,44 +1662,38 @@ let update_equality (seed:int) (bdesc:base_descriptor) (ft:t): unit =
 
 let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   (* Inherit the feature [i0] as the feature [i1] in the class [cls], i.e. add
-     [i1] as a variant to all seeds of [i0] and add all seeds of [i0] as seeds
+     [i1] as a variant to the seed of [i0] and make the seed of [i0] to the seed
      of [i1]. Furthermore [i1] is no longer its own seed and cannot be found
      via the feature map *)
   assert (not export || is_interface_check ft);
   assert (i0 < count ft);
   assert (i1 < count ft);
+  assert (i0 <> i1);
   assert (cls = (descriptor i1 ft).cls);
   let bdesc0 = base_descriptor i0 ft
   and bdesc1 = base_descriptor i1 ft
   in
-  bdesc1.seeds  <- IntSet.remove i1 bdesc1.seeds;
+  (* add variant to seed and seed to variant*)
   bdesc1.is_inh <- true;
-  IntSet.iter
-    (fun i_seed -> (* add variant to seed and seed to variant*)
-      let bdesc_seed = base_descriptor i_seed ft in
-      assert (not (IntMap.mem cls bdesc_seed.variants) ||
-              IntMap.find cls bdesc_seed.variants = i1);
-      bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-      bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
-      update_equality i_seed bdesc1 ft
-    )
-    bdesc0.seeds;
+  let bdesc_seed = base_descriptor bdesc0.seed ft in
+  assert (not (IntMap.mem cls bdesc_seed.variants) ||
+          IntMap.find cls bdesc_seed.variants = i1);
+  bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
+  bdesc1.seed         <- bdesc0.seed;
+  update_equality bdesc0.seed bdesc1 ft;
+  assert (has_variant bdesc0.seed cls ft);
   if not export && is_public ft then begin (* do the same for the private view *)
     let bdesc0 = base_descriptor_priv i0 ft
     and bdesc1 = base_descriptor_priv i1 ft
     in
-    bdesc1.seeds  <- IntSet.remove i1 bdesc1.seeds;
     bdesc1.is_inh <- true;
-    IntSet.iter
-      (fun i_seed -> (* add variant to seed and seed to variant*)
-        let bdesc_seed = base_descriptor_priv i_seed ft in
-        assert (not (IntMap.mem cls bdesc_seed.variants) ||
-        IntMap.find cls bdesc_seed.variants = i1);
-        bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-        bdesc1.seeds        <- IntSet.add i_seed bdesc1.seeds;
-        update_equality i_seed bdesc1 ft
-      )
-      bdesc0.seeds;
+    let bdesc_seed = base_descriptor_priv bdesc0.seed ft in
+    assert (not (IntMap.mem cls bdesc_seed.variants) ||
+            IntMap.find cls bdesc_seed.variants = i1);
+    bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
+    bdesc1.seed         <- bdesc0.seed;
+    update_equality bdesc0.seed bdesc1 ft;
+    assert (has_private_variant bdesc0.seed cls ft);
   end;
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
@@ -1931,7 +1925,6 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
     if desc.mdl = mdl || IntSet.mem desc.mdl used then
       match desc.pub with
         Some bdesc ->
-          assert (not (IntSet.is_empty bdesc.seeds));
           if not bdesc.is_inh then
             add_key i ft
       | None ->
