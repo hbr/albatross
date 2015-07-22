@@ -106,7 +106,7 @@ module Term: sig
 
   val apply: term -> term array -> term
 
-  val lambda_split: term -> int * int array * term list * term
+  val lambda_split: term -> int * int array * term list * term * bool
 
   val qlambda_split_0: term -> int * int array * term * bool
   val qlambda_split: term -> int * int array * term * bool
@@ -436,7 +436,7 @@ end = struct
           n = Array.length args2 &&
           eq f1 f2 nb &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
-      | Lam(n1,nms1,pres1,t1,_), Lam(n2,nms2,pres2,t2,_) when n1 = n2 ->
+      | Lam(n1,nms1,pres1,t1,_), Lam(n2,nms2,pres2,t2,_) ->
           let nb = 1 + nb in
           (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb) pres1 pres2
           with Invalid_argument _ -> false)
@@ -711,9 +711,9 @@ end = struct
     sub t args 0
 
 
-  let lambda_split (t:term): int * int array * term list * term =
+  let lambda_split (t:term): int * int array * term list * term * bool =
     match t with
-      Lam (n,names,pres,t,_) -> n,names,pres,t
+      Lam (n,names,pres,t,p) -> n,names,pres,t,p
     | _ -> raise Not_found
 
 

@@ -897,6 +897,12 @@ let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): i
   match idx_lst with
     [] -> raise Not_found
   | idx::rest ->
+      if not (List.for_all (fun i -> i=idx) rest) then begin
+        List.iteri
+          (fun i idx ->
+            printf "%d %d %s\n" i idx (string_of_signature idx ft))
+          idx_lst
+      end;
       assert (List.for_all (fun i -> i=idx) rest);
       idx
 
@@ -1575,39 +1581,37 @@ let print (ft:t): unit =
     ft.seq
 
 
+let find_unifiables (fn:feature_name) (tp:type_term) (ntvs:int) (ft:t)
+    : (int*Term_sub.t) list =
+  try
+    let tab = Feature_map.find fn ft.map in
+    Term_table2.unify_with tp ntvs 0 tab
+  with Not_found ->
+    []
 
 
-let find_variant_candidate (i:int) (cls:int) (ft:t): int =
+let find_variant_candidate0 (i:int) (cls:int) (ft:t): int =
   (* Find the variant of the feature [i] in the class [cls] *)
   assert (has_anchor i ft); (* exactly one formal generic anchored
                                to the owner class *)
-  let ct = class_table ft
-  and desc = descriptor i ft in
+  let desc = descriptor i ft in
   let nfgs = Tvars.count_all desc.tvs
   and fg_anchor = anchor i ft in
-  let candidates = Class_table.find_features
+  assert (nfgs = 1);
+  assert (fg_anchor = 0);
+  (*let candidates = Class_table.find_features
       (desc.fname, desc.tp, nfgs)
       cls
-      ct
+      ct*)
+  let candidates = find_unifiables desc.fname desc.tp nfgs ft
   in
   let lst = List.filter
       (fun (idx,sub) ->
         try
-          let desc_heir = descriptor idx ft in
-          for k = 0 to nfgs - 1 do
-            let tp1  = Term_sub.find k sub
-            and tvs1 = desc_heir.tvs in
-            if k = fg_anchor then
-              let tp2,tvs2 = Class_table.class_type desc_heir.cls ct
-              in
-              if Tvars.is_equal_or_fg tp1 tvs1 tp2 tvs2
-              then ()
-              else raise Not_found
-            else if Tvars.is_equal tp1 tvs1 (Variable k) desc.tvs
-            then ()
-            else raise Not_found
-          done;
-          true
+          i <> idx &&
+          let desc_heir = descriptor idx ft
+          and tp1       = Term_sub.find 0 sub in
+          Tvars.principal_class tp1 desc_heir.tvs = cls
         with Not_found ->
           false)
       candidates
@@ -1615,7 +1619,22 @@ let find_variant_candidate (i:int) (cls:int) (ft:t): int =
   match lst with
     [] -> raise Not_found
   | [i_variant,_] -> i_variant
-  | _ -> assert false (* cannot happen *)
+  | _ ->
+      printf "many variants of %s\n" (string_of_signature i ft);
+      List.iter
+        (fun (i_var,_) ->
+          printf "  %d %s\n" i_var
+            (string_of_signature i_var ft);)
+        lst;
+      assert false (* cannot happen *)
+
+
+let find_variant_candidate (i:int) (cls:int) (ft:t): int =
+  (* Find the variant of the feature [i] in the class [cls] *)
+  try
+    variant i cls ft
+  with Not_found ->
+    find_variant_candidate0 i cls ft
 
 
 
@@ -1706,19 +1725,12 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
 
 let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   let desc = descriptor i ft in
-  let ctp,tvs = Class_table.class_type cls ft.ct
-  and anchor  = anchor i ft (*desc.anchored.(0)*) in
+  let ctp0,tvs = Class_table.class_type cls ft.ct
+  and anchor  = anchor i ft in
   assert (anchor <> -1);
-  let ntvs    = Tvars.count_all tvs
-  and ntvs_i  = Tvars.count_all desc.tvs
-  in
-  let tvs1 = Tvars.insert_fgs desc.tvs anchor tvs in
-  let ctp  = Term.upbound (ntvs_i-anchor) ntvs ctp in
-  let ctp  = Term.up anchor ctp in
-  let tvs1 = Tvars.update_fg (anchor+ntvs) ctp tvs1 in
-  let f_tp(tp:type_term): type_term =
-    Term.upbound ntvs anchor tp
-  in
+  assert (Tvars.count_fgs desc.tvs = 1);
+  let f_tp (tp:type_term): type_term =
+    Term.sub tp [|ctp0|] (Tvars.count_all tvs) in
   let cnt = count ft
   and nargs = Array.length desc.argnames
   in
@@ -1730,7 +1742,7 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   and sign = Sign.map f_tp desc.sign
   in
   let sign = if ghost then Sign.to_ghost sign else sign in
-  let anchor_fg, anchor_cls = Sign.anchor tvs1 sign in
+  let anchor_fg, anchor_cls = Sign.anchor tvs sign in
   Seq.push
     {mdl       = Class_table.current_module ft.ct;
      fname     = desc.fname;
@@ -1738,8 +1750,8 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
      anchor_cls = anchor_cls;
      anchor_fg  = anchor_fg;
      impl      = desc.impl;
-     tvs       = tvs1;
-     anchored  = Array.make 1 (anchor+ntvs);
+     tvs       = tvs;
+     anchored  = Array.make 1 anchor (*(anchor+ntvs)*);
      argnames  = desc.argnames;
      sign      = sign;
      tp        = f_tp desc.tp;
@@ -1748,6 +1760,8 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
    } ft.seq;
   add_class_feature cnt false false false ft;
   inherit_feature i cnt cls false ft;
+  if ft.verbosity > 1 then
+    printf "  new feature inherited %d %s\n" cnt (string_of_signature cnt ft);
   cnt
 
 

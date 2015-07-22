@@ -572,6 +572,19 @@ let make (c:Context.t): t =
    c     = c}
 
 
+let make_untyped (c:Context.t): t =
+  (* New accumulator for an untyped expression in the context [c] *)
+  let tvars = Context.type_variables c in
+  let tvars = TVars_sub.add_local 1 tvars in
+  {tlist = [];
+   stack = [];
+   sign  = Sign.make_const (Variable 0);
+   tvars = tvars;
+   norm  = false;
+   trace = Context.verbosity c > 5;
+   c     = c}
+
+
 let make_boolean (c:Context.t): t =
   let tvs = Context.type_variables c in
   let ntvs = TVars_sub.count_all tvs in
@@ -709,6 +722,7 @@ let add_leaf
   and nfgs    = Tvars.count_fgs    tvs
   in
   assert (nloc=0 || nglob=0);
+  assert (nfgs=0 || nglob=0);
   assert (nloc <= nloctb);
   assert (nfgs <= nfgstb);
   assert (nglob <= nglobtb);
@@ -788,6 +802,14 @@ let complete_function (nargs:int) (tb:t): unit =
           end else
             assert false (* cannot happen *)
       | _ ->
+          printf "nargs %d\n" nargs;
+          printf "   f  %s\n" (string_of_term f tb);
+          printf "      %s\n" (string_of_complete_signature_sub fsig tb);
+          printf "res   %s\n" (string_of_type res tb);
+          List.iteri
+            (fun i arg ->
+              printf "   arg %d: %s\n" i (string_of_term arg tb))
+            !arglst;
           assert false (* cannot happen *)
     else
       TVars_sub.sub_star(Sign.result fsig) tb.tvars, false in
@@ -1140,7 +1162,7 @@ let has_dummy (tb:t): bool =
 
 
 
-let specialize_term_0 (tb:t): unit =
+let specialize_term_0 (second_run:bool) (tb:t): unit =
   (* Substitute all functions with the most specific ones. E.g. the term builder
      might have used [=] of ANY. But since the arguments are of type LATTICE it
      specializes [=] of ANY to [=] of LATTICE. *)
@@ -1193,12 +1215,14 @@ let specialize_term_0 (tb:t): unit =
         in
         nglob, t
     | Application (f,args,pr) ->
+        let nglob = if second_run then nglob + 2 else nglob in
         let nglob,f = upd f nargs nglob in
         let nglob, args = upd_args nglob args in
         nglob, Application (f,args,pr)
     | Lam (n,nms,pres,t,pr) ->
-        let nargs = n + nargs
-        and nglob = n + nglob + if pr then 0 else 1 in
+        let n_eff = if tb.norm then 1 else n in
+        let nargs = n_eff + nargs
+        and nglob = n_eff + nglob + if pr then 0 else 1 in
         let nglob,pres_rev =
           List.fold_left
             (fun (nglob,ps) p ->
@@ -1221,7 +1245,10 @@ let specialize_term_0 (tb:t): unit =
   let nglob, t = upd t nargs 0 in
   if nglob <> TVars_sub.count_global tb.tvars then begin
     printf "specialize_term nglob %d\n" nglob;
-    printf "                cnt   %d\n" (TVars_sub.count_global tb.tvars)
+    printf "                cnt   %d\n" (TVars_sub.count_global tb.tvars);
+    printf "  %s\n" (string_of_tvs_sub tb);
+    printf "  %s\n" (string_of_term t tb);
+    printf "  %s\n" (Term.to_string t)
   end;
   assert (nglob = TVars_sub.count_global tb.tvars);
   tb.tlist <- [t,nt,s]
@@ -1256,7 +1283,7 @@ let normalize_lambdas (tb:t): unit =
 
 
 let specialize_term (tb:t): unit =
-  specialize_term_0 tb;
+  specialize_term_0 false tb;
   normalize_lambdas tb;
   tb.norm <- true
 
@@ -1338,10 +1365,10 @@ let check_term (t:term) (tb:t): t =
     let lambda n nms pres t is_pred tb =
       assert (0 < n);
       assert (Array.length nms = n);
-      let nms = [|ST.symbol "$0"|] in
+      let nms0 = [|ST.symbol "$0"|] in
       let ntvs_gap = count_local tb - Context.count_type_variables tb.c
       and is_func = not is_pred in
-      let c = Context.push_untyped_with_gap nms is_pred is_func false ntvs_gap tb.c in
+      let c = Context.push_untyped_with_gap nms0 is_pred is_func false ntvs_gap tb.c in
       let ntvs    = Context.count_local_type_variables c - ntvs_gap
       in
       let tb = expect_lambda ntvs is_pred c tb in
@@ -1364,6 +1391,10 @@ let check_term (t:term) (tb:t): t =
         complete_lambda ntvs npres is_pred tb
       with Not_found -> assert false
       end;
+      let t,tvs,s = pop_term tb in
+      let _,_,pres,t0,p = Term.lambda_split t in
+      let t = Lam(n,nms,pres,t0,p) in
+      tb.tlist <- (t,tvs,s) :: tb.tlist;
       tb
     and qlambda n nms t is_all tb =
       assert (0 < n);
@@ -1542,3 +1573,31 @@ let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
     let _ = check_term t tb in true
   with Illegal_term ->
     false
+
+
+let specialized (t:term) (c:Context.t): term =
+  t
+  (*let tb = make_untyped c in
+  set_normalized tb;
+  printf "\n";
+  printf "specialized %s\n" (string_of_term t tb);
+  printf "            %s\n" (Term.to_string t);
+  printf "            %s\n" (string_of_tvs_sub tb);
+  try
+    let tb = check_term t tb in
+    printf "  term checked\n";
+    printf "            %s\n" (string_of_tvs_sub tb);
+    specialize_term_0 true tb;
+    printf "  term specialized\n";
+    let res,_ = result tb in
+    if  t <> res then begin
+      printf "specialized %s\n" (string_of_term t tb);
+      printf "            %s\n" (Term.to_string t);
+      printf "     result %s\n" (string_of_term res tb);
+      printf "            %s\n" (Term.to_string res);
+    end;
+    printf "\n";
+    res
+  with Not_found ->
+    assert false
+*)

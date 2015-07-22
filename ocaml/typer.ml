@@ -928,3 +928,7 @@ let result_term
 let boolean_term (ie: info_expression) (c:Context.t): term =
   assert (not (Context.is_global c));
   analyze_expression ie true c
+
+
+let specialized (t:term) (c: Context.t): term =
+  Term_builder.specialized t c

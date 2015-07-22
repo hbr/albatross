@@ -59,6 +59,7 @@ val variant:       int -> int -> int -> t -> term
 
 val specialized: int -> term array -> int -> t -> term
 val beta_reduce: int -> term -> term array -> int -> t -> term
+val apply_term:  term -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
 val make: int -> t

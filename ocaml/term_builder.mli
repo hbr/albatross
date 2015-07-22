@@ -150,3 +150,5 @@ exception Illegal_term
 val check_term: term -> t -> t
 
 val is_valid: term -> bool -> Context.t -> bool
+
+val specialized: term -> Context.t -> term

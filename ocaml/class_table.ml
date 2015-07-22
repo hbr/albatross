@@ -153,6 +153,14 @@ let base_descriptor (idx:int) (ct:t): base_descriptor =
         bdesc
 
 
+let is_deferred (cls:int) (ct:t): bool =
+  let bdesc = base_descriptor cls ct in
+  match bdesc.hmark with
+    Deferred_hmark -> true
+  | _ -> false
+
+
+
 let has_any (ct:t): bool =
   let desc = descriptor any_index ct in
   desc.mdl <> -1
@@ -243,13 +251,18 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
   assert (i < count ct);
   let bdesc = base_descriptor i ct in
   let nfgs  = Tvars.count_fgs bdesc.tvs in
-  let tp =
-    if nfgs = 0 then
-      Variable i
-    else
-      VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i))
-  in
-  tp, bdesc.tvs
+  if is_deferred i ct then begin
+    assert (nfgs = 0); (* nyi: deferred classes with formal generics *)
+    let tvs = Tvars.make_fgs [|ST.symbol "A"|] [|Variable (i+1)|] in
+    (Variable 0), tvs
+  end else
+    let tp =
+      if nfgs = 0 then
+        Variable i
+      else
+        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i))
+    in
+    tp, bdesc.tvs
 
 
 let split_type_term (tp:type_term): int * type_term array =

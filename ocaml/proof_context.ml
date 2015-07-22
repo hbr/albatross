@@ -548,7 +548,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         let eq = term_up idx nb pc in
         let nargs, left, right = Proof_table.split_equality eq nb pc.base in
         assert (nargs = 0);
-        assert (t = left);
+        assert (Term.equivalent t left);
         right, Eval.Simpl(Eval.Term t,idx,[||]), true
     | _ ->
         do_subterms t nb
@@ -649,7 +649,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 else
                   args, Array.map (fun t -> Eval.Term t) args, false
               in
-              let exp = Term.apply t0 args in
+              let exp = Proof_table.apply_term t0 args nb pc.base in
               let res,rese,_ =
                 if full then
                   eval exp nb full
