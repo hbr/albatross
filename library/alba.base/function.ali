@@ -38,10 +38,10 @@ end
 range (f:A->B): ghost B?
     -> {b: some(a) a in f.domain and f(a) = b}
 
-image (f:A->B, p:A?): ghost B?
+image (p:A?, f:A->B): ghost B?
      -> {y: some(x) (f.domain*p)(x) and f(x) = y}
 
-preimage (f:A->B, q:B?): ghost A?
+preimage (q:B?, f:A->B): ghost A?
      -> {x: x in f.domain and f(x) in q}
 
 (|) (f:A->B, p:A?): (A->B)

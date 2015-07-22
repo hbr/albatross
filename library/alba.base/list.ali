@@ -18,10 +18,18 @@ create
 end
 
 (+) (a,b: [G]): [G]
-    -- The concatenation of the lists 'a' and 'b'.
+        -- The concatenation of the lists 'a' and 'b'.
+    -> inspect a
+       case nil   then b
+       case h ^ t then h ^ (t + b)
+       end
 
 (-) (a:[G]): [G]
-    -- The reversed list 'a'.
+        -- The reversed list 'a'.
+    -> inspect a
+       case nil   then nil
+       case h ^ t then -t + [h]
+       end
 
 head (a:[G]): G
         -- The first element of the list 'a'.
