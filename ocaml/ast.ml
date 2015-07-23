@@ -410,7 +410,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
       assert (is_orig_arg i);
       i - (nb-nvars_0) in
     let check_args args =
-      Array.iter (fun args -> check args nbranch carr c) args in
+      Array.iter (fun arg -> check arg nbranch carr c) args in
     match t with
       Variable i when i = idx + nb ->
         assert (nargs = 0);
@@ -436,6 +436,9 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
           error_info info ("Illegal recursive call \"" ^
                            (Context.string_of_term t true 0 c) ^ "\"")
     | VAppl (i,args) ->
+        check_args args
+    | Application (f,args,pr) ->
+        check f nbranch carr c;
         check_args args
     | Flow (Inspect,args) ->
         let len = Array.length args in
@@ -479,9 +482,9 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             check res (nbranch+1) carr c)
           0 ncases
     | Flow (flow, args) ->
-        assert false
+        assert false (* nyi *)
     | _ ->
-        assert false
+        assert false (* nyi *)
   in
   let nvars = Context.count_variables c in
   let carr  = Array.make nvars None in
