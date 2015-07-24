@@ -390,8 +390,8 @@ let is_feature_term_recursive (t:term) (idx:int) (pc:PC.t): bool =
 
 
 let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
-  (* Check that the term [t] is a valid definition term for the feature [idx], i.e.
-     it has either no recursion or only valid recursive calls.
+  (* Check that the term [t] is a valid recursive definition term for the
+     feature [idx], i.e. all recursive calls are valid.
 
      [idx] is absolute
      [pc] is a valid environment for the term [t]
@@ -440,6 +440,15 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | Application (f,args,pr) ->
         check f nbranch carr c;
         check_args args
+    | Lam (n,nms,pres,t0,pr) ->
+        assert false (* nyi *)
+    | QExp (n,nms,pres,t0) ->
+        assert false (* not allowed in recursive functions *)
+    | Flow (Ifexp, args) ->
+        check_args args
+    | Flow (Asexp, args) ->
+        assert (Array.length args = 2);
+        check args.(0) nbranch carr c
     | Flow (Inspect,args) ->
         let len = Array.length args in
         assert (3 <= len);
@@ -450,7 +459,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         interval_iter
           (fun i ->
             let n1,nms1,pat,_ = Term.qlambda_split_0 args.(2*i+1)
-            and n2,nms2,res,_  = Term.qlambda_split_0 args.(2*i+2) in
+            and n2,nms2,res,_ = Term.qlambda_split_0 args.(2*i+2) in
             assert (n1 = n2);
             let parr =
               let arr = Feature_table.args_of_tuple pat (n1+nb) ft in
@@ -481,10 +490,6 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             and carr = Array.append carr1 carr in
             check res (nbranch+1) carr c)
           0 ncases
-    | Flow (flow, args) ->
-        assert false (* nyi *)
-    | _ ->
-        assert false (* nyi *)
   in
   let nvars = Context.count_variables c in
   let carr  = Array.make nvars None in
