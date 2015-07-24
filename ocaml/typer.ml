@@ -353,13 +353,10 @@ end = struct
     let nargs = Context.count_variables accs.c
     and ft    = Context.feature_table accs.c
     in
-    let vars1 = Term.used_variables_from t1 nargs
-    and vars2 = Term.used_variables_from t2 nargs in
-    let lst =
-      try List.combine vars1 vars2
-      with Invalid_argument _ -> assert false (* cannot happen *)
-    in
-    let i,j = List.find (fun (i,j) -> i<>j) (List.rev lst) in
+    let vars1 = List.rev (Term.used_variables_from t1 nargs)
+    and vars2 = List.rev (Term.used_variables_from t2 nargs) in
+    let lst   = Mylist.combine vars1 vars2 in
+    let i,j = List.find (fun (i,j) -> i<>j) lst in
     let str1 = Feature_table.string_of_signature (i-nargs) ft
     and str2 = Feature_table.string_of_signature (j-nargs) ft in
     str1, str2

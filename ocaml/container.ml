@@ -157,6 +157,8 @@ module Mylist: sig
   val sum:          ('a -> int) -> int -> 'a list -> int
 
   val has_duplicates: 'a list -> bool
+
+  val combine:      'a list -> 'b list -> ('a*'b) list
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -195,6 +197,15 @@ end = struct
       [] -> false
     | h::t ->
         List.mem h t || has_duplicates t
+
+  let combine (l1: 'a list) (l2: 'b list): ('a*'b) list =
+    let rec comb l1 l2 res =
+      match l1, l2 with
+        [], _  -> res
+      | _ , [] -> res
+      | a::l1, b::l2 -> comb l1 l2 ((a,b)::res)
+    in
+    List.rev (comb l1 l2 [])
 end
 
 
