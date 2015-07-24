@@ -627,9 +627,9 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
             let ghost = is_ghost args.(0) nb in
             cases_from 0 ghost
         end
-        (* ghost_args args 0 (Array.length args)*)
     | VAppl (i,args) ->
-        is_ghost_function (i-nb-nargs) ft
+        let ghost = is_ghost_function (i-nb-nargs) ft in
+        ghost || ghost_args args 0 (Array.length args)
     | Application (f,args,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
