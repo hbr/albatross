@@ -257,7 +257,7 @@ let transformed_type (tp:term) (tb:t): type_term =
   in
   assert (ntvs_ctxt <= ntvs_loc);
   assert (nfgs_ctxt <= nfgs);
-  let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_loc tp in
+  let tp = Term.upbound (nfgs-nfgs_ctxt+nglobs) ntvs_ctxt tp in
   Term.up (ntvs_loc-ntvs_ctxt) tp
 
 
