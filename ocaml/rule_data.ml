@@ -255,8 +255,7 @@ let make (t:term) (c:Context.t): t =
     if ps = [] then
       try
         let neq,eq_id,left,right = Context.split_equality tgt nargs c in
-        assert (neq = 0);
-        Some (eq_id,left,right)
+        if neq = 0 then Some (eq_id,left,right) else None
       with Not_found -> None
     else None
   in
