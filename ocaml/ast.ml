@@ -497,8 +497,12 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
 
 
 let check_recursion (info:info) (idx:int) (t:term) (pc:PC.t): unit =
-  if is_feature_term_recursive t idx pc then
+  if is_feature_term_recursive t idx pc then begin
+    let ft = PC.feature_table pc in
+    if Feature_table.is_ghost_function idx ft then
+      error_info info "Recursive function must not be a ghost function";
     check_recursion0 info idx t pc
+  end
 
 
 let feature_specification
