@@ -1271,7 +1271,7 @@ let normalize_lambdas (tb:t): unit =
     | Lam (n,nms,pres,t,pr) ->
         let pres = List.map (fun p -> norm p (n+nb)) pres
         and t = norm t (n+nb) in
-        Context.make_lambda n nms pres t pr tb.c
+        Context.make_lambda n nms pres t pr nb tb.c
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, norm t (n+nb), is_all)
     | Flow (ctrl,args) ->
@@ -1426,6 +1426,7 @@ let check_term (t:term) (tb:t): t =
           printf "  type     %s\n"
             (Class_table.string_of_complete_signature s tvs ct);
           printf "  expected %s\n" (complete_signature_string tb);
+          printf "           %s\n" (string_of_tvs_sub tb);
           raise Illegal_term
       end
     in
@@ -1441,6 +1442,7 @@ let check_term (t:term) (tb:t): t =
             printf "  type     %s\n"
               (Class_table.string_of_complete_signature s tvs ct);
             printf "  expected %s\n" (complete_signature_string tb);
+            printf "  %s\n" (string_of_tvs_sub tb);
             raise Illegal_term
         end
     | VAppl(i,args) ->

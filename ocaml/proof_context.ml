@@ -592,6 +592,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
 
      [below_idx]: consider only rules below [below_idx] for equality. *)
   let nbenv = nbenv pc in
+  (*printf "evaluated_term %s   (nbenv:%d)\n" (string_of_term t pc) nbenv;
+  printf "               %s\n" (Term.to_string t);*)
   let rec eval (t:term) (nb:int) (full:bool): term * Eval.t * bool =
     let eval_args modi args full =
       let modi_ref = ref modi in
@@ -649,6 +651,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 else
                   args, Array.map (fun t -> Eval.Term t) args, false
               in
+              (*let _ =
+                let ft = feature_table pc in
+                let idx = i - nb - nbenv in
+                printf "expand feature %s\n" (Feature_table.string_of_signature idx ft);
+                printf "  in %s\n" (string_of_term_anon t nb pc);
+                printf "     %s\n" (Term.to_string t);
+              in ();*)
               let exp = Proof_table.apply_term t0 args nb pc.base in
               let res,rese,_ =
                 if full then
@@ -1295,7 +1304,7 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
 let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)
     : term =
   let c = context pc in
-  Context.make_lambda n nms ps t pr c
+  Context.make_lambda n nms ps t pr 0 c
 
 let tuple_of_args (args: term array) (nb:int) (pc:t): term =
   let c = context pc in

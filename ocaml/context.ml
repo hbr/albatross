@@ -207,10 +207,11 @@ let string_of_term (t:term) (norm:bool) (nanon:int) (c:t): string =
   Feature_table.term_to_string t norm nanon (varnames c) c.ft
 
 
-let make_lambda (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (c:t)
+let make_lambda
+    (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int) (c:t)
     : term =
   let nbenv = count_variables c in
-  Feature_table.make_lambda n nms ps t pred nbenv c.ft
+  Feature_table.make_lambda n nms ps t pred (nb+nbenv) c.ft
 
 
 let make_application
