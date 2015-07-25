@@ -594,13 +594,15 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let nbenv = nbenv pc in
   (*printf "evaluated_term %s   (nbenv:%d)\n" (string_of_term t pc) nbenv;
   printf "               %s\n" (Term.to_string t);*)
-  let rec eval (t:term) (nb:int) (full:bool): term * Eval.t * bool =
+  let rec eval (t:term) (nb:int) (full:bool) (depth:int): term * Eval.t * bool =
+    if depth > 100 then raise Not_found;
+    let depth = 1 + depth in
     let eval_args modi args full =
       let modi_ref = ref modi in
       let args = Array.map
           (fun a ->
             if full then
-              let a,e,modi_a = eval a nb full in
+              let a,e,modi_a = eval a nb full depth in
               modi_ref := (modi_a || !modi_ref);
               a,e
             else a, Eval.Term a)
@@ -630,7 +632,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           begin try
             let n,nms,t0 = Proof_table.definition i nb pc.base in
             assert (n = 0);
-            let res,rese,_ = eval t0 nb full in
+            let res,rese,_ = eval t0 nb full depth in
             res, Eval.Exp(i,[||],rese), true
           with Not_found ->
             t, Eval.Term t, false
@@ -661,7 +663,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
               let exp = Proof_table.apply_term t0 args nb pc.base in
               let res,rese,_ =
                 if full then
-                  eval exp nb full
+                  eval exp nb full depth
                 else
                   exp, Eval.Term exp, false
               in
@@ -675,17 +677,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let fe = Eval.Term f in
           apply f fe false args pr true
       | Application (f,args,pr) ->
-          let f,fe,fmodi = eval f nb full in
+          let f,fe,fmodi = eval f nb full depth in
           apply f fe fmodi args pr full
       | Lam (n,nms,pres,t0,pred) ->
           if full then
-            let t0,e,tmodi = eval t0 (1+nb) full in
+            let t0,e,tmodi = eval t0 (1+nb) full depth in
             Lam (n,nms,pres,t0,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
           else
             t, Eval.Term t, false
       | QExp (n,nms,t,is_all) ->
           let full = full || not is_all in
-          let t,e,tmodi = eval t (n+nb) full in
+          let t,e,tmodi = eval t (n+nb) full depth in
           QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
       | Flow (ctrl,args) ->
           let len = Array.length args in
@@ -698,13 +700,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 else
                   begin try
                     let idx = find_match args.(0) pc in
-                    let fst,fste,_ = eval args.(1) nb full
+                    let fst,fste,_ = eval args.(1) nb full depth
                     and conde,snde = Eval.Term args.(0), Eval.Term args.(2) in
                     fst, Eval.If(true,idx,[|conde;fste;snde|]), true
                   with Not_found ->
                     begin try
                       let idx = find_match (negation args.(0) pc) pc in
-                      let snd,snde,_ = eval args.(2) nb full
+                      let snd,snde,_ = eval args.(2) nb full depth
                       and conde,fste = Eval.Term args.(0), Eval.Term args.(1) in
                     snd, Eval.If(false,idx,[|conde;fste;snde|]), true
                     with Not_found ->
@@ -722,7 +724,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 let ncases       = len / 2
                 and ft           = feature_table pc
                 and nvars        = nb + nbenv
-                and insp,inspe,inspmodi = eval args.(0) nb full in
+                and insp,inspe,inspmodi = eval args.(0) nb full depth in
                 let rec cases_from (i:int) =
                   if i = ncases then begin (* no match found *)
                     if inspmodi then begin
@@ -747,7 +749,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       | Some args ->
                           assert (Array.length args = n2);
                           let res = Term.apply res args in
-                          let res1,rese,_ = eval res nb full in
+                          let res1,rese,_ = eval res nb full depth in
                           res1, Eval.Inspect(t,inspe,i,n1,rese), true
                     with Not_found ->
                       cases_from (i+1)
@@ -774,7 +776,10 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     in
     expand t
   in
-  let tred,ered,modi = eval t 0 false in
+  let tred,ered,modi =
+    try eval t 0 false 0
+    with Not_found -> t, (Eval.Term t), false
+  in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
   if ta <> t then begin
     printf "t   %s  %s\n" (string_of_term t pc) (Term.to_string t);
