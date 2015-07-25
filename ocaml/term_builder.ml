@@ -545,12 +545,10 @@ let unify_sign
     and tp_act = Sign.result sig_act in
     unify tp_req tp_act tb
   end else if n_req = 0 && n_act > 0 then begin
-    raise Not_found (* nyi: automatic upgrade of signature, because it is a
-                       conversion to a predicate or a function *)
-    (*printf ".. sig_act has to be upgraded\n";
+    (*printf ".. sig_act has to be upgraded\n";*)
     let tp_req = Sign.result sig_req
     and tp_act = to_dummy sig_act tb in
-    unify tp_req tp_act tb*)
+    unify tp_req tp_act tb
   end else begin
     (*printf ".. both are constant or callable\n";*)
     unify_sign_0 sig_req sig_act tb
@@ -775,10 +773,7 @@ let complete_function (nargs:int) (tb:t): unit =
   let arglst = ref [] in
   for i = 1 to nargs do  (* pop arguments *)
     assert (tb.tlist <> []);
-    let t,_,s = List.hd tb.tlist in
-    tb.tlist <- List.tl tb.tlist;
-    assert (Sign.is_constant s); (* not valid for automatically upgraded
-                                    functions! *)
+    let t,_,s = pop_term tb in
     arglst := t :: !arglst;
   done;
   let f,tvs,fsig = List.hd tb.tlist in

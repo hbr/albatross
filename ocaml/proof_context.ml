@@ -584,6 +584,22 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
 let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (pc:t): term =
   Proof_table.beta_reduce n t args nb pc.base
 
+let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)
+    : term =
+  let c = context pc in
+  Context.make_lambda n nms ps t pr 0 c
+
+let tuple_of_args (args: term array) (nb:int) (pc:t): term =
+  let c = context pc in
+  Context.tuple_of_args args nb c
+
+let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term =
+  let c = context pc in
+  Context.make_application f args nb pr c
+
+
+
+
 
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
@@ -624,6 +640,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | _ ->
           Application (f,args,is_pred), e, modi
     in
+    let downgrade t = Context.downgrade_term t nb (context pc)
+    in
     let expand t =
       let domain_id = nb + nbenv + Feature_table.domain_index in
       match t with
@@ -631,7 +649,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Variable i ->
           begin try
             let n,nms,t0 = Proof_table.definition i nb pc.base in
-            assert (n = 0);
+            let t0 =
+              if n = 0 then t0
+              else make_lambda n nms [] t0 false pc in
             let res,rese,_ = eval t0 nb full depth in
             res, Eval.Exp(i,[||],rese), true
           with Not_found ->
@@ -774,7 +794,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                   t, Eval.Term t, false
           end
     in
-    expand t
+    let tred,ered,modi = expand t in
+    let tred = downgrade tred in
+    tred,ered,modi
   in
   let tred,ered,modi =
     try eval t 0 false 0
@@ -1304,21 +1326,6 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
      [teval] is the term [tgt] evaluation with [e]. *)
   Proof_table.add_eval_backward tgt imp e pc.base;
   raw_add imp false pc
-
-
-let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)
-    : term =
-  let c = context pc in
-  Context.make_lambda n nms ps t pr 0 c
-
-let tuple_of_args (args: term array) (nb:int) (pc:t): term =
-  let c = context pc in
-  Context.tuple_of_args args nb c
-
-let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term =
-  let c = context pc in
-  Context.make_application f args nb pr c
-
 
 
 

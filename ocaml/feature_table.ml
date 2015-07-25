@@ -2170,3 +2170,38 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
     peer_matches_of_match n mtch nb ft
   in
   unmatched_from 1 first_list
+
+
+
+
+let downgrade_term (t:term) (nb:int) (ft:t): term =
+  (* Downgrade all calls of the form [Application(Variable i,args)] to
+     [VAppl(i,args')] if [i] is not a constant.
+   *)
+  let rec down t nb =
+    let down_args args nb = Array.map (fun t -> down t nb) args
+    and down_list lst nb  = List.map  (fun t -> down t nb) lst in
+    match t with
+      Variable _ ->
+        t
+    | VAppl (i,args) ->
+        VAppl(i, down_args args nb)
+    | Application(Variable i,args,pr) when nb <= i ->
+        assert (Array.length args = 1);
+        let nargs = arity (i - nb) ft in
+        let args = down_args args nb in
+        if nargs = 0 then
+          Application(Variable i,args,pr)
+        else
+          let args = args_of_tuple_ext args.(0) nb nargs ft in
+          VAppl(i,args)
+    | Application(f,args,pr) ->
+        Application (down f nb, down_args args nb, pr)
+    | Lam(n,nms,pres,t0,pr) ->
+        Lam (n,nms, down_list pres (1+nb), down t0 (1+nb), pr)
+    | QExp (n,nms,t0,is_all) ->
+        QExp (n,nms, down t0 (n+nb), is_all)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, down_args args nb)
+  in
+  down t nb

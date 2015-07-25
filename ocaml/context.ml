@@ -653,11 +653,10 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
       Variable i ->
         begin try
           let n,nms,t0 = definition i nb c in
-          if n <> 0 then begin
-            printf "n <> 0  t %s\n" (string_of_term t true nb c)
-          end;
-          assert (n = 0);
-          t0
+          if n = 0 then
+            t0
+          else
+            make_lambda n nms [] t0 false nb c
         with Not_found ->
           t
         end
@@ -1186,3 +1185,7 @@ let get_type (tp:type_t withinfo) (c:t): type_term =
 
 let string_of_type (tp:type_term) (c:t): string =
   Class_table.string_of_type tp (tvars c) (class_table c)
+
+
+let downgrade_term (t:term) (nb:int) (c:t): term =
+  Feature_table.downgrade_term t (nb + count_variables c) c.ft

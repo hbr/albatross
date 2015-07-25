@@ -212,3 +212,5 @@ val export_feature: int -> bool -> t -> unit
 val print: t -> unit
 
 val check_interface: t -> unit
+
+val downgrade_term: term -> int -> t -> term

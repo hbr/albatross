@@ -491,6 +491,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
       and argsb = Array.init n (fun i -> snd args.(i)) in
       argsa, argsb
     in
+    let ta,tb =
     match e with
       Eval.Term t -> t,t
     | Eval.Exp (idx,args,e) when idx = domain_id ->
@@ -512,11 +513,16 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           try definition idx nb at
           with Not_found -> raise Illegal_proof_term
         in
-        if n <> Array.length args then raise Illegal_proof_term;
+        let argslen = Array.length args in
+        let t =
+          if n <> argslen then begin
+            assert (argslen = 0);
+            Context.make_lambda n nms [] t false nb (context at)
+          end else t in
         let ta,tb = reconstruct e nb
         and argsa,argsb = reconstr_args args in
         let uneval =
-          if n = 0 then Variable idx
+          if argslen = 0 then Variable idx
           else VAppl(idx,argsa) in
         let exp =
           try apply_term_0 t argsb nb at
@@ -616,6 +622,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             printf "no inspect expression %s\n" (string_of_term_anon t nb at);
             raise Illegal_proof_term
         end
+    in
+    let tb = Context.downgrade_term tb nb at.c in
+    ta, tb
   in
   reconstruct e 0
 
