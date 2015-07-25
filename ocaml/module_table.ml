@@ -159,9 +159,9 @@ let name (mdl:int) (mt:t): string =
 
 
 
-let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
-  assert (not (has (name,lib) mt));
-  assert (not (has_base name mt));
+let add_used ((nme,lib):int*int list) (used:IntSet.t) (mt:t): unit =
+  assert (not (has (nme,lib) mt));
+  assert (not (has_base nme mt));
   let n = count mt in
   let lib_id =
     try find_library lib mt
@@ -170,12 +170,17 @@ let add_used ((name,lib):int*int list) (used:IntSet.t) (mt:t): unit =
       Seq.push lib mt.libseq; id
   in
   let used = IntSet.add n used in
-  Seq.push {name=name; lib=lib_id; priv=used; pub=used} mt.seq;
-  if IntSet.mem name mt.base then
-    mt.base_added <- IntSet.add name mt.base_added;
-  mt.map   <- Module_map.add (name,lib) n mt.map;
+  Seq.push {name=nme; lib=lib_id; priv=used; pub=used} mt.seq;
+  if IntSet.mem nme mt.base then
+    mt.base_added <- IntSet.add nme mt.base_added;
+  mt.map   <- Module_map.add (nme,lib) n mt.map;
   mt.mode  <- 2;
-  mt.fgens <- IntMap.empty
+  mt.fgens <- IntMap.empty(*;
+  printf "add_used of module %s\n" (name (current mt) mt);
+  IntSet.iter
+    (fun mdl ->
+      printf "  %s\n" (name mdl mt))
+    used*)
 
 
 

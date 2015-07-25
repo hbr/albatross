@@ -1238,6 +1238,19 @@ let base_table (verbosity:int) : t =
   ft
 
 
+let has_visible_variant (i:int) (ft:t): bool =
+  (* Does the feature [i] has a visible variant in the current module?
+   *)
+  assert (is_interface_use ft);
+  let bdesc = base_descriptor i ft
+  and mt    = module_table ft in
+  let used  = Module_table.current_used mt in
+  IntMap.exists
+    (fun cls ivar ->
+      let desc  = descriptor ivar ft in
+      IntSet.mem desc.mdl used)
+    bdesc.variants
+
 
 
 let find_funcs
@@ -1255,6 +1268,9 @@ let find_funcs
         in
         let nfgs = Tvars.count_all tvs in
         if is_public ft && not (Option.has desc.pub) then
+          lst
+        else if is_interface_use ft &&
+          not (has_visible_variant i ft) then
           lst
         else if arity <= nargs then
           (i,tvs,sign) :: lst

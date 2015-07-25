@@ -664,7 +664,14 @@ let analyze_used
             let nme = fst mdl.v in
             if Module_table.has_base nme mt then
               info_abort fn_outer mdl.i ("Duplicate base module " ^ (ST.string nme));
-            PC.add_used_module mdl.v set pc;
+            let set1 = List.fold_left
+                (fun set1 m ->
+                  let mdl =
+                    try Module_table.find m.v mt with Not_found -> assert false in
+                  IntSet.union (Module_table.used mdl mt) set1)
+                IntSet.empty use_blk
+            in
+            PC.add_used_module mdl.v set1 pc;
             let use_blk2,ast = parse_file fn in
             analyze ast fn pc;
             let set = IntSet.add (Module_table.current mt) set in
