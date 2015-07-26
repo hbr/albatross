@@ -610,6 +610,8 @@ let analyze_feature
     (bdy: feature_body option)
     (exp: info_expression option)
     (pc: Proof_context.t): unit =
+  if rt = None then
+    not_yet_implemented fn.i "Features without result type";
   let pc1 =
     let rvar = is_func || Option.has rt in
     PC.push entlst rt false is_func rvar pc in
