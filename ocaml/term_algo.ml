@@ -1,13 +1,34 @@
 open Term
 open Container
 
-(*
-let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
+
+let unify (t1:term) (nargs:int) (t2:term): Term_sub.t =
   (* Unify the term [t1] with the term [t2] i.e. find a substitution for the
-     [nargs] arguments which applied to [t1] makes it equal to t2
+     [nargs] arguments of [t1] which applied to [t1] makes it equal to t2
    *)
-  assert false;
+  assert (IntSet.cardinal (Term.bound_variables t1 nargs) = nargs);
   let rec uni t1 t2 nb sub =
+    let uni_args args1 args2 sub =
+      assert (Array.length args1 = Array.length args2);
+      let _,sub =
+        Array.fold_left
+          (fun (i,sub) a1 ->
+            i+1,
+            uni a1 args2.(i) nb sub)
+          (0,sub)
+          args1 in
+      sub
+    and uni_list lst1 lst2 sub =
+      assert (List.length lst1 = List.length lst2);
+      let _,sub =
+        List.fold_left2
+          (fun (i,sub) a1 a2 ->
+            i+1,
+            uni a1 a2 nb sub)
+          (0,sub)
+          lst1 lst2 in
+      sub
+    in
     match t1, t2 with
       Variable i, _ when i < nb || nb+nargs <= i ->
         if t1 = t2 then sub else raise Not_found
@@ -26,18 +47,21 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
         | Some t -> assert (t=t2); sub
         end
     | VAppl (i1,args1), VAppl (i2,args2) when i1 = i2 ->
-        assert false
+        uni_args args1 args2 sub
     | Application (f1,args1,pr1), Application (f2,args2,pr2)
       when Array.length args1 = Array.length args2  && pr1 = pr2 ->
-        let sub = ref (uni f1 f2 nb sub) in
-        for i = 0 to Array.length args1 - 1 do
-          sub := uni args1.(i) args2.(i) nb !sub
-        done;
-        !sub
+        let sub = uni f1 f2 nb sub in
+        uni_args args1 args2 sub
     | Lam(n1,nms1,ps1,t1,pr1), Lam(n2,nms2,ps2,t2,pr2)
       when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
-        assert (ps1 = []);
+        let sub = uni_list ps1 ps2 sub in
         uni t1 t2 (1 + nb) sub
+    | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
+      when n1 = n2 && is_all1 = is_all2 ->
+        uni t01 t02 (n1+nb) sub
+    | Flow(ctrl1,args1), Flow(ctrl2,args2)
+      when ctrl1 = ctrl2 && Array.length args1 = Array.length args2 ->
+        uni_args args1 args2 sub
     | _ ->
         raise Not_found
   in
@@ -45,7 +69,14 @@ let unify (t1:term) (t2:term) (nargs:int): Term_sub.t =
   assert (let args = Term_sub.arguments nargs sub in
   Term.sub t1 args nargs = t2);
   sub
-*)
+
+let can_unify (t1:term) (nargs:int) (t2:term): bool =
+  (* Can the term [t1] with [nargs] arguments be unified with the term [t2]? *)
+  try
+    let _ = unify t1 nargs t2 in true
+  with Not_found ->
+    false
+
 
 (* Comparison of two terms and finding their differences
 

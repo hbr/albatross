@@ -68,6 +68,17 @@ let is_catchall (t:term) (nargs:int): bool =
   | _ -> false
 
 
+let is_backward_recursive (rd:t): bool =
+  assert (is_implication rd);
+  assert (rd.nbwd = 0);
+  let ntgt = Term.nodes rd.target in
+  List.exists
+    (fun (_,_,p) ->
+      let np = Term.nodes p in
+      ntgt < np &&
+      Term_algo.can_unify rd.target rd.nargs p)
+    rd.premises
+
 
 let is_forward_catchall (rd:t): bool =
   is_implication rd &&
@@ -84,7 +95,9 @@ let is_forward (rd:t): bool =
 
 let is_backward (rd:t): bool =
   is_implication rd &&
-  (rd.nbwd = 0 && not rd.bwd_blckd && not (is_catchall rd.target rd.nargs))
+  (rd.nbwd = 0 && not rd.bwd_blckd &&
+   not (is_catchall rd.target rd.nargs) &&
+   not (is_backward_recursive rd))
 
 
 let is_equality (rd:t): bool =
