@@ -400,7 +400,10 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
   let c = PC.context pc
   and ft = PC.feature_table pc in
   let nargs   = Context.count_last_arguments c
-  and nvars_0 = Context.count_variables c
+  and nvars_0 = Context.count_variables c in
+  let make_carr (n:int): int option array = Array.make n None in
+  let prepend_carr (n:int) (carr:int option array): int option array =
+    Array.append (make_carr n) carr
   in
   let rec check (t:term) (nbranch:int) (carr:int option array) (c:Context.t): unit =
     let nb = Context.count_variables c in
@@ -420,6 +423,8 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | Variable i ->
         ()
     | VAppl (i,args) when i = idx + nb ->
+        if nbranch = 0 then
+          error_info info "Recursive call must occur only within a branch";
         let len = Array.length args in
         let is_lower_arg i =
           assert (i < nargs);
@@ -441,9 +446,13 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         check f nbranch carr c;
         check_args args
     | Lam (n,nms,pres,t0,pr) ->
-        assert false (* nyi *)
-    | QExp (n,nms,pres,t0) ->
-        assert false (* not allowed in recursive functions *)
+        let carr0 = prepend_carr 1 carr
+        and c0 = Context.push_untyped [|ST.symbol "x"|] c in
+        check t0 nbranch carr0 c0
+    | QExp (n,nms,t0,_) ->
+        let carr0 = prepend_carr n carr
+        and c0 = Context.push_untyped nms c in
+        check t0 nbranch carr0 c0
     | Flow (Ifexp, args) ->
         check_args args
     | Flow (Asexp, args) ->
@@ -492,17 +501,13 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
           0 ncases
   in
   let nvars = Context.count_variables c in
-  let carr  = Array.make nvars None in
+  let carr  = make_carr nvars in
   check t 0 carr c
 
 
 let check_recursion (info:info) (idx:int) (t:term) (pc:PC.t): unit =
-  if is_feature_term_recursive t idx pc then begin
-    let ft = PC.feature_table pc in
-    if Feature_table.is_ghost_function idx ft then
-      error_info info "Recursive function must not be a ghost function";
+  if is_feature_term_recursive t idx pc then
     check_recursion0 info idx t pc
-  end
 
 
 let feature_specification
