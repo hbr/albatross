@@ -1,8 +1,104 @@
 open Term
 open Container
 
+let unify_pattern
+    (n1:int) (p1:term) (n2:int) (p2:term): term array =
+  (* Find a unification of the pattern [p1] with [n1] variables and [p2] with [n2]
+     variables. Both terms above their variables are from the same environment.
 
-let unify (t1:term) (nargs:int) (t2:term): Term_sub.t =
+     The result (if unification is possible) is an array of size [n1+n2] which
+     contains substitutions for all variables of the two pattern. The substitution
+     applied to both pattern (with sufficiently space made for the variables of the
+     other pattern) results in the same term.
+
+     If unification is not possible then [Not_found] is raised
+   *)
+  let n = n1 + n2 in
+  let subargs = Array.init n (fun i -> Variable i)
+  and subflgs = Array.make n false
+  and pat1 = Term.upbound n2 n1 p1
+  and pat2 = Term.up n1 p2
+  in
+  let do_sub i t =
+    assert (i < n);
+    if subflgs.(i) && t <> subargs.(i) then
+      raise Not_found
+    else begin
+      subflgs.(i) <- true;
+      subargs.(i) <- t
+    end in
+  let rec uni t1 t2 =
+    let uni_args args1 args2 =
+      assert (Array.length args1 = Array.length args2);
+      Array.iteri
+        (fun i arg ->
+          uni arg args2.(i))
+        args1
+    in
+    match t1, t2 with
+      Variable i, Variable j when i < n && j < n ->
+        do_sub i t1;
+        do_sub j t1
+    | Variable i, _ when i < n ->
+        assert (i < n1);
+        do_sub i t2
+    | _ , Variable j when j < n ->
+        do_sub j t1
+    | Variable i1, Variable i2 when i1 = i2 ->
+        ()
+    | VAppl(i1,args1), VAppl(i2,args2) when i1 = i2 ->
+        uni_args args1 args2
+    | Application(f1,args1,pr1), Application(f2,args2,pr2)
+      when pr1 = pr2 && Array.length args1 = Array.length args2 ->
+        assert false (* nyi: *)
+    | Lam(n1,nms1,ps1,t01,pr1), Lam(n2,nms2,ps2,t02,pr2)
+      when pr1 = pr2 ->
+        assert false (* nyi: *)
+    | QExp(n1,nms1,t01,all1), QExp(n2,nms2,t02,all2)
+      when n1 = n2 && all1 = all2 ->
+        assert false (* nyi: *)
+    | Flow(ctrl1,args1), Flow(ctrl2,args2)
+      when ctrl1 = ctrl2 && Array.length args1 = Array.length args2 ->
+        assert false (* nyi: *)
+    | _ ->
+        raise Not_found
+  in
+  uni pat1 pat2;
+  assert begin
+    let ok = Term.sub pat1 subargs n = Term.sub pat2 subargs n in
+    if not ok then begin
+      Printf.printf "unify_pattern\n";
+      Printf.printf "   n1 %d, p1 %s\n" n1 (Term.to_string p1);
+      Printf.printf "   n2 %d, p2 %s\n" n2 (Term.to_string p2);
+      Printf.printf "   pat1 %s\n" (Term.to_string pat1);
+      Printf.printf "   pat2 %s\n" (Term.to_string pat2);
+      Array.iteri (fun i t ->
+        Printf.printf "   %d %s\n" i (Term.to_string t))
+        subargs
+    end;
+    ok
+  end;
+  subargs
+
+
+
+let unify (t1:term) (npat:int) (pat:term): term array =
+  let args = unify_pattern 0 t1 npat pat in
+  Array.map
+    (fun t ->
+      try Term.down npat t
+      with Term_capture -> assert false (* cannot happen *))
+    args
+
+
+let can_unify_pattern (t:term) (npat:int) (pat:term): bool =
+  try let _ = unify t npat pat in true
+  with Not_found -> false
+
+
+
+
+let unify0 (t1:term) (nargs:int) (t2:term): Term_sub.t =
   (* Unify the term [t1] with the term [t2] i.e. find a substitution for the
      [nargs] arguments of [t1] which applied to [t1] makes it equal to t2
    *)
@@ -73,7 +169,7 @@ let unify (t1:term) (nargs:int) (t2:term): Term_sub.t =
 let can_unify (t1:term) (nargs:int) (t2:term): bool =
   (* Can the term [t1] with [nargs] arguments be unified with the term [t2]? *)
   try
-    let _ = unify t1 nargs t2 in true
+    let _ = unify0 t1 nargs t2 in true
   with Not_found ->
     false
 

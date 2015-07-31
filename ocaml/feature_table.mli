@@ -147,9 +147,8 @@ val is_constructor:    int -> t -> bool
 val peer_constructors: int -> t -> IntSet.t
 val peer_matches:      int -> int -> t -> (int*term) list
 val peer_matches_of_match: int -> term -> int -> t -> (int*term) list
-val case_substitution: int -> term -> int -> term -> int -> t -> (term array) option
-val is_case_matching:  term -> int -> term -> int -> t -> bool
 val unmatched_inspect_cases: term array -> int -> t -> (int * term) list
+val inspect_unfold_catchall: term array -> int -> t -> term array
 
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool

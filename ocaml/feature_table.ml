@@ -620,7 +620,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
               if ghost || i = ncases then
                 ghost
               else
-                let n,_,t,_ = Term.qlambda_split_0 args.(2*i+2) in
+                let n,_,t   = Term.pattern_split args.(2*i+2) in
                 let ghost = is_ghost t (n+nb) in
                 cases_from (1+i) ghost
             in
@@ -1464,11 +1464,9 @@ let term_to_string
       assert (3 <= len);
       let ncases = len / 2 in
       let case (i:int): string =
-        let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
-        and n1,nms1,res, _ = Term.qlambda_split_0 args.(2*i+2) in
+        let n, nms, mtch, res = Term.case_split args.(2*i+1) args.(2*i+2) in
         let names1 = Array.append nms names in
         let to_str t = to_string t names1 nanonused false None in
-        assert (n = n1);
         " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
       in
       let rec cases_from (i:int) (str:string): string =
@@ -1483,7 +1481,7 @@ let term_to_string
       assert (len = 2);
       let str1 = to_string args.(0) names nanonused false (Some (Asop,true)) in
       let str2 =
-        let n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
+        let n,nms,mtch = Term.pattern_split args.(1) in
         let names1 = Array.append nms names in
         to_string mtch names1 nanonused false (Some (Asop,false)) in
       str1 ^ " as " ^ str2
@@ -1526,7 +1524,7 @@ let term_to_string
       | Flow (ctrl,args) ->
           begin
             match ctrl with
-              Ifexp -> None, if2str args
+              Ifexp   -> None, if2str args
             | Inspect -> None, insp2str args
             | Asexp   -> Some(Asop), as2str args
           end
@@ -2017,50 +2015,57 @@ let peer_matches (i:int) (nb:int) (ft:t): (int*term) list =
 
 
 
-let peer_matches_of_match
-    (nmtch:int) (mtch:term)
-    (nb:int) (ft:t)
-    : (int*term) list =
-  let combine
-      (mlst:(int*term) list)        (* list of match expressions of an argument *)
-      (lst: (int*term list) list)   (* list of nvars, reversed argument list *)
-      : (int*term list) list =
-    List.fold_left
-      (fun res (nmtch,mtch) ->
-        List.fold_left
-          (fun res (n,args_rev) ->
-            let args_rev =
-              if n = 0 then
-                mtch :: args_rev
-              else
-                (Term.up n mtch) ::
-                (List.map (fun a -> Term.upbound n nmtch a) args_rev)
-            in
-            ((n+nmtch), args_rev) :: res)
-          res
-          lst)
-      []
-      mlst
-  in
-  let rec match_set (t:term): (int*term) list =
+let combine
+    (plst:(int*term) list)        (* list of match expressions of an argument *)
+    (lst: (int*term list) list)   (* list of nvars, reversed argument list *)
+    : (int*term list) list =
+  (* Combine pattern.
+     [plst] is the set of complete pattern of an argument.
+     [lst]  represents the all combinations of the previous arguments; each list
+            element has a number of variables of the pattern and the reversed list
+            of the arguments.
+   *)
+  List.fold_left
+    (fun res (npat,pat) ->
+      List.fold_left
+        (fun res (n,args_rev) ->
+          let pat = Term.up n pat
+          and args_rev =
+            if npat = 0 then args_rev
+            else
+              (List.map (fun a -> Term.upbound npat n a) args_rev)
+          in
+          ((n+npat), pat :: args_rev) :: res)
+        res
+        lst)
+    []
+    plst
+
+
+
+let pattern_set (nt:int) (t:term) (nb:int) (ft:t): (int*term) list =
+  (* Treat [t] as a pattern with [nt] match variables and calculate the complete
+     set of patters (including [t]) so that any expression can be matched with one
+     of the pattern. *)
+  let rec pat_set (t:term): (int*term) list =
     match t with
-      Variable i when i < nmtch ->
+      Variable i when i < nt ->
         [1,Variable 0]
     | Variable i ->
-        assert (nmtch + nb <= i);
-        let idx = i - nmtch - nb in
+        assert (nt + nb <= i);
+        let idx = i - nt - nb in
         (0, Variable (idx+nb)) :: (peer_matches idx nb ft)
     | VAppl (i,args) ->
-        assert (nmtch + nb <= i);
+        assert (nt + nb <= i);
         let args_lst: (int * term list) list =
           Array.fold_left
             (fun lst arg ->
-              let mlst = match_set arg in
-              combine mlst lst)
+              let plst = pat_set arg in
+              combine plst lst)
             [0,[]]
             args
         in
-        let idx   = i - nmtch - nb
+        let idx   = i - nt - nb
         and nargs = Array.length args in
         assert (nargs = arity idx ft);
         List.fold_left
@@ -2073,66 +2078,215 @@ let peer_matches_of_match
     | _ ->
         assert false (* cannot happen in a match expression *)
   in
-  let res = match_set mtch in
-  List.filter (fun e -> e <> (nmtch,mtch)) res
+  pat_set t
 
 
 
+let peer_matches_of_match
+    (npat:int) (pat:term)
+    (nb:int) (ft:t)
+    : (int*term) list =
+  let res = pattern_set npat pat nb ft in
+  List.filter (fun e -> e <> (npat,pat)) res
+
+
+
+let is_pattern (n:int) (t:term) (nb:int) (ft:t): bool =
+  (* Is the term [t] with [n] variables a pattern i.e. does it contain only variables
+     or constructors?
+
+     All variables below [n] must occur only once in a pattern.
+   *)
+  let is_constr i = (n+nb) <= i && is_constructor (i-n-nb) ft
+  in
+  let free = Term.free_variables     t n
+  and bnd  = Term.bound_variables    t n
+  and bnd_lst = Term.used_variables t n in
+  let nbnd = IntSet.cardinal bnd
+  in
+  IntSet.for_all is_constr free &&
+  n = nbnd &&
+  nbnd = List.length bnd_lst
+
+
+(*
 let case_substitution
-    (nt:int) (t:term) (nmtch:int) (mtch:term) (nb:int) (ft:t): (term array) option =
-  (* The substitutions for the match expression [mtch] which make the match
+    (nt:int) (t:term) (npat:int) (pat:term) (nb:int) (ft:t): (term array) option =
+  (* The substitutions for the match expression [pat] which make the match
      expression equivalent to the term [t] (with [nt] variables) or [None] if
      the match definitely fails. The function raises [Not_found] if neither a
-     positive or a negative match is possible.  *)
-  let subargs = Array.make nmtch (Variable (-1))
-  and subflgs = Array.make nmtch false
+     positive or a negative match is possible i.e. if matching cannot be decided
+     because the term does not provide enough information.
+
+     Positive match: The term is more special than the pattern and substitutions
+                     can be found.
+
+     Negative match: The term has a different constructor than the pattern at a
+                     corresponding position.
+
+     Undecidable:    The term is more general than the pattern or the term has a
+                     non constructor at some position where a constructor would be
+                     needed to compare it with the corresponding constructor of the
+                     pattern. The latter case cannot occur if the term is a pattern.
+
+                     I.e. if the term is a pattern then Undecidable means that the
+                     term is more general.
+ *)
+  let subargs = Array.make npat (Variable (-1))
+  and subflgs = Array.make npat false
   and hassub  = ref true in
   let is_constr idx =
     nt + nb <= idx && is_constructor (idx-nt-nb) ft
   in
-  let rec do_match t mtch =
+  let rec do_match t pat =
     let match_args args1 args2 =
       Array.iteri
         (fun i arg ->
           do_match arg args2.(i))
         args1
     in
-    match t, mtch with
-      _, Variable i when i < nmtch ->
+    match t, pat with
+      _, Variable i when i < npat ->
         assert (not subflgs.(i));
         subflgs.(i) <- true;
         subargs.(i) <- t
     | Variable idx1, Variable idx2 when is_constr idx1 ->
-        hassub := !hassub && idx1 + nmtch = idx2
+        hassub := !hassub && idx1 + npat = idx2
     | Variable idx1, VAppl(idx2,args2) when is_constr idx1 ->
         hassub := false
     | VAppl (idx1,_) , Variable idx2 when is_constr idx1 ->
         hassub := false
     | VAppl(idx1,args1), VAppl(idx2,args2) when  is_constr idx1 ->
-        hassub :=  !hassub &&  idx1 + nmtch = idx2;
+        assert (nt + nb <= idx1);
+        assert (npat + nb <= idx2);
+        hassub :=  !hassub &&  idx1 - nt =  idx2 - npat;
         match_args args1 args2
     | _ ->
         raise Not_found
   in
-  do_match t mtch;
-  assert (not !hassub || interval_for_all (fun i -> subflgs.(i)) 0 nmtch);
+  do_match t pat;
+  assert (not !hassub || interval_for_all (fun i -> subflgs.(i)) 0 npat);
   if !hassub then
     Some subargs
   else
     None
+*)
 
 
-
-
-let is_case_matching (t:term) (n:int) (mtch:term) (nb:int) (ft:t): bool =
+(*
+let is_case_matching (t:term) (npat:int) (pat:term) (nb:int) (ft:t): bool =
   (* Is the term [t] matching the match expression [mtch] with [n] variables?
    *)
-  match case_substitution 0 t n mtch nb ft with
+  match case_substitution 0 t npat pat nb ft with
     None   -> false
   | Some _ -> true
+*)
 
 
 
+
+(*  Unmatched cases
+    ===============
+
+
+    Example:
+
+        is_prefix (a,b:[G]): BOOLEAN
+            -> inspect a, b
+               case nil, _   then true
+               case _  , nil then false
+               case x^a, y^b then x = y and a.is_prefix(b)
+               end
+
+    The first case leaves us the unmatched cases:
+
+         (0^1, 2)
+
+    The second case has the pattern (0, nil) and should leave us with
+
+         (0^1, 2^3)
+
+    which is matched by the third case.
+
+    The peer pattern of the second case:
+
+        (0, 1^2)
+
+    Check the second case:
+        compare unmatched    (0^1,   2)
+        with pattern         (0  , nil)
+
+    An unmatched pattern has to be either
+        removed                           the pattern is more general
+        left in unchanged                 unmatched and pattern do not match
+        modified and/or splitted up       the pattern matches partially
+
+    Partial match: There is a substitution for the unmatched and for the pattern.
+                   When both substitutions are applied the terms are equal
+
+       (0^1,2)   sub [0~>0,1~>1,2~>nil]    res (0^1,nil)
+       (0,nil)   sub [0~>0^1]              res (0^1,nil)
+
+    The pattern is more general: Special case of a partial match where the
+                                 substitution of the unmatched is empty
+
+    No match: There is no substitution pair.
+
+
+    Unification of two pattern:
+    ===========================
+
+    Example 1:
+    (0^1,2) and (0,nil)
+
+    With unique variables (0^1,2) and (3,nil)
+
+    General substitution: [0~>0,1~>1,2~>nil,  3~>0^1]
+    makes both to (0^1,nil)
+
+    Example 2:
+    (0^1,2) and (0,1)
+
+    With unique variables (0^1,2) and (3,4)
+
+    General substitution: [0~>0,1~>1,2~>2,  3~>0^1,4~>2]
+    makes both to (0^1,2)
+
+    If one pattern is more special than the other it gets the identity substitution.
+    I.e. substitution happens only on the more general pattern.
+
+    Computing unmatched pattern
+    ===========================
+
+    For each case clause we have a set of unmatched pattern of the previous clauses.
+
+    For each pattern in the set of unmatched pattern the current pattern is either
+
+    - unrelated:     The unmatched pattern remains
+    - more general:  The unmatched pattern is resolved
+    - partial match: The unmatched pattern has to be splitted into unmatched and
+                     resolved subpattern. Only the unmatched subpattern remain.
+
+    Splitting partially resolved pattern
+    ====================================
+
+    We have an unmatched pattern upat and a pattern pat. We unify the two pattern
+    and get a substitution which is not the identity in the part of the variables
+    of upat. The variables with a nontrivial substitution are only partially
+    resolved.
+
+    1. Do the substitution on upat to get upatsub
+         The partially resolved variables dissappear and some variables of pat
+         might be introduced
+
+    2. Treat upatsub as a pattern and calculate all peer pattern
+
+    3. Filter the peer pattern so that only pattern more special than upat remain
+
+    The unmatched pattern upat has to be splitted up into the filtered set of peer
+    pattern of upatsub.
+
+ *)
 let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list =
   (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
    *)
@@ -2140,36 +2294,128 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
   assert (3 <= len);
   assert (len mod 2 = 1);
   let ncases = len / 2 in
+  let is_trivial arr n =
+    assert (n <= Array.length arr);
+    interval_for_all
+      (fun i ->
+        match arr.(i) with
+          Variable k -> k < n
+        | _ -> false)
+      0 n
+  and unmatched_partial (n:int) (pat:term) (arr: term array): int * term =
+    assert (n <= Array.length arr);
+    let len = Array.length arr in
+    let n2  = len - n in
+    let upat  = Term.upbound n2 n pat in
+    let upat  = Term.sub upat arr len in
+    let used  = List.rev (Term.used_variables upat len) in
+    let n_new = List.length used in
+    let arr2  = Array.make len (Variable (-1)) in
+    List.iteri (fun pos i -> arr2.(i) <- Variable pos) used;
+    let upat  = Term.sub upat arr2 n_new in
+    n_new, upat in
+  let add_filtered_peers
+      (peers:(int*term)list) (npat:int) (pat:term) (lst:(int*term)list)
+      : (int*term)list =
+    List.fold_left
+      (fun lst (n,t) ->
+        try
+          let subarr = Term_algo.unify_pattern n t npat pat in
+          if is_trivial subarr n then (n,t) :: lst else lst
+        with Not_found ->
+          lst)
+      lst
+      peers
+  in
   let rec unmatched_from (i:int) (lst:(int*term) list): (int*term) list =
-    assert (0 < i);
     assert (i <= ncases);
     if i = ncases then
       lst
     else
-      let n,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1) in
-      let lst_i = peer_matches_of_match n mtch nb ft in
-      let lst = List.filter
-          (fun (n,mtch) ->
-            List.exists
-              (fun (n0,mtch0) ->
-                try
-                  let sub = case_substitution n mtch n0 mtch0 nb ft in
-                  Option.has sub
-                with Not_found ->
-                  (*printf "unmatched_inspect_cases (not found) case %d\n" i;
-                    printf "   mtch  %s\n" (term_to_string mtch  true (n+nb)  [||] ft);
-                    printf "   mtch0 %s\n" (term_to_string mtch0 true (n0+nb) [||] ft);
-                    (*assert false (* cannot happen *)*)*)
-                  false)
-              lst)
-          lst_i in
-      unmatched_from (i+1) lst
+      let npat_i,_,pat_i = Term.pattern_split args.(2*i+1) in
+      let lst_new =
+        List.fold_left
+          (fun lst_new (npat,pat) ->
+            try
+              let subarr = Term_algo.unify_pattern npat pat npat_i pat_i in
+              if is_trivial subarr npat then begin
+                (* pat_i is more general, i.e. pat no longer needed *)
+                lst_new
+              end else begin
+                (* pat_i resolved pat only partial, splitting of pat necessary *)
+                let n2, upat2 = unmatched_partial npat pat subarr in
+                let peers = peer_matches_of_match n2 upat2 nb ft in
+                add_filtered_peers peers npat pat lst_new
+              end
+            with Not_found -> (* pat and pat_i cannot be unified *)
+              (npat,pat) :: lst_new)
+          []
+          lst
+      in
+      unmatched_from (i+1) lst_new
   in
-  let first_list =
-    let n,_,mtch,_ = Term.qlambda_split_0 args.(1) in
-    peer_matches_of_match n mtch nb ft
-  in
-  unmatched_from 1 first_list
+  unmatched_from 0 [1, Variable 0]
+
+
+
+
+
+
+
+
+let inspect_unfold_catchall (args:term array) (nb:int) (ft:t): term array =
+  (* Check if the inspect expression [Flow(Inspect,args)] has catchall cases. If yes
+     unfold the catchall pattern to a sequence of explicit pattern and add the
+     corresponding cases. If there are case clauses in the original inspect expression
+     after the catchall clause, they are useless.
+   *)
+  let len = Array.length args in
+  assert (3 <= len);
+  assert (len mod 2 = 1);
+  let ncases = len / 2 in
+  let ntup = Array.length (args_of_tuple args.(0) nb ft) in
+  let i_catchall =
+    let rec find i =
+      if i = ncases then
+        i
+      else
+        try
+          let n,_,pat = Term.pattern_split args.(2*i+1) in
+          let tupargs = args_of_tuple pat (n+nb) ft in
+          let ntup2   = Array.length tupargs in
+          let is_catchall args =
+            interval_for_all
+              (fun i ->
+                match tupargs.(i) with
+                  Variable k when k < n -> true
+                | _ -> false)
+              0 ntup2
+          in
+          if ntup < ntup2 || not (is_catchall tupargs) then
+            find (i+1)
+          else
+            i
+        with Not_found ->
+          find (i+1)
+    in
+    find 0 in
+  assert (i_catchall <= ncases);
+  if i_catchall = ncases then
+    args
+  else begin
+    let args_cut = Array.sub args 0 (1+2*i_catchall)
+    and res      = args.(2+2*i_catchall) in
+    let lst = unmatched_inspect_cases args_cut nb ft in
+    assert (lst <> []);
+    let lst =
+      List.fold_left
+        (fun lst (n,t) ->
+          let nms = standard_argnames n in
+          let pat = Term.some_quantified n nms t in
+          pat :: res :: lst)
+        [] lst in
+    Array.append args_cut (Array.of_list lst)
+  end
 
 
 

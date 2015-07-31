@@ -425,6 +425,38 @@ end (* Accus *)
 
 
 
+let unfold_inspect (t:term) (c:Context.t): term =
+  let ft    = Context.feature_table c
+  and nvars = Context.count_variables c in
+  let rec unfold t nb =
+    let unfold_args args = Array.map (fun a -> unfold a nb) args
+    and unfold_list lst  = List.map  (fun a -> unfold a nb) lst
+    in
+    match t with
+      Variable i ->
+        t
+    | VAppl (i,args) ->
+        VAppl (i, unfold_args args)
+    | Application (f,args,pr) ->
+        let f    = unfold f nb
+        and args = unfold_args args in
+        Application(f,args,pr)
+    | Lam (n,nms,pres,t,pr) ->
+        let pres = unfold_list pres
+        and t    = unfold t (1+nb) in
+        Lam(n,nms,pres,t,pr)
+    | QExp (n,nms,t,is_all) ->
+        QExp (n, nms, unfold t (n+nb), is_all)
+    | Flow (Inspect,args) ->
+        let args = unfold_args args in
+        let args = Feature_table.inspect_unfold_catchall args (nb+nvars) ft in
+        Flow(Inspect,args)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, unfold_args args)
+  in
+  unfold t 0
+
+
 
 let cannot_find (name:string) (nargs:int) (info:info) =
   let str = "Cannot find \"" ^ name
@@ -906,6 +938,7 @@ let analyze_expression
   let term,tvars_sub = Accus.result accs in
   validate_term ie.i term c;
   Context.update_type_variables tvars_sub c;
+  let term = unfold_inspect term c in
   assert (Term_builder.is_valid term is_bool c);
   term
 

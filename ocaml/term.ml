@@ -127,6 +127,10 @@ module Term: sig
 
   val some_quantifier_split: term -> int * int array * term
 
+  val pattern: int -> int array -> term -> term
+  val pattern_split: term -> int * int array * term
+  val case_split: term -> term -> int * int array * term * term
+
   val binary: int -> term -> term -> term
 
   val binary_split_0: term -> int * term * term
@@ -728,6 +732,19 @@ end = struct
       QExp (n,names,t,is_all) -> n,names,t,is_all
     | _ -> raise Not_found
 
+  let pattern (n:int) (nms:int array) (t:term): term =
+    QExp (n,nms,t,false)
+
+  let pattern_split (t:term): int * int array * term =
+    let n,nms,t,is_all = qlambda_split_0 t in
+    assert (not is_all);
+    n, nms, t
+
+  let case_split (t1:term) (t2:term): int * int array * term * term =
+    let n1,nms1,t1 = pattern_split t1
+    and n2,nms2,t2 = pattern_split t2 in
+    assert (n1 = n2);
+    n1, nms1, t1, t2
 
   let unary (unid:int) (t:term): term =
     let args = [| t |] in

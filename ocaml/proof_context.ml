@@ -742,8 +742,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 assert (3 <= len);
                 assert (len mod 2 = 1);
                 let ncases       = len / 2
-                and ft           = feature_table pc
-                and nvars        = nb + nbenv
                 and insp,inspe,inspmodi = eval args.(0) nb full depth in
                 let rec cases_from (i:int) =
                   if i = ncases then begin (* no match found *)
@@ -752,36 +750,29 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       and args  = Array.copy args in
                       argse.(0) <- inspe;
                       args.(0)  <- insp;
-                      Flow(Inspect,args), Eval.Flow(ctrl,argse), true
+                      Flow(ctrl,args), Eval.Flow(ctrl,argse), true
                     end else begin
                       t, Eval.Term t, false
                     end
                   end else
-                    let n1,_,mtch,_ = Term.qlambda_split_0 args.(2*i+1)
-                    and n2,_,res,_  = Term.qlambda_split_0 args.(2*i+2) in
-                    assert (n1 = n2);
+                    let n,_,mtch,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+
                     try
-                      let sub =
-                        Feature_table.case_substitution 0 insp n1 mtch nvars ft in
-                      match sub with
-                        None ->
-                          cases_from (i+1)
-                      | Some args ->
-                          assert (Array.length args = n2);
-                          let res = Term.apply res args in
-                          let res1,rese,_ = eval res nb full depth in
-                          res1, Eval.Inspect(t,inspe,i,n1,rese), true
+                      let sub = Term_algo.unify insp n mtch in
+                      assert (Array.length sub = n);
+                      let res = Term.apply res sub in
+                      let res1,rese,_ = eval res nb full depth in
+                      res1, Eval.Inspect(t,inspe,i,n,rese), true
                     with Not_found ->
                       cases_from (i+1)
                 in
                 cases_from 0
             | Asexp ->
                 assert (len = 2);
-                let c = context pc
-                and n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
+                let n,nms,mtch = Term.pattern_split args.(1) in
                 try
                   let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|] in
-                  if Context.is_case_matching args.(0) n mtch nb c then begin
+                  if Term_algo.can_unify_pattern args.(0) n mtch then begin
                     Variable (nbenv+Feature_table.true_index),
                     Eval.As(true,eargs),
                     true

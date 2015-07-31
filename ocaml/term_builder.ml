@@ -1008,6 +1008,10 @@ let complete_inspect (n:int) (tb:t): unit =
   let insp,_,_ = pop_term tb in
   args.(0) <- insp;
   get_expected 1 tb;
+  (*let args =
+    let ft = Context.feature_table tb.c
+    and nvars = Context.count_variables tb.c in
+    Feature_table.inspect_unfold_catchall args nvars ft in*)
   let term = Flow (Inspect, args) in
   if tb.trace then
     printf "\ncomplete_inspect %s\n\n" (string_of_term term tb);
