@@ -196,10 +196,6 @@ rule next_token = parse
 
 | "/in"           { Parser.NOTIN,    (false,false) }
 
-| "()"            { Parser.PARENOP,  (false,false) }
-
-| "[]"            { Parser.BRACKETOP,(false,false) }
-
 
 | ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|' '^']+ as op {
   try

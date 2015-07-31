@@ -117,7 +117,6 @@ let predicate_of_expression (info:info) (e:expression): expression =
 %token ARROW
 %token ASSIGN
 %token BAR
-%token BRACKETOP
 %token CARET
 %token COLON
 %token COMMA
@@ -144,7 +143,6 @@ let predicate_of_expression (info:info) (e:expression): expression =
 %token NEQV
 %token NEWLINE
 %token NOTIN
-%token PARENOP
 %token PLUS
 %token QMARK
 %token RBRACE
@@ -859,8 +857,6 @@ operator:
 |   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
 |   ROPERATOR { RFreeop $1 }
-|   PARENOP   { Parenop }
-|   BRACKETOP { Bracketop }
 
 
 
