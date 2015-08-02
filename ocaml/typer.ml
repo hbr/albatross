@@ -542,7 +542,7 @@ let is_constant (nme:int) (c:Context.t): bool =
 let case_variables (e:expression) (c:Context.t): expression * int list =
   let rec vars (e:expression) (nanon:int) (lst:int list): expression * int * int list =
     match e with
-      Expnumber _ | Exptrue | Expfalse ->
+      Expnumber _ | Exptrue | Expfalse | Expop _ ->
         e, nanon, lst
     | Identifier nme | Typedexp(Identifier nme,_)->
         let lst =

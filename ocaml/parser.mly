@@ -558,6 +558,7 @@ nameopconst:
 
 featopconst:
     LPAREN operator RPAREN { FNoperator $2}
+|   LBRACKET RBRACKET      { FNoperator Bracketop }
 |   KWtrue                 { FNtrue }
 |   KWfalse                { FNfalse }
 |   NUMBER                 { FNnumber $1 }
@@ -703,11 +704,12 @@ expr:
 |   operator_expr                 { $1 }
 |   LPAREN expr RPAREN            { Expparen $2 }
 |   LPAREN operator RPAREN        { Expop $2 }
+|   LBRACKET RBRACKET             { Expop Bracketop}
 |   LBRACKET expr RBRACKET        {
   let lst = expression_list $2 in
   let rec brexp lst =
     match lst with
-      []   -> Identifier (ST.symbol "nil")
+      []   -> Expop Bracketop (*Identifier (ST.symbol "nil")*)
     | h::t ->
         Binexp (Caretop, h, brexp t)
   in
