@@ -714,7 +714,7 @@ let add_case_induction
       clst_rev
   in
   let t = Term.all_quantified 2 [|ST.symbol "p";ST.symbol "a"|] t in
-  printf "induction %s\n" (Proof_context.string_of_term t pc);
+  (*printf "induction %s\n" (Proof_context.string_of_term t pc);*)
   add_case_axiom t pc
 
 
@@ -746,8 +746,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       (n1+n2)
       (Feature_table.standard_argnames (n1+n2))
       t in
-  printf "inversion %s\n"
-    (Proof_context.string_of_term t pc);
+  (* printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
   add_case_axiom t pc
 
 
@@ -778,7 +777,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and mtch2 = Flow(Asexp, [|Variable 0; mtch2|]) in
   let t = Term.binary imp_id mtch1 (Term.binary imp_id mtch2 (Variable false_id)) in
   let q = Term.all_quantified 1 (Feature_table.standard_argnames 1) t in
-  printf "inversion %s\n" (PC.string_of_term q pc);
+  (*printf "inversion %s\n" (PC.string_of_term q pc);*)
   add_case_axiom q pc
 
 
@@ -829,7 +828,7 @@ let add_case_injections
           let teq1 = Term.binary eq_id1 (Variable i) (Variable (n+i)) in
           let t = Term.binary imp_id teq0 teq1 in
           let t = Term.all_quantified (2*n) nms t in
-          printf "injection %s\n" (Proof_context.string_of_term t pc);
+          (*printf "injection %s\n" (Proof_context.string_of_term t pc);*)
           add_case_axiom t pc
         done)
     clst
@@ -910,10 +909,30 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
     (Array.to_list (Sign.arguments sign))
 
 
+let creators_check_formal_generics
+    (info:info) (clst:int list) (tvs:Tvars.t) (ft:Feature_table.t): unit =
+  assert (Tvars.count tvs = 0);
+  for i = 0 to (Tvars.count_fgs tvs) - 1 do
+    if List.for_all
+        (fun cidx ->
+          let _,sign = Feature_table.signature cidx ft in
+          let argtps = Sign.arguments sign in
+          interval_for_all
+            (fun j ->
+              argtps.(j) <> Variable i)
+            0 (Array.length argtps))
+        clst then
+          let nme = (Tvars.fgnames tvs).(i) in
+          error_info info ("Formal generic " ^ (ST.string nme) ^
+                           " does not occur in any constructor")
+  done
+
+
 
 let put_creators
     (cls: int)
     (cls_is_new:bool)
+    (tvs: Tvars.t)
     (cls_tp: type_t)
     (creators: (feature_name withinfo * entities list) list withinfo)
     (pc: Proof_context.t)
@@ -926,13 +945,12 @@ let put_creators
   let c0lst, c1lst =
     List.fold_left
       (fun (c0lst,c1lst) (fn,ents) ->
-        let c1 = Context.push (withinfo info ents) rt false true false c in
-        let sign = Context.signature c1
-        and nms  = Context.local_argnames c1
-        and tvs  = Context.tvars c1
-        and cnt  = Feature_table.count ft in
-        if Tvars.count tvs > 0 then
-          error_info fn.i "Type inference for constructors not allowed";
+        let formals,res =
+          Class_table.analyze_signature (withinfo fn.i ents) rt
+            false true false tvs ct in
+        let nms, argtps = Myarray.split formals in
+        let sign = Sign.make argtps res in
+        let cnt = Feature_table.count ft in
         let spec = Feature.Spec.make_func_def nms None []
         and imp  = Feature.Empty in
         let idx, is_new, is_export =
@@ -945,10 +963,6 @@ let put_creators
           with Not_found ->
             cnt, true, false
         in
-        printf "  %d %s  %s\n"
-          idx
-          (feature_name_to_string fn.v)
-          (Context.sign2string sign c1);
         assert (not cls_is_new || is_new);
         for i = 0 to Sign.arity sign - 1 do
           let arg = Sign.arg_type i sign in
@@ -982,7 +996,8 @@ let put_creators
   if Class_table.is_interface_check ct &&
      Class_table.constructors_priv cls ct <> cset then
     error_info info "Different constructors in implementation file";
-  Class_table.set_constructors cset cls ct
+  Class_table.set_constructors cset cls ct;
+  creators_check_formal_generics creators.i clst tvs ft
 
 
 
@@ -1061,7 +1076,8 @@ let put_class
   if creators.v <> [] then begin
     match hm.v with
       Case_hmark ->
-        put_creators idx is_new cls_tp creators pc
+        let _,tvs = Class_table.class_type idx ct in
+        put_creators idx is_new tvs cls_tp creators pc
     | _ ->
         error_info creators.i "Only case classes can have constructors"
   end;

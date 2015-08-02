@@ -1091,7 +1091,7 @@ let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int
       nall + (find path name ct)
     with Not_found ->
         error_info info ("Class " ^ (string_of_classname path name)
-                         ^ " does not exist")
+                         ^ " does not exist in this context")
 
 
 
@@ -1302,6 +1302,8 @@ let formal_arguments
   let fargs (es: entities): formal list =
     match es with
       Untyped_entities lst ->
+        if Tvars.count_local tvs < List.length lst then
+          error_info entlst.i "Untyped arguments not allowed here";
         assert (List.length lst <= Tvars.count_local tvs);
         assert (!n_untyped = 0);
         n_untyped := List.length lst;
