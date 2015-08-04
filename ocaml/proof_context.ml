@@ -705,10 +705,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             Lam (n,nms,pres,t0,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
           else
             t, Eval.Term t, false
-      | QExp (n,nms,t,is_all) ->
+      | QExp (n,nms,t0,is_all) ->
           let full = full || not is_all in
-          let t,e,tmodi = eval t (n+nb) full depth in
-          QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
+          if full then
+            let t,e,tmodi = eval t0 (n+nb) full depth in
+            QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
+          else
+            t, Eval.Term t, false
       | Flow (ctrl,args) ->
           let len = Array.length args in
           begin
