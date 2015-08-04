@@ -651,6 +651,8 @@ let analyze_feature
       Feature_table.add_feature fn tvs nms sign imp ft;
       cnt, true, false
   in
+  if PC.is_interface_check pc && is_new then
+    error_info fn.i "Feature not declared in implementation file";
   let spec = feature_specification_ast fn.i nms idx bdy exp pc1 in
   update_feature fn.i idx is_new is_export spec imp pc;
   if is_new then
