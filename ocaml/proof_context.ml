@@ -774,8 +774,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 assert (len = 2);
                 let n,nms,mtch = Term.pattern_split args.(1) in
                 try
-                  let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|] in
-                  if Term_algo.can_unify_pattern args.(0) n mtch then begin
+                  let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|]
+                  and ft = feature_table pc in
+                  if Feature_table.is_case_matching args.(0) n mtch (nb+nbenv) ft
+                  then begin
+                  (*if Term_algo.can_unify_pattern args.(0) n mtch then begin*)
                     Variable (nbenv+Feature_table.true_index),
                     Eval.As(true,eargs),
                     true
@@ -1056,7 +1059,7 @@ let close (pc:t): unit =
   else
     let cnt0 = count pc in
     let rec cls (round:int): unit =
-      if count pc - cnt0 > 500 then assert false; (* 'infinite' loop detection *)
+      if count pc - cnt0 > 1000 then assert false; (* 'infinite' loop detection *)
       if has_work pc then begin
         let lst = List.rev pc.work in
       pc.work <- [];

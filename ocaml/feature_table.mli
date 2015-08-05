@@ -145,6 +145,7 @@ val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
 val peer_constructors: int -> t -> IntSet.t
+val is_case_matching:  term -> int -> term -> int -> t -> bool
 val peer_matches:      int -> int -> t -> (int*term) list
 val peer_matches_of_match: int -> term -> int -> t -> (int*term) list
 val unmatched_inspect_cases: term array -> int -> t -> (int * term) list

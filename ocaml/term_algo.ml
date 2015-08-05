@@ -1,6 +1,48 @@
 open Term
 open Container
 
+let extract_pattern (n:int) (t:term): (int*int*int*term) list =
+  (* Extract a pattern of each variable in the term [t]. The result is a list of
+     triples [i,j,n,p] where
+         i: original variable
+         j: variable in the pattern
+         n: number of variables in the pattern
+         p: pattern
+   *)
+  let rec extract (var:int) (pos:int) (npat:int) (pat:term) (t:term) (nb:int) =
+    let bvs = Term.bound_variables t (n+nb) in
+    if not (IntSet.mem (var+nb) bvs) then
+      var, pos, (pos+1), Variable (0+nb)
+    else
+      let extract_args pos npat pat args =
+        Array.fold_left
+          (fun (var,pos,npat,p) arg ->
+            extract var pos npat pat arg nb)
+          (var,pos,npat,pat)
+          args in
+      match t with
+        Variable i ->
+          assert (var = i + nb);
+          var, pos, npat, Variable (pos+nb)
+      | VAppl(i,args) ->
+          assert (var <> i + nb);
+          extract_args pos npat pat args
+      | Application(f,args,pr) ->
+          assert false (* nyi *)
+      | Lam(n,nms,ps,t0,pr) ->
+          assert false (* nyi *)
+      | QExp(n,nms,t0,is_all) ->
+          assert false (* nyi *)
+      | Flow(ctrl,args) ->
+          assert false (* nyi *)
+  in
+  let vars = Term.bound_variables t n in
+  IntSet.fold
+    (fun i lst ->
+      (extract i 0 1 (Variable 0) t 0) :: lst)
+    vars []
+
+
 let unify_pattern
     (n1:int) (p1:term) (n2:int) (p2:term): term array =
   (* Find a unification of the pattern [p1] with [n1] variables and [p2] with [n2]

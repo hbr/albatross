@@ -1560,7 +1560,8 @@ let term_to_string
 
 
 
-
+let string_of_term_anon (t:term) (nb:int) (ft:t): string =
+  term_to_string t true nb [||] ft
 
 
 let print (ft:t): unit =
@@ -2109,7 +2110,8 @@ let is_pattern (n:int) (t:term) (nb:int) (ft:t): bool =
   nbnd = List.length bnd_lst
 
 
-(*
+
+
 let case_substitution
     (nt:int) (t:term) (npat:int) (pat:term) (nb:int) (ft:t): (term array) option =
   (* The substitutions for the match expression [pat] which make the match
@@ -2170,17 +2172,18 @@ let case_substitution
     Some subargs
   else
     None
-*)
 
 
-(*
+
+
 let is_case_matching (t:term) (npat:int) (pat:term) (nb:int) (ft:t): bool =
   (* Is the term [t] matching the match expression [mtch] with [n] variables?
+     Raise [Not_found] if the match is undecidable.
    *)
   match case_substitution 0 t npat pat nb ft with
     None   -> false
   | Some _ -> true
-*)
+
 
 
 
@@ -2359,7 +2362,50 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
 
 
 
+(* Catch all cases:
 
+        (<=) (a,b:NATURAL): BOOLEAN
+            -> inspect a,b
+               case 0,            _            then true        -- critical!!
+               case _,            0            then false
+               case successor(n), successor(m) then n <= m
+               end
+
+   The first case is implicitly two cases. The inspect has to be unfolded
+
+        (<=) (a,b:NATURAL): BOOLEAN
+            -> inspect a,b
+               case 0,            0            then true
+               case 0,            successor(_) then true
+               case successor(_), 0            then false
+               case successor(n), successor(m) then n <= m
+               end
+
+   It might be possible that one inspect variable has only catchall cases.
+
+        plus (t:(NATURAL,NATURAL): NATURAL
+            -> inspect t
+               case (a,0)            then a                   -- uncritical
+               case (a,successor(b)) then successor(a + b)
+               end
+
+   In the first example the catchall case is critical in the third example it
+   is uncritical and does not require unfolding. What's the difference? In the
+   first example there are other cases where a constructor appears at the same
+   position, i.e. the inspect expression actually distinguishes cases at this
+   position.
+
+   In order to find critical cases we have to investigate all variables
+   occuring in a pattern. If there are other cases which have a constructor at
+   this position then the variable is just a shorthand for several cases (all
+   constructors of this type).
+
+   In order to find case which distiguish more we have to construct a pattern
+   for each variable which matches all cases where there is something at the
+   variable position. I.e. we have to convert (0,y) to (x,y) to see that the
+   second case matches with the substitution y~>0.  We need a function which
+   takes a term and a number of variables a returns a list of pairs (i,p)
+   where i is the variable and p is the pattern. *)
 
 
 
