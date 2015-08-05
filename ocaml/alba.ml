@@ -41,6 +41,13 @@ type command =
   | Version
   | Help
 
+(*
+  A module file is
+     new:      there is no dal/dali file
+     modified: the file is more recent than its dal/dali file
+     affected: there is a used module whose interface file has been modified
+               or whose ali file is more recent than the dali file of the module
+ *)
 
 
 type state = {
@@ -48,6 +55,8 @@ type state = {
     mutable modified:    bool;
     mutable affected:    bool;
     mutable is_new:      bool;
+    mutable mtime:       float;
+    mutable dmtime:      float;
     mutable used:        module_name list
   }
 
@@ -66,6 +75,8 @@ let make_state () = {
   modified    = false;
   affected    = false;
   is_new      = false;
+  mtime       = 0.;
+  dmtime      = 0.;
   used        = []
 }
 
@@ -228,22 +239,27 @@ let dfile_path (mdl:int) (ext:string) (ad:t): string =
 
 
 
-let file_status (mdlname: int) (ext:string) (ad:t): bool * bool =
+let file_status (mdlname: int) (ext:string) (ad:t): bool * bool * float * float =
+  (* Check if the file [mdlname.ext] has been modified or is new. The file is new
+     if no dal/dali file is available. The file has been modified if it is more
+     recent than the corresponding dal/dali file. *)
   let dfname = dfile_path mdlname ext ad
   and fname  = file_path mdlname ext ad
   in
   let stat = my_stat fname in
+  let mtime = stat.Unix.st_mtime in
   try
-    let mstat = my_stat dfname in
-    let modified = mstat.Unix.st_mtime < stat.Unix.st_mtime in
-      modified, false
+    let dmtime = (my_stat dfname).Unix.st_mtime in
+    let modified = dmtime < mtime in
+      modified, false, mtime, dmtime
   with Not_found ->
-    false, true
+    false, true, mtime, 0.
 
 
 
 
-let used (mdlname:int) (ext:string) (ad:t): module_name list =
+let used_modules (mdlname:int) (ext:string) (ad:t): module_name list =
+  (* The used modules of an interface/implementation of a module *)
   let dfname = dfile_path mdlname ext ad in
   let ch_in = open_in dfname in
   let rec read (lst:module_name list): module_name list =
@@ -265,29 +281,34 @@ let used (mdlname:int) (ext:string) (ad:t): module_name list =
 
 
 
+let module_state (mdlname:int) (ext:string) (ad:t): state =
+  (* The state of the interface/implementation of a module: avail, modi, affected
+     plus its used modules*)
+  let st = make_state () in
+  try
+    let modi,is_new,mtime,dmtime = file_status mdlname ext ad in
+    st.is_avail <- true;
+    st.modified <- modi;
+    st.is_new   <- is_new;
+    st.mtime    <- mtime;
+    st.dmtime   <- dmtime;
+    st.affected <- is_new || modi;
+      if not modi && not is_new then
+        st.used <- used_modules mdlname ext ad;
+      st
+  with
+    Not_found -> st
+
+
 
 let module_states (ad:t): (state*state) IntMap.t =
-  let state (mdlname:int) (ext:string): state =
-    let st = make_state () in
-    try
-      let modi,is_new = file_status mdlname ext ad in
-      st.is_avail <- true;
-      st.modified <- modi;
-      st.is_new   <- is_new;
-      st.affected <- is_new || modi;
-      if not modi && not is_new then
-        st.used <- used mdlname ext ad;
-      st
-    with
-      Not_found -> st
-  in
   List.fold_left
     (fun map nme ->
       if IntMap.mem nme map then
         map
       else
-        let st  = state nme "al"
-        and sti = state nme "ali"
+        let st  = module_state nme "al"  ad
+        and sti = module_state nme "ali" ad
         in
         if st.affected && sti.is_avail then
           sti.affected <- true;
@@ -337,7 +358,9 @@ let get_module_states (ad:t): unit =
         else
           try
             let _,stui = IntMap.find used ad.module_states in
-            if not stui.is_avail || stui.modified || stui.is_new then
+            if not stui.is_avail || stui.modified || stui.is_new ||
+            st.dmtime < stui.mtime
+            then
               st.affected <- true
           with Not_found ->
             st.affected <- true)
