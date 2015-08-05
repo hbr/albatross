@@ -838,8 +838,11 @@ end = struct
 
 
   let rec make_implication_chain
-      (ps:term list) (tgt:term) (imp_id:int): term =
-    match ps with
+      (ps_rev:term list) (tgt:term) (imp_id:int): term =
+    (*  Make an implication chain from the reversed list of the premises, the target
+        and the implication id.
+     *)
+    match ps_rev with
       [] -> tgt
     | p::ps0 ->
         make_implication_chain
