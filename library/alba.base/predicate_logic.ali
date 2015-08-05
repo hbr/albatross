@@ -1,4 +1,5 @@
 use
+    boolean_logic
     predicate
 end
 
@@ -27,14 +28,21 @@ all(p,q,r:G?)
         (p * q) * r = p * (q * r)
 
         p + p = p
+        p = 0 + p
         p + q = q + p
         (p + q) + r = p + (q + r)
 
-        (some(x) p(x)) ==> p /= 0
+        (some(x) p(x)) ==>  p /= 0
 
         p /= 0         ==> some(x) p(x)
 
         p /= 0 ==> p + q /= 0
+
+        -- De Morgan
+        not (some(x) x in p) ==> (all(x)  x /in p)
+        not (all(x)  x in p) ==> (some(x) x /in p)
+        (all(x)  x /in p)    ==> not (some(x) x in p)
+        (some(x) x /in p)    ==> not (all(x)  x in p)
     end
 
 

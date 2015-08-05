@@ -125,7 +125,10 @@ all(a,b,c:PO, p,q:PO?)
         a <= b ==> b < c  ==> a /= c
         a < b  ==> b <= c ==> a /= c
         a < b  ==> b < c  ==> a < c
-        
+
+        a = b   ==>  b <= c  ==> a <= c
+        a <= b  ==>  b =  c  ==> a <= c
+
         a.is_least(p)     ==> b.is_least(p)      ==> a = b
         a.is_greatest(p)  ==> b.is_greatest(p)   ==> a = b
         a.is_infimum(p)   ==> b.is_infimum(p)    ==> a = b

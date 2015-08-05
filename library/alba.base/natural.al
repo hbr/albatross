@@ -32,6 +32,12 @@ predecessor (n:NATURAL): NATURAL
     end
 
 
+
+
+
+{: Arithmetic
+   ========== :}
+
 (+) (a,b: NATURAL): NATURAL
     -> inspect b
        case 0           then a
@@ -50,16 +56,6 @@ predecessor (n:NATURAL): NATURAL
        case 0           then 1
        case n.successor then a^n * a
        end
-
-(<=) (a,b:NATURAL): BOOLEAN
-    -> inspect a, b
-       case    0, _  then true
-       case    _, 0  then false
-       case    n.successor, m.successor then n <= m
-       end
-
-
-
 
 all(a,b:NATURAL)
     ensure
@@ -82,8 +78,6 @@ all ensure
     1 * 2 = 2
     2 * 2 = 4
     2 ^ 2 = 4
-    1 <= 2
-    2 <= 4
 end
 
 all(a,b,c:NATURAL)
@@ -120,15 +114,16 @@ all(a,b:NATURAL)
 
         all(n)
             require
-                n in {n: a + n = n + a}
+                a + n = n + a
             proof
                 a + n.successor   = (a + n).successor  -- def '+'
                 (a + n).successor = (n + a).successor  -- induction hypothesis
                 (n + a).successor = n + a.successor    -- def '+'
                 n + a.successor   = n.successor + a    -- lemma
             ensure
-                n.successor in {n: a + n = n + a}
+                a + n.successor = n.successor + a
             end
+        b in {n: a + n = n + a}
     ensure
         a + b = b + a
     end
@@ -172,15 +167,17 @@ all(a,b,c:NATURAL) -- distributivity
 
         all(a)
             require
-                a in {n: n * (b + c) = n*b + n*c}
+                a * (b + c) = a*b + a*c
             proof
                 a.successor * (b + c) = a*(b + c) + (b + c)
                 a*(b + c) + (b + c)   = a*b + a*c + (b + c)
                 a*b + a*c + (b + c)   = a*b + b + (a*c + c)
                 a*b + b + (a*c + c)   = a.successor*b + a.successor*c
             ensure
-                a.successor in {n: n * (b + c) = n*b + n*c}
+                a.successor * (b + c) = a.successor*b + a.successor*c
             end
+
+        a in {n: n * (b + c) = n*b + n*c}
     ensure
         a * (b + c) = a*b + a*c
     end

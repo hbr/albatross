@@ -20,19 +20,19 @@ end
 
 preorder (t:BINARY_TREE[G]): LIST[G]
     -> inspect t
-       case leaf        then nil
+       case leaf        then []
        case tree(i,l,r) then i ^ (l.preorder + r.preorder)
        end
 
 inorder (t:BINARY_TREE[G]): LIST[G]
     -> inspect t
-       case leaf        then nil
+       case leaf        then []
        case tree(i,l,r) then l.inorder + i ^ r.inorder
        end
 
 postorder (t:BINARY_TREE[G]): LIST[G]
     -> inspect t
-       case leaf        then nil
+       case leaf        then []
        case tree(i,l,r) then l.postorder + r.postorder + [i]
        end
 

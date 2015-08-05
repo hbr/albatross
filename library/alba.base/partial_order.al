@@ -158,6 +158,25 @@ all(a,b,c:PO)
         a < c
     end
 
+all(a,b,c:PO)
+    require
+        a = b
+        b <= c
+    proof
+        b = a
+        a in {x: x <= c}
+    ensure
+        a <= c
+    end
+
+
+all(a,b,c:PO)
+    require
+        a <= b
+        b = c
+    ensure
+        a <= c
+    end
 
 
 all(a,b:PO, p:PO?)

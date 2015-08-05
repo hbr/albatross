@@ -87,6 +87,8 @@ all(a,b:PO, p:PO?)
     require
         p.is_closure_system
         a <= b
+    proof
+        least(p.above(a)) <= least(p.above(b))
     ensure
         a.closed(p) <= b.closed(p)
     end

@@ -5,6 +5,7 @@
 
 use
     predicate
+    tuple
 end
 
 
@@ -20,9 +21,24 @@ end
 3: NATURAL = 2.successor
 4: NATURAL = 3.successor
 
+
 (+) (a,b: NATURAL):  NATURAL
+    -> inspect b
+       case 0           then a
+       case n.successor then (a + n).successor
+       end
+
 (*) (a,b: NATURAL):  NATURAL
+    -> inspect a
+       case 0           then 0
+       case n.successor then n*b + b
+       end
+
 (^) (a,b: NATURAL):  NATURAL
+    -> inspect b
+       case 0           then 1
+       case n.successor then a^n * a
+       end
 
 predecessor (n:NATURAL): NATURAL
     require

@@ -5,31 +5,29 @@
 
 use
     predicate
+    function
+    tuple
+    natural
 end
 
 
 G:ANY
+H:ANY
 
 case class
     LIST[G]
 create
-    nil
+    []
     (^) (head:G, tail:[G])  -- [G] is a shorthand for LIST[G]
 end
 
-(+) (a,b: [G]): [G]
-        -- The concatenation of the lists 'a' and 'b'.
+
+size (a:[G]): NATURAL
     -> inspect a
-       case nil   then b
-       case h ^ t then h ^ (t + b)
+       case []  then 0
+       case h^t then t.size.successor
        end
 
-(-) (a:[G]): [G]
-        -- The reversed list 'a'.
-    -> inspect a
-       case nil   then nil
-       case h ^ t then -t + [h]
-       end
 
 head (a:[G]): G
         -- The first element of the list 'a'.
@@ -52,19 +50,109 @@ tail (a:[G]): [G]
     end
 
 
-all(a,b,c:[G], x:G)
+(in) (x:G, a:[G]): BOOLEAN
+        -- Is the element 'x' contained in the list 'a'?
+    -> inspect a
+       case []  then false
+       case h^t then x=h or x in t
+       end
+
+
+elements (a:[G]): G?
+        -- The set of elements of the list 'a'.
+    -> {x: x in a}
+
+
+all_in (a:[G], p:G?): BOOLEAN
+        -- Do all elements of the list 'a' satisfy the predicate 'p'?
+    -> inspect a
+       case []  then true
+       case h^t then h in p and t.all_in(p)
+       end
+
+all_in (a,b:[G]): BOOLEAN
+        -- Are all elements of the list 'a' contained in the list 'b'?
+    -> a.all_in(elements(b))
+
+
+same_elements (a,b:[G]): BOOLEAN
+        -- Have the lists 'a' and 'b' the same elements
+    -> a.all_in(b) and b.all_in(a)
+
+
+permutation (a,b:[G]): ghost BOOLEAN
+    -> a.size = b.size and same_elements(a,b)
+
+
+(+) (a,b: [G]): [G]
+        -- The concatenation of the lists 'a' and 'b'.
+    -> inspect a
+       case []    then b
+       case h ^ t then h ^ (t + b)
+       end
+
+(-) (a:[G]): [G]
+        -- The reversed list 'a'.
+    -> inspect a
+       case []    then []
+       case h ^ t then -t + [h]
+       end
+
+folded (f:(G,H)->H, b:H, l:[G]): H
+        -- The function 'f' folded with start value 'b' over the list 'l'.
+    -> inspect l
+       case []  then b
+       case h^t then f.folded(f(h,b),t)
+       end
+
+
+is_prefix (a,b:[G]): BOOLEAN
+    -> inspect a, b
+       case [] , _   then true
+       case _  , []  then false
+       case x^a, y^b then x = y and a.is_prefix(b)
+       end
+
+
+
+
+all(a,b,c:[G], x,y:G, p,q:G?)
     ensure
         -- concatenation of lists
-        a   + nil =  a
-        nil + b   =  b
+        a   + []  =  a
+        []  + b   =  b
         x^a + b   =  x^(a + b)
 
-        a + b + c  =  a + (b + c)
+        (a + b) + c  =  a + (b + c)
 
         -- list reversal
-        (-nil = nil)
-        (-[x] = [x])        -- [x,y,...] is a shorthand for 'x^y^...^nil'
+        (-[]  = [] )
+        (-[x] = [x])        -- [x,y,...] is a shorthand for 'x^y^...^[] '
         (-x^a = -a + [x])
 
         (-(a + b)  =  -b + -a)
+
+        (-(-a)) = a
+
+        -- list elements
+        x in a ==> a.all_in(p) ==> x in p
+        a.all_in(b) ==> b.all_in(p) ==> a.all_in(p)
+        a.all_in(p) ==> p <= q ==> a.all_in(q)
+
+        a.all_in(b) ==> a.elements <= b.elements
+        a.elements <= b.elements ==> a.all_in(b)
+
+        same_elements(a,a)
+        same_elements(a,b) ==> same_elements(b,a)
+        same_elements(a,b) ==> same_elements(b,c) ==> same_elements(a,c)
+
+        -- permutation
+        permutation(a,a)
+        permutation(a,b) ==> permutation(b,a)
+        permutation(a,b) ==> permutation(b,c) ==> permutation(a,c)
+        permutation(x^y^a, y^x^a)
+        permutation(a,b) ==> permutation(x^a,x^b)
+
+        -- folding
+        a + b = (^).folded(b,-a)
     end

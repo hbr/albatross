@@ -17,13 +17,11 @@ all(p:G?)
 
 all(a:G)
     proof
-        require {a} = 0
-        proof   all(x:G) {x}(x)
-                {a}(a)
-        ensure  false end
+        a in 0 ==> false
     ensure
         {a} /= 0
     end
+
 
 all(p:G?)
     require
@@ -34,32 +32,90 @@ all(p:G?)
         p /= 0
     end
 
+
 all(p:G?)
     require
         p /= 0
     proof
-        not (some(x) x in p) ==> false
+        not not some(x) x in p
     ensure
         some(x) x in p
     end
 
 
+{: De Morgan's Laws
+   ================ :}
+
+all(p:G?)
+    require
+        all(x) x /in p
+    proof
+        require
+            some(x) x in p
+        proof
+            all(x) require x in p
+                   proof   x /in p
+                   ensure  false end
+        ensure
+            false
+        end
+    ensure
+        not some(x) x in p
+    end
+
+all(x:G, p:G?)
+    require
+        not some(x) x in p
+    ensure
+        x /in p
+    end
+
+
+
+all(p:G?)
+    require
+        some(x) x /in p
+    proof
+        require
+            all(x) x in p
+        proof
+            all(x) require x /in p
+                   proof   x in p
+                   ensure  false end
+        ensure
+            false
+        end
+    ensure
+        not all(x) x in p
+    end
+
+
+all(p:G?)
+    require
+        not all(x) x in p
+    proof
+        require
+            not some(x) x /in p
+        proof
+            all(x) proof not not (x in p)
+                   ensure x in p end
+        ensure
+            false
+        end
+    ensure
+        some(x) x /in p
+    end
+
+
 all(p,q:G?)
     require
-         p /= 0
+        p /= 0
     proof
-         some(x) x in p
-         all(x)
-             require
-                 p(x)
-             proof
-                 x in p + q
-                 some(x) x in {x: x in p + q}
-             ensure
-                 p + q /= 0
-             end
+        all(x) require p(x)
+               proof   x in p + q
+               ensure  p + q /= 0 end
     ensure
-         p + q /= 0
+        p + q /= 0
     end
 
 
@@ -116,7 +172,10 @@ all(p:G?)
         p * p = p
     end
 
-
+all(p:G?)
+    ensure
+        p = 0 + p
+    end
 
 
 -- some theorems
@@ -124,24 +183,34 @@ all(p:G?)
 all(a,b:G)
         -- symmetry of equality
     require a = b
-    proof   {x:x=a}(b)
+    proof   b in {a}
     ensure  b = a end
 
 all(a,b,c:G)
         -- transitivity of equality
     require a = b
             b = c
-    proof   {x: a=x}(c)
+    proof   c in {a}
     ensure  a = c end
 
 
+all(a,b,c,d,e:G)
+    require
+        a = b
+        b = c
+        c = d
+        d = e
+    ensure
+        a = e
+    end
+
 all(x:G, p:G?)
     require
-        p(x)
+        x in p
     proof
-        all(y) require {x}(y)
+        all(y) require y in {x}
                proof   x = y
-               ensure  p(y) end
+               ensure  y in p end
     ensure
         {x} <= p
     end
@@ -170,14 +239,14 @@ all(p:G?, e:BOOLEAN)
 
 all(p,q:G?)
     require
-        some(x) p(x)
+        some(x) x in p
         p <= q
     proof
-        all(x) require p(x)
-               proof   q(x)
-               ensure some(x) q(x) end
+        all(x) require x in p
+               proof   x in q
+               ensure  some(x) x in q end
     ensure
-        some(x) q(x)
+        some(x) x in q
     end
 
 

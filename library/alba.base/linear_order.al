@@ -21,8 +21,8 @@ all(a,b,c:LO)
     ensure
         a = a
         a <= b or b <= a
-        a <= b ==> b <= a ==> a = b
-        a <= b ==> b <= c ==> a <= c
+        a <= b  ==>  b <= a  ==>  a = b
+        a <= b  ==>  b <= c  ==>  a <= c
     end
 
 all(a:LO)
@@ -70,4 +70,65 @@ all(a,b:LO)
         end
     ensure
         a < b  or  b < a
+    end
+
+
+
+{: Maximum and Minimum
+   =================== :}
+
+min (a,b:LO): LO  -> if a <= b then a else b end
+max (a,b:LO): LO  -> if a <= b then b else a end
+
+
+all(a,b:LO)
+    proof
+        proof  a <= b  or  not (a <= b)
+               a <= b  ==> min(a,b) in {a,b}
+        ensure min(a,b) in {a,b} end
+
+        all(x) require x in {a,b}
+               proof   a <= b  or  not (a <= b)
+                       a <= b        ==> min(a,b) <= x
+                       not (a <= b)  ==> min(a,b) <= x
+               ensure  min(a,b) <= x end
+    ensure
+        min(a,b).is_least({a,b})
+    end
+
+
+all(a,b:LO)
+    proof
+        proof  a <= b  or  not (a <= b)
+               a <= b  ==> max(a,b) in {a,b}
+        ensure max(a,b) in {a,b} end
+
+        all(x)
+            require
+                x in {a,b}
+            proof
+                x = a  or x = b
+                a <= b or not (a <= b)
+                require
+                    x = a
+                proof
+                    a <= b       ==> x <= max(a,b)
+                    not (a <= b) ==> x <= max(a,b)
+                ensure
+                    x <= max(a,b)
+                end
+
+                require
+                    x = b
+                proof
+                    a <= b  ==>  x <= max(a,b)
+                    not (a <= b) ==> x <= max(a,b)
+                ensure
+                    x <= max(a,b)
+                end
+            ensure
+                x <= max(a,b)
+            end
+    ensure
+        max(a,b).is_greatest({a,b})
     end
