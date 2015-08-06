@@ -40,7 +40,7 @@ type descriptor = {
   }
 
 type t = {
-    mutable map: int Term_table2.t Feature_map.t;
+    mutable map: Term_table.t ref Feature_map.t;
     seq:         descriptor seq;
     mutable base:int list ref IntMap.t; (* module name -> list of features *)
     ct:          Class_table.t;
@@ -865,7 +865,7 @@ let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): i
   let tp   = Class_table.to_dummy ntvs sign in
   let ntvs = Tvars.count_all tvs
   and tab = Feature_map.find fn ft.map in
-  let lst  = Term_table2.unify tp ntvs tab in
+  let lst  = Term_table.unify tp ntvs !tab in
   let idx_lst =
     List.fold_left
       (fun lst (i,sub) ->
@@ -926,7 +926,7 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t
   let _, anchor = Sign.anchor desc.tvs desc.sign in
   assert (0 <= desc.cls);
   Class_table.add_feature
-    (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
+    i
     desc.cls
     (is_desc_deferred desc)
     priv_only
@@ -938,7 +938,7 @@ let add_class_feature (i:int) (priv_only:bool) (pub_only:bool) (base:bool) (ft:t
       (string_of_signature i ft)
       (Class_table.class_name anchor ft.ct);*)
     Class_table.add_feature
-      (i, desc.fname, desc.tp, Tvars.count_all desc.tvs)
+      i
       anchor
       (is_desc_deferred desc)
       priv_only
@@ -958,11 +958,11 @@ let add_key (i:int) (ft:t): unit =
   let tab =
     try Feature_map.find desc.fname ft.map
     with Not_found ->
-      let tab = Term_table2.make () in
+      let tab = ref Term_table.empty in
       ft.map <- Feature_map.add desc.fname tab ft.map;
       tab
   in
-  Term_table2.add desc.tp ntvs 0 i tab
+  tab := Term_table.add desc.tp ntvs 0 i !tab
 
 
 
@@ -1284,7 +1284,7 @@ let find_funcs
           lst
       )
       []
-      (Term_table2.terms tab)
+      (Term_table.terms !tab)
   in
   if lst = [] then raise Not_found
   else lst
@@ -1600,7 +1600,7 @@ let find_unifiables (fn:feature_name) (tp:type_term) (ntvs:int) (ft:t)
     : (int*Term_sub.t) list =
   try
     let tab = Feature_map.find fn ft.map in
-    Term_table2.unify_with tp ntvs 0 tab
+    Term_table.unify_with tp ntvs 0 !tab
   with Not_found ->
     []
 
@@ -1731,7 +1731,7 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   end;
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
-  Term_table2.remove i1 tab
+  tab := Term_table.remove i1 !tab
 
 
 

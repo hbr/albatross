@@ -87,16 +87,10 @@ val is_class_public: int -> t -> bool
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
-val add_feature:  (int*feature_name*type_term*int)
-  -> int -> bool -> bool -> bool -> bool -> t -> unit
-    (** [add_feature (fidx,fn,tp,nfgs) cls is_def priv_only pub_only base ct] adds the
-        feature [fidx,fn,tp,tvs] to the class [cls] as deferred or effective
+val add_feature:  int -> int -> bool -> bool -> bool -> bool -> t -> unit
+    (** [add_feature fidx cls is_def priv_only pub_only base ct] adds the
+        feature [fidx] to the class [cls] as deferred or effective
         depending on the value of [is_def] *)
-
-val find_features: (feature_name*type_term*int) -> int -> t -> (int*Term_sub.t) list
-    (** [find_features (fn,tp,nfgs) cls ct] finds all features of the class
-        [cls] with the name [fn] which can be unified with [tp] with [nfgs]
-        formal generics *)
 
 val add_assertion:  int -> int -> bool -> t -> unit
    (** [add_assertion aidx cls defer ct] adds the assertion [aidx] to the

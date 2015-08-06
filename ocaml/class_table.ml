@@ -21,7 +21,6 @@ type parent_descriptor = bool * type_term array (* is_ghost, actual generics *)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
-                         mutable fmap:  int Term_table2.t Feature_map.t;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
@@ -89,7 +88,6 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   let anc  = IntMap.singleton idx (false,args) in
   {hmark = hm;
    tvs   = tvs;
-   fmap  = Feature_map.empty;
    def_features = [];
    eff_features = [];
    def_asserts  = [];
@@ -723,35 +721,11 @@ let update
 
 
 
-let find_features
-    (f:(feature_name*type_term*int))
-    (cls:int)
-    (ct:t)
-    : (int*Term_sub.t) list =
-  assert (cls < count ct);
-  let fn,tp,ntvs = f in
-  let bdesc = base_descriptor cls ct in
-  try
-    let tab = Feature_map.find fn bdesc.fmap in
-    Term_table2.unify_with tp ntvs 0 tab
-  with Not_found ->
-    []
-
-
 let add_feature_bdesc
-    (f:(int*feature_name*type_term*int))
+    (fidx:int)
     (is_deferred:bool)
     (bdesc:base_descriptor)
     :unit =
-  let fidx,fn,tp,nfgs = f in
-  let tab =
-    try Feature_map.find fn bdesc.fmap
-    with Not_found ->
-      let tab = Term_table2.make () in
-      bdesc.fmap <- Feature_map.add fn tab bdesc.fmap;
-      tab
-  in
-  Term_table2.add tp nfgs 0 fidx tab;
   if is_deferred then begin
     assert (not (List.mem fidx bdesc.def_features));
     bdesc.def_features <- fidx :: bdesc.def_features
@@ -764,7 +738,7 @@ let add_feature_bdesc
 
 
 let add_feature
-    (f:(int*feature_name*type_term*int))
+    (fidx:int)
     (cidx:int)
     (is_deferred:bool)
     (priv_only: bool)
@@ -776,24 +750,19 @@ let add_feature
   assert (not (priv_only && pub_only));
   let desc = descriptor cidx ct in
   if base || is_deferred then begin
-    let fidx,_,_,_ = f in
     desc.base_features <- fidx :: desc.base_features end;
   if priv_only || is_private ct then
-    add_feature_bdesc f is_deferred desc.priv
+    add_feature_bdesc fidx is_deferred desc.priv
   else if is_interface_check ct then
-    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
+    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
   else if pub_only then begin
     assert (is_interface_use ct);
-    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
+    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
   end else begin
     assert (is_interface_use ct);
-    add_feature_bdesc f is_deferred desc.priv;
-    add_feature_bdesc f is_deferred (base_descriptor cidx ct)
+    add_feature_bdesc fidx is_deferred desc.priv;
+    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
   end
-  (*else begin
-    add_feature_bdesc f is_deferred desc.priv;
-    add_feature_bdesc f is_deferred (base_descriptor cidx ct);
-  end*)
 
 
 let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
