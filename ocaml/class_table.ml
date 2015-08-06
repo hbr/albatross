@@ -312,6 +312,17 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     VAppl(ntvs+dummy_index, [|tup;Sign.result s|])
 
 
+let to_function (ntvs:int) (s:Sign.t): type_term =
+  (* Convert the callable signature [0,1,...]:RT to the function signature
+     (0,(1,...)) ->RT  *)
+  assert (Sign.has_result s);
+  if Sign.arity s = 0 then
+    Sign.result s
+  else
+    let tup = to_tuple ntvs 0 (Sign.arguments s) in
+    VAppl(ntvs+function_index, [|tup;Sign.result s|])
+
+
 let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
   (* Convert the callable signature [0,1,...]:RT to a predicate (0,1,...)? or to a
      function signature (0,(1,...)) -> RT.  *)

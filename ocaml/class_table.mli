@@ -186,6 +186,8 @@ val to_dummy: int -> Sign.t -> type_term
        If the constant signature is neither a predicate nor a function then
        the result type of the signature is returned. *)
 
+val to_function: int -> Sign.t -> type_term
+
 val upgrade_signature: int -> bool -> Sign.t -> type_term
 
 
