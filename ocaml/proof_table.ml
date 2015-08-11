@@ -157,6 +157,11 @@ let expand_term (t:term) (at:t): term =
   Context.fully_expanded t 0 at.c
 
 
+let prepend_names (nms:int array) (names:int array): int array =
+  let nms = Feature_table.adapt_names nms names in
+  Array.append nms names
+
+
 let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
   let imp_id = imp_id at in
@@ -164,7 +169,7 @@ let prenex_term (t:term) (at:t): term =
     try
       let n0,nms0,t0 = Term.all_quantifier_split t in
       let n1,nms1,t1 = pterm0 t0 (nt+n0) (n0+imp_id) in
-      let nms = Array.append nms0 nms1 in
+      let nms = prepend_names nms0 nms1 in
       let t2, nms2 =
         let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
         let n   = Array.length usd in
@@ -394,7 +399,7 @@ let discharged_term (i:int) (at:t): term =
   assert (not (has_result at));
   let n1,nms1,t = discharged_assumptions i at in
   let nargs = n1 + count_last_arguments at
-  and nms   = Array.append nms1 (names at) in
+  and nms   = prepend_names nms1 (names at) in
   all_quantified nargs nms t (previous at)
 
 
@@ -999,7 +1004,7 @@ let discharged (i:int) (at:t): term * proof_term =
   let n1,nms1,t = discharged_assumptions i at
   in
   let nargs = n1 + count_last_arguments at
-  and nms   = Array.append nms1 (names at)
+  and nms   = prepend_names nms1 (names at)
   and nreq  = at.nreq
   and cnt0  = count_previous at
   and axiom = is_axiom i at
