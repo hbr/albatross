@@ -275,6 +275,7 @@ module Seq: sig
   type 'a t
   val empty: unit -> 'a t
   val singleton: 'a -> 'a t
+  val make:  int -> 'a -> 'a t
   val count: 'a t -> int
   val elem:  int -> 'a t -> 'a
   val copy:  'a t -> 'a t
@@ -293,6 +294,8 @@ end = struct
   let empty () = {cnt=0; arr=[||]}
 
   let singleton (e:'a) = {cnt=1; arr=Array.make 1 e}
+
+  let make (n:int) (e:'a) = {cnt=n; arr=Array.make n e}
 
   let count (seq:'a t): int  = seq.cnt
 
