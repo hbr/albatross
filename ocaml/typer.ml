@@ -425,7 +425,7 @@ end (* Accus *)
 
 
 
-let unfold_inspect (t:term) (c:Context.t): term =
+let unfold_inspect (info:info) (t:term) (c:Context.t): term =
   let ft    = Context.feature_table c
   and nvars = Context.count_variables c in
   let rec unfold t nb =
@@ -449,7 +449,7 @@ let unfold_inspect (t:term) (c:Context.t): term =
         QExp (n, nms, unfold t (n+nb), is_all)
     | Flow (Inspect,args) ->
         let args = unfold_args args in
-        let args = Feature_table.inspect_unfold_catchall args (nb+nvars) ft in
+        let args = Feature_table.inspect_unfolded info args (nb+nvars) ft in
         Flow(Inspect,args)
     | Flow (ctrl,args) ->
         Flow (ctrl, unfold_args args)
@@ -938,7 +938,7 @@ let analyze_expression
   let term,tvars_sub = Accus.result accs in
   validate_term ie.i term c;
   Context.update_type_variables tvars_sub c;
-  let term = unfold_inspect term c in
+  let term = unfold_inspect ie.i term c in
   assert (Term_builder.is_valid term is_bool c);
   term
 

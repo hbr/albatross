@@ -2290,13 +2290,15 @@ let is_case_matching (t:term) (npat:int) (pat:term) (nb:int) (ft:t): bool =
     pattern of upatsub.
 
  *)
-let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list =
-  (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
+let unmatched_and_splitted
+    (n:int) (pat:term) (unmatched:(int*term)list) (nb:int) (ft:t)
+    : (int*term) list * (int * term * term array option) list =
+  (* Calculate the remaining unmatched pattern and a split list. The unmatched
+     pattern are all the pattern which are left over with the pattern [n,pat]
+     working of the unmatched cases in [unmatched]. The split list consist of one
+     ore more pattern into which [n,pat] has to be splitted. The pattern has to be
+     splitted if it is more general than some pattern in [unmatched].
    *)
-  let len = Array.length args in
-  assert (3 <= len);
-  assert (len mod 2 = 1);
-  let ncases = len / 2 in
   let is_trivial arr n =
     assert (n <= Array.length arr);
     interval_for_all
@@ -2330,39 +2332,60 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
       lst
       peers
   in
+  let unmatched,splitted = List.fold_left
+      (fun (unmatched,splitted) (npat0,pat0) ->
+        try
+          let subarr = Term_algo.unify_pattern npat0 pat0 n pat in
+          assert (Array.length subarr = npat0 + n);
+          if is_trivial subarr npat0 then begin
+            (* pat is more general, i.e. pat0 no longer needed as unmatched *)
+            let triple =
+              if npat0 = n && pat = pat0 then (n,pat,None)
+              else (npat0,pat0,Some subarr) in
+            unmatched,
+            triple::splitted
+          end else begin
+            (* pat resolves pat0 only partial, splitting of pat necessary *)
+            let n2, upat2 = unmatched_partial npat0 pat0 subarr in
+            let peers = peer_matches_of_match n2 upat2 nb ft
+            and subarr =
+              try Term_algo.unify_pattern n2 upat2 n pat
+              with Not_found -> assert false
+            in
+            add_filtered_peers peers npat0 pat0 unmatched,
+            (n2,upat2,Some subarr)::splitted
+          end
+        with Not_found -> (* pat and pat_i cannot be unified *)
+          (npat0,pat0) :: unmatched, splitted)
+      ([],[])
+      unmatched in
+  unmatched, splitted
+
+
+
+let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list =
+  (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
+   *)
+  let len = Array.length args in
+  assert (3 <= len);
+  assert (len mod 2 = 1);
+  let ncases = len / 2 in
   let rec unmatched_from (i:int) (lst:(int*term) list): (int*term) list =
     assert (i <= ncases);
     if i = ncases then
       lst
-    else
+    else begin
       let npat_i,_,pat_i = Term.pattern_split args.(2*i+1) in
-      let lst_new =
-        List.fold_left
-          (fun lst_new (npat,pat) ->
-            try
-              let subarr = Term_algo.unify_pattern npat pat npat_i pat_i in
-              if is_trivial subarr npat then begin
-                (* pat_i is more general, i.e. pat no longer needed *)
-                lst_new
-              end else begin
-                (* pat_i resolved pat only partial, splitting of pat necessary *)
-                let n2, upat2 = unmatched_partial npat pat subarr in
-                let peers = peer_matches_of_match n2 upat2 nb ft in
-                add_filtered_peers peers npat pat lst_new
-              end
-            with Not_found -> (* pat and pat_i cannot be unified *)
-              (npat,pat) :: lst_new)
-          []
-          lst
-      in
-      unmatched_from (i+1) lst_new
+      let unmatched,_ = unmatched_and_splitted npat_i pat_i lst nb ft in
+      unmatched_from (i+1) unmatched
+    end
   in
   unmatched_from 0 [1, Variable 0]
 
 
 
 
-(* Catch all cases:
+(* "Catch all" cases:
 
         (<=) (a,b:NATURAL): BOOLEAN
             -> inspect a,b
@@ -2395,73 +2418,71 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ft:t): (int * term) list
    position, i.e. the inspect expression actually distinguishes cases at this
    position.
 
-   In order to find critical cases we have to investigate all variables
-   occuring in a pattern. If there are other cases which have a constructor at
-   this position then the variable is just a shorthand for several cases (all
-   constructors of this type).
+   For each case we have to calculate the unmatched pattern of all previous
+   cases. With the current pattern and the unmatched set we can calculate the
+   new set of cases which will substitute the current case.
 
-   In order to find case which distiguish more we have to construct a pattern
-   for each variable which matches all cases where there is something at the
-   variable position. I.e. we have to convert (0,y) to (x,y) to see that the
-   second case matches with the substitution y~>0.  We need a function which
-   takes a term and a number of variables a returns a list of pairs (i,p)
-   where i is the variable and p is the pattern. *)
+       Walk through all unmatched:
+
+          a) unmatched pattern is more general: split up the unmatched
+             pattern. The current case is not modified.
+
+          b) current pattern is more general or equal: Add a case clause with
+             the unmatched (there might be more unmatched pattern which are
+             more special than the current pattern.
+
+   If the set of unmatched pattern is empty then the case clause is not needed.
+   This condition might be flagged as an error. *)
 
 
+let inspect_unfolded (info:info) (args:term array) (nb:int) (ft:t): term array =
+  (* Unfold case clauses in the inspect expression [Flow(Inspect,args)].
 
-let inspect_unfold_catchall (args:term array) (nb:int) (ft:t): term array =
-  (* Check if the inspect expression [Flow(Inspect,args)] has catchall cases. If yes
-     unfold the catchall pattern to a sequence of explicit pattern and add the
-     corresponding cases. If there are case clauses in the original inspect expression
-     after the catchall clause, they are useless.
+     A case clause has to be unfolded to a set of clauses if it is more general
+     than some of the unmatched clauses.
    *)
   let len = Array.length args in
   assert (3 <= len);
   assert (len mod 2 = 1);
   let ncases = len / 2 in
-  let ntup = Array.length (args_of_tuple args.(0) nb ft) in
-  let i_catchall =
-    let rec find i =
-      if i = ncases then
-        i
-      else
-        try
-          let n,_,pat = Term.pattern_split args.(2*i+1) in
-          let tupargs = args_of_tuple pat (n+nb) ft in
-          let ntup2   = Array.length tupargs in
-          let is_catchall args =
-            interval_for_all
-              (fun i ->
-                match tupargs.(i) with
-                  Variable k when k < n -> true
-                | _ -> false)
-              0 ntup2
-          in
-          if ntup < ntup2 || not (is_catchall tupargs) then
-            find (i+1)
-          else
-            i
-        with Not_found ->
-          find (i+1)
-    in
-    find 0 in
-  assert (i_catchall <= ncases);
-  if i_catchall = ncases then
-    args
-  else begin
-    let args_cut = Array.sub args 0 (1+2*i_catchall)
-    and res      = args.(2+2*i_catchall) in
-    let lst = unmatched_inspect_cases args_cut nb ft in
-    assert (lst <> []);
-    let lst =
-      List.fold_left
-        (fun lst (n,t) ->
-          let nms = standard_argnames n in
-          let pat = Term.some_quantified n nms t in
-          pat :: res :: lst)
-        [] lst in
-    Array.append args_cut (Array.of_list lst)
-  end
+  let rec unfolded_from
+      (i:int) (unmatched: (int*term)list) (lst: term list): term list =
+    if i = ncases then
+      lst
+    else
+      let n,nms,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+      let unmatched,splitted =
+        unmatched_and_splitted n pat unmatched nb ft in
+      if splitted = [] then
+        error_info info ("Unneeded case " ^ (string_of_term_anon pat (n+nb) ft));
+      let lst =
+        List.fold_left
+          (fun lst (n0,pat0,sub_opt) ->
+            let n1,nms1,pat1,res1 =
+              match sub_opt with
+                None ->
+                  assert (n = n0);
+                  n,nms,pat,res
+              | Some arr ->
+                  assert (Array.length arr = n0 + n);
+                  let res0 = Term.up n0 res in
+                  let res0 = Term.sub res0 arr (n0+n) in
+                  let res0 =
+                    try Term.down_from n n0 res0
+                    with Term_capture -> assert false in
+                  n0, (standard_argnames n0), pat0, res0
+            in
+            (Term.pattern n1 nms1 res1) :: (Term.pattern n1 nms1 pat1) :: lst)
+          lst
+          splitted
+      in
+      unfolded_from (i+1) unmatched lst
+  in
+  let lst = unfolded_from 0 [1, Variable 0] [] in
+  let lst = args.(0) :: (List.rev lst) in
+  let args = Array.of_list lst in
+  args
+
 
 
 
