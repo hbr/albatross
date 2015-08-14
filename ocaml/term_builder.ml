@@ -776,11 +776,10 @@ let complete_function (nargs:int) (tb:t): unit =
     let t,_,s = pop_term tb in
     arglst := t :: !arglst;
   done;
-  let f,tvs,fsig = List.hd tb.tlist in
+  let f,tvs,fsig = pop_term tb in
   assert (Tvars.count_all tvs <= count_all tb);
   let fsig = Sign.up_from
       (count_all tb - Tvars.count_all tvs) (count_local tb) fsig in
-  tb.tlist <- List.tl tb.tlist;
   let ttp, is_pred  =
     if Sign.is_constant fsig then
       let dum_idx = dummy_index tb
@@ -880,20 +879,18 @@ let complete_lambda (ntvs:int) (npres:int) (is_pred:bool) (tb:t): unit =
       if n = 0 then lst
       else begin
         assert (tb.tlist <> []);
-        let p,_,_ = List.hd tb.tlist in
-        tb.tlist <- List.tl tb.tlist;
+        let p,_,_ = pop_term tb in
         pop (n-1) (p::lst)
       end
     in
     List.rev (pop npres [])
   in
   let pres = pop_pres npres in
-  let t,ttvs,tsig = List.hd tb.tlist in
+  let t,ttvs,tsig = pop_term tb in
   assert (Tvars.count_all ttvs <= count_all tb);
   let tsig =
     Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
-  tb.tlist <- List.tl tb.tlist;
   let lam = Lam (nargs,names,pres,t,is_pred)
   and s   =
     let argtps = Array.init nargs
@@ -941,12 +938,11 @@ let complete_quantified (ntvs:int) (is_all:bool) (tb:t): unit =
   let names = Context.local_argnames tb.c in
   let nargs = Array.length names in
   assert (0 < nargs);
-  let t,ttvs,tsig = List.hd tb.tlist in
+  let t,ttvs,tsig = pop_term tb in
   assert (Tvars.count_all ttvs <= count_all tb);
   let tsig =
     Sign.up_from (count_all tb - Tvars.count_all ttvs) (count_local tb) tsig in
   assert (Sign.is_constant tsig);
-  tb.tlist <- List.tl tb.tlist;
   remove_local ntvs tb;
   tb.c <- Context.pop tb.c;
   let qexp =
@@ -1008,10 +1004,6 @@ let complete_inspect (n:int) (tb:t): unit =
   let insp,_,_ = pop_term tb in
   args.(0) <- insp;
   get_expected 1 tb;
-  (*let args =
-    let ft = Context.feature_table tb.c
-    and nvars = Context.count_variables tb.c in
-    Feature_table.inspect_unfold_catchall args nvars ft in*)
   let term = Flow (Inspect, args) in
   if tb.trace then
     printf "\ncomplete_inspect %s\n\n" (string_of_term term tb);
@@ -1031,7 +1023,7 @@ let complete_as (tb:t): unit =
   and tvs = tvars tb in
   let term = Flow (Asexp, [|exp; Term.some_quantified n nms mtch|]) in
   if tb.trace then
-    printf "\ncomplete_inspect %s\n\n" (string_of_term term tb);
+    printf "\ncomplete_as %s\n\n" (string_of_term term tb);
    tb.tlist <-
     (term, tvs, s) :: tb.tlist
 
@@ -1119,8 +1111,7 @@ let update_called_variables (tb:t): unit =
     | Flow (ctrl,args) ->
         Flow (ctrl, Array.map (fun a -> update a nb) args)
   in
-  let t,nt,s = List.hd tb.tlist in
-  tb.tlist <- List.tl tb.tlist;
+  let t,nt,s = pop_term tb in
   tb.tlist <- (update t 0,nt,s) :: tb.tlist
 
 
@@ -1240,7 +1231,7 @@ let specialize_term_0 (second_run:bool) (tb:t): unit =
         nglob, Flow (ctrl,args)
   in
   let nargs = Context.count_variables tb.c
-  and t,nt,s     = List.hd tb.tlist in
+  and t,nt,s   = List.hd tb.tlist in
   let nglob, t = upd t nargs 0 in
   if nglob <> TVars_sub.count_global tb.tvars then begin
     printf "specialize_term nglob %d\n" nglob;

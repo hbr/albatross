@@ -337,16 +337,28 @@ end = struct
   let complete_case (ntvs_added:int) (accs:t): unit =
     iter_accus_save Term_builder.complete_case accs;
     accs.ntvs_added <- ntvs_added;
-    accs.c <- Context.pop accs.c
+    accs.c <- Context.pop accs.c;
+    if accs.trace then begin
+      printf "  complete case\n";
+      trace_accus accs
+    end
 
 
   let complete_inspect (ncases:int) (accs:t): unit =
-    iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs
+    iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs;
+    if accs.trace then begin
+      printf "  complete inspect\n";
+      trace_accus accs
+    end
 
   let complete_as (ntvs_added:int) (accs:t): unit =
     iter_accus_save Term_builder.complete_as accs;
     accs.ntvs_added <- ntvs_added;
-    accs.c <- Context.pop accs.c
+    accs.c <- Context.pop accs.c;
+    if accs.trace then begin
+      printf "  complete as\n";
+      trace_accus accs
+    end
 
 
   let get_diff (t1:term) (t2:term) (accs:t): string * string =
@@ -920,8 +932,8 @@ let analyze_expression
     Accus.expect_case c1 accs;
     Accus.get_expected 0 accs;
     analyze mtch accs c1;
-    Accus.complete_as ntvs_gap accs;
     Accus.remove_untyped accs;
+    Accus.complete_as ntvs_gap accs;
     Accus.drop_expected accs;
     Accus.drop_expected accs
   in
