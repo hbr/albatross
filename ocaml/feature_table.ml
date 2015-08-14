@@ -2136,6 +2136,7 @@ let case_substitution
  *)
   let subargs = Array.make npat (Variable (-1))
   and subflgs = Array.make npat false
+  and decid   = ref true
   and hassub  = ref true in
   let is_constr idx =
     nt + nb <= idx && is_constructor (idx-nt-nb) ft
@@ -2164,14 +2165,16 @@ let case_substitution
         hassub :=  !hassub &&  idx1 - nt =  idx2 - npat;
         match_args args1 args2
     | _ ->
-        raise Not_found
+        decid := false
   in
   do_match t pat;
-  assert (not !hassub || interval_for_all (fun i -> subflgs.(i)) 0 npat);
-  if !hassub then
+  assert (not !hassub || not !decid || interval_for_all (fun i -> subflgs.(i)) 0 npat);
+  if not !hassub then
+    None
+  else if !decid then
     Some subargs
   else
-    None
+    raise Not_found
 
 
 
