@@ -22,6 +22,42 @@ end
 3: NATURAL = 2.successor
 4: NATURAL = 3.successor
 
+
+{: Successor
+   ========= :}
+
+all(a:NATURAL)
+    require
+        some(x) a = successor(x)
+    proof
+        all(x)
+            require
+                a = successor(x)
+            proof
+                successor(x) = a
+                a in {a: a /= 0}
+            ensure
+                a /= 0
+            end
+    ensure
+        a /= 0
+    end
+
+all(a:NATURAL)
+    require
+        a /= 0
+    proof
+        0 in {a: a /= 0 ==> some(x) a = successor(x)}
+        all(a) proof
+                   successor(a) = successor(a)
+               ensure
+                   some(x) successor(a) = successor(x)
+               end
+        a in {a: a /= 0 ==> some(x) a = successor(x)}
+    ensure
+        some(x) a = successor(x)
+    end
+
 predecessor (n:NATURAL): NATURAL
     require
         n as _.successor
@@ -35,8 +71,9 @@ predecessor (n:NATURAL): NATURAL
 
 
 
-{: Arithmetic
-   ========== :}
+{: Addition
+   ======== :}
+
 
 (+) (a,b: NATURAL): NATURAL
     -> inspect b
@@ -44,41 +81,15 @@ predecessor (n:NATURAL): NATURAL
        case n.successor then (a + n).successor
        end
 
-(*) (a,b:NATURAL): NATURAL
-    -> inspect a
-       case 0           then 0
-       case n.successor then n*b + b
-       end
-
-
-(^) (a,b:NATURAL): NATURAL
-    -> inspect b
-       case 0           then 1
-       case n.successor then a^n * a
-       end
 
 all(a,b:NATURAL)
     ensure
         a + 0 = a
         a + b.successor = (a + b).successor
         a + 1 = a.successor
-
-        0 * b = 0
-        a.successor * b = a*b + b
-
-        a^0 = 1
-        a ^ b.successor = a^b * a
     end
 
 
-
-all ensure
-    1 + 1 = 2
-    1 + 2 = 3
-    1 * 2 = 2
-    2 * 2 = 4
-    2 ^ 2 = 4
-end
 
 all(a,b,c:NATURAL)
     proof
@@ -98,17 +109,18 @@ all(n:NATURAL)
     end
 
 
+all(a,b:NATURAL) -- commutativity of successor
+    proof
+       0 in {n: a + n.successor = a.successor + n}
+       b in {n: a + n.successor = a.successor + n}
+    ensure
+       a + b.successor = a.successor + b
+    end
+
+
 all(a,b:NATURAL)
         -- commutativity of addition
     proof
-        all(a,b:NATURAL) -- lemma
-            proof
-               0 in {n: a + n.successor = a.successor + n}
-               b in {n: a + n.successor = a.successor + n}
-            ensure
-               a + b.successor = a.successor + b
-            end
-
         proof  0 + a = a
         ensure 0 in {n: a + n = n + a} end
 
@@ -119,7 +131,7 @@ all(a,b:NATURAL)
                 a + n.successor   = (a + n).successor  -- def '+'
                 (a + n).successor = (n + a).successor  -- induction hypothesis
                 (n + a).successor = n + a.successor    -- def '+'
-                n + a.successor   = n.successor + a    -- lemma
+                n + a.successor   = n.successor + a    -- commutativity successor
             ensure
                 a + n.successor = n.successor + a
             end
@@ -127,6 +139,155 @@ all(a,b:NATURAL)
     ensure
         a + b = b + a
     end
+
+
+
+all(a,b,x:NATURAL)
+    proof
+        0 in {x: a + x = b + x ==> a = b}
+        x in {x: a + x = b + x ==> a = b}
+    ensure
+        a + x = b + x ==> a = b
+    end
+
+all(a,b,x:NATURAL)
+    require
+        x + a = x + b
+    proof
+        proof  a + x = x + a
+        ensure a + x = b + x end
+    ensure
+        a = b
+    end
+
+all(a,x:NATURAL)
+    proof
+        0 in {a: a = a.successor ==> false}
+        a in {a: a = a.successor ==> false}
+    ensure
+        a = a.successor ==> false
+    end
+
+all(a,x:NATURAL)
+    proof
+        require a + x = a
+        proof   x + a = a + x
+                a + x = a
+                a = 0 + a
+        ensure  x + a = 0 + a end
+    ensure
+        a + x = a  ==>  x = 0
+    end
+
+
+
+
+{: Order structure
+   =============== :}
+
+
+(<=) (a,b:NATURAL): BOOLEAN
+    -> inspect a, b
+       case    0, _ then true
+       case    _, 0 then false
+       case    successor(a), successor(b) then a <= b
+       end
+
+(<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
+
+
+all(a:NATURAL)
+    proof
+        0 in {a:NATURAL: a <= a}
+        a in {a:NATURAL: a <= a}
+    ensure
+        a <= a
+    end
+
+all(a:NATURAL)
+    proof
+        0 in {a:NATURAL: a <= 0 ==> a = 0}
+        a in {a: a <= 0 ==> a = 0}
+    ensure
+        a <= 0 ==> a = 0
+    end
+
+all(a:NATURAL)
+    ensure
+       successor(a) <= 0 ==> false
+    end
+
+{: Difference
+   ========== :}
+
+
+
+
+all(a,b:NATURAL)
+    proof
+        proof
+            require
+                b <= 0
+                (0:NATURAL,b) as (0,successor(_))
+            proof
+                b = 0
+                0 in {b: (0:NATURAL,b) as (0,successor(_))}
+            ensure
+                false
+            end
+        ensure
+            0 in {a: b <= a ==> not ((a,b) as (0,successor(_)))}
+        end
+
+        all(a)
+            ensure
+                not ((successor(a),b) as (0,successor(_)))
+            end
+
+        a in {a: b <= a ==> not ((a,b) as (0,successor(_)))}
+    ensure
+        b <= a  ==>  not ((a,b) as (0,successor(_)))
+    end
+
+
+all(a,b,n,m:NATURAL)
+    require
+        b <= a
+        (a,b) = (successor(n),successor(m))
+    proof
+        (successor(n),successor(m)) in {x,y: y <= x}
+    ensure
+        m <= n
+    end
+
+
+(-)  (a,b:NATURAL): NATURAL
+    require b <= a
+    ensure  Result = inspect a,b
+                     case    _, 0 then a
+                     case    successor(a), successor(b) then a - b
+                     end
+    end
+
+
+
+{: Multiplication
+   ============== :}
+
+(*) (a,b:NATURAL): NATURAL
+    -> inspect a
+       case 0           then 0
+       case n.successor then n*b + b
+       end
+
+
+all(a,b:NATURAL)
+    ensure
+        0 * b = 0
+        a.successor * b = a*b + b
+    end
+
+
 
 all(a:NATURAL)
     proof
@@ -181,3 +342,29 @@ all(a,b,c:NATURAL) -- distributivity
     ensure
         a * (b + c) = a*b + a*c
     end
+
+
+{: Exponentiation
+   ============== :}
+
+(^) (a,b:NATURAL): NATURAL
+    -> inspect b
+       case 0           then 1
+       case n.successor then a^n * a
+       end
+
+all(a,b:NATURAL)
+    ensure
+        a^0 = 1
+        a ^ b.successor = a^b * a
+    end
+
+
+
+all ensure
+    1 + 1 = 2
+    1 + 2 = 3
+    1 * 2 = 2
+    2 * 2 = 4
+    2 ^ 2 = 4
+end

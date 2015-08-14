@@ -50,9 +50,14 @@ predecessor (n:NATURAL): NATURAL
     end
 
 
-all(a,b,c:NATURAL)
+all(a,b,c,x:NATURAL)
     ensure
+        -- successor
+        a /= 0 ==> some(x) a = successor(x)
+        (some(x) a = successor(x)) ==> a /= 0
+
         -- addition
+        a.successor + b = a + b.successor
         a + 0 = a
         0 + a = a
         a + b.successor = (a + b).successor
@@ -60,6 +65,9 @@ all(a,b,c:NATURAL)
 
         a + b = b + a
         a + b + c = a + (b + c)
+        a + x = b + x  ==>  a = b
+        x + a = x + b  ==>  a = b
+        a + x = a      ==>  x = 0
 
         -- multiplication
         a * 0 = 0
