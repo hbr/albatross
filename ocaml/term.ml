@@ -732,9 +732,6 @@ end = struct
       QExp (n,names,t,is_all) -> n,names,t,is_all
     | _ -> raise Not_found
 
-  let pattern (n:int) (nms:int array) (t:term): term =
-    QExp (n,nms,t,false)
-
   let pattern_split (t:term): int * int array * term =
     let n,nms,t,is_all = qlambda_split_0 t in
     assert (not is_all);
@@ -795,6 +792,9 @@ end = struct
   let some_quantified (nargs:int) (names:int array) (t:term): term =
     quantified false nargs names t
 
+
+  let pattern (n:int) (nms:int array) (t:term): term =
+    some_quantified n nms t
 
   let quantifier_split (t:term) (is_all:bool): int * int array * term =
     let n,nms,t0,is_all0 = qlambda_split t in

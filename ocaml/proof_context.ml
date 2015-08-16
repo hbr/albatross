@@ -660,7 +660,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
           assert (not pr);
           let args = [|Eval.Term (Lam(n,nms,pres,t0,pr))|]
-          and dom = Context.domain_lambda n nms pres nb (context pc) in
+          and dom = Context.domain_of_lambda n nms pres nb (context pc) in
+          dom, Eval.Exp(i, args, Eval.Term dom), true
+      | VAppl (i,[|Variable idx|]) when i = domain_id && nbenv + nb <= idx->
+          let args = [|Eval.Term (Variable idx)|]
+          and dom  = Context.domain_of_feature idx nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
       | VAppl (i,args) ->
           begin

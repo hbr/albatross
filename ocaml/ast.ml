@@ -516,7 +516,7 @@ let feature_specification
     (nms: int array)
     (reqlst: compound)
     (enslst:compound)
-    (pc:PC.t): Feature.Spec.t =
+    (pc:PC.t): Feature.Spec.t * (info*term) option =
   let nargs = Array.length nms
   and context = PC.context pc in
   let adapt_term t = adapt_inner_function_term info t nargs pc in
@@ -528,14 +528,12 @@ let feature_specification
   let pres = adapt_list pres in
   match enslst with
     [] ->
-      Feature.Spec.make_func_spec nms pres []
+      Feature.Spec.make_func_spec nms pres [], None
   | _ ->
       begin try
         let term,info = result_term enslst context in
-        check_recursion info idx term pc;
-        verify_preconditions term info pc;
-        let term = adapt_term term in
-        Feature.Spec.make_func_def nms (Some term) pres
+        let term1 = adapt_term term in
+        Feature.Spec.make_func_def nms (Some term1) pres, Some(info,term)
       with Not_found ->
         let prove cond errstring =
           try Prover.prove cond pc
@@ -543,6 +541,8 @@ let feature_specification
             error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"")
         in
         let posts = function_property_list enslst pc in
+        if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
+          error_info info "Recursive calls not allowed in postconditions";
         if PC.is_private pc then begin
           let exist = Context.existence_condition posts context in
           let unique =
@@ -557,7 +557,7 @@ let feature_specification
         assert (List.for_all (fun t -> is_feature_term_recursive t idx pc) posts);
         let posts = adapt_list posts
         in
-        Feature.Spec.make_func_spec nms pres posts
+        Feature.Spec.make_func_spec nms pres posts, None
       end
 
 
@@ -567,7 +567,7 @@ let feature_specification_ast
     (idx: int)
     (bdy: feature_body option)
     (exp: info_expression option)
-    (pc: Proof_context.t): Feature.Spec.t =
+    (pc: Proof_context.t): Feature.Spec.t * (info*term) option =
   let nargs = Array.length nms in
   let adapt_term t =
     adapt_inner_function_term info t nargs pc in
@@ -576,13 +576,11 @@ let feature_specification_ast
   let context = PC.context pc in
   match bdy, exp with
     None, None ->
-      Feature.Spec.make_empty nms
+      Feature.Spec.make_empty nms, None
   | None, Some ie ->
       let term = Typer.result_term ie context in
-      check_recursion info idx term pc;
-      verify_preconditions term ie.i pc;
-      let term = adapt_term term in
-      (Feature.Spec.make_func_def nms (Some term) [])
+      let term1 = adapt_term term in
+      (Feature.Spec.make_func_def nms (Some term1) []), Some(ie.i,term)
   | Some (reqlst,_,enslst), None ->
       feature_spec reqlst enslst
   | Some bdy, Some exp ->
@@ -605,6 +603,12 @@ let implementation_status
       not_yet_implemented info "features with locals"
 
 
+let check_function_term (idx:int) (opt:(info*term)option) (pc:PC.t): unit =
+  match opt with
+    None -> ()
+  | Some (info,term) ->
+      check_recursion info idx term pc;
+      verify_preconditions term info pc
 
 
 let analyze_feature
@@ -653,8 +657,9 @@ let analyze_feature
   in
   if PC.is_interface_check pc && is_new then
     error_info fn.i "Feature not declared in implementation file";
-  let spec = feature_specification_ast fn.i nms idx bdy exp pc1 in
+  let spec,opt = feature_specification_ast fn.i nms idx bdy exp pc1 in
   update_feature fn.i idx is_new is_export spec imp pc;
+  check_function_term idx opt pc1;
   if is_new then
     add_property_assertion idx pc
 

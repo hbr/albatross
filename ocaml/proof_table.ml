@@ -508,7 +508,10 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         begin match argsa.(0) with
           Lam(n,nms,pres,t0,pr) ->
             if pr then raise Illegal_proof_term;
-            if Context.domain_lambda n nms pres nb (context at) <> doma then
+            if Context.domain_of_lambda n nms pres nb (context at) <> doma then
+              raise Illegal_proof_term
+        | Variable idx2 ->
+            if Context.domain_of_feature idx2 nb (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
         end;

@@ -721,9 +721,9 @@ let postconditions (idx:int) (nb:int) (c:t): int * int array * term list =
 
 
 
-let domain_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term =
+let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term =
   (* Construct the domain of a lambda expression with the precondition [pres] where
-     the lambda expression if within an environment with [nb] variables more than the
+     the lambda expression is within an environment with [nb] variables more than the
      context [c].
    *)
   let nbenv = count_variables c in
@@ -740,6 +740,17 @@ let domain_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term 
           pres in
       Lam(n,nms,[],inner,true)
 
+
+
+let domain_of_feature (idx:int) (nb:int) (c:t): term =
+  (* Construct the domain of feature [idx] in an environment with [nb] variables more
+     than the context [c].
+   *)
+  let nbenv = count_variables c in
+  if idx < nb + nbenv then
+    assert false (* nyi: local features *)
+  else
+    Feature_table.domain_of_feature idx (nb+nbenv) c.ft
 
 
 let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
@@ -822,6 +833,40 @@ let is_case_match_expression (t:term) (c:t): bool =
 (*
   (x -> y -> exp) (x) ~> (y -> exp)
  *)
+
+
+let case_preconditions
+    (insp:term) (n:int) (nms:int array) (pat:term)
+    (pres:term list) (lst:term list) (nb:int) (c:t)
+    : term list =
+  (*  Generate all(x,y,...) insp = pat ==> pre
+   *)
+  let insp   = Term.up n insp
+  and imp_id = n + nb + implication_index c
+  and eq_id  =
+    let i =
+      match pat with
+        Variable i -> i
+      | VAppl(i,_) -> i
+      | _ -> assert false (* cannot happen in pattern *)
+    in
+    let ndelta = n + nb + count_variables c in
+    let i = i - ndelta in
+    assert (0 <= i);
+    assert (Feature_table.is_constructor i c.ft);
+    let cls = Feature_table.class_of_feature i c.ft in
+    ndelta + Feature_table.equality_index cls c.ft
+  in
+  List.fold_left
+    (fun lst pre ->
+      let t = Term.binary imp_id (Term.binary eq_id insp pat) pre in
+      let t = Term.all_quantified n nms t in
+      t :: lst)
+    lst
+    pres
+
+
+
 let term_preconditions (t:term)  (c:t): term list =
   let imp_id0 = implication_index c
   and and_id0 = and_index c
@@ -968,16 +1013,10 @@ let term_preconditions (t:term)  (c:t): term list =
               let unmatched =
                 Feature_table.unmatched_inspect_cases args (nb+nvars) c.ft
               in
-              (*if unmatched <> [] then
-                printf "unmatched cases\n";
-              List.iter
-                (fun (n,mtch) ->
-                  printf "  %s\n" (string_of_term mtch true (n+nb) c))
-                unmatched;*)
               let lst = List.fold_left
                   (fun lst (n,mtch) ->
                     let nms = Feature_table.standard_argnames n in
-                    let q   = Term.some_quantified n nms mtch in
+                    let q   = Term.pattern n nms mtch in
                     let t = Flow(Asexp,[|args.(0);q|]) in
                     let t = Term.unary not_id t in
                     t :: lst)
@@ -987,15 +1026,12 @@ let term_preconditions (t:term)  (c:t): term list =
                 if i = ncases then
                   lst
                 else
-                  let n,nms,mtch,_  = Term.qlambda_split_0 args.(2*i+1) in
-                  let n2,nms2,res,_ = Term.qlambda_split_0 args.(2*i+2) in
+                  let n,nms,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
                   let lst_inner,_ = pres res (nb+n) [] in
                   let lst_inner   = List.rev lst_inner in
-                  List.fold_left
-                    (fun lst p ->
-                      raise NYI )
-                    lst
-                    lst_inner
+                  let lst =
+                    case_preconditions args.(0) n nms pat lst_inner lst nb c in
+                  cases_from (i+1) lst
               in
               let lst = cases_from 0 lst in
               lst, domain_t

@@ -368,10 +368,14 @@ all(a:[G])
    ============ :}
 
 folded (f:(G,H)->H, b:H, l:[G]): H
-    -> inspect l
-       case []  then b
-       case h^t then f.folded(f(h,b),t)
-       end
+    require
+        f.is_total
+    ensure
+        Result =  inspect l
+                  case []  then b
+                  case h^t then f.folded(f(h,b),t)
+                  end
+    end
 
 all(a,b:[G])
     proof

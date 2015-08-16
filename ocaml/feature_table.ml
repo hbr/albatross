@@ -564,6 +564,25 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
 
 
 
+
+let domain_of_feature (i:int) (nb:int) (ft:t): term =
+  assert (nb <= i);
+  let n,nms,pres = preconditions i nb ft in
+  let t =
+    match pres with
+      [] ->
+        Variable (n+nb+true_index)
+    | hd::tl ->
+        let and_id = n + nb + and_index in
+        List.fold_left
+          (fun t1 t2 ->
+            Term.binary and_id t1 t2)
+          hd
+          tl in
+  make_lambda n nms [] t true nb ft
+
+
+
 let private_body (i:int) (ft:t): Feature.body =
   assert (i < count ft);
   let desc = descriptor i ft in
