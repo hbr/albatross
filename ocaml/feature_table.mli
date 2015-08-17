@@ -144,6 +144,7 @@ val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
+val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val is_case_matching:  term -> int -> term -> int -> t -> bool
 val peer_matches:      int -> int -> t -> (int*term) list

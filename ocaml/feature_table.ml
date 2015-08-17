@@ -2001,6 +2001,31 @@ let check_interface (ft:t): unit =
 
 
 
+let pattern_subterms (n:int) (pat:term) (nb:int) (ft:t): (int*term*int) list =
+  (* Return a list of all subterms of the pattern [n,pat] with their level.
+   *)
+  let rec subterms t level lst =
+    match t with
+      Variable i ->
+        assert (i < n || n + nb <= i);
+        assert (i < n || is_constructor (i-n-nb) ft);
+        (n+nb,t,level)::lst
+    | VAppl(i,args) ->
+        assert (n + nb <= i);
+        assert (is_constructor (i-n-nb) ft);
+        let lst = (n+nb,t,level)::lst
+        and level = level + 1 in
+        Array.fold_left
+          (fun lst arg -> subterms arg level lst)
+          lst
+          args
+    | _ ->
+        assert false (* cannot happen in pattern *)
+  in
+  subterms pat 0 []
+
+
+
 
 let peer_constructors (i:int) (ft:t): IntSet.t =
   assert (i < count ft);
@@ -2032,6 +2057,7 @@ let peer_matches (i:int) (nb:int) (ft:t): (int*term) list =
       (n,t)::lst)
     set
     []
+
 
 
 

@@ -389,6 +389,24 @@ let is_feature_term_recursive (t:term) (idx:int) (pc:PC.t): bool =
 
 
 
+
+(* Recursion Checker
+   =================
+
+   Valid recursive call: At least one argument of the recursive call is
+                         structurally smaller than the original argument.
+
+   Algorithm: We maintain a list of quaduples
+
+       (n,term,level,iarg)
+
+   where (n,term) is a subterm of [iarg] where level indicates which level
+   below. [level = 0] indicates that the term is at the same level as the
+   argument.
+ *)
+
+
+
 let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
   (* Check that the term [t] is a valid recursive definition term for the
      feature [idx], i.e. all recursive calls are valid.
@@ -400,20 +418,46 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
   let c = PC.context pc
   and ft = PC.feature_table pc in
   let nargs   = Context.count_last_arguments c
-  and nvars_0 = Context.count_variables c in
-  let make_carr (n:int): int option array = Array.make n None in
-  let prepend_carr (n:int) (carr:int option array): int option array =
-    Array.append (make_carr n) carr
   in
-  let rec check (t:term) (nbranch:int) (carr:int option array) (c:Context.t): unit =
+  let find (n:int) (t:term) (lst:(int*term*int*int) list): int * int =
+    let _,_,level,iarg =
+      List.find
+        (fun (n0,t0,level,iarg) ->
+          assert (n0 <= n);
+          Term.up (n-n0) t0 = t)
+        lst in
+    level,iarg
+  in
+  let find_opt (n:int) (t:term) (lst:(int*term*int*int) list): (int * int) option =
+    try
+      let level,iarg = find n t lst in Some(level,iarg)
+    with Not_found -> None
+  in
+  let add_pattern (insp_arr: (int*int) option array) (n:int) (parr:term array)
+      (nb:int) (lst:(int*term*int*int) list): (int*term*int*int) list =
+    let len_insp = Array.length insp_arr
+    and len_pat  = Array.length parr in
+    assert (len_pat <= len_insp);
+    let len =
+      if len_pat < len_insp then len_pat - 1 else len_insp in
+    interval_fold
+      (fun lst i ->
+        match insp_arr.(i) with
+          Some (level,iarg) ->
+            let plst = Feature_table.pattern_subterms n parr.(i) nb ft in
+            List.fold_left
+              (fun lst (nall,p,plevel) -> (nall,p,level+plevel,iarg)::lst)
+              lst
+              plst
+        | None ->
+            lst)
+      lst 0 len
+  in
+  let rec check (t:term) (nbranch:int) (tlst:(int*term*int*int) list) (c:Context.t)
+      : unit =
     let nb = Context.count_variables c in
-    assert (Array.length carr = nb);
-    let is_orig_arg i = nb - nvars_0 <= i && i < nb - nvars_0 + nargs in
-    let orig_arg i =
-      assert (is_orig_arg i);
-      i - (nb-nvars_0) in
     let check_args args =
-      Array.iter (fun arg -> check arg nbranch carr c) args in
+      Array.iter (fun arg -> check arg nbranch tlst c) args in
     match t with
       Variable i when i = idx + nb ->
         assert (nargs = 0);
@@ -427,15 +471,11 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
           error_info info "Recursive call must occur only within a branch";
         let len = Array.length args in
         let is_lower_arg i =
-          assert (i < nargs);
-          match args.(i) with
-            Variable j when j < nb ->
-              begin match carr.(j) with
-                None   -> false
-              | Some k -> k = i
-              end
-          | _ ->
-              false
+          try
+            let level,iarg = find nb args.(i) tlst in
+            iarg = i && level > 0
+          with Not_found ->
+            false
         in
         if not (interval_exist is_lower_arg 0 len) then
           error_info info ("Illegal recursive call \"" ^
@@ -443,66 +483,48 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | VAppl (i,args) ->
         check_args args
     | Application (f,args,pr) ->
-        check f nbranch carr c;
+        check f nbranch tlst c;
         check_args args
     | Lam (n,nms,pres,t0,pr) ->
-        let carr0 = prepend_carr 1 carr
-        and c0 = Context.push_untyped [|ST.symbol "x"|] c in
-        check t0 nbranch carr0 c0
+        let c0 = Context.push_untyped [|ST.symbol "x"|] c in
+        check t0 nbranch tlst c0
     | QExp (n,nms,t0,_) ->
-        let carr0 = prepend_carr n carr
-        and c0 = Context.push_untyped nms c in
-        check t0 nbranch carr0 c0
+        let c0 = Context.push_untyped nms c in
+        check t0 nbranch tlst c0
     | Flow (Ifexp, args) ->
         check_args args
     | Flow (Asexp, args) ->
         assert (Array.length args = 2);
-        check args.(0) nbranch carr c
+        check args.(0) nbranch tlst c
     | Flow (Inspect,args) ->
         let len = Array.length args in
         assert (3 <= len);
         assert (len mod 2 = 1);
         let ncases = len / 2 in
         let insp_arr = Feature_table.args_of_tuple args.(0) nb ft in
+        let insp_arr2 = Array.map (fun t -> find_opt nb t tlst) insp_arr in
         let ninsp    = Array.length insp_arr in
         interval_iter
           (fun i ->
-            let n1,nms1,pat,_ = Term.qlambda_split_0 args.(2*i+1)
-            and n2,nms2,res,_ = Term.qlambda_split_0 args.(2*i+2) in
-            assert (n1 = n2);
+            let n,nms,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
             let parr =
-              let arr = Feature_table.args_of_tuple pat (n1+nb) ft in
+              let arr = Feature_table.args_of_tuple pat (n+nb) ft in
               if Array.length arr > ninsp then
-                Feature_table.args_of_tuple_ext pat (n1+nb) ninsp ft
+                Feature_table.args_of_tuple_ext pat (n+nb) ninsp ft
               else arr in
+            let tlst2 = add_pattern insp_arr2 n parr nb tlst in
             assert (Array.length parr = ninsp); (* because only constructors and
                                                    variables are allowed in patterns *)
-            let carr1 = Array.make n1 None in
-            Array.iteri
-              (fun i p ->
-                let vars = Term.bound_variables p n1 in
-                match insp_arr.(i) with
-                  Variable j when j < nb ->
-                    IntSet.iter
-                      (fun pvar ->
-                        assert (carr1.(pvar) = None);
-                        carr1.(pvar) <-
-                          if is_orig_arg j then
-                            Some (orig_arg j)
-                          else
-                            carr.(j))
-                      vars
-                | _ ->
-                    ())
-              parr;
-            let c = Context.push_untyped nms1 c
-            and carr = Array.append carr1 carr in
-            check res (nbranch+1) carr c)
+            let c = Context.push_untyped nms c in
+            check res (nbranch+1) tlst2 c)
           0 ncases
   in
   let nvars = Context.count_variables c in
-  let carr  = make_carr nvars in
-  check t 0 carr c
+  let tlst0 =
+    interval_fold (fun lst i -> (nvars,Variable i,0,i)::lst) [] 0 nargs in
+  check t 0 tlst0 c
+
+
 
 
 let check_recursion (info:info) (idx:int) (t:term) (pc:PC.t): unit =

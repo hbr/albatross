@@ -42,12 +42,9 @@ all(x:L, a,b:[L])
 
 is_sorted (l:[L]): BOOLEAN
     -> inspect l
-       case []  then true
-       case x^t then
-           inspect t
-           case []  then true
-           case y^a then x <= y and t.is_sorted
-           end
+       case []    then true
+       case [_]   then true
+       case x^y^a then x <= y and (y^a).is_sorted
        end
 
 all(x:L, a:[L])
