@@ -278,10 +278,13 @@ module Seq: sig
   val make:  int -> 'a -> 'a t
   val count: 'a t -> int
   val elem:  int -> 'a t -> 'a
+  val first: 'a t -> 'a
+  val last:  'a t -> 'a
   val copy:  'a t -> 'a t
   val put:   int -> 'a -> 'a t -> unit
   val push:  'a -> 'a t -> unit
   val pop:   int -> 'a t -> unit
+  val pop_last: 'a t -> 'a
   val keep:  int -> 'a t -> unit
   val remove: int -> 'a t -> unit
   val iter:  ('a->unit) -> 'a t -> unit
@@ -302,6 +305,14 @@ end = struct
   let elem (i:int) (seq:'a t): 'a =
     assert (i<seq.cnt);
     seq.arr.(i)
+
+  let first (seq:'a t): 'a =
+    assert (0 < count seq);
+    elem 0 seq
+
+  let last (seq:'a t): 'a =
+    assert (0 < count seq);
+    elem (count seq - 1) seq
 
   let copy (s:'a t): 'a t =
     {cnt = s.cnt; arr = Array.copy s.arr}
@@ -333,6 +344,13 @@ end = struct
   let keep (n:int) (seq: 'a t): unit =
     assert (n <= count seq);
     seq.cnt <- n
+
+
+  let pop_last (seq:'a t): 'a =
+    assert (0 < count seq);
+    let e = last seq in
+    pop 1 seq; e
+
 
   let iter (f:'a->unit) (s:'a t) =
     let rec iter0 i =
