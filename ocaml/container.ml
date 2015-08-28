@@ -277,6 +277,7 @@ module Seq: sig
   val singleton: 'a -> 'a t
   val make:  int -> 'a -> 'a t
   val count: 'a t -> int
+  val is_empty: 'a t -> bool
   val elem:  int -> 'a t -> 'a
   val first: 'a t -> 'a
   val last:  'a t -> 'a
@@ -301,6 +302,8 @@ end = struct
   let make (n:int) (e:'a) = {cnt=n; arr=Array.make n e}
 
   let count (seq:'a t): int  = seq.cnt
+
+  let is_empty (seq:'s t): bool =  (count seq = 0)
 
   let elem (i:int) (seq:'a t): 'a =
     assert (i<seq.cnt);
