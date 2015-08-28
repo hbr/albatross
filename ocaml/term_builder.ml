@@ -883,7 +883,7 @@ let complete_lambda (ntvs:int) (npres:int) (is_pred:bool) (tb:t): unit =
         pop (n-1) (p::lst)
       end
     in
-    List.rev (pop npres [])
+    pop npres []
   in
   let pres = pop_pres npres in
   let t,ttvs,tsig = pop_term tb in
