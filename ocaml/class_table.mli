@@ -153,6 +153,7 @@ val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor
 val has_private_ancestor: int -> int -> t -> bool
 val private_ancestor:     int -> int -> t -> parent_descriptor
+val ancestor_type: type_term -> int -> int -> t -> type_term
 
 val descends_from_any: int -> t -> bool
 val type_descends_from_any: term -> Tvars.t -> t -> bool

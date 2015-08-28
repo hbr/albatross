@@ -328,7 +328,7 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
      function signature (0,(1,...)) -> RT.  *)
   assert (Sign.has_result s);
   assert (Sign.arity s > 0);
-  assert (not is_pred || Sign.result s = boolean_type ntvs);
+  (*assert (not is_pred || Sign.result s = boolean_type ntvs);*)
   let tup = to_tuple ntvs 0 (Sign.arguments s)
   in
   let idx, args =
@@ -1159,6 +1159,23 @@ let has_private_ancestor (cls:int) (anc:int) (ct:t): bool =
   cls = anc ||
   try let _ = private_ancestor cls anc ct in true
   with Not_found -> false
+
+
+
+let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
+  (* The ancestor type of type [tp] with the ancestor class [anc_cls] in an
+     environment with [ntvs] type variables *)
+   assert (ntvs <= anc_cls);
+   assert (anc_cls-ntvs < count ct);
+   let cls,args = split_type_term tp in
+   assert (ntvs <= cls);
+   assert (cls-ntvs < count ct);
+   let _,pargs = ancestor (cls-ntvs) (anc_cls-ntvs) ct in
+   if Array.length pargs = 0 then
+     Variable anc_cls
+   else
+     let pargs = Array.map (fun tp -> Term.sub tp args ntvs) pargs in
+     VAppl(anc_cls,pargs)
 
 
 
