@@ -721,6 +721,11 @@ let postconditions (idx:int) (nb:int) (c:t): int * int array * term list =
 
 
 
+let has_preconditions (idx:int) (nb:int) (c:t): bool =
+  let _,_,lst = preconditions idx nb c in
+  lst <> []
+
+
 let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term =
   (* Construct the domain of a lambda expression with the precondition [pres] where
      the lambda expression is within an environment with [nb] variables more than the

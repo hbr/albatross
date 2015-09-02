@@ -140,6 +140,7 @@ val tuple_of_args: term array -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
+val has_preconditions: int -> int -> t -> bool
 val term_preconditions: term -> t -> term list
 
 val domain_of_lambda:  int -> int array -> term list -> int -> t -> term
