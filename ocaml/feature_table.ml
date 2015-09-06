@@ -510,6 +510,32 @@ let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term 
   Term.apply t0 args
 
 
+let normalize_lambdas (t:term) (nb:int) (ft:t): term =
+  let rec norm t nb =
+    let norm_args args = Array.map (fun a -> norm a nb) args
+    in
+    match t with
+      Variable i ->
+        t
+    | VAppl (i,args) ->
+        VAppl (i, norm_args args)
+    | Application (f,args,pr) ->
+        let f    = norm f nb
+        and args = norm_args args in
+        make_application f args pr nb ft
+    | Lam (n,nms,pres,t,pr) ->
+        let pres = List.map (fun p -> norm p (n+nb)) pres
+        and t = norm t (n+nb) in
+        make_lambda n nms pres t pr nb ft
+    | QExp (n,nms,t,is_all) ->
+        QExp (n, nms, norm t (n+nb), is_all)
+    | Flow (ctrl,args) ->
+        Flow (ctrl, norm_args args)
+  in
+  norm t nb
+
+
+
 
 
 let definition (i:int) (nb:int) (ft:t): int * int array * term =
@@ -715,6 +741,40 @@ let has_anchor (i:int) (ft:t): bool =
   with Not_found -> false
 
 
+let seed (i:int) (ft:t): int =
+  assert (i < count ft);
+  (base_descriptor i ft).seed
+
+
+let seeded_term (t:term) (nb:int) (ft:t): term =
+  let rec seeded t nb =
+    let seeded_args args = Array.map (fun t -> seeded t nb) args in
+    match t with
+      Variable i when i < nb -> t
+    | Variable i ->
+        Variable (nb + seed (i-nb) ft)
+    | VAppl(i,args) ->
+        assert (nb <= i);
+        let i = nb + seed (i-nb) ft
+        and args = seeded_args args in
+        VAppl(i,args)
+    | Application(f,args,pr) ->
+        let f = seeded f nb
+        and args = seeded_args args in
+        Application(f,args,pr)
+    | Lam(n,nms,pres,t0,pr) ->
+        let t0 = seeded t0 (1+nb)
+        and pres = List.map (fun t -> seeded t (1+nb)) pres in
+        Lam(n,nms,pres,t0,pr)
+    | QExp(n,nms,t0,is_all) ->
+        let t0 = seeded t0 (n+nb) in
+        QExp(n,nms,t0,is_all)
+    | Flow(ctrl,args) ->
+        let args = seeded_args args in
+        Flow(ctrl,args)
+  in
+  seeded t nb
+
 
 let variant (i:int) (cls:int) (ft:t): int =
   (* The variant of the feature [i] in the class [cls] *)
@@ -742,6 +802,24 @@ let has_private_variant (i:int) (cls:int) (ft:t): bool =
   try let _ = private_variant i cls ft in true
   with Not_found -> false
 
+
+
+
+let variant_feature
+    (i:int) (nb:int) (ags:type_term array) (tvs:Tvars.t) (ft:t): int =
+  assert (i < nb + count ft);
+  let idx = i - nb in
+  assert (Array.length ags = count_fgs idx ft);
+  let nfgs = Array.length ags in
+  if nfgs = 0 || nfgs > 1 then
+    i
+  else begin
+    let cls = Tvars.principal_class ags.(0) tvs in
+    try
+      nb + variant idx cls ft
+    with Not_found ->
+      i
+  end
 
 
 

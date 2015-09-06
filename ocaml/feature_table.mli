@@ -35,6 +35,8 @@ val is_deferred: int -> t -> bool
 
 val is_ghost_function: int -> t -> bool
 
+val seeded_term: term -> int -> t -> term
+
 val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
@@ -48,6 +50,8 @@ val variant_term: term -> int -> int -> int -> t -> term
 
 val has_variant: int -> int -> t -> bool
 val has_private_variant: int -> int -> t -> bool
+
+val variant_feature: int -> int -> type_term array -> Tvars.t -> t -> int
 
 val find_variant_candidate: int -> int -> t -> int
 
@@ -160,6 +164,7 @@ val owner: int -> t -> int
 val make_lambda:      int -> int array -> term list -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
+val normalize_lambdas:term -> int -> t -> term
 val remove_tuple_accessors: term -> int -> int -> t -> term
 val tuple_of_args:    term array -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array

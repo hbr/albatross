@@ -1244,31 +1244,13 @@ let specialize_term_0 (second_run:bool) (tb:t): unit =
   tb.tlist <- [t,nt,s]
 
 
+
 let normalize_lambdas (tb:t): unit =
   assert (Mylist.is_singleton tb.tlist);
-  let rec norm t nb =
-    let norm_args args = Array.map (fun a -> norm a nb) args
-    in
-    match t with
-      Variable i ->
-        t
-    | VAppl (i,args) ->
-        VAppl (i, norm_args args)
-    | Application (f,args,pr) ->
-        let f    = norm f nb
-        and args = norm_args args in
-        Context.make_application f args nb pr tb.c
-    | Lam (n,nms,pres,t,pr) ->
-        let pres = List.map (fun p -> norm p (n+nb)) pres
-        and t = norm t (n+nb) in
-        Context.make_lambda n nms pres t pr nb tb.c
-    | QExp (n,nms,t,is_all) ->
-        QExp (n, nms, norm t (n+nb), is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, norm_args args)
-  in
-  let t,nt,s = List.hd tb.tlist in
-  let t = norm t 0 in
+  let t,nt,s = List.hd tb.tlist
+  and ft = Context.feature_table tb.c
+  and nb = Context.count_variables tb.c in
+  let t = Feature_table.normalize_lambdas t nb ft in
   tb.tlist <- [t,nt,s]
 
 
