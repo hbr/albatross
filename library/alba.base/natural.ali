@@ -21,6 +21,8 @@ end
 3: NATURAL = 2.successor
 4: NATURAL = 3.successor
 
+(<=) (a,b:NATURAL): BOOLEAN
+(<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
 
 (+) (a,b: NATURAL):  NATURAL
     -> inspect b
@@ -68,6 +70,25 @@ all(a,b,c,x:NATURAL)
         a + x = b + x  ==>  a = b
         x + a = x + b  ==>  a = b
         a + x = a      ==>  x = 0
+
+        a + b = 0  ==> a = 0
+        a + b = 0  ==> b = 0
+
+        -- order
+        a <= b     ==>  a < b + 1
+        a < b + 1  ==>  a <= b
+        a + 1 <= b ==>  a < b
+        a < b      ==>  a + 1 <= b
+        a <= b  ==> some(x) a + x = b
+        (some(x) a + x = b) ==> a <= b
+        a < a + 1
+        a <= b  ==> a + x <= b + x
+        a + x <= b + x ==> a <= b
+        a <= b or b <= a
+        a <= b or b < a
+        a <= a
+        a <= b  ==>  b <= a  ==> a = b
+        a <= b  ==>  b <= c  ==> a <= c
 
         -- multiplication
         a * 0 = 0

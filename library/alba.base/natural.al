@@ -58,6 +58,8 @@ all(a:NATURAL)
         some(x) a = successor(x)
     end
 
+
+
 predecessor (n:NATURAL): NATURAL
     require
         n as _.successor
@@ -180,11 +182,44 @@ all(a,x:NATURAL)
     end
 
 
+all(a,b:NATURAL)
+    proof
+        0 in {a: a + b = 0  ==> a = 0}
+
+        all(a)
+            require
+                a + b = 0 ==> a = 0
+                a.successor + b = 0
+            proof
+                a.successor + b = a + b.successor
+                a + b.successor = (a + b).successor
+                (a + b).successor = 0
+            ensure
+                a.successor = 0
+            end
+
+        a in {a: a + b = 0  ==> a = 0}
+    ensure
+        a + b = 0  ==> a = 0
+    end
+
+all(a,b:NATURAL)
+    require
+        a + b = 0
+    proof
+        b + a = a + b
+        b + a = 0
+    ensure
+        b = 0
+    end
+
+
+
+
 
 
 {: Order structure
    =============== :}
-
 
 (<=) (a,b:NATURAL): BOOLEAN
     -> inspect a, b
@@ -216,6 +251,429 @@ all(a:NATURAL)
     ensure
        successor(a) <= 0 ==> false
     end
+
+
+all(a,b:NATURAL)
+    require
+        a <= b  ==> a < successor(b)
+        successor(a) <= successor(b)
+    proof
+        a <= b
+    ensure
+        successor(a) < b.successor.successor
+    end
+
+all(a,b:NATURAL)
+    proof
+        0 in {b: (all(b) a <= b ==> a < b.successor)
+                 ==> a.successor <= b
+                 ==> a.successor < b.successor}
+        b in {b: (all(b) a <= b ==> a < b.successor)
+                 ==> a.successor <= b
+                 ==> a.successor < b.successor}
+    ensure
+        (all(b) a <= b ==> a < b.successor)
+        ==> a.successor <= b
+        ==> a.successor < b.successor
+    end
+
+all(a,b:NATURAL)
+    proof
+        0 in {a: all(b) a <= b  ==>  a < b.successor}
+        a in {a: all(b) a <= b  ==>  a < b.successor}
+    ensure
+        a <= b  ==>  a < b.successor
+        a <= b  ==>  a < b + 1
+    end
+
+all(a,b:NATURAL)
+    proof
+        0 in {b: all(a) a.successor <= b ==>  a < b}
+        b in {b: all(a) a.successor <= b ==>  a < b}
+    ensure
+        a.successor <= b ==>  a < b
+        a + 1 <= b ==> a < b
+    end
+
+
+
+all(a,b:NATURAL)
+    proof
+        proof
+            all(a:NATURAL)
+                require
+                    a <= 0
+                proof
+                    0 = a
+                    a in {a:a + 0 = 0}
+                ensure
+                    some(x) a + x = 0
+                end
+        ensure
+            0 in {b:NATURAL: all(a) a <= b ==> some(x) a + x = b}
+        end
+
+        all(a,b:NATURAL)
+            require
+                all(a) a <= b ==> some(x) a + x = b
+            proof
+                proof
+                    0 + b.successor = b.successor
+                    some(x) 0 + x = b.successor
+                ensure
+                    0 in {a: a <= b.successor ==> some(x) a + x = b.successor}
+                end
+
+                all(a)
+                    require
+                        a.successor <= b.successor
+                    proof
+                        a <= b
+                        all(x)
+                            require
+                                a + x = b
+                            proof
+                                a.successor + x   = a + x.successor
+                                a + x.successor   = (a + x).successor
+
+                                a.successor + x   =  b.successor
+                            ensure
+                                some(x) a.successor + x = b.successor
+                            end
+                    ensure
+                        some(x) a.successor + x = b.successor
+                    end
+
+                a in {a: a <= b.successor ==> some(x) a + x = b.successor}
+            ensure
+                a <= b.successor ==> some(x) a + x = b.successor
+            end
+
+        b in {b: all(a) a <= b ==> some(x) a + x = b}
+    ensure
+        a <= b ==> some(x) a + x = b
+    end
+
+
+all(a,b:NATURAL)
+    proof
+        proof
+            all(a:NATURAL)
+                require
+                    some(x) a + x = 0
+                proof
+                    all(x)
+                        require
+                            a + x = 0
+                        proof
+                            0 = a
+                            a in {a: a <= 0}
+                        ensure
+                            a <= 0
+                        end
+                ensure
+                    a <= 0
+                end
+        ensure
+            0 in {b: all(a:NATURAL) (some(x) a + x = b) ==> a <= b}
+        end
+
+        all(a,b:NATURAL)
+            require
+                all(a) (some(x) a + x = b) ==> a <= b
+            proof
+                0 in {a: (some(x) a + x = b.successor) ==> a <= b.successor}
+
+                all(a)
+                    require
+                        (some(x) a + x = b.successor) ==> a <= b.successor
+                        some(x) a.successor + x = b.successor
+                    proof
+                        all(x)
+                            require
+                                a.successor + x = b.successor
+                            proof
+                                (a + x).successor = a + x.successor
+                                a + x.successor   = a.successor + x
+
+                                (a + x).successor = b.successor
+
+                                a + x = b
+                                some(x) a + x = b
+                                a <= b
+                            ensure
+                                a.successor <= b.successor
+                            end
+                    ensure
+                        a.successor <= b.successor
+                    end
+
+                a in {a: (some(x) a + x = b.successor) ==> a <= b.successor}
+            ensure
+                (some(x) a + x = b.successor) ==> a <= b.successor
+            end
+
+        b in {b: all(a) (some(x) a + x = b) ==> a <= b}
+    ensure
+        (some(x) a + x = b) ==> a <= b
+    end
+
+
+
+
+all(a,b:NATURAL)
+    proof
+        0 in {a: all(b:NATURAL) (some(x) a + x = b) ==> a <= b}
+
+        all(a,b:NATURAL)
+            require
+                (all(b) (some(x) a + x = b) ==> a <= b)
+            proof
+                proof
+                    require
+                        some(x) a.successor + x = 0
+                    proof
+                        all(x)
+                            proof
+                                0 in {x: a.successor + x = 0 ==> false}
+                                x in {x: a.successor + x = 0 ==> false}
+                            ensure
+                                a.successor + x = 0 ==> false
+                            end
+                    ensure
+                        false
+                    end
+                ensure
+                    0 in {b: (some(x) a.successor + x = b) ==> a.successor <= b}
+                end
+
+                all(b:NATURAL)
+                    require
+                        (some(x) a.successor + x = b) ==> a.successor <= b
+                        some(x) a.successor + x = b.successor
+                    proof
+                        all(x)
+                             require
+                                 a.successor + x = b.successor
+                             ensure
+                                 a.successor <= b.successor
+                             end
+                    ensure
+                        a.successor <= b.successor
+                    end
+
+                b in {b: (some(x) a.successor + x = b) ==> a.successor <= b}
+            ensure
+                (some(x) a.successor + x = b) ==> a.successor <= b
+            end
+
+        a in {a: all(b) (some(x) a + x = b) ==> a <= b}
+    ensure
+        (some(x) a + x = b) ==> a <= b
+    end
+
+
+all(a,b:NATURAL)
+    require
+        a <= b
+        b <= a
+    proof
+        some(x) a + x = b
+        some(y) b + y = a
+        all(x)
+            require
+                a + x = b
+            proof
+                all(y)
+                    require
+                        b + y = a
+                    proof
+                        a + (x + y) = (a + x) + y
+                        a + x + y = b + y
+
+                        a + (x + y) = a
+
+                        x + y = 0
+                        x = 0
+                        0 in {x: a + x = b}
+                    ensure
+                        a = b
+                    end
+            ensure
+                a = b
+            end
+    ensure
+        a = b
+    end
+
+all(a,b,c:NATURAL)
+    require
+        a <= b
+        b <= c
+     proof
+        all(x)
+            require
+                a + x = b
+            proof
+                all(y)
+                    require
+                        b + y = c
+                    proof
+                        a + (x + y) = (a + x) + y
+                        a + x + y   = b + y
+
+                        a + (x + y) = c
+                    ensure
+                        a <= c
+                    end
+            ensure
+                a <= c
+            end
+    ensure
+        a <= c
+    end
+
+
+all(a:NATURAL)
+    proof
+        0 in {a: a <= a.successor}
+        a in {a: a <= a.successor}
+    ensure
+        a <= a.successor
+        a < a.successor
+        a < a + 1
+    end
+
+
+
+all(a,b:NATURAL)
+    require
+        a < b
+    proof
+        some(x) a + x = b
+        all(x)
+            require
+                a + x = b
+            proof
+                require
+                    x = 0
+                proof
+                    0 = x
+                    x in {x: a = a + x}
+                    a = b
+                ensure
+                    false
+                end
+                x /= 0
+                some(y) x = y.successor
+                all(y)
+                    require
+                        x = y.successor
+                    proof
+                        y.successor in {x: a + x = b}
+                        a.successor + y = a + y.successor
+                        a.successor + y = b
+                    ensure
+                        a.successor <= b
+                    end
+            ensure
+                a.successor <= b
+            end
+    ensure
+        a.successor <= b
+        a + 1 <= b
+    end
+
+all(a,b:NATURAL)
+    require
+        a < b + 1
+    ensure
+        a <= b
+    end
+
+
+all(a,b:NATURAL)
+    proof
+        0 in {a: a <= b or b <= a}
+
+        all(a)
+            require
+                a <= b or b <= a
+            proof
+                require
+                    a <= b
+                proof
+                    a = b or a /= b
+                    require
+                        a = b
+                    proof
+                        a <= a.successor
+                        b in {x: x <= a.successor}
+                        b <= a.successor
+                    ensure
+                        a.successor <= b or b <= a.successor
+                    end
+                    require
+                        a /= b
+                    proof
+                        a < b
+                        a.successor <= b
+                    ensure
+                        a.successor <= b or b <= a.successor
+                    end
+                ensure
+                    a.successor <= b or b <= a.successor
+                end
+
+                require
+                    b <= a
+                ensure
+                    a.successor <= b or b <= a.successor
+                end
+            ensure
+                a.successor <= b or b <= a.successor
+            end
+        a in {a: a <= b or b <= a}
+    ensure
+        a <= b or b <= a
+    end
+
+
+all(a,b:NATURAL)
+    proof
+        a = b or a /= b
+        require  a = b
+        proof    b in {x: a <= x}
+        ensure   a <= b or b < a end
+
+        require  a /= b
+        proof    a <= b or b <= a
+                 a <= b ==> a <= b or b < a
+                 require  b <= a
+                 proof    b /= a
+                 ensure   a <= b or b < a end
+        ensure   a <= b or b < a end
+    ensure
+        a <= b or b < a
+    end
+
+
+
+all(a,b,n:NATURAL)
+    require a <= b
+    proof   0 in {n: a + n <= b + n}
+            n in {n: a + n <= b + n}
+    ensure  a + n <= b + n
+    end
+
+
+all(a,b,n:NATURAL)
+    proof   0 in {n: a + n <= b + n ==> a <= b}
+            n in {n: a + n <= b + n ==> a <= b}
+    ensure  a + n <= b + n ==> a <= b
+    end
+
+
 
 {: Difference
    ========== :}
