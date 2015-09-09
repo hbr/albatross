@@ -500,7 +500,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
         (fun ll (n,tp) -> match ll with
           [] -> [[n],tp]
         | (ns,tp1)::tl ->
-            if tp=tp1 then [n::ns,tp]
+            if tp=tp1 then (n::ns,tp)::tl
             else           ([n],tp)::ll )
         []
         fargs
