@@ -19,14 +19,14 @@
      "local"
      "mod"
      "not"      "note"
-     "old"      "or"
+     "old"      "or"          "orif"
      "proof"
      "redefine" "rename"      "require"
      "Result"
      "some"
      "then"
      "undefine" "until"    "use"
-     "variant"
+     "variant"  "via"
      "while"
     ))
 

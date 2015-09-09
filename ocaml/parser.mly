@@ -259,14 +259,14 @@ ass_req_opt:
     { [] }
 |   ass_req { $1 }
 
-ass_check: KWproof proof_seq separator { List.rev $2 }
+ass_proof: KWproof proof_seq separator { List.rev $2 }
 
 
 ass_ens: KWensure ass_seq { List.rev $2 }
 
 ass_seq:
-    info_expr                           { [$1] }
-|   ass_seq separator info_expr         { $3::$1 }
+    info_expr_1                         { [$1] }
+|   ass_seq separator info_expr_1       { $3::$1 }
 
 proof_seq:
     proof_expr { [$1] }
@@ -274,15 +274,16 @@ proof_seq:
 
 
 proof_expr:
-    info_expr { $1 }
-|   proof_expr_struct { $1 }
-|   proof_all_expr_inner {
+    info_expr_1 { $1 }
+|   proof_inner { $1 }
+|   proof_all_inner {
   let entlst,req,impl,ens = $1 in
   let exp = Expquantified (Universal,
                            entlst,
                            Expproof(req, Some impl, ens)) in
   withinfo (rhs_info 1) exp
 }
+|   proof_if { $1 }
 
 
 proof_all_expr: KWall formal_arguments_opt opt_nl
@@ -294,7 +295,7 @@ proof_all_expr: KWall formal_arguments_opt opt_nl
 }
 
 
-proof_all_expr_inner:
+proof_all_inner:
     KWall formal_arguments opt_nl
        ass_req_opt
        ass_imp
@@ -305,14 +306,14 @@ proof_all_expr_inner:
 }
 
 
-proof_expr_struct:
-    ass_req ass_check ass_ens KWend{
+proof_inner:
+    ass_req ass_proof ass_ens KWend{
   let is_do = false in
   let impl  = Impdefined (None,is_do,$2) in
   let exp   = Expproof ($1, Some impl, $3) in
   withinfo (rhs_info 1) exp
 }
-|   ass_check ass_ens KWend {
+|   ass_proof ass_ens KWend {
   let is_do = false in
   let impl  = Impdefined (None,is_do,$1) in
   let exp   = Expproof ([], Some impl, $2) in
@@ -326,7 +327,7 @@ proof_expr_struct:
 
 ass_imp:
     { Impdefined (None,false,[]) }
-|   ass_check           { Impdefined (None,false,$1) }
+|   ass_proof           { Impdefined (None,false,$1) }
 |   KWdeferred          { Impdeferred }
 |   implementation_note {
   match $1 with
@@ -334,6 +335,25 @@ ass_imp:
   | _ ->
       error_info (rhs_info 1) "Not allowed in assertions"
 }
+
+
+proof_if:
+    KWif ass_then_part_list ass_else_part ass_ens KWend {
+  withinfo (rhs_info 1) (Proofif ($2,$3,$4)) }
+
+
+ass_then_part_list:
+    ass_then_part { [$1] }
+|   ass_then_part KWelseif ass_then_part_list { $1::$3 }
+
+ass_then_part:
+    expr_1 { $1,[] }
+|   expr_1 KWthen proof_seq { $1,$3 }
+
+ass_else_part:
+    { [] }
+| KWelse proof_seq { $2 }
+
 
 
 
@@ -594,42 +614,16 @@ feature_body:
 feature_implementation:
     KWdeferred           { Impdeferred }
 |   implementation_note  { $1 }
-|   implementation_block { $1 }
 
 
-implementation_block:
-    local_block do_block    { Impdefined($1,true, $2) }
-|   local_block proof_block { Impdefined($1,false,$2) }
+
+require_block: ass_req { $1 }
+
+require_block_opt: ass_req_opt { $1 }
 
 
-require_block:
-    KWrequire compound { $2 }
+ensure_block: ass_ens  { $1 }
 
-require_block_opt:
-    { [] }
-|   require_block { $1 }
-
-proof_block:
-    KWproof compound { $2 }
-
-do_block: KWdo compound { $2 }
-
-
-local_block:
-    { None }
-|   KWlocal local_list { Some $2 }
-
-local_list:
-    local_declaration { [$1] }
-|   local_declaration SEMICOL local_list { $1::$3}
-
-
-local_declaration:
-    entity_list { Unassigned $1 }
-|   entity_list ASSIGN expr { Assigned ($1,$3) }
-|   LIDENTIFIER LPAREN entity_list RPAREN return_type_opt feature_body {
-  Local_feature ($1,$3,$5,$6)
-}
 
 
 
@@ -642,10 +636,6 @@ implementation_note: KWnote LIDENTIFIER optsemi {
   else
     error_info (rhs_info 1) "must be one of {built_in,axiom,event}"
 }
-
-
-ensure_block:
-    KWensure compound { $2 }
 
 
 
@@ -675,21 +665,6 @@ formal_arguments: LPAREN entity_list RPAREN { $2 }
 
 
 
-/* todo: distinguish between expressions which can occur within expressions
-         only and expressions which can occur in imperative constructs to
-         avoid the check ambiguity !!!
-*/
-
-compound: compound_list { $1 }
-
-
-compound_list:
-    info_expr  optsemi { [$1] }
-|   info_expr SEMICOL compound_list { $1::$3 }
-
-
-
-
 
 
 /* ------------------------------------------------------------------------- */
@@ -698,8 +673,14 @@ compound_list:
 
 info_expr: expr %prec LOWEST_PREC { withinfo (rhs_info 1) $1 }
 
+info_expr_1: expr_1 %prec LOWEST_PREC { withinfo (rhs_info 1) $1 }
+
 
 expr:
+    expr_1  %prec LOWEST_PREC { $1 }
+|   expr_2  { $1 }
+
+expr_1:
     atomic_expr                   { $1 }
 |   operator_expr                 { $1 }
 |   LPAREN expr RPAREN            { Expparen $2 }
@@ -715,11 +696,10 @@ expr:
   in
   brexp lst
 }
-|   expr COMMA expr               { Tupleexp ($1,$3) }
-|   expr LPAREN expr RPAREN       { Funapp ($1,$3) }
-|   expr LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
-|   expr DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
-|   expr DOT LBRACE expr RBRACE   {
+|   expr_1 LPAREN expr RPAREN       { Funapp ($1,$3) }
+|   expr_1 LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
+|   expr_1 DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
+|   expr_1 DOT LBRACE expr RBRACE   {
   Expdot($1, predicate_of_expression (rhs_info 4) $4)
 }
 |   dotted_id_list DOT LPAREN expr RPAREN   {
@@ -728,7 +708,7 @@ expr:
 |   dotted_id_list DOT LBRACE expr RBRACE   {
   Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
 }
-|   expr COLON type_nt        { Typedexp ($1, withinfo (rhs_info 3) $3) }
+|   expr_1 COLON type_nt        { Typedexp ($1, withinfo (rhs_info 3) $3) }
 
 |   KWall  formal_arguments opt_nl expr {
   Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }
@@ -756,8 +736,12 @@ expr:
   let entlst = entities_of_expression info [Identifier $1] in
   Exparrow (withinfo info entlst, $3)
 }
-|  exp_conditional { $1 }
+
+
+expr_2:
+   exp_conditional { $1 }
 |  exp_inspect     { $1 }
+|  expr COMMA expr { Tupleexp ($1,$3) }
 
 
 atomic_expr:
@@ -771,57 +755,57 @@ atomic_expr:
 }
 
 operator_expr:
-    expr PLUS expr                { Binexp (Plusop,$1,$3) }
+    expr_1 PLUS expr_1                { Binexp (Plusop,$1,$3) }
 
-|   expr MINUS expr               { Binexp (Minusop,$1,$3) }
+|   expr_1 MINUS expr_1               { Binexp (Minusop,$1,$3) }
 
-|   PLUS expr                     { Unexp (Plusop,$2) }
+|   PLUS expr_1                     { Unexp (Plusop,$2) }
 
-|   MINUS expr                    { Unexp (Minusop,$2) }
+|   MINUS expr_1                    { Unexp (Minusop,$2) }
 
-|   expr TIMES expr               { Binexp (Timesop,$1,$3) }
+|   expr_1 TIMES expr_1               { Binexp (Timesop,$1,$3) }
 
-|   TIMES expr                    { Unexp (Timesop,$2) }
+|   TIMES expr_1                    { Unexp (Timesop,$2) }
 
-|   expr DIVIDE expr              { Binexp (Divideop,$1,$3) }
+|   expr_1 DIVIDE expr_1              { Binexp (Divideop,$1,$3) }
 
-|   expr CARET  expr              { Binexp (Caretop,$1,$3) }
+|   expr_1 CARET  expr_1              { Binexp (Caretop,$1,$3) }
 
-|   expr KWin expr                { Binexp (Inop,$1,$3) }
+|   expr_1 KWin expr_1                { Binexp (Inop,$1,$3) }
 
-|   expr NOTIN expr               { Binexp (Notinop,$1,$3) }
+|   expr_1 NOTIN expr_1               { Binexp (Notinop,$1,$3) }
 
-|   expr EQ  expr                 { Binexp (Eqop,$1,$3) }
+|   expr_1 EQ  expr_1                 { Binexp (Eqop,$1,$3) }
 
-|   expr NEQ  expr                { Binexp (NEqop,$1,$3) }
+|   expr_1 NEQ  expr_1                { Binexp (NEqop,$1,$3) }
 
-|   expr LT  expr                 { Binexp (LTop,$1,$3) }
+|   expr_1 LT  expr_1                 { Binexp (LTop,$1,$3) }
 
-|   expr LE  expr                 { Binexp (LEop,$1,$3) }
+|   expr_1 LE  expr_1                 { Binexp (LEop,$1,$3) }
 
-|   expr GT  expr                 { Binexp (GTop,$1,$3) }
+|   expr_1 GT  expr_1                 { Binexp (GTop,$1,$3) }
 
-|   expr GE  expr                 { Binexp (GEop,$1,$3) }
+|   expr_1 GE  expr_1                 { Binexp (GEop,$1,$3) }
 
-|   expr KWas expr                { Binexp (Asop,$1,$3) }
+|   expr_1 KWas expr_1                { Binexp (Asop,$1,$3) }
 
-|   expr KWand  expr              { Binexp (Andop,$1,$3) }
+|   expr_1 KWand  expr_1              { Binexp (Andop,$1,$3) }
 
-|   expr KWor   expr              { Binexp (Orop,$1,$3)  }
+|   expr_1 KWor   expr_1              { Binexp (Orop,$1,$3)  }
 
-|   KWnot   expr                  { Unexp (Notop,$2) }
+|   KWnot   expr_1                  { Unexp (Notop,$2) }
 
-|   KWold   expr                  { Unexp (Oldop,$2) }
+|   KWold   expr_1                  { Unexp (Oldop,$2) }
 
-|   expr DCOLON expr              { Binexp (DColonop,$1,$3) }
+|   expr_1 DCOLON expr_1              { Binexp (DColonop,$1,$3) }
 
-|   expr COLON expr               { Expcolon ($1,$3) }
+|   expr_1 COLON expr_1               { Expcolon ($1,$3) }
 
-|   expr BAR  expr                { Binexp (Barop,$1,$3) }
+|   expr_1 BAR  expr_1                { Binexp (Barop,$1,$3) }
 
-|   expr DBAR expr                { Binexp (DBarop,$1,$3) }
+|   expr_1 DBAR expr_1                { Binexp (DBarop,$1,$3) }
 
-|   expr DARROW expr              { Binexp (DArrowop,$1,$3) }
+|   expr_1 DARROW expr_1              { Binexp (DArrowop,$1,$3) }
 
 
 
@@ -907,7 +891,7 @@ exp_then_part_list:
 |   exp_then_part KWelseif exp_then_part_list  { $1::$3 }
 
 exp_then_part:
-    expr KWthen expr { $1, $3 }
+    expr_1 KWthen expr { $1, $3 }
 
 exp_else_part:
     { None }
@@ -924,16 +908,3 @@ exp_case_list:
 |   exp_case exp_case_list { $1 :: $2 }
 
 exp_case: KWcase expr KWthen expr { $2, $4 }
-
-
-
-/*   UNUSED!!!
-inspect:
-    KWinspect info_expr case_list KWend { Expinspect ($2, $3) }
-
-case_list:
-    case_part { [$1] }
-|   case_part case_list { $1::$2 }
-
-case_part:  KWcase info_expr KWthen compound { $2,$4 }
-*/

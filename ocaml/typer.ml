@@ -762,6 +762,9 @@ let analyze_expression
       | Cmdif (_,_) ->
           not_yet_implemented ie.i ("Expif Typing of command "
                                     ^ (string_of_expression e))
+      | Proofif (_,_,_) ->
+          not_yet_implemented ie.i ("Proofif Typing of command "
+                                    ^ (string_of_expression e))
     with Accus.Untypeable _ ->
       error_info ie.i
         ("Type error in expression \"" ^ (string_of_expression e) ^ "\"")

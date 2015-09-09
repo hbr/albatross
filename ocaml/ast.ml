@@ -206,6 +206,8 @@ let rec make_proof
     | Expproof (rlst,imp_opt,elst) ->
         let kind, clst = analyze_imp_opt (i+1) ie.i imp_opt c in
         make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
+    | Proofif (thenlist,elsepart,enslist) ->
+        not_yet_implemented ie.i "Conditional proofs"
     | _ ->
         let _ = prove_basic_expression ie pc in
         ()

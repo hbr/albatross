@@ -20,7 +20,7 @@ item (o:OPTION[G]): G
     require
         o as value(v)
     ensure
-        Result = inspect o
+        Result = (inspect o
                  case value(v) then v
-                 end
+                 end)
     end

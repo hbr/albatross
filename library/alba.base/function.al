@@ -66,11 +66,11 @@ preimage (q:B?, f:A->B): ghost A?
            require
                a in (f.domain + g.domain)
            ensure
-               Result = if a in f.domain then
+               Result = (if a in f.domain then
                            f(a)
                         else
                            g(a)
-                        end
+                        end)
            end
 
 is_total (f:A->B): ghost BOOLEAN

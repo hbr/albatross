@@ -1,5 +1,6 @@
 gmon.out
 gmon.txt
+*.log
 
 _build
 _draft

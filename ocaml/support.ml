@@ -383,7 +383,8 @@ type expression =
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
   | Expinspect    of expression * (expression*expression) list
-  | Cmdif         of (expression * compound) list   * compound option
+  | Proofif       of (expression * compound) list * compound * compound
+  | Cmdif         of (expression * compound) list * compound
   | Cmdinspect    of
       info_expression
         * (info_expression * compound) list
@@ -447,6 +448,19 @@ let expression_of_list (lst:expression list): expression =
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
+  and str_thenlist thenlist =
+    string_of_list
+      thenlist
+      (fun tp ->
+        let cond,comp = tp
+        in
+        (string_of_expression cond)
+        ^ (if comp = [] then "" else "then " ^ (string_of_compound comp)))
+      " elseif "
+  and str_elsepart elsepart =
+    match elsepart with
+      [] -> ""
+    | _ -> " else " ^ (string_of_compound elsepart)
   in
   match e with
     Identifier id -> ST.string id
@@ -523,21 +537,17 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
         | Some e -> " else " ^ (string_of_expression e))
       ^ " end"
 
+  | Proofif (thenlist,elsepart,enslist) ->
+      "if "
+      ^ (str_thenlist thenlist)
+      ^ (str_elsepart elsepart)
+      ^ " ensure "
+      ^ (string_of_compound enslist)
+      ^ " end"
   | Cmdif (thenlist,elsepart) ->
       "if "
-      ^ (string_of_list
-           thenlist
-           (fun tp ->
-             let cond,comp = tp
-             in
-             (string_of_expression cond)
-             ^ " then "
-             ^ (string_of_compound comp))
-           " elseif ")
-      ^ (
-        match elsepart with
-          None -> ""
-        | Some e -> " else " ^ (string_of_compound e))
+      ^ (str_thenlist thenlist)
+      ^ (str_elsepart elsepart)
       ^ " end"
   | Expinspect (inspexp,caselist) ->
       "inspect "
