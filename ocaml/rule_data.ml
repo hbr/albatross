@@ -74,6 +74,7 @@ let is_backward_recursive (rd:t): bool =
   let ntgt = Term.nodes rd.target in
   List.exists
     (fun (_,_,p) ->
+      p = rd.target ||
       let np = Term.nodes p in
       ntgt < np &&
       Term_algo.can_unify rd.target rd.nargs p)
@@ -190,8 +191,8 @@ let term (rd:t) (nbenv:int): term =
 
 
 
-let complexity (t:term) (c:Context.t): int =
-  let t_exp = Context.fully_expanded t 0 c in
+let complexity (t:term) (nb:int) (c:Context.t): int =
+  let t_exp = Context.fully_expanded t nb c in
   Term.nodes t_exp
 
 
@@ -203,6 +204,24 @@ let is_backward_blocked
     true
   else
     false
+
+
+let forward_blocked
+    (ps_rev:(int*bool*term)list) (tgt:term) (nb:int) (c:Context.t):
+    (int*bool*term)list * bool =
+  let ntgt = complexity tgt nb c in
+  let ps,max_nds =
+    List.fold_left
+      (fun (ps,max_nds) (gp1,cons,p) ->
+        let nds  = complexity p nb c in
+        let cons = nds <= ntgt in
+        let nds  = max nds max_nds in
+        let ps   = (gp1,cons,p)::ps in
+        ps,nds)
+        ([],0)
+      ps_rev
+  in
+  ps, max_nds <= ntgt
 
 
 
@@ -264,6 +283,11 @@ let make (t:term) (c:Context.t): t =
     else
       is_backward_blocked ps tgt nargs c
   in
+  let fwd_blckd =
+    if nargs = 0 then false
+    else
+      let _,fwd_blckd = forward_blocked (List.rev ps) tgt nargs c in
+      fwd_blckd in
   let eq =
     if ps = [] then
       try
@@ -277,7 +301,7 @@ let make (t:term) (c:Context.t): t =
              nargs     = nargs;
              spec      = nargs = 0;
              nms       = nms;
-             fwd_blckd = false;
+             fwd_blckd = fwd_blckd;
              bwd_blckd = bwd_blckd;
              nbwd      = nbwd;
              ndropped  = 0;
@@ -325,19 +349,7 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
   in
   let ps,fwd_blckd =
     if full then
-      let ntgt = complexity tgt c in
-      let ps,max_nds =
-        List.fold_left
-          (fun (ps,max_nds) (gp1,cons,p) ->
-            let nds  = complexity p c in
-            let cons = nds <= ntgt in
-            let nds  = max nds max_nds in
-            let ps   = (gp1,cons,p)::ps in
-            ps,nds)
-          ([],0)
-          ps_rev
-      in
-      ps, max_nds <= ntgt
+      forward_blocked ps_rev tgt 0 c
     else
       List.rev ps_rev, false
   in
