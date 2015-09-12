@@ -7,7 +7,6 @@
 open Container
 open Term
 
-type submap  = Term_sub.t IntMap.t   (* idx -> sub *)
 type sublist = (int*Term_sub.t) list
 
 module FlowMap = Map.Make(struct
@@ -112,67 +111,6 @@ let merge_lists (l1: sublist) (l2:sublist): sublist =
         end
   in
   List.rev (merge l1 l2 [])
-
-
-
-
-
-let join_map (m1: submap) (m2: submap)
-    : submap =
-  (* Join the two disjoint maps 'm1' and 'm2' *)
-  IntMap.fold
-    (fun idx sub2 map ->
-      assert (not (IntMap.mem idx m1)); (* maps must be disjoint! *)
-      IntMap.add idx sub2 map
-    )
-    m2  (* map to fold *)
-    m1  (* start map   *)
-
-
-
-
-let merge_map (m1: submap) (m2: submap)
-    : submap =
-  (* Merge the two maps 'm1' and 'm2'
-
-     The domain of the merge is the subset of the intersection of both domains
-     where the corresponding substitutions are mergeable (i.e. do not have
-     different terms for the same variable).
-   *)
-  if IntMap.is_empty m1 || IntMap.is_empty m2 then
-    raise Not_found;
-  let merged_res =
-    IntMap.fold
-      (fun idx sub1 res ->
-        try
-          let sub2 = IntMap.find idx m2 in
-          try
-            let sub  = Term_sub.merge sub1 sub2 in
-            IntMap.add idx sub res
-          with Not_found ->
-            res
-        with Not_found ->
-          res
-      )
-      m1
-      IntMap.empty
-  in
-  if IntMap.is_empty merged_res then
-    raise Not_found
-  else
-    merged_res
-
-
-
-
-
-
-
-let map_to_list(map: submap): (int * Term_sub.t) list =
-  IntMap.fold
-    (fun i sub lst -> (i,sub)::lst)
-    map
-    []
 
 
 
