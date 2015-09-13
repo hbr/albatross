@@ -668,22 +668,18 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           dom, Eval.Exp(i, args, Eval.Term dom), true
       | VAppl (i,args) ->
           begin
+            let is_flow t =
+              match t with Flow _ -> true | _ -> false
+            in
             try
               let n,nms,t0 = Proof_table.definition i nb pc.base in
               assert (n = Array.length args);
-              let args,argse,_ =
+              let args,argse,argsmodi =
                 if full then
-                  eval_args true args full
+                  eval_args false args full
                 else
                   args, Array.map (fun t -> Eval.Term t) args, false
               in
-              (*let _ =
-                let ft = feature_table pc in
-                let idx = i - nb - nbenv in
-                printf "expand feature %s\n" (Feature_table.string_of_signature idx ft);
-                printf "  in %s\n" (string_of_term_anon t nb pc);
-                printf "     %s\n" (Term.to_string t);
-              in ();*)
               let exp = Proof_table.apply_term t0 args nb pc.base in
               let res,rese,_ =
                 if full then
@@ -691,7 +687,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 else
                   exp, Eval.Term exp, false
               in
-              res, Eval.Exp(i,argse,rese), true
+              if full && is_flow res then begin
+                let res = VAppl(i,args)
+                and e   = Eval.VApply (i,argse) in
+                res, e, argsmodi
+              end else begin
+                res, Eval.Exp(i,argse,rese), true
+              end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
               vapply i args full
@@ -763,7 +765,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     end
                   end else
                     let n,_,mtch,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-
                     try
                       let sub = Term_algo.unify insp n mtch in
                       assert (Array.length sub = n);
@@ -782,7 +783,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                   and ft = feature_table pc in
                   if Feature_table.is_case_matching args.(0) n mtch (nb+nbenv) ft
                   then begin
-                  (*if Term_algo.can_unify_pattern args.(0) n mtch then begin*)
                     Variable (nbenv+Feature_table.true_index),
                     Eval.As(true,eargs),
                     true
