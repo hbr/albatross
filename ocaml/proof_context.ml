@@ -17,11 +17,11 @@ type slot_data = {ndown:int;
 
 
 
-type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
-              mutable prvd2: Term_table.t;  (* as schematic terms *)
-              mutable bwd:   Term_table.t;
-              mutable fwd:   Term_table.t;
-              mutable left:  Term_table.t;
+type entry = {mutable prvd:  int Term_table.t;  (* all proved terms *)
+              mutable prvd2: int Term_table.t;  (* as schematic terms *)
+              mutable bwd:   int Term_table.t;
+              mutable fwd:   int Term_table.t;
+              mutable left:  int Term_table.t;
               mutable slots: slot_data array}
 
 type gdesc = {mutable pub: bool;
@@ -238,11 +238,11 @@ let string_of_term_array (args: term array) (pc:t): string =
 
 
 let unify
-    (t:term) (nbenv:int) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
+    (t:term) (nbenv:int) (tab:int Term_table.t) (pc:t): (int * Term_sub.t) list =
   Term_table.unify t nbenv tab
 
 let unify_with
-    (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
+    (t:term) (nargs:int) (nbenv:int) (tab:int Term_table.t) (pc:t)
     : (int * Term_sub.t) list =
   Term_table.unify_with t nargs nbenv tab
 
