@@ -99,7 +99,8 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
     let pres = term_preconditions info t pc in
     List.iter
       (fun t ->
-        try Prover.prove t pc
+        try let _ = Prover.prove_and_insert t pc in ()
+          (*Prover.prove t pc*)
         with
           Not_found ->
             error_info info ("Cannot prove precondition " ^ (PC.string_of_term t pc))

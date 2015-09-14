@@ -23,6 +23,8 @@ type t = {seq:       desc Ass_seq.t;
           depth:     int;
           count0:    int;      (* number of assertions at the start of the context *)
           mutable nreq:  int;  (* number of local assumptions *)
+          mutable maxreq: int; (* first index with no more assumptions *)
+          mutable reqs: int list;
           prev:      t option;
           verbosity: int}
 
@@ -265,6 +267,8 @@ let make (verbosity:int): t =
    names    = [||];
    new_ctxt = true;
    nreq    = 0;
+   maxreq  = 0;
+   reqs    = [];
    prev    = None;
    c = Context.make verbosity;
    verbosity = verbosity}
@@ -280,6 +284,8 @@ let push0 (names: int array) (new_ctxt:bool) (c:Context.t) (at:t): t =
    depth    = 1 + at.depth;
    count0   = count at;
    nreq     = 0;
+   maxreq   = count at;
+   reqs     = [];
    prev     = Some at}
 
 
@@ -371,23 +377,25 @@ let discharged_assumptions (i:int) (at:t): int * int array * term =
     with Not_found -> 0,[||],tgt
   in
   let imp_id = n + imp_id at in
-  let tref = ref tgt in
-  for k = cnt0 + at.nreq - 1 downto cnt0 do
-    let t = local_term k at in
-    let t = Term.up n t in
-    tref := Term.binary imp_id t !tref
-  done;
-  n,nms,!tref
+  assert (at.nreq = List.length at.reqs);
+  let res =
+    List.fold_left
+      (fun tgt k ->
+        let t = local_term k at in
+        let t = Term.up n t in
+        Term.binary imp_id t tgt)
+      tgt
+      at.reqs in
+  n,nms,res
 
 
 let assumptions (at:t): term list =
   (* The assumptions of the current context *)
-  let cnt0 = count_previous at
-  and lst  = ref [] in
-  for i = cnt0 + at.nreq - 1 downto cnt0 do
-    lst := (local_term i at)::!lst
-  done;
-  !lst
+  List.fold_left
+    (fun lst i ->
+      (local_term i at)::lst)
+    []
+    at.reqs
 
 
 
@@ -436,9 +444,10 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   match pt with
     Assumption _ ->
       let idx = count at in
-      assert (idx = count_previous at + at.nreq);
       raw_add ();
-      at.nreq <- at.nreq + 1
+      at.reqs <- idx :: at.reqs;
+      at.nreq <- at.nreq + 1;
+      at.maxreq <- idx + 1
   | _ ->
       raw_add ()
 
@@ -969,7 +978,6 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
      Note: If [i] is not in the current environment it cannot be quantified!
    *)
   let cnt0 = count_previous at
-  and nreq = at.nreq
   and pt   = proof_term i at in
   let n,nms,pt =
     match pt with
@@ -989,7 +997,7 @@ let discharged_proof_term (i:int) (at:t): int * int array * proof_term array =
           0, [||], pt
     end
   in
-  let narr = if cnt0+nreq<=i  then i+1-cnt0 else nreq in
+  let narr = if at.maxreq<=i  then i+1-cnt0 else at.maxreq - cnt0 in
   let pterm j =
     let pt = proof_term (cnt0+j) at in Proof_term.term_up n pt
   in
