@@ -91,9 +91,7 @@ is_finite (p:A?): ghost BOOLEAN
                ==> f.range = p
 
 is_choice (f:A?->A, p:A?): ghost BOOLEAN
-    ensure
-        Result = ({q: q <= p} <= f.domain and all(q) q <= p ==> f(q) in q)
-    end
+    -> all(q) q /= 0 and q <= p ==> q in f.domain and f(q) in q
 
 is_iterable (f:A->A): ghost BOOLEAN
     ensure
@@ -111,7 +109,7 @@ is_idempotent (f:A->A): ghost BOOLEAN
     end
 
 
-preimage(f:A->B, b:B): ghost A
+preimage(b:B, f:A->B): ghost A
     require
         f.is_injective
         b in f.range
@@ -140,7 +138,7 @@ inverse0 (f:A->B): ghost (B -> A)
                      require
                          b in f.range
                      ensure
-                         Result = f.preimage(b)
+                         Result = b.preimage(f)
                      end
     end
 
