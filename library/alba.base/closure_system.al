@@ -66,7 +66,7 @@ closed (a:PO, p:PO?): ghost PO
     require
         p.is_closure_system
     ensure
-        Result = least(p.above(a))
+        -> least(p.above(a))
     end
 
 

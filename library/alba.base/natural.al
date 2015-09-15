@@ -64,9 +64,9 @@ predecessor (n:NATURAL): NATURAL
     require
         n as _.successor
     ensure
-        Result = (inspect n
-                 case    m.successor then m
-                 end)
+        -> inspect n
+           case    m.successor then m
+           end
     end
 
 
@@ -721,10 +721,10 @@ all(a,b,n,m:NATURAL)
 
 (-)  (a,b:NATURAL): NATURAL
     require b <= a
-    ensure  Result = (inspect a,b
-                     case    _, 0 then a
-                     case    successor(a), successor(b) then a - b
-                     end)
+    ensure  -> inspect a,b
+               case    _, 0 then a
+               case    successor(a), successor(b) then a - b
+               end
     end
 
 

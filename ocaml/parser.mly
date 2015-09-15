@@ -88,7 +88,21 @@ let predicate_of_expression (info:info) (e:expression): expression =
   | _ -> (* enumerated set *)
       set_of_expression_list lst
 
-%}
+
+type feature_body1 =
+    Body1 of feature_body
+  | Body2 of (compound * info_expression)
+
+
+let body_exp (fb:feature_body1 option): feature_body option * info_expression option =
+  match fb with
+    None -> None, None
+  | Some (Body1 bdy)      -> Some bdy, None
+  | Some (Body2 (req,ie)) -> Some(req,None,[]), Some ie
+
+ %}
+
+
 
 %token KWCURRENT KWCurrent
 %token KWNONE
@@ -547,13 +561,15 @@ named_feature:
     return_type_opt
     optsemi
     feature_body_opt {
-  Named_feature ($1, $2, $3, false, $5, None)
+  let bdy,exp = body_exp $5 in
+  Named_feature ($1, $2, $3, false, bdy, exp)
 }
 |   nameopconst_info
     return_type
     optsemi
     feature_body_opt {
-  Named_feature ($1, noinfo [], Some $2, false, $4, None)
+  let bdy,exp = body_exp $4 in
+  Named_feature ($1, noinfo [], Some $2, false, bdy, exp)
 }
 |   nameopconst_info
     formal_arguments_info
@@ -601,13 +617,15 @@ feature_body_opt:
 
 feature_body:
     require_block feature_implementation ensure_block KWend
-    { $1, Some $2, $3 }
-|   require_block feature_implementation KWend  { $1, Some $2, [] }
-|   feature_implementation ensure_block KWend   { [], Some $1, $2 }
-|   require_block ensure_block KWend            { $1, None,    $2 }
-|   require_block KWend                         { $1, None,    [] }
-|   feature_implementation KWend                { [], Some $1, [] }
-|   ensure_block KWend                          { [], None,    $1 }
+    { Body1($1, Some $2, $3) }
+|   require_block feature_implementation KWend  { Body1($1, Some $2, []) }
+|   feature_implementation ensure_block KWend   { Body1([], Some $1, $2) }
+|   require_block ensure_block KWend            { Body1($1, None,    $2) }
+|   require_block KWend                         { Body1($1, None,    []) }
+|   feature_implementation KWend                { Body1([], Some $1, []) }
+|   ensure_block KWend                          { Body1([], None,    $1) }
+|   require_block KWensure ARROW info_expr KWend { Body2 ($1, $4) }
+|   KWensure ARROW info_expr KWend { Body2 ([], $3) }
 
 
 
@@ -727,9 +745,9 @@ expr_1:
 }
 |   KWagent formal_arguments_info return_type_opt optsemi
     require_block_opt
-    ensure_block
+    KWensure ARROW expr
     KWend {
-  Expagent ($2,$3,$5,$6)
+  Expagent ($2,$3,$5,$8)
 }
 |   LIDENTIFIER ARROW expr {
   let info = rhs_info 1 in

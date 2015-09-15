@@ -555,35 +555,29 @@ let feature_specification
     [] ->
       Feature.Spec.make_func_spec nms pres [], None
   | _ ->
-      begin try
-        let term,info = result_term enslst context in
-        let term1 = adapt_term term in
-        Feature.Spec.make_func_def nms (Some term1) pres, Some(info,term)
-      with Not_found ->
-        let prove cond errstring =
-          try Prover.prove cond pc
+      let prove cond errstring =
+        try Prover.prove cond pc
+        with Not_found ->
+          error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"")
+      in
+      let posts = function_property_list enslst pc in
+      if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
+        error_info info "Recursive calls not allowed in postconditions";
+      if PC.is_private pc then begin
+        let exist = Context.existence_condition posts context in
+        let unique =
+          try Context.uniqueness_condition posts context
           with Not_found ->
-            error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"")
+            error_info info "Result type does not inherit ANY"
         in
-        let posts = function_property_list enslst pc in
-        if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
-          error_info info "Recursive calls not allowed in postconditions";
-        if PC.is_private pc then begin
-          let exist = Context.existence_condition posts context in
-          let unique =
-            try Context.uniqueness_condition posts context
-            with Not_found ->
-              error_info info "Result type does not inherit ANY"
-          in
-          prove exist  "existence";
-          prove unique "uniqueness"
-        end;
-        let posts = Context.function_postconditions idx posts context in
-        assert (List.for_all (fun t -> is_feature_term_recursive t idx pc) posts);
-        let posts = adapt_list posts
-        in
-        Feature.Spec.make_func_spec nms pres posts, None
-      end
+        prove exist  "existence";
+        prove unique "uniqueness"
+      end;
+      let posts = Context.function_postconditions idx posts context in
+      assert (List.for_all (fun t -> is_feature_term_recursive t idx pc) posts);
+      let posts = adapt_list posts
+      in
+      Feature.Spec.make_func_spec nms pres posts, None
 
 
 let feature_specification_ast
@@ -596,6 +590,7 @@ let feature_specification_ast
   let nargs = Array.length nms in
   let adapt_term t =
     adapt_inner_function_term info t nargs pc in
+  let adapt_list lst = List.map adapt_term lst in
   let feature_spec reqlst enslst =
     feature_specification info idx nms reqlst enslst pc in
   let context = PC.context pc in
@@ -608,6 +603,15 @@ let feature_specification_ast
       (Feature.Spec.make_func_def nms (Some term1) []), Some(ie.i,term)
   | Some (reqlst,_,enslst), None ->
       feature_spec reqlst enslst
+  | Some (reqlst,None,[]), Some ie ->
+      let term = Typer.result_term ie context in
+      let term1 = adapt_term term in
+      add_assumptions reqlst pc;
+      let pres = PC.assumptions pc in
+      if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
+        error_info info "Recursive calls not allowed in preconditions";
+      let pres = adapt_list pres in
+      (Feature.Spec.make_func_def nms (Some term1) pres), Some(ie.i,term)
   | Some bdy, Some exp ->
       assert false (* cannot happen *)
 

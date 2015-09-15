@@ -672,18 +672,8 @@ let analyze_expression
           do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
           lambda entlst None [] e false true accs c
-      | Expagent (entlst,rt,pres,posts) ->
-          begin match posts with
-            [ie0] ->
-              begin match ie0.v with
-                Binexp (Eqop, ExpResult, exp) ->
-                  lambda entlst rt pres exp false true accs c
-              | _ ->
-                  not_yet_implemented ie.i "Agents defined with properties"
-              end
-          | _ ->
-              not_yet_implemented ie.i "Agents defined with properties"
-          end
+      | Expagent (entlst,rt,pres,exp) ->
+          lambda entlst rt pres exp false true accs c
       | Expif (thenlist,elsepart) ->
           exp_if thenlist elsepart accs c
       | Expinspect (inspexp,caselst) ->

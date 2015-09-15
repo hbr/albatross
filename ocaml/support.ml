@@ -368,7 +368,7 @@ type expression =
   | Expfalse
   | Expparen      of expression
   | Exparrow      of entities list withinfo * expression
-  | Expagent      of entities list withinfo * return_type * compound * compound
+  | Expagent      of entities list withinfo * return_type * compound * expression
   | Expop         of operator
   | Funapp        of expression * expression
   | Bracketapp    of expression * expression
@@ -480,10 +480,10 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Exparrow  (l,e) ->
       "(" ^ (string_of_formals l.v) ^ ")->" ^ (string_of_expression e)
 
-  | Expagent (l,rt,pres,posts) ->
+  | Expagent (l,rt,pres,exp) ->
       "agent(" ^ (string_of_formals l.v) ^ ")" ^ (string_of_return_type rt) ^
       " require " ^ (string_of_compound pres) ^
-      " ensure " ^ (string_of_compound posts) ^
+      " ensure -> " ^ (string_of_expression exp) ^
       " end"
   | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 

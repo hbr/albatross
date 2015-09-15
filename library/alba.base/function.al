@@ -20,11 +20,9 @@ domain (f:A->B): ghost A?   note built_in end
 0: (A->B)                   note built_in end
 
 (<=) (f,g:A->B): ghost BOOLEAN
-    ensure
-        Result = (f.domain <= g.domain
-                  and
-                  all(x) x in f.domain ==> f(x) = g(x))
-    end
+    -> f.domain <= g.domain
+       and
+       all(x) x in f.domain ==> f(x) = g(x)
 
 (=) (f,g:A->B): ghost BOOLEAN
     -> f <= g and g <= f
@@ -38,19 +36,14 @@ inherit         ghost ANY end
 
 
 range (f:A->B): ghost B?
-    ensure
-        Result = {b: some(a) a in f.domain and f(a) = b}
-    end
+    -> {b: some(a) a in f.domain and f(a) = b}
 
 image (p:A?, f:A->B): ghost B?
-    ensure
-        Result = {y: some(x) x in (f.domain*p) and f(x) = y}
-    end
+    -> {y: some(x) x in (f.domain*p) and f(x) = y}
 
 preimage (q:B?, f:A->B): ghost A?
-    ensure
-        Result = {x: x in f.domain and f(x) in q}
-    end
+    -> {x: x in f.domain and f(x) in q}
+
 
 (|) (f:A->B, p:A?): (A->B)
     -> agent (a:A):B
@@ -58,7 +51,7 @@ preimage (q:B?, f:A->B): ghost A?
                a in f.domain
                a in p
            ensure
-               Result = f(a)
+               -> f(a)
            end
 
 (+) (f,g:A->B): ghost (A->B)
@@ -66,23 +59,22 @@ preimage (q:B?, f:A->B): ghost A?
            require
                a in (f.domain + g.domain)
            ensure
-               Result = (if a in f.domain then
-                           f(a)
-                        else
-                           g(a)
-                        end)
+               -> if a in f.domain then
+                     f(a)
+                  else
+                     g(a)
+                  end
            end
 
 is_total (f:A->B): ghost BOOLEAN
     -> all(a) a in f.domain
 
 is_injective (f:A->B): ghost BOOLEAN
-    ensure
-        Result = all(x,y) x in f.domain
-                      ==> y in f.domain
-                      ==> f(x) = f(y)
-                      ==> x = y
-    end
+    -> all(x,y) x in f.domain
+                ==> y in f.domain
+                ==> f(x) = f(y)
+                ==> x = y
+
 
 is_finite (p:A?): ghost BOOLEAN
     -> all(f:A->A) f.is_injective
@@ -94,19 +86,14 @@ is_choice (f:A?->A, p:A?): ghost BOOLEAN
     -> all(q) q /= 0 and q <= p ==> q in f.domain and f(q) in q
 
 is_iterable (f:A->A): ghost BOOLEAN
-    ensure
-        Result = all(a) a in f.domain ==> f(a) in f.domain
-    end
+    -> all(a) a in f.domain ==> f(a) in f.domain
 
 is_fixpoint (a:A, f:A->A): ghost BOOLEAN
-    ensure
-        Result = (a in f.domain and f(a) = a)
-    end
+    -> a in f.domain and f(a) = a
+
 
 is_idempotent (f:A->A): ghost BOOLEAN
-    ensure
-        Result = (f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f))
-    end
+    -> f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f)
 
 
 preimage(b:B, f:A->B): ghost A
@@ -134,12 +121,12 @@ inverse0 (f:A->B): ghost (B -> A)
     require
         f.is_injective
     ensure
-        Result = agent (b:B):A
-                     require
-                         b in f.range
-                     ensure
-                         Result = b.preimage(f)
-                     end
+        -> agent(b:B): A
+               require
+                   b in f.range
+               ensure
+                   -> b.preimage(f)
+               end
     end
 
 

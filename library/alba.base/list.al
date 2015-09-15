@@ -45,9 +45,9 @@ head (a:[G]): G
     require
         a as x ^ t
     ensure
-        Result = (inspect a
-                 case h ^ _ then h
-                 end)
+        -> inspect a
+           case h ^ _ then h
+           end
     end
 
 
@@ -56,9 +56,9 @@ tail (a:[G]): [G]
     require
         a as x ^ t
     ensure
-        Result = (inspect a
-                 case _ ^ t then t
-                 end)
+        -> inspect a
+           case _ ^ t then t
+           end
     end
 
 
@@ -371,10 +371,10 @@ folded (f:(G,H)->H, b:H, l:[G]): H
     require
         f.is_total
     ensure
-        Result =  (inspect l
-                  case []  then b
-                  case h^t then f.folded(f(h,b),t)
-                  end)
+        -> inspect l
+           case []  then b
+           case h^t then f.folded(f(h,b),t)
+           end
     end
 
 all(a,b:[G])

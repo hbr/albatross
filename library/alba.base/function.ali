@@ -50,7 +50,7 @@ preimage (q:B?, f:A->B): ghost A?
                a in f.domain
                a in p
            ensure
-               Result = f(a)
+               -> f(a)
            end
 
 (+) (f,g:A->B): ghost (A->B)
@@ -58,11 +58,7 @@ preimage (q:B?, f:A->B): ghost A?
            require
                a in (f.domain + g.domain)
            ensure
-               Result = (if a in f.domain then
-                           f(a)
-                        else
-                           g(a)
-                        end)
+               -> if a in f.domain then f(a) else g(a) end
            end
 
 is_total (f:A->B): ghost BOOLEAN

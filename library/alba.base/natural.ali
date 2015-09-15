@@ -46,9 +46,9 @@ predecessor (n:NATURAL): NATURAL
     require
         n as _.successor
     ensure
-        Result = (inspect n
-                 case    m.successor then m
-                 end)
+        -> inspect n
+           case    m.successor then m
+           end
     end
 
 
