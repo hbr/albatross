@@ -98,6 +98,8 @@ let arity     (c:t): int = entry_arity c.entry
 
 let verbosity (c:t): int = c.verbosity
 
+let info (c:t): info = c.entry.info
+
 let has_result_variable (c:t): bool = c.entry.rvar
 
 let has_result (c:t): bool = Result_type.has_result c.entry.result
@@ -465,6 +467,17 @@ let type_variables (c:t): TVars_sub.t = c.entry.tvs_sub
 
 let boolean (c:t): term =
   Class_table.boolean_type (ntvs c)
+
+
+let update_types (subs:type_term array) (c:t): unit =
+  let len = Array.length subs in
+  assert (len = TVars_sub.count_local c.entry.tvs_sub);
+  Array.iteri
+    (fun i (nme,tp) ->
+      let tp = Term.sub tp subs len in
+      c.entry.fargs.(i) <- nme,tp)
+    c.entry.fargs
+
 
 
 let update_type_variables (tvs:TVars_sub.t) (c:t): unit =

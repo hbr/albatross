@@ -484,14 +484,8 @@ let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
   Context.beta_reduce n t args nb at.c
 
 
-let apply_term_0 (t:term) (args:term array) (nb:int) (at:t): term =
-  let nms = Array.init nb (fun i -> ST.symbol (string_of_int i)) in
-  let c = Context.push_untyped nms at.c in
-  Typer.specialized (Term.apply t args) c
-
 let apply_term (t:term) (args:term array) (nb:int) (at:t): term =
-  try apply_term_0 t args nb at
-  with Not_found -> assert false
+  Term.apply t args
 
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
@@ -542,7 +536,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           if argslen = 0 then Variable idx
           else VAppl(idx,argsa) in
         let exp =
-          try apply_term_0 t argsb nb at
+          try apply_term t argsb nb at
           with Not_found ->
             raise Illegal_proof_term in
         if not (Term.equivalent exp ta) then begin

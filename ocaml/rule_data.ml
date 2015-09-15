@@ -241,13 +241,13 @@ let get_anchor_class (nargs:int) (nms:int array) (t:term) (c:Context.t): int =
   else begin
     assert (nargs = Array.length nms);
     let c1 = Context.push_untyped nms c in
-    let tb = Term_builder.make_boolean c1 in
-    Term_builder.set_normalized tb;
     try
-      let tb  = Term_builder.check_term t tb in
-      let s   = Term_builder.substituted_context_signature tb
+      let tb = Term_builder.occupy_term t c1 in
+      let s  = Term_builder.substituted_context_signature tb
       and tvs = Term_builder.tvars tb in
-      let _,cls = Sign.anchor tvs s in cls
+      let _,cls = Sign.anchor tvs s in
+      Term_builder.release tb;
+      cls
     with Term_builder.Illegal_term ->
       Printf.printf "illegal term %s\n"
         (Context.string_of_term (QExp (nargs,nms,t,true)) true 0 c);

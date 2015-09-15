@@ -22,41 +22,36 @@ module Accus: sig
   val is_tracing:        t -> bool
   val count:             t -> int
   val ntvs_added:        t -> int
+  val first:             t -> Term_builder.t
   val expected_arity:    t -> int
-  val expected_signatures_string: t -> string
-  val substitutions_string: t -> string
   val expect_boolean:    t -> unit
   val expect_type:       term -> t -> unit
   val expect_boolean_expression:    t -> unit
   val expect_new_untyped:t -> unit
-  val remove_untyped:    t -> unit
   val push_expected:     t -> unit
   val get_expected:      int -> t -> unit
   val drop_expected:     t -> unit
-  val complete_if:      bool -> t -> unit
+  val expect_if:         t -> unit
+  val complete_if:       bool -> t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
-  val expect_argument:   int -> t -> unit
-  val complete_function: int -> t -> unit
-  val expect_lambda:     int -> bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int -> int -> bool -> t -> unit
-  val expect_quantified: int -> Context.t -> t -> unit
-  val complete_quantified:   int -> int -> bool -> t -> unit
+  val expect_argument:   t -> unit
+  val complete_function: t -> unit
+  val expect_lambda:     bool -> Context.t -> t -> unit
+  val complete_lambda:   int -> int array -> int -> bool -> t -> unit
+  val expect_quantified: Context.t -> t -> unit
+  val complete_quantified: bool -> t -> unit
   val expect_case:       Context.t -> t -> unit
-  val complete_case:     int -> t -> unit
+  val complete_case:     t -> unit
+  val expect_inspect:    t -> unit
   val complete_inspect:  int ->  t -> unit
-  val complete_as:       int -> t -> unit
-  val specialize_terms:  t -> unit
+  val expect_as:         t -> unit
+  val complete_as:       t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
-  val check_untyped_variables: info -> t -> unit
-  val remove_dummies:    info_expression -> t -> unit
-  val result:            t -> term * TVars_sub.t
 
 end = struct
 
   type t = {mutable accus: Term_builder.t list;
-            mutable ntvs_added: int;
-            mutable arity:  int;
             trace: bool;
             mutable c: Context.t}
 
@@ -66,13 +61,11 @@ end = struct
   let make (is_bool:bool) (c:Context.t): t =
     let tb =
       if is_bool then
-        Term_builder.make_boolean c
+        Term_builder.occupy_boolean c
       else
-        Term_builder.make c
+        Term_builder.occupy_context c
     in
     {accus           = [tb];
-     ntvs_added      = 0;
-     arity           = 0;
      trace           = (5 <= Context.verbosity c);
      c               = c}
 
@@ -85,42 +78,36 @@ end = struct
       [] -> assert false
     | [_] -> true
     | hd::tl ->
-        let res,_ = Term_builder.result hd in
-        List.for_all (fun tb -> res = fst (Term_builder.result tb)) tl
+        let res = Term_builder.head_term hd in
+        List.for_all (fun tb -> res = Term_builder.head_term tb) tl
 
   let is_tracing (accs:t): bool = accs.trace
 
   let count (accs:t): int = List.length accs.accus
 
-  let ntvs_added (accs:t): int = accs.ntvs_added
+  let first (accs:t): Term_builder.t =
+    assert (accs.accus <> []);
+    List.hd accs.accus
 
-  let expected_arity (accs:t): int = accs.arity
 
-  let expected_signatures_string (accs:t): string =
-    "{" ^
-    (String.concat
-      ","
-      (List.map (fun acc -> Term_builder.signature_string acc) accs.accus)) ^
-    "}"
+  let ntvs_added (accs:t): int =
+    Term_builder.count_local_added (first accs)
 
-  let substitutions_string (accs:t): string =
-    "{" ^
-    (String.concat
-       ","
-       (List.map (fun acc -> Term_builder.substitution_string acc) accs.accus)) ^
-    "}"
+  let expected_arity (accs:t): int =
+    Term_builder.expected_arity (first accs)
 
 
   let trace_accus (accs:t): unit =
     let accus = accs.accus in
     List.iteri
       (fun i acc ->
-        let t = Term_builder.head_term acc in
-        printf "    %d: \"%s\"  \"%s\" %s %s\n"
+        let t = Term_builder.last_term acc in
+        printf "    %d: \"%s\"  \"%s\" %s%s %s\n"
           i
-          (Term_builder.string_of_head_term acc) (Term.to_string t)
-          (Term_builder.string_of_tvs_sub acc)
-          (Term_builder.string_of_head_signature acc))
+          (Term_builder.string_of_last_term acc) (Term.to_string t)
+          (Term_builder.string_of_tvs acc)
+          (Term_builder.string_of_substitutions acc)
+          (Term_builder.string_of_last_signature acc))
       accus
 
 
@@ -131,38 +118,29 @@ end = struct
 
 
   let expect_new_untyped (accs:t): unit =
-    accs.ntvs_added <- accs.ntvs_added + 1;
     List.iter Term_builder.expect_new_untyped accs.accus
 
 
-  let remove_untyped (accs:t): unit =
-    List.iter Term_builder.remove_untyped accs.accus;
-    accs.ntvs_added <- accs.ntvs_added - 1
-
 
   let expect_function (nargs:int) (accs:t): unit =
-    accs.arity           <- nargs;
-    accs.ntvs_added      <- nargs + accs.ntvs_added;
-    List.iter (fun acc -> Term_builder.expect_function nargs acc) accs.accus
+    List.iter (fun acc -> Term_builder.expect_function nargs (-1) acc) accs.accus
 
 
 
-  let complete_function (nargs:int) (accs:t): unit =
-    accs.ntvs_added <- accs.ntvs_added - nargs;
+  let complete_function (accs:t): unit =
     List.iter
-      (fun acc -> Term_builder.complete_function nargs acc)
+      Term_builder.complete_function
       accs.accus;
     if accs.trace then begin
-      printf "  complete function with %d arguments\n" nargs;
+      printf "  complete function\n";
       trace_accus accs
     end
 
 
 
-  let expect_argument (i:int) (accs:t): unit =
+  let expect_argument(accs:t): unit =
     (** Expect the next argument of the current application *)
-    accs.arity <- 0;
-    List.iter (fun acc -> Term_builder.expect_argument i acc) accs.accus
+    List.iter Term_builder.expect_argument accs.accus
 
 
   let add_leaf
@@ -172,17 +150,23 @@ end = struct
     (** Add the terms from the list [terms] of the context [c] to the
         accumulators [accs]
      *)
+    assert (terms <> []);
     let accus = accs.accus in
+    let rec add_lf terms acc lst =
+      let add i tvs s acc lst =
+        try Term_builder.add_leaf i tvs s acc; acc::lst
+        with Not_found -> lst in
+      match terms with
+        [] -> assert false (* cannot happen *)
+      | [i,tvs,s] ->
+          add i tvs s acc lst
+      | (i,tvs,s)::terms ->
+          let lst = add i tvs s (Term_builder.clone acc) lst in
+          add_lf terms acc lst
+    in
     accs.accus <-
       List.fold_left
-        (fun lst acc ->
-          List.fold_left
-            (fun lst (i,tvs,s) ->
-              try (Term_builder.add_leaf i tvs s acc) :: lst
-              with Not_found -> lst)
-            lst
-          terms
-        )
+        (fun lst acc -> add_lf terms acc lst)
         []
         accus;
     if accs.trace && 1 < List.length terms then begin
@@ -275,27 +259,24 @@ end = struct
     iter_accus_save Term_builder.drop_expected accs
 
 
+  let expect_if (accs:t): unit =
+    iter_accus_save Term_builder.expect_if accs
+
   let complete_if (has_else:bool) (accs:t): unit =
     iter_accus_save (fun acc -> Term_builder.complete_if has_else acc) accs
 
 
-  let expect_lambda
-      (ntvs:int) (is_pred:bool) (c:Context.t) (accs:t)
-      : unit =
-    assert (0 <= ntvs);
-    accs.arity      <- 0;
-    accs.ntvs_added <- 0;
-    accs.c          <- c;
-    map_accus
-      (fun acc -> Term_builder.expect_lambda ntvs is_pred c acc)
+  let expect_lambda (is_pred:bool) (c:Context.t) (accs:t): unit =
+    accs.c <- c;
+    iter_accus_save
+      (fun acc -> Term_builder.expect_lambda is_pred c acc)
       accs
 
 
-  let complete_lambda (ntvs:int) (ntvs_added:int) (npres:int) (is_pred:bool) (accs:t)
+  let complete_lambda (n:int) (nms:int array) (npres:int) (is_pred:bool) (accs:t)
       : unit =
     iter_accus
-      (fun acc -> Term_builder.complete_lambda ntvs npres is_pred acc) accs;
-    accs.ntvs_added <- ntvs_added;
+      (fun acc -> Term_builder.complete_lambda n nms npres is_pred acc) accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete lambda\n";
@@ -305,21 +286,17 @@ end = struct
 
 
 
-  let expect_quantified (ntvs:int) (c:Context.t) (accs:t): unit =
-    assert (0 <= ntvs);
-    accs.arity      <- 0;
-    accs.ntvs_added <- 0;
-    accs.c          <- c;
+  let expect_quantified (c:Context.t) (accs:t): unit =
+    accs.c <- c;
     iter_accus
-      (fun acc -> Term_builder.expect_quantified ntvs c acc)
+      (fun acc -> Term_builder.expect_quantified c acc)
       accs
 
 
-  let complete_quantified (ntvs:int) (ntvs_added:int) (is_all:bool) (accs:t)
+  let complete_quantified (is_all:bool) (accs:t)
       : unit =
     iter_accus
-      (fun acc -> Term_builder.complete_quantified ntvs is_all acc) accs;
-    accs.ntvs_added <- ntvs_added;
+      (fun acc -> Term_builder.complete_quantified is_all acc) accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete quantified\n";
@@ -330,19 +307,20 @@ end = struct
 
   let expect_case (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    accs.ntvs_added <- 0;
     iter_accus_save (fun acc -> Term_builder.expect_case c acc) accs
 
 
-  let complete_case (ntvs_added:int) (accs:t): unit =
+  let complete_case (accs:t): unit =
     iter_accus_save Term_builder.complete_case accs;
-    accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete case\n";
       trace_accus accs
     end
 
+
+  let expect_inspect (accs:t): unit =
+    iter_accus_save Term_builder.expect_inspect accs
 
   let complete_inspect (ncases:int) (accs:t): unit =
     iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs;
@@ -351,9 +329,13 @@ end = struct
       trace_accus accs
     end
 
-  let complete_as (ntvs_added:int) (accs:t): unit =
+
+  let expect_as (accs:t): unit =
+    iter_accus_save Term_builder.expect_as accs
+
+
+  let complete_as (accs:t): unit =
     iter_accus_save Term_builder.complete_as accs;
-    accs.ntvs_added <- ntvs_added;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete as\n";
@@ -374,21 +356,14 @@ end = struct
     str1, str2
 
 
-  let specialize_terms (accs:t): unit =
-    List.iter (fun tb -> Term_builder.specialize_term tb) accs.accus;
-    if accs.trace then begin
-      printf "  update terms\n";
-      trace_accus accs
-    end
-
   let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
     match accs.accus with
       [] -> assert false
     | hd::tl ->
-        let t1,tvars2 = Term_builder.result hd in
+        let t1 = Term_builder.head_term hd in
         try
-          let acc = List.find (fun acc -> fst (Term_builder.result acc) <> t1) tl in
-          let t2,tvars2 = Term_builder.result acc
+          let acc = List.find (fun acc -> Term_builder.head_term acc <> t1) tl in
+          let t2 = Term_builder.head_term acc
           and estr = string_of_expression e in
           printf "ambiguous expression %s (%d)\n" (string_of_expression e)
             (List.length accs.accus);
@@ -400,38 +375,6 @@ end = struct
              str1 ^ "\n    " ^ str2)
         with Not_found ->
           ()
-
-  let check_untyped_variables (inf:info) (accs:t): unit =
-    List.iter
-      (fun acc ->
-        try
-          Term_builder.check_untyped_variables acc;
-          Term_builder.update_called_variables acc
-        with Term_builder.Incomplete_type i ->
-          error_info inf
-            ("Cannot infer a type for " ^
-             ST.string (Context.variable_name i accs.c)))
-      accs.accus
-
-
-  let remove_dummies (ie:info_expression) (accs:t): unit =
-    accs.accus <-
-      List.fold_left
-        (fun lst acc ->
-          if Term_builder.has_dummy acc then lst
-          else acc::lst)
-        []
-        accs.accus;
-    if accs.accus = [] then
-      error_info ie.i ("Cannot type the expression \"" ^
-                       (string_of_expression ie.v) ^
-                       "\"")
-
-
-
-  let result (accs:t): term * TVars_sub.t =
-    assert (is_unique accs);
-    Term_builder.result (List.hd accs.accus)
 end (* Accus *)
 
 
@@ -529,15 +472,10 @@ let process_leaf
                Class_table.string_of_reduced_complete_signature s tvs ct)
              lst)
       and reqs = String.concat "\n\t"
-          (List.map Term_builder.string_of_reduced_substituted_signature acc_lst)
+          (List.map Term_builder.string_of_reduced_required_type acc_lst)
       in
       error_info info (str ^ actuals ^ "\n  Required type(s):\n\t" ^ reqs)
 
-
-
-let term_builder (is_bool:bool) (c:Context.t): Term_builder.t =
-  if is_bool then Term_builder.make_boolean c
-  else Term_builder.make c
 
 
 let is_constant (nme:int) (c:Context.t): bool =
@@ -606,7 +544,7 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
 
 
 let validate_term (info:info) (t:term) (c:Context.t): unit =
-  (* Check that all match expression in inspect expressions have only constructors
+  (* Check that all pattern in inspect expressions have only constructors
      and variables *)
   let rec validate t c =
     let val_args args c = Array.iter (fun arg -> validate arg c) args in
@@ -658,6 +596,21 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
         end
   in
   validate t c
+
+
+
+let push_context
+    (entlst:  entities list withinfo)
+    (is_pred: bool)
+    (is_func: bool)
+    (gap:     int)
+    (c: Context.t)
+    : Context.t =
+  let c = Context.push_with_gap entlst None is_pred is_func false gap c in
+  if Context.count_last_formal_generics c <> 0 then
+    error_info entlst.i "Cannot introduce new formal generics in subexpression";
+  c
+
 
 
 let analyze_expression
@@ -744,7 +697,7 @@ let analyze_expression
               "\"\n  Actual type:\n\t"
             and actual = Context.string_of_type tp c
             and reqs = String.concat "\n\t"
-                (List.map Term_builder.string_of_reduced_substituted_signature lst) in
+                (List.map Term_builder.string_of_reduced_required_type lst) in
             error_info info (str ^ actual ^ "\n  Required types(s):\n\t" ^ reqs)
           end;
           analyze e0 accs c
@@ -780,10 +733,10 @@ let analyze_expression
     Accus.expect_function nargs accs;
     analyze f accs c;
     for i=0 to nargs-1 do
-      Accus.expect_argument i accs;
+      Accus.expect_argument accs;
       analyze args.(i) accs c
     done;
-    Accus.complete_function nargs accs
+    Accus.complete_function accs
 
   and quantified
       (q:quantifier)
@@ -793,13 +746,11 @@ let analyze_expression
       (c:Context.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    let c = Context.push_with_gap entlst None false false false ntvs_gap c in
-    let ntvs      = Context.count_local_type_variables c in
-    Accus.expect_quantified (ntvs-ntvs_gap) c accs;
+    let c = push_context entlst false false ntvs_gap c in
+    Accus.expect_quantified c accs;
     analyze e accs c;
-    Accus.check_untyped_variables entlst.i accs;
     let is_all = match q with Universal -> true | Existential -> false in
-    Accus.complete_quantified (ntvs-ntvs_gap) ntvs_gap is_all accs
+    Accus.complete_quantified is_all accs
 
   and lambda
       (entlst:entities list withinfo)
@@ -812,8 +763,7 @@ let analyze_expression
       (c:Context.t)
       : unit =
     let ntvs_gap = Accus.ntvs_added accs in
-    let c = Context.push_with_gap entlst None is_pred is_func false ntvs_gap c in
-    let ntvs      = Context.count_local_type_variables c in
+    let c = push_context entlst is_pred is_func ntvs_gap c in
     let rec anapres (pres:compound) (npres:int): int =
       match pres with
         [] -> npres
@@ -822,11 +772,12 @@ let analyze_expression
           analyze p.v accs c;
           anapres pres (1+npres)
     in
-    Accus.expect_lambda (ntvs-ntvs_gap) is_pred c accs;
+    Accus.expect_lambda is_pred c accs;
     analyze e accs c;
     let npres = anapres pres 0 in
-    Accus.check_untyped_variables entlst.i accs;
-    Accus.complete_lambda (ntvs-ntvs_gap) ntvs_gap npres is_pred accs
+    let nms = Context.local_argnames c in
+    let n = Array.length nms in
+    Accus.complete_lambda n nms npres is_pred accs
 
   and exp_if
       (thenlist: (expression * expression) list)
@@ -864,6 +815,7 @@ let analyze_expression
           do_exp_if (n+1) lst
     in
     Accus.push_expected accs;
+    Accus.expect_if accs;
     do_exp_if 0 thenlist
 
   and inspect (info:info)
@@ -895,7 +847,7 @@ let analyze_expression
       analyze m accs c1;
       Accus.get_expected 1 accs;
       analyze r accs c1;
-      Accus.complete_case ntvs_gap accs
+      Accus.complete_case accs
     in
     let rec do_case_list i lst =
       match lst with
@@ -904,13 +856,13 @@ let analyze_expression
           do_case i c;
           do_case_list (1+i) lst
     in
+    Accus.expect_inspect accs;
     Accus.push_expected accs;
     Accus.expect_new_untyped accs;
     Accus.push_expected accs;  (* stack = [match_type insp_type ...]*)
     analyze insp accs c;
     let ncases = do_case_list 0 caselst in
     assert (0 < ncases);
-    Accus.remove_untyped accs;
     Accus.complete_inspect ncases accs;
     Accus.drop_expected accs;
     Accus.drop_expected accs
@@ -922,6 +874,7 @@ let analyze_expression
       (accs:Accus.t)
       (c:Context.t): unit =
     Accus.expect_boolean accs;
+    Accus.expect_as accs;
     Accus.push_expected accs;
     Accus.expect_new_untyped accs;
     Accus.push_expected accs;
@@ -935,8 +888,7 @@ let analyze_expression
     Accus.expect_case c1 accs;
     Accus.get_expected 0 accs;
     analyze mtch accs c1;
-    Accus.remove_untyped accs;
-    Accus.complete_as ntvs_gap accs;
+    Accus.complete_as accs;
     Accus.drop_expected accs;
     Accus.drop_expected accs
   in
@@ -945,14 +897,16 @@ let analyze_expression
   analyze exp accs c;
   assert (not (Accus.is_empty accs));
 
-  Accus.remove_dummies ie accs;
-  Accus.specialize_terms accs;
-  (*Accus.check_untyped_variables ie.i accs;*)
   Accus.check_uniqueness info exp accs;
 
-  let term,tvars_sub = Accus.result accs in
+  let tb = Accus.first accs in
+  Term_builder.update_context tb;
+  Term_builder.specialize_head tb;
+
+  let term = Term_builder.normalized_result tb in
+  Term_builder.release tb;
+
   validate_term ie.i term c;
-  Context.update_type_variables tvars_sub c;
   let term = unfold_inspect ie.i term c in
   assert (Term_builder.is_valid term is_bool c);
   term
@@ -973,7 +927,3 @@ let result_term
 let boolean_term (ie: info_expression) (c:Context.t): term =
   assert (not (Context.is_global c));
   analyze_expression ie true c
-
-
-let specialized (t:term) (c: Context.t): term =
-  Term_builder.specialized t c

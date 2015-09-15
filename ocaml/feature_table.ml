@@ -518,7 +518,12 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
       Variable i ->
         t
     | VAppl (i,args) ->
-        VAppl (i, norm_args args)
+        let args = norm_args args in
+        if i = in_index + nb then begin
+          assert (Array.length args = 2);
+          Application(args.(1), [|args.(0)|],true)
+        end else
+          VAppl (i, args)
     | Application (f,args,pr) ->
         let f    = norm f nb
         and args = norm_args args in

@@ -46,7 +46,8 @@ val pop:   t -> t
 val is_global:   t -> bool
 val is_toplevel: t -> bool
 val depth:       t -> int
-val arity:     t -> int
+val arity:       t -> int
+val info:        t -> info
 
 val has_result:  t -> bool
 val has_result_variable:  t -> bool
@@ -111,6 +112,7 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
+val update_types: type_term array -> t -> unit
 val update_type_variables: TVars_sub.t -> t -> unit
 
 val string_of_term:       term -> bool -> int -> t -> string
