@@ -267,7 +267,7 @@ ass_feat: proof_all_expr {
 
 ass_req:
     KWrequire ass_seq { List.rev $2 }
-|   KWrequire ass_seq separator { List.rev $2 }
+|   KWrequire ass_seq SEMICOL { List.rev $2 }
 
 ass_req_opt:
     { [] }
@@ -280,7 +280,8 @@ ass_ens: KWensure ass_seq { List.rev $2 }
 
 ass_seq:
     info_expr_1                         { [$1] }
-|   ass_seq separator info_expr_1       { $3::$1 }
+|   ass_seq SEMICOL info_expr_1       { $3::$1 }
+
 
 proof_seq:
     proof_expr { [$1] }
@@ -298,6 +299,8 @@ proof_expr:
   withinfo (rhs_info 1) exp
 }
 |   proof_if { $1 }
+
+|   proof_inspect { $1 }
 
 
 proof_all_expr: KWall formal_arguments_opt opt_nl
@@ -350,6 +353,19 @@ ass_imp:
       error_info (rhs_info 1) "Not allowed in assertions"
 }
 
+proof_inspect:
+    KWinspect LIDENTIFIER proof_inspect_rest KWend {
+  let lst,ens = $3 in
+  withinfo (rhs_info 1) (Proofinspect ($2,lst,ens))
+}
+
+proof_inspect_rest:
+    optsemi KWensure info_expr { [], $3 }
+|   KWcase info_expr KWproof ass_seq proof_inspect_rest {
+  let lst,ens = $5 in
+  ($2,$4)::lst, ens
+   }
+
 
 proof_if:
     KWif ass_then_part_list ass_else_part ass_ens KWend {
@@ -362,11 +378,11 @@ ass_then_part_list:
 
 ass_then_part:
     expr_1 { $1,[] }
-|   expr_1 KWthen proof_seq { $1,$3 }
+|   expr_1 KWproof proof_seq { $1,$3 }
 
 ass_else_part:
-    { [] }
-| KWelse proof_seq { $2 }
+  KWelse { [] }
+| KWelse KWproof proof_seq { $3 }
 
 
 

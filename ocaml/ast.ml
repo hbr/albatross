@@ -182,7 +182,7 @@ let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t): (term*proof_term)
 
 
 let rec make_proof
-    (i:int)
+    (i:int) (* recursion counter *)
     (entlst: entities list withinfo)
     (kind: kind)
     (rlst: compound)
@@ -190,29 +190,6 @@ let rec make_proof
     (elst: compound)
     (pc:   Proof_context.t)
     : unit =
-  let prove_check_expression (ie:info_expression) (pc:PC.t): unit =
-    let c = PC.context pc in
-    match ie.v with
-      Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
-        begin
-          match q with
-            Universal ->
-              let kind, clst =
-                analyze_imp_opt (i+1) entlst.i imp_opt c
-              in
-              make_proof (i+1) entlst kind rlst clst elst pc
-          | Existential ->
-              error_info ie.i "Only \"all\" allowed here"
-        end
-    | Expproof (rlst,imp_opt,elst) ->
-        let kind, clst = analyze_imp_opt (i+1) ie.i imp_opt c in
-        make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
-    | Proofif (thenlist,elsepart,enslist) ->
-        not_yet_implemented ie.i "Conditional proofs"
-    | _ ->
-        let _ = prove_basic_expression ie pc in
-        ()
-  in
   let pc1 = Proof_context.push entlst None false false false pc in
   let defer = is_deferred kind
   and owner = Proof_context.owner pc1
@@ -220,10 +197,97 @@ let rec make_proof
   if defer then
     Proof_context.check_deferred pc1;  (* owner class has to be deferred *)
   add_assumptions rlst pc1;
-  List.iter (fun ie -> prove_check_expression ie pc1) clst;
+  List.iter (fun ie -> prove_check_expression i ie pc1) clst;
   let pair_lst = prove_ensure elst kind pc1 in
   add_proved defer owner pair_lst pc;
   PC.close pc
+
+and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
+  let c = PC.context pc in
+  match ie.v with
+    Expquantified (q,entlst,Expproof(rlst,imp_opt,elst)) ->
+      begin
+        match q with
+          Universal ->
+            let kind, clst =
+              analyze_imp_opt (i+1) entlst.i imp_opt c
+            in
+            make_proof (i+1) entlst kind rlst clst elst pc
+        | Existential ->
+            error_info ie.i "Only \"all\" allowed here"
+      end
+  | Expproof (rlst,imp_opt,elst) ->
+      let kind, clst = analyze_imp_opt (i+1) ie.i imp_opt c in
+      make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
+  | Proofif (thenlist,elsepart,enslist) ->
+      not_yet_implemented ie.i "Conditional proofs"
+  | Proofinspect (id,lst,ens) ->
+      not_yet_implemented ie.i "Inspect proofs"
+      (*proof_inspect ie.i id lst ens pc*)
+  | _ ->
+      let _ = prove_basic_expression ie pc in
+      ()
+
+and proof_inspect
+    (info:info) (id:int)
+    (lst:(info_expression*compound)list)
+    (ens:info_expression)
+    (pc:PC.t)
+    : unit =
+  let c   = PC.context pc in
+  let nvars = Context.count_variables c
+  and tgt = get_boolean_term ens pc
+  and ct  = Context.class_table c in
+  printf "inspect goal %s\n" (PC.string_of_term tgt pc);
+  let idx,tvs,s =
+    try Context.variable id c
+    with Not_found ->
+      error_info info ("Unknown variable \"" ^ (ST.string id) ^ "\"") in
+  assert (idx < nvars);
+  assert (Sign.is_constant s);
+  if not (IntSet.mem idx (Term.bound_variables tgt nvars)) then
+    error_info ens.i ("Variable \"" ^ (ST.string id) ^
+                      "\" does not occur in the goal");
+  let cons, tp =
+    let tp = Sign.result s in
+    let cls,_ = Class_table.split_type_term tp
+    and ntvs = Tvars.count_all tvs in
+    let set =
+      if cls < ntvs then IntSet.empty
+      else
+        Class_table.constructors (cls-ntvs) ct in
+    if IntSet.is_empty set then
+      error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
+    set, tp
+  in
+  let proved_cases =
+    List.fold_left
+      (fun lst (ie,cmp) ->
+        let pat,nms = Typer.case_variables ie.i ie.v c in
+        let n = Array.length nms in
+        let pc1 = PC.push_untyped nms pc in
+        let c1  = PC.context pc1 in
+        let pat = Typer.typed_term
+            (withinfo ie.i pat)
+            (Term.up n tp) c1 in
+        let invalid_pat () =
+          error_info ie.i
+            ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
+        match pat with
+          VAppl(i,args) ->
+            let argslen = Array.length args in
+            if argslen <> n then invalid_pat ();
+            for k = 0 to n-1 do
+              if args.(k) <> Variable k then invalid_pat ()
+            done;
+            if not (IntSet.mem (i-nvars-n) cons) then invalid_pat ();
+            assert false
+        | _ ->
+            invalid_pat ())
+      []
+      lst in
+  not_yet_implemented info "Inspect proofs"
+
 
 
 let prove_and_store
@@ -704,7 +768,7 @@ let add_case_induction
     (cls:     int)
     (clst_rev:int list)
     (pc:      Proof_context.t): unit =
-  let pappl nb a = Application(Variable nb, [|a|],true) in
+  let pappl nb a = Application(Variable nb, [|a|],true) in (* a in p *)
   let ft = Proof_context.feature_table pc in
   let imp_id0 = 2 + Feature_table.implication_index
   and tgt = pappl 0 (Variable 1) in
@@ -717,7 +781,7 @@ let add_case_induction
           if Sign.arity s = 0 then
             pappl 0 (Variable (2+idx))
           else
-            let a0lst, a1lst, nargs =
+            let a0lst, a1lst, nargs = (* a0lst: non recursive, a1lst: recursive *)
               Array.fold_left
                 (fun (a0lst,a1lst,i) tp ->
                   if Tvars.principal_class tp tvs = cls then

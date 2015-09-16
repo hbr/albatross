@@ -383,6 +383,7 @@ type expression =
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
   | Expinspect    of expression * (expression*expression) list
+  | Proofinspect  of int * (info_expression*compound) list * info_expression
   | Proofif       of (expression * compound) list * compound * compound
   | Cmdif         of (expression * compound) list * compound
   | Cmdinspect    of
@@ -536,6 +537,16 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
           None -> ""
         | Some e -> " else " ^ (string_of_expression e))
       ^ " end"
+
+  | Proofinspect (id,caselst,ens) ->
+      "inspect " ^ (ST.string id)
+      ^ (string_of_list
+           caselst
+           (fun (pat,cmp) ->
+             " case " ^ (string_of_expression pat.v)
+             ^ " proof " ^ (string_of_compound cmp))
+           "")
+      ^ " ensure " ^ (string_of_expression ens.v) ^ " end"
 
   | Proofif (thenlist,elsepart,enslist) ->
       "if "

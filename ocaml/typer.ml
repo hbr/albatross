@@ -16,7 +16,7 @@ module Accus: sig
   type t
   exception Untypeable of Term_builder.t list
 
-  val make:              bool -> Context.t -> t
+  val make:              Term_builder.t -> Context.t -> t
   val is_empty:          t -> bool
   val is_singleton:      t -> bool
   val is_tracing:        t -> bool
@@ -58,16 +58,11 @@ end = struct
   exception Untypeable of Term_builder.t list
 
 
-  let make (is_bool:bool) (c:Context.t): t =
-    let tb =
-      if is_bool then
-        Term_builder.occupy_boolean c
-      else
-        Term_builder.occupy_context c
-    in
+  let make (tb:Term_builder.t) (c:Context.t): t =
     {accus           = [tb];
      trace           = (5 <= Context.verbosity c);
      c               = c}
+
 
   let is_empty     (accs:t): bool =   Mylist.is_empty     accs.accus
 
@@ -489,8 +484,10 @@ let is_constant (nme:int) (c:Context.t): bool =
     false
 
 
-let case_variables (e:expression) (c:Context.t): expression * int list =
-  let rec vars (e:expression) (nanon:int) (lst:int list): expression * int * int list =
+let case_variables
+    (info:info) (e:expression) (c:Context.t): expression * int array =
+  let rec vars (e:expression) (nanon:int) (lst:int list)
+      : expression * int * int list =
     match e with
       Expnumber _ | Exptrue | Expfalse | Expop _ ->
         e, nanon, lst
@@ -539,8 +536,16 @@ let case_variables (e:expression) (c:Context.t): expression * int list =
         printf "case_variables %s\n" (string_of_expression e);
         raise Not_found
   in
-  let e, nanon, lst = vars e 0 [] in
-  e, List.rev lst
+  try
+    let e, nanon, lst = vars e 0 [] in
+    if Mylist.has_duplicates lst then
+      error_info info ("Duplicate variable in pattern \"" ^
+                       (string_of_expression e) ^ "\"");
+    let nms = Array.of_list (List.rev lst) in
+    e, nms
+  with Not_found ->
+    error_info info ("Cannot extract variables from pattern \"" ^
+                     (string_of_expression e) ^ "\"")
 
 
 let validate_term (info:info) (t:term) (c:Context.t): unit =
@@ -615,7 +620,7 @@ let push_context
 
 let analyze_expression
     (ie:        info_expression)
-    (is_bool:   bool)
+    (tb:        Term_builder.t)
     (c:         Context.t)
     : term =
   (** Analyse the expression [ie] in the context [context] and return the term.
@@ -705,9 +710,8 @@ let analyze_expression
       | Cmdif (_,_) ->
           not_yet_implemented ie.i ("Expif Typing of command "
                                     ^ (string_of_expression e))
-      | Proofif (_,_,_) ->
-          not_yet_implemented ie.i ("Proofif Typing of command "
-                                    ^ (string_of_expression e))
+      | Proofinspect _ | Proofif _  ->
+          assert false (* cannot happen *)
     with Accus.Untypeable _ ->
       error_info ie.i
         ("Type error in expression \"" ^ (string_of_expression e) ^ "\"")
@@ -815,25 +819,11 @@ let analyze_expression
       (c:Context.t)
       :unit =
     let do_case (i:int) ((m,r):expression*expression): unit =
-      let m,nmslst =
-        try case_variables m c
-        with Not_found ->
-          error_info info ("Cannot extract variables from \"case " ^
-                           (string_of_expression m) ^ " then " ^
-                           (string_of_expression r) ^ "\"")
+      let m,nms = case_variables info m c
       and ntvs_gap = Accus.ntvs_added accs in
-      if Mylist.has_duplicates nmslst then
-        error_info info "Duplicate variable in inspect expression";
-      let nms = Array.of_list nmslst in
       let c1   = Context.push_untyped_gap nms ntvs_gap c in
       Accus.expect_case c1 accs;
       Accus.get_expected 0 accs;
-      if i = 0 then
-        begin match m with
-          Identifier id when List.mem id nmslst ->
-            error_info info "First case cannot match all"
-        | _ -> ()
-        end;
       analyze m accs c1;
       Accus.get_expected 1 accs;
       analyze r accs c1;
@@ -869,11 +859,8 @@ let analyze_expression
     Accus.expect_new_untyped accs;
     Accus.push_expected accs;
     analyze e accs c;
-    let mtch,nmslst = case_variables mtch c
+    let mtch,nms = case_variables info mtch c
     and ntvs_gap = Accus.ntvs_added accs in
-    if Mylist.has_duplicates nmslst then
-      error_info info "Duplicate variable in as expression";
-    let nms = Array.of_list nmslst in
     let c1 = Context.push_untyped_gap nms ntvs_gap c in
     Accus.expect_case c1 accs;
     Accus.get_expected 0 accs;
@@ -883,7 +870,7 @@ let analyze_expression
     Accus.drop_expected accs
   in
 
-  let accs   = Accus.make is_bool c in
+  let accs   = Accus.make tb c in
   analyze exp accs c;
   assert (not (Accus.is_empty accs));
 
@@ -898,7 +885,7 @@ let analyze_expression
 
   validate_term ie.i term c;
   let term = unfold_inspect ie.i term c in
-  assert (Term_builder.is_valid term is_bool c);
+  assert (Term_builder.is_valid term c);
   term
 
 
@@ -911,9 +898,18 @@ let result_term
       context [context] and return the term.
    *)
   assert (not (Context.is_global c));
-  analyze_expression ie false c
+  let tb = Term_builder.occupy_context c in
+  analyze_expression ie tb c
 
 
 let boolean_term (ie: info_expression) (c:Context.t): term =
   assert (not (Context.is_global c));
-  analyze_expression ie true c
+  let tb = Term_builder.occupy_boolean c in
+  analyze_expression ie tb c
+
+
+let typed_term
+    (ie:info_expression) (tp:type_term) (c:Context.t): term =
+  assert (not (Context.is_global c));
+  let tb = Term_builder.occupy_typed tp c in
+  analyze_expression ie tb c

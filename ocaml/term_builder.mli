@@ -12,6 +12,7 @@ type t
 val occupy_boolean: Context.t -> t
 val occupy_untyped: Context.t -> t
 val occupy_context: Context.t -> t
+val occupy_typed:   type_term -> Context.t -> t
 val occupy_term:    term -> Context.t -> t
 val release: t -> unit
 val clone:   t -> t
@@ -58,6 +59,4 @@ val specialize_head:t -> unit
 
 val update_context: t -> unit
 
-
-val specialize: term -> bool -> Context.t -> term
-val is_valid:   term -> bool -> Context.t -> bool
+val is_valid:   term -> Context.t -> bool

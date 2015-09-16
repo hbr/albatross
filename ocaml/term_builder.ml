@@ -1407,11 +1407,19 @@ let occupy_untyped (c:Context.t): t =
   expect_new_untyped tb;
   tb
 
+
 let occupy_context (c:Context.t): t =
   assert (Context.has_result c);
   let tb = occupy c in
   let trans = transform_from_context (Context.tvars c) tb in
   tb.rtype <- trans (Context.result_type c);
+  tb
+
+
+let occupy_typed (tp:type_term) (c:Context.t): t =
+  let tb = occupy c in
+  let trans = transform_from_context (Context.tvars c) tb in
+  tb.rtype <- trans tp;
   tb
 
 
@@ -1457,10 +1465,8 @@ let update_context (tb:t): unit =
     not_yet_implemented (Context.info c) "Type inference of formal generics"
 
 
-let specialize (t:term) (is_bool: bool) (c:Context.t): term =
-  let tb =
-    if is_bool then occupy_boolean c
-    else occupy_untyped c in
+let specialize (t:term) (c:Context.t): term =
+  let tb = occupy_untyped c in
   tb.norm <- true;
   if tb.trace then begin
     printf "specialize \"%s\" \"%s\"\n" (string_of_term t tb) (Term.to_string t);
@@ -1484,9 +1490,9 @@ let specialize (t:term) (is_bool: bool) (c:Context.t): term =
 
 
 
-let is_valid (t:term) (is_bool: bool) (c:Context.t): bool =
+let is_valid (t:term) (c:Context.t): bool =
   try
-    let _ = specialize t is_bool c in true
+    let _ = specialize t c in true
   with Not_found ->
     printf "invalid term %s\n" (Context.string_of_term t true 0 c);
     false
