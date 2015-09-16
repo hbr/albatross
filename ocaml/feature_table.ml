@@ -510,6 +510,281 @@ let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term 
   Term.apply t0 args
 
 
+let adapt_names (nms:int array) (names:int array): int array =
+  let nms  = Array.copy nms in
+  let nnms = Array.length nms in
+  let patch i =
+    assert (i < nnms);
+    let str = "$" ^ (ST.string nms.(i)) in
+    nms.(i) <- ST.symbol str
+  and has i =
+    assert (i < nnms);
+    try
+      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
+      true
+    with Not_found ->
+      false
+  in
+  let rec patch_until_ok i =
+    if has i then begin
+      patch i;
+      patch_until_ok i
+    end
+  in
+  for i = 0 to nnms - 1 do
+    patch_until_ok i
+  done;
+  nms
+
+
+let term_to_string
+    (t:term)
+    (norm:bool)
+    (nanon: int)
+    (names: int array)
+    (ft:t)
+    : string =
+  (** Convert the term [t] in an environment with the named variables [names]
+      to a string.
+   *)
+  let anon_symbol (i:int) (nanon:int): int =
+      ST.symbol ("$" ^ (string_of_int (nanon+i)))
+  in
+  let rec to_string
+      (t:term)
+      (names: int array)
+      (nanonused: int)
+      (is_fun: bool)
+      (outop: (operator*bool) option)
+      : string =
+    (* nanonused: number of already used anonymous variables
+       is_fun: the term is used in a function position
+       outop: the optional outer operator and a flag if the current term
+              is the left operand of the outer operator
+     *)
+    let nnames = Array.length names
+    and anon2sym (i:int): int = anon_symbol i nanonused
+    in
+    let find_op_int (i:int): operator =
+      if nnames <= i then
+        match (Seq.elem (i-nnames) ft.seq).fname with
+          FNoperator op -> op
+        | _ -> raise Not_found
+      else
+        raise Not_found
+    in
+    let var2str (i:int): string =
+      if i < nnames then
+        ST.string names.(i)
+      else
+        feature_name_to_string
+          (Seq.elem (i-nnames) ft.seq).fname
+    and find_op (f:term): operator  =
+      match f with
+        Variable i -> find_op_int i
+      | _ -> raise Not_found
+    and args2str (n:int) (nms:int array): string =
+      let nnms  = Array.length nms in
+      assert (nnms = n);
+      let argsstr = Array.init n (fun i -> ST.string nms.(i)) in
+      String.concat "," (Array.to_list argsstr)
+    in
+    let local_names (n:int) (nms:int array): int * int array =
+      let nnms  = Array.length nms in
+      if n = nnms then
+        nanonused, nms
+      else
+        nanonused+n, Array.init n anon2sym
+    in
+    let lam_strs (n:int) (nms:int array) (ps:term list) (t:term)
+        : string * string *string =
+      let nanonused, nms = local_names n nms in
+      let names = Array.append nms names in
+      args2str n nms,
+      String.concat ";" (List.map (fun t -> to_string t names nanonused false None) ps),
+      to_string t names nanonused false None
+    in
+    let default_fapp (f:term) (argsstr:string): string =
+      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")" in
+    let funiapp2str (i:int) (argsstr:string): string =
+      if nnames <= i then
+        let fn = (descriptor (i-nnames) ft).fname in
+        begin match fn with
+          FNname fsym ->
+            if fsym = (ST.symbol "singleton") then
+              "{" ^ argsstr ^ "}"
+            else if fsym = ST.tuple then
+              "(" ^ argsstr ^ ")"
+            else
+              default_fapp (Variable i) argsstr
+        | _ -> default_fapp (Variable i) argsstr
+        end
+      else
+        default_fapp (Variable i) argsstr
+    in
+    let funapp2str (f:term) (argsstr:string): string =
+      match f with
+        Variable i ->
+          funiapp2str i argsstr
+      | _ -> default_fapp f argsstr
+    in
+    let argsstr (args: term array): string =
+      String.concat
+        ","
+        (List.map
+           (fun t -> to_string t names nanonused false None)
+           (Array.to_list args))
+    in
+    let op2str (op:operator) (args: term array): string =
+      match op with
+        Allop | Someop | Asop -> assert false (* cannot happen *)
+      | _ ->
+          let nargs = Array.length args in
+          if nargs = 1 then
+            (operator_to_rawstring op) ^ " "
+            ^ (to_string args.(0) names nanonused false (Some (op,false)))
+          else begin
+            assert (nargs=2); (* only unary and binary operators *)
+            (to_string args.(0) names nanonused false (Some (op,true)))
+            ^ " " ^ (operator_to_rawstring op) ^ " "
+            ^ (to_string args.(1) names nanonused false (Some (op,false)))
+          end
+    and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool): string =
+      let argsstr, presstr, tstr = lam_strs n nms pres t in
+      if pr then
+        "{" ^ argsstr ^ ": " ^ tstr ^ "}"
+      else
+        match pres with
+          [] -> "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
+        | _ -> "agent (" ^ argsstr ^ ") require " ^
+            presstr ^
+            " ensure Result = " ^ tstr ^ " end"
+    and if2str (args:term array): string =
+      let len = Array.length args in
+      assert(2 <= len); assert (len <= 3);
+      let to_str t = to_string t names nanonused false None in
+      let cond_exp (c:term) (e:term) (isif:bool): string =
+        (if isif then "if " else " elseif ") ^ (to_str c) ^ " then " ^ (to_str e)
+      in
+      let rec ifrest (t:term): string =
+        match t with
+          Flow (Ifexp,args) -> ifargs args false
+        | _                 -> " else " ^ (to_str t)
+      and ifargs (args: term array) (is_outer:bool): string =
+        let len = Array.length args in
+        assert(2 <= len); assert (len <= 3);
+        (cond_exp args.(0) args.(1) true) ^
+        (if len = 2 then "" else ifrest args.(2)) ^
+        (if is_outer then " end" else "")
+      in
+      ifargs args true
+    and insp2str (args:term array): string =
+      let len = Array.length args in
+      assert (len mod 2 = 1);
+      assert (3 <= len);
+      let ncases = len / 2 in
+      let case (i:int): string =
+        let n, nms, mtch, res = Term.case_split args.(2*i+1) args.(2*i+2) in
+        let names1 = Array.append nms names in
+        let to_str t = to_string t names1 nanonused false None in
+        " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
+      in
+      let rec cases_from (i:int) (str:string): string =
+        if i = ncases then
+          str
+        else
+          (cases_from (1+i) (str ^ (case i))) in
+      let to_str t = to_string t names nanonused false None in
+      "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
+    and as2str (args:term array): string =
+      let len = Array.length args in
+      assert (len = 2);
+      let str1 = to_string args.(0) names nanonused false (Some (Asop,true)) in
+      let str2 =
+        let n,nms,mtch = Term.pattern_split args.(1) in
+        let names1 = Array.append nms names in
+        to_string mtch names1 nanonused false (Some (Asop,false)) in
+      str1 ^ " as " ^ str2
+    in
+    let inop, str =
+      match t with
+        Variable i ->
+          None, var2str i
+      | VAppl (i,args) ->
+          begin try
+            let op = find_op_int i in
+            Some op, op2str op args
+          with Not_found ->
+            None, funiapp2str i (argsstr args)
+          end
+      | Application (f,args,pr) ->
+          begin
+            try
+              let op = find_op f in
+              Some op, op2str op args
+            with Not_found ->
+              None, funapp2str f (argsstr args)
+          end
+      | Lam (n,nms,pres,t,pr) ->
+          let nms = adapt_names nms names in
+          let nbenv = Array.length names in
+          let remove_tup t = remove_tuple_accessors t n nbenv ft in
+          let pres, t =
+            if norm then
+              List.map remove_tup pres,
+              remove_tup t
+            else
+              pres,t in
+          None, lam2str n nms pres t pr
+      | QExp (n,nms,t,is_all) ->
+          let nms = adapt_names nms names in
+          let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
+          and argsstr, _, tstr = lam_strs n nms [] t in
+          Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
+      | Flow (ctrl,args) ->
+          begin
+            match ctrl with
+              Ifexp   -> None, if2str args
+            | Inspect -> None, insp2str args
+            | Asexp   -> Some(Asop), as2str args
+          end
+    in
+    match inop, outop with
+      Some iop, Some (oop,is_left) ->
+        let _,iprec,iassoc = operator_data iop
+        and _,oprec,oassoc = operator_data oop
+        in
+        let paren1 = iprec < oprec
+        and paren2 = (iop = oop) &&
+          match oassoc with
+            Left     -> not is_left
+          | Right    -> is_left
+          | Nonassoc -> true
+        and paren3 = (iprec = oprec) && (iop <> oop)
+        in
+        if  paren1 || paren2 || paren3 then
+          "(" ^ str ^ ")"
+        else
+          str
+    | Some iop, None when is_fun ->
+        "(" ^ str ^ ")"
+    | _ -> str
+  in
+  let nnames = Array.length names in
+  let names = Array.init (nnames + nanon)
+      (fun i ->
+        if i<nanon then anon_symbol i 0
+        else names.(i-nanon))
+  in
+  to_string t names nanon false None
+
+
+let string_of_term_anon (t:term) (nb:int) (ft:t): string =
+  term_to_string t true nb [||] ft
+
+
+
+
 let normalize_lambdas (t:term) (nb:int) (ft:t): term =
   let rec norm t nb =
     let norm_args args = Array.map (fun a -> norm a nb) args
@@ -538,9 +813,6 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
         Flow (ctrl, norm_args args)
   in
   norm t nb
-
-
-
 
 
 let definition (i:int) (nb:int) (ft:t): int * int array * term =
@@ -1392,310 +1664,8 @@ let find_funcs
   else lst
 
 
-let adapt_names (nms:int array) (names:int array): int array =
-  let nms  = Array.copy nms in
-  let nnms = Array.length nms in
-  let patch i =
-    assert (i < nnms);
-    let str = "$" ^ (ST.string nms.(i)) in
-    nms.(i) <- ST.symbol str
-  and has i =
-    assert (i < nnms);
-    try
-      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
-      true
-    with Not_found ->
-      false
-  in
-  let rec patch_until_ok i =
-    if has i then begin
-      patch i;
-      patch_until_ok i
-    end
-  in
-  for i = 0 to nnms - 1 do
-    patch_until_ok i
-  done;
-  nms
 
 
-let term_to_string
-    (t:term)
-    (norm:bool)
-    (nanon: int)
-    (names: int array)
-    (ft:t)
-    : string =
-  (** Convert the term [t] in an environment with the named variables [names]
-      to a string.
-   *)
-  let anon_symbol (i:int) (nanon:int): int =
-      ST.symbol ("$" ^ (string_of_int (nanon+i)))
-  in
-  let rec to_string
-      (t:term)
-      (names: int array)
-      (nanonused: int)
-      (is_fun: bool)
-      (outop: (operator*bool) option)
-      : string =
-    (* nanonused: number of already used anonymous variables
-       is_fun: the term is used in a function position
-       outop: the optional outer operator and a flag if the current term
-              is the left operand of the outer operator
-     *)
-    let nnames = Array.length names
-    and anon2sym (i:int): int = anon_symbol i nanonused
-    in
-    let find_op_int (i:int): operator =
-      if nnames <= i then
-        match (Seq.elem (i-nnames) ft.seq).fname with
-          FNoperator op -> op
-        | _ -> raise Not_found
-      else
-        raise Not_found
-    in
-    let var2str (i:int): string =
-      if i < nnames then
-        ST.string names.(i)
-      else
-        feature_name_to_string
-          (Seq.elem (i-nnames) ft.seq).fname
-    and find_op (f:term): operator  =
-      match f with
-        Variable i -> find_op_int i
-      | _ -> raise Not_found
-    and args2str (n:int) (nms:int array): string =
-      let nnms  = Array.length nms in
-      assert (nnms = n);
-      let argsstr = Array.init n (fun i -> ST.string nms.(i)) in
-      String.concat "," (Array.to_list argsstr)
-    in
-    let local_names (n:int) (nms:int array): int * int array =
-      let nnms  = Array.length nms in
-      if n = nnms then
-        nanonused, nms
-      else
-        nanonused+n, Array.init n anon2sym
-    in
-    let lam_strs (n:int) (nms:int array) (ps:term list) (t:term)
-        : string * string *string =
-      let nanonused, nms = local_names n nms in
-      let names = Array.append nms names in
-      args2str n nms,
-      String.concat ";" (List.map (fun t -> to_string t names nanonused false None) ps),
-      to_string t names nanonused false None
-    in
-    let default_fapp (f:term) (argsstr:string): string =
-      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")" in
-    let funiapp2str (i:int) (argsstr:string): string =
-      if nnames <= i then
-        let fn = (descriptor (i-nnames) ft).fname in
-        begin match fn with
-          FNname fsym ->
-            if fsym = (ST.symbol "singleton") then
-              "{" ^ argsstr ^ "}"
-            else if fsym = ST.tuple then
-              "(" ^ argsstr ^ ")"
-            else
-              default_fapp (Variable i) argsstr
-        | _ -> default_fapp (Variable i) argsstr
-        end
-      else
-        default_fapp (Variable i) argsstr
-    in
-    let funapp2str (f:term) (argsstr:string): string =
-      match f with
-        Variable i ->
-          funiapp2str i argsstr
-      | _ -> default_fapp f argsstr
-    in
-    let argsstr (args: term array): string =
-      String.concat
-        ","
-        (List.map
-           (fun t -> to_string t names nanonused false None)
-           (Array.to_list args))
-    in
-    let op2str (op:operator) (args: term array): string =
-      match op with
-        Allop | Someop | Asop -> assert false (* cannot happen *)
-      | _ ->
-          let nargs = Array.length args in
-          if nargs = 1 then
-            (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(0) names nanonused false (Some (op,false)))
-          else begin
-            assert (nargs=2); (* only unary and binary operators *)
-            (to_string args.(0) names nanonused false (Some (op,true)))
-            ^ " " ^ (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(1) names nanonused false (Some (op,false)))
-          end
-    and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool): string =
-      let argsstr, presstr, tstr = lam_strs n nms pres t in
-      if pr then
-        "{" ^ argsstr ^ ": " ^ tstr ^ "}"
-      else
-        match pres with
-          [] -> "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
-        | _ -> "agent (" ^ argsstr ^ ") require " ^
-            presstr ^
-            " ensure Result = " ^ tstr ^ " end"
-    and if2str (args:term array): string =
-      let len = Array.length args in
-      assert(2 <= len); assert (len <= 3);
-      let to_str t = to_string t names nanonused false None in
-      let cond_exp (c:term) (e:term) (isif:bool): string =
-        (if isif then "if " else " elseif ") ^ (to_str c) ^ " then " ^ (to_str e)
-      in
-      let rec ifrest (t:term): string =
-        match t with
-          Flow (Ifexp,args) -> ifargs args false
-        | _                 -> " else " ^ (to_str t)
-      and ifargs (args: term array) (is_outer:bool): string =
-        let len = Array.length args in
-        assert(2 <= len); assert (len <= 3);
-        (cond_exp args.(0) args.(1) true) ^
-        (if len = 2 then "" else ifrest args.(2)) ^
-        (if is_outer then " end" else "")
-      in
-      ifargs args true
-    and insp2str (args:term array): string =
-      let len = Array.length args in
-      assert (len mod 2 = 1);
-      assert (3 <= len);
-      let ncases = len / 2 in
-      let case (i:int): string =
-        let n, nms, mtch, res = Term.case_split args.(2*i+1) args.(2*i+2) in
-        let names1 = Array.append nms names in
-        let to_str t = to_string t names1 nanonused false None in
-        " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
-      in
-      let rec cases_from (i:int) (str:string): string =
-        if i = ncases then
-          str
-        else
-          (cases_from (1+i) (str ^ (case i))) in
-      let to_str t = to_string t names nanonused false None in
-      "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
-    and as2str (args:term array): string =
-      let len = Array.length args in
-      assert (len = 2);
-      let str1 = to_string args.(0) names nanonused false (Some (Asop,true)) in
-      let str2 =
-        let n,nms,mtch = Term.pattern_split args.(1) in
-        let names1 = Array.append nms names in
-        to_string mtch names1 nanonused false (Some (Asop,false)) in
-      str1 ^ " as " ^ str2
-    in
-    let inop, str =
-      match t with
-        Variable i ->
-          None, var2str i
-      | VAppl (i,args) ->
-          begin try
-            let op = find_op_int i in
-            Some op, op2str op args
-          with Not_found ->
-            None, funiapp2str i (argsstr args)
-          end
-      | Application (f,args,pr) ->
-          begin
-            try
-              let op = find_op f in
-              Some op, op2str op args
-            with Not_found ->
-              None, funapp2str f (argsstr args)
-          end
-      | Lam (n,nms,pres,t,pr) ->
-          let nms = adapt_names nms names in
-          let nbenv = Array.length names in
-          let remove_tup t = remove_tuple_accessors t n nbenv ft in
-          let pres, t =
-            if norm then
-              List.map remove_tup pres,
-              remove_tup t
-            else
-              pres,t in
-          None, lam2str n nms pres t pr
-      | QExp (n,nms,t,is_all) ->
-          let nms = adapt_names nms names in
-          let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
-          and argsstr, _, tstr = lam_strs n nms [] t in
-          Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
-      | Flow (ctrl,args) ->
-          begin
-            match ctrl with
-              Ifexp   -> None, if2str args
-            | Inspect -> None, insp2str args
-            | Asexp   -> Some(Asop), as2str args
-          end
-    in
-    match inop, outop with
-      Some iop, Some (oop,is_left) ->
-        let _,iprec,iassoc = operator_data iop
-        and _,oprec,oassoc = operator_data oop
-        in
-        let paren1 = iprec < oprec
-        and paren2 = (iop = oop) &&
-          match oassoc with
-            Left     -> not is_left
-          | Right    -> is_left
-          | Nonassoc -> true
-        and paren3 = (iprec = oprec) && (iop <> oop)
-        in
-        if  paren1 || paren2 || paren3 then
-          "(" ^ str ^ ")"
-        else
-          str
-    | Some iop, None when is_fun ->
-        "(" ^ str ^ ")"
-    | _ -> str
-  in
-  let nnames = Array.length names in
-  let names = Array.init (nnames + nanon)
-      (fun i ->
-        if i<nanon then anon_symbol i 0
-        else names.(i-nanon))
-  in
-  to_string t names nanon false None
-
-
-
-let string_of_term_anon (t:term) (nb:int) (ft:t): string =
-  term_to_string t true nb [||] ft
-
-
-let print (ft:t): unit =
-  Seq.iteri
-    (fun i fdesc ->
-      let name   = feature_name_to_string fdesc.fname
-      and mdlnme =
-        if fdesc.mdl = -1
-        then ""
-        else
-          Class_table.module_name fdesc.mdl ft.ct
-      and tname  =
-        Class_table.string_of_signature
-          fdesc.sign fdesc.tvs ft.ct
-      and bdyname spec =
-        let def_opt = Feature.Spec.definition spec in
-        match def_opt with
-          None -> "Basic"
-        | Some def -> term_to_string def true 0 fdesc.argnames ft
-      and clsnme =
-        if fdesc.cls = -1 then ""
-        else Class_table.class_name fdesc.cls ft.ct
-      in
-      match fdesc.pub with
-        None ->
-          Printf.printf "%s.%s: %s %s = (%s)\n"
-            mdlnme clsnme name tname (bdyname fdesc.priv.spec)
-      | Some pdef ->
-          Printf.printf "%s.%s: %s %s = (%s, %s)\n"
-            mdlnme clsnme name tname
-            (bdyname fdesc.priv.spec) (bdyname pdef.spec))
-    ft.seq
 
 
 let find_unifiables (fn:feature_name) (tp:type_term) (ntvs:int) (ft:t)
