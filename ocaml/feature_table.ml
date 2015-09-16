@@ -815,6 +815,76 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
   norm t nb
 
 
+let prepend_names (nms:int array) (names:int array): int array =
+  let nms = adapt_names nms names in
+  Array.append nms names
+
+
+let prenex (t:term) (nb:int) (ft:t): term =
+  (* Calculate the prenex normal form of the term [t] with respect to universal
+     quantifiers. All universal quantifiers are bubbled up in implication chains
+     and merged with the upper universal quantifier.
+   *)
+  let rec norm (t:term) (nb:int): term =
+    let n,nms,t = norm0 t nb in
+    Term.all_quantified n nms t
+  and norm_args (args:term array) (nb:int): term array =
+    Array.map (fun t -> norm t nb) args
+  and norm_lst  (lst: term list) (nb:int): term list =
+    List.map (fun t -> norm t nb) lst
+  and norm0 (t:term) (nb:int): int * int array * term =
+    match t with
+      Variable i -> 0, [||], t
+    | VAppl(i,args) when i = nb + implication_index ->
+        assert (Array.length args = 2);
+        let a = norm args.(0) nb
+        and n,nms,b1 = norm0 args.(1) nb in
+        let b1 =
+          let args = Array.init (n+nb)
+              (fun i ->
+                if i < n then Variable (nb+i)
+                else Variable (i-n)) in
+          Term.sub b1 args (n+nb)
+        in
+        let a1 = Term.upbound n nb a in
+        let t = VAppl(i+n,[|a1;b1|]) in
+        n, nms, t
+    | VAppl(i,args) ->
+        0, [||], VAppl(i, norm_args args nb)
+    | Application(f,args,pr) ->
+        let f = norm f nb
+        and args = norm_args args nb in
+        0, [||], Application(f,args,pr)
+    | Lam(n,nms,ps,t0,pr) ->
+        let ps = norm_lst ps (1+nb)
+        and t0 = norm t0 (1+nb) in
+        0, [||], Lam(n,nms,ps,t0,pr)
+    | QExp(n0,nms0,t0,is_all) ->
+        if is_all then
+          let n1,nms1,t1 = norm0 t0 (n0+nb) in
+          let nms = prepend_names nms0 nms1 in
+          let t2, nms2 =
+            let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
+            let n   = Array.length usd in
+            assert (n = n0+n1);
+            let args = Array.make n (Variable (-1))
+            and nms2 = Array.make n (-1) in
+            for i = 0 to n-1 do
+              nms2.(i) <- nms.(usd.(i));
+              args.(usd.(i)) <- (Variable i)
+            done;
+            Term.sub t1 args n, nms2
+          in
+          n0+n1, nms2, t2
+        else
+          0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
+    | Flow(ctrl,args) ->
+        0, [||], Flow(ctrl, norm_args args nb)
+  in
+  norm t nb
+
+
+
 let definition (i:int) (nb:int) (ft:t): int * int array * term =
   assert (nb <= i);
   assert (i  <= nb + count ft);

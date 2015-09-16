@@ -170,6 +170,8 @@ val tuple_of_args:    term array -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
 val args_of_tuple_ext:term -> int -> int -> t -> term array
 
+val prenex: term -> int -> t -> term
+
 val preconditions:  int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
 
