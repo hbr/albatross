@@ -2184,80 +2184,147 @@ let peer_matches (i:int) (nb:int) (ft:t): (int*term) list =
 
 
 
-let combine
-    (plst:(int*term) list)        (* list of match expressions of an argument *)
-    (lst: (int*term list) list)   (* list of nvars, reversed argument list *)
-    : (int*term list) list =
-  (* Combine pattern.
-     [plst] is the set of complete pattern of an argument.
-     [lst]  represents the all combinations of the previous arguments; each list
-            element has a number of variables of the pattern and the reversed list
-            of the arguments.
-   *)
-  List.fold_left
-    (fun res (npat,pat) ->
-      List.fold_left
-        (fun res (n,args_rev) ->
-          let pat = Term.up n pat
-          and args_rev =
-            if npat = 0 then args_rev
-            else
-              (List.map (fun a -> Term.upbound npat n a) args_rev)
+
+(*  Peer Pattern
+    ============
+
+    We have a pattern [pat] and want to find the minimal set of complementary
+    pattern so that one pattern of the complete set always matches.
+
+    (a) The pattern is a variable: The complementary set is empty (catch all)
+
+    (b) The pattern has the form [f(a,b,...)] (Note: [f] has to be a constructor).
+
+        The first part of the complementary set consists of all trivial
+        pattern of the peer constructors of [f].
+
+        Each argument has a complementary set. We have to make a combination
+        of the complementary sets of the arguments. We compute a list of
+        argument pattern lists and start with the list of arguments and an
+        an empty list of argument pattern lists:
+
+        (a1) The argument list is empty: No pattern is added to the list of
+             argument pattern lists.
+
+        (a2) The argument list is 'rest+a':
+
+             cset: The complementary pattern set of 'a'
+             lst:  The list of argument pattern lists of the rest
+
+             for each pattern in {a}+cset
+                 for each argument pattern list in 'lst':
+                     append a to the argument pattern list
+             concatenate all list of argument pattern lists
+
+             for each pattern p in cset
+                     add [v0,v1,...,p] to the resulting argument pattern list ????
+
+        (a3) At the end we have a complete list of argument pattern list
+
+             The complementary set of 'f(a,b,...)' is
+
+                   fcset + {f(a0,b0,...), f(a1,b1,...), ... }
+
+             where [ai,bi,...] is an entry in the list of argument pattern lists.
+
+    Boundary cases:
+
+        f(a,b,...) is f(v0,v1,...) where vi is a variable:
+
+        The complementary set of each vi is empty. The list of argument
+        pattern lists before is empty before and remains empty during
+        (a2). Therefore the complementary pattern set of f(v) consist of all
+        primitive pattern of the peer constructors of f.
+
+    Implementation hints:
+
+        (a) A pattern set has the form
+
+                 {(p0,n0), (p1,n1), ... }
+
+            where p is the pattern term and n is the number of variables in
+            the pattern.
+
+        (b) A list of argument pattern lists has the form
+
+                 [ ([p0a,p0b,...],n0), ([p1a,p1b,...],n1), ... ]
+
+            where [pia,pib,...] is the ith argument pattern sequence and [ni]
+            is the number of used variables in the pattern sequence.
+
+            Appending an argument pattern (p,n) to the sequence ([pia,pib,...],ni)
+            results in ([pia,pib,...p'],n+ni) where p' is p shifted up by n.
+
+
+ *)
+let complementary_pattern (n:int) (p:term) (nb:int) (ft:t): (int*term) list =
+  let rec comp_pat (p:term): (int*term) list =
+    let rec args_pat_lst (argsrev:term list) (nargs:int)
+        (aplst:(term list * int) list)
+        : (term list * int) * (term list * int) list =
+      assert (List.length argsrev = nargs);
+      match argsrev with
+        [] ->
+          ([],0), aplst
+      | a::tl ->
+          let cset  = comp_pat a
+          and (argsrevtl,nargsrevtl), aplst = args_pat_lst tl (nargs-1) aplst in
+          let a,na =
+            let abnd  = Term.bound_variables a n
+            and perm  = Array.make n (Variable (-1)) in
+            let na = IntSet.fold
+                (fun i na ->
+                  perm.(i) <- Variable na; na+1)
+                abnd 0 in
+            let a = Term.sub a perm na in
+            a,na
           in
-          ((n+npat), pat :: args_rev) :: res)
-        res
-        lst)
-    []
-    plst
-
-
-
-let pattern_set (nt:int) (t:term) (nb:int) (ft:t): (int*term) list =
-  (* Treat [t] as a pattern with [nt] match variables and calculate the complete
-     set of patters (including [t]) so that any expression can be matched with one
-     of the pattern. *)
-  let rec pat_set (t:term): (int*term) list =
-    match t with
-      Variable i when i < nt ->
-        [1,Variable 0]
+          let push_arg n p nargsrev argsrev =
+            let argsrev =
+              List.map (fun t -> Term.upbound n nargsrev t) argsrev in
+            let argsrev = (Term.up nargsrev p)::argsrev in
+            argsrev,(n+nargsrev) in
+          let prepend_pattern np p aplst =
+            List.rev_map (fun (argsrev,n) -> push_arg np p n argsrev) aplst in
+          let aplst =
+            let cset = (na,a)::cset in
+            let lstlst =
+              List.rev_map (fun (n,p) -> prepend_pattern n p aplst) cset in
+            List.concat lstlst in
+          let push_arg0 n p = push_arg n p nargsrevtl argsrevtl in
+          let aplst =
+            List.fold_left
+              (fun aplst (n,p) ->
+                (push_arg0 n p)::aplst)
+              aplst
+              cset in
+          push_arg0 na a, aplst
+    in
+    match p with
+      Variable i when i < n ->
+        []
     | Variable i ->
-        assert (nt + nb <= i);
-        let idx = i - nt - nb in
-        (0, Variable (idx+nb)) :: (peer_matches idx nb ft)
+        assert (n + nb <= i);
+       peer_matches (i-n-nb) nb ft
     | VAppl (i,args) ->
-        assert (nt + nb <= i);
-        let args_lst: (int * term list) list =
-          Array.fold_left
-            (fun lst arg ->
-              let plst = pat_set arg in
-              combine plst lst)
-            [0,[]]
-            args
-        in
-        let idx   = i - nt - nb
-        and nargs = Array.length args in
-        assert (nargs = arity idx ft);
+        assert (n + nb <= i);
+        let idx = i-n-nb in
+        let fcset = peer_matches idx nb ft in
+        let nargs    = Array.length args
+        and args_rev = List.rev (Array.to_list args) in
+        let _,apl = args_pat_lst args_rev nargs [] in
         List.fold_left
-          (fun lst (n,args_rev) ->
-            assert (List.length args_rev = nargs);
+          (fun cset (args_rev,n) ->
             let args = Array.of_list (List.rev args_rev) in
-            (n, VAppl (idx+n+nb, args)) :: lst)
-          (peer_matches idx nb ft)
-          args_lst
+            assert (Array.length args = nargs);
+            let p    = VAppl (idx+n+nb, args) in
+            (n,p) :: cset)
+          fcset
+          apl
     | _ ->
-        assert false (* cannot happen in a match expression *)
+        assert false (* cannot happen in pattern *)
   in
-  pat_set t
-
-
-
-let peer_matches_of_match
-    (npat:int) (pat:term)
-    (nb:int) (ft:t)
-    : (int*term) list =
-  let res = pattern_set npat pat nb ft in
-  List.filter (fun e -> e <> (npat,pat)) res
-
+  comp_pat p
 
 
 let is_pattern (n:int) (t:term) (nb:int) (ft:t): bool =
@@ -2518,7 +2585,7 @@ let unmatched_and_splitted
           end else begin
             (* pat resolves pat0 only partial, splitting of pat necessary *)
             let n2, upat2 = unmatched_partial npat0 pat0 subarr in
-            let peers = peer_matches_of_match n2 upat2 nb ft
+            let peers = complementary_pattern n2 upat2 nb ft
             and subarr =
               try Term_algo.unify_pattern n2 upat2 n pat
               with Not_found -> assert false
