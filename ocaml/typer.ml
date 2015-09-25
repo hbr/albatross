@@ -41,6 +41,8 @@ module Accus: sig
   val complete_lambda:   int -> int array -> int -> bool -> t -> unit
   val expect_quantified: Context.t -> t -> unit
   val complete_quantified: bool -> t -> unit
+  val expect_inductive:  Context.t -> t -> unit
+  val complete_inductive:info -> int -> t -> unit
   val expect_case:       Context.t -> t -> unit
   val complete_case:     t -> unit
   val expect_inspect:    t -> unit
@@ -48,7 +50,7 @@ module Accus: sig
   val expect_as:         t -> unit
   val complete_as:       t -> unit
   val check_uniqueness:  info -> expression -> t -> unit
-
+  val iter: (Term_builder.t->unit) -> t -> unit
 end = struct
 
   type t = {mutable accus: Term_builder.t list;
@@ -183,7 +185,7 @@ end = struct
 
 
 
-  let iter_accus (f:Term_builder.t->unit) (accs:t): unit =
+  let iter (f:Term_builder.t->unit) (accs:t): unit =
     let accus = accs.accus in
     accs.accus <-
       List.fold_left
@@ -200,9 +202,9 @@ end = struct
 
 
 
-  let iter_accus_save (f:Term_builder.t->unit) (accs:t): unit =
+  let iter_save (f:Term_builder.t->unit) (accs:t): unit =
     try
-      iter_accus f accs
+      iter f accs
     with Untypeable _ ->
       assert false
 
@@ -241,36 +243,36 @@ end = struct
 
 
   let expect_type (tp:type_term) (accs:t): unit =
-    iter_accus (fun acc -> Term_builder.expect_type tp acc) accs
+    iter (fun acc -> Term_builder.expect_type tp acc) accs
 
 
   let push_expected (accs:t): unit =
-    iter_accus_save Term_builder.push_expected accs
+    iter_save Term_builder.push_expected accs
 
   let get_expected (i:int) (accs:t): unit =
-    iter_accus_save (fun acc -> Term_builder.get_expected i acc) accs
+    iter_save (fun acc -> Term_builder.get_expected i acc) accs
 
   let drop_expected (accs:t): unit =
-    iter_accus_save Term_builder.drop_expected accs
+    iter_save Term_builder.drop_expected accs
 
 
   let expect_if (accs:t): unit =
-    iter_accus_save Term_builder.expect_if accs
+    iter_save Term_builder.expect_if accs
 
   let complete_if (has_else:bool) (accs:t): unit =
-    iter_accus_save (fun acc -> Term_builder.complete_if has_else acc) accs
+    iter_save (fun acc -> Term_builder.complete_if has_else acc) accs
 
 
   let expect_lambda (is_pred:bool) (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    iter_accus_save
+    iter_save
       (fun acc -> Term_builder.expect_lambda is_pred c acc)
       accs
 
 
   let complete_lambda (n:int) (nms:int array) (npres:int) (is_pred:bool) (accs:t)
       : unit =
-    iter_accus
+    iter
       (fun acc -> Term_builder.complete_lambda n nms npres is_pred acc) accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -283,14 +285,14 @@ end = struct
 
   let expect_quantified (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    iter_accus
+    iter
       (fun acc -> Term_builder.expect_quantified c acc)
       accs
 
 
   let complete_quantified (is_all:bool) (accs:t)
       : unit =
-    iter_accus
+    iter
       (fun acc -> Term_builder.complete_quantified is_all acc) accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
@@ -300,13 +302,32 @@ end = struct
 
 
 
+  let expect_inductive (c:Context.t) (accs:t): unit =
+    accs.c <- c;
+    iter_save
+      (fun acc -> Term_builder.expect_inductive c acc)
+      accs
+
+
+
+  let complete_inductive (info:info) (nrules:int) (accs:t): unit =
+    iter_save
+      (fun tb -> Term_builder.complete_inductive info nrules tb)
+      accs;
+    accs.c <- Context.pop accs.c;
+    if accs.trace then begin
+      printf "  complete inductive\n";
+      trace_accus accs
+    end
+
+
   let expect_case (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    iter_accus_save (fun acc -> Term_builder.expect_case c acc) accs
+    iter_save (fun acc -> Term_builder.expect_case c acc) accs
 
 
   let complete_case (accs:t): unit =
-    iter_accus_save Term_builder.complete_case accs;
+    iter_save Term_builder.complete_case accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete case\n";
@@ -315,10 +336,10 @@ end = struct
 
 
   let expect_inspect (accs:t): unit =
-    iter_accus_save Term_builder.expect_inspect accs
+    iter_save Term_builder.expect_inspect accs
 
   let complete_inspect (ncases:int) (accs:t): unit =
-    iter_accus_save (fun acc -> Term_builder.complete_inspect ncases acc) accs;
+    iter_save (fun acc -> Term_builder.complete_inspect ncases acc) accs;
     if accs.trace then begin
       printf "  complete inspect\n";
       trace_accus accs
@@ -326,11 +347,11 @@ end = struct
 
 
   let expect_as (accs:t): unit =
-    iter_accus_save Term_builder.expect_as accs
+    iter_save Term_builder.expect_as accs
 
 
   let complete_as (accs:t): unit =
-    iter_accus_save Term_builder.complete_as accs;
+    iter_save Term_builder.complete_as accs;
     accs.c <- Context.pop accs.c;
     if accs.trace then begin
       printf "  complete as\n";
@@ -379,17 +400,17 @@ let unfold_inspect (info:info) (t:term) (c:Context.t): term =
   let ft    = Context.feature_table c
   and nvars = Context.count_variables c in
   let rec unfold t nb =
-    let unfold_args args = Array.map (fun a -> unfold a nb) args
+    let unfold_args args nb = Array.map (fun a -> unfold a nb) args
     and unfold_list lst  = List.map  (fun a -> unfold a nb) lst
     in
     match t with
       Variable i ->
         t
     | VAppl (i,args) ->
-        VAppl (i, unfold_args args)
+        VAppl (i, unfold_args args nb)
     | Application (f,args,pr) ->
         let f    = unfold f nb
-        and args = unfold_args args in
+        and args = unfold_args args nb in
         Application(f,args,pr)
     | Lam (n,nms,pres,t,pr) ->
         let pres = unfold_list pres
@@ -398,11 +419,13 @@ let unfold_inspect (info:info) (t:term) (c:Context.t): term =
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, unfold t (n+nb), is_all)
     | Flow (Inspect,args) ->
-        let args = unfold_args args in
+        let args = unfold_args args nb in
         let args = Feature_table.inspect_unfolded info args (nb+nvars) ft in
         Flow(Inspect,args)
     | Flow (ctrl,args) ->
-        Flow (ctrl, unfold_args args)
+        Flow (ctrl, unfold_args args nb)
+    | Indset (n,nms,n0,nind,rs) ->
+        Indset (n,nms,n0,nind, unfold_args rs (n+nb))
   in
   unfold t 0
 
@@ -485,15 +508,23 @@ let is_constant (nme:int) (c:Context.t): bool =
 
 
 let case_variables
-    (info:info) (e:expression) (c:Context.t): expression * int array =
+    (info:info) (e:expression) (dups:bool) (c:Context.t)
+    : expression * int array =
   let rec vars (e:expression) (nanon:int) (lst:int list)
       : expression * int * int list =
+    let fvars f nanon lst =
+      match f with
+        Identifier nme -> f,nanon,lst
+      | _ -> vars f nanon lst
+    in
     match e with
       Expnumber _ | Exptrue | Expfalse | Expop _ ->
         e, nanon, lst
     | Identifier nme | Typedexp(Identifier nme,_)->
         let lst =
           if is_constant nme c then
+            lst
+          else if dups && List.mem nme lst then
             lst
           else
             nme :: lst in
@@ -513,7 +544,7 @@ let case_variables
         Binexp(op,e1,e2), nanon, lst
     | Funapp(f,args) ->
         let args = expression_list args in
-        let f,nanon,lst = vars f nanon lst in
+        let f,nanon,lst = fvars f nanon lst in
         let arglst,nanon,lst =
           List.fold_left
             (fun (arglst,nanon,lst) e ->
@@ -524,7 +555,7 @@ let case_variables
         Funapp(f,expression_of_list (List.rev arglst)), nanon, lst
     | Expdot (tgt,f) ->
         let tgt, nanon,lst = vars tgt nanon lst in
-        let f, nanon, lst  = vars f nanon lst in
+        let f, nanon, lst  = fvars f nanon lst in
         Expdot(tgt,f), nanon, lst
     | Tupleexp (e1,e2) ->
         let e1,nanon,lst = vars e1 nanon lst in
@@ -538,7 +569,7 @@ let case_variables
   in
   try
     let e, nanon, lst = vars e 0 [] in
-    if Mylist.has_duplicates lst then
+    if (not dups) && Mylist.has_duplicates lst then
       error_info info ("Duplicate variable in pattern \"" ^
                        (string_of_expression e) ^ "\"");
     let nms = Array.of_list (List.rev lst) in
@@ -599,6 +630,9 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
               let c = Context.push_untyped nms c in
               check_match mtch c
         end
+    | Indset (n,nms,n0,nind,rs) ->
+        let c = Context.push_untyped nms c in
+        val_args rs c
   in
   validate t c
 
@@ -669,6 +703,8 @@ let analyze_expression
           quantified q entlst exp accs c
       | Exppred (entlst,e) ->
           lambda entlst None [] e true false accs c
+      | Expindset (entlst,rules) ->
+          inductive_set entlst rules accs c
       | Expdot (tgt,f) ->
           application f [|tgt|] accs c
       | Tupleexp (a,b) ->
@@ -773,6 +809,41 @@ let analyze_expression
     let n = Array.length nms in
     Accus.complete_lambda n nms npres is_pred accs
 
+
+  and inductive_set
+      (entlst: entities list withinfo)
+      (rules: expression list)
+      (accs: Accus.t)
+      (c:Context.t)
+      : unit =
+    let ntvs_gap = Accus.ntvs_added accs in
+    let c1 = push_context entlst false false ntvs_gap c in
+    let nargs = Context.count_last_arguments c1 in
+    assert (0 < nargs);
+    if 1 < nargs then
+      not_yet_implemented entlst.i "Multiple inductive sets";
+    let analyze_rule (r:expression): unit =
+      begin match r with
+        Binexp (DArrowop,_,_) ->
+          let r,nms = case_variables entlst.i r true c1
+          and ntvs_gap = Accus.ntvs_added accs in
+          if Array.length nms = 0 then
+            error_info entlst.i "Rules must have variables";
+          let c2 = Context.push_untyped_gap nms ntvs_gap c1 in
+          Accus.expect_boolean_expression accs;
+          Accus.expect_quantified c2 accs;
+          analyze r accs c2;
+          Accus.complete_quantified true accs
+      | _ ->
+          Accus.expect_boolean_expression accs;
+          analyze r accs c1
+      end
+    in
+    Accus.expect_inductive c1 accs;
+    List.iter analyze_rule rules;
+    Accus.complete_inductive entlst.i (List.length rules) accs
+
+
   and exp_if
       (thenlist: (expression * expression) list)
       (elsepart: expression option)
@@ -819,7 +890,7 @@ let analyze_expression
       (c:Context.t)
       :unit =
     let do_case (i:int) ((m,r):expression*expression): unit =
-      let m,nms = case_variables info m c
+      let m,nms = case_variables info m false c
       and ntvs_gap = Accus.ntvs_added accs in
       let c1   = Context.push_untyped_gap nms ntvs_gap c in
       Accus.expect_case c1 accs;
@@ -859,7 +930,7 @@ let analyze_expression
     Accus.expect_new_untyped accs;
     Accus.push_expected accs;
     analyze e accs c;
-    let mtch,nms = case_variables info mtch c
+    let mtch,nms = case_variables info mtch false c
     and ntvs_gap = Accus.ntvs_added accs in
     let c1 = Context.push_untyped_gap nms ntvs_gap c in
     Accus.expect_case c1 accs;

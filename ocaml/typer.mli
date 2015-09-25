@@ -1,7 +1,7 @@
 open Term
 open Support
 
-val case_variables: info -> expression -> Context.t -> expression * int array
+val case_variables: info -> expression -> bool -> Context.t -> expression * int array
 
 val result_term: info_expression -> Context.t -> term
 

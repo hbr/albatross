@@ -75,18 +75,28 @@ let entities_of_expression (info:info) (lst: expression list): entities list =
   List.rev (entlist lst [] [])
 
 
-
+(*
+   {a,b,c,...}            -- enumerated
+   {a:A,b:B,... : expr}   -- predicate: [arglist,colon expression]
+                          --   arglist:  the arguments without the last
+                          --   colonexp: lastarg, expr
+   {(p): r0, r1, ... }
+*)
 let predicate_of_expression (info:info) (e:expression): expression =
-  let lst = expression_list_rev e in
-  match lst with
-    [] -> assert false (* never empty *)
-  | Expcolon(last_arg,pexp)::rest ->
+  match e with
+    Expcolon(Expparen(args),pexp) ->
+      (* inductively defined set *)
+      let lst = expression_list args
+      and rules = expression_list pexp in
+      let entlst = entities_of_expression info lst in
+      Expindset(withinfo info entlst, rules)
+  | Expcolon(args,pexp) ->
       (* predicate *)
-      let lst = List.rev (last_arg::rest) in
+      let lst = expression_list args in
       let entlst = entities_of_expression info lst in
       Exppred (withinfo info entlst,pexp)
   | _ -> (* enumerated set *)
-      set_of_expression_list lst
+      set_of_expression_list (expression_list_rev e)
 
 
 type feature_body1 =
@@ -179,8 +189,8 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 /*  8 */ %nonassoc KWall     KWsome  /* greedy */
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
-/* 15 */ %right    COMMA
-/* 18 */ %left     COLON /* greedy ???*/
+/* 15 */ %left     COLON /* greedy ???*/
+/* 18 */ %right    COMMA
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
@@ -354,7 +364,7 @@ ass_imp:
 }
 
 proof_inspect:
-    KWinspect LIDENTIFIER proof_inspect_rest KWend {
+    KWinspect expr_1 proof_inspect_rest KWend {
   let lst,ens = $3 in
   withinfo (rhs_info 1) (Proofinspect ($2,lst,ens))
 }
@@ -775,7 +785,7 @@ expr_1:
 expr_2:
    exp_conditional { $1 }
 |  exp_inspect     { $1 }
-|  expr COMMA expr { Tupleexp ($1,$3) }
+/*|  expr COMMA expr { Tupleexp ($1,$3) }*/
 
 
 atomic_expr:
@@ -834,6 +844,8 @@ operator_expr:
 |   expr_1 DCOLON expr_1              { Binexp (DColonop,$1,$3) }
 
 |   expr_1 COLON expr_1               { Expcolon ($1,$3) }
+
+|   expr_1 COMMA expr_1               { Tupleexp ($1,$3) }
 
 |   expr_1 BAR  expr_1                { Binexp (Barop,$1,$3) }
 

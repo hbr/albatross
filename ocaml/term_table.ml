@@ -14,6 +14,10 @@ module FlowMap = Map.Make(struct
   type t = flow*int
 end)
 
+module IntPairMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = int*int
+end)
 
 type 'a t = {
     terms: ('a*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
@@ -29,6 +33,8 @@ type 'a t = {
     somes: 'a t IntMap.t;        (* one for each number of bindings *)
     flows: ('a t array) FlowMap.t;
          (* one for each flow control with the number of arguments*)
+    inds: ('a t array) IntPairMap.t;
+         (* one for each pair (nsets,nrules) *)
   }
 
 
@@ -42,7 +48,8 @@ let empty = {
   lams  = IntMap.empty;
   alls  = IntMap.empty;
   somes = IntMap.empty;
-  flows = FlowMap.empty}
+  flows = FlowMap.empty;
+  inds  = IntPairMap.empty}
 
 
 let count  (tab:'a t): int =
@@ -150,19 +157,20 @@ let unify (t:term) (nbt:int) (table:'a t)
         join_lists (IntMap.find i mp) base
       with Not_found -> base
     in
-    let list_of (t:term) (tab:'a t): 'a sublist =
+    let list_of (t:term) (nb:int) (tab:'a t): 'a sublist =
       let res = uni t tab nb in
       if res=[] then raise Not_found;
       res
     in
     let arglst
-        (args:term array) (argtabs:'a t array) (lst:'a sublist) (use_lst:bool)
+        (args:term array) (nb:int) (argtabs:'a t array)
+        (lst:'a sublist) (use_lst:bool)
         : 'a sublist =
       let len = Array.length args in
       assert (len = Array.length argtabs);
       let res_lst = ref lst in
       for i=0 to len-1 do
-        let alst = list_of args.(i) argtabs.(i) in
+        let alst = list_of args.(i) nb argtabs.(i) in
         res_lst :=
           if i=0 && not use_lst then alst else merge_lists !res_lst alst
       done;
@@ -187,7 +195,7 @@ let unify (t:term) (nbt:int) (table:'a t)
         let idx = i - nb - nbt in
         begin try
           let argtabs = IntMap.find idx tab.apps in
-          arglst args argtabs [] false
+          arglst args nb argtabs [] false
         with Not_found ->
           basic_subs
         end
@@ -196,7 +204,7 @@ let unify (t:term) (nbt:int) (table:'a t)
           try
             let len           = Array.length args in
             let ftab, argtabs = IntMap.find len tab.fapps in
-            arglst args argtabs (list_of f ftab) true
+            arglst args nb argtabs (list_of f nb ftab) true
           with Not_found ->
             basic_subs
         end
@@ -231,7 +239,15 @@ let unify (t:term) (nbt:int) (table:'a t)
         let len = Array.length args in
         begin try
           let argtabs = FlowMap.find (ctrl,len) tab.flows in
-          arglst args argtabs [] false
+          arglst args nb argtabs [] false
+        with Not_found ->
+          basic_subs
+        end
+    | Indset (n,nms,n0,nind,rs) ->
+        assert (n0+nind = Array.length rs);
+        begin try
+          let argtabs = IntPairMap.find (n,n0+nind) tab.inds in
+          arglst rs (n+nb) argtabs [] false
         with Not_found ->
           basic_subs
         end
@@ -351,6 +367,15 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:'a t)
             lst := if i = 0 then alst else merge_lists !lst alst)
           args;
         !lst
+    | Indset (n,nms,n0,nind,rs) ->
+        let argtabs = IntPairMap.find (n,n0+nind) tab.inds in
+        let lst = ref [] in
+        Array.iteri
+          (fun i a ->
+            let alst = uniw a argtabs.(i) (n+nb) in
+            lst := if i = 0 then alst else merge_lists !lst alst)
+          rs;
+        !lst
 in
   try
     uniw t table 0
@@ -468,6 +493,14 @@ let add
           let argtabs =
             Array.mapi (fun i tab -> add0 args.(i) nb tab) argtabs in
           {tab with flows = FlowMap.add (ctrl,n) argtabs tab.flows}
+      | Indset (n,nms,n0,nind,rs) ->
+          assert (n0+nind = Array.length rs);
+          let argtabs =
+            try IntPairMap.find (n,n0+nind) tab.inds
+            with Not_found -> Array.make (n0+nind) empty in
+          let argtabs =
+            Array.mapi (fun i tab -> add0 rs.(i) (n+nb) tab) argtabs in
+          {tab with inds = IntPairMap.add (n,n0+nind) argtabs tab.inds}
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
@@ -488,7 +521,8 @@ let filter (f:'a -> bool) (tab:'a t): 'a t =
      lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
      alls  = IntMap.map filt tab.alls;
      somes = IntMap.map filt tab.somes;
-     flows = FlowMap.map (fun args -> Array.map filt args) tab.flows}
+     flows = FlowMap.map (fun args -> Array.map filt args) tab.flows;
+     inds  = IntPairMap.map (fun args -> Array.map filt args) tab.inds}
   in
   filt tab
 

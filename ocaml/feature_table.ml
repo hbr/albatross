@@ -156,8 +156,8 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         raise Not_found
       else
         ()
-    and check_args args = Array.iter (fun t -> check_pub t nb) args
-    and check_lst  lst n = List.iter  (fun t -> check_pub t (n+nb)) lst
+    and check_args args nb = Array.iter (fun t -> check_pub t nb) args
+    and check_lst  lst nb  = List.iter  (fun t -> check_pub t nb) lst
     in
     match t with
       Variable i when i < nb ->
@@ -166,17 +166,19 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         check_pub_i i
     | VAppl(i,args) ->
         check_pub_i i;
-        check_args args
+        check_args args nb
     | Application(f,args,_) ->
         check_pub f nb;
-        check_args args
+        check_args args nb
     | Lam(n,nms,pres0,t0,_) ->
         check_lst pres0 (1+nb);
         check_pub t0 (1+nb)
     | QExp(n,nms,t0,_) ->
         check_pub t0 (n+nb)
     | Flow (ctrl,args) ->
-        check_args args
+        check_args args nb
+    | Indset (n,nms,n0,nind,rs) ->
+        check_args rs (n+nb)
   in
   try
     check_pub t nbenv;
@@ -287,6 +289,9 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         QExp(n,nms,t0,is_all), 0, 0
     | Flow (ctrl,args) ->
         Flow (ctrl, Array.map (fun t -> untup0 t nb) args), 0, 0
+    | Indset (n,nms,n0,nind,rs) ->
+        let rs = Array.map (fun r -> untup0 r (n+nb)) rs in
+        Indset (n,nms,n0,nind,rs), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   and untup0_lst lst nb =
@@ -352,6 +357,8 @@ let beta_reduce_0
         QExp(n, nms, reduce t0 (n + nb), is_all)
     | Flow (ctrl,args) ->
         Flow (ctrl, reduce_args args)
+    | Indset (n,nms,n0,nind,rs) ->
+        assert false (* nyi *)
   in
   reduce tlam 0
 
@@ -748,6 +755,17 @@ let term_to_string
             | Inspect -> None, insp2str args
             | Asexp   -> Some(Asop), as2str args
           end
+      | Indset (n,nms,n0,nind,rs) ->
+          let argsstr = args2str n nms in
+          let nms = adapt_names nms names in
+          let nanonused, nms = local_names n nms in
+          let names = Array.append nms names in
+          let rsstrs = List.map (fun t -> to_string t names nanonused false None)
+              (Array.to_list rs) in
+          let rsstr = String.concat "," rsstrs in
+          let str = "{(" ^ argsstr ^ "):"
+            ^  rsstr ^ "}" in
+          None, str
     in
     match inop, outop with
       Some iop, Some (oop,is_left) ->
@@ -787,13 +805,13 @@ let string_of_term_anon (t:term) (nb:int) (ft:t): string =
 
 let normalize_lambdas (t:term) (nb:int) (ft:t): term =
   let rec norm t nb =
-    let norm_args args = Array.map (fun a -> norm a nb) args
+    let norm_args args nb = Array.map (fun a -> norm a nb) args
     in
     match t with
       Variable i ->
         t
     | VAppl (i,args) ->
-        let args = norm_args args in
+        let args = norm_args args nb in
         if i = in_index + nb then begin
           assert (Array.length args = 2);
           Application(args.(1), [|args.(0)|],true)
@@ -801,7 +819,7 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
           VAppl (i, args)
     | Application (f,args,pr) ->
         let f    = norm f nb
-        and args = norm_args args in
+        and args = norm_args args nb in
         make_application f args pr nb ft
     | Lam (n,nms,pres,t,pr) ->
         let pres = List.map (fun p -> norm p (n+nb)) pres
@@ -810,7 +828,9 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
     | QExp (n,nms,t,is_all) ->
         QExp (n, nms, norm t (n+nb), is_all)
     | Flow (ctrl,args) ->
-        Flow (ctrl, norm_args args)
+        Flow (ctrl, norm_args args nb)
+    | Indset (n,nms,n0,nind,rs) ->
+        Indset (n,nms,n0,nind, norm_args rs (n+nb))
   in
   norm t nb
 
@@ -880,6 +900,8 @@ let prenex (t:term) (nb:int) (ft:t): term =
           0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
     | Flow(ctrl,args) ->
         0, [||], Flow(ctrl, norm_args args nb)
+    | Indset (n,nms,n0,nind,rs) ->
+        0, [||], Indset (n,nms,n0,nind, norm_args rs (n+nb))
   in
   norm t nb
 
@@ -1019,6 +1041,8 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
             let ghost = is_ghost args.(0) nb in
             cases_from 0 ghost
         end
+    | Indset _ ->
+        true
     | VAppl (i,args) ->
         let ghost = is_ghost_function (i-nb-nargs) ft in
         ghost || ghost_args args 0 (Array.length args)
@@ -1095,7 +1119,7 @@ let seed (i:int) (ft:t): int =
 
 let seeded_term (t:term) (nb:int) (ft:t): term =
   let rec seeded t nb =
-    let seeded_args args = Array.map (fun t -> seeded t nb) args in
+    let seeded_args args nb = Array.map (fun t -> seeded t nb) args in
     match t with
       Variable i when i < nb -> t
     | Variable i ->
@@ -1103,11 +1127,11 @@ let seeded_term (t:term) (nb:int) (ft:t): term =
     | VAppl(i,args) ->
         assert (nb <= i);
         let i = nb + seed (i-nb) ft
-        and args = seeded_args args in
+        and args = seeded_args args nb in
         VAppl(i,args)
     | Application(f,args,pr) ->
         let f = seeded f nb
-        and args = seeded_args args in
+        and args = seeded_args args nb in
         Application(f,args,pr)
     | Lam(n,nms,pres,t0,pr) ->
         let t0 = seeded t0 (1+nb)
@@ -1117,8 +1141,11 @@ let seeded_term (t:term) (nb:int) (ft:t): term =
         let t0 = seeded t0 (n+nb) in
         QExp(n,nms,t0,is_all)
     | Flow(ctrl,args) ->
-        let args = seeded_args args in
+        let args = seeded_args args nb in
         Flow(ctrl,args)
+    | Indset (n,nms,n0,nind,rs) ->
+        let rs = seeded_args rs (n+nb) in
+        Indset (n,nms,n0,nind,rs)
   in
   seeded t nb
 
@@ -2754,5 +2781,7 @@ let downgrade_term (t:term) (nb:int) (ft:t): term =
         QExp (n,nms, down t0 (n+nb), is_all)
     | Flow (ctrl,args) ->
         Flow (ctrl, down_args args nb)
+    | Indset (n,nms,n0,nind,rs) ->
+        Indset (n,nms,n0,nind, down_args rs (n+nb))
   in
   down t nb

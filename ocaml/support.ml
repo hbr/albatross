@@ -375,6 +375,7 @@ type expression =
   | Expdot        of expression * expression
   | Expset        of expression
   | Exppred       of entities list withinfo * expression
+  | Expindset     of entities list withinfo * expression list
   | Binexp        of operator * expression * expression
   | Unexp         of operator * expression
   | Tupleexp      of expression * expression
@@ -383,7 +384,7 @@ type expression =
   | Expassign     of expression * expression
   | Expif         of (expression * expression) list * expression option
   | Expinspect    of expression * (expression*expression) list
-  | Proofinspect  of int * (info_expression*compound) list * info_expression
+  | Proofinspect  of expression * (info_expression*compound) list * info_expression
   | Proofif       of (expression * compound) list * compound * compound
   | Cmdif         of (expression * compound) list * compound
   | Cmdinspect    of
@@ -503,6 +504,10 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Exppred (elist,exp) ->
       "{" ^ (string_of_formals elist.v) ^ ":" ^ (string_of_expression exp)^ "}"
 
+  | Expindset (elist,rules) ->
+      "{" ^ (string_of_formals elist.v) ^ ":" ^
+      (string_of_list rules string_of_expression ",") ^ "}"
+
   | Binexp (op,e1,e2) ->
       withparen ((strexp e1) ^ (operator_to_string op) ^ (strexp e2)) wp
 
@@ -538,8 +543,8 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
         | Some e -> " else " ^ (string_of_expression e))
       ^ " end"
 
-  | Proofinspect (id,caselst,ens) ->
-      "inspect " ^ (ST.string id)
+  | Proofinspect (insp,caselst,ens) ->
+      "inspect " ^ (string_of_expression insp)
       ^ (string_of_list
            caselst
            (fun (pat,cmp) ->

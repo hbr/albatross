@@ -20,6 +20,10 @@ type term =
                    (* n, names, pres, t, is_pred *)
   | QExp        of int * int array * term * bool (* n, names, t, is_all *)
   | Flow        of flow * term array
+  | Indset      of int * int array * int * int * term array
+                               (* number of sets, (usually one), names,
+                                  number of basic rules, inductive rules,
+                                  rules *)
 and formal  = int * term (* name, type *)
 and formals = formal array
 
@@ -142,6 +146,7 @@ module Term: sig
 
   val implication_chain: term -> int -> (term list * term) list
 
+  val split_rule: term -> int -> int * int array * term list * term
 end = struct
 
   let is_variable_i (t:term) (i:int): bool =
@@ -207,6 +212,10 @@ end = struct
               assert (Array.length args = 2);
               "as(" ^ (String.concat "," argsstr) ^ ")"
         end
+    | Indset (n,nms,nb,nind,rs) ->
+        "{(" ^ (string_of_int n) ^ "):"
+        ^ (String.concat "," (List.map to_string (Array.to_list rs)))
+        ^ "}"
 
 
 
@@ -249,6 +258,8 @@ end = struct
         1 + (nodes t)
     | Flow (ctrl,args) ->
         1 + nodesarr args
+    | Indset (n,_,_,_,rs) ->
+        1 + nodesarr rs
 
 
   let rec depth (t:term): int =
@@ -270,6 +281,8 @@ end = struct
         1 + (depth t)
     | Flow (ctrl,args) ->
         1 + deptharr args
+    | Indset (n,_,_,_,rs) ->
+        1 + deptharr rs
 
 
 
@@ -300,6 +313,8 @@ end = struct
           fld a t (level+1) (nb+n)
       | Flow (ctrl,args) ->
           fldarr a args
+      | Indset (n,nms,n0,nind,rs) ->
+          fldarr a rs
     in
     fld a t 0 0
 
@@ -449,6 +464,11 @@ end = struct
           and n2 = Array.length args2 in
           n1 = n2 &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
+      | Indset (n1,nms1,n01,nind1,rs1), Indset (n2,nms2,n02,nind2,rs2) ->
+          n1 = n2 &&
+          n01 = n02 &&
+          nind1 = nind2 &&
+          interval_for_all (fun i -> eq rs1.(i) rs2.(i) (n1+nb)) 0 nind1
       | _, _ ->
           false
     in
@@ -461,14 +481,14 @@ end = struct
        is the number of bound variables in the context where 'j' appears.
      *)
     let rec mapr nb t =
-      let map_args args = Array.map (fun t -> mapr nb t) args
+      let map_args nb args = Array.map (fun t -> mapr nb t) args
       in
       match t with
         Variable j -> Variable (f j nb)
       | VAppl (j,args) ->
-          VAppl (f j nb, map_args args)
+          VAppl (f j nb, map_args nb args)
       | Application (a,b,pred) ->
-          Application (mapr nb a, map_args b, pred)
+          Application (mapr nb a, map_args nb b, pred)
       | Lam (nargs,names,pres,t,pred) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -477,7 +497,10 @@ end = struct
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
-          Flow(ctrl,map_args args)
+          Flow(ctrl,map_args nb args)
+      | Indset (n,nms,n0,nind,rs) ->
+          Indset (n,nms,n0,nind, map_args (n+nb) rs)
+
     in
     mapr 0 t
 
@@ -501,13 +524,13 @@ end = struct
        number of bound variables in the context where 'j' appears
      *)
     let rec mapr nb t =
-      let map_args args = Array.map (fun t -> mapr nb t) args in
+      let map_args nb args = Array.map (fun t -> mapr nb t) args in
       match t with
         Variable j -> f j nb
       | VAppl (j,args) ->
           VAppl (j, Array.map (fun t -> mapr nb t) args)
       | Application (a,b,pred) ->
-          Application (mapr nb a, map_args b, pred)
+          Application (mapr nb a, map_args nb b, pred)
       | Lam (nargs,names,pres,t,pred) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -516,7 +539,10 @@ end = struct
       | QExp (nargs,names,t,is_all) ->
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
-          Flow(ctrl, map_args args)
+          Flow(ctrl, map_args nb args)
+      | Indset (n,nms,n0,nind,rs) ->
+          Indset (n,nms,n0,nind, map_args (n+nb) rs)
+
     in
     mapr 0 t
 
@@ -636,7 +662,7 @@ end = struct
     let len = Array.length args in
     assert (len <= nargs);
     let rec sub t nb =
-      let sub_args args = Array.map (fun t -> sub t nb) args in
+      let sub_args nb args = Array.map (fun t -> sub t nb) args in
       let nb1 = nb + start in
       match t with
         Variable i when i < nb1 -> t
@@ -648,9 +674,9 @@ end = struct
           Variable (i + n_delta - len)
       | VAppl (i,args) ->
           assert (nb1 + nargs - len <= i);
-          VAppl (i + n_delta - len, sub_args args)
+          VAppl (i + n_delta - len, sub_args nb args)
       | Application(f,args,pr) ->
-          Application (sub f nb, sub_args args, pr)
+          Application (sub f nb, sub_args nb args, pr)
       | Lam(n,nms,pres0,t0,pr) ->
           let nb = 1 + nb in
           let pres0 = List.map (fun t -> sub t nb) pres0
@@ -659,7 +685,9 @@ end = struct
       | QExp(n,nms,t0,is_all) ->
           QExp (n, nms, sub t0 (n+nb), is_all)
       | Flow (ctrl,args) ->
-          Flow (ctrl, sub_args args)
+          Flow (ctrl, sub_args nb args)
+      | Indset (n,nms,n0,nind,rs) ->
+          Indset (n,nms,n0,nind, sub_args (n+nb) rs)
     in
     sub t 0
 
@@ -829,6 +857,15 @@ end = struct
     in
     chrec t []
 
+
+  let split_rule (t:term) (imp_id:int)
+      : int * int array * term list * term =
+    let n,nms,t0,is_all = qlambda_split_0 t in
+    if n>0 && not is_all then
+      0, [||], [], t
+    else
+      let ps_rev, tgt = split_implication_chain t0 (n+imp_id) in
+      n,nms,ps_rev,tgt
 
 
   let rec make_implication_chain

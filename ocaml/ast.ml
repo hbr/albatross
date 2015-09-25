@@ -263,7 +263,7 @@ and proof_inspect
   let proved_cases =
     List.fold_left
       (fun lst (ie,cmp) ->
-        let pat,nms = Typer.case_variables ie.i ie.v c in
+        let pat,nms = Typer.case_variables ie.i ie.v false c in
         let n = Array.length nms in
         let pc1 = PC.push_untyped nms pc in
         let c1  = PC.context pc1 in
@@ -585,6 +585,8 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             let c = Context.push_untyped nms c in
             check res (nbranch+1) tlst2 c)
           0 ncases
+    | Indset (n,nms,n0,nind,rs) ->
+        assert false (* nyi *)
   in
   let nvars = Context.count_variables c in
   let tlst0 =

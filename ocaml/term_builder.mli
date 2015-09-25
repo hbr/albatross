@@ -6,6 +6,7 @@
 
 open Term
 open Signature
+open Support
 
 exception Illegal_term
 type t
@@ -47,6 +48,8 @@ val expect_lambda: bool -> Context.t -> t -> unit
 val complete_lambda: int -> int array -> int -> bool -> t -> unit
 val expect_quantified: Context.t -> t -> unit
 val complete_quantified: bool -> t -> unit
+val expect_inductive:   Context.t -> t -> unit
+val complete_inductive: info -> int -> t -> unit
 val expect_if:      t -> unit
 val complete_if:    bool -> t -> unit
 val expect_case:    Context.t -> t -> unit

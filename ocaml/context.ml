@@ -711,6 +711,8 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
         QExp (n, nms, expand t (n+nb), is_all)
     | Flow (ctrl,args) ->
         t
+    | Indset _ ->
+        t
   in
   expand t nb
 
@@ -1057,6 +1059,8 @@ let term_preconditions (t:term)  (c:t): term list =
               assert (len = 2);
               pres args.(0) nb lst
         end
+    | Indset (n,nms,n0,nind,rs) ->
+        lst, domain_t
   in
   let ps,_ = pres t 0 [] in
   List.rev ps

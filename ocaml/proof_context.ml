@@ -535,6 +535,8 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Flow (ctrl,args),
           Eval.Flow(ctrl,argse),
           modi
+      | Indset (n,nms,n0,nind,rs) ->
+          t, Eval.Term t, false
     in
     let sublst = unify t (nb+nbenv) pc.entry.left pc in
     let sublst =
@@ -794,6 +796,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 with Not_found ->
                   t, Eval.Term t, false
           end
+      | Indset (n,nms,n0,nind,rs) ->
+          t, Eval.Term t, false
     in
     let tred,ered,modi = expand t in
     let tred = downgrade tred in

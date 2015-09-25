@@ -118,8 +118,12 @@ let predicate_index (tb:t): int = Tvars.count_all tb.tvs + Class_table.predicate
 let function_index  (tb:t): int = Tvars.count_all tb.tvs + Class_table.function_index
 let dummy_index     (tb:t): int = Tvars.count_all tb.tvs + Class_table.dummy_index
 
-let boolean_type (tb:t): type_term = Variable (boolean_index tb)
-let any_type     (tb:t): type_term = Variable (any_index tb)
+let boolean_type (tb:t):     type_term = Variable (boolean_index tb)
+let any_type     (tb:t):     type_term = Variable (any_index tb)
+
+let predicate_type (arg:type_term) (tb:t): type_term =
+  VAppl(predicate_index tb, [|arg|])
+
 
 let count_terms (tb:t): int = Seq.count tb.terms
 
@@ -703,7 +707,6 @@ let expect_new_untyped (tb:t): unit =
 
 let add_anys (n:int) (tb:t):unit =
   assert (tb.nglobals + n <= global_capacity tb);
-  (*resize 0 n 0 tb;*)
   let anytp    = any_type tb
   and concepts = Tvars.concepts tb.tvs in
   for i = 0 to n-1 do
@@ -1134,6 +1137,125 @@ let complete_quantified (is_all:bool) (tb:t): unit =
 
 
 
+let expect_inductive (c:Context.t) (tb:t): unit =
+  if tb.trace then printf "  expect inductive set\n";
+  let nargs  = Context.count_last_arguments c
+  and tvs    = Context.tvars c
+  and expfun = is_expecting_function tb in
+  assert (0 < nargs);
+  assert (nargs = 1); (* multiple inductive sets not yet implemented *)
+  if expfun && nargs > 1 then
+    raise Not_found;
+  if expfun then expect_boolean tb;
+  push_context c tb;
+  resize 0 nargs 0 tb;
+  let start = globals_start tb + tb.nglobals in
+  add_anys nargs tb;
+  let transform = transform_from_context tvs tb in
+  for i = 0 to nargs-1 do
+    let _,s = Context.variable_data i c in
+    assert (Sign.is_constant s);
+    let tp  = transform (Sign.result s)
+    and req = predicate_type (Variable (i+start)) tb in
+    unify req tp tb
+  done
+
+
+let split_rule_element (t:term) (nargs:int) (n:int): int * term array =
+  match t with
+    Application(Variable i,args,pr)
+    when n <= i && i < n+nargs ->
+      Array.iter (fun t -> let _ = Term.down_from nargs n t in ()) args;
+      i, args
+  | _ ->
+      try
+        let _ = Term.down_from nargs n t in
+        raise Not_found
+      with Term_capture ->
+        invalid_arg "Inductive set must occur only at the toplevel"
+
+
+
+
+let analyze_rule (info:info) (r:term) (c:Context.t): bool =
+  (* Analyze the rule [r] as a rule of an inductively defined set and return whether
+     the rule is inductive. *)
+  let nargs = Context.count_last_arguments c
+  and nvars = Context.count_variables c in
+  let imp_id = nvars + Feature_table.implication_index in
+  let n,nms,ps_rev,tgt = Term.split_rule r imp_id in
+  let split (t:term) = split_rule_element t nargs n
+  in
+  let check_target () =
+    let _,_ = split tgt in () in
+  let rec check_premises ps_rev =
+    match ps_rev with
+      [] -> ()
+    | p::rest ->
+        try
+          let _ = split p in
+          check_premises rest
+        with Not_found ->
+          invalid_arg "Missing induction hypothesis"
+  in
+  check_target ();
+  match ps_rev with
+    [] ->
+      false
+  | p::rest ->
+      begin
+        try
+          let _ = split p in
+          check_premises ps_rev;
+          true
+        with Not_found ->
+          check_premises rest;
+          if rest = [] then false else true
+      end
+
+
+let complete_inductive (info:info) (nrules:int) (tb:t): unit =
+  let start = Seq.count tb.terms - nrules in
+  assert (0 <= start);
+  let c = context tb in
+  let n0, nind =
+    interval_fold
+      (fun (n0,nind) i ->
+        let r = (Seq.elem (start+i) tb.terms).term in
+        let is_ind =
+          try analyze_rule info r c
+          with Not_found ->
+            assert false
+          | Invalid_argument str ->
+              assert false
+        in
+        if is_ind && n0 = 0 then
+          error_info info ("The first rule \"" ^ (string_of_term r tb)
+                           ^ "\" must not be inductive");
+        if not is_ind && nind <> 0 then
+          error_info info ("Basic rule \"" ^ (string_of_term r tb)
+                           ^ "\" out of order");
+        if is_ind then n0,nind+1 else n0+1,nind)
+      (0,0)
+      0 nrules
+  in
+  assert (n0 + nind = nrules);
+  let rs = Array.init nrules (fun i -> (Seq.elem (start+i) tb.terms).term) in
+  let n = Context.count_last_arguments c
+  and nms = Context.local_argnames c in
+  assert (n = 1);  (* nyi: multiple inductive sets *)
+  let s =
+    let tvs,s     = Context.variable_data 0 c in
+    let transform = transform_from_context tvs tb in
+    Sign.make_const (transform (Sign.result s))
+  and set = Indset (n,nms,n0,nind,rs) in
+  Seq.keep start tb.terms;
+  pop_context tb;
+  if tb.trace then
+    printf "  set  \"%s\"  %s\n" (string_of_term set tb)
+      (string_of_complete_signature s tb);
+  push_term set s tb
+
 
 let variant (idx:int) (gcnt:int) (nb:int) (tb:t): int =
   let c = context tb in
@@ -1215,6 +1337,9 @@ let specialize_head (tb:t): unit =
     | Flow(ctrl,args) ->
         let args,gpos = spec_args args gpos nb in
         Flow(ctrl,args), gpos
+    | Indset (n,nms,n0,nind,rs) ->
+        let rs,gpos = spec_args rs gpos (n+nb) in
+        Indset (n,nms,n0,nind,rs), gpos
   in
   let trec = Seq.elem 0 tb.terms in
   let t,gpos = spec trec.term 0 0 in
@@ -1378,6 +1503,12 @@ let check_term (t:term) (tb:t): unit =
               drop_expected tb;
               drop_expected tb
         end
+    | Indset (n,nms,n0,nind,rs) ->
+        let ntvs_gap = count_local tb - Context.count_type_variables c0 in
+        let c = Context.push_untyped_with_gap nms false false false ntvs_gap c0 in
+        expect_inductive c tb;
+        Array.iter (fun r -> expect_boolean_expression tb; check r tb) rs;
+        complete_inductive UNKNOWN (Array.length rs) tb
   in
   let depth = Context.depth (context tb) in
   check t tb;
