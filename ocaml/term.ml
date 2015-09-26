@@ -20,10 +20,8 @@ type term =
                    (* n, names, pres, t, is_pred *)
   | QExp        of int * int array * term * bool (* n, names, t, is_all *)
   | Flow        of flow * term array
-  | Indset      of int * int array * int * int * term array
-                               (* number of sets, (usually one), names,
-                                  number of basic rules, inductive rules,
-                                  rules *)
+  | Indset      of int * int array * term array
+                               (* number of sets, (usually one), names, rules *)
 and formal  = int * term (* name, type *)
 and formals = formal array
 
@@ -58,8 +56,6 @@ module Term: sig
   val is_argument: term -> int -> bool
 
   val nodes: term -> int
-
-  val depth: term -> int
 
   val fold_with_level: ('a -> int -> int -> 'a) -> 'a -> term -> 'a
   val fold: ('a -> int -> 'a) -> 'a -> term -> 'a
@@ -147,6 +143,9 @@ module Term: sig
   val implication_chain: term -> int -> (term list * term) list
 
   val split_rule: term -> int -> int * int array * term list * term
+
+  val closure_rule: int -> term -> term
+  val induction_law: int -> term -> term
 end = struct
 
   let is_variable_i (t:term) (i:int): bool =
@@ -212,7 +211,7 @@ end = struct
               assert (Array.length args = 2);
               "as(" ^ (String.concat "," argsstr) ^ ")"
         end
-    | Indset (n,nms,nb,nind,rs) ->
+    | Indset (n,nms,rs) ->
         "{(" ^ (string_of_int n) ^ "):"
         ^ (String.concat "," (List.map to_string (Array.to_list rs)))
         ^ "}"
@@ -258,31 +257,10 @@ end = struct
         1 + (nodes t)
     | Flow (ctrl,args) ->
         1 + nodesarr args
-    | Indset (n,_,_,_,rs) ->
+    | Indset (_,_,rs) ->
         1 + nodesarr rs
 
 
-  let rec depth (t:term): int =
-    (* The depth of the term t *)
-    let depthlst lst =
-      List.fold_left (fun d t -> max d (depth t)) 0 lst
-    and deptharr arr =
-      Array.fold_left (fun d t -> max d (depth t)) 0 arr
-    in
-    match t with
-      Variable _ -> 0
-    | VAppl (i,args) ->
-        Mylist.sum depth 1 (Array.to_list args)
-    | Application (f,args,_) ->
-        Mylist.sum depth (1 + (depth f)) (Array.to_list args)
-    | Lam (_,_,pres,t,_) ->
-        1 + depthlst (t::pres)
-    | QExp (_,_,t,_)->
-        1 + (depth t)
-    | Flow (ctrl,args) ->
-        1 + deptharr args
-    | Indset (n,_,_,_,rs) ->
-        1 + deptharr rs
 
 
 
@@ -313,7 +291,7 @@ end = struct
           fld a t (level+1) (nb+n)
       | Flow (ctrl,args) ->
           fldarr a args
-      | Indset (n,nms,n0,nind,rs) ->
+      | Indset (n,nms,rs) ->
           fldarr a rs
     in
     fld a t 0 0
@@ -464,11 +442,11 @@ end = struct
           and n2 = Array.length args2 in
           n1 = n2 &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
-      | Indset (n1,nms1,n01,nind1,rs1), Indset (n2,nms2,n02,nind2,rs2) ->
+      | Indset (n1,nms1,rs1), Indset (n2,nms2,rs2) ->
+          let nrules1, nrules2 = Array.length rs1, Array.length rs2 in
           n1 = n2 &&
-          n01 = n02 &&
-          nind1 = nind2 &&
-          interval_for_all (fun i -> eq rs1.(i) rs2.(i) (n1+nb)) 0 nind1
+          nrules1 = nrules2 &&
+          interval_for_all (fun i -> eq rs1.(i) rs2.(i) (n1+nb)) 0 nrules1
       | _, _ ->
           false
     in
@@ -498,8 +476,8 @@ end = struct
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
           Flow(ctrl,map_args nb args)
-      | Indset (n,nms,n0,nind,rs) ->
-          Indset (n,nms,n0,nind, map_args (n+nb) rs)
+      | Indset (n,nms,rs) ->
+          Indset (n,nms, map_args (n+nb) rs)
 
     in
     mapr 0 t
@@ -540,8 +518,8 @@ end = struct
           QExp(nargs, names, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
           Flow(ctrl, map_args nb args)
-      | Indset (n,nms,n0,nind,rs) ->
-          Indset (n,nms,n0,nind, map_args (n+nb) rs)
+      | Indset (n,nms,rs) ->
+          Indset (n,nms, map_args (n+nb) rs)
 
     in
     mapr 0 t
@@ -653,7 +631,7 @@ end = struct
         The term [t] has above [start] [nargs] argument variables. The first
         [Array.length args] of them will be substituted by the corresponding
         term in [args] and the others will be shifted down appropriately so
-        that the new term has [(Array.length args)-nargs] argument variables.
+        that the new term has [nargs-(Array.length args)] argument variables.
 
         The arguments come from an environment with [n_delta] variables more
         than the term [t]. Therefore the variables in [t] above [start+nargs]
@@ -686,8 +664,8 @@ end = struct
           QExp (n, nms, sub t0 (n+nb), is_all)
       | Flow (ctrl,args) ->
           Flow (ctrl, sub_args nb args)
-      | Indset (n,nms,n0,nind,rs) ->
-          Indset (n,nms,n0,nind, sub_args (n+nb) rs)
+      | Indset (n,nms,rs) ->
+          Indset (n,nms, sub_args (n+nb) rs)
     in
     sub t 0
 
@@ -698,7 +676,7 @@ end = struct
         The term [t] has [nargs] argument variables. The first
         [Array.length args] of them will be substituted by the corresponding
         term in [args] and the others will be shifted down appropriately so
-        that the new term has [(Array.length args)-nargs] argument variables.
+        that the new term has [nargs-(Array.length args)] argument variables.
 
         The arguments come from an environment with [n_delta] variables more
         than the term [t]. Therefore the variables in [t] above [nargs] have
@@ -711,7 +689,7 @@ end = struct
   let sub_from (t:term) (start:int) (args:term array) (nbound:int): term =
     (** substitute the free variables start,start+1,..,start+args.len-1 of the
         term [t] by the arguments [args] which are from an environment with
-        [nbound] bound variables more than the variable of the term [t],
+        [nbound] bound variables more than the variables of the term [t],
         i.e. all free variables above [len] are shifted up by
         [nbound-args.len] *)
     let len = Array.length args in
@@ -907,6 +885,78 @@ end = struct
     in
     chainr t
 
+
+  let closure_rule (i:int) (t:term): term =
+    assert (0 <= i);
+    match t with
+      Indset(n,nms,rs) ->
+        if Array.length rs <= i then invalid_arg "Rule index out of bound";
+        apply rs.(i) [|t|]
+    | _ ->
+        invalid_arg "Not an inductive set"
+
+
+
+
+  let induction_law (imp_id:int) (p:term): term =
+    (* Calculate the induction rule for the inductively defined set [p]
+
+       all(a,q) p(a) ==> ind0 ==> ... ==> indn ==> q(a)
+
+       indi: all(x,y,...) p(e1) ==> q(e1) ==>
+                          ...
+                          p(en) ==> q(en) ==>
+                          e0              ==>
+                          p(e) ==> q(e)
+
+       where all(x,y,...) p(e1) ==> ... ==> p(en) ==> e0 ==> p(e) is the
+       corresponding closure rule.
+     *)
+    let imp_id, p = imp_id + 2, up 2 p in (* space for a and q *)
+    match p with
+      Indset (n,nms,rs) ->
+        assert (n = 1);
+        let nrules = Array.length rs in
+        let pair (n:int) (t:term): term * term =
+          match t with
+            Application(Variable i,args,pr) when i = n ->
+              assert pr;
+              assert (Array.length args = 1);
+              sub_from t n [|p|] 0,
+              sub_from t n [|Variable 1|] 0
+          | _ ->
+              raise Not_found
+        in
+        let rule (i:int): term =
+          let n,nms,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
+          let imp_id = imp_id + n in
+          let chn =
+            let t1,t2 =  try pair n tgt with Not_found -> assert false in
+            binary imp_id t1 t2 in
+          let chn = List.fold_left
+              (fun chn t ->
+                try
+                  let t1,t2 = pair n t in
+                  binary imp_id t1 (binary imp_id t2 chn)
+                with Not_found ->
+                  binary imp_id t chn)
+              chn
+              ps_rev in
+          all_quantified n nms chn
+        in
+        let tgt =
+          interval_fold
+            (fun tgt j ->
+              let i = nrules - j - 1 in
+              let indi = rule i in
+              binary imp_id indi tgt)
+            (Application (Variable 1, [|Variable 0|],true))  (* q(a) *)
+            0 nrules in
+        let pa = Application (p,[|Variable 0|],true) in
+        let t0 = binary imp_id pa tgt in
+        all_quantified 2 [|ST.symbol "a";ST.symbol "q"|] t0
+    | _ ->
+        invalid_arg "Not an inductive set"
 end (* Term *)
 
 

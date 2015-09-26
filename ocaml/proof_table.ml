@@ -740,6 +740,19 @@ let term_of_someelim (i:int) (at:t): term =
     raise Illegal_proof_term
 
 
+let closure_rule (i:int) (t:term) (at:t): term =
+  try
+    Term.closure_rule i t
+  with Invalid_argument _ ->
+    raise Illegal_proof_term
+
+
+let induction_law (t:term) (at:t): term =
+  try
+    Term.induction_law (imp_id at) t
+  with Invalid_argument _ ->
+    raise Illegal_proof_term
+
 let count_assumptions (pt_arr:proof_term array): int =
   let p (pt:proof_term): bool =
     match pt with
@@ -785,6 +798,14 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
     let cnt = count at in
     match pt with
       Axiom t | Assumption t ->
+        if trace then print0 t at;
+        t
+    | Indset_rule (t,i) ->
+        let t = closure_rule i t at in
+        if trace then print0 t at;
+        t
+    | Indset_ind t ->
+        let t = induction_law t at in
         if trace then print0 t at;
         t
     | Detached (a,b) ->

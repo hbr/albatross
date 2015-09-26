@@ -177,7 +177,7 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         check_pub t0 (n+nb)
     | Flow (ctrl,args) ->
         check_args args nb
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         check_args rs (n+nb)
   in
   try
@@ -289,9 +289,9 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         QExp(n,nms,t0,is_all), 0, 0
     | Flow (ctrl,args) ->
         Flow (ctrl, Array.map (fun t -> untup0 t nb) args), 0, 0
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         let rs = Array.map (fun r -> untup0 r (n+nb)) rs in
-        Indset (n,nms,n0,nind,rs), 0, 0
+        Indset (n,nms,rs), 0, 0
   and untup0 t nb =
     let t,_,_ = untup t nb 0 0 in t
   and untup0_lst lst nb =
@@ -357,7 +357,7 @@ let beta_reduce_0
         QExp(n, nms, reduce t0 (n + nb), is_all)
     | Flow (ctrl,args) ->
         Flow (ctrl, reduce_args args)
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         assert false (* nyi *)
   in
   reduce tlam 0
@@ -755,7 +755,7 @@ let term_to_string
             | Inspect -> None, insp2str args
             | Asexp   -> Some(Asop), as2str args
           end
-      | Indset (n,nms,n0,nind,rs) ->
+      | Indset (n,nms,rs) ->
           let argsstr = args2str n nms in
           let nms = adapt_names nms names in
           let nanonused, nms = local_names n nms in
@@ -829,8 +829,8 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
         QExp (n, nms, norm t (n+nb), is_all)
     | Flow (ctrl,args) ->
         Flow (ctrl, norm_args args nb)
-    | Indset (n,nms,n0,nind,rs) ->
-        Indset (n,nms,n0,nind, norm_args rs (n+nb))
+    | Indset (n,nms,rs) ->
+        Indset (n,nms, norm_args rs (n+nb))
   in
   norm t nb
 
@@ -900,8 +900,8 @@ let prenex (t:term) (nb:int) (ft:t): term =
           0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
     | Flow(ctrl,args) ->
         0, [||], Flow(ctrl, norm_args args nb)
-    | Indset (n,nms,n0,nind,rs) ->
-        0, [||], Indset (n,nms,n0,nind, norm_args rs (n+nb))
+    | Indset (n,nms,rs) ->
+        0, [||], Indset (n,nms, norm_args rs (n+nb))
   in
   norm t nb
 
@@ -1143,9 +1143,9 @@ let seeded_term (t:term) (nb:int) (ft:t): term =
     | Flow(ctrl,args) ->
         let args = seeded_args args nb in
         Flow(ctrl,args)
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         let rs = seeded_args rs (n+nb) in
-        Indset (n,nms,n0,nind,rs)
+        Indset (n,nms,rs)
   in
   seeded t nb
 
@@ -2781,7 +2781,7 @@ let downgrade_term (t:term) (nb:int) (ft:t): term =
         QExp (n,nms, down t0 (n+nb), is_all)
     | Flow (ctrl,args) ->
         Flow (ctrl, down_args args nb)
-    | Indset (n,nms,n0,nind,rs) ->
-        Indset (n,nms,n0,nind, down_args rs (n+nb))
+    | Indset (n,nms,rs) ->
+        Indset (n,nms, down_args rs (n+nb))
   in
   down t nb

@@ -424,8 +424,8 @@ let unfold_inspect (info:info) (t:term) (c:Context.t): term =
         Flow(Inspect,args)
     | Flow (ctrl,args) ->
         Flow (ctrl, unfold_args args nb)
-    | Indset (n,nms,n0,nind,rs) ->
-        Indset (n,nms,n0,nind, unfold_args rs (n+nb))
+    | Indset (n,nms,rs) ->
+        Indset (n,nms, unfold_args rs (n+nb))
   in
   unfold t 0
 
@@ -630,7 +630,7 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
               let c = Context.push_untyped nms c in
               check_match mtch c
         end
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         let c = Context.push_untyped nms c in
         val_args rs c
   in

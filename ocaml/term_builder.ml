@@ -1248,7 +1248,7 @@ let complete_inductive (info:info) (nrules:int) (tb:t): unit =
     let tvs,s     = Context.variable_data 0 c in
     let transform = transform_from_context tvs tb in
     Sign.make_const (transform (Sign.result s))
-  and set = Indset (n,nms,n0,nind,rs) in
+  and set = Indset (n,nms,rs) in
   Seq.keep start tb.terms;
   pop_context tb;
   if tb.trace then
@@ -1337,9 +1337,9 @@ let specialize_head (tb:t): unit =
     | Flow(ctrl,args) ->
         let args,gpos = spec_args args gpos nb in
         Flow(ctrl,args), gpos
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         let rs,gpos = spec_args rs gpos (n+nb) in
-        Indset (n,nms,n0,nind,rs), gpos
+        Indset (n,nms,rs), gpos
   in
   let trec = Seq.elem 0 tb.terms in
   let t,gpos = spec trec.term 0 0 in
@@ -1503,7 +1503,7 @@ let check_term (t:term) (tb:t): unit =
               drop_expected tb;
               drop_expected tb
         end
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         let ntvs_gap = count_local tb - Context.count_type_variables c0 in
         let c = Context.push_untyped_with_gap nms false false false ntvs_gap c0 in
         expect_inductive c tb;

@@ -585,7 +585,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             let c = Context.push_untyped nms c in
             check res (nbranch+1) tlst2 c)
           0 ncases
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         assert false (* nyi *)
   in
   let nvars = Context.count_variables c in

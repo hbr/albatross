@@ -243,10 +243,10 @@ let unify (t:term) (nbt:int) (table:'a t)
         with Not_found ->
           basic_subs
         end
-    | Indset (n,nms,n0,nind,rs) ->
-        assert (n0+nind = Array.length rs);
+    | Indset (n,nms,rs) ->
+        let nrules = Array.length rs in
         begin try
-          let argtabs = IntPairMap.find (n,n0+nind) tab.inds in
+          let argtabs = IntPairMap.find (n,nrules) tab.inds in
           arglst rs (n+nb) argtabs [] false
         with Not_found ->
           basic_subs
@@ -367,8 +367,8 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:'a t)
             lst := if i = 0 then alst else merge_lists !lst alst)
           args;
         !lst
-    | Indset (n,nms,n0,nind,rs) ->
-        let argtabs = IntPairMap.find (n,n0+nind) tab.inds in
+    | Indset (n,nms,rs) ->
+        let argtabs = IntPairMap.find (n,Array.length rs) tab.inds in
         let lst = ref [] in
         Array.iteri
           (fun i a ->
@@ -493,14 +493,14 @@ let add
           let argtabs =
             Array.mapi (fun i tab -> add0 args.(i) nb tab) argtabs in
           {tab with flows = FlowMap.add (ctrl,n) argtabs tab.flows}
-      | Indset (n,nms,n0,nind,rs) ->
-          assert (n0+nind = Array.length rs);
+      | Indset (n,nms,rs) ->
+          let nrules = Array.length rs in
           let argtabs =
-            try IntPairMap.find (n,n0+nind) tab.inds
-            with Not_found -> Array.make (n0+nind) empty in
+            try IntPairMap.find (n,nrules) tab.inds
+            with Not_found -> Array.make (nrules) empty in
           let argtabs =
             Array.mapi (fun i tab -> add0 rs.(i) (n+nb) tab) argtabs in
-          {tab with inds = IntPairMap.add (n,n0+nind) argtabs tab.inds}
+          {tab with inds = IntPairMap.add (n,nrules) argtabs tab.inds}
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in

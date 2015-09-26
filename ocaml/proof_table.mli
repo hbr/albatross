@@ -71,6 +71,7 @@ val definition: int -> int -> t -> int * int array * term
 
 val is_proof_pair:  term -> proof_term -> t -> bool
 
+val add_proved_0:      term -> proof_term -> t -> unit
 val add_proved:        term -> proof_term -> int -> t -> unit
 
 val add_axiom:      term -> t -> unit

@@ -1059,7 +1059,7 @@ let term_preconditions (t:term)  (c:t): term list =
               assert (len = 2);
               pres args.(0) nb lst
         end
-    | Indset (n,nms,n0,nind,rs) ->
+    | Indset (n,nms,rs) ->
         lst, domain_t
   in
   let ps,_ = pres t 0 [] in

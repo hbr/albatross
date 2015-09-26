@@ -35,6 +35,8 @@ let extract_pattern (n:int) (t:term): (int*int*int*term) list =
           assert false (* nyi *)
       | Flow(ctrl,args) ->
           assert false (* nyi *)
+      | Indset(n,nms,rs) ->
+          assert false (* nyi *)
   in
   let vars = Term.bound_variables t n in
   IntSet.fold
@@ -401,6 +403,8 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, Flow(ctrl,args)
+    | Indset (n,nms,rs) ->
+        assert false (* nyi *)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
   if nextpos = 1 then raise Not_found;

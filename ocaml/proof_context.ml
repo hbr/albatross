@@ -535,7 +535,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Flow (ctrl,args),
           Eval.Flow(ctrl,argse),
           modi
-      | Indset (n,nms,n0,nind,rs) ->
+      | Indset (n,nms,rs) ->
           t, Eval.Term t, false
     in
     let sublst = unify t (nb+nbenv) pc.entry.left pc in
@@ -796,7 +796,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 with Not_found ->
                   t, Eval.Term t, false
           end
-      | Indset (n,nms,n0,nind,rs) ->
+      | Indset (n,nms,rs) ->
           t, Eval.Term t, false
     in
     let tred,ered,modi = expand t in
@@ -1020,11 +1020,46 @@ let add_consequences_someelim (i:int) (pc:t): unit =
     ()
 
 
+let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
+  match t with
+    Application (Indset(n,nms,rs),args,pr) ->
+      assert pr;
+      assert (Array.length args = 1);
+      assert (n = 1); (* nyi *)
+      let len = Array.length rs
+      and set = Indset(n,nms,rs) in
+      for i = 0 to len-1 do
+        let rule = Term.apply rs.(i) [|set|] in
+        if has rule pc then begin
+          ()
+        end else begin
+          let pt = Indset_rule (set,i) in
+          Proof_table.add_proved_0 rule pt pc.base;
+          let _ = raw_add rule true pc in ()
+        end
+      done;
+      if fwd then begin
+        let imp_id = nbenv pc + Feature_table.implication_index in
+        let indlaw = Term.induction_law imp_id set
+        and pt     = Indset_ind set in
+        if has indlaw pc then
+          ()
+        else begin
+          Proof_table.add_proved_0 indlaw pt pc.base;
+          let _ = raw_add indlaw true pc in ()
+        end
+      end
+  | _ ->
+      ()
+
+
 let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
-   *)
-  let rd = rule_data i pc in
+         *)
+  let t  = term i pc
+  and rd = rule_data i pc in
+  add_inductive_set_laws true t pc;
   if not (RD.is_intermediate rd) then
     add_consequences_premise i pc;
   if RD.is_implication rd then
@@ -1430,7 +1465,6 @@ let prove_equality (g:term) (pc:t): int =
 
 
 
-
 let backward_witness (t:term) (pc:t): int =
     let nargs,nms,tt = split_some_quantified t pc in
     let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
@@ -1448,6 +1482,7 @@ let backward_witness (t:term) (pc:t): int =
 let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
+  add_inductive_set_laws false g pc;
   try
     find_match g pc
   with Not_found ->

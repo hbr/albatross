@@ -73,6 +73,8 @@ end
 type proof_term =
     Axiom      of term
   | Assumption of term
+  | Indset_rule of term * int
+  | Indset_ind  of term
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
@@ -129,6 +131,10 @@ end = struct
           print_prefix (); printf "Axiom %s\n" (Term.to_string t)
       | Assumption t        ->
           print_prefix (); printf "Assumption %s\n" (Term.to_string t)
+      | Indset_rule (t,i) ->
+          print_prefix (); printf "Rule %d of %s\n" i (Term.to_string t)
+      | Indset_ind t ->
+          print_prefix (); printf "Induction law %s\n" (Term.to_string t)
       | Detached (i,j)      ->
           print_prefix (); printf "Detached %d %d\n" i j
       | Specialize (i,args) ->
@@ -189,7 +195,7 @@ end = struct
     in
     let rec adapt (pt:t): t =
       match pt with
-        Axiom _ | Assumption _ -> pt
+        Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> pt
       | Detached (a,b) ->
           Detached (index a, index b)
       | Specialize (i,args) ->
@@ -254,7 +260,7 @@ end = struct
         (fun (k,set) pt ->
           let set =
             match pt with
-              Axiom _ | Assumption _ -> set
+              Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> set
             | Detached (i,j) ->
                 add_idx i (add_idx j set)
             | Specialize (i,_) | Witness (i,_,_,_) | Someelim i ->
@@ -311,7 +317,7 @@ end = struct
       else
         let set = IntSet.add k set in
         match pt_arr.(k-start) with
-          Axiom _ | Assumption _ -> set
+          Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> set
         | Detached (i,j) ->
             assert (i < k);
             assert (j < k);
@@ -387,7 +393,7 @@ end = struct
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
-          Axiom _ | Assumption _  ->
+          Axiom _ | Assumption _  | Indset_rule _ | Indset_ind _ ->
             pt
         | Detached (i,j) -> Detached (index i, index j)
         | Eval (i,e)     -> Eval   (index i, transform_eval e)
@@ -486,6 +492,8 @@ end = struct
           match pt with
             Axiom t
           | Assumption t
+          | Indset_rule (t,_)
+          | Indset_ind t
           | Eval_bwd (t,_) ->
               uvars_term t set
           | Detached (i,_)
@@ -585,6 +593,10 @@ end = struct
               Axiom (shrink_term t)
           | Assumption t ->
               Assumption (shrink_term t)
+          | Indset_rule (t,i) ->
+              Indset_rule(shrink_term t,i)
+          | Indset_ind t ->
+              Indset_ind(shrink_term t)
           | Detached (i,j) ->
               pt
           | Specialize (i,args) ->
@@ -689,6 +701,8 @@ end = struct
       match pt with
         Axiom t        -> Axiom (up t)
       | Assumption t   -> Assumption (up t)
+      | Indset_rule (t,i) -> Indset_rule (up t,i)
+      | Indset_ind t      -> Indset_ind (up t)
       | Detached (i,j) -> pt
       | Specialize (i,args) -> Specialize (i, upargs args)
       | Eval (i,e)     -> Eval (i, upeval_0 e)
@@ -718,6 +732,8 @@ end = struct
     match pt with
       Axiom _  -> "ax"
     | Assumption _ -> "ass"
+    | Indset_rule (_,_) -> "rule"
+    | Indset_ind _ -> "ind"
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
     | Specialize (i,args) -> "spec " ^ (string_of_int i)
     | Inherit (i,bcls,cls)     -> "inh " ^ (string_of_int i)
