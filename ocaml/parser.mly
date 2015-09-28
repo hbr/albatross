@@ -371,9 +371,9 @@ proof_inspect:
 
 proof_inspect_rest:
     optsemi KWensure info_expr { [], $3 }
-|   KWcase info_expr KWproof ass_seq proof_inspect_rest {
+|   KWcase info_expr KWproof proof_seq proof_inspect_rest {
   let lst,ens = $5 in
-  ($2,$4)::lst, ens
+  ($2,List.rev $4)::lst, ens
    }
 
 

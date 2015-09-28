@@ -101,6 +101,10 @@ let signature (i:int) (ft:t): Tvars.t * Sign.t =
   let desc = descriptor i ft in
   desc.tvs, desc.sign
 
+
+let argument_names (i:int) (ft:t): int array =
+  (descriptor i ft).argnames
+
 let class_of_feature (i:int) (ft:t): int =
   (descriptor i ft).cls
 
@@ -145,6 +149,24 @@ let is_constructor (i:int) (ft:t): bool =
   assert (desc.cls <> -1);
   IntSet.mem i (Class_table.constructors desc.cls ft.ct)
 
+
+
+let inductive_arguments (i:int) (ft:t): int list =
+  assert (is_constructor i ft);
+  let desc = descriptor i ft in
+  let ntvs = Tvars.count_all desc.tvs in
+  let lst = interval_fold
+      (fun lst i ->
+        match Sign.arg_type i desc.sign with
+          Variable cls when cls = desc.cls + ntvs ->
+            i :: lst
+        | VAppl(cls,_) when cls = desc.cls + ntvs ->
+            i :: lst
+        | _ ->
+            lst)
+      []
+      0 (Sign.arity desc.sign) in
+  List.rev lst
 
 
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =

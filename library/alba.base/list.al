@@ -109,25 +109,20 @@ all(x:G, a:[G], p:G?)
         x in a
         a.all_in(p)
     proof
-        []  in {a: x in a ==> a.all_in(p) ==> x in p}
-
-        all(y:G, a:[G])
-            require
-                x in a  ==> a.all_in(p) ==> x in p
-                x in y^a
-                (y^a).all_in(p)
-            proof
-                y in p
-                a.all_in(p)
-                x = y or x in a
-                require x = y
-                proof   y = x
-                ensure  x in p end
-            ensure
-                x in p
-            end
-
-        a in {a: x in a ==> a.all_in(p) ==> x in p}
+        inspect a
+        case y^a proof
+            require x in y^a
+                    (y^a).all_in(p)
+            proof   y in p
+                    a.all_in(p)
+                    x = y or x in a
+                    require x = y
+                    proof   y = x
+                    ensure  x in p end
+            ensure  x in p end
+        ensure
+            x in a ==> a.all_in(p) ==> x in p
+        end
     ensure
         x in p
     end
@@ -139,9 +134,7 @@ all(a:[G], p,q:G?)
         a.all_in(p)
         p <= q
     proof
-        []  in {a: a.all_in(p) ==> p <= q ==> a.all_in(q)}
-
-        a in {a: a.all_in(p) ==> p <= q ==> a.all_in(q)}
+        inspect a ensure a.all_in(p) ==> p <= q ==> a.all_in(q) end
     ensure
         a.all_in(q)
     end
@@ -165,18 +158,12 @@ all(p:G?, a,b:[G])
 
 all(a,b:[G])
     proof
-        all(x:G, a:[G])
-            require
-                a.elements <= b.elements ==> a.all_in(b)
-                (x^a).elements <= b.elements
-            proof
-                a.elements <= b.elements
-            ensure
-                (x^a).all_in(b)
-            end
-
-        [] in {a: a.elements <= b.elements  ==> a.all_in(b)}
-        a  in {a: a.elements <= b.elements  ==> a.all_in(b)}
+        inspect a
+        case x^a proof
+            require (x^a).elements <= b.elements
+            proof   a.elements <= b.elements
+            ensure  (x^a).all_in(b) end
+        ensure a.elements <= b.elements  ==> a.all_in(b) end
     ensure
         a.elements <= b.elements  ==> a.all_in(b)
     end
@@ -282,8 +269,7 @@ is_prefix (a,b:[G]): BOOLEAN
 
 all(a:[G])
     proof
-        []  in {a: a + []  = a}
-        a   in {a: a + []  = a}
+        inspect a ensure a + [] = a end
     ensure
         a + []  = a
     end
@@ -291,10 +277,9 @@ all(a:[G])
 
 all(a,b,c:[G])
     proof
-        []  in {a: a + b + c = a + (b + c)}
-        a   in {a: a + b + c = a + (b + c)}
+        inspect a ensure (a + b) + c = a + (b + c) end
     ensure
-        a + b + c = a + (b + c)
+        (a + b) + c = a + (b + c)
     end
 
 
@@ -312,26 +297,13 @@ all(a,b,c:[G])
 
 all(a,b:[G])
     proof
-        proof   (-b) + []  = -b
-                (-([] + b)) = -b + -[]
-        ensure  [] in {a: -(a + b) = -b + -a} end
-
-        all(x,a)
-            require
-                -(a + b) = -b + -a
-            proof
-                (- (x^a + b))       =   -(a + b) + [x]    -- def '+', '-'
-
-                (- (a + b)) + [x]   =   -b + -a + [x]     -- ind hypo
-
-                (-b) + -a + [x]     =   -b + (-a + [x])   -- assoc '+'
-
-                (-b) + (-a + [x] )  =   -b + - x^a        -- def '-'
-            ensure
-                -(x^a + b) = -b + -x^a
-            end
-
-        a in {a: -(a + b) = -b + -a}
+        inspect a
+        case x^a proof
+            (- (x^a + b))       =   -(a + b) + [x]    -- def '+', '-'
+            (- (a + b)) + [x]   =   -b + -a + [x]     -- ind hypo
+            (-b) + -a + [x]     =   -b + (-a + [x])   -- assoc '+'
+            (-b) + (-a + [x] )  =   -b + - x^a        -- def '-'
+        ensure  -(a + b) = -b + -a end
     ensure
        -(a + b) = -b + -a
     end
@@ -339,24 +311,18 @@ all(a,b:[G])
 
 all(a:[G])
     proof
-        []  in {a: -(-a) = a}
-
-        all(x:G,a:[G])
-            require
-                -(-a) = a
-            proof
+        inspect a
+        case x^a proof
                 -(-x^a) = - (-a + [x])
 
                 ;- (-a + [x]) = -[x] + -(-a)
 
                 proof  -[x] = [x]
-                ensure -[x] + (-(-a)) = [x] + a end
+                ensure -[x] + -(-a) = [x] + a end
 
                 [x] + a = x^a
-            ensure
-                -(-x^a) = x^a
-            end
-        a  in {a: -(-a) = a}
+
+        ensure -(-a) = a end
     ensure
         -(-a) = a
     end
@@ -379,33 +345,23 @@ folded (f:(G,H)->H, b:H, l:[G]): H
 
 all(a,b:[G])
     proof
-        []  in {a: all(b:[G]) -a + b = (^).folded(b,a)}
+        inspect a
+        case x^a proof
+            all(b) -a + b = (^).folded(b,a)
 
-        all(x,a)
-            require
-                all(b:[G]) -a + b = (^).folded(b,a)
+            all(b)
             proof
-                all(b:[G]) -a + b = (^).folded(b,a)
-
-                all(b:[G])
-                proof
-                    (^).folded(b,x^a) = (^).folded(x^b,a)
-
-                    (^).folded(x^b,a) = -a + (x^b)
-
-                    (-a) + (x^b)      = -a + ([x] + b)
-
-                    (-a) + ([x] + b)  = -a + [x] + b
-
-                    (-a) + [x] + b    = -x^a + b
-                ensure
-                    -x^a + b = (^).folded(b,x^a)
-                end
+                (^).folded(b,x^a) = (^).folded(x^b,a)
+                (^).folded(x^b,a) = -a + (x^b)
+                (-a) + (x^b)      = -a + ([x] + b)
+                (-a) + ([x] + b)  = -a + [x] + b
+                (-a) + [x] + b    = -x^a + b
             ensure
-                all(b:[G]) -x^a + b = (^).folded(b,x^a)
+                -x^a + b = (^).folded(b,x^a)
             end
-
-        a in {a: all(b:[G]) -a + b = (^).folded(b,a)}
+        ensure
+            all(b) -a + b = (^).folded(b,a)
+        end
     ensure
         -a + b = (^).folded(b,a)
     end

@@ -911,6 +911,8 @@ let add_consequences_premise (i:int) (pc:t): unit =
       already available implications.
    *)
   assert (i < count pc);
+  if not (is_nbenv_current i pc) then
+    printf "add_consequences_premise %s\n" (string_of_term_i i pc);
   assert (is_nbenv_current i pc);
   assert (not (RD.is_intermediate (rule_data i pc)));
   let nbenv = nbenv pc in
@@ -1556,7 +1558,7 @@ let assumptions (pc:t): term list =
 
 let discharged (i:int) (pc:t): term * proof_term =
   (** The [i]th term of the current environment with all local variables and
-      assumptions discharged together with its proof term and its base index.
+      assumptions discharged together with its proof term.
    *)
   Proof_table.discharged i pc.base
 

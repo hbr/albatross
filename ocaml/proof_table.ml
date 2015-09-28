@@ -18,7 +18,6 @@ type desc = {nbenv0:     int;
 
 type t = {seq:       desc Ass_seq.t;
           names:     int array;
-          new_ctxt:  bool;
           c:         Context.t;
           depth:     int;
           count0:    int;      (* number of assertions at the start of the context *)
@@ -86,29 +85,17 @@ let count_variables (at:t): int = Context.count_variables at.c
 
 
 let count_last_arguments (at:t): int =
-  if at.new_ctxt then
-    Context.count_last_arguments at.c
-  else
-    0
+  Context.count_last_arguments at.c
 
 
 let has_result (at:t): bool =
-  if at.new_ctxt then
-    Context.has_result at.c
-  else
-    false
+  Context.has_result at.c
 
 let has_result_variable (at:t): bool =
-  if at.new_ctxt then
-    Context.has_result_variable at.c
-  else
-    false
+  Context.has_result_variable at.c
 
 let last_arguments_string (at:t): string =
-  if at.new_ctxt then
-    Context.local_arguments_string at.c
-  else
-    ""
+  Context.local_arguments_string at.c
 
 let descriptor (i:int) (at:t): desc =
   assert (i < count at);
@@ -227,7 +214,6 @@ let make (verbosity:int): t =
    depth    = 0;
    count0   = 0;
    names    = [||];
-   new_ctxt = true;
    nreq    = 0;
    maxreq  = 0;
    reqs    = [];
@@ -236,12 +222,10 @@ let make (verbosity:int): t =
    verbosity = verbosity}
 
 
-let push0 (names: int array) (new_ctxt:bool) (c:Context.t) (at:t): t =
-  assert (0 = Array.length names || new_ctxt);
+let push0 (names: int array) (c:Context.t) (at:t): t =
   {at with
    seq = Ass_seq.clone at.seq;
    names = names;
-   new_ctxt = new_ctxt;
    c        = c;
    depth    = 1 + at.depth;
    count0   = count at;
@@ -263,19 +247,15 @@ let push
   assert (depth at = Context.depth c);
   let c = Context.push entlst rt is_pred is_func rvar c in
   let names = Context.local_argnames c in
-  push0 names true c at
+  push0 names c at
 
 
 
 let push_untyped (names:int array) (at:t): t =
-  let nargs = Array.length names in
   let c = context at in
-  if 0 < nargs then begin
-    let c = Context.push_untyped names c in
-    assert (names = Context.local_argnames c);
-    push0 names true c at
-  end else
-    push0 names false c at
+  let c = Context.push_untyped names c in
+  assert (names = Context.local_argnames c);
+  push0 names c at
 
 
 

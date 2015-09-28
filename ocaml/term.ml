@@ -86,6 +86,8 @@ module Term: sig
 
   val map_free: (int->int) -> term -> int -> term
 
+  val lambda_inner: term -> int -> term
+
   val down_from: int -> int -> term -> term
 
   val down: int -> term -> term
@@ -494,7 +496,12 @@ end = struct
     map fb t
 
 
-
+  let  lambda_inner (t:term) (i:int): term =
+    (* Extract a lambda inner term where variable [i] becomes variable [0], all
+       variable below are shifted one up and all variables above are left unchanged.
+     *)
+    let f j = if j=i then 0 else j+1 in
+    map_free f t 0
 
 
   let map_to_term (f:int->int->term) (t:term): term =

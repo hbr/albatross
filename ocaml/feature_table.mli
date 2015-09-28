@@ -144,10 +144,12 @@ val feature_name: int -> t -> string
 
 val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
+val argument_names: int -> t -> int array
 val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
+val inductive_arguments: int -> t -> int list
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val is_case_matching:  term -> int -> term -> int -> t -> bool
