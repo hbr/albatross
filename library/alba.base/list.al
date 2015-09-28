@@ -328,6 +328,17 @@ all(a:[G])
     end
 
 
+all(x:G, a:[G])
+    proof
+        - - a = a
+
+        x ^ (-a)            = - - x ^ (-a)
+    ensure
+        x ^ (-a) = - (a + [x])
+    end
+
+
+
 
 
 {: List folding

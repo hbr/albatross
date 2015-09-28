@@ -300,6 +300,11 @@ and prove_inductive_type
       try Prover.prove_and_insert goal pc1
       with Not_found -> error_info info ("Cannot prove case \"" ^
                                          (PC.string_of_term pat pc1) ^ "\"")
+      | Proof.Limit_exceeded n ->
+          error_info info
+            ("Cannot prove case \"" ^
+             (PC.string_of_term pat pc1) ^ "\" because goal limit " ^
+             (string_of_int n) ^ " exceeded")
     in
     let t,pt = PC.discharged gidx pc1 in
     let _ = PC.add_proved_0 false (-1) t pt 0 pc in

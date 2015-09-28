@@ -133,6 +133,7 @@ all(a,b,c:[G], x,y:G, p,q:G?)
         (-[]  = [] )
         (-[x] = [x])        -- [x,y,...] is a shorthand for 'x^y^...^[] '
         (-x^a = -a + [x])
+        x^(-a) = - (a + [x])
 
         (-(a + b)  =  -b + -a)
 
