@@ -116,6 +116,19 @@ end = struct
   let generic_h       = symbol "H"
 end
 
+let n_names_with_start (c:char) (size:int): int array =
+  let code = Char.code c in
+  Array.init size (fun i -> ST.symbol (String.make 1 (Char.chr (i + code))))
+
+let standard_fgnames (size:int): int array =
+  n_names_with_start 'A' size
+
+let standard_argnames (size:int): int array =
+  n_names_with_start 'a' size
+
+let anon_argnames (size:int): int array =
+  Array.init size (fun i -> ST.symbol ("$" ^ (string_of_int i)))
+
 
 (*
 -----------------------------------------------------------------------------

@@ -132,7 +132,7 @@ let rec set_failed (i:int) (gs:t): unit =
   match g.parent with
     None ->
       assert (i = 0);
-      raise Not_found
+      raise (Proof_failed "")
   | Some (ipar,ialt,isub) ->
       let par = item ipar gs in
       par.nfailed <- 1 + par.nfailed;
@@ -448,9 +448,10 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
     PC.close pc;
   let rec round (i:int) (start:int): unit =
     if PC.is_interface_check pc && 1 < i then
-      raise Not_found;
+      raise (Proof_failed "");
     if goal_limit () <= start then
-      raise (Limit_exceeded (goal_limit ()));
+      raise (Proof_failed (", goal limit " ^ (string_of_int (goal_limit())) ^
+                           " exceeded"));
     let cnt = count gs in
     if PC.is_tracing pc then
       printf "%s-- round %d with %d goals --\n" (PC.trace_prefix pc) i (cnt - start);
@@ -478,7 +479,7 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
 let is_provable (g:term) (pc:PC.t): bool =
   try
     let _ = proof_term g pc in true
-  with Not_found | Limit_exceeded _ ->
+  with Proof_failed _ ->
     false
 
 

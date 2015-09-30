@@ -101,3 +101,5 @@ val inherit_parent: int -> int -> type_term array -> info -> t -> unit
 val add_potential_equalities: int -> t -> unit
 
 val check_interface: t -> unit
+
+val evaluated_star: term -> t -> term

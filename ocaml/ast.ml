@@ -94,20 +94,21 @@ let term_preconditions (info:info) (t:term) (pc:PC.t): term list =
                               (PC.string_of_term t pc))
 
 
+
+
 let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
   if PC.is_private pc then
     let pres = term_preconditions info t pc in
     List.iter
-      (fun t ->
-        try let _ = Prover.prove_and_insert t pc in ()
-          (*Prover.prove t pc*)
-        with
-          Not_found ->
-            error_info info ("Cannot prove precondition " ^ (PC.string_of_term t pc))
-        | Proof.Limit_exceeded limit ->
-            error_info info ("Cannot prove precondition "
-                             ^ (PC.string_of_term t pc)
-                             ^ ", goal limit " ^ (string_of_int limit) ^ " exceeded"))
+      (fun p ->
+        try
+          ignore (Prover.prove_and_insert p pc)
+        with Proof.Proof_failed msg ->
+          error_info info ("Cannot prove precondition \"" ^
+                           (PC.string_of_term p pc) ^
+                           "\"\n  of term \"" ^
+                           (PC.string_of_term t pc) ^ "\"" ^
+                           msg))
       pres
 
 
@@ -155,11 +156,8 @@ let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int * info
     let res = Prover.prove_and_insert t pc in
     PC.close pc;
     res, ie.i
-  with Not_found ->
-    error_info ie.i "Cannot prove"
-  | Limit_exceeded limit ->
-      let str = string_of_int limit in
-      error_info ie.i ("Cannot prove, goal limit " ^ str ^ " exceeded")
+  with Proof.Proof_failed msg ->
+    error_info ie.i ("Cannot prove" ^ msg)
 
 
 
@@ -230,12 +228,143 @@ and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
       begin match e with
         Identifier id ->
           prove_inductive_type (i+1) ie.i id lst ens pc
+      | Expcolon (Funapp(Identifier p_id,elem),set) ->
+          prove_inductive_set (i+1) ie.i p_id elem set lst ens pc
       | _ ->
-          not_yet_implemented ie.i "Inspect proofs with inductive sets"
+          error_info ie.i "Illegal inspect proof"
       end
   | _ ->
       let _ = prove_basic_expression ie pc in
       ()
+
+
+and prove_inductive_set
+    (rcnt:int) (* recursion counter *)
+    (info:info) (p_id:int) (elem:expression) (set:expression)  (* p(a): exp *)
+    (lst:(info_expression*compound)list)
+    (ens:info_expression)
+    (pc:PC.t)
+    : unit =
+  let pc0   = PC.push_untyped [|p_id|] pc in
+  let c0    = PC.context pc0 in
+  let nvars = Context.count_variables c0 in
+  let elem, p, rules, goal, q =
+    let bexp = get_boolean_term (withinfo info (Funapp (set,elem))) pc0
+    and goal = Typer.boolean_term ens c0 in
+    verify_preconditions bexp info pc0;
+    ignore (get_boolean_term
+              (withinfo info (Binexp(Eqop,(Identifier p_id),set))) pc0);
+    let elem,set1 =
+      match bexp with
+        Application (f,[|elem|],_) ->
+          elem, f
+      | VAppl (idx,[|elem|]) ->
+          elem, Variable idx
+      | _ ->
+          assert false (* cannot happen *) in
+    let q =
+      let tp = Context.variable_type 0 c0 in
+      let np = Context.arity_of_downgraded_type tp c0 in
+      let nms = anon_argnames np in
+      let t0 =
+        let ft = Context.feature_table c0 in
+        let args = Feature_table.args_of_tuple elem nvars ft in
+        if Array.length args = np then
+          try
+            let _,map = Array.fold_left (fun (j,map) arg ->
+              let i = Term.variable arg in
+              if nvars <= i then raise Not_found;
+              j+1, IntMap.add i j map) (0,IntMap.empty) args in
+            let t0 = Term.lambda_inner_map goal map in
+            Feature_table.add_tuple_accessors t0 np nvars ft
+          with Not_found ->
+            Term.lambda_inner2 goal elem
+        else
+          Term.lambda_inner2 goal elem in
+      let q = Lam (np, nms, [], t0, true) in
+      verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
+      q
+    in
+    let set2 = PC.evaluated_star set1 pc0 in
+    begin match set2 with
+      Indset (n,nms,rs) ->
+        assert (n = 1);
+        begin try ignore (Prover.prove_and_insert bexp pc0); PC.close pc0
+        with Proof.Proof_failed _ ->
+          error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
+                           "\" is not in the inductive set");
+        end;
+        let rs = Array.map (fun t -> Term.down_from 1 1 t) rs in
+        elem,set2,rs,goal,q
+    | _ ->
+        error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
+                         "\" does not evaluate to an inductive set")
+    end
+  in
+  let prove_case
+      (info:info) (rule:term) (ps:term list) (tgt:term) (cmp:compound)
+      (pc1:PC.t) (pc0:PC.t)
+      : unit =
+    List.iter (fun t -> ignore (PC.add_assumption t pc1)) ps;
+    PC.close pc1;
+    List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
+    let gidx =
+      try Prover.prove_and_insert tgt pc1
+      with Proof.Proof_failed msg ->
+        error_info info ("Cannot prove case \"" ^
+                         (PC.string_of_term rule pc1) ^
+                         "\"" ^ msg)
+    in
+    let t,pt = PC.discharged gidx pc1 in
+    ignore(PC.add_proved_0 false (-1) t pt 0 pc0);
+    PC.close pc0
+  in
+  let nrules = Array.length rules
+  and imp_id = nvars + Feature_table.implication_index in
+  let unproved_rules =
+    List.fold_left
+      (fun unproved (ie,cmp) ->
+        let rule,nms = Typer.case_variables ie.i ie.v true c0 in
+        let n = Array.length nms in
+        let pc1 = PC.push_untyped nms pc0 in
+        let c1  = PC.context pc1 in
+        let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
+        let irule,unproved =
+          let rule = Term.all_quantified n nms rule in
+          let l1, unproved = List.partition
+              (fun i -> Term.equivalent rules.(i) rule) unproved in
+          if l1 = [] then
+            error_info ie.i "Invalid case";
+          assert (List.length l1 = 1);
+          List.hd l1,unproved in
+        let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p q in
+        assert (n1 = n);
+        prove_case ie.i rule ps tgt cmp pc1 pc0;
+        unproved)
+      (Array.to_list (Array.init nrules (fun i -> i)))
+      lst
+  in
+  List.iter
+    (fun irule ->
+      let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
+      let rule =
+        try
+          let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
+          assert (n1 = n);
+          t0
+        with Not_found -> rules.(irule) in
+      let pc1 = PC.push_untyped nms pc0 in
+      prove_case ens.i rule ps tgt [] pc1 pc0)
+    unproved_rules;
+  let gidx =
+    (*try Prover.prove_and_insert (Application(q,[|Variable elem|],true)) pc0*)
+    try Prover.prove_and_insert (Application(q,[|elem|],true)) pc0
+    with Proof.Proof_failed _  -> assert false (* cannot happen *) in
+  let t,pt = PC.discharged gidx pc0 in
+  ignore(PC.add_proved_0 false (-1) t pt 0 pc);
+  PC.close pc
+
+
 
 and prove_inductive_type
     (rcnt:int) (* recursion counter *)
@@ -291,23 +420,18 @@ and prove_inductive_type
     let goal = Application(p,[|pat|],true) in
     List.iter
       (fun i ->
-        let _ =
-          PC.add_assumption (Application(p,[|Variable i|],true)) pc1 in ())
+        ignore (PC.add_assumption (Application(p,[|Variable i|],true)) pc1))
       lstind;
     PC.close pc1;
     List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
     let gidx =
       try Prover.prove_and_insert goal pc1
-      with Not_found -> error_info info ("Cannot prove case \"" ^
-                                         (PC.string_of_term pat pc1) ^ "\"")
-      | Proof.Limit_exceeded n ->
-          error_info info
-            ("Cannot prove case \"" ^
-             (PC.string_of_term pat pc1) ^ "\" because goal limit " ^
-             (string_of_int n) ^ " exceeded")
+      with Proof.Proof_failed msg ->
+        error_info info ("Cannot prove case \"" ^
+                         (PC.string_of_term pat pc1) ^ "\"" ^ msg)
     in
     let t,pt = PC.discharged gidx pc1 in
-    let _ = PC.add_proved_0 false (-1) t pt 0 pc in
+    ignore (PC.add_proved_0 false (-1) t pt 0 pc);
     PC.close pc
   in
   let cons_set,tp,p,goal =
@@ -365,7 +489,9 @@ and prove_inductive_type
         prove_case ens.i cons_idx pat p [] pc1 pc
       end)
     cons_set;
-  let _ = Prover.prove_and_insert goal pc in ();
+  begin try ignore (Prover.prove_and_insert goal pc)
+  with Proof.Proof_failed _ -> assert false (* cannot happen *)
+  end;
   PC.close pc
 
 
@@ -703,8 +829,8 @@ let feature_specification
   | _ ->
       let prove cond errstring =
         try Prover.prove cond pc
-        with Not_found ->
-          error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"")
+        with Proof.Proof_failed msg ->
+          error_info info ("Cannot prove " ^ errstring ^ " of \"Result\"" ^ msg)
       in
       let posts = function_property_list enslst pc in
       if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
@@ -889,7 +1015,7 @@ let add_case_induction
                   Term.binary imp_id1 p tgt, i+1)
                 (tgt,0)
                 a1lst in
-            Term.all_quantified nargs (Feature_table.standard_argnames nargs) p
+            Term.all_quantified nargs (standard_argnames nargs) p
         in
         Term.binary imp_id0 p tgt)
       tgt
@@ -926,7 +1052,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       (Variable false_id) in
   let t = Term.all_quantified
       (n1+n2)
-      (Feature_table.standard_argnames (n1+n2))
+      (standard_argnames (n1+n2))
       t in
   (* printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
   add_case_axiom t pc
@@ -947,7 +1073,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       Variable (1+idx)
     else
       let args = Array.init n (fun i -> Variable i)
-      and nms  = Feature_table.standard_argnames n in
+      and nms  = standard_argnames n in
       let t    = VAppl(1+n+idx, args) in
       Term.quantified false n nms t
   in
@@ -958,7 +1084,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   let mtch1 = Flow(Asexp, [|Variable 0; mtch1|])
   and mtch2 = Flow(Asexp, [|Variable 0; mtch2|]) in
   let t = Term.binary imp_id mtch1 (Term.binary imp_id mtch2 (Variable false_id)) in
-  let q = Term.all_quantified 1 (Feature_table.standard_argnames 1) t in
+  let q = Term.all_quantified 1 (standard_argnames 1) t in
   (*printf "inversion %s\n" (PC.string_of_term q pc);*)
   add_case_axiom q pc
 
@@ -998,7 +1124,7 @@ let add_case_injections
       else
         let args1 = Array.init n (fun i -> Variable i)
         and args2 = Array.init n (fun i -> Variable (n+i))
-        and nms   = Feature_table.standard_argnames (2*n)
+        and nms   = standard_argnames (2*n)
         and idx   = 2*n + idx
         and eq_id0 = 2*n  +
             Feature_table.equality_index_of_type (Sign.result s) tvs ft
@@ -1188,7 +1314,7 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
     Normal_type ([], ST.symbol str,[])
   in
   begin (* add equality *)
-    let argnames = Array.to_list (Feature_table.standard_argnames 2) in
+    let argnames = Array.to_list (standard_argnames 2) in
     let fn     = withinfo UNKNOWN (FNoperator Eqop)
     and entlst = withinfo UNKNOWN [Typed_entities (argnames,cls_tp)]
     and rt     =

@@ -558,6 +558,11 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   let tsimp, te, modi = simp t 0 in
   let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
   assert (ta = t);
+  if tb <> tsimp then begin
+    printf "simplified_term  %s\n" (string_of_term t pc);
+    printf "           tb    %s\n" (string_of_term tb pc);
+    printf "           tsimp %s\n" (string_of_term tsimp pc);
+  end;
   assert (tb = tsimp);
   assert (modi = (tsimp <> t));
   (*if modi then begin
@@ -828,6 +833,14 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
 
 
 
+let evaluated_star (t:term) (pc:t): term =
+  let rec eval t =
+    let t,e,modi = evaluated_term t 0 pc in
+    if modi then eval t
+    else t
+  in
+  eval t
+
 
 let add_mp0 (t:term) (i:int) (j:int) (search:bool) (pc:t): int =
   (* Add the term [t] by applying the modus ponens rule with [i] as the premise
@@ -1048,7 +1061,7 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
           ()
         else begin
           Proof_table.add_proved_0 indlaw pt pc.base;
-          let _ = raw_add indlaw true pc in ()
+          ignore(raw_add indlaw true pc)
         end
       end
   | _ ->

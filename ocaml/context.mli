@@ -157,3 +157,5 @@ val get_type: type_t withinfo -> t -> type_term
 val string_of_type: type_term -> t -> string
 
 val downgrade_term: term -> int -> t -> term
+
+val arity_of_downgraded_type: type_term -> t -> int

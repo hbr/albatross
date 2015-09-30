@@ -139,6 +139,8 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
       argments.  *)
 
 
+val arity_of_downgraded: int -> type_term -> int
+
 val update: int -> header_mark withinfo -> formal_generics -> t -> unit
 
 val add: header_mark withinfo -> int -> formal_generics -> t -> unit

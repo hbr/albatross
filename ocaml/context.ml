@@ -1035,7 +1035,7 @@ let term_preconditions (t:term)  (c:t): term list =
               in
               let lst = List.fold_left
                   (fun lst (n,mtch) ->
-                    let nms = Feature_table.standard_argnames n in
+                    let nms = standard_argnames n in
                     let q   = Term.pattern n nms mtch in
                     let t = Flow(Asexp,[|args.(0);q|]) in
                     let t = Term.unary not_id t in
@@ -1166,3 +1166,8 @@ let string_of_type (tp:type_term) (c:t): string =
 
 let downgrade_term (t:term) (nb:int) (c:t): term =
   Feature_table.downgrade_term t (nb + count_variables c) c.ft
+
+
+let arity_of_downgraded_type (tp:type_term) (c:t): int =
+  let ntvs = TVars_sub.count_all c.entry.tvs_sub in
+  Class_table.arity_of_downgraded ntvs tp

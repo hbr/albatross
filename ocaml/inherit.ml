@@ -107,13 +107,8 @@ let check_validity (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
       let spec = Feature_table.variant_term spec 0 icls cls ft in
       try
         prove spec pc
-      with Not_found ->
-        error_info info (error_string spec)
-      | Proof.Limit_exceeded limit ->
-          let str = string_of_int limit in
-          error_info info ((error_string spec) ^ " because the goal limit " ^
-                           str ^ " is exceeded")
-    )
+      with Proof.Proof_failed msg ->
+        error_info info ((error_string spec) ^ msg))
     specs
 
 

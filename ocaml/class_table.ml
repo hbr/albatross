@@ -538,6 +538,34 @@ let extract_from_tuple
 
 
 
+let extract_from_tuple_max (ntvs:int) (tp:type_term): type_term array =
+  let tup_idx = ntvs + tuple_index in
+  let rec extract (tp:type_term) (lst:type_term list): type_term list =
+    let cls_idx, args = split_type_term tp in
+    if cls_idx = tup_idx then begin
+      extract args.(1) (args.(0)::lst)
+    end else
+      tp :: lst
+  in
+  let lst = extract tp [] in
+  Array.of_list (List.rev lst)
+
+
+
+let arity_of_downgraded (ntvs:int) (tp:type_term): int =
+  let pred_idx = predicate_index + ntvs
+  and func_idx = function_index  + ntvs
+  and dum_idx  = dummy_index     + ntvs
+  in
+  let cls,args = split_type_term tp in
+  if cls = pred_idx || cls = func_idx || cls = dum_idx then begin
+    assert (0 < Array.length args);
+    let args = extract_from_tuple_max ntvs args.(0) in
+    Array.length args
+  end else
+    0
+
+
 let downgrade_signature
     (ntvs:int) (sign:Sign.t) (nargs:int): Sign.t =
   assert (Sign.arity sign < nargs);

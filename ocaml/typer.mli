@@ -8,3 +8,5 @@ val result_term: info_expression -> Context.t -> term
 val boolean_term: info_expression -> Context.t -> term
 
 val typed_term: info_expression -> type_term -> Context.t -> term
+
+val untyped_term: info_expression -> Context.t -> term

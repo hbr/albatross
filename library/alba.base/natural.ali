@@ -22,6 +22,11 @@ end
 4: NATURAL = 3.successor
 
 (<=) (a,b:NATURAL): BOOLEAN
+    -> inspect a, b
+       case 0,_ then true
+       case successor(_), 0 then false
+       case successor(a), successor(b) then a <= b end
+
 (<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
 
 (+) (a,b: NATURAL):  NATURAL

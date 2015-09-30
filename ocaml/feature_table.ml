@@ -1559,7 +1559,7 @@ let export_feature (i:int) (withspec:bool) (ft:t): unit =
       ()
 
 
-
+(*
 let n_names_with_start (c:char) (size:int): int array =
   let code = Char.code c in
   Array.init size (fun i -> ST.symbol (String.make 1 (Char.chr (i + code))))
@@ -1569,7 +1569,7 @@ let standard_fgnames (size:int): int array =
 
 let standard_argnames (size:int): int array =
   n_names_with_start 'a' size
-
+*)
 
 let add_base
     (mdl_nme: string)

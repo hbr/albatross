@@ -715,6 +715,17 @@ let add_anys (n:int) (tb:t):unit =
   tb.nglobals <- n + tb.nglobals
 
 
+
+let new_tuple (n:int) (tb:t): type_term =
+  (* Make an new n tuple (A,B,..) with A:ANY with n new global type variables. *)
+  assert (1 < n);
+  let start = globals_start tb + tb.nglobals in
+  add_anys n tb;
+  let arr = Array.init n (fun i -> Variable (start+i)) in
+  Class_table.to_tuple (Tvars.count_all tb.tvs) 0 arr
+
+
+
 let push_expected (tb:t): unit =
   Seq.push tb.rtype tb.reqstack
 
@@ -789,6 +800,18 @@ let callable_signature (s:Sign.t) (tb:t): Sign.t =
           in
           unify tp rt tb;
           Sign.make_const tp
+      | VAppl(i,[|Variable j|])
+        when funrec.nargs > 1 && i = predicate_index tb
+            && is_tv j tb && not (has_sub j tb) ->
+              let tup = new_tuple funrec.nargs tb in
+              add_sub j tup tb;
+              Sign.make_const (VAppl(i,[|tup|]))
+      | VAppl(i,[|Variable j;res|])
+        when funrec.nargs > 1 && i = function_index tb
+            && is_tv j tb && not (has_sub j tb) ->
+              let tup = new_tuple funrec.nargs tb in
+              add_sub j tup tb;
+              Sign.make_const (VAppl(i,[|tup;res|]))
       | _ ->
           Sign.make_const rt
     in
@@ -802,7 +825,12 @@ let push_term (t:term) (s:Sign.t) (tb:t): unit =
   (* Push the term [t] which is not a leaf *)
   assert (Sign.is_constant s);
   let s1 =
-    if is_expecting_function tb then callable_signature s tb else s in
+    if Sign.is_constant s && is_expecting_function tb then
+      let funrec = Seq.last tb.funstack in
+      let s = Sign.make_const (substituted_type (Sign.result s) tb) in
+      Class_table.downgrade_signature (Tvars.count_all tb.tvs) s funrec.nargs
+      (*callable_signature s tb*)
+    else s in
   Seq.push {term = t; sign0 = s; sign = s1} tb.terms
 
 
@@ -856,7 +884,9 @@ let check_as_argument (i:int) (s:Sign.t) (tb:t): unit =
 
 let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
   assert (Sign.has_result s);
-  resize 0 0 0 tb;
+  if is_expecting_function tb then
+    resize 0 ((Seq.last tb.funstack).nargs+1) 0 tb;
+  (*resize 0 0 0 tb;*)
   Seq.push tb.nglobals tb.gcntseq;
   let transform =
     if Tvars.count_local tvs = 0 && Tvars.count_fgs tvs = 0  then begin
@@ -885,6 +915,7 @@ let expect_function (nargs:int) (pr:int) (tb:t): unit =
   let pos = Seq.count tb.terms in
   if is_expecting_function tb then begin (* already expecting a function, new function
                                             has to return a predicate or a function *)
+    if tb.trace then printf "  already expecting function\n";
     resize 0 (nargs+1) 0 tb;
     let funrec = Seq.last tb.funstack in
     let start  = globals_start tb + tb.nglobals in

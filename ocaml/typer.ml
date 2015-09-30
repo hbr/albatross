@@ -984,3 +984,9 @@ let typed_term
   assert (not (Context.is_global c));
   let tb = Term_builder.occupy_typed tp c in
   analyze_expression ie tb c
+
+let untyped_term
+    (ie:info_expression) (c:Context.t): term =
+  assert (not (Context.is_global c));
+  let tb = Term_builder.occupy_untyped c in
+  analyze_expression ie tb c

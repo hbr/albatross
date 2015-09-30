@@ -75,7 +75,7 @@ val tuple_index:       int
 val first_index:       int
 val second_index:      int
 
-val standard_argnames: int -> int array
+(*val standard_argnames: int -> int array*)
 
 val base_table: int -> t
 
@@ -162,6 +162,7 @@ val is_term_public:    term -> int -> t -> bool
 
 val owner: int -> t -> int
 
+val add_tuple_accessors: term -> int -> int -> t -> term
 val make_lambda:      int -> int array -> term list -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term

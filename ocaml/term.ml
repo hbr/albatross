@@ -88,6 +88,10 @@ module Term: sig
 
   val lambda_inner: term -> int -> term
 
+  val lambda_inner_map: term -> int IntMap.t -> term
+
+  val lambda_inner2: term -> term -> term
+
   val down_from: int -> int -> term -> term
 
   val down: int -> term -> term
@@ -142,12 +146,11 @@ module Term: sig
   val split_implication_chain: term -> int -> term list * term
   val make_implication_chain:  term list -> term -> int -> term
 
-  val implication_chain: term -> int -> (term list * term) list
-
   val split_rule: term -> int -> int * int array * term list * term
 
-  val closure_rule: int -> term -> term
-  val induction_law: int -> term -> term
+  val closure_rule:   int -> term -> term
+  val induction_rule: int -> int -> term -> term -> int * int array * term list * term
+  val induction_law:  int -> term -> term
 end = struct
 
   let is_variable_i (t:term) (i:int): bool =
@@ -273,17 +276,17 @@ end = struct
      *)
     let rec fld (a:'a) (t:term) (level) (nb:int): 'a =
       let var i = if nb <= i then f a (i-nb) level else a
-      and fldarr a arr =
+      and fldarr a arr nb =
         Array.fold_left (fun a t -> fld a t (level+1) nb) a arr
       in
       match t with
         Variable i -> var i
       | VAppl (i,args) ->
           let a = var i in
-          fldarr a args
+          fldarr a args nb
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
-          fldarr a args
+          fldarr a args nb
       | Lam (n,_,pres,t,_) ->
           let level = 1 + level
           and nb    = 1 + nb in
@@ -292,9 +295,9 @@ end = struct
       | QExp (n,_,t,_) ->
           fld a t (level+1) (nb+n)
       | Flow (ctrl,args) ->
-          fldarr a args
+          fldarr a args nb
       | Indset (n,nms,rs) ->
-          fldarr a rs
+          fldarr a rs (n+nb)
     in
     fld a t 0 0
 
@@ -498,9 +501,22 @@ end = struct
 
   let  lambda_inner (t:term) (i:int): term =
     (* Extract a lambda inner term where variable [i] becomes variable [0], all
-       variable below are shifted one up and all variables above are left unchanged.
+       other variables are shifted one up.
      *)
     let f j = if j=i then 0 else j+1 in
+    map_free f t 0
+
+
+  let  lambda_inner_map (t:term) (map:int IntMap.t): term =
+    (* Extract a lambda inner term ***** *)
+    let n = IntMap.cardinal map in
+    let f j =
+      try
+        let i = IntMap.find j map in
+        assert (i < n); i
+      with Not_found ->
+        j + n
+    in
     map_free f t 0
 
 
@@ -585,6 +601,47 @@ end = struct
   let array_up (n:int) (arr:term array): term array =
     if n = 0 then arr
     else Array.map (fun t -> up n t) arr
+
+
+  let  lambda_inner2 (t:term) (sub:term): term =
+    (* Extract a lambda inner term where subterm [sub] becomes variable [0], all
+       variables are shifted one up.
+      *)
+    let rec lam t sub nb =
+      let lam_args args sub nb = Array.map (fun a -> lam a sub nb) args
+      and lam_lst  lst  sub nb = List. map (fun a -> lam a sub nb) lst in
+      if equivalent t sub then
+        Variable 0
+      else
+        match t with
+          Variable i when i < nb ->
+            t
+        | Variable i ->
+            Variable (i+1)
+        | VAppl(i,args) ->
+            VAppl(i+1,lam_args args sub nb)
+        | Application(f,args,pr) ->
+            Application(lam f sub nb, lam_args args sub nb,pr)
+        | Lam(n,nms,ps,t0,pr) ->
+            let sub = up 1 sub
+            and nb  = 1 + nb in
+            let ps  = lam_lst ps sub nb in
+            let t0  = lam t0 sub nb in
+            Lam(n,nms,ps,t0,pr)
+        | QExp(n,nms,t0,is_all) ->
+            let sub = up n sub
+            and nb  = n + nb in
+            let t0  = lam t0 sub nb in
+            QExp(n,nms,t0,is_all)
+        | Flow(ctrl,args) ->
+            Flow(ctrl, lam_args args sub nb)
+        | Indset (n,nms,rs) ->
+            let sub = up n sub in
+            let nb = n + nb in
+            let rs = lam_args rs sub nb in
+            Indset(n,nms,rs)
+    in
+    lam t sub 0
 
 
   let part_sub_from
@@ -868,31 +925,6 @@ end = struct
 
 
 
-  let implication_chain (t:term) (impid:int)
-      : (term list * term) list =
-    (* Extract the implication chain of the term 't' i.e. we have
-
-       t = (a=>b=>...=>z)
-
-       result:
-       [([],a=>b=>...=>z), ([a],b=>...=>z), ... , ([a,...,y],z)]
-
-       In the case that 't' is not an implication then the returned list
-       consists only of the first element.
-     *)
-    let rec chainr (t:term)
-        : (term list * term) list =
-      try
-        let a,b = binary_split t impid in
-        ([],t) :: (List.map
-                     (fun (ps,tgt) -> a::ps,tgt)
-                     (chainr b))
-      with Not_found ->
-        [([],t)]
-    in
-    chainr t
-
-
   let closure_rule (i:int) (t:term): term =
     assert (0 <= i);
     match t with
@@ -905,8 +937,69 @@ end = struct
 
 
 
+  let induction_rule (imp_id:int) (i:int) (p:term) (q:term)
+      : int * int array * term list * term =
+    (* Calculate the induction rule [i] for the inductively defined set [p]
+
+       The closure rule [i] is
+
+           all(x,y,...)   p(e1) ==> ... ==> p(en) ==> p(e)
+
+           where each p(ei) could be ei as well
+
+       The induction rule [i] is
+
+           all(x,y,...)   p(e1) ==> q(e1) ==>
+                          p(e2) ==> q(e2) ==>
+                          ...
+                          p(en) ==> q(en) ==>
+                          p(e)  ==> q(e)
+
+           where for a degenerate premise ei we get 'ei ==>' instead of
+           'p(ei) ==> q(ei) ==>'
+
+       The function returs the formal arguments names, the list of premises and the
+       target.
+
+       Note: We are in an environment where the set [q] is represented by
+       'Variable 1'. This is the outer environment of the induction rule.
+     *)
+    let pair (n:int) (t:term): term * term =
+      match t with
+        Application(Variable i,args,pr) when i = n ->
+          assert pr;
+          assert (Array.length args = 1);
+          sub_from t n [|p|] 0,
+          sub_from t n [|q|] 0
+      | _ ->
+          raise Not_found
+    in
+    match p with
+      Indset (n,nms,rs) ->
+        assert (n = 1);
+        let nrules = Array.length rs in
+        assert (i < nrules);
+        let n,nms,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
+        let last,tgt = try pair n tgt with Not_found -> assert false in
+        let ps = List.fold_left
+            (fun ps t ->
+              try
+                let t1,t2 = pair n t in
+                t1 :: t2 :: ps
+              with Not_found ->
+                let t = down_from 1 n t in
+                t :: ps)
+            [last]
+            ps_rev
+        in
+        n,nms,ps,tgt
+    | _ ->
+        invalid_arg "Not an inductive set"
+
+
+
   let induction_law (imp_id:int) (p:term): term =
-    (* Calculate the induction rule for the inductively defined set [p]
+    (* Calculate the induction law for the inductively defined set [p]
 
        all(a,q) p(a) ==> ind0 ==> ... ==> indn ==> q(a)
 
@@ -924,33 +1017,10 @@ end = struct
       Indset (n,nms,rs) ->
         assert (n = 1);
         let nrules = Array.length rs in
-        let pair (n:int) (t:term): term * term =
-          match t with
-            Application(Variable i,args,pr) when i = n ->
-              assert pr;
-              assert (Array.length args = 1);
-              sub_from t n [|p|] 0,
-              sub_from t n [|Variable 1|] 0
-          | _ ->
-              raise Not_found
-        in
-        let rule (i:int): term =
-          let n,nms,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
-          let imp_id = imp_id + n in
-          let chn =
-            let t1,t2 =  try pair n tgt with Not_found -> assert false in
-            binary imp_id t1 t2 in
-          let chn = List.fold_left
-              (fun chn t ->
-                try
-                  let t1,t2 = pair n t in
-                  binary imp_id t1 (binary imp_id t2 chn)
-                with Not_found ->
-                  binary imp_id t chn)
-              chn
-              ps_rev in
-          all_quantified n nms chn
-        in
+        let rule i =
+          let n,nms,ps,tgt = induction_rule imp_id i p (Variable 1) in
+          let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
+          all_quantified n nms chn in
         let tgt =
           interval_fold
             (fun tgt j ->

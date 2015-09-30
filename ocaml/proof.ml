@@ -9,6 +9,7 @@ open Term
 open Printf
 
 exception Limit_exceeded of int
+exception Proof_failed of string
 
 module Eval = struct
   type t =
@@ -628,8 +629,13 @@ end = struct
     let uvars_pt = used_variables nargs pt_arr in
     if not (nargs1 = IntSet.cardinal uvars_pt &&
             List.for_all (fun i -> IntSet.mem i uvars_pt) uvars_t)
-    then
-      raise Not_found;
+    then begin
+      printf "normalize_pair\n";
+      printf "   nargs %d, nargs1 %d, card uvars_pt %d, nms %s\n"
+        nargs nargs1 (IntSet.cardinal uvars_pt)
+        ("(" ^ (String.concat ","
+                  (List.map Support.ST.string (Array.to_list nms))) ^ ")");
+      raise Not_found end;
     let args = Array.make nargs (Variable (-1))
     and nms1 = Array.make nargs1 (-1) in
     List.iteri
