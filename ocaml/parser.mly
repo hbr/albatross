@@ -302,8 +302,8 @@ proof_expr:
     info_expr_1 { $1 }
 |   proof_inner { $1 }
 |   proof_all_inner {
-  let entlst,req,impl,ens = $1 in
-  let exp = Expquantified (Universal,
+  let quant, entlst,req,impl,ens = $1 in
+  let exp = Expquantified (quant,
                            entlst,
                            Expproof(req, Some impl, ens)) in
   withinfo (rhs_info 1) exp
@@ -331,7 +331,15 @@ proof_all_inner:
        ass_ens
     KWend {
   let entlst = withinfo (rhs_info 2) $2 in
-  entlst, $4, $5, $6
+  Universal, entlst, $4, $5, $6
+}
+|   KWsome formal_arguments opt_nl
+       ass_req_opt
+       ass_imp
+       ass_ens
+    KWend {
+  let entlst = withinfo (rhs_info 2) $2 in
+  Existential, entlst, $4, $5, $6
 }
 
 
