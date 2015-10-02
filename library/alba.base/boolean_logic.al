@@ -46,23 +46,11 @@ all(a,b:BOOLEAN)
     require
         not a or not b
     proof
-        not a  ==>  not (a and b)
-        not b  ==>  not (a and b)
+        if not a orif not b ensure not (a and b) end
     ensure
         not (a and b)
     end
 
-
-all(a:BOOLEAN)
-    proof
-        require
-            not (a or not a)
-        ensure
-            false
-        end
-    ensure
-        a or not a
-    end
 
 
 all(a:BOOLEAN)
@@ -78,8 +66,7 @@ all(a,b:BOOLEAN)
     require
         a or b
     proof
-        a  ==>  b or a
-        b  ==>  b or a
+        if a orif b ensure b or a end
     ensure
         b or a
     end
@@ -88,9 +75,9 @@ all(a,b,c:BOOLEAN)
     require
         a or b or c
     proof
-        require a or b
-        proof   a  ==> a or (b or c)
-        ensure  a or (b or c) end
+        if a or b proof a ==> a or (b or c)
+        orif c
+        ensure a or (b or c) end
     ensure
         a or (b or c)
     end
@@ -100,26 +87,4 @@ all(a,b,c:BOOLEAN)
         a or (b or c)
     ensure
         a or b or c
-    end
-
-all(a,b:BOOLEAN)
-    require
-        not a ==> b
-    proof
-        a or not a
-        a     ==> a or b
-        not a ==> a or b
-    ensure
-        a or b
-    end
-
-
-all(a,b:BOOLEAN)
-    require
-        a or b
-        not a
-    proof
-        a ==> b
-    ensure
-        b
     end

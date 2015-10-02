@@ -87,9 +87,15 @@ val count:          t -> int
 val count_previous: t -> int
 val count_global:   t -> int
 
+val count_variables:t -> int
+
 val term_orig:      int -> t -> term * int
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
+
+val negation:       term -> t -> term
+val implication:    term -> term -> t -> term
+val disjunction:    term -> term -> t -> term
 
 val check_deferred: t -> unit
 val owner:          t -> int
@@ -103,3 +109,8 @@ val add_potential_equalities: int -> t -> unit
 val check_interface: t -> unit
 
 val evaluated_star: term -> t -> term
+
+val excluded_middle:     t -> int
+val or_elimination:      t -> int
+val has_excluded_middle: t -> bool
+val has_or_elimination:  t -> bool

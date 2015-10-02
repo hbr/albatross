@@ -88,6 +88,13 @@ all(a,b,c:BOOLEAN)
     end
 
 
+all(a,b:BOOLEAN)
+    ensure
+        a or not a
+        a or b ==> not a ==> b
+        (not a ==> b) ==> a or b
+    end
+
 all(a:BOOLEAN)
     ensure
         a = a

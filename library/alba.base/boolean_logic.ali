@@ -9,8 +9,6 @@ all(a,b,c:BOOLEAN)
     ensure
         false ==> a                   -- ex falso quodlibet
 
-        a or not a                    -- excluded middle
-
         a or a ==> a                  -- idempotence of 'or'
 
         a or b ==> b or a             -- commutativity of 'or'
@@ -29,8 +27,4 @@ all(a,b,c:BOOLEAN)
         -- associativity of 'or'
         (a or b) or c ==> a or (b or c)
         a or (b or c) ==> (a or b) or c
-
-        -- 'or' and implication
-        (not a ==> b) ==> a or b
-        a or b ==> not a ==> b
     end

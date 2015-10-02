@@ -129,7 +129,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
        KWinherit   KWinspect      KWinvariant
 %token KWlocal
 %token KWnot       KWnote
-%token KWold       KWor
+%token KWold       KWor           KWorif
 %token KWproof
 %token KWredefine  KWrename       KWrequire
 %token KWsome
@@ -295,7 +295,7 @@ ass_seq:
 
 proof_seq:
     proof_expr { [$1] }
-|   proof_seq separator proof_expr { $3::$1 }
+|   proof_seq SEMICOL proof_expr { $3::$1 }
 
 
 proof_expr:
@@ -309,6 +309,8 @@ proof_expr:
   withinfo (rhs_info 1) exp
 }
 |   proof_if { $1 }
+
+|   proof_guarded_if { $1 }
 
 |   proof_inspect { $1 }
 
@@ -378,8 +380,9 @@ proof_inspect_rest:
 
 
 proof_if:
-    KWif ass_then_part_list ass_else_part ass_ens KWend {
-  withinfo (rhs_info 1) (Proofif ($2,$3,$4)) }
+    KWif ass_then_part_list proof_if_rest KWend {
+  let else_cmp, ens = $3 in
+  withinfo (rhs_info 1) (Proofif ($2,else_cmp,ens)) }
 
 
 ass_then_part_list:
@@ -387,14 +390,40 @@ ass_then_part_list:
 |   ass_then_part KWelseif ass_then_part_list { $1::$3 }
 
 ass_then_part:
-    expr_1 { $1,[] }
-|   expr_1 KWproof proof_seq { $1,$3 }
-
-ass_else_part:
-  KWelse { [] }
-| KWelse KWproof proof_seq { $3 }
+    expr_1 { withinfo (rhs_info 1) $1, [] }
+|   expr_1 KWproof proof_seq { withinfo (rhs_info 1) $1, List.rev $3 }
 
 
+proof_if_rest:
+    KWelse optsemi KWensure info_expr { withinfo (rhs_info 1) [], $4 }
+|   KWelse KWproof proof_seq optsemi KWensure info_expr {
+  withinfo (rhs_info 1) (List.rev $3), $6 }
+
+
+
+proof_guarded_if:
+    KWif ass_then_part
+    proof_guarded_if_rest
+    KWend {
+  let ie,cmp = $2 in
+  let lst,ens = $3 in
+  withinfo (rhs_info 1) (Proofgif ((ie,cmp)::lst,ens))
+}
+
+
+proof_guarded_if_rest:
+    KWorif info_expr_1 optsemi KWensure info_expr { [$2,[]], $5}
+|   KWorif info_expr_1 KWproof proof_seq optsemi KWensure info_expr {
+  [$2,List.rev $4], $7
+}
+|   KWorif info_expr_1 proof_guarded_if_rest {
+  let lst,ens = $3 in
+  ($2,[])::lst, ens
+}
+|   KWorif info_expr_1 KWproof proof_seq proof_guarded_if_rest {
+  let lst,ens = $5 in
+  ($2,List.rev $4)::lst,ens
+}
 
 
 /* ------------------------------------------------------------------------- */

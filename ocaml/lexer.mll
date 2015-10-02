@@ -93,6 +93,7 @@ let _ =
      ("note",      Parser.KWnote);
      ("old",       Parser.KWold);
      ("or",        Parser.KWor);
+     ("orif",      Parser.KWorif);
      ("proof",     Parser.KWproof);
      ("redefine",  Parser.KWredefine);
      ("rename",    Parser.KWrename);

@@ -132,9 +132,7 @@ all(p,q:G?)
         p <= q
     proof
         all(x) require (q+p)(x)
-               proof   q(x) or p(x)
-                       q(x) ==> q(x)
-                       p(x) ==> q(x)
+               proof   if q(x) orif p(x) ensure q(x) end
                ensure  q(x) end
     ensure
         p * q = p

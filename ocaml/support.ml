@@ -398,8 +398,10 @@ type expression =
   | Expif         of (expression * expression) list * expression option
   | Expinspect    of expression * (expression*expression) list
   | Proofinspect  of expression * (info_expression*compound) list * info_expression
-  | Proofif       of (expression * compound) list * compound * compound
-  | Cmdif         of (expression * compound) list * compound
+  | Proofif       of (info_expression * compound) list * compound withinfo
+                     * info_expression
+  | Proofgif      of (info_expression * compound) list * info_expression
+  | Cmdif         of (info_expression * compound) list * compound withinfo
   | Cmdinspect    of
       info_expression
         * (info_expression * compound) list
@@ -469,13 +471,13 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       (fun tp ->
         let cond,comp = tp
         in
-        (string_of_expression cond)
+        (string_of_expression cond.v)
         ^ (if comp = [] then "" else "then " ^ (string_of_compound comp)))
       " elseif "
   and str_elsepart elsepart =
-    match elsepart with
+    match elsepart.v with
       [] -> ""
-    | _ -> " else " ^ (string_of_compound elsepart)
+    | _ -> " else " ^ (string_of_compound elsepart.v)
   in
   match e with
     Identifier id -> ST.string id
@@ -566,13 +568,15 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
            "")
       ^ " ensure " ^ (string_of_expression ens.v) ^ " end"
 
-  | Proofif (thenlist,elsepart,enslist) ->
+  | Proofif (thenlist,elsepart,ens) ->
       "if "
       ^ (str_thenlist thenlist)
       ^ (str_elsepart elsepart)
       ^ " ensure "
-      ^ (string_of_compound enslist)
+      ^ (string_of_expression ens.v)
       ^ " end"
+  | Proofgif (list,ens) ->
+      assert false (* should not be printed *)
   | Cmdif (thenlist,elsepart) ->
       "if "
       ^ (str_thenlist thenlist)

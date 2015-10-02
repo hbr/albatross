@@ -50,15 +50,9 @@ is_sorted (l:[L]): BOOLEAN
 all(x:L, a:[L])
         -- sorted 1
     proof
-        all(y:L,a:[L])
-            require
-                (y^a).is_sorted ==> a.is_sorted
-                (x^y^a).is_sorted
-            ensure
-                (y^a).is_sorted
-            end
-        []  in {a: (x^a).is_sorted ==> a.is_sorted}
-        a   in {a: (x^a).is_sorted ==> a.is_sorted}
+        inspect a ensure
+            (x^a).is_sorted ==> a.is_sorted
+        end
     ensure
         (x^a).is_sorted ==> a.is_sorted
     end
@@ -67,8 +61,9 @@ all(x:L, a:[L])
 all(x:L, a:[L])
         -- sorted 2
     proof
-        []  in {a: all(x) (x^a).is_sorted ==> x.is_lower_bound(a)}
-        a   in {a: all(x) (x^a).is_sorted ==> x.is_lower_bound(a)}
+        inspect a ensure
+            all(x) (x^a).is_sorted ==> x.is_lower_bound(a)
+        end
     ensure
         (x^a).is_sorted ==> x.is_lower_bound(a)
     end
@@ -80,8 +75,9 @@ all(x:L, a:[L])
         x.is_lower_bound(a)
         a.is_sorted
     proof
-        []  in {a: x.is_lower_bound(a)  ==>  a.is_sorted  ==> (x^a).is_sorted}
-        a   in {a: x.is_lower_bound(a)  ==>  a.is_sorted  ==> (x^a).is_sorted}
+        inspect a ensure
+            x.is_lower_bound(a)  ==>  a.is_sorted  ==> (x^a).is_sorted
+        end
     ensure
         (x^a).is_sorted
     end
@@ -160,28 +156,22 @@ all(x:L, a:[L])
 
 all(x:L, a:[L])
     proof
-        []  in {a: a.is_sorted ==> x.into(a).is_sorted}
-
-        all(x,y:L, a:[L])
+        inspect a
+        case y^a proof
             require
-                a.is_sorted ==> x.into(a).is_sorted
                 (y^a).is_sorted
             proof
-                x <= y or not (x <= y)
-
-                require x <= y
-                ensure  x.into(y^a).is_sorted end
-
-                require not (x <= y)
-                proof   y.is_lower_bound(x^a)
-                        permutation(x^a, x.into(a))
-                        (y^x.into(a)).is_sorted
-                ensure  x.into(y^a).is_sorted end                
+                if x <= y
+                else proof y.is_lower_bound(x^a)
+                           permutation(x^a, x.into(a))
+                           (y^x.into(a)).is_sorted
+                ensure x.into(y^a).is_sorted end
             ensure
                 x.into(y^a).is_sorted
             end
-            
-        a in {a: a.is_sorted ==> x.into(a).is_sorted}
+        ensure
+            a.is_sorted ==> x.into(a).is_sorted
+        end
     ensure
         a.is_sorted ==> x.into(a).is_sorted
     end
@@ -200,37 +190,27 @@ sorted (a:[L]): [L]
 
 all(a:[L])
     proof
-        [] in {a: permutation(a, a.sorted)}
-        all(x:L, a:[L])
-            require
-                permutation(a, a.sorted)
-            proof
-                permutation(x^a, x^a.sorted)
-                permutation(x^a.sorted, x.into(a.sorted))
-                proof  x.into(a.sorted) = (x^a).sorted
-                ensure permutation(x.into(a.sorted), (x^a).sorted) end
-            ensure
-                permutation(x^a, (x^a).sorted)
-            end
-        a in {a: permutation(a, a.sorted)}
+        inspect a
+        case x^a proof
+            permutation(x^a, x^a.sorted)
+            permutation(x^a.sorted, x.into(a.sorted))
+            proof  x.into(a.sorted) = (x^a).sorted
+            ensure permutation(x.into(a.sorted), (x^a).sorted) end
+        ensure
+            permutation(a, a.sorted)
+        end
     ensure
         permutation(a, a.sorted)
     end
 
 all(a:[L])
     proof
-        [] in {a: a.sorted.is_sorted}
-
-        all(x:L,a:[L])
-            require
-                a.sorted.is_sorted
-            proof
-                x.into(a.sorted).is_sorted
-            ensure
-                (x^a).sorted.is_sorted
-            end
-        
-        a in {a: a.sorted.is_sorted}
+        inspect a
+        case x^a proof
+            x.into(a.sorted).is_sorted
+        ensure
+            a.sorted.is_sorted
+        end
     ensure
         a.sorted.is_sorted
     end

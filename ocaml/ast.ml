@@ -95,6 +95,11 @@ let term_preconditions (info:info) (t:term) (pc:PC.t): term list =
 
 
 
+let prove_insert_close (t:term) (pc:PC.t): unit =
+  ignore(Prover.prove_and_insert t pc);
+  PC.close pc
+
+
 
 let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
   if PC.is_private pc then
@@ -111,6 +116,11 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
                            msg))
       pres
 
+
+let get_boolean_term_verified (ie: info_expression) (pc:Proof_context.t): term =
+  let t = get_boolean_term ie pc in
+  verify_preconditions t ie.i pc;
+  t
 
 let add_assumptions_or_axioms
     (lst:compound) (is_axiom:bool) (pc:Proof_context.t): (int*info) list =
@@ -222,8 +232,18 @@ and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
   | Expproof (rlst,imp_opt,elst) ->
       let kind, clst = analyze_imp_opt (i+1) ie.i imp_opt c in
       make_proof (i+1) (withinfo UNKNOWN []) kind rlst clst elst pc
-  | Proofif (thenlist,elsepart,enslist) ->
-      not_yet_implemented ie.i "Conditional proofs"
+  | Proofif (thenlist,elsepart,ens) ->
+      if not (PC.has_excluded_middle pc) then
+        error_info ie.i "Excluded middle law not available";
+      if not (PC.has_or_elimination pc) then
+        error_info ie.i "Or-elimination law not available";
+      prove_if (i+1) ie.i thenlist elsepart ens pc
+  | Proofgif (lst,ens) ->
+      if not (PC.has_excluded_middle pc) then
+        error_info ie.i "Excluded middle law not available";
+      if not (PC.has_or_elimination pc) then
+        error_info ie.i "Or-elimination law not available";
+      prove_gif (i+1) ie.i lst ens pc
   | Proofinspect (e,lst,ens) ->
       begin match e with
         Identifier id ->
@@ -236,6 +256,91 @@ and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
   | _ ->
       let _ = prove_basic_expression ie pc in
       ()
+
+and prove_branch
+    (rcnt:int) (* recursion counter *)
+    (info:info)
+    (cond:term)
+    (cmp:compound)
+    (goal:term)
+    (pc:PC.t): unit =
+    let pc1 = PC.push_untyped [||] pc in
+    ignore(PC.add_assumption cond pc1);
+    PC.close pc1;
+    List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
+    try
+      let gidx = Prover.prove_and_insert goal pc1 in
+      let t,pt = PC.discharged gidx pc1 in
+      ignore(PC.add_proved_0 false (-1) t pt 0 pc);
+      PC.close pc
+    with Proof.Proof_failed _ ->
+      error_info info ("Cannot prove goal \"" ^
+                        (PC.string_of_term goal pc1) ^ "\"")
+
+and prove_gif
+    (rcnt:int) (* recursion counter *)
+    (info:info)
+    (lst: (info_expression*compound)list)
+    (ens:info_expression)
+    (pc:PC.t): unit =
+  assert (2 <= List.length lst);
+  let rec analyze_conditions lst_rev =
+    match lst_rev with
+      [ie,cmp] ->
+        let cond = get_boolean_term_verified ie pc in
+        cond, [cond, withinfo ie.i cond, cmp]
+    | (ie,cmp)::lst ->
+        let disjunct,lst = analyze_conditions lst in
+        let cond = get_boolean_term_verified ie pc in
+        let disjunct = PC.disjunction cond disjunct pc in
+        disjunct, (disjunct, withinfo ie.i cond, cmp)::lst
+    | [] ->
+        assert false (* cannot happen *)
+  in
+  let rec prove lst goal pc =
+    match lst with
+      [(dis1,cond1,cmp1);(dis2,cond2,cmp2)] ->
+        prove_branch rcnt cond1.i cond1.v cmp1 goal pc;
+        prove_branch rcnt cond2.i cond2.v cmp2 goal pc
+    | (dis,cond,cmp)::rest ->
+        not_yet_implemented info "Guarded if proofs with more than two alternatives"
+    | _ ->
+        assert false (* cannot happen *)
+  in
+  let disjunct,lst = analyze_conditions lst in
+  begin try prove_insert_close disjunct pc
+  with Proof.Proof_failed msg ->
+    error_info info ("Cannot prove sufficiency of alternatives\n   \"" ^
+                     (PC.string_of_term disjunct pc) ^ "\"" ^ msg) end;
+  let goal = get_boolean_term_verified ens pc in
+  prove lst goal pc
+
+
+and prove_if
+    (rcnt:int) (* recursion counter *)
+    (info:info)
+    (thenlist: (info_expression*compound)list)
+    (elsepart: compound withinfo)
+    (ens:info_expression)
+    (pc:PC.t): unit =
+  let goal = get_boolean_term_verified ens pc in
+  let rec prove
+      (thenlist:(info_expression*compound)list) (n:int) (pc:PC.t): unit =
+    match thenlist with
+      [ie,cmp] ->
+        let cond = get_boolean_term_verified ie pc in
+        let condneg = PC.negation cond pc in
+        let em = PC.disjunction cond condneg pc in
+        prove_insert_close em pc;
+        prove_branch rcnt ie.i cond cmp goal pc;
+        prove_branch rcnt elsepart.i condneg elsepart.v goal pc
+    | (ie,cmp)::rest ->
+        not_yet_implemented ie.i "Conditional proofs with \"elseif\""
+    | _ ->
+        assert false (* cannot happen *)
+  in
+  prove thenlist 0 pc
+
 
 
 and prove_inductive_set

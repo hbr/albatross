@@ -119,6 +119,9 @@ let is_toplevel (at:t): bool =
 
 let nbenv (at:t): int = Proof_table.count_variables at.base
 
+let count_variables (at:t): int = Proof_table.count_variables at.base
+
+
 let count_base (pc:t): int = Proof_table.count pc.base
 
 let count (pc:t): int = Ass_seq.count pc.terms
@@ -196,6 +199,10 @@ let implication (a:term) (b:term) (pc:t): term =
 let negation (a:term) (pc:t): term =
   let nb = nbenv pc in
   Term.unary (nb + Feature_table.not_index) a
+
+let disjunction (a:term) (b:term) (pc:t): term =
+  let nb = nbenv pc in
+  Term.binary (nb + Feature_table.or_index) a b
 
 let all_quantified (nargs:int) (names:int array) (t:term) (pc:t): term =
   Proof_table.all_quantified nargs names t pc.base
@@ -1678,3 +1685,44 @@ let check_interface (pc:t): unit =
         ("deferred assertion `" ^ (string_of_term (term i pc) pc) ^
          "' is not public")
   done
+
+
+let excluded_middle (pc:t): int =
+  let nvars = nbenv pc in
+  let or_id  = 1 + nvars + Feature_table.or_index
+  and not_id = 1 + nvars + Feature_table.not_index in
+  let em = Term.binary or_id (Variable 0) (Term.unary not_id (Variable 0)) in
+  let em = Term.all_quantified 1 (standard_argnames 1) em in
+  find em pc
+
+
+let or_elimination (pc:t): int =
+  let nvars = nbenv pc in
+  let or_id  = 3 + nvars + Feature_table.or_index
+  and imp_id = 3 + nvars + Feature_table.implication_index in
+  let a_or_b = Term.binary or_id (Variable 0) (Variable 1)
+  and a_imp_c = Term.binary imp_id (Variable 0) (Variable 2)
+  and b_imp_c = Term.binary imp_id (Variable 1) (Variable 2) in
+  let or_elim = Term.binary imp_id
+      a_or_b
+      (Term.binary imp_id
+         a_imp_c
+         (Term.binary imp_id
+            b_imp_c
+            (Variable 2))) in
+  let or_elim = Term.all_quantified 3 (standard_argnames 3) or_elim in
+  find or_elim pc
+
+
+let has_excluded_middle (pc:t): bool =
+  try
+    ignore(excluded_middle pc); true
+  with Not_found ->
+    false
+
+
+let has_or_elimination (pc:t): bool =
+  try
+    ignore(or_elimination pc); true
+  with Not_found ->
+    false
