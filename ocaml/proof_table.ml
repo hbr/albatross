@@ -680,12 +680,10 @@ let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
   let some_term = some_quantified nargs nms t at in
   let ti  = local_term i at in
   let wt  = Term.apply t args in
-  if Term.equivalent ti wt then ()
-  else begin
-    printf "illegal witness ti %s, wt %s, for %s\n"
-      (string_of_term ti at)
-      (string_of_term wt at)
-      (string_of_term some_term at);
+  if not (Term.equivalent ti wt) then begin
+    printf "illegal witness ti  \"%s\"\n" (string_of_term ti at);
+    printf "                wt  \"%s\"\n" (string_of_term wt at);
+    printf "                for \"%s\"\n" (string_of_term some_term at);
     raise Illegal_proof_term
   end;
   implication ti some_term at

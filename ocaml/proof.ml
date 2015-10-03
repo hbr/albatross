@@ -714,8 +714,9 @@ end = struct
       | Eval (i,e)     -> Eval (i, upeval_0 e)
       | Eval_bwd (t,e) -> Eval_bwd (up t, upeval_0 e)
       | Witness (i,nms,t,args) ->
-          let t = up t
-          and args = upargs args in
+          let n = Array.length nms in
+          let t    = up_inner t n
+          and args = upargs_inner args n in
           Witness (i,nms,t,args)
       | Someelim i     -> pt
       | Subproof (nb1,nms,i,pt_arr) ->
