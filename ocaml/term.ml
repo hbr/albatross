@@ -1001,7 +1001,7 @@ end = struct
   let induction_law (imp_id:int) (p:term): term =
     (* Calculate the induction law for the inductively defined set [p]
 
-       all(a,q) p(a) ==> ind0 ==> ... ==> indn ==> q(a)
+       all(q,a) ind0 ==> ... ==> indn ==> p(a) ==> q(a)
 
        indi: all(x,y,...) p(e1) ==> q(e1) ==>
                           ...
@@ -1018,20 +1018,21 @@ end = struct
         assert (n = 1);
         let nrules = Array.length rs in
         let rule i =
-          let n,nms,ps,tgt = induction_rule imp_id i p (Variable 1) in
+          let n,nms,ps,tgt = induction_rule imp_id i p (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
           all_quantified n nms chn in
+        let pa = Application (p,[|Variable 1|],true)
+        and qa = Application (Variable 0, [|Variable 1|],true) in
+        let tgt = binary imp_id pa qa in
         let tgt =
           interval_fold
             (fun tgt j ->
               let i = nrules - j - 1 in
               let indi = rule i in
               binary imp_id indi tgt)
-            (Application (Variable 1, [|Variable 0|],true))  (* q(a) *)
+            tgt
             0 nrules in
-        let pa = Application (p,[|Variable 0|],true) in
-        let t0 = binary imp_id pa tgt in
-        all_quantified 2 [|ST.symbol "a";ST.symbol "q"|] t0
+        all_quantified 2 [|ST.symbol "q";ST.symbol "a"|] tgt
     | _ ->
         invalid_arg "Not an inductive set"
 end (* Term *)
