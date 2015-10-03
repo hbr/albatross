@@ -746,7 +746,7 @@ let analyze_expression
       | Cmdif (_,_) ->
           not_yet_implemented ie.i ("Expif Typing of command "
                                     ^ (string_of_expression e))
-      | Proofinspect _ | Proofif _  ->
+      | Proofinspect _ | Proofif _ | Proofgif _ ->
           assert false (* cannot happen *)
     with Accus.Untypeable _ ->
       error_info ie.i

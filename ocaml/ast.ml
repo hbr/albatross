@@ -462,7 +462,6 @@ and prove_inductive_set
       prove_case ens.i rule ps tgt [] pc1 pc0)
     unproved_rules;
   let gidx =
-    (*try Prover.prove_and_insert (Application(q,[|Variable elem|],true)) pc0*)
     try Prover.prove_and_insert (Application(q,[|elem|],true)) pc0
     with Proof.Proof_failed _  -> assert false (* cannot happen *) in
   let t,pt = PC.discharged gidx pc0 in
