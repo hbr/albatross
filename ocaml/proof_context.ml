@@ -462,7 +462,9 @@ let arguments_of_sub (sub:Term_sub.t) (n_up:int): term array =
 
 
 let specialized
-    (idx:int) (sub:Term_sub.t) (nbenv_sub:int) (search:bool) (pc:t): int =
+    (idx:int) (sub:Term_sub.t) (nbenv_sub:int)
+    (reason:int) (* 0: match, 1: fwd, 2: bwd *)
+    (pc:t): int =
   (* The schematic rule [idx] specialized by [sub]. *)
   assert (is_consistent pc);
   assert (idx < count pc);
@@ -478,6 +480,10 @@ let specialized
     try
       find t pc
     with Not_found ->
+      let search =
+        if reason = 0 then false
+        else if reason = 1 then not (RD.is_forward rd) && RD.is_backward rd
+        else true in
       Proof_table.add_specialize t idx args pc.base;
       raw_add0 t rd search pc
 
@@ -492,7 +498,7 @@ let find_match (g:term) (pc:t): int =
     idx
   with Not_found ->
     let idx,sub = List.hd sublst in
-    try specialized idx sub nbenv false pc
+    try specialized idx sub nbenv 0 pc
     with Not_found -> assert false (* specialization not type safe ? *)
 
 
@@ -918,7 +924,7 @@ let add_consequence
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
   assert (nbenv_sub <= nbenv pc);
   try
-    let j = specialized j sub nbenv_sub false pc
+    let j = specialized j sub nbenv_sub 1 pc
     in
     add_mp_fwd i j pc
   with Not_found ->
@@ -986,7 +992,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
           (* the schematic rule [idx] matches the premise of [i]*)
           begin
             try
-              let idx_premise = specialized idx sub nbenv_a false pc in
+              let idx_premise = specialized idx sub nbenv_a 1 pc in
               add_mp_fwd idx_premise i pc
             with Not_found ->
               ()
@@ -1468,7 +1474,7 @@ let prove_equality (g:term) (pc:t): int =
           (Eval.Beta (Eval.Term ai_abstracted)) pc in
       let idx = add_mp !result idx2 false pc in
       let sub = Term_sub.singleton 0 pred_i in
-      let idx2 = specialized leibniz.(i) sub (nbenv pc) false pc in
+      let idx2 = specialized leibniz.(i) sub (nbenv pc) 0 pc in
       let idx = add_mp idx idx2 false pc in
       let t = Term.apply pred_inner_i [|args2.(i)|]
       and e = Eval.Beta (Eval.Term (term idx pc)) in
@@ -1527,7 +1533,7 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
           idx :: lst
         else begin
           let cnt = count pc in
-          let idx = specialized idx sub nbenv true pc in
+          let idx = specialized idx sub nbenv 2 pc in
           if idx = cnt then begin
             cnt :: lst
           end else begin

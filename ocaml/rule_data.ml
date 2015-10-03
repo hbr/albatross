@@ -284,7 +284,7 @@ let make (t:term) (c:Context.t): t =
       is_backward_blocked ps tgt nargs c
   in
   let fwd_blckd =
-    if nargs = 0 then false
+    if nargs = 0 || nbwd > 0 then false
     else
       let _,fwd_blckd = forward_blocked (List.rev ps) tgt nargs c in
       fwd_blckd in
@@ -354,10 +354,13 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
       List.rev ps_rev, false
   in
   let nargs_new = rd.nargs - nargs in
+  let bwd_blckd = 0 < nargs_new && is_backward_blocked ps tgt nargs_new c in
     {rd with
      orig  = Some orig;
      spec  = true;
      fwd_blckd = fwd_blckd;
+     bwd_blckd = bwd_blckd;
+     nbwd = if nargs_new = 0 then 0 else rd.nbwd; (* ???? WRONG ??? *)
      nbenv = nbenv;
      nargs = nargs_new;
      nms   = nms;
