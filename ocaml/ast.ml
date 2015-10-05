@@ -190,7 +190,13 @@ let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t)
 
 
 
-
+let beta_reduced (t:term) (pc:PC.t): term =
+  match t with
+    Application(Lam(n,_,_,t0,_),args,_) ->
+      assert (Array.length args = 1);
+      PC.beta_reduce n t0 args 0 pc
+  | _ ->
+      assert false
 
 
 
@@ -416,8 +422,11 @@ and prove_inductive_set
     let gidx =
       try Prover.prove_and_insert tgt pc1
       with Proof.Proof_failed msg ->
+        let goal = beta_reduced tgt pc1 in
         error_info info ("Cannot prove case \"" ^
                          (PC.string_of_term rule pc1) ^
+                         "\" with goal \n \"" ^
+                         (PC.string_of_term goal pc1) ^
                          "\"" ^ msg)
     in
     let t,pt = PC.discharged gidx pc1 in
