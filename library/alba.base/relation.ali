@@ -12,6 +12,14 @@ end
 A: ANY
 B: ANY
 
+
+all(r,s:(A,B)?)
+    require
+        all(a,b) r(a,b) ==> s(a,b)
+    ensure
+        r <= s
+    end
+
 domain (r:(A,B)?): ghost A?         -> {a: some(b) r(a,b)}
 range  (r:(A,B)?): ghost B?         -> {b: some(a) r(a,b)}
 

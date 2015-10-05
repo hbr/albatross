@@ -1,0 +1,162 @@
+{: Copyright (C) Helmut Brandl  <helmut dot brandl at gmx dot net>
+
+   This file is distributed under the terms of the GNU General Public License
+   version 2 (GPLv2) as published by the Free Software Foundation. :}
+
+
+use
+    predicate_logic
+    relation
+end
+
+A: ANY
+
+{: Carrier
+   ======= :}
+
+carrier (r:(A,A)?): ghost A?
+        -- The carrier of the relation 'r' i.e. the union of its domain
+        -- and range.
+    -> domain(r) + range(r)
+
+
+
+{: Reflexivity
+   =========== :}
+
+
+is_reflexive: ghost (A,A)??
+        -- The collection of all reflexive relations
+    = {r: (all(x,y) r(x,y) ==> r(x,x)) and
+          (all(x,y) r(x,y) ==> r(y,y))}
+
+all(r:(A,A)?)
+    require
+        r.is_reflexive
+    ensure
+        r.domain  = r.range
+        r.carrier = r.domain
+        r.carrier = r.range
+    end
+
+
+
+
+to_reflexive (p:A?): (A,A)?
+        -- The least reflexive relation with the carrier 'p'.
+    -> {x,y: x=y and p(x)}
+
+all(p:A?)
+    ensure
+        inverse(p.to_reflexive) = p.to_reflexive
+        domain(p.to_reflexive)  = p
+        range(p.to_reflexive)   = p
+        carrier(p.to_reflexive) = p
+    end
+
+
+
+
+reflexive (r:(A,A)?): ghost (A,A)?
+        -- The least reflexive relation which contains 'r'.
+    -> {(s): r(a,b) ==> s(a,b),
+             r(a,b) ==> s(a,a),
+             r(a,b) ==> s(b,b)}
+
+all(a,b:A, r:(A,A)?)
+    ensure
+        (r.reflexive)(a,b) ==> (r.reflexive)(a,a)
+        (r.reflexive)(a,b) ==> (r.reflexive)(b,b)
+        r.reflexive in is_reflexive
+    end
+
+
+
+
+{: Symmetry
+   ======== :}
+
+symmetric (r:(A,A)?): (A,A)?
+        -- The least symmetric relation which contains 'r'.
+    -> r + r.inverse
+
+
+
+{: Transitivity
+   ============ :}
+
+is_transitive: ghost (A,A)??
+        -- The collection of all transitive relations.
+    = {r: all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)}
+
+(+) (r:(A,A)?): ghost (A,A)?
+        -- The least transitive relation which contains 'r'.
+    -> {(s): r(x,y) ==> s(x,y), s(x,y) ==> r(y,z) ==> s(x,z)}
+
+all(a,b,c:A, r:(A,A)?)
+    ensure
+        (+r)(a,b) ==> (+r)(b,c) ==> (+r)(a,c)
+        (+r).is_transitive
+    end
+
+(*) (r:(A,A)?): ghost (A,A)?
+        -- The least reflexive transitive relation which contains 'r'.
+    -> + r.reflexive
+
+
+{: Equivalence
+   =========== :}
+
+equivalence (r:(A,A)?): ghost (A,A)?
+        -- The least equivalence relation which contains 'r'.
+    -> + r.reflexive.symmetric
+
+
+
+
+
+{: Confluence
+   ==========
+
+A relation 'r' has the diamond property if for all three elements 'a,b,c'
+there exists another element 'd' such that the following diagram is valid:
+
+    a --->  c
+    |       |
+    |       |
+    v       v
+    b --->  d
+
+The property is called _diamond property_ because the diagramm tilted by 45
+degrees has the form of a diamond.
+
+A relation is confluent if its transitive closure has the diamond property
+i.e. in a confluent relation if starting from an element 'a' you can reach the
+elements 'b' and 'c' directly or indirectly, then no matter how far you go,
+there is always a forth element 'd' where the paths will join.
+
+    a . . .>  c
+    .         .
+    .         .
+    v         v
+    b . . .>  d
+
+:}
+
+diamond: ghost (A,A)??
+        -- The collection of all relations which have the (strong) diamond
+        -- property.
+    = {r: all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)}
+
+all(r:(A,A)?)
+    ensure
+        r in diamond ==> r.reflexive in diamond
+        r in diamond ==> +r in diamond
+    end
+
+
+
+confluent: ghost (A,A)??
+        -- The collection of all confluent relations, i.e. of all relations whose
+        -- transitive closures have the (strong) diamond property.
+    = {r: +r in diamond}
