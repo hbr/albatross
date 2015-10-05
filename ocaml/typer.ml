@@ -304,7 +304,7 @@ end = struct
 
   let expect_inductive (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    iter_save
+    iter
       (fun acc -> Term_builder.expect_inductive c acc)
       accs
 
@@ -482,6 +482,7 @@ let process_leaf
     Accus.Untypeable acc_lst ->
       let ct = Context.class_table c in
       let i,_,_ = List.hd lst in
+      let nargs = Term_builder.expected_arity (List.hd acc_lst) in
       let str = "Type error \"" ^ (Context.string_of_term (Variable i) false 0 c) ^
         "\"\n  Actual type(s):\n\t"
       and actuals = String.concat "\n\t"
@@ -489,10 +490,16 @@ let process_leaf
              (fun (_,tvs,s) ->
                Class_table.string_of_reduced_complete_signature s tvs ct)
              lst)
+      and reqstr =
+        if nargs = 0 then
+          "\n  Required type(s):\n\t"
+        else
+          "\n  Expecting function with " ^ (string_of_int nargs) ^
+          " arguments with the required return type(s):\n\t"
       and reqs = String.concat "\n\t"
           (List.map Term_builder.string_of_reduced_required_type acc_lst)
       in
-      error_info info (str ^ actuals ^ "\n  Required type(s):\n\t" ^ reqs)
+      error_info info (str ^ actuals ^ reqstr ^ reqs)
 
 
 
