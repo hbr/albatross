@@ -1175,21 +1175,22 @@ let expect_inductive (c:Context.t) (tb:t): unit =
   and expfun = is_expecting_function tb in
   assert (0 < nargs);
   assert (nargs = 1); (* multiple inductive sets not yet implemented *)
-  if expfun && nargs > 1 then
-    raise Not_found;
-  if expfun then expect_boolean tb;
+  let set_type =
+    resize 0 nargs 0 tb;
+    let start = globals_start tb + tb.nglobals in
+    add_anys nargs tb;
+    predicate_type (Variable start) tb in
+  if expfun then
+    expect_boolean tb
+  else
+    unify tb.rtype set_type tb;
   push_context c tb;
-  resize 0 nargs 0 tb;
-  let start = globals_start tb + tb.nglobals in
-  add_anys nargs tb;
-  let transform = transform_from_context tvs tb in
-  for i = 0 to nargs-1 do
-    let _,s = Context.variable_data i c in
+  let tp =
+    let transform = transform_from_context tvs tb in
+    let _,s = Context.variable_data 0 c in
     assert (Sign.is_constant s);
-    let tp  = transform (Sign.result s)
-    and req = predicate_type (Variable (i+start)) tb in
-    unify req tp tb
-  done
+    transform (Sign.result s) in
+  unify set_type tp tb
 
 
 let split_rule_element (t:term) (nargs:int) (n:int): int * term array =
