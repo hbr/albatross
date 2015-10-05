@@ -354,7 +354,7 @@ and prove_inductive_set
   let c0    = PC.context pc0 in
   let nvars = Context.count_variables c0 in
   let elem, p, rules, goal, q =
-    let bexp = get_boolean_term (withinfo info (Funapp (set,elem))) pc0
+    let bexp = get_boolean_term (withinfo info (Funapp (Expparen set,elem))) pc0
     and goal = Typer.boolean_term ens c0 in
     verify_preconditions bexp info pc0;
     ignore (get_boolean_term
