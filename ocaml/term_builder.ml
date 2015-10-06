@@ -1193,85 +1193,12 @@ let expect_inductive (c:Context.t) (tb:t): unit =
   unify set_type tp tb
 
 
-let split_rule_element (t:term) (nargs:int) (n:int): int * term array =
-  match t with
-    Application(Variable i,args,pr)
-    when n <= i && i < n+nargs ->
-      Array.iter (fun t -> let _ = Term.down_from nargs n t in ()) args;
-      i, args
-  | _ ->
-      try
-        let _ = Term.down_from nargs n t in
-        raise Not_found
-      with Term_capture ->
-        invalid_arg "Inductive set must occur only at the toplevel"
-
-
-
-
-let analyze_rule (info:info) (r:term) (c:Context.t): bool =
-  (* Analyze the rule [r] as a rule of an inductively defined set and return whether
-     the rule is inductive. *)
-  let nargs = Context.count_last_arguments c
-  and nvars = Context.count_variables c in
-  let imp_id = nvars + Feature_table.implication_index in
-  let n,nms,ps_rev,tgt = Term.split_rule r imp_id in
-  let split (t:term) = split_rule_element t nargs n
-  in
-  let check_target () =
-    let _,_ = split tgt in () in
-  let rec check_premises ps_rev =
-    match ps_rev with
-      [] -> ()
-    | p::rest ->
-        try
-          let _ = split p in
-          check_premises rest
-        with Not_found ->
-          invalid_arg "Missing induction hypothesis"
-  in
-  check_target ();
-  match ps_rev with
-    [] ->
-      false
-  | p::rest ->
-      begin
-        try
-          let _ = split p in
-          check_premises ps_rev;
-          true
-        with Not_found ->
-          check_premises rest;
-          if rest = [] then false else true
-      end
 
 
 let complete_inductive (info:info) (nrules:int) (tb:t): unit =
   let start = Seq.count tb.terms - nrules in
   assert (0 <= start);
   let c = context tb in
-  let n0, nind =
-    interval_fold
-      (fun (n0,nind) i ->
-        let r = (Seq.elem (start+i) tb.terms).term in
-        let is_ind =
-          try analyze_rule info r c
-          with Not_found ->
-            assert false
-          | Invalid_argument str ->
-              assert false
-        in
-        if is_ind && n0 = 0 then
-          error_info info ("The first rule \"" ^ (string_of_term r tb)
-                           ^ "\" must not be inductive");
-        if not is_ind && nind <> 0 then
-          error_info info ("Basic rule \"" ^ (string_of_term r tb)
-                           ^ "\" out of order");
-        if is_ind then n0,nind+1 else n0+1,nind)
-      (0,0)
-      0 nrules
-  in
-  assert (n0 + nind = nrules);
   let rs = Array.init nrules (fun i -> (Seq.elem (start+i) tb.terms).term) in
   let n = Context.count_last_arguments c
   and nms = Context.local_argnames c in
