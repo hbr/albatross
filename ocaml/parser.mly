@@ -840,13 +840,13 @@ operator_expr:
 
 |   expr_1 MINUS expr_1               { Binexp (Minusop,$1,$3) }
 
-|   PLUS expr_1                     { Unexp (Plusop,$2) }
+|   PLUS expr_1                       { Unexp (Plusop,$2) }
 
-|   MINUS expr_1                    { Unexp (Minusop,$2) }
+|   MINUS expr_1                      { Unexp (Minusop,$2) }
 
 |   expr_1 TIMES expr_1               { Binexp (Timesop,$1,$3) }
 
-|   TIMES expr_1                    { Unexp (Timesop,$2) }
+|   TIMES expr_1                      { Unexp (Timesop,$2) }
 
 |   expr_1 DIVIDE expr_1              { Binexp (Divideop,$1,$3) }
 
@@ -874,9 +874,13 @@ operator_expr:
 
 |   expr_1 KWor   expr_1              { Binexp (Orop,$1,$3)  }
 
-|   KWnot   expr_1                  { Unexp (Notop,$2) }
+|   expr_1 OPERATOR expr_1            { Binexp (Freeop $2,$1,$3) }
 
-|   KWold   expr_1                  { Unexp (Oldop,$2) }
+|   expr_1 ROPERATOR expr_1           { Binexp (RFreeop $2,$1,$3) }
+
+|   KWnot   expr_1                    { Unexp (Notop,$2) }
+
+|   KWold   expr_1                    { Unexp (Oldop,$2) }
 
 |   expr_1 DCOLON expr_1              { Binexp (DColonop,$1,$3) }
 

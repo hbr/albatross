@@ -208,8 +208,8 @@ rule next_token = parse
       and sym  = Support.ST.symbol op
       in
       if last = ':'
-      then Parser.OPERATOR  sym, (false,false)
-      else Parser.ROPERATOR sym, (false,false)
+      then Parser.ROPERATOR  sym, (false,false)
+      else Parser.OPERATOR sym, (false,false)
 }
 
 
