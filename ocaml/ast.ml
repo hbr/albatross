@@ -380,18 +380,21 @@ and prove_inductive_set
       let t0 =
         let ft = Context.feature_table c0 in
         let args = Feature_table.args_of_tuple elem nvars ft in
-        if Array.length args = np then
-          try
-            let _,map = Array.fold_left (fun (j,map) arg ->
-              let i = Term.variable arg in
-              if nvars <= i then raise Not_found;
-              j+1, IntMap.add i j map) (0,IntMap.empty) args in
-            let t0 = Term.lambda_inner_map goal map in
-            Feature_table.add_tuple_accessors t0 np nvars ft
-          with Not_found ->
-            Term.lambda_inner2 goal elem
-        else
-          Term.lambda_inner2 goal elem in
+        let t0 =
+          if Array.length args = np then
+            try
+              let _,map = Array.fold_left (fun (j,map) arg ->
+                let i = Term.variable arg in
+                if nvars <= i then raise Not_found;
+                j+1, IntMap.add i j map) (0,IntMap.empty) args in
+              Term.lambda_inner_map goal map
+            with Not_found ->
+              Term.lambda_inner2 goal elem
+          else
+            Term.lambda_inner2 goal elem in
+        Feature_table.add_tuple_accessors t0 np nvars ft
+      in
+      assert (np = Array.length nms);
       let q = Lam (np, nms, [], t0, true) in
       verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
       q
