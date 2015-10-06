@@ -191,6 +191,8 @@ val to_dummy: int -> Sign.t -> type_term
 
 val to_function: int -> Sign.t -> type_term
 
+val extract_from_tuple_max: int -> type_term -> type_term array
+
 val upgrade_signature: int -> bool -> Sign.t -> type_term
 
 

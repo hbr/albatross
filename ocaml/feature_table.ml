@@ -113,6 +113,28 @@ let arity (i:int) (ft:t): int =
   Sign.arity (descriptor i ft).sign
 
 
+let is_higher_order (i:int) (ft:t): bool =
+  let desc = descriptor i ft in
+  assert (Sign.has_result desc.sign);
+  let ntvs = Tvars.count_all desc.tvs in
+  let cls,_ = Class_table.split_type_term (Sign.result desc.sign) in
+  assert (ntvs <= cls);
+  let cls = cls - ntvs in
+  cls = Class_table.predicate_index || cls = Class_table.function_index
+
+
+let tuple_arity (i:int) (ft:t): int =
+  assert (is_higher_order i ft);
+  let desc = descriptor i ft in
+  assert (Sign.has_result desc.sign);
+  let ntvs = Tvars.count_all desc.tvs in
+  let _,args = Class_table.split_type_term (Sign.result desc.sign) in
+  assert (Array.length args = 1);
+  let args = Class_table.extract_from_tuple_max ntvs args.(0) in
+  Array.length args
+
+
+
 let string_of_signature (i:int) (ft:t): string =
   let desc = descriptor i ft in
   (feature_name_to_string desc.fname) ^ " " ^
@@ -594,10 +616,11 @@ let term_to_string
     let nnames = Array.length names
     and anon2sym (i:int): int = anon_symbol i nanonused
     in
-    let find_op_int (i:int): operator =
+    let find_op_int (i:int): operator * int=
       if nnames <= i then
-        match (Seq.elem (i-nnames) ft.seq).fname with
-          FNoperator op -> op
+        let idx = i - nnames in
+        match (Seq.elem idx ft.seq).fname with
+          FNoperator op -> op, idx
         | _ -> raise Not_found
       else
         raise Not_found
@@ -608,7 +631,7 @@ let term_to_string
       else
         feature_name_to_string
           (Seq.elem (i-nnames) ft.seq).fname
-    and find_op (f:term): operator  =
+    and find_op (f:term): operator * int =
       match f with
         Variable i -> find_op_int i
       | _ -> raise Not_found
@@ -664,12 +687,24 @@ let term_to_string
            (fun t -> to_string t names nanonused false None)
            (Array.to_list args))
     in
-    let op2str (op:operator) (args: term array): string =
+    let op2str (op:operator) (fidx:int) (args: term array): string =
       match op with
         Allop | Someop | Asop -> assert false (* cannot happen *)
       | _ ->
           let nargs = Array.length args in
-          if nargs = 1 then
+          if nargs = 1 && arity fidx ft = 0 then begin
+            assert (is_higher_order fidx ft);
+            let nargs_tup = tuple_arity fidx ft in
+            assert (1 <= nargs_tup);
+            if nargs_tup = 1 then
+              "(" ^ (operator_to_rawstring op) ^ ")"
+              ^ (to_string args.(0) names nanonused false (Some (op,false)))
+            else
+              let args = args_of_tuple_ext args.(0) nnames 2 ft in
+              (to_string args.(0) names nanonused false (Some (op,true)))
+              ^ " " ^ (operator_to_rawstring op) ^ " "
+              ^ (to_string args.(1) names nanonused false (Some (op,false)))
+          end else if nargs = 1 then
             (operator_to_rawstring op) ^ " "
             ^ (to_string args.(0) names nanonused false (Some (op,false)))
           else begin
@@ -741,16 +776,16 @@ let term_to_string
           None, var2str i
       | VAppl (i,args) ->
           begin try
-            let op = find_op_int i in
-            Some op, op2str op args
+            let op,fidx = find_op_int i in
+            Some op, op2str op fidx args
           with Not_found ->
             None, funiapp2str i (argsstr args)
           end
       | Application (f,args,pr) ->
           begin
             try
-              let op = find_op f in
-              Some op, op2str op args
+              let op,fidx = find_op f in
+              Some op, op2str op fidx args
             with Not_found ->
               None, funapp2str f (argsstr args)
           end
@@ -1517,6 +1552,7 @@ let add_feature
   add_class_feature cnt false false base ft;
   if ft.verbosity > 1 then
     printf "  new feature %d %s\n" cnt (string_of_signature cnt ft)
+
 
 
 
