@@ -418,7 +418,7 @@ and prove_inductive_set
   let prove_case
       (info:info) (rule:term) (ps:term list) (tgt:term) (cmp:compound)
       (pc1:PC.t) (pc0:PC.t)
-      : unit =
+      : int =
     List.iter (fun t -> ignore (PC.add_assumption t pc1)) ps;
     PC.close pc1;
     List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
@@ -433,14 +433,15 @@ and prove_inductive_set
                          "\"" ^ msg)
     in
     let t,pt = PC.discharged gidx pc1 in
-    ignore(PC.add_proved_0 false (-1) t pt 0 pc0);
-    PC.close pc0
+    let idx = PC.add_proved_0 false (-1) t pt 0 pc0 in
+    PC.close pc0;
+    idx
   in
   let nrules = Array.length rules
   and imp_id = nvars + Feature_table.implication_index in
-  let unproved_rules =
+  let proved =
     List.fold_left
-      (fun unproved (ie,cmp) ->
+      (fun proved (ie,cmp) ->
         let pc1,rule =
           match ie.v with
             Expquantified(Universal,entlst,e) ->
@@ -451,34 +452,36 @@ and prove_inductive_set
         let n    = Context.count_last_arguments c1
         and nms  = Context.local_argnames c1 in
         let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
-        let irule,unproved =
+        let irule =
           let rule =
             Context.prenex_term (Term.all_quantified n nms rule) c1 in
-          let l1, unproved = List.partition
-              (fun i -> Term.equivalent rules.(i) rule) unproved in
-          if l1 = [] then
-            error_info ie.i "Invalid case";
-          assert (List.length l1 = 1);
-          List.hd l1,unproved in
+          try
+            interval_find (fun i -> Term.equivalent rules.(i) rule) 0 nrules
+          with Not_found ->
+            error_info ie.i "Invalid case"
+        in
         let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p q in
         assert (n1 = n);
-        prove_case ie.i rule ps tgt cmp pc1 pc0;
-        unproved)
-      (Array.to_list (Array.init nrules (fun i -> i)))
+        let idx = prove_case ie.i rule ps tgt cmp pc1 pc0 in
+        IntMap.add irule idx proved)
+      IntMap.empty
       lst
   in
-  List.iter
+  interval_iter
     (fun irule ->
-      let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
-      let rule =
-        try
-          let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
-          assert (n1 = n);
-          t0
-        with Not_found -> rules.(irule) in
-      let pc1 = PC.push_untyped nms pc0 in
-      prove_case ens.i rule ps tgt [] pc1 pc0)
-    unproved_rules;
+      try
+        ignore(IntMap.find irule proved)
+      with Not_found ->
+        let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
+        let rule =
+          try
+            let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
+            assert (n1 = n);
+            t0
+          with Not_found -> rules.(irule) in
+        let pc1 = PC.push_untyped nms pc0 in
+        ignore(prove_case ens.i rule ps tgt [] pc1 pc0)
+    ) 0 nrules;
   let gidx =
     try Prover.prove_and_insert (Application(q,[|elem|],true)) pc0
     with Proof.Proof_failed _  -> assert false (* cannot happen *) in

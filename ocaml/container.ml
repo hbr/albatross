@@ -102,22 +102,28 @@ let interval_fold (f:'a->int->'a) (a0:'a) (start:int) (beyond:int): 'a =
 
 
 
-let interval_for_all (f: int -> bool) (start:int) (beyond:int): bool =
+let interval_find (f:int -> bool) (start:int) (beyond:int): int =
   assert (start <= beyond);
-  let rec for_all i =
+  let rec find i =
     if beyond <= i then
-      true
+      raise Not_found
+    else if f i then
+      i
     else
-      f i && for_all (i+1)
+      find (i+1)
   in
-  for_all start
+  find start
 
 
 let interval_exist (f: int -> bool) (start:int) (beyond:int): bool =
   assert (start <= beyond);
-  not (interval_for_all (fun i -> not (f i)) start beyond)
+  try ignore (interval_find f start beyond); true
+  with Not_found -> false
 
 
+let interval_for_all (f: int -> bool) (start:int) (beyond:int): bool =
+  assert (start <= beyond);
+  not (interval_exist (fun i -> not (f i)) start beyond)
 
 
 let interval_iter (f:int -> unit) (start:int) (beyond:int): unit =
