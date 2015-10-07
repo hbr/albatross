@@ -1313,7 +1313,8 @@ let normalized_result (tb:t): term =
   let c = context tb in
   let ft = Context.feature_table c
   and nb = Context.count_variables c in
-  Feature_table.normalize_lambdas res nb ft
+  let res = Feature_table.normalize_lambdas res nb ft in
+  Context.prenex_term res c
 
 exception Illegal_term
 

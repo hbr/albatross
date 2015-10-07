@@ -452,7 +452,8 @@ and prove_inductive_set
         and nms  = Context.local_argnames c1 in
         let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
         let irule,unproved =
-          let rule = Term.all_quantified n nms rule in
+          let rule =
+            Context.prenex_term (Term.all_quantified n nms rule) c1 in
           let l1, unproved = List.partition
               (fun i -> Term.equivalent rules.(i) rule) unproved in
           if l1 = [] then

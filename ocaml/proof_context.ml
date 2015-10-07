@@ -207,6 +207,10 @@ let disjunction (a:term) (b:term) (pc:t): term =
 let all_quantified (nargs:int) (names:int array) (t:term) (pc:t): term =
   Proof_table.all_quantified nargs names t pc.base
 
+
+let prenex_term (t:term) (pc:t): term =
+  Proof_table.prenex_term t pc.base
+
 let implication_chain (ps:term list) (tgt:term) (pc:t): term  =
   Proof_table.implication_chain ps tgt pc.base
 

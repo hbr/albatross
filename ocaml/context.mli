@@ -91,6 +91,7 @@ val beta_reduce:      int -> term -> term array -> int -> t -> term
 val quantified:      bool -> int -> int array -> term -> t -> term
 val all_quantified:  int -> int array -> term -> t -> term
 val some_quantified: int -> int array -> term -> t -> term
+val prenex_term:     term -> t -> term
 
 val variable_name: int -> t -> int
     (** The name of the [i]th variable argument *)

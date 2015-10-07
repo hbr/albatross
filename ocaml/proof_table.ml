@@ -153,8 +153,7 @@ let prepend_names (nms:int array) (names:int array): int array =
 
 let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
-  let ft = feature_table at in
-  Feature_table.prenex t (count_variables at) ft
+  Context.prenex_term t at.c
 
 
 let equivalent (t1:term) (t2:term) (at:t): bool =

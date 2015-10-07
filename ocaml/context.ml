@@ -237,7 +237,8 @@ let some_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
   quantified false nargs names t c
 
 
-
+let prenex_term (t:term) (c:t): term =
+  Feature_table.prenex t (count_variables c) c.ft
 
 
 let entry_signature (e:entry) (c:t): Sign.t =

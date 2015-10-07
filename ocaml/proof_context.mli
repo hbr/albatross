@@ -39,6 +39,8 @@ val string_of_term: term -> t -> string
 val string_of_term_anon: term -> int -> t -> string
 val string_of_term_i: int -> t -> string
 
+val prenex_term: term -> t -> term
+
 val make:      int -> t
 
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
