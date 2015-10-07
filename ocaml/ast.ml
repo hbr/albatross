@@ -441,10 +441,15 @@ and prove_inductive_set
   let unproved_rules =
     List.fold_left
       (fun unproved (ie,cmp) ->
-        let rule,nms = Typer.case_variables ie.i ie.v true c0 in
-        let n = Array.length nms in
-        let pc1 = PC.push_untyped nms pc0 in
+        let pc1,rule =
+          match ie.v with
+            Expquantified(Universal,entlst,e) ->
+              PC.push entlst None false false false pc0, e
+          | _ ->
+              PC.push_untyped [||] pc0, ie.v in
         let c1  = PC.context pc1 in
+        let n    = Context.count_last_arguments c1
+        and nms  = Context.local_argnames c1 in
         let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
         let irule,unproved =
           let rule = Term.all_quantified n nms rule in

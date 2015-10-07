@@ -188,11 +188,11 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
 /*  5 */ %nonassoc ASSIGN
-/*  8 */ %nonassoc KWall     KWsome  /* greedy */
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
 /* 15 */ %left     COLON /* greedy ???*/
 /* 18 */ %right    COMMA
+/* 19 */ %nonassoc KWall     KWsome  /* greedy */
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
@@ -794,10 +794,10 @@ expr_1:
 }
 |   expr_1 COLON type_nt        { Typedexp ($1, withinfo (rhs_info 3) $3) }
 
-|   KWall  formal_arguments opt_nl expr {
+|   KWall  formal_arguments opt_nl expr_1 {
   Expquantified (Universal, withinfo (rhs_info 2) $2, $4) }
 
-|   KWsome formal_arguments opt_nl expr {
+|   KWsome formal_arguments opt_nl expr_1 {
   Expquantified (Existential, withinfo (rhs_info 2) $2, $4) }
 
 |   LBRACE expr RBRACE            {

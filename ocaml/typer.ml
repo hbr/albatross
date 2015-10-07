@@ -871,21 +871,8 @@ let analyze_expression
     if 1 < nargs then
       not_yet_implemented entlst.i "Multiple inductive sets";
     let analyze_rule (r:expression): unit =
-      begin match r with
-        Binexp (DArrowop,_,_) ->
-          let r,nms = case_variables entlst.i r true c1
-          and ntvs_gap = Accus.ntvs_added accs in
-          if Array.length nms = 0 then
-            error_info entlst.i "Rules must have variables";
-          let c2 = Context.push_untyped_gap nms ntvs_gap c1 in
-          Accus.expect_boolean_expression accs;
-          Accus.expect_quantified c2 accs;
-          analyze r accs c2;
-          Accus.complete_quantified true accs
-      | _ ->
-          Accus.expect_boolean_expression accs;
-          analyze r accs c1
-      end
+      Accus.expect_boolean_expression accs;
+      analyze r accs c1
     in
     Accus.expect_inductive c1 accs;
     List.iter analyze_rule rules;

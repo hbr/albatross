@@ -59,9 +59,9 @@ all(p:A?)
 
 reflexive (r:(A,A)?): ghost (A,A)?
         -- The least reflexive relation which contains 'r'.
-    -> {(s): r(a,b) ==> s(a,b),
-             r(a,b) ==> s(a,a),
-             r(a,b) ==> s(b,b)}
+    -> {(s): all(a,b) r(a,b) ==> s(a,b),
+             all(a,b) r(a,b) ==> s(a,a),
+             all(a,b) r(a,b) ==> s(b,b)}
 
 all(a,b:A, r:(A,A)?)
     ensure
@@ -91,7 +91,8 @@ is_transitive: ghost (A,A)??
 
 (+) (r:(A,A)?): ghost (A,A)?
         -- The least transitive relation which contains 'r'.
-    -> {(s): r(x,y) ==> s(x,y), s(x,y) ==> r(y,z) ==> s(x,z)}
+    -> {(s): all(x,y)   r(x,y) ==> s(x,y),
+             all(x,y,z) s(x,y) ==> r(y,z) ==> s(x,z)}
 
 all(a,b,c:A, r:(A,A)?)
     ensure
