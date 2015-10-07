@@ -718,12 +718,16 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
               let full = full || triggers_eval i nb pc in
               vapply i args full
           end
+      | Application (Lam(n,nms,ps,t0,prlam),args,pr) when not full ->
+          assert (prlam = pr);
+          beta_reduce n t0 args nb pc, Eval.Beta (Eval.Term t), true
       | Application (Variable i,args,pr) when i < nb + nbenv ->
           let f  = Variable i in
           let fe = Eval.Term f in
           apply f fe false args pr true
       | Application (f,args,pr) ->
           let f,fe,fmodi = eval f nb full depth in
+          let full = full || not fmodi in
           apply f fe fmodi args pr full
       | Lam (n,nms,pres,t0,pred) ->
           if full then
@@ -1063,7 +1067,8 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
         end else begin
           let pt = Indset_rule (set,i) in
           Proof_table.add_proved_0 rule pt pc.base;
-          let _ = raw_add rule true pc in ()
+          ignore(raw_add rule true pc);
+          add_last_to_work pc
         end
       done;
       if fwd then begin
@@ -1074,7 +1079,8 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
           ()
         else begin
           Proof_table.add_proved_0 indlaw pt pc.base;
-          ignore(raw_add indlaw true pc)
+          ignore(raw_add indlaw true pc);
+          add_last_to_work pc
         end
       end
   | _ ->
@@ -1511,6 +1517,7 @@ let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
   add_inductive_set_laws false g pc;
+  close pc;
   try
     find_match g pc
   with Not_found ->
