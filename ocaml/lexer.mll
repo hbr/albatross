@@ -198,13 +198,24 @@ rule next_token = parse
 | "/in"           { Parser.NOTIN,    (false,false) }
 
 
+| ['-' '~' '='] ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|' '^']*
+    ('>' | ">*" | ">+" ) | "|-" | "|-"
+    as op {
+  try
+    kwtoken op
+  with Not_found ->
+    let sym = Support.ST.symbol op in
+    Parser.RELOP sym, (false,false)
+}
+
 | ['+' '-' '/' '*' '<' '>' '=' '~' ':' '#' '|' '^']+ as op {
   try
     kwtoken op
   with
     Not_found ->
-      assert ((String.length op) > 0);
-      let last = op.[(String.length op)-1]
+      let len = String.length op in
+      assert (0 < len);
+      let last = op.[len-1]
       and sym  = Support.ST.symbol op
       in
       if last = ':'

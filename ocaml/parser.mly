@@ -169,6 +169,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 %token NOTIN
 %token PLUS
 %token QMARK
+%token RELOP
 %token RBRACE
 %token RBRACKET
 %token RPAREN
@@ -179,6 +180,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 
 %token <int>    UIDENTIFIER
 %token <int>    LIDENTIFIER
+%token <int>    RELOP
 %token <int>    OPERATOR
 %token <int>    ROPERATOR
 %token <int>    NUMBER
@@ -196,6 +198,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 /* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
                    LE        LT        GE      GT
                    KWin      NOTIN     KWas
+                   RELOP
 /* 40 */ %left     BAR       DBAR
 /* 45 */ %left     PLUS      MINUS
 /* 50 */ %left     TIMES     DIVIDE
@@ -874,6 +877,8 @@ operator_expr:
 
 |   expr_1 KWor   expr_1              { Binexp (Orop,$1,$3)  }
 
+|   expr_1 RELOP expr_1               { Binexp (Freeop $2,$1,$3) }
+
 |   expr_1 OPERATOR expr_1            { Binexp (Freeop $2,$1,$3) }
 
 |   expr_1 ROPERATOR expr_1           { Binexp (RFreeop $2,$1,$3) }
@@ -930,6 +935,7 @@ operator:
 |   DCOLON    { DColonop }
 |   OPERATOR  { Freeop $1 }
 |   ROPERATOR { RFreeop $1 }
+|   RELOP     { Freeop $1 }
 
 
 
