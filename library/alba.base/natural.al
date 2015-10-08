@@ -574,6 +574,17 @@ all(a,b:NATURAL)
 
 
 all(a,b:NATURAL)
+    require
+        not (a <= b)
+    proof
+        a <= b or b <= a
+    ensure
+        b <= a
+    end
+
+
+
+all(a,b:NATURAL)
     proof
         a = b or a /= b
         require  a = b
