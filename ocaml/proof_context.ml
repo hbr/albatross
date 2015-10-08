@@ -947,6 +947,22 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
     add_mp0 t i j search pc
 
 
+let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
+  (* [idx] must represent a term which can be beta reduced *)
+  let t = term idx pc in
+  printf "add_beta_reduced %s\n" (string_of_term t pc);
+  match t with
+    Application(Lam(n,nms,ps,t0,prlam),[|arg|],pr) ->
+      assert (prlam = pr);
+      let pt = Eval(idx,Eval.Beta (Eval.Term t))
+      and res = beta_reduce n t0 [|arg|] 0 pc in
+      printf "res %s\n" (string_of_term res pc);
+      Proof_table.add_proved res pt 0 pc.base;
+      raw_add res search pc
+  | _ ->
+      invalid_arg "The term is not a beta redex"
+
+
 let add_mp_fwd (i:int) (j:int) (pc:t): unit =
   let rdj = rule_data j pc in
   if RD.is_forward rdj then begin
