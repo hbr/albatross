@@ -76,6 +76,7 @@ module Term: sig
   val range_variables: term -> int -> int -> IntSet.t
 
   val used_variables:       term -> int -> int list
+  val used_variables_filtered: term -> (int -> bool) -> int list
   val used_variables_from:  term -> int -> int list
 
   val equivalent: term -> term -> bool
@@ -508,7 +509,9 @@ end = struct
 
 
   let  lambda_inner_map (t:term) (map:int IntMap.t): term =
-    (* Extract a lambda inner term ***** *)
+    (* Extract a lambda inner term where [map] maps i,j,k,... to the range
+       0,1,...,n-1. The variables from the map become the variables
+       0,1,...,n-1  and all other variables are shiftet up by [n]. *)
     let n = IntMap.cardinal map in
     let f j =
       try

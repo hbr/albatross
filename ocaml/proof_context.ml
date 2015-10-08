@@ -119,8 +119,14 @@ let is_toplevel (at:t): bool =
 
 let nbenv (at:t): int = Proof_table.count_variables at.base
 
-let count_variables (at:t): int = Proof_table.count_variables at.base
+let count_variables (at:t): int =
+  Proof_table.count_variables at.base
 
+let count_last_arguments (pc:t): int =
+  Proof_table.count_last_arguments pc.base
+
+let local_argnames (pc:t): int array =
+  Proof_table.local_argnames pc.base
 
 let count_base (pc:t): int = Proof_table.count pc.base
 
@@ -183,6 +189,27 @@ let is_visible (i:int) (pc:t): bool =
   and t  = term i pc in
   Feature_table.is_term_public t nb ft
 
+let string_of_term (t:term) (pc:t): string =
+  Context.string_of_term t true 0 (context pc)
+
+
+let string_of_term_anon (t:term) (nb:int) (pc:t): string =
+  Context.string_of_term t true nb (context pc)
+
+
+let string_of_term_i (i:int) (pc:t): string =
+  assert (i < count pc);
+  string_of_term (term i pc) pc
+
+
+let string_of_term_array (args: term array) (pc:t): string =
+  "[" ^
+  (String.concat ","
+     (List.map (fun t -> string_of_term t pc) (Array.to_list args)))
+  ^
+  "]"
+
+
 
 let split_implication (t:term) (pc:t): term * term =
   Proof_table.split_implication t pc.base
@@ -215,6 +242,45 @@ let implication_chain (ps:term list) (tgt:term) (pc:t): term  =
   Proof_table.implication_chain ps tgt pc.base
 
 
+let assumptions (pc:t): term list =
+  Proof_table.assumptions pc.base
+
+
+let assumptions_chain (tgt:term) (pc:t): term =
+  implication_chain (assumptions pc) tgt pc
+
+let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
+  let n   = count_last_arguments pc
+  and nms = local_argnames pc in
+  assert (0 <= idx);
+  assert (idx < n);
+  let chn = assumptions_chain tgt pc in
+  if n = 1 then
+    chn
+  else
+    let usd_rev =
+      Term.used_variables_filtered chn (fun i -> i<>idx && i < n) in
+    let nusd = List.length usd_rev in
+    let map,_ = List.fold_left
+        (fun (map,i) ivar ->
+          assert (0 < i);
+          let i = i-1 in IntMap.add ivar i map, i)
+        (IntMap.empty,nusd)
+        usd_rev in
+    let nmsusd = Array.make nusd (-1) in
+    Array.iteri
+      (fun i nme ->
+        try
+          let j = IntMap.find i map in
+          nmsusd.(j) <- nme
+        with Not_found ->
+          ())
+      nms;
+    let t0 = Term.lambda_inner_map chn map in
+    let res = Term.all_quantified nusd nmsusd t0 in
+    prenex_term res pc
+
+
 let work (pc:t): int list = pc.work
 
 let has_work (pc:t): bool = pc.work <> []
@@ -226,27 +292,6 @@ let clear_work (pc:t): unit =
 let has_result (pc:t): bool = Proof_table.has_result pc.base
 
 let has_result_variable (pc:t): bool = Proof_table.has_result_variable pc.base
-
-let string_of_term (t:term) (pc:t): string =
-  Context.string_of_term t true 0 (context pc)
-
-
-let string_of_term_anon (t:term) (nb:int) (pc:t): string =
-  Context.string_of_term t true nb (context pc)
-
-
-let string_of_term_i (i:int) (pc:t): string =
-  assert (i < count pc);
-  string_of_term (term i pc) pc
-
-
-let string_of_term_array (args: term array) (pc:t): string =
-  "[" ^
-  (String.concat ","
-     (List.map (fun t -> string_of_term t pc) (Array.to_list args)))
-  ^
-  "]"
-
 
 let unify
     (t:term) (nbenv:int) (tab:int Term_table.t) (pc:t): (int * Term_sub.t) list =
@@ -1587,10 +1632,6 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
     if not (IntSet.is_empty blacklst) then
       printf "%s   blacklist %s\n" prefix (intset_to_string blacklst) end;
   lst
-
-
-let assumptions (pc:t): term list =
-  Proof_table.assumptions pc.base
 
 
 let discharged (i:int) (pc:t): term * proof_term =

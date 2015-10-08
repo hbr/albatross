@@ -34,6 +34,7 @@ val count_variables:t -> int
 val has_result:     t -> bool
 val has_result_variable:     t -> bool
 val count_last_arguments:  t -> int
+val local_argnames:        t -> int array
 val last_arguments_string: t -> string
 val names:       t -> int array
 val imp_id:      t -> int

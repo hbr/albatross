@@ -87,6 +87,8 @@ let count_variables (at:t): int = Context.count_variables at.c
 let count_last_arguments (at:t): int =
   Context.count_last_arguments at.c
 
+let local_argnames (at:t): int array =
+  Context.local_argnames at.c
 
 let has_result (at:t): bool =
   Context.has_result at.c

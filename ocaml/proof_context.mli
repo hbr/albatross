@@ -60,7 +60,6 @@ val clear_work:         t -> unit
 val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
-val assumptions:        t -> term list
 val discharged:         int  -> t -> term * proof_term
 val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> term -> proof_term -> t -> int
@@ -98,6 +97,10 @@ val is_assumption:  int -> t -> bool
 val negation:       term -> t -> term
 val implication:    term -> term -> t -> term
 val disjunction:    term -> term -> t -> term
+
+val assumptions:        t -> term list
+val assumptions_chain:  term -> t -> term
+val strengthened_induction_goal: int -> term -> t -> term
 
 val check_deferred: t -> unit
 val owner:          t -> int
