@@ -1101,6 +1101,26 @@ let add_consequences_someelim (i:int) (pc:t): unit =
     ()
 
 
+let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
+  match set with
+    Indset _ ->
+      let imp_id = nbenv pc + Feature_table.implication_index in
+      let indlaw = Term.induction_law imp_id set
+      and pt     = Indset_ind set in
+      Proof_table.add_proved_0 indlaw pt pc.base;
+      let idx = raw_add indlaw false pc in
+      let rd  = rule_data idx pc in
+      let args = [|q;elem|] in
+      let rd  = RD.specialize rd args idx (context pc) in
+      assert (RD.is_specialized rd);
+      let t   = RD.term rd (nbenv pc) in
+      Proof_table.add_specialize t idx args pc.base;
+      raw_add0 t rd false pc
+  | _ ->
+      invalid_arg "Not an inductive set"
+
+
+
 let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
   match t with
     Application (Indset(n,nms,rs),args,pr) ->
@@ -1644,6 +1664,11 @@ let discharged (i:int) (pc:t): term * proof_term =
 
 let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
   Proof_table.is_proof_pair t pt pc.base
+
+
+let add_proved_term (t:term) (pt:proof_term) (search:bool) (pc:t): int =
+  Proof_table.add_proved t pt 0 pc.base;
+  raw_add t search pc
 
 
 let add_proved_0

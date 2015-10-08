@@ -61,6 +61,7 @@ val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
 val discharged:         int  -> t -> term * proof_term
+val add_proved_term:    term -> proof_term -> bool -> t -> int
 val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> term -> proof_term -> t -> int
 val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
@@ -110,6 +111,8 @@ val inherit_parent: int -> int -> type_term array -> info -> t -> unit
     (** [inherit_parent cls par par_args info pc] *)
 
 val add_potential_equalities: int -> t -> unit
+
+val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit
 

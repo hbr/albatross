@@ -359,7 +359,7 @@ and prove_inductive_set
   let pc0   = PC.push_untyped [|p_id|] pc in
   let c0    = PC.context pc0 in
   let nvars = Context.count_variables c0 in
-  let elem, p, rules, goal, q =
+  let elem, p, pa_idx, ind_idx, rules, goal, q =
     let bexp = get_boolean_term (withinfo info (Funapp (Expparen set,elem))) pc0
     and goal = Typer.boolean_term ens c0 in
     verify_preconditions bexp info pc0;
@@ -397,19 +397,22 @@ and prove_inductive_set
       assert (np = Array.length nms);
       let q = Lam (np, nms, [], t0, true) in
       verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
+      PC.close pc0;
       q
     in
     let set2 = PC.evaluated_star set1 pc0 in
     begin match set2 with
       Indset (n,nms,rs) ->
         assert (n = 1);
-        begin try ignore (Prover.prove_and_insert bexp pc0); PC.close pc0
-        with Proof.Proof_failed _ ->
-          error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
-                           "\" is not in the inductive set");
-        end;
+        let pa = Application(set2,[|elem|],true) in
+        let pa_idx =
+          try PC.find pa pc0
+          with Not_found ->
+            error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
+                             "\" is not in the inductive set") in
         let rs = Array.map (fun t -> Term.down_from 1 1 t) rs in
-        elem,set2,rs,goal,q
+        let ind_idx = PC.add_set_induction_law set2 q elem pc0 in
+        elem,set2,pa_idx,ind_idx,rs,goal,q
     | _ ->
         error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
                          "\" does not evaluate to an inductive set")
@@ -433,9 +436,7 @@ and prove_inductive_set
                          "\"" ^ msg)
     in
     let t,pt = PC.discharged gidx pc1 in
-    let idx = PC.add_proved_0 false (-1) t pt 0 pc0 in
-    PC.close pc0;
-    idx
+    PC.add_proved_term t pt false pc0
   in
   let nrules = Array.length rules
   and imp_id = nvars + Feature_table.implication_index in
@@ -467,24 +468,25 @@ and prove_inductive_set
       IntMap.empty
       lst
   in
-  interval_iter
-    (fun irule ->
-      try
-        ignore(IntMap.find irule proved)
-      with Not_found ->
-        let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
-        let rule =
+  let ind_idx =
+    interval_fold
+      (fun ind_idx irule ->
+        let rule_idx =
           try
-            let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
-            assert (n1 = n);
-            t0
-          with Not_found -> rules.(irule) in
-        let pc1 = PC.push_untyped nms pc0 in
-        ignore(prove_case ens.i rule ps tgt [] pc1 pc0)
-    ) 0 nrules;
-  let gidx =
-    try Prover.prove_and_insert (Application(q,[|elem|],true)) pc0
-    with Proof.Proof_failed _  -> assert false (* cannot happen *) in
+            IntMap.find irule proved
+          with Not_found ->
+            let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
+            let rule =
+              try
+                let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
+                assert (n1 = n);
+                t0
+            with Not_found -> rules.(irule) in
+            let pc1 = PC.push_untyped nms pc0 in
+            prove_case ens.i rule ps tgt [] pc1 pc0 in
+        PC.add_mp rule_idx ind_idx false pc0
+      ) ind_idx 0 nrules in
+  let gidx = PC.add_mp pa_idx ind_idx false pc0 in
   let t,pt = PC.discharged gidx pc0 in
   ignore(PC.add_proved_0 false (-1) t pt 0 pc);
   PC.close pc
