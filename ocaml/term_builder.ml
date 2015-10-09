@@ -1154,8 +1154,9 @@ let complete_quantified (is_all:bool) (tb:t): unit =
   pop_context tb;
   let trec = Seq.pop_last tb.terms in
   let term =
-    if IntSet.cardinal (Term.bound_variables trec.term nargs) <> nargs then
-      raise Not_found;
+    if not is_all &&
+      IntSet.cardinal (Term.bound_variables trec.term nargs) <> nargs
+    then raise Not_found;
     if is_all then
       Term.all_quantified nargs names  trec.term
     else

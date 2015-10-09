@@ -898,10 +898,10 @@ let prepend_names (nms:int array) (names:int array): int array =
 
 
 let prenex (t:term) (nb:int) (ft:t): term =
-  (* Calculate the prenex normal form of the term [t] with respect to universal
-     quantifiers. All universal quantifiers are bubbled up in implication chains
-     and merged with the upper universal quantifier.
-   *)
+  (* Calculate the prenex normal form of the term [t] with respect to
+     universal quantifiers. All universal quantifiers are bubbled up in
+     implication chains and merged with the upper universal quantifier. Unused
+     variables in universally quantified expressions are eliminated.  *)
   let rec norm (t:term) (nb:int): term =
     let n,nms,t = norm0 t nb in
     Term.all_quantified n nms t
@@ -940,19 +940,19 @@ let prenex (t:term) (nb:int) (ft:t): term =
         if is_all then
           let n1,nms1,t1 = norm0 t0 (n0+nb) in
           let nms = prepend_names nms0 nms1 in
-          let t2, nms2 =
+          let t2, n2, nms2 =
             let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
             let n   = Array.length usd in
-            assert (n = n0+n1);
-            let args = Array.make n (Variable (-1))
+            assert (is_all || n = n0 + n1);
+            let args = Array.make (n0+n1) (Variable (-1))
             and nms2 = Array.make n (-1) in
             for i = 0 to n-1 do
               nms2.(i) <- nms.(usd.(i));
               args.(usd.(i)) <- (Variable i)
             done;
-            Term.sub t1 args n, nms2
+            Term.sub t1 args n, n, nms2
           in
-          n0+n1, nms2, t2
+          n2, nms2, t2
         else
           0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
     | Flow(ctrl,args) ->
