@@ -356,6 +356,7 @@ and prove_inductive_set
     (ens:info_expression)
     (pc:PC.t)
     : unit =
+  assert (not (PC.is_global pc));
   let pc0   = PC.push_untyped [|p_id|] pc in
   let c0    = PC.context pc0 in
   let nvars = Context.count_variables c0 in
@@ -488,7 +489,7 @@ and prove_inductive_set
       ) ind_idx 0 nrules in
   let gidx = PC.add_mp pa_idx ind_idx false pc0 in
   let t,pt = PC.discharged gidx pc0 in
-  ignore(PC.add_proved_0 false (-1) t pt 0 pc);
+  ignore(PC.add_proved_term t pt true pc);
   PC.close pc
 
 
@@ -500,6 +501,9 @@ and prove_inductive_type
     (ens:info_expression)
     (pc:PC.t)
     : unit =
+  assert (not (PC.is_global pc));
+  let pc_outer = pc in
+  let pc = PC.push_untyped [||] pc_outer in
   let c   = PC.context pc in
   let nvars = Context.count_variables c
   and tgt = get_boolean_term ens pc
@@ -542,7 +546,7 @@ and prove_inductive_type
   let prove_case
       (info:info) (cons_idx:int) (pat:term) (p:term) (cmp:compound)
       (pc1:PC.t) (pc:PC.t)
-      : unit =
+      : int =
     let lstind = Feature_table.inductive_arguments cons_idx ft in
     let goal = Application(p,[|pat|],true) in
     List.iter
@@ -561,10 +565,9 @@ and prove_inductive_type
                          msg)
     in
     let t,pt = PC.discharged gidx pc1 in
-    ignore (PC.add_proved_0 false (-1) t pt 0 pc);
-    PC.close pc
+    PC.add_proved_term t pt false pc
   in
-  let cons_set,tp,p,goal =
+  let cons_set,ind_idx,tp,p,goal =
     let idx,tvs,s =
       try Context.variable id c
       with Not_found ->
@@ -577,52 +580,56 @@ and prove_inductive_type
     let pinner = Term.lambda_inner tgt idx in
     let p = Lam(1,[|id|],[],pinner,true) in
     let goal = Application(p,[|Variable idx|],true) in
-    let cons_set, tp =
+    let cons_set, cls, tp =
       let tp = Sign.result s in
       let cls,_ = Class_table.split_type_term tp
       and ntvs = Tvars.count_all tvs in
-    let set =
-      if cls < ntvs then IntSet.empty
-      else
-        Class_table.constructors (cls-ntvs) ct in
-    if IntSet.is_empty set then
-      error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
-    set, tp
+      let set =
+        if cls < ntvs then IntSet.empty
+        else
+          let cls = cls - ntvs in
+          Class_table.constructors cls ct in
+      if IntSet.is_empty set then
+        error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
+      set, cls-ntvs, tp
     in
-    cons_set,tp,p,goal
+    let ind_idx = PC.add_induction_law cls p (Variable idx) pc in
+    cons_set,ind_idx,tp,p,goal
   in
   let proved_cases =
     List.fold_left
-      (fun set (ie,cmp) ->
+      (fun map (ie,cmp) ->
         let cons_idx, pat, p, pc1 =
           analyze_pattern ie p cons_set tp in
-        prove_case ie.i cons_idx pat p cmp pc1 pc;
-        IntSet.add cons_idx set
+        let idx = prove_case ie.i cons_idx pat p cmp pc1 pc in
+        IntMap.add cons_idx idx map
       )
-      IntSet.empty
+      IntMap.empty
       lst in
-  IntSet.iter
-    (fun cons_idx ->
-      if IntSet.mem cons_idx proved_cases then
-        ()
-      else begin
-        let n   = Feature_table.arity cons_idx ft in
-        let nms = Array.init n (fun i -> ST.symbol ("$" ^ (string_of_int i))) in
-        let pc1 = PC.push_untyped nms pc in
-        let pat =
-          let idx   = nvars + n + cons_idx in
-          if n = 0 then Variable idx
-          else
-            let args = Array.init n (fun i -> Variable i) in
-            VAppl(idx,args) in
-        let p = Term.up n p in
-        prove_case ens.i cons_idx pat p [] pc1 pc
-      end)
-    cons_set;
-  begin try ignore (Prover.prove_and_insert goal pc)
-  with Proof.Proof_failed _ -> assert false (* cannot happen *)
-  end;
-  PC.close pc
+  let ind_idx =
+    IntSet.fold
+      (fun cons_idx ind_idx ->
+        try
+          let idx = IntMap.find cons_idx proved_cases in
+          PC.add_mp idx ind_idx false pc
+        with Not_found ->
+          let n   = Feature_table.arity cons_idx ft in
+          let nms = Array.init n (fun i -> ST.symbol ("$" ^ (string_of_int i))) in
+          let pc1 = PC.push_untyped nms pc in
+          let pat =
+            let idx   = nvars + n + cons_idx in
+            if n = 0 then Variable idx
+            else
+              let args = Array.init n (fun i -> Variable i) in
+              VAppl(idx,args) in
+          let p = Term.up n p in
+          let idx = prove_case ens.i cons_idx pat p [] pc1 pc in
+          PC.add_mp idx ind_idx false pc
+      )
+      cons_set ind_idx in
+  let t,pt = PC.discharged ind_idx pc in
+  ignore (PC.add_proved_term t pt true pc_outer);
+  PC.close pc_outer
 
 
 
@@ -1097,15 +1104,15 @@ let analyze_feature
 
 
 
-let add_case_axiom (t:term) (pc:Proof_context.t): unit =
-  let _ = Proof_context.add_proved false (-1) t (Proof.Axiom t) pc in ()
+let add_case_axiom (t:term) (pc:Proof_context.t): int =
+  Proof_context.add_proved false (-1) t (Proof.Axiom t) pc
 
 
 
 let add_case_induction
     (cls:     int)
     (clst_rev:int list)
-    (pc:      Proof_context.t): unit =
+    (pc:      Proof_context.t): int =
   let pappl nb a = Application(Variable nb, [|a|],true) in (* a in p *)
   let ft = Proof_context.feature_table pc in
   let imp_id0 = 2 + Feature_table.implication_index
@@ -1185,7 +1192,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       (standard_argnames (n1+n2))
       t in
   (* printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
-  add_case_axiom t pc
+  ignore(add_case_axiom t pc)
 
 
 
@@ -1216,7 +1223,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   let t = Term.binary imp_id mtch1 (Term.binary imp_id mtch2 (Variable false_id)) in
   let q = Term.all_quantified 1 (standard_argnames 1) t in
   (*printf "inversion %s\n" (PC.string_of_term q pc);*)
-  add_case_axiom q pc
+  ignore(add_case_axiom q pc)
 
 
 
@@ -1267,7 +1274,7 @@ let add_case_injections
           let t = Term.binary imp_id teq0 teq1 in
           let t = Term.all_quantified (2*n) nms t in
           (*printf "injection %s\n" (Proof_context.string_of_term t pc);*)
-          add_case_axiom t pc
+          ignore(add_case_axiom t pc)
         done)
     clst
 
@@ -1427,14 +1434,14 @@ let put_creators
       creators.v in
   let clst_rev = c1lst @ c0lst in
   let clst = List.rev clst_rev in
-  add_case_induction cls clst_rev pc;
+  let indlaw = add_case_induction cls clst_rev pc in
   add_case_inversions cls clst pc;
   add_case_injections clst pc;
   let cset = IntSet.of_list clst in
   if Class_table.is_interface_check ct &&
      Class_table.constructors_priv cls ct <> cset then
     error_info info "Different constructors in implementation file";
-  Class_table.set_constructors cset cls ct;
+  Class_table.set_constructors cset indlaw cls ct;
   creators_check_formal_generics creators.i clst tvs ft
 
 

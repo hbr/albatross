@@ -147,9 +147,10 @@ val add: header_mark withinfo -> int -> formal_generics -> t -> unit
 
 val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool
+val induction_law:    int -> t -> int
 val constructors:     int -> t -> IntSet.t
 val constructors_priv:int -> t -> IntSet.t
-val set_constructors: IntSet.t -> int -> t -> unit
+val set_constructors: IntSet.t -> int -> int -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor

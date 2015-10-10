@@ -191,6 +191,13 @@ let inductive_arguments (i:int) (ft:t): int list =
   List.rev lst
 
 
+
+let constructor_rule (idx:int) (p:term) (nb:int) (ft:t) :term =
+  assert false
+
+
+
+
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =
   let rec check_pub t nb =
     let check_pub_i i =
@@ -2805,7 +2812,6 @@ let inspect_unfolded (info:info) (args:term array) (nb:int) (ft:t): term array =
   let lst = args.(0) :: (List.rev lst) in
   let args = Array.of_list lst in
   args
-
 
 
 

@@ -1117,6 +1117,21 @@ let add_consequences_someelim (i:int) (pc:t): unit =
     ()
 
 
+let add_induction_law (cls:int) (p:term) (elem:term) (pc:t): int =
+  (* Add the induction law of the case class [cls], specialized for the set
+     [p] and the element [elem]. *)
+  let ct = class_table pc in
+  assert (Class_table.has_constructors cls ct);
+  let idx_ind = Class_table.induction_law cls ct in
+  let rd = rule_data idx_ind pc
+  and args = [|p;elem|] in
+  let rd = RD.specialize rd args idx_ind (context pc) in
+  let t  = RD.term rd (nbenv pc) in
+  Proof_table.add_specialize t idx_ind args pc.base;
+  raw_add0 t rd false pc
+
+
+
 let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
   match set with
     Indset _ ->
@@ -1683,8 +1698,13 @@ let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
 
 
 let add_proved_term (t:term) (pt:proof_term) (search:bool) (pc:t): int =
+  assert (not (is_global pc));
+  let cnt = count pc in
   Proof_table.add_proved t pt 0 pc.base;
-  raw_add t search pc
+  let idx = raw_add t search pc in
+  if search && idx = cnt then
+    add_last_to_work pc;
+  idx
 
 
 let add_proved_0

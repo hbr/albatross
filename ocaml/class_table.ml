@@ -26,6 +26,7 @@ type base_descriptor = { hmark:    header_mark;
                          mutable def_asserts:  int list;
                          mutable eff_asserts:  int list;
                          mutable constructors: IntSet.t;
+                         mutable indlaw:       int;
                          mutable descendants:  IntSet.t;
                          mutable ancestors: parent_descriptor IntMap.t}
 
@@ -93,6 +94,7 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
    def_asserts  = [];
    eff_asserts  = [];
    constructors = IntSet.empty;
+   indlaw       = -1;
    descendants  = IntSet.empty;
    ancestors=anc}
 
@@ -654,6 +656,12 @@ let constructors (cls:int) (ct:t): IntSet.t =
   bdesc.constructors
 
 
+
+let  induction_law (cls:int) (ct:t): int =
+  let bdesc = base_descriptor cls ct in
+  assert ((bdesc.indlaw = -1) = (bdesc.constructors = IntSet.empty));
+  bdesc.indlaw
+
 let constructors_priv (cls:int) (ct:t): IntSet.t =
   assert (cls < count ct);
   let bdesc = base_descriptor_priv cls ct in
@@ -672,7 +680,7 @@ let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
 
 
-let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
+let set_constructors (set:IntSet.t) (indlaw:int) (cls:int) (ct:t): unit =
   assert (cls < count ct);
   let bdesc = base_descriptor cls ct in
   assert (bdesc.constructors = IntSet.empty);
@@ -683,9 +691,11 @@ let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
   end;
   if is_interface_use ct then begin
     let bdesc_priv = base_descriptor_priv cls ct in
-    bdesc_priv.constructors <- set
+    bdesc_priv.constructors <- set;
+    bdesc_priv.indlaw <- indlaw
   end;
-  bdesc.constructors <- set
+  bdesc.constructors <- set;
+  bdesc.indlaw <- indlaw
 
 
 
