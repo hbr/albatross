@@ -667,7 +667,19 @@ let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term 
   Context.make_application f args nb pr c
 
 
+let is_inductive_set (i:int) (pc:t): bool =
+  Proof_table.is_inductive_set i pc.base
 
+
+let inductive_set (t:term) (pc:t): term =
+  Proof_table.inductive_set t pc.base
+
+
+let definition (i:int) (nb:int) (pc:t): int * int array * term =
+  if i < nb || is_inductive_set (i-nb) pc then
+    raise Not_found
+  else
+    Proof_table.definition i nb pc.base
 
 
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
@@ -717,7 +729,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let n,nms,t0 = Proof_table.definition i nb pc.base in
+            let n,nms,t0 = definition i nb pc in
             let t0 =
               if n = 0 then t0
               else make_lambda n nms [] t0 false pc in
@@ -741,7 +753,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
               match t with Flow _ -> true | _ -> false
             in
             try
-              let n,nms,t0 = Proof_table.definition i nb pc.base in
+              let n,nms,t0 = definition i nb pc in
               assert (n = Array.length args);
               let args,argse,argsmodi =
                 if full then
@@ -897,15 +909,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   assert (modi = (tred <> t));
   tred, ered, modi
 
-
-
-let evaluated_star (t:term) (pc:t): term =
-  let rec eval t =
-    let t,e,modi = evaluated_term t 0 pc in
-    if modi then eval t
-    else t
-  in
-  eval t
 
 
 let add_mp0 (t:term) (i:int) (j:int) (search:bool) (pc:t): int =
@@ -1133,55 +1136,49 @@ let add_induction_law (cls:int) (p:term) (elem:term) (pc:t): int =
 
 
 let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
-  match set with
-    Indset _ ->
-      let imp_id = nbenv pc + Feature_table.implication_index in
-      let indlaw = Term.induction_law imp_id set
-      and pt     = Indset_ind set in
-      Proof_table.add_proved_0 indlaw pt pc.base;
-      let idx = raw_add indlaw false pc in
-      let rd  = rule_data idx pc in
-      let args = [|q;elem|] in
-      let rd  = RD.specialize rd args idx (context pc) in
-      assert (RD.is_specialized rd);
-      let t   = RD.term rd (nbenv pc) in
-      Proof_table.add_specialize t idx args pc.base;
-      raw_add0 t rd false pc
-  | _ ->
-      invalid_arg "Not an inductive set"
-
+  try
+    let indlaw = Proof_table.set_induction_law set pc.base
+    and pt     = Indset_ind set in
+    Proof_table.add_proved_0 indlaw pt pc.base;
+    let idx = raw_add indlaw false pc in
+    let rd  = rule_data idx pc in
+    let args = [|q;elem|] in
+    let rd  = RD.specialize rd args idx (context pc) in
+    assert (RD.is_specialized rd);
+    let t   = RD.term rd (nbenv pc) in
+    Proof_table.add_specialize t idx args pc.base;
+    raw_add0 t rd false pc
+  with Not_found ->
+    invalid_arg "Not an inductive set"
 
 
 let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
   match t with
-    Application (Indset(n,nms,rs),args,pr) ->
+    Application(set,args,pr) ->
       assert pr;
       assert (Array.length args = 1);
-      assert (n = 1); (* nyi *)
-      let len = Array.length rs
-      and set = Indset(n,nms,rs) in
-      for i = 0 to len-1 do
-        let rule = Term.apply rs.(i) [|set|] in
-        if has rule pc then begin
-          ()
-        end else begin
-          let pt = Indset_rule (set,i) in
-          Proof_table.add_proved_0 rule pt pc.base;
-          ignore(raw_add rule true pc);
-          add_last_to_work pc
-        end
-      done;
-      if fwd then begin
-        let imp_id = nbenv pc + Feature_table.implication_index in
-        let indlaw = Term.induction_law imp_id set
-        and pt     = Indset_ind set in
-        if has indlaw pc then
-          ()
-        else begin
-          Proof_table.add_proved_0 indlaw pt pc.base;
-          ignore(raw_add indlaw true pc);
-          add_last_to_work pc
-        end
+      begin try
+        let rs =
+          let indset = inductive_set set pc in
+          match indset with
+            Indset(n,nms,rs) ->
+              assert (n = 1); (* nyi *)
+              rs
+          | _ -> assert false in
+        let len = Array.length rs in
+        for i = 0 to len-1 do
+          let rule = Term.apply rs.(i) [|set|] in
+          if has rule pc then begin
+            ()
+          end else begin
+            let pt = Indset_rule (set,i) in
+            Proof_table.add_proved_0 rule pt pc.base;
+            ignore(raw_add rule true pc);
+            add_last_to_work pc
+          end
+        done
+      with Not_found ->
+        ()
       end
   | _ ->
       ()
@@ -1214,20 +1211,6 @@ let close_step (pc:t): unit =
 
 
 let prefix (pc:t): string = String.make (2*(depth pc)+2) ' '
-
-(*
-let close (pc:t): unit =
-  let rec cls (n:int): unit =
-    if n > 500 then assert false;  (* 'infinite' loop detection *)
-    if has_work pc then begin
-      close_step pc;
-      cls (n+1)
-    end else
-      ()
-  in
-  cls 0;
-  assert (not (has_work pc))
-*)
 
 
 let close (pc:t): unit =

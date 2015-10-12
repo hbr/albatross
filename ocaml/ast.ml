@@ -360,7 +360,7 @@ and prove_inductive_set
   let pc0   = PC.push_untyped [|p_id|] pc in
   let c0    = PC.context pc0 in
   let nvars = Context.count_variables c0 in
-  let elem, p, pa_idx, ind_idx, rules, goal, q =
+  let elem, p, prep, pa_idx, ind_idx, rules, goal, q =
     let bexp = get_boolean_term (withinfo info (Funapp (Expparen set,elem))) pc0
     and goal = Typer.boolean_term ens c0 in
     verify_preconditions bexp info pc0;
@@ -401,19 +401,23 @@ and prove_inductive_set
       PC.close pc0;
       q
     in
-    let set2 = PC.evaluated_star set1 pc0 in
+    let set2 =
+      try Context.inductive_set set1 c0
+      with Not_found ->
+        error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
+                         "\" does not evaluate to an inductive set") in
     begin match set2 with
       Indset (n,nms,rs) ->
         assert (n = 1);
-        let pa = Application(set2,[|elem|],true) in
+        let pa = Application(set1,[|elem|],true) in
         let pa_idx =
           try PC.find pa pc0
           with Not_found ->
             error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
                              "\" is not in the inductive set") in
         let rs = Array.map (fun t -> Term.down_from 1 1 t) rs in
-        let ind_idx = PC.add_set_induction_law set2 q elem pc0 in
-        elem,set2,pa_idx,ind_idx,rs,goal,q
+        let ind_idx = PC.add_set_induction_law set1 q elem pc0 in
+        elem,set2,set1,pa_idx,ind_idx,rs,goal,q
     | _ ->
         error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
                          "\" does not evaluate to an inductive set")
@@ -462,7 +466,7 @@ and prove_inductive_set
           with Not_found ->
             error_info ie.i "Invalid case"
         in
-        let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p q in
+        let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p prep q in
         assert (n1 = n);
         let idx = prove_case ie.i rule ps tgt cmp pc1 pc0 in
         IntMap.add irule idx proved)
@@ -476,7 +480,7 @@ and prove_inductive_set
           try
             IntMap.find irule proved
           with Not_found ->
-            let n,nms,ps,tgt = Term.induction_rule imp_id irule p q in
+            let n,nms,ps,tgt = Term.induction_rule imp_id irule p prep q in
             let rule =
               try
                 let n1,_,t0 = Term.all_quantifier_split rules.(irule) in

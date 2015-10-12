@@ -989,6 +989,27 @@ let has_definition (i:int) (ft:t): bool =
 
 
 
+let is_inductive_set (i:int) (nb:int) (ft:t): bool =
+  try
+    let n,nms,t = definition i nb ft in
+    begin
+      match t with
+        Indset _ -> true
+      | _        -> false
+    end
+  with Not_found ->
+    false
+
+
+let inductive_set (i:int) (args:term array) (nb:int) (ft:t): term =
+  let n,nms,t = definition i nb ft in
+  match t with
+    Indset _ ->
+      assert (n = Array.length args);
+      Term.apply t args
+  | _ ->
+      raise Not_found
+
 
 let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   (* The preconditions (if there are some) of the feature [i] as optional number of
@@ -1014,13 +1035,32 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   let desc = descriptor i ft in
   let spec = (base_descriptor i ft).spec in
   let n = arity i ft in
-  if Feature.Spec.has_preconditions spec then
-    let lst = Feature.Spec.postconditions spec in
-    let lst = List.map (fun t -> Term.upbound nb n t) lst in
-    n, desc.argnames, lst
-  else
-    raise Not_found
+  let lst = Feature.Spec.postconditions spec in
+  let lst = List.map (fun t -> Term.upbound nb n t) lst in
+  n, desc.argnames, lst
 
+
+
+let count_postconditions (i:int) (ft:t): int =
+  let bdesc = base_descriptor i ft in
+  Feature.Spec.count_postconditions bdesc.spec
+
+
+
+let function_property
+    (i:int) (fidx:int) (nb:int) (args:term array) (ft:t): term =
+  assert (nb <= fidx);
+  let fidx = fidx - nb in
+  let spec = (base_descriptor fidx ft).spec in
+  let n = arity fidx ft in
+  if n <> Array.length args then invalid_arg "wrong size of arguments";
+  if i < 0 || count_postconditions fidx ft <= i then
+    invalid_arg "postcondition does not exist";
+  let pres  = Feature.Spec.preconditions spec
+  and post  = Feature.Spec.postcondition i spec in
+  let chn =
+    Term.make_implication_chain (List.rev pres) post (implication_index + n) in
+  Term.sub chn args nb
 
 
 

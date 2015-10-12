@@ -149,9 +149,10 @@ module Term: sig
 
   val split_rule: term -> int -> int * int array * term list * term
 
-  val closure_rule:   int -> term -> term
-  val induction_rule: int -> int -> term -> term -> int * int array * term list * term
-  val induction_law:  int -> term -> term
+  val closure_rule:   int -> term -> term -> term
+  val induction_rule: int -> int -> term -> term -> term
+    -> int * int array * term list * term
+  val induction_law:  int -> term -> term -> term
 end = struct
 
   let is_variable_i (t:term) (i:int): bool =
@@ -264,7 +265,7 @@ end = struct
     | Flow (ctrl,args) ->
         1 + nodesarr args
     | Indset (_,_,rs) ->
-        1 + nodesarr rs
+        1
 
 
 
@@ -928,19 +929,19 @@ end = struct
 
 
 
-  let closure_rule (i:int) (t:term): term =
+  let closure_rule (i:int) (p:term) (p_rep:term): term =
     assert (0 <= i);
-    match t with
+    match p with
       Indset(n,nms,rs) ->
         if Array.length rs <= i then invalid_arg "Rule index out of bound";
-        apply rs.(i) [|t|]
+        apply rs.(i) [|p_rep|]
     | _ ->
         invalid_arg "Not an inductive set"
 
 
 
 
-  let induction_rule (imp_id:int) (i:int) (p:term) (q:term)
+  let induction_rule (imp_id:int) (i:int) (p:term) (pr:term) (q:term)
       : int * int array * term list * term =
     (* Calculate the induction rule [i] for the inductively defined set [p]
 
@@ -963,16 +964,13 @@ end = struct
 
        The function returs the formal arguments names, the list of premises and the
        target.
-
-       Note: We are in an environment where the set [q] is represented by
-       'Variable 1'. This is the outer environment of the induction rule.
      *)
     let pair (n:int) (t:term): term * term =
       match t with
-        Application(Variable i,args,pr) when i = n ->
-          assert pr;
+        Application(Variable i,args,pr0) when i = n ->
+          assert pr0;
           assert (Array.length args = 1);
-          sub_from t n [|p|] 0,
+          sub_from t n [|pr|] 0,
           sub_from t n [|q|] 0
       | _ ->
           raise Not_found
@@ -1001,8 +999,9 @@ end = struct
 
 
 
-  let induction_law (imp_id:int) (p:term): term =
-    (* Calculate the induction law for the inductively defined set [p]
+  let induction_law (imp_id:int) (p:term) (pr:term): term =
+    (* Calculate the induction law for the inductively defined set [p] represented
+       by [pr]
 
        all(q,a) ind0 ==> ... ==> indn ==> p(a) ==> q(a)
 
@@ -1015,16 +1014,16 @@ end = struct
        where all(x,y,...) p(e1) ==> ... ==> p(en) ==> e0 ==> p(e) is the
        corresponding closure rule.
      *)
-    let imp_id, p = imp_id + 2, up 2 p in (* space for a and q *)
+    let imp_id, p, pr = imp_id + 2, up 2 p, up 2 pr in (* space for a and q *)
     match p with
       Indset (n,nms,rs) ->
         assert (n = 1);
         let nrules = Array.length rs in
         let rule i =
-          let n,nms,ps,tgt = induction_rule imp_id i p (Variable 0) in
+          let n,nms,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
           all_quantified n nms chn in
-        let pa = Application (p,[|Variable 1|],true)
+        let pa = Application (pr,[|Variable 1|],true)
         and qa = Application (Variable 0, [|Variable 1|],true) in
         let tgt = binary imp_id pa qa in
         let tgt =

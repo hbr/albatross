@@ -717,6 +717,29 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
   in
   expand t nb
 
+let is_inductive_set (i:int) (c:t): bool =
+  let nb = count_variables c in
+  nb <= i &&
+  Feature_table.is_inductive_set i nb c.ft
+
+
+let inductive_set (t:term) (c:t): term =
+  (* The inductive set represented by the term [t]. *)
+  let nb = count_variables c in
+  let indset i args =
+    if i < nb then
+      raise Not_found
+    else
+      Feature_table.inductive_set i args nb c.ft in
+  match t with
+    Indset _ ->
+      t
+  | Variable i ->
+      indset i [||]
+  | VAppl (i,args) ->
+      indset i args
+  | _ ->
+      raise Not_found
 
 
 let preconditions (idx:int) (nb:int) (c:t): int * int array * term list =
@@ -735,6 +758,11 @@ let postconditions (idx:int) (nb:int) (c:t): int * int array * term list =
   else
     Feature_table.postconditions idx (nb+nbenv) (feature_table c)
 
+
+let function_property (idx:int) (i:int) (args:term array) (c:t): term =
+  let nbenv = count_variables c in
+  if idx < nbenv then invalid_arg "variables don't have properties";
+  Feature_table.function_property idx i nbenv args c.ft
 
 
 let has_preconditions (idx:int) (nb:int) (c:t): bool =

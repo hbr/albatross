@@ -118,8 +118,6 @@ val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit
 
-val evaluated_star: term -> t -> term
-
 val excluded_middle:     t -> int
 val or_elimination:      t -> int
 val has_excluded_middle: t -> bool

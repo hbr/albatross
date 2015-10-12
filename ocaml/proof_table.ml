@@ -719,18 +719,38 @@ let term_of_someelim (i:int) (at:t): term =
     raise Illegal_proof_term
 
 
+let is_inductive_set (i:int) (at:t): bool =
+  Context.is_inductive_set i at.c
+
+
+let inductive_set (t:term) (at:t): term =
+  Context.inductive_set t at.c
+
+
 let closure_rule (i:int) (t:term) (at:t): term =
   try
-    Term.closure_rule i t
-  with Invalid_argument _ ->
+    let set = inductive_set t at in
+    Term.closure_rule i set t
+  with Not_found
+  | Invalid_argument _ ->
     raise Illegal_proof_term
 
 
-let induction_law (t:term) (at:t): term =
+let function_property (idx:int) (i:int) (args:term array) (at:t): term =
   try
-    Term.induction_law (imp_id at) t
+    Context.function_property idx i args at.c
   with Invalid_argument _ ->
     raise Illegal_proof_term
+
+
+let set_induction_law (t:term) (at:t): term =
+  let p =
+    try
+      Context.inductive_set t at.c
+    with Not_found ->
+      raise Illegal_proof_term in
+  Term.induction_law (imp_id at) p t
+
 
 let count_assumptions (pt_arr:proof_term array): int =
   let p (pt:proof_term): bool =
@@ -779,12 +799,16 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
       Axiom t | Assumption t ->
         if trace then print0 t at;
         t
+    | Funprop (idx,i,args) ->
+        let t = function_property idx i args at in
+        if trace then print0 t at;
+        t
     | Indset_rule (t,i) ->
         let t = closure_rule i t at in
         if trace then print0 t at;
         t
     | Indset_ind t ->
-        let t = induction_law t at in
+        let t = set_induction_law t at in
         if trace then print0 t at;
         t
     | Detached (a,b) ->

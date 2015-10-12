@@ -139,11 +139,14 @@ val fully_expanded: term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> t -> int * int array * term
+val is_inductive_set: int -> t -> bool
+val inductive_set: term -> t -> term
 
 val tuple_of_args: term array -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
+val function_property: int -> int -> term array -> t -> term
 val has_preconditions: int -> int -> t -> bool
 val term_preconditions: term -> t -> term list
 

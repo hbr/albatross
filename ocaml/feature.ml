@@ -44,14 +44,21 @@ module Spec = struct
     spec.pres
 
 
+  let count_postconditions (spec:t): int =
+    List.length spec.posts
+
+
+  let postcondition (i:int) (spec:t): term =
+    assert (i < count_postconditions spec);
+    List.nth spec.posts i
+
+
   let has_postconditions (spec:t): bool =
     spec.posts <> []
 
+
   let postconditions (spec:t): term list =
-    if spec.posts = [] then
-      raise Not_found
-    else
-      spec.posts
+    spec.posts
 
 
   let equivalent (s1:t) (s2:t): bool =

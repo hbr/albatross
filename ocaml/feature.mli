@@ -15,7 +15,9 @@ module Spec: sig
   val names:           t -> int * int array
   val has_preconditions: t -> bool
   val preconditions:   t -> term list
+  val count_postconditions: t -> int
   val has_postconditions: t -> bool
+  val postcondition:    int -> t -> term
   val postconditions:   t -> term list
 end
 

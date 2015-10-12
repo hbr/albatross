@@ -138,6 +138,9 @@ val definition: int -> int -> t -> int * int array * term
 
 val has_definition: int -> t -> bool
 
+val is_inductive_set: int -> int -> t -> bool
+val inductive_set: int -> term array -> int -> t -> term
+
 val specification: int -> t -> term list
 
 val feature_name: int -> t -> string
@@ -176,6 +179,8 @@ val prenex: term -> int -> t -> term
 
 val preconditions:  int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
+val count_postconditions: int -> t -> int
+val function_property: int -> int -> int -> term array -> t -> term
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
