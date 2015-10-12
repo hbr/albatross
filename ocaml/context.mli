@@ -139,6 +139,7 @@ val fully_expanded: term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> t -> int * int array * term
+val arity:      int -> int -> t -> int
 val is_inductive_set: int -> t -> bool
 val inductive_set: term -> t -> term
 

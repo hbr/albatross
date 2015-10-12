@@ -1066,6 +1066,7 @@ let function_property
 
 let domain_of_feature (i:int) (nb:int) (ft:t): term =
   assert (nb <= i);
+  assert (arity (i-nb) ft > 0);
   let n,nms,pres = preconditions i nb ft in
   let t =
     match pres with

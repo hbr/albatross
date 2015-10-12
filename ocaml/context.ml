@@ -652,6 +652,12 @@ let definition (idx:int) (nb:int) (c:t): int * int array * term =
   else
     Feature_table.definition idx (nb + nbenv) (feature_table c)
 
+let arity (idx:int) (nb:int) (c:t): int =
+  let nbenv = count_variables c in
+  if idx < nb + nbenv then
+    0
+  else
+    Feature_table.arity (idx-nb-nbenv) c.ft
 
 let fully_expanded (t:term) (nb:int) (c:t): term =
   let rec expand t nb =

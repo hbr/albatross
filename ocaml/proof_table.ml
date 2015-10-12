@@ -402,6 +402,11 @@ let definition (idx:int) (nb:int) (at:t): int * int array * term =
   let c = context at in
   Context.definition idx nb c
 
+
+let arity (idx:int) (nb:int) (at:t): int =
+  Context.arity idx nb at.c
+
+
 let split_equality (t:term) (nb:int) (at:t): int * term * term =
   let nargs, eq_id, left, right =
     Feature_table.split_equality t (nb + count_variables at) (feature_table at) in
@@ -456,7 +461,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             if pr then raise Illegal_proof_term;
             if Context.domain_of_lambda n nms pres nb (context at) <> doma then
               raise Illegal_proof_term
-        | Variable idx2 ->
+        | Variable idx2 when arity idx2 nb at > 0 ->
             if Context.domain_of_feature idx2 nb (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()

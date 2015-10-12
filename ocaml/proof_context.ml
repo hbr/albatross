@@ -681,6 +681,9 @@ let definition (i:int) (nb:int) (pc:t): int * int array * term =
   else
     Proof_table.definition i nb pc.base
 
+let arity (i:int) (nb:int) (pc:t): int =
+  Proof_table.arity i nb pc.base
+
 
 let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
@@ -743,7 +746,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let args = [|Eval.Term (Lam(n,nms,pres,t0,pr))|]
           and dom = Context.domain_of_lambda n nms pres nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
-      | VAppl (i,[|Variable idx|]) when i = domain_id && nbenv + nb <= idx->
+      | VAppl (i,[|Variable idx|])
+        when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
           let args = [|Eval.Term (Variable idx)|]
           and dom  = Context.domain_of_feature idx nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
