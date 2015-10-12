@@ -90,7 +90,8 @@ val count:          t -> int
 val count_previous: t -> int
 val count_global:   t -> int
 
-val count_variables:t -> int
+val count_variables:      t -> int
+val count_last_arguments: t -> int
 
 val term_orig:      int -> t -> term * int
 val term:           int -> t -> term

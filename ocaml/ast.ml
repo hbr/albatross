@@ -381,18 +381,23 @@ and prove_inductive_set
       let t0 =
         let ft = Context.feature_table c0 in
         let args = Feature_table.args_of_tuple elem nvars ft in
+        let args = Array.map
+            (fun arg ->
+              match arg with
+                Variable i when 1 <= i && i < nvars -> i
+              | _ ->
+                  error_info info ("\"" ^ (PC.string_of_term arg pc0) ^
+                                   "\" is not a variable")) args in
+        if np <> Array.length args then
+          error_info info ("Must be " ^ (string_of_int np) ^ " arguments");
         let t0 =
-          if Array.length args = np then
-            try
-              let _,map = Array.fold_left (fun (j,map) arg ->
-                let i = Term.variable arg in
-                if nvars <= i then raise Not_found;
-                j+1, IntMap.add i j map) (0,IntMap.empty) args in
-              Term.lambda_inner_map goal map
-            with Not_found ->
-              Term.lambda_inner2 goal elem
-          else
-            Term.lambda_inner2 goal elem in
+          let _,map =
+            Array.fold_left
+              (fun (j,map) i ->
+                assert (i < nvars);
+                j+1, IntMap.add i j map)
+              (0,IntMap.empty) args in
+          Term.lambda_inner_map goal map in
         Feature_table.add_tuple_accessors t0 np nvars ft
       in
       assert (np = Array.length nms);
@@ -435,7 +440,7 @@ and prove_inductive_set
       with Proof.Proof_failed msg ->
         let goal = beta_reduced tgt pc1 in
         error_info info ("Cannot prove case \"" ^
-                         (PC.string_of_term rule pc1) ^
+                         (PC.string_of_term rule pc0) ^
                          "\" with goal \n \"" ^
                          (PC.string_of_term goal pc1) ^
                          "\"" ^ msg)
@@ -458,9 +463,9 @@ and prove_inductive_set
         let n    = Context.count_last_arguments c1
         and nms  = Context.local_argnames c1 in
         let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
+        let rule =
+          Context.prenex_term (Term.all_quantified n nms rule) c1 in
         let irule =
-          let rule =
-            Context.prenex_term (Term.all_quantified n nms rule) c1 in
           try
             interval_find (fun i -> Term.equivalent rules.(i) rule) 0 nrules
           with Not_found ->
@@ -481,14 +486,14 @@ and prove_inductive_set
             IntMap.find irule proved
           with Not_found ->
             let n,nms,ps,tgt = Term.induction_rule imp_id irule p prep q in
-            let rule =
+            (*let rule =
               try
                 let n1,_,t0 = Term.all_quantifier_split rules.(irule) in
                 assert (n1 = n);
                 t0
-            with Not_found -> rules.(irule) in
+            with Not_found -> rules.(irule) in*)
             let pc1 = PC.push_untyped nms pc0 in
-            prove_case ens.i rule ps tgt [] pc1 pc0 in
+            prove_case ens.i rules.(irule) ps tgt [] pc1 pc0 in
         PC.add_mp rule_idx ind_idx false pc0
       ) ind_idx 0 nrules in
   let gidx = PC.add_mp pa_idx ind_idx false pc0 in
