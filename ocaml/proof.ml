@@ -74,6 +74,10 @@ end
 type proof_term =
     Axiom      of term
   | Assumption of term
+  | Funprop    of
+      int * int * term array (* idx of function,
+                                idx of postcondition,
+                                arguments *)
   | Indset_rule of term * int
   | Indset_ind  of term
   | Detached   of int * int  (* modus ponens *)
@@ -132,6 +136,8 @@ end = struct
           print_prefix (); printf "Axiom %s\n" (Term.to_string t)
       | Assumption t        ->
           print_prefix (); printf "Assumption %s\n" (Term.to_string t)
+      | Funprop (idx,i,_)  ->
+          print_prefix (); printf "Funprop %d %d\n" idx i
       | Indset_rule (t,i) ->
           print_prefix (); printf "Rule %d of %s\n" i (Term.to_string t)
       | Indset_ind t ->
@@ -196,7 +202,7 @@ end = struct
     in
     let rec adapt (pt:t): t =
       match pt with
-        Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> pt
+        Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ -> pt
       | Detached (a,b) ->
           Detached (index a, index b)
       | Specialize (i,args) ->
@@ -261,7 +267,8 @@ end = struct
         (fun (k,set) pt ->
           let set =
             match pt with
-              Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> set
+              Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ ->
+                set
             | Detached (i,j) ->
                 add_idx i (add_idx j set)
             | Specialize (i,_) | Witness (i,_,_,_) | Someelim i ->
@@ -318,7 +325,8 @@ end = struct
       else
         let set = IntSet.add k set in
         match pt_arr.(k-start) with
-          Axiom _ | Assumption _ | Indset_rule _ | Indset_ind _ -> set
+          Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ ->
+            set
         | Detached (i,j) ->
             assert (i < k);
             assert (j < k);
@@ -394,7 +402,7 @@ end = struct
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
-          Axiom _ | Assumption _  | Indset_rule _ | Indset_ind _ ->
+          Axiom _ | Assumption _  | Funprop _ | Indset_rule _ | Indset_ind _ ->
             pt
         | Detached (i,j) -> Detached (index i, index j)
         | Eval (i,e)     -> Eval   (index i, transform_eval e)
@@ -497,12 +505,13 @@ end = struct
           | Indset_ind t
           | Eval_bwd (t,_) ->
               uvars_term t set
-          | Detached (i,_)
-          | Eval   (i,_)
-          | Someelim i ->
+          | Detached _
+          | Eval _
+          | Someelim _ ->
               set
-          | Specialize (i,args)
-          | Witness (i,_,_,args) ->
+          | Funprop (_,_,args)
+          | Specialize (_,args)
+          | Witness (_,_,_,args) ->
               uvars_args args set
           | Subproof (nb1,nms,i,pt_arr) ->
               uvars (nb+nb1) pt_arr set
@@ -598,8 +607,10 @@ end = struct
               Indset_rule(shrink_term t,i)
           | Indset_ind t ->
               Indset_ind(shrink_term t)
-          | Detached (i,j) ->
+          | Detached _ ->
               pt
+          | Funprop(idx,i,args) ->
+              Funprop(idx,i,shrink_args args)
           | Specialize (i,args) ->
               Specialize (i, shrink_args args)
           | Eval (i,e)     -> Eval (i, shrink_eval e)
@@ -709,8 +720,9 @@ end = struct
       | Assumption t   -> Assumption (up t)
       | Indset_rule (t,i) -> Indset_rule (up t,i)
       | Indset_ind t      -> Indset_ind (up t)
-      | Detached (i,j) -> pt
-      | Specialize (i,args) -> Specialize (i, upargs args)
+      | Detached _ -> pt
+      | Funprop (idx,i,args) -> Funprop(idx,i, upargs args)
+      | Specialize (i,args)  -> Specialize (i, upargs args)
       | Eval (i,e)     -> Eval (i, upeval_0 e)
       | Eval_bwd (t,e) -> Eval_bwd (up t, upeval_0 e)
       | Witness (i,nms,t,args) ->
@@ -739,6 +751,7 @@ end = struct
     match pt with
       Axiom _  -> "ax"
     | Assumption _ -> "ass"
+    | Funprop _ -> "prop"
     | Indset_rule (_,_) -> "rule"
     | Indset_ind _ -> "ind"
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
