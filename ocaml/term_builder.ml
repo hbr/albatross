@@ -1584,7 +1584,13 @@ let specialize (t:term) (c:Context.t): term =
 
 let is_valid (t:term) (c:Context.t): bool =
   try
-    let _ = specialize t c in true
+    let tb = occupy_untyped c in
+    tb.norm <- true;
+    if tb.trace then begin
+      printf "check term \"%s\" \"%s\"\n" (string_of_term t tb) (Term.to_string t);
+    end;
+    check_term t tb;
+    true
   with Not_found ->
     printf "invalid term %s\n" (Context.string_of_term t true 0 c);
     false
