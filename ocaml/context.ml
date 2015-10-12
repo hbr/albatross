@@ -947,8 +947,10 @@ let term_preconditions (t:term)  (c:t): term list =
         args
     and pres_lam n nms t lst =
       let lst0,_ = pres t (n+nb) [] in
+      let nbb = nb + count_variables c in
+      let prenex t = Feature_table.prenex t nbb c.ft in
       List.fold_right
-        (fun t lst -> QExp(n,nms,t,true)::lst)
+        (fun t lst -> (prenex (QExp(n,nms,t,true)))::lst)
         lst0
         lst
     in
@@ -1032,6 +1034,20 @@ let term_preconditions (t:term)  (c:t): term list =
     | QExp (n,nms,t0,is_all) ->
         pres_lam n nms t0 lst,
         None
+    | Indset (n,nms,rs) ->
+        let lst =
+          Array.fold_left
+            (fun lst r ->
+              let lst_r,_ = pres r (n+nb) [] in (* reversed *)
+              let lst_r = List.rev_map
+                  (fun p ->
+                    try Term.down n p
+                    with Term_capture -> assert false)
+                  lst_r in
+              List.rev_append lst_r lst)
+            lst
+            rs in
+        lst, None
     | Flow (ctrl,args) ->
         let len = Array.length args in
         begin
@@ -1094,8 +1110,6 @@ let term_preconditions (t:term)  (c:t): term list =
               assert (len = 2);
               pres args.(0) nb lst
         end
-    | Indset (n,nms,rs) ->
-        lst, domain_t
   in
   let ps,_ = pres t 0 [] in
   List.rev ps
