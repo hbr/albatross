@@ -54,6 +54,12 @@ preimage (q:B?, f:A->B): ghost A?
                -> f(a)
            end
 
+(+) (f:A->B,e:(A,B)): (A->B)
+    -> agent (a:A): B
+           require a = e.first or a in f.domain
+           ensure  -> if a = e.first then e.second else f(a) end end
+
+
 (+) (f,g:A->B): ghost (A->B)
     -> agent (a:A): B
            require

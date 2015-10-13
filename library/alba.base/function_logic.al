@@ -39,6 +39,25 @@ all(f,g,h:A->B)
     end
 
 
+all(f:A->B, a:A, b:B)
+    proof
+        a = (a,b).first
+    ensure
+        (f + (a,b))(a) = b
+    end
+
+
+all(f:A->B, a,x:A, b:B)
+    require
+        x in f.domain
+        x /= a
+    proof
+        x /= (a,b).first
+    ensure
+        (f + (a,b))(x) = f(x)
+    end
+
+
 all(f,g:A->B)
     require
         consistent(f,g)

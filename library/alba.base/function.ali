@@ -3,7 +3,7 @@
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation. :}
 
-use predicate end
+use predicate; tuple end
 
 A: ANY
 B: ANY
@@ -52,6 +52,13 @@ preimage (q:B?, f:A->B): ghost A?
            ensure
                -> f(a)
            end
+
+
+(+) (f:A->B,e:(A,B)): (A->B)
+    -> agent (a:A): B
+           require a = e.first or a in f.domain
+           ensure  -> if a = e.first then e.second else f(a) end end
+
 
 (+) (f,g:A->B): ghost (A->B)
     -> agent (a:A): B

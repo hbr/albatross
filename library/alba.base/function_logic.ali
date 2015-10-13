@@ -10,6 +10,8 @@ end
 A: ANY
 B: ANY
 
+{: Order Structure
+   =============== :}
 
 all(f,g,h:A->B)
     ensure
@@ -17,6 +19,23 @@ all(f,g,h:A->B)
          f <= g  ==>  g <= f  ==> f = g
          f <= g  ==>  g <= h  ==> f <= h
     end
+
+
+
+
+{: Override
+   ======== :}
+
+
+all(f:A->B, a,x:A, b:B)
+    ensure
+        (f + (a,b))(a) = b
+        x in f.domain ==> x /= a ==> (f + (a,b))(x) = f(x)
+    end
+
+
+{: Consistency of Functions
+   ======================== :}
 
 
 all(f,g:A->B)

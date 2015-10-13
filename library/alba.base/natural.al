@@ -21,6 +21,11 @@ end
 2: NATURAL = 1.successor
 3: NATURAL = 2.successor
 4: NATURAL = 3.successor
+5: NATURAL = 4.successor
+6: NATURAL = 5.successor
+7: NATURAL = 6.successor
+8: NATURAL = 7.successor
+9: NATURAL = 8.successor
 
 
 {: Successor
