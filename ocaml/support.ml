@@ -255,6 +255,7 @@ type operator =
   | Timesop
   | Divideop
   | Caretop
+  | Commaop
   | Eqop
   | NEqop
   | Eqvop
@@ -291,6 +292,7 @@ let operator_data op =
   | Timesop   -> "*",   50,  Left
   | Divideop  -> "/",   50,  Left
   | Caretop   -> "^",   55,  Right
+  | Commaop   -> ",",   18,  Right
   | Eqop      -> "=",   35,  Nonassoc
   | NEqop     -> "/=",  35,  Nonassoc
   | Eqvop     -> "~",   35,  Nonassoc

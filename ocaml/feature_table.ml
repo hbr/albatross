@@ -660,20 +660,23 @@ let term_to_string
       let nanonused, nms = local_names n nms in
       let names = Array.append nms names in
       args2str n nms,
-      String.concat ";" (List.map (fun t -> to_string t names nanonused false None) ps),
+      String.concat ";"
+        (List.map (fun t -> to_string t names nanonused false None) ps),
       to_string t names nanonused false None
     in
-    let default_fapp (f:term) (argsstr:string): string =
-      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")" in
-    let funiapp2str (i:int) (argsstr:string): string =
+    let default_fapp (f:term) (argsstr:string): operator option * string =
+      None,
+      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")"
+    in
+    let funiapp2str (i:int) (argsstr:string): operator option * string =
       if nnames <= i then
         let fn = (descriptor (i-nnames) ft).fname in
         begin match fn with
           FNname fsym ->
             if fsym = (ST.symbol "singleton") then
-              "{" ^ argsstr ^ "}"
+              None, "{" ^ argsstr ^ "}"
             else if fsym = ST.tuple then
-              "(" ^ argsstr ^ ")"
+              Some Commaop, argsstr
             else
               default_fapp (Variable i) argsstr
         | _ -> default_fapp (Variable i) argsstr
@@ -681,7 +684,7 @@ let term_to_string
       else
         default_fapp (Variable i) argsstr
     in
-    let funapp2str (f:term) (argsstr:string): string =
+    let funapp2str (f:term) (argsstr:string): operator option * string =
       match f with
         Variable i ->
           funiapp2str i argsstr
@@ -720,7 +723,8 @@ let term_to_string
             ^ " " ^ (operator_to_rawstring op) ^ " "
             ^ (to_string args.(1) names nanonused false (Some (op,false)))
           end
-    and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool): string =
+    and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool)
+        : string =
       let argsstr, presstr, tstr = lam_strs n nms pres t in
       if pr then
         "{" ^ argsstr ^ ": " ^ tstr ^ "}"
@@ -786,7 +790,7 @@ let term_to_string
             let op,fidx = find_op_int i in
             Some op, op2str op fidx args
           with Not_found ->
-            None, funiapp2str i (argsstr args)
+            funiapp2str i (argsstr args)
           end
       | Application (f,args,pr) ->
           begin
@@ -794,7 +798,7 @@ let term_to_string
               let op,fidx = find_op f in
               Some op, op2str op fidx args
             with Not_found ->
-              None, funapp2str f (argsstr args)
+              funapp2str f (argsstr args)
           end
       | Lam (n,nms,pres,t,pr) ->
           let nms = adapt_names nms names in
