@@ -91,8 +91,6 @@ module Term: sig
 
   val lambda_inner_map: term -> int IntMap.t -> term
 
-  val lambda_inner2: term -> term -> term
-
   val down_from: int -> int -> term -> term
 
   val down: int -> term -> term
@@ -605,47 +603,6 @@ end = struct
   let array_up (n:int) (arr:term array): term array =
     if n = 0 then arr
     else Array.map (fun t -> up n t) arr
-
-
-  let  lambda_inner2 (t:term) (sub:term): term =
-    (* Extract a lambda inner term where subterm [sub] becomes variable [0], all
-       variables are shifted one up.
-      *)
-    let rec lam t sub nb =
-      let lam_args args sub nb = Array.map (fun a -> lam a sub nb) args
-      and lam_lst  lst  sub nb = List. map (fun a -> lam a sub nb) lst in
-      if equivalent t sub then
-        Variable 0
-      else
-        match t with
-          Variable i when i < nb ->
-            t
-        | Variable i ->
-            Variable (i+1)
-        | VAppl(i,args) ->
-            VAppl(i+1,lam_args args sub nb)
-        | Application(f,args,pr) ->
-            Application(lam f sub nb, lam_args args sub nb,pr)
-        | Lam(n,nms,ps,t0,pr) ->
-            let sub = up 1 sub
-            and nb  = 1 + nb in
-            let ps  = lam_lst ps sub nb in
-            let t0  = lam t0 sub nb in
-            Lam(n,nms,ps,t0,pr)
-        | QExp(n,nms,t0,is_all) ->
-            let sub = up n sub
-            and nb  = n + nb in
-            let t0  = lam t0 sub nb in
-            QExp(n,nms,t0,is_all)
-        | Flow(ctrl,args) ->
-            Flow(ctrl, lam_args args sub nb)
-        | Indset (n,nms,rs) ->
-            let sub = up n sub in
-            let nb = n + nb in
-            let rs = lam_args rs sub nb in
-            Indset(n,nms,rs)
-    in
-    lam t sub 0
 
 
   let part_sub_from
