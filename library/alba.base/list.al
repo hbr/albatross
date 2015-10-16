@@ -22,15 +22,6 @@ create
 end
 
 
-all(a:[G], p:[G]?)
-        -- Induction
-    require
-        p([])
-        all(a,x) p(a) ==> p(x^a)
-    ensure
-        p(a)
-    end
-
 all(x:G,a:[G])
         -- Inversion
     ensure

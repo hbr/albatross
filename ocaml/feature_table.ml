@@ -165,6 +165,105 @@ let base_descriptor (i:int) (ft:t): base_descriptor =
 
 
 
+let adapt_names (nms:int array) (names:int array): int array =
+  let nms  = Array.copy nms in
+  let nnms = Array.length nms in
+  let patch i =
+    assert (i < nnms);
+    let str = "$" ^ (ST.string nms.(i)) in
+    nms.(i) <- ST.symbol str
+  and has i =
+    assert (i < nnms);
+    try
+      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
+      true
+    with Not_found ->
+      false
+  in
+  let rec patch_until_ok i =
+    if has i then begin
+      patch i;
+      patch_until_ok i
+    end
+  in
+  for i = 0 to nnms - 1 do
+    patch_until_ok i
+  done;
+  nms
+
+
+let prepend_names (nms:int array) (names:int array): int array =
+  let nms = adapt_names nms names in
+  Array.append nms names
+
+
+let prenex (t:term) (nb:int) (ft:t): term =
+  (* Calculate the prenex normal form of the term [t] with respect to
+     universal quantifiers. All universal quantifiers are bubbled up in
+     implication chains and merged with the upper universal quantifier. Unused
+     variables in universally quantified expressions are eliminated.  *)
+  let rec norm (t:term) (nb:int): term =
+    let n,nms,t = norm0 t nb in
+    Term.all_quantified n nms t
+  and norm_args (args:term array) (nb:int): term array =
+    Array.map (fun t -> norm t nb) args
+  and norm_lst  (lst: term list) (nb:int): term list =
+    List.map (fun t -> norm t nb) lst
+  and norm0 (t:term) (nb:int): int * int array * term =
+    match t with
+      Variable i -> 0, [||], t
+    | VAppl(i,args) when i = nb + implication_index ->
+        assert (Array.length args = 2);
+        let a = norm args.(0) nb
+        and n,nms,b1 = norm0 args.(1) nb in
+        let b1 =
+          let args = Array.init (n+nb)
+              (fun i ->
+                if i < n then Variable (nb+i)
+                else Variable (i-n)) in
+          Term.sub b1 args (n+nb)
+        in
+        let a1 = Term.upbound n nb a in
+        let t = VAppl(i+n,[|a1;b1|]) in
+        n, nms, t
+    | VAppl(i,args) ->
+        0, [||], VAppl(i, norm_args args nb)
+    | Application(f,args,pr) ->
+        let f = norm f nb
+        and args = norm_args args nb in
+        0, [||], Application(f,args,pr)
+    | Lam(n,nms,ps,t0,pr) ->
+        let ps = norm_lst ps (1+nb)
+        and t0 = norm t0 (1+nb) in
+        0, [||], Lam(n,nms,ps,t0,pr)
+    | QExp(n0,nms0,t0,is_all) ->
+        if is_all then
+          let n1,nms1,t1 = norm0 t0 (n0+nb) in
+          let nms = prepend_names nms0 nms1 in
+          let t2, n2, nms2 =
+            let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
+            let n   = Array.length usd in
+            assert (is_all || n = n0 + n1);
+            let args = Array.make (n0+n1) (Variable (-1))
+            and nms2 = Array.make n (-1) in
+            for i = 0 to n-1 do
+              nms2.(i) <- nms.(usd.(i));
+              args.(usd.(i)) <- (Variable i)
+            done;
+            Term.sub t1 args n, n, nms2
+          in
+          n2, nms2, t2
+        else
+          0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
+    | Flow(ctrl,args) ->
+        0, [||], Flow(ctrl, norm_args args nb)
+    | Indset (n,nms,rs) ->
+        0, [||], Indset (n,nms, norm_args rs (n+nb))
+  in
+  norm t nb
+
+
+
 let is_constructor (i:int) (ft:t): bool =
   assert (i < count ft);
   let desc = descriptor i ft in
@@ -174,6 +273,7 @@ let is_constructor (i:int) (ft:t): bool =
 
 
 let inductive_arguments (i:int) (ft:t): int list =
+  (* Reversed list of inductive arguments *)
   assert (is_constructor i ft);
   let desc = descriptor i ft in
   let ntvs = Tvars.count_all desc.tvs in
@@ -192,10 +292,45 @@ let inductive_arguments (i:int) (ft:t): int list =
 
 
 
-let constructor_rule (idx:int) (p:term) (nb:int) (ft:t) :term =
-  assert false
+let feature_call(i:int) (nb:int) (args:term array) (ft:t): term =
+  (* Construct the term [f(a,b,...)] for the feature [i] for an environment
+     with [nb] variables.*)
+  let len = Array.length args in
+  assert (arity i ft = len);
+  if len = 0 then
+    Variable (i+nb)
+  else
+    VAppl (i+nb,args)
 
 
+let constructor_rule (idx:int) (p:term) (nb:int) (ft:t)
+    : int * int array * term list * term =
+  let n       = arity idx ft in
+  let nms     = anon_argnames n in
+  let p       = Term.up n p in
+  let call    = feature_call idx (n+nb) (Array.init n (fun i -> Variable i)) ft in
+  let tgt     = Application(p,[|call|],true) in
+  let indargs = inductive_arguments idx ft in
+  let ps_rev  =
+    List.rev_map
+      (fun iarg -> Application(p,[|Variable iarg|],true)) indargs in
+  n,nms,ps_rev,tgt
+
+
+let induction_law (cls:int) (p:term) (ivar:int) (nb:int) (ft:t): term =
+  assert (Class_table.has_constructors cls ft.ct);
+  let cons = Class_table.constructors cls ft.ct
+  and imp_id = nb + implication_index in
+  let lst = List.rev (IntSet.elements cons) in
+  List.fold_left
+      (fun tgt idx ->
+        let rule =
+          let n,nms,ps_rev,tgt = constructor_rule idx p nb ft in
+          let chn  = Term.make_implication_chain ps_rev tgt (n+imp_id) in
+          Term.all_quantified n nms chn in
+        Term.binary imp_id rule tgt)
+      (Application(p,[|Variable ivar|],true))
+    lst
 
 
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =
@@ -568,33 +703,6 @@ let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term 
   Term.apply t0 args
 
 
-let adapt_names (nms:int array) (names:int array): int array =
-  let nms  = Array.copy nms in
-  let nnms = Array.length nms in
-  let patch i =
-    assert (i < nnms);
-    let str = "$" ^ (ST.string nms.(i)) in
-    nms.(i) <- ST.symbol str
-  and has i =
-    assert (i < nnms);
-    try
-      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
-      true
-    with Not_found ->
-      false
-  in
-  let rec patch_until_ok i =
-    if has i then begin
-      patch i;
-      patch_until_ok i
-    end
-  in
-  for i = 0 to nnms - 1 do
-    patch_until_ok i
-  done;
-  nms
-
-
 let term_to_string
     (t:term)
     (norm:bool)
@@ -903,78 +1011,6 @@ let normalize_lambdas (t:term) (nb:int) (ft:t): term =
   norm t nb
 
 
-let prepend_names (nms:int array) (names:int array): int array =
-  let nms = adapt_names nms names in
-  Array.append nms names
-
-
-let prenex (t:term) (nb:int) (ft:t): term =
-  (* Calculate the prenex normal form of the term [t] with respect to
-     universal quantifiers. All universal quantifiers are bubbled up in
-     implication chains and merged with the upper universal quantifier. Unused
-     variables in universally quantified expressions are eliminated.  *)
-  let rec norm (t:term) (nb:int): term =
-    let n,nms,t = norm0 t nb in
-    Term.all_quantified n nms t
-  and norm_args (args:term array) (nb:int): term array =
-    Array.map (fun t -> norm t nb) args
-  and norm_lst  (lst: term list) (nb:int): term list =
-    List.map (fun t -> norm t nb) lst
-  and norm0 (t:term) (nb:int): int * int array * term =
-    match t with
-      Variable i -> 0, [||], t
-    | VAppl(i,args) when i = nb + implication_index ->
-        assert (Array.length args = 2);
-        let a = norm args.(0) nb
-        and n,nms,b1 = norm0 args.(1) nb in
-        let b1 =
-          let args = Array.init (n+nb)
-              (fun i ->
-                if i < n then Variable (nb+i)
-                else Variable (i-n)) in
-          Term.sub b1 args (n+nb)
-        in
-        let a1 = Term.upbound n nb a in
-        let t = VAppl(i+n,[|a1;b1|]) in
-        n, nms, t
-    | VAppl(i,args) ->
-        0, [||], VAppl(i, norm_args args nb)
-    | Application(f,args,pr) ->
-        let f = norm f nb
-        and args = norm_args args nb in
-        0, [||], Application(f,args,pr)
-    | Lam(n,nms,ps,t0,pr) ->
-        let ps = norm_lst ps (1+nb)
-        and t0 = norm t0 (1+nb) in
-        0, [||], Lam(n,nms,ps,t0,pr)
-    | QExp(n0,nms0,t0,is_all) ->
-        if is_all then
-          let n1,nms1,t1 = norm0 t0 (n0+nb) in
-          let nms = prepend_names nms0 nms1 in
-          let t2, n2, nms2 =
-            let usd = Array.of_list (List.rev (Term.used_variables t1 (n0+n1))) in
-            let n   = Array.length usd in
-            assert (is_all || n = n0 + n1);
-            let args = Array.make (n0+n1) (Variable (-1))
-            and nms2 = Array.make n (-1) in
-            for i = 0 to n-1 do
-              nms2.(i) <- nms.(usd.(i));
-              args.(usd.(i)) <- (Variable i)
-            done;
-            Term.sub t1 args n, n, nms2
-          in
-          n2, nms2, t2
-        else
-          0, [||], QExp(n0, nms0, norm t0 (n0+nb), is_all)
-    | Flow(ctrl,args) ->
-        0, [||], Flow(ctrl, norm_args args nb)
-    | Indset (n,nms,rs) ->
-        0, [||], Indset (n,nms, norm_args rs (n+nb))
-  in
-  norm t nb
-
-
-
 let definition (i:int) (nb:int) (ft:t): int * int array * term =
   assert (nb <= i);
   assert (i  <= nb + count ft);
@@ -994,6 +1030,8 @@ let has_definition (i:int) (ft:t): bool =
 
 
 let is_inductive_set (i:int) (nb:int) (ft:t): bool =
+  (* Does the feature [i] in an environment with [nb] bound variables represent
+     an inductively defined set`*)
   try
     let n,nms,t = definition i nb ft in
     begin

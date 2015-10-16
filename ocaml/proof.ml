@@ -80,6 +80,7 @@ type proof_term =
                                 arguments *)
   | Indset_rule of term * int
   | Indset_ind  of term
+  | Indtype    of int * int * term (* cls, induction variable, goal *)
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
@@ -141,7 +142,9 @@ end = struct
       | Indset_rule (t,i) ->
           print_prefix (); printf "Rule %d of %s\n" i (Term.to_string t)
       | Indset_ind t ->
-          print_prefix (); printf "Induction law %s\n" (Term.to_string t)
+          print_prefix (); printf "Set induction law %s\n" (Term.to_string t)
+      | Indtype (cls,idx,goal) ->
+          print_prefix (); printf "Induction law cls %d\n" cls;
       | Detached (i,j)      ->
           print_prefix (); printf "Detached %d %d\n" i j
       | Specialize (i,args) ->
@@ -202,7 +205,9 @@ end = struct
     in
     let rec adapt (pt:t): t =
       match pt with
-        Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ -> pt
+        Axiom _ | Assumption _ | Funprop _
+      | Indset_rule _ | Indset_ind _ | Indtype _ ->
+          pt
       | Detached (a,b) ->
           Detached (index a, index b)
       | Specialize (i,args) ->
@@ -267,7 +272,8 @@ end = struct
         (fun (k,set) pt ->
           let set =
             match pt with
-              Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ ->
+              Axiom _ | Assumption _ | Funprop _
+            | Indset_rule _ | Indset_ind _ | Indtype _ ->
                 set
             | Detached (i,j) ->
                 add_idx i (add_idx j set)
@@ -325,7 +331,8 @@ end = struct
       else
         let set = IntSet.add k set in
         match pt_arr.(k-start) with
-          Axiom _ | Assumption _ | Funprop _ | Indset_rule _ | Indset_ind _ ->
+          Axiom _ | Assumption _ | Funprop _
+        | Indset_rule _ | Indset_ind _ | Indtype _ ->
             set
         | Detached (i,j) ->
             assert (i < k);
@@ -402,7 +409,8 @@ end = struct
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
-          Axiom _ | Assumption _  | Funprop _ | Indset_rule _ | Indset_ind _ ->
+          Axiom _ | Assumption _  | Funprop _
+        | Indset_rule _ | Indset_ind _ | Indtype _ ->
             pt
         | Detached (i,j) -> Detached (index i, index j)
         | Eval (i,e)     -> Eval   (index i, transform_eval e)
@@ -505,6 +513,8 @@ end = struct
           | Indset_ind t
           | Eval_bwd (t,_) ->
               uvars_term t set
+          | Indtype (_,ivar,t) ->
+              uvars_term (Variable ivar) (uvars_term t set)
           | Detached _
           | Eval _
           | Someelim _ ->
@@ -607,6 +617,11 @@ end = struct
               Indset_rule(shrink_term t,i)
           | Indset_ind t ->
               Indset_ind(shrink_term t)
+          | Indtype (cls,idx,goal) ->
+              let v   = shrink_term (Variable idx) in
+              assert (Term.is_variable v);
+              let idx = Term.variable v in
+              Indtype (cls,idx,shrink_term goal)
           | Detached _ ->
               pt
           | Funprop(idx,i,args) ->
@@ -720,6 +735,10 @@ end = struct
       | Assumption t   -> Assumption (up t)
       | Indset_rule (t,i) -> Indset_rule (up t,i)
       | Indset_ind t      -> Indset_ind (up t)
+      | Indtype (cls,idx,goal) ->
+          let v   = up (Variable idx) in
+          let idx = var v in
+          Indtype(cls,idx,up goal)
       | Detached _ -> pt
       | Funprop (idx,i,args) -> Funprop(idx,i, upargs args)
       | Specialize (i,args)  -> Specialize (i, upargs args)
@@ -753,7 +772,8 @@ end = struct
     | Assumption _ -> "ass"
     | Funprop _ -> "prop"
     | Indset_rule (_,_) -> "rule"
-    | Indset_ind _ -> "ind"
+    | Indset_ind _ -> "indset"
+    | Indtype _    -> "ind"
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
     | Specialize (i,args) -> "spec " ^ (string_of_int i)
     | Inherit (i,bcls,cls)     -> "inh " ^ (string_of_int i)

@@ -55,6 +55,8 @@ val set_induction_law: term -> t -> term
 val is_inductive_set: int -> t -> bool
 val inductive_set: term -> t -> term
 
+val type_induction_law: int -> int -> term -> t -> term
+
 val term:          int -> t -> term * int
 val proof_term:    int -> t -> proof_term
 val nbenv_term:    int -> t -> int

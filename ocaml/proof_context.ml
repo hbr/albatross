@@ -954,6 +954,8 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
     add_mp0 t i j search pc
 
 
+
+
 let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   (* [idx] must represent a term which can be beta reduced *)
   let t = term idx pc in
@@ -1124,18 +1126,13 @@ let add_consequences_someelim (i:int) (pc:t): unit =
     ()
 
 
-let add_induction_law (cls:int) (p:term) (elem:term) (pc:t): int =
-  (* Add the induction law of the case class [cls], specialized for the set
-     [p] and the element [elem]. *)
-  let ct = class_table pc in
-  assert (Class_table.has_constructors cls ct);
-  let idx_ind = Class_table.induction_law cls ct in
-  let rd = rule_data idx_ind pc
-  and args = [|p;elem|] in
-  let rd = RD.specialize rd args idx_ind (context pc) in
-  let t  = RD.term rd (nbenv pc) in
-  Proof_table.add_specialize t idx_ind args pc.base;
-  raw_add0 t rd false pc
+let add_induction_law (cls:int) (ivar:int) (goal:term) (pc:t): int =
+  (* Add the induction law of the case class [cls] for the goal [goal]. *)
+  let law = Proof_table.type_induction_law cls ivar goal pc.base
+  and pt  = Indtype (cls,ivar,goal) in
+  Proof_table.add_proved_0 law pt pc.base;
+  raw_add law false pc
+
 
 
 

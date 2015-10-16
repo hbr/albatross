@@ -132,6 +132,9 @@ val equality_index: int -> t -> int
 val equality_index_of_type: term -> Tvars.t -> t -> int
     (** [equality_index tp ft] returns the equality index of the type [tp]. *)
 
+
+val feature_call: int -> int -> term array -> t -> term
+
 val definition: int -> int -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature
         [idx]. Raises [Not_found] if feature [idx] has no definition *)
@@ -153,6 +156,9 @@ val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
 val inductive_arguments: int -> t -> int list
+val constructor_rule:  int -> term -> int -> t
+  -> int * int array * term list * term
+val induction_law:     int -> term -> int -> int -> t -> term
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val is_case_matching:  term -> int -> term -> int -> t -> bool
@@ -166,7 +172,7 @@ val is_term_public:    term -> int -> t -> bool
 val owner: int -> t -> int
 
 val add_tuple_accessors: term -> int -> int -> t -> term
-val make_lambda:      int -> int array -> term list -> term -> bool -> int -> t -> term
+val make_lambda: int -> int array -> term list -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 val normalize_lambdas:term -> int -> t -> term

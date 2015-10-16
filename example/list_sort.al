@@ -134,7 +134,7 @@ all(x,y:L, a:[L])
 
 all(x:L, a:[L])
     proof
-        [] in {a: permutation (x^a, x.into(a))}
+        {:[] in {a: permutation (x^a, x.into(a))}:}
 
         all(y:L, a:[L])
             require
@@ -148,7 +148,8 @@ all(x:L, a:[L])
                 permutation(x^y^a, x.into(y^a))
             end
 
-        a in {a: permutation (x^a, x.into(a))}
+        inspect a
+        ensure permutation (x^a, x.into(a)) end
     ensure
         permutation (x^a, x.into(a))
     end

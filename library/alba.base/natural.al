@@ -219,8 +219,7 @@ all(a,b:NATURAL)
 
 all(a:NATURAL)
     proof
-        0 in {a:NATURAL: a <= a}
-        a in {a:NATURAL: a <= a}
+        inspect a ensure a <= a end
     ensure
         a <= a
     end
@@ -359,59 +358,6 @@ all(a,b:NATURAL)
     end
 
 
-
-all(a,b:NATURAL)
-    proof
-        0 in {a: all(b:NATURAL) (some(x) a + x = b) ==> a <= b}
-
-        all(a,b:NATURAL)
-            require
-                (all(b) (some(x) a + x = b) ==> a <= b)
-            proof
-                proof
-                    require
-                        some(x) a.successor + x = 0
-                    proof
-                        all(x)
-                            proof
-                                0 in {x: a.successor + x = 0 ==> false}
-                                x in {x: a.successor + x = 0 ==> false}
-                            ensure
-                                a.successor + x = 0 ==> false
-                            end
-                    ensure
-                        false
-                    end
-                ensure
-                    0 in {b: (some(x) a.successor + x = b) ==> a.successor <= b}
-                end
-
-                all(b:NATURAL)
-                    require
-                        (some(x) a.successor + x = b) ==> a.successor <= b
-                        some(x) a.successor + x = b.successor
-                    proof
-                        all(x)
-                             require
-                                 a.successor + x = b.successor
-                             ensure
-                                 a.successor <= b.successor
-                             end
-                    ensure
-                        a.successor <= b.successor
-                    end
-
-                b in {b: (some(x) a.successor + x = b) ==> a.successor <= b}
-            ensure
-                (some(x) a.successor + x = b) ==> a.successor <= b
-            end
-
-        a in {a: all(b) (some(x) a + x = b) ==> a <= b}
-    ensure
-        (some(x) a + x = b) ==> a <= b
-    end
-
-
 all(a,b:NATURAL)
     require
         a <= b
@@ -475,8 +421,8 @@ all(a,b,c:NATURAL)
 
 all(a:NATURAL)
     proof
-        0 in {a: a <= a.successor}
-        a in {a: a <= a.successor}
+        inspect a
+        ensure a <= a.successor end
     ensure
         a <= a.successor
         a < a.successor
@@ -533,46 +479,26 @@ all(a,b:NATURAL)
 
 all(a,b:NATURAL)
     proof
-        0 in {a: a <= b or b <= a}
-
-        all(a)
-            require
-                a <= b or b <= a
-            proof
-                require
-                    a <= b
-                proof
-                    a = b or a /= b
-                    require
-                        a = b
-                    proof
-                        a <= a.successor
-                        b in {x: x <= a.successor}
-                        b <= a.successor
-                    ensure
-                        a.successor <= b or b <= a.successor
-                    end
-                    require
-                        a /= b
-                    proof
-                        a < b
-                        a.successor <= b
-                    ensure
-                        a.successor <= b or b <= a.successor
-                    end
+        inspect a
+        case successor(a) proof
+            if a <= b proof
+                if a = b proof
+                    a <= a.successor
+                    b in {x: x <= a.successor}
+                    b <= a.successor
+                else proof
+                    a < b
+                    a.successor <= b
                 ensure
                     a.successor <= b or b <= a.successor
                 end
-
-                require
-                    b <= a
-                ensure
-                    a.successor <= b or b <= a.successor
-                end
+            orif b <= a
             ensure
                 a.successor <= b or b <= a.successor
             end
-        a in {a: a <= b or b <= a}
+        ensure
+            a <= b or b <= a
+        end
     ensure
         a <= b or b <= a
     end
@@ -611,15 +537,13 @@ all(a,b:NATURAL)
 
 all(a,b,n:NATURAL)
     require a <= b
-    proof   0 in {n: a + n <= b + n}
-            n in {n: a + n <= b + n}
+    proof   inspect n ensure a + n <= b + n end
     ensure  a + n <= b + n
     end
 
 
 all(a,b,n:NATURAL)
-    proof   0 in {n: a + n <= b + n ==> a <= b}
-            n in {n: a + n <= b + n ==> a <= b}
+    proof   inspect n ensure a + n <= b + n ==> a <= b end
     ensure  a + n <= b + n ==> a <= b
     end
 
@@ -633,7 +557,8 @@ all(a,b,n:NATURAL)
 
 all(a,b:NATURAL)
     proof
-        proof
+        inspect a
+        case 0 proof
             require
                 b <= 0
                 (0:NATURAL,b) as (0,successor(_))
@@ -643,16 +568,8 @@ all(a,b:NATURAL)
             ensure
                 false
             end
-        ensure
-            0 in {a: b <= a ==> not ((a,b) as (0,successor(_)))}
-        end
+        ensure b <= a ==> not ((a,b) as (0,successor(_))) end
 
-        all(a)
-            ensure
-                not ((successor(a),b) as (0,successor(_)))
-            end
-
-        a in {a: b <= a ==> not ((a,b) as (0,successor(_)))}
     ensure
         b <= a  ==>  not ((a,b) as (0,successor(_)))
     end
@@ -699,8 +616,7 @@ all(a,b:NATURAL)
 
 all(a:NATURAL)
     proof
-       0 in {n:NATURAL: n * 0 = 0}
-       a in {n: n * 0 = 0}
+       inspect a ensure a * 0 = 0 end
     ensure
        a * 0 = 0
     end
@@ -712,11 +628,12 @@ all(a:NATURAL)
         1 * a = a
     end
 
+
 all(a,b,c:NATURAL) -- distributivity
     proof
         all(a,b,c,d:NATURAL)  -- lemma
             {: Note: This lemma is needed as long as the special treatment of
-                     commutative and associative operators is not implemented :}
+                     commutative and associative operators is not yet implemented :}
             proof
                a + b + (c + d)   = a + (b + (c + d))
 
@@ -732,21 +649,15 @@ all(a,b,c:NATURAL) -- distributivity
                a + b + (c + d) = a + c + (b + d)
             end
 
-        0 in {n: n * (b + c) = n*b + n*c}
-
-        all(a)
-            require
-                a * (b + c) = a*b + a*c
-            proof
-                a.successor * (b + c) = a*(b + c) + (b + c)
-                a*(b + c) + (b + c)   = a*b + a*c + (b + c)
-                a*b + a*c + (b + c)   = a*b + b + (a*c + c)
-                a*b + b + (a*c + c)   = a.successor*b + a.successor*c
-            ensure
-                a.successor * (b + c) = a.successor*b + a.successor*c
-            end
-
-        a in {n: n * (b + c) = n*b + n*c}
+        inspect a
+        case successor(a) proof
+            a.successor * (b + c) = a*(b + c) + (b + c)
+            a*(b + c) + (b + c)   = a*b + a*c + (b + c)
+            a*b + a*c + (b + c)   = a*b + b + (a*c + c)
+            a*b + b + (a*c + c)   = a.successor*b + a.successor*c
+        ensure
+            a * (b + c) = a*b + a*c
+        end
     ensure
         a * (b + c) = a*b + a*c
     end

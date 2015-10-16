@@ -330,7 +330,6 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
     if Array.length rd.nms = 0 then rd.nms
     else Array.sub rd.nms nargs (rd.nargs - nargs)
   in
-  (*if not full then Context.push_untyped nms c;*)
   let sub t = Term.part_sub t rd.nargs args nbenv_delta
   in
   assert begin match rd.premises with
