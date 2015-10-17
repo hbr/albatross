@@ -99,6 +99,11 @@ val variable_name: int -> t -> int
 val variable_type: int -> t -> type_term
     (** The type of the [i]th variable argument *)
 
+val variable_index: int -> t -> int
+
+val unique_name:  int -> t -> int
+val unique_names: int array -> t -> int array
+
 val fgnames: t   -> int array
 
 val local_argnames: t -> int array

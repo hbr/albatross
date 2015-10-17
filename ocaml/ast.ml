@@ -196,7 +196,17 @@ let beta_reduced (t:term) (pc:PC.t): term =
       assert (Array.length args = 1);
       PC.beta_reduce n t0 args 0 pc
   | _ ->
-      assert false
+      t
+
+
+let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
+  let psstr = String.concat "\n"
+      (List.rev_map
+         (fun ass -> (PC.string_of_term (beta_reduced ass pc) pc))
+         ps_rev)
+  and tgtstr = PC.string_of_term (beta_reduced goal pc) pc in
+  "\n" ^ psstr ^ "\n--------------------------\n" ^ tgtstr
+
 
 
 
@@ -438,12 +448,9 @@ and prove_inductive_set
     let gidx =
       try Prover.prove_and_insert tgt pc1
       with Proof.Proof_failed msg ->
-        let goal = beta_reduced tgt pc1 in
+        let errstr = error_string_case (List.rev ps) tgt pc1 in
         error_info info ("Cannot prove case \"" ^
-                         (PC.string_of_term rule pc0) ^
-                         "\" with goal \n \"" ^
-                         (PC.string_of_term goal pc1) ^
-                         "\"" ^ msg)
+                         (PC.string_of_term rule pc0) ^ "\"" ^ msg ^ errstr)
     in
     let t,pt = PC.discharged gidx pc1 in
     PC.add_proved_term t pt false pc0
@@ -486,6 +493,7 @@ and prove_inductive_set
             IntMap.find irule proved
           with Not_found ->
             let n,nms,ps,tgt = Term.induction_rule imp_id irule p prep q in
+            let nms = Context.unique_names nms c0 in
             let pc1 = PC.push_untyped nms pc0 in
             prove_case ens.i rules.(irule) ps tgt [] pc1 pc0 in
         PC.add_mp rule_idx ind_idx false pc0
@@ -563,15 +571,10 @@ and prove_inductive_type
     let gidx =
       try Prover.prove_and_insert case_goal pc1
       with Proof.Proof_failed msg ->
-        let psstr = String.concat "\n"
-            (List.rev_map
-               (fun ass -> (PC.string_of_term (beta_reduced ass pc1) pc1))
-               ps_rev)
-        and tgtstr = PC.string_of_term (beta_reduced case_goal pc1) pc1 in
+        let errstr = error_string_case ps_rev case_goal pc1 in
         error_info info ("Cannot prove case \"" ^
                          (PC.string_of_term pat pc1) ^
-                         "\n" ^ psstr ^ "\n---------------\n" ^ tgtstr ^
-                         "\n" ^ msg)
+                         "\"" ^ msg ^ errstr)
     in
     let t,pt = PC.discharged gidx pc1 in
     PC.add_proved_term t pt false pc

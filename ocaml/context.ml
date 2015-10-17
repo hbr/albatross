@@ -263,6 +263,24 @@ let variable_index (nme:int) (c:t): int =
   Search.array_find_min (fun (n,_) -> n = nme) c.entry.fargs
 
 
+
+let unique_name (nme:int) (c:t): int =
+  let patched nme = ST.symbol ("$" ^ (ST.string nme)) in
+  let rec name n =
+    try ignore(variable_index n c); name (patched n)
+    with Not_found -> n
+  in
+  name nme
+
+
+let unique_names (nms:int array) (c:t): int array =
+  let nms  = Array.copy nms in
+  Array.iteri (fun i n -> nms.(i) <- unique_name n c) nms;
+  nms
+
+
+
+
 let owner (c:t): int =
   if is_toplevel c then
     let ct  = class_table c
