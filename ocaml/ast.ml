@@ -469,17 +469,27 @@ and prove_inductive_set
         let c1  = PC.context pc1 in
         let n    = Context.count_last_arguments c1
         and nms  = Context.local_argnames c1 in
-        let rule = Typer.boolean_term (withinfo ie.i rule) c1 in
-        let rule =
-          Context.prenex_term (Term.all_quantified n nms rule) c1 in
+        let rule0 = Typer.boolean_term (withinfo ie.i rule) c1 in
+        let rule  = Term.all_quantified n nms rule0 in
         let irule =
+          let rule =
+            Context.prenex_term (Term.all_quantified n nms rule0) c1 in
           try
             interval_find (fun i -> Term.equivalent rules.(i) rule) 0 nrules
           with Not_found ->
             error_info ie.i "Invalid case"
         in
-        let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p prep q in
-        assert (n1 = n);
+        let ps,tgt =
+          let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p prep q in
+          assert (n1 = n);
+          let args =
+            let usd = Array.of_list (List.rev (Term.used_variables rule0 n)) in
+            assert (Array.length usd = n);
+            Array.map (fun i -> Variable i) usd
+          in
+          let tgt = Term.sub tgt args n
+          and ps  = List.map (fun t -> Term.sub t args n) ps in
+          ps,tgt in
         let idx = prove_case ie.i rule ps tgt cmp pc1 pc0 in
         IntMap.add irule idx proved)
       IntMap.empty
