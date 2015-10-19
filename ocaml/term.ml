@@ -78,6 +78,9 @@ module Term: sig
   val used_variables:       term -> int -> int list
   val used_variables_filtered: term -> (int -> bool) -> int list
   val used_variables_from:  term -> int -> int list
+  val used_variables_transform: term -> int -> int array * int array
+  val remove_unused_0: int array -> term -> int * int array * term array
+  val remove_unused:   int array -> term -> int * int array * term
 
   val equivalent: term -> term -> bool
 
@@ -415,6 +418,26 @@ end = struct
     used_variables_filtered t (fun i -> nvars <= i)
 
 
+
+  let used_variables_transform (t:term) (nvars:int): int array * int array =
+    (* Analyze the used variables of the term [t] with variables in the interval
+       0,1,...,nvars-1 and return two arrays.
+
+       arr1: 0,1,...nused-1     index of the used variable i
+       arr2: 0,1,...nvars-1     position of the variable i in the term [t]
+     *)
+    let arr1  = Array.of_list (List.rev (used_variables t nvars)) in
+    let nused = Array.length arr1 in
+    let arr2  = Array.make nvars (-1) in
+    for i = 0 to nused - 1 do
+      arr2.(arr1.(i)) <- i
+    done;
+    arr1, arr2
+
+
+
+
+
   let equivalent (t1:term) (t2:term): bool =
     (* Are the terms [t1] and [t2] equivalent ignoring names and predicate flags? *)
     let rec eq t1 t2 nb =
@@ -738,6 +761,20 @@ end = struct
        apply the function ([v0,v1,...]->t) to the arguments in args
      *)
     sub t args 0
+
+
+  let remove_unused_0 (nms:int array) (t:term): int * int array * term array =
+    let n = Array.length nms in
+    let usd,pos = used_variables_transform t n in
+    let n2 = Array.length usd in
+    let args = Array.map (fun i -> Variable i) pos
+    and nms2 = Array.init n2 (fun i -> nms.(usd.(i))) in
+    n2, nms2, args
+
+
+  let remove_unused (nms:int array) (t:term): int * int array * term =
+    let n2,nms2,args = remove_unused_0 nms t in
+    n2, nms2, sub t args n2
 
 
   let lambda_split (t:term): int * int array * term list * term * bool =

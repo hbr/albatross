@@ -647,14 +647,15 @@ end = struct
     shrink 0 pt_arr
 
 
-  let normalize_pair (nargs:int) (nms:int array) (start:int) (t:term) (pt_arr: t array)
+  let normalize_pair
+      (nargs:int) (nms:int array) (start:int) (t:term) (pt_arr: t array)
       : int * int array * term  * t array =
-    let uvars_t = Term.used_variables t nargs in
-    let nargs1  = List.length uvars_t in
-    assert (nargs1 <= nargs);
+    assert (nargs = Array.length nms);
+    let usd,pos = Term.used_variables_transform t nargs in
+    let nargs1 = Array.length usd in
     let uvars_pt = used_variables nargs pt_arr in
     if not (nargs1 = IntSet.cardinal uvars_pt &&
-            List.for_all (fun i -> IntSet.mem i uvars_pt) uvars_t)
+            interval_for_all (fun i -> IntSet.mem usd.(i) uvars_pt) 0 nargs1)
     then begin
       printf "normalize_pair\n";
       printf "   nargs %d, nargs1 %d, card uvars_pt %d, nms %s\n"
@@ -662,17 +663,10 @@ end = struct
         ("(" ^ (String.concat ","
                   (List.map Support.ST.string (Array.to_list nms))) ^ ")");
       raise Not_found end;
-    let args = Array.make nargs (Variable (-1))
-    and nms1 = Array.make nargs1 (-1) in
-    List.iteri
-      (fun pos i -> assert (i < nargs);
-        let pos1 = nargs1 - pos - 1 in
-        args.(i)   <- Variable pos1;
-        nms1.(pos1) <- nms.(i))
-      uvars_t;
+    let args = Array.map (fun i -> Variable i) pos
+    and nms1 = Array.init nargs1 (fun i -> nms.(usd.(i))) in
     let t      = Term.sub t args nargs1
-    and pt_arr = remove_unused_variables args nargs1 pt_arr
-    in
+    and pt_arr = remove_unused_variables args nargs1 pt_arr in
     nargs1, nms1, t, pt_arr
 
 
