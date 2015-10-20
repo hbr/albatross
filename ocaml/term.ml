@@ -266,7 +266,7 @@ end = struct
     | Flow (ctrl,args) ->
         1 + nodesarr args
     | Indset (_,_,rs) ->
-        1
+        1 + nodesarr rs
 
 
 
