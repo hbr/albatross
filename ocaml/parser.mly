@@ -384,9 +384,13 @@ proof_inspect:
 
 proof_inspect_rest:
     optsemi KWensure info_expr { [], $3 }
-|   KWcase info_expr KWproof proof_seq proof_inspect_rest {
-  let lst,ens = $5 in
-  ($2,List.rev $4)::lst, ens
+|   KWcase info_expr optsemi KWproof proof_seq proof_inspect_rest {
+  let lst,ens = $6 in
+  ($2,List.rev $5)::lst, ens
+   }
+|   KWcase info_expr proof_inspect_rest {
+  let lst,ens = $3 in
+  ($2,[])::lst, ens
    }
 
 
