@@ -158,7 +158,7 @@ val is_constructor:    int -> t -> bool
 val inductive_arguments: int -> t -> int list
 val constructor_rule:  int -> term -> int -> t
   -> int * int array * term list * term
-val induction_law:     int -> term -> int -> int -> t -> term
+val induction_law:    int -> int -> t -> term
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val is_case_matching:  term -> int -> term -> int -> t -> bool

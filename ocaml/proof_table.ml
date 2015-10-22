@@ -757,11 +757,8 @@ let set_induction_law (t:term) (at:t): term =
   Term.induction_law (imp_id at) p t
 
 
-let type_induction_law (cls:int) (idx:int) (goal:term) (at:t): term =
-  let p =
-    let t0 = Term.lambda_inner goal idx in
-    Lam (1, anon_argnames 1, [], t0, true) in
-  Feature_table.induction_law cls p idx (count_variables at) (feature_table at)
+let type_induction_law (cls:int) (at:t): term =
+  Feature_table.induction_law cls (count_variables at) (feature_table at)
 
 
 let count_assumptions (pt_arr:proof_term array): int =
@@ -823,8 +820,8 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         let t = set_induction_law t at in
         if trace then print0 t at;
         t
-    | Indtype (cls,idx,goal) ->
-        let t = type_induction_law cls idx goal at in
+    | Indtype cls ->
+        let t = type_induction_law cls at in
         if trace then print0 t at;
         t
     | Detached (a,b) ->

@@ -149,7 +149,9 @@ val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
 val constructors_priv:int -> t -> IntSet.t
-val set_constructors: IntSet.t -> int -> t -> unit
+val induction_law:    int -> t -> int
+val set_constructors:  IntSet.t -> int -> t -> unit
+val set_induction_law: int -> int -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor

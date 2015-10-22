@@ -1126,12 +1126,19 @@ let add_consequences_someelim (i:int) (pc:t): unit =
     ()
 
 
+
 let add_induction_law (cls:int) (ivar:int) (goal:term) (pc:t): int =
   (* Add the induction law of the case class [cls] for the goal [goal]. *)
-  let law = Proof_table.type_induction_law cls ivar goal pc.base
-  and pt  = Indtype (cls,ivar,goal) in
-  Proof_table.add_proved_0 law pt pc.base;
-  raw_add law false pc
+  let ct = class_table pc in
+  let idx =
+    try Class_table.induction_law cls ct
+    with Not_found -> assert false
+  in
+  let p =
+    let t0 = Term.lambda_inner goal idx in
+    Lam (1, anon_argnames 1, [], t0, true) in
+  let sub = Term_sub.add 0 p (Term_sub.add 1 (Variable ivar) Term_sub.empty) in
+  specialized idx sub (nbenv pc) 0 pc
 
 
 
@@ -1754,6 +1761,16 @@ let add_proved_list
       let delta = count pc - cnt in
       let _ = add_proved_0 defer owner t pt delta pc in ())
     lst
+
+
+
+let add_induction_law0 (cls:int) (pc:t): unit =
+  assert (is_global pc);
+  let law = Proof_table.type_induction_law cls pc.base
+  and pt  = Indtype cls in
+  let idx = add_proved_0 false (-1) law pt 0 pc in
+  let ct = class_table pc in
+  Class_table.set_induction_law idx cls ct
 
 
 

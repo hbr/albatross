@@ -80,7 +80,7 @@ type proof_term =
                                 arguments *)
   | Indset_rule of term * int
   | Indset_ind  of term
-  | Indtype    of int * int * term (* cls, induction variable, goal *)
+  | Indtype    of int (* cls *)
   | Detached   of int * int  (* modus ponens *)
   | Specialize of int * term array
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
@@ -143,7 +143,7 @@ end = struct
           print_prefix (); printf "Rule %d of %s\n" i (Term.to_string t)
       | Indset_ind t ->
           print_prefix (); printf "Set induction law %s\n" (Term.to_string t)
-      | Indtype (cls,idx,goal) ->
+      | Indtype cls ->
           print_prefix (); printf "Induction law cls %d\n" cls;
       | Detached (i,j)      ->
           print_prefix (); printf "Detached %d %d\n" i j
@@ -513,8 +513,7 @@ end = struct
           | Indset_ind t
           | Eval_bwd (t,_) ->
               uvars_term t set
-          | Indtype (_,ivar,t) ->
-              uvars_term (Variable ivar) (uvars_term t set)
+          | Indtype _
           | Detached _
           | Eval _
           | Someelim _ ->
@@ -617,11 +616,7 @@ end = struct
               Indset_rule(shrink_term t,i)
           | Indset_ind t ->
               Indset_ind(shrink_term t)
-          | Indtype (cls,idx,goal) ->
-              let v   = shrink_term (Variable idx) in
-              assert (Term.is_variable v);
-              let idx = Term.variable v in
-              Indtype (cls,idx,shrink_term goal)
+          | Indtype _
           | Detached _ ->
               pt
           | Funprop(idx,i,args) ->
@@ -729,10 +724,7 @@ end = struct
       | Assumption t   -> Assumption (up t)
       | Indset_rule (t,i) -> Indset_rule (up t,i)
       | Indset_ind t      -> Indset_ind (up t)
-      | Indtype (cls,idx,goal) ->
-          let v   = up (Variable idx) in
-          let idx = var v in
-          Indtype(cls,idx,up goal)
+      | Indtype  _
       | Detached _ -> pt
       | Funprop (idx,i,args) -> Funprop(idx,i, upargs args)
       | Specialize (i,args)  -> Specialize (i, upargs args)

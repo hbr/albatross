@@ -293,6 +293,11 @@ let feature_call(i:int) (nb:int) (args:term array) (ft:t): term =
 
 let constructor_rule (idx:int) (p:term) (nb:int) (ft:t)
     : int * int array * term list * term =
+  (* Construct the rule for the constructor [idx] where the constructor [idx] has
+     the form [c(a1,a2,...)] where [ar1,ar2,...] are recursive.
+
+     all(args) p(ar1) ==> p(ar2) ==> ... ==> p(c(a1,a2,...))
+   *)
   let n       = arity idx ft in
   let nms     = anon_argnames n in
   let p       = Term.up n p in
@@ -305,20 +310,29 @@ let constructor_rule (idx:int) (p:term) (nb:int) (ft:t)
   n,nms,ps_rev,tgt
 
 
-let induction_law (cls:int) (p:term) (ivar:int) (nb:int) (ft:t): term =
+let induction_law (cls:int) (nb:int) (ft:t): term =
+  (* Construct the induction law
+
+     all(p,x) ind1 ==> ... ==> indn ==> p(x)
+   *)
   assert (Class_table.has_constructors cls ft.ct);
   let cons = Class_table.constructors cls ft.ct
-  and imp_id = nb + implication_index in
+  and imp_id = nb + 2 + implication_index
+  and p  = Variable 0
+  and x  = Variable 1
+  in
   let lst = List.rev (IntSet.elements cons) in
-  List.fold_left
+  let t0 =
+    List.fold_left
       (fun tgt idx ->
         let rule =
-          let n,nms,ps_rev,tgt = constructor_rule idx p nb ft in
+          let n,nms,ps_rev,tgt = constructor_rule idx p (nb+2) ft in
           let chn  = Term.make_implication_chain ps_rev tgt (n+imp_id) in
           Term.all_quantified n nms chn in
         Term.binary imp_id rule tgt)
-      (Application(p,[|Variable ivar|],true))
-    lst
+      (Application(p,[|x|],true))
+      lst in
+  Term.all_quantified 2 [|ST.symbol "p"; ST.symbol "x"|] t0
 
 
 let is_term_public (t:term) (nbenv:int) (ft:t): bool =

@@ -208,6 +208,78 @@ let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
   "\n" ^ psstr ^ "\n--------------------------\n" ^ tgtstr
 
 
+let analyze_type_inspect
+    (info:info)
+    (id:int)
+    (goal:term)
+    (pc:PC.t)
+    : IntSet.t * int * int * type_term =
+  (* constructor set, induction law, induction variable, inductive type *)
+  let c     = PC.context pc in
+  let nvars = Context.count_variables c
+  and ct    = Context.class_table c
+  in
+  let idx,tvs,s =
+    try Context.variable id c
+    with Not_found ->
+      error_info info ("Unknown variable \"" ^ (ST.string id) ^ "\"") in
+  assert (idx < nvars);
+  assert (Sign.is_constant s);
+  let cons_set, cls, tp =
+    let tp = Sign.result s in
+    let cls,_ = Class_table.split_type_term tp
+    and ntvs = Tvars.count_all tvs in
+    let set =
+      if cls < ntvs then IntSet.empty
+      else
+        let cls = cls - ntvs in
+        Class_table.constructors cls ct in
+    if IntSet.is_empty set then
+      error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
+    set, cls-ntvs, tp
+  in
+  let ind_idx = PC.add_induction_law cls idx goal pc in
+  cons_set,ind_idx,idx,tp
+
+
+
+let analyze_type_case_pattern
+    (ie:info_expression)
+    (cons_set:IntSet.t)
+    (tp:type_term)
+    (pc:PC.t)
+    : int * term * PC.t =
+  (* cons_idx, pat, pc1 *)
+  let c     = PC.context pc
+  and nvars = PC.count_variables pc in
+  let pat,nms = Typer.case_variables ie.i ie.v false c in
+  let n = Array.length nms in
+  let pc1 = PC.push_untyped nms pc in
+  let c1  = PC.context pc1 in
+  let pat = Typer.typed_term
+      (withinfo ie.i pat)
+      (Term.up n tp) c1 in
+  let invalid_pat () =
+    error_info ie.i
+      ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
+  let cons_idx =
+    match pat with
+      Variable i ->
+        let cons_idx = i - nvars - n in
+        if not (IntSet.mem cons_idx cons_set) then  invalid_pat ();
+        cons_idx
+    | VAppl(i,args) ->
+        let argslen = Array.length args in
+        if argslen <> n then invalid_pat ();
+        for k = 0 to n-1 do
+          if args.(k) <> Variable k then invalid_pat ()
+        done;
+        let cons_idx = i - nvars - n in
+        if not (IntSet.mem cons_idx cons_set) then invalid_pat ();
+        cons_idx
+    | _ ->
+        invalid_pat ()
+  in cons_idx, pat, pc1
 
 
 let rec make_proof
@@ -514,6 +586,40 @@ and prove_inductive_set
   PC.close pc
 
 
+and prove_type_case
+    (rcnt:int) (* recursion counter *)
+    (info:info)
+    (cons_idx:int) (pat:term) (cmp:compound)
+    (ivar:int) (goal:term)
+    (pc1:PC.t) (pc:PC.t)
+    : int =
+  (* prove one case of an inductive type *)
+  let nvars = PC.count_variables pc
+  and ft    = PC.feature_table pc in
+  let n,_,ps_rev,case_goal =
+    let t0 = Term.lambda_inner goal ivar in
+    let p = Lam(1,anon_argnames 1,[],t0,true) in
+    Feature_table.constructor_rule cons_idx p nvars ft in
+  assert (n = PC.count_last_arguments pc1);
+  List.iter
+    (fun ass ->
+      ignore (PC.add_assumption ass pc1))
+    (List.rev ps_rev);
+  PC.close pc1;
+  List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
+  let gidx =
+    try Prover.prove_and_insert case_goal pc1
+    with Proof.Proof_failed msg ->
+      let errstr = error_string_case ps_rev case_goal pc1 in
+      error_info info ("Cannot prove case \"" ^
+                       (PC.string_of_term pat pc1) ^
+                       "\"" ^ msg ^ errstr)
+  in
+  let t,pt = PC.discharged gidx pc1 in
+  PC.add_proved_term t pt false pc
+
+
+
 
 and prove_inductive_type
     (rcnt:int) (* recursion counter *)
@@ -528,96 +634,14 @@ and prove_inductive_type
   let c   = PC.context pc in
   let nvars = Context.count_variables c
   and tgt = get_boolean_term ens pc
-  and ft  = Context.feature_table c
-  and ct  = Context.class_table c in
-  let analyze_pattern (ie:info_expression)
-      (cons_set:IntSet.t) (tp:type_term)
-      : int * term * PC.t =
-    (* cons_idx, pat, pc1 *)
-    let pat,nms = Typer.case_variables ie.i ie.v false c in
-    let n = Array.length nms in
-    let pc1 = PC.push_untyped nms pc in
-    let c1  = PC.context pc1 in
-    let pat = Typer.typed_term
-        (withinfo ie.i pat)
-        (Term.up n tp) c1 in
-    let invalid_pat () =
-      error_info ie.i
-        ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
-    let cons_idx =
-      match pat with
-        Variable i ->
-          let cons_idx = i - nvars - n in
-          if not (IntSet.mem cons_idx cons_set) then  invalid_pat ();
-          cons_idx
-      | VAppl(i,args) ->
-          let argslen = Array.length args in
-          if argslen <> n then invalid_pat ();
-          for k = 0 to n-1 do
-            if args.(k) <> Variable k then invalid_pat ()
-          done;
-          let cons_idx = i - nvars - n in
-          if not (IntSet.mem cons_idx cons_set) then invalid_pat ();
-          cons_idx
-      | _ ->
-          invalid_pat ()
-    in cons_idx, pat, pc1
-  in
-  let prove_case
-      (info:info) (cons_idx:int) (pat:term) (cmp:compound) (ivar:int)
-      (pc1:PC.t) (pc:PC.t)
-      : int =
-    let n,_,ps_rev,case_goal =
-      let t0 = Term.lambda_inner tgt ivar in
-      let p = Lam(1,anon_argnames 1,[],t0,true) in
-      Feature_table.constructor_rule cons_idx p nvars ft in
-    assert (n = PC.count_last_arguments pc1);
-    List.iter
-      (fun ass ->
-        ignore (PC.add_assumption ass pc1))
-      (List.rev ps_rev);
-    PC.close pc1;
-    List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
-    let gidx =
-      try Prover.prove_and_insert case_goal pc1
-      with Proof.Proof_failed msg ->
-        let errstr = error_string_case ps_rev case_goal pc1 in
-        error_info info ("Cannot prove case \"" ^
-                         (PC.string_of_term pat pc1) ^
-                         "\"" ^ msg ^ errstr)
-    in
-    let t,pt = PC.discharged gidx pc1 in
-    PC.add_proved_term t pt false pc
-  in
+  and ft  = Context.feature_table c in
   let cons_set,ind_idx,ivar,tp =
-    let idx,tvs,s =
-      try Context.variable id c
-      with Not_found ->
-        error_info info ("Unknown variable \"" ^ (ST.string id) ^ "\"") in
-    assert (idx < nvars);
-    assert (Sign.is_constant s);
-    let cons_set, cls, tp =
-      let tp = Sign.result s in
-      let cls,_ = Class_table.split_type_term tp
-      and ntvs = Tvars.count_all tvs in
-      let set =
-        if cls < ntvs then IntSet.empty
-        else
-          let cls = cls - ntvs in
-          Class_table.constructors cls ct in
-      if IntSet.is_empty set then
-        error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
-      set, cls-ntvs, tp
-    in
-    let ind_idx = PC.add_induction_law cls idx tgt pc in
-    cons_set,ind_idx,idx,tp
-  in
+    analyze_type_inspect info id tgt pc in
   let proved_cases =
     List.fold_left
       (fun map (ie,cmp) ->
-        let cons_idx, pat, pc1 =
-          analyze_pattern ie cons_set tp in
-        let idx = prove_case ie.i cons_idx pat cmp ivar pc1 pc in
+        let cons_idx, pat, pc1 = analyze_type_case_pattern ie cons_set tp pc in
+        let idx = prove_type_case rcnt ie.i cons_idx pat cmp ivar tgt pc1 pc in
         IntMap.add cons_idx idx map
       )
       IntMap.empty
@@ -636,7 +660,7 @@ and prove_inductive_type
               let args = Array.init n (fun i -> Variable i) in
               Feature_table.feature_call cons_idx (nvars+n) args ft
             in
-            prove_case ens.i cons_idx pat [] ivar pc1 pc
+            prove_type_case rcnt ens.i cons_idx pat [] ivar tgt pc1 pc
         in
         PC.add_mp idx ind_idx false pc)
       cons_set ind_idx in
@@ -1398,6 +1422,7 @@ let put_creators
      Class_table.constructors_priv cls ct <> cset then
     error_info info "Different constructors in implementation file";
   Class_table.set_constructors cset cls ct;
+  PC.add_induction_law0 cls pc;
   creators_check_formal_generics creators.i clst tvs ft
 
 

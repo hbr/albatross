@@ -114,7 +114,8 @@ val inherit_parent: int -> int -> type_term array -> info -> t -> unit
 
 val add_potential_equalities: int -> t -> unit
 
-val add_induction_law:    int ->  int -> term -> t -> int
+val add_induction_law0:  int -> t -> unit
+val add_induction_law:   int ->  int -> term -> t -> int
 val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit
