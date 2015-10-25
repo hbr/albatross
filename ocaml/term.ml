@@ -76,8 +76,8 @@ module Term: sig
   val range_variables: term -> int -> int -> IntSet.t
 
   val used_variables:       term -> int -> int list
-  val used_variables_filtered: term -> (int -> bool) -> int list
-  val used_variables_from:  term -> int -> int list
+  val used_variables_filtered: term -> (int -> bool) -> bool -> int list
+  val used_variables_from:  term -> int -> bool -> int list
   val used_variables_transform: term -> int -> int array * int array
   val remove_unused_0: int array -> term -> int * int array * term array
   val remove_unused:   int array -> term -> int * int array * term
@@ -390,13 +390,13 @@ end = struct
     variables_filtered t (fun i -> start <= i && i < beyond)
 
 
-  let used_variables_filtered (t:term) (f:int->bool): int list =
+  let used_variables_filtered (t:term) (f:int->bool) (dup:bool): int list =
     (* The list of variables of the term [t] which satisfy [f] in reversed
        order in which they appear *)
     let lst,_ =
       fold
         (fun (lst,set) ivar ->
-          if not (f ivar) || IntSet.mem ivar set then
+          if not (f ivar) || (not dup && IntSet.mem ivar set) then
             lst,set
           else
             ivar::lst, IntSet.add ivar set)
@@ -409,13 +409,13 @@ end = struct
   let used_variables (t:term) (nvars:int): int list =
     (* The list of variables of the term [t] below [nvars] in reversed order in
        which they appear *)
-    used_variables_filtered t (fun i -> i < nvars)
+    used_variables_filtered t (fun i -> i < nvars) false
 
 
-  let used_variables_from (t:term) (nvars:int): int list =
+  let used_variables_from (t:term) (nvars:int) (dup:bool): int list =
     (* The list of variables of the term [t] from [nvars] on in reversed order in
        which they appear *)
-    used_variables_filtered t (fun i -> nvars <= i)
+    used_variables_filtered t (fun i -> nvars <= i) dup
 
 
 
