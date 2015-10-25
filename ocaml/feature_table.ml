@@ -40,7 +40,7 @@ type descriptor = {
   }
 
 type t = {
-    mutable map: int Term_table.t ref Feature_map.t;
+    mutable map: Term_table.t ref Feature_map.t;
     seq:         descriptor seq;
     mutable base:int list ref IntMap.t; (* module name -> list of features *)
     ct:          Class_table.t;

@@ -6,25 +6,25 @@
 
 open Term
 
-type 'a t
+type t
 
-val empty: 'a t
+val empty: t
 
-val count: 'a t -> int
+val count: t -> int
 
-val terms: 'a t -> ('a*int*int*term) list
+val terms: t -> (int*int*int*term) list
 
-val unify: term -> int -> 'a t -> ('a * Term_sub.t) list
+val unify: term -> int -> t -> (int * Term_sub.t) list
 
-val unify_with: term -> int -> int -> 'a t -> ('a * Term_sub.t) list
-
-
-val add: term -> int -> int -> 'a -> 'a t -> 'a t
+val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
 
 
-val filter: ('a->bool) -> 'a t -> 'a t
+val add: term -> int -> int -> int -> t -> t
 
-val remove: 'a -> 'a t -> 'a t
+
+val filter: (int->bool) -> t -> t
+
+val remove: int -> t -> t
     (** [remove i tab] removes the term with the index [i] from the table
         [tab] *)
 

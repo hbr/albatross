@@ -7,7 +7,7 @@
 open Container
 open Term
 
-type 'a sublist = ('a*Term_sub.t) list
+type sublist = (int*Term_sub.t) list
 
 module FlowMap = Map.Make(struct
   let compare = Pervasives.compare
@@ -19,21 +19,20 @@ module IntPairMap = Map.Make(struct
   type t = int*int
 end)
 
-type 'a t = {
-    terms: ('a*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
-    avars: ('a*int*int) list;             (* [idx, argument variable, nargs] *)
-    bvars: 'a sublist IntMap.t;           (* bvar -> [idx,sub] *)
-    fvars: (int * 'a sublist IntMap.t) list; (* [nbenv, fvar -> [idx,sub]] *)
-    apps:  ('a t array) IntMap.t; (* one for each function variable *)
-    fapps: ('a t * 'a t array) IntMap.t;
-                              (* one for each number of arguments *)
-    lams:  ('a t list * 'a t) IntMap.t;
+type t = {
+    terms: (int*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
+    avars: (int*int*int) list;             (* [idx, argument variable, nargs] *)
+    bvars: sublist IntMap.t;               (* bvar -> [idx,sub] *)
+    fvars: (int * sublist IntMap.t) list;  (* [nbenv, fvar -> [idx,sub]] *)
+    apps:  (t array) IntMap.t;             (* one for each function variable *)
+    fapps: (t * t array) IntMap.t;         (* one for each number of arguments *)
+    lams:  (t list * t) IntMap.t;
                               (* one for each number of preconditions *)
-    alls:  'a t IntMap.t;        (* one for each number of bindings *)
-    somes: 'a t IntMap.t;        (* one for each number of bindings *)
-    flows: ('a t array) FlowMap.t;
+    alls:  t IntMap.t;        (* one for each number of bindings *)
+    somes: t IntMap.t;        (* one for each number of bindings *)
+    flows: (t array) FlowMap.t;
          (* one for each flow control with the number of arguments*)
-    inds: ('a t array) IntPairMap.t;
+    inds: (t array) IntPairMap.t;
          (* one for each pair (nsets,nrules) *)
   }
 
@@ -52,31 +51,31 @@ let empty = {
   inds  = IntPairMap.empty}
 
 
-let count  (tab:'a t): int =
+let count  (tab:t): int =
   List.length tab.terms
 
 exception Term_found of term
 
-let find_lam (n:int) (tab:'a t): 'a t list * 'a t =
+let find_lam (n:int) (tab: t): t list * t =
   IntMap.find n tab.lams
 
-let add_lam (n:int) (lamtab:'a t list * 'a t) (tab:'a t): 'a t =
+let add_lam (n:int) (lamtab:t list * t) (tab:t): t =
   {tab with lams = IntMap.add n lamtab tab.lams}
 
 
-let terms0 (tab:'a t): ('a*int*int*int*term) list =
+let terms0 (tab:t): (int*int*int*int*term) list =
   (** All the terms as a list [obj,nb,nargs,nbenv,term] of the table [tab] in the
       reverse order in which they have been inserted.  *)
   tab.terms
 
 
-let terms (tab:'a t): ('a*int*int*term) list =
+let terms (tab:t): (int*int*int*term) list =
   (** All the terms as a list [idx,nargs,nbenv,term] of the table [tab] in the
       order in which they have been inserted.  *)
   List.rev_map (fun (idx,_,nargs,nbenv,term) -> idx,nargs,nbenv,term) tab.terms
 
 
-let join_lists (l1: 'a sublist) (l2:'a sublist): 'a sublist =
+let join_lists (l1: sublist) (l2:sublist): sublist =
   (** Join the two disjoint lists [l1] and [l2].
    *)
   let rec join l1 l2 res =
@@ -94,7 +93,7 @@ let join_lists (l1: 'a sublist) (l2:'a sublist): 'a sublist =
 
 
 
-let merge_lists (l1: 'a sublist) (l2:'a sublist): 'a sublist =
+let merge_lists (l1: sublist) (l2:sublist): sublist =
   (** Merge the two lists [l1] and [l2].
 
       The merged list contains only the indices which occur in both lists
@@ -121,15 +120,15 @@ let merge_lists (l1: 'a sublist) (l2:'a sublist): 'a sublist =
 
 
 
-let qmap (is_all:bool) (tab:'a t): 'a t IntMap.t =
+let qmap (is_all:bool) (tab:t): t IntMap.t =
   if is_all then
     tab.alls
   else
     tab.somes
 
 
-let unify (t:term) (nbt:int) (table:'a t)
-    :  ('a * Term_sub.t) list =
+let unify (t:term) (nbt:int) (table:t)
+    :  (int * Term_sub.t) list =
   (** Unify the term [t] which comes from an environment with [nbt] bound
       variables with the terms in the table 'table'.
 
@@ -142,8 +141,8 @@ let unify (t:term) (nbt:int) (table:'a t)
             the term [ut] at the corresponding index [idx] the term [ut]
             has to be transformed into the environment of [t].
    *)
-  let rec uni (t:term) (tab:'a t) (nb:int): 'a sublist =
-    let basic_subs: 'a sublist =
+  let rec uni (t:term) (tab:t) (nb:int): sublist =
+    let basic_subs: sublist =
       try
         let t = Term.down nb t in
         List.map (fun (idx,avar,nargs) -> idx,Term_sub.singleton avar t) tab.avars
@@ -151,21 +150,21 @@ let unify (t:term) (nbt:int) (table:'a t)
         []
     and subs
         (i:int)
-        (mp:   'a sublist IntMap.t)
-        (base: 'a sublist) : 'a sublist =
+        (mp:   sublist IntMap.t)
+        (base: sublist) : sublist =
       try
         join_lists (IntMap.find i mp) base
       with Not_found -> base
     in
-    let list_of (t:term) (nb:int) (tab:'a t): 'a sublist =
+    let list_of (t:term) (nb:int) (tab:t): sublist =
       let res = uni t tab nb in
       if res=[] then raise Not_found;
       res
     in
     let arglst
-        (args:term array) (nb:int) (argtabs:'a t array)
-        (lst:'a sublist) (use_lst:bool)
-        : 'a sublist =
+        (args:term array) (nb:int) (argtabs:t array)
+        (lst:sublist) (use_lst:bool)
+        : sublist =
       let len = Array.length args in
       assert (len = Array.length argtabs);
       let res_lst = ref lst in
@@ -263,8 +262,8 @@ let unify (t:term) (nbt:int) (table:'a t)
 
 
 
-let unify_with (t:term) (nargs:int) (nbenv:int) (table:'a t)
-    :  ('a * Term_sub.t) list =
+let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
+    :  (int * Term_sub.t) list =
   (** Unify the terms in the table [table] with term [t] which has [nargs]
       arguments and comes from an environment with [nbenv] variables.
 
@@ -277,7 +276,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:'a t)
             into the environment of the term at [idx] (e.g. in the term [t]
             space has to be made for the variables of the term at [idx]).
    *)
-  let rec uniw (t:term) (tab:'a t) (nb:int): 'a sublist =
+  let rec uniw (t:term) (tab:t) (nb:int): sublist =
     match t with
       Variable i when i < nb ->
         (* bound variable of [t] *)
@@ -383,7 +382,7 @@ in
     []
 
 
-let newmap (i:int) (idx:'a) (map: 'a sublist IntMap.t): 'a sublist IntMap.t =
+let newmap (i:int) (idx:int) (map: sublist IntMap.t): sublist IntMap.t =
   try
     let sublist = IntMap.find i map in
     assert (not (List.exists (fun (i,_) -> i=idx) sublist));
@@ -393,19 +392,19 @@ let newmap (i:int) (idx:'a) (map: 'a sublist IntMap.t): 'a sublist IntMap.t =
     IntMap.add i [idx,Term_sub.empty] map
 
 
-let has (idx:'a) (table:'a t): bool =
+let has (idx:int) (table:t): bool =
   List.exists (fun (i,_,_,_,_) -> i = idx) table.terms
 
 
 let add
     (t:term) (nargs:int) (nbenv:int)
-    (idx:'a)
-    (table:'a t): 'a t =
+    (idx:int)
+    (table:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
       environment with [nbenv] variables to the index [idx]
       within the node [tab].
    *)
-  let rec add0 (t:term) (nb:int) (tab:'a t): 'a t =
+  let rec add0 (t:term) (nb:int) (tab:t): t =
     let tab =
       match t with
         Variable i when nb<=i && i<nb+nargs ->
@@ -509,7 +508,7 @@ let add
 
 
 
-let filter (f:'a -> bool) (tab:'a t): 'a t =
+let filter (f:int -> bool) (tab:t): t =
   let filt_sub sublst = List.filter (fun (obj,_) -> f obj) sublst in
   let rec filt tab =
     {terms = List.filter (fun (obj,_,_,_,_) -> f obj) tab.terms;
@@ -528,5 +527,5 @@ let filter (f:'a -> bool) (tab:'a t): 'a t =
 
 
 
-let remove (obj:'a) (tab:'a t): 'a t =
-  filter (fun o -> o <> obj) tab
+let remove (idx:int) (tab:t): t =
+  filter (fun i -> i <> idx) tab
