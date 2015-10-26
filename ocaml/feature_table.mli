@@ -75,7 +75,8 @@ val tuple_index:       int
 val first_index:       int
 val second_index:      int
 
-(*val standard_argnames: int -> int array*)
+val false_constant: int -> term
+val true_constant:  int -> term
 
 val base_table: int -> t
 

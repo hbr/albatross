@@ -62,6 +62,13 @@ let first_index:       int = 10
 let second_index:      int = 11
 
 
+let false_constant (nb:int): term =
+  VAppl (nb+false_index,[||])
+
+let true_constant (nb:int): term =
+  VAppl (nb+true_index,[||])
+
+
 let empty (verbosity:int): t =
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
@@ -285,10 +292,7 @@ let feature_call(i:int) (nb:int) (args:term array) (ft:t): term =
      with [nb] variables.*)
   let len = Array.length args in
   assert (arity i ft = len);
-  if len = 0 then
-    Variable (i+nb)
-  else
-    VAppl (i+nb,args)
+  VAppl (i+nb,args)
 
 
 let constructor_rule (idx:int) (p:term) (nb:int) (ft:t)
@@ -896,12 +900,15 @@ let term_to_string
         Variable i ->
           None, var2str i
       | VAppl (i,args) ->
-          begin try
-            let op,fidx = find_op_int i in
-            Some op, op2str op fidx args
-          with Not_found ->
-            funiapp2str i (argsstr args)
-          end
+          if Array.length args = 0 then
+            None, var2str i
+          else
+            begin try
+              let op,fidx = find_op_int i in
+              Some op, op2str op fidx args
+            with Not_found ->
+              funiapp2str i (argsstr args)
+            end
       | Application (f,args,pr) ->
           begin
             try
@@ -1115,7 +1122,7 @@ let domain_of_feature (i:int) (nb:int) (ft:t): term =
   let t =
     match pres with
       [] ->
-        Variable (n+nb+true_index)
+        true_constant (n+nb)
     | hd::tl ->
         let and_id = n + nb + and_index in
         List.fold_left
@@ -1791,20 +1798,18 @@ let base_table (verbosity:int) : t =
     [||] [||] bool false false (spec_none 0) ft;
 
   let imp_id1   = 1 + implication_index
-  and false_id1 = 1 + false_index
-  and false_id2 = 2 + false_index
   and imp_id2   = 2 + implication_index
   and not_id2   = 2 + not_index
   in
-  let not_term = Term.binary imp_id1 (Variable 0) (Variable false_id1)
+  let not_term = Term.binary imp_id1 (Variable 0) (false_constant 1)
   and or_term  =  Term.binary imp_id2 (Term.unary not_id2 (Variable 0)) (Variable 1)
   and and_term =
     Term.unary  not_id2
       (Term.binary imp_id2
          (Variable 0)
-         (Term.binary imp_id2 (Variable 1) (Variable false_id2)))
+         (Term.binary imp_id2 (Variable 1) (false_constant 2)))
   and true_term =
-    Term.binary implication_index (Variable false_index) (Variable false_index)
+    Term.binary implication_index (false_constant 0) (false_constant 0)
   in
   add_base (* true *)
     "boolean" Class_table.boolean_index FNtrue
@@ -2349,11 +2354,8 @@ let peer_matches (i:int) (nb:int) (ft:t): (int*term) list =
       assert (is_constructor i ft);
       let n = arity i ft in
       let t =
-        if n = 0 then
-          Variable (i + nb + n)
-        else
-          let args = Array.init n (fun i -> Variable i) in
-          VAppl (i + nb + n, args) in
+        let args = Array.init n (fun i -> Variable i) in
+        VAppl (i + nb + n, args) in
       (n,t)::lst)
     set
     []
@@ -2525,12 +2527,12 @@ let is_pattern (n:int) (t:term) (nb:int) (ft:t): bool =
 
 
 let case_substitution
-    (nt:int) (t:term) (npat:int) (pat:term) (nb:int) (ft:t): (term array) option =
-  (* The substitutions for the match expression [pat] which make the match
-     expression equivalent to the term [t] (with [nt] variables) or [None] if
-     the match definitely fails. The function raises [Not_found] if neither a
-     positive or a negative match is possible i.e. if matching cannot be decided
-     because the term does not provide enough information.
+    (t:term) (npat:int) (pat:term) (nb:int) (ft:t): (term array) option =
+  (* The substitutions for the pattern [pat] which make the pattern equivalent
+     to the term [t] (with [nt] variables) or [None] if the match definitely
+     fails. The function raises [Not_found] if neither a positive or a
+     negative match is possible i.e. if matching cannot be decided because
+     the term does not provide enough information.
 
      Positive match: The term is more special than the pattern and substitutions
                      can be found.
@@ -2545,37 +2547,36 @@ let case_substitution
 
                      I.e. if the term is a pattern then Undecidable means that the
                      term is more general.
- *)
+
+     Note: [pat] must be a pattern i.e. it contains only constructors and variables!
+   *)
   let subargs = Array.make npat (Variable (-1))
   and subflgs = Array.make npat false
   and decid   = ref true
   and hassub  = ref true in
   let is_constr idx =
-    nt + nb <= idx && is_constructor (idx-nt-nb) ft
+    nb <= idx && is_constructor (idx-nb) ft
   in
   let rec do_match t pat =
     let match_args args1 args2 =
+      assert (Array.length args1 = Array.length args2);
       Array.iteri
         (fun i arg ->
           do_match arg args2.(i))
         args1
     in
     match t, pat with
-      _, Variable i when i < npat ->
+      _, Variable i ->
+        assert(i < npat);  (* otherwise it would not be a pattern *)
         assert (not subflgs.(i));
         subflgs.(i) <- true;
         subargs.(i) <- t
-    | Variable idx1, Variable idx2 when is_constr idx1 ->
-        hassub := !hassub && idx1 + npat = idx2
-    | Variable idx1, VAppl(idx2,args2) when is_constr idx1 ->
-        hassub := false
-    | VAppl (idx1,_) , Variable idx2 when is_constr idx1 ->
-        hassub := false
     | VAppl(idx1,args1), VAppl(idx2,args2) when  is_constr idx1 ->
-        assert (nt + nb <= idx1);
+        assert (nb <= idx1);
         assert (npat + nb <= idx2);
-        hassub :=  !hassub &&  idx1 - nt =  idx2 - npat;
-        match_args args1 args2
+        hassub :=  !hassub &&  idx1 = idx2 - npat;
+        if !hassub then
+          match_args args1 args2;
     | _ ->
         decid := false
   in
@@ -2592,10 +2593,10 @@ let case_substitution
 
 
 let is_case_matching (t:term) (npat:int) (pat:term) (nb:int) (ft:t): bool =
-  (* Is the term [t] matching the match expression [mtch] with [n] variables?
+  (* Is the term [t] matching the pattern [pat] with [npat] variables?
      Raise [Not_found] if the match is undecidable.
    *)
-  match case_substitution 0 t npat pat nb ft with
+  match case_substitution t npat pat nb ft with
     None   -> false
   | Some _ -> true
 
@@ -2902,7 +2903,7 @@ let inspect_unfolded (info:info) (args:term array) (nb:int) (ft:t): term array =
 
 
 let downgrade_term (t:term) (nb:int) (ft:t): term =
-  (* Downgrade all calls of the form [Application(Variable i,args)] to
+  (* Downgrade all calls of the form [Application(VAppl (i,[||]),args)] to
      [VAppl(i,args')] if [i] is not a constant.
    *)
   let rec down t nb =
@@ -2913,12 +2914,12 @@ let downgrade_term (t:term) (nb:int) (ft:t): term =
         t
     | VAppl (i,args) ->
         VAppl(i, down_args args nb)
-    | Application(Variable i,args,pr) when nb <= i ->
+    | Application(VAppl (i,[||]),args,pr) when nb <= i ->
         assert (Array.length args = 1);
         let nargs = arity (i - nb) ft in
         let args = down_args args nb in
         if nargs = 0 then
-          Application(Variable i,args,pr)
+          Application(VAppl(i,[||]),args,pr)
         else
           let args = args_of_tuple_ext args.(0) nb nargs ft in
           VAppl(i,args)

@@ -461,7 +461,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             if pr then raise Illegal_proof_term;
             if Context.domain_of_lambda n nms pres nb (context at) <> doma then
               raise Illegal_proof_term
-        | Variable idx2 when arity idx2 nb at > 0 ->
+        | VAppl(idx2,[||]) when arity idx2 nb at > 0 ->
+        (*| Variable idx2 when arity idx2 nb at > 0 ->*)
             if Context.domain_of_feature idx2 nb (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
@@ -480,9 +481,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           end else t in
         let ta,tb = reconstruct e nb
         and argsa,argsb = reconstr_args args in
-        let uneval =
-          if argslen = 0 then Variable idx
-          else VAppl(idx,argsa) in
+        let uneval = VAppl(idx,argsa) in
+          (*if argslen = 0 then Variable idx
+          else VAppl(idx,argsa) in*)
         let exp =
           try apply_term t argsb nb at
           with Not_found ->
@@ -538,8 +539,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let argsa, argsb = reconstr_args args in
         let res =
           let nvars = count_variables at in
-          if cond then Variable (nvars + Feature_table.true_index)
-          else Variable (nvars + Feature_table.false_index)
+          if cond then Feature_table.true_constant nvars
+          else Feature_table.false_constant nvars
         in
         Flow (Asexp,argsa), res
     | Eval.Inspect (t,inspe,icase,nvars,rese) ->

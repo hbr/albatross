@@ -264,11 +264,7 @@ let analyze_type_case_pattern
       ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
   let cons_idx =
     match pat with
-      Variable i ->
-        let cons_idx = i - nvars - n in
-        if not (IntSet.mem cons_idx cons_set) then  invalid_pat ();
-        cons_idx
-    | VAppl(i,args) ->
+      VAppl(i,args) ->
         let argslen = Array.length args in
         if argslen <> n then invalid_pat ();
         for k = 0 to n-1 do
@@ -452,8 +448,6 @@ and prove_inductive_set
       match bexp with
         Application (f,[|elem|],_) ->
           elem, f
-      | VAppl (idx,[|elem|]) ->
-          elem, Variable idx
       | _ ->
           assert false (* cannot happen *) in
     let q =
@@ -1155,19 +1149,15 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   let n1,n2 = Sign.arity s1, Sign.arity s2 in
   let args1 = Array.init n1 (fun i -> Variable i)
   and args2 = Array.init n2 (fun i -> Variable (n1+i)) in
-  let appl idx args =
-    let idx = n1 + n2 + idx in
-    if Array.length args = 0 then Variable idx
-    else VAppl (idx,args) in
+  let appl idx args = VAppl(n1+n2+idx,args) in
   let t1 = appl idx1 args1
   and t2 = appl idx2 args2
   and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
   and imp_id   = n1 + n2 + Feature_table.implication_index
-  and false_id = n1 + n2 + Feature_table.false_index
   in
   let t = Term.binary imp_id
       (Term.binary eq_id t1 t2)
-      (Variable false_id) in
+      (Feature_table.false_constant (n1+n2)) in
   let t = Term.all_quantified
       (n1+n2)
       (standard_argnames (n1+n2))
@@ -1181,27 +1171,24 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
 let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   (* Add case inversions
 
-     all(a:T) a as mtch1  ==>  a as mtch2  ==>  false
+     all(a:T) a as pat1  ==>  a as pat2  ==>  false
    *)
   assert (idx1 <> idx2);
   let ft = PC.feature_table pc in
-  let make_match idx =
+  let make_pattern idx =
     let n = Feature_table.arity idx ft in
-    if n = 0 then
-      Variable (1+idx)
-    else
-      let args = Array.init n (fun i -> Variable i)
-      and nms  = standard_argnames n in
-      let t    = VAppl(1+n+idx, args) in
-      Term.quantified false n nms t
+    let args = Array.init n (fun i -> Variable i)
+    and nms  = standard_argnames n in
+    let t    = VAppl(1+n+idx, args) in
+    Term.quantified false n nms t
   in
-  let mtch1 = make_match idx1
-  and mtch2 = make_match idx2
+  let pat1 = make_pattern idx1
+  and pat2 = make_pattern idx2
   and imp_id   = 1 + Feature_table.implication_index
-  and false_id = 1 + Feature_table.false_index in
-  let mtch1 = Flow(Asexp, [|Variable 0; mtch1|])
-  and mtch2 = Flow(Asexp, [|Variable 0; mtch2|]) in
-  let t = Term.binary imp_id mtch1 (Term.binary imp_id mtch2 (Variable false_id)) in
+  and false_const = Feature_table.false_constant 1 in
+  let pat1 = Flow(Asexp, [|Variable 0; pat1|])
+  and pat2 = Flow(Asexp, [|Variable 0; pat2|]) in
+  let t = Term.binary imp_id pat1 (Term.binary imp_id pat2 false_const) in
   let q = Term.all_quantified 1 (standard_argnames 1) t in
   (*printf "inversion %s\n" (PC.string_of_term q pc);*)
   ignore(add_case_axiom q pc)

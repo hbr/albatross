@@ -884,6 +884,7 @@ let check_as_argument (i:int) (s:Sign.t) (tb:t): unit =
 
 let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
   assert (Sign.has_result s);
+  let nvars  = Context.count_variables (context tb) in
   if is_expecting_function tb then
     resize 0 ((Seq.last tb.funstack).nargs+1) 0 tb;
   (*resize 0 0 0 tb;*)
@@ -907,14 +908,17 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
     end else begin
       check_as_argument i s tb; s
     end in
-  Seq.push {term = Variable i; sign = s1; sign0 = s} tb.terms
+  let term = if i < nvars then Variable i else VAppl (i,[||]) in
+  Seq.push {term = term; sign = s1; sign0 = s} tb.terms
+  (*Seq.push {term = Variable i; sign = s1; sign0 = s} tb.terms*)
 
 
 let expect_function (nargs:int) (pr:int) (tb:t): unit =
   if tb.trace then printf "  expect function nargs %d, pr %d\n" nargs pr;
   let pos = Seq.count tb.terms in
-  if is_expecting_function tb then begin (* already expecting a function, new function
-                                            has to return a predicate or a function *)
+  if is_expecting_function tb then begin
+      (* already expecting a function, new function
+         has to return a predicate or a function *)
     if tb.trace then printf "  already expecting function\n";
     resize 0 (nargs+1) 0 tb;
     let funrec = Seq.last tb.funstack in
@@ -963,8 +967,12 @@ let complete_function (tb:t): unit =
       let pr = (cls = predicate_index tb) in
       Application(frec.term, args, pr)
     else begin
-      assert (Term.is_variable frec.term);
-      VAppl (Term.variable frec.term, args)
+      match frec.term with
+        VAppl(i,args0) ->
+          assert (Array.length args0 = 0);
+          VAppl (i,args)
+      | _ ->
+          assert false
     end
   and s0 = Sign.make_const (Sign.result frec.sign)
   in
@@ -1377,10 +1385,14 @@ let check_term (t:term) (tb:t): unit =
         add_lf i
     | VAppl(i,args) ->
         let nargs = Array.length args in
-        expect_function nargs (-1) tb;
-        add_lf i;
-        Array.iter (fun a -> expect_argument tb; check a tb) args;
-        complete_function tb
+        if nargs = 0 then
+          add_lf i
+        else begin
+          expect_function nargs (-1) tb;
+          add_lf i;
+          Array.iter (fun a -> expect_argument tb; check a tb) args;
+          complete_function tb
+        end
     | Application (f,args,pr) ->
         let nargs = Array.length args
         and pr    = if pr then 1 else 0 in

@@ -259,7 +259,7 @@ let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
     chn
   else
     let usd_rev =
-      Term.used_variables_filtered chn (fun i -> i<>idx && i < n) in
+      Term.used_variables_filtered chn (fun i -> i<>idx && i < n) false in
     let nusd = List.length usd_rev in
     let map,_ = List.fold_left
         (fun (map,i) ivar ->
@@ -732,12 +732,15 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            let n,nms,t0 = definition i nb pc in
+            ignore(definition i nb pc);
+            assert false (* i cannot be global and local definitions nyi *)
+            (*let n,nms,t0 = definition i nb pc in
+            assert false;
             let t0 =
               if n = 0 then t0
               else make_lambda n nms [] t0 false pc in
             let res,rese,_ = eval t0 nb full depth in
-            res, Eval.Exp(i,[||],rese), true
+            res, Eval.Exp(i,[||],rese), true*)
           with Not_found ->
             t, Eval.Term t, false
           end
@@ -746,9 +749,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let args = [|Eval.Term (Lam(n,nms,pres,t0,pr))|]
           and dom = Context.domain_of_lambda n nms pres nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
-      | VAppl (i,[|Variable idx|])
+      | VAppl (i,[| VAppl (idx,[||]) |])
         when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
-          let args = [|Eval.Term (Variable idx)|]
+          let args = [| Eval.Term (VAppl (idx,[||])) |]
           and dom  = Context.domain_of_feature idx nb (context pc) in
           dom, Eval.Exp(i, args, Eval.Term dom), true
       | VAppl (i,args) ->
@@ -758,26 +761,34 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             in
             try
               let n,nms,t0 = definition i nb pc in
-              assert (n = Array.length args);
-              let args,argse,argsmodi =
-                if full then
-                  eval_args false args full
-                else
-                  args, Array.map (fun t -> Eval.Term t) args, false
-              in
-              let exp = Proof_table.apply_term t0 args nb pc.base in
-              let res,rese,_ =
-                if full then
-                  eval exp nb full depth
-                else
-                  exp, Eval.Term exp, false
-              in
-              if full && is_flow res then begin
-                let res = VAppl(i,args)
-                and e   = Eval.VApply (i,argse) in
-                res, e, argsmodi
-              end else begin
-                res, Eval.Exp(i,argse,rese), true
+              if n > 0 && Array.length args = 0 then
+                let t0 = make_lambda n nms [] t0 false pc in
+                let res,rese,_ = eval t0 nb full depth in
+                res, Eval.Exp(i,[||],rese), true
+              else begin
+                if n <> Array.length args then
+                  printf "n %d, #args %d\n" n (Array.length args);
+                assert (n = Array.length args);
+                let args,argse,argsmodi =
+                  if full then
+                    eval_args false args full
+                  else
+                    args, Array.map (fun t -> Eval.Term t) args, false
+                in
+                let exp = Proof_table.apply_term t0 args nb pc.base in
+                let res,rese,_ =
+                  if full then
+                    eval exp nb full depth
+                  else
+                    exp, Eval.Term exp, false
+                in
+                if full && is_flow res then begin
+                  let res = VAppl(i,args)
+                  and e   = Eval.VApply (i,argse) in
+                  res, e, argsmodi
+                end else begin
+                  res, Eval.Exp(i,argse,rese), true
+                end
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
@@ -853,9 +864,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       t, Eval.Term t, false
                     end
                   end else
-                    let n,_,mtch,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+                    let n,_,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
                     try
-                      let sub = Term_algo.unify insp n mtch in
+                      let sub = Term_algo.unify insp n pat in
                       assert (Array.length sub = n);
                       let res = Term.apply res sub in
                       let res1,rese,_ = eval res nb full depth in
@@ -866,17 +877,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 cases_from 0
             | Asexp ->
                 assert (len = 2);
-                let n,nms,mtch = Term.pattern_split args.(1) in
+                let n,nms,pat = Term.pattern_split args.(1) in
                 try
                   let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|]
                   and ft = feature_table pc in
-                  if Feature_table.is_case_matching args.(0) n mtch (nb+nbenv) ft
+                  if Feature_table.is_case_matching args.(0) n pat (nb+nbenv) ft
                   then begin
-                    Variable (nbenv+Feature_table.true_index),
+                    Feature_table.true_constant nbenv,
                     Eval.As(true,eargs),
                     true
                   end else begin
-                    Variable (nbenv+Feature_table.false_index),
+                    Feature_table.false_constant nbenv,
                     Eval.As(false,eargs),
                     true
                   end
@@ -896,13 +907,14 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
   if ta <> t then begin
-    printf "t   %s  %s\n" (string_of_term t pc) (Term.to_string t);
-    printf "ta  %s  %s\n" (string_of_term ta pc) (Term.to_string ta)
+    printf "t    %s  %s\n" (string_of_term t pc) (Term.to_string t);
+    printf "ta   %s  %s\n" (string_of_term ta pc) (Term.to_string ta);
+    printf "tred %s\n" (string_of_term tred pc)
   end;
   assert (ta = t);
   if tb <> tred then begin
-    printf "tb   %s\n" (string_of_term tb pc);
-    printf "tred %s\n" (string_of_term tred pc)
+    printf "tb   %s %s\n" (string_of_term tb pc) (Term.to_string tb);
+    printf "tred %s %s\n" (string_of_term tred pc) (Term.to_string tred)
   end;
   (*if modi then begin
     printf "\nevaluation found\n";

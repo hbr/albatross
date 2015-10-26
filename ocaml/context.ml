@@ -704,27 +704,15 @@ let fully_expanded (t:term) (nb:int) (c:t): term =
           let n,nms,t0 = definition i nb c in
           let t0 = expand t0 (n+nb) in
           if n = 0 then
-            apply t0 args false
+            t0
+          else if Array.length args = 0 then
+            make_lambda n nms [] t0 false nb c
           else begin
             assert (n = Array.length args);
             Term.apply t0 args
           end
         with Not_found ->
           VAppl (i, args)
-       end
-    | Application (Variable i, args, pr) ->
-        let args = expargs args in
-        begin try
-          let n,nms,t0 = definition i nb c in
-          let t0 = expand t0 (n+nb) in
-          if n = 0 then
-            apply t0 args false
-          else begin
-            assert (n = Array.length args);
-            beta_reduce n t0 args nb c
-          end
-        with Not_found ->
-          Application (Variable i, args, pr)
        end
     | Application (f,args,pr) ->
         let f    = expand f nb
@@ -758,8 +746,6 @@ let inductive_set (t:term) (c:t): term =
   match t with
     Indset _ ->
       t
-  | Variable i ->
-      indset i [||]
   | VAppl (i,args) ->
       indset i args
   | _ ->
@@ -802,8 +788,8 @@ let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): te
   let nbenv = count_variables c in
   match pres with
     [] ->
-      let true_id = 1 + nb + nbenv + Feature_table.true_index in
-      Lam(n,nms,[],Variable true_id,true)
+      let true_const = Feature_table.true_constant (1+nb+nbenv) in
+      Lam(n,nms,[],true_const,true)
   | p::pres ->
       let and_id  = 1 + nb + nbenv + Feature_table.and_index in
       let inner =
@@ -996,14 +982,17 @@ let term_preconditions (t:term)  (c:t): term list =
           lst1,
         domain_t
     | VAppl (i,args) ->
-        let n,nms,lst1 = preconditions i nb c in
-        assert (n = Array.length args);
-        let lst = pres_args args lst in
-        List.fold_left
-          (fun lst t -> (Term.apply t args)::lst)
-          lst
-          lst1,
-        domain_t
+        if Array.length args = 0 && arity i nb c > 0 then
+          lst, domain_t
+        else
+          let n,nms,lst1 = preconditions i nb c in
+          assert (n = Array.length args);
+          let lst = pres_args args lst in
+          List.fold_left
+            (fun lst t -> (Term.apply t args)::lst)
+            lst
+            lst1,
+          domain_t
     | Application (f,args,pr) when pr ->
         let lst,dom = pres f nb lst in
         pres_args args lst,

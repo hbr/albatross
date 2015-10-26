@@ -24,7 +24,7 @@ type t = {
     avars: (int*int*int) list;             (* [idx, argument variable, nargs] *)
     bvars: sublist IntMap.t;               (* bvar -> [idx,sub] *)
     fvars: (int * sublist IntMap.t) list;  (* [nbenv, fvar -> [idx,sub]] *)
-    apps:  (t array) IntMap.t;             (* one for each function variable *)
+    apps:  (t array * sublist) IntMap.t;   (* one for each function variable *)
     fapps: (t * t array) IntMap.t;         (* one for each number of arguments *)
     lams:  (t list * t) IntMap.t;
                               (* one for each number of preconditions *)
@@ -193,8 +193,11 @@ let unify (t:term) (nbt:int) (table:t)
         assert (nb + nbt <= i);
         let idx = i - nb - nbt in
         begin try
-          let argtabs = IntMap.find idx tab.apps in
-          arglst args nb argtabs [] false
+          let argtabs,sublst = IntMap.find idx tab.apps in
+          if Array.length argtabs = 0 then
+            join_lists basic_subs sublst
+          else
+            arglst args nb argtabs [] false
         with Not_found ->
           basic_subs
         end
@@ -321,14 +324,18 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | VAppl (i,args) ->
         assert (nb + nargs + nbenv <= i);
         let idx = i - nb - nargs - nbenv in
-        let argtabs = IntMap.find idx tab.apps in
-        let lst = ref [] in
-        Array.iteri
-          (fun i a ->
-            let alst = uniw a argtabs.(i) nb in
-            lst := if i = 0 then alst else merge_lists !lst alst)
-          args;
-        !lst
+        let argtabs,sublst = IntMap.find idx tab.apps in
+        if Array.length argtabs = 0 then
+          sublst
+        else begin
+          let lst = ref [] in
+          Array.iteri
+            (fun i a ->
+              let alst = uniw a argtabs.(i) nb in
+              lst := if i = 0 then alst else merge_lists !lst alst)
+            args;
+          !lst
+        end
     | Application (f,args,_) ->
         let len = Array.length args in
         let ftab, argtabs = IntMap.find len tab.fapps in
@@ -431,14 +438,16 @@ let add
           {tab with bvars = newmap i idx tab.bvars}
       | VAppl (i,args) ->
           assert (nb + nargs + nbenv <= i);
-          let len = Array.length args in
-          let fidx = i - nb - nargs - nbenv in
-          let argtabs =
+          let len  = Array.length args
+          and item = idx, Term_sub.empty
+          and fidx = i - nb - nargs - nbenv in
+          let argtabs,sublst =
             try IntMap.find fidx tab.apps
-            with Not_found -> Array.make len empty in
+            with Not_found ->
+              Array.make len empty, [] in
           let argtabs =
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs in
-          {tab with apps = IntMap.add fidx argtabs tab.apps}
+          {tab with apps = IntMap.add fidx (argtabs,item::sublst) tab.apps}
       | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =
@@ -515,7 +524,7 @@ let filter (f:int -> bool) (tab:t): t =
      avars = List.filter (fun (obj,_,_) ->     f obj) tab.avars;
      bvars = IntMap.map filt_sub tab.bvars;
      fvars = List.map (fun (nbenv,map) -> nbenv, IntMap.map filt_sub map) tab.fvars;
-     apps  = IntMap.map (fun args -> Array.map filt args) tab.apps;
+     apps  = IntMap.map (fun (args,sublst) -> Array.map filt args,sublst) tab.apps;
      fapps = IntMap.map (fun (f,args) -> filt f, Array.map filt args) tab.fapps;
      lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
      alls  = IntMap.map filt tab.alls;
