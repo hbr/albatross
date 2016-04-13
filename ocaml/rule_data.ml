@@ -7,15 +7,18 @@
 open Term
 open Signature
 open Container
+open Printf
 
 
 type t = {
     orig:int option;  (* original schematic assertion *)
-    nbenv:     int;   (* number of variables between the arguments and the
-                         global variables *)
+    c:         Context.t;
     nargs:     int;
     spec:      bool;  (* is specialized *)
     nms:       int array;
+    tps:       type_term array;
+    fgnms:     int array;
+    fgcon:     type_term array;
     fwd_blckd: bool;  (* is blocked as forward rule *)
     bwd_blckd: bool;  (* is blocked as backward rule *)
     nbwd:      int;   (* number of premises until backward rule *)
@@ -30,9 +33,12 @@ type t = {
 
 let anchor_class (rd:t): int = rd.anchor
 
-let nbenv (rd:t): int = rd.nbenv
+let count_variables (rd:t): int = Context.count_variables rd.c
 
 let is_schematic (rd:t) : bool =  not rd.spec
+
+let is_generic (rd:t): bool =
+  Array.length rd.fgcon > 0
 
 let is_orig_schematic (rd:t): bool =
   match rd.orig with
@@ -74,7 +80,7 @@ let is_backward_recursive (rd:t): bool =
   let ntgt = Term.nodes rd.target in
   List.exists
     (fun (_,_,p) ->
-      p = rd.target ||
+      Term.equivalent p rd.target ||
       let np = Term.nodes p in
       ntgt < np &&
       Term_algo.can_unify rd.target rd.nargs p)
@@ -129,12 +135,13 @@ let short_string (rd:t): string =
 let count_premises (rd:t): int =
   List.length rd.premises
 
+
 let premises (rd:t) (nbenv:int): (term*bool) list =
   assert (is_fully_specialized rd);
   assert (is_implication rd);
-  assert (rd.nbenv <= nbenv);
-  let nbenv_delta = nbenv - rd.nbenv in
-  let up t = Term.upbound nbenv_delta rd.nargs t in
+  assert (count_variables rd <= nbenv);
+  let nbenv_delta = nbenv - count_variables rd in
+  let up t = Term.up_from nbenv_delta rd.nargs t in
   List.map (fun (gp1,cons,p) -> up p,cons) rd.premises
 
 
@@ -163,27 +170,32 @@ let update_ps_tgt (ps:(int*bool*term) list) (imp:term) (nbenv:int):
   List.rev ps_rev, tgt
 
 
+
+
 let prepend_premises (ps:(int*bool*term) list) (rd:t)
     : term =
-  let t = implication_chain ps rd.target (rd.nargs + rd.nbenv) in
-  Term.all_quantified rd.nargs rd.nms t
+  let t = implication_chain ps rd.target (rd.nargs + count_variables rd) in
+  Term.all_quantified rd.nargs (rd.nms,rd.tps) (rd.fgnms,rd.fgcon) t
+
+
+
+let term0 (rd:t): term =
+  if is_implication rd && is_specialized rd then
+    let (gp1,_,p), ps = List.hd rd.premises, List.tl rd.premises in
+    assert (gp1 = 0);
+    let p = Term.down rd.nargs p
+    and t = prepend_premises ps rd
+    and imp_id = count_variables rd + Feature_table.implication_index in
+    Term.binary imp_id p t
+  else
+    prepend_premises rd.premises rd
 
 
 
 let term (rd:t) (nbenv:int): term =
-  assert (rd.nbenv <= nbenv);
-  let t =
-    if is_implication rd && is_specialized rd then
-      let (gp1,_,p), ps = List.hd rd.premises, List.tl rd.premises in
-      assert (gp1 = 0);
-      let p = Term.down rd.nargs p
-      and t = prepend_premises ps rd
-      and imp_id = rd.nbenv + Feature_table.implication_index in
-      Term.binary imp_id p t
-    else
-      prepend_premises rd.premises rd
-  in
-  let nbenv_delta = nbenv - rd.nbenv in
+  assert (count_variables rd <= nbenv);
+  let t = term0 rd in
+  let nbenv_delta = nbenv - count_variables rd in
   Term.up nbenv_delta t
 
 
@@ -235,31 +247,26 @@ let split_term (t:term) (nargs:int) (nbenv:int): (int*bool*term) list * term =
   ps, tgt
 
 
-let get_anchor_class (nargs:int) (nms:int array) (t:term) (c:Context.t): int =
-  if not (Context.is_global c) || nargs = 0 then
+let get_anchor_class (fgcon:type_term array) (c:Context.t): int =
+  let len = Array.length fgcon in
+  if not (Context.is_global c) || len <> 1 then
     -1
   else begin
-    assert (nargs = Array.length nms);
-    let c1 = Context.push_untyped nms c in
-    try
-      let tb = Term_builder.occupy_term t c1 in
-      let s  = Term_builder.substituted_context_signature tb
-      and tvs = Term_builder.tvars tb in
-      let _,cls = Sign.anchor tvs s in
-      Term_builder.release tb;
-      cls
-    with Term_builder.Illegal_term ->
-      Printf.printf "illegal term %s\n"
-        (Context.string_of_term (QExp (nargs,nms,t,true)) true 0 c);
-      assert false
+    let tvs   = Context.tvars c
+    and cls,_ = Class_table.split_type_term fgcon.(0) in
+    let nall  = Tvars.count_all tvs in
+    assert (len + nall <= cls);
+    cls - len - nall
   end
 
+
+
 let make (t:term) (c:Context.t): t =
-  let nargs,nms,t0 =
+  let nargs,(nms,tps),(fgnms,fgcon),t0 =
     try Term.all_quantifier_split t
-    with Not_found -> 0,[||], t
+    with Not_found -> 0,empty_formals,empty_formals, t
   in
-  let anch_cls = get_anchor_class nargs nms t0 c in
+  let anch_cls = get_anchor_class fgcon c in
   let nbenv = Context.count_variables c in
   let ps, tgt = split_term t0 nargs nbenv
   in
@@ -297,10 +304,13 @@ let make (t:term) (c:Context.t): t =
     else None
   in
   let rd = { orig      = None;
-             nbenv     = nbenv;
+             c         = c;
              nargs     = nargs;
              spec      = nargs = 0;
              nms       = nms;
+             tps       = tps;
+             fgnms     = fgnms;
+             fgcon     = fgcon;
              fwd_blckd = fwd_blckd;
              bwd_blckd = bwd_blckd;
              nbwd      = nbwd;
@@ -315,23 +325,182 @@ let make (t:term) (c:Context.t): t =
 
 
 
-let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
+let schematic_premise (rd:t): int * int * term =
+  assert (is_implication rd);
+  let gp1,_,p = List.hd rd.premises in
+  let p = Term.down_from (rd.nargs - gp1) gp1 p in
+  gp1, count_variables rd, p
+
+
+
+let schematic_target (rd:t): int * int * term =
+  if rd.nbwd <> 0 then
+    Printf.printf "schematic_target nbwd %d\n" rd.nbwd;
+  assert (rd.nbwd = 0);
+  rd.nargs, count_variables rd, rd.target
+
+
+
+let schematic_term (rd:t): int * int * term =
+  let nvars = count_variables rd in
+  let imp_id = rd.nargs + nvars + Feature_table.implication_index in
+  let t =
+    List.fold_left
+      (fun t (_,_,p) ->
+        Term.binary imp_id p t)
+      rd.target
+      rd.premises
+  in
+  rd.nargs, nvars, t
+
+
+
+
+let drop (rd:t) (c:Context.t): t =
+  assert (is_specialized rd);
+  assert (is_implication rd);
+  assert (count_variables rd <= Context.count_variables c);
+  let nbenv = Context.count_variables c in
+  let nbenv_delta = nbenv - count_variables rd in
+  let gp1,_,p = List.hd rd.premises in
+  assert (gp1 = 0);
+  let ps = List.map
+      (fun (gp1,cons,p) -> gp1,cons,Term.up_from nbenv_delta rd.nargs p)
+      (List.tl rd.premises)
+  and tgt = Term.up_from nbenv_delta rd.nargs rd.target
+  in
+  let bwd_blockd =
+    0 < rd.nargs &&
+    (Term.is_argument tgt rd.nargs ||
+    is_backward_blocked ps tgt rd.nargs c)
+  in
+  {rd with
+   spec      = rd.nargs = 0;
+   nbwd      = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
+   ndropped  = rd.ndropped + 1;
+   c         = c;
+   bwd_blckd = bwd_blockd;
+   premises  = ps;
+   target    = tgt}
+
+
+
+let term_a (rd:t) (nbenv:int): term =
+  assert (count_variables rd <= nbenv);
+  assert (is_specialized rd);
+  assert (is_implication rd);
+  let gp1,_,p = List.hd rd.premises in
+  assert (gp1 = 0);
+  let t = Term.down rd.nargs p in
+  Term.up (nbenv - count_variables rd) t
+
+
+
+let term_b (rd:t) (nbenv:int): term =
+  assert (is_specialized rd);
+  assert (is_implication rd);
+  assert (count_variables rd <= nbenv);
+  let ps = List.tl rd.premises in
+  let t  = prepend_premises ps rd in
+  let nbenv_delta = nbenv - count_variables rd in
+  Term.up nbenv_delta t
+
+
+
+
+
+let target (rd:t) (nbenv:int): term =
+  assert (is_fully_specialized rd);
+  let nbenv_delta = nbenv - count_variables rd in
+  Term.up nbenv_delta rd.target
+
+
+
+
+let actual_generics (args:arguments) (c:Context.t) (rd:t): agens =
+  if is_generic rd then begin
+    let nargs = Array.length args in
+    assert (nargs <= rd.nargs);
+    let argtps = Array.map (fun t -> Context.type_of_term t c) args in
+    let nfgs = Array.length rd.fgcon in
+    let ags = Array.init nfgs (fun i -> empty_term)
+    and reqtvs, acttvs = Tvars.make_fgs rd.fgnms rd.fgcon, Context.tvars c
+    and ct = Context.class_table c in
+    let nall = Tvars.count_all acttvs in
+    let do_sub i tp =
+      if ags.(i) = empty_term then
+        ags.(i) <- tp
+      else if ags.(i) = tp then
+        ()
+      else
+        raise Not_found
+    in
+    let rec unify reqtp acttp =
+      let unicls i1 i2 =
+          if i1-nfgs = i2-nall then
+            ()
+          else
+            raise Not_found
+      in
+      match reqtp, acttp with
+        Variable i1,_ when i1 < nfgs ->
+          if Class_table.satisfies acttp acttvs reqtp reqtvs ct then
+            do_sub i1 acttp
+          else
+            raise Not_found
+      | Variable i1, Variable i2 ->
+          unicls i1 i2
+      | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
+          assert (Array.length args1 = Array.length args2);
+          unicls i1 i2;
+          uniargs args1 args2
+      | _ ->
+          assert false (* cannot happen with types *)
+    and uniargs args1 args2 =
+      let len = Array.length args2 in
+      assert (len <= Array.length args2);
+      for k = 0 to len-1 do
+        unify args1.(k) args2.(k)
+      done
+    in
+    uniargs rd.tps argtps;
+    assert (interval_for_all (fun i -> ags.(i)<>empty_term) 0 nfgs);
+    ags
+  end else
+    [||]
+
+
+let specialize (rd:t) (args:term array) (ags:agens) (orig:int) (c:Context.t)
     : t =
-  let nargs = Array.length args
-  and nbenv = Context.count_variables c in
-  assert (rd.nbenv <= nbenv);
+  let nargs  = Array.length args
+  and nbenv  = Context.count_variables c
+  and tvs    = Context.tvars c
+  and rdnfgs = Array.length rd.fgcon in
+  let nall   = Tvars.count_all tvs in
+  let argtps = Array.map (fun t -> Context.type_of_term t c) args in
+  assert (count_variables rd <= nbenv);
+  assert (rdnfgs = Array.length ags);
   assert (not (is_specialized rd));
   assert (nargs <= rd.nargs);
   assert (nargs = rd.nargs || is_implication rd);
   assert (nargs = rd.nargs || let gp1,_,_ = List.hd rd.premises in nargs = gp1);
   let full        = nargs = rd.nargs
-  and nbenv_delta = nbenv - rd.nbenv
-  and nms =
-    if Array.length rd.nms = 0 then rd.nms
-    else Array.sub rd.nms nargs (rd.nargs - nargs)
+  and nbenv_delta = nbenv - count_variables rd
+  and nms,tps =
+    if Array.length rd.nms = 0 then
+      rd.nms,rd.tps
+    else
+      Array.sub rd.nms nargs (rd.nargs - nargs),
+      Array.init
+        (rd.nargs-nargs)
+        (fun i -> Term.subst rd.tps.(nargs+i) nall ags)
   in
-  let sub t = Term.part_sub t rd.nargs args nbenv_delta
-  in
+  let sub t =
+    let t = Feature_table.substituted
+      t rd.nargs (count_variables rd)
+      args nbenv_delta
+      ags  tvs (Context.feature_table c) in
+    t in
   assert begin match rd.premises with
     [] -> nargs = rd.nargs
   | (gp1,_,_)::_ ->
@@ -360,98 +529,11 @@ let specialize (rd:t) (args:term array) (orig:int) (c:Context.t)
      fwd_blckd = fwd_blckd;
      bwd_blckd = bwd_blckd;
      nbwd = if nargs_new = 0 then 0 else rd.nbwd; (* ???? WRONG ??? *)
-     nbenv = nbenv;
+     c     = c;
      nargs = nargs_new;
      nms   = nms;
+     tps   = tps;
+     fgnms = [||];
+     fgcon = [||];
      premises = ps;
      target   = tgt}
-
-
-
-let schematic_premise (rd:t): int * int * term =
-  assert (is_implication rd);
-  let gp1,_,p = List.hd rd.premises in
-  let p = Term.down_from (rd.nargs - gp1) gp1 p in
-  gp1, rd.nbenv, p
-
-
-
-let schematic_target (rd:t): int * int * term =
-  if rd.nbwd <> 0 then
-    Printf.printf "schematic_target nbwd %d\n" rd.nbwd;
-  assert (rd.nbwd = 0);
-  rd.nargs, rd.nbenv, rd.target
-
-
-
-let schematic_term (rd:t): int * int * term =
-  let imp_id = rd.nargs + rd.nbenv + Feature_table.implication_index in
-  let t =
-    List.fold_left
-      (fun t (_,_,p) ->
-        Term.binary imp_id p t)
-      rd.target
-      rd.premises
-  in
-  rd.nargs, rd.nbenv, t
-
-
-
-
-let drop (rd:t) (c:Context.t): t =
-  assert (is_specialized rd);
-  assert (is_implication rd);
-  assert (rd.nbenv <= Context.count_variables c);
-  let nbenv = Context.count_variables c in
-  let nbenv_delta = nbenv - rd.nbenv in
-  let gp1,_,p = List.hd rd.premises in
-  assert (gp1 = 0);
-  let ps = List.map
-      (fun (gp1,cons,p) -> gp1,cons,Term.upbound nbenv_delta rd.nargs p)
-      (List.tl rd.premises)
-  and tgt = Term.upbound nbenv_delta rd.nargs rd.target
-  in
-  let bwd_blockd =
-    0 < rd.nargs &&
-    (Term.is_argument tgt rd.nargs ||
-    is_backward_blocked ps tgt rd.nargs c)
-  in
-  {rd with
-   spec      = rd.nargs = 0;
-   nbwd      = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
-   ndropped  = rd.ndropped + 1;
-   nbenv     = nbenv;
-   bwd_blckd = bwd_blockd;
-   premises  = ps;
-   target    = tgt}
-
-
-
-let term_a (rd:t) (nbenv:int): term =
-  assert (rd.nbenv <= nbenv);
-  assert (is_specialized rd);
-  assert (is_implication rd);
-  let gp1,_,p = List.hd rd.premises in
-  assert (gp1 = 0);
-  let t = Term.down rd.nargs p in
-  Term.up (nbenv - rd.nbenv) t
-
-
-
-let term_b (rd:t) (nbenv:int): term =
-  assert (is_specialized rd);
-  assert (is_implication rd);
-  assert (rd.nbenv <= nbenv);
-  let ps = List.tl rd.premises in
-  let t  = prepend_premises ps rd in
-  let nbenv_delta = nbenv - rd.nbenv in
-  Term.up nbenv_delta t
-
-
-
-
-
-let target (rd:t) (nbenv:int): term =
-  assert (is_fully_specialized rd);
-  let nbenv_delta = nbenv - rd.nbenv in
-  Term.up nbenv_delta rd.target

@@ -41,13 +41,13 @@ val imp_id:      t -> int
 
 val prenex_term: term -> t -> term
 val expand_term: term -> t -> term
-val equivalent:  term -> term -> t -> bool
+(*val equivalent:  term -> term -> t -> bool*)
 val split_implication: term -> t -> term * term
-val split_all_quantified: term -> t -> int * int array * term
-val split_some_quantified: term -> t -> int * int array * term
+val split_all_quantified: term -> t -> int * formals * formals * term
+val split_some_quantified: term -> t -> int * formals * term
 val split_equality: term -> int -> t -> int * term * term
 val implication: term -> term -> t -> term
-val all_quantified:  int -> int array -> term -> t -> term
+val all_quantified:  int -> formals -> formals -> term -> t -> term
 val implication_chain: term list -> term -> t -> term
 val someelim:  int -> t -> term
 
@@ -72,9 +72,10 @@ val reconstruct_evaluation: Eval.t -> t -> term*term
 val make: int -> t
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
+val push_typed:   formals -> formals -> t -> t
 val pop:  t -> t
 
-val definition: int -> int -> t -> int * int array * term
+val definition: int -> int -> agens -> t -> int * int array * term
 val arity:      int -> int -> t -> int
 
 val is_proof_pair:  term -> proof_term -> t -> bool
@@ -89,7 +90,7 @@ val add_eval:       term -> int -> Eval.t -> t -> unit
 val add_eval_backward:   term -> term -> Eval.t -> t -> unit
 val add_witness:    term -> int -> int array -> term -> term array -> t -> unit
 val add_someelim:   int -> term -> t -> unit
-val add_specialize: term -> int -> term array -> t -> unit
+val add_specialize: term -> int -> arguments -> agens -> t -> unit
 val add_inherited:  term -> int -> int -> int -> t -> unit
 
 val assumptions:  t   -> term list

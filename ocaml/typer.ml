@@ -172,7 +172,7 @@ end = struct
       List.iter
         (fun (i,tvs,sign) ->
           printf "  %d %s %s\n" i
-            (Context.string_of_term (Variable i) false 0 accs.c)
+            (Context.string_of_term0 (Variable i) false 0 accs.c)
             (Class_table.string_of_complete_signature sign tvs ct))
         terms
     end;
@@ -400,7 +400,8 @@ end (* Accus *)
 
 let unfold_inspect (info:info) (t:term) (c:Context.t): term =
   let ft    = Context.feature_table c
-  and nvars = Context.count_variables c in
+  and nvars = Context.count_variables c
+  and ntvs  = Context.ntvs c in
   let rec unfold t nb =
     let unfold_args args nb = Array.map (fun a -> unfold a nb) args
     and unfold_list lst  = List.map  (fun a -> unfold a nb) lst
@@ -408,26 +409,26 @@ let unfold_inspect (info:info) (t:term) (c:Context.t): term =
     match t with
       Variable i ->
         t
-    | VAppl (i,args) ->
-        VAppl (i, unfold_args args nb)
+    | VAppl (i,args,ags) ->
+        VAppl (i, unfold_args args nb,ags)
     | Application (f,args,pr) ->
         let f    = unfold f nb
         and args = unfold_args args nb in
         Application(f,args,pr)
-    | Lam (n,nms,pres,t,pr) ->
+    | Lam (n,nms,pres,t,pr,tp) ->
         let pres = unfold_list pres
         and t    = unfold t (1+nb) in
-        Lam(n,nms,pres,t,pr)
-    | QExp (n,nms,t,is_all) ->
-        QExp (n, nms, unfold t (n+nb), is_all)
+        Lam(n,nms,pres,t,pr,tp)
+    | QExp (n,tps,fgs,t,is_all) ->
+        QExp (n, tps, fgs, unfold t (n+nb), is_all)
     | Flow (Inspect,args) ->
         let args = unfold_args args nb in
-        let args = Feature_table.inspect_unfolded info args (nb+nvars) ft in
+        let args = Feature_table.inspect_unfolded info args (nb+nvars) ntvs ft in
         Flow(Inspect,args)
     | Flow (ctrl,args) ->
         Flow (ctrl, unfold_args args nb)
-    | Indset (n,nms,rs) ->
-        Indset (n,nms, unfold_args rs (n+nb))
+    | Indset (nme,tp,rs) ->
+        Indset (nme,tp, unfold_args rs (1+nb))
   in
   unfold t 0
 
@@ -485,7 +486,7 @@ let process_leaf
       let ct = Context.class_table c in
       let i,_,_ = List.hd lst in
       let nargs = Term_builder.expected_arity (List.hd acc_lst) in
-      let str = "Type error \"" ^ (Context.string_of_term (Variable i) false 0 c) ^
+      let str = "Type error \"" ^ (Context.string_of_term0 (Variable i) false 0 c) ^
         "\"\n  Actual type(s):\n\t"
       and actuals = String.concat "\n\t"
           (List.map
@@ -591,7 +592,8 @@ let case_variables
 
 
 let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
-  let nargs = Context.count_last_arguments c
+  assert false
+  (*let nargs = Context.count_last_arguments c
   and nvars = Context.count_variables c in
   assert (nargs = 1); (* nyi: multiple inductive sets *)
   let imp_id = nvars + Feature_table.implication_index in
@@ -623,7 +625,7 @@ let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
                        (Context.string_of_term r true 0 c) ^ "\"")
   in
   Array.iter check_rule rs
-
+*)
 
 
 
@@ -636,13 +638,13 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
     let val_lst  lst  c = List.iter  (fun t   -> validate t c)   lst  in
     match t with
       Variable i -> ()
-    | VAppl(_,args) -> val_args args c
+    | VAppl(_,args,_) -> val_args args c
     | Application(f,args,pr) ->
         validate f c; val_args args c
-    | Lam (n,nms,pres,t,pr) ->
+    | Lam (n,nms,pres,t,pr,tp) ->
         let c = Context.push_untyped [|ST.symbol "$0"|] c in
         val_lst pres c; validate t c
-    | QExp (n,nms,t,_) ->
+    | QExp (n,(nms,tps),_,t,_) ->
         let c = Context.push_untyped nms c in
         validate t c
     |  Flow (flow,args) ->
@@ -652,7 +654,7 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
             ()
           else
             error_info info
-              ("The term \"" ^ (Context.string_of_term mtch true 0 c) ^
+              ("The term \"" ^ (Context.string_of_term mtch c) ^
                "\" is not a valid pattern")
         in
         begin
@@ -665,24 +667,24 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
               let ncases = len / 2 in
               validate args.(0) c;
               for i = 0 to ncases - 1 do
-                let n, nms, mtch,_ = Term.qlambda_split_0 args.(2*i+1)
-                and n1,nms1,res ,_ = Term.qlambda_split_0 args.(2*i+2) in
-                assert (n = n1);
+                let n,(nms,_),mtch,res = Term.case_split args.(2*i+1) args.(2*i+2) in
                 let c = Context.push_untyped nms c in
                 validate res c;
                 check_match mtch c
               done
           | Asexp ->
               assert (len = 2);
-              validate args.(0) c;
+              assert false
+              (*validate args.(0) c;
               let n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
               let c = Context.push_untyped nms c in
-              check_match mtch c
+              check_match mtch c*)
         end
-    | Indset (n,nms,rs) ->
-        let c = Context.push_untyped nms c in
+    | Indset (nme,tp,rs) ->
+        assert false
+        (*let c = Context.push_untyped nms c in
         validate_inductive_set info rs c;
-        val_args rs c
+        val_args rs c*)
   in
   validate t c
 
@@ -986,14 +988,15 @@ let analyze_expression
 
   let tb = Accus.first accs in
   Term_builder.update_context tb;
-  Term_builder.specialize_head tb;
+  (*Term_builder.specialize_head tb;*)
 
   let term = Term_builder.normalized_result tb in
   Term_builder.release tb;
 
   validate_term ie.i term c;
   let term = unfold_inspect ie.i term c in
-  assert (Term_builder.is_valid term c);
+  assert (Context.is_valid term c);
+  (*assert (Term_builder.is_valid term c);*)
   term
 
 

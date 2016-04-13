@@ -87,8 +87,8 @@ val is_class_public: int -> t -> bool
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
-val add_feature:  int -> int -> bool -> bool -> bool -> bool -> t -> unit
-    (** [add_feature fidx cls is_def priv_only pub_only base ct] adds the
+val add_feature:  int -> int -> bool -> bool -> bool -> t -> unit
+    (** [add_feature fidx cls is_def priv_only pub_only ct] adds the
         feature [fidx] to the class [cls] as deferred or effective
         depending on the value of [is_def] *)
 
@@ -96,7 +96,7 @@ val add_assertion:  int -> int -> bool -> t -> unit
    (** [add_assertion aidx cls defer ct] adds the assertion [aidx] to the
        assertion of the class [cls] *)
 
-val base_features: int -> t -> int list
+val generics: int -> t -> (bool*int) list
 
 val deferred_features: int -> t -> int list
    (** [deferred_features cls ct]: The list of deferred features of the class
@@ -177,6 +177,9 @@ val boolean_type:   int -> term
 val is_boolean_binary: Sign.t -> int -> bool
 val is_boolean_unary:  Sign.t -> int -> bool
 
+val predicate_type: type_term -> int -> type_term
+val function_type:  type_term -> type_term -> int -> type_term
+
 val to_tuple: int -> int -> type_term array -> type_term
 
 val to_dummy: int -> Sign.t -> type_term
@@ -215,6 +218,7 @@ val string_of_complete_signature: Sign.t -> Tvars.t -> t -> string
 val string_of_complete_signature_sub: Sign.t -> TVars_sub.t -> t -> string
 
 val string_of_type: type_term -> Tvars.t -> t -> string
+val string_of_type_arr: agens -> Tvars.t -> t -> string
 
 val string_of_concepts: Tvars.t -> t -> string
 

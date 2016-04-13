@@ -21,6 +21,7 @@ type parent_descriptor = bool * type_term array (* is_ghost, actual generics *)
 
 type base_descriptor = { hmark:    header_mark;
                          tvs:      Tvars.t;
+                         mutable generics: (bool*int) list;
                          mutable def_features: int list;
                          mutable eff_features: int list;
                          mutable def_asserts:  int list;
@@ -33,7 +34,6 @@ type base_descriptor = { hmark:    header_mark;
 
 type descriptor      = { mutable mdl:  int;
                          name: int;
-                         mutable base_features: int list;
                          priv: base_descriptor;
                          mutable publ: base_descriptor option}
 
@@ -89,6 +89,7 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   let anc  = IntMap.singleton idx (false,args) in
   {hmark = hm;
    tvs   = tvs;
+   generics = [];
    def_features = [];
    eff_features = [];
    def_asserts  = [];
@@ -248,10 +249,14 @@ let concepts_of_class (i:int) (ct:t): type_term array =
 
 
 let class_type (i:int) (ct:t): type_term * Tvars.t =
+  (* A type term and a type environment which represents the class. For inheritable
+     classes (for the moment only deferred classes) a type variable (formal generic)
+     is returned whose concept is the class.
+   *)
   assert (i < count ct);
   let bdesc = base_descriptor i ct in
   let nfgs  = Tvars.count_fgs bdesc.tvs in
-  if is_deferred i ct then begin
+  if is_deferred i ct then begin (* or other inheritable *)
     assert (nfgs = 0); (* nyi: deferred classes with formal generics *)
     let tvs = Tvars.make_fgs [|ST.symbol "A"|] [|Variable (i+1)|] in
     (Variable 0), tvs
@@ -260,7 +265,7 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
       if nfgs = 0 then
         Variable i
       else
-        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i))
+        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i), [||])
     in
     tp, bdesc.tvs
 
@@ -268,13 +273,13 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
 let split_type_term (tp:type_term): int * type_term array =
   match tp with
     Variable i -> i, [||]
-  | VAppl (i,args) -> i, args
+  | VAppl (i,args,_) -> i, args
   | _ -> assert false (* other cases not possible with types *)
 
 
 let combine_type_term (cls_idx:int) (args: type_term array): type_term =
   if 0 < Array.length args then
-    VAppl (cls_idx, args)
+    VAppl (cls_idx, args, [||])
   else
     Variable cls_idx
 
@@ -287,8 +292,9 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
     if i = start then
       tp
     else
-      let i = i - 1 in
-      let tp = VAppl(ntvs+tuple_index,[|args.(i);tp|]) in
+      let i = i - 1
+      and tup_id = ntvs + tuple_index in
+      let tp = VAppl(tup_id,[|args.(i);tp|], [||]) in
       tuple i tp
   in
   tuple (n-1) args.(n-1)
@@ -298,10 +304,14 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
 
 let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
 let any (ntvs:int)           = Variable (any_index+ntvs)
-let func nb dom ran = VAppl(nb+function_index,[|dom;ran|])
+let func nb dom ran = VAppl(nb+function_index,[|dom;ran|],[||])
 
 
+let predicate_type (tp:type_term) (ntvs:int): type_term =
+  VAppl(ntvs+predicate_index,[|tp|],[||])
 
+let function_type (tp_a:type_term) (tp_b:type_term) (ntvs:int): type_term =
+  VAppl(ntvs+function_index,[|tp_a;tp_b|],[||])
 
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
   (* Convert the callable signature [0,1,...]:RT to the dummy signature
@@ -311,7 +321,7 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    VAppl(ntvs+dummy_index, [|tup;Sign.result s|])
+    VAppl(ntvs+dummy_index, [|tup;Sign.result s|],[||])
 
 
 let to_function (ntvs:int) (s:Sign.t): type_term =
@@ -321,8 +331,9 @@ let to_function (ntvs:int) (s:Sign.t): type_term =
   if Sign.arity s = 0 then
     Sign.result s
   else
-    let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    VAppl(ntvs+function_index, [|tup;Sign.result s|])
+    let tup = to_tuple ntvs 0 (Sign.arguments s)
+    and fid = ntvs + function_index in
+    VAppl(fid, [|tup;Sign.result s|], [||])
 
 
 let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
@@ -340,7 +351,7 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
       function_index, [|tup;Sign.result s|]
   in
   let idx = idx + ntvs in
-  VAppl(idx, args)
+  VAppl(idx, args, [||])
 
 
 
@@ -394,7 +405,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           else if j < nb+nfgs then
             ST.string fgnames.(j-nb)
           else class_name (j-nb-nfgs) ct
-      | VAppl (j,tarr) ->
+      | VAppl (j,tarr,_) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
@@ -428,11 +439,19 @@ let string_of_type (tp:type_term) (tvs:Tvars.t) (ct:t): string =
   type2string tp (Tvars.count tvs) (Tvars.fgnames tvs) ct
 
 
+let string_of_type_arr (ags: agens) (tvs:Tvars.t) (ct:t): string =
+  String.concat
+    ","
+    (List.map (fun tp -> string_of_type tp tvs ct) (Array.to_list ags))
+
+
+
 let string_of_concepts (tvs:Tvars.t) (ct:t): string =
-  let cpt_lst = Array.to_list (Tvars.concepts tvs) in
+  string_of_type_arr (Tvars.concepts tvs) tvs ct
+  (*let cpt_lst = Array.to_list (Tvars.concepts tvs) in
   String.concat
      ","
-     (List.map (fun tp -> string_of_type tp tvs ct) cpt_lst)
+     (List.map (fun tp -> string_of_type tp tvs ct) cpt_lst)*)
 
 
 let string_of_fgconcepts (tvs:Tvars.t) (ct:t): string =
@@ -806,14 +825,11 @@ let add_feature
     (is_deferred:bool)
     (priv_only: bool)
     (pub_only:bool)
-    (base:bool)
     (ct:t)
     : unit =
   assert (cidx < count ct);
   assert (not (priv_only && pub_only));
   let desc = descriptor cidx ct in
-  if base || is_deferred then begin
-    desc.base_features <- fidx :: desc.base_features end;
   if priv_only || is_private ct then
     add_feature_bdesc fidx is_deferred desc.priv
   else if is_interface_check ct then
@@ -854,8 +870,11 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
 
 
 
-let base_features (cidx:int) (ct:t): int list =
-  (descriptor cidx ct).base_features
+let generics (cidx:int) (ct:t): (bool*int) list =
+  (* The list of all generic features/assertions in the reversed order of
+     insertion. *)
+  assert (cidx < count ct);
+  (base_descriptor cidx ct).generics
 
 
 let deferred_features (cidx:int) (ct:t): int list =
@@ -898,7 +917,6 @@ let add
   Seq.push
     {mdl  = current_module ct;
      name = cn;
-     base_features = [];
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;
@@ -1006,8 +1024,11 @@ let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
 
 
 
-let rec satisfies
-    (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
+let rec satisfies_0
+    (tp1:type_term) (tvs1:Tvars.t)
+    (tp2:type_term) (tvs2:Tvars.t)
+    (findfun: int->int-> type_term array)
+    (ct:t)
     : bool =
   let ntvs1 = Tvars.count_local tvs1
   and nall1 = Tvars.count_all   tvs1
@@ -1022,15 +1043,15 @@ let rec satisfies
     if idx1 = nall1 + dummy_index then
       true
     else
-      let bdesc1 = base_descriptor (idx1-nall1) ct in
       try
-        let _,anc_args = IntMap.find (idx2-nall2)  bdesc1.ancestors in
+        let anc_args = findfun (idx1-nall1) (idx2-nall2) in
         let nargs    = Array.length anc_args in
         assert (nargs = Array.length args2);
-        let anc_args = Array.map (fun t -> Term.sub t args1 nall1) anc_args
+        let anc_args =
+          Array.map (fun t -> Term.subst t nall1 args1) anc_args
         in
         for i = 0 to nargs-1 do
-          if satisfies anc_args.(i) tvs1 args2.(i) tvs2 ct then
+          if satisfies_0 anc_args.(i) tvs1 args2.(i) tvs2 findfun ct then
             ()
           else
             raise Not_found
@@ -1056,6 +1077,17 @@ let rec satisfies
   | _ ->
       sat1 tp1 tp2
 
+
+
+let rec satisfies
+    (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
+    : bool =
+  let findfun (c1:int) (c2:int): type_term array =
+    let bdesc1 = base_descriptor c1 ct in
+    let _,anc_args = IntMap.find c2 bdesc1.ancestors in
+    anc_args
+  in
+  satisfies_0 tp1 tvs1 tp2 tvs2 findfun ct
 
 
 
@@ -1103,7 +1135,7 @@ let valid_type
     if nargs = 0 then
       Variable cls_idx
     else
-      VAppl (cls_idx, args)
+      VAppl (cls_idx, args, [||])
   end
 
 
@@ -1226,8 +1258,8 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
    if Array.length pargs = 0 then
      Variable anc_cls
    else
-     let pargs = Array.map (fun tp -> Term.sub tp args ntvs) pargs in
-     VAppl(anc_cls,pargs)
+     let pargs = Array.map (fun tp -> Term.subst tp ntvs args) pargs in
+     VAppl(anc_cls,pargs,[||])
 
 
 
@@ -1303,7 +1335,9 @@ let rec inherit_parent
   in
   IntMap.iter
     (fun anc (is_ghost,anc_args) ->
-      let anc_args = Array.map (fun t -> Term.sub t args cls_nfgs) anc_args in
+      let anc_args = Array.map
+          (fun t -> Term.subst t cls_nfgs args)
+          anc_args in
       let anc_bdesc = base_descriptor anc ct in
       inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc;
       if is_interface_use ct then
@@ -1455,7 +1489,6 @@ let add_base_class
   Seq.push
     {mdl=(-1);
      name = nme;
-     base_features = [];
      priv = bdesc;
      publ = bdesc_opt}
     ct.seq;

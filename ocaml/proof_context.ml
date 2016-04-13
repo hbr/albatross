@@ -122,6 +122,7 @@ let nbenv (at:t): int = Proof_table.count_variables at.base
 let count_variables (at:t): int =
   Proof_table.count_variables at.base
 
+
 let count_last_arguments (pc:t): int =
   Proof_table.count_last_arguments pc.base
 
@@ -138,7 +139,7 @@ let is_consistent (pc:t): bool =
 let count_previous (pc:t): int = Proof_table.count_previous pc.base
 let count_global(pc:t): int = Proof_table.count_global pc.base
 
-let imp_id(at:t): int = Proof_table.imp_id at.base
+let imp_id(pc:t): int = Proof_table.imp_id pc.base
 
 let term_orig (i:int) (pc:t): term * int =
   (** The [i]th proved term with the number of variables of its environment.
@@ -190,11 +191,11 @@ let is_visible (i:int) (pc:t): bool =
   Feature_table.is_term_public t nb ft
 
 let string_of_term (t:term) (pc:t): string =
-  Context.string_of_term t true 0 (context pc)
+  Context.string_of_term t (context pc)
 
 
 let string_of_term_anon (t:term) (nb:int) (pc:t): string =
-  Context.string_of_term t true nb (context pc)
+  Context.string_of_term0 t true nb (context pc)
 
 
 let string_of_term_i (i:int) (pc:t): string =
@@ -214,12 +215,6 @@ let string_of_term_array (args: term array) (pc:t): string =
 let split_implication (t:term) (pc:t): term * term =
   Proof_table.split_implication t pc.base
 
-let split_all_quantified (t:term) (pc:t): int * int array * term =
-  Proof_table.split_all_quantified t pc.base
-
-let split_some_quantified (t:term) (pc:t): int * int array * term =
-  Proof_table.split_some_quantified t pc.base
-
 let implication (a:term) (b:term) (pc:t): term =
   Proof_table.implication a b pc.base
 
@@ -231,8 +226,8 @@ let disjunction (a:term) (b:term) (pc:t): term =
   let nb = nbenv pc in
   Term.binary (nb + Feature_table.or_index) a b
 
-let all_quantified (nargs:int) (names:int array) (t:term) (pc:t): term =
-  Proof_table.all_quantified nargs names t pc.base
+let all_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (pc:t): term =
+  Proof_table.all_quantified nargs tps fgs t pc.base
 
 
 let prenex_term (t:term) (pc:t): term =
@@ -249,7 +244,7 @@ let assumptions (pc:t): term list =
 let assumptions_chain (tgt:term) (pc:t): term =
   implication_chain (assumptions pc) tgt pc
 
-let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
+(*let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
   let n   = count_last_arguments pc
   and nms = local_argnames pc in
   assert (0 <= idx);
@@ -279,7 +274,7 @@ let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
     let t0 = Term.lambda_inner_map chn map in
     let res = Term.all_quantified nusd nmsusd t0 in
     prenex_term res pc
-
+*)
 
 let work (pc:t): int list = pc.work
 
@@ -294,8 +289,19 @@ let has_result (pc:t): bool = Proof_table.has_result pc.base
 let has_result_variable (pc:t): bool = Proof_table.has_result_variable pc.base
 
 let unify
-    (t:term) (nbenv:int) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
-  Term_table.unify t nbenv tab
+    (t:term) (tab:Term_table.t) (pc:t): (int * arguments * agens) list =
+  let lst = List.rev (Term_table.unify t (nbenv pc) tab) in
+  List.fold_left
+    (fun lst (idx,sub) ->
+      let rd = rule_data idx pc in
+      let args = Term_sub.arguments (Term_sub.count sub) sub in
+      try
+        let ags = RD.actual_generics args (context pc) rd in
+        (idx,args,ags)::lst
+      with Not_found ->
+        lst)
+    []
+    lst
 
 let unify_with
     (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
@@ -346,7 +352,7 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
 
 
 
-
+(*
 let find_slot (t:term) (pc:t): int * term =
   let least_free = Term.least_free t
   and nslots = Array.length pc.entry.slots in
@@ -362,7 +368,7 @@ let find_slot (t:term) (pc:t): int * term =
 let find_in_slot (t:term) (pc:t): int =
   let i, ti = find_slot t pc in
   TermMap.find ti pc.entry.slots.(i).sprvd
-
+*)
 
 let find_in_tab (t:term) (nbenv:int) (pc:t): int =
   (** The index of the assertion [t].
@@ -412,6 +418,9 @@ let expand_term (t:term) (pc:t): term =
 
 
 let add_to_equalities (t:term) (idx:int) (pc:t): unit =
+  (* Check the assertion [t] at [idx] if it is a simplifying equality. If yes, add it
+     to the equality table.
+   *)
   let nbenv = nbenv pc in
   try
     let nargs, left,right = split_equality t pc in
@@ -483,6 +492,7 @@ let get_rule_data (t:term) (pc:t): RD.t =
 
 
 let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
+  assert (Context.is_valid t (context pc));
   assert (count pc + 1 = count_base pc);
   let cnt = count pc in
   let res = try find t pc with Not_found -> cnt in
@@ -502,29 +512,27 @@ let raw_add (t:term) (search:bool) (pc:t): int =
 
 
 
-let arguments_of_sub (sub:Term_sub.t) (n_up:int): term array =
+let arguments_of_sub (sub:Term_sub.t): term array =
   let nargs = Term_sub.count sub in
   let args = Term_sub.arguments nargs sub in
-  Array.iteri (fun i t -> args.(i) <- Term.up n_up t) args;
+  (*Array.iteri (fun i t -> args.(i) <- Term.up n_up t) args;*)
   args
 
 
 
 let specialized
-    (idx:int) (sub:Term_sub.t) (nbenv_sub:int)
+    (idx:int) (args:arguments) (ags:agens)
     (reason:int) (* 0: match, 1: fwd, 2: bwd *)
     (pc:t): int =
   (* The schematic rule [idx] specialized by [sub]. *)
   assert (is_consistent pc);
   assert (idx < count pc);
   let nbenv = nbenv pc in
-  assert (nbenv_sub <= nbenv);
   let rd    = rule_data idx pc in
   if RD.is_specialized rd then
-    begin assert (Term_sub.count sub = 0); idx end
+    begin assert (Array.length args = 0); idx end
   else
-    let args  = arguments_of_sub sub (nbenv-nbenv_sub) in
-    let rd    = RD.specialize rd args idx (context pc) in
+    let rd    = RD.specialize rd args ags idx (context pc) in
     let t     = RD.term rd nbenv in
     try
       find t pc
@@ -533,21 +541,20 @@ let specialized
         if reason = 0 then false
         else if reason = 1 then not (RD.is_forward rd) && RD.is_backward rd
         else true in
-      Proof_table.add_specialize t idx args pc.base;
+      Proof_table.add_specialize t idx args ags pc.base;
       raw_add0 t rd search pc
 
 
 
 let find_match (g:term) (pc:t): int =
-  let nbenv = nbenv pc in
-  let sublst = unify g nbenv pc.entry.prvd2 pc in
+  let sublst = unify g pc.entry.prvd2 pc in
   if sublst = [] then raise Not_found;
   try
-    let idx,_ = List.find (fun (_,sub) -> Term_sub.is_empty sub) sublst in
+    let idx,_,_ = List.find (fun (_,args,_) -> Array.length args = 0) sublst in
     idx
   with Not_found ->
-    let idx,sub = List.hd sublst in
-    try specialized idx sub nbenv 0 pc
+    let idx,args,ags = List.hd sublst in
+    try specialized idx args ags 0 pc
     with Not_found -> assert false (* specialization not type safe ? *)
 
 
@@ -557,7 +564,6 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
      different.
 
      [below_idx]: consider only rules below [below_idx] for equality. *)
-  let nbenv = nbenv pc in
   let rec simp t nb =
     let do_subterms t nb =
       let simpl_args args modi =
@@ -575,10 +581,10 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       match t with
         Variable _ ->
           t, Eval.Term t, false
-      | VAppl (i,args) ->
+      | VAppl (i,args,ags) ->
           let args, argse, modi = simpl_args args false in
-          VAppl(i,args),
-          Eval.VApply(i,argse),
+          VAppl(i,args,ags),
+          Eval.VApply(i,argse,ags),
           modi
       | Application(f,args,pr) ->
           let fsimp,fe,fmodi = simp f nb in
@@ -586,26 +592,28 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Application(fsimp, args, pr),
           Eval.Apply(fe,argse,pr),
           modi
-      | Lam(n,nms,pres,t0,pr) ->
+      | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
+      (*| Lam(n,nms,pres,t0,pr,tp) ->
           let tsimp,te,tmodi = simp t0 (1+nb) in
-          Lam(n,nms,pres,tsimp,pr), Eval.Lam(n,nms,pres,te,pr), tmodi
-      | QExp(n,nms,t0,is_all) ->
+          Lam(n,nms,pres,tsimp,pr,tp), Eval.Lam(n,nms,pres,te,pr,tp), tmodi
+      | QExp(n,tps,fgs,t0,is_all) ->
           let tsimp,te,tmodi = simp t0 (n+nb) in
-          QExp(n,nms,tsimp,is_all), Eval.QExp(n,nms,te,is_all), tmodi
+          QExp(n,tps,fgs,tsimp,is_all), Eval.QExp(n,tps,fgs,te,is_all), tmodi
       | Flow (ctrl,args) ->
           let args, argse, modi = simpl_args args false in
           Flow (ctrl,args),
           Eval.Flow(ctrl,argse),
           modi
       | Indset (n,nms,rs) ->
-          t, Eval.Term t, false
+          t, Eval.Term t, false*)
     in
-    let sublst = unify t (nb+nbenv) pc.entry.left pc in
+    assert (nb = 0);
+    let sublst = unify t pc.entry.left pc in
     let sublst =
-      List.filter (fun (idx,sub) -> idx < below_idx && Term_sub.is_empty sub) sublst
+      List.filter (fun (idx,sub,_) -> idx < below_idx && Array.length sub = 0) sublst
     in
     match sublst with
-      (idx,_) :: _ ->
+      (idx,_,ags) :: _ ->
         (* Note: This is a workaround. Only single entries in the equality table
                  should be accepted. But multiple entries are possible as long we
                  do not make specializations type safe. *)
@@ -613,10 +621,11 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         let nargs, left, right = Proof_table.split_equality eq nb pc.base in
         assert (nargs = 0);
         assert (Term.equivalent t left);
-        right, Eval.Simpl(Eval.Term t,idx,[||]), true
+        right, Eval.Simpl(Eval.Term t,idx,[||],ags), true
     | _ ->
         do_subterms t nb
   in
+  assert (Context.is_valid t (context pc));
   let tsimp, te, modi = simp t 0 in
   let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
   assert (ta = t);
@@ -675,11 +684,11 @@ let inductive_set (t:term) (pc:t): term =
   Proof_table.inductive_set t pc.base
 
 
-let definition (i:int) (nb:int) (pc:t): int * int array * term =
+let definition (i:int) (nb:int) (ags:agens) (pc:t): int * int array * term =
   if i < nb || is_inductive_set (i-nb) pc then
     raise Not_found
   else
-    Proof_table.definition i nb pc.base
+    Proof_table.definition i nb ags pc.base
 
 let arity (i:int) (nb:int) (pc:t): int =
   Proof_table.arity i nb pc.base
@@ -710,16 +719,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let args,argse = Myarray.split args in
       args, argse, !modi_ref
     in
-    let vapply i args full =
+    let vapply i args tp full = (* eval args and VAppl *)
       let args, argse, modi = eval_args false args full in
-      let e = Eval.VApply (i,argse) in
-      VAppl(i,args), e, modi
+      let e = Eval.VApply (i,argse,tp) in
+      VAppl(i,args,tp), e, modi
     in
-    let apply f fe modi args is_pred full =
+    let apply f fe modi args is_pred full = (* eval args,
+                                               beta reduce or VApplication *)
       let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
-        Lam (n,nms,_,t0,_) ->
+        Lam (n,nms,_,t0,_,_) ->
           beta_reduce  n t0 args nb pc, Eval.Beta e, true
       | _ ->
           Application (f,args,is_pred), e, modi
@@ -732,39 +742,32 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         Variable i when i < nb -> t, Eval.Term t, false
       | Variable i ->
           begin try
-            ignore(definition i nb pc);
-            assert false (* i cannot be global and local definitions nyi *)
-            (*let n,nms,t0 = definition i nb pc in
-            assert false;
-            let t0 =
-              if n = 0 then t0
-              else make_lambda n nms [] t0 false pc in
-            let res,rese,_ = eval t0 nb full depth in
-            res, Eval.Exp(i,[||],rese), true*)
+            ignore(definition i nb [||] pc);
+            assert false (* i cannot be global; local definitions nyi *)
           with Not_found ->
             t, Eval.Term t, false
           end
-      | VAppl (i,[|Lam(n,nms,pres,t0,pr)|]) when i = domain_id ->
+      | VAppl (i,[|Lam(n,nms,pres,t0,pr,tp0)|],ags) when i = domain_id ->
           assert (not pr);
-          let args = [|Eval.Term (Lam(n,nms,pres,t0,pr))|]
+          let args = [|Eval.Term (Lam(n,nms,pres,t0,pr,tp0))|]
           and dom = Context.domain_of_lambda n nms pres nb (context pc) in
-          dom, Eval.Exp(i, args, Eval.Term dom), true
-      | VAppl (i,[| VAppl (idx,[||]) |])
+          dom, Eval.Exp(i, ags, args, Eval.Term dom), true
+      | VAppl (i,[| VAppl (idx,[||],ags0) |],ags)
         when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
-          let args = [| Eval.Term (VAppl (idx,[||])) |]
+          let args = [| Eval.Term (VAppl (idx,[||],ags0)) |]
           and dom  = Context.domain_of_feature idx nb (context pc) in
-          dom, Eval.Exp(i, args, Eval.Term dom), true
-      | VAppl (i,args) ->
+          dom, Eval.Exp(i,ags, args, Eval.Term dom), true
+      | VAppl (i,args,ags) ->
           begin
             let is_flow t =
               match t with Flow _ -> true | _ -> false
             in
             try
-              let n,nms,t0 = definition i nb pc in
+              let n,nms,t0 = definition i nb ags pc in
               if n > 0 && Array.length args = 0 then
                 let t0 = make_lambda n nms [] t0 false pc in
                 let res,rese,_ = eval t0 nb full depth in
-                res, Eval.Exp(i,[||],rese), true
+                res, Eval.Exp(i,ags,[||],rese), true
               else begin
                 if n <> Array.length args then
                   printf "n %d, #args %d\n" n (Array.length args);
@@ -783,18 +786,18 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     exp, Eval.Term exp, false
                 in
                 if full && is_flow res then begin
-                  let res = VAppl(i,args)
-                  and e   = Eval.VApply (i,argse) in
+                  let res = VAppl(i,args,ags)
+                  and e   = Eval.VApply (i,argse,ags) in
                   res, e, argsmodi
                 end else begin
-                  res, Eval.Exp(i,argse,rese), true
+                  res, Eval.Exp(i,ags,argse,rese), true
                 end
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
-              vapply i args full
+              vapply i args ags full
           end
-      | Application (Lam(n,nms,ps,t0,prlam),args,pr) when not full ->
+      | Application (Lam(n,nms,_,t0,prlam,_),args,pr) when not full ->
           assert (prlam = pr);
           beta_reduce n t0 args nb pc, Eval.Beta (Eval.Term t), true
       | Application (Variable i,args,pr) when i < nb + nbenv ->
@@ -805,17 +808,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           let f,fe,fmodi = eval f nb full depth in
           let full = full || not fmodi in
           apply f fe fmodi args pr full
-      | Lam (n,nms,pres,t0,pred) ->
+      | Lam (n,nms,pres,t0,pred,tp) ->
           if full then
             let t0,e,tmodi = eval t0 (1+nb) full depth in
-            Lam (n,nms,pres,t0,pred), Eval.Lam (n,nms,pres,e,pred), tmodi
+            Lam (n,nms,pres,t0,pred,tp), Eval.Lam (n,nms,pres,e,pred,tp), tmodi
           else
             t, Eval.Term t, false
-      | QExp (n,nms,t0,is_all) ->
+      | QExp (n,tps,fgs,t0,is_all) ->
           let full = full || not is_all in
           if full then
             let t,e,tmodi = eval t0 (n+nb) full depth in
-            QExp (n,nms,t,is_all), Eval.QExp (n,nms,e,is_all), tmodi
+            QExp (n,tps,fgs,t,is_all), Eval.QExp (n,tps,fgs,e,is_all), tmodi
           else
             t, Eval.Term t, false
       | Flow (ctrl,args) ->
@@ -953,13 +956,17 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
   assert (RD.is_specialized rdj);
   assert (RD.is_implication rdj);
   let t = RD.term_b rdj nbenv in
-  if not (Proof_table.equivalent (term i pc) (RD.term_a rdj nbenv) pc.base)
+  if not (Term.equivalent (term i pc) (RD.term_a rdj nbenv))
   then begin
-    printf "add_mp premise     %d %s\n" i (string_of_term_i i pc);
-    printf "       implication %d %s\n" j (string_of_term_i j pc);
-    printf "       term_a         %s\n" (string_of_term (RD.term_a rdj nbenv) pc)
+    printf "add_mp premise     %d %s %s\n" i
+      (string_of_term_i i pc) (Term.to_string (term i pc));
+    printf "       implication %d %s %s\n"
+      j (string_of_term_i j pc) (Term.to_string (term j pc));
+    printf "       term_a         %s %s\n"
+      (string_of_term (RD.term_a rdj nbenv) pc)
+      (Term.to_string (RD.term_a rdj nbenv))
   end;
-  assert (Proof_table.equivalent (term i pc) (RD.term_a rdj nbenv) pc.base);
+  assert (Term.equivalent (term i pc) (RD.term_a rdj nbenv));
   try
     find t pc
   with Not_found ->
@@ -973,7 +980,7 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   let t = term idx pc in
   printf "add_beta_reduced %s\n" (string_of_term t pc);
   match t with
-    Application(Lam(n,nms,ps,t0,prlam),[|arg|],pr) ->
+    Application(Lam(n,_,_,t0,prlam,_),[|arg|],pr) ->
       assert (prlam = pr);
       let pt = Eval(idx,Eval.Beta (Eval.Term t))
       and res = beta_reduce n t0 [|arg|] 0 pc in
@@ -996,12 +1003,12 @@ let add_mp_fwd (i:int) (j:int) (pc:t): unit =
 
 let is_nbenv_current (i:int) (pc:t): bool =
   assert (i < count pc);
-  let nbenv_i = RD.nbenv (rule_data i pc) in
+  let nbenv_i = RD.count_variables (rule_data i pc) in
   nbenv_i = nbenv pc
 
 
 let add_consequence
-    (i:int ) (j:int) (sub:Term_sub.t) (pc:t): unit =
+    (i:int ) (j:int) (sub:arguments) (ags:agens) (pc:t): unit =
   (* Add the consequence of [i] and the implication [j]. The term [j] might
      be a schematic implication which has to be converted into a specific
      implication by using the substitution [sub].
@@ -1014,7 +1021,7 @@ let add_consequence
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
   assert (nbenv_sub <= nbenv pc);
   try
-    let j = specialized j sub nbenv_sub 1 pc
+    let j = specialized j sub ags 1 pc
     in
     add_mp_fwd i j pc
   with Not_found ->
@@ -1034,14 +1041,14 @@ let add_consequences_premise (i:int) (pc:t): unit =
   let nbenv = nbenv pc in
   let t,nbenv_t = Proof_table.term i pc.base in
   assert (nbenv = nbenv_t);
-  let sublst = unify t nbenv_t pc.entry.fwd pc in
+  let sublst = unify t pc.entry.fwd pc in
   let sublst = List.rev sublst in
   List.iter
-    (fun (idx,sub) ->
+    (fun (idx,sub,ags) ->
       assert (is_consistent pc);
       assert (idx < count pc);
       if is_available idx pc && is_visible idx pc then
-        add_consequence i idx sub pc)
+        add_consequence i idx sub ags pc)
     sublst
 
 
@@ -1058,6 +1065,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   and nbenv = nbenv pc
   in
   assert (RD.is_implication rd);
+  assert (not (RD.is_generic rd));
   let gp1,nbenv_a,a = RD.schematic_premise rd in
   assert (nbenv_a = nbenv);
   if RD.is_schematic rd then (* the implication is schematic *)
@@ -1067,22 +1075,23 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
     List.iter
       (fun (idx,sub) ->
         if is_available idx pc && not (RD.is_intermediate (rule_data idx pc)) then
-          add_consequence idx i sub pc)
+          let args = Term_sub.arguments (Term_sub.count sub) sub in
+          add_consequence idx i args [||] pc)
       sublst
   else (* the implication is not schematic *)
     try
       let idx = find a pc in   (* check for exact match *)
       add_mp_fwd idx i pc
     with Not_found -> (* no exact match *)
-      let sublst = unify a nbenv_a pc.entry.prvd2 pc
+      let sublst = unify a pc.entry.prvd2 pc
       in
       match sublst with
         [] -> ()
-      | (idx,sub)::_ ->
+      | (idx,sub,ags)::_ ->
           (* the schematic rule [idx] matches the premise of [i]*)
           begin
             try
-              let idx_premise = specialized idx sub nbenv_a 1 pc in
+              let idx_premise = specialized idx sub ags 1 pc in
               add_mp_fwd idx_premise i pc
             with Not_found ->
               ()
@@ -1139,18 +1148,30 @@ let add_consequences_someelim (i:int) (pc:t): unit =
 
 
 
-let add_induction_law (cls:int) (ivar:int) (goal:term) (pc:t): int =
+let type_of_term (t:term) (pc:t): type_term =
+  Context.type_of_term t (context pc)
+
+let predicate_of_type (tp:type_term) (pc:t): type_term =
+  Context.predicate_of_type tp (context pc)
+
+
+
+let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
   (* Add the induction law of the case class [cls] for the goal [goal]. *)
-  let ct = class_table pc in
+  let ct = class_table pc
+  and cls,_ = Class_table.split_type_term tp in
   let idx =
     try Class_table.induction_law cls ct
     with Not_found -> assert false
   in
   let p =
     let t0 = Term.lambda_inner goal idx in
-    Lam (1, anon_argnames 1, [], t0, true) in
-  let sub = Term_sub.add 0 p (Term_sub.add 1 (Variable ivar) Term_sub.empty) in
-  specialized idx sub (nbenv pc) 0 pc
+    let ptp = predicate_of_type tp pc in
+    Lam (1, anon_argnames 1, [], t0, true, ptp) in
+  let sub = [|p; Variable ivar|] in
+  (*let sub = Term_sub.add 0 p (Term_sub.add 1 (Variable ivar) Term_sub.empty) in*)
+  let ags = assert false in (* nyi *)
+  specialized idx sub ags 0 pc
 
 
 
@@ -1162,11 +1183,12 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
     Proof_table.add_proved_0 indlaw pt pc.base;
     let idx = raw_add indlaw false pc in
     let rd  = rule_data idx pc in
-    let args = [|q;elem|] in
-    let rd  = RD.specialize rd args idx (context pc) in
+    let args = [|q;elem|]
+    and ags  = assert false (* nyi *) in
+    let rd  = RD.specialize rd args ags idx (context pc) in
     assert (RD.is_specialized rd);
     let t   = RD.term rd (nbenv pc) in
-    Proof_table.add_specialize t idx args pc.base;
+    Proof_table.add_specialize t idx args ags pc.base;
     raw_add0 t rd false pc
   with Not_found ->
     invalid_arg "Not an inductive set"
@@ -1181,8 +1203,7 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
         let rs =
           let indset = inductive_set set pc in
           match indset with
-            Indset(n,nms,rs) ->
-              assert (n = 1); (* nyi *)
+            Indset(nme,tp,rs) ->
               rs
           | _ -> assert false in
         let len = Array.length rs in
@@ -1384,6 +1405,13 @@ let push_untyped (names:int array) (pc:t): t =
   push0 base pc
 
 
+
+let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
+  let base = Proof_table.push_typed fargs fgs pc.base in
+  push0 base pc
+
+
+
 let pop (pc:t): t =
   assert (is_local pc);
   if pc.trace then
@@ -1506,6 +1534,9 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
 
 
 
+let predicate_of_term (t:term) (pc:t): type_term =
+  Context.predicate_of_term t (context pc)
+
 
 (* Subterm equality:
 
@@ -1541,9 +1572,12 @@ let prove_equality (g:term) (pc:t): int =
   assert (nargs = 0);
   let imp_id = 1 + imp_id pc in
   let find_leibniz t1 t2 =
+    (* find: all(p) p(t1) ==> p(t2) *)
+    let tp_p = predicate_of_term t1 pc in
     let p t = Application(Variable 0, [|Term.up 1 t|], true) in
     let imp = Term.binary imp_id (p t1) (p t2) in
-    let t  = Term.all_quantified 1 [||] imp in
+    let t   =
+      Term.all_quantified 1 ([|ST.symbol "p"|],[|tp_p|]) empty_formals imp in
     find t pc
   in
   let tlam, leibniz, args1, args2 =
@@ -1574,16 +1608,20 @@ let prove_equality (g:term) (pc:t): int =
     let start_idx  = find_match start_term pc in
     let result = ref start_idx in
     for i = 0 to nargs - 1 do
-      let pred_inner_i = pred_inner i in
-      let pred_i = Lam(1,[||],[],pred_inner_i,true) in
+      let pred_inner_i = pred_inner i
+      and tp  = type_of_term args1.(i) pc in
+      let ptp = predicate_of_type tp pc in
+      let pred_i = Lam(1,[||],[],pred_inner_i,true,ptp) in
       let ai_abstracted =
         make_application pred_i [|args1.(i)|] 0 true pc in
       let imp = implication (term !result pc) ai_abstracted pc in
       let idx2 = eval_backward ai_abstracted imp
           (Eval.Beta (Eval.Term ai_abstracted)) pc in
       let idx = add_mp !result idx2 false pc in
-      let sub = Term_sub.singleton 0 pred_i in
-      let idx2 = specialized leibniz.(i) sub (nbenv pc) 0 pc in
+      let sub = [|pred_i|]
+      (*let sub = Term_sub.singleton 0 pred_i*)
+      and ags = assert false (* nyi *) in
+      let idx2 = specialized leibniz.(i) sub ags 0 pc in
       let idx = add_mp idx idx2 false pc in
       let t = Term.apply pred_inner_i [|args2.(i)|]
       and e = Eval.Beta (Eval.Term (term idx pc)) in
@@ -1593,7 +1631,7 @@ let prove_equality (g:term) (pc:t): int =
     let e =
       let ev args =
         Eval.Beta (Eval.Term (make_application lam args 0 true pc)) in
-      Eval.VApply(eq_id, [|ev args1; ev args2|])
+      assert false (*Eval.VApply(eq_id, [|ev args1; ev args2|])*)
     in
     result := add_fwd_evaluation g !result e false pc;
     !result
@@ -1603,8 +1641,9 @@ let prove_equality (g:term) (pc:t): int =
 
 
 let backward_witness (t:term) (pc:t): int =
-    let nargs,nms,tt = split_some_quantified t pc in
-    let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
+    let nargs,(nms,tps),tt = Term.some_quantifier_split t in
+    assert false
+    (*let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
     let idx,sub = List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst
     in
     let witness = term idx pc in
@@ -1612,7 +1651,7 @@ let backward_witness (t:term) (pc:t): int =
     let args    = Term_sub.arguments nargs sub in
     Proof_table.add_witness impl idx nms tt args pc.base;
     let idx_impl = raw_add impl false pc in
-    add_mp0 t idx idx_impl false pc
+    add_mp0 t idx idx_impl false pc*)
 
 
 
@@ -1632,18 +1671,17 @@ let find_goal (g:term) (pc:t): int =
 
 
 let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
-  let nbenv = nbenv pc in
-  let sublst = unify g nbenv pc.entry.bwd pc in
+  let sublst = unify g pc.entry.bwd pc in
   let lst =
     List.fold_left
-      (fun lst (idx,sub) ->
+      (fun lst (idx,sub,ags) ->
         if IntSet.mem idx blacklst || not (is_visible idx pc) then
           lst
-        else if Term_sub.is_empty sub then
+        else if Array.length sub = 0 then
           idx :: lst
         else begin
           let cnt = count pc in
-          let idx = specialized idx sub nbenv 2 pc in
+          let idx = specialized idx sub ags 2 pc in
           if idx = cnt then begin
             cnt :: lst
           end else begin
@@ -1780,6 +1818,7 @@ let add_induction_law0 (cls:int) (pc:t): unit =
   assert (is_global pc);
   let law = Proof_table.type_induction_law cls pc.base
   and pt  = Indtype cls in
+  printf "induction law %s\n" (string_of_term law pc);
   let idx = add_proved_0 false (-1) law pt 0 pc in
   let ct = class_table pc in
   Class_table.set_induction_law idx cls ct
@@ -1818,13 +1857,19 @@ let check_interface (pc:t): unit =
          "' is not public")
   done
 
+let boolean_type (nb:int) (pc:t): type_term =
+  let ntvs = Context.ntvs (context pc) in
+  Variable (Class_table.boolean_index + nb + ntvs)
+
 
 let excluded_middle (pc:t): int =
   let nvars = nbenv pc in
   let or_id  = 1 + nvars + Feature_table.or_index
   and not_id = 1 + nvars + Feature_table.not_index in
   let em = Term.binary or_id (Variable 0) (Term.unary not_id (Variable 0)) in
-  let em = Term.all_quantified 1 (standard_argnames 1) em in
+  let nms = standard_argnames 1
+  and tps = [| boolean_type 1 pc |] in
+  let em = Term.all_quantified 1 (nms,tps) empty_formals em in
   find em pc
 
 
@@ -1842,7 +1887,10 @@ let or_elimination (pc:t): int =
          (Term.binary imp_id
             b_imp_c
             (Variable 2))) in
-  let or_elim = Term.all_quantified 3 (standard_argnames 3) or_elim in
+  let btp = boolean_type 3 pc in
+  let nms = standard_argnames 3
+  and tps = [| btp; btp; btp |] in
+  let or_elim = Term.all_quantified 3 (nms,tps) empty_formals or_elim in
   find or_elim pc
 
 

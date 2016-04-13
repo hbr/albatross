@@ -106,8 +106,8 @@ end = struct
       match t with
         Variable j when j < cnt -> gstar j n
       | Variable _ -> t
-      | VAppl (c,args) ->
-          VAppl (c, Array.map (fun t -> sub t n) args)
+      | VAppl (c,args,[||]) ->
+          VAppl (c,  Array.map (fun t -> sub t n) args, [||])
       | _ ->
           assert false
     in
@@ -199,7 +199,7 @@ end = struct
       and cnt  = count s
       in
       for i = 0 to cnt - 1 do
-        args.(i) <- Term.upbound n cnt args.(i)
+        args.(i) <- Term.up_from n cnt args.(i)
       done;
       {args = args; flags = s.flags; used = s.used}
     end
@@ -230,7 +230,7 @@ end = struct
         larger substitution.
      *)
     let sn   = count s in
-    let args = Array.map (fun t -> Term.upbound n sn t) s.args in
+    let args = Array.map (fun t -> Term.up_from n sn t) s.args in
     let snew = make (n+sn) in
     Array.blit args    0  snew.args  0  sn;
     Array.blit s.flags 0  snew.flags 0  sn;
@@ -263,7 +263,7 @@ end = struct
     Array.blit s.flags n   snew.flags 0   (sn-n);
     for i = 0 to sn-n-1 do
       if snew.flags.(i) then begin
-        let tp   = Term.sub s.args.(i+n) args_bot n in
+        let tp   = Term.subst s.args.(i+n) n args_bot in
         let tp   =
           try Term.down n tp
           with Not_found -> assert false
@@ -576,7 +576,7 @@ end = struct
         f a t
 
   let up_from (n:int) (start:int) (rt:t): t =
-    map (fun tp -> Term.upbound n start tp) rt
+    map (fun tp -> Term.up_from n start tp) rt
 
   let up (n:int) (rt:t): t = up_from n 0 rt
 
@@ -708,7 +708,7 @@ end = struct
   let up_from (n:int) (start:int) (s:t): t =
     (** Shift all types up by [n] starting from [start].
      *)
-    map (fun t -> Term.upbound n start t) s
+    map (fun t -> Term.up_from n start t) s
 
 
   let up (n:int) (s:t): t =

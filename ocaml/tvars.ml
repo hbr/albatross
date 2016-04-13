@@ -101,7 +101,7 @@ let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
         is_eq (concept i tvs1) (concept j tvs2) (nmax-1)
     | Variable i, Variable j when nall1 <= i && nall2 <= j ->
         (i - count_all tvs1) = (j - count_all tvs2)
-    | VAppl (i,args1), VAppl(j,args2) ->
+    | VAppl (i,args1,_), VAppl(j,args2,_) ->
         let n1 = Array.length args1
         and n2 = Array.length args2 in
         let res = ref (n1 = n2 && i = j) in
@@ -146,7 +146,7 @@ let principal_variable (tp:type_term) (tvs:t): int =
         pvar (concept i tvs)
     | Variable i ->
         i
-    | VAppl (i,_) ->
+    | VAppl (i,_,_) ->
         pvar (Variable i)
     | _ ->
         assert false
@@ -174,7 +174,7 @@ let add_fgs (nfgs:int) (tvs_new:t) (tvs:t): t =
     tvs
   else
     let up n arr = Array.map (fun tp -> Term.up n tp) arr
-    and up_from n start arr = Array.map (fun tp -> Term.upbound n start tp) arr
+    and up_from n start arr = Array.map (fun tp -> Term.up_from n start tp) arr
     in
     let nlocs  = count_local tvs_new in
     let nblocs = count_local tvs - nlocs in
@@ -231,9 +231,9 @@ let insert_fgs (tvs1:t) (i:int) (tvs2:t): t =
       (nfgs1 + nfgs2)
       (fun j ->
         if j < i then
-          Term.upbound nfgs2 i tvs1.fgconcepts.(j)
+          Term.up_from nfgs2 i tvs1.fgconcepts.(j)
         else if j < i + nfgs2 then
-          let cpt = Term.upbound (nfgs1-i) nfgs2 tvs2.fgconcepts.(j-i) in
+          let cpt = Term.up_from (nfgs1-i) nfgs2 tvs2.fgconcepts.(j-i) in
           Term.up i cpt
         else
           Term.up nfgs2 tvs1.fgconcepts.(j-i-nfgs2))
@@ -256,13 +256,13 @@ let add_global (cs:type_term array) (tvs:t): t =
   and cnt    = count tvs
   and nfgs0  = count_fgs tvs
   in
-  let concepts0 = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.concepts
-  and concepts1 = Array.map (fun tp -> Term.upbound nfgs0 nglob1 tp) cs
+  let concepts0 = Array.map (fun tp -> Term.up_from nglob1 cnt tp) tvs.concepts
+  and concepts1 = Array.map (fun tp -> Term.up_from nfgs0 nglob1 tp) cs
   in
   let concepts1 = Array.map (fun tp -> Term.up cnt tp) concepts1 in
   {tvs with
    concepts   = Array.append concepts0 concepts1;
-   fgconcepts = Array.map (fun tp -> Term.upbound nglob1 cnt tp) tvs.fgconcepts}
+   fgconcepts = Array.map (fun tp -> Term.up_from nglob1 cnt tp) tvs.fgconcepts}
 
 
 
@@ -302,11 +302,11 @@ let augment_fgs
   let cnt = count tvs
   and nfgs0 = count_fgs tvs in
   let fgconcepts0 =
-    Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.fgconcepts
+    Array.map (fun tp -> Term.up_from nfgs1 cnt tp) tvs.fgconcepts
   and concepts =
-    Array.map (fun tp -> Term.upbound nfgs1 cnt tp) tvs.concepts
+    Array.map (fun tp -> Term.up_from nfgs1 cnt tp) tvs.concepts
   and fgconcepts1 =
-    Array.map (fun tp -> Term.upbound nfgs0 nfgs1 tp) fgconcepts
+    Array.map (fun tp -> Term.up_from nfgs0 nfgs1 tp) fgconcepts
   in
   let fgconcepts1 = Array.map (fun tp -> Term.up cnt tp) fgconcepts1 in
   {tvs with

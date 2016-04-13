@@ -127,6 +127,8 @@ let add_assumptions_or_axioms
   List.map
     (fun ie ->
       let t = get_boolean_term ie pc in
+      if is_axiom && Term.is_all_quantified t then
+        error_info ie.i "Universal quantification not allowed in ensure clause";
       verify_preconditions t ie.i pc;
       let idx =
         if is_axiom then
@@ -159,8 +161,11 @@ let add_proved
 
 
 
-let prove_basic_expression (ie:info_expression) (pc:Proof_context.t): int * info =
+let prove_basic_expression (ie:info_expression) (ens:bool) (pc:Proof_context.t)
+    : int * info =
   let t = get_boolean_term ie pc in
+  if ens && Term.is_all_quantified t then
+    error_info ie.i "Universal quantification not allowed in ensure clause";
   verify_preconditions t ie.i pc;
   try
     let res = Prover.prove_and_insert t pc in
@@ -178,7 +183,7 @@ let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t)
       PAxiom | PDeferred ->
         add_axioms lst pc
     | PNormal ->
-        List.map (fun ie -> prove_basic_expression ie pc) lst
+        List.map (fun ie -> prove_basic_expression ie true pc) lst
   in
   List.map
     (fun (idx,info) ->
@@ -192,7 +197,7 @@ let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t)
 
 let beta_reduced (t:term) (pc:PC.t): term =
   match t with
-    Application(Lam(n,_,_,t0,_),args,_) ->
+    Application(Lam(n,_,_,t0,_,_),args,_) ->
       assert (Array.length args = 1);
       PC.beta_reduce n t0 args 0 pc
   | _ ->
@@ -238,7 +243,7 @@ let analyze_type_inspect
       error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
     set, cls-ntvs, tp
   in
-  let ind_idx = PC.add_induction_law cls idx goal pc in
+  let ind_idx = PC.add_induction_law tp idx goal pc in
   cons_set,ind_idx,idx,tp
 
 
@@ -264,7 +269,7 @@ let analyze_type_case_pattern
       ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
   let cons_idx =
     match pat with
-      VAppl(i,args) ->
+      VAppl(i,args,_) ->
         let argslen = Array.length args in
         if argslen <> n then invalid_pat ();
         for k = 0 to n-1 do
@@ -338,7 +343,7 @@ and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
           error_info ie.i "Illegal inspect proof"
       end
   | _ ->
-      let _ = prove_basic_expression ie pc in
+      let _ = prove_basic_expression ie false pc in
       ()
 
 and prove_branch
@@ -477,7 +482,7 @@ and prove_inductive_set
         Feature_table.add_tuple_accessors t0 np nvars ft
       in
       assert (np = Array.length nms);
-      let q = Lam (np, nms, [], t0, true) in
+      let q = Lam (np, nms, [], t0, true,tp) in
       verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
       PC.close pc0;
       q
@@ -534,28 +539,28 @@ and prove_inductive_set
               PC.push_untyped [||] pc0, ie.v in
         let c1  = PC.context pc1 in
         let n    = Context.count_last_arguments c1
-        and nms  = Context.local_argnames c1 in
+        and fargs = Context.local_formals c1
+        and fgs   = Context.local_fgs c1 in
         let rule0 = Typer.boolean_term (withinfo ie.i rule) c1 in
-        let rule  = Term.all_quantified n nms rule0 in
+        let rule  = Term.all_quantified n fargs fgs rule0 in
         let irule =
           let rule =
-            Context.prenex_term (Term.all_quantified n nms rule0) c1 in
+            Context.prenex_term rule c1 in
           try
             interval_find (fun i -> Term.equivalent rules.(i) rule) 0 nrules
           with Not_found ->
             error_info ie.i "Invalid case"
         in
         let ps,tgt =
-          let n1,nms1,ps,tgt = Term.induction_rule imp_id irule p prep q in
-          assert (n1 = n);
+          let n1,fargs1,fgs1,ps,tgt = Term.induction_rule imp_id irule p prep q in
+          assert (n1 = n); (* The variables might be permuted *)
           let args =
             let usd = Array.of_list (List.rev (Term.used_variables rule0 n)) in
             assert (Array.length usd = n);
-            Array.map (fun i -> Variable i) usd
-          in
-          let tgt = Term.sub tgt args n
-          and ps  = List.map (fun t -> Term.sub t args n) ps in
-          ps,tgt in
+            Array.map (fun i -> Variable i) usd in
+          let sub t = Term.subst t n args in
+          List.map sub ps, sub tgt
+        in
         let idx = prove_case ie.i rule ps tgt cmp pc1 pc0 in
         IntMap.add irule idx proved)
       IntMap.empty
@@ -568,9 +573,10 @@ and prove_inductive_set
           try
             IntMap.find irule proved
           with Not_found ->
-            let n,nms,ps,tgt = Term.induction_rule imp_id irule p prep q in
+            let n,(nms,tps),fgs,ps,tgt = Term.induction_rule imp_id irule p prep q in
             let nms = Context.unique_names nms c0 in
-            let pc1 = PC.push_untyped nms pc0 in
+            let pc1 = PC.push_typed (nms,tps) fgs pc0 in
+            (*let pc1 = PC.push_untyped nms pc0 in  (* push_typed !!! *)*)
             prove_case ens.i rules.(irule) ps tgt [] pc1 pc0 in
         PC.add_mp rule_idx ind_idx false pc0
       ) ind_idx 0 nrules in
@@ -590,10 +596,12 @@ and prove_type_case
   (* prove one case of an inductive type *)
   let nvars = PC.count_variables pc
   and ft    = PC.feature_table pc in
-  let n,_,ps_rev,case_goal =
-    let t0 = Term.lambda_inner goal ivar in
-    let p = Lam(1,anon_argnames 1,[],t0,true) in
-    Feature_table.constructor_rule cons_idx p nvars ft in
+  let n,_,_,ps_rev,case_goal =
+    let t0 = Term.lambda_inner goal ivar
+    and tp = assert false in
+    let p   = Lam(1,anon_argnames 1,[],t0,true,tp)
+    and ags = assert false in
+    Feature_table.constructor_rule cons_idx p ags nvars ft in
   assert (n = PC.count_last_arguments pc1);
   List.iter
     (fun ass ->
@@ -811,7 +819,7 @@ let adapt_inner_function_term
   (* Functions have a result variable with number [nargs]. However all preconditions,
      definition terms and postconditions finally don't contain the result variable.
      If a function is defined by properties then the variable 'Result' is replaced
-     by the corresponding call. I.e. all variable starting from [nargs] are shifted
+     by the corresponding call. I.e. all variables starting from [nargs] are shifted
      down by one. *)
   if PC.has_result_variable pc then
     try
@@ -907,10 +915,13 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
                          Feature_table.feature_name idx ft)
     | Variable i ->
         ()
-    | VAppl (i,args) when i = idx + nb ->
+    | VAppl (i,args,_) when i = idx + nb ->
         if nbranch = 0 then
           error_info info "Recursive call must occur only within a branch";
         let len = Array.length args in
+        if len = 0 then
+          error_info info ("Illegal recursive call of the constant " ^
+                           Feature_table.feature_name idx ft);
         let is_lower_arg i =
           try
             let level,iarg = find nb args.(i) tlst in
@@ -920,18 +931,20 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         in
         if not (interval_exist is_lower_arg 0 len) then
           error_info info ("Illegal recursive call \"" ^
-                           (Context.string_of_term t true 0 c) ^ "\"")
-    | VAppl (i,args) ->
+                           (Context.string_of_term t c) ^ "\"")
+    | VAppl (i,args,_) ->
         check_args args
     | Application (f,args,pr) ->
         check f nbranch tlst c;
         check_args args
-    | Lam (n,nms,pres,t0,pr) ->
-        let c0 = Context.push_untyped [|ST.symbol "x"|] c in
-        check t0 nbranch tlst c0
-    | QExp (n,nms,t0,_) ->
-        let c0 = Context.push_untyped nms c in
-        check t0 nbranch tlst c0
+    | Lam (n,nms,pres,t0,pr,tp) ->
+        assert false (* nyi *)
+        (*let c0 = Context.push_untyped [|ST.symbol "x"|] c in
+        check t0 nbranch tlst c0*)
+    | QExp (n,fargs,fgs,t0,_) ->
+        assert false (* nyi *)
+        (*let c0 = Context.push_untyped nms c in
+        check t0 nbranch tlst c0*)
     | Flow (Ifexp, args) ->
         check_args args
     | Flow (Asexp, args) ->
@@ -947,7 +960,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         let ninsp    = Array.length insp_arr in
         interval_iter
           (fun i ->
-            let n,nms,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+            let n,fargs,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
             let parr =
               let arr = Feature_table.args_of_tuple pat (n+nb) ft in
               if Array.length arr > ninsp then
@@ -956,7 +969,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             let tlst2 = add_pattern insp_arr2 n parr nb tlst in
             assert (Array.length parr = ninsp); (* because only constructors and
                                                    variables are allowed in patterns *)
-            let c = Context.push_untyped nms c in
+            let c = Context.push_typed fargs empty_formals c in
             check res (nbranch+1) tlst2 c)
           0 ncases
     | Indset (n,nms,rs) ->
@@ -980,8 +993,9 @@ let feature_specification
     (idx: int)
     (nms: int array)
     (reqlst: compound)
-    (enslst:compound)
-    (pc:PC.t): Feature.Spec.t * (info*term) option =
+    (enslst: compound)
+    (pc:PC.t)
+    : Feature.Spec.t =
   let nargs = Array.length nms
   and context = PC.context pc in
   let adapt_term t = adapt_inner_function_term info t nargs pc in
@@ -993,7 +1007,7 @@ let feature_specification
   let pres = adapt_list pres in
   match enslst with
     [] ->
-      Feature.Spec.make_func_spec nms pres [], None
+      Feature.Spec.make_func_spec nms pres []
   | _ ->
       let prove cond errstring =
         try Prover.prove cond pc
@@ -1017,7 +1031,7 @@ let feature_specification
       assert (List.for_all (fun t -> is_feature_term_recursive t idx pc) posts);
       let posts = adapt_list posts
       in
-      Feature.Spec.make_func_spec nms pres posts, None
+      Feature.Spec.make_func_spec nms pres posts
 
 
 let feature_specification_ast
@@ -1032,7 +1046,7 @@ let feature_specification_ast
     adapt_inner_function_term info t nargs pc in
   let adapt_list lst = List.map adapt_term lst in
   let feature_spec reqlst enslst =
-    feature_specification info idx nms reqlst enslst pc in
+    feature_specification info idx nms reqlst enslst pc, None in
   let context = PC.context pc in
   match bdy, exp with
     None, None ->
@@ -1088,6 +1102,15 @@ let analyze_feature
     (bdy: feature_body option)
     (exp: info_expression option)
     (pc: Proof_context.t): unit =
+  (*  - Analyze the signature and push into the context
+      - Find the index, check if it is a new feature or it is the exportation of an
+        already available feature.
+      - Add a new feature or export an already available feature.
+      - Get the specification of the feature and update the feature.
+      - Check the validity of a potential recursion
+      - Verify the preconditions of the definition term. (What about precondition
+        terms and postconditions).
+   *)
   if rt = None then
     not_yet_implemented fn.i "Features without result type";
   let pc1 =
@@ -1141,6 +1164,10 @@ let add_case_axiom (t:term) (pc:Proof_context.t): int =
 
 
 let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
+  (* Add case inversions
+
+     all(args) c1(..) = c2(..)  ==>  false
+   *)
   assert (idx1 <> idx2);
   let ft = PC.feature_table pc in
   let tvs1,s1 = Feature_table.signature idx1 ft
@@ -1148,21 +1175,25 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   assert (tvs1 = tvs2);
   let n1,n2 = Sign.arity s1, Sign.arity s2 in
   let args1 = Array.init n1 (fun i -> Variable i)
-  and args2 = Array.init n2 (fun i -> Variable (n1+i)) in
-  let appl idx args = VAppl(n1+n2+idx,args) in
+  and args2 = Array.init n2 (fun i -> Variable (n1+i))
+  and fgnms,fgcon = Tvars.fgnames tvs1, Tvars.fgconcepts tvs1
+  and tps = Array.append (Sign.arguments s1) (Sign.arguments s2) in
+  let ags = Array.init (Array.length fgcon) (fun i -> Variable i) in
+  let appl idx args = VAppl(n1+n2+idx,args,ags) in
   let t1 = appl idx1 args1
   and t2 = appl idx2 args2
   and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
   and imp_id   = n1 + n2 + Feature_table.implication_index
   in
   let t = Term.binary imp_id
-      (Term.binary eq_id t1 t2)
+      (VAppl(eq_id, [|t1;t2|], [|Sign.result s1|]))
       (Feature_table.false_constant (n1+n2)) in
   let t = Term.all_quantified
       (n1+n2)
-      (standard_argnames (n1+n2))
+      (standard_argnames (n1+n2),tps)
+      (fgnms,fgcon)
       t in
-  (* printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
+  printf "inversion %s\n" (Proof_context.string_of_term t pc);
   ignore(add_case_axiom t pc)
 
 
@@ -1174,7 +1205,8 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
      all(a:T) a as pat1  ==>  a as pat2  ==>  false
    *)
   assert (idx1 <> idx2);
-  let ft = PC.feature_table pc in
+  assert false (* nyi *)
+  (*let ft = PC.feature_table pc in
   let make_pattern idx =
     let n = Feature_table.arity idx ft in
     let args = Array.init n (fun i -> Variable i)
@@ -1191,7 +1223,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   let t = Term.binary imp_id pat1 (Term.binary imp_id pat2 false_const) in
   let q = Term.all_quantified 1 (standard_argnames 1) t in
   (*printf "inversion %s\n" (PC.string_of_term q pc);*)
-  ignore(add_case_axiom q pc)
+  ignore(add_case_axiom q pc)*)
 
 
 
@@ -1219,10 +1251,19 @@ let add_case_inversions
 let add_case_injections
     (clst: int list)
     (pc:Proof_context.t): unit =
+  (* Add the injection laws for the constructors [clst]. For each constructor and
+     each argument of the constructor there is an injection law of the form:
+
+     all(a1,..,b1,..) c(a1,..) = c(b1,..) ==> ai = bi
+   *)
   let ft   = Proof_context.feature_table pc in
   List.iter
     (fun idx ->
       let tvs,s = Feature_table.signature idx ft in
+      let fgnms,fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs
+      and tps = Sign.arguments s
+      and rtp = Sign.result s in
+      let tps = Array.append tps tps in
       let n = Sign.arity s in
       if n = 0 then
         ()
@@ -1232,16 +1273,20 @@ let add_case_injections
         and nms   = standard_argnames (2*n)
         and idx   = 2*n + idx
         and eq_id0 = 2*n  +
-            Feature_table.equality_index_of_type (Sign.result s) tvs ft
+            Feature_table.equality_index_of_type rtp tvs ft
         and imp_id = 2*n + Feature_table.implication_index in
-        let teq0 = Term.binary eq_id0 (VAppl(idx,args1)) (VAppl(idx,args2)) in
+        let teq0 =
+          let ags   = Array.init (Array.length fgcon) (fun i -> Variable i) in
+          let a1,a2 = VAppl(idx,args1,ags), VAppl(idx,args2,ags) in
+          VAppl(eq_id0, [|a1;a2|], [|rtp|]) in
         for i = 0 to n - 1 do
+          let itp = tps.(i) in
           let eq_id1 = 2*n +
-              Feature_table.equality_index_of_type (Sign.arg_type i s) tvs ft in
-          let teq1 = Term.binary eq_id1 (Variable i) (Variable (n+i)) in
+              Feature_table.equality_index_of_type itp tvs ft in
+          let teq1 = VAppl(eq_id1, [|Variable i;Variable (n+i)|], [|itp|]) in
           let t = Term.binary imp_id teq0 teq1 in
-          let t = Term.all_quantified (2*n) nms t in
-          (*printf "injection %s\n" (Proof_context.string_of_term t pc);*)
+          let t = Term.all_quantified (2*n) (nms,tps) (fgnms,fgcon) t in
+          printf "injection %s\n" (Proof_context.string_of_term t pc);
           ignore(add_case_axiom t pc)
         done)
     clst
@@ -1250,7 +1295,8 @@ let add_case_injections
 let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
   (* Can the case class [cls] be constructed without actual generics at the
      positions [posset]?  *)
-  let ct = PC.class_table pc
+  assert false (* nyi *)
+  (*let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   assert (Class_table.is_case_class cls ct);
   let cset = Class_table.constructors cls ct in
@@ -1280,7 +1326,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
             let set = Term.bound_variables tp nfgs in
             IntSet.inter set fgenset = IntSet.empty)
           (Array.to_list (Sign.arguments sign)))
-    cset
+    cset*)
 
 
 
@@ -1296,9 +1342,9 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
       match tp with
         Variable i when i = cls + ntvs ->
           false
-      | VAppl(i,ags) when i = cls + ntvs ->
+      | VAppl(i,ags,_) when i = cls + ntvs ->
           false
-      | VAppl(i,ags) ->
+      | VAppl(i,ags,_) ->
           assert (ntvs <= i);
           Class_table.is_case_class (i-ntvs) ct &&
           begin

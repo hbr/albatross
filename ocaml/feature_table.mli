@@ -37,6 +37,8 @@ val is_ghost_function: int -> t -> bool
 
 val seeded_term: term -> int -> t -> term
 
+val seed_function: t -> int -> int
+
 val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
@@ -51,7 +53,9 @@ val variant_term: term -> int -> int -> int -> t -> term
 val has_variant: int -> int -> t -> bool
 val has_private_variant: int -> int -> t -> bool
 
-val variant_feature: int -> int -> type_term array -> Tvars.t -> t -> int
+(*val variant_feature: int -> int -> type_term array -> Tvars.t -> t -> int*)
+
+val fully_expanded: term -> int -> Tvars.t -> t -> term
 
 val find_variant_candidate: int -> int -> t -> int
 
@@ -136,14 +140,14 @@ val equality_index_of_type: term -> Tvars.t -> t -> int
 
 val feature_call: int -> int -> term array -> t -> term
 
-val definition: int -> int -> t -> int * int array * term
+val definition: int -> int -> agens -> Tvars.t -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature
         [idx]. Raises [Not_found] if feature [idx] has no definition *)
 
 val has_definition: int -> t -> bool
 
 val is_inductive_set: int -> int -> t -> bool
-val inductive_set: int -> term array -> int -> t -> term
+val inductive_set: int -> term array -> agens -> int -> Tvars.t -> t -> term
 
 val specification: int -> t -> term list
 
@@ -151,21 +155,23 @@ val feature_name: int -> t -> string
 
 val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
+val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
 val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
 val inductive_arguments: int -> t -> int list
-val constructor_rule:  int -> term -> int -> t
-  -> int * int array * term list * term
+val constructor_rule:  int -> term -> agens -> int -> t
+  -> int * names * arguments * term list * term
 val induction_law:    int -> int -> t -> term
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val is_case_matching:  term -> int -> term -> int -> t -> bool
-val peer_matches:      int -> int -> t -> (int*term) list
-val unmatched_inspect_cases: term array -> int -> t -> (int * term) list
-val inspect_unfolded:  info ->term array -> int -> t -> term array
+(*val peer_matches:      int -> int -> t -> (int*term) list*)
+val unmatched_inspect_cases: term array -> int -> int -> t
+  -> (int * term list * term) list
+val inspect_unfolded:  info -> term array -> int -> int -> t -> term array
 
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
@@ -173,16 +179,20 @@ val is_term_public:    term -> int -> t -> bool
 val owner: int -> t -> int
 
 val add_tuple_accessors: term -> int -> int -> t -> term
-val make_lambda: int -> int array -> term list -> term -> bool -> int -> t -> term
+val make_lambda:
+    int -> int array -> term list -> term -> bool -> int -> type_term -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 val normalize_lambdas:term -> int -> t -> term
+val substituted:
+    term -> int -> int -> arguments -> int -> agens -> Tvars.t -> t -> term
+val specialized:      term -> int -> Tvars.t -> t -> term
 val remove_tuple_accessors: term -> int -> int -> t -> term
 val tuple_of_args:    term array -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
 val args_of_tuple_ext:term -> int -> int -> t -> term array
 
-val prenex: term -> int -> t -> term
+(*val prenex: term -> int -> t -> term*)
 
 val preconditions:  int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
@@ -205,22 +215,6 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
 val update_specification: int -> Feature.Spec.t -> t -> unit
 val set_owner_class:      int -> int -> t -> unit
 val export_feature: int -> bool -> t -> unit
-
-val add_function:
-    feature_name withinfo -> Tvars.t -> int array -> Sign.t
-      -> Feature.body -> t -> unit
-  (** [add_function fn tvs fnms sign imp_stat term_opt ft] adds the function
-      with then name [fn], the formal generics of [tvs], the arguments [fnms],
-      the signature [sign] the implementation status [imp_stat] and an
-      optional definition term [term_opt] to the feature table [ft] *)
-
-val update_function:
-    int -> info  -> bool -> Feature.body -> t -> unit
-  (** [update_function fn tvs fnms sign imp_stat term_opt ft] updates the function
-      with then name [fn], the formal generics of [tvs], the arguments [fnms],
-      the signature [sign] the implementation status [imp_stat] and an
-      optional definition term [term_opt] to the feature table [ft] *)
-
 
 
 val term_to_string: term -> bool -> int -> int array -> t -> string

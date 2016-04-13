@@ -122,7 +122,7 @@ let boolean_type (tb:t):     type_term = Variable (boolean_index tb)
 let any_type     (tb:t):     type_term = Variable (any_index tb)
 
 let predicate_type (arg:type_term) (tb:t): type_term =
-  VAppl(predicate_index tb, [|arg|])
+  make_type (predicate_index tb) [|arg|]
 
 
 let count_terms (tb:t): int = Seq.count tb.terms
@@ -156,7 +156,7 @@ let expected_arity (tb:t): int =
 let tvars (tb:t): Tvars.t = tb.tvs
 
 let string_of_term (t:term) (tb:t): string =
-  Context.string_of_term t tb.norm 0 (context tb)
+  Context.string_of_term0 t tb.norm 0 (context tb)
 
 
 
@@ -254,7 +254,7 @@ let string_of_reduced_required_type (tb:t): string =
 
 
 let substituted_type (tp:type_term) (tb:t): type_term =
-  Term.sub tp tb.subs (Array.length tb.subs)
+  Term.subst tp (Array.length tb.subs) tb.subs
 
 let substituted_signature (s:Sign.t) (tb:t): Sign.t =
   Sign.map (fun tp -> substituted_type tp tb) s
@@ -394,8 +394,8 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
     and start_globs1 = start_globs0 + nlocs in
     let transform =
       (fun tp ->
-        let tp = Term.upbound nfgs nall tp in
-        let tp = Term.upbound nglobs cnt tp in
+        let tp = Term.up_from nfgs nall tp in
+        let tp = Term.up_from nglobs cnt tp in
         Term.up nlocs tp)
     in
     tb.rtype <- transform tb.rtype;
@@ -458,7 +458,7 @@ let transform_from_global (tvs:Tvars.t) (tb:t): type_term -> type_term  =
   in
   let space2 = nall - (space1 + nglobs) in
   (fun tp ->
-    let tp = Term.upbound space2 nglobs tp in
+    let tp = Term.up_from space2 nglobs tp in
     Term.up space1 tp)
 
 
@@ -474,7 +474,7 @@ let transform_from_context (tvs:Tvars.t) (tb:t): type_term -> type_term =
   let space2 = Tvars.count_global tb.tvs + Tvars.count_fgs tb.tvs - nfgs
   and space1 = Tvars.count_local tb.tvs - nlocs in
   (fun tp ->
-    let tp = Term.upbound space2 nlocs tp in
+    let tp = Term.up_from space2 nlocs tp in
     Term.up space1 tp)
 
 
@@ -525,7 +525,8 @@ let add_sub (i:int) (t:type_term) (tb:t): unit =
   assert (not (has_sub i tb));
   tb.subs.(i) <- t;
   for k = locals_start tb to globals_beyond tb - 1 do
-    tb.subs.(k) <- Term.sub tb.subs.(k) tb.subs (Tvars.count tb.tvs)
+    tb.subs.(k) <-
+      Term.subst tb.subs.(k) (Tvars.count tb.tvs) tb.subs
   done;
   assert (not (IntSet.mem i (Term.bound_variables t (Tvars.count tb.tvs))))
 
@@ -536,8 +537,11 @@ let push_context (c:Context.t) (tb:t): unit =
   and nfgs =
     if Seq.is_empty tb.constack then
       Context.count_formal_generics c
-    else
-      Context.count_last_formal_generics c in
+    else begin
+      let nfgs = Context.count_last_formal_generics c in
+      assert (nfgs = 0); (* inner contexts cannot have new formal generics *)
+      nfgs
+    end in
   assert (tb.nlocals <= ntvs);
   let ntvs_delta = ntvs - tb.nlocals in
   resize ntvs_delta 0 nfgs tb;
@@ -641,7 +645,7 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
           uni tb.subs.(i) t2
         else
           uni tb.subs.(i) tb.subs.(j)
-    | VAppl(i1,args1), _ when i1 = dummy_index tb ->
+    | VAppl(i1,args1,_), _ when i1 = dummy_index tb ->
         if tb.trace then printf "unify dummy %s with %s\n"
             (string_of_type t1 tb) (string_of_type t2 tb);
         assert (Array.length args1 = 2);
@@ -649,12 +653,12 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
           Variable j when j < ntvs && has_sub j tb->
             if tb.trace then printf "unify dummy with substituted variable\n";
             uni t1 tb.subs.(j);
-        | VAppl(i2,args2) when i2 = predicate_index tb ->
+        | VAppl(i2,args2,_) when i2 = predicate_index tb ->
             if tb.trace then printf "unify dummy with predicate\n";
             assert (Array.length args2 = 1);
             uni args1.(0) args2.(0);
             uni args1.(1) (boolean_type tb);
-        | VAppl(i2,args2) when i2 = function_index tb ->
+        | VAppl(i2,args2,_) when i2 = function_index tb ->
             if tb.trace then printf "unify dummy with function\n";
             assert (Array.length args2 = 2);
             uni args1.(0) args2.(0);
@@ -669,7 +673,7 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
         do_vareq j t1
     | Variable i, Variable j when i = j ->
         ()
-    | VAppl(i1,args1), VAppl(i2,args2) ->
+    | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
           not_found "diff args len (2)";
@@ -787,31 +791,31 @@ let callable_signature (s:Sign.t) (tb:t): Sign.t =
             let start = globals_start tb + tb.nglobals in
             if funrec.pr = 1 then begin
               add_anys 1 tb;
-              VAppl(predicate_index tb,[|Variable (start)|])
+              make_type (predicate_index tb) [|Variable (start)|]
             end else if funrec.pr = 0 then begin
               add_anys 2 tb;
-              VAppl(function_index tb,
-                    [|Variable (start); Variable (start+1)|])
+              make_type (function_index tb)
+                    [|Variable (start); Variable (start+1)|]
             end else begin
               add_anys 2 tb;
-              VAppl(dummy_index tb,
-                    [|Variable (start); Variable (start+1)|])
+              make_type (dummy_index tb)
+                    [|Variable (start); Variable (start+1)|]
             end
           in
           unify tp rt tb;
           Sign.make_const tp
-      | VAppl(i,[|Variable j|])
+      | VAppl(i,[|Variable j|],_)
         when funrec.nargs > 1 && i = predicate_index tb
             && is_tv j tb && not (has_sub j tb) ->
               let tup = new_tuple funrec.nargs tb in
               add_sub j tup tb;
-              Sign.make_const (VAppl(i,[|tup|]))
-      | VAppl(i,[|Variable j;res|])
+              Sign.make_const (make_type i [|tup|])
+      | VAppl(i,[|Variable j;res|],_)
         when funrec.nargs > 1 && i = function_index tb
             && is_tv j tb && not (has_sub j tb) ->
               let tup = new_tuple funrec.nargs tb in
               add_sub j tup tb;
-              Sign.make_const (VAppl(i,[|tup;res|]))
+              Sign.make_const (make_type i [|tup;res|])
       | _ ->
           Sign.make_const rt
     in
@@ -874,9 +878,9 @@ let check_as_argument (i:int) (s:Sign.t) (tb:t): unit =
         if Context.has_preconditions i 0 (context tb) then
           raise Not_found;
         unify (boolean_type tb) res tb;
-        VAppl(predicate_index tb,[|tup|])
+        make_type (predicate_index tb) [|tup|]
       end else
-        VAppl(function_index tb, [|tup;res|]) in
+        make_type (function_index tb) [|tup;res|] in
     unify tb.rtype tp tb
   end
 
@@ -889,6 +893,7 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
     resize 0 ((Seq.last tb.funstack).nargs+1) 0 tb;
   (*resize 0 0 0 tb;*)
   Seq.push tb.nglobals tb.gcntseq;
+  let glob_start = globals_beyond tb in
   let transform =
     if Tvars.count_local tvs = 0 && Tvars.count_fgs tvs = 0  then begin
       add_global_tvs tvs tb;
@@ -908,9 +913,15 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
     end else begin
       check_as_argument i s tb; s
     end in
-  let term = if i < nvars then Variable i else VAppl (i,[||]) in
+  let term =
+    if i < nvars then
+      Variable i
+    else
+      let ags = Array.init
+          (globals_beyond tb - glob_start)
+          (fun i -> Variable (glob_start + i)) in
+      VAppl (i,[||],ags) in
   Seq.push {term = term; sign = s1; sign0 = s} tb.terms
-  (*Seq.push {term = Variable i; sign = s1; sign0 = s} tb.terms*)
 
 
 let expect_function (nargs:int) (pr:int) (tb:t): unit =
@@ -929,13 +940,13 @@ let expect_function (nargs:int) (pr:int) (tb:t): unit =
     tb.rtype <-
       if funrec.pr = 1 then begin
         unify tb.rtype (boolean_type tb) tb;
-        VAppl(predicate_index tb, [|tup|])
+        make_type (predicate_index tb) [|tup|]
       end else if funrec.pr = 0 then begin
         unify tb.rtype (Variable (start+funrec.nargs)) tb;
-        VAppl(function_index tb,[|tup;Variable (start+funrec.nargs)|])
+        make_type (function_index tb) [|tup;Variable (start+funrec.nargs)|]
       end else begin
         unify tb.rtype (Variable (start+funrec.nargs)) tb;
-        VAppl(dummy_index tb,[|tup;Variable (start+funrec.nargs)|])
+        make_type (dummy_index tb) [|tup;Variable (start+funrec.nargs)|]
       end
   end;
   Seq.push {pos = pos; nargs = nargs; pr = pr; level = tb.level} tb.funstack
@@ -968,9 +979,9 @@ let complete_function (tb:t): unit =
       Application(frec.term, args, pr)
     else begin
       match frec.term with
-        VAppl(i,args0) ->
+        VAppl(i,args0,ags) ->
           assert (Array.length args0 = 0);
-          VAppl (i,args)
+          VAppl (i,args,ags)
       | _ ->
           assert false
     end
@@ -1019,7 +1030,8 @@ let expect_as (tb:t): unit =
   tb.level <- tb.level + 1
 
 let complete_as (tb:t): unit =
-  resize 0 0 0 tb;
+  assert false
+  (*resize 0 0 0 tb;
   let nms = Context.local_argnames (context tb) in
   let n   = Array.length nms in
   let start = count_terms tb - 2 in
@@ -1035,7 +1047,7 @@ let complete_as (tb:t): unit =
   if tb.trace then
     printf "  \"%s\"  %s\n"
       (string_of_term t tb) (string_of_complete_type tp tb);
-  push_term t (Sign.make_const tp) tb
+  push_term t (Sign.make_const tp) tb*)
 
 
 let expect_inspect (tb:t): unit =
@@ -1047,7 +1059,8 @@ let expect_case (c:Context.t) (tb:t): unit =
 
 let complete_case (tb:t): unit =
   resize 0 2 0 tb;
-  let nms = Context.local_argnames (context tb) in
+  let c   = context tb in
+  let nms,tps = Context.local_argnames c, Sign.arguments (context_signature tb) in
   let n   = Array.length nms in
   pop_context tb;
   get_expected 1 tb;
@@ -1056,8 +1069,8 @@ let complete_case (tb:t): unit =
   let tp_pat = tb.rtype in
   let start = Seq.count tb.terms - 2 in
   assert (0 <= start);
-  let pat = Term.pattern n nms (Seq.elem start tb.terms).term
-  and res = Term.pattern n nms (Seq.elem (start+1) tb.terms).term in
+  let pat = Term.pattern n (nms,tps) (Seq.elem start tb.terms).term
+  and res = Term.pattern n (nms,tps) (Seq.elem (start+1) tb.terms).term in
   Seq.pop 2 tb.terms;
   push_term pat (Sign.make_const tp_pat) tb;
   push_term res (Sign.make_const tp_res) tb
@@ -1138,10 +1151,11 @@ let complete_lambda (n:int) (nms:int array) (npres:int) (is_pred:bool) (tb:t)
     let pos_last = pos_t0 + npres  in
     interval_fold (fun lst i -> term (pos_last-i) :: lst)
       [] 0 npres in
-  let lam = Lam (n,nms,pres,t0,is_pred) in
+  let tp  = Seq.pop_last tb.lamstack in
+  let lam = Lam (n,nms,pres,t0,is_pred,tp) in
   Seq.keep pos_t0 tb.terms;
   pop_context tb;
-  let s = Sign.make_const (Seq.pop_last tb.lamstack) in
+  let s = Sign.make_const tp in
   if tb.trace then
     printf "  lam  \"%s\"  %s\n" (string_of_term lam tb)
       (string_of_complete_signature s tb);
@@ -1159,6 +1173,9 @@ let complete_quantified (is_all:bool) (tb:t): unit =
   let names = Context.local_argnames (context tb) in
   let nargs = Array.length names in
   assert (0 < nargs);
+  let s = context_signature tb in
+  assert (Sign.arity s = nargs);
+  let tps = Sign.arguments s in
   pop_context tb;
   let trec = Seq.pop_last tb.terms in
   let term =
@@ -1166,9 +1183,9 @@ let complete_quantified (is_all:bool) (tb:t): unit =
       IntSet.cardinal (Term.bound_variables trec.term nargs) <> nargs
     then raise Not_found;
     if is_all then
-      Term.all_quantified nargs names  trec.term
+      Term.all_quantified  nargs (names,tps) empty_formals  trec.term
     else
-      Term.some_quantified nargs names  trec.term
+      Term.some_quantified nargs (names,tps) empty_formals  trec.term
   in
   if tb.trace then
     printf "  qexp \"%s\"  %s\n" (string_of_term term tb)
@@ -1205,7 +1222,8 @@ let expect_inductive (c:Context.t) (tb:t): unit =
 
 
 let complete_inductive (info:info) (nrules:int) (tb:t): unit =
-  let start = Seq.count tb.terms - nrules in
+  assert false
+  (*let start = Seq.count tb.terms - nrules in
   assert (0 <= start);
   let c = context tb in
   let rs = Array.init nrules (fun i -> (Seq.elem (start+i) tb.terms).term) in
@@ -1222,9 +1240,9 @@ let complete_inductive (info:info) (nrules:int) (tb:t): unit =
   if tb.trace then
     printf "  set  \"%s\"  %s\n" (string_of_term set tb)
       (string_of_complete_signature s tb);
-  push_term set s tb
+  push_term set s tb*)
 
-
+(*
 let variant (idx:int) (gcnt:int) (nb:int) (tb:t): int =
   let c = context tb in
   let nvars = nb + Context.count_variables c in
@@ -1250,12 +1268,13 @@ let variant (idx:int) (gcnt:int) (nb:int) (tb:t): int =
           ags;
         assert false in
       idx
-
+*)
 
 
 let specialize_head (tb:t): unit =
   assert (Seq.count tb.terms = 1);
-  let rec spec (t:term) (gpos:int) (nb:int): term * int =
+  assert false
+  (*let rec spec (t:term) (gpos:int) (nb:int): term * int =
     let spec_args (args:term array) (gpos:int) (nb:int): term array * int =
       let len = Array.length args in
       let args1  = Array.make len (Variable 0) in
@@ -1313,22 +1332,69 @@ let specialize_head (tb:t): unit =
   let t,gpos = spec trec.term 0 0 in
   assert (gpos = Seq.count tb.gcntseq);
   Seq.put 0 {trec with term = t} tb.terms
+*)
+
+let type_in_context (tp:type_term) (tb:t): type_term =
+  assert (Seq.count tb.terms = 1);
+  let tp = substituted_type tp tb in
+  try
+    let ntvs = Context.count_type_variables (context tb) in
+    let fg0 = fgs_start tb in
+    let tp = Term.down fg0 tp in
+    Term.up ntvs tp
+  with Term_capture ->
+    assert false (* substituted type should not contain type variables *)
+
+
+let term_in_context (tb:t): term =
+  assert (Seq.count tb.terms = 1);
+  let tpe tp = type_in_context tp tb in
+  let tpe_args args = Array.map tpe args in
+  let rec term t =
+    let targs args = Array.map term args
+    and tlst  lst  = List.map  term lst in
+    match t with
+      Variable _ -> t
+    | VAppl(i,args,ags) ->
+        VAppl(i,targs args, tpe_args ags)
+    | Application (f,args,pr) ->
+        let f = term f
+        and args = targs args in
+        Application (f,args,pr)
+    | Lam (n,nms,ps,t0,pr,tp) ->
+        let ps = tlst ps
+        and t0 = term t0
+        and tp = tpe tp in
+        Lam (n,nms,ps,t0,pr,tp)
+    | QExp (n,(nms,tps),fgs,t0,is_all) ->
+        assert (fgs = empty_formals);
+        let tps = tpe_args tps
+        and t0  = term t0 in
+        QExp (n,(nms,tps),fgs,t0,is_all)
+    | Indset (nme,tp,rs) ->
+        assert false
+    | Flow (ctrl,args) ->
+        Flow (ctrl, targs args)
+  in
+  term (head_term tb)
 
 
 
 let normalized_result (tb:t): term =
   assert (Seq.count tb.terms = 1);
-  let res = head_term tb in
+  let res = term_in_context tb in
   let c = context tb in
   let ft = Context.feature_table c
   and nb = Context.count_variables c in
   let res = Feature_table.normalize_lambdas res nb ft in
+  let res = Context.specialized res c in
   Context.prenex_term res c
 
 exception Illegal_term
 
 let check_term (t:term) (tb:t): unit =
-  let rec check (t:term) (tb:t): unit =
+  assert false
+  (*let rec check (t:term) (tb:t): unit =
     let c0 = context tb in
     let lambda n nms pres t is_pred tb =
       assert (0 < n);
@@ -1486,7 +1552,7 @@ let check_term (t:term) (tb:t): unit =
   let depth = Context.depth (context tb) in
   check t tb;
   assert (depth = Context.depth (context tb))
-
+*)
 
 
 let pool = ref []
@@ -1528,11 +1594,12 @@ let occupy_typed (tp:type_term) (c:Context.t): t =
 
 
 let occupy_term (t:term) (c:Context.t): t =
-  let tb = occupy c in
+  assert false
+  (*let tb = occupy c in
   tb.norm <- true;
   expect_new_untyped tb;
   check_term t tb;
-  tb
+  tb*)
 
 
 let release (tb:t): unit =
@@ -1604,5 +1671,5 @@ let is_valid (t:term) (c:Context.t): bool =
     check_term t tb;
     true
   with Not_found ->
-    printf "invalid term %s\n" (Context.string_of_term t true 0 c);
+    printf "invalid term %s\n" (Context.string_of_term t c);
     false

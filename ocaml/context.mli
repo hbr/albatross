@@ -41,6 +41,7 @@ val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t ->
 val push_untyped_with_gap: int array -> bool -> bool -> bool -> int -> t -> t
 val push_untyped_gap: int array -> int -> t -> t
 val push_untyped:     int array -> t -> t
+val push_typed:       formals -> formals -> t -> t
 val pop:   t -> t
 
 val is_global:   t -> bool
@@ -77,20 +78,26 @@ val count_last_formal_generics:  t -> int
     (** The number of formal generics in this context without the preceeding
         contexts *)
 
+val count_last_type_variables: t -> int
+    (** The number of type variables in this context without the preceeding
+        contexts *)
+
 val count_variables:  t -> int
     (** The number of variables in this context and all preceeding
         contexts *)
 
+val ntvs: t -> int
 
 val implication_index: t -> int
 
-val make_lambda:      int -> int array -> term list -> term -> bool -> int -> t -> term
+val make_lambda:
+    int -> int array -> term list -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> int -> bool -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 
-val quantified:      bool -> int -> int array -> term -> t -> term
-val all_quantified:  int -> int array -> term -> t -> term
-val some_quantified: int -> int array -> term -> t -> term
+val quantified:      bool -> int -> formals -> formals -> term -> t -> term
+val all_quantified:  int -> formals -> formals -> term -> t -> term
+val some_quantified: int -> formals -> formals -> term -> t -> term
 val prenex_term:     term -> t -> term
 
 val variable_name: int -> t -> int
@@ -106,7 +113,12 @@ val unique_names: int array -> t -> int array
 
 val fgnames: t   -> int array
 
+val fgnames:    t -> int array
+val fgconcepts: t -> type_term array
 val local_argnames: t -> int array
+val local_types:    t -> term array
+val local_formals:  t -> formals
+val local_fgs: t -> formals
 
 val tvars: t -> Tvars.t
 
@@ -118,11 +130,17 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
+val type_of_term: term -> t -> type_term
+val predicate_of_type: type_term -> t -> type_term
+val predicate_of_term: term -> t -> type_term
+
 val update_types: type_term array -> t -> unit
 val update_type_variables: TVars_sub.t -> t -> unit
 
-val string_of_term:       term -> bool -> int -> t -> string
-val sign2string:    Sign.t -> t -> string
+val string_of_term0:      term -> bool -> int -> t -> string
+val string_of_term:       term -> t -> string
+val string_of_term_array: string -> term array -> t -> string
+val string_of_signature:  Sign.t -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
 val signature:  t -> Sign.t
@@ -143,7 +161,7 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val fully_expanded: term -> int -> t -> term
 
 val split_equality: term -> int -> t -> int * int * term * term
-val definition: int -> int -> t -> int * int array * term
+val definition: int -> int -> agens -> t -> int * int array * term
 val arity:      int -> int -> t -> int
 val is_inductive_set: int -> t -> bool
 val inductive_set: term -> t -> term
@@ -169,3 +187,5 @@ val string_of_type: type_term -> t -> string
 val downgrade_term: term -> int -> t -> term
 
 val arity_of_downgraded_type: type_term -> t -> int
+val specialized: term -> t -> term
+val is_valid:    term -> t -> bool

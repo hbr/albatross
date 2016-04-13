@@ -30,11 +30,11 @@ immutable class PREDICATE[G]
 inherit         ghost ANY end
 
 
-all(a,b:G)
+all(a,b:G, p:G?)
         -- leibniz rule
     require  a = b
     note     axiom
-    ensure   all(p:G?) p(a) ==> p(b) end
+    ensure   p(a) ==> p(b) end
 
 
 all(x:G, p,q:G?)

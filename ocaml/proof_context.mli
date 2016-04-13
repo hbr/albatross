@@ -45,6 +45,7 @@ val make:      int -> t
 
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
+val push_typed:   formals -> formals -> t -> t
 val pop:          t -> t
 
 val depth:     t -> int
@@ -83,7 +84,6 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
         Return the backward rules whose target matches the goal exactly. *)
 
 val split_implication:  term -> t -> term * term
-val split_all_quantified: term -> t -> int * int array * term
 val implication_chain:  term list -> term -> t -> term
 val beta_reduce: int -> term -> term array -> int -> t -> term
 val count:          t -> int
@@ -103,7 +103,7 @@ val disjunction:    term -> term -> t -> term
 
 val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
-val strengthened_induction_goal: int -> term -> t -> term
+(*val strengthened_induction_goal: int -> term -> t -> term*)
 
 val check_deferred: t -> unit
 val owner:          t -> int
@@ -115,7 +115,7 @@ val inherit_parent: int -> int -> type_term array -> info -> t -> unit
 val add_potential_equalities: int -> t -> unit
 
 val add_induction_law0:  int -> t -> unit
-val add_induction_law:   int ->  int -> term -> t -> int
+val add_induction_law:   type_term ->  int -> term -> t -> int
 val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit

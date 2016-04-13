@@ -134,6 +134,8 @@ let count_last_formal_generics (c:t): int =
    *)
   c.entry.nfgs_delta
 
+let count_last_type_variables (c:t): int =
+  c.entry.ntvs_delta
 
 let count_last_arguments (c:t): int = c.entry.nargs_delta
 
@@ -180,8 +182,24 @@ let ntvs (c:t): int =
 let entry_local_argnames (e:entry): int array =
   Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
 
+let entry_local_types (e:entry): term array =
+  Array.init e.nargs_delta (fun i -> snd e.fargs.(i))
+
 
 let local_argnames (c:t): int array = entry_local_argnames c.entry
+
+let local_types (c:t): term array = entry_local_types c.entry
+
+let local_formals (c:t): formals =
+  entry_local_argnames c.entry, entry_local_types c.entry
+
+let local_fgs (c:t): formals =
+  let tvs = TVars_sub.tvars c.entry.tvs_sub in
+  let nfgs = c.entry.nfgs_delta in
+  let fgnms = Array.sub (Tvars.fgnames tvs) 0 nfgs
+  and fgcon = Array.sub (Tvars.fgconcepts tvs) 0 nfgs in
+  fgnms,fgcon
+
 
 
 let entry_varnames (e:entry): int array =
@@ -194,26 +212,52 @@ let varnames (c:t): int array = entry_varnames c.entry
 
 let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
 
+let entry_fgconcepts (e:entry): type_term array = TVars_sub.fgconcepts e.tvs_sub
+
 let fgnames (c:t): int array = entry_fgnames c.entry
+
+let fgconcepts (c:t): type_term array = entry_fgconcepts c.entry
 
 let tvars (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
-let sign2string (s:Sign.t) (c:t): string =
+let string_of_signature (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
     s
     (tvars c)
     (class_table c)
 
 
-let string_of_term (t:term) (norm:bool) (nanon:int) (c:t): string =
+let string_of_term0 (t:term) (norm:bool) (nanon:int) (c:t): string =
   Feature_table.term_to_string t norm nanon (varnames c) c.ft
+
+let string_of_term (t:term) (c:t): string =
+  string_of_term0 t true 0 c
+
+
+let string_of_term_anon (t:term) (nb:int) (c:t): string =
+  string_of_term0 t true nb c
+
+
+let string_of_term_array (sep:string) (arr: term array) (c:t): string =
+  String.concat sep
+    (List.map (fun t -> string_of_term t c) (Array.to_list arr))
+
+
+let string_of_type_term (tp:type_term) (c:t): string =
+  Class_table.string_of_type tp (tvars c) (class_table c)
+
+
+let string_of_type_array (sep:string) (tps:types) (c:t): string =
+  String.concat sep
+    (List.map (fun tp -> string_of_type_term tp c) (Array.to_list tps))
 
 
 let make_lambda
     (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int) (c:t)
     : term =
   let nbenv = count_variables c in
-  Feature_table.make_lambda n nms ps t pred (nb+nbenv) c.ft
+  assert false
+  (*Feature_table.make_lambda n nms ps t pred (nb+nbenv) c.ft*)
 
 
 let make_application
@@ -227,18 +271,19 @@ let beta_reduce (n:int) (tlam:term) (args:term array) (nb:int )(c:t): term =
   Feature_table.beta_reduce n tlam args (nb+count_variables c) c.ft
 
 
-let quantified (is_all:bool) (nargs:int) (nms:int array) (t:term) (c:t): term =
-  Term.quantified is_all nargs nms t
+let quantified (is_all:bool) (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t)
+    : term =
+  Term.quantified is_all nargs tps fgs t
 
-let all_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
-  quantified true nargs names t c
+let all_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term =
+  quantified true nargs tps fgs t c
 
-let some_quantified (nargs:int) (names:int array) (t:term) (c:t): term =
-  quantified false nargs names t c
+let some_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term =
+  quantified false nargs tps fgs t c
 
 
 let prenex_term (t:term) (c:t): term =
-  Feature_table.prenex t (count_variables c) c.ft
+  Term.prenex t (count_variables c) (ntvs c) Feature_table.implication_index
 
 
 let entry_signature (e:entry) (c:t): Sign.t =
@@ -256,7 +301,7 @@ let signature (c:t): Sign.t =
 
 let signature_string (c:t): string =
   (** Print the signature of the context [c].  *)
-  sign2string (signature c) c
+  string_of_signature (signature c) c
 
 
 let variable_index (nme:int) (c:t): int =
@@ -419,7 +464,7 @@ let push_with_gap
     Array.append
       fargs1
       (Array.map
-         (fun (n,t) -> n, Term.up ntvs1 (Term.upbound nfgs1 ntvs0 t))
+         (fun (n,t) -> n, Term.up ntvs1 (Term.up_from nfgs1 ntvs0 t))
          entry.fargs)
   and nargs_delta = Array.length fargs1 -
     if rvar then 1 else 0 (*variables*)
@@ -466,10 +511,40 @@ let push_untyped_with_gap
 let push_untyped_gap (names:int array) (ntvs_gap:int) (c:t): t =
   push_untyped_with_gap names false false false ntvs_gap c
 
+
 let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None false false false c
 
+
+let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
+  let nfgs_new  = Array.length fgcon
+  and nargs_new = Array.length tps in
+  assert (nfgs_new  = Array.length fgnms);
+  assert (nargs_new = Array.length nms);
+  let tvs_sub = TVars_sub.augment 0 fgnms fgcon c.entry.tvs_sub in
+  let ntvs0   = TVars_sub.count_local c.entry.tvs_sub in
+  let nargs   = nargs_new + Array.length c.entry.fargs in
+  let fargs = Array.init nargs
+      (fun i ->
+        if i < nargs_new then nms.(i), tps.(i)
+        else
+          let i = i - nargs_new in
+          let nme,con = c.entry.fargs.(i) in
+          let con = Term.up_from nfgs_new ntvs0 con in
+          nme,con) in
+  {c with
+   entry =
+   {tvs_sub = tvs_sub;
+    fargs   = fargs;
+    ntvs_delta  = 0;
+    nfgs_delta  = nfgs_new;
+    nargs_delta = nargs_new;
+    rvar    = false;
+    result  = Result_type.empty;
+    info    = UNKNOWN};
+   prev = Some c;
+   depth = 1 + c.depth}
 
 
 let pop (c:t): t =
@@ -484,8 +559,54 @@ let pop (c:t): t =
 
 let type_variables (c:t): TVars_sub.t = c.entry.tvs_sub
 
+
 let boolean (c:t): term =
   Class_table.boolean_type (ntvs c)
+
+
+let rec type_of_term (t:term) (c:t): type_term =
+  let nvars = count_variables c in
+  match t with
+    Variable i when i < nvars -> variable_type i c
+  | Variable i -> assert false (* Global constants are not variables *)
+  | VAppl(i,args,ags) ->
+      assert (nvars <= i);
+      Feature_table.result_type (i-nvars) ags (ntvs c) c.ft
+  | Application(f,args,pr) ->
+      if pr then
+        boolean c
+      else begin
+        let f_tp = type_of_term f c in
+        let cls,ags = Class_table.split_type_term f_tp in
+        assert (Array.length ags = 2);
+        assert (cls + ntvs c = Class_table.function_index);
+        ags.(1)
+      end
+  | Lam(_,_,_,_,_,tp) -> tp
+  | QExp _            -> boolean c
+  | Indset (_,tp,_)   -> tp
+  | Flow(ctrl,args) ->
+      match ctrl with
+        Ifexp ->
+          assert (2 <= Array.length args);
+          type_of_term args.(1) c
+      | Inspect ->
+          assert (3 <= Array.length args);
+          let _,tps,res = Term.pattern_split args.(2) in
+          let c1 = push_typed tps empty_formals c in
+          type_of_term res c1
+      | Asexp ->
+          boolean c
+
+
+let predicate_of_type (tp:type_term) (c:t): type_term =
+  let pred_idx = (ntvs c) + Class_table.predicate_index in
+  VAppl(pred_idx,[|tp|],[||])
+
+
+let predicate_of_term (t:term) (c:t): type_term =
+  let tp = type_of_term t c in
+  predicate_of_type tp c
 
 
 let update_types (subs:type_term array) (c:t): unit =
@@ -493,7 +614,7 @@ let update_types (subs:type_term array) (c:t): unit =
   assert (len = TVars_sub.count_local c.entry.tvs_sub);
   Array.iteri
     (fun i (nme,tp) ->
-      let tp = Term.sub tp subs len in
+      let tp = Term.subst tp len subs in
       c.entry.fargs.(i) <- nme,tp)
     c.entry.fargs
 
@@ -507,7 +628,8 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
     let args = TVars_sub.args c.entry.tvs_sub in
     let ntvs = Array.length args                in
     Array.iteri
-      (fun i (nme,t) -> c.entry.fargs.(i) <- (nme, Term.sub t args ntvs))
+      (fun i (nme,t) ->
+        c.entry.fargs.(i) <- (nme, Term.subst t ntvs args))
       c.entry.fargs
   with Term_capture ->
     not_yet_implemented c.entry.info "Type inference of formal generics"
@@ -594,7 +716,7 @@ let named_signature_string (c:t): string =
 let string_of_assertion (t:term) (c: t): string =
   "all"
   ^ (named_signature_string c) ^ " "
-  ^ (string_of_term t true 0 c)
+  ^ (string_of_term t c)
 
 
 let put_formal_generic
@@ -663,12 +785,15 @@ let find_feature
 
 
 
-let definition (idx:int) (nb:int) (c:t): int * int array * term =
+let definition (idx:int) (nb:int) (ags:agens) (c:t)
+    : int * int array * term =
   let nbenv = count_variables c in
   if idx < nb + nbenv then
     raise Not_found
   else
-    Feature_table.definition idx (nb + nbenv) (feature_table c)
+    Feature_table.definition idx (nb + nbenv) ags (tvars c) (feature_table c)
+
+
 
 let arity (idx:int) (nb:int) (c:t): int =
   let nbenv = count_variables c in
@@ -677,57 +802,14 @@ let arity (idx:int) (nb:int) (c:t): int =
   else
     Feature_table.arity (idx-nb-nbenv) c.ft
 
+
+
 let fully_expanded (t:term) (nb:int) (c:t): term =
-  let rec expand t nb =
-    let expargs args = Array.map (fun arg -> expand arg nb) args in
-    let apply f args pr =
-      match f with
-        Lam(n,_,_,t0,_) ->
-          beta_reduce n t0 args nb c
-      | _ ->
-          Application (f,args,pr)
-    in
-    match t with
-      Variable i ->
-        begin try
-          let n,nms,t0 = definition i nb c in
-          if n = 0 then
-            t0
-          else
-            make_lambda n nms [] t0 false nb c
-        with Not_found ->
-          t
-        end
-    | VAppl (i, args) ->
-        let args = expargs args in
-        begin try
-          let n,nms,t0 = definition i nb c in
-          let t0 = expand t0 (n+nb) in
-          if n = 0 then
-            t0
-          else if Array.length args = 0 then
-            make_lambda n nms [] t0 false nb c
-          else begin
-            assert (n = Array.length args);
-            Term.apply t0 args
-          end
-        with Not_found ->
-          VAppl (i, args)
-       end
-    | Application (f,args,pr) ->
-        let f    = expand f nb
-        and args = expargs args in
-        apply f args pr
-    | Lam (n,nms,pres,t,pr) ->
-        Lam (n, nms, pres, expand t (1+nb), pr)
-    | QExp (n,nms,t,is_all) ->
-        QExp (n, nms, expand t (n+nb), is_all)
-    | Flow (ctrl,args) ->
-        t
-    | Indset _ ->
-        t
-  in
-  expand t nb
+  let nvars = count_variables c
+  and tvs   = tvars c in
+  Feature_table.fully_expanded t (nb+nvars) tvs c.ft
+
+
 
 let is_inductive_set (i:int) (c:t): bool =
   let nb = count_variables c in
@@ -735,19 +817,21 @@ let is_inductive_set (i:int) (c:t): bool =
   Feature_table.is_inductive_set i nb c.ft
 
 
+
 let inductive_set (t:term) (c:t): term =
   (* The inductive set represented by the term [t]. *)
-  let nb = count_variables c in
-  let indset i args =
+  let nb = count_variables c
+  and tvs  = tvars c in
+  let indset i args ags =
     if i < nb then
       raise Not_found
     else
-      Feature_table.inductive_set i args nb c.ft in
+      Feature_table.inductive_set i args ags nb tvs c.ft in
   match t with
     Indset _ ->
       t
-  | VAppl (i,args) ->
-      indset i args
+  | VAppl (i,args,ags) ->
+      indset i args ags
   | _ ->
       raise Not_found
 
@@ -785,11 +869,12 @@ let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): te
      the lambda expression is within an environment with [nb] variables more than the
      context [c].
    *)
-  let nbenv = count_variables c in
+  assert false
+  (*let nbenv = count_variables c in
   match pres with
     [] ->
       let true_const = Feature_table.true_constant (1+nb+nbenv) in
-      Lam(n,nms,[],true_const,true)
+      assert false (*Lam(n,nms,[],true_const,true)*)
   | p::pres ->
       let and_id  = 1 + nb + nbenv + Feature_table.and_index in
       let inner =
@@ -797,7 +882,7 @@ let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): te
           (fun t p -> Term.binary and_id t p)
           p
           pres in
-      Lam(n,nms,[],inner,true)
+      Lam(n,nms,[],inner,true)*)
 
 
 
@@ -838,7 +923,7 @@ let is_case_match_expression (t:term) (c:t): bool =
     | Variable i when i < nvars  -> false
     | Variable i ->
         Feature_table.is_constructor (i-nvars) c.ft
-    | VAppl(i,args) ->
+    | VAppl(i,args,_) ->
         let res = Feature_table.is_constructor (i-nvars) c.ft in
         is_match_args res args
     | _ ->
@@ -847,7 +932,143 @@ let is_case_match_expression (t:term) (c:t): bool =
   is_match t
 
 
+exception Type_error of string
 
+let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
+    let nvars = count_variables c
+    and ntvs  = ntvs c in
+    let getargs args c = Array.map (fun t -> type_of_term_full t trace c) args
+    and split_type_term tp pr =
+      let cls,ags = Class_table.split_type_term tp in
+      assert (ntvs <= cls);
+      if pr then begin
+        if cls <> ntvs + Class_table.predicate_index then
+          raise (Type_error
+                   ("The type " ^ string_of_type_term tp c ^ " is not a predicate"));
+        assert (Array.length ags = 1)
+      end else begin
+        if cls <> ntvs + Class_table.function_index then
+          raise (Type_error
+                   ("The type " ^ string_of_type_term tp c ^ " is not a function"));
+        assert (Array.length ags = 2)
+      end;
+      ags
+    in
+    let feature_signature (i:int) (ags:type_term array): Sign.t =
+      assert (nvars <= i);
+      let tvs,s = Feature_table.signature (i-nvars) c.ft in
+      if Tvars.count_fgs tvs <> Array.length ags then
+        raise (Type_error
+                 ("The feature \"" ^
+                  Feature_table.string_of_signature (i-nvars) c.ft ^
+                  "\" does not have " ^ string_of_int (Array.length ags) ^
+                  " formal generic(s)"));
+      let trans tp = Term.subst tp ntvs ags in
+      Sign.map trans s
+    in
+    let trace_tp tp =
+      if trace then
+        printf "  %s : %s\n" (string_of_term t c) (string_of_type_term tp c);
+      tp
+    in
+    let check_args reqargs actargs =
+      if reqargs <> actargs then
+          raise (Type_error
+                   (string_of_term t c ^
+                    " required argument types: " ^
+                    string_of_type_array "," reqargs c ^
+                    " , actual argument types: " ^
+                    string_of_type_array "," actargs c))
+    in
+    match t with
+      Variable i ->
+        assert (i < nvars);
+        trace_tp (variable_type i c)
+    | VAppl (i,args,ags) ->
+        assert (nvars <= i);
+        let argtps = getargs args c
+        and s      = feature_signature i ags in
+        assert (Sign.has_result s);
+        check_args (Sign.arguments s) argtps;
+        trace_tp (Sign.result s)
+    | Application (f,args,pr) ->
+        assert (Array.length args = 1);
+        let ftp    = type_of_term_full f trace c
+        and argtps = getargs args c in
+        let ags = split_type_term ftp pr in
+        check_args [|ags.(0)|] argtps;
+        if pr then
+          trace_tp (boolean c)
+        else
+          trace_tp (ags.(1))
+    | Lam (n,nms,ps,t0,pr,tp) ->
+        let ags = split_type_term tp pr in
+        let c1 = push_typed ([|ST.symbol "t"|],[|ags.(0)|]) empty_formals c in
+        let rtp = type_of_term_full t0 trace c1 in
+        if pr then
+          assert (rtp = boolean c)
+        else
+          assert (rtp = ags.(1));
+        trace_tp tp
+    | QExp (n,tps,fgs,t0,is_all) ->
+        assert (is_global c || fgs = empty_formals);
+        let c1 = push_typed tps fgs c in
+        let rtp = type_of_term_full t0 trace c1 in
+        assert (rtp = boolean c1);
+        trace_tp (boolean c)
+    | Indset (nme,tp,rs) ->
+        assert false
+    | Flow (ctrl,args) ->
+        let len = Array.length args in
+        match ctrl with
+          Ifexp ->
+            assert false
+        | Asexp ->
+            assert false
+        | Inspect ->
+            assert (3 <= len);
+            assert (len mod 2 = 1);
+            let ncases = len / 2 in
+            assert (0 < ncases);
+            let insp_tp = type_of_term_full args.(0) trace c in
+            let rec check_cases_from i tp =
+              if i = ncases then
+                tp
+              else
+                let n,(nms,tps),pat,res =
+                  Term.case_split args.(2*i+1) args.(2*i+2) in
+                let c1 = push_typed (nms,tps) empty_formals c in
+                let insp_tp_i =  type_of_term_full pat trace c1
+                and res_tp_i  =  type_of_term_full res trace c1 in
+                if insp_tp <> insp_tp_i then
+                  raise (Type_error
+                           ("Pattern of case " ^ string_of_term pat c1 ^
+                            " does not have type " ^
+                            string_of_type_term insp_tp c1));
+                if tp <> empty_term && tp <> res_tp_i then
+                  raise (Type_error
+                           ("Term " ^ string_of_term res c1 ^
+                            " does not have type " ^
+                           string_of_type_term tp c1));
+                res_tp_i
+            in
+            trace_tp (check_cases_from 0 empty_term)
+
+
+let check_well_typed (t:term) (c:t): unit =
+  let check trace = ignore(type_of_term_full t trace c) in
+  try
+    check false
+  with Type_error str ->
+    printf "check_well_typed \"%s\" \"%s\"\n" (string_of_term t c) (Term.to_string t);
+    printf "  type error: %s\n" str;
+    check true
+
+
+let is_valid (t:term) (c:t): bool =
+  (*printf "is_valid \"%s\" \"%s\"\n" (string_of_term t c) (Term.to_string t);*)
+  try check_well_typed t c; true
+  with Type_error _ -> false
 
 
 (* Calculation of preconditions:
@@ -895,7 +1116,7 @@ let is_case_match_expression (t:term) (c:t): bool =
 
 
 let case_preconditions
-    (insp:term) (n:int) (nms:int array) (pat:term)
+    (insp:term) (n:int) (nms:int array) (tps:types) (pat:term)
     (pres:term list) (lst:term list) (nb:int) (c:t)
     : term list =
   (*  Generate all(x,y,...) insp = pat ==> pre
@@ -905,8 +1126,8 @@ let case_preconditions
   and eq_id  =
     let i =
       match pat with
-        Variable i -> i
-      | VAppl(i,_) -> i
+        Variable i   -> i
+      | VAppl(i,_,_) -> i
       | _ -> assert false (* cannot happen in pattern *)
     in
     let ndelta = n + nb + count_variables c in
@@ -919,7 +1140,7 @@ let case_preconditions
   List.fold_left
     (fun lst pre ->
       let t = Term.binary imp_id (Term.binary eq_id insp pat) pre in
-      let t = Term.all_quantified n nms t in
+      let t = Term.all_quantified n (nms,tps) empty_formals t in
       t :: lst)
     lst
     pres
@@ -932,8 +1153,9 @@ let term_preconditions (t:term)  (c:t): term list =
   and or_id0  = or_index c
   and not_id0 = not_index c
   and dom_id0 = domain_index c
+  and ntvs = ntvs c
   in
-  let rec pres (t:term) (nb:int) (lst:term list): term list * term option =
+  let rec pres (t:term) (nb:int) (lst:term list): term list =
     let imp_id  = nb + imp_id0
     and and_id  = nb + and_id0
     and or_id   = nb + or_id0
@@ -946,80 +1168,76 @@ let term_preconditions (t:term)  (c:t): term list =
     in
     let pres_args args lst =
       Array.fold_left
-        (fun lst t -> let lst,_ = pres t nb lst in lst)
+        (fun lst t -> pres t nb lst)
         lst
         args
-    and pres_lam n nms t lst =
-      let lst0,_ = pres t (n+nb) [] in
+    and pres_lam n tps fgs t lst =
+      let lst0 = pres t (n+nb) [] in
       let nbb = nb + count_variables c in
-      let prenex t = Feature_table.prenex t nbb c.ft in
+      let prenex t = (*Feature_table.prenex t nbb c.ft*) assert false in
       List.fold_right
-        (fun t lst -> (prenex (QExp(n,nms,t,true)))::lst)
+        (fun t lst -> (prenex (QExp(n,tps,fgs,t,true)))::lst)
         lst0
         lst
     in
-    let domain_t =  Some (VAppl (dom_id,[|t|])) in
     match t with
     | Variable i ->
-       lst, domain_t
-    | VAppl (i, args) when i = imp_id || i = and_id ->
+       lst
+    | VAppl (i,args,_) when i = imp_id || i = and_id ->
         assert (Array.length args = 2);
-        let lst1,_ = pres args.(0) nb lst
-        and lst2,_ = pres args.(1) nb []  in
+        let lst1 = pres args.(0) nb lst
+        and lst2 = pres args.(1) nb []  in
         List.fold_right
           (fun t lst -> (Term.binary imp_id args.(0) t)::lst)
           lst2
-          lst1,
-        domain_t
-    | VAppl (i, args) when i = or_id ->
+          lst1
+    | VAppl (i, args,_) when i = or_id ->
         assert (Array.length args = 2);
-        let lst1,_  = pres args.(0) nb lst
-        and lst2,_  = pres args.(1) nb []
+        let lst1  = pres args.(0) nb lst
+        and lst2  = pres args.(1) nb []
         and not_t = Term.unary not_id args.(0) in
         List.fold_right
           (fun t lst -> (Term.binary imp_id not_t t)::lst)
           lst2
-          lst1,
-        domain_t
-    | VAppl (i,args) ->
+          lst1
+    | VAppl (i,args,ags) ->
         if Array.length args = 0 && arity i nb c > 0 then
-          lst, domain_t
+          lst
         else
           let n,nms,lst1 = preconditions i nb c in
           assert (n = Array.length args);
           let lst = pres_args args lst in
           List.fold_left
-            (fun lst t -> (Term.apply t args)::lst)
+            (fun lst t -> (Term.apply0 t args ags)::lst)
             lst
-            lst1,
-          domain_t
+            lst1
     | Application (f,args,pr) when pr ->
-        let lst,dom = pres f nb lst in
-        pres_args args lst,
-        None
+        let lst = pres f nb lst in
+        pres_args args lst
     | Application (f,args,pr) ->
         assert (Array.length args = 1);
-        let lst,dom = pres f nb lst in
+        assert false
+        (*let lst,dom = pres f nb lst in
         let lst = pres_args args lst in
         begin match dom with
           Some dom ->
             Application(dom,args,true)::lst
         | None ->
             lst
-        end,
-        domain_t
-    | Lam (n,nms,pres0,t0,pr) ->
+        end*)
+    | Lam (n,nms,pres0,t0,pr,tp) ->
         let pres0     = remove_tup_lst pres0 n
         and t0        = remove_tup t0 n
         and imp_id    = n + imp_id in
-        let lst,_ = (* collect preconditions of preconditions *)
+        let lst = (* collect preconditions of preconditions *)
           List.fold_left
             (fun (lst,plst) p ->
-              let pres_p,_ = pres p (n+nb) [] in
+              let pres_p = pres p (n+nb) [] in
               let lst = List.fold_left
                   (fun lst pre_p ->
                     let chn = Term.make_implication_chain plst pre_p imp_id in
-                    QExp(n,nms,chn,true)::lst)
+                    assert false
+                    (*QExp(n,nms,chn,true)::lst*))
                   lst
                   pres_p
               in
@@ -1027,25 +1245,24 @@ let term_preconditions (t:term)  (c:t): term list =
             (lst,[])
             pres0
         in
-        let pres_t0,_ = pres t0 (n+nb) [] in
-        let lst = (* preconditions have to imply the preconditions of the inner
+        let pres_t0 = pres t0 (n+nb) [] in
+        let lst,_ = (* preconditions have to imply the preconditions of the inner
                      expression *)
           let pres0_rev = List.rev pres0 in
           List.fold_right
             (fun tgt lst ->
               let chn = Term.make_implication_chain pres0_rev tgt imp_id in
-              QExp(n,nms,chn,true)::lst)
+              assert false (* QExp(n,nms,chn,true)::lst*))
             pres_t0 (* is reversed *)
             lst in
-        lst,None
-    | QExp (n,nms,t0,is_all) ->
-        pres_lam n nms t0 lst,
-        None
+        lst
+    | QExp (n,tps,fgs,t0,is_all) ->
+        pres_lam n tps fgs t0 lst
     | Indset (n,nms,rs) ->
         let lst =
           Array.fold_left
             (fun lst r ->
-              let lst_r,_ = pres r (n+nb) [] in (* reversed *)
+              let lst_r = pres r (n+nb) [] in (* reversed *)
               let lst_r = List.rev_map
                   (fun p ->
                     try Term.down n p
@@ -1054,7 +1271,7 @@ let term_preconditions (t:term)  (c:t): term list =
               List.rev_append lst_r lst)
             lst
             rs in
-        lst, None
+        lst
     | Flow (ctrl,args) ->
         let len = Array.length args in
         begin
@@ -1062,8 +1279,8 @@ let term_preconditions (t:term)  (c:t): term list =
             Ifexp ->
               assert (2 <= len);
               assert (len <= 3);
-              let lst1,_ = pres args.(0) nb lst
-              and lst2,_ = pres args.(1) nb []
+              let lst1 = pres args.(0) nb lst
+              and lst2 = pres args.(1) nb []
               in
               let reslst =
                 List.fold_right
@@ -1076,25 +1293,26 @@ let term_preconditions (t:term)  (c:t): term list =
                   args.(0) :: reslst
                 else
                   let neg = Term.unary not_id args.(0)
-                  and lst3,_ = pres args.(2) nb [] in
+                  and lst3 = pres args.(2) nb [] in
                   List.fold_right
                     (fun t lst -> (Term.binary imp_id neg t) :: lst)
                     lst3
                     reslst
               in
-              reslst, domain_t
+              reslst
           | Inspect ->
               assert (3 <= len);
               assert (len mod 2 = 1);
               let ncases = len / 2
               and nvars = count_variables c in
               let unmatched =
-                Feature_table.unmatched_inspect_cases args (nb+nvars) c.ft
+                Feature_table.unmatched_inspect_cases args (nb+nvars) ntvs c.ft
               in
               let lst = List.fold_left
-                  (fun lst (n,mtch) ->
-                    let nms = standard_argnames n in
-                    let q   = Term.pattern n nms mtch in
+                  (fun lst (n,tps,pat) ->
+                    let nms = standard_argnames n
+                    and tps = Array.of_list tps in
+                    let q = Term.pattern n (nms,tps) pat in
                     let t = Flow(Asexp,[|args.(0);q|]) in
                     let t = Term.unary not_id t in
                     t :: lst)
@@ -1104,23 +1322,21 @@ let term_preconditions (t:term)  (c:t): term list =
                 if i = ncases then
                   lst
                 else
-                  let n,nms,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-                  let lst_inner,_ = pres res (nb+n) [] in
+                  let n,(nms,tps),pat,res =
+                    Term.case_split args.(2*i+1) args.(2*i+2) in
+                  let lst_inner   = pres res (nb+n) [] in
                   let lst_inner   = List.rev lst_inner in
                   let lst =
-                    case_preconditions args.(0) n nms pat lst_inner lst nb c in
+                      case_preconditions args.(0) n nms tps pat lst_inner lst nb c in
                   cases_from (i+1) lst
               in
-              let lst = cases_from 0 lst in
-              lst, domain_t
+              cases_from 0 lst
           | Asexp ->
               assert (len = 2);
               pres args.(0) nb lst
         end
   in
-  let ps,_ = pres t 0 [] in
-  List.rev ps
-
+  List.rev (pres t 0 [])
 
 
 let existence_condition (posts:term list) (c:t): term =
@@ -1133,7 +1349,8 @@ let existence_condition (posts:term list) (c:t): term =
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  let nargs   = count_last_arguments c
+  assert false
+  (*let nargs   = count_last_arguments c
   and and_id  = 1 + and_index c
   in
   let args =
@@ -1148,7 +1365,7 @@ let existence_condition (posts:term list) (c:t): term =
       (fun inner p -> Term.binary and_id inner (replace p))
       (replace (List.hd posts))
       (List.tl posts) in
-  some_quantified 1 [|ST.symbol "x"|] term_inner c
+  some_quantified 1 [|ST.symbol "x"|] term_inner c*)
 
 
 
@@ -1162,7 +1379,8 @@ let uniqueness_condition (posts:term list) (c:t): term =
      substituted by [x]/[y].  *)
   assert (has_result_variable c);
   assert (posts <> []);
-  let nargs   = count_last_arguments c
+  assert false
+  (*let nargs   = count_last_arguments c
   and imp_id  = 2 + implication_index c
   and rt      = result_type c
   and tvs     = tvars c
@@ -1188,7 +1406,7 @@ let uniqueness_condition (posts:term list) (c:t): term =
       posts
       (Term.binary eq_id (Variable 0) (Variable 1)) in
   all_quantified 2 [|ST.symbol "x";ST.symbol "y"|] term_inner c
-
+*)
 
 
 
@@ -1203,13 +1421,14 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  let nargs   = count_last_arguments c in
+  assert false
+  (*let nargs   = count_last_arguments c in
   let fargs = Array.init nargs (fun i -> Variable i) in
   let fterm = VAppl (1+nargs+idx, fargs) in
   let args  =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
   let replace t = Term.sub t args (1+nargs) in
-  List.map replace posts
+  List.map replace posts*)
 
 
 let get_type (tp:type_t withinfo) (c:t): type_term =
@@ -1220,6 +1439,12 @@ let string_of_type (tp:type_term) (c:t): string =
   Class_table.string_of_type tp (tvars c) (class_table c)
 
 
+let string_of_type_array (sep:string) (arr: type_term array) (c:t): string =
+  String.concat
+    sep
+    (List.map (fun tp -> string_of_type tp c) (Array.to_list arr))
+
+
 let downgrade_term (t:term) (nb:int) (c:t): term =
   Feature_table.downgrade_term t (nb + count_variables c) c.ft
 
@@ -1227,3 +1452,8 @@ let downgrade_term (t:term) (nb:int) (c:t): term =
 let arity_of_downgraded_type (tp:type_term) (c:t): int =
   let ntvs = TVars_sub.count_all c.entry.tvs_sub in
   Class_table.arity_of_downgraded ntvs tp
+
+let specialized (t:term) (c:t): term =
+  let nvars = count_variables c
+  and tvs   = tvars c in
+  Feature_table.specialized t nvars tvs c.ft

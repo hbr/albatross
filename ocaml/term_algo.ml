@@ -9,7 +9,8 @@ let extract_pattern (n:int) (t:term): (int*int*int*term) list =
          n: number of variables in the pattern
          p: pattern
    *)
-  let rec extract (var:int) (pos:int) (npat:int) (pat:term) (t:term) (nb:int) =
+  assert false
+  (*let rec extract (var:int) (pos:int) (npat:int) (pat:term) (t:term) (nb:int) =
     let bvs = Term.bound_variables t (n+nb) in
     if not (IntSet.mem (var+nb) bvs) then
       var, pos, (pos+1), Variable (0+nb)
@@ -43,6 +44,11 @@ let extract_pattern (n:int) (t:term): (int*int*int*term) list =
     (fun i lst ->
       (extract i 0 1 (Variable 0) t 0) :: lst)
     vars []
+*)
+
+
+
+
 
 
 let unify_pattern
@@ -60,7 +66,7 @@ let unify_pattern
   let n = n1 + n2 in
   let subargs = Array.init n (fun i -> Variable i)
   and subflgs = Array.make n false
-  and pat1 = Term.upbound n2 n1 p1
+  and pat1 = Term.up_from n2 n1 p1
   and pat2 = Term.up n1 p2
   in
   let do_sub i t =
@@ -90,15 +96,15 @@ let unify_pattern
         do_sub j t1
     | Variable i1, Variable i2 when i1 = i2 ->
         ()
-    | VAppl(i1,args1), VAppl(i2,args2) when i1 = i2 ->
+    | VAppl(i1,args1,_), VAppl(i2,args2,_) when i1 = i2 ->
         uni_args args1 args2
     | Application(f1,args1,pr1), Application(f2,args2,pr2)
       when pr1 = pr2 && Array.length args1 = Array.length args2 ->
         assert false (* nyi: *)
-    | Lam(n1,nms1,ps1,t01,pr1), Lam(n2,nms2,ps2,t02,pr2)
+    | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
       when pr1 = pr2 ->
         assert false (* nyi: *)
-    | QExp(n1,nms1,t01,all1), QExp(n2,nms2,t02,all2)
+    | QExp(n1,_,_,t01,all1), QExp(n2,_,_,t02,all2)
       when n1 = n2 && all1 = all2 ->
         assert false (* nyi: *)
     | Flow(ctrl1,args1), Flow(ctrl2,args2)
@@ -109,7 +115,7 @@ let unify_pattern
   in
   uni pat1 pat2;
   assert begin
-    let ok = Term.sub pat1 subargs n = Term.sub pat2 subargs n in
+    let ok = Term.subst pat1 n subargs = Term.subst pat2 n subargs in
     if not ok then begin
       Printf.printf "unify_pattern\n";
       Printf.printf "   n1 %d, p1 %s\n" n1 (Term.to_string p1);
@@ -186,17 +192,17 @@ let unify0 (t1:term) (nargs:int) (t2:term): Term_sub.t =
         | Some t when t <> t2 -> raise Not_found
         | Some t -> assert (t=t2); sub
         end
-    | VAppl (i1,args1), VAppl (i2,args2) when i1 = i2 ->
+    | VAppl (i1,args1,_), VAppl (i2,args2,_) when i1 = i2 ->
         uni_args args1 args2 sub
     | Application (f1,args1,pr1), Application (f2,args2,pr2)
       when Array.length args1 = Array.length args2  && pr1 = pr2 ->
         let sub = uni f1 f2 nb sub in
         uni_args args1 args2 sub
-    | Lam(n1,nms1,ps1,t1,pr1), Lam(n2,nms2,ps2,t2,pr2)
+    | Lam(n1,_,ps1,t1,pr1,_), Lam(n2,_,ps2,t2,pr2,_)
       when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
         let sub = uni_list ps1 ps2 sub in
         uni t1 t2 (1 + nb) sub
-    | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
+    | QExp(n1,_,_,t01,is_all1), QExp(n2,_,_,t02,is_all2)
       when n1 = n2 && is_all1 = is_all2 ->
         uni t01 t02 (n1+nb) sub
     | Flow(ctrl1,args1), Flow(ctrl2,args2)
@@ -206,14 +212,18 @@ let unify0 (t1:term) (nargs:int) (t2:term): Term_sub.t =
         raise Not_found
   in
   let sub = uni t1 t2 0 Term_sub.empty in
-  assert (let args = Term_sub.arguments nargs sub in
-  Term.sub t1 args nargs = t2);
+  assert begin
+    let args = Term_sub.arguments nargs sub in
+    let t1sub = Term.subst t1 nargs args in
+    Term.equivalent t1sub t2
+  end;
   sub
+
 
 let can_unify (t1:term) (nargs:int) (t2:term): bool =
   (* Can the term [t1] with [nargs] arguments be unified with the term [t2]? *)
   try
-    let _ = unify0 t1 nargs t2 in true
+    ignore(unify0 t1 nargs t2);  true
   with Not_found ->
     false
 
@@ -280,7 +290,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         else raise Not_found
     | Variable k, Variable l when k = l ->
         pos+1, poslst, elst, tlst
-    | VAppl(i1,args1), VAppl(i2,args2)
+    | VAppl(i1,args1,_), VAppl(i2,args2,_)
       when i1 = i2 && Array.length args1 = Array.length args2 ->
         begin try
           let pos  = pos + 1 in
@@ -296,7 +306,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Lam(n1,nms1,ps1,t01,pr1), Lam(n2,nms2,ps2,t02,pr2)
+    | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
       when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
         let nb = 1 + nb in
         begin try
@@ -310,7 +320,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | QExp(n1,nms1,t01,is_all1), QExp(n2,nms2,t02,is_all2)
+    | QExp(n1,_,_,t01,is_all1), QExp(n2,_,_,t02,is_all2)
       when n1 = n2 && is_all1 = is_all2 ->
         begin try
           comp t01 t02 (n1+nb) (1+pos) poslst elst tlst
@@ -359,13 +369,13 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | Variable k ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else nextpos+1, nextvar, poslst, Variable (k+nargs)
-    | VAppl (i,args) ->
+    | VAppl (i,args,ags) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos = nextpos + 1 in
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
-          nextpos, nextvar, poslst, VAppl(i+nargs,args)
+          nextpos, nextvar, poslst, VAppl(i+nargs,args,ags)
     | Application (f,args,pr) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
@@ -374,7 +384,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, Application(f,args,pr)
-    | Lam(n,nms,pres,t0,pr) ->
+    | Lam(n,nms,pres,t0,pr,tp) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nb = 1 + nb in
@@ -389,13 +399,13 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let pres = List.rev pres_rev in
           let nextpos,nextvar,poslst,t0 =
             mklambda nextpos nextvar poslst t0 nb in
-          nextpos, nextvar, poslst, Lam(n,nms,pres,t0,pr)
-    | QExp(n,nms,t0,is_all) ->
+          nextpos, nextvar, poslst, Lam(n,nms,pres,t0,pr,tp)
+    | QExp(n,tps,fgs,t0,is_all) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,t0 =
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
-          nextpos, nextvar, poslst, QExp(n,nms,t0,is_all)
+          nextpos, nextvar, poslst, QExp(n,tps,fgs,t0,is_all)
     | Flow (ctrl,args) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
@@ -403,7 +413,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, Flow(ctrl,args)
-    | Indset (n,nms,rs) ->
+    | Indset (nme,tp,rs) ->
         assert false (* nyi *)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in

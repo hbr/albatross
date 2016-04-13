@@ -77,8 +77,6 @@ let check_validity (i:int) (idx:int) (cls:int) (info:info) (pc:PC.t): unit =
     assert (Sign.has_result sign);
     Tvars.principal_class (Sign.result sign) tvs
   in
-  (*if not (Feature_table.has_definition i ft) then
-    not_yet_implemented info "inheritance of functions defined by properties";*)
   let specs =
     try Feature_table.specification i ft
     with Not_found ->
@@ -144,9 +142,10 @@ let rec inherit_effective
         Feature_table.inherit_feature i idx cls false ft;
         check_validity i idx cls info pc
       with Not_found ->
-        let idx = Feature_table.inherit_new_effective i cls ghost ft in
+        ()
+        (*let idx = Feature_table.inherit_new_effective i cls ghost ft in
         if to_descs then
-          inherit_to_descendants idx info pc
+          inherit_to_descendants idx info pc*)
       end
   end
 
@@ -185,11 +184,28 @@ let inherit_features
 
 
 
+let inherit_parent (cls:int) (parent:parent) (pc:PC.t): unit =
+  let ct = PC.class_table pc
+  and ft = PC.feature_table pc in
+  let ghost,tp,renames = parent in
+  if renames <> [] then
+    not_yet_implemented tp.i "rename";
+  assert (renames = [] ); (* nyi: feature adaption *)
+  let par, par_args = Class_table.parent_type cls tp ct in
+  if Class_table.has_ancestor cls par ct then
+    ()
+  else if Class_table.has_ancestor par cls ct then
+    error_info tp.i "circular inheritance"
+  else begin
+    assert false
+  end
+
+
 let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   let has_any =
-    ref (Proof_context.is_public pc || Class_table.inherits_any cls ct) in
+    ref (PC.is_public pc || Class_table.inherits_any cls ct) in
   List.iter
     (fun (ghost,tp,renames) ->
       if renames <> [] then

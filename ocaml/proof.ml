@@ -14,14 +14,15 @@ exception Proof_failed of string
 module Eval = struct
   type t =
       Term of term
-    | Exp of (int * t array * t) (* idx of function, eval args, eval of expansion *)
-    | VApply of int * t array
+    | Exp of (int * agens * t array * t) (* idx of function, actual generics,
+                                            eval args, eval of expansion *)
+    | VApply of  int * t array * type_term array
     | Apply of t * t array * bool
-    | Lam of int * int array * term list * t * bool
-    | QExp of int * int array * t * bool
+    | Lam of int * int array * term list * t * bool * type_term
+    | QExp of int * formals * formals * t * bool
     | Beta of t
-    | Simpl of t * int * term array  (* e, idx of simplifying equality assertion,
-                                        specialization arguments *)
+    | Simpl of t * int * term array * agens
+          (* e, idx of simplifying equality assertion, specialization arguments *)
     | Flow of flow * t array
     | If of (bool * int * t array) (* cond, idx cond, args *)
     | As of bool * t array
@@ -34,26 +35,26 @@ module Eval = struct
     in
     match e with
       Term t -> printf "%s term %s\n" prefix (Term.to_string t)
-    | Exp (i,args,e) ->
+    | Exp (i,ags,args,e) ->
         printf "%s expand %d\n" prefix i;
         print (prefix ^ "    ") e
-    | VApply (i,args) ->
+    | VApply (i,args,_) ->
         printf "%s apply %d\n" prefix i;
         print_args args
     | Apply (f,args,pr) ->
         printf "%s apply %s\n" prefix (if pr then "predicate" else "function");
         print (prefix ^ "    ") f;
         print_args args
-    | Lam (n,nms,pres,e,pr) ->
+    | Lam (n,nms,pres,e,pr,tp) ->
         printf "%s lambda %s\n" prefix (if pr then "predicate" else "function");
         print (prefix ^ "    ") e
-    | QExp (n,nms,e,is_all) ->
+    | QExp (n,_,_,e,is_all) ->
         printf "%s qexp %s\n" prefix (if is_all then "all" else "some");
         print (prefix ^ "    ") e
     | Beta e ->
         printf "%s beta\n" prefix;
         print (prefix ^ "    ") e
-    | Simpl (e,idx,args) ->
+    | Simpl (e,idx,args,ags) ->
         printf "%s simpl eq_idx %d\n" prefix idx;
         print (prefix ^ "    ") e
     | Flow (ctrl,args) ->
@@ -82,7 +83,7 @@ type proof_term =
   | Indset_ind  of term
   | Indtype    of int (* cls *)
   | Detached   of int * int  (* modus ponens *)
-  | Specialize of int * term array
+  | Specialize of int * arguments * agens
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
   | Eval_bwd   of term*Eval.t (* term which is backward evaluated, evaluation *)
   | Witness    of int * int array * term * term array
@@ -90,10 +91,7 @@ type proof_term =
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
   | Inherit    of int * int * int (* assertion, base/descendant class *)
-  | Subproof   of int        (* nargs *)
-                * int array  (* names *)
-                * int        (* res *)
-                * proof_term array
+  | Subproof   of formals * formals * int * proof_term array (* _,_,res,_ *)
 
 
 module Proof_term: sig
@@ -105,7 +103,8 @@ module Proof_term: sig
 
   val used_variables: int -> t array -> IntSet.t
 
-  val remove_unused_variables: term array -> int -> t array -> t array
+  val remove_unused_variables:
+      arguments -> int -> arguments -> int -> t array -> t array
 
   val normalize_pair: int -> int array -> int -> term -> t array
     -> int * int array * term * t array
@@ -114,9 +113,9 @@ module Proof_term: sig
 
   val print_pt: string -> int -> t -> unit
 
-  val term_up: int -> t -> t
+  (*val term_up: int -> t -> t*)
 
-  val split_subproof: t -> int * int array * int * t array
+  val split_subproof: t -> formals * formals * int * t array
 
   val is_subproof: t -> bool
 
@@ -147,7 +146,7 @@ end = struct
           print_prefix (); printf "Induction law cls %d\n" cls;
       | Detached (i,j)      ->
           print_prefix (); printf "Detached %d %d\n" i j
-      | Specialize (i,args) ->
+      | Specialize (i,args,ags) ->
           print_prefix (); printf "Specialize %d\n" i
       | Eval (i,e)          ->
           print_prefix (); printf "Eval %d\n" i;
@@ -158,8 +157,9 @@ end = struct
           Eval.print (prefix ^ "    ") e
       | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
       | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
-      | Subproof (nb,nms,i,pt_arr) ->
-          print_prefix (); printf "Subproof nb %d, i %d\n" nb i;
+      | Subproof ((nms,_),(fgnms,_),i,pt_arr) ->
+          print_prefix (); printf "Subproof nb %d/%d, i %d\n"
+            (Array.length nms) (Array.length fgnms) i;
           print_pt_arr (prefix^"  ") (start+k) pt_arr
       | Inherit (i,bcls,cls)  -> print_prefix (); printf "Inherit %d\n" i
     done
@@ -178,21 +178,21 @@ end = struct
       in
       match e with
         Eval.Term t   -> e
-      | Eval.Exp (i,args,e) ->
-          Eval.Exp (i, adapt_args args, adapt_eval e)
-      | Eval.VApply (i,args) ->
-          Eval.VApply (i, adapt_args args)
+      | Eval.Exp (i,ags,args,e) ->
+          Eval.Exp (i,ags, adapt_args args, adapt_eval e)
+      | Eval.VApply (i,args,ags) ->
+          Eval.VApply (i,adapt_args args,ags)
       | Eval.Apply (f,args,pr) ->
           let f = adapt_eval f
           and args = adapt_args args in
           Eval.Apply (f,args,pr)
-      | Eval.Lam (n,nms,pres,e,pr) ->
-          Eval.Lam (n, nms, pres, adapt_eval e, pr)
-      | Eval.QExp (n,nms,e,is_all) ->
-          Eval.QExp (n, nms, adapt_eval e, is_all)
+      | Eval.Lam (n,nms,pres,e,pr,tp) ->
+          Eval.Lam (n, nms, pres, adapt_eval e, pr,tp)
+      | Eval.QExp (n,tps,fgs,e,is_all) ->
+          Eval.QExp (n, tps, fgs, adapt_eval e, is_all)
       | Eval.Beta e -> Eval.Beta (adapt_eval e)
-      | Eval.Simpl (e,eq_idx,args) ->
-          Eval.Simpl (adapt_eval e, index eq_idx, args)
+      | Eval.Simpl (e,eq_idx,args,ags) ->
+          Eval.Simpl (adapt_eval e, index eq_idx, args, ags)
       | Eval.Flow (ctrl,args) ->
           Eval.Flow (ctrl, adapt_args args)
       | Eval.If (cond,idx,args) ->
@@ -210,8 +210,8 @@ end = struct
           pt
       | Detached (a,b) ->
           Detached (index a, index b)
-      | Specialize (i,args) ->
-          Specialize (index i, args)
+      | Specialize (i,args,ags) ->
+          Specialize (index i, args, ags)
       | Inherit (i,bcls,cls) ->
           Inherit (index i, bcls, cls)
       | Eval (i,e)    -> Eval (index i, adapt_eval e)
@@ -255,12 +255,13 @@ end = struct
         Array.fold_left (fun set e -> used_eval e set) set args in
       match e with
         Eval.Term t -> set
-      | Eval.Exp (i,args,e)    -> used_eval e (used_args set args)
-      | Eval.VApply(i,args)    -> used_args set args
+      | Eval.Exp (i,_,args,e)  -> used_eval e (used_args set args)
+      | Eval.VApply(i,args,_)  -> used_args set args
       | Eval.Apply (f,args,_)  -> used_args (used_eval f set) args
-      | Eval.Lam (n,nms,_,e,_) | Eval.QExp (n,nms,e,_) -> used_eval e set
+      | Eval.Lam (n,_,_,e,_,_) | Eval.QExp (n,_,_,e,_) ->
+          used_eval e set
       | Eval.Beta e            -> used_eval e set
-      | Eval.Simpl (e,i,args)  -> used_eval e (add_idx i set)
+      | Eval.Simpl (e,i,args,_)-> used_eval e (add_idx i set)
       | Eval.Flow (ctrl,args)  -> used_args set args
       | Eval.If (cond,idx,args)-> used_args (add_idx idx set) args
       | Eval.As (cond,args)    -> used_args set args
@@ -277,7 +278,7 @@ end = struct
                 set
             | Detached (i,j) ->
                 add_idx i (add_idx j set)
-            | Specialize (i,_) | Witness (i,_,_,_) | Someelim i ->
+            | Specialize (i,_,_) | Witness (i,_,_,_) | Someelim i ->
                 add_idx i set
             | Eval (i,e) ->
                 let set = add_idx i set in
@@ -310,14 +311,14 @@ end = struct
           Array.fold_left (fun set e -> usd_eval e set) set args in
         match e with
           Eval.Term t   -> set
-        | Eval.Exp (i,args,e)    -> usd_eval e (usd_args set args)
-        | Eval.VApply (i,args)   -> usd_args set args
+        | Eval.Exp (i,_,args,e)   -> usd_eval e (usd_args set args)
+        | Eval.VApply (i,args,_)  -> usd_args set args
         | Eval.Apply (f,args,_) ->
             let set = usd_eval f set in
             usd_args set args
-        | Eval.Lam (n,nms,_,e,_) | Eval.QExp(n,nms,e,_) -> usd_eval e set
+        | Eval.Lam (n,_,_,e,_,_) | Eval.QExp(n,_,_,e,_) -> usd_eval e set
         | Eval.Beta e           -> usd_eval e set
-        | Eval.Simpl (e,i,args) ->
+        | Eval.Simpl (e,i,args,_) ->
             let set = usd i pt_arr set in
             usd_eval e set
         | Eval.Flow (ctrl,args) -> usd_args set args
@@ -339,7 +340,7 @@ end = struct
             assert (j < k);
             let set = usd i pt_arr set in
             usd j pt_arr set
-        | Specialize (i,_) | Witness (i,_,_,_)| Someelim i ->
+        | Specialize (i,_,_) | Witness (i,_,_,_)| Someelim i ->
             assert (i < k);
             usd i pt_arr set
         | Eval (i,e) ->
@@ -358,6 +359,9 @@ end = struct
             assert false
     in
     usd k pt_arr IntSet.empty
+
+
+
 
 
   let reindex (start:int) (map: (int*int) array) (k:int) (pt_arr:t array)
@@ -391,18 +395,22 @@ end = struct
       let rec transform_eval (e:Eval.t): Eval.t =
         match e with
           Eval.Term _ -> e
-        | Eval.Exp (i,args,e) ->
-            Eval.Exp(i, Array.map transform_eval args, transform_eval e)
-        | Eval.VApply (i,args) ->
-            Eval.VApply (i, Array.map transform_eval args)
+        | Eval.Exp (i,ags,args,e) ->
+            Eval.Exp(i, ags, Array.map transform_eval args, transform_eval e)
+        | Eval.VApply (i,args,ags) ->
+            Eval.VApply (i, Array.map transform_eval args, ags)
         | Eval.Apply (f,args,pr) ->
             Eval.Apply (transform_eval f, Array.map transform_eval args,pr)
-        | Eval.Lam (n,nms,pres,e,pr) -> Eval.Lam (n,nms,pres,transform_eval e,pr)
-        | Eval.QExp (n,nms,e,ia)-> Eval.QExp (n,nms,transform_eval e,ia)
+        | Eval.Lam (n,nms,pres,e,pr,tp) ->
+            Eval.Lam (n,nms,pres,transform_eval e,pr,tp)
+        | Eval.QExp (n,tps,fgs,e,ia) ->
+            Eval.QExp (n,tps,fgs,transform_eval e,ia)
         | Eval.Beta e           -> Eval.Beta (transform_eval e)
-        | Eval.Simpl (e,i,args) -> Eval.Simpl (transform_eval e, index i,args)
+        | Eval.Simpl (e,i,args,ags) ->
+            Eval.Simpl (transform_eval e, index i,args,ags)
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, Array.map transform_eval args)
-        | Eval.If (cond,i,args) -> Eval.If(cond,index i, Array.map transform_eval args)
+        | Eval.If (cond,i,args) ->
+            Eval.If(cond,index i, Array.map transform_eval args)
         | Eval.As (cond,args)   -> Eval.As(cond,Array.map transform_eval args)
         | Eval.Inspect (t,inspe,icase,nvars,rese) ->
             Eval.Inspect (t, transform_eval inspe, icase, nvars, transform_eval rese)
@@ -415,7 +423,7 @@ end = struct
         | Detached (i,j) -> Detached (index i, index j)
         | Eval (i,e)     -> Eval   (index i, transform_eval e)
         | Eval_bwd (t,e) -> Eval_bwd (t, transform_eval e)
-        | Specialize (i,args) -> Specialize (index i, args)
+        | Specialize (i,args,ags) -> Specialize (index i, args,ags)
         | Witness (i,nms,t,args)  -> Witness (index i, nms, t, args)
         | Someelim i -> Someelim (index i)
         | Subproof (nargs,nms,k,pt_arr1) ->
@@ -519,11 +527,12 @@ end = struct
           | Someelim _ ->
               set
           | Funprop (_,_,args)
-          | Specialize (_,args)
+          | Specialize (_,args,_)
           | Witness (_,_,_,args) ->
               uvars_args args set
-          | Subproof (nb1,nms,i,pt_arr) ->
-              uvars (nb+nb1) pt_arr set
+          | Subproof ((nms,_),_,i,pt_arr) ->
+              let nb = nb + Array.length nms in
+              uvars nb pt_arr set
           | Inherit (i,bcls,cls) ->
               assert false
         )
@@ -537,73 +546,97 @@ end = struct
 
 
   let remove_unused_variables
-      (args:term array)
+      (args:  term array)
       (nargs: int)
+      (ags:   type_term array)
+      (ntvs:  int)
       (pt_arr:t array)
       : t array =
-    (* Remove unused variables in [pt_arr]. The array of proof term [pt_arr]
-       has [args.length] variables and only [nargs] of them are unused. The [args]
-       array maps variables to their new names ([i -> Variable j]: i: old
-       variable, j: new variable). The unused variables map to [Variable
-       (-1)].
+    (* Remove unused variables in [pt_arr]. The array of proof terms [pt_arr]
+       has [args.length,ags.length] variables/type variables but only
+       [nargs,ntvs] of them are used. The [args/ags] arrays map variables/type
+       variables to their new names ([i -> Variable j]: i: old variable, j:
+       new variable). The unused variables map to [Variable (-1)].
 
        Note: It might be possible that no variables are removed, but that the
        variables are just permuted. *)
     assert (nargs <= Array.length args);
-    let rec shrink (nb:int) (pt_arr:t array): t array =
-      let shrink_inner (t:term) (nb1:int): term =
-        Term.sub_from t (nb+nb1) args nargs
+    assert (ntvs  <= Array.length ags);
+    let rec shrink (nb:int) (nb2:int) (pt_arr:t array): t array =
+      let shrink_inner (t:term) (nba:int) (nb2a:int): term =
+        Term.subst0_from t (nb+nba) nargs args (nb2+nb2a) ntvs ags
       in
-      let shrink_term (t:term): term = shrink_inner t 0
+      let shrink_term (t:term): term = shrink_inner t 0 0
       in
-      let shrink_args_inner (args:term array) (nb:int): term array =
-        Array.map (fun a -> shrink_inner a nb) args
-      and shrink_list_inner (lst:term list) (nb:int): term list =
-        List.map (fun a -> shrink_inner a nb) lst
+      let shrink_args_inner (args:term array) (nb:int) (nb2:int): term array =
+        Array.map (fun a -> shrink_inner a nb nb2) args
+      and shrink_list_inner (lst:term list) (nb:int) (nb2:int): term list =
+        List.map (fun a -> shrink_inner a nb nb2) lst
       in
-      let shrink_args (args:term array): term array = shrink_args_inner args 0
+      let shrink_args (args:term array): term array = shrink_args_inner args 0 0
+      in
+      let shrink_type_inner (tp:type_term) (nb2a:int): type_term =
+        Term.subst_from tp (nb2+nb2a) ntvs ags in
+      let shrink_types_inner (ags:type_term array) (nb2:int): type_term array =
+        Array.map (fun tp -> shrink_type_inner tp nb2) ags
+      in
+      let shrink_type (tp:type_term): type_term =
+        Term.subst_from tp nb2 ntvs ags in
+      let shrink_types (ags:agens): agens =
+        Array.map shrink_type ags
       in
       let shrink_eval (e:Eval.t): Eval.t =
         let var t =
           assert (Term.is_variable t);
           Term.variable t
         in
-        let rec shrnk e nb =
-          let shrnk_eargs args = Array.map (fun e -> shrnk e nb) args in
+        let rec shrnk e nb nb2 =
+          let shrnk_eargs args = Array.map (fun e -> shrnk e nb nb2) args in
           match e with
             Eval.Term t ->
-              Eval.Term (shrink_inner t nb)
-          | Eval.Exp (idx,args,e) ->
-              let idx  = var (shrink_inner (Variable idx) nb)
+              Eval.Term (shrink_inner t nb nb2)
+          | Eval.Exp (idx,ags,args,e) ->
+              let idx  = var (shrink_inner (Variable idx) nb nb2)
+              and ags  = shrink_types_inner ags nb2
               and args = shrnk_eargs args
-              and e    = shrnk e nb in
-              Eval.Exp (idx,args,e)
-          | Eval.VApply(i,args) ->
-              let i = var (shrink_inner (Variable i) nb)
-              and args = shrnk_eargs args in
-              Eval.VApply (i,args)
+              and e    = shrnk e nb nb2 in
+              Eval.Exp (idx,ags,args,e)
+          | Eval.VApply(i,args,ags) ->
+              let i  = var (shrink_inner (Variable i)  nb nb2)
+              and args = shrnk_eargs args
+              and ags  = shrink_types_inner ags nb2 in
+              Eval.VApply (i,args,ags)
           | Eval.Apply(f,args,pr) ->
-              let f = shrnk f nb
+              let f = shrnk f nb nb2
               and args = shrnk_eargs args in
               Eval.Apply (f,args,pr)
-          | Eval.Lam (n,nms,pres,e,pr) ->
-              Eval.Lam (n,nms,shrink_list_inner pres (1+nb),shrnk e (1+nb),pr)
-          | Eval.QExp (n,nms,e,is_all) ->
-              Eval.QExp (n,nms,shrnk e (nb+n),is_all)
+          | Eval.Lam (n,nms,pres,e,pr,tp) ->
+              Eval.Lam (n,
+                        nms,
+                        shrink_list_inner pres (1+nb) nb2,
+                        shrnk e (1+nb) nb2,
+                        pr,
+                        shrink_type_inner tp nb2)
+          | Eval.QExp (n,(nms,tps),(fgnms,fgcon),e,is_all) ->
+              let nb,nb2 = nb + n, nb2 + Array.length fgnms in
+              Eval.QExp (n,(nms,tps),(fgnms,fgcon),shrnk e nb nb2, is_all)
           | Eval.Beta e ->
-              Eval.Beta (shrnk e nb)
-          | Eval.Simpl (e,idx,args) ->
-              Eval.Simpl (shrnk e nb, idx, shrink_args_inner args nb)
+              Eval.Beta (shrnk e nb nb2)
+          | Eval.Simpl (e,idx,args,ags) ->
+              let e    = shrnk e nb nb2
+              and args = shrink_args_inner args nb nb2
+              and ags  = shrink_types_inner ags nb2 in
+              Eval.Simpl (e, idx, args, ags)
           | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, shrnk_eargs args)
           | Eval.If(cond,idx,args)-> Eval.If(cond,idx,shrnk_eargs args)
           | Eval.As(cond,args)    -> Eval.As(cond,shrnk_eargs args)
           | Eval.Inspect(t,inspe,icase,nvars,rese) ->
-              let t = shrink_inner t nb
-              and inspe = shrnk inspe nb
-              and rese  = shrnk rese  nb in
+              let t = shrink_inner t nb nb2
+              and inspe = shrnk inspe nb nb2
+              and rese  = shrnk rese  nb nb2 in
               Eval.Inspect(t,inspe,icase,nvars,rese)
         in
-        shrnk e 0
+        shrnk e 0 0
       in
       Array.map
         (fun pt ->
@@ -621,31 +654,33 @@ end = struct
               pt
           | Funprop(idx,i,args) ->
               Funprop(idx,i,shrink_args args)
-          | Specialize (i,args) ->
-              Specialize (i, shrink_args args)
+          | Specialize (i,args,ags) ->
+              Specialize (i, shrink_args args, shrink_types ags)
           | Eval (i,e)     -> Eval (i, shrink_eval e)
           | Eval_bwd (t,e) -> Eval_bwd (shrink_term t, shrink_eval e)
           | Witness (i,nms,t,args) ->
               let nargs = Array.length args in
               let args  = shrink_args args in
-              let t = shrink_inner t nargs in
+              let t = shrink_inner t nargs 0 in
               Witness (i,nms,t,args)
           | Someelim i ->
               Someelim i
-          | Subproof (nb1,nms,i,pt_arr) ->
-              Subproof (nb1,nms,i, shrink (nb+nb1) pt_arr)
+          | Subproof ((nms,tps),(fgnms,fgcon),i,pt_arr) ->
+              let nb,nb2 = nb + Array.length nms, nb2 + Array.length fgnms in
+              Subproof ((nms,tps),(fgnms,fgcon),i, shrink nb nb2 pt_arr)
           | Inherit (i,bcls,cls) ->
               assert false
         )
         pt_arr
     in
-    shrink 0 pt_arr
+    shrink 0 0 pt_arr
 
 
   let normalize_pair
       (nargs:int) (nms:int array) (start:int) (t:term) (pt_arr: t array)
       : int * int array * term  * t array =
-    assert (nargs = Array.length nms);
+    assert false
+    (*assert (nargs = Array.length nms);
     let usd,pos = Term.used_variables_transform t nargs in
     let nargs1 = Array.length usd in
     let uvars_pt = used_variables nargs pt_arr in
@@ -663,10 +698,10 @@ end = struct
     let t      = Term.sub t args nargs1
     and pt_arr = remove_unused_variables args nargs1 pt_arr in
     nargs1, nms1, t, pt_arr
+*)
 
 
-
-
+(*
   let term_up (n:int) (pt:t): t =
     (* Shift all terms used in the proof term [pt] up by [n]. *)
     let rec trm_up nb pt =
@@ -742,16 +777,19 @@ end = struct
       | Inherit (i,bcls,cls)-> pt
     in
     if n = 0 then pt else trm_up 0 pt
+*)
 
-
-  let split_subproof (pt:t): int * int array * int * t array =
+  let split_subproof (pt:t): formals * formals * int * t array =
     match pt with
       Subproof (nb,nms,i,pt_arr) -> nb,nms,i,pt_arr
     | _ -> raise Not_found
 
+
   let is_subproof (pt:t): bool =
-    try let _ = split_subproof pt in true
+    try ignore(split_subproof pt); true
     with Not_found -> false
+
+
   let short_string (pt:t): string =
     match pt with
       Axiom _  -> "ax"
@@ -761,7 +799,7 @@ end = struct
     | Indset_ind _ -> "indset"
     | Indtype _    -> "ind"
     | Detached (i,j) -> "mp " ^ (string_of_int i) ^ " " ^ (string_of_int j)
-    | Specialize (i,args) -> "spec " ^ (string_of_int i)
+    | Specialize (i,_,_) -> "spec " ^ (string_of_int i)
     | Inherit (i,bcls,cls)     -> "inh " ^ (string_of_int i)
     | Eval (i,_)          -> "eval " ^ (string_of_int i)
     | Eval_bwd _          -> "eval"

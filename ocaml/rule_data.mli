@@ -11,8 +11,9 @@ type t
 val make: term ->  Context.t -> t
 
 val anchor_class:         t -> int
-val nbenv:                t -> int
+val count_variables:      t -> int
 val is_schematic:         t -> bool
+val is_generic:           t -> bool
 val is_forward:           t -> bool
 val is_backward:          t -> bool
 val is_specialized:       t -> bool
@@ -26,7 +27,8 @@ val previous_schematic:   t -> int option
 val premises:             t -> int -> (term*bool) list
 val count_premises:       t -> int
 val short_string:         t -> string
-val specialize: t -> term array -> int -> Context.t -> t
+val actual_generics:      arguments -> Context.t -> t -> agens
+val specialize: t -> term array -> agens -> int -> Context.t -> t
 
 val drop: t -> Context.t -> t
 

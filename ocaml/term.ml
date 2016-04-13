@@ -14,20 +14,22 @@ type flow =
 
 type term =
     Variable    of int
-  | VAppl       of int * term array              (* fidx, args *)
-  | Application of term * term array * bool      (* fterm, args, is_pred *)
-  | Lam         of int * int array * term list * term * bool
-                   (* n, names, pres, t, is_pred *)
-  | QExp        of int * int array * term * bool (* n, names, t, is_all *)
-  | Flow        of flow * term array
-  | Indset      of int * int array * term array
-                               (* number of sets, (usually one), names, rules *)
-and formal  = int * term (* name, type *)
-and formals = formal array
-
-type type_term = term
+  | VAppl       of int * arguments * arguments (* fidx, args, ags *)
+  | Application of term * arguments * bool      (* fterm, args, is_pred *)
+  | Lam         of int * names * term list * term * bool * type_term
+                   (* n, names, pres, t, is_pred, type *)
+  | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
+  | Flow        of flow * arguments
+  | Indset      of int * type_term * arguments (* name, type, rules *)
+and names      = int array
+and arguments  = term array
+and agens      = type_term array
+and types      = type_term array
+and formals    = names * arguments
+and type_term  = term
 
 exception Term_capture
+exception Name_clash of int
 
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
@@ -44,6 +46,22 @@ let string_of_flow (ctrl:flow): string =
     Ifexp   -> "if"
   | Inspect -> "inspect"
   | Asexp   -> "as"
+
+
+let empty_term:    term = Variable (-1)
+
+let empty_formals: formals = [||], [||]
+
+
+let make_type (cls:int) (ags:arguments): type_term =
+  VAppl (cls,ags,[||])
+
+
+let count_formals ((nms,tps):formals): int =
+  let n = Array.length nms in
+  assert (n = Array.length tps);
+  n
+
 
 module Term: sig
 
@@ -79,8 +97,11 @@ module Term: sig
   val used_variables_filtered: term -> (int -> bool) -> bool -> int list
   val used_variables_from:  term -> int -> bool -> int list
   val used_variables_transform: term -> int -> int array * int array
-  val remove_unused_0: int array -> term -> int * int array * term array
-  val remove_unused:   int array -> term -> int * int array * term
+  val unused_transform:     formals -> int -> formals -> term ->
+    formals * arguments * formals * arguments
+
+  (*val remove_unused_0: int array -> term -> int * int array * term array
+  val remove_unused:   int array -> term -> int * int array * term*)
 
   val equivalent: term -> term -> bool
 
@@ -94,16 +115,29 @@ module Term: sig
 
   val lambda_inner_map: term -> int IntMap.t -> term
 
+  val up_type:   int -> type_term -> type_term
+  val down_type: int -> type_term -> type_term
+
   val down_from: int -> int -> term -> term
 
   val down: int -> term -> term
 
-  val upbound: int->int->term->term
+  val up_from: int->int->term->term
 
   val up: int->term->term
 
   val array_up: int -> term array -> term array
 
+  val subst0_from: term -> int -> int -> arguments -> int -> int -> arguments -> term
+
+  val subst0: term -> int -> term array -> int -> term array -> term
+
+  val subst_from: term -> int -> int -> arguments -> term
+  val subst:      term -> int -> arguments -> term
+
+  val apply0: term -> term array -> term array -> term
+  val apply:  term -> term array -> term
+(*
   val part_sub_from: term -> int -> int -> term array -> int -> term
 
   val part_sub: term -> int -> term array -> int -> term
@@ -113,31 +147,33 @@ module Term: sig
   val sub:   term -> term array -> int -> term
 
   val apply: term -> term array -> term
+*)
+  val lambda_split: term -> int * int array * term list * term * bool * type_term
 
-  val lambda_split: term -> int * int array * term list * term * bool
-
-  val qlambda_split_0: term -> int * int array * term * bool
-  val qlambda_split: term -> int * int array * term * bool
+  val qlambda_split_0: term -> int * formals * formals * term * bool
+  val qlambda_split: term -> int * formals * formals * term * bool
 
   val unary: int -> term -> term
 
   val unary_split: term -> int -> term
 
-  val quantified: bool -> int -> int array -> term -> term
+  val quantified: bool -> int -> formals -> formals -> term -> term
 
-  val all_quantified:  int -> int array -> term -> term
+  val all_quantified:  int -> formals -> formals -> term -> term
 
-  val some_quantified:  int -> int array -> term -> term
+  val some_quantified:  int -> formals -> formals -> term -> term
 
-  val quantifier_split: term -> bool -> int * int array * term
+  val quantifier_split: term -> bool -> int * formals * formals * term
 
-  val all_quantifier_split: term-> int * int array * term
+  val all_quantifier_split: term-> int * formals * formals * term
 
-  val some_quantifier_split: term -> int * int array * term
+  val some_quantifier_split: term -> int * formals * term
 
-  val pattern: int -> int array -> term -> term
-  val pattern_split: term -> int * int array * term
-  val case_split: term -> term -> int * int array * term * term
+  val is_all_quantified: term -> bool
+
+  val pattern: int -> formals -> term -> term
+  val pattern_split: term -> int * formals * term
+  val case_split: term -> term -> int * formals * term * term
 
   val binary: int -> term -> term -> term
 
@@ -148,12 +184,13 @@ module Term: sig
   val split_implication_chain: term -> int -> term list * term
   val make_implication_chain:  term list -> term -> int -> term
 
-  val split_rule: term -> int -> int * int array * term list * term
+  val split_rule: term -> int -> int * formals * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
   val induction_rule: int -> int -> term -> term -> term
-    -> int * int array * term list * term
-  val induction_law:  int -> term -> term -> term
+    -> int * formals * formals * term list * term
+  val induction_law:  int -> term -> term -> type_term -> type_term -> term
+  val prenex: term -> int -> int -> int -> term
 end = struct
 
   let is_variable_i (t:term) (i:int): bool =
@@ -185,7 +222,7 @@ end = struct
     in
     match t with
       Variable i -> string_of_int i
-    | VAppl (i,args) ->
+    | VAppl (i,args,_) ->
         let fstr = string_of_int i
         and argsstr = Array.to_list (Array.map to_string args)
         in
@@ -200,9 +237,9 @@ end = struct
         fstr ^ predstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Lam(nargs,names,pres,t,pred) ->
+    | Lam(nargs,names,pres,t,pred,_) ->
         strlam nargs names pres t pred
-    | QExp (nargs,names,t,is_all) ->
+    | QExp (nargs,(names,_),_,t,is_all) ->
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
         qstr ^ "(" ^ argsstr ^ ") " ^ (to_string t)
@@ -256,12 +293,12 @@ end = struct
     in
     match t with
       Variable _ -> 1
-    | VAppl (i,args) -> 1 + nodesarr args
+    | VAppl (i,args,_) -> 1 + nodesarr args
     | Application (f,args,_) ->
         nodes f + nodesarr args
-    | Lam (_,_,pres,t,_) ->
+    | Lam (_,_,pres,t,_,_) ->
         1 + nodeslst pres + nodes t
-    | QExp (_,_,t,_) ->
+    | QExp (_,_,_,t,_) ->
         1 + (nodes t)
     | Flow (ctrl,args) ->
         1 + nodesarr args
@@ -284,18 +321,18 @@ end = struct
       in
       match t with
         Variable i -> var i
-      | VAppl (i,args) ->
+      | VAppl (i,args,_) ->
           let a = var i in
           fldarr a args nb
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           fldarr a args nb
-      | Lam (n,_,pres,t,_) ->
+      | Lam (n,_,pres,t,_,_) ->
           let level = 1 + level
           and nb    = 1 + nb in
           let a = List.fold_left (fun a t -> fld a t level nb) a pres in
           fld a t level nb
-      | QExp (n,_,t,_) ->
+      | QExp (n,_,_,t,_) ->
           fld a t (level+1) (nb+n)
       | Flow (ctrl,args) ->
           fldarr a args nb
@@ -313,6 +350,88 @@ end = struct
     let f0 a i level = f a i in
     fold_with_level f0 a t
 
+
+(*
+  let rec fold_variables_0
+      (nb1:int) (f1:'a1->int->'a1) (a1:'a1)
+      (nb2:int) (f2:'a2->int->'a2) (a2:'a2)
+      (wtps:bool)
+      (t:term): 'a1 * 'a2 =
+    let fdum a i = assert false in
+    let var i = if nb1 <= i then f1 a1 (i-nb1), a2 else a1, a2
+    and fold_args nb1 f1 a1 args1 nb2 f2 a2 args2 wtps =
+      let a1, a2 =
+        Array.fold_left
+          (fun (a1,a2) t -> fold_variables_0 nb1 f1 a1 nb2 f2 a2 wtps t)
+          (a1,a2)
+          args1 in
+      let a2,_ =
+        if wtps then
+          Array.fold_left
+            (fun (a2,_) tp -> fold_variables_0 nb2 f2 a2 0 fdum () false tp)
+            (a2,())
+            args2
+        else a2,() in
+      a1,a2
+    in
+    match t with
+      Variable i ->
+        var i
+    | VAppl(i,_,args,ags) ->
+        let a1,a2 = var i in
+        fold_args nb1 f1 a1 args nb2 f2 a2 ags wtps
+    | Application (f,args,pr) ->
+        let a1,a2 = fold_variables_0 nb1 f1 a1 nb2 f2 a2 wtps f in
+        fold_args nb1 f1 a1 args nb2 f2 a2 [||] wtps
+    | Lam(n,_,pres,t0,_,tp) ->
+        let nb1 = 1 + nb1 in
+        let a2,_ =
+          if wtps then fold_variables_0 nb2 f2 a2 0 fdum () false tp
+          else a2,() in
+        let a1,a2 =
+          List.fold_left
+            (fun (a1,a2) t -> fold_variables_0 nb1 f1 a1 nb2 f2 a2 wtps t)
+            (a1,a2)
+            pres in
+        fold_variables_0 nb1 f1 a1 nb2 f2 a2 wtps t0
+    | QExp (n,(nms1,tps),(nms2,fgs),t0,_) ->
+        let nb1 = nb1 + n
+        and nb2 = nb2 + Array.length nms2 in
+        let a2,_ =
+          if wtps then
+            let a2,_ = fold_args nb2 f2 a2 tps 0 fdum () [||] false in
+            fold_args nb2 f2 a2 fgs 0 fdum () [||] false
+          else a2,() in
+        fold_variables_0 nb1 f1 a1 nb2 f2 a2 wtps t0
+    | Indset (nme,tp,rs) ->
+        let nb1 = 1 + nb1 in
+        let a2,_ =
+          if wtps then fold_variables_0 nb2 f2 a2 0 fdum () false tp
+          else a2,() in
+        fold_args nb1 f1 a1 rs nb2 f2 a2 [||] wtps
+    | Flow(ctrl,args) ->
+        fold_args nb1 f1 a1 args nb2 f2 a2 [||] wtps
+
+
+
+  let fold_variables
+      (f1:'a1->int->'a1) (a1:'a1)
+      (f2:'a2->int->'a2) (a2:'a2)
+      (wtps:bool)
+      (t:term): 'a1 * 'a2 =
+    (* Fold the variables/type variables in the order in which they appear in
+       the term [t] with the functions [f1/f2] and accumulate the results in
+       [a1/a2].  At each level type variables are accumulated first. *)
+    fold_variables_0 0 f1 a1 0 f2 a2 wtps t
+
+
+
+
+  let fold_term_variables (f:'a->int->'a) (a:'a) (t:term): 'a =
+    let fdum _ _ = assert false in
+    let a,_ = fold_variables f a fdum () false t in
+    a
+*)
 
 
   let fold_arguments (f:'a->int->'a) (a:'a) (t:term) (nargs:int): 'a =
@@ -362,6 +481,7 @@ end = struct
       t
 
 
+
   let variables_filtered (t:term) (f:int->bool): IntSet.t =
     (* The set of variables which satisfy the predicate [f] *)
     fold
@@ -390,26 +510,39 @@ end = struct
     variables_filtered t (fun i -> start <= i && i < beyond)
 
 
+
+  let used_variables_filtered_0
+      (t:term) (f:int->bool) (dup:bool) (lst:int list)
+      : int list =
+    (* The list of variables of the term [t] which satisfy [f] in reversed
+       order in which they appear *)
+    fold
+      (fun lst ivar ->
+        if f ivar && (dup || not (List.mem ivar lst)) then ivar::lst
+        else lst)
+      lst
+      t
+
+
+
+
   let used_variables_filtered (t:term) (f:int->bool) (dup:bool): int list =
     (* The list of variables of the term [t] which satisfy [f] in reversed
        order in which they appear *)
-    let lst,_ =
-      fold
-        (fun (lst,set) ivar ->
-          if not (f ivar) || (not dup && IntSet.mem ivar set) then
-            lst,set
-          else
-            ivar::lst, IntSet.add ivar set)
-        ([], IntSet.empty)
-        t
-    in
-    lst
+    used_variables_filtered_0 t f dup []
+
+
+
+  let used_variables_0 (t:term) (nvars:int) (lst:int list): int list =
+    (* The list of variables of the term [t] below [nvars] in reversed order in
+       which they appear, accumulated to the list [lst] *)
+    used_variables_filtered_0 t (fun i -> i < nvars) false lst
 
 
   let used_variables (t:term) (nvars:int): int list =
     (* The list of variables of the term [t] below [nvars] in reversed order in
        which they appear *)
-    used_variables_filtered t (fun i -> i < nvars) false
+    used_variables_0 t nvars []
 
 
   let used_variables_from (t:term) (nvars:int) (dup:bool): int list =
@@ -437,6 +570,52 @@ end = struct
 
 
 
+  let used_variables_arr_transform (arr:term array) (nvars:int)
+      : int array * int array =
+    (* Analyze the used variables of the array of term [arr] with variables in
+       the interval 0,1,...,nvars-1 and return two arrays.
+
+       arr1: 0,1,...nused-1     index of the used variable i
+       arr2: 0,1,...nvars-1     position of the variable i in the array [arr]
+     *)
+    let lst =
+      Array.fold_left
+        (fun lst t -> used_variables_0 t nvars lst)
+        []
+        arr in
+    let arr1  = Array.of_list (List.rev lst) in
+    let nused = Array.length arr1 in
+    let arr2  = Array.make nvars (-1) in
+    for i = 0 to nused - 1 do
+      arr2.(arr1.(i)) <- i
+    done;
+    arr1, arr2
+
+
+
+  let unused_transform
+      ((nms,tps):    formals)
+      (ntvs:int)
+      ((fgnms,fgcon):formals)
+      (t:term)
+      : formals  * arguments * formals  * arguments =
+    let n1,n2 = Array.length nms, ntvs + Array.length fgnms
+    in
+    let usd,pos = used_variables_transform t n1 in
+    let n1new = Array.length usd in
+    let args  = Array.map (fun i -> Variable i) pos
+    and nms   = Array.init n1new (fun i -> nms.(usd.(i)))
+    and tps   = Array.init n1new (fun i -> tps.(usd.(i)))
+    in
+    let usd,pos = used_variables_arr_transform tps n2 in
+    let n2new = Array.length usd in
+    let ags   = Array.map (fun i -> Variable i) pos
+    and fgnms = Array.init n2new (fun i -> assert (ntvs<=i); fgnms.(usd.(i-ntvs)))
+    and fgcon = Array.init n2new (fun i -> assert (ntvs<=i); fgcon.(usd.(i-ntvs)))
+    in
+    (nms,tps), args, (fgnms,fgcon), ags
+
+
 
   let equivalent (t1:term) (t2:term): bool =
     (* Are the terms [t1] and [t2] equivalent ignoring names and predicate flags? *)
@@ -444,7 +623,7 @@ end = struct
       match t1, t2 with
         Variable i, Variable j ->
           i = j
-      | VAppl(i1,args1), VAppl(i2,args2)
+      | VAppl(i1,args1,_), VAppl(i2,args2,_)
         when i1 = i2 ->
           let n1 = Array.length args1
           and n2 = Array.length args2 in
@@ -455,13 +634,13 @@ end = struct
           n = Array.length args2 &&
           eq f1 f2 nb &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
-      | Lam(n1,nms1,pres1,t1,_), Lam(n2,nms2,pres2,t2,_) ->
+      | Lam(n1,nms1,pres1,t1,_,_), Lam(n2,nms2,pres2,t2,_,_) ->
           let nb = 1 + nb in
           (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb) pres1 pres2
           with Invalid_argument _ -> false)
             &&
           eq t1 t2 nb
-      | QExp(n1,nms1,t1,is_all1), QExp(n2,nms2,t2,is_all2)
+      | QExp(n1,_,_,t1,is_all1), QExp(n2,_,_,t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
           eq t1 t2 (n1+nb)
       | Flow(ctrl1,args1), Flow(ctrl2,args2) ->
@@ -482,6 +661,242 @@ end = struct
 
 
 
+  let rec shift_from
+      (delta1:int) (start1:int)
+      (delta2:int) (start2:int)
+      (t:term)
+      : term =
+    (* Shift all free variables by [delta1] starting from [start1] and all
+       free type variables by [delta2] starting from [start2]. Raise
+       [Term_capture] if a free variable gets bound. *)
+    if delta1 = 0 && delta2 = 0 then
+      t
+    else
+      let shift_i  d s i =
+        if i < s then i
+        else if i+d < s then
+          raise Term_capture
+        else
+          i+d
+      and shift_args d1 s1 d2 s2 args =
+        if d1=0 && d2 = 0 then args
+        else Array.map (fun t -> shift_from d1 s1 d2 s2 t) args
+      and shift_list d1 s1 d2 s2 lst =
+        if d1=0 && d2 = 0 then lst
+        else List.map (fun t -> shift_from d1 s2 d2 s2 t) lst in
+      match t with
+        Variable i ->
+          Variable (shift_i delta1 start1 i)
+      | VAppl(j,args,ags) ->
+          VAppl(shift_i delta1 start1 j,
+                shift_args delta1 start1 delta2 start2 args,
+                shift_args delta2 start2 0 0 ags)
+      | Application(f,args,pr) ->
+          Application(shift_from delta1 start1 delta2 start2 f,
+                      shift_args delta1 start1 delta2 start2 args,
+                      pr)
+      | Lam(n,nms,pres,t,pred,tp) ->
+          let start1 = 1 + start1 in
+          Lam(n,nms,
+              shift_list delta1 start1 delta2 start2 pres,
+              shift_from delta1 start1 delta2 start2 t,
+              pred,
+              shift_from delta2 start2 0 0 tp)
+      | QExp (n,(nms,tps),(fgnms,fgcon),t0,is_all) ->
+          assert (n = Array.length tps);
+          let start1 = n + start1
+          and start2 = Array.length fgcon in
+          QExp(n,
+               (nms,   shift_args delta2 start2 0 0 tps),
+               (fgnms, shift_args delta2 start2 0 0 fgcon),
+               shift_from delta1 start1 delta2 start2 t0,
+               is_all)
+      | Flow (ctrl,args) ->
+          Flow (ctrl, shift_args delta1 start1 delta2 start2 args)
+      | Indset (nme,tp,rs) ->
+          let start1 = 1 + start1 in
+          Indset(nme,
+                 shift_from delta2 start2 0 0 tp,
+                 shift_args delta1 start1 delta2 start2 rs)
+
+
+
+  let shift (d1:int) (d2:int) (t:term): term =
+    shift_from d1 0 d2 0 t
+
+  let shift_type (delta:int) (t:type_term): type_term =
+    shift_from delta 0 0 0 t
+
+  let up_type (n:int) (tp:type_term): type_term =
+    shift_type n tp
+
+  let down_type (n:int) (tp:type_term): type_term =
+    shift_type (-n) tp
+
+
+  let up_from (n:int) (start:int) (t:term): term =
+    shift_from n start 0 0 t
+
+  let up (n:int) (t:term): term =
+    shift_from n 0 0 0 t
+
+
+  let rec partial_subst_from
+      (t:term)
+      (n1:int) (nb1:int) (d1:int) (args1:term array)
+      (n2:int) (nb2:int) (d2:int) (args2:term array)
+      : term =
+    (*  Perform a partial substitution.
+
+        The term [t] has [n1] argument variables and [n2] type variables and
+        below [nb1/nb2] bound variables.  The first [Array.length args] of the
+        arguments and the first [Array.length ags] of the type variables will
+        be substituted by the corresponding terms/types in [args/ags] and the
+        others will be shifted down appropriately so that the new term has
+        [Array.length args - nargs] argument variables and [Array.length ags -
+        ntvs] type variables.
+
+        The arguments come from an environment with [d1/d2] variables/type
+        variables more than the term [t]. Therefore the variables/type
+        variables in [t] above [n1/n2] have to be shifted up by
+        [n_delta/ntvs_delta] to transform them into the environment of the
+        arguments.  *)
+    let len1,len2    = Array.length args1, Array.length args2  in
+    assert (len1 <= n1);
+    assert (len2 <= n2);
+    let free i = assert (nb1+n1 <= i); i+d1-len1 in
+    let sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2 =
+      Array.map
+        (fun t -> partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2)
+        args
+    and sub_list lst n1 nb1 d1 args1 n2 nb2 d2 args2 =
+      List.map
+        (fun t -> partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2)
+        lst in
+    if len1=0 && d1=0 && len2=0 && d2=0 then
+      t
+    else
+      match t with
+        Variable i when i < nb1 ->
+          t
+      | Variable i when i < nb1+len1 ->
+          assert (args1.(i-nb1) <> Variable (-1));
+          shift (nb1+n1-len1) 0 args1.(i-nb1)
+      | Variable i when i < nb1+n1 ->
+          Variable (i-len1)
+      | Variable i ->
+          Variable (free i)
+      | VAppl(j,args,ags) ->
+          VAppl(free j,
+                sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
+                sub_args ags  n2 nb2 d2 args2 0  0   0  [||])
+      | Application (f,args,pr) ->
+          Application (partial_subst_from f n1 nb1 d1 args1 n2 nb2 d2 args2,
+                       sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
+                       pr)
+      | Lam (n,nms,ps,t0,pr,tp) ->
+          let nb1 = 1 + nb1 in
+          Lam (n,nms,
+               sub_list ps n1 nb1 d1 args1 n2 nb2 d2 args2,
+               partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
+               pr,
+               partial_subst_from tp n2 nb2 d2 args2 0  0   0  [||])
+      | QExp (n,(nms,tps),(fgnms,fgtps),t0,is_all) ->
+          let nb1 = n + nb1
+          and nb2 = nb2 + Array.length fgtps in
+          QExp(n,
+               (nms,   sub_args tps   n2 nb2 d2 args2 0 0 0 [||]),
+               (fgnms, sub_args fgtps n2 nb2 d2 args2 0 0 0 [||]),
+               partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
+               is_all)
+      | Flow(ctrl,args) ->
+          Flow (ctrl, sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2)
+      | Indset (nme,tp,rs) ->
+          let nb1 = 1 + nb1 in
+          Indset (nme,
+                  partial_subst_from tp n2 nb2 d2 args2 0 0 0 [||],
+                  sub_args           rs n1 nb1 d1 args1 n2 nb2 d2 args2)
+
+
+
+  let partial_subst
+      (t:          term)
+      (n1:int) (d1:int) (args1:term array)
+      (n2:int) (d2:int) (args2:term array)
+      : term =
+    (*  Perform a partial substitution.
+
+        The term [t] has [n1] argument variables and [n2] type variables.  The
+        first [Array.length args] of the arguments and the first [Array.length
+        ags] of the type variables will be substituted by the corresponding
+        terms/types in [args/ags] and the others will be shifted down
+        appropriately so that the new term has [Array.length args - n1]
+        argument variables and [Array.length ags - n2] type variables.
+
+        The arguments come from an environment with [d1/d2] variables/type
+        variables more than the term [t]. Therefore the variables/type
+        variables in [t] above [n1/n2] have to be shifted up by [d1/d2] to
+        transform them into the environment of the arguments.  *)
+    partial_subst_from t n1 0 d1 args1 n2 0 d2 args2
+
+
+
+  let subst0_from
+      (t:term)
+      (nb1:int) (d1:int) (args1:term array)
+      (nb2:int) (d2:int) (args2:term array)
+      : term =
+    let n1,n2 = Array.length args1, Array.length args2 in
+    partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2
+
+
+  let subst0
+      (t:term)
+      (d1:int) (args1:term array)
+      (d2:int) (args2:term array): term =
+    (*  Perform a substitution.
+
+        The term [t] has [Array.length args1] argument variables and
+        [Array.length args2] type variables.  The arguments and type variables
+        will be substituted by the terms/types in the arrays, the others will
+        be shifted down appropriately so that the new term has neither
+        argument nor type variables.
+
+        The arguments come from an environment with [d1/d2] variables/type
+        variables more than the term [t] (above the variables). Therefore the
+        variables/type variables in [t] above have to be shifted up by
+        [d1/d2] to transform them into the environment of the arguments.  *)
+    subst0_from t 0 d1 args1 0 d2 args2
+
+
+  let apply0 (t:term) (args1:term array) (args2: term array): term =
+    let n1,n2 = Array.length args1, Array.length args2 in
+    partial_subst_from t n1 0 0 args1 n2 0 0 args2
+
+
+  let apply (t:term) (args:term array): term =
+    let n1 = Array.length args in
+    partial_subst_from t n1 0 0 args 0 0 0 [||]
+
+
+  let subst_from (t:term) (nb:int) (d:int) (args:arguments): term =
+    subst0_from t nb d args 0 0 [||]
+
+  let subst (t:term) (d:int) (args:arguments): term =
+    subst_from t 0 d args
+
+
+  let swap_variable_blocks (n1:int) (m1:int) (n2:int) (m2:int) (t:term): term =
+    (* The term [t] has [n1+m1] variables and [n2+m2] type variables. The
+       variables and type variables in the two blocks have to be swapped *)
+    let new_var i n m = if i<n then m+i else i-n in
+    let mkargs n m = Array.init (n+m) (fun i -> Variable(new_var i n m)) in
+    let args1 = mkargs n1 m1
+    and args2 = mkargs n2 m2 in
+    subst0 t (n1+m1) args1 (n2+m2) args2
+
+
+
   let map (f:int->int->int) (t:term): term =
     (* Map all variables 'j' of the term 't' to 'Variable(f j nb)' where 'nb'
        is the number of bound variables in the context where 'j' appears.
@@ -491,17 +906,17 @@ end = struct
       in
       match t with
         Variable j -> Variable (f j nb)
-      | VAppl (j,args) ->
-          VAppl (f j nb, map_args nb args)
+      | VAppl (j,args,ags) ->
+          VAppl (f j nb, map_args nb args, ags)
       | Application (a,b,pred) ->
           Application (mapr nb a, map_args nb b, pred)
-      | Lam (nargs,names,pres,t,pred) ->
+      | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
           and t    = mapr nb t in
-          Lam(nargs, names, pres, t, pred)
-      | QExp (nargs,names,t,is_all) ->
-          QExp(nargs, names, mapr (nb+nargs) t, is_all)
+          Lam(nargs, names, pres, t, pred,tp)
+      | QExp (nargs,args,fgs,t,is_all) ->
+          QExp(nargs, args, fgs, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
           Flow(ctrl,map_args nb args)
       | Indset (n,nms,rs) ->
@@ -553,17 +968,17 @@ end = struct
       let map_args nb args = Array.map (fun t -> mapr nb t) args in
       match t with
         Variable j -> f j nb
-      | VAppl (j,args) ->
-          VAppl (j, Array.map (fun t -> mapr nb t) args)
+      | VAppl (j,args,ags) ->
+          VAppl (j, Array.map (fun t -> mapr nb t) args, ags)
       | Application (a,b,pred) ->
           Application (mapr nb a, map_args nb b, pred)
-      | Lam (nargs,names,pres,t,pred) ->
+      | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
           and t = mapr nb t in
-          Lam(nargs, names, pres , t, pred)
-      | QExp (nargs,names,t,is_all) ->
-          QExp(nargs, names, mapr (nb+nargs) t, is_all)
+          Lam(nargs, names, pres , t, pred, tp)
+      | QExp (nargs,args,fgs,t,is_all) ->
+          QExp(nargs, args, fgs, mapr (nb+nargs) t, is_all)
       | Flow (ctrl,args) ->
           Flow(ctrl, map_args nb args)
       | Indset (n,nms,rs) ->
@@ -603,7 +1018,8 @@ end = struct
 
   let upbound (n:int) (start:int) (t:term): term =
     (* Shift all free variables up by 'n' from 'start' on in the term 't' *)
-    assert (n>=0);
+    assert false  (*no longer in use *)
+    (*assert (n>=0);
     if n=0 then
       t
     else
@@ -614,59 +1030,20 @@ end = struct
           else
             j + n)
         t
+*)
 
 
-
-
+(*
   let up (n:int) (t:term): term =
     (* Shift all free variables up by 'n' in the term 't' *)
-    upbound n 0 t
+    upbound n 0 t*)
 
 
   let array_up (n:int) (arr:term array): term array =
     if n = 0 then arr
     else Array.map (fun t -> up n t) arr
 
-
-  let part_sub_from
-      (t:term)
-      (start:int)
-      (nargs:int)
-      (args:term array)
-      (n_delta:int)
-      : term =
-    (** Perform a partial substitution.
-
-        The term [t] has above [start] [nargs] argument variables. The first
-        [Array.length args] of them will be substituted by the corresponding
-        term in [args] and the others will be shifted down appropriately so
-        that the new term has [(Array.length args)-nargs] argument variables.
-
-        The arguments come from an environment with [n_delta] variables more
-        than the term [t]. Therefore the variables in [t] above [start+nargs]
-        have to be shifted up by [n_delta] to transform them into the
-        environment of the arguments.  *)
-    let len = Array.length args in
-    assert (len <= nargs);
-    map_to_term
-      (fun j nb ->
-        let nb1 = nb + start in
-        if j < nb1 then
-          Variable(j)
-        else
-          let jfree = j - nb1 in
-          if jfree < len then
-            let arg = args.(jfree) in
-            assert (arg <> Variable (-1));
-            up (nb1+nargs-len) arg
-          else if jfree < nargs then
-            Variable (j-len)
-          else
-            Variable(j+n_delta-len)
-      )
-      t
-
-
+(*
   let part_sub_from
       (t:term)
       (start:int)
@@ -698,18 +1075,19 @@ end = struct
           Variable (i-len)
       | Variable i ->
           Variable (i + n_delta - len)
-      | VAppl (i,args) ->
+      | VAppl (i,is,args,ags) ->
           assert (nb1 + nargs - len <= i);
-          VAppl (i + n_delta - len, sub_args nb args)
+          assert (nb1 + nargs - len <= is);
+          VAppl (i+n_delta-len, is+n_delta-len,sub_args nb args, ags)
       | Application(f,args,pr) ->
           Application (sub f nb, sub_args nb args, pr)
-      | Lam(n,nms,pres0,t0,pr) ->
+      | Lam(n,nms,pres0,t0,pr,tp) ->
           let nb = 1 + nb in
           let pres0 = List.map (fun t -> sub t nb) pres0
           and t0    = sub t0 nb in
-          Lam (n, nms, pres0, t0, pr)
-      | QExp(n,nms,t0,is_all) ->
-          QExp (n, nms, sub t0 (n+nb), is_all)
+          Lam (n, nms, pres0, t0, pr,tp)
+      | QExp(n,args,fgs,t0,is_all) ->
+          QExp (n, args, fgs, sub t0 (n+nb), is_all)
       | Flow (ctrl,args) ->
           Flow (ctrl, sub_args nb args)
       | Indset (n,nms,rs) ->
@@ -761,8 +1139,8 @@ end = struct
        apply the function ([v0,v1,...]->t) to the arguments in args
      *)
     sub t args 0
-
-
+*)
+(*
   let remove_unused_0 (nms:int array) (t:term): int * int array * term array =
     let n = Array.length nms in
     let usd,pos = used_variables_transform t n in
@@ -770,49 +1148,60 @@ end = struct
     let args = Array.map (fun i -> Variable i) pos
     and nms2 = Array.init n2 (fun i -> nms.(usd.(i))) in
     n2, nms2, args
+*)
 
 
-  let remove_unused (nms:int array) (t:term): int * int array * term =
-    let n2,nms2,args = remove_unused_0 nms t in
-    n2, nms2, sub t args n2
+  let remove_unused
+      ((nms,tps):formals)
+      (ntvs:int)
+      ((fgnms,fgcon):formals)
+      (t:term)
+      : formals * formals * term =
+    let (nms,tps), args, (fgnms,fgcon), ags =
+      unused_transform (nms,tps) ntvs (fgnms,fgcon) t in
+    let n1new, n2new = Array.length nms, Array.length fgnms in
+    let t = subst0 t n1new args n2new ags in
+    (nms,tps), (fgnms,fgcon), t
 
 
-  let lambda_split (t:term): int * int array * term list * term * bool =
+
+  let lambda_split (t:term): int * names * term list * term * bool * type_term =
     match t with
-      Lam (n,names,pres,t,p) -> n,names,pres,t,p
+      Lam (n,nms,pres,t,p,tp) -> n,nms,pres,t,p,tp
     | _ -> raise Not_found
 
 
-  let qlambda_split_0 (t:term): int * int array * term * bool =
+  let qlambda_split_0 (t:term): int * formals * formals * term * bool =
     match t with
-      QExp (n,names,t,is_all) -> n,names,t,is_all
+      QExp (n,args,fgs,t,is_all) -> n,args,fgs,t,is_all
     | _ ->
-        0, [||], t, false
+        0, empty_formals, empty_formals, t, false
 
-  let qlambda_split (t:term): int * int array * term * bool =
+  let qlambda_split (t:term): int * formals * formals * term * bool =
     match t with
-      QExp (n,names,t,is_all) -> n,names,t,is_all
+      QExp (n,args,fgs,t,is_all) -> n,args,fgs,t,is_all
     | _ -> raise Not_found
 
-  let pattern_split (t:term): int * int array * term =
-    let n,nms,t,is_all = qlambda_split_0 t in
+  let pattern_split (t:term): int * formals * term =
+    let n,fargs,_,t,is_all = qlambda_split_0 t in
     assert (not is_all);
-    n, nms, t
+    n, fargs, t
 
-  let case_split (t1:term) (t2:term): int * int array * term * term =
-    let n1,nms1,t1 = pattern_split t1
-    and n2,nms2,t2 = pattern_split t2 in
+  let case_split (t1:term) (t2:term): int * formals * term * term =
+    let n1,fargs1,t1 = pattern_split t1
+    and n2,fargs2,t2 = pattern_split t2 in
     assert (n1 = n2);
-    n1, nms1, t1, t2
+    n1, fargs1, t1, t2
+
 
   let unary (unid:int) (t:term): term =
     let args = [| t |] in
-    VAppl (unid, args)
+    VAppl (unid,args,[||])
 
 
   let unary_split (t:term) (unid:int): term =
     match t with
-      VAppl (i,args) when i = unid ->
+      VAppl (i,args,_) when i = unid ->
         assert (Array.length args = 1);
         args.(0)
     | _ -> raise Not_found
@@ -820,12 +1209,12 @@ end = struct
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| left; right |] in
-    VAppl (binid, args)
+    VAppl (binid, args, [||])
 
 
   let binary_split_0 (t:term): int * term * term =
     match t with
-      VAppl(i,args) when Array.length args = 2 ->
+      VAppl(i,args,_) when Array.length args = 2 ->
         i, args.(0), args.(1)
     | _ ->
         raise Not_found
@@ -840,36 +1229,52 @@ end = struct
 
 
 
-  let quantified (is_all:bool) (nargs:int) (names:int array) (t:term): term =
-    assert (let nnms = Array.length names in nnms=0 || nnms = nargs);
+  let quantified (is_all:bool) (nargs:int) (args:formals) (fgs:formals) (t:term)
+      : term =
+    begin
+      let (nms,tps), (fgnms,fgcon) = args, fgs in
+      let n1,n2 = Array.length nms, Array.length fgnms in
+      assert (n1 = Array.length tps);
+      assert (n2 = Array.length fgcon);
+      assert (nargs = 0 || nargs = n1)
+    end;
     if nargs = 0 then
       t
     else
-      QExp (nargs,names,t,is_all)
+      QExp (nargs,args,fgs,t,is_all)
 
 
-  let all_quantified (nargs:int) (names:int array) (t:term): term =
-    quantified true nargs names t
+  let all_quantified (nargs:int) (args:formals) (fgs:formals) (t:term): term =
+    quantified true nargs args fgs t
 
-  let some_quantified (nargs:int) (names:int array) (t:term): term =
-    quantified false nargs names t
+  let some_quantified (nargs:int) (args:formals) (fgs:formals) (t:term): term =
+    quantified false nargs args fgs t
 
 
-  let pattern (n:int) (nms:int array) (t:term): term =
-    some_quantified n nms t
+  let pattern (n:int) (args:formals) (t:term): term =
+    some_quantified n args empty_formals t
 
-  let quantifier_split (t:term) (is_all:bool): int * int array * term =
-    let n,nms,t0,is_all0 = qlambda_split t in
+
+  let quantifier_split (t:term) (is_all:bool): int * formals * formals * term =
+    let n,args,fgs,t0,is_all0 = qlambda_split t in
     if is_all = is_all0 then
-      n,nms,t0
+      n,args,fgs,t0
     else
       raise Not_found
 
-  let all_quantifier_split (t:term): int * int array * term =
+
+  let all_quantifier_split (t:term): int * formals * formals * term =
     quantifier_split t true
 
-  let some_quantifier_split (t:term): int * int array * term =
-    quantifier_split t false
+  let some_quantifier_split (t:term): int * formals * term =
+    let n,tps,fgs,t = quantifier_split t false in
+    assert (fgs = empty_formals);
+    n,tps,t
+
+
+  let is_all_quantified (t:term) =
+    try ignore (all_quantifier_split t); true
+    with Not_found -> false
 
 
   let split_implication_chain (t:term) (impid:int)
@@ -899,13 +1304,13 @@ end = struct
 
 
   let split_rule (t:term) (imp_id:int)
-      : int * int array * term list * term =
-    let n,nms,t0,is_all = qlambda_split_0 t in
+      : int * formals * formals * term list * term =
+    let n,fargs,fgs,t0,is_all = qlambda_split_0 t in
     if n>0 && not is_all then
-      0, [||], [], t
+      0, empty_formals, empty_formals, [], t
     else
       let ps_rev, tgt = split_implication_chain t0 (n+imp_id) in
-      n,nms,ps_rev,tgt
+      n,fargs,fgs,ps_rev,tgt
 
 
   let rec make_implication_chain
@@ -922,6 +1327,82 @@ end = struct
           imp_id
 
 
+  let prepend_names (nms1:int array) (nms2:int array): int array =
+    let n1,n2 = Array.length nms1, Array.length nms2 in
+    interval_iter
+      (fun i ->
+        if interval_exist (fun j -> nms1.(i)=nms2.(j)) 0 n2 then
+          raise (Name_clash nms1.(i))
+        else
+          ())
+      0 n1;
+    Array.append nms1 nms2
+
+
+
+  let rec prenex (t:term) (nb:int) (nb2:int) (imp_id:int): term =
+    (* Calculate the prenex normal form of the term [t] with respect to
+       universal quantifiers. All universal quantifiers are bubbled up in
+       implication chains and merged with the upper universal quantifier. Unused
+       variables in universally quantified expressions are eliminated.  *)
+    let n,tps,fgs,t0 = prenex_0 t nb nb2 imp_id in
+    all_quantified n tps fgs t0
+
+  and prenex_0 (t:term) (nb:int) (nb2:int) (imp_id:int)
+      : int * formals * formals * term =
+    let norm_args (args:term array) (nb:int) (nb2:int): term array =
+      Array.map (fun t -> prenex t nb nb2 imp_id) args
+    and norm_lst  (lst: term list) (nb:int) (nb2:int): term list =
+      List.map (fun t -> prenex t nb nb2 imp_id) lst in
+    match t with
+      Variable i -> 0, empty_formals, empty_formals, t
+    | VAppl(i,args,ags) when i = nb + imp_id ->
+        assert (Array.length args = 2);
+        assert (Array.length ags  = 0);
+        let a = prenex args.(0) nb nb2 imp_id
+        and n,(nms,tps),(fgnms,fgcon),b1 = prenex_0 args.(1) nb nb2 imp_id in
+        let b1 = swap_variable_blocks n nb (Array.length fgnms) nb2 args.(1)
+        and a1 = shift_from n nb (Array.length fgnms) nb2 a in
+        let t = VAppl(i+n,[|a1;b1|],ags) in
+        n, (nms,tps), (fgnms,fgcon), t
+    | VAppl(i,args,ags) ->
+        0, empty_formals, empty_formals,
+        VAppl(i, norm_args args nb nb2, ags)
+    | Application(f,args,pr) ->
+        let f = prenex f nb nb2 imp_id
+        and args = norm_args args nb nb2 in
+        0, empty_formals, empty_formals, Application(f,args,pr)
+    | Lam(n,nms,ps,t0,pr,tp) ->
+        let ps = norm_lst ps (1+nb) nb2
+        and t0 = prenex t0 (1+nb) nb2 imp_id in
+          0, empty_formals, empty_formals, Lam(n,nms,ps,t0,pr,tp)
+    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,is_all) ->
+        let nb  = nb  + n0
+        and nb2 = nb2 + Array.length fgnms in
+        if is_all then
+          let n1,(nms1,tps1),(fgnms1,fgcon1),t1 = prenex_0 t0 nb nb2 imp_id in
+          let nms,tps     = prepend_names nms nms1, Array.append tps tps1
+          and fgnms,fgcon =
+            prepend_names fgnms fgnms1, Array.append fgcon fgcon1 in
+          let (nms,tps),(fgnms,fgcon),t1 =
+            remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
+          Array.length nms, (nms,tps), (fgnms,fgcon), t1
+        else
+          0, empty_formals, empty_formals,
+          QExp(n0, (nms,tps), (fgnms,fgcon), prenex t0 nb nb2 imp_id, is_all)
+    | Flow(ctrl,args) ->
+        0, empty_formals, empty_formals,
+        Flow(ctrl, norm_args args nb nb2)
+    | Indset (nme,tp,rs) ->
+        let tp = assert false
+        and rs = norm_args rs (1+nb) nb2 in
+        0, empty_formals, empty_formals , Indset (nme,tp,rs)
+
+
+
+
+
+
 
   let closure_rule (i:int) (p:term) (p_rep:term): term =
     assert (0 <= i);
@@ -936,7 +1417,7 @@ end = struct
 
 
   let induction_rule (imp_id:int) (i:int) (p:term) (pr:term) (q:term)
-      : int * int array * term list * term =
+      : int * formals * formals * term list * term =
     (* Calculate the induction rule [i] for the inductively defined set [p]
 
        The closure rule [i] is
@@ -964,8 +1445,10 @@ end = struct
         Application(Variable i,args,pr0) when i = n ->
           assert pr0;
           assert (Array.length args = 1);
-          sub_from t n [|pr|] 0,
-          sub_from t n [|q|] 0
+          subst_from t n 0 [|pr|],
+          subst_from t n 0 [|q |]
+          (*sub_from t n [|pr|] 0,
+          sub_from t n [|q|] 0*)
       | _ ->
           raise Not_found
     in
@@ -974,7 +1457,7 @@ end = struct
         assert (n = 1);
         let nrules = Array.length rs in
         assert (i < nrules);
-        let n,nms,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
+        let n,fargs,fgs,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
         let last,tgt = try pair n tgt with Not_found -> assert false in
         let ps = List.fold_left
             (fun ps t ->
@@ -987,13 +1470,14 @@ end = struct
             [last]
             ps_rev
         in
-        n,nms,ps,tgt
+        n,fargs,fgs,ps,tgt
     | _ ->
         invalid_arg "Not an inductive set"
 
 
 
-  let induction_law (imp_id:int) (p:term) (pr:term): term =
+  let induction_law
+      (imp_id:int) (p:term) (pr:term) (el_tp:type_term) (set_tp:type_term): term =
     (* Calculate the induction law for the inductively defined set [p] represented
        by [pr]
 
@@ -1014,9 +1498,9 @@ end = struct
         assert (n = 1);
         let nrules = Array.length rs in
         let rule i =
-          let n,nms,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
+          let n,fargs,fgs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
-          all_quantified n nms chn in
+          all_quantified n fargs fgs chn in
         let pa = Application (pr,[|Variable 1|],true)
         and qa = Application (Variable 0, [|Variable 1|],true) in
         let tgt = binary imp_id pa qa in
@@ -1028,7 +1512,9 @@ end = struct
               binary imp_id indi tgt)
             tgt
             0 nrules in
-        all_quantified 2 [|ST.symbol "q";ST.symbol "a"|] tgt
+        let nms = [|ST.symbol "q";ST.symbol "a"|]
+        and tps = [|set_tp; el_tp|] in
+        all_quantified 2 (nms,tps) empty_formals tgt
     | _ ->
         invalid_arg "Not an inductive set"
 end (* Term *)

@@ -189,7 +189,7 @@ let unify (t:term) (nbt:int) (table:t)
               base)
           basic_subs
           tab.fvars
-    | VAppl (i,args) ->
+    | VAppl (i,args,_) ->
         assert (nb + nbt <= i);
         let idx = i - nb - nbt in
         begin try
@@ -210,7 +210,7 @@ let unify (t:term) (nbt:int) (table:t)
           with Not_found ->
             basic_subs
         end
-    | Lam (n,_,pres,t,_) ->
+    | Lam (n,_,pres,t,_,_) ->
         let len = List.length pres in
         begin try
           let prestablst,ttab = find_lam len tab in
@@ -229,7 +229,7 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
         end
-    | QExp (n,_,t,is_all) ->
+    | QExp (n,_,_,t,is_all) ->
         begin try
           let ttab = IntMap.find n (qmap is_all tab) in
           let tlst = uni t ttab (n+nb) in
@@ -245,11 +245,11 @@ let unify (t:term) (nbt:int) (table:t)
         with Not_found ->
           basic_subs
         end
-    | Indset (n,nms,rs) ->
+    | Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         begin try
-          let argtabs = IntPairMap.find (n,nrules) tab.inds in
-          arglst rs (n+nb) argtabs [] false
+          let argtabs = IntPairMap.find (1,nrules) tab.inds in
+          arglst rs (1+nb) argtabs [] false
         with Not_found ->
           basic_subs
         end
@@ -321,7 +321,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
           raise Not_found
         else
           sublist
-    | VAppl (i,args) ->
+    | VAppl (i,args,_) ->
         assert (nb + nargs + nbenv <= i);
         let idx = i - nb - nargs - nbenv in
         let argtabs,sublst = IntMap.find idx tab.apps in
@@ -346,7 +346,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             flst := merge_lists !flst alst)
           args;
         !flst
-    | Lam (n,_,pres,t,_) ->
+    | Lam (n,_,pres,t,_,_) ->
         let len = List.length pres in
         let prestabs, ttab = find_lam len tab in
         let rec addpres pres prestabs lst =
@@ -360,7 +360,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
         in
         let tlst = uniw t ttab (1 + nb) in
         addpres pres prestabs tlst
-    | QExp (n,_,t,is_all) ->
+    | QExp (n,_,_,t,is_all) ->
         let ttab = IntMap.find n (qmap is_all tab) in
         uniw t ttab (n+nb)
     | Flow (ctrl,args) ->
@@ -373,12 +373,12 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
             lst := if i = 0 then alst else merge_lists !lst alst)
           args;
         !lst
-    | Indset (n,nms,rs) ->
-        let argtabs = IntPairMap.find (n,Array.length rs) tab.inds in
+    | Indset (_,_,rs) ->
+        let argtabs = IntPairMap.find (1,Array.length rs) tab.inds in
         let lst = ref [] in
         Array.iteri
           (fun i a ->
-            let alst = uniw a argtabs.(i) (n+nb) in
+            let alst = uniw a argtabs.(i) (1+nb) in
             lst := if i = 0 then alst else merge_lists !lst alst)
           rs;
         !lst
@@ -436,7 +436,7 @@ let add
           (* variable is bound by some abstraction *)
           assert (i < nb);
           {tab with bvars = newmap i idx tab.bvars}
-      | VAppl (i,args) ->
+      | VAppl (i,args,_) ->
           assert (nb + nargs + nbenv <= i);
           let len  = Array.length args
           and item = idx, Term_sub.empty
@@ -461,7 +461,7 @@ let add
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
-      | Lam (n,_,pres,t,_) ->
+      | Lam (n,_,pres,t,_,_) ->
           let len = List.length pres in
           let rec addpres pres prestablst =
             match pres, prestablst with
@@ -482,7 +482,7 @@ let add
           and prestab = addpres pres prestab
           in
           add_lam len (prestab,ttab) tab
-      | QExp (n,_,t,is_all) ->
+      | QExp (n,_,_,t,is_all) ->
           let ttab =
             try IntMap.find n (qmap is_all tab)
             with Not_found -> empty
@@ -501,7 +501,8 @@ let add
           let argtabs =
             Array.mapi (fun i tab -> add0 args.(i) nb tab) argtabs in
           {tab with flows = FlowMap.add (ctrl,n) argtabs tab.flows}
-      | Indset (n,nms,rs) ->
+      | Indset (_,_,rs) ->
+          let n = 1 in
           let nrules = Array.length rs in
           let argtabs =
             try IntPairMap.find (n,nrules) tab.inds
