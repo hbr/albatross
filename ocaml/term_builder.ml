@@ -1388,7 +1388,14 @@ let normalized_result (tb:t): term =
   and nb = Context.count_variables c in
   let res = Feature_table.normalize_lambdas res nb ft in
   let res = Context.specialized res c in
-  Context.prenex_term res c
+  let res = Context.prenex_term res c in
+  if tb.trace then begin
+    let c = context tb in
+    printf "  normalized \"%s\"   \"%s\"\n"
+      (Context.string_of_term res c)
+      (Term.to_string res)
+  end;
+  res
 
 exception Illegal_term
 

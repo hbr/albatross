@@ -13,11 +13,20 @@ open Printf
 
 type formal = int * type_term
 
-type desc = { name: int;
-              lib:  int;
+
+type desc = { name: int; (* module name *)
+              lib:  int; (* library name of the module *)
               mutable priv: IntSet.t;
-              mutable pub:  IntSet.t
-            }
+              mutable pub:  IntSet.t (* Privately and publicly used modules are
+                                        identical for all used modules. For the
+                                        current module the publicly used modules
+                                        are a subset of the privately used modules *)
+   (* The used modules of each module contain the directly and indirectly used
+      modules. Usage is reflexive, i.e. each module uses itself.
+
+      The modules are added in topologically sorted i.e. a module is entered into
+      the table only if all its used modules are already in the table. *)
+   }
 
 
 
@@ -26,7 +35,8 @@ type t = {mutable map:    int Module_map.t;
           seq:            desc Seq.t;
           libseq:         library_name Seq.t;
           base:           IntSet.t;
-          mutable base_added:     IntSet.t;
+          mutable base_added:     IntSet.t; (* Set of all base modules which are
+                                               already in the module table *)
           mutable mode:   int;
           mutable fgens: type_term IntMap.t}
 
@@ -102,6 +112,8 @@ let descriptor (i:int) (mt:t): desc =
 
 
 let interface_used (used_blk: use_block) (mt:t): IntSet.t =
+  (* The set of all directly and indirectly used modules of the use block [used_blk]
+     occuring in the interface file of the current module *)
   assert (has_current mt);
   List.fold_left
     (fun set mdl ->
@@ -160,6 +172,9 @@ let name (mdl:int) (mt:t): string =
 
 
 let add_used ((nme,lib):int*int list) (used:IntSet.t) (mt:t): unit =
+  (* Add the used module (nme,lib) of the current module with all its implicitely
+     used modules. Note: The current module has not yet been inserted!
+   *)
   assert (not (has (nme,lib) mt));
   assert (not (has_base nme mt));
   let n = count mt in
@@ -198,6 +213,17 @@ let add_current (name:int) (used:IntSet.t) (mt:t): unit =
 
 
 
+let is_visible (mdl:int) (mt:t): bool =
+  (* Is the module [mdl] visible i.e. exported? *)
+  assert (0 <= mdl);
+  assert (mdl < count mt);
+  assert (has_current mt);
+  assert (mdl <> current mt);
+  let desc = descriptor (current mt) mt in
+  IntSet.mem mdl desc.pub
+
+
+
 let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
   assert (has_current mt);
   assert (is_private mt);
@@ -210,10 +236,9 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
 
 
 let base_set: IntSet.t =
-  List.fold_left
-    (fun set nme -> IntSet.add (ST.symbol nme) set)
-    IntSet.empty
-    ["boolean";"any";"predicate";"tuple";"function"]
+  (* The set of all basic modules. *)
+  IntSet.of_list
+    (List.rev_map ST.symbol ["boolean";"any";"predicate";"tuple";"function"])
 
 
 
@@ -347,3 +372,11 @@ let class_formal_generics (fgens: formal_generics) (mt:t): formal array =
            let str = "Unknown formal generic " ^ (ST.string nme) in
            error_info fgens.i str)
        fgens.v)
+
+
+let class_tvs (fgens:formal_generics) (mt:t): Tvars.t =
+  let fgs = class_formal_generics fgens mt in
+  let fgnms, fgcon = Myarray.split fgs in
+  let nfgs = Array.length fgcon in
+  let fgcon = Array.map (fun tp -> Term.up nfgs tp) fgcon in
+  Tvars.make_fgs fgnms fgcon

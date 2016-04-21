@@ -14,9 +14,9 @@ open Container
 
 type formal = int * type_term
 
-type parent_descriptor = bool * type_term array
 
 type t
+type parent_descriptor
 
 val dummy_index:     int
 val boolean_index:   int
@@ -120,7 +120,6 @@ val anchored: Tvars.t -> int -> t -> int array
 val anchor_formal_generics: Tvars.t -> Sign.t -> t -> int array
 val check_deferred:  int -> int -> info -> t -> unit
 
-val find:   int list -> int -> t -> int
 val find_for_declaration: int list*int -> t -> int
 
 val split_type_term: type_term -> int * type_term array
@@ -141,22 +140,20 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
 
 val arity_of_downgraded: int -> type_term -> int
 
-val update: int -> header_mark withinfo -> formal_generics -> t -> unit
+val update: int -> header_mark withinfo -> Tvars.t -> t -> unit
 
-val add: header_mark withinfo -> int -> formal_generics -> t -> unit
+val add: header_mark withinfo -> int -> Tvars.t -> t -> unit
 
 val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
-val constructors_priv:int -> t -> IntSet.t
 val induction_law:    int -> t -> int
 val set_constructors:  IntSet.t -> int -> t -> unit
 val set_induction_law: int -> int -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor
-val has_private_ancestor: int -> int -> t -> bool
-val private_ancestor:     int -> int -> t -> parent_descriptor
+val is_ghost_ancestor: int -> int -> t -> bool
 val ancestor_type: type_term -> int -> int -> t -> type_term
 
 val descends_from_any: int -> t -> bool

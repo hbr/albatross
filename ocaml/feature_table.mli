@@ -43,21 +43,17 @@ val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
 
-val private_variant: int -> int -> t -> int
-
 val variant_term: term -> int -> int -> int -> t -> term
     (** [variant t nb base_cls cls ft] returns the variant of the term [t]
         with [nb] bound variables of the base class [base_cls] in the class
         [cls] *)
 
 val has_variant: int -> int -> t -> bool
-val has_private_variant: int -> int -> t -> bool
 
-(*val variant_feature: int -> int -> type_term array -> Tvars.t -> t -> int*)
 
 val fully_expanded: term -> int -> Tvars.t -> t -> term
 
-val find_variant_candidate: int -> int -> t -> int
+val find_variant_candidate: int -> int -> t -> int*agens
 
 val has_variant_candidate: int -> int -> t -> bool
 
@@ -157,7 +153,6 @@ val is_deferred: int -> t -> bool
 val signature: int -> t -> Tvars.t * Sign.t
 val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
-val private_body: int -> t -> Feature.body
 val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
@@ -221,7 +216,7 @@ val term_to_string: term -> bool -> int -> int array -> t -> string
 
 val inherit_new_effective: int -> int -> bool -> t -> int
 
-val inherit_feature: int -> int -> int -> bool -> t -> unit
+val inherit_feature: int -> agens -> int -> int -> bool -> t -> unit
 
 val export_feature: int -> bool -> t -> unit
 
@@ -232,3 +227,5 @@ val downgrade_term: term -> int -> t -> term
 val adapt_names: int array -> int array -> int array
 
 val domain_of_feature: int -> int -> t -> term
+
+val validate_visibility: term -> int -> info -> t -> unit

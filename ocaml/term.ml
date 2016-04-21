@@ -65,6 +65,8 @@ let count_formals ((nms,tps):formals): int =
 
 module Term: sig
 
+  val standard_substitution: int -> term array
+
   val is_variable_i: term -> int -> bool
 
   val to_string: term -> string
@@ -134,20 +136,11 @@ module Term: sig
 
   val subst_from: term -> int -> int -> arguments -> term
   val subst:      term -> int -> arguments -> term
+  val subst_array:arguments -> int -> arguments -> arguments
 
   val apply0: term -> term array -> term array -> term
   val apply:  term -> term array -> term
-(*
-  val part_sub_from: term -> int -> int -> term array -> int -> term
 
-  val part_sub: term -> int -> term array -> int -> term
-
-  val sub_from: term -> int -> term array -> int -> term
-
-  val sub:   term -> term array -> int -> term
-
-  val apply: term -> term array -> term
-*)
   val lambda_split: term -> int * int array * term list * term * bool * type_term
 
   val qlambda_split_0: term -> int * formals * formals * term * bool
@@ -191,7 +184,12 @@ module Term: sig
     -> int * formals * formals * term list * term
   val induction_law:  int -> term -> term -> type_term -> type_term -> term
   val prenex: term -> int -> int -> int -> term
+
 end = struct
+
+  let standard_substitution (n:int): term array =
+    assert (0 <= n);
+    Array.init n (fun i -> Variable i)
 
   let is_variable_i (t:term) (i:int): bool =
     match t with
@@ -883,7 +881,14 @@ end = struct
     subst0_from t nb d args 0 0 [||]
 
   let subst (t:term) (d:int) (args:arguments): term =
+    (* Substitute that arguments of the term [t] by the actual arguments [args] which
+       have [d] more variables than the term [t] above its arguments. I.e. all
+       variables in [t] above [nargs] have to be shifted up. *)
     subst_from t 0 d args
+
+
+  let subst_array (arr:term array) (d:int) (args:arguments): arguments =
+    Array.map (fun t -> subst t d args) arr
 
 
   let swap_variable_blocks (n1:int) (m1:int) (n2:int) (m2:int) (t:term): term =

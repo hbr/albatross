@@ -278,7 +278,7 @@ type operator =
   | DColonop
   | Inop
   | Notinop
-  | Allop
+  | Allop (* Allop and Someop still necessary? "Feature_table.term_to_string" *)
   | Someop
   | Freeop  of int
   | RFreeop of int

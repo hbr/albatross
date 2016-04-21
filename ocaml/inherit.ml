@@ -26,8 +26,9 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
    *)
   let ft = PC.feature_table pc in
   assert (cls <> Feature_table.class_of_feature i ft);
-  let idx =
-    try Feature_table.find_variant_candidate i cls ft
+  let idx,ags =
+    try
+      Feature_table.find_variant_candidate i cls ft
     with Not_found ->
       let ct   = class_table pc  in
       let str =
@@ -49,7 +50,7 @@ let inherit_deferred (i:int) (cls:int) (is_ghost:bool) (info:info) (pc:PC.t): un
   and is_idx_ghost = Feature_table.is_ghost_function idx ft in
   if is_idx_ghost && not is_i_ghost && not is_ghost then
     error_info info "Must be ghost inheritance";
-  Feature_table.inherit_feature i idx cls false ft
+  Feature_table.inherit_feature i ags idx cls false ft
 
 
 
@@ -120,6 +121,7 @@ let rec inherit_effective
    *)
   let ft = Proof_context.feature_table pc
   in
+  assert (not (Feature_table.is_interface_check ft));
   if not (Feature_table.has_anchor i ft) || Feature_table.has_variant i cls ft
   then
     ()
@@ -130,28 +132,25 @@ let rec inherit_effective
       printf "   inherit effective \"%s %s\" in %s\n"
         (Class_table.class_name icls ct)
         (Feature_table.string_of_signature i ft)
-        (Class_table.class_name cls ct) end;
-    try
-      let idx = Feature_table.private_variant i cls ft in
-      assert (PC.is_interface_check pc);
-      Feature_table.export_feature idx true ft;
-      Feature_table.inherit_feature i idx cls true ft
+        (Class_table.class_name cls ct)
+    end;
+    assert (not (Feature_table.has_variant i cls ft));
+    begin try
+      let idx,ags = Feature_table.find_variant_candidate i cls ft in
+      Feature_table.inherit_feature i ags idx cls false ft;
+      check_validity i idx cls info pc
     with Not_found ->
-      begin try
-        let idx = Feature_table.find_variant_candidate i cls ft in
-        Feature_table.inherit_feature i idx cls false ft;
-        check_validity i idx cls info pc
-      with Not_found ->
-        ()
+      ()
         (*let idx = Feature_table.inherit_new_effective i cls ghost ft in
-        if to_descs then
+          if to_descs then
           inherit_to_descendants idx info pc*)
-      end
+    end
   end
 
 and inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
   let ft = PC.feature_table pc in
-  if Feature_table.has_anchor i ft then
+  if not (Feature_table.is_interface_check ft && Feature_table.has_anchor i ft)
+  then
     let ct  = class_table pc in
     let cls = Feature_table.class_of_feature i ft in
     let descendants = Class_table.descendants cls ct in
@@ -159,7 +158,7 @@ and inherit_to_descendants (i:int) (info:info) (pc:PC.t): unit =
       (fun heir ->
         assert (not (Feature_table.is_deferred i ft)); (* no new deferred allowed
                                                           if class has descendants *)
-        let ghost,_ = Class_table.ancestor heir cls ct in
+        let ghost = Class_table.is_ghost_ancestor heir cls ct in
         inherit_effective i heir ghost false info pc)
       descendants
 
@@ -218,7 +217,7 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
         error_info tp.i "circular inheritance"
       else begin
         if Class_table.is_interface_check ct &&
-          not (Class_table.has_private_ancestor cls par ct) then
+          not (Class_table.has_ancestor cls par ct) then
           error_info tp.i ("Class " ^ (Class_table.class_name cls ct) ^
                            " does not inherit "  ^
                            (Class_table.class_name par ct) ^
@@ -230,7 +229,8 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
         if 1 < Feature_table.verbosity ft then
           printf "   inherit %s in %s\n"
             (Class_table.class_name par ct) (Class_table.class_name cls ct);
-        Class_table.inherit_parent cls par par_args ghost tp.i ct;
+        if not (Class_table.is_interface_check ct) then
+          Class_table.inherit_parent cls par par_args ghost tp.i ct;
         inherit_features cls par par_args ghost tp.i pc;
         PC.inherit_parent cls par par_args tp.i pc;
         if not !has_any && Class_table.inherits_any cls ct then begin

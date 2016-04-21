@@ -10,44 +10,6 @@ open Term
 open Signature
 open Printf
 
-
-type definition = term
-
-type formal     = int * term
-
-type base_descriptor = {
-    mutable spec:       Feature.Spec.t;
-    mutable is_inh:     bool;
-    mutable seed:       int;
-    mutable variants:   int IntMap.t;  (* cls -> fidx *)
-    mutable is_eq:      bool (* is equality inherited from ANY *)
-  }
-
-type descriptor = {
-    mutable mdl: int;             (* -1: base feature, module not yet assigned*)
-    mutable cls: int;             (* owner class *)
-    anchor_cls:  int;
-    anchor_fg:   int;
-    fname:       feature_name;
-    impl:        Feature.implementation;
-    tvs:         Tvars.t;         (* only formal generics *)
-    mutable anchored: int array;  (* formal generics anchored to the owner class *)
-    argnames:    int array;
-    sign:        Sign.t;
-    mutable tp:  type_term;
-    priv:        base_descriptor;
-    mutable pub: base_descriptor option;
-  }
-
-type t = {
-    mutable map: Term_table.t ref Feature_map.t;
-    seq:         descriptor seq;
-    mutable base:int list ref IntMap.t; (* module name -> list of features *)
-    ct:          Class_table.t;
-    verbosity:   int
-  }
-
-
 let implication_index: int =  0
 let false_index:       int =  1
 let true_index:        int =  2
@@ -71,6 +33,71 @@ let true_constant (nb:int): term =
   VAppl (id,[||],[||])
 
 
+type definition = term
+
+type formal     = int * term
+
+
+class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
+  object (self:'self)
+    val mutable is_inh = false
+    val mutable is_exp = false
+    val mutable spec = spec
+    val mutable sd = idx                    (* each new feature is its own seed *)
+    val mutable subst = Term.standard_substitution nfgs
+    val mutable vars = IntMap.singleton cls idx  (* and own variant *)
+    val mutable is_eq = (idx = eq_index)
+
+    method is_inherited:bool = is_inh
+    method is_exported:bool = is_exp
+    method seed:int = sd
+    method ags:agens = subst
+    method specification:Feature.Spec.t = spec
+    method variant (cls:int): int = IntMap.find cls vars
+    method has_variant (cls:int): bool =
+      IntMap.mem cls vars
+    method variants: int IntMap.t = vars
+    method is_equality: bool = is_eq
+    method set_specification (sp:Feature.Spec.t): unit =
+      spec <- sp
+    method set_seed (s:int) (ags:agens):unit =
+      sd <- s;
+      subst <- ags
+    method add_variant (cls:int) (idx:int): unit =
+      vars <- IntMap.add cls idx vars
+    method set_inherited: unit =
+      is_inh <- true
+    method set_exported: unit =
+      is_exp <- true
+    method set_equality: unit =
+      is_eq <- true
+  end
+
+type descriptor = {
+    mutable mdl: int;             (* -1: base feature, module not yet assigned*)
+    mutable cls: int;             (* owner class *)
+    anchor_cls:  int;
+    anchor_fg:   int;
+    fname:       feature_name;
+    impl:        Feature.implementation;
+    tvs:         Tvars.t;         (* only formal generics *)
+    mutable anchored: int array;  (* formal generics anchored to the owner class *)
+    argnames:    int array;
+    sign:        Sign.t;
+    mutable tp:  type_term;
+    bdesc:       bdesc;
+  }
+
+type t = {
+    mutable map: Term_table.t ref Feature_map.t;
+    seq:         descriptor seq;
+    mutable base:int list ref IntMap.t; (* module name -> list of features *)
+    ct:          Class_table.t;
+    verbosity:   int
+  }
+
+
+
 let empty (verbosity:int): t =
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
@@ -88,6 +115,24 @@ let is_interface_check  (ft:t): bool = Class_table.is_interface_check ft.ct
 let is_interface_use (ft:t): bool = Class_table.is_interface_use ft.ct
 
 
+let has_current_module (ft:t): bool =
+  Class_table.has_current_module ft.ct
+
+let current_module (ft:t): int =
+  Class_table.current_module ft.ct
+
+let count_modules (ft:t): int =
+  Class_table.count_modules ft.ct
+
+let used_modules (mdl:int) (ft:t): IntSet.t =
+  Class_table.used_modules mdl ft.ct
+
+let find_module (name:int*int list)  (ft:t): int =
+  Class_table.find_module name ft.ct
+
+let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
+
+
 let count (ft:t): int =
   Seq.count ft.seq
 
@@ -97,12 +142,6 @@ let verbosity (ft:t): int = ft.verbosity
 let descriptor (i:int) (ft:t): descriptor =
   assert (i < count ft);
   Seq.elem i ft.seq
-
-
-let base_descriptor_priv (i:int) (ft:t): base_descriptor =
-  assert (i < count ft);
-  let desc = descriptor i ft in
-  desc.priv
 
 
 
@@ -159,7 +198,11 @@ let string_of_signature (i:int) (ft:t): string =
 
 let is_feature_public (i:int) (ft:t): bool =
   assert (i < count ft);
-  Option.has (descriptor i ft).pub
+  is_private ft ||
+  let desc = descriptor i ft in
+  (desc.mdl = current_module ft && desc.bdesc#is_exported) ||
+  (desc.mdl <> current_module ft &&
+   Module_table.is_visible desc.mdl (module_table ft))
 
 
 let feature_name (i:int) (ft:t): string =
@@ -167,17 +210,10 @@ let feature_name (i:int) (ft:t): string =
   feature_name_to_string desc.fname
 
 
-let base_descriptor (i:int) (ft:t): base_descriptor =
+let base_descriptor (i:int) (ft:t): bdesc =
   assert (i < count ft);
-  let desc = descriptor i ft in
-  if is_private ft then
-    desc.priv
-  else
-    match desc.pub with
-      None ->
-        printf "feature %d \"%s\" is not public\n" i (string_of_signature i ft);
-        assert false (* cannot happen in public view *)
-    | Some bdesc -> bdesc
+  (descriptor i ft).bdesc
+
 
 
 
@@ -313,15 +349,12 @@ let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
      all(args) p(ar1) ==> p(ar2) ==> ... ==> p(c(a1,a2,...))
    *)
   let desc = descriptor idx ft in
-  let n   = Sign.arity desc.sign
-  and nms = desc.argnames
-  and tps = Sign.arguments desc.sign
+  let tps = Sign.arguments desc.sign
   in
   let n       = arity idx ft in
   let nms     = anon_argnames n in
   let p       = Term.up n p in
-  let call    = VAppl (idx+n+nb, Array.init n (fun i -> Variable i), ags) in
-  (*let call    = feature_call idx (n+nb) (Array.init n (fun i -> Variable i)) ft in*)
+  let call    = VAppl (idx+n+nb, Term.standard_substitution n, ags) in
   let tgt     = Application(p,[|call|],true) in
   let indargs = inductive_arguments idx ft in
   let ps_rev  =
@@ -1044,7 +1077,7 @@ let has_anchor (i:int) (ft:t): bool =
 
 let seed (i:int) (ft:t): int =
   assert (i < count ft);
-  (base_descriptor i ft).seed
+  (base_descriptor i ft)#seed
 
 
 
@@ -1084,27 +1117,20 @@ let variant (i:int) (cls:int) (ft:t): int =
   (* The variant of the feature [i] in the class [cls] *)
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
-  let seed_bdesc = base_descriptor bdesc.seed ft
+  let seed_bdesc = base_descriptor bdesc#seed ft
   in
-  IntMap.find cls seed_bdesc.variants
+  seed_bdesc#variant cls
 
 
-
-let private_variant (i:int) (cls:int) (ft:t): int =
-  (* The privat variant of the feature [i] in the class [cls] *)
-  assert (i < count ft);
-  let bdesc      = base_descriptor_priv i ft in
-  let seed_bdesc = base_descriptor_priv bdesc.seed ft in
-  IntMap.find cls seed_bdesc.variants
 
 
 let has_variant (i:int) (cls:int) (ft:t): bool =
-  try let _ = variant i cls ft in true
-  with Not_found -> false
+  try
+    ignore(variant i cls ft);
+    true
+  with
+    Not_found -> false
 
-let has_private_variant (i:int) (cls:int) (ft:t): bool =
-  try let _ = private_variant i cls ft in true
-  with Not_found -> false
 
 
 let unify_types
@@ -1196,7 +1222,13 @@ let variant_feature
   if nfgs = 0 || nfgs > 1 then
     i,ags
   else begin
-    let cls = Tvars.principal_class ags.(0) tvs in
+    let bdesc = base_descriptor idx ft in
+    let sd,ags_sd = bdesc#seed, bdesc#ags
+    and nall = Tvars.count_all tvs in
+    assert (Array.length ags_sd = 1); (* nyi: inheritance with more than one
+                                         formal generic *)
+    let ags1 = Term.subst_array ags_sd nall ags in
+    let cls = Tvars.principal_class ags1.(0) tvs in
     try
       let idx_var = variant idx cls ft in
       let ags_var = variant_generics idx_var idx ags tvs ft in
@@ -1311,7 +1343,7 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
 
 let definition_term (i:int) (ft:t): term =
   assert (i < count ft);
-  Feature.Spec.definition_term (base_descriptor i ft).spec
+  Feature.Spec.definition_term (base_descriptor i ft)#specification
 
 
 
@@ -1325,7 +1357,6 @@ let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
   let idx = i - nb in
   let t0 = definition_term idx ft in
   let desc = descriptor idx ft in
-  let nall = Tvars.count_all tvs in
   let nargs = arity idx ft in
   let t = substituted t0 nargs 0 [||] nb ags tvs ft in
   nargs, desc.argnames, t
@@ -1340,8 +1371,6 @@ let expanded_definition
   assert (i  <= nb + count ft);
   let idx = i - nb in
   let t0 = definition_term idx ft in
-  let desc = descriptor idx ft in
-  let nall = Tvars.count_all tvs in
   let nargs = Array.length args in
   assert (nargs = arity idx ft);
   substituted t0 nargs 0 args nb ags tvs ft
@@ -1392,7 +1421,7 @@ let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   assert (nb <= i);
   let i = i - nb in
   let desc = descriptor i ft in
-  let spec = (base_descriptor i ft).spec in
+  let spec = (base_descriptor i ft)#specification in
   let n = arity i ft in
   if Feature.Spec.has_preconditions spec then
     let lst = Feature.Spec.preconditions spec in
@@ -1407,7 +1436,7 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
   assert (nb <= i);
   let i = i - nb in
   let desc = descriptor i ft in
-  let spec = (base_descriptor i ft).spec in
+  let spec = (base_descriptor i ft)#specification in
   let n = arity i ft in
   let lst = Feature.Spec.postconditions spec in
   let lst = List.map (fun t -> Term.up_from nb n t) lst in
@@ -1417,7 +1446,7 @@ let postconditions (i:int) (nb:int) (ft:t): int * int array * term list =
 
 let count_postconditions (i:int) (ft:t): int =
   let bdesc = base_descriptor i ft in
-  Feature.Spec.count_postconditions bdesc.spec
+  Feature.Spec.count_postconditions bdesc#specification
 
 
 
@@ -1458,17 +1487,12 @@ let domain_of_feature (i:int) (nb:int) (ft:t): term =
 
 
 
-let private_body (i:int) (ft:t): Feature.body =
-  assert (i < count ft);
-  let desc = descriptor i ft in
-  desc.priv.spec, desc.impl
-
 
 let body (i:int) (ft:t): Feature.body =
   assert (i < count ft);
   let desc = descriptor i ft
   and bdesc = base_descriptor i ft in
-  bdesc.spec, desc.impl
+  bdesc#specification, desc.impl
 
 
 let owner (i:int) (ft:t): int =
@@ -1560,15 +1584,6 @@ let is_predicate (i:int) (ft:t): bool =
       false
 
 
-let standard_bdesc (i:int) (cls:int) (spec: Feature.Spec.t) (nb:int) (ft:t)
-    : base_descriptor =
-  {is_inh     = false;
-   seed       = i;                      (* each feature is its own seed *)
-   variants   = IntMap.singleton cls i; (* and own variant in its owner class *)
-   spec       = spec;
-   is_eq      = (i = eq_index)}
-
-
 
 let seed_function (ft:t): int -> int =
   fun i -> seed i ft
@@ -1640,7 +1655,6 @@ let rec fully_expanded (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
   (* Expand the functions in the term [t] which comes from an environment with
      [nb] variables and whose types are valid in the type environment [tvs].
      *)
-  let nall = Tvars.count_all tvs in
   let expand t nb = fully_expanded t nb tvs ft in
   let expargs args nb = Array.map (fun t -> expand t nb) args
   and explst  lst  nb = List.map  (fun t -> expand t nb) lst
@@ -1674,7 +1688,7 @@ and expanded_feature
   assert (nb <= i);
   let bdesc = base_descriptor (i-nb) ft in
   try
-    let t0 = Feature.Spec.definition_term bdesc.spec in
+    let t0 = Feature.Spec.definition_term bdesc#specification in
     assert (Array.length args = arity (i-nb) ft);
     let nargs = Array.length args in
     let t = substituted t0 nargs 0 args nb ags tvs ft in
@@ -1728,19 +1742,19 @@ let variant_spec (i:int) (inew:int) (base_cls:int) (cls:int) (ft:t)
    *)
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
-  let nargs,nms   = Feature.Spec.names bdesc.spec in
+  let nargs,nms   = Feature.Spec.names bdesc#specification in
   let pres = List.map
       (fun t -> variant_term t nargs base_cls cls ft)
-      (Feature.Spec.preconditions bdesc.spec)
+      (Feature.Spec.preconditions bdesc#specification)
   in
-  if Feature.Spec.has_postconditions bdesc.spec then
+  if Feature.Spec.has_postconditions bdesc#specification then
     let posts =
       List.map
         (fun t -> variant_postcondition t i inew nargs base_cls cls ft)
-        (Feature.Spec.postconditions bdesc.spec) in
+        (Feature.Spec.postconditions bdesc#specification) in
     Feature.Spec.make_func_spec nms pres posts
   else
-    let def = Feature.Spec.definition bdesc.spec in
+    let def = Feature.Spec.definition bdesc#specification in
     match def with
       None -> Feature.Spec.make_func_def nms None pres
     | Some defterm ->
@@ -1823,7 +1837,7 @@ let terms_of_formals (farr: formal array): term array =
 
 
 let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
-  (* Find the feature with the characteristics.  *)
+  (* Find the feature with the name [fn] and the signature [tvs/sign].  *)
   let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
   let ntvs = Tvars.count_all tvs
@@ -1868,6 +1882,8 @@ let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): i
       end;
       assert (List.for_all (fun i -> i=idx) rest);
       idx
+
+
 
 
 let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
@@ -1943,10 +1959,9 @@ let add_feature
     (ft:       t): unit =
   (* Add a new feature to the feature table with an empty specification *)
   assert (not (has_with_signature fn.v tvs sign ft));
-  let is_priv = is_private ft
-  and cnt     = Seq.count ft.seq
-  and nargs   = Array.length argnames
+  let cnt     = Seq.count ft.seq
   and spec    = Feature.Spec.make_empty argnames
+  and nfgs    = Tvars.count_all tvs
   in
   assert (not (Feature.Spec.has_definition spec));
   let mdl = Class_table.current_module ft.ct in
@@ -1959,9 +1974,7 @@ let add_feature
       Class_table.check_deferred cls nanchors fn.i ft.ct
   | _ -> ()
   end;
-  let bdesc = standard_bdesc cnt cls spec nargs ft
-  and bdesc_opt =
-    if is_priv then None else Some (standard_bdesc cnt cls spec nargs ft)
+  let bdesc = new bdesc cnt nfgs cls spec
   and nfgs = Tvars.count_all tvs
   in
   let desc =
@@ -1976,8 +1989,7 @@ let add_feature
      sign     = sign;
      tp       = Class_table.to_dummy nfgs sign;
      anchored = anchored;
-     priv     = bdesc;
-     pub      = bdesc_opt}
+     bdesc    = bdesc}
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
@@ -1992,14 +2004,15 @@ let add_feature
 let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
-  assert (Feature.Spec.is_empty bdesc.spec);
+  assert (Feature.Spec.is_empty bdesc#specification);
   assert begin
     not (is_interface_check ft) ||
-    Feature.Spec.private_public_consistent (base_descriptor_priv i ft).spec spec
+    Feature.Spec.private_public_consistent
+      (base_descriptor i ft)#specification
+      spec
   end;
-  if is_interface_use ft then
-    (base_descriptor_priv i ft).spec <- spec;
-  bdesc.spec <- spec
+  bdesc#set_specification spec
+
 
 
 
@@ -2008,36 +2021,17 @@ let set_owner_class (idx:int) (cls:int) (ft:t): unit =
   (descriptor idx ft).cls <- cls
 
 
+
 let export_feature (i:int) (withspec:bool) (ft:t): unit =
   (* Export the feature [i] unless it is already publicly available. *)
   assert (i < count ft);
   if ft.verbosity > 1 then
     printf "  export feature %d %s\n" i (string_of_signature i ft);
-  let desc = descriptor i ft in
-  match desc.pub with
-    None ->
-      let nargs = Array.length desc.argnames in
-      let spec  =
-        if withspec then desc.priv.spec
-        else Feature.Spec.make_func_spec desc.argnames [] []
-      in
-      desc.pub <- Some (standard_bdesc i desc.cls spec nargs ft);
-      add_class_feature i false true ft;
-  | Some _ ->
-      ()
+  (descriptor i ft).bdesc#set_exported
 
 
-(*
-let n_names_with_start (c:char) (size:int): int array =
-  let code = Char.code c in
-  Array.init size (fun i -> ST.symbol (String.make 1 (Char.chr (i + code))))
 
-let standard_fgnames (size:int): int array =
-  n_names_with_start 'A' size
 
-let standard_argnames (size:int): int array =
-  n_names_with_start 'a' size
-*)
 
 let add_base
     (mdl_nme: string)
@@ -2063,13 +2057,7 @@ let add_base
   and cnt  = count ft
   and nargs = Array.length argtypes
   in
-  let bdesc = standard_bdesc cnt cls spec nargs ft
-  and bdesc_opt =
-    match fn with
-      FNoperator Allop
-    | FNoperator Someop ->
-        Some (standard_bdesc cnt cls spec nargs ft)
-    | _ -> None
+  let bdesc = new bdesc cnt ntvs cls spec
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
   let anchored = Class_table.anchored tvs cls ft.ct in
@@ -2095,8 +2083,7 @@ let add_base
     argnames = standard_argnames nargs;
     sign     = sign;
     tp       = Class_table.to_dummy ntvs sign;
-    priv     = bdesc;
-    pub      = bdesc_opt
+    bdesc    = bdesc
   }
   in
   Seq.push desc ft.seq;
@@ -2208,7 +2195,7 @@ let has_visible_variant (i:int) (ft:t): bool =
     (fun cls ivar ->
       let desc  = descriptor ivar ft in
       IntSet.mem desc.mdl used)
-    bdesc.variants
+    bdesc#variants
 
 
 
@@ -2226,12 +2213,7 @@ let find_funcs
         and tvs   = Tvars.fgs_to_global desc.tvs
         in
         let nfgs = Tvars.count_all tvs in
-        if is_public ft && not (Option.has desc.pub) then
-          lst
-        else if is_interface_use ft &&
-          not (has_visible_variant i ft) then
-          lst
-        else if arity <= nargs then
+        if arity <= nargs then
           (i,tvs,sign) :: lst
         else if nargs = 0 then begin (* upgrade *)
           assert (0 < arity);
@@ -2239,7 +2221,7 @@ let find_funcs
           let tp = Class_table.upgrade_signature nfgs is_pred sign in
           let s  = Sign.make_const tp in
           (i,tvs,s) :: lst
-        end else
+        end else (* nargs <> 0  && nargs < arity *)
           lst
       )
       []
@@ -2262,8 +2244,13 @@ let find_unifiables (fn:feature_name) (tp:type_term) (ntvs:int) (ft:t)
     []
 
 
-let find_variant_candidate0 (i:int) (cls:int) (ft:t): int =
-  (* Find the variant of the feature [i] in the class [cls] *)
+let find_variant_candidate0 (i:int) (cls:int) (ft:t): int*agens =
+  (* Find the variant of the feature [i] in the class [cls]
+
+     Return the index [idx] of the variant candidate and the actual generics
+     [ags] so that the signature of [i] substituted by the actual generics
+     [ags] yields the signature of [idx]
+   *)
   assert (has_anchor i ft); (* exactly one formal generic anchored
                                to the owner class *)
   let desc = descriptor i ft in
@@ -2286,7 +2273,10 @@ let find_variant_candidate0 (i:int) (cls:int) (ft:t): int =
   in
   match lst with
     [] -> raise Not_found
-  | [i_variant,_] -> i_variant
+  | [i_variant,sub] ->
+      let nags = Term_sub.count sub in
+      let ags  = Term_sub.arguments nags sub in
+      i_variant,ags
   | _ ->
       printf "many variants of %s\n" (string_of_signature i ft);
       List.iter
@@ -2296,13 +2286,18 @@ let find_variant_candidate0 (i:int) (cls:int) (ft:t): int =
         lst;
       assert false (* cannot happen *)
 
-
+(*
 let find_variant_candidate (i:int) (cls:int) (ft:t): int =
   (* Find the variant of the feature [i] in the class [cls] *)
   try
     variant i cls ft
   with Not_found ->
     find_variant_candidate0 i cls ft
+*)
+
+let find_variant_candidate (i:int) (cls:int) (ft:t): int*agens =
+  (* Find the variant of the feature [i] in the class [cls] *)
+  find_variant_candidate0 i cls ft
 
 
 
@@ -2325,7 +2320,7 @@ let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
   let i,a,b = Term.binary_split_0 t in
   let i = i - nbenv in
   assert (i < count ft);
-  if (base_descriptor i ft).is_eq then begin
+  if (base_descriptor i ft)#is_equality then begin
     nargs, i, a, b
   end else
     raise Not_found
@@ -2338,20 +2333,24 @@ let is_equality (t:term) (nbenv:int) (ft:t): bool =
 
 
 
-let update_equality (seed:int) (bdesc:base_descriptor) (ft:t): unit =
+let update_equality (seed:int) (bdesc:bdesc) (ft:t): unit =
   (* If the feature [seed] is the equality feature of ANY then mark the base
      descriptor [bdesc] as equality. *)
-  if seed = eq_index then begin
-    bdesc.is_eq <- true;
-  end
+  if seed = eq_index then
+    bdesc#set_equality
 
 
 
-let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
+let inherit_feature
+    (i0:int) (ags:agens) (i1:int)
+    (cls:int) (export:bool) (ft:t): unit =
   (* Inherit the feature [i0] as the feature [i1] in the class [cls], i.e. add
-     [i1] as a variant to the seed of [i0] and make the seed of [i0] to the seed
-     of [i1]. Furthermore [i1] is no longer its own seed and cannot be found
-     via the feature map *)
+     [i1] as a variant to the seed of [i0] and make the seed of [i0] to the
+     seed of [i1]. Furthermore [i1] is no longer its own seed and cannot be
+     found via the feature map.
+
+     [ags] are the actual generics to substitute the formal generics of [i0]
+     *)
   assert (not export || is_interface_check ft);
   assert (i0 < count ft);
   assert (i1 < count ft);
@@ -2361,27 +2360,20 @@ let inherit_feature (i0:int) (i1:int) (cls:int) (export:bool) (ft:t): unit =
   and bdesc1 = base_descriptor i1 ft
   in
   (* add variant to seed and seed to variant*)
-  bdesc1.is_inh <- true;
-  let bdesc_seed = base_descriptor bdesc0.seed ft in
-  assert (not (IntMap.mem cls bdesc_seed.variants) ||
-          IntMap.find cls bdesc_seed.variants = i1);
-  bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-  bdesc1.seed         <- bdesc0.seed;
-  update_equality bdesc0.seed bdesc1 ft;
-  assert (has_variant bdesc0.seed cls ft);
-  if not export && is_public ft then begin (* do the same for the private view *)
-    let bdesc0 = base_descriptor_priv i0 ft
-    and bdesc1 = base_descriptor_priv i1 ft
-    in
-    bdesc1.is_inh <- true;
-    let bdesc_seed = base_descriptor_priv bdesc0.seed ft in
-    assert (not (IntMap.mem cls bdesc_seed.variants) ||
-            IntMap.find cls bdesc_seed.variants = i1);
-    bdesc_seed.variants <- IntMap.add cls i1 bdesc_seed.variants;
-    bdesc1.seed         <- bdesc0.seed;
-    update_equality bdesc0.seed bdesc1 ft;
-    assert (has_private_variant bdesc0.seed cls ft);
-  end;
+  bdesc1#set_inherited;
+  let bdesc_seed = base_descriptor bdesc0#seed ft in
+  assert (not (bdesc_seed#has_variant cls) ||
+          bdesc_seed#variant cls = i1);
+  bdesc_seed#add_variant cls i1;
+  let sd0  = bdesc0#seed
+  and ags0 = bdesc0#ags  (* actual generics to substitute the formal generics
+                            of the seed of [i0] into the type environment of [i0]
+                          *)
+  and d = count_fgs i1 ft in
+  let ags_sd0_i1 = Term.subst_array ags0 d ags in
+  bdesc1#set_seed sd0 ags_sd0_i1;
+  update_equality bdesc0#seed bdesc1 ft;
+  assert (has_variant bdesc0#seed cls ft);
   let fn  = (descriptor i1 ft).fname in
   let tab = Feature_map.find fn ft.map in
   tab := Term_table.remove i1 !tab
@@ -2404,13 +2396,10 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
   let f_tp (tp:type_term): type_term =
     Term.subst tp (Tvars.count_all tvs) [|ctp0|] in
   let cnt = count ft
-  and nargs = Array.length desc.argnames
+  and nfgs  = Tvars.count_all tvs
   in
   let spec = variant_spec i cnt desc.cls cls ft in
-  let bdesc = standard_bdesc cnt cls spec nargs ft
-  and bdesc_opt =
-    if is_public ft then Some (standard_bdesc cnt cls spec nargs ft)
-    else None
+  let bdesc = new bdesc cnt nfgs cls spec
   and sign = Sign.map f_tp desc.sign
   in
   let sign = if ghost then Sign.to_ghost sign else sign in
@@ -2427,34 +2416,16 @@ let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
      argnames  = desc.argnames;
      sign      = sign;
      tp        = f_tp desc.tp;
-     priv      = bdesc;
-     pub       = bdesc_opt
+     bdesc     = bdesc
    } ft.seq;
   add_class_feature cnt false false ft;
-  inherit_feature i cnt cls false ft;
+  let ags = assert false in
+  inherit_feature i ags cnt cls false ft;
   if ft.verbosity > 1 then
     printf "  new feature inherited %d %s\n" cnt (string_of_signature cnt ft);
   cnt
 
 
-
-
-let has_current_module (ft:t): bool =
-  Class_table.has_current_module ft.ct
-
-let current_module (ft:t): int =
-  Class_table.current_module ft.ct
-
-let count_modules (ft:t): int =
-  Class_table.count_modules ft.ct
-
-let used_modules (mdl:int) (ft:t): IntSet.t =
-  Class_table.used_modules mdl ft.ct
-
-let find_module (name:int*int list)  (ft:t): int =
-  Class_table.find_module name ft.ct
-
-let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
 
 
 let add_base_features (mdl_name:int) (ft:t): unit =
@@ -2488,14 +2459,16 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   if name <> ST.symbol "boolean" then begin
     let or_desc  = descriptor or_index ft
     and and_desc = descriptor and_index ft in
-    or_desc.priv.spec   <- Feature.Spec.make_func_def or_desc.argnames  None [];
-    and_desc.priv.spec  <- Feature.Spec.make_func_def and_desc.argnames None []
+    or_desc.bdesc#set_specification
+      (Feature.Spec.make_func_def or_desc.argnames  None []);
+    and_desc.bdesc#set_specification
+      (Feature.Spec.make_func_def and_desc.argnames None [])
   end
 
 
 
 let set_interface_check (used:IntSet.t) (ft:t): unit =
-  Class_table.set_interface_check used ft.ct;
+  Class_table.set_interface_check used ft.ct(*;
   ft.map <- Feature_map.empty;
   let mdl = current_module ft in
   for i = 0 to count ft - 1 do
@@ -2503,13 +2476,13 @@ let set_interface_check (used:IntSet.t) (ft:t): unit =
     if desc.mdl = mdl || IntSet.mem desc.mdl used then
       match desc.pub with
         Some bdesc ->
-          if not bdesc.is_inh then
+          if not bdesc#is_inherited then
             add_key i ft
       | None ->
           add_key i ft;
           if desc.mdl <> mdl then
             desc.pub <- Some (desc.priv)
-  done
+  done*)
 
 
 
@@ -2521,7 +2494,7 @@ let check_interface (ft:t): unit =
     let desc = descriptor i ft in
     if curr = desc.mdl
         && is_desc_deferred desc
-        && not (Option.has desc.pub)
+        && not desc.bdesc#is_exported
         && Class_table.is_class_public desc.cls ft.ct then
       error_info (FINFO (1,0))
         ("deferred feature `" ^ (string_of_signature i ft) ^
@@ -3201,3 +3174,49 @@ let downgrade_term (t:term) (nb:int) (ft:t): term =
         Indset (nme, tp, down_args rs (1+nb))
   in
   down t nb
+
+
+let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
+  let rec collect (t:term) (nb:int) (set:IntSet.t): IntSet.t =
+    let collect_args args nb set =
+      Array.fold_left
+        (fun set arg -> collect arg nb set)
+        set
+        args
+    in
+    match t with
+      Variable _ ->
+        set
+    | VAppl(i,args,ags) ->
+        assert (nb <= i);
+        let set = IntSet.add (i-nb) set in
+        collect_args args nb set
+    | Application (f,args,is_pred) ->
+        let set = collect f nb set in
+        collect_args args nb set
+    | Lam (n, nms, pres, t0, is_pred, tp) ->
+        collect t0 (1+nb) set
+    | QExp (n, args, fgs, t0, is_all) ->
+        collect t0 (n+nb) set
+    | Flow (flow, args) ->
+        collect_args args nb set
+    | Indset (nme,tp,rs) ->
+        collect_args rs (1+nb) set
+  in
+  collect t nb IntSet.empty
+
+
+
+let validate_visibility (t:term) (nb:int) (info:info) (ft:t): unit =
+  if not (is_interface_check ft) then
+    ()
+  else
+    let set = collect_called t nb ft in
+    let set = IntSet.filter (fun idx -> not (is_feature_public idx ft)) set in
+    if not (IntSet.is_empty set) then
+      let strlst =
+        List.map
+          (fun idx -> "    " ^ (string_of_signature idx ft))
+          (IntSet.elements set) in
+      let str = String.concat "\n" strlst in
+      error_info info ("The following functions are not visible:\n" ^ str)

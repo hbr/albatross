@@ -398,6 +398,7 @@ let trace_visit (i:int) (gs:t): unit =
   printf "\n%svisit goal %d: %s\n"
     prefix i
     (PC.string_of_term g.goal g.ctxt.pc);
+  printf "                     %s\n" (Term.to_string g.goal);
   match g.parent with
     None -> ()
   | Some (ipar,ialt,isub) ->

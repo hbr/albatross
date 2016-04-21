@@ -69,14 +69,10 @@ val set_interface_check: IntSet.t -> t -> unit
         in private mode) to interface-check mode and set the publicly used modules
         to [used] in the module table [mt]. *)
 
-(*val add:  int -> int list -> int -> t -> unit*)
 
-(*val set_used: IntSet.t -> t -> unit*)
-
+val is_visible: int -> t -> bool
 
 val put_formal: int withinfo -> type_term -> t -> unit
-
-val class_formal_generics: formal_generics -> t -> (int*type_term) array
 
 val formal_generics: entities list withinfo -> return_type -> bool -> int
   -> TVars_sub.t -> t -> TVars_sub.t
@@ -85,3 +81,7 @@ val formal_generics: entities list withinfo -> return_type -> bool -> int
        type context [tvs] if not yet in. Between the untyped arguments of the
        signature [entlst,rt] and the free type variables already contained in
        [tvs] a gap of [ntvs_gap] is left. *)
+
+val class_formal_generics: formal_generics -> t -> (int*type_term) array
+
+val class_tvs: formal_generics -> t -> Tvars.t

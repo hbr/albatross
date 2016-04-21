@@ -17,10 +17,13 @@ module CMap = Map.Make(struct
   let compare = Pervasives.compare
 end)
 
-type parent_descriptor = bool * type_term array (* is_ghost, actual generics *)
+type parent_descriptor = {
+    is_ghost: bool;
+    actual_generics: type_term array
+  }
 
 type base_descriptor = { hmark:    header_mark;
-                         tvs:      Tvars.t;
+                         mutable tvs: Tvars.t;
                          mutable generics: (bool*int) list;
                          mutable def_features: int list;
                          mutable eff_features: int list;
@@ -33,9 +36,13 @@ type base_descriptor = { hmark:    header_mark;
 
 
 type descriptor      = { mutable mdl:  int;
+                         ident: int;
                          name: int;
-                         priv: base_descriptor;
-                         mutable publ: base_descriptor option}
+                         bdesc: base_descriptor;
+                         (*priv: base_descriptor;*)
+                         mutable is_exp: bool(*;
+                         mutable publ: base_descriptor option*)}
+
 
 type t = {mutable map:   int CMap.t;
           seq:           descriptor seq;
@@ -86,7 +93,8 @@ let count (ct:t):int =
 let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
     : base_descriptor =
   let args = Array.init nfgs (fun i -> Variable i) in
-  let anc  = IntMap.singleton idx (false,args) in
+  let anc  = IntMap.singleton idx
+      {is_ghost = false; actual_generics = args} in
   {hmark = hm;
    tvs   = tvs;
    generics = [];
@@ -129,29 +137,12 @@ let class_name (i:int) (ct:t): string =
     String.concat "." (List.rev_map ST.string lst)
 
 
-let is_class_public (cls:int) (ct:t): bool =
-  assert (cls < count ct);
-  Option.has (descriptor cls ct).publ
-
-
-
-let base_descriptor_priv (idx:int) (ct:t): base_descriptor =
-  (descriptor idx ct).priv
-
 
 let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
-  let desc = descriptor idx ct in
-  if is_private ct then
-    desc.priv
-  else
-    match desc.publ with
-      None ->
-        printf "class %s is not public\n" (class_name idx ct);
-        assert false (* cannot happen in public view *)
-    | Some bdesc ->
-        bdesc
+  (descriptor idx ct).bdesc
+
 
 
 let is_deferred (cls:int) (ct:t): bool =
@@ -227,14 +218,8 @@ let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
 
 
 let set_interface_check (used:IntSet.t) (ct:t): unit =
-  Module_table.set_interface_check used ct.mt;
-  ct.map <- CMap.empty;
-  let mdl = current_module ct in
-  for i = 0 to count ct - 1 do
-    let desc = descriptor i ct in
-    if desc.mdl = mdl || IntSet.mem desc.mdl used then
-      add_to_map i ct
-  done
+  Module_table.set_interface_check used ct.mt
+
 
 let descendants (i:int) (ct:t): IntSet.t =
   assert (i < count ct);
@@ -341,7 +326,6 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
      function signature (0,(1,...)) -> RT.  *)
   assert (Sign.has_result s);
   assert (Sign.arity s > 0);
-  (*assert (not is_pred || Sign.result s = boolean_type ntvs);*)
   let tup = to_tuple ntvs 0 (Sign.arguments s)
   in
   let idx, args =
@@ -513,27 +497,46 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
 
 
 
-let find_base (path:int list) (cn:int) (findpriv:bool) (ct:t): int =
-  let idx = CMap.find (path,cn) ct.map in
-  if findpriv || is_private ct then
-    idx
-  else
-    match (descriptor idx ct).publ with
-      None   -> raise Not_found
-    | Some _ -> idx
+let is_visible (cidx:int) (ct:t): bool =
+  (* Is the class visible i.e. being in interface check mode implies that the
+     class is either defined in a publicly used module or it is defined in the
+     current module and exported.
+   *)
+  assert (cidx < count ct);
+  not (is_interface_check ct) ||
+  let desc = descriptor cidx ct in
+  assert (desc.mdl <> -1);
+  let currmod = current_module ct in
+  (desc.mdl = currmod && desc.is_exp) ||
+  (desc.mdl <> currmod && Module_table.is_visible desc.mdl ct.mt)
+
+
+let is_class_public (cidx:int) (ct:t): bool = is_visible cidx ct
 
 
 let find_for_declaration (cn:int list*int) (ct:t): int =
+  (* In a class declaration an unqualified classname always refers to a class
+     in the current module.
+
+     A class declaration redeclares a class:
+
+     - The class is already present in the current module.
+
+     - The class name is qualified and already present in a publicly used module.
+
+     Otherwise the class declaration declares a new class.
+   *)
   let path, cn = cn in
-  let idx = find_base path cn true ct in
+  let idx = CMap.find (path,cn) ct.map in
+  (*let idx = find_base path cn true ct in*)
   let desc = descriptor idx ct in
-  if path = [] && desc.mdl <> current_module ct then
-    raise Not_found
-  else
+  if (path = [] && desc.mdl = current_module ct) ||
+     (path <> [] && desc.mdl <> current_module ct && is_visible idx ct)
+  then
     idx
+  else
+    raise Not_found
 
-
-let find (path:int list) (cn: int) (ct:t): int = find_base path cn false ct
 
 
 let extract_from_tuple
@@ -625,23 +628,9 @@ let downgrade_signature
 
 
 
-let check_class_formal_generic
-    (i:info) (nme:int) (tp1:term) (tp2:term)
-    (ct:t)
-    : unit =
-  (** Check if the constraint [tp1] of the formal generic [nme] is equal to
-      [tp2] *)
-    if tp1 <> tp2 then
-      error_info
-        i
-        ("Formal generic " ^ (ST.string nme) ^
-         " must satisfy " ^ (type2string tp2 0 [||] ct))
-
-
-
 let update_base_descriptor
     (hm:    header_mark withinfo)
-    (fgens: formal_generics)
+    (tvs:   Tvars.t)
     (desc:  base_descriptor)
     (ct:    t)
     : unit =
@@ -652,20 +641,14 @@ let update_base_descriptor
       ^ "\"\n"
     in
     error_info hm.i str);
-  let fgs = Module_table.class_formal_generics fgens ct.mt in
-  let fgnames    = Tvars.fgnames desc.tvs
-  in
-  let nfgs = Array.length fgnames in
-  if nfgs <> Array.length fgs then
-    (let str = "Class must have " ^ (string_of_int nfgs) ^ " formal generics" in
-    error_info fgens.i str);
-  for i = 0 to nfgs-1 do
-    let nme,tp1 = fgs.(i)
-    and tp2     = Tvars.concept i desc.tvs in
-    let tp1 = Term.up nfgs tp1 in
-    check_class_formal_generic fgens.i nme tp1 tp2 ct;
-    fgnames.(i) <- nme
-  done
+  if not (Tvars.is_equivalent desc.tvs tvs) then begin
+    let str =
+      "The formal generics are not consistent with previous declaration\n" ^
+      "   previous declaration \"" ^ (string_of_tvs desc.tvs ct)
+      ^ "\""
+    in error_info hm.i str
+  end;
+  desc.tvs <- tvs
 
 
 
@@ -684,11 +667,6 @@ let induction_law (cls:int) (ct:t): int =
 
 
 
-let constructors_priv (cls:int) (ct:t): IntSet.t =
-  assert (cls < count ct);
-  let bdesc = base_descriptor_priv cls ct in
-  bdesc.constructors
-
 
 let is_case_class (cls:int) (ct:t): bool =
   assert (cls < count ct);
@@ -704,7 +682,8 @@ let has_constructors (cls:int) (ct:t): bool =
 
 let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  let bdesc = base_descriptor cls ct in
+  assert false (* nyi *)
+  (*let bdesc = base_descriptor cls ct in
   assert (bdesc.constructors = IntSet.empty);
   assert (bdesc.hmark = Case_hmark);
   if is_interface_check ct then begin
@@ -715,20 +694,21 @@ let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
     let bdesc_priv = base_descriptor_priv cls ct in
     bdesc_priv.constructors <- set
   end;
-  bdesc.constructors <- set
+  bdesc.constructors <- set*)
 
 
 
 let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  let bdesc = base_descriptor cls ct in
+  assert false (* nyi *)
+  (*let bdesc = base_descriptor cls ct in
   assert (bdesc.indlaw = -1);
   assert (bdesc.hmark = Case_hmark);
   if is_interface_use ct then begin
     let bdesc_priv = base_descriptor_priv cls ct in
     bdesc_priv.indlaw <- indlaw
   end;
-  bdesc.indlaw <- indlaw
+  bdesc.indlaw <- indlaw*)
 
 
 
@@ -737,42 +717,29 @@ let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
 let export
     (idx:   int)
     (hm:    header_mark withinfo)
-    (fgens: formal_generics)
+    (tvs:   Tvars.t)
     (ct:    t)
     : unit =
   let desc = Seq.elem idx ct.seq in
-  let hm1, hm2 = desc.priv.hmark, hm.v in
+  let hm1, hm2 = desc.bdesc.hmark, hm.v in
   begin
     match hm1, hm2 with
-      Case_hmark, Immutable_hmark -> ()
-    | _, _ when hm1=hm2 -> ()
+      (*Case_hmark, Immutable_hmark -> () *)
+      _, _ when hm1=hm2 -> ()
     | _, _ ->
         error_info
           hm.i
-          ("Header mark is not consistent with private header mark \"" ^
+          ("Header mark is not consistent with previous header mark \"" ^
            (hmark2string hm1))
   end;
-  let fgs  = Module_table.class_formal_generics fgens ct.mt in
-  let nfgs = Array.length fgs in
-  let fgconcepts = Tvars.fgconcepts desc.priv.tvs in
-  if nfgs > Array.length fgconcepts then
-    error_info fgens.i "More formal generics than in private definition";
-  for i = 0 to nfgs-1 do
-    let tp1     = fgconcepts.(i)
-    and nme,tp2 = fgs.(i) in
-    let tp2 = Term.up nfgs tp2 in
-    if tp1 <> tp2 then
-      error_info
-        fgens.i
-        ("The constraint of " ^ (ST.string nme) ^
-         " is not consistent with private definition");
-  done;
-  desc.publ <-
-    let fgnames,concepts = Myarray.split fgs in
-    let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
-    let tvs = Tvars.make_fgs fgnames concepts in
-    let bdesc = standard_bdesc hm2 nfgs tvs idx in
-    Some bdesc
+  if not (Tvars.is_equivalent desc.bdesc.tvs tvs) then begin
+    let str =
+      "The formal generics are not consistent with previous declaration\n" ^
+      "   previous declaration \"" ^ (string_of_tvs desc.bdesc.tvs ct)
+      ^ "\""
+    in error_info hm.i str
+  end;
+  desc.is_exp <- true
 
 
 
@@ -781,7 +748,7 @@ let export
 let update
     (idx:   int)
     (hm:    header_mark withinfo)
-    (fgens: formal_generics)
+    (tvs:   Tvars.t)
     (ct:    t)
     : unit =
   assert (has_current_module ct);
@@ -791,14 +758,11 @@ let update
   if desc.mdl = -1 || desc.mdl = mdl then begin
     if desc.mdl = -1 then
       desc.mdl <- mdl;
-    if is_private ct then
-      update_base_descriptor hm fgens desc.priv ct
-    else
-      match desc.publ with
-        None ->       export idx hm fgens ct
-      | Some bdesc -> update_base_descriptor hm fgens bdesc ct
-  end
-  else
+    if is_private ct || desc.is_exp then
+      update_base_descriptor hm tvs desc.bdesc ct
+    else if not desc.is_exp then
+      export idx hm tvs ct
+  end else
     () (* cannot update a class from a different module *)
 
 
@@ -829,19 +793,12 @@ let add_feature
     : unit =
   assert (cidx < count ct);
   assert (not (priv_only && pub_only));
-  let desc = descriptor cidx ct in
-  if priv_only || is_private ct then
-    add_feature_bdesc fidx is_deferred desc.priv
-  else if is_interface_check ct then
-    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
-  else if pub_only then begin
-    assert (is_interface_use ct);
-    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
-  end else begin
-    assert (is_interface_use ct);
-    add_feature_bdesc fidx is_deferred desc.priv;
-    add_feature_bdesc fidx is_deferred (base_descriptor cidx ct)
-  end
+  if is_interface_check ct then
+    ()
+  else
+    let desc = descriptor cidx ct in
+    add_feature_bdesc fidx is_deferred desc.bdesc
+
 
 
 let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
@@ -860,13 +817,11 @@ let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
   (** Add the assertion [aidx] to the class [cidx] as deferred or effective
       assertion depending on [is_deferred].  *)
   assert (cidx < count ct);
-  let bdesc = base_descriptor cidx ct in
-  if is_private ct || is_interface_check ct then
+  if is_interface_check ct then
+    ()
+  else
+    let bdesc = base_descriptor cidx ct in
     add_assertion_bdesc aidx is_deferred bdesc
-  else begin
-    add_assertion_bdesc aidx is_deferred bdesc;
-    add_assertion_bdesc aidx is_deferred (descriptor cidx ct).priv
-  end
 
 
 
@@ -900,25 +855,20 @@ let effective_assertions (cidx:int) (ct:t): int list =
 let add
     (hm:    header_mark withinfo)
     (cn:    int)
-    (fgens: formal_generics)
+    (tvs:   Tvars.t)
     (ct:    t)
     : unit =
-  let fgs = Module_table.class_formal_generics fgens ct.mt in
-  let idx  = count ct
-  and nfgs = Array.length fgs
-  and fgnames,concepts = Myarray.split fgs
-  in
-  let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
-  let tvs  = Tvars.make_fgs fgnames concepts in
+  let idx  = count ct in
+  let nfgs = Tvars.count_fgs tvs in
   let bdesc = standard_bdesc hm.v nfgs tvs idx
-  and bdesc_opt =
-    if is_public ct then Some (standard_bdesc hm.v nfgs tvs idx) else None
+  and is_exp = is_interface_use ct
   in
   Seq.push
     {mdl  = current_module ct;
      name = cn;
-     priv = bdesc;
-     publ = bdesc_opt}
+     ident = idx;
+     is_exp = is_exp;
+     bdesc = bdesc}
     ct.seq;
   add_to_map idx ct
 
@@ -953,11 +903,6 @@ let anchor_formal_generics (tvs:Tvars.t) (s:Sign.t) (ct:t): int array =
 
 let anchor_class (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
   let _,cls = Sign.anchor tvs s in cls
-  (*let anchfgs = anchor_formal_generics tvs s ct in
-  if Array.length anchfgs = 1 then
-    Tvars.principal_class (Variable anchfgs.(0)) tvs
-  else
-    -1*)
 
 
 
@@ -1011,7 +956,7 @@ let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
        (Module_table.name desc.mdl ct.mt) ^
        "\" of the owner class " ^
        (class_name owner ct))
-  else if not (IntSet.is_empty bdesc.descendants) then
+  else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants) then
     error_info info
       ("Owner class " ^ (class_name owner ct) ^" has already descendants")
   else if nanchors <> 1 then
@@ -1084,8 +1029,7 @@ let rec satisfies
     : bool =
   let findfun (c1:int) (c2:int): type_term array =
     let bdesc1 = base_descriptor c1 ct in
-    let _,anc_args = IntMap.find c2 bdesc1.ancestors in
-    anc_args
+    (IntMap.find c2 bdesc1.ancestors).actual_generics
   in
   satisfies_0 tp1 tvs1 tp2 tvs2 findfun ct
 
@@ -1141,18 +1085,25 @@ let valid_type
 
 
 let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
+  (* Find the class index/type variable index of [path.name] in the type
+     environment [tvs].  *)
   let ntvs    = Tvars.count tvs
   and fgnames = Tvars.fgnames tvs
   and nall    = Tvars.count_all tvs
   in
-  try
+  try (* If there is not path then try to find the name in the formal generics *)
     if path = [] then
       ntvs + Search.array_find_min (fun n -> n=name) fgnames
     else
       raise Not_found
   with Not_found ->
+    (* [name] is not a formal generic *)
     try
-      nall + (find path name ct)
+      let idx = CMap.find (path,name) ct.map in
+      if not (is_visible idx ct) then
+        error_info info ("Class " ^ (string_of_classname path name)
+                         ^ " is not visible in this context");
+      nall + idx
     with Not_found ->
         error_info info ("Class " ^ (string_of_classname path name)
                          ^ " does not exist in this context")
@@ -1173,7 +1124,10 @@ let get_type
     (ct:t)
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
-     variables and the formal generics [fgnames,concepts] into a type term *)
+     variables and the formal generics [fgnames,concepts] into a type term.
+
+     Only visible classes can be used legally in a type!
+   *)
   let class_index0 path name: int = class_index path name tvs tp.i ct
   in
   let info = tp.i in
@@ -1227,22 +1181,19 @@ let ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
   IntMap.find anc bdesc.ancestors
 
 
+let is_ghost_ancestor (cls:int) (anc:int) (ct:t): bool =
+  try
+    (ancestor cls anc ct).is_ghost
+  with Not_found ->
+    assert false
+
+
 let has_ancestor (cls:int) (anc:int) (ct:t): bool =
   (** Does the class [cls] have [anc] as an ancestor ? *)
   cls = anc ||
   try let _ = ancestor cls anc ct in true
   with Not_found -> false
 
-
-let private_ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
-  let bdesc = (descriptor cls ct).priv in
-  IntMap.find anc bdesc.ancestors
-
-let has_private_ancestor (cls:int) (anc:int) (ct:t): bool =
-  (* Does the class [cls] have [anc] as a private ancestor ? *)
-  cls = anc ||
-  try let _ = private_ancestor cls anc ct in true
-  with Not_found -> false
 
 
 
@@ -1254,7 +1205,7 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
    let cls,args = split_type_term tp in
    assert (ntvs <= cls);
    assert (cls-ntvs < count ct);
-   let _,pargs = ancestor (cls-ntvs) (anc_cls-ntvs) ct in
+   let pargs = (ancestor (cls-ntvs) (anc_cls-ntvs) ct).actual_generics in
    if Array.length pargs = 0 then
      Variable anc_cls
    else
@@ -1315,39 +1266,38 @@ let rec inherit_parent
   (* Inherit the parent [par,args] in the class [cls] and in the descendants of
      [cls]. *)
   let par_bdesc      = base_descriptor par ct
-  and cls_bdesc_priv = base_descriptor_priv cls ct
+  (*and cls_bdesc_priv = base_descriptor_priv cls ct*)
   and cls_bdesc      = base_descriptor cls ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
   let inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc =
     try
-      let ghost0,anc_args0 = IntMap.find anc cls_bdesc.ancestors in
-      if anc_args <> anc_args0 then
+      let pdesc = IntMap.find anc cls_bdesc.ancestors in
+      if anc_args <> pdesc.actual_generics then
         error_info info ("Cannot inherit " ^ (class_name anc ct) ^
                          " in " ^ (class_name cls ct) ^
                          " with different actual generics")
-      else if ghost <> ghost0 then
+      else if ghost <> pdesc.is_ghost then
         error_info info ("Cannot change ghost status of " ^ (class_name anc ct) ^
                          " in " ^ (class_name cls ct))
       else
         () (* ancestor already consistently available *)
     with Not_found ->
-      one_inherit cls cls_bdesc anc (ghost,anc_args) anc_bdesc
+      let adesc =
+        {is_ghost = ghost; actual_generics = anc_args} in
+      one_inherit cls cls_bdesc anc adesc anc_bdesc
   in
   IntMap.iter
-    (fun anc (is_ghost,anc_args) ->
+    (fun anc adesc ->
       let anc_args = Array.map
           (fun t -> Term.subst t cls_nfgs args)
-          anc_args in
+          adesc.actual_generics in
       let anc_bdesc = base_descriptor anc ct in
-      inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc;
-      if is_interface_use ct then
-        let anc_bdesc_priv = base_descriptor_priv anc ct in
-        inherit_ancestor anc anc_args is_ghost anc_bdesc_priv cls_bdesc_priv)
+      inherit_ancestor anc anc_args adesc.is_ghost anc_bdesc cls_bdesc)
     par_bdesc.ancestors;
   IntSet.iter
     (fun desc ->
-      let ghost,cls_args = ancestor desc cls ct in
-      inherit_parent desc cls cls_args ghost info ct)
+      let adesc = ancestor desc cls ct in
+      inherit_parent desc cls adesc.actual_generics adesc.is_ghost info ct)
     cls_bdesc.descendants
 
 
@@ -1483,14 +1433,13 @@ let add_base_class
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
   let bdesc = standard_bdesc hm nfgs tvs idx
-  and bdesc_opt =
-    if name = "@DUMMY" then Some (standard_bdesc hm nfgs tvs idx) else None
   in
   Seq.push
     {mdl=(-1);
      name = nme;
-     priv = bdesc;
-     publ = bdesc_opt}
+     ident = idx;
+     is_exp = (name = "@DUMMY");
+     bdesc = bdesc}
     ct.seq;
   let mdl_nme = ST.symbol (String.lowercase name) in
   assert (not (IntMap.mem mdl_nme ct.base));

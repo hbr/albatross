@@ -1491,13 +1491,15 @@ and inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
   assert (is_global pc);
   assert (owner <> -1);
   let ct = class_table pc in
-  let descendants = Class_table.descendants owner ct in
-  IntSet.iter
-    (fun descendant ->
-      assert (not defer); (* deferred assertion cannot be added to class
-                             with descendants *)
-      inherit_effective i owner descendant false pc)
-   descendants
+  if not (Class_table.is_interface_check ct) then begin
+    let descendants = Class_table.descendants owner ct in
+    IntSet.iter
+      (fun descendant ->
+        assert (not defer); (* deferred assertion cannot be added to a class
+                               with descendants *)
+        inherit_effective i owner descendant false pc)
+      descendants
+  end
 
 
 

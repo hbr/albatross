@@ -689,6 +689,11 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
   validate t c
 
 
+let validate_visibility (info:info) (t:term) (c:Context.t): unit =
+  let ft = Context.feature_table c
+  and nb = Context.count_variables c
+  in
+  Feature_table.validate_visibility t nb info ft
 
 let push_context
     (entlst:  entities list withinfo)
@@ -994,6 +999,7 @@ let analyze_expression
   Term_builder.release tb;
 
   validate_term ie.i term c;
+  validate_visibility ie.i term c;
   let term = unfold_inspect ie.i term c in
   assert (Context.is_valid term c);
   (*assert (Term_builder.is_valid term c);*)

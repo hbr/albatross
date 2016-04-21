@@ -759,7 +759,7 @@ let update_feature
   in
   if PC.is_private pc || not (PC.is_interface_check pc) then begin
     if not is_new then begin
-      let spec0,impl0 = Feature_table.private_body idx ft in
+      let spec0,impl0 = Feature_table.body idx ft in
       if not (Feature.Spec.private_public_consistent spec0 spec) then
         error_info info "Specification does not match the previous declaration";
       if not ((PC.is_private pc && impl0=impl) || match_impl impl0 impl) then
@@ -769,12 +769,11 @@ let update_feature
       update ()
   end else if is_export then begin
     assert (PC.is_interface_check pc);
-    let spec0,impl0 = Feature_table.private_body idx ft in
+    let spec0,impl0 = Feature_table.body idx ft in
     if not (match_impl impl0 impl) then
       error_info info "Implementation status is not consistent with private status";
     if not (Feature.Spec.private_public_consistent spec0 spec) then
-      error_info info "Specification is not consistent with private specification";
-    update ()
+      error_info info "Specification is not consistent with private specification"
   end else begin
     assert (PC.is_interface_check pc);
     let spec0,impl0 = Feature_table.body idx ft in
@@ -1450,13 +1449,14 @@ let put_creators
   let clst = List.rev clst_rev in
   add_case_inversions cls clst pc;
   add_case_injections clst pc;
-  let cset = IntSet.of_list clst in
+  assert false (* nyi *)
+  (*let cset = IntSet.of_list clst in
   if Class_table.is_interface_check ct &&
      Class_table.constructors_priv cls ct <> cset then
     error_info info "Different constructors in implementation file";
   Class_table.set_constructors cset cls ct;
   PC.add_induction_law0 cls pc;
-  creators_check_formal_generics creators.i clst tvs ft
+  creators_check_formal_generics creators.i clst tvs ft*)
 
 
 
@@ -1504,10 +1504,12 @@ let put_class
   assert (Proof_context.is_global pc);
   let ft = Proof_context.feature_table pc in
   let ct = Feature_table.class_table ft in
+  let mt = Class_table.module_table ct in
+  let tvs = Module_table.class_tvs fgs mt in
   let idx,is_new =
     try
       let idx = Class_table.find_for_declaration cn.v ct in
-      Class_table.update idx hm fgs  ct;
+      Class_table.update idx hm tvs ct;
       idx, false
     with Not_found ->
       let path, cn0 = cn.v in
@@ -1515,7 +1517,7 @@ let put_class
         error_info cn.i
           ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
       let idx = Class_table.count ct in
-      Class_table.add hm cn0 fgs ct;
+      Class_table.add hm cn0 tvs ct;
       idx, true
   in
   let cls_tp =
