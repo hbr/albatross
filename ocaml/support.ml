@@ -354,7 +354,9 @@ let is_letter ch =
 
 
 let operator_to_rawstring op =
-  let s,_,_ = operator_data op in s
+  let s,_,_ = operator_data op
+  in
+  s
 
 let operator_to_string op =
   match op with

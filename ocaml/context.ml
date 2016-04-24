@@ -637,39 +637,17 @@ let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
 
 
 
-
-
 let arguments_string (e:entry) (ct:Class_table.t): string =
-  (** The string "(a:A, b1,b2:B, ... )" of all local arguments of the entry [e].
-      In case that there are no arguments the empty string is returned and
-      not "()".
+  (* The string "(a:A, b1,b2:B, ... )" of all local arguments of the entry [e].
+     In case that there are no arguments the empty string is returned and
+     not "()". In case that there are formal generics they are prefixed.
    *)
-  let nargs = entry_arity e in
-  if nargs = 0 then
-    ""
-  else
-    let fargs = Array.to_list (Array.sub e.fargs 0 nargs)
-    in
-    let llst = List.fold_left
-        (fun ll (n,tp) -> match ll with
-          [] -> [[n],tp]
-        | (ns,tp1)::tl ->
-            if tp=tp1 then (n::ns,tp)::tl
-            else           ([n],tp)::ll )
-        []
-        fargs
-    in
-    "("
-    ^  String.concat
-        ","
-        (List.rev_map
-           (fun (ns,tp) ->
-             let ntvs = TVars_sub.count e.tvs_sub in
-             (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
-             ^ ":"
-             ^ (Class_table.type2string tp ntvs (entry_fgnames e) ct))
-           llst)
-    ^ ")"
+  let nargs = entry_arity e
+  and tvs   = TVars_sub.tvars e.tvs_sub
+  in
+  let args = Array.sub e.fargs 0 nargs in
+  Class_table.arguments_string tvs args ct
+
 
 
 let ith_arguments_string (i:int) (c:t): string =
@@ -869,7 +847,7 @@ let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): te
      the lambda expression is within an environment with [nb] variables more than the
      context [c].
    *)
-  assert false
+  assert false (* nyi *)
   (*let nbenv = count_variables c in
   match pres with
     [] ->
@@ -1349,7 +1327,7 @@ let existence_condition (posts:term list) (c:t): term =
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false
+  assert false (* nyi *)
   (*let nargs   = count_last_arguments c
   and and_id  = 1 + and_index c
   in
@@ -1379,7 +1357,7 @@ let uniqueness_condition (posts:term list) (c:t): term =
      substituted by [x]/[y].  *)
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false
+  assert false (* nyi *)
   (*let nargs   = count_last_arguments c
   and imp_id  = 2 + implication_index c
   and rt      = result_type c
@@ -1421,7 +1399,7 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false
+  assert false (* nyi *)
   (*let nargs   = count_last_arguments c in
   let fargs = Array.init nargs (fun i -> Variable i) in
   let fterm = VAppl (1+nargs+idx, fargs) in

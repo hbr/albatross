@@ -25,11 +25,9 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable slots: slot_data array}
 
 type gdesc = {mutable pub: bool;
-              inh: bool;
-              cls: int;
-              anchor_cls: int;
               mdl: int;
-              mutable defer: bool}
+              defer: bool;
+              anchor: int}
 
 type t = {base:   Proof_table.t;
           terms:  RD.t Ass_seq.t;
@@ -174,22 +172,6 @@ let is_assumption (i:int) (pc:t): bool =
   Proof_table.is_assumption i pc.base
 
 
-let is_available (i:int) (pc:t): bool =
-  assert (i < count pc);
-  is_private pc ||
-  count_global pc <= i ||
-  let gdesc = Seq.elem i pc.gseq in
-  not gdesc.inh ||
-  gdesc.pub
-
-
-let is_visible (i:int) (pc:t): bool =
-  not (is_interface_check pc) ||
-  let ft = feature_table pc
-  and nb = nbenv pc
-  and t  = term i pc in
-  Feature_table.is_term_public t nb ft
-
 let string_of_term (t:term) (pc:t): string =
   Context.string_of_term t (context pc)
 
@@ -210,6 +192,15 @@ let string_of_term_array (args: term array) (pc:t): string =
   ^
   "]"
 
+
+
+
+let is_visible (i:int) (pc:t): bool =
+  not (is_interface_check pc) ||
+  let ft = feature_table pc
+  and nb = nbenv pc
+  and t  = term i pc in
+  Feature_table.is_term_public t nb ft
 
 
 let split_implication (t:term) (pc:t): term * term =
@@ -244,37 +235,6 @@ let assumptions (pc:t): term list =
 let assumptions_chain (tgt:term) (pc:t): term =
   implication_chain (assumptions pc) tgt pc
 
-(*let strengthened_induction_goal (idx:int) (tgt:term) (pc:t): term =
-  let n   = count_last_arguments pc
-  and nms = local_argnames pc in
-  assert (0 <= idx);
-  assert (idx < n);
-  let chn = assumptions_chain tgt pc in
-  if n = 1 then
-    chn
-  else
-    let usd_rev =
-      Term.used_variables_filtered chn (fun i -> i<>idx && i < n) false in
-    let nusd = List.length usd_rev in
-    let map,_ = List.fold_left
-        (fun (map,i) ivar ->
-          assert (0 < i);
-          let i = i-1 in IntMap.add ivar i map, i)
-        (IntMap.empty,nusd)
-        usd_rev in
-    let nmsusd = Array.make nusd (-1) in
-    Array.iteri
-      (fun i nme ->
-        try
-          let j = IntMap.find i map in
-          nmsusd.(j) <- nme
-        with Not_found ->
-          ())
-      nms;
-    let t0 = Term.lambda_inner_map chn map in
-    let res = Term.all_quantified nusd nmsusd t0 in
-    prenex_term res pc
-*)
 
 let work (pc:t): int list = pc.work
 
@@ -288,9 +248,12 @@ let has_result (pc:t): bool = Proof_table.has_result pc.base
 
 let has_result_variable (pc:t): bool = Proof_table.has_result_variable pc.base
 
+let seed_function (pc:t): int -> int =
+  Feature_table.seed_function (feature_table pc)
+
 let unify
     (t:term) (tab:Term_table.t) (pc:t): (int * arguments * agens) list =
-  let lst = List.rev (Term_table.unify t (nbenv pc) tab) in
+  let lst = List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab) in
   List.fold_left
     (fun lst (idx,sub) ->
       let rd = rule_data idx pc in
@@ -306,7 +269,7 @@ let unify
 let unify_with
     (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
     : (int * Term_sub.t) list =
-  Term_table.unify_with t nargs nbenv tab
+  Term_table.unify_with t nargs nbenv (seed_function pc) tab
 
 
 let trace_prefix_0 (pc:t): string =
@@ -433,16 +396,18 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
     if is_simpl then begin
       (*printf "add_to_equalities %d %s   <%s>\n"
         idx (string_of_term t pc) (Term.to_string t);*)
-      pc.entry.left <- Term_table.add left nargs nbenv idx pc.entry.left
+      pc.entry.left <-
+        Term_table.add left nargs nbenv idx (seed_function pc) pc.entry.left
     end
   with Not_found ->
     ()
 
 
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
-  pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx pc.entry.prvd;
+  let sfun = seed_function pc in
+  pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;
   let nargs,nbenv,t = RD.schematic_term rd in
-  pc.entry.prvd2 <- Term_table.add t nargs nbenv idx pc.entry.prvd2
+  pc.entry.prvd2 <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd2
 
 
 
@@ -451,7 +416,8 @@ let add_to_forward (rd:RD.t) (idx:int) (pc:t): unit =
     ()
   else begin
     let nargs,nbenv,t = RD.schematic_premise rd in
-    pc.entry.fwd <- Term_table.add t nargs nbenv idx pc.entry.fwd
+    pc.entry.fwd <-
+      Term_table.add t nargs nbenv idx (seed_function pc) pc.entry.fwd
   end
 
 
@@ -460,7 +426,8 @@ let add_to_backward (rd:RD.t) (idx:int) (pc:t): unit =
     ()
   end else begin
     let nargs,nbenv,t = RD.schematic_target rd in
-    pc.entry.bwd <- Term_table.add t nargs nbenv idx pc.entry.bwd
+    pc.entry.bwd <-
+      Term_table.add t nargs nbenv idx (seed_function pc) pc.entry.bwd
   end
 
 
@@ -477,6 +444,39 @@ let add_last_to_tables (pc:t): unit =
   add_to_backward rd idx pc;
   add_to_equalities t idx pc;
   assert (has t pc)
+
+
+let filter_tables (pred:int->bool) (pc:t): unit =
+  assert (is_global pc);
+  let e = pc.entry in
+  e.prvd  <- Term_table.filter pred e.prvd;
+  e.prvd2 <- Term_table.filter pred e.prvd2;
+  e.bwd   <- Term_table.filter pred e.bwd;
+  e.fwd   <- Term_table.filter pred e.fwd;
+  e.left  <- Term_table.filter pred e.left
+
+
+let remap_tables (pc:t): unit =
+  assert (is_global pc);
+  let e = pc.entry
+  and f = seed_function pc in
+  e.prvd  <- Term_table.remap_vappl f e.prvd;
+  e.prvd2 <- Term_table.remap_vappl f e.prvd2;
+  e.bwd   <- Term_table.remap_vappl f e.bwd;
+  e.fwd   <- Term_table.remap_vappl f e.fwd;
+  e.left  <- Term_table.remap_vappl f e.left
+
+
+let filter_and_remap_tables (pred:int->bool) (pc:t): unit =
+  assert (is_global pc);
+  let e = pc.entry
+  and f = seed_function pc in
+  e.prvd  <- Term_table.filter_and_remap pred f e.prvd;
+  e.prvd2 <- Term_table.filter_and_remap pred f e.prvd2;
+  e.bwd   <- Term_table.filter_and_remap pred f e.bwd;
+  e.fwd   <- Term_table.filter_and_remap pred f e.fwd;
+  e.left  <- Term_table.filter_and_remap pred f e.left
+
 
 
 let add_last_to_work (pc:t): unit =
@@ -499,8 +499,11 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
   let dup = res <> cnt in
   if pc.trace then trace_term t rd search dup pc;
   Ass_seq.push rd pc.terms;
-  if search && not dup then
+  if search && not dup then begin
     add_last_to_tables pc;
+    if not dup && is_global pc then
+      Feature_table.add_involved_assertion cnt t (feature_table pc)
+  end;
   res
 
 
@@ -515,7 +518,6 @@ let raw_add (t:term) (search:bool) (pc:t): int =
 let arguments_of_sub (sub:Term_sub.t): term array =
   let nargs = Term_sub.count sub in
   let args = Term_sub.arguments nargs sub in
-  (*Array.iteri (fun i t -> args.(i) <- Term.up n_up t) args;*)
   args
 
 
@@ -593,19 +595,6 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Eval.Apply(fe,argse,pr),
           modi
       | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
-      (*| Lam(n,nms,pres,t0,pr,tp) ->
-          let tsimp,te,tmodi = simp t0 (1+nb) in
-          Lam(n,nms,pres,tsimp,pr,tp), Eval.Lam(n,nms,pres,te,pr,tp), tmodi
-      | QExp(n,tps,fgs,t0,is_all) ->
-          let tsimp,te,tmodi = simp t0 (n+nb) in
-          QExp(n,tps,fgs,tsimp,is_all), Eval.QExp(n,tps,fgs,te,is_all), tmodi
-      | Flow (ctrl,args) ->
-          let args, argse, modi = simpl_args args false in
-          Flow (ctrl,args),
-          Eval.Flow(ctrl,argse),
-          modi
-      | Indset (n,nms,rs) ->
-          t, Eval.Term t, false*)
     in
     assert (nb = 0);
     let sublst = unify t pc.entry.left pc in
@@ -1047,7 +1036,7 @@ let add_consequences_premise (i:int) (pc:t): unit =
     (fun (idx,sub,ags) ->
       assert (is_consistent pc);
       assert (idx < count pc);
-      if is_available idx pc && is_visible idx pc then
+      if is_visible idx pc then
         add_consequence i idx sub ags pc)
     sublst
 
@@ -1074,7 +1063,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
     let sublst = List.rev sublst in
     List.iter
       (fun (idx,sub) ->
-        if is_available idx pc && not (RD.is_intermediate (rule_data idx pc)) then
+        if(*is_available idx pc &&*)not (RD.is_intermediate (rule_data idx pc)) then
           let args = Term_sub.arguments (Term_sub.count sub) sub in
           add_consequence idx i args [||] pc)
       sublst
@@ -1292,7 +1281,7 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
     Proof_table.add_axiom t pc.base
   else
     Proof_table.add_assumption t pc.base;
-  let _ = raw_add t true pc in ();
+  ignore(raw_add t true pc);
   if not is_axiom then
     add_last_to_work pc;
   cnt
@@ -1431,19 +1420,21 @@ let variant (i:int) (bcls:int) (cls:int) (pc:t): term =
   Proof_table.variant i bcls cls pc.base
 
 
-let add_global (defer:bool) (inh:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
+let add_global (defer:bool) (anchor:int) (pc:t): unit =
   assert (is_global pc);
-  if count pc <> Seq.count pc.gseq + 1 then
+  let cnt = count pc in
+  if cnt <> Seq.count pc.gseq + 1 then
     printf "add_global count pc = %d, Seq.count pc.gseq = %d\n"
-      (count pc) (Seq.count pc.gseq);
-  assert (count pc = Seq.count pc.gseq + 1);
+      cnt (Seq.count pc.gseq);
+  assert (cnt = Seq.count pc.gseq + 1);
   let mt = module_table pc in
   let mdl = Module_table.current mt in
-  Seq.push {pub = is_public pc;
-            defer = defer;
-            inh   = inh;
-            cls = cls; anchor_cls = anchor_cls;
-            mdl = mdl} pc.gseq;
+  Seq.push
+    {pub = is_public pc;
+     defer = defer;
+     anchor = anchor;
+     mdl = mdl}
+    pc.gseq;
   assert (count pc = Seq.count pc.gseq)
 
 
@@ -1452,7 +1443,8 @@ let add_global (defer:bool) (inh:bool) (cls:int) (anchor_cls:int) (pc:t): unit =
 let inherit_deferred (i:int) (base_cls:int) (cls:int) (info:info) (pc:t): unit =
   (* Inherit the deferred assertion [i] in the class [cls] *)
   assert (i < count_global pc);
-  let t = variant i base_cls cls pc in
+  assert false
+  (*let t = variant i base_cls cls pc in
   let ct = class_table pc in
   if 1 < pc.verbosity then
     printf "   inherit deferred \"%s\" in %s\n"
@@ -1462,69 +1454,9 @@ let inherit_deferred (i:int) (base_cls:int) (cls:int) (info:info) (pc:t): unit =
     error_info info ("The deferred assertion \""  ^
                      (string_of_term t pc) ^
                      "\" is missing in " ^
-                     (Class_table.class_name cls (class_table pc)))
+                     (Class_table.class_name cls (class_table pc)))*)
 
 
-
-let rec inherit_effective
-    (i:int) (base_cls:int) (cls:int) (to_descs:bool) (pc:t): unit =
-  (* Inherit the effective assertion [i] in the class [cls] *)
-  assert (is_global pc);
-  assert (i < count_global pc);
-  let t = variant i base_cls cls pc in
-  let ct = class_table pc in
-  if 1 < pc.verbosity then
-    printf "   inherit \"%s\" of \"%s\" in %s\n"
-      (string_of_term t pc)
-      (Class_table.class_name base_cls ct)
-      (Class_table.class_name cls ct);
-  if not (has t pc) then begin
-    Proof_table.add_inherited t i base_cls cls pc.base;
-    let idx = raw_add t true pc in ();
-    add_global false true cls cls pc;
-    Class_table.add_assertion idx cls false ct;
-    if to_descs then
-      inherit_to_descendants idx false cls pc
-  end
-
-and inherit_to_descendants (i:int) (defer:bool) (owner:int) (pc:t): unit =
-  assert (is_global pc);
-  assert (owner <> -1);
-  let ct = class_table pc in
-  if not (Class_table.is_interface_check ct) then begin
-    let descendants = Class_table.descendants owner ct in
-    IntSet.iter
-      (fun descendant ->
-        assert (not defer); (* deferred assertion cannot be added to a class
-                               with descendants *)
-        inherit_effective i owner descendant false pc)
-      descendants
-  end
-
-
-
-
-
-
-let add_potential_equalities (cls:int) (pc:t): unit =
-  let ct = class_table pc in
-  let cls_lst1 = Class_table.deferred_assertions cls ct in
-  let cls_lst2 = Class_table.effective_assertions cls ct in
-  let add_equalities lst =
-    let lst = List.rev lst in
-    List.iter (fun i -> add_to_equalities (term i pc) i pc) lst in
-  add_equalities cls_lst1;
-  add_equalities cls_lst2
-
-
-
-let inherit_parent
-    (cls:int) (par:int) (par_args:type_term array) (info:info) (pc:t): unit =
-  let ct = class_table pc in
-  let deflst = Class_table.deferred_assertions par ct in
-  List.iter (fun i -> inherit_deferred i par cls info pc) (List.rev deflst);
-  let efflst = Class_table.effective_assertions par ct in
-  List.iter (fun i -> inherit_effective i par cls true pc) (List.rev efflst)
 
 
 
@@ -1644,7 +1576,7 @@ let prove_equality (g:term) (pc:t): int =
 
 let backward_witness (t:term) (pc:t): int =
     let nargs,(nms,tps),tt = Term.some_quantifier_split t in
-    assert false
+    assert false (* nyi *)
     (*let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
     let idx,sub = List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst
     in
@@ -1741,6 +1673,10 @@ let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
 
 
 let add_proved_term (t:term) (pt:proof_term) (search:bool) (pc:t): int =
+  (* Add the proof pair [t,pt] to the table and include it into the search
+     tables if [search] is flagged and the term [t] is not a duplicate.
+
+     Note: Not allowed as a global assertion! *)
   assert (not (is_global pc));
   let cnt = count pc in
   Proof_table.add_proved t pt 0 pc.base;
@@ -1751,11 +1687,13 @@ let add_proved_term (t:term) (pt:proof_term) (search:bool) (pc:t): int =
 
 
 let add_proved_0
-    (defer:bool) (owner:int)
+    (defer:bool) (anchor:int)
     (t:term) (pterm:proof_term) (delta:int) (pc:t)
     : int =
+  assert (not defer || anchor <> 0);
   let cnt = count pc
-  and ct = class_table pc in
+  and ct = class_table pc
+  and ft = feature_table pc in
   Proof_table.add_proved t pterm delta pc.base;
   let idx = raw_add t true pc in
   let dup = idx < cnt
@@ -1765,25 +1703,17 @@ let add_proved_0
                                 because globals are not closed *)
     add_last_to_work pc;
   let anchor_cls = RD.anchor_class (rule_data idx pc) in
-  if is_global pc then
-    add_global defer false owner anchor_cls pc;
-  if is_global pc && owner <> -1 then begin
-    let add_assertion idx =
-      Class_table.add_assertion idx owner defer ct;
-      inherit_to_descendants idx defer owner pc;
-      if anchor_cls <> -1 && anchor_cls <> owner then begin
-        Class_table.add_assertion idx anchor_cls defer ct;
-        inherit_to_descendants idx defer anchor_cls pc
-      end
-    in
-    if dup && is_public pc && not (Seq.elem idx pc.gseq).pub then begin
-      (* export the original assertion *)
-      add_assertion idx;
-      (Seq.elem idx pc.gseq).pub <- true
-    end else if not dup then begin
+  if is_global pc then begin
+    add_global defer anchor pc;
+    if defer && not dup then begin
       assert (idx = cnt);
-      add_assertion cnt
-    end
+      Class_table.add_generic idx true anchor ct;
+      let gdesc = Seq.elem idx pc.gseq in
+      if is_interface_check pc && not gdesc.pub then
+        gdesc.pub <- true
+    end else if dup && is_interface_check pc
+    then
+      (Seq.elem idx pc.gseq).pub <- true
   end;
   cnt
 
@@ -1814,6 +1744,39 @@ let add_proved_list
       let _ = add_proved_0 defer owner t pt delta pc in ())
     lst
 
+
+let remove_or_remap (set:IntSet.t) (pc:t): unit =
+  (* All assertions in the set [set] have some features which have got a new
+     seed.
+
+     If an assertion can still be found then there is a more general assertion in
+     the search tables and the assertion has to be removed from the search tables.
+
+     If an assertion cannot be found anymore then the search tables have to be
+     remapped to find them again. Furthermore an assertion which has to be remapped
+     might be an equality assertion. If yes, its left hand side has to be added to
+     the equality table.
+   *)
+  let index i =
+    try find (term i pc) pc
+    with Not_found -> -1
+  in
+  let remap_set =
+    IntSet.filter
+      (fun i ->
+        let idx = index i in
+        assert (idx <> i); (* Some features have new seeds *)
+        idx = -1)
+      set
+  in
+  let pred i = IntSet.mem i remap_set || not (IntSet.mem i set)
+  in
+  filter_and_remap_tables pred pc;
+  IntSet.iter
+    (fun i ->
+      let t = term i pc in
+      add_to_equalities t i pc)
+    remap_set
 
 
 let add_induction_law0 (cls:int) (pc:t): unit =
@@ -1852,7 +1815,7 @@ let check_interface (pc:t): unit =
     let gdesc = Seq.elem i pc.gseq in
     if gdesc.defer
         && not gdesc.pub
-        && Class_table.is_class_public gdesc.cls (class_table pc)
+        && Class_table.is_class_public gdesc.anchor (class_table pc)
     then
       error_info (FINFO (1,0))
         ("deferred assertion `" ^ (string_of_term (term i pc) pc) ^

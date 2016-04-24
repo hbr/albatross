@@ -87,32 +87,11 @@ val is_class_public: int -> t -> bool
 val descendants: int -> t -> IntSet.t
     (** [descendants cls ct] returns the set of descendants of the class [cls] *)
 
-val add_feature:  int -> int -> bool -> bool -> bool -> t -> unit
-    (** [add_feature fidx cls is_def priv_only pub_only ct] adds the
-        feature [fidx] to the class [cls] as deferred or effective
-        depending on the value of [is_def] *)
-
-val add_assertion:  int -> int -> bool -> t -> unit
-   (** [add_assertion aidx cls defer ct] adds the assertion [aidx] to the
-       assertion of the class [cls] *)
 
 val generics: int -> t -> (bool*int) list
+val add_generic: int -> bool -> int -> t -> unit
+val add_generics: int -> bool -> Tvars.t -> t -> unit
 
-val deferred_features: int -> t -> int list
-   (** [deferred_features cls ct]: The list of deferred features of the class
-       [cls] *)
-
-val effective_features: int -> t -> int list
-   (** [effective_features cls ct]: The list of effective features of the class
-       [cls] *)
-
-val deferred_assertions: int -> t -> int list
-   (** [deferred_assertions cls ct]: The list of deferred assertions of the class
-       [cls] *)
-
-val effective_assertions: int -> t -> int list
-   (** [effective_assertions cls ct]: The list of effective assertions of the class
-       [cls] *)
 
 val owner: Tvars.t -> Sign.t -> t -> int
 val anchor_class: Tvars.t -> Sign.t -> t -> int
@@ -228,5 +207,9 @@ val string_of_tvs: Tvars.t -> t -> string
 val string_of_tvs_sub: TVars_sub.t -> t -> string
 
 val string_of_detailed_tvs: Tvars.t -> t -> string
+
+val arguments_string: Tvars.t -> formal array -> t -> string
+
+val arguments_string2: Tvars.t -> names -> types -> t -> string
 
 val string_of_reduced_complete_signature: Sign.t -> Tvars.t -> t -> string

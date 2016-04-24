@@ -39,6 +39,13 @@ val seeded_term: term -> int -> t -> term
 
 val seed_function: t -> int -> int
 
+
+val get_variant_seed: int -> int -> agens -> t -> int*agens
+
+val add_variant: int -> int -> agens -> t -> unit
+
+val set_seed: int -> int -> agens -> t -> unit
+
 val variant: int -> int -> t -> int
     (** [variant idx cls ft] returns the variant of the feature [idx] in the
         class [cls] *)
@@ -53,7 +60,7 @@ val has_variant: int -> int -> t -> bool
 
 val fully_expanded: term -> int -> Tvars.t -> t -> term
 
-val find_variant_candidate: int -> int -> t -> int*agens
+val find_variant_candidate: int -> t -> int*agens
 
 val has_variant_candidate: int -> int -> t -> bool
 
@@ -145,7 +152,7 @@ val has_definition: int -> t -> bool
 val is_inductive_set: int -> int -> t -> bool
 val inductive_set: int -> term array -> agens -> int -> Tvars.t -> t -> term
 
-val specification: int -> t -> term list
+val transformed_specifications: int -> int -> agens -> t -> term list
 
 val feature_name: int -> t -> string
 
@@ -210,6 +217,9 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
 val update_specification: int -> Feature.Spec.t -> t -> unit
 val set_owner_class:      int -> int -> t -> unit
 val export_feature: int -> bool -> t -> unit
+
+val involved_assertions: int -> t -> IntSet.t
+val add_involved_assertion: int -> term -> t -> unit
 
 
 val term_to_string: term -> bool -> int -> int array -> t -> string

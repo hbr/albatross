@@ -67,6 +67,7 @@ val add_proved_term:    term -> proof_term -> bool -> t -> int
 val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> term -> proof_term -> t -> int
 val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
+val remove_or_remap:    IntSet.t -> t -> unit
 val premises:           int -> t -> (term*bool) list
 val previous_schematic: int  -> t -> int option
 val trying_goal:        term -> t -> unit
@@ -109,10 +110,6 @@ val check_deferred: t -> unit
 val owner:          t -> int
 val anchor_class:   t -> int
 
-val inherit_parent: int -> int -> type_term array -> info -> t -> unit
-    (** [inherit_parent cls par par_args info pc] *)
-
-val add_potential_equalities: int -> t -> unit
 
 val add_induction_law0:  int -> t -> unit
 val add_induction_law:   type_term ->  int -> term -> t -> int

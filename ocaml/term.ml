@@ -53,6 +53,10 @@ let empty_term:    term = Variable (-1)
 let empty_formals: formals = [||], [||]
 
 
+let standard_substitution (n:int): term array =
+  assert (0 <= n);
+  Array.init n (fun i -> Variable i)
+
 let make_type (cls:int) (ags:arguments): type_term =
   VAppl (cls,ags,[||])
 
@@ -64,8 +68,6 @@ let count_formals ((nms,tps):formals): int =
 
 
 module Term: sig
-
-  val standard_substitution: int -> term array
 
   val is_variable_i: term -> int -> bool
 
@@ -186,10 +188,6 @@ module Term: sig
   val prenex: term -> int -> int -> int -> term
 
 end = struct
-
-  let standard_substitution (n:int): term array =
-    assert (0 <= n);
-    Array.init n (fun i -> Variable i)
 
   let is_variable_i (t:term) (i:int): bool =
     match t with
@@ -888,6 +886,10 @@ end = struct
 
 
   let subst_array (arr:term array) (d:int) (args:arguments): arguments =
+    (* Substitute the arguments of the array [arr] by the actual arguments
+       [args] which have [d] more variables than the term [t] above its
+       arguments. I.e. all variables in [t] above [nargs] have to be shifted
+       up. *)
     Array.map (fun t -> subst t d args) arr
 
 

@@ -9,6 +9,4 @@ open Term
 
 type parent_descriptor = Class_table.parent_descriptor
 
-val inherit_to_descendants: int -> info -> Proof_context.t -> unit
-
 val inherit_parents: int -> inherit_clause -> Proof_context.t -> unit

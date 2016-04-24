@@ -25,10 +25,6 @@ type parent_descriptor = {
 type base_descriptor = { hmark:    header_mark;
                          mutable tvs: Tvars.t;
                          mutable generics: (bool*int) list;
-                         mutable def_features: int list;
-                         mutable eff_features: int list;
-                         mutable def_asserts:  int list;
-                         mutable eff_asserts:  int list;
                          mutable constructors: IntSet.t;
                          mutable indlaw:       int;
                          mutable descendants:  IntSet.t;
@@ -39,9 +35,7 @@ type descriptor      = { mutable mdl:  int;
                          ident: int;
                          name: int;
                          bdesc: base_descriptor;
-                         (*priv: base_descriptor;*)
-                         mutable is_exp: bool(*;
-                         mutable publ: base_descriptor option*)}
+                         mutable is_exp: bool}
 
 
 type t = {mutable map:   int CMap.t;
@@ -98,10 +92,6 @@ let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
   {hmark = hm;
    tvs   = tvs;
    generics = [];
-   def_features = [];
-   eff_features = [];
-   def_asserts  = [];
-   eff_asserts  = [];
    constructors = IntSet.empty;
    indlaw       = -1;
    descendants  = IntSet.empty;
@@ -452,11 +442,11 @@ let string_of_tvs (tvs:Tvars.t) (ct:t): string =
     if Tvars.count_local tvs = 0 then
       ""
     else
-      string_of_int (Tvars.count_local tvs)
+      "(" ^ string_of_int (Tvars.count_local tvs) ^ ")"
   and str2 = string_of_concepts tvs ct
   and str3 = string_of_fgconcepts tvs ct in
   let strcpts =
-    if str2="" && str3="" then
+    if str2 = "" && str3 = "" then
       ""
     else if str3="" then
       "[" ^ str2 ^ "]"
@@ -494,6 +484,63 @@ let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
   in
   let subsstr = if subsstr = "" then "" else "[" ^ subsstr ^ "]" in
   (string_of_tvs tvs ct) ^ subsstr
+
+
+let arguments_string
+    (tvs:Tvars.t) (args:formal array) (ct:t)
+    : string =
+  (* The string "(a:A, b1,b2:B, ... )" of then arguments [args] within the
+     type environment [tvs] prefixed of a potential list of formal generics.
+
+     In case that there are no arguments the empty string is returned and
+     not "()".
+   *)
+  let nargs = Array.length args in
+  if nargs = 0 then
+    ""
+  else
+    let fargs = Array.to_list args
+    in
+    let llst = List.fold_left
+        (fun ll (n,tp) -> match ll with
+          [] -> [[n],tp]
+        | (ns,tp1)::tl ->
+            if tp=tp1 then (n::ns,tp)::tl
+            else           ([n],tp)::ll )
+        []
+        fargs
+    in
+    (string_of_tvs tvs ct)
+    ^
+    "("
+    ^  String.concat
+        ","
+        (List.rev_map
+           (fun (ns,tp) ->
+             let ntvs = Tvars.count tvs in
+             (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
+             ^ ":"
+             ^ (type2string tp ntvs (Tvars.fgnames tvs) ct))
+           llst)
+    ^ ")"
+
+
+
+
+let arguments_string2
+    (tvs:Tvars.t) (nms:names) (tps:types) (ct:t)
+    : string =
+  (* The string "(a:A, b1,b2:B, ... )" of then arguments [args] within the
+     type environment [tvs] prefixed of a potential list of formal generics.
+
+     In case that there are no arguments the empty string is returned and
+     not "()".
+   *)
+  let nargs = Array.length nms in
+  assert (nargs = Array.length tps);
+  let args = Myarray.combine nms tps in
+  arguments_string tvs args ct
+
 
 
 
@@ -682,7 +729,7 @@ let has_constructors (cls:int) (ct:t): bool =
 
 let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  assert false (* nyi *)
+  assert false (* nyi: redesign *)
   (*let bdesc = base_descriptor cls ct in
   assert (bdesc.constructors = IntSet.empty);
   assert (bdesc.hmark = Case_hmark);
@@ -700,7 +747,7 @@ let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
 
 let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  assert false (* nyi *)
+  assert false (* nyi: redesign *)
   (*let bdesc = base_descriptor cls ct in
   assert (bdesc.indlaw = -1);
   assert (bdesc.hmark = Case_hmark);
@@ -767,89 +814,36 @@ let update
 
 
 
-let add_feature_bdesc
-    (fidx:int)
-    (is_deferred:bool)
-    (bdesc:base_descriptor)
-    :unit =
-  if is_deferred then begin
-    assert (not (List.mem fidx bdesc.def_features));
-    bdesc.def_features <- fidx :: bdesc.def_features
-  end else begin
-    assert (not (List.mem fidx bdesc.eff_features));
-    bdesc.eff_features <- fidx :: bdesc.eff_features;
-  end
-
-
-
-
-let add_feature
-    (fidx:int)
-    (cidx:int)
-    (is_deferred:bool)
-    (priv_only: bool)
-    (pub_only:bool)
-    (ct:t)
-    : unit =
-  assert (cidx < count ct);
-  assert (not (priv_only && pub_only));
-  if is_interface_check ct then
-    ()
-  else
-    let desc = descriptor cidx ct in
-    add_feature_bdesc fidx is_deferred desc.bdesc
-
-
-
-let add_assertion_bdesc (aidx:int) (is_deferred:bool) (bdesc:base_descriptor)
-    : unit =
-  if is_deferred then begin
-    assert (not (List.mem aidx bdesc.def_asserts));
-    bdesc.def_asserts <- aidx :: bdesc.def_asserts
-  end else begin
-    assert (not (List.mem aidx bdesc.eff_asserts));
-    bdesc.eff_asserts <- aidx :: bdesc.eff_asserts
-  end
-
-
-let add_assertion (aidx:int) (cidx:int) (is_deferred:bool) (ct:t)
-    : unit =
-  (** Add the assertion [aidx] to the class [cidx] as deferred or effective
-      assertion depending on [is_deferred].  *)
-  assert (cidx < count ct);
-  if is_interface_check ct then
-    ()
-  else
-    let bdesc = base_descriptor cidx ct in
-    add_assertion_bdesc aidx is_deferred bdesc
 
 
 
 let generics (cidx:int) (ct:t): (bool*int) list =
-  (* The list of all generic features/assertions in the reversed order of
-     insertion. *)
+  (* The list of all generic features/assertions in the order of insertion. *)
   assert (cidx < count ct);
-  (base_descriptor cidx ct).generics
+  List.rev (base_descriptor cidx ct).generics
 
 
-let deferred_features (cidx:int) (ct:t): int list =
-  assert (cidx < count ct);
-  (base_descriptor cidx ct).def_features
+
+let add_generic (idx:int) (is_ass:bool) (cls:int) (ct:t): unit =
+  assert (cls < count ct);
+  let bdesc = base_descriptor cls ct in
+  assert (not (List.mem (is_ass,idx) bdesc.generics));
+  bdesc.generics <- (is_ass,idx)::bdesc.generics
 
 
-let effective_features (cidx:int) (ct:t): int list =
-  assert (cidx < count ct);
-  (base_descriptor cidx ct).eff_features
+
+let add_generics (idx:int) (is_ass:bool) (tvs:Tvars.t) (ct:t): unit =
+  assert (Tvars.count_all tvs = Tvars.count_fgs tvs);
+  let set = Array.fold_left
+      (fun set tp -> IntSet.add (Tvars.principal_class tp tvs) set)
+      IntSet.empty
+      (Tvars.fgconcepts tvs) in
+  IntSet.iter
+    (fun cls -> add_generic idx is_ass cls ct)
+    set
 
 
-let deferred_assertions (cidx:int) (ct:t): int list =
-  assert (cidx < count ct);
-  (base_descriptor cidx ct).def_asserts
 
-
-let effective_assertions (cidx:int) (ct:t): int list =
-  assert (cidx < count ct);
-  (base_descriptor cidx ct).eff_asserts
 
 
 let add

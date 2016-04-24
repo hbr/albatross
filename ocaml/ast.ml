@@ -754,8 +754,7 @@ let update_feature
     let is_ghost = Feature_table.is_ghost_specification spec ft in
     if is_ghost && not (Feature_table.is_ghost_function idx ft) then
       error_info info "Must be a ghost function";
-    Feature_table.update_specification idx spec ft;
-    Inherit.inherit_to_descendants idx info pc
+    Feature_table.update_specification idx spec ft
   in
   if PC.is_private pc || not (PC.is_interface_check pc) then begin
     if not is_new then begin
@@ -967,7 +966,8 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
               else arr in
             let tlst2 = add_pattern insp_arr2 n parr nb tlst in
             assert (Array.length parr = ninsp); (* because only constructors and
-                                                   variables are allowed in patterns *)
+                                                   variables are allowed in
+                                                   patterns *)
             let c = Context.push_typed fargs empty_formals c in
             check res (nbranch+1) tlst2 c)
           0 ncases
@@ -1109,7 +1109,7 @@ let analyze_feature
       - Check the validity of a potential recursion
       - Verify the preconditions of the definition term. (What about precondition
         terms and postconditions).
-   *)
+          *)
   if rt = None then
     not_yet_implemented fn.i "Features without result type";
   let pc1 =
@@ -1204,7 +1204,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
      all(a:T) a as pat1  ==>  a as pat2  ==>  false
    *)
   assert (idx1 <> idx2);
-  assert false (* nyi *)
+  assert false (* nyi: redesign *)
   (*let ft = PC.feature_table pc in
   let make_pattern idx =
     let n = Feature_table.arity idx ft in
@@ -1294,7 +1294,7 @@ let add_case_injections
 let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
   (* Can the case class [cls] be constructed without actual generics at the
      positions [posset]?  *)
-  assert false (* nyi *)
+  assert false (* nyi: redesign *)
   (*let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   assert (Class_table.is_case_class cls ct);
@@ -1439,7 +1439,8 @@ let put_creators
         update_feature fn.i idx is_new is_export spec imp pc;
         let is_base = is_base_constructor idx cls pc in
         if is_base && c1lst <> [] then
-          error_info fn.i "Base constructors must be defined before other constructors"
+          error_info fn.i
+            "Base constructors must be defined before other constructors"
         else if not is_base && c0lst = [] then
           error_info fn.i "No base constructors available";
         if is_base then idx::c0lst, c1lst else c0lst, idx::c1lst)
@@ -1449,7 +1450,7 @@ let put_creators
   let clst = List.rev clst_rev in
   add_case_inversions cls clst pc;
   add_case_injections clst pc;
-  assert false (* nyi *)
+  assert false (* nyi: redesign *)
   (*let cset = IntSet.of_list clst in
   if Class_table.is_interface_check ct &&
      Class_table.constructors_priv cls ct <> cset then

@@ -14,12 +14,17 @@ val count: t -> int
 
 val terms: t -> (int*int*int*term) list
 
-val unify: term -> int -> t -> (int * Term_sub.t) list
+val unify: term -> int -> (int->int) -> t -> (int * Term_sub.t) list
 
-val unify_with: term -> int -> int -> t -> (int * Term_sub.t) list
+val unify_with: term -> int -> int -> (int->int) -> t -> (int * Term_sub.t) list
 
+val add: term -> int -> int -> int -> (int->int) -> t -> t
 
-val add: term -> int -> int -> int -> t -> t
+val unify0: term -> int -> t -> (int * Term_sub.t) list
+
+val unify0_with: term -> int -> int -> t -> (int * Term_sub.t) list
+
+val add0: term -> int -> int -> int -> t -> t
 
 
 val filter: (int->bool) -> t -> t
@@ -28,3 +33,6 @@ val remove: int -> t -> t
     (** [remove i tab] removes the term with the index [i] from the table
         [tab] *)
 
+val remap_vappl: (int->int) -> t -> t
+
+val filter_and_remap: (int->bool) -> (int->int) -> t -> t

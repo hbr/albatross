@@ -170,57 +170,6 @@ let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
   Context.prenex_term t at.c
 
-(*
-let equivalent (t1:term) (t2:term) (at:t): bool =
-  (* Are the terms equivalent without regarding names and positions of the
-     all quantifiers? *)
-  let rec equiv t1 t2 imp_id =
-    let split (t:term): int * term option * term =
-      let n, t0 =
-        try
-          let n,nms,t0 = Term.all_quantifier_split t in n,t0
-        with Not_found -> 0, t in
-      let a, b =
-        try
-          let a,b = Term.binary_split t0 (n+imp_id) in Some a, b
-        with Not_found -> None, t0
-      in
-      n, a, b
-    in
-    let n1, a1, b1 = split t1
-    and n2, a2, b2 = split t2 in
-    match a1, a2 with
-      None, None when n1 = n2 ->
-        true
-    | Some a1, Some a2 ->
-        if n1 = n2 then
-          let imp_id = n1 + imp_id in
-          equiv a1 a2 imp_id &&
-          equiv b1 b2 imp_id
-        else
-          let first_less n1 a1 b1 n2 a2 b2 =
-            assert (n1 <= n2);
-            let gp1_a1 = Term.greatestp1_arg a1 n1
-            and gp1_a2 = Term.greatestp1_arg a2 n2 in
-            gp1_a1 = gp1_a2 &&
-            let imp_id = gp1_a1+imp_id
-            and nargs1, nargs2 = n1-gp1_a1, n2-gp1_a2 in
-            equiv
-              (Term.down_from nargs1 gp1_a1 a1)
-              (Term.down_from nargs2 gp1_a2 a2)
-              imp_id &&
-            equiv
-              (Term.all_quantified nargs1 [||] b1)
-              (Term.all_quantified nargs2 [||] b2)
-              imp_id
-          in
-          if n1 <= n2 then first_less n1 a1 b1 n2 a2 b2
-          else first_less n2 a2 b2 n1 a1 b1
-    | _, _ ->
-        false
-  in
-  equiv t1 t2 (imp_id at)
-*)
 
 
 let make (verbosity:int): t =
@@ -316,9 +265,6 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
   assert (is_global at);
   let t,nbenv = term i at in
   assert (nbenv = 0);
-  (*let ft = feature_table at in
-  let t = Feature_table.variant_term t nbenv bcls cls ft in
-  t*)
   let n,(nms,tps),(fgnms,fgcon),t0 =
     try Term.all_quantifier_split t
     with Not_found -> assert false in
@@ -342,37 +288,8 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
 
 
 
-let discharged_assumptions (i:int) (at:t): int * formals * formals * term =
-  (* The [i]th term of the current environment with all quantified variables
-     of the term and assumptions discharged. A potential quantifier in the
-     term is moved up (prenex normal form) all assumptions.
-
-     Note: If [i] is not in the current environment it cannot be quantified!
-   *)
-  assert false
-  (*let cnt0 = count_previous at
-  and tgt  = local_term i at in
-  let n,nms,tgt =
-    try
-      let n,tps,fgs,t = split_all_quantified tgt at in
-      if i < cnt0 then
-        printf "  i %d, cnt0 %d tgt %s\n" i cnt0 (string_of_term tgt at);
-      assert (cnt0 <= i);
-      n,tps,fgs,t
-    with Not_found -> 0,empty_formals,empty_formals,tgt
-  in
-  let imp_id = n + imp_id at in
-  assert (at.nreq = List.length at.reqs);
-  let res =
-    List.fold_left
-      (fun tgt k ->
-        let t = local_term k at in
-        let t = Term.up n t in
-        Term.binary imp_id t tgt)
-      tgt
-      at.reqs in
-  n,nms,res
-*)
+let count_local_assumptions (at:t): int =
+  at.nreq
 
 let assumptions (at:t): term list =
   (* The assumptions of the current context *)
@@ -549,7 +466,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     match e with
       Eval.Term t -> t,t
     | Eval.Exp (idx,ags,args,e) when idx = domain_id ->
-        assert false
+        assert false (* nyi *)
         (*let doma, domb = reconstruct e nb in
         if doma <> domb then raise Illegal_proof_term;
         if Array.length args <> 1 then raise Illegal_proof_term;
@@ -749,7 +666,7 @@ let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
 
 let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
     : term =
-  assert false
+  assert false (* nyi *)
   (*let nargs = Array.length args in
   Array.iter (fun t ->
     match t with Variable i when i = -1 ->
@@ -823,7 +740,7 @@ let function_property (idx:int) (i:int) (args:term array) (at:t): term =
 
 
 let set_induction_law (t:term) (at:t): term =
-  assert false
+  assert false (* nyi *)
   (*let p =
     try
       Context.inductive_set t at.c
@@ -1039,44 +956,6 @@ let add_someelim (i:int) (t:term) (at:t): unit =
 
 
 
-let discharged_proof_term (i:int) (at:t): int * formals * formals * proof_term array =
-  (* The [i]th term of the current environment with all quantified variables and
-     assumptions discharged.
-
-     Note: If [i] is not in the current environment it cannot be quantified!
-   *)
-  assert false
-  (*let cnt0 = count_previous at
-  and pt   = proof_term i at in
-  let n,tps,fgs,pt =
-    match pt with
-      Axiom t -> begin
-        try
-          let n,tps,fgs,t = split_all_quantified t at in
-          n, tps, fgs, Axiom t
-        with Not_found ->
-          0,empty_formals,empty_formals,pt
-      end
-    | _ -> begin
-        try
-          let (nms,tps),(fgnms,fgcon),pt_arr = Proof_term.split_subproof pt in
-          let n = Array.length nms in
-          assert (n=0 || cnt0 <= i);
-          n,(nms,tps),(fgnms,fgcon),
-          Subproof (0,empty_formals,empty_formals,idx,pt_arr)
-        with Not_found ->
-          0, empty_formals, empty_formals, pt
-    end
-  in
-  let narr = if at.maxreq<=i  then i+1-cnt0 else at.maxreq - cnt0 in
-  let pterm j =
-    let pt = proof_term (cnt0+j) at in Proof_term.term_up n pt
-  in
-  let pt_arr = Array.init narr (fun j -> if cnt0+j=i then pt else pterm j)
-  in
-  n, nms, pt_arr*)
-
-
 
 
 (* Special cases for discharging:
@@ -1094,6 +973,10 @@ let discharged_proof_term (i:int) (at:t): int * formals * formals * proof_term a
       forbid universally quantified assertions in ensure clauses and require the
       user to bubble them up. This removes a lot of complexity.
 
+      Exception: The current environment has neither variables nor assumptions.
+                 Then the universally quantified assertion and its proof term
+                 do not need any modification.
+
    4. The target is from an outer context: In that case the target does not contain
       any of the variables of the inner context and does not need the assumptions
       of the inner context to be proved.
@@ -1105,78 +988,55 @@ let discharged_proof_term (i:int) (at:t): int * formals * formals * proof_term a
 let discharged (i:int) (at:t): term * proof_term =
   let tgt = local_term i at
   and pt  = proof_term i at in
-  assert (not (Term.is_all_quantified tgt));
-  let t0 = discharged_assumptions i at in
-  let tps, args, fgs, ags =
-    let tps,ntvs,fgs = local_formals at, count_last_type_variables at, local_fgs at in
-    Term.unused_transform tps ntvs fgs t0 in
-  let n1new, n2new = count_formals tps, count_formals fgs in
-  let t0 = Term.subst0 t0 n1new args n2new ags in
-  let t  = Term.all_quantified n1new tps fgs t0
-  in
-  match pt with
-    Axiom _ ->
-      let pt = Axiom t in
-      t, pt
-  | _ ->
-      let cnt0  = count_previous at in
-      let narr = if at.maxreq <= i then i+1-cnt0 else at.maxreq-cnt0 in
-      if narr = 0 then begin
-        assert (i < cnt0);
-        t, Subproof (empty_formals,empty_formals,i,[||])
-      end else begin
-        let nargs = Array.length args in
-        let ptarr = Array.init narr (fun j -> proof_term (cnt0+j) at) in
-        let i,ptarr  = Proof_term.remove_unused i cnt0 ptarr in
-        let uvars_pt = Proof_term.used_variables nargs ptarr in
-        if not (n1new = IntSet.cardinal uvars_pt &&
-                IntSet.for_all
-                  (fun i ->
-                    assert (i < nargs);
-                    args.(i) <> Variable (-1))
-                  uvars_pt)
-        then begin
-          printf "n1new %d, IntSet.cardinal uvars_pt %d\n"
-            n1new (IntSet.cardinal uvars_pt);
-          printf "uvars_pt %s\n" (intset_to_string uvars_pt);
-          printf "#ptarr %d\n" (Array.length ptarr);
-          Proof_term.print_pt_arr "    " cnt0 ptarr;
-          raise Not_found
-        end;
-        let ptarr =
-          Proof_term.remove_unused_variables args n1new ags n2new ptarr in
-        let pt = Subproof (tps,fgs,i,ptarr) in
-        t,pt
-      end
-
-(*
-let discharged (i:int) (at:t): term * proof_term =
-  assert (not (has_result at));
-  let n1,(nms1,tps1), (fgnms,fgcon),t = discharged_assumptions i at
-  in
-  let nargs = n1 + count_last_arguments at
-  and nms   = prepend_names nms1 (names at)
-  and nreq  = at.nreq
-  and cnt0  = count_previous at
-  and axiom = is_axiom i at
-  in
-  let len, pt_arr =
-    let n2,nms2,pt_arr = discharged_proof_term i at in
-    assert (n1 = n2);
-    assert (nms1 = nms2);
-    Array.length pt_arr, pt_arr
-  in
-  if nargs = 0 && nreq = 0 && len = 1 then
-    t, pt_arr.(0)
-  else
-    let i,pt_arr =
-      if len=0 then i,pt_arr else Proof_term.remove_unused i cnt0 pt_arr
+  if count_last_arguments at = 0 &&
+    count_local_assumptions at = 0 &&
+    count_last_local at = 1
+  then begin
+    assert (i = count_previous at);
+    tgt,pt
+  end else begin
+    assert (not (Term.is_all_quantified tgt));
+    let t0 = discharged_assumptions i at in
+    let tps, args, fgs, ags =
+      let tps,ntvs,fgs =
+        local_formals at, count_last_type_variables at, local_fgs at in
+      Term.unused_transform tps ntvs fgs t0 in
+    let n1new, n2new = count_formals tps, count_formals fgs in
+    let t0 = Term.subst0 t0 n1new args n2new ags in
+    let t  = Term.all_quantified n1new tps fgs t0
     in
-    let nargs,nms,t,pt_arr = Proof_term.normalize_pair nargs nms cnt0 t pt_arr
-    in
-    let t  = Term.all_quantified nargs nms t
-    in
-    let pt = if axiom then Axiom t else Subproof (nargs,nms,i,pt_arr)
-    in
-    t, pt
-*)
+    match pt with
+      Axiom _ ->
+        let pt = Axiom t in
+        t, pt
+    | _ ->
+        let cnt0  = count_previous at in
+        let narr = if at.maxreq <= i then i+1-cnt0 else at.maxreq-cnt0 in
+        if narr = 0 then begin
+          assert (i < cnt0);
+          t, Subproof (empty_formals,empty_formals,i,[||])
+        end else begin
+          let nargs = Array.length args in
+          let ptarr = Array.init narr (fun j -> proof_term (cnt0+j) at) in
+          let i,ptarr  = Proof_term.remove_unused i cnt0 ptarr in
+          let uvars_pt = Proof_term.used_variables nargs ptarr in
+          if not (n1new = IntSet.cardinal uvars_pt &&
+                  IntSet.for_all
+                    (fun i ->
+                      assert (i < nargs);
+                      args.(i) <> Variable (-1))
+                    uvars_pt)
+          then begin
+            printf "n1new %d, IntSet.cardinal uvars_pt %d\n"
+              n1new (IntSet.cardinal uvars_pt);
+            printf "uvars_pt %s\n" (intset_to_string uvars_pt);
+            printf "#ptarr %d\n" (Array.length ptarr);
+            Proof_term.print_pt_arr "    " cnt0 ptarr;
+            raise Not_found
+          end;
+          let ptarr =
+            Proof_term.remove_unused_variables args n1new ags n2new ptarr in
+          let pt = Subproof (tps,fgs,i,ptarr) in
+          t,pt
+        end
+  end

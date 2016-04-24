@@ -127,7 +127,7 @@ let qmap (is_all:bool) (tab:t): t IntMap.t =
     tab.somes
 
 
-let unify (t:term) (nbt:int) (table:t)
+let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
     :  (int * Term_sub.t) list =
   (** Unify the term [t] which comes from an environment with [nbt] bound
       variables with the terms in the table 'table'.
@@ -192,6 +192,7 @@ let unify (t:term) (nbt:int) (table:t)
     | VAppl (i,args,_) ->
         assert (nb + nbt <= i);
         let idx = i - nb - nbt in
+        let idx = sfun idx in
         begin try
           let argtabs,sublst = IntMap.find idx tab.apps in
           if Array.length argtabs = 0 then
@@ -262,10 +263,8 @@ let unify (t:term) (nbt:int) (table:t)
 
 
 
-
-
-
-let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
+let unify_with
+    (t:term) (nargs:int) (nbenv:int) (sfun:int->int) (table:t)
     :  (int * Term_sub.t) list =
   (** Unify the terms in the table [table] with term [t] which has [nargs]
       arguments and comes from an environment with [nbenv] variables.
@@ -324,6 +323,7 @@ let unify_with (t:term) (nargs:int) (nbenv:int) (table:t)
     | VAppl (i,args,_) ->
         assert (nb + nargs + nbenv <= i);
         let idx = i - nb - nargs - nbenv in
+        let idx = sfun idx in
         let argtabs,sublst = IntMap.find idx tab.apps in
         if Array.length argtabs = 0 then
           sublst
@@ -403,9 +403,10 @@ let has (idx:int) (table:t): bool =
   List.exists (fun (i,_,_,_,_) -> i = idx) table.terms
 
 
-let add
-    (t:term) (nargs:int) (nbenv:int)
+let add_base
+    (t:term) (nb:int) (nargs:int) (nbenv:int)
     (idx:int)
+    (sfun:int->int)
     (table:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
       environment with [nbenv] variables to the index [idx]
@@ -441,6 +442,7 @@ let add
           let len  = Array.length args
           and item = idx, Term_sub.empty
           and fidx = i - nb - nargs - nbenv in
+          let fidx = sfun fidx in
           let argtabs,sublst =
             try IntMap.find fidx tab.apps
             with Not_found ->
@@ -513,16 +515,26 @@ let add
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
-  add0 t 0 table
+  add0 t nb table
 
 
 
+let add
+    (t:term) (nargs:int) (nbenv:int)
+    (idx:int)
+    (sfun:int->int)
+    (table:t): t =
+  (** Associate the term [t] which has [nargs] arguments and comes from an
+      environment with [nbenv] variables to the index [idx]
+      within the node [tab].
+   *)
+  add_base t 0 nargs nbenv idx sfun table
 
 let filter (f:int -> bool) (tab:t): t =
-  let filt_sub sublst = List.filter (fun (obj,_) -> f obj) sublst in
+  let filt_sub sublst = List.filter (fun (i,_) -> f i) sublst in
   let rec filt tab =
-    {terms = List.filter (fun (obj,_,_,_,_) -> f obj) tab.terms;
-     avars = List.filter (fun (obj,_,_) ->     f obj) tab.avars;
+    {terms = List.filter (fun (i,_,_,_,_) -> f i) tab.terms;
+     avars = List.filter (fun (i,_,_) ->     f i) tab.avars;
      bvars = IntMap.map filt_sub tab.bvars;
      fvars = List.map (fun (nbenv,map) -> nbenv, IntMap.map filt_sub map) tab.fvars;
      apps  = IntMap.map (fun (args,sublst) -> Array.map filt args,sublst) tab.apps;
@@ -537,5 +549,93 @@ let filter (f:int -> bool) (tab:t): t =
 
 
 
+let filter_and_remap (f:int->bool) (sfun:int->int) (tab:t): t =
+  List.fold_left
+    (fun tab (idx,nb,nargs,nbenv,t) ->
+      assert (nb = 0);
+      if f idx then
+        add t nargs nbenv idx sfun tab
+      else
+        tab)
+    empty
+    (List.rev tab.terms)
+
+
+
+let merge_tabs (t1:t) (t2:t) (sfun:int->int): t =
+  (* Merge the two tables [t1] and [t2] into one table. *)
+  let rec merge ts1 ts2 tab =
+    let add_merge (idx,nb,nargs,nbenv,t) tab ts1 ts2 =
+      let tab = add_base t nb nargs nbenv idx sfun tab in
+      merge ts1 ts2 tab
+    in
+    match ts1, ts2 with
+      [], [] ->
+        tab
+    | h1::tl1, [] ->
+        add_merge h1 tab tl1 []
+    | [], h2::tl2 ->
+        add_merge h2 tab [] tl2
+    | h1::tl1, h2::tl2 ->
+        let idx1,_,_,_,_ = h1
+        and idx2,_,_,_,_ = h2
+        in
+        assert (idx1 <> idx2);
+        if idx1 < idx2 then
+          add_merge h1 tab tl1 ts2
+        else
+          add_merge h2 tab ts1 tl2
+  in
+  let ts1 = List.rev t1.terms
+  and ts2 = List.rev t2.terms in
+  merge ts1 ts2 empty
+
+
+
+let remap_vappl (sfun:int->int) (tab:t): t =
+  let rec remap (tab:t): t =
+    let remap_apps apps =
+      IntMap.fold
+        (fun k (args,subs) map ->
+          let args = Array.map remap args in
+          let k1 = sfun k in
+          try
+            let args1,sublst1 = IntMap.find k1 apps
+            in
+            assert false (* nyi: k1 already present in the applications *)
+          with Not_found ->
+            assert false (* nyi: k1 not yet presend in the applications *)
+        )
+        apps
+        IntMap.empty
+    in
+    {tab with
+     apps = remap_apps tab.apps;
+     fapps = IntMap.map (fun (f,args) -> remap f, Array.map remap args) tab.fapps;
+     lams  = IntMap.map (fun (pres,exp) -> List.map remap pres, remap exp) tab.lams;
+     alls  = IntMap.map remap tab.alls;
+     somes = IntMap.map remap tab.somes;
+     flows = FlowMap.map (fun args -> Array.map remap args) tab.flows;
+     inds  = IntPairMap.map (fun args -> Array.map remap args) tab.inds
+   }
+  in
+  remap tab
+
+
 let remove (idx:int) (tab:t): t =
   filter (fun i -> i <> idx) tab
+
+
+let unify0 (t:term) (nbt:int) (table:t)
+    :  (int * Term_sub.t) list =
+  unify t nbt (fun i -> i) table
+
+let unify0_with (t:term) (nargs:int) (nbenv:int) (table:t)
+    :  (int * Term_sub.t) list =
+  unify_with t nargs nbenv (fun i -> i) table
+
+let add0
+    (t:term) (nargs:int) (nbenv:int)
+    (idx:int)
+    (table:t): t =
+  add t nargs nbenv idx (fun i -> i) table
