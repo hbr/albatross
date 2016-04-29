@@ -58,7 +58,8 @@ let count (tvs:t): int    = tvs.nlocal + count_global tvs
 
 let count_all(tvs:t): int = tvs.nlocal + count_global tvs + count_fgs tvs
 
-
+let is_empty (tvs:t): bool =
+  count_all tvs = 0
 
 let concept (i:int) (tvs:t): type_term =
   assert (count_local tvs <= i);

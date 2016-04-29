@@ -49,6 +49,7 @@ val is_toplevel: t -> bool
 val depth:       t -> int
 val arity:       t -> int
 val info:        t -> info
+val is_outer:    t -> t -> bool
 
 val has_result:  t -> bool
 val has_result_variable:  t -> bool
@@ -114,13 +115,15 @@ val unique_names: int array -> t -> int array
 val fgnames: t   -> int array
 
 val fgnames:    t -> int array
-val fgconcepts: t -> type_term array
+val fgconcepts: t -> types
 val local_argnames: t -> int array
-val local_types:    t -> term array
+val local_types:    t -> types
 val local_formals:  t -> formals
 val local_fgs: t -> formals
+val local_types_reduced: t -> types
 
 val tvars: t -> Tvars.t
+val tvars_sub: t -> TVars_sub.t
 
 val ith_arguments_string: int -> t -> string
 val local_arguments_string: t -> string
@@ -135,16 +138,22 @@ val predicate_of_type: type_term -> t -> type_term
 val predicate_of_term: term -> t -> type_term
 
 val update_types: type_term array -> t -> unit
-val update_type_variables: TVars_sub.t -> t -> unit
 
-val string_of_term0:      term -> bool -> int -> t -> string
+val string_of_term0:      term -> bool -> bool -> int -> t -> string
 val string_of_term:       term -> t -> string
+val string_long_of_term:  term -> t -> string
 val string_of_term_array: string -> term array -> t -> string
+val string_of_arguments:  term array -> t -> string
 val string_of_signature:  Sign.t -> t -> string
+val string_of_type: type_term -> t -> string
+val string_of_type_array: string -> agens -> t -> string
+val string_of_ags: agens -> t -> string
 val signature_string: t -> string
 val named_signature_string: t -> string
 val signature:  t -> Sign.t
 
+val transformed_term0: term -> int -> t -> t -> term
+val transformed_term:  term -> t -> t -> term
 
 val owner:          t -> int
 val anchor_class:   t -> int
@@ -182,10 +191,9 @@ val uniqueness_condition: term list -> t -> term
 val function_postconditions: int -> term list -> t -> term list
 
 val get_type: type_t withinfo -> t -> type_term
-val string_of_type: type_term -> t -> string
 
 val downgrade_term: term -> int -> t -> term
 
 val arity_of_downgraded_type: type_term -> t -> int
 val specialized: term -> t -> term
-val is_valid:    term -> t -> bool
+val is_well_typed:    term -> t -> bool

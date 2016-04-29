@@ -86,7 +86,7 @@ type proof_term =
   | Specialize of int * arguments * agens
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
   | Eval_bwd   of term*Eval.t (* term which is backward evaluated, evaluation *)
-  | Witness    of int * int array * term * term array
+  | Witness    of int * formals * term * term array
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
@@ -99,7 +99,7 @@ module Proof_term: sig
 
   val adapt: int -> int -> t -> t
 
-  val remove_unused: int -> int -> t array -> int * t array
+  val remove_unused_proof_terms: int -> int -> t array -> int * t array
 
   val used_variables: int -> t array -> IntSet.t
 
@@ -112,8 +112,6 @@ module Proof_term: sig
   val print_pt_arr:  string -> int -> t array -> unit
 
   val print_pt: string -> int -> t -> unit
-
-  (*val term_up: int -> t -> t*)
 
   val split_subproof: t -> formals * formals * int * t array
 
@@ -455,7 +453,16 @@ end = struct
 
 
 
-  let remove_unused (k:int) (start:int) (pt_arr:t array): int * t array =
+  let remove_unused_proof_terms
+      (k:int) (start:int) (pt_arr:t array)
+      : int * t array =
+    (* Remove unused proof terms and reindex the proof terms in the array
+       [pt_arr] which proves assertion [k].
+
+       start: index of the first proof term in [pt_arr]
+
+       Result: index of the proved term, array of proof terms
+     *)
     let n = Array.length pt_arr in
     assert (0 < n);
     assert (k < start + n);
@@ -618,8 +625,12 @@ end = struct
                         pr,
                         shrink_type_inner tp nb2)
           | Eval.QExp (n,(nms,tps),(fgnms,fgcon),e,is_all) ->
-              let nb,nb2 = nb + n, nb2 + Array.length fgnms in
-              Eval.QExp (n,(nms,tps),(fgnms,fgcon),shrnk e nb nb2, is_all)
+              assert ((fgnms,fgcon) = empty_formals);
+              let nb  = nb + n
+              and nb2 = nb2 + Array.length fgnms in
+              let e = shrnk e nb nb2
+              and tps = shrink_types_inner tps nb2 in
+              Eval.QExp (n,(nms,tps),(fgnms,fgcon), e, is_all)
           | Eval.Beta e ->
               Eval.Beta (shrnk e nb nb2)
           | Eval.Simpl (e,idx,args,ags) ->
@@ -658,16 +669,23 @@ end = struct
               Specialize (i, shrink_args args, shrink_types ags)
           | Eval (i,e)     -> Eval (i, shrink_eval e)
           | Eval_bwd (t,e) -> Eval_bwd (shrink_term t, shrink_eval e)
-          | Witness (i,nms,t,args) ->
-              let nargs = Array.length args in
-              let args  = shrink_args args in
+          | Witness (i,(nms,tps),t,args) ->
+              let nargs = Array.length args
+              and args  = shrink_args args
+              and tps   = shrink_types tps
+              in
               let t = shrink_inner t nargs 0 in
-              Witness (i,nms,t,args)
+              Witness (i,(nms,tps),t,args)
           | Someelim i ->
               Someelim i
           | Subproof ((nms,tps),(fgnms,fgcon),i,pt_arr) ->
-              let nb,nb2 = nb + Array.length nms, nb2 + Array.length fgnms in
-              Subproof ((nms,tps),(fgnms,fgcon),i, shrink nb nb2 pt_arr)
+              let nb,nb2 = nb + Array.length nms, nb2 + Array.length fgnms
+              in
+              let pt_arr = shrink nb nb2 pt_arr
+              and tps    = shrink_types tps
+              and fgcon  = shrink_types fgcon
+              in
+              Subproof ((nms,tps),(fgnms,fgcon),i, pt_arr)
           | Inherit (i,bcls,cls) ->
               assert false
         )

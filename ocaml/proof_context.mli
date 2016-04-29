@@ -36,9 +36,12 @@ val is_global: t -> bool
 val is_toplevel: t -> bool
 
 val string_of_term: term -> t -> string
+val string_long_of_term: term -> t -> string
 val string_of_term_anon: term -> int -> t -> string
 val string_of_term_i: int -> t -> string
+val string_long_of_term_i: int -> t -> string
 
+val is_well_typed: term -> t -> bool
 val prenex_term: term -> t -> term
 
 val make:      int -> t
@@ -94,7 +97,6 @@ val count_global:   t -> int
 val count_variables:      t -> int
 val count_last_arguments: t -> int
 
-val term_orig:      int -> t -> term * int
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
 

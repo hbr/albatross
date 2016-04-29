@@ -187,8 +187,13 @@ val make_application: term -> term array -> bool -> int -> t -> term
 val beta_reduce:      int -> term -> term array -> int -> t -> term
 val normalize_lambdas:term -> int -> t -> term
 val substituted:
-    term -> int -> int -> arguments -> int -> agens -> Tvars.t -> t -> term
+    term -> int -> int -> int
+      -> arguments -> int -> agens -> Tvars.t -> t -> term
 val specialized:      term -> int -> Tvars.t -> t -> term
+
+val equality_term: term -> term -> int -> type_term -> Tvars.t -> t -> term
+val implication: term -> term -> int -> term
+
 val remove_tuple_accessors: term -> int -> int -> t -> term
 val tuple_of_args:    term array -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
@@ -222,7 +227,7 @@ val involved_assertions: int -> t -> IntSet.t
 val add_involved_assertion: int -> term -> t -> unit
 
 
-val term_to_string: term -> bool -> int -> int array -> t -> string
+val term_to_string: term -> bool -> bool -> int -> int array -> Tvars.t -> t -> string
 
 val inherit_new_effective: int -> int -> bool -> t -> int
 

@@ -27,7 +27,16 @@ all(p:G?)
     require
         some(x) x in p
     proof
-        all(x) x in p ==> p /= 0
+        all(x)
+            require
+                p(x)
+                p = 0
+            proof
+                x in 0
+            ensure
+                false
+            end
+        -- all(x) x in p ==> p /= 0 -- Redesign: No longer working!
     ensure
         p /= 0
     end

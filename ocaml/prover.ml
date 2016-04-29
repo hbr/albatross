@@ -52,6 +52,7 @@ let goal_limit () = !goal_limit_ref
 
 
 let goal (g:term) (black:IntSet.t) (par:(int*int*int) option) (pc: PC.t): goal =
+  assert (PC.is_well_typed g pc);
   let c = {pc=pc; map = TermMap.empty} in
   {goal      = g;
    ctxt      = c;
@@ -197,7 +198,8 @@ let rec set_succeeded (i:int) (gs:t): unit =
   let g = item i gs in
   if gs.trace then begin
     let prefix = PC.trace_prefix g.ctxt.pc in
-    printf "%ssuccess goal %d: %s\n" prefix i (PC.string_of_term g.goal g.ctxt.pc);
+    printf "%ssuccess goal %d: %s\n"
+      prefix i (PC.string_long_of_term g.goal g.ctxt.pc);
   end;
   assert (0 <= g.pos);
   assert (g.pos < PC.count g.ctxt.pc);
@@ -397,7 +399,7 @@ let trace_visit (i:int) (gs:t): unit =
   let prefix = PC.trace_prefix g.ctxt.pc in
   printf "\n%svisit goal %d: %s\n"
     prefix i
-    (PC.string_of_term g.goal g.ctxt.pc);
+    (PC.string_long_of_term g.goal g.ctxt.pc);
   printf "                     %s\n" (Term.to_string g.goal);
   match g.parent with
     None -> ()
@@ -439,7 +441,7 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
   if gs.trace then begin
     printf "\n%strying to prove: %s\n"
       (PC.trace_prefix pc)
-      (PC.string_of_term g pc);
+      (PC.string_long_of_term g pc);
     if PC.verbosity pc > 3 then
       printf "%s                 %s\n"
         (PC.trace_prefix pc)

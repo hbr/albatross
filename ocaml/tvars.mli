@@ -36,6 +36,7 @@ val count_global: t -> int
 val count:        t -> int
 val count_fgs:    t -> int
 val count_all:    t -> int
+val is_empty:     t -> bool
 val concept:      int -> t -> type_term
 val name:         int -> t -> int
 val concepts:     t -> type_term array

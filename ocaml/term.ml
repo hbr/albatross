@@ -104,9 +104,6 @@ module Term: sig
   val unused_transform:     formals -> int -> formals -> term ->
     formals * arguments * formals * arguments
 
-  (*val remove_unused_0: int array -> term -> int * int array * term array
-  val remove_unused:   int array -> term -> int * int array * term*)
-
   val equivalent: term -> term -> bool
 
   val map: (int->int->int) -> term -> term
@@ -118,6 +115,9 @@ module Term: sig
   val lambda_inner: term -> int -> term
 
   val lambda_inner_map: term -> int IntMap.t -> term
+
+  val shift_from : int -> int -> int -> int -> term -> term
+  val shift: int -> int -> term -> term
 
   val up_type:   int -> type_term -> type_term
   val down_type: int -> type_term -> type_term
@@ -156,7 +156,7 @@ module Term: sig
 
   val all_quantified:  int -> formals -> formals -> term -> term
 
-  val some_quantified:  int -> formals -> formals -> term -> term
+  val some_quantified:  int -> formals -> term -> term
 
   val quantifier_split: term -> bool -> int * formals * formals * term
 
@@ -165,6 +165,7 @@ module Term: sig
   val some_quantifier_split: term -> int * formals * term
 
   val is_all_quantified: term -> bool
+  val is_generic: term -> bool
 
   val pattern: int -> formals -> term -> term
   val pattern_split: term -> int * formals * term
@@ -507,112 +508,6 @@ end = struct
 
 
 
-  let used_variables_filtered_0
-      (t:term) (f:int->bool) (dup:bool) (lst:int list)
-      : int list =
-    (* The list of variables of the term [t] which satisfy [f] in reversed
-       order in which they appear *)
-    fold
-      (fun lst ivar ->
-        if f ivar && (dup || not (List.mem ivar lst)) then ivar::lst
-        else lst)
-      lst
-      t
-
-
-
-
-  let used_variables_filtered (t:term) (f:int->bool) (dup:bool): int list =
-    (* The list of variables of the term [t] which satisfy [f] in reversed
-       order in which they appear *)
-    used_variables_filtered_0 t f dup []
-
-
-
-  let used_variables_0 (t:term) (nvars:int) (lst:int list): int list =
-    (* The list of variables of the term [t] below [nvars] in reversed order in
-       which they appear, accumulated to the list [lst] *)
-    used_variables_filtered_0 t (fun i -> i < nvars) false lst
-
-
-  let used_variables (t:term) (nvars:int): int list =
-    (* The list of variables of the term [t] below [nvars] in reversed order in
-       which they appear *)
-    used_variables_0 t nvars []
-
-
-  let used_variables_from (t:term) (nvars:int) (dup:bool): int list =
-    (* The list of variables of the term [t] from [nvars] on in reversed order in
-       which they appear *)
-    used_variables_filtered t (fun i -> nvars <= i) dup
-
-
-
-  let used_variables_transform (t:term) (nvars:int): int array * int array =
-    (* Analyze the used variables of the term [t] with variables in the interval
-       0,1,...,nvars-1 and return two arrays.
-
-       arr1: 0,1,...nused-1     index of the used variable i
-       arr2: 0,1,...nvars-1     position of the variable i in the term [t]
-     *)
-    let arr1  = Array.of_list (List.rev (used_variables t nvars)) in
-    let nused = Array.length arr1 in
-    let arr2  = Array.make nvars (-1) in
-    for i = 0 to nused - 1 do
-      arr2.(arr1.(i)) <- i
-    done;
-    arr1, arr2
-
-
-
-
-  let used_variables_arr_transform (arr:term array) (nvars:int)
-      : int array * int array =
-    (* Analyze the used variables of the array of term [arr] with variables in
-       the interval 0,1,...,nvars-1 and return two arrays.
-
-       arr1: 0,1,...nused-1     index of the used variable i
-       arr2: 0,1,...nvars-1     position of the variable i in the array [arr]
-     *)
-    let lst =
-      Array.fold_left
-        (fun lst t -> used_variables_0 t nvars lst)
-        []
-        arr in
-    let arr1  = Array.of_list (List.rev lst) in
-    let nused = Array.length arr1 in
-    let arr2  = Array.make nvars (-1) in
-    for i = 0 to nused - 1 do
-      arr2.(arr1.(i)) <- i
-    done;
-    arr1, arr2
-
-
-
-  let unused_transform
-      ((nms,tps):    formals)
-      (ntvs:int)
-      ((fgnms,fgcon):formals)
-      (t:term)
-      : formals  * arguments * formals  * arguments =
-    let n1,n2 = Array.length nms, ntvs + Array.length fgnms
-    in
-    let usd,pos = used_variables_transform t n1 in
-    let n1new = Array.length usd in
-    let args  = Array.map (fun i -> Variable i) pos
-    and nms   = Array.init n1new (fun i -> nms.(usd.(i)))
-    and tps   = Array.init n1new (fun i -> tps.(usd.(i)))
-    in
-    let usd,pos = used_variables_arr_transform tps n2 in
-    let n2new = Array.length usd in
-    let ags   = Array.map (fun i -> Variable i) pos
-    and fgnms = Array.init n2new (fun i -> assert (ntvs<=i); fgnms.(usd.(i-ntvs)))
-    and fgcon = Array.init n2new (fun i -> assert (ntvs<=i); fgcon.(usd.(i-ntvs)))
-    in
-    (nms,tps), args, (fgnms,fgcon), ags
-
-
-
   let equivalent (t1:term) (t2:term): bool =
     (* Are the terms [t1] and [t2] equivalent ignoring names and predicate flags? *)
     let rec eq t1 t2 nb =
@@ -776,7 +671,7 @@ end = struct
         Variable i when i < nb1 ->
           t
       | Variable i when i < nb1+len1 ->
-          assert (args1.(i-nb1) <> Variable (-1));
+          assert (args1.(i-nb1) <> empty_term);
           shift (nb1+n1-len1) 0 args1.(i-nb1)
       | Variable i when i < nb1+n1 ->
           Variable (i-len1)
@@ -879,7 +774,7 @@ end = struct
     subst0_from t nb d args 0 0 [||]
 
   let subst (t:term) (d:int) (args:arguments): term =
-    (* Substitute that arguments of the term [t] by the actual arguments [args] which
+    (* Substitute the arguments of the term [t] by the actual arguments [args] which
        have [d] more variables than the term [t] above its arguments. I.e. all
        variables in [t] above [nargs] have to be shifted up. *)
     subst_from t 0 d args
@@ -1023,28 +918,6 @@ end = struct
 
 
 
-  let upbound (n:int) (start:int) (t:term): term =
-    (* Shift all free variables up by 'n' from 'start' on in the term 't' *)
-    assert false  (*no longer in use *)
-    (*assert (n>=0);
-    if n=0 then
-      t
-    else
-      map
-        (fun j nb ->
-          if j<nb+start then
-            j
-          else
-            j + n)
-        t
-*)
-
-
-(*
-  let up (n:int) (t:term): term =
-    (* Shift all free variables up by 'n' in the term 't' *)
-    upbound n 0 t*)
-
 
   let array_up (n:int) (arr:term array): term array =
     if n = 0 then arr
@@ -1158,6 +1031,132 @@ end = struct
 *)
 
 
+  let used_variables_filtered_0
+      (t:term) (f:int->bool) (dup:bool) (lst:int list)
+      : int list =
+    (* The list of variables of the term [t] which satisfy [f] in reversed
+       order in which they appear *)
+    fold
+      (fun lst ivar ->
+        if f ivar && (dup || not (List.mem ivar lst)) then ivar::lst
+        else lst)
+      lst
+      t
+
+
+
+
+  let used_variables_filtered (t:term) (f:int->bool) (dup:bool): int list =
+    (* The list of variables of the term [t] which satisfy [f] in reversed
+       order in which they appear *)
+    used_variables_filtered_0 t f dup []
+
+
+
+  let used_variables_0 (t:term) (nvars:int) (lst:int list): int list =
+    (* The list of variables of the term [t] below [nvars] in reversed order in
+       which they appear, accumulated to the list [lst] *)
+    used_variables_filtered_0 t (fun i -> i < nvars) false lst
+
+
+  let used_variables (t:term) (nvars:int): int list =
+    (* The list of variables of the term [t] below [nvars] in reversed order in
+       which they appear *)
+    used_variables_0 t nvars []
+
+
+  let used_variables_from (t:term) (nvars:int) (dup:bool): int list =
+    (* The list of variables of the term [t] from [nvars] on in reversed order in
+       which they appear *)
+    used_variables_filtered t (fun i -> nvars <= i) dup
+
+
+
+  let used_variables_transform (t:term) (nvars:int): int array * int array =
+    (* Analyze the used variables of the term [t] with variables in the interval
+       0,1,...,nvars-1 and return two arrays.
+
+       arr1: 0,1,...nused-1     index of the used variable i
+       arr2: 0,1,...nvars-1     position of the variable i in the term [t]
+     *)
+    let arr1  = Array.of_list (List.rev (used_variables t nvars)) in
+    let nused = Array.length arr1 in
+    let arr2  = Array.make nvars (-1) in
+    for i = 0 to nused - 1 do
+      arr2.(arr1.(i)) <- i
+    done;
+    arr1, arr2
+
+
+
+
+  let used_variables_arr_transform (arr:term array) (nvars:int)
+      : int array * int array =
+    (* Analyze the used variables of the array of term [arr] with variables in
+       the interval 0,1,...,nvars-1 and return two arrays.
+
+       arr1: 0,1,...nused-1     index of the used variable i
+       arr2: 0,1,...nvars-1     position of the variable i in the array [arr1]
+     *)
+    let lst =
+      Array.fold_left
+        (fun lst t -> used_variables_0 t nvars lst)
+        []
+        arr in
+    let arr1  = Array.of_list (List.rev lst) in
+    let nused = Array.length arr1 in
+    let arr2  = Array.make nvars (-1) in
+    for i = 0 to nused - 1 do
+      arr2.(arr1.(i)) <- i
+    done;
+    arr1, arr2
+
+
+
+  let unused_transform
+      ((nms,tps):    formals)
+      (ntvs:int)
+      ((fgnms,fgcon):formals)
+      (t:term)
+      : formals  * arguments * formals  * agens =
+    (* Find the used variables in the term [t] and the used type variables in the
+       types [tps].
+
+       It is required that the type variables in the range 0,..,ntvs-1 are not
+       used anymore.
+
+       Generate arguments which map the used variables to their new position
+       and actual generics which map the used type variables to their new
+       position.
+
+       The new positions are generated in the order of appearance in the term
+       [t] and the types [tps].
+
+       Transform the signature (nms,tps) and the formal generics (fgnms,fgcon)
+       with the arguments and the actual generics.
+     *)
+    let n1,n2 = Array.length nms, ntvs + Array.length fgnms
+    in
+    let usd,pos = used_variables_transform t n1 in
+    let n1new = Array.length usd in
+    let args  = Array.map (fun i -> Variable i) pos
+    and nms   = Array.init n1new (fun i -> nms.(usd.(i)))
+    and tps   = Array.init n1new (fun i -> tps.(usd.(i)))
+    in
+    let usd,pos = used_variables_arr_transform tps n2 in
+    let n2new = Array.length usd in
+    assert (interval_for_all (fun i -> ntvs<=usd.(i)) 0 n2new);
+    let ags   = Array.map (fun i -> Variable i) pos (* might create [empty_term] *)
+    and fgnms = Array.init n2new (fun i -> fgnms.(usd.(i)))
+    and fgcon = Array.init n2new (fun i -> fgcon.(usd.(i)))
+    in
+    let tps   = subst_array tps   n2new ags
+    and fgcon = subst_array fgcon n2new ags
+    in
+    (nms,tps), args, (fgnms,fgcon), ags
+
+
+
   let remove_unused
       ((nms,tps):formals)
       (ntvs:int)
@@ -1254,12 +1253,12 @@ end = struct
   let all_quantified (nargs:int) (args:formals) (fgs:formals) (t:term): term =
     quantified true nargs args fgs t
 
-  let some_quantified (nargs:int) (args:formals) (fgs:formals) (t:term): term =
-    quantified false nargs args fgs t
+  let some_quantified (nargs:int) (args:formals)(t:term): term =
+    quantified false nargs args empty_formals t
 
 
   let pattern (n:int) (args:formals) (t:term): term =
-    some_quantified n args empty_formals t
+    some_quantified n args t
 
 
   let quantifier_split (t:term) (is_all:bool): int * formals * formals * term =
@@ -1279,9 +1278,19 @@ end = struct
     n,tps,t
 
 
-  let is_all_quantified (t:term) =
+  let is_all_quantified (t:term): bool =
     try ignore (all_quantifier_split t); true
     with Not_found -> false
+
+
+  let is_generic (t:term): bool =
+    try
+      let _,_,(fgnms,fgcon),_ = all_quantifier_split t in
+      let nfgs = Array.length fgnms in
+      assert (nfgs = Array.length fgcon);
+      nfgs > 0
+    with Not_found ->
+      false
 
 
   let split_implication_chain (t:term) (impid:int)
@@ -1352,11 +1361,21 @@ end = struct
        universal quantifiers. All universal quantifiers are bubbled up in
        implication chains and merged with the upper universal quantifier. Unused
        variables in universally quantified expressions are eliminated.  *)
-    let n,tps,fgs,t0 = prenex_0 t nb nb2 imp_id in
+    let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id in
     all_quantified n tps fgs t0
 
-  and prenex_0 (t:term) (nb:int) (nb2:int) (imp_id:int)
+
+
+  and prenex_0 (t:term) (nb:int) (nargs:int) (nb2:int) (imp_id:int)
       : int * formals * formals * term =
+    (* Calculate the number of variables (with their names and types) which
+       bubble up from the term [t] because the target of an implication chain
+       is universally quantified.
+
+       nb:    total number of variables in the environment
+       nargs: number of the variables to which bubbled up variables have to
+              be appended
+     *)
     let norm_args (args:term array) (nb:int) (nb2:int): term array =
       Array.map (fun t -> prenex t nb nb2 imp_id) args
     and norm_lst  (lst: term list) (nb:int) (nb2:int): term list =
@@ -1367,9 +1386,11 @@ end = struct
         assert (Array.length args = 2);
         assert (Array.length ags  = 0);
         let a = prenex args.(0) nb nb2 imp_id
-        and n,(nms,tps),(fgnms,fgcon),b1 = prenex_0 args.(1) nb nb2 imp_id in
-        let b1 = swap_variable_blocks n nb (Array.length fgnms) nb2 args.(1)
-        and a1 = shift_from n nb (Array.length fgnms) nb2 a in
+        and n,(nms,tps),(fgnms,fgcon),b1 =
+          prenex_0 args.(1) nb nargs nb2 imp_id in
+        let b1 = swap_variable_blocks n nargs (Array.length fgnms) nb2 b1
+        and a1 = shift_from n nargs (Array.length fgnms) nb2 a in
+        assert (not (is_all_quantified b1));
         let t = VAppl(i+n,[|a1;b1|],ags) in
         n, (nms,tps), (fgnms,fgcon), t
     | VAppl(i,args,ags) ->
@@ -1383,20 +1404,24 @@ end = struct
         let ps = norm_lst ps (1+nb) nb2
         and t0 = prenex t0 (1+nb) nb2 imp_id in
           0, empty_formals, empty_formals, Lam(n,nms,ps,t0,pr,tp)
-    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,is_all) ->
+    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,true) ->
+        assert ((fgnms,fgcon) = empty_formals);
         let nb  = nb  + n0
         and nb2 = nb2 + Array.length fgnms in
-        if is_all then
-          let n1,(nms1,tps1),(fgnms1,fgcon1),t1 = prenex_0 t0 nb nb2 imp_id in
-          let nms,tps     = prepend_names nms nms1, Array.append tps tps1
-          and fgnms,fgcon =
-            prepend_names fgnms fgnms1, Array.append fgcon fgcon1 in
-          let (nms,tps),(fgnms,fgcon),t1 =
-            remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
-          Array.length nms, (nms,tps), (fgnms,fgcon), t1
-        else
-          0, empty_formals, empty_formals,
-          QExp(n0, (nms,tps), (fgnms,fgcon), prenex t0 nb nb2 imp_id, is_all)
+        let n1,(nms1,tps1),(fgnms1,fgcon1),t1 =
+          prenex_0 t0 nb (n0+nargs) nb2 imp_id in
+        assert (not (is_all_quantified t1));
+        let nms,tps     = prepend_names nms nms1, Array.append tps tps1
+        and fgnms,fgcon =
+          prepend_names fgnms fgnms1, Array.append fgcon fgcon1 in
+        let (nms,tps),(fgnms,fgcon),t1 =
+          remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
+        assert (not (is_all_quantified t1));
+        Array.length nms, (nms,tps), (fgnms,fgcon), t1
+    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,false) ->
+        assert ((fgnms,fgcon) = empty_formals);
+        0, empty_formals, empty_formals,
+        QExp(n0, (nms,tps), (fgnms,fgcon), prenex t0 nb nb2 imp_id, false)
     | Flow(ctrl,args) ->
         0, empty_formals, empty_formals,
         Flow(ctrl, norm_args args nb nb2)
@@ -1643,7 +1668,7 @@ end = struct
 
   let arguments (nargs:int) (sub:t): term array =
     assert (IntMap.cardinal sub = nargs);
-    let args = Array.make nargs (Variable (-1)) in
+    let args = Array.make nargs empty_term in
     IntMap.iter
       (fun i t ->
         assert (i<nargs);

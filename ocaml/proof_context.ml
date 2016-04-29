@@ -139,12 +139,6 @@ let count_global(pc:t): int = Proof_table.count_global pc.base
 
 let imp_id(pc:t): int = Proof_table.imp_id pc.base
 
-let term_orig (i:int) (pc:t): term * int =
-  (** The [i]th proved term with the number of variables of its environment.
-   *)
-  assert (i < count_base pc);
-  Proof_table.term i pc.base
-
 let term (i:int) (pc:t): term =
   (** The [i]th proved term in the current environment.
    *)
@@ -152,11 +146,12 @@ let term (i:int) (pc:t): term =
   assert (i < count pc);
   Proof_table.local_term i pc.base
 
-let term_up (i:int) (n:int) (pc:t): term =
-  assert (0 <= n);
-  Term.up n (term i pc)
 
 let depth (pc:t): int = pc.depth
+
+
+let type_of_term (t:term) (pc:t): type_term =
+  Context.type_of_term t (context pc)
 
 
 let rule_data (idx:int) (pc:t): RD.t =
@@ -172,17 +167,28 @@ let is_assumption (i:int) (pc:t): bool =
   Proof_table.is_assumption i pc.base
 
 
+let tvars (pc:t): Tvars.t =
+  Context.tvars (context pc)
+
 let string_of_term (t:term) (pc:t): string =
   Context.string_of_term t (context pc)
 
+let string_long_of_term (t:term) (pc:t): string =
+  Context.string_long_of_term t (context pc)
+
 
 let string_of_term_anon (t:term) (nb:int) (pc:t): string =
-  Context.string_of_term0 t true nb (context pc)
+  Context.string_of_term0 t true false nb (context pc)
 
 
 let string_of_term_i (i:int) (pc:t): string =
   assert (i < count pc);
-  string_of_term (term i pc) pc
+  Proof_table.string_of_term_i i pc.base
+
+
+let string_long_of_term_i (i:int) (pc:t): string =
+  assert (i < count pc);
+  Proof_table.string_long_of_term_i i pc.base
 
 
 let string_of_term_array (args: term array) (pc:t): string =
@@ -194,12 +200,19 @@ let string_of_term_array (args: term array) (pc:t): string =
 
 
 
+let string_of_tvs (pc:t): string =
+  Class_table.string_of_tvs (tvars pc) (class_table pc)
+
+
+let string_of_ags (ags:agens) (pc:t): string =
+  Context.string_of_ags ags (context pc)
+
 
 let is_visible (i:int) (pc:t): bool =
   not (is_interface_check pc) ||
   let ft = feature_table pc
-  and nb = nbenv pc
-  and t  = term i pc in
+  and t,c  = Proof_table.term i pc.base in
+  let nb = Context.count_variables c in
   Feature_table.is_term_public t nb ft
 
 
@@ -251,25 +264,58 @@ let has_result_variable (pc:t): bool = Proof_table.has_result_variable pc.base
 let seed_function (pc:t): int -> int =
   Feature_table.seed_function (feature_table pc)
 
+let is_well_typed (t:term) (pc:t): bool =
+  Context.is_well_typed t (context pc)
+
+
+let transformed_to_current (t:term) (idx:int) (pc:t): term =
+  Proof_table.transformed_to_current t idx pc.base
+
+
+
 let unify
-    (t:term) (tab:Term_table.t) (pc:t): (int * arguments * agens) list =
+    (t:term) (tab:Term_table.t) (pc:t)
+    : (int * arguments * agens) list =
   let lst = List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab) in
   List.fold_left
     (fun lst (idx,sub) ->
       let rd = rule_data idx pc in
       let args = Term_sub.arguments (Term_sub.count sub) sub in
       try
-        let ags = RD.actual_generics args (context pc) rd in
+        let ags = RD.verify_specialization args (context pc) rd in
         (idx,args,ags)::lst
       with Not_found ->
-        lst)
+        (*printf "cannot unify types of actual arguments with formal arguments\n";
+        printf "   actuals %s\n" (string_of_term_array args pc);
+        printf "   rule    %s\n" (string_long_of_term_i idx pc);*)
+        lst
+    )
     []
     lst
 
+
 let unify_with
-    (t:term) (nargs:int) (nbenv:int) (tab:Term_table.t) (pc:t)
-    : (int * Term_sub.t) list =
-  Term_table.unify_with t nargs nbenv (seed_function pc) tab
+    (t:term) (nargs:int) (tps:types) (tab:Term_table.t) (pc:t)
+    : (int * arguments) list =
+  (* Find the terms which can be unified with [t] which has [nargs] arguments
+     and comes from the current environment.
+   *)
+  let nb = nbenv pc in
+  let lst = Term_table.unify_with t nargs nb (seed_function pc) tab
+  in
+  List.fold_left
+    (fun lst (idx,sub) ->
+      (* [sub] is valid in the environment of [idx] *)
+      let args = Term_sub.arguments (Term_sub.count sub) sub in
+      let args = Array.map (fun t -> transformed_to_current t idx pc) args in
+      let argtps = Array.map (fun t -> type_of_term t pc) args in
+      if tps = argtps then
+        (idx,args)::lst
+      else
+        lst
+    )
+    []
+    lst
 
 
 let trace_prefix_0 (pc:t): string =
@@ -283,7 +329,7 @@ let trace_prefix (pc:t): string =
 let is_trace_extended (pc:t): bool = 3 < pc.verbosity
 
 let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
-  let str    = string_of_term t pc
+  let str = string_long_of_term t pc
   and cnt    = count pc
   and prefix = trace_prefix pc in
   assert (cnt + 1 = count_base pc);
@@ -315,35 +361,17 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
 
 
 
-(*
-let find_slot (t:term) (pc:t): int * term =
-  let least_free = Term.least_free t
-  and nslots = Array.length pc.entry.slots in
-  let i = ref 0 in
-  while !i < nslots
-      && least_free < pc.entry.slots.(!i).ndown
-  do i:=!i+1 done;
-  assert (!i<nslots);
-  !i,
-  Term.down pc.entry.slots.(!i).ndown t
-
-
-let find_in_slot (t:term) (pc:t): int =
-  let i, ti = find_slot t pc in
-  TermMap.find ti pc.entry.slots.(i).sprvd
-*)
-
-let find_in_tab (t:term) (nbenv:int) (pc:t): int =
+let find_in_tab (t:term) (pc:t): int =
   (** The index of the assertion [t].
    *)
-  let sublst = unify_with t 0 nbenv pc.entry.prvd pc in
+  let sublst = unify_with t 0 [||] pc.entry.prvd pc in
   match sublst with
     []          -> raise Not_found
   | [(idx,sub)] -> idx
   | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
 
 
-let find (t:term) (pc:t): int = find_in_tab t (nbenv pc) pc
+let find (t:term) (pc:t): int = find_in_tab t  pc
 
 
 
@@ -415,7 +443,7 @@ let add_to_forward (rd:RD.t) (idx:int) (pc:t): unit =
   if not (RD.is_forward rd) then
     ()
   else begin
-    let nargs,nbenv,t = RD.schematic_premise rd in
+    let nargs,_,nbenv,t = RD.schematic_premise rd in
     pc.entry.fwd <-
       Term_table.add t nargs nbenv idx (seed_function pc) pc.entry.fwd
   end
@@ -492,7 +520,6 @@ let get_rule_data (t:term) (pc:t): RD.t =
 
 
 let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
-  assert (Context.is_valid t (context pc));
   assert (count pc + 1 = count_base pc);
   let cnt = count pc in
   let res = try find t pc with Not_found -> cnt in
@@ -526,16 +553,19 @@ let specialized
     (idx:int) (args:arguments) (ags:agens)
     (reason:int) (* 0: match, 1: fwd, 2: bwd *)
     (pc:t): int =
-  (* The schematic rule [idx] specialized by [sub]. *)
+  (* The schematic rule [idx] specialized by the arguments [args] and the
+     actual generics [ags].
+
+     Note: The arguments [args] are valid in the current enviroment!
+   *)
   assert (is_consistent pc);
   assert (idx < count pc);
-  let nbenv = nbenv pc in
   let rd    = rule_data idx pc in
   if RD.is_specialized rd then
     begin assert (Array.length args = 0); idx end
-  else
+  else begin
     let rd    = RD.specialize rd args ags idx (context pc) in
-    let t     = RD.term rd nbenv in
+    let t     = RD.term rd in
     try
       find t pc
     with Not_found ->
@@ -545,6 +575,7 @@ let specialized
         else true in
       Proof_table.add_specialize t idx args ags pc.base;
       raw_add0 t rd search pc
+  end
 
 
 
@@ -565,14 +596,17 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
      structure and a flag which tells if the term [t] and its simplification are
      different.
 
-     [below_idx]: consider only rules below [below_idx] for equality. *)
-  let rec simp t nb =
-    let do_subterms t nb =
+     [below_idx]: consider only rules below [below_idx] for equality.
+
+     Note: [t] is valid in the current environment!
+*)
+  let rec simp t =
+    let do_subterms t =
       let simpl_args args modi =
         let arglst, modi =
           Array.fold_left
             (fun (arglst,modi) a ->
-              let asimp,ae,amodi = simp a nb in
+              let asimp,ae,amodi = simp a in
               (asimp,ae)::arglst, modi || amodi)
             ([],modi)
             args
@@ -589,14 +623,13 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           Eval.VApply(i,argse,ags),
           modi
       | Application(f,args,pr) ->
-          let fsimp,fe,fmodi = simp f nb in
+          let fsimp,fe,fmodi = simp f in
           let args, argse, modi = simpl_args args fmodi in
           Application(fsimp, args, pr),
           Eval.Apply(fe,argse,pr),
           modi
       | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
     in
-    assert (nb = 0);
     let sublst = unify t pc.entry.left pc in
     let sublst =
       List.filter (fun (idx,sub,_) -> idx < below_idx && Array.length sub = 0) sublst
@@ -606,16 +639,16 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
         (* Note: This is a workaround. Only single entries in the equality table
                  should be accepted. But multiple entries are possible as long we
                  do not make specializations type safe. *)
-        let eq = term_up idx nb pc in
-        let nargs, left, right = Proof_table.split_equality eq nb pc.base in
+        let eq = term idx pc in
+        let nargs, left, right = Proof_table.split_equality eq 0 pc.base in
         assert (nargs = 0);
         assert (Term.equivalent t left);
         right, Eval.Simpl(Eval.Term t,idx,[||],ags), true
     | _ ->
-        do_subterms t nb
+        do_subterms t
   in
-  assert (Context.is_valid t (context pc));
-  let tsimp, te, modi = simp t 0 in
+  assert (is_well_typed t pc);
+  let tsimp, te, modi = simp t in
   let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
   assert (ta = t);
   if tb <> tsimp then begin
@@ -690,8 +723,6 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
 
      [below_idx]: consider only rules below [below_idx] for equality. *)
   let nbenv = nbenv pc in
-  (*printf "evaluated_term %s   (nbenv:%d)\n" (string_of_term t pc) nbenv;
-  printf "               %s\n" (Term.to_string t);*)
   let rec eval (t:term) (nb:int) (full:bool) (depth:int): term * Eval.t * bool =
     if depth > 100 then raise Not_found;
     let depth = 1 + depth in
@@ -939,23 +970,23 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
      implication. *)
   assert (i < count pc);
   assert (j < count pc);
-  let rdj = rule_data j pc
-  and nbenv = nbenv pc
+  let rdj   = rule_data j pc
+  and c     = context pc
   in
   assert (RD.is_specialized rdj);
   assert (RD.is_implication rdj);
-  let t = RD.term_b rdj nbenv in
-  if not (Term.equivalent (term i pc) (RD.term_a rdj nbenv))
+  let t = RD.term_b rdj c in
+  if not (Term.equivalent (term i pc) (RD.term_a rdj c))
   then begin
     printf "add_mp premise     %d %s %s\n" i
       (string_of_term_i i pc) (Term.to_string (term i pc));
     printf "       implication %d %s %s\n"
       j (string_of_term_i j pc) (Term.to_string (term j pc));
     printf "       term_a         %s %s\n"
-      (string_of_term (RD.term_a rdj nbenv) pc)
-      (Term.to_string (RD.term_a rdj nbenv))
+      (string_of_term (RD.term_a rdj c) pc)
+      (Term.to_string (RD.term_a rdj c))
   end;
-  assert (Term.equivalent (term i pc) (RD.term_a rdj nbenv));
+  assert (Term.equivalent (term i pc) (RD.term_a rdj c));
   try
     find t pc
   with Not_found ->
@@ -997,20 +1028,25 @@ let is_nbenv_current (i:int) (pc:t): bool =
 
 
 let add_consequence
-    (i:int ) (j:int) (sub:arguments) (ags:agens) (pc:t): unit =
+    (i:int ) (j:int) (args:arguments) (ags:agens) (pc:t): unit =
   (* Add the consequence of [i] and the implication [j]. The term [j] might
      be a schematic implication which has to be converted into a specific
      implication by using the substitution [sub].
 
-     Note: The substitution [sub] is valid in the environment of the term [i]!
-         *)
+     Note: The arguments [args] and the actual generics [ags] are valid in the
+     current environment.
+   *)
+  (*printf "add_consequence\n";
+  printf "    premise %d %s\n" i (string_long_of_term_i i pc);
+  printf "    impl    %d %s\n" j (string_long_of_term_i j pc);
+  printf "    sub        %s\n" (string_of_term_array sub pc);*)
   assert (is_consistent pc);
   assert (i < count pc);
   assert (j < count pc);
   let nbenv_sub = Proof_table.nbenv_term i pc.base in
   assert (nbenv_sub <= nbenv pc);
   try
-    let j = specialized j sub ags 1 pc
+    let j = specialized j args ags 1 pc
     in
     add_mp_fwd i j pc
   with Not_found ->
@@ -1021,15 +1057,15 @@ let add_consequence
 let add_consequences_premise (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] by using the term as a premise for
       already available implications.
-   *)
+      *)
   assert (i < count pc);
   if not (is_nbenv_current i pc) then
     printf "add_consequences_premise %s\n" (string_of_term_i i pc);
   assert (is_nbenv_current i pc);
   assert (not (RD.is_intermediate (rule_data i pc)));
   let nbenv = nbenv pc in
-  let t,nbenv_t = Proof_table.term i pc.base in
-  assert (nbenv = nbenv_t);
+  let t,c_t = Proof_table.term i pc.base in
+  assert (nbenv = Context.count_variables c_t);
   let sublst = unify t pc.entry.fwd pc in
   let sublst = List.rev sublst in
   List.iter
@@ -1055,17 +1091,17 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   in
   assert (RD.is_implication rd);
   assert (not (RD.is_generic rd));
-  let gp1,nbenv_a,a = RD.schematic_premise rd in
+  let gp1,tps,nbenv_a,a = RD.schematic_premise rd in
   assert (nbenv_a = nbenv);
-  if RD.is_schematic rd then (* the implication is schematic *)
-    let sublst = unify_with a gp1 nbenv_a pc.entry.prvd pc
+   if RD.is_schematic rd then (* the implication is schematic *)
+    let sublst = unify_with a gp1 tps pc.entry.prvd pc
     in
     let sublst = List.rev sublst in
     List.iter
-      (fun (idx,sub) ->
-        if(*is_available idx pc &&*)not (RD.is_intermediate (rule_data idx pc)) then
-          let args = Term_sub.arguments (Term_sub.count sub) sub in
-          add_consequence idx i args [||] pc)
+      (fun (idx,args) ->
+        if not (RD.is_intermediate (rule_data idx pc)) then
+          add_consequence idx i args [||] pc
+      )
       sublst
   else (* the implication is not schematic *)
     try
@@ -1103,13 +1139,20 @@ let add_fwd_evaluation (t:term) (i:int) (e:Eval.t) (full:bool) (pc:t): int =
 
 
 let add_consequences_evaluation (i:int) (pc:t): unit =
-  (* Add the evaluation of the term [i] in case that there is one if
-     it is not yet in the proof context [pc] to the proof context and to the
-     work items.  *)
+  (* Add the simplification and the evaluation of the term [i] in case that
+     there is one if it is not yet in the proof context [pc] to the proof
+     context and to the work items.
+
+     Note: The term [i] is in the current context.
+*)
+  assert begin
+    let _,c = Proof_table.term i pc.base in
+    c == context pc
+  end;
   let t = term i pc in
   let add_eval t e =
     try
-      let _ = add_fwd_evaluation t i e true pc in ()
+      ignore(add_fwd_evaluation t i e true pc)
     with Not_found ->
       ()
   in
@@ -1176,7 +1219,7 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
     and ags  = assert false (* nyi *) in
     let rd  = RD.specialize rd args ags idx (context pc) in
     assert (RD.is_specialized rd);
-    let t   = RD.term rd (nbenv pc) in
+    let t   = RD.term rd in
     Proof_table.add_specialize t idx args ags pc.base;
     raw_add0 t rd false pc
   with Not_found ->
@@ -1217,7 +1260,8 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
 let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
-         *)
+   *)
+  (*printf "add_consequences %d %s\n" i (string_long_of_term_i i pc);*)
   let t  = term i pc
   and rd = rule_data i pc in
   add_inductive_set_laws true t pc;
@@ -1253,7 +1297,8 @@ let close (pc:t): unit =
       if has_work pc then begin
         let lst = List.rev pc.work in
       pc.work <- [];
-        List.iter (fun i -> add_consequences i pc) lst;
+        List.iter (fun i ->
+          add_consequences i pc) lst;
         if is_interface_check pc then
           pc.work <- []
         else
@@ -1408,6 +1453,7 @@ let pop (pc:t): t =
   match pc.prev with
     None -> assert false
   | Some x -> x
+
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
@@ -1575,17 +1621,18 @@ let prove_equality (g:term) (pc:t): int =
 
 
 let backward_witness (t:term) (pc:t): int =
-    let nargs,(nms,tps),tt = Term.some_quantifier_split t in
-    assert false (* nyi *)
-    (*let sublst  = unify_with tt nargs (nbenv pc) pc.entry.prvd pc in
-    let idx,sub = List.find (fun (idx,sub) -> Term_sub.count sub = nargs) sublst
-    in
-    let witness = term idx pc in
-    let impl    = implication witness t pc in
-    let args    = Term_sub.arguments nargs sub in
-    Proof_table.add_witness impl idx nms tt args pc.base;
+  (* Find a witness for the existentially quantified term [t] or raise [Not_found]
+     if there is no witness or [t] is not existentially quantified.
+   *)
+   let nargs,(nms,tps),t0 = Term.some_quantifier_split t in
+   let sublst  = unify_with t0 nargs tps pc.entry.prvd pc in
+   let idx,args = List.find (fun (idx,args) -> Array.length args = nargs) sublst
+   in
+   let witness = term idx pc in
+   let impl    = implication witness t pc in
+   Proof_table.add_witness impl idx nms tps t0 args pc.base;
     let idx_impl = raw_add impl false pc in
-    add_mp0 t idx idx_impl false pc*)
+   add_mp0 t idx idx_impl false pc
 
 
 
@@ -1649,6 +1696,7 @@ let eval_reduce (g:term) (lst:int list) (pc:t): int list =
 
 
 let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
+  assert (is_well_typed g pc);
   let lst = backward_in_table g blacklst pc in
   let lst = eval_reduce g lst pc in
   if pc.trace && is_trace_extended pc then begin
@@ -1702,7 +1750,6 @@ let add_proved_0
   if not dup || is_glob then (* duplicates of globals must be added to work,
                                 because globals are not closed *)
     add_last_to_work pc;
-  let anchor_cls = RD.anchor_class (rule_data idx pc) in
   if is_global pc then begin
     add_global defer anchor pc;
     if defer && not dup then begin
@@ -1799,10 +1846,10 @@ let previous_schematic (idx:int) (pc:t): int option =
 let premises (idx:int) (pc:t): (term*bool) list =
   assert (idx < count pc);
   let rd    = rule_data idx pc
-  and nbenv = nbenv pc in
+  in
   assert (RD.is_fully_specialized rd);
   assert (RD.is_implication rd);
-  RD.premises rd nbenv
+  RD.premises rd (context pc)
 
 
 

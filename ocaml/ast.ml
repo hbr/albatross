@@ -127,8 +127,13 @@ let add_assumptions_or_axioms
   List.map
     (fun ie ->
       let t = get_boolean_term ie pc in
-      if is_axiom && Term.is_all_quantified t then
-        error_info ie.i "Universal quantification not allowed in ensure clause";
+      if is_axiom && Term.is_all_quantified t then begin
+        let str =
+          "Universal quantification not allowed in ensure clause"
+          ^ "\n  normalized term: "
+          ^ (PC.string_long_of_term t pc) in
+        error_info ie.i str
+      end;
       verify_preconditions t ie.i pc;
       let idx =
         if is_axiom then
@@ -164,8 +169,13 @@ let add_proved
 let prove_basic_expression (ie:info_expression) (ens:bool) (pc:Proof_context.t)
     : int * info =
   let t = get_boolean_term ie pc in
-  if ens && Term.is_all_quantified t then
-    error_info ie.i "Universal quantification not allowed in ensure clause";
+  if ens && Term.is_all_quantified t then begin
+    let str =
+      "Universal quantification not allowed in ensure clause"
+      ^ "\n  normalized term: "
+      ^ (PC.string_long_of_term t pc) in
+    error_info ie.i str
+  end;
   verify_preconditions t ie.i pc;
   try
     let res = Prover.prove_and_insert t pc in
@@ -1259,32 +1269,37 @@ let add_case_injections
   List.iter
     (fun idx ->
       let tvs,s = Feature_table.signature idx ft in
-      let fgnms,fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs
-      and tps = Sign.arguments s
-      and rtp = Sign.result s in
-      let tps = Array.append tps tps in
       let n = Sign.arity s in
       if n = 0 then
         ()
       else
+        let fgnms,fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs
+        and tps  = Sign.arguments s
+        and rtp  = Sign.result s in
+        let tps  = Array.append tps tps
+        and nfgs = Array.length fgnms in
+
+        (* We need [2*n] variables: a1,..,b1,.. *)
         let args1 = Array.init n (fun i -> Variable i)
         and args2 = Array.init n (fun i -> Variable (n+i))
         and nms   = standard_argnames (2*n)
-        and idx   = 2*n + idx
-        and eq_id0 = 2*n  +
-            Feature_table.equality_index_of_type rtp tvs ft
-        and imp_id = 2*n + Feature_table.implication_index in
-        let teq0 =
-          let ags   = Array.init (Array.length fgcon) (fun i -> Variable i) in
-          let a1,a2 = VAppl(idx,args1,ags), VAppl(idx,args2,ags) in
-          VAppl(eq_id0, [|a1;a2|], [|rtp|]) in
+        and ags   = standard_substitution nfgs
+        in
+
+        (* The term c(a1,..) = c(b1,...) *)
+        let eq_ca_cb =
+          let ca = VAppl(2*n+idx, args1, ags)
+          and cb = VAppl(2*n+idx, args2, ags) in
+          Feature_table.equality_term ca cb (2*n) rtp tvs ft
+        in
         for i = 0 to n - 1 do
           let itp = tps.(i) in
-          let eq_id1 = 2*n +
-              Feature_table.equality_index_of_type itp tvs ft in
-          let teq1 = VAppl(eq_id1, [|Variable i;Variable (n+i)|], [|itp|]) in
-          let t = Term.binary imp_id teq0 teq1 in
-          let t = Term.all_quantified (2*n) (nms,tps) (fgnms,fgcon) t in
+          let eq_ai_bi =
+            let ai,bi = Variable i, Variable (n+i) in
+            Feature_table.equality_term ai bi (2*n) itp tvs ft
+          in
+          let imp = Feature_table.implication eq_ca_cb eq_ai_bi (2*n) in
+          let t = Term.all_quantified (2*n) (nms,tps) (fgnms,fgcon) imp in
           printf "injection %s\n" (Proof_context.string_of_term t pc);
           ignore(add_case_axiom t pc)
         done)
@@ -1448,16 +1463,18 @@ let put_creators
       creators.v in
   let clst_rev = c1lst @ c0lst in
   let clst = List.rev clst_rev in
-  add_case_inversions cls clst pc;
-  add_case_injections clst pc;
-  assert false (* nyi: redesign *)
-  (*let cset = IntSet.of_list clst in
+  let cset = IntSet.of_list clst in
   if Class_table.is_interface_check ct &&
-     Class_table.constructors_priv cls ct <> cset then
+    not (IntSet.equal (Class_table.constructors cls ct) cset)
+  then
     error_info info "Different constructors in implementation file";
-  Class_table.set_constructors cset cls ct;
-  PC.add_induction_law0 cls pc;
-  creators_check_formal_generics creators.i clst tvs ft*)
+  if not (Class_table.has_constructors cls ct) then begin
+    creators_check_formal_generics creators.i clst tvs ft;
+    add_case_inversions cls clst pc;
+    add_case_injections clst pc;
+    Class_table.set_constructors cset cls ct;
+    PC.add_induction_law0 cls pc
+  end
 
 
 

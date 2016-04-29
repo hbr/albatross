@@ -57,10 +57,13 @@ val inductive_set: term -> t -> term
 
 val type_induction_law: int -> t -> term
 
-val term:          int -> t -> term * int
+val term:          int -> t -> term * Context.t
 val proof_term:    int -> t -> proof_term
+val string_of_term_i: int -> t -> string
+val string_long_of_term_i: int -> t -> string
 val nbenv_term:    int -> t -> int
 val local_term:    int -> t -> term
+val transformed_to_current: term -> int -> t -> term
 val is_assumption: int -> t -> bool
 val variant:       int -> int -> int -> t -> term
 
@@ -88,7 +91,7 @@ val add_assumption: term -> t -> unit
 val add_mp:         term -> int -> int -> t -> unit
 val add_eval:       term -> int -> Eval.t -> t -> unit
 val add_eval_backward:   term -> term -> Eval.t -> t -> unit
-val add_witness:    term -> int -> int array -> term -> term array -> t -> unit
+val add_witness:    term -> int -> names -> types -> term -> term array -> t -> unit
 val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> arguments -> agens -> t -> unit
 val add_inherited:  term -> int -> int -> int -> t -> unit

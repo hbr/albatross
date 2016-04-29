@@ -5,6 +5,7 @@
 *)
 
 open Term
+open Signature
 open Proof
 open Container
 open Support
@@ -150,11 +151,15 @@ let all_quantified (nargs:int)  (tps:formals) (fgs:formals)(t:term) (at:t): term
 let some_quantified (nargs:int)  (tps:formals) (fgs:formals) (t:term) (at:t): term =
   Context.some_quantified nargs tps fgs t at.c
 
+
 let string_of_term (t:term) (at:t): string =
   Context.string_of_term t at.c
 
+let string_long_of_term (t:term) (at:t): string =
+  Context.string_long_of_term t at.c
+
 let string_of_term_anon (t:term) (nb:int) (at:t): string =
-  Context.string_of_term0 t true nb at.c
+  Context.string_of_term0 t true false nb at.c
 
 
 let expand_term (t:term) (at:t): term =
@@ -235,12 +240,29 @@ let pop (at:t): t =
 
 
 
-let term (i:int) (at:t): term * int =
-  (** The [i]th proved term with the number of variables of its environment.
+let term (i:int) (at:t): term * Context.t =
+  (** The [i]th proved term and its context.
    *)
   assert (i < count at);
   let desc = descriptor i at in
-  desc.term, desc.nbenv0
+  desc.term, desc.c
+
+
+let transformed_to_current (t:term) (idx:int) (at:t): term =
+  (* The term [t] transformed form the environment of the term at [idx] into the
+     current environment.
+   *)
+  Context.transformed_term t (descriptor idx at).c (context at)
+
+
+let string_of_term_i (i:int) (at:t): string =
+  let desc = descriptor i at in
+  Context.string_of_term desc.term desc.c
+
+
+let string_long_of_term_i (i:int) (at:t): string =
+  let desc = descriptor i at in
+  Context.string_long_of_term desc.term desc.c
 
 
 let nbenv_term (i:int) (at:t): int =
@@ -250,21 +272,27 @@ let nbenv_term (i:int) (at:t): int =
   (descriptor i at).nbenv0
 
 
+let ntvs_term (i:int) (at:t): int =
+  (* The complete number of type variables of the environment of the [i]th
+     proved term.  *)
+  TVars_sub.count_all (Context.tvars_sub (descriptor i at).c)
+
 
 let local_term (i:int) (at:t): term =
   (** The [i]th proved term in the local environment.
    *)
   assert (i < count at);
   let desc = descriptor i at in
-  let n_up = count_variables at - desc.nbenv0
-  in
-  Term.up n_up desc.term
+  if desc.c == at.c then
+    desc.term
+  else
+    Context.transformed_term desc.term desc.c at.c
 
 
 let variant (i:int) (bcls:int) (cls:int) (at:t): term =
   assert (is_global at);
-  let t,nbenv = term i at in
-  assert (nbenv = 0);
+  let t,c = term i at in
+  assert (c == at.c);
   let n,(nms,tps),(fgnms,fgcon),t0 =
     try Term.all_quantifier_split t
     with Not_found -> assert false in
@@ -283,7 +311,7 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
         res)
       tps
   and fgnms, fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs in
-  let t0 = Feature_table.substituted t0 n 0 [||] 0 ags tvs ft in
+  let t0 = Feature_table.substituted t0 n 0 0 [||] 0 ags tvs ft in
   Term.all_quantified n (nms,tps) (fgnms,fgcon) t0
 
 
@@ -345,6 +373,7 @@ let proof_term (i:int) (at:t): proof_term =
 let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
+  assert (Context.is_well_typed t at.c);
   let raw_add () =
     Ass_seq.push {nbenv0 = count_variables at;
                   c      = at.c;
@@ -411,21 +440,27 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
   assert (i < count at);
   let tvs   = tvars at in
   let nargs = Array.length args
-  (*and nags  = Array.length ags
-  and nall  = Tvars.count_all tvs*)
   and desc  = descriptor i at
+  and nall  = Tvars.count_all tvs
   in
-  let nvars_i = Context.count_variables desc.c in
-  let d1 = count_variables at - nvars_i
-  (*and d2 = nall - Context.ntvs desc.c*) in
+  let nvars_i = Context.count_variables desc.c
+  and ntvs_i  = ntvs_term i at
+  in
+  let d1 = count_variables at - nvars_i in
   let n,(nms,tps),(fgnms,fgcon),t0 =
     try Term.all_quantifier_split desc.term
     with Not_found -> 0, empty_formals, empty_formals, desc.term
   in
   assert (nargs <= n);
-  (*let tsub = Term.partial_subst t0 n d1 args nags d2 ags in*)
-  let tsub = Feature_table.substituted t0 n nvars_i args d1
-      ags tvs (feature_table at) in
+  let tsub =
+    Feature_table.substituted
+      t0 n nvars_i ntvs_i
+      args d1
+      ags tvs (feature_table at)
+  and nms = Array.sub nms nargs (n-nargs)
+  and tps = Array.sub tps nargs (n-nargs)
+  in
+  let tps = Term.subst_array tps (nall-ntvs_i) ags in
   if nargs < n then
     let imp_id0 = (imp_id at)           in
     let imp_id1 = imp_id0 + (n-nargs)   in
@@ -434,11 +469,7 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
       Term.binary
         imp_id0
         (Term.down (n-nargs) a)
-        (Term.all_quantified
-           (n-nargs)
-           (Array.sub nms nargs (n-nargs), Array.sub tps nargs (n-nargs))
-           empty_formals
-           b)
+        (Term.all_quantified (n-nargs) (nms,tps) empty_formals b)
     with Term_capture ->
       printf "term capture\n";
       raise Illegal_proof_term
@@ -545,8 +576,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           printf "            right %s\n" (string_of_term_anon right nb at);
           if nb = 0 then begin
             let c = context at in
-            assert (Context.is_valid left c);
-            assert (Context.is_valid tb c);
+            assert (Context.is_well_typed left c);
+            assert (Context.is_well_typed tb c);
           end;
           raise Illegal_proof_term
         end;
@@ -642,9 +673,9 @@ let term_of_eval (i:int) (e:Eval.t) (at:t): term =
   let ok = (Term.equivalent t  ta) in
   if not ok then begin
     printf "evaluated terms do not coincide\n";
-    printf "   term %3d  %s  %s\n" i (string_of_term t at)(Term.to_string t);
-    printf "   eval      %s  %s\n" (string_of_term ta at) (Term.to_string ta);
-    printf "   evaluated %s  %s\n" (string_of_term tb at) (Term.to_string tb);
+    printf "   term %3d  %s  %s\n" i (string_long_of_term t at)(Term.to_string t);
+    printf "   eval      %s  %s\n" (string_long_of_term ta at) (Term.to_string ta);
+    printf "   evaluated %s  %s\n" (string_long_of_term tb at) (Term.to_string tb);
     raise Illegal_proof_term
   end;
   tb
@@ -652,28 +683,30 @@ let term_of_eval (i:int) (e:Eval.t) (at:t): term =
 
 let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
   let ta,tb = reconstruct_evaluation e at in
-  let ok = (t = ta) in
+  let ok = (Term.equivalent t ta) in
   if not ok then begin
     printf "evaluated terms (bwd) do not coincide\n";
-    printf "   term      %s  %s\n" (string_of_term t at) (Term.to_string t);
-    printf "   eval      %s  %s\n" (string_of_term ta at) (Term.to_string ta);
-    printf "   evaluated %s\n" (string_of_term tb at);
+    printf "   term      %s  %s\n" (string_long_of_term t at) (Term.to_string t);
+    printf "   eval      %s  %s\n" (string_long_of_term ta at) (Term.to_string ta);
+    printf "   evaluated %s\n" (string_long_of_term tb at);
     raise Illegal_proof_term
   end;
   implication tb ta at
 
 
 
-let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
+let term_of_witness
+    (i:int) (nms:names) (tps:types) (t:term) (args:term array) (at:t)
     : term =
-  assert false (* nyi *)
-  (*let nargs = Array.length args in
-  Array.iter (fun t ->
-    match t with Variable i when i = -1 ->
-      raise Illegal_proof_term
-    | _ -> ())
+  let nargs = Array.length args in
+  Array.iter
+    (fun t ->
+      match t with Variable i when i = -1 ->
+        raise Illegal_proof_term
+      | _ -> ()
+    )
     args;
-  let some_term = some_quantified nargs nms t at in
+  let some_term = Term.some_quantified nargs (nms,tps) t in
   let ti  = local_term i at in
   let wt  = Term.apply t args in
   if not (Term.equivalent ti wt) then begin
@@ -682,30 +715,41 @@ let term_of_witness (i:int) (nms:int array) (t:term) (args:term array) (at:t)
     printf "                for \"%s\"\n" (string_of_term some_term at);
     raise Illegal_proof_term
   end;
-  implication ti some_term at*)
+  implication ti some_term at
 
 
 let someelim (i:int) (at:t): term =
-  (** Transform the term [i] if it has the form [some(a,b,...) e1] into
-      [all(e2) (all(a,b,...) e1 => e2) => e2]. Otherwise [raise Not_found]
+  (* It the term [i] has not the form [some(a:A,b:B,...) t] then raise
+     Not_found.
+
+     If the term is an existentially quantified assertions then transform it
+     into
+
+         all(u:BOOLEAN) (all(a:A,b:B,...) t ==> u) ==> u
+
    *)
+
   assert (i < count at);
-  let t = local_term i at in
-  let nargs,(nms,tps),tt = split_some_quantified t at in
-  assert false
-  (*let tt = Term.upbound 1 nargs tt in
+  let t_i,c = term i at in
+  assert (c == at.c); (* It is the same context because some
+                         elimination is added as forward
+                         closure of an existentially quantified
+                         assertion *)
+  let nargs,(nms,tps),t0 = split_some_quantified t_i at in
   let imp_id  = imp_id at
   in
-  let imp_id1 = imp_id + (nargs+1)
-  and imp_id2 = imp_id + 1
+  let imp_id_inner = imp_id + (nargs+1)
+  and imp_id_outer = imp_id + 1
   and e_name = ST.symbol "$e"
+  and e_tp   = Context.boolean at.c
   in
-  let impl1   = Term.binary imp_id1 tt (Variable nargs) in
-  let all1    = Term.all_quantified nargs nms impl1 in
-  let impl2   = Term.binary imp_id2 all1 (Variable 0) in
-  let all2    = Term.all_quantified 1 [|e_name|] impl2 in
-  all2
-*)
+  let t1 = Term.up_from 1 nargs t0
+  in
+  let t_impl_u   = Term.binary imp_id_inner t1 (Variable nargs) in
+  let all_inner  = Term.all_quantified nargs (nms,tps) empty_formals t_impl_u in
+  let impl_outer = Term.binary imp_id_outer all_inner (Variable 0) in
+  Term.all_quantified 1 ([|e_name|],[|e_tp|]) empty_formals impl_outer
+
 
 
 let term_of_someelim (i:int) (at:t): term =
@@ -782,7 +826,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
     in
     let print (t:term) (at:t) =
       printf "%s%3d %s"
-        (prefix (depth at)) (count at) (string_of_term t at)
+        (prefix (depth at)) (count at) (string_long_of_term t at)
     and print_all (at:t) =
       let pre = prefix (depth at - 1) in
       printf "%s%3d all%s\n%s    require\n"
@@ -794,6 +838,8 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
     let print0 (t:term) at = print t at; printf "\n"
     and print1 (t:term) (i:int) at = print t at; printf "\t{%d}\n" i
     and print2 (t:term) (i:int) (j:int) at = print t at; printf "\t{%d,%d}\n" i j
+    and printstr (t:term) (str:string) at =
+      print t at; printf "\t{%s}\n" str
     in
     let cnt = count at in
     match pt with
@@ -802,19 +848,19 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Funprop (idx,i,args) ->
         let t = function_property idx i args at in
-        if trace then print0 t at;
+        if trace then printstr t "funprop" at;
         t
     | Indset_rule (t,i) ->
         let t = closure_rule i t at in
-        if trace then print0 t at;
+        if trace then printstr t "rule" at;
         t
     | Indset_ind t ->
         let t = set_induction_law t at in
-        if trace then print0 t at;
+        if trace then printstr t "indset" at;
         t
     | Indtype cls ->
         let t = type_induction_law cls at in
-        if trace then print0 t at;
+        if trace then printstr t "indlaw" at;
         t
     | Detached (a,b) ->
         let t = term_of_mp a b at in
@@ -830,15 +876,15 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         t
     | Eval_bwd (t,e) ->
         let t = term_of_eval_bwd t e at in
-        if trace then print0 t at;
+        if trace then printstr t "evalbwd" at;
         t
-    | Witness (idx,nms,t,args) ->
-        let t = term_of_witness idx nms t args at in
-        if trace then print0 t at;
+    | Witness (idx,(nms,tps),t,args) ->
+        let t = term_of_witness idx nms tps t args at in
+        if trace then print1 t idx at;
         t
     | Someelim idx ->
         let t = term_of_someelim idx at in
-        if trace then print0 t at;
+        if trace then print1 t idx at;
         t
     | Inherit (idx,bcls,cls) ->
         let t =  variant idx bcls cls at in
@@ -945,17 +991,56 @@ let add_eval_backward (t:term) (impl:term) (e:Eval.t) (at:t): unit =
 
 
 let add_witness
-    (impl:term) (i:int)
-    (nms:int array) (t:term)
-    (args:term array) (at:t): unit =
-  add_proved_0 impl (Witness (i,nms,t,args)) at
+    (impl:term)
+    (i:int)
+    (nms:names)
+    (tps:types)
+    (t:term)
+    (args:arguments) (at:t): unit =
+  add_proved_0 impl (Witness (i,(nms,tps),t,args)) at
 
 
 let add_someelim (i:int) (t:term) (at:t): unit =
   add_proved_0 t (Someelim i) at
 
 
+(*  Discharging
+    ===========
 
+    Suppose the prover has accepted the assertion:
+
+        all[G:CG,H:CH,...](a:A,b:B,...)
+            require
+                r0;r1;...
+            ensure
+                e
+            end
+
+    I.e. at the end we get a proof term for 'e' valid in the context.
+
+    Discharged premises:  'r0 ==> r1 ==> ... ==> e'
+
+    In the implication chain not all variables 'a,b,...' might be
+    used. I.e. we can calculate a map 'f:int->int' which maps old variables to
+    new variables and a set of used variables 'usd'. The map is undefined for
+    old variables which are unused.
+
+    Having this we get a type sequence 'UT1,UT2,...' of the used types which
+    is 'A,B,...' with all types corresponding to unused variables removed.
+
+    Formal generics not occurring in 'UT1,UT2,...' are unused as well. This
+    gives rise to a map 'ffg:int->int' which maps old formal generics to new
+    formal generics and a set of used formal generics 'usdfg'. The map is
+    undefined for unused formal generics.
+
+    With this we get a formal generics sequence 'UG1:CUG1,UG2,CUG2,..'.
+
+    We have to map all terms with 'f' and all types with 'ffg' in the term and
+    the proof term. In case that in the proof term some a function is applied
+    to an undefined argument, then the proof term uses more variables than the
+    final term. This has to be considered as an error.
+
+ *)
 
 
 (* Special cases for discharging:
@@ -998,9 +1083,11 @@ let discharged (i:int) (at:t): term * proof_term =
     assert (not (Term.is_all_quantified tgt));
     let t0 = discharged_assumptions i at in
     let tps, args, fgs, ags =
-      let tps,ntvs,fgs =
-        local_formals at, count_last_type_variables at, local_fgs at in
-      Term.unused_transform tps ntvs fgs t0 in
+      let tps  = local_formals at
+      and ntvs = count_last_type_variables at
+      and fgs  = local_fgs at in
+      Term.unused_transform tps ntvs fgs t0
+    in
     let n1new, n2new = count_formals tps, count_formals fgs in
     let t0 = Term.subst0 t0 n1new args n2new ags in
     let t  = Term.all_quantified n1new tps fgs t0
@@ -1018,7 +1105,7 @@ let discharged (i:int) (at:t): term * proof_term =
         end else begin
           let nargs = Array.length args in
           let ptarr = Array.init narr (fun j -> proof_term (cnt0+j) at) in
-          let i,ptarr  = Proof_term.remove_unused i cnt0 ptarr in
+          let i,ptarr  = Proof_term.remove_unused_proof_terms i cnt0 ptarr in
           let uvars_pt = Proof_term.used_variables nargs ptarr in
           if not (n1new = IntSet.cardinal uvars_pt &&
                   IntSet.for_all

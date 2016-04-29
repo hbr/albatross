@@ -490,7 +490,7 @@ let arguments_string
     (tvs:Tvars.t) (args:formal array) (ct:t)
     : string =
   (* The string "(a:A, b1,b2:B, ... )" of then arguments [args] within the
-     type environment [tvs] prefixed of a potential list of formal generics.
+     type environment [tvs].
 
      In case that there are no arguments the empty string is returned and
      not "()".
@@ -510,8 +510,6 @@ let arguments_string
         []
         fargs
     in
-    (string_of_tvs tvs ct)
-    ^
     "("
     ^  String.concat
         ","
@@ -530,7 +528,7 @@ let arguments_string
 let arguments_string2
     (tvs:Tvars.t) (nms:names) (tps:types) (ct:t)
     : string =
-  (* The string "(a:A, b1,b2:B, ... )" of then arguments [args] within the
+  (* The string "(a:A, b1,b2:B, ... )" of the arguments [args] within the
      type environment [tvs] prefixed of a potential list of formal generics.
 
      In case that there are no arguments the empty string is returned and
@@ -729,33 +727,21 @@ let has_constructors (cls:int) (ct:t): bool =
 
 let set_constructors (set:IntSet.t) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  assert false (* nyi: redesign *)
-  (*let bdesc = base_descriptor cls ct in
+  assert (not (is_interface_check ct));
+  let bdesc = base_descriptor cls ct in
   assert (bdesc.constructors = IntSet.empty);
   assert (bdesc.hmark = Case_hmark);
-  if is_interface_check ct then begin
-    let bdesc_priv = base_descriptor_priv cls ct in
-    assert (bdesc_priv.constructors = set)
-  end;
-  if is_interface_use ct then begin
-    let bdesc_priv = base_descriptor_priv cls ct in
-    bdesc_priv.constructors <- set
-  end;
-  bdesc.constructors <- set*)
+  bdesc.constructors <- set
 
 
 
 let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
   assert (cls < count ct);
-  assert false (* nyi: redesign *)
-  (*let bdesc = base_descriptor cls ct in
+  assert (not (is_interface_check ct));
+  let bdesc = base_descriptor cls ct in
   assert (bdesc.indlaw = -1);
   assert (bdesc.hmark = Case_hmark);
-  if is_interface_use ct then begin
-    let bdesc_priv = base_descriptor_priv cls ct in
-    bdesc_priv.indlaw <- indlaw
-  end;
-  bdesc.indlaw <- indlaw*)
+  bdesc.indlaw <- indlaw
 
 
 
@@ -1617,3 +1603,34 @@ let string_of_reduced_complete_signature
   let tvs0 = Tvars.make nlocs0 concepts fgnames fgconcepts in
   (string_of_detailed_tvs tvs0 ct) ^
   (string_of_signature s0 tvs0 ct)
+
+
+let verify_substitution
+    (tps1:types) (tvs1:Tvars.t)
+    (tps2:types) (tvs2:Tvars.t): unit =
+  (* Verify that the [tps1] from the environment [tvs1] can be substituted by
+     the types [tps2] from the environment [tvs2].
+
+     Both environments must have the same formal generics, must not have global
+     type variables and might differ in the number of local type variables.
+   *)
+  let ntps = Array.length tps1 in
+  assert (ntps = Array.length tps2);
+  assert (Tvars.count_fgs tvs1 = Tvars.count_fgs tvs2);
+  assert (Tvars.count_global tvs1 = 0);
+  assert (Tvars.count_global tvs2 = 0);
+  let nlocs1 = Tvars.count_local tvs1
+  and nlocs2 = Tvars.count_local tvs2
+  in
+  let maxlocs = max nlocs1 nlocs2 in
+  let up1 = maxlocs - nlocs1
+  and up2 = maxlocs - nlocs2 in
+  let ok =
+    interval_for_all (* For higher performance consider unification *)
+      (fun i -> Term.up up1 tps1.(i) = Term.up up2 tps2.(i))
+      0 ntps
+  in
+  if not ok then
+    raise Not_found
+  else
+    ()

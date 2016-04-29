@@ -92,6 +92,19 @@ let previous (c:t): t =
   assert (not (is_global c));
   Option.value c.prev
 
+
+let rec is_outer (c_outer:t) (c:t): bool =
+  if c_outer == c then
+    true
+  else
+    match c.prev with
+      None ->
+        false
+    | Some c ->
+        is_outer c_outer c
+
+
+
 let entry_arity (e:entry): int = e.nargs_delta
 
 let arity     (c:t): int = entry_arity c.entry
@@ -202,6 +215,25 @@ let local_fgs (c:t): formals =
 
 
 
+let local_type_reduced (i:int) (c:t): type_term =
+  (* Requires that the type of argument i does not contain local type variables *)
+  assert (i < count_last_arguments c);
+  let ntvs = count_last_type_variables c in
+  let _,tp = c.entry.fargs.(i) in
+  try
+    Term.down ntvs tp
+  with
+    Term_capture ->
+      assert false (* precondition violated *)
+
+
+
+let local_types_reduced (c:t): types =
+  let nargs = count_last_arguments c in
+  Array.init nargs (fun i -> local_type_reduced i c)
+
+
+
 let entry_varnames (e:entry): int array =
   Array.map (fun (n,_) -> n) e.fargs
 
@@ -218,6 +250,8 @@ let fgnames (c:t): int array = entry_fgnames c.entry
 
 let fgconcepts (c:t): type_term array = entry_fgconcepts c.entry
 
+let tvars_sub (c:t): TVars_sub.t = c.entry.tvs_sub
+
 let tvars (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
 
 let string_of_signature (s:Sign.t) (c:t): string =
@@ -227,20 +261,31 @@ let string_of_signature (s:Sign.t) (c:t): string =
     (class_table c)
 
 
-let string_of_term0 (t:term) (norm:bool) (nanon:int) (c:t): string =
-  Feature_table.term_to_string t norm nanon (varnames c) c.ft
+let string_of_term0 (t:term) (norm:bool) (long:bool) (nanon:int) (c:t): string =
+  let tvs = tvars c in
+  Feature_table.term_to_string t norm long nanon (varnames c) tvs c.ft
 
 let string_of_term (t:term) (c:t): string =
-  string_of_term0 t true 0 c
+  string_of_term0 t true false 0 c
+
+let string_long_of_term (t:term) (c:t): string =
+  string_of_term0 t true true 0 c
 
 
 let string_of_term_anon (t:term) (nb:int) (c:t): string =
-  string_of_term0 t true nb c
+  string_of_term0 t true false nb c
+
+
+let string_long_of_term_anon (t:term) (nb:int) (c:t): string =
+  string_of_term0 t true true nb c
 
 
 let string_of_term_array (sep:string) (arr: term array) (c:t): string =
   String.concat sep
     (List.map (fun t -> string_of_term t c) (Array.to_list arr))
+
+let string_of_arguments (arr: term array) (c:t): string =
+  "(" ^ (string_of_term_array "," arr c) ^ ")"
 
 
 let string_of_type_term (tp:type_term) (c:t): string =
@@ -250,6 +295,11 @@ let string_of_type_term (tp:type_term) (c:t): string =
 let string_of_type_array (sep:string) (tps:types) (c:t): string =
   String.concat sep
     (List.map (fun tp -> string_of_type_term tp c) (Array.to_list tps))
+
+let string_of_ags (ags:agens) (c:t): string =
+  "["
+  ^ (string_of_type_array "," ags c)
+  ^ "]"
 
 
 let make_lambda
@@ -547,6 +597,7 @@ let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
    depth = 1 + c.depth}
 
 
+
 let pop (c:t): t =
   (** Pop the last context
    *)
@@ -617,23 +668,6 @@ let update_types (subs:type_term array) (c:t): unit =
       let tp = Term.subst tp len subs in
       c.entry.fargs.(i) <- nme,tp)
     c.entry.fargs
-
-
-
-let update_type_variables (tvs:TVars_sub.t) (c:t): unit =
-  (** Update the type variables of the current context with [tvs]
-   *)
-  try
-    TVars_sub.update_subs c.entry.tvs_sub tvs;
-    let args = TVars_sub.args c.entry.tvs_sub in
-    let ntvs = Array.length args                in
-    Array.iteri
-      (fun i (nme,t) ->
-        c.entry.fargs.(i) <- (nme, Term.subst t ntvs args))
-      c.entry.fargs
-  with Term_capture ->
-    not_yet_implemented c.entry.info "Type inference of formal generics"
-
 
 
 
@@ -912,125 +946,133 @@ let is_case_match_expression (t:term) (c:t): bool =
 
 exception Type_error of string
 
+
+
+
 let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
-    let nvars = count_variables c
-    and ntvs  = ntvs c in
-    let getargs args c = Array.map (fun t -> type_of_term_full t trace c) args
-    and split_type_term tp pr =
-      let cls,ags = Class_table.split_type_term tp in
-      assert (ntvs <= cls);
-      if pr then begin
-        if cls <> ntvs + Class_table.predicate_index then
-          raise (Type_error
-                   ("The type " ^ string_of_type_term tp c ^ " is not a predicate"));
-        assert (Array.length ags = 1)
-      end else begin
-        if cls <> ntvs + Class_table.function_index then
-          raise (Type_error
-                   ("The type " ^ string_of_type_term tp c ^ " is not a function"));
-        assert (Array.length ags = 2)
-      end;
-      ags
-    in
-    let feature_signature (i:int) (ags:type_term array): Sign.t =
-      assert (nvars <= i);
-      let tvs,s = Feature_table.signature (i-nvars) c.ft in
-      if Tvars.count_fgs tvs <> Array.length ags then
+  let nvars = count_variables c
+  and ntvs  = ntvs c in
+  let getargs args c = Array.map (fun t -> type_of_term_full t trace c) args
+  and split_type_term tp pr =
+    let cls,ags = Class_table.split_type_term tp in
+    assert (ntvs <= cls);
+    if pr then begin
+      if cls <> ntvs + Class_table.predicate_index then
         raise (Type_error
-                 ("The feature \"" ^
-                  Feature_table.string_of_signature (i-nvars) c.ft ^
-                  "\" does not have " ^ string_of_int (Array.length ags) ^
-                  " formal generic(s)"));
-      let trans tp = Term.subst tp ntvs ags in
-      Sign.map trans s
-    in
-    let trace_tp tp =
-      if trace then
-        printf "  %s : %s\n" (string_of_term t c) (string_of_type_term tp c);
-      tp
-    in
-    let check_args reqargs actargs =
-      if reqargs <> actargs then
-          raise (Type_error
-                   (string_of_term t c ^
-                    " required argument types: " ^
-                    string_of_type_array "," reqargs c ^
-                    " , actual argument types: " ^
-                    string_of_type_array "," actargs c))
-    in
-    match t with
-      Variable i ->
-        assert (i < nvars);
-        trace_tp (variable_type i c)
-    | VAppl (i,args,ags) ->
-        assert (nvars <= i);
-        let argtps = getargs args c
-        and s      = feature_signature i ags in
-        assert (Sign.has_result s);
-        check_args (Sign.arguments s) argtps;
-        trace_tp (Sign.result s)
-    | Application (f,args,pr) ->
-        assert (Array.length args = 1);
-        let ftp    = type_of_term_full f trace c
-        and argtps = getargs args c in
-        let ags = split_type_term ftp pr in
-        check_args [|ags.(0)|] argtps;
-        if pr then
-          trace_tp (boolean c)
-        else
-          trace_tp (ags.(1))
-    | Lam (n,nms,ps,t0,pr,tp) ->
-        let ags = split_type_term tp pr in
-        let c1 = push_typed ([|ST.symbol "t"|],[|ags.(0)|]) empty_formals c in
-        let rtp = type_of_term_full t0 trace c1 in
-        if pr then
-          assert (rtp = boolean c)
-        else
-          assert (rtp = ags.(1));
-        trace_tp tp
-    | QExp (n,tps,fgs,t0,is_all) ->
-        assert (is_global c || fgs = empty_formals);
-        let c1 = push_typed tps fgs c in
-        let rtp = type_of_term_full t0 trace c1 in
-        assert (rtp = boolean c1);
+                 ("The type " ^ string_of_type_term tp c ^ " is not a predicate"));
+      assert (Array.length ags = 1)
+    end else begin
+      if cls <> ntvs + Class_table.function_index then
+        raise (Type_error
+                 ("The type " ^ string_of_type_term tp c ^ " is not a function"));
+      assert (Array.length ags = 2)
+    end;
+    ags
+  in
+  let feature_signature (i:int) (ags:type_term array): Sign.t =
+    assert (nvars <= i);
+    let tvs,s = Feature_table.signature (i-nvars) c.ft in
+    if Tvars.count_fgs tvs <> Array.length ags then
+      raise (Type_error
+               ("The feature \"" ^
+                Feature_table.string_of_signature (i-nvars) c.ft ^
+                "\" does not have " ^ string_of_int (Array.length ags) ^
+                " formal generic(s)"));
+    let trans tp = Term.subst tp ntvs ags in
+    Sign.map trans s
+  in
+  let trace_tp tp =
+    if trace then
+      printf "  %s : %s\n" (string_long_of_term t c) (string_of_type_term tp c);
+    tp
+  in
+  let check_args reqargs actargs =
+    if reqargs <> actargs then
+      raise (Type_error
+               (string_of_term t c ^
+                " required argument types: " ^
+                string_of_ags reqargs c ^
+                " , actual argument types: " ^
+                string_of_ags actargs c))
+  in
+  match t with
+    Variable i ->
+      assert (i < nvars);
+      trace_tp (variable_type i c)
+  | VAppl (i,args,ags) ->
+      assert (nvars <= i);
+      let argtps = getargs args c
+      and s      = feature_signature i ags in
+      assert (Sign.has_result s);
+      check_args (Sign.arguments s) argtps;
+      trace_tp (Sign.result s)
+  | Application (f,args,pr) ->
+      assert (Array.length args = 1);
+      let ftp    = type_of_term_full f trace c
+      and argtps = getargs args c in
+      let ags = split_type_term ftp pr in
+      check_args [|ags.(0)|] argtps;
+      if pr then
         trace_tp (boolean c)
-    | Indset (nme,tp,rs) ->
-        assert false
-    | Flow (ctrl,args) ->
-        let len = Array.length args in
-        match ctrl with
-          Ifexp ->
-            assert false
-        | Asexp ->
-            assert false
-        | Inspect ->
-            assert (3 <= len);
-            assert (len mod 2 = 1);
-            let ncases = len / 2 in
-            assert (0 < ncases);
-            let insp_tp = type_of_term_full args.(0) trace c in
-            let rec check_cases_from i tp =
-              if i = ncases then
-                tp
-              else
-                let n,(nms,tps),pat,res =
-                  Term.case_split args.(2*i+1) args.(2*i+2) in
-                let c1 = push_typed (nms,tps) empty_formals c in
-                let insp_tp_i =  type_of_term_full pat trace c1
-                and res_tp_i  =  type_of_term_full res trace c1 in
-                if insp_tp <> insp_tp_i then
-                  raise (Type_error
-                           ("Pattern of case " ^ string_of_term pat c1 ^
-                            " does not have type " ^
+      else
+        trace_tp (ags.(1))
+  | Lam (n,nms,ps,t0,pr,tp) ->
+      let ags = split_type_term tp pr in
+      let c1 = push_typed ([|ST.symbol "t"|],[|ags.(0)|]) empty_formals c in
+      let rtp = type_of_term_full t0 trace c1 in
+      if pr then
+        assert (rtp = boolean c)
+      else
+        assert (rtp = ags.(1));
+      trace_tp tp
+  | QExp (n,tps,fgs,t0,is_all) ->
+      assert (is_global c || fgs = empty_formals);
+      let c1 = push_typed tps fgs c in
+      let rtp = type_of_term_full t0 trace c1 in
+      if rtp <> boolean c1 then begin
+        printf "rtp  %s\n" (string_of_type_term rtp c1);
+        printf "bool %s\n" (string_of_type_term (boolean c1) c1);
+      end;
+      assert (rtp = boolean c1);
+      trace_tp (boolean c)
+  | Indset (nme,tp,rs) ->
+      assert false
+  | Flow (ctrl,args) ->
+      let len = Array.length args in
+      match ctrl with
+        Ifexp ->
+          assert false
+      | Asexp ->
+          assert false
+      | Inspect ->
+          assert (3 <= len);
+          assert (len mod 2 = 1);
+          let ncases = len / 2 in
+          assert (0 < ncases);
+          let insp_tp = type_of_term_full args.(0) trace c in
+          let rec check_cases_from i tp =
+            if i = ncases then
+              tp
+            else
+              let n,(nms,tps),pat,res =
+                Term.case_split args.(2*i+1) args.(2*i+2) in
+              let c1 = push_typed (nms,tps) empty_formals c in
+              let insp_tp_i =  type_of_term_full pat trace c1
+              and res_tp_i  =  type_of_term_full res trace c1 in
+              if insp_tp <> insp_tp_i then
+                raise (Type_error
+                         ("Pattern of case " ^ string_of_term pat c1 ^
+                          " does not have type " ^
                             string_of_type_term insp_tp c1));
-                if tp <> empty_term && tp <> res_tp_i then
+              if tp <> empty_term && tp <> res_tp_i then
                   raise (Type_error
                            ("Term " ^ string_of_term res c1 ^
                             " does not have type " ^
-                           string_of_type_term tp c1));
-                res_tp_i
-            in
-            trace_tp (check_cases_from 0 empty_term)
+                            string_of_type_term tp c1));
+              res_tp_i
+          in
+          trace_tp (check_cases_from 0 empty_term)
+
 
 
 let check_well_typed (t:term) (c:t): unit =
@@ -1038,15 +1080,45 @@ let check_well_typed (t:term) (c:t): unit =
   try
     check false
   with Type_error str ->
-    printf "check_well_typed \"%s\" \"%s\"\n" (string_of_term t c) (Term.to_string t);
+    printf "check_well_typed\n  \"%s\"\n  \"%s\"\n"
+      (string_long_of_term t c) (Term.to_string t);
     printf "  type error: %s\n" str;
     check true
 
 
-let is_valid (t:term) (c:t): bool =
-  (*printf "is_valid \"%s\" \"%s\"\n" (string_of_term t c) (Term.to_string t);*)
+let is_well_typed (t:term) (c:t): bool =
   try check_well_typed t c; true
   with Type_error _ -> false
+
+
+
+let transformed_term0 (t:term) (nargs:int) (c0:t) (c:t): term =
+  (* The term [t] with [nargs] arguments valid in the context [c0] transformed
+     to the inner context [c].  *)
+  assert (is_outer c0 c);
+  if is_global c0 then begin
+    assert (not (Term.is_all_quantified t));
+    let nvars = count_variables c
+    and ntvs  = count_formal_generics c + count_type_variables c in
+    Term.shift_from nvars nargs ntvs 0 t
+  end else begin
+    assert (not (is_global c0));
+    assert (count_formal_generics c0 = count_formal_generics c);
+    let ntvs0 = count_type_variables c0
+    and ntvs  = count_type_variables c in
+    assert (ntvs0 <= ntvs);
+    let nvars0 = count_variables c0
+    and nvars  = count_variables c in
+    assert (nvars0 <= nvars);
+    Term.shift_from (nvars-nvars0) nargs (ntvs-ntvs0) 0 t
+  end
+
+
+let transformed_term (t:term) (c0:t) (c:t): term =
+  (* The term [t] valid in the context [c0] transformed to the inner context
+     [c].
+   *)
+  transformed_term0 t 0 c0 c
 
 
 (* Calculation of preconditions:

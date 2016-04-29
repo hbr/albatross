@@ -10,7 +10,6 @@ type t
 
 val make: term ->  Context.t -> t
 
-val anchor_class:         t -> int
 val count_variables:      t -> int
 val is_schematic:         t -> bool
 val is_generic:           t -> bool
@@ -24,20 +23,20 @@ val is_intermediate:      t -> bool
 val is_equality:          t -> bool
 val equality_data:        t -> int * int * term * term
 val previous_schematic:   t -> int option
-val premises:             t -> int -> (term*bool) list
+val premises:             t -> Context.t -> (term*bool) list
 val count_premises:       t -> int
 val short_string:         t -> string
-val actual_generics:      arguments -> Context.t -> t -> agens
-val specialize: t -> term array -> agens -> int -> Context.t -> t
+val verify_specialization: arguments -> Context.t -> t -> agens
+val specialize:           t -> arguments -> agens -> int -> Context.t -> t
 
 val drop: t -> Context.t -> t
 
-val schematic_premise: t -> int * int * term
+val schematic_premise: t -> int * types * int * term
 val schematic_target:  t -> int * int * term
 val schematic_term:    t -> int * int * term
 
-val term:     t -> int -> term
-val term_a:   t -> int -> term
-val term_b:   t -> int -> term
-val target:   t -> int -> term
+val term:     t ->  term
+val term_a:   t -> Context.t -> term
+val term_b:   t -> Context.t -> term
+val target:   t -> Context.t -> term
 

@@ -146,7 +146,7 @@ let inherit_assertion (i:int) (cls:int) (info:info) (pc:PC.t): unit =
       let ct = Feature_table.class_table ft in
       let ctp,tvs = Class_table.class_type cls ct in
       let t1 =
-        Feature_table.substituted t0 n 0
+        Feature_table.substituted t0 n 0 0
           (standard_substitution n)
           n [|ctp|] tvs ft in
       begin try

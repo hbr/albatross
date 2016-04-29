@@ -172,7 +172,7 @@ end = struct
       List.iter
         (fun (i,tvs,sign) ->
           printf "  %d %s %s\n" i
-            (Context.string_of_term0 (Variable i) false 0 accs.c)
+            (Context.string_of_term0 (Variable i) false false 0 accs.c)
             (Class_table.string_of_complete_signature sign tvs ct))
         terms
     end;
@@ -486,7 +486,8 @@ let process_leaf
       let ct = Context.class_table c in
       let i,_,_ = List.hd lst in
       let nargs = Term_builder.expected_arity (List.hd acc_lst) in
-      let str = "Type error \"" ^ (Context.string_of_term0 (Variable i) false 0 c) ^
+      let str = "Type error \"" ^
+        (Context.string_of_term0 (Variable i) false false 0 c) ^
         "\"\n  Actual type(s):\n\t"
       and actuals = String.concat "\n\t"
           (List.map
@@ -993,7 +994,6 @@ let analyze_expression
 
   let tb = Accus.first accs in
   Term_builder.update_context tb;
-  (*Term_builder.specialize_head tb;*)
 
   let term = Term_builder.normalized_result tb in
   Term_builder.release tb;
@@ -1001,7 +1001,7 @@ let analyze_expression
   validate_term ie.i term c;
   validate_visibility ie.i term c;
   let term = unfold_inspect ie.i term c in
-  assert (Context.is_valid term c);
+  assert (Context.is_well_typed term c);
   (*assert (Term_builder.is_valid term c);*)
   term
 

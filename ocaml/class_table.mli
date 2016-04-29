@@ -213,3 +213,5 @@ val arguments_string: Tvars.t -> formal array -> t -> string
 val arguments_string2: Tvars.t -> names -> types -> t -> string
 
 val string_of_reduced_complete_signature: Sign.t -> Tvars.t -> t -> string
+
+val verify_substitution: types -> Tvars.t -> types -> Tvars.t -> unit

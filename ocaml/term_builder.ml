@@ -156,7 +156,7 @@ let expected_arity (tb:t): int =
 let tvars (tb:t): Tvars.t = tb.tvs
 
 let string_of_term (t:term) (tb:t): string =
-  Context.string_of_term0 t tb.norm 0 (context tb)
+  Context.string_of_term0 t tb.norm false 0 (context tb)
 
 
 
@@ -1185,7 +1185,7 @@ let complete_quantified (is_all:bool) (tb:t): unit =
     if is_all then
       Term.all_quantified  nargs (names,tps) empty_formals  trec.term
     else
-      Term.some_quantified nargs (names,tps) empty_formals  trec.term
+      Term.some_quantified nargs (names,tps) trec.term
   in
   if tb.trace then
     printf "  qexp \"%s\"  %s\n" (string_of_term term tb)

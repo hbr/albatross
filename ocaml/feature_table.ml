@@ -727,8 +727,10 @@ let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term 
 let term_to_string
     (t:term)
     (norm:bool)
+    (long:bool)
     (nanon: int)
     (names: int array)
+    (tvs: Tvars.t)
     (ft:t)
     : string =
   (** Convert the term [t] in an environment with the named variables [names]
@@ -741,6 +743,7 @@ let term_to_string
       (t:term)
       (names: int array)
       (nanonused: int)
+      (tvs:Tvars.t)
       (is_fun: bool)
       (outop: (operator*bool) option)
       : string =
@@ -790,12 +793,12 @@ let term_to_string
       let names = Array.append nms names in
       args2str n nms,
       String.concat ";"
-        (List.map (fun t -> to_string t names nanonused false None) ps),
-      to_string t names nanonused false None
+        (List.map (fun t -> to_string t names nanonused tvs false None) ps),
+      to_string t names nanonused tvs false None
     in
     let default_fapp (f:term) (argsstr:string): operator option * string =
       None,
-      (to_string f names nanonused true None) ^ "(" ^ argsstr ^ ")"
+      (to_string f names nanonused tvs true None) ^ "(" ^ argsstr ^ ")"
     in
     let funiapp2str (i:int) (argsstr:string): operator option * string =
       if nnames <= i then
@@ -823,7 +826,7 @@ let term_to_string
       String.concat
         ","
         (List.map
-           (fun t -> to_string t names nanonused false None)
+           (fun t -> to_string t names nanonused tvs false None)
            (Array.to_list args))
     in
     let op2str (op:operator) (fidx:int) (args: term array): string =
@@ -837,20 +840,20 @@ let term_to_string
             assert (1 <= nargs_tup);
             if nargs_tup = 1 then
               "(" ^ (operator_to_rawstring op) ^ ")"
-              ^ (to_string args.(0) names nanonused false (Some (op,false)))
+              ^ (to_string args.(0) names nanonused tvs false (Some (op,false)))
             else
               let args = args_of_tuple_ext args.(0) nnames 2 ft in
-              (to_string args.(0) names nanonused false (Some (op,true)))
+              (to_string args.(0) names nanonused tvs false (Some (op,true)))
               ^ " " ^ (operator_to_rawstring op) ^ " "
-              ^ (to_string args.(1) names nanonused false (Some (op,false)))
+              ^ (to_string args.(1) names nanonused tvs false (Some (op,false)))
           end else if nargs = 1 then
             (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(0) names nanonused false (Some (op,false)))
+            ^ (to_string args.(0) names nanonused tvs false (Some (op,false)))
           else begin
             assert (nargs=2); (* only unary and binary operators *)
-            (to_string args.(0) names nanonused false (Some (op,true)))
+            (to_string args.(0) names nanonused tvs false (Some (op,true)))
             ^ " " ^ (operator_to_rawstring op) ^ " "
-            ^ (to_string args.(1) names nanonused false (Some (op,false)))
+            ^ (to_string args.(1) names nanonused tvs false (Some (op,false)))
           end
     and lam2str (n:int) (nms: int array) (pres:term list) (t:term) (pr:bool)
         : string =
@@ -866,7 +869,7 @@ let term_to_string
     and if2str (args:term array): string =
       let len = Array.length args in
       assert(2 <= len); assert (len <= 3);
-      let to_str t = to_string t names nanonused false None in
+      let to_str t = to_string t names nanonused tvs false None in
       let cond_exp (c:term) (e:term) (isif:bool): string =
         (if isif then "if " else " elseif ") ^ (to_str c) ^ " then " ^ (to_str e)
       in
@@ -890,7 +893,7 @@ let term_to_string
       let case (i:int): string =
         let n, (nms,_), mtch, res = Term.case_split args.(2*i+1) args.(2*i+2) in
         let names1 = Array.append nms names in
-        let to_str t = to_string t names1 nanonused false None in
+        let to_str t = to_string t names1 nanonused tvs false None in
         " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
       in
       let rec cases_from (i:int) (str:string): string =
@@ -898,16 +901,16 @@ let term_to_string
           str
         else
           (cases_from (1+i) (str ^ (case i))) in
-      let to_str t = to_string t names nanonused false None in
+      let to_str t = to_string t names nanonused tvs false None in
       "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
     and as2str (args:term array): string =
       let len = Array.length args in
       assert (len = 2);
-      let str1 = to_string args.(0) names nanonused false (Some (Asop,true)) in
+      let str1 = to_string args.(0) names nanonused tvs false (Some (Asop,true)) in
       let str2 =
         let n,(nms,_),mtch = Term.pattern_split args.(1) in
         let names1 = Array.append nms names in
-        to_string mtch names1 nanonused false (Some (Asop,false)) in
+        to_string mtch names1 nanonused tvs false (Some (Asop,false)) in
       str1 ^ " as " ^ str2
     in
     let inop, str =
@@ -947,14 +950,23 @@ let term_to_string
           let nms = adapt_names nms names in
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           in
-          if nanonused + Array.length names <> 0 then
+          if not long && nanonused + Array.length names <> 0 then
             let argsstr, _, tstr = lam_strs n nms [] t in
             Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
-          else
-            let tvs = Tvars.make_fgs fgnms fgcon in
+          else begin
+            let names = Array.append nms names in
+            let tvs1 = Tvars.make_fgs fgnms fgcon in
+            if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
+              printf "tvs1  %s\n" (Class_table.string_of_tvs tvs1 ft.ct);
+              printf "tvs   %s\n" (Class_table.string_of_tvs tvs  ft.ct);
+            end;
+            assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);
+            let tvs = if Tvars.is_empty tvs then tvs1 else tvs in
             let argsstr = Class_table.arguments_string2 tvs nms tps ft.ct
-            and tstr = to_string t nms 0 false None in
-            Some op, opstr ^ argsstr ^ " " ^ tstr
+            and tvsstr  = Class_table.string_of_tvs tvs1 ft.ct
+            and tstr = to_string t names nanonused tvs false None in
+            Some op, opstr ^ tvsstr ^ argsstr ^ " " ^ tstr
+          end
       | Flow (ctrl,args) ->
           begin
             match ctrl with
@@ -968,7 +980,8 @@ let term_to_string
           let nms = adapt_names nms names in
           let nanonused, nms = local_names n nms in
           let names = Array.append nms names in
-          let rsstrs = List.map (fun t -> to_string t names nanonused false None)
+          let rsstrs =
+            List.map (fun t -> to_string t names nanonused tvs false None)
               (Array.to_list rs) in
           let rsstr = String.concat "," rsstrs in
           let str = "{(" ^ argsstr ^ "):"
@@ -1002,11 +1015,15 @@ let term_to_string
         if i<nanon then anon_symbol i 0
         else names.(i-nanon))
   in
-  to_string t names nanon false None
+  to_string t names nanon tvs false None
 
 
 let string_of_term_anon (t:term) (nb:int) (ft:t): string =
-  term_to_string t true nb [||] ft
+  term_to_string t true false nb [||] (Tvars.empty) ft
+
+let string_long_of_term_anon (t:term) (nb:int) (tvs:Tvars.t) (ft:t): string =
+  term_to_string t true true nb [||] tvs ft
+
 
 
 
@@ -1137,23 +1154,23 @@ let unify_signatures
 
 
 let variant_generics
-    (idx_var:int) (idx:int) (ags:agens) (tvs:Tvars.t) (ft:t): agens =
-  (* [idx_var] is a variant of the feature [idx]. We consider a feature call of
-     the form [VAppl(idx,_,ags)]. The routine calculates the actual generics
-     of the call of the variant feature [VAppl(idx_var,_,ags_var)].
-   *)
+    (idx_var:int) (idx:int) (ags:agens) (ntvs:int) (ft:t): agens =
+  (* [idx_var] is a variant of the feature [idx]. We consider a feature call
+     of the form [VAppl(idx,_,ags)] where [ags] come from a type environment
+     with [ntvs] type variables. The routine calculates the actual generics of
+     the call of the variant feature [VAppl(idx_var,_,ags_var)].  *)
+
   let tvs_var,s_var = signature idx_var ft in
   let nfgs_var      = Tvars.count_fgs tvs_var in
   if nfgs_var = 0 then
     [||]
   else
-    let nall        = Tvars.count_all tvs in
-    let subst tp    = Term.subst tp nall ags in
+    let subst tp    = Term.subst tp ntvs ags in
     let tvs0,s0     = signature idx ft in
     let len         = Sign.arity s0 in
     assert (len = Sign.arity s_var);
     let ags         = Array.make nfgs_var empty_term in
-    let uni tp1 tp2 = unify_types tp1 nfgs_var (subst tp2) nall ags in
+    let uni tp1 tp2 = unify_types tp1 nfgs_var (subst tp2) ntvs ags in
     for k = 0 to len-1 do
       uni (Sign.arg_type k s_var) (Sign.arg_type k s0)
     done;
@@ -1190,7 +1207,7 @@ let variant_feature
     let cls = Tvars.principal_class ags1.(0) tvs in
     try
       let idx_var = variant idx cls ft in
-      let ags_var = variant_generics idx_var idx ags tvs ft in
+      let ags_var = variant_generics idx_var idx ags nall ft in
       nb + idx_var, ags_var
     with Not_found ->
       i,ags
@@ -1198,23 +1215,31 @@ let variant_feature
 
 
 let substituted
-    (t:term) (nargs:int) (nbenv:int)
+    (t:term) (nargs:int) (nbenv:int) (ntvs:int)
     (args:arguments) (d:int)
     (ags:agens) (tvs:Tvars.t)
     (ft:t)
     : term =
   (* The term [t] has [nargs] arguments below [nbenv] variables. Furthermore
-     there are formal generics. The first arguments will be substituted by
-     [args] coming from an enviroment with [d] variables more than [t]. The
-     formal generics will be substituted by [ags] coming from the type
+     there are formal generics or [ntvs] type variables (locals+generics!).
+
+     The first arguments will be substituted by [args] coming from an
+     enviroment with [d] variables more than [t].
+
+     The formal generics will be substituted by [ags] coming from the type
      environment [tvs]. All feature calls will be specialized according to the
      actual generics.
 
      Note: All formal generics will be substituted.
+
+     Note: The presence of type variables and formal generics is mutually
+           exclusive.
    *)
-  let len  = Array.length args
-  and nall = Tvars.count_all tvs in
-  let subtp tp = Term.subst tp nall ags in
+  let len    = Array.length args
+  and is_gen = (0 < Array.length ags)
+  and nall   = Tvars.count_all tvs in
+  assert (not is_gen || ntvs = 0);       (* mutually exclusive *)
+  let subtp tp = Term.subst tp (nall-ntvs) ags in
   assert (len <= nargs);
   let rec spec nb t =
     let spec_args nb args = Array.map (fun t -> spec nb t) args
@@ -1232,7 +1257,12 @@ let substituted
     | VAppl(i0,args,ags0) ->
         let ags0 = Array.map subtp ags0
         and args   = spec_args nb args in
-        let i,ags0 = variant_feature i0 (nb+nargs+nbenv) ags0 tvs ft in
+        let i,ags0 =
+          if is_gen then
+            variant_feature i0 (nb+nargs+nbenv) ags0 tvs ft
+          else
+            i0,ags0
+        in
         let i = i - len + d in
         VAppl (i,args,ags0)
     | Application (f,args,pr) ->
@@ -1299,6 +1329,28 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
   spec nb t
 
 
+let equality_term
+    (a:term) (b:term) (nb:int) (tp:type_term) (tvs:Tvars.t) (ft:t)
+    : term =
+  (* The term [a = b] where [a] and [b] have the type [tp] in the type environment
+     [tvs] and are valid in an environment with [nb] variables.
+
+     Note: '=' in the class ANY has the signature [A:ANY](x,y:A):BOOLEAN
+   *)
+  let args0 = standard_substitution 2
+  and ags0  = standard_substitution 1 in
+  let eq0 = VAppl(2+eq_index, args0, ags0) in
+  substituted eq0 2 0 0 [|a;b|] nb [|tp|] tvs ft
+
+
+
+let implication (a:term) (b:term) (nb:int): term =
+  (* The implication [a ==> b] where [a] and [b] are valid in an environment
+     with [nb] variables.
+   *)
+  VAppl(nb+implication_index, [|a;b|], [||])
+
+
 
 let definition_term (i:int) (ft:t): term =
   assert (i < count ft);
@@ -1317,7 +1369,7 @@ let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
   let t0 = definition_term idx ft in
   let desc = descriptor idx ft in
   let nargs = arity idx ft in
-  let t = substituted t0 nargs 0 [||] nb ags tvs ft in
+  let t = substituted t0 nargs 0 0 [||] nb ags tvs ft in
   nargs, desc.argnames, t
 
 
@@ -1332,7 +1384,7 @@ let expanded_definition
   let t0 = definition_term idx ft in
   let nargs = Array.length args in
   assert (nargs = arity idx ft);
-  substituted t0 nargs 0 args nb ags tvs ft
+  substituted t0 nargs 0 0 args nb ags tvs ft
 
 
 
@@ -1650,7 +1702,7 @@ and expanded_feature
     let t0 = Feature.Spec.definition_term bdesc#specification in
     assert (Array.length args = arity (i-nb) ft);
     let nargs = Array.length args in
-    let t = substituted t0 nargs 0 args nb ags tvs ft in
+    let t = substituted t0 nargs 0 0 args nb ags tvs ft in
     fully_expanded t nb tvs ft
   with Not_found ->
     VAppl(i,args,ags)
@@ -1778,7 +1830,7 @@ let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list 
     (fun t ->
       let t1 = Term.make_implication_chain pres_rev t imp_id
       and args = standard_substitution n in
-      let t2 = substituted t1 n 0 args n ags desc_var.tvs ft in
+      let t2 = substituted t1 n 0 0 args n ags desc_var.tvs ft in
       QExp(n,(nms,tps),(fgnms,fgcon),t2,true)
     )
     posts

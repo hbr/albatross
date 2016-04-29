@@ -9,7 +9,7 @@ let extract_pattern (n:int) (t:term): (int*int*int*term) list =
          n: number of variables in the pattern
          p: pattern
    *)
-  assert false
+  assert false (* nyi *)
   (*let rec extract (var:int) (pos:int) (npat:int) (pat:term) (t:term) (nb:int) =
     let bvs = Term.bound_variables t (n+nb) in
     if not (IntSet.mem (var+nb) bvs) then
