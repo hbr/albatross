@@ -27,7 +27,14 @@ domain (f:A->B): ghost A?   note built_in end
 (=) (f,g:A->B): ghost BOOLEAN
     -> f <= g and g <= f
 
-all note axiom ensure 0.domain = 0 end
+all(f:A->B)
+    require
+        f = 0
+    note axiom
+    ensure
+        f.domain = 0
+    end
+
 
 all(f:A->B) ensure f = f end
 
@@ -54,10 +61,17 @@ preimage (q:B?, f:A->B): ghost A?
                -> f(a)
            end
 
-(+) (f:A->B,e:(A,B)): (A->B)
+(+) (f:A->B, e:(A,B)): (A->B)
     -> agent (a:A): B
-           require a = e.first or a in f.domain
-           ensure  -> if a = e.first then e.second else f(a) end end
+           require
+               a = e.first or a in f.domain
+           ensure
+               -> if a = e.first then
+                      e.second
+                  else
+                      f(a)
+                  end
+           end
 
 
 (+) (f,g:A->B): ghost (A->B)
@@ -177,9 +191,13 @@ all(f:A->B)
     require
         f.is_injective
     proof
-        f.inverse0.domain = f.range and all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
+        f.inverse0.domain = f.range
+        and
+        all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
     ensure
-        some(g) g.domain = f.range and all(x) x in f.domain ==> g(f(x)) = x
+        some(g) g.domain = f.range
+                and
+                all(x) x in f.domain ==> g(f(x)) = x
     end
 
 all(f:A->B, g,h:B->A)
@@ -223,13 +241,14 @@ inverse (f:A->B): ghost (B -> A)
     end
 
 
-
+{:
 all(a:A)
     ensure
-        all(x)(x -> a)(x) = a
+        all(x)(x -> a)(x) = a   -- 'x' not typeable !!!
         all(x)(x -> a)(x) = a
     end
-
+:}
+{:
 all(a:A)
     ensure
         (x -> x)(a) = a
@@ -240,6 +259,7 @@ all(a:A)
         all(x)((x:A) -> a)(x) = a  -- in this form the type checker cannot
                                    -- reconstruct the types
     end
+:}
 
 all(f,g,h:A->B)
     require

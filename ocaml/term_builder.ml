@@ -1112,8 +1112,11 @@ let upgraded_signature (s:Sign.t) (is_pred:bool) (tb:t): type_term =
 
 let expect_lambda (is_pred:bool) (c:Context.t) (tb:t): unit =
   let nargs = Context.count_last_arguments c in
-  if tb.trace then printf "  expect lambda (%s) nargs %d\n"
-      (if is_pred then "predicate" else "function") nargs;
+  if tb.trace then
+    printf "  expect lambda (%s) nargs %d  type %s\n"
+      (if is_pred then "predicate" else "function")
+      nargs
+      (string_of_type tb.rtype tb);
   let nanys = nargs + if is_pred then 0 else 1
   and expfun = is_expecting_function tb in
   resize 0 nanys 0 tb;
@@ -1123,7 +1126,8 @@ let expect_lambda (is_pred:bool) (c:Context.t) (tb:t): unit =
   assert (Sign.arity csig = nargs);
   let start = globals_start tb + tb.nglobals - nanys in
   let args = Array.init nargs (fun i -> Variable (start+i)) in
-  let rsig = Sign.make_func args tb.rtype in
+  (*let rsig = Sign.make_func args tb.rtype in*)
+  let rsig = Sign.make_func args (Sign.result csig) in
   let rtype = upgraded_signature rsig is_pred tb in
   for i = 0 to nargs - 1 do
     unify (Sign.arg_type i csig) (Variable (start+i)) tb done;
@@ -1133,6 +1137,9 @@ let expect_lambda (is_pred:bool) (c:Context.t) (tb:t): unit =
     if expfun then Sign.result csig
     else upgraded_signature csig is_pred tb in
   unify tb.rtype t2 tb;
+  if tb.trace then begin
+    printf "    tp   %s\n" (string_of_complete_type rtype tb)
+  end;
   Seq.push rtype tb.lamstack;
   tb.rtype <- Sign.result csig
 
@@ -1333,6 +1340,14 @@ let specialize_head (tb:t): unit =
   assert (gpos = Seq.count tb.gcntseq);
   Seq.put 0 {trec with term = t} tb.terms
 *)
+
+
+let is_fully_typed (tb:t): bool =
+  interval_for_all
+    (fun i -> tb.subs.(i) <> Variable i)
+    (globals_start tb)
+    (globals_beyond tb)
+
 
 let type_in_context (tp:type_term) (tb:t): type_term =
   assert (Seq.count tb.terms = 1);

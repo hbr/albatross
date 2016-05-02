@@ -332,7 +332,7 @@ let discharged_assumptions (i:int) (at:t): term =
   assert (is_local at);
   assert (not (has_result at));
   let tgt = local_term i at in
-  assert (not (Term.is_all_quantified tgt));
+  assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));
   List.fold_left
     (fun tgt i -> implication (local_term i at) tgt at)
     tgt
@@ -497,23 +497,22 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     match e with
       Eval.Term t -> t,t
     | Eval.Exp (idx,ags,args,e) when idx = domain_id ->
-        assert false (* nyi *)
-        (*let doma, domb = reconstruct e nb in
+        let doma, domb = reconstruct e nb in
         if doma <> domb then raise Illegal_proof_term;
         if Array.length args <> 1 then raise Illegal_proof_term;
         let argsa,argsb = reconstr_args args in
         assert (argsa = argsb); (* must be valid in case of domain_id *)
         begin match argsa.(0) with
-          Lam(n,nms,pres,t0,pr,_) ->
+          Lam(n,nms,pres,t0,pr,tp0) ->
             if pr then raise Illegal_proof_term;
-            if Context.domain_of_lambda n nms pres nb (context at) <> doma then
+            if Context.domain_of_lambda n nms pres tp0 nb (context at) <> doma then
               raise Illegal_proof_term
-        | VAppl(idx2,_,[||],_) when arity idx2 nb at > 0 ->
+        | VAppl(idx2,args,ags) when arity idx2 nb at > 0 ->
             if Context.domain_of_feature idx2 nb (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
         end;
-        VAppl(idx,argsa), doma*)
+        VAppl(idx,argsa,ags), doma
     | Eval.Exp (idx,ags,args,e) ->
         let n,nms,t =
           try definition idx nb ags at
@@ -719,7 +718,7 @@ let term_of_witness
 
 
 let someelim (i:int) (at:t): term =
-  (* It the term [i] has not the form [some(a:A,b:B,...) t] then raise
+  (* If the term [i] has not the form [some(a:A,b:B,...) t] then raise
      Not_found.
 
      If the term is an existentially quantified assertions then transform it
@@ -730,11 +729,7 @@ let someelim (i:int) (at:t): term =
    *)
 
   assert (i < count at);
-  let t_i,c = term i at in
-  assert (c == at.c); (* It is the same context because some
-                         elimination is added as forward
-                         closure of an existentially quantified
-                         assertion *)
+  let t_i = local_term i at in
   let nargs,(nms,tps),t0 = split_some_quantified t_i at in
   let imp_id  = imp_id at
   in
@@ -1080,7 +1075,9 @@ let discharged (i:int) (at:t): term * proof_term =
     assert (i = count_previous at);
     tgt,pt
   end else begin
-    assert (not (Term.is_all_quantified tgt));
+    if count_last_arguments at <> 0 && Term.is_all_quantified tgt then
+      printf "discharged %d %s\n" i (string_long_of_term_i i at);
+    assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));
     let t0 = discharged_assumptions i at in
     let tps, args, fgs, ags =
       let tps  = local_formals at

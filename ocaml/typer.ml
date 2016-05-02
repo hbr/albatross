@@ -993,6 +993,13 @@ let analyze_expression
   Accus.check_uniqueness info exp accs;
 
   let tb = Accus.first accs in
+  if not (Term_builder.is_fully_typed tb) then begin
+    let str =
+      "The term \"" ^ (string_of_expression ie.v)
+      ^ "\" has not enough variables to determine all formal generics"
+    in
+    error_info ie.i str
+  end;
   Term_builder.update_context tb;
 
   let term = Term_builder.normalized_result tb in

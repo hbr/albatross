@@ -726,20 +726,16 @@ let result_term (lst:info_expression list) (context:Context.t): term * info =
 
 let add_property_assertion
     (idx:int)
-    (pc: PC.t): unit =
-  try
-    let c = PC.context pc in
-    let idx = idx + Context.count_variables c in
-    let n, nms,  posts = Context.postconditions idx 0 c
-    and n1,nms1, pres  = Context.preconditions  idx 0 c in
-    assert (n = n1); assert (nms = nms1); assert (n = Array.length nms);
-    let pc1 = PC.push_untyped nms pc in
-    List.iter (fun t -> let _ = PC.add_assumption t pc1 in ()) pres;
-    let lst = List.map (fun t -> PC.add_axiom t pc1) posts in
-    let lst = List.map (fun i -> PC.discharged i pc1) lst in
-    PC.add_proved_list false (-1) lst pc
-  with Not_found ->
-    ()
+    (pc: PC.t)
+    : unit =
+  assert (PC.is_global pc);
+  let ft = PC.feature_table pc in
+  let lst = Feature_table.function_property_assertions idx ft in
+  List.iter
+    (fun t ->
+      ignore(PC.add_proved false (-1) t (Axiom t) pc)
+    )
+    lst
 
 
 
@@ -1025,7 +1021,7 @@ let feature_specification
       in
       let posts = function_property_list enslst pc in
       if List.exists (fun t -> is_feature_term_recursive t idx pc) pres then
-        error_info info "Recursive calls not allowed in postconditions";
+        error_info info "Recursive calls not allowed in preconditions";
       if PC.is_private pc then begin
         let exist = Context.existence_condition posts context in
         let unique =

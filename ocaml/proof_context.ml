@@ -770,7 +770,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | VAppl (i,[|Lam(n,nms,pres,t0,pr,tp0)|],ags) when i = domain_id ->
           assert (not pr);
           let args = [|Eval.Term (Lam(n,nms,pres,t0,pr,tp0))|]
-          and dom = Context.domain_of_lambda n nms pres nb (context pc) in
+          and dom = Context.domain_of_lambda n nms pres tp0 nb (context pc) in
           dom, Eval.Exp(i, ags, args, Eval.Term dom), true
       | VAppl (i,[| VAppl (idx,[||],ags0) |],ags)
         when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
@@ -1142,13 +1142,7 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
   (* Add the simplification and the evaluation of the term [i] in case that
      there is one if it is not yet in the proof context [pc] to the proof
      context and to the work items.
-
-     Note: The term [i] is in the current context.
-*)
-  assert begin
-    let _,c = Proof_table.term i pc.base in
-    c == context pc
-  end;
+   *)
   let t = term i pc in
   let add_eval t e =
     try

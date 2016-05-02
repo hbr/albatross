@@ -32,6 +32,7 @@ val head_term: t -> term
 val last_term: t -> term
 val tvars:     t -> Tvars.t
 val substituted_context_signature: t -> Sign.t
+val is_fully_typed: t -> bool
 val normalized_result: t -> term
 val push_expected: t -> unit
 val drop_expected: t -> unit

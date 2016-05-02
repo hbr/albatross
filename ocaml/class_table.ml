@@ -422,10 +422,7 @@ let string_of_type_arr (ags: agens) (tvs:Tvars.t) (ct:t): string =
 
 let string_of_concepts (tvs:Tvars.t) (ct:t): string =
   string_of_type_arr (Tvars.concepts tvs) tvs ct
-  (*let cpt_lst = Array.to_list (Tvars.concepts tvs) in
-  String.concat
-     ","
-     (List.map (fun tp -> string_of_type tp tvs ct) cpt_lst)*)
+
 
 
 let string_of_fgconcepts (tvs:Tvars.t) (ct:t): string =

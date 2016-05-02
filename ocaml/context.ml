@@ -191,6 +191,18 @@ let ntvs (c:t): int =
   (count_formal_generics c) + (count_type_variables c)
 
 
+let function_index (c:t): int =
+  ntvs c + Class_table.function_index
+
+let predicate_index (c:t): int =
+  ntvs c + Class_table.predicate_index
+
+
+let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
+  VAppl (function_index c, [|a_tp;r_tp|], [||])
+
+let predicate_type (a_tp: type_term) (c:t): type_term =
+  VAppl (predicate_index c, [|a_tp|], [||])
 
 let entry_local_argnames (e:entry): int array =
   Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
@@ -568,6 +580,7 @@ let push_untyped (names:int array) (c:t): t =
 
 
 let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
+  assert (is_global c || (fgnms,fgcon) = empty_formals);
   let nfgs_new  = Array.length fgcon
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
@@ -595,6 +608,25 @@ let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
     info    = UNKNOWN};
    prev = Some c;
    depth = 1 + c.depth}
+
+
+
+let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
+  Class_table.extract_from_tuple n (ntvs c) tp
+
+
+let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
+  assert (0 < n);
+  assert (n = Array.length nms);
+  let cls,ags = Class_table.split_type_term tp
+  and all_ntvs = ntvs c
+  in
+  let cls0 = cls - all_ntvs in
+  assert (cls0 = Class_table.predicate_index && Array.length ags = 1
+        || cls0 = Class_table.function_index && Array.length ags = 2);
+  let tps = extract_from_tuple n ags.(0) c in
+  push_typed (nms,tps) empty_formals c
+
 
 
 
@@ -630,7 +662,7 @@ let rec type_of_term (t:term) (c:t): type_term =
         let f_tp = type_of_term f c in
         let cls,ags = Class_table.split_type_term f_tp in
         assert (Array.length ags = 2);
-        assert (cls + ntvs c = Class_table.function_index);
+        assert (cls = function_index c);
         ags.(1)
       end
   | Lam(_,_,_,_,_,tp) -> tp
@@ -651,7 +683,7 @@ let rec type_of_term (t:term) (c:t): type_term =
 
 
 let predicate_of_type (tp:type_term) (c:t): type_term =
-  let pred_idx = (ntvs c) + Class_table.predicate_index in
+  let pred_idx = predicate_index c in
   VAppl(pred_idx,[|tp|],[||])
 
 
@@ -876,17 +908,51 @@ let has_preconditions (idx:int) (nb:int) (c:t): bool =
   lst <> []
 
 
-let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): term =
-  (* Construct the domain of a lambda expression with the precondition [pres] where
+
+let domain_type (tp:type_term) (c:t): type_term =
+  (* [tp] is either a function type [A->B] or a predicate type {A}. The domain
+     type is in both cases A.
+   *)
+  let f_id = function_index c
+  and p_id = predicate_index c
+  in
+  let cls,ags = Class_table.split_type_term tp in
+  let nags = Array.length ags
+  in
+  assert (cls = p_id && nags = 1 || cls = f_id && nags = 2);
+  ags.(0)
+
+
+
+let domain_of_lambda
+    (n:int) (nms:int array) (pres:term list) (f_tp:type_term) (nb:int) (c:t)
+    : term =
+  (* Construct the domain of a lambda expression with the preconditions [pres] where
      the lambda expression is within an environment with [nb] variables more than the
      context [c].
+
+     The lambda expression must have function type because the function 'domain'
+     requires a function argument.
+
+         agent (a:A): B
+             require
+                 p1; p2; ...
+             ensure
+                 -> ...
+             end
+
+     The domain is the set {a:A: p1 and p2 and ... } or {a:A: true} in case that
+     there are no preconditions.
    *)
-  assert false (* nyi *)
-  (*let nbenv = count_variables c in
+  let a_tp = domain_type f_tp c in
+  let p_tp = predicate_type a_tp c in
+  let nbenv = count_variables c
+  and is_pred = true
+  in
   match pres with
     [] ->
       let true_const = Feature_table.true_constant (1+nb+nbenv) in
-      assert false (*Lam(n,nms,[],true_const,true)*)
+      Lam(n, nms, [], true_const, is_pred, p_tp)
   | p::pres ->
       let and_id  = 1 + nb + nbenv + Feature_table.and_index in
       let inner =
@@ -894,7 +960,7 @@ let domain_of_lambda (n:int) (nms:int array) (pres:term list) (nb:int) (c:t): te
           (fun t p -> Term.binary and_id t p)
           p
           pres in
-      Lam(n,nms,[],inner,true)*)
+      Lam(n, nms, [], inner, is_pred, p_tp)
 
 
 
@@ -909,8 +975,8 @@ let domain_of_feature (idx:int) (nb:int) (c:t): term =
     Feature_table.domain_of_feature idx (nb+nbenv) c.ft
 
 
-let remove_tuple_accessors (t:term) (nargs:int) (nb:int) (c:t): term =
-  let nbenv = nb + count_variables c in
+let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
+  let nbenv = count_variables c in
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 
@@ -1041,9 +1107,19 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
       let len = Array.length args in
       match ctrl with
         Ifexp ->
-          assert false
+          assert (2 <= len);
+          assert (len <= 3);
+          let cond_tp = type_of_term_full args.(0) trace c
+          and if_tp   = type_of_term_full args.(1) trace c
+          in
+          assert (cond_tp = boolean c);
+          if len = 3 then begin
+            let else_tp = type_of_term_full args.(2) trace c in
+            assert (if_tp = else_tp)
+          end;
+          trace_tp if_tp
       | Asexp ->
-          assert false
+          assert false (* nyi *)
       | Inspect ->
           assert (3 <= len);
           assert (len mod 2 = 1);
@@ -1159,10 +1235,50 @@ let transformed_term (t:term) (c0:t) (c:t): term =
                   pf0, pf1, ...
                   px0,...,py0,...,...
                   (x,y,...).(f.domain)
- *)
-(*
-  (x -> y -> exp) (x) ~> (y -> exp)
- *)
+
+       agent(x:X,y:Y,...)
+           require r0;r1;...
+           ensure  -> t
+           end
+
+   Lambda terms
+
+      A lambda term is either
+
+          {a,b,...: t}
+
+      or
+
+          agent (a,b,...)
+              require
+                  r0; r1; ...
+              ensure
+                  -> t
+              end
+
+      The preconditions are:
+
+             all(a,b,..) p0r0     -- The preconditions of 'r0' have to be
+             all(a,b,..) p1r0     -- satisfied
+             ...
+             all(a,b,..) r0 ==> p0r1
+             all(a,b,..) r0 ==> p1r1
+             ...
+             all(a,b,..) r0 ==> r1 ==> p0r2
+             all(a,b,..) r0 ==> r1 ==> p1r2
+             ...
+             ...
+             all(a,b,..) r0 ==> r1 ==> ... ==> p0t
+             all(a,b,..) r0 ==> r1 ==> ... ==> p1t
+             ...
+
+      Note: A set expression does not have inner preconditions, therefore we
+            get as a special case (which is included in the above scheme):
+
+             all(a,b,..) p0t
+             all(a,b,..) p1t
+             ...
+   *)
 
 
 let case_preconditions
@@ -1197,119 +1313,117 @@ let case_preconditions
 
 
 
+
+
 let term_preconditions (t:term)  (c:t): term list =
-  let imp_id0 = implication_index c
-  and and_id0 = and_index c
-  and or_id0  = or_index c
-  and not_id0 = not_index c
-  and dom_id0 = domain_index c
-  and ntvs = ntvs c
+  (* The preconditions of the term [t] *)
+  let all_ntvs = ntvs c
   in
-  let rec pres (t:term) (nb:int) (lst:term list): term list =
-    let imp_id  = nb + imp_id0
-    and and_id  = nb + and_id0
-    and or_id   = nb + or_id0
-    and not_id  = nb + not_id0
-    and dom_id  = nb + dom_id0
-    in
-    let remove_tup t n = remove_tuple_accessors t n nb c in
-    let remove_tup_lst lst n =
-      List.map (fun t -> remove_tup t n) lst
-    in
+  let rec pres
+      (t:term) (lst:term list) (c:t)
+      : term list =
+    let imp_id = implication_index c
+    and or_id  = or_index c
+    and and_id = and_index c
+    and not_id = not_index c in
     let pres_args args lst =
       Array.fold_left
-        (fun lst t -> pres t nb lst)
+        (fun lst t -> pres t lst c)
         lst
         args
-    and pres_lam n tps fgs t lst =
-      let lst0 = pres t (n+nb) [] in
-      let nbb = nb + count_variables c in
-      let prenex t = (*Feature_table.prenex t nbb c.ft*) assert false in
-      List.fold_right
-        (fun t lst -> (prenex (QExp(n,tps,fgs,t,true)))::lst)
-        lst0
-        lst
     in
     match t with
     | Variable i ->
        lst
     | VAppl (i,args,_) when i = imp_id || i = and_id ->
         assert (Array.length args = 2);
-        let lst1 = pres args.(0) nb lst
-        and lst2 = pres args.(1) nb []  in
+        let lst1 = pres args.(0) lst c
+        and lst2 = pres args.(1) [] c in
         List.fold_right
-          (fun t lst -> (Term.binary imp_id args.(0) t)::lst)
+          (fun t lst -> (Term.binary imp_id args.(0) t) :: lst)
           lst2
           lst1
     | VAppl (i, args,_) when i = or_id ->
         assert (Array.length args = 2);
-        let lst1  = pres args.(0) nb lst
-        and lst2  = pres args.(1) nb []
+        let lst1  = pres args.(0) lst c
+        and lst2  = pres args.(1) [] c
         and not_t = Term.unary not_id args.(0) in
         List.fold_right
           (fun t lst -> (Term.binary imp_id not_t t)::lst)
           lst2
           lst1
     | VAppl (i,args,ags) ->
-        if Array.length args = 0 && arity i nb c > 0 then
+        if Array.length args = 0 && arity i 0 c > 0 then
           lst
         else
-          let n,nms,lst1 = preconditions i nb c in
+          let n,nms,lst1 = preconditions i 0 c in
           assert (n = Array.length args);
           let lst = pres_args args lst in
           List.fold_left
             (fun lst t -> (Term.apply0 t args ags)::lst)
             lst
             lst1
-    | Application (f,args,pr) when pr ->
-        let lst = pres f nb lst in
+    | Application (f,args,true) -> (* predicate application *)
+        let lst = pres f lst c in
         pres_args args lst
-    | Application (f,args,pr) ->
+    | Application (f,args,false) -> (* function application *)
         assert (Array.length args = 1);
-        assert false
-        (*let lst,dom = pres f nb lst in
-        let lst = pres_args args lst in
-        begin match dom with
-          Some dom ->
-            Application(dom,args,true)::lst
-        | None ->
-            lst
-        end*)
+        let lst = pres f lst c
+        and ags =
+          let f_cls,ags =
+            Class_table.split_type_term (type_of_term f c) in
+          assert (f_cls = function_index c);
+          assert (Array.length ags = 2);
+          ags
+        in
+        let lst = pres_args args lst
+        and dom = VAppl (domain_index c,[|f|],ags) in
+        Application(dom,args,true)::lst
     | Lam (n,nms,pres0,t0,pr,tp) ->
-        let pres0     = remove_tup_lst pres0 n
-        and t0        = remove_tup t0 n
-        and imp_id    = n + imp_id in
-        let lst = (* collect preconditions of preconditions *)
+        let t0     = remove_tuple_accessors t0 n c
+        and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0
+        and c      = push_lambda n nms tp c
+        and imp_id = n + imp_id
+        and tps =
+          let cls,ags = Class_table.split_type_term tp in
+          extract_from_tuple n ags.(0) c
+        in
+        let prepend_pres
+            (ps_rev:term list) (tgt:term) (lst:term list): term list =
+          let chn = Term.make_implication_chain ps_rev tgt imp_id in
+          QExp (n, (nms,tps), empty_formals, chn, true) :: lst
+        in
+        let prepend_pres_of_term
+            (ps_rev:term list) (p:term) (lst:term list)
+            : term list =
+          let pres_p_rev = pres p [] c in
           List.fold_left
-            (fun (lst,plst) p ->
-              let pres_p = pres p (n+nb) [] in
-              let lst = List.fold_left
-                  (fun lst pre_p ->
-                    let chn = Term.make_implication_chain plst pre_p imp_id in
-                    assert false
-                    (*QExp(n,nms,chn,true)::lst*))
-                  lst
-                  pres_p
-              in
-              lst, p::plst)
-            (lst,[])
+            (fun lst p -> prepend_pres ps_rev p lst)
+            lst
+            (List.rev pres_p_rev)
+        in
+        let ps_rev,lst =
+          List.fold_left
+            (fun (ps_rev,lst) p ->
+              p :: ps_rev,
+              prepend_pres_of_term ps_rev p lst
+            )
+            ([],lst)
             pres0
         in
-        let pres_t0 = pres t0 (n+nb) [] in
-        let lst,_ = (* preconditions have to imply the preconditions of the inner
-                     expression *)
-          let pres0_rev = List.rev pres0 in
-          List.fold_right
-            (fun tgt lst ->
-              let chn = Term.make_implication_chain pres0_rev tgt imp_id in
-              assert false (* QExp(n,nms,chn,true)::lst*))
-            pres_t0 (* is reversed *)
-            lst in
-        lst
+        prepend_pres_of_term ps_rev t0 lst
     | QExp (n,tps,fgs,t0,is_all) ->
-        pres_lam n tps fgs t0 lst
+        let c = push_typed tps fgs c in
+        let lst0 = pres t0 [] c in
+        List.fold_right
+          (fun t lst ->
+            QExp(n,tps,fgs,t,true) :: lst
+          )
+          lst0
+          lst
     | Indset (n,nms,rs) ->
-        let lst =
+        assert false
+        (*let lst =
           Array.fold_left
             (fun lst r ->
               let lst_r = pres r (n+nb) [] in (* reversed *)
@@ -1321,7 +1435,7 @@ let term_preconditions (t:term)  (c:t): term list =
               List.rev_append lst_r lst)
             lst
             rs in
-        lst
+        lst*)
     | Flow (ctrl,args) ->
         let len = Array.length args in
         begin
@@ -1329,8 +1443,8 @@ let term_preconditions (t:term)  (c:t): term list =
             Ifexp ->
               assert (2 <= len);
               assert (len <= 3);
-              let lst1 = pres args.(0) nb lst
-              and lst2 = pres args.(1) nb []
+              let lst1 = pres args.(0) lst c
+              and lst2 = pres args.(1) [] c
               in
               let reslst =
                 List.fold_right
@@ -1343,7 +1457,7 @@ let term_preconditions (t:term)  (c:t): term list =
                   args.(0) :: reslst
                 else
                   let neg = Term.unary not_id args.(0)
-                  and lst3 = pres args.(2) nb [] in
+                  and lst3 = pres args.(2) [] c in
                   List.fold_right
                     (fun t lst -> (Term.binary imp_id neg t) :: lst)
                     lst3
@@ -1356,7 +1470,7 @@ let term_preconditions (t:term)  (c:t): term list =
               let ncases = len / 2
               and nvars = count_variables c in
               let unmatched =
-                Feature_table.unmatched_inspect_cases args (nb+nvars) ntvs c.ft
+                Feature_table.unmatched_inspect_cases args nvars all_ntvs c.ft
               in
               let lst = List.fold_left
                   (fun lst (n,tps,pat) ->
@@ -1374,33 +1488,34 @@ let term_preconditions (t:term)  (c:t): term list =
                 else
                   let n,(nms,tps),pat,res =
                     Term.case_split args.(2*i+1) args.(2*i+2) in
-                  let lst_inner   = pres res (nb+n) [] in
+                  let c1 = push_typed (nms,tps) empty_formals c in
+                  let lst_inner   = pres res [] c1 in
                   let lst_inner   = List.rev lst_inner in
                   let lst =
-                      case_preconditions args.(0) n nms tps pat lst_inner lst nb c in
+                      case_preconditions args.(0) n nms tps pat lst_inner lst 0 c in
                   cases_from (i+1) lst
               in
               cases_from 0 lst
           | Asexp ->
               assert (len = 2);
-              pres args.(0) nb lst
+              pres args.(0) lst c
         end
   in
-  List.rev (pres t 0 [])
-
+  List.rev_map
+    (fun p -> prenex_term p c)
+    (pres t [] c)
 
 let existence_condition (posts:term list) (c:t): term =
   (* Generate the existence condition
 
-         some(x) e1_x and e2_x and ...
+         some(x:RT) e1_x and e2_x and ...
 
      where [ei_x] is the ith postcondition with the variable [Result] substituted
-     by [x].
+     by [x] and [RT] is the result type of the function.
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false (* nyi *)
-  (*let nargs   = count_last_arguments c
+  let nargs   = count_last_arguments c
   and and_id  = 1 + and_index c
   in
   let args =
@@ -1408,36 +1523,39 @@ let existence_condition (posts:term list) (c:t): term =
       (1 + nargs)
       (fun i -> if i < nargs then Variable (1+i) else Variable 0) in
   let replace t =
-    Term.sub t args (2 + nargs)
+    Term.subst t (2 + nargs) args
   in
   let term_inner =
     List.fold_left
       (fun inner p -> Term.binary and_id inner (replace p))
       (replace (List.hd posts))
       (List.tl posts) in
-  some_quantified 1 [|ST.symbol "x"|] term_inner c*)
+  Term.some_quantified 1 ([|ST.symbol "x"|],[|result_type c|]) term_inner
 
 
 
 let uniqueness_condition (posts:term list) (c:t): term =
   (* Generate the uniqueness condition
 
-         all(x,y) e1_x ==> e1_y ==> ...
-                  e2_x ==> e2_y ==> ... ==> x = y
+         all(x,y:RT) e1_x ==> e1_y ==> ...
+                     e2_x ==> e2_y ==> ... ==> x = y
 
      where [ei_x]/[ei_y] is the ith postcondition with the variable [Result]
-     substituted by [x]/[y].  *)
+     substituted by [x]/[y].
+   *)
+  assert (is_toplevel c);
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false (* nyi *)
-  (*let nargs   = count_last_arguments c
+  let nargs   = count_last_arguments c
+  and nvars   = count_last_variables c
   and imp_id  = 2 + implication_index c
   and rt      = result_type c
   and tvs     = tvars c
   in
   let cls = Tvars.principal_class rt tvs in
   let eq_id  = 2 + (count_variables c)
-      + Feature_table.variant Feature_table.eq_index cls c.ft in
+      + Feature_table.variant Feature_table.eq_index cls c.ft
+  in
   let args_var xyvar  =
     assert (xyvar < 2);
     Array.init
@@ -1446,17 +1564,29 @@ let uniqueness_condition (posts:term list) (c:t): term =
   let argsx = args_var 0
   and argsy = args_var 1 in
   let replace_by_args t args =
-    Term.sub t args (3 + nargs)
+    Term.subst t (3 + nargs) args
+  in
+  let x_eq_y =
+    let eq_id_0 = 2 + nvars + Feature_table.eq_index in
+    let x_eq_y_0 = VAppl (eq_id_0, [|Variable 0; Variable 1|], [|Variable 0|])
+    in
+    Feature_table.substituted
+      x_eq_y_0  0  (2+nvars)  0  [||]  0  [|rt|] tvs c.ft
   in
   let term_inner =
     List.fold_right
       (fun t inner ->
         let t1 = Term.binary imp_id (replace_by_args t argsy) inner in
-        Term.binary imp_id (replace_by_args t argsx) t1)
+        Term.binary imp_id (replace_by_args t argsx) t1
+      )
       posts
-      (Term.binary eq_id (Variable 0) (Variable 1)) in
-  all_quantified 2 [|ST.symbol "x";ST.symbol "y"|] term_inner c
-*)
+      x_eq_y
+      (*(VAppl (eq_id,[|Variable 0; Variable 1|], [|rt|]))*)
+  and nms = [|ST.symbol "x"; ST.symbol "y"|]
+  and tps = [|rt; rt|]
+  in
+  Term.all_quantified 2 (nms,tps) empty_formals term_inner
+
 
 
 
@@ -1471,14 +1601,17 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
    *)
   assert (has_result_variable c);
   assert (posts <> []);
-  assert false (* nyi *)
-  (*let nargs   = count_last_arguments c in
-  let fargs = Array.init nargs (fun i -> Variable i) in
-  let fterm = VAppl (1+nargs+idx, fargs) in
+  let tvs   = Feature_table.tvars idx c.ft
+  and nargs = count_last_arguments c
+  in
+  let fargs = Array.init nargs (fun i -> Variable i)
+  and ags   = Array.init (Tvars.count_fgs tvs) (fun i -> Variable i)
+  in
+  let fterm = VAppl (1+nargs+idx, fargs, ags) in
   let args  =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
-  let replace t = Term.sub t args (1+nargs) in
-  List.map replace posts*)
+  let replace t = Term.subst t (1+nargs) args in
+  List.map replace posts
 
 
 let get_type (tp:type_t withinfo) (c:t): type_term =

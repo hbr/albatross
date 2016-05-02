@@ -443,7 +443,7 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
     and reqtps = Array.sub rd.tps 0 nargs in
     Class_table.verify_substitution reqtps reqtvs argtps acttvs;
     [||]
-  end else begin
+  end else begin (* global context !! *)
     let nfgs = Array.length rd.fgcon in
     let ags = Array.init nfgs (fun i -> empty_term)
     and reqtvs = Tvars.make_fgs rd.fgnms rd.fgcon
@@ -476,7 +476,8 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
       | Variable i1, Variable i2 ->
           unicls i1 i2
       | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
-          assert (Array.length args1 = Array.length args2);
+          if Array.length args1 <> Array.length args2 then
+            raise Not_found;
           unicls i1 i2;
           uniargs args1 args2
       | _ ->

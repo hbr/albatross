@@ -20,6 +20,10 @@ type term =
                    (* n, names, pres, t, is_pred, type *)
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
   | Flow        of flow * arguments
+                   (* if:      args = [c e1 e2]   'e2' is optional
+                      inspect: args = [inspe pat0 e0 pat1 e1 ... ]
+                      as:      args = [e pat]
+                    *)
   | Indset      of int * type_term * arguments (* name, type, rules *)
 and names      = int array
 and arguments  = term array
@@ -1165,7 +1169,8 @@ end = struct
       : formals * formals * term =
     let (nms,tps), args, (fgnms,fgcon), ags =
       unused_transform (nms,tps) ntvs (fgnms,fgcon) t in
-    let n1new, n2new = Array.length nms, Array.length fgnms in
+    let n1new = Array.length nms
+    and n2new = Array.length fgnms in
     let t = subst0 t n1new args n2new ags in
     (nms,tps), (fgnms,fgcon), t
 
@@ -1359,9 +1364,11 @@ end = struct
   let rec prenex (t:term) (nb:int) (nb2:int) (imp_id:int): term =
     (* Calculate the prenex normal form of the term [t] with respect to
        universal quantifiers. All universal quantifiers are bubbled up in
-       implication chains and merged with the upper universal quantifier. Unused
-       variables in universally quantified expressions are eliminated.  *)
-    let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id in
+       implication chains and merged with the upper universal
+       quantifier. Unused variables in universally quantified expressions are
+       eliminated. Variables are order according to their appearance. *)
+
+   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id in
     all_quantified n tps fgs t0
 
 
@@ -1388,8 +1395,7 @@ end = struct
         let a = prenex args.(0) nb nb2 imp_id
         and n,(nms,tps),(fgnms,fgcon),b1 =
           prenex_0 args.(1) nb nargs nb2 imp_id in
-        let b1 = swap_variable_blocks n nargs (Array.length fgnms) nb2 b1
-        and a1 = shift_from n nargs (Array.length fgnms) nb2 a in
+        let a1 = shift n (Array.length fgnms) a in
         assert (not (is_all_quantified b1));
         let t = VAppl(i+n,[|a1;b1|],ags) in
         n, (nms,tps), (fgnms,fgcon), t
@@ -1405,15 +1411,16 @@ end = struct
         and t0 = prenex t0 (1+nb) nb2 imp_id in
           0, empty_formals, empty_formals, Lam(n,nms,ps,t0,pr,tp)
     | QExp(n0,(nms,tps),(fgnms,fgcon),t0,true) ->
-        assert ((fgnms,fgcon) = empty_formals);
         let nb  = nb  + n0
         and nb2 = nb2 + Array.length fgnms in
         let n1,(nms1,tps1),(fgnms1,fgcon1),t1 =
           prenex_0 t0 nb (n0+nargs) nb2 imp_id in
         assert (not (is_all_quantified t1));
-        let nms,tps     = prepend_names nms nms1, Array.append tps tps1
-        and fgnms,fgcon =
-          prepend_names fgnms fgnms1, Array.append fgcon fgcon1 in
+        let nms   = prepend_names nms1 nms
+        and tps   = Array.append tps1 tps
+        and fgnms = prepend_names fgnms fgnms1
+        and fgcon = Array.append fgcon fgcon1
+        in
         let (nms,tps),(fgnms,fgcon),t1 =
           remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
         assert (not (is_all_quantified t1));

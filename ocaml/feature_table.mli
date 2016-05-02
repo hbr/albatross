@@ -157,6 +157,7 @@ val transformed_specifications: int -> int -> agens -> t -> term list
 val feature_name: int -> t -> string
 
 val is_deferred: int -> t -> bool
+val tvars: int -> t -> Tvars.t
 val signature: int -> t -> Tvars.t * Sign.t
 val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
@@ -199,11 +200,10 @@ val tuple_of_args:    term array -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
 val args_of_tuple_ext:term -> int -> int -> t -> term array
 
-(*val prenex: term -> int -> t -> term*)
-
 val preconditions:  int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
 val count_postconditions: int -> t -> int
+val function_property_assertions: int -> t -> term list
 val function_property: int -> int -> int -> term array -> t -> term
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list

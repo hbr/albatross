@@ -87,7 +87,7 @@ type descriptor = {
     impl:        Feature.implementation;
     tvs:         Tvars.t;         (* only formal generics *)
     mutable anchored: int array;  (* formal generics anchored to the owner class *)
-    argnames:    int array;
+    argnames:    names;
     sign:        Sign.t;
     mutable tp:  type_term;
     bdesc:       bdesc;
@@ -149,6 +149,8 @@ let descriptor (i:int) (ft:t): descriptor =
   Seq.elem i ft.seq
 
 
+let tvars (i:int) (ft:t): Tvars.t =
+  (descriptor i ft).tvs
 
 let signature (i:int) (ft:t): Tvars.t * Sign.t =
   let desc = descriptor i ft in
@@ -1459,12 +1461,51 @@ let count_postconditions (i:int) (ft:t): int =
   let bdesc = base_descriptor i ft in
   Feature.Spec.count_postconditions bdesc#specification
 
+let function_property_assertions (idx:int) (ft:t): term list =
+  (* Get the list of assertions
+
+        all[fgs](tps) r1 ==> r2 ==> ... ==> ei
+
+     of a function with the specification
+
+        f (a:A,b:B,...): RT
+            require
+                r1; r2; ...
+            ensure
+                e1(Result)
+                e2(Result)
+                ...
+            end
+
+     where [Result] has been replaced by [f(a,b,...)].
+   *)
+  let desc  = descriptor idx ft in
+  let spec  = desc.bdesc#specification in
+  let pres  = List.rev (Feature.Spec.preconditions spec)
+  and posts = Feature.Spec.postconditions spec
+  and nargs = Sign.arity desc.sign
+  and tps   = Sign.arguments desc.sign
+  and fgnms = Tvars.fgnames desc.tvs
+  and fgcon = Tvars.fgconcepts desc.tvs
+  in
+  List.map
+    (fun e ->
+      let chn =
+        Term.make_implication_chain pres e (nargs + implication_index)
+      in
+      let t =
+        Term.all_quantified nargs (desc.argnames,tps) (fgnms,fgcon) chn
+      in
+      Term.prenex t 0 0 implication_index
+    )
+    posts
+
 
 
 let function_property
     (i:int) (fidx:int) (nb:int) (args:term array) (ft:t): term =
   assert (nb <= fidx);
-  assert false
+  assert false (* nyi *)
   (*let fidx = fidx - nb in
   let spec = (base_descriptor fidx ft).spec in
   let n = arity fidx ft in
@@ -1476,7 +1517,6 @@ let function_property
   let chn =
     Term.make_implication_chain (List.rev pres) post (implication_index + n) in
   Term.sub chn args nb*)
-
 
 
 let domain_of_feature (i:int) (nb:int) (ft:t): term =
