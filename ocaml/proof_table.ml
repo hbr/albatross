@@ -425,8 +425,10 @@ let specialized (i:int) (args:term array) (nb:int) (at:t): term =
     Term.sub t0 args nbenv_delta*)
 
 
-let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (at:t): term =
-  Context.beta_reduce n t args nb at.c
+let beta_reduce
+    (n:int) (t:term) (tp:type_term) (args:term array) (nb:int) (at:t)
+    : term =
+  Context.beta_reduce n t tp args nb at.c
 
 
 let apply_term (t:term) (args:term array) (nb:int) (at:t): term =
@@ -553,8 +555,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
-          Application(Lam(n,nms,_,t0,_,_),args,_) ->
-            let tb = beta_reduce n t0 args nb at in
+          Application(Lam(n,nms,_,t0,_,tp),args,_) ->
+            let tb = beta_reduce n t0 tp args nb at in
             ta,tb
         | _ -> raise Illegal_proof_term end
     | Eval.Simpl (e,idx,args,ags) ->

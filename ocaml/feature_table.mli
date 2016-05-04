@@ -141,7 +141,7 @@ val equality_index_of_type: term -> Tvars.t -> t -> int
     (** [equality_index tp ft] returns the equality index of the type [tp]. *)
 
 
-val feature_call: int -> int -> term array -> t -> term
+val feature_call: int -> int -> arguments -> agens -> t -> term
 
 val definition: int -> int -> agens -> Tvars.t -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature
@@ -159,6 +159,7 @@ val feature_name: int -> t -> string
 val is_deferred: int -> t -> bool
 val tvars: int -> t -> Tvars.t
 val signature: int -> t -> Tvars.t * Sign.t
+val argument_types: int -> agens -> int -> t -> types
 val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
 val body:         int -> t -> Feature.body
@@ -181,12 +182,13 @@ val is_term_public:    term -> int -> t -> bool
 
 val owner: int -> t -> int
 
-val add_tuple_accessors: term -> int -> int -> t -> term
+val add_tuple_accessors: term -> int -> type_term -> int -> t -> term
 val make_lambda:
-    int -> int array -> term list -> term -> bool -> int -> type_term -> t -> term
+    int -> int array -> term list -> term -> bool
+      -> int -> type_term -> t -> term
 val make_application: term -> term array -> bool -> int -> t -> term
-val beta_reduce:      int -> term -> term array -> int -> t -> term
-val normalize_lambdas:term -> int -> t -> term
+val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
+
 val substituted:
     term -> int -> int -> int
       -> arguments -> int -> agens -> Tvars.t -> t -> term
@@ -196,9 +198,9 @@ val equality_term: term -> term -> int -> type_term -> Tvars.t -> t -> term
 val implication: term -> term -> int -> term
 
 val remove_tuple_accessors: term -> int -> int -> t -> term
-val tuple_of_args:    term array -> int -> t -> term
+val tuple_of_args:    arguments -> type_term -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
-val args_of_tuple_ext:term -> int -> int -> t -> term array
+val args_of_tuple_ext:term -> type_term -> int -> int -> t -> term array
 
 val preconditions:  int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list
@@ -228,10 +230,6 @@ val add_involved_assertion: int -> term -> t -> unit
 
 
 val term_to_string: term -> bool -> bool -> int -> int array -> Tvars.t -> t -> string
-
-val inherit_new_effective: int -> int -> bool -> t -> int
-
-val inherit_feature: int -> agens -> int -> int -> bool -> t -> unit
 
 val export_feature: int -> bool -> t -> unit
 

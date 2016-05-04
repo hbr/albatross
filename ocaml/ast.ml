@@ -207,9 +207,9 @@ let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t)
 
 let beta_reduced (t:term) (pc:PC.t): term =
   match t with
-    Application(Lam(n,_,_,t0,_,_),args,_) ->
+    Application(Lam(n,_,_,t0,_,tp),args,_) ->
       assert (Array.length args = 1);
-      PC.beta_reduce n t0 args 0 pc
+      PC.beta_reduce n t0 tp args 0 pc
   | _ ->
       t
 
@@ -234,11 +234,11 @@ let analyze_type_inspect
   let nvars = Context.count_variables c
   and ct    = Context.class_table c
   in
-  let idx,tvs,s =
+  let ivar,tvs,s =
     try Context.variable id c
     with Not_found ->
       error_info info ("Unknown variable \"" ^ (ST.string id) ^ "\"") in
-  assert (idx < nvars);
+  assert (ivar < nvars);
   assert (Sign.is_constant s);
   let cons_set, cls, tp =
     let tp = Sign.result s in
@@ -253,8 +253,8 @@ let analyze_type_inspect
       error_info info ("Type of \"" ^ (ST.string id) ^ "\" is not inductive");
     set, cls-ntvs, tp
   in
-  let ind_idx = PC.add_induction_law tp idx goal pc in
-  cons_set,ind_idx,idx,tp
+  let ind_idx = PC.add_induction_law tp ivar goal pc in
+  cons_set,ind_idx,ivar,tp
 
 
 
@@ -450,7 +450,7 @@ and prove_inductive_set
     (pc:PC.t)
     : unit =
   assert (not (PC.is_global pc));
-  let pc0   = PC.push_untyped [|p_id|] pc in
+  let pc0   = assert false (*PC.push_untyped [|p_id|] pc*) in
   let c0    = PC.context pc0 in
   let nvars = Context.count_variables c0 in
   let elem, p, prep, pa_idx, ind_idx, rules, goal, q =
@@ -471,7 +471,10 @@ and prove_inductive_set
       let nms = anon_argnames np in
       let t0 =
         let ft = Context.feature_table c0 in
-        let args = Feature_table.args_of_tuple elem nvars ft in
+        let args =
+          assert false
+          (*Feature_table.args_of_tuple elem nvars ft*)
+        in
         let args = Array.map
             (fun arg ->
               match arg with
@@ -489,7 +492,8 @@ and prove_inductive_set
                 j+1, IntMap.add i j map)
               (0,IntMap.empty) args in
           Term.lambda_inner_map goal map in
-        Feature_table.add_tuple_accessors t0 np nvars ft
+        assert false
+        (*Feature_table.add_tuple_accessors t0 np nvars ft*)
       in
       assert (np = Array.length nms);
       let q = Lam (np, nms, [], t0, true,tp) in
@@ -546,7 +550,8 @@ and prove_inductive_set
             Expquantified(Universal,entlst,e) ->
               PC.push entlst None false false false pc0, e
           | _ ->
-              PC.push_untyped [||] pc0, ie.v in
+              assert false
+              (*PC.push_untyped [||] pc0, ie.v*) in
         let c1  = PC.context pc1 in
         let n    = Context.count_last_arguments c1
         and fargs = Context.local_formals c1
@@ -586,7 +591,8 @@ and prove_inductive_set
             let n,(nms,tps),fgs,ps,tgt = Term.induction_rule imp_id irule p prep q in
             let nms = Context.unique_names nms c0 in
             let pc1 = PC.push_typed (nms,tps) fgs pc0 in
-            (*let pc1 = PC.push_untyped nms pc0 in  (* push_typed !!! *)*)
+
+            let pc1 = assert false (*PC.push_untyped nms pc0 "push_typed !!!" *) in
             prove_case ens.i rules.(irule) ps tgt [] pc1 pc0 in
         PC.add_mp rule_idx ind_idx false pc0
       ) ind_idx 0 nrules in
@@ -599,18 +605,21 @@ and prove_inductive_set
 and prove_type_case
     (rcnt:int) (* recursion counter *)
     (info:info)
-    (cons_idx:int) (pat:term) (cmp:compound)
+    (cons_idx:int) (tp:type_term) (pat:term) (cmp:compound)
     (ivar:int) (goal:term)
     (pc1:PC.t) (pc:PC.t)
     : int =
-  (* prove one case of an inductive type *)
+  (* Prove one case of an inductive type
+
+     tp: type of the inductive type
+   *)
   let nvars = PC.count_variables pc
   and ft    = PC.feature_table pc in
   let n,_,_,ps_rev,case_goal =
     let t0 = Term.lambda_inner goal ivar
-    and tp = assert false in
-    let p   = Lam(1,anon_argnames 1,[],t0,true,tp)
-    and ags = assert false in
+    and p_tp = PC.predicate_of_type tp pc in
+    let p   = Lam(1, anon_argnames 1, [], t0, true, p_tp)
+    and _, ags = Class_table.split_type_term tp in
     Feature_table.constructor_rule cons_idx p ags nvars ft in
   assert (n = PC.count_last_arguments pc1);
   List.iter
@@ -641,19 +650,21 @@ and prove_inductive_type
     (pc:PC.t)
     : unit =
   assert (not (PC.is_global pc));
+  let tgt = get_boolean_term ens pc in
+  let cons_set, ind_idx, ivar, tp =
+    analyze_type_inspect info id tgt pc
+  in
+  let _,ags = Class_table.split_type_term tp in
   let pc_outer = pc in
   let pc = PC.push_untyped [||] pc_outer in
-  let c   = PC.context pc in
+  let c  = PC.context pc in
   let nvars = Context.count_variables c
-  and tgt = get_boolean_term ens pc
   and ft  = Context.feature_table c in
-  let cons_set,ind_idx,ivar,tp =
-    analyze_type_inspect info id tgt pc in
   let proved_cases =
     List.fold_left
       (fun map (ie,cmp) ->
         let cons_idx, pat, pc1 = analyze_type_case_pattern ie cons_set tp pc in
-        let idx = prove_type_case rcnt ie.i cons_idx pat cmp ivar tgt pc1 pc in
+        let idx = prove_type_case rcnt ie.i cons_idx tp pat cmp ivar tgt pc1 pc in
         IntMap.add cons_idx idx map
       )
       IntMap.empty
@@ -665,17 +676,24 @@ and prove_inductive_type
           try
             IntMap.find cons_idx proved_cases
           with Not_found ->
-            let n   = Feature_table.arity cons_idx ft in
-            let nms = anon_argnames n in
-            let pc1 = PC.push_untyped nms pc in
+            let n   = Feature_table.arity cons_idx ft
+            and ntvs = PC.count_all_type_variables pc
+            in
+            let nms = anon_argnames n
+            and tps = Feature_table.argument_types cons_idx ags ntvs ft
+            in
+            let pc1 = PC.push_typed (nms,tps) empty_formals pc in
             let pat =
               let args = Array.init n (fun i -> Variable i) in
-              Feature_table.feature_call cons_idx (nvars+n) args ft
+              Feature_table.feature_call cons_idx (nvars+n) args ags ft
             in
-            prove_type_case rcnt ens.i cons_idx pat [] ivar tgt pc1 pc
+            prove_type_case rcnt ens.i cons_idx tp pat [] ivar tgt pc1 pc
         in
-        PC.add_mp idx ind_idx false pc)
-      cons_set ind_idx in
+        PC.add_mp idx ind_idx false pc
+      )
+      cons_set
+      ind_idx
+  in
   let t,pt = PC.discharged ind_idx pc in
   ignore (PC.add_proved_term t pt true pc_outer);
   PC.close pc_outer
@@ -959,16 +977,21 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         assert (3 <= len);
         assert (len mod 2 = 1);
         let ncases = len / 2 in
-        let insp_arr = Feature_table.args_of_tuple args.(0) nb ft in
+        let insp_arr =
+          (*Feature_table.args_of_tuple args.(0) nb ft*)
+          assert false in
         let insp_arr2 = Array.map (fun t -> find_opt nb t tlst) insp_arr in
         let ninsp    = Array.length insp_arr in
         interval_iter
           (fun i ->
             let n,fargs,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
             let parr =
-              let arr = Feature_table.args_of_tuple pat (n+nb) ft in
+              let arr =
+                (*Feature_table.args_of_tuple pat (n+nb) ft*)
+                assert false in
               if Array.length arr > ninsp then
-                Feature_table.args_of_tuple_ext pat (n+nb) ninsp ft
+                assert false (* nyi *)
+                (*Feature_table.args_of_tuple_ext pat (n+nb) ninsp ft*)
               else arr in
             let tlst2 = add_pattern insp_arr2 n parr nb tlst in
             assert (Array.length parr = ninsp); (* because only constructors and

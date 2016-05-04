@@ -174,6 +174,9 @@ let not_index (c:t): int =
 let domain_index (c:t): int =
   count_variables c + Feature_table.domain_index
 
+let tuple_index (c:t): int =
+  count_variables c + Feature_table.tuple_index
+
 
 let variable_name (i:int) (c:t): int =
   assert (i < count_variables c);
@@ -196,6 +199,9 @@ let function_index (c:t): int =
 
 let predicate_index (c:t): int =
   ntvs c + Class_table.predicate_index
+
+let tuple_class (c:t): int =
+  ntvs c + Class_table.tuple_index
 
 
 let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
@@ -329,8 +335,10 @@ let make_application
   res
 
 
-let beta_reduce (n:int) (tlam:term) (args:term array) (nb:int )(c:t): term =
-  Feature_table.beta_reduce n tlam args (nb+count_variables c) c.ft
+let beta_reduce
+    (n:int) (tlam:term) (tp:type_term) (args:term array) (nb:int )(c:t)
+    : term =
+  Feature_table.beta_reduce n tlam tp args (nb+count_variables c) c.ft
 
 
 let quantified (is_all:bool) (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t)
@@ -913,14 +921,8 @@ let domain_type (tp:type_term) (c:t): type_term =
   (* [tp] is either a function type [A->B] or a predicate type {A}. The domain
      type is in both cases A.
    *)
-  let f_id = function_index c
-  and p_id = predicate_index c
-  in
-  let cls,ags = Class_table.split_type_term tp in
-  let nags = Array.length ags
-  in
-  assert (cls = p_id && nags = 1 || cls = f_id && nags = 2);
-  ags.(0)
+  Class_table.domain_type tp
+
 
 
 
@@ -980,11 +982,26 @@ let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 
-let tuple_of_args (args:term array) (nb:int) (c:t): term =
-  let nbenv = nb + count_variables c in
-  Feature_table.tuple_of_args args nbenv c.ft
-
-
+let tuple_of_args (args:arguments) (tup_tp:type_term) (c:t): term =
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...) or the type [tup_tp].
+   *)
+  let nargs = Array.length args
+  and tup_id = tuple_index c
+  in
+  assert (0 < nargs);
+  let rec tup_from (i:int) (tup_tp:type_term): term =
+    if i = nargs - 1 then
+      args.(i)
+    else begin
+      assert (i + 2 <= nargs);
+      let cls,ags = Class_table.split_type_term tup_tp in
+      assert (cls = tuple_class c);
+      assert (Array.length ags = 2);
+      let b = tup_from (i + 1) ags.(1) in
+      VAppl (tup_id, [| args.(i); b |], ags)
+    end
+  in
+  tup_from 0 tup_tp
 
 
 let is_case_match_expression (t:term) (c:t): bool =

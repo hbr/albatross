@@ -172,7 +172,7 @@ end = struct
       List.iter
         (fun (i,tvs,sign) ->
           printf "  %d %s %s\n" i
-            (Context.string_of_term0 (Variable i) false false 0 accs.c)
+            (Context.string_of_term0 (Variable i) true false 0 accs.c)
             (Class_table.string_of_complete_signature sign tvs ct))
         terms
     end;
@@ -487,7 +487,7 @@ let process_leaf
       let i,_,_ = List.hd lst in
       let nargs = Term_builder.expected_arity (List.hd acc_lst) in
       let str = "Type error \"" ^
-        (Context.string_of_term0 (Variable i) false false 0 c) ^
+        (Context.string_of_term0 (Variable i) true false 0 c) ^
         "\"\n  Actual type(s):\n\t"
       and actuals = String.concat "\n\t"
           (List.map

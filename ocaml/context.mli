@@ -94,7 +94,7 @@ val implication_index: t -> int
 val make_lambda:
     int -> int array -> term list -> term -> bool -> int -> t -> term
 val make_application: term -> term array -> int -> bool -> t -> term
-val beta_reduce:      int -> term -> term array -> int -> t -> term
+val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 
 val quantified:      bool -> int -> formals -> formals -> term -> t -> term
 val all_quantified:  int -> formals -> formals -> term -> t -> term
@@ -175,7 +175,6 @@ val arity:      int -> int -> t -> int
 val is_inductive_set: int -> t -> bool
 val inductive_set: term -> t -> term
 
-val tuple_of_args: term array -> int -> t -> term
 
 val preconditions: int -> int -> t -> int * int array * term list
 val postconditions: int -> int -> t -> int * int array * term list

@@ -68,7 +68,7 @@ val is_assumption: int -> t -> bool
 val variant:       int -> int -> int -> t -> term
 
 val specialized: int -> term array -> int -> t -> term
-val beta_reduce: int -> term -> term array -> int -> t -> term
+val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
 val apply_term:  term -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 

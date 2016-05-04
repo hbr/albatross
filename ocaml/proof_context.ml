@@ -117,6 +117,10 @@ let is_toplevel (at:t): bool =
 
 let nbenv (at:t): int = Proof_table.count_variables at.base
 
+let count_all_type_variables (pc:t): int =
+  Context.ntvs (context pc)
+
+
 let count_variables (at:t): int =
   Proof_table.count_variables at.base
 
@@ -203,6 +207,9 @@ let string_of_term_array (args: term array) (pc:t): string =
 let string_of_tvs (pc:t): string =
   Class_table.string_of_tvs (tvars pc) (class_table pc)
 
+
+let string_of_type (tp:type_term) (pc:t): string =
+  Context.string_of_type tp (context pc)
 
 let string_of_ags (ags:agens) (pc:t): string =
   Context.string_of_ags ags (context pc)
@@ -681,17 +688,17 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
 
 
 
-let beta_reduce (n:int) (t:term) (args:term array) (nb:int) (pc:t): term =
-  Proof_table.beta_reduce n t args nb pc.base
+let beta_reduce
+    (n:int) (t:term) (tp:type_term) (args:term array) (nb:int) (pc:t)
+    : term =
+  Proof_table.beta_reduce n t tp args nb pc.base
+
 
 let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)
     : term =
   let c = context pc in
   Context.make_lambda n nms ps t pr 0 c
 
-let tuple_of_args (args: term array) (nb:int) (pc:t): term =
-  let c = context pc in
-  Context.tuple_of_args args nb c
 
 let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term =
   let c = context pc in
@@ -749,8 +756,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
-        Lam (n,nms,_,t0,_,_) ->
-          beta_reduce  n t0 args nb pc, Eval.Beta e, true
+        Lam (n,nms,_,t0,_,tp) ->
+          beta_reduce  n t0 tp args nb pc, Eval.Beta e, true
       | _ ->
           Application (f,args,is_pred), e, modi
     in
@@ -817,9 +824,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
               let full = full || triggers_eval i nb pc in
               vapply i args ags full
           end
-      | Application (Lam(n,nms,_,t0,prlam,_),args,pr) when not full ->
+      | Application (Lam(n,nms,_,t0,prlam,tp),args,pr) when not full ->
           assert (prlam = pr);
-          beta_reduce n t0 args nb pc, Eval.Beta (Eval.Term t), true
+          beta_reduce n t0 tp args nb pc, Eval.Beta (Eval.Term t), true
       | Application (Variable i,args,pr) when i < nb + nbenv ->
           let f  = Variable i in
           let fe = Eval.Term f in
@@ -1000,10 +1007,10 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   let t = term idx pc in
   printf "add_beta_reduced %s\n" (string_of_term t pc);
   match t with
-    Application(Lam(n,_,_,t0,prlam,_),[|arg|],pr) ->
+    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
       assert (prlam = pr);
       let pt = Eval(idx,Eval.Beta (Eval.Term t))
-      and res = beta_reduce n t0 [|arg|] 0 pc in
+      and res = beta_reduce n t0 tp [|arg|] 0 pc in
       printf "res %s\n" (string_of_term res pc);
       Proof_table.add_proved res pt 0 pc.base;
       raw_add res search pc
@@ -1183,20 +1190,33 @@ let predicate_of_type (tp:type_term) (pc:t): type_term =
 
 
 let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
-  (* Add the induction law of the case class [cls] for the goal [goal]. *)
+  (* Add the induction law of the case type [tp] for the goal [goal].
+
+     [tp] is the type of the inspect term.
+
+     An induction law is of the form:
+
+         all(p,x) p0 ==> p1 ==> x in p
+
+     where there is a premise for each constructor.
+
+   *)
+  printf "add_induction_law %s\n" (string_of_type tp pc);
   let ct = class_table pc
-  and cls,_ = Class_table.split_type_term tp in
+  and cls,ags = Class_table.split_type_term tp
+  and ntvs  = count_all_type_variables pc
+  in
+  assert (ntvs <= cls);
+  let cls = cls - ntvs in
   let idx =
     try Class_table.induction_law cls ct
     with Not_found -> assert false
   in
   let p =
-    let t0 = Term.lambda_inner goal idx in
+    let t0 = Term.lambda_inner goal ivar in
     let ptp = predicate_of_type tp pc in
     Lam (1, anon_argnames 1, [], t0, true, ptp) in
   let sub = [|p; Variable ivar|] in
-  (*let sub = Term_sub.add 0 p (Term_sub.add 1 (Variable ivar) Term_sub.empty) in*)
-  let ags = assert false in (* nyi *)
   specialized idx sub ags 0 pc
 
 
@@ -1735,7 +1755,7 @@ let add_proved_0
   assert (not defer || anchor <> 0);
   let cnt = count pc
   and ct = class_table pc
-  and ft = feature_table pc in
+  in
   Proof_table.add_proved t pterm delta pc.base;
   let idx = raw_add t true pc in
   let dup = idx < cnt

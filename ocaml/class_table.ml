@@ -259,6 +259,16 @@ let combine_type_term (cls_idx:int) (args: type_term array): type_term =
     Variable cls_idx
 
 
+
+let domain_type (tp:type_term): type_term =
+  (* [tp] is either a function type [A->B] or a predicate type {A}. The domain
+     type is in both cases A.
+   *)
+  let _,ags = split_type_term tp in
+  assert (0 < Array.length ags);
+  ags.(0)
+
+
 let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
   let n = Array.length args in
   assert (n > 0);

@@ -336,6 +336,8 @@ module TVars_sub: sig
   val anchor:       int -> t -> int
 
   val subs: t -> (int*term*term) list
+
+  val update_from_inner: t -> t -> unit
 end = struct
 
   type t = {vars: Tvars.t;
@@ -474,24 +476,6 @@ end = struct
       else
         assert ((get i tv) = (Term.down_from ndown nloc (get_star i tvnew)))
     done
-    (*assert (count tv <= count tvnew);
-    assert (count_local tv = count_local tvnew);
-    assert (count_global tv = 0);
-    assert ((count_fgs tv) = (count_fgs tvnew));
-    let nloc  = count_local tv
-    and ndown = (count_global tvnew) - (count_global tv)
-    in
-    for i=0 to nloc-1 do
-      if Term_sub_arr.has i tvnew.sub &&
-        not (Term_sub_arr.has i tv.sub)
-      then
-        Term_sub_arr.add_new
-          i
-          (Term.down_from ndown nloc (get_star i tvnew))
-          tv.sub
-      else
-        assert ((get i tv) = (Term.down_from ndown nloc (get_star i tvnew)))
-    done*)
 
 
   let sub_star (t:type_term) (s:t): term =
@@ -501,6 +485,31 @@ end = struct
     Term_sub_arr.get_star i s.sub
 
   let subs (s:t): (int*term*term) list = Term_sub_arr.subs s.sub
+
+  let update_from_inner (s_inner:t) (s:t): unit =
+    (* Update the substitutions of local type variables from an inner context to
+       its outer context *)
+    assert (count_fgs s = count_fgs s_inner);
+    assert (count_global s  = 0);
+    assert (count_global s_inner = 0);
+    let ndiff = count_local s_inner - count_local s in
+    assert (0 <= ndiff);
+    interval_iter
+      (fun i ->
+        if has (i + ndiff) s_inner then
+          let tp =
+            try
+              Term.down ndiff (get (i + ndiff) s_inner)
+            with Term_capture ->
+              assert false
+          in
+          if has i s then
+            assert (get i s = tp)
+          else
+            add_sub i tp s
+      )
+      0
+      (count_local s)
 
 end (* TVars_sub *)
 

@@ -64,7 +64,9 @@ class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
       spec <- sp
     method set_seed (s:int) (ags:agens):unit =
       sd <- s;
-      subst <- ags
+      subst <- ags;
+      if sd = eq_index then
+        is_eq <- true
     method add_variant (cls:int) (idx:int): unit =
       assert (not (IntMap.mem cls vars));
       vars <- IntMap.add cls idx vars
@@ -72,8 +74,6 @@ class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
       is_inh <- true
     method set_exported: unit =
       is_exp <- true
-    method set_equality: unit =
-      is_eq <- true
     method add_assertion (i:int): unit =
       inv_ass <- IntSet.add i inv_ass
   end
@@ -155,6 +155,12 @@ let tvars (i:int) (ft:t): Tvars.t =
 let signature (i:int) (ft:t): Tvars.t * Sign.t =
   let desc = descriptor i ft in
   desc.tvs, desc.sign
+
+
+let argument_types (i:int) (ags:agens) (ntvs:int) (ft:t): types =
+  let tvs,s = signature i ft in
+  let tps = Sign.arguments s in
+  Term.subst_array tps ntvs ags
 
 
 let result_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
@@ -285,13 +291,12 @@ let inductive_arguments (i:int) (ft:t): int list =
 
 
 
-let feature_call(i:int) (nb:int) (args:term array) (ft:t): term =
+let feature_call(i:int) (nb:int) (args:arguments) (ags:agens) (ft:t): term =
   (* Construct the term [f(a,b,...)] for the feature [i] for an environment
      with [nb] variables.*)
-  assert false
-  (*let len = Array.length args in
+  let len = Array.length args in
   assert (arity i ft = len);
-  VAppl (i+nb,args)*)
+  VAppl (i+nb, args, ags)
 
 
 let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
@@ -501,8 +506,9 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
   in
   if nargs <= 1 then
       t
-  else
+  else begin
     untup0 t 0
+  end
 
 
 (*
@@ -583,108 +589,157 @@ let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
   Array.of_list (List.rev lst)
 
 
+let ith_tuple_element
+     (i:int) (n:int) (t:term) (tup_tp:type_term) (nvars:int) (ft:t)
+    : term =
+  (* The [i]th of [n] tuple elements of term [t] which has the tuple type
+     [tup_tp] and comes from an enviroment with [nvars] variables.
+
+     Example: Tuple elements of a 4-tuple:
+
+          0: t.first
+          1: t.second.first
+          2: t.second.second.first
+          3: t.second.second.second
+
+          i + 1 < n:  i times second + first
+          i + 1 = n:  i times second
+   *)
+  let first_id  = nvars + first_index
+  and second_id = nvars + second_index
+  in
+  let elem (i:int) (tp:type_term): term =
+    let split_tup (tp:type_term): agens =
+      let _,ags = Class_table.split_type_term tp in
+      assert (Array.length ags = 2);
+      ags
+    in
+    let rec seconds (m:int) (t:term) (tp:type_term): term * type_term =
+      assert (0 <= m);
+      if m = 0 then
+        t, tp
+      else
+        let ags = split_tup tp in
+        let t = VAppl (second_id, [|t|], ags) in
+        seconds (m - 1) t ags.(1)
+    in
+    if i + 1 < n then
+      let t, tp = seconds i t tup_tp in
+      let ags = split_tup tp in
+      VAppl (first_id, [|t|], ags)
+    else if i + 1 = n then
+      let t,_ = seconds i t tup_tp in
+      t
+    else
+      assert false (* cannot happen *)
+  in
+  elem i tup_tp
 
 
-let args_of_tuple_ext (t:term) (nbenv:int) (nargs:int) (ft:t): term array =
-  (* The tuple (a,b,...) transformed into an argument array [a,b,...].
-     If the tuple [t] is only an n-tuple and [m] arguments are needed with
-     [n < m] the last tuple element [l] is used to generated the missing
+let args_of_tuple_ext
+    (t:term) (tp:type_term) (nvars:int) (nargs:int) (ft:t)
+    : term array =
+  (* The tuple (a,b,...,z) transformed into an argument array [a,b,...].
+     If the tuple [t] is only an n-tuple and [nargs] arguments are needed with
+     [n < nargs] the last tuple element [z] is used to generated the missing
      elements as
 
-         l.first,  l.second.first, l.second...first, l.second...second
+         z.first,  z.second.first, z.second...first, z.second...second
    *)
   assert (0 < nargs);
-  let first_id  = nbenv + first_index
-  and second_id = nbenv + second_index
-  and tuple_id  = nbenv + tuple_index
+  let first_id  = nvars + first_index
+  and second_id = nvars + second_index
+  and tuple_id  = nvars + tuple_index
   in
-  let rec untup (t:term) (n:int) (lst:term list): int * term list =
+  let rec untup
+      (t:term) (tp:type_term) (n:int) (lst:term list)
+      : int * term list * type_term =
     assert (n < nargs);
     if n + 1 = nargs then
-      n + 1, t::lst
+      n + 1, t::lst, tp
     else
       match t with
-        VAppl(i,args,_) when i = tuple_id ->
+        VAppl(i,args,ags) when i = tuple_id ->
           assert (Array.length args = 2);
-          untup args.(1) (n+1) (args.(0)::lst)
+          assert (Array.length ags  = 2);
+          untup args.(1) ags.(1) (n+1) (args.(0)::lst)
       | _ ->
-          n + 1, t::lst
+          n + 1, t::lst, tp
   in
-  let rec argument (i:int) (n:int) (t:term): term =
-    assert (0 <= i);
-    assert (i < n);
-    assert (2 <= n);
-    assert false
-    (*if i = 0 then
-      VAppl (first_id, [|t|])
-    else if i = 1 && n = 2 then
-      VAppl (second_id, [|t|])
-    else
-      let t = VAppl(second_id, [|t|]) in
-      argument (i-1) (n-1) t*)
+  let n, lst_rev, tp_last = untup t tp 0 []
   in
-  let n, lst = untup t 0 [] in
-  let lst =
+  let lst_rev =
     if n < nargs then begin
-      match lst with
+      match lst_rev with
         [] ->
           assert false
-      | h::tail ->
+      | last::tail ->
           let delta = nargs - n + 1 in
-          let rec add_args_from i lst =
+          let rec add_args_from i lst_rev =
             if i = delta then
-              lst
+              lst_rev
             else
-              add_args_from (i + 1) ((argument i delta h) :: lst)
+              add_args_from
+                (i + 1)
+                ((ith_tuple_element i delta last tp_last nvars ft) :: lst_rev)
           in
           add_args_from 0 tail
     end else
-      lst
+      lst_rev
   in
-  assert (List.length lst = nargs);
-  Array.of_list (List.rev lst)
+  assert (List.length lst_rev = nargs);
+  Array.of_list (List.rev lst_rev)
 
 
 
-
-let tuple_of_args (args:term array) (nbenv:int) (ft:t): term =
-  (* The arguments [a,b,...] transformed to a tuple (a,b,...).
+let tuple_of_args
+    (args:arguments) (tup_tp:type_term) (nb:int) (ft:t)
+    : term =
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...) or the type [tup_tp].
    *)
-  assert false
-  (*let tup_id    = nbenv + tuple_index
-  and nargs     = Array.length args in
-  assert (0 < nargs);
-  let rec to_tup (i:int) (t:term): term =
-    if i = 0 then
-      t
-    else
-      let i = i - 1 in
-      let t = VAppl(tup_id, [|args.(i);t|]) in
-      to_tup i t
+  let nargs = Array.length args
+  and tup_id = nb + tuple_index
   in
-  let i = nargs - 1 in
-  let t = args.(i) in
-  let res = to_tup i t in
-  assert (args = args_of_tuple_ext res nbenv nargs ft);
-  assert (args = args_of_tuple res nbenv ft);
-  res*)
+  assert (0 < nargs);
+  let rec tup_from (i:int) (tup_tp:type_term): term =
+    if i = nargs - 1 then
+      args.(i)
+    else begin
+      assert (i + 2 <= nargs);
+      let _,ags = Class_table.split_type_term tup_tp in
+      assert (Array.length ags = 2);
+      let b = tup_from (i + 1) ags.(1) in
+      VAppl (tup_id, [| args.(i); b |], ags)
+    end
+  in
+  tup_from 0 tup_tp
 
 
 
 
-let add_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
-  (* Convert the inner term [t] which has [nargs] arguments to a term with one
-     argument expecting an [nargs] tuple.
+
+
+
+
+let add_tuple_accessors
+    (t:term) (nargs:int) (tup_tp:type_term) (nbenv:int) (ft:t)
+    : term =
+  (* Convert the inner term [t] which has [nargs] arguments below [nbenv] variables
+     to a term with one argument expecting an [nargs] tuple.
 
      nargs = 4
      args: [0.first, 0.second.first, 0.second.second.first, 0.second.second.second]
    *)
+  let res =
   if nargs <= 1 then
     t
   else
-    let args = args_of_tuple_ext (Variable 0) (nbenv+1) nargs ft in
+    let args =
+      args_of_tuple_ext (Variable 0) tup_tp (nbenv+1) nargs ft in
     Term.subst t 1 args
-
+  in
+  assert (remove_tuple_accessors res nargs nbenv ft = t);
+  res
 
 
 let make_lambda
@@ -693,7 +748,9 @@ let make_lambda
     : term =
   assert (0 < n);
   assert (Array.length nms = 0 || Array.length nms = n);
-  let add_tup t = add_tuple_accessors t n nbenv ft in
+  let tup_tp = Class_table.domain_type tp in
+  let add_tup t = add_tuple_accessors t n tup_tp nbenv ft
+  in
   let t0 = add_tup t
   and pres0 = List.map add_tup pres in
   Lam(n,nms,pres0,t0,pr,tp)
@@ -707,23 +764,46 @@ let make_application
     if Array.length args = 1 then
       args
     else
-      [|tuple_of_args args nbenv ft|]
+      assert false (* nyi *)
+      (*[|tuple_of_args args nbenv ft|]*)
   in
   Application (f, args, pred)
 
 
 
-let beta_reduce (n:int) (tlam: term) (args:term array) (nbenv:int) (ft:t): term =
+let beta_reduce
+    (n:int) (tlam: term) (tp:type_term) (args:term array) (nbenv:int) (ft:t)
+    : term =
   (* Beta reduce the expression ((x,y,...)->tlam)(args). The expression comes from
      an environment with [nbenv] variables. The expression is normalized i.e. fully
      tupelized i.e. it has one argument which is an [n] tuple.
+
+     [tp] is the type of the lambda term.
    *)
   assert (0 < Array.length args);
   assert (Array.length args <= n);
   assert (Array.length args = 1);
-  let t0   = remove_tuple_accessors tlam n nbenv ft in
-  let args = args_of_tuple_ext args.(0) nbenv n ft in
+  let t0   = remove_tuple_accessors tlam n nbenv ft
+  and tup_tp = Class_table.domain_type tp
+  in
+  let args = args_of_tuple_ext args.(0) tup_tp nbenv n ft in
   Term.apply t0 args
+
+
+
+
+let fake_tuple_type (n:int): type_term =
+  assert (1 <= n);
+  let rec tup i tp =
+    if i = 0 then
+      tp
+    else
+      let tp = VAppl (-1, [|empty_term; tp|], [||]) in
+      tup (i - 1) tp
+  in
+  tup (n - 1) empty_term
+
+
 
 
 let term_to_string
@@ -844,7 +924,8 @@ let term_to_string
               "(" ^ (operator_to_rawstring op) ^ ")"
               ^ (to_string args.(0) names nanonused tvs false (Some (op,false)))
             else
-              let args = args_of_tuple_ext args.(0) nnames 2 ft in
+              let tup_tp = fake_tuple_type nnames in
+              let args = args_of_tuple_ext args.(0) tup_tp nnames 2 ft in
               (to_string args.(0) names nanonused tvs false (Some (op,true)))
               ^ " " ^ (operator_to_rawstring op) ^ " "
               ^ (to_string args.(1) names nanonused tvs false (Some (op,false)))
@@ -1059,36 +1140,6 @@ let seed (i:int) (ft:t): int =
 
 
 
-let normalize_lambdas (t:term) (nb:int) (ft:t): term =
-  let rec norm t nb =
-    let norm_args args nb = Array.map (fun a -> norm a nb) args
-    in
-    match t with
-      Variable i ->
-        t
-    | VAppl (i,args,ags) ->
-        let args = norm_args args nb in
-        if i = in_index + nb then begin
-          assert (Array.length args = 2);
-          Application(args.(1), [|args.(0)|],true)
-        end else
-          VAppl (i, args, ags)
-    | Application (f,args,pr) ->
-        let f    = norm f nb
-        and args = norm_args args nb in
-        make_application f args pr nb ft
-    | Lam (n,nms,pres,t,pr,tp) ->
-        let pres = List.map (fun p -> norm p (n+nb)) pres
-        and t = norm t (n+nb) in
-        make_lambda n nms pres t pr nb tp ft
-    | QExp (n,tps,fgs,t,is_all) ->
-        QExp (n, tps, fgs, norm t (n+nb), is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, norm_args args nb)
-    | Indset (nme,tp,rs) ->
-        Indset (nme,tp,norm_args rs (1+nb))
-  in
-  norm t nb
 
 
 let variant (i:int) (cls:int) (ft:t): int =
@@ -2457,101 +2508,6 @@ let is_equality (t:term) (nbenv:int) (ft:t): bool =
   try
     let _ = split_equality t nbenv ft in true
   with Not_found -> false
-
-
-
-let update_equality (seed:int) (bdesc:bdesc) (ft:t): unit =
-  (* If the feature [seed] is the equality feature of ANY then mark the base
-     descriptor [bdesc] as equality. *)
-  if seed = eq_index then
-    bdesc#set_equality
-
-
-
-let inherit_feature
-    (i0:int) (ags:agens) (i1:int)
-    (cls:int) (export:bool) (ft:t): unit =
-  (* Inherit the feature [i0] as the feature [i1] in the class [cls], i.e. add
-     [i1] as a variant to the seed of [i0] and make the seed of [i0] to the
-     seed of [i1]. Furthermore [i1] is no longer its own seed and cannot be
-     found via the feature map.
-
-     [ags] are the actual generics to substitute the formal generics of [i0]
-     *)
-  assert (not export || is_interface_check ft);
-  assert (i0 < count ft);
-  assert (i1 < count ft);
-  assert (i0 <> i1);
-  assert (cls = (descriptor i1 ft).cls);
-  let bdesc0 = base_descriptor i0 ft
-  and bdesc1 = base_descriptor i1 ft
-  in
-  (* add variant to seed and seed to variant*)
-  bdesc1#set_inherited;
-  let bdesc_seed = base_descriptor bdesc0#seed ft in
-  assert (not (bdesc_seed#has_variant cls) ||
-          bdesc_seed#variant cls = i1);
-  bdesc_seed#add_variant cls i1;
-  let sd0  = bdesc0#seed
-  and ags0 = bdesc0#ags  (* actual generics to substitute the formal generics
-                            of the seed of [i0] into the type environment of [i0]
-                          *)
-  and d = count_fgs i1 ft in
-  let ags_sd0_i1 = Term.subst_array ags0 d ags in
-  bdesc1#set_seed sd0 ags_sd0_i1;
-  update_equality bdesc0#seed bdesc1 ft;
-  assert (has_variant bdesc0#seed cls ft);
-  let fn  = (descriptor i1 ft).fname in
-  let tab = Feature_map.find fn ft.map in
-  tab := Term_table.remove i1 !tab
-
-
-
-
-
-
-let inherit_new_effective (i:int) (cls:int) (ghost:bool) (ft:t): int =
-  (* Inherit the feature [i] in the descendant class [cls] as a new feature. I.e.
-     the descendant class [cls] does not yet have a variant candidate of the feature
-     [i].
-   *)
-  let desc = descriptor i ft in
-  let ctp0,tvs = Class_table.class_type cls ft.ct
-  and anchor  = anchor i ft in
-  assert (anchor <> -1);
-  assert (Tvars.count_fgs desc.tvs = 1);
-  let f_tp (tp:type_term): type_term =
-    Term.subst tp (Tvars.count_all tvs) [|ctp0|] in
-  let cnt = count ft
-  and nfgs  = Tvars.count_all tvs
-  in
-  let spec = variant_spec i cnt desc.cls cls ft in
-  let bdesc = new bdesc cnt nfgs cls spec
-  and sign = Sign.map f_tp desc.sign
-  in
-  let sign = if ghost then Sign.to_ghost sign else sign in
-  let anchor_fg, anchor_cls = Sign.anchor tvs sign in
-  Seq.push
-    {mdl       = Class_table.current_module ft.ct;
-     fname     = desc.fname;
-     cls       = cls;
-     anchor_cls = anchor_cls;
-     anchor_fg  = anchor_fg;
-     impl      = desc.impl;
-     tvs       = tvs;
-     anchored  = Array.make 1 anchor (*(anchor+ntvs)*);
-     argnames  = desc.argnames;
-     sign      = sign;
-     tp        = f_tp desc.tp;
-     bdesc     = bdesc
-   } ft.seq;
-  add_class_feature cnt ft;
-  let ags = assert false in
-  inherit_feature i ags cnt cls false ft;
-  if ft.verbosity > 1 then
-    printf "  new feature inherited %d %s\n" cnt (string_of_signature cnt ft);
-  cnt
-
 
 
 

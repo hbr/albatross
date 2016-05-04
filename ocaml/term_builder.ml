@@ -32,7 +32,6 @@ type t = {
     mutable nglobals: int;
     mutable nfgs:     int;
     mutable rtype:    type_term;
-    mutable norm:     bool;
     mutable level:    int;
     terms:            term_rec Seq.t;
     funstack:         fun_rec  Seq.t;
@@ -68,6 +67,13 @@ let context (tb:t): Context.t =
 
 let class_table (tb:t): Class_table.t =
   Context.class_table (context tb)
+
+let feature_table (tb:t): Feature_table.t =
+  Context.feature_table (context tb)
+
+let count_variables (tb:t): int =
+  Context.count_variables (context tb)
+
 
 let locals_start   (tb:t): int = Tvars.count_local tb.tvs - tb.nlocals
 let globals_start  (tb:t): int = Tvars.count_local tb.tvs
@@ -111,6 +117,8 @@ let can_add_globals (n:int) (tb:t): bool =
   Tvars.count_all tb.tvs
 
 
+
+let in_index (tb:t): int = count_variables tb + Feature_table.in_index
 
 let boolean_index   (tb:t): int = Tvars.count_all tb.tvs + Class_table.boolean_index
 let any_index       (tb:t): int = Tvars.count_all tb.tvs + Class_table.any_index
@@ -156,7 +164,7 @@ let expected_arity (tb:t): int =
 let tvars (tb:t): Tvars.t = tb.tvs
 
 let string_of_term (t:term) (tb:t): string =
-  Context.string_of_term0 t tb.norm false 0 (context tb)
+  Context.string_of_term0 t true false 0 (context tb)
 
 
 
@@ -278,7 +286,6 @@ let make () =
     nglobals  =  0;
     nfgs      =  0;
     level     =  0;
-    norm      =  false;
     subs      =  Array.init (maxlocals+maxglobals) (fun i -> Variable i);
     terms     =  Seq.empty ();
     funstack  =  Seq.empty ();
@@ -300,7 +307,6 @@ let clone (tb:t): t =
     nglobals =  tb.nglobals;
     nfgs     =  tb.nfgs;
     level    =  tb.level;
-    norm     =  tb.norm;
     subs     =  Array.copy tb.subs;
     terms    =  Seq.copy tb.terms;
     funstack =  Seq.copy tb.funstack;
@@ -353,7 +359,6 @@ let reset (tb:t): unit =
   remove_global tb.nglobals tb;
   remove_fg     tb.nfgs tb;
   tb.level <- 0;
-  tb.norm  <- false;
   Seq.keep 0 tb.terms;
   Seq.keep 0 tb.funstack;
   Seq.keep 0 tb.constack;
@@ -964,24 +969,35 @@ let expect_argument (tb:t): unit =
   tb.rtype <- Sign.arg_type argi s
 
 
+
+
 let complete_function (tb:t): unit =
   resize 0 0 0 tb;
   let funrec = Seq.pop_last tb.funstack in
   let frec = Seq.elem funrec.pos tb.terms
-  and args = Array.init funrec.nargs
-      (fun i -> (Seq.elem (funrec.pos + 1 + i) tb.terms).term) in
+  and args =
+    Array.init
+      funrec.nargs
+      (fun i -> (Seq.elem (funrec.pos + 1 + i) tb.terms).term)
+  in
   Seq.pop (1 + funrec.nargs) tb.terms;
   let term =
     if Sign.is_constant frec.sign0 then
+      let ft  = feature_table tb in
       let rt = substituted_type (Sign.result frec.sign0) tb in
-      let cls,_ = Class_table.split_type_term rt in
+      let cls,ags = Class_table.split_type_term rt in
       let pr = (cls = predicate_index tb) in
-      Application(frec.term, args, pr)
+      let arg =
+        Feature_table.tuple_of_args args ags.(0) (count_variables tb) ft in
+      Application(frec.term, [|arg|], pr)
     else begin
       match frec.term with
         VAppl(i,args0,ags) ->
           assert (Array.length args0 = 0);
-          VAppl (i,args,ags)
+          if i = in_index tb then
+            Application (args.(1), [|args.(0)|], true)
+          else
+            VAppl (i,args,ags)
       | _ ->
           assert false
     end
@@ -993,9 +1009,14 @@ let complete_function (tb:t): unit =
   push_term term s0 tb
 
 
+
+
 let expect_if (tb:t): unit =
   if tb.trace then printf "  expect if\n";
   tb.level <- tb.level + 1
+
+
+
 
 let complete_if (has_else:bool) (tb:t): unit =
   resize 0 0 0 tb;
@@ -1148,17 +1169,35 @@ let expect_lambda (is_pred:bool) (c:Context.t) (tb:t): unit =
 let complete_lambda (n:int) (nms:int array) (npres:int) (is_pred:bool) (tb:t)
     : unit =
   (* stack: ... t0 p0 p1 p2 ...
+
+     - Unstack the term [t0] and the preconditions [p0,p1,...]
+
+     - Add tuple accessors to the term and the preconditions i.e. change the
+       local variables (a,b,c) to (x.first, x.second.first, x.second.second).
+
+     - Push Lam (n, nms, pres, t0, is_pred, tp) onto the term stack.
    *)
   resize 0 0 0 tb;
   let pos_t0 = Seq.count tb.terms - npres - 1 in
   assert (0 <= pos_t0);
-  let term i = (Seq.elem i tb.terms).term in
-  let t0 = term pos_t0
+  let term i = (Seq.elem i tb.terms).term
+  in
+  let ft = feature_table tb
+  and nbenv = count_variables tb
+  and t0 = term pos_t0
   and pres =
     let pos_last = pos_t0 + npres  in
     interval_fold (fun lst i -> term (pos_last-i) :: lst)
-      [] 0 npres in
+      [] 0 npres
+  in
   let tp  = Seq.pop_last tb.lamstack in
+  let tup_tp = Class_table.domain_type tp in
+  let add_tup_acc t =
+    Feature_table.add_tuple_accessors t n tup_tp (nbenv-n) ft
+  in
+  let t0 = add_tup_acc t0
+  and pres = List.map add_tup_acc pres
+  in
   let lam = Lam (n,nms,pres,t0,is_pred,tp) in
   Seq.keep pos_t0 tb.terms;
   pop_context tb;
@@ -1399,9 +1438,6 @@ let normalized_result (tb:t): term =
   assert (Seq.count tb.terms = 1);
   let res = term_in_context tb in
   let c = context tb in
-  let ft = Context.feature_table c
-  and nb = Context.count_variables c in
-  let res = Feature_table.normalize_lambdas res nb ft in
   let res = Context.specialized res c in
   let res = Context.prenex_term res c in
   if tb.trace then begin
@@ -1414,167 +1450,6 @@ let normalized_result (tb:t): term =
 
 exception Illegal_term
 
-let check_term (t:term) (tb:t): unit =
-  assert false
-  (*let rec check (t:term) (tb:t): unit =
-    let c0 = context tb in
-    let lambda n nms pres t is_pred tb =
-      assert (0 < n);
-      assert (Array.length nms = n);
-      let nms0 = if n > 1 then [|ST.symbol "$0"|] else nms in
-      let ntvs_gap = count_local tb - Context.count_type_variables c0
-      and is_func = not is_pred in
-      let c = Context.push_untyped_with_gap nms0 is_pred is_func false ntvs_gap c0
-      in
-      expect_lambda is_pred c tb;
-      check t tb;
-      let rec check_pres (pres:term list) (npres:int) (tb:t): int =
-        match pres with
-          [] -> npres
-        | p::pres ->
-            expect_boolean_expression tb;
-            check p tb;
-            check_pres pres (npres+1) tb
-      in
-      let npres = check_pres pres 0 tb in
-      begin try
-        complete_lambda n nms npres is_pred tb
-      with Not_found -> assert false
-      end
-    and qlambda n nms t is_all tb =
-      assert (0 < n);
-      assert (Array.length nms = n);
-      let ntvs_gap = count_local tb - Context.count_type_variables c0 in
-      let c = Context.push_untyped_with_gap nms false false false ntvs_gap c0 in
-      expect_quantified c tb;
-      check t tb;
-      begin try
-        complete_quantified is_all tb
-      with Not_found ->
-        assert false
-      end
-    and add_lf i =
-      let tvs,s = Context.variable_data i c0 in
-      begin
-        try add_leaf i tvs s tb
-        with Not_found ->
-          let ct = Context.class_table c0 in
-          printf "illegal term \"%s\" \"%s\" %s%s\n"
-            (string_of_term t tb) (Term.to_string t)
-            (string_of_tvs tb) (string_of_substitutions tb);
-          printf "  type     %s\n"
-            (Class_table.string_of_complete_signature s tvs ct);
-          printf "  expected %s\n" (string_of_type tb.rtype tb);
-          raise Illegal_term
-      end
-    in
-    match t with
-      Variable i ->
-        add_lf i
-    | VAppl(i,args) ->
-        let nargs = Array.length args in
-        if nargs = 0 then
-          add_lf i
-        else begin
-          expect_function nargs (-1) tb;
-          add_lf i;
-          Array.iter (fun a -> expect_argument tb; check a tb) args;
-          complete_function tb
-        end
-    | Application (f,args,pr) ->
-        let nargs = Array.length args
-        and pr    = if pr then 1 else 0 in
-        assert (nargs = 1);
-        expect_function nargs pr tb;
-        check f tb;
-        expect_argument tb;
-        check args.(0) tb;
-        complete_function tb
-    | Lam(n,nms,pres,t0,is_pred) ->
-        assert (0 < n);
-        assert (n = Array.length nms);
-        lambda n nms pres t0 is_pred tb
-    | QExp(n,nms,t0,is_all) ->
-        assert (n = Array.length nms);
-        qlambda n nms t0 is_all tb
-    | Flow (ctrl,args) ->
-        let len = Array.length args in
-        begin
-          match ctrl with
-            Ifexp ->
-              assert (2 <= len);
-              assert (len <= 3);
-              expect_if tb;
-              push_expected tb;
-              expect_boolean_expression tb;
-              check args.(0) tb;
-              get_expected 0 tb;
-              check args.(1) tb;
-              let has_else =
-                if len = 3 then begin
-                  get_expected 0 tb;
-                  check args.(2) tb;
-                  true
-                end else false in
-              complete_if has_else tb;
-              drop_expected tb
-          | Inspect ->
-              assert (3 <= len);
-              assert (len mod 2 = 1);
-              let ncases = len / 2 in
-              let rec do_cases_from (i:int) (tb:t): unit =
-                if i = ncases then
-                  ()
-                else
-                  let n, nms, pat,res = Term.case_split args.(2*i+1) args.(2*i+2)
-                  and ntvs_gap = count_local tb - Context.count_type_variables c0
-                  in
-                  let c1 = Context.push_untyped_gap nms ntvs_gap c0 in
-                  expect_case c1 tb;
-                  get_expected 0 tb;
-                  check pat tb;
-                  get_expected 1 tb;
-                  check res tb;
-                  complete_case tb;
-                  do_cases_from (i+1) tb
-              in
-              expect_inspect tb;
-              push_expected tb;
-              expect_new_untyped tb;
-              push_expected tb;
-              check args.(0) tb;
-              do_cases_from 0 tb;
-              complete_inspect ncases tb;
-              drop_expected tb;
-              drop_expected tb
-          | Asexp ->
-              expect_boolean tb;
-              expect_as tb;
-              push_expected tb;
-              expect_new_untyped tb;
-              push_expected tb;
-              check args.(0) tb;
-              let n, nms, pat = Term.pattern_split args.(1)
-              and ntvs_gap = count_local tb - Context.count_type_variables c0 in
-              let c1 = Context.push_untyped_gap nms ntvs_gap c0 in
-              expect_case c1 tb;
-              get_expected 0 tb;
-              check pat tb;
-              complete_as tb;
-              drop_expected tb;
-              drop_expected tb
-        end
-    | Indset (n,nms,rs) ->
-        let ntvs_gap = count_local tb - Context.count_type_variables c0 in
-        let c = Context.push_untyped_with_gap nms false false false ntvs_gap c0 in
-        expect_inductive c tb;
-        Array.iter (fun r -> expect_boolean_expression tb; check r tb) rs;
-        complete_inductive UNKNOWN (Array.length rs) tb
-  in
-  let depth = Context.depth (context tb) in
-  check t tb;
-  assert (depth = Context.depth (context tb))
-*)
 
 
 let pool = ref []
@@ -1615,14 +1490,6 @@ let occupy_typed (tp:type_term) (c:Context.t): t =
   tb
 
 
-let occupy_term (t:term) (c:Context.t): t =
-  assert false
-  (*let tb = occupy c in
-  tb.norm <- true;
-  expect_new_untyped tb;
-  check_term t tb;
-  tb*)
-
 
 let release (tb:t): unit =
   reset tb;
@@ -1656,42 +1523,3 @@ let update_context (tb:t): unit =
     Context.update_types subs c
   with Term_capture ->
     not_yet_implemented (Context.info c) "Type inference of formal generics"
-
-
-let specialize (t:term) (c:Context.t): term =
-  let tb = occupy_untyped c in
-  tb.norm <- true;
-  if tb.trace then begin
-    printf "specialize \"%s\" \"%s\"\n" (string_of_term t tb) (Term.to_string t);
-    printf "  %s\n" (string_of_tvs tb);
-    printf "  %s\n" (string_of_substitutions tb)
-  end;
-  let t0 = Feature_table.seeded_term t
-      (Context.count_variables c) (Context.feature_table c) in
-  check_term t0 tb;
-  specialize_head tb;
-  let t1 = head_term tb in
-  if not (Term.equivalent t t1) then begin
-    printf "t   %s  %s\n" (string_of_term t tb) (Term.to_string t);
-    printf "t1  %s  %s\n" (string_of_term t1 tb)
-      (Term.to_string t1)
-  end;
-  assert (Term.equivalent t t1);
-  release tb;
-  t1
-
-
-
-
-let is_valid (t:term) (c:Context.t): bool =
-  try
-    let tb = occupy_untyped c in
-    tb.norm <- true;
-    if tb.trace then begin
-      printf "check term \"%s\" \"%s\"\n" (string_of_term t tb) (Term.to_string t);
-    end;
-    check_term t tb;
-    true
-  with Not_found ->
-    printf "invalid term %s\n" (Context.string_of_term t c);
-    false
