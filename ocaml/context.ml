@@ -222,7 +222,8 @@ let local_argnames (c:t): int array = entry_local_argnames c.entry
 let local_types (c:t): term array = entry_local_types c.entry
 
 let local_formals (c:t): formals =
-  entry_local_argnames c.entry, entry_local_types c.entry
+  entry_local_argnames c.entry,
+  entry_local_types c.entry
 
 let local_fgs (c:t): formals =
   let tvs = TVars_sub.tvars c.entry.tvs_sub in
@@ -1119,7 +1120,7 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
       assert (rtp = boolean c1);
       trace_tp (boolean c)
   | Indset (nme,tp,rs) ->
-      assert false
+      tp
   | Flow (ctrl,args) ->
       let len = Array.length args in
       match ctrl with
@@ -1438,21 +1439,22 @@ let term_preconditions (t:term)  (c:t): term list =
           )
           lst0
           lst
-    | Indset (n,nms,rs) ->
-        assert false
-        (*let lst =
+    | Indset (nme,tp,rs) ->
+        let c = push_typed ([|nme|],[|tp|]) empty_formals c in
+        let lst =
           Array.fold_left
             (fun lst r ->
-              let lst_r = pres r (n+nb) [] in (* reversed *)
-              let lst_r = List.rev_map
+              let lst_r = pres r [] c in (* reversed *)
+              let lst_r =
+                List.rev_map
                   (fun p ->
-                    try Term.down n p
+                    try Term.down 1 p
                     with Term_capture -> assert false)
                   lst_r in
               List.rev_append lst_r lst)
             lst
             rs in
-        lst*)
+        lst
     | Flow (ctrl,args) ->
         let len = Array.length args in
         begin

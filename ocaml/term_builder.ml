@@ -1268,25 +1268,28 @@ let expect_inductive (c:Context.t) (tb:t): unit =
 
 
 let complete_inductive (info:info) (nrules:int) (tb:t): unit =
-  assert false
-  (*let start = Seq.count tb.terms - nrules in
+  let start = Seq.count tb.terms - nrules in
   assert (0 <= start);
   let c = context tb in
   let rs = Array.init nrules (fun i -> (Seq.elem (start+i) tb.terms).term) in
   let n = Context.count_last_arguments c
   and nms = Context.local_argnames c in
   assert (n = 1);  (* nyi: multiple inductive sets *)
-  let s =
+  let tp =
     let tvs,s     = Context.variable_data 0 c in
     let transform = transform_from_context tvs tb in
-    Sign.make_const (transform (Sign.result s))
-  and set = Indset (n,nms,rs) in
+    transform (Sign.result s)
+  in
+  let set = Indset (nms.(0),tp,rs)
+  and s   = Sign.make_const tp in
   Seq.keep start tb.terms;
   pop_context tb;
   if tb.trace then
     printf "  set  \"%s\"  %s\n" (string_of_term set tb)
       (string_of_complete_signature s tb);
-  push_term set s tb*)
+  push_term set s tb
+
+
 
 (*
 let variant (idx:int) (gcnt:int) (nb:int) (tb:t): int =
@@ -1426,7 +1429,7 @@ let term_in_context (tb:t): term =
         and t0  = term t0 in
         QExp (n,(nms,tps),fgs,t0,is_all)
     | Indset (nme,tp,rs) ->
-        assert false
+        Indset(nme,tpe tp, targs rs)
     | Flow (ctrl,args) ->
         Flow (ctrl, targs args)
   in

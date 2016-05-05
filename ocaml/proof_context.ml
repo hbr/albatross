@@ -1230,7 +1230,7 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
     let idx = raw_add indlaw false pc in
     let rd  = rule_data idx pc in
     let args = [|q;elem|]
-    and ags  = assert false (* nyi *) in
+    and ags  = [||]  (* is not generic *) in
     let rd  = RD.specialize rd args ags idx (context pc) in
     assert (RD.is_specialized rd);
     let t   = RD.term rd in
@@ -1246,11 +1246,11 @@ let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
       assert pr;
       assert (Array.length args = 1);
       begin try
-        let rs =
+        let nme,tp,rs =
           let indset = inductive_set set pc in
           match indset with
             Indset(nme,tp,rs) ->
-              rs
+              nme,tp,rs
           | _ -> assert false in
         let len = Array.length rs in
         for i = 0 to len-1 do

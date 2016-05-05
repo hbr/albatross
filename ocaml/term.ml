@@ -184,11 +184,11 @@ module Term: sig
   val split_implication_chain: term -> int -> term list * term
   val make_implication_chain:  term list -> term -> int -> term
 
-  val split_rule: term -> int -> int * formals * formals * term list * term
+  val split_rule: term -> int -> int * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
   val induction_rule: int -> int -> term -> term -> term
-    -> int * formals * formals * term list * term
+    -> int * formals * term list * term
   val induction_law:  int -> term -> term -> type_term -> type_term -> term
   val prenex: term -> int -> int -> int -> term
 
@@ -219,7 +219,7 @@ end = struct
             let presstr = String.concat ";" (List.map to_string pres) in
             "(agent(" ^ argsstr ^ ") require " ^
             presstr ^
-            " ensure Result = " ^ (to_string t) ^ " end)"
+            " ensure -> " ^ (to_string t) ^ " end)"
     in
     match t with
       Variable i -> string_of_int i
@@ -563,22 +563,24 @@ end = struct
       : term =
     (* Shift all free variables by [delta1] starting from [start1] and all
        free type variables by [delta2] starting from [start2]. Raise
-       [Term_capture] if a free variable gets bound. *)
+       [Term_capture] if a free variable gets bound.
+     *)
     if delta1 = 0 && delta2 = 0 then
       t
     else
-      let shift_i  d s i =
-        if i < s then i
-        else if i+d < s then
+      let shift_i delta start i =
+        if i < start then
+          i
+        else if i + delta < start then
           raise Term_capture
         else
-          i+d
+          i + delta
       and shift_args d1 s1 d2 s2 args =
         if d1=0 && d2 = 0 then args
         else Array.map (fun t -> shift_from d1 s1 d2 s2 t) args
       and shift_list d1 s1 d2 s2 lst =
         if d1=0 && d2 = 0 then lst
-        else List.map (fun t -> shift_from d1 s2 d2 s2 t) lst in
+        else List.map (fun t -> shift_from d1 s1 d2 s2 t) lst in
       match t with
         Variable i ->
           Variable (shift_i delta1 start1 i)
@@ -635,6 +637,17 @@ end = struct
   let up (n:int) (t:term): term =
     shift_from n 0 0 0 t
 
+  let array_up (n:int) (arr:term array): term array =
+    if n = 0 then
+      arr
+    else
+      Array.map (fun t -> up n t) arr
+
+  let down_from (n:int) (start:int) (t:term): term =
+    shift_from (-n) start 0 0 t
+
+  let down (n:int) (t:term): term =
+    shift_from (-n) 0 0 0 t
 
   let rec partial_subst_from
       (t:term)
@@ -847,14 +860,20 @@ end = struct
     (* Extract a lambda inner term where variable [i] becomes variable [0], all
        other variables are shifted one up.
      *)
-    let f j = if j=i then 0 else j+1 in
+    let f j =
+      if j=i then
+        0
+      else
+        j+1
+    in
     map_free f t 0
 
 
   let  lambda_inner_map (t:term) (map:int IntMap.t): term =
     (* Extract a lambda inner term where [map] maps i,j,k,... to the range
-       0,1,...,n-1. The variables from the map become the variables
-       0,1,...,n-1  and all other variables are shiftet up by [n]. *)
+       0,1,...,n-1 where [n] is the cardinality of [map]. The variables from
+       the map become the variables 0,1,...,n-1 and all other variables are
+       shiftet up by [n]. *)
     let n = IntMap.cardinal map in
     let f j =
       try
@@ -892,40 +911,6 @@ end = struct
 
     in
     mapr 0 t
-
-
-
-  let down_from (n:int) (start:int) (t:term): term =
-    (* Shift all free variables of [t] above [start] down by [n]. In case that
-       free variables get captured raise 'Term_capture' *)
-    if n = 0 then
-      t
-    else
-      map
-        (fun j nb ->
-          if j < nb+start then
-            j
-          else if n <= j-nb-start then
-            j - n
-          else
-            raise Term_capture
-        )
-        t
-
-
-
-  let down (n:int) (t:term): term =
-    (* Shift all free variables of 't' down by 'n', require that there
-       are no free variables 0,1,...,n-1, otherwise raise [Term_capture].
-     *)
-    down_from n 0 t
-
-
-
-
-  let array_up (n:int) (arr:term array): term array =
-    if n = 0 then arr
-    else Array.map (fun t -> up n t) arr
 
 (*
   let part_sub_from
@@ -1325,13 +1310,14 @@ end = struct
 
 
   let split_rule (t:term) (imp_id:int)
-      : int * formals * formals * term list * term =
+      : int * formals * term list * term =
     let n,fargs,fgs,t0,is_all = qlambda_split_0 t in
+    assert (fgs = empty_formals);
     if n>0 && not is_all then
-      0, empty_formals, empty_formals, [], t
+      0, empty_formals, [], t
     else
       let ps_rev, tgt = split_implication_chain t0 (n+imp_id) in
-      n,fargs,fgs,ps_rev,tgt
+      n,fargs,ps_rev,tgt
 
 
   let rec make_implication_chain
@@ -1433,8 +1419,7 @@ end = struct
         0, empty_formals, empty_formals,
         Flow(ctrl, norm_args args nb nb2)
     | Indset (nme,tp,rs) ->
-        let tp = assert false
-        and rs = norm_args rs (1+nb) nb2 in
+        let rs = norm_args rs (1+nb) nb2 in
         0, empty_formals, empty_formals , Indset (nme,tp,rs)
 
 
@@ -1456,8 +1441,9 @@ end = struct
 
 
   let induction_rule (imp_id:int) (i:int) (p:term) (pr:term) (q:term)
-      : int * formals * formals * term list * term =
+      : int * formals * term list * term =
     (* Calculate the induction rule [i] for the inductively defined set [p]
+       represented by [pr].
 
        The closure rule [i] is
 
@@ -1476,7 +1462,7 @@ end = struct
            where for a degenerate premise ei we get 'ei ==>' instead of
            'p(ei) ==> q(ei) ==>'
 
-       The function returs the formal arguments names, the list of premises and the
+       The function returs the formal arguments, the list of premises and the
        target.
      *)
     let pair (n:int) (t:term): term * term =
@@ -1492,11 +1478,10 @@ end = struct
           raise Not_found
     in
     match p with
-      Indset (n,nms,rs) ->
-        assert (n = 1);
+      Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         assert (i < nrules);
-        let n,fargs,fgs,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
+        let n,fargs,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
         let last,tgt = try pair n tgt with Not_found -> assert false in
         let ps = List.fold_left
             (fun ps t ->
@@ -1509,14 +1494,15 @@ end = struct
             [last]
             ps_rev
         in
-        n,fargs,fgs,ps,tgt
+        n,fargs,ps,tgt
     | _ ->
         invalid_arg "Not an inductive set"
 
 
 
   let induction_law
-      (imp_id:int) (p:term) (pr:term) (el_tp:type_term) (set_tp:type_term): term =
+      (imp_id:int) (p:term) (pr:term) (el_tp:type_term) (set_tp:type_term)
+      : term =
     (* Calculate the induction law for the inductively defined set [p] represented
        by [pr]
 
@@ -1533,13 +1519,12 @@ end = struct
      *)
     let imp_id, p, pr = imp_id + 2, up 2 p, up 2 pr in (* space for a and q *)
     match p with
-      Indset (n,nms,rs) ->
-        assert (n = 1);
+      Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         let rule i =
-          let n,fargs,fgs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
+          let n,fargs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
-          all_quantified n fargs fgs chn in
+          all_quantified n fargs empty_formals chn in
         let pa = Application (pr,[|Variable 1|],true)
         and qa = Application (Variable 0, [|Variable 1|],true) in
         let tgt = binary imp_id pa qa in

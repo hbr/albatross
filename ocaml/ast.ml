@@ -213,6 +213,202 @@ let beta_reduced (t:term) (pc:PC.t): term =
   | _ ->
       t
 
+type inductive_set_data =
+    {pc:    PC.t;
+     goal:  term;
+     goal_predicate: term; (* [element in goal_predicate] reduces to [goal] *)
+     element: term;
+     set:     term;        (* as written in the inpect expression *)
+     set_expanded: term;   (* the inductive set '{(p): r0, r1, ... }' *)
+     rules:  term array;   (* the rules *)
+     induction_rule: int;  (* index of the assertion of the induction rule *)
+     element_in_set: int   (* assertion which proves [element in set] *)
+   }
+
+
+let analyze_inductive_set
+    (info: info)
+    (p_nme: int)
+    (elem: expression)
+    (set:  expression)
+    (ens:  info_expression)
+    (pc:PC.t)
+    : inductive_set_data =
+  (* Analyzes the outer part of an inductive set proof.
+
+        ensure
+            ens
+        inspect
+            p(elem):  set
+        ...
+
+     Introduces an inner context for the varialbe [p] and returns all terms
+     within this context.
+   *)
+  assert (not (PC.is_global pc));
+  let pc0   = PC.push_untyped [|p_nme|] pc in
+  let c0    = PC.context pc0 in
+  let nvars = Context.count_variables c0 in
+  let bexp  = Typer.boolean_term (withinfo info (Funapp (Expparen set,elem))) c0
+  and goal  = Typer.boolean_term ens c0 in
+  verify_preconditions bexp info pc0;
+  ignore (Typer.boolean_term (* with that [p] gets a type *)
+            (withinfo info
+               (Binexp(Eqop,(Identifier p_nme),set))) c0
+         );
+   let elem,set1 =
+    match bexp with
+      Application (f,[|elem|],_) ->
+        elem, f
+    | _ ->
+        assert false (* cannot happen *) in
+  let q =
+    let tp = Context.variable_type 0 c0 in
+    let np = Context.arity_of_downgraded_type tp c0 in
+    let nms = anon_argnames np in
+    let t0 =
+      let ft = Context.feature_table c0 in
+      let tup_tp = Context.type_of_term elem c0
+      and args   = Feature_table.args_of_tuple elem nvars ft in
+      let args = Array.map
+          (fun arg ->
+            match arg with
+              Variable i when 1 <= i && i < nvars ->
+                i
+            | _ ->
+                error_info info ("\"" ^ (PC.string_of_term arg pc0) ^
+                                 "\" is not a variable")
+          )
+          args
+      in
+      if np <> Array.length args then
+        error_info info ("Must be " ^ (string_of_int np) ^ " arguments");
+      let t0 =
+        let _,map =
+          Array.fold_left
+            (fun (j,map) i ->
+              assert (i < nvars);
+              j+1, IntMap.add i j map
+            )
+            (0,IntMap.empty)
+            args
+        in
+        Term.lambda_inner_map goal map
+      in
+      Feature_table.add_tuple_accessors t0 np tup_tp nvars ft
+    in
+    assert (np = Array.length nms);
+    let q = Lam (np, nms, [], t0, true,tp) in
+    verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
+    PC.close pc0;
+    q
+  in
+  let set2 =
+    try Context.inductive_set set1 c0
+    with Not_found ->
+      error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
+                       "\" does not evaluate to an inductive set") in
+  begin match set2 with
+    Indset (nme,tp,rs) ->
+      let pa = Application(set1,[|elem|],true) in
+      let pa_idx =
+        try PC.find pa pc0
+        with Not_found ->
+          error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
+                           "\" is not in the inductive set") in
+      let rs = Array.map (fun t -> Term.down_from 1 1 t) rs in
+      let ind_idx = PC.add_set_induction_law set1 q elem pc0 in
+      if PC.is_tracing pc0 then begin
+        let prefix = PC.trace_prefix pc0 in
+        printf "\n\n";
+        printf "%sProof with inductively defined set\n\n" prefix;
+        printf "%sensure\n" prefix;
+        printf "%s    %s\n" prefix (PC.string_long_of_term goal pc0);
+        printf "%sinspect\n" prefix;
+        printf "%s    %s(%s): %s\n\n"
+          prefix
+          (ST.string p_nme)
+          (PC.string_of_term elem pc0)
+          (PC.string_long_of_term set1 pc0)
+      end;
+      {pc             = pc0;
+       goal           = goal;
+       goal_predicate = q;
+       set            = set1;
+       set_expanded   = set2;
+       element        = elem;
+       rules          = rs;
+       induction_rule = ind_idx;
+       element_in_set = pa_idx;
+     }
+  | _ ->
+      error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
+                       "\" does not evaluate to an inductive set")
+  end
+
+
+type inductive_set_case_data =
+    {pc:    PC.t;
+     goal:  term;
+     premises: term list;
+   }
+
+
+
+let analyze_inductive_set_case
+    (case_exp: info_expression)
+    (data: inductive_set_data)
+    : int * term * term list * term * PC.t =
+  (* Analyze the case expression of an inductive set proof.
+
+         case
+            all(x,y,..) e0 ==> e1 ==> ... ==> (x,y,...) in p
+         require
+            p0; p1; ...
+         ensure
+            target
+
+     - Analyze case expression and find the appropriate rule of the inductive
+       set.
+     - Push the variables of the case expression into a new context.
+     - Compute the case specific induction hypotheses and the goal in the
+       new context.
+
+     Return the index of the rule and the rule in the outer context and
+     the induction hypotheses and the goal in the new context.
+   *)
+  let c = PC.context data.pc in
+  let rule = Typer.boolean_term case_exp c in
+  let irule =
+    try
+      interval_find
+        (fun i -> Term.equivalent data.rules.(i) rule)
+        0
+        (Array.length data.rules)
+    with Not_found ->
+      error_info case_exp.i "Invalid case"
+  in
+  let pc1 =
+    let n, args, fgs, t0 =
+      try
+        Term.all_quantifier_split rule
+      with Not_found ->
+        0, empty_formals, empty_formals, rule
+    in
+    assert (fgs = empty_formals);
+    PC.push_typed args fgs data.pc
+  in
+  let imp_id = PC.count_variables data.pc + Feature_table.implication_index in
+  let _,_,ps,tgt =
+    Term.induction_rule
+      imp_id
+      irule
+      data.set_expanded
+      data.set
+      data.goal_predicate
+  in
+  irule, rule, ps, tgt, pc1
+
 
 let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
   let psstr = String.concat "\n"
@@ -347,8 +543,8 @@ and prove_check_expression (i:int) (ie:info_expression) (pc:PC.t): unit =
       begin match e with
         Identifier id ->
           prove_inductive_type (i+1) ie.i id lst ens pc
-      | Expcolon (Funapp(Identifier p_id,elem),set) ->
-          prove_inductive_set (i+1) ie.i p_id elem set lst ens pc
+      | Expcolon (Funapp(Identifier p_nme,elem),set) ->
+          prove_inductive_set (i+1) ie.i p_nme elem set lst ens pc
       | _ ->
           error_info ie.i "Illegal inspect proof"
       end
@@ -441,145 +637,82 @@ and prove_if
   prove thenlist 0 pc
 
 
+and prove_inductive_set_case
+    (rcnt:int) (* recursion counter *)
+    (info:info)
+    (rule:term)                   (* in the outer context *)
+    (ps: term list) (tgt: term)   (* in the inner context *)
+    (cmp: compound)
+    (pc1:PC.t)                    (* inner context *)
+    (pc0:PC.t)                    (* outer context *)
+    : int =
+  if PC.is_tracing pc1 then begin
+    let prefix = PC.trace_prefix pc0 in
+    printf "\n\n%scase\n" prefix;
+    printf "%s    %s\n" prefix (PC.string_long_of_term rule pc0);
+    printf "%srequire\n" prefix;
+    List.iter
+      (fun t -> printf "%s    %s\n" prefix (PC.string_long_of_term t pc1))
+      ps;
+    printf"%sensure\n" prefix;
+    printf"%s    %s\n\n" prefix (PC.string_long_of_term tgt pc1);
+  end;
+  List.iter (fun t -> ignore (PC.add_assumption t pc1)) ps;
+  PC.close pc1;
+  List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
+  let gidx =
+    try Prover.prove_and_insert tgt pc1
+    with Proof.Proof_failed msg ->
+      let errstr = error_string_case (List.rev ps) tgt pc1 in
+      error_info info ("Cannot prove case \"" ^
+                       (PC.string_of_term rule pc0) ^ "\"" ^ msg ^ errstr)
+  in
+  let t,pt = PC.discharged gidx pc1 in
+  PC.add_proved_term t pt false pc0
+
+
+
 
 and prove_inductive_set
     (rcnt:int) (* recursion counter *)
     (info:info) (p_id:int) (elem:expression) (set:expression)  (* p(a): exp *)
-    (lst:(info_expression*compound)list)
+    (case_lst:(info_expression*compound)list)
     (ens:info_expression)
     (pc:PC.t)
     : unit =
+  (* Execute a proof with an inductive set:
+
+         ensure
+             ens
+         inspect
+             p(elem): set      -- 'elem in set' must be valid
+
+         case         -- List of zero of more cases, each case represents a
+             ...      -- rule for 'p(elem)' to be valid
+         proof
+             ...
+
+         ...
+         end
+   *)
   assert (not (PC.is_global pc));
-  let pc0   = assert false (*PC.push_untyped [|p_id|] pc*) in
-  let c0    = PC.context pc0 in
-  let nvars = Context.count_variables c0 in
-  let elem, p, prep, pa_idx, ind_idx, rules, goal, q =
-    let bexp = get_boolean_term (withinfo info (Funapp (Expparen set,elem))) pc0
-    and goal = Typer.boolean_term ens c0 in
-    verify_preconditions bexp info pc0;
-    ignore (get_boolean_term
-              (withinfo info (Binexp(Eqop,(Identifier p_id),set))) pc0);
-    let elem,set1 =
-      match bexp with
-        Application (f,[|elem|],_) ->
-          elem, f
-      | _ ->
-          assert false (* cannot happen *) in
-    let q =
-      let tp = Context.variable_type 0 c0 in
-      let np = Context.arity_of_downgraded_type tp c0 in
-      let nms = anon_argnames np in
-      let t0 =
-        let ft = Context.feature_table c0 in
-        let args =
-          assert false
-          (*Feature_table.args_of_tuple elem nvars ft*)
-        in
-        let args = Array.map
-            (fun arg ->
-              match arg with
-                Variable i when 1 <= i && i < nvars -> i
-              | _ ->
-                  error_info info ("\"" ^ (PC.string_of_term arg pc0) ^
-                                   "\" is not a variable")) args in
-        if np <> Array.length args then
-          error_info info ("Must be " ^ (string_of_int np) ^ " arguments");
-        let t0 =
-          let _,map =
-            Array.fold_left
-              (fun (j,map) i ->
-                assert (i < nvars);
-                j+1, IntMap.add i j map)
-              (0,IntMap.empty) args in
-          Term.lambda_inner_map goal map in
-        assert false
-        (*Feature_table.add_tuple_accessors t0 np nvars ft*)
-      in
-      assert (np = Array.length nms);
-      let q = Lam (np, nms, [], t0, true,tp) in
-      verify_preconditions (Application(q,[|elem|],true)) ens.i pc0;
-      PC.close pc0;
-      q
-    in
-    let set2 =
-      try Context.inductive_set set1 c0
-      with Not_found ->
-        error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
-                         "\" does not evaluate to an inductive set") in
-    begin match set2 with
-      Indset (n,nms,rs) ->
-        assert (n = 1);
-        let pa = Application(set1,[|elem|],true) in
-        let pa_idx =
-          try PC.find pa pc0
-          with Not_found ->
-            error_info info ("\"" ^ (PC.string_of_term elem pc0) ^
-                             "\" is not in the inductive set") in
-        let rs = Array.map (fun t -> Term.down_from 1 1 t) rs in
-        let ind_idx = PC.add_set_induction_law set1 q elem pc0 in
-        elem,set2,set1,pa_idx,ind_idx,rs,goal,q
-    | _ ->
-        error_info info ("\"" ^ (PC.string_of_term set1 pc0) ^
-                         "\" does not evaluate to an inductive set")
-    end
+  let data = analyze_inductive_set info p_id elem set ens pc
   in
-  let prove_case
-      (info:info) (rule:term) (ps:term list) (tgt:term) (cmp:compound)
-      (pc1:PC.t) (pc0:PC.t)
-      : int =
-    List.iter (fun t -> ignore (PC.add_assumption t pc1)) ps;
-    PC.close pc1;
-    List.iter (fun ie -> prove_check_expression rcnt ie pc1) cmp;
-    let gidx =
-      try Prover.prove_and_insert tgt pc1
-      with Proof.Proof_failed msg ->
-        let errstr = error_string_case (List.rev ps) tgt pc1 in
-        error_info info ("Cannot prove case \"" ^
-                         (PC.string_of_term rule pc0) ^ "\"" ^ msg ^ errstr)
-    in
-    let t,pt = PC.discharged gidx pc1 in
-    PC.add_proved_term t pt false pc0
+  let nvars  = PC.count_variables data.pc
+  and nrules = Array.length data.rules
   in
-  let nrules = Array.length rules
-  and imp_id = nvars + Feature_table.implication_index in
+  let imp_id = nvars + Feature_table.implication_index in
   let proved =
     List.fold_left
       (fun proved (ie,cmp) ->
-        let pc1,rule =
-          match ie.v with
-            Expquantified(Universal,entlst,e) ->
-              PC.push entlst None false false false pc0, e
-          | _ ->
-              assert false
-              (*PC.push_untyped [||] pc0, ie.v*) in
-        let c1  = PC.context pc1 in
-        let n    = Context.count_last_arguments c1
-        and fargs = Context.local_formals c1
-        and fgs   = Context.local_fgs c1 in
-        let rule0 = Typer.boolean_term (withinfo ie.i rule) c1 in
-        let rule  = Term.all_quantified n fargs fgs rule0 in
-        let irule =
-          let rule =
-            Context.prenex_term rule c1 in
-          try
-            interval_find (fun i -> Term.equivalent rules.(i) rule) 0 nrules
-          with Not_found ->
-            error_info ie.i "Invalid case"
+        let irule, rule, ps,tgt,pc1 =
+          analyze_inductive_set_case ie data in
+        let idx =
+          prove_inductive_set_case rcnt ie.i rule ps tgt cmp pc1 data.pc
         in
-        let ps,tgt =
-          let n1,fargs1,fgs1,ps,tgt = Term.induction_rule imp_id irule p prep q in
-          assert (n1 = n); (* The variables might be permuted *)
-          let args =
-            let usd = Array.of_list (List.rev (Term.used_variables rule0 n)) in
-            assert (Array.length usd = n);
-            Array.map (fun i -> Variable i) usd in
-          let sub t = Term.subst t n args in
-          List.map sub ps, sub tgt
-        in
-        let idx = prove_case ie.i rule ps tgt cmp pc1 pc0 in
         IntMap.add irule idx proved)
       IntMap.empty
-      lst
+      case_lst
   in
   let ind_idx =
     interval_fold
@@ -588,16 +721,22 @@ and prove_inductive_set
           try
             IntMap.find irule proved
           with Not_found ->
-            let n,(nms,tps),fgs,ps,tgt = Term.induction_rule imp_id irule p prep q in
-            let nms = Context.unique_names nms c0 in
-            let pc1 = PC.push_typed (nms,tps) fgs pc0 in
-
-            let pc1 = assert false (*PC.push_untyped nms pc0 "push_typed !!!" *) in
-            prove_case ens.i rules.(irule) ps tgt [] pc1 pc0 in
-        PC.add_mp rule_idx ind_idx false pc0
-      ) ind_idx 0 nrules in
-  let gidx = PC.add_mp pa_idx ind_idx false pc0 in
-  let t,pt = PC.discharged gidx pc0 in
+            let n,(nms,tps),ps,tgt =
+              Term.induction_rule
+                imp_id
+                irule
+                data.set_expanded
+                data.set
+                data.goal_predicate in
+            let nms = Context.unique_names nms (PC.context data.pc) in
+            let pc1 = PC.push_typed (nms,tps) empty_formals data.pc in
+            prove_inductive_set_case
+              rcnt ens.i data.rules.(irule) ps tgt [] pc1 data.pc
+        in
+        PC.add_mp rule_idx ind_idx false data.pc
+      ) data.induction_rule 0 nrules in
+  let gidx = PC.add_mp data.element_in_set ind_idx false data.pc in
+  let t,pt = PC.discharged gidx data.pc in
   ignore(PC.add_proved_term t pt true pc);
   PC.close pc
 

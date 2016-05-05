@@ -42,6 +42,7 @@ val push_untyped_with_gap: int array -> bool -> bool -> bool -> int -> t -> t
 val push_untyped_gap: int array -> int -> t -> t
 val push_untyped:     int array -> t -> t
 val push_typed:       formals -> formals -> t -> t
+val previous: t -> t
 val pop:   t -> t
 
 val is_global:   t -> bool

@@ -111,7 +111,7 @@ all(a,b:A, r:(A,A)?)
         all(a,b) require (r.reflexive)(a,b)
                  proof   inspect s(a,b): r.reflexive
                          ensure  (r.reflexive)(a,a) end
-                         
+
                          inspect s(a,b): r.reflexive
                          ensure  (r.reflexive)(b,b) end
                  ensure  (r.reflexive)(a,a)
@@ -214,7 +214,7 @@ relation and 's' is the corresponding closure:
         .      .
         v      v
         b ---> d
-        
+
 This requires one induction proof. In the second step we prove the desired
 property with another induction proof.
 
@@ -287,7 +287,7 @@ all(a,b,c:A, r:(A,A)?)
     end
 
 
-all(a,c:A, r:(A,A)?)
+all(a,b,c:A, r:(A,A)?)
     require
         r in diamond
         (r.reflexive)(a,c)
@@ -329,8 +329,8 @@ all(a,c:A, r:(A,A)?)
                    ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
         end
     ensure
-        all(b) (r.reflexive)(a,b)
-               ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
+        (r.reflexive)(a,b)
+        ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
     end
 
 
@@ -354,16 +354,21 @@ all(r:(A,A)?)
 :}
 
 
-all(a,b:A, r:(A,A)?)
+all(a,b,c:A, r:(A,A)?)
          -- Intermediate lemma for the transitive closure.
     require
         r in diamond
         (+r)(a,b)
     proof
-        inspect s(a,b): +r
-        case all(a,b) r(a,b) ==> s(a,b) proof
+        inspect
+            s(a,b): +r
+        case
+            all(a,b) r(a,b) ==> s(a,b)
+        proof
             r <= +r
-        case all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c) proof
+
+        case
+            all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c)
             {:      a ----> d           --->        r
                     .       .           ...>       +r
                     .       .
@@ -373,6 +378,7 @@ all(a,b:A, r:(A,A)?)
                     v       v
                     c ----> f
             :}
+        proof
             all(d) r(a,d) ==> some(e) r(b,e) and (+r)(d,e)  -- ind. hypo
             all(d)
             require r(a,d)
@@ -390,11 +396,11 @@ all(a,b:A, r:(A,A)?)
             all(c) r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
         end
     ensure
-        all(c) r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
+        r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
     end
 
 
-all(a,c:A, r:(A,A)?)
+all(a,b,c:A, r:(A,A)?)
     require
         r in diamond
         (+r)(a,c)
@@ -432,7 +438,7 @@ all(a,c:A, r:(A,A)?)
             all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
         end
     ensure
-        all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
+        (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
     end
 
 all(r:(A,A)?) ensure r in diamond ==> +r in diamond end

@@ -948,7 +948,7 @@ let term_to_string
           [] -> "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
         | _ -> "agent (" ^ argsstr ^ ") require " ^
             presstr ^
-            " ensure Result = " ^ tstr ^ " end"
+            " ensure -> " ^ tstr ^ " end"
     and if2str (args:term array): string =
       let len = Array.length args in
       assert(2 <= len); assert (len <= 3);
@@ -1059,8 +1059,8 @@ let term_to_string
           end
       | Indset (nme,tp,rs) ->
           let n,nms = 1, [|nme|] in
-          let argsstr = args2str n nms in
           let nms = adapt_names nms names in
+          let argsstr = args2str n nms in
           let nanonused, nms = local_names n nms in
           let names = Array.append nms names in
           let rsstrs =
@@ -1410,7 +1410,6 @@ let definition_term (i:int) (ft:t): term =
   Feature.Spec.definition_term (base_descriptor i ft)#specification
 
 
-
 let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
     : int * int array * term =
   (* The definition term of the feature [i-nb] transformed into an environment with
@@ -1428,9 +1427,13 @@ let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
 
 (* Really necessary?? *)
 let expanded_definition
-    (i:int) (nb:int) (args:arguments) (ags:agens) (tvs:Tvars.t) (ft:t): term =
+    (i:int) (nb:int) (args:arguments) (ags:agens) (tvs:Tvars.t) (ft:t)
+    : term =
   (* The definition of the feature [i-nb] expanded with the arguments [args]
-     and the actual generics [ags] which come from the type context [tvs]. *)
+     and the actual generics [ags] which come from the type context [tvs].
+
+     The term to be expanded is [VAppl(i, args, ags)].
+   *)
   assert (nb <= i);
   assert (i  <= nb + count ft);
   let idx = i - nb in

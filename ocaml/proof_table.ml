@@ -781,13 +781,14 @@ let function_property (idx:int) (i:int) (args:term array) (at:t): term =
 
 
 let set_induction_law (t:term) (at:t): term =
-  assert false (* nyi *)
-  (*let p =
+  let p =
     try
       Context.inductive_set t at.c
     with Not_found ->
       raise Illegal_proof_term in
-  Term.induction_law (imp_id at) p t*)
+  let set_tp = Context.type_of_term p at.c in
+  let elem_tp = Class_table.domain_type set_tp in
+  Term.induction_law (imp_id at) p t elem_tp set_tp
 
 
 let type_induction_law (cls:int) (at:t): term =

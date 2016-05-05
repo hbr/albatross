@@ -593,22 +593,21 @@ let case_variables
 
 
 let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
-  assert false
-  (*let nargs = Context.count_last_arguments c
+  let nargs = Context.count_last_arguments c
   and nvars = Context.count_variables c in
   assert (nargs = 1); (* nyi: multiple inductive sets *)
   let imp_id = nvars + Feature_table.implication_index in
   let ind_set_name () = ST.string (Context.variable_name 0 c)
   in
   let check_rule (r:term): unit =
-    let n,nms,ps_rev,tgt = Term.split_rule r imp_id in
+    let n,(nms,tps),ps_rev,tgt = Term.split_rule r imp_id in
     let check_element (t:term): bool =
       let check_inner t =
         try ignore(Term.down_from nargs n t)
         with Term_capture ->
           error_info info ("Variable \"" ^ (ind_set_name ()) ^
                            "\" only at the top allowed in rule\n  \"" ^
-                           (Context.string_of_term r true 0 c) ^ "\"")
+                           (Context.string_long_of_term r c) ^ "\"")
       in
       match t with
         Application(Variable i,args,pr)
@@ -623,10 +622,10 @@ let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
     if not (check_element tgt) then
       error_info info ("The target must contain \"" ^ (ind_set_name ()) ^
                        "\" at the top in rule \n  \"" ^
-                       (Context.string_of_term r true 0 c) ^ "\"")
+                       (Context.string_of_term r c) ^ "\"")
   in
   Array.iter check_rule rs
-*)
+
 
 
 
@@ -682,10 +681,9 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
               check_match mtch c*)
         end
     | Indset (nme,tp,rs) ->
-        assert false
-        (*let c = Context.push_untyped nms c in
+        let c = Context.push_typed ([|nme|],[|tp|]) empty_formals c in
         validate_inductive_set info rs c;
-        val_args rs c*)
+        val_args rs c
   in
   validate t c
 
