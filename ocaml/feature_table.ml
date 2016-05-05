@@ -1152,7 +1152,6 @@ let variant (i:int) (cls:int) (ft:t): int =
 
 
 
-
 let has_variant (i:int) (cls:int) (ft:t): bool =
   try
     ignore(variant i cls ft);
@@ -1212,7 +1211,6 @@ let variant_generics
      of the form [VAppl(idx,_,ags)] where [ags] come from a type environment
      with [ntvs] type variables. The routine calculates the actual generics of
      the call of the variant feature [VAppl(idx_var,_,ags_var)].  *)
-
   let tvs_var,s_var = signature idx_var ft in
   let nfgs_var      = Tvars.count_fgs tvs_var in
   if nfgs_var = 0 then
@@ -1759,7 +1757,7 @@ let rec fully_expanded (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
     : term =
   (* Expand the functions in the term [t] which comes from an environment with
      [nb] variables and whose types are valid in the type environment [tvs].
-     *)
+   *)
   let expand t nb = fully_expanded t nb tvs ft in
   let expargs args nb = Array.map (fun t -> expand t nb) args
   and explst  lst  nb = List.map  (fun t -> expand t nb) lst
@@ -1801,6 +1799,17 @@ and expanded_feature
   with Not_found ->
     VAppl(i,args,ags)
 
+
+
+
+let complexity (t:term) (nb:int) (tvs:Tvars.t) (ft:t): int =
+  (* The complexity of the term [t] coming from and environment with [nvars]
+     variables and the type context [tvs].
+
+     The complexity of a term is the node count of the fully expanded term.
+   *)
+  let t = fully_expanded t nb tvs ft in
+  Term.nodes t
 
 
 

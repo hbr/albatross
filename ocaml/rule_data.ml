@@ -200,11 +200,6 @@ let string_of_term (rd:t): string =
 
 
 
-let complexity (t:term) (nb:int) (c:Context.t): int =
-  let t_exp = Context.fully_expanded t nb c in
-  Term.nodes t_exp
-
-
 let is_backward_blocked
     (ps:(int*bool*term)list) (tgt:term) (nargs:int) (c:Context.t): bool =
   if nargs = 0 then
@@ -215,14 +210,20 @@ let is_backward_blocked
     false
 
 
+
 let forward_blocked
-    (ps_rev:(int*bool*term)list) (tgt:term) (nb:int) (c:Context.t):
+    (ps_rev:(int*bool*term)list)
+    (tgt:term)
+    (nb:int)
+    (tvs:Tvars.t)
+    (ft:Feature_table.t)
+    :
     (int*bool*term)list * bool =
-  let ntgt = complexity tgt nb c in
+  let ntgt = Feature_table.complexity tgt nb tvs ft in
   let ps,max_nds =
     List.fold_left
       (fun (ps,max_nds) (gp1,cons,p) ->
-        let nds  = complexity p nb c in
+        let nds  = Feature_table.complexity p nb tvs ft in
         let cons = nds <= ntgt in
         let nds  = max nds max_nds in
         let ps   = (gp1,cons,p)::ps in
@@ -231,7 +232,6 @@ let forward_blocked
       ps_rev
   in
   ps, max_nds <= ntgt
-
 
 
 let split_term (t:term) (nargs:int) (nbenv:int): (int*bool*term) list * term =
@@ -277,7 +277,14 @@ let make (t:term) (c:Context.t): t =
   let fwd_blckd =
     if nargs = 0 || nbwd > 0 then false
     else
-      let _,fwd_blckd = forward_blocked (List.rev ps) tgt nargs c in
+      let ft = Context.feature_table c in
+      let tvs =
+        if Context.is_global c then
+          Tvars.make_fgs fgnms fgcon
+        else
+          Context.tvars c
+      and nb = nargs + nbenv in
+      let _,fwd_blckd = forward_blocked (List.rev ps) tgt nb tvs ft in
       fwd_blckd in
   let eq =
     if ps = [] then
@@ -542,7 +549,11 @@ let specialize
   in
   let ps,fwd_blckd =
     if full then
-      forward_blocked ps_rev tgt 0 c
+      let tvs = Context.tvars c
+      and nb  = Context.count_variables c
+      and ft  = Context.feature_table c
+      in
+      forward_blocked ps_rev tgt nb tvs ft
     else
       List.rev ps_rev, false
   in
