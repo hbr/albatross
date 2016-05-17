@@ -91,9 +91,10 @@ val count_variables:  t -> int
 val ntvs: t -> int
 
 val implication_index: t -> int
+val is_equality_index: int -> t -> bool
 
 val make_lambda:
-    int -> int array -> term list -> term -> bool -> int -> t -> term
+    int -> int array -> term list -> term -> bool -> int -> type_term -> t -> term
 val make_application: term -> term array -> int -> bool -> t -> term
 val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 
@@ -135,8 +136,12 @@ val type_variables: t -> TVars_sub.t
 val boolean: t -> term
 
 val type_of_term: term -> t -> type_term
+val tuple_of_types: types -> t -> type_term
+val tuple_of_terms: arguments -> t -> type_term
 val predicate_of_type: type_term -> t -> type_term
 val predicate_of_term: term -> t -> type_term
+val function_of_types: types -> type_term -> t -> type_term
+val function_of_terms: arguments -> term -> t -> type_term
 
 val update_types: type_term array -> t -> unit
 

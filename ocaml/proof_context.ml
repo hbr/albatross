@@ -714,10 +714,13 @@ let beta_reduce
   Proof_table.beta_reduce n t tp args nb pc.base
 
 
-let make_lambda (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool) (pc:t)
+let make_lambda
+    (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool)
+    (tp:type_term)
+    (pc:t)
     : term =
   let c = context pc in
-  Context.make_lambda n nms ps t pr 0 c
+  Context.make_lambda n nms ps t pr 0 tp c
 
 
 let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term =
@@ -812,7 +815,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             try
               let n,nms,t0 = definition i nb ags pc in
               if n > 0 && Array.length args = 0 then
-                let t0 = make_lambda n nms [] t0 false pc in
+                let tp = assert false in
+                let t0 = make_lambda n nms [] t0 false tp pc in
                 let res,rese,_ = eval t0 nb full depth in
                 res, Eval.Exp(i,ags,[||],rese), true
               else begin
@@ -1580,10 +1584,15 @@ let predicate_of_term (t:term) (pc:t): type_term =
 
 *)
 let prove_equality (g:term) (pc:t): int =
-  let nargs, eq_id, left, right = Context.split_equality g 0 (context pc) in
-  let eq_id = nbenv pc + eq_id in
-  if 0 < nargs then raise Not_found;
-  assert (nargs = 0);
+  let c = context pc in
+  let eq_id, left, right, ags =
+    match g with
+      VAppl (eq_id, [|left;right|], ags)
+      when Context.is_equality_index eq_id c ->
+        eq_id, left, right, ags
+    | _ ->
+        raise Not_found
+  in
   let imp_id = 1 + imp_id pc in
   let find_leibniz t1 t2 =
     (* find: all(p) p(t1) ==> p(t2) *)
@@ -1597,7 +1606,8 @@ let prove_equality (g:term) (pc:t): int =
   let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
-  let lam = make_lambda nargs [||] [] tlam false pc in
+  let tp = Context.function_of_terms args1 left c in
+  let lam = make_lambda nargs [||] [] tlam false tp pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
   let lam_1up = Term.up 1 lam
@@ -1613,12 +1623,14 @@ let prove_equality (g:term) (pc:t): int =
             else if j = i then Variable 0
             else args1_up1.(j)) in
       make_application lam_1up args 1 false pc in
-    let pred_inner i = Term.binary (eq_id+1) flhs_1up (frhs_x i)
+    let pred_inner i =
+      VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags)
+      (*Term.binary (eq_id+1) flhs_1up (frhs_x i)*)
     in
     let start_term =
-      Term.binary eq_id
-        (make_application lam args1 0 true pc)
-        (make_application lam args1 0 true pc) in
+      let t = make_application lam args1 0 false pc in
+      VAppl (eq_id, [|t;t|], ags)
+    in
     let start_idx  = find_match start_term pc in
     let result = ref start_idx in
     for i = 0 to nargs - 1 do
@@ -1632,10 +1644,8 @@ let prove_equality (g:term) (pc:t): int =
       let idx2 = eval_backward ai_abstracted imp
           (Eval.Beta (Eval.Term ai_abstracted)) pc in
       let idx = add_mp !result idx2 false pc in
-      let sub = [|pred_i|]
-      (*let sub = Term_sub.singleton 0 pred_i*)
-      and ags = assert false (* nyi *) in
-      let idx2 = specialized leibniz.(i) sub ags 0 pc in
+      let sub = [|pred_i|] in
+      let idx2 = specialized leibniz.(i) sub [||] 0 pc in
       let idx = add_mp idx idx2 false pc in
       let t = Term.apply pred_inner_i [|args2.(i)|]
       and e = Eval.Beta (Eval.Term (term idx pc)) in
@@ -1645,7 +1655,7 @@ let prove_equality (g:term) (pc:t): int =
     let e =
       let ev args =
         Eval.Beta (Eval.Term (make_application lam args 0 true pc)) in
-      assert false (*Eval.VApply(eq_id, [|ev args1; ev args2|])*)
+      Eval.VApply(eq_id, [|ev args1; ev args2|], ags)
     in
     result := add_fwd_evaluation g !result e false pc;
     !result

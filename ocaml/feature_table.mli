@@ -124,7 +124,7 @@ val is_interface_check:  t -> bool
 val is_interface_use:  t -> bool
    (** Are we using an interface? *)
 
-
+val is_equality_index: int -> t -> bool
 
 val split_equality: term -> int -> t -> int * int * term * term
     (** [split_equality t nbenv ft] returns the number of arguments, the

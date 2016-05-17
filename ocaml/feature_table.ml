@@ -2533,6 +2533,11 @@ let set_seed (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
 
 
 
+let is_equality_index (idx:int) (ft:t): bool =
+  (base_descriptor idx ft)#is_equality
+
+
+
 let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
   (* Return [nargs, eq_id, left, right] if the term is an equality. *)
   let nargs, t =

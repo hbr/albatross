@@ -305,10 +305,7 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
   let ags = [|ctp|] in
   let nall = Tvars.count_all tvs in
   let tps  = Array.map
-      (fun tp ->
-        let tvs0 = Tvars.make_fgs fgnms fgcon in
-        let res = Term.subst tp nall ags in
-        res)
+      (fun tp -> Term.subst tp nall ags)
       tps
   and fgnms, fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs in
   let t0 = Feature_table.substituted t0 n 0 0 [||] 0 ags tvs ft in
@@ -524,7 +521,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let t =
           if n <> argslen then begin
             assert (argslen = 0);
-            Context.make_lambda n nms [] t false nb (context at)
+            let tp = assert false in
+            Context.make_lambda n nms [] t false nb tp (context at)
           end else t in
         let ta,tb = reconstruct e nb
         and argsa,argsb = reconstr_args args in

@@ -178,6 +178,11 @@ let tuple_index (c:t): int =
   count_variables c + Feature_table.tuple_index
 
 
+
+let is_equality_index (i:int) (c:t): bool =
+  Feature_table.is_equality_index (i - count_variables c) c.ft
+
+
 let variable_name (i:int) (c:t): int =
   assert (i < count_variables c);
   fst c.entry.fargs.(i)
@@ -322,11 +327,12 @@ let string_of_ags (ags:agens) (c:t): string =
 
 
 let make_lambda
-    (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int) (c:t)
+    (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int)
+    (tp:type_term)
+    (c:t)
     : term =
   let nbenv = count_variables c in
-  assert false
-  (*Feature_table.make_lambda n nms ps t pred (nb+nbenv) c.ft*)
+  Feature_table.make_lambda n nms ps t pred (nb+nbenv) tp c.ft
 
 
 let make_application
@@ -699,6 +705,33 @@ let predicate_of_type (tp:type_term) (c:t): type_term =
 let predicate_of_term (t:term) (c:t): type_term =
   let tp = type_of_term t c in
   predicate_of_type tp c
+
+
+
+let tuple_of_types (argtps:types) (c:t): type_term =
+  let ntvs = ntvs c in
+  Class_table.to_tuple ntvs 0 argtps
+
+
+
+let tuple_of_terms (args:arguments) (c:t): type_term =
+  let argtps = Array.map (fun t -> type_of_term t c) args in
+  tuple_of_types argtps c
+
+
+
+let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
+  let fidx = function_index c
+  and tup  = tuple_of_types argtps c in
+  VAppl(fidx, [|tup;r_tp|], [||])
+
+
+
+
+let function_of_terms (args:arguments) (result:term) (c:t): type_term =
+  let r_tp = type_of_term result c
+  and argtps = Array.map (fun t -> type_of_term t c) args in
+  function_of_types argtps r_tp c
 
 
 let update_types (subs:type_term array) (c:t): unit =
