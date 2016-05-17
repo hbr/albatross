@@ -62,9 +62,8 @@ val fully_expanded: term -> int -> Tvars.t -> t -> term
 val complexity: term -> int -> Tvars.t -> t -> int
 
 
-val find_variant_candidate: int -> t -> int*agens
-
-val has_variant_candidate: int -> int -> t -> bool
+val find_minimal_variants: int -> int -> t -> (int*agens) list
+val find_new_variants: int -> t -> (int*agens) list
 
 val string_of_signature: int -> t -> string
 

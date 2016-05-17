@@ -53,7 +53,19 @@ let check_transform_valid
      into the environment of the feature [ivar] by using the actual generics
      [ags] to substitute the formal generics of [i]. *)
   let ft = PC.feature_table pc in
+  if 3 <= PC.verbosity pc then begin
+    printf "\n\n   Check the validity of the feature\n";
+    printf "         %d %s\n" i (Feature_table.string_of_signature i ft);
+    printf "      in %d %s\n" ivar (Feature_table.string_of_signature ivar ft);
+  end;
   let specs = Feature_table.transformed_specifications i ivar ags ft in
+  if 3 <= PC.verbosity pc then begin
+    printf "\n\n   Check the validity of the feature\n";
+    printf "         %d %s\n" i (Feature_table.string_of_signature i ft);
+    printf "      in %d %s\n" ivar (Feature_table.string_of_signature ivar ft);
+    List.iter (fun t -> printf "      %s\n" (PC.string_long_of_term t pc)) specs;
+    printf "\n";
+  end;
   List.iter
     (fun t ->
       try
@@ -91,17 +103,36 @@ let check_ghost_variant
 let inherit_feature
     (idx:int)
     (cls:int)
-    (lst:(int*int*agens) list)
     (ghost:bool)
     (info:info)
     (pc:PC.t)
-    : (int*int*agens) list =
-  (* Inherit the feature [idx] in the class [cls] and in case that there is a
-     variant add the new seed/variant pair to the list of pairs. *)
+    : (int*bool*int*agens) list =
+  (* Inherit the feature [idx] in the class [cls].
+
+     - Find all new variants of the feature. Variants are either new variants
+       which can be found in the search tables or already existing variants of
+       the seed of [idx].
+
+     - If [idx] is a deferred feature, then there must be a variant. Otherwise
+       report an error.
+
+     - If [idx] is an effective feature, then its specification has to be valid in
+       all minimal variants of the feature.
+
+     - Insert all new variants into the variant map of the seed of [idx].
+
+     - Return a list of triples with
+            sd:   Seed of the variant
+            ivar: New variant
+            ags:  Actual generics to substituted the formal generics of the seed.
+   *)
   let ft = PC.feature_table pc in
   let defer = Feature_table.is_deferred idx ft in
-  try
-    let ivar,ags = Feature_table.find_variant_candidate idx ft in
+  let fold_fun
+      (is_new:bool)
+      (lst:(int*bool*int*agens) list)
+      ((ivar,ags):(int*agens))
+      : (int*bool*int*agens) list =
     let sd,sdags = Feature_table.get_variant_seed idx ivar ags ft in
     if 1 < PC.verbosity pc then begin
       printf "    generic feature %2d \"%s\"\n"
@@ -112,22 +143,49 @@ let inherit_feature
         printf "      seed          %2d \"%s\"\n"
           sd (Feature_table.string_of_signature sd ft)
     end;
-    Feature_table.add_variant sd ivar sdags ft;
+    if is_new then
+      Feature_table.add_variant sd ivar sdags ft;
     check_ghost_variant idx ivar ghost info ft;
     if PC.is_private pc && not defer then
       check_transform_valid idx ivar ags info pc;
-    (sd,ivar,sdags)::lst
-  with Not_found ->
-    if not defer then
+    (sd,is_new,ivar,sdags)::lst
+  in
+  let lst =
+    List.fold_left
+      (fold_fun false)
+      []
+      (Feature_table.find_minimal_variants idx cls ft)
+  in
+  let lst =
+    List.fold_left
+      (fold_fun true)
       lst
-    else
+      (Feature_table.find_new_variants idx ft)
+  in
+  if not defer then
+    lst
+  else
+    let error_deferred () =
       let ct = class_table pc  in
       let str =
         "The class " ^ (Class_table.class_name cls ct) ^
-        " does not have a feature unifiable with \"" ^
+        " does not have a variant of the deferred feature \n\t\"" ^
         (Feature_table.string_of_signature idx ft) ^
-        "\" with proper substitutions of the type variables" in
+        "\"" in
       error_info info str
+    in
+    match lst with
+      [sd,is_new,ivar,ags] ->
+        assert (Array.length ags = 1); (* nyi: deferred features with more than
+                                          one formal generic *)
+        let tvs = Feature_table.tvars ivar ft in
+        if Tvars.principal_class ags.(0) tvs <> cls then begin
+          error_deferred ()
+        end;
+        lst
+    | _ ->
+        error_deferred ()
+
 
 
 
@@ -185,21 +243,27 @@ let inherit_generics
           inherit_assertion idx cls info pc;
           lst
         end else
-          inherit_feature idx cls lst ghost info pc
+          let lst1 = inherit_feature idx cls ghost info pc in
+          List.rev_append lst1 lst
       )
       []
       (Class_table.generics par (class_table pc))
   in
   let ass_set =
     List.fold_left
-      (fun set (sd,ivar,ags) ->
-        Feature_table.set_seed sd ivar ags ft;
-        IntSet.union set (Feature_table.involved_assertions ivar ft)
+      (fun set (sd,is_new,ivar,ags) ->
+        if is_new then begin
+          Feature_table.set_seed sd ivar ags ft;
+          IntSet.union set (Feature_table.involved_assertions ivar ft)
+        end else
+          set
       )
       IntSet.empty
       sd_var_lst
   in
   PC.remove_or_remap ass_set pc
+
+
 
 
 let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =

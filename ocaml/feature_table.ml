@@ -94,7 +94,7 @@ type descriptor = {
   }
 
 type t = {
-    mutable map: Term_table.t ref Feature_map.t;
+    mutable map: Term_table.t ref Feature_map.t; (* search table *)
     seq:         descriptor seq;
     mutable base:int list ref IntMap.t; (* module name -> list of features *)
     ct:          Class_table.t;
@@ -647,9 +647,7 @@ let args_of_tuple_ext
          z.first,  z.second.first, z.second...first, z.second...second
    *)
   assert (0 < nargs);
-  let first_id  = nvars + first_index
-  and second_id = nvars + second_index
-  and tuple_id  = nvars + tuple_index
+  let tuple_id  = nvars + tuple_index
   in
   let rec untup
       (t:term) (tp:type_term) (n:int) (lst:term list)
@@ -1179,11 +1177,15 @@ let unify_types
         assert (i-nfgs = j-nall)
     | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
         let len = Array.length args1 in
+        if len <> Array.length args2 then
+          raise Not_found;
+        if i1-nfgs <> i2-nall then
+          raise Not_found;
         assert (len = Array.length args2);
         assert (i1-nfgs = i2-nall);
         interval_iter (fun k -> uni args1.(k) args2.(k)) 0 len
     | _ ->
-        assert false
+        raise Not_found
   in
   uni tp1 tp2
 
@@ -1254,7 +1256,12 @@ let variant_feature
     and nall = Tvars.count_all tvs in
     assert (Array.length ags_sd = 1); (* nyi: inheritance with more than one
                                          formal generic *)
-    let ags1 = Term.subst_array ags_sd nall ags in
+    let ags1 =
+      if sd = i then
+        ags
+      else
+        Term.subst_array ags_sd nall ags
+    in
     let cls = Tvars.principal_class ags1.(0) tvs in
     try
       let idx_var = variant idx cls ft in
@@ -1894,11 +1901,10 @@ let definition_equality (i:int) (ft:t): term =
   assert (Sign.has_result desc.sign);
   let nargs = Sign.arity desc.sign
   and nfgs  = Tvars.count_all desc.tvs
+  and r_tp  = Sign.result desc.sign
   in
   assert (desc.cls <> -1);
-  let eq_id = equality_index_of_type (Sign.result desc.sign) desc.tvs ft in
-  let eq_id = nargs + eq_id
-  and f_id  = nargs + i
+  let f_id  = nargs + i
   in
   let t = Option.value (Feature.Spec.definition bdesc#specification) in
   let f =
@@ -1908,8 +1914,11 @@ let definition_equality (i:int) (ft:t): term =
       let args = standard_substitution nargs
       and ags  = standard_substitution nfgs in
       VAppl (f_id, args, ags)
-   in
-   Term.binary eq_id f t
+  in
+  let eq_id = nargs + eq_index in
+  VAppl (eq_id, [|f;t|], [|r_tp|])
+
+
 
 
 let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list =
@@ -1961,7 +1970,9 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
-let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): int =
+let find_with_signature
+    (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t)
+    : int =
   (* Find the feature with the name [fn] and the signature [tvs/sign].  *)
   let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
@@ -1985,12 +1996,15 @@ let find_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): i
               sub
           in
           if ok then begin
-            let owner = Class_table.owner tvs sign ft.ct in
+            let ags = Term_sub.arguments (Term_sub.count sub) sub in
+            assert (Array.length ags = 1); (* nyi: Inheritance with more than one
+                                              formal generic.*)
+            let cls = Tvars.principal_class ags.(0) tvs in
             try
-              let ivar = variant i owner ft in
+              let ivar = variant i cls ft in
               ivar :: lst
             with Not_found ->
-              assert false (* cannot happen, feature must be inherited *)
+              lst
           end else
             lst)
       []
@@ -2344,6 +2358,91 @@ let find_funcs
   else lst
 
 
+let variant_data (i:int) (k:int) (ft:t): agens =
+  (* Tell if [i] is a base feature of [k] i.e. [k] is a variant of [i].
+     If no then raise [Not_found].
+     If yes then return the actual generics to substitute the formal generics of [i]
+     to make the signatures identical.
+   *)
+  let desc_i = descriptor i ft
+  and desc_k = descriptor k ft
+  in
+  let nfgs_i = Tvars.count_fgs desc_i.tvs
+  and nfgs_k = Tvars.count_fgs desc_k.tvs
+  in
+  let ags = Array.make nfgs_i empty_term
+  in
+  unify_types desc_i.tp nfgs_i desc_k.tp nfgs_k ags;
+  let ok =
+    interval_for_all
+      (fun j ->
+        Class_table.satisfies
+          ags.(j) desc_k.tvs
+          (Tvars.concept j desc_i.tvs) desc_i.tvs
+          ft.ct
+      )
+      0 nfgs_i in
+  if ok then
+    ags
+  else
+    raise Not_found
+
+
+
+
+let find_minimal_variants (i:int) (cls:int) (ft:t): (int*agens) list =
+  (* Find the minimal variants of the feature [i] in the variant table of
+     [i] or the seed of [i] with at least one class above [cls].
+
+     Return a list [ivar,ags] of the minimal variants so that the signature of
+     [i] substituted by the actual generics [ags] yields the signature of
+     [ivar]
+   *)
+  let desc_i = descriptor i ft in
+  let sd     = desc_i.bdesc#seed in
+  let desc_sd = descriptor sd ft in
+  IntMap.fold
+    (fun _ ivar lst ->
+      if i = ivar then
+        lst
+      else
+        try
+          let ags = variant_data i ivar ft in
+          let desc_ivar = descriptor ivar ft in
+          let above =
+            interval_exist
+              (fun k ->
+                let pcls = Tvars.principal_class ags.(k) desc_ivar.tvs in
+                Class_table.has_ancestor pcls cls ft.ct
+              )
+              0 (Array.length ags) in
+          if not above then
+            raise Not_found;
+          (* [ivar] is a variant of [i], but is it minimal? *)
+          let lst,is_min =
+            List.fold_left
+              (fun (lst,is_min) (ivar0,ags0) ->
+                if not is_min then
+                  (ivar0,ags0) :: lst, false
+                else
+                  try
+                    ignore(variant_data ivar ivar0 ft);
+                    lst, true
+                  with Not_found ->
+                    (ivar0,ags0) :: lst, false
+              )
+              ([],true)
+              lst
+          in
+          if is_min then
+            (ivar,ags) :: lst
+          else
+            lst
+        with Not_found ->
+          lst
+    )
+    desc_sd.bdesc#variants
+    []
 
 
 
@@ -2357,105 +2456,39 @@ let find_unifiables (fn:feature_name) (tp:type_term) (ntvs:int) (ft:t)
     []
 
 
-let find_variant_candidate (i:int) (ft:t): int*agens =
-  (* Find a new variant candidate for the feature [i].
 
-     A variant candidate has the same name and there is a valid substitution of
+let find_new_variants (i:int) (ft:t): (int*agens) list =
+  (* Find new variants of the feature [i] in the search tables.
+
+     A new variant has the same name and there is a valid substitution of
      the formal generics of [i] so that the signature of [i] becomes equal to
      the signature of the variant candidate.
 
-     This function is called after a new inheritance relation has been established
-     in the class table. There can be at most one variant candidate because the
-     other possible variants have already been stored as variants and removed from
-     the search tables.
-
-     Return the index [idx] of the variant candidate and the actual generics
-     [ags] so that the signature of [i] substituted by the actual generics
-     [ags] yields the signature of [idx]
+     Return a list [ivar,ags] of the new variants so that the signature of [i]
+     substituted by the actual generics [ags] yields the signature of [ivar]
    *)
   let desc = descriptor i ft in
   let nfgs = Tvars.count_all desc.tvs in
-  let unilst = find_unifiables desc.fname desc.tp nfgs ft
-  in
-  let lst =
-    List.fold_left
-      (fun lst (idx,sub) ->
-        assert (nfgs = Term_sub.count sub);
-        if i = idx then
-          lst
+  List.fold_left
+    (fun lst (idx,sub) ->
+      assert (nfgs = Term_sub.count sub);
+      if i = idx then
+        lst
+      else
+        let desc_idx = descriptor idx ft in
+        let valid =
+          Term_sub.for_all
+            (fun k tp ->
+              Class_table.satisfies tp desc_idx.tvs (Variable k) desc.tvs ft.ct
+            )
+            sub in
+        if valid then
+          (idx,Term_sub.arguments nfgs sub)::lst
         else
-          let desc_idx = descriptor idx ft in
-          let valid =
-            Term_sub.for_all
-              (fun k tp ->
-                Class_table.satisfies tp desc_idx.tvs (Variable k) desc.tvs ft.ct
-              )
-              sub in
-          if valid then
-            (idx,Term_sub.arguments nfgs sub)::lst
-          else
-            lst
-      )
-      []
-      unilst
-  in
-  match lst with
-    [] ->
-      raise Not_found
-  | [idx,ags] ->
-      idx,ags
-  | _ ->
-      assert false
-
-(*
-let find_variant_candidate (i:int) (cls:int) (ft:t): int*agens =
-  (* Find the variant of the feature [i] in the class [cls]
-
-     Return the index [idx] of the variant candidate and the actual generics
-     [ags] so that the signature of [i] substituted by the actual generics
-     [ags] yields the signature of [idx]
-   *)
-  assert (has_anchor i ft); (* exactly one formal generic anchored
-                               to the owner class *)
-  let desc = descriptor i ft in
-  let nfgs = Tvars.count_all desc.tvs
-  and fg_anchor = anchor i ft in
-  assert (nfgs = 1);
-  assert (fg_anchor = 0);
-  let candidates = find_unifiables desc.fname desc.tp nfgs ft
-  in
-  let lst = List.filter
-      (fun (idx,sub) ->
-        try
-          i <> idx &&
-          let desc_heir = descriptor idx ft
-          and tp1       = Term_sub.find 0 sub in
-          Tvars.principal_class tp1 desc_heir.tvs = cls
-        with Not_found ->
-          false)
-      candidates
-  in
-  match lst with
-    [] -> raise Not_found
-  | [i_variant,sub] ->
-      let nags = Term_sub.count sub in
-      let ags  = Term_sub.arguments nags sub in
-      i_variant,ags
-  | _ ->
-      printf "many variants of %s\n" (string_of_signature i ft);
-      List.iter
-        (fun (i_var,_) ->
-          printf "  %d %s\n" i_var
-            (string_of_signature i_var ft);)
-        lst;
-      assert false (* cannot happen *)
-*)
-
-
-let has_variant_candidate (i:int) (cls:int) (ft:t): bool =
-  (* Has the feature [i] a variant in the class [cls]? *)
-  try let _ = find_variant_candidate i ft in true
-  with Not_found -> false
+          lst
+    )
+    []
+    (find_unifiables desc.fname desc.tp nfgs ft)
 
 
 let get_variant_seed (i:int) (ivar:int) (ags:agens) (ft:t): int*agens =
@@ -2495,6 +2528,9 @@ let set_seed (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
      which substitute the formal generics of [sd] the get the same signature.
    *)
   (base_descriptor ivar ft)#set_seed sd ags
+
+
+
 
 
 let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
@@ -2816,6 +2852,8 @@ let complementary_pattern
   compl_pat p
 
 
+
+
 let is_pattern (n:int) (t:term) (nb:int) (ft:t): bool =
   (* Is the term [t] with [n] variables a pattern i.e. does it contain only variables
      or constructors?
@@ -2860,8 +2898,7 @@ let case_substitution
 
      Note: [pat] must be a pattern i.e. it contains only constructors and variables!
    *)
-  assert false
-  (*let subargs = Array.make npat (Variable (-1))
+  let subargs = Array.make npat (Variable (-1))
   and subflgs = Array.make npat false
   and decid   = ref true
   and hassub  = ref true in
@@ -2882,7 +2919,7 @@ let case_substitution
         assert (not subflgs.(i));
         subflgs.(i) <- true;
         subargs.(i) <- t
-    | VAppl(idx1,args1), VAppl(idx2,args2) when  is_constr idx1 ->
+    | VAppl(idx1,args1,ags1), VAppl(idx2,args2,ags2) when  is_constr idx1 ->
         assert (nb <= idx1);
         assert (npat + nb <= idx2);
         hassub :=  !hassub &&  idx1 = idx2 - npat;
@@ -2899,7 +2936,7 @@ let case_substitution
     Some subargs
   else
     raise Not_found
-*)
+
 
 
 

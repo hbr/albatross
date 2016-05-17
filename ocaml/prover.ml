@@ -253,7 +253,6 @@ let push_premise (shared:bool) (g:goal): unit =
 let push_variables (g:goal): unit =
   let pc = g.tgt_ctxt.pc in
   let n,tps,fgs,t = Term.all_quantifier_split g.target in
-  assert (fgs = empty_formals);
   let pc = PC.push_typed tps fgs pc in
   g.tgt_ctxt <- {pc = pc; map = TermMap.empty};
   g.target   <- t

@@ -589,7 +589,7 @@ let push_untyped (names:int array) (c:t): t =
 
 
 let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
-  assert (is_global c || (fgnms,fgcon) = empty_formals);
+  assert (ntvs c = 0 || (fgnms,fgcon) = empty_formals);
   let nfgs_new  = Array.length fgcon
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
@@ -1070,13 +1070,14 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
       printf "  %s : %s\n" (string_long_of_term t c) (string_of_type_term tp c);
     tp
   in
-  let check_args reqargs actargs =
+  let check_args sub reqargs actargs =
     if reqargs <> actargs then
       raise (Type_error
-               (string_of_term t c ^
-                " required argument types: " ^
+               ("\n    term:     " ^ string_of_term t c ^
+                "\n    subterm : " ^ string_of_term sub c ^
+                "\n    required argument types: " ^
                 string_of_ags reqargs c ^
-                " , actual argument types: " ^
+                "\n    actual argument types: " ^
                 string_of_ags actargs c))
   in
   match t with
@@ -1088,14 +1089,14 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
       let argtps = getargs args c
       and s      = feature_signature i ags in
       assert (Sign.has_result s);
-      check_args (Sign.arguments s) argtps;
+      check_args t (Sign.arguments s) argtps;
       trace_tp (Sign.result s)
   | Application (f,args,pr) ->
       assert (Array.length args = 1);
       let ftp    = type_of_term_full f trace c
       and argtps = getargs args c in
       let ags = split_type_term ftp pr in
-      check_args [|ags.(0)|] argtps;
+      check_args t [|ags.(0)|] argtps;
       if pr then
         trace_tp (boolean c)
       else
@@ -1110,7 +1111,7 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
         assert (rtp = ags.(1));
       trace_tp tp
   | QExp (n,tps,fgs,t0,is_all) ->
-      assert (is_global c || fgs = empty_formals);
+      assert (ntvs = 0 || fgs = empty_formals);
       let c1 = push_typed tps fgs c in
       let rtp = type_of_term_full t0 trace c1 in
       if rtp <> boolean c1 then begin
@@ -1137,7 +1138,22 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
           end;
           trace_tp if_tp
       | Asexp ->
-          assert false (* nyi *)
+          assert (len = 2);
+          let tp = type_of_term_full args.(0) trace c in
+          let n,tps,t0 = Term.pattern_split args.(1) in
+          let c1 = push_typed tps empty_formals c in
+          let pat_tp = type_of_term_full t0 trace c1 in
+          if tp <> pat_tp then
+            raise (Type_error (
+                   ("Types in \"" ^ string_of_term t c ^
+                    "\" are different\n    " ^
+                    string_of_term args.(0) c ^ ": " ^
+                    (string_of_type_term tp c) ^
+                    "\n    " ^
+                    string_of_term t0 c1 ^ ": "  ^
+                    (string_of_type_term pat_tp c)
+                   )));
+          boolean c
       | Inspect ->
           assert (3 <= len);
           assert (len mod 2 = 1);

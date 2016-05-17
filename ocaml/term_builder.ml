@@ -1051,9 +1051,10 @@ let expect_as (tb:t): unit =
   tb.level <- tb.level + 1
 
 let complete_as (tb:t): unit =
-  assert false
-  (*resize 0 0 0 tb;
-  let nms = Context.local_argnames (context tb) in
+  resize 0 0 0 tb;
+  let nms = Context.local_argnames (context tb)
+  and tps = Sign.arguments (context_signature tb)
+  in
   let n   = Array.length nms in
   let start = count_terms tb - 2 in
   assert (0 <= start);
@@ -1064,11 +1065,11 @@ let complete_as (tb:t): unit =
   Seq.pop 2 tb.terms;
   tb.level <- tb.level - 1;
   pop_context tb;
-  let t = Flow(Asexp,[|exp; Term.pattern n nms pat|]) in
+  let t = Flow(Asexp,[|exp; Term.pattern n (nms,tps) pat|]) in
   if tb.trace then
     printf "  \"%s\"  %s\n"
       (string_of_term t tb) (string_of_complete_type tp tb);
-  push_term t (Sign.make_const tp) tb*)
+  push_term t (Sign.make_const tp) tb
 
 
 let expect_inspect (tb:t): unit =

@@ -1333,27 +1333,31 @@ let add_case_axiom (t:term) (pc:Proof_context.t): int =
 let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   (* Add case inversions
 
-     all(args) c1(..) = c2(..)  ==>  false
+     all(a11:A11,a12:A12,...,a21:A21,a22:A22,...)
+         c1(a11,a12,...) = c2(a21,a22,...)  ==>  false
    *)
   assert (idx1 <> idx2);
   let ft = PC.feature_table pc in
   let tvs1,s1 = Feature_table.signature idx1 ft
   and tvs2,s2 = Feature_table.signature idx2 ft in
   assert (tvs1 = tvs2);
-  let n1,n2 = Sign.arity s1, Sign.arity s2 in
+  let n1 = Sign.arity s1
+  and n2 = Sign.arity s2 in
   let args1 = Array.init n1 (fun i -> Variable i)
   and args2 = Array.init n2 (fun i -> Variable (n1+i))
   and fgnms,fgcon = Tvars.fgnames tvs1, Tvars.fgconcepts tvs1
   and tps = Array.append (Sign.arguments s1) (Sign.arguments s2) in
-  let ags = Array.init (Array.length fgcon) (fun i -> Variable i) in
-  let appl idx args = VAppl(n1+n2+idx,args,ags) in
+  let ags = standard_substitution (Array.length fgcon) in
+  let appl idx args =
+    VAppl(n1+n2+idx,args,ags)
+  in
   let t1 = appl idx1 args1
   and t2 = appl idx2 args2
   and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
   and imp_id   = n1 + n2 + Feature_table.implication_index
   in
   let t = Term.binary imp_id
-      (VAppl(eq_id, [|t1;t2|], [|Sign.result s1|]))
+      (VAppl(eq_id, [|t1;t2|], ags))
       (Feature_table.false_constant (n1+n2)) in
   let t = Term.all_quantified
       (n1+n2)
@@ -1372,25 +1376,35 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
      all(a:T) a as pat1  ==>  a as pat2  ==>  false
    *)
   assert (idx1 <> idx2);
-  assert false (* nyi: redesign *)
-  (*let ft = PC.feature_table pc in
-  let make_pattern idx =
-    let n = Feature_table.arity idx ft in
-    let args = Array.init n (fun i -> Variable i)
-    and nms  = standard_argnames n in
-    let t    = VAppl(1+n+idx, args) in
-    Term.quantified false n nms t
+  let ft = PC.feature_table pc in
+  let tvs1,s1 = Feature_table.signature idx1 ft
+  and tvs2,s2 = Feature_table.signature idx2 ft in
+  assert (tvs1 = tvs2);
+  let ags = standard_substitution (Tvars.count_fgs tvs1) in
+  let make_pattern idx s =
+    let n = Sign.arity s in
+    let args = standard_substitution n
+    and nms  = standard_argnames n
+    and tps  = Sign.arguments s
+    in
+    let t    = VAppl(1+n+idx, args, ags) in
+    Term.some_quantified n (nms,tps) t
   in
-  let pat1 = make_pattern idx1
-  and pat2 = make_pattern idx2
+  let pat1 = make_pattern idx1 s1
+  and pat2 = make_pattern idx2 s2
   and imp_id   = 1 + Feature_table.implication_index
   and false_const = Feature_table.false_constant 1 in
   let pat1 = Flow(Asexp, [|Variable 0; pat1|])
   and pat2 = Flow(Asexp, [|Variable 0; pat2|]) in
   let t = Term.binary imp_id pat1 (Term.binary imp_id pat2 false_const) in
-  let q = Term.all_quantified 1 (standard_argnames 1) t in
-  (*printf "inversion %s\n" (PC.string_of_term q pc);*)
-  ignore(add_case_axiom q pc)*)
+  let nms = standard_argnames 1
+  and tps = [|Sign.result s1|]
+  and fgnms = Tvars.fgnames tvs1
+  and fgcon = Tvars.fgconcepts tvs1
+  in
+  let q = Term.all_quantified 1 (nms,tps) (fgnms,fgcon) t in
+  printf "inversion %s\n" (PC.string_of_term q pc);
+  ignore(add_case_axiom q pc)
 
 
 

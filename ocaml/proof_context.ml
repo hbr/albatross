@@ -32,6 +32,7 @@ type gdesc = {mutable pub: bool;
 type t = {base:   Proof_table.t;
           terms:  RD.t Ass_seq.t;
           gseq:   gdesc Seq.t;
+          mutable def_ass: Term_table.t;
           depth:  int;
           mutable work:   int list;
           count0: int;
@@ -95,6 +96,7 @@ let make (verbosity:int): t  =
     {base     = Proof_table.make verbosity;
      terms    = Ass_seq.empty ();
      gseq     = Seq.empty ();
+     def_ass  = Term_table.empty;
      depth    = 0;
      prev     = None;
      work     = [];
@@ -438,6 +440,27 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
     ()
 
 
+let has_public_deferred (t:term) (pc:t): bool =
+  assert (is_global pc);
+  let sfun = seed_function pc in
+  let sublst = unify_with t 0 [||] pc.def_ass pc in
+  match sublst with
+    [] ->
+      false
+  | [idx,sub] ->
+      true
+  | _ ->
+      assert false (* no duplicates *)
+
+
+
+let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
+  assert (is_global pc);
+  if not (has_public_deferred t pc) then
+    let sfun = seed_function pc in
+    pc.def_ass  <- Term_table.add t 0 0 idx sfun pc.def_ass
+
+
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
   pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;
@@ -543,9 +566,6 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
 
 let raw_add (t:term) (search:bool) (pc:t): int =
   raw_add0 t (get_rule_data t pc) search pc
-
-
-
 
 
 
@@ -1764,6 +1784,10 @@ let add_proved_0
   if not dup || is_glob then (* duplicates of globals must be added to work,
                                 because globals are not closed *)
     add_last_to_work pc;
+  if defer && is_interface_check pc then begin
+    assert (is_global pc);
+    add_to_public_deferred t cnt pc
+  end;
   if is_global pc then begin
     add_global defer anchor pc;
     if defer && not dup then begin
@@ -1877,10 +1901,11 @@ let check_interface (pc:t): unit =
     if gdesc.defer
         && not gdesc.pub
         && Class_table.is_class_public gdesc.anchor (class_table pc)
+        && not (has_public_deferred (term i pc) pc)
     then
       error_info (FINFO (1,0))
-        ("deferred assertion `" ^ (string_of_term (term i pc) pc) ^
-         "' is not public")
+        ("deferred assertion \"" ^ (string_of_term (term i pc) pc) ^
+         "\" is not public")
   done
 
 let boolean_type (nb:int) (pc:t): type_term =

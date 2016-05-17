@@ -649,12 +649,12 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
         validate t c
     |  Flow (flow,args) ->
         let len = Array.length args in
-        let check_match mtch c =
-          if Context.is_case_match_expression mtch c then
+        let check_pattern pat c =
+          if Context.is_case_match_expression pat c then
             ()
           else
             error_info info
-              ("The term \"" ^ (Context.string_of_term mtch c) ^
+              ("The term \"" ^ (Context.string_of_term pat c) ^
                "\" is not a valid pattern")
         in
         begin
@@ -667,18 +667,17 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
               let ncases = len / 2 in
               validate args.(0) c;
               for i = 0 to ncases - 1 do
-                let n,(nms,_),mtch,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-                let c = Context.push_untyped nms c in
+                let n,tps,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+                let c = Context.push_typed tps empty_formals c in
                 validate res c;
-                check_match mtch c
+                check_pattern pat c
               done
           | Asexp ->
               assert (len = 2);
-              assert false
-              (*validate args.(0) c;
-              let n,nms,mtch,_ = Term.qlambda_split_0 args.(1) in
-              let c = Context.push_untyped nms c in
-              check_match mtch c*)
+              validate args.(0) c;
+              let n,tps,pat = Term.pattern_split args.(1) in
+              let c = Context.push_typed tps empty_formals c in
+              check_pattern pat c
         end
     | Indset (nme,tp,rs) ->
         let c = Context.push_typed ([|nme|],[|tp|]) empty_formals c in
