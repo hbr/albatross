@@ -814,7 +814,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | VAppl (i,[| VAppl (idx,[||],ags0) |],ags)
         when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
           let args = [| Eval.Term (VAppl (idx,[||],ags0)) |]
-          and dom  = Context.domain_of_feature idx nb (context pc) in
+          and dom  = Context.domain_of_feature idx nb ags0 (context pc) in
           dom, Eval.Exp(i,ags, args, Eval.Term dom), true
       | VAppl (i,args,ags) ->
           begin

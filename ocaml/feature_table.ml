@@ -152,22 +152,31 @@ let descriptor (i:int) (ft:t): descriptor =
 let tvars (i:int) (ft:t): Tvars.t =
   (descriptor i ft).tvs
 
-let signature (i:int) (ft:t): Tvars.t * Sign.t =
+let signature0 (i:int) (ft:t): Tvars.t * Sign.t =
   let desc = descriptor i ft in
   desc.tvs, desc.sign
 
 
 let argument_types (i:int) (ags:agens) (ntvs:int) (ft:t): types =
-  let tvs,s = signature i ft in
+  let tvs,s = signature0 i ft in
   let tps = Sign.arguments s in
   Term.subst_array tps ntvs ags
 
 
 let result_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
-  let tvs,s = signature i ft in
+  let tvs,s = signature0 i ft in
   assert (Sign.has_result s);
   let rt = Sign.result s in
   Term.subst rt ntvs ags
+
+
+let signature (i:int) (ags:agens) (ntvs:int) (ft:t): Sign.t =
+  (* The signature of the feature [i] where the formal generics are substituted
+     by the actual generics [ags] coming from a type environment with [ntvs]
+     type variables. *)
+  let argtps = argument_types i ags ntvs ft
+  and rtp    = result_type i ags ntvs ft in
+  Sign.make_func argtps rtp
 
 
 let argument_names (i:int) (ft:t): int array =
@@ -644,13 +653,16 @@ let ith_tuple_element
 let args_of_tuple_ext
     (t:term) (tp:type_term) (nvars:int) (nargs:int) (ft:t)
     : term array =
-  (* The tuple (a,b,...,z) transformed into an argument array [a,b,...].
-     If the tuple [t] is only an n-tuple and [nargs] arguments are needed with
-     [n < nargs] the last tuple element [z] is used to generated the missing
-     elements as
+  (* The tuple [t = (a,b,...,z)] with type [tp] transformed into an argument
+     array [a,b,...].
+
+     If the tuple [t] is only an n-tuple and [nargs]
+     arguments are needed with [n < nargs] the last tuple element [z] is used
+     to generated the missing elements as
 
          z.first,  z.second.first, z.second...first, z.second...second
    *)
+
   assert (0 < nargs);
   let tuple_id  = nvars + tuple_index
   in
@@ -1218,13 +1230,13 @@ let variant_generics
      of the form [VAppl(idx,_,ags)] where [ags] come from a type environment
      with [ntvs] type variables. The routine calculates the actual generics of
      the call of the variant feature [VAppl(idx_var,_,ags_var)].  *)
-  let tvs_var,s_var = signature idx_var ft in
+  let tvs_var,s_var = signature0 idx_var ft in
   let nfgs_var      = Tvars.count_fgs tvs_var in
   if nfgs_var = 0 then
     [||]
   else
     let subst tp    = Term.subst tp ntvs ags in
-    let tvs0,s0     = signature idx ft in
+    let tvs0,s0     = signature0 idx ft in
     let len         = Sign.arity s0 in
     assert (len = Sign.arity s_var);
     let ags         = Array.make nfgs_var empty_term in
@@ -1583,10 +1595,23 @@ let function_property
   Term.sub chn args nb*)
 
 
-let domain_of_feature (i:int) (nb:int) (ft:t): term =
+
+
+let domain_of_feature (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t): term =
+  (* The domain of the feature [i] in a context with [nb] variables and the
+     formal generics of the feature [i] substituted by the actual generics [ags]
+     coming from the type environment [tvs].
+   *)
   assert (nb <= i);
   assert (arity (i-nb) ft > 0);
-  let n,nms,pres = preconditions i nb ft in
+  let n,nms,pres = preconditions i nb ft
+  and nall = Tvars.count_all tvs
+  in
+  let subst t =
+    substituted t 0 (n+nb) 0 [||] 0 ags tvs ft
+  in
+  let s = signature (i-nb) ags nall ft in
+  let tp = Class_table.upgrade_signature nall true s in
   let t =
     match pres with
       [] ->
@@ -1594,11 +1619,11 @@ let domain_of_feature (i:int) (nb:int) (ft:t): term =
     | hd::tl ->
         let and_id = n + nb + and_index in
         List.fold_left
-          (fun t1 t2 ->
-            Term.binary and_id t1 t2)
+          (fun t1 t2 -> Term.binary and_id (subst t1) (subst t2))
           hd
-          tl in
-  assert false (*make_lambda n nms [] t true nb ft*)
+          tl
+  in
+  make_lambda n nms [] t true nb tp ft
 
 
 
@@ -2695,7 +2720,7 @@ let peer_matches
   IntSet.fold
     (fun i lst ->
       assert (is_constructor i ft);
-      let tvs,s = signature i ft in
+      let tvs,s = signature0 i ft in
       assert (Tvars.count_all tvs = Array.length ags);
       let n = Sign.arity s
       and tps = Array.to_list (Sign.arguments s) in
@@ -3281,9 +3306,13 @@ let inspect_unfolded (info:info) (args:term array) (nb:int) (ntvs:int)(ft:t)
 
 
 
-let downgrade_term (t:term) (nb:int) (ft:t): term =
-  (* Downgrade all calls of the form [Application(VAppl (i,[||]),args)] to
-     [VAppl(i,args')] if [i] is not a constant.
+let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
+  (* Downgrade all calls of the form
+ 
+         [ Application (VAppl (i, [||], ags), args, pr)]
+     to
+
+         [VAppl(i,args')] if [i] is not a constant.
    *)
   let rec down t nb =
     let down_args args nb = Array.map (fun t -> down t nb) args
@@ -3300,9 +3329,10 @@ let downgrade_term (t:term) (nb:int) (ft:t): term =
         if nargs = 0 then
           t
         else
-          assert false
-          (*let args = args_of_tuple_ext args.(0) nb nargs ft in
-          VAppl(i,args)*)
+          let s = signature i ags ntvs ft in
+          let tup_tp = Class_table.to_tuple ntvs 0 (Sign.arguments s) in
+          let args = args_of_tuple_ext args.(0) tup_tp nb nargs ft in
+          VAppl(i,args,ags)
     | Application(f,args,pr) ->
         Application (down f nb, down_args args nb, pr)
     | Lam(n,nms,pres,t0,pr,tp) ->

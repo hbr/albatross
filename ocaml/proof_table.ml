@@ -507,7 +507,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             if Context.domain_of_lambda n nms pres tp0 nb (context at) <> doma then
               raise Illegal_proof_term
         | VAppl(idx2,args,ags) when arity idx2 nb at > 0 ->
-            if Context.domain_of_feature idx2 nb (context at) <> doma then
+            if Context.domain_of_feature idx2 nb ags (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
         end;

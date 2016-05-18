@@ -159,7 +159,7 @@ val feature_name: int -> t -> string
 
 val is_deferred: int -> t -> bool
 val tvars: int -> t -> Tvars.t
-val signature: int -> t -> Tvars.t * Sign.t
+val signature0: int -> t -> Tvars.t * Sign.t
 val argument_types: int -> agens -> int -> t -> types
 val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
@@ -236,10 +236,10 @@ val export_feature: int -> bool -> t -> unit
 
 val check_interface: t -> unit
 
-val downgrade_term: term -> int -> t -> term
+val downgrade_term: term -> int -> int -> t -> term
 
 val adapt_names: int array -> int array -> int array
 
-val domain_of_feature: int -> int -> t -> term
+val domain_of_feature: int -> int -> agens -> Tvars.t -> t -> term
 
 val validate_visibility: term -> int -> info -> t -> unit

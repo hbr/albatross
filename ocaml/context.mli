@@ -191,7 +191,7 @@ val has_preconditions: int -> int -> t -> bool
 val term_preconditions: term -> t -> term list
 
 val domain_of_lambda:  int -> int array -> term list -> type_term -> int -> t -> term
-val domain_of_feature: int -> int -> t -> term
+val domain_of_feature: int -> int -> agens -> t -> term
 
 val existence_condition: term list -> t -> term
 val uniqueness_condition: term list -> t -> term

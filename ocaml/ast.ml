@@ -1376,8 +1376,8 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
    *)
   assert (idx1 <> idx2);
   let ft = PC.feature_table pc in
-  let tvs1,s1 = Feature_table.signature idx1 ft
-  and tvs2,s2 = Feature_table.signature idx2 ft in
+  let tvs1,s1 = Feature_table.signature0 idx1 ft
+  and tvs2,s2 = Feature_table.signature0 idx2 ft in
   assert (tvs1 = tvs2);
   let n1 = Sign.arity s1
   and n2 = Sign.arity s2 in
@@ -1415,8 +1415,8 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
    *)
   assert (idx1 <> idx2);
   let ft = PC.feature_table pc in
-  let tvs1,s1 = Feature_table.signature idx1 ft
-  and tvs2,s2 = Feature_table.signature idx2 ft in
+  let tvs1,s1 = Feature_table.signature0 idx1 ft
+  and tvs2,s2 = Feature_table.signature0 idx2 ft in
   assert (tvs1 = tvs2);
   let ags = standard_substitution (Tvars.count_fgs tvs1) in
   let make_pattern idx s =
@@ -1478,7 +1478,7 @@ let add_case_injections
   let ft   = Proof_context.feature_table pc in
   List.iter
     (fun idx ->
-      let tvs,s = Feature_table.signature idx ft in
+      let tvs,s = Feature_table.signature0 idx ft in
       let n = Sign.arity s in
       if n = 0 then
         ()
@@ -1557,7 +1557,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
 let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
-  let tvs,sign = Feature_table.signature idx ft in
+  let tvs,sign = Feature_table.signature0 idx ft in
   let ntvs     = Tvars.count_all tvs in
   let is_class_involved tp = Tvars.is_class_involved cls tp tvs
   in
@@ -1598,7 +1598,7 @@ let creators_check_formal_generics
   for i = 0 to (Tvars.count_fgs tvs) - 1 do
     if List.for_all
         (fun cidx ->
-          let _,sign = Feature_table.signature cidx ft in
+          let _,sign = Feature_table.signature0 cidx ft in
           let argtps = Sign.arguments sign in
           interval_for_all
             (fun j ->

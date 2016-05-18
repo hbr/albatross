@@ -468,7 +468,7 @@ let variable_data (i:int) (c:t): Tvars.t * Sign.t =
     Sign.make_const (snd c.entry.fargs.(i))
   else
     let idx = i - nvars in
-    let tvs,s = Feature_table.signature idx (feature_table c) in
+    let tvs,s = Feature_table.signature0 idx (feature_table c) in
     Tvars.fgs_to_global tvs, s
 
 
@@ -1001,7 +1001,7 @@ let domain_of_lambda
 
 
 
-let domain_of_feature (idx:int) (nb:int) (c:t): term =
+let domain_of_feature (idx:int) (nb:int) (ags:agens) (c:t): term =
   (* Construct the domain of feature [idx] in an environment with [nb] variables more
      than the context [c].
    *)
@@ -1009,7 +1009,8 @@ let domain_of_feature (idx:int) (nb:int) (c:t): term =
   if idx < nb + nbenv then
     assert false (* nyi: local features *)
   else
-    Feature_table.domain_of_feature idx (nb+nbenv) c.ft
+    let tvs = tvars c in
+    Feature_table.domain_of_feature idx (nb+nbenv) ags tvs c.ft
 
 
 let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
@@ -1067,29 +1068,45 @@ exception Type_error of string
 
 
 
-let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
+let rec type_of_term_full
+    (t:term)
+    (req_tp: type_term option)
+    (trace:bool)
+    (c:t)
+    : type_term =
   let nvars = count_variables c
   and ntvs  = ntvs c in
-  let getargs args c = Array.map (fun t -> type_of_term_full t trace c) args
-  and split_type_term tp pr =
+  let split_function_or_predicate
+      (tp:type_term)
+      : type_term * type_term option =
     let cls,ags = Class_table.split_type_term tp in
     assert (ntvs <= cls);
-    if pr then begin
-      if cls <> ntvs + Class_table.predicate_index then
+    if cls = predicate_index c then begin
+      assert (Array.length ags = 1);
+      ags.(0), None
+    end else if cls = function_index c then begin
+      assert (Array.length ags = 2);
+      ags.(0), Some ags.(1)
+    end else
+      assert false
+  in
+  let get_arg_types (tp:type_term) (pr:bool): type_term * type_term option =
+    let argtp, rtp = split_function_or_predicate tp in
+    begin match rtp with
+      None when not pr ->
         raise (Type_error
-                 ("The type " ^ string_of_type_term tp c ^ " is not a predicate"));
-      assert (Array.length ags = 1)
-    end else begin
-      if cls <> ntvs + Class_table.function_index then
+                 ("The type " ^ string_of_type_term tp c ^ " is not a predicate"))
+    | Some _  when pr ->
         raise (Type_error
-                 ("The type " ^ string_of_type_term tp c ^ " is not a function"));
-      assert (Array.length ags = 2)
+                 ("The type " ^ string_of_type_term tp c ^ " is not a function"))
+    | _ ->
+        ()
     end;
-    ags
+    argtp, rtp
   in
   let feature_signature (i:int) (ags:type_term array): Sign.t =
     assert (nvars <= i);
-    let tvs,s = Feature_table.signature (i-nvars) c.ft in
+    let tvs,s = Feature_table.signature0 (i-nvars) c.ft in
     if Tvars.count_fgs tvs <> Array.length ags then
       raise (Type_error
                ("The feature \"" ^
@@ -1104,123 +1121,140 @@ let rec type_of_term_full (t:term) (trace:bool) (c:t): type_term =
       printf "  %s : %s\n" (string_long_of_term t c) (string_of_type_term tp c);
     tp
   in
-  let check_args sub reqargs actargs =
-    if reqargs <> actargs then
-      raise (Type_error
-               ("\n    term:     " ^ string_of_term t c ^
-                "\n    subterm : " ^ string_of_term sub c ^
-                "\n    required argument types: " ^
-                string_of_ags reqargs c ^
-                "\n    actual argument types: " ^
-                string_of_ags actargs c))
+  let check_and_trace tp =
+    begin match req_tp with
+      Some (req_tp) when req_tp <> tp ->
+        raise (Type_error
+                 ("\n    term:     " ^ string_of_term t c ^
+                  "\n    required type: " ^
+                  string_of_type_term req_tp c ^
+                  "\n    actual type:   " ^
+                  string_of_type_term tp c))
+    | _ ->
+        ()
+    end;
+    trace_tp tp
+  in
+  let check_and_trace_sign (s:Sign.t): type_term =
+    let req_tp =
+      match req_tp with
+        None -> assert false
+      | Some tp -> tp
+    in
+    let argtp, rtp = split_function_or_predicate req_tp in
+    let act_tp =
+      let pr =
+        match rtp with
+          None ->
+            if Sign.result s <> boolean c then
+              raise (Type_error
+                 ("\n    term:     " ^  string_of_term t c ^
+                  "\n    signature: " ^ (string_of_signature s c) ^
+                  string_of_type_term req_tp c ^
+                  "\n    cannot be upgraded to: " ^
+                  string_of_type_term req_tp c));
+            true
+        | Some rtp ->
+            false
+      in
+      Class_table.upgrade_signature ntvs pr s
+    in
+    trace_tp act_tp
+  in
+  let check_args reqtps args =
+    Array.iteri
+      (fun i t -> ignore (type_of_term_full t (Some reqtps.(i)) trace c))
+      args
   in
   match t with
     Variable i ->
       assert (i < nvars);
-      trace_tp (variable_type i c)
+      check_and_trace (variable_type i c)
   | VAppl (i,args,ags) ->
       assert (nvars <= i);
-      let argtps = getargs args c
-      and s      = feature_signature i ags in
+      let len = Array.length args
+      and s   = feature_signature i ags in
       assert (Sign.has_result s);
-      check_args t (Sign.arguments s) argtps;
-      trace_tp (Sign.result s)
+      if len = Sign.arity s then begin
+        check_args (Sign.arguments s) args;
+        check_and_trace (Sign.result s)
+      end else begin
+        assert (len = 0);
+        check_and_trace_sign s
+      end
   | Application (f,args,pr) ->
       assert (Array.length args = 1);
-      let ftp    = type_of_term_full f trace c
-      and argtps = getargs args c in
-      let ags = split_type_term ftp pr in
-      check_args t [|ags.(0)|] argtps;
+      let ftp = type_of_term_full f None trace c in
+      let argtp,rtp = get_arg_types ftp pr in
+      ignore (type_of_term_full args.(0) (Some argtp) trace c);
       if pr then
-        trace_tp (boolean c)
+        check_and_trace (boolean c)
       else
-        trace_tp (ags.(1))
+        check_and_trace (Option.value rtp)
   | Lam (n,nms,ps,t0,pr,tp) ->
-      let ags = split_type_term tp pr in
-      let c1 = push_typed ([|ST.symbol "t"|],[|ags.(0)|]) empty_formals c in
-      let rtp = type_of_term_full t0 trace c1 in
-      if pr then
-        assert (rtp = boolean c)
-      else
-        assert (rtp = ags.(1));
-      trace_tp tp
+      let argtp,rtp = get_arg_types tp pr in
+      let c1 = push_typed ([|ST.symbol "t"|],[|argtp|]) empty_formals c in
+      ignore (type_of_term_full
+                t0
+                (if pr then
+                  Some (boolean c1)
+                else
+                  rtp)
+                trace
+                c1);
+      check_and_trace tp
   | QExp (n,tps,fgs,t0,is_all) ->
       assert (ntvs = 0 || fgs = empty_formals);
       let c1 = push_typed tps fgs c in
-      let rtp = type_of_term_full t0 trace c1 in
-      if rtp <> boolean c1 then begin
-        printf "rtp  %s\n" (string_of_type_term rtp c1);
-        printf "bool %s\n" (string_of_type_term (boolean c1) c1);
-      end;
-      assert (rtp = boolean c1);
-      trace_tp (boolean c)
+      ignore (type_of_term_full t0 (Some (boolean c1)) trace c1);
+      check_and_trace (boolean c)
   | Indset (nme,tp,rs) ->
-      tp
+      (* Missing: Verify types of the rules!! *)
+      check_and_trace tp
   | Flow (ctrl,args) ->
       let len = Array.length args in
       match ctrl with
         Ifexp ->
           assert (2 <= len);
           assert (len <= 3);
-          let cond_tp = type_of_term_full args.(0) trace c
-          and if_tp   = type_of_term_full args.(1) trace c
-          in
-          assert (cond_tp = boolean c);
-          if len = 3 then begin
-            let else_tp = type_of_term_full args.(2) trace c in
-            assert (if_tp = else_tp)
-          end;
-          trace_tp if_tp
+          ignore (type_of_term_full args.(0) (Some (boolean c)) trace c);
+          let if_tp = type_of_term_full args.(1) req_tp trace c in
+          if len = 3 then
+            ignore (type_of_term_full args.(2) (Some if_tp) trace c);
+          check_and_trace if_tp
       | Asexp ->
           assert (len = 2);
-          let tp = type_of_term_full args.(0) trace c in
+          let tp = type_of_term_full args.(0) None trace c in
           let n,tps,t0 = Term.pattern_split args.(1) in
           let c1 = push_typed tps empty_formals c in
-          let pat_tp = type_of_term_full t0 trace c1 in
-          if tp <> pat_tp then
-            raise (Type_error (
-                   ("Types in \"" ^ string_of_term t c ^
-                    "\" are different\n    " ^
-                    string_of_term args.(0) c ^ ": " ^
-                    (string_of_type_term tp c) ^
-                    "\n    " ^
-                    string_of_term t0 c1 ^ ": "  ^
-                    (string_of_type_term pat_tp c)
-                   )));
-          boolean c
+          ignore (type_of_term_full t0 (Some tp) trace c1);
+          check_and_trace (boolean c)
       | Inspect ->
           assert (3 <= len);
           assert (len mod 2 = 1);
           let ncases = len / 2 in
           assert (0 < ncases);
-          let insp_tp = type_of_term_full args.(0) trace c in
-          let rec check_cases_from i tp =
+          let insp_tp = type_of_term_full args.(0) None trace c in
+          let rec check_cases_from i req_tp =
             if i = ncases then
-              tp
+              req_tp
             else
               let n,(nms,tps),pat,res =
                 Term.case_split args.(2*i+1) args.(2*i+2) in
               let c1 = push_typed (nms,tps) empty_formals c in
-              let insp_tp_i =  type_of_term_full pat trace c1
-              and res_tp_i  =  type_of_term_full res trace c1 in
-              if insp_tp <> insp_tp_i then
-                raise (Type_error
-                         ("Pattern of case " ^ string_of_term pat c1 ^
-                          " does not have type " ^
-                            string_of_type_term insp_tp c1));
-              if tp <> empty_term && tp <> res_tp_i then
-                  raise (Type_error
-                           ("Term " ^ string_of_term res c1 ^
-                            " does not have type " ^
-                            string_of_type_term tp c1));
-              res_tp_i
+              ignore (type_of_term_full pat (Some insp_tp) trace c1);
+              let req_tp = type_of_term_full res req_tp trace c1 in
+              check_cases_from (i + 1) (Some req_tp)
           in
-          trace_tp (check_cases_from 0 empty_term)
+          let tp = check_cases_from 0 req_tp in
+          match tp with
+            Some tp -> check_and_trace tp
+          | _ -> assert false
 
 
 
 let check_well_typed (t:term) (c:t): unit =
-  let check trace = ignore(type_of_term_full t trace c) in
+  let check trace = ignore(type_of_term_full t None trace c) in
   try
     check false
   with Type_error str ->
@@ -1707,7 +1741,11 @@ let string_of_type_array (sep:string) (arr: type_term array) (c:t): string =
 
 
 let downgrade_term (t:term) (nb:int) (c:t): term =
-  Feature_table.downgrade_term t (nb + count_variables c) c.ft
+  Feature_table.downgrade_term
+    t
+    (nb + count_variables c)
+    (ntvs c)
+    c.ft
 
 
 let arity_of_downgraded_type (tp:type_term) (c:t): int =
