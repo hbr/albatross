@@ -1190,11 +1190,12 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         interval_iter
           (fun i ->
             let n,fargs,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+            let c1 = Context.push_typed fargs empty_formals c in
+            let pat_tp = Context.type_of_term pat c1 in
             let parr =
               let arr = Feature_table.args_of_tuple pat (n+nb) ft in
               if Array.length arr > ninsp then
-                assert false (* nyi *)
-                (*Feature_table.args_of_tuple_ext pat (n+nb) ninsp ft*)
+                Feature_table.args_of_tuple_ext pat pat_tp (n+nb) ninsp ft
               else
                 arr
             in
@@ -1547,19 +1548,18 @@ let add_case_injections
 let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
   (* Can the case class [cls] be constructed without actual generics at the
      positions [posset]?  *)
-  assert false (* nyi: redesign *)
-  (*let ct = PC.class_table pc
+  let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   assert (Class_table.is_case_class cls ct);
   let cset = Class_table.constructors cls ct in
   IntSet.exists
     (fun c ->
-      let tvs,sign = Feature_table.signature c ft in
+      let tvs,sign = Feature_table.signature0 c ft in
       assert (Tvars.count tvs = 0);
       let nfgs = Tvars.count_fgs tvs in
       let fgs =
         match Sign.result sign with
-          VAppl(cls2,fgs) ->
+          VAppl(cls2,fgs,ags) ->
             assert (cls2 = cls + nfgs);
             fgs
         | _ ->
@@ -1578,7 +1578,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
             let set = Term.bound_variables tp nfgs in
             IntSet.inter set fgenset = IntSet.empty)
           (Array.to_list (Sign.arguments sign)))
-    cset*)
+    cset
 
 
 
