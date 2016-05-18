@@ -40,6 +40,7 @@ val string_long_of_term: term -> t -> string
 val string_of_term_anon: term -> int -> t -> string
 val string_of_term_i: int -> t -> string
 val string_long_of_term_i: int -> t -> string
+val string_of_type: type_term -> t -> string
 
 val is_well_typed: term -> t -> bool
 val prenex_term: term -> t -> term
@@ -91,6 +92,7 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
 val split_implication:  term -> t -> term * term
 val implication_chain:  term list -> term -> t -> term
 val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
+val beta_reduce_term: term -> t -> term
 val count:          t -> int
 val count_previous: t -> int
 val count_global:   t -> int

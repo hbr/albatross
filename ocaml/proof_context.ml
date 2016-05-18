@@ -442,7 +442,6 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
 
 let has_public_deferred (t:term) (pc:t): bool =
   assert (is_global pc);
-  let sfun = seed_function pc in
   let sublst = unify_with t 0 [||] pc.def_ass pc in
   match sublst with
     [] ->
@@ -712,6 +711,14 @@ let beta_reduce
     (n:int) (t:term) (tp:type_term) (args:term array) (nb:int) (pc:t)
     : term =
   Proof_table.beta_reduce n t tp args nb pc.base
+
+
+let beta_reduce_term (t:term) (pc:t): term =
+  match t with
+    Application (Lam(n,_,_,t0,_,tp), args, _) ->
+      beta_reduce n t0 tp args 0 pc
+  | _ ->
+      assert false (* Is not a redex *)
 
 
 let make_lambda
@@ -1225,7 +1232,6 @@ let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
      where there is a premise for each constructor.
 
    *)
-  printf "add_induction_law %s\n" (string_of_type tp pc);
   let ct = class_table pc
   and cls,ags = Class_table.split_type_term tp
   and ntvs  = count_all_type_variables pc
@@ -1625,7 +1631,6 @@ let prove_equality (g:term) (pc:t): int =
       make_application lam_1up args 1 false pc in
     let pred_inner i =
       VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags)
-      (*Term.binary (eq_id+1) flhs_1up (frhs_x i)*)
     in
     let start_term =
       let t = make_application lam args1 0 false pc in

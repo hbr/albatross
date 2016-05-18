@@ -1349,11 +1349,14 @@ let transformed_term (t:term) (c0:t) (c:t): term =
 
 
 let case_preconditions
-    (insp:term) (n:int) (nms:int array) (tps:types) (pat:term)
+    (insp:term) (insp_tp:type_term)
+    (n:int) (nms:int array) (tps:types) (pat:term)
     (pres:term list) (lst:term list) (nb:int) (c:t)
     : term list =
   (*  Generate all(x,y,...) insp = pat ==> pre
    *)
+  let cls,ags = Class_table.split_type_term insp_tp in
+  let cls0 = cls - ntvs c in
   let insp   = Term.up n insp
   and imp_id = n + nb + implication_index c
   and eq_id  =
@@ -1368,11 +1371,13 @@ let case_preconditions
     assert (0 <= i);
     assert (Feature_table.is_constructor i c.ft);
     let cls = Feature_table.class_of_feature i c.ft in
+    assert (cls = cls0);
     ndelta + Feature_table.equality_index cls c.ft
   in
   List.fold_left
     (fun lst pre ->
-      let t = Term.binary imp_id (Term.binary eq_id insp pat) pre in
+      let eq = VAppl (eq_id, [|insp;pat|], ags) in
+      let t = Term.binary imp_id eq pre in
       let t = Term.all_quantified n (nms,tps) empty_formals t in
       t :: lst)
     lst
@@ -1560,7 +1565,9 @@ let term_preconditions (t:term)  (c:t): term list =
                   let lst_inner   = pres res [] c1 in
                   let lst_inner   = List.rev lst_inner in
                   let lst =
-                      case_preconditions args.(0) n nms tps pat lst_inner lst 0 c in
+                    let tp = type_of_term args.(0) c in
+                    case_preconditions args.(0) tp n nms tps pat lst_inner lst 0 c
+                  in
                   cases_from (i+1) lst
               in
               cases_from 0 lst
@@ -1620,10 +1627,6 @@ let uniqueness_condition (posts:term list) (c:t): term =
   and rt      = result_type c
   and tvs     = tvars c
   in
-  let cls = Tvars.principal_class rt tvs in
-  let eq_id  = 2 + (count_variables c)
-      + Feature_table.variant Feature_table.eq_index cls c.ft
-  in
   let args_var xyvar  =
     assert (xyvar < 2);
     Array.init
@@ -1649,7 +1652,6 @@ let uniqueness_condition (posts:term list) (c:t): term =
       )
       posts
       x_eq_y
-      (*(VAppl (eq_id,[|Variable 0; Variable 1|], [|rt|]))*)
   and nms = [|ST.symbol "x"; ST.symbol "y"|]
   and tps = [|rt; rt|]
   in

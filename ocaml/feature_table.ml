@@ -300,11 +300,15 @@ let feature_call(i:int) (nb:int) (args:arguments) (ags:agens) (ft:t): term =
 
 
 let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
-    : int * names * arguments * term list * term =
+    : int * names * types * term list * term =
   (* Construct the rule for the constructor [idx] where the constructor [idx] has
      the form [c(a1,a2,...)] where [ar1,ar2,...] are recursive.
 
-     all(args) p(ar1) ==> p(ar2) ==> ... ==> p(c(a1,a2,...))
+         all(args) p(ar1) ==> p(ar2) ==> ... ==> p(c(a1,a2,...))
+
+     [p] is the predicate term which expects objects of the inductive type
+     belonging to the constructor [i] and [ags] are the actual generics substituted
+     for the formal generics of the inductive type.
    *)
   let desc = descriptor idx ft in
   let tps = Sign.arguments desc.sign
@@ -2643,14 +2647,13 @@ let check_interface (ft:t): unit =
 let pattern_subterms (n:int) (pat:term) (nb:int) (ft:t): (int*term*int) list =
   (* Return a list of all subterms of the pattern [n,pat] with their level.
    *)
-  assert false
-  (*let rec subterms t level lst =
+  let rec subterms t level lst =
     match t with
       Variable i ->
         assert (i < n || n + nb <= i);
         assert (i < n || is_constructor (i-n-nb) ft);
         (n+nb,t,level)::lst
-    | VAppl(i,args) ->
+    | VAppl(i,args,ags) ->
         assert (n + nb <= i);
         assert (is_constructor (i-n-nb) ft);
         let lst = (n+nb,t,level)::lst
@@ -2662,7 +2665,7 @@ let pattern_subterms (n:int) (pat:term) (nb:int) (ft:t): (int*term*int) list =
     | _ ->
         assert false (* cannot happen in pattern *)
   in
-  subterms pat 0 []*)
+  subterms pat 0 []
 
 
 
