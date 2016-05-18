@@ -779,7 +779,8 @@ let export
       ^ "\""
     in error_info hm.i str
   end;
-  desc.is_exp <- true
+  desc.bdesc.tvs <- tvs;
+  desc.is_exp    <- true
 
 
 
@@ -1078,7 +1079,7 @@ let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int
   and fgnames = Tvars.fgnames tvs
   and nall    = Tvars.count_all tvs
   in
-  try (* If there is not path then try to find the name in the formal generics *)
+  try (* If there is no path then try to find the name in the formal generics *)
     if path = [] then
       ntvs + Search.array_find_min (fun n -> n=name) fgnames
     else
@@ -1092,8 +1093,8 @@ let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int
                          ^ " is not visible in this context");
       nall + idx
     with Not_found ->
-        error_info info ("Class " ^ (string_of_classname path name)
-                         ^ " does not exist in this context")
+      error_info info ("Class " ^ (string_of_classname path name)
+                       ^ " does not exist in this context")
 
 
 
@@ -1115,7 +1116,7 @@ let get_type
 
      Only visible classes can be used legally in a type!
    *)
-  let class_index0 path name: int = class_index path name tvs tp.i ct
+  let class_index0 path (nme: int): int = class_index path nme tvs tp.i ct
   in
   let info = tp.i in
   let rec get_tp (tp:type_t): type_term =

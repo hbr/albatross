@@ -1748,6 +1748,10 @@ let put_class
       Class_table.add hm cn0 tvs ct;
       idx, true
   in
+  if 2 <= PC.verbosity pc then begin
+    let str = if is_new then "new" else "update" in
+    printf "\n  %s class %s\n" str (ST.string (snd cn.v));
+  end;
   let cls_tp =
     let lib,cls = cn.v in
     let fgtps   = List.map (fun nme -> Normal_type([],nme,[])) fgs.v in
