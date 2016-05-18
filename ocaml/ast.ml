@@ -102,7 +102,7 @@ let prove_insert_close (t:term) (pc:PC.t): unit =
 
 
 let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
-  if PC.is_private pc then
+  if PC.is_private pc then begin
     let pres = term_preconditions info t pc in
     List.iter
       (fun p ->
@@ -115,6 +115,7 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
                            (PC.string_of_term t pc) ^ "\"" ^
                            msg))
       pres
+  end
 
 
 let get_boolean_term_verified (ie: info_expression) (pc:Proof_context.t): term =

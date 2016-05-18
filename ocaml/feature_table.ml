@@ -351,6 +351,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
           let n,nms,tps,ps_rev,tgt = constructor_rule idx p ags (nb+2) ft in
           let chn  = Term.make_implication_chain ps_rev tgt (n+imp_id) in
           Term.all_quantified n (nms,tps) empty_formals chn in
+        let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in
         Term.binary imp_id rule tgt)
       (Application(p,[|x|],true))
       lst in
@@ -760,14 +761,14 @@ let make_lambda
 
 
 let make_application
-    (f:term) (args:term array) (pred:bool) (nbenv:int) (ft:t): term =
+    (f:term) (args:term array) (tup:type_term) (pred:bool) (nbenv:int) (ft:t)
+    : term =
   assert (Array.length args > 0);
   let args =
     if Array.length args = 1 then
       args
     else
-      assert false (* nyi *)
-      (*[|tuple_of_args args nbenv ft|]*)
+      [|tuple_of_args args tup nbenv ft|]
   in
   Application (f, args, pred)
 

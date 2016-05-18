@@ -336,9 +336,10 @@ let make_lambda
 
 
 let make_application
-    (f:term) (args:term array) (nb:int) (pred:bool) (c:t): term =
+    (f:term) (args:term array) (tup:type_term) (nb:int) (pred:bool) (c:t)
+    : term =
   let nbenv = count_variables c in
-  let res = Feature_table.make_application f args pred (nb+nbenv) c.ft in
+  let res = Feature_table.make_application f args tup pred (nb+nbenv) c.ft in
   res
 
 
@@ -1428,11 +1429,18 @@ let term_preconditions (t:term)  (c:t): term list =
         if Array.length args = 0 && arity i 0 c > 0 then
           lst
         else
+          let tvs = tvars c
+          and nb  = count_variables c in
           let n,nms,lst1 = preconditions i 0 c in
           assert (n = Array.length args);
           let lst = pres_args args lst in
           List.fold_left
-            (fun lst t -> (Term.apply0 t args ags)::lst)
+            (fun lst t ->
+              let t =
+                Feature_table.substituted t n nb 0 args 0 ags tvs c.ft
+              in
+              t :: lst
+            )
             lst
             lst1
     | Application (f,args,true) -> (* predicate application *)

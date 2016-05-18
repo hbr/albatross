@@ -730,9 +730,11 @@ let make_lambda
   Context.make_lambda n nms ps t pr 0 tp c
 
 
-let make_application (f:term) (args:term array) (nb:int) (pr:bool) (pc:t): term =
+let make_application
+    (f:term) (args:term array) (tup:type_term) (nb:int) (pr:bool) (pc:t)
+    : term =
   let c = context pc in
-  Context.make_application f args nb pr c
+  Context.make_application f args tup nb pr c
 
 
 let is_inductive_set (i:int) (pc:t): bool =
@@ -1017,11 +1019,11 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
   if not (Term.equivalent (term i pc) (RD.term_a rdj c))
   then begin
     printf "add_mp premise     %d %s %s\n" i
-      (string_of_term_i i pc) (Term.to_string (term i pc));
+      (string_long_of_term_i i pc) (Term.to_string (term i pc));
     printf "       implication %d %s %s\n"
-      j (string_of_term_i j pc) (Term.to_string (term j pc));
+      j (string_long_of_term_i j pc) (Term.to_string (term j pc));
     printf "       term_a         %s %s\n"
-      (string_of_term (RD.term_a rdj c) pc)
+      (string_long_of_term (RD.term_a rdj c) pc)
       (Term.to_string (RD.term_a rdj c))
   end;
   assert (Term.equivalent (term i pc) (RD.term_a rdj c));
@@ -1612,15 +1614,17 @@ let prove_equality (g:term) (pc:t): int =
   let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
-  let tp = Context.function_of_terms args1 left c in
-  let lam = make_lambda nargs [||] [] tlam false tp pc in
+  let tup  = Context.tuple_of_terms args1 c
+  and r_tp = Context.type_of_term left c in
+  let f_tp = VAppl (Context.function_index c, [|tup;r_tp|], [||]) in
+  let lam = make_lambda nargs [||] [] tlam false f_tp pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
   let lam_1up = Term.up 1 lam
   and args1_up1 = Term.array_up 1 args1
   and args2_up1 = Term.array_up 1 args2 in
   try
-    let flhs_1up = make_application lam_1up args1_up1 1 false pc
+    let flhs_1up = make_application lam_1up args1_up1 tup 1 false pc
     and frhs_x i =
       let args =
         Array.init nargs
@@ -1628,12 +1632,12 @@ let prove_equality (g:term) (pc:t): int =
             if j < i then args2_up1.(j)
             else if j = i then Variable 0
             else args1_up1.(j)) in
-      make_application lam_1up args 1 false pc in
+      make_application lam_1up args tup 1 false pc in
     let pred_inner i =
       VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags)
     in
     let start_term =
-      let t = make_application lam args1 0 false pc in
+      let t = make_application lam args1 tup 0 false pc in
       VAppl (eq_id, [|t;t|], ags)
     in
     let start_idx  = find_match start_term pc in
@@ -1644,7 +1648,7 @@ let prove_equality (g:term) (pc:t): int =
       let ptp = predicate_of_type tp pc in
       let pred_i = Lam(1,[||],[],pred_inner_i,true,ptp) in
       let ai_abstracted =
-        make_application pred_i [|args1.(i)|] 0 true pc in
+        make_application pred_i [|args1.(i)|] tp 0 true pc in
       let imp = implication (term !result pc) ai_abstracted pc in
       let idx2 = eval_backward ai_abstracted imp
           (Eval.Beta (Eval.Term ai_abstracted)) pc in
@@ -1659,7 +1663,7 @@ let prove_equality (g:term) (pc:t): int =
     done;
     let e =
       let ev args =
-        Eval.Beta (Eval.Term (make_application lam args 0 true pc)) in
+        Eval.Beta (Eval.Term (make_application lam args tup 0 true pc)) in
       Eval.VApply(eq_id, [|ev args1; ev args2|], ags)
     in
     result := add_fwd_evaluation g !result e false pc;
