@@ -123,27 +123,48 @@ let get_boolean_term_verified (ie: info_expression) (pc:Proof_context.t): term =
   verify_preconditions t ie.i pc;
   t
 
-let add_assumptions_or_axioms
-    (lst:compound) (is_axiom:bool) (pc:Proof_context.t): (int*info) list =
+
+let terms_of_compound (lst:compound) (pc:PC.t): term withinfo list =
   List.map
     (fun ie ->
       let t = get_boolean_term ie pc in
+      withinfo ie.i t
+    )
+    lst
+
+
+let add_assumption_or_axiom_terms
+    (lst: term withinfo list)
+    (is_axiom: bool)
+    (pc:PC.t)
+    : (int * info) list =
+  List.map
+    (fun it ->
+      let t = it.v in
       if is_axiom && Term.is_all_quantified t then begin
         let str =
           "Universal quantification not allowed in ensure clause"
           ^ "\n  normalized term: "
           ^ (PC.string_long_of_term t pc) in
-        error_info ie.i str
+        error_info it.i str
       end;
-      verify_preconditions t ie.i pc;
+      verify_preconditions t it.i pc;
       let idx =
         if is_axiom then
           Proof_context.add_axiom t pc
         else begin
           Proof_context.add_assumption t pc
         end in
-      idx,ie.i)
+      idx,it.i)
     lst
+
+
+
+let add_assumptions_or_axioms
+    (lst:compound) (is_axiom:bool) (pc:Proof_context.t)
+    : (int*info) list =
+  let lst = terms_of_compound lst pc in
+  add_assumption_or_axiom_terms lst is_axiom pc
 
 
 let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
@@ -151,8 +172,8 @@ let add_assumptions (lst:compound) (pc:Proof_context.t): unit =
   PC.close pc
 
 
-let add_axioms (lst:compound) (pc:Proof_context.t): (int*info) list =
-  add_assumptions_or_axioms lst true pc
+let add_axioms (lst:term withinfo list) (pc:Proof_context.t): (int*info) list =
+  add_assumption_or_axiom_terms lst true pc
 
 
 
@@ -165,36 +186,42 @@ let add_proved
   Proof_context.add_proved_list defer owner lst pc
 
 
-
-
-let prove_basic_expression (ie:info_expression) (ens:bool) (pc:Proof_context.t)
-    : int * info =
-  let t = get_boolean_term ie pc in
+let prove_basic_term (it:term withinfo) (ens:bool) (pc:PC.t): int * info =
+  let t = it.v in
   if ens && Term.is_all_quantified t then begin
     let str =
       "Universal quantification not allowed in ensure clause"
       ^ "\n  normalized term: "
       ^ (PC.string_long_of_term t pc) in
-    error_info ie.i str
+    error_info it.i str
   end;
-  verify_preconditions t ie.i pc;
+  verify_preconditions t it.i pc;
   try
     let res = Prover.prove_and_insert t pc in
     PC.close pc;
-    res, ie.i
+    res, it.i
   with Proof.Proof_failed msg ->
-    error_info ie.i ("Cannot prove" ^ msg)
+    error_info it.i ("Cannot prove" ^ msg)
 
 
 
-let prove_ensure (lst:compound) (k:kind) (pc:Proof_context.t)
+
+let prove_basic_expression (ie:info_expression) (ens:bool) (pc:Proof_context.t)
+    : int * info =
+  let t = get_boolean_term ie pc in
+  prove_basic_term (withinfo ie.i t) ens pc
+
+
+
+
+let prove_ensure (lst:term withinfo list) (k:kind) (pc:Proof_context.t)
     : (term*proof_term) list =
   let idx_info_lst =
     match k with
       PAxiom | PDeferred ->
         add_axioms lst pc
     | PNormal ->
-        List.map (fun ie -> prove_basic_expression ie true pc) lst
+        List.map (fun it -> prove_basic_term it true pc) lst
   in
   List.map
     (fun (idx,info) ->
@@ -506,6 +533,7 @@ let rec make_proof
   if defer then
     Proof_context.check_deferred pc1;  (* owner class has to be deferred *)
   add_assumptions rlst pc1;
+  let elst = terms_of_compound elst pc1 in
   List.iter (fun ie -> prove_check_expression i ie pc1) clst;
   let pair_lst = prove_ensure elst kind pc1 in
   add_proved defer owner pair_lst pc;
