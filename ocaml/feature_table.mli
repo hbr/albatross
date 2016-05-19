@@ -58,7 +58,6 @@ val variant_term: term -> int -> int -> int -> t -> term
 val has_variant: int -> int -> t -> bool
 
 
-val fully_expanded: term -> int -> Tvars.t -> t -> term
 val complexity: term -> int -> Tvars.t -> t -> int
 
 

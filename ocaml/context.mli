@@ -175,7 +175,7 @@ val variable:        int -> t -> int * Tvars.t * Sign.t
 
 val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 
-val fully_expanded: term -> int -> t -> term
+val complexity: term -> t -> int
 
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> agens -> t -> int * int array * term

@@ -413,8 +413,9 @@ let split_equality (t:term) (pc:t): int * term * term =
   Proof_table.split_equality t 0 pc.base
 
 
-let expand_term (t:term) (pc:t): term =
-  Proof_table.expand_term t pc.base
+
+let complexity (t:term) (pc:t): int =
+  Context.complexity t (context pc)
 
 
 let add_to_equalities (t:term) (idx:int) (pc:t): unit =
@@ -427,8 +428,9 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
     let is_simpl =
       if 0 < nargs then false (*Term.nodes right < Term.nodes left*)
       else
-        let left, right = expand_term left pc, expand_term right pc in
-        Term.nodes right < Term.nodes left
+        complexity right pc < complexity left pc
+        (*let left, right = expand_term left pc, expand_term right pc in
+        Term.nodes right < Term.nodes left*)
     in
     if is_simpl then begin
       (*printf "add_to_equalities %d %s   <%s>\n"

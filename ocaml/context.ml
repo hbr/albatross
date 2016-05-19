@@ -891,10 +891,10 @@ let arity (idx:int) (nb:int) (c:t): int =
 
 
 
-let fully_expanded (t:term) (nb:int) (c:t): term =
+let complexity (t:term) (c:t): int =
   let nvars = count_variables c
   and tvs   = tvars c in
-  Feature_table.fully_expanded t (nb+nvars) tvs c.ft
+  Feature_table.complexity t nvars tvs c.ft
 
 
 

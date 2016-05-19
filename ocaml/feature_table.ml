@@ -1763,90 +1763,71 @@ let seeded_term (t:term) (nb:int) (ft:t): term =
   seeded t nb*)
 
 
-
-
-
-
-(* Function expansion
-   ==================
-
-   A called function f(x,y,...) has the form
-
-       VAppl(i,args,ags)
-
-   The actual arguments replace the formal arguments, the actual generics replace
-   the formal generics. If the function has a definition it has a definition term
-   't0' which has the formal arguments i.e. 't0(x,y,...)'.
-
-   The definition term 't0' might have other function calls of the form
-   'VAppl(i,args,ags)'. However the actual generics in the inner function calls
-   are expressed in terms of the formal generics of the outer function which have to
-   be replaced by the actual generics of the outer function call. This replacement
-   might lead to a more specialized inner function call.
-
-   We need a function which replaces in a definition term all formal generics by
-   actual generics an specializes the function calls appropriately.
-
-*)
-
-
-let rec fully_expanded (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
-    : term =
-  (* Expand the functions in the term [t] which comes from an environment with
-     [nb] variables and whose types are valid in the type environment [tvs].
+let rec complexity (t:term) (nbenv:int) (tvs:Tvars.t) (ft:t): int =
+  (* The complexity (i.e. node count) of the term [t] with all functions fully
+     expanded. The term [t] comes from an environment with
+     [nb] variables and its types are valid in the type environment [tvs].
    *)
-  let expand t nb = fully_expanded t nb tvs ft in
-  let expargs args nb = Array.map (fun t -> expand t nb) args
-  and explst  lst  nb = List.map  (fun t -> expand t nb) lst
-  in
+  complexity_base t 0 [||] nbenv tvs ft
+
+and complexity_base
+    (t:term) (nb:int) (cargs:int array) (nbenv:int) (tvs:Tvars.t) (ft:t)
+    : int =
+  (* The term [t] has [nb] bound variables below [#cargs] arguments below
+     [nbenv] variables coming from the type environment [tvs].
+
+     Compute the complexity (i.e. node count) of the term [t] with all
+     functions fully expanded and all arguments substituted by term with a
+     node count corresponding to the array [cargs].
+   *)
+
+  let compl t = complexity_base t nb cargs nbenv tvs ft in
+  let nargs = Array.length cargs in
   match t with
-    Variable i ->
-      assert (i < nb); t
-  | VAppl(i,args,ags) ->
-      assert (nb <= i);
-      let args = expargs args nb in
-      expanded_feature i args ags nb tvs ft
+    Variable i when nb <= i && i < nb + nargs ->
+      cargs.(i - nb)
+  | Variable i ->
+      assert (i < nb || nb + nargs <= i);
+      assert (i < nb + nargs + nbenv);
+      1
+  | VAppl (i,args,ags) ->
+      assert (nb + nargs + nbenv <= i);
+      let cargs = Array.map compl args in
+      feature_complexity (i - nb - nargs - nbenv) cargs ags tvs ft
   | Application (f,args,pr) ->
-      let f = expand f nb in
-      Application(f,args,pr)
+      let cf = compl f
+      and cargs = Array.map compl args in
+      Myarray.sum cf cargs
   | Lam (n,nms,ps,t0,pr,tp) ->
-      let ps = explst ps (1+nb)
-      and t0 = expand t0 (1+nb) in
-      Lam(n,nms,ps,t0,pr,tp)
+      1 + complexity_base t0 (1+nb) cargs nbenv tvs ft
   | QExp (n,tps,fgs,t0,is_all) ->
-      assert (fgs = empty_formals);
-      let t0  = expand t0 (n+nb) in
-      QExp(n,tps,fgs,t0,is_all)
+      1 + complexity_base t0 (n+nb) cargs nbenv tvs ft
   | Flow _ | Indset _ ->
-      t
+      Term.nodes0 t nb cargs
 
-and expanded_feature
-    (i:int) (args:arguments) (ags:agens) (nb:int) (tvs:Tvars.t) (ft:t): term =
-  (* Expand the feature [i] (coming from an environment with [nb] bound variables)
-     with the arguments [args] and the actual generics [ags] from the type
-     environment [tvs] *)
-  assert (nb <= i);
-  let bdesc = base_descriptor (i-nb) ft in
-  try
-    let t0 = Feature.Spec.definition_term bdesc#specification in
-    assert (Array.length args = arity (i-nb) ft);
-    let nargs = Array.length args in
-    let t = substituted t0 nargs 0 0 args nb ags tvs ft in
-    fully_expanded t nb tvs ft
-  with Not_found ->
-    VAppl(i,args,ags)
-
-
-
-
-let complexity (t:term) (nb:int) (tvs:Tvars.t) (ft:t): int =
-  (* The complexity of the term [t] coming from and environment with [nvars]
-     variables and the type context [tvs].
-
-     The complexity of a term is the node count of the fully expanded term.
+and feature_complexity
+    (i:int) (cargs:int array) (ags:agens) (tvs:Tvars.t) (ft:t)
+    : int =
+  (* The complexity of the feature call [VAppl(i,args,ags)] where [cargs]
+     contains the complexity of the arguments. The formal generics are substituted
+     by the actual generics coming from the type environment [tvs].
    *)
-  let t = fully_expanded t nb tvs ft in
-  Term.nodes t
+  let desc = descriptor i ft in
+  try
+    let t0 = Feature.Spec.definition_term desc.bdesc#specification in
+    let nargs = Array.length cargs
+    and ari   = Sign.arity desc.sign in
+    let t = substituted t0  0 ari 0 [||] 0 ags tvs ft in
+    if nargs = ari then
+      complexity_base t 0 cargs 0 tvs ft
+    else begin
+      assert (nargs = 0);
+      complexity t ari tvs ft
+    end
+  with Not_found ->
+    Myarray.sum 1 cargs
+
+
 
 
 
@@ -3308,7 +3289,7 @@ let inspect_unfolded (info:info) (args:term array) (nb:int) (ntvs:int)(ft:t)
 
 let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
   (* Downgrade all calls of the form
- 
+
          [ Application (VAppl (i, [||], ags), args, pr)]
      to
 

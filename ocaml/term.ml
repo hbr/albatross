@@ -81,6 +81,7 @@ module Term: sig
   val is_variable: term -> bool
   val is_argument: term -> int -> bool
 
+  val nodes0: term -> int -> int array -> int
   val nodes: term -> int
 
   val fold_with_level: ('a -> int -> int -> 'a) -> 'a -> term -> 'a
@@ -283,7 +284,35 @@ end = struct
       let i = variable t in i < nargs
     with Not_found -> false
 
-
+  let nodes0 (t:term) (nb:int) (cargs:int array): int =
+    (* The number of nodes in the term [t] which has [nb] bound variable,
+       [#cargs] number of arguments. The arguments are substituted by terms
+       which have a node count corresponding to the array [cargs].
+     *)
+    let nargs = Array.length cargs in
+    let rec nds t nb =
+      let ndsarr n args =
+        Array.fold_left (fun sum t -> sum + nds t nb) n args
+      in
+      match t with
+        Variable i when nb <= i && i < nb + nargs ->
+          cargs.(i - nb)
+      | Variable _ ->
+          1
+      | VAppl (i,args,_) ->
+          ndsarr 1 args
+      | Application (f,args,_) ->
+          ndsarr (nds f nb) args
+      | Lam (_,_,pres,t,_,_) ->
+          1 + nds t (1 + nb) (* preconditions are not counted *)
+      | QExp (n,_,_,t,_) ->
+          1 + nds t (n + nb)
+      | Flow (ctrl,args) ->
+          ndsarr 1 args
+      | Indset (_,_,rs) ->
+          ndsarr 1 rs
+    in
+    nds t nb
 
   let rec nodes (t:term): int =
     (* The number of nodes in the term t *)
@@ -298,7 +327,7 @@ end = struct
     | Application (f,args,_) ->
         nodes f + nodesarr args
     | Lam (_,_,pres,t,_,_) ->
-        1 + nodeslst pres + nodes t
+        1 + nodes t (* preconditions are not counted *)
     | QExp (_,_,_,t,_) ->
         1 + (nodes t)
     | Flow (ctrl,args) ->

@@ -162,9 +162,6 @@ let string_of_term_anon (t:term) (nb:int) (at:t): string =
   Context.string_of_term0 t true false nb at.c
 
 
-let expand_term (t:term) (at:t): term =
-  Context.fully_expanded t 0 at.c
-
 
 let prepend_names (nms:int array) (names:int array): int array =
   let nms = Feature_table.adapt_names nms names in

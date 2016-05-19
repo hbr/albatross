@@ -221,6 +221,7 @@ module Myarray: sig
 
   val combine: 'a array -> 'b array -> ('a*'b) array
   val split:   ('a*'b) array -> 'a array * 'b array
+  val sum: int -> int array -> int
 
 end = struct
 
@@ -234,6 +235,8 @@ end = struct
     and b = Array.map (fun (_,y) -> y) c in
     a,b
 
+  let sum (start:int) (arr:int array): int =
+    Array.fold_left (fun sum n -> sum + n) start arr
 end
 
 

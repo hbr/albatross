@@ -115,7 +115,10 @@ let unify_pattern
   in
   uni pat1 pat2;
   assert begin
-    let ok = Term.subst pat1 n subargs = Term.subst pat2 n subargs in
+    let ok =
+      Term.equivalent
+        (Term.subst pat1 n subargs)
+        (Term.subst pat2 n subargs) in
     if not ok then begin
       Printf.printf "unify_pattern\n";
       Printf.printf "   n1 %d, p1 %s\n" n1 (Term.to_string p1);
