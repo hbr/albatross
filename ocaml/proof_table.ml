@@ -1068,7 +1068,8 @@ let discharged (i:int) (at:t): term * proof_term =
   and pt  = proof_term i at in
   if count_last_arguments at = 0 &&
     count_local_assumptions at = 0 &&
-    count_last_local at = 1
+    count_last_local at = 1 &&
+    i = count_previous at
   then begin
     assert (i = count_previous at);
     tgt,pt

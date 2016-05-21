@@ -164,7 +164,10 @@ let expected_arity (tb:t): int =
 let tvars (tb:t): Tvars.t = tb.tvs
 
 let string_of_term (t:term) (tb:t): string =
-  Context.string_of_term0 t true false 0 (context tb)
+  let c = context tb in
+  let ft = Context.feature_table c in
+  Feature_table.term_to_string t true true 0 (Context.varnames c) tb.tvs ft
+  (*Context.string_of_term0 t true false 0 (context tb)*)
 
 
 
@@ -187,6 +190,14 @@ let string_of_reduced_complete_type (tp:type_term) (tb:t): string =
 
 let string_of_type (t:type_term) (tb:t): string =
   Class_table.string_of_type t tb.tvs (class_table tb)
+
+let string_of_type_array (ags:agens) (tb:t): string =
+  "[" ^
+  (String.concat
+     ","
+     (List.map (fun tp -> string_of_type tp tb) (Array.to_list ags))
+  ) ^ "]"
+
 
 let string_of_signature (s:Sign.t) (tb:t): string =
   Class_table.string_of_signature s tb.tvs (class_table tb)
@@ -383,8 +394,16 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
   else begin
     if tb.trace then begin
       printf "resize %d, %d, %d\n" nlocs nglobs nfgs;
+      printf "  lcap %d, gcap %d, fcap %d\n"
+        (local_capacity tb) (global_capacity tb) (fgs_capacity tb);
       printf "  tvs  %s\n" (string_of_tvs tb);
-      printf "  subs %s\n" (string_of_substitutions tb)
+      printf "  subs %s\n" (string_of_substitutions tb);
+      printf "  terms\n";
+      Seq.iteri
+        (fun i trec ->
+          printf "    %d %s\n" i (string_of_term trec.term tb)
+        )
+        tb.terms
     end;
     let nglobs = nglobs + 2 in  (* always 2 globals reserve *)
     let nall = Tvars.count_all tb.tvs
@@ -397,11 +416,14 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
     in
     let start_locs1  = start_locs0 + nlocs
     and start_globs1 = start_globs0 + nlocs in
-    let transform =
-      (fun tp ->
-        let tp = Term.up_from nfgs nall tp in
-        let tp = Term.up_from nglobs cnt tp in
-        Term.up nlocs tp)
+    let transform tp =
+      let tp = Term.up_from nfgs nall tp in
+      let tp = Term.up_from nglobs cnt tp in
+      Term.up nlocs tp
+    and transform_term t =
+      let t = Term.shift_from 0 0 nfgs nall t in
+      let t = Term.shift_from 0 0 nglobs cnt t in
+      Term.shift 0 nlocs t
     in
     tb.rtype <- transform tb.rtype;
     tb.tvs <- begin
@@ -430,8 +452,11 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
         let trec = Seq.elem i tb.terms in
         Seq.put
           i
-          {trec with sign = Sign.map transform trec.sign;
+          {term  = transform_term trec.term;
+           sign  = Sign.map transform trec.sign;
            sign0 = Sign.map transform trec.sign0}
+          (*{trec with sign = Sign.map transform trec.sign;
+           sign0 = Sign.map transform trec.sign0}*)
           tb.terms)
       0 (Seq.count tb.terms);
     let transform_seq seq =
@@ -442,8 +467,16 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
     transform_seq tb.lamstack;
     transform_seq tb.reqstack;
     if tb.trace then begin
+      printf "  lcap %d, gcap %d, fcap %d\n"
+        (local_capacity tb) (global_capacity tb) (fgs_capacity tb);
       printf "  tvs  %s\n" (string_of_tvs tb);
-      printf "  subs %s\n" (string_of_substitutions tb)
+      printf "  subs %s\n" (string_of_substitutions tb);
+      printf "  terms\n";
+      Seq.iteri
+        (fun i trec ->
+          printf "    %d %s\n" i (string_of_term trec.term tb)
+        )
+        tb.terms
     end
   end
 
@@ -925,7 +958,20 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
       let ags = Array.init
           (globals_beyond tb - glob_start)
           (fun i -> Variable (glob_start + i)) in
-      VAppl (i,[||],ags) in
+      if not (is_expecting_function tb) && not (Sign.is_constant s) then begin
+        let ft = feature_table tb
+        and nvars = count_variables tb in
+        let n   = Sign.arity s in
+        let nms = standard_argnames n
+        and args = standard_substitution n
+        and pr  = is_predicate tb.rtype tb
+        and tup_tp = Class_table.domain_type tb.rtype in
+        let t0 = VAppl(i+n,args,ags) in
+        let t0 = Feature_table.add_tuple_accessors t0 n tup_tp nvars ft in
+        Lam (n, nms, [], t0, pr, tb.rtype)
+      end else
+        VAppl (i,[||],ags)
+  in
   Seq.push {term = term; sign = s1; sign0 = s} tb.terms
 
 
@@ -993,7 +1039,7 @@ let complete_function (tb:t): unit =
     else begin
       match frec.term with
         VAppl(i,args0,ags) ->
-          assert (Array.length args0 = 0);
+          assert (Array.length args0 = 0); (* In 'add_leaf' added without arguments *)
           if i = in_index tb then
             Application (args.(1), [|args.(0)|], true)
           else

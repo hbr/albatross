@@ -88,6 +88,8 @@ val count_variables:  t -> int
     (** The number of variables in this context and all preceeding
         contexts *)
 
+val varnames: t -> names
+
 val ntvs: t -> int
 
 val implication_index: t -> int

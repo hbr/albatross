@@ -1166,6 +1166,16 @@ let rec type_of_term_full
       (fun i t -> ignore (type_of_term_full t (Some reqtps.(i)) trace c))
       args
   in
+  if trace then begin
+    printf "  type of %s\n" (string_long_of_term t c);
+    begin match req_tp with
+      Some tp ->
+        printf "    required type %s\n" (string_of_type_term tp c)
+    | _ ->
+        ()
+    end;
+    printf "    actual type %s\n" (string_of_type_term (type_of_term t c) c)
+  end;
   match t with
     Variable i ->
       assert (i < nvars);
@@ -1174,6 +1184,10 @@ let rec type_of_term_full
       assert (nvars <= i);
       let len = Array.length args
       and s   = feature_signature i ags in
+      if trace then begin
+        printf "  feature application ags %s\n" (string_of_ags ags c);
+        printf "          signature       %s\n" (string_of_signature s c);
+      end;
       assert (Sign.has_result s);
       if len = Sign.arity s then begin
         check_args (Sign.arguments s) args;

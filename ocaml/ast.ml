@@ -1431,7 +1431,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       (standard_argnames (n1+n2),tps)
       (fgnms,fgcon)
       t in
-  printf "inversion %s\n" (Proof_context.string_of_term t pc);
+  (*printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
   ignore(add_case_axiom t pc)
 
 
@@ -1470,7 +1470,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and fgcon = Tvars.fgconcepts tvs1
   in
   let q = Term.all_quantified 1 (nms,tps) (fgnms,fgcon) t in
-  printf "inversion %s\n" (PC.string_of_term q pc);
+  (*printf "inversion %s\n" (PC.string_of_term q pc);*)
   ignore(add_case_axiom q pc)
 
 
@@ -1539,7 +1539,7 @@ let add_case_injections
           in
           let imp = Feature_table.implication eq_ca_cb eq_ai_bi (2*n) in
           let t = Term.all_quantified (2*n) (nms,tps) (fgnms,fgcon) imp in
-          printf "injection %s\n" (Proof_context.string_of_term t pc);
+          (*printf "injection %s\n" (Proof_context.string_of_term t pc);*)
           ignore(add_case_axiom t pc)
         done)
     clst

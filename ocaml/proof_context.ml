@@ -1889,7 +1889,6 @@ let add_induction_law0 (cls:int) (pc:t): unit =
   assert (is_global pc);
   let law = Proof_table.type_induction_law cls pc.base
   and pt  = Indtype cls in
-  printf "induction law %s\n" (string_of_term law pc);
   let idx = add_proved_0 false (-1) law pt 0 pc in
   let ct = class_table pc in
   Class_table.set_induction_law idx cls ct

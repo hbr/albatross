@@ -316,9 +316,7 @@ end = struct
 
   let rec nodes (t:term): int =
     (* The number of nodes in the term t *)
-    let nodeslst lst =
-      List.fold_left (fun n t -> n + nodes t) 0 lst
-    and nodesarr arr =
+    let nodesarr arr =
       Array.fold_left (fun sum t -> sum + (nodes t)) 0 arr
     in
     match t with
@@ -631,7 +629,7 @@ end = struct
       | QExp (n,(nms,tps),(fgnms,fgcon),t0,is_all) ->
           assert (n = Array.length tps);
           let start1 = n + start1
-          and start2 = Array.length fgcon in
+          and start2 = Array.length fgcon + start2 in
           QExp(n,
                (nms,   shift_args delta2 start2 0 0 tps),
                (fgnms, shift_args delta2 start2 0 0 fgcon),

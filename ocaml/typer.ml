@@ -1004,6 +1004,7 @@ let analyze_expression
 
   validate_term ie.i term c;
   validate_visibility ie.i term c;
+  assert (Context.is_well_typed term c);
   let term = unfold_inspect ie.i term c in
   assert (Context.is_well_typed term c);
   (*assert (Term_builder.is_valid term c);*)

@@ -2350,16 +2350,9 @@ let find_funcs
         let arity = Sign.arity sign
         and tvs   = Tvars.fgs_to_global desc.tvs
         in
-        let nfgs = Tvars.count_all tvs in
-        if arity <= nargs then
+        if arity <= nargs || nargs = 0 then
           (i,tvs,sign) :: lst
-        else if nargs = 0 then begin (* upgrade *)
-          assert (0 < arity);
-          let is_pred = is_predicate i ft in
-          let tp = Class_table.upgrade_signature nfgs is_pred sign in
-          let s  = Sign.make_const tp in
-          (i,tvs,s) :: lst
-        end else (* nargs <> 0  && nargs < arity *)
+        else
           lst
       )
       []
