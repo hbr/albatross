@@ -52,7 +52,7 @@ let goal_limit () = !goal_limit_ref
 
 
 let goal (g:term) (black:IntSet.t) (par:(int*int*int) option) (pc: PC.t): goal =
-  assert (PC.is_well_typed g pc);
+  (*assert (PC.is_well_typed g pc);*)
   let c = {pc=pc; map = TermMap.empty} in
   {goal      = g;
    ctxt      = c;

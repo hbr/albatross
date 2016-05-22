@@ -367,7 +367,7 @@ let proof_term (i:int) (at:t): proof_term =
 let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
-  assert (Context.is_well_typed t at.c);
+  (*assert (Context.is_well_typed t at.c);*)
   let raw_add () =
     Ass_seq.push {nbenv0 = count_variables at;
                   c      = at.c;
@@ -936,12 +936,17 @@ let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
     false
 
 
+let is_well_typed (t:term) (at:t): bool =
+  Context.is_well_typed t at.c
+
+
 let add_proved (t:term) (pt:proof_term) (delta:int) (at:t): unit =
   (** Add the term [t] and its proof term [pt] to the table.
    *)
   assert (delta <= count at);
   let start = count at - delta in
   let pt = Proof_term.adapt start delta pt in
+  assert (not (is_global at) || is_well_typed t at);
   assert (not (is_global at) || is_proof_pair t pt at);
   add_proved_0 t pt at
 

@@ -675,7 +675,6 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     | _ ->
         do_subterms t
   in
-  assert (is_well_typed t pc);
   let tsimp, te, modi = simp t in
   let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
   assert (ta = t);
@@ -683,6 +682,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     printf "simplified_term  %s\n" (string_of_term t pc);
     printf "           tb    %s\n" (string_of_term tb pc);
     printf "           tsimp %s\n" (string_of_term tsimp pc);
+    assert (is_well_typed t pc);
   end;
   assert (tb = tsimp);
   assert (modi = (tsimp <> t));
@@ -1751,7 +1751,7 @@ let eval_reduce (g:term) (lst:int list) (pc:t): int list =
 
 
 let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
-  assert (is_well_typed g pc);
+  (*assert (is_well_typed g pc);*)
   let lst = backward_in_table g blacklst pc in
   let lst = eval_reduce g lst pc in
   if pc.trace && is_trace_extended pc then begin
