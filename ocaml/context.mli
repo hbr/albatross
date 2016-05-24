@@ -124,6 +124,9 @@ val local_argnames: t -> int array
 val local_types:    t -> types
 val local_formals:  t -> formals
 val local_fgs: t -> formals
+val argnames: t -> names
+val argtypes: t -> types
+
 val local_types_reduced: t -> types
 
 val tvars: t -> Tvars.t

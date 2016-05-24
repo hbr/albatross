@@ -33,6 +33,7 @@ and formals    = names * arguments
 and type_term  = term
 
 exception Term_capture
+exception Empty_term
 exception Name_clash of int
 
 module TermSet = Set.Make(struct
@@ -633,7 +634,8 @@ end = struct
         Variable i when i < nb1 ->
           t
       | Variable i when i < nb1+len1 ->
-          assert (args1.(i-nb1) <> empty_term);
+          if args1.(i-nb1) = empty_term then
+            raise Empty_term;
           shift (nb1+n1-len1) 0 args1.(i-nb1)
       | Variable i when i < nb1+n1 ->
           Variable (i-len1)

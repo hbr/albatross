@@ -221,6 +221,12 @@ let entry_local_argnames (e:entry): int array =
 let entry_local_types (e:entry): term array =
   Array.init e.nargs_delta (fun i -> snd e.fargs.(i))
 
+let entry_argnames (e:entry): names =
+  Array.init (Array.length e.fargs) (fun i -> fst e.fargs.(i))
+
+let entry_argtypes (e:entry): types =
+  Array.init (Array.length e.fargs) (fun i -> snd e.fargs.(i))
+
 
 let local_argnames (c:t): int array = entry_local_argnames c.entry
 
@@ -237,6 +243,11 @@ let local_fgs (c:t): formals =
   and fgcon = Array.sub (Tvars.fgconcepts tvs) 0 nfgs in
   fgnms,fgcon
 
+let argnames (c:t): names =
+  entry_argnames c.entry
+
+let argtypes (c:t): types =
+  entry_argtypes c.entry
 
 
 let local_type_reduced (i:int) (c:t): type_term =
@@ -277,6 +288,7 @@ let fgconcepts (c:t): type_term array = entry_fgconcepts c.entry
 let tvars_sub (c:t): TVars_sub.t = c.entry.tvs_sub
 
 let tvars (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
+
 
 let string_of_signature (s:Sign.t) (c:t): string =
   Class_table.string_of_signature
