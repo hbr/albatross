@@ -610,11 +610,16 @@ elem_type:
 |   tuple_type   { $1 }
 |   qmark_type   { $1 }
 |   star_type    { $1 }
-|   list_type    { $1 }
+|   LBRACE type_nt_inner RBRACE { Brace_type $2 }
+|   LBRACKET type_nt_inner RBRACKET { List_type $2 }
 |   LPAREN type_nt RPAREN { Paren_type $2 }
 
 
+type_nt_inner:
+    type_nt { $1 }
+|   type_list_min2 { Tuple_type $1 }
 
+    
 simple_type:
     UIDENTIFIER actual_generics {
   Normal_type ([],$1,$2)
@@ -636,11 +641,10 @@ arrow_type: elem_type ARROW type_nt {
 }
 
 
-qmark_type: elem_type QMARK   { QMark_type $1 }
+qmark_type:
+    elem_type QMARK   { Brace_type $1 }
 
 star_type:  elem_type TIMES   { Star_type $1 }
-
-list_type:  LBRACKET elem_type RBRACKET { List_type $2 }
 
 
 tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }

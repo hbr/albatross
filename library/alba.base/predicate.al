@@ -13,74 +13,74 @@ G: ANY
 
 immutable class PREDICATE[G] end
 
-(in)  (e:G, p:G?): BOOLEAN  note built_in end
-(/in) (a:G, p:G?): BOOLEAN -> not p(a)
+(in)  (e:G, p:{G}): BOOLEAN  note built_in end
+(/in) (a:G, p:{G}): BOOLEAN -> not p(a)
 
-(<=) (p,q:G?): ghost BOOLEAN -> all(x) p(x) ==> q(x)
-
-
-(=) (p,q:G?): ghost BOOLEAN -> p <= q and q <= p
+(<=) (p,q:{G}): ghost BOOLEAN -> all(x) p(x) ==> q(x)
 
 
+(=) (p,q:{G}): ghost BOOLEAN -> p <= q and q <= p
 
-all(p:G?) ensure p = p end
+
+
+all(p:{G}) ensure p = p end
 
 
 immutable class PREDICATE[G]
 inherit         ghost ANY end
 
 
-all(a,b:G, p:G?)
+all(a,b:G, p:{G})
         -- leibniz rule
     require  a = b
     ensure   p(a) ==> p(b)
     note     axiom end
 
 
-all(x:G, p,q:G?)
+all(x:G, p,q:{G})
     require p <= q
             p(x)
     ensure  q(x) end
 
 
 
-(+) (p,q:G?): G?   -> {x: p(x) or q(x)}
+(+) (p,q:{G}): {G}   -> {x: p(x) or q(x)}
 
-(*) (p,q:G?): G?   -> {x: p(x) and q(x)}
+(*) (p,q:{G}): {G}   -> {x: p(x) and q(x)}
 
-(-) (p,q:G?): G?   -> {x: p(x) and not q(x)}
+(-) (p,q:{G}): {G}   -> {x: p(x) and not q(x)}
 
-(-) (p:G?): G?     -> {x: not p(x)}
+(-) (p:{G}): {G}     -> {x: not p(x)}
 
-singleton (a:G): G? -> {x: x = a}
+singleton (a:G): {G} -> {x: x = a}
 
-0:G? = {x: false}
-1:G? = {x: true}
+0:{G} = {x: false}
+1:{G} = {x: true}
 
-(+) (pp:G??): ghost G? -> {x: some(p) pp(p) and p(x)}
+(+) (pp:{{G}}): ghost {G} -> {x: some(p) pp(p) and p(x)}
 
-(*) (pp:G??): ghost G? -> {x: all(p) pp(p) ==> p(x)}
+(*) (pp:{{G}}): ghost {G} -> {x: all(p) pp(p) ==> p(x)}
 
-is_lower_bound (p:G?, ps:G??): ghost BOOLEAN
+is_lower_bound (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> all(q) ps(q) ==> p <= q
 
-is_upper_bound (p:G?, ps:G??): ghost BOOLEAN
+is_upper_bound (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> all(q) ps(q) ==> q <= p
 
-lower_bounds(ps:G??): ghost G??
+lower_bounds(ps:{{G}}): ghost {{G}}
     -> {p: p.is_lower_bound(ps)}
 
-upper_bounds(ps:G??): ghost G??
+upper_bounds(ps:{{G}}): ghost {{G}}
     -> {p: p.is_upper_bound(ps)}
 
-is_least (p:G?, ps:G??): ghost BOOLEAN
+is_least (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> ps(p) and p.is_lower_bound(ps)
 
-is_greatest (p:G?, ps:G??): ghost BOOLEAN
+is_greatest (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> ps(p) and p.is_upper_bound(ps)
 
-is_infimum (p:G?, ps:G??): ghost BOOLEAN
+is_infimum (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> p.is_greatest(lower_bounds(ps))
 
-is_supremum (p:G?, ps:G??): ghost BOOLEAN
+is_supremum (p:{G}, ps:{{G}}): ghost BOOLEAN
     -> p.is_least(upper_bounds(ps))

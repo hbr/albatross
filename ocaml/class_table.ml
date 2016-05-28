@@ -394,7 +394,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
             assert (tarrlen=1);
-            1, ((to_string tarr.(0) nb 1) ^ "?")
+            1, ("{" ^ (to_string tarr.(0) nb 1) ^ "}")
           end else if j1 = sequence_index then begin
             assert (tarrlen=1);
             1, ((to_string tarr.(0) nb 1) ^ "*")
@@ -1142,7 +1142,7 @@ let get_type
         valid_tp (class_index0 path name) args
     | Paren_type tp ->
         get_tp tp
-    | QMark_type tp ->
+    | Brace_type tp ->
         let t = get_tp tp in
         valid_tp (class_index0 [] predicate_name) [|t|]
     | Star_type tp ->

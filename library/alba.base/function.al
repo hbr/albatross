@@ -15,7 +15,7 @@ B: ANY
 immutable class FUNCTION[A,B] end
 
 
-domain (f:A->B): ghost A?   note built_in end
+domain (f:A->B): ghost {A}   note built_in end
 
 0: (A->B)                   note built_in end
 
@@ -42,17 +42,17 @@ immutable class FUNCTION[A,B]
 inherit         ghost ANY end
 
 
-range (f:A->B): ghost B?
+range (f:A->B): ghost {B}
     -> {b: some(a) a in f.domain and f(a) = b}
 
-image (p:A?, f:A->B): ghost B?
+image (p:{A}, f:A->B): ghost {B}
     -> {y: some(x) x in (f.domain*p) and f(x) = y}
 
-preimage (q:B?, f:A->B): ghost A?
+preimage (q:{B}, f:A->B): ghost {A}
     -> {x: x in f.domain and f(x) in q}
 
 
-(|) (f:A->B, p:A?): (A->B)
+(|) (f:A->B, p:{A}): (A->B)
     -> agent (a:A):B
            require
                a in f.domain
@@ -96,13 +96,13 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> x = y
 
 
-is_finite (p:A?): ghost BOOLEAN
+is_finite (p:{A}): ghost BOOLEAN
     -> all(f:A->A) f.is_injective
                ==> f.domain = p
                ==> f.range <= p
                ==> f.range = p
 
-is_choice (f:A?->A, p:A?): ghost BOOLEAN
+is_choice (f:{A}->A, p:{A}): ghost BOOLEAN
     -> all(q) q /= 0 and q <= p ==> q in f.domain and f(q) in q
 
 is_iterable (f:A->A): ghost BOOLEAN
@@ -179,7 +179,7 @@ all(f:A->A)
     end
 
 {:
-(|) (f:A->B, p:A?): ghost (A->B)
+(|) (f:A->B, p:{A}): ghost (A->B)
     ensure
         Result.domain = f.domain * p
         Result <= f
@@ -306,7 +306,7 @@ all(f,g:A->B)
 
 
 {:
-all(f:A->B, p:A?)
+all(f:A->B, p:{A})
     proof
         all(y:B)
             require

@@ -13,7 +13,7 @@ all(a,b,c:G)
         {a} /= 0
     end
 
-all(x:G,p,q,r:G?)
+all(x:G,p,q,r:{G})
     ensure
         p <= p
         (p <= q) ==> (q <= p) ==> (p = q)
@@ -46,12 +46,12 @@ all(x:G,p,q,r:G?)
     end
 
 
-all(x:G,p:G?)
+all(x:G,p:{G})
     ensure
         p(x) ==> {x} <= p
     end
 
-all(p,q:G?)
+all(p,q:{G})
     require
         some(x) p(x)
         p <= q
@@ -60,7 +60,7 @@ all(p,q:G?)
     end
 
 
-all(ps:G??)
+all(ps:{{G}})
     ensure
         (*ps).is_infimum(ps)
         (+ps).is_supremum(ps)

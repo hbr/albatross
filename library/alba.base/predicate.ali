@@ -10,24 +10,24 @@ G: ANY
 
 immutable class PREDICATE[G] end
 
-(in)  (a:G, p:G?): BOOLEAN
+(in)  (a:G, p:{G}): BOOLEAN
         -- Is 'a' an element of the set 'p'?
         --     Note: The expressions 'a in p' and 'p(a)' are equivalent
 
-(/in) (a:G, p:G?): BOOLEAN
+(/in) (a:G, p:{G}): BOOLEAN
         -- Is 'a' not an element of the set 'p'?
     -> not p(a)
 
-(<=) (p,q:G?): ghost BOOLEAN
+(<=) (p,q:{G}): ghost BOOLEAN
         -- Is 'p' a subset of 'q'?
     -> all(x) p(x) ==> q(x)
 
-(=)  (p,q:G?): ghost BOOLEAN
+(=)  (p,q:{G}): ghost BOOLEAN
         -- Are 'p' and 'q' equal sets?
     -> p <= q and q <= p
 
 
-all(a,b:G, p:G?)
+all(a,b:G, p:{G})
     ensure
         p = p                        -- reflexivity
         a = b  ==>  p(a)  ==>  p(b)  -- leibniz rule
@@ -42,71 +42,71 @@ end
 
 
 
-0: G? = {x: false}
+0: {G} = {x: false}
         -- The empty set
 
-1: G? = {x: true}
+1: {G} = {x: true}
         -- The universal set
 
-(+)  (p,q:G?): G?
+(+)  (p,q:{G}): {G}
         -- The union of the sets 'p' and 'q'
     -> {x: p(x) or q(x)}
 
-(*)  (p,q:G?): G?
+(*)  (p,q:{G}): {G}
         -- The intersection of the sets 'p' and 'q'
     -> {x: p(x) and q(x)}
 
-(-)  (p,q:G?): G?
+(-)  (p,q:{G}): {G}
         -- The set 'p' without the elements of the set 'q'
     -> {x: p(x) and not q(x)}
 
-(-)  (p:G?): G?
+(-)  (p:{G}): {G}
         -- The complement of the set 'p'
     -> {x: not p(x)}
 
-(+)  (pp:G??): ghost G?
+(+)  (pp:{{G}}): ghost {G}
         -- The union of all sets in the collection of sets 'pp'
     -> {x: some(p) pp(p) and p(x)}
 
-(*)  (pp:G??): ghost G?
+(*)  (pp:{{G}}): ghost {G}
         -- The intersection of all sets in the collection of sets 'pp'
     -> {x: all(p) pp(p) ==> p(x)}
 
-singleton (a:G): G?
+singleton (a:G): {G}
         -- The singleton set containing only the element 'a'
         --    Note: '{a}' is an abbreviation for 'a.singleton' or 'singleton(a)'
         --          '{a,b,...}' is an abbreviation for '{a} + {b} + ...'
     -> {x: x = a}
 
 
-is_lower_bound (p:G?, ps:G??): ghost BOOLEAN
+is_lower_bound (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is the set 'p' a subset of all sets in the collection 'ps'?
     -> all(q) ps(q) ==> p <= q
 
-is_upper_bound (p:G?, ps:G??): ghost BOOLEAN
+is_upper_bound (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is the set 'p' a superset of all sets in the collection 'ps'?
     -> all(q) ps(q) ==> q <= p
 
-lower_bounds(ps:G??): ghost G??
+lower_bounds(ps:{{G}}): ghost {{G}}
         -- The set of subsets of all sets in the collection 'ps'.
     -> {p: p.is_lower_bound(ps)}
 
-upper_bounds(ps:G??): ghost G??
+upper_bounds(ps:{{G}}): ghost {{G}}
         -- The set of supersets of all sets in the collection 'ps'.
     -> {p: p.is_upper_bound(ps)}
 
-is_least (p:G?, ps:G??): ghost BOOLEAN
+is_least (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is 'p' the least set of the collection 'ps'?
     -> ps(p) and p.is_lower_bound(ps)
 
-is_greatest (p:G?, ps:G??): ghost BOOLEAN
+is_greatest (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is 'p' the greatest set of the collection 'ps'?
     -> ps(p) and p.is_upper_bound(ps)
 
-is_infimum (p:G?, ps:G??): ghost BOOLEAN
+is_infimum (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is 'p' the greatest set of all subsets of the collection 'ps'?
     -> p.is_greatest(lower_bounds(ps))
 
-is_supremum (p:G?, ps:G??): ghost BOOLEAN
+is_supremum (p:{G}, ps:{{G}}): ghost BOOLEAN
         -- Is 'p' the least set of all supersets of the collection 'ps'?
     -> p.is_least(upper_bounds(ps))

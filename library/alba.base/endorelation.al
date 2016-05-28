@@ -13,7 +13,7 @@ A: ANY
 
 {: Carrier
    ======= :}
-carrier (r:(A,A)?): ghost A? -> domain(r) + range(r)
+carrier (r:{A,A}): ghost A? -> domain(r) + range(r)
 
 
 
@@ -23,11 +23,11 @@ carrier (r:(A,A)?): ghost A? -> domain(r) + range(r)
    =========== :}
 
 
-is_reflexive: ghost (A,A)??
+is_reflexive: ghost {{A,A}}
     = {r: (all(x,y) r(x,y) ==> r(x,x)) and
           (all(x,y) r(x,y) ==> r(y,y))}
 
-all(r:(A,A)?)
+all(r:{A,A})
     require
         r in is_reflexive
     ensure
@@ -55,7 +55,7 @@ all(r:(A,A)?)
     end
 
 
-all(r:(A,A)?)
+all(r:{A,A})
     require
         r in is_reflexive
     ensure
@@ -65,7 +65,7 @@ all(r:(A,A)?)
         r.domain + r.range = r.domain
     end
 
-all(r:(A,A)?)
+all(r:{A,A})
     require
         r in is_reflexive
     ensure
@@ -85,7 +85,7 @@ all(r:(A,A)?)
 
 
 
-to_reflexive (p:A?): (A,A)?
+to_reflexive (p:A?): {A,A}
     -> {x,y: x=y and p(x)}
 
 all(p:A?)
@@ -129,13 +129,13 @@ all(p:A?)
 
 
 
-reflexive (r:(A,A)?): ghost (A,A)?
+reflexive (r:{A,A}): ghost {A,A}
     -> {(s): all(a,b) r(a,b) ==> s(a,b),
              all(a,b) r(a,b) ==> s(a,a),
              all(a,b) r(a,b) ==> s(b,b)}
 
 
-all(a,b:A, r:(A,A)?)
+all(a,b:A, r:{A,A})
     ensure
         (r.reflexive)(a,b) ==> (r.reflexive)(a,a)
     proof
@@ -147,7 +147,7 @@ all(a,b:A, r:(A,A)?)
 
 
 
-all(a,b:A, r:(A,A)?)
+all(a,b:A, r:{A,A})
     ensure
         (r.reflexive)(a,b) ==> (r.reflexive)(b,b)
     proof
@@ -159,7 +159,7 @@ all(a,b:A, r:(A,A)?)
 
 
 
-all(r:(A,A)?)
+all(r:{A,A})
     ensure
         r.reflexive in is_reflexive
     end
@@ -169,7 +169,7 @@ all(r:(A,A)?)
 {: Symmetry
    ======== :}
 
-symmetric (r:(A,A)?): (A,A)?
+symmetric (r:{A,A}): {A,A}
     -> r + r.inverse
 
 
@@ -179,17 +179,17 @@ symmetric (r:(A,A)?): (A,A)?
 {: Transitivity
    ============ :}
 
-is_transitive: ghost (A,A)??
+is_transitive: ghost {{A,A}}
         -- The collection of all transitive relations.
     = {r: all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)}
 
-(+) (r:(A,A)?): ghost (A,A)?
+(+) (r:{A,A}): ghost {A,A}
         -- The least transitive relation which contains 'r'.
     -> {(s): all(x,y)   r(x,y) ==> s(x,y),
              all(x,y,z) s(x,y) ==> r(y,z) ==> s(x,z)}
 
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
     require
         (+r)(b,c)
     ensure
@@ -202,13 +202,13 @@ all(a,b,c:A, r:(A,A)?)
         ensure  (+r)(a,c) end
     end
 
-all(r:(A,A)?)
+all(r:{A,A})
     ensure
         +r in is_transitive
     end
 
 
-(*) (r:(A,A)?): ghost (A,A)?
+(*) (r:{A,A}): ghost {A,A}
         -- The least reflexive transitive relation which contains 'r'.
     -> + r.reflexive
 
@@ -219,7 +219,7 @@ all(r:(A,A)?)
 {: Equivalence
    =========== :}
 
-equivalence (r:(A,A)?): ghost (A,A)?
+equivalence (r:{A,A}): ghost {A,A}
     -> + r.reflexive.symmetric
 
 
@@ -229,7 +229,7 @@ equivalence (r:(A,A)?): ghost (A,A)?
 {: Confluence
    ========== :}
 
-diamond: ghost (A,A)??
+diamond: ghost {{A,A}}
     = {r: all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)}
 
 
@@ -269,7 +269,7 @@ factor out this proof in another lemma.
 
 
 
-all(a,b,c:A, r,s:(A,A)?)
+all(a,b,c:A, r,s:{A,A})
         -- Base case for both intermediate lemmas
     require
         r in diamond
@@ -302,7 +302,7 @@ all(a,b,c:A, r,s:(A,A)?)
 
 :}
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (r.reflexive)(a,b)
@@ -328,7 +328,7 @@ all(a,b,c:A, r:(A,A)?)
 
 
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (r.reflexive)(a,c)
@@ -378,7 +378,7 @@ all(a,b,c:A, r:(A,A)?)
     end
 
 
-all(r:(A,A)?)
+all(r:{A,A})
     ensure
         r in diamond  ==>  r.reflexive in diamond
     end
@@ -398,7 +398,7 @@ all(r:(A,A)?)
 :}
 
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
          -- Intermediate lemma for the transitive closure.
     require
         r in diamond
@@ -447,7 +447,7 @@ all(a,b,c:A, r:(A,A)?)
     end
 
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (+r)(a,c)
@@ -493,12 +493,12 @@ all(a,b,c:A, r:(A,A)?)
         end
     end
 
-all(r:(A,A)?) ensure r in diamond ==> +r in diamond end
+all(r:{A,A}) ensure r in diamond ==> +r in diamond end
 
 
 
 
-confluent: ghost (A,A)??
+confluent: ghost {{A,A}}
         -- The collection of all confluent relations, i.e. of all relations whose
         -- transitive closures have the (strong) diamond property.
     = {r: +r in diamond}

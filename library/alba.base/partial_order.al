@@ -40,33 +40,33 @@ inherit        ANY end
 
 (>)  (a,b:PO): BOOLEAN  -> b < a
 
-is_lower_bound (a:PO, p:PO?): ghost BOOLEAN -> all(x) p(x) ==> a <= x
+is_lower_bound (a:PO, p:{PO}): ghost BOOLEAN -> all(x) p(x) ==> a <= x
 
-is_upper_bound (a:PO, p:PO?): ghost BOOLEAN -> all(x) p(x) ==> x <= a
+is_upper_bound (a:PO, p:{PO}): ghost BOOLEAN -> all(x) p(x) ==> x <= a
 
-is_least (a:PO, p:PO?): ghost BOOLEAN    -> p(a) and a.is_lower_bound(p)
+is_least (a:PO, p:{PO}): ghost BOOLEAN    -> p(a) and a.is_lower_bound(p)
 
-is_greatest (a:PO, p:PO?): ghost BOOLEAN -> p(a) and a.is_upper_bound(p)
+is_greatest (a:PO, p:{PO}): ghost BOOLEAN -> p(a) and a.is_upper_bound(p)
 
-is_minimal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) x < a ==> not p(x)
+is_minimal (a:PO, p:{PO}): ghost BOOLEAN  -> p(a) and all(x) x < a ==> not p(x)
 
-is_maximal (a:PO, p:PO?): ghost BOOLEAN  -> p(a) and all(x) a < x ==> not p(x)
+is_maximal (a:PO, p:{PO}): ghost BOOLEAN  -> p(a) and all(x) a < x ==> not p(x)
 
-has_least (p:PO?): ghost BOOLEAN -> some(x) x.is_least(p)
+has_least (p:{PO}): ghost BOOLEAN -> some(x) x.is_least(p)
 
-has_greatest (p:PO?): ghost BOOLEAN -> some(x) x.is_greatest(p)
+has_greatest (p:{PO}): ghost BOOLEAN -> some(x) x.is_greatest(p)
 
-upper_bounds (p:PO?): ghost PO? -> {x: x.is_upper_bound(p)}
+upper_bounds (p:{PO}): ghost {PO} -> {x: x.is_upper_bound(p)}
 
-lower_bounds (p:PO?): ghost PO? -> {x: x.is_lower_bound(p)}
+lower_bounds (p:{PO}): ghost {PO} -> {x: x.is_lower_bound(p)}
 
-is_infimum (a:PO, p:PO?): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
+is_infimum (a:PO, p:{PO}): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
 
-is_supremum (a:PO, p:PO?): ghost BOOLEAN -> a.is_least(p.upper_bounds)
+is_supremum (a:PO, p:{PO}): ghost BOOLEAN -> a.is_least(p.upper_bounds)
 
-has_infimum (p:PO?): ghost BOOLEAN -> some(x) x.is_infimum(p)
+has_infimum (p:{PO}): ghost BOOLEAN -> some(x) x.is_infimum(p)
 
-has_supremum (p:PO?): ghost BOOLEAN -> some(x) x.is_supremum(p)
+has_supremum (p:{PO}): ghost BOOLEAN -> some(x) x.is_supremum(p)
 
 is_monotonic(f:PO->PO): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
@@ -82,29 +82,29 @@ is_descending(f:PO->PO): ghost BOOLEAN ->
 
 
 
-all(a,b:PO, p:PO?) require a.is_least(p)
+all(a,b:PO, p:{PO}) require a.is_least(p)
                            b.is_least(p)
                    ensure  a = b end
 
-all(a,b:PO, p:PO?) require a.is_greatest(p)
+all(a,b:PO, p:{PO}) require a.is_greatest(p)
                            b.is_greatest(p)
                    ensure  a = b end
 
-all(a,b:PO, p:PO?)
+all(a,b:PO, p:{PO})
     ensure
         a.is_infimum(p)  ==> b.is_infimum(p)  ==> a = b
     end
 
 
 
-all(a,b:PO, p:PO?)
+all(a,b:PO, p:{PO})
     ensure
         a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
     end
 
 
 
-least(p:PO?): ghost PO
+least(p:{PO}): ghost PO
     require
         some(x) x.is_least(p)
     ensure
@@ -113,7 +113,7 @@ least(p:PO?): ghost PO
 
 
 
-greatest(p:PO?): ghost PO
+greatest(p:{PO}): ghost PO
     require
         some(x) x.is_greatest(p)
     ensure
@@ -121,14 +121,14 @@ greatest(p:PO?): ghost PO
     end
 
 
-(*) (p:PO?): ghost PO
+(*) (p:{PO}): ghost PO
     require
         some(x) x.is_infimum(p)
     ensure
         Result.is_infimum(p)
     end
 
-(+) (p:PO?):  ghost PO
+(+) (p:{PO}):  ghost PO
     require
         some(x) x.is_supremum(p)
     ensure
@@ -193,7 +193,7 @@ all(a,b,c:PO)
     end
 
 
-all(a,b:PO, p:PO?)
+all(a,b:PO, p:{PO})
     require
        a <= b
        b.is_lower_bound(p)
@@ -214,7 +214,7 @@ all(a:PO)
     end
 
 
-all(x:PO, p,q:PO?)
+all(x:PO, p,q:{PO})
     require
         x.is_lower_bound(p)
         x.is_lower_bound(q)
@@ -229,7 +229,7 @@ all(x:PO, p,q:PO?)
 
 
 
-all(x:PO, p,q:PO?)
+all(x:PO, p,q:{PO})
     require
         ((p + q).lower_bounds)(x)
     ensure
@@ -237,7 +237,7 @@ all(x:PO, p,q:PO?)
     end
 
 
-all(x:PO, p,q:PO?)
+all(x:PO, p,q:{PO})
     require
         ((p + q).lower_bounds)(x)
     ensure
@@ -245,7 +245,7 @@ all(x:PO, p,q:PO?)
     end
 
 
-all(a,b:PO, p,q:PO?)
+all(a,b:PO, p,q:{PO})
     require
         a.is_infimum(p)
         b.is_infimum(q)
@@ -257,7 +257,7 @@ all(a,b:PO, p,q:PO?)
     end
 
 
-all(a:PO, p:PO?)
+all(a:PO, p:{PO})
     require
         a.is_least(p)
     ensure
@@ -271,7 +271,7 @@ all(a:PO, p:PO?)
     end
 
 
-all(a:PO, p:PO?)
+all(a:PO, p:{PO})
     require
         a.is_infimum(p)
         a in p
@@ -289,7 +289,7 @@ all(a:PO)
 
 
 
-all(p:PO?)
+all(p:{PO})
     require
         some(x) x.is_infimum(p)
     ensure
@@ -298,7 +298,7 @@ all(p:PO?)
 
 
 
-all(x:PO, p:PO?)
+all(x:PO, p:{PO})
     require
         some(x) x.is_infimum(p)
         x.is_infimum(p)
@@ -306,7 +306,7 @@ all(x:PO, p:PO?)
         x = *p
     end
 
-all(p,q:PO?)
+all(p,q:{PO})
     require
         p.has_infimum
         q.has_infimum
@@ -320,7 +320,7 @@ all(p,q:PO?)
 
 
 
-all(p,q:PO?)
+all(p,q:{PO})
     require
         p.has_least
         q.has_least

@@ -14,7 +14,7 @@ A: ANY
 {: Carrier
    ======= :}
 
-carrier (r:(A,A)?): ghost A?
+carrier (r:{A,A}): ghost A?
         -- The carrier of the relation 'r' i.e. the union of its domain
         -- and range.
     -> domain(r) + range(r)
@@ -25,12 +25,12 @@ carrier (r:(A,A)?): ghost A?
    =========== :}
 
 
-is_reflexive: ghost (A,A)??
+is_reflexive: ghost {{A,A}}
         -- The collection of all reflexive relations
     = {r: (all(x,y) r(x,y) ==> r(x,x)) and
           (all(x,y) r(x,y) ==> r(y,y))}
 
-all(r:(A,A)?)
+all(r:{A,A})
     require
         r.is_reflexive
     ensure
@@ -42,7 +42,7 @@ all(r:(A,A)?)
 
 
 
-to_reflexive (p:A?): (A,A)?
+to_reflexive (p:A?): {A,A}
         -- The least reflexive relation with the carrier 'p'.
     -> {x,y: x=y and p(x)}
 
@@ -57,13 +57,13 @@ all(p:A?)
 
 
 
-reflexive (r:(A,A)?): ghost (A,A)?
+reflexive (r:{A,A}): ghost {A,A}
         -- The least reflexive relation which contains 'r'.
     -> {(s): all(a,b) r(a,b) ==> s(a,b),
              all(a,b) r(a,b) ==> s(a,a),
              all(a,b) r(a,b) ==> s(b,b)}
 
-all(a,b:A, r:(A,A)?)
+all(a,b:A, r:{A,A})
     ensure
         (r.reflexive)(a,b) ==> (r.reflexive)(a,a)
         (r.reflexive)(a,b) ==> (r.reflexive)(b,b)
@@ -76,7 +76,7 @@ all(a,b:A, r:(A,A)?)
 {: Symmetry
    ======== :}
 
-symmetric (r:(A,A)?): (A,A)?
+symmetric (r:{A,A}): {A,A}
         -- The least symmetric relation which contains 'r'.
     -> r + r.inverse
 
@@ -85,22 +85,22 @@ symmetric (r:(A,A)?): (A,A)?
 {: Transitivity
    ============ :}
 
-is_transitive: ghost (A,A)??
+is_transitive: ghost {{A,A}}
         -- The collection of all transitive relations.
     = {r: all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)}
 
-(+) (r:(A,A)?): ghost (A,A)?
+(+) (r:{A,A}): ghost {A,A}
         -- The least transitive relation which contains 'r'.
     -> {(s): all(x,y)   r(x,y) ==> s(x,y),
              all(x,y,z) s(x,y) ==> r(y,z) ==> s(x,z)}
 
-all(a,b,c:A, r:(A,A)?)
+all(a,b,c:A, r:{A,A})
     ensure
         (+r)(a,b) ==> (+r)(b,c) ==> (+r)(a,c)
         (+r).is_transitive
     end
 
-(*) (r:(A,A)?): ghost (A,A)?
+(*) (r:{A,A}): ghost {A,A}
         -- The least reflexive transitive relation which contains 'r'.
     -> + r.reflexive
 
@@ -108,7 +108,7 @@ all(a,b,c:A, r:(A,A)?)
 {: Equivalence
    =========== :}
 
-equivalence (r:(A,A)?): ghost (A,A)?
+equivalence (r:{A,A}): ghost {A,A}
         -- The least equivalence relation which contains 'r'.
     -> + r.reflexive.symmetric
 
@@ -144,12 +144,12 @@ there is always a forth element 'd' where the paths will join.
 
 :}
 
-diamond: ghost (A,A)??
+diamond: ghost {{A,A}}
         -- The collection of all relations which have the (strong) diamond
         -- property.
     = {r: all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)}
 
-all(r:(A,A)?)
+all(r:{A,A})
     ensure
         r in diamond ==> r.reflexive in diamond
         r in diamond ==> +r in diamond
@@ -157,7 +157,7 @@ all(r:(A,A)?)
 
 
 
-confluent: ghost (A,A)??
+confluent: ghost {{A,A}}
         -- The collection of all confluent relations, i.e. of all relations whose
         -- transitive closures have the (strong) diamond property.
     = {r: +r in diamond}

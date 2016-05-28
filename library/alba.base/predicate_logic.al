@@ -5,28 +5,28 @@ end
 
 G: ANY
 
-all(p:G?)
+all(p:{G})
     ensure
         0 <= p
     end
 
 
 
-all(p:G?)
+all(p:{G})
     ensure
         p <= 1
     end
 
 
 
-all(p:G?)
+all(p:{G})
     ensure
         p * (-p) = 0
     end
 
 
 
-all(p:G?)
+all(p:{G})
     ensure
         p + (-p) = 1
     end
@@ -41,7 +41,7 @@ all(a:G)
     end
 
 
-all(p:G?)
+all(p:{G})
     require
         some(x) x in p
     ensure
@@ -60,7 +60,7 @@ all(p:G?)
     end
 
 
-all(p:G?)
+all(p:{G})
     require
         p /= 0
     ensure
@@ -73,7 +73,7 @@ all(p:G?)
 {: De Morgan's Laws
    ================ :}
 
-all(p:G?)
+all(p:{G})
     require
         all(x) x /in p
     ensure
@@ -99,7 +99,7 @@ all(p:G?)
         end:}
     end
 
-all(x:G, p:G?)
+all(x:G, p:{G})
     require
         not some(x) x in p
     ensure
@@ -108,7 +108,7 @@ all(x:G, p:G?)
 
 
 
-all(p:G?)
+all(p:{G})
     require
         some(x) x /in p
     ensure
@@ -126,7 +126,7 @@ all(p:G?)
     end
 
 
-all(p:G?)
+all(p:{G})
     require
         not all(x) x in p
     ensure
@@ -143,7 +143,7 @@ all(p:G?)
     end
 
 
-all(p,q:G?)
+all(p,q:{G})
     require
         p /= 0
     ensure
@@ -156,14 +156,14 @@ all(p,q:G?)
 
 
 
-all(a:G, p:G?)
+all(a:G, p:{G})
     require
         a.p
     ensure
         a.(p + {a})
     end
 
-all(p,q:G?)
+all(p,q:{G})
     require
         p <= q
     ensure
@@ -171,7 +171,7 @@ all(p,q:G?)
     end
 
 
-all(p,q:G?)
+all(p,q:{G})
     require
         p <= q
     ensure
@@ -184,37 +184,37 @@ all(p,q:G?)
     end
 
 
-all(p,q:G?)
+all(p,q:{G})
     ensure
         p + q = q + p
     end
 
-all(p,q:G?)
+all(p,q:{G})
     ensure
         p * q = q * p
     end
 
-all(p,q,r:G?)
+all(p,q,r:{G})
     ensure
         (p * q) * r = p * (q * r)
     end
 
-all(p,q,r:G?)
+all(p,q,r:{G})
     ensure
         (p + q) + r = p + (q + r)
     end
 
-all(p:G?)
+all(p:{G})
     ensure
         p + p = p
     end
 
-all(p:G?)
+all(p:{G})
     ensure
         p * p = p
     end
 
-all(p:G?)
+all(p:{G})
     ensure
         p = 0 + p
     end
@@ -246,7 +246,7 @@ all(a,b,c,d,e:G)
         a = e
     end
 
-all(x:G, p:G?)
+all(x:G, p:{G})
     require
         x in p
     ensure
@@ -258,21 +258,21 @@ all(x:G, p:G?)
     end
 
 
-all(p:G?) ensure p <= p end
+all(p:{G}) ensure p <= p end
 
-all(p:G?) ensure p = p end
+all(p:{G}) ensure p = p end
 
-all(p,q,r:G?) require p <= q
+all(p,q,r:{G}) require p <= q
                       q <= r
               ensure  p <= r end
 
-all(p,q:G?)   require p <= q
+all(p,q:{G})   require p <= q
                       q <= p
               ensure  p = q end
 
 
 
-all(p:G?, e:BOOLEAN)
+all(p:{G}, e:BOOLEAN)
     require
         some(x) p(x)
         all(x) p(x) ==> e
@@ -281,7 +281,7 @@ all(p:G?, e:BOOLEAN)
     end
 
 
-all(p,q:G?)
+all(p,q:{G})
     require
         some(x) x in p
         p <= q
@@ -294,7 +294,7 @@ all(p,q:G?)
     end
 
 
-all(ps:G??)
+all(ps:{{G}})
     ensure
         (*ps).is_infimum(ps)
     proof
@@ -310,7 +310,7 @@ all(ps:G??)
             end
     end
 
-all(ps:G??)
+all(ps:{{G}})
     ensure
         (+ps).is_supremum(ps)
     proof
