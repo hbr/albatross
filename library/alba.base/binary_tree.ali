@@ -44,16 +44,11 @@ postorder (t:BINARY_TREE[G]): [G]
        end
 
 
-all(t:BINARY_TREE[G])
-    proof
-        inspect t ensure - - t = t end
-    ensure
-        - - t = t
-    end
 
 
 all(t:BINARY_TREE[G])
     ensure
+        (- - t) = t
         (-t).inorder  = - t.inorder
         (-t).preorder = - t.postorder
     end

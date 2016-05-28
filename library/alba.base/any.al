@@ -9,7 +9,7 @@ G: ANY
 
 (/=) (a,b:G): BOOLEAN -> not (a = b)
 
-all(a:G) deferred ensure a = a end
+all(a:G) ensure a = a deferred end
 
 
 all(a:G)

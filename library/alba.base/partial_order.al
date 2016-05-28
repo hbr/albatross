@@ -20,12 +20,12 @@ PO2: PARTIAL_ORDER
 (=)  (a,b:PO): BOOLEAN   deferred end
 
 all(a,b,c:PO)
-    deferred
     ensure
         a = a
         a <= a                               -- reflexive
         (a <= b) ==> (b <= a) ==> (a = b)    -- antisymmetric
         (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive
+    deferred
     end
 
 
@@ -90,9 +90,18 @@ all(a,b:PO, p:PO?) require a.is_greatest(p)
                            b.is_greatest(p)
                    ensure  a = b end
 
-all(a,b:PO, p:PO?) ensure  a.is_infimum(p)  ==> b.is_infimum(p)  ==> a = b
-                           a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
-                   end
+all(a,b:PO, p:PO?)
+    ensure
+        a.is_infimum(p)  ==> b.is_infimum(p)  ==> a = b
+    end
+
+
+
+all(a,b:PO, p:PO?)
+    ensure
+        a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
+    end
+
 
 
 least(p:PO?): ghost PO
@@ -101,6 +110,8 @@ least(p:PO?): ghost PO
     ensure
         Result.is_least(p)
     end
+
+
 
 greatest(p:PO?): ghost PO
     require
@@ -129,25 +140,28 @@ all(a,b,c:PO)
     require
         a < b
         b <= c
-    proof
-        require a = c
-        proof   c = a
-                a in {x: b <= x}
-        ensure  false end
     ensure
         a /= c
+    proof
+        require a = c
+        ensure  false
+        proof   c = a
+                a in {x: b <= x}
+        end
     end
+
 
 all(a,b,c:PO)
     require
         a <= b
         b < c
-    proof
-        require a = c
-        proof   c in {x: x <= b}
-        ensure  false end
     ensure
         a /= c
+    proof
+        require a = c
+        ensure  false
+        proof   c in {x: x <= b}
+        end
     end
 
 all(a,b,c:PO)
@@ -162,11 +176,11 @@ all(a,b,c:PO)
     require
         a = b
         b <= c
+    ensure
+        a <= c
     proof
         b = a
         a in {x: x <= c}
-    ensure
-        a <= c
     end
 
 
@@ -189,13 +203,14 @@ all(a,b:PO, p:PO?)
 
 
 all(a:PO)
-    proof
-        all(x) require  {a}(x)
-               proof    x = a
-                        {y: y <= x}(a)
-               ensure   a <= x end
     ensure
         a.is_lower_bound({a})
+    proof
+        all(x) require  {a}(x)
+               ensure   a <= x
+               proof    x = a
+                        {y: y <= x}(a)
+               end
     end
 
 
@@ -203,12 +218,13 @@ all(x:PO, p,q:PO?)
     require
         x.is_lower_bound(p)
         x.is_lower_bound(q)
+    ensure
+        ((p + q).lower_bounds)(x)
     proof
         all(y) require (p + q)(y)
+               ensure  x <= y
                proof   p(y) ==> x <= y
-               ensure  x <= y end
-    ensure
-        ((p + q).lower_bounds)(x)
+               end
     end
 
 
@@ -218,31 +234,42 @@ all(x:PO, p,q:PO?)
         ((p + q).lower_bounds)(x)
     ensure
         x.is_lower_bound(p)
+    end
+
+
+all(x:PO, p,q:PO?)
+    require
+        ((p + q).lower_bounds)(x)
+    ensure
         x.is_lower_bound(q)
     end
+
 
 all(a,b:PO, p,q:PO?)
     require
         a.is_infimum(p)
         b.is_infimum(q)
         p <= q
-    proof
-        b.is_lower_bound(p)
     ensure
         b <= a
+    proof
+        b.is_lower_bound(p)
     end
+
 
 all(a:PO, p:PO?)
     require
         a.is_least(p)
-    proof
-        all(x) require x.is_lower_bound(p)
-               proof   all(y) p(y) ==> x <= y
-                       p(a)
-               ensure  x <= a end
     ensure
         a.is_infimum(p)
+    proof
+        all(x) require x.is_lower_bound(p)
+               ensure  x <= a
+               proof   all(y) p(y) ==> x <= y
+                       p(a)
+               end
     end
+
 
 all(a:PO, p:PO?)
     require
@@ -254,11 +281,12 @@ all(a:PO, p:PO?)
 
 
 all(a:PO)
-    proof
-        a.is_least({x: a <= x})
     ensure
         a.is_infimum({x: a <= x})
+    proof
+        a.is_least({x: a <= x})
     end
+
 
 
 all(p:PO?)
@@ -267,6 +295,8 @@ all(p:PO?)
     ensure
         (*p).is_infimum(p)
     end
+
+
 
 all(x:PO, p:PO?)
     require
@@ -281,23 +311,25 @@ all(p,q:PO?)
         p.has_infimum
         q.has_infimum
         p <= q
+    ensure
+        (*q) <= *p
     proof
         (*q).is_infimum(q)
         (*p).is_infimum(p)
-    ensure
-        (*q) <= *p
     end
+
+
 
 all(p,q:PO?)
     require
         p.has_least
         q.has_least
         p <= q
+    ensure
+        least(q) <= least(p)
     proof
         least(q).is_least(q)
         least(p).is_least(p)
-    ensure
-        least(q) <= least(p)
     end
 
 {:

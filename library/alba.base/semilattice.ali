@@ -14,7 +14,7 @@ SL: SEMILATTICE
 (<=) (a,b:SL): BOOLEAN -> a = a * b
 
 all(a,b,c:SL)
-    deferred ensure
+    ensure
         a = a
 
         a * a = a
@@ -22,7 +22,7 @@ all(a,b,c:SL)
         a * b = b * a
 
         a * b * c = a * (b * c)
-    end
+    deferred end
 
 deferred class SEMILATTICE
 inherit        ANY end

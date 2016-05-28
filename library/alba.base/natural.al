@@ -34,33 +34,34 @@ end
 all(a:NATURAL)
     require
         some(x) a = successor(x)
+    ensure
+        a /= 0
     proof
         all(x)
             require
                 a = successor(x)
+            ensure
+                a /= 0
             proof
                 successor(x) = a
                 a in {a: a /= 0}
-            ensure
-                a /= 0
             end
-    ensure
-        a /= 0
     end
+
 
 
 all(a:NATURAL)
     require
         a /= 0
+    ensure
+        some(x) a = successor(x)
     proof
+        ensure
+            a /= 0 ==> some(x) a = successor(x)
         inspect a
         case successor(a) proof
             successor(a) = successor(a)
-        ensure
-            a /= 0 ==> some(x) a = successor(x)
         end
-    ensure
-        some(x) a = successor(x)
     end
 
 
@@ -89,114 +90,130 @@ predecessor (n:NATURAL): NATURAL
        end
 
 
-all(a,b:NATURAL)
+all(a:NATURAL)
     ensure
         a + 0 = a
+    end
+
+
+
+all(a,b:NATURAL)
+    ensure
         a + b.successor = (a + b).successor
+    end
+
+
+
+all(a:NATURAL)
+    ensure
         a + 1 = a.successor
     end
 
 
 
 all(a,b,c:NATURAL)
-    proof
-        inspect c ensure (a + b) + c = a + (b + c) end
     ensure
         a + b + c  =  a + (b + c)
+    inspect c
     end
 
 
 all(n:NATURAL)
-    proof
-        inspect n ensure 0 + n = n end
     ensure
         0 + n = n
+    inspect
+        n
     end
 
 
 all(a,b:NATURAL) -- commutativity of successor
-    proof
-        inspect b ensure a + b.successor = a.successor + b end
     ensure
         a + b.successor = a.successor + b
+    inspect
+        b
     end
 
 
 all(a,b:NATURAL)
         -- commutativity of addition
-    proof
-        inspect b
-        case b.successor proof
-            a + b.successor   = (a + b).successor  -- def '+'
-            (a + b).successor = (b + a).successor  -- ind hypo
-            (b + a).successor = b + a.successor    -- def '+'
-            b + a.successor   = b.successor + a    -- commutativity of successor
-        ensure  a + b = b + a end
     ensure
         a + b = b + a
+    inspect b
+    case b.successor proof
+        a + b.successor   = (a + b).successor  -- def '+'
+        (a + b).successor = (b + a).successor  -- ind hypo
+        (b + a).successor = b + a.successor    -- def '+'
+        b + a.successor   = b.successor + a    -- commutativity of successor
     end
 
 
 
 all(a,b,x:NATURAL)
-    proof
-        inspect x ensure a + x = b + x ==> a = b end
     ensure
         a + x = b + x ==> a = b
+    inspect
+        x
     end
+
+
 
 all(a,b,x:NATURAL)
     require
         x + a = x + b
-    proof
-        proof  a + x = x + a
-        ensure a + x = b + x end
     ensure
         a = b
+    proof
+        ensure a + x = b + x
+        proof  a + x = x + a
+        end
     end
 
-all(a,x:NATURAL)
-    proof
-        inspect a ensure a = a.successor ==> false end
+
+all(a:NATURAL)
     ensure
         a = a.successor ==> false
+    inspect
+        a
     end
 
 all(a,x:NATURAL)
+    ensure
+        a + x = a  ==>  x = 0
     proof
         require a + x = a
+        ensure  x + a = 0 + a
         proof   x + a = a + x
                 a + x = a
                 a = 0 + a
-        ensure  x + a = 0 + a end
-    ensure
-        a + x = a  ==>  x = 0
+        end
     end
 
 
 all(a,b:NATURAL)
-    proof
-        inspect a
-        case successor(a) proof
-            require successor(a) + b = 0
-            proof   successor(a) + b  = a + b.successor
-                    a + b.successor   = (a + b).successor
-                    (a + b).successor = 0
-                    false
-            ensure  a.successor = 0 end
-        ensure  a + b = 0  ==> a = 0 end
     ensure
         a + b = 0  ==> a = 0
+    inspect a
+    case successor(a) proof
+        require successor(a) + b = 0
+        ensure  a.successor = 0
+        proof   successor(a) + b  = a + b.successor
+                a + b.successor   = (a + b).successor
+                (a + b).successor = 0
+                false
+        end
     end
+
+
+
 
 all(a,b:NATURAL)
     require
         a + b = 0
+    ensure
+        b = 0
     proof
         b + a = a + b
         b + a = 0
-    ensure
-        b = 0
     end
 
 
@@ -218,18 +235,17 @@ all(a,b:NATURAL)
 
 
 all(a:NATURAL)
-    proof
-        inspect a ensure a <= a end
     ensure
         a <= a
-    end
+    inspect a end
+
 
 all(a:NATURAL)
-    proof
-        inspect a ensure a <= 0 ==> a = 0 end
     ensure
         a <= 0 ==> a = 0
-    end
+    inspect a end
+
+
 
 all(a:NATURAL)
     ensure
@@ -241,137 +257,168 @@ all(a,b:NATURAL)
     require
         a <= b  ==> a < successor(b)
         successor(a) <= successor(b)
-    proof
-        a <= b
     ensure
         successor(a) < b.successor.successor
+    proof
+        a <= b
     end
 
 
 all(a,b:NATURAL)
+    ensure
+        a <= b  ==>  a < b.successor
     proof
+        ensure
+            all(b) a <= b  ==>  a < b.successor
         inspect a
         case successor(a) proof
             all(b)
-                proof
-                    inspect b
-                    ensure a.successor <= b  ==>  a.successor < b.successor end
                 ensure
                     a.successor <= b  ==>  a.successor < b.successor
-                end
-        ensure
-            all(b) a <= b  ==>  a < b.successor
-        end
-    ensure
-        a <= b  ==>  a < b.successor
-        a <= b  ==>  a < b + 1
-    end
-
-
-all(a,b:NATURAL)
-    proof
-        inspect b ensure all(a) a.successor <= b ==>  a < b end
-    ensure
-        a.successor <= b ==>  a < b
-        a + 1 <= b ==> a < b
-    end
-
-
-all(a,b:NATURAL)
-    proof
-        inspect b
-        case 0 proof
-            all(a:NATURAL)
-                require
-                    a <= 0
                 proof
-                    0 = a
-                    a + 0 = 0
-                ensure
-                    some(x) a + x = 0
+                    ensure a.successor <= b  ==>  a.successor < b.successor
+                    inspect b
+                    end
                 end
-        case successor(b) proof
-            all(a)
-            proof
-                inspect a
-                case 0 proof
-                    0 + b.successor = b.successor
-                case a.successor proof
-                    require a.successor <= b.successor
-                    proof  a <= b
-                           all(x) require a + x = b
-                                  proof   a.successor + x   = a + x.successor
-                                          a.successor + x   =  b.successor
-                                  ensure  some(x) a.successor + x = b.successor
-                                  end
-                    ensure some(x) a.successor + x = b.successor end
-                ensure
-                    a <= b.successor ==> some(x) a + x = b.successor
-                end
-            ensure
-                a <= b.successor ==> some(x) a + x = b.successor
-            end
-        ensure
-            all(a) a <= b ==> some(x) a + x = b
         end
-    ensure
-        a <= b ==> some(x) a + x = b
-    end
-
-
-all(a,b:NATURAL)
-    proof
-        inspect b
-        case 0 proof
-            all(a:NATURAL)
-            require  some(x) a + x = 0
-            proof    all(x) require a + x = 0
-                            proof   0 = a
-                                    a in {a: a <= 0}
-                            ensure  a <= 0 end
-            ensure   a <= 0 end
-        case b.successor proof
-            all(a) (some(x) a + x = b) ==> a <= b
-            all(a) proof
-                inspect a
-                case successor(a) proof
-                    require some(x) a.successor + x = b.successor
-                    proof   all(x) require a.successor + x = b.successor
-                                   proof   (a + x).successor = a + x .successor
-                                           a + x.successor = a.successor + x
-                                           (a + x).successor = b.successor
-                                           a + x = b
-                                           some(x) a + x = b
-                                           a <= b
-                                   ensure  a.successor <= b.successor end
-                    ensure  a.successor <= b.successor end
-                ensure  (some(x) a + x = b.successor) ==> a <= b.successor end
-            ensure
-                (some(x) a + x = b.successor) ==> a <= b.successor
-            end
-            all(a) (some(x) a + x = b.successor) ==> a <= b.successor
-        ensure
-            all(a) (some(x) a + x = b) ==> a <= b
-        end
-    ensure
-        (some(x) a + x = b) ==> a <= b
     end
 
 
 all(a,b:NATURAL)
     require
         a <= b
+    ensure
+        a < b + 1
+    proof
+        a < b.successor
+    end
+
+
+all(a,b:NATURAL)
+    ensure
+        a.successor <= b ==>  a < b
+    inspect b end
+
+
+all(a,b:NATURAL)
+    require
+        a + 1 <= b
+    ensure
+        a < b
+    end
+
+
+
+all(a,b:NATURAL)
+    ensure
+        a <= b ==> some(x) a + x = b
+    proof
+        ensure
+            all(a) a <= b ==> some(x) a + x = b
+        inspect b
+        case 0 proof
+            all(a:NATURAL)
+                require
+                    a <= 0
+                ensure
+                    some(x) a + x = 0
+                proof
+                    0 = a
+                    a + 0 = 0
+                end
+        case successor(b) proof
+            all(a)
+            ensure
+                a <= b.successor ==> some(x) a + x = b.successor
+            proof
+                ensure
+                    a <= b.successor ==> some(x) a + x = b.successor
+                inspect a
+                case 0 proof
+                    0 + b.successor = b.successor
+                case a.successor proof
+                    require a.successor <= b.successor
+                    ensure some(x) a.successor + x = b.successor
+                    proof  a <= b
+                           all(x) require a + x = b
+                                  ensure  some(x) a.successor + x = b.successor
+                                  proof   a.successor + x   = a + x.successor
+                                          a.successor + x   =  b.successor
+                                  end
+                    end
+                end
+            end
+        end
+    end
+
+
+
+all(a,b:NATURAL)
+    ensure
+        (some(x) a + x = b) ==> a <= b
+    proof
+        ensure
+            all(a) (some(x) a + x = b) ==> a <= b
+        inspect b
+        case 0 proof
+            all(a:NATURAL)
+            require  some(x) a + x = 0
+            ensure   a <= 0
+            proof    all(x) require a + x = 0
+                            ensure  a <= 0
+                            proof   0 = a
+                                    a in {a: a <= 0}
+                            end
+            end
+        case b.successor proof
+            all(a) (some(x) a + x = b) ==> a <= b
+            all(a)
+            ensure
+                (some(x) a + x = b.successor) ==> a <= b.successor
+            proof
+                ensure  (some(x) a + x = b.successor) ==> a <= b.successor
+                inspect a
+                case successor(a) proof
+                    require some(x) a.successor + x = b.successor
+                    ensure  a.successor <= b.successor
+                    proof   all(x) require a.successor + x = b.successor
+                                   ensure  a.successor <= b.successor
+                                   proof   (a + x).successor = a + x .successor
+                                           a + x.successor = a.successor + x
+                                           (a + x).successor = b.successor
+                                           a + x = b
+                                           some(x) a + x = b
+                                           a <= b
+                                   end
+                    end
+                end
+            end
+            all(a) (some(x) a + x = b.successor) ==> a <= b.successor
+        end
+    end
+
+
+
+all(a,b:NATURAL)
+    require
+        a <= b
         b <= a
+    ensure
+        a = b
     proof
         some(x) a + x = b
         some(y) b + y = a
         all(x)
             require
                 a + x = b
+            ensure
+                a = b
             proof
                 all(y)
                     require
                         b + y = a
+                    ensure
+                        a = b
                     proof
                         a + (x + y) = (a + x) + y
                         a + x + y = b + y
@@ -381,51 +428,59 @@ all(a,b:NATURAL)
                         x + y = 0
                         x = 0
                         0 in {x: a + x = b}
-                    ensure
-                        a = b
                     end
-            ensure
-                a = b
             end
-    ensure
-        a = b
     end
+
+
+
 
 all(a,b,c:NATURAL)
     require
         a <= b
         b <= c
+    ensure
+        a <= c
      proof
         all(x)
             require
                 a + x = b
+            ensure
+                a <= c
             proof
                 all(y)
                     require
                         b + y = c
+                    ensure
+                        a <= c
                     proof
                         a + (x + y) = (a + x) + y
                         a + x + y   = b + y
 
                         a + (x + y) = c
-                    ensure
-                        a <= c
                     end
-            ensure
-                a <= c
             end
+    end
+
+
+
+
+
+all(a:NATURAL)
     ensure
-        a <= c
+        a <= a.successor
+    inspect a end
+
+
+
+all(a:NATURAL)
+    ensure
+        a < a.successor
     end
 
 
 all(a:NATURAL)
-    proof
-        inspect a
-        ensure a <= a.successor end
     ensure
-        a <= a.successor
-        a < a.successor
         a < a + 1
     end
 
@@ -434,40 +489,50 @@ all(a:NATURAL)
 all(a,b:NATURAL)
     require
         a < b
+    ensure
+        a.successor <= b
     proof
         some(x) a + x = b
         all(x)
             require
                 a + x = b
+            ensure
+                a.successor <= b
             proof
                 require
                     x = 0
+                ensure
+                    false
                 proof
                     0 = x
                     x in {x: a = a + x}
                     a = b
-                ensure
-                    false
                 end
                 x /= 0
                 some(y) x = y.successor
                 all(y)
                     require
                         x = y.successor
+                    ensure
+                        a.successor <= b
                     proof
                         y.successor in {x: a + x = b}
                         a.successor + y = a + y.successor
                         a.successor + y = b
-                    ensure
-                        a.successor <= b
                     end
-            ensure
-                a.successor <= b
             end
+    end
+
+
+all(a,b:NATURAL)
+    require
+        a < b
     ensure
-        a.successor <= b
         a + 1 <= b
     end
+
+
+
 
 all(a,b:NATURAL)
     require
@@ -478,74 +543,73 @@ all(a,b:NATURAL)
 
 
 all(a,b:NATURAL)
-    proof
-        inspect a
-        case successor(a) proof
-            if a <= b proof
-                if a = b proof
-                    a <= a.successor
-                    b in {x: x <= a.successor}
-                    b <= a.successor
-                else proof
-                    a < b
-                    a.successor <= b
-                ensure
-                    a.successor <= b or b <= a.successor
-                end
-            orif b <= a
-            ensure
-                a.successor <= b or b <= a.successor
-            end
-        ensure
-            a <= b or b <= a
-        end
     ensure
         a <= b or b <= a
+    inspect a
+    case successor(a) proof
+        ensure
+            a.successor <= b or b <= a.successor
+        if a <= b proof
+            ensure
+                a.successor <= b or b <= a.successor
+            if a = b proof
+                a <= a.successor
+                b in {x: x <= a.successor}
+                b <= a.successor
+            else proof
+                a < b
+                a.successor <= b
+            end
+        orif b <= a
+        end
     end
 
 
 all(a,b:NATURAL)
     require
         not (a <= b)
-    proof
-        a <= b or b <= a
     ensure
         b <= a
+    proof
+        a <= b or b <= a
     end
 
 
 
 all(a,b:NATURAL)
+    ensure
+        a <= b or b < a
     proof
         a = b or a /= b
         require  a = b
+        ensure   a <= b or b < a
         proof    b in {x: a <= x}
-        ensure   a <= b or b < a end
+        end
 
         require  a /= b
+        ensure   a <= b or b < a
         proof    a <= b or b <= a
                  a <= b ==> a <= b or b < a
                  require  b <= a
+                 ensure   a <= b or b < a
                  proof    b /= a
-                 ensure   a <= b or b < a end
-        ensure   a <= b or b < a end
-    ensure
-        a <= b or b < a
+                 end
+        end
     end
 
 
 
 all(a,b,n:NATURAL)
     require a <= b
-    proof   inspect n ensure a + n <= b + n end
     ensure  a + n <= b + n
-    end
+    inspect n end
+
 
 
 all(a,b,n:NATURAL)
-    proof   inspect n ensure a + n <= b + n ==> a <= b end
     ensure  a + n <= b + n ==> a <= b
-    end
+    inspect n end
+
 
 
 
@@ -556,22 +620,19 @@ all(a,b,n:NATURAL)
 
 
 all(a,b:NATURAL)
-    proof
-        inspect a
-        case 0 proof
-            require
-                b <= 0
-                (0:NATURAL,b) as (0,successor(_))
-            proof
-                b = 0
-                0 in {b: (0:NATURAL,b) as (0,successor(_))}
-            ensure
-                false
-            end
-        ensure b <= a ==> not ((a,b) as (0,successor(_))) end
-
     ensure
         b <= a  ==>  not ((a,b) as (0,successor(_)))
+    inspect a
+    case 0 proof
+        require
+            b <= 0
+            (0:NATURAL,b) as (0,successor(_))
+        ensure
+            false
+        proof
+            b = 0
+            0 in {b: (0:NATURAL,b) as (0,successor(_))}
+        end
     end
 
 
@@ -579,11 +640,13 @@ all(a,b,n,m:NATURAL)
     require
         b <= a
         (a,b) = (successor(n),successor(m))
-    proof
-        (successor(n),successor(m)) in {x,y: y <= x}
     ensure
         m <= n
+    proof
+        (successor(n),successor(m)) in {x,y: y <= x}
     end
+
+
 
 
 (-)  (a,b:NATURAL): NATURAL
@@ -606,60 +669,65 @@ all(a,b,n,m:NATURAL)
        end
 
 
+all(a:NATURAL)
+    ensure
+        0 * a = 0
+    end
+
 all(a,b:NATURAL)
     ensure
-        0 * b = 0
         a.successor * b = a*b + b
     end
 
 
 
 all(a:NATURAL)
-    proof
-       inspect a ensure a * 0 = 0 end
     ensure
        a * 0 = 0
-    end
+    inspect a end
 
 all(a:NATURAL)
-    proof
-        0 + a = a
     ensure
         1 * a = a
+    proof
+        0 + a = a
     end
 
 
 all(a,b,c:NATURAL) -- distributivity
+    ensure
+        a * (b + c) = a*b + a*c
     proof
         all(a,b,c,d:NATURAL)  -- lemma
             {: Note: This lemma is needed as long as the special treatment of
                      commutative and associative operators is not yet implemented :}
+            ensure
+               a + b + (c + d) = a + c + (b + d)
             proof
                a + b + (c + d)   = a + (b + (c + d))
 
+               ensure a + (b + (c + d)) = a + (b + c + d)
                proof  b + (c + d) = b + c + d
-               ensure a + (b + (c + d)) = a + (b + c + d) end
+               end
 
+               ensure a + (b + c + d) = a + (c + b + d)
                proof  b + c = c + b
-               ensure a + (b + c + d) = a + (c + b + d) end
+               end
 
+               ensure a + (c + b + d) = a + (c + (b + d))
                proof  c + b + d = c + (b + d)
-               ensure a + (c + b + d) = a + (c + (b + d)) end
-            ensure
-               a + b + (c + d) = a + c + (b + d)
+               end
             end
 
+        ensure
+            a * (b + c) = a*b + a*c
         inspect a
         case successor(a) proof
             a.successor * (b + c) = a*(b + c) + (b + c)
             a*(b + c) + (b + c)   = a*b + a*c + (b + c)
             a*b + a*c + (b + c)   = a*b + b + (a*c + c)
             a*b + b + (a*c + c)   = a.successor*b + a.successor*c
-        ensure
-            a * (b + c) = a*b + a*c
         end
-    ensure
-        a * (b + c) = a*b + a*c
     end
 
 
@@ -672,9 +740,13 @@ all(a,b,c:NATURAL) -- distributivity
        case n.successor then a^n * a
        end
 
-all(a,b:NATURAL)
+all(a:NATURAL)
     ensure
         a^0 = 1
+    end
+
+all(a,b:NATURAL)
+    ensure
         a ^ b.successor = a^b * a
     end
 
@@ -682,8 +754,20 @@ all(a,b:NATURAL)
 
 all ensure
     1 + 1 = 2
+end
+
+all ensure
     1 + 2 = 3
+end
+
+all ensure
     1 * 2 = 2
+end
+
+all ensure
     2 * 2 = 4
+end
+
+all ensure
     2 ^ 2 = 4
 end

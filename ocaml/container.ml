@@ -17,6 +17,11 @@ end = struct
 end
 
 
+type ('a, 'b) either =
+    Left of 'a
+  | Right of 'b
+
+
 module Search: sig
   val binsearch_max: 'a -> 'a array -> int
   val array_find_min: ('a -> bool) -> 'a array -> int

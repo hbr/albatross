@@ -136,6 +136,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 %token KWthen      KWtrue
 %token KWundefine  KWuse
 %token KWvariant
+%token KWvia
 %token KWwhile
 
 %token ARROW
@@ -187,6 +188,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 
 
 /*  0 */ %nonassoc LOWEST_PREC  KWghost
+/*  ? */ %nonassoc KWcase
 /*  5 */ %nonassoc ASSIGN
 /* 10 */ %right    SEMICOL
 /* 13 */ %right    ARROW     /* ??? */
@@ -272,11 +274,8 @@ formal_generic:
 /*  assertions  */
 /* ------------------------------------------------------------------------- */
 
-ass_feat: proof_all_expr {
-  let entlst, req, impl, ens = $1 in
-  let bdy = req, Some impl, ens in
-  Assertion_feature (None, entlst, bdy)
-}
+ass_feat: user_proof { $1 }
+
 
 ass_req:
     KWrequire ass_seq { List.rev $2 }
@@ -286,7 +285,7 @@ ass_req_opt:
     { [] }
 |   ass_req { $1 }
 
-ass_proof: KWproof proof_seq separator { List.rev $2 }
+
 
 
 ass_ens: KWensure ass_seq { List.rev $2 }
@@ -296,149 +295,197 @@ ass_seq:
 |   ass_seq SEMICOL info_expr_1       { $3::$1 }
 
 
-proof_seq:
-    proof_expr { [$1] }
-|   proof_seq SEMICOL proof_expr { $3::$1 }
 
 
-proof_expr:
-    info_expr_1 { $1 }
-|   proof_inner { $1 }
-|   proof_all_inner {
-  let quant, entlst,req,impl,ens = $1 in
-  let exp = Expquantified (quant,
-                           entlst,
-                           Expproof(req, Some impl, ens)) in
-  withinfo (rhs_info 1) exp
-}
-|   proof_if { $1 }
+/* ------------------------------------------------------------------------- */
+/* User Proofs */
+/* ------------------------------------------------------------------------- */
 
-|   proof_guarded_if { $1 }
-
-|   proof_inspect { $1 }
-
-
-proof_all_expr: KWall formal_arguments_opt opt_nl
-                ass_req_opt
-                ass_imp
-                ass_ens KWend {
+user_proof:
+    KWall formal_arguments_opt opt_nl
+    KWrequire info_expr_1 user_proof_1
+    KWend {
   let entlst = withinfo (rhs_info 2) $2 in
-  entlst, $4, $5, $6
+  let req, ens, body = $6 in
+  let req = $5 :: req in
+  assert (ens <> []);
+  Source_proof (entlst, req, ens, body)
+}
+|   KWall formal_arguments_opt opt_nl
+    KWensure info_expr_1 user_proof_2
+    KWend {
+  let entlst = withinfo (rhs_info 2) $2 in
+  let ens, prf = $6 in
+  let ens = $5 :: ens in
+  Source_proof (entlst, [], ens, prf)
+   }
+
+
+user_proof_1:
+    SEMICOL info_expr_1 user_proof_1 {
+  let req, ens, prf = $3 in
+  $2 :: req, ens, prf
+   }
+|   optsemi KWensure info_expr_1 user_proof_2 {
+  let ens, prf = $4 in
+  [], $3 :: ens, prf
 }
 
 
-proof_all_inner:
+user_proof_2:
+    { [], None }
+|   SEMICOL info_expr_1 user_proof_2 {
+  let ens, prf = $3 in
+  $2 :: ens, prf
+   }
+|   optsemi deferred_or_axiom { [], Some $2 }
+|   optsemi proof_support  { [], Some $2 }
+
+
+
+
+deferred_or_axiom: KWnote LIDENTIFIER {
+  let str = ST.string $2
+  in
+  if str = "axiom" then
+      withinfo (rhs_info 1) PS_Axiom
+  else
+    error_info (rhs_info 1) "must be one of 'axiom'"
+   }
+| KWdeferred { withinfo (rhs_info 1) PS_Deferred }
+
+
+
+
+proof_support_opt:
+    { None }
+|   proof_support { Some $1 }
+
+
+proof_support:
+    sequence_proof { $1 }
+|   if_proof { $1 }
+|   guarded_if_proof { $1 }
+|   induction_proof { $1 }
+
+
+sequence_proof:
+    KWproof proof_sequence { withinfo (rhs_info 1) (PS_Sequence $2) }
+
+proof_sequence:
+    proof_step { [$1] }
+|   proof_step SEMICOL proof_sequence  { $1 :: $3 }
+
+
+proof_step:
+    info_expr_1 {
+  PS_Simple $1
+   }
+|   inner_user_proof {
+  let entlst,req,goal,body = $1 in
+  PS_Structured (entlst,req,goal,body) }
+
+
+inner_user_proof:
     KWall formal_arguments opt_nl
-       ass_req_opt
-       ass_imp
-       ass_ens
+    inner_user_proof_1
     KWend {
   let entlst = withinfo (rhs_info 2) $2 in
-  Universal, entlst, $4, $5, $6
-}
-|   KWsome formal_arguments opt_nl
-       ass_req_opt
-       ass_imp
-       ass_ens
+  let req, goal, prf = $4 in
+  entlst, req, goal, prf
+  }
+|   inner_user_proof_1
     KWend {
-  let entlst = withinfo (rhs_info 2) $2 in
-  Existential, entlst, $4, $5, $6
-}
+  let entlst = withinfo UNKNOWN [] in
+  let req, goal, prf = $1 in
+  entlst, req, goal, prf
+  }
 
 
-proof_inner:
-    ass_req ass_proof ass_ens KWend{
-  let is_do = false in
-  let impl  = Impdefined (None,is_do,$2) in
-  let exp   = Expproof ($1, Some impl, $3) in
-  withinfo (rhs_info 1) exp
-}
-|   ass_proof ass_ens KWend {
-  let is_do = false in
-  let impl  = Impdefined (None,is_do,$1) in
-  let exp   = Expproof ([], Some impl, $2) in
-  withinfo (rhs_info 1) exp
-}
-|   ass_req ass_ens KWend {
-  let exp   = Expproof ($1, None, $2) in
-  withinfo (rhs_info 1) exp
-}
-
-
-ass_imp:
-    { Impdefined (None,false,[]) }
-|   ass_proof           { Impdefined (None,false,$1) }
-|   KWdeferred          { Impdeferred }
-|   implementation_note {
-  match $1 with
-    Impbuiltin -> $1
-  | _ ->
-      error_info (rhs_info 1) "Not allowed in assertions"
-}
-
-proof_inspect:
-    KWinspect expr_1 proof_inspect_rest KWend {
-  let lst,ens = $3 in
-  withinfo (rhs_info 1) (Proofinspect ($2,lst,ens))
-}
-
-proof_inspect_rest:
-    optsemi KWensure info_expr { [], $3 }
-|   KWcase info_expr optsemi KWproof proof_seq proof_inspect_rest {
-  let lst,ens = $6 in
-  ($2,List.rev $5)::lst, ens
+inner_user_proof_1:
+    KWrequire info_expr_1 inner_user_proof_2 {
+  let req, goal, prf = $3 in
+  $2 :: req, goal, prf
    }
-|   KWcase info_expr proof_inspect_rest {
-  let lst,ens = $3 in
-  ($2,[])::lst, ens
+|   KWensure  info_expr_1 inner_user_proof_3 {
+  [], $2, $3
+  }
+
+
+inner_user_proof_2:
+    optsemi KWensure info_expr_1 inner_user_proof_3 {
+  [], $3, $4
+  }
+| SEMICOL info_expr_1 inner_user_proof_2 {
+  let req, ens, prf = $3 in
+  $2 :: req, ens, prf
    }
 
 
-proof_if:
-    KWif ass_then_part_list proof_if_rest KWend {
-  let else_cmp, ens = $3 in
-  withinfo (rhs_info 1) (Proofif ($2,else_cmp,ens)) }
-
-
-ass_then_part_list:
-    ass_then_part { [$1] }
-|   ass_then_part KWelseif ass_then_part_list { $1::$3 }
-
-ass_then_part:
-    expr_1 { withinfo (rhs_info 1) $1, [] }
-|   expr_1 KWproof proof_seq { withinfo (rhs_info 1) $1, List.rev $3 }
-
-
-proof_if_rest:
-    KWelse optsemi KWensure info_expr { withinfo (rhs_info 1) [], $4 }
-|   KWelse KWproof proof_seq optsemi KWensure info_expr {
-  withinfo (rhs_info 1) (List.rev $3), $6 }
+inner_user_proof_3:
+    { None }
+|   optsemi proof_support { Some $2 }
 
 
 
-proof_guarded_if:
-    KWif ass_then_part
-    proof_guarded_if_rest
-    KWend {
-  let ie,cmp = $2 in
-  let lst,ens = $3 in
-  withinfo (rhs_info 1) (Proofgif ((ie,cmp)::lst,ens))
+if_proof:
+    KWif info_expr_1 if_proof_1  {
+      let prf1, prf2 = $3 in
+      withinfo (rhs_info 1) (PS_If ($2, prf1, prf2))
+    }
+
+if_proof_1:
+    opt_nl proof_support KWelse if_proof_2 {
+      Some $2, $4
+    }
+|   KWelse if_proof_2 { None, $2 }
+
+if_proof_2:
+    opt_nl proof_support { Some $2 }
+|   { None }
+
+
+
+
+guarded_if_proof:
+    KWif info_expr_1 guarded_if_proof_1 {
+  let prf1, cond2, prf2 = $3 in
+  withinfo (rhs_info 1) (PS_Guarded_If ($2, prf1, cond2, prf2))
+}
+
+guarded_if_proof_1:
+    opt_nl proof_support KWorif info_expr_1 guarded_if_proof_2 {
+  Some $2, $4, $5
+}
+|   KWorif info_expr_1 guarded_if_proof_2 {
+  None, $2, $3
 }
 
 
-proof_guarded_if_rest:
-    KWorif info_expr_1 optsemi KWensure info_expr { [$2,[]], $5}
-|   KWorif info_expr_1 KWproof proof_seq optsemi KWensure info_expr {
-  [$2,List.rev $4], $7
+guarded_if_proof_2:
+    opt_nl proof_support { Some $2 }
+|   { None }
+
+
+
+
+induction_proof:
+    KWinspect info_expr_1 induction_proof_1 {
+  withinfo (rhs_info 1) (PS_Inspect ($2,$3))
+    }
+
+induction_proof_1:
+    %prec LOWEST_PREC { [] }
+|   KWcase info_expr_1 optsemi proof_support_opt induction_proof_1 {
+  ($2,$4) :: $5
 }
-|   KWorif info_expr_1 proof_guarded_if_rest {
-  let lst,ens = $3 in
-  ($2,[])::lst, ens
-}
-|   KWorif info_expr_1 KWproof proof_seq proof_guarded_if_rest {
-  let lst,ens = $5 in
-  ($2,List.rev $4)::lst,ens
-}
+
+
+
+
+
+
+
 
 
 /* ------------------------------------------------------------------------- */
@@ -768,7 +815,7 @@ expr:
     expr_1  %prec LOWEST_PREC { $1 }
 |   expr_2  { $1 }
 
-expr_1:
+expr_1:  /* Without 'if' and 'inspect' expressions */
     atomic_expr                   { $1 }
 |   operator_expr                 { $1 }
 |   LPAREN expr RPAREN            { Expparen $2 }
@@ -829,7 +876,6 @@ expr_1:
 expr_2:
    exp_conditional { $1 }
 |  exp_inspect     { $1 }
-/*|  expr COMMA expr { Tupleexp ($1,$3) }*/
 
 
 atomic_expr:

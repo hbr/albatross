@@ -24,34 +24,44 @@ true: BOOLEAN                = false ==> false
 
 
 all(a:BOOLEAN)
-    note axiom
     ensure
         not not a ==> a    -- double negation
+    note axiom
     end
 
 all(a:BOOLEAN)
         -- indirect proof
     require
         not a ==> false
-    proof
-        not not a
     ensure
         a
+    proof
+        not not a
     end
 
 all ensure true end
 
+
 all(a,b:BOOLEAN)
-        -- 'and' elimination
+        -- 'and' elimination 1
     require
         a and b
-    proof
-        not not a
-        not not b
     ensure
         a
-        b
+    proof
+        not not a
     end
+
+all(a,b:BOOLEAN)
+        -- 'and' elimination 2
+    require
+        a and b
+    ensure
+        b
+    proof
+        not not b
+    end
+
 
 all(a,b:BOOLEAN)
         -- 'and' introduction
@@ -59,21 +69,33 @@ all(a,b:BOOLEAN)
         a ==> b ==> a and b
     end
 
+
+
+
 all(a,b:BOOLEAN)
         -- 'or' introduction
+    ensure
+        a ==> a or b
     proof
         require
             a
             not a
-        proof
-            not not b
         ensure
             b
+        proof
+            not not b
         end
+    end
+
+
+all(a,b:BOOLEAN)
+        -- 'or' introduction 2
     ensure
-        a ==> a or b
         b ==> a or b
     end
+
+
+
 
 all(a,b,c:BOOLEAN)
         -- 'or' elimination
@@ -81,17 +103,26 @@ all(a,b,c:BOOLEAN)
         a or b
         a ==> c
         b ==> c
-    proof
-        not not c
     ensure
         c
+    proof
+        not not c
+    end
+
+
+all(a:BOOLEAN)
+    ensure
+        a or not a
+    end
+
+all(a,b:BOOLEAN)
+    ensure
+        a or b ==> not a ==> b
     end
 
 
 all(a,b:BOOLEAN)
     ensure
-        a or not a
-        a or b ==> not a ==> b
         (not a ==> b) ==> a or b
     end
 

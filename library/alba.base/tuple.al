@@ -33,11 +33,15 @@ second (t:(A,B)): B     note built_in end
 all(a:A,b:B)
     ensure
         (a,b).first0  = a
+    end
+
+all(a:A,b:B)
+    ensure
         (a,b).second0 = b
     end
 
 all(a:A,b:B)
-    note axiom ensure
+    ensure
         (a,b).first  = a
         (a,b).second = b
-    end
+    note axiom end

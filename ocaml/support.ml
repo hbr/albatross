@@ -736,8 +736,35 @@ type inherit_clause = parent list
 
 type create_clause = (feature_name withinfo * entities list) list withinfo
 
+
+type proof_support =
+    PS_Axiom
+  | PS_Deferred
+  | PS_Sequence of proof_step list
+  | PS_If of
+      info_expression * proof_support_option * proof_support_option
+  | PS_Guarded_If of
+      info_expression * proof_support_option *
+        info_expression * proof_support_option
+  | PS_Inspect of
+      info_expression * (info_expression * proof_support_option) list
+
+and info_proof_support = proof_support withinfo
+
+and proof_support_option = info_proof_support option
+
+and one_case = info_expression * proof_support_option
+
+and proof_step =
+    PS_Simple of info_expression
+  | PS_Structured of
+      entities list withinfo * compound * info_expression * proof_support_option
+
+
+
 type declaration =
-    Assertion_feature of int option * entities list withinfo * feature_body
+    Source_proof of
+      entities list withinfo * compound * compound * proof_support_option
   | Named_feature of
       feature_name withinfo
         * entities list withinfo

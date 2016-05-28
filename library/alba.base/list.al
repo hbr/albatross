@@ -26,6 +26,11 @@ all(x:G,a:[G])
         -- Inversion
     ensure
        []  = x^a  ==>  false
+    end
+
+all(x:G,a:[G])
+        -- Inversion
+    ensure
        x^a = []   ==>  false
     end
 
@@ -57,11 +62,19 @@ all(x,y:G, a,b:[G])
         -- Injection
     require
         x^a = y^b
-    proof
-        y^b in {l: l as _^_ and l.head = x and l.tail = a}
     ensure
         x = y
-        a = b
+    proof
+        y^b in {l: l as _^_ and l.head = x and l.tail = a}
+    end
+
+
+all(x,y:G, a,b:[G])
+        -- Injection
+    require
+        x^a = y^b
+    ensure
+        x = y
     end
 
 
@@ -99,35 +112,37 @@ all(x:G, a:[G], p:G?)
     require
         x in a
         a.all_in(p)
+    ensure
+        x in p
     proof
+        ensure
+            x in a ==> a.all_in(p) ==> x in p
         inspect a
         case y^a proof
             require x in y^a
                     (y^a).all_in(p)
+            ensure  x in p
             proof   y in p
                     a.all_in(p)
                     x = y or x in a
                     require x = y
+                    ensure  x in p
                     proof   y = x
-                    ensure  x in p end
-            ensure  x in p end
-        ensure
-            x in a ==> a.all_in(p) ==> x in p
+                    end
+            end
         end
-    ensure
-        x in p
     end
-
 
 
 all(a:[G], p,q:G?)
     require
         a.all_in(p)
         p <= q
-    proof
-        inspect a ensure a.all_in(p) ==> p <= q ==> a.all_in(q) end
     ensure
         a.all_in(q)
+    proof
+        ensure a.all_in(p) ==> p <= q ==> a.all_in(q)
+        inspect a end
     end
 
 
@@ -139,65 +154,76 @@ all(p:G?, a,b:[G])
     require
         a.all_in(b)
         b.all_in(p)
-    proof
-        a.elements <= b.elements
     ensure
         a.all_in(p)
+    proof
+        a.elements <= b.elements
     end
 
 
 
 all(a,b:[G])
-    proof
-        inspect a
-        case x^a proof
-            require (x^a).elements <= b.elements
-            proof   a.elements <= b.elements
-            ensure  (x^a).all_in(b) end
-        ensure a.elements <= b.elements  ==> a.all_in(b) end
     ensure
         a.elements <= b.elements  ==> a.all_in(b)
+    inspect a
+    case x^a proof
+        require (x^a).elements <= b.elements
+        ensure  (x^a).all_in(b)
+        proof   a.elements <= b.elements
+        end
     end
 
 
 all(a,b:[G])
+    ensure
+        a.all_in(b) ==> a.elements <= b.elements
     proof
         all(x,y:G, a:[G])
             require
                 a.all_in(b) ==> a.elements <= b.elements
                 (x^a).all_in(b)
                 y in (x^a).elements
+            ensure
+                y in b.elements
             proof
                 y = x or y in a
 
                 require y = x
+                ensure  y in b
                 proof   x = y; x in b; y in {z: z in b}
-                ensure  y in b end
+                end
 
                 require y in a
+                ensure  y in b
                 proof   y in a.elements
                         a.all_in(b)
                         y in b.elements
-                ensure  y in b end
+                end
 
                 y in b
-            ensure
-                y in b.elements
             end
         [] in {a: a.all_in(b) ==> a.elements <= b.elements}
         a  in {a: a.all_in(b) ==> a.elements <= b.elements}
-    ensure
-        a.all_in(b) ==> a.elements <= b.elements
     end
 
 
 same_elements (a,b:[G]): BOOLEAN
     -> a.all_in(b) and b.all_in(a)
 
-all(a,b,c:[G])
+all(a:[G])
     ensure
         same_elements(a,a)
+    end
+
+
+all(a,b:[G])
+    ensure
         same_elements(a,b) ==> same_elements(b,a)
+    end
+
+
+all(a,b,c:[G])
+    ensure
         same_elements(a,b) ==> same_elements(b,c) ==> same_elements(a,c)
     end
 
@@ -209,28 +235,36 @@ all(a,b,c:[G])
 permutation (a,b:[G]): ghost BOOLEAN
     -> a.size = b.size and same_elements(a,b)
 
-all(a,b,c:[G])
+all(a:[G])
     ensure
         permutation(a,a)
+    end
+
+all(a,b:[G])
+    ensure
         permutation(a,b) ==> permutation(b,a)
+    end
+
+all(a,b,c:[G])
+    ensure
         permutation(a,b) ==> permutation(b,c) ==> permutation(a,c)
     end
 
 all(x,y:G, a:[G])
-    proof
-        all(x,y) (x^y^a).all_in(y^x^a)
     ensure
         permutation(x^y^a, y^x^a)
+    proof
+        all(x,y) (x^y^a).all_in(y^x^a)
     end
 
 all(x:G, a,b:[G])
     require
         permutation(a,b)
+    ensure
+        permutation(x^a, x^b)
     proof
         (x^a).all_in({z: z in x^b})
         (x^b).all_in({z: z in x^a})
-    ensure
-        permutation(x^a, x^b)
     end
 
 
@@ -259,19 +293,15 @@ is_prefix (a,b:[G]): BOOLEAN
        end
 
 all(a:[G])
-    proof
-        inspect a ensure a + [] = a end
     ensure
         a + []  = a
-    end
+    inspect a end
 
 
 all(a,b,c:[G])
-    proof
-        inspect a ensure (a + b) + c = a + (b + c) end
     ensure
         (a + b) + c = a + (b + c)
-    end
+    inspect a end
 
 
 
@@ -287,45 +317,41 @@ all(a,b,c:[G])
        end
 
 all(a,b:[G])
-    proof
-        inspect a
-        case x^a proof
-            (- (x^a + b))       =   -(a + b) + [x]    -- def '+', '-'
-            (- (a + b)) + [x]   =   -b + -a + [x]     -- ind hypo
-            (-b) + -a + [x]     =   -b + (-a + [x])   -- assoc '+'
-            (-b) + (-a + [x] )  =   -b + - x^a        -- def '-'
-        ensure  -(a + b) = -b + -a end
     ensure
        -(a + b) = -b + -a
+    inspect a
+    case x^a proof
+        (- (x^a + b))       =   -(a + b) + [x]    -- def '+', '-'
+        (- (a + b)) + [x]   =   -b + -a + [x]     -- ind hypo
+        (-b) + -a + [x]     =   -b + (-a + [x])   -- assoc '+'
+        (-b) + (-a + [x] )  =   -b + - x^a        -- def '-'
     end
 
 
 all(a:[G])
-    proof
-        inspect a
-        case x^a proof
-                -(-x^a) = - (-a + [x])
-
-                ;- (-a + [x]) = -[x] + -(-a)
-
-                proof  -[x] = [x]
-                ensure -[x] + -(-a) = [x] + a end
-
-                [x] + a = x^a
-
-        ensure -(-a) = a end
     ensure
         -(-a) = a
+    inspect a
+    case x^a proof
+            -(-x^a) = - (-a + [x])
+
+            ;- (-a + [x]) = -[x] + -(-a)
+
+            ensure -[x] + -(-a) = [x] + a
+            proof  -[x] = [x]
+            end
+
+            [x] + a = x^a
     end
 
 
 all(x:G, a:[G])
+    ensure
+        x ^ (-a) = - (a + [x])
     proof
         - - a = a
 
         x ^ (-a)            = - - x ^ (-a)
-    ensure
-        x ^ (-a) = - (a + [x])
     end
 
 
@@ -346,37 +372,38 @@ folded (f:(G,H)->H, b:H, l:[G]): H
     end
 
 all(a,b:[G])
+    ensure
+        -a + b = (^).folded(b,a)
     proof
+        ensure
+            all(b) -a + b = (^).folded(b,a)
         inspect a
         case x^a proof
             all(b) -a + b = (^).folded(b,a)
 
             all(b)
+            ensure
+                -x^a + b = (^).folded(b,x^a)
             proof
                 (^).folded(b,x^a) = (^).folded(x^b,a)
                 (^).folded(x^b,a) = -a + (x^b)
                 (-a) + (x^b)      = -a + ([x] + b)
                 (-a) + ([x] + b)  = -a + [x] + b
                 (-a) + [x] + b    = -x^a + b
-            ensure
-                -x^a + b = (^).folded(b,x^a)
             end
-        ensure
-            all(b) -a + b = (^).folded(b,a)
         end
-    ensure
-        -a + b = (^).folded(b,a)
     end
 
 
 
 
 all(a,b:[G])
-    proof
-        proof  -(-a) = a
-        ensure a + b = -(-a) + b end
-
-        (-(-a)) + b = (^).folded(b,-a)
     ensure
         a + b = (^).folded(b,-a)
+    proof
+        ensure a + b = -(-a) + b
+        proof  -(-a) = a
+        end
+
+        (-(-a)) + b = (^).folded(b,-a)
     end

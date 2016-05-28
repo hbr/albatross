@@ -103,6 +103,7 @@ module Term: sig
 
   val range_variables: term -> int -> int -> IntSet.t
 
+  val used_variables_0:     term -> int -> int list -> int list
   val used_variables:       term -> int -> int list
   val used_variables_filtered: term -> (int -> bool) -> bool -> int list
   val used_variables_from:  term -> int -> bool -> int list

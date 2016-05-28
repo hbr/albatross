@@ -45,42 +45,33 @@ postorder (t:BINARY_TREE[G]): [G]
 
 
 all(t:BINARY_TREE[G])
-    proof
-        inspect t ensure - - t = t end
-    ensure
-        - - t = t
-    end
+    ensure - - t = t
+    inspect t end
 
 
 all(t:BINARY_TREE[G])
-    proof
-        inspect t
-        case tree(i,l,r) proof
-            (-tree(i,l,r)).inorder            = -r.inorder + ([i] + (-l.inorder))
-            (-r.inorder) + ([i] + -l.inorder) = (-r.inorder + [i]) + -l.inorder
-            (-r.inorder + [i]) + -l.inorder   = - i^r.inorder + -l.inorder
-            (-i^r.inorder) + -l.inorder       = - (l.inorder + i^r.inorder)
-            (- (l.inorder + i^r.inorder))     = - tree(i,l,r).inorder
-        ensure -t.inorder = (-t).inorder end
     ensure
         (-t).inorder = - t.inorder
+    inspect t
+    case tree(i,l,r) proof
+        (-tree(i,l,r)).inorder            = -r.inorder + ([i] + (-l.inorder))
+        (-r.inorder) + ([i] + -l.inorder) = (-r.inorder + [i]) + -l.inorder
+        (-r.inorder + [i]) + -l.inorder   = - i^r.inorder + -l.inorder
+        (-i^r.inorder) + -l.inorder       = - (l.inorder + i^r.inorder)
+        (- (l.inorder + i^r.inorder))     = - tree(i,l,r).inorder
     end
 
 
 all(t:BINARY_TREE[G])
-    proof
-        inspect t
-        case tree(i,l,r) proof
-            (-r.postorder) + - l.postorder = - (l.postorder + r.postorder)
-
-            (-tree(i,l,r)).preorder             = i ^ ((-r).preorder + (-l).preorder)
-            i ^ ((-r).preorder + (-l).preorder) = i ^ (-r.postorder + -l.postorder)
-            i ^ (-r.postorder + -l.postorder)   = i ^ (-(l.postorder + r.postorder))
-            i ^ -(l.postorder + r.postorder)    = - (l.postorder + r.postorder + [i])
-            (-(l.postorder + r.postorder + [i]))= - tree(i,l,r).postorder
-        ensure
-            (-t).preorder = - t.postorder
-        end
     ensure
         (-t).preorder = - t.postorder
+    inspect t
+    case tree(i,l,r) proof
+        (-r.postorder) + - l.postorder = - (l.postorder + r.postorder)
+
+        (-tree(i,l,r)).preorder             = i ^ ((-r).preorder + (-l).preorder)
+        i ^ ((-r).preorder + (-l).preorder) = i ^ (-r.postorder + -l.postorder)
+        i ^ (-r.postorder + -l.postorder)   = i ^ (-(l.postorder + r.postorder))
+        i ^ -(l.postorder + r.postorder)    = - (l.postorder + r.postorder + [i])
+        (-(l.postorder + r.postorder + [i]))= - tree(i,l,r).postorder
     end

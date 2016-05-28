@@ -9,10 +9,10 @@ use boolean end
 all(a:BOOLEAN)
     require
         false
-    proof
-        not a ==> false
     ensure
         a
+    proof
+        not a ==> false
     end
 
 all(a,b:BOOLEAN)
@@ -20,6 +20,13 @@ all(a,b:BOOLEAN)
         not (a or b)
     ensure
         not a
+    end
+
+
+all(a,b:BOOLEAN)
+    require
+        not (a or b)
+    ensure
         not b
     end
 
@@ -35,52 +42,56 @@ all(a,b:BOOLEAN)
 all(a,b:BOOLEAN)
     require
         not (a and b)
+    ensure
+        not a or not b
     proof
         not (not a or not b) ==> false
-    ensure
-        not a or not b
     end
 
 
 all(a,b:BOOLEAN)
     require
         not a or not b
-    proof
-        if not a orif not b ensure not (a and b) end
     ensure
         not (a and b)
+    if not a
+    orif not b
     end
+
+
+
 
 
 
 all(a:BOOLEAN)
     require
         a or a
-    proof
-        a ==> a
     ensure
         a
+    proof
+        a ==> a
     end
 
 all(a,b:BOOLEAN)
     require
         a or b
-    proof
-        if a orif b ensure b or a end
     ensure
         b or a
-    end
+    if a orif b end
+
 
 all(a,b,c:BOOLEAN)
     require
         a or b or c
-    proof
-        if a or b proof a ==> a or (b or c)
-        orif c
-        ensure a or (b or c) end
     ensure
         a or (b or c)
+    if a or b
+    proof
+        a ==> a or (b or c)
+    orif c
     end
+
+
 
 all(a,b,c:BOOLEAN)
     require

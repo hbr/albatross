@@ -18,7 +18,7 @@ end
 first  (t:(A,B)): A
 second (t:(A,B)): B
 
-all(a:A, b:B, t:(A,B))
+all(a:A, b:B)
     ensure
         (a,b).first  = a
         (a,b).second = b

@@ -33,8 +33,8 @@ inherit         ghost ANY end
 all(a,b:G, p:G?)
         -- leibniz rule
     require  a = b
-    note     axiom
-    ensure   p(a) ==> p(b) end
+    ensure   p(a) ==> p(b)
+    note     axiom end
 
 
 all(x:G, p,q:G?)

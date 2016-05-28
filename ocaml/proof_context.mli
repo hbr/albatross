@@ -51,6 +51,7 @@ val make:      int -> t
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val push_typed:   formals -> formals -> t -> t
+val push_empty:   t -> t
 val pop:          t -> t
 
 val depth:     t -> int
@@ -61,6 +62,7 @@ val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
 val add_mp:             int -> int -> bool -> t -> int
 val add_beta_reduced:   int -> bool -> t -> int
+val specialized:        int -> arguments -> agens -> int -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
 val clear_work:         t -> unit
@@ -100,6 +102,7 @@ val count_global:   t -> int
 val count_variables:      t -> int
 val count_last_arguments: t -> int
 val count_all_type_variables: t -> int
+val local_argnames: t -> names
 
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool

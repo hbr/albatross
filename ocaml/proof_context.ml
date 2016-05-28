@@ -1494,6 +1494,11 @@ let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
 
 
 
+let push_empty (pc:t): t =
+  let base = Proof_table.push_typed empty_formals empty_formals pc.base in
+  push0 base pc
+
+
 let pop (pc:t): t =
   assert (is_local pc);
   if pc.trace then

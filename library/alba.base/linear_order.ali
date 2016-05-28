@@ -16,12 +16,12 @@ LO: LINEAR_ORDER
 (<=) (a,b:LO): BOOLEAN    deferred end
 
 all(a,b,c:LO)
-    deferred
     ensure
         a = a
         a <= b or b <= a
         a <= b ==> b <= a ==> a = b
         a <= b ==> b <= c ==> a <= c
+    deferred
     end
 
 deferred class LINEAR_ORDER

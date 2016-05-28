@@ -30,9 +30,9 @@ domain (f:A->B): ghost A?   note built_in end
 all(f:A->B)
     require
         f = 0
-    note axiom
     ensure
         f.domain = 0
+    note axiom
     end
 
 
@@ -130,10 +130,10 @@ preimage(b:B, f:A->B): ghost A
 all(x:A, f:A->B)
     require
         x in f.domain
-    proof
-        x in f.domain and f(x) = f(x)
     ensure
         f(x) in f.range
+    proof
+        x in f.domain and f(x) = f(x)
     end
 
 
@@ -150,7 +150,7 @@ inverse0 (f:A->B): ghost (B -> A)
     end
 
 
-all(f:A->B, b:B)
+all(f:A->B)
     require
         f.is_injective
     ensure
@@ -165,17 +165,17 @@ consistent (f,g:A->B): ghost BOOLEAN
 all(f:A->A)
     require
         f.is_iterable
+    ensure
+        f.range <= f.domain
     proof
         all(a)
             require
                 a in f.range
-            proof
-                all(x) x in f.domain and f(x) = a ==> a in f.domain
             ensure
                 a in f.domain
+            proof
+                all(x) x in f.domain and f(x) = a ==> a in f.domain
             end
-    ensure
-        f.range <= f.domain
     end
 
 {:
@@ -190,14 +190,14 @@ all(f:A->A)
 all(f:A->B)
     require
         f.is_injective
-    proof
-        f.inverse0.domain = f.range
-        and
-        all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
     ensure
         some(g) g.domain = f.range
                 and
                 all(x) x in f.domain ==> g(f(x)) = x
+    proof
+        f.inverse0.domain = f.range
+        and
+        all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
     end
 
 all(f:A->B, g,h:B->A)
@@ -207,29 +207,29 @@ all(f:A->B, g,h:B->A)
         h.domain = f.range
         all(x) x in f.domain ==> g(f(x)) = x
         all(x) x in f.domain ==> h(f(x)) = x
+    ensure
+        g = h
     proof
         g.domain = h.domain
         all(y)
             require
                 y in f.range
+            ensure
+                g(y) = h(y)
             proof
                 some(x) x in f.domain and f(x) = y
                 all(x)
                     require
                         x in f.domain and f(x) = y
+                    ensure
+                        g(y) = h(y)
                     proof
                         f(x) = y
                         g(f(x)) = x
                         h(f(x)) = x
                         y in {y: y in g.domain and g(y) = h(y)}
-                    ensure
-                        g(y) = h(y)
                     end
-            ensure
-                g(y) = h(y)
             end
-    ensure
-        g = h
     end
 
 inverse (f:A->B): ghost (B -> A)
@@ -266,18 +266,18 @@ all(f,g,h:A->B)
         f.domain = g.domain
         f <= h
         g <= h
+    ensure
+        f = g
     proof
         all(a)
             require
                 a in f.domain
+            ensure
+                f(a) = g(a)
             proof
                 f(a) = h(a)
                 h(a) = g(a)
-            ensure
-                f(a) = g(a)
             end
-    ensure
-        f = g
     end
 {:
 all(f,g:A->B)
