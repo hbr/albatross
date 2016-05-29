@@ -10,6 +10,11 @@ open Term
 open Signature
 open Printf
 
+module IntArrayMap = Map.Make(struct
+  let compare = Pervasives.compare
+  type t = int array
+end)
+
 let implication_index: int =  0
 let false_index:       int =  1
 let true_index:        int =  2
@@ -38,14 +43,14 @@ type definition = term
 type formal     = int * term
 
 
-class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
+class bdesc (idx:int) (nfgs:int) (classes:int array) (spec:Feature.Spec.t) =
   object (self:'self)
     val mutable is_inh = false
     val mutable is_exp = false
     val mutable spec = spec
     val mutable sd = idx                    (* each new feature is its own seed *)
     val mutable subst = standard_substitution nfgs
-    val mutable vars = IntMap.singleton cls idx  (* and own variant *)
+    val mutable vars = IntArrayMap.singleton classes idx  (* and own variant *)
     val mutable is_eq = (idx = eq_index)
     val mutable inv_ass = IntSet.empty
 
@@ -54,10 +59,10 @@ class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
     method seed:int = sd
     method ags:agens = subst
     method specification:Feature.Spec.t = spec
-    method variant (cls:int): int = IntMap.find cls vars
-    method has_variant (cls:int): bool =
-      IntMap.mem cls vars
-    method variants: int IntMap.t = vars
+    method variant (classes:int array): int = IntArrayMap.find classes vars
+    method has_variant (classes:int array): bool =
+      IntArrayMap.mem classes vars
+    method variants: int IntArrayMap.t = vars
     method is_equality: bool = is_eq
     method involved_assertions: IntSet.t = inv_ass
     method set_specification (sp:Feature.Spec.t): unit =
@@ -67,9 +72,9 @@ class bdesc (idx:int) (nfgs:int) (cls:int) (spec:Feature.Spec.t) =
       subst <- ags;
       if sd = eq_index then
         is_eq <- true
-    method add_variant (cls:int) (idx:int): unit =
-      assert (not (IntMap.mem cls vars));
-      vars <- IntMap.add cls idx vars
+    method add_variant (classes:int array) (idx:int): unit =
+      assert (not (IntArrayMap.mem classes vars));
+      vars <- IntArrayMap.add classes idx vars
     method set_inherited: unit =
       is_inh <- true
     method set_exported: unit =
@@ -1157,13 +1162,13 @@ let seed (i:int) (ft:t): int =
 
 
 
-let variant (i:int) (cls:int) (ft:t): int =
+let variant (i:int) (classes:int array) (ft:t): int =
   (* The variant of the feature [i] in the class [cls] *)
   assert (i < count ft);
   let bdesc = base_descriptor i ft in
   let seed_bdesc = base_descriptor bdesc#seed ft
   in
-  seed_bdesc#variant cls
+  seed_bdesc#variant classes
 
 
 
@@ -1199,21 +1204,6 @@ let unify_types
   uni tp1 tp2
 
 
-let unify_signatures
-    (s1:Sign.t) (nfgs:int) (s2:Sign.t) (ags:agens) (nall:int): agens =
-  (* Needed ???? *)
-  let res_ags  = Array.make nfgs empty_term
-  and len      = Sign.arity s1
-  and subst tp = Term.subst tp nall ags in
-  let uni tp1 tp2 = unify_types tp1 nfgs (subst tp2) nall res_ags in
-  assert (len = Sign.arity s2);
-  assert (Sign.has_result s1 = Sign.has_result s2);
-  for k = 0 to len-1 do
-    uni (Sign.arg_type k s1) (Sign.arg_type k s2)
-  done;
-  if Sign.has_result s1 then
-    uni (Sign.result s1) (Sign.result s2);
-  res_ags
 
 
 let variant_generics
@@ -1222,25 +1212,18 @@ let variant_generics
      of the form [VAppl(idx,_,ags)] where [ags] come from a type environment
      with [ntvs] type variables. The routine calculates the actual generics of
      the call of the variant feature [VAppl(idx_var,_,ags_var)].  *)
-  let tvs_var,s_var = signature0 idx_var ft in
-  let nfgs_var      = Tvars.count_fgs tvs_var in
+  let desc     = descriptor idx ft
+  and desc_var = descriptor idx_var ft
+  in
+  let nfgs_var = Tvars.count_fgs desc_var.tvs in
   if nfgs_var = 0 then
     [||]
-  else
+  else begin
     let subst tp    = Term.subst tp ntvs ags in
-    let tvs0,s0     = signature0 idx ft in
-    let len         = Sign.arity s0 in
-    assert (len = Sign.arity s_var);
     let ags         = Array.make nfgs_var empty_term in
-    let uni tp1 tp2 = unify_types tp1 nfgs_var (subst tp2) ntvs ags in
-    for k = 0 to len-1 do
-      uni (Sign.arg_type k s_var) (Sign.arg_type k s0)
-    done;
-    assert (Sign.has_result s_var = Sign.has_result s0);
-    if Sign.has_result s0 then
-      uni (Sign.result s_var) (Sign.result s0);
+    unify_types desc_var.tp nfgs_var (subst desc.tp) ntvs ags;
     ags
-
+  end
 
 
 let variant_feature
@@ -1260,23 +1243,21 @@ let variant_feature
   end;
   assert (Array.length ags = count_fgs idx ft);
   let nfgs = Array.length ags in
-  if nfgs = 0 || nfgs > 1 then
+  if nfgs = 0 then
     i,ags
   else begin
     let bdesc = base_descriptor idx ft in
     let sd,ags_sd = bdesc#seed, bdesc#ags
     and nall = Tvars.count_all tvs in
-    assert (Array.length ags_sd = 1); (* nyi: inheritance with more than one
-                                         formal generic *)
     let ags1 =
       if sd = i then
         ags
       else
         Term.subst_array ags_sd nall ags
     in
-    let cls = Tvars.principal_class ags1.(0) tvs in
+    let classes = Array.map (fun tp -> Tvars.principal_class tp tvs) ags1 in
     try
-      let idx_var = variant idx cls ft in
+      let idx_var = variant idx classes ft in
       let ags_var = variant_generics idx_var idx ags nall ft in
       nb + idx_var, ags_var
     with Not_found ->
@@ -1828,7 +1809,7 @@ and feature_complexity
 
 
 let equality_index (cls:int) (ft:t): int =
-  variant eq_index cls ft
+  variant eq_index [|cls|] ft
 
 
 let equality_index_of_type (tp:term) (tvs:Tvars.t) (ft:t): int =
@@ -1943,8 +1924,6 @@ let find_with_signature
           in
           if ok then begin
             let ags = Term_sub.arguments (Term_sub.count sub) sub in
-            (*assert (Array.length ags = 1); (* nyi: Inheritance with more than one
-                                              formal generic.*)*)
             try
               let ivar,_ = variant_feature i 0 ags tvs ft in
               ivar :: lst
@@ -2025,6 +2004,7 @@ let add_keys (ft:t): unit =
   done
 
 
+
 let add_feature
     (fn:       feature_name withinfo)
     (tvs:      Tvars.t)
@@ -2039,6 +2019,12 @@ let add_feature
   and nfgs    = Tvars.count_all tvs
   in
   assert (not (Feature.Spec.has_definition spec));
+  assert (Tvars.count tvs = 0);
+  let classes =
+    Array.map
+      (fun tp -> Tvars.principal_class tp tvs)
+      (Tvars.fgconcepts tvs)
+  in
   let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct
   and anchor_fg, anchor_cls = Sign.anchor tvs sign in
@@ -2049,7 +2035,7 @@ let add_feature
       Class_table.check_deferred cls nanchors fn.i ft.ct
   | _ -> ()
   end;
-  let bdesc = new bdesc cnt nfgs cls spec
+  let bdesc = new bdesc cnt nfgs classes spec
   and nfgs = Tvars.count_all tvs
   in
   let desc =
@@ -2129,7 +2115,7 @@ let add_base
   and cnt  = count ft
   and nargs = Array.length argtypes
   in
-  let bdesc = new bdesc cnt ntvs cls spec
+  let bdesc = new bdesc cnt ntvs [|cls|] spec
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
   let anchored = Class_table.anchored tvs cls ft.ct in
@@ -2263,8 +2249,8 @@ let has_visible_variant (i:int) (ft:t): bool =
   let bdesc = base_descriptor i ft
   and mt    = module_table ft in
   let used  = Module_table.current_used mt in
-  IntMap.exists
-    (fun cls ivar ->
+  IntArrayMap.exists
+    (fun _ ivar ->
       let desc  = descriptor ivar ft in
       IntSet.mem desc.mdl used)
     bdesc#variants
@@ -2339,7 +2325,7 @@ let find_minimal_variants (i:int) (cls:int) (ft:t): (int*agens) list =
   let desc_i = descriptor i ft in
   let sd     = desc_i.bdesc#seed in
   let desc_sd = descriptor sd ft in
-  IntMap.fold
+  IntArrayMap.fold
     (fun _ ivar lst ->
       if i = ivar then
         lst
@@ -2452,11 +2438,10 @@ let add_variant (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
      Furthermore remove the variant [ivar] from the key table! Reason: A variant
      shall be found only via its seed.
    *)
-  assert (Array.length ags = 1); (* nyi: variants of seeds with more than one
-                                    formal generic *)
   let desc_ivar = descriptor ivar ft in
-  let cls = Tvars.principal_class ags.(0) desc_ivar.tvs in
-  (base_descriptor sd ft)#add_variant cls ivar;
+  let classes = Array.map (fun tp -> Tvars.principal_class tp desc_ivar.tvs) ags
+  in
+  (base_descriptor sd ft)#add_variant classes ivar;
   remove_key ivar ft
 
 
