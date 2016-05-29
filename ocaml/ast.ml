@@ -632,7 +632,7 @@ let analyze_feature
   let imp  = implementation_status fn.i bdy pc in
   let idx, is_new, is_export =
     try
-      let idx = Feature_table.find_with_signature fn.v tvs sign ft in
+      let idx = Feature_table.find_with_signature fn tvs sign ft in
       let is_export =
         PC.is_interface_check pc && not (Feature_table.is_feature_public idx ft) in
       if is_export && not (Sign.is_ghost sign) &&
@@ -656,8 +656,10 @@ let analyze_feature
   let spec,opt = feature_specification_ast fn.i nms idx bdy exp pc1 in
   update_feature fn.i idx is_new is_export spec imp pc;
   check_function_term idx opt pc1;
-  if is_new then
-    add_property_assertion idx pc
+  if is_new then begin
+    add_property_assertion idx pc;
+    Inherit.add_new_feature fn.i idx pc
+  end
 
 
 
@@ -936,7 +938,7 @@ let put_creators
         and imp  = Feature.Empty in
         let idx, is_new, is_export =
           try
-            let idx = Feature_table.find_with_signature fn.v tvs sign ft in
+            let idx = Feature_table.find_with_signature fn tvs sign ft in
             let is_export =
               PC.is_public pc &&
               not (Feature_table.is_feature_public idx ft) in

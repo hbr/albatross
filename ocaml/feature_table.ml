@@ -1895,65 +1895,93 @@ let terms_of_formals (farr: formal array): term array =
 
 
 
-let find_with_signature
-    (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t)
-    : int =
-  (* Find the feature with the name [fn] and the signature [tvs/sign].  *)
+let find_seed_with_signature
+    (fn:feature_name withinfo) (idx:int) (tvs: Tvars.t) (sign:Sign.t) (ft:t)
+    : int*agens =
+  (* Find the seed of the feature with the name [fn] and signature [tvs/sign]
+     which is different from the the feature [idx].
+
+     Raise [Not_found] if there is no seed.
+
+     Report an error if there are multiple seeds.
+   *)
   let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
   let ntvs = Tvars.count_all tvs
-  and tab = Feature_map.find fn ft.map in
+  and tab = Feature_map.find fn.v ft.map in
   let lst  = Term_table.unify0 tp ntvs !tab in
-  let idx_lst =
+  let lst =
     List.fold_left
-      (fun lst (i,sub) ->
-        let desc = descriptor i ft in
-        if Tvars.is_equivalent tvs desc.tvs
-            && Term.equivalent tp desc.tp
-            && Term_sub.is_identity sub then
-          i :: lst
-        else
+      (fun lst (sd,sub) ->
+        if sd = idx then
+          lst
+        else begin
+          let desc = descriptor sd ft
+          and ags = Term_sub.arguments (Term_sub.count sub) sub in
+          let len = Array.length ags in
+          assert (Tvars.count_fgs desc.tvs = len);
+          assert (Tvars.count     desc.tvs = 0);
           let ok =
-            Term_sub.for_all
-              (fun j t ->
-                Class_table.satisfies
-                  t tvs
-                  (Tvars.concept j desc.tvs) desc.tvs
-                  ft.ct)
-              sub
+            interval_for_all
+            (fun i ->
+              Class_table.satisfies ags.(i) tvs (Variable i) desc.tvs ft.ct
+            )
+              0 len
           in
-          if ok then begin
-            let ags = Term_sub.arguments (Term_sub.count sub) sub in
-            try
-              let ivar,_ = variant_feature i 0 ags tvs ft in
-              ivar :: lst
-            with Not_found ->
-              lst
-          end else
-            lst)
+          if ok then
+            (sd,ags) :: lst
+          else
+            lst
+        end
+      )
       []
       lst
   in
-  match idx_lst with
-    [] -> raise Not_found
-  | idx::rest ->
-      if not (List.for_all (fun i -> i=idx) rest) then begin
-        List.iteri
-          (fun i idx ->
-            printf "%d %d %s\n" i idx (string_of_signature idx ft))
-          idx_lst
-      end;
-      assert (List.for_all (fun i -> i=idx) rest);
-      idx
+  match lst with
+    [] ->
+      raise Not_found
+  | [idx,ags] ->
+      idx, ags
+  | _ :: _ ->
+      let str =
+        "Feature \"" ^ (feature_name_to_string fn.v) ^
+        "\" cannot have multiple seeds\nseeds:\n\t"
+      in
+      let strlst =
+        List.map (fun (idx,_) -> string_of_signature idx ft) lst in
+      let str = str ^ String.concat "\n\t" strlst in
+      error_info fn.i str
 
 
 
+let find_with_signature
+    (fn:feature_name withinfo) (tvs: Tvars.t) (sign:Sign.t) (ft:t)
+    : int =
+  (* Find the feature with the name [fn] and the signature [tvs/sign].  *)
+  let i,ags_sd = find_seed_with_signature fn (-1) tvs sign ft
+  in
+  let ivar,ags_var = variant_feature i 0 ags_sd tvs ft
+  in
+  let desc = descriptor ivar ft in
+  if Tvars.is_equivalent tvs desc.tvs && sign = desc.sign then
+    ivar
+  else
+    raise Not_found
 
-let has_with_signature (fn:feature_name) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
+
+
+let has_with_signature
+    (fn:feature_name withinfo) (tvs: Tvars.t) (sign:Sign.t) (ft:t): bool =
   try
     let _ = find_with_signature fn tvs sign ft in true
   with Not_found -> false
 
+
+
+let find_proper_seed (info:info) (idx:int) (ft:t): int*agens =
+  let desc = descriptor idx ft in
+  let fn = withinfo info desc.fname in
+  find_seed_with_signature fn idx desc.tvs desc.sign ft
 
 
 
@@ -2013,7 +2041,7 @@ let add_feature
     (impl:     Feature.implementation)
     (ft:       t): unit =
   (* Add a new feature to the feature table with an empty specification *)
-  assert (not (has_with_signature fn.v tvs sign ft));
+  assert (not (has_with_signature fn tvs sign ft));
   let cnt     = Seq.count ft.seq
   and spec    = Feature.Spec.make_empty argnames
   and nfgs    = Tvars.count_all tvs

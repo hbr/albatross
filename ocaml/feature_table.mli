@@ -205,7 +205,8 @@ val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
       [nargs] arguments. *)
 
 
-val find_with_signature: feature_name -> Tvars.t -> Sign.t -> t -> int
+val find_proper_seed: info -> int -> t -> int*agens
+val find_with_signature: feature_name withinfo -> Tvars.t -> Sign.t -> t -> int
 
 val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
   -> Feature.implementation -> t -> unit

@@ -28,24 +28,6 @@ let prove (t:term) (pc:PC.t): unit =
 
 
 
-
-let inherit_parent (cls:int) (parent:parent) (pc:PC.t): unit =
-  let ct = PC.class_table pc in
-  let ghost,tp,renames = parent in
-  if renames <> [] then
-    not_yet_implemented tp.i "rename";
-  assert (renames = [] ); (* nyi: feature adaption *)
-  let par, par_args = Class_table.parent_type cls tp ct in
-  if Class_table.has_ancestor cls par ct then
-    ()
-  else if Class_table.has_ancestor par cls ct then
-    error_info tp.i "circular inheritance"
-  else begin
-    assert false
-  end
-
-
-
 let check_transform_valid
     (i:int) (ivar:int) (ags:agens) (info:info) (pc:PC.t)
     : unit =
@@ -97,6 +79,8 @@ let check_ghost_variant
   and is_ivar_ghost = Feature_table.is_ghost_function ivar ft in
   if is_ivar_ghost && not is_i_ghost && not is_ghost then
     error_info info "Must be ghost inheritance"
+
+
 
 
 
@@ -263,6 +247,60 @@ let inherit_generics
   in
   PC.remove_or_remap ass_set pc
 
+
+
+
+let add_new_feature (info:info) (idx:int) (pc:PC.t): unit =
+  (* Do all inheritance related stuff for the new feature [idx].
+
+     See if there is already a seed feature. If yes make the new feature
+     a variant of the seed feature and verify the validity of the specification
+     of the seed in the environment of the new feature.
+
+     See if there are variants of the new feature in the search tables (this
+     is possible only if the new feature does not have a proper seed). If yes,
+     make the variant a variant of the new feature and check the validity of
+     the specification of the new feature in the environment of the variant
+     feature.
+
+     Finally put the seeds to all newly created variants and remap all assertions
+     which involve newly created variants.
+*)
+  let ft = PC.feature_table pc in
+  let trace (sd:int) (ivar:int): unit =
+    if 1 < PC.verbosity pc then begin
+      printf "    generic feature %2d \"%s\"\n"
+        sd (Feature_table.string_of_signature sd ft);
+      printf "      variant       %2d \"%s\"\n"
+        ivar (Feature_table.string_of_signature ivar ft);
+    end
+  in
+  try
+    let sd,ags = Feature_table.find_proper_seed info idx ft in
+    trace sd idx;
+    Feature_table.add_variant sd idx ags ft;
+    if PC.is_private pc then
+      check_transform_valid sd idx ags info pc;
+    Feature_table.set_seed sd idx ags ft
+  with Not_found -> (* no proper seed *)
+    let var_lst = Feature_table.find_new_variants idx ft
+    in
+    let ass_set =
+      List.fold_left
+        (fun set (ivar,ags) ->
+          trace idx ivar;
+          Feature_table.add_variant idx ivar ags ft;
+          if PC.is_private pc then
+            check_transform_valid idx ivar ags info pc;
+          IntSet.union set (Feature_table.involved_assertions ivar ft)
+        )
+        IntSet.empty
+        var_lst
+    in
+    List.iter
+      (fun (ivar,ags) -> Feature_table.set_seed idx ivar ags ft)
+      var_lst;
+    PC.remove_or_remap ass_set pc
 
 
 
