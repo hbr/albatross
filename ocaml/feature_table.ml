@@ -1167,14 +1167,6 @@ let variant (i:int) (cls:int) (ft:t): int =
 
 
 
-let has_variant (i:int) (cls:int) (ft:t): bool =
-  try
-    ignore(variant i cls ft);
-    true
-  with
-    Not_found -> false
-
-
 
 let unify_types
     (tp1:type_term) (nfgs:int) (tp2:type_term) (nall:int) (ags:agens): unit =
@@ -1256,6 +1248,9 @@ let variant_feature
   (* The variant of the feature [i] in a context with [nb] variables where the
      formal generics are substituted by the actual generics [ags] which come from
      the type environment [tvs].
+
+     Return the feature index of the variant and the actual generics which
+     substitute the formal generics of the variant feature.
    *)
   assert (i < nb + count ft);
   let idx = i - nb in
@@ -1831,68 +1826,6 @@ and feature_complexity
 
 
 
-let variant_postcondition
-    (t:term) (i:int) (inew:int) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
-  (* The variant of the postcondition term [t] of the feature [i] with [nb]
-     bound variables in the class [cls] where all features of [t] from the
-     class [base_class] are transformed into their inherited variant in class
-     [cls] *)
-  assert (Class_table.has_ancestor cls base_cls ft.ct);
-  let cnt = count ft in
-  let f (j:int): int =
-    if inew <> (-1) && j = i then
-      cnt
-    else if class_of_feature j ft = base_cls && has_anchor j ft then
-      try variant j cls ft
-      with Not_found ->
-        j
-        (*printf "there is no variant of \"%s\" in class %s\n"
-          (string_of_signature j ft)
-          (Class_table.class_name cls ft.ct);
-          assert false (* If [cls] inherits [base_cls] then there has to be a variant
-                          in the descendant *)*)
-    else
-      j
-  in
-  Term.map_free f t nb
-
-
-
-let variant_term (t:term) (nb:int) (base_cls:int) (cls:int) (ft:t): term =
-  (* The variant of the term [t] with [nb] bound variables in the class [cls] where
-     all features of [t] from the class [base_class] are transformed into their
-     inherited variant in class [cls] *)
-  variant_postcondition t (-1) (-1) nb base_cls cls ft
-
-
-
-let variant_spec (i:int) (inew:int) (base_cls:int) (cls:int) (ft:t)
-    : Feature.Spec.t =
-  (* The variant of the specification of the feature [i] of the base class
-     [base_cls] in the class [cls]. The feature in the descendant class [cls]
-     has the index [inew].
-   *)
-  assert (i < count ft);
-  let bdesc = base_descriptor i ft in
-  let nargs,nms   = Feature.Spec.names bdesc#specification in
-  let pres = List.map
-      (fun t -> variant_term t nargs base_cls cls ft)
-      (Feature.Spec.preconditions bdesc#specification)
-  in
-  if Feature.Spec.has_postconditions bdesc#specification then
-    let posts =
-      List.map
-        (fun t -> variant_postcondition t i inew nargs base_cls cls ft)
-        (Feature.Spec.postconditions bdesc#specification) in
-    Feature.Spec.make_func_spec nms pres posts
-  else
-    let def = Feature.Spec.definition bdesc#specification in
-    match def with
-      None -> Feature.Spec.make_func_def nms None pres
-    | Some defterm ->
-        Feature.Spec.make_func_def
-          nms (Some (variant_term defterm nargs base_cls cls ft)) pres
-
 
 let equality_index (cls:int) (ft:t): int =
   variant eq_index cls ft
@@ -1994,7 +1927,9 @@ let find_with_signature
     List.fold_left
       (fun lst (i,sub) ->
         let desc = descriptor i ft in
-        if Tvars.is_equivalent tvs desc.tvs && Term_sub.is_identity sub then
+        if Tvars.is_equivalent tvs desc.tvs
+            && Term.equivalent tp desc.tp
+            && Term_sub.is_identity sub then
           i :: lst
         else
           let ok =
@@ -2008,11 +1943,10 @@ let find_with_signature
           in
           if ok then begin
             let ags = Term_sub.arguments (Term_sub.count sub) sub in
-            assert (Array.length ags = 1); (* nyi: Inheritance with more than one
-                                              formal generic.*)
-            let cls = Tvars.principal_class ags.(0) tvs in
+            (*assert (Array.length ags = 1); (* nyi: Inheritance with more than one
+                                              formal generic.*)*)
             try
-              let ivar = variant i cls ft in
+              let ivar,_ = variant_feature i 0 ags tvs ft in
               ivar :: lst
             with Not_found ->
               lst

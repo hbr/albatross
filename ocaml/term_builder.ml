@@ -455,8 +455,6 @@ let resize (nlocs:int) (nglobs:int) (nfgs:int) (tb:t): unit =
           {term  = transform_term trec.term;
            sign  = Sign.map transform trec.sign;
            sign0 = Sign.map transform trec.sign0}
-          (*{trec with sign = Sign.map transform trec.sign;
-           sign0 = Sign.map transform trec.sign0}*)
           tb.terms)
       0 (Seq.count tb.terms);
     let transform_seq seq =
@@ -1338,97 +1336,6 @@ let complete_inductive (info:info) (nrules:int) (tb:t): unit =
 
 
 
-(*
-let variant (idx:int) (gcnt:int) (nb:int) (tb:t): int =
-  let c = context tb in
-  let nvars = nb + Context.count_variables c in
-  if idx < nvars then
-    idx
-  else
-    let ft = Context.feature_table c in
-    let nfgs = Feature_table.count_fgs (idx-nvars) ft in
-    if nfgs = 0 then
-      idx
-    else
-      let gstart0 = globals_start tb in
-      let ags = Array.init nfgs (fun i -> tb.subs.(gstart0+gcnt+i)) in
-      let idx = try
-        Feature_table.variant_feature idx nvars ags tb.tvs ft
-      with Not_found ->
-        printf "no variant found for %s\n"
-          (Feature_table.string_of_signature (idx-nvars) ft);
-        printf "  substitution(s)\n";
-        Array.iter (fun tp ->
-          printf "    %s\n"
-            (string_of_reduced_complete_type tp tb))
-          ags;
-        assert false in
-      idx
-*)
-
-
-let specialize_head (tb:t): unit =
-  assert (Seq.count tb.terms = 1);
-  assert false
-  (*let rec spec (t:term) (gpos:int) (nb:int): term * int =
-    let spec_args (args:term array) (gpos:int) (nb:int): term array * int =
-      let len = Array.length args in
-      let args1  = Array.make len (Variable 0) in
-      let i,gpos1 =
-        Array.fold_left
-          (fun (i,gpos1) arg ->
-            let t,gpos2 = spec arg gpos1 nb in
-            args1.(i)  <- t;
-            i+1,gpos2)
-          (0,gpos)
-          args in
-      assert (i = len);
-      args1, gpos1
-    and spec_lst (lst:term list) (gpos:int) (nb:int): term list * int =
-      let gpos,lst =
-        List.fold_left
-          (fun (gpos,lst) t ->
-            let t,gpos = spec t gpos nb in
-            gpos, t::lst)
-          (gpos,[])
-          lst in
-      List.rev lst, gpos
-    in
-    match t with
-      Variable i ->
-        let gcnt = Seq.elem gpos tb.gcntseq in
-        let idx = variant i gcnt nb tb in
-        Variable idx, (gpos+1)
-    | VAppl (idx,args) ->
-        let gcnt = Seq.elem gpos tb.gcntseq in
-        let idx1 = variant idx gcnt nb tb in
-        let args1, gpos = spec_args args (gpos+1) nb in
-        VAppl(idx1,args1), gpos
-    | Application (f,args,pr) ->
-        let f1,gpos  = spec f gpos nb in
-        let args1,gpos = spec_args args gpos nb in
-        Application(f1,args1,pr), gpos
-    | Lam (n,nms,pres,t0,pr) ->
-        let nb = (if tb.norm then 1 else n) + nb in
-        let t0,gpos = spec t0 gpos nb in
-        let pres,gpos = spec_lst pres gpos nb in
-        Lam(n,nms,pres,t0,pr), gpos
-    | QExp (n,nms,t0,is_all) ->
-        let nb = n + nb in
-        let t0,gpos = spec t0 gpos nb in
-        QExp(n,nms,t0,is_all), gpos
-    | Flow(ctrl,args) ->
-        let args,gpos = spec_args args gpos nb in
-        Flow(ctrl,args), gpos
-    | Indset (n,nms,rs) ->
-        let rs,gpos = spec_args rs gpos (n+nb) in
-        Indset (n,nms,rs), gpos
-  in
-  let trec = Seq.elem 0 tb.terms in
-  let t,gpos = spec trec.term 0 0 in
-  assert (gpos = Seq.count tb.gcntseq);
-  Seq.put 0 {trec with term = t} tb.terms
-*)
 
 
 let is_fully_typed (tb:t): bool =

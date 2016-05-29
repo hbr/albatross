@@ -46,17 +46,6 @@ val add_variant: int -> int -> agens -> t -> unit
 
 val set_seed: int -> int -> agens -> t -> unit
 
-val variant: int -> int -> t -> int
-    (** [variant idx cls ft] returns the variant of the feature [idx] in the
-        class [cls] *)
-
-val variant_term: term -> int -> int -> int -> t -> term
-    (** [variant t nb base_cls cls ft] returns the variant of the term [t]
-        with [nb] bound variables of the base class [base_cls] in the class
-        [cls] *)
-
-val has_variant: int -> int -> t -> bool
-
 
 val complexity: term -> int -> Tvars.t -> t -> int
 

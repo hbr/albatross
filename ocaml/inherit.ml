@@ -75,10 +75,10 @@ let check_transform_valid
         and sig2 = Feature_table.string_of_signature ivar ft
         and tstr = PC.string_of_term t pc in
         let str =
-          "The feature \"" ^ sig2 ^
-          "\"\ncannot be a variant of the feature \"" ^ sig1 ^
-          "\"\nbecause \"" ^ tstr ^
-          "\" cannot be verified"
+          "The feature\n\t\"" ^ sig2 ^
+          "\"\ncannot be a variant of the feature \"\n\t" ^ sig1 ^
+          "\"\nbecause\n\t\"" ^ tstr ^
+          "\"\ncannot be verified"
         in
         error_info info str
     )

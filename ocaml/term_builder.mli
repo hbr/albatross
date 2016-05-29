@@ -58,6 +58,5 @@ val expect_inspect: t -> unit
 val complete_inspect: int -> t -> unit
 val expect_as:      t -> unit
 val complete_as:    t -> unit
-val specialize_head:t -> unit
 
 val update_context: t -> unit
