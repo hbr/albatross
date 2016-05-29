@@ -69,10 +69,19 @@ module Spec = struct
         (Term.to_string (Option.value s2.def));
     s1.def = s2.def && s1.pres = s2.pres && s1.posts = s2.posts
 
+
   let private_public_consistent (priv:t) (pub:t): bool =
-    priv.pres = pub.pres &&
-    (pub.def   = None || pub.def   = priv.def) &&
-    (pub.posts = []   || pub.posts = priv.posts)
+    Term.equivalent_list priv.pres pub.pres
+      &&
+    (pub.posts = [] || Term.equivalent_list pub.posts priv.posts)
+      &&
+    match pub.def, priv.def with
+      None, _ ->
+        true
+    | Some pubdef, Some privdef ->
+        Term.equivalent pubdef privdef
+    | _ ->
+        false
 end
 
 

@@ -113,6 +113,10 @@ module Term: sig
 
   val equivalent: term -> term -> bool
 
+  val equivalent_list: term list -> term list -> bool
+
+  val equivalent_array: term array -> term array -> bool
+
   val map: (int->int->int) -> term -> term
 
   val map_to_term: (int->int->term) -> term -> term
@@ -500,6 +504,18 @@ end = struct
           false
     in
     eq t1 t2 0
+
+  let equivalent_list (lst1:term list) (lst2:term list): bool =
+    List.for_all2 (fun t1 t2 -> equivalent t1 t2) lst1 lst2
+
+
+  let equivalent_array (arr1:term array) (arr2:term array): bool =
+    let len = Array.length arr1 in
+    len = Array.length arr2
+      &&
+    interval_for_all
+      (fun i -> equivalent arr1.(i) arr2.(i))
+      0 len
 
 
 
