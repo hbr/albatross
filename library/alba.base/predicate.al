@@ -43,6 +43,16 @@ all(x:G, p,q:{G})
     ensure  q(x) end
 
 
+is_empty (p:{G}): ghost BOOLEAN
+        -- Is the set 'p' empty?
+    -> all(x) x /in p
+
+is_universal (p:{G}): ghost BOOLEAN
+        -- Is the set 'p' the universal set?
+    -> all(x) x in p
+
+has_some (p:{G}): ghost BOOLEAN
+    -> some(x) x in p
 
 (+) (p,q:{G}): {G}   -> {x: p(x) or q(x)}
 
@@ -56,6 +66,9 @@ singleton (a:G): {G} -> {x: x = a}
 
 0:{G} = {x: false}
 1:{G} = {x: true}
+
+empty:{G}     = {x: false}
+universal:{G} = {x: true}
 
 (+) (pp:{{G}}): ghost {G} -> {x: some(p) pp(p) and p(x)}
 

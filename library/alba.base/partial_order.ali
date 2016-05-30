@@ -100,10 +100,10 @@ greatest(p:{PO}): ghost PO
         Result.is_supremum(p)
     end
 
-is_monotonic(f:PO->PO): ghost BOOLEAN ->
+is_monotonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
 
-is_antitonic(f:PO->PO): ghost BOOLEAN ->
+is_antitonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
 
 is_ascending(f:PO->PO): ghost BOOLEAN ->
@@ -152,6 +152,38 @@ all(a,b,c:PO, p,q:{PO})
 
         a.is_infimum({x: a <= x})
     end
+
+
+
+{: Directed Sets and Continuous Functions
+   ======================================
+:}
+
+is_directed (d:{PO}): ghost BOOLEAN
+        -- Is 'd' not empty and do all pair of elements of 'd' have an
+        -- upper bound in 'd'?
+    -> d.has_some
+       and
+       all(a,b)  {a,b} <= d
+                 ==>
+                 some(x) x in d
+                 and
+                 x.is_upper_bound({a,b})
+
+
+is_up_continuous (f:PO->PO2): ghost BOOLEAN
+        -- Does 'f' map suprema to suprema?
+    -> all(set,sup)
+           set <= f.domain
+           ==>
+           sup in f.domain
+           ==>
+           sup.is_supremum(set)
+           ==>
+           f(sup).is_supremum(set.image(f))
+
+
+
 
 
 G: ANY

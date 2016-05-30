@@ -68,10 +68,10 @@ has_infimum (p:{PO}): ghost BOOLEAN -> some(x) x.is_infimum(p)
 
 has_supremum (p:{PO}): ghost BOOLEAN -> some(x) x.is_supremum(p)
 
-is_monotonic(f:PO->PO): ghost BOOLEAN ->
+is_monotonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
 
-is_antitonic(f:PO->PO): ghost BOOLEAN ->
+is_antitonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
 
 is_ascending(f:PO->PO): ghost BOOLEAN ->
@@ -331,6 +331,32 @@ all(p,q:{PO})
         least(q).is_least(q)
         least(p).is_least(p)
     end
+
+
+{: Directed Sets and Continuous Functions
+   ======================================
+:}
+
+is_directed (d:{PO}): ghost BOOLEAN
+    -> d.has_some
+       and
+       all(a,b)  {a,b} <= d
+                 ==>
+                 some(x) x in d
+                         and
+                         x.is_upper_bound({a,b})
+
+
+is_up_continuous (f:PO->PO2): ghost BOOLEAN
+    -> all(set,sup)
+           set <= f.domain
+           ==>
+           sup in f.domain
+           ==>
+           sup.is_supremum(set)
+           ==>
+           f(sup).is_supremum(set.image(f))
+
 
 {:
 all(a:PO, f:PO->PO)

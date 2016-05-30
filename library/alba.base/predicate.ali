@@ -42,6 +42,26 @@ end
 
 
 
+is_empty (p:{G}): ghost BOOLEAN
+        -- Is the set 'p' empty?
+    -> all(x) x /in p
+
+is_universal (p:{G}): ghost BOOLEAN
+        -- Is the set 'p' the universal set?
+    -> all(x) x in p
+
+has_some (p:{G}): ghost BOOLEAN
+        -- Does the set 'p' have elements?
+    -> some(x) x in p
+
+
+empty:{G}     = {x: false}
+        -- The empty set
+
+universal:{G} = {x: true}
+        -- The universal set
+
+
 0: {G} = {x: false}
         -- The empty set
 
