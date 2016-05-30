@@ -46,7 +46,17 @@ range (f:A->B): ghost {B}
     -> {b: some(a) a in f.domain and f(a) = b}
 
 image (p:{A}, f:A->B): ghost {B}
-    -> {y: some(x) x in (f.domain*p) and f(x) = y}
+    -> {y: some(x) x in f.domain*p and f(x) = y}
+
+
+[] (f:A->B, p:{A}): ghost {B}
+    -> {y: some(x) x in f.domain and x in p and f(x) = y}
+
+
+all(f:A->B, p:{A})
+    ensure
+        f[p] = p.image(f)
+    end
 
 preimage (q:{B}, f:A->B): ghost {A}
     -> {x: x in f.domain and f(x) in q}

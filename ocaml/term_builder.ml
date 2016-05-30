@@ -963,7 +963,8 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
         let nms = standard_argnames n
         and args = standard_substitution n
         and pr  = is_predicate tb.rtype tb
-        and tup_tp = Class_table.domain_type tb.rtype in
+        and tup_tp =
+          Class_table.domain_type (substituted_type tb.rtype tb) in
         let t0 = VAppl(i+n,args,ags) in
         let t0 = Feature_table.add_tuple_accessors t0 n tup_tp nvars ft in
         Lam (n, nms, [], t0, pr, tb.rtype)

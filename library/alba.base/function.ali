@@ -41,6 +41,9 @@ range (f:A->B): ghost {B}
 image (p:{A}, f:A->B): ghost {B}
      -> {y: some(x) (f.domain*p)(x) and f(x) = y}
 
+[] (f:A->B, p:{A}): ghost {B}
+    -> {y: some(x) x in f.domain and x in p and f(x) = y}
+
 preimage (q:{B}, f:A->B): ghost {A}
      -> {x: x in f.domain and f(x) in q}
 

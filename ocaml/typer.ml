@@ -744,7 +744,6 @@ let analyze_expression
       | Expop op            -> do_leaf (feat (FNoperator op))
       | Binexp (Asop,e1,mtch) ->
           exp_as ie.i e1 mtch accs c
-          (*not_yet_implemented info  ("Typing of " ^ (string_of_expression e))*)
       | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
       | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
       | Funapp (Expdot(tgt,f),args) ->
@@ -787,8 +786,10 @@ let analyze_expression
             error_info info (str ^ actual ^ "\n  Required types(s):\n\t" ^ reqs)
           end;
           analyze e0 accs c
-      | Bracketapp (_,_) ->
-          not_yet_implemented ie.i ("Bracketapp Typing of "^ (string_of_expression e))
+      | Bracketapp (tgt,args) ->
+          let arg_lst = tgt :: expression_list args in
+          let args = Array.of_list arg_lst in
+          application (Expop Bracketop) args accs c
       | Expset _ ->
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
       | Expcolon (_,_) ->

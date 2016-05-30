@@ -934,6 +934,13 @@ let term_to_string
     let op2str (op:operator) (fidx:int) (args: term array): string =
       match op with
         Allop | Someop | Asop -> assert false (* cannot happen *)
+      | Bracketop when arity fidx ft > 1 ->
+          let nargs = Array.length args in
+          assert (nargs = arity fidx ft);
+          let tgt = args.(0)
+          and args = Array.sub args 1 (nargs - 1) in
+          let tgtstr = to_string tgt names nanonused tvs false None in
+          tgtstr ^ "[" ^ (argsstr args) ^ "]"
       | _ ->
           let nargs = Array.length args in
           if nargs = 1 && arity fidx ft = 0 then begin
