@@ -725,9 +725,8 @@ and prove_inductive_type
       ind_idx
   in
   let t,pt = PC.discharged ind_idx pc in
-  ignore (PC.add_proved_term t pt true pc_outer);
-  PC.close pc_outer;
-  PC.find goal pc_outer
+  let idx = PC.add_proved_term t pt false pc_outer in
+  PC.add_beta_reduced idx false pc_outer
 
 
 
@@ -854,9 +853,8 @@ and prove_inductive_set
       ) data.induction_rule 0 nrules in
   let gidx = PC.add_mp data.element_in_set ind_idx false data.pc in
   let t,pt = PC.discharged gidx data.pc in
-  ignore(PC.add_proved_term t pt true pc);
-  PC.close pc;
-  PC.find goal pc
+  let idx = PC.add_proved_term t pt false pc in
+  PC.add_beta_reduced idx false pc
 
 
 and prove_inductive_set_case

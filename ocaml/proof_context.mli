@@ -62,6 +62,7 @@ val add_assumption:     term -> t -> int
 val add_axiom:          term -> t -> int
 val add_mp:             int -> int -> bool -> t -> int
 val add_beta_reduced:   int -> bool -> t -> int
+val add_beta_redex:     term -> int -> bool -> t -> int
 val specialized:        int -> arguments -> agens -> int -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list

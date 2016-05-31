@@ -1040,17 +1040,37 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
 let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   (* [idx] must represent a term which can be beta reduced *)
   let t = term idx pc in
-  printf "add_beta_reduced %s\n" (string_of_term t pc);
   match t with
     Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
       assert (prlam = pr);
       let pt = Eval(idx,Eval.Beta (Eval.Term t))
       and res = beta_reduce n t0 tp [|arg|] 0 pc in
-      printf "res %s\n" (string_of_term res pc);
       Proof_table.add_proved res pt 0 pc.base;
       raw_add res search pc
   | _ ->
-      invalid_arg "The term is not a beta redex"
+      assert false (* The term [idx] is not a beta redex *)
+
+
+
+let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
+  (* The term [t] must be beta reducible and its beta reduction is the
+     term [idx]. The term [t] is added.
+   *)
+  printf "add_beta_redex %s\n" (string_of_term t pc);
+  match t with
+    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
+      assert (prlam = pr);
+      let pt = Eval_bwd(t,Eval.Beta (Eval.Term t)) (* proves the implication
+                                                      [t_idx ==> t] *)
+      and reduced = beta_reduce n t0 tp [|arg|] 0 pc in
+      let impl = implication reduced t pc in
+      printf "   reduced %s\n" (string_of_term reduced pc);
+      Proof_table.add_proved impl pt 0 pc.base;
+      let idx_impl = raw_add  impl false pc in
+      add_mp idx idx_impl search pc
+  | _ ->
+      assert false
+
 
 
 let add_mp_fwd (i:int) (j:int) (pc:t): unit =
