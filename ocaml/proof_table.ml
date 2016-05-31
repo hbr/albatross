@@ -932,6 +932,7 @@ let is_proof_pair (t:term) (pt:proof_term) (at:t): bool =
     res
   with Illegal_proof_term ->
     printf "Illegal proof term\n";
+    printf "   term \"%s\"\n" (string_long_of_term t at);
     print_pt pt at;
     false
 

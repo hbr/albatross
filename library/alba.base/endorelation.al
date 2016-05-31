@@ -141,7 +141,7 @@ all(a,b:A, r:{A,A})
     proof
         all(a,b) require (r.reflexive)(a,b)
                  ensure  (r.reflexive)(a,a)
-                 inspect s(a,b): r.reflexive
+                 inspect (r.reflexive)(a,b)
                  end
     end
 
@@ -153,7 +153,7 @@ all(a,b:A, r:{A,A})
     proof
         all(a,b) require (r.reflexive)(a,b)
                  ensure  (r.reflexive)(b,b)
-                 inspect s(a,b): r.reflexive
+                 inspect (r.reflexive)(a,b)
                  end
     end
 
@@ -194,8 +194,10 @@ all(a,b,c:A, r:{A,A})
         (+r)(b,c)
     ensure
         (+r)(a,b) ==> (+r)(a,c)
-    inspect s(b,c): +r
-    case all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c) proof
+    inspect
+        (+r)(b,c)
+    case all(a,b,c) (+r)(a,b) ==> r(b,c) ==> (+r)(a,c)
+    proof
         all(a) (+r)(a,b) ==> (+r)(a,c)
         all(a)
         require (+r)(a,b)
@@ -312,14 +314,22 @@ all(a,b,c:A, r:{A,A})
     proof
         ensure
             all(c) r(a,c) ==> some(d) r(b,d) and (r.reflexive)(c,d)
-        inspect s(a,b): r.reflexive
-        case all(a,b) r(a,b) ==> s(a,b) proof
+
+        inspect
+            (r.reflexive)(a,b)
+
+        case all(a,b) r(a,b) ==> (r.reflexive)(a,b)
+        proof
             r <= r.reflexive
-        case all(a,b) r(a,b) ==> s(a,a) proof
+
+        case all(a,b) r(a,b) ==> (r.reflexive)(a,a)
+        proof
             all(c) require r(a,c)
                    ensure  some(d) r(a,d) and (r.reflexive)(c,d)
                    proof   r(a,c) and (r.reflexive)(c,c) end
-        case all(a,b) r(a,b) ==> s(b,b) proof
+
+        case all(a,b) r(a,b) ==> (r.reflexive)(b,b)
+        proof
             all(c) require r(b,c)
                    ensure  some(d) r(b,d) and (r.reflexive)(c,d)
                    proof   r(b,c) and (r.reflexive)(c,c) end
@@ -339,8 +349,10 @@ all(a,b,c:A, r:{A,A})
         ensure
             all(b) (r.reflexive)(a,b)
                    ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
-        inspect s(a,c): r.reflexive
-        case all(a,c) r(a,c) ==> s(a,c) proof
+        inspect
+            (r.reflexive)(a,c)
+        case all(a,c) r(a,c) ==> (r.reflexive)(a,c)
+        proof
             all(b)
             require (r.reflexive)(a,b)
             ensure  some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
@@ -353,7 +365,9 @@ all(a,b,c:A, r:{A,A})
                     proof   (r.reflexive)(b,d) and (r.reflexive)(c,d)
                     end
             end
-        case all(a,c) r(a,c) ==> s(a,a) proof
+
+        case all(a,c) r(a,c) ==> (r.reflexive)(a,a)
+        proof
             all(b)
             require (r.reflexive)(a,b)
             ensure
@@ -368,7 +382,9 @@ all(a,b,c:A, r:{A,A})
                     (r.reflexive)(b,b) and (r.reflexive)(a,b)
                 end
             end
-        case all(a,c) r(a,c) ==> s(c,c) proof
+
+        case all(a,c) r(a,c) ==> (r.reflexive)(c,c)
+        proof
             all(b)
                 require (r.reflexive)(c,b)
                 ensure  some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
@@ -409,14 +425,14 @@ all(a,b,c:A, r:{A,A})
         ensure
             all(c) r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
         inspect
-            s(a,b): +r
+            (+r)(a,b)
         case
-            all(a,b) r(a,b) ==> s(a,b)
+            all(a,b) r(a,b) ==> (+r)(a,b)
         proof
             r <= +r
 
         case
-            all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c)
+            all(a,b,c) (+r)(a,b) ==> r(b,c) ==> (+r)(a,c)
             {:      a ----> d           --->        r
                     .       .           ...>       +r
                     .       .
@@ -456,8 +472,10 @@ all(a,b,c:A, r:{A,A})
     proof
         ensure
             all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
-        inspect s(a,c): +r
-        case all(a,c) r(a,c) ==> s(a,c) proof
+        inspect
+            (+r)(a,c)
+        case all(a,c) r(a,c) ==> (+r)(a,c)
+        proof
             all(b) require (+r)(a,b)
                    ensure  some(d) (+r)(b,d) and (+r)(c,d)
                    proof   r(a,c)
@@ -468,7 +486,8 @@ all(a,b,c:A, r:{A,A})
                            proof   (+r)(b,d) and (+r)(c,d)
                            end
                    end
-        case all(a,c,e) s(a,c) ==> r(c,e) ==> s(a,e) proof
+        case all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
+        proof
             {:  a . . .> c ---> e           --->        r
                 .        .      .           ...>       +r
                 .        .      .
