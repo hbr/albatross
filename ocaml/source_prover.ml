@@ -32,7 +32,7 @@ let verify_preconditions (it:info_term) (pc:PC.t): unit =
     List.iter
       (fun p ->
         try
-          ignore (Prover.prove_and_insert p pc)
+          Prover.prove p pc
         with Proof.Proof_failed msg ->
           error_info it.i ("Cannot prove precondition \"" ^
                            (PC.string_of_term p pc) ^
@@ -119,15 +119,16 @@ let add_axiom (it:info_term) (pc:PC.t): int =
   PC.add_axiom it.v pc
 
 
-let prove_insert_report (goal:info_term) (pc:PC.t): int =
+let prove_insert_report (goal:info_term) (search:bool) (pc:PC.t): int =
   try
-    Prover.prove_and_insert goal.v pc
+    let t,pt = Prover.proof_term goal.v pc in
+    PC.add_proved_term t pt search pc
   with Proof.Proof_failed msg ->
     error_info goal.i ("Cannot prove" ^ msg)
 
 
 let prove_insert_close (goal:info_term) (pc:PC.t): int =
-  let idx = prove_insert_report goal pc in
+  let idx = prove_insert_report goal true pc in
   PC.close pc;
   idx
 
@@ -167,14 +168,14 @@ let one_goal (elst: info_terms): info_term =
 
 let prove_goal (goal: info_term) (pc:PC.t): unit =
   verify_preconditions goal pc;
-  let idx = prove_insert_report goal pc in
+  let idx = prove_insert_report goal false pc in
   let t,pt = PC.discharged idx pc in
   let pc0 = PC.pop pc in
   ignore (PC.add_proved false (-1) t pt pc0)
 
 
 let prove_goals (elst: info_terms) (pc:PC.t): unit =
-  let idx_list = List.map (fun it -> prove_insert_report it pc) elst in
+  let idx_list = List.map (fun it -> prove_insert_report it false pc) elst in
   let pair_list = List.map (fun idx -> PC.discharged idx pc) idx_list in
   let pc0 = PC.pop pc in
   PC.add_proved_list false (-1) pair_list pc0
@@ -549,7 +550,7 @@ and prove_sequence
       begin match step with
         PS_Simple ie ->
           let it = get_boolean_term_verified ie pc in
-          ignore (prove_insert_report it pc)
+          ignore (prove_insert_report it true pc)
       | PS_Structured (entlst,rlst,tgt,prf) ->
           let rlst, elst, pc1 = push entlst rlst [tgt] pc in
           add_assumptions rlst pc1;
@@ -583,7 +584,7 @@ and prove_guarded_if
   in
   let or_exp = PC.disjunction c1.v c2.v pc in
   let or_exp_idx =
-    prove_insert_report (withinfo info or_exp) pc
+    prove_insert_report (withinfo info or_exp) false pc
   and or_elim_idx =
     try
       PC.or_elimination pc
@@ -913,6 +914,7 @@ and prove_exist_elim
     (pc:PC.t)
     : int =
   assert (reqs <> []);
+  PC.close pc;
   let req =
     List.fold_left
       (fun left right ->
@@ -924,9 +926,8 @@ and prove_exist_elim
   in
   let someexp = (withinfo info (Expquantified (Existential,entlst,req))) in
   let someexp = get_boolean_term_verified someexp pc in
-  let someexp_idx = prove_insert_report someexp pc in
+  let someexp_idx = prove_insert_report someexp false pc in
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
-  PC.close pc;
   let n,fargs,t0 = Term.some_quantifier_split someexp.v in
   let pc1 = PC.push_typed fargs empty_formals pc in
   ignore (PC.add_assumption t0 pc1);
