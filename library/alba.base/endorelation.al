@@ -280,12 +280,16 @@ all(a,b,c:A, r,s:{A,A})
         r(a,c)
     ensure
         some(d) r(b,d) and s(c,d)
-    proof
-        some(d) r(b,d) and r(c,d)
-        all(d) require r(b,d) and r(c,d)
-               ensure  some(d) r(b,d) and s(c,d)
-               proof   r(b,d) and s(c,d) end
+    via some(d)
+            require
+                r(b,d)
+                r(c,d)
+            proof
+                r(b,d) and s(c,d)
     end
+
+
+
 
 
 
@@ -356,14 +360,12 @@ all(a,b,c:A, r:{A,A})
             all(b)
             require (r.reflexive)(a,b)
             ensure  some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
-            proof
-                some(d) r(b,d) and (r.reflexive)(c,d)
-                all(d)
-                    require r(b,d) and (r.reflexive)(c,d)
-                    ensure
-                        some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
-                    proof   (r.reflexive)(b,d) and (r.reflexive)(c,d)
-                    end
+            via some(d)
+                    require
+                        r(b,d)
+                        (r.reflexive)(c,d)
+                    proof
+                        (r.reflexive)(b,d) and (r.reflexive)(c,d)
             end
 
         case all(a,c) r(a,c) ==> (r.reflexive)(a,a)
@@ -372,15 +374,12 @@ all(a,b,c:A, r:{A,A})
             require (r.reflexive)(a,b)
             ensure
                 some(d) (r.reflexive)(b,d) and (r.reflexive)(a,d)
-            proof
-                some(d) r(b,d) and (r.reflexive)(c,d)
-                all(d)
-                require r(b,d) and (r.reflexive)(c,d)
-                ensure
-                    some(d) (r.reflexive)(b,d) and (r.reflexive)(a,d)
-                proof
-                    (r.reflexive)(b,b) and (r.reflexive)(a,b)
-                end
+            via some(d)
+                    require
+                        r(b,d)
+                        (r.reflexive)(c,d)
+                    proof
+                        (r.reflexive)(b,b) and (r.reflexive)(a,b)
             end
 
         case all(a,c) r(a,c) ==> (r.reflexive)(c,c)
@@ -447,17 +446,17 @@ all(a,b,c:A, r:{A,A})
             all(d)
             require r(a,d)
             ensure  some(f) r(c,f) and (+r)(d,f)
-            proof   some(e) r(b,e) and (+r)(d,e)
-                    all(e) require r(b,e) and (+r)(d,e)
-                           ensure some(f) r(c,f) and (+r)(d,f)
-                           proof   r(b,c)
-                                   some(f) r(c,f) and r(e,f)
-                                   all(f)
-                                   require r(c,f) and r(e,f)
-                                   ensure  some(f) r(c,f) and (+r)(d,f)
-                                   proof   r(c,f) and (+r)(d,f)
-                                   end
-                           end
+            via some(e)
+                    require
+                        r(b,e)
+                        (+r)(d,e)
+                    via some(f)
+                            require
+                                r(c,f)
+                                r(e,f)
+                            proof
+                                r(b,c)
+                                r(c,f) and (+r)(d,f)
             end
         end
     end
@@ -474,19 +473,21 @@ all(a,b,c:A, r:{A,A})
             all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
         inspect
             (+r)(a,c)
-        case all(a,c) r(a,c) ==> (+r)(a,c)
+        case
+            all(a,c) r(a,c) ==> (+r)(a,c)
         proof
             all(b) require (+r)(a,b)
                    ensure  some(d) (+r)(b,d) and (+r)(c,d)
-                   proof   r(a,c)
-                           some(d) r(b,d) and (+r)(c,d)
-                           all(d)
-                           require r(b,d) and (+r)(c,d)
-                           ensure  some(d) (+r)(b,d) and (+r)(c,d)
-                           proof   (+r)(b,d) and (+r)(c,d)
-                           end
+                   via some(d)
+                           require
+                               r(b,d)
+                               (+r)(c,d)
+                           proof
+                               r(a,c)
+                               (+r)(b,d) and (+r)(c,d)
                    end
-        case all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
+        case
+            all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
         proof
             {:  a . . .> c ---> e           --->        r
                 .        .      .           ...>       +r
@@ -498,16 +499,16 @@ all(a,b,c:A, r:{A,A})
             all(b)
             require (+r)(a,b)
             ensure  some(f) (+r)(b,f) and (+r)(e,f)
-            proof   some(d) (+r)(b,d) and (+r)(c,d)
-                    all(d) require (+r)(b,d) and (+r)(c,d)
-                           ensure  some(f) (+r)(b,f) and (+r)(e,f)
-                           proof
-                               some(f) r(d,f) and (+r)(e,f)
-                               all(f) require r(d,f) and (+r)(e,f)
-                                      ensure  some(f) (+r)(b,f) and (+r)(e,f)
-                                      proof   (+r)(b,f) and (+r)(e,f)
-                                      end
-                           end
+            via some(d)
+                    require
+                        (+r)(b,d)
+                        (+r)(c,d)
+                    via some(f)
+                            require
+                                r(d,f)
+                                (+r)(e,f)
+                            proof
+                                (+r)(b,f) and (+r)(e,f)
             end
         end
     end

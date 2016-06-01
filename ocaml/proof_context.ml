@@ -1073,6 +1073,37 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
 
 
 
+let add_some_elim (i:int) (search:bool) (pc:t): int =
+  (* The term [i] has the form [some(a,b,...) t0]. Add the elimination law
+
+         all(e) (all(a,b,..) t0 ==> e) ==> e
+   *)
+  let t =
+    try
+      Proof_table.someelim i pc.base
+    with Not_found ->
+      assert false
+  in
+  Proof_table.add_proved t (Someelim i) 0 pc.base;
+  raw_add t search pc
+
+
+
+
+let add_some_elim_specialized (i:int) (goal:term) (search:bool) (pc:t): int =
+  (* The term [i] has the form [some(a,b,...) t0]. Add the elimination law
+
+         all(e) (all(a,b,..) t0 ==> e) ==> e
+
+     and the specialized version
+
+         (all(a,b,...) t0 ==> goal) ==> goal
+   *)
+  let idx = add_some_elim i search pc in
+  specialized idx [|goal|] [||] 0 pc
+
+
+
 let add_mp_fwd (i:int) (j:int) (pc:t): unit =
   let rdj = rule_data j pc in
   if RD.is_forward rdj then begin
@@ -1223,12 +1254,12 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
 
 let add_consequences_someelim (i:int) (pc:t): unit =
   try
-    let some_cons = Proof_table.someelim i pc.base in
-    if has some_cons pc then
+    let some_consequence = Proof_table.someelim i pc.base in
+    if has some_consequence pc then
       ()
     else begin
-      Proof_table.add_someelim i some_cons pc.base;
-      let _ = raw_add some_cons true pc in ();
+      Proof_table.add_someelim i some_consequence pc.base;
+      let _ = raw_add some_consequence true pc in ();
       add_last_to_work pc
     end
   with Not_found ->

@@ -531,6 +531,8 @@ and prove_one
               prove_guarded_if prf.i goal cond1 prf1 cond2 prf2  pc
           | PS_Inspect (insp, cases) ->
               prove_inspect prf.i goal insp cases pc
+          | PS_Existential (entlst, reqs, prf1) ->
+              prove_exist_elim prf.i goal entlst reqs prf1 pc
         end
       with Proof.Proof_failed msg ->
         error_info prf.i ("Does not prove \"" ^
@@ -900,3 +902,37 @@ and prove_inductive_set_case
   in
   let t,pt = PC.discharged gidx pc1 in
   PC.add_proved_term t pt false pc0
+
+
+and prove_exist_elim
+    (info: info)
+    (goal: term)
+    (entlst: entities list withinfo)
+    (reqs: info_expression list)
+    (prf:  proof_support_option)
+    (pc:PC.t)
+    : int =
+  assert (reqs <> []);
+  let req =
+    List.fold_left
+      (fun left right ->
+        let right = Expparen right.v in
+        Binexp (Andop,left,right)
+      )
+      (Expparen (List.hd reqs).v)
+      (List.tl reqs)
+  in
+  let someexp = (withinfo info (Expquantified (Existential,entlst,req))) in
+  let someexp = get_boolean_term_verified someexp pc in
+  let someexp_idx = prove_insert_report someexp pc in
+  let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
+  PC.close pc;
+  let n,fargs,t0 = Term.some_quantifier_split someexp.v in
+  let pc1 = PC.push_typed fargs empty_formals pc in
+  ignore (PC.add_assumption t0 pc1);
+  PC.close pc1;
+  let goal = Term.up n goal in
+  let goal_idx = prove_one goal prf pc1 in
+  let t,pt = PC.discharged goal_idx pc1 in
+  let all_idx = PC.add_proved_term t pt false pc in
+  PC.add_mp all_idx elim_idx false pc

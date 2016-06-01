@@ -104,6 +104,7 @@ let _ =
      ("undefine",  Parser.KWundefine);
      ("use",       Parser.KWuse);
      ("variant",   Parser.KWvariant);
+     ("via",       Parser.KWvia);
      ("while",     Parser.KWwhile);
 
      ("->",        Parser.ARROW);

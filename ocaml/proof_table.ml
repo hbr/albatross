@@ -718,13 +718,12 @@ let someelim (i:int) (at:t): term =
   (* If the term [i] has not the form [some(a:A,b:B,...) t] then raise
      Not_found.
 
-     If the term is an existentially quantified assertions then transform it
+     If the term is an existentially quantified assertion then transform it
      into
 
          all(u:BOOLEAN) (all(a:A,b:B,...) t ==> u) ==> u
 
    *)
-
   assert (i < count at);
   let t_i = local_term i at in
   let nargs,(nms,tps),t0 = split_some_quantified t_i at in

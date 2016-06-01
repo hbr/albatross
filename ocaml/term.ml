@@ -191,6 +191,8 @@ module Term: sig
   val split_implication_chain: term -> int -> term list * term
   val make_implication_chain:  term list -> term -> int -> term
 
+  val split_left_binop_chain: term -> int -> term list
+
   val split_rule: term -> int -> int * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
@@ -1165,6 +1167,33 @@ end = struct
         ps_rev, t
     in
     chrec t []
+
+
+
+  let split_left_binop_chain (t:term) (op_id:int): term list =
+    (* If the term [t] has the form
+
+           a op b op c op ... op z
+
+       and the operator represented by [op_id] is left associative i.e.
+
+           ((..(a op b) op c) .. ) op z
+
+       then
+       return the list
+
+           [a,b,c,...,z]
+     *)
+    let rec split t lst =
+      try
+        let a,b = binary_split t op_id in
+        split a (b :: lst)
+      with Not_found ->
+        t :: lst
+    in
+    split t []
+
+
 
 
   let split_rule (t:term) (imp_id:int)

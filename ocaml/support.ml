@@ -748,6 +748,8 @@ type proof_support =
         info_expression * proof_support_option
   | PS_Inspect of
       info_expression * (info_expression * proof_support_option) list
+  | PS_Existential of
+      entities list withinfo * info_expression list * proof_support_option
 
 and info_proof_support = proof_support withinfo
 

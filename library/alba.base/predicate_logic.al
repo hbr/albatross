@@ -41,23 +41,24 @@ all(a:G)
     end
 
 
+
 all(p:{G})
     require
         some(x) x in p
     ensure
         p /= 0
-    proof
-        all(x)
+    via some(x)
             require
-                p(x)
-                p = 0
-            ensure
-                false
+                x in p
             proof
-                x in 0
-            end
-        -- all(x) x in p ==> p /= 0 -- Redesign: No longer working!
+                require p = 0
+                ensure  false
+                proof   x in 0
+                end
     end
+
+
+
 
 
 all(p:{G})
@@ -83,21 +84,15 @@ all(p:{G})
             some(x) x in p
         ensure
             false
-        proof
-            all(x) require x in p
-                   ensure  false
-                   proof   x /in p end
+        via some(x)
+                require x in p
+                proof   x /in p
         end
-        {: better as via 'some(x) proof'
-        require
-            some(x) x in p
-        ensure
-            false
-        via some(x) require x in p
-                    ensure  false
-                    proof   x /in p end
-        end:}
     end
+
+
+
+
 
 all(x:G, p:{G})
     require
@@ -105,6 +100,8 @@ all(x:G, p:{G})
     ensure
         x /in p
     end
+
+
 
 
 
@@ -118,29 +115,47 @@ all(p:{G})
             all(x) x in p
         ensure
             false
-        proof
-            all(x) require x /in p
-                   ensure  false
-                   proof   x in p end
+        via some(x)
+                require x /in p
+                proof   x in p
         end
     end
+
+
+
+
+
+
 
 
 all(p:{G})
     require
-        not all(x) x in p
+        not all(x) x in p   -- a1
     ensure
         some(x) x /in p
     proof
         require
-            not some(x) x /in p
+            not some(x) x /in p  -- a2
         ensure
             false
         proof
-            all(x) ensure x in p
-                   proof not not (x in p) end
+            all(x)
+                ensure
+                    x in p  -- contradicts 'a1'
+                proof
+                    require
+                        not (x in p)   -- a3
+                    ensure
+                        false
+                    proof
+                        some(x) x /in p -- witness 'a3', contradicts 'a2'
+                    end
+                end
         end
     end
+
+
+
 
 
 all(p,q:{G})
