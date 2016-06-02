@@ -1826,6 +1826,13 @@ let discharged (i:int) (pc:t): term * proof_term =
   Proof_table.discharged i pc.base
 
 
+let discharged_bubbled (i:int) (pc:t): term * proof_term =
+  (** The [i]th term of the current environment with all local variables and
+      assumptions discharged together with its proof term.
+   *)
+  Proof_table.discharged_bubbled i pc.base
+
+
 
 let is_proof_pair (t:term) (pt:proof_term) (pc:t): bool =
   Proof_table.is_proof_pair t pt pc.base

@@ -134,7 +134,6 @@ let prove_insert_close (goal:info_term) (pc:PC.t): int =
 
 
 
-
 let store_unproved
     (is_defer:bool)
     (elst: info_terms)
@@ -142,7 +141,7 @@ let store_unproved
     : unit =
   assert (PC.is_toplevel pc);
   let idx_lst = List.map (fun it -> add_axiom it pc) elst in
-  let pair_lst = List.map (fun idx -> PC.discharged idx pc) idx_lst in
+  let pair_lst = List.map (fun idx -> PC.discharged_bubbled idx pc) idx_lst in
   let anchor =
     if is_defer then
       PC.owner pc
@@ -169,14 +168,14 @@ let one_goal (elst: info_terms): info_term =
 let prove_goal (goal: info_term) (pc:PC.t): unit =
   verify_preconditions goal pc;
   let idx = prove_insert_report goal false pc in
-  let t,pt = PC.discharged idx pc in
+  let t,pt = PC.discharged_bubbled idx pc in
   let pc0 = PC.pop pc in
   ignore (PC.add_proved false (-1) t pt pc0)
 
 
 let prove_goals (elst: info_terms) (pc:PC.t): unit =
   let idx_list = List.map (fun it -> prove_insert_report it false pc) elst in
-  let pair_list = List.map (fun idx -> PC.discharged idx pc) idx_list in
+  let pair_list = List.map (fun idx -> PC.discharged_bubbled idx pc) idx_list in
   let pc0 = PC.pop pc in
   PC.add_proved_list false (-1) pair_list pc0
 
@@ -488,7 +487,7 @@ let rec prove_and_store
       with  Proof.Proof_failed msg ->
         error_info goal.i ("Cannot prove" ^ msg)
     in
-    let t,pt = PC.discharged idx pc1 in
+    let t,pt = PC.discharged_bubbled idx pc1 in
     ignore (PC.add_proved false (-1) t pt pc)
   in
   match prf with
@@ -563,7 +562,7 @@ and prove_sequence
             with Proof.Proof_failed msg ->
               error_info goal.i ("Cannot prove" ^ msg)
           in
-          let t,pt = PC.discharged idx pc1 in
+          let t,pt = PC.discharged_bubbled idx pc1 in
           ignore(PC.add_proved false (-1) t pt pc)
       end;
       PC.close pc
@@ -646,7 +645,7 @@ and prove_branch
   ignore (PC.add_assumption cond.v pc1);
   PC.close pc1;
   let idx = prove_one goal prf pc1 in
-  let t,pt = PC.discharged idx pc1 in
+  let t,pt = PC.discharged_bubbled idx pc1 in
   PC.add_proved_term t pt false pc
 
 
@@ -737,7 +736,7 @@ and prove_inductive_type
       cons_set
       ind_idx
   in
-  let t,pt = PC.discharged ind_idx pc in
+  let t,pt = PC.discharged_bubbled ind_idx pc in
   let idx = PC.add_proved_term t pt false pc_outer in
   PC.add_beta_reduced idx false pc_outer
 
@@ -867,9 +866,6 @@ and prove_inductive_set
       ) data.induction_rule 0 nrules in
   let gidx = PC.add_mp data.element_in_set ind_idx false data.pc in
   PC.add_beta_reduced gidx false pc
-  (*let t,pt = PC.discharged gidx data.pc in
-  let idx = PC.add_proved_term t pt false pc in
-  PC.add_beta_reduced idx false pc*)
 
 
 and prove_inductive_set_case

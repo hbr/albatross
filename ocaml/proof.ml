@@ -91,7 +91,8 @@ type proof_term =
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
   | Inherit    of int * int * int (* assertion, base/descendant class *)
-  | Subproof   of formals * formals * int * proof_term array (* _,_,res,_ *)
+  | Subproof   of formals * formals * int * proof_term array * bool
+                        (* _,_,res,_,bubble_up *)
 
 
 module Proof_term: sig
@@ -155,7 +156,7 @@ end = struct
           Eval.print (prefix ^ "    ") e
       | Witness (i,_,t,args)-> print_prefix (); printf "Witness %d\n" i
       | Someelim i          -> print_prefix (); printf "Someelim %d\n" i
-      | Subproof ((nms,_),(fgnms,_),i,pt_arr) ->
+      | Subproof ((nms,_),(fgnms,_),i,pt_arr,_) ->
           print_prefix (); printf "Subproof nb %d/%d, i %d\n"
             (Array.length nms) (Array.length fgnms) i;
           print_pt_arr (prefix^"  ") (start+k) pt_arr
@@ -217,8 +218,8 @@ end = struct
       | Witness (i,nms,t,args) ->
           Witness (index i,nms,t,args)
       | Someelim i   -> Someelim (index i)
-      | Subproof (nargs,names,res,pt_arr) ->
-          Subproof (nargs,names, index res, Array.map adapt pt_arr)
+      | Subproof (nargs,names,res,pt_arr,bubble) ->
+          Subproof (nargs,names, index res, Array.map adapt pt_arr,bubble)
     in
     if delta = 0 then pt else adapt pt
 
@@ -283,7 +284,7 @@ end = struct
                 used_eval e set
             | Eval_bwd (t,e) ->
                 used_eval e set
-            | Subproof (_,_,k1,pt_arr1) ->
+            | Subproof (_,_,k1,pt_arr1,_) ->
                 used_below k k1 below pt_arr1 set
             | Inherit (i,bcls,cls) ->
                 assert false
@@ -347,7 +348,7 @@ end = struct
             usd_eval e set
         | Eval_bwd (t,e) ->
             usd_eval e set
-        | Subproof (_,_,k1,pt_arr1) ->
+        | Subproof (_,_,k1,pt_arr1,_) ->
             let set1 = used_below k k1 k pt_arr1 IntSet.empty in
             IntSet.fold
               (fun i set -> usd i pt_arr set)
@@ -424,13 +425,13 @@ end = struct
         | Specialize (i,args,ags) -> Specialize (index i, args,ags)
         | Witness (i,nms,t,args)  -> Witness (index i, nms, t, args)
         | Someelim i -> Someelim (index i)
-        | Subproof (nargs,nms,k,pt_arr1) ->
+        | Subproof (nargs,nms,k,pt_arr1,bubble) ->
             let start_inner = start_inner + i in
             let below = if is_inner then below else start_inner in
             let n_rem = if is_inner then n_rem else snd map.(i) in
             let k,pt_arr = reidx start_inner below n_rem k pt_arr1 in
             assert (k < start_inner + Array.length pt_arr);
-            Subproof (nargs, nms, k, pt_arr)
+            Subproof (nargs, nms, k, pt_arr,bubble)
         | Inherit (i,bcls,cls) ->
             assert false
       in
@@ -537,7 +538,7 @@ end = struct
           | Specialize (_,args,_)
           | Witness (_,_,_,args) ->
               uvars_args args set
-          | Subproof ((nms,_),_,i,pt_arr) ->
+          | Subproof ((nms,_),_,i,pt_arr,_) ->
               let nb = nb + Array.length nms in
               uvars nb pt_arr set
           | Inherit (i,bcls,cls) ->
@@ -678,14 +679,14 @@ end = struct
               Witness (i,(nms,tps),t,args)
           | Someelim i ->
               Someelim i
-          | Subproof ((nms,tps),(fgnms,fgcon),i,pt_arr) ->
+          | Subproof ((nms,tps),(fgnms,fgcon),i,pt_arr,bubble) ->
               let nb,nb2 = nb + Array.length nms, nb2 + Array.length fgnms
               in
               let pt_arr = shrink nb nb2 pt_arr
               and tps    = shrink_types tps
               and fgcon  = shrink_types fgcon
               in
-              Subproof ((nms,tps),(fgnms,fgcon),i, pt_arr)
+              Subproof ((nms,tps),(fgnms,fgcon),i, pt_arr,bubble)
           | Inherit (i,bcls,cls) ->
               assert false
         )
@@ -719,87 +720,11 @@ end = struct
 *)
 
 
-(*
-  let term_up (n:int) (pt:t): t =
-    (* Shift all terms used in the proof term [pt] up by [n]. *)
-    let rec trm_up nb pt =
-      let up_inner t nb1 = Term.upbound n (nb1+nb) t in
-      let up t = up_inner t 0 in
-      let upargs_inner args nb =
-        Array.map (fun a -> up_inner a nb) args
-      and uplist_inner lst nb =
-        List.map (fun a -> up_inner a nb) lst
-      in
-      let upargs args = Array.map up args in
-      let var t =
-        assert (Term.is_variable t);
-        Term.variable t
-      in
-      let rec upeval e nb =
-        let upeval_args args = Array.map (fun e -> upeval e nb) args in
-        match e with
-          Eval.Term t ->
-            Eval.Term (up_inner t nb)
-        | Eval.Exp (idx,args,e) ->
-            let idx  = var (up_inner (Variable idx) nb)
-            and args = upeval_args args
-            and e    = upeval e nb in
-            Eval.Exp (idx,args,e)
-	| Eval.VApply(i,args) ->
-            let i    = var (up_inner (Variable i) nb)
-            and args = upeval_args args in
-            Eval.VApply(i,args)
-	| Eval.Apply(f,args,pr) ->
-            let f = upeval f nb
-            and args = upeval_args args in
-            Eval.Apply(f,args,pr)
-        | Eval.Lam (n,nms,pres,e,pr) ->
-            Eval.Lam (n, nms, uplist_inner pres (1+nb), upeval e (1+nb), pr)
-        | Eval.QExp (n,nms,e,is_all) ->
-            Eval.QExp (n, nms, upeval e (n+nb),is_all)
-        | Eval.Beta e ->
-            Eval.Beta (upeval e nb)
-        | Eval.Simpl (e,idx,args) ->
-            Eval.Simpl (upeval e nb, idx, upargs_inner args nb)
-        | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, upeval_args args)
-        | Eval.If(cond,idx,args)-> Eval.If(cond,idx,upeval_args args)
-        | Eval.As(cond,args)    -> Eval.As(cond,upeval_args args)
-        | Eval.Inspect(t,inspe,icase,nvars,rese) ->
-            let t = up_inner t nb
-            and inspe = upeval inspe nb
-            and rese  = upeval rese  nb in
-            Eval.Inspect(t,inspe,icase,nvars,rese)
-      in
-      let upeval_0 e = upeval e 0
-      in
-      match pt with
-        Axiom t        -> Axiom (up t)
-      | Assumption t   -> Assumption (up t)
-      | Indset_rule (t,i) -> Indset_rule (up t,i)
-      | Indset_ind t      -> Indset_ind (up t)
-      | Indtype  _
-      | Detached _ -> pt
-      | Funprop (idx,i,args) -> Funprop(idx,i, upargs args)
-      | Specialize (i,args)  -> Specialize (i, upargs args)
-      | Eval (i,e)     -> Eval (i, upeval_0 e)
-      | Eval_bwd (t,e) -> Eval_bwd (up t, upeval_0 e)
-      | Witness (i,nms,t,args) ->
-          let n = Array.length nms in
-          let t    = up_inner t n
-          and args = upargs_inner args n in
-          Witness (i,nms,t,args)
-      | Someelim i     -> pt
-      | Subproof (nb1,nms,i,pt_arr) ->
-          let pt_arr = Array.map (fun pt -> trm_up (nb+nb1) pt) pt_arr in
-          Subproof (nb1,nms,i,pt_arr)
-      | Inherit (i,bcls,cls)-> pt
-    in
-    if n = 0 then pt else trm_up 0 pt
-*)
+
 
   let split_subproof (pt:t): formals * formals * int * t array =
     match pt with
-      Subproof (nb,nms,i,pt_arr) -> nb,nms,i,pt_arr
+      Subproof (nb,nms,i,pt_arr,_) -> nb,nms,i,pt_arr
     | _ -> raise Not_found
 
 
@@ -823,5 +748,5 @@ end = struct
     | Eval_bwd _          -> "eval"
     | Witness (i,nms,t,args) -> "wit " ^ (string_of_int i)
     | Someelim i             -> "selim " ^ (string_of_int i)
-    | Subproof (nargs,names,res,pt_arr) -> "sub"
+    | Subproof (nargs,names,res,pt_arr,_) -> "sub"
 end

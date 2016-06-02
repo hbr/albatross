@@ -1239,9 +1239,12 @@ end = struct
        universal quantifiers. All universal quantifiers are bubbled up in
        implication chains and merged with the upper universal
        quantifier. Unused variables in universally quantified expressions are
-       eliminated. Variables are ordered according to their appearance. *)
+       eliminated. Variables are ordered according to their appearance.
+
+       Note: The implication index is valid in the global environment!!
+     *)
    let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id in
-    all_quantified n tps fgs t0
+   all_quantified n tps fgs t0
 
 
 

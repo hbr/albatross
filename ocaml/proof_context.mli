@@ -73,6 +73,7 @@ val close_step:         t -> unit
 val close:              t -> unit
 val close_assumptions:  t -> unit
 val discharged:         int  -> t -> term * proof_term
+val discharged_bubbled: int  -> t -> term * proof_term
 val add_proved_term:    term -> proof_term -> bool -> t -> int
 val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
 val add_proved:         bool -> int -> term -> proof_term -> t -> int

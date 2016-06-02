@@ -95,5 +95,6 @@ val add_specialize: term -> int -> arguments -> agens -> t -> unit
 val add_inherited:  term -> int -> int -> int -> t -> unit
 
 val assumptions:  t   -> term list
-val discharged:   int -> t -> term * proof_term
+val discharged:           int -> t -> term * proof_term
+val discharged_bubbled:   int -> t -> term * proof_term
 val print_pt:     proof_term -> t -> unit

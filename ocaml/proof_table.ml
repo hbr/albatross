@@ -326,7 +326,7 @@ let discharged_assumptions (i:int) (at:t): term =
   assert (is_local at);
   assert (not (has_result at));
   let tgt = local_term i at in
-  assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));
+  (*assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));*)
   List.fold_left
     (fun tgt i -> implication (local_term i at) tgt at)
     tgt
@@ -337,8 +337,12 @@ let discharged_term (i:int) (at:t): term =
   (* The [i]th term of the current environment with all local variables and
      assumptions discharged.
    *)
+  assert (not (is_global at));
   let t0 = discharged_assumptions i at in
-  let n, tps, fgs = count_last_arguments at, local_formals at, local_fgs at in
+  let n   = count_last_arguments at
+  and tps = local_formals at
+  and fgs = local_fgs at
+  in
   Term.all_quantified n tps fgs t0
 
 
@@ -882,7 +886,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         let t =  variant idx bcls cls at in
         if trace then print1 t idx at;
         t
-    | Subproof (tps,fgs,res_idx,pt_arr) ->
+    | Subproof (tps,fgs,res_idx,pt_arr,bubble) ->
         let at = push_typed tps fgs at in
         let pt_len = Array.length pt_arr in
         let pt_nass =
@@ -901,7 +905,10 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
           print_str "end" at;
         end;
         let term = discharged_term res_idx at in
-        term
+        if bubble then
+          prenex_term term (pop at)
+        else
+          term
   in
   reconstruct pt at
 
@@ -1041,34 +1048,27 @@ let add_someelim (i:int) (t:term) (at:t): unit =
  *)
 
 
-(* Special cases for discharging:
+let discharged0 (i:int) (bubble:bool) (at:t)
+    : term * proof_term =
+   (* Special cases for discharging:
 
-   1. The target is an axiom: Just discharge the term (with bubbling up and
-      removing of unneeded variables)  and use an axiom as a proof term.
+      1. The target is an axiom: Just discharge the term (with bubbling up if
+         the flag [bubble] is set and removing of unneeded variables) and use
+         an axiom as a proof term.
 
-   2. Only one proof term in the subproof, no assumptions and no variables:
+      2. Only one proof term in the subproof, no assumptions and no variables:
 
-      The only possibility to create such a situation is with `ensure ass end`
-      which should be syntactically forbidden or reduced to the equivalent form
-      `ass`.
+         The only possibility to create such a situation is with `ensure ass
+         end` which should be syntactically forbidden or reduced to the
+         equivalent form `ass`.
 
-   3. The target is a universally quantified assertion: Maybe it is best to
-      forbid universally quantified assertions in ensure clauses and require the
-      user to bubble them up. This removes a lot of complexity.
+     3. The target is from an outer context: In that case the target does not
+        contain any of the variables of the inner context and does not need
+        the assumptions of the inner context to be proved.
 
-      Exception: The current environment has neither variables nor assumptions.
-                 Then the universally quantified assertion and its proof term
-                 do not need any modification.
-
-   4. The target is from an outer context: In that case the target does not contain
-      any of the variables of the inner context and does not need the assumptions
-      of the inner context to be proved.
-
-
-   The only remaining action for discharging: Remove unneeded variables.
-
+     4. Otherwise: Discharge the target with bubbling up if [bubble] is set and
+        generate the corresponding proof term. Reorder variable if necessary.
  *)
-let discharged (i:int) (at:t): term * proof_term =
   let tgt = local_term i at
   and pt  = proof_term i at in
   if count_last_arguments at = 0 &&
@@ -1079,9 +1079,6 @@ let discharged (i:int) (at:t): term * proof_term =
     assert (i = count_previous at);
     tgt,pt
   end else begin
-    if count_last_arguments at <> 0 && Term.is_all_quantified tgt then
-      printf "discharged %d %s\n" i (string_long_of_term_i i at);
-    assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));
     let t0 = discharged_assumptions i at in
     let tps, args, fgs, ags =
       let tps  = local_formals at
@@ -1091,7 +1088,10 @@ let discharged (i:int) (at:t): term * proof_term =
     in
     let n1new, n2new = count_formals tps, count_formals fgs in
     let t0 = Term.subst0 t0 n1new args n2new ags in
-    let t  = Term.all_quantified n1new tps fgs t0
+    let t  = Term.all_quantified n1new tps fgs t0 in
+    let t  =
+      if bubble then prenex_term t (pop at)
+      else t
     in
     match pt with
       Axiom _ ->
@@ -1102,7 +1102,7 @@ let discharged (i:int) (at:t): term * proof_term =
         let narr = if at.maxreq <= i then i+1-cnt0 else at.maxreq-cnt0 in
         if narr = 0 then begin
           assert (i < cnt0);
-          t, Subproof (empty_formals,empty_formals,i,[||])
+          t, Subproof (empty_formals,empty_formals,i,[||],bubble)
         end else begin
           let nargs = Array.length args in
           let ptarr = Array.init narr (fun j -> proof_term (cnt0+j) at) in
@@ -1120,11 +1120,19 @@ let discharged (i:int) (at:t): term * proof_term =
             printf "uvars_pt %s\n" (intset_to_string uvars_pt);
             printf "#ptarr %d\n" (Array.length ptarr);
             Proof_term.print_pt_arr "    " cnt0 ptarr;
-            raise Not_found
+            assert false (* Cannot happen *)
           end;
           let ptarr =
             Proof_term.remove_unused_variables args n1new ags n2new ptarr in
-          let pt = Subproof (tps,fgs,i,ptarr) in
+          let pt = Subproof (tps,fgs,i,ptarr,bubble) in
           t,pt
         end
   end
+
+
+let discharged (i:int) (at:t): term * proof_term =
+  discharged0 i false at
+
+
+let discharged_bubbled (i:int) (at:t): term * proof_term =
+  discharged0 i true at
