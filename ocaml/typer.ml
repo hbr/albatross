@@ -593,6 +593,21 @@ let case_variables
 
 
 let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
+  (* An inductively defined set must have the form
+
+         {(p): r0, r1, ... }
+
+     where each rule has the form
+
+         all(...) c0 ==> c1 ==> ... ==> p(e)    | e does not contain p
+
+     where each ci has the form
+
+         all(...) di ==> ti       | only ti can contain p, if yes it has the form
+                                  | p(ei) and ei does not contain p
+                                  | degenerate form without variables and premise
+                                  | allowed
+   *)
   let nargs = Context.count_last_arguments c
   and nvars = Context.count_variables c in
   assert (nargs = 1); (* nyi: multiple inductive sets *)
@@ -600,29 +615,46 @@ let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
   let ind_set_name () = ST.string (Context.variable_name 0 c)
   in
   let check_rule (r:term): unit =
-    let n,(nms,tps),ps_rev,tgt = Term.split_rule r imp_id in
-    let check_element (t:term): bool =
-      let check_inner t =
-        try ignore(Term.down_from nargs n t)
-        with Term_capture ->
-          error_info info ("Variable \"" ^ (ind_set_name ()) ^
-                           "\" only at the top allowed in rule\n  \"" ^
-                           (Context.string_long_of_term r c) ^ "\"")
-      in
+    let n,(nms,tps),ps_rev,tgt =
+      Term.split_general_implication_chain r imp_id in
+    let c_rule = Context.push_typed (nms,tps) empty_formals c in
+    let is_target (t:term) (nb:int) (c1:Context.t): bool =
       match t with
-        Application(Variable i,args,pr)
-        when n <= i && i < n+nargs -> (* [i] represents the inductive set *)
-          Array.iter check_inner args;
-          true
+        Application(Variable i, [|e|], true) when i = n + nb ->
+          begin try
+            ignore (Term.down_from nargs (n+nb) e);
+            true
+          with Term_capture ->
+            error_info info ("Variable \"" ^ (ind_set_name ()) ^
+                             "\" not allowed in \"" ^
+                             (Context.string_of_term e c1) ^
+                             "\" of rule\n  \"" ^
+                             (Context.string_long_of_term r c) ^ "\"")
+          end
       | _ ->
-          check_inner t;
           false
     in
-    List.iter (fun t -> ignore(check_element t)) ps_rev;
-    if not (check_element tgt) then
-      error_info info ("The target must contain \"" ^ (ind_set_name ()) ^
-                       "\" at the top in rule \n  \"" ^
-                       (Context.string_of_term r c) ^ "\"")
+    if not (is_target tgt 0 c_rule) then
+      error_info info ("\"" ^ (Context.string_of_term tgt c_rule) ^
+                       "\" is not a valid target because it does not contain \"" ^
+                       (ind_set_name ()) ^ "\"");
+    let check_premise (ci:term): unit =
+      let n1,(nms1,tps1),ps_rev1,tgt1 =
+        Term.split_general_implication_chain ci (n + imp_id)
+      in
+      let c_premise = Context.push_typed (nms1,tps1) empty_formals c_rule in
+      ignore (is_target tgt1 n1 c_premise);
+      List.iter
+        (fun p ->
+          if is_target p n1 c_premise then
+            let pstr = Context.string_of_term p c_premise in
+            error_info info ("Premise term \"" ^ pstr ^
+                             "\" must not contain \"" ^
+                             (ind_set_name ()) ^ "\"")
+        )
+        ps_rev1
+    in
+    List.iter (fun t -> ignore(check_premise t)) ps_rev;
   in
   Array.iter check_rule rs
 

@@ -350,8 +350,9 @@ let analyze_inductive_set
       in
       let pa = Application(set,[|elem|],true) in
       let pa_idx =
-        try PC.find pa pc
+        try PC.find_goal pa pc
         with Not_found ->
+          printf "pa %s\n" (PC.string_of_term pa pc);
           error_info info ("\"" ^ (PC.string_of_term elem pc) ^
                            "\" is not in the inductive set") in
       let ind_idx = PC.add_set_induction_law set q elem pc in

@@ -1325,7 +1325,7 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
     invalid_arg "Not an inductive set"
 
 
-let add_inductive_set_laws (fwd:bool) (t:term) (pc:t): unit =
+let add_inductive_set_rules (fwd:bool) (t:term) (pc:t): unit =
   match t with
     Application(set,args,pr) ->
       assert pr;
@@ -1363,7 +1363,7 @@ let add_consequences (i:int) (pc:t): unit =
   (*printf "add_consequences %d %s\n" i (string_long_of_term_i i pc);*)
   let t  = term i pc
   and rd = rule_data i pc in
-  add_inductive_set_laws true t pc;
+  add_inductive_set_rules true t pc;
   if not (RD.is_intermediate rd) then
     add_consequences_premise i pc;
   if RD.is_implication rd then
@@ -1750,7 +1750,7 @@ let backward_witness (t:term) (pc:t): int =
 let find_goal (g:term) (pc:t): int =
   (* Find either an exact match of the goal or a schematic assertion which can
      be fully specialized to match the goal. *)
-  add_inductive_set_laws false g pc;
+  add_inductive_set_rules false g pc;
   close pc;
   try
     find_match g pc

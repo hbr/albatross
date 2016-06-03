@@ -193,7 +193,7 @@ module Term: sig
 
   val split_left_binop_chain: term -> int -> term list
 
-  val split_rule: term -> int -> int * formals * term list * term
+  val split_general_implication_chain: term -> int -> int * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
   val induction_rule: int -> int -> term -> term -> term
@@ -1196,7 +1196,7 @@ end = struct
 
 
 
-  let split_rule (t:term) (imp_id:int)
+  let split_general_implication_chain (t:term) (imp_id:int)
       : int * formals * term list * term =
     let n,fargs,fgs,t0,is_all = qlambda_split_0 t in
     assert (fgs = empty_formals);
@@ -1355,23 +1355,15 @@ end = struct
        target.
      *)
     let pair (n:int) (t:term): term * term =
-      match t with
-        Application(Variable i,args,pr0) when i = n ->
-          assert pr0;
-          assert (Array.length args = 1);
-          subst_from t n 0 [|pr|],
-          subst_from t n 0 [|q |]
-          (*sub_from t n [|pr|] 0,
-          sub_from t n [|q|] 0*)
-      | _ ->
-          raise Not_found
+      subst_from t n 0 [|pr|],
+      subst_from t n 0 [|q |]
     in
     match p with
       Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         assert (i < nrules);
-        let n,fargs,ps_rev,tgt = split_rule rs.(i) (imp_id+1) in
-        let last,tgt = try pair n tgt with Not_found -> assert false in
+        let n,fargs,ps_rev,tgt = split_general_implication_chain rs.(i) (imp_id+1) in
+        let last,tgt = pair n tgt in
         let ps = List.fold_left
             (fun ps t ->
               try
@@ -1395,18 +1387,13 @@ end = struct
     (* Calculate the induction law for the inductively defined set [p] represented
        by [pr]
 
-       all(q,a) ind0 ==> ... ==> indn ==> p(a) ==> q(a)
+       all(q,a) ind1 ==> ... ==> indn ==> p(a) ==> q(a)
 
-       indi: all(x,y,...) p(e1) ==> q(e1) ==>
-                          ...
-                          p(en) ==> q(en) ==>
-                          e0              ==>
-                          p(e) ==> q(e)
-
-       where all(x,y,...) p(e1) ==> ... ==> p(en) ==> e0 ==> p(e) is the
-       corresponding closure rule.
      *)
-    let imp_id, p, pr = imp_id + 2, up 2 p, up 2 pr in (* space for a and q *)
+    let imp_id = imp_id + 2
+    and p      = up 2 p
+    and pr     = up 2 pr (* space for a and q *)
+    in
     match p with
       Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
