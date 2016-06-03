@@ -289,11 +289,8 @@ let analyze_inductive_set
         ensure
             ens
         inspect
-            p(elem):  set
+            elem in set
         ...
-
-     Introduces an inner context for the varialbe [p] and returns all terms
-     within this context.
    *)
   assert (not (PC.is_global pc));
   let c    = PC.context pc in
@@ -663,14 +660,6 @@ and prove_inspect
       prove_inductive_set info goal args.(0) set cases pc
   | _ ->
       error_info info "Illegal induction proof"
-      (*
-  match insp.v with
-    Identifier id ->
-      prove_inductive_type info goal id cases pc
-  | Expcolon (Funapp(Identifier p_nme,elem),set) ->
-      prove_inductive_set info goal p_nme elem set cases pc
-  | _ ->
-      error_info info "Illegal induction proof"*)
 
 
 and prove_inductive_type

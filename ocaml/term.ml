@@ -1336,20 +1336,18 @@ end = struct
 
        The closure rule [i] is
 
-           all(x,y,...)   p(e1) ==> ... ==> p(en) ==> p(e)
+           all(x,y,...)   c1 ==> c2  ==> ...  ==> p(e)
 
-           where each p(ei) could be ei as well
+           where each ci has the form
+                all(...) di ==> p(ei)
+           or degenerate without quantifier and premises
 
        The induction rule [i] is
 
-           all(x,y,...)   p(e1) ==> q(e1) ==>
-                          p(e2) ==> q(e2) ==>
+           all(x,y,...)   c1(p) ==> c1(q) ==>
+                          c2(p) ==> c2(q) ==>
                           ...
-                          p(en) ==> q(en) ==>
                           p(e)  ==> q(e)
-
-           where for a degenerate premise ei we get 'ei ==>' instead of
-           'p(ei) ==> q(ei) ==>'
 
        The function returs the formal arguments, the list of premises and the
        target.
