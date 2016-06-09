@@ -25,10 +25,13 @@ carrier (r:{A,A}): ghost A?
    =========== :}
 
 
-is_reflexive: ghost {{A,A}}
-        -- The collection of all reflexive relations
-    = {r: (all(x,y) r(x,y) ==> r(x,x)) and
-          (all(x,y) r(x,y) ==> r(y,y))}
+is_reflexive (r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' reflexive?
+    -> (all(x,y) r(x,y) ==> r(x,x)) and
+       (all(x,y) r(x,y) ==> r(y,y))
+
+
+
 
 all(r:{A,A})
     require
@@ -67,7 +70,7 @@ all(a,b:A, r:{A,A})
     ensure
         (r.reflexive)(a,b) ==> (r.reflexive)(a,a)
         (r.reflexive)(a,b) ==> (r.reflexive)(b,b)
-        r.reflexive in is_reflexive
+        r.reflexive.is_reflexive
     end
 
 
@@ -144,15 +147,16 @@ there is always a forth element 'd' where the paths will join.
 
 :}
 
-diamond: ghost {{A,A}}
-        -- The collection of all relations which have the (strong) diamond
-        -- property.
-    = {r: all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)}
+is_diamond (r:{A,A}): ghost BOOLEAN
+        -- Does the relation 'r' have the strong diamond property?
+    -> all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)
+
+
 
 all(r:{A,A})
     ensure
-        r in diamond ==> r.reflexive in diamond
-        r in diamond ==> +r in diamond
+        r.is_diamond ==> r.reflexive.is_diamond
+        r.is_diamond ==> (+r).is_diamond
     end
 
 
@@ -160,4 +164,4 @@ all(r:{A,A})
 confluent: ghost {{A,A}}
         -- The collection of all confluent relations, i.e. of all relations whose
         -- transitive closures have the (strong) diamond property.
-    = {r: +r in diamond}
+    = {r: (+r).is_diamond}

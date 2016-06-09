@@ -23,33 +23,33 @@ carrier (r:{A,A}): ghost A? -> domain(r) + range(r)
    =========== :}
 
 
-is_reflexive: ghost {{A,A}}
-    = {r: (all(x,y) r(x,y) ==> r(x,x)) and
-          (all(x,y) r(x,y) ==> r(y,y))}
+is_reflexive (r:{A,A}): ghost BOOLEAN
+    -> (all(x,y) r(x,y) ==> r(x,x)) and
+       (all(x,y) r(x,y) ==> r(y,y))
+
 
 all(r:{A,A})
     require
-        r in is_reflexive
+        r.is_reflexive
     ensure
         r.domain  = r.range
     proof
-       all(x) require x in r.domain
-              ensure  x in r.range
-              proof   some(y) r(x,y)
-                      all(y) require r(x,y)
-                             ensure  x in r.range
-                             proof   r(x,x)
-                                     some(y) r(y,x)  end
-              end
+        all(x) require x in r.domain
+               ensure  x in r.range
+                       via some(y)
+                           require
+                               r(x,y)
+                           proof
+                               r(x,x)
+               end
 
         all(y) require y in r.range
                ensure  y in r.domain
-               proof   some(x) r(x,y)
-                       all(x)  require r(x,y)
-                               ensure  y in r.domain
-                               proof   r(y,y)
-                                       some(x) r(y,x)
-                               end
+                       via some(x)
+                           require
+                               r(x,y)
+                           proof
+                               r(y,y)
                end
         r.domain = r.range
     end
@@ -57,7 +57,7 @@ all(r:{A,A})
 
 all(r:{A,A})
     require
-        r in is_reflexive
+        r.is_reflexive
     ensure
         r.carrier = r.domain
     proof
@@ -67,7 +67,7 @@ all(r:{A,A})
 
 all(r:{A,A})
     require
-        r in is_reflexive
+        r.is_reflexive
     ensure
         r.carrier = r.range
     proof
@@ -160,7 +160,7 @@ all(a,b:A, r:{A,A})
 
 all(r:{A,A})
     ensure
-        r.reflexive in is_reflexive
+        r.reflexive.is_reflexive
     end
 
 
@@ -230,9 +230,8 @@ equivalence (r:{A,A}): ghost {A,A}
 {: Confluence
    ========== :}
 
-diamond: ghost {{A,A}}
-    = {r: all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)}
-
+is_diamond (r:{A,A}): ghost BOOLEAN
+    -> all(a,b,c) r(a,b) ==> r(a,c) ==> some(d) r(b,d) and r(c,d)
 
 {:
 In the following we prove that any relation transfers the diamond property to
@@ -273,7 +272,7 @@ factor out this proof in another lemma.
 all(a,b,c:A, r,s:{A,A})
         -- Base case for both intermediate lemmas
     require
-        r in diamond
+        r.is_diamond
         r <= s
         r(a,b)
         r(a,c)
@@ -309,7 +308,7 @@ all(a,b,c:A, r,s:{A,A})
 
 all(a,b,c:A, r:{A,A})
     require
-        r in diamond
+        r.is_diamond
         (r.reflexive)(a,b)
         r(a,c)
     ensure
@@ -338,7 +337,7 @@ all(a,b,c:A, r:{A,A})
 
 all(a,b,c:A, r:{A,A})
     require
-        r in diamond
+        r.is_diamond
         (r.reflexive)(a,c)
         (r.reflexive)(a,b)
     ensure
@@ -373,7 +372,7 @@ all(a,b,c:A, r:{A,A})
 
 all(r:{A,A})
     ensure
-        r in diamond  ==>  r.reflexive in diamond
+        r.is_diamond  ==>  r.reflexive.is_diamond
     end
 
 
@@ -396,15 +395,12 @@ all(r:{A,A})
 all(a,b,c:A, r:{A,A})
          -- Intermediate lemma for the transitive closure.
     require
-        r in diamond
+        r.is_diamond
         (+r)(a,b)
-        -- r(a,c)
+        r(a,c)
     ensure
-        -- some(d) r(b,d) and (+r)(c,d)
-        r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
-    proof
-        ensure
-            all(c) r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
+        some(d) r(b,d) and (+r)(c,d)
+
         inspect
             (+r)(a,b)
         case
@@ -413,40 +409,34 @@ all(a,b,c:A, r:{A,A})
             r <= +r
 
         case
-            all(a,b,c) (+r)(a,b) ==> r(b,c) ==> (+r)(a,c)
-            {:      a ----> d           --->        r
+            all(a,b,d) (+r)(a,b) ==> r(b,d) ==> (+r)(a,d)
+            {:      a ----> c           --->        r
                     .       .           ...>       +r
                     .       .
                     v       v
                     b ----> e
                     |       |
                     v       v
-                    c ----> f
+                    d ----> f
             :}
-        proof
-            all(d) r(a,d) ==> some(e) r(b,e) and (+r)(d,e)  -- ind. hypo
-            all(d)
-            require r(a,d)
-            ensure  some(f) r(c,f) and (+r)(d,f)
             via some(e)
                     require
                         r(b,e)
-                        (+r)(d,e)
+                        (+r)(c,e)
                     via some(f)
                             require
-                                r(c,f)
+                                r(d,f)
                                 r(e,f)
                             proof
-                                r(b,c)
-                                r(c,f) and (+r)(d,f)
-            end
-        end
+                                r(b,d)
+                                r(d,f) and (+r)(c,f)
     end
+
 
 
 all(a,b,c:A, r:{A,A})
     require
-        r in diamond
+        r.is_diamond
         (+r)(a,c)
         (+r)(a,b)
     ensure
@@ -486,7 +476,7 @@ all(a,b,c:A, r:{A,A})
 
 
 
-all(r:{A,A}) ensure r in diamond ==> +r in diamond end
+all(r:{A,A}) ensure r.is_diamond ==> (+r).is_diamond end
 
 
 
@@ -494,4 +484,4 @@ all(r:{A,A}) ensure r in diamond ==> +r in diamond end
 confluent: ghost {{A,A}}
         -- The collection of all confluent relations, i.e. of all relations whose
         -- transitive closures have the (strong) diamond property.
-    = {r: +r in diamond}
+    = {r: (+r).is_diamond}
