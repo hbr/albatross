@@ -424,12 +424,16 @@ let visit (i:int) (gs:t): unit =
   let g = item i gs in
   if gs.trace then trace_visit i gs;
   g.visited <- true;
-  enter i gs;
   try
     prove_trivially g;
     set_succeeded i gs
   with Not_found ->
-    generate_subgoals i gs
+    enter i gs;
+    try
+      prove_trivially g;
+      set_succeeded i gs
+    with Not_found ->
+      generate_subgoals i gs
 
 
 

@@ -626,12 +626,15 @@ let specialized
 
 
 let find_match (g:term) (pc:t): int =
-  let sublst = unify g pc.entry.prvd2 pc in
-  if sublst = [] then raise Not_found;
   try
-    let idx,_,_ = List.find (fun (_,args,_) -> Array.length args = 0) sublst in
-    idx
+    find g pc
   with Not_found ->
+    let sublst = unify g pc.entry.prvd2 pc in
+    if sublst = [] then raise Not_found;
+    try
+      let idx,_,_ = List.find (fun (_,args,_) -> Array.length args = 0) sublst in
+      idx
+    with Not_found ->
     let idx,args,ags = List.hd sublst in
     try specialized idx args ags 0 pc
     with Not_found -> assert false (* specialization not type safe ? *)

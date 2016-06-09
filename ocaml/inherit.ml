@@ -58,7 +58,7 @@ let check_transform_valid
         and tstr = PC.string_of_term t pc in
         let str =
           "The feature\n\t\"" ^ sig2 ^
-          "\"\ncannot be a variant of the feature \"\n\t" ^ sig1 ^
+          "\"\ncannot be a variant of the feature \n\t\"" ^ sig1 ^
           "\"\nbecause\n\t\"" ^ tstr ^
           "\"\ncannot be verified"
         in
