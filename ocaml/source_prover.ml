@@ -1232,7 +1232,16 @@ and prove_exist_elim
   in
   let someexp = (withinfo info (Expquantified (Existential,entlst,req))) in
   let someexp = get_boolean_term_verified someexp pc in
-  let someexp_idx = prove_insert_report someexp false pc in
+  let someexp_idx =
+    try
+      let t,pt = Prover.proof_term someexp.v pc in
+      PC.add_proved_term t pt false pc
+    with Proof.Proof_failed msg ->
+      error_info
+        someexp.i
+        ("Cannot prove \"" ^ (PC.string_of_term someexp.v pc) ^
+         "\"" ^ msg)
+  in
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
   let n,fargs,t0 = Term.some_quantifier_split someexp.v in
   let pc1 = PC.push_typed fargs empty_formals pc in
