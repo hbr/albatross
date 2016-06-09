@@ -33,6 +33,7 @@ val has_result: t -> bool
 val has_result_variable: t -> bool
 
 val is_global: t -> bool
+val is_local:  t -> bool
 val is_toplevel: t -> bool
 
 val string_of_term: term -> t -> string
@@ -58,7 +59,7 @@ val depth:     t -> int
 
 val find:               term -> t -> int
 val has:                term -> t -> bool
-val add_assumption:     term -> t -> int
+val add_assumption:     term -> bool -> t -> int
 val add_axiom:          term -> t -> int
 val add_mp:             int -> int -> bool -> t -> int
 val add_beta_reduced:   int -> bool -> t -> int
@@ -97,6 +98,8 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
 
 val split_implication:  term -> t -> term * term
 val implication_chain:  term list -> term -> t -> term
+val split_general_implication_chain:
+    term -> t -> int * formals * term list * term
 val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
 val beta_reduce_term: term -> t -> term
 val count:          t -> int
@@ -117,7 +120,7 @@ val disjunction:    term -> term -> t -> term
 
 val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
-(*val strengthened_induction_goal: int -> term -> t -> term*)
+val assumption_indices: t -> int list
 
 val check_deferred: t -> unit
 val owner:          t -> int

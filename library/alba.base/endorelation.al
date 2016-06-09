@@ -136,26 +136,25 @@ reflexive (r:{A,A}): ghost {A,A}
 
 
 all(a,b:A, r:{A,A})
+    require
+        (r.reflexive)(a,b)
     ensure
-        (r.reflexive)(a,b) ==> (r.reflexive)(a,a)
-    proof
-        all(a,b) require (r.reflexive)(a,b)
-                 ensure  (r.reflexive)(a,a)
-                 inspect (r.reflexive)(a,b)
-                 end
+        (r.reflexive)(a,a)
+
+        inspect (r.reflexive)(a,b)
     end
-
-
 
 all(a,b:A, r:{A,A})
+    require
+        (r.reflexive)(a,b)
     ensure
-        (r.reflexive)(a,b) ==> (r.reflexive)(b,b)
-    proof
-        all(a,b) require (r.reflexive)(a,b)
-                 ensure  (r.reflexive)(b,b)
-                 inspect (r.reflexive)(a,b)
-                 end
+        (r.reflexive)(b,b)
+
+        inspect (r.reflexive)(a,b)
     end
+
+
+
 
 
 
@@ -315,9 +314,6 @@ all(a,b,c:A, r:{A,A})
         r(a,c)
     ensure
         some(d) r(b,d) and (r.reflexive)(c,d)
-    proof
-        ensure
-            all(c) r(a,c) ==> some(d) r(b,d) and (r.reflexive)(c,d)
 
         inspect
             (r.reflexive)(a,b)
@@ -328,17 +324,15 @@ all(a,b,c:A, r:{A,A})
 
         case all(a,b) r(a,b) ==> (r.reflexive)(a,a)
         proof
-            all(c) require r(a,c)
-                   ensure  some(d) r(a,d) and (r.reflexive)(c,d)
-                   proof   r(a,c) and (r.reflexive)(c,c) end
+            r(a,c) and (r.reflexive)(c,c)
 
         case all(a,b) r(a,b) ==> (r.reflexive)(b,b)
         proof
-            all(c) require r(b,c)
-                   ensure  some(d) r(b,d) and (r.reflexive)(c,d)
-                   proof   r(b,c) and (r.reflexive)(c,c) end
-        end
+            r(b,c) and (r.reflexive)(c,c)
     end
+
+
+
 
 
 
@@ -346,57 +340,43 @@ all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (r.reflexive)(a,c)
-    ensure
         (r.reflexive)(a,b)
-        ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
-    proof
-        ensure
-            all(b) (r.reflexive)(a,b)
-                   ==> some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
+    ensure
+        some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
+
         inspect
             (r.reflexive)(a,c)
         case all(a,c) r(a,c) ==> (r.reflexive)(a,c)
-        proof
-            all(b)
-            require (r.reflexive)(a,b)
-            ensure  some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
             via some(d)
                     require
                         r(b,d)
                         (r.reflexive)(c,d)
                     proof
                         (r.reflexive)(b,d) and (r.reflexive)(c,d)
-            end
 
         case all(a,c) r(a,c) ==> (r.reflexive)(a,a)
-        proof
-            all(b)
-            require (r.reflexive)(a,b)
-            ensure
-                some(d) (r.reflexive)(b,d) and (r.reflexive)(a,d)
             via some(d)
                     require
                         r(b,d)
                         (r.reflexive)(c,d)
                     proof
                         (r.reflexive)(b,b) and (r.reflexive)(a,b)
-            end
 
         case all(a,c) r(a,c) ==> (r.reflexive)(c,c)
-        proof
-            all(b)
-                require (r.reflexive)(c,b)
-                ensure  some(d) (r.reflexive)(b,d) and (r.reflexive)(c,d)
-                proof   (r.reflexive)(b,b) and (r.reflexive)(c,b)
-                end
-        end
+            proof
+                (r.reflexive)(b,b) and (r.reflexive)(c,b)
     end
+
+
+
 
 
 all(r:{A,A})
     ensure
         r in diamond  ==>  r.reflexive in diamond
     end
+
+
 
 {: Theorem: If 'r' is a diamond relation then its transitive closure is a
             diamond as well.
@@ -418,7 +398,9 @@ all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (+r)(a,b)
+        -- r(a,c)
     ensure
+        -- some(d) r(b,d) and (+r)(c,d)
         r(a,c) ==> some(d) r(b,d) and (+r)(c,d)
     proof
         ensure
@@ -466,18 +448,14 @@ all(a,b,c:A, r:{A,A})
     require
         r in diamond
         (+r)(a,c)
+        (+r)(a,b)
     ensure
-        (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
-    proof
-        ensure
-            all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d)
+        some(d) (+r)(b,d) and (+r)(c,d)
+
         inspect
             (+r)(a,c)
         case
             all(a,c) r(a,c) ==> (+r)(a,c)
-        proof
-            all(b) require (+r)(a,b)
-                   ensure  some(d) (+r)(b,d) and (+r)(c,d)
                    via some(d)
                            require
                                r(b,d)
@@ -485,20 +463,14 @@ all(a,b,c:A, r:{A,A})
                            proof
                                r(a,c)
                                (+r)(b,d) and (+r)(c,d)
-                   end
         case
             all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
-        proof
             {:  a . . .> c ---> e           --->        r
                 .        .      .           ...>       +r
                 .        .      .
                 v        v      v
                 b . . .> d ---> f
             :}
-            all(b) (+r)(a,b) ==> some(d) (+r)(b,d) and (+r)(c,d) -- ind. hypo
-            all(b)
-            require (+r)(a,b)
-            ensure  some(f) (+r)(b,f) and (+r)(e,f)
             via some(d)
                     require
                         (+r)(b,d)
@@ -509,9 +481,10 @@ all(a,b,c:A, r:{A,A})
                                 (+r)(e,f)
                             proof
                                 (+r)(b,f) and (+r)(e,f)
-            end
-        end
     end
+
+
+
 
 all(r:{A,A}) ensure r in diamond ==> +r in diamond end
 

@@ -24,6 +24,7 @@ type ('a, 'b) either =
 
 module Search: sig
   val binsearch_max: 'a -> 'a array -> int
+  val binsearch:     'a -> 'a array -> int
   val array_find_min: ('a -> bool) -> 'a array -> int
 end = struct
   let binsearch_max (el:'a) (arr: 'a array) =
@@ -49,6 +50,15 @@ end = struct
     in
     assert (0<=idx && idx<=Array.length arr);
     idx
+
+
+  let binsearch (el:'a) (arr: 'a array) =
+    let insert_pos = binsearch_max el arr in
+    if insert_pos = 0 || arr.(insert_pos-1) <> el then
+      raise Not_found
+    else
+      insert_pos - 1
+
 
   let array_find_min (p:'a -> bool) (arr: 'a array) =
     let len = Array.length arr in
@@ -77,7 +87,7 @@ module IntMap = Map.Make(struct
 end)
 
 
-let intset_to_string (set:IntSet.t): string =
+let string_of_intset (set:IntSet.t): string =
   "{"
   ^ String.concat
       ","
@@ -86,13 +96,16 @@ let intset_to_string (set:IntSet.t): string =
 
 
 
-let intlist_to_string (lst:int list): string =
-  "{"
+let string_of_intlist (lst:int list): string =
+  "["
   ^ String.concat
       ","
       (List.map string_of_int lst)
-  ^ "}"
+  ^ "]"
 
+
+let string_of_intarray (arr:int array): string =
+  string_of_intlist (Array.to_list arr)
 
 
 let interval_fold (f:'a->int->'a) (a0:'a) (start:int) (beyond:int): 'a =

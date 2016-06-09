@@ -34,7 +34,6 @@ and type_term  = term
 
 exception Term_capture
 exception Empty_term
-exception Name_clash of int
 
 module TermSet = Set.Make(struct
   let compare = Pervasives.compare
@@ -70,6 +69,12 @@ let count_formals ((nms,tps):formals): int =
   let n = Array.length nms in
   assert (n = Array.length tps);
   n
+
+let string_of_names (nms:names): string =
+  "(" ^
+  (String.concat ","
+     (List.map ST.string (Array.to_list nms))) ^
+  ")"
 
 
 module Term: sig
@@ -171,7 +176,8 @@ module Term: sig
 
   val quantifier_split: term -> bool -> int * formals * formals * term
 
-  val all_quantifier_split: term-> int * formals * formals * term
+  val all_quantifier_split:  term-> int * formals * formals * term
+  val all_quantifier_split_1:term-> int * formals * formals * term
 
   val some_quantifier_split: term -> int * formals * term
 
@@ -1122,6 +1128,15 @@ end = struct
   let all_quantifier_split (t:term): int * formals * formals * term =
     quantifier_split t true
 
+
+
+  let all_quantifier_split_1 (t:term): int * formals * formals * term =
+    try
+      all_quantifier_split t
+    with Not_found ->
+        0, empty_formals, empty_formals, t
+
+
   let some_quantifier_split (t:term): int * formals * term =
     let n,tps,fgs,t = quantifier_split t false in
     assert (fgs = empty_formals);
@@ -1221,16 +1236,36 @@ end = struct
           imp_id
 
 
+  let adapt_names (nms:int array) (names:int array): int array =
+    let nms  = Array.copy nms in
+    let nnms = Array.length nms in
+    let patch i =
+      assert (i < nnms);
+      let str = "$" ^ (ST.string nms.(i)) in
+      nms.(i) <- ST.symbol str
+    and has i =
+      assert (i < nnms);
+      try
+        let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
+        true
+      with Not_found ->
+        false
+    in
+    let rec patch_until_ok i =
+      if has i then begin
+        patch i;
+        patch_until_ok i
+      end
+    in
+    for i = 0 to nnms - 1 do
+      patch_until_ok i
+    done;
+    nms
+
+
   let prepend_names (nms1:int array) (nms2:int array): int array =
-    let n1,n2 = Array.length nms1, Array.length nms2 in
-    interval_iter
-      (fun i ->
-        if interval_exist (fun j -> nms1.(i)=nms2.(j)) 0 n2 then
-          raise (Name_clash nms1.(i))
-        else
-          ())
-      0 n1;
-    Array.append nms1 nms2
+   let nms1 = adapt_names nms1 nms2 in
+   Array.append nms1 nms2
 
 
 
@@ -1332,7 +1367,7 @@ end = struct
   let induction_rule (imp_id:int) (i:int) (p:term) (pr:term) (q:term)
       : int * formals * term list * term =
     (* Calculate the induction rule [i] for the inductively defined set [p]
-       represented by [pr].
+       represented by [pr] with the goal predicate [q].
 
        The closure rule [i] is
 

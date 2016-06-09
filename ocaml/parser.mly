@@ -368,6 +368,7 @@ proof_support:
 |   guarded_if_proof { $1 }
 |   induction_proof { $1 }
 |   existential_proof { $1 }
+|   LPAREN proof_support RPAREN { $2 }
 
 
 sequence_proof:

@@ -153,7 +153,7 @@ let add_assumption_or_axiom_terms
         if is_axiom then
           Proof_context.add_axiom t pc
         else begin
-          Proof_context.add_assumption t pc
+          Proof_context.add_assumption t true pc
         end in
       idx,it.i)
     lst
@@ -194,7 +194,7 @@ let function_property_list (lst:compound) (pc:PC.t): term list =
     (fun e ->
       let t = get_boolean_term e pc1 in
       verify_preconditions t e.i pc1;
-      let _ = PC.add_assumption t pc1 in
+      let _ = PC.add_assumption t true pc1 in
       t)
     lst
 

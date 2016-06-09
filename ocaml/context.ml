@@ -455,6 +455,14 @@ let check_deferred (c:t): unit =
   Class_table.check_deferred owner nanchors c.entry.info ct
 
 
+let split_general_implication_chain
+    (t:term) (c:t): int * formals * term list * term =
+  let nvars = count_variables c in
+  let imp_id = nvars + Feature_table.implication_index in
+  Term.split_general_implication_chain t imp_id
+
+
+
 
 let depth (c:t): int = c.depth
 

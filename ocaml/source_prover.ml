@@ -109,7 +109,7 @@ let add_assumptions (rlst:info_terms) (pc:PC.t): unit =
   List.iter
     (fun it ->
       verify_preconditions it pc;
-      ignore (PC.add_assumption it.v pc)
+      ignore (PC.add_assumption it.v true pc)
     )
     rlst
 
@@ -268,6 +268,7 @@ type inductive_set_data =
     {pc:      PC.t;
      goal:    term;
      goal_predicate: term; (* [element in goal_predicate] reduces to [goal] *)
+     nass: int;
      element: term;
      set:     term;        (* as written in the inpect expression *)
      set_expanded: term;   (* the inductive set '{(p): r0, r1, ... }' *)
@@ -277,139 +278,246 @@ type inductive_set_data =
    }
 
 
-let analyze_inductive_set
+
+
+let assumptions_for_variables
+    (ind_vars: int array)
+    (insp_vars: int list)
+    (pc:PC.t)
+    : int list * int list =
+  (* All assumptions of the contexts which are needed to define the variables
+     [ind_vars] and all the other variables which are not in [ind_vars] but in
+     the contexts. *)
+  let ind_vars  = Array.copy ind_vars
+  and nvars = Array.length ind_vars in
+  assert (0 < nvars);
+  Array.sort Pervasives.compare ind_vars;
+  let rec collect
+      (i:int) (nargs:int) (ass:int list) (pc:PC.t)
+      : int list * int =
+    let idx_lst = PC.assumption_indices pc in
+    let ass = List.rev_append idx_lst ass
+    in
+    let c = PC.context pc in
+    let loc_nargs = Context.count_last_arguments c in
+    let i =
+      interval_fold
+        (fun i k ->
+          let k = k + nargs in
+          assert (i <= nvars);
+          if i = nvars || k <> ind_vars.(i) then
+            i
+          else
+            i + 1
+        )
+        i 0 loc_nargs
+    in
+    if nvars = i then
+      ass, loc_nargs+nargs
+    else begin
+      assert (PC.is_local pc);
+      collect i (loc_nargs + nargs) ass (PC.pop pc)
+    end
+  in
+  let ass, nvars = collect 0 0 [] pc in
+  let used_lst =
+    List.fold_left
+      (fun lst idx -> Term.used_variables_0 (PC.term idx pc) nvars lst)
+      []
+      ass
+  in
+  let used_lst =
+    let insp_vars = Array.of_list insp_vars in
+    Array.sort Pervasives.compare insp_vars;
+    List.filter
+      (fun i ->
+        try ignore(Search.binsearch i insp_vars); false
+        with Not_found -> true
+      )
+      used_lst
+  in
+  ass, used_lst
+
+
+
+
+let induction_goal_predicate
+    (vars:int array)              (* induction variables *)
+    (others:int list)             (* other variables *)
+    (ass_lst:int list)            (* list of assumptions *)
+    (filter: term -> bool)        (* which assumptions enter *)
+    (goal: term)
+    (pc:PC.t)
+    : int * term =
+  (*
+    Generate the goal predicate and the number of assumptions:
+
+        {vars: all(others) a1 ==> a2 ==> ... ==> goal}
+
+    where all assumptions ai pass the filter.
+   *)
+  let c = PC.context pc in
+  let nvars = PC.count_variables pc
+  and argnames = Context.argnames c
+  and argtypes = Context.argtypes c
+  in
+  let nass, ass_rev =
+    List.fold_left
+      (fun (n,lst) idx ->
+        let p = PC.term idx pc in
+        if filter p then
+          1+n, p::lst
+        else
+          n,lst
+      )
+      (0,[])
+      ass_lst
+  and n_ind_vars = Array.length vars
+  and all_vars = Array.append (Array.of_list others) vars
+  in
+  let n_all_vars = Array.length all_vars
+  in
+  let imp_id = n_all_vars + nvars + Feature_table.implication_index
+  and n_other_vars = n_all_vars - n_ind_vars
+  in
+  let map,_ =
+    Array.fold_left
+      (fun (map,i) ivar -> IntMap.add ivar i map, i+1)
+      (IntMap.empty,0)
+      all_vars in
+  let subst t = Term.lambda_inner_map t map in
+  let nms_inner = Array.init n_other_vars (fun i -> argnames.(all_vars.(i)))
+  and tps_inner = Array.init n_other_vars (fun i -> argtypes.(all_vars.(i)))
+  and nms_outer =
+    Array.init n_ind_vars (fun i -> argnames.(all_vars.(i+n_other_vars)))
+  and tps_outer =
+    Array.init n_ind_vars (fun i -> argtypes.(all_vars.(i+n_other_vars)))
+  in
+  let chn =
+    List.fold_left
+      (fun chn p ->
+        let p = subst p in
+        Term.binary imp_id p chn
+      )
+      (subst goal)
+      ass_rev
+  in
+  let t =
+    Term.all_quantified n_other_vars (nms_inner,tps_inner) empty_formals chn
+  in
+  let tp = Context.predicate_of_type (Context.tuple_of_types tps_outer c) c in
+  let t = Context.make_lambda n_ind_vars nms_outer  [] t true 0 tp c in
+  nass, t
+
+
+
+
+
+let inductive_set
+    (info:info) (set:term) (c:Context.t)
+    : term * type_term * term array =
+  try
+    let set_exp = Context.inductive_set set c in
+    begin
+      match set_exp with
+        Indset (nme,tp,rs) ->
+          let rs = Array.map (fun r -> Term.apply r [|set|]) rs in
+          set_exp, tp, rs
+      | _ ->
+          assert false (* cannot happen *)
+    end
+  with Not_found ->
+    error_info info ("\"" ^ (Context.string_of_term set c) ^
+                     "\" does not evaluate to an inductive set")
+
+
+
+
+
+
+let inductive_set_context
     (info: info)
     (elem: term)
     (set:  term)
-    (goal: term)
+    (user_goal: term)
     (pc:PC.t)
     : inductive_set_data =
   (* Analyzes the outer part of an inductive set proof.
 
-        ensure
-            ens
         inspect
-            elem in set
+            elem in set  -- elem must be either a variable or a tuple of variables
         ...
    *)
   assert (not (PC.is_global pc));
   let c    = PC.context pc in
-  let nvars = Context.count_variables c in
-  let q =
-    let tp = Context.type_of_term set c in
-    let np = Context.arity_of_downgraded_type tp c in
-    let nms = anon_argnames np in
-    let t0 =
-      let ft = Context.feature_table c in
-      let tup_tp = Context.type_of_term elem c
-      and args   = Feature_table.args_of_tuple elem nvars ft in
-      let args = Array.map
-          (fun arg ->
-            match arg with
-              Variable i when i < nvars ->
-                i
-            | _ ->
-                error_info info ("\"" ^ (PC.string_of_term arg pc) ^
-                                 "\" is not a variable")
-          )
-          args
-      in
-      if np <> Array.length args then
-        error_info info ("Must be " ^ (string_of_int np) ^ " arguments");
-      let t0 =
-        let _,map =
-          Array.fold_left
-            (fun (j,map) i ->
-              assert (i < nvars);
-              j+1, IntMap.add i j map
-            )
-            (0,IntMap.empty)
-            args
-        in
-        Term.lambda_inner_map goal map
-      in
-      Feature_table.add_tuple_accessors t0 np tup_tp nvars ft
-    in
-    assert (np = Array.length nms);
-    let q = Lam (np, nms, [], t0, true,tp) in
-    verify_preconditions (withinfo info (Application(q,[|elem|],true))) pc;
-    PC.close pc;
-    q
+  let set_expanded, set_tp, rules = inductive_set info set c
   in
-  let set_expanded =
-    try Context.inductive_set set c
+  let nvars = Context.count_variables c in
+  let goal_pred, nass =
+    let ft = Context.feature_table c in
+    let vars   = Feature_table.args_of_tuple elem nvars ft in
+    let vars = Array.map
+        (fun arg ->
+          match arg with
+            Variable i when i < nvars ->
+              i
+          | _ ->
+              error_info info ("\"" ^ (PC.string_of_term arg pc) ^
+                               "\" is not a variable")
+        )
+        vars
+    in
+    let ass_lst, var_lst =
+      let insp_vars = Term.used_variables elem nvars in
+      let insp_vars = Term.used_variables_0 set nvars insp_vars in
+      assumptions_for_variables vars insp_vars pc in
+    let nass,goal_pred =
+      induction_goal_predicate
+        vars
+        var_lst
+        ass_lst
+        (fun t -> not (Term.equivalent t (Application(set,[|elem|],true))))
+        user_goal
+        pc
+    in
+    goal_pred, nass
+  in
+  let pa = Application(set,[|elem|],true) in
+  let pa_idx =
+    try PC.find_goal pa pc
     with Not_found ->
-      error_info info ("\"" ^ (PC.string_of_term set pc) ^
-                       "\" does not evaluate to an inductive set") in
-  begin match set_expanded with
-    Indset (nme,tp,rs) ->
-      let rs = Array.map (fun r -> Term.apply r [|set|]) rs
-      in
-      let pa = Application(set,[|elem|],true) in
-      let pa_idx =
-        try PC.find_goal pa pc
-        with Not_found ->
-          printf "pa %s\n" (PC.string_of_term pa pc);
-          error_info info ("\"" ^ (PC.string_of_term elem pc) ^
-                           "\" is not in the inductive set") in
-      let ind_idx = PC.add_set_induction_law set q elem pc in
-      if PC.is_tracing pc then begin
-        let prefix = PC.trace_prefix pc in
-        printf "\n\n";
-        printf "%sProof with inductively defined set\n\n" prefix;
-        printf "%sensure\n" prefix;
-        printf "%s    %s\n" prefix (PC.string_long_of_term goal pc);
-        printf "%sinspect\n" prefix;
-        printf "%s    %s\n\n"
-          prefix
-          (PC.string_long_of_term (Application(set,[|elem|],true)) pc)
-      end;
-      {pc             = pc;
-       goal           = goal;
-       goal_predicate = q;
-       set            = set;
-       set_expanded   = set_expanded;
-       element        = elem;
-       rules          = rs;
-       induction_rule = ind_idx;
-       element_in_set = pa_idx;
-     }
-  | _ ->
-      error_info info ("\"" ^ (PC.string_of_term set pc) ^
-                       "\" does not evaluate to an inductive set")
-  end
-
-
-type inductive_set_case_data =
-    {pc:    PC.t;
-     goal:  term;
-     premises: term list;
-   }
+      error_info info ("\"" ^ (PC.string_of_term elem pc) ^
+                       "\" is not in the inductive set") in
+  let ind_idx = PC.add_set_induction_law set goal_pred elem pc in
+  if PC.is_tracing pc then begin
+    let prefix = PC.trace_prefix pc in
+    printf "\n\n";
+    printf "%sProof with inductively defined set\n\n" prefix;
+    printf "%sensure\n" prefix;
+    printf "%s    %s\n" prefix (PC.string_long_of_term user_goal pc);
+    printf "%sinspect\n" prefix;
+    printf "%s    %s\n\n"
+      prefix
+      (PC.string_long_of_term (Application(set,[|elem|],true)) pc)
+  end;
+  {pc             = pc;
+   goal           = user_goal;
+   goal_predicate = goal_pred;
+   nass           = nass;
+   set            = set;
+   set_expanded   = set_expanded;
+   element        = elem;
+   rules          = rules;
+   induction_rule = ind_idx;
+   element_in_set = pa_idx;
+ }
 
 
 
-let analyze_inductive_set_case
+let inductive_set_case
     (case_exp: info_expression)
     (data: inductive_set_data)
-    : int * term * term list * term * PC.t =
-  (* Analyze the case expression of an inductive set proof.
-
-         case
-            all(x,y,..) e0 ==> e1 ==> ... ==> (x,y,...) in p
-         require
-            p0; p1; ...
-         ensure
-            target
-
-     - Analyze case expression and find the appropriate rule of the inductive
-       set.
-     - Push the variables of the case expression into a new context.
-     - Compute the case specific induction hypotheses and the goal in the
-       new context.
-
-     Return the index of the rule and the rule in the outer context and
-     the induction hypotheses and the goal in the new context.
-   *)
+    : int * term =
   let c = PC.context data.pc in
   let rule = Typer.boolean_term case_exp c in
   let irule =
@@ -421,26 +529,10 @@ let analyze_inductive_set_case
     with Not_found ->
       error_info case_exp.i "Invalid case"
   in
-  let pc1 =
-    let n, args, fgs, t0 =
-      try
-        Term.all_quantifier_split rule
-      with Not_found ->
-        0, empty_formals, empty_formals, rule
-    in
-    assert (fgs = empty_formals);
-    PC.push_typed args fgs data.pc
-  in
-  let imp_id = PC.count_variables data.pc + Feature_table.implication_index in
-  let _,_,ps,tgt =
-    Term.induction_rule
-      imp_id
-      irule
-      data.set_expanded
-      data.set
-      data.goal_predicate
-  in
-  irule, rule, ps, tgt, pc1
+  irule, rule
+
+
+
 
 
 let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
@@ -453,6 +545,217 @@ let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
 
 
 
+
+let add_set_induction_hypothesis
+    (hypo_idx:int)
+    (pc:PC.t)
+    : int =
+  (* The induction hypothesis has the form
+
+         all(hypo_vars) d1 ==> ... ==>
+                {ind_vars: all(other_vars) a1 ==> ... ==> user_goal}(ind_vars)
+
+     and has been added to the context of the case at [hypo_idx].
+
+     We have to add the following assertion to the context and return its index:
+
+         all(hypo_vars, other_vars) a1 ==> a2 ==> ... ==> d1 ==> ... ==> goal
+    *)
+  let hypo = PC.term hypo_idx pc
+  in
+  let n1,fargs1,ps_rev1,goal_redex1 =
+    PC.split_general_implication_chain hypo pc
+  in
+  let pc1 = PC.push_typed fargs1 empty_formals pc
+  in
+  match goal_redex1 with
+    Application(Lam(_),_,_) ->
+      let outer_goal = PC.beta_reduce_term goal_redex1 pc1
+      in
+      let n2,fargs2,ps_rev2,user_goal =
+        PC.split_general_implication_chain outer_goal pc1
+      in
+      let pc2 = PC.push_typed fargs2 empty_formals  pc1
+      in
+      (* Now we have two contexts: all(hypo_vars)  all(other_vars *)
+      let alst_rev =
+        List.rev_map
+          (fun a -> PC.add_assumption a false pc2)
+          (List.rev ps_rev2)
+      in
+      let dlst_rev =
+        List.rev_map
+          (fun d -> PC.add_assumption (Term.up n2 d) false pc2)
+          (List.rev ps_rev1)
+      in
+      (* Now we have a1; a2; ... ; d1; d2, ... as assumptions in the context and
+         can specialize the induction hypothesis hypo_idx.*)
+      let gen_goalpred_idx =
+        let spec_hypo_idx =
+          let args = Array.init n1 (fun i -> Variable (i + n2)) in
+          PC.specialized hypo_idx args [||] 0 pc2
+        in
+        List.fold_left
+          (fun idx d_idx ->
+            PC.add_mp d_idx idx false pc2)
+          spec_hypo_idx
+          (List.rev dlst_rev)
+      in
+      let gen_goal_idx = PC.add_beta_reduced gen_goalpred_idx false pc2 in
+      let chn_goal_idx =
+        let args = standard_substitution n2 in
+        PC.specialized gen_goal_idx args [||] 0 pc2
+      in
+      let goal_idx =
+        List.fold_left
+          (fun idx a_idx -> PC.add_mp a_idx idx false pc2)
+          chn_goal_idx
+          (List.rev alst_rev)
+      in
+      let t,pt = PC.discharged_bubbled goal_idx pc2 in
+      let idx = PC.add_proved_term t pt false pc1 in
+      let t,pt = PC.discharged_bubbled idx pc1 in
+      PC.add_proved_term t pt true pc
+  | _ ->
+      hypo_idx
+
+
+
+let string_of_case_context
+    (prefix: string)
+    (ass_lst_rev: int list)
+    (goal: term)
+    (pc:PC.t)
+    : string =
+  let ass_str =
+    String.concat
+      ("\n" ^ prefix)
+      (List.rev_map
+         (fun a_idx -> PC.string_long_of_term_i a_idx pc)
+         ass_lst_rev)
+  and goal_str =
+    PC.string_long_of_term goal pc
+  in
+  prefix ^ ass_str ^ "\n"
+  ^ prefix ^ "---------------------\n"
+  ^ prefix ^ goal_str ^ "\n"
+
+
+
+let inductive_set_case_context
+    (set:  term)
+    (set_expanded: term)
+    (rule:term)
+    (irule:int)
+    (nass: int)
+    (goal_pred:term)
+    (pc: PC.t):
+    int list * term * term * PC.t  (* assumptions, goal, inner context *)
+    =
+  (*
+    Prepare the inner context and return the reversed list of assumptions,
+    the goal and the inner context (2 levels deeper than the inspect context).
+
+    The rule has the form
+
+        all(rule vars) c1 ==> c2 ==> ... ==> p(e)
+
+    The goal predicate has the form
+
+       {ind vars: all(other vars) a1 ==> a2 ==> ... ==> user_goal}
+
+    with [nass] assumptions before the user goal.
+
+    The new context has the form
+
+        all(rule vars)
+            require
+                c1(set)
+                c1(goal_pred)    -- ind hypo 1
+                c2(set)
+                c2(goal_pred)    -- ind hypo 2
+                ...
+                e in set
+            proof
+                all(other vars)
+                    require
+                        a1
+                        a2
+                        ...
+                    proof
+                        ind hypo 1 in user terms
+                        ind hypo 2 in user terms
+                        ...
+                        ...  -- <-- here the user proof starts to prove the
+                             --     goal
+
+    where
+
+         ci:
+             all(hypo vars) d1i ==> d2i ==> ... ==> p(ei)
+
+         ind hypo i:
+             all(hypo vars) d1i ==> ... ==> goal_pred(ei)
+   *)
+  let n1,fargs1,ps,goal_pred1 =
+    let nvars = PC.count_variables pc in
+    let imp_id = nvars + Feature_table.implication_index in
+    let n,(_,tps), ps, goal_pred1 =
+      Term.induction_rule imp_id irule set_expanded set goal_pred
+    in
+    let m,(nms,_),_,_ = Term.all_quantifier_split_1 rule in
+    assert (n = m);
+    n,(nms,tps), ps, goal_pred1
+  in
+  let pc1 = PC.push_typed fargs1 empty_formals pc in
+  (* add induction hypotheses *)
+  let ass_lst_rev, hlst_rev, _ =
+    List.fold_left
+      (fun (alst, hlst, is_hypo) p ->
+        if is_hypo then
+          let idx = PC.add_assumption p false pc1 in
+          alst, idx::hlst, false
+        else begin
+          let idx = PC.add_assumption p true pc1 in
+          idx::alst, hlst, true
+        end
+      )
+      ([],[],false)
+      ps
+  in
+  let ass_lst_rev =
+    List.fold_left
+      (fun alst idx ->
+        let hidx = add_set_induction_hypothesis idx pc1 in
+        hidx::alst
+      )
+      ass_lst_rev
+      (List.rev hlst_rev)
+  in
+  PC.close pc1;
+  (* Now we have context [all(rule_vars) require c1(set); c1(q); ... set(e)] *)
+  let stren_goal = PC.beta_reduce_term goal_pred1 pc1 in
+  let n2,fargs2,fgs2,chn = Term.all_quantifier_split_1 stren_goal in
+  let pc2 = PC.push_typed fargs2 fgs2 pc1 in
+  let ass_lst_rev, goal =
+    interval_fold
+      (fun (alst,chn) _ ->
+        let a,chn =
+          try
+            PC.split_implication chn pc2
+          with Not_found ->
+            assert false (* cannot happen *)
+        in
+        PC.add_assumption a true pc2 :: alst,
+        chn
+      )
+      (ass_lst_rev, chn)
+      0
+      nass
+  in
+  (* Now we have context [all(other_vars) require a1; a2; ...] *)
+  PC.close pc2;
+  ass_lst_rev, goal, goal_pred1, pc2
 
 
 
@@ -640,7 +943,7 @@ and prove_branch
     (cond:info_term) (goal:term) (prf:proof_support_option) (pc:PC.t)
     : int =
   let pc1 = PC.push_empty pc in
-  ignore (PC.add_assumption cond.v pc1);
+  ignore (PC.add_assumption cond.v true pc1);
   PC.close pc1;
   let idx = prove_one goal prf pc1 in
   let t,pt = PC.discharged_bubbled idx pc1 in
@@ -779,7 +1082,7 @@ and prove_type_case
   end;
   List.iter
     (fun ass ->
-      ignore (PC.add_assumption ass pc1))
+      ignore (PC.add_assumption ass true pc1))
     (List.rev ps_rev);
   PC.close pc1;
   let case_goal_idx =
@@ -815,21 +1118,29 @@ and prove_inductive_set
          end
    *)
   assert (not (PC.is_global pc));
-  let data = analyze_inductive_set info elem set goal pc
+  let data = inductive_set_context info elem set goal pc
   in
-  let nvars  = PC.count_variables data.pc
-  and nrules = Array.length data.rules
+  let nrules = Array.length data.rules
   in
-  let imp_id = nvars + Feature_table.implication_index in
   let proved =
     List.fold_left
       (fun proved (ie,prf) ->
-        let irule, rule, ps,tgt,pc1 =
-          analyze_inductive_set_case ie data in
+        let irule, rule = inductive_set_case ie data in
+        let ass_lst_rev, goal, goal_pred, pc_inner =
+          inductive_set_case_context
+            data.set
+            data.set_expanded
+            rule
+            irule
+            data.nass
+            data.goal_predicate
+            pc in
         let idx =
-          prove_inductive_set_case ie.i rule ps tgt prf pc1 data.pc
+          prove_inductive_set_case
+            ie.i rule ass_lst_rev goal goal_pred prf pc_inner data.pc
         in
-        IntMap.add irule idx proved)
+        IntMap.add irule idx proved
+      )
       IntMap.empty
       cases
   in
@@ -840,55 +1151,64 @@ and prove_inductive_set
           try
             IntMap.find irule proved
           with Not_found ->
-            let n,(nms,tps),ps,tgt =
-              Term.induction_rule
-                imp_id
-                irule
-                data.set_expanded
+            let ass_lst_rev, goal, goal_pred, pc_inner =
+              inductive_set_case_context
                 data.set
-                data.goal_predicate in
-            let nms = Context.unique_names nms (PC.context data.pc) in
-            let pc1 = PC.push_typed (nms,tps) empty_formals data.pc in
+                data.set_expanded
+                data.rules.(irule)
+                irule
+                data.nass
+                data.goal_predicate
+                pc
+            in
             prove_inductive_set_case
-              info data.rules.(irule) ps tgt None pc1 data.pc
+              info data.rules.(irule) ass_lst_rev goal goal_pred None pc_inner data.pc
         in
         PC.add_mp rule_idx ind_idx false data.pc
-      ) data.induction_rule 0 nrules in
-  let gidx = PC.add_mp data.element_in_set ind_idx false data.pc in
+      )
+      data.induction_rule 0 nrules
+  in
+  let gidx = PC.add_mp data.element_in_set ind_idx false data.pc
+  in
   PC.add_beta_reduced gidx false pc
+
 
 
 and prove_inductive_set_case
     (info:info)
     (rule:term)                   (* in the outer context *)
-    (ps: term list) (tgt: term)   (* in the inner context *)
-    (prf: proof_support_option)
+    (ass_lst_rev: int list)
+    (goal: term)                  (* in the inner context *)
+    (goal_pred: term)             (* in the middle context *)
+    (prf:  proof_support_option)
     (pc1:PC.t)                    (* inner context *)
     (pc0:PC.t)                    (* outer context *)
     : int =
-  if PC.is_tracing pc1 then begin
+  if PC.is_tracing pc0 then begin
     let prefix = PC.trace_prefix pc0 in
-    printf "\n\n%scase\n" prefix;
+    printf "\n\n";
+    printf "%scase\n" prefix;
     printf "%s    %s\n" prefix (PC.string_long_of_term rule pc0);
-    printf "%srequire\n" prefix;
-    List.iter
-      (fun t -> printf "%s    %s\n" prefix (PC.string_long_of_term t pc1))
-      ps;
-    printf"%sensure\n" prefix;
-    printf"%s    %s\n\n" prefix (PC.string_long_of_term tgt pc1);
+    printf "%sgoal\n" prefix;
+    printf "%s\n"
+      (string_of_case_context (prefix ^ "    ") ass_lst_rev goal pc1);
   end;
-  List.iter (fun t -> ignore (PC.add_assumption t pc1)) ps;
-  PC.close pc1;
   let gidx =
     try
-      prove_one tgt prf pc1
+      prove_one goal prf pc1
     with Proof.Proof_failed msg ->
-      let errstr = error_string_case (List.rev ps) tgt pc1 in
-      error_info info ("Cannot prove case \"" ^
-                       (PC.string_of_term rule pc0) ^ "\"" ^ msg ^ errstr)
+      let casestr = string_of_case_context "" ass_lst_rev goal pc1
+      and rulestr = PC.string_of_term rule pc0 in
+      error_info info ("Cannot prove case \"" ^ rulestr ^ "\""
+                       ^ msg ^ casestr)
   in
   let t,pt = PC.discharged gidx pc1 in
+  let pc01 = PC.pop pc1 in
+  let idx = PC.add_proved_term t pt false pc01 in
+  let idx = PC.add_beta_redex goal_pred idx false pc01 in
+  let t,pt = PC.discharged idx pc01 in
   PC.add_proved_term t pt false pc0
+
 
 
 and prove_exist_elim
@@ -916,7 +1236,7 @@ and prove_exist_elim
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
   let n,fargs,t0 = Term.some_quantifier_split someexp.v in
   let pc1 = PC.push_typed fargs empty_formals pc in
-  ignore (PC.add_assumption t0 pc1);
+  ignore (PC.add_assumption t0 true pc1);
   PC.close pc1;
   let goal = Term.up n goal in
   let goal_idx = prove_one goal prf pc1 in

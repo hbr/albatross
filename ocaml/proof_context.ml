@@ -239,6 +239,12 @@ let disjunction (a:term) (b:term) (pc:t): term =
   let nb = nbenv pc in
   Term.binary (nb + Feature_table.or_index) a b
 
+
+let split_general_implication_chain
+    (t:term) (pc:t): int * formals * term list * term =
+  Context.split_general_implication_chain t (context pc)
+
+
 let all_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (pc:t): term =
   Proof_table.all_quantified nargs tps fgs t pc.base
 
@@ -252,6 +258,9 @@ let implication_chain (ps:term list) (tgt:term) (pc:t): term  =
 
 let assumptions (pc:t): term list =
   Proof_table.assumptions pc.base
+
+let assumption_indices (pc:t): int list =
+  Proof_table.assumption_indices pc.base
 
 
 let assumptions_chain (tgt:term) (pc:t): term =
@@ -505,6 +514,9 @@ let add_last_to_tables (pc:t): unit =
   assert (has t pc)
 
 
+
+
+
 let filter_tables (pred:int->bool) (pc:t): unit =
   assert (is_global pc);
   let e = pc.entry in
@@ -543,6 +555,7 @@ let add_last_to_work (pc:t): unit =
   if not (is_global pc || is_interface_use pc) then
     let idx = count pc - 1 in
     pc.work <- idx :: pc.work
+
 
 
 
@@ -720,6 +733,7 @@ let beta_reduce_term (t:term) (pc:t): term =
     Application (Lam(n,_,_,t0,_,tp), args, _) ->
       beta_reduce n t0 tp args 0 pc
   | _ ->
+      printf "beta_reduce_term %s\n" (string_long_of_term t pc);
       assert false (* Is not a redex *)
 
 
@@ -1056,7 +1070,6 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
   (* The term [t] must be beta reducible and its beta reduction is the
      term [idx]. The term [t] is added.
    *)
-  printf "add_beta_redex %s\n" (string_of_term t pc);
   match t with
     Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
       assert (prlam = pr);
@@ -1064,7 +1077,6 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
                                                       [t_idx ==> t] *)
       and reduced = beta_reduce n t0 tp [|arg|] 0 pc in
       let impl = implication reduced t pc in
-      printf "   reduced %s\n" (string_of_term reduced pc);
       Proof_table.add_proved impl pt 0 pc.base;
       let idx_impl = raw_add  impl false pc in
       add_mp idx idx_impl search pc
@@ -1415,18 +1427,17 @@ let close_assumptions (pc:t): unit =
 
 
 
-let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
+let add_assumption_or_axiom (t:term) (is_axiom: bool) (search:bool) (pc:t): int =
   (** Add the term [t] as an assumption or an axiom to the context [pc].
    *)
   assert (is_consistent pc);
   let cnt = count pc in
-  let t = Proof_table.prenex_term t pc.base in
   if is_axiom then
     Proof_table.add_axiom t pc.base
   else
     Proof_table.add_assumption t pc.base;
-  ignore(raw_add t true pc);
-  if not is_axiom then
+  ignore(raw_add t search pc);
+  if not is_axiom && search then
     add_last_to_work pc;
   cnt
 
@@ -1434,17 +1445,17 @@ let add_assumption_or_axiom (t:term) (is_axiom: bool) (pc:t): int =
 
 
 
-let add_assumption (t:term) (pc:t): int =
+let add_assumption (t:term) (search:bool) (pc:t): int =
   (** Add the term [t] as an assumption to the context [pc].
    *)
-  add_assumption_or_axiom t false pc
+  add_assumption_or_axiom t false search pc
 
 
 
 let add_axiom (t:term) (pc:t): int =
   (** Add the term [t] as an axiom to the context [pc].
    *)
-  add_assumption_or_axiom t true pc
+  add_assumption_or_axiom t true false pc
 
 
 
@@ -1812,10 +1823,10 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   let lst = eval_reduce g lst pc in
   if pc.trace && is_trace_extended pc then begin
     let prefix = trace_prefix pc
-    and str = intlist_to_string lst in
+    and str = string_of_intlist lst in
     printf "%salternatives %s\n" prefix str;
     if not (IntSet.is_empty blacklst) then
-      printf "%s   blacklist %s\n" prefix (intset_to_string blacklst) end;
+      printf "%s   blacklist %s\n" prefix (string_of_intset blacklst) end;
   lst
 
 

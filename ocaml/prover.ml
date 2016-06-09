@@ -243,7 +243,7 @@ let push_premise (shared:bool) (g:goal): unit =
     end else
       pc
   in
-  let _ = PC.add_assumption a pc in
+  let _ = PC.add_assumption a true pc in
   g.target <- b
 
 

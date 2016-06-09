@@ -25,7 +25,7 @@ type t = {seq:       desc Ass_seq.t;
           count0:    int;      (* number of assertions at the start of the context *)
           mutable nreq:  int;  (* number of local assumptions *)
           mutable maxreq: int; (* first index with no more assumptions *)
-          mutable reqs: int list;
+          mutable reqs: int list; (* reversed indices of assumptions *)
           prev:      t option;
           verbosity: int}
 
@@ -322,11 +322,16 @@ let assumptions (at:t): term list =
     at.reqs
 
 
+
+let assumption_indices (at:t): int list =
+  at.reqs
+
+
+
 let discharged_assumptions (i:int) (at:t): term =
   assert (is_local at);
   assert (not (has_result at));
   let tgt = local_term i at in
-  (*assert (count_last_arguments at = 0 || not (Term.is_all_quantified tgt));*)
   List.fold_left
     (fun tgt i -> implication (local_term i at) tgt at)
     tgt
@@ -976,6 +981,11 @@ let add_inherited (t:term) (idx:int) (bcls:int) (cls:int) (at:t): unit =
 
 
 let add_mp (t:term) (i:int) (j:int) (at:t): unit =
+  let ti = local_term i at
+  and imp = local_term j at in
+  let a,b = split_implication imp at in
+  assert (Term.equivalent ti a);
+  assert (Term.equivalent b  t);
   let pt = Detached (i,j) in
   add_proved_0 t pt  at
 
@@ -1117,7 +1127,7 @@ let discharged0 (i:int) (bubble:bool) (at:t)
           then begin
             printf "n1new %d, IntSet.cardinal uvars_pt %d\n"
               n1new (IntSet.cardinal uvars_pt);
-            printf "uvars_pt %s\n" (intset_to_string uvars_pt);
+            printf "uvars_pt %s\n" (string_of_intset uvars_pt);
             printf "#ptarr %d\n" (Array.length ptarr);
             Proof_term.print_pt_arr "    " cnt0 ptarr;
             assert false (* Cannot happen *)
