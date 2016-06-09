@@ -1577,9 +1577,7 @@ let term_preconditions (t:term)  (c:t): term list =
               let lst_r = pres r [] c in (* reversed *)
               let lst_r =
                 List.rev_map
-                  (fun p ->
-                    try Term.down 1 p
-                    with Term_capture -> assert false)
+                  (fun p -> Term.all_quantified 1 ([|nme|],[|tp|]) empty_formals p)
                   lst_r in
               List.rev_append lst_r lst)
             lst
