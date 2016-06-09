@@ -368,6 +368,7 @@ proof_support:
 |   guarded_if_proof { $1 }
 |   induction_proof { $1 }
 |   existential_proof { $1 }
+|   contradiction_proof { $1 }
 |   LPAREN proof_support RPAREN { $2 }
 
 
@@ -493,6 +494,9 @@ existential_proof:
   withinfo (rhs_info 2) (PS_Existential (entlst, reqs, prf))
 }
 
+
+
+
 existential_proof_1:
     { [], None }
 |   optsemi proof_support { [], Some $2 }
@@ -500,6 +504,17 @@ existential_proof_1:
   let reqs,prf = $3 in
   $2 :: reqs, prf
 }
+
+
+contradiction_proof:
+    KWvia KWrequire info_expr_1 {
+  withinfo (rhs_info 2) (PS_Contradiction ($3,None))
+}
+|   KWvia KWrequire info_expr_1 optsemi proof_support {
+  withinfo (rhs_info 2) (PS_Contradiction ($3, Some $5))
+}
+
+
 
 
 
@@ -635,7 +650,7 @@ type_nt_inner:
     type_nt { $1 }
 |   type_list_min2 { Tuple_type $1 }
 
-    
+
 simple_type:
     UIDENTIFIER actual_generics {
   Normal_type ([],$1,$2)

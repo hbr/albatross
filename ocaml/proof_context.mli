@@ -66,6 +66,7 @@ val add_beta_reduced:   int -> bool -> t -> int
 val add_beta_redex:     term -> int -> bool -> t -> int
 val add_some_elim:      int -> bool -> t -> int
 val add_some_elim_specialized: int -> term -> bool -> t -> int
+val add_eval_backward:  term -> t -> int
 val specialized:        int -> arguments -> agens -> int -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
@@ -117,6 +118,7 @@ val is_assumption:  int -> t -> bool
 val negation:       term -> t -> term
 val implication:    term -> term -> t -> term
 val disjunction:    term -> term -> t -> term
+val false_constant: t -> term
 
 val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
@@ -135,5 +137,6 @@ val check_interface: t -> unit
 
 val excluded_middle:     t -> int
 val or_elimination:      t -> int
+val indirect_proof_law:  t -> int
 val has_excluded_middle: t -> bool
 val has_or_elimination:  t -> bool

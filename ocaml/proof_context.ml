@@ -240,6 +240,11 @@ let disjunction (a:term) (b:term) (pc:t): term =
   Term.binary (nb + Feature_table.or_index) a b
 
 
+let false_constant (pc:t): term =
+  let nb = nbenv pc in
+  Feature_table.false_constant nb
+
+
 let split_general_implication_chain
     (t:term) (pc:t): int * formals * term list * term =
   Context.split_general_implication_chain t (context pc)
@@ -1628,6 +1633,17 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
   raw_add imp false pc
 
 
+let add_eval_backward (t:term) (pc:t): int =
+  (* Add the implication [teval ==> t] where the term [t] must have an
+     evaluation.  The implication is not entered into the search tables nor
+     into the work items.  *)
+  let teval,e,modi = evaluated_term t (count pc) pc in
+  if not modi then
+    assert false; (* The term [t] must have an evaluation *)
+  let imp = implication teval t pc in
+  eval_backward t imp e pc
+
+
 
 let predicate_of_term (t:term) (pc:t): type_term =
   Context.predicate_of_term t (context pc)
@@ -2016,6 +2032,23 @@ let excluded_middle (pc:t): int =
   and tps = [| boolean_type 1 pc |] in
   let em = Term.all_quantified 1 (nms,tps) empty_formals em in
   find em pc
+
+
+let indirect_proof_law (pc:t): int =
+  let nvars = nbenv pc in
+  let not_id   = 1 + nvars + Feature_table.not_index
+  and imp_id   = 1 + nvars + Feature_table.implication_index
+  and false_const = Feature_table.false_constant (1 + nvars)
+  in
+  (* all(a) (not a ==> false) ==> a *)
+  let nota = Term.unary not_id (Variable 0) in
+  let nota_imp_false = Term.binary imp_id nota false_const in
+  let t = Term.binary imp_id nota_imp_false false_const in
+  let btp = boolean_type 1 pc in
+  let nms = standard_argnames 1
+  and tps = [| btp |] in
+  let indirect = Term.all_quantified 1 (nms,tps) empty_formals t in
+  find indirect pc
 
 
 let or_elimination (pc:t): int =

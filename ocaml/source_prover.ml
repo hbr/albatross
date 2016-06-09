@@ -834,6 +834,8 @@ and prove_one
               prove_inspect prf.i goal insp cases pc
           | PS_Existential (entlst, reqs, prf1) ->
               prove_exist_elim prf.i goal entlst reqs prf1 pc
+          | PS_Contradiction (exp,prf1) ->
+              prove_contradiction prf.i goal exp prf1 pc
         end
       with Proof.Proof_failed msg ->
         error_info prf.i ("Does not prove \"" ^
@@ -1252,3 +1254,32 @@ and prove_exist_elim
   let t,pt = PC.discharged goal_idx pc1 in
   let all_idx = PC.add_proved_term t pt false pc in
   PC.add_mp all_idx elim_idx false pc
+
+
+
+
+
+and prove_contradiction
+    (info: info)
+    (goal: term)
+    (exp:  info_expression)
+    (prf:  proof_support_option)
+    (pc:PC.t)
+    : int =
+  let exp = get_boolean_term exp pc in
+  let pc1 = PC.push_empty pc in
+  ignore (PC.add_assumption exp.v true pc1);
+  PC.close pc1;
+  let false_idx =
+    try
+      prove_one (PC.false_constant pc1) prf pc1
+    with Proof.Proof_failed msg ->
+      error_info
+        info
+        ("Cannot derive \"false\" from \"" ^
+         (PC.string_of_term exp.v pc1) ^ "\"")
+  in
+  let t,pt = PC.discharged false_idx pc1 in
+  ignore(PC.add_proved_term t pt true pc);
+  PC.close pc;
+  prove_one goal None pc

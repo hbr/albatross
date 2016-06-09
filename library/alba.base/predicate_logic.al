@@ -50,11 +50,8 @@ all(p:{G})
     via some(x)
             require
                 x in p
-            proof
-                require p = 0
-                ensure  false
-                proof   x in 0
-                end
+            via require p <= 0
+            proof x in 0
     end
 
 
@@ -76,18 +73,15 @@ all(p:{G})
 
 all(p:{G})
     require
-        all(x) x /in p
+        all(x) x /in p   -- a
     ensure
         not some(x) x in p
-    proof
-        require
+
+        via require
             some(x) x in p
-        ensure
-            false
         via some(x)
                 require x in p
-                proof   x /in p
-        end
+                proof   x /in p  -- from 'a'
     end
 
 
@@ -110,15 +104,12 @@ all(p:{G})
         some(x) x /in p
     ensure
         not all(x) x in p
-    proof
-        require
+
+        via require
             all(x) x in p
-        ensure
-            false
         via some(x)
                 require x /in p
                 proof   x in p
-        end
     end
 
 
@@ -133,25 +124,19 @@ all(p:{G})
         not all(x) x in p   -- a1
     ensure
         some(x) x /in p
-    proof
-        require
+
+        via require
             not some(x) x /in p  -- a2
-        ensure
-            false
         proof
             all(x)
                 ensure
                     x in p  -- contradicts 'a1'
-                proof
-                    require
+
+                    via require
                         not (x in p)   -- a3
-                    ensure
-                        false
                     proof
                         some(x) x /in p -- witness 'a3', contradicts 'a2'
-                    end
                 end
-        end
     end
 
 

@@ -66,7 +66,7 @@ let _ =
      ("all",       Parser.KWall);
      ("and",       Parser.KWand);
      ("as",        Parser.KWas);
-     ("assert",    Parser.KWas);
+     ("assert",    Parser.KWassert);
      ("case",      Parser.KWcase);
      ("check",     Parser.KWcheck);
      ("class",     Parser.KWclass);
