@@ -146,7 +146,7 @@ let inherit_feature
       lst
       (Feature_table.find_new_variants idx ft)
   in
-  if not defer then
+  if not defer || PC.is_interface_use pc then
     lst
   else
     let error_deferred () =
