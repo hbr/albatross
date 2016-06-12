@@ -265,7 +265,7 @@ end = struct
 
   let expect_lambda (is_pred:bool) (c:Context.t) (accs:t): unit =
     accs.c <- c;
-    iter_save
+    iter
       (fun acc -> Term_builder.expect_lambda is_pred c acc)
       accs
 
