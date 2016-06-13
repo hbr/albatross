@@ -6,62 +6,109 @@ end
 
 G: ANY
 
-all(a,b,c:G)
-    ensure
-        a = b  ==>  b = a
-        a = b  ==>  b = c  ==>   a = c
-        {a} /= 0
-    end
+{: Set order
+   ========= :}
 
-all(x:G,p,q,r:{G})
+all(p,q,r:{G})
     ensure
         p <= p
         (p <= q) ==> (q <= p) ==> (p = q)
         (p <= q) ==> (q <= r) ==> (p <= r)
+    end
 
 
-        p <= q ==> p * q = p
-        q <= p ==> p + q = p
+{: Proper subset
+   ============= :}
 
-        p * p = p
-        p * q = q * p
-        (p * q) * r = p * (q * r)
 
-        p + p = p
-        p = 0 + p
-        p + q = q + p
-        (p + q) + r = p + (q + r)
+(<)  (p,q:{G}): ghost BOOLEAN
+    -> p <= q and some(x) x /in p and x in q
 
-        (some(x) p(x)) ==>  p /= 0
+all(p,q:{G})
+    ensure
+        p < q ==> q.has_some
+        p < q ==> p /= q
+        p <= q ==> p /= q ==> p < q
+    end
 
-        p /= 0         ==> some(x) p(x)
 
-        p /= 0 ==> p + q /= 0
 
-        -- De Morgan
-        not (some(x) x in p) ==> x /in p
+{: Singleton set
+   ============= :}
+
+singleton (a:G): {G}
+        -- The singleton set containing only the element 'a'
+        --    Note: '{a}' is an abbreviation for 'a.singleton' or 'singleton(a)'
+        --          '{a,b,...}' is an abbreviation for '{a} + {b} + ...'
+    -> {x: x = a}
+
+
+all(x:G,p:{G})
+    ensure
+        p(x) ==> {x} <= p
+        {x}.has_some
+        p < {x} ==> p.is_empty
+    end
+
+
+
+
+{: De Morgan
+   ========= :}
+
+all(p:{G})
+    ensure
+        not (some(x) x in p) ==> all(x) x /in p
         not (all(x)  x in p) ==> (some(x) x /in p)
         (all(x)  x /in p)    ==> not (some(x) x in p)
         (some(x) x /in p)    ==> not (all(x)  x in p)
     end
 
 
-all(x:G,p:{G})
-    ensure
-        p(x) ==> {x} <= p
-    end
 
-all(p,q:{G})
-    require
-        some(x) p(x)
-        p <= q
-    ensure
-        some(x) q(x)
-    end
+{: Set algebra
+   =========== :}
+
+(+)  (p,q:{G}): {G}
+        -- The union of the sets 'p' and 'q'
+    -> {x: p(x) or q(x)}
+
+(*)  (p,q:{G}): {G}
+        -- The intersection of the sets 'p' and 'q'
+    -> {x: p(x) and q(x)}
+
+(-)  (p,q:{G}): {G}
+        -- The set 'p' without the elements of the set 'q'
+    -> {x: p(x) and not q(x)}
+
+(-)  (p:{G}): {G}
+        -- The complement of the set 'p'
+    -> {x: not p(x)}
 
 
-all(ps:{{G}})
+
+
+{: Union and intersection of collections of sets
+   ============================================= :}
+
+
+(+)  (ps:{{G}}): ghost {G}
+        -- The union of all sets of the collection of sets 'ps'
+    -> {x: some(p) ps(p) and p(x)}
+
+(*)  (ps:{{G}}): ghost {G}
+        -- The intersection of all sets of the collection of sets 'ps'
+    -> {x: all(p) ps(p) ==> p(x)}
+
+
+
+all(p:{G}, ps:{{G}})
     ensure
-        (*ps).is_infimum(ps)
-        (+ps).is_supremum(ps)
+        -- *ps is greatest lower bound
+        p in ps ==> *ps <= p
+        (all(q) q in ps ==> p <= q) ==> p <= *ps
+
+        -- +ps is least upper bound
+        p in ps ==> p <= +ps
+        (all(q) q in ps ==> q <= p) ==> +ps <= p
     end

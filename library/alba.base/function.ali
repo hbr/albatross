@@ -1,97 +1,71 @@
-use predicate; tuple end
+use predicate end
 
 A: ANY
 B: ANY
 
-immutable class FUNCTION[A,B] end
-
-domain(f:A->B): ghost {A}
-
-0: (A->B)
-
-(<=) (f,g:A->B): ghost BOOLEAN
-    -> f.domain <= g.domain
-       and all(x) x in f.domain ==> f(x) = g(x)
-
-(=) (f,g:A->B): ghost BOOLEAN
-    -> f <= g and g <= f
-
-all(f:A->B)
-    ensure
-        f = 0 ==> f.domain = 0
-        f = f
-    end
-
-
-immutable class
-    FUNCTION[A,B]
+immutable
+    class FUNCTION[A,B]
 inherit
     ghost ANY
 end
 
 
-range (f:A->B): ghost {B}
-    -> {b: some(a) a in f.domain and f(a) = b}
+{: Basic functions
+   =============== :}
 
-image (p:{A}, f:A->B): ghost {B}
-     -> {y: some(x) (f.domain*p)(x) and f(x) = y}
+domain(f:A->B): ghost {A}
+
+consistent (f,g:A->B): ghost BOOLEAN
+        -- Do 'f' and 'g' have the same values on its common domain
+    -> all(x) x in f.domain  ==>  x in g.domain  ==> f(x) = g(x)
+
+
+(=) (f,g:A->B): ghost BOOLEAN
+    -> f.domain = g.domain and consistent(f,g)
+
+undefined: (A->B)
+
+
+is_total (f:A->B): ghost BOOLEAN
+    -> f.domain.is_universal
+
+
+all(f,g:A->B)
+    ensure
+        consistent(undefined,f)
+        consistent(f,g) ==> consistent(g,f)
+        consistent(f,f)
+        f = f
+    end
+
+
+
+{: Range, image and preimage
+   ========================= :}
+
+
+range (f:A->B): ghost {B}
+        -- The range of the function 'f'.
+    -> {y: some(x) x in f.domain and f(x) = y}
 
 [] (f:A->B, p:{A}): ghost {B}
-    -> {y: some(x) x in f.domain and x in p and f(x) = y}
+        -- f[p] is the image of the set 'p' under the function 'f'.
+    -> {y: some(x) x in p and x in f.domain and f(x) = y}
+
 
 preimage (q:{B}, f:A->B): ghost {A}
      -> {x: x in f.domain and f(x) in q}
 
-(|) (f:A->B, p:{A}): (A->B)
-    -> agent (a:A):B
-           require
-               a in f.domain
-               a in p
-           ensure
-               -> f(a)
-           end
 
+all(x:A, p,q:{A}, f:A->B)
+    ensure
+       x in f.domain ==> f(x) in f.range
 
-(+) (f:A->B,e:(A,B)): (A->B)
-    -> agent (a:A): B
-           require a = e.first or a in f.domain
-           ensure  -> if a = e.first then e.second else f(a) end end
+       f[f.domain] <= f.range
+       f.range <= f[f.domain]
 
+       f.domain <= f.range.preimage(f)
+       f.range.preimage(f) <= f.domain
 
-(+) (f,g:A->B): ghost (A->B)
-    -> agent (a:A): B
-           require
-               a in (f.domain + g.domain)
-           ensure
-               -> if a in f.domain then f(a) else g(a) end
-           end
-
-is_total (f:A->B): ghost BOOLEAN
-    -> all(a) a in f.domain
-
-is_injective (f:A->B): ghost BOOLEAN
-    -> all(x,y) x in f.domain
-                ==> y in f.domain
-                ==> f(x) = f(y)
-                ==> x = y
-
-is_finite (p:{A}): ghost BOOLEAN
-    -> all(f:A->A) f.is_injective
-                   ==> f.domain = p
-                   ==> f.range <= p
-                   ==> f.range = p
-
-is_choice (f:{A}->A, p:{A}): ghost BOOLEAN
-    -> all(q) q /= 0 and q <= p ==> q in f.domain and f(q) in q
-
-is_iterable (f:A->A): ghost BOOLEAN
-    -> all(a) a in f.domain ==> f(a) in f.domain
-
-is_fixpoint (a:A, f:A->A): ghost BOOLEAN
-    -> a in f.domain and f(a) = a
-
-is_idempotent (f:A->A): ghost BOOLEAN
-    -> f.is_iterable and all(a) a in f.domain ==> f(a).is_fixpoint(f)
-
-consistent (f,g:A->B): ghost BOOLEAN
-    -> all(x) x in f.domain  ==>  x in g.domain  ==> f(x) = g(x)
+       p <= q ==> f[p] <= f[q]
+    end

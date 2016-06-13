@@ -1,6 +1,7 @@
 use
     predicate_logic
     partial_order
+    -- endofunction
 end
 
 
@@ -12,16 +13,16 @@ above (p:PO?, a:PO): PO?
 
 
 is_closure_system (p:PO?):  ghost BOOLEAN
-    -> (all(a) p.above(a) /= 0) and
-       all(q) q <= p  ==> q /= 0 ==> (some(x) x.is_infimum(q)) and *q in p
+    -> (all(a) p.above(a) /= empty) and
+       all(q) q <= p  ==> q /= empty ==> (some(x) x.is_infimum(q)) and *q in p
 
-
+{:
 is_closure_map(f:PO->PO): ghost BOOLEAN ->
     f.is_total and
     f.is_ascending and
     f.is_monotonic and
     f.is_idempotent
-
+:}
 
 
 all(a:PO, p:PO?)

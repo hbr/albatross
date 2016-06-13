@@ -16,6 +16,7 @@ all(a,b,c:BOOLEAN)
 
         -- negation
         (not a ==> false) ==> a       -- indirect proof
+        false ==> a                   -- ex falso quodlibet
 
         -- conjunction
         a and b ==> a                 -- and elimination
@@ -33,6 +34,5 @@ all(a,b,c:BOOLEAN)
 
         a or not a                    -- excluded middle
 
-        a or b ==> not a ==> b        -- or and implication
-        (not a ==> b) ==> a or b
+        a or a ==> a                  -- idempotence of 'or'
     end

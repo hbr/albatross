@@ -1,25 +1,30 @@
 use
     function
+    tuple
 end
 
 A: ANY
 B: ANY
 
-{: Order Structure
-   =============== :}
-
-all(f,g,h:A->B)
-    ensure
-         f <= f
-         f <= g  ==>  g <= f  ==> f = g
-         f <= g  ==>  g <= h  ==> f <= h
-    end
-
-
-
-
 {: Override
    ======== :}
+
+(+) (f:A->B, e:(A,B)): (A->B)
+    -> agent (a:A): B
+           require
+               a = e.first or a in f.domain
+           ensure
+               -> if a = e.first then e.second else f(a) end
+           end
+
+
+(+) (f,g:A->B): ghost (A->B)
+    -> agent (a:A): B
+           require
+               a in (g.domain + f.domain)
+           ensure
+               -> if a in g.domain then g(a) else f(a) end
+           end
 
 
 all(f:A->B, a,x:A, b:B)
@@ -29,15 +34,97 @@ all(f:A->B, a,x:A, b:B)
     end
 
 
-{: Consistency of Functions
-   ======================== :}
 
 
-all(f,g:A->B)
+{: Order Structure
+   =============== :}
+
+(<=) (f,g:A->B): ghost BOOLEAN
+        -- Is 'f' a subfunction of 'g'?
+    -> f.domain <= g.domain
+       and
+       consistent(f,g)
+
+
+(<) (f,g:A->B): ghost BOOLEAN
+        -- Is 'f' a proper subfunction of 'g'?
+    -> f <= g
+       and
+       some(a) a in g.domain and a /in f.domain
+
+
+all(f,g,h:A->B)
     ensure
-        f <= f + g
-        consistent(f,g) ==> consistent(g,f)
-        consistent(f,g) ==> g <= f + g
-        consistent(f,g) ==> some(h) f <= h and g <= h
-        (some(h) f <= h and g <= h) ==> consistent(f,g)
+        f <= f                              -- reflexive
+        f <= g  ==>  g <= h  ==> f <= h     -- transitive
+        f <= g  ==>  g <= f  ==> f = g      -- antisymmetric
+
+        f < g ==> f /= g
+        f <= g ==> f /= g ==> f < g
+
+        g <= f + g
+        consistent(f,g) ==> f <= f + g
+
+        f <= h  ==>  g <= h  ==>  consistent(f,g)
+        consistent(f,g) ==> (some(h) f <= h and g <= h)
+    end
+
+
+
+
+
+{: Domain restriction
+   ================== :}
+
+
+(|) (f:A->B, p:{A}): (A->B)
+        -- The function 'f' whose domain is restricted to the arguments which are
+        -- also in 'p'.
+    -> agent (a:A):B
+           require
+               a in f.domain
+               a in p
+           ensure
+               -> f(a)
+           end
+
+
+
+
+
+{: Injectivity
+   ===========
+
+   A function is injective if it is one to one. I.e. each value in the range of
+   the function has a unique origin.
+
+:}
+
+
+is_injective (f:A->B): ghost BOOLEAN
+    -> all(x,y) x in f.domain
+                ==> y in f.domain
+                ==> f(x) = f(y)
+                ==> x = y
+
+
+
+preimage(b:B, f:A->B): ghost A
+        -- The argument of the injective function 'f' which maps to 'b'.
+    require
+        f.is_injective
+        b in f.range
+    ensure
+        Result in f.domain
+        f(Result) = b
+    end
+
+
+inverse (f:A->B): ghost (B -> A)
+        -- The inverse of the injective function 'f'.
+    require
+        f.is_injective
+    ensure
+        Result.domain = f.range
+        all(x) x in f.domain ==> Result(f(x)) = x
     end

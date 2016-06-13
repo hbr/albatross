@@ -2,12 +2,7 @@ use boolean end
 
 all(a,b,c:BOOLEAN)
     ensure
-        false ==> a                   -- ex falso quodlibet
-
-        a or a ==> a                  -- idempotence of 'or'
-
         a or b ==> b or a             -- commutativity of 'or'
-
 
         -- de Morgan 1
         not (a or b) ==> not a
@@ -22,4 +17,8 @@ all(a,b,c:BOOLEAN)
         -- associativity of 'or'
         (a or b) or c ==> a or (b or c)
         a or (b or c) ==> (a or b) or c
+
+        a or b ==> not a ==> b        -- 'or' and '==>'
+        (not a ==> b) ==> a or b
+
     end

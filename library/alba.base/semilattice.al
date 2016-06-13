@@ -139,5 +139,24 @@ all(a,b:SL)
 
 G:ANY
 
-immutable class predicate.PREDICATE[G]
-inherit         ghost SEMILATTICE end
+
+all(p:{G})
+    ensure
+        p * p = p
+    end
+
+all(p,q:{G})
+    ensure
+        p * q = q * p
+    end
+
+all(p,q,r:{G})
+    ensure
+        (p * q) * r = p * (q * r)
+    end
+
+immutable class
+    predicate.PREDICATE[G]
+inherit
+    ghost SEMILATTICE
+end

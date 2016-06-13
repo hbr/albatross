@@ -1,19 +1,21 @@
 immutable class BOOLEAN end
 
 
+{: Built in functions
+   ================== :}
+
 false: BOOLEAN               note built_in end
 
 (==>) (a,b:BOOLEAN): BOOLEAN note built_in end
 
+
+
+
+
+{: Negation
+   ======== :}
+
 (not) (a:BOOLEAN): BOOLEAN   -> a ==> false
-
-true: BOOLEAN                = false ==> false
-
-(and) (a,b:BOOLEAN): BOOLEAN -> not (a ==> b ==> false)
-
-(or)  (a,b:BOOLEAN): BOOLEAN -> not a ==> b
-
-(=)   (a,b:BOOLEAN): BOOLEAN -> (a ==> b) and (b ==> a)
 
 
 
@@ -30,11 +32,29 @@ all(a:BOOLEAN)
         not a ==> false
     ensure
         a
-    proof
-        not not a
+        proof not not a
     end
 
+all(a:BOOLEAN)
+    require
+        false
+    ensure
+        a
+        via require not a
+    end
+
+
+{: The constant 'true'
+   =================== :}
+
+true: BOOLEAN                = false ==> false
+
+
 all ensure true end
+
+
+
+(and) (a,b:BOOLEAN): BOOLEAN -> not (a ==> b ==> false)
 
 
 all(a,b:BOOLEAN)
@@ -66,19 +86,21 @@ all(a,b:BOOLEAN)
 
 
 
+(or)  (a,b:BOOLEAN): BOOLEAN -> not a ==> b
+
 
 all(a,b:BOOLEAN)
         -- 'or' introduction
+    require
+        a
     ensure
-        a ==> a or b
+        a or b
     proof
         require
-            a
             not a
         ensure
             b
-        proof
-            not not b
+            via require not b
         end
     end
 
@@ -100,8 +122,16 @@ all(a,b,c:BOOLEAN)
         b ==> c
     ensure
         c
-    proof
-        not not c
+        via require not c
+    end
+
+
+all(a:BOOLEAN)
+    require
+        a or a
+    ensure
+        a
+        if a orif a
     end
 
 
@@ -120,6 +150,15 @@ all(a,b:BOOLEAN)
     ensure
         (not a ==> b) ==> a or b
     end
+
+
+
+
+{: Boolean equivalence
+   =================== :}
+
+
+(=)   (a,b:BOOLEAN): BOOLEAN -> (a ==> b) and (b ==> a)
 
 all(a:BOOLEAN)
     ensure

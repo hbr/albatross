@@ -342,7 +342,7 @@ is_directed (d:{PO}): ghost BOOLEAN
                          x.is_upper_bound({a,b})
 
 
-is_up_continuous (f:PO->PO2): ghost BOOLEAN
+is_upcontinuous (f:PO->PO2): ghost BOOLEAN
     -> all(set,sup)
            set <= f.domain
            ==>
@@ -350,7 +350,7 @@ is_up_continuous (f:PO->PO2): ghost BOOLEAN
            ==>
            sup.is_supremum(set)
            ==>
-           f(sup).is_supremum(set.image(f))
+           f(sup).is_supremum(f[set])
 
 
 {:

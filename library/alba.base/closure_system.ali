@@ -13,8 +13,8 @@ is_closure_system (p:PO?):  ghost BOOLEAN
         -- Are the elements of the set 'p' a closure system, i.e. does it have
         -- sufficiently large elements and do all nonempty subsets of 'p' have
         -- an infimum in 'p'?
-    -> (all(a) p.above(a) /= 0) and
-       all(q) q <= p  ==> q /= 0 ==> (some(x) x.is_infimum(q)) and *q in p
+    -> (all(a) p.above(a) /= empty) and
+       all(q) q <= p  ==> q /= empty ==> (some(x) x.is_infimum(q)) and *q in p
 
 
 closed (a:PO, p:PO?): ghost PO
