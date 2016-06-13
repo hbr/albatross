@@ -76,9 +76,8 @@ all(f:A->B)
             ensure
                 y in f.range
                 via some (x)
-                    require
-                        x in f.domain
-                        x in f.domain
+                        x in f.domain and
+                        x in f.domain and
                         f(x) = y
             end
     end
@@ -92,10 +91,7 @@ all(f:A->B)
                 y in f.range
             ensure
                 y in f[f.domain]
-                via some(x)
-                    require
-                        x in f.domain
-                        f(x) = y
+                via some(x) x in f.domain and f(x) = y
                     proof
                         x in f.domain and x in f.domain and f(x) = y
             end
@@ -114,11 +110,7 @@ all(p,q:{A}, f:A->B)
                 y in f[p]
             ensure
                 y in f[q]
-                via some(x)
-                    require
-                        x in p
-                        x in f.domain
-                        f(x) = y
+                via some(x) x in p and x in f.domain and f(x) = y
                     proof
                         x in q and x in f.domain and f(x) = y
             end

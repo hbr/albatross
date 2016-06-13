@@ -486,24 +486,12 @@ induction_proof_1:
 
 existential_proof:
     KWvia KWsome formal_arguments optsemi
-    KWrequire info_expr_1 existential_proof_1 {
-  let reqs,prf = $7
-  and entlst = withinfo (rhs_info 3) $3
+    info_expr_1 optsemi proof_support_opt {
+  let entlst = withinfo (rhs_info 3) $3
   in
-  let reqs = $6 :: reqs in
-  withinfo (rhs_info 2) (PS_Existential (entlst, reqs, prf))
+  withinfo (rhs_info 2) (PS_Existential (entlst, $5, $7))
 }
 
-
-
-
-existential_proof_1:
-    { [], None }
-|   optsemi proof_support { [], Some $2 }
-|   SEMICOL info_expr_1 existential_proof_1 {
-  let reqs,prf = $3 in
-  $2 :: reqs, prf
-}
 
 
 contradiction_proof:

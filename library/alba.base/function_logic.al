@@ -110,10 +110,7 @@ all(f,g:A->B)
         f /= g
         via require
             g <= f
-        via some(a)
-            require
-                a in g.domain
-                a /in f.domain
+        via some(a) a in g.domain and a /in f.domain
     end
 
 

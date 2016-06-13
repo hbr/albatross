@@ -30,18 +30,14 @@ all(r:{A,A})
     proof
         all(x) require x in r.domain
                ensure  x in r.range
-                       via some(y)
-                           require
-                               r(x,y)
+                       via some(y) r(x,y)
                            proof
                                r(x,x)
                end
 
         all(y) require y in r.range
                ensure  y in r.domain
-                       via some(x)
-                           require
-                               r(x,y)
+                       via some(x) r(x,y)
                            proof
                                r(y,y)
                end
@@ -57,18 +53,14 @@ all(r:{A,A})
     proof
         all(x) require x in r.domain
                ensure  x in r.range
-                       via some(y)
-                           require
-                               r(x,y)
+                       via some(y) r(x,y)
                            proof
                                r(x,x)
                end
 
         all(y) require y in r.range
                ensure  y in r.domain
-                       via some(x)
-                           require
-                               r(x,y)
+                       via some(x) r(x,y)
                            proof
                                r(y,y)
                end
@@ -84,9 +76,7 @@ all(r:{A,A})
     proof
         all(x) require x in r.domain
                ensure  x in r.range
-                       via some(y)
-                           require
-                               r(x,y)
+                       via some(y) r(x,y)
                            proof
                                r(x,x)
                end
@@ -100,9 +90,7 @@ all(r:{A,A})
     proof
         all(y) require y in r.range
                ensure  y in r.domain
-                       via some(x)
-                           require
-                               r(x,y)
+                       via some(x) r(x,y)
                            proof
                                r(y,y)
                end

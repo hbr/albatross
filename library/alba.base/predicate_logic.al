@@ -34,7 +34,7 @@ all(p,q:{G})
         p < q
     ensure
         q.has_some
-        via some(x) require x /in p and x in q
+        via some(x) x /in p and x in q
             proof
                 x in q
     end
@@ -46,7 +46,7 @@ all(p,q:{G})
     ensure
         p /= q
         via require p = q
-        via some(x) require x /in p; x in q
+        via some(x) x /in p and x in q
     end
 
 
@@ -109,7 +109,7 @@ all(p:{G}, x:G)
     ensure
         p.is_empty
         via require p.has_some
-        via some(y) require y in p
+        via some(y) y in p
             proof
                 p /= {x}
                 y in {x}
@@ -128,8 +128,7 @@ all(p:{G})
 
         via require
             some(x) x in p
-        via some(x)
-                require x in p
+        via some(x) x in p
                 proof   x /in p  -- from 'a'
     end
 
@@ -156,8 +155,7 @@ all(p:{G})
 
         via require
             all(x) x in p
-        via some(x)
-                require x /in p
+        via some(x) x /in p
                 proof   x in p
     end
 
@@ -271,10 +269,7 @@ all(p:{G}, ps:{{G}})
                 x in +ps
             ensure
                 x in p
-                via some(q)
-                require
-                    q in ps
-                    x in q
+                via some(q) q in ps and x in q
                 proof
                     q <= p
             end

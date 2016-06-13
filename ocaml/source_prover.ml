@@ -1217,22 +1217,12 @@ and prove_exist_elim
     (info: info)
     (goal: term)
     (entlst: entities list withinfo)
-    (reqs: info_expression list)
+    (req: info_expression)
     (prf:  proof_support_option)
     (pc:PC.t)
     : int =
-  assert (reqs <> []);
   PC.close pc;
-  let req =
-    List.fold_left
-      (fun left right ->
-        let right = Expparen right.v in
-        Binexp (Andop,left,right)
-      )
-      (Expparen (List.hd reqs).v)
-      (List.tl reqs)
-  in
-  let someexp = (withinfo info (Expquantified (Existential,entlst,req))) in
+  let someexp = (withinfo info (Expquantified (Existential,entlst,req.v))) in
   let someexp = get_boolean_term_verified someexp pc in
   let someexp_idx =
     try

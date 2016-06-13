@@ -52,12 +52,9 @@ all(a,b,c:A, r,s:{A,A})
         r(a,c)
     ensure
         some(d) r(b,d) and s(c,d)
-    via some(d)
-            require
-                r(b,d)
-                r(c,d)
-            proof
-                r(b,d) and s(c,d)
+        via some(d) r(b,d) and r(c,d)
+                proof
+                    r(b,d) and s(c,d)
     end
 
 
@@ -120,18 +117,12 @@ all(a,b,c:A, r:{A,A})
         inspect
             (r.reflexive)(a,c)
         case all(a,c) r(a,c) ==> (r.reflexive)(a,c)
-            via some(d)
-                    require
-                        r(b,d)
-                        (r.reflexive)(c,d)
+            via some(d) r(b,d) and (r.reflexive)(c,d)
                     proof
                         (r.reflexive)(b,d) and (r.reflexive)(c,d)
 
         case all(a,c) r(a,c) ==> (r.reflexive)(a,a)
-            via some(d)
-                    require
-                        r(b,d)
-                        (r.reflexive)(c,d)
+            via some(d) r(b,d) and (r.reflexive)(c,d)
                     proof
                         (r.reflexive)(b,b) and (r.reflexive)(a,b)
 
@@ -193,14 +184,8 @@ all(a,b,c:A, r:{A,A})
                     v       v
                     d ----> f
             :}
-            via some(e)
-                    require
-                        r(b,e)
-                        (+r)(c,e)
-                    via some(f)
-                            require
-                                r(d,f)
-                                r(e,f)
+            via some(e) r(b,e) and (+r)(c,e)
+                    via some(f) r(d,f) and r(e,f)
                             proof
                                 r(b,d)
                                 r(d,f) and (+r)(c,f)
@@ -220,10 +205,7 @@ all(a,b,c:A, r:{A,A})
             (+r)(a,c)
         case
             all(a,c) r(a,c) ==> (+r)(a,c)
-                   via some(d)
-                           require
-                               r(b,d)
-                               (+r)(c,d)
+                   via some(d) r(b,d) and (+r)(c,d)
                            proof
                                r(a,c)
                                (+r)(b,d) and (+r)(c,d)
@@ -235,14 +217,8 @@ all(a,b,c:A, r:{A,A})
                 v        v      v
                 b . . .> d ---> f
             :}
-            via some(d)
-                    require
-                        (+r)(b,d)
-                        (+r)(c,d)
-                    via some(f)
-                            require
-                                r(d,f)
-                                (+r)(e,f)
+            via some(d) (+r)(b,d) and (+r)(c,d)
+                    via some(f) r(d,f) and (+r)(e,f)
                             proof
                                 (+r)(b,f) and (+r)(e,f)
     end
