@@ -82,10 +82,10 @@ let is_backward_recursive (rd:t): bool =
   let ntgt = Term.nodes rd.target in
   List.exists
     (fun (_,_,_,p) ->
-      Term.equivalent p rd.target ||
+      Term.equivalent p rd.target (*||
       let np = Term.nodes p in
       ntgt < np &&
-      Term_algo.can_unify rd.target rd.nargs p)
+      Term_algo.can_unify rd.target rd.nargs p*))
     rd.premises
 
 
