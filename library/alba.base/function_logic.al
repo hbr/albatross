@@ -263,6 +263,27 @@ all(f,g,h:A->B)
 
 
 
+all(f,g:A->B)
+    require
+        f <= g
+    ensure
+        f.range <= g.range
+        assert
+            all(y)
+                require
+                    y in f.range
+                ensure
+                    y in g.range
+                    via some(x) x in f.domain and f(x) = y
+                    assert
+                        f(x) = g(x)   -- consistent functions
+                        x in g.domain and g(x) = y
+                end
+
+    end
+
+
+
 {: Domain restriction
    ================== :}
 
@@ -277,6 +298,18 @@ all(f,g,h:A->B)
            end
 
 
+all(f:A->B, p:{A})
+    ensure
+        (f|p).range <= f.range
+        assert
+        all(y)
+            require
+                y in (f|p).range
+            ensure
+                y in f.range
+                via some(x) x in (f|p).domain and (f|p)(x) = y
+            end
+    end
 
 
 
@@ -293,6 +326,28 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> y in f.domain
                 ==> f(x) = f(y)
                 ==> x = y
+
+
+
+all(f,g:A->B)
+    require
+        g.is_injective
+        f <= g
+    ensure
+        f.is_injective
+        assert
+            all(x,y)
+                require
+                    x in f.domain
+                    y in f.domain
+                    f(x) = f(y)
+                ensure
+                    x = y
+                    assert
+                        g(x) = f(x)
+                        g(x) = g(y)
+                end
+    end
 
 
 
@@ -473,4 +528,33 @@ inverse (f:A->B): ghost (B -> A)
     ensure
         Result.domain = f.range
         all(x) x in f.domain ==> Result(f(x)) = x
+    end
+
+
+all(f,g:A->B, y:B)
+    require
+        f <= g
+        y in f.range
+    ensure
+        y in g.range
+        assert
+            f.range <= g.range
+    end
+
+
+all(f,g:A->B, y:B)
+    require
+        g.is_injective
+        f <= g
+        y in f.range
+    ensure
+        y.preimage(f) = y.preimage(g)
+        via some(x) x in f.domain and f(x) = y
+        assert
+            y.preimage(f) = x
+            f(x) = g(x)    -- consitent functions
+            g(x) = y
+            -- x in g.domain
+            y.preimage(g) = x
+
     end

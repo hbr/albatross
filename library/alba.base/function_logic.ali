@@ -86,6 +86,8 @@ all(f,g,h:A->B)
 
         f <= h  ==>  g <= h  ==>  consistent(f,g)
         consistent(f,g) ==> (some(h) f <= h and g <= h)
+
+        f <= g ==> f.range <= g.range
     end
 
 
@@ -108,7 +110,10 @@ all(f,g,h:A->B)
            end
 
 
-
+all(f:A->B, p:{A})
+    ensure
+        (f|p).range <= f.range
+    end
 
 
 {: Injectivity
@@ -137,6 +142,8 @@ all(f,g:A->B, p:{A})
         ==> disjoint(f.domain,g.domain)
         ==> disjoint(f.range, g.range)
         ==> (f + g).is_injective
+
+        g.is_injective ==> f <= g ==> f.is_injective
     end
 
 
@@ -163,4 +170,13 @@ inverse (f:A->B): ghost (B -> A)
     ensure
         Result.domain = f.range
         all(x) x in f.domain ==> Result(f(x)) = x
+    end
+
+
+all(f,g:A->B, y:B)
+    ensure
+        g.is_injective
+        ==> f <= g
+        ==> y in f.range
+        ==> y.preimage(f) = y.preimage(g)
     end

@@ -13,12 +13,13 @@ all(p:{G}) ensure p <= p end
 all(p:{G}) ensure p = p end
 
 all(p,q,r:{G}) require p <= q
-                      q <= r
-              ensure  p <= r end
+                       q <= r
+               ensure  p <= r end
 
 all(p,q:{G})   require p <= q
-                      q <= p
-              ensure  p = q end
+                       q <= p
+               ensure  p = q end
+
 
 
 

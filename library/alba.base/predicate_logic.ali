@@ -9,6 +9,7 @@ G: ANY
 {: Set order
    ========= :}
 
+
 all(p,q,r:{G})
     ensure
         p <= p
