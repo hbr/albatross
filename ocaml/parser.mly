@@ -274,7 +274,7 @@ formal_generic:
 /*  assertions  */
 /* ------------------------------------------------------------------------- */
 
-ass_feat: user_proof { $1 }
+ass_feat: theorem { $1 }
 
 
 ass_req:
@@ -301,103 +301,115 @@ ass_seq:
 /* User Proofs */
 /* ------------------------------------------------------------------------- */
 
-user_proof:
+theorem:
     KWall formal_arguments_opt opt_nl
-    KWrequire info_expr_1 user_proof_1
+    KWrequire info_expr_1 theorem_1
     KWend {
   let entlst = withinfo (rhs_info 2) $2 in
-  let req, ens, body = $6 in
+  let req, ens, prf = $6 in
   let req = $5 :: req in
   assert (ens <> []);
-  Source_proof (entlst, req, ens, body)
+  Theorem (entlst, req, ens, prf)
 }
 |   KWall formal_arguments_opt opt_nl
-    KWensure info_expr_1 user_proof_2
+    KWensure info_expr_1 theorem_2
     KWend {
   let entlst = withinfo (rhs_info 2) $2 in
   let ens, prf = $6 in
   let ens = $5 :: ens in
-  Source_proof (entlst, [], ens, prf)
+  Theorem (entlst, [], ens, prf)
    }
 
 
-user_proof_1:
-    SEMICOL info_expr_1 user_proof_1 {
+
+theorem_1:
+    SEMICOL info_expr_1 theorem_1 {
   let req, ens, prf = $3 in
   $2 :: req, ens, prf
    }
-|   optsemi KWensure info_expr_1 user_proof_2 {
+|   optsemi KWensure info_expr_1 theorem_2 {
   let ens, prf = $4 in
   [], $3 :: ens, prf
 }
 
 
-user_proof_2:
-    { [], None }
-|   SEMICOL info_expr_1 user_proof_2 {
+theorem_2:
+    optsemi deferred_or_axiom { [], $2 }
+|   source_proof  { [], $1 }
+|   SEMICOL info_expr_1 theorem_2 {
   let ens, prf = $3 in
-  $2 :: ens, prf
-   }
-|   optsemi deferred_or_axiom { [], Some $2 }
-|   optsemi proof_support  { [], Some $2 }
+  $2::ens, prf
+}
 
 
+
+
+source_proof:
+    source_proof_2 { SP_Proof ([],$1) }
+|   optsemi KWassert proof_step source_proof_1 {
+  let steps, prf = $4 in
+  SP_Proof ($3::steps, prf)
+}
+
+source_proof_1: /* gets a proof step list and a proof_expression */
+    source_proof_2 {
+  [], $1
+}
+|   SEMICOL proof_step source_proof_1 {
+  let steps, prf = $3 in
+  $2 :: steps, prf
+}
+
+
+source_proof_2: /* gets a proof expression */
+    { None }
+|   optsemi proof_expression {
+  Some $2
+}
 
 
 deferred_or_axiom: KWnote LIDENTIFIER {
   let str = ST.string $2
   in
   if str = "axiom" then
-      withinfo (rhs_info 1) PS_Axiom
+      SP_Axiom
   else
-    error_info (rhs_info 1) "must be one of 'axiom'"
+    error_info (rhs_info 1) "must be 'axiom'"
    }
-| KWdeferred { withinfo (rhs_info 1) PS_Deferred }
+| KWdeferred { SP_Deferred }
 
 
 
 
-proof_support_opt:
-    { None }
-|   proof_support { Some $1 }
 
-
-proof_support:
-    sequence_proof { $1 }
-|   if_proof { $1 }
+proof_expression:
+    if_proof { $1 }
 |   guarded_if_proof { $1 }
 |   induction_proof { $1 }
 |   existential_proof { $1 }
 |   contradiction_proof { $1 }
-|   LPAREN proof_support RPAREN { $2 }
+|   LPAREN proof_expression RPAREN { $2 }
 
-
-sequence_proof:
-    KWproof proof_sequence { withinfo (rhs_info 1) (PS_Sequence $2) }
-
-proof_sequence:
-    proof_step { [$1] }
-|   proof_step SEMICOL proof_sequence  { $1 :: $3 }
 
 
 proof_step:
     info_expr_1 {
   PS_Simple $1
    }
-|   inner_user_proof {
+|   inner_theorem {
   let entlst,req,goal,body = $1 in
   PS_Structured (entlst,req,goal,body) }
 
 
-inner_user_proof:
+inner_theorem:
     KWall formal_arguments opt_nl
-    inner_user_proof_1
+    inner_theorem_1
     KWend {
   let entlst = withinfo (rhs_info 2) $2 in
   let req, goal, prf = $4 in
   entlst, req, goal, prf
   }
-|   inner_user_proof_1
+|   inner_theorem_1
     KWend {
   let entlst = withinfo UNKNOWN [] in
   let req, goal, prf = $1 in
@@ -405,101 +417,67 @@ inner_user_proof:
   }
 
 
-inner_user_proof_1:
-    KWrequire info_expr_1 inner_user_proof_2 {
+inner_theorem_1: /*(* gets assumptions goal source-proof *) */
+    KWrequire info_expr_1 inner_theorem_2 {
   let req, goal, prf = $3 in
   $2 :: req, goal, prf
    }
-|   KWensure  info_expr_1 inner_user_proof_3 {
+|   KWensure  info_expr_1 source_proof {
   [], $2, $3
   }
 
 
-inner_user_proof_2:
-    optsemi KWensure info_expr_1 inner_user_proof_3 {
+inner_theorem_2: /*(* gets rest of assumptions goal source-proof *) */
+    optsemi KWensure info_expr_1 source_proof {
   [], $3, $4
   }
-| SEMICOL info_expr_1 inner_user_proof_2 {
+| SEMICOL info_expr_1 inner_theorem_2 {
   let req, ens, prf = $3 in
   $2 :: req, ens, prf
    }
 
 
-inner_user_proof_3:
-    { None }
-|   optsemi proof_support { Some $2 }
-
-
 
 if_proof:
-    KWif info_expr_1 if_proof_1  {
-      let prf1, prf2 = $3 in
-      withinfo (rhs_info 1) (PS_If ($2, prf1, prf2))
+    KWif info_expr_1 source_proof KWelse source_proof  {
+      withinfo (rhs_info 1) (PE_If ($2, $3, $5))
     }
 
-if_proof_1:
-    opt_nl proof_support KWelse if_proof_2 {
-      Some $2, $4
-    }
-|   KWelse if_proof_2 { None, $2 }
-
-if_proof_2:
-    opt_nl proof_support { Some $2 }
-|   { None }
 
 
 
 
 guarded_if_proof:
-    KWif info_expr_1 guarded_if_proof_1 {
-  let prf1, cond2, prf2 = $3 in
-  withinfo (rhs_info 1) (PS_Guarded_If ($2, prf1, cond2, prf2))
+    KWif info_expr_1 source_proof KWorif info_expr_1 source_proof {
+  withinfo (rhs_info 1) (PE_Guarded_If ($2, $3, $5, $6))
 }
-
-guarded_if_proof_1:
-    opt_nl proof_support KWorif info_expr_1 guarded_if_proof_2 {
-  Some $2, $4, $5
-}
-|   KWorif info_expr_1 guarded_if_proof_2 {
-  None, $2, $3
-}
-
-
-guarded_if_proof_2:
-    opt_nl proof_support { Some $2 }
-|   { None }
-
-
 
 
 induction_proof:
     KWinspect info_expr_1 induction_proof_1 {
-  withinfo (rhs_info 1) (PS_Inspect ($2,$3))
+  withinfo (rhs_info 1) (PE_Inspect ($2,$3))
     }
 
 induction_proof_1:
     %prec LOWEST_PREC { [] }
-|   KWcase info_expr_1 optsemi proof_support_opt induction_proof_1 {
-  ($2,$4) :: $5
+|   KWcase info_expr_1 source_proof induction_proof_1 {
+  ($2,$3) :: $4
 }
 
 
 existential_proof:
     KWvia KWsome formal_arguments optsemi
-    info_expr_1 optsemi proof_support_opt {
+    info_expr_1 source_proof {
   let entlst = withinfo (rhs_info 3) $3
   in
-  withinfo (rhs_info 2) (PS_Existential (entlst, $5, $7))
+  withinfo (rhs_info 2) (PE_Existential (entlst, $5, $6))
 }
 
 
 
 contradiction_proof:
-    KWvia KWrequire info_expr_1 {
-  withinfo (rhs_info 2) (PS_Contradiction ($3,None))
-}
-|   KWvia KWrequire info_expr_1 optsemi proof_support {
-  withinfo (rhs_info 2) (PS_Contradiction ($3, Some $5))
+    KWvia KWrequire info_expr_1 source_proof {
+  withinfo (rhs_info 2) (PE_Contradiction ($3,$4))
 }
 
 

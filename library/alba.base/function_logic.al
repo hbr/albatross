@@ -33,7 +33,7 @@ B: ANY
 all(f:A->B, a:A, b:B)
     ensure
         (f + (a,b))(a) = b
-        proof
+        assert
             a = (a,b).first
     end
 
@@ -44,7 +44,7 @@ all(f:A->B, a,x:A, b:B)
         x /= a
     ensure
         (f + (a,b))(x) = f(x)
-        proof
+        assert
             x /= (a,b).first
     end
 
@@ -87,16 +87,16 @@ all(f,g,h:A->B)
         g <= h
     ensure
         f <= h
-    proof
-        all(x)
-            require
-                x in f.domain
-            ensure
-                f(x) = h(x)
-            proof
-                f(x) = g(x)
-                g(x) = h(x)
-            end
+        assert
+            all(x)
+                require
+                    x in f.domain
+                ensure
+                    f(x) = h(x)
+                assert
+                    f(x) = g(x)
+                    g(x) = h(x)
+                end
     end
 
 
@@ -121,13 +121,13 @@ all(f,g:A->B)
     ensure
         f < g
         via require not some(x) x in g.domain and x /in f.domain
-            proof
+            assert
             all(x)
                 require
                     x in g.domain
                 ensure
                     x in f.domain
-                    proof
+                    assert
                         not (x in g.domain and x/in f.domain)
                         x /in g.domain or x in f.domain
                 end
@@ -145,7 +145,7 @@ all(f,g:A->B)
         consistent(f,g)
     ensure
         f <= f + g
-        proof
+        assert
             f.domain <= (f+g).domain
             all(x)
                 require
@@ -153,7 +153,7 @@ all(f,g:A->B)
                 ensure
                     f(x) = (f + g)(x)
                     if x in g.domain
-                    proof
+                    assert
                         g(x) = (f + g)(x)
                     orif x /in g.domain
                 end
@@ -164,8 +164,8 @@ all(f,g:A->B)
         consistent(f,g)
     ensure
         some(h) f <= h  and g <= h
-    proof
-        f <= f + g and g <= f + g
+        assert
+            f <= f + g and g <= f + g
     end
 
 
@@ -175,14 +175,14 @@ all(f,g,h:A->B)
         g <= h
     ensure
         consistent(f,g)
-        proof
+        assert
             all(x)
                 require
                     x in f.domain
                     x in g.domain
                 ensure
                     f(x) = g(x)
-                    proof
+                    assert
                         f(x) = h(x)
                         h(x) = g(x)
                 end
@@ -238,8 +238,8 @@ all(x:A, f:A->B)
         x in f.domain
     ensure
         f(x) in f.range
-    proof
-        x in f.domain and f(x) = f(x)
+        assert
+            x in f.domain and f(x) = f(x)
     end
 
 
@@ -276,10 +276,10 @@ all(f:A->B)
         some(g) g.domain = f.range
                 and
                 all(x) x in f.domain ==> g(f(x)) = x
-        proof
-            f.inverse0.domain = f.range
-            and
-            all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
+            assert
+                f.inverse0.domain = f.range
+                and
+                all(x) x in f.domain ==> (f.inverse0)(f(x)) = x
     end
 
 
@@ -294,27 +294,20 @@ all(f:A->B, g,h:B->A)
         all(x) x in f.domain ==> h(f(x)) = x
     ensure
         g = h
-    proof
-        g.domain = h.domain
-        all(y)
-            require
-                y in f.range
-            ensure
-                g(y) = h(y)
-            proof
-                some(x) x in f.domain and f(x) = y
-                all(x)
-                    require
-                        x in f.domain and f(x) = y
-                    ensure
-                        g(y) = h(y)
-                    proof
-                        f(x) = y
-                        g(f(x)) = x
-                        h(f(x)) = x
-                        y in {y: y in g.domain and g(y) = h(y)}
-                    end
-            end
+        assert
+            g.domain = h.domain
+            all(y)
+                require
+                    y in f.range
+                ensure
+                    g(y) = h(y)
+                    via some(x) x in f.domain and f(x) = y
+                        assert
+                            f(x) = y
+                            g(f(x)) = x
+                            h(f(x)) = x
+                            y in {y: y in g.domain and g(y) = h(y)}
+                end
     end
 
 

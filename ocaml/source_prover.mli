@@ -10,5 +10,5 @@ module PC = Proof_context
 
 val prove_and_store:
     entities list withinfo
-  -> compound -> compound -> proof_support_option -> PC.t
+  -> compound -> compound -> source_proof -> PC.t
     -> unit

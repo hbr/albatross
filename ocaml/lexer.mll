@@ -94,7 +94,7 @@ let _ =
      ("old",       Parser.KWold);
      ("or",        Parser.KWor);
      ("orif",      Parser.KWorif);
-     ("proof",     Parser.KWproof);
+     ("proof",     Parser.KWassert);
      ("redefine",  Parser.KWredefine);
      ("rename",    Parser.KWrename);
      ("require",   Parser.KWrequire);

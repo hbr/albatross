@@ -766,15 +766,17 @@ let rec prove_and_store
     (entlst: entities list withinfo)
     (rlst: compound)
     (elst: compound)
-    (prf:  proof_support_option)
+    (prf:  source_proof)
     (pc:PC.t)
     : unit =
   if PC.is_public pc then begin
     match prf with
-      None -> ()
-    | Some prf when prf.v = PS_Deferred -> ()
-    | Some prf ->
-        error_info prf.i "Proof not allowed in interface file"
+      SP_Deferred | SP_Proof ([],None) ->
+        ()
+    | SP_Axiom ->
+        error_info entlst.i "Axiom not allowed in interface file"
+    | _ ->
+        error_info entlst.i "Proof not allowed in interface file"
   end;
   let rlst, elst, pc1 = push entlst rlst elst pc in
   add_assumptions rlst pc1;
@@ -792,61 +794,58 @@ let rec prove_and_store
     ignore (PC.add_proved false (-1) t pt pc)
   in
   match prf with
-    None when PC.is_interface_use pc1 ->
+    SP_Axiom | SP_Deferred ->
       store_unproved false elst pc1
-  | None when PC.is_interface_check pc1 ->
-      PC.close pc1;
-      prove_goals elst pc1
-  | None ->
-      prove_goal ()
-  | Some prf1 ->
-      match prf1.v with
-        PS_Axiom ->
-          store_unproved false elst pc1
-      | PS_Deferred ->
-          store_unproved true elst pc1
-      | _ ->
-          prove_goal ()
+  | SP_Proof([],None) ->
+      if PC.is_interface_use pc1 then
+        store_unproved false elst pc1
+      else if PC.is_interface_check pc1 then begin
+        PC.close pc1;
+        prove_goals elst pc1
+      end else
+        prove_goal ()
+  | _ ->
+        prove_goal ()
 
 
 and prove_one
-    (goal:term) (prf:proof_support_option) (pc:PC.t)
+    (goal:term) (prf:source_proof) (pc:PC.t)
     : int =
-  (* Prove [goal] with the proof support [prf]. Assume that the preconditions
+  (* Prove [goal] with the proof expression [prf]. Assume that the preconditions
      of the goal are already verified. *)
   assert (PC.is_private pc);
   match prf with
-    None ->
-      Prover.prove_and_insert goal pc
-  | Some prf ->
-      try
-        begin
-          match prf.v with
-            PS_Axiom | PS_Deferred ->
-              assert false (* cannot happen *)
-          | PS_Sequence lst ->
-              prove_sequence lst goal pc
-          | PS_If (cond, prf1, prf2) ->
-              prove_if prf.i goal cond prf1 prf2 pc
-          | PS_Guarded_If (cond1, prf1, cond2, prf2) ->
-              prove_guarded_if prf.i goal cond1 prf1 cond2 prf2  pc
-          | PS_Inspect (insp, cases) ->
-              prove_inspect prf.i goal insp cases pc
-          | PS_Existential (entlst, reqs, prf1) ->
-              prove_exist_elim prf.i goal entlst reqs prf1 pc
-          | PS_Contradiction (exp,prf1) ->
-              prove_contradiction prf.i goal exp prf1 pc
-        end
-      with Proof.Proof_failed msg ->
-        error_info prf.i ("Does not prove \"" ^
-                          (PC.string_of_term goal pc) ^
-                          "\"" ^ msg)
+    SP_Axiom | SP_Deferred -> assert false (* cannot happen here *)
+  | SP_Proof (lst, pexp) ->
+      prove_sequence lst pc;
+      begin match pexp with
+        None ->
+          Prover.prove_and_insert goal pc
+      | Some prf ->
+          try
+            begin
+              match prf.v with
+                PE_If (cond, sprf1, sprf2) ->
+                  prove_if prf.i goal cond sprf1 sprf2 pc
+              | PE_Guarded_If (cond1, sprf1, cond2, sprf2) ->
+                  prove_guarded_if prf.i goal cond1 sprf1 cond2 sprf2  pc
+              | PE_Inspect (insp, cases) ->
+                  prove_inspect prf.i goal insp cases pc
+              | PE_Existential (entlst, reqs, prf1) ->
+                  prove_exist_elim prf.i goal entlst reqs prf1 pc
+              | PE_Contradiction (exp,prf1) ->
+                  prove_contradiction prf.i goal exp prf1 pc
+            end
+          with Proof.Proof_failed msg ->
+            error_info prf.i ("Does not prove \"" ^
+                              (PC.string_of_term goal pc) ^
+                              "\"" ^ msg)
+      end
 
 
 and prove_sequence
     (lst: proof_step list)
-    (goal: term)
-    (pc: PC.t): int =
+    (pc: PC.t): unit =
   List.iter
     (fun step ->
       begin match step with
@@ -870,15 +869,14 @@ and prove_sequence
       end;
       PC.close pc
     )
-    lst;
-  Prover.prove_and_insert goal pc
+    lst
 
 
 and prove_guarded_if
     (info: info)
     (goal: term)
-    (c1:info_expression) (prf1:proof_support_option)
-    (c2:info_expression) (prf2:proof_support_option)
+    (c1:info_expression) (prf1:source_proof)
+    (c2:info_expression) (prf2:source_proof)
     (pc:PC.t)
     : int =
   let c1 = get_boolean_term_verified c1 pc
@@ -908,8 +906,8 @@ and prove_if
     (info: info)
     (goal: term)
     (c1:info_expression)
-    (prf1:proof_support_option)
-    (prf2:proof_support_option)
+    (prf1:source_proof)
+    (prf2:source_proof)
     (pc:PC.t)
     : int =
   let c1 = get_boolean_term_verified c1 pc
@@ -942,7 +940,7 @@ and prove_if
 
 
 and prove_branch
-    (cond:info_term) (goal:term) (prf:proof_support_option) (pc:PC.t)
+    (cond:info_term) (goal:term) (prf:source_proof) (pc:PC.t)
     : int =
   let pc1 = PC.push_empty pc in
   ignore (PC.add_assumption cond.v true pc1);
@@ -1024,7 +1022,7 @@ and prove_inductive_type
               let args = standard_substitution n in
               Feature_table.feature_call cons_idx (nvars+n) args ags ft
             in
-            prove_type_case cons_idx tp pat None ivar goal pc1 pc
+            prove_type_case cons_idx tp pat (SP_Proof([],None)) ivar goal pc1 pc
         in
         PC.add_mp idx ind_idx false pc
       )
@@ -1041,7 +1039,7 @@ and prove_type_case
     (cons_idx:int)
     (tp:type_term)  (* inductive type in the outer context *)
     (pat:term)      (* in the inner context *)
-    (prf:proof_support_option)
+    (prf:source_proof)
     (ivar:int)
     (goal:term)     (* in the outer context *)
     (pc1:PC.t)      (* inner context *)
@@ -1164,7 +1162,8 @@ and prove_inductive_set
                 pc
             in
             prove_inductive_set_case
-              info data.rules.(irule) ass_lst_rev goal goal_pred None pc_inner data.pc
+              info data.rules.(irule) ass_lst_rev goal goal_pred
+              (SP_Proof([],None)) pc_inner data.pc
         in
         PC.add_mp rule_idx ind_idx false data.pc
       )
@@ -1182,7 +1181,7 @@ and prove_inductive_set_case
     (ass_lst_rev: int list)
     (goal: term)                  (* in the inner context *)
     (goal_pred: term)             (* in the middle context *)
-    (prf:  proof_support_option)
+    (prf: source_proof)
     (pc1:PC.t)                    (* inner context *)
     (pc0:PC.t)                    (* outer context *)
     : int =
@@ -1218,7 +1217,7 @@ and prove_exist_elim
     (goal: term)
     (entlst: entities list withinfo)
     (req: info_expression)
-    (prf:  proof_support_option)
+    (prf: source_proof)
     (pc:PC.t)
     : int =
   PC.close pc;
@@ -1253,7 +1252,7 @@ and prove_contradiction
     (info: info)
     (goal: term)
     (exp:  info_expression)
-    (prf:  proof_support_option)
+    (prf:  source_proof)
     (pc:PC.t)
     : int =
   let exp = get_boolean_term exp pc in
@@ -1272,4 +1271,13 @@ and prove_contradiction
   let t,pt = PC.discharged false_idx pc1 in
   ignore(PC.add_proved_term t pt true pc);
   PC.close pc;
-  prove_one goal None pc
+  try
+    prove_one goal (SP_Proof([],None)) pc
+  with Proof.Proof_failed msg ->
+    error_info
+      info
+      ("Cannot prove\n\t\"" ^
+       (PC.string_of_term goal pc) ^
+      "\"\nby assuming\n\t\"" ^
+       (PC.string_of_term t pc) ^
+       "\"")

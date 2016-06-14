@@ -32,7 +32,9 @@ all(a:BOOLEAN)
         not a ==> false
     ensure
         a
-        proof not not a
+        assert
+            not not a  -- can be derived from assumption and
+                       -- proves 'a' by the double negation law
     end
 
 all(a:BOOLEAN)
@@ -63,8 +65,7 @@ all(a,b:BOOLEAN)
         a and b
     ensure
         a
-    proof
-        not not a
+        via require not a
     end
 
 all(a,b:BOOLEAN)
@@ -73,8 +74,7 @@ all(a,b:BOOLEAN)
         a and b
     ensure
         b
-    proof
-        not not b
+        via require not b
     end
 
 

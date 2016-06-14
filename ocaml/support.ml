@@ -737,37 +737,37 @@ type inherit_clause = parent list
 type create_clause = (feature_name withinfo * entities list) list withinfo
 
 
-type proof_support =
-    PS_Axiom
-  | PS_Deferred
-  | PS_Sequence of proof_step list
-  | PS_If of
-      info_expression * proof_support_option * proof_support_option
-  | PS_Guarded_If of
-      info_expression * proof_support_option *
-        info_expression * proof_support_option
-  | PS_Inspect of
-      info_expression * (info_expression * proof_support_option) list
-  | PS_Existential of
-      entities list withinfo * info_expression * proof_support_option
-  | PS_Contradiction of info_expression * proof_support_option
+type source_proof =
+    SP_Axiom
+  | SP_Deferred
+  | SP_Proof of proof_step list * info_proof_expression option
 
-and info_proof_support = proof_support withinfo
+and  info_proof_expression = proof_expression withinfo
 
-and proof_support_option = info_proof_support option
+and proof_expression =
+    PE_If of
+      info_expression * source_proof * source_proof
+  | PE_Guarded_If of
+      info_expression * source_proof * info_expression * source_proof
+  | PE_Inspect of
+      info_expression * one_case list
+  | PE_Existential of
+      entities list withinfo * info_expression * source_proof
+  | PE_Contradiction of
+      info_expression * source_proof
 
-and one_case = info_expression * proof_support_option
+and  one_case = info_expression * source_proof
 
 and proof_step =
     PS_Simple of info_expression
   | PS_Structured of
-      entities list withinfo * compound * info_expression * proof_support_option
+      entities list withinfo * compound * info_expression * source_proof
 
 
 
 type declaration =
-    Source_proof of
-      entities list withinfo * compound * compound * proof_support_option
+    Theorem of
+      entities list withinfo * compound * compound * source_proof
   | Named_feature of
       feature_name withinfo
         * entities list withinfo

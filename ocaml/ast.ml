@@ -1008,9 +1008,9 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
     and elst   = [withinfo UNKNOWN (Binexp (Eqop,Identifier arga,Identifier arga))]
     and prf =
       if PC.is_private pc then
-        Some (withinfo UNKNOWN PS_Axiom)
+        SP_Axiom
       else
-        None
+        SP_Proof([],None)
     in
     Source_prover.prove_and_store entlst [] elst prf pc
   end;
@@ -1092,7 +1092,7 @@ let analyze (ast: declaration list) (pc:Proof_context.t): unit =
           put_class hm cname fgens creators inherits pc
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
           analyze_feature fn entlst rt is_func body expr pc
-      | Source_proof (entlst, req, ens, prf) ->
+      | Theorem (entlst, req, ens, prf) ->
           Source_prover.prove_and_store entlst req ens prf pc
       | Formal_generic (name, concept) ->
           Context.put_formal_generic name concept context
