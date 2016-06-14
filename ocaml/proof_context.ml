@@ -1412,7 +1412,7 @@ let close (pc:t): unit =
   else
     let cnt0 = count pc in
     let rec cls (round:int): unit =
-      if count pc - cnt0 > 1000 then assert false; (* 'infinite' loop detection *)
+      (*if count pc - cnt0 > 1000 then assert false; (* 'infinite' loop detection *)*)
       if has_work pc then begin
         let lst = List.rev pc.work in
       pc.work <- [];
