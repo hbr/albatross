@@ -46,7 +46,7 @@ type t = {
 
 
 
-let goal_limit_ref = ref 200
+let goal_limit_ref = ref 500
 
 let goal_limit () = !goal_limit_ref
 
