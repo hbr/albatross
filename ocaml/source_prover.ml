@@ -945,7 +945,15 @@ and prove_branch
   let pc1 = PC.push_empty pc in
   ignore (PC.add_assumption cond.v true pc1);
   PC.close pc1;
-  let idx = prove_one goal prf pc1 in
+  let idx =
+    try
+      prove_one goal prf pc1
+    with Proof.Proof_failed msg ->
+      error_info
+        cond.i
+        ("Cannot prove the goal\n\t\"" ^ (PC.string_of_term goal pc) ^
+         "\"\nassuming\n\t\"" ^ (PC.string_of_term cond.v pc) ^ "\"")
+  in
   let t,pt = PC.discharged_bubbled idx pc1 in
   PC.add_proved_term t pt false pc
 
