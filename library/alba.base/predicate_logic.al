@@ -77,6 +77,9 @@ all(p,q:{G})
     end
 
 
+
+
+
 {: Singleton set
    ============= :}
 
@@ -203,7 +206,29 @@ all(p:{G})
 
 (-) (p:{G}): {G}     -> {x: not p(x)}
 
+disjoint(p,q:{G}): ghost BOOLEAN -> (p*q).is_empty
 
+
+all(p,q:{G})
+    require
+        disjoint(p,q)
+    ensure
+        disjoint(q,p)
+        assert
+            p*q = q*p
+            q*p in {x: x.is_empty}
+    end
+
+all(a:G, p,q:{G})
+    require
+        disjoint(p,q)
+        a in p
+    ensure
+        a /in q
+        via require a in q
+            assert
+               a in (p*q)
+    end
 
 
 {: Union and intersection of collections of sets

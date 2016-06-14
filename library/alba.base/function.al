@@ -43,6 +43,9 @@ all(f,g:A->B)
 
 all(f:A->B) ensure f = f end
 
+
+
+
 immutable class FUNCTION[A,B]
 inherit         ghost ANY end
 

@@ -1,10 +1,24 @@
 use
     function
     tuple
+    predicate_logic
 end
 
 A: ANY
 B: ANY
+
+
+
+{: General properties
+   ================== :}
+
+
+all(f,g:A->B)
+    ensure
+        disjoint(f.domain, g.domain) ==> consistent(f,g)
+    end
+
+
 
 {: Override
    ======== :}
@@ -27,10 +41,15 @@ B: ANY
            end
 
 
-all(f:A->B, a,x:A, b:B)
+all(f,g:A->B, a,x:A, b:B)
     ensure
         (f + (a,b))(a) = b
         x in f.domain ==> x /= a ==> (f + (a,b))(x) = f(x)
+
+        x in g.domain ==> (f + g)(x) = g(x)
+        consistent(f,g) ==> x in f.domain ==> (f + g)(x) = f(x)
+
+        consistent(f,g) ==> f + g = g + f
     end
 
 
@@ -107,6 +126,23 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> f(x) = f(y)
                 ==> x = y
 
+
+
+all(f,g:A->B, p:{A})
+    ensure
+        f.is_injective ==> (f|p).is_injective
+
+        f.is_injective
+        ==> g.is_injective
+        ==> disjoint(f.domain,g.domain)
+        ==> disjoint(f.range, g.range)
+        ==> (f + g).is_injective
+    end
+
+
+
+{: The inverse of a function
+   ========================= :}
 
 
 preimage(b:B, f:A->B): ghost A

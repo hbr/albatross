@@ -86,6 +86,16 @@ all(p:{G})
     -> {x: not p(x)}
 
 
+disjoint(p,q:{G}): ghost BOOLEAN
+        -- Are the sets 'p' and 'q' disjoint?
+    -> (p*q).is_empty
+
+all(a:G, p,q:{G})
+    ensure
+        disjoint(p,q) ==> disjoint(q,p)
+        disjoint(p,q) ==> a in p ==> a /in q
+    end
+
 
 
 {: Union and intersection of collections of sets

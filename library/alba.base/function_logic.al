@@ -9,6 +9,27 @@ A: ANY
 B: ANY
 
 
+{: General properties
+   ================== :}
+
+
+all(f,g:A->B)
+        -- functions with disjoint domains are consistent
+    require
+        disjoint(f.domain, g.domain)
+    ensure
+        consistent(f,g)
+        assert
+        all(x)
+            require
+                x in f.domain
+                x in g.domain
+            ensure
+                f(x) = g(x)
+                assert
+                    x /in g.domain
+            end
+    end
 
 
 {: Override
@@ -48,6 +69,58 @@ all(f:A->B, a,x:A, b:B)
             x /= (a,b).first
     end
 
+
+all(x:A,f,g:A->B)
+    require
+        x in g.domain
+    ensure
+        (f + g)(x) = g(x)
+    end
+
+all(x:A,f,g:A->B)
+    require
+        consistent(f,g)
+        x in f.domain
+    ensure
+        (f + g)(x) = f(x)
+        if x in g.domain
+        else
+    end
+
+all(f,g:A->B)
+    ensure
+        (f + g).domain <= (g + f).domain
+    end
+
+
+all(f,g:A->B)
+    require
+        consistent(f,g)
+    ensure
+        consistent(f + g, g + f)
+        assert
+        all(x)
+            require
+                x in (f + g).domain
+                x in (g + f).domain
+            ensure
+                (f + g)(x) = (g + f)(x)
+                if x in f.domain
+                assert
+                    (f + g)(x) = f(x)
+                orif x in g.domain
+                assert
+                    (g + f)(x) = g(x)
+            end
+    end
+
+
+all(f,g:A->B)
+    require
+        consistent(f,g)
+    ensure
+        f + g = g + f
+    end
 
 
 
@@ -222,6 +295,97 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> x = y
 
 
+
+all(f:A->B, p:{A})
+    require
+        f.is_injective
+    ensure
+        (f|p).is_injective
+    end
+
+
+all(f,g:A->B, x,y:A)
+    require
+        f.is_injective
+        g.is_injective
+        disjoint(f.domain,g.domain)
+        disjoint(f.range, g.range)
+        x in (f + g).domain
+        y in (f + g).domain
+        (f + g)(x) = (f + g)(y)
+        x in f.domain
+    ensure
+        x = y
+        assert
+            f <= f + g              -- disjoint domains
+            f(x) = (f + g)(x)
+            (f + g)(x) in f.range   -- because 'f(x) in f.range'
+        if y in f.domain
+        assert
+            f(y) = (f + g)(y)       -- because 'f <= f + g'
+            f(x) = f(y)
+            x = y                   -- because 'f.is_injective'
+        orif y in g.domain
+        assert
+            g <= f + g              -- always
+            g(y) = (f + g)(y)
+            (f + g)(y) in g.range   -- 'g(y)' in 'g.range'
+            (f + g)(y) in f.range   -- because '(f + g)(x) = (f + g)(y)'
+                                    -- and '(f + g)(x) in f.range'
+            (f + g)(y) /in g.range  -- ranges of 'f' and 'g' are disjoint
+    end
+
+
+all(f,g:A->B, x,y:A)
+    require
+        f.is_injective
+        g.is_injective
+        disjoint(f.domain,g.domain)
+        disjoint(f.range, g.range)
+        x in (f + g).domain
+        y in (f + g).domain
+        (f + g)(x) = (f + g)(y)
+        x in g.domain
+    ensure
+        x = y
+        assert
+            -- same situation as the previous theorem with 'f' and 'g' flipped
+            disjoint(g.domain,f.domain)
+            disjoint(g.range, f.range)
+            x in (g + f).domain
+            y in (g + f).domain
+            f + g = g + f
+            {h:A->B: x in h.domain ==> y in h.domain ==> h(x) = h(y)}(g + f)
+    end
+
+
+all(f,g:A->B)
+    require
+        f.is_injective
+        g.is_injective
+        disjoint(f.domain,g.domain)
+        disjoint(f.range, g.range)
+    ensure
+        (f + g).is_injective
+        assert
+        all(x,y)
+            require
+                x in (f + g).domain
+                y in (f + g).domain
+                (f + g)(x) = (f + g)(y)
+            ensure
+                x = y
+                -- use the last two previous theorems
+                if x in f.domain
+                orif x in g.domain
+            end
+    end
+
+
+{: The inverse of a function
+   ========================= :}
+
+
 preimage(b:B, f:A->B): ghost A
     require
         f.is_injective
@@ -231,16 +395,6 @@ preimage(b:B, f:A->B): ghost A
         f(Result) = b
     end
 
-
-
-all(x:A, f:A->B)
-    require
-        x in f.domain
-    ensure
-        f(x) in f.range
-        assert
-            x in f.domain and f(x) = f(x)
-    end
 
 
 inverse0 (f:A->B): ghost (B -> A)
