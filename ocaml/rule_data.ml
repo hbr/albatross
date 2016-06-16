@@ -355,14 +355,7 @@ let schematic_target (rd:t): int * int * term =
 
 let schematic_term (rd:t): int * int * term =
   let nvars = count_variables rd in
-  let imp_id = rd.nargs + nvars + Feature_table.implication_index in
-  let t =
-    List.fold_left
-      (fun t (_,_,_,p) ->
-        Term.binary imp_id p t)
-      rd.target
-      rd.premises
-  in
+  let t = implication_chain rd.premises rd.target (rd.nargs + nvars) in
   rd.nargs, nvars, t
 
 
