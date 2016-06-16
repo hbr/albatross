@@ -755,6 +755,7 @@ and proof_expression =
       entities list withinfo * info_expression * source_proof
   | PE_Contradiction of
       info_expression * source_proof
+  | PE_Transitivity of info_expression list
 
 and  one_case = info_expression * source_proof
 

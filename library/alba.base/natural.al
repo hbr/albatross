@@ -134,16 +134,22 @@ all(a,b:NATURAL)
     ensure
         a + b = b + a
     inspect b
-    case b.successor proof
-        a + b.successor   = (a + b).successor  -- def '+'
-        (a + b).successor = (b + a).successor  -- ind hypo
-        (b + a).successor = b + a.successor    -- def '+'
-        b + a.successor   = b.successor + a    -- commutativity of successor
+    case b.successor
+    assert
+        ensure
+            a + b.successor = b.successor + a
+            via [(a + b).successor  -- def '+'
+                 (b + a).successor  -- ind hypo
+                 b + a.successor    -- def '+'
+                                    -- commutativity of successor
+                 ]
+        end
     end
 
 
 
 all(a,b,x:NATURAL)
+        -- right cancellation
     ensure
         a + x = b + x ==> a = b
     inspect
@@ -153,13 +159,14 @@ all(a,b,x:NATURAL)
 
 
 all(a,b,x:NATURAL)
+        -- left cancellation
     require
         x + a = x + b
     ensure
         a = b
     proof
         ensure a + x = b + x
-        proof  a + x = x + a
+               via [x + a]
         end
     end
 
@@ -172,16 +179,18 @@ all(a:NATURAL)
     end
 
 all(a,x:NATURAL)
+    require
+        a + x = a
     ensure
-        a + x = a  ==>  x = 0
-    proof
-        require a + x = a
-        ensure  x + a = 0 + a
-        proof   x + a = a + x
-                a + x = a
-                a = 0 + a
-        end
+        x = 0
+        assert
+            ensure
+                x + a = 0 + a  -- by right cancellation proves the goal
+                via [a + x; a]
+            end
     end
+
+
 
 
 all(a,b:NATURAL)
@@ -191,10 +200,11 @@ all(a,b:NATURAL)
     case successor(a) proof
         require successor(a) + b = 0
         ensure  a.successor = 0
-        proof   successor(a) + b  = a + b.successor
-                a + b.successor   = (a + b).successor
-                (a + b).successor = 0
-                false
+        assert
+             ensure (a + b).successor = 0
+                via [a + b.successor
+                     a.successor + b]
+             end
         end
     end
 
@@ -378,12 +388,14 @@ all(a,b:NATURAL)
                     ensure  a.successor <= b.successor
                     proof   all(x) require a.successor + x = b.successor
                                    ensure  a.successor <= b.successor
-                                   proof   (a + x).successor = a + x .successor
-                                           a + x.successor = a.successor + x
+                                   assert
+                                       ensure
                                            (a + x).successor = b.successor
-                                           a + x = b
-                                           some(x) a + x = b
-                                           a <= b
+                                           via [a + x.successor
+                                                a.successor + x]
+                                       end
+                                       some(x) a + x = b
+                                       a <= b
                                    end
                     end
                 end
@@ -512,8 +524,10 @@ all(a,b:NATURAL)
                         a.successor <= b
                     proof
                         y.successor in {x: a + x = b}
-                        a.successor + y = a + y.successor
-                        a.successor + y = b
+                        ensure
+                            a.successor + y = b
+                            via [a + y.successor]
+                        end
                     end
             end
     end
@@ -717,11 +731,14 @@ all(a,b,c:NATURAL) -- distributivity
         ensure
             a * (b + c) = a*b + a*c
         inspect a
-        case successor(a) proof
-            a.successor * (b + c) = a*(b + c) + (b + c)
-            a*(b + c) + (b + c)   = a*b + a*c + (b + c)
-            a*b + a*c + (b + c)   = a*b + b + (a*c + c)
-            a*b + b + (a*c + c)   = a.successor*b + a.successor*c
+        case successor(a)
+        assert
+            ensure
+                a.successor * (b + c) = a.successor*b + a.successor*c
+                via [ a*(b + c) + (b + c)
+                      a*b + a*c + (b + c)
+                      a*b + b + (a*c + c) ]
+            end
         end
     end
 

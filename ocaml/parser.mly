@@ -388,6 +388,7 @@ proof_expression:
 |   induction_proof { $1 }
 |   existential_proof { $1 }
 |   contradiction_proof { $1 }
+|   transitivity_proof { $1 }
 |   LPAREN proof_expression RPAREN { $2 }
 
 
@@ -482,8 +483,16 @@ contradiction_proof:
 
 
 
+transitivity_proof:
+    KWvia LBRACKET info_expr_1 more_expressions RBRACKET {
+  withinfo (rhs_info 1) (PE_Transitivity ($3::$4))
+}
 
-
+more_expressions:
+    { [] }
+|   SEMICOL info_expr_1 more_expressions {
+  $2 :: $3
+}
 
 /* ------------------------------------------------------------------------- */
 /* Classes */

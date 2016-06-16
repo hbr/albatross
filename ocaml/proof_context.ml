@@ -625,19 +625,38 @@ let specialized
 
 
 
+let find_schematic (t:term) (pc:t): int * arguments * agens =
+  (* Find a universal quantified assertion and a substitution for it so that
+     the substituted assertions is the same as the term 't'.
+   *)
+  let sublst = unify t pc.entry.prvd2 pc in
+  match sublst with
+    [] ->
+      raise Not_found
+  | head :: tail ->
+      head
+
+
+
 let find_match (g:term) (pc:t): int =
   try
     find g pc
   with Not_found ->
     let sublst = unify g pc.entry.prvd2 pc in
-    if sublst = [] then raise Not_found;
+    if sublst = [] then
+      raise Not_found;
     try
-      let idx,_,_ = List.find (fun (_,args,_) -> Array.length args = 0) sublst in
+      let idx,_,_ =
+        List.find
+          (fun (_,args,_) -> Array.length args = 0)
+          sublst in
       idx
     with Not_found ->
-    let idx,args,ags = List.hd sublst in
-    try specialized idx args ags 0 pc
-    with Not_found -> assert false (* specialization not type safe ? *)
+      let idx,args,ags = List.hd sublst in
+      try
+        specialized idx args ags 0 pc
+      with Not_found ->
+        assert false (* specialization not type safe ? *)
 
 
 let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =

@@ -119,19 +119,25 @@ let add_axiom (it:info_term) (pc:PC.t): int =
   PC.add_axiom it.v pc
 
 
-let prove_insert_report (goal:info_term) (search:bool) (pc:PC.t): int =
+
+let prove_insert_report_base
+    (info:info) (goal:term) (search:bool) (pc:PC.t): int =
   try
-    let t,pt = Prover.proof_term goal.v pc in
+    let t,pt = Prover.proof_term goal pc in
     PC.add_proved_term t pt search pc
   with Proof.Proof_failed msg ->
-    error_info goal.i ("Cannot prove" ^ msg)
+    error_info info ("Cannot prove \"" ^ (PC.string_of_term goal pc)
+                     ^ "\"" ^ msg)
+
+
+let prove_insert_report (goal:info_term) (search:bool) (pc:PC.t): int =
+  prove_insert_report_base goal.i goal.v search pc
 
 
 let prove_insert_close (goal:info_term) (pc:PC.t): int =
   let idx = prove_insert_report goal true pc in
   PC.close pc;
   idx
-
 
 
 let store_unproved
@@ -760,6 +766,115 @@ let inductive_set_case_context
 
 
 
+let get_transitivity_data
+    (info:info)
+    (goal:term)
+    (pc:PC.t)
+    : int * term * term * type_term * agens * (term -> term -> term) =
+  (* Analyze the goal which should have the form 'r(a,b)' (if not report an error)
+     and return
+
+     Index of the transitivity law 'all(a,b,c:G) r(a,b) ==> r(b,c) ==> r(a,c)
+
+     The terms 'a' and 'b' and the type of the terms
+
+     The actual generics (0 or 1) which are needed to substitute the formal
+     generics (0 or 1) of the transitivity law.
+
+     A function which maps two terms 'x' and 'y' to 'r(x,y)'
+   *)
+  let error str =
+    error_info info ("The goal \"" ^ (PC.string_of_term goal pc) ^
+                     "\" " ^ str)
+  in
+  let error_not_proper () =
+    error "is not a proper binary boolean expression"
+  in
+  let c = PC.context pc in
+  let nvars = Context.count_variables c
+  in
+  let find_law (rel:int -> term -> term -> term) (tp:type_term): int*agens =
+      let a = Variable 0
+      and b = Variable 1
+      and c = Variable 2
+      and imp_id = 3 + nvars
+      and nms = standard_argnames 3
+      and tps = [|tp;tp;tp|]
+      in
+      let pc1 = PC.push_typed (nms,tps) empty_formals pc in
+      let t =
+        let ab = rel 3 a b
+        and bc = rel 3 b c
+        and ac = rel 3 a c in
+        Term.binary imp_id ab (Term.binary imp_id bc ac)
+      in
+      let idx_law,_,ags =
+        try
+          PC.find_schematic t pc1
+        with Not_found ->
+          let law = Term.all_quantified
+              3 (standard_argnames 3,[|tp;tp;tp|]) empty_formals t
+          in
+          error_info info ("Cannot find the transitivity law\n\t\"" ^
+                           (PC.string_long_of_term law pc) ^
+                           "\"")
+      in
+      idx_law, ags
+  in
+  match goal with
+    Application (p, [|arg|], true) ->
+      let ft = Context.feature_table c in
+      let tup_tp = Class_table.domain_type (Context.type_of_term p c) in
+      let args = Feature_table.args_of_tuple arg nvars ft in
+      if Array.length args <> 2 then
+        error_not_proper ();
+      let tp = Context.type_of_term args.(0) c in
+      if not (Term.equivalent tp (Context.type_of_term args.(1) c)) then
+        error_not_proper ();
+      let rel nb a b =
+        let p = Term.up nb p in
+        let arg = Feature_table.tuple_of_args [|a;b|] tup_tp (nb+nvars) ft in
+        Application (p, [|arg|],true)
+      in
+      let idx_law,ags = find_law rel tp in
+      idx_law, args.(0), args.(1), tp, ags, rel 0
+  | VAppl (idx, [|a1;a2|], ags)
+    when Term.equivalent
+        (Context.type_of_term a1 c)
+        (Context.type_of_term a2 c)
+    ->
+      let tp = Context.type_of_term a1 c in
+      let mkterm nb a b = VAppl (nb+idx,[|a;b|],ags) in
+      let idx_law,ags = find_law mkterm tp in
+      idx_law, a1, a2, tp, ags, mkterm 0
+  | _ ->
+      error_not_proper ()
+
+
+let prove_transitivity_step
+    (info:info)
+    (idx_law:int) (* index of 'all(a,b,c:T) r(a,b) ==> r(b,c) ==> r(a,c)' *)
+    (idx_rab:int) (* index of 'r(a,b)' *)
+    (a: term)
+    (b: term)
+    (c: term)
+    (ags:agens)
+    (r: term -> term -> term)
+    (pc:PC.t)
+    : int =
+  (* It is assumed that 'r(a,b)' has been proved. The function proves 'r(b,c)'
+     and uses the transitivity law to prove 'r(a,c)'.
+   *)
+  let rbc = r b c in
+  let idx_rbc = prove_insert_report_base info rbc false pc
+  in
+  let spec_law = PC.specialized idx_law [|a;b;c|] ags 0 pc
+  in
+  let idx = PC.add_mp idx_rab spec_law false pc
+  in
+  PC.add_mp idx_rbc idx false pc
+
+
 
 
 let rec prove_and_store
@@ -835,6 +950,8 @@ and prove_one
                   prove_exist_elim prf.i goal entlst reqs prf1 pc
               | PE_Contradiction (exp,prf1) ->
                   prove_contradiction prf.i goal exp prf1 pc
+              | PE_Transitivity lst ->
+                  prove_by_transitivity prf.i goal lst pc
             end
           with Proof.Proof_failed msg ->
             error_info prf.i ("Does not prove \"" ^
@@ -1289,3 +1406,39 @@ and prove_contradiction
       "\"\nby assuming\n\t\"" ^
        (PC.string_of_term t pc) ^
        "\"")
+
+
+
+and prove_by_transitivity
+    (info:info)
+    (goal:term)
+    (lst: info_expression list)
+    (pc:PC.t)
+    : int =
+  assert (lst <> []);
+  let c = PC.context pc in
+  let idx_law, first, last, tp, ags, rel =
+    get_transitivity_data info goal pc
+  in
+  let lst = List.map (fun ie -> withinfo ie.i (Typer.typed_term ie tp c)) lst
+  in
+  match lst with
+    b :: tail ->
+      let rab = rel first b.v in
+      let idx_rab = prove_insert_report_base b.i rab false pc in
+      let idx_rax, x =
+        List.fold_left
+          (fun (idx_rab,b) c ->
+            let idx_rac =
+              prove_transitivity_step
+                c.i idx_law idx_rab first b c.v ags rel pc
+            in
+            idx_rac, c.v
+          )
+          (idx_rab,b.v)
+          tail
+      in
+      prove_transitivity_step
+        info idx_law idx_rax first x last ags rel pc
+  | _ ->
+      assert false (* cannot happen *)
