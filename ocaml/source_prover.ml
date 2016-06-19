@@ -1345,7 +1345,7 @@ and prove_inductive_set_case
       let casestr = string_of_case_context "" ass_lst_rev goal pc1
       and rulestr = PC.string_of_term rule pc0 in
       error_info info ("Cannot prove case \"" ^ rulestr ^ "\""
-                       ^ msg ^ casestr)
+                       ^ msg ^ "\n" ^ casestr)
   in
   let t,pt = PC.discharged gidx pc1 in
   let pc01 = PC.pop pc1 in

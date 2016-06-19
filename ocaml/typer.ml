@@ -32,7 +32,7 @@ module Accus: sig
   val get_expected:      int -> t -> unit
   val drop_expected:     t -> unit
   val expect_if:         t -> unit
-  val complete_if:       bool -> t -> unit
+  val complete_if:       t -> unit
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   t -> unit
@@ -259,8 +259,8 @@ end = struct
   let expect_if (accs:t): unit =
     iter_save Term_builder.expect_if accs
 
-  let complete_if (has_else:bool) (accs:t): unit =
-    iter_save (fun acc -> Term_builder.complete_if has_else acc) accs
+  let complete_if (accs:t): unit =
+    iter_save (fun acc -> Term_builder.complete_if acc) accs
 
 
   let expect_lambda (is_pred:bool) (c:Context.t) (accs:t): unit =
@@ -801,8 +801,8 @@ let analyze_expression
           lambda entlst None [] e false true accs c
       | Expagent (entlst,rt,pres,exp) ->
           lambda entlst rt pres exp false true accs c
-      | Expif (thenlist,elsepart) ->
-          exp_if thenlist elsepart accs c
+      | Expif (cond,e1,e2) ->
+          exp_if cond e1 e2 accs c
       | Expinspect (inspexp,caselst) ->
           inspect ie.i inspexp caselst accs c
       | Typedexp (e0,tp) ->
@@ -920,43 +920,18 @@ let analyze_expression
 
 
   and exp_if
-      (thenlist: (expression * expression) list)
-      (elsepart: expression option)
+      (cond:expression) (e1:expression) (e2:expression)
       (accs: Accus.t)
       (c:Context.t)
       : unit =
-    let rec do_exp_if (n:int) (thenlist:(expression * expression) list): unit =
-      let terminate has_else n =
-        if has_else then
-          Accus.complete_if true accs
-        else
-          Accus.complete_if false accs;
-        for i = 1 to n-1 do
-          Accus.complete_if true accs
-        done;
-        Accus.drop_expected accs
-      in
-      match thenlist with
-        [] ->
-          begin
-            match elsepart with
-              None ->
-                terminate false n
-            | Some e ->
-                Accus.get_expected 0 accs;
-                analyze e accs c;
-                terminate true n
-          end
-      | (cond,e)::lst ->
-          Accus.expect_boolean_expression accs;
-          analyze cond accs c;
-          Accus.get_expected 0 accs;
-          analyze e accs c;
-          do_exp_if (n+1) lst
-    in
     Accus.push_expected accs;
-    Accus.expect_if accs;
-    do_exp_if 0 thenlist
+    Accus.expect_boolean_expression accs;
+    analyze cond accs c;
+    Accus.get_expected 0 accs;
+    analyze e1 accs c;
+    Accus.get_expected 0 accs;
+    analyze e2 accs c;
+    Accus.complete_if accs
 
   and inspect (info:info)
       (insp:expression)

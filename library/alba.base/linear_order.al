@@ -79,8 +79,8 @@ all(a,b:LO)
 {: Maximum and Minimum
    =================== :}
 
-min (a,b:LO): LO  -> if a <= b then a else b end
-max (a,b:LO): LO  -> if a <= b then b else a end
+min (a,b:LO): LO  -> if a <= b then a else b
+max (a,b:LO): LO  -> if a <= b then b else a
 
 
 all(a,b:LO)

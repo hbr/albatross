@@ -21,7 +21,6 @@ size (a:[G]): NATURAL
     -> inspect a
        case []  then 0
        case h^t then t.size.successor
-       end
 
 
 head (a:[G]): G
@@ -31,7 +30,6 @@ head (a:[G]): G
     ensure
         -> inspect a
            case h ^ _ then h
-           end
     end
 
 tail (a:[G]): [G]
@@ -41,7 +39,6 @@ tail (a:[G]): [G]
     ensure
         -> inspect a
            case _ ^ t then t
-           end
     end
 
 
@@ -50,7 +47,6 @@ tail (a:[G]): [G]
     -> inspect a
        case []  then false
        case h^t then x=h or x in t
-       end
 
 
 elements (a:[G]): G?
@@ -63,7 +59,6 @@ all_in (a:[G], p:G?): BOOLEAN
     -> inspect a
        case []  then true
        case h^t then h in p and t.all_in(p)
-       end
 
 all_in (a,b:[G]): BOOLEAN
         -- Are all elements of the list 'a' contained in the list 'b'?
@@ -84,14 +79,12 @@ permutation (a,b:[G]): ghost BOOLEAN
     -> inspect a
        case []    then b
        case h ^ t then h ^ (t + b)
-       end
 
 (-) (a:[G]): [G]
         -- The reversed list 'a'.
     -> inspect a
        case []    then []
        case h ^ t then -t + [h]
-       end
 
 folded (f:(G,H)->H, b:H, l:[G]): H
         -- The function 'f' folded with start value 'b' over the list 'l'.
@@ -101,7 +94,6 @@ folded (f:(G,H)->H, b:H, l:[G]): H
         -> inspect l
            case []  then b
            case h^t then f.folded(f(h,b),t)
-           end
     end
 
 
@@ -110,7 +102,6 @@ is_prefix (a,b:[G]): BOOLEAN
        case [] , _   then true
        case _  , []  then false
        case x^a, y^b then x = y and a.is_prefix(b)
-       end
 
 
 

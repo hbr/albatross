@@ -38,7 +38,6 @@ head (a:[G]): G
     ensure
         -> inspect a
            case h ^ _ then h
-           end
     end
 
 
@@ -49,7 +48,6 @@ tail (a:[G]): [G]
     ensure
         -> inspect a
            case _ ^ t then t
-           end
     end
 
 
@@ -79,7 +77,6 @@ size (a:[G]): NATURAL
     -> inspect a
        case []  then 0
        case h^t then t.size.successor
-       end
 
 
 
@@ -92,7 +89,6 @@ size (a:[G]): NATURAL
     -> inspect a
        case []  then false
        case h^t then x = h  or  x in t
-       end
 
 elements (l:[G]): G? -> {x: x in l}
 
@@ -101,7 +97,7 @@ all_in (a:[G], p:G?): BOOLEAN
     -> inspect a
        case []  then true
        case h^t then h in p and t.all_in(p)
-       end
+
 
 all(x:G, a:[G], p:G?)
     require
@@ -271,7 +267,6 @@ is_prefix (a,b:[G]): BOOLEAN
        case [] , _   then true
        case _  , []  then false
        case x^a, y^b then x = y and a.is_prefix(b)
-       end
 
 
 
@@ -285,7 +280,6 @@ is_prefix (a,b:[G]): BOOLEAN
     -> inspect a
        case []    then b
        case h ^ t then h ^ (t + b)
-       end
 
 all(a:[G])
     ensure
@@ -309,7 +303,6 @@ all(a,b,c:[G])
     -> inspect a
        case []    then []
        case h ^ t then -t + h ^ []
-       end
 
 all(a,b:[G])
     ensure
@@ -363,7 +356,6 @@ folded (f:(G,H)->H, b:H, l:[G]): H
         -> inspect l
            case []  then b
            case h^t then f.folded(f(h,b),t)
-           end
     end
 
 all(a,b:[G])

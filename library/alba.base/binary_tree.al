@@ -17,26 +17,22 @@ preorder (t:BINARY_TREE[G]): [G]
     -> inspect t
        case leaf        then []
        case tree(i,l,r) then i ^ (l.preorder + r.preorder)
-       end
 
 inorder (t:BINARY_TREE[G]): [G]
     -> inspect t
        case leaf        then []
        case tree(i,l,r) then l.inorder + i ^ r.inorder
-       end
 
 postorder (t:BINARY_TREE[G]): [G]
     -> inspect t
        case leaf        then []
        case tree(i,l,r) then l.postorder + r.postorder + [i]
-       end
 
 
 (-) (t:BINARY_TREE[G]): BINARY_TREE[G]
     -> inspect t
        case leaf        then leaf
        case tree(i,l,r) then tree(i, -r, -l)
-       end
 
 
 all(t:BINARY_TREE[G])

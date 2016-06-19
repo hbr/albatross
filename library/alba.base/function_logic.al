@@ -39,7 +39,8 @@ all(f,g:A->B)
 (+) (f:A->B,e:(A,B)): (A->B)
     -> agent (a:A): B
            require a = e.first or a in f.domain
-           ensure  -> if a = e.first then e.second else f(a) end end
+           ensure  -> if a = e.first then e.second else f(a)
+           end
 
 
 (+) (f,g:A->B): ghost (A->B)
@@ -47,7 +48,7 @@ all(f,g:A->B)
            require
                a in (g.domain + f.domain)
            ensure
-               -> if a in g.domain then g(a) else f(a) end
+               -> if a in g.domain then g(a) else f(a)
            end
 
 

@@ -41,11 +41,14 @@ all(x:L, a,b:[L])
    ============ :}
 
 is_sorted (l:[L]): BOOLEAN
-    -> inspect l
-       case []    then true
-       case [_]   then true
-       case x^y^a then x <= y and (y^a).is_sorted
-       end
+    -> inspect
+           l
+       case [] then
+           true
+       case [_] then
+           true
+       case x^y^a then
+           x <= y and (y^a).is_sorted
 
 all(x:L, a:[L])
         -- sorted 1
@@ -87,11 +90,15 @@ all(x:L, a:[L])
 
 
 into (x:L, a:[L]): [L]
-    -> inspect a
-       case []  then [x]
+    -> inspect
+           a
+       case []  then
+           [x]
        case y^a then
-           if x <= y then x^y^a else y ^ x.into(a) end
-       end
+           if x <= y then
+               x^y^a
+           else
+               y ^ x.into(a)
 
 all(x:L)
     ensure
@@ -182,7 +189,6 @@ sorted (a:[L]): [L]
     -> inspect a
        case []  then []
        case h^t then h.into(t.sorted)
-       end
 
 
 all(a:[L])

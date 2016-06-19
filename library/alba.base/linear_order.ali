@@ -25,8 +25,8 @@ inherit        ANY end
 is_lower_bound (a:LO, p:LO?): ghost BOOLEAN
     -> all(x) x in p ==> a <= x
 :}
-min (a,b:LO): LO  -> if a <= b then a else b end
-max (a,b:LO): LO  -> if a <= b then b else a end
+min (a,b:LO): LO  -> if a <= b then a else b
+max (a,b:LO): LO  -> if a <= b then b else a
 
 
 all(a:LO)

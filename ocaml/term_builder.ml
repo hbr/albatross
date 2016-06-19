@@ -1063,25 +1063,18 @@ let expect_if (tb:t): unit =
 
 
 
-let complete_if (has_else:bool) (tb:t): unit =
+let complete_if (tb:t): unit =
   resize 0 0 0 tb;
   get_expected 0 tb;
   let args =
     let cnt = Seq.count tb.terms in
-    if has_else then begin
-      assert (cnt >= 3);
-      let cond = (Seq.elem (cnt-3) tb.terms).term
-      and t1   = (Seq.elem (cnt-2) tb.terms).term
-      and t2   = (Seq.elem (cnt-1) tb.terms).term in
-      Seq.pop 3 tb.terms;
-      [|cond;t1;t2|]
-    end else begin
-      assert (cnt >= 2);
-      let cond = (Seq.elem (cnt-2) tb.terms).term
-      and t1   = (Seq.elem (cnt-1) tb.terms).term in
-      Seq.pop 2 tb.terms;
-      [|cond;t1|]
-    end in
+    assert (cnt >= 3);
+    let cond = (Seq.elem (cnt-3) tb.terms).term
+    and t1   = (Seq.elem (cnt-2) tb.terms).term
+    and t2   = (Seq.elem (cnt-1) tb.terms).term in
+    Seq.pop 3 tb.terms;
+    [|cond;t1;t2|]
+  in
   let t = Flow(Ifexp,args)
   and s = Sign.make_const tb.rtype in
   if tb.trace then

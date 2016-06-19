@@ -51,7 +51,7 @@ val complete_quantified: bool -> t -> unit
 val expect_inductive:   Context.t -> t -> unit
 val complete_inductive: info -> int -> t -> unit
 val expect_if:      t -> unit
-val complete_if:    bool -> t -> unit
+val complete_if:    t -> unit
 val expect_case:    Context.t -> t -> unit
 val complete_case:  t -> unit
 val expect_inspect: t -> unit

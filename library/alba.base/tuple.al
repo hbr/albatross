@@ -14,12 +14,10 @@ end
 first0 (t:(A,B)): A
     -> inspect t
        case (a,_) then a
-       end
 
 second0 (t:(A,B)): B
     -> inspect t
        case (_,b) then b
-       end
 
 
 first  (t:(A,B)): A     note built_in end  -- destructors still missing

@@ -25,35 +25,39 @@ end
     -> inspect a, b
        case 0,_ then true
        case successor(_), 0 then false
-       case successor(a), successor(b) then a <= b end
+       case successor(a), successor(b) then a <= b
 
 (<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
 
 (+) (a,b: NATURAL):  NATURAL
-    -> inspect b
-       case 0           then a
-       case n.successor then (a + n).successor
-       end
+    -> inspect
+           b
+       case 0 then
+           a
+       case n.successor then
+           (a + n).successor
 
 (-)  (a,b:NATURAL): NATURAL
     require b <= a
-    ensure  -> inspect a,b
-               case    _, 0 then a
-               case    successor(a), successor(b) then a - b
-               end
+    ensure
+        -> inspect
+               a,b
+           case    _, 0 then
+               a
+           case    successor(a), successor(b) then
+               a - b
     end
 
 (*) (a,b: NATURAL):  NATURAL
     -> inspect a
        case 0           then 0
        case n.successor then n*b + b
-       end
+
 
 (^) (a,b: NATURAL):  NATURAL
     -> inspect b
        case 0           then 1
        case n.successor then a^n * a
-       end
 
 predecessor (n:NATURAL): NATURAL
     require
@@ -61,7 +65,6 @@ predecessor (n:NATURAL): NATURAL
     ensure
         -> inspect n
            case    m.successor then m
-           end
     end
 
 

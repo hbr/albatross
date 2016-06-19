@@ -960,8 +960,21 @@ operator_expr:
 |   expr_1 DARROW expr_1              { Binexp (DArrowop,$1,$3) }
 
 
+exp_conditional:
+    KWif expr_1 KWthen expr KWelse expr {
+  Expif ($2,$4,$6)
+}
 
+exp_inspect:
+    KWinspect expr exp_case_list {
+  Expinspect ($2,$3)
+    }
 
+exp_case_list:
+    exp_case %prec LOWEST_PREC { [$1] }
+|   exp_case exp_case_list { $1 :: $2 }
+
+exp_case: KWcase expr KWthen expr { $2, $4 }
 
 
 /* ------------------------------------------------------------------------- */
@@ -1027,37 +1040,3 @@ separator:
     SEMICOL  {()}
 |   NEWLINE  {()}
 
-
-/* ------------------------------------------------------------------------- */
-/*  old grammar rules  */
-/* ------------------------------------------------------------------------- */
-
-/* ------------------------------------------------------------------------- */
-/* Flow control */
-/* ------------------------------------------------------------------------- */
-
-exp_conditional:
-    KWif exp_then_part_list exp_else_part KWend { Expif ($2,$3) }
-
-exp_then_part_list:
-    exp_then_part { [$1] }
-|   exp_then_part KWelseif exp_then_part_list  { $1::$3 }
-
-exp_then_part:
-    expr_1 KWthen expr { $1, $3 }
-
-exp_else_part:
-    { None }
-|   KWelse expr { Some $2 }
-
-
-exp_inspect:
-    KWinspect expr exp_case_list KWend {
-  Expinspect ($2,$3)
-    }
-
-exp_case_list:
-    exp_case { [$1] }
-|   exp_case exp_case_list { $1 :: $2 }
-
-exp_case: KWcase expr KWthen expr { $2, $4 }

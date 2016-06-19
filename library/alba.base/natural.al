@@ -67,7 +67,6 @@ predecessor (n:NATURAL): NATURAL
     ensure
         -> inspect n
            case    m.successor then m
-           end
     end
 
 
@@ -82,7 +81,6 @@ predecessor (n:NATURAL): NATURAL
     -> inspect b
        case 0           then a
        case n.successor then (a + n).successor
-       end
 
 
 all(a:NATURAL)
@@ -234,7 +232,6 @@ all(a,b:NATURAL)
        case    0, _ then true
        case    _, 0 then false
        case    successor(a), successor(b) then a <= b
-       end
 
 (<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
 
@@ -663,7 +660,6 @@ all(a,b,n,m:NATURAL)
     ensure  -> inspect a,b
                case    _, 0 then a
                case    successor(a), successor(b) then a - b
-               end
     end
 
 
@@ -675,7 +671,6 @@ all(a,b,n,m:NATURAL)
     -> inspect a
        case 0           then 0
        case n.successor then n*b + b
-       end
 
 
 all(a:NATURAL)
@@ -750,7 +745,6 @@ all(a,b,c:NATURAL) -- distributivity
     -> inspect b
        case 0           then 1
        case n.successor then a^n * a
-       end
 
 all(a:NATURAL)
     ensure

@@ -17,5 +17,4 @@ item (o:OPTION[G]): G
     ensure
         -> inspect o
            case value(v) then v
-           end
     end

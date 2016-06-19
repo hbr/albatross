@@ -399,7 +399,7 @@ type expression =
   | Typedexp      of expression * type_t withinfo
   | Expcolon      of expression * expression
   | Expassign     of expression * expression
-  | Expif         of (expression * expression) list * expression option
+  | Expif         of expression * expression * expression
   | Expinspect    of expression * (expression*expression) list
   | Proofinspect  of expression * (info_expression*compound) list * info_expression
   | Proofif       of (info_expression * compound) list * compound withinfo
@@ -545,22 +545,13 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expassign (e1,e2) ->
       withparen ((strexp e1) ^ ":=" ^ (strexp e2)) wp
 
-  | Expif (thenlist,elsepart) ->
-      "if "
-      ^ (string_of_list
-           thenlist
-           (fun tp ->
-             let cond,comp = tp
-             in
-             (string_of_expression cond)
-             ^ " then "
-             ^ (string_of_expression comp))
-           " elseif ")
-      ^ (
-        match elsepart with
-          None -> ""
-        | Some e -> " else " ^ (string_of_expression e))
-      ^ " end"
+  | Expif (cond,e1,e2) ->
+      "if " ^
+      (string_of_expression cond) ^
+      " then " ^
+      (string_of_expression e1) ^
+      " else " ^
+      (string_of_expression e2)
 
   | Proofinspect (insp,caselst,ens) ->
       "inspect " ^ (string_of_expression insp)
