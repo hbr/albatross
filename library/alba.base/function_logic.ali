@@ -132,6 +132,24 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> x = y
 
 
+(>->) (p:{A}, q:{B}): ghost BOOLEAN
+        -- Is there an injection from the set 'p' into the set 'q'?
+    -> some(f:A->B)
+           f.is_injective and
+           f.domain = p and
+           f.range <= q
+
+
+(<->) (p:{A}, q:{B}): ghost BOOLEAN
+        -- Are the sets 'p' and 'q' equipotent i.e. is there a one to one
+        -- correpondence between all elements of 'p' and 'q'?
+    -> some(f:A->B)
+           f.is_injective and
+           f.domain = p and
+           f.range  = q
+
+
+
 
 all(f,g:A->B, p:{A})
     ensure

@@ -328,6 +328,18 @@ is_injective (f:A->B): ghost BOOLEAN
                 ==> x = y
 
 
+(>->) (p:{A}, q:{B}): ghost BOOLEAN
+    -> some(f:A->B)
+           f.is_injective and
+           f.domain = p and
+           f.range <= q
+
+(<->) (p:{A}, q:{B}): ghost BOOLEAN
+    -> some(f:A->B)
+           f.is_injective and
+           f.domain = p and
+           f.range  = q
+
 
 all(f,g:A->B)
     require
