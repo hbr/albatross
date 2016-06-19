@@ -9,6 +9,56 @@ A: ANY
    ======= :}
 carrier (r:{A,A}): ghost A? -> domain(r) + range(r)
 
+identity: {A,A} = {x,y: x = y}
+
+diagonal(p:{A}): {A,A}
+    -> {x,y: x = y and x in p}
+
+
+{: Closure
+   ======= :}
+
+
+closed(a:A, r:{A,A}): ghost {A}
+    -> {(p): a in p, all(x,y) x in p ==> r(x,y) ==> y in p}
+
+
+closed(p:{A}, r:{A,A}): ghost {A}
+    -> {(q): all(x) x in p ==> x in q,
+             all(x,y) x in q ==> r(x,y) ==> y in q}
+
+
+all(a:A, r:{A,A})
+    ensure
+        a.closed(r) <= {a}.closed(r)
+        assert
+            all(x)
+                require
+                    x in a.closed(r)
+                ensure
+                    x in {a}.closed(r)
+                    inspect x in a.closed(r)
+                end
+    end
+
+
+all(a:A, r:{A,A})
+    ensure
+        {a}.closed(r) <= a.closed(r)
+        assert
+            all(x)
+                require
+                    x in {a}.closed(r)
+                ensure
+                    x in a.closed(r)
+                    inspect x in {a}.closed(r)
+                    case all(x) x in {a} ==> x in {a}.closed(r)
+                        assert
+                            a = x
+                            a in a.closed(r)
+                end
+    end
+
 
 
 
@@ -224,9 +274,9 @@ symmetric (r:{A,A}): {A,A}
 {: Transitivity
    ============ :}
 
-is_transitive: ghost {{A,A}}
-        -- The collection of all transitive relations.
-    = {r: all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)}
+is_transitive(r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' transitive?
+    -> all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)
 
 (+) (r:{A,A}): ghost {A,A}
         -- The least transitive relation which contains 'r'.
@@ -251,13 +301,18 @@ all(a,b,c:A, r:{A,A})
 
 all(r:{A,A})
     ensure
-        +r in is_transitive
+        (+r).is_transitive
     end
+
+
+
+{: Reflexive transitive closure
+   ============================ :}
 
 
 (*) (r:{A,A}): ghost {A,A}
         -- The least reflexive transitive relation which contains 'r'.
-    -> + r.reflexive
+    -> {x,y: y in x.closed(r)}
 
 
 

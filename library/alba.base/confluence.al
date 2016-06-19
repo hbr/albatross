@@ -231,5 +231,29 @@ all(r:{A,A}) ensure r.is_diamond ==> (+r).is_diamond end
 
 
 is_confluent(r:{A,A}): ghost BOOLEAN
-        -- Is the relation confluent i.e. is its transitive closure a diamond?
-    -> (+r).is_diamond
+        -- Is the relation confluent i.e. starting from an element 'a' and stepping
+        -- form 'a' to 'b' and from 'a' to 'c', is there an element 'd' so that 'd'
+        -- can be reached from 'b' and 'c' in zero or more steps?
+    -> all(a,b,c)
+           r(a,b)
+           ==> r(a,c)
+           ==> some(d) d in b.closed(r) and d in c.closed(r)
+
+
+all(r:{A,A})
+    require
+        r.is_diamond
+    ensure
+        r.is_confluent
+        assert
+            all(a,b,c)
+                require
+                    r(a,b)
+                    r(a,c)
+                ensure
+                    some(d) d in b.closed(r) and d in c.closed(r)
+                    via some(d) r(b,d) and r(c,d)
+                        assert
+                            d in b.closed(r) and d in c.closed(r)
+                end
+    end
