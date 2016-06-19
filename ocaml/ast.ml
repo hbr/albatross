@@ -436,11 +436,15 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         check f nbranch tlst c;
         check_args args
     | Lam (n,nms,pres,t0,pr,tp) ->
-        assert false (* nyi *)
+        not_yet_implemented
+          info
+          "Lambda expressions in recursive definitions"
         (*let c0 = Context.push_untyped [|ST.symbol "x"|] c in
         check t0 nbranch tlst c0*)
     | QExp (n,fargs,fgs,t0,_) ->
-        assert false (* nyi *)
+        error_info
+          info
+          "Quantified expressions not allowed in recursive definitions"
         (*let c0 = Context.push_untyped nms c in
         check t0 nbranch tlst c0*)
     | Flow (Ifexp, args) ->
@@ -477,7 +481,9 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             check res (nbranch+1) tlst2 c)
           0 ncases
     | Indset (n,nms,rs) ->
-        assert false (* nyi *)
+        error_info
+          info
+          "Inductively defined sets not allowed in recursive definitions"
   in
   let nvars = Context.count_variables c in
   let tlst0 =
