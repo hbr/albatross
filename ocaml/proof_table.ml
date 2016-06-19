@@ -324,6 +324,7 @@ let assumptions (at:t): term list =
 
 
 let assumption_indices (at:t): int list =
+  (* in reversed order *)
   at.reqs
 
 

@@ -274,7 +274,8 @@ type inductive_set_data =
     {pc:      PC.t;
      goal:    term;
      goal_predicate: term; (* [element in goal_predicate] reduces to [goal] *)
-     nass: int;
+     other_vars: int array;
+     ass_lst: int list;
      element: term;
      set:     term;        (* as written in the inpect expression *)
      set_expanded: term;   (* the inductive set '{(p): r0, r1, ... }' *)
@@ -287,13 +288,14 @@ type inductive_set_data =
 
 
 let assumptions_for_variables
-    (ind_vars: int array)
-    (insp_vars: int list)
+    (ind_vars: int array)  (* The induction variables *)
+    (insp_vars: int list)  (* All variables of the inspect expression *)
     (pc:PC.t)
     : int list * int list =
   (* All assumptions of the contexts which are needed to define the variables
-     [ind_vars] and all the other variables which are not in [ind_vars] but in
-     the contexts. *)
+     [ind_vars] and all the other variables which are not in [insp_vars] but
+     in the contexts.
+   *)
   let ind_vars  = Array.copy ind_vars
   and nvars = Array.length ind_vars in
   assert (0 < nvars);
@@ -301,8 +303,8 @@ let assumptions_for_variables
   let rec collect
       (i:int) (nargs:int) (ass:int list) (pc:PC.t)
       : int list * int =
-    let idx_lst = PC.assumption_indices pc in
-    let ass = List.rev_append idx_lst ass
+    let idx_lst_rev = PC.assumption_indices pc in
+    let ass = List.rev_append idx_lst_rev ass
     in
     let c = PC.context pc in
     let loc_nargs = Context.count_last_arguments c in
@@ -351,32 +353,27 @@ let induction_goal_predicate
     (vars:int array)              (* induction variables *)
     (others:int list)             (* other variables *)
     (ass_lst:int list)            (* list of assumptions *)
-    (filter: term -> bool)        (* which assumptions enter *)
     (goal: term)
     (pc:PC.t)
-    : int * term =
-  (*
-    Generate the goal predicate and the number of assumptions:
+    : term =
+  (* Generate the goal predicate:
 
         {vars: all(others) a1 ==> a2 ==> ... ==> goal}
 
     where all assumptions ai pass the filter.
-   *)
+        *)
   let c = PC.context pc in
   let nvars = PC.count_variables pc
   and argnames = Context.argnames c
   and argtypes = Context.argtypes c
   in
-  let nass, ass_rev =
+  let ass_rev =
     List.fold_left
-      (fun (n,lst) idx ->
+      (fun lst idx ->
         let p = PC.term idx pc in
-        if filter p then
-          1+n, p::lst
-        else
-          n,lst
+        p :: lst
       )
-      (0,[])
+      ([])
       ass_lst
   and n_ind_vars = Array.length vars
   and all_vars = Array.append (Array.of_list others) vars
@@ -413,7 +410,7 @@ let induction_goal_predicate
   in
   let tp = Context.predicate_of_type (Context.tuple_of_types tps_outer c) c in
   let t = Context.make_lambda n_ind_vars nms_outer  [] t true 0 tp c in
-  nass, t
+  t
 
 
 
@@ -459,7 +456,7 @@ let inductive_set_context
   let set_expanded, set_tp, rules = inductive_set info set c
   in
   let nvars = Context.count_variables c in
-  let goal_pred, nass =
+  let goal_pred, other_vars, ass_lst =
     let ft = Context.feature_table c in
     let vars   = Feature_table.args_of_tuple elem nvars ft in
     let vars = Array.map
@@ -473,20 +470,19 @@ let inductive_set_context
         )
         vars
     in
-    let ass_lst, var_lst =
+    let ass_lst, other_var_lst =
       let insp_vars = Term.used_variables elem nvars in
       let insp_vars = Term.used_variables_0 set nvars insp_vars in
       assumptions_for_variables vars insp_vars pc in
-    let nass,goal_pred =
+    let goal_pred =
       induction_goal_predicate
         vars
-        var_lst
+        other_var_lst
         ass_lst
-        (fun t -> not (Term.equivalent t (Application(set,[|elem|],true))))
         user_goal
         pc
     in
-    goal_pred, nass
+    goal_pred, Array.of_list other_var_lst, ass_lst
   in
   let pa = Application(set,[|elem|],true) in
   let pa_idx =
@@ -509,7 +505,8 @@ let inductive_set_context
   {pc             = pc;
    goal           = user_goal;
    goal_predicate = goal_pred;
-   nass           = nass;
+   other_vars     = other_vars;
+   ass_lst        = ass_lst;
    set            = set;
    set_expanded   = set_expanded;
    element        = elem;
@@ -729,6 +726,7 @@ let inductive_set_case_context
       ([],[],false)
       ps
   in
+  (* add induction hypotheses in usable form *)
   let ass_lst_rev =
     List.fold_left
       (fun alst idx ->
@@ -929,16 +927,25 @@ and prove_one
   (* Prove [goal] with the proof expression [prf]. Assume that the preconditions
      of the goal are already verified. *)
   assert (PC.is_private pc);
+  let result idx =
+    let ok = Term.equivalent goal (PC.term idx pc) in
+    if not ok then begin
+      printf "goal   %s\n" (PC.string_long_of_term goal pc);
+      printf "proved %s\n" (PC.string_long_of_term_i idx pc)
+    end;
+    assert (Term.equivalent goal (PC.term idx pc));
+    idx
+  in
   match prf with
     SP_Axiom | SP_Deferred -> assert false (* cannot happen here *)
   | SP_Proof (lst, pexp) ->
       prove_sequence lst pc;
       begin match pexp with
         None ->
-          Prover.prove_and_insert goal pc
+          result (Prover.prove_and_insert goal pc)
       | Some prf ->
           try
-            begin
+            result (
               match prf.v with
                 PE_If (cond, sprf1, sprf2) ->
                   prove_if prf.i goal cond sprf1 sprf2 pc
@@ -952,7 +959,7 @@ and prove_one
                   prove_contradiction prf.i goal exp prf1 pc
               | PE_Transitivity lst ->
                   prove_by_transitivity prf.i goal lst pc
-            end
+            )
           with Proof.Proof_failed msg ->
             error_info prf.i ("Does not prove \"" ^
                               (PC.string_of_term goal pc) ^
@@ -1257,7 +1264,7 @@ and prove_inductive_set
             data.set_expanded
             rule
             irule
-            data.nass
+            (List.length data.ass_lst)
             data.goal_predicate
             pc in
         let idx =
@@ -1282,7 +1289,7 @@ and prove_inductive_set
                 data.set_expanded
                 data.rules.(irule)
                 irule
-                data.nass
+                (List.length data.ass_lst)
                 data.goal_predicate
                 pc
             in
@@ -1296,8 +1303,20 @@ and prove_inductive_set
   in
   let gidx = PC.add_mp data.element_in_set ind_idx false data.pc
   in
-  PC.add_beta_reduced gidx false pc
-
+  let res =
+    let idx = PC.add_beta_reduced gidx false pc in
+    let vars = Array.map (fun i -> Variable i) data.other_vars in
+    PC.specialized idx vars [||] 0 pc
+  in
+  let res =
+    List.fold_left
+      (fun res ass_idx ->
+        PC.add_mp ass_idx res false pc
+      )
+      res
+      data.ass_lst
+  in
+  res
 
 
 and prove_inductive_set_case
@@ -1333,7 +1352,11 @@ and prove_inductive_set_case
   let idx = PC.add_proved_term t pt false pc01 in
   let idx = PC.add_beta_redex goal_pred idx false pc01 in
   let t,pt = PC.discharged idx pc01 in
-  PC.add_proved_term t pt false pc0
+  let res = PC.add_proved_term t pt false pc0 in
+  if PC.is_tracing pc0 then
+    printf "\n%scase succeeded\n\n" (PC.trace_prefix pc0);
+  res
+
 
 
 
