@@ -195,7 +195,7 @@ let analyze_type_inspect
     (goal:term)
     (pc:PC.t)
     : IntSet.t * int * type_term =
-  (* constructor set, induction law, induction variable, inductive type *)
+  (* constructor set, induction law, inductive type *)
   let c     = PC.context pc in
   let nvars = Context.count_variables c
   and ct    = Context.class_table c
@@ -329,20 +329,23 @@ let assumptions_for_variables
   in
   let ass, nvars = collect 0 0 [] pc in
   let used_lst =
-    List.fold_left
-      (fun lst idx -> Term.used_variables_0 (PC.term idx pc) nvars lst)
+    if ass = [] then
       []
-      ass
-  in
-  let used_lst =
-    let insp_vars = Array.of_list insp_vars in
-    Array.sort Pervasives.compare insp_vars;
-    List.filter
-      (fun i ->
-        try ignore(Search.binsearch i insp_vars); false
-        with Not_found -> true
-      )
-      used_lst
+    else
+      let used_lst =
+        List.fold_left
+          (fun lst idx -> Term.used_variables_0 (PC.term idx pc) nvars lst)
+          []
+          ass
+      in
+      let insp_vars = Array.of_list insp_vars in
+      Array.sort Pervasives.compare insp_vars;
+      List.filter
+        (fun i ->
+          try ignore(Search.binsearch i insp_vars); false
+          with Not_found -> true
+        )
+        used_lst
   in
   ass, used_lst
 
@@ -361,7 +364,8 @@ let induction_goal_predicate
         {vars: all(others) a1 ==> a2 ==> ... ==> goal}
 
     where all assumptions ai pass the filter.
-        *)
+   *)
+  assert (ass_lst <> [] || others = []);
   let c = PC.context pc in
   let nvars = PC.count_variables pc
   and argnames = Context.argnames c
@@ -449,6 +453,7 @@ let inductive_set_context
 
         inspect
             elem in set  -- elem must be either a variable or a tuple of variables
+                         -- The variables in 'elem' must not appear in 'set'.
         ...
    *)
   assert (not (PC.is_global pc));
@@ -458,11 +463,18 @@ let inductive_set_context
   let nvars = Context.count_variables c in
   let goal_pred, other_vars, ass_lst =
     let ft = Context.feature_table c in
+    let set_vars = Term.used_variables set nvars in
     let vars   = Feature_table.args_of_tuple elem nvars ft in
     let vars = Array.map
         (fun arg ->
           match arg with
             Variable i when i < nvars ->
+              if List.mem i set_vars then
+                error_info
+                  info
+                  ("Induction variable \"" ^ (PC.string_of_term arg pc) ^
+                   "\" must not occur in the set/relation \"" ^
+                   (PC.string_of_term set pc) ^ "\"");
               i
           | _ ->
               error_info info ("\"" ^ (PC.string_of_term arg pc) ^
