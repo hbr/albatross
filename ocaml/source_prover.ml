@@ -1130,8 +1130,6 @@ and prove_inductive_type
       prefix
       (ST.string (Context.argnames (PC.context pc)).(ivar))
   end;
-  let pc_outer = pc in
-  let pc = PC.push_untyped [||] pc_outer in
   let c  = PC.context pc in
   let nvars = Context.count_variables c
   and ft  = Context.feature_table c in
@@ -1147,7 +1145,7 @@ and prove_inductive_type
       IntMap.empty
       cases
   in
-  let ind_idx =
+  let idx_goal_redex =
     (* rest of the cases *)
     IntSet.fold
       (fun cons_idx ind_idx ->
@@ -1173,9 +1171,7 @@ and prove_inductive_type
       cons_set
       ind_idx
   in
-  let t,pt = PC.discharged_bubbled ind_idx pc in
-  let idx = PC.add_proved_term t pt false pc_outer in
-  PC.add_beta_reduced idx false pc_outer
+  PC.add_beta_reduced idx_goal_redex false pc
 
 
 
