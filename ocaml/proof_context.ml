@@ -893,7 +893,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                 in
                 let exp = Proof_table.apply_term t0 args nb pc.base in
                 let res,rese,_ =
-                  if full then
+                  if full || is_flow exp then
                     eval exp nb full depth
                   else
                     exp, Eval.Term exp, false
@@ -939,30 +939,27 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           begin
             match ctrl with
               Ifexp ->
-                assert (len = 2 || len = 3);
-                if len = 2 then
-                  assert false (* nyi *)
-                else
+                assert (len = 3);
+                begin try
+                  let idx = find_match args.(0) pc in
+                  let fst,fste,_ = eval args.(1) nb full depth
+                  and conde,snde = Eval.Term args.(0), Eval.Term args.(2) in
+                  fst, Eval.If(true,idx,[|conde;fste;snde|]), true
+                with Not_found ->
                   begin try
-                    let idx = find_match args.(0) pc in
-                    let fst,fste,_ = eval args.(1) nb full depth
-                    and conde,snde = Eval.Term args.(0), Eval.Term args.(2) in
-                    fst, Eval.If(true,idx,[|conde;fste;snde|]), true
-                  with Not_found ->
-                    begin try
-                      let idx = find_match (negation args.(0) pc) pc in
-                      let snd,snde,_ = eval args.(2) nb full depth
-                      and conde,fste = Eval.Term args.(0), Eval.Term args.(1) in
+                    let idx = find_match (negation args.(0) pc) pc in
+                    let snd,snde,_ = eval args.(2) nb full depth
+                    and conde,fste = Eval.Term args.(0), Eval.Term args.(1) in
                     snd, Eval.If(false,idx,[|conde;fste;snde|]), true
-                    with Not_found ->
-                      t,
-                      Eval.Flow(Ifexp,
-                                [|Eval.Term args.(0);
-                                  Eval.Term args.(1);
-                                  Eval.Term args.(2)|]),
-                      false
-                    end
+                  with Not_found ->
+                    t,
+                    Eval.Flow(Ifexp,
+                              [|Eval.Term args.(0);
+                                Eval.Term args.(1);
+                                Eval.Term args.(2)|]),
+                    false
                   end
+                end
             | Inspect ->
                 assert (3 <= len);
                 assert (len mod 2 = 1);
@@ -985,8 +982,11 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                       let sub = Term_algo.unify insp n pat in
                       assert (Array.length sub = n);
                       let res = Term.apply res sub in
-                      let res1,rese,_ = eval res nb full depth in
-                      res1, Eval.Inspect(t,inspe,i,n,rese), true
+                      if full then
+                        let res1,rese,_ = eval res nb full depth in
+                        res1, Eval.Inspect(t,inspe,i,n,rese), true
+                      else
+                        res, Eval.Inspect(t,inspe,i,n,Eval.Term res), true
                     with Not_found ->
                       cases_from (i+1)
                 in
