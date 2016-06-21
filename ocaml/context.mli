@@ -105,6 +105,7 @@ val all_quantified:  int -> formals -> formals -> term -> t -> term
 val some_quantified: int -> formals -> formals -> term -> t -> term
 val prenex_term:     term -> t -> term
 val prenex_sort_term:term -> t -> term
+val prenex_term_bubble_one:term -> t -> term
 
 val variable_name: int -> t -> int
     (** The name of the [i]th variable argument *)

@@ -173,6 +173,11 @@ let prenex_term (t:term) (at:t): term =
   Context.prenex_term t at.c
 
 
+let prenex_term_bubble_one (t:term) (at:t): term =
+  (* The term [t] in prenex normal form with respect to universal quantifiers *)
+  Context.prenex_term_bubble_one t at.c
+
+
 
 let make (verbosity:int): t =
   {seq      = Ass_seq.empty ();
@@ -912,7 +917,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         end;
         let term = discharged_term res_idx at in
         if bubble then
-          prenex_term term (pop at)
+          prenex_term_bubble_one term (pop at)
         else
           term
   in
@@ -1101,8 +1106,10 @@ let discharged0 (i:int) (bubble:bool) (at:t)
     let t0 = Term.subst0 t0 n1new args n2new ags in
     let t  = Term.all_quantified n1new tps fgs t0 in
     let t  =
-      if bubble then prenex_term t (pop at)
-      else t
+      if bubble then
+        prenex_term_bubble_one t (pop at)
+      else
+        t
     in
     match pt with
       Axiom _ ->
