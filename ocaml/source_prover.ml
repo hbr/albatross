@@ -187,6 +187,35 @@ let prove_goals (elst: info_terms) (pc:PC.t): unit =
 
 
 
+let beta_reduced (t:term) (pc:PC.t): term =
+  match t with
+    Application(Lam(n,_,_,t0,_,tp),args,_) ->
+      assert (Array.length args = 1);
+      PC.beta_reduce n t0 tp args 0 pc
+  | _ ->
+      t
+
+
+(* Support functions for induction proofs *)
+
+
+type inductive_set_data =
+    {pc:      PC.t;
+     goal:    term;
+     goal_predicate: term; (* [element in goal_predicate] reduces to [goal] *)
+     other_vars: int array;
+     ass_lst: int list;
+     element: term;
+     set:     term;        (* as written in the inpect expression *)
+     set_expanded: term;   (* the inductive set '{(p): r0, r1, ... }' *)
+     rules:  term array;   (* the rules *)
+     induction_rule: int;  (* index of the assertion of the induction rule *)
+     element_in_set: int   (* assertion which proves [element in set] *)
+   }
+
+
+
+
 let inner_case_context
     (ass_lst_rev: int list) (* List of assumptions already in the middle context *)
     (case_goal_pred: term)  (* case goal predicate *)
@@ -366,31 +395,6 @@ let inductive_type_case_context
   let ass_lst_rev, goal, pc2 =
     inner_case_context ass_lst_rev case_goal_pred nass pc1 in
   ass_lst_rev, goal, case_goal_pred, pc2
-
-
-
-
-let beta_reduced (t:term) (pc:PC.t): term =
-  match t with
-    Application(Lam(n,_,_,t0,_,tp),args,_) ->
-      assert (Array.length args = 1);
-      PC.beta_reduce n t0 tp args 0 pc
-  | _ ->
-      t
-
-type inductive_set_data =
-    {pc:      PC.t;
-     goal:    term;
-     goal_predicate: term; (* [element in goal_predicate] reduces to [goal] *)
-     other_vars: int array;
-     ass_lst: int list;
-     element: term;
-     set:     term;        (* as written in the inpect expression *)
-     set_expanded: term;   (* the inductive set '{(p): r0, r1, ... }' *)
-     rules:  term array;   (* the rules *)
-     induction_rule: int;  (* index of the assertion of the induction rule *)
-     element_in_set: int   (* assertion which proves [element in set] *)
-   }
 
 
 
@@ -863,7 +867,7 @@ let inductive_set_case_context
   ass_lst_rev, goal, goal_pred1, pc2
 
 
-
+(* Support functions for transitivity proofs *)
 
 let get_transitivity_data
     (info:info)
@@ -975,6 +979,8 @@ let prove_transitivity_step
 
 
 
+
+(* Mutually recursive prover functions *)
 
 let rec prove_and_store
     (entlst: entities list withinfo)
@@ -1278,7 +1284,6 @@ and prove_inductive_type
 
 
 
-
 and prove_type_case
     (info:info)
     (cons_idx:int)
@@ -1329,69 +1334,6 @@ and prove_type_case
   if PC.is_tracing pc then
     printf "\n%scase succeeded\n\n" (PC.trace_prefix pc);
   res
-
-
-
-(*
-and prove_type_case
-    (cons_idx:int)
-    (nms: names)    (* The names of the arguments of the constructor *)
-    (tp:type_term)  (* inductive type in the outer context *)
-    (prf:source_proof)
-    (ivar:int)
-    (goal:term)     (* in the outer context *)
-    (pc:PC.t)       (* outer context *)
-    : int =
-  (* Prove one case of an inductive type
-   *)
-  let nvars = PC.count_variables pc
-  and ntvs = PC.count_all_type_variables pc
-  and ft    = PC.feature_table pc
-  in
-  let _, ags = Class_table.split_type_term tp
-  and n = Array.length nms
-  in
-  let pat =
-    let args = standard_substitution n in
-    Feature_table.feature_call cons_idx (nvars+n) args ags ft
-  and tps = Feature_table.argument_types cons_idx ags ntvs ft
-  in
-  let pc1 = PC.push_typed (nms,tps) empty_formals pc
-  in
-  let n1,_,_,ps_rev,case_goal =
-    let t0 = Term.lambda_inner goal ivar
-    and p_tp = PC.predicate_of_type tp pc1 in
-    let p   = Lam(1, anon_argnames 1, [], t0, true, p_tp)
-    in
-    Feature_table.constructor_rule cons_idx p ags nvars ft in
-  assert (n1 = n);
-  if PC.is_tracing pc then begin
-    let prefix = PC.trace_prefix pc1 in
-    printf "\n\n%scase\n" prefix;
-    printf "%s    %s\n"   prefix (PC.string_long_of_term pat pc1);
-    if List.length ps_rev <> 0 then begin
-      printf "%srequire\n" prefix;
-      List.iter
-        (fun t ->
-          let t = PC.beta_reduce_term t pc1 in
-          printf "%s    %s\n" prefix (PC.string_long_of_term t pc1))
-        (List.rev ps_rev)
-    end;
-    printf "%sensure\n" prefix;
-    let t = PC.beta_reduce_term case_goal pc1 in
-    printf "%s    %s\n\n" prefix (PC.string_long_of_term t pc1)
-  end;
-  List.iter
-    (fun ass ->
-      ignore (PC.add_assumption ass true pc1))
-    (List.rev ps_rev);
-  PC.close pc1;
-  let case_goal_idx =
-    prove_one case_goal prf pc1
-  in
-  let t,pt = PC.discharged case_goal_idx pc1 in
-  PC.add_proved_term t pt false pc
-*)
 
 
 
