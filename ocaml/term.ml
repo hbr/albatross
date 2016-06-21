@@ -205,7 +205,9 @@ module Term: sig
   val induction_rule: int -> int -> term -> term -> term
     -> int * formals * term list * term
   val induction_law:  int -> term -> term -> type_term -> type_term -> term
-  val prenex: term -> int -> int -> int -> term
+  val prenex:            term -> int -> int -> int -> term
+  val prenex_sort:       term -> int -> int -> int -> term
+  val prenex_bubble_one: term -> int -> int -> int -> term
 
 end = struct
 
@@ -1278,12 +1280,27 @@ end = struct
 
        Note: The implication index is valid in the global environment!!
      *)
-   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id in
+   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id true 0 in
    all_quantified n tps fgs t0
 
 
+  and prenex_sort (t:term) (nb:int) (nb2:int) (imp_id:int): term =
+   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 0 in
+   all_quantified n tps fgs t0
 
-  and prenex_0 (t:term) (nb:int) (nargs:int) (nb2:int) (imp_id:int)
+  and prenex_bubble_one (t:term) (nb:int) (nb2:int) (imp_id:int): term =
+   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 1 in
+   all_quantified n tps fgs t0
+
+
+  and prenex_0
+      (t:term)
+      (nb:int)
+      (nargs:int)
+      (nb2:int)
+      (imp_id:int)
+      (recursive:bool)
+      (nbubble:int)
       : int * formals * formals * term =
     (* Calculate the number of variables (with their names and types) which
        bubble up from the term [t] because the target of an implication chain
@@ -1292,40 +1309,60 @@ end = struct
        nb:    total number of variables in the environment
        nargs: number of the variables to which bubbled up variables have to
               be appended
+
+       not recursive and nbubble = 0: just sort the variables if universally
+                                      quantified
+
+       not recursive and nbubble > 0: sort the variables and let bubble up
+                                      up to nbubble universal quantifiers
+
+       recursive:                     full recursive prenex calculation
      *)
+    let pren t nb nb2 imp_id =
+      if recursive then
+        prenex t nb nb2 imp_id
+      else
+        t
+    in
     let norm_args (args:term array) (nb:int) (nb2:int): term array =
-      Array.map (fun t -> prenex t nb nb2 imp_id) args
+      Array.map (fun t -> pren t nb nb2 imp_id) args
     and norm_lst  (lst: term list) (nb:int) (nb2:int): term list =
-      List.map (fun t -> prenex t nb nb2 imp_id) lst in
+      List.map (fun t -> pren t nb nb2 imp_id) lst in
     match t with
       Variable i -> 0, empty_formals, empty_formals, t
     | VAppl(i,args,ags) when i = nb + imp_id ->
         assert (Array.length args = 2);
         assert (Array.length ags  = 0);
-        let a = prenex args.(0) nb nb2 imp_id
+        let a = pren args.(0) nb nb2 imp_id
         and n,(nms,tps),(fgnms,fgcon),b1 =
-          prenex_0 args.(1) nb nargs nb2 imp_id in
+          prenex_0 args.(1) nb nargs nb2 imp_id recursive nbubble in
         let a1 = shift n (Array.length fgnms) a in
-        assert (not (is_all_quantified b1));
+        assert (not recursive || not (is_all_quantified b1));
         let t = VAppl(i+n,[|a1;b1|],ags) in
         n, (nms,tps), (fgnms,fgcon), t
     | VAppl(i,args,ags) ->
         0, empty_formals, empty_formals,
         VAppl(i, norm_args args nb nb2, ags)
     | Application(f,args,pr) ->
-        let f = prenex f nb nb2 imp_id
+        let f = pren f nb nb2 imp_id
         and args = norm_args args nb nb2 in
         0, empty_formals, empty_formals, Application(f,args,pr)
     | Lam(n,nms,ps,t0,pr,tp) ->
         let ps = norm_lst ps (1+nb) nb2
-        and t0 = prenex t0 (1+nb) nb2 imp_id in
+        and t0 = pren t0 (1+nb) nb2 imp_id in
           0, empty_formals, empty_formals, Lam(n,nms,ps,t0,pr,tp)
     | QExp(n0,(nms,tps),(fgnms,fgcon),t0,true) ->
         let nb  = nb  + n0
         and nb2 = nb2 + Array.length fgnms in
         let n1,(nms1,tps1),(fgnms1,fgcon1),t1 =
-          prenex_0 t0 nb (n0+nargs) nb2 imp_id in
-        assert (not (is_all_quantified t1));
+          if recursive then
+            prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive nbubble
+          else if nbubble > 0 then
+            prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive (nbubble-1)
+          else
+            0, empty_formals, empty_formals, t0
+        in
+        assert (not recursive || not (is_all_quantified t1));
         let nms   = prepend_names nms1 nms
         and tps   = Array.append tps1 tps
         and fgnms = prepend_names fgnms fgnms1
@@ -1333,12 +1370,12 @@ end = struct
         in
         let (nms,tps),(fgnms,fgcon),t1 =
           remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
-        assert (not (is_all_quantified t1));
+        assert (not recursive || not (is_all_quantified t1));
         Array.length nms, (nms,tps), (fgnms,fgcon), t1
     | QExp(n0,(nms,tps),(fgnms,fgcon),t0,false) ->
         assert ((fgnms,fgcon) = empty_formals);
         0, empty_formals, empty_formals,
-        QExp(n0, (nms,tps), (fgnms,fgcon), prenex t0 nb nb2 imp_id, false)
+        QExp(n0, (nms,tps), (fgnms,fgcon), pren t0 nb nb2 imp_id, false)
     | Flow(ctrl,args) ->
         0, empty_formals, empty_formals,
         Flow(ctrl, norm_args args nb nb2)

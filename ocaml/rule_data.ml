@@ -524,6 +524,14 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
   end
 
 
+let count_args_to_specialize (rd:t): int =
+  match rd.premises with
+    [] ->
+      rd.nargs
+  | (gp1,_,_,_) :: _ ->
+      gp1
+
+
 let specialize
     (rd:t) (args:term array) (ags:agens) (orig:int) (c:Context.t)
     : t =
@@ -537,6 +545,13 @@ let specialize
   assert (not (is_specialized rd));
   assert (nargs <= rd.nargs);
   assert (nargs = rd.nargs || is_implication rd);
+  if not (nargs = rd.nargs || let gp1,_,_,_ = List.hd rd.premises in nargs = gp1)
+  then begin
+    printf "specialize\n";
+    printf "   %s\n" (string_of_term rd);
+    printf "   nargs %d, gp1 %d\n" nargs
+      (let gp1,_,_,_ = List.hd rd.premises in gp1)
+  end;
   assert (nargs = rd.nargs || let gp1,_,_,_ = List.hd rd.premises in nargs = gp1);
   let full        = nargs = rd.nargs
   and nbenv_delta = nbenv - count_variables rd

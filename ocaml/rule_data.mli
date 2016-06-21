@@ -27,6 +27,7 @@ val premises:             t -> Context.t -> (term*bool) list
 val count_premises:       t -> int
 val short_string:         t -> string
 val verify_specialization: arguments -> Context.t -> t -> agens
+val count_args_to_specialize: t -> int
 val specialize:           t -> arguments -> agens -> int -> Context.t -> t
 
 val drop: t -> Context.t -> t

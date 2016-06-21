@@ -187,6 +187,37 @@ let prove_goals (elst: info_terms) (pc:PC.t): unit =
 
 
 
+let inner_case_context
+    (ass_lst_rev: int list) (* List of assumptions already in the middle context *)
+    (case_goal_pred: term)  (* case goal predicate *)
+    (nass:int)              (* additional assumptions in the goal predicate *)
+    (pc:PC.t)
+    : int list * term * PC.t (* assumptions, goal, inner context *)
+    =
+  let stren_goal = PC.beta_reduce_term case_goal_pred pc in
+  let n1,fargs1,fgs1,chn = Term.all_quantifier_split_1 stren_goal in
+  let pc1 = PC.push_typed fargs1 fgs1 pc in
+  let ass_lst_rev, goal =
+    interval_fold
+      (fun (alst,chn) _ ->
+        let a,chn =
+          try
+            PC.split_implication chn pc1
+          with Not_found ->
+            assert false (* cannot happen *)
+        in
+        PC.add_assumption a true pc1 :: alst,
+        chn
+      )
+      (ass_lst_rev, chn)
+      0
+      nass
+  in
+  (* Now we have context [all(other_vars) require a1; a2; ...] *)
+  PC.close pc1;
+  ass_lst_rev, goal, pc1
+
+
 
 
 let analyze_type_inspect
@@ -230,8 +261,8 @@ let analyze_type_case_pattern
     (cons_set:IntSet.t)
     (tp:type_term)
     (pc:PC.t)
-    : int * term * PC.t =
-  (* cons_idx, pat, pc1 *)
+    : int * names =
+  (* cons_idx, names *)
   let c     = PC.context pc
   and nvars = PC.count_variables pc in
   let pat,nms = Typer.case_variables ie.i ie.v false c in
@@ -257,7 +288,84 @@ let analyze_type_case_pattern
         cons_idx
     | _ ->
         invalid_pat ()
-  in cons_idx, pat, pc1
+  in cons_idx, nms
+
+
+
+let inductive_type_case_context
+    (cons_idx: int)     (* constructor *)
+    (nms: names)        (* argument names of the constructor *)
+    (tp:  type_term)    (* type of the induction variable *)
+    (goal_pred:term)
+    (nass: int)         (* number of assumptions in the goal predicate *)
+    (pc:PC.t)
+    : int list * term * term * PC.t
+      (* assumptions, goal, case_goal_pred (middle context), inner context *)
+    =
+  (* Prepare the inner contextand return the reversed list of assumptions,
+     the goal and the inner context (2 levels deeper than the inspect context).
+
+     goal_pred: p = {x: all(y,...) r1 ==> r2 ==> ... ==> goal}
+
+         case cons_i(...)
+            all(cvars)
+                require
+                    p(ra1)   -- induction hypothesis ra1: recursive argument 1
+                    p(ra2)
+                    ...
+                ensure
+                    p(cons_i(...))
+                    assert
+                        'p(ra1) beta reduced'
+                        'p(ra2) beta reduced'
+                        ...
+                        all(y,...)
+                            require
+                                r1
+                                r2
+                                ...
+                            ensure
+                                goal[x:=cons_i(...)]
+                                assert
+                                   ...  -- <- user proof
+                            end
+
+                end
+   *)
+  let nvars = PC.count_variables pc
+  and ntvs = PC.count_all_type_variables pc
+  and ft    = PC.feature_table pc
+  in
+  let _, ags = Class_table.split_type_term tp
+  and n = Array.length nms
+  in
+  let tps = Feature_table.argument_types cons_idx ags ntvs ft
+  in
+  let pc1 = PC.push_typed (nms,tps) empty_formals pc
+  in
+  let n1,_,_,ps_rev,case_goal_pred =
+    Feature_table.constructor_rule cons_idx goal_pred ags nvars ft
+  in
+  assert (n1 = n);
+  let ind_hyp_idx_lst =
+    List.fold_left
+      (fun lst hypo ->
+        let idx = PC.add_assumption hypo false pc1 in
+        idx :: lst
+      )
+      []
+      (List.rev ps_rev)
+  in
+  let ass_lst_rev =
+    List.fold_left
+      (fun lst idx -> (PC.add_beta_reduced idx true pc1) :: lst)
+      []
+      (List.rev ind_hyp_idx_lst)
+  in
+  PC.close pc1;
+  let ass_lst_rev, goal, pc2 =
+    inner_case_context ass_lst_rev case_goal_pred nass pc1 in
+  ass_lst_rev, goal, case_goal_pred, pc2
 
 
 
@@ -332,7 +440,7 @@ let assumptions_for_variables
     if ass = [] then
       []
     else
-      let used_lst =
+      let used_lst_rev =
         List.fold_left
           (fun lst idx -> Term.used_variables_0 (PC.term idx pc) nvars lst)
           []
@@ -345,7 +453,7 @@ let assumptions_for_variables
           try ignore(Search.binsearch i insp_vars); false
           with Not_found -> true
         )
-        used_lst
+        (List.rev used_lst_rev)
   in
   ass, used_lst
 
@@ -363,7 +471,6 @@ let induction_goal_predicate
 
         {vars: all(others) a1 ==> a2 ==> ... ==> goal}
 
-    where all assumptions ai pass the filter.
    *)
   assert (ass_lst <> [] || others = []);
   let c = PC.context pc in
@@ -750,27 +857,9 @@ let inductive_set_case_context
   in
   PC.close pc1;
   (* Now we have context [all(rule_vars) require c1(set); c1(q); ... set(e)] *)
-  let stren_goal = PC.beta_reduce_term goal_pred1 pc1 in
-  let n2,fargs2,fgs2,chn = Term.all_quantifier_split_1 stren_goal in
-  let pc2 = PC.push_typed fargs2 fgs2 pc1 in
-  let ass_lst_rev, goal =
-    interval_fold
-      (fun (alst,chn) _ ->
-        let a,chn =
-          try
-            PC.split_implication chn pc2
-          with Not_found ->
-            assert false (* cannot happen *)
-        in
-        PC.add_assumption a true pc2 :: alst,
-        chn
-      )
-      (ass_lst_rev, chn)
-      0
-      nass
+  let ass_lst_rev, goal, pc2 =
+    inner_case_context ass_lst_rev goal_pred1 nass pc1
   in
-  (* Now we have context [all(other_vars) require a1; a2; ...] *)
-  PC.close pc2;
   ass_lst_rev, goal, goal_pred1, pc2
 
 
@@ -1116,10 +1205,6 @@ and prove_inductive_type
     (cases: one_case list)
     (pc:PC.t)
     : int =
-  let cons_set, ind_idx, tp =
-    analyze_type_inspect info ivar goal pc
-  in
-  let _,ags = Class_table.split_type_term tp in
   if PC.is_tracing pc then begin
     let prefix = PC.trace_prefix pc in
     printf "\n\n%sInduction Proof\n\n" prefix;
@@ -1130,16 +1215,27 @@ and prove_inductive_type
       prefix
       (ST.string (Context.argnames (PC.context pc)).(ivar))
   end;
+  let ass_idx_lst, other_vars =
+    assumptions_for_variables [|ivar|] [ivar] pc in
+  let goal_pred =
+    induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
+  and nass = List.length ass_idx_lst
+  in
+  let goal = beta_reduced (Application(goal_pred,[|Variable ivar|],true)) pc in
+  let cons_set, ind_idx, tp =
+    analyze_type_inspect info ivar goal pc
+  in
   let c  = PC.context pc in
-  let nvars = Context.count_variables c
-  and ft  = Context.feature_table c in
+  let ft  = Context.feature_table c in
   let proved_cases =
     (* explicitly given cases *)
     List.fold_left
       (fun map (ie,prf) ->
-        let cons_idx, pat, pc1 =
+        let cons_idx, nms =
           analyze_type_case_pattern ie cons_set tp pc in
-        let idx = prove_type_case cons_idx tp pat prf ivar goal pc1 pc in
+        (*let idx = prove_type_case cons_idx nms tp prf ivar goal pc in*)
+        let idx =
+          prove_type_case ie.i cons_idx nms tp prf ivar goal_pred nass pc in
         IntMap.add cons_idx idx map
       )
       IntMap.empty
@@ -1153,57 +1249,122 @@ and prove_inductive_type
           try
             IntMap.find cons_idx proved_cases
           with Not_found ->
-            let n   = Feature_table.arity cons_idx ft
-            and ntvs = PC.count_all_type_variables pc
-            in
-            let nms = anon_argnames n
-            and tps = Feature_table.argument_types cons_idx ags ntvs ft
-            in
-            let pc1 = PC.push_typed (nms,tps) empty_formals pc in
-            let pat =
-              let args = standard_substitution n in
-              Feature_table.feature_call cons_idx (nvars+n) args ags ft
-            in
-            prove_type_case cons_idx tp pat (SP_Proof([],None)) ivar goal pc1 pc
+            let n   = Feature_table.arity cons_idx ft in
+            let nms = anon_argnames n in
+            (*prove_type_case
+              cons_idx nms tp (SP_Proof([],None)) ivar goal pc*)
+            prove_type_case
+              info cons_idx nms tp (SP_Proof([],None)) ivar goal_pred nass pc
         in
         PC.add_mp idx ind_idx false pc
       )
       cons_set
       ind_idx
   in
-  PC.add_beta_reduced idx_goal_redex false pc
+  let res =
+    let idx  = PC.add_beta_reduced idx_goal_redex false pc in
+    let vars = Array.map (fun i -> Variable i) (Array.of_list other_vars) in
+    PC.specialized idx vars [||] 0 pc
+  in
+  let res =
+    List.fold_left
+      (fun res ass_idx ->
+        PC.add_mp ass_idx res false pc
+      )
+      res
+      ass_idx_lst
+  in
+  res
+
 
 
 
 and prove_type_case
+    (info:info)
     (cons_idx:int)
+    (nms: names)     (* The names of the arguments of the constructor *)
+    (tp:type_term)   (* inductive type in the outer context *)
+    (prf:source_proof)
+    (ivar:int)       (* induction variable *)
+    (goal_pred:term) (* in the outer context *)
+    (nass:int)       (* number of assumptions in the goal predicate *)
+    (pc:PC.t)        (* outer context *)
+    : int =
+  (* Prove one case of an inductive type
+   *)
+  let _, ags = Class_table.split_type_term tp
+  and n = Array.length nms
+  and nvars = PC.count_variables pc
+  and ft = PC.feature_table pc
+  in
+  let ass_lst_rev, goal, case_goal_pred, pc2 =
+    inductive_type_case_context cons_idx nms tp goal_pred nass pc
+  and pat =
+    let args = standard_substitution n in
+    Feature_table.feature_call cons_idx (nvars+n) args ags ft
+  in
+  let pc1 = PC.pop pc2 in
+  if PC.is_tracing pc then begin
+    let prefix = PC.trace_prefix pc in
+    printf "\n\n";
+    printf "%scase %s\n" prefix (PC.string_of_term pat pc1);
+    printf "%sgoal\n" prefix;
+    printf "%s\n"
+      (string_of_case_context (prefix ^ "    ") ass_lst_rev goal pc2);
+  end;
+  let gidx =
+    try
+      prove_one goal prf pc2
+    with Proof.Proof_failed msg ->
+      let casestr = string_of_case_context "" ass_lst_rev goal pc2
+      and patstr  = PC.string_of_term pat pc1 in
+      error_info info ("Cannot prove case \"" ^ patstr ^ "\""
+                       ^ msg ^ "\n" ^ casestr)
+  in
+  let t,pt = PC.discharged gidx pc2 in
+  let idx = PC.add_proved_term t pt false pc1 in
+  let idx = PC.add_beta_redex case_goal_pred idx false pc1 in
+  let t,pt = PC.discharged idx pc1 in
+  let res = PC.add_proved_term t pt false pc in
+  if PC.is_tracing pc then
+    printf "\n%scase succeeded\n\n" (PC.trace_prefix pc);
+  res
+
+
+
+(*
+and prove_type_case
+    (cons_idx:int)
+    (nms: names)    (* The names of the arguments of the constructor *)
     (tp:type_term)  (* inductive type in the outer context *)
-    (pat:term)      (* in the inner context *)
     (prf:source_proof)
     (ivar:int)
     (goal:term)     (* in the outer context *)
-    (pc1:PC.t)      (* inner context *)
     (pc:PC.t)       (* outer context *)
     : int =
   (* Prove one case of an inductive type
    *)
   let nvars = PC.count_variables pc
+  and ntvs = PC.count_all_type_variables pc
   and ft    = PC.feature_table pc
-  and c1    = PC.context pc1
   in
-  (* The inner context might have type variables, therefore we adapt only the
-     type part to the inner context. *)
-  let ntvs_delta = Context.count_local_type_variables c1 in
-  let tp1 = Term.up_type ntvs_delta tp
-  and goal1 = Term.shift 0 ntvs_delta goal
+  let _, ags = Class_table.split_type_term tp
+  and n = Array.length nms
   in
-  let n,_,_,ps_rev,case_goal =
-    let t0 = Term.lambda_inner goal1 ivar
-    and p_tp = PC.predicate_of_type tp1 pc1 in
+  let pat =
+    let args = standard_substitution n in
+    Feature_table.feature_call cons_idx (nvars+n) args ags ft
+  and tps = Feature_table.argument_types cons_idx ags ntvs ft
+  in
+  let pc1 = PC.push_typed (nms,tps) empty_formals pc
+  in
+  let n1,_,_,ps_rev,case_goal =
+    let t0 = Term.lambda_inner goal ivar
+    and p_tp = PC.predicate_of_type tp pc1 in
     let p   = Lam(1, anon_argnames 1, [], t0, true, p_tp)
-    and _, ags = Class_table.split_type_term tp1 in
+    in
     Feature_table.constructor_rule cons_idx p ags nvars ft in
-  assert (n = PC.count_last_arguments pc1);
+  assert (n1 = n);
   if PC.is_tracing pc then begin
     let prefix = PC.trace_prefix pc1 in
     printf "\n\n%scase\n" prefix;
@@ -1230,7 +1391,7 @@ and prove_type_case
   in
   let t,pt = PC.discharged case_goal_idx pc1 in
   PC.add_proved_term t pt false pc
-
+*)
 
 
 

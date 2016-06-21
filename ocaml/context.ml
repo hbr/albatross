@@ -375,6 +375,9 @@ let some_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term
 let prenex_term (t:term) (c:t): term =
   Term.prenex t (count_variables c) (ntvs c) Feature_table.implication_index
 
+let prenex_sort_term (t:term) (c:t): term =
+  Term.prenex_sort
+    t (count_variables c) (ntvs c) Feature_table.implication_index
 
 let entry_signature (e:entry) (c:t): Sign.t =
   (** The signature of the entry [e] in the context [c].  *)

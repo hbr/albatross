@@ -588,6 +588,14 @@ let raw_add (t:term) (search:bool) (pc:t): int =
 
 
 
+let raw_add_work (t:term) (search:bool) (pc:t): int =
+  let idx = raw_add t search pc in
+  if search && idx + 1 =  count pc then
+    add_last_to_work pc;
+  idx
+
+
+
 let arguments_of_sub (sub:Term_sub.t): term array =
   let nargs = Term_sub.count sub in
   let args = Term_sub.arguments nargs sub in
@@ -609,6 +617,8 @@ let specialized
   let rd    = rule_data idx pc in
   if RD.is_specialized rd then
     begin assert (Array.length args = 0); idx end
+  else if Array.length args = 0 && RD.count_args_to_specialize rd > 0 then
+    idx
   else begin
     let rd    = RD.specialize rd args ags idx (context pc) in
     let t     = RD.term rd in
@@ -1056,6 +1066,8 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
   let rdj   = rule_data j pc
   and c     = context pc
   in
+  if not (RD.is_specialized rdj) then
+    printf "add_mp %s\n" (string_long_of_term_i j pc);
   assert (RD.is_specialized rdj);
   assert (RD.is_implication rdj);
   let t = RD.term_b rdj c in
@@ -1087,7 +1099,7 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
       let pt = Eval(idx,Eval.Beta (Eval.Term t))
       and res = beta_reduce n t0 tp [|arg|] 0 pc in
       Proof_table.add_proved res pt 0 pc.base;
-      raw_add res search pc
+      raw_add_work res search pc
   | _ ->
       assert false (* The term [idx] is not a beta redex *)
 
@@ -1428,15 +1440,18 @@ let prefix (pc:t): string = String.make (2*(depth pc)+2) ' '
 let close (pc:t): unit =
   if is_global pc then
     ()
-  else
+  else begin
     let cnt0 = count pc in
     let rec cls (round:int): unit =
       (*if count pc - cnt0 > 1000 then assert false; (* 'infinite' loop detection *)*)
       if has_work pc then begin
         let lst = List.rev pc.work in
-      pc.work <- [];
-        List.iter (fun i ->
-          add_consequences i pc) lst;
+        pc.work <- [];
+        List.iter
+          (fun i ->
+            add_consequences i pc
+          )
+          lst;
         if is_interface_check pc then
           pc.work <- []
         else
@@ -1444,6 +1459,7 @@ let close (pc:t): unit =
       end
     in
     cls 0
+  end
 
 
 let close_assumptions (pc:t): unit =
