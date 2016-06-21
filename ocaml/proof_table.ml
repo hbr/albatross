@@ -495,7 +495,7 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
 
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   (* Return the unevaluated and the evaluated term *)
-  let rec reconstruct e nb =
+  let rec reconstruct (e:Eval.t) (nb:int) =
     let domain_id = nb + count_variables at + Feature_table.domain_index
     and reconstr_args args =
       let n = Array.length args in
@@ -609,6 +609,12 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           else Feature_table.false_constant nvars
         in
         Flow (Asexp,argsa), res
+    | Eval.AsExp t ->
+        let nvars = count_variables at
+        and ft = feature_table at
+        and tvs = tvars at in
+        let exp = Feature_table.evaluated_as_expression t (nb+nvars) tvs ft in
+        t, exp
     | Eval.Inspect (t,inspe,icase,nvars,rese) ->
         let inspa,inspb = reconstruct inspe nb
         and resa,resb   = reconstruct rese nb in
@@ -762,6 +768,8 @@ let term_of_someelim (i:int) (at:t): term =
   try
     someelim i at
   with Not_found ->
+    printf "term_of_someelim\n";
+    printf "  %s\n" (string_of_term_i i at);
     raise Illegal_proof_term
 
 

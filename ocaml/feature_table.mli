@@ -154,6 +154,8 @@ val argument_names: int -> t -> int array
 val body:         int -> t -> Feature.body
 
 val is_constructor:    int -> t -> bool
+val inductive_type:    int -> agens -> int -> t -> type_term
+val evaluated_as_expression: term -> int -> Tvars.t -> t -> term
 val inductive_arguments: int -> t -> int list
 val constructor_rule:  int -> term -> agens -> int -> t
   -> int * names * arguments * term list * term

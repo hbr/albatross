@@ -26,6 +26,7 @@ module Eval = struct
     | Flow of flow * t array
     | If of (bool * int * t array) (* cond, idx cond, args *)
     | As of bool * t array
+    | AsExp of term
     | Inspect of (term * t * int * int * t)
           (* uneval, eval insp, case, nvars, eval res *)
   let rec print (prefix:string) (e:t): unit =
@@ -66,6 +67,7 @@ module Eval = struct
     | As (cond,args) ->
         printf "%s \"as\" %b\n" prefix cond;
         print_args args
+    | AsExp t -> printf "%s as %s\n" prefix (Term.to_string t)
     | Inspect (t,inspe,icase,nvars,rese) ->
         printf "%s \"inspect\" case %d\n" prefix icase
 
@@ -176,7 +178,7 @@ end = struct
       let adapt_args args = Array.map (fun e -> adapt_eval e) args
       in
       match e with
-        Eval.Term t   -> e
+        Eval.Term t | Eval.AsExp t  -> e
       | Eval.Exp (i,ags,args,e) ->
           Eval.Exp (i,ags, adapt_args args, adapt_eval e)
       | Eval.VApply (i,args,ags) ->
@@ -253,7 +255,7 @@ end = struct
       let used_args set args =
         Array.fold_left (fun set e -> used_eval e set) set args in
       match e with
-        Eval.Term t -> set
+        Eval.Term t | Eval.AsExp t -> set
       | Eval.Exp (i,_,args,e)  -> used_eval e (used_args set args)
       | Eval.VApply(i,args,_)  -> used_args set args
       | Eval.Apply (f,args,_)  -> used_args (used_eval f set) args
@@ -309,7 +311,7 @@ end = struct
         let usd_args set args =
           Array.fold_left (fun set e -> usd_eval e set) set args in
         match e with
-          Eval.Term t   -> set
+          Eval.Term t | Eval.AsExp t -> set
         | Eval.Exp (i,_,args,e)   -> usd_eval e (usd_args set args)
         | Eval.VApply (i,args,_)  -> usd_args set args
         | Eval.Apply (f,args,_) ->
@@ -393,7 +395,7 @@ end = struct
       in
       let rec transform_eval (e:Eval.t): Eval.t =
         match e with
-          Eval.Term _ -> e
+          Eval.Term _ | Eval.AsExp _ -> e
         | Eval.Exp (i,ags,args,e) ->
             Eval.Exp(i, ags, Array.map transform_eval args, transform_eval e)
         | Eval.VApply (i,args,ags) ->
@@ -603,6 +605,8 @@ end = struct
           match e with
             Eval.Term t ->
               Eval.Term (shrink_inner t nb nb2)
+          | Eval.AsExp t ->
+              Eval.AsExp (shrink_inner t nb nb2)
           | Eval.Exp (idx,ags,args,e) ->
               let idx  = var (shrink_inner (Variable idx) nb nb2)
               and ags  = shrink_types_inner ags nb2

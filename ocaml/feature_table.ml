@@ -285,6 +285,17 @@ let is_constructor (i:int) (ft:t): bool =
 
 
 
+
+let inductive_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
+  assert (is_constructor i ft);
+  let desc = descriptor i ft in
+  assert (desc.cls <> -1);
+  let ctp, _ = Class_table.class_type desc.cls ft.ct in
+  Term.subst ctp ntvs ags
+
+
+
+
 let inductive_arguments (i:int) (ft:t): int list =
   (* Reversed list of inductive arguments *)
   assert (is_constructor i ft);
@@ -302,7 +313,6 @@ let inductive_arguments (i:int) (ft:t): int list =
       []
       0 (Sign.arity desc.sign) in
   List.rev lst
-
 
 
 let feature_call(i:int) (nb:int) (args:arguments) (ags:agens) (ft:t): term =
@@ -1399,6 +1409,36 @@ let equality_term
   and ags0  = standard_substitution 1 in
   let eq0 = VAppl(2+eq_index, args0, ags0) in
   substituted eq0 2 0 0 [|a;b|] nb [|tp|] tvs ft
+
+
+let evaluated_as_expression
+    (t:term)
+    (nb:int)
+    (tvs:Tvars.t)
+    (ft:t)
+    : term =
+  (* The as expression [t as cons(...)] has the evaluation
+
+         some(a,b,c,...) t = cons(...)
+   *)
+  let eq_term c n t0 args ags =
+    let ntvs = Tvars.count_all tvs in
+    let tp = inductive_type (c-nb-n) ags ntvs ft in
+    let t0 = Term.up n t0 in
+    equality_term t0 (VAppl(c,args,ags)) (nb+n) tp tvs ft
+  in
+  match t with
+    Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags),_)|]) ->
+      assert (n + nb <= c);
+      let eq = eq_term c n t0 args ags in
+      QExp(n,(nms,tps),fgs,eq,false)
+  | Flow(Asexp,[|t0;VAppl(c,args,ags)|]) ->
+      eq_term c 0 t0 args ags
+  | _ ->
+      printf "%s\n" (term_to_string t true true nb [||] tvs ft);
+      printf "%s\n" (Term.to_string t);
+      assert false (* not an as expression *)
+
 
 
 

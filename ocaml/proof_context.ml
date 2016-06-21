@@ -1008,7 +1008,12 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     true
                   end
                 with Not_found ->
-                  t, Eval.Term t, false
+                  let nvars = count_variables pc
+                  and ft = feature_table pc
+                  and tvs = tvars pc in
+                  let exp =
+                    Feature_table.evaluated_as_expression t (nb+nvars) tvs ft in
+                  exp, Eval.AsExp t, true
           end
       | Indset (n,nms,rs) ->
           t, Eval.Term t, false
