@@ -824,26 +824,21 @@ let add_case_injections
 
 
 let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
-  (* Can the case class [cls] be constructed without actual generics at the
-     positions [posset]?  *)
+  (* Does the class [cls] have a base constructor which does not use any
+     object of type of a formal generic which is in any position of [posset]
+     in the class type?
+   *)
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   assert (Class_table.is_case_class cls ct);
-  let cset = Class_table.constructors cls ct in
   IntSet.exists
     (fun c ->
       let tvs,sign = Feature_table.signature0 c ft in
       assert (Tvars.count tvs = 0);
       let nfgs = Tvars.count_fgs tvs in
-      let fgs =
-        match Sign.result sign with
-          VAppl(cls2,fgs,ags) ->
-            assert (cls2 = cls + nfgs);
-            fgs
-        | _ ->
-            assert false (* cannot happen *) in
-      assert (IntSet.cardinal posset = Array.length fgs);
-      let fgenset:IntSet.t =
+      let cls2,fgs = Class_table.split_type_term (Sign.result sign) in
+      assert (cls2 = cls + nfgs);
+      let fgset:IntSet.t =
         IntSet.fold
           (fun pos set ->
             assert (pos < Array.length fgs);
@@ -852,11 +847,13 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
           posset
           IntSet.empty in
       List.for_all
-        (fun tp ->
-            let set = Term.bound_variables tp nfgs in
-            IntSet.inter set fgenset = IntSet.empty)
-          (Array.to_list (Sign.arguments sign)))
-    cset
+        (fun argtp ->
+          let cls,_ = Class_table.split_type_term argtp in
+          not (IntSet.mem cls fgset)
+        )
+        (Array.to_list (Sign.arguments sign))
+    )
+    (Class_table.base_constructors cls ct)
 
 
 
@@ -894,7 +891,8 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
             can_be_constructed_without (i-ntvs) posset pc
           end
       | _ ->
-          true)
+          true
+    )
     (Array.to_list (Sign.arguments sign))
 
 
@@ -979,7 +977,8 @@ let put_creators
       creators.v in
   let clst_rev = c1lst @ c0lst in
   let clst = List.rev clst_rev in
-  let cset = IntSet.of_list clst in
+  let cset = IntSet.of_list clst
+  and cset_base = IntSet.of_list c0lst in
   if Class_table.is_interface_check ct &&
     not (IntSet.equal (Class_table.constructors cls ct) cset)
   then
@@ -988,7 +987,7 @@ let put_creators
     creators_check_formal_generics creators.i clst tvs ft;
     add_case_inversions cls clst pc;
     add_case_injections clst pc;
-    Class_table.set_constructors cset cls ct;
+    Class_table.set_constructors cset_base cset cls ct;
     PC.add_induction_law0 cls pc
   end
 

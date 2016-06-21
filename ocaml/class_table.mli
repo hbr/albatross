@@ -128,8 +128,9 @@ val add: header_mark withinfo -> int -> Tvars.t -> t -> unit
 val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
+val base_constructors:     int -> t -> IntSet.t
 val induction_law:    int -> t -> int
-val set_constructors:  IntSet.t -> int -> t -> unit
+val set_constructors:  IntSet.t -> IntSet.t -> int -> t -> unit
 val set_induction_law: int -> int -> t -> unit
 
 val has_ancestor: int -> int -> t -> bool
