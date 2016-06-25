@@ -13,9 +13,14 @@ B: ANY
    ================== :}
 
 
-all(f,g:A->B)
+all(f,g:A->B, p,q:{A}, a:A)
     ensure
         disjoint(f.domain, g.domain) ==> consistent(f,g)
+
+        f[p+q] = f[p] + f[q]
+
+        a in f.domain ==> f[{a}] = {f(a)}
+
     end
 
 

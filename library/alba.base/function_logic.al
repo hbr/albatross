@@ -32,6 +32,71 @@ all(f,g:A->B)
     end
 
 
+all(p,q:{A}, f:A->B, y:B)
+    require
+        y in f[p+q]
+    ensure
+        y in f[p] + f[q]
+
+        via some(x) x in p+q and x in f.domain and f(x) = y
+        if x in p
+        assert
+            x in p and x in f.domain and f(x) = y
+        orif x in q
+        assert
+            x in q and x in f.domain and f(x) = y
+    end
+
+
+all(p,q:{A}, f:A->B, y:B)
+    require
+        y in f[p] + f[q]
+    ensure
+        y in f[p+q]
+
+        if y in f[p]
+            via some(x) x in p and x in f.domain and f(x) = y
+            assert
+                 x in p + q and x in f.domain and f(x) = y
+        orif y in f[q]
+            via some(x) x in q and x in f.domain and f(x) = y
+            assert
+                 x in p + q and x in f.domain and f(x) = y
+    end
+
+
+all(p,q:{A}, f:A->B)
+    ensure
+        f[p+q] = f[p] + f[q]
+    end
+
+all(a:A, f:A->B)
+    require
+        a in f.domain
+    ensure
+        f[{a}] = {f(a)}
+
+        assert
+            all(b)
+                require
+                    b in f[{a}]
+                ensure
+                    b in {f(a)}
+                    via some(x) x in {a} and x in f.domain and f(x) = b
+                end
+            all(b)
+                require
+                    b in {f(a)}
+                ensure
+                    b in f[{a}]
+                    assert
+                        a in {a} and a in f.domain and f(a) = b
+                end
+    end
+
+
+
+
 {: Override
    ======== :}
 
