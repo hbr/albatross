@@ -7,7 +7,7 @@ A: ANY
 
 {: Carrier
    ======= :}
-carrier (r:{A,A}): ghost A? -> domain(r) + range(r)
+carrier (r:{A,A}): ghost {A} -> domain(r) + range(r)
 
 identity: {A,A} = {x,y: x = y}
 
@@ -77,18 +77,18 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.domain  = r.range
-    proof
+    assert
         all(x) require x in r.domain
                ensure  x in r.range
                        via some(y) r(x,y)
-                           proof
+                           assert
                                r(x,x)
                end
 
         all(y) require y in r.range
                ensure  y in r.domain
                        via some(x) r(x,y)
-                           proof
+                           assert
                                r(y,y)
                end
         r.domain = r.range
@@ -100,18 +100,18 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.domain  = r.range
-    proof
+    assert
         all(x) require x in r.domain
                ensure  x in r.range
                        via some(y) r(x,y)
-                           proof
+                           assert
                                r(x,x)
                end
 
         all(y) require y in r.range
                ensure  y in r.domain
                        via some(x) r(x,y)
-                           proof
+                           assert
                                r(y,y)
                end
         r.domain = r.range
@@ -123,11 +123,11 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.domain <= r.range
-    proof
+    assert
         all(x) require x in r.domain
                ensure  x in r.range
                        via some(y) r(x,y)
-                           proof
+                           assert
                                r(x,x)
                end
     end
@@ -137,11 +137,11 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.range <= r.domain
-    proof
+    assert
         all(y) require y in r.range
                ensure  y in r.domain
                        via some(x) r(x,y)
-                           proof
+                           assert
                                r(y,y)
                end
     end
@@ -152,7 +152,7 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.carrier <= r.domain
-    proof
+    assert
         all(x)
         require
             x in r.carrier
@@ -167,7 +167,7 @@ all(r:{A,A})
         r.is_reflexive
     ensure
         r.carrier <= r.range
-    proof
+    assert
         all(a)
             require
                 a in r.carrier
@@ -181,44 +181,44 @@ all(r:{A,A})
 
 
 
-to_reflexive (p:A?): {A,A}
+to_reflexive (p:{A}): {A,A}
     -> {x,y: x=y and p(x)}
 
-all(p:A?)
+all(p:{A})
     ensure
         inverse(p.to_reflexive) = p.to_reflexive
     end
 
-all(p:A?)
+all(p:{A})
     ensure
         domain(p.to_reflexive) = p
-    proof
+    assert
         all(x) require x in p
                ensure  x in domain(p.to_reflexive)
-               proof   (p.to_reflexive)(x,x) end
+               assert   (p.to_reflexive)(x,x) end
 
         all(x) require x in domain(p.to_reflexive)
                ensure  x in p
-               proof   some(y) (p.to_reflexive)(x,y)
+               assert   some(y) (p.to_reflexive)(x,y)
                        all(y)  require (p.to_reflexive)(x,y)
                                ensure  x in p end
                end
     end
 
 
-all(p:A?)
+all(p:{A})
     ensure
         range(p.to_reflexive) = p
-    proof
+    assert
         p.to_reflexive.inverse = p.to_reflexive
 
         range(p.to_reflexive) = domain(p.to_reflexive.inverse)
     end
 
-all(p:A?)
+all(p:{A})
     ensure
         carrier(p.to_reflexive) = p
-    proof
+    assert
         domain(p.to_reflexive) = p
         range (p.to_reflexive) = p
     end
@@ -292,7 +292,7 @@ all(a,b,c:A, r:{A,A})
     inspect
         (+r)(b,c)
     case all(a,b,c) (+r)(a,b) ==> r(b,c) ==> (+r)(a,c)
-    proof
+    assert
         all(a) (+r)(a,b) ==> (+r)(a,c)
         all(a)
         require (+r)(a,b)

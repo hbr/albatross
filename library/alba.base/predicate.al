@@ -38,7 +38,7 @@ all(a,b:G)
         a = b
     ensure
         b = a
-        proof
+        assert
             b in {x: x = a}
     end
 

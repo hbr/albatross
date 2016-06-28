@@ -137,10 +137,10 @@ all(a,b,c:PO)
         b <= c
     ensure
         a /= c
-    proof
+    assert
         require a = c
         ensure  false
-        proof   c = a
+        assert   c = a
                 a in {x: b <= x}
         end
     end
@@ -152,10 +152,10 @@ all(a,b,c:PO)
         b < c
     ensure
         a /= c
-    proof
+    assert
         require a = c
         ensure  false
-        proof   c in {x: x <= b}
+        assert   c in {x: x <= b}
         end
     end
 
@@ -173,7 +173,7 @@ all(a,b,c:PO)
         b <= c
     ensure
         a <= c
-    proof
+    assert
         b = a
         a in {x: x <= c}
     end
@@ -200,10 +200,10 @@ all(a,b:PO, p:{PO})
 all(a:PO)
     ensure
         a.is_lower_bound({a})
-    proof
+    assert
         all(x) require  {a}(x)
                ensure   a <= x
-               proof    x = a
+               assert    x = a
                         {y: y <= x}(a)
                end
     end
@@ -215,10 +215,10 @@ all(x:PO, p,q:{PO})
         x.is_lower_bound(q)
     ensure
         ((p + q).lower_bounds)(x)
-    proof
+    assert
         all(y) require (p + q)(y)
                ensure  x <= y
-               proof   p(y) ==> x <= y
+               assert   p(y) ==> x <= y
                end
     end
 
@@ -247,7 +247,7 @@ all(a,b:PO, p,q:{PO})
         p <= q
     ensure
         b <= a
-    proof
+    assert
         b.is_lower_bound(p)
     end
 
@@ -257,10 +257,10 @@ all(a:PO, p:{PO})
         a.is_least(p)
     ensure
         a.is_infimum(p)
-    proof
+    assert
         all(x) require x.is_lower_bound(p)
                ensure  x <= a
-               proof   all(y) p(y) ==> x <= y
+               assert   all(y) p(y) ==> x <= y
                        p(a)
                end
     end
@@ -278,7 +278,7 @@ all(a:PO, p:{PO})
 all(a:PO)
     ensure
         a.is_infimum({x: a <= x})
-    proof
+    assert
         a.is_least({x: a <= x})
     end
 
@@ -308,7 +308,7 @@ all(p,q:{PO})
         p <= q
     ensure
         (*q) <= *p
-    proof
+    assert
         (*q).is_infimum(q)
         (*p).is_infimum(p)
     end
@@ -322,7 +322,7 @@ all(p,q:{PO})
         p <= q
     ensure
         least(q) <= least(p)
-    proof
+    assert
         least(q).is_least(q)
         least(p).is_least(p)
     end
@@ -357,14 +357,14 @@ is_upcontinuous (f:PO->PO2): ghost BOOLEAN
 all(a:PO, f:PO->PO)
     require
         f.is_closure_map
-    proof
+    assert
         f(a).is_fixpoint(f)
 
         all(x)
             require
                 x.is_fixpoint(f)   -- 'is_fixpoint' is not inherited!!
                 a <= x
-            proof
+            assert
                 f(a) <= f(x)
                 f(x) = x
             ensure

@@ -21,7 +21,7 @@ all(x,y:L, a:[L])
         y.is_lower_bound(a)
     ensure
         x.is_lower_bound(a)
-    proof
+    assert
         {z: y <= z} <= {z: x <= z}
     end
 
@@ -61,7 +61,7 @@ all(x:L, a:[L])
         -- sorted 2
     ensure
         (x^a).is_sorted ==> x.is_lower_bound(a)
-    proof
+    assert
         ensure
             all(x) (x^a).is_sorted ==> x.is_lower_bound(a)
         inspect a end
@@ -76,7 +76,7 @@ all(x:L, a:[L])
         a.is_sorted
     ensure
         (x^a).is_sorted
-    proof
+    assert
         ensure
             x.is_lower_bound(a)  ==>  a.is_sorted  ==> (x^a).is_sorted
         inspect a end
@@ -103,7 +103,7 @@ into (x:L, a:[L]): [L]
 all(x:L)
     ensure
         permutation ([x], x.into([]))
-    proof
+    assert
         x.into([]) = [x]
     end
 
@@ -115,7 +115,7 @@ all(x,y:L, a:[L])
         x <= y
     ensure
         permutation(x^y^a, x.into(y^a))
-    proof
+    assert
          x.into(y^a) = x^y^a
     end
 
@@ -126,12 +126,12 @@ all(x,y:L, a:[L])
         not (x <= y)
     ensure
         permutation(x^y^a, x.into(y^a))
-    proof
+    assert
         permutation(x^y^a, y^x^a)        -- module list
         permutation(y^x^a, y^x.into(a))  -- ind hypo/list
         ensure
             permutation(y^x.into(a), x.into(y^a))
-        proof
+        assert
             x.into(y^a) = y^x.into(a)
             y^x.into(a) in {l: permutation(l,x.into(y^a))}
         end
@@ -141,13 +141,13 @@ all(x,y:L, a:[L])
 all(x:L, a:[L])
     ensure
         permutation (x^a, x.into(a))
-    proof
+    assert
         all(y:L, a:[L])
             require
                 permutation(x^a, x.into(a))
             ensure
                 permutation(x^y^a, x.into(y^a))
-            proof
+            assert
                 x <= y or not (x <= y)
 
                 x <= y       ==> permutation(x^y^a, x.into(y^a))
@@ -165,15 +165,15 @@ all(x:L, a:[L])
         a.is_sorted ==> x.into(a).is_sorted
     inspect
         a
-    case y^a proof
+    case y^a assert
         require
             (y^a).is_sorted
         ensure
             x.into(y^a).is_sorted
-        proof
+        assert
             ensure x.into(y^a).is_sorted
             if x <= y
-            else proof y.is_lower_bound(x^a)
+            else assert y.is_lower_bound(x^a)
                        permutation(x^a, x.into(a))
                        (y^x.into(a)).is_sorted
             end
@@ -195,12 +195,12 @@ all(a:[L])
     ensure
         permutation(a, a.sorted)
     inspect a
-    case x^a proof
+    case x^a assert
         permutation(x^a, x^a.sorted)
         permutation(x^a.sorted, x.into(a.sorted))
 
         ensure permutation(x.into(a.sorted), (x^a).sorted)
-        proof  x.into(a.sorted) = (x^a).sorted
+        assert  x.into(a.sorted) = (x^a).sorted
         end
     end
 
@@ -208,6 +208,6 @@ all(a:[L])
     ensure
         a.sorted.is_sorted
     inspect a
-    case x^a proof
+    case x^a assert
         x.into(a.sorted).is_sorted
     end

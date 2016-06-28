@@ -95,7 +95,7 @@ all(a,b:BOOLEAN)
         a
     ensure
         a or b
-    proof
+    assert
         require
             not a
         ensure

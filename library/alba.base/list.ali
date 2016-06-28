@@ -49,12 +49,12 @@ tail (a:[G]): [G]
        case h^t then x=h or x in t
 
 
-elements (a:[G]): G?
+elements (a:[G]): {G}
         -- The set of elements of the list 'a'.
     -> {x: x in a}
 
 
-all_in (a:[G], p:G?): BOOLEAN
+all_in (a:[G], p:{G}): BOOLEAN
         -- Do all elements of the list 'a' satisfy the predicate 'p'?
     -> inspect a
        case []  then true
@@ -106,7 +106,7 @@ is_prefix (a,b:[G]): BOOLEAN
 
 
 
-all(a,b,c:[G], x,y:G, p,q:G?)
+all(a,b,c:[G], x,y:G, p,q:{G})
     ensure
         -- concatenation of lists
         a   + []  =  a

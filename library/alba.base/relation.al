@@ -12,7 +12,7 @@ all(r,s:{A,B})
         all(a,b) r(a,b) ==> s(a,b)
     ensure
         r <= s
-    proof
+    assert
         all(t)
             ensure  r(t) ==> s(t)
             inspect t end
@@ -54,7 +54,7 @@ preimage (p:{B}, r:{A,B}): ghost {A} -> {a: some(b) b in p and r(a,b)}
    ===================== :}
 
 
-inverse (r:{A,B}): (B,A)?          -> {b,a: r(a,b)}
+inverse (r:{A,B}): {B,A}          -> {b,a: r(a,b)}
 
 
 all(r:{A,B})

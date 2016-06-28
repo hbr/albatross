@@ -31,13 +31,13 @@ all(a:NATURAL)
         some(x) a = successor(x)
     ensure
         a /= 0
-    proof
+    assert
         all(x)
             require
                 a = successor(x)
             ensure
                 a /= 0
-            proof
+            assert
                 successor(x) = a
                 a in {a: a /= 0}
             end
@@ -160,7 +160,7 @@ all(a,b,x:NATURAL)
         x + a = x + b
     ensure
         a = b
-    proof
+    assert
         ensure a + x = b + x
                via [x + a]
         end
@@ -193,7 +193,7 @@ all(a,b:NATURAL)
     ensure
         a + b = 0  ==> a = 0
     inspect a
-    case successor(a) proof
+    case successor(a) assert
         require successor(a) + b = 0
         ensure  a.successor = 0
         assert
@@ -212,7 +212,7 @@ all(a,b:NATURAL)
         a + b = 0
     ensure
         b = 0
-    proof
+    assert
         b + a = a + b
         b + a = 0
     end
@@ -259,7 +259,7 @@ all(a,b:NATURAL)
         successor(a) <= successor(b)
     ensure
         successor(a) < b.successor.successor
-    proof
+    assert
         a <= b
     end
 
@@ -283,7 +283,7 @@ all(a,b:NATURAL)
         a <= b
     ensure
         a < b + 1
-    proof
+    assert
         a < b.successor
     end
 
@@ -324,7 +324,7 @@ all(a,b:NATURAL)
                 a <= b
                 all(x) require a + x = b
                        ensure  some(x) a.successor + x = b.successor
-                       proof   a.successor + x   = a + x.successor
+                       assert  a.successor + x   = a + x.successor
                                a.successor + x   =  b.successor
                        end
     end
@@ -335,32 +335,32 @@ all(a,b:NATURAL)
 all(a,b:NATURAL)
     ensure
         (some(x) a + x = b) ==> a <= b
-    proof
+    assert
         ensure
             all(a) (some(x) a + x = b) ==> a <= b
         inspect b
-        case 0 proof
+        case 0 assert
             all(a:NATURAL)
             require  some(x) a + x = 0
             ensure   a <= 0
-            proof    all(x) require a + x = 0
+            assert    all(x) require a + x = 0
                             ensure  a <= 0
-                            proof   0 = a
+                            assert  0 = a
                                     a in {a: a <= 0}
                             end
             end
-        case b.successor proof
+        case b.successor assert
             all(a) (some(x) a + x = b) ==> a <= b
             all(a)
             ensure
                 (some(x) a + x = b.successor) ==> a <= b.successor
-            proof
+            assert
                 ensure  (some(x) a + x = b.successor) ==> a <= b.successor
                 inspect a
-                case successor(a) proof
+                case successor(a) assert
                     require some(x) a.successor + x = b.successor
                     ensure  a.successor <= b.successor
-                    proof   all(x) require a.successor + x = b.successor
+                    assert  all(x) require a.successor + x = b.successor
                                    ensure  a.successor <= b.successor
                                    assert
                                        ensure
@@ -386,7 +386,7 @@ all(a,b:NATURAL)
         b <= a
     ensure
         a = b
-    proof
+    assert
         some(x) a + x = b
         some(y) b + y = a
         all(x)
@@ -394,13 +394,13 @@ all(a,b:NATURAL)
                 a + x = b
             ensure
                 a = b
-            proof
+            assert
                 all(y)
                     require
                         b + y = a
                     ensure
                         a = b
-                    proof
+                    assert
                         a + (x + y) = (a + x) + y
                         a + x + y = b + y
 
@@ -422,19 +422,19 @@ all(a,b,c:NATURAL)
         b <= c
     ensure
         a <= c
-     proof
+     assert
         all(x)
             require
                 a + x = b
             ensure
                 a <= c
-            proof
+            assert
                 all(y)
                     require
                         b + y = c
                     ensure
                         a <= c
-                    proof
+                    assert
                         a + (x + y) = (a + x) + y
                         a + x + y   = b + y
 
@@ -472,19 +472,19 @@ all(a,b:NATURAL)
         a < b
     ensure
         a.successor <= b
-    proof
+    assert
         some(x) a + x = b
         all(x)
             require
                 a + x = b
             ensure
                 a.successor <= b
-            proof
+            assert
                 require
                     x = 0
                 ensure
                     false
-                proof
+                assert
                     0 = x
                     x in {x: a = a + x}
                     a = b
@@ -496,7 +496,7 @@ all(a,b:NATURAL)
                         x = y.successor
                     ensure
                         a.successor <= b
-                    proof
+                    assert
                         y.successor in {x: a + x = b}
                         ensure
                             a.successor + y = b
@@ -529,17 +529,17 @@ all(a,b:NATURAL)
     ensure
         a <= b or b <= a
     inspect a
-    case successor(a) proof
+    case successor(a) assert
         ensure
             a.successor <= b or b <= a.successor
-        if a <= b proof
+        if a <= b assert
             ensure
                 a.successor <= b or b <= a.successor
-            if a = b proof
+            if a = b assert
                 a <= a.successor
                 b in {x: x <= a.successor}
                 b <= a.successor
-            else proof
+            else assert
                 a < b
                 a.successor <= b
             end
@@ -553,7 +553,7 @@ all(a,b:NATURAL)
         not (a <= b)
     ensure
         b <= a
-    proof
+    assert
         a <= b or b <= a
     end
 
@@ -562,20 +562,20 @@ all(a,b:NATURAL)
 all(a,b:NATURAL)
     ensure
         a <= b or b < a
-    proof
+    assert
         a = b or a /= b
         require  a = b
         ensure   a <= b or b < a
-        proof    b in {x: a <= x}
+        assert   b in {x: a <= x}
         end
 
         require  a /= b
         ensure   a <= b or b < a
-        proof    a <= b or b <= a
+        assert   a <= b or b <= a
                  a <= b ==> a <= b or b < a
                  require  b <= a
                  ensure   a <= b or b < a
-                 proof    b /= a
+                 assert   b /= a
                  end
         end
     end
@@ -606,13 +606,13 @@ all(a,b:NATURAL)
     ensure
         b <= a  ==>  not ((a,b) as (0,successor(_)))
     inspect a
-    case 0 proof
+    case 0 assert
         require
             b <= 0
             (0:NATURAL,b) as (0,successor(_))
         ensure
             false
-        proof
+        assert
             b = 0
             0 in {b: (0:NATURAL,b) as (0,successor(_))}
         end
@@ -625,7 +625,7 @@ all(a,b,n,m:NATURAL)
         (a,b) = (successor(n),successor(m))
     ensure
         m <= n
-    proof
+    assert
         (successor(n),successor(m)) in {x,y: y <= x}
     end
 
@@ -670,7 +670,7 @@ all(a:NATURAL)
 all(a:NATURAL)
     ensure
         1 * a = a
-    proof
+    assert
         0 + a = a
     end
 
@@ -678,25 +678,25 @@ all(a:NATURAL)
 all(a,b,c:NATURAL) -- distributivity
     ensure
         a * (b + c) = a*b + a*c
-    proof
+    assert
         all(a,b,c,d:NATURAL)  -- lemma
             {: Note: This lemma is needed as long as the special treatment of
                      commutative and associative operators is not yet implemented :}
             ensure
                a + b + (c + d) = a + c + (b + d)
-            proof
+            assert
                a + b + (c + d)   = a + (b + (c + d))
 
                ensure a + (b + (c + d)) = a + (b + c + d)
-               proof  b + (c + d) = b + c + d
+               assert b + (c + d) = b + c + d
                end
 
                ensure a + (b + c + d) = a + (c + b + d)
-               proof  b + c = c + b
+               assert b + c = c + b
                end
 
                ensure a + (c + b + d) = a + (c + (b + d))
-               proof  c + b + d = c + (b + d)
+               assert c + b + d = c + (b + d)
                end
             end
 

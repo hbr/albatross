@@ -614,7 +614,6 @@ type_nt:
 elem_type:
     simple_type  { $1 }
 |   tuple_type   { $1 }
-|   qmark_type   { $1 }
 |   star_type    { $1 }
 |   LBRACE type_nt_inner RBRACE { Brace_type $2 }
 |   LBRACKET type_nt_inner RBRACKET { List_type $2 }
@@ -646,9 +645,6 @@ arrow_type: elem_type ARROW type_nt {
   Arrow_type ($1,$3)
 }
 
-
-qmark_type:
-    elem_type QMARK   { Brace_type $1 }
 
 star_type:  elem_type TIMES   { Star_type $1 }
 

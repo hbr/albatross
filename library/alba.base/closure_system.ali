@@ -5,11 +5,11 @@ end
 
 PO: PARTIAL_ORDER
 
-above (p:PO?, a:PO): PO?
+above (p:{PO}, a:PO): {PO}
         -- The set of elements of 'p' which are above 'a'.
     -> {x: p(x) and a <= x}
 
-is_closure_system (p:PO?):  ghost BOOLEAN
+is_closure_system (p:{PO}):  ghost BOOLEAN
         -- Are the elements of the set 'p' a closure system, i.e. does it have
         -- sufficiently large elements and do all nonempty subsets of 'p' have
         -- an infimum in 'p'?
@@ -17,7 +17,7 @@ is_closure_system (p:PO?):  ghost BOOLEAN
        all(q) q <= p  ==> q /= empty ==> (some(x) x.is_infimum(q)) and *q in p
 
 
-closed (a:PO, p:PO?): ghost PO
+closed (a:PO, p:{PO}): ghost PO
         -- The least element of 'p' above 'a'.
     require
         p.is_closure_system
@@ -26,7 +26,7 @@ closed (a:PO, p:PO?): ghost PO
     end
 
 
-all(a,b:PO, p:PO?)
+all(a,b:PO, p:{PO})
     require
         p.is_closure_system
     ensure                                       -- closure is:

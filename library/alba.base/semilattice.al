@@ -34,7 +34,7 @@ all(a,b:SL)
         b <= a
     ensure
         a = b
-    proof
+    assert
         a = a * b
         a * b = b * a
         b * a = b
@@ -49,17 +49,17 @@ all(a,b,c:SL)
         b <= c
     ensure
         a <= c
-    proof
+    assert
         a = a * b
 
         ensure a * b = a * (b * c)
-        proof  b * c = b
+        assert b * c = b
         end
 
         a * (b * c) = a * b * c
 
         ensure a * b * c = a * c
-        proof  a * b = a
+        assert a * b = a
         end
 
         a = a * c
@@ -71,14 +71,14 @@ inherit        PARTIAL_ORDER end
 all(a,b:SL)
     ensure
         a * b <= a
-    proof
+    assert
         ensure a * b = a * a * b
-        proof  a * a = a end
+        assert a * a = a end
 
         a * a * b = a * (a * b)
 
         ensure a * (a * b) = a * (b * a)
-        proof  a * b = b * a
+        assert a * b = b * a
                b * a in {x: a * (a * b) = a * x}
         end
 
@@ -91,9 +91,9 @@ all(a,b:SL)
 all(a,b:SL)
     ensure
         a * b <= b
-    proof
+    assert
         ensure a * b  = a * (b * b)
-        proof  b * b = b end
+        assert b * b = b end
 
         a * (b * b) = a * b * b
 
@@ -107,20 +107,20 @@ all(a,b,c:SL)
         c <= b
     ensure
         c <= a * b
-    proof
+    assert
         c = c * a
 
         ensure
             c * a = c * a * b
-        proof  c * a = a * c
+        assert c * a = a * c
                ensure a * c = a * (c * b)
-               proof  c * b = c
+               assert c * b = c
                end
 
                a * (c * b) = a * c * b
 
                ensure a * c * b  = c * a * b
-               proof  a * c = c * a
+               assert a * c = c * a
                       c * a in {x: a * c * b = x * b}
                end
         end

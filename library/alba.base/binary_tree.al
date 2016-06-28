@@ -44,7 +44,7 @@ all(t:BINARY_TREE[G])
     ensure
         (-t).inorder = - t.inorder
     inspect t
-    case tree(i,l,r) proof
+    case tree(i,l,r) assert
         (-tree(i,l,r)).inorder            = -r.inorder + ([i] + (-l.inorder))
         (-r.inorder) + ([i] + -l.inorder) = (-r.inorder + [i]) + -l.inorder
         (-r.inorder + [i]) + -l.inorder   = - i^r.inorder + -l.inorder
@@ -57,7 +57,7 @@ all(t:BINARY_TREE[G])
     ensure
         (-t).preorder = - t.postorder
     inspect t
-    case tree(i,l,r) proof
+    case tree(i,l,r) assert
         (-r.postorder) + - l.postorder = - (l.postorder + r.postorder)
 
         (-tree(i,l,r)).preorder             = i ^ ((-r).preorder + (-l).preorder)

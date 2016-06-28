@@ -94,7 +94,6 @@ let _ =
      ("old",       Parser.KWold);
      ("or",        Parser.KWor);
      ("orif",      Parser.KWorif);
-     ("proof",     Parser.KWassert);
      ("redefine",  Parser.KWredefine);
      ("rename",    Parser.KWrename);
      ("require",   Parser.KWrequire);
@@ -135,7 +134,6 @@ let kwtoken id =
   in
   match kw with
     Parser.KWrequire -> kw, (true,false)
-  | Parser.KWproof   -> kw, (true,false)
   | Parser.KWensure  -> kw, (true,false)
   | Parser.KWall     -> kw, (true,false)
   | Parser.KWend     -> kw, (false,true)

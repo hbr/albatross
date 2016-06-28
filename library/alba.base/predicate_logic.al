@@ -36,7 +36,7 @@ all(p,q:{G})
     ensure
         q.has_some
         via some(x) x /in p and x in q
-            proof
+            assert
                 x in q
     end
 
@@ -58,7 +58,7 @@ all(p,q:{G})
     ensure
         p < q
         via require not some(x) x /in p and x in q  -- a
-        proof
+        assert
             all(x)
                     -- construct contradiction by proving 'q <= p' which
                     -- contradicts 'p /= q'
@@ -66,7 +66,7 @@ all(p,q:{G})
                     x in q
                 ensure
                     x in p
-                    proof
+                    assert
                         not (x /in p and x in q)  -- consequence of 'a' by
                                                   -- contrapositive
                         x in p or x /in q
@@ -92,17 +92,17 @@ all(x:G, p:{G})
         x in p
     ensure
         {x} <= p
-    proof
+    assert
         all(y) require y in {x}
                ensure  y in p
-               proof   x = y end
+               assert   x = y end
     end
 
 
 all(x:G)
     ensure
         {x}.has_some
-        proof
+        assert
             x in {x}
     end
 
@@ -114,7 +114,7 @@ all(p:{G}, x:G)
         p.is_empty
         via require p.has_some
         via some(y) y in p
-            proof
+            assert
                 p /= {x}
                 y in {x}
                 {x} <= p
@@ -133,7 +133,7 @@ all(p:{G})
         via require
             some(x) x in p
         via some(x) x in p
-                proof   x /in p  -- from 'a'
+                assert   x /in p  -- from 'a'
     end
 
 
@@ -160,7 +160,7 @@ all(p:{G})
         via require
             all(x) x in p
         via some(x) x /in p
-                proof   x in p
+                assert   x in p
     end
 
 
@@ -178,14 +178,14 @@ all(p:{G})
 
         via require
             not some(x) x /in p  -- a2
-        proof
+        assert
             all(x)
                 ensure
                     x in p  -- contradicts 'a1'
 
                     via require
                         not (x in p)   -- a3
-                    proof
+                    assert
                         some(x) x /in p -- witness 'a3', contradicts 'a2'
                 end
     end
@@ -255,13 +255,13 @@ all(p:{G}, ps:{{G}})
         p in ps
     ensure
         p <= +ps
-        proof
+        assert
         all(x)
             require
                 x in p
             ensure
                 x in +ps
-                proof
+                assert
                     p in ps and x in p
                     some(q) q in ps and x in q
             end
@@ -273,14 +273,14 @@ all(p:{G}, ps:{{G}})
     ensure
         p <= *ps
 
-        proof
+        assert
         all(x,q)
             require
                 x in p
                 q in ps
             ensure
                 x in q
-                proof p <= q
+                assert p <= q
             end
     end
 
@@ -289,14 +289,14 @@ all(p:{G}, ps:{{G}})
         all(q) q in ps ==> q <= p
     ensure
         +ps <= p   -- +ps = {x: some(q) q in ps and x in q}
-        proof
+        assert
         all(x)
             require
                 x in +ps
             ensure
                 x in p
                 via some(q) q in ps and x in q
-                proof
+                assert
                     q <= p
             end
     end

@@ -53,7 +53,7 @@ all(a,b,c:A, r,s:{A,A})
     ensure
         some(d) r(b,d) and s(c,d)
         via some(d) r(b,d) and r(c,d)
-                proof
+                assert
                     r(b,d) and s(c,d)
     end
 
@@ -89,15 +89,15 @@ all(a,b,c:A, r:{A,A})
             (r.reflexive)(a,b)
 
         case all(a,b) r(a,b) ==> (r.reflexive)(a,b)
-        proof
+        assert
             r <= r.reflexive
 
         case all(a,b) r(a,b) ==> (r.reflexive)(a,a)
-        proof
+        assert
             r(a,c) and (r.reflexive)(c,c)
 
         case all(a,b) r(a,b) ==> (r.reflexive)(b,b)
-        proof
+        assert
             r(b,c) and (r.reflexive)(c,c)
     end
 
@@ -118,16 +118,16 @@ all(a,b,c:A, r:{A,A})
             (r.reflexive)(a,c)
         case all(a,c) r(a,c) ==> (r.reflexive)(a,c)
             via some(d) r(b,d) and (r.reflexive)(c,d)
-                    proof
+                    assert
                         (r.reflexive)(b,d) and (r.reflexive)(c,d)
 
         case all(a,c) r(a,c) ==> (r.reflexive)(a,a)
             via some(d) r(b,d) and (r.reflexive)(c,d)
-                    proof
+                    assert
                         (r.reflexive)(b,b) and (r.reflexive)(a,b)
 
         case all(a,c) r(a,c) ==> (r.reflexive)(c,c)
-            proof
+            assert
                 (r.reflexive)(b,b) and (r.reflexive)(c,b)
     end
 
@@ -170,7 +170,7 @@ all(a,b,c:A, r:{A,A})
             (+r)(a,b)
         case
             all(a,b) r(a,b) ==> (+r)(a,b)
-        proof
+        assert
             r <= +r
 
         case
@@ -186,7 +186,7 @@ all(a,b,c:A, r:{A,A})
             :}
             via some(e) r(b,e) and (+r)(c,e)
                     via some(f) r(d,f) and r(e,f)
-                            proof
+                            assert
                                 r(b,d)
                                 r(d,f) and (+r)(c,f)
     end
@@ -206,7 +206,7 @@ all(a,b,c:A, r:{A,A})
         case
             all(a,c) r(a,c) ==> (+r)(a,c)
                    via some(d) r(b,d) and (+r)(c,d)
-                           proof
+                           assert
                                r(a,c)
                                (+r)(b,d) and (+r)(c,d)
         case
@@ -219,7 +219,7 @@ all(a,b,c:A, r:{A,A})
             :}
             via some(d) (+r)(b,d) and (+r)(c,d)
                     via some(f) r(d,f) and (+r)(e,f)
-                            proof
+                            assert
                                 (+r)(b,f) and (+r)(e,f)
     end
 

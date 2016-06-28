@@ -8,7 +8,7 @@ A: ANY
 {: Carrier
    ======= :}
 
-carrier (r:{A,A}): ghost A?
+carrier (r:{A,A}): ghost {A}
         -- The carrier of the relation 'r' i.e. the union of its domain
         -- and range.
     -> domain(r) + range(r)
@@ -61,11 +61,11 @@ all(r:{A,A})
 
 
 
-to_reflexive (p:A?): {A,A}
+to_reflexive (p:{A}): {A,A}
         -- The least reflexive relation with the carrier 'p'.
     -> {x,y: x=y and p(x)}
 
-all(p:A?)
+all(p:{A})
     ensure
         inverse(p.to_reflexive) = p.to_reflexive
         domain(p.to_reflexive)  = p

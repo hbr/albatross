@@ -24,7 +24,7 @@ all(a,b,c:LO)
 all(a:LO)
     ensure
         a <= a
-    proof
+    assert
         a <= a or a <= a
     end
 
@@ -38,12 +38,12 @@ all(a,b:LO)
         not (a <= b)
     ensure
         b < a
-    proof
+    assert
         a <= b  or  b <= a
 
         require  b = a
         ensure   false
-        proof    a in {x: x <= b}
+            assert a in {x: x <= b}
         end
     end
 
@@ -52,11 +52,11 @@ all(a,b:LO)
         not (a < b)
     ensure
         b <= a
-    proof
-        require  not (b <= a)
-        ensure   false
-        proof    a < b
-        end
+        assert
+            require  not (b <= a)
+            ensure   false
+                assert   a < b
+            end
     end
 
 
@@ -66,12 +66,12 @@ all(a,b:LO)
         a /= b
     ensure
         a < b  or  b < a
-    proof
-        require
-            not (a < b)
-        ensure
-            b < a
-        end
+        assert
+            require
+                not (a < b)
+            ensure
+                b < a
+            end
     end
 
 
@@ -86,15 +86,15 @@ max (a,b:LO): LO  -> if a <= b then b else a
 all(a,b:LO)
     ensure
         min(a,b).is_least({a,b})
-    proof
+    assert
         ensure min(a,b) in {a,b}
-        proof  a <= b  or  not (a <= b)
+        assert a <= b  or  not (a <= b)
                a <= b  ==> min(a,b) in {a,b}
         end
 
         all(x) require x in {a,b}
                ensure  min(a,b) <= x
-               proof   a <= b  or  not (a <= b)
+               assert  a <= b  or  not (a <= b)
                        a <= b        ==> min(a,b) <= x
                        not (a <= b)  ==> min(a,b) <= x
                end
@@ -106,9 +106,9 @@ all(a,b:LO)
 all(a,b:LO)
     ensure
         max(a,b).is_greatest({a,b})
-    proof
+    assert
         ensure max(a,b) in {a,b}
-        proof  a <= b  or  not (a <= b)
+        assert a <= b  or  not (a <= b)
                a <= b  ==> max(a,b) in {a,b}
         end
 
@@ -117,14 +117,14 @@ all(a,b:LO)
                 x in {a,b}
             ensure
                 x <= max(a,b)
-            proof
+            assert
                 x = a  or x = b
                 a <= b or not (a <= b)
                 require
                     x = a
                 ensure
                     x <= max(a,b)
-                proof
+                assert
                     a <= b       ==> x <= max(a,b)
                     not (a <= b) ==> x <= max(a,b)
                 end
@@ -133,7 +133,7 @@ all(a,b:LO)
                     x = b
                 ensure
                     x <= max(a,b)
-                proof
+                assert
                     a <= b  ==>  x <= max(a,b)
                     not (a <= b) ==> x <= max(a,b)
                 end
