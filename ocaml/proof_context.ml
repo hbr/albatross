@@ -15,6 +15,10 @@ module RD = Rule_data
 type slot_data = {ndown:int;
                   sprvd: int TermMap.t}
 
+type var_def_data = {
+    definition: int option;
+    used: int list
+  }
 
 
 type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
@@ -23,6 +27,7 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
               mutable fwd:   Term_table.t;
               mutable left:  Term_table.t;
               mutable slots: slot_data array}
+
 
 type gdesc = {mutable pub: bool;
               mdl: int;
@@ -38,6 +43,7 @@ type t = {base:   Proof_table.t;
           count0: int;
           entry:  entry;
           prev:   t option;
+          var_defs: var_def_data array;
           trace:  bool;
           verbosity: int}
 
@@ -80,6 +86,7 @@ let make_entry () =
     {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
      slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
 
+
 let copied_entry (e:entry): entry =
   {prvd     = e.prvd;
    prvd2    = e.prvd2;
@@ -99,6 +106,7 @@ let make (verbosity:int): t  =
      def_ass  = Term_table.empty;
      depth    = 0;
      prev     = None;
+     var_defs = [||];
      work     = [];
      count0   = 0;
      entry    = make_entry ();
@@ -130,6 +138,12 @@ let count_variables (at:t): int =
 let count_last_arguments (pc:t): int =
   Proof_table.count_last_arguments pc.base
 
+let count_last_variables (pc:t): int =
+  Proof_table.count_last_variables pc.base
+
+let count_last_type_variables (pc:t): int =
+  Proof_table.count_last_type_variables pc.base
+
 let local_argnames (pc:t): int array =
   Proof_table.local_argnames pc.base
 
@@ -154,6 +168,33 @@ let term (i:int) (pc:t): term =
 
 
 let depth (pc:t): int = pc.depth
+
+let trace_prefix_0 (pc:t): string =
+  assert (not (is_global pc));
+  String.make (3 + 2*(pc.depth-1)) ' '
+
+
+let trace_prefix (pc:t): string =
+  String.make (3 + 2*pc.depth) ' '
+
+let trace_pop (pc:t): unit =
+  printf "%send\n" (trace_prefix_0 pc)
+
+
+let pop (pc:t): t =
+  assert (is_local pc);
+  if pc.trace then
+    trace_pop pc;
+  match pc.prev with
+    None -> assert false
+  | Some x -> x
+
+
+let rec global (pc:t): t =
+  if is_global pc then
+    pc
+  else
+    global (pop pc)
 
 
 let type_of_term (t:term) (pc:t): type_term =
@@ -272,6 +313,115 @@ let assumptions_chain (tgt:term) (pc:t): term =
   implication_chain (assumptions pc) tgt pc
 
 
+
+
+let assumptions_for_variables
+    (ind_vars: int array)  (* The induction variables *)
+    (insp_vars: int list)  (* All variables of the inspect expression *)
+    (pc:t)
+    : int list * int list =
+  (* All assumptions of the contexts which are needed to define the variables
+     [ind_vars] and all the other variables which are not in [insp_vars] but
+     in the contexts.
+   *)
+  let ind_vars  = Array.copy ind_vars
+  and nvars = Array.length ind_vars in
+  assert (0 < nvars);
+  Array.sort Pervasives.compare ind_vars;
+  let rec collect
+      (i:int) (nargs:int) (ass:int list) (pc:t)
+      : int list * int =
+    let idx_lst_rev = assumption_indices pc in
+    let ass = List.rev_append idx_lst_rev ass
+    in
+    let c = context pc in
+    let loc_nargs = Context.count_last_arguments c in
+    let i =
+      interval_fold
+        (fun i k ->
+          let k = k + nargs in
+          assert (i <= nvars);
+          if i = nvars || k <> ind_vars.(i) then
+            i
+          else
+            i + 1
+        )
+        i 0 loc_nargs
+    in
+    if nvars = i then
+      ass, loc_nargs+nargs
+    else begin
+      assert (is_local pc);
+      collect i (loc_nargs + nargs) ass (pop pc)
+    end
+  in
+  let ass, nvars = collect 0 0 [] pc in
+  let used_lst =
+    if ass = [] then
+      []
+    else
+      let used_lst_rev =
+        List.fold_left
+          (fun lst idx -> Term.used_variables_0 (term idx pc) nvars lst)
+          []
+          ass
+      in
+      let insp_vars = Array.of_list insp_vars in
+      Array.sort Pervasives.compare insp_vars;
+      List.filter
+        (fun i ->
+          try ignore(Search.binsearch i insp_vars); false
+          with Not_found -> true
+        )
+        (List.rev used_lst_rev)
+  in
+  ass, used_lst
+
+
+
+let add_variable_definition (v:int) (idx:int) (pc:t): unit =
+  (* The assertion at [idx] is a valid definition assertion of the form
+
+         v = exp
+   *)
+  assert (v < count_variables pc);
+  let def = pc.var_defs.(v) in
+  assert (not (Option.has def.definition));
+  pc.var_defs.(v) <- {def with definition = Some idx}
+
+
+
+let add_variable_usage (v:int) (idx:int) (pc:t): unit =
+  (* The variable [v] is part of the definition term of another variable and
+     has been used to substitute the other variable in an assertion to get the
+     assertion at [idx]
+   *)
+  assert (v < count_variables pc);
+  let def = pc.var_defs.(v) in
+  assert (not (Option.has def.definition));
+  if List.mem idx def.used then
+    ()
+  else
+    pc.var_defs.(v) <- {def with used = idx :: def.used}
+
+
+let variable_definition (v:int) (pc:t): int =
+  assert (v < count_variables pc);
+  match pc.var_defs.(v).definition with
+    None ->
+      raise Not_found
+  | Some idx ->
+      idx
+
+
+let variable_has_definition (v:int) (pc:t): bool =
+  try
+    ignore(variable_definition v pc);
+    true
+  with Not_found ->
+    false
+
+
 let work (pc:t): int list = pc.work
 
 let has_work (pc:t): bool = pc.work <> []
@@ -340,14 +490,6 @@ let unify_with
     []
     lst
 
-
-let trace_prefix_0 (pc:t): string =
-  assert (not (is_global pc));
-  String.make (3 + 2*(pc.depth-1)) ' '
-
-
-let trace_prefix (pc:t): string =
-  String.make (3 + 2*pc.depth) ' '
 
 let is_trace_extended (pc:t): bool = 3 < pc.verbosity
 
@@ -423,8 +565,39 @@ let has_in_view (t:term) (pc:t): bool =
 
 
 
+
+let equal_symmetry (pc:t): int =
+  find (Feature_table.equal_symmetry_term ()) (global pc)
+
+
+let leibniz_term (pc:t): int =
+  find (Feature_table.leibniz_term ()) (global pc)
+
+
 let split_equality (t:term) (pc:t): int * term * term =
   Proof_table.split_equality t 0 pc.base
+
+
+
+let split_specific_equality (t:term) (pc:t): term * term =
+  let nargs,left,right = split_equality t pc in
+  if nargs = 0 then
+    left, right
+  else
+    raise Not_found
+
+
+
+
+let equality_data (i:int) (pc:t):  int * term * term =
+  assert (count_variables pc = Proof_table.nbenv_term i pc.base);
+  let rd = rule_data i pc in
+  let nargs, eq_id, left, right = Rule_data.equality_data rd in
+  if nargs = 0 then
+    eq_id, left, right
+  else
+    raise Not_found
+
 
 
 
@@ -635,16 +808,29 @@ let specialized
 
 
 
-let find_schematic (t:term) (pc:t): int * arguments * agens =
-  (* Find a universal quantified assertion and a substitution for it so that
-     the substituted assertions is the same as the term 't'.
+let find_schematic (t:term) (nargs:int) (pc:t): int * agens =
+  (* Find a universally quantified assertion and a substitution for it so that
+     the substituted assertion is the same as the term 't' and the substitution
+     is the indentity substitution with [nargs] arguments.
    *)
   let sublst = unify t pc.entry.prvd2 pc in
+  let sublst =
+    List.filter
+      (fun (_,args,_) ->
+        Array.length args = nargs &&
+        interval_for_all
+          (fun i ->
+            args.(i) = Variable i
+          )
+          0 nargs
+      )
+      sublst
+  in
   match sublst with
     [] ->
       raise Not_found
-  | head :: tail ->
-      head
+  |  (idx,_,ags):: tail ->
+      idx, ags
 
 
 
@@ -1412,6 +1598,137 @@ let add_inductive_set_rules (fwd:bool) (t:term) (pc:t): unit =
       ()
 
 
+
+let equality_swapped (i:int) (left:term) (right:term) (pc:t): int =
+  (* The term at [i] is a equality of the form [left = right]. Add the
+     term [right = left] to the context and return its index.
+   *)
+  let eq_sym = equal_symmetry pc
+  and tp = type_of_term left pc in
+  let eq_sym = specialized eq_sym [|left;right|] [|tp|] 0 pc in
+  add_mp i eq_sym false pc
+
+
+let leibniz (i:int) (left:term) (right:term) (pc:t): int =
+  (* The term at [i] is a equality of the form [left = right]. Add the
+     term [all(p) p(left) ==> p(right)] derived from the leibniz condition
+
+         all(a,b,p) a = b ==> p(a) ==> p(b)
+
+     to the context and return its index.
+   *)
+  let idx = leibniz_term pc
+  and tp = type_of_term left pc in
+  let idx = specialized idx [|left;right|] [|tp|] 0 pc in
+  add_mp i idx false pc
+
+
+
+let can_be_variable_definition (v:int) (t:term) (pc:t): bool =
+  not (variable_has_definition v pc) &&
+  let nvars = count_variables pc in
+  let used = Term.used_variables t nvars in
+  not (List.mem v used) &&
+  List.for_all
+    (fun v -> not (variable_has_definition v pc))
+    used
+
+
+let substitute_variable
+    (var:int) (def_idx:int) (def_term:term)
+    (t:term) (idx:int) (search:bool) (pc:t): int =
+  (* The variable [var] has the defining assertion [def_idx] with the
+     definition term [def_term]. Use this definition to substitute the
+     variable in the assertion [t] at [idx]
+   *)
+  let leib = leibniz def_idx (Variable var) def_term pc
+                  (* leib: all(p:{T} p(var) ==> p(def_term) *)
+  and pterm = Term.lambda_inner t var
+  and tp = type_of_term (Variable var) pc
+  in
+  let ptp = predicate_of_type tp pc in
+  let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
+  let imp_idx = specialized leib [|p|] [||] 0 pc
+      (* {var: term}(var) ==> {var:term}(def_term) *)
+  and redex1 = make_application p [|Variable var|] tp 0 true pc
+  in
+  let idx_redex1 = add_beta_redex redex1 idx false pc in
+  let idx_redex2 = add_mp idx_redex1 imp_idx false pc in
+  add_beta_reduced idx_redex2 search pc
+
+
+let add_consequences_variable_definition (i:int) (pc:t): unit =
+  (* If the assertion [i] is a variable definition of the form [v = exp] or
+     [exp = v] where [exp] does not contain [v] then add all the consequences
+     of the variable definition.
+
+     - Use symmetry of [=] and swap the operands if necessary to get the
+       expression into the form [v = exp] so that [v] has no definition and
+       does not occur in [exp] and none of the variables in [exp] has a
+       definition. If this is not possible then do nothing.
+
+     - Add [exp] as a defintion of [v].
+
+     - Scan all assumptions which contain [v] and add the assumptions with
+       [v] substituted by [exp] to the context. Furthermore add the substituted
+       assumptions to all variables occurring in [exp].
+   *)
+  let var_def (i:int): int * int * term  =
+    let eq_id, left, right = equality_data i pc in
+    match left,right with
+      Variable j, Variable k ->
+        if can_be_variable_definition j right pc then
+          i,j,right
+        else if can_be_variable_definition k left pc then
+          let i = equality_swapped i left right pc in
+          i,k,left
+        else
+          raise Not_found
+    | Variable j, _ ->
+        if can_be_variable_definition j right pc then
+          i, j, right
+        else
+          raise Not_found
+    | _, Variable k ->
+        if can_be_variable_definition k left pc then
+          let i = equality_swapped i left right pc in
+          i, k, left
+        else
+          raise Not_found
+    | _,_ ->
+        raise Not_found
+  in
+  try
+    let idx, ivar, exp = var_def i in
+    assert (not (variable_has_definition ivar pc));
+    let leib = leibniz idx (Variable ivar) exp pc in
+    let ass_lst, _ = assumptions_for_variables [|ivar|] [] pc in
+    add_variable_definition ivar idx pc;
+    let nvars = count_variables pc in
+    let exp_used = Term.used_variables exp nvars in
+    List.iter
+      (fun ass_idx ->
+        if ass_idx <> idx then
+          let ass  = term ass_idx pc in
+          let used = Term.used_variables ass nvars in
+          if List.mem ivar used then begin
+            try
+              let idx_sub = substitute_variable ivar idx exp ass ass_idx true pc in
+              (* add idx_sub to all variables in exp *)
+              List.iter
+                (fun v -> add_variable_usage v idx_sub pc)
+                exp_used
+            with Not_found ->
+              ()
+          end
+      )
+      ass_lst
+  with Not_found ->
+    ()
+
+
+
+
 let add_consequences (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] which are not yet in the proof
       context [pc] to the proof context and to the work items.
@@ -1425,7 +1742,8 @@ let add_consequences (i:int) (pc:t): unit =
   if RD.is_implication rd then
     add_consequences_implication i rd pc;
   add_consequences_evaluation i pc;
-  add_consequences_someelim  i pc
+  add_consequences_someelim  i pc;
+  add_consequences_variable_definition i pc
 
 
 let clear_work (pc:t): unit =
@@ -1531,9 +1849,6 @@ let trace_push (pc:t): unit =
   printf "%srequire\n" prefix
 
 
-let trace_pop (pc:t): unit =
-  printf "%send\n" (trace_prefix_0 pc)
-
 let trying_goal (g:term) (pc:t): unit =
   if pc.trace then begin
     let prefix = trace_prefix pc in
@@ -1557,7 +1872,18 @@ let proved_goal (g:term) (pc:t): unit =
 
 
 let push0 (base:Proof_table.t) (pc:t): t =
-  let nbenv = Proof_table.count_variables base in
+  let nbenv = Proof_table.count_variables base
+  and nargs = Proof_table.count_last_variables base in
+  let var_defs =
+    Array.init
+      nbenv
+      (fun i ->
+        if i < nargs then
+          {definition = None; used = []}
+        else
+          pc.var_defs.(i-nargs)
+      )
+  in
   let res = {pc with
              base  = base;
              terms = Ass_seq.clone pc.terms;
@@ -1565,6 +1891,7 @@ let push0 (base:Proof_table.t) (pc:t): t =
              depth = 1 + pc.depth;
              count0 = count pc;
              entry  = copied_entry pc.entry;
+             var_defs = var_defs;
              prev   = Some pc} in
   push_slots nbenv res;
   if res.trace then
@@ -1607,16 +1934,6 @@ let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
 let push_empty (pc:t): t =
   let base = Proof_table.push_typed empty_formals empty_formals pc.base in
   push0 base pc
-
-
-let pop (pc:t): t =
-  assert (is_local pc);
-  if pc.trace then
-    trace_pop pc;
-  match pc.prev with
-    None -> assert false
-  | Some x -> x
-
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)

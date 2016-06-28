@@ -49,8 +49,6 @@ all(a,b,c:G)
         b = c
     ensure
         a = c
-        proof
-            c in {x: x = a}
     end
 
 

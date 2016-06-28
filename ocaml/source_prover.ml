@@ -399,70 +399,6 @@ let inductive_type_case_context
 
 
 
-let assumptions_for_variables
-    (ind_vars: int array)  (* The induction variables *)
-    (insp_vars: int list)  (* All variables of the inspect expression *)
-    (pc:PC.t)
-    : int list * int list =
-  (* All assumptions of the contexts which are needed to define the variables
-     [ind_vars] and all the other variables which are not in [insp_vars] but
-     in the contexts.
-   *)
-  let ind_vars  = Array.copy ind_vars
-  and nvars = Array.length ind_vars in
-  assert (0 < nvars);
-  Array.sort Pervasives.compare ind_vars;
-  let rec collect
-      (i:int) (nargs:int) (ass:int list) (pc:PC.t)
-      : int list * int =
-    let idx_lst_rev = PC.assumption_indices pc in
-    let ass = List.rev_append idx_lst_rev ass
-    in
-    let c = PC.context pc in
-    let loc_nargs = Context.count_last_arguments c in
-    let i =
-      interval_fold
-        (fun i k ->
-          let k = k + nargs in
-          assert (i <= nvars);
-          if i = nvars || k <> ind_vars.(i) then
-            i
-          else
-            i + 1
-        )
-        i 0 loc_nargs
-    in
-    if nvars = i then
-      ass, loc_nargs+nargs
-    else begin
-      assert (PC.is_local pc);
-      collect i (loc_nargs + nargs) ass (PC.pop pc)
-    end
-  in
-  let ass, nvars = collect 0 0 [] pc in
-  let used_lst =
-    if ass = [] then
-      []
-    else
-      let used_lst_rev =
-        List.fold_left
-          (fun lst idx -> Term.used_variables_0 (PC.term idx pc) nvars lst)
-          []
-          ass
-      in
-      let insp_vars = Array.of_list insp_vars in
-      Array.sort Pervasives.compare insp_vars;
-      List.filter
-        (fun i ->
-          try ignore(Search.binsearch i insp_vars); false
-          with Not_found -> true
-        )
-        (List.rev used_lst_rev)
-  in
-  ass, used_lst
-
-
-
 
 let induction_goal_predicate
     (vars:int array)              (* induction variables *)
@@ -596,7 +532,7 @@ let inductive_set_context
     let ass_lst, other_var_lst =
       let insp_vars = Term.used_variables elem nvars in
       let insp_vars = Term.used_variables_0 set nvars insp_vars in
-      assumptions_for_variables vars insp_vars pc in
+      PC.assumptions_for_variables vars insp_vars pc in
     let goal_pred =
       induction_goal_predicate
         vars
@@ -911,9 +847,9 @@ let get_transitivity_data
         and ac = rel 3 a c in
         Term.binary imp_id ab (Term.binary imp_id bc ac)
       in
-      let idx_law,_,ags =
+      let idx_law,ags =
         try
-          PC.find_schematic t pc1
+          PC.find_schematic t 3 pc1
         with Not_found ->
           let law = Term.all_quantified
               3 (standard_argnames 3,[|tp;tp;tp|]) empty_formals t
@@ -1222,7 +1158,7 @@ and prove_inductive_type
       (ST.string (Context.argnames (PC.context pc)).(ivar))
   end;
   let ass_idx_lst, other_vars =
-    assumptions_for_variables [|ivar|] [ivar] pc in
+    PC.assumptions_for_variables [|ivar|] [ivar] pc in
   let goal_pred =
     induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
   and nass = List.length ass_idx_lst

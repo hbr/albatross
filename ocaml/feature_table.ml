@@ -1076,11 +1076,11 @@ let term_to_string
           else begin
             let names = Array.append nms names in
             let tvs1 = Tvars.make_fgs fgnms fgcon in
-            if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
+            (*if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
               printf "tvs1  %s\n" (Class_table.string_of_tvs tvs1 ft.ct);
               printf "tvs   %s\n" (Class_table.string_of_tvs tvs  ft.ct);
             end;
-            assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);
+            assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);*)
             let tvs = if Tvars.is_empty tvs then tvs1 else tvs in
             let argsstr = Class_table.arguments_string2 tvs nms tps ft.ct
             and tvsstr  = Class_table.string_of_tvs tvs1 ft.ct
@@ -3372,3 +3372,43 @@ let add_involved_assertion (ia:int) (t:term) (ft:t): unit =
   IntSet.iter
     (fun fidx -> (base_descriptor fidx ft)#add_assertion ia)
     (collect_called t 0 ft)
+
+
+
+let equal_symmetry_term (): term =
+  (* Construct all(a,b) a = b ==> b = a *)
+  let eq_id  = 2  + eq_index
+  and imp_id = 2  + implication_index
+  and a = Variable 0
+  and b = Variable 1
+  and ag = Variable 0
+  and any_tp = Variable (1 + Class_table.any_index)
+  in
+  let eq a b = VAppl (eq_id, [|a;b|], [|ag|]) in
+  let imp = Term.binary imp_id (eq a b) (eq b a) in
+  Term.all_quantified
+    2
+    (standard_argnames 2,[|ag;ag|])
+    (standard_fgnames 1,[|any_tp|])
+    imp
+
+
+let leibniz_term (): term =
+  (* Construct all(a,b,p) a = b ==> p(a) ==> p(b) *)
+  let eq_id  = 3 + eq_index
+  and imp_id = 3 + implication_index
+  and a = Variable 0
+  and b = Variable 1
+  and p = Variable 2
+  and ag = Variable 0
+  and any_tp = Variable (1 + Class_table.any_index)
+  in
+  let pred = Class_table.predicate_type ag 1 in
+  let eqab = VAppl (eq_id, [|a;b|], [|ag|])
+  and p x  = Application (p, [|x|], true) in
+  let imp = Term.binary imp_id eqab (Term.binary imp_id (p a) (p b)) in
+  Term.all_quantified
+    3
+    (standard_argnames 3, [|ag;ag;pred|])
+    (standard_fgnames 1, [|any_tp|])
+    imp

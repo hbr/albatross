@@ -87,7 +87,7 @@ val trying_goal:        term -> t -> unit
 val failed_goal:        term -> t -> unit
 val proved_goal:        term -> t -> unit
 
-val find_schematic:     term -> t -> int * arguments * agens
+val find_schematic:     term -> int -> t -> int * agens
 val find_goal:          term -> t -> int
     (** Find a term which exactly matches the goal or which can be specialized to
         match the goal. Add the specialization if necessary and return the index
@@ -124,7 +124,7 @@ val false_constant: t -> term
 val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
 val assumption_indices: t -> int list
-
+val assumptions_for_variables: int array -> int list -> t -> int list * int list
 val check_deferred: t -> unit
 val owner:          t -> int
 val anchor_class:   t -> int

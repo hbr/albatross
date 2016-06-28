@@ -39,11 +39,6 @@ all(a:[G])
 
         via some(x,y,b) a = x^y^b
         via some(z) a = [z]
-            assert
-                ensure
-                    [z] = x ^ y ^ b
-                    via [a]
-                end
     end
 
 

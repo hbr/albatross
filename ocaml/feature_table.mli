@@ -222,6 +222,7 @@ val add_involved_assertion: int -> term -> t -> unit
 
 
 val term_to_string: term -> bool -> bool -> int -> int array -> Tvars.t -> t -> string
+val string_of_term_anon: term -> int -> t -> string
 
 val export_feature: int -> bool -> t -> unit
 
@@ -234,3 +235,6 @@ val adapt_names: int array -> int array -> int array
 val domain_of_feature: int -> int -> agens -> Tvars.t -> t -> term
 
 val validate_visibility: term -> int -> info -> t -> unit
+
+val equal_symmetry_term: unit -> term
+val leibniz_term: unit -> term

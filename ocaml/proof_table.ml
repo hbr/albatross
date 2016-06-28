@@ -90,6 +90,9 @@ let count_last_type_variables (at:t): int = Context.count_last_type_variables at
 let count_last_arguments (at:t): int =
   Context.count_last_arguments at.c
 
+let count_last_variables (at:t): int =
+  Context.count_last_variables at.c
+
 let local_argnames (at:t): int array =
   Context.local_argnames at.c
 
