@@ -175,7 +175,7 @@ all(f,g:A->B, p:{A})
    ========================= :}
 
 
-preimage(b:B, f:A->B): ghost A
+origin(b:B, f:A->B): ghost A
         -- The argument of the injective function 'f' which maps to 'b'.
     require
         f.is_injective
@@ -201,5 +201,5 @@ all(f,g:A->B, y:B)
         g.is_injective
         ==> f <= g
         ==> y in f.range
-        ==> y.preimage(f) = y.preimage(g)
+        ==> y.origin(f) = y.origin(g)
     end

@@ -40,8 +40,8 @@ all(f,g:A->B)
 
 
 
-{: Range, image and preimage
-   ========================= :}
+{: Range, image and origin
+   ======================= :}
 
 
 range (f:A->B): ghost {B}
@@ -53,7 +53,7 @@ range (f:A->B): ghost {B}
     -> {y: some(x) x in p and x in f.domain and f(x) = y}
 
 
-preimage (q:{B}, f:A->B): ghost {A}
+origin (q:{B}, f:A->B): ghost {A}
      -> {x: x in f.domain and f(x) in q}
 
 
@@ -64,8 +64,8 @@ all(x:A, p,q:{A}, f:A->B)
        f[f.domain] <= f.range
        f.range <= f[f.domain]
 
-       f.domain <= f.range.preimage(f)
-       f.range.preimage(f) <= f.domain
+       f.domain <= f.range.origin(f)
+       f.range.origin(f) <= f.domain
 
        p <= q ==> f[p] <= f[q]
     end

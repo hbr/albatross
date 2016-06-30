@@ -522,7 +522,7 @@ all(f,g:A->B)
    ========================= :}
 
 
-preimage(b:B, f:A->B): ghost A
+origin(b:B, f:A->B): ghost A
     require
         f.is_injective
         b in f.range
@@ -542,7 +542,7 @@ inverse0 (f:A->B): ghost (B -> A)
                require
                    b in f.range
                ensure
-                   -> b.preimage(f)
+                   -> b.origin(f)
                end
     end
 
@@ -627,13 +627,13 @@ all(f,g:A->B, y:B)
         f <= g
         y in f.range
     ensure
-        y.preimage(f) = y.preimage(g)
+        y.origin(f) = y.origin(g)
 
         via some(x) x in f.domain and f(x) = y
         assert
             f(x) = g(x)           -- consistent functions
-            g(x).preimage(g) = x  -- def 'preimage'
-        via [f(x).preimage(f)
+            g(x).origin(g) = x    -- def 'origin'
+        via [f(x).origin(f)
              x
-             g(x).preimage(g)]
+             g(x).origin(g)]
     end

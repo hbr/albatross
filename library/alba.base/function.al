@@ -121,16 +121,16 @@ all(p,q:{A}, f:A->B)
     end
 
 
-preimage (q:{B}, f:A->B): ghost {A}
+origin (q:{B}, f:A->B): ghost {A}
     -> {x: x in f.domain and f(x) in q}
 
 
 all(f:A->B)
     ensure
-        f.domain <= f.range.preimage(f)
+        f.domain <= f.range.origin(f)
     end
 
 all(f:A->B)
     ensure
-        f.range.preimage(f) <= f.domain
+        f.range.origin(f) <= f.domain
     end
