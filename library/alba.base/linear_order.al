@@ -88,15 +88,12 @@ all(a,b:LO)
         min(a,b).is_least({a,b})
     assert
         ensure min(a,b) in {a,b}
-        assert a <= b  or  not (a <= b)
-               a <= b  ==> min(a,b) in {a,b}
+            if a <= b else
         end
 
         all(x) require x in {a,b}
                ensure  min(a,b) <= x
-               assert  a <= b  or  not (a <= b)
-                       a <= b        ==> min(a,b) <= x
-                       not (a <= b)  ==> min(a,b) <= x
+                   if a <= b else
                end
     end
 

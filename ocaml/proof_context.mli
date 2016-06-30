@@ -141,3 +141,4 @@ val or_elimination:      t -> int
 val indirect_proof_law:  t -> int
 val has_excluded_middle: t -> bool
 val has_or_elimination:  t -> bool
+val expand_variable_definitions: int -> t-> unit

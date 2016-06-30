@@ -110,7 +110,8 @@ module Term: sig
 
   val used_variables_0:     term -> int -> int list -> int list
   val used_variables:       term -> int -> int list
-  val used_variables_filtered: term -> (int -> bool) -> bool -> int list
+  val used_variables_filtered_0: term -> (int -> bool) -> bool -> int list -> int list
+  val used_variables_filtered:   term -> (int -> bool) -> bool -> int list
   val used_variables_from:  term -> int -> bool -> int list
   val used_variables_transform: term -> int -> int array * int array
   val unused_transform:     formals -> int -> formals -> term ->

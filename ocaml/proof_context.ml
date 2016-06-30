@@ -190,6 +190,85 @@ let pop (pc:t): t =
   | Some x -> x
 
 
+let trace_push (pc:t): unit =
+  let str = Proof_table.last_arguments_string pc.base in
+  let prefix = trace_prefix_0 pc in
+  if str <> "" then printf "%sall%s\n" prefix str;
+  printf "%srequire\n" prefix
+
+
+let push_slots (nbenv:int) (pc:t): unit =
+  pc.entry.slots <-
+    if nbenv=0 then
+      Array.copy pc.entry.slots
+    else
+      let len = Array.length pc.entry.slots in
+      Array.init
+        (len+1)
+        (fun i ->
+          if i<len then
+            let sd = pc.entry.slots.(i) in
+            {sd with ndown = sd.ndown+nbenv}
+          else
+            {ndown=0; sprvd=TermMap.empty})
+
+
+let push0 (base:Proof_table.t) (pc:t): t =
+  let nbenv = Proof_table.count_variables base
+  and nargs = Proof_table.count_last_variables base in
+  let var_defs =
+    Array.init
+      nbenv
+      (fun i ->
+        if i < nargs then
+          {definition = None; used = []}
+        else
+          pc.var_defs.(i-nargs)
+      )
+  in
+  let res = {pc with
+             base  = base;
+             terms = Ass_seq.clone pc.terms;
+             work  = pc.work;
+             depth = 1 + pc.depth;
+             count0 = count pc;
+             entry  = copied_entry pc.entry;
+             var_defs = var_defs;
+             prev   = Some pc} in
+  push_slots nbenv res;
+  if res.trace then
+    trace_push res;
+  res
+
+
+let push
+    (entlst:entities list withinfo)
+    (rt:return_type)
+    (is_pred:bool)
+    (is_func:bool)
+    (rvar: bool)
+    (pc:t): t =
+  let base = Proof_table.push entlst rt is_pred is_func rvar pc.base in
+  push0 base pc
+
+
+let push_untyped (names:int array) (pc:t): t =
+  let base = Proof_table.push_untyped names pc.base in
+  push0 base pc
+
+
+
+let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
+  let base = Proof_table.push_typed fargs fgs pc.base in
+  push0 base pc
+
+
+
+let push_empty (pc:t): t =
+  let base = Proof_table.push_typed empty_formals empty_formals pc.base in
+  push0 base pc
+
+
 let rec global (pc:t): t =
   if is_global pc then
     pc
@@ -379,49 +458,6 @@ let assumptions_for_variables
 
 
 
-let add_variable_definition (v:int) (idx:int) (pc:t): unit =
-  (* The assertion at [idx] is a valid definition assertion of the form
-
-         v = exp
-   *)
-  assert (v < count_variables pc);
-  let def = pc.var_defs.(v) in
-  assert (not (Option.has def.definition));
-  pc.var_defs.(v) <- {def with definition = Some idx}
-
-
-
-let add_variable_usage (v:int) (idx:int) (pc:t): unit =
-  (* The variable [v] is part of the definition term of another variable and
-     has been used to substitute the other variable in an assertion to get the
-     assertion at [idx]
-   *)
-  assert (v < count_variables pc);
-  let def = pc.var_defs.(v) in
-  assert (not (Option.has def.definition));
-  if List.mem idx def.used then
-    ()
-  else
-    pc.var_defs.(v) <- {def with used = idx :: def.used}
-
-
-let variable_definition (v:int) (pc:t): int =
-  assert (v < count_variables pc);
-  match pc.var_defs.(v).definition with
-    None ->
-      raise Not_found
-  | Some idx ->
-      idx
-
-
-let variable_has_definition (v:int) (pc:t): bool =
-  try
-    ignore(variable_definition v pc);
-    true
-  with Not_found ->
-    false
-
-
 let work (pc:t): int list = pc.work
 
 let has_work (pc:t): bool = pc.work <> []
@@ -597,6 +633,122 @@ let equality_data (i:int) (pc:t):  int * term * term =
     eq_id, left, right
   else
     raise Not_found
+
+
+let add_variable_definition (v:int) (idx:int) (pc:t): unit =
+  (* The assertion at [idx] is a valid definition assertion of the form
+
+         v = exp
+   *)
+  assert (v < count_variables pc);
+  let def = pc.var_defs.(v) in
+  assert (not (Option.has def.definition));
+  pc.var_defs.(v) <- {def with definition = Some idx}
+
+
+
+let add_variable_usage (v:int) (idx:int) (pc:t): unit =
+  (* The variable [v] is part of the definition term of another variable and
+     has been used to substitute the other variable in an assertion to get the
+     assertion at [idx]
+   *)
+  assert (v < count_variables pc);
+  let def = pc.var_defs.(v) in
+  assert (not (Option.has def.definition));
+  if List.mem idx def.used then
+    ()
+  else
+    pc.var_defs.(v) <- {def with used = idx :: def.used}
+
+
+
+
+let variable_definition (v:int) (pc:t): int =
+  (* The index of the defining assertin of the variable [v]. Raise [Not_found]
+     if the variable has no definition.
+   *)
+  assert (v < count_variables pc);
+  match pc.var_defs.(v).definition with
+    None ->
+      raise Not_found
+  | Some idx ->
+      idx
+
+
+let variable_has_definition (v:int) (pc:t): bool =
+  try
+    ignore(variable_definition v pc);
+    true
+  with Not_found ->
+    false
+
+
+let extended_variable_definition (v:int) (pc:t): int * term =
+  (* The index of the defining assertion of the variable [v] and its
+     definition term.
+   *)
+  try
+    let idx = variable_definition v pc in
+    let t = term idx pc in
+    let left,right = split_specific_equality t pc in
+    assert (left = Variable v);
+    idx, right
+  with Not_found ->
+    assert false (* Illegal call *)
+
+
+
+
+
+
+let get_variable_definitions (t:term) (pc:t): (int*int*term) list =
+  (* Get the list of all applicable variable definitions in the term [t].
+     The definition consists of the index of the defining assertion, the
+     variable and the definition term.
+
+     The list must be applied in reversed form.
+   *)
+  let nvars = count_variables pc in
+  let filter v = v < nvars && variable_has_definition v pc
+  in
+  let get_used t lst = Term.used_variables_filtered_0 t filter false lst
+  in
+  let get_defs var_lst =
+    List.rev_map
+      (fun v ->
+        let idx,exp = extended_variable_definition v pc in
+        idx,v,exp
+      )
+      var_lst
+  in
+  let rec get_definitions
+      (rcnt:int)
+      (vars_new: int list)
+      (defs:(int*int*term) list)
+      : (int*int*term) list =
+    assert (rcnt <= nvars);
+    match vars_new with
+      [] ->
+        defs
+    | _ ->
+        let vars_new, defs =
+          List.fold_left
+            (fun (vs,defs) (idx,v,exp) ->
+              let vs = get_used exp vs
+              and defs = (idx,v,exp)::defs in
+              vs,defs
+            )
+            ([],defs)
+            (get_defs vars_new)
+        in
+        get_definitions (rcnt+1) vars_new defs
+  in
+  get_definitions 0 (get_used t []) []
+
+
+
+
+
 
 
 
@@ -1280,7 +1432,6 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
 
 
 
-
 let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   (* [idx] must represent a term which can be beta reduced *)
   let t = term idx pc in
@@ -1517,6 +1668,39 @@ let predicate_of_type (tp:type_term) (pc:t): type_term =
 
 
 
+let add_assumption_or_axiom (t:term) (is_axiom: bool) (search:bool) (pc:t): int =
+  (** Add the term [t] as an assumption or an axiom to the context [pc].
+   *)
+  assert (is_consistent pc);
+  let cnt = count pc in
+  if is_axiom then
+    Proof_table.add_axiom t pc.base
+  else
+    Proof_table.add_assumption t pc.base;
+  ignore(raw_add t search pc);
+  if not is_axiom && search then
+    add_last_to_work pc;
+  cnt
+
+
+
+
+
+let add_assumption (t:term) (search:bool) (pc:t): int =
+  (** Add the term [t] as an assumption to the context [pc].
+   *)
+  add_assumption_or_axiom t false search pc
+
+
+
+let add_axiom (t:term) (pc:t): int =
+  (** Add the term [t] as an axiom to the context [pc].
+   *)
+  add_assumption_or_axiom t true false pc
+
+
+
+
 let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
   (* Add the induction law of the case type [tp] for the goal [goal].
 
@@ -1634,6 +1818,45 @@ let can_be_variable_definition (v:int) (t:term) (pc:t): bool =
     used
 
 
+let variable_substitution_implication
+    (v:int)
+    (idx:int)
+    (exp:term)
+    (t:term)
+    (search:bool)
+    (pc:t)
+    :term * int =
+  (* Insert the term [t[v:=exp] ==> t] and return the term [t[v:=exp]] and
+     the index of the implication.
+
+     where [idx] is the assertion with the variable definition [v = exp].
+
+     Raise [Not_found] if the symmetry law of equality is not available or if
+     the leibniz law is not available.
+
+     The term [t] must be a boolean term.
+   *)
+  let idx = equality_swapped idx (Variable v) exp pc in
+  let pterm = Term.lambda_inner t v
+  and tp = type_of_term (Variable v) pc in
+  let ptp = predicate_of_type tp pc in
+  let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
+  let redex1 = make_application p [|exp|] tp 0 true pc
+  and tr = beta_reduce 1 pterm ptp [|exp|] 0 pc
+  and idx_leib = leibniz idx exp (Variable v) pc in
+  let idx_leib = specialized idx_leib [|p|] [||] 0 pc in
+  let pc0 = push_empty pc in
+  let idx_a = add_assumption tr false pc0 in
+  let idx_redex1 = add_beta_redex redex1 idx_a false pc0 in
+  let idx_redex2 = add_mp idx_redex1 idx_leib false pc0 in
+  let idx_t = add_beta_reduced idx_redex2 false pc0 in
+  assert (Term.equivalent (term idx_t pc0) t);
+  let imp,pt = Proof_table.discharged idx_t pc0.base in
+  Proof_table.add_proved imp pt 0 pc.base;
+  let res_idx = raw_add imp search pc in
+  tr,res_idx
+
+
 let substitute_variable
     (var:int) (def_idx:int) (def_term:term)
     (t:term) (idx:int) (search:bool) (pc:t): int =
@@ -1655,6 +1878,20 @@ let substitute_variable
   let idx_redex1 = add_beta_redex redex1 idx false pc in
   let idx_redex2 = add_mp idx_redex1 imp_idx false pc in
   add_beta_reduced idx_redex2 search pc
+
+
+
+let substitute_variable_add_used
+    (var:int) (idx:int) (search:bool) (pc:t)
+    : int =
+  (* Use the definition term of the variable [var] and substitute all occurrences
+     of the variable [var] in the assertion at [idx] by the definition term.
+
+     Furthermore add the assertion [idx] to the used assertions of all variables
+     occurring in the definition term.*)
+  assert false
+
+
 
 
 let add_consequences_variable_definition (i:int) (pc:t): unit =
@@ -1701,7 +1938,6 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
   try
     let idx, ivar, exp = var_def i in
     assert (not (variable_has_definition ivar pc));
-    let leib = leibniz idx (Variable ivar) exp pc in
     let ass_lst, _ = assumptions_for_variables [|ivar|] [] pc in
     add_variable_definition ivar idx pc;
     let nvars = count_variables pc in
@@ -1725,6 +1961,32 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
       ass_lst
   with Not_found ->
     ()
+
+
+
+let expand_variable_definitions (i:int) (pc:t): unit =
+  (* Check if the assertion at [i] has variables which have a definition. If yes
+     then use these variable definitions and add the substituted assertion.*)
+  let subst (i:int) (idx:int) (v:int) (exp:term) (search:bool): int =
+    let t = term i pc in
+    substitute_variable v idx exp t i search pc
+  in
+  let t = term i pc
+  in
+  let defs = get_variable_definitions t pc in
+  match defs with
+    [] ->
+      ()
+  | (idx,v,exp)::tail ->
+      let i =
+        List.fold_right
+          (fun (idx,v,exp) i ->
+            subst i idx v exp false
+          )
+          tail
+          i
+      in
+      ignore(subst i idx v exp true)
 
 
 
@@ -1793,62 +2055,6 @@ let close_assumptions (pc:t): unit =
 
 
 
-let add_assumption_or_axiom (t:term) (is_axiom: bool) (search:bool) (pc:t): int =
-  (** Add the term [t] as an assumption or an axiom to the context [pc].
-   *)
-  assert (is_consistent pc);
-  let cnt = count pc in
-  if is_axiom then
-    Proof_table.add_axiom t pc.base
-  else
-    Proof_table.add_assumption t pc.base;
-  ignore(raw_add t search pc);
-  if not is_axiom && search then
-    add_last_to_work pc;
-  cnt
-
-
-
-
-
-let add_assumption (t:term) (search:bool) (pc:t): int =
-  (** Add the term [t] as an assumption to the context [pc].
-   *)
-  add_assumption_or_axiom t false search pc
-
-
-
-let add_axiom (t:term) (pc:t): int =
-  (** Add the term [t] as an axiom to the context [pc].
-   *)
-  add_assumption_or_axiom t true false pc
-
-
-
-
-let push_slots (nbenv:int) (pc:t): unit =
-  pc.entry.slots <-
-    if nbenv=0 then
-      Array.copy pc.entry.slots
-    else
-      let len = Array.length pc.entry.slots in
-      Array.init
-        (len+1)
-        (fun i ->
-          if i<len then
-            let sd = pc.entry.slots.(i) in
-            {sd with ndown = sd.ndown+nbenv}
-          else
-            {ndown=0; sprvd=TermMap.empty})
-
-
-let trace_push (pc:t): unit =
-  let str = Proof_table.last_arguments_string pc.base in
-  let prefix = trace_prefix_0 pc in
-  if str <> "" then printf "%sall%s\n" prefix str;
-  printf "%srequire\n" prefix
-
-
 let trying_goal (g:term) (pc:t): unit =
   if pc.trace then begin
     let prefix = trace_prefix pc in
@@ -1871,34 +2077,6 @@ let proved_goal (g:term) (pc:t): unit =
       (trace_prefix pc) (string_of_term g pc)
 
 
-let push0 (base:Proof_table.t) (pc:t): t =
-  let nbenv = Proof_table.count_variables base
-  and nargs = Proof_table.count_last_variables base in
-  let var_defs =
-    Array.init
-      nbenv
-      (fun i ->
-        if i < nargs then
-          {definition = None; used = []}
-        else
-          pc.var_defs.(i-nargs)
-      )
-  in
-  let res = {pc with
-             base  = base;
-             terms = Ass_seq.clone pc.terms;
-             work  = pc.work;
-             depth = 1 + pc.depth;
-             count0 = count pc;
-             entry  = copied_entry pc.entry;
-             var_defs = var_defs;
-             prev   = Some pc} in
-  push_slots nbenv res;
-  if res.trace then
-    trace_push res;
-  res
-
-
 let print_work (pc:t): unit =
   if has_work pc then begin
     printf "open work to close\n";
@@ -1908,32 +2086,9 @@ let print_work (pc:t): unit =
   end
 
 
-let push
-    (entlst:entities list withinfo)
-    (rt:return_type)
-    (is_pred:bool)
-    (is_func:bool)
-    (rvar: bool)
-    (pc:t): t =
-  let base = Proof_table.push entlst rt is_pred is_func rvar pc.base in
-  push0 base pc
-
-
-let push_untyped (names:int array) (pc:t): t =
-  let base = Proof_table.push_untyped names pc.base in
-  push0 base pc
-
-
-
-let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
-  let base = Proof_table.push_typed fargs fgs pc.base in
-  push0 base pc
-
-
-
-let push_empty (pc:t): t =
-  let base = Proof_table.push_typed empty_formals empty_formals pc.base in
-  push0 base pc
+let boolean_type (nb:int) (pc:t): type_term =
+  let ntvs = Context.ntvs (context pc) in
+  Variable (Class_table.boolean_index + nb + ntvs)
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
@@ -2192,9 +2347,46 @@ let eval_reduce (g:term) (lst:int list) (pc:t): int list =
   if modi then add_eval t1 e lst else lst
 
 
+let substituted_goal (g:term) (lst:int list) (pc:t): int list =
+  (* Apply all variable substitutions in backward direction and add
+     [gsub ==> g] to the context and add its index to the list *)
+  try
+    let gsub,imps =
+      List.fold_left
+        (fun (gsub,imps) (idx,v,exp) ->
+          let gsub,imp =
+            variable_substitution_implication v idx exp gsub false pc in
+          gsub, imp::imps
+        )
+        (g,[])
+      (List.rev (get_variable_definitions g pc))
+    in
+    if imps = [] then
+      lst
+    else
+      let pc0 = push_empty pc in
+      let idx_gsub = add_assumption gsub false pc0 in
+      let idx_g =
+        List.fold_left
+          (fun g imp -> add_mp g imp false pc0)
+          idx_gsub
+        imps
+      in
+      let imp,pt = Proof_table.discharged idx_g pc0.base in
+      Proof_table.add_proved imp pt 0 pc.base;
+      let imp_idx = raw_add imp false pc in
+      imp_idx :: lst
+  with Not_found ->
+    lst
+
+
 
 let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   (*assert (is_well_typed g pc);*)
+  let lst = substituted_goal g [] pc in
+  if lst <> [] then
+    lst
+  else begin
   let lst = backward_in_table g blacklst pc in
   let lst = eval_reduce g lst pc in
   if pc.trace && is_trace_extended pc then begin
@@ -2204,6 +2396,7 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
     if not (IntSet.is_empty blacklst) then
       printf "%s   blacklist %s\n" prefix (string_of_intset blacklst) end;
   lst
+  end
 
 
 let discharged (i:int) (pc:t): term * proof_term =
@@ -2377,11 +2570,6 @@ let check_interface (pc:t): unit =
         ("deferred assertion \"" ^ (string_of_term (term i pc) pc) ^
          "\" is not public")
   done
-
-let boolean_type (nb:int) (pc:t): type_term =
-  let ntvs = Context.ntvs (context pc) in
-  Variable (Class_table.boolean_index + nb + ntvs)
-
 
 let excluded_middle (pc:t): int =
   let nvars = nbenv pc in

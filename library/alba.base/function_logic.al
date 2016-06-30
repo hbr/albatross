@@ -27,7 +27,7 @@ all(f,g:A->B)
             ensure
                 f(x) = g(x)
                 assert
-                    x /in g.domain
+                    x /in g.domain -- disjoint domains, contradicts assumption
             end
     end
 
@@ -259,8 +259,9 @@ all(f,g:A->B)
         f /= g
     ensure
         f < g
-        via require not some(x) x in g.domain and x /in f.domain
-            assert
+        via require
+            not some(x) x in g.domain and x /in f.domain
+        assert
             all(x)
                 require
                     x in g.domain
@@ -374,6 +375,8 @@ all(f:A->B, p:{A})
             ensure
                 y in f.range
                 via some(x) x in (f|p).domain and (f|p)(x) = y
+                assert
+                    x in f.domain and f(x) = y
             end
     end
 
@@ -488,7 +491,7 @@ all(f,g:A->B, x,y:A)
             x in (g + f).domain
             y in (g + f).domain
             f + g = g + f
-            {h:A->B: x in h.domain ==> y in h.domain ==> h(x) = h(y)}(g + f)
+            {h: x in h.domain ==> y in h.domain ==> h(x) = h(y)}(g + f)
     end
 
 
@@ -589,11 +592,9 @@ all(f:A->B, g,h:B->A)
                 ensure
                     g(y) = h(y)
                     via some(x) x in f.domain and f(x) = y
-                        assert
-                            f(x) = y
-                            g(f(x)) = x
-                            h(f(x)) = x
-                            y in {y: y in g.domain and g(y) = h(y)}
+                    via [g(f(x))
+                         x
+                         h(f(x))]
                 end
     end
 
@@ -627,12 +628,12 @@ all(f,g:A->B, y:B)
         y in f.range
     ensure
         y.preimage(f) = y.preimage(g)
+
         via some(x) x in f.domain and f(x) = y
         assert
-            y.preimage(f) = x
-            f(x) = g(x)    -- consitent functions
-            g(x) = y
-            -- x in g.domain
-            y.preimage(g) = x
-
+            f(x) = g(x)           -- consistent functions
+            g(x).preimage(g) = x  -- def 'preimage'
+        via [f(x).preimage(f)
+             x
+             g(x).preimage(g)]
     end

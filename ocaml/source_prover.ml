@@ -1013,12 +1013,15 @@ and prove_one
 and prove_sequence
     (lst: proof_step list)
     (pc: PC.t): unit =
+  let expand (i:int): unit =
+    PC.expand_variable_definitions i pc
+  in
   List.iter
     (fun step ->
       begin match step with
         PS_Simple ie ->
           let it = get_boolean_term_verified ie pc in
-          ignore (prove_insert_report it true pc)
+          expand (prove_insert_report it true pc)
       | PS_Structured (entlst,rlst,tgt,prf) ->
           let rlst, elst, pc1 = push entlst rlst [tgt] pc in
           add_assumptions rlst pc1;
@@ -1032,7 +1035,7 @@ and prove_sequence
               error_info goal.i ("Cannot prove" ^ msg)
           in
           let t,pt = PC.discharged_bubbled idx pc1 in
-          ignore(PC.add_proved false (-1) t pt pc)
+          expand (PC.add_proved false (-1) t pt pc)
       end;
       PC.close pc
     )
