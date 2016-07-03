@@ -506,11 +506,12 @@ end = struct
           and n2 = Array.length args2 in
           n1 = n2 &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
-      | Indset (n1,nms1,rs1), Indset (n2,nms2,rs2) ->
+      | Indset (nme1,tp1,rs1), Indset (nme2,tp2,rs2) ->
           let nrules1, nrules2 = Array.length rs1, Array.length rs2 in
-          n1 = n2 &&
           nrules1 = nrules2 &&
-          interval_for_all (fun i -> eq rs1.(i) rs2.(i) (n1+nb)) 0 nrules1
+          interval_for_all
+            (fun i -> eq rs1.(i) rs2.(i) (1+nb))
+            0 nrules1
       | _, _ ->
           false
     in
