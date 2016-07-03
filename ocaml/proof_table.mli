@@ -96,6 +96,7 @@ val add_someelim:   int -> term -> t -> unit
 val add_specialize: term -> int -> arguments -> agens -> t -> unit
 val add_inherited:  term -> int -> int -> int -> t -> unit
 
+val is_local_assumption: int -> t -> bool
 val assumptions:  t   -> term list
 val assumption_indices: t -> int list
 val discharged:           int -> t -> term * proof_term

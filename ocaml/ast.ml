@@ -107,13 +107,14 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
     List.iter
       (fun p ->
         try
-          ignore (Prover.prove_and_insert p pc)
+          ignore (Prover.proof_term p pc)
         with Proof.Proof_failed msg ->
           error_info info ("Cannot prove precondition \"" ^
                            (PC.string_of_term p pc) ^
                            "\"\n  of term \"" ^
                            (PC.string_of_term t pc) ^ "\"" ^
-                           msg))
+                           msg)
+      )
       pres
   end
 
@@ -189,7 +190,7 @@ let add_proved
 
 
 let function_property_list (lst:compound) (pc:PC.t): term list =
-  let pc1 = Proof_context.push_untyped [||] pc in
+  let pc1 = Proof_context.push_empty pc in
   List.map
     (fun e ->
       let t = get_boolean_term e pc1 in

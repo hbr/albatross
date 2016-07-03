@@ -321,6 +321,12 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
 let count_local_assumptions (at:t): int =
   at.nreq
 
+
+let  is_local_assumption (i:int) (at:t): bool =
+  let cnt0 = count_previous at in
+  cnt0 <= i && i < cnt0 + at.nreq
+
+
 let assumptions (at:t): term list =
   (* The assumptions of the current context *)
   List.fold_left
@@ -395,6 +401,7 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
   match pt with
     Assumption _ ->
       let idx = count at in
+      assert (count_previous at + at.nreq = idx);
       raw_add ();
       at.reqs <- idx :: at.reqs;
       at.nreq <- at.nreq + 1;

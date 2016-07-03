@@ -293,6 +293,10 @@ let is_assumption (i:int) (pc:t): bool =
   Proof_table.is_assumption i pc.base
 
 
+let is_local_assumption (i:int) (pc:t): bool =
+  Proof_table.is_local_assumption i pc.base
+
+
 let tvars (pc:t): Tvars.t =
   Context.tvars (context pc)
 
@@ -2005,6 +2009,8 @@ let add_consequences (i:int) (pc:t): unit =
     add_consequences_implication i rd pc;
   add_consequences_evaluation i pc;
   add_consequences_someelim  i pc;
+  if is_local_assumption i pc then
+    expand_variable_definitions i pc;
   add_consequences_variable_definition i pc
 
 
