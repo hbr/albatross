@@ -544,11 +544,7 @@ let inductive_set_context
     goal_pred, Array.of_list other_var_lst, ass_lst
   in
   let pa = Application(set,[|elem|],true) in
-  let pa_idx =
-    try PC.find_goal pa pc
-    with Not_found ->
-      error_info info ("\"" ^ (PC.string_of_term elem pc) ^
-                       "\" is not in the inductive set") in
+  let pa_idx = prove_insert_report_base info pa false pc in
   let ind_idx = PC.add_set_induction_law set goal_pred elem pc in
   if PC.is_tracing pc then begin
     let prefix = PC.trace_prefix pc in
