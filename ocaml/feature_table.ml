@@ -2296,13 +2296,23 @@ let base_table (verbosity:int) : t =
     "tuple" Class_table.tuple_index (FNname ST.tuple)
     [|any2;any2|] [|a_tp;b_tp|] tup_tp false false (spec_none 2) ft;
 
+  let first_second_term i =
+    assert (i < 2);
+    let args = standard_substitution 2
+    and ags  = standard_substitution 2
+    and nms  = standard_argnames 2 in
+    let tup = VAppl(tuple_index+3, args, ags) in
+    let pat = Term.some_quantified 2 (nms,ags) tup
+    and res = Term.some_quantified 2 (nms,ags) (Variable i) in
+    Flow (Inspect, [|Variable 0; pat; res |])
+  in
   add_base (* first *)
     "tuple" Class_table.tuple_index (FNname ST.first)
-    [|any2;any2|] [|tup_tp|] a_tp false false (spec_none 1) ft;
+    [|any2;any2|] [|tup_tp|] a_tp false false (spec_term 1 (first_second_term 0)) ft;
 
   add_base (* second *)
     "tuple" Class_table.tuple_index (FNname ST.second)
-    [|any2;any2|] [|tup_tp|] b_tp false false (spec_none 1) ft;
+    [|any2;any2|] [|tup_tp|] b_tp false false (spec_term 1 (first_second_term 1)) ft;
 
   assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
   assert ((descriptor false_index ft).fname       = FNfalse);

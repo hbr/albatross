@@ -10,11 +10,10 @@ create
     tuple(first:A, second:B)
 end
 
-first  (t:(A,B)): A
-second (t:(A,B)): B
+first (t:(A,B)): A
+    -> inspect t
+       case (a,_) then a
 
-all(a:A, b:B)
-    ensure
-        (a,b).first  = a
-        (a,b).second = b
-    end
+second (t:(A,B)): B
+    -> inspect t
+       case (_,b) then b
