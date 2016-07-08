@@ -120,8 +120,8 @@ all(a:A, f:A->B)
 all(f:A->B, a:A, b:B)
     ensure
         (f + (a,b))(a) = b
-        assert
-            a = (a,b).first
+    assert
+        a = (a,b).first
     end
 
 
@@ -131,8 +131,8 @@ all(f:A->B, a,x:A, b:B)
         x /= a
     ensure
         (f + (a,b))(x) = f(x)
-        assert
-            x /= (a,b).first
+    assert
+        x /= (a,b).first
     end
 
 
@@ -310,6 +310,7 @@ all(f,g:A->B)
 
 
 all(f,g,h:A->B)
+        -- Two subfunctions of the same function are consistent.
     require
         f <= h
         g <= h
@@ -364,6 +365,16 @@ all(f,g:A->B)
                -> f(a)
            end
 
+(-) (f:A->B, a:A): (A->B)
+        -- The function 'f' with the element 'a' removed from its domain.
+    -> agent (x)
+           require
+               x in f.domain
+               x /= a
+           ensure
+               -> f(x)
+           end
+
 
 all(f:A->B, p:{A})
     ensure
@@ -379,6 +390,56 @@ all(f:A->B, p:{A})
                     x in f.domain and f(x) = y
             end
     end
+
+
+all(f:A->B, a,b:A)
+    ensure
+        f - a - b = f - b - a
+    end
+
+
+
+all(f:A->B, a:A)
+    require
+        a in f.domain
+    ensure
+        f = f - a + (a,f(a))
+    assert
+        -- Proof needs to many explicit case splits. Case splits should be
+        -- triggered automatically by a conditional expression of a nonrecursive
+        -- function !!!
+        all(x)
+            require
+                x in f.domain
+            ensure
+                x in (f - a + (a,f(a))).domain
+            if x = a
+            else
+            end
+        all(x)
+            require
+                x in (f - a + (a,f(a))).domain
+            ensure
+                x in f.domain
+            if x = a
+            else
+                assert
+                    x in (f - a).domain
+            end
+        all(x)
+            require
+                x in f.domain
+                x in (f - a + (a,f(a))).domain
+            ensure
+                f(x) = (f - a + (a,f(a)))(x)
+            if x = a
+            else
+                via [(f - a)(x)]
+            end
+    end
+
+
+
 
 
 

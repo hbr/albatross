@@ -19,6 +19,14 @@ all(a:G)
         false
     end
 
+all(a,b:G)
+    ensure
+        a = b or a /= b
+    if a = b
+    else
+    end
+
+
 
 immutable class boolean.BOOLEAN
 inherit         ANY end

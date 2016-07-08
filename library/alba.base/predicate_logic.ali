@@ -91,10 +91,15 @@ disjoint(p,q:{G}): ghost BOOLEAN
         -- Are the sets 'p' and 'q' disjoint?
     -> (p*q).is_empty
 
-all(a:G, p,q:{G})
+all(a:G, p,q,r:{G})
     ensure
+        p + q <= r ==> p <= r
+        p + q <= r ==> q <= r
+        p <= r ==> q <= r ==> p + q <= r
+
         disjoint(p,q) ==> disjoint(q,p)
         disjoint(p,q) ==> a in p ==> a /in q
+        not disjoint(p,q) ==> (p*q).has_some
     end
 
 

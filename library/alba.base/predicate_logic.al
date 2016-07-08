@@ -5,6 +5,7 @@ end
 
 G: ANY
 
+
 {: Set order
    ========= :}
 
@@ -210,6 +211,38 @@ all(p:{G})
 disjoint(p,q:{G}): ghost BOOLEAN -> (p*q).is_empty
 
 
+all(p,q,r:{G})
+    require
+        p + q <= r
+    ensure
+        p <= r
+    end
+
+all(p,q,r:{G})
+    require
+        p + q <= r
+    ensure
+        q <= r
+    end
+
+all(p,q,r:{G})
+    require
+        p <= r
+        q <= r
+    ensure
+        p + q <= r
+    assert
+        all(x)
+            require
+                x in p + q
+            ensure
+                x in r
+            if   x in p
+            orif x in q
+            end
+    end
+
+
 all(p,q:{G})
     require
         disjoint(p,q)
@@ -230,6 +263,19 @@ all(a:G, p,q:{G})
             assert
                a in (p*q)
     end
+
+
+all(p,q:{G})
+    require
+        not disjoint(p,q)
+    ensure
+        (p*q).has_some
+        via require not (p*q).has_some
+    end
+
+
+
+
 
 
 {: Union and intersection of collections of sets

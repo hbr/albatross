@@ -106,18 +106,33 @@ all(f,g,h:A->B)
 (|) (f:A->B, p:{A}): (A->B)
         -- The function 'f' whose domain is restricted to the arguments which are
         -- also in 'p'.
-    -> agent (a:A):B
+    -> agent (x)
            require
-               a in f.domain
-               a in p
+               x in f.domain
+               x in p
            ensure
-               -> f(a)
+               -> f(x)
            end
 
 
-all(f:A->B, p:{A})
+(-) (f:A->B, a:A): (A->B)
+        -- The function 'f' with 'a' removed from its domain.
+    -> agent (x)
+           require
+               x in f.domain
+               x /= a
+           ensure
+               -> f(x)
+           end
+
+
+all(a,b:A, f:A->B, p:{A})
     ensure
         (f|p).range <= f.range
+
+        f - a - b = f - b - a
+
+        a in f.domain ==> f = f - a + (a,f(a))
     end
 
 

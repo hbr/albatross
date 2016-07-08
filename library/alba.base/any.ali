@@ -11,7 +11,11 @@ G: ANY
 
 all(a:G) ensure a = a deferred end
 
-all(a:G) ensure a /= a ==> false end
+all(a,b:G)
+    ensure
+        a /= a ==> false
+        a = b or a /= b
+    end
 
 immutable class boolean.BOOLEAN
 inherit         ANY end
