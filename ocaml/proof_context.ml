@@ -1282,7 +1282,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             match ctrl with
               Ifexp ->
                 assert (len = 3);
-                begin try
+                let no_eval () =
+                  t,
+                  Eval.Flow(Ifexp,
+                            [|Eval.Term args.(0);
+                              Eval.Term args.(1);
+                              Eval.Term args.(2)|]),
+                  false
+                in
+                if nb <> 0 then
+                  no_eval ()
+                else begin try
                   let idx = find_match args.(0) pc in
                   let fst,fste,_ = eval args.(1) nb full depth
                   and conde,snde = Eval.Term args.(0), Eval.Term args.(2) in
@@ -1294,12 +1304,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     and conde,fste = Eval.Term args.(0), Eval.Term args.(1) in
                     snd, Eval.If(false,idx,[|conde;fste;snde|]), true
                   with Not_found ->
-                    t,
-                    Eval.Flow(Ifexp,
-                              [|Eval.Term args.(0);
-                                Eval.Term args.(1);
-                                Eval.Term args.(2)|]),
-                    false
+                    no_eval ()
                   end
                 end
             | Inspect ->
