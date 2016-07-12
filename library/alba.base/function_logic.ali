@@ -218,3 +218,15 @@ all(f,g:A->B, y:B)
         ==> y in f.range
         ==> y.origin(f) = y.origin(g)
     end
+
+
+{:# Fixpoints
+:}
+
+is_fixpoint(x:A, f:A->A): ghost BOOLEAN
+        -- Is 'x' a fixpoint of the function 'f'?
+    -> x in f.domain and f(x) = x
+
+is_idempotent(f:A->A): ghost BOOLEAN
+        -- Is the function 'f' idempotent i.e. is f(x) = f(f(x)) valid?
+    -> all(x) x in f.domain ==> f(x).is_fixpoint(f)

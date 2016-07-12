@@ -149,8 +149,8 @@ all(x:A,f,g:A->B)
         x in f.domain
     ensure
         (f + g)(x) = f(x)
-        if x in g.domain
-        else
+    if x in g.domain
+    else
     end
 
 all(f,g:A->B)
@@ -698,3 +698,17 @@ all(f,g:A->B, y:B)
              x
              g(x).origin(g)]
     end
+
+
+
+
+{:# Fixpoints
+:}
+
+is_fixpoint(x:A, f:A->A): ghost BOOLEAN
+        -- Is 'x' a fixpoint of the function 'f'?
+    -> x in f.domain and f(x) = x
+
+is_idempotent(f:A->A): ghost BOOLEAN
+        -- Is the function 'f' idempotent i.e. is f(x) = f(f(x)) valid?
+    -> all(x) x in f.domain ==> f(x).is_fixpoint(f)

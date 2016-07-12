@@ -1,18 +1,40 @@
 use
     predicate_logic
+    function
     relation
 end
 
 A: ANY
 
-{: Carrier
-   ======= :}
+{: Basics
+   ====== :}
+
+
 carrier (r:{A,A}): ghost {A} -> domain(r) + range(r)
 
-identity: {A,A} = {x,y: x = y}
+identity: {A,A}
+        -- The identity relation.
+    = {x,y: x = y}
 
 diagonal(p:{A}): {A,A}
+        -- The identity relation restricted to the set 'p'
     -> {x,y: x = y and x in p}
+
+is_total(f:A->A, r:{A,A}): ghost BOOLEAN
+        -- Is 'f' total on the carrier of 'r'?
+    -> r.carrier <= f.domain
+
+is_antisymmetric(r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' antisymmetric?
+    -> all(a,b) r(a,b) ==> r(b,a) ==> a = b
+
+is_dichotomic(r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' dichotomic i.e. for all pairs of the carrier either
+        -- the first one relates to the second or vice versa?
+    -> all(a,b) {a,b} <= r.carrier ==> r(a,b) or r(b,a)
+
+
+
 
 
 {: Closure
@@ -70,6 +92,20 @@ all(a:A, r:{A,A})
 is_reflexive (r:{A,A}): ghost BOOLEAN
     -> (all(x,y) r(x,y) ==> r(x,x)) and
        (all(x,y) r(x,y) ==> r(y,y))
+
+
+all(a:A, r:{A,A})
+    require
+        a in r.carrier
+        r.is_reflexive
+    ensure
+        r(a,a)
+
+    if a in r.domain
+        via some(b) r(a,b)
+    orif a in r.range
+        via some(b) r(b,a)
+    end
 
 
 all(r:{A,A})

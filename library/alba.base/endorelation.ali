@@ -1,17 +1,42 @@
 use
     predicate_logic
+    function
     relation
 end
 
 A: ANY
 
-{: Carrier
-   ======= :}
+{: Basics
+   ====== :}
 
 carrier (r:{A,A}): ghost {A}
         -- The carrier of the relation 'r' i.e. the union of its domain
         -- and range.
     -> domain(r) + range(r)
+
+
+identity: {A,A}
+        -- The identity relation.
+    = {x,y: x = y}
+
+diagonal(p:{A}): {A,A}
+        -- The identity relation restricted to the set 'p'
+    -> {x,y: x = y and x in p}
+
+is_total(f:A->A, r:{A,A}): ghost BOOLEAN
+        -- Is 'f' total on the carrier of 'r'?
+    -> r.carrier <= f.domain
+
+
+is_antisymmetric(r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' antisymmetric?
+    -> all(a,b) r(a,b) ==> r(b,a) ==> a = b
+
+is_dichotomic(r:{A,A}): ghost BOOLEAN
+        -- Is the relation 'r' dichotomic i.e. for all pairs of the carrier either
+        -- the first one relates to the second or vice versa?
+    -> all(a,b) {a,b} <= r.carrier ==> r(a,b) or r(b,a)
+
 
 
 
@@ -36,6 +61,9 @@ all(a:A, r:{A,A})
     end
 
 
+
+
+
 {: Reflexivity
    =========== :}
 
@@ -52,6 +80,8 @@ all(r:{A,A})
     require
         r.is_reflexive
     ensure
+        all(a) a in r.carrier ==> r(a,a)
+
         r.domain  <= r.range
         r.range   <= r.domain
         r.carrier <= r.domain
@@ -98,6 +128,8 @@ all(a,b:A, r:{A,A})
 symmetric (r:{A,A}): {A,A}
         -- The least symmetric relation which contains 'r'.
     -> r + r.inverse
+
+
 
 
 
