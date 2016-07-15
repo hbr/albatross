@@ -26,6 +26,51 @@ domain (r:{A,B}): ghost {A}         -> {a: some(b) r(a,b)}
 range  (r:{A,B}): ghost {B}         -> {b: some(a) r(a,b)}
 
 
+all(r,s:{A,B})
+    ensure
+        (r*s).domain <= r.domain
+    assert
+        all(a)
+            require
+                a in (r*s).domain
+            ensure
+                a in r.domain
+            via
+                some(b) (r*s)(a,b)
+            end
+    end
+
+all(r,s:{A,B})
+    ensure
+        (r*s).domain <= s.domain
+    assert
+        s*r = r*s
+        r*s in {t: t.domain <= s.domain}
+    end
+
+
+all(r,s:{A,B})
+    ensure
+        (r*s).range <= r.range
+    assert
+        all(b)
+            require
+                b in (r*s).range
+            ensure
+                b in r.range
+            via
+                some(a) (r*s)(a,b)
+            end
+    end
+
+all(r,s:{A,B})
+    ensure
+        (r*s).range <= s.range
+    assert
+        s*r = r*s
+        r*s in {t: t.range <= s.range}
+    end
+
 
 {: Domain and range restriction
    ============================ :}

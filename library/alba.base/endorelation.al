@@ -35,6 +35,58 @@ is_dichotomic(r:{A,A}): ghost BOOLEAN
 
 
 
+all(r,s:{A,A})
+        -- The carrier of an intersection of two relations is a subset of the
+        -- carrier of the first relation
+    ensure
+        (r*s).carrier <= r.carrier
+    assert
+        all(a)
+            require
+                a in (r*s).carrier
+            ensure
+                a in r.carrier
+            assert
+                (r*s).domain <= r.domain
+                (r*s).range  <= r.range
+                a in (r*s).domain or a in (r*s).range
+                if a in (r*s).domain
+                orif a in (r*s).range
+            end
+    end
+
+
+all(r,s:{A,A})
+        -- The carrier of an intersection of two relations is a subset of the
+        -- carrier of the second relation
+    ensure
+        (r*s).carrier <= s.carrier
+    assert
+        s * r = r * s
+        r * s in {t: t.carrier <= s.carrier}
+    end
+
+
+
+
+
+all(r,s:{A,A})
+         -- The intersection of two antisymmetric relations is antisymmetric
+    require
+        r.is_antisymmetric
+        s.is_antisymmetric
+    ensure
+        (r * s).is_antisymmetric
+    end
+
+
+
+all(p:{A})
+    ensure
+        p in (<=).carrier
+    assert
+        p <= p
+    end
 
 
 {: Closure

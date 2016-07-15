@@ -25,11 +25,14 @@ all(p,q,r:{G})
 (<)  (p,q:{G}): ghost BOOLEAN
     -> p <= q and some(x) x /in p and x in q
 
-all(p,q:{G})
+all(p,q,r:{G})
     ensure
         p < q ==> q.has_some
         p < q ==> p /= q
         p <= q ==> p /= q ==> p < q
+
+        p < q  ==> q <= r ==> p < r
+        p <= q ==> q < r  ==> p < r
     end
 
 
@@ -80,7 +83,7 @@ all(p:{G})
 
 (-)  (p,q:{G}): {G}
         -- The set 'p' without the elements of the set 'q'
-    -> {x: p(x) and not q(x)}
+    -> {x: x in p and x /in q}
 
 (-)  (p:{G}): {G}
         -- The complement of the set 'p'
@@ -100,6 +103,8 @@ all(a:G, p,q,r:{G})
         disjoint(p,q) ==> disjoint(q,p)
         disjoint(p,q) ==> a in p ==> a /in q
         not disjoint(p,q) ==> (p*q).has_some
+
+        q < p ==> (p - q).has_some
     end
 
 
@@ -115,16 +120,3 @@ all(a:G, p,q,r:{G})
 (*)  (ps:{{G}}): ghost {G}
         -- The intersection of all sets of the collection of sets 'ps'
     -> {x: all(p) ps(p) ==> p(x)}
-
-
-
-all(p:{G}, ps:{{G}})
-    ensure
-        -- *ps is greatest lower bound
-        p in ps ==> *ps <= p
-        (all(q) q in ps ==> p <= q) ==> p <= *ps
-
-        -- +ps is least upper bound
-        p in ps ==> p <= +ps
-        (all(q) q in ps ==> q <= p) ==> +ps <= p
-    end

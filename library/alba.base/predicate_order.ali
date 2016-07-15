@@ -1,0 +1,16 @@
+use
+    predicate_logic
+    partial_order
+end
+
+
+
+
+A: ANY
+
+
+immutable class
+    predicate.PREDICATE[A]
+inherit
+    ghost PARTIAL_ORDER
+end

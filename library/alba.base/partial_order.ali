@@ -101,10 +101,10 @@ is_monotonic(f:PO->PO2): ghost BOOLEAN ->
 is_antitonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
 
-is_ascending(f:PO->PO): ghost BOOLEAN ->
+is_increasing(f:PO->PO): ghost BOOLEAN ->
     all(a) (f.domain)(a) ==> a <= f(a)
 
-is_descending(f:PO->PO): ghost BOOLEAN ->
+is_decreasing(f:PO->PO): ghost BOOLEAN ->
     all(a) (f.domain)(a) ==> f(a) <= a
 
 
@@ -176,13 +176,3 @@ is_upcontinuous (f:PO->PO2): ghost BOOLEAN
            sup.is_supremum(set)
            ==>
            f(sup).is_supremum(f[set])
-
-
-
-
-
-G: ANY
-
-immutable class predicate.PREDICATE[G]
-inherit   ghost PARTIAL_ORDER
-end

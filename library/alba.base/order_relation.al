@@ -27,6 +27,16 @@ is_linear_order(r:{A,A}): ghost BOOLEAN
        r.is_dichotomic
 
 
+all(r,s:{A,A})
+    require
+        r.is_partial_order
+        s.is_partial_order
+    ensure
+        (r*s).is_partial_order
+    end
+
+
+
 
 
 {:
@@ -34,13 +44,60 @@ is_linear_order(r:{A,A}): ghost BOOLEAN
 :}
 
 
-upper_set(a:A, r:{A,A}): {A}
-        -- The set of all elements above 'a' with respect to the relation 'r'.
+upper_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements above 'a' in the relation 'r'.
     -> {x: r(a,x)}
 
-lower_set(a:A, r:{A,A}): {A}
-        -- The set of all elements below 'a' with respect to the relation 'r'.
-    -> {x: r(x,a)}
+
+lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements below 'a' in the relation 'r'.
+    -> {(p): a in r.carrier ==> a in p,
+             all(x,y) r(x,y) ==> y in p ==> x in p}
+
+
+strict_lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements strictly below 'a' in the relation 'r'.
+    -> {x: x in a.lower_set(r) and x /= a}
+
+
+all(a,b:A, r:{A,A})
+    require
+        r.is_partial_order
+        a in b.lower_set(r)
+    ensure
+        r(a,b)
+
+    inspect
+        a in b.lower_set(r)
+    end
+
+
+all(a,b:A, r:{A,A})
+    require
+        r.is_partial_order
+        r(a,b)
+    ensure
+        a.lower_set(r) <= b.lower_set(r)
+    assert
+        all(x)
+            require
+                x in a.lower_set(r)
+            ensure
+                x in b.lower_set(r)
+            inspect
+                x in a.lower_set(r)
+            end
+    end
+
+all(a,b:A, r:{A,A})
+    require
+        b in a.lower_set(r)
+    ensure
+        b in r.carrier
+
+    inspect
+        b in a.lower_set(r)
+    end
 
 
 
@@ -58,6 +115,14 @@ is_lower_bound(a:A, p:{A}, r:{A,A}): ghost BOOLEAN
 is_upper_bound(a:A, p:{A}, r:{A,A}): ghost BOOLEAN
         -- Is 'a' an upper bound for the set 'p' with respect to the relation 'r'?
     -> a in r.carrier and all(x) x in p ==> r(x,a)
+
+has_lower_bound(p:{A}, r:{A,A}): ghost BOOLEAN
+        -- Does the set 'p' have a lower bound in 'r'?
+    -> some(a) a.is_lower_bound(p,r)
+
+has_upper_bound(p:{A}, r:{A,A}): ghost BOOLEAN
+        -- Does the set 'p' have an upper bound in 'r'?
+    -> some(a) a.is_upper_bound(p,r)
 
 lower_bounds(p:{A}, r:{A,A}): ghost {A}
         -- The set of all lower bounds of the set 'p' with respect to the
@@ -228,6 +293,8 @@ all(a:A, p:{A}, r:{A,A})
     end
 
 
+
+
 {:
 # Infimum and supremum
 :}
@@ -282,6 +349,7 @@ all(a:A, p:{A}, r:{A,A})
 
         a.is_least(p.upper_bounds(r.inverse), r.inverse)
     end
+
 
 
 
@@ -438,7 +506,9 @@ is_weak_closure_system (p:{A}, r:{A,A}): ghost BOOLEAN
        and
        p <= r.carrier
        and
-       (all(x) x in r.carrier ==> (p * x.upper_set(r)).has_some)
+       (all(x)
+            x in r.carrier ==>
+            (p * x.upper_set(r)).has_some)  -- p is sufficiently large
        and
        all(q)
            q <= p ==> q.has_some
@@ -482,6 +552,9 @@ all(a:A, p:{A}, r:{A,A})
             ensure
                 q.has_least(r)
 
+            assert
+                q <= p
+                q.has_some
             via some(x) x.is_infimum(q,r) and x in p
             assert
                 q.has_some
@@ -496,6 +569,7 @@ all(a:A, p:{A}, r:{A,A})
 
 
 all(p:{A}, r:{A,A})
+        -- A closure system is a weak closure system.
     require
         p.is_closure_system(r)
     ensure
@@ -531,6 +605,24 @@ closed(a:A, p:{A}, r:{A,A}): ghost A
     ensure
         -> least (p * a.upper_set(r), r)
     end
+
+
+
+{:
+# Up- and downclosed sets
+:}
+
+is_downclosed(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> all(x,y) r(x,y) ==> y in p ==> x in p
+
+is_upclosed(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> all(x,y) r(x,y) ==> x in p ==> y in p
+
+
+
+
+
+
 
 {:# Interior systems
 :}

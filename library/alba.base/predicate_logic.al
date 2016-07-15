@@ -79,7 +79,26 @@ all(p,q:{G})
     end
 
 
+all(p,q,r:{G})
+    require
+        p < q
+        q <= r
+    ensure
+        p < r
+    via
+        some(x) x /in p and x in q
+    end
 
+
+all(p,q,r:{G})
+    require
+        p <= q
+        q < r
+    ensure
+        p < r
+    via
+        some(x) x /in q and x in r
+    end
 
 
 {: Singleton set
@@ -204,7 +223,7 @@ all(p:{G})
 
 (*) (p,q:{G}): {G}   -> {x: p(x) and q(x)}
 
-(-) (p,q:{G}): {G}   -> {x: p(x) and not q(x)}
+(-) (p,q:{G}): {G}   -> {x: x in p and x /in q}
 
 (-) (p:{G}): {G}     -> {x: not p(x)}
 
@@ -270,12 +289,21 @@ all(p,q:{G})
         not disjoint(p,q)
     ensure
         (p*q).has_some
-        via require not (p*q).has_some
+    via
+        require not (p*q).has_some
     end
 
 
-
-
+all(p,q:{G})
+    require
+        q < p
+    ensure
+        (p - q).has_some
+    via
+        some(x) x /in q and x in p
+        assert
+            x in p - q
+    end
 
 
 {: Union and intersection of collections of sets
@@ -284,65 +312,3 @@ all(p,q:{G})
 (+) (pp:{{G}}): ghost {G} -> {x: some(p) pp(p) and p(x)}
 
 (*) (pp:{{G}}): ghost {G} -> {x: all(p) pp(p) ==> p(x)}
-
-
-
-{: Theorems needed to prove that '+ps' is the supremum of 'ps' and
-   '*ps' is the infimum of 'ps'
-:}
-
-all(p:{G}, ps:{{G}})
-    ensure
-        p in ps ==> *ps <= p
-    end
-
-all(p:{G}, ps:{{G}})
-    require
-        p in ps
-    ensure
-        p <= +ps
-        assert
-        all(x)
-            require
-                x in p
-            ensure
-                x in +ps
-                assert
-                    p in ps and x in p
-                    some(q) q in ps and x in q
-            end
-    end
-
-all(p:{G}, ps:{{G}})
-    require
-        all(q) q in ps ==> p <= q
-    ensure
-        p <= *ps
-
-        assert
-        all(x,q)
-            require
-                x in p
-                q in ps
-            ensure
-                x in q
-                assert p <= q
-            end
-    end
-
-all(p:{G}, ps:{{G}})
-    require
-        all(q) q in ps ==> q <= p
-    ensure
-        +ps <= p   -- +ps = {x: some(q) q in ps and x in q}
-        assert
-        all(x)
-            require
-                x in +ps
-            ensure
-                x in p
-                via some(q) q in ps and x in q
-                assert
-                    q <= p
-            end
-    end

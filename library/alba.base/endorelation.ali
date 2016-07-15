@@ -38,6 +38,16 @@ is_dichotomic(r:{A,A}): ghost BOOLEAN
     -> all(a,b) {a,b} <= r.carrier ==> r(a,b) or r(b,a)
 
 
+all(p:{A}, r,s:{A,A})
+    ensure
+        (r * s).carrier <= r.carrier
+        (r * s).carrier <= s.carrier
+
+        r.is_antisymmetric ==> s.is_antisymmetric ==> (r * s).is_antisymmetric
+
+        p in (<=).carrier
+    end
+
 
 
 
@@ -94,6 +104,7 @@ all(r:{A,A})
 to_reflexive (p:{A}): {A,A}
         -- The least reflexive relation with the carrier 'p'.
     -> {x,y: x=y and p(x)}
+
 
 all(p:{A})
     ensure

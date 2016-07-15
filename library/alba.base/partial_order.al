@@ -1,5 +1,6 @@
 use
     predicate_logic
+    order_relation
     function
     tuple
 end
@@ -35,9 +36,93 @@ inherit        ANY end
 
 (>)  (a,b:PO): BOOLEAN  -> b < a
 
+
+all(a:PO)
+    ensure
+        a in (<=).carrier
+    assert
+        a <= a
+    end
+
+
+
+{:
+# Upper and lower bounds
+:}
+
 is_lower_bound (a:PO, p:{PO}): ghost BOOLEAN -> all(x) p(x) ==> a <= x
 
 is_upper_bound (a:PO, p:{PO}): ghost BOOLEAN -> all(x) p(x) ==> x <= a
+
+has_lower_bound (p:{PO}): ghost BOOLEAN -> some(x) x.is_lower_bound(p)
+
+has_upper_bound (p:{PO}): ghost BOOLEAN -> some(x) x.is_upper_bound(p)
+
+upper_bounds (p:{PO}): ghost {PO} -> {x: x.is_upper_bound(p)}
+
+lower_bounds (p:{PO}): ghost {PO} -> {x: x.is_lower_bound(p)}
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_lower_bound(p)
+    ensure
+        a.is_lower_bound(p,(<=))
+    assert
+        all(x) x in p ==> {x,y: x <= y}(a,x)
+    end
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_lower_bound(p,(<=))
+    ensure
+        a.is_lower_bound(p)
+    assert
+        all(x)
+            require
+                x in p
+            ensure
+                a <= x
+            assert
+                {x,y: x <= y}(a,x)
+            end
+    end
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_upper_bound(p)
+    ensure
+        a.is_upper_bound(p,(<=))
+    assert
+        all(x) x in p ==> {x,y: x <= y}(x,a)
+    end
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_upper_bound(p,(<=))
+    ensure
+        a.is_upper_bound(p)
+    assert
+        all(x)
+            require
+                x in p
+            ensure
+                x <= a
+            assert
+                {x,y: x <= y}(x,a)
+            end
+    end
+
+
+
+
+
+{:
+# Greatest and least elements
+:}
 
 is_least (a:PO, p:{PO}): ghost BOOLEAN    -> p(a) and a.is_lower_bound(p)
 
@@ -51,53 +136,22 @@ has_least (p:{PO}): ghost BOOLEAN -> some(x) x.is_least(p)
 
 has_greatest (p:{PO}): ghost BOOLEAN -> some(x) x.is_greatest(p)
 
-upper_bounds (p:{PO}): ghost {PO} -> {x: x.is_upper_bound(p)}
-
-lower_bounds (p:{PO}): ghost {PO} -> {x: x.is_lower_bound(p)}
-
-is_infimum (a:PO, p:{PO}): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
-
-is_supremum (a:PO, p:{PO}): ghost BOOLEAN -> a.is_least(p.upper_bounds)
-
-has_infimum (p:{PO}): ghost BOOLEAN -> some(x) x.is_infimum(p)
-
-has_supremum (p:{PO}): ghost BOOLEAN -> some(x) x.is_supremum(p)
-
-is_monotonic(f:PO->PO2): ghost BOOLEAN ->
-    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
-
-is_antitonic(f:PO->PO2): ghost BOOLEAN ->
-    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
-
-is_ascending(f:PO->PO): ghost BOOLEAN ->
-    all(a) (f.domain)(a) ==> a <= f(a)
-
-is_descending(f:PO->PO): ghost BOOLEAN ->
-    all(a) (f.domain)(a) ==> f(a) <= a
-
-
-
-all(a,b:PO, p:{PO}) require a.is_least(p)
-                           b.is_least(p)
-                   ensure  a = b end
-
-all(a,b:PO, p:{PO}) require a.is_greatest(p)
-                           b.is_greatest(p)
-                   ensure  a = b end
 
 all(a,b:PO, p:{PO})
+    require
+        a.is_least(p)
+        b.is_least(p)
     ensure
-        a.is_infimum(p)  ==> b.is_infimum(p)  ==> a = b
+        a = b
     end
-
-
 
 all(a,b:PO, p:{PO})
+    require
+        a.is_greatest(p)
+        b.is_greatest(p)
     ensure
-        a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
+        a = b
     end
-
-
 
 least(p:{PO}): ghost PO
     require
@@ -114,6 +168,103 @@ greatest(p:{PO}): ghost PO
     ensure
         Result.is_greatest(p)
     end
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_least(p)
+    ensure
+        a.is_least(p,(<=))
+    end
+
+
+all(p,q:{PO})
+        -- Bigger set has lower least element (antitonic)
+    require
+        p.has_least
+        q.has_least
+        p <= q
+    ensure
+        least(q) <= least(p)
+    assert
+        least(q).is_least(q)
+        least(p).is_least(p)
+    end
+
+
+
+
+
+
+
+
+
+{:
+# Infimum and supremum
+:}
+
+is_infimum (a:PO, p:{PO}): ghost BOOLEAN  -> a.is_greatest(p.lower_bounds)
+
+is_supremum (a:PO, p:{PO}): ghost BOOLEAN -> a.is_least(p.upper_bounds)
+
+has_infimum (p:{PO}): ghost BOOLEAN -> some(x) x.is_infimum(p)
+
+has_supremum (p:{PO}): ghost BOOLEAN -> some(x) x.is_supremum(p)
+
+
+all(a,b:PO, p:{PO})
+        -- An infimum is unique
+    ensure
+        a.is_infimum(p)  ==> b.is_infimum(p)  ==> a = b
+    end
+
+
+all(a,b:PO, p:{PO})
+        -- A supremum is unique
+    ensure
+        a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
+    end
+
+
+
+all(a:PO, p:{PO})
+    require
+        a.is_infimum(p)
+    ensure
+        a.is_infimum(p,(<=))
+    end
+
+
+
+
+
+{:
+# Upper and lower set
+:}
+
+upper_set (a:PO): {PO}
+    -> {x: a <= x}
+
+lower_set (a:PO): {PO}
+    -> {x: x <= a}
+
+
+{:
+# Functions on partial orders
+:}
+
+is_monotonic(f:PO->PO2): ghost BOOLEAN ->
+    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
+
+is_antitonic(f:PO->PO2): ghost BOOLEAN ->
+    all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(b) <= f(a)
+
+is_increasing(f:PO->PO): ghost BOOLEAN ->
+    all(a) (f.domain)(a) ==> a <= f(a)
+
+is_decreasing(f:PO->PO): ghost BOOLEAN ->
+    all(a) (f.domain)(a) ==> f(a) <= a
+
 
 
 (*) (p:{PO}): ghost PO
@@ -315,19 +466,6 @@ all(p,q:{PO})
 
 
 
-all(p,q:{PO})
-    require
-        p.has_least
-        q.has_least
-        p <= q
-    ensure
-        least(q) <= least(p)
-    assert
-        least(q).is_least(q)
-        least(p).is_least(p)
-    end
-
-
 {: Directed Sets and Continuous Functions
    ======================================
 :}
@@ -352,31 +490,48 @@ is_upcontinuous (f:PO->PO2): ghost BOOLEAN
            ==>
            f(sup).is_supremum(f[set])
 
-
 {:
-all(a:PO, f:PO->PO)
-    require
-        f.is_closure_map
-    assert
-        f(a).is_fixpoint(f)
-
-        all(x)
-            require
-                x.is_fixpoint(f)   -- 'is_fixpoint' is not inherited!!
-                a <= x
-            assert
-                f(a) <= f(x)
-                f(x) = x
-            ensure
-                f(a) <= x
-            end
-    ensure
-        f(a).is_least({x: x.is_fixpoint(f) and a <= x})
-    end
+# Closure system
 :}
 
-G: ANY
+is_closure_system(p:{PO}): ghost BOOLEAN
+    -> all(q)
+           q <= p
+           ==>
+           some(x) x.is_infimum(q) and x in p
 
-immutable class predicate.PREDICATE[G]
-inherit   ghost PARTIAL_ORDER
-end
+
+is_weak_closure_system(p:{PO}): ghost BOOLEAN
+    -> (all(x) (p * x.upper_set).has_some) -- 'p' is sufficiently large
+       and
+       all(q) q <= p ==>                   -- 'p' is closed to infimum
+              q.has_some ==>
+              some(x) x.is_infimum(q) and x in p
+
+is_closure_map (f:PO->PO): ghost BOOLEAN
+    -> f.is_total and
+       f.is_increasing and
+       f.is_monotonic and
+       f.is_idempotent
+
+
+
+all(p:{PO})
+        -- Consistency with closure system of module 'order_relation'.
+    require
+        p.is_closure_system
+    ensure
+        p.is_closure_system((<=))
+    assert
+        p <= (<=).carrier
+        all(q)
+            require
+                q <= p
+            ensure
+                some(x) x.is_infimum(q,(<=)) and x in p
+            via
+                some(x) x.is_infimum(q) and x in p
+                assert
+                    x.is_infimum(q,(<=)) and x in p
+            end
+    end

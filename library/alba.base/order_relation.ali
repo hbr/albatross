@@ -27,6 +27,10 @@ is_linear_order(r:{A,A}): ghost BOOLEAN
        r.is_dichotomic
 
 
+all(r,s:{A,A})
+    ensure
+        r.is_partial_order ==> s.is_partial_order ==> (r*s).is_partial_order
+    end
 
 
 {:
@@ -34,16 +38,35 @@ is_linear_order(r:{A,A}): ghost BOOLEAN
 :}
 
 
-upper_set(a:A, r:{A,A}): {A}
-        -- The set of all elements above 'a' with respect to the relation 'r'.
+upper_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements above 'a' in the relation 'r'.
     -> {x: r(a,x)}
 
-lower_set(a:A, r:{A,A}): {A}
-        -- The set of all elements below 'a' with respect to the relation 'r'.
-    -> {x: r(x,a)}
+
+lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements below 'a' in the relation 'r'.
+    -> {(p): a in r.carrier ==> a in p,
+             all(x,y) r(x,y) ==> y in p ==> x in p}
+
+
+strict_lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements strictly below 'a' in the relation 'r'.
+    -> {x: x in a.lower_set(r) and x /= a}
 
 
 
+all(a,b:A, r:{A,A})
+    ensure
+        r.is_partial_order ==>
+        r(a,b) ==>
+        a.lower_set(r) <= b.lower_set(r)
+
+        b in a.lower_set(r) ==> b in r.carrier
+
+        r.is_partial_order ==>
+        a in b.lower_set(r) ==>
+        r(a,b)
+    end
 
 
 {:
@@ -210,10 +233,17 @@ supremum(p:{A}, r:{A,A}): ghost A
 
 
 
-all(a:A, p:{A}, r:{A,A})
-    ensure
-        a.is_infimum(p,r) ==> a.is_supremum(p,r.inverse)
-    end
+{:
+# Up- and downclosed sets
+:}
+
+is_downclosed(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> all(x,y) r(x,y) ==> y in p ==> x in p
+
+is_upclosed(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> all(x,y) r(x,y) ==> x in p ==> y in p
+
+
 
 
 

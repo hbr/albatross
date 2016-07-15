@@ -1,5 +1,5 @@
 use
-    predicate
+    predicate_logic
     tuple
 end
 
@@ -21,6 +21,15 @@ all(r,s:{A,B})
 domain (r:{A,B}): ghost {A}         -> {a: some(b) r(a,b)}
 range  (r:{A,B}): ghost {B}         -> {b: some(a) r(a,b)}
 
+
+all(r,s:{A,B})
+    ensure
+        (r*s).domain <= r.domain
+        (r*s).domain <= s.domain
+
+        (r*s).range <= r.range
+        (r*s).range <= s.range
+    end
 
 
 {: Domain and range restriction
