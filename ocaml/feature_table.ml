@@ -2516,17 +2516,35 @@ let get_variant_seed (i:int) (ivar:int) (ags:agens) (ft:t): int*agens =
 
 
 
-let add_variant (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
+let add_variant (info:info) (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
   (* Add to the seed [sd] the variant [ivar] where [ags] are the actual generics
-     which substitute the formal generics of [sd] the get the same signature.
+     which substitute the formal generics of [sd] to get the same signature.
 
      Furthermore remove the variant [ivar] from the key table! Reason: A variant
      shall be found only via its seed.
    *)
   let desc_ivar = descriptor ivar ft in
   let classes = Array.map (fun tp -> Tvars.principal_class tp desc_ivar.tvs) ags
+  and bdesc = base_descriptor sd ft
   in
-  (base_descriptor sd ft)#add_variant classes ivar;
+  if bdesc#has_variant classes then begin
+    let var_str = string_of_signature ivar ft
+    and seed_str = string_of_signature sd ft
+    and old_ivar = bdesc#variant classes in
+    let old_var_str = string_of_signature old_ivar ft
+    in
+    let err_str =
+      "Illegal variant\n" ^
+      "The feature\n\n\t" ^ var_str ^
+      "\n\ncannot be a variant of\n\n\t" ^ seed_str ^
+      (if old_ivar <> sd then
+        "\n\nbecause there is already the variant\n\n\t" ^ old_var_str
+      else "")
+    in
+    error_info info err_str
+  end;
+  assert(not (bdesc#has_variant classes));
+  bdesc#add_variant classes ivar;
   remove_key ivar ft
 
 

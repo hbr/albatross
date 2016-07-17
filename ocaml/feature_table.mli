@@ -42,7 +42,7 @@ val seed_function: t -> int -> int
 
 val get_variant_seed: int -> int -> agens -> t -> int*agens
 
-val add_variant: int -> int -> agens -> t -> unit
+val add_variant: info -> int -> int -> agens -> t -> unit
 
 val set_seed: int -> int -> agens -> t -> unit
 

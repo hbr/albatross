@@ -128,7 +128,7 @@ let inherit_feature
           sd (Feature_table.string_of_signature sd ft)
     end;
     if is_new then
-      Feature_table.add_variant sd ivar sdags ft;
+      Feature_table.add_variant info sd ivar sdags ft;
     check_ghost_variant idx ivar ghost info ft;
     if PC.is_private pc && not defer then
       check_transform_valid idx ivar ags info pc;
@@ -278,7 +278,7 @@ let add_new_feature (info:info) (idx:int) (pc:PC.t): unit =
   try
     let sd,ags = Feature_table.find_proper_seed info idx ft in
     trace sd idx;
-    Feature_table.add_variant sd idx ags ft;
+    Feature_table.add_variant info sd idx ags ft;
     if PC.is_private pc then
       check_transform_valid sd idx ags info pc;
     Feature_table.set_seed sd idx ags ft
@@ -289,7 +289,7 @@ let add_new_feature (info:info) (idx:int) (pc:PC.t): unit =
       List.fold_left
         (fun set (ivar,ags) ->
           trace idx ivar;
-          Feature_table.add_variant idx ivar ags ft;
+          Feature_table.add_variant info idx ivar ags ft;
           if PC.is_private pc then
             check_transform_valid idx ivar ags info pc;
           IntSet.union set (Feature_table.involved_assertions ivar ft)
