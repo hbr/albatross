@@ -69,6 +69,13 @@ let allows_partial_specialization (rd:t): bool =
 
 
 
+let allows_premise_specialization (rd:t): bool =
+  is_implication rd &&
+  let gp1,gp1_tp,_,_ = List.hd rd.premises in
+  gp1_tp = Array.length rd.fgcon
+
+
+
 let is_catchall (t:term) (nargs:int): bool =
   match t with
     Variable i when i < nargs -> true
@@ -98,8 +105,12 @@ let is_forward_catchall (rd:t): bool =
 
 let is_forward (rd:t): bool =
   is_implication rd &&
-  (not (is_forward_catchall rd) &&
-   (not rd.fwd_blckd || allows_partial_specialization rd))
+  (not (is_forward_catchall rd)) &&
+  (not rd.fwd_blckd || allows_partial_specialization rd) (* partial specialization
+                                                            can overrule fwd_blckd *)
+    &&
+  (allows_premise_specialization rd) (* premise must always contain all formal
+                                        generics *)
 
 
 let is_backward (rd:t): bool =
@@ -541,6 +552,12 @@ let specialize
   and tvs    = Context.tvars c
   and rdnfgs = Array.length rd.fgcon in
   let nall   = Tvars.count_all tvs in
+  if rdnfgs <> Array.length ags then begin
+    printf "specialize\n";
+    printf "   %s\n" (string_of_term rd);
+    printf "   rdnfgs %d\n" rdnfgs;
+    printf "   |ags|  %d\n" (Array.length ags);
+  end;
   assert (rdnfgs = Array.length ags);
   assert (not (is_specialized rd));
   assert (nargs <= rd.nargs);
@@ -584,6 +601,7 @@ let specialize
       []
       rd.premises
   in
+  let nargs_new = rd.nargs - nargs in
   let ps,fwd_blckd =
     if full then
       let tvs = Context.tvars c
@@ -594,7 +612,6 @@ let specialize
     else
       List.rev ps_rev, false
   in
-  let nargs_new = rd.nargs - nargs in
   let bwd_blckd = 0 < nargs_new && is_backward_blocked ps tgt nargs_new c in
   {rd with
    orig  = Some orig;
