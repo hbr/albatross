@@ -1890,17 +1890,6 @@ let substitute_variable
 
 
 
-let substitute_variable_add_used
-    (var:int) (idx:int) (search:bool) (pc:t)
-    : int =
-  (* Use the definition term of the variable [var] and substitute all occurrences
-     of the variable [var] in the assertion at [idx] by the definition term.
-
-     Furthermore add the assertion [idx] to the used assertions of all variables
-     occurring in the definition term.*)
-  assert false
-
-
 
 
 let add_consequences_variable_definition (i:int) (pc:t): unit =
