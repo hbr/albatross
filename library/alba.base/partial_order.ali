@@ -95,6 +95,14 @@ greatest(p:{PO}): ghost PO
         Result.is_supremum(p)
     end
 
+all(p:{PO})
+    ensure
+        p.has_supremum ==> (+ p).is_supremum(p)
+        p.has_infimum  ==> (* p).is_infimum(p)
+    end
+
+
+
 is_monotonic(f:PO->PO2): ghost BOOLEAN ->
     all(a,b:PO) {a,b} <= f.domain ==> a <= b ==> f(a) <= f(b)
 

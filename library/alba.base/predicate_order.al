@@ -82,3 +82,15 @@ immutable class
 inherit
     ghost PARTIAL_ORDER
 end
+
+
+all(ps:{{A}})
+    ensure
+        (+ ps).is_supremum(ps)
+    end
+
+
+all(ps:{{A}})
+    ensure
+        (* ps).is_infimum(ps)
+    end

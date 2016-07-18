@@ -34,42 +34,6 @@ all(r,s:{A,A})
 
 
 {:
-# Upper and lower set
-:}
-
-
-upper_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements above 'a' in the relation 'r'.
-    -> {x: r(a,x)}
-
-
-lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements below 'a' in the relation 'r'.
-    -> {(p): a in r.carrier ==> a in p,
-             all(x,y) r(x,y) ==> y in p ==> x in p}
-
-
-strict_lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements strictly below 'a' in the relation 'r'.
-    -> {x: x in a.lower_set(r) and x /= a}
-
-
-
-all(a,b:A, r:{A,A})
-    ensure
-        r.is_partial_order ==>
-        r(a,b) ==>
-        a.lower_set(r) <= b.lower_set(r)
-
-        b in a.lower_set(r) ==> b in r.carrier
-
-        r.is_partial_order ==>
-        a in b.lower_set(r) ==>
-        r(a,b)
-    end
-
-
-{:
 # Upper and lower bounds
 :}
 
@@ -238,13 +202,74 @@ supremum(p:{A}, r:{A,A}): ghost A
 :}
 
 is_downclosed(p:{A}, r:{A,A}): ghost BOOLEAN
-    -> all(x,y) r(x,y) ==> y in p ==> x in p
+    -> p <= r.carrier
+       and
+       all(x,y) r(x,y) ==> y in p ==> x in p
 
 is_upclosed(p:{A}, r:{A,A}): ghost BOOLEAN
-    -> all(x,y) r(x,y) ==> x in p ==> y in p
+    -> p <= r.carrier
+       and
+       all(x,y) r(x,y) ==> x in p ==> y in p
+
+
+all(ps:{{A}}, r:{A,A})
+        -- An arbitrary union of downclosed sets is downclosed
+    require
+        all(p) p in ps ==> p.is_downclosed(r)
+    ensure
+        (+ ps).is_downclosed(r)
+    end
 
 
 
+
+{:
+# Upper and lower set
+:}
+
+
+upper_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements above 'a' in the relation 'r'.
+    -> {x: r(a,x)}
+
+
+lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements below 'a' in the relation 'r'.
+    -> {(p): a in r.carrier ==> a in p,
+             all(x,y) r(x,y) ==> y in p ==> x in p}
+
+
+lower_sets(r:{A,A}): ghost {{A}}
+        -- The collection of all lower sets of the relation 'r'.
+    -> {p: some(a) p = a.lower_set(r)}
+
+
+strict_lower_set(a:A, r:{A,A}): ghost {A}
+        -- The set of all elements strictly below 'a' in the relation 'r'.
+    -> {x: x in a.lower_set(r) and x /= a}
+
+
+
+all(a,b:A, r:{A,A})
+    ensure
+        r.is_partial_order ==>
+        r(a,b) ==>
+        a.lower_set(r) <= b.lower_set(r)
+
+        b in a.lower_set(r) ==> b in r.carrier
+
+        r.is_partial_order ==>
+        a in b.lower_set(r) ==>
+        r(a,b)
+    end
+
+all(ps:{{A}}, r:{A,A})
+        -- The union of all lower sets is the carrier.
+    require
+        ps = {p: some(a) p = a.lower_set(r)}
+    ensure
+        + ps = r.carrier
+    end
 
 
 
@@ -264,27 +289,20 @@ is_updirected(d:{A}, r:{A,A}): ghost BOOLEAN
 
 
 {:
-# Monotonic and continuous functions
+# Monotonic functions
 
 A monotonic function is between two order relations is a function which
-preserves the order, i,e
+preserves the order.
 
-    r1(x,y) ==> r2(f(x),f(y))
-
-An upcontinuous function preserves suprema i.e.
-
-    x.is_supremum(p,r1) ==> f(x).is_supremum(f[p],r2)
-
-and a downcontiunous function presevers infima
-
-    x.is_infimum(p,r1) ==> f(x).is_infimum(f[p],r2)
 
 :}
 
 
 is_monotonic(f:A->B, r1:{A,A}, r2:{B,B}): ghost BOOLEAN
-    -> all(x,y)
-           {x,y} <= f.domain
+    -> f.is_total(r1)
+       and
+       all(x,y)
+           {x,y} <= r1.carrier
            ==>
            r1(x,y)
            ==>
@@ -294,6 +312,36 @@ is_monotonic(f:A->B, r1:{A,A}, r2:{B,B}): ghost BOOLEAN
 is_monotonic(f:A->A, r:{A,A}): ghost BOOLEAN
     -> f.is_monotonic(r,r)
 
+
+is_reflecting(f:A->B, r:{A,A}, s:{B,B}): ghost BOOLEAN
+    -> f.is_total(r)
+       and
+       all(x,y)
+           {x,y} <= r.carrier ==>
+           s(f(x), f(y)) ==>
+           r(x,y)
+
+is_embedding(f:A->B, r:{A,A}, s:{B,B}): ghost BOOLEAN
+    -> f.is_total(r)
+       and
+       f.is_injective
+       and
+       f.is_monotonic(r,s)
+       and
+       f.inverse.is_monotonic(s,r)
+
+
+{:
+# Continuous functions
+
+An upcontinuous function preserves suprema i.e.
+
+    x.is_supremum(p,r1) ==> f(x).is_supremum(f[p],r2)
+
+and a downcontiunous function presevers infima
+
+    x.is_infimum(p,r1) ==> f(x).is_infimum(f[p],r2)
+:}
 
 is_upcontinuous(f:A->B, r1:{A,A}, r2:{B,B}): ghost BOOLEAN
     -> r1.carrier <= f.domain
@@ -310,11 +358,10 @@ is_upcontinuous(f:A->A, r:{A,A}): ghost BOOLEAN
 is_prefixpoint(a:A, f:A->A, r:{A,A}): ghost BOOLEAN
     -> a in f.domain and r(a,f(a))
 
-is_total(f:A->A, r:{A,A}): ghost BOOLEAN
-    -> r.carrier <= f.domain
-
 is_increasing(f:A->A, r:{A,A}): ghost BOOLEAN
     -> f.is_total(r) and all(x) x in r.carrier ==> r(x,f(x))
+
+
 
 
 {:

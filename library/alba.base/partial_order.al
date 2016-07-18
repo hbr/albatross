@@ -282,6 +282,20 @@ is_decreasing(f:PO->PO): ghost BOOLEAN ->
     end
 
 
+all(p:{PO})
+   require
+       p.has_infimum
+   ensure
+       (*p).is_infimum(p)
+   end
+
+all(p:{PO})
+   require
+       p.has_supremum
+   ensure
+       (+p).is_supremum(p)
+   end
+
 all(a,b,c:PO)
     require
         a < b
