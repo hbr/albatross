@@ -588,7 +588,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         assert (Array.length args = 0);
         assert (Array.length ags  = 0);
         let ta,tb = reconstruct e nb in
-        if tb <> left then begin
+        if not (Term.equivalent tb left) then begin
           printf "reconstruct ta    %s\n" (string_of_term_anon ta nb at);
           printf "            tb    %s %s\n"
             (string_of_term_anon tb nb at) (Term.to_string tb);
