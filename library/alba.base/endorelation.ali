@@ -5,6 +5,7 @@ use
 end
 
 A: ANY
+B: ANY
 
 {: Basics
    ====== :}
@@ -23,7 +24,7 @@ diagonal(p:{A}): {A,A}
         -- The identity relation restricted to the set 'p'
     -> {x,y: x = y and x in p}
 
-is_total(f:A->A, r:{A,A}): ghost BOOLEAN
+is_total(f:A->B, r:{A,A}): ghost BOOLEAN
         -- Is 'f' total on the carrier of 'r'?
     -> r.carrier <= f.domain
 
