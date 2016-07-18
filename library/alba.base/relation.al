@@ -26,6 +26,16 @@ domain (r:{A,B}): ghost {A}         -> {a: some(b) r(a,b)}
 range  (r:{A,B}): ghost {B}         -> {b: some(a) r(a,b)}
 
 
+domains (rs:{{A,B}}): ghost {{A}}
+        -- The collection of all domains of the relations in 'rs'.
+    -> {p: some(r) r in rs and p = r.domain}
+
+ranges  (rs:{{A,B}}): ghost {{B}}
+        -- The collection of all ranges of the relations in 'rs'.
+    -> {p: some(r) r in rs and p = r.range}
+
+
+
 all(r,s:{A,B})
     ensure
         (r*s).domain <= r.domain
@@ -72,6 +82,50 @@ all(r,s:{A,B})
     end
 
 
+all(rs:{{A,B}})
+        -- The domain of a union of relations is the union of the domains
+    ensure
+        (+ rs).domain = + rs.domains
+    assert
+        all(x)
+            require
+                x in (+ rs).domain
+            ensure
+                x in + rs.domains
+
+            via some(y) (+ rs)(x,y)
+            via some(r) r in rs and r(x,y)
+            assert
+                r in rs and r.domain = r.domain
+
+                r.domain in {d: some(r) r in rs and d = r.domain}
+                and
+                x in r.domain
+
+                some(d) d in {d: some(r) r in rs and d = r.domain} and x in d
+            end
+
+        all(x)
+            require
+                x in + rs.domains
+            ensure
+                x in (+ rs).domain
+
+            via some(d) d in {d: some(r) r in rs and d = r.domain} and x in d
+            via some(r) r in rs and d = r.domain
+            assert
+                x in r.domain
+            via some(y) r(x,y)
+            assert
+                r in rs and r(x,y)
+                some(r) r in rs and r(x,y)
+                some(y) (+ rs)(x,y)
+            end
+    end
+
+
+
+
 {: Domain and range restriction
    ============================ :}
 
@@ -80,6 +134,9 @@ all(r,s:{A,B})
 
 (|) (r:{A,B}, q:{B}): {A,B}
     -> {x,y: r(x,y) and y in q}
+
+
+
 
 
 {: Image and preimage
@@ -123,6 +180,92 @@ all(r:{A,B})
     end
 
 
+all(r:{A,B})
+    ensure
+        r.inverse.inverse = r
+    end
+
+
+all(rs:{{A,B}})
+        -- The inverse of a union of relations is the union of the inverse
+        -- relations.
+    ensure
+        (+ rs).inverse = + {r: r.inverse in rs}
+
+    assert
+        all(x,y)
+            require
+                ((+ rs).inverse)(x,y)
+            ensure
+                (+ {r: r.inverse in rs})(x,y)
+
+            via some(r) r in rs and r(y,x)
+            assert
+                r.inverse.inverse = r
+                r.inverse in {s: s.inverse in rs} and (r.inverse)(x,y)
+
+                some(s) s in {s: s.inverse in rs} and s(x,y)
+            end
+
+        all(x,y)
+            require
+                (+ {r: r.inverse in rs})(x,y)
+            ensure
+                ((+ rs).inverse)(x,y)
+
+            via some(r) r in {r: r.inverse in rs} and r(x,y)
+            assert
+                r.inverse in rs and (r.inverse)(y,x)
+
+                some(s) s in rs and s(y,x)
+                (+ rs)(y,x)
+            end
+    end
+
+
+all(rs:{{A,B}})
+        -- The range of a union of relations is the union of the ranges
+    ensure
+        (+ rs).range = + rs.ranges
+    assert
+        (+ rs).inverse = + {r: r.inverse in rs}
+
+        ensure
+            {d: some(r) r.inverse in rs and d = r.domain}
+            =
+            {d: some(r) r in rs and d = r.range}
+        assert
+            all(d)
+                require
+                    some(r) r.inverse in rs and d = r.domain
+                ensure
+                    some(r) r in rs and d = r.range
+
+                via some(r) r.inverse in rs and d = r.domain
+                assert
+                    r.inverse in rs and d = r.inverse.range
+                end
+
+            all(d)
+                require
+                    some(r) r in rs and d = r.range
+                ensure
+                    some(r) r.inverse in rs and d = r.domain
+
+                via some(r) r in rs and d = r.range
+                assert
+                    r.inverse.inverse = r
+                    r.inverse.inverse in rs and d = r.inverse.domain
+                end
+        end
+    via
+        [(+ rs).inverse.domain
+         (+ {r: r.inverse in rs}).domain
+         (+ {r: r.inverse in rs}.domains)
+         (+ {p: some(r) r in {r: r.inverse in rs} and p = r.domain})
+         (+ {p: some(r) r.inverse in rs and p = r.domain})
+        ]
+    end
 
 
 {: Relations which are functions

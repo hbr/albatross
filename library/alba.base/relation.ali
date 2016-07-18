@@ -22,6 +22,17 @@ domain (r:{A,B}): ghost {A}         -> {a: some(b) r(a,b)}
 range  (r:{A,B}): ghost {B}         -> {b: some(a) r(a,b)}
 
 
+domains (rs:{{A,B}}): ghost {{A}}
+        -- The collection of all domains of the relations in 'rs'.
+    -> {p: some(r) r in rs and p = r.domain}
+
+ranges  (rs:{{A,B}}): ghost {{B}}
+        -- The collection of all ranges of the relations in 'rs'.
+    -> {p: some(r) r in rs and p = r.range}
+
+
+
+
 all(r,s:{A,B})
     ensure
         (r*s).domain <= r.domain
@@ -30,6 +41,17 @@ all(r,s:{A,B})
         (r*s).range <= r.range
         (r*s).range <= s.range
     end
+
+all(rs:{{A,B}})
+    ensure
+        -- The domain of a union of relations is the union of the domains
+        (+ rs).domain = + rs.domains
+
+        -- The range of a union of relations is the union of the ranges
+        (+ rs).range  = + rs.ranges
+    end
+
+
 
 
 {: Domain and range restriction
@@ -67,12 +89,16 @@ preimage (p:{B}, r:{A,B}): ghost {A} -> {a: some(b) b in p and r(a,b)}
 inverse (r:{A,B}): {B,A}          -> {b,a: r(a,b)}
 
 
-all(r:{A,B})
+all(r:{A,B}, rs:{{A,B}})
     ensure
         range(r)  = domain(inverse(r))
         domain(r) = range (inverse(r))
         range (inverse(r))  = domain(r)
         domain(inverse(r))  = range (r)
+
+        r.inverse.inverse = r
+
+        (+ rs).inverse = + {r: r.inverse in rs}
     end
 
 
