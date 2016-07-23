@@ -9,6 +9,10 @@ open Term
 
 type sublist = (int*Term_sub.t) list
 
+type result =
+    Initial
+  | Sub_list of sublist
+
 module FlowMap = Map.Make(struct
   let compare = Pervasives.compare
   type t = flow*int
@@ -22,14 +26,14 @@ end)
 type t = {
     terms: (int*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
     avars: (int*int*int) list;             (* [idx, argument variable, nargs] *)
-    bvars: sublist IntMap.t;               (* bvar -> [idx,sub] *)
-    fvars: (int * sublist IntMap.t) list;  (* [nbenv, fvar -> [idx,sub]] *)
-    apps:  (t array * sublist) IntMap.t;   (* one for each function variable *)
+    bvars: int list IntMap.t;              (* bvar -> list of indices *)
+    fvars: (int * int list IntMap.t) list; (* [nbenv, fvar -> list of indices] *)
+    apps:  (t array * int list) IntMap.t;  (* one for each function variable *)
     fapps: (t * t array) IntMap.t;         (* one for each number of arguments *)
     lams:  (t list * t) IntMap.t;
                               (* one for each number of preconditions *)
-    alls:  t IntMap.t;        (* one for each number of bindings *)
-    somes: t IntMap.t;        (* one for each number of bindings *)
+    alls:  t IntMap.t;        (* one for each number of arguments *)
+    somes: t IntMap.t;        (* one for each number of arguments *)
     flows: (t array) FlowMap.t;
          (* one for each flow control with the number of arguments*)
     inds: (t array) IntPairMap.t;
@@ -75,48 +79,6 @@ let terms (tab:t): (int*int*int*term) list =
   List.rev_map (fun (idx,_,nargs,nbenv,term) -> idx,nargs,nbenv,term) tab.terms
 
 
-let join_lists (l1: sublist) (l2:sublist): sublist =
-  (** Join the two disjoint lists [l1] and [l2].
-   *)
-  let rec join l1 l2 res =
-    match l1, l2 with
-      [], _  -> List.rev_append l2 res
-    | _, []  -> List.rev_append l1 res
-    | (idx1,sub1)::tail1, (idx2,sub2)::tail2 ->
-        assert (idx1 <> idx2);
-        if idx1 < idx2 then
-          join l1 tail2 ((idx2,sub2)::res)
-        else
-          join tail1 l2 ((idx1,sub1)::res)
-  in
-  List.rev (join l1 l2 [])
-
-
-
-let merge_lists (l1: sublist) (l2:sublist): sublist =
-  (** Merge the two lists [l1] and [l2].
-
-      The merged list contains only the indices which occur in both lists
-      and on which the substitutions of both lists are mergable.
-   *)
-  let rec merge l1 l2 res =
-    match l1, l2 with
-      [], _  -> res
-    | _ , [] -> res
-    | (idx1,sub1)::tail1, (idx2,sub2)::tail2 ->
-        if idx1 < idx2 then
-          merge l1 tail2 res
-        else if idx1 > idx2 then
-          merge tail1 l2 res
-        else begin
-          try
-            let sub = Term_sub.merge sub1 sub2 in
-            merge tail1 tail2 ((idx1,sub)::res)
-          with Not_found ->
-            merge tail1 tail2 res
-        end
-  in
-  List.rev (merge l1 l2 [])
 
 
 
@@ -127,138 +89,319 @@ let qmap (is_all:bool) (tab:t): t IntMap.t =
     tab.somes
 
 
-let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
-    :  (int * Term_sub.t) list =
-  (** Unify the term [t] which comes from an environment with [nbt] bound
-      variables with the terms in the table 'table'.
 
-      The result is a list of tuples (idx,sub) where the unified
-      term [ut] has the index [idx], and applying
-      the substitution [sub] to [ut] yields the term [t].
-
-      Note: The substitutions are valid in the environment of [t] because
-            they consist of subterms of [t]. Before applying them to the
-            the term [ut] at the corresponding index [idx] the term [ut]
-            has to be transformed into the environment of [t].
-   *)
-  let rec uni (t:term) (tab:t) (nb:int): sublist =
-    let basic_subs: sublist =
-      try
-        let t = Term.down nb t in
-        List.map (fun (idx,avar,nargs) -> idx,Term_sub.singleton avar t) tab.avars
-      with Term_capture ->
-        []
-    and subs
-        (i:int)
-        (mp:   sublist IntMap.t)
-        (base: sublist) : sublist =
-      try
-        join_lists (IntMap.find i mp) base
-      with Not_found -> base
-    in
-    let list_of (t:term) (nb:int) (tab:t): sublist =
-      let res = uni t tab nb in
-      if res=[] then raise Not_found;
-      res
-    in
-    let arglst
-        (args:term array) (nb:int) (argtabs:t array)
-        (lst:sublist) (use_lst:bool)
-        : sublist =
-      let len = Array.length args in
-      assert (len = Array.length argtabs);
-      let res_lst = ref lst in
-      for i=0 to len-1 do
-        let alst = list_of args.(i) nb argtabs.(i) in
-        res_lst :=
-          if i=0 && not use_lst then alst else merge_lists !res_lst alst
-      done;
-      join_lists basic_subs !res_lst
-    in
-    match t with
-      Variable i when i < nb ->
-        IntMap.find i tab.bvars
-    | Variable i ->
-        assert (nb <= i);
-        List.fold_left
-          (fun base (nbenv,map) ->
-            assert (nbenv <= nbt);
-            if nbt-nbenv <= i-nb then
-              subs (i-nb - (nbt-nbenv)) map base
-            else
-              base)
-          basic_subs
-          tab.fvars
-    | VAppl (i,args,_) ->
-        assert (nb + nbt <= i);
-        let idx = i - nb - nbt in
-        let idx = sfun idx in
-        begin try
-          let argtabs,sublst = IntMap.find idx tab.apps in
-          if Array.length argtabs = 0 then
-            join_lists basic_subs sublst
-          else
-            arglst args nb argtabs [] false
-        with Not_found ->
-          basic_subs
-        end
-    | Application (f,args,_) ->
-        begin
+let merge_avars (avars:(int*int*int) list) (t:term) (r:result): sublist =
+  let rec merge avars lst reslst =
+    (* avars and lst are descending *)
+    match avars, lst with
+      [], _ ->
+        reslst
+    | _, [] ->
+        reslst
+    | (idx1,avar,nargs)::tail1, (idx2,sub)::tail2 ->
+        if idx1 < idx2 then (* idx2 cannot be merged *)
+          merge avars tail2 reslst
+        else if idx1 > idx2 then (* idx1 cannot be merged *)
+          merge tail1 lst reslst
+        else
           try
-            let len           = Array.length args in
-            let ftab, argtabs = IntMap.find len tab.fapps in
-            arglst args nb argtabs (list_of f nb ftab) true
+            let t2 = Term_sub.find avar sub in
+            if Term.equivalent t t2 then
+              merge tail1 tail2 ((idx2,sub)::reslst)
+            else
+              merge tail1 tail2 reslst
           with Not_found ->
-            basic_subs
-        end
-    | Lam (n,_,pres,t,_,_) ->
-        let len = List.length pres in
-        begin try
-          let prestablst,ttab = find_lam len tab in
-          let tlst = uni t ttab (1 + nb) in
-          let rec addpres pres prestablst lst =
-            match pres, prestablst with
-              [], [] -> lst
-            | p::pres, tab::prestablst ->
-                let plst = uni p tab (1+nb) in
-                let lst = merge_lists plst lst in
-                addpres pres prestablst lst
-            | _ -> assert false (* list must have the same size *)
-          in
-          let tlst = addpres pres prestablst tlst in
-          join_lists basic_subs tlst
-        with Not_found ->
-          basic_subs
-        end
-    | QExp (n,_,_,t,is_all) ->
-        begin try
-          let ttab = IntMap.find n (qmap is_all tab) in
-          let tlst = uni t ttab (n+nb) in
-          join_lists basic_subs tlst
-        with Not_found ->
-          basic_subs
-        end
-    | Flow (ctrl,args) ->
-        let len = Array.length args in
-        begin try
-          let argtabs = FlowMap.find (ctrl,len) tab.flows in
-          arglst args nb argtabs [] false
-        with Not_found ->
-          basic_subs
-        end
-    | Indset (nme,tp,rs) ->
-        let nrules = Array.length rs in
-        begin try
-          let argtabs = IntPairMap.find (1,nrules) tab.inds in
-          arglst rs (1+nb) argtabs [] false
-        with Not_found ->
-          basic_subs
-        end
+            let sub = Term_sub.add avar t sub in
+            merge tail1 tail2 ((idx2,sub)::reslst)
+  in
+  match r with
+    Initial ->
+      List.rev_map
+        (fun (idx,avar,nargs) -> idx,Term_sub.singleton avar t)
+        avars
+  | Sub_list lst ->
+      merge avars lst []
+
+
+
+
+let merge_idxlst (idxlst:int list) (r:result): sublist =
+  let rec merge idxlst lst reslst =
+    (* idxlst and lst are descending *)
+    match idxlst, lst with
+      [], _ ->
+        reslst
+    | _, [] ->
+        reslst
+    | idx1::tail1, (idx2,sub)::tail2 ->
+        if idx1 < idx2 then
+          merge idxlst tail2 reslst
+        else if idx1 > idx2 then
+          merge tail1 lst reslst
+        else
+          merge tail1 tail2 ((idx2,sub)::reslst)
   in
   try
-    uni t table 0
+    match r with
+      Initial ->
+        List.rev_map (fun idx -> idx,Term_sub.empty) idxlst
+    | Sub_list lst ->
+        merge idxlst lst []
   with Not_found ->
     []
+
+
+
+let join_sublist (l1: sublist) (l2:sublist): sublist =
+  (* [l1] and [l2] are ascending and disjoint. The result is ascending. *)
+  let rec join l1 l2 res =
+    match l1, l2 with
+      [], _ ->
+        List.rev_append l2 res
+    | _, [] ->
+        List.rev_append l1 res
+    | (idx1,sub1)::tail1, (idx2,sub2)::tail2 ->
+        assert (idx1 <> idx2); (* lists are disjoint! *)
+        if idx1 < idx2 then
+          join tail1 l2 ((idx1,sub1)::res)
+        else
+          join l1 tail2 ((idx2,sub2)::res)
+  in
+  List.rev (join l1 l2 [])
+
+
+
+let extract_idxlst_locvars
+    (v:int)
+    (nbenvt: int)
+    (fvars: (int * int list IntMap.t) list)
+    : int list =
+  let idxlst =
+    List.fold_left
+      (fun idxlst (nbenv,map) ->
+        if nbenvt - nbenv <= v then
+          try
+            let idxlstvar =
+            IntMap.find (v - (nbenvt - nbenv)) map
+            in
+            List.rev_append idxlstvar idxlst
+        with Not_found ->
+          idxlst
+      else
+          idxlst
+      )
+      []
+      fvars
+  in
+  List.rev idxlst
+
+
+
+type unifier = term -> t -> int -> result -> sublist
+
+let uni_args
+    (args: term array)
+    (nb:int)
+    (argtabs: t array)
+    (r: result)
+    (uni: unifier)
+    : sublist =
+  let len = Array.length args in
+  assert (len = Array.length argtabs);
+  let sublst, _ =
+    interval_fold
+      (fun (sublst,r) i ->
+        let r =
+          if sublst = [] then r else Sub_list (List.rev sublst)
+        in
+        let sublst = uni args.(i) argtabs.(i) nb r in
+        if sublst = [] then begin
+          raise Not_found
+        end;
+        sublst, Initial (* Initial is dummy, because sublst is never
+                           empty *)
+      )
+      ([],r)
+      0 len
+  in
+  sublst
+
+
+
+let uni_core
+    (t:term) (nb:int) (nargs:int) (nvars:int)
+    (r:result)
+    (uni:unifier)
+    (sfun: int->int)
+    (tab:t)
+    : sublist =
+  (* The core part of the unifier which handles all parts except argument
+     variables.
+
+     The unifier tries to find an exact match between the toplevel part of
+     the term [t] and the current [tab]. If no exact match is possible the
+     exception [Not_found] is thrown.
+   *)
+  match t with
+    Variable i when i < nb ->
+      (* bound variable of [t] *)
+      let idxlst = IntMap.find i tab.bvars in
+      merge_idxlst idxlst r
+  | Variable i ->
+      assert (nb + nargs <= i);
+      let idxlst = extract_idxlst_locvars (i-nb-nargs) nvars tab.fvars in
+      merge_idxlst idxlst r
+  | VAppl (i,args,_) ->
+      assert (nb + nargs + nvars <= i);
+      let idx = i - nb - nargs - nvars in
+      let idx = sfun idx in
+      let argtabs,idxlst =
+        try
+          IntMap.find idx tab.apps
+        with Not_found ->
+          raise Not_found
+      in
+      let len = Array.length args in
+      assert (len = Array.length argtabs);
+      if len = 0 then
+        merge_idxlst idxlst r
+      else
+        uni_args args nb argtabs r uni
+  | Application (f,args,_) ->
+      let len = Array.length args in
+      let ftab, argtabs = IntMap.find len tab.fapps in
+      assert (len = Array.length argtabs);
+      let sublst = uni f ftab nb r in
+      interval_fold
+        (fun sublst i ->
+          if sublst = [] then raise Not_found;
+          uni args.(i) argtabs.(i) nb (Sub_list (List.rev sublst))
+        )
+        sublst
+        0 len
+  | Lam (n,_,pres,t,_,_) ->
+      let len = List.length pres in
+      let prestablst,ttab = find_lam len tab in
+      let sublst = uni t ttab (1 + nb) r in
+      let rec addpres pres prestablst sublst =
+        if sublst = [] then raise Not_found;
+        match pres, prestablst with
+          [], [] ->
+            sublst
+        | p::pres, tab::prestablst ->
+            let sublst = uni p tab (1+nb) (Sub_list (List.rev sublst)) in
+            addpres pres prestablst sublst
+        | _ ->
+            assert false (* lists must have the same size *)
+      in
+      addpres pres prestablst sublst
+  | QExp (n,_,_,t,is_all) ->
+      let ttab = IntMap.find n (qmap is_all tab) in
+      uni t ttab (n+nb) r
+  | Flow (ctrl,args) ->
+      let len = Array.length args in
+      let argtabs = FlowMap.find (ctrl,len) tab.flows in
+      uni_args args nb argtabs r uni
+  | Indset (nme,tp,rs) ->
+      let nrules = Array.length rs in
+      let argtabs = IntPairMap.find (1,nrules) tab.inds in
+      uni_args rs nb argtabs r uni
+
+
+let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
+    :  (int * Term_sub.t) list =
+  (* Unify the term [t] which comes from an environment with [nbt] bound
+     variables with the terms in the table 'table'.
+
+     The result is a list of tuples (idx,sub) where the unified
+     term [ut] has the index [idx], and applying
+     the substitution [sub] to [ut] yields the term [t].
+
+     Note: The substitutions are valid in the environment of [t] because
+           they consist of subterms of [t]. Before applying them to the
+           the term [ut] at the corresponding index [idx] the term [ut]
+           has to be transformed into the environment of [t].
+   *)
+  let rec uni (t:term) (tab:t) (nb:int) (r:result): sublist =
+    let avar_subs: sublist = (* merge all assertions which have at this position
+                                an argument variable into the result *)
+      try
+        let t = Term.down nb t in
+        merge_avars tab.avars t r
+      with Term_capture ->
+        []
+    and other_subs: sublist =
+      try
+        uni_core t nb 0 nbt r uni sfun tab
+      with Not_found ->
+        []
+    in
+    join_sublist avar_subs other_subs
+  in
+  uni t table 0 Initial
+
+
+
+
+
+let merge_terms
+    (var:int)
+    (nbenv:int)
+    (terms:(int*int*int*int*term)list)
+    (r:result)
+    : sublist =
+  (* Merge the terms of a table entry which can substitute the argument
+     variable [var] in a local environment with [nbenv] variables into the
+     result [r]
+   *)
+  let rec merge terms lst reslst =
+    (* terms and lst (sublist)  are descending *)
+    match terms,lst with
+      [], _ ->
+        reslst
+    | _, [] ->
+        reslst
+    | (idx1,nb1,nargs1,nbenv1,t1)::tail1, (idx2,sub2)::tail2 ->
+        assert (nbenv1 <= nbenv);
+        if idx1 < idx2 then (* idx2 not possible *)
+          merge terms tail2 reslst
+        else if idx1 > idx2 then (* idx1 not possible *)
+          merge tail1 lst reslst
+        else begin (* idx1 = idx2, i.e. substitutions can be merged *)
+          try
+            let t1 = Term.down nb1 t1 in
+            begin try
+              let t2 = Term_sub.find var sub2 in
+              if Term.equivalent t1 t2 then
+                merge tail1 tail2 ((idx2,sub2)::reslst)
+              else begin
+                merge tail1 tail2 reslst
+              end
+            with Not_found ->
+              let sub2 = Term_sub.add var t1 sub2 in
+              merge tail1 tail2 ((idx2,sub2)::reslst)
+            end
+          with Term_capture ->
+            merge tail1 tail2 reslst
+        end
+  in
+  match r with
+    Initial ->
+      List.fold_left
+        (fun lst (idx,nb_0,nargs_0,nbenv_0,t_0) ->
+          assert (nbenv_0 <= nbenv);
+          assert (not (List.exists (fun (i,_) -> i=idx) lst));
+          try
+            let t_0 = Term.down nb_0 t_0 in
+            (idx, Term_sub.singleton var t_0)::lst
+          with Term_capture ->
+            lst)
+        []
+        terms
+  | Sub_list lst ->
+      merge terms lst []
+
+
 
 
 
@@ -278,138 +421,49 @@ let unify_with
             into the environment of the term at [idx] (e.g. in the term [t]
             space has to be made for the variables of the term at [idx]).
    *)
-  let rec uniw (t:term) (tab:t) (nb:int): sublist =
+  let rec uniw (t:term) (tab:t) (nb:int) (r:result): sublist =
     match t with
-      Variable i when i < nb ->
-        (* bound variable of [t] *)
-        IntMap.find i tab.bvars
-    | Variable i when i < nb+nargs ->
+      Variable i when nb <= i && i < nb + nargs ->
         (* argument variable of [t] *)
-        List.fold_left
-          (fun lst (idx,nb_0,nargs_0,nbenv_0,t_0) ->
-            assert (nbenv_0 <= nbenv);
-            assert (not (List.exists (fun (i,_) -> i=idx) lst));
-            try
-              let t_0 = Term.down nb_0 t_0 in
-              (idx, Term_sub.singleton (i-nb) t_0)::lst
-            with Term_capture ->
-              lst)
+        merge_terms (i - nb) nbenv tab.terms r
+    | _ ->
+        try
+          uni_core t nb nargs nbenv r uniw sfun tab
+        with Not_found ->
           []
-          (List.rev tab.terms)
-    | Variable i ->
-        (* free variable of [t] *)
-        let fvar = i - nargs - nb in
-        let sublist =
-          List.fold_left
-            (fun lst (nbenv_1,fvar2sublist) ->
-              assert (nbenv_1 <= nbenv);
-              let fvar = fvar - (nbenv - nbenv_1) in
-              if 0 <= fvar then
-                try
-                  let sublist = IntMap.find fvar fvar2sublist in
-                  join_lists sublist lst
-                with Not_found ->
-                  lst
-              else
-                lst
-            )
-            []
-            tab.fvars
-        in
-        if sublist=[] then
-          raise Not_found
-        else
-          sublist
-    | VAppl (i,args,_) ->
-        assert (nb + nargs + nbenv <= i);
-        let idx = i - nb - nargs - nbenv in
-        let idx = sfun idx in
-        let argtabs,sublst = IntMap.find idx tab.apps in
-        if Array.length argtabs = 0 then
-          sublst
-        else begin
-          let lst = ref [] in
-          Array.iteri
-            (fun i a ->
-              let alst = uniw a argtabs.(i) nb in
-              lst := if i = 0 then alst else merge_lists !lst alst)
-            args;
-          !lst
-        end
-    | Application (f,args,_) ->
-        let len = Array.length args in
-        let ftab, argtabs = IntMap.find len tab.fapps in
-        let flst = ref (uniw f ftab nb) in
-        Array.iteri
-          (fun i a ->
-            let alst = uniw a argtabs.(i) nb in
-            flst := merge_lists !flst alst)
-          args;
-        !flst
-    | Lam (n,_,pres,t,_,_) ->
-        let len = List.length pres in
-        let prestabs, ttab = find_lam len tab in
-        let rec addpres pres prestabs lst =
-          match pres, prestabs with
-            [], [] -> lst
-          | p::pres, tab::prestabs ->
-              let plst = uniw p tab (1+nb) in
-              let lst = merge_lists plst lst in
-              addpres pres prestabs lst
-          | _ -> assert false (* lists must have the same size *)
-        in
-        let tlst = uniw t ttab (1 + nb) in
-        addpres pres prestabs tlst
-    | QExp (n,_,_,t,is_all) ->
-        let ttab = IntMap.find n (qmap is_all tab) in
-        uniw t ttab (n+nb)
-    | Flow (ctrl,args) ->
-        let len = Array.length args in
-        let argtabs = FlowMap.find (ctrl,len) tab.flows in
-        let lst = ref [] in
-        Array.iteri
-          (fun i a ->
-            let alst = uniw a argtabs.(i) nb in
-            lst := if i = 0 then alst else merge_lists !lst alst)
-          args;
-        !lst
-    | Indset (_,_,rs) ->
-        let argtabs = IntPairMap.find (1,Array.length rs) tab.inds in
-        let lst = ref [] in
-        Array.iteri
-          (fun i a ->
-            let alst = uniw a argtabs.(i) (1+nb) in
-            lst := if i = 0 then alst else merge_lists !lst alst)
-          rs;
-        !lst
-in
-  try
-    uniw t table 0
-  with Not_found ->
-    []
+  in
+  uniw t table 0 Initial
 
 
-let newmap (i:int) (idx:int) (map: sublist IntMap.t): sublist IntMap.t =
+
+
+
+
+let newmap (i:int) (idx:int) (map: int list IntMap.t): int list IntMap.t =
   try
-    let sublist = IntMap.find i map in
-    assert (not (List.exists (fun (i,_) -> i=idx) sublist));
-    let sublist = (idx,Term_sub.empty):: sublist in
-    IntMap.add i sublist map
+    let lst = IntMap.find i map in
+    IntMap.add i (idx::lst) map
   with Not_found ->
-    IntMap.add i [idx,Term_sub.empty] map
+    IntMap.add i [idx] map
+
+
+
 
 
 let has (idx:int) (table:t): bool =
   List.exists (fun (i,_,_,_,_) -> i = idx) table.terms
 
 
+
+
+
 let add_base
     (t:term) (nb:int) (nargs:int) (nbenv:int)
     (idx:int)
     (sfun:int->int)
-    (table:t): t =
+    (tab:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
-      environment with [nbenv] variables to the index [idx]
+      environment with [nbenv] variables with the index [idx]
       within the node [tab].
    *)
   let rec add0 (t:term) (nb:int) (tab:t): t =
@@ -418,10 +472,13 @@ let add_base
         Variable i when nb<=i && i<nb+nargs ->
           (* variable is a formal argument which can be substituted *)
           (*assert (not (List.exists (fun (i,_,_) -> i=idx) tab.avars));*)
-          {tab with avars = (idx, (i-nb),nargs) :: tab.avars}
+          {tab with
+           avars = (idx, (i-nb),nargs) :: tab.avars(*;
+           bvars = newmap i idx tab.bvars*)
+         }
       | Variable i when nb+nargs <= i ->
           (* variable is a free variable (i.e. not substitutable *)
-          let fvar = i-nargs-nb in
+          let fvar = i - nargs - nb in
           {tab with fvars =
            let fvars = tab.fvars in
            match fvars with
@@ -440,16 +497,17 @@ let add_base
       | VAppl (i,args,_) ->
           assert (nb + nargs + nbenv <= i);
           let len  = Array.length args
-          and item = idx, Term_sub.empty
           and fidx = i - nb - nargs - nbenv in
           let fidx = sfun fidx in
-          let argtabs,sublst =
+          let argtabs,idxlst =
             try IntMap.find fidx tab.apps
             with Not_found ->
               Array.make len empty, [] in
+          let idxlst = if len = 0 then idx::idxlst else idxlst
+          in
           let argtabs =
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs in
-          {tab with apps = IntMap.add fidx (argtabs,item::sublst) tab.apps}
+          {tab with apps = IntMap.add fidx (argtabs,idxlst) tab.apps}
       | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =
@@ -515,7 +573,7 @@ let add_base
     in
     {tab with terms = (idx,nb,nargs,nbenv,t)::tab.terms}
   in
-  add0 t nb table
+  add0 t nb tab
 
 
 
@@ -523,21 +581,26 @@ let add
     (t:term) (nargs:int) (nbenv:int)
     (idx:int)
     (sfun:int->int)
-    (table:t): t =
+    (tab:t): t =
   (** Associate the term [t] which has [nargs] arguments and comes from an
-      environment with [nbenv] variables to the index [idx]
+      environment with [nbenv] variables with the index [idx]
       within the node [tab].
    *)
-  add_base t 0 nargs nbenv idx sfun table
+  add_base t 0 nargs nbenv idx sfun tab
+
+
+
 
 let filter (f:int -> bool) (tab:t): t =
-  let filt_sub sublst = List.filter (fun (i,_) -> f i) sublst in
+  let filt_idx idxlst = List.filter f idxlst in
   let rec filt tab =
     {terms = List.filter (fun (i,_,_,_,_) -> f i) tab.terms;
      avars = List.filter (fun (i,_,_) ->     f i) tab.avars;
-     bvars = IntMap.map filt_sub tab.bvars;
-     fvars = List.map (fun (nbenv,map) -> nbenv, IntMap.map filt_sub map) tab.fvars;
-     apps  = IntMap.map (fun (args,sublst) -> Array.map filt args,sublst) tab.apps;
+     bvars = IntMap.map filt_idx tab.bvars;
+     fvars = List.map (fun (nbenv,map) -> nbenv, IntMap.map filt_idx map) tab.fvars;
+     apps  = IntMap.map
+       (fun (args,idxlst) -> Array.map filt args, filt_idx idxlst)
+       tab.apps;
      fapps = IntMap.map (fun (f,args) -> filt f, Array.map filt args) tab.fapps;
      lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
      alls  = IntMap.map filt tab.alls;
