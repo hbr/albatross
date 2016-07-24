@@ -14,6 +14,8 @@ val count: t -> int
 
 val terms: t -> (int*int*int*term) list
 
+val find: term -> int -> int -> (int->int) -> t -> (int * Term_sub.t) list
+
 val unify: term -> int -> (int->int) -> t -> (int * Term_sub.t) list
 
 val unify_with: term -> int -> int -> (int->int) -> t -> (int * Term_sub.t) list

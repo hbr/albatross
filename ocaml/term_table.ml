@@ -308,6 +308,9 @@ let uni_core
       uni_args rs nb argtabs r uni
 
 
+
+
+
 let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
     :  (int * Term_sub.t) list =
   (* Unify the term [t] which comes from an environment with [nbt] bound
@@ -341,6 +344,51 @@ let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
   uni t table 0 Initial
 
 
+
+
+let merge_avars_exact
+    (avars:(int*int*int) list) (avar:int) (nargs:int) (r:result)
+    : sublist =
+  let rec merge avars lst reslst =
+    (* avars and lst are descending *)
+    match avars, lst with
+      [], _ ->
+        reslst
+    | _, [] ->
+        reslst
+    | (idx1,avar1,nargs1)::tail1, (idx2,sub)::tail2 ->
+        if idx1 < idx2 then (* idx2 cannot be merged *)
+          merge avars tail2 reslst
+        else if idx1 > idx2 then (* idx1 cannot be merged *)
+          merge tail1 lst reslst
+        else if nargs1 = nargs && avar1 = avar then
+          merge tail1 tail2 ((idx2,sub)::reslst)
+        else
+          merge tail1 tail2 reslst
+  in
+  match r with
+    Initial ->
+      List.rev_map
+        (fun (idx,avar,nargs) -> idx,Term_sub.empty)
+        avars
+  | Sub_list lst ->
+      merge avars lst []
+
+
+
+let find (t:term) (nargs:int) (nvars:int) (sfun:int->int) (table:t)
+    :  (int * Term_sub.t) list =
+  (* Find the indices of all terms which are identical to the term [t] which has
+     [nargs] argument variables and comes from an environment with [nvars] local
+     variables.*)
+  let rec uni (t:term) (tab:t) (nb:int) (r:result): sublist =
+    match t with
+      Variable i when nb <= i && i < nb + nargs ->
+        merge_avars_exact tab.avars (i - nb) nargs r
+    | _ ->
+        uni_core t nb nargs nvars r uni sfun tab
+  in
+  uni t table 0 Initial
 
 
 

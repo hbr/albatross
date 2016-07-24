@@ -577,17 +577,15 @@ let find_in_tab (t:term) (pc:t): int =
 
 
 let find (t:term) (pc:t): int =
-  (*find_in_tab t  pc*)
   let n,_,_,t0 = Term.all_quantifier_split_1 t in
   let sublst =
-    Term_table.unify t0 (n + nbenv pc) (seed_function pc) pc.entry.prvd2 in
-  let idx,sub =
-    List.find
-      (fun (idx,sub) ->
-        (n = 0 && Term_sub.is_empty sub) ||
-        (n > 0 && Term_sub.count sub = n && Term_sub.is_identity sub))
-      sublst in
-  idx
+    Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd2 in
+  match sublst with
+    (idx,sub)::_ ->
+      assert (Term_sub.is_empty sub);
+      idx
+  | _ ->
+      raise Not_found
 
 
 
