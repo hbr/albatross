@@ -576,7 +576,18 @@ let find_in_tab (t:term) (pc:t): int =
   | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
 
 
-let find (t:term) (pc:t): int = find_in_tab t  pc
+let find (t:term) (pc:t): int =
+  (*find_in_tab t  pc*)
+  let n,_,_,t0 = Term.all_quantifier_split_1 t in
+  let sublst =
+    Term_table.unify t0 (n + nbenv pc) (seed_function pc) pc.entry.prvd2 in
+  let idx,sub =
+    List.find
+      (fun (idx,sub) ->
+        (n = 0 && Term_sub.is_empty sub) ||
+        (n > 0 && Term_sub.count sub = n && Term_sub.is_identity sub))
+      sublst in
+  idx
 
 
 
@@ -807,7 +818,8 @@ let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
 
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
-  pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;
+  if not (is_global pc) then
+    pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;
   let nargs,nbenv,t = RD.schematic_term rd in
   pc.entry.prvd2 <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd2
 
@@ -1534,7 +1546,7 @@ let add_consequence
   (*printf "add_consequence\n";
   printf "    premise %d %s\n" i (string_long_of_term_i i pc);
   printf "    impl    %d %s\n" j (string_long_of_term_i j pc);
-  printf "    sub        %s\n" (string_of_term_array sub pc);*)
+  printf "    args       %s\n"   (string_of_term_array args pc);*)
   assert (is_consistent pc);
   assert (i < count pc);
   assert (j < count pc);
