@@ -559,7 +559,7 @@ let has_sub (i:int) (tb:t): bool =
 let add_sub (i:int) (t:type_term) (tb:t): unit =
   assert (is_tv i tb);
   assert (not (has_sub i tb));
-  tb.subs.(i) <- t;
+  tb.subs.(i) <- substituted_type t tb;
   for k = locals_start tb to globals_beyond tb - 1 do
     tb.subs.(k) <-
       Term.subst tb.subs.(k) (Tvars.count tb.tvs) tb.subs
