@@ -256,6 +256,7 @@ type operator =
   | Divideop
   | Caretop
   | Commaop
+  | Dotop
   | Eqop
   | NEqop
   | Eqvop
@@ -293,6 +294,7 @@ let operator_data op =
   | Divideop  -> "/",   50,  Left
   | Caretop   -> "^",   55,  Right
   | Commaop   -> ",",   18,  Right
+  | Dotop     -> ".",   70,  Left
   | Eqop      -> "=",   35,  Nonassoc
   | NEqop     -> "/=",  35,  Nonassoc
   | Eqvop     -> "~",   35,  Nonassoc
@@ -311,8 +313,8 @@ let operator_data op =
   | Barop     -> "|",   40,  Left
   | DBarop    -> "||",  40,  Left
   | Arrowop   -> "->",  13,  Right
-  | Parenop   -> "()",  1000, Nonassoc
-  | Bracketop -> "[]",  1000, Nonassoc
+  | Parenop   -> "()",  80, Nonassoc
+  | Bracketop -> "[]",  70, Nonassoc
   | DArrowop  -> "==>", 20,  Right
   | DColonop  -> "::",  55,  Right
   | Allop     -> "all",  8,  Nonassoc

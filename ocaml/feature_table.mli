@@ -35,8 +35,6 @@ val is_deferred: int -> t -> bool
 
 val is_ghost_function: int -> t -> bool
 
-val seeded_term: term -> int -> t -> term
-
 val seed_function: t -> int -> int
 
 

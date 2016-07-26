@@ -36,7 +36,7 @@ module Accus: sig
   val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
   val expect_function:   int -> t -> unit
   val expect_argument:   t -> unit
-  val complete_function: t -> unit
+  val complete_function: bool -> t -> unit
   val expect_lambda:     bool -> Context.t -> t -> unit
   val complete_lambda:   int -> int array -> int -> bool -> t -> unit
   val expect_quantified: Context.t -> t -> unit
@@ -124,10 +124,9 @@ end = struct
 
 
 
-  let complete_function (accs:t): unit =
-    List.iter
-      Term_builder.complete_function
-      accs.accus;
+  let complete_function (oo:bool) (accs:t): unit =
+    let f = Term_builder.complete_function oo in
+    List.iter f accs.accus;
     if accs.trace then begin
       printf "  complete function\n";
       trace_accus accs
@@ -409,12 +408,12 @@ let unfold_inspect (info:info) (t:term) (c:Context.t): term =
     match t with
       Variable i ->
         t
-    | VAppl (i,args,ags) ->
-        VAppl (i, unfold_args args nb,ags)
-    | Application (f,args,pr) ->
+    | VAppl (i,args,ags,oo) ->
+        VAppl (i, unfold_args args nb,ags,oo)
+    | Application (f,args,pr,inop) ->
         let f    = unfold f nb
         and args = unfold_args args nb in
-        Application(f,args,pr)
+        Application(f,args,pr,inop)
     | Lam (n,nms,pres,t,pr,tp) ->
         let pres = unfold_list pres
         and t    = unfold t (1+nb) in
@@ -620,7 +619,7 @@ let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
     let c_rule = Context.push_typed (nms,tps) empty_formals c in
     let is_target (t:term) (nb:int) (c1:Context.t): bool =
       match t with
-        Application(Variable i, [|e|], true) when i = n + nb ->
+        Application(Variable i, [|e|], true,_) when i = n + nb ->
           begin try
             ignore (Term.down_from nargs (n+nb) e);
             true
@@ -670,8 +669,8 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
     let val_lst  lst  c = List.iter  (fun t   -> validate t c)   lst  in
     match t with
       Variable i -> ()
-    | VAppl(_,args,_) -> val_args args c
-    | Application(f,args,pr) ->
+    | VAppl(_,args,_,_) -> val_args args c
+    | Application(f,args,pr,_) ->
         validate f c; val_args args c
     | Lam (n,nms,pres,t,pr,tp) ->
         let c = Context.push_untyped [|ST.symbol "$0"|] c in
@@ -776,14 +775,14 @@ let analyze_expression
       | Expop op            -> do_leaf (feat (FNoperator op))
       | Binexp (Asop,e1,mtch) ->
           exp_as ie.i e1 mtch accs c
-      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] accs c
-      | Unexp  (op,e)       -> application (Expop op) [|e|] accs c
+      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] false accs c
+      | Unexp  (op,e)       -> application (Expop op) [|e|] false accs c
       | Funapp (Expdot(tgt,f),args) ->
           let arg_lst = tgt :: (expression_list args) in
           let args = Array.of_list arg_lst in
-          application f args accs c
+          application f args true accs c
       | Funapp (f,args)     ->
-          application f (Array.of_list (expression_list args)) accs c
+          application f (Array.of_list (expression_list args)) false accs c
       | Expparen e          -> analyze e accs c
       | Expquantified (q,entlst,exp) ->
           quantified q entlst exp accs c
@@ -792,9 +791,9 @@ let analyze_expression
       | Expindset (entlst,rules) ->
           inductive_set entlst rules accs c
       | Expdot (tgt,f) ->
-          application f [|tgt|] accs c
+          application f [|tgt|] true accs c
       | Tupleexp (a,b) ->
-          application (Identifier ST.tuple) [|a;b|] accs c
+          application (Identifier ST.tuple) [|a;b|] false accs c
       | ExpResult ->
           do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
@@ -821,7 +820,7 @@ let analyze_expression
       | Bracketapp (tgt,args) ->
           let arg_lst = tgt :: expression_list args in
           let args = Array.of_list arg_lst in
-          application (Expop Bracketop) args accs c
+          application (Expop Bracketop) args false accs c
       | Expset _ ->
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
       | Expcolon (_,_) ->
@@ -843,6 +842,7 @@ let analyze_expression
   and application
       (f:expression)
       (args: expression array) (* unreversed, i.e. as in the source code *)
+      (oo:bool)
       (accs: Accus.t)
       (c:Context.t)
       : unit =
@@ -854,7 +854,7 @@ let analyze_expression
       Accus.expect_argument accs;
       analyze args.(i) accs c
     done;
-    Accus.complete_function accs
+    Accus.complete_function oo accs
 
   and quantified
       (q:quantifier)

@@ -102,7 +102,7 @@ let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
         is_eq (concept i tvs1) (concept j tvs2) (nmax-1)
     | Variable i, Variable j when nall1 <= i && nall2 <= j ->
         (i - count_all tvs1) = (j - count_all tvs2)
-    | VAppl (i,args1,_), VAppl(j,args2,_) ->
+    | VAppl (i,args1,_,_), VAppl(j,args2,_,_) ->
         let n1 = Array.length args1
         and n2 = Array.length args2 in
         let res = ref (n1 = n2 && i = j) in
@@ -147,7 +147,7 @@ let principal_variable (tp:type_term) (tvs:t): int =
         pvar (concept i tvs)
     | Variable i ->
         i
-    | VAppl (i,_,_) ->
+    | VAppl (i,_,_,_) ->
         pvar (Variable i)
     | _ ->
         assert false

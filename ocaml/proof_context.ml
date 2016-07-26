@@ -1047,15 +1047,15 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       match t with
         Variable _ ->
           t, Eval.Term t, false
-      | VAppl (i,args,ags) ->
+      | VAppl (i,args,ags,oo) ->
           let args, argse, modi = simpl_args args false in
-          VAppl(i,args,ags),
+          VAppl(i,args,ags,oo),
           Eval.VApply(i,argse,ags),
           modi
-      | Application(f,args,pr) ->
+      | Application(f,args,pr,inop) ->
           let fsimp,fe,fmodi = simp f in
           let args, argse, modi = simpl_args args fmodi in
-          Application(fsimp, args, pr),
+          Application(fsimp, args, pr, inop),
           Eval.Apply(fe,argse,pr),
           modi
       | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
@@ -1079,15 +1079,15 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   in
   let tsimp, te, modi = simp t in
   let ta, tb = Proof_table.reconstruct_evaluation te pc.base in
-  assert (ta = t);
-  if tb <> tsimp then begin
+  assert (Term.equivalent ta t);
+  if not (Term.equivalent tb tsimp) then begin
     printf "simplified_term  %s\n" (string_of_term t pc);
     printf "           tb    %s\n" (string_of_term tb pc);
     printf "           tsimp %s\n" (string_of_term tsimp pc);
     assert (is_well_typed t pc);
   end;
-  assert (tb = tsimp);
-  assert (modi = (tsimp <> t));
+  assert (Term.equivalent tb tsimp);
+  assert (modi = not (Term.equivalent tsimp t));
   (*if modi then begin
     printf "simplification found\n";
     printf "  term    %s\n" (string_of_term t pc);
@@ -1119,7 +1119,7 @@ let beta_reduce
 
 let beta_reduce_term (t:term) (pc:t): term =
   match t with
-    Application (Lam(n,_,_,t0,_,tp), args, _) ->
+    Application (Lam(n,_,_,t0,_,tp), args, _, _) ->
       beta_reduce n t0 tp args 0 pc
   | _ ->
       printf "beta_reduce_term %s\n" (string_long_of_term t pc);
@@ -1183,20 +1183,20 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let args,argse = Myarray.split args in
       args, argse, !modi_ref
     in
-    let vapply i args tp full = (* eval args and VAppl *)
+    let vapply i args tp oo full = (* eval args and VAppl *)
       let args, argse, modi = eval_args false args full in
       let e = Eval.VApply (i,argse,tp) in
-      VAppl(i,args,tp), e, modi
+      VAppl(i,args,tp,oo), e, modi
     in
-    let apply f fe modi args is_pred full = (* eval args,
-                                               beta reduce or VApplication *)
+    let apply f fe modi args is_pred inop full = (* eval args,
+                                                    beta reduce or VApplication *)
       let args, argse, modi = eval_args modi args full in
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
         Lam (n,nms,_,t0,_,tp) ->
           beta_reduce  n t0 tp args nb pc, Eval.Beta e, true
       | _ ->
-          Application (f,args,is_pred), e, modi
+          Application (f,args,is_pred,inop), e, modi
     in
     let downgrade t = Context.downgrade_term t nb (context pc)
     in
@@ -1211,17 +1211,17 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           with Not_found ->
             t, Eval.Term t, false
           end
-      | VAppl (i,[|Lam(n,nms,pres,t0,pr,tp0)|],ags) when i = domain_id ->
+      | VAppl (i,[|Lam(n,nms,pres,t0,pr,tp0)|],ags,inop) when i = domain_id ->
           assert (not pr);
           let args = [|Eval.Term (Lam(n,nms,pres,t0,pr,tp0))|]
           and dom = Context.domain_of_lambda n nms pres tp0 nb (context pc) in
           dom, Eval.Exp(i, ags, args, Eval.Term dom), true
-      | VAppl (i,[| VAppl (idx,[||],ags0) |],ags)
+      | VAppl (i,[| VAppl (idx,[||],ags0,oo0) |],ags,_)
         when i = domain_id && nbenv + nb <= idx && arity idx nb pc > 0 ->
-          let args = [| Eval.Term (VAppl (idx,[||],ags0)) |]
+          let args = [| Eval.Term (VAppl (idx,[||],ags0,oo0)) |]
           and dom  = Context.domain_of_feature idx nb ags0 (context pc) in
           dom, Eval.Exp(i,ags, args, Eval.Term dom), true
-      | VAppl (i,args,ags) ->
+      | VAppl (i,args,ags,oo) ->
           begin
             let is_flow t =
               match t with Flow _ -> true | _ -> false
@@ -1251,7 +1251,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
                     exp, Eval.Term exp, false
                 in
                 if full && is_flow res then begin
-                  let res = VAppl(i,args,ags)
+                  let res = VAppl(i,args,ags,oo)
                   and e   = Eval.VApply (i,argse,ags) in
                   res, e, argsmodi
                 end else begin
@@ -1260,19 +1260,19 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
-              vapply i args ags full
+              vapply i args ags oo full
           end
-      | Application (Lam(n,nms,_,t0,prlam,tp),args,pr) when not full ->
+      | Application (Lam(n,nms,_,t0,prlam,tp),args,pr,inop) when not full ->
           assert (prlam = pr);
           beta_reduce n t0 tp args nb pc, Eval.Beta (Eval.Term t), true
-      | Application (Variable i,args,pr) when i < nb + nbenv ->
+      | Application (Variable i,args,pr,inop) when i < nb + nbenv ->
           let f  = Variable i in
           let fe = Eval.Term f in
-          apply f fe false args pr true
-      | Application (f,args,pr) ->
+          apply f fe false args pr inop true
+      | Application (f,args,pr,inop) ->
           let f,fe,fmodi = eval f nb full depth in
           let full = full || not fmodi in
-          apply f fe fmodi args pr full
+          apply f fe fmodi args pr inop full
       | Lam (n,nms,pres,t0,pred,tp) ->
           if full then
             let t0,e,tmodi = eval t0 (1+nb) full depth in
@@ -1384,13 +1384,13 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     with Not_found -> t, (Eval.Term t), false
   in
   let ta,tb = Proof_table.reconstruct_evaluation ered pc.base in
-  if ta <> t then begin
+  if not (Term.equivalent ta t) then begin
     printf "t    %s  %s\n" (string_of_term t pc) (Term.to_string t);
     printf "ta   %s  %s\n" (string_of_term ta pc) (Term.to_string ta);
     printf "tred %s\n" (string_of_term tred pc)
   end;
-  assert (ta = t);
-  if tb <> tred then begin
+  assert (Term.equivalent ta t);
+  if not (Term.equivalent tb tred) then begin
     printf "tb   %s %s\n" (string_of_term tb pc) (Term.to_string tb);
     printf "tred %s %s\n" (string_of_term tred pc) (Term.to_string tred)
   end;
@@ -1399,8 +1399,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     printf "  term: %s\n" (string_of_term t pc);
     printf "  eval: %s\n\n" (string_of_term tred pc);
     end;*)
-  assert (tb = tred);
-  assert (modi = (tred <> t));
+  assert (Term.equivalent tb tred);
+  assert (modi = not (Term.equivalent tred t));
   tred, ered, modi
 
 
@@ -1455,7 +1455,7 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   (* [idx] must represent a term which can be beta reduced *)
   let t = term idx pc in
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
+    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
       assert (prlam = pr);
       let pt = Eval(idx,Eval.Beta (Eval.Term t))
       and res = beta_reduce n t0 tp [|arg|] 0 pc in
@@ -1471,7 +1471,7 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
      term [idx]. The term [t] is added.
    *)
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr) ->
+    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
       assert (prlam = pr);
       let pt = Eval_bwd(t,Eval.Beta (Eval.Term t)) (* proves the implication
                                                       [t_idx ==> t] *)
@@ -1772,7 +1772,7 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
 
 let add_inductive_set_rules (fwd:bool) (t:term) (pc:t): unit =
   match t with
-    Application(set,args,pr) ->
+    Application(set,args,pr,_) ->
       assert pr;
       assert (Array.length args = 1);
       begin try
@@ -2187,7 +2187,7 @@ let prove_equality (g:term) (pc:t): int =
   let c = context pc in
   let eq_id, left, right, ags =
     match g with
-      VAppl (eq_id, [|left;right|], ags)
+      VAppl (eq_id, [|left;right|], ags, _)
       when Context.is_equality_index eq_id c ->
         eq_id, left, right, ags
     | _ ->
@@ -2197,7 +2197,7 @@ let prove_equality (g:term) (pc:t): int =
   let find_leibniz t1 t2 =
     (* find: all(p) p(t1) ==> p(t2) *)
     let tp_p = predicate_of_term t1 pc in
-    let p t = Application(Variable 0, [|Term.up 1 t|], true) in
+    let p t = Application(Variable 0, [|Term.up 1 t|], true, false) in
     let imp = Term.binary imp_id (p t1) (p t2) in
     let t   =
       Term.all_quantified 1 ([|ST.symbol "p"|],[|tp_p|]) empty_formals imp in
@@ -2208,7 +2208,7 @@ let prove_equality (g:term) (pc:t): int =
   let nargs = Array.length args1 in
   let tup  = Context.tuple_of_terms args1 c
   and r_tp = Context.type_of_term left c in
-  let f_tp = VAppl (Context.function_index c, [|tup;r_tp|], [||]) in
+  let f_tp = VAppl (Context.function_index c, [|tup;r_tp|], [||], false) in
   let lam = make_lambda nargs [||] [] tlam false f_tp pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
@@ -2226,11 +2226,11 @@ let prove_equality (g:term) (pc:t): int =
             else args1_up1.(j)) in
       make_application lam_1up args tup 1 false pc in
     let pred_inner i =
-      VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags)
+      VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags, false)
     in
     let start_term =
       let t = make_application lam args1 tup 0 false pc in
-      VAppl (eq_id, [|t;t|], ags)
+      VAppl (eq_id, [|t;t|], ags, false)
     in
     let start_idx  = find_match start_term pc in
     let result = ref start_idx in

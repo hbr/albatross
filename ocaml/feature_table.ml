@@ -31,11 +31,11 @@ let second_index:      int = 11
 
 let false_constant (nb:int): term =
   let id = nb+false_index in
-  VAppl (id,[||],[||])
+  VAppl (id,[||],[||],false)
 
 let true_constant (nb:int): term =
   let id = nb+true_index in
-  VAppl (id,[||],[||])
+  VAppl (id,[||],[||],false)
 
 
 type definition = term
@@ -306,7 +306,7 @@ let inductive_arguments (i:int) (ft:t): int list =
         match Sign.arg_type i desc.sign with
           Variable cls when cls = desc.cls + ntvs ->
             i :: lst
-        | VAppl(cls,_,_) when cls = desc.cls + ntvs ->
+        | VAppl(cls,_,_,_) when cls = desc.cls + ntvs ->
             i :: lst
         | _ ->
             lst)
@@ -320,7 +320,7 @@ let feature_call(i:int) (nb:int) (args:arguments) (ags:agens) (ft:t): term =
      with [nb] variables.*)
   let len = Array.length args in
   assert (arity i ft = len);
-  VAppl (i+nb, args, ags)
+  VAppl (i+nb, args, ags, false)
 
 
 let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
@@ -340,12 +340,12 @@ let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
   let n       = arity idx ft in
   let nms     = anon_argnames n in
   let p       = Term.up n p in
-  let call    = VAppl (idx+n+nb, standard_substitution n, ags) in
-  let tgt     = Application(p,[|call|],true) in
+  let call    = VAppl (idx+n+nb, standard_substitution n, ags, false) in
+  let tgt     = Application(p,[|call|],true,false) in
   let indargs = inductive_arguments idx ft in
   let ps_rev  =
     List.rev_map
-      (fun iarg -> Application(p,[|Variable iarg|],true)) indargs in
+      (fun iarg -> Application(p,[|Variable iarg|],true,false)) indargs in
   n,nms,tps,ps_rev,tgt
 
 
@@ -377,7 +377,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
           Term.all_quantified n (nms,tps) empty_formals chn in
         let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in
         Term.binary imp_id rule tgt)
-      (Application(p,[|x|],true))
+      (Application(p,[|x|],true,false))
       lst in
   Term.all_quantified 2 (nms,tps) (fgnms,fgcon) t0
 
@@ -400,10 +400,10 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
         ()
     | Variable i ->
         check_pub_i i
-    | VAppl(i,args,_) ->
+    | VAppl(i,args,_,_) ->
         check_pub_i i;
         check_args args nb
-    | Application(f,args,_) ->
+    | Application(f,args,_,_) ->
         check_pub f nb;
         check_args args nb
     | Lam(n,nms,pres0,t0,_,_) ->
@@ -468,7 +468,7 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
              2: second *)
     let first_id  = nb + 1 + nbenv + first_index
     and second_id = nb + 1 + nbenv + second_index
-    and vappl i t ags  = VAppl (i+nargs-1, [|t|], ags), 0, 0
+    and vappl i t ags  = VAppl (i+nargs-1, [|t|], ags, true), 0, 0
     in
     match t with
       Variable i when i < nb ->
@@ -481,7 +481,7 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         nsnds2
     | Variable i ->
         Variable (i + nargs - 1), 0 , 0
-    | VAppl(i,args,ags) when i = first_id ->
+    | VAppl(i,args,ags,_) when i = first_id ->
         assert (Array.length args = 1);
         let t,outer,nsnds = untup args.(0) nb 1 0 in
         assert (outer = 0 || outer = 1);
@@ -490,7 +490,7 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
           t, 0, 0
         else
           vappl i t ags
-    | VAppl(i,args,ags) when i = second_id && outer = 0 ->
+    | VAppl(i,args,ags,_) when i = second_id && outer = 0 ->
         assert (Array.length args = 1);
         let t,outer,nsnds = untup args.(0) nb 2 0 in
         assert (outer = 0 || outer = 2);
@@ -499,7 +499,7 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
           t, 0, 0
         else
           vappl i t ags
-    | VAppl(i,args,ags) when i = second_id->
+    | VAppl(i,args,ags,_) when i = second_id->
         assert (Array.length args = 1);
         assert (outer = 1 || outer = 2);
         let t1,outer1,nsnds1 = untup args.(0) nb outer (nsnds+1) in
@@ -509,13 +509,13 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
           assert (outer1 = outer);
           t1, outer1, nsnds1-1
         end
-    | VAppl(i,args,ags) ->
+    | VAppl(i,args,ags,oo) ->
         let args = Array.map (fun t -> untup0 t nb) args in
-        VAppl(i+nargs-1,args,ags), 0, 0
-    | Application(f,args,pr) ->
+        VAppl(i+nargs-1,args,ags,oo), 0, 0
+    | Application(f,args,pr,inop) ->
         let f = untup0 f nb
         and args = Array.map (fun t -> untup0 t nb) args in
-        Application(f,args,pr), 0, 0
+        Application(f,args,pr,inop), 0, 0
     | Lam (n,nms,pres0,t0,pr,tp) ->
         let t0 = untup0 t0 (1+nb)
         and pres0 = untup0_lst pres0 (1+nb) in
@@ -607,7 +607,7 @@ let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
   let tuple_id  = nbenv + tuple_index in
   let rec collect t lst =
     match t with
-      VAppl (i,args,_) when i = tuple_id ->
+      VAppl (i,args,_,_) when i = tuple_id ->
         assert (Array.length args = 2);
         let lst = args.(0) :: lst in
         collect args.(1) lst
@@ -649,13 +649,13 @@ let ith_tuple_element
         t, tp
       else
         let ags = split_tup tp in
-        let t = VAppl (second_id, [|t|], ags) in
+        let t = VAppl (second_id, [|t|], ags, true) in
         seconds (m - 1) t ags.(1)
     in
     if i + 1 < n then
       let t, tp = seconds i t tup_tp in
       let ags = split_tup tp in
-      VAppl (first_id, [|t|], ags)
+      VAppl (first_id, [|t|], ags, true)
     else if i + 1 = n then
       let t,_ = seconds i t tup_tp in
       t
@@ -689,7 +689,7 @@ let args_of_tuple_ext
       n + 1, t::lst, tp
     else
       match t with
-        VAppl(i,args,ags) when i = tuple_id ->
+        VAppl(i,args,ags,_) when i = tuple_id ->
           assert (Array.length args = 2);
           assert (Array.length ags  = 2);
           untup args.(1) ags.(1) (n+1) (args.(0)::lst)
@@ -739,7 +739,7 @@ let tuple_of_args
       let _,ags = Class_table.split_type_term tup_tp in
       assert (Array.length ags = 2);
       let b = tup_from (i + 1) ags.(1) in
-      VAppl (tup_id, [| args.(i); b |], ags)
+      VAppl (tup_id, [| args.(i); b |], ags, false)
     end
   in
   tup_from 0 tup_tp
@@ -797,7 +797,7 @@ let make_application
     else
       [|tuple_of_args args tup nbenv ft|]
   in
-  Application (f, args, pred)
+  Application (f, args, pred, false)
 
 
 
@@ -828,7 +828,7 @@ let fake_tuple_type (n:int): type_term =
     if i = 0 then
       tp
     else
-      let tp = VAppl (-1, [|empty_term; tp|], [||]) in
+      let tp = VAppl (-1, [|empty_term; tp|], [||], false) in
       tup (i - 1) tp
   in
   tup (n - 1) empty_term
@@ -908,38 +908,63 @@ let term_to_string
         (List.map (fun t -> to_string t names nanonused tvs false None) ps),
       to_string t names nanonused tvs false None
     in
-    let default_fapp (f:term) (argsstr:string): operator option * string =
-      None,
-      (to_string f names nanonused tvs true None) ^ "(" ^ argsstr ^ ")"
-    in
-    let funiapp2str (i:int) (argsstr:string): operator option * string =
-      if nnames <= i then
-        let fn = (descriptor (i-nnames) ft).fname in
-        begin match fn with
-          FNname fsym ->
-            if fsym = (ST.symbol "singleton") then
-              None, "{" ^ argsstr ^ "}"
-            else if fsym = ST.tuple then
-              Some Commaop, argsstr
-            else
-              default_fapp (Variable i) argsstr
-        | _ -> default_fapp (Variable i) argsstr
-        end
-      else
-        default_fapp (Variable i) argsstr
-    in
-    let funapp2str (f:term) (argsstr:string): operator option * string =
-      match f with
-        Variable i ->
-          funiapp2str i argsstr
-      | _ -> default_fapp f argsstr
-    in
     let argsstr (args: term array): string =
       String.concat
         ","
         (List.map
            (fun t -> to_string t names nanonused tvs false None)
            (Array.to_list args))
+    in
+    let fapp2str
+        (f:term) (args:term array) (inop:bool): operator option * string =
+      assert (Array.length args = 1);
+      let argsstr = argsstr args in
+      if inop then
+        let argstr =
+          to_string args.(0) names nanonused tvs false (Some (Inop,true))
+        and fstr =
+          to_string f names nanonused tvs false (Some (Inop,false))
+        in
+        Some Inop,
+        argstr ^ " in " ^ fstr
+      else
+        None,
+        (to_string f names nanonused tvs true (Some (Parenop,true))) ^
+        "(" ^ argsstr ^ ")"
+    in
+    let ooapp2str (i:int) (args:term array): operator option * string =
+      assert (nnames <= i);
+      let fstr =
+        match (descriptor (i-nnames) ft).fname with
+          FNname fsym -> ST.string fsym
+        | _ -> assert false
+      in
+      let len = Array.length args in
+      assert (0 < len);
+      let tgtstr =
+        to_string args.(0) names nanonused tvs false (Some (Dotop,true))
+      in
+      Some Dotop,
+      tgtstr ^ "." ^ fstr ^
+      (if len = 1 then
+        ""
+      else
+        let args = Array.sub args 1  (len - 1) in
+        "(" ^ (argsstr args) ^ ")")
+    in
+    let funiapp2str (i:int) (args:term array): operator option * string =
+      assert (nnames <= i);
+      let fn = (descriptor (i-nnames) ft).fname in
+      match fn with
+        FNname fsym ->
+          if fsym = (ST.symbol "singleton") then
+            None, "{" ^ argsstr args ^ "}"
+          else if fsym = ST.tuple then
+            Some Commaop, (argsstr args)
+          else
+            None, ST.string fsym ^ "(" ^ argsstr args ^ ")"
+      | _ ->
+          assert false;
     in
     let op2str (op:operator) (fidx:int) (args: term array): string =
       match op with
@@ -1037,7 +1062,7 @@ let term_to_string
       match t with
         Variable i ->
           None, var2str i
-      | VAppl (i,args,_) ->
+      | VAppl (i,args,_,oo) ->
           if Array.length args = 0 then
             None, var2str i
           else
@@ -1045,15 +1070,18 @@ let term_to_string
               let op,fidx = find_op_int i in
               Some op, op2str op fidx args
             with Not_found ->
-              funiapp2str i (argsstr args)
+              if oo then
+                ooapp2str i args
+              else
+                funiapp2str i args
             end
-      | Application (f,args,pr) ->
+      | Application (f,args,pr,inop) ->
           begin
             try
               let op,fidx = find_op f in
               Some op, op2str op fidx args
             with Not_found ->
-              funapp2str f (argsstr args)
+              fapp2str f args inop
           end
       | Lam (n,nms,pres,t,pr,_) ->
           let nms = adapt_names nms names in
@@ -1125,8 +1153,8 @@ let term_to_string
           "(" ^ str ^ ")"
         else
           str
-    | Some iop, None when is_fun ->
-        "(" ^ str ^ ")"
+    (*| Some iop, None when is_fun ->
+        "(" ^ str ^ ")"*)
     | _ -> str
   in
   let nnames = Array.length names in
@@ -1206,7 +1234,7 @@ let unify_types
     | Variable i, Variable j ->
         assert (nall <= j);
         assert (i-nfgs = j-nall)
-    | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
         let len = Array.length args1 in
         if len <> Array.length args2 then
           raise Not_found;
@@ -1322,7 +1350,7 @@ let substituted
         Variable (i - len)
     | Variable i ->
         Variable (i - len + d)
-    | VAppl(i0,args,ags0) ->
+    | VAppl(i0,args,ags0,oo) ->
         let ags0 = Array.map subtp ags0
         and args   = spec_args nb args in
         let i,ags0 =
@@ -1332,11 +1360,11 @@ let substituted
             i0,ags0
         in
         let i = i - len + d in
-        VAppl (i,args,ags0)
-    | Application (f,args,pr) ->
+        VAppl (i,args,ags0,oo)
+    | Application (f,args,pr,inop) ->
         let f = spec nb f
         and args = spec_args nb args in
-        Application (f,args,pr)
+        Application (f,args,pr,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let nb = 1 + nb in
         let ps = spec_lst nb ps
@@ -1369,14 +1397,14 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
     in
     match t with
       Variable _ -> t
-    | VAppl(i0,args,ags) ->
+    | VAppl(i0,args,ags,oo) ->
         let args  = spec_args nb args
         and i,ags = variant_feature i0 nb ags tvs ft in
-        VAppl (i,args,ags)
-    | Application (f,args,pr) ->
+        VAppl (i,args,ags,oo)
+    | Application (f,args,pr,inop) ->
         let f = spec nb f
         and args = spec_args nb args in
-        Application (f,args,pr)
+        Application (f,args,pr,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let nb = 1 + nb in
         let ps = spec_lst nb ps
@@ -1407,7 +1435,7 @@ let equality_term
    *)
   let args0 = standard_substitution 2
   and ags0  = standard_substitution 1 in
-  let eq0 = VAppl(2+eq_index, args0, ags0) in
+  let eq0 = VAppl(2+eq_index, args0, ags0,false) in
   substituted eq0 2 0 0 [|a;b|] nb [|tp|] tvs ft
 
 
@@ -1425,14 +1453,14 @@ let evaluated_as_expression
     let ntvs = Tvars.count_all tvs in
     let tp = inductive_type (c-nb-n) ags ntvs ft in
     let t0 = Term.up n t0 in
-    equality_term t0 (VAppl(c,args,ags)) (nb+n) tp tvs ft
+    equality_term t0 (VAppl(c,args,ags,false)) (nb+n) tp tvs ft
   in
   match t with
-    Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags),_)|]) ->
+    Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags,_),_)|]) ->
       assert (n + nb <= c);
       let eq = eq_term c n t0 args ags in
       QExp(n,(nms,tps),fgs,eq,false)
-  | Flow(Asexp,[|t0;VAppl(c,args,ags)|]) ->
+  | Flow(Asexp,[|t0;VAppl(c,args,ags,_)|]) ->
       eq_term c 0 t0 args ags
   | _ ->
       printf "%s\n" (term_to_string t true true nb [||] tvs ft);
@@ -1446,7 +1474,7 @@ let implication (a:term) (b:term) (nb:int): term =
   (* The implication [a ==> b] where [a] and [b] are valid in an environment
      with [nb] variables.
    *)
-  VAppl(nb+implication_index, [|a;b|], [||])
+  VAppl(nb+implication_index, [|a;b|], [||],false)
 
 
 
@@ -1517,13 +1545,6 @@ let inductive_set (i:int) (args:term array) (ags:agens) (nb:int) (tvs:Tvars.t) (
     expanded_definition i nb args ags tvs ft
   else
     raise Not_found
-  (*let n,nms,t = definition i nb ft in
-  match t with
-    Indset _ ->
-      assert (n = Array.length args);
-      Term.apply t args
-  | _ ->
-      raise Not_found*)
 
 
 let preconditions (i:int) (nb:int) (ft:t): int * int array * term list =
@@ -1710,10 +1731,10 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         end
     | Indset _ ->
         true
-    | VAppl (i,args,_) ->
+    | VAppl (i,args,_,_) ->
         let ghost = is_ghost_function (i-nb-nargs) ft in
         ghost || ghost_args args 0 (Array.length args)
-    | Application (f,args,_) ->
+    | Application (f,args,_,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
   in
@@ -1752,38 +1773,6 @@ let seed_function (ft:t): int -> int =
   fun i -> seed i ft
 
 
-let seeded_term (t:term) (nb:int) (ft:t): term =
-  assert false
-  (*let rec seeded t nb =
-    let seeded_args args nb = Array.map (fun t -> seeded t nb) args in
-    match t with
-      Variable i when i < nb -> t
-    | Variable i ->
-        Variable (nb + seed (i-nb) ft)
-    | VAppl(i,args) ->
-        assert (nb <= i);
-        let i = nb + seed (i-nb) ft
-        and args = seeded_args args nb in
-        VAppl(i,args)
-    | Application(f,args,pr) ->
-        let f = seeded f nb
-        and args = seeded_args args nb in
-        Application(f,args,pr)
-    | Lam(n,nms,pres,t0,pr) ->
-        let t0 = seeded t0 (1+nb)
-        and pres = List.map (fun t -> seeded t (1+nb)) pres in
-        Lam(n,nms,pres,t0,pr)
-    | QExp(n,nms,t0,is_all) ->
-        let t0 = seeded t0 (n+nb) in
-        QExp(n,nms,t0,is_all)
-    | Flow(ctrl,args) ->
-        let args = seeded_args args nb in
-        Flow(ctrl,args)
-    | Indset (n,nms,rs) ->
-        let rs = seeded_args rs (n+nb) in
-        Indset (n,nms,rs)
-  in
-  seeded t nb*)
 
 
 let rec complexity (t:term) (nbenv:int) (tvs:Tvars.t) (ft:t): int =
@@ -1813,11 +1802,11 @@ and complexity_base
       assert (i < nb || nb + nargs <= i);
       assert (i < nb + nargs + nbenv);
       1
-  | VAppl (i,args,ags) ->
+  | VAppl (i,args,ags,_) ->
       assert (nb + nargs + nbenv <= i);
       let cargs = Array.map compl args in
       feature_complexity (i - nb - nargs - nbenv) cargs ags tvs ft
-  | Application (f,args,pr) ->
+  | Application (f,args,pr,_) ->
       let cf = compl f
       and cargs = Array.map compl args in
       Myarray.sum cf cargs
@@ -1885,10 +1874,10 @@ let definition_equality (i:int) (ft:t): term =
     else
       let args = standard_substitution nargs
       and ags  = standard_substitution nfgs in
-      VAppl (f_id, args, ags)
+      VAppl (f_id, args, ags, false)
   in
   let eq_id = nargs + eq_index in
-  VAppl (eq_id, [|f;t|], [|r_tp|])
+  VAppl (eq_id, [|f;t|], [|r_tp|], false)
 
 
 
@@ -2301,7 +2290,7 @@ let base_table (verbosity:int) : t =
     let args = standard_substitution 2
     and ags  = standard_substitution 2
     and nms  = standard_argnames 2 in
-    let tup = VAppl(tuple_index+3, args, ags) in
+    let tup = VAppl(tuple_index+3, args, ags, false) in
     let pat = Term.some_quantified 2 (nms,ags) tup
     and res = Term.some_quantified 2 (nms,ags) (Variable i) in
     Flow (Inspect, [|Variable 0; pat; res |])
@@ -2675,7 +2664,7 @@ let pattern_subterms (n:int) (pat:term) (nb:int) (ft:t): (int*term*int) list =
         assert (i < n || n + nb <= i);
         assert (i < n || is_constructor (i-n-nb) ft);
         (n+nb,t,level)::lst
-    | VAppl(i,args,ags) ->
+    | VAppl(i,args,ags,_) ->
         assert (n + nb <= i);
         assert (is_constructor (i-n-nb) ft);
         let lst = (n+nb,t,level)::lst
@@ -2723,7 +2712,7 @@ let peer_matches
       let tps = List.map (fun tp -> Term.subst tp ntvs ags) tps in
       let t =
         let args = Array.init n (fun i -> Variable i) in
-        VAppl (i+nb+n,args,ags) in
+        VAppl (i+nb+n,args,ags,false) in
       (n,tps,t)::lst)
     set
     []
@@ -2860,7 +2849,7 @@ let complementary_pattern
     | Variable i ->
         assert (n + nb <= i);
         assert false (* there are no global variables *)
-    | VAppl (i,args,ags) ->
+    | VAppl (i,args,ags,_) ->
         assert (n + nb <= i);
         let idx = i-n-nb in
         let fcset = peer_matches idx ags nb ntvs ft in
@@ -2872,7 +2861,7 @@ let complementary_pattern
             let args = Array.of_list (List.rev args_rev)
             and tps  = List.rev tps in
             assert (Array.length args = nargs);
-            let p  = VAppl (idx+n+nb,args,ags) in
+            let p  = VAppl (idx+n+nb,args,ags,false) in
             (n,tps,p) :: cset)
           fcset
           apl
@@ -2949,7 +2938,7 @@ let case_substitution
         assert (not subflgs.(i));
         subflgs.(i) <- true;
         subargs.(i) <- t
-    | VAppl(idx1,args1,ags1), VAppl(idx2,args2,ags2) when  is_constr idx1 ->
+    | VAppl(idx1,args1,ags1,_), VAppl(idx2,args2,ags2,_) when  is_constr idx1 ->
         assert (nb <= idx1);
         assert (npat + nb <= idx2);
         hassub :=  !hassub &&  idx1 = idx2 - npat;
@@ -3316,9 +3305,9 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
     match t with
       Variable _ ->
         t
-    | VAppl (i,args,ags) ->
-        VAppl(i, down_args args nb,ags)
-    | Application(VAppl (i,[||],ags),args,pr) when nb <= i ->
+    | VAppl (i,args,ags,oo) ->
+        VAppl(i, down_args args nb,ags,oo)
+    | Application(VAppl (i,[||],ags,oo),args,pr,_) when nb <= i ->
         assert (Array.length args = 1);
         let nargs = arity (i - nb) ft in
         let args = down_args args nb in
@@ -3328,9 +3317,9 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
           let s = signature i ags ntvs ft in
           let tup_tp = Class_table.to_tuple ntvs 0 (Sign.arguments s) in
           let args = args_of_tuple_ext args.(0) tup_tp nb nargs ft in
-          VAppl(i,args,ags)
-    | Application(f,args,pr) ->
-        Application (down f nb, down_args args nb, pr)
+          VAppl(i,args,ags,oo)
+    | Application(f,args,pr,inop) ->
+        Application (down f nb, down_args args nb, pr, inop)
     | Lam(n,nms,pres,t0,pr,tp) ->
         Lam (n,nms, down_list pres (1+nb), down t0 (1+nb), pr, tp)
     | QExp (n,tps,fgs,t0,is_all) ->
@@ -3354,11 +3343,11 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
     match t with
       Variable _ ->
         set
-    | VAppl(i,args,ags) ->
+    | VAppl(i,args,ags,_) ->
         assert (nb <= i);
         let set = IntSet.add (i-nb) set in
         collect_args args nb set
-    | Application (f,args,is_pred) ->
+    | Application (f,args,is_pred,_) ->
         let set = collect f nb set in
         collect_args args nb set
     | Lam (n, nms, pres, t0, is_pred, tp) ->
@@ -3412,7 +3401,7 @@ let equal_symmetry_term (): term =
   and ag = Variable 0
   and any_tp = Variable (1 + Class_table.any_index)
   in
-  let eq a b = VAppl (eq_id, [|a;b|], [|ag|]) in
+  let eq a b = VAppl (eq_id, [|a;b|], [|ag|], false) in
   let imp = Term.binary imp_id (eq a b) (eq b a) in
   Term.all_quantified
     2
@@ -3432,8 +3421,8 @@ let leibniz_term (): term =
   and any_tp = Variable (1 + Class_table.any_index)
   in
   let pred = Class_table.predicate_type ag 1 in
-  let eqab = VAppl (eq_id, [|a;b|], [|ag|])
-  and p x  = Application (p, [|x|], true) in
+  let eqab = VAppl (eq_id, [|a;b|], [|ag|],false)
+  and p x  = Application (p, [|x|], true, false) in
   let imp = Term.binary imp_id eqab (Term.binary imp_id (p a) (p b)) in
   Term.all_quantified
     3

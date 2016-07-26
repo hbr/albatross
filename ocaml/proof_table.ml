@@ -528,12 +528,12 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             if pr then raise Illegal_proof_term;
             if Context.domain_of_lambda n nms pres tp0 nb (context at) <> doma then
               raise Illegal_proof_term
-        | VAppl(idx2,args,ags) when arity idx2 nb at > 0 ->
+        | VAppl(idx2,args,ags,_) when arity idx2 nb at > 0 ->
             if Context.domain_of_feature idx2 nb ags (context at) <> doma then
               raise Illegal_proof_term
         | _ -> ()
         end;
-        VAppl(idx,argsa,ags), doma
+        VAppl(idx,argsa,ags,false), doma
     | Eval.Exp (idx,ags,args,e) ->
         let n,nms,t =
           try definition idx nb ags at
@@ -548,7 +548,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           end else t in
         let ta,tb = reconstruct e nb
         and argsa,argsb = reconstr_args args in
-        let uneval = VAppl(idx,argsa,ags) in
+        let uneval = VAppl(idx,argsa,ags,false) in
         let exp =
           try apply_term t argsb nb at
           with Not_found ->
@@ -561,11 +561,11 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         uneval, tb
     | Eval.VApply (i,args,ags) ->
         let argsa, argsb = reconstr_args args in
-        VAppl (i,argsa,ags), VAppl (i,argsb,ags)
+        VAppl (i,argsa,ags,false), VAppl (i,argsb,ags,false)
     | Eval.Apply (f,args,pr) ->
         let fa,fb = reconstruct f nb in
         let argsa, argsb = reconstr_args args in
-        Application (fa,argsa,pr), Application (fb,argsb,pr)
+        Application (fa,argsa,pr,false), Application (fb,argsb,pr,false)
     | Eval.Lam (n,nms,pres,e,pr,tp) ->
         let ta,tb = reconstruct e (1 + nb) in
         Lam (n,nms,pres,ta,pr,tp), Lam (n,nms,pres,tb,pr,tp)
@@ -575,7 +575,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Beta e ->
         let ta,tb = reconstruct e nb in
         begin match tb with
-          Application(Lam(n,nms,_,t0,_,tp),args,_) ->
+          Application(Lam(n,nms,_,t0,_,tp),args,_,_) ->
             let tb = beta_reduce n t0 tp args nb at in
             ta,tb
         | _ -> raise Illegal_proof_term end
@@ -641,7 +641,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
               let subarr = Term_algo.unify inspb n1 mtch in
               assert (Array.length subarr = n2);
                 let res = Term.apply res subarr in
-                if res <> resa then begin
+                if not (Term.equivalent res resa) then begin
                   printf "inspect result different\n";
                   printf "  res       %s\n" (string_of_term_anon res nb at);
                   printf "  resa      %s\n" (string_of_term_anon resa nb at);

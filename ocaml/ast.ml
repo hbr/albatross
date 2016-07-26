@@ -414,7 +414,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
                          Feature_table.feature_name idx ft)
     | Variable i ->
         ()
-    | VAppl (i,args,_) when i = idx + nb ->
+    | VAppl (i,args,_,_) when i = idx + nb ->
         if nbranch = 0 then
           error_info info "Recursive call must occur only within a branch";
         let len = Array.length args in
@@ -431,9 +431,9 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         if not (interval_exist is_lower_arg 0 len) then
           error_info info ("Illegal recursive call \"" ^
                            (Context.string_of_term t c) ^ "\"")
-    | VAppl (i,args,_) ->
+    | VAppl (i,args,_,_) ->
         check_args args
-    | Application (f,args,pr) ->
+    | Application (f,args,pr,_) ->
         check f nbranch tlst c;
         check_args args
     | Lam (n,nms,pres,t0,pr,tp) ->
@@ -695,7 +695,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and tps = Array.append (Sign.arguments s1) (Sign.arguments s2) in
   let ags = standard_substitution (Array.length fgcon) in
   let appl idx args =
-    VAppl(n1+n2+idx,args,ags)
+    VAppl(n1+n2+idx,args,ags,false)
   in
   let t1 = appl idx1 args1
   and t2 = appl idx2 args2
@@ -703,7 +703,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and imp_id   = n1 + n2 + Feature_table.implication_index
   in
   let t = Term.binary imp_id
-      (VAppl(eq_id, [|t1;t2|], ags))
+      (VAppl(eq_id, [|t1;t2|], ags,false))
       (Feature_table.false_constant (n1+n2)) in
   let t = Term.all_quantified
       (n1+n2)
@@ -733,7 +733,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
     and nms  = standard_argnames n
     and tps  = Sign.arguments s
     in
-    let t    = VAppl(1+n+idx, args, ags) in
+    let t    = VAppl(1+n+idx, args, ags,false) in
     Term.some_quantified n (nms,tps) t
   in
   let pat1 = make_pattern idx1 s1
@@ -806,8 +806,8 @@ let add_case_injections
 
         (* The term c(a1,..) = c(b1,...) *)
         let eq_ca_cb =
-          let ca = VAppl(2*n+idx, args1, ags)
-          and cb = VAppl(2*n+idx, args2, ags) in
+          let ca = VAppl(2*n+idx, args1, ags, false)
+          and cb = VAppl(2*n+idx, args2, ags, false) in
           Feature_table.equality_term ca cb (2*n) rtp tvs ft
         in
         for i = 0 to n - 1 do
@@ -870,9 +870,9 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
       match tp with
         Variable i when i = cls + ntvs ->
           false
-      | VAppl(i,ags,_) when i = cls + ntvs ->
+      | VAppl(i,ags,_,_) when i = cls + ntvs ->
           false
-      | VAppl(i,ags,_) ->
+      | VAppl(i,ags,_,_) ->
           assert (ntvs <= i);
           Class_table.is_case_class (i-ntvs) ct &&
           begin

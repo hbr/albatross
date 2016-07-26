@@ -96,9 +96,9 @@ let unify_pattern
         do_sub j t1
     | Variable i1, Variable i2 when i1 = i2 ->
         ()
-    | VAppl(i1,args1,_), VAppl(i2,args2,_) when i1 = i2 ->
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
         uni_args args1 args2
-    | Application(f1,args1,pr1), Application(f2,args2,pr2)
+    | Application(f1,args1,pr1,_), Application(f2,args2,pr2,_)
       when pr1 = pr2 && Array.length args1 = Array.length args2 ->
         assert false (* nyi: *)
     | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
@@ -195,9 +195,9 @@ let unify0 (t1:term) (nargs:int) (t2:term): Term_sub.t =
         | Some t when t <> t2 -> raise Not_found
         | Some t -> assert (t=t2); sub
         end
-    | VAppl (i1,args1,_), VAppl (i2,args2,_) when i1 = i2 ->
+    | VAppl (i1,args1,_,_), VAppl (i2,args2,_,_) when i1 = i2 ->
         uni_args args1 args2 sub
-    | Application (f1,args1,pr1), Application (f2,args2,pr2)
+    | Application (f1,args1,pr1,_), Application (f2,args2,pr2,_)
       when Array.length args1 = Array.length args2  && pr1 = pr2 ->
         let sub = uni f1 f2 nb sub in
         uni_args args1 args2 sub
@@ -293,7 +293,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         else raise Not_found
     | Variable k, Variable l when k = l ->
         pos+1, poslst, elst, tlst
-    | VAppl(i1,args1,_), VAppl(i2,args2,_)
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_)
       when i1 = i2 && Array.length args1 = Array.length args2 ->
         begin try
           let pos  = pos + 1 in
@@ -301,7 +301,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Application(f1,args1,pr1), Application(f2,args2,pr2)
+    | Application(f1,args1,pr1,_), Application(f2,args2,pr2,_)
       when Array.length args1 = Array.length args2 && pr1 = pr2 ->
         begin try
           let pos,poslst,elst,tlst = comp f1 f2 nb (1+pos) poslst elst tlst in
@@ -372,21 +372,21 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | Variable k ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else nextpos+1, nextvar, poslst, Variable (k+nargs)
-    | VAppl (i,args,ags) ->
+    | VAppl (i,args,ags,oo) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos = nextpos + 1 in
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
-          nextpos, nextvar, poslst, VAppl(i+nargs,args,ags)
-    | Application (f,args,pr) ->
+          nextpos, nextvar, poslst, VAppl(i+nargs,args,ags,oo)
+    | Application (f,args,pr,inop) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,f =
             mklambda (nextpos+1) nextvar poslst f nb in
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
-          nextpos, nextvar, poslst, Application(f,args,pr)
+          nextpos, nextvar, poslst, Application(f,args,pr,inop)
     | Lam(n,nms,pres,t0,pr,tp) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else

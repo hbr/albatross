@@ -79,7 +79,7 @@ let allows_premise_specialization (rd:t): bool =
 let is_catchall (t:term) (nargs:int): bool =
   match t with
     Variable i when i < nargs -> true
-  | Application(Variable i, [|Variable j|],pr) when i < nargs && j < nargs -> true
+  | Application(Variable i, [|Variable j|],pr,_) when i < nargs && j < nargs -> true
   | _ -> false
 
 
@@ -509,7 +509,7 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
             raise Not_found
       | Variable i1, Variable i2 ->
           unicls i1 i2
-      | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
+      | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
           if Array.length args1 <> Array.length args2 then
             raise Not_found;
           unicls i1 i2;

@@ -681,7 +681,7 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
           uni tb.subs.(i) t2
         else
           uni tb.subs.(i) tb.subs.(j)
-    | VAppl(i1,args1,_), _ when i1 = dummy_index tb ->
+    | VAppl(i1,args1,_,_), _ when i1 = dummy_index tb ->
         if tb.trace then printf "unify dummy %s with %s\n"
             (string_of_type t1 tb) (string_of_type t2 tb);
         assert (Array.length args1 = 2);
@@ -689,12 +689,12 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
           Variable j when j < ntvs && has_sub j tb->
             if tb.trace then printf "unify dummy with substituted variable\n";
             uni t1 tb.subs.(j);
-        | VAppl(i2,args2,_) when i2 = predicate_index tb ->
+        | VAppl(i2,args2,_,_) when i2 = predicate_index tb ->
             if tb.trace then printf "unify dummy with predicate\n";
             assert (Array.length args2 = 1);
             uni args1.(0) args2.(0);
             uni args1.(1) (boolean_type tb);
-        | VAppl(i2,args2,_) when i2 = function_index tb ->
+        | VAppl(i2,args2,_,_) when i2 = function_index tb ->
             if tb.trace then printf "unify dummy with function\n";
             assert (Array.length args2 = 2);
             uni args1.(0) args2.(0);
@@ -709,7 +709,7 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
         do_vareq j t1
     | Variable i, Variable j when i = j ->
         ()
-    | VAppl(i1,args1,_), VAppl(i2,args2,_) ->
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
         let nargs = Array.length args1 in
         if nargs <> (Array.length args2) then
           not_found "diff args len (2)";
@@ -840,13 +840,13 @@ let callable_signature (s:Sign.t) (tb:t): Sign.t =
           in
           unify tp rt tb;
           Sign.make_const tp
-      | VAppl(i,[|Variable j|],_)
+      | VAppl(i,[|Variable j|],_,_)
         when funrec.nargs > 1 && i = predicate_index tb
             && is_tv j tb && not (has_sub j tb) ->
               let tup = new_tuple funrec.nargs tb in
               add_sub j tup tb;
               Sign.make_const (make_type i [|tup|])
-      | VAppl(i,[|Variable j;res|],_)
+      | VAppl(i,[|Variable j;res|],_,_)
         when funrec.nargs > 1 && i = function_index tb
             && is_tv j tb && not (has_sub j tb) ->
               let tup = new_tuple funrec.nargs tb in
@@ -965,11 +965,11 @@ let add_leaf (i:int) (tvs:Tvars.t) (s:Sign.t) (tb:t): unit =
         and pr  = is_predicate tb.rtype tb
         and tup_tp =
           Class_table.domain_type (substituted_type tb.rtype tb) in
-        let t0 = VAppl(i+n,args,ags) in
+        let t0 = VAppl(i+n,args,ags,false) in
         let t0 = Feature_table.add_tuple_accessors t0 n tup_tp nvars ft in
         Lam (n, nms, [], t0, pr, tb.rtype)
       end else
-        VAppl (i,[||],ags)
+        VAppl (i,[||],ags,false)
   in
   Seq.push {term = term; sign = s1; sign0 = s} tb.terms
 
@@ -1016,7 +1016,7 @@ let expect_argument (tb:t): unit =
 
 
 
-let complete_function (tb:t): unit =
+let complete_function (oo:bool) (tb:t): unit =
   resize 0 0 0 tb;
   let funrec = Seq.pop_last tb.funstack in
   let frec = Seq.elem funrec.pos tb.terms
@@ -1034,15 +1034,15 @@ let complete_function (tb:t): unit =
       let pr = (cls = predicate_index tb) in
       let arg =
         Feature_table.tuple_of_args args ags.(0) (count_variables tb) ft in
-      Application(frec.term, [|arg|], pr)
+      Application(frec.term, [|arg|], pr, false)
     else begin
       match frec.term with
-        VAppl(i,args0,ags) ->
+        VAppl(i,args0,ags,_) ->
           assert (Array.length args0 = 0); (* In 'add_leaf' added without arguments *)
           if i = in_index tb then
-            Application (args.(1), [|args.(0)|], true)
+            Application (args.(1), [|args.(0)|], true, true)
           else
-            VAppl (i,args,ags)
+            VAppl (i,args,ags,oo)
       | _ ->
           assert false
     end
@@ -1360,12 +1360,12 @@ let term_in_context (tb:t): term =
     and tlst  lst  = List.map  term lst in
     match t with
       Variable _ -> t
-    | VAppl(i,args,ags) ->
-        VAppl(i,targs args, tpe_args ags)
-    | Application (f,args,pr) ->
+    | VAppl(i,args,ags,oo) ->
+        VAppl(i,targs args, tpe_args ags, oo)
+    | Application (f,args,pr,inop) ->
         let f = term f
         and args = targs args in
-        Application (f,args,pr)
+        Application (f,args,pr,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let ps = tlst ps
         and t0 = term t0

@@ -210,10 +210,10 @@ let tuple_class (c:t): int =
 
 
 let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
-  VAppl (function_index c, [|a_tp;r_tp|], [||])
+  VAppl (function_index c, [|a_tp;r_tp|], [||], false)
 
 let predicate_type (a_tp: type_term) (c:t): type_term =
-  VAppl (predicate_index c, [|a_tp|], [||])
+  VAppl (predicate_index c, [|a_tp|], [||], false)
 
 let entry_local_argnames (e:entry): int array =
   Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
@@ -697,10 +697,10 @@ let rec type_of_term (t:term) (c:t): type_term =
   match t with
     Variable i when i < nvars -> variable_type i c
   | Variable i -> assert false (* Global constants are not variables *)
-  | VAppl(i,args,ags) ->
+  | VAppl(i,args,ags,_) ->
       assert (nvars <= i);
       Feature_table.result_type (i-nvars) ags (ntvs c) c.ft
-  | Application(f,args,pr) ->
+  | Application(f,args,pr,_) ->
       if pr then
         boolean c
       else begin
@@ -729,7 +729,7 @@ let rec type_of_term (t:term) (c:t): type_term =
 
 let predicate_of_type (tp:type_term) (c:t): type_term =
   let pred_idx = predicate_index c in
-  VAppl(pred_idx,[|tp|],[||])
+  VAppl(pred_idx,[|tp|],[||],false)
 
 
 let predicate_of_term (t:term) (c:t): type_term =
@@ -753,7 +753,7 @@ let tuple_of_terms (args:arguments) (c:t): type_term =
 let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
   let fidx = function_index c
   and tup  = tuple_of_types argtps c in
-  VAppl(fidx, [|tup;r_tp|], [||])
+  VAppl(fidx, [|tup;r_tp|], [||],false)
 
 
 
@@ -946,7 +946,7 @@ let inductive_set (t:term) (c:t): term =
   match t with
     Indset _ ->
       t
-  | VAppl (i,args,ags) ->
+  | VAppl (i,args,ags,_) ->
       indset i args ags
   | _ ->
       raise Not_found
@@ -1063,7 +1063,7 @@ let tuple_of_args (args:arguments) (tup_tp:type_term) (c:t): term =
       assert (cls = tuple_class c);
       assert (Array.length ags = 2);
       let b = tup_from (i + 1) ags.(1) in
-      VAppl (tup_id, [| args.(i); b |], ags)
+      VAppl (tup_id, [| args.(i); b |], ags, false)
     end
   in
   tup_from 0 tup_tp
@@ -1083,7 +1083,7 @@ let is_case_match_expression (t:term) (c:t): bool =
     | Variable i when i < nvars  -> false
     | Variable i ->
         Feature_table.is_constructor (i-nvars) c.ft
-    | VAppl(i,args,_) ->
+    | VAppl(i,args,_,_) ->
         let res = Feature_table.is_constructor (i-nvars) c.ft in
         is_match_args res args
     | _ ->
@@ -1209,7 +1209,7 @@ let rec type_of_term_full
     Variable i ->
       assert (i < nvars);
       check_and_trace (variable_type i c)
-  | VAppl (i,args,ags) ->
+  | VAppl (i,args,ags,_) ->
       assert (nvars <= i);
       let len = Array.length args
       and s   = feature_signature i ags in
@@ -1225,7 +1225,7 @@ let rec type_of_term_full
         assert (len = 0);
         check_and_trace_sign s
       end
-  | Application (f,args,pr) ->
+  | Application (f,args,pr,_) ->
       assert (Array.length args = 1);
       let ftp = type_of_term_full f None trace c in
       let argtp,rtp = get_arg_types ftp pr in
@@ -1441,7 +1441,7 @@ let case_preconditions
     let i =
       match pat with
         Variable i   -> i
-      | VAppl(i,_,_) -> i
+      | VAppl(i,_,_,_) -> i
       | _ -> assert false (* cannot happen in pattern *)
     in
     let ndelta = n + nb + count_variables c in
@@ -1454,7 +1454,7 @@ let case_preconditions
   in
   List.fold_left
     (fun lst pre ->
-      let eq = VAppl (eq_id, [|insp;pat|], ags) in
+      let eq = VAppl (eq_id, [|insp;pat|], ags, false) in
       let t = Term.binary imp_id eq pre in
       let t = Term.all_quantified n (nms,tps) empty_formals t in
       t :: lst)
@@ -1485,7 +1485,7 @@ let term_preconditions (t:term)  (c:t): term list =
     match t with
     | Variable i ->
        lst
-    | VAppl (i,args,_) when i = imp_id || i = and_id ->
+    | VAppl (i,args,_,_) when i = imp_id || i = and_id ->
         assert (Array.length args = 2);
         let lst1 = pres args.(0) lst c
         and lst2 = pres args.(1) [] c in
@@ -1493,7 +1493,7 @@ let term_preconditions (t:term)  (c:t): term list =
           (fun t lst -> (Term.binary imp_id args.(0) t) :: lst)
           lst2
           lst1
-    | VAppl (i, args,_) when i = or_id ->
+    | VAppl (i, args,_,_) when i = or_id ->
         assert (Array.length args = 2);
         let lst1  = pres args.(0) lst c
         and lst2  = pres args.(1) [] c
@@ -1502,7 +1502,7 @@ let term_preconditions (t:term)  (c:t): term list =
           (fun t lst -> (Term.binary imp_id not_t t)::lst)
           lst2
           lst1
-    | VAppl (i,args,ags) ->
+    | VAppl (i,args,ags,_) ->
         if Array.length args = 0 && arity i 0 c > 0 then
           lst
         else
@@ -1520,10 +1520,10 @@ let term_preconditions (t:term)  (c:t): term list =
             )
             lst
             lst1
-    | Application (f,args,true) -> (* predicate application *)
+    | Application (f,args,true,_) -> (* predicate application *)
         let lst = pres f lst c in
         pres_args args lst
-    | Application (f,args,false) -> (* function application *)
+    | Application (f,args,false,_) -> (* function application *)
         assert (Array.length args = 1);
         let lst = pres f lst c
         and ags =
@@ -1534,8 +1534,8 @@ let term_preconditions (t:term)  (c:t): term list =
           ags
         in
         let lst = pres_args args lst
-        and dom = VAppl (domain_index c,[|f|],ags) in
-        Application(dom,args,true)::lst
+        and dom = VAppl (domain_index c,[|f|],ags,false) in
+        Application(dom,args,true,false)::lst
     | Lam (n,nms,pres0,t0,pr,tp) ->
         let t0     = remove_tuple_accessors t0 n c
         and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0
@@ -1722,7 +1722,7 @@ let uniqueness_condition (posts:term list) (c:t): term =
   in
   let x_eq_y =
     let eq_id_0 = 2 + nvars + Feature_table.eq_index in
-    let x_eq_y_0 = VAppl (eq_id_0, [|Variable 0; Variable 1|], [|Variable 0|])
+    let x_eq_y_0 = VAppl (eq_id_0, [|Variable 0; Variable 1|], [|Variable 0|],false)
     in
     Feature_table.substituted
       x_eq_y_0  0  (2+nvars)  0  [||]  0  [|rt|] tvs c.ft
@@ -1760,7 +1760,7 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
   let fargs = Array.init nargs (fun i -> Variable i)
   and ags   = Array.init (Tvars.count_fgs tvs) (fun i -> Variable i)
   in
-  let fterm = VAppl (1+nargs+idx, fargs, ags) in
+  let fterm = VAppl (1+nargs+idx, fargs, ags, false) in
   let args  =
     Array.init (1+nargs) (fun i -> if i < nargs then Variable i else fterm) in
   let replace t = Term.subst t (1+nargs) args in

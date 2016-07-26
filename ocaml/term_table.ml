@@ -268,7 +268,7 @@ let uni_core
       assert (nb + nargs <= i);
       let idxlst = extract_idxlst_locvars (i-nb-nargs) nvars tab.fvars in
       merge_idxlst idxlst r
-  | VAppl (i,args,_) ->
+  | VAppl (i,args,_,_) ->
       assert (nb + nargs + nvars <= i);
       let idx = i - nb - nargs - nvars in
       let idx = sfun idx in
@@ -284,7 +284,7 @@ let uni_core
         merge_idxlst idxlst r
       else
         uni_args args nb argtabs r uni
-  | Application (f,args,_) ->
+  | Application (f,args,_,_) ->
       let len = Array.length args in
       let ftab, argtabs = IntMap.find len tab.fapps in
       assert (len = Array.length argtabs);
@@ -580,7 +580,7 @@ let add_base
           (* variable is bound by some abstraction *)
           assert (i < nb);
           {tab with bvars = newmap i idx tab.bvars}
-      | VAppl (i,args,_) ->
+      | VAppl (i,args,_,_) ->
           assert (nb + nargs + nbenv <= i);
           let len  = Array.length args
           and fidx = i - nb - nargs - nbenv in
@@ -594,7 +594,7 @@ let add_base
           let argtabs =
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs in
           {tab with apps = IntMap.add fidx (argtabs,idxlst) tab.apps}
-      | Application (f,args,_) ->
+      | Application (f,args,_,_) ->
           let len = Array.length args in
           let ftab,argtabs =
             try

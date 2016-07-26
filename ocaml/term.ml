@@ -14,8 +14,8 @@ type flow =
 
 type term =
     Variable    of int
-  | VAppl       of int * arguments * arguments (* fidx, args, ags *)
-  | Application of term * arguments * bool      (* fterm, args, is_pred *)
+  | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
+  | Application of term * arguments * bool * bool (* fterm, args, is_pred, inop *)
   | Lam         of int * names * term list * term * bool * type_term
                    (* n, names, pres, t, is_pred, type *)
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
@@ -62,7 +62,7 @@ let standard_substitution (n:int): term array =
   Array.init n (fun i -> Variable i)
 
 let make_type (cls:int) (ags:arguments): type_term =
-  VAppl (cls,ags,[||])
+  VAppl (cls,ags,[||],false)
 
 
 let count_formals ((nms,tps):formals): int =
@@ -241,14 +241,14 @@ end = struct
     in
     match t with
       Variable i -> string_of_int i
-    | VAppl (i,args,_) ->
+    | VAppl (i,args,_,_) ->
         let fstr = string_of_int i
         and argsstr = Array.to_list (Array.map to_string args)
         in
         fstr ^ "v(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Application (f,args,pr) ->
+    | Application (f,args,pr,_) ->
         let fstr = to_string f
         and argsstr = Array.to_list (Array.map to_string args)
         and predstr = if pr then "p" else "f"
@@ -316,9 +316,9 @@ end = struct
           cargs.(i - nb)
       | Variable _ ->
           1
-      | VAppl (i,args,_) ->
+      | VAppl (i,args,_,_) ->
           ndsarr 1 args
-      | Application (f,args,_) ->
+      | Application (f,args,_,_) ->
           ndsarr (nds f nb) args
       | Lam (_,_,pres,t,_,_) ->
           1 + nds t (1 + nb) (* preconditions are not counted *)
@@ -338,8 +338,8 @@ end = struct
     in
     match t with
       Variable _ -> 1
-    | VAppl (i,args,_) -> 1 + nodesarr args
-    | Application (f,args,_) ->
+    | VAppl (i,args,_,_) -> 1 + nodesarr args
+    | Application (f,args,_,_) ->
         nodes f + nodesarr args
     | Lam (_,_,pres,t,_,_) ->
         1 + nodes t (* preconditions are not counted *)
@@ -366,10 +366,10 @@ end = struct
       in
       match t with
         Variable i -> var i
-      | VAppl (i,args,_) ->
+      | VAppl (i,args,_,_) ->
           let a = var i in
           fldarr a args nb
-      | Application (f,args,_) ->
+      | Application (f,args,_,_) ->
           let a = fld a f (level+1) nb in
           fldarr a args nb
       | Lam (n,_,pres,t,_,_) ->
@@ -480,13 +480,13 @@ end = struct
       match t1, t2 with
         Variable i, Variable j ->
           i = j
-      | VAppl(i1,args1,_), VAppl(i2,args2,_)
+      | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_)
         when i1 = i2 ->
           let n1 = Array.length args1
           and n2 = Array.length args2 in
           n1 = n2 &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
-      | Application (f1,args1,_), Application (f2,args2,_) ->
+      | Application (f1,args1,_,_), Application (f2,args2,_,_) ->
           let n = Array.length args1 in
           n = Array.length args2 &&
           eq f1 f2 nb &&
@@ -559,14 +559,15 @@ end = struct
       match t with
         Variable i ->
           Variable (shift_i delta1 start1 i)
-      | VAppl(j,args,ags) ->
+      | VAppl(j,args,ags,oo) ->
           VAppl(shift_i delta1 start1 j,
                 shift_args delta1 start1 delta2 start2 args,
-                shift_args delta2 start2 0 0 ags)
-      | Application(f,args,pr) ->
+                shift_args delta2 start2 0 0 ags,
+                oo)
+      | Application(f,args,pr,inop) ->
           Application(shift_from delta1 start1 delta2 start2 f,
                       shift_args delta1 start1 delta2 start2 args,
-                      pr)
+                      pr, inop)
       | Lam(n,nms,pres,t,pred,tp) ->
           let start1 = 1 + start1 in
           Lam(n,nms,
@@ -670,14 +671,15 @@ end = struct
           Variable (i-len1)
       | Variable i ->
           Variable (free i)
-      | VAppl(j,args,ags) ->
+      | VAppl(j,args,ags,oo) ->
           VAppl(free j,
                 sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
-                sub_args ags  n2 nb2 d2 args2 0  0   0  [||])
-      | Application (f,args,pr) ->
+                sub_args ags  n2 nb2 d2 args2 0  0   0  [||],
+                oo)
+      | Application (f,args,pr,inop) ->
           Application (partial_subst_from f n1 nb1 d1 args1 n2 nb2 d2 args2,
                        sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
-                       pr)
+                       pr,inop)
       | Lam (n,nms,ps,t0,pr,tp) ->
           let nb1 = 1 + nb1 in
           Lam (n,nms,
@@ -801,10 +803,10 @@ end = struct
       in
       match t with
         Variable j -> Variable (f j nb)
-      | VAppl (j,args,ags) ->
-          VAppl (f j nb, map_args nb args, ags)
-      | Application (a,b,pred) ->
-          Application (mapr nb a, map_args nb b, pred)
+      | VAppl (j,args,ags,oo) ->
+          VAppl (f j nb, map_args nb args, ags,oo)
+      | Application (a,b,pred,inop) ->
+          Application (mapr nb a, map_args nb b, pred,inop)
       | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -869,10 +871,10 @@ end = struct
       let map_args nb args = Array.map (fun t -> mapr nb t) args in
       match t with
         Variable j -> f j nb
-      | VAppl (j,args,ags) ->
-          VAppl (j, Array.map (fun t -> mapr nb t) args, ags)
-      | Application (a,b,pred) ->
-          Application (mapr nb a, map_args nb b, pred)
+      | VAppl (j,args,ags,oo) ->
+          VAppl (j, Array.map (fun t -> mapr nb t) args, ags, oo)
+      | Application (a,b,pred,inop) ->
+          Application (mapr nb a, map_args nb b, pred,inop)
       | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -1062,12 +1064,12 @@ end = struct
 
   let unary (unid:int) (t:term): term =
     let args = [| t |] in
-    VAppl (unid,args,[||])
+    VAppl (unid,args,[||],false)
 
 
   let unary_split (t:term) (unid:int): term =
     match t with
-      VAppl (i,args,_) when i = unid ->
+      VAppl (i,args,_,_) when i = unid ->
         assert (Array.length args = 1);
         args.(0)
     | _ -> raise Not_found
@@ -1075,12 +1077,12 @@ end = struct
 
   let binary (binid:int) (left:term) (right:term): term =
     let args = [| left; right |] in
-    VAppl (binid, args, [||])
+    VAppl (binid, args, [||],false)
 
 
   let binary_split_0 (t:term): int * term * term =
     match t with
-      VAppl(i,args,_) when Array.length args = 2 ->
+      VAppl(i,args,_,_) when Array.length args = 2 ->
         i, args.(0), args.(1)
     | _ ->
         raise Not_found
@@ -1332,7 +1334,7 @@ end = struct
       List.map (fun t -> pren t nb nb2 imp_id) lst in
     match t with
       Variable i -> 0, empty_formals, empty_formals, t
-    | VAppl(i,args,ags) when i = nb + imp_id ->
+    | VAppl(i,args,ags,oo) when i = nb + imp_id ->
         assert (Array.length args = 2);
         assert (Array.length ags  = 0);
         let a = pren args.(0) nb nb2 imp_id
@@ -1340,15 +1342,15 @@ end = struct
           prenex_0 args.(1) nb nargs nb2 imp_id recursive nbubble in
         let a1 = shift n (Array.length fgnms) a in
         assert (not recursive || not (is_all_quantified b1));
-        let t = VAppl(i+n,[|a1;b1|],ags) in
+        let t = VAppl(i+n,[|a1;b1|],ags,oo) in
         n, (nms,tps), (fgnms,fgcon), t
-    | VAppl(i,args,ags) ->
+    | VAppl(i,args,ags,oo) ->
         0, empty_formals, empty_formals,
-        VAppl(i, norm_args args nb nb2, ags)
-    | Application(f,args,pr) ->
+        VAppl(i, norm_args args nb nb2, ags, oo)
+    | Application(f,args,pr,inop) ->
         let f = pren f nb nb2 imp_id
         and args = norm_args args nb nb2 in
-        0, empty_formals, empty_formals, Application(f,args,pr)
+        0, empty_formals, empty_formals, Application(f,args,pr,inop)
     | Lam(n,nms,ps,t0,pr,tp) ->
         let ps = norm_lst ps (1+nb) nb2
         and t0 = pren t0 (1+nb) nb2 imp_id in
@@ -1473,8 +1475,8 @@ end = struct
           let n,fargs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
           all_quantified n fargs empty_formals chn in
-        let pa = Application (pr,[|Variable 1|],true)
-        and qa = Application (Variable 0, [|Variable 1|],true) in
+        let pa = Application (pr,[|Variable 1|],true,true)
+        and qa = Application (Variable 0, [|Variable 1|],true,true) in
         let tgt = binary imp_id pa qa in
         let tgt =
           interval_fold

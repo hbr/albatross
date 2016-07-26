@@ -242,7 +242,7 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
       if nfgs = 0 then
         Variable i
       else
-        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i), [||])
+        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i), [||], false)
     in
     tp, bdesc.tvs
 
@@ -250,13 +250,13 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
 let split_type_term (tp:type_term): int * type_term array =
   match tp with
     Variable i -> i, [||]
-  | VAppl (i,args,_) -> i, args
+  | VAppl (i,args,_,_) -> i, args
   | _ -> assert false (* other cases not possible with types *)
 
 
 let combine_type_term (cls_idx:int) (args: type_term array): type_term =
   if 0 < Array.length args then
-    VAppl (cls_idx, args, [||])
+    VAppl (cls_idx, args, [||],false)
   else
     Variable cls_idx
 
@@ -281,7 +281,7 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
     else
       let i = i - 1
       and tup_id = ntvs + tuple_index in
-      let tp = VAppl(tup_id,[|args.(i);tp|], [||]) in
+      let tp = VAppl(tup_id,[|args.(i);tp|], [||],false) in
       tuple i tp
   in
   tuple (n-1) args.(n-1)
@@ -291,14 +291,14 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
 
 let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
 let any (ntvs:int)           = Variable (any_index+ntvs)
-let func nb dom ran = VAppl(nb+function_index,[|dom;ran|],[||])
+let func nb dom ran = VAppl(nb+function_index,[|dom;ran|],[||],false)
 
 
 let predicate_type (tp:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+predicate_index,[|tp|],[||])
+  VAppl(ntvs+predicate_index,[|tp|],[||],false)
 
 let function_type (tp_a:type_term) (tp_b:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+function_index,[|tp_a;tp_b|],[||])
+  VAppl(ntvs+function_index,[|tp_a;tp_b|],[||],false)
 
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
   (* Convert the callable signature [0,1,...]:RT to the dummy signature
@@ -308,7 +308,7 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    VAppl(ntvs+dummy_index, [|tup;Sign.result s|],[||])
+    VAppl(ntvs+dummy_index, [|tup;Sign.result s|],[||],false)
 
 
 let to_function (ntvs:int) (s:Sign.t): type_term =
@@ -320,7 +320,7 @@ let to_function (ntvs:int) (s:Sign.t): type_term =
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s)
     and fid = ntvs + function_index in
-    VAppl(fid, [|tup;Sign.result s|], [||])
+    VAppl(fid, [|tup;Sign.result s|], [||],false)
 
 
 let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
@@ -337,7 +337,7 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
       function_index, [|tup;Sign.result s|]
   in
   let idx = idx + ntvs in
-  VAppl(idx, args, [||])
+  VAppl(idx, args, [||],false)
 
 
 
@@ -391,7 +391,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           else if j < nb+nfgs then
             ST.string fgnames.(j-nb)
           else class_name (j-nb-nfgs) ct
-      | VAppl (j,tarr,_) ->
+      | VAppl (j,tarr,_,_) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
           if j1 = predicate_index then begin
@@ -1077,7 +1077,7 @@ let valid_type
     if nargs = 0 then
       Variable cls_idx
     else
-      VAppl (cls_idx, args, [||])
+      VAppl (cls_idx, args, [||],false)
   end
 
 
@@ -1208,7 +1208,7 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
      Variable anc_cls
    else
      let pargs = Array.map (fun tp -> Term.subst tp ntvs args) pargs in
-     VAppl(anc_cls,pargs,[||])
+     VAppl(anc_cls,pargs,[||],false)
 
 
 

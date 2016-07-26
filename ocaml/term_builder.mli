@@ -43,7 +43,7 @@ val expect_new_untyped: t -> unit
 val add_leaf:   int -> Tvars.t -> Sign.t -> t -> unit
 val expect_argument: t -> unit
 val expect_function: int -> int -> t -> unit
-val complete_function: t -> unit
+val complete_function: bool -> t -> unit
 val expect_lambda: bool -> Context.t -> t -> unit
 val complete_lambda: int -> int array -> int -> bool -> t -> unit
 val expect_quantified: Context.t -> t -> unit

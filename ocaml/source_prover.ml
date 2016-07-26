@@ -189,7 +189,7 @@ let prove_goals (elst: info_terms) (pc:PC.t): unit =
 
 let beta_reduced (t:term) (pc:PC.t): term =
   match t with
-    Application(Lam(n,_,_,t0,_,tp),args,_) ->
+    Application(Lam(n,_,_,t0,_,tp),args,_,_) ->
       assert (Array.length args = 1);
       PC.beta_reduce n t0 tp args 0 pc
   | _ ->
@@ -306,7 +306,7 @@ let analyze_type_case_pattern
       ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
   let cons_idx =
     match pat with
-      VAppl(i,args,_) ->
+      VAppl(i,args,_,_) ->
         let argslen = Array.length args in
         if argslen <> n then invalid_pat ();
         for k = 0 to n-1 do
@@ -543,7 +543,7 @@ let inductive_set_context
     in
     goal_pred, Array.of_list other_var_lst, ass_lst
   in
-  let pa = Application(set,[|elem|],true) in
+  let pa = Application(set,[|elem|],true,false) in
   let pa_idx = prove_insert_report_base info pa false pc in
   let ind_idx = PC.add_set_induction_law set goal_pred elem pc in
   if PC.is_tracing pc then begin
@@ -555,7 +555,7 @@ let inductive_set_context
     printf "%sinspect\n" prefix;
     printf "%s    %s\n\n"
       prefix
-      (PC.string_long_of_term (Application(set,[|elem|],true)) pc)
+      (PC.string_long_of_term (Application(set,[|elem|],true,false)) pc)
   end;
   {pc             = pc;
    goal           = user_goal;
@@ -627,7 +627,7 @@ let add_set_induction_hypothesis
   let pc1 = PC.push_typed fargs1 empty_formals pc
   in
   match goal_redex1 with
-    Application(Lam(_),_,_) ->
+    Application(Lam(_),_,_,_) ->
       let outer_goal = PC.beta_reduce_term goal_redex1 pc1
       in
       let n2,fargs2,ps_rev2,user_goal =
@@ -857,7 +857,7 @@ let get_transitivity_data
       idx_law, ags
   in
   match goal with
-    Application (p, [|arg|], true) ->
+    Application (p, [|arg|], true, _) ->
       let ft = Context.feature_table c in
       let tup_tp = Class_table.domain_type (Context.type_of_term p c) in
       let args = Feature_table.args_of_tuple arg nvars ft in
@@ -869,17 +869,17 @@ let get_transitivity_data
       let rel nb a b =
         let p = Term.up nb p in
         let arg = Feature_table.tuple_of_args [|a;b|] tup_tp (nb+nvars) ft in
-        Application (p, [|arg|],true)
+        Application (p, [|arg|],true,false)
       in
       let idx_law,ags = find_law rel tp in
       idx_law, args.(0), args.(1), tp, ags, rel 0
-  | VAppl (idx, [|a1;a2|], ags)
+  | VAppl (idx, [|a1;a2|], ags,oo)
     when Term.equivalent
         (Context.type_of_term a1 c)
         (Context.type_of_term a2 c)
     ->
       let tp = Context.type_of_term a1 c in
-      let mkterm nb a b = VAppl (nb+idx,[|a;b|],ags) in
+      let mkterm nb a b = VAppl (nb+idx,[|a;b|],ags,oo) in
       let idx_law,ags = find_law mkterm tp in
       idx_law, a1, a2, tp, ags, mkterm 0
   | _ ->
@@ -1132,7 +1132,7 @@ and prove_inspect
   match insp.v with
     Variable var_idx ->
       prove_inductive_type info goal var_idx cases pc
-  | Application (set,args,pr) when pr ->
+  | Application (set,args,pr,_) when pr ->
       assert (Array.length args = 1);
       prove_inductive_set info goal args.(0) set cases pc
   | _ ->
@@ -1162,7 +1162,8 @@ and prove_inductive_type
     induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
   and nass = List.length ass_idx_lst
   in
-  let goal = beta_reduced (Application(goal_pred,[|Variable ivar|],true)) pc in
+  let goal =
+    beta_reduced (Application(goal_pred,[|Variable ivar|],true,false)) pc in
   let cons_set, ind_idx, tp =
     analyze_type_inspect info ivar goal pc
   in
