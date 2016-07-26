@@ -83,8 +83,8 @@ let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
 
 let make_entry () =
   let e = Term_table.empty in
-    {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
-     slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
+  {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
+   slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
 
 
 let copied_entry (e:entry): entry =
@@ -326,7 +326,7 @@ let string_of_term_array (args: term array) (pc:t): string =
   (String.concat ","
      (List.map (fun t -> string_of_term t pc) (Array.to_list args)))
   ^
-  "]"
+    "]"
 
 
 
@@ -499,8 +499,8 @@ let unify
         (idx,args,ags)::lst
       with Not_found ->
         (*printf "cannot unify types of actual arguments with formal arguments\n";
-        printf "   actuals %s\n" (string_of_term_array args pc);
-        printf "   rule    %s\n" (string_long_of_term_i idx pc);*)
+          printf "   actuals %s\n" (string_of_term_array args pc);
+          printf "   rule    %s\n" (string_long_of_term_i idx pc);*)
         lst
     )
     []
@@ -513,8 +513,10 @@ let unify_with
   (* Find the terms which can be unified with [t] which has [nargs] arguments
      and comes from the current environment.
    *)
-  let nb = nbenv pc in
-  let lst = Term_table.unify_with t nargs nb (seed_function pc) tab
+  let nvars = nbenv pc
+  and nb,_,_,t0 = Term.all_quantifier_split_1 t
+  in
+  let lst = Term_table.unify_with t0 nb nargs nvars true (seed_function pc) tab
   in
   List.fold_left
     (fun lst (idx,sub) ->
@@ -565,16 +567,16 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
   if is_global pc then printf "\n"
 
 
-
-let find_in_tab (t:term) (pc:t): int =
+(*
+  let find_in_tab (t:term) (pc:t): int =
   (** The index of the assertion [t].
    *)
   let sublst = unify_with t 0 [||] pc.entry.prvd pc in
   match sublst with
-    []          -> raise Not_found
+  []          -> raise Not_found
   | [(idx,sub)] -> idx
   | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
-
+ *)
 
 let find (t:term) (pc:t): int =
   let n,_,_,t0 = Term.all_quantifier_split_1 t in
@@ -651,7 +653,7 @@ let equality_data (i:int) (pc:t):  int * term * term =
 let add_variable_definition (v:int) (idx:int) (pc:t): unit =
   (* The assertion at [idx] is a valid definition assertion of the form
 
-         v = exp
+     v = exp
    *)
   assert (v < count_variables pc);
   let def = pc.var_defs.(v) in
@@ -781,8 +783,6 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
       if 0 < nargs then false (*Term.nodes right < Term.nodes left*)
       else
         complexity right pc < complexity left pc
-        (*let left, right = expand_term left pc, expand_term right pc in
-        Term.nodes right < Term.nodes left*)
     in
     if is_simpl then begin
       (*printf "add_to_equalities %d %s   <%s>\n"
@@ -796,7 +796,7 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
 
 let has_public_deferred (t:term) (pc:t): bool =
   assert (is_global pc);
-  let sublst = unify_with t 0 [||] pc.def_ass pc in
+  let sublst = Term_table.find t 0 0 (seed_function pc) pc.def_ass in
   match sublst with
     [] ->
       false
@@ -816,8 +816,8 @@ let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
 
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
-  if not (is_global pc) then
-    pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;
+  (*if not (is_global pc) then
+    pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;*)
   let nargs,nbenv,t = RD.schematic_term rd in
   pc.entry.prvd2 <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd2
 
@@ -1029,7 +1029,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
      [below_idx]: consider only rules below [below_idx] for equality.
 
      Note: [t] is valid in the current environment!
-*)
+   *)
   let rec simp t =
     let do_subterms t =
       let simpl_args args modi =
@@ -1092,7 +1092,7 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     printf "simplification found\n";
     printf "  term    %s\n" (string_of_term t pc);
     printf "  simpl   %s\n" (string_of_term tsimp pc);
-  end;*)
+    end;*)
   tsimp, te, modi
 
 
@@ -1398,7 +1398,7 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     printf "\nevaluation found\n";
     printf "  term: %s\n" (string_of_term t pc);
     printf "  eval: %s\n\n" (string_of_term tred pc);
-  end;*)
+    end;*)
   assert (tb = tred);
   assert (modi = (tred <> t));
   tred, ered, modi
@@ -1562,7 +1562,7 @@ let add_consequence
 let add_consequences_premise (i:int) (pc:t): unit =
   (** Add the consequences of the term [i] by using the term as a premise for
       already available implications.
-      *)
+   *)
   assert (i < count pc);
   if not (is_nbenv_current i pc) then
     printf "add_consequences_premise %s\n" (string_of_term_i i pc);
@@ -1598,8 +1598,8 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   assert (not (RD.is_generic rd));
   let gp1,tps,nbenv_a,a = RD.schematic_premise rd in
   assert (nbenv_a = nbenv);
-   if RD.is_schematic rd then (* the implication is schematic *)
-    let sublst = unify_with a gp1 tps pc.entry.prvd pc
+  if RD.is_schematic rd then (* the implication is schematic *)
+    let sublst = unify_with a gp1 tps pc.entry.prvd2 pc
     in
     let sublst = List.rev sublst in
     List.iter
@@ -2131,24 +2131,6 @@ let add_global (defer:bool) (anchor:int) (pc:t): unit =
 
 
 
-let inherit_deferred (i:int) (base_cls:int) (cls:int) (info:info) (pc:t): unit =
-  (* Inherit the deferred assertion [i] in the class [cls] *)
-  assert (i < count_global pc);
-  assert false
-  (*let t = variant i base_cls cls pc in
-  let ct = class_table pc in
-  if 1 < pc.verbosity then
-    printf "   inherit deferred \"%s\" in %s\n"
-      (string_of_term t pc)
-      (Class_table.class_name cls ct);
-  if not (has_in_view t pc) then
-    error_info info ("The deferred assertion \""  ^
-                     (string_of_term t pc) ^
-                     "\" is missing in " ^
-                     (Class_table.class_name cls (class_table pc)))*)
-
-
-
 
 
 let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
@@ -2200,7 +2182,7 @@ let predicate_of_term (t:term) (pc:t): type_term =
 
    result:  lhs = rhs                                        Eval
 
-*)
+ *)
 let prove_equality (g:term) (pc:t): int =
   let c = context pc in
   let eq_id, left, right, ags =
@@ -2287,15 +2269,15 @@ let backward_witness (t:term) (pc:t): int =
   (* Find a witness for the existentially quantified term [t] or raise [Not_found]
      if there is no witness or [t] is not existentially quantified.
    *)
-   let nargs,(nms,tps),t0 = Term.some_quantifier_split t in
-   let sublst  = unify_with t0 nargs tps pc.entry.prvd pc in
-   let idx,args = List.find (fun (idx,args) -> Array.length args = nargs) sublst
-   in
-   let witness = term idx pc in
-   let impl    = implication witness t pc in
-   Proof_table.add_witness impl idx nms tps t0 args pc.base;
-    let idx_impl = raw_add impl false pc in
-   add_mp0 t idx idx_impl false pc
+  let nargs,(nms,tps),t0 = Term.some_quantifier_split t in
+  let sublst  = unify_with t0 nargs tps pc.entry.prvd2 pc in
+  let idx,args = List.find (fun (idx,args) -> Array.length args = nargs) sublst
+  in
+  let witness = term idx pc in
+  let impl    = implication witness t pc in
+  Proof_table.add_witness impl idx nms tps t0 args pc.base;
+  let idx_impl = raw_add impl false pc in
+  add_mp0 t idx idx_impl false pc
 
 
 
@@ -2369,7 +2351,7 @@ let substituted_goal (g:term) (lst:int list) (pc:t): int list =
           gsub, imp::imps
         )
         (g,[])
-      (List.rev (get_variable_definitions g pc))
+        (List.rev (get_variable_definitions g pc))
     in
     if imps = [] then
       lst
@@ -2380,7 +2362,7 @@ let substituted_goal (g:term) (lst:int list) (pc:t): int list =
         List.fold_left
           (fun g imp -> add_mp g imp false pc0)
           idx_gsub
-        imps
+          imps
       in
       let imp,pt = Proof_table.discharged idx_g pc0.base in
       Proof_table.add_proved imp pt 0 pc.base;
@@ -2397,15 +2379,15 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   if lst <> [] then
     lst
   else begin
-  let lst = backward_in_table g blacklst pc in
-  let lst = eval_reduce g lst pc in
-  if pc.trace && is_trace_extended pc then begin
-    let prefix = trace_prefix pc
-    and str = string_of_intlist lst in
-    printf "%salternatives %s\n" prefix str;
-    if not (IntSet.is_empty blacklst) then
-      printf "%s   blacklist %s\n" prefix (string_of_intset blacklst) end;
-  lst
+    let lst = backward_in_table g blacklst pc in
+    let lst = eval_reduce g lst pc in
+    if pc.trace && is_trace_extended pc then begin
+      let prefix = trace_prefix pc
+      and str = string_of_intlist lst in
+      printf "%salternatives %s\n" prefix str;
+      if not (IntSet.is_empty blacklst) then
+        printf "%s   blacklist %s\n" prefix (string_of_intset blacklst) end;
+    lst
   end
 
 

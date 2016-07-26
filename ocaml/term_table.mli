@@ -18,7 +18,8 @@ val find: term -> int -> int -> (int->int) -> t -> (int * Term_sub.t) list
 
 val unify: term -> int -> (int->int) -> t -> (int * Term_sub.t) list
 
-val unify_with: term -> int -> int -> (int->int) -> t -> (int * Term_sub.t) list
+val unify_with:
+    term -> int -> int -> int -> bool -> (int->int) -> t -> (int * Term_sub.t) list
 
 val add: term -> int -> int -> int -> (int->int) -> t -> t
 

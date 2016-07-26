@@ -25,7 +25,7 @@ end)
 
 type t = {
     terms: (int*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
-    avars: (int*int*int) list;             (* [idx, argument variable, nargs] *)
+    avars: (int*int*int) list;             (* [idx, argument variable, nb,nargs] *)
     bvars: int list IntMap.t;              (* bvar -> list of indices *)
     fvars: (int * int list IntMap.t) list; (* [nbenv, fvar -> list of indices] *)
     apps:  (t array * int list) IntMap.t;  (* one for each function variable *)
@@ -229,7 +229,7 @@ let uni_args
 
 
 let uni_core
-    (t:term) (nb:int) (nargs:int) (nvars:int)
+    (t:term) (nb:int) (nb0:int) (nargs:int) (nvars:int)
     (r:result)
     (uni:unifier)
     (sfun: int->int)
@@ -242,10 +242,27 @@ let uni_core
      the term [t] and the current [tab]. If no exact match is possible the
      exception [Not_found] is thrown.
    *)
+  assert (nb0 <= nb);
+  let nbb = nb - nb0 in
   match t with
-    Variable i when i < nb ->
+    Variable i when i < nbb ->
       (* bound variable of [t] *)
       let idxlst = IntMap.find i tab.bvars in
+      merge_idxlst idxlst r
+  | Variable i when i < nb ->
+      (* bound variable of [t] which can match an argument variable *)
+      assert (nbb <= i);
+      let idxlst =
+        List.fold_left
+          (fun lst (idx,avar,nargs) ->
+            if nargs = nb0 && i - nbb = avar then
+              idx :: lst
+            else
+              lst
+          )
+          []
+          tab.avars
+      in
       merge_idxlst idxlst r
   | Variable i ->
       assert (nb + nargs <= i);
@@ -335,7 +352,7 @@ let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
         []
     and other_subs: sublist =
       try
-        uni_core t nb 0 nbt r uni sfun tab
+        uni_core t nb 0 0 nbt r uni sfun tab
       with Not_found ->
         []
     in
@@ -386,7 +403,7 @@ let find (t:term) (nargs:int) (nvars:int) (sfun:int->int) (table:t)
       Variable i when nb <= i && i < nb + nargs ->
         merge_avars_exact tab.avars (i - nb) nargs r
     | _ ->
-        uni_core t nb nargs nvars r uni sfun tab
+        uni_core t nb 0 nargs nvars r uni sfun tab
   in
   uni t table 0 Initial
 
@@ -396,12 +413,24 @@ let merge_terms
     (var:int)
     (nbenv:int)
     (terms:(int*int*int*int*term)list)
+    (nb0:int)
+    (bvars_flg:bool) (* schematic terms will be considered only if nargs = nb0 *)
     (r:result)
     : sublist =
   (* Merge the terms of a table entry which can substitute the argument
      variable [var] in a local environment with [nbenv] variables into the
      result [r]
    *)
+  let down nb nargs t =
+    let nb =
+      if bvars_flg then begin
+        assert (nargs = nb0);
+        nb + nargs
+      end else
+        nb
+    in
+    Term.down nb t
+  in
   let rec merge terms lst reslst =
     (* terms and lst (sublist)  are descending *)
     match terms,lst with
@@ -415,9 +444,11 @@ let merge_terms
           merge terms tail2 reslst
         else if idx1 > idx2 then (* idx1 not possible *)
           merge tail1 lst reslst
+        else if bvars_flg && nargs1 <> nb0 then (* idx1 = idx2 *)
+          merge tail1 tail2 reslst
         else begin (* idx1 = idx2, i.e. substitutions can be merged *)
           try
-            let t1 = Term.down nb1 t1 in
+            let t1 = down nb1 nargs1 t1 in
             begin try
               let t2 = Term_sub.find var sub2 in
               if Term.equivalent t1 t2 then
@@ -439,11 +470,15 @@ let merge_terms
         (fun lst (idx,nb_0,nargs_0,nbenv_0,t_0) ->
           assert (nbenv_0 <= nbenv);
           assert (not (List.exists (fun (i,_) -> i=idx) lst));
-          try
-            let t_0 = Term.down nb_0 t_0 in
-            (idx, Term_sub.singleton var t_0)::lst
-          with Term_capture ->
-            lst)
+          if bvars_flg && nargs_0 <> nb0 then
+            lst
+          else
+            let t_0 = down nb_0 nargs_0 t_0 in
+            try
+              let t_0 = Term.down nb_0 t_0 in
+              (idx, Term_sub.singleton var t_0)::lst
+            with Term_capture ->
+              lst)
         []
         terms
   | Sub_list lst ->
@@ -455,10 +490,13 @@ let merge_terms
 
 
 let unify_with
-    (t:term) (nargs:int) (nbenv:int) (sfun:int->int) (table:t)
+    (t:term) (nb0:int) (nargs:int) (nbenv:int)
+    (bvars_flg:bool) (sfun:int->int)
+    (table:t)
     :  (int * Term_sub.t) list =
-  (** Unify the terms in the table [table] with term [t] which has [nargs]
-      arguments and comes from an environment with [nbenv] variables.
+  (** Unify the terms in the table [table] with term [t] which has [nb0]
+      universally quantied variables below [nargs] arguments and comes from an
+      environment with [nbenv] variables.
 
       The result is a list of tuples (idx,sub) where applying the substitution
       [sub] to the term [t] yields the term at [idx].
@@ -473,14 +511,14 @@ let unify_with
     match t with
       Variable i when nb <= i && i < nb + nargs ->
         (* argument variable of [t] *)
-        merge_terms (i - nb) nbenv tab.terms r
+        merge_terms (i - nb) nbenv tab.terms nb0 bvars_flg r
     | _ ->
         try
-          uni_core t nb nargs nbenv r uniw sfun tab
+          uni_core t nb nb0 nargs nbenv r uniw sfun tab
         with Not_found ->
           []
   in
-  uniw t table 0 Initial
+  uniw t table nb0 Initial
 
 
 
@@ -743,7 +781,7 @@ let unify0 (t:term) (nbt:int) (table:t)
 
 let unify0_with (t:term) (nargs:int) (nbenv:int) (table:t)
     :  (int * Term_sub.t) list =
-  unify_with t nargs nbenv (fun i -> i) table
+  unify_with t 0 nargs nbenv false (fun i -> i) table
 
 let add0
     (t:term) (nargs:int) (nbenv:int)
