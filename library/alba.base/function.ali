@@ -3,8 +3,8 @@ use predicate end
 A: ANY
 B: ANY
 
-immutable
-    class FUNCTION[A,B]
+class
+    FUNCTION[A,B]
 inherit
     ghost ANY
 end

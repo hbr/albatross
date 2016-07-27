@@ -5,7 +5,7 @@ use
 end
 
 
-case class
+class
     NATURAL
 create
     0

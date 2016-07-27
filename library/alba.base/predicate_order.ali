@@ -9,7 +9,7 @@ end
 A: ANY
 
 
-immutable class
+class
     predicate.PREDICATE[A]
 inherit
     ghost PARTIAL_ORDER

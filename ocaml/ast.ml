@@ -980,17 +980,18 @@ let put_creators
   let clst = List.rev clst_rev in
   let cset = IntSet.of_list clst
   and cset_base = IntSet.of_list c0lst in
-  if Class_table.is_interface_check ct &&
-    not (IntSet.equal (Class_table.constructors cls ct) cset)
-  then
-    error_info info "Different constructors in implementation file";
   if not (Class_table.has_constructors cls ct) then begin
     creators_check_formal_generics creators.i clst tvs ft;
     add_case_inversions cls clst pc;
     add_case_injections clst pc;
     Class_table.set_constructors cset_base cset cls ct;
     PC.add_induction_law0 cls pc
-  end
+  end else if
+    not (IntSet.equal (Class_table.constructors cls ct) cset)
+  then
+    error_info info "Different constructors than previously declared"
+  else
+    ()
 
 
 
@@ -1066,23 +1067,14 @@ let put_class
     let lib,cls = cn.v in
     let fgtps   = List.map (fun nme -> Normal_type([],nme,[])) fgs.v in
     Normal_type (lib, cls, fgtps) in
-  begin match hm.v with
-    Case_hmark ->
-      if not (Class_table.has_any ct) then
-        error_info hm.i "A case class needs the module \"any\"";
-      if not (Class_table.has_predicate ct) then
-        error_info hm.i "A case class needs the module \"predicate\"";
-      inherit_case_any idx cls_tp pc
-  | _ ->
-      ()
-  end;
   if creators.v <> [] then begin
-    match hm.v with
-      Case_hmark ->
-        let _,tvs = Class_table.class_type idx ct in
-        put_creators idx is_new tvs cls_tp creators pc
-    | _ ->
-        error_info creators.i "Only case classes can have constructors"
+    if not (Class_table.has_any ct) then
+      error_info hm.i "An inductive type needs the module \"any\"";
+    if not (Class_table.has_predicate ct) then
+      error_info hm.i "An inductive type needs the module \"predicate\"";
+    inherit_case_any idx cls_tp pc;
+    let _,tvs = Class_table.class_type idx ct in
+    put_creators idx is_new tvs cls_tp creators pc
   end;
   Inherit.inherit_parents idx inherits pc
 

@@ -728,16 +728,14 @@ let induction_law (cls:int) (ct:t): int =
 
 
 
-let is_case_class (cls:int) (ct:t): bool =
-  assert (cls < count ct);
-  match (base_descriptor cls ct).hmark with
-    Case_hmark -> true
-  | _          -> false
-
-
-
 let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
+
+
+let is_case_class (cls:int) (ct:t): bool =
+  assert (cls < count ct);
+  has_constructors cls ct
+
 
 
 let set_constructors
@@ -746,7 +744,6 @@ let set_constructors
   assert (not (is_interface_check ct));
   let bdesc = base_descriptor cls ct in
   assert (bdesc.constructors = IntSet.empty);
-  assert (bdesc.hmark = Case_hmark);
   bdesc.base_constructors <- base_set;
   bdesc.constructors <- set
 
@@ -757,7 +754,6 @@ let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
   assert (not (is_interface_check ct));
   let bdesc = base_descriptor cls ct in
   assert (bdesc.indlaw = -1);
-  assert (bdesc.hmark = Case_hmark);
   bdesc.indlaw <- indlaw
 
 
@@ -772,15 +768,13 @@ let export
     : unit =
   let desc = Seq.elem idx ct.seq in
   let hm1, hm2 = desc.bdesc.hmark, hm.v in
-  begin
-    match hm1, hm2 with
-      (*Case_hmark, Immutable_hmark -> () *)
-      _, _ when hm1=hm2 -> ()
-    | _, _ ->
-        error_info
-          hm.i
-          ("Header mark is not consistent with previous header mark \"" ^
-           (hmark2string hm1))
+  if hm1 <> hm2 then begin
+    let hstr = hmark2string hm1 in
+    let hstr = if hstr = "" then "" else " \"" ^ hstr ^ "\"" in
+    error_info
+      hm.i
+      ("Header mark is not consistent with previous header mark" ^
+       hstr)
   end;
   if not (Tvars.is_equivalent desc.bdesc.tvs tvs) then begin
     let str =
@@ -1467,14 +1461,14 @@ let base_table (): t =
   and fgb = ST.symbol "B"
   and anycon = Variable any_index
   and ct = empty_table ()   in
-  add_base_class "BOOLEAN"   Immutable_hmark [||] ct;
+  add_base_class "BOOLEAN"   No_hmark        [||] ct;
   add_base_class "ANY"       Deferred_hmark  [||] ct;
-  add_base_class "@DUMMY"    Immutable_hmark [||] ct;
-  add_base_class "PREDICATE" Immutable_hmark [|fgg,anycon|] ct;
-  add_base_class "FUNCTION"  Immutable_hmark [|(fga,anycon);(fgb,anycon)|] ct;
-  add_base_class "TUPLE"     Case_hmark      [|(fga,anycon);(fgb,anycon)|] ct;
-  add_base_class "SEQUENCE"  Immutable_hmark [|fga,anycon|] ct;
-  add_base_class "LIST"      Case_hmark      [|fga,anycon|] ct;
+  add_base_class "@DUMMY"    No_hmark        [||] ct;
+  add_base_class "PREDICATE" No_hmark        [|fgg,anycon|] ct;
+  add_base_class "FUNCTION"  No_hmark        [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "TUPLE"     No_hmark        [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "SEQUENCE"  No_hmark        [|fga,anycon|] ct;
+  add_base_class "LIST"      No_hmark        [|fga,anycon|] ct;
   check_base_classes ct;
   ct
 

@@ -5,7 +5,7 @@ end
 
 G:ANY
 
-case class
+class
     BINARY_TREE[G]
 create
     leaf

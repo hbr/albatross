@@ -13,7 +13,7 @@ all(a,b,c:SL)
         a = a
 
         a * a = a
-        
+
         a * b = b * a
 
         a * b * c = a * (b * c)
@@ -52,5 +52,8 @@ all(a,b:SL)
 
 G: ANY
 
-immutable class predicate.PREDICATE[G]
-inherit         ghost SEMILATTICE end
+class
+    predicate.PREDICATE[G]
+inherit
+    ghost SEMILATTICE
+end

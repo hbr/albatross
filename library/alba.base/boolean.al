@@ -1,4 +1,4 @@
-immutable class BOOLEAN end
+class BOOLEAN end
 
 
 {: Built in functions

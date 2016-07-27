@@ -155,7 +155,7 @@ all(p,q,r:{G})
         (p * q) * r = p * (q * r)
     end
 
-immutable class
+class
     predicate.PREDICATE[G]
 inherit
     ghost SEMILATTICE

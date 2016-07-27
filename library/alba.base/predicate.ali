@@ -2,7 +2,7 @@ use any end
 
 G: ANY
 
-immutable class
+class
     PREDICATE[G]
 inherit
     ghost ANY

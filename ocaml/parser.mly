@@ -128,6 +128,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
 %token KWif        KWimmutable    KWimport     KWin
        KWinherit   KWinspect      KWinvariant
 %token KWlocal
+%token KWmutable
 %token KWnot       KWnote
 %token KWold       KWor           KWorif
 %token KWproof
@@ -501,9 +502,8 @@ more_expressions:
 
 
 header_mark:
-  { No_hmark }
-| KWimmutable { Immutable_hmark }
-| KWcase      { Case_hmark }
+    { No_hmark }
+| KWmutable   { Mutable_hmark }
 | KWdeferred  { Deferred_hmark  }
 
 

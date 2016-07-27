@@ -667,13 +667,12 @@ and string_of_body b =
 
 (* Header mark *)
 
-type header_mark = No_hmark | Case_hmark | Immutable_hmark | Deferred_hmark
+type header_mark = No_hmark | Mutable_hmark | Deferred_hmark
 
 let hmark2string (hm:header_mark) =
   match hm with
     No_hmark -> ""
-  | Case_hmark -> "case"
-  | Immutable_hmark -> "immutable"
+  | Mutable_hmark -> "immutable"
   | Deferred_hmark  -> "deferred"
 
 let hmark2string_wblank (hm:header_mark) =

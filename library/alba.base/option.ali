@@ -4,7 +4,7 @@ end
 
 G:ANY
 
-case class
+class
     OPTION[G]
 create
     none

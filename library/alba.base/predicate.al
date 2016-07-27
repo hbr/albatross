@@ -6,7 +6,7 @@ end
 
 G: ANY
 
-immutable class PREDICATE[G] end
+class PREDICATE[G] end
 
 (in)  (e:G, p:{G}): BOOLEAN  note built_in end
 (/in) (a:G, p:{G}): BOOLEAN -> not p(a)
@@ -21,8 +21,11 @@ immutable class PREDICATE[G] end
 all(p:{G}) ensure p = p end
 
 
-immutable class PREDICATE[G]
-inherit         ghost ANY end
+class
+    PREDICATE[G]
+inherit
+    ghost ANY
+end
 
 
 all(a,b:G)

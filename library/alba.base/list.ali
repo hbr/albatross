@@ -9,7 +9,7 @@ end
 G:ANY
 H:ANY
 
-case class
+class
     LIST[G]
 create
     []

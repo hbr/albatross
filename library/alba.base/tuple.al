@@ -3,7 +3,7 @@ use predicate end
 A: ANY
 B: ANY
 
-case class
+class
     TUPLE[A,B]
 create
     tuple(first:A, second:B)

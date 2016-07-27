@@ -7,7 +7,7 @@ end
 A: ANY
 B: ANY
 
-immutable class FUNCTION[A,B] end
+class FUNCTION[A,B] end
 
 
 domain (f:A->B): ghost {A}  note built_in end
@@ -46,8 +46,11 @@ all(f:A->B) ensure f = f end
 
 
 
-immutable class FUNCTION[A,B]
-inherit         ghost ANY end
+class
+    FUNCTION[A,B]
+inherit
+    ghost ANY
+end
 
 
 

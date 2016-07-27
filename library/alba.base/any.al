@@ -28,5 +28,8 @@ all(a,b:G)
 
 
 
-immutable class boolean.BOOLEAN
-inherit         ANY end
+class
+    boolean.BOOLEAN
+inherit
+    ANY
+end

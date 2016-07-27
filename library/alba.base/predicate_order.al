@@ -77,7 +77,7 @@ all(p:{A}, ps:{{A}})
     end
 
 
-immutable class
+class
     predicate.PREDICATE[A]
 inherit
     ghost PARTIAL_ORDER

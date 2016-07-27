@@ -17,5 +17,8 @@ all(a,b:G)
         a = b or a /= b
     end
 
-immutable class boolean.BOOLEAN
-inherit         ANY end
+class
+    boolean.BOOLEAN
+inherit
+    ANY
+end

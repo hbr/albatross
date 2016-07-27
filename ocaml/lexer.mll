@@ -89,6 +89,7 @@ let _ =
      ("inspect",   Parser.KWinspect);
      ("invariant", Parser.KWinvariant);
      ("local",     Parser.KWlocal);
+     ("mutable",   Parser.KWmutable);
      ("not",       Parser.KWnot);
      ("note",      Parser.KWnote);
      ("old",       Parser.KWold);
