@@ -912,7 +912,8 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
   let cnt = count pc in
   let res = try find t pc with Not_found -> cnt in
   let dup = res <> cnt in
-  if pc.trace then trace_term t rd search dup pc;
+  if pc.trace && ((search && not dup) || is_trace_extended pc) then
+    trace_term t rd search dup pc;
   Ass_seq.push rd pc.terms;
   if search && not dup then begin
     add_last_to_tables pc;
