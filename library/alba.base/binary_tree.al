@@ -36,20 +36,25 @@ postorder (t:BINARY_TREE[G]): [G]
 
 
 all(t:BINARY_TREE[G])
-    ensure - - t = t
-    inspect t end
+    ensure
+        - - t = t
+    inspect
+        t
+    end
 
 
 all(t:BINARY_TREE[G])
     ensure
-        (-t).inorder = - t.inorder
-    inspect t
-    case tree(i,l,r) assert
-        (-tree(i,l,r)).inorder            = -r.inorder + ([i] + (-l.inorder))
-        (-r.inorder) + ([i] + -l.inorder) = (-r.inorder + [i]) + -l.inorder
-        (-r.inorder + [i]) + -l.inorder   = - i^r.inorder + -l.inorder
-        (-i^r.inorder) + -l.inorder       = - (l.inorder + i^r.inorder)
-        (- (l.inorder + i^r.inorder))     = - tree(i,l,r).inorder
+        (- t).inorder = - t.inorder
+    inspect
+        t
+    case tree(i,l,r)
+        via [(- tree(i,l,r)).inorder
+             (- r.inorder) + ([i] + - l.inorder)   -- def
+             (- r.inorder + [i]) + - l.inorder     -- assoc
+             (- i ^ r.inorder) + - l.inorder       -- - a + [x] = - x ^ a
+             (- (l.inorder + i ^ r.inorder))       -- - a + - b = - (b + a)
+             (- tree(i,l,r).inorder)]              -- def
     end
 
 
