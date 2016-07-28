@@ -421,7 +421,7 @@ end = struct
 
   let greatestp1_arg (t:term) (nargs:int): int =
     (** The greatest (plus 1) argument variable of the term [t] with
-        [nargs] arguments or [nargs] if there is no argument variable
+        [nargs] arguments or [0] if there is no argument variable
      *)
     fold_arguments
       (fun gtst i -> if gtst <= i then i+1 else gtst)
