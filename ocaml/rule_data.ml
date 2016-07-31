@@ -93,16 +93,6 @@ let allows_premise_specialization (rd:t): bool =
 
 
 
-let is_catchall (t:term) (nargs:int): bool =
-  match t with
-    Variable i when i < nargs -> true
-  | Application(Variable i, [|Variable j|],pr,_) when i < nargs && j < nargs ->
-      true
-  | _ ->
-      false
-
-
-
 let is_backward_recursive (rd:t): bool =
   assert (is_implication rd);
   assert (rd.nbwd = 0);
@@ -114,7 +104,11 @@ let is_backward_recursive (rd:t): bool =
 let is_forward_catchall (rd:t): bool =
   is_implication rd &&
   let _,_,p = List.hd rd.premises in
-  is_catchall p rd.ctxt.nargs
+  match p with
+    Variable i when i < rd.ctxt.nargs ->
+      true
+  | _ ->
+      false
 
 
 
@@ -161,7 +155,7 @@ let implication_chain (ps:(int*int*term) list) (tgt:term) (nbenv:int): term =
 let prepend_premises
     (ps:(int*int*term) list) (rd:t)
     : term =
-  (* Prepend the premises [ps] in front of the target and unversally quantify
+  (* Prepend the premises [ps] in front of the target and universally quantify
      the term.
    *)
   let t =
@@ -220,10 +214,34 @@ let premises (rd:t) (c:Context.t): (term*bool) list =
 
 
 
+let is_backward_catchall (rd:t): bool =
+  let nargs = rd.ctxt.nargs in
+  match rd.target with
+    Variable i when i < nargs ->
+      true
+  | Application(Variable i,args,true,_) when i < nargs ->
+      assert (Array.length args = 1);
+      let nvars = count_variables rd
+      and ft = Context.feature_table rd.ctxt.c in
+      let args = Feature_table.args_of_tuple args.(0) (nargs + nvars) ft in
+      let len = Array.length args in
+      interval_for_all
+        (fun i ->
+          match args.(i) with
+            Variable j when j < nargs ->
+              true
+          | _ ->
+              false
+        )
+        0 len
+  | _ ->
+      false
+
+
 let is_backward (rd:t): bool =
   is_implication rd &&
   (rd.nbwd = 0 &&
-   not (is_catchall rd.target rd.ctxt.nargs) &&
+   not (is_backward_catchall rd) &&
    not (is_backward_recursive rd))
 
 
