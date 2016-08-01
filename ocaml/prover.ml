@@ -197,36 +197,40 @@ let rec set_succeeded (i:int) (gs:t): unit =
    *)
   let g = item i gs in
   if gs.trace then begin
-    let prefix = PC.trace_prefix g.ctxt.pc in
-    printf "%ssuccess goal %d: %s\n"
-      prefix i (PC.string_long_of_term g.goal g.ctxt.pc);
+    let prefix = PC.trace_prefix g.ctxt.pc
+    and obs = if g.obsolete then " of obsolete" else "" in
+    printf "%ssuccess%s goal %d: %s\n"
+      prefix obs i (PC.string_long_of_term g.goal g.ctxt.pc);
   end;
   assert (0 <= g.pos);
   assert (g.pos < PC.count g.ctxt.pc);
-  match g.parent with
-    None ->
-      assert (i = 0);
-      raise Root_succeeded
-  | Some (ipar,ialt,isub) ->
-      let par = item ipar gs in
-      assert (ialt < Array.length par.alternatives);
-      let alt = par.alternatives.(ialt) in
-      assert (isub < Array.length alt.premises);
-      let p,pos = alt.premises.(isub) in
-      assert (p = i);
-      assert (pos = -1);
-      assert (0 < alt.npremises);
-      alt.premises.(isub) <- p,g.pos;
-      alt.npremises <- alt.npremises - 1;
-      if alt.npremises = 0 then begin
-        let pos = succeed_alternative ialt par in
-        discharge_target pos par;
-        set_succeeded ipar gs;
-        for jalt = 0 to Array.length par.alternatives - 1 do
-          if jalt <> ialt then
-            set_obsolete_alternative jalt ipar gs
-        done
-      end
+  if g.obsolete then
+    ()
+  else
+    match g.parent with
+      None ->
+        assert (i = 0);
+        raise Root_succeeded
+    | Some (ipar,ialt,isub) ->
+        let par = item ipar gs in
+        assert (ialt < Array.length par.alternatives);
+        let alt = par.alternatives.(ialt) in
+        assert (isub < Array.length alt.premises);
+        let p,pos = alt.premises.(isub) in
+        assert (p = i);
+        assert (pos = -1);
+        assert (0 < alt.npremises);
+        alt.premises.(isub) <- p,g.pos;
+        alt.npremises <- alt.npremises - 1;
+        if alt.npremises = 0 then begin
+          let pos = succeed_alternative ialt par in
+          discharge_target pos par;
+          set_succeeded ipar gs;
+          for jalt = 0 to Array.length par.alternatives - 1 do
+            if jalt <> ialt then
+              set_obsolete_alternative jalt ipar gs
+          done
+        end
 
 
 
