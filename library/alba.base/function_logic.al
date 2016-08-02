@@ -477,18 +477,18 @@ all(f,g:A->B)
         f <= g
     ensure
         f.is_injective
-        assert
-            all(x,y)
-                require
-                    x in f.domain
-                    y in f.domain
-                    f(x) = f(y)
-                ensure
-                    x = y
-                    assert
-                        g(x) = f(x)
-                        g(x) = g(y)
-                end
+    assert
+        all(x,y)
+            require
+                x in f.domain
+                y in f.domain
+                f(x) = f(y)
+            ensure
+                x = y
+                assert
+                    g(x) = f(x)
+                    g(x) = g(y)
+            end
     end
 
 
@@ -694,6 +694,7 @@ all(f,g:A->B, y:B)
         assert
             f(x) = g(x)           -- consistent functions
             g(x).origin(g) = x    -- def 'origin'
+            f.is_injective        -- g.is_injective and f <= g
         via [f(x).origin(f)
              x
              g(x).origin(g)]

@@ -110,20 +110,15 @@ all(a,b,c:[G], x,y:G, p,q:{G})
     ensure
         -- concatenation of lists
         a   + []  =  a
-        []  + b   =  b
-        x^a + b   =  x^(a + b)
 
         (a + b) + c  =  a + (b + c)
 
         -- list reversal
-        -- (-[]  = [] )
-        (-[x] = [x])        -- [x,y,...] is a shorthand for 'x^y^...^[] '
-        (-x^a = -a + [x])
-        x^(-a) = - (a + [x])
+        x ^ (-a) = - (a + [x])
 
-        (-(a + b)  =  -b + -a)
+        (-(a + b))  =  -b + -a
 
-        (-(-a)) = a
+        (- -a) = a
 
         -- list elements
         x in a ==> a.all_in(p) ==> x in p

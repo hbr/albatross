@@ -466,8 +466,6 @@ is_closure_map (f:A->A, r:{A,A}): ghost BOOLEAN
 
 
 all(a:A, p:{A}, r:{A,A})
-    require
-        p.is_closure_system(r)
     ensure
         p.is_closure_system(r) ==> p.is_weak_closure_system(r)
 

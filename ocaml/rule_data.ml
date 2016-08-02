@@ -112,16 +112,6 @@ let is_forward_catchall (rd:t): bool =
 
 
 
-let is_forward (rd:t): bool =
-  is_implication rd &&
-  (not (is_forward_catchall rd)) &&
-  (not rd.fwd_blckd || allows_partial_specialization rd) (* partial specialization
-                                                            can overrule fwd_blckd *)
-    &&
-  (allows_premise_specialization rd) (* premise must always contain all formal
-                                        generics *)
-
-
 let is_equality (rd:t): bool =
   Option.has rd.eq
 
@@ -244,6 +234,17 @@ let is_backward (rd:t): bool =
    not (is_backward_catchall rd) &&
    not (is_backward_recursive rd))
 
+
+
+let is_forward (rd:t): bool =
+  is_implication rd &&
+  not (is_schematic rd && is_backward rd) &&
+  (not (is_forward_catchall rd)) &&
+  (not rd.fwd_blckd || allows_partial_specialization rd) (* partial specialization
+                                                            can overrule fwd_blckd *)
+    &&
+  (allows_premise_specialization rd) (* premise must always contain all formal
+                                        generics *)
 
 
 let short_string (rd:t): string =

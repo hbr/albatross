@@ -373,6 +373,13 @@ all(a:PO)
                end
     end
 
+all(a,b:PO)
+    require
+        a <= b
+    ensure
+        a.is_lower_bound({b})
+    end
+
 
 all(x:PO, p,q:{PO})
     require

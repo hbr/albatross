@@ -123,6 +123,10 @@ all(a,b,c:BOOLEAN)
     ensure
         c
         via require not c
+        assert
+            not a  -- contrapositive of 'a ==> c'
+            b      -- def 'a or b'
+            c
     end
 
 

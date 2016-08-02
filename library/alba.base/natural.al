@@ -311,23 +311,29 @@ all(a,b:NATURAL)
 
         inspect b
         case 0
-        assert
-            0 = a
-            a + 0 = 0
+            assert
+                0 = a
+                a + 0 = 0
         case successor(b)
             inspect a
             case 0
-            assert
-                0 + b.successor = b.successor
+                assert
+                    0 + b.successor = b.successor
             case a.successor
-            assert
-                a <= b
-                all(x) require a + x = b
-                       ensure  some(x) a.successor + x = b.successor
-                       assert  a.successor + x   = a + x.successor
-                               a.successor + x   =  b.successor
-                       end
+                assert
+                    a <= b
+                via some(x)
+                    a + x = b
+                assert
+                    ensure
+                        a.successor + x = b.successor
+                    via
+                        [a + x.successor
+                         (a + x).successor]
+                    end
     end
+
+
 
 
 
@@ -365,9 +371,10 @@ all(a,b:NATURAL)
                                    assert
                                        ensure
                                            (a + x).successor = b.successor
-                                           via [a + x.successor
-                                                a.successor + x]
+                                       via [a + x.successor
+                                            a.successor + x]
                                        end
+                                       a + x = b
                                        some(x) a + x = b
                                        a <= b
                                    end
@@ -422,25 +429,13 @@ all(a,b,c:NATURAL)
         b <= c
     ensure
         a <= c
-     assert
-        all(x)
-            require
-                a + x = b
-            ensure
-                a <= c
-            assert
-                all(y)
-                    require
-                        b + y = c
-                    ensure
-                        a <= c
-                    assert
-                        a + (x + y) = (a + x) + y
-                        a + x + y   = b + y
-
-                        a + (x + y) = c
-                    end
-            end
+    via some(x)
+        a + x = b
+    via some(y)
+        b + y = c
+    assert
+        a + (x + y) = c
+        some(z) a + z = c
     end
 
 
@@ -522,6 +517,8 @@ all(a,b:NATURAL)
         a < b + 1
     ensure
         a <= b
+    assert
+        a + 1 <= b + 1
     end
 
 

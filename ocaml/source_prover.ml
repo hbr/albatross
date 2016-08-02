@@ -179,12 +179,25 @@ let prove_goal (goal: info_term) (pc:PC.t): unit =
   ignore (PC.add_proved false (-1) t pt pc0)
 
 
-let prove_goals (elst: info_terms) (pc:PC.t): unit =
-  let idx_list = List.map (fun it -> prove_insert_report it false pc) elst in
-  let pair_list = List.map (fun idx -> PC.discharged_bubbled idx pc) idx_list in
-  let pc0 = PC.pop pc in
-  PC.add_proved_list false (-1) pair_list pc0
 
+let find_goals (elst: info_terms) (pc:PC.t): unit =
+  assert (PC.is_toplevel pc);
+  List.iter
+    (fun e ->
+      let chn = PC.assumptions_chain e.v pc
+      and tps = PC.local_formals pc
+      and fgs = PC.local_fgs pc
+      and n   = PC.count_last_arguments pc
+      in
+      let t1 = Term.all_quantified n tps fgs chn in
+      let pc0 = PC.pop pc in
+      let t2 = PC.prenex_term t1 pc0 in
+      try
+        ignore(PC.find t2 pc0)
+      with Not_found ->
+        error_info e.i "Not proved in the implementation file"
+    )
+    elst
 
 
 let beta_reduced (t:term) (pc:PC.t): term =
@@ -952,8 +965,7 @@ let rec prove_and_store
       if PC.is_interface_use pc1 then
         store_unproved false elst pc1
       else if PC.is_interface_check pc1 then begin
-        PC.close pc1;
-        prove_goals elst pc1
+        find_goals elst pc1
       end else
         prove_goal ()
   | _ ->

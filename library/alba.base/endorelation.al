@@ -149,8 +149,8 @@ is_reflexive (r:{A,A}): ghost BOOLEAN
 
 all(a:A, r:{A,A})
     require
-        a in r.carrier
         r.is_reflexive
+        a in r.carrier
     ensure
         r(a,a)
 
@@ -247,7 +247,10 @@ all(r:{A,A})
             x in r.carrier
         ensure
             x in r.domain
-            if x in r.domain orif x in r.range
+        assert
+            r(x,x)
+        if x in r.domain
+        orif x in r.range
         end
     end
 
@@ -262,7 +265,10 @@ all(r:{A,A})
                 a in r.carrier
             ensure
                 a in r.range
-                if a in r.domain orif a in r.range
+            assert
+                r(a,a)
+            if a in r.domain
+            orif a in r.range
             end
     end
 
@@ -387,6 +393,20 @@ all(a,b,c:A, r:{A,A})
         require (+r)(a,b)
         ensure  (+r)(a,c) end
     end
+
+
+all(a,b,c:A, r:{A,A})
+    require
+        (+r)(a,b)
+        (+r)(b,c)
+    ensure
+        (+r)(a,c)
+    end
+
+
+
+
+
 
 all(r:{A,A})
     ensure

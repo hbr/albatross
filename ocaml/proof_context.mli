@@ -88,6 +88,7 @@ val failed_goal:        term -> t -> unit
 val proved_goal:        term -> t -> unit
 
 val find_schematic:     term -> int -> t -> int * agens
+val find_match:         term -> t -> int
 val find_goal:          term -> t -> int
     (** Find a term which exactly matches the goal or which can be specialized to
         match the goal. Add the specialization if necessary and return the index
@@ -112,6 +113,8 @@ val count_variables:      t -> int
 val count_last_arguments: t -> int
 val count_all_type_variables: t -> int
 val local_argnames: t -> names
+val local_formals: t -> formals
+val local_fgs: t -> formals
 
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool

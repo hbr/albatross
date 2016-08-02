@@ -42,7 +42,11 @@ all(a,b:BOOLEAN)
         not (a and b)
     ensure
         not a or not b
-        via require not (not a or not b)
+    via require
+        not (not a or not b)
+            {: apply 'not (x or y) ==> not x' and  'not (x or y) ==> not y'
+               and then the double negation law to derive a contradiction
+               with the premise 'not (a and b)' :}
     end
 
 
@@ -114,7 +118,9 @@ all(a,b:BOOLEAN)
         not a
     ensure
         b
-        if a orif b
+    if a
+        assert false
+    orif b
     end
 
 all(a,b:BOOLEAN)

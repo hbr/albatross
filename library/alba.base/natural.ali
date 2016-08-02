@@ -75,7 +75,7 @@ all(a,b,c,x:NATURAL)
         (some(x) a = successor(x)) ==> a /= 0
 
         -- addition
-        a.successor + b = a + b.successor
+        a + b.successor = a.successor + b
         a + 0 = a
         0 + a = a
         a + b.successor = (a + b).successor

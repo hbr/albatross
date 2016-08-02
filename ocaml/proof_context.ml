@@ -147,6 +147,12 @@ let count_last_type_variables (pc:t): int =
 let local_argnames (pc:t): int array =
   Proof_table.local_argnames pc.base
 
+let local_formals (pc:t): formals =
+  Proof_table.local_formals pc.base
+
+let local_fgs (pc:t): formals =
+  Proof_table.local_fgs pc.base
+
 let count_base (pc:t): int = Proof_table.count pc.base
 
 let count (pc:t): int = Ass_seq.count pc.terms
@@ -393,7 +399,7 @@ let assumption_indices (pc:t): int list =
 
 
 let assumptions_chain (tgt:term) (pc:t): term =
-  implication_chain (assumptions pc) tgt pc
+  implication_chain (List.rev (assumptions pc)) tgt pc
 
 
 
@@ -1600,15 +1606,18 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   let gp1,tps,nbenv_a,a = RD.schematic_premise rd in
   assert (nbenv_a = nbenv);
   if RD.is_schematic rd then (* the implication is schematic *)
-    let sublst = unify_with a gp1 tps pc.entry.prvd2 pc
-    in
-    let sublst = List.rev sublst in
-    List.iter
-      (fun (idx,args) ->
-        if not (RD.is_intermediate (rule_data idx pc)) then
-          add_consequence idx i args [||] pc
-      )
-      sublst
+    if RD.is_forward rd then begin
+      let sublst = unify_with a gp1 tps pc.entry.prvd2 pc
+      in
+      let sublst = List.rev sublst in
+      List.iter
+        (fun (idx,args) ->
+          if not (RD.is_intermediate (rule_data idx pc)) then
+            add_consequence idx i args [||] pc
+        )
+        sublst
+    end else
+      ()
   else (* the implication is not schematic *)
     try
       let idx = find a pc in   (* check for exact match *)
