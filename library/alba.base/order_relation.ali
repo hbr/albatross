@@ -266,7 +266,7 @@ all(a,b:A, r:{A,A})
 all(ps:{{A}}, r:{A,A})
         -- The union of all lower sets is the carrier.
     require
-        ps = {p: some(a) p = a.lower_set(r)}
+        ps = {p: some(a) a in r.carrier and p = a.lower_set(r)}
     ensure
         + ps = r.carrier
     end

@@ -390,7 +390,7 @@ all(a,b:A, r:{A,A})
 all(ps:{{A}}, r:{A,A})
         -- The union of all lower sets is the carrier.
     require
-        ps = {p: some(a) p = a.lower_set(r)}
+        ps = {p: some(a) a in r.carrier and p = a.lower_set(r)}
     ensure
         + ps = r.carrier
     assert
@@ -400,7 +400,7 @@ all(ps:{{A}}, r:{A,A})
             ensure
                 x in r.carrier
             via some(p) p in ps and x in p
-            via some(a) p = a.lower_set(r)
+            via some(a) a in r.carrier and p = a.lower_set(r)
             end
 
         all(x)
@@ -409,7 +409,7 @@ all(ps:{{A}}, r:{A,A})
             ensure
                 x in + ps
             assert
-                x.lower_set(r) = x.lower_set(r)
+                x in r.carrier and x.lower_set(r) = x.lower_set(r)
 
                 x.lower_set(r) in ps and x in x.lower_set(r)
 
