@@ -518,6 +518,7 @@ end = struct
     eq t1 t2 0
 
   let equivalent_list (lst1:term list) (lst2:term list): bool =
+    List.length lst1 = List.length lst2 &&
     List.for_all2 (fun t1 t2 -> equivalent t1 t2) lst1 lst2
 
 
