@@ -82,6 +82,16 @@ all(r,s:{A,B})
     end
 
 
+all(r:{A,B}, rs:{{A,B}})
+    require
+        r in rs
+    ensure
+        r.domain in rs.domains
+    assert
+        r in rs and r.domain = r.domain
+    end
+
+
 all(rs:{{A,B}})
         -- The domain of a union of relations is the union of the domains
     ensure
@@ -96,13 +106,7 @@ all(rs:{{A,B}})
             via some(y) (+ rs)(x,y)
             via some(r) r in rs and r(x,y)
             assert
-                r in rs and r.domain = r.domain
-
-                r.domain in {d: some(r) r in rs and d = r.domain}
-                and
-                x in r.domain
-
-                some(d) d in {d: some(r) r in rs and d = r.domain} and x in d
+                r.domain in rs.domains and x in r.domain
             end
 
         all(x)
@@ -111,7 +115,7 @@ all(rs:{{A,B}})
             ensure
                 x in (+ rs).domain
 
-            via some(d) d in {d: some(r) r in rs and d = r.domain} and x in d
+            via some(d) d in rs.domains and x in d
             via some(r) r in rs and d = r.domain
             assert
                 x in r.domain
