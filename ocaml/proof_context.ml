@@ -2150,17 +2150,6 @@ let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
   raw_add imp false pc
 
 
-let add_eval_backward (t:term) (pc:t): int =
-  (* Add the implication [teval ==> t] where the term [t] must have an
-     evaluation.  The implication is not entered into the search tables nor
-     into the work items.  *)
-  let teval,e,modi = evaluated_term t (count pc) pc in
-  if not modi then
-    assert false; (* The term [t] must have an evaluation *)
-  let imp = implication teval t pc in
-  eval_backward t imp e pc
-
-
 
 let predicate_of_term (t:term) (pc:t): type_term =
   Context.predicate_of_term t (context pc)

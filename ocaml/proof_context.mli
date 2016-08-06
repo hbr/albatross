@@ -66,7 +66,6 @@ val add_beta_reduced:   int -> bool -> t -> int
 val add_beta_redex:     term -> int -> bool -> t -> int
 val add_some_elim:      int -> bool -> t -> int
 val add_some_elim_specialized: int -> term -> bool -> t -> int
-val add_eval_backward:  term -> t -> int
 val specialized:        int -> arguments -> agens -> int -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
