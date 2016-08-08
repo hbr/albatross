@@ -1235,35 +1235,28 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
             in
             try
               let n,nms,t0 = definition i nb ags pc in
-              if n > 0 && Array.length args = 0 then
-                let tp = assert false in
-                let t0 = make_lambda n nms [] t0 false tp pc in
-                let res,rese,_ = eval t0 nb full depth in
-                res, Eval.Exp(i,ags,[||],rese), true
-              else begin
-                if n <> Array.length args then
-                  printf "n %d, #args %d\n" n (Array.length args);
-                assert (n = Array.length args);
-                let args,argse,argsmodi =
-                  if full then
-                    eval_args false args full
-                  else
-                    args, Array.map (fun t -> Eval.Term t) args, false
-                in
-                let exp = Proof_table.apply_term t0 args nb pc.base in
-                let res,rese,_ =
-                  if full || is_flow exp then
-                    eval exp nb full depth
-                  else
-                    exp, Eval.Term exp, false
-                in
-                if full && is_flow res then begin
-                  let res = VAppl(i,args,ags,oo)
-                  and e   = Eval.VApply (i,argse,ags) in
-                  res, e, argsmodi
-                end else begin
-                  res, Eval.Exp(i,ags,argse,rese), true
-                end
+              if n <> Array.length args then
+                printf "n %d, #args %d\n" n (Array.length args);
+              assert (n = Array.length args);
+              let args,argse,argsmodi =
+                if full then
+                  eval_args false args full
+                else
+                  args, Array.map (fun t -> Eval.Term t) args, false
+              in
+              let exp = Proof_table.apply_term t0 args nb pc.base in
+              let res,rese,_ =
+                if full || is_flow exp then
+                  eval exp nb full depth
+                else
+                  exp, Eval.Term exp, false
+              in
+              if full && is_flow res then begin
+                let res = VAppl(i,args,ags,oo)
+                and e   = Eval.VApply (i,argse,ags) in
+                res, e, argsmodi
+              end else begin
+                res, Eval.Exp(i,ags,argse,rese), true
               end
             with Not_found ->
               let full = full || triggers_eval i nb pc in
