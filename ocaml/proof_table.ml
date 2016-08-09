@@ -539,13 +539,6 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           try definition idx nb ags at
           with Not_found -> raise Illegal_proof_term
         in
-        let argslen = Array.length args in
-        let t =
-          if n <> argslen then begin
-            assert (argslen = 0);
-            let tp = assert false in
-            Context.make_lambda n nms [] t false nb tp (context at)
-          end else t in
         let ta,tb = reconstruct e nb
         and argsa,argsb = reconstr_args args in
         let uneval = VAppl(idx,argsa,ags,false) in
