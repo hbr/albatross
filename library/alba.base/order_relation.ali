@@ -235,18 +235,26 @@ upper_set(a:A, r:{A,A}): ghost {A}
 
 lower_set(a:A, r:{A,A}): ghost {A}
         -- The set of all elements below 'a' in the relation 'r'.
-    -> {(p): a in r.carrier ==> a in p,
-             all(x,y) r(x,y) ==> y in p ==> x in p}
+    require
+        a in r.carrier
+    ensure
+        -> {(p): a in p,
+                 all(x,y) r(x,y) ==> y in p ==> x in p}
+    end
 
 
 lower_sets(r:{A,A}): ghost {{A}}
         -- The collection of all lower sets of the relation 'r'.
-    -> {p: some(a) p = a.lower_set(r)}
+    -> {p: some(a) a in r.carrier and p = a.lower_set(r)}
 
 
 strict_lower_set(a:A, r:{A,A}): ghost {A}
         -- The set of all elements strictly below 'a' in the relation 'r'.
-    -> {x: x in a.lower_set(r) and x /= a}
+    require
+        a in r.carrier
+    ensure
+        -> {x: x in a.lower_set(r) and x /= a}
+    end
 
 
 
@@ -256,9 +264,10 @@ all(a,b:A, r:{A,A})
         r(a,b) ==>
         a.lower_set(r) <= b.lower_set(r)
 
-        b in a.lower_set(r) ==> b in r.carrier
+        a in r.carrier ==> b in a.lower_set(r) ==> b in r.carrier
 
         r.is_partial_order ==>
+        b in r.carrier ==>
         a in b.lower_set(r) ==>
         r(a,b)
     end

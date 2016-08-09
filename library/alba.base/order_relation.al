@@ -27,12 +27,17 @@ is_linear_order(r:{A,A}): ghost BOOLEAN
        r.is_dichotomic
 
 
+is_linear_preorder(r:{A,A}): ghost BOOLEAN
+    -> r.is_preorder and
+       r.is_dichotomic
+
+
 all(r,s:{A,A})
     require
         r.is_partial_order
         s.is_partial_order
     ensure
-        (r*s).is_partial_order
+        (r * s).is_partial_order
     end
 
 
@@ -305,6 +310,16 @@ is_upclosed(p:{A}, r:{A,A}): ghost BOOLEAN
        all(x,y) r(x,y) ==> x in p ==> y in p
 
 
+downclosed(p:{A}, r:{A,A}): ghost {A}
+        -- The downward closure of the set 'p' with respect to the relation 'r'.
+        -- 'p' has to be a subset of the carrier of 'r'.
+    require
+        p <= r.carrier
+    ensure
+        -> {(q): all(x) x in p ==> x in q,
+                 all(x,y) r(x,y) ==> y in q ==> x in q}
+    end
+
 
 all(ps:{{A}}, r:{A,A})
         -- An arbitrary union of downclosed sets is downclosed
@@ -357,19 +372,27 @@ upper_set(a:A, r:{A,A}): ghost {A}
 
 lower_set(a:A, r:{A,A}): ghost {A}
         -- The set of all elements below 'a' in the relation 'r'.
-    -> {(p): a in r.carrier ==> a in p,
-             all(x,y) r(x,y) ==> y in p ==> x in p}
+    require
+        a in r.carrier
+    ensure
+        -> {(p): a in p,
+                 all(x,y) r(x,y) ==> y in p ==> x in p}
+    end
 
 
 lower_sets(r:{A,A}): ghost {{A}}
         -- The collection of all lower sets of the relation 'r'.
-    -> {p: some(a) p = a.lower_set(r)}
+    -> {p: some(a) a in r.carrier and p = a.lower_set(r)}
 
 
 
 strict_lower_set(a:A, r:{A,A}): ghost {A}
         -- The set of all elements strictly below 'a' in the relation 'r'.
-    -> {x: x in a.lower_set(r) and x /= a}
+    require
+        a in r.carrier
+    ensure
+        -> {x: x in a.lower_set(r) and x /= a}
+    end
 
 
 
@@ -377,6 +400,7 @@ strict_lower_set(a:A, r:{A,A}): ghost {A}
 all(a,b:A, r:{A,A})
         -- All elements of a lower set are in the carrier.
     require
+        a in r.carrier
         b in a.lower_set(r)
     ensure
         b in r.carrier
@@ -421,6 +445,7 @@ all(ps:{{A}}, r:{A,A})
 all(a,b:A, r:{A,A})
     require
         r.is_partial_order
+        b in r.carrier
         a in b.lower_set(r)
     ensure
         r(a,b)
