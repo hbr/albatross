@@ -1062,8 +1062,10 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       | Application(f,args,pr,inop) ->
           let fsimp,fe,fmodi = simp f in
           let args, argse, modi = simpl_args args fmodi in
-          Application(fsimp, args, pr, inop),
-          Eval.Apply(fe,argse,pr),
+          let res  = Application(fsimp, args, pr, inop) in
+          let rese = Eval.Term res in
+          res,
+          Eval.Apply(fe,argse,rese,pr),
           modi
       | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
     in
@@ -1198,14 +1200,16 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
     let apply f fe modi args is_pred inop full = (* eval args,
                                                     beta reduce or VApplication *)
       let args, argse, modi = eval_args modi args full in
-      let e = Eval.Apply (fe,argse,is_pred) in
+      let res  = Application (f,args,is_pred,inop) in
+      let rese = Eval.Term res in
+      let e = Eval.Apply (fe,argse,rese,is_pred) in
       match f with
         Lam (n,nms,_,t0,_,tp) ->
           let reduct = beta_reduce  n t0 tp args nb pc
           in
           reduct, Eval.Beta (e, Eval.Term reduct), true
       | _ ->
-          Application (f,args,is_pred,inop), e, modi
+          res, e, modi
     in
     let downgrade t = Context.downgrade_term t nb (context pc)
     in

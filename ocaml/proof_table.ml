@@ -555,10 +555,12 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.VApply (i,args,ags) ->
         let argsa, argsb = reconstr_args args in
         VAppl (i,argsa,ags,false), VAppl (i,argsb,ags,false)
-    | Eval.Apply (f,args,pr) ->
-        let fa,fb = reconstruct f nb in
-        let argsa, argsb = reconstr_args args in
-        Application (fa,argsa,pr,false), Application (fb,argsb,pr,false)
+    | Eval.Apply (f,args,e,pr) ->
+        let fa,fb = reconstruct f nb
+        and argsa, argsb = reconstr_args args
+        and resa,resb = reconstruct e nb in
+        assert (Term.equivalent resa (Application (fb,argsb,pr,false)));
+        Application (fa,argsa,pr,false), resb
     | Eval.Lam (n,nms,pres,e,pr,tp) ->
         let ta,tb = reconstruct e (1 + nb) in
         Lam (n,nms,pres,ta,pr,tp), Lam (n,nms,pres,tb,pr,tp)
