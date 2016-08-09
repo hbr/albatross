@@ -1201,7 +1201,9 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
       let e = Eval.Apply (fe,argse,is_pred) in
       match f with
         Lam (n,nms,_,t0,_,tp) ->
-          beta_reduce  n t0 tp args nb pc, Eval.Beta e, true
+          let reduct = beta_reduce  n t0 tp args nb pc
+          in
+          reduct, Eval.Beta (e, Eval.Term reduct), true
       | _ ->
           Application (f,args,is_pred,inop), e, modi
     in
@@ -1264,7 +1266,8 @@ let evaluated_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           end
       | Application (Lam(n,nms,_,t0,prlam,tp),args,pr,inop) when not full ->
           assert (prlam = pr);
-          beta_reduce n t0 tp args nb pc, Eval.Beta (Eval.Term t), true
+          let reduct = beta_reduce n t0 tp args nb pc in
+          reduct, Eval.Beta (Eval.Term t, Eval.Term reduct), true
       | Application (Variable i,args,pr,inop) when i < nb + nbenv ->
           let f  = Variable i in
           let fe = Eval.Term f in
@@ -1457,10 +1460,10 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   match t with
     Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
       assert (prlam = pr);
-      let pt = Eval(idx,Eval.Beta (Eval.Term t))
-      and res = beta_reduce n t0 tp [|arg|] 0 pc in
-      Proof_table.add_proved res pt 0 pc.base;
-      raw_add_work res search pc
+      let reduct = beta_reduce n t0 tp [|arg|] 0 pc in
+      let pt = Eval(idx, Eval.Beta (Eval.Term t, Eval.Term reduct)) in
+      Proof_table.add_proved reduct pt 0 pc.base;
+      raw_add_work reduct search pc
   | _ ->
       assert false (* The term [idx] is not a beta redex *)
 
@@ -1473,9 +1476,11 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
   match t with
     Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
       assert (prlam = pr);
-      let pt = Eval_bwd(t,Eval.Beta (Eval.Term t)) (* proves the implication
-                                                      [t_idx ==> t] *)
-      and reduced = beta_reduce n t0 tp [|arg|] 0 pc in
+      let reduced = beta_reduce n t0 tp [|arg|] 0 pc in
+      let e1,e2 = Eval.Term t, Eval.Term reduced in
+      let pt = Eval_bwd(t,Eval.Beta (e1,e2))     (* proves the implication
+                                                    [t_idx ==> t] *)
+      in
       let impl = implication reduced t pc in
       Proof_table.add_proved impl pt 0 pc.base;
       let idx_impl = raw_add  impl false pc in
@@ -2138,7 +2143,7 @@ let add_global (defer:bool) (anchor:int) (pc:t): unit =
 
 let eval_backward (tgt:term) (imp:term) (e:Eval.t) (pc:t): int =
   (* Add [imp] as an evaluation where [imp] has the form [teval ==> tgt] and
-     [teval] is the term [tgt] evaluation with [e]. *)
+     [teval] is the term [tgt] evaluated with [e]. *)
   Proof_table.add_eval_backward tgt imp e pc.base;
   raw_add imp false pc
 
@@ -2151,7 +2156,7 @@ let predicate_of_term (t:term) (pc:t): type_term =
 (* Subterm equality:
 
       The goal has the form             lhs  = rhs
-      which we can get into the form    f(a1,a2,..) = f(b1,b2,..)
+      which we can transform into       f(a1,a2,..) = f(b1,b2,..)
       as a lambda term [f]
       and two argument arrays [a1,a2,..], [b1,b2,..]
 
@@ -2232,23 +2237,27 @@ let prove_equality (g:term) (pc:t): int =
       let ptp = predicate_of_type tp pc in
       let pred_i = Lam(1,[||],[],pred_inner_i,true,ptp) in
       let ai_abstracted =
-        make_application pred_i [|args1.(i)|] tp 0 true pc in
-      let imp = implication (term !result pc) ai_abstracted pc in
-      let idx2 = eval_backward ai_abstracted imp
-          (Eval.Beta (Eval.Term ai_abstracted)) pc in
+        make_application pred_i [|args1.(i)|] tp 0 true pc
+      and ai_reduced = term !result pc in
+      let imp = implication ai_reduced ai_abstracted pc in
+      let idx2 =
+        eval_backward ai_abstracted imp
+          (Eval.Beta (Eval.Term ai_abstracted, Eval.Term ai_reduced)) pc in
       let idx = add_mp !result idx2 false pc in
       let sub = [|pred_i|] in
       let idx2 = specialized leibniz.(i) sub [||] 0 pc in
       let idx = add_mp idx idx2 false pc in
-      let t = Term.apply pred_inner_i [|args2.(i)|]
-      and e = Eval.Beta (Eval.Term (term idx pc)) in
+      let t = Term.apply pred_inner_i [|args2.(i)|] in
+      let e = Eval.Beta (Eval.Term (term idx pc), Eval.Term t) in
       Proof_table.add_eval t idx e pc.base;
       result := raw_add t false pc
     done;
     let e =
-      let ev args =
-        Eval.Beta (Eval.Term (make_application lam args tup 0 true pc)) in
-      Eval.VApply(eq_id, [|ev args1; ev args2|], ags)
+      let ev args t =
+        Eval.Beta (Eval.Term (make_application lam args tup 0 true pc),
+                   Eval.Term t)
+      in
+      Eval.VApply(eq_id, [|ev args1 left; ev args2 right|], ags)
     in
     result := add_fwd_evaluation g !result e false pc;
     !result

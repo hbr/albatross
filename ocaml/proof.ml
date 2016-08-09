@@ -20,7 +20,7 @@ module Eval = struct
     | Apply of t * t array * bool
     | Lam of int * int array * term list * t * bool * type_term
     | QExp of int * formals * formals * t * bool
-    | Beta of t
+    | Beta of t * t (* redex and reduct *)
     | Simpl of t * int * term array * agens
           (* e, idx of simplifying equality assertion, specialization arguments *)
     | Flow of flow * t array
@@ -52,9 +52,10 @@ module Eval = struct
     | QExp (n,_,_,e,is_all) ->
         printf "%s qexp %s\n" prefix (if is_all then "all" else "some");
         print (prefix ^ "    ") e
-    | Beta e ->
+    | Beta (e1,e2) ->
         printf "%s beta\n" prefix;
-        print (prefix ^ "    ") e
+        print (prefix ^ "    ") e1;
+        print (prefix ^ "    ") e2
     | Simpl (e,idx,args,ags) ->
         printf "%s simpl eq_idx %d\n" prefix idx;
         print (prefix ^ "    ") e
@@ -191,7 +192,7 @@ end = struct
           Eval.Lam (n, nms, pres, adapt_eval e, pr,tp)
       | Eval.QExp (n,tps,fgs,e,is_all) ->
           Eval.QExp (n, tps, fgs, adapt_eval e, is_all)
-      | Eval.Beta e -> Eval.Beta (adapt_eval e)
+      | Eval.Beta (e1,e2) -> Eval.Beta (adapt_eval e1, adapt_eval e2)
       | Eval.Simpl (e,eq_idx,args,ags) ->
           Eval.Simpl (adapt_eval e, index eq_idx, args, ags)
       | Eval.Flow (ctrl,args) ->
@@ -261,7 +262,7 @@ end = struct
       | Eval.Apply (f,args,_)  -> used_args (used_eval f set) args
       | Eval.Lam (n,_,_,e,_,_) | Eval.QExp (n,_,_,e,_) ->
           used_eval e set
-      | Eval.Beta e            -> used_eval e set
+      | Eval.Beta (e1,e2)      -> used_eval e1 (used_eval e2 set)
       | Eval.Simpl (e,i,args,_)-> used_eval e (add_idx i set)
       | Eval.Flow (ctrl,args)  -> used_args set args
       | Eval.If (cond,idx,args)-> used_args (add_idx idx set) args
@@ -318,7 +319,7 @@ end = struct
             let set = usd_eval f set in
             usd_args set args
         | Eval.Lam (n,_,_,e,_,_) | Eval.QExp(n,_,_,e,_) -> usd_eval e set
-        | Eval.Beta e           -> usd_eval e set
+        | Eval.Beta (e1,e2)    -> usd_eval e1 (usd_eval e2 set)
         | Eval.Simpl (e,i,args,_) ->
             let set = usd i pt_arr set in
             usd_eval e set
@@ -406,7 +407,7 @@ end = struct
             Eval.Lam (n,nms,pres,transform_eval e,pr,tp)
         | Eval.QExp (n,tps,fgs,e,ia) ->
             Eval.QExp (n,tps,fgs,transform_eval e,ia)
-        | Eval.Beta e           -> Eval.Beta (transform_eval e)
+        | Eval.Beta (e1,e2)   -> Eval.Beta (transform_eval e1, transform_eval e2)
         | Eval.Simpl (e,i,args,ags) ->
             Eval.Simpl (transform_eval e, index i,args,ags)
         | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, Array.map transform_eval args)
@@ -636,8 +637,8 @@ end = struct
               let e = shrnk e nb nb2
               and tps = shrink_types_inner tps nb2 in
               Eval.QExp (n,(nms,tps),(fgnms,fgcon), e, is_all)
-          | Eval.Beta e ->
-              Eval.Beta (shrnk e nb nb2)
+          | Eval.Beta (e1,e2) ->
+              Eval.Beta (shrnk e1 nb nb2, shrnk e2 nb nb2)
           | Eval.Simpl (e,idx,args,ags) ->
               let e    = shrnk e nb nb2
               and args = shrink_args_inner args nb nb2

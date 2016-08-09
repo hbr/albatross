@@ -572,12 +572,14 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.QExp (n,tps,fgs,e,is_all) ->
         let ta,tb = reconstruct e (nb+n) in
         QExp (n,tps,fgs,ta,is_all), QExp (n,tps,fgs,tb,is_all)
-    | Eval.Beta e ->
-        let ta,tb = reconstruct e nb in
-        begin match tb with
+    | Eval.Beta (e_redex, e_reduct) ->
+        let ta_redex,tb_redex   = reconstruct e_redex nb
+        and ta_reduct,tb_reduct = reconstruct e_reduct nb in
+        begin match tb_redex with
           Application(Lam(n,nms,_,t0,_,tp),args,_,_) ->
-            let tb = beta_reduce n t0 tp args nb at in
-            ta,tb
+            let reduct = beta_reduce n t0 tp args nb at in
+            assert (Term.equivalent ta_reduct reduct);
+            ta_redex,tb_reduct
         | _ -> raise Illegal_proof_term end
     | Eval.Simpl (e,idx,args,ags) ->
         let eq = term_of_specialize idx args ags at in
