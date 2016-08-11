@@ -206,6 +206,7 @@ all(p:{G})
                     via require
                         not (x in p)   -- a3
                     assert
+                        x /in p
                         some(x) x /in p -- witness 'a3', contradicts 'a2'
                 end
     end
@@ -260,6 +261,39 @@ all(p,q,r:{G})
             orif x in q
             end
     end
+
+
+all(p,q,r:{G})
+        -- Associativity of set union
+    ensure
+        p + q + r <= p + (q + r)
+    assert
+        all(x)
+            require
+                x in (p + q + r)
+            ensure
+                x in (p + (q + r))
+            if x in (p + q)
+            orif x in r
+            end
+    end
+
+all(p,q,r:{G})
+        -- Associativity of set union
+    ensure
+        p + (q + r) <= p + q + r
+    assert
+        all(x)
+            require
+                x in (p + (q + r))
+            ensure
+                x in (p + q + r)
+            if x in p
+            orif x in (q + r)
+            end
+    end
+
+
 
 
 all(p,q:{G})

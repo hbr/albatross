@@ -34,7 +34,45 @@ is_dichotomic(r:{A,A}): ghost BOOLEAN
         -- the first one relates to the second or vice versa?
     -> all(a,b) {a,b} <= r.carrier ==> r(a,b) or r(b,a)
 
+all(r:{A,A})
+    ensure
+        r.carrier <= r.inverse.carrier
+    assert
+        all(x)
+            require
+                x in r.carrier
+            ensure
+                x in r.inverse.carrier
+            if x in r.domain
+                assert
+                   r.domain = r.inverse.range
+                   x in r.inverse.range
+            orif x in r.range
+                assert
+                   r.range = r.inverse.domain
+                   x in r.inverse.domain
+            end
+    end
 
+all(r:{A,A})
+    ensure
+        r.inverse.carrier <= r.carrier
+    assert
+        all(x)
+            require
+                x in r.inverse.carrier
+            ensure
+                x in r.carrier
+            if x in r.inverse.domain
+                assert
+                   r.inverse.domain = r.range
+                   x in r.range
+            orif x in r.inverse.range
+                assert
+                   r.inverse.range = r.domain
+                   x in r.domain
+            end
+    end
 
 all(r,s:{A,A})
         -- The carrier of an intersection of two relations is a subset of the
@@ -63,6 +101,7 @@ all(r,s:{A,A})
     ensure
         (r*s).carrier <= s.carrier
     assert
+        (s * r).carrier <= s.carrier    -- previous theorem
         s * r = r * s
         r * s in {t: t.carrier <= s.carrier}
     end
@@ -86,7 +125,7 @@ all(p:{A})
     ensure
         p in (<=).carrier
     assert
-        p <= p
+        {p,q: p <= q}(p,p)
     end
 
 

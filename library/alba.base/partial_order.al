@@ -41,7 +41,7 @@ all(a:PO)
     ensure
         a in (<=).carrier
     assert
-        a <= a
+        {x,y: x <= y}(a,a)
     end
 
 
@@ -63,13 +63,19 @@ upper_bounds (p:{PO}): ghost {PO} -> {x: x.is_upper_bound(p)}
 lower_bounds (p:{PO}): ghost {PO} -> {x: x.is_lower_bound(p)}
 
 
+all(a,b:PO)
+        -- Lemma to connect '<=' with a general relation.
+    require
+        {a,b: a <= b}(a,b)
+    ensure
+        a <= b
+    end
+
 all(a:PO, p:{PO})
     require
         a.is_lower_bound(p)
     ensure
         a.is_lower_bound(p,(<=))
-    assert
-        all(x) x in p ==> {x,y: x <= y}(a,x)
     end
 
 
@@ -78,15 +84,6 @@ all(a:PO, p:{PO})
         a.is_lower_bound(p,(<=))
     ensure
         a.is_lower_bound(p)
-    assert
-        all(x)
-            require
-                x in p
-            ensure
-                a <= x
-            assert
-                {x,y: x <= y}(a,x)
-            end
     end
 
 
@@ -95,8 +92,6 @@ all(a:PO, p:{PO})
         a.is_upper_bound(p)
     ensure
         a.is_upper_bound(p,(<=))
-    assert
-        all(x) x in p ==> {x,y: x <= y}(x,a)
     end
 
 
@@ -105,15 +100,6 @@ all(a:PO, p:{PO})
         a.is_upper_bound(p,(<=))
     ensure
         a.is_upper_bound(p)
-    assert
-        all(x)
-            require
-                x in p
-            ensure
-                x <= a
-            assert
-                {x,y: x <= y}(x,a)
-            end
     end
 
 
@@ -224,7 +210,6 @@ all(a,b:PO, p:{PO})
     ensure
         a.is_supremum(p) ==> b.is_supremum(p) ==> a = b
     end
-
 
 
 all(a:PO, p:{PO})

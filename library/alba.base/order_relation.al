@@ -83,6 +83,7 @@ all(a:A, p:{A}, r:{A,A})
     ensure
         a.is_upper_bound(p,r)
     assert
+        r.inverse.carrier <= r.carrier
         all(x)
             require
                 x in p
@@ -101,6 +102,7 @@ all(a:A, p:{A}, r:{A,A})
     ensure
         a.is_lower_bound(p,r)
     assert
+        r.inverse.carrier <= r.carrier
         all(x)
             require
                 x in p
@@ -144,7 +146,75 @@ all(a,b:A, p:{A}, r:{A,A})
     end
 
 
+all(p:{A}, r:{A,A})
+        -- Duality
+    ensure
+        p.lower_bounds(r) <= p.upper_bounds(r.inverse)
+    assert
+        all(x)
+            require
+                x in p.lower_bounds(r)
+            ensure
+                x in p.upper_bounds(r.inverse)
+            assert
+                r.inverse.inverse = r
+                x.is_lower_bound(p,r.inverse.inverse)
+                x.is_upper_bound(p,r.inverse)
+            end
+    end
 
+
+all(p:{A}, r:{A,A})
+        -- Duality
+    ensure
+        p.upper_bounds(r.inverse) <= p.lower_bounds(r)
+    assert
+        all(x)
+            require
+                x in p.upper_bounds(r.inverse)
+            ensure
+                x in p.lower_bounds(r)
+            assert
+                x.is_upper_bound(p,r.inverse)
+                x.is_lower_bound(p,r)
+            end
+    end
+
+
+
+all(p:{A}, r:{A,A})
+        -- Duality
+    ensure
+        p.upper_bounds(r) <= p.lower_bounds(r.inverse)
+    assert
+        all(x)
+            require
+                 x in p.upper_bounds(r)
+            ensure
+                 x in p.lower_bounds(r.inverse)
+            assert
+                 r.inverse.inverse = r
+                 x.is_upper_bound(p,r.inverse.inverse)
+                 x.is_lower_bound(p,r.inverse)
+            end
+    end
+
+
+all(p:{A}, r:{A,A})
+        -- Duality
+    ensure
+        p.lower_bounds(r.inverse) <= p.upper_bounds(r)
+    assert
+        all(x)
+            require
+                x in p.lower_bounds(r.inverse)
+            ensure
+                x in p.upper_bounds(r)
+            assert
+                x.is_lower_bound(p,r.inverse)
+                x.is_upper_bound(p,r)
+            end
+    end
 
 
 
@@ -224,6 +294,8 @@ all(a:A, p:{A}, r:{A,A})
         a.is_greatest(p,r)
     ensure
         a.is_least(p,r.inverse)
+    assert
+        r.carrier <= r.inverse.carrier
     end
 
 all(a:A, p:{A}, r:{A,A})
@@ -231,6 +303,8 @@ all(a:A, p:{A}, r:{A,A})
         a.is_least(p,r)
     ensure
         a.is_greatest(p,r.inverse)
+    assert
+        r.carrier <= r.inverse.carrier
     end
 
 
@@ -279,6 +353,7 @@ supremum(p:{A}, r:{A,A}): ghost A
 
 
 all(a:A, p:{A}, r:{A,A})
+        -- Duality
     require
         a.is_infimum(p,r)
     ensure
@@ -293,6 +368,19 @@ all(a:A, p:{A}, r:{A,A})
 
 
 
+all(a:A, p:{A}, r:{A,A})
+        -- Duality
+    require
+        a.is_supremum(p,r)
+    ensure
+        a.is_infimum(p,r.inverse)
+    assert
+        a.is_least(p.upper_bounds(r),r)
+
+        p.upper_bounds(r) = p.lower_bounds(r.inverse)
+
+        a.is_greatest(p.lower_bounds(r.inverse),r.inverse)
+    end
 
 
 {:

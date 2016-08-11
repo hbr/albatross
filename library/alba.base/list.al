@@ -158,6 +158,7 @@ all(p:{G}, a,b:[G])
     ensure
         a.all_in(p)
     assert
+        a.all_in(b.elements)
         a.elements <= b.elements
     end
 

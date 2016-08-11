@@ -41,6 +41,9 @@ is_dichotomic(r:{A,A}): ghost BOOLEAN
 
 all(p:{A}, r,s:{A,A})
     ensure
+        r.carrier <= r.inverse.carrier
+        r.inverse.carrier <= r.carrier
+
         (r * s).carrier <= r.carrier
         (r * s).carrier <= s.carrier
 

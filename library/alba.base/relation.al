@@ -54,6 +54,7 @@ all(r,s:{A,B})
     ensure
         (r*s).domain <= s.domain
     assert
+        (s * r).domain <= s.domain  -- previous theorem
         s*r = r*s
         r*s in {t: t.domain <= s.domain}
     end
@@ -77,6 +78,7 @@ all(r,s:{A,B})
     ensure
         (r*s).range <= s.range
     assert
+        (s * r).range <= s.range  -- previous theorem
         s*r = r*s
         r*s in {t: t.range <= s.range}
     end
@@ -122,7 +124,7 @@ all(rs:{{A,B}})
             via some(y) r(x,y)
             assert
                 r in rs and r(x,y)
-                some(r) r in rs and r(x,y)
+                (+ rs)(x,y)
                 some(y) (+ rs)(x,y)
             end
     end
@@ -163,10 +165,58 @@ preimage (p:{B}, r:{A,B}): ghost {A} -> {a: some(b) b in p and r(a,b)}
 inverse (r:{A,B}): {B,A}          -> {b,a: r(a,b)}
 
 
+all(r:{A,B}, y:B)
+    require
+        y in r.range
+    ensure
+        y in r.inverse.domain
+    via some(x)
+        r(x,y)
+    assert
+        (r.inverse)(y,x)
+    end
+
+
+all(r:{A,B}, y:B)
+    require
+        y in r.inverse.domain
+    ensure
+        y in r.range
+    via some(x)
+        (r.inverse)(y,x)
+    end
+
+
 all(r:{A,B})
     ensure
         range(r)  = domain(inverse(r))
     end
+
+
+
+all(r:{A,B}, x:A)
+    require
+        x in r.domain
+    ensure
+        x in r.inverse.range
+    via some(y)
+        r(x,y)
+    assert
+        (r.inverse)(y,x)
+    end
+
+
+all(r:{A,B}, x:A)
+    require
+        x in r.inverse.range
+    ensure
+        x in r.domain
+    via some(y)
+        (r.inverse)(y,x)
+    assert
+        (r.inverse)(y,x)
+    end
+
 
 all(r:{A,B})
     ensure
@@ -227,49 +277,47 @@ all(rs:{{A,B}})
     end
 
 
+
 all(rs:{{A,B}})
         -- The range of a union of relations is the union of the ranges
     ensure
         (+ rs).range = + rs.ranges
     assert
-        (+ rs).inverse = + {r: r.inverse in rs}
+        all(y)
+            require
+                y in (+ rs).range
+            ensure
+                y in + rs.ranges
+            via some(x)
+                (+ rs)(x,y)
+            via some(r)
+                r in rs and r(x,y)
+            assert
+                r in rs and r.range = r.range
+                r.range in rs.ranges and y in r.range
+                some(p) p in rs.ranges and y in p
+            end
 
-        ensure
-            {d: some(r) r.inverse in rs and d = r.domain}
-            =
-            {d: some(r) r in rs and d = r.range}
-        assert
-            all(d)
-                require
-                    some(r) r.inverse in rs and d = r.domain
-                ensure
-                    some(r) r in rs and d = r.range
-
-                via some(r) r.inverse in rs and d = r.domain
-                assert
-                    r.inverse in rs and d = r.inverse.range
-                end
-
-            all(d)
-                require
-                    some(r) r in rs and d = r.range
-                ensure
-                    some(r) r.inverse in rs and d = r.domain
-
-                via some(r) r in rs and d = r.range
-                assert
-                    r.inverse.inverse = r
-                    r.inverse.inverse in rs and d = r.inverse.domain
-                end
-        end
-    via
-        [(+ rs).inverse.domain
-         (+ {r: r.inverse in rs}).domain
-         (+ {r: r.inverse in rs}.domains)
-         (+ {p: some(r) r in {r: r.inverse in rs} and p = r.domain})
-         (+ {p: some(r) r.inverse in rs and p = r.domain})
-        ]
+        all(y)
+            require
+                y in + rs.ranges
+            ensure
+                y in (+ rs).range
+            via some(p)
+                p in rs.ranges and y in p
+            via some(r)
+                r in rs and p = r.range    -- def 'ranges'
+            assert
+                y in r.range
+            via some(x)
+                r(x,y)
+            assert
+                r in rs and r(x,y)
+                (+ rs)(x,y)
+                some(x) (+ rs)(x,y)
+            end
     end
+
 
 
 {: Relations which are functions

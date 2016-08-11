@@ -548,7 +548,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             raise Illegal_proof_term in
         if not (Term.equivalent exp ta) then begin
           printf "reconstruct exp   %s\n" (string_of_term_anon exp nb at);
-          printf "            tb    %s\n" (string_of_term_anon tb nb at);
+          printf "            ta    %s\n" (string_of_term_anon ta nb at);
         end;
         if not (Term.equivalent exp ta) then raise Illegal_proof_term;
         uneval, tb

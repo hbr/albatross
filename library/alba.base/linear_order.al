@@ -87,14 +87,24 @@ all(a,b:LO)
     ensure
         min(a,b).is_least({a,b})
     assert
-        ensure min(a,b) in {a,b}
-            if a <= b else
+        ensure
+            min(a,b) in {a,b}
+        if a <= b
+        else
         end
 
-        all(x) require x in {a,b}
-               ensure  min(a,b) <= x
-                   if a <= b else
-               end
+        all(x)
+            require
+                x in {a,b}
+            ensure
+                min(a,b) <= x
+            if x in {a}
+                if a <= b
+                else
+            orif x in {b}
+                if a <= b
+                else
+            end
     end
 
 
@@ -104,9 +114,9 @@ all(a,b:LO)
     ensure
         max(a,b).is_greatest({a,b})
     assert
-        ensure max(a,b) in {a,b}
-        assert a <= b  or  not (a <= b)
-               a <= b  ==> max(a,b) in {a,b}
+        ensure
+            max(a,b) in {a,b}
+        if a <= b else
         end
 
         all(x)
@@ -114,25 +124,9 @@ all(a,b:LO)
                 x in {a,b}
             ensure
                 x <= max(a,b)
-            assert
-                x = a  or x = b
-                a <= b or not (a <= b)
-                require
-                    x = a
-                ensure
-                    x <= max(a,b)
-                assert
-                    a <= b       ==> x <= max(a,b)
-                    not (a <= b) ==> x <= max(a,b)
-                end
-
-                require
-                    x = b
-                ensure
-                    x <= max(a,b)
-                assert
-                    a <= b  ==>  x <= max(a,b)
-                    not (a <= b) ==> x <= max(a,b)
-                end
+            if x in {a}
+                if a <= b else
+            orif x in {b}
+                if a <= b else
             end
     end
