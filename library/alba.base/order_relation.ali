@@ -220,6 +220,18 @@ all(ps:{{A}}, r:{A,A})
         (+ ps).is_downclosed(r)
     end
 
+all(r:{A,A}, p:{A}, a:A)
+        -- Adding the least element of the complement of a downclosed set to
+        -- the set in a partial order gives a downclosed set.
+    require
+        r.is_partial_order
+        p.is_downclosed(r)
+        a.is_least(r.carrier - p, r)
+    ensure
+        (p + {a}).is_downclosed(r)
+    end
+
+
 
 
 
@@ -234,7 +246,8 @@ upper_set(a:A, r:{A,A}): ghost {A}
 
 
 lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements below 'a' in the relation 'r'.
+        -- The set of all elements starting from 'a' and following the
+        -- relation 'r' in downward direction.
     require
         a in r.carrier
     ensure
@@ -249,7 +262,7 @@ lower_sets(r:{A,A}): ghost {{A}}
 
 
 strict_lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements strictly below 'a' in the relation 'r'.
+        -- 'a.lower_set(r)' without 'a'.
     require
         a in r.carrier
     ensure
@@ -260,16 +273,22 @@ strict_lower_set(a:A, r:{A,A}): ghost {A}
 
 all(a,b:A, r:{A,A})
     ensure
-        r.is_partial_order ==>
+        r.is_preorder ==>
         r(a,b) ==>
         a.lower_set(r) <= b.lower_set(r)
 
         a in r.carrier ==> b in a.lower_set(r) ==> b in r.carrier
 
-        r.is_partial_order ==>
+        r.is_preorder ==>
         b in r.carrier ==>
         a in b.lower_set(r) ==>
         r(a,b)
+
+        r.is_partial_order ==> a in r.carrier ==>
+        a.strict_lower_set(r).is_downclosed(r)
+
+        r.is_linear_order ==> a in r.carrier ==>
+        a.is_least(r.carrier - a.strict_lower_set(r), r)
     end
 
 all(ps:{{A}}, r:{A,A})
@@ -390,12 +409,18 @@ is_complete_partial_order(r:{A,A}): ghost BOOLEAN
 :}
 
 
+
+nonempty_has_least(r:{A,A}): ghost BOOLEAN
+        -- Do all nonempty subsets of the carrier have a least element?
+    -> all(p) p <= r.carrier ==> p.has_some ==> some(x) x.is_least(p,r)
+
+
 is_wellorder(r:{A,A}): ghost BOOLEAN
         -- Is 'r' a wellorder i.e. a linear order where every nonempty set
         -- has a least element?
     -> r.is_linear_order
        and
-       all(p) p <= r.carrier ==> p.has_some ==> p.has_least(r)
+       r.nonempty_has_least
 
 
 

@@ -103,6 +103,10 @@ all(a:G, p,q,r:{G})
         p + q + r   <= p + (q + r)
         p + (q + r) <= p + q + r
 
+        not (p <= q) ==> some(x) x in p - q
+
+        a /in p - q ==> a in p ==> a in q
+
         disjoint(p,q) ==> disjoint(q,p)
         disjoint(p,q) ==> a in p ==> a /in q
         not disjoint(p,q) ==> (p*q).has_some
@@ -118,8 +122,14 @@ all(a:G, p,q,r:{G})
 
 (+)  (ps:{{G}}): ghost {G}
         -- The union of all sets of the collection of sets 'ps'
-    -> {x: some(p) ps(p) and p(x)}
+    -> {x: some(p) p in ps and x in p}
 
 (*)  (ps:{{G}}): ghost {G}
         -- The intersection of all sets of the collection of sets 'ps'
-    -> {x: all(p) ps(p) ==> p(x)}
+    -> {x: all(p) p in ps ==> x in p}
+
+
+all(p:{G}, ps:{{G}})
+    ensure
+        p in ps ==> p <= + ps
+    end

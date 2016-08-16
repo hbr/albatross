@@ -340,9 +340,73 @@ all(p,q:{G})
     end
 
 
+all(p,q:{G}, x:G)
+    require
+        x /in p - q
+        x in p
+    ensure
+        x in q
+    via require
+        not (x in q)
+    end
+
+
+all(p,q:{G})
+    require
+        not (p <= q)
+    ensure
+        some(x) x in p - q
+
+    via require
+        not some(x) x in p - q          -- a1
+    assert
+        ensure
+            p <= q
+        assert
+            all(x)
+                require
+                    x in p
+                ensure
+                    x in q
+                assert
+                    all(x) x /in p - q  -- De Morgan of a1
+                    x /in p - q
+                via require
+                    not (x in q)
+                end
+        end
+    end
+
+
+
+
+
+
+
+
 {: Union and intersection of collections of sets
    ============================================= :}
 
-(+) (pp:{{G}}): ghost {G} -> {x: some(p) pp(p) and p(x)}
+(+) (ps:{{G}}): ghost {G} -> {x: some(p) p in ps and x in p}
 
-(*) (pp:{{G}}): ghost {G} -> {x: all(p) pp(p) ==> p(x)}
+(*) (ps:{{G}}): ghost {G} -> {x: all(p) p in ps ==> x in p}
+
+
+
+all(p:{G}, ps:{{G}})
+        -- Every set of a collection of sets is a subset of the union
+        -- of the collection.
+    require
+        p in ps
+    ensure
+        p <= + ps
+    assert
+        all(x)
+            require
+                x in p
+            ensure
+                x in + ps
+            assert
+                p in ps and x in p
+            end
+    end

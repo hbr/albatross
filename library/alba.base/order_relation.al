@@ -446,10 +446,64 @@ all(ps:{{A}}, r:{A,A})
 
 
 
+all(r:{A,A}, p:{A}, a:A)
+        -- Adding the least element of the complement of a downclosed set to
+        -- the set in a partial order gives a downclosed set.
+    require
+        r.is_partial_order
+        p.is_downclosed(r)
+        a.is_least(r.carrier - p, r)
+
+    ensure
+        (p + {a}).is_downclosed(r)
+
+    assert
+        all(x,y)
+            require
+                y in p + {a}
+                r(x,y)
+            ensure
+                x in p + {a}
+            if y in p
+            orif y in {a}
+                assert
+                    require
+                        not (x in p)
+                    ensure
+                        x in {a}
+                    assert
+                        y.is_least(r.carrier - p, r)
+                        y.is_lower_bound(r.carrier - p , r)
+                        all(x) x in r.carrier - p ==> r(y,x)
+                        r(y,x)
+                        y = x
+                        x in {a}
+                    end
+            end
+    end
+
+
+
 
 
 {:
 # Upper and lower set
+
+The lower sets play an important role in the study of order relations. The set
+'a.lower_set(r)' for an element 'a' in the carrier of 'r' is inductively
+defined. It is the set of all elements starting from 'a' and following 'r' in
+downward direction.
+
+This definition is valid for any relation. However it very useful for
+preorders or more specific orders. In a preorder 'a.lower_set(r)' coincides
+with the set of elements which are less or equal 'a'.
+
+The collection of lower sets of a preorder characterizes completely the
+preorder relation. I.e. having the lower sets it is possible to reconstruct
+the relation.
+
+
+
 :}
 
 
@@ -459,7 +513,8 @@ upper_set(a:A, r:{A,A}): ghost {A}
 
 
 lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements below 'a' in the relation 'r'.
+        -- The set of all elements starting from 'a' and following the
+        -- relation 'r' in downward direction.
     require
         a in r.carrier
     ensure
@@ -475,7 +530,7 @@ lower_sets(r:{A,A}): ghost {{A}}
 
 
 strict_lower_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements strictly below 'a' in the relation 'r'.
+        -- 'a.lower_set(r)' without 'a'.
     require
         a in r.carrier
     ensure
@@ -531,8 +586,9 @@ all(ps:{{A}}, r:{A,A})
 
 
 all(a,b:A, r:{A,A})
+        -- The lower sets are sufficient to reconstruct the relation.
     require
-        r.is_partial_order
+        r.is_preorder
         b in r.carrier
         a in b.lower_set(r)
     ensure
@@ -543,9 +599,13 @@ all(a,b:A, r:{A,A})
     end
 
 
+
+
+
 all(a,b:A, r:{A,A})
+       -- The map 'x -> x.lower_set(r)' is monotonic.
     require
-        r.is_partial_order
+        r.is_preorder
         r(a,b)
     ensure
         a.lower_set(r) <= b.lower_set(r)
@@ -559,6 +619,109 @@ all(a,b:A, r:{A,A})
                 x in a.lower_set(r)
             end
     end
+
+
+
+
+
+all(a:A, r:{A,A})
+        -- In a partial order every strict lower set is downclosed.
+    require
+        r.is_partial_order
+        a in r.carrier
+    ensure
+        a.strict_lower_set(r).is_downclosed(r)
+    assert
+        all(x,y)
+            require
+                r(x,y)
+                y in a.strict_lower_set(r)
+            ensure
+                x in a.strict_lower_set(r)
+            assert
+                y /= a                -- definition of 'strict_lower_set'
+                y in a.lower_set(r)   --      "               "
+
+                x in a.lower_set(r)   -- 'r(x,y)' and definition of 'lower_set'
+                ensure
+                    x /= a
+                via require
+                    x = a
+                assert
+                    ensure
+                       y = a    -- contradiction
+                    assert
+                       ensure
+                           r(y,a)  -- y in a.lower_set(r)
+                       assert
+                           r.is_preorder
+                       end
+                       r(a,y)
+                    end
+                end
+            end
+    end
+
+
+all(r:{A,A}, a:A)
+        -- In a linear order 'a' is the least element of the complement of
+        -- 'a.strict_lower_set(r)'.
+    require
+        r.is_linear_order
+        a in r.carrier
+
+    ensure
+        a.is_least(r.carrier - a.strict_lower_set(r),r)
+
+    assert
+        a in r.carrier - a.strict_lower_set(r)
+
+        all(b)
+            require
+                b in r.carrier - a.strict_lower_set(r)
+            ensure
+                r(a,b)
+            if a = b
+            orif a /= b
+                assert
+                    b /in a.strict_lower_set(r)
+                    not r(b,a)
+                if r(a,b) orif r(b,a)
+            end
+    end
+
+
+all(r:{A,A}, a,b,c:A)
+    require
+        r.is_partial_order
+        c in r.carrier
+        b in c.strict_lower_set(r)
+        r(a,b)
+
+    ensure
+        a in c.strict_lower_set(r)
+
+    assert
+        r.is_preorder
+        b /= c
+        b in c.lower_set(r)
+        a in c.lower_set(r)
+        ensure
+            a /= c
+        via require
+            a = c
+        assert
+            r(b,c)    -- b in c.lower_set(r)
+            r(c,b)    -- a = c and r(a,b)
+            b = c     -- antisymmetry
+        end
+    end
+
+
+
+
+
+
 
 
 
@@ -643,9 +806,20 @@ all(f:A->B, r:{A,A}, s:{B,B})
             ensure
                 x = y
             assert
-                r(x,x)
-                f(y) in {z: s(f(x),z)}
-                s(f(x),f(y))
+                ensure
+                    r(x,y)                  -- f.is_reflecting(r,s)
+                assert
+                    f(x) = f(y)
+                    f(y) in {z: s(f(x),z)}  -- s.is_reflexive
+                    s(f(x),f(y))
+                end
+                ensure
+                    r(y,x)                  -- f.is_reflecting(r,s)
+                assert
+                    f(y) = f(x)
+                    f(x) in {z: s(f(y),z)}  -- s.is_reflexive
+                    s(f(y),f(x))
+                end
             end
     end
 
@@ -698,12 +872,16 @@ is_complete_partial_order(r:{A,A}): ghost BOOLEAN
 :}
 
 
+nonempty_has_least(r:{A,A}): ghost BOOLEAN
+        -- Do all nonempty subsets of the carrier have a least element?
+    -> all(p) p <= r.carrier ==> p.has_some ==> some(x) x.is_least(p,r)
+
 is_wellorder(r:{A,A}): ghost BOOLEAN
         -- Is 'r' a wellorder i.e. a linear order where every nonempty set
         -- has a least element?
     -> r.is_linear_order
        and
-       all(p) p <= r.carrier ==> p.has_some ==> p.has_least(r)
+       r.nonempty_has_least
 
 
 
