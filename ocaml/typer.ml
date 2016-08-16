@@ -763,10 +763,7 @@ let analyze_expression
     in
     try
       match e with
-        Expproof (_,_,_)
-      | Expquantified (_,_,Expproof (_,_,_)) ->
-          error_info info "Proof not allowed here"
-      | Identifier name     -> do_leaf (id name)
+        Identifier name     -> do_leaf (id name)
       | Expanon             ->
           not_yet_implemented ie.i ("Expanon Typing of "^ (string_of_expression e))
       | Expfalse            -> do_leaf (feat FNfalse)

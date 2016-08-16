@@ -411,7 +411,7 @@ type expression =
   | Cmdinspect    of
       info_expression
         * (info_expression * compound) list
-  | Expproof      of compound * implementation option * compound
+  (*| Expproof      of compound * implementation option * compound*)
   | Expquantified of quantifier * entities list withinfo * expression
 
 and
@@ -600,15 +600,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
              " case " ^ (string_of_expression pat.v)
              ^ " then " ^  (string_of_compound comp))
            "")
-      ^ " end"
-  | Expproof (req,imp_opt,ens) ->
-      "require " ^ (string_of_compound req)
-      ^
-        (match imp_opt with
-          Some imp -> " " ^ string_of_implementation imp
-        | None     -> "")
-      ^ " ensure " ^ (string_of_compound ens) ^ " end"
-
   | Expquantified (q,elist,exp) ->
       (match q with Universal -> "all" | Existential -> "some")
       ^ "(" ^ (string_of_formals elist.v) ^ ") "  ^ (string_of_expression exp)
