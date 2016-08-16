@@ -205,7 +205,7 @@ let rec string_of_type (t:type_t) =
   | Arrow_type (t1,t2) ->
       (string_of_type t1) ^ "->" ^ (string_of_type t2)
   | Tuple_type l -> actuals l
-  | Brace_type t -> (string_of_type t) ^ "?"
+  | Brace_type t -> "{" ^ (string_of_type t) ^ "}"
   | Star_type t  -> (string_of_type t) ^ "*"
   | List_type t  -> "[" ^ (string_of_type t) ^ "]"
   | Paren_type t -> "(" ^ (string_of_type t) ^ ")"
