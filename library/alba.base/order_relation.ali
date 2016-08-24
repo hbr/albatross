@@ -78,6 +78,37 @@ all(a,b:A, p:{A}, r:{A,A})
 
 
 {:
+# Maximal elements
+:}
+
+is_maximal(a:A, p:{A}, r:{A,A}): ghost BOOLEAN
+        -- 'a' is maximal in 'p' iff there is no greater element in 'p'.
+    -> a in p and all(b) b in p ==> r(a,b) ==> a = b
+
+
+has_maximal(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> some(a) a.is_maximal(p,r)
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- Every subset of a partial order which does not have maximal elements
+        -- has elements strictly above each of its members.
+    require
+        r.is_partial_order
+        p <= r.carrier
+        not p.has_maximal(r)
+        a in p
+    ensure
+        some(b) b in p and r(a,b) and a /= b
+    end
+
+
+
+
+
+
+
+{:
 # Least elements
 :}
 
@@ -153,6 +184,31 @@ all(a:A, p:{A}, r:{A,A})
 
         a.is_least(p,r)    ==> a.is_greatest(p,r.inverse)
     end
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- In a partial order every greatest element is maximal
+    require
+        r.is_partial_order
+        a.is_greatest(p,r)
+    ensure
+        a.is_maximal(p,r)
+    end
+
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- Every subset of a linear order which does not have a greatest element
+        -- has elements strictly above each of its members.
+    require
+        r.is_linear_order
+        p <= r.carrier
+        not p.has_greatest(r)
+        a in p
+    ensure
+        some(b) b in p and r(a,b) and a /= b
+    end
+
 
 
 {:
@@ -271,6 +327,19 @@ strict_lower_set(a:A, r:{A,A}): ghost {A}
 
 
 
+strict_lower_sets(p:{A}, r:{A,A}): ghost {{A}}
+        -- The collection of all strict lower sets of the elements in 'p'.
+    require
+        p <= r.carrier
+    ensure
+        -> {q: some(x) x in p and q = x.strict_lower_set(r)}
+    end
+
+
+
+
+
+
 all(a,b:A, r:{A,A})
     ensure
         r.is_preorder ==>
@@ -291,6 +360,9 @@ all(a,b:A, r:{A,A})
         a.is_least(r.carrier - a.strict_lower_set(r), r)
     end
 
+
+
+
 all(ps:{{A}}, r:{A,A})
         -- The union of all lower sets is the carrier.
     require
@@ -300,6 +372,29 @@ all(ps:{{A}}, r:{A,A})
     end
 
 
+
+all(b:A, r:{A,A})
+        -- The union of all strict lower sets of a strict lower set is fully
+        -- contained in the outer strict lower set.
+    require
+        r.is_partial_order
+        b in r.carrier
+    ensure
+        + b.strict_lower_set(r).strict_lower_sets(r) <= b.strict_lower_set(r)
+    end
+
+
+
+all(r:{A,A}, a,b,c:A)
+        -- Transitivity of strict lower sets.
+    require
+        r.is_partial_order
+        c in r.carrier
+        b in c.strict_lower_set(r)
+        r(a,b)
+    ensure
+        a in c.strict_lower_set(r)
+    end
 
 {:
 # Directed sets

@@ -218,6 +218,52 @@ all(p:{A}, r:{A,A})
 
 
 
+{:
+# Maximal elements
+:}
+
+is_maximal(a:A, p:{A}, r:{A,A}): ghost BOOLEAN
+    -> a in p and all(b) b in p ==> r(a,b) ==> a = b
+
+
+has_maximal(p:{A}, r:{A,A}): ghost BOOLEAN
+    -> some(a) a.is_maximal(p,r)
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- Every subset of a partial order which does not have maximal elements
+        -- has elements strictly above each of its members.
+    require
+        r.is_partial_order
+        p <= r.carrier
+        not p.has_maximal(r)
+        a in p
+    ensure
+        some(b) b in p and r(a,b) and a /= b
+    via require
+        not some(b) b in p and r(a,b) and a /= b
+    assert
+        all(b)
+            require
+                b in p
+                r(a,b)
+            ensure
+                a = b
+            assert
+                not (b in p and r(a,b) and a /= b)   -- contrapositive of the
+                                                     -- assumption
+                if not (b in p and r(a,b))
+                    if not (b in p)
+                    orif not r(a,b)
+                orif not (a /= b)
+                    via require not (a = b)
+            end
+        a.is_maximal(p,r)
+        p.has_maximal(r)
+    end
+
+
+
 
 {:
 # Least elements
@@ -290,6 +336,7 @@ greatest(p:{A}, r:{A,A}): ghost A
 
 
 all(a:A, p:{A}, r:{A,A})
+        -- Duality
     require
         a.is_greatest(p,r)
     ensure
@@ -298,7 +345,10 @@ all(a:A, p:{A}, r:{A,A})
         r.carrier <= r.inverse.carrier
     end
 
+
+
 all(a:A, p:{A}, r:{A,A})
+        -- Duality
     require
         a.is_least(p,r)
     ensure
@@ -308,7 +358,84 @@ all(a:A, p:{A}, r:{A,A})
     end
 
 
+all(a:A, p:{A}, r:{A,A})
+        -- In a partial order every greatest element is maximal
+    require
+        r.is_partial_order
+        a.is_greatest(p,r)
+    ensure
+        a.is_maximal(p,r)
+    assert
+        all(b)
+            require
+                r(a,b)
+                a /= b
+            ensure
+                b /in p
+            via require
+                b in p
+            assert
+                r(b,a)    -- a.is_upper_bound(p,r)
+                a = b     -- antisymmetry
+            end
+    end
 
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- In a linear order every maximal element of a set is the greatest element
+        -- of the set.
+    require
+        r.is_linear_order
+        p <= r.carrier
+        a.is_maximal(p,r)
+    ensure
+        a.is_greatest(p,r)
+    assert
+        all(b) r(a,b) ==> a /= b ==> b /in p
+        all(x)
+            require
+                x in p
+            ensure
+                r(x,a)
+            assert
+                r(a,x) or r(x,a)
+            if r(x,a)
+            orif r(a,x)
+                assert
+                    -- a /= x ==> x /in p
+                    not (x /in p) ==> not (a /= x)
+                    not (a /= x)
+                    not not (a = x)
+            end
+    end
+
+
+all(a:A, p:{A}, r:{A,A})
+        -- Every subset of a linear order which does not have a greatest element
+        -- has elements strictly above each of its members.
+    require
+        r.is_linear_order
+        p <= r.carrier
+        not p.has_greatest(r)
+        a in p
+
+    ensure
+        some(b) b in p and r(a,b) and a /= b
+
+    assert
+        require
+            p.has_maximal(r)
+        ensure
+            p.has_greatest(r)
+        via some(a)
+            a.is_maximal(p,r)
+        assert
+            a.is_greatest(p,r)
+        end
+
+        not p.has_maximal(r)
+    end
 
 {:
 # Infimum and supremum
@@ -485,6 +612,17 @@ all(r:{A,A}, p:{A}, a:A)
 
 
 
+all(r:{A,A}, p:{A})
+        -- In a linear order the complement of a downclosed set is upclosed.
+    require
+        r.is_linear_order
+        p.is_downclosed(r)
+
+    ensure
+        (r.carrier - p).is_upclosed(r)
+    end
+
+
 
 {:
 # Upper and lower set
@@ -536,6 +674,16 @@ strict_lower_set(a:A, r:{A,A}): ghost {A}
     ensure
         -> {x: x in a.lower_set(r) and x /= a}
     end
+
+
+strict_lower_sets(p:{A}, r:{A,A}): ghost {{A}}
+        -- The collection of all strict lower sets of the elements in 'p'.
+    require
+        p <= r.carrier
+    ensure
+        -> {q: some(x) x in p and q = x.strict_lower_set(r)}
+    end
+
 
 
 
@@ -636,8 +784,10 @@ all(a:A, r:{A,A})
             require
                 r(x,y)
                 y in a.strict_lower_set(r)
+
             ensure
                 x in a.strict_lower_set(r)
+
             assert
                 y /= a                -- definition of 'strict_lower_set'
                 y in a.lower_set(r)   --      "               "
@@ -692,6 +842,7 @@ all(r:{A,A}, a:A)
 
 
 all(r:{A,A}, a,b,c:A)
+        -- Transitivity of strict lower sets.
     require
         r.is_partial_order
         c in r.carrier
@@ -720,8 +871,49 @@ all(r:{A,A}, a,b,c:A)
 
 
 
+{: Consider the set `b.strict_lower_set(r)` in some partial order `r`. Then
+every element of this set has a strict lower set as well which is fully
+contained in the outer set. Therefore the union of all these strict lower sets
+is fully contained in the out set as well.
 
+  :}
 
+all(b:A, r:{A,A})
+        -- The union of all strict lower sets of a strict lower set is fully
+        -- contained in the outer strict lower set.
+    require
+        r.is_partial_order
+        b in r.carrier
+
+    ensure
+        + b.strict_lower_set(r).strict_lower_sets(r) <= b.strict_lower_set(r)
+
+    assert
+        all(x)
+            require
+                x in + b.strict_lower_set(r).strict_lower_sets(r)
+
+            ensure
+                x in b.strict_lower_set(r)
+
+            via some(p)
+                p in b.strict_lower_set(r).strict_lower_sets(r)
+                and
+                x in p
+            via some(y)
+                y in b.strict_lower_set(r) and p = y.strict_lower_set(r)
+            assert
+                r.is_preorder
+                x in y.strict_lower_set(r)
+
+                r(x,y)
+                r(y,b)
+                x = b ==> x = y  -- x = b leads to contradiction
+
+                x in b.lower_set(r)
+                x /= b
+            end
+    end
 
 
 
@@ -991,7 +1183,7 @@ all(a:A, p:{A}, r:{A,A})
             assert
                 q <= p
                 q.has_some
-            via some(x) x.is_infimum(q,r) and x in p
+            via some(x) x.is_infimum(q,r) and x in p  -- def 'weak_closure_system'
             assert
                 q.has_some
                 x.is_least(q,r)
