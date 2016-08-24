@@ -31,14 +31,15 @@ all(p,q:{G})   require p <= q
 (<)  (p,q:{G}): ghost BOOLEAN
     -> p <= q and some(x) x /in p and x in q
 
+
 all(p,q:{G})
     require
         p < q
     ensure
         q.has_some
-        via some(x) x /in p and x in q
-            assert
-                x in q
+    via some(x) x /in p and x in q
+        assert
+            x in q
     end
 
 
