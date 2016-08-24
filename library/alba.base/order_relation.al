@@ -646,8 +646,14 @@ the relation.
 
 
 upper_set(a:A, r:{A,A}): ghost {A}
-        -- The set of all elements above 'a' in the relation 'r'.
-    -> {x: r(a,x)}
+        -- The set of all elements starting from 'a' and following the
+        -- relation 'r' in upward direction.
+    require
+        a in r.carrier
+    ensure
+        -> {(p): a in p,
+                 all(x,y) r(x,y) ==> x in p ==> y in p}
+    end
 
 
 lower_set(a:A, r:{A,A}): ghost {A}
@@ -744,6 +750,21 @@ all(a,b:A, r:{A,A})
 
     inspect
         a in b.lower_set(r)
+    end
+
+
+all(a,b:A, r:{A,A})
+        -- The upper sets are sufficient to reconstruct the relation.
+    require
+        r.is_preorder
+        a in r.carrier
+        b in a.upper_set(r)
+
+    ensure
+        r(a,b)
+
+    inspect
+        b in a.upper_set(r)
     end
 
 
@@ -914,6 +935,8 @@ all(b:A, r:{A,A})
                 x /= b
             end
     end
+
+
 
 
 
@@ -1185,12 +1208,16 @@ all(a:A, p:{A}, r:{A,A})
                 q.has_some
             via some(x) x.is_infimum(q,r) and x in p  -- def 'weak_closure_system'
             assert
-                q.has_some
-                x.is_least(q,r)
+                ensure
+                    x.is_least(q,r)
                 {: x is the infimum of q i.e. the greatest lower bound. a is a
                    lower bound of q. Therefore r(a,x) must be valid and x must
                    be in q. An infimum which is in a set is the least element
                    of the set.  :}
+                assert
+                    r.is_preorder
+                    r(a,x)
+                end
             end
     end
 
@@ -1213,11 +1240,16 @@ all(p:{A}, r:{A,A})
                 x in x.upper_set(r)
             via some(z) z.is_infimum(empty,r) and z in p -- p is a closure system
             assert
-                z in p * x.upper_set(r)
+                ensure
+                    z in p * x.upper_set(r)
                 {: The lower bounds of the empty set consists of the whole carrier
                    of the relation. Therefore the infimum of the empty set is the
                    greatest element of the carrier which is certainly in the upper
                    set of 'x'. :}
+                assert
+                    r.is_preorder
+                    r(x,z)
+                end
             end
     end
 
