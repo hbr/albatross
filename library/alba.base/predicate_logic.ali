@@ -103,6 +103,8 @@ all(a:G, p,q,r:{G})
         p + q + r   <= p + (q + r)
         p + (q + r) <= p + q + r
 
+        q <= p ==> p - (p - q) = q
+
         not (p <= q) ==> some(x) x in p - q
 
         a /in p - q ==> a in p ==> a in q

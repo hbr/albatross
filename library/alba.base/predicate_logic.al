@@ -380,6 +380,16 @@ all(p,q:{G})
 
 
 
+all(p,q:{G})
+        -- Double complement with respect to a base set.
+    require
+        q <= p
+    ensure
+        p - (p - q) = q
+    end
+
+
+
 
 
 

@@ -753,6 +753,22 @@ all(a,b:A, r:{A,A})
     end
 
 
+
+all(a,b:A, r:{A,A})
+        -- All elements of an upper set are in the carrier.
+    require
+        a in r.carrier
+        b in a.upper_set(r)
+
+    ensure
+        b in r.carrier
+
+    inspect
+        b in a.upper_set(r)
+    end
+
+
+
 all(a,b:A, r:{A,A})
         -- The upper sets are sufficient to reconstruct the relation.
     require
@@ -831,6 +847,105 @@ all(a:A, r:{A,A})
                     end
                 end
             end
+    end
+
+
+
+all(r:{A,A}, p:{A}, b:A)
+        -- If 'b' is the least element of elements which are not in 'p' then
+        -- all elements of the strict lower set of 'b' are in 'p'.
+    require
+        r.is_partial_order
+        b.is_least(r.carrier - p, r)
+
+    ensure
+        b.strict_lower_set(r) <= p
+
+    assert
+        all(a)
+            require
+                a in b.strict_lower_set(r)
+            ensure
+                a in p
+            assert
+                r.is_preorder
+                r(a,b)
+            via require
+                not (a in p)
+            assert
+                a in r.carrier - p
+                r(b,a)          -- because 'b.is_least(r.carrier - p, r)'
+                a = b           -- antisymmetry, contradicts assumption
+            end
+    end
+
+
+all(r:{A,A}, a:A)
+        -- The complement of a strict lower set is the corresponding upper set
+        -- in a linear order.
+    require
+        r.is_linear_order
+        a in r.carrier
+
+    ensure
+        r.carrier - a.strict_lower_set(r) = a.upper_set(r)
+
+    assert
+        all(b)
+            require
+                b in r.carrier - a.strict_lower_set(r)
+            ensure
+                b in a.upper_set(r)
+            assert
+                not (b /= a and b in a.lower_set(r))
+                if not (b /= a)
+                    assert
+                        not not (b = a)
+                orif not (b in a.lower_set(r))
+                    assert
+                        ensure
+                            r(a,b)
+                        assert
+                            not r(b,a)
+                            r(b,a) or r(a,b)
+                        end
+            end
+
+        all(b)
+            require
+                b in a.upper_set(r)
+            ensure
+                b in r.carrier - a.strict_lower_set(r)
+            assert
+                ensure
+                    b /in a.strict_lower_set(r)
+                via require
+                    b in a.strict_lower_set(r)
+                assert
+                    r.is_preorder
+                    r(a,b)
+                    r(b,a)
+                    b = a    -- antisymmetry
+                end
+            end
+    end
+
+
+
+all(r:{A,A}, a:A)
+        -- The complement of an upper set is the corresponding strict lower set
+        -- in a linear order.
+    require
+        r.is_linear_order
+        a in r.carrier
+
+    ensure
+        r.carrier - a.upper_set(r) = a.strict_lower_set(r)
+
+    assert
+        a.upper_set(r) = r.carrier - a.strict_lower_set(r)
+    via
+        [ r.carrier - (r.carrier - a.strict_lower_set(r)) ]
     end
 
 
@@ -938,7 +1053,72 @@ all(b:A, r:{A,A})
 
 
 
+all(r:{A,A}, p:{A}, a:A)
+        -- If 'a' is the least element of the set 'p' then 'p' is a subset of
+        -- the upper set of 'a'.
+    require
+        a.is_least(p,r)
 
+    ensure
+        p <= a.upper_set(r)
+
+    assert
+        all(b)
+            require
+                b in p
+            ensure
+                b in a.upper_set(r)
+            assert
+                r(a,b)
+            end
+    end
+
+
+
+all(r:{A,A}, p:{A}, a:A)
+    require
+        r.is_preorder
+        p.is_upclosed(r)
+        a.is_least(p,r)
+
+    ensure
+        a.upper_set(r) <= p
+
+    assert
+        all(b)
+            require
+                b in a.upper_set(r)
+            ensure
+                b in p
+            inspect
+                b in a.upper_set(r)
+            end
+    end
+
+
+
+
+all(r:{A,A}, p:{A}, a:A)
+        -- In a linear order if the complement of a downclosed set has a least
+        -- element then the downclosed set can be represented as the strict lower
+        -- set of this least element.
+    require
+        r.is_linear_order
+        p.is_downclosed(r)
+        a.is_least(r.carrier - p, r)
+
+    ensure
+        p = a.strict_lower_set(r)
+
+    assert
+        r.is_preorder
+        (r.carrier - p).is_upclosed(r)
+        a.upper_set(r) = r.carrier - p
+    via [p
+         r.carrier - (r.carrier - p)
+         r.carrier - a.upper_set(r)
+         a.strict_lower_set(r) ]
+    end
 
 
 {:

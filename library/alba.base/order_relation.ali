@@ -416,6 +416,17 @@ all(r:{A,A}, a,b,c:A)
 
 
 all(a,b:A, r:{A,A})
+        -- All elements of an upper set are in the carrier.
+    require
+        a in r.carrier
+        b in a.upper_set(r)
+    ensure
+        b in r.carrier
+    end
+
+
+
+all(a,b:A, r:{A,A})
         -- The upper sets are sufficient to reconstruct the relation.
     require
         r.is_preorder
@@ -424,6 +435,78 @@ all(a,b:A, r:{A,A})
     ensure
         r(a,b)
     end
+
+
+
+all(r:{A,A}, p:{A}, a:A)
+        -- If 'a' is the least element of the set 'p' then 'p' is a subset of
+        -- the upper set of 'a'.
+    require
+        a.is_least(p,r)
+    ensure
+        p <= a.upper_set(r)
+    end
+
+
+
+all(r:{A,A}, p:{A}, a:A)
+        -- In a preorder the upper set of a least element of an upclosed set
+        -- is is fully contained in the set.
+    require
+        r.is_preorder
+        p.is_upclosed(r)
+        a.is_least(p,r)
+    ensure
+        a.upper_set(r) <= p
+    end
+
+
+all(r:{A,A}, p:{A}, b:A)
+        -- If 'b' is the least element of elements which are not in 'p' then
+        -- all elements of the strict lower set of 'b' are in 'p'.
+    require
+        r.is_partial_order
+        b.is_least(r.carrier - p, r)
+    ensure
+        b.strict_lower_set(r) <= p
+    end
+
+
+all(r:{A,A}, a:A)
+        -- The complement of a strict lower set is the corresponding upper set
+        -- in a linear order.
+    require
+        r.is_linear_order
+        a in r.carrier
+    ensure
+        r.carrier - a.strict_lower_set(r) = a.upper_set(r)
+    end
+
+
+all(r:{A,A}, a:A)
+        -- The complement of an upper set is the corresponding strict lower set
+        -- in a linear order.
+    require
+        r.is_linear_order
+        a in r.carrier
+    ensure
+        r.carrier - a.upper_set(r) = a.strict_lower_set(r)
+    end
+
+
+
+all(r:{A,A}, p:{A}, a:A)
+        -- In a linear order if the complement of a downclosed set has a least
+        -- element then the downclosed set can be represented as the strict lower
+        -- set of this least element.
+    require
+        r.is_linear_order
+        p.is_downclosed(r)
+        a.is_least(r.carrier - p, r)
+    ensure
+        p = a.strict_lower_set(r)
+    end
+
 
 
 
