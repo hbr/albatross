@@ -2526,11 +2526,14 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
         if IntSet.mem idx blacklst || not (is_visible idx pc) then
           lst
         else if Array.length sub = 0 then
-          idx :: lst
+          if RD.is_backward (rule_data idx pc) then
+            idx :: lst
+          else
+            lst
         else begin
           let cnt = count pc in
           let idx = specialized idx sub ags 2 pc in
-          if idx = cnt then begin
+          if idx = cnt && RD.is_backward (rule_data idx pc) then begin
             cnt :: lst
           end else begin
             lst
