@@ -11,7 +11,14 @@ open Support
 module PC = Proof_context
 
 let usage = "\
-usage: alba [-work-dir <path>] [-I <path>] <command> <args>
+usage: alba options <command> <args>
+
+Options:
+    -work-dir <path> Specify a path to the directory where the albatross source
+                     files are located (default: current working directory)
+
+    -I <path>        Specify path(s) on where to find the used libaries
+                     (default: Content of the environment variable ALBA_LIB_PATH)
 
 Commands:
     init           initialize an albatross working directory
