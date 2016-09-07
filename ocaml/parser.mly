@@ -351,6 +351,11 @@ source_proof:
   let steps, prf = $4 in
   SP_Proof ($3::steps, prf)
 }
+| optsemi LPAREN KWassert proof_step source_proof_1 RPAREN {
+  let steps, prf = $5 in
+  SP_Proof ($4::steps, prf)
+}
+
 
 source_proof_1: /* gets a proof step list and a proof_expression */
     source_proof_2 {
@@ -1035,4 +1040,3 @@ opt_nl:
 separator:
     SEMICOL  {()}
 |   NEWLINE  {()}
-
