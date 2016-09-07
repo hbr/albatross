@@ -16,11 +16,12 @@ end
 domain(f:A->B): ghost {A}
 
 consistent (f,g:A->B): ghost BOOLEAN
-        -- Do 'f' and 'g' have the same values on its common domain
+        -- Do 'f' and 'g' have the same values on its common domain?
     -> all(x) x in f.domain  ==>  x in g.domain  ==> f(x) = g(x)
 
 
 (=) (f,g:A->B): ghost BOOLEAN
+        -- Are the functions 'f' and 'g' equal?
     -> f.domain = g.domain and consistent(f,g)
 
 undefined: (A->B)

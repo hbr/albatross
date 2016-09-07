@@ -29,7 +29,7 @@ all(f,g:A->B, p,q:{A}, a:A)
    ======== :}
 
 (+) (f:A->B, e:(A,B)): (A->B)
-    -> agent (a:A): B
+    -> agent (a)
            require
                a = e.first or a in f.domain
            ensure
@@ -223,10 +223,23 @@ all(f,g:A->B, y:B)
 {:# Fixpoints
 :}
 
-is_fixpoint(x:A, f:A->A): ghost BOOLEAN
-        -- Is 'x' a fixpoint of the function 'f'?
-    -> x in f.domain and f(x) = x
+fixpoints(f:A->A): ghost {A}
+        -- The fixpoints of the function 'f'.
+    -> {x: x in f.domain and f(x) = x}
+
 
 is_idempotent(f:A->A): ghost BOOLEAN
         -- Is the function 'f' idempotent i.e. is f(x) = f(f(x)) valid?
-    -> all(x) x in f.domain ==> f(x).is_fixpoint(f)
+    -> all(x) x in f.domain ==> f(x) in f.fixpoints
+
+
+
+
+{:# Choice Function
+:}
+
+is_choice(f:{A}->A, p:{A}): ghost BOOLEAN
+        -- Is 'f' a choice function for the set 'p'?
+    -> (all(q) q.has_some ==> q <= p ==> q in f.domain)
+       and
+       (all(q) q.has_some ==> q <= p ==> f(q) in q)
