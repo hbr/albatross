@@ -19,7 +19,7 @@ end
 
 (<=) (p,q:{G}): ghost BOOLEAN
         -- Is 'p' a subset of 'q'?
-    -> all(x) p(x) ==> q(x)
+    -> all(x) x in p ==> x in q
 
 (=)  (p,q:{G}): ghost BOOLEAN
         -- Are 'p' and 'q' equal sets?

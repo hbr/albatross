@@ -472,11 +472,15 @@ all(p,q:{PO})
 
 
 
+
+
+
+
 {: Directed Sets and Continuous Functions
    ======================================
 :}
 
-is_directed (d:{PO}): ghost BOOLEAN
+is_updirected (d:{PO}): ghost BOOLEAN
     -> d.has_some
        and
        all(a,b)  {a,b} <= d
@@ -495,6 +499,36 @@ is_upcontinuous (f:PO->PO2): ghost BOOLEAN
            sup.is_supremum(set)
            ==>
            f(sup).is_supremum(f[set])
+
+
+
+
+
+{: Chains
+   ======
+:}
+
+
+is_chain(p:{PO}): ghost BOOLEAN
+        -- Is the set 'p' a chain?
+    -> all(a,b) {a,b} <= p ==> a <= b or b <= a
+
+
+all(p:{PO}, a,b:PO)
+        -- All pairs in a chain have an upper bound
+    require
+        p.is_chain
+        {a,b} <= p
+    ensure
+        some(x) x in p and a <= x and b <= x
+    if a <= b
+        assert
+            b in p and a <= b and b <= b
+    orif b <= a
+        assert
+            a in p and a <= a and b <= a
+    end
+
 
 {:
 # Closure system

@@ -8,7 +8,7 @@ G: ANY
 
 class PREDICATE[G] end
 
-(in)  (e:G, p:{G}): BOOLEAN  note built_in end
+(in)  (e:G, p:{G}): BOOLEAN
 (/in) (a:G, p:{G}): BOOLEAN -> not p(a)
 
 (<=) (p,q:{G}): ghost BOOLEAN -> all(x) p(x) ==> q(x)

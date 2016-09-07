@@ -4,6 +4,10 @@ gmon.txt
 
 _build
 _draft
+*_draft.ml
+*_draft.mli
+*_draft.al
+*_draft.ali
 doc
 .alba
 *.js

@@ -708,6 +708,34 @@ all(a,b:A, r:{A,A})
 
 
 
+
+all(r:{A,A}, p:{A}, b:A)
+        -- All lower sets of elements in a downclosed set are subsets
+        -- of the downclosed set.
+    require
+        p.is_downclosed(r)
+        b in p
+
+    ensure
+        b.lower_set(r) <= p
+
+    assert
+        all(a)
+            require
+                 a in b.lower_set(r)
+            ensure
+                 a in p
+            inspect
+                 a in b.lower_set(r)
+            end
+    end
+
+
+
+
+
+
+
 all(ps:{{A}}, r:{A,A})
         -- The union of all lower sets is the carrier.
     require
@@ -806,7 +834,40 @@ all(a,b:A, r:{A,A})
     end
 
 
+all(a:A, r:{A,A})
+        -- A strict lower set is a proper subset of the carrier
+    require
+        a in r.carrier
+    ensure
+        a.strict_lower_set(r) < r.carrier
+    assert
+        a /in a.strict_lower_set(r) and a in r.carrier
+    end
 
+
+all(a:A, r:{A,A})
+    require
+        a in r.carrier
+    ensure
+        a.strict_lower_set(r) + {a} = a.lower_set(r)
+    assert
+        all(x)
+            require
+                x in a.strict_lower_set(r) + {a}
+            ensure
+                x in a.lower_set(r)
+            if x in a.strict_lower_set(r)
+            orif x in {a}
+            end
+        all(x)
+            require
+                x in a.lower_set(r)
+            ensure
+                x in a.strict_lower_set(r) + {a}
+            if x /= a
+            orif x = a
+            end
+    end
 
 
 all(a:A, r:{A,A})
@@ -847,6 +908,27 @@ all(a:A, r:{A,A})
                     end
                 end
             end
+    end
+
+
+all(r:{A,A}, p:{A}, a,b:A)
+        -- In a partial order all elements strictly below the least element of
+        -- a set are not in the set.
+    require
+        r.is_partial_order
+        b.is_least(p,r)
+        a in b.strict_lower_set(r)
+
+    ensure
+        a /in p
+
+    via require
+        a in p
+    assert
+        r.is_preorder
+        r(b,a)
+        r(a,b)
+        a = b
     end
 
 
@@ -977,6 +1059,39 @@ all(r:{A,A}, a:A)
     end
 
 
+
+
+
+all(r:{A,A}, a,b:A)
+        -- Transitivity of strict lower sets.
+    require
+        r.is_partial_order
+        r(a,b)
+
+    ensure
+        a.strict_lower_set(r) <= b.strict_lower_set(r)
+
+    assert
+        r.is_preorder
+        all(x)
+            require
+                x in a.strict_lower_set(r)
+            ensure
+                x in b.strict_lower_set(r)
+            assert
+                r(x,a)
+                r(x,b)
+                x in b.lower_set(r)
+                -- x /= b
+            via require
+                x = b
+            assert
+                x = a   -- from r(a,b) and r(x,a) by antisymmetry, contradicts
+                        -- x in a.strict_lower_set(r)
+            end
+    end
+
+
 all(r:{A,A}, a,b,c:A)
         -- Transitivity of strict lower sets.
     require
@@ -1006,13 +1121,35 @@ all(r:{A,A}, a,b,c:A)
 
 
 
+all(r:{A,A}, a,b:A)
+        -- If a strict lower set has a greatest element, then the lower set of
+        -- this greatest element is a superset of the strict lower set.
+    require
+        r.is_partial_order
+        b in r.carrier
+        a.is_greatest(b.strict_lower_set(r), r)
+
+    ensure
+        b.strict_lower_set(r) <= a.lower_set(r)
+
+    assert
+        all(x)
+            require
+                x in b.strict_lower_set(r)
+            ensure
+                x in a.lower_set(r)
+            assert
+                r(x,a)
+            end
+    end
+
+
 
 {: Consider the set `b.strict_lower_set(r)` in some partial order `r`. Then
 every element of this set has a strict lower set as well which is fully
 contained in the outer set. Therefore the union of all these strict lower sets
 is fully contained in the out set as well.
-
-  :}
+:}
 
 all(b:A, r:{A,A})
         -- The union of all strict lower sets of a strict lower set is fully

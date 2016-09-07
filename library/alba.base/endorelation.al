@@ -95,6 +95,55 @@ all(r,s:{A,A})
     end
 
 
+
+all(rs:{{A,A}}, a:A)
+    require
+         a in (+ rs).carrier
+
+    ensure
+         some(r) r in rs and a in r.carrier
+
+    if a in (+ rs).domain
+        via some(b) (a,b) in + rs
+        via some(r) r in rs and r(a,b)
+        assert
+            r in rs and a in r.carrier
+    orif a in (+ rs).range
+        via some(b) (b,a) in + rs
+        via some(r) r in rs and r(b,a)
+        assert
+            r in rs and a in r.carrier
+    end
+
+
+all(r,s:{A,A})
+    require
+        r <= s
+
+    ensure
+        r.carrier <= s.carrier
+
+    assert
+        all(x)
+            require
+                x in r.carrier
+            ensure
+                x in s.carrier
+            if x in r.domain
+                via some(y)
+                    r(x,y)
+                assert
+                    s(x,y)
+            orif x in r.range
+                via some(y)
+                    r(y,x)
+                assert
+                    s(y,x)
+            end
+    end
+
+
+
 all(r,s:{A,A})
         -- The carrier of an intersection of two relations is a subset of the
         -- carrier of the second relation
@@ -311,6 +360,32 @@ all(r:{A,A})
             end
     end
 
+
+
+all(r:{A,A})
+        -- Every dichotomic relation is reflexive.
+    require
+        r.is_dichotomic
+    ensure
+        r.is_reflexive
+    assert
+        all(x,y)
+             require
+                 r(x,y)
+             ensure
+                 r(x,x)
+             assert
+                 r(x,x) or r(x,x)
+             end
+        all(x,y)
+             require
+                 r(x,y)
+             ensure
+                 r(y,y)
+             assert
+                 r(y,y) or r(y,y)
+             end
+    end
 
 
 

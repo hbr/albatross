@@ -54,6 +54,22 @@ all(p:{A}, r,s:{A,A})
 
 
 
+all(rs:{{A,A}}, a:A)
+    require
+        a in (+ rs).carrier
+    ensure
+        some(r) r in rs and a in r.carrier
+    end
+
+
+all(r,s:{A,A})
+    require
+        r <= s
+    ensure
+        r.carrier <= s.carrier
+    end
+
+
 
 {: Closure
    ======= :}
@@ -103,6 +119,13 @@ all(r:{A,A})
     end
 
 
+all(r:{A,A})
+        -- Every dichotomic relation is reflexive.
+    require
+        r.is_dichotomic
+    ensure
+        r.is_reflexive
+    end
 
 
 to_reflexive (p:{A}): {A,A}
