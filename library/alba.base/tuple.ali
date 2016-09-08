@@ -1,4 +1,6 @@
-use predicate end
+use
+    predicate
+end
 
 
 A: ANY
@@ -11,9 +13,15 @@ create
 end
 
 first (t:(A,B)): A
-    -> inspect t
-       case (a,_) then a
+        -- The first element of the tuple 't'.
+    -> inspect
+           t
+       case (a,_) then
+           a
 
 second (t:(A,B)): B
-    -> inspect t
-       case (_,b) then b
+        -- The second element of the tuple 't'.
+    -> inspect
+           t
+       case (_,b) then
+           b

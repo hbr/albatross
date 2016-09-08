@@ -1,4 +1,7 @@
-use predicate end
+use
+    predicate
+end
+
 
 A: ANY
 B: ANY
@@ -12,9 +15,13 @@ end
 
 
 first (t:(A,B)): A
-    -> inspect t
-       case (a,_) then a
+    -> inspect
+           t
+       case (a,_) then
+           a
 
 second (t:(A,B)): B
-    -> inspect t
-       case (_,b) then b
+    -> inspect
+           t
+       case (_,b) then
+           b
