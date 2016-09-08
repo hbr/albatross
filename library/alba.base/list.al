@@ -360,35 +360,43 @@ all(x:G, a:[G])
 {: List folding
    ============ :}
 
-folded (f:(G,H)->H, b:H, l:[G]): H
+folded (f:(H,G)->H, b:H, l:[G]): H
     require
         f.is_total
     ensure
-        -> inspect l
-           case []  then b
-           case h^t then f.folded(f(h,b),t)
+        -> inspect
+               l
+           case [] then
+               b
+           case h ^ t then
+               f.folded(f(b,h),t)
     end
 
 all(a,b:[G])
     ensure
-        -a + b = (^).folded(b,a)
+        -a + b = ((a,x) -> x ^ a).folded(b,a)
+
     assert
         ensure
-            all(b) -a + b = (^).folded(b,a)
-        inspect a
-        case x^a assert
-            all(b) -a + b = (^).folded(b,a)
+            all(b) -a + b = ((a,x) -> x ^ a).folded(b,a)
+        inspect
+            a
+        case x ^ a
+        assert
+            all(b) -a + b = ((a,x) -> x ^ a).folded(b,a)  -- ind hypo
 
             all(b)
-            ensure
-                -x^a + b = (^).folded(b,x^a)
-            assert
-                (^).folded(b,x^a) = (^).folded(x^b,a)
-                (^).folded(x^b,a) = -a + (x^b)
-                (-a) + (x^b)      = -a + ([x] + b)
-                (-a) + ([x] + b)  = -a + [x] + b
-                (-a) + [x] + b    = -x^a + b
-            end
+                ensure
+                    - x ^ a + b = ((a,x) -> x ^ a).folded(b,x^a)
+                via [
+                    - x ^ a + b
+                    (-a) + [x] + b                      -- def '-'
+                    (-a) + ([x] + b)                    -- assoc of '+'
+                    (-a) + x ^ b                        -- def '+'
+                    ((a,x) -> x ^ a).folded(x ^ b, a)   -- use of ind hypo
+                    ((a,x) -> x ^ a).folded(b, x ^ a)   -- def folded
+                    ]
+                end
         end
     end
 
@@ -397,11 +405,31 @@ all(a,b:[G])
 
 all(a,b:[G])
     ensure
-        a + b = (^).folded(b,-a)
+        a + b = ((a,x) -> x ^ a).folded(b,-a)
     assert
         ensure a + b = -(-a) + b
         assert -(-a) = a
         end
 
-        (-(-a)) + b = (^).folded(b,-a)
+        (-(-a)) + b = ((a,x) -> x ^ a).folded(b,-a)
+    end
+
+
+
+
+{:
+# Mapping of Lists
+:}
+
+[] (f:G->H, a:[G]): [H]
+        -- The list 'a' where all elements are mapped by 'f'.
+    require
+        a.elements <= f.domain
+    ensure
+        -> inspect
+               a
+           case [] then
+               []
+           case h ^ t then
+               f(h) ^  f[t]
     end

@@ -28,8 +28,10 @@ head (a:[G]): G
     require
         a as x ^ t
     ensure
-        -> inspect a
-           case h ^ _ then h
+        -> inspect
+               a
+           case h ^ _ then
+               h
     end
 
 tail (a:[G]): [G]
@@ -37,16 +39,21 @@ tail (a:[G]): [G]
     require
         a as x ^ t
     ensure
-        -> inspect a
-           case _ ^ t then t
+        -> inspect
+               a
+           case _ ^ t then
+               t
     end
 
 
 (in) (x:G, a:[G]): BOOLEAN
         -- Is the element 'x' contained in the list 'a'?
-    -> inspect a
-       case []  then false
-       case h^t then x=h or x in t
+    -> inspect
+           a
+       case [] then
+           false
+       case h ^ t then
+           x = h or x in t
 
 
 elements (a:[G]): {G}
@@ -76,24 +83,35 @@ permutation (a,b:[G]): ghost BOOLEAN
 
 (+) (a,b: [G]): [G]
         -- The concatenation of the lists 'a' and 'b'.
-    -> inspect a
-       case []    then b
-       case h ^ t then h ^ (t + b)
+    -> inspect
+           a
+       case [] then
+           b
+       case h ^ t then
+           h ^ (t + b)
+
 
 (-) (a:[G]): [G]
         -- The reversed list 'a'.
-    -> inspect a
-       case []    then []
-       case h ^ t then -t + [h]
+    -> inspect
+           a
+       case [] then
+           []
+       case h ^ t then
+           - t + [h]
 
-folded (f:(G,H)->H, b:H, l:[G]): H
+
+folded (f:(H,G)->H, b:H, l:[G]): H
         -- The function 'f' folded with start value 'b' over the list 'l'.
     require
         f.is_total
     ensure
-        -> inspect l
-           case []  then b
-           case h^t then f.folded(f(h,b),t)
+        -> inspect
+               l
+           case [] then
+               b
+           case h ^ t then
+               f.folded(f(b,h), t)
     end
 
 
@@ -140,5 +158,24 @@ all(a,b,c:[G], x,y:G, p,q:{G})
         permutation(a,b) ==> permutation(x^a,x^b)
 
         -- folding
-        a + b = (^).folded(b,-a)
+        a + b = ((a,x) -> x ^ a).folded(b,-a)
+    end
+
+
+
+{:
+# Mapping of Lists
+:}
+
+[] (f:G->H, a:[G]): [H]
+        -- The list 'a' where all elements are mapped by 'f'.
+    require
+        a.elements <= f.domain
+    ensure
+        -> inspect
+               a
+           case [] then
+               []
+           case h ^ t then
+               f(h) ^  f[t]
     end
