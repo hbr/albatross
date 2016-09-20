@@ -9,6 +9,10 @@ The albatross compiler is a proof assistant and a compiler for the Albatross
 language.
 
 
+# Documentation
+
+[Language Description](http://www.gitbook.com/book/hbr/alba-lang-description)
+
 
 # Installation
 
