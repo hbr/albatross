@@ -96,7 +96,7 @@ all(a,b,c,x:NATURAL)
         a + 1 <= b ==>  a < b
         a < b      ==>  a + 1 <= b
         a <= b  ==> some(x) a + x = b
-        (some(x) a + x = b) ==> a <= b
+        a + x = b ==> a <= b
         a < a + 1
         a <= b  ==> a + x <= b + x
         a + x <= b + x ==> a <= b

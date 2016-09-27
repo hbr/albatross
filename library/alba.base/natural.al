@@ -125,21 +125,21 @@ all(a,b:NATURAL) -- commutativity of successor
     end
 
 
+
+
 all(a,b:NATURAL)
         -- commutativity of addition
     ensure
         a + b = b + a
-    inspect b
+    inspect
+        b
     case b.successor
-    assert
-        ensure
-            a + b.successor = b.successor + a
-            via [(a + b).successor  -- def '+'
-                 (b + a).successor  -- ind hypo
-                 b + a.successor    -- def '+'
-                                    -- commutativity of successor
-                 ]
-        end
+        via [ a + b.successor
+             (a + b).successor  -- def '+'
+             (b + a).successor  -- ind hypo
+             b + a.successor    -- def '+'
+             b.successor + a    -- commutativity of successor
+             ]
     end
 
 
@@ -151,6 +151,8 @@ all(a,b,x:NATURAL)
     inspect
         x
     end
+
+
 
 
 
@@ -167,6 +169,8 @@ all(a,b,x:NATURAL)
     end
 
 
+
+
 all(a:NATURAL)
     ensure
         a = a.successor ==> false
@@ -174,35 +178,45 @@ all(a:NATURAL)
         a
     end
 
+
+
 all(a,x:NATURAL)
     require
         a + x = a
     ensure
         x = 0
-        assert
-            ensure
-                x + a = 0 + a  -- by right cancellation proves the goal
-                via [a + x; a]
-            end
+    assert
+        ensure
+            x + a = 0 + a  -- by right cancellation proves the goal
+        via [ a + x
+              a ]
+        end
     end
-
 
 
 
 all(a,b:NATURAL)
+    require
+        a + b = 0
     ensure
-        a + b = 0  ==> a = 0
-    inspect a
-    case successor(a) assert
-        require successor(a) + b = 0
-        ensure  a.successor = 0
+        a = 0
+    inspect
+        a
+    case a.successor
         assert
-             ensure (a + b).successor = 0
-                via [a + b.successor
-                     a.successor + b]
-             end
-        end
+            a.successor + b = 0
+
+            ensure
+                (a + b).successor = 0
+            via [ a + b.successor
+                  a.successor + b ]
+            end
+
+            false
     end
+
+
+
 
 
 
@@ -308,82 +322,66 @@ all(a,b:NATURAL)
         a <= b
     ensure
         some(x) a + x = b
-
-        inspect b
+    inspect
+        b
+    case 0
+        assert
+            0 = a
+            a + 0 = 0
+    case successor(b)
+        inspect
+            a
         case 0
             assert
-                0 = a
-                a + 0 = 0
-        case successor(b)
-            inspect a
-            case 0
-                assert
-                    0 + b.successor = b.successor
-            case a.successor
-                assert
-                    a <= b
-                via some(x)
-                    a + x = b
-                assert
-                    ensure
-                        a.successor + x = b.successor
-                    via
-                        [a + x.successor
-                         (a + x).successor]
-                    end
-    end
-
-
-
-
-
-
-all(a,b:NATURAL)
-    ensure
-        (some(x) a + x = b) ==> a <= b
-    assert
-        ensure
-            all(a) (some(x) a + x = b) ==> a <= b
-        inspect b
-        case 0 assert
-            all(a:NATURAL)
-            require  some(x) a + x = 0
-            ensure   a <= 0
-            assert    all(x) require a + x = 0
-                            ensure  a <= 0
-                            assert  0 = a
-                                    a in {a: a <= 0}
-                            end
-            end
-        case b.successor assert
-            all(a) (some(x) a + x = b) ==> a <= b
-            all(a)
-            ensure
-                (some(x) a + x = b.successor) ==> a <= b.successor
+                0 + b.successor = b.successor
+        case a.successor
             assert
-                ensure  (some(x) a + x = b.successor) ==> a <= b.successor
-                inspect a
-                case successor(a) assert
-                    require some(x) a.successor + x = b.successor
-                    ensure  a.successor <= b.successor
-                    assert  all(x) require a.successor + x = b.successor
-                                   ensure  a.successor <= b.successor
-                                   assert
-                                       ensure
-                                           (a + x).successor = b.successor
-                                       via [a + x.successor
-                                            a.successor + x]
-                                       end
-                                       a + x = b
-                                       some(x) a + x = b
-                                       a <= b
-                                   end
-                    end
+                a <= b
+            via some(x)
+                a + x = b
+            assert
+                ensure
+                    a.successor + x = b.successor
+                via
+                    [a + x.successor
+                     (a + x).successor]
                 end
-            end
-            all(a) (some(x) a + x = b.successor) ==> a <= b.successor
-        end
     end
+
+
+
+all(a,b,x:NATURAL)
+    require
+        a + x = b
+    ensure
+        a <= b
+    inspect
+        b
+    case b.successor
+        assert
+            all(a,x) a + x = b ==> a <= b  -- ind hypo
+            -- goal: a + x = b.successor ==> a <= b.successor
+        inspect
+            a
+        case a.successor
+            assert
+                all(x) a + x = b.successor ==> a <= b.successor  -- ind hypo
+                a.successor + x = b.successor
+
+                ensure
+                    (a + x).successor = b.successor
+                via [a + x.successor
+                     a.successor + x]
+                end
+
+                a + x = b
+                a + x = b ==> a <= b    -- from outer ind hypo
+                a <= b
+
+                a.successor <= b.successor  -- goal
+    end
+
+
 
 
 
@@ -393,31 +391,19 @@ all(a,b:NATURAL)
         b <= a
     ensure
         a = b
+    via some(x)
+        a + x = b
+    via some(y)
+        b + y = a
     assert
-        some(x) a + x = b
-        some(y) b + y = a
-        all(x)
-            require
-                a + x = b
-            ensure
-                a = b
-            assert
-                all(y)
-                    require
-                        b + y = a
-                    ensure
-                        a = b
-                    assert
-                        a + (x + y) = (a + x) + y
-                        a + x + y = b + y
+        a + (x + y) = (a + x) + y
+        a + x + y = b + y
 
-                        a + (x + y) = a
+        a + (x + y) = a
 
-                        x + y = 0
-                        x = 0
-                        0 in {x: a + x = b}
-                    end
-            end
+        x + y = 0
+        x = 0
+        0 in {x: a + x = b}
     end
 
 
@@ -445,7 +431,9 @@ all(a,b,c:NATURAL)
 all(a:NATURAL)
     ensure
         a <= a.successor
-    inspect a end
+    inspect
+        a
+    end
 
 
 
@@ -467,39 +455,30 @@ all(a,b:NATURAL)
         a < b
     ensure
         a.successor <= b
+    via some(x)
+        a + x = b
     assert
-        some(x) a + x = b
-        all(x)
-            require
-                a + x = b
-            ensure
-                a.successor <= b
-            assert
-                require
-                    x = 0
-                ensure
-                    false
-                assert
-                    0 = x
-                    x in {x: a = a + x}
-                    a = b
-                end
-                x /= 0
-                some(y) x = y.successor
-                all(y)
-                    require
-                        x = y.successor
-                    ensure
-                        a.successor <= b
-                    assert
-                        y.successor in {x: a + x = b}
-                        ensure
-                            a.successor + y = b
-                            via [a + y.successor]
-                        end
-                    end
-            end
+        ensure
+            x /= 0
+        via require
+            x = 0
+        assert
+            0 = x
+            x in {x: a = a + x}
+            a = b
+        end
+    via some(y)
+        x = y.successor
+    assert
+        y.successor in {x: a + x = b}
+        a + y.successor = b
+        ensure
+            a.successor + y = b
+        via [ a + y.successor ]
+        end
     end
+
+
 
 
 all(a,b:NATURAL)
@@ -525,24 +504,23 @@ all(a,b:NATURAL)
 all(a,b:NATURAL)
     ensure
         a <= b or b <= a
-    inspect a
-    case successor(a) assert
-        ensure
-            a.successor <= b or b <= a.successor
-        if a <= b assert
-            ensure
-                a.successor <= b or b <= a.successor
-            if a = b assert
-                a <= a.successor
-                b in {x: x <= a.successor}
-                b <= a.successor
-            else assert
-                a < b
-                a.successor <= b
-            end
+    inspect
+        a
+    case successor(a)
+        if a <= b
+            if a = b
+                assert
+                    a <= a.successor
+                    b in {x: x <= a.successor}
+                    b <= a.successor
+            orif a /= b
+                assert
+                    a < b
+                    a.successor <= b
         orif b <= a
-        end
     end
+
+
 
 
 all(a,b:NATURAL)
@@ -559,36 +537,38 @@ all(a,b:NATURAL)
 all(a,b:NATURAL)
     ensure
         a <= b or b < a
-    assert
-        a = b or a /= b
-        require  a = b
-        ensure   a <= b or b < a
-        assert   b in {x: a <= x}
-        end
+    if a = b
+        assert
+            b in {x: a <= x}
+    orif a /= b
+        if a <= b
+        orif b <= a
+            assert
+                b /= a
+    end
 
-        require  a /= b
-        ensure   a <= b or b < a
-        assert   a <= b or b <= a
-                 a <= b ==> a <= b or b < a
-                 require  b <= a
-                 ensure   a <= b or b < a
-                 assert   b /= a
-                 end
-        end
+
+
+
+all(a,b,n:NATURAL)
+    require
+        a <= b
+    ensure
+        a + n <= b + n
+    inspect
+        n
     end
 
 
 
 all(a,b,n:NATURAL)
-    require a <= b
-    ensure  a + n <= b + n
-    inspect n end
-
-
-
-all(a,b,n:NATURAL)
-    ensure  a + n <= b + n ==> a <= b
-    inspect n end
+    require
+        a + n <= b + n
+    ensure
+        a <= b
+    inspect
+        n
+    end
 
 
 
@@ -602,17 +582,19 @@ all(a,b,n:NATURAL)
 all(a,b:NATURAL)
     ensure
         b <= a  ==>  not ((a,b) as (0,successor(_)))
-    inspect a
-    case 0 assert
-        require
-            b <= 0
-            (0:NATURAL,b) as (0,successor(_))
-        ensure
-            false
+    inspect
+        a
+    case 0
         assert
-            b = 0
-            0 in {b: (0:NATURAL,b) as (0,successor(_))}
-        end
+            require
+                b <= 0
+                (0:NATURAL,b) as (0,successor(_))
+            ensure
+                false
+            assert
+                b = 0
+                0 in {b: (0:NATURAL,b) as (0,successor(_))}
+            end
     end
 
 
@@ -680,35 +662,27 @@ all(a,b,c:NATURAL) -- distributivity
             {: Note: This lemma is needed as long as the special treatment of
                      commutative and associative operators is not yet implemented :}
             ensure
-               a + b + (c + d) = a + c + (b + d)
+                a + b + (c + d) = a + c + (b + d)
             assert
-               a + b + (c + d)   = a + (b + (c + d))
-
-               ensure a + (b + (c + d)) = a + (b + c + d)
-               assert b + (c + d) = b + c + d
-               end
-
-               ensure a + (b + c + d) = a + (c + b + d)
-               assert b + c = c + b
-               end
-
-               ensure a + (c + b + d) = a + (c + (b + d))
-               assert c + b + d = c + (b + d)
-               end
+                b + (c + d) = b + c + d
+                b + c = c + b
+                c + b + d = c + (b + d)
+            via [ a + b + (c + d)
+                  a + (b + (c + d))
+                  a + (b + c + d)
+                  a + (c + b + d)
+                  a + (c + (b + d))
+                  a + c + (b + d)
+                ]
             end
-
-        ensure
-            a * (b + c) = a*b + a*c
-        inspect a
-        case successor(a)
-        assert
-            ensure
-                a.successor * (b + c) = a.successor*b + a.successor*c
-                via [ a*(b + c) + (b + c)
-                      a*b + a*c + (b + c)
-                      a*b + b + (a*c + c) ]
-            end
-        end
+    inspect
+        a
+    case successor(a)
+        via [ a.successor * (b + c)
+              a*(b + c) + (b + c)
+              a*b + a*c + (b + c)
+              a*b + b + (a*c + c)
+              a.successor*b + a.successor*c ]
     end
 
 
