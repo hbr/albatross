@@ -103,171 +103,43 @@ size (a:[G]): NATURAL
 elements (l:[G]): {G} -> {x: x in l}
 
 
-all_in (a:[G], p:{G}): BOOLEAN
-    -> inspect a
-       case []  then true
-       case h^t then h in p and t.all_in(p)
 
-
-all(x:G, a:[G], p:{G})
-    require
-        x in a
-        a.all_in(p)
-    ensure
-        x in p
-    assert
-        ensure
-            x in a ==> a.all_in(p) ==> x in p
-        inspect a
-        case y^a assert
-            require x in y^a
-                    (y^a).all_in(p)
-            ensure  x in p
-            assert  y in p
-                    a.all_in(p)
-                    x = y or x in a
-                    require x = y
-                    ensure  x in p
-                    assert  y = x
-                    end
-            end
-        end
-    end
-
-
-all(a:[G], p,q:{G})
-    require
-        a.all_in(p)
-        p <= q
-    ensure
-        a.all_in(q)
-    assert
-        ensure a.all_in(p) ==> p <= q ==> a.all_in(q)
-        inspect a end
-    end
-
-
-all_in (a,b:[G]): BOOLEAN
-    -> a.all_in(elements(b))
-
-
-all(p:{G}, a,b:[G])
-    require
-        a.all_in(b)
-        b.all_in(p)
-    ensure
-        a.all_in(p)
-    assert
-        a.all_in(b.elements)
-        a.elements <= b.elements
-    end
-
-
-
-all(a,b:[G])
-    ensure
-        a.elements <= b.elements  ==> a.all_in(b)
-    inspect a
-    case x^a assert
-        require (x^a).elements <= b.elements
-        ensure  (x^a).all_in(b)
-        assert  a.elements <= b.elements
-        end
-    end
-
-
-all(a,b:[G])
-    ensure
-        a.all_in(b) ==> a.elements <= b.elements
-    assert
-        all(x,y:G, a:[G])
-            require
-                a.all_in(b) ==> a.elements <= b.elements
-                (x^a).all_in(b)
-                y in (x^a).elements
-            ensure
-                y in b.elements
-            assert
-                y = x or y in a
-
-                require y = x
-                ensure  y in b
-                assert  x = y; x in b; y in {z: z in b}
-                end
-
-                require y in a
-                ensure  y in b
-                assert  y in a.elements
-                        a.all_in(b)
-                        y in b.elements
-                end
-
-                y in b
-            end
-        [] in {a: a.all_in(b) ==> a.elements <= b.elements}
-        a  in {a: a.all_in(b) ==> a.elements <= b.elements}
-    end
-
-
-same_elements (a,b:[G]): BOOLEAN
-    -> a.all_in(b) and b.all_in(a)
-
-all(a:[G])
-    ensure
-        same_elements(a,a)
-    end
-
-
-all(a,b:[G])
-    ensure
-        same_elements(a,b) ==> same_elements(b,a)
-    end
-
-
-all(a,b,c:[G])
-    ensure
-        same_elements(a,b) ==> same_elements(b,c) ==> same_elements(a,c)
-    end
 
 
 
 {: Permutation
    =========== :}
 
-permutation (a,b:[G]): ghost BOOLEAN
-    -> a.size = b.size and same_elements(a,b)
+permutation: ghost {[G],[G]}
+   = {(r):
+           r([],[])                                  -- empty list
+           ,
+           all(x,a,b) r(a,b) ==> r(x ^ a, x ^ b)     -- prefix element
+           ,
+           all(x,y,a) r(x ^ y ^ a, y ^ x ^ a)        -- swap adjacent
+           ,
+           all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)   -- transitive
+     }
+
 
 all(a:[G])
     ensure
-        permutation(a,a)
+        permutation(a, a)
+    inspect
+        a
     end
+
 
 all(a,b:[G])
-    ensure
-        permutation(a,b) ==> permutation(b,a)
-    end
-
-all(a,b,c:[G])
-    ensure
-        permutation(a,b) ==> permutation(b,c) ==> permutation(a,c)
-    end
-
-all(x,y:G, a:[G])
-    ensure
-        permutation(x^y^a, y^x^a)
-    assert
-        all(x,y) (x^y^a).all_in(y^x^a)
-    end
-
-all(x:G, a,b:[G])
     require
         permutation(a,b)
     ensure
-        permutation(x^a, x^b)
-    assert
-        (x^a).all_in({z: z in x^b})
-        (x^b).all_in({z: z in x^a})
+        permutation(b,a)
+    inspect
+        permutation(a,b)
     end
+
+
 
 
 

@@ -1,253 +1,121 @@
 use
-    alba.base.boolean_logic
-    alba.base.predicate_logic
-    alba.base.linear_order
     alba.base.list
+    alba.base.linear_order
 end
 
+
 L: LINEAR_ORDER
-
-
-{: Lower Bound
-   =========== :}
-
-is_lower_bound (x:L, a:[L]): BOOLEAN
-    -> a.all_in({y: x <= y})
-
-
-
-all(x,y:L, a:[L])
-        -- transitivity
-    require
-        x <= y
-        y.is_lower_bound(a)
-    ensure
-        x.is_lower_bound(a)
-    assert
-        {z: y <= z} <= {z: x <= z}
-    end
-
-
-all(x:L, a,b:[L])
-    require
-        x.is_lower_bound(a)
-        permutation(a,b)
-    ensure
-        x.is_lower_bound(b)
-    end
-
-
-
-
-{: Sorted Lists
-   ============ :}
-
-is_sorted (l:[L]): BOOLEAN
-    -> inspect
-           l
-       case [] then
-           true
-       case [_] then
-           true
-       case x ^ y ^ a then
-           x <= y and (y ^ a).is_sorted
-
-
-
-
-all(x:L, a:[L])
-        -- sorted 1
-    require
-        (x ^a).is_sorted
-    ensure
-        a.is_sorted
-    inspect
-        a
-    end
-
-
-
-all(x:L, a:[L])
-        -- sorted 2
-    require
-        (x ^ a).is_sorted
-    ensure
-        x.is_lower_bound(a)
-    inspect
-        a
-    case y ^ a
-        assert
-            all(x) (x ^ a).is_sorted ==> x.is_lower_bound(a)
-            (x ^ y ^ a).is_sorted
-            x <= y
-            (y ^ a).is_sorted
-            y.is_lower_bound(a)
-    end
-
-
-all(x:L, a:[L])
-        -- sorted 2
-    ensure
-        (x ^ a).is_sorted ==> x.is_lower_bound(a)
-    assert
-        ensure
-            all(x) (x ^ a).is_sorted ==> x.is_lower_bound(a)
-        inspect a end
-    end
-
-
-
-all(x:L, a:[L])
-        -- sorted 3
-    require
-        x.is_lower_bound(a)
-        a.is_sorted
-    ensure
-        (x ^ a).is_sorted
-    inspect
-        a
-    end
-
-
-
-
-{: Element Insertion
-   ================= :}
 
 
 into (x:L, a:[L]): [L]
     -> inspect
            a
-       case []  then
+       case [] then
            [x]
-       case y^a then
+       case y ^ a then
            if x <= y then
-               x^y^a
+               x ^ y ^ a
            else
                y ^ x.into(a)
 
-all(x:L)
-    ensure
-        permutation ([x], x.into([]))
-    assert
-        x.into([]) = [x]
-    end
+
+sorted(a:[L]): [L]
+     -> inspect
+            a
+        case [] then
+            []
+        case x ^ a then
+            x.into(a.sorted)
 
 
 
-all(x,y:L, a:[L])
-    require
-        permutation(x ^ a, x.into(a))
-        x <= y
-    ensure
-        permutation(x ^ y ^ a, x.into(y ^ a))
-    assert
-         x.into(y ^ a) = x ^ y ^ a
-    end
 
-
-all(x,y:L, a:[L])
-    require
-        permutation(x ^ a, x.into(a))
-        not (x <= y)
-    ensure
-        permutation(x ^ y ^ a, x.into(y ^ a))
-    assert
-        permutation(x ^ y ^ a, y ^ x ^ a)        -- module 'list'
-        permutation(y ^ x ^ a, y ^ x.into(a))    -- ind hypo/list
-        ensure
-            permutation(y ^ x.into(a), x.into(y ^ a))
-        assert
-            x.into(y ^ a) = y ^ x.into(a)
-            y ^ x.into(a) in {l: permutation(l, x.into(y ^ a))}
-        end
-    end
+sorted_lists: ghost {[L]}
+    = {(sorted):
+           [] in sorted,
+           all(x) [x] in sorted,
+           all(x,y,a) x <= y ==> y ^ a in sorted ==> x ^ y ^ a in sorted
+      }
 
 
 
 all(x:L, a:[L])
+    require
+        a in sorted_lists
     ensure
-        permutation (x ^ a, x.into(a))
+        x.into(a) in sorted_lists
     inspect
-        a
-    case y ^ a
-        assert
-            permutation(x ^ a, x.into(a))
+        a in sorted_lists
+    case all(y:L) [y] in sorted_lists
         if x <= y
         else
-    end
-
-
-
-all(x:L, a:[L])
-    ensure
-        permutation (x ^ a, x.into(a))
-    inspect
-        a
-    case y ^ a
+    case all(y,z:L,a)
+        y <= z ==> z ^ a in sorted_lists ==> y ^ z ^ a in sorted_lists
+        assert
+            x.into(z ^ a) in sorted_lists  -- ind hypo
+            -- goal: x.into(y ^ z ^ a) in sorted_lists
+            -- nontrivial case: x > y and x > z
         if x <= y
         else
-    end
-
-
-
-all(x:L, a:[L])
-    require
-        a.is_sorted
-    ensure
-        x.into(a).is_sorted
-    inspect
-        a
-    case y ^ a
-        assert
-            a.is_sorted ==> x.into(a).is_sorted -- ind. hypo
-            (y ^ a).is_sorted                   -- p1
-            a.is_sorted
-            x.into(a).is_sorted
-
-            -- goal: x.into(y ^ a).is_sorted
-            if x <= y
+            if x <= z
             else
                 assert
-                    y <= x
-                    y.is_lower_bound(a)              -- using p1
-                    y.is_lower_bound(x ^ a)
-                    permutation(x ^ a, x.into(a))
-                    (y ^ x.into(a)).is_sorted
-                    y ^ x.into(a) = x.into(y ^ a)
+                    ensure
+                        z ^ x.into(a) in sorted_lists
+                    assert
+                        x.into(z ^ a) = z ^ x.into(a)
+                    end
+                    y ^ z ^ x.into(a) = x.into(y ^ z ^ a)
+                    x.into(y ^ z ^ a) in sorted_lists  -- goal
+    end
+
+all(a:[L])
+    ensure
+        a.sorted in sorted_lists
+    inspect
+        a
     end
 
 
 
 
-
-
-{: Insertion Sort
-   ============= :}
-
-sorted (a:[L]): [L]
-    -> inspect a
-       case []  then []
-       case h^t then h.into(t.sorted)
-
+all(x:L, a:[L])
+    ensure
+        permutation(x ^ a, x.into(a))
+    inspect
+        a
+    case y ^ a
+        if x <= y
+            assert
+                x ^ y ^ a = x.into(y ^ a)
+                x.into(y ^ a) in {b: permutation(x ^ y ^ a, b)}
+        else
+            assert
+                permutation(x ^ a, x.into(a))             -- ind hypo
+                permutation(y ^ x ^ a, y ^ x.into(a))     -- rule: prefix element
+                x.into(y ^ a) = y ^ x.into(a)             -- def 'into'
+            via [
+                  x ^ y ^ a
+                  y ^ x ^ a
+                  y ^ x.into(a)
+                  x.into(y ^ a)
+                ]
+    end
 
 all(a:[L])
     ensure
         permutation(a, a.sorted)
-    inspect a
-    case x^a assert
-        permutation(x^a, x^a.sorted)
-        permutation(x^a.sorted, x.into(a.sorted))
+    inspect
+        a
+    case x ^ a
+        assert
+            permutation(a, a.sorted)                    -- ind hypo
+            (x ^ a).sorted = x.into(a.sorted)    -- def: 'sorted'
+            -- goal: permutation(x ^ a, (x ^ a).sorted)
 
-        ensure permutation(x.into(a.sorted), (x^a).sorted)
-        assert  x.into(a.sorted) = (x^a).sorted
-        end
-    end
-
-all(a:[L])
-    ensure
-        a.sorted.is_sorted
-    inspect a
-    case x^a assert
-        x.into(a.sorted).is_sorted
+        via [ x ^ a
+              x ^ a.sorted        -- ind hypo
+              x.into(a.sorted)    -- previous theorem
+              (x ^ a).sorted      -- def 'sorted'
+            ]
     end

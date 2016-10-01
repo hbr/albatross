@@ -56,29 +56,23 @@ tail (a:[G]): [G]
            x = h or x in t
 
 
+
 elements (a:[G]): {G}
         -- The set of elements of the list 'a'.
     -> {x: x in a}
 
 
-all_in (a:[G], p:{G}): BOOLEAN
-        -- Do all elements of the list 'a' satisfy the predicate 'p'?
-    -> inspect a
-       case []  then true
-       case h^t then h in p and t.all_in(p)
 
-all_in (a,b:[G]): BOOLEAN
-        -- Are all elements of the list 'a' contained in the list 'b'?
-    -> a.all_in(elements(b))
-
-
-same_elements (a,b:[G]): BOOLEAN
-        -- Have the lists 'a' and 'b' the same elements
-    -> a.all_in(b) and b.all_in(a)
-
-
-permutation (a,b:[G]): ghost BOOLEAN
-    -> a.size = b.size and same_elements(a,b)
+permutation: ghost {[G],[G]}
+   = {(r):
+           r([],[])                                  -- empty list
+           ,
+           all(x,a,b) r(a,b) ==> r(x ^ a, x ^ b)     -- prefix element
+           ,
+           all(x,y,a) r(x ^ y ^ a, y ^ x ^ a)        -- swap adjacent
+           ,
+           all(a,b,c) r(a,b) ==> r(b,c) ==> r(a,c)   -- transitive
+     }
 
 
 (+) (a,b: [G]): [G]
@@ -124,7 +118,7 @@ is_prefix (a,b:[G]): BOOLEAN
 
 
 
-all(a,b,c:[G], x,y:G, p,q:{G})
+all(a,b,c:[G], x:G)
     ensure
         -- concatenation of lists
         a   + []  =  a
@@ -138,24 +132,9 @@ all(a,b,c:[G], x,y:G, p,q:{G})
 
         (- -a) = a
 
-        -- list elements
-        x in a ==> a.all_in(p) ==> x in p
-        a.all_in(b) ==> b.all_in(p) ==> a.all_in(p)
-        a.all_in(p) ==> p <= q ==> a.all_in(q)
-
-        a.all_in(b) ==> a.elements <= b.elements
-        a.elements <= b.elements ==> a.all_in(b)
-
-        same_elements(a,a)
-        same_elements(a,b) ==> same_elements(b,a)
-        same_elements(a,b) ==> same_elements(b,c) ==> same_elements(a,c)
-
         -- permutation
         permutation(a,a)
         permutation(a,b) ==> permutation(b,a)
-        permutation(a,b) ==> permutation(b,c) ==> permutation(a,c)
-        permutation(x^y^a, y^x^a)
-        permutation(a,b) ==> permutation(x^a,x^b)
 
         -- folding
         a + b = ((a,x) -> x ^ a).folded(b,-a)
