@@ -19,7 +19,10 @@ language.
 Prerequisites: In order to compile the Albatross compiler you need the `OCaml`
 compiler. The OCaml compiler is available at no cost through
 [caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
-platforms.
+platforms. Beside the ocaml compiler the program `ocamlbuild` is needed. The
+ocaml compiler versions below 4.03 already contain the program
+`ocamlbuild`. From version 4.03 on `ocamlbuild` is no longer part of the
+compiler suite and has to be installed separately.
 
 
 Compile the Albatross compiler with the commands:
@@ -29,12 +32,13 @@ Compile the Albatross compiler with the commands:
     ocamlbuild -lib unix alba.native
 
 
-Now you have the file `alba.native` in the directory `albatross/ocaml/_build`
-which is the executable albatross compiler. Copy (or link) it under the name
-`alba` to any location which is in the search path for programs.
+After these commands you have the file `alba.native` in the directory
+`albatross/ocaml/_build` which is the executable albatross compiler. Copy (or
+link) it under the name `alba` to any location which is in the search path for
+programs.
 
-The basic libary is in `albatross/library/alba.base`. In order to use it you
-have to compile it.
+The basic libary is in `path/to/albatross/library/alba.base`. In order to use
+it you have to compile it.
 
     cd path/to/albatross/library/alba.base
 
@@ -48,7 +52,8 @@ and the compiler will find the libraries automatically.
 
 For the emacs editor there is an albatross mode which does syntax
 highlighting. The file `albatross-mode.el` can be found in the directory
-`misc`. The file contains instructions to activate the mode in emacs.
+`path/to/albatross/misc`. The file contains instructions to activate the mode
+in emacs.
 
 
 
