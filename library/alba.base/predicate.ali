@@ -55,5 +55,7 @@ all(a,b,c:G, p:{G})
         a = b ==> b = a              -- symmetry of equality
         a = b ==> b = c ==> a = c    -- transitivity of equality
 
-        p.is_empty ==> all(a) a /in p
+        p.is_empty ==> all(a) a /in p   -- empty set does not have elements
+
+        (a /in p ==> false) ==> a in p  -- indirect proof
     end

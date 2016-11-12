@@ -83,3 +83,18 @@ all(p:{G})
 empty:{G}     = {x: false}
 
 universal:{G} = {x: true}
+
+
+{: Indirect Proof
+   ==============
+:}
+
+
+all(a:G, p:{G})
+    require
+        a /in p ==> false
+    ensure
+        a in p
+    via require
+        not (a in p)
+    end
