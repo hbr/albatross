@@ -822,16 +822,6 @@ let analyze_expression
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
       | Expcolon (_,_) ->
           not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
-      | Expassign (_,_) ->
-          not_yet_implemented ie.i ("Expassign Typing of "^ (string_of_expression e))
-      | Cmdinspect (_,_) ->
-          not_yet_implemented ie.i ("Expinspect Typing of command "^
-                                    (string_of_expression e))
-      | Cmdif (_,_) ->
-          not_yet_implemented ie.i ("Expif Typing of command "
-                                    ^ (string_of_expression e))
-      | Proofinspect _ | Proofif _ | Proofgif _ ->
-          assert false (* cannot happen *)
     with Accus.Untypeable _ ->
       error_info ie.i
         ("Type error in expression \"" ^ (string_of_expression e) ^ "\"")

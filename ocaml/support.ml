@@ -400,18 +400,8 @@ type expression =
   | Tupleexp      of expression * expression
   | Typedexp      of expression * type_t withinfo
   | Expcolon      of expression * expression
-  | Expassign     of expression * expression
   | Expif         of expression * expression * expression
   | Expinspect    of expression * (expression*expression) list
-  | Proofinspect  of expression * (info_expression*compound) list * info_expression
-  | Proofif       of (info_expression * compound) list * compound withinfo
-                     * info_expression
-  | Proofgif      of (info_expression * compound) list * info_expression
-  | Cmdif         of (info_expression * compound) list * compound withinfo
-  | Cmdinspect    of
-      info_expression
-        * (info_expression * compound) list
-  (*| Expproof      of compound * implementation option * compound*)
   | Expquantified of quantifier * entities list withinfo * expression
 
 and
@@ -544,9 +534,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expcolon (e1,e2) ->
       withparen ((strexp e1) ^ ":" ^ (strexp e2)) wp
 
-  | Expassign (e1,e2) ->
-      withparen ((strexp e1) ^ ":=" ^ (strexp e2)) wp
-
   | Expif (cond,e1,e2) ->
       "if " ^
       (string_of_expression cond) ^
@@ -555,30 +542,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       " else " ^
       (string_of_expression e2)
 
-  | Proofinspect (insp,caselst,ens) ->
-      "inspect " ^ (string_of_expression insp)
-      ^ (string_of_list
-           caselst
-           (fun (pat,cmp) ->
-             " case " ^ (string_of_expression pat.v)
-             ^ " proof " ^ (string_of_compound cmp))
-           "")
-      ^ " ensure " ^ (string_of_expression ens.v) ^ " end"
-
-  | Proofif (thenlist,elsepart,ens) ->
-      "if "
-      ^ (str_thenlist thenlist)
-      ^ (str_elsepart elsepart)
-      ^ " ensure "
-      ^ (string_of_expression ens.v)
-      ^ " end"
-  | Proofgif (list,ens) ->
-      assert false (* should not be printed *)
-  | Cmdif (thenlist,elsepart) ->
-      "if "
-      ^ (str_thenlist thenlist)
-      ^ (str_elsepart elsepart)
-      ^ " end"
   | Expinspect (inspexp,caselist) ->
       "inspect "
       ^ (string_of_expression inspexp)
@@ -589,17 +552,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
              ^ " then " ^  (string_of_expression exp))
            "")
       ^ " end"
-  | Cmdinspect (inspexp,caselist) ->
-      "inspect "
-      ^ (string_of_expression inspexp.v)
-      ^ (string_of_list
-           caselist
-           (fun ce ->
-             let pat,comp = ce
-             in
-             " case " ^ (string_of_expression pat.v)
-             ^ " then " ^  (string_of_compound comp))
-           "")
   | Expquantified (q,elist,exp) ->
       (match q with Universal -> "all" | Existential -> "some")
       ^ "(" ^ (string_of_formals elist.v) ^ ") "  ^ (string_of_expression exp)
