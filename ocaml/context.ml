@@ -1438,19 +1438,8 @@ let case_preconditions
   let insp   = Term.up n insp
   and imp_id = n + nb + implication_index c
   and eq_id  =
-    let i =
-      match pat with
-        Variable i   -> i
-      | VAppl(i,_,_,_) -> i
-      | _ -> assert false (* cannot happen in pattern *)
-    in
     let ndelta = n + nb + count_variables c in
-    let i = i - ndelta in
-    assert (0 <= i);
-    assert (Feature_table.is_constructor i c.ft);
-    let cls = Feature_table.class_of_feature i c.ft in
-    assert (cls = cls0);
-    ndelta + Feature_table.equality_index cls c.ft
+    ndelta + Feature_table.equality_index cls0 c.ft
   in
   List.fold_left
     (fun lst pre ->
