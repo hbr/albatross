@@ -397,41 +397,6 @@ end (* Accus *)
 
 
 
-let unfold_inspect (info:info) (t:term) (c:Context.t): term =
-  let ft    = Context.feature_table c
-  and nvars = Context.count_variables c
-  and ntvs  = Context.ntvs c in
-  let rec unfold t nb =
-    let unfold_args args nb = Array.map (fun a -> unfold a nb) args
-    and unfold_list lst  = List.map  (fun a -> unfold a nb) lst
-    in
-    match t with
-      Variable i ->
-        t
-    | VAppl (i,args,ags,oo) ->
-        VAppl (i, unfold_args args nb,ags,oo)
-    | Application (f,args,pr,inop) ->
-        let f    = unfold f nb
-        and args = unfold_args args nb in
-        Application(f,args,pr,inop)
-    | Lam (n,nms,pres,t,pr,tp) ->
-        let pres = unfold_list pres
-        and t    = unfold t (1+nb) in
-        Lam(n,nms,pres,t,pr,tp)
-    | QExp (n,tps,fgs,t,is_all) ->
-        QExp (n, tps, fgs, unfold t (n+nb), is_all)
-    | Flow (Inspect,args) ->
-        let args = unfold_args args nb in
-        let args = Feature_table.inspect_unfolded info args (nb+nvars) ntvs ft in
-        Flow(Inspect,args)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, unfold_args args nb)
-    | Indset (nme,tp,rs) ->
-        Indset (nme,tp, unfold_args rs (1+nb))
-  in
-  unfold t 0
-
-
 
 let cannot_find (name:string) (nargs:int) (info:info) =
   let str = "Cannot find \"" ^ name
@@ -1007,7 +972,6 @@ let analyze_expression
   validate_term ie.i term c;
   validate_visibility ie.i term c;
   assert (Context.is_well_typed term c);
-  let term = unfold_inspect ie.i term c in
   assert (Context.is_well_typed term c);
   (*assert (Term_builder.is_valid term c);*)
   term

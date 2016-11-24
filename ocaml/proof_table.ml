@@ -635,7 +635,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             and n2,_,res  = Term.pattern_split args.(2*icase+2) in
             if n1 <> n2 then raise Illegal_proof_term;
             begin try
-              let subarr = Term_algo.unify inspb n1 mtch in
+              let ft = feature_table at
+              and nvars = count_variables at in
+              let subarr = Pattern.unify_with_pattern inspb n1 mtch nvars ft in
               assert (Array.length subarr = n2);
                 let res = Term.apply res subarr in
                 if not (Term.equivalent res resa) then begin
@@ -645,7 +647,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
                   raise Illegal_proof_term
                 end;
                 t, resb
-            with Not_found ->
+            with Reject | Undecidable ->
               printf "inspect no match\n";
               printf "  term      %s\n" (string_of_term_anon inspa nb at);
               printf "  eval      %s\n" (string_of_term_anon inspb nb at);

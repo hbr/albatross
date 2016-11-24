@@ -240,10 +240,14 @@ all(a,b:NATURAL)
    =============== :}
 
 (<=) (a,b:NATURAL): BOOLEAN
-    -> inspect a, b
-       case    0, _ then true
-       case    _, 0 then false
-       case    successor(a), successor(b) then a <= b
+    -> inspect
+           a, b
+       case 0,_ then
+           true
+       case successor(a), successor(b) then
+           a <= b
+       case _, _ then
+           false
 
 (<)  (a,b:NATURAL): BOOLEAN -> a <= b and a /= b
 
@@ -580,22 +584,17 @@ all(a,b,n:NATURAL)
 
 
 all(a,b:NATURAL)
+    require
+        b <= a
     ensure
-        b <= a  ==>  not ((a,b) as (0,successor(_)))
+        not ((a,b) as (0,successor(_)))
     inspect
         a
     case 0
         assert
-            require
-                b <= 0
-                (0:NATURAL,b) as (0,successor(_))
-            ensure
-                false
-            assert
-                b = 0
-                0 in {b: (0:NATURAL,b) as (0,successor(_))}
-            end
+            b = 0
     end
+
 
 
 all(a,b,n,m:NATURAL)

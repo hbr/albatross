@@ -38,6 +38,9 @@ exception Error_string of string
 exception Error_info of info*string
 exception Error_fileinfo of string*info*string
 exception NYI
+exception Reject
+exception Undecidable
+
 
 let error_string (str:string) = raise (Error_string str)
 

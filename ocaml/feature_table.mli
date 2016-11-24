@@ -160,11 +160,8 @@ val constructor_rule:  int -> term -> agens -> int -> t
 val induction_law:    int -> int -> t -> term
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
-val is_case_matching:  term -> int -> term -> int -> t -> bool
-(*val peer_matches:      int -> int -> t -> (int*term) list*)
 val unmatched_inspect_cases: term array -> int -> int -> t
   -> (int * term list * term) list
-val inspect_unfolded:  info -> term array -> int -> int -> t -> term array
 
 val is_feature_public: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
