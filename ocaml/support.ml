@@ -438,6 +438,9 @@ let expression_list_rev (e:expression): expression list =
   list e []
 
 
+let expression_list_length (e:expression): int =
+  List.length (expression_list_rev e)
+
 
 let expression_list (e:expression): expression list =
   (* break up a tuple into a list.*)

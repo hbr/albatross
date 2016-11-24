@@ -926,7 +926,14 @@ let analyze_expression
       (accs: Accus.t)
       (c:Context.t)
       :unit =
+    let ninspected = expression_list_length insp
+    in
     let do_case (i:int) ((m,r):expression*expression): unit =
+      if ninspected > expression_list_length m then
+        error_info info ("case " ^ (string_of_int (i+1)) ^
+                         " \"" ^  (string_of_expression m) ^
+                         "\" does not have at least " ^
+                         (string_of_int ninspected) ^ " pattern");
       let m,nms = case_variables info m false c
       and ntvs_gap = Accus.ntvs_added accs in
       let c1   = Context.push_untyped_gap nms ntvs_gap c in

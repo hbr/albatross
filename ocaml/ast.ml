@@ -385,9 +385,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
       (nb:int) (lst:(int*term*int*int) list): (int*term*int*int) list =
     let len_insp = Array.length insp_arr
     and len_pat  = Array.length parr in
-    assert (len_pat <= len_insp);
-    let len =
-      if len_pat < len_insp then len_pat - 1 else len_insp in
+    assert (len_pat = len_insp);
     interval_fold
       (fun lst i ->
         match insp_arr.(i) with
@@ -399,7 +397,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
               plst
         | None ->
             lst)
-      lst 0 len
+      lst 0 len_insp
   in
   let rec check (t:term) (nbranch:int) (tlst:(int*term*int*int) list) (c:Context.t)
       : unit =
@@ -474,12 +472,13 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
               else
                 arr
             in
+            assert (Array.length parr = ninsp); (* because there have to be enough
+                                                   pattern for the inspected
+                                                   expressions *)
             let tlst2 = add_pattern insp_arr2 n parr nb tlst in
-            assert (Array.length parr = ninsp); (* because only constructors and
-                                                   variables are allowed in
-                                                   patterns *)
             let c = Context.push_typed fargs empty_formals c in
-            check res (nbranch+1) tlst2 c)
+            check res (nbranch+1) tlst2 c
+          )
           0 ncases
     | Indset (n,nms,rs) ->
         error_info
