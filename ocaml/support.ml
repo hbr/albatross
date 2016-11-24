@@ -461,19 +461,6 @@ let expression_of_list (lst:expression list): expression =
 let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
-  and str_thenlist thenlist =
-    string_of_list
-      thenlist
-      (fun tp ->
-        let cond,comp = tp
-        in
-        (string_of_expression cond.v)
-        ^ (if comp = [] then "" else "then " ^ (string_of_compound comp)))
-      " elseif "
-  and str_elsepart elsepart =
-    match elsepart.v with
-      [] -> ""
-    | _ -> " else " ^ (string_of_compound elsepart.v)
   in
   match e with
     Identifier id -> ST.string id

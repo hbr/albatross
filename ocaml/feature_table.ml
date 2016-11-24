@@ -3074,13 +3074,14 @@ let is_case_matching (t:term) (npat:int) (pat:term) (nb:int) (ft:t): bool =
 
  *)
 let unmatched_and_splitted
-    (n:int) (tps:tplst) (pat:term) (unmatched:(int*tplst*term)list)
+    (n:int) (tps:tplst) (pat:term)   (* Pattern to be analyzed *)
+    (unmatched:(int*tplst*term)list) (* Complementary pattern of the previous cases *)
     (nb:int) (ntvs:int) (ft:t)
     : (int*tplst*term) list * (int * tplst * term * term array option) list =
   (* Calculate the remaining unmatched pattern and a split list. The unmatched
      pattern are all the pattern which are left over with the pattern [n,pat]
      working of the unmatched cases in [unmatched]. The split list consist of one
-     ore more pattern into which [n,pat] has to be splitted. The pattern has to be
+     or more pattern into which [n,pat] has to be splitted. The pattern has to be
      splitted if it is more general than some pattern in [unmatched].
    *)
   let is_trivial arr n =
@@ -3155,7 +3156,8 @@ let unmatched_and_splitted
         with Not_found -> (* pat and pat_i cannot be unified *)
           (npat0,tps0,pat0) :: unmatched, splitted)
       ([],[])
-      unmatched in
+      unmatched
+  in
   unmatched, splitted
 
 
@@ -3229,7 +3231,7 @@ let unmatched_inspect_cases (args:term array) (nb:int) (ntvs:int) (ft:t)
 
           b) current pattern is more general or equal: Add a case clause with
              the unmatched (there might be more unmatched pattern which are
-             more special than the current pattern.
+             more special than the current pattern).
 
    If the set of unmatched pattern is empty then the case clause is not needed.
    This condition might be flagged as an error. *)
