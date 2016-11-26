@@ -1722,7 +1722,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
               if ghost || i = ncases then
                 ghost
               else
-                let n,_,t   = Term.pattern_split args.(2*i+2) in
+                let n,_,_,t = Term.case_split args.(2*i+1) args.(2*i+2) in
                 let ghost = is_ghost t (n+nb) in
                 cases_from (1+i) ghost
             in

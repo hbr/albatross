@@ -631,14 +631,14 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             if len < 3 || len mod 2 <> 1 then raise Illegal_proof_term;
             let ncases = len / 2 in
             if icase < 0 || ncases <= icase then raise Illegal_proof_term;
-            let n1,_,mtch = Term.pattern_split args.(2*icase+1)
-            and n2,_,res  = Term.pattern_split args.(2*icase+2) in
-            if n1 <> n2 then raise Illegal_proof_term;
+            let n1,_,mtch,res =
+              Term.case_split args.(2*icase+1) args.(2*icase+2)
+            in
             begin try
               let ft = feature_table at
               and nvars = count_variables at in
               let subarr = Pattern.unify_with_pattern inspb n1 mtch nvars ft in
-              assert (Array.length subarr = n2);
+              assert (Array.length subarr = n1);
                 let res = Term.apply res subarr in
                 if not (Term.equivalent res resa) then begin
                   printf "inspect result different\n";

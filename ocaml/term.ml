@@ -1057,10 +1057,14 @@ end = struct
     n, fargs, t
 
   let case_split (t1:term) (t2:term): int * formals * term * term =
-    let n1,fargs1,t1 = pattern_split t1
-    and n2,fargs2,t2 = pattern_split t2 in
-    assert (n1 = n2);
-    n1, fargs1, t1, t2
+    let n1,fargs1,t1 = pattern_split t1 in
+    if n1 = 0 then
+      n1, fargs1, t1, t2 (* There are not pattern variables *)
+    else begin
+      let n2,fargs2,t2 = pattern_split t2 in
+      assert (n1 = n2);
+      n1, fargs1, t1, t2
+    end
 
 
   let unary (unid:int) (t:term): term =

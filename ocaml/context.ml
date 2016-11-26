@@ -720,7 +720,7 @@ let rec type_of_term (t:term) (c:t): type_term =
           type_of_term args.(1) c
       | Inspect ->
           assert (3 <= Array.length args);
-          let _,tps,res = Term.pattern_split args.(2) in
+          let _,tps,_,res = Term.case_split args.(1) args.(2) in
           let c1 = push_typed tps empty_formals c in
           type_of_term res c1
       | Asexp ->
