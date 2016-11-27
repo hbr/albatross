@@ -1349,11 +1349,11 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     assert (len = 2);
     let nvars = nbenv pc in
     let n,nms,pat = Term.pattern_split args.(1) in
-
-    let eargs = [|Eval.Term args.(0); Eval.Term args.(1)|]
+    let insp,inspe = maybe_eval args.(0) lazy_ depth pc in
+    let eargs = [|inspe; Eval.Term args.(1)|]
     and ft = feature_table pc in
     try
-      ignore(Pattern.unify_with_pattern args.(0) n pat nvars ft);
+      ignore(Pattern.unify_with_pattern insp n pat nvars ft);
       Feature_table.true_constant nvars,
       Eval.As(true,eargs)
     with Reject ->
