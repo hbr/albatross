@@ -324,13 +324,13 @@ let string_of_arguments (arr: term array) (c:t): string =
   "(" ^ (string_of_term_array "," arr c) ^ ")"
 
 
-let string_of_type_term (tp:type_term) (c:t): string =
+let string_of_type (tp:type_term) (c:t): string =
   Class_table.string_of_type tp (tvars c) (class_table c)
 
 
 let string_of_type_array (sep:string) (tps:types) (c:t): string =
   String.concat sep
-    (List.map (fun tp -> string_of_type_term tp c) (Array.to_list tps))
+    (List.map (fun tp -> string_of_type tp c) (Array.to_list tps))
 
 let string_of_ags (ags:agens) (c:t): string =
   "["
@@ -1124,10 +1124,10 @@ let rec type_of_term_full
     begin match rtp with
       None when not pr ->
         raise (Type_error
-                 ("The type " ^ string_of_type_term tp c ^ " is not a predicate"))
+                 ("The type " ^ string_of_type tp c ^ " is not a predicate"))
     | Some _  when pr ->
         raise (Type_error
-                 ("The type " ^ string_of_type_term tp c ^ " is not a function"))
+                 ("The type " ^ string_of_type tp c ^ " is not a function"))
     | _ ->
         ()
     end;
@@ -1147,7 +1147,7 @@ let rec type_of_term_full
   in
   let trace_tp tp =
     if trace then
-      printf "  %s : %s\n" (string_long_of_term t c) (string_of_type_term tp c);
+      printf "  %s : %s\n" (string_long_of_term t c) (string_of_type tp c);
     tp
   in
   let check_and_trace tp =
@@ -1156,9 +1156,9 @@ let rec type_of_term_full
         raise (Type_error
                  ("\n    term:     " ^ string_of_term t c ^
                   "\n    required type: " ^
-                  string_of_type_term req_tp c ^
+                  string_of_type req_tp c ^
                   "\n    actual type:   " ^
-                  string_of_type_term tp c))
+                  string_of_type tp c))
     | _ ->
         ()
     end;
@@ -1179,9 +1179,9 @@ let rec type_of_term_full
               raise (Type_error
                  ("\n    term:     " ^  string_of_term t c ^
                   "\n    signature: " ^ (string_of_signature s c) ^
-                  string_of_type_term req_tp c ^
+                  string_of_type req_tp c ^
                   "\n    cannot be upgraded to: " ^
-                  string_of_type_term req_tp c));
+                  string_of_type req_tp c));
             true
         | Some rtp ->
             false
@@ -1199,11 +1199,11 @@ let rec type_of_term_full
     printf "  type of %s\n" (string_long_of_term t c);
     begin match req_tp with
       Some tp ->
-        printf "    required type %s\n" (string_of_type_term tp c)
+        printf "    required type %s\n" (string_of_type tp c)
     | _ ->
         ()
     end;
-    printf "    actual type %s\n" (string_of_type_term (type_of_term t c) c)
+    printf "    actual type %s\n" (string_of_type (type_of_term t c) c)
   end;
   match t with
     Variable i ->
@@ -1759,15 +1759,6 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
 let get_type (tp:type_t withinfo) (c:t): type_term =
   let tvs = tvars c in
   Class_table.get_type tp tvs (class_table c)
-
-let string_of_type (tp:type_term) (c:t): string =
-  Class_table.string_of_type tp (tvars c) (class_table c)
-
-
-let string_of_type_array (sep:string) (arr: type_term array) (c:t): string =
-  String.concat
-    sep
-    (List.map (fun tp -> string_of_type tp c) (Array.to_list arr))
 
 
 let downgrade_term (t:term) (nb:int) (c:t): term =
