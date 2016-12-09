@@ -380,6 +380,11 @@ let operator_to_string op =
 
 type is_do_block = bool
 
+type application_mode =
+    AMmath
+  | AMoo
+  | AMop
+
 
 type expression =
     Identifier    of int
@@ -392,18 +397,15 @@ type expression =
   | Exparrow      of entities list withinfo * expression
   | Expagent      of entities list withinfo * return_type * compound * expression
   | Expop         of operator
-  | Funapp        of expression * expression
-  | Bracketapp    of expression * expression
-  | Expdot        of expression * expression
+  | Funapp        of expression * expression list * application_mode
   | Expset        of expression
   | Exppred       of entities list withinfo * expression
   | Expindset     of entities list withinfo * expression list
-  | Binexp        of operator * expression * expression
-  | Unexp         of operator * expression
   | Tupleexp      of expression * expression
   | Typedexp      of expression * type_t withinfo
   | Expcolon      of expression * expression
   | Expif         of expression * expression * expression
+  | Expas         of expression * expression
   | Expinspect    of expression * (expression*expression) list
   | Expquantified of quantifier * entities list withinfo * expression
 
@@ -468,6 +470,9 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexp e         = string_of_expression ~wp:wp e
   and withparen str wp = if wp then "(" ^ str ^ ")" else str
   in
+  let strexplst lst =
+    String.concat "," (List.map strexp lst)
+  in
   match e with
     Identifier id -> ST.string id
 
@@ -493,14 +498,36 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       " end"
   | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 
-  | Funapp (f,args) ->
-      (strexp f) ^ "(" ^ (strexp args) ^ ")"
-
-  | Bracketapp (tgt,args) ->
-      (strexp tgt) ^ "[" ^ (strexp args) ^ "]"
-
-  | Expdot (t,f) ->
-      withparen ((strexp t) ^ "." ^ (strexp f)) wp
+  | Funapp (Expop Bracketop,args,_) ->
+      begin
+        match args with
+          tgt ::args ->
+            (strexp tgt) ^ "[" ^ (strexplst args) ^ "]"
+        | _ ->
+            assert false (* Cannot happen *)
+      end
+  | Funapp (Expop op,args,AMop) ->
+      begin
+        match args with
+          [e] ->
+            withparen ((operator_to_string op) ^ (strexp e)) wp
+        | [e1;e2] ->
+            withparen ((strexp e1) ^ (operator_to_string op) ^ (strexp e2)) wp
+        | _ ->
+            assert false (* Cannot happen *)
+      end
+  | Funapp (f,args,AMoo) ->
+      begin
+        match args with
+          tgt::args ->
+            withparen ((strexp tgt) ^ "." ^ (strexp f)) wp ^
+            (if args = [] then ""
+            else "(" ^ strexplst args ^ ")" )
+        | _ ->
+            assert false (* Cannot happen *)
+      end
+  | Funapp (f,args,_) ->
+      (strexp f) ^ "(" ^ (strexplst args) ^ ")"
 
   | Expset s ->
       "{" ^  (strexp s) ^ "}"
@@ -511,12 +538,6 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   | Expindset (elist,rules) ->
       "{" ^ (string_of_formals elist.v) ^ ":" ^
       (string_of_list rules string_of_expression ",") ^ "}"
-
-  | Binexp (op,e1,e2) ->
-      withparen ((strexp e1) ^ (operator_to_string op) ^ (strexp e2)) wp
-
-  | Unexp (op,e) ->
-      withparen ((operator_to_string op) ^ (strexp e)) wp
 
   | Typedexp (e,t) ->
       withparen ((strexp e) ^ ":" ^ (string_of_type t.v)) wp
@@ -534,6 +555,11 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       (string_of_expression e1) ^
       " else " ^
       (string_of_expression e2)
+
+  | Expas (e,pat) ->
+      string_of_expression e ^
+      " as " ^
+      string_of_expression pat
 
   | Expinspect (inspexp,caselist) ->
       "inspect "

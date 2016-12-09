@@ -514,15 +514,7 @@ let case_variables
     | Typedexp (Expanon,tp) ->
         let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
         Typedexp(Identifier nme,tp), 1+nanon, nme :: lst
-    | Unexp (op,exp) ->
-        let e,nanon,lst = vars exp nanon lst in
-        Unexp(op,e), nanon, lst
-    | Binexp (op,e1,e2) ->
-        let e1,nanon,lst = vars e1 nanon lst in
-        let e2,nanon,lst = vars e2 nanon lst in
-        Binexp(op,e1,e2), nanon, lst
-    | Funapp(f,args) ->
-        let args = expression_list args in
+    | Funapp(f,args,am) ->
         let f,nanon,lst = fvars f nanon lst in
         let arglst,nanon,lst =
           List.fold_left
@@ -531,11 +523,7 @@ let case_variables
               e::arglst, nanon, lst)
             ([],nanon,lst)
             args in
-        Funapp(f,expression_of_list (List.rev arglst)), nanon, lst
-    | Expdot (tgt,f) ->
-        let tgt, nanon,lst = vars tgt nanon lst in
-        let f, nanon, lst  = fvars f nanon lst in
-        Expdot(tgt,f), nanon, lst
+        Funapp(f,List.rev arglst,am), nanon, lst
     | Tupleexp (e1,e2) ->
         let e1,nanon,lst = vars e1 nanon lst in
         let e2,nanon,lst = vars e2 nanon lst in
@@ -739,16 +727,10 @@ let analyze_expression
       | Exptrue             -> do_leaf (feat FNtrue)
       | Expnumber num       -> do_leaf (feat (FNnumber num))
       | Expop op            -> do_leaf (feat (FNoperator op))
-      | Binexp (Asop,e1,mtch) ->
-          exp_as ie.i e1 mtch accs c
-      | Binexp (op,e1,e2)   -> application (Expop op) [|e1; e2|] false accs c
-      | Unexp  (op,e)       -> application (Expop op) [|e|] false accs c
-      | Funapp (Expdot(tgt,f),args) ->
-          let arg_lst = tgt :: (expression_list args) in
-          let args = Array.of_list arg_lst in
-          application f args true accs c
-      | Funapp (f,args)     ->
-          application f (Array.of_list (expression_list args)) false accs c
+      | Expas (e,pat) ->
+          exp_as ie.i e pat accs c
+      | Funapp (f,args,am)     ->
+          application f (Array.of_list args) am accs c
       | Expparen e          -> analyze e accs c
       | Expquantified (q,entlst,exp) ->
           quantified q entlst exp accs c
@@ -756,10 +738,8 @@ let analyze_expression
           lambda entlst None [] e true false accs c
       | Expindset (entlst,rules) ->
           inductive_set entlst rules accs c
-      | Expdot (tgt,f) ->
-          application f [|tgt|] true accs c
       | Tupleexp (a,b) ->
-          application (Identifier ST.tuple) [|a;b|] false accs c
+          application (Identifier ST.tuple) [|a;b|] AMmath accs c
       | ExpResult ->
           do_leaf (id (ST.symbol "Result"))
       | Exparrow(entlst,e) ->
@@ -783,10 +763,6 @@ let analyze_expression
             error_info info (str ^ actual ^ "\n  Required types(s):\n\t" ^ reqs)
           end;
           analyze e0 accs c
-      | Bracketapp (tgt,args) ->
-          let arg_lst = tgt :: expression_list args in
-          let args = Array.of_list arg_lst in
-          application (Expop Bracketop) args false accs c
       | Expset _ ->
           not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
       | Expcolon (_,_) ->
@@ -798,7 +774,7 @@ let analyze_expression
   and application
       (f:expression)
       (args: expression array) (* unreversed, i.e. as in the source code *)
-      (oo:bool)
+      (am:application_mode)
       (accs: Accus.t)
       (c:Context.t)
       : unit =
@@ -810,6 +786,7 @@ let analyze_expression
       Accus.expect_argument accs;
       analyze args.(i) accs c
     done;
+    let oo = match am with AMoo -> true | _ -> false in
     Accus.complete_function oo accs
 
   and quantified

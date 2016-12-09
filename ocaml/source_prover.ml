@@ -12,6 +12,7 @@ open Container
 open Printf
 
 module PC = Proof_context
+module Typer = Typer
 
 type info_term  = term withinfo
 type info_terms = info_term list

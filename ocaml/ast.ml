@@ -12,6 +12,7 @@ open Container
 open Printf
 
 module PC = Proof_context
+module Typer = Typer
 
 type kind =
     PAxiom
@@ -206,7 +207,7 @@ let result_term (lst:info_expression list) (context:Context.t): term * info =
     [] -> assert false
   | [e] -> begin
       match e.v with
-        Binexp (Eqop, ExpResult,def) ->
+        Funapp (Expop Eqop, [ExpResult;def],_) ->
           Typer.result_term
             (withinfo e.i def)
             context,
@@ -1011,7 +1012,8 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
   begin (* add reflexivity of equality *)
     let arga     = ST.symbol "a" in
     let entlst = withinfo UNKNOWN [Typed_entities ([arga],cls_tp)]
-    and elst   = [withinfo UNKNOWN (Binexp (Eqop,Identifier arga,Identifier arga))]
+    and elst   =
+      [withinfo UNKNOWN (Funapp (Expop Eqop,[Identifier arga;Identifier arga],AMop))]
     and prf =
       if PC.is_private pc then
         SP_Axiom

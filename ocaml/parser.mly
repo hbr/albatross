@@ -30,11 +30,17 @@ let cinfo (i:info): string =  info_string (filename ()) i
 
 let syntax_error () = raise (Parsing.Parse_error)
 
+let binexp (op:operator) (e1:expression) (e2:expression): expression =
+  Funapp (Expop op, [e1;e2], AMop)
+
+let unexp (op:operator) (e:expression): expression =
+  Funapp (Expop op, [e], AMop)
+
 
 let expression_from_dotted_id (l: int list): expression =
   match List.rev l with
     f::t ->
-      let func e i = Expdot (e, Identifier i)
+      let func e i = Funapp(Identifier i, [e], AMoo)
       in
       List.fold_left func (Identifier f) t
   | _    -> assert false
@@ -43,14 +49,15 @@ let expression_from_dotted_id (l: int list): expression =
 let set_of_expression_list (lst:expression list): expression =
   let singleton = Identifier (ST.singleton)
   in
-  let singl (e:expression) = Funapp (singleton,e)
+  let singl (e:expression) = Funapp (singleton,[e],AMmath)
   in
   match List.rev lst with
     [] -> assert false (* cannot happen, list has at least the element [e] *)
   | hd::tl ->
       List.fold_left
         (fun res e ->
-          Binexp (Plusop, res, singl e))
+          binexp Plusop res (singl e)
+        )
         (singl hd)
         tl
 
@@ -109,6 +116,7 @@ let body_exp (fb:feature_body1 option): feature_body option * info_expression op
     None -> None, None
   | Some (Body1 bdy)      -> Some bdy, None
   | Some (Body2 (req,ie)) -> Some(req,None,[]), Some ie
+
 
  %}
 
@@ -832,27 +840,42 @@ expr_1:  /* Without 'if' and 'inspect' expressions */
 |   LPAREN expr RPAREN            { Expparen $2 }
 |   LPAREN operator RPAREN        { Expop $2 }
 |   LBRACKET RBRACKET             { Expop Bracketop}
+
 |   LBRACKET expr RBRACKET        {
   let lst = expression_list $2 in
   let rec brexp lst =
     match lst with
       []   -> Expop Bracketop (*Identifier (ST.symbol "nil")*)
     | h::t ->
-        Binexp (Caretop, h, brexp t)
+        binexp Caretop h (brexp t)
   in
   brexp lst
 }
-|   expr_1 LPAREN expr RPAREN       { Funapp ($1,$3) }
-|   expr_1 LBRACKET expr RBRACKET   { Bracketapp ($1,$3) }
-|   expr_1 DOT LIDENTIFIER          { Expdot ($1, Identifier $3) }
+
+|   expr_1 LPAREN expr RPAREN       {
+  let args = expression_list $3 in
+  match $1 with
+    Funapp(f, [tgt], AMoo) ->
+      Funapp(f, tgt::args, AMoo)
+  | _ ->
+      Funapp ($1,expression_list $3,AMmath)
+}
+
+|   expr_1 LBRACKET expr RBRACKET   {
+  Funapp (Expop Bracketop,$1 :: expression_list $3, AMop) }
+
+|   expr_1 DOT LIDENTIFIER          { Funapp (Identifier $3,[$1],AMoo) }
+
 |   expr_1 DOT LBRACE expr RBRACE   {
-  Expdot($1, predicate_of_expression (rhs_info 4) $4)
+  Funapp (predicate_of_expression (rhs_info 4) $4, [$1], AMoo)
 }
 |   dotted_id_list DOT LPAREN expr RPAREN   {
-  Expdot (expression_from_dotted_id $1, $4) }
+  Funapp ($4, [expression_from_dotted_id $1], AMoo) }
 
 |   dotted_id_list DOT LBRACE expr RBRACE   {
-  Expdot(expression_from_dotted_id $1, predicate_of_expression (rhs_info 4) $4)
+  Funapp (predicate_of_expression (rhs_info 4) $4,
+          [expression_from_dotted_id $1],
+          AMoo)
 }
 |   expr_1 COLON type_nt        { Typedexp ($1, withinfo (rhs_info 3) $3) }
 
@@ -900,65 +923,65 @@ atomic_expr:
 }
 
 operator_expr:
-    expr_1 PLUS expr_1                { Binexp (Plusop,$1,$3) }
+    expr_1 PLUS expr_1                { binexp Plusop $1 $3 }
 
-|   expr_1 MINUS expr_1               { Binexp (Minusop,$1,$3) }
+|   expr_1 MINUS expr_1               { binexp Minusop $1 $3 }
 
-|   PLUS expr_1                       { Unexp (Plusop,$2) }
+|   PLUS expr_1                       { unexp Plusop $2 }
 
-|   MINUS expr_1                      { Unexp (Minusop,$2) }
+|   MINUS expr_1                      { unexp Minusop $2 }
 
-|   expr_1 TIMES expr_1               { Binexp (Timesop,$1,$3) }
+|   expr_1 TIMES expr_1               { binexp Timesop $1 $3 }
 
-|   TIMES expr_1                      { Unexp (Timesop,$2) }
+|   TIMES expr_1                      { unexp Timesop $2 }
 
-|   expr_1 DIVIDE expr_1              { Binexp (Divideop,$1,$3) }
+|   expr_1 DIVIDE expr_1              { binexp Divideop $1 $3 }
 
-|   expr_1 CARET  expr_1              { Binexp (Caretop,$1,$3) }
+|   expr_1 CARET  expr_1              { binexp Caretop $1 $3 }
 
-|   expr_1 KWin expr_1                { Binexp (Inop,$1,$3) }
+|   expr_1 KWin expr_1                { binexp Inop $1 $3 }
 
-|   expr_1 NOTIN expr_1               { Binexp (Notinop,$1,$3) }
+|   expr_1 NOTIN expr_1               { binexp Notinop $1 $3 }
 
-|   expr_1 EQ  expr_1                 { Binexp (Eqop,$1,$3) }
+|   expr_1 EQ  expr_1                 { binexp Eqop $1 $3 }
 
-|   expr_1 NEQ  expr_1                { Binexp (NEqop,$1,$3) }
+|   expr_1 NEQ  expr_1                { binexp NEqop $1 $3 }
 
-|   expr_1 LT  expr_1                 { Binexp (LTop,$1,$3) }
+|   expr_1 LT  expr_1                 { binexp LTop $1 $3 }
 
-|   expr_1 LE  expr_1                 { Binexp (LEop,$1,$3) }
+|   expr_1 LE  expr_1                 { binexp LEop $1 $3 }
 
-|   expr_1 GT  expr_1                 { Binexp (GTop,$1,$3) }
+|   expr_1 GT  expr_1                 { binexp GTop $1 $3  }
 
-|   expr_1 GE  expr_1                 { Binexp (GEop,$1,$3) }
+|   expr_1 GE  expr_1                 { binexp GEop $1 $3  }
 
-|   expr_1 KWas expr_1                { Binexp (Asop,$1,$3) }
+|   expr_1 KWas expr_1                { Expas ($1,$3) }
 
-|   expr_1 KWand  expr_1              { Binexp (Andop,$1,$3) }
+|   expr_1 KWand  expr_1              { binexp Andop $1 $3  }
 
-|   expr_1 KWor   expr_1              { Binexp (Orop,$1,$3)  }
+|   expr_1 KWor   expr_1              { binexp Orop $1 $3   }
 
-|   expr_1 RELOP expr_1               { Binexp (Freeop $2,$1,$3) }
+|   expr_1 RELOP expr_1               { binexp (Freeop $2) $1 $3 }
 
-|   expr_1 OPERATOR expr_1            { Binexp (Freeop $2,$1,$3) }
+|   expr_1 OPERATOR expr_1            { binexp (Freeop $2) $1 $3  }
 
-|   expr_1 ROPERATOR expr_1           { Binexp (RFreeop $2,$1,$3) }
+|   expr_1 ROPERATOR expr_1           { binexp (RFreeop $2) $1 $3 }
 
-|   KWnot   expr_1                    { Unexp (Notop,$2) }
+|   KWnot   expr_1                    { unexp Notop $2 }
 
-|   KWold   expr_1                    { Unexp (Oldop,$2) }
+|   KWold   expr_1                    { unexp Oldop $2 }
 
-|   expr_1 DCOLON expr_1              { Binexp (DColonop,$1,$3) }
+|   expr_1 DCOLON expr_1              { binexp DColonop $1 $3  }
 
 |   expr_1 COLON expr_1               { Expcolon ($1,$3) }
 
 |   expr_1 COMMA expr_1               { Tupleexp ($1,$3) }
 
-|   expr_1 BAR  expr_1                { Binexp (Barop,$1,$3) }
+|   expr_1 BAR  expr_1                { binexp Barop $1 $3 }
 
-|   expr_1 DBAR expr_1                { Binexp (DBarop,$1,$3) }
+|   expr_1 DBAR expr_1                { binexp DBarop $1 $3 }
 
-|   expr_1 DARROW expr_1              { Binexp (DArrowop,$1,$3) }
+|   expr_1 DARROW expr_1              { binexp DArrowop $1 $3 }
 
 
 exp_conditional:
