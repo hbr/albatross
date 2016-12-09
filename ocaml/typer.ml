@@ -471,12 +471,16 @@ let process_leaf
 
 
 
-let is_constant (nme:int) (c:Context.t): bool =
-  let nvars = Context.count_variables c in
+let is_constant_constructor (nme:int) (c:Context.t): bool =
+  let nvars = Context.count_variables c
+  and ft = Context.feature_table c in
   try
     let lst   = Context.find_identifier nme 0 c in
     let lst = List.filter
-        (fun (idx,_,_) -> nvars <= idx ) lst in
+        (fun (idx,_,_) ->
+          nvars <= idx && Feature_table.is_constructor (idx-nvars) ft
+        )
+        lst in
     lst <> []
   with Not_found ->
     false
@@ -497,7 +501,7 @@ let case_variables
         e, nanon, lst
     | Identifier nme | Typedexp(Identifier nme,_)->
         let lst =
-          if is_constant nme c then
+          if is_constant_constructor nme c then
             lst
           else if dups && List.mem nme lst then
             lst
