@@ -403,6 +403,20 @@ let signature_string (c:t): string =
   string_of_signature (signature c) c
 
 
+
+let feature_signature (fidx:int) (c:t): Tvars.t * Sign.t =
+  let nvars = count_variables c in
+  assert (nvars <= fidx);
+  Feature_table.signature0 (fidx-nvars) c.ft
+
+
+let string_of_feature_signature (fidx:int) (c:t): string =
+  let nvars = count_variables c in
+  assert (nvars <= fidx);
+  Feature_table.string_of_signature (fidx-nvars) c.ft
+
+
+
 let variable_index (nme:int) (c:t): int =
   Search.array_find_min (fun (n,_) -> n = nme) c.entry.fargs
 
@@ -847,6 +861,8 @@ let put_formal_generic
   Class_table.put_formal name concept (class_table c)
 
 
+let find_features (fn:feature_name) (c:t): int list =
+  Feature_table.find_features fn (count_variables c) c.ft
 
 
 let find_funcs

@@ -167,6 +167,9 @@ val signature_string: t -> string
 val named_signature_string: t -> string
 val signature:  t -> Sign.t
 
+val feature_signature: int -> t -> Tvars.t * Sign.t
+val string_of_feature_signature: int -> t -> string
+
 val transformed_term0: term -> int -> t -> t -> term
 val transformed_term:  term -> t -> t -> term
 
@@ -176,6 +179,7 @@ val check_deferred: t -> unit
 
 val is_case_match_expression: term -> t -> bool
 val find_identifier: int ->          int -> t -> (int * Tvars.t * Sign.t) list
+val find_features:   feature_name -> t -> int list
 val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val variable_data:   int -> t -> Tvars.t * Sign.t
 val variable:        int -> t -> int * Tvars.t * Sign.t

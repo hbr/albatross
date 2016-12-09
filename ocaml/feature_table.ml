@@ -232,6 +232,16 @@ let is_feature_public (i:int) (ft:t): bool =
    Module_table.is_visible desc.mdl (module_table ft))
 
 
+let is_feature_visible (i:int) (ft:t): bool =
+  assert (i < count ft);
+  not (is_interface_check ft) ||
+  let desc = descriptor i ft in
+  (desc.mdl = current_module ft && desc.bdesc#is_exported) ||
+  (desc.mdl <> current_module ft &&
+   Module_table.is_visible desc.mdl (module_table ft))
+
+
+
 let feature_name (i:int) (ft:t): string =
   let desc = descriptor i ft in
   feature_name_to_string desc.fname
@@ -2329,6 +2339,18 @@ let has_visible_variant (i:int) (ft:t): bool =
       IntSet.mem desc.mdl used)
     bdesc#variants
 
+
+
+let find_features (fn:feature_name) (nvars:int) (ft:t): int list =
+  List.fold_left
+    (fun lst (i,_,_,_) ->
+      if is_feature_visible i ft then
+        (i + nvars) :: lst
+      else
+        lst
+    )
+    []
+    (Term_table.terms !(Feature_map.find fn ft.map))
 
 
 let find_funcs

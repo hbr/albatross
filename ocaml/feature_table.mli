@@ -163,7 +163,8 @@ val peer_constructors: int -> t -> IntSet.t
 val unmatched_inspect_cases: term array -> int -> int -> t
   -> (int * term list * term) list
 
-val is_feature_public: int -> t -> bool
+val is_feature_public:  int -> t -> bool
+val is_feature_visible: int -> t -> bool
 val is_term_public:    term -> int -> t -> bool
 
 val owner: int -> t -> int
@@ -193,6 +194,8 @@ val postconditions: int -> int -> t -> int * int array * term list
 val count_postconditions: int -> t -> int
 val function_property_assertions: int -> t -> term list
 val function_property: int -> int -> int -> term array -> t -> term
+
+val find_features: feature_name -> int -> t -> int list
 
 val find_funcs: feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
   (** [find_funcs fn nargs ft] finds all functions with name [fn] and [nargs]
