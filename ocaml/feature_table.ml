@@ -2342,15 +2342,18 @@ let has_visible_variant (i:int) (ft:t): bool =
 
 
 let find_features (fn:feature_name) (nvars:int) (ft:t): int list =
-  List.fold_left
-    (fun lst (i,_,_,_) ->
-      if is_feature_visible i ft then
-        (i + nvars) :: lst
-      else
-        lst
-    )
+  try
+    List.fold_left
+      (fun lst (i,_,_,_) ->
+        if is_feature_visible i ft then
+          (i + nvars) :: lst
+        else
+          lst
+      )
+      []
+      (Term_table.terms !(Feature_map.find fn ft.map))
+  with Not_found ->
     []
-    (Term_table.terms !(Feature_map.find fn ft.map))
 
 
 let find_funcs
