@@ -1085,7 +1085,7 @@ let term_to_string
               else
                 funiapp2str i args
             end
-      | Application (f,args,pr,inop) ->
+      | Application (f,args,_,inop) ->
           begin
             try
               let op,fidx = find_op f in
@@ -1539,7 +1539,6 @@ let is_inductive_set (i:int) (nb:int) (ft:t): bool =
   assert (nb <= i);
   try
     let t = definition_term (i-nb) ft in
-    (*let n,nms,t = definition i nb ft in*)
     begin
       match t with
         Indset _ -> true
@@ -3158,7 +3157,7 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
         t
     | VAppl (i,args,ags,oo) ->
         VAppl(i, down_args args nb,ags,oo)
-    | Application(VAppl (i,[||],ags,oo),args,pr,_) when nb <= i ->
+    | Application(VAppl (i,[||],ags,oo),args,_,_) when nb <= i ->
         assert (Array.length args = 1);
         let nargs = arity (i - nb) ft in
         let args = down_args args nb in
@@ -3198,7 +3197,7 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
         assert (nb <= i);
         let set = IntSet.add (i-nb) set in
         collect_args args nb set
-    | Application (f,args,is_pred,_) ->
+    | Application (f,args,_,_) ->
         let set = collect f nb set in
         collect_args args nb set
     | Lam (n, nms, pres, t0, is_pred, tp) ->

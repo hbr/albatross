@@ -715,15 +715,16 @@ let rec type_of_term (t:term) (c:t): type_term =
       assert (nvars <= i);
       Feature_table.result_type (i-nvars) ags (ntvs c) c.ft
   | Application(f,args,pr,_) ->
-      if pr then
-        boolean c
-      else begin
-        let f_tp = type_of_term f c in
-        let cls,ags = Class_table.split_type_term f_tp in
+      let f_tp = type_of_term f c in
+      let cls,ags = Class_table.split_type_term f_tp in
+      if cls = function_index c then begin
         assert (Array.length ags = 2);
-        assert (cls = function_index c);
         ags.(1)
-      end
+      end else if cls = predicate_index c then begin
+        assert (Array.length ags = 1);
+        boolean c
+      end else
+        assert false (* cannot happen, must be either a predicate or a function *)
   | Lam(_,_,_,_,_,tp) -> tp
   | QExp _            -> boolean c
   | Indset (_,tp,_)   -> tp
@@ -1241,15 +1242,18 @@ let rec type_of_term_full
         assert (len = 0);
         check_and_trace_sign s
       end
-  | Application (f,args,pr,_) ->
+  | Application (f,args,_,_) ->
       assert (Array.length args = 1);
       let ftp = type_of_term_full f None trace c in
-      let argtp,rtp = get_arg_types ftp pr in
+      let argtp,rtp = split_function_or_predicate ftp in
       ignore (type_of_term_full args.(0) (Some argtp) trace c);
-      if pr then
-        check_and_trace (boolean c)
-      else
-        check_and_trace (Option.value rtp)
+      begin
+        match rtp with
+          None ->
+            check_and_trace (boolean c)
+        | Some tp ->
+            check_and_trace tp
+      end
   | Lam (n,nms,ps,t0,pr,tp) ->
       let argtp,rtp = get_arg_types tp pr in
       let c1 = push_typed ([|ST.symbol "t"|],[|argtp|]) empty_formals c in
@@ -1525,22 +1529,19 @@ let term_preconditions (t:term)  (c:t): term list =
             )
             lst
             lst1
-    | Application (f,args,true,_) -> (* predicate application *)
-        let lst = pres f lst c in
-        pres_args args lst
-    | Application (f,args,false,_) -> (* function application *)
-        assert (Array.length args = 1);
-        let lst = pres f lst c
-        and ags =
-          let f_cls,ags =
-            Class_table.split_type_term (type_of_term f c) in
-          assert (f_cls = function_index c);
-          assert (Array.length ags = 2);
-          ags
-        in
+    | Application (f,args,_,_) ->
+        let lst  = pres f lst c in
         let lst = pres_args args lst
-        and dom = VAppl (domain_index c,[|f|],ags,false) in
-        Application(dom,args,true,false)::lst
+        in
+        let f_tp = type_of_term f c in
+        let cls,ags = Class_table.split_type_term f_tp in
+        if cls = predicate_index c then
+          lst
+        else if cls = function_index c then
+          let dom = VAppl (domain_index c,[|f|],ags,false) in
+          Application(dom,args,true,false) :: lst
+        else
+          assert false (* Cannot happen *)
     | Lam (n,nms,pres0,t0,pr,tp) ->
         let t0     = remove_tuple_accessors t0 n c
         and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0

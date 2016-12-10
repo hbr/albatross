@@ -871,22 +871,28 @@ let get_transitivity_data
       idx_law, ags
   in
   match goal with
-    Application (p, [|arg|], true, _) ->
-      let ft = Context.feature_table c in
-      let tup_tp = Class_table.domain_type (Context.type_of_term p c) in
-      let args = Feature_table.args_of_tuple arg nvars ft in
-      if Array.length args <> 2 then
-        error_not_proper ();
-      let tp = Context.type_of_term args.(0) c in
-      if not (Term.equivalent tp (Context.type_of_term args.(1) c)) then
-        error_not_proper ();
-      let rel nb a b =
-        let p = Term.up nb p in
-        let arg = Feature_table.tuple_of_args [|a;b|] tup_tp (nb+nvars) ft in
-        Application (p, [|arg|],true,false)
-      in
-      let idx_law,ags = find_law rel tp in
-      idx_law, args.(0), args.(1), tp, ags, rel 0
+    Application (p, [|arg|], _, _) ->
+      let p_tp = Context.type_of_term p c in
+      let cls,ags = Class_table.split_type_term p_tp in
+      if cls = Context.predicate_index c then begin
+        assert (Array.length ags = 1);
+        let ft = Context.feature_table c in
+        let tup_tp = Class_table.domain_type p_tp in
+        let args = Feature_table.args_of_tuple arg nvars ft in
+        if Array.length args <> 2 then
+          error_not_proper ();
+        let tp = Context.type_of_term args.(0) c in
+        if not (Term.equivalent tp (Context.type_of_term args.(1) c)) then
+          error_not_proper ();
+        let rel nb a b =
+          let p = Term.up nb p in
+          let arg = Feature_table.tuple_of_args [|a;b|] tup_tp (nb+nvars) ft in
+          Application (p, [|arg|],true,false)
+        in
+        let idx_law,ags = find_law rel tp in
+        idx_law, args.(0), args.(1), tp, ags, rel 0
+      end else
+        error_not_proper ()
   | VAppl (idx, [|a1;a2|], ags,oo)
     when Term.equivalent
         (Context.type_of_term a1 c)
@@ -1145,7 +1151,7 @@ and prove_inspect
   match insp.v with
     Variable var_idx ->
       prove_inductive_type info goal var_idx cases pc
-  | Application (set,args,pr,_) when pr ->
+  | Application (set,args,_,_) ->
       assert (Array.length args = 1);
       prove_inductive_set info goal args.(0) set cases pc
   | _ ->

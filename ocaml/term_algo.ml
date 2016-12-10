@@ -98,8 +98,8 @@ let unify_pattern
         ()
     | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
         uni_args args1 args2
-    | Application(f1,args1,pr1,_), Application(f2,args2,pr2,_)
-      when pr1 = pr2 && Array.length args1 = Array.length args2 ->
+    | Application(f1,args1,_,_), Application(f2,args2,_,_)
+      when Array.length args1 = Array.length args2 ->
         assert false (* nyi: *)
     | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
       when pr1 = pr2 ->
@@ -209,8 +209,8 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Application(f1,args1,pr1,_), Application(f2,args2,pr2,_)
-      when Array.length args1 = Array.length args2 && pr1 = pr2 ->
+    | Application(f1,args1,_,_), Application(f2,args2,_,_)
+      when Array.length args1 = Array.length args2 ->
         begin try
           let pos,poslst,elst,tlst = comp f1 f2 nb (1+pos) poslst elst tlst in
           comp_args pos poslst elst tlst args1 args2

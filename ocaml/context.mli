@@ -142,7 +142,8 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
-val function_index: t -> int
+val function_index:  t -> int
+val predicate_index: t -> int
 
 val type_of_term: term -> t -> type_term
 val tuple_of_types: types -> t -> type_term
