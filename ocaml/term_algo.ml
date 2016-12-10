@@ -98,7 +98,7 @@ let unify_pattern
         ()
     | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
         uni_args args1 args2
-    | Application(f1,args1,_,_), Application(f2,args2,_,_)
+    | Application(f1,args1,_), Application(f2,args2,_)
       when Array.length args1 = Array.length args2 ->
         assert false (* nyi: *)
     | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
@@ -209,7 +209,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Application(f1,args1,_,_), Application(f2,args2,_,_)
+    | Application(f1,args1,_), Application(f2,args2,_)
       when Array.length args1 = Array.length args2 ->
         begin try
           let pos,poslst,elst,tlst = comp f1 f2 nb (1+pos) poslst elst tlst in
@@ -287,14 +287,14 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, VAppl(i+nargs,args,ags,oo)
-    | Application (f,args,pr,inop) ->
+    | Application (f,args,inop) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos,nextvar,poslst,f =
             mklambda (nextpos+1) nextvar poslst f nb in
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
-          nextpos, nextvar, poslst, Application(f,args,pr,inop)
+          nextpos, nextvar, poslst, Application(f,args,inop)
     | Lam(n,nms,pres,t0,pr,tp) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else

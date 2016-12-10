@@ -555,12 +555,12 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.VApply (i,args,ags) ->
         let argsa, argsb = reconstr_args args in
         VAppl (i,argsa,ags,false), VAppl (i,argsb,ags,false)
-    | Eval.Apply (f,args,e,pr) ->
+    | Eval.Apply (f,args,e) ->
         let fa,fb = reconstruct f nb
         and argsa, argsb = reconstr_args args
         and resa,resb = reconstruct e nb in
-        assert (Term.equivalent resa (Application (fb,argsb,pr,false)));
-        Application (fa,argsa,pr,false), resb
+        assert (Term.equivalent resa (Application (fb,argsb,false)));
+        Application (fa,argsa,false), resb
     | Eval.Lam (n,nms,pres,e,pr,tp) ->
         let ta,tb = reconstruct e (1 + nb) in
         Lam (n,nms,pres,ta,pr,tp), Lam (n,nms,pres,tb,pr,tp)
@@ -571,7 +571,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let ta_redex,tb_redex   = reconstruct e_redex nb
         and ta_reduct,tb_reduct = reconstruct e_reduct nb in
         begin match tb_redex with
-          Application(Lam(n,nms,_,t0,_,tp),args,_,_) ->
+          Application(Lam(n,nms,_,t0,_,tp), args, _) ->
             let reduct = beta_reduce n t0 tp args nb at in
             assert (Term.equivalent ta_reduct reduct);
             ta_redex,tb_reduct

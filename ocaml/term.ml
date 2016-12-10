@@ -15,7 +15,7 @@ type flow =
 type term =
     Variable    of int
   | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
-  | Application of term * arguments * bool * bool (* fterm, args, is_pred, inop *)
+  | Application of term * arguments * bool (* fterm, args,, inop *)
   | Lam         of int * names * term list * term * bool * type_term
                    (* n, names, pres, t, is_pred, type *)
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
@@ -248,12 +248,11 @@ end = struct
         fstr ^ "v(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Application (f,args,pr,_) ->
+    | Application (f,args,_) ->
         let fstr = to_string f
         and argsstr = Array.to_list (Array.map to_string args)
-        and predstr = if pr then "p" else "f"
         in
-        fstr ^ predstr ^ "(" ^
+        fstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
     | Lam(nargs,names,pres,t,pred,_) ->
@@ -318,7 +317,7 @@ end = struct
           1
       | VAppl (i,args,_,_) ->
           ndsarr 1 args
-      | Application (f,args,_,_) ->
+      | Application (f,args,_) ->
           ndsarr (nds f nb) args
       | Lam (_,_,pres,t,_,_) ->
           1 + nds t (1 + nb) (* preconditions are not counted *)
@@ -339,7 +338,7 @@ end = struct
     match t with
       Variable _ -> 1
     | VAppl (i,args,_,_) -> 1 + nodesarr args
-    | Application (f,args,_,_) ->
+    | Application (f,args,_) ->
         nodes f + nodesarr args
     | Lam (_,_,pres,t,_,_) ->
         1 + nodes t (* preconditions are not counted *)
@@ -369,7 +368,7 @@ end = struct
       | VAppl (i,args,_,_) ->
           let a = var i in
           fldarr a args nb
-      | Application (f,args,_,_) ->
+      | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           fldarr a args nb
       | Lam (n,_,pres,t,_,_) ->
@@ -486,7 +485,7 @@ end = struct
           and n2 = Array.length args2 in
           n1 = n2 &&
           interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
-      | Application (f1,args1,_,_), Application (f2,args2,_,_) ->
+      | Application (f1,args1,_), Application (f2,args2,_) ->
           let n = Array.length args1 in
           n = Array.length args2 &&
           eq f1 f2 nb &&
@@ -565,10 +564,10 @@ end = struct
                 shift_args delta1 start1 delta2 start2 args,
                 shift_args delta2 start2 0 0 ags,
                 oo)
-      | Application(f,args,pr,inop) ->
+      | Application(f,args,inop) ->
           Application(shift_from delta1 start1 delta2 start2 f,
                       shift_args delta1 start1 delta2 start2 args,
-                      pr, inop)
+                      inop)
       | Lam(n,nms,pres,t,pred,tp) ->
           let start1 = 1 + start1 in
           Lam(n,nms,
@@ -677,10 +676,10 @@ end = struct
                 sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
                 sub_args ags  n2 nb2 d2 args2 0  0   0  [||],
                 oo)
-      | Application (f,args,pr,inop) ->
+      | Application (f,args,inop) ->
           Application (partial_subst_from f n1 nb1 d1 args1 n2 nb2 d2 args2,
                        sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
-                       pr,inop)
+                       inop)
       | Lam (n,nms,ps,t0,pr,tp) ->
           let nb1 = 1 + nb1 in
           Lam (n,nms,
@@ -806,8 +805,8 @@ end = struct
         Variable j -> Variable (f j nb)
       | VAppl (j,args,ags,oo) ->
           VAppl (f j nb, map_args nb args, ags,oo)
-      | Application (a,b,pred,inop) ->
-          Application (mapr nb a, map_args nb b, pred,inop)
+      | Application (a,b,inop) ->
+          Application (mapr nb a, map_args nb b, inop)
       | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -874,8 +873,8 @@ end = struct
         Variable j -> f j nb
       | VAppl (j,args,ags,oo) ->
           VAppl (j, Array.map (fun t -> mapr nb t) args, ags, oo)
-      | Application (a,b,pred,inop) ->
-          Application (mapr nb a, map_args nb b, pred,inop)
+      | Application (a,b,inop) ->
+          Application (mapr nb a, map_args nb b, inop)
       | Lam (nargs,names,pres,t,pred,tp) ->
           let nb = 1 + nb in
           let pres = List.map (fun t -> mapr nb t) pres
@@ -1352,10 +1351,10 @@ end = struct
     | VAppl(i,args,ags,oo) ->
         0, empty_formals, empty_formals,
         VAppl(i, norm_args args nb nb2, ags, oo)
-    | Application(f,args,pr,inop) ->
+    | Application(f,args,inop) ->
         let f = pren f nb nb2 imp_id
         and args = norm_args args nb nb2 in
-        0, empty_formals, empty_formals, Application(f,args,pr,inop)
+        0, empty_formals, empty_formals, Application(f,args,inop)
     | Lam(n,nms,ps,t0,pr,tp) ->
         let ps = norm_lst ps (1+nb) nb2
         and t0 = pren t0 (1+nb) nb2 imp_id in
@@ -1480,8 +1479,8 @@ end = struct
           let n,fargs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
           all_quantified n fargs empty_formals chn in
-        let pa = Application (pr,[|Variable 1|],true,true)
-        and qa = Application (Variable 0, [|Variable 1|],true,true) in
+        let pa = Application (pr,[|Variable 1|],true)
+        and qa = Application (Variable 0, [|Variable 1|],true) in
         let tgt = binary imp_id pa qa in
         let tgt =
           interval_fold

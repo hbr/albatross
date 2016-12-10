@@ -1064,13 +1064,13 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           VAppl(i,args,ags,oo),
           Eval.VApply(i,argse,ags),
           modi
-      | Application(f,args,pr,inop) ->
+      | Application(f,args,inop) ->
           let fsimp,fe,fmodi = simp f in
           let args, argse, modi = simpl_args args fmodi in
-          let res  = Application(fsimp, args, pr, inop) in
+          let res  = Application(fsimp, args, inop) in
           let rese = Eval.Term res in
           res,
-          Eval.Apply(fe,argse,rese,pr),
+          Eval.Apply(fe,argse,rese),
           modi
       | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
     in
@@ -1133,7 +1133,7 @@ let beta_reduce
 
 let beta_reduce_term (t:term) (pc:t): term =
   match t with
-    Application (Lam(n,_,_,t0,_,tp), args, _, _) ->
+    Application (Lam(n,_,_,t0,_,tp), args, _) ->
       beta_reduce n t0 tp args 0 pc
   | _ ->
       printf "beta_reduce_term %s\n" (string_long_of_term t pc);
@@ -1150,10 +1150,10 @@ let make_lambda
 
 
 let make_application
-    (f:term) (args:term array) (tup:type_term) (nb:int) (pr:bool) (pc:t)
+    (f:term) (args:term array) (tup:type_term) (nb:int) (pc:t)
     : term =
   let c = context pc in
-  Context.make_application f args tup nb pr c
+  Context.make_application f args tup nb c
 
 
 let is_inductive_set (i:int) (pc:t): bool =
@@ -1199,7 +1199,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         dom, Eval.Exp(i, ags, args, Eval.Term dom)
     | VAppl(i,args,ags,oo) ->
         eval_vappl t i args ags oo lazy_ depth pc
-    | Application (Lam(n,nms,_,t0,pred,tp),args,pr,inop) ->
+    | Application (Lam(n,nms,_,t0,_,tp), args, inop) ->
         let reduct = beta_reduce n t0 tp args 0 pc
         and te = Eval.Term t in
         begin try
@@ -1209,23 +1209,23 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         with No_branch_evaluation ->
           raise No_evaluation
         end
-    | Application (f,args,pr,inop) ->
+    | Application (f,args,inop) ->
         assert (Array.length args = 1);
         begin
           try
             let f_exp,fe = eval f lazy_ (depth - 1) pc
             and argse = [| Eval.Term args.(0) |] in
             let t_exp,te =
-              maybe_eval (Application(f_exp,args,pr,inop)) lazy_ depth pc in
-            t_exp, Eval.Apply(fe,argse,te,pr)
+              maybe_eval (Application(f_exp,args,inop)) lazy_ depth pc in
+            t_exp, Eval.Apply(fe,argse,te)
           with No_evaluation ->
             if depth = 1 then
               let args,argse = eval_args args (depth - 1) pc in
-              let t_exp = Application(f,args,pr,inop) in
+              let t_exp = Application(f,args,inop) in
               let fe = Eval.Term f
               and te = Eval.Term t_exp
               in
-              t_exp, Eval.Apply(fe, argse,te,pr)
+              t_exp, Eval.Apply(fe, argse,te)
             else
               raise No_evaluation
         end
@@ -1438,8 +1438,7 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   (* [idx] must represent a term which can be beta reduced *)
   let t = term idx pc in
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
-      assert (prlam = pr);
+    Application(Lam(n,_,_,t0,prlam,tp), [|arg|], _) ->
       let reduct = beta_reduce n t0 tp [|arg|] 0 pc in
       let pt = Eval(idx, Eval.Beta (Eval.Term t, Eval.Term reduct)) in
       Proof_table.add_proved reduct pt 0 pc.base;
@@ -1454,8 +1453,7 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
      term [idx]. The term [t] is added.
    *)
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp),[|arg|],pr,_) ->
-      assert (prlam = pr);
+    Application(Lam(n,_,_,t0,prlam,tp), [|arg|], _) ->
       let reduced = beta_reduce n t0 tp [|arg|] 0 pc in
       let e1,e2 = Eval.Term t, Eval.Term reduced in
       let pt = Eval_bwd(t,Eval.Beta (e1,e2))     (* proves the implication
@@ -1760,8 +1758,7 @@ let add_set_induction_law (set:term) (q:term) (elem:term) (pc:t): int =
 
 let add_inductive_set_rules (fwd:bool) (t:term) (pc:t): unit =
   match t with
-    Application(set,args,pr,_) ->
-      assert pr;
+    Application(set,args,_) ->
       assert (Array.length args = 1);
       begin try
         let nme,tp,rs =
@@ -1848,7 +1845,7 @@ let variable_substitution_implication
   and tp = type_of_term (Variable v) pc in
   let ptp = predicate_of_type tp pc in
   let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
-  let redex1 = make_application p [|exp|] tp 0 true pc
+  let redex1 = make_application p [|exp|] tp 0 pc
   and tr = beta_reduce 1 pterm ptp [|exp|] 0 pc
   and idx_leib = leibniz idx exp (Variable v) pc in
   let idx_leib = specialized idx_leib [|p|] [||] 0 pc in
@@ -1880,7 +1877,7 @@ let substitute_variable
   let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
   let imp_idx = specialized leib [|p|] [||] 0 pc
       (* {var: term}(var) ==> {var:term}(def_term) *)
-  and redex1 = make_application p [|Variable var|] tp 0 true pc
+  and redex1 = make_application p [|Variable var|] tp 0 pc
   in
   let idx_redex1 = add_beta_redex redex1 idx false pc in
   let idx_redex2 = add_mp idx_redex1 imp_idx false pc in
@@ -2174,7 +2171,7 @@ let prove_equality (g:term) (pc:t): int =
   let find_leibniz t1 t2 =
     (* find: all(p) p(t1) ==> p(t2) *)
     let tp_p = predicate_of_term t1 pc in
-    let p t = Application(Variable 0, [|Term.up 1 t|], true, false) in
+    let p t = Application(Variable 0, [|Term.up 1 t|], false) in
     let imp = Term.binary imp_id (p t1) (p t2) in
     let t   =
       Term.all_quantified 1 ([|ST.symbol "p"|],[|tp_p|]) empty_formals imp in
@@ -2193,7 +2190,7 @@ let prove_equality (g:term) (pc:t): int =
   and args1_up1 = Term.array_up 1 args1
   and args2_up1 = Term.array_up 1 args2 in
   try
-    let flhs_1up = make_application lam_1up args1_up1 tup 1 false pc
+    let flhs_1up = make_application lam_1up args1_up1 tup 1 pc
     and frhs_x i =
       let args =
         Array.init nargs
@@ -2201,12 +2198,12 @@ let prove_equality (g:term) (pc:t): int =
             if j < i then args2_up1.(j)
             else if j = i then Variable 0
             else args1_up1.(j)) in
-      make_application lam_1up args tup 1 false pc in
+      make_application lam_1up args tup 1 pc in
     let pred_inner i =
       VAppl (eq_id+1, [|flhs_1up; (frhs_x i)|], ags, false)
     in
     let start_term =
-      let t = make_application lam args1 tup 0 false pc in
+      let t = make_application lam args1 tup 0 pc in
       VAppl (eq_id, [|t;t|], ags, false)
     in
     let start_idx  = find_match start_term pc in
@@ -2217,7 +2214,7 @@ let prove_equality (g:term) (pc:t): int =
       let ptp = predicate_of_type tp pc in
       let pred_i = Lam(1,[||],[],pred_inner_i,true,ptp) in
       let ai_abstracted =
-        make_application pred_i [|args1.(i)|] tp 0 true pc
+        make_application pred_i [|args1.(i)|] tp 0 pc
       and ai_reduced = term !result pc in
       let imp = implication ai_reduced ai_abstracted pc in
       let idx2 =
@@ -2234,7 +2231,7 @@ let prove_equality (g:term) (pc:t): int =
     done;
     let e =
       let ev args t =
-        Eval.Beta (Eval.Term (make_application lam args tup 0 true pc),
+        Eval.Beta (Eval.Term (make_application lam args tup 0 pc),
                    Eval.Term t)
       in
       Eval.VApply(eq_id, [|ev args1 left; ev args2 right|], ags)

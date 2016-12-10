@@ -576,7 +576,7 @@ let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
     let c_rule = Context.push_typed (nms,tps) empty_formals c in
     let is_target (t:term) (nb:int) (c1:Context.t): bool =
       match t with
-        Application(Variable i, [|e|], true,_) when i = n + nb ->
+        Application(Variable i, [|e|],_) when i = n + nb ->
           begin try
             ignore (Term.down_from nargs (n+nb) e);
             true
@@ -627,7 +627,7 @@ let validate_term (info:info) (t:term) (c:Context.t): unit =
     match t with
       Variable i -> ()
     | VAppl(_,args,_,_) -> val_args args c
-    | Application(f,args,pr,_) ->
+    | Application(f,args,_) ->
         validate f c; val_args args c
     | Lam (n,nms,pres,t,pr,tp) ->
         let c = Context.push_untyped [|ST.symbol "$0"|] c in

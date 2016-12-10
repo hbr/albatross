@@ -351,11 +351,11 @@ let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
   let nms     = anon_argnames n in
   let p       = Term.up n p in
   let call    = VAppl (idx+n+nb, standard_substitution n, ags, false) in
-  let tgt     = Application(p,[|call|],true,false) in
+  let tgt     = Application(p,[|call|],false) in
   let indargs = inductive_arguments idx ft in
   let ps_rev  =
     List.rev_map
-      (fun iarg -> Application(p,[|Variable iarg|],true,false)) indargs in
+      (fun iarg -> Application(p,[|Variable iarg|],false)) indargs in
   n,nms,tps,ps_rev,tgt
 
 
@@ -387,7 +387,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
           Term.all_quantified n (nms,tps) empty_formals chn in
         let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in
         Term.binary imp_id rule tgt)
-      (Application(p,[|x|],true,false))
+      (Application(p,[|x|],false))
       lst in
   Term.all_quantified 2 (nms,tps) (fgnms,fgcon) t0
 
@@ -413,7 +413,7 @@ let is_term_public (t:term) (nbenv:int) (ft:t): bool =
     | VAppl(i,args,_,_) ->
         check_pub_i i;
         check_args args nb
-    | Application(f,args,_,_) ->
+    | Application(f,args,_) ->
         check_pub f nb;
         check_args args nb
     | Lam(n,nms,pres0,t0,_,_) ->
@@ -522,10 +522,10 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | VAppl(i,args,ags,oo) ->
         let args = Array.map (fun t -> untup0 t nb) args in
         VAppl(i+nargs-1,args,ags,oo), 0, 0
-    | Application(f,args,pr,inop) ->
+    | Application(f,args,inop) ->
         let f = untup0 f nb
         and args = Array.map (fun t -> untup0 t nb) args in
-        Application(f,args,pr,inop), 0, 0
+        Application(f,args,inop), 0, 0
     | Lam (n,nms,pres0,t0,pr,tp) ->
         let t0 = untup0 t0 (1+nb)
         and pres0 = untup0_lst pres0 (1+nb) in
@@ -594,10 +594,10 @@ let beta_reduce_0
     | VAppl (i,args) ->
         let args = reduce_args args in
         VAppl (i - 1 + ndelta, args)
-    | Application(f,args,pr) ->
+    | Application(f,args) ->
         let f    = reduce f nb
         and args = reduce_args args in
-        Application(f,args,pr)
+        Application(f,args)
     | Lam(n,nms,pres0,t0,pr) ->
         Lam(n, nms, pres0, reduce t0 (1+nb), pr)
     | QExp(n,nms,t0,is_all) ->
@@ -798,7 +798,7 @@ let make_lambda
 
 
 let make_application
-    (f:term) (args:term array) (tup:type_term) (pred:bool) (nbenv:int) (ft:t)
+    (f:term) (args:term array) (tup:type_term) (nbenv:int) (ft:t)
     : term =
   assert (Array.length args > 0);
   let args =
@@ -807,7 +807,7 @@ let make_application
     else
       [|tuple_of_args args tup nbenv ft|]
   in
-  Application (f, args, pred, false)
+  Application (f, args, false)
 
 
 
@@ -1085,7 +1085,7 @@ let term_to_string
               else
                 funiapp2str i args
             end
-      | Application (f,args,_,inop) ->
+      | Application (f,args,inop) ->
           begin
             try
               let op,fidx = find_op f in
@@ -1371,10 +1371,10 @@ let substituted
         in
         let i = i - len + d in
         VAppl (i,args,ags0,oo)
-    | Application (f,args,pr,inop) ->
+    | Application (f,args,inop) ->
         let f = spec nb f
         and args = spec_args nb args in
-        Application (f,args,pr,inop)
+        Application (f,args,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let nb = 1 + nb in
         let ps = spec_lst nb ps
@@ -1411,10 +1411,10 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
         let args  = spec_args nb args
         and i,ags = variant_feature i0 nb ags tvs ft in
         VAppl (i,args,ags,oo)
-    | Application (f,args,pr,inop) ->
+    | Application (f,args,inop) ->
         let f = spec nb f
         and args = spec_args nb args in
-        Application (f,args,pr,inop)
+        Application (f,args,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let nb = 1 + nb in
         let ps = spec_lst nb ps
@@ -1743,7 +1743,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
     | VAppl (i,args,_,_) ->
         let ghost = is_ghost_function (i-nb-nargs) ft in
         ghost || ghost_args args 0 (Array.length args)
-    | Application (f,args,_,_) ->
+    | Application (f,args,_) ->
         let fghost = is_ghost f nb in
         fghost || ghost_args args 0 (Array.length args)
   in
@@ -1815,7 +1815,7 @@ and complexity_base
       assert (nb + nargs + nbenv <= i);
       let cargs = Array.map compl args in
       feature_complexity (i - nb - nargs - nbenv) cargs ags tvs ft
-  | Application (f,args,pr,_) ->
+  | Application (f,args,_) ->
       let cf = compl f
       and cargs = Array.map compl args in
       Myarray.sum cf cargs
@@ -3157,7 +3157,7 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
         t
     | VAppl (i,args,ags,oo) ->
         VAppl(i, down_args args nb,ags,oo)
-    | Application(VAppl (i,[||],ags,oo),args,_,_) when nb <= i ->
+    | Application(VAppl (i,[||],ags,oo), args, _) when nb <= i ->
         assert (Array.length args = 1);
         let nargs = arity (i - nb) ft in
         let args = down_args args nb in
@@ -3168,8 +3168,8 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
           let tup_tp = Class_table.to_tuple ntvs 0 (Sign.arguments s) in
           let args = args_of_tuple_ext args.(0) tup_tp nb nargs ft in
           VAppl(i,args,ags,oo)
-    | Application(f,args,pr,inop) ->
-        Application (down f nb, down_args args nb, pr, inop)
+    | Application(f,args,inop) ->
+        Application (down f nb, down_args args nb, inop)
     | Lam(n,nms,pres,t0,pr,tp) ->
         Lam (n,nms, down_list pres (1+nb), down t0 (1+nb), pr, tp)
     | QExp (n,tps,fgs,t0,is_all) ->
@@ -3197,7 +3197,7 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
         assert (nb <= i);
         let set = IntSet.add (i-nb) set in
         collect_args args nb set
-    | Application (f,args,_,_) ->
+    | Application (f,args,_) ->
         let set = collect f nb set in
         collect_args args nb set
     | Lam (n, nms, pres, t0, is_pred, tp) ->
@@ -3272,7 +3272,7 @@ let leibniz_term (): term =
   in
   let pred = Class_table.predicate_type ag 1 in
   let eqab = VAppl (eq_id, [|a;b|], [|ag|],false)
-  and p x  = Application (p, [|x|], true, false) in
+  and p x  = Application (p, [|x|], false) in
   let imp = Term.binary imp_id eqab (Term.binary imp_id (p a) (p b)) in
   Term.all_quantified
     3

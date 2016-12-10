@@ -348,10 +348,10 @@ let make_lambda
 
 
 let make_application
-    (f:term) (args:term array) (tup:type_term) (nb:int) (pred:bool) (c:t)
+    (f:term) (args:term array) (tup:type_term) (nb:int)(c:t)
     : term =
   let nbenv = count_variables c in
-  let res = Feature_table.make_application f args tup pred (nb+nbenv) c.ft in
+  let res = Feature_table.make_application f args tup (nb+nbenv) c.ft in
   res
 
 
@@ -714,7 +714,7 @@ let rec type_of_term (t:term) (c:t): type_term =
   | VAppl(i,args,ags,_) ->
       assert (nvars <= i);
       Feature_table.result_type (i-nvars) ags (ntvs c) c.ft
-  | Application(f,args,pr,_) ->
+  | Application(f,args,_) ->
       let f_tp = type_of_term f c in
       let cls,ags = Class_table.split_type_term f_tp in
       if cls = function_index c then begin
@@ -1242,7 +1242,7 @@ let rec type_of_term_full
         assert (len = 0);
         check_and_trace_sign s
       end
-  | Application (f,args,_,_) ->
+  | Application (f,args,_) ->
       assert (Array.length args = 1);
       let ftp = type_of_term_full f None trace c in
       let argtp,rtp = split_function_or_predicate ftp in
@@ -1529,7 +1529,7 @@ let term_preconditions (t:term)  (c:t): term list =
             )
             lst
             lst1
-    | Application (f,args,_,_) ->
+    | Application (f,args,_) ->
         let lst  = pres f lst c in
         let lst = pres_args args lst
         in
@@ -1539,7 +1539,7 @@ let term_preconditions (t:term)  (c:t): term list =
           lst
         else if cls = function_index c then
           let dom = VAppl (domain_index c,[|f|],ags,false) in
-          Application(dom,args,true,false) :: lst
+          Application(dom,args,false) :: lst
         else
           assert false (* Cannot happen *)
     | Lam (n,nms,pres0,t0,pr,tp) ->

@@ -209,7 +209,7 @@ let is_backward_catchall (rd:t): bool =
   match rd.target with
     Variable i when i < nargs ->
       true
-  | Application(Variable i,args,_,_) when i < nargs ->
+  | Application(Variable i,args,_) when i < nargs ->
       assert (Array.length args = 1);
       let nvars = count_variables rd
       and ft = Context.feature_table rd.ctxt.c in

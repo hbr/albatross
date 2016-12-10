@@ -1031,16 +1031,15 @@ let complete_function (oo:bool) (tb:t): unit =
       let ft  = feature_table tb in
       let rt = substituted_type (Sign.result frec.sign0) tb in
       let cls,ags = Class_table.split_type_term rt in
-      let pr = (cls = predicate_index tb) in
       let arg =
         Feature_table.tuple_of_args args ags.(0) (count_variables tb) ft in
-      Application(frec.term, [|arg|], pr, false)
+      Application(frec.term, [|arg|], false)
     else begin
       match frec.term with
         VAppl(i,args0,ags,_) ->
           assert (Array.length args0 = 0); (* In 'add_leaf' added without arguments *)
           if i = in_index tb then
-            Application (args.(1), [|args.(0)|], true, true)
+            Application (args.(1), [|args.(0)|], true)
           else
             VAppl (i,args,ags,oo)
       | _ ->
@@ -1361,10 +1360,10 @@ let term_in_context (tb:t): term =
       Variable _ -> t
     | VAppl(i,args,ags,oo) ->
         VAppl(i,targs args, tpe_args ags, oo)
-    | Application (f,args,pr,inop) ->
+    | Application (f,args,inop) ->
         let f = term f
         and args = targs args in
-        Application (f,args,pr,inop)
+        Application (f,args,inop)
     | Lam (n,nms,ps,t0,pr,tp) ->
         let ps = tlst ps
         and t0 = term t0

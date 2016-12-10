@@ -17,7 +17,7 @@ module Eval = struct
     | Exp of (int * agens * t array * t) (* idx of function, actual generics,
                                             eval args, eval of expansion *)
     | VApply of  int * t array * type_term array
-    | Apply of t * t array * t * bool (* eval f, eval args, eval result *)
+    | Apply of t * t array * t (* eval f, eval args, eval result *)
     | Lam of int * int array * term list * t * bool * type_term
     | QExp of int * formals * formals * t * bool
     | Beta of t * t (* redex and reduct *)
@@ -42,8 +42,8 @@ module Eval = struct
     | VApply (i,args,_) ->
         printf "%s apply %d\n" prefix i;
         print_args args
-    | Apply (f,args,e,pr) ->
-        printf "%s apply %s\n" prefix (if pr then "predicate" else "function");
+    | Apply (f,args,pr) ->
+        printf "%s apply \n" prefix;
         print (prefix ^ "    ") f;
         print_args args;
         print (prefix ^ "    ") e
@@ -185,11 +185,11 @@ end = struct
           Eval.Exp (i,ags, adapt_args args, adapt_eval e)
       | Eval.VApply (i,args,ags) ->
           Eval.VApply (i,adapt_args args,ags)
-      | Eval.Apply (f,args,e,pr) ->
+      | Eval.Apply (f,args,e) ->
           let f = adapt_eval f
           and args = adapt_args args
           and e = adapt_eval e in
-          Eval.Apply (f,args,e,pr)
+          Eval.Apply (f,args,e)
       | Eval.Lam (n,nms,pres,e,pr,tp) ->
           Eval.Lam (n, nms, pres, adapt_eval e, pr,tp)
       | Eval.QExp (n,tps,fgs,e,is_all) ->
@@ -261,7 +261,7 @@ end = struct
         Eval.Term t | Eval.AsExp t -> set
       | Eval.Exp (i,_,args,e)  -> used_eval e (used_args set args)
       | Eval.VApply(i,args,_)  -> used_args set args
-      | Eval.Apply (f,args,e,_)-> used_eval e (used_args (used_eval f set) args)
+      | Eval.Apply (f,args,e)  -> used_eval e (used_args (used_eval f set) args)
       | Eval.Lam (n,_,_,e,_,_) | Eval.QExp (n,_,_,e,_) ->
           used_eval e set
       | Eval.Beta (e1,e2)      -> used_eval e1 (used_eval e2 set)
@@ -317,7 +317,7 @@ end = struct
           Eval.Term t | Eval.AsExp t -> set
         | Eval.Exp (i,_,args,e)   -> usd_eval e (usd_args set args)
         | Eval.VApply (i,args,_)  -> usd_args set args
-        | Eval.Apply (f,args,e,_) ->
+        | Eval.Apply (f,args,e) ->
             let set = usd_eval f set in
             let set = usd_args set args in
             usd_eval e set
@@ -404,11 +404,10 @@ end = struct
             Eval.Exp(i, ags, Array.map transform_eval args, transform_eval e)
         | Eval.VApply (i,args,ags) ->
             Eval.VApply (i, Array.map transform_eval args, ags)
-        | Eval.Apply (f,args,e,pr) ->
+        | Eval.Apply (f,args,e) ->
             Eval.Apply (transform_eval f,
                         Array.map transform_eval args,
-                        transform_eval e,
-                        pr)
+                        transform_eval e)
         | Eval.Lam (n,nms,pres,e,pr,tp) ->
             Eval.Lam (n,nms,pres,transform_eval e,pr,tp)
         | Eval.QExp (n,tps,fgs,e,ia) ->
@@ -625,11 +624,11 @@ end = struct
               and args = shrnk_eargs args
               and ags  = shrink_types_inner ags nb2 in
               Eval.VApply (i,args,ags)
-          | Eval.Apply(f,args,e,pr) ->
+          | Eval.Apply(f,args,e) ->
               let f = shrnk f nb nb2
               and args = shrnk_eargs args
               and e = shrnk e nb nb2 in
-              Eval.Apply (f,args,e,pr)
+              Eval.Apply (f,args,e)
           | Eval.Lam (n,nms,pres,e,pr,tp) ->
               Eval.Lam (n,
                         nms,

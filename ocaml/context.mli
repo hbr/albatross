@@ -97,7 +97,7 @@ val is_equality_index: int -> t -> bool
 
 val make_lambda:
     int -> int array -> term list -> term -> bool -> int -> type_term -> t -> term
-val make_application: term -> arguments -> type_term -> int -> bool -> t -> term
+val make_application: term -> arguments -> type_term -> int -> t -> term
 val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 
 val quantified:      bool -> int -> formals -> formals -> term -> t -> term

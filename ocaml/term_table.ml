@@ -284,7 +284,7 @@ let uni_core
         merge_idxlst idxlst r
       else
         uni_args args nb argtabs r uni
-  | Application (f,args,_,_) ->
+  | Application (f,args,_) ->
       let len = Array.length args in
       let ftab, argtabs = IntMap.find len tab.fapps in
       assert (len = Array.length argtabs);
@@ -594,7 +594,7 @@ let add_base
           let argtabs =
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs in
           {tab with apps = IntMap.add fidx (argtabs,idxlst) tab.apps}
-      | Application (f,args,_,_) ->
+      | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =
             try

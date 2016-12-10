@@ -432,7 +432,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
                            (Context.string_of_term t c) ^ "\"")
     | VAppl (i,args,_,_) ->
         check_args args
-    | Application (f,args,_,_) ->
+    | Application (f,args,_) ->
         check f nbranch tlst c;
         check_args args
     | Lam (n,nms,pres,t0,pr,tp) ->
