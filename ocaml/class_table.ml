@@ -999,7 +999,8 @@ let rec satisfies_0
   in
   let sat1 (tp1:type_term) (tp2:type_term): bool =
     match tp1 with
-      Variable i when i < ntvs1 -> assert false (* shall never happen *)
+      Variable i when i < ntvs1 ->
+        false
     | Variable i when i < nall1 ->
         let tp1 = Tvars.concept i tvs1 in
         sat0 tp1 tp2
