@@ -12,7 +12,6 @@ open Container
 open Printf
 
 module PC = Proof_context
-module Typer = Typer
 
 type kind =
     PAxiom

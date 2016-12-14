@@ -4,471 +4,125 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Container
-open Term
-open Signature
 open Support
+open Term
+open Container
+open Signature
 open Printf
 
 
-module Accus: sig
+module TB = Term_builder
 
-  type t
-  exception Untypeable of Term_builder.t list
-
-  val make:              Term_builder.t -> Context.t -> t
-  val is_empty:          t -> bool
-  val is_singleton:      t -> bool
-  val is_tracing:        t -> bool
-  val count:             t -> int
-  val ntvs_added:        t -> int
-  val first:             t -> Term_builder.t
-  val expected_arity:    t -> int
-  val expect_boolean:    t -> unit
-  val expect_type:       term -> t -> unit
-  val expect_boolean_expression:    t -> unit
-  val expect_new_untyped:t -> unit
-  val push_expected:     t -> unit
-  val get_expected:      int -> t -> unit
-  val drop_expected:     t -> unit
-  val expect_if:         t -> unit
-  val complete_if:       t -> unit
-  val add_leaf:          (int*Tvars.t*Sign.t) list -> t -> unit
-  val expect_function:   int -> t -> unit
-  val expect_argument:   t -> unit
-  val complete_function: bool -> t -> unit
-  val expect_lambda:     bool -> Context.t -> t -> unit
-  val complete_lambda:   int -> int array -> int -> bool -> t -> unit
-  val expect_quantified: Context.t -> t -> unit
-  val complete_quantified: bool -> t -> unit
-  val expect_inductive:  Context.t -> t -> unit
-  val complete_inductive:info -> int -> t -> unit
-  val expect_case:       Context.t -> t -> unit
-  val complete_case:     t -> unit
-  val expect_inspect:    t -> unit
-  val complete_inspect:  int ->  t -> unit
-  val expect_as:         t -> unit
-  val complete_as:       t -> unit
-  val check_uniqueness:  info -> expression -> t -> unit
-  val iter: (Term_builder.t->unit) -> t -> unit
-end = struct
-
-  type t = {mutable accus: Term_builder.t list;
-            trace: bool;
-            mutable c: Context.t}
-
-  exception Untypeable of Term_builder.t list
-
-
-  let make (tb:Term_builder.t) (c:Context.t): t =
-    {accus           = [tb];
-     trace           = (5 <= Context.verbosity c);
-     c               = c}
-
-
-  let is_empty     (accs:t): bool =   Mylist.is_empty     accs.accus
-
-  let is_singleton (accs:t): bool =   Mylist.is_singleton accs.accus
-
-  let is_unique (accs:t): bool =
-    match accs.accus with
-      [] -> assert false
-    | [_] -> true
-    | hd::tl ->
-        let res = Term_builder.head_term hd in
-        List.for_all (fun tb -> res = Term_builder.head_term tb) tl
-
-  let is_tracing (accs:t): bool = accs.trace
-
-  let count (accs:t): int = List.length accs.accus
-
-  let first (accs:t): Term_builder.t =
-    assert (accs.accus <> []);
-    List.hd accs.accus
-
-
-  let ntvs_added (accs:t): int =
-    Term_builder.count_local_added (first accs)
-
-  let expected_arity (accs:t): int =
-    Term_builder.expected_arity (first accs)
-
-
-  let trace_accus (accs:t): unit =
-    let accus = accs.accus in
-    List.iteri
-      (fun i acc ->
-        let t = Term_builder.last_term acc in
-        printf "    %d: \"%s\"  \"%s\" %s%s %s\n"
-          i
-          (Term_builder.string_of_last_term acc) (Term.to_string t)
-          (Term_builder.string_of_tvs acc)
-          (Term_builder.string_of_substitutions acc)
-          (Term_builder.string_of_last_signature acc))
-      accus
-
-
-  let expect_boolean_expression (accs:t): unit =
-    List.iter
-      (fun acc -> Term_builder.expect_boolean_expression acc)
-      accs.accus
-
-
-  let expect_new_untyped (accs:t): unit =
-    List.iter Term_builder.expect_new_untyped accs.accus
+type ident =
+    IDVar of int
+  | IDFun of int list
 
 
 
-  let expect_function (nargs:int) (accs:t): unit =
-    List.iter (fun acc -> Term_builder.expect_function nargs (-1) acc) accs.accus
+type eterm0 =
+    EVar of int
+  | EGlAppl of (int list * eterm array * application_mode)
+  | EAppl of (eterm * eterm array * application_mode)
+  | ELam  of (eterm list * eterm * bool)  (* preconditions, term ,is_pred *)
+  | EQExp of (eterm * bool)  (* is_all *)
+  | EInspect of (eterm * (eterm*eterm) list)
+
+and eterm = {
+    info: info;
+    context: Context.t;
+    term: eterm0
+  }
+
+type max_numbers = {
+    max_locs: int;
+    max_fgs: int;
+    max_globs: int
+  }
+
+
+let prefix (level:int): string =
+  String.make (2+2*level) ' '
 
 
 
-  let complete_function (oo:bool) (accs:t): unit =
-    let f = Term_builder.complete_function oo in
-    List.iter f accs.accus;
-    if accs.trace then begin
-      printf "  complete function\n";
-      trace_accus accs
-    end
 
-
-
-  let expect_argument(accs:t): unit =
-    (** Expect the next argument of the current application *)
-    List.iter Term_builder.expect_argument accs.accus
-
-
-  let add_leaf
-      (terms: (int*Tvars.t*Sign.t) list)
-      (accs:   t)
-      : unit =
-    (** Add the terms from the list [terms] of the context [c] to the
-        accumulators [accs]
-     *)
-    assert (terms <> []);
-    let accus = accs.accus in
-    let rec add_lf terms acc lst =
-      let add i tvs s acc lst =
-        try Term_builder.add_leaf i tvs s acc; acc::lst
-        with Not_found -> lst in
-      match terms with
-        [] -> assert false (* cannot happen *)
-      | [i,tvs,s] ->
-          add i tvs s acc lst
-      | (i,tvs,s)::terms ->
-          let lst = add i tvs s (Term_builder.clone acc) lst in
-          add_lf terms acc lst
+let used_variables (nargs:int) (et:eterm): IntSet.t =
+  let rec used et nb set =
+    let used_args args nb set =
+      Array.fold_left
+        (fun set et -> used et nb set)
+        set
+        args
     in
-    accs.accus <-
+    let used_list args nb set =
       List.fold_left
-        (fun lst acc -> add_lf terms acc lst)
-        []
-        accus;
-    if accs.trace && 1 < List.length terms then begin
-      let ct = Context.class_table accs.c in
-      printf "multiple leafs\n";
-      List.iter
-        (fun (i,tvs,sign) ->
-          printf "  %d %s %s\n" i
-            (Context.string_of_term0 (Variable i) true false 0 accs.c)
-            (Class_table.string_of_complete_signature sign tvs ct))
-        terms
-    end;
-    if accs.trace then begin
-      printf "  add_leaf\n";
-      trace_accus accs
-    end;
-    if accs.accus = [] then
-      raise (Untypeable accus)
-
-
-
-  let iter (f:Term_builder.t->unit) (accs:t): unit =
-    let accus = accs.accus in
-    accs.accus <-
-      List.fold_left
-        (fun lst acc ->
-          try
-            f acc;
-            acc::lst
-          with Not_found ->
-            lst)
-        []
-        accs.accus;
-    if accs.accus = [] then
-      raise (Untypeable accus)
-
-
-
-  let iter_save (f:Term_builder.t->unit) (accs:t): unit =
-    try
-      iter f accs
-    with Untypeable _ ->
-      assert false
-
-
-  let map_accus (f:Term_builder.t->Term_builder.t) (accs:t): unit =
-    let lst =
-      List.fold_left
-        (fun lst acc ->
-          try
-            (f acc)::lst
-          with Not_found ->
-            lst)
-        []
-        accs.accus
+        (fun set et -> used et nb set)
+        set
+        args
     in
-    if lst = [] then
-      raise (Untypeable accs.accus);
-    accs.accus <- lst
-
-
-  let expect_boolean (accs:t): unit =
-    let accus = accs.accus in
-    accs.accus <-
-      List.fold_left
-        (fun lst acc ->
-          try
-            Term_builder.expect_boolean acc;
-            acc :: lst
-          with Not_found ->
-            lst)
-        []
-        accs.accus;
-    if accs.accus = [] then
-      raise (Untypeable accus)
-
-
-
-  let expect_type (tp:type_term) (accs:t): unit =
-    iter (fun acc -> Term_builder.expect_type tp acc) accs
-
-
-  let push_expected (accs:t): unit =
-    iter_save Term_builder.push_expected accs
-
-  let get_expected (i:int) (accs:t): unit =
-    iter_save (fun acc -> Term_builder.get_expected i acc) accs
-
-  let drop_expected (accs:t): unit =
-    iter_save Term_builder.drop_expected accs
-
-
-  let expect_if (accs:t): unit =
-    iter_save Term_builder.expect_if accs
-
-  let complete_if (accs:t): unit =
-    iter_save (fun acc -> Term_builder.complete_if acc) accs
-
-
-  let expect_lambda (is_pred:bool) (c:Context.t) (accs:t): unit =
-    accs.c <- c;
-    iter
-      (fun acc -> Term_builder.expect_lambda is_pred c acc)
-      accs
-
-
-  let complete_lambda (n:int) (nms:int array) (npres:int) (is_pred:bool) (accs:t)
-      : unit =
-    iter
-      (fun acc -> Term_builder.complete_lambda n nms npres is_pred acc) accs;
-    accs.c <- Context.pop accs.c;
-    if accs.trace then begin
-      printf "  complete lambda\n";
-      trace_accus accs
-    end
-
-
-
-
-  let expect_quantified (c:Context.t) (accs:t): unit =
-    accs.c <- c;
-    iter
-      (fun acc -> Term_builder.expect_quantified c acc)
-      accs
-
-
-  let complete_quantified (is_all:bool) (accs:t)
-      : unit =
-    iter
-      (fun acc -> Term_builder.complete_quantified is_all acc) accs;
-    accs.c <- Context.pop accs.c;
-    if accs.trace then begin
-      printf "  complete quantified\n";
-      trace_accus accs
-    end
-
-
-
-  let expect_inductive (c:Context.t) (accs:t): unit =
-    accs.c <- c;
-    iter
-      (fun acc -> Term_builder.expect_inductive c acc)
-      accs
-
-
-
-  let complete_inductive (info:info) (nrules:int) (accs:t): unit =
-    iter_save
-      (fun tb -> Term_builder.complete_inductive info nrules tb)
-      accs;
-    accs.c <- Context.pop accs.c;
-    if accs.trace then begin
-      printf "  complete inductive\n";
-      trace_accus accs
-    end
-
-
-  let expect_case (c:Context.t) (accs:t): unit =
-    accs.c <- c;
-    iter_save (fun acc -> Term_builder.expect_case c acc) accs
-
-
-  let complete_case (accs:t): unit =
-    iter_save Term_builder.complete_case accs;
-    accs.c <- Context.pop accs.c;
-    if accs.trace then begin
-      printf "  complete case\n";
-      trace_accus accs
-    end
-
-
-  let expect_inspect (accs:t): unit =
-    iter_save Term_builder.expect_inspect accs
-
-  let complete_inspect (ncases:int) (accs:t): unit =
-    iter_save (fun acc -> Term_builder.complete_inspect ncases acc) accs;
-    if accs.trace then begin
-      printf "  complete inspect\n";
-      trace_accus accs
-    end
-
-
-  let expect_as (accs:t): unit =
-    iter_save Term_builder.expect_as accs
-
-
-  let complete_as (accs:t): unit =
-    iter_save Term_builder.complete_as accs;
-    accs.c <- Context.pop accs.c;
-    if accs.trace then begin
-      printf "  complete as\n";
-      trace_accus accs
-    end
-
-
-  let get_diff (t1:term) (t2:term) (accs:t): string * string =
-    let nargs = Context.count_variables accs.c
-    and ft    = Context.feature_table accs.c
-    in
-    let vars1 = List.rev (Term.used_variables_from t1 nargs true)
-    and vars2 = List.rev (Term.used_variables_from t2 nargs true) in
-    let lst   = Mylist.combine vars1 vars2 in
-    let i,j =
-      try List.find (fun (i,j) -> i<>j) lst
-      with Not_found -> assert false (* cannot happen *) in
-    let str1 = Feature_table.string_of_signature (i-nargs) ft
-    and str2 = Feature_table.string_of_signature (j-nargs) ft in
-    str1, str2
-
-
-  let check_uniqueness (inf:info) (e:expression) (accs:t): unit =
-    match accs.accus with
-      [] -> assert false
-    | hd::tl ->
-        let t1 = Term_builder.head_term hd in
-        try
-          let acc = List.find (fun acc -> Term_builder.head_term acc <> t1) tl in
-          let t2 = Term_builder.head_term acc
-          and estr = string_of_expression e in
-          printf "ambiguous expression %s (%d)\n" (string_of_expression e)
-            (List.length accs.accus);
-          printf "    t1 %s\n" (Term.to_string t1);
-          printf "    t2 %s\n" (Term.to_string t2);
-          let str1, str2 = get_diff t1 t2 accs in
-          error_info inf
-            ("The expression " ^ estr ^ " is ambiguous\n    " ^
-             str1 ^ "\n    " ^ str2)
-        with Not_found ->
-          ()
-end (* Accus *)
-
-
-
-
-
-let cannot_find (name:string) (nargs:int) (info:info) =
-  let str = "Cannot find \"" ^ name
-    ^ "\" with " ^ (string_of_int nargs) ^ " arguments"
-  in
-  error_info info str
-
-
-let features (fn:feature_name) (nargs:int) (info:info) (c:Context.t)
-    : (int * Tvars.t * Sign.t) list =
-  try
-    Context.find_feature fn nargs c
-  with Not_found ->
-    cannot_find (feature_name_to_string fn) nargs info
-
-
-let identifiers (name:int) (nargs:int) (info:info) (c:Context.t)
-    : (int * Tvars.t * Sign.t) list =
-  try
-    Context.find_identifier name nargs c
-  with Not_found ->
-    cannot_find (ST.string name) nargs info
-
-
-let string_of_signature (tvs:Tvars.t) (s:Sign.t) (c:Context.t): string =
-  let ct = Context.class_table c  in
-  (Class_table.string_of_complete_signature s tvs ct)
-
-
-let string_of_signatures (lst:(int*Tvars.t*Sign.t) list) (c:Context.t): string =
-  "{" ^
-  (String.concat
-     ","
-     (List.map (fun (_,tvs,s) ->
-       string_of_signature tvs s c) lst)) ^
-  "}"
-
-
-
-let process_leaf
-    (lst: (int*Tvars.t*Sign.t) list)
-    (c:Context.t)
-    (info:info)
-    (accs: Accus.t)
-    : unit =
-  assert (lst <> []);
-  try
-    Accus.add_leaf lst accs
-  with
-    Accus.Untypeable acc_lst ->
-      let ct = Context.class_table c in
-      let i,_,_ = List.hd lst in
-      let nargs = Term_builder.expected_arity (List.hd acc_lst) in
-      let str = "Type error \"" ^
-        (Context.string_of_term0 (Variable i) true false 0 c) ^
-        "\"\n  Actual type(s):\n\t"
-      and actuals = String.concat "\n\t"
-          (List.map
-             (fun (_,tvs,s) ->
-               Class_table.string_of_reduced_complete_signature s tvs ct)
-             lst)
-      and reqstr =
-        if nargs = 0 then
-          "\n  Required type(s):\n\t"
+    match et.term with
+      EVar i ->
+        if i < nargs then
+          IntSet.add i set
         else
-          "\n  Expecting function with " ^ (string_of_int nargs) ^
-          " arguments with the required return type(s):\n\t"
-      and reqs = String.concat "\n\t"
-          (List.map Term_builder.string_of_reduced_required_type acc_lst)
-      in
-      error_info info (str ^ actuals ^ reqstr ^ reqs)
+          set
+    | EGlAppl (_,args,_) ->
+        used_args args nb set
+    | EAppl (f,args,_) ->
+        let set = used f nb set in
+        used_args args nb set
+    | ELam (pres,et0,is_pred) ->
+        let nb = nb + Context.count_last_variables et0.context in
+        let set = used_list pres nb set in
+        used et0 nb set
+    | EQExp (et0,_) ->
+        let nb = nb + Context.count_last_variables et0.context in
+        used et0 nb set
+    | EInspect (insp,cases) ->
+        let set = used insp nb set in
+        List.fold_left
+          (fun set (pat,res) ->
+            assert (pat.context == res.context);
+            let nb = nb + Context.count_last_variables pat.context in
+            used pat nb (used res nb set)
+          )
+          set
+          cases
+  in
+  used et 0 IntSet.empty
 
+
+let max_globs_of_features (flst:int list) (c:Context.t): int =
+  List.fold_left
+    (fun nglobs fidx ->
+      let tvs,_ = Context.feature_signature fidx c in
+      max nglobs (Tvars.count_fgs tvs)
+    )
+    0
+    flst
+
+
+
+
+let find_identifier (info:info) (id:int) (c:Context.t): ident =
+  try
+    let i = Context.variable_index id c in
+    IDVar i
+  with Not_found ->
+    let flst = Context.find_features (FNname id) c in
+    if flst = [] then
+      error_info info ("Unknown \"" ^ ST.string id ^ "\"");
+    IDFun flst
+
+
+let find_features (info:info) (fn:feature_name) (c:Context.t): int list =
+  let flst = Context.find_features fn c
+  in
+  if flst = [] then
+    error_info
+      info
+      ("Unknow function \"" ^ feature_name_to_string fn ^ "\"");
+  flst
 
 
 let is_constant_constructor (nme:int) (c:Context.t): bool =
@@ -484,7 +138,6 @@ let is_constant_constructor (nme:int) (c:Context.t): bool =
     lst <> []
   with Not_found ->
     false
-
 
 let case_variables
     (info:info) (e:expression) (dups:bool) (c:Context.t)
@@ -523,7 +176,7 @@ let case_variables
               e::arglst, nanon, lst)
             ([],nanon,lst)
             args in
-        Funapp(f,List.rev arglst,am), nanon, lst
+        Funapp(f, List.rev arglst, am), nanon, lst
     | Tupleexp (e1,e2) ->
         let e1,nanon,lst = vars e1 nanon lst in
         let e2,nanon,lst = vars e2 nanon lst in
@@ -546,445 +199,675 @@ let case_variables
                      (string_of_expression e) ^ "\"")
 
 
+let first_pass
+    (info:info)
+    (e:expression)
+    (c:Context.t)
+    : max_numbers * eterm =
+  let rec first
+      (info:info)
+      (e:expression)
+      (mn:max_numbers)
+      (c:Context.t)
+      : max_numbers * eterm
+      =
+    match e with
+      Identifier id ->
+        identifier info id mn c
+    | Expanon ->
+        not_yet_implemented info ("Expanon Typing of "^ (string_of_expression e))
+    | Expnumber num ->
+        assert false
+    | ExpResult ->
+        assert false
+    | Exptrue ->
+        global_application_fn info FNtrue [] AMmath mn c
+    | Expfalse ->
+        global_application_fn info FNfalse [] AMmath mn c
+    | Expparen e ->
+        first info e mn c
+    | Exparrow (entlst,e) ->
+        assert false
+    | Expagent (entlst,rt,pres,exp) ->
+        assert false
+    | Expop op ->
+        assert false
+    | Funapp (f,args,am) ->
+        application info f args am mn c
+    | Expset e ->
+        assert false
+    | Exppred (entlst,e) ->
+        lambda info entlst true None [] e mn c
+    | Expindset (entlst,rules) ->
+        assert false
+    | Tupleexp (e1,e2) ->
+        global_application_fn info (FNname ST.tuple) [e1;e2] AMmath mn c
+    | Typedexp (e,tp) ->
+        assert false
+    | Expcolon (e1,e2) ->
+        assert false
+    | Expif (cond,e1,e2) ->
+        assert false
+    | Expas (e,pat) ->
+        assert false
+    | Expinspect (insp, cases) ->
+        inspect info insp cases mn c
+    | Expquantified (q,entlst,exp) ->
+        quantified info q entlst exp mn c
 
-
-let validate_inductive_set (info:info) (rs:term array) (c:Context.t): unit =
-  (* An inductively defined set must have the form
-
-         {(p): r0, r1, ... }
-
-     where each rule has the form
-
-         all(...) c0 ==> c1 ==> ... ==> p(e)    | e does not contain p
-
-     where each ci has the form
-
-         all(...) di ==> ti       | only ti can contain p, if yes it has the form
-                                  | p(ei) and ei does not contain p
-                                  | degenerate form without variables and premise
-                                  | allowed
-   *)
-  let nargs = Context.count_last_arguments c
-  and nvars = Context.count_variables c in
-  assert (nargs = 1); (* nyi: multiple inductive sets *)
-  let imp_id = nvars + Feature_table.implication_index in
-  let ind_set_name () = ST.string (Context.variable_name 0 c)
-  in
-  let check_rule (r:term): unit =
-    let n,(nms,tps),ps_rev,tgt =
-      Term.split_general_implication_chain r imp_id in
-    let c_rule = Context.push_typed (nms,tps) empty_formals c in
-    let is_target (t:term) (nb:int) (c1:Context.t): bool =
-      match t with
-        Application(Variable i, [|e|],_) when i = n + nb ->
-          begin try
-            ignore (Term.down_from nargs (n+nb) e);
-            true
-          with Term_capture ->
-            error_info info ("Variable \"" ^ (ind_set_name ()) ^
-                             "\" not allowed in \"" ^
-                             (Context.string_of_term e c1) ^
-                             "\" of rule\n  \"" ^
-                             (Context.string_long_of_term r c) ^ "\"")
-          end
-      | _ ->
-          false
-    in
-    if not (is_target tgt 0 c_rule) then
-      error_info info ("\"" ^ (Context.string_of_term tgt c_rule) ^
-                       "\" is not a valid target because it does not contain \"" ^
-                       (ind_set_name ()) ^ "\"");
-    let check_premise (ci:term): unit =
-      let n1,(nms1,tps1),ps_rev1,tgt1 =
-        Term.split_general_implication_chain ci (n + imp_id)
-      in
-      let c_premise = Context.push_typed (nms1,tps1) empty_formals c_rule in
-      ignore (is_target tgt1 n1 c_premise);
-      List.iter
-        (fun p ->
-          if is_target p n1 c_premise then
-            let pstr = Context.string_of_term p c_premise in
-            error_info info ("Premise term \"" ^ pstr ^
-                             "\" must not contain \"" ^
-                             (ind_set_name ()) ^ "\"")
-        )
-        ps_rev1
-    in
-    List.iter (fun t -> ignore(check_premise t)) ps_rev;
-  in
-  Array.iter check_rule rs
-
-
-
-
-
-let validate_term (info:info) (t:term) (c:Context.t): unit =
-  (* Check that all pattern in inspect expressions have only constructors
-     and variables *)
-  let rec validate t c =
-    let val_args args c = Array.iter (fun arg -> validate arg c) args in
-    let val_lst  lst  c = List.iter  (fun t   -> validate t c)   lst  in
-    match t with
-      Variable i -> ()
-    | VAppl(_,args,_,_) -> val_args args c
-    | Application(f,args,_) ->
-        validate f c; val_args args c
-    | Lam (n,nms,pres,t,pr,tp) ->
-        let c = Context.push_untyped [|ST.symbol "$0"|] c in
-        val_lst pres c; validate t c
-    | QExp (n,(nms,tps),_,t,_) ->
-        let c = Context.push_untyped nms c in
-        validate t c
-    |  Flow (flow,args) ->
-        let len = Array.length args in
-        let check_pattern pat c =
-          if Context.is_case_match_expression pat c then
-            ()
-          else
-            error_info info
-              ("The term \"" ^ (Context.string_of_term pat c) ^
-               "\" is not a valid pattern")
-        in
+  and application info f args am mn c =
+    match f with
+      Identifier id ->
         begin
-          match flow with
-            Ifexp ->
-              val_args args c
-          | Inspect ->
-              assert (3 <= len);
-              assert (len mod 2 = 1);
-              let ncases = len / 2 in
-              validate args.(0) c;
-              for i = 0 to ncases - 1 do
-                let n,tps,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-                let c = Context.push_typed tps empty_formals c in
-                validate res c;
-                check_pattern pat c
-              done
-          | Asexp ->
-              assert (len = 2);
-              validate args.(0) c;
-              let n,tps,pat = Term.pattern_split args.(1) in
-              let c = Context.push_typed tps empty_formals c in
-              check_pattern pat c
+          match find_identifier info id c with
+            IDVar i ->
+              let fterm = {info = info; context = c; term = EVar i} in
+              term_application info fterm args am mn c
+          | IDFun flst ->
+              global_application_flst info flst args AMmath mn c
         end
-    | Indset (nme,tp,rs) ->
-        let c = Context.push_typed ([|nme|],[|tp|]) empty_formals c in
-        validate_inductive_set info rs c;
-        val_args rs c
-  in
-  validate t c
+    | Expop op ->
+        global_application_fn info (FNoperator op) args am mn c
+    | _ ->
+        assert false (* nyi *)
 
-
-let validate_visibility (info:info) (t:term) (c:Context.t): unit =
-  let ft = Context.feature_table c
-  and nb = Context.count_variables c
-  in
-  Feature_table.validate_visibility t nb info ft
-
-let push_context
-    (entlst:  entities list withinfo)
-    (is_pred: bool)
-    (is_func: bool)
-    (gap:     int)
-    (c: Context.t)
-    : Context.t =
-  let c = Context.push_with_gap entlst None is_pred is_func false gap c in
-  if Context.count_last_formal_generics c <> 0 then
-    error_info entlst.i "Cannot introduce new formal generics in subexpression";
-  c
-
-
-
-let analyze_expression
-    (ie:        info_expression)
-    (tb:        Term_builder.t)
-    (c:         Context.t)
-    : term =
-  (** Analyse the expression [ie] in the context [context] and return the term.
-   *)
-  assert (not (Context.is_global c));
-  if 5 <= Context.verbosity c then
-    printf "typer analyze %s\n" (string_of_expression ie.v);
-  let info, exp = ie.i, ie.v in
-  let rec analyze
-      (e:expression)
-      (accs: Accus.t)
-      (c:Context.t)
-      : unit =
-    let nargs = Accus.expected_arity accs
-    in
-    let feat (fn:feature_name) = features fn nargs info c
-    and id   (name:int)        = identifiers name nargs info c
-    and do_leaf (lst: (int*Tvars.t*Sign.t) list): unit =
-      process_leaf lst c info accs
-    in
-    try
-      match e with
-        Identifier name     -> do_leaf (id name)
-      | Expanon             ->
-          not_yet_implemented ie.i ("Expanon Typing of "^ (string_of_expression e))
-      | Expfalse            -> do_leaf (feat FNfalse)
-      | Exptrue             -> do_leaf (feat FNtrue)
-      | Expnumber num       -> do_leaf (feat (FNnumber num))
-      | Expop op            -> do_leaf (feat (FNoperator op))
-      | Expas (e,pat) ->
-          exp_as ie.i e pat accs c
-      | Funapp (f,args,am)     ->
-          application f (Array.of_list args) am accs c
-      | Expparen e          -> analyze e accs c
-      | Expquantified (q,entlst,exp) ->
-          quantified q entlst exp accs c
-      | Exppred (entlst,e) ->
-          lambda entlst None [] e true false accs c
-      | Expindset (entlst,rules) ->
-          inductive_set entlst rules accs c
-      | Tupleexp (a,b) ->
-          application (Identifier ST.tuple) [|a;b|] AMmath accs c
-      | ExpResult ->
-          do_leaf (id (ST.symbol "Result"))
-      | Exparrow(entlst,e) ->
-          lambda entlst None [] e false true accs c
-      | Expagent (entlst,rt,pres,exp) ->
-          lambda entlst rt pres exp false true accs c
-      | Expif (cond,e1,e2) ->
-          exp_if cond e1 e2 accs c
-      | Expinspect (inspexp,caselst) ->
-          inspect ie.i inspexp caselst accs c
-      | Typedexp (e0,tp) ->
-          let tp = Context.get_type tp c in
-          begin try
-            Accus.expect_type tp accs
-          with Accus.Untypeable lst ->
-            let str    = "Type error \"" ^ (string_of_expression e) ^
-              "\"\n  Actual type:\n\t"
-            and actual = Context.string_of_type tp c
-            and reqs = String.concat "\n\t"
-                (List.map Term_builder.string_of_reduced_required_type lst) in
-            error_info info (str ^ actual ^ "\n  Required types(s):\n\t" ^ reqs)
-          end;
-          analyze e0 accs c
-      | Expset _ ->
-          not_yet_implemented ie.i ("Expset Typing of "^ (string_of_expression e))
-      | Expcolon (_,_) ->
-          not_yet_implemented ie.i ("Expcolon Typing of "^ (string_of_expression e))
-    with Accus.Untypeable _ ->
-      error_info ie.i
-        ("Type error in expression \"" ^ (string_of_expression e) ^ "\"")
-
-  and application
-      (f:expression)
-      (args: expression array) (* unreversed, i.e. as in the source code *)
+  and term_application
+      (info:info)
+      (f:eterm)
+      (args:expression list)
       (am:application_mode)
-      (accs: Accus.t)
+      (mn:max_numbers)
       (c:Context.t)
-      : unit =
-    let nargs = Array.length args in
-    assert (0 < nargs);
-    Accus.expect_function nargs accs;
-    analyze f accs c;
-    for i=0 to nargs-1 do
-      Accus.expect_argument accs;
-      analyze args.(i) accs c
-    done;
-    let oo = match am with AMoo -> true | _ -> false in
-    Accus.complete_function oo accs
+      : max_numbers * eterm
+      =
+    let mn,args = arguments info args mn c in
+    {mn with max_globs = 2 + List.length args + mn.max_globs},
+    {info = info;
+     context = c;
+     term = EAppl (f,Array.of_list args,am)}
 
-  and quantified
-      (q:quantifier)
-      (entlst:entities list withinfo)
-      (e:expression)
-      (accs: Accus.t)
+  and global_application_fn
+      (info:info)
+      (fn:feature_name)
+      (args:expression list)
+      (am:application_mode)
+      (mn:max_numbers)
       (c:Context.t)
-      : unit =
-    let ntvs_gap = Accus.ntvs_added accs in
-    let c = push_context entlst false false ntvs_gap c in
-    Accus.expect_quantified c accs;
-    analyze e accs c;
-    let is_all = match q with Universal -> true | Existential -> false in
-    Accus.complete_quantified is_all accs
+      : max_numbers * eterm
+      =
+    let flst = find_features info fn c in
+    global_application_flst info flst args am mn c
+
+  and global_application_flst info flst args am mn c =
+    let nglobs_f = max_globs_of_features flst c in
+    let mn = {mn with max_globs = nglobs_f + mn.max_globs} in
+    let mn,args = arguments info args mn c in
+    mn,
+    {info = info;
+     context = c;
+     term = EGlAppl(flst, Array.of_list args, am)}
+
+  and arguments
+      (info:info)
+      (args:expression list)
+      (mn:max_numbers)
+      (c:Context.t)
+      : max_numbers * eterm list
+      =
+    let mn,lst =
+      List.fold_left
+        (fun (mn,lst) arg ->
+          let mn,et =
+            first info arg mn c
+          in
+          mn, et::lst
+        )
+        (mn,[])
+        args
+    in
+    mn, List.rev lst
+
+  and identifier
+      (info:info)
+      (id:int)
+      (mn:max_numbers)
+      (c:Context.t)
+      : max_numbers * eterm
+      =
+    match find_identifier info id c with
+      IDVar i ->
+        mn, {info = info; context = c; term = EVar i}
+    | IDFun flst ->
+        global_application_flst info flst [] AMmath mn c
 
   and lambda
+      (info:info)
       (entlst:entities list withinfo)
+      (is_pred:bool)
       (rt: return_type)
       (pres: compound)
       (e:expression)
-      (is_pred: bool)
-      (is_func: bool)
-      (accs: Accus.t)
+      (mn: max_numbers)
       (c:Context.t)
-      : unit =
-    let ntvs_gap = Accus.ntvs_added accs in
-    let c = push_context entlst is_pred is_func ntvs_gap c in
-    let rec anapres (pres:compound) (npres:int): int =
-      match pres with
-        [] -> npres
-      | p::pres ->
-          Accus.expect_boolean_expression accs;
-          analyze p.v accs c;
-          anapres pres (1+npres)
+      : max_numbers * eterm
+      =
+    let c_new = Context.push entlst rt is_pred (not is_pred) false c in
+    let mn =
+      {mn with
+       max_locs  = max mn.max_locs (Context.count_type_variables c_new);
+       max_globs = mn.max_globs + Context.count_local_type_variables c_new
+     }
     in
-    Accus.expect_lambda is_pred c accs;
-    analyze e accs c;
-    let npres = anapres pres 0 in
-    let nms = Context.local_argnames c in
-    let n = Array.length nms in
-    Accus.complete_lambda n nms npres is_pred accs
-
-
-  and inductive_set
-      (entlst: entities list withinfo)
-      (rules: expression list)
-      (accs: Accus.t)
-      (c:Context.t)
-      : unit =
-    let ntvs_gap = Accus.ntvs_added accs in
-    let c1 = push_context entlst false false ntvs_gap c in
-    let nargs = Context.count_last_arguments c1 in
-    assert (0 < nargs);
-    if 1 < nargs then
-      not_yet_implemented entlst.i "Multiple inductive sets";
-    let analyze_rule (r:expression): unit =
-      Accus.expect_boolean_expression accs;
-      analyze r accs c1
+    let pres_rev,nm =
+      List.fold_left
+        (fun (pres_rev,mn) e ->
+          assert false
+        )
+        ([],mn)
+        pres
     in
-    Accus.expect_inductive c1 accs;
-    List.iter analyze_rule rules;
-    Accus.complete_inductive entlst.i (List.length rules) accs
+    let mn, et0 = first info e mn c_new in
+    mn,
+    {info = info;
+     context = c;
+     term = ELam (List.rev pres_rev, et0, is_pred)}
 
-
-  and exp_if
-      (cond:expression) (e1:expression) (e2:expression)
-      (accs: Accus.t)
-      (c:Context.t)
-      : unit =
-    Accus.push_expected accs;
-    Accus.expect_boolean_expression accs;
-    analyze cond accs c;
-    Accus.get_expected 0 accs;
-    analyze e1 accs c;
-    Accus.get_expected 0 accs;
-    analyze e2 accs c;
-    Accus.complete_if accs
-
-  and inspect (info:info)
-      (insp:expression)
-      (caselst:(expression*expression) list)
-      (accs: Accus.t)
-      (c:Context.t)
-      :unit =
-    let ninspected = expression_list_length insp
-    in
-    let do_case (i:int) ((m,r):expression*expression): unit =
-      if ninspected > expression_list_length m then
-        error_info info ("case " ^ (string_of_int (i+1)) ^
-                         " \"" ^  (string_of_expression m) ^
-                         "\" does not have at least " ^
-                         (string_of_int ninspected) ^ " pattern");
-      let m,nms = case_variables info m false c
-      and ntvs_gap = Accus.ntvs_added accs in
-      let c1   = Context.push_untyped_gap nms ntvs_gap c in
-      Accus.expect_case c1 accs;
-      Accus.get_expected 0 accs;
-      analyze m accs c1;
-      Accus.get_expected 1 accs;
-      analyze r accs c1;
-      Accus.complete_case accs
-    in
-    let rec do_case_list i lst =
-      match lst with
-        [] -> i
-      | c::lst ->
-          do_case i c;
-          do_case_list (1+i) lst
-    in
-    Accus.expect_inspect accs;
-    Accus.push_expected accs;
-    Accus.expect_new_untyped accs;
-    Accus.push_expected accs;  (* stack = [match_type insp_type ...]*)
-    analyze insp accs c;
-    let ncases = do_case_list 0 caselst in
-    assert (0 < ncases);
-    Accus.complete_inspect ncases accs;
-    Accus.drop_expected accs;
-    Accus.drop_expected accs
-
-  and exp_as
+  and quantified
       (info:info)
-      (e:expression)
-      (mtch:expression)
-      (accs:Accus.t)
-      (c:Context.t): unit =
-    Accus.expect_boolean accs;
-    Accus.expect_as accs;
-    Accus.push_expected accs;
-    Accus.expect_new_untyped accs;
-    Accus.push_expected accs;
-    analyze e accs c;
-    let mtch,nms = case_variables info mtch false c
-    and ntvs_gap = Accus.ntvs_added accs in
-    let c1 = Context.push_untyped_gap nms ntvs_gap c in
-    Accus.expect_case c1 accs;
-    Accus.get_expected 0 accs;
-    analyze mtch accs c1;
-    Accus.complete_as accs;
-    Accus.drop_expected accs;
-    Accus.drop_expected accs
+      (q:quantifier)
+      (entlst:entities list withinfo)
+      (exp:expression)
+      (mn: max_numbers)
+      (c:Context.t)
+      : max_numbers * eterm
+      =
+    let c_new = Context.push entlst None false false false c in
+    let nargs = Context.count_last_variables c_new in
+    let mn =
+      {mn with
+       max_locs = max mn.max_locs (Context.count_type_variables c_new)}
+    in
+    let mn, et0 = first info exp mn c_new
+    and is_all =
+      begin
+        match q with
+          Existential -> false
+        | Universal -> true
+      end
+    in
+    let used = used_variables nargs et0 in
+    if IntSet.cardinal used <> nargs then begin
+      let names = Context.local_argnames c_new
+      and unused =
+        List.rev
+          (interval_fold
+             (fun unused i ->
+               if not (IntSet.mem i used) then
+                 i :: unused
+               else
+                 unused
+             ) [] 0 nargs)
+      in
+      error_info
+        info
+        ("Unused variables\nThe quantified expression\n\n\t" ^
+         string_of_expression e ^
+         "\n\nhas the following unused " ^
+         (if List.length unused = 1 then "variable" else "variables") ^
+         "\n\n\t" ^
+         String.concat
+           ", "
+           (List.map (fun i -> ST.string names.(i)) unused)
+         ^
+             "\n")
+    end;
+    mn,
+    {info = info;
+     context = c;
+     term = EQExp (et0,is_all)}
+
+  and inspect
+      (info:info)
+      (insp:expression)
+      (cases: (expression*expression) list)
+      (mn: max_numbers)
+      (c:Context.t)
+      : max_numbers * eterm
+      =
+    let ninspected = expression_list_length insp in
+    let mn = {mn with max_globs = mn.max_globs + 1} in
+    let mn,einsp = first info insp mn c in
+    let mn,ecases =
+      List.fold_left
+        (fun (mn,ecases) (pat,res) ->
+          if ninspected > expression_list_length pat then
+            error_info
+              info
+              ("Illegal pattern\n" ^
+               "The pattern\n\n\t" ^
+               (string_of_expression pat) ^
+               "\n\ndoes not have " ^
+               (string_of_int ninspected) ^
+               " subpattern and therefore cannot be matched against the\n" ^
+               "inspected expression\n\n\t" ^
+               (string_of_expression insp) ^
+               "\n");
+          let pat,names = case_variables info pat false c in
+          let c_new = Context.push_untyped names c in
+          let mn =
+            {mn with
+             max_locs = max mn.max_locs (Context.count_type_variables c_new)}
+          in
+          let mn, epat = first info pat mn c_new in
+          let mn, eres = first info res mn c_new in
+          mn, (epat,eres) :: ecases
+        )
+        (mn,[])
+        cases
+    in
+    let ecases = List.rev ecases in
+    mn,
+    {info = info;
+     context = c;
+     term = EInspect (einsp,ecases)}
+
   in
 
-  let accs   = Accus.make tb c in
-  analyze exp accs c;
-  assert (not (Accus.is_empty accs));
-
-  Accus.check_uniqueness info exp accs;
-
-  let tb = Accus.first accs in
-  if not (Term_builder.is_fully_typed tb) then begin
-    let str =
-      "The term \"" ^ (string_of_expression ie.v)
-      ^ "\" has not enough variables to determine all formal generics"
-    in
-    error_info ie.i str
-  end;
-  Term_builder.update_context tb;
-
-  let term = Term_builder.normalized_result tb in
-  Term_builder.release tb;
-
-  validate_term ie.i term c;
-  validate_visibility ie.i term c;
-  assert (Context.is_well_typed term c);
-  assert (Context.is_well_typed term c);
-  (*assert (Term_builder.is_valid term c);*)
-  term
+  first
+    info
+    e
+    {max_locs  = Context.count_type_variables c;
+     max_globs = 0;
+     max_fgs   = 0}
+    c
 
 
-
-let result_term
-    (ie:  info_expression)
-    (c:   Context.t)
-    : term =
-  (** Analyse the expression [ie] as the result expression of the
-      context [context] and return the term.
+let replicate_tbs (tbs:TB.t list) (flst:int list): (int * TB.t list) list =
+  (* Provide all global functions in the list [lst] with an own copy of the
+     tbs.
    *)
+  let copies tbs = List.rev_map TB.copy tbs
+  in
+  match flst with
+    [] ->
+      assert false (* cannot happen; at least one global function must be present. *)
+  | fidx :: rest ->
+      (fidx,tbs) :: (List.map (fun fidx -> fidx, copies tbs) rest)
+
+
+let trace_head_terms (level:int) (c:Context.t) (tbs:TB.t list): unit =
+  let len = List.length tbs in
+  List.iteri
+    (fun i tb ->
+      let istr = if len = 1 then "" else (string_of_int i) ^ ": " in
+      printf "%s%s%s\n"
+        (prefix level)
+        istr
+        (TB.string_of_complete_head_term tb)
+    )
+    tbs
+
+
+let filter_global_functions
+    (info:info)
+    (flst:int list)            (* The possible global functions *)
+    (nargs:int)                (* The actual number of arguments *)
+    (tbs:TB.t list)
+    : TB.t list
+    =
+  (* Analyze the possible global functions [flst] unify the result type with the
+     required type and return each global function with a proper type context.
+
+     Report an error if no function can be unified with any of the required
+     return types.
+   *)
+  let flst1 = replicate_tbs tbs flst in
+  let tbs1 =
+    List.fold_left
+      (fun tbs1 (fidx,tbs) ->
+        let ftbs =
+          List.fold_left
+            (fun ftbs tb ->
+              try
+                TB.start_global_application fidx nargs tb;
+                tb :: ftbs
+              with Reject ->
+                ftbs
+            )
+            []
+            tbs
+        in
+        List.append tbs1 ftbs
+      )
+      []
+      flst1
+  in
+  if tbs1 = [] then
+    assert false (* report error *);
+  tbs1
+
+
+let string_of_required_types (tbs:TB.t list): string =
+  "which does not match " ^
+  (if List.length tbs = 1 then
+    "the required type"
+  else
+    "any of the required types") ^
+  "\n\n\t" ^
+  String.concat
+    "\n\t"
+    (List.map TB.string_of_required_type tbs) ^
+  "\n"
+
+
+let variable_type_mismatch
+    (info:info) (i:int) (c:Context.t) (tbs:TB.t list)
+    : unit
+    =
+  error_info
+    info
+    ("Type mismatch\n" ^
+     "The variable \"" ^ ST.string (Context.variable_name i c) ^
+     "\" has type\n\n\t" ^
+     Context.string_of_type (Context.variable_type i c) c ^
+     "\n\n" ^
+     string_of_required_types tbs)
+
+
+
+
+
+
+
+let analyze_eterm
+    (et_outer:eterm)
+    (tbs:TB.t list)
+    (level:int)
+    (trace:bool)
+    : TB.t list
+    =
+  let rec analyze
+      (et:eterm)
+      (tbs:TB.t list)
+      (level:int)
+      : TB.t list
+      =
+    match et.term with
+      EVar i ->
+        variable et i tbs level
+    | EGlAppl (flst,args,am) ->
+        global_application et flst args am tbs level
+    | EAppl (f,args,am) ->
+        term_application et f args am tbs level
+    | ELam (pres,et0,is_pred) ->
+        if trace then
+          printf "%s%s expression\n"
+            (prefix level)
+            (if is_pred then "predicate" else "function");
+        List.iter
+          (fun tb -> TB.start_lambda et0.context is_pred tb)
+          tbs;
+        let tbs1 =
+          List.fold_left
+            (fun tbs et -> analyze et tbs (level+1))
+            tbs
+            pres
+        in
+        let tbs2 = analyze et0 tbs1 (level+1) in
+        List.iter
+          (fun tb -> TB.complete_lambda is_pred (List.length pres) tb)
+          tbs2;
+        if trace then
+          trace_head_terms level et.context tbs2;
+        tbs2
+    | EQExp (et0,is_all) ->
+        if trace then
+          printf "%s%s quantification\n"
+            (prefix level)
+            (if is_all then "universal" else "existential");
+        let tbs1 =
+          List.fold_left
+            (fun tbs tb ->
+              try
+                TB.start_quantified et0.context tb;
+                tb :: tbs
+              with Reject ->
+                tbs
+            )
+            []
+            tbs
+        in
+        if tbs1 = [] then
+          assert false;
+        let tbs2 = analyze et0 tbs1 (level+1) in
+        List.iter
+          (fun tb -> TB.complete_quantified is_all tb)
+          tbs2;
+        if trace then
+          trace_head_terms level et.context tbs2;
+        tbs2
+    | EInspect (insp,cases) ->
+        if trace then
+          printf "%sinspect\n" (prefix level);
+        List.iter TB.start_inspect tbs;
+        let tbs1 = analyze insp tbs (level+1) in
+        List.iter TB.start_cases tbs1;
+        let tbs2 =
+          List.fold_left
+            (fun tbs (pat,res) ->
+              assert (pat.context == res.context);
+              if trace then begin
+                printf "%scase\n" (prefix level);
+                printf "%spattern\n" (prefix (level+1))
+              end;
+              List.iter (fun tb -> TB.start_case pat.context tb) tbs;
+              let tbs1 = analyze pat tbs  (level+2) in
+              if trace then
+                printf "%sresult\n" (prefix (level+1));
+              List.iter TB.expect_case_result tbs1;
+              let tbs2 = analyze res tbs1 (level+2) in
+              List.iter TB.complete_case tbs2;
+              tbs2
+            )
+            tbs1
+            cases
+        in
+        let ncases = List.length cases in
+        List.iter (fun tb -> TB.complete_inspect ncases tb) tbs2;
+        if trace then
+          trace_head_terms level et.context tbs2;
+        tbs2
+
+  and variable et i tbs level =
+      let tbs1 =
+        List.fold_left
+          (fun tbs1 tb ->
+            try
+              TB.add_variable i et.context tb;
+              tb :: tbs1
+            with Reject ->
+              tbs1
+          )
+          []
+          tbs
+      in
+      if tbs1 = [] then
+        variable_type_mismatch et.info i et.context tbs;
+      if trace then
+        trace_head_terms level et.context tbs1;
+      tbs1
+
+  and term_application et f args am tbs level =
+    if trace then
+      printf "%sfunction term\n" (prefix level);
+    let nargs = Array.length args in
+    List.iter (fun tb -> TB.start_term_application nargs tb) tbs;
+    let tbs1 = analyze f tbs (level+1) in
+    let tbs2 = arguments args tbs1 level in
+    List.iter (fun tb -> TB.complete_application am tb) tbs2;
+    if trace then
+      trace_head_terms level et.context tbs2;
+    tbs
+
+  and global_application et flst args am tbs level =
+    if trace then begin
+      let len = List.length flst
+      in
+      List.iteri
+        (fun i fidx ->
+          let istr = if len = 1 then "" else (string_of_int i) ^ ": " in
+          printf "%s%s%s\n"
+            (prefix level)
+            istr
+            (Context.string_of_feature_signature fidx et.context)
+        )
+        flst
+    end;
+    let nargs = Array.length args in
+    let tbs1 =
+      filter_global_functions et.info flst nargs tbs
+    in
+    let tbs2 = arguments args tbs1 (level+1)
+    in
+    List.iter (fun tb -> TB.complete_application am tb) tbs2;
+    if trace then
+      trace_head_terms level et.context tbs2;
+    tbs2
+
+  and arguments args tbs level =
+    let nargs = Array.length args in
+    interval_fold
+      (fun tbs i ->
+        if trace then
+          printf "%sargument %d\n" (prefix level) i;
+        List.iter (fun tb -> TB.expect_argument i tb) tbs;
+        analyze args.(i) tbs (level+1)
+      )
+      tbs 0 nargs
+  in
+
+  analyze et_outer tbs level
+
+
+
+
+
+
+let get_different_globals (t1:term) (t2:term) (c:Context.t): string * string =
+  let nvars = Context.count_variables c
+  and ft    = Context.feature_table c
+  in
+  let vars1 = List.rev (Term.used_variables_from t1 nvars true)
+  and vars2 = List.rev (Term.used_variables_from t2 nvars true) in
+  let lst   = Mylist.combine vars1 vars2 in
+  let i,j =
+    try List.find (fun (i,j) -> i<>j) lst
+    with Not_found -> assert false (* cannot happen *) in
+  let str1 = Feature_table.string_of_signature (i-nvars) ft
+  and str2 = Feature_table.string_of_signature (j-nvars) ft in
+  str1, str2
+
+
+let undefined_formal_generics (info:info) (ft:Feature_table.t) (tb:TB.t): unit =
+  let lst = TB.undefined_globals tb
+  and tstr = TB.string_of_head_term tb
+  in
+  printf "undefined_formal_generics %d\n" (List.length lst);
+  let fstring fidx lst =
+    let fstr = Feature_table.string_of_signature fidx ft
+    and tvs,s = Feature_table.signature0 fidx ft
+    in
+    let fgnames = Tvars.fgnames tvs
+    and nfgs = Tvars.count_fgs tvs in
+    let undefs =
+      String.concat
+        ","
+        (List.map
+           (fun i -> assert (i < nfgs); ST.string fgnames.(i))
+           lst)
+    in
+    fstr ^ " undefined: " ^ undefs
+  in
+  let undefstr =
+    String.concat
+      "\n\t"
+      (List.rev_map
+         (fun (fidx,lst) ->
+           fstring fidx lst
+         )
+         lst)
+  in
+  error_info
+    info
+    ("Undefined formal generics\n" ^
+     "Not all formal generics of functions/constants could be determined\n" ^
+     "in the expression\n\n\t" ^
+     tstr ^ "\n\n" ^
+     "undefind formal generics:\n\n\t" ^
+     undefstr ^
+     "\n"
+    )
+
+
+
+let general_term
+    (ie:info_expression) (tp:type_term option) (c:Context.t)
+    : term =
+  let trace = true (*Context.verbosity c >= 5*) in
+  if trace then begin
+    printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression ie.v);
+  end;
+  let mn,et = first_pass ie.i ie.v c in
+  let tb = TB.make tp mn.max_locs mn.max_globs mn.max_fgs c in
+  assert (TB.context tb == c);
+  let lst = analyze_eterm et [tb] 0 trace
+  in
+  match lst with
+    [] ->
+      assert false (* Cannot happen; at least one term is returned, otherwise an
+                      error is reported *)
+  | [tb] ->
+      if TB.has_undefined_globals tb then
+        undefined_formal_generics
+          ie.i
+          (Context.feature_table c)
+          tb;
+      TB.update_context c tb;
+      let t = TB.result_term tb in
+      assert (Context.is_well_typed t c);
+      t
+  | tb1 :: tb2 :: _ ->
+      let t1 = TB.head_term tb1
+      and t2 = TB.head_term tb2 in
+      let str1, str2 = get_different_globals t1 t2 c in
+      let estr = string_of_expression ie.v in
+      error_info
+        ie.i
+        ("The expression\n\n\t" ^ estr ^ "\n\nis ambiguous\n\n\t" ^
+         str1 ^ "\n\t" ^ str2)
+
+
+
+
+let typed_term (ie:info_expression) (tp:type_term) (c:Context.t): term =
   assert (not (Context.is_global c));
-  let tb = Term_builder.occupy_context c in
-  analyze_expression ie tb c
+  general_term ie (Some tp) c
+
+
+
+let untyped_term (ie:info_expression) (c:Context.t): term =
+  assert (not (Context.is_global c));
+  general_term ie None c
+
 
 
 let boolean_term (ie: info_expression) (c:Context.t): term =
   assert (not (Context.is_global c));
-  let tb = Term_builder.occupy_boolean c in
-  analyze_expression ie tb c
+  general_term ie (Some (Context.boolean c)) c
 
 
-let typed_term
-    (ie:info_expression) (tp:type_term) (c:Context.t): term =
+let result_term (ie:info_expression) (c:Context.t): term =
   assert (not (Context.is_global c));
-  let tb = Term_builder.occupy_typed tp c in
-  analyze_expression ie tb c
-
-let untyped_term
-    (ie:info_expression) (c:Context.t): term =
-  assert (not (Context.is_global c));
-  let tb = Term_builder.occupy_untyped c in
-  analyze_expression ie tb c
+  assert (Context.has_result c);
+  let tp = Context.result_type c in
+  typed_term ie tp c
