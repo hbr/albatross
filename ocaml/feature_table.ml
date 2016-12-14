@@ -735,7 +735,7 @@ let args_of_tuple_ext
 let tuple_of_args
     (args:arguments) (tup_tp:type_term) (nb:int) (ft:t)
     : term =
-  (* The arguments [a,b,...] transformed to a tuple (a,b,...) or the type [tup_tp].
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...) of the type [tup_tp].
    *)
   let nargs = Array.length args
   and tup_id = nb + tuple_index
