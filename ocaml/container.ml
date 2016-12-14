@@ -116,7 +116,7 @@ let interval_fold (f:'a->int->'a) (a0:'a) (start:int) (beyond:int): 'a =
     else
       fold (i+1) (f a i)
   in
-  fold 0 a0
+  fold start a0
 
 
 
