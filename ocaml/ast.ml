@@ -193,7 +193,7 @@ let function_property_list (lst:compound) (pc:PC.t): term list =
   let pc1 = Proof_context.push_empty pc in
   List.map
     (fun e ->
-      let t = get_boolean_term e pc1 in
+      let t = get_boolean_term e pc in
       verify_preconditions t e.i pc1;
       let _ = PC.add_assumption t true pc1 in
       t)

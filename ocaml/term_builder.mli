@@ -9,6 +9,7 @@ open Term
 
 type t
 val context: t -> Context.t
+val count_terms: t -> int
 val head_term: t -> term
 val has_required_type: t -> bool
 val string_of_required_type: t -> string

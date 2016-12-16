@@ -262,6 +262,9 @@ let string_of_substitutions (tb:t): string =
 
 
 
+let count_terms (tb:t): int =
+  List.length tb.terms
+
 let head_term (tb:t): term =
   assert (tb.terms <> []);
   let t,_ = List.hd tb.terms in
@@ -319,6 +322,13 @@ let has_substitution (i:int) (tb:t): bool =
   tb.sub.(i) <> Variable i
 
 
+
+let has_dummy_substitution (i:int) (tb:t): bool =
+  assert (has_substitution i tb);
+  let cls,_ = Class_table.split_type_term tb.sub.(i) in
+  cls = dummy_index tb
+
+
 let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   (*printf "satisfies\n";
   printf " %s %s\n" (string_of_tvs tb) (string_of_substitutions tb);
@@ -338,6 +348,12 @@ let substitute (i:int) (tp:type_term) (tb:t): unit =
     tb.sub.(i) <- tp
   else
     raise Reject
+
+
+let update_substitution (i:int) (tp:type_term) (tb:t): unit =
+  assert (is_tv i tb);
+  assert (has_dummy_substitution i tb);
+  tb.sub.(i) <- tp
 
 
 let substitute_var_var (i:int) (j:int) (tb:t): unit =
@@ -360,9 +376,36 @@ let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
     (string_of_type t2 tb)
     (string_of_substituted_type_with_tvs t2 tb);*)
   let ntvs = Tvars.count tb.tvs in
+  let unify_potential_dummy
+      (i:int)  (t2:type_term) (ordered:bool): unit =
+    let uni t1 t2 =
+      if ordered then
+        unify t1 t2 tb
+      else
+        unify t2 t1 tb
+    in
+    if has_dummy_substitution i tb then begin
+      let cls1,ags1 = Class_table.split_type_term tb.sub.(i)
+      and cls2,ags2 = Class_table.split_type_term t2
+      in
+      assert (Array.length ags1 = 2);
+      assert (Array.length ags2 >= 1);
+      unify ags1.(0) ags2.(0) tb;
+      if cls2 = function_index tb || cls2 = dummy_index tb then begin
+        uni ags1.(1) ags2.(1);
+        update_substitution i t2 tb
+      end else if cls2 = predicate_index tb then begin
+        uni ags1.(1) (boolean_type tb);
+        update_substitution i t2 tb
+      end else
+        raise Reject
+    end else
+      uni tb.sub.(i) t2
+  in
   match t1, t2 with
     Variable i, Variable j when i = j ->
       ()
+
   | Variable i, Variable j when i < ntvs && j < ntvs ->
       assert (not (is_local i tb && is_local j tb));
       let i_has_sub = has_substitution i tb
@@ -374,51 +417,55 @@ let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
         if is_local j tb then
           substitute i tb.sub.(j) tb
         else
-          substitute i (Variable j) tb
+          substitute i t2 tb
       else if not j_has_sub then
         if is_local i tb then
           substitute j tb.sub.(i) tb
         else
-          substitute j (Variable i) tb
-      else
-        unify tb.sub.(i) tb.sub.(j) tb
+          substitute j t1 tb
+      else begin
+        (* Both have substitutions *)
+        let i_has_dummy_sub = has_dummy_substitution i tb
+        and j_has_dummy_sub = has_dummy_substitution j tb
+        in
+        if i_has_dummy_sub && not j_has_dummy_sub then
+          unify t1 tb.sub.(j) tb
+        else if not i_has_dummy_sub && j_has_dummy_sub then
+          unify tb.sub.(i) t2 tb
+        else
+          unify tb.sub.(i) tb.sub.(j) tb
+      end
+
   | Variable i, _ when i < ntvs ->
       if has_substitution i tb then
-        unify tb.sub.(i) t2 tb
+        unify_potential_dummy i t2 true
       else
         substitute i t2 tb
+
   | _, Variable j when j < ntvs ->
       if has_substitution j tb then
-        unify tb.sub.(j) t1 tb
+        unify_potential_dummy j t1 false
       else
         substitute j t1 tb
+
   | Variable i, _ ->
       raise Reject  (* Different types cannot be unified *)
+
   | _, Variable j ->
       raise Reject  (* Different types cannot be unified *)
-  | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = dummy_index tb ->
-      (* If the required type is a dummy then it can be unified with
-         a predicate or a function type *)
-      assert (Array.length args1 = 2);
-      if i2 = predicate_index tb then begin
-        assert (Array.length args2 = 1);
-        unify args1.(0) args2.(0) tb;
-        unify args1.(1) (boolean_type tb) tb
-      end else if i2 = function_index tb then begin
-        assert (Array.length args2 = 2);
-        unify args1.(0) args2.(0) tb;
-        unify args1.(1) args2.(1) tb
-      end else
-        raise Reject
 
   | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
+      assert (i1 <> dummy_index tb);
       let len = Array.length args1 in
       assert (len = Array.length args2);
       for i = 0 to len - 1 do
         unify args1.(i) args2.(i) tb
       done
+
   | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
       assert (i1 <> i2);
+      assert (i1 <> dummy_index tb);
+      assert (i2 <> dummy_index tb);
       raise Reject (* Different classes cannot be unified *)
   | _ ->
       assert false (* Cannot happen with types *)
@@ -655,6 +702,7 @@ let function_of_args (start:int) (nargs:int) (rt:type_term) (tb:t): type_term =
 
 
 let tuple_of_args (args:term array) (tup_tp:type_term) (tb:t): term =
+  let tup_tp = substituted_type tup_tp tb in
   let c = context tb in
   let nvars = Context.count_variables c
   and ft = Context.feature_table c in
@@ -713,10 +761,15 @@ let complete_application (am:application_mode) (tb:t): unit =
         | _ ->
             assert false (* Cannot happen *)
       in
+      let f_tp = substituted_type f_tp tb in
       let arg =
         let args = Array.of_list (List.map (fun (t,_) -> t) args) in
         let cls,ags = Class_table.split_type_term f_tp in
-        assert (cls = predicate_index tb || cls = function_index tb);
+        assert begin
+          cls = predicate_index tb ||
+          cls = function_index tb ||
+          cls = dummy_index tb
+        end;
         tuple_of_args args ags.(0) tb
       in
       let t = Application (f, [|arg|], false) in

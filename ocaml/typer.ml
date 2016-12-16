@@ -203,7 +203,8 @@ let first_pass
     (info:info)
     (e:expression)
     (c:Context.t)
-    : max_numbers * eterm =
+    : max_numbers * eterm
+    =
   let rec first
       (info:info)
       (e:expression)
@@ -219,7 +220,11 @@ let first_pass
     | Expnumber num ->
         assert false
     | ExpResult ->
-        assert false
+        if not (Context.has_result c) then
+          error_info info "There is no variable \"Result\" in this context";
+        assert (Context.has_result_variable c);
+        let i = Context.count_last_arguments c in
+        mn, {info = info; context = c; term = EVar i}
     | Exptrue ->
         global_application_fn info FNtrue [] AMmath mn c
     | Expfalse ->
@@ -231,7 +236,7 @@ let first_pass
     | Expagent (entlst,rt,pres,exp) ->
         assert false
     | Expop op ->
-        assert false
+        global_application_fn info (FNoperator op) [] AMmath mn c
     | Funapp (f,args,am) ->
         application info f args am mn c
     | Expset e ->
@@ -264,12 +269,13 @@ let first_pass
               let fterm = {info = info; context = c; term = EVar i} in
               term_application info fterm args am mn c
           | IDFun flst ->
-              global_application_flst info flst args AMmath mn c
+              global_application_flst info flst args am mn c
         end
     | Expop op ->
         global_application_fn info (FNoperator op) args am mn c
     | _ ->
-        assert false (* nyi *)
+        let mn,f_et = first info f mn c in
+        term_application info f_et args am mn c
 
   and term_application
       (info:info)
@@ -707,7 +713,7 @@ let analyze_eterm
     List.iter (fun tb -> TB.complete_application am tb) tbs2;
     if trace then
       trace_head_terms level et.context tbs2;
-    tbs
+    tbs2
 
   and global_application et flst args am tbs level =
     if trace then begin
@@ -822,6 +828,8 @@ let general_term
   assert (TB.context tb == c);
   let lst = analyze_eterm et [tb] 0 trace
   in
+  if trace then
+    printf "typer end analysis\n\n";
   match lst with
     [] ->
       assert false (* Cannot happen; at least one term is returned, otherwise an

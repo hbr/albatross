@@ -6,6 +6,8 @@ _build
 _draft
 *_draft.ml
 *_draft.mli
+*_old.ml
+*_old.mli
 *_draft.al
 *_draft.ali
 doc
