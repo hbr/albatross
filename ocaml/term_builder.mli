@@ -28,6 +28,8 @@ val start_lambda:    Context.t -> bool -> t -> unit
 val complete_lambda: bool -> int -> t -> unit
 val start_inductive_set: Context.t -> t -> unit
 val complete_inductive_set: int -> t -> unit
+val expect_else_expression: t -> unit
+val complete_if_expression: t -> unit
 val start_inspect: t -> unit
 val start_cases: t -> unit
 val start_case: Context.t -> t -> unit

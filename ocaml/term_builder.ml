@@ -1018,12 +1018,12 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   and nargs = Context.count_last_arguments c
   in
   let tp = upgraded_signature csig is_pred tb in
-  (* pop t0 *)
-  let t0,t0_tp = List.hd tb.terms
-  and terms = List.tl tb.terms
-  in
   (* pop preconditions *)
-  let pres,terms = pop_args npres terms
+  let pres,terms = pop_args npres tb.terms
+  in
+  (* pop t0 *)
+  let t0,t0_tp = List.hd terms
+  and terms = List.tl terms
   in
   let t0,pres =
     let tup_tp = Class_table.domain_type tp in
@@ -1039,6 +1039,23 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   in
   pop_context tb;
   tb.terms <- (t,tp) :: terms
+
+
+
+
+let expect_else_expression (tb:t): unit =
+  let _,tp = List.hd tb.terms in
+  tb.req <- Some tp
+
+
+
+
+let complete_if_expression (tb:t): unit =
+  let (cond,cond_tp),terms = pop_term tb.terms in
+  let (e2,e1_tp),terms     = pop_term terms in
+  let (e1,e2_tp),terms     = pop_term terms in
+  tb.terms <- (Flow (Ifexp, [|cond;e1;e2|]),e1_tp) :: terms
+
 
 
 let start_inspect (tb:t): unit =

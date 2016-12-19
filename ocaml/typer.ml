@@ -26,6 +26,7 @@ type eterm0 =
   | ELam  of (eterm list * eterm * bool)  (* preconditions, term ,is_pred *)
   | EQExp of (eterm * bool)  (* is_all *)
   | EInspect of (eterm * (eterm*eterm) list)
+  | EIf of (eterm * eterm * eterm)
   | EIndset of eterm list
 
 and eterm = {
@@ -89,6 +90,10 @@ let used_variables (nargs:int) (et:eterm): IntSet.t =
           )
           set
           cases
+    | EIf (c,e1,e2) ->
+        let set = used c nb set in
+        let set = used e1 nb set in
+        used e2 nb set
     | EIndset rules ->
         assert (rules <> []);
         let c0 = (List.hd rules).context in
@@ -230,11 +235,13 @@ let first_pass
     | Expnumber num ->
         assert false
     | ExpResult ->
-        if not (Context.has_result c) then
-          error_info info "There is no variable \"Result\" in this context";
-        assert (Context.has_result_variable c);
-        let i = Context.count_last_arguments c in
-        mn, {info = info; context = c; term = EVar i}
+        begin
+          try
+            let i = Context.variable_index (ST.symbol "Result") c in
+            mn, {info = info; context = c; term = EVar i}
+          with Not_found ->
+            error_info info "There is no variable \"Result\" in this context";
+        end
     | Exptrue ->
         global_application_fn info FNtrue [] AMmath mn c
     | Expfalse ->
@@ -244,7 +251,7 @@ let first_pass
     | Exparrow (entlst,e) ->
         assert false
     | Expagent (entlst,rt,pres,exp) ->
-        assert false
+        lambda info entlst false rt pres exp mn c
     | Expop op ->
         global_application_fn info (FNoperator op) [] AMmath mn c
     | Funapp (f,args,am) ->
@@ -285,7 +292,13 @@ let first_pass
     | Expcolon (e1,e2) ->
         assert false
     | Expif (cond,e1,e2) ->
-        assert false
+        let mn, cond = first info cond mn c in
+        let mn, e1   = first info e1 mn c in
+        let mn, e2   = first info e2 mn c in
+        mn,
+        {info = info;
+         context = c;
+         term = EIf (cond,e1,e2)}
     | Expas (e,pat) ->
         assert false
     | Expinspect (insp, cases) ->
@@ -397,10 +410,11 @@ let first_pass
        max_globs = mn.max_globs + Context.count_local_type_variables c_new
      }
     in
-    let pres_rev,nm =
+    let pres_rev,mn =
       List.fold_left
         (fun (pres_rev,mn) e ->
-          assert false
+          let mn,et = first e.i e.v mn c_new in
+          et :: pres_rev, mn
         )
         ([],mn)
         pres
@@ -653,20 +667,28 @@ let analyze_eterm
     | EAppl (f,args,am) ->
         term_application et f args am tbs level
     | ELam (pres,et0,is_pred) ->
-        if trace then
+        if trace then begin
           printf "%s%s expression\n"
             (prefix level)
             (if is_pred then "predicate" else "function");
+          printf "%sinner term\n" (prefix level)
+        end;
         List.iter
           (fun tb -> TB.start_lambda et0.context is_pred tb)
           tbs;
-        let tbs1 =
+        let tbs1 = analyze et0 tbs (level+1)
+        in
+        let npres = List.length pres in
+        if trace && npres > 0 then
+          printf "%spreconditions\n" (prefix level);
+        let tbs2 =
           List.fold_left
-            (fun tbs et -> analyze et tbs (level+1))
-            tbs
+            (fun tbs et ->
+              List.iter TB.expect_boolean tbs;
+              analyze et tbs (level+1))
+            tbs1
             pres
         in
-        let tbs2 = analyze et0 tbs1 (level+1) in
         List.iter
           (fun tb -> TB.complete_lambda is_pred (List.length pres) tb)
           tbs2;
@@ -699,6 +721,27 @@ let analyze_eterm
         if trace then
           trace_head_terms level et.context tbs2;
         tbs2
+    | EIf (cond,e1,e2) ->
+        if trace then begin
+          printf "%sif\n" (prefix level);
+          printf "%sthen expression\n" (prefix level)
+        end;
+        let tbs1 = analyze e1 tbs (level+1)
+        in
+        if trace then
+          printf "%selse expression\n" (prefix level);
+        List.iter TB.expect_else_expression tbs1;
+        let tbs2 = analyze e2 tbs1 (level+1)
+        in
+        if trace then
+          printf "%scondition\n" (prefix level);
+        List.iter TB.expect_boolean tbs2;
+        let tbs3 = analyze cond tbs2 (level+1)
+        in
+        List.iter TB.complete_if_expression tbs3;
+        if trace then
+          trace_head_terms level et.context tbs3;
+        tbs3
     | EInspect (insp,cases) ->
         if trace then
           printf "%sinspect\n" (prefix level);
