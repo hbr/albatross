@@ -18,13 +18,16 @@ val string_of_complete_head_term: t -> string
 val make: type_term option -> int -> int -> int -> Context.t -> t
 val copy: t -> t
 val expect_argument: int -> t -> unit
-val add_variable: int -> Context.t -> t -> unit
+val expect_boolean: t -> unit
+val add_variable: int -> t -> unit
 val start_global_application: int -> int -> t -> unit
 val complete_application: application_mode -> t -> unit
 val start_quantified: Context.t -> t -> unit
 val complete_quantified: bool -> t -> unit
 val start_lambda:    Context.t -> bool -> t -> unit
 val complete_lambda: bool -> int -> t -> unit
+val start_inductive_set: Context.t -> t -> unit
+val complete_inductive_set: int -> t -> unit
 val start_inspect: t -> unit
 val start_cases: t -> unit
 val start_case: Context.t -> t -> unit

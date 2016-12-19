@@ -26,6 +26,7 @@ type eterm0 =
   | ELam  of (eterm list * eterm * bool)  (* preconditions, term ,is_pred *)
   | EQExp of (eterm * bool)  (* is_all *)
   | EInspect of (eterm * (eterm*eterm) list)
+  | EIndset of eterm list
 
 and eterm = {
     info: info;
@@ -88,6 +89,15 @@ let used_variables (nargs:int) (et:eterm): IntSet.t =
           )
           set
           cases
+    | EIndset rules ->
+        assert (rules <> []);
+        let c0 = (List.hd rules).context in
+        List.fold_left
+          (fun set rule ->
+            assert (rule.context == c0);
+            used rule nb set)
+          set
+          rules
   in
   used et 0 IntSet.empty
 
@@ -244,7 +254,30 @@ let first_pass
     | Exppred (entlst,e) ->
         lambda info entlst true None [] e mn c
     | Expindset (entlst,rules) ->
-        assert false
+        let c_new = Context.push entlst None false false false c in
+        let nargs = Context.count_last_arguments c_new
+        and nlocs = Context.count_local_type_variables c_new in
+        if nargs <> 1 then
+          not_yet_implemented entlst.i "Multiple inductive sets";
+        assert (nlocs <= 1);
+        let mn =
+          {mn with
+           max_globs = mn.max_globs + nlocs;
+           max_locs  = max mn.max_locs (Context.count_type_variables c_new)}
+        in
+        let mn, rules =
+          List.fold_left
+            (fun (mn,rules) e ->
+              let mn,et = first info e mn c_new in
+              mn, et :: rules
+            )
+            (mn,[])
+            rules
+        in
+        mn,
+        {info = info;
+         context = c;
+         term = EIndset (List.rev rules)}
     | Tupleexp (e1,e2) ->
         global_application_fn info (FNname ST.tuple) [e1;e2] AMmath mn c
     | Typedexp (e,tp) ->
@@ -514,6 +547,18 @@ let trace_head_terms (level:int) (c:Context.t) (tbs:TB.t list): unit =
     tbs
 
 
+let string_of_required_types (tbs:TB.t list): string =
+  (if List.length tbs = 1 then
+    "the required type"
+  else
+    "any of the required types") ^
+  "\n\n\t" ^
+  String.concat
+    "\n\t"
+    (List.map TB.string_of_required_type tbs) ^
+  "\n"
+
+
 let filter_global_functions
     (info:info)
     (flst:int list)            (* The possible global functions *)
@@ -549,21 +594,23 @@ let filter_global_functions
       flst1
   in
   if tbs1 = [] then
-    assert false (* report error *);
+    error_info
+      info
+      (let one = List.length flst = 1 in
+      "Type mismatch\n" ^
+       (if one then
+         "The function\n\n\t"
+       else "None of the functions\n\n\t") ^
+      (let c = TB.context (List.hd tbs) in
+       String.concat
+         "\n\n\t"
+         (List.map (fun fidx -> Context.string_of_feature_signature fidx c) flst)
+      ) ^ "\n\n" ^
+      (if one then "cannot " else "can ") ^
+      "accept " ^ (string_of_int nargs) ^
+      " argument(s) and return an object matching\n" ^
+      string_of_required_types tbs);
   tbs1
-
-
-let string_of_required_types (tbs:TB.t list): string =
-  "which does not match " ^
-  (if List.length tbs = 1 then
-    "the required type"
-  else
-    "any of the required types") ^
-  "\n\n\t" ^
-  String.concat
-    "\n\t"
-    (List.map TB.string_of_required_type tbs) ^
-  "\n"
 
 
 let variable_type_mismatch
@@ -576,7 +623,7 @@ let variable_type_mismatch
      "The variable \"" ^ ST.string (Context.variable_name i c) ^
      "\" has type\n\n\t" ^
      Context.string_of_type (Context.variable_type i c) c ^
-     "\n\n" ^
+     "\n\nwhich does not match " ^
      string_of_required_types tbs)
 
 
@@ -683,25 +730,58 @@ let analyze_eterm
         if trace then
           trace_head_terms level et.context tbs2;
         tbs2
+    | EIndset rules ->
+        if trace then
+          printf "%sinductive set\n" (prefix level);
+        assert (rules <> []);
+        let c0 = (List.hd rules).context in
+        let tbs1 =
+          List.fold_left
+            (fun tbs tb ->
+              try
+                TB.start_inductive_set c0 tb;
+                tb :: tbs
+              with Reject ->
+                tbs
+            )
+            []
+            tbs
+        in
+        let tbs2,nrules =
+          List.fold_left
+            (fun (tbs,i) rule ->
+              if trace then
+                printf "%srule %d\n" (prefix level) i;
+              List.iter TB.expect_boolean tbs;
+              let tbs = analyze rule tbs (level+1) in
+              tbs, i+1
+            )
+            (tbs1,0)
+            rules
+        in
+        List.iter (fun tb -> TB.complete_inductive_set nrules tb) tbs2;
+        if trace then
+          trace_head_terms level et.context tbs2;
+        tbs2
 
   and variable et i tbs level =
-      let tbs1 =
-        List.fold_left
-          (fun tbs1 tb ->
-            try
-              TB.add_variable i et.context tb;
-              tb :: tbs1
-            with Reject ->
-              tbs1
-          )
-          []
-          tbs
-      in
-      if tbs1 = [] then
-        variable_type_mismatch et.info i et.context tbs;
-      if trace then
-        trace_head_terms level et.context tbs1;
-      tbs1
+    let tbs1 =
+      List.fold_left
+        (fun tbs1 tb ->
+          try
+            TB.add_variable i tb;
+            tb :: tbs1
+          with Reject ->
+            tbs1
+        )
+        []
+        tbs
+    in
+    if tbs1 = [] then
+      variable_type_mismatch et.info i et.context tbs;
+    if trace then
+      trace_head_terms level et.context tbs1;
+    tbs1
 
   and term_application et f args am tbs level =
     if trace then
@@ -753,6 +833,7 @@ let analyze_eterm
   in
 
   analyze et_outer tbs level
+
 
 
 
@@ -820,9 +901,8 @@ let general_term
     (ie:info_expression) (tp:type_term option) (c:Context.t)
     : term =
   let trace = true (*Context.verbosity c >= 5*) in
-  if trace then begin
+  if trace then
     printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression ie.v);
-  end;
   let mn,et = first_pass ie.i ie.v c in
   let tb = TB.make tp mn.max_locs mn.max_globs mn.max_fgs c in
   assert (TB.context tb == c);

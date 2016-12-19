@@ -11,7 +11,7 @@ open Signature
 open Printf
 
 type application =
-    GlFun of int*Sign.t*int*int*int (* nargs, start fgs, nfgs *)
+    GlFun of int*Sign.t*int*int*int*bool (* nargs, start fgs, nfgs, is_pred *)
   | TermApp of int * int (* nargs, start fgs *)
 
 type t = {
@@ -25,7 +25,7 @@ type t = {
     mutable nfgs:      int;
     mutable tvs:       Tvars.t;
     mutable sub:       type_term array;
-    mutable glob_ranges: (int*int*int) list (* fidx (absolut), start, nfgs *)
+    mutable feature_fg_ranges: (int*int*int) list (* fidx (absolut), start, nfgs *)
   }
 
 let oo_from_am (am:application_mode): bool =
@@ -133,6 +133,10 @@ let context (tb:t): Context.t =
   assert (tb.contexts <> []);
   List.hd tb.contexts
 
+let feature_table (tb:t): Feature_table.t =
+  assert (tb.contexts <> []);
+  Context.feature_table (context tb)
+
 let class_table (tb:t): Class_table.t =
   assert (tb.contexts <> []);
   Context.class_table (context tb)
@@ -210,9 +214,12 @@ let string_of_substituted_type_with_tvs
     let tvstr = String.concat "," (Array.to_list used) in
     "[" ^ tvstr ^ "] " ^ tpstr
 
+
+
 let string_of_required_type (tb:t): string =
   assert (has_required_type tb);
   string_of_substituted_type_with_tvs (Option.value tb.req) tb
+
 
 
 let string_of_tvs (tb:t): string =
@@ -314,7 +321,7 @@ let copy (tb:t): t =
    nfgs = tb.nfgs;
    tvs = tb.tvs;
    sub = Array.copy tb.sub;
-   glob_ranges = tb.glob_ranges}
+   feature_fg_ranges = tb.feature_fg_ranges}
 
 
 let has_substitution (i:int) (tb:t): bool =
@@ -341,11 +348,31 @@ let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
   Class_table.satisfies t1 tb.tvs t2 tb.tvs (class_table tb)
 
 
+let can_reach (tp:type_term) (i:int) (tb:t): bool =
+  (* Can the type term [tp] reach the type variable [i] by substitutions? *)
+  let ntvs = Array.length tb.sub in
+  let rec can tp n =
+    assert (n <= ntvs + 1); (* infinite loop protection *)
+    if tp = Variable i then
+      true
+    else
+      match tp with
+        Variable j when is_tv j tb && has_substitution j tb ->
+          can tb.sub.(j) (n+1)
+      | _ ->
+          false
+  in
+  can tp 0
+
+
 let substitute (i:int) (tp:type_term) (tb:t): unit =
   assert (is_tv i tb);
   assert (not (has_substitution i tb));
   if satisfies tp (Variable i) tb then
-    tb.sub.(i) <- tp
+    if can_reach tp i tb then
+      ()
+    else
+      tb.sub.(i) <- tp
   else
     raise Reject
 
@@ -366,6 +393,19 @@ let substitute_var_var (i:int) (j:int) (tb:t): unit =
     substitute j (Variable i) tb
 
 
+let substitute_var_var_with_sub (i:int) (j:int) (tb:t): unit =
+  assert (not (has_substitution i tb));
+  assert (has_substitution j tb);
+  if i < j then
+    substitute i (Variable j) tb
+  else begin
+    assert (not (is_local i tb)); (* otherwise j would be local as well and we
+                                     never substitute locals by locals *)
+    assert (not (is_local j tb));
+    assert false
+  end
+
+
 let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
   (*printf "unify\n";
   printf " %s %s\n" (string_of_tvs tb) (string_of_substitutions tb);
@@ -374,7 +414,8 @@ let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
     (string_of_substituted_type_with_tvs t1 tb);
   printf "  %s,   %s\n"
     (string_of_type t2 tb)
-    (string_of_substituted_type_with_tvs t2 tb);*)
+    (string_of_substituted_type_with_tvs t2 tb);
+  flush_all ();*)
   let ntvs = Tvars.count tb.tvs in
   let unify_potential_dummy
       (i:int)  (t2:type_term) (ordered:bool): unit =
@@ -532,15 +573,19 @@ let make
    nfgs     = nfgs_c;
    tvs = tvs_tb;
    sub = Array.init (maxlocs + maxglobs) (fun i -> Variable i);
-   glob_ranges = []
+   feature_fg_ranges = []
  }
 
 
-let add_variable (i:int) (c:Context.t) (tb:t): unit =
-  let tp =
-    let tp = Context.variable_type i c in
-    (transform_from_context c tb) tp
-  in
+
+let variable_type (i:int) (tb:t): type_term =
+  let c = context tb in
+  let tp = Context.variable_type i c in
+  (transform_from_context c tb) tp
+
+
+let add_variable (i:int) (tb:t): unit =
+  let tp = variable_type i tb in
   unify_with_required tp tb;
   tb.terms <- (Variable i, tp) :: tb.terms
 
@@ -549,13 +594,17 @@ let expect_argument (i:int) (tb:t): unit =
   (* Set the required type for the argument [i] of the current function *)
   assert (tb.calls <> []);
   match List.hd tb.calls with
-    GlFun (_,s,nargs,_,_) ->
+    GlFun (_,s,nargs,_,_,_) ->
       assert (i < nargs);
       assert (i < Sign.arity s);
       tb.req <- Some (Sign.arg_type i s)
   | TermApp (nargs,start) ->
       assert (i < nargs);
       tb.req <- Some (Variable (start+i))
+
+
+let expect_boolean (tb:t): unit =
+  tb.req <- Some (boolean_type tb)
 
 
 let pop_term
@@ -623,6 +672,84 @@ let context_names_and_types (tb:t): int * names * types =
   in
   nargs, names, tps
 
+let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
+  let arr =
+    Array.init nargs (fun i -> Variable (start+i))
+  in
+  Class_table.to_tuple (count_all tb) 0 arr
+
+
+
+let dummy_type_of_args
+    (start:int) (nargs:int) (rtp:type_term) (tb:t)
+    :
+    type_term
+    =
+  let tup =
+    tuple_type_of_args start nargs tb
+  in
+  make_type (dummy_index tb) [|tup;rtp|]
+
+
+
+
+let function_of_args (start:int) (nargs:int) (rt:type_term) (tb:t): type_term =
+  let tup = tuple_type_of_args start nargs tb in
+  make_type (function_index tb) [|tup;rt|]
+
+
+
+
+let tuple_of_args (args:term array) (tup_tp:type_term) (tb:t): term =
+  let tup_tp = substituted_type tup_tp tb in
+  let c = context tb in
+  let nvars = Context.count_variables c
+  and ft = Context.feature_table c in
+  Feature_table.tuple_of_args args tup_tp nvars ft
+
+
+
+let link_new_locals_to_new_globals (tb:t): unit =
+  let c = context tb in
+  let new_locs = Context.count_local_type_variables c in
+  let gstart = globals_beyond tb
+  and lstart = locals_start tb in
+  add_anys new_locs tb;
+  for i = 0 to new_locs - 1 do
+    substitute (lstart + i) (Variable (gstart + i)) tb
+  done
+
+let context_signature (tb:t): Sign.t =
+  (* The signature of the current context in the type environment of [tb]. *)
+  let c = context tb in
+  Sign.map (transform_from_context c tb) (Context.signature c)
+
+
+
+let upgraded_signature (s:Sign.t) (is_pred:bool) (tb:t): type_term =
+  (* The signature [s] upgraded to a predicate or a function. *)
+  assert (Sign.has_result s);
+  let ntvs = Tvars.count_all tb.tvs  in
+  Class_table.upgrade_signature ntvs is_pred s
+
+
+
+let partially_upgraded_signature
+    (s:Sign.t) (nargs:int) (is_pred:bool) (tb:t)
+    : type_term
+    =
+  (* The signature [s] without the first [nargs] arguments upgraded to a
+     predicate or a function. *)
+  assert (Sign.has_result s);
+  let arity = Sign.arity s in
+  assert (nargs < arity);
+  let args = Array.sub (Sign.arguments s) nargs (arity-nargs) in
+  let s = Sign.make_func args (Sign.result s) in
+  upgraded_signature s is_pred tb
+
+
+
+
 let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
   let tvs,s = Context.feature_signature fidx (context tb) in
   assert (Sign.has_result s);
@@ -635,21 +762,24 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
   and nfgs = Tvars.count_fgs tvs
   in
   add_globals concepts tb;
-  tb.calls <- GlFun (fidx,s,nargs,start,nfgs) :: tb.calls;
-  tb.glob_ranges <- begin
+  tb.feature_fg_ranges <- begin
     let fidx = fidx - Context.count_variables (context tb) in
-    (fidx,start,nfgs) :: tb.glob_ranges
+    (fidx,start,nfgs) :: tb.feature_fg_ranges
   end;
   let nargs_s = Sign.arity s in
   if nargs = nargs_s then
-    unify_with_required (Sign.result s) tb
-  else if nargs < nargs_s then begin
+    begin
+      tb.calls <- GlFun (fidx,s,nargs,start,nfgs,false) :: tb.calls;
+      unify_with_required (Sign.result s) tb
+    end
+  else if nargs < nargs_s then
+    begin
     (* The global function [fidx] has more arguments than there are arguments
        provided. We have to convert the call into an application of a function
-       expression. Suppose we have two arguments [a] and [b] and the function
-       needs four arguments.
+       or a predicate expression. Suppose we have two arguments [a] and [b]
+       and the function needs four arguments.
 
-           ((c,d) -> f(a,b,c,d))
+           ((c,d) -> f(a,b,c,d))    or {(c,d): f(a,b,c,d)}
 
        This is possible only if the types of the missing arguments satisfy the
        concept of [ANY].
@@ -658,55 +788,47 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
 
            ((c,d) -> f(a,b,c,d)) : (C,D) -> RT
      *)
-    let any_tp = any_type tb in
-    if interval_exist
-        (fun i -> not (satisfies (Sign.arg_type i s) any_tp tb))
-        nargs nargs_s
-    then
-      raise Reject;
-    let f_tp =
-      let ntvs = count_all tb in
-      let tup_tp = Class_table.to_tuple ntvs nargs (Sign.arguments s) in
-      Class_table.function_type tup_tp (Sign.result s) ntvs
-    in
-    unify_with_required f_tp tb
-  end else if nargs_s = 0 then begin
-    (* The global function [fidx] is a constant. It has to be a function or a
-       predicate. *)
-    printf "nargs_s < nargs: %d %d\n" nargs_s nargs;
-    assert false (* nyi *)
-  end else
+      let is_pred =
+        match tb.req with
+          None -> false
+        | Some tp ->
+            let cls,_ = Class_table.split_type_term tp in
+            if cls = function_index tb then
+              false
+            else if cls = predicate_index tb then
+              true
+            else
+              raise Reject
+      in
+      let any_tp = any_type tb in
+      if interval_exist
+          (fun i -> not (satisfies (Sign.arg_type i s) any_tp tb))
+          nargs nargs_s
+      then
+        raise Reject;
+      let f_tp =
+        let ntvs = count_all tb in
+        let tup_tp = Class_table.to_tuple ntvs nargs (Sign.arguments s) in
+        if not is_pred then
+          Class_table.function_type tup_tp (Sign.result s) ntvs
+        else if Sign.result s = boolean_type tb then
+          Class_table.predicate_type tup_tp ntvs
+        else
+          raise Reject
+      in
+      tb.calls <- GlFun (fidx,s,nargs,start,nfgs,is_pred) :: tb.calls;
+      unify_with_required f_tp tb
+    end
+  else if nargs_s = 0 then
+    begin
+      (* The global function [fidx] is a constant. It has to be a function or a
+         predicate. *)
+      printf "nargs_s < nargs: %d %d\n" nargs_s nargs;
+      assert false (* nyi *)
+    end
+  else
     raise Reject
 
-
-
-let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
-  let arr =
-    Array.init nargs (fun i -> Variable (start+i))
-  in
-  Class_table.to_tuple (count_all tb) 0 arr
-
-
-
-let dummy_type_of_args (start:int) (nargs:int) (tb:t): type_term =
-  let tup =
-    tuple_type_of_args start nargs tb
-  in
-  make_type (dummy_index tb) [|tup;boolean_type tb|]
-
-
-
-let function_of_args (start:int) (nargs:int) (rt:type_term) (tb:t): type_term =
-  let tup = tuple_type_of_args start nargs tb in
-  make_type (function_index tb) [|tup;rt|]
-
-
-let tuple_of_args (args:term array) (tup_tp:type_term) (tb:t): term =
-  let tup_tp = substituted_type tup_tp tb in
-  let c = context tb in
-  let nvars = Context.count_variables c
-  and ft = Context.feature_table c in
-  Feature_table.tuple_of_args args tup_tp nvars ft
 
 
 let start_term_application (nargs:int) (tb:t): unit =
@@ -715,13 +837,17 @@ let start_term_application (nargs:int) (tb:t): unit =
   begin
     match tb.req with
       None ->
-        add_anys (nargs+2) tb;
-        assert false (* nyi *)
+        add_anys (nargs+2) tb; (* one for the dummy, one for the result type *)
+        (* Set the required type to DUMMY[ARGTUP,RTP] *)
+        let rtp = Variable (start+nargs+1) in
+        substitute (start+nargs) (dummy_type_of_args start nargs rtp tb) tb;
+        tb.req <- Some (Variable (start+nargs))
     | Some tp ->
         if tp = boolean_type tb then begin
           add_anys (nargs+1) tb; (* one for the dummy type *)
           (* Set the required type to DUMMY[ARGTUP,BOOLEAN] *)
-          substitute (start+nargs) (dummy_type_of_args start nargs tb) tb;
+          let rtp = boolean_type tb in
+          substitute (start+nargs) (dummy_type_of_args start nargs rtp tb) tb;
           tb.req <- Some (Variable (start+nargs))
         end else begin
           add_anys nargs tb;
@@ -734,25 +860,63 @@ let start_term_application (nargs:int) (tb:t): unit =
 let complete_application (am:application_mode) (tb:t): unit =
   assert (tb.calls <> []);
   match List.hd tb.calls with
-    GlFun (fidx,s,nargs,start,nfgs) ->
+    GlFun (fidx,s,nargs,start,nfgs,is_pred) ->
+      tb.calls <- List.tl tb.calls;
       let nargs_s = Sign.arity s in
       let args,terms = pop_args nargs tb.terms in
       let args = Array.of_list (List.map (fun (t,_) -> t) args) in
-      let ags =
-        Array.init nfgs (fun i -> Variable (start + i))
+      let ags = Array.init nfgs (fun i -> Variable (start + i))
       in
-      if nargs = nargs_s then begin
-        let t =
-          if fidx = in_index tb then
-            Application (args.(1), [|args.(0)|], true)
-          else
-            VAppl (fidx,args,ags,oo_from_am am)
-        in
-        tb.terms <- (t,Sign.result s) :: terms;
-        tb.calls <- List.tl tb.calls
-      end else
-        assert false (* nyi *)
+      if nargs = nargs_s then
+        begin
+          let t =
+            if fidx = in_index tb then
+              Application (args.(1), [|args.(0)|], true)
+            else
+              VAppl (fidx, args, ags, oo_from_am am)
+          in
+          tb.terms <- (t,Sign.result s) :: terms;
+        end
+      else if nargs < nargs_s then
+        begin
+          (* partial application: The first nargs (possibly 0) arguments are
+             provided, for the rest we need a lambda expression.
+
+             ((c,d) -> f(a,b,c,d))
+
+           *)
+          let tp = partially_upgraded_signature s nargs is_pred tb
+          and names =
+            Feature_table.argument_names
+              (fidx - count_variables tb)
+              (feature_table tb)
+          and args =
+            let args1 = Array.map (fun t -> Term.up (nargs_s-nargs) t) args
+            and args2 = Array.init (nargs_s-nargs) (fun i -> Variable i) in
+            Array.append args1 args2
+          in
+          let t0 =
+            let t0 = VAppl(fidx+nargs_s-nargs, args, ags, false)
+            and tup_tp = Class_table.domain_type tp in
+            Feature_table.add_tuple_accessors
+              t0
+              (nargs_s-nargs)
+              tup_tp
+              (count_variables tb)
+              (feature_table tb)
+          in
+          let t = Lam (nargs_s-nargs, names, [], t0, is_pred, tp) in
+          tb.terms <- (t,tp) :: terms
+        end
+      else if nargs_s = 0 then
+        (* The global function is a constant *)
+        begin
+          assert false (* nyi *)
+        end
+      else
+        assert false (* cannot happen *)
   | TermApp (nargs,start) ->
+      tb.calls <- List.tl tb.calls;
       let args,terms = pop_args (nargs+1) tb.terms in
       let f,f_tp,args =
         match args with
@@ -774,8 +938,7 @@ let complete_application (am:application_mode) (tb:t): unit =
       in
       let t = Application (f, [|arg|], false) in
       let tp = result_type_of_type f_tp tb in
-      tb.terms <- (t,tp) :: terms;
-      tb.calls <- List.tl tb.calls
+      tb.terms <- (t,tp) :: terms
 
 
 
@@ -805,6 +968,8 @@ let pop_context (tb:t): unit =
   tb.contexts <- List.tl tb.contexts
 
 
+
+
 let start_quantified (c:Context.t) (tb:t): unit =
   unify_with_required (boolean_type tb) tb;
   push_context c tb;
@@ -825,27 +990,6 @@ let complete_quantified (is_all:bool) (tb:t): unit =
   tb.terms <- (t,t0_tp) :: List.tl tb.terms
 
 
-let link_new_locals_to_new_globals (tb:t): unit =
-  let c = context tb in
-  let new_locs = Context.count_local_type_variables c in
-  let gstart = globals_beyond tb
-  and lstart = locals_start tb in
-  add_anys new_locs tb;
-  for i = 0 to new_locs - 1 do
-    substitute (lstart + i) (Variable (gstart + i)) tb
-  done
-
-let context_signature (tb:t): Sign.t =
-  (* The signature of the current context in the type environment of [tb]. *)
-  let c = context tb in
-  Sign.map (transform_from_context c tb) (Context.signature c)
-
-
-let upgraded_signature (s:Sign.t) (is_pred:bool) (tb:t): type_term =
-  (* The signature [s] upgraded to a predicate or a function. *)
-  assert (Sign.has_result s);
-  let ntvs = Tvars.count_all tb.tvs  in
-  Class_table.upgrade_signature ntvs is_pred s
 
 
 let start_lambda (c_new:Context.t) (is_pred:bool) (tb:t): unit =
@@ -951,6 +1095,35 @@ let complete_inspect (ncases:int) (tb:t): unit =
   tb.reqs <- List.tl (List.tl tb.reqs)
 
 
+let start_inductive_set (c_new:Context.t) (tb:t): unit =
+  assert (Context.previous c_new == context tb);
+  assert (Context.count_last_variables c_new = 1);
+  push_context c_new tb;
+  let nlocs = Context.count_last_type_variables c_new in
+  assert (nlocs <= 1);
+  if nlocs = 1 then begin
+    let start = globals_beyond tb in
+    add_anys 1 tb;
+    let pred_tp = Class_table.predicate_type (Variable start) (count_all tb) in
+    assert (not (has_substitution (locals_start tb) tb));
+    substitute (locals_start tb) pred_tp tb
+  end;
+  let pred_tp = Variable (locals_start tb) in
+  unify_with_required pred_tp tb
+
+
+let complete_inductive_set (n:int) (tb:t): unit =
+  let args,terms = pop_args n tb.terms in
+  let names = Context.local_argnames (context tb) in
+  assert (Array.length names = 1);
+  let tp = variable_type 0 tb
+  and rules = Array.of_list (List.map (fun (t,tp) -> t) args)
+  in
+  let t = Indset (names.(0), tp, rules) in
+  pop_context tb;
+  tb.terms <- (t,tp) :: terms
+
+
 let has_undefined_globals (tb:t): bool =
   interval_exist
     (fun i -> tb.sub.(i) = Variable i)
@@ -980,7 +1153,7 @@ let undefined_globals (tb:t): (int * int list) list =
       | _ -> (fidx,List.rev fglst) :: lst
     )
     []
-    tb.glob_ranges
+    tb.feature_fg_ranges
 
 
 let type_in_context (tp:type_term) (tb:t): type_term =
