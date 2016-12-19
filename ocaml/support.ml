@@ -536,7 +536,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       "{" ^ (string_of_formals elist.v) ^ ":" ^ (string_of_expression exp)^ "}"
 
   | Expindset (elist,rules) ->
-      "{" ^ (string_of_formals elist.v) ^ ":" ^
+      "{" ^ "(" ^ string_of_formals elist.v ^ "):" ^
       (string_of_list rules string_of_expression ",") ^ "}"
 
   | Typedexp (e,t) ->
