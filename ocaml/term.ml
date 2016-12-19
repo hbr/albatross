@@ -15,7 +15,7 @@ type flow =
 type term =
     Variable    of int
   | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
-  | Application of term * arguments * bool (* fterm, args,, inop *)
+  | Application of term * arguments * bool (* fterm, args, inop *)
   | Lam         of int * names * term list * term * bool * type_term
                    (* n, names, pres, t, is_pred, type *)
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
@@ -475,46 +475,58 @@ end = struct
 
   let equivalent (t1:term) (t2:term): bool =
     (* Are the terms [t1] and [t2] equivalent ignoring names and predicate flags? *)
-    let rec eq t1 t2 nb =
+    let rec eq t1 t2 nb1 nb2 =
+      let eqarr arr1 arr2 nb1 nb2 =
+        let n1 = Array.length arr1
+        and n2 = Array.length arr2 in
+        n1 = n2 &&
+        interval_for_all (fun i -> eq arr1.(i) arr2.(i) nb1 nb2) 0 n1
+      in
       match t1, t2 with
         Variable i, Variable j ->
           i = j
-      | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_)
+      | VAppl(i1,args1,ags1,_), VAppl(i2,args2,ags2,_)
         when i1 = i2 ->
-          let n1 = Array.length args1
-          and n2 = Array.length args2 in
-          n1 = n2 &&
-          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
+          eqarr args1 args2 nb1 nb2 &&
+          eqarr ags1 ags2 nb2 0
       | Application (f1,args1,_), Application (f2,args2,_) ->
-          let n = Array.length args1 in
-          n = Array.length args2 &&
-          eq f1 f2 nb &&
-          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n
-      | Lam(n1,nms1,pres1,t1,_,_), Lam(n2,nms2,pres2,t2,_,_) ->
-          let nb = 1 + nb in
-          (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb) pres1 pres2
+          eq f1 f2 nb1 nb2 &&
+          eqarr args1 args2 nb1 nb2
+      | Lam(n1,nms1,pres1,t1,pr1,tp1), Lam(n2,nms2,pres2,t2,pr2,tp2) ->
+          let nb1 = 1 + nb1 in
+          n1 = n2 &&
+          Array.length nms1 = Array.length nms2 &&
+          pr1 = pr2 &&
+          (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb1 nb2) pres1 pres2
           with Invalid_argument _ -> false)
             &&
-          eq t1 t2 nb
-      | QExp(n1,_,_,t1,is_all1), QExp(n2,_,_,t2,is_all2)
+          eq t1 t2 nb1 nb2 &&
+          eq tp1 tp2 nb2 0
+      | QExp(n1,(nms1,tps1),(fgnms1,fgs1),t1,is_all1),
+        QExp(n2,(nms2,tps2),(fgnms2,fgs2),t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
-          eq t1 t2 (n1+nb)
+          let nfgs1 = Array.length fgs1
+          and nfgs2 = Array.length fgs2 in
+          if nfgs1 = nfgs2 then
+            let nb1 = n1 + nb1
+            and nb2 = nfgs1 + nb2 in
+            Array.length nms1 = Array.length nms2 &&
+            Array.length fgnms1 = Array.length fgnms2 &&
+            eqarr fgs1 fgs2 nb2 0 &&
+            eqarr tps1 tps2 nb2 0 &&
+            eq t1 t2 nb1 nb2
+          else
+            false
       | Flow(ctrl1,args1), Flow(ctrl2,args2) ->
           ctrl1 = ctrl2 &&
-          let n1 = Array.length args1
-          and n2 = Array.length args2 in
-          n1 = n2 &&
-          interval_for_all (fun i -> eq args1.(i) args2.(i) nb) 0 n1
+          eqarr args1 args2 nb1 nb2
       | Indset (nme1,tp1,rs1), Indset (nme2,tp2,rs2) ->
-          let nrules1, nrules2 = Array.length rs1, Array.length rs2 in
-          nrules1 = nrules2 &&
-          interval_for_all
-            (fun i -> eq rs1.(i) rs2.(i) (1+nb))
-            0 nrules1
+          eq tp1 tp2 nb2 0 &&
+          eqarr rs1 rs2 (1+nb1) nb2
       | _, _ ->
           false
     in
-    eq t1 t2 0
+    eq t1 t2 0 0
 
   let equivalent_list (lst1:term list) (lst2:term list): bool =
     List.length lst1 = List.length lst2 &&
