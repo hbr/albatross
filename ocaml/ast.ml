@@ -201,22 +201,6 @@ let function_property_list (lst:compound) (pc:PC.t): term list =
 
 
 
-let result_term (lst:info_expression list) (context:Context.t): term * info =
-  match lst with
-    [] -> assert false
-  | [e] -> begin
-      match e.v with
-        Funapp (Expop Eqop, [ExpResult;def],_) ->
-          Typer.result_term
-            (withinfo e.i def)
-            context,
-          e.i
-      | _ ->
-          raise Not_found
-  end
-  | _ -> raise Not_found
-
-
 
 
 let add_property_assertion
