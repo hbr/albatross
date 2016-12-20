@@ -10,8 +10,53 @@ open Container
 open Signature
 open Printf
 
+(*
+
+  context:          locs                     + fgs
+  builder:    space locs + globs space + space fgs
+
+The builder has enough space to accomodate all untyped variables and formal
+generics of the inner contexts and all global type variables imported from
+global generic functions, needed for arguments of lambda expressions, needed
+to represent arguments, return type, function/predicate type of term
+applications.
+
+Global type variables are introduced
+
+- as placeholders for formal generics of used global functions
+
+- as anchors for untyped variables in lambda expressions (arguments in lambda
+  expressions have to satisfy ANY, therefore untyped variables are linked to
+  global type variables with concept ANY).
+
+- as placeholders for arguments, for the result type and for the
+  function/predicate type of a term application (note: in all term
+  applications we don't know the types of the arguments, only that they have
+  to satisfy the concept of ANY; we might not know if the term is a predicate
+  or a function and we might not know the result type).
+
+
+Each type variable has a possible substitution. Substitutions are immutable
+except the substitution of a type variable which represents a
+function/predicate type (in that case a dummy type is used). The substitution
+of a type variable representing a dummy type can be updated and finally must
+be updated, otherwise the correct type (function or predicate) cannot be
+determined. Only global type variables can be substituted by dummy types.
+
+Each type variable points to its substitution which can be another type
+variable or a definitive type. Pointer chains of type variables are
+possible. Cycles of pointers are not allowed.
+
+If a type variable points to another type variable then the concept of the
+other type variable is stronger than the concept of the original type
+variable.
+
+
+
+*)
 type application =
-    GlFun of int*Sign.t*int*int*int*bool (* nargs, start fgs, nfgs, is_pred *)
+    GlFun of int*Sign.t*bool*int*int*int*bool
+                        (* is_const, nargs, start fgs, nfgs, is_pred *)
   | TermApp of int * int (* nargs, start fgs *)
 
 type t = {
@@ -319,7 +364,7 @@ let copy (tb:t): t =
    nlocals = tb.nlocals;
    nglobals = tb.nglobals;
    nfgs = tb.nfgs;
-   tvs = tb.tvs;
+   tvs = Tvars.copy tb.tvs;
    sub = Array.copy tb.sub;
    feature_fg_ranges = tb.feature_fg_ranges}
 
@@ -368,7 +413,7 @@ let can_reach (tp:type_term) (i:int) (tb:t): bool =
 let substitute (i:int) (tp:type_term) (tb:t): unit =
   assert (is_tv i tb);
   assert (not (has_substitution i tb));
-  if satisfies tp (Variable i) tb then
+  if satisfies (substituted_type tp tb) (Variable i) tb then
     if can_reach tp i tb then
       ()
     else
@@ -383,6 +428,7 @@ let update_substitution (i:int) (tp:type_term) (tb:t): unit =
   tb.sub.(i) <- tp
 
 
+
 let substitute_var_var (i:int) (j:int) (tb:t): unit =
   assert (not (has_substitution i tb));
   assert (not (has_substitution j tb));
@@ -393,17 +439,6 @@ let substitute_var_var (i:int) (j:int) (tb:t): unit =
     substitute j (Variable i) tb
 
 
-let substitute_var_var_with_sub (i:int) (j:int) (tb:t): unit =
-  assert (not (has_substitution i tb));
-  assert (has_substitution j tb);
-  if i < j then
-    substitute i (Variable j) tb
-  else begin
-    assert (not (is_local i tb)); (* otherwise j would be local as well and we
-                                     never substitute locals by locals *)
-    assert (not (is_local j tb));
-    assert false
-  end
 
 
 let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
@@ -455,15 +490,15 @@ let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
       if not i_has_sub && not j_has_sub then
         substitute_var_var i j tb
       else if not i_has_sub then
-        if is_local j tb then
-          substitute i tb.sub.(j) tb
-        else
+        if has_dummy_substitution j tb then
           substitute i t2 tb
-      else if not j_has_sub then
-        if is_local i tb then
-          substitute j tb.sub.(i) tb
         else
+          unify t1 tb.sub.(j) tb
+      else if not j_has_sub then
+        if has_dummy_substitution i tb then
           substitute j t1 tb
+        else
+          unify tb.sub.(i) t2 tb
       else begin
         (* Both have substitutions *)
         let i_has_dummy_sub = has_dummy_substitution i tb
@@ -594,7 +629,7 @@ let expect_argument (i:int) (tb:t): unit =
   (* Set the required type for the argument [i] of the current function *)
   assert (tb.calls <> []);
   match List.hd tb.calls with
-    GlFun (_,s,nargs,_,_,_) ->
+    GlFun (_,s,_,nargs,_,_,_) ->
       assert (i < nargs);
       assert (i < Sign.arity s);
       tb.req <- Some (Sign.arg_type i s)
@@ -607,6 +642,12 @@ let expect_boolean (tb:t): unit =
   tb.req <- Some (boolean_type tb)
 
 
+let expect_type (tp:type_term) (tb:t): unit =
+  let tp = (transform_from_context (context tb) tb) tp in
+  unify_with_required tp tb;
+  tb.req <- Some tp
+
+
 let pop_term
     (terms:(term*type_term) list)
     : (term*type_term) * (term*type_term) list =
@@ -615,7 +656,7 @@ let pop_term
     hd :: tl ->
       hd, tl
   | _ ->
-      assert false
+      assert false (* Cannot happen *)
 
 let pop_args
     (n:int) (terms:(term*type_term) list)
@@ -769,7 +810,7 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
   let nargs_s = Sign.arity s in
   if nargs = nargs_s then
     begin
-      tb.calls <- GlFun (fidx,s,nargs,start,nfgs,false) :: tb.calls;
+      tb.calls <- GlFun (fidx,s,false,nargs,start,nfgs,false) :: tb.calls;
       unify_with_required (Sign.result s) tb
     end
   else if nargs < nargs_s then
@@ -788,6 +829,8 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
 
            ((c,d) -> f(a,b,c,d)) : (C,D) -> RT
      *)
+      if 0 < nargs then
+        raise Reject; (* Partial application not yet allowed *)
       let is_pred =
         match tb.req with
           None -> false
@@ -816,15 +859,23 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
         else
           raise Reject
       in
-      tb.calls <- GlFun (fidx,s,nargs,start,nfgs,is_pred) :: tb.calls;
+      tb.calls <- GlFun (fidx,s,false,nargs,start,nfgs,is_pred) :: tb.calls;
       unify_with_required f_tp tb
     end
   else if nargs_s = 0 then
     begin
       (* The global function [fidx] is a constant. It has to be a function or a
          predicate. *)
-      printf "nargs_s < nargs: %d %d\n" nargs_s nargs;
-      assert false (* nyi *)
+      assert (Sign.is_constant s);
+      let s =
+        try
+          Class_table.downgrade_signature (count_all tb) s nargs
+        with Not_found ->
+          raise Reject
+      in
+      assert (Sign.arity s = nargs);
+      tb.calls <- GlFun (fidx,s,true,nargs,start,nfgs,false) :: tb.calls;
+      unify_with_required (Sign.result s) tb
     end
   else
     raise Reject
@@ -860,14 +911,16 @@ let start_term_application (nargs:int) (tb:t): unit =
 let complete_application (am:application_mode) (tb:t): unit =
   assert (tb.calls <> []);
   match List.hd tb.calls with
-    GlFun (fidx,s,nargs,start,nfgs,is_pred) ->
+    GlFun (fidx,s,is_const,nargs,start,nfgs,is_pred) ->
       tb.calls <- List.tl tb.calls;
       let nargs_s = Sign.arity s in
+      let ags = Array.init nfgs (fun i -> Variable (start + i)) in
       let args,terms = pop_args nargs tb.terms in
-      let args = Array.of_list (List.map (fun (t,_) -> t) args) in
-      let ags = Array.init nfgs (fun i -> Variable (start + i))
+      let args,tps = List.split args in
+      let args = Array.of_list args
+      and tps  = Array.of_list tps
       in
-      if nargs = nargs_s then
+      if not is_const && nargs = nargs_s then
         begin
           let t =
             if fidx = in_index tb then
@@ -877,7 +930,7 @@ let complete_application (am:application_mode) (tb:t): unit =
           in
           tb.terms <- (t,Sign.result s) :: terms;
         end
-      else if nargs < nargs_s then
+      else if not is_const && nargs < nargs_s then
         begin
           (* partial application: The first nargs (possibly 0) arguments are
              provided, for the rest we need a lambda expression.
@@ -908,10 +961,16 @@ let complete_application (am:application_mode) (tb:t): unit =
           let t = Lam (nargs_s-nargs, names, [], t0, is_pred, tp) in
           tb.terms <- (t,tp) :: terms
         end
-      else if nargs_s = 0 then
-        (* The global function is a constant *)
+      else if is_const then
+        (* The global function is a constant, but applied to arguments *)
         begin
-          assert false (* nyi *)
+          let tup = Class_table.to_tuple (count_all tb) 0 tps in
+          let arg = tuple_of_args args tup tb in
+          let f = VAppl(fidx,[||],ags,false) in
+          let t = Application(f, [|arg|],false)
+          and tp = Sign.result s
+          in
+          tb.terms <- (t,tp) :: terms
         end
       else
         assert false (* cannot happen *)
@@ -1055,6 +1114,31 @@ let complete_if_expression (tb:t): unit =
   let (e2,e1_tp),terms     = pop_term terms in
   let (e1,e2_tp),terms     = pop_term terms in
   tb.terms <- (Flow (Ifexp, [|cond;e1;e2|]),e1_tp) :: terms
+
+
+
+let start_as_expression (tb:t): unit =
+  unify_with_required (boolean_type tb) tb;
+  tb.req <- None
+
+
+let expect_as_pattern (c:Context.t) (tb:t): unit =
+  let _,tp = List.hd tb.terms in
+  push_context c tb;
+  tb.req <- Some tp
+
+
+let complete_as_expression (tb:t): unit =
+  let (pat,_),  terms = pop_term tb.terms in
+  let nargs,names,tps = context_names_and_types tb in
+  let pat = Term.some_quantified nargs (names,tps) pat
+  in
+  pop_context tb;
+  let (insp,_), terms = pop_term terms in
+  let t = Flow(Asexp,[|insp;pat|])
+  and tp = boolean_type tb
+  in
+  tb.terms <- (t,tp) :: terms
 
 
 

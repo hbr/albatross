@@ -24,10 +24,12 @@ type eterm0 =
   | EGlAppl of (int list * eterm array * application_mode)
   | EAppl of (eterm * eterm array * application_mode)
   | ELam  of (eterm list * eterm * bool)  (* preconditions, term ,is_pred *)
-  | EQExp of (eterm * bool)  (* is_all *)
-  | EInspect of (eterm * (eterm*eterm) list)
-  | EIf of (eterm * eterm * eterm)
+  | EQExp of eterm * bool  (* is_all *)
+  | EInspect of eterm * (eterm*eterm) list
+  | EAs of eterm * eterm
+  | EIf of eterm * eterm * eterm
   | EIndset of eterm list
+  | ETyped of eterm * type_term withinfo
 
 and eterm = {
     info: info;
@@ -80,6 +82,8 @@ let used_variables (nargs:int) (et:eterm): IntSet.t =
     | EQExp (et0,_) ->
         let nb = nb + Context.count_last_variables et0.context in
         used et0 nb set
+    | ETyped (e,_) ->
+        used e nb set
     | EInspect (insp,cases) ->
         let set = used insp nb set in
         List.fold_left
@@ -90,6 +94,10 @@ let used_variables (nargs:int) (et:eterm): IntSet.t =
           )
           set
           cases
+    | EAs (insp,pat) ->
+        let set = used insp nb set in
+        let nb = nb + Context.count_last_variables pat.context in
+        used pat nb set
     | EIf (c,e1,e2) ->
         let set = used c nb set in
         let set = used e1 nb set in
@@ -233,7 +241,7 @@ let first_pass
     | Expanon ->
         not_yet_implemented info ("Expanon Typing of "^ (string_of_expression e))
     | Expnumber num ->
-        assert false
+        global_application_fn info (FNnumber num) [] AMmath mn c
     | ExpResult ->
         begin
           try
@@ -249,7 +257,7 @@ let first_pass
     | Expparen e ->
         first info e mn c
     | Exparrow (entlst,e) ->
-        assert false
+        lambda info entlst false None [] e mn c
     | Expagent (entlst,rt,pres,exp) ->
         lambda info entlst false rt pres exp mn c
     | Expop op ->
@@ -257,7 +265,7 @@ let first_pass
     | Funapp (f,args,am) ->
         application info f args am mn c
     | Expset e ->
-        assert false
+        assert false (* Really needed ? *)
     | Exppred (entlst,e) ->
         lambda info entlst true None [] e mn c
     | Expindset (entlst,rules) ->
@@ -287,10 +295,15 @@ let first_pass
          term = EIndset (List.rev rules)}
     | Tupleexp (e1,e2) ->
         global_application_fn info (FNname ST.tuple) [e1;e2] AMmath mn c
-    | Typedexp (e,tp) ->
-        assert false
+    | Typedexp (e,tp_) ->
+        let tp = Context.get_type tp_ c in
+        let mn,et = first info e mn c in
+        mn,
+        {info = info;
+         context = c;
+         term = ETyped (et, withinfo tp_.i tp)}
     | Expcolon (e1,e2) ->
-        assert false
+        assert false (* Really needed ? *)
     | Expif (cond,e1,e2) ->
         let mn, cond = first info cond mn c in
         let mn, e1   = first info e1 mn c in
@@ -300,7 +313,18 @@ let first_pass
          context = c;
          term = EIf (cond,e1,e2)}
     | Expas (e,pat) ->
-        assert false
+        let mn,einsp = first info e mn c in
+        let pat,names = case_variables info pat false c in
+        let c_new = Context.push_untyped names c in
+        let mn =
+          {mn with
+           max_locs = max mn.max_locs (Context.count_type_variables c_new)}
+        in
+        let mn, epat = first info pat mn c_new in
+        mn,
+        {info = info;
+         context = c;
+         term = EAs (einsp,epat)}
     | Expinspect (insp, cases) ->
         inspect info insp cases mn c
     | Expquantified (q,entlst,exp) ->
@@ -590,19 +614,16 @@ let filter_global_functions
   let tbs1 =
     List.fold_left
       (fun tbs1 (fidx,tbs) ->
-        let ftbs =
-          List.fold_left
-            (fun ftbs tb ->
-              try
-                TB.start_global_application fidx nargs tb;
-                tb :: ftbs
-              with Reject ->
-                ftbs
-            )
-            []
-            tbs
-        in
-        List.append tbs1 ftbs
+        List.fold_left
+          (fun tbs1 tb ->
+            try
+              TB.start_global_application fidx nargs tb;
+              tb :: tbs1
+            with Reject ->
+              tbs1
+          )
+          tbs1
+          tbs
       )
       []
       flst1
@@ -673,28 +694,37 @@ let analyze_eterm
             (if is_pred then "predicate" else "function");
           printf "%sinner term\n" (prefix level)
         end;
-        List.iter
-          (fun tb -> TB.start_lambda et0.context is_pred tb)
-          tbs;
-        let tbs1 = analyze et0 tbs (level+1)
+        let tbs1 =
+          List.fold_left
+            (fun tbs tb ->
+              try
+                TB.start_lambda et0.context is_pred tb;
+                tb :: tbs
+              with Reject ->
+                tbs
+            )
+            []
+            tbs
+        in
+        let tbs2 = analyze et0 tbs1 (level+1)
         in
         let npres = List.length pres in
         if trace && npres > 0 then
           printf "%spreconditions\n" (prefix level);
-        let tbs2 =
+        let tbs3 =
           List.fold_left
             (fun tbs et ->
               List.iter TB.expect_boolean tbs;
               analyze et tbs (level+1))
-            tbs1
+            tbs2
             pres
         in
         List.iter
           (fun tb -> TB.complete_lambda is_pred (List.length pres) tb)
-          tbs2;
+          tbs3;
         if trace then
-          trace_head_terms level et.context tbs2;
-        tbs2
+          trace_head_terms level et.context tbs3;
+        tbs3
     | EQExp (et0,is_all) ->
         if trace then
           printf "%s%s quantification\n"
@@ -713,7 +743,13 @@ let analyze_eterm
             tbs
         in
         if tbs1 = [] then
-          assert false;
+          error_info
+            et.info
+            ("Type mismatch\n" ^
+             "A quantified expression has type\n\n\tBOOLEAN\n\n" ^
+             "which does not match " ^
+             string_of_required_types tbs
+            );
         let tbs2 = analyze et0 tbs1 (level+1) in
         List.iter
           (fun tb -> TB.complete_quantified is_all tb)
@@ -721,6 +757,31 @@ let analyze_eterm
         if trace then
           trace_head_terms level et.context tbs2;
         tbs2
+    | ETyped (e, tp) ->
+        if trace then
+          printf "%sexpect type %s\n"
+            (prefix level)
+            (Context.string_of_type tp.v e.context);
+        let tbs1 =
+          List.fold_left
+            (fun tbs tb ->
+              try
+                TB.expect_type tp.v tb;
+                tb :: tbs
+              with Reject ->
+                tbs
+            )
+            []
+            tbs
+        in
+        if tbs1 = [] then
+          error_info
+            tp.i
+            ("Type mismatch\n" ^
+             "The type \n\n\t" ^ (Context.string_of_type tp.v et.context) ^
+             "\n\ndoes not match " ^
+             string_of_required_types tbs);
+        analyze e tbs1 level
     | EIf (cond,e1,e2) ->
         if trace then begin
           printf "%sif\n" (prefix level);
@@ -739,6 +800,30 @@ let analyze_eterm
         let tbs3 = analyze cond tbs2 (level+1)
         in
         List.iter TB.complete_if_expression tbs3;
+        if trace then
+          trace_head_terms level et.context tbs3;
+        tbs3
+    | EAs (insp,pat) ->
+        if trace then
+          printf "%sas expression\n%sinspected\n" (prefix level) (prefix level);
+        let tbs1 =
+          List.fold_left
+            (fun tbs tb ->
+              try
+                TB.start_as_expression tb;
+                tb :: tbs
+              with Reject ->
+                tbs
+            )
+            []
+            tbs
+        in
+        let tbs2 = analyze insp tbs1 (level+1) in
+        if trace then
+          printf "%spattern\n" (prefix level);
+        List.iter (fun tb -> TB.expect_as_pattern pat.context tb) tbs2;
+        let tbs3 = analyze pat tbs2 (level+1) in
+        List.iter TB.complete_as_expression tbs3;
         if trace then
           trace_head_terms level et.context tbs3;
         tbs3
@@ -891,8 +976,10 @@ let get_different_globals (t1:term) (t2:term) (c:Context.t): string * string =
   and vars2 = List.rev (Term.used_variables_from t2 nvars true) in
   let lst   = Mylist.combine vars1 vars2 in
   let i,j =
-    try List.find (fun (i,j) -> i<>j) lst
-    with Not_found -> assert false (* cannot happen *) in
+    try
+      List.find (fun (i,j) -> i<>j) lst
+    with Not_found ->
+      assert false (* cannot happen *) in
   let str1 = Feature_table.string_of_signature (i-nvars) ft
   and str2 = Feature_table.string_of_signature (j-nvars) ft in
   str1, str2
@@ -943,7 +1030,7 @@ let undefined_formal_generics (info:info) (ft:Feature_table.t) (tb:TB.t): unit =
 let general_term
     (ie:info_expression) (tp:type_term option) (c:Context.t)
     : term =
-  let trace = true (*Context.verbosity c >= 5*) in
+  let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
   if trace then
     printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression ie.v);
   let mn,et = first_pass ie.i ie.v c in
@@ -953,10 +1040,24 @@ let general_term
   in
   if trace then
     printf "typer end analysis\n\n";
+  let min_nodes =
+    List.fold_left
+      (fun min_nodes tb ->
+        let n = Term.nodes (TB.head_term tb) in
+        if min_nodes = 0 then n else min min_nodes n
+      )
+      0
+      lst
+  in
+  let lst =
+    List.filter
+      (fun tb -> Term.nodes (TB.head_term tb) = min_nodes)
+      lst
+  in
   match lst with
     [] ->
       assert false (* Cannot happen; at least one term is returned, otherwise an
-                      error is reported *)
+                      error would have been reported *)
   | [tb] ->
       if TB.has_undefined_globals tb then
         undefined_formal_generics
