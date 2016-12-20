@@ -29,6 +29,13 @@ let make
    fgnames  = fgnames;
    fgconcepts = fgconcepts}
 
+
+let copy (tvs:t): t =
+  {nlocal     = tvs.nlocal;
+   concepts   = Array.copy tvs.concepts;
+   fgnames    = Array.copy tvs.fgnames;
+   fgconcepts = Array.copy tvs.fgconcepts}
+
 let count_fgs (tvs:t): int = Array.length tvs.fgnames
 
 

@@ -20,6 +20,7 @@ val empty: t
     (** An empty type environment *)
 
 val make: int -> type_term array -> int array -> type_term array -> t
+val copy: t -> t
 
 val make_fgs:    int array -> type_term array -> t
     (** [make_fgs names cpts] makes a type enviroment from the formal generics
