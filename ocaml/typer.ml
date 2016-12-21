@@ -688,12 +688,13 @@ let analyze_eterm
     | EAppl (f,args,am) ->
         term_application et f args am tbs level
     | ELam (pres,et0,is_pred) ->
-        if trace then begin
+        let pred_fun is_pred =
+          if is_pred then "predicate" else "function"
+        in
+        if trace then
           printf "%s%s expression\n"
             (prefix level)
-            (if is_pred then "predicate" else "function");
-          printf "%sinner term\n" (prefix level)
-        end;
+            (pred_fun is_pred);
         let tbs1 =
           List.fold_left
             (fun tbs tb ->
@@ -706,6 +707,14 @@ let analyze_eterm
             []
             tbs
         in
+        if tbs1 = [] then
+          error_info
+            et.info
+            ("Type mismatch\n" ^
+             "The " ^ (pred_fun is_pred) ^ " expression does match " ^
+             string_of_required_types tbs);
+        if trace then
+          printf "%sinner term\n" (prefix level);
         let tbs2 = analyze et0 tbs1 (level+1)
         in
         let npres = List.length pres in
