@@ -702,11 +702,12 @@ all(f:A->B, g,h:B->A)
                 g(y) = h(y)
             via some(x)
                 x in f.domain and f(x) = y
-            via [g(y)
-                 g(f(x))
-                 x
-                 h(f(x))
-                 h(y)]
+            via [ g(y)
+                , g(f(x))
+                , x
+                , h(f(x))
+                , h(y)
+                ]
             end
     end
 
@@ -747,9 +748,10 @@ all(f,g:A->B, y:B)
         f(x) = g(x)           -- consistent functions
         g(x).origin(g) = x    -- def 'origin'
         f.is_injective        -- g.is_injective and f <= g
-    via [f(x).origin(f)
-         x
-         g(x).origin(g)]
+    via [ f(x).origin(f)
+        , x
+        , g(x).origin(g)
+        ]
     end
 
 

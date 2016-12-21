@@ -49,12 +49,13 @@ all(t:BINARY_TREE[G])
     inspect
         t
     case tree(i,l,r)
-        via [(- tree(i,l,r)).inorder
-             (- r.inorder) + ([i] + - l.inorder)   -- def
-             (- r.inorder + [i]) + - l.inorder     -- assoc
-             (- i ^ r.inorder) + - l.inorder       -- - a + [x] = - x ^ a
-             (- (l.inorder + i ^ r.inorder))       -- - a + - b = - (b + a)
-             (- tree(i,l,r).inorder)]              -- def
+        via [ (- tree(i,l,r)).inorder
+            , - r.inorder + ([i] + - l.inorder)    -- def
+            , - r.inorder + [i]  + - l.inorder     -- assoc
+            , - i ^ r.inorder    + - l.inorder     -- - a + [x] = - x ^ a
+            , - (l.inorder + i ^ r.inorder)        -- - a + - b = - (b + a)
+            , - tree(i,l,r).inorder                -- def
+            ]
     end
 
 
@@ -62,12 +63,14 @@ all(t:BINARY_TREE[G])
     ensure
         (-t).preorder = - t.postorder
     inspect t
-    case tree(i,l,r) assert
-        (-r.postorder) + - l.postorder = - (l.postorder + r.postorder)
-
-        (-tree(i,l,r)).preorder             = i ^ ((-r).preorder + (-l).preorder)
-        i ^ ((-r).preorder + (-l).preorder) = i ^ (-r.postorder + -l.postorder)
-        i ^ (-r.postorder + -l.postorder)   = i ^ (-(l.postorder + r.postorder))
-        i ^ -(l.postorder + r.postorder)    = - (l.postorder + r.postorder + [i])
-        (-(l.postorder + r.postorder + [i]))= - tree(i,l,r).postorder
+    case tree(i,l,r)
+        assert
+            (-r.postorder) + - l.postorder = - (l.postorder + r.postorder)
+        via [ (-tree(i,l,r)).preorder
+            , i ^ ((-r).preorder + (-l).preorder)
+            , i ^ (-r.postorder + -l.postorder)
+            , i ^ - (l.postorder + r.postorder)
+            , -(l.postorder + r.postorder + [i])
+            , - tree(i,l,r).postorder
+            ]
     end

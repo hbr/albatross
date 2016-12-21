@@ -134,12 +134,12 @@ all(a,b:NATURAL)
     inspect
         b
     case b.successor
-        via [ a + b.successor
-             (a + b).successor  -- def '+'
-             (b + a).successor  -- ind hypo
-             b + a.successor    -- def '+'
-             b.successor + a    -- commutativity of successor
-             ]
+        via [  a + b.successor
+            , (a + b).successor  -- def '+'
+            ,  (b + a).successor  -- ind hypo
+            ,  b + a.successor    -- def '+'
+            ,  b.successor + a    -- commutativity of successor
+            ]
     end
 
 
@@ -188,7 +188,7 @@ all(a,x:NATURAL)
     assert
         ensure
             x + a = 0 + a  -- by right cancellation proves the goal
-        via [ a + x
+        via [ a + x,
               a ]
         end
     end
@@ -208,7 +208,7 @@ all(a,b:NATURAL)
 
             ensure
                 (a + b).successor = 0
-            via [ a + b.successor
+            via [ a + b.successor,
                   a.successor + b ]
             end
 
@@ -347,7 +347,7 @@ all(a,b:NATURAL)
                 ensure
                     a.successor + x = b.successor
                 via
-                    [a + x.successor
+                    [a + x.successor,
                      (a + x).successor]
                 end
     end
@@ -374,7 +374,7 @@ all(a,b,x:NATURAL)
 
                 ensure
                     (a + x).successor = b.successor
-                via [a + x.successor
+                via [a + x.successor,
                      a.successor + x]
                 end
 
@@ -667,21 +667,22 @@ all(a,b,c:NATURAL) -- distributivity
                 b + c = c + b
                 c + b + d = c + (b + d)
             via [ a + b + (c + d)
-                  a + (b + (c + d))
-                  a + (b + c + d)
-                  a + (c + b + d)
-                  a + (c + (b + d))
-                  a + c + (b + d)
+                , a + (b + (c + d))
+                , a + (b + c + d)
+                , a + (c + b + d)
+                , a + (c + (b + d))
+                , a + c + (b + d)
                 ]
             end
     inspect
         a
     case successor(a)
         via [ a.successor * (b + c)
-              a*(b + c) + (b + c)
-              a*b + a*c + (b + c)
-              a*b + b + (a*c + c)
-              a.successor*b + a.successor*c ]
+            , a*(b + c) + (b + c)
+            , a*b + a*c + (b + c)
+            , a*b + b + (a*c + c)
+            , a.successor*b + a.successor*c
+            ]
     end
 
 

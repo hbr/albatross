@@ -503,17 +503,13 @@ contradiction_proof:
 }
 
 
-
 transitivity_proof:
-    KWvia LBRACKET info_expr_1 more_expressions RBRACKET {
-  withinfo (rhs_info 1) (PE_Transitivity ($3::$4))
+    KWvia LBRACKET expr RBRACKET {
+  let lst = expression_list $3 in
+  withinfo (rhs_info 1) (PE_Transitivity lst)
 }
 
-more_expressions:
-    { [] }
-|   SEMICOL info_expr_1 more_expressions {
-  $2 :: $3
-}
+
 
 /* ------------------------------------------------------------------------- */
 /* Classes */

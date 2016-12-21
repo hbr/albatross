@@ -260,13 +260,12 @@ all(a,b:[G])
             all(b)
                 ensure
                     - x ^ a + b = ((a,x) -> x ^ a).folded(b,x^a)
-                via [
-                    - x ^ a + b
-                    (-a) + [x] + b                      -- def '-'
-                    (-a) + ([x] + b)                    -- assoc of '+'
-                    (-a) + x ^ b                        -- def '+'
-                    ((a,x) -> x ^ a).folded(x ^ b, a)   -- use of ind hypo
-                    ((a,x) -> x ^ a).folded(b, x ^ a)   -- def folded
+                via [ - x ^ a + b
+                    , - a + [x] + b                       -- def '-'
+                    , - a + ([x] + b)                     -- assoc of '+'
+                    , - a + x ^ b                         -- def '+'
+                    , ((a,x) -> x ^ a).folded(x ^ b, a)   -- use of ind hypo
+                    , ((a,x) -> x ^ a).folded(b, x ^ a)   -- def folded
                     ]
                 end
         end

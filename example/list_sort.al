@@ -94,11 +94,10 @@ all(x:L, a:[L])
                 permutation(x ^ a, x.into(a))             -- ind hypo
                 permutation(y ^ x ^ a, y ^ x.into(a))     -- rule: prefix element
                 x.into(y ^ a) = y ^ x.into(a)             -- def 'into'
-            via [
-                  x ^ y ^ a
-                  y ^ x ^ a
-                  y ^ x.into(a)
-                  x.into(y ^ a)
+            via [ x ^ y ^ a
+                , y ^ x ^ a
+                , y ^ x.into(a)
+                , x.into(y ^ a)
                 ]
     end
 
@@ -114,8 +113,8 @@ all(a:[L])
             -- goal: permutation(x ^ a, (x ^ a).sorted)
 
         via [ x ^ a
-              x ^ a.sorted        -- ind hypo
-              x.into(a.sorted)    -- previous theorem
-              (x ^ a).sorted      -- def 'sorted'
+            , x ^ a.sorted        -- ind hypo
+            , x.into(a.sorted)    -- previous theorem
+            , (x ^ a).sorted      -- def 'sorted'
             ]
     end

@@ -1251,10 +1251,11 @@ all(r:{A,A}, p:{A}, a:A)
         r.is_preorder
         (r.carrier - p).is_upclosed(r)
         a.upper_set(r) = r.carrier - p
-    via [p
-         r.carrier - (r.carrier - p)
-         r.carrier - a.upper_set(r)
-         a.strict_lower_set(r) ]
+    via [ p
+        , r.carrier - (r.carrier - p)
+        , r.carrier - a.upper_set(r)
+        , a.strict_lower_set(r)
+        ]
     end
 
 
