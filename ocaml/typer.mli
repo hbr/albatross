@@ -7,8 +7,8 @@
 open Term
 open Support
 
-val typed_term:   info_expression -> type_term -> Context.t -> term
-val untyped_term: info_expression -> Context.t -> term
-val boolean_term: info_expression -> Context.t -> term
-val result_term:  info_expression -> Context.t -> term
-val case_variables: info -> expression -> bool -> Context.t -> expression * int array
+val typed_term:   expression -> type_term -> Context.t -> term
+val untyped_term: expression -> Context.t -> term
+val boolean_term: expression -> Context.t -> term
+val result_term:  expression -> Context.t -> term
+val case_variables: expression -> bool -> Context.t -> expression * int array

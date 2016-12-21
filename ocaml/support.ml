@@ -386,7 +386,7 @@ type application_mode =
   | AMop
 
 
-type expression =
+type expression0 =
     Identifier    of int
   | Expanon
   | Expnumber     of int
@@ -410,9 +410,9 @@ type expression =
   | Expquantified of quantifier * entities list withinfo * expression
 
 and
-      info_expression = expression withinfo
+      expression = expression0 withinfo
 and
-      compound        = info_expression list
+      compound        = expression list
 and
       implementation  =
     Impdeferred
@@ -435,7 +435,7 @@ let expression_list_rev (e:expression): expression list =
   (* break up a tuple into a list, note: the returned list contains the
      elements reversed *)
   let rec list (e:expression) (lst:expression list): expression list =
-    match e with
+    match e.v with
       Tupleexp (a,b) ->
         list b (a::lst)
     | _ -> e::lst
@@ -458,9 +458,9 @@ let expression_of_list (lst:expression list): expression =
     match lst with
       [a]      -> a
     | [a;b]    ->
-        Tupleexp (a,b)
+        withinfo UNKNOWN (Tupleexp (a,b))
     | a :: lst ->
-        Tupleexp (a,tuple lst)
+        withinfo UNKNOWN (Tupleexp (a,tuple lst))
     | _ ->
         assert false
   in
@@ -473,7 +473,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
   let strexplst lst =
     String.concat "," (List.map strexp lst)
   in
-  match e with
+  match e.v with
     Identifier id -> ST.string id
 
   | Expanon       -> "_"
@@ -498,7 +498,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       " end"
   | Expop op     -> "(" ^ (operator_to_rawstring op) ^ ")"
 
-  | Funapp (Expop Bracketop,args,_) ->
+  | Funapp ({v = Expop Bracketop; i = _},args,_) ->
       begin
         match args with
           tgt ::args ->
@@ -506,7 +506,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
         | _ ->
             assert false (* Cannot happen *)
       end
-  | Funapp (Expop op,args,AMop) ->
+  | Funapp ({v = Expop op; i = _},args,AMop) ->
       begin
         match args with
           [e] ->
@@ -576,7 +576,7 @@ let rec string_of_expression  ?(wp=false) (e:expression) =
       ^ "(" ^ (string_of_formals elist.v) ^ ") "  ^ (string_of_expression exp)
 
 and string_of_compound comp =
-  string_of_list comp (fun ie -> string_of_expression ie.v) ";"
+  string_of_list comp string_of_expression ";"
 
 and string_of_locals loc =
   string_of_list
@@ -700,23 +700,23 @@ and  info_proof_expression = proof_expression withinfo
 
 and proof_expression =
     PE_If of
-      info_expression * source_proof * source_proof
+      expression * source_proof * source_proof
   | PE_Guarded_If of
-      info_expression * source_proof * info_expression * source_proof
+      expression * source_proof * expression * source_proof
   | PE_Inspect of
-      info_expression * one_case list
+      expression * one_case list
   | PE_Existential of
-      entities list withinfo * info_expression * source_proof
+      entities list withinfo * expression * source_proof
   | PE_Contradiction of
-      info_expression * source_proof
-  | PE_Transitivity of info_expression list
+      expression * source_proof
+  | PE_Transitivity of expression list
 
-and  one_case = info_expression * source_proof
+and  one_case = expression * source_proof
 
 and proof_step =
-    PS_Simple of info_expression
+    PS_Simple of expression
   | PS_Structured of
-      entities list withinfo * compound * info_expression * source_proof
+      entities list withinfo * compound * expression * source_proof
 
 
 
@@ -729,7 +729,7 @@ type declaration =
         * return_type
         * bool  (* is function without explicit return type *)
         * feature_body option
-        * info_expression option
+        * expression option
   | Formal_generic of int withinfo * type_t withinfo
   | Class_declaration of
       header_mark withinfo

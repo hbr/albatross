@@ -81,9 +81,9 @@ let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
 
 
 
-let get_boolean_term (ie: info_expression) (pc:Proof_context.t): term =
+let get_boolean_term (e: expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
-  Typer.boolean_term ie c
+  Typer.boolean_term e c
 
 let term_preconditions (info:info) (t:term) (pc:PC.t): term list =
   let c = PC.context pc in
@@ -119,17 +119,17 @@ let verify_preconditions (t:term) (info:info) (pc:Proof_context.t): unit =
   end
 
 
-let get_boolean_term_verified (ie: info_expression) (pc:Proof_context.t): term =
-  let t = get_boolean_term ie pc in
-  verify_preconditions t ie.i pc;
+let get_boolean_term_verified (e: expression) (pc:Proof_context.t): term =
+  let t = get_boolean_term e pc in
+  verify_preconditions t e.i pc;
   t
 
 
 let terms_of_compound (lst:compound) (pc:PC.t): term withinfo list =
   List.map
-    (fun ie ->
-      let t = get_boolean_term ie pc in
-      withinfo ie.i t
+    (fun e ->
+      let t = get_boolean_term e pc in
+      withinfo e.i t
     )
     lst
 
@@ -533,7 +533,7 @@ let feature_specification_ast
     (nms: int array)
     (idx: int)
     (bdy: feature_body option)
-    (exp: info_expression option)
+    (exp: expression option)
     (pc: Proof_context.t): Feature.Spec.t * (info*term) option =
   let nargs = Array.length nms in
   let adapt_term t =
@@ -594,7 +594,7 @@ let analyze_feature
     (rt: return_type)
     (is_func: bool)
     (bdy: feature_body option)
-    (exp: info_expression option)
+    (exp: expression option)
     (pc: Proof_context.t): unit =
   (*  - Analyze the signature and push into the context
       - Find the index, check if it is a new feature or it is the exportation of an
@@ -996,7 +996,10 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
     let arga     = ST.symbol "a" in
     let entlst = withinfo UNKNOWN [Typed_entities ([arga],cls_tp)]
     and elst   =
-      [withinfo UNKNOWN (Funapp (Expop Eqop,[Identifier arga;Identifier arga],AMop))]
+      let eq = withinfo UNKNOWN (Expop Eqop)
+      and a  = withinfo UNKNOWN (Identifier arga)
+      in
+      [withinfo UNKNOWN (Funapp (eq,[a;a],AMop))]
     and prf =
       if PC.is_private pc then
         SP_Axiom

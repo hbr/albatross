@@ -163,19 +163,19 @@ let is_constant_constructor (nme:int) (c:Context.t): bool =
     false
 
 let case_variables
-    (info:info) (e:expression) (dups:bool) (c:Context.t)
+    (e:expression) (dups:bool) (c:Context.t)
     : expression * int array =
   let rec vars (e:expression) (nanon:int) (lst:int list)
       : expression * int * int list =
     let fvars f nanon lst =
-      match f with
+      match f.v with
         Identifier nme -> f,nanon,lst
       | _ -> vars f nanon lst
     in
-    match e with
+    match e.v with
       Expnumber _ | Exptrue | Expfalse | Expop _ ->
         e, nanon, lst
-    | Identifier nme | Typedexp(Identifier nme,_)->
+    | Identifier nme | Typedexp({v=Identifier nme;i=_},_)->
         let lst =
           if is_constant_constructor nme c then
             lst
@@ -186,10 +186,13 @@ let case_variables
         e,nanon,lst
     | Expanon ->
         let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
-        Identifier nme, 1+nanon, nme :: lst
-    | Typedexp (Expanon,tp) ->
+        withinfo e.i (Identifier nme),
+        1+nanon,
+        nme :: lst
+    | Typedexp ({v=Expanon;i=info},tp) ->
         let nme = ST.symbol ("$" ^ (string_of_int nanon)) in
-        Typedexp(Identifier nme,tp), 1+nanon, nme :: lst
+        withinfo e.i (Typedexp(withinfo info (Identifier nme),tp)),
+        1+nanon, nme :: lst
     | Funapp(f,args,am) ->
         let f,nanon,lst = fvars f nanon lst in
         let arglst,nanon,lst =
@@ -199,11 +202,13 @@ let case_variables
               e::arglst, nanon, lst)
             ([],nanon,lst)
             args in
-        Funapp(f, List.rev arglst, am), nanon, lst
+        withinfo e.i (Funapp(f, List.rev arglst, am)),
+        nanon, lst
     | Tupleexp (e1,e2) ->
         let e1,nanon,lst = vars e1 nanon lst in
         let e2,nanon,lst = vars e2 nanon lst in
-        Tupleexp (e1,e2), nanon, lst
+        withinfo e.i (Tupleexp (e1,e2)),
+        nanon, lst
     | Expparen e ->
         vars e nanon lst
     | _ ->
@@ -213,61 +218,59 @@ let case_variables
   try
     let e, nanon, lst = vars e 0 [] in
     if (not dups) && Mylist.has_duplicates lst then
-      error_info info ("Duplicate variable in pattern \"" ^
+      error_info e.i ("Duplicate variable in pattern \"" ^
                        (string_of_expression e) ^ "\"");
     let nms = Array.of_list (List.rev lst) in
     e, nms
   with Not_found ->
-    error_info info ("Cannot extract variables from pattern \"" ^
+    error_info e.i ("Cannot extract variables from pattern \"" ^
                      (string_of_expression e) ^ "\"")
 
 
 let first_pass
-    (info:info)
     (e:expression)
     (c:Context.t)
     : max_numbers * eterm
     =
   let rec first
-      (info:info)
       (e:expression)
       (mn:max_numbers)
       (c:Context.t)
       : max_numbers * eterm
       =
-    match e with
+    match e.v with
       Identifier id ->
-        identifier info id mn c
+        identifier e.i id mn c
     | Expanon ->
-        not_yet_implemented info ("Expanon Typing of "^ (string_of_expression e))
+        not_yet_implemented e.i ("Expanon Typing of "^ (string_of_expression e))
     | Expnumber num ->
-        global_application_fn info (FNnumber num) [] AMmath mn c
+        global_application_fn e.i (FNnumber num) [] AMmath mn c
     | ExpResult ->
         begin
           try
             let i = Context.variable_index (ST.symbol "Result") c in
-            mn, {info = info; context = c; term = EVar i}
+            mn, {info = e.i; context = c; term = EVar i}
           with Not_found ->
-            error_info info "There is no variable \"Result\" in this context";
+            error_info e.i "There is no variable \"Result\" in this context";
         end
     | Exptrue ->
-        global_application_fn info FNtrue [] AMmath mn c
+        global_application_fn e.i FNtrue [] AMmath mn c
     | Expfalse ->
-        global_application_fn info FNfalse [] AMmath mn c
-    | Expparen e ->
-        first info e mn c
-    | Exparrow (entlst,e) ->
-        lambda info entlst false None [] e mn c
+        global_application_fn e.i FNfalse [] AMmath mn c
+    | Expparen e0 ->
+        first e0 mn c
+    | Exparrow (entlst,e0) ->
+        lambda e.i entlst false None [] e0 mn c
     | Expagent (entlst,rt,pres,exp) ->
-        lambda info entlst false rt pres exp mn c
+        lambda e.i entlst false rt pres exp mn c
     | Expop op ->
-        global_application_fn info (FNoperator op) [] AMmath mn c
+        global_application_fn e.i (FNoperator op) [] AMmath mn c
     | Funapp (f,args,am) ->
-        application info f args am mn c
+        application e.i f args am mn c
     | Expset e ->
         assert false (* Really needed ? *)
-    | Exppred (entlst,e) ->
-        lambda info entlst true None [] e mn c
+    | Exppred (entlst,e0) ->
+        lambda e.i entlst true None [] e0 mn c
     | Expindset (entlst,rules) ->
         let c_new = Context.push entlst None false false false c in
         let nargs = Context.count_last_arguments c_new
@@ -283,60 +286,60 @@ let first_pass
         let mn, rules =
           List.fold_left
             (fun (mn,rules) e ->
-              let mn,et = first info e mn c_new in
+              let mn,et = first e mn c_new in
               mn, et :: rules
             )
             (mn,[])
             rules
         in
         mn,
-        {info = info;
+        {info = e.i;
          context = c;
          term = EIndset (List.rev rules)}
     | Tupleexp (e1,e2) ->
-        global_application_fn info (FNname ST.tuple) [e1;e2] AMmath mn c
-    | Typedexp (e,tp_) ->
+        global_application_fn e.i (FNname ST.tuple) [e1;e2] AMmath mn c
+    | Typedexp (e0,tp_) ->
         let tp = Context.get_type tp_ c in
-        let mn,et = first info e mn c in
+        let mn,et = first e0 mn c in
         mn,
-        {info = info;
+        {info = e.i;
          context = c;
          term = ETyped (et, withinfo tp_.i tp)}
     | Expcolon (e1,e2) ->
         assert false (* Really needed ? *)
     | Expif (cond,e1,e2) ->
-        let mn, cond = first info cond mn c in
-        let mn, e1   = first info e1 mn c in
-        let mn, e2   = first info e2 mn c in
+        let mn, cond = first cond mn c in
+        let mn, e1   = first e1 mn c in
+        let mn, e2   = first e2 mn c in
         mn,
-        {info = info;
+        {info = e.i;
          context = c;
          term = EIf (cond,e1,e2)}
-    | Expas (e,pat) ->
-        let mn,einsp = first info e mn c in
-        let pat,names = case_variables info pat false c in
+    | Expas (e0,pat) ->
+        let mn,einsp = first e0 mn c in
+        let pat,names = case_variables pat false c in
         let c_new = Context.push_untyped names c in
         let mn =
           {mn with
            max_locs = max mn.max_locs (Context.count_type_variables c_new)}
         in
-        let mn, epat = first info pat mn c_new in
+        let mn, epat = first pat mn c_new in
         mn,
-        {info = info;
+        {info = e.i;
          context = c;
          term = EAs (einsp,epat)}
     | Expinspect (insp, cases) ->
-        inspect info insp cases mn c
+        inspect e.i insp cases mn c
     | Expquantified (q,entlst,exp) ->
-        quantified info q entlst exp mn c
+        quantified e.i q entlst exp mn c
 
   and application info f args am mn c =
-    match f with
+    match f.v with
       Identifier id ->
         begin
-          match find_identifier info id c with
+          match find_identifier f.i id c with
             IDVar i ->
-              let fterm = {info = info; context = c; term = EVar i} in
+              let fterm = {info = f.i; context = c; term = EVar i} in
               term_application info fterm args am mn c
           | IDFun flst ->
               global_application_flst info flst args am mn c
@@ -344,7 +347,7 @@ let first_pass
     | Expop op ->
         global_application_fn info (FNoperator op) args am mn c
     | _ ->
-        let mn,f_et = first info f mn c in
+        let mn,f_et = first f mn c in
         term_application info f_et args am mn c
 
   and term_application
@@ -394,7 +397,7 @@ let first_pass
       List.fold_left
         (fun (mn,lst) arg ->
           let mn,et =
-            first info arg mn c
+            first arg mn c
           in
           mn, et::lst
         )
@@ -437,13 +440,13 @@ let first_pass
     let pres_rev,mn =
       List.fold_left
         (fun (pres_rev,mn) e ->
-          let mn,et = first e.i e.v mn c_new in
+          let mn,et = first e mn c_new in
           et :: pres_rev, mn
         )
         ([],mn)
         pres
     in
-    let mn, et0 = first info e mn c_new in
+    let mn, et0 = first e mn c_new in
     mn,
     {info = info;
      context = c;
@@ -464,7 +467,7 @@ let first_pass
       {mn with
        max_locs = max mn.max_locs (Context.count_type_variables c_new)}
     in
-    let mn, et0 = first info exp mn c_new
+    let mn, et0 = first exp mn c_new
     and is_all =
       begin
         match q with
@@ -513,7 +516,7 @@ let first_pass
       =
     let ninspected = expression_list_length insp in
     let mn = {mn with max_globs = mn.max_globs + 1} in
-    let mn,einsp = first info insp mn c in
+    let mn,einsp = first insp mn c in
     let mn,ecases =
       List.fold_left
         (fun (mn,ecases) (pat,res) ->
@@ -529,14 +532,14 @@ let first_pass
                "inspected expression\n\n\t" ^
                (string_of_expression insp) ^
                "\n");
-          let pat,names = case_variables info pat false c in
+          let pat,names = case_variables pat false c in
           let c_new = Context.push_untyped names c in
           let mn =
             {mn with
              max_locs = max mn.max_locs (Context.count_type_variables c_new)}
           in
-          let mn, epat = first info pat mn c_new in
-          let mn, eres = first info res mn c_new in
+          let mn, epat = first pat mn c_new in
+          let mn, eres = first res mn c_new in
           mn, (epat,eres) :: ecases
         )
         (mn,[])
@@ -551,7 +554,6 @@ let first_pass
   in
 
   first
-    info
     e
     {max_locs  = Context.count_type_variables c;
      max_globs = 0;
@@ -680,6 +682,7 @@ let analyze_eterm
       (level:int)
       : TB.t list
       =
+    assert (tbs <> []);
     match et.term with
       EVar i ->
         variable et i tbs level
@@ -1037,12 +1040,12 @@ let undefined_formal_generics (info:info) (ft:Feature_table.t) (tb:TB.t): unit =
 
 
 let general_term
-    (ie:info_expression) (tp:type_term option) (c:Context.t)
+    (e:expression) (tp:type_term option) (c:Context.t)
     : term =
   let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
   if trace then
-    printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression ie.v);
-  let mn,et = first_pass ie.i ie.v c in
+    printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression e);
+  let mn,et = first_pass e c in
   let tb = TB.make tp mn.max_locs mn.max_globs mn.max_fgs c in
   assert (TB.context tb == c);
   let lst = analyze_eterm et [tb] 0 trace
@@ -1070,7 +1073,7 @@ let general_term
   | [tb] ->
       if TB.has_undefined_globals tb then
         undefined_formal_generics
-          ie.i
+          e.i
           (Context.feature_table c)
           tb;
       TB.update_context c tb;
@@ -1081,34 +1084,34 @@ let general_term
       let t1 = TB.head_term tb1
       and t2 = TB.head_term tb2 in
       let str1, str2 = get_different_globals t1 t2 c in
-      let estr = string_of_expression ie.v in
+      let estr = string_of_expression e in
       error_info
-        ie.i
+        e.i
         ("The expression\n\n\t" ^ estr ^ "\n\nis ambiguous\n\n\t" ^
          str1 ^ "\n\t" ^ str2)
 
 
 
 
-let typed_term (ie:info_expression) (tp:type_term) (c:Context.t): term =
+let typed_term (e:expression) (tp:type_term) (c:Context.t): term =
   assert (not (Context.is_global c));
-  general_term ie (Some tp) c
+  general_term e (Some tp) c
 
 
 
-let untyped_term (ie:info_expression) (c:Context.t): term =
+let untyped_term (e:expression) (c:Context.t): term =
   assert (not (Context.is_global c));
-  general_term ie None c
+  general_term e None c
 
 
 
-let boolean_term (ie: info_expression) (c:Context.t): term =
+let boolean_term (e: expression) (c:Context.t): term =
   assert (not (Context.is_global c));
-  general_term ie (Some (Context.boolean c)) c
+  general_term e (Some (Context.boolean c)) c
 
 
-let result_term (ie:info_expression) (c:Context.t): term =
+let result_term (e:expression) (c:Context.t): term =
   assert (not (Context.is_global c));
   assert (Context.has_result c);
   let tp = Context.result_type c in
-  typed_term ie tp c
+  typed_term e tp c

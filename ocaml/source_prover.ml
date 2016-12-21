@@ -43,28 +43,28 @@ let verify_preconditions (it:info_term) (pc:PC.t): unit =
   end
 
 
-let get_boolean_term (ie: info_expression) (pc:Proof_context.t): info_term =
+let get_boolean_term (e: expression) (pc:Proof_context.t): info_term =
   let c = PC.context pc in
-  let t = Typer.boolean_term ie c in
-  withinfo ie.i t
+  let t = Typer.boolean_term e c in
+  withinfo e.i t
 
 
 let get_boolean_term_verified
-    (ie: info_expression) (pc:Proof_context.t): info_term =
-  let it = get_boolean_term ie pc in
+    (e: expression) (pc:Proof_context.t): info_term =
+  let it = get_boolean_term e pc in
   verify_preconditions it pc;
   it
 
 
-let get_term (ie:info_expression) (pc:PC.t): info_term =
+let get_term (e:expression) (pc:PC.t): info_term =
   let c = PC.context pc in
-  let t = Typer.untyped_term ie c in
-  withinfo ie.i t
+  let t = Typer.untyped_term e c in
+  withinfo e.i t
 
 
 let get_term_verified
-    (ie: info_expression) (pc:Proof_context.t): info_term =
-  let it = get_term ie pc in
+    (e: expression) (pc:Proof_context.t): info_term =
+  let it = get_term e pc in
   verify_preconditions it pc;
   it
 
@@ -299,7 +299,7 @@ let analyze_type_inspect
 
 
 let analyze_type_case_pattern
-    (ie:info_expression)
+    (e:expression)
     (cons_set:IntSet.t)
     (tp:type_term)
     (pc:PC.t)
@@ -307,16 +307,16 @@ let analyze_type_case_pattern
   (* cons_idx, names *)
   let c     = PC.context pc
   and nvars = PC.count_variables pc in
-  let pat,nms = Typer.case_variables ie.i ie.v false c in
+  let pat,nms = Typer.case_variables e false c in
   let n = Array.length nms in
   let pc1 = PC.push_untyped nms pc in
   let c1  = PC.context pc1
   and tp  = Term.up n tp
   in
-  let pat = Typer.typed_term (withinfo ie.i pat) tp c1 in
+  let pat = Typer.typed_term pat tp c1 in
   let invalid_pat () =
-    error_info ie.i
-      ("Invalid pattern \"" ^ (string_of_expression ie.v) ^ "\"") in
+    error_info e.i
+      ("Invalid pattern \"" ^ (string_of_expression e) ^ "\"") in
   let cons_idx =
     match pat with
       VAppl(i,args,_,_) ->
@@ -586,7 +586,7 @@ let inductive_set_context
 
 
 let inductive_set_case
-    (case_exp: info_expression)
+    (case_exp: expression)
     (data: inductive_set_data)
     : int * term =
   let c = PC.context data.pc in
@@ -1059,8 +1059,8 @@ and prove_sequence
 and prove_guarded_if
     (info: info)
     (goal: term)
-    (c1:info_expression) (prf1:source_proof)
-    (c2:info_expression) (prf2:source_proof)
+    (c1:expression) (prf1:source_proof)
+    (c2:expression) (prf2:source_proof)
     (pc:PC.t)
     : int =
   let c1 = get_boolean_term_verified c1 pc
@@ -1089,7 +1089,7 @@ and prove_guarded_if
 and prove_if
     (info: info)
     (goal: term)
-    (c1:info_expression)
+    (c1:expression)
     (prf1:source_proof)
     (prf2:source_proof)
     (pc:PC.t)
@@ -1145,7 +1145,7 @@ and prove_branch
 and prove_inspect
     (info:info)
     (goal:term)
-    (insp:info_expression) (cases:one_case list) (pc:PC.t): int =
+    (insp:expression) (cases:one_case list) (pc:PC.t): int =
   let insp = get_term insp pc in
   match insp.v with
     Variable var_idx ->
@@ -1429,12 +1429,12 @@ and prove_exist_elim
     (info: info)
     (goal: term)
     (entlst: entities list withinfo)
-    (req: info_expression)
+    (req: expression)
     (prf: source_proof)
     (pc:PC.t)
     : int =
   PC.close pc;
-  let someexp = (withinfo info (Expquantified (Existential,entlst,req.v))) in
+  let someexp = (withinfo info (Expquantified (Existential,entlst,req))) in
   let someexp = get_boolean_term_verified someexp pc in
   let someexp_idx =
     try
@@ -1464,7 +1464,7 @@ and prove_exist_elim
 and prove_contradiction
     (info: info)
     (goal: term)
-    (exp:  info_expression)
+    (exp:  expression)
     (prf:  source_proof)
     (pc:PC.t)
     : int =
@@ -1500,7 +1500,7 @@ and prove_contradiction
 and prove_by_transitivity
     (info:info)
     (goal:term)
-    (lst: info_expression list)
+    (lst: expression list)
     (pc:PC.t)
     : int =
   assert (lst <> []);
