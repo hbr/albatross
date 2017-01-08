@@ -23,7 +23,7 @@ let symbol_info (): info =
   info_from_position (Parsing.symbol_start_pos ())
 
 let rhs_info (i:int): info =
-  info_from_position (rhs_start_pos i)
+  info_from_position (Parsing.rhs_start_pos i)
 
 let cinfo (i:info): string =  info_string (filename ()) i
 
@@ -184,7 +184,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token NOTIN
 %token PLUS
 %token QMARK
-%token RELOP
 %token RBRACE
 %token RBRACKET
 %token RPAREN
@@ -240,8 +239,8 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 /* ------------------------------------------------------------------------- */
 
 file:
-  use_block optsemi decls {$1, List.rev $3}
-| decls {[], List.rev $1 }
+  use_block optsemi decls EOF {$1, List.rev $3}
+| decls EOF {[], List.rev $1 }
 
 decls:
     { [] }
