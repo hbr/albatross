@@ -1,0 +1,4 @@
+bin: [
+     "ocaml/alba"
+     "ocaml/alba-debug"
+]

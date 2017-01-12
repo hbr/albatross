@@ -20,9 +20,10 @@ doc
 *.docdir
 *.odocl
 *~
+ocaml/alba
+ocaml/alba-node
 \#*
 .\#*
 todo.md
 .emacs.*
-ocaml/makefile
 ocaml/sha1.ml
