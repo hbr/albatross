@@ -16,20 +16,28 @@ language.
 
 # Installation
 
-Prerequisites: In order to compile the Albatross compiler you need the `OCaml`
-compiler. The OCaml compiler is available at no cost through
-[caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
-platforms. Beside the ocaml compiler the program `ocamlbuild` is needed. The
-ocaml compiler versions below 4.03 already contain the program
-`ocamlbuild`. From version 4.03 on `ocamlbuild` is no longer part of the
-compiler suite and has to be installed separately.
+Prerequisites:
+
+- ocaml: In order to compile the Albatross compiler you need the `OCaml`
+  compiler. The OCaml compiler is available at no cost through
+  [caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
+  platforms.
+
+- ocamlbuild: Beside the ocaml compiler the program `ocamlbuild` is
+  needed. The ocaml compiler versions below 4.03 already contain the program
+  `ocamlbuild`. From version 4.03 on `ocamlbuild` is no longer part of the
+  compiler suite and has to be installed separately. If you have opam just
+  type `opam install ocamlbuild`.
+
+- yojson: Library to process json files. Installation with opam `opam install
+  yojson`.
 
 
 Compile the Albatross compiler with the commands:
 
     cd path/to/albatross/ocaml
 
-    ocamlbuild -lib unix alba.native
+    ocamlbuild -use-ocamlfind -lib unix alba.native
 
 
 After these commands you have the file `alba.native` in the directory
