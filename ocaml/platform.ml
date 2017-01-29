@@ -6,8 +6,10 @@
 
 type t = <
     readdir: string -> string array;
-    is_directory: string -> bool
-        >
+    is_directory: string -> bool;
+    mkdir: string -> int -> unit;
+    getcwd: unit -> string
+      >
 
 module Dummy = struct end
 
@@ -30,3 +32,9 @@ let readdir (path:string): string array =
 
 let is_directory (path:string): bool =
   (get ())#is_directory path
+
+let mkdir (path:string) (perm:int): unit =
+  (get())#mkdir path perm
+
+let getcwd (): string =
+  (get())#getcwd ()
