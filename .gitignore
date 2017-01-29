@@ -21,6 +21,7 @@ doc
 *.odocl
 *~
 ocaml/alba
+ocaml/alba-debug
 ocaml/alba-node
 \#*
 .\#*

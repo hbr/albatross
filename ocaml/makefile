@@ -60,17 +60,17 @@ doc:
 test2: alba.byte test2_library test2_draft test2_example
 
 
-test2_library: alba.byte
-	./alba.byte -work-dir ../library/alba.base compile -force -verbosity 1
+test2_library: alba-debug
+	./alba-debug -work-dir ../library/alba.base compile -force -verbosity 1
 
-test2_draft: alba.byte
-	./alba.byte -work-dir ../_draft/backward compile -force -verbosity 1
+test2_draft: alba-debug
+	./alba-debug -work-dir ../_draft/backward compile -force -verbosity 1
 
-test2_example: alba.byte
-	./alba.byte -work-dir ../example compile -force -verbosity 1
+test2_example: alba-debug
+	./alba-debug -work-dir ../example compile -force -verbosity 1
 
-test2_sf: alba.byte
-	./alba.byte -work-dir ../../sf compile -force -verbosity 1
+test2_sf: alba-debug
+	./alba-debug -work-dir ../../sf compile -force -verbosity 1
 
 test: alba.native test_library test_draft test_example
 
@@ -83,89 +83,89 @@ test_draft: alba.native
 test_example: alba.native
 	./alba.native -work-dir ../example compile -force -verbosity 1
 
-boolean: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+boolean: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 boolean 1>&2
 
-any: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+any: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 any 1>&2
 
-boolean_logic: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+boolean_logic: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 boolean_logic 1>&2
 
-predicate: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+predicate: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 predicate 1>&2
 
 
-tuple: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+tuple: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 tuple 1>&2
 
 
-predicate_logic: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+predicate_logic: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 predicate_logic 1>&2
 
 
-function_logic: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+function_logic: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 function_logic 1>&2
 
 
-relation: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+relation: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 relation 1>&2
 
 
-lattice: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+lattice: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 lattice 1>&2
 
-semilattice: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+semilattice: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 semilattice 1>&2
 
-complete_semilattice: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+complete_semilattice: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 complete_semilattice 1>&2
 
-partial_order: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+partial_order: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 partial_order 1>&2
 
-endorelation: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+endorelation: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 endorelation 1>&2
 
-function: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+function: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 function 1>&2
 
-linear_order: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+linear_order: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 linear_order 1>&2
 
-wellorder: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+wellorder: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 wellorder 1>&2
 
-natural: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+natural: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 natural 1>&2
 
-list: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+list: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 list 1>&2
 
-binary_tree: alba.byte
-	./alba.byte -work-dir ../library/alba.base  \
+binary_tree: alba-debug
+	./alba-debug -work-dir ../library/alba.base  \
          compile -force -verbosity 3 binary_tree 1>&2
 
-tree: alba.byte
-	./alba.byte -work-dir ../_draft/backward  \
+tree: alba-debug
+	./alba-debug -work-dir ../_draft/backward  \
          compile -force -verbosity 3 tree 1>&2
 
 
