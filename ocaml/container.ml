@@ -317,6 +317,7 @@ module Seq: sig
   val remove: int -> 'a t -> unit
   val iter:  ('a->unit) -> 'a t -> unit
   val iteri: (int->'a->unit) -> 'a t -> unit
+  val fold:  ('b->'a->'b) -> 'b -> 'a t -> 'b
   val find_min: ('a -> bool) -> 'a t -> int
 end = struct
   type 'a t = {mutable cnt:int;
@@ -399,6 +400,13 @@ end = struct
         iter0 (i+1)
       end
     in iter0 0
+
+  let fold (f:'b -> 'a -> 'b) (start:'b) (seq:'a t): 'b =
+    interval_fold
+      (fun res i -> f res (elem i seq))
+      start
+      0
+      (count seq)
 
   let find_min (f:'a->bool) (s:'a t): int =
     let cnt = count s in

@@ -4,7 +4,7 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-
+open Support
 
 let fill_string (n:int) (str:string): string =
   let len = String.length str in
@@ -34,6 +34,7 @@ let print_string_wrapped (f:Format.formatter) (str:string): unit =
 type t = {
     mutable command: string list;  (* in reversed order *)
     mutable work_dir: string;
+    mutable package_paths: string list;
     mutable verbosity: int;
     mutable force: bool;
     mutable arguments: string list (* in reversed order *)
@@ -50,6 +51,12 @@ let verbosity (cmd_line:t): int =
 
 let arguments (cmd_line:t): string list =
   List.rev cmd_line.arguments
+
+let package_paths (cmd_line:t): string list =
+  List.rev cmd_line.package_paths
+
+let is_forced (nme: int) (cmd:t): bool =
+  cmd.force && (cmd.arguments = [] || List.mem (ST.string nme) cmd.arguments)
 
 
 type alba_option = {
@@ -88,6 +95,12 @@ let force_option = {
   text = "Forced compilation, even if it is not necessary"
 }
 
+
+let package_path_option = {
+    key = "-I";
+    key_text = "-I <path>";
+    text = "Add <path> to search path for used packages"
+  }
 
 
 type command = {
@@ -136,9 +149,12 @@ let command_options (cmd:command): alba_option list =
 
 let initial_menu = [
   { name = "compile";
-    details = Final(compile_text,[work_dir_option;force_option;verbosity_option])
+    details = Final(compile_text,
+                    [work_dir_option;force_option;
+                     verbosity_option;package_path_option])
   };
-  { name = "status";  details = Final(status_text,[work_dir_option]) };
+  { name = "status";
+    details = Final(status_text,[work_dir_option;package_path_option]) };
   { name = "init";    details = Final(init_text,[work_dir_option]) };
   { name = "version";
     details = Final("Display the version of the Albatross compiler",[])};
@@ -220,7 +236,7 @@ let print_menu_help (f:Format.formatter) (menu:command list): unit =
 
 let print_general_help (f:Format.formatter): unit =
   print_menu_help f initial_menu
-    
+
 
 
 let print_help (f:Format.formatter) (cmd_line:t): unit =
@@ -240,11 +256,12 @@ let print_help (f:Format.formatter) (cmd_line:t): unit =
         print_general_help f
 
 
-let get (work_dir:string): t =
+let get (): t =
   let menu = ref initial_menu
   and cmd_line = {
     command = [];
-    work_dir = work_dir;
+    work_dir = "";
+    package_paths = [];
     verbosity = 1;
     force = false;
     arguments = [];
@@ -282,6 +299,10 @@ let get (work_dir:string): t =
      (force_option.key,
       Arg.Unit (fun () -> cmd_line.force <- true),
       force_option.text);
+     (package_path_option.key,
+      Arg.String
+        (fun str -> cmd_line.package_paths <- str :: cmd_line.package_paths),
+      package_path_option.text);
      ("-help", Arg.Unit do_nothing, "");
      ("--help", Arg.Unit do_nothing, "");
    ]

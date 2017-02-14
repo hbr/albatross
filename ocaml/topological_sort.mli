@@ -11,6 +11,7 @@ module type Application_data =
     type graph
     val compare: node -> node -> int
     val dependencies: node -> graph -> node list
+    val string_of_node: node -> string
   end
 
 
@@ -19,6 +20,7 @@ module type S =
     sig
       type node
       type graph
+      val print_cycle: Format.formatter -> node list -> unit
       val sort: node list -> graph -> (node list, node list) result
     end
 

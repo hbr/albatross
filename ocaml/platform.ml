@@ -8,8 +8,13 @@ type t = <
     readdir: string -> string array;
     is_directory: string -> bool;
     mkdir: string -> int -> unit;
-    getcwd: unit -> string
-      >
+    getcwd: unit -> string;
+    getenv: string -> string;
+    path_separator: unit -> char;
+    directory_separator: unit -> char;
+    modification_time: string -> float
+>
+
 
 module Dummy = struct end
 
@@ -33,8 +38,40 @@ let readdir (path:string): string array =
 let is_directory (path:string): bool =
   (get ())#is_directory path
 
+
+let path_exists (path:string): bool =
+  try
+    ignore(is_directory path);
+    true
+  with Sys_error _ ->
+    false
+
 let mkdir (path:string) (perm:int): unit =
   (get())#mkdir path perm
 
 let getcwd (): string =
   (get())#getcwd ()
+
+let getenv (str:string): string =
+  (get())#getenv str
+
+let path_separator (): char =
+  (get())#path_separator ()
+
+let directory_separator (): char =
+  (get())#directory_separator ()
+
+
+let modification_time (str:string): float =
+  (get())#modification_time str
+
+
+let write_dummy (path:string): unit =
+  close_out (open_out path)
+
+
+module Filename =
+  struct
+    let concat (dir:string) (name:string): string =
+      Filename.concat dir name
+  end

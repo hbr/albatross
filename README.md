@@ -29,15 +29,12 @@ Prerequisites:
   compiler suite and has to be installed separately. If you have opam just
   type `opam install ocamlbuild`.
 
-- yojson: Library to process json files. Installation with opam `opam install
-  yojson`.
-
 
 Compile the Albatross compiler with the commands:
 
     cd path/to/albatross/ocaml
 
-    ocamlbuild -use-ocamlfind -lib unix alba.native
+    ocamlbuild -lib unix alba.native
 
 
 After these commands you have the file `alba.native` in the directory

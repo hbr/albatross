@@ -3,5 +3,5 @@
 build:
 	cd ocaml;       \
 	make alba;      \
-	make alba-debug
+	make alba.byte
 

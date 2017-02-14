@@ -9,13 +9,27 @@ type t = <
     readdir: string -> string array;
     is_directory: string -> bool;
     mkdir: string -> int -> unit;
-    getcwd: unit -> string
-        >
+    getcwd: unit -> string;
+    getenv: string -> string;
+    path_separator: unit -> char;
+    directory_separator: unit -> char;
+    modification_time: string -> float
+    >
 
 val set: t -> unit
 val get: unit -> t
 
 val readdir: string -> string array
+val path_exists: string -> bool
 val is_directory: string -> bool
 val mkdir: string -> int -> unit
 val getcwd: unit -> string
+val getenv: string -> string
+val path_separator: unit -> char
+val modification_time: string -> float
+val write_dummy: string -> unit
+
+module Filename:
+sig
+  val concat: string -> string -> string
+end

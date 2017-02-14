@@ -14,6 +14,7 @@ module type Application_data =
     type graph
     val compare: node -> node -> int
     val dependencies: node -> graph -> node list
+    val string_of_node: node -> string
   end
 
 
@@ -22,6 +23,7 @@ module type S =
     sig
       type node
       type graph
+      val print_cycle: Format.formatter -> node list -> unit
       val sort: node list -> graph -> (node list, node list) result
     end
 
@@ -64,7 +66,7 @@ module Make(AD: Application_data) =
         map
         lst
 
-          
+
 
     let make (w: node list) (graph:graph): t =
       let map = add_new_elements w EMap.empty in
@@ -101,7 +103,8 @@ module Make(AD: Application_data) =
       let rec get lst stack =
         match stack with
           [] ->
-            assert false (* cannot happen, the first element must be on the stack *)
+            assert false (* cannot happen, the first element must be
+                            on the stack *)
         | (e,_) :: tail ->
             if AD.compare first e = 0 then
               first :: lst
@@ -164,6 +167,26 @@ module Make(AD: Application_data) =
             end
           else
             outer_loop d
+
+
+    let print_cycle (f:Format.formatter) (cycle: node list): unit =
+      Format.fprintf f "@[<v>";
+      List.iteri
+        (fun i n ->
+          let start =
+            if i = 0 then
+              "+-> "
+            else
+              "|   "
+          in
+          Format.fprintf
+            f
+            "%s%s@,"
+            start
+            (AD.string_of_node n)
+        )
+        cycle;
+      Format.fprintf f "+ <-+@,"
 
 
     let sort (w:node list) (graph:graph): (node list, node list) result =
