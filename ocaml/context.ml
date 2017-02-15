@@ -567,10 +567,9 @@ let push_with_gap
       possibly newly introduced type variables of the signature. *)
   assert (not (is_pred && is_func));
   let entry      = c.entry
-  and ct         = class_table c
-  and mt         = module_table c in
+  and ct         = class_table c in
   let tvs_sub  =
-    Module_table.formal_generics entlst rt is_func ntvs_gap entry.tvs_sub mt in
+    Class_table.formal_generics entlst rt is_func ntvs_gap entry.tvs_sub ct in
   let tvs = TVars_sub.tvars tvs_sub
   in
   let ntvs0 = TVars_sub.count_local entry.tvs_sub

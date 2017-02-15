@@ -38,7 +38,7 @@ type t = {mutable map:    int Module_map.t;
           mutable base_added:     IntSet.t; (* Set of all base modules which are
                                                already in the module table *)
           mutable mode:   int;
-          mutable fgens: type_term IntMap.t}
+         }
 
 
 
@@ -189,14 +189,7 @@ let add_used ((nme,lib):int*int list) (used:IntSet.t) (mt:t): unit =
   if IntSet.mem nme mt.base then
     mt.base_added <- IntSet.add nme mt.base_added;
   mt.map   <- Module_map.add (nme,lib) n mt.map;
-  mt.mode  <- 2;
-  mt.fgens <- IntMap.empty(*;
-  printf "add_used of module %s\n" (name (current mt) mt);
-  IntSet.iter
-    (fun mdl ->
-      printf "  %s\n" (name mdl mt))
-    used*)
-
+  mt.mode  <- 2
 
 
 let add_current (name:int) (used:IntSet.t) (mt:t): unit =
@@ -208,8 +201,7 @@ let add_current (name:int) (used:IntSet.t) (mt:t): unit =
   if IntSet.mem name mt.base then
     mt.base_added <- IntSet.add name mt.base_added;
   mt.map   <- Module_map.add (name,[]) n mt.map;
-  mt.mode  <- 0;
-  mt.fgens <- IntMap.empty
+  mt.mode  <- 0
 
 
 
@@ -230,8 +222,7 @@ let set_interface_check (pub_used:IntSet.t) (mt:t): unit =
   assert (IntSet.subset pub_used (used_priv (current mt) mt));
   let desc = Seq.elem (current mt) mt.seq in
   desc.pub  <- pub_used;
-  mt.mode   <- 1;
-  mt.fgens  <- IntMap.empty
+  mt.mode   <- 1
 
 
 
@@ -251,132 +242,5 @@ let make (): t =
    libseq  = libseq;
    base    = base_set;
    base_added = IntSet.empty;
-   mode    = 0;
-   fgens   = IntMap.empty}
-
-
-
-let find_formal (name: int) (mt:t): type_term =
-  IntMap.find name mt.fgens
-
-
-
-let put_formal (name: int withinfo) (concept: type_term) (mt:t): unit =
-  (** Add the formal generic with [name] and [concept] to the formal generics
-      of the class table [ct] *)
-  if IntMap.mem name.v mt.fgens then
-    error_info
-      name.i
-      ("formal generic " ^ (ST.string name.v) ^ " already defined")
-  else
-    mt.fgens <- IntMap.add name.v concept mt.fgens
-
-
-
-let add_fg
-    (name:int)
-    (path: int list)
-    (fgs: formal list)
-    (tvs:TVars_sub.t)
-    (mt:t)
-    : formal list =
-  (* Check if [name] is a new formal generic. If yes prepend it to [fgs].
-
-     Note: [fgs] is reversed *)
-  if path = [] &&
-    not (List.exists (fun (nme,_)-> nme=name) fgs) &&
-    not (TVars_sub.has_fg name tvs)
-  then
-    try
-      let cpt = IntMap.find name mt.fgens in
-      (name,cpt) :: fgs
-    with Not_found ->
-      fgs
-  else
-    fgs
-
-
-let collect_fgs
-    (tp:type_t)
-    (fgs:formal list)
-    (tvs:TVars_sub.t)
-    (mt:t)
-    : formal list =
-  (* Collect the formal generics of the type [tp] and prepend them to [fgs] if
-     they are new.
-
-     Note: [fgs] is reversed *)
-  let rec collect (tp:type_t) (fgs:formal list): formal list =
-    match tp with
-      Normal_type (path,name,args) ->
-        let fgs = List.fold_left
-            (fun lst tp -> collect tp lst)
-            fgs
-            args
-        in
-        add_fg name path fgs tvs mt
-    | Arrow_type (tpa,tpb) ->
-        collect tpb (collect tpa fgs)
-    | Brace_type tp | Star_type tp | Paren_type tp | List_type tp ->
-        collect tp fgs
-    | Tuple_type lst ->
-        List.fold_left (fun fgs tp -> collect tp fgs) fgs lst
-  in
-  collect tp fgs
-
-
-
-let formal_generics
-    (entlst:   entities list withinfo)
-    (rt:       return_type)
-    (is_func:  bool)
-    (ntvs_gap: int)
-    (tvs:      TVars_sub.t)
-    (mt:       t)
-    : TVars_sub.t =
-  let ntvs_new,fgs_new =
-    List.fold_left
-      (fun (ntvs,fgs) ent ->
-        match ent with
-          Untyped_entities vars ->
-            ntvs + List.length vars, fgs
-        | Typed_entities (_,tp) ->
-            ntvs, collect_fgs tp fgs tvs mt)
-      (0,[])
-      entlst.v
-  in
-  let ntvs_new, fgs_new =
-    match rt with
-      None when is_func -> ntvs_new + 1, fgs_new
-    | None -> ntvs_new, fgs_new
-    | Some tp ->
-        let t,_,_ = tp.v in
-        ntvs_new, collect_fgs t fgs_new tvs mt
-  in
-  let fgs_new = Array.of_list (List.rev fgs_new) in
-  let fgnames,fgconcepts = Myarray.split fgs_new in
-  let nfgs_new = Array.length fgconcepts in
-  let fgconcepts = Array.map (fun tp -> Term.up nfgs_new tp) fgconcepts in
-  TVars_sub.augment (ntvs_new+ntvs_gap) fgnames fgconcepts tvs
-
-
-
-
-let class_formal_generics (fgens: formal_generics) (mt:t): formal array =
-  Array.of_list
-    (List.map
-       (fun nme ->
-         try
-           nme, IntMap.find nme mt.fgens
-         with Not_found ->
-           let str = "Unknown formal generic " ^ (ST.string nme) in
-           error_info fgens.i str)
-       fgens.v)
-
-
-let class_tvs (fgens:formal_generics) (mt:t): Tvars.t =
-  let fgs = class_formal_generics fgens mt in
-  let fgnms, fgcon = Myarray.split fgs in
-  let nfgs = Array.length fgcon in
-  let fgcon = Array.map (fun tp -> Term.up nfgs tp) fgcon in
-  Tvars.make_fgs fgnms fgcon
+   mode    = 0
+  }

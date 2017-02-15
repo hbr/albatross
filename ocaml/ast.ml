@@ -1030,8 +1030,7 @@ let put_class
   assert (Proof_context.is_global pc);
   let ft = Proof_context.feature_table pc in
   let ct = Feature_table.class_table ft in
-  let mt = Class_table.module_table ct in
-  let tvs = Module_table.class_tvs fgs mt in
+  let tvs = Class_table.class_tvs fgs ct in
   let idx,is_new =
     try
       let idx = Class_table.find_for_declaration cn.v ct in
