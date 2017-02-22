@@ -506,7 +506,7 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
 let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
   (* Return the unevaluated and the evaluated term *)
   let rec reconstruct (e:Eval.t) (nb:int) =
-    let domain_id = nb + count_variables at + Feature_table.domain_index
+    let domain_id = nb + count_variables at + Constants.domain_index
     and reconstr_args args =
       let n = Array.length args in
       let args = Array.map (fun e -> reconstruct e nb) args in

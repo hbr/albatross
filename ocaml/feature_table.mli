@@ -56,18 +56,6 @@ val string_of_signature: int -> t -> string
 val is_ghost_term: term -> int -> t -> bool
 val is_ghost_specification: Feature.Spec.t -> t -> bool
 
-val implication_index: int
-val false_index:       int
-val true_index:        int
-val not_index:         int
-val and_index:         int
-val or_index:          int
-val eq_index:          int
-val in_index:          int
-val domain_index:      int
-val tuple_index:       int
-val first_index:       int
-val second_index:      int
 
 val false_constant: int -> term
 val true_constant:  int -> term

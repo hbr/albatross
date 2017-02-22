@@ -444,7 +444,7 @@ let induction_goal_predicate
   in
   let n_all_vars = Array.length all_vars
   in
-  let imp_id = n_all_vars + nvars + Feature_table.implication_index
+  let imp_id = n_all_vars + nvars + Constants.implication_index
   and n_other_vars = n_all_vars - n_ind_vars
   in
   let map,_ =
@@ -770,7 +770,7 @@ let inductive_set_case_context
    *)
   let n1,fargs1,ps,goal_pred1 =
     let nvars = PC.count_variables pc in
-    let imp_id = nvars + Feature_table.implication_index in
+    let imp_id = nvars + Constants.implication_index in
     let n,(_,tps), ps, goal_pred1 =
       Term.induction_rule imp_id irule set_expanded set goal_pred
     in

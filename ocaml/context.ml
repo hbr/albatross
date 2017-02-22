@@ -160,22 +160,22 @@ let count_variables (c:t): int = Array.length c.entry.fargs
 
 
 let implication_index (c:t): int =
-  count_variables c + Feature_table.implication_index
+  count_variables c + Constants.implication_index
 
 let and_index (c:t): int =
-  count_variables c + Feature_table.and_index
+  count_variables c + Constants.and_index
 
 let or_index (c:t): int =
-  count_variables c + Feature_table.or_index
+  count_variables c + Constants.or_index
 
 let not_index (c:t): int =
-  count_variables c + Feature_table.not_index
+  count_variables c + Constants.not_index
 
 let domain_index (c:t): int =
-  count_variables c + Feature_table.domain_index
+  count_variables c + Constants.domain_index
 
 let tuple_index (c:t): int =
-  count_variables c + Feature_table.tuple_index
+  count_variables c + Constants.tuple_index
 
 
 
@@ -373,15 +373,15 @@ let some_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term
 
 
 let prenex_term (t:term) (c:t): term =
-  Term.prenex t (count_variables c) (ntvs c) Feature_table.implication_index
+  Term.prenex t (count_variables c) (ntvs c) Constants.implication_index
 
 let prenex_sort_term (t:term) (c:t): term =
   Term.prenex_sort
-    t (count_variables c) (ntvs c) Feature_table.implication_index
+    t (count_variables c) (ntvs c) Constants.implication_index
 
 let prenex_term_bubble_one (t:term) (c:t): term =
   Term.prenex_bubble_one
-    t (count_variables c) (ntvs c) Feature_table.implication_index
+    t (count_variables c) (ntvs c) Constants.implication_index
 
 
 
@@ -481,7 +481,7 @@ let check_deferred (c:t): unit =
 let split_general_implication_chain
     (t:term) (c:t): int * formals * term list * term =
   let nvars = count_variables c in
-  let imp_id = nvars + Feature_table.implication_index in
+  let imp_id = nvars + Constants.implication_index in
   Term.split_general_implication_chain t imp_id
 
 
@@ -1036,7 +1036,7 @@ let domain_of_lambda
       let true_const = Feature_table.true_constant (1+nb+nbenv) in
       Lam(n, nms, [], true_const, is_pred, p_tp)
   | p::pres ->
-      let and_id  = 1 + nb + nbenv + Feature_table.and_index in
+      let and_id  = 1 + nb + nbenv + Constants.and_index in
       let inner =
         List.fold_left
           (fun t p -> Term.binary and_id t p)
@@ -1726,7 +1726,7 @@ let uniqueness_condition (posts:term list) (c:t): term =
     Term.subst t (3 + nargs) args
   in
   let x_eq_y =
-    let eq_id_0 = 2 + nvars + Feature_table.eq_index in
+    let eq_id_0 = 2 + nvars + Constants.eq_index in
     let x_eq_y_0 = VAppl (eq_id_0, [|Variable 0; Variable 1|], [|Variable 0|],false)
     in
     Feature_table.substituted

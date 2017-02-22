@@ -15,26 +15,13 @@ module IntArrayMap = Map.Make(struct
   type t = int array
 end)
 
-let implication_index: int =  0
-let false_index:       int =  1
-let true_index:        int =  2
-let not_index:         int =  3
-let and_index:         int =  4
-let or_index:          int =  5
-let eq_index:          int =  6
-let in_index:          int =  7
-let domain_index:      int =  8
-let tuple_index:       int =  9
-let first_index:       int = 10
-let second_index:      int = 11
-
 
 let false_constant (nb:int): term =
-  let id = nb+false_index in
+  let id = nb + Constants.false_index in
   VAppl (id,[||],[||],false)
 
 let true_constant (nb:int): term =
-  let id = nb+true_index in
+  let id = nb + Constants.true_index in
   VAppl (id,[||],[||],false)
 
 
@@ -51,7 +38,7 @@ class bdesc (idx:int) (nfgs:int) (classes:int array) (spec:Feature.Spec.t) =
     val mutable sd = idx                    (* each new feature is its own seed *)
     val mutable subst = standard_substitution nfgs
     val mutable vars = IntArrayMap.singleton classes idx  (* and own variant *)
-    val mutable is_eq = (idx = eq_index)
+    val mutable is_eq = (idx = Constants.eq_index)
     val mutable inv_ass = IntSet.empty
 
     method is_inherited:bool = is_inh
@@ -70,7 +57,7 @@ class bdesc (idx:int) (nfgs:int) (classes:int array) (spec:Feature.Spec.t) =
     method set_seed (s:int) (ags:agens):unit =
       sd <- s;
       subst <- ags;
-      if sd = eq_index then
+      if sd = Constants.eq_index then
         is_eq <- true
     method add_variant (classes:int array) (idx:int): unit =
       assert (not (IntArrayMap.mem classes vars));
@@ -202,7 +189,7 @@ let is_higher_order (i:int) (ft:t): bool =
   let cls,_ = Class_table.split_type_term (Sign.result desc.sign) in
   assert (ntvs <= cls);
   let cls = cls - ntvs in
-  cls = Class_table.predicate_index || cls = Class_table.function_index
+  cls = Constants.predicate_index || cls = Constants.function_index
 
 
 let tuple_arity (i:int) (ft:t): int =
@@ -369,7 +356,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
   assert (Class_table.has_constructors cls ft.ct);
   let cons = Class_table.constructors cls ft.ct
   and tp,tvs = Class_table.class_type cls ft.ct
-  and imp_id = nb + 2 + implication_index
+  and imp_id = nb + 2 + Constants.implication_index
   and p  = Variable 0
   and x  = Variable 1
   in
@@ -476,8 +463,8 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     (* outer 0: neither first nor second
              1: first
              2: second *)
-    let first_id  = nb + 1 + nbenv + first_index
-    and second_id = nb + 1 + nbenv + second_index
+    let first_id  = nb + 1 + nbenv + Constants.first_index
+    and second_id = nb + 1 + nbenv + Constants.second_index
     and vappl i t ags  = VAppl (i+nargs-1, [|t|], ags, true), 0, 0
     in
     match t with
@@ -614,7 +601,7 @@ let beta_reduce_0
 let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
   (* The tuple (a,b,...) transformed into an argument array [a,b,...].
    *)
-  let tuple_id  = nbenv + tuple_index in
+  let tuple_id  = nbenv + Constants.tuple_index in
   let rec collect t lst =
     match t with
       VAppl (i,args,_,_) when i = tuple_id ->
@@ -644,8 +631,8 @@ let ith_tuple_element
           i + 1 < n:  i times second + first
           i + 1 = n:  i times second
    *)
-  let first_id  = nvars + first_index
-  and second_id = nvars + second_index
+  let first_id  = nvars + Constants.first_index
+  and second_id = nvars + Constants.second_index
   in
   let elem (i:int) (tp:type_term): term =
     let split_tup (tp:type_term): agens =
@@ -689,7 +676,7 @@ let args_of_tuple_ext
    *)
 
   assert (0 < nargs);
-  let tuple_id  = nvars + tuple_index
+  let tuple_id  = nvars + Constants.tuple_index
   in
   let rec untup
       (t:term) (tp:type_term) (n:int) (lst:term list)
@@ -738,7 +725,7 @@ let tuple_of_args
   (* The arguments [a,b,...] transformed to a tuple (a,b,...) of the type [tup_tp].
    *)
   let nargs = Array.length args
-  and tup_id = nb + tuple_index
+  and tup_id = nb + Constants.tuple_index
   in
   assert (0 < nargs);
   let rec tup_from (i:int) (tup_tp:type_term): term =
@@ -1445,7 +1432,7 @@ let equality_term
    *)
   let args0 = standard_substitution 2
   and ags0  = standard_substitution 1 in
-  let eq0 = VAppl(2+eq_index, args0, ags0,false) in
+  let eq0 = VAppl(2 + Constants.eq_index, args0, ags0,false) in
   substituted eq0 2 0 0 [|a;b|] nb [|tp|] tvs ft
 
 
@@ -1484,7 +1471,7 @@ let implication (a:term) (b:term) (nb:int): term =
   (* The implication [a ==> b] where [a] and [b] are valid in an environment
      with [nb] variables.
    *)
-  VAppl(nb+implication_index, [|a;b|], [||],false)
+  VAppl(nb+Constants.implication_index, [|a;b|], [||],false)
 
 
 
@@ -1620,12 +1607,12 @@ let function_property_assertions (idx:int) (ft:t): term list =
   List.map
     (fun e ->
       let chn =
-        Term.make_implication_chain pres e (nargs + implication_index)
+        Term.make_implication_chain pres e (nargs + Constants.implication_index)
       in
       let t =
         Term.all_quantified nargs (desc.argnames,tps) (fgnms,fgcon) chn
       in
-      Term.prenex t 0 0 implication_index
+      Term.prenex t 0 0 Constants.implication_index
     )
     posts
 
@@ -1670,7 +1657,7 @@ let domain_of_feature (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t): term =
       [] ->
         true_constant (n+nb)
     | hd::tl ->
-        let and_id = n + nb + and_index in
+        let and_id = n + nb + Constants.and_index in
         List.fold_left
           (fun t1 t2 -> Term.binary and_id (subst t1) (subst t2))
           hd
@@ -1772,7 +1759,7 @@ let is_predicate (i:int) (ft:t): bool =
   let res = Sign.result sign in
   match res with
     Variable i when nfgs <= i ->
-      i - nfgs = Class_table.boolean_index
+      i - nfgs = Constants.boolean_index
   | _ ->
       false
 
@@ -1854,7 +1841,7 @@ and feature_complexity
 
 
 let equality_index (cls:int) (ft:t): int =
-  variant eq_index [|cls|] ft
+  variant Constants.eq_index [|cls|] ft
 
 
 let equality_index_of_type (tp:term) (tvs:Tvars.t) (ft:t): int =
@@ -1885,7 +1872,7 @@ let definition_equality (i:int) (ft:t): term =
       and ags  = standard_substitution nfgs in
       VAppl (f_id, args, ags, false)
   in
-  let eq_id = nargs + eq_index in
+  let eq_id = nargs + Constants.eq_index in
   VAppl (eq_id, [|f;t|], [|r_tp|], false)
 
 
@@ -1902,7 +1889,7 @@ let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list 
       posts
   and n,nms,pres  = preconditions  i 0 ft in
   let pres_rev = List.rev pres in
-  let imp_id = n + implication_index
+  let imp_id = n + Constants.implication_index
   and desc_var = descriptor ivar ft in
   let tps = Sign.arguments desc_var.sign
   and fgnms = Tvars.fgnames desc_var.tvs
@@ -2227,30 +2214,30 @@ let base_table (verbosity:int) : t =
   let bool    = Class_table.boolean_type 0 in
   let ft      = empty verbosity
   in
-  let any1  = Variable (Class_table.any_index+1)
-  and any2  = Variable (Class_table.any_index+2)
-  and bool1 = Variable (Class_table.boolean_index+1)
+  let any1  = Variable (Constants.any_index+1)
+  and any2  = Variable (Constants.any_index+2)
+  and bool1 = Variable (Constants.boolean_index+1)
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
-  let p_tp1 = make_type (Class_table.predicate_index+1) [|g_tp|]
-  and p_tp2 = make_type (Class_table.predicate_index+2) [|a_tp|]
-  and f_tp  = make_type (Class_table.function_index+2)  [|a_tp;b_tp|]
-  and tup_tp= make_type (Class_table.tuple_index+2) [|a_tp;b_tp|]
+  let p_tp1 = make_type (Constants.predicate_index+1) [|g_tp|]
+  and p_tp2 = make_type (Constants.predicate_index+2) [|a_tp|]
+  and f_tp  = make_type (Constants.function_index+2)  [|a_tp;b_tp|]
+  and tup_tp= make_type (Constants.tuplec_index+2) [|a_tp;b_tp|]
   and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None []
   and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t) []
   in
   add_base (* ==> *)
-    "boolean" Class_table.boolean_index (FNoperator DArrowop)
+    "boolean" Constants.boolean_index (FNoperator DArrowop)
     [||] [|bool;bool|] bool false false (spec_none 2) ft;
 
   add_base (* false *)
-    "boolean" Class_table.boolean_index FNfalse
+    "boolean" Constants.boolean_index FNfalse
     [||] [||] bool false false (spec_none 0) ft;
 
-  let imp_id1   = 1 + implication_index
-  and imp_id2   = 2 + implication_index
-  and not_id2   = 2 + not_index
+  let imp_id1   = 1 + Constants.implication_index
+  and imp_id2   = 2 + Constants.implication_index
+  and not_id2   = 2 + Constants.not_index
   in
   let not_term = Term.binary imp_id1 (Variable 0) (false_constant 1)
   and or_term  =  Term.binary imp_id2 (Term.unary not_id2 (Variable 0)) (Variable 1)
@@ -2260,38 +2247,38 @@ let base_table (verbosity:int) : t =
          (Variable 0)
          (Term.binary imp_id2 (Variable 1) (false_constant 2)))
   and true_term =
-    Term.binary implication_index (false_constant 0) (false_constant 0)
+    Term.binary Constants.implication_index (false_constant 0) (false_constant 0)
   in
   add_base (* true *)
-    "boolean" Class_table.boolean_index FNtrue
+    "boolean" Constants.boolean_index FNtrue
     [||] [||] bool false false (spec_term 0 true_term) ft;
 
   add_base (* not *)
-    "boolean" Class_table.boolean_index (FNoperator Notop)
+    "boolean" Constants.boolean_index (FNoperator Notop)
     [||] [|bool|] bool false false (spec_term 1 not_term) ft;
 
   add_base (* and *)
-    "boolean" Class_table.boolean_index (FNoperator Andop)
+    "boolean" Constants.boolean_index (FNoperator Andop)
     [||] [|bool;bool|] bool false false (spec_term 2 and_term) ft;
 
   add_base (* or *)
-    "boolean" Class_table.boolean_index (FNoperator Orop)
+    "boolean" Constants.boolean_index (FNoperator Orop)
     [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
   add_base (* equality *)
-    "any" Class_table.any_index (FNoperator Eqop)
+    "any" Constants.any_index (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 
   add_base (* in *)
-    "predicate" Class_table.predicate_index (FNoperator Inop)
+    "predicate" Constants.predicate_index (FNoperator Inop)
     [|any1|] [|g_tp;p_tp1|] bool1 false false (spec_none 2) ft;
 
   add_base (* domain *)
-    "function" Class_table.function_index (FNname ST.domain)
+    "function" Constants.function_index (FNname ST.domain)
     [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* tuple *)
-    "tuple" Class_table.tuple_index (FNname ST.tuple)
+    "tuple" Constants.tuple_index (FNname ST.tuple)
     [|any2;any2|] [|a_tp;b_tp|] tup_tp false false (spec_none 2) ft;
 
   let first_second_term i =
@@ -2299,29 +2286,29 @@ let base_table (verbosity:int) : t =
     let args = standard_substitution 2
     and ags  = standard_substitution 2
     and nms  = standard_argnames 2 in
-    let tup = VAppl(tuple_index+3, args, ags, false) in
+    let tup = VAppl(Constants.tuple_index+3, args, ags, false) in
     let pat = Term.some_quantified 2 (nms,ags) tup
     and res = Term.some_quantified 2 (nms,ags) (Variable i) in
     Flow (Inspect, [|Variable 0; pat; res |])
   in
   add_base (* first *)
-    "tuple" Class_table.tuple_index (FNname ST.first)
+    "tuple" Constants.tuplec_index (FNname ST.first)
     [|any2;any2|] [|tup_tp|] a_tp false false (spec_term 1 (first_second_term 0)) ft;
 
   add_base (* second *)
-    "tuple" Class_table.tuple_index (FNname ST.second)
+    "tuple" Constants.tuplec_index (FNname ST.second)
     [|any2;any2|] [|tup_tp|] b_tp false false (spec_term 1 (first_second_term 1)) ft;
 
-  assert ((descriptor implication_index ft).fname = FNoperator DArrowop);
-  assert ((descriptor false_index ft).fname       = FNfalse);
-  assert ((descriptor not_index ft).fname         = FNoperator Notop);
-  assert ((descriptor and_index ft).fname         = FNoperator Andop);
-  assert ((descriptor or_index ft).fname          = FNoperator Orop);
-  assert ((descriptor eq_index ft).fname          = FNoperator Eqop);
-  assert ((descriptor domain_index ft).fname      = FNname ST.domain);
-  assert ((descriptor tuple_index ft).fname       = FNname ST.tuple);
-  assert ((descriptor first_index ft).fname       = FNname ST.first);
-  assert ((descriptor second_index ft).fname      = FNname ST.second);
+  assert ((descriptor Constants.implication_index ft).fname = FNoperator DArrowop);
+  assert ((descriptor Constants.false_index ft).fname   = FNfalse);
+  assert ((descriptor Constants.not_index ft).fname     = FNoperator Notop);
+  assert ((descriptor Constants.and_index ft).fname     = FNoperator Andop);
+  assert ((descriptor Constants.or_index ft).fname      = FNoperator Orop);
+  assert ((descriptor Constants.eq_index ft).fname      = FNoperator Eqop);
+  assert ((descriptor Constants.domain_index ft).fname  = FNname ST.domain);
+  assert ((descriptor Constants.tuple_index ft).fname   = FNname ST.tuple);
+  assert ((descriptor Constants.first_index ft).fname   = FNname ST.first);
+  assert ((descriptor Constants.second_index ft).fname  = FNname ST.second);
   ft
 
 
@@ -2632,8 +2619,8 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
   Class_table.add_current_module name used ft.ct;
   add_base_features name ft;
   if name <> ST.symbol "boolean" then begin
-    let or_desc  = descriptor or_index ft
-    and and_desc = descriptor and_index ft in
+    let or_desc  = descriptor Constants.or_index ft
+    and and_desc = descriptor Constants.and_index ft in
     or_desc.bdesc#set_specification
       (Feature.Spec.make_func_def or_desc.argnames  None []);
     and_desc.bdesc#set_specification
@@ -3244,12 +3231,12 @@ let add_involved_assertion (ia:int) (t:term) (ft:t): unit =
 
 let equal_symmetry_term (): term =
   (* Construct all(a,b) a = b ==> b = a *)
-  let eq_id  = 2  + eq_index
-  and imp_id = 2  + implication_index
+  let eq_id  = 2  + Constants.eq_index
+  and imp_id = 2  + Constants.implication_index
   and a = Variable 0
   and b = Variable 1
   and ag = Variable 0
-  and any_tp = Variable (1 + Class_table.any_index)
+  and any_tp = Variable (1 + Constants.any_index)
   in
   let eq a b = VAppl (eq_id, [|a;b|], [|ag|], false) in
   let imp = Term.binary imp_id (eq a b) (eq b a) in
@@ -3262,13 +3249,13 @@ let equal_symmetry_term (): term =
 
 let leibniz_term (): term =
   (* Construct all(a,b,p) a = b ==> p(a) ==> p(b) *)
-  let eq_id  = 3 + eq_index
-  and imp_id = 3 + implication_index
+  let eq_id  = 3 + Constants.eq_index
+  and imp_id = 3 + Constants.implication_index
   and a = Variable 0
   and b = Variable 1
   and p = Variable 2
   and ag = Variable 0
-  and any_tp = Variable (1 + Class_table.any_index)
+  and any_tp = Variable (1 + Constants.any_index)
   in
   let pred = Class_table.predicate_type ag 1 in
   let eqab = VAppl (eq_id, [|a;b|], [|ag|],false)

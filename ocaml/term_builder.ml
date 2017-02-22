@@ -190,7 +190,7 @@ let count_variables (tb:t): int =
   Context.count_variables (context tb)
 
 let in_index (tb:t): int =
-  count_variables tb + Feature_table.in_index
+  count_variables tb + Constants.in_index
 
 let any_index       (tb:t): int = count_all tb + Class_table.any_index
 let boolean_index   (tb:t): int = count_all tb + Class_table.boolean_index

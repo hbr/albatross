@@ -363,11 +363,11 @@ let implication (a:term) (b:term) (pc:t): term =
 
 let negation (a:term) (pc:t): term =
   let nb = nbenv pc in
-  Term.unary (nb + Feature_table.not_index) a
+  Term.unary (nb + Constants.not_index) a
 
 let disjunction (a:term) (b:term) (pc:t): term =
   let nb = nbenv pc in
-  Term.binary (nb + Feature_table.or_index) a b
+  Term.binary (nb + Constants.or_index) a b
 
 
 let false_constant (pc:t): term =
@@ -1120,7 +1120,7 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
   and ft    = feature_table pc in
   i < nbenv ||
   let idx = i - nbenv in
-  idx = Feature_table.or_index ||
+  idx = Constants.or_index ||
   Feature_table.owner idx ft <> Class_table.boolean_index
 
 
@@ -1186,7 +1186,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       raise No_evaluation;
     let depth = depth + 1 in
     let nvars = nbenv pc in
-    let domain_id = nvars + Feature_table.domain_index
+    let domain_id = nvars + Constants.domain_index
     in
     match t with
       Variable i ->
@@ -1248,9 +1248,9 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       (lazy_:bool) (depth:int) (pc:t)
       : term * Eval.t =
     let nvars = nbenv pc in
-    let and_id    = nvars + Feature_table.and_index
-    and or_id     = nvars + Feature_table.or_index
-    and imp_id    = nvars + Feature_table.implication_index
+    let and_id    = nvars + Constants.and_index
+    and or_id     = nvars + Constants.or_index
+    and imp_id    = nvars + Constants.implication_index
     in
     let is_lazy i = i = and_id || i = or_id || i = imp_id
     in
@@ -2546,8 +2546,8 @@ let check_interface (pc:t): unit =
 
 let excluded_middle (pc:t): int =
   let nvars = nbenv pc in
-  let or_id  = 1 + nvars + Feature_table.or_index
-  and not_id = 1 + nvars + Feature_table.not_index in
+  let or_id  = 1 + nvars + Constants.or_index
+  and not_id = 1 + nvars + Constants.not_index in
   let em = Term.binary or_id (Variable 0) (Term.unary not_id (Variable 0)) in
   let nms = standard_argnames 1
   and tps = [| boolean_type 1 pc |] in
@@ -2557,8 +2557,8 @@ let excluded_middle (pc:t): int =
 
 let indirect_proof_law (pc:t): int =
   let nvars = nbenv pc in
-  let not_id   = 1 + nvars + Feature_table.not_index
-  and imp_id   = 1 + nvars + Feature_table.implication_index
+  let not_id   = 1 + nvars + Constants.not_index
+  and imp_id   = 1 + nvars + Constants.implication_index
   and false_const = Feature_table.false_constant (1 + nvars)
   in
   (* all(a) (not a ==> false) ==> a *)
@@ -2574,8 +2574,8 @@ let indirect_proof_law (pc:t): int =
 
 let or_elimination (pc:t): int =
   let nvars = nbenv pc in
-  let or_id  = 3 + nvars + Feature_table.or_index
-  and imp_id = 3 + nvars + Feature_table.implication_index in
+  let or_id  = 3 + nvars + Constants.or_index
+  and imp_id = 3 + nvars + Constants.implication_index in
   let a_or_b = Term.binary or_id (Variable 0) (Variable 1)
   and a_imp_c = Term.binary imp_id (Variable 0) (Variable 2)
   and b_imp_c = Term.binary imp_id (Variable 1) (Variable 2) in

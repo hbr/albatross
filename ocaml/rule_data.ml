@@ -132,7 +132,7 @@ let count_premises (rd:t): int =
 
 
 let implication_chain (ps:(int*int*term) list) (tgt:term) (nbenv:int): term =
-  let imp_id = nbenv + Feature_table.implication_index in
+  let imp_id = nbenv + Constants.implication_index in
   List.fold_right
     (fun (_,_,p) tgt -> Term.binary imp_id p tgt)
     ps
@@ -166,7 +166,7 @@ let term (rd:t): term =
     assert (gp1_tp = 0);
     let p = Term.down rd.ctxt.nargs p
     and t = prepend_premises ps rd
-    and imp_id = count_variables rd + Feature_table.implication_index in
+    and imp_id = count_variables rd + Constants.implication_index in
     Term.binary imp_id p t
   else
     prepend_premises rd.premises rd
@@ -283,7 +283,7 @@ let forward_blocked
 let split_term
     (t:term) (nargs:int) (nbenv:int) (nfgs:int) (tps:type_term array)
     : (int*int*term) list * term =
-  let imp_id = nbenv + nargs + Feature_table.implication_index
+  let imp_id = nbenv + nargs + Constants.implication_index
   in
   let ps, tgt = Term.split_implication_chain t imp_id
   in
@@ -669,3 +669,32 @@ let specialize
             fgcon = [||]};
    premises = ps;
    target   = tgt}
+
+
+
+let find_constructor (t:term) (pvar:int) (rd:t): int =
+  (* extract the constructor from the premise [t] using the predicate
+     variable [pvar]. Raise [Not_found] if [t] does not represent a premise
+     of an induction law.*)
+  let imp_id = rd.ctxt.nargs + Context.implication_index rd.ctxt.c
+  in
+  let n,args,ps_rev,tgt =
+    Term.split_general_implication_chain t imp_id
+  in
+  assert false
+
+
+let constructors (rd:t): int list =
+  (* Extract the constructors from the rule [rd]. If [rd] does not represent
+     an induction law then return the empty list.
+
+     A rule is an induction law if it has the form
+
+       all(x:T, p:{T})  pp1 ==> pp2 ==> ... ==> x in p
+
+       ppi:  all(args) cond ==> ra1 in p ==> ... ==> c(args) in p
+
+       cond must not involve [p] and [c], only the arguments [args]
+   *)
+
+  assert false

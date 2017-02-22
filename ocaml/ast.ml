@@ -683,7 +683,7 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   let t1 = appl idx1 args1
   and t2 = appl idx2 args2
   and eq_id    = n1 + n2 + Feature_table.equality_index cls ft
-  and imp_id   = n1 + n2 + Feature_table.implication_index
+  and imp_id   = n1 + n2 + Constants.implication_index
   in
   let t = Term.binary imp_id
       (VAppl(eq_id, [|t1;t2|], ags,false))
@@ -721,7 +721,7 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   in
   let pat1 = make_pattern idx1 s1
   and pat2 = make_pattern idx2 s2
-  and imp_id   = 1 + Feature_table.implication_index
+  and imp_id   = 1 + Constants.implication_index
   and false_const = Feature_table.false_constant 1 in
   let pat1 = Flow(Asexp, [|Variable 0; pat1|])
   and pat2 = Flow(Asexp, [|Variable 0; pat2|]) in
