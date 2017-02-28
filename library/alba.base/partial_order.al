@@ -252,6 +252,24 @@ is_decreasing(f:PO->PO): ghost BOOLEAN ->
 
 
 
+(*) (a,b:PO): ghost PO
+    require
+        some(x) x.is_infimum({a,b})
+    ensure
+        Result.is_infimum({a,b})
+    end
+
+
+(+) (a,b:PO): ghost PO
+        -- The least upper bound of 'a' and 'b'.
+    require
+        some(x) x.is_supremum({a,b})
+    ensure
+        Result.is_supremum({a,b})
+    end
+
+
+
 (*) (p:{PO}): ghost PO
     require
         some(x) x.is_infimum(p)
@@ -381,9 +399,10 @@ all(x:PO, p,q:{PO})
 
 
 
+
 all(x:PO, p,q:{PO})
     require
-        ((p + q).lower_bounds)(x)
+        x in (p + q).lower_bounds
     ensure
         x.is_lower_bound(p)
     end
@@ -391,7 +410,7 @@ all(x:PO, p,q:{PO})
 
 all(x:PO, p,q:{PO})
     require
-        ((p + q).lower_bounds)(x)
+        x in (p + q).lower_bounds
     ensure
         x.is_lower_bound(q)
     end

@@ -79,6 +79,18 @@ greatest(p:{PO}): ghost PO
         Result.is_greatest(p)
     end
 
+
+
+
+(*) (a,b:PO): ghost PO
+        -- The greatest lower bound of 'a' and 'b'.
+    require
+        some(x) x.is_infimum({a,b})
+    ensure
+        Result.is_infimum({a,b})
+    end
+
+
 (*) (p:{PO}): ghost PO
         -- The greatest lower bound of the set 'p'.
     require
@@ -86,6 +98,19 @@ greatest(p:{PO}): ghost PO
     ensure
         Result.is_infimum(p)
     end
+
+
+
+
+{:
+(+) (a,b:PO): ghost PO
+        -- The least upper bound of 'a' and 'b'.
+    require
+        some(x) x.is_supremum({a,b})
+    ensure
+        Result.is_supremum({a,b})
+    end
+:}
 
 (+) (p:{PO}): ghost PO
         -- The least upper bound of the set 'p'.
