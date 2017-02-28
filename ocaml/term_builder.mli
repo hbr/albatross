@@ -43,8 +43,11 @@ val expect_case_result: t -> unit
 val complete_case: t -> unit
 val complete_inspect: int -> t -> unit
 val has_undefined_globals: t -> bool
-val start_term_application: int -> t -> unit
+val required_can_be_boolean: t -> bool
+val start_predicate_application: int -> t -> unit
+val start_function_application:  int -> t -> unit
 val is_fully_typed: t -> bool
-val undefined_globals: t -> (int * int list) list
+val undefined_untyped: t -> int list
+val untyped_in_context: t -> type_term array
 val update_context: Context.t -> t -> unit
 val result_term: t -> term

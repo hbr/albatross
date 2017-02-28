@@ -169,7 +169,13 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
   (* Compare the terms and return an inner lambda term and two argument arrays so
      that the lambda term applied to the fist argument array results in the first
      term and the lambda term applied to the second argument array results in the
-     second term. *)
+     second term.
+
+     Furthermore the function [eq] is used to compute for each pair of different
+     subsexpression a user defined value of arbitrary type ['a].
+
+     Raise [Not_found] if the terms are equivalent.
+   *)
   (* return n positions checked,
      positions with different subterms,
      pair list of different subterms *)
@@ -217,8 +223,11 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
-      when n1 = n2 && pr1 = pr2 && List.length ps1 = List.length ps2 ->
+    | Lam(n1,nms1,ps1,t01,pr1,tp1), Lam(n2,nms2,ps2,t02,pr2,tp2)
+         when n1 = n2
+              && pr1 = pr2
+              && Term.equivalent_list ps1 ps2
+              && Term.equivalent tp1 tp2 ->
         let nb = 1 + nb in
         begin try
           let pos,poslst,elst,tlst =
@@ -231,8 +240,14 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | QExp(n1,_,_,t01,is_all1), QExp(n2,_,_,t02,is_all2)
-      when n1 = n2 && is_all1 = is_all2 ->
+    | QExp(n1,(nms1,tps1),(fgnms1,fgtps1),t01,is_all1),
+      QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,is_all2)
+         when n1 = n2 && is_all1 = is_all2
+              && let nfgs = Array.length fgtps1 in
+                 nfgs = Array.length fgtps2
+                 && Term.equivalent_array fgtps1 fgtps2
+                 && Term.equivalent_array tps1 tps2
+      ->
         begin try
           comp t01 t02 (n1+nb) (1+pos) poslst elst tlst
         with Not_found ->
@@ -328,7 +343,6 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         assert false (* nyi *)
   in
   let nextpos, nextvar, poslst, tlam = mklambda 0 0 poslst t1 0 in
-  if nextpos = 1 then raise Not_found;
   assert (nextvar = nargs);
   assert (poslst = []);
   let tarr = Array.of_list (List.rev tlst)

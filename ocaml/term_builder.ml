@@ -36,12 +36,7 @@ Global type variables are introduced
   or a function and we might not know the result type).
 
 
-Each type variable has a possible substitution. Substitutions are immutable
-except the substitution of a type variable which represents a
-function/predicate type (in that case a dummy type is used). The substitution
-of a type variable representing a dummy type can be updated and finally must
-be updated, otherwise the correct type (function or predicate) cannot be
-determined. Only global type variables can be substituted by dummy types.
+Each type variable has a possible substitution. Substitutions are immutable.
 
 Each type variable points to its substitution which can be another type
 variable or a definitive type. Pointer chains of type variables are
@@ -194,7 +189,6 @@ let in_index (tb:t): int =
 
 let any_index       (tb:t): int = count_all tb + Class_table.any_index
 let boolean_index   (tb:t): int = count_all tb + Class_table.boolean_index
-let dummy_index     (tb:t): int = count_all tb + Class_table.dummy_index
 let predicate_index (tb:t): int = count_all tb + Class_table.predicate_index
 let function_index  (tb:t): int = count_all tb + Class_table.function_index
 
@@ -332,7 +326,7 @@ let result_type_of_type (tp:type_term) (tb:t): type_term =
   let cls,ags = Class_table.split_type_term tp in
   if cls = predicate_index tb then
     boolean_type tb
-  else if cls = function_index tb || cls = dummy_index tb then
+  else if cls = function_index tb  then
     begin
       assert (Array.length ags = 2);
       ags.(1)
@@ -373,12 +367,6 @@ let has_substitution (i:int) (tb:t): bool =
   assert (is_tv i tb);
   tb.sub.(i) <> Variable i
 
-
-
-let has_dummy_substitution (i:int) (tb:t): bool =
-  assert (has_substitution i tb);
-  let cls,_ = Class_table.split_type_term tb.sub.(i) in
-  cls = dummy_index tb
 
 
 let satisfies (t1:type_term) (t2:type_term) (tb:t): bool =
@@ -422,13 +410,6 @@ let substitute (i:int) (tp:type_term) (tb:t): unit =
     raise Reject
 
 
-let update_substitution (i:int) (tp:type_term) (tb:t): unit =
-  assert (is_tv i tb);
-  assert (has_dummy_substitution i tb);
-  tb.sub.(i) <- tp
-
-
-
 let substitute_var_var (i:int) (j:int) (tb:t): unit =
   assert (not (has_substitution i tb));
   assert (not (has_substitution j tb));
@@ -441,7 +422,7 @@ let substitute_var_var (i:int) (j:int) (tb:t): unit =
 
 
 
-let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
+let unify (t1:type_term) (t2:type_term) (tb:t): unit =
   (*printf "unify\n";
   printf " %s %s\n" (string_of_tvs tb) (string_of_substitutions tb);
   printf "  %s,   %s\n"
@@ -452,99 +433,65 @@ let rec unify (t1:type_term) (t2:type_term) (tb:t): unit =
     (string_of_substituted_type_with_tvs t2 tb);
   flush_all ();*)
   let ntvs = Tvars.count tb.tvs in
-  let unify_potential_dummy
-      (i:int)  (t2:type_term) (ordered:bool): unit =
-    let uni t1 t2 =
-      if ordered then
-        unify t1 t2 tb
-      else
-        unify t2 t1 tb
-    in
-    if has_dummy_substitution i tb then begin
-      let cls1,ags1 = Class_table.split_type_term tb.sub.(i)
-      and cls2,ags2 = Class_table.split_type_term t2
-      in
-      assert (Array.length ags1 = 2);
-      assert (Array.length ags2 >= 1);
-      unify ags1.(0) ags2.(0) tb;
-      if cls2 = function_index tb || cls2 = dummy_index tb then begin
-        uni ags1.(1) ags2.(1);
-        update_substitution i t2 tb
-      end else if cls2 = predicate_index tb then begin
-        uni ags1.(1) (boolean_type tb);
-        update_substitution i t2 tb
-      end else
-        raise Reject
-    end else
-      uni tb.sub.(i) t2
-  in
-  match t1, t2 with
-    Variable i, Variable j when i = j ->
+  let rec unify0 t1 t2 =
+    match t1, t2 with
+      Variable i, Variable j when i = j ->
       ()
 
-  | Variable i, Variable j when i < ntvs && j < ntvs ->
-      assert (not (is_local i tb && is_local j tb));
-      let i_has_sub = has_substitution i tb
-      and j_has_sub = has_substitution j tb
-      in
-      if not i_has_sub && not j_has_sub then
-        substitute_var_var i j tb
-      else if not i_has_sub then
-        if has_dummy_substitution j tb then
-          substitute i t2 tb
-        else
-          unify t1 tb.sub.(j) tb
-      else if not j_has_sub then
-        if has_dummy_substitution i tb then
-          substitute j t1 tb
-        else
-          unify tb.sub.(i) t2 tb
-      else begin
-        (* Both have substitutions *)
-        let i_has_dummy_sub = has_dummy_substitution i tb
-        and j_has_dummy_sub = has_dummy_substitution j tb
-        in
-        if i_has_dummy_sub && not j_has_dummy_sub then
-          unify t1 tb.sub.(j) tb
-        else if not i_has_dummy_sub && j_has_dummy_sub then
-          unify tb.sub.(i) t2 tb
-        else
-          unify tb.sub.(i) tb.sub.(j) tb
-      end
+    | Variable i, Variable j when i < ntvs && j < ntvs ->
+       assert (not (is_local i tb && is_local j tb));
+       let i_has_sub = has_substitution i tb
+       and j_has_sub = has_substitution j tb
+       in
+       if not i_has_sub && not j_has_sub then
+         substitute_var_var i j tb
+       else if not i_has_sub then
+         unify0 t1 tb.sub.(j)
+       else if not j_has_sub then
+         unify0 tb.sub.(i) t2
+       else
+           (* Both have substitutions *)
+         unify0 tb.sub.(i) tb.sub.(j)
 
-  | Variable i, _ when i < ntvs ->
-      if has_substitution i tb then
-        unify_potential_dummy i t2 true
-      else
-        substitute i t2 tb
 
-  | _, Variable j when j < ntvs ->
-      if has_substitution j tb then
-        unify_potential_dummy j t1 false
-      else
-        substitute j t1 tb
+    | Variable i, _ when i < ntvs ->
+       if has_substitution i tb then
+         unify0 tb.sub.(i) t2
+       else
+         substitute i t2 tb
 
-  | Variable i, _ ->
-      raise Reject  (* Different types cannot be unified *)
+    | _, Variable j when j < ntvs ->
+       if has_substitution j tb then
+         unify0 t1 tb.sub.(j)
+       else
+         substitute j t1 tb
 
-  | _, Variable j ->
-      raise Reject  (* Different types cannot be unified *)
+    | Variable i, _ ->
+       raise Reject  (* Different types cannot be unified *)
 
-  | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
-      assert (i1 <> dummy_index tb);
-      let len = Array.length args1 in
-      assert (len = Array.length args2);
-      for i = 0 to len - 1 do
-        unify args1.(i) args2.(i) tb
-      done
+    | _, Variable j ->
+       raise Reject  (* Different types cannot be unified *)
 
-  | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
-      assert (i1 <> i2);
-      assert (i1 <> dummy_index tb);
-      assert (i2 <> dummy_index tb);
-      raise Reject (* Different classes cannot be unified *)
-  | _ ->
-      assert false (* Cannot happen with types *)
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
+       let len = Array.length args1 in
+       assert (len = Array.length args2);
+       for i = 0 to len - 1 do
+         unify0 args1.(i) args2.(i)
+       done
+
+    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
+       assert (i1 <> i2);
+       raise Reject (* Different classes cannot be unified *)
+    | _ ->
+       assert false (* Cannot happen with types *)
+  in
+  unify0 t1 t2
+  (*try
+    unify0 t1 t2;
+    printf "unify ok  %s\n" (string_of_substitutions tb)
+  with Reject ->
+    printf "unify rejected\n";
+    raise Reject*)
 
 
 
@@ -611,6 +558,15 @@ let make
    feature_fg_ranges = []
  }
 
+
+let is_in_outer_context (tb:t): bool =
+  match tb.contexts with
+  | [_] ->
+     true
+  | [] ->
+     assert false (* Cannot happen *)
+  | _ ->
+     false
 
 
 let variable_type (i:int) (tb:t): type_term =
@@ -713,6 +669,7 @@ let context_names_and_types (tb:t): int * names * types =
   in
   nargs, names, tps
 
+
 let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
   let arr =
     Array.init nargs (fun i -> Variable (start+i))
@@ -721,17 +678,10 @@ let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
 
 
 
-let dummy_type_of_args
-    (start:int) (nargs:int) (rtp:type_term) (tb:t)
-    :
-    type_term
-    =
-  let tup =
-    tuple_type_of_args start nargs tb
-  in
-  make_type (dummy_index tb) [|tup;rtp|]
 
-
+let predicate_of_args (start:int) (nargs:int) (tb:t): type_term =
+  let tup = tuple_type_of_args start nargs tb in
+  make_type (predicate_index tb) [|tup|]
 
 
 let function_of_args (start:int) (nargs:int) (rt:type_term) (tb:t): type_term =
@@ -788,6 +738,27 @@ let partially_upgraded_signature
   let s = Sign.make_func args (Sign.result s) in
   upgraded_signature s is_pred tb
 
+
+
+let required_can_be_boolean (tb:t): bool =
+  match tb.req with
+  | None ->
+     true
+  | Some tp ->
+     let tp = substituted_type tp tb in
+     match tp with
+     | Variable i when i < globals_beyond tb ->
+        assert (globals_start tb <= i);
+        let cpt = concept i tb
+        and nall = count_all tb in
+        let cls,_ = Class_table.split_type_term cpt in
+        assert (nall <= cls);
+        Class_table.has_ancestor
+          Constants.boolean_index
+          (cls - nall)
+          (class_table tb)
+     | _ ->
+        tp = boolean_type tb
 
 
 
@@ -882,30 +853,37 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
 
 
 
-let start_term_application (nargs:int) (tb:t): unit =
+let start_predicate_application (nargs:int) (tb:t): unit =
+  assert (required_can_be_boolean tb);
   let start = globals_beyond tb in
   tb.calls <- TermApp (nargs,start) :: tb.calls;
   begin
-    match tb.req with
-      None ->
-        add_anys (nargs+2) tb; (* one for the dummy, one for the result type *)
-        (* Set the required type to DUMMY[ARGTUP,RTP] *)
-        let rtp = Variable (start+nargs+1) in
-        substitute (start+nargs) (dummy_type_of_args start nargs rtp tb) tb;
-        tb.req <- Some (Variable (start+nargs))
-    | Some tp ->
-        if tp = boolean_type tb then begin
-          add_anys (nargs+1) tb; (* one for the dummy type *)
-          (* Set the required type to DUMMY[ARGTUP,BOOLEAN] *)
-          let rtp = boolean_type tb in
-          substitute (start+nargs) (dummy_type_of_args start nargs rtp tb) tb;
-          tb.req <- Some (Variable (start+nargs))
-        end else begin
-          add_anys nargs tb;
-          (* Set the required type to FUNCTION[ARGTUP,TP] *)
-          tb.req <- Some (function_of_args start nargs tp tb)
-        end
-  end
+    try
+      unify_with_required (boolean_type tb) tb
+    with Reject ->
+      assert false (* cannot happen because required can be boolean *)
+  end;
+  add_anys nargs tb;
+  (* Set the required type to FUNCTION[ARGTUP,TP] *)
+  tb.req <- Some (predicate_of_args start nargs tb)
+
+
+
+let start_function_application (nargs:int) (tb:t): unit =
+  let start = globals_beyond tb in
+  tb.calls <- TermApp (nargs,start) :: tb.calls;
+  match tb.req with
+  | None ->
+     add_anys (nargs + 1) tb;  (* one for the unknown result type *)
+     let tp = Variable (start + nargs) in
+     tb.req <- Some (function_of_args start nargs tp tb)
+  | Some tp ->
+     add_anys nargs tb;
+     (* Set the required type to FUNCTION[ARGTUP,TP] *)
+     tb.req <- Some (function_of_args start nargs tp tb)
+
+
+
 
 
 let complete_application (am:application_mode) (tb:t): unit =
@@ -990,8 +968,7 @@ let complete_application (am:application_mode) (tb:t): unit =
         let cls,ags = Class_table.split_type_term f_tp in
         assert begin
           cls = predicate_index tb ||
-          cls = function_index tb ||
-          cls = dummy_index tb
+          cls = function_index tb
         end;
         tuple_of_args args ags.(0) tb
       in
@@ -1236,26 +1213,6 @@ let is_fully_typed (tb:t): bool =
   not (has_undefined_globals tb)
 
 
-let undefined_globals (tb:t): (int * int list) list =
-  List.fold_left
-    (fun lst (fidx,start,nfgs) ->
-      let fglst =
-        interval_fold
-          (fun fglst i ->
-            if tb.sub.(start+i) = Variable (start+i) then
-              i :: fglst
-            else
-              fglst
-          )
-          [] 0 nfgs
-      in
-      match fglst with
-        [] -> lst
-      | _ -> (fidx,List.rev fglst) :: lst
-    )
-    []
-    tb.feature_fg_ranges
-
 
 let type_in_context (tp:type_term) (tb:t): type_term =
   let tp = substituted_type tp tb in
@@ -1266,6 +1223,7 @@ let type_in_context (tp:type_term) (tb:t): type_term =
     Term.up ntvs tp
   with Term_capture ->
     assert false (* substituted type should not contain type variables *)
+
 
 let head_term_in_context (tb:t): term =
   assert (is_fully_typed tb);
@@ -1299,8 +1257,36 @@ let head_term_in_context (tb:t): term =
   in
   term (head_term tb)
 
-let update_context (c:Context.t) (tb:t): unit =
+
+let undefined_untyped (tb:t): int list =
+  (* The list of untyped variables of the context of [tb] which could not be
+     determined completely *)
+  assert (is_in_outer_context tb);
+  let c = context tb in
+  let tvs_c = Context.tvars c in
+  let nlocs_c = Tvars.count_local tvs_c
+  and globs_beyond = globals_beyond tb
+  and locs_start   = locals_start tb
+  in
+  assert (Tvars.count_global tvs_c = 0);
+  assert (nlocs_c = tb.nlocals);
+  interval_fold
+    (fun lst i ->
+      let sub = substituted_type tb.sub.(locs_start+i) tb in
+      match sub with
+      | Variable j when j < globs_beyond ->
+         i :: lst
+      | _ ->
+         lst
+    )
+    []
+    0 nlocs_c
+
+
+let untyped_in_context (tb:t): type_term array =
   assert (is_fully_typed tb);
+  assert (is_in_outer_context tb);
+  let c = context tb in
   let tvs_c = Context.tvars c in
   let nlocs_c = Tvars.count_local tvs_c
   and nfgs_c  = Tvars.count_fgs tvs_c
@@ -1311,20 +1297,27 @@ let update_context (c:Context.t) (tb:t): unit =
   let loc_start  = globals_start tb - tb.nlocals
   and glob_start = globals_start tb in
   let space2     = Tvars.count_all tb.tvs - nfgs_c - glob_start in
-  let subs =
-    Array.init nlocs_c
-      (fun i ->
-        if has_substitution (loc_start+i) tb then
-          let sub = substituted_type tb.sub.(loc_start+i) tb in
-          try
-            let sub = Term.down_from space2 glob_start sub in
-            Term.down loc_start sub
-          with Term_capture ->
-            assert false (* cannot happen *)
-        else
-          Variable i)
-  in
+  Array.init
+    nlocs_c
+    (fun i ->
+      if has_substitution (loc_start+i) tb then
+        let sub = substituted_type tb.sub.(loc_start+i) tb in
+        try
+          let sub = Term.down_from space2 glob_start sub in
+          Term.down loc_start sub
+        with Term_capture ->
+          assert false (* cannot happen *)
+      else
+        Variable i)
+
+
+
+let update_context (c:Context.t) (tb:t): unit =
+  assert (is_fully_typed tb);
+  assert (is_in_outer_context tb);
+  let subs = untyped_in_context tb in
   Context.update_types subs c
+
 
 let result_term (tb:t): term =
   let t = head_term_in_context tb in

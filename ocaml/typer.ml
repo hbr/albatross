@@ -927,7 +927,11 @@ let analyze_eterm
     if trace then
       printf "%sfunction term\n" (prefix level);
     let nargs = Array.length args in
-    List.iter (fun tb -> TB.start_term_application nargs tb) tbs;
+    let tbs_pred = List.filter TB.required_can_be_boolean tbs in
+    let tbs_pred = List.rev_map TB.copy tbs_pred in
+    List.iter (fun tb -> TB.start_function_application  nargs tb) tbs;
+    List.iter (fun tb -> TB.start_predicate_application nargs tb) tbs_pred;
+    let tbs = tbs @ tbs_pred in
     let tbs1 = analyze f tbs (level+1) in
     let tbs2 = arguments args tbs1 level in
     List.iter (fun tb -> TB.complete_application am tb) tbs2;
@@ -977,65 +981,92 @@ let analyze_eterm
 
 
 
-
-
-
-let get_different_globals (t1:term) (t2:term) (c:Context.t): string * string =
-  let nvars = Context.count_variables c
-  and ft    = Context.feature_table c
-  in
-  let vars1 = List.rev (Term.used_variables_from t1 nvars true)
-  and vars2 = List.rev (Term.used_variables_from t2 nvars true) in
-  let lst   = Mylist.combine vars1 vars2 in
-  let i,j =
+let get_difference (t1:term) (t2:term) (c:Context.t): string * string =
+  let lam,_,arr1,arr2 =
     try
-      List.find (fun (i,j) -> i<>j) lst
+      Term_algo.compare t1 t2 (fun t1 t2 -> ())
     with Not_found ->
-      assert false (* cannot happen *) in
-  let str1 = Feature_table.string_of_signature (i-nvars) ft
-  and str2 = Feature_table.string_of_signature (j-nvars) ft in
-  str1, str2
+      printf "no differences found\n";
+      printf "  t1 %s \n" (Context.string_long_of_term t1 c);
+      printf "  t2 %s \n" (Context.string_long_of_term t2 c);
+      printf "  t1 %s\n" (Term.to_string t1);
+      printf "  t2 %s\n" (Term.to_string t2);
+      assert false (* There must be differences *)
+  in
+  assert (Array.length arr1 > 0);
+  assert (Array.length arr1 = Array.length arr2);
+  match arr1.(0), arr2.(0) with
+  | VAppl(i1,_,_,_), VAppl(i2,_,_,_) ->
+     let nvars = Context.count_variables c
+     and ft = Context.feature_table c in
+     let str1 = Feature_table.string_of_signature (i1-nvars) ft
+     and str2 = Feature_table.string_of_signature (i2-nvars) ft in
+     str1, str2
+  | Lam _ , Lam _ | QExp _, QExp _ ->
+     Context.string_long_of_term arr1.(0) c,
+     Context.string_long_of_term arr2.(0) c
+  | _ ->
+     assert false (* Cannot happen, there must be differences *)
 
 
-let undefined_formal_generics (info:info) (ft:Feature_table.t) (tb:TB.t): unit =
-  let lst = TB.undefined_globals tb
-  and tstr = TB.string_of_head_term tb
+
+
+let undefined_untyped (e:expression) (tb:TB.t) (c:Context.t): unit =
+  let undefs = TB.undefined_untyped tb in
+  let open Context in
+  let n = count_last_variables c in
+  let nms =
+    interval_fold
+      (fun nms i ->
+        match variable_type i c with
+        | Variable j when List.mem j undefs ->
+           (ST.string (variable_name i c)) :: nms
+        | _ ->
+           nms
+      )
+      []
+      0 n
   in
-  printf "undefined_formal_generics %d\n" (List.length lst);
-  let fstring fidx lst =
-    let fstr = Feature_table.string_of_signature fidx ft
-    and tvs,s = Feature_table.signature0 fidx ft
-    in
-    let fgnames = Tvars.fgnames tvs
-    and nfgs = Tvars.count_fgs tvs in
-    let undefs =
-      String.concat
-        ","
-        (List.map
-           (fun i -> assert (i < nfgs); ST.string fgnames.(i))
-           lst)
-    in
-    fstr ^ " undefined: " ^ undefs
+  let vars = if List.length nms = 1 then "variable" else "variables" in
+  let str =
+    "The type of the " ^ vars^ "\n\n   "
+    ^ String.concat ", " nms
+    ^ "\n\ncannot be inferred completely"
   in
-  let undefstr =
-    String.concat
-      "\n\t"
-      (List.rev_map
-         (fun (fidx,lst) ->
-           fstring fidx lst
-         )
-         lst)
+  error_info e.i str
+
+
+let different_untyped
+      (e:expression)
+      (tpsub1:type_term array) (tpsub2: type_term array)
+      (c:Context.t)
+    : unit =
+  let open Context in
+  let n = count_last_variables c in
+  let len = Array.length tpsub1 in
+  assert (len = Array.length tpsub2);
+  let type_pair i =
+    let tp  = variable_type i c in
+    Term.subst tp len tpsub1,
+    Term.subst tp len tpsub2
   in
-  error_info
-    info
-    ("Undefined formal generics\n" ^
-     "Not all formal generics of functions/constants could be determined\n" ^
-     "in the expression\n\n\t" ^
-     tstr ^ "\n\n" ^
-     "undefind formal generics:\n\n\t" ^
-     undefstr ^
-     "\n"
-    )
+  let i =
+    interval_find
+      (fun i ->
+        let tp1,tp2 = type_pair i in
+        not (Term.equivalent tp1 tp2)
+      )
+      0 n
+  in
+  let tp1,tp2 = type_pair i in
+  let str =
+    "The inferred type for the variable \""
+    ^ (ST.string (variable_name i c))
+    ^ "\" is ambiguous\n\nPossible types:\n"
+    ^ "\n    " ^ string_of_type tp1 c
+    ^ "\n    " ^ string_of_type tp2 c
+  in
+  error_info e.i str
 
 
 
@@ -1071,24 +1102,28 @@ let general_term
       assert false (* Cannot happen; at least one term is returned, otherwise an
                       error would have been reported *)
   | [tb] ->
-      if TB.has_undefined_globals tb then
-        undefined_formal_generics
-          e.i
-          (Context.feature_table c)
-          tb;
+     if TB.has_undefined_globals tb then
+       undefined_untyped e tb c;
       TB.update_context c tb;
       let t = TB.result_term tb in
       assert (Context.is_well_typed t c);
       t
   | tb1 :: tb2 :: _ ->
-      let t1 = TB.head_term tb1
-      and t2 = TB.head_term tb2 in
-      let str1, str2 = get_different_globals t1 t2 c in
-      let estr = string_of_expression e in
-      error_info
-        e.i
-        ("The expression\n\n\t" ^ estr ^ "\n\nis ambiguous\n\n\t" ^
-         str1 ^ "\n\t" ^ str2)
+     if TB.has_undefined_globals tb1 then
+       undefined_untyped e tb c;
+     let tpsub1 = TB.untyped_in_context tb1
+     and tpsub2 = TB.untyped_in_context tb2 in
+     if not (Term.equivalent_array tpsub1 tpsub2) then
+       different_untyped e tpsub1 tpsub2 c;
+     Context.update_types tpsub1 c;
+     let t1 = TB.result_term tb1
+     and t2 = TB.result_term tb2 in
+     let str1, str2 = get_difference t1 t2 c in
+     let estr = string_of_expression e in
+     error_info
+       e.i
+       ("The expression\n\n\t" ^ estr ^ "\n\nis ambiguous\n\n\t" ^
+          str1 ^ "\n\t" ^ str2)
 
 
 
