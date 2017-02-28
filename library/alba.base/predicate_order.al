@@ -77,6 +77,27 @@ all(p:{A}, ps:{{A}})
     end
 
 
+
+all(p,q,r:{A})
+        -- 'p * q' is the infimum of 'p' and 'q'
+    require
+       r <= p
+       r <= q
+    ensure
+       r <= p * q
+    end
+
+
+all(p,q,r:{A})
+        -- 'p + q' is the supremum of 'p' and 'q'
+    require
+       p <= r
+       q <= r
+    ensure
+       p + q <= r
+    end
+
+
 class
     predicate.PREDICATE[A]
 inherit
