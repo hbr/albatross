@@ -1,6 +1,10 @@
-use partial_order end
+use
+    partial_order
+end
 
-deferred class SEMILATTICE end
+deferred class
+    SEMILATTICE
+end
 
 SL: SEMILATTICE
 
@@ -34,10 +38,6 @@ all(a,b:SL)
         b <= a
     ensure
         a = b
-    assert
-        a = a * b
-        a * b = b * a
-        b * a = b
     end
 
 
@@ -50,41 +50,53 @@ all(a,b,c:SL)
     ensure
         a <= c
     assert
-        a = a * b
-
-        ensure a * b = a * (b * c)
-        assert b * c = b
+        ensure
+            a = a * c
+        via [ a
+            , a * b
+            , a * (b * c)
+            , a * b * c
+            , a * c
+            ]
         end
-
-        a * (b * c) = a * b * c
-
-        ensure a * b * c = a * c
-        assert a * b = a
-        end
-
-        a = a * c
     end
 
-deferred class SEMILATTICE
-inherit        PARTIAL_ORDER end
+
+all(a,b,c:SL)
+    require
+        a <= b
+        b <= c
+    ensure
+        a <= c
+    assert
+        ensure
+            a = a * c
+        via [ a
+            , a * b
+            , a * (b * c)
+            , a * b * c
+            , a * c
+            ]
+        end
+    end
+
 
 all(a,b:SL)
     ensure
         a * b <= a
     assert
-        ensure a * b = a * a * b
-        assert a * a = a end
-
-        a * a * b = a * (a * b)
-
-        ensure a * (a * b) = a * (b * a)
-        assert a * b = b * a
-               b * a in {x: a * (a * b) = a * x}
+        ensure
+            a * b = a * b * a
+        assert
+            a = a * a
+            a * b = b * a
+        via [ a * b
+            , a * a * b
+            , a * (a * b)
+            , a * (b * a)
+            , a * b * a
+            ]
         end
-
-        a * (b * a) = a * b * a
-
-        a * b = a * b * a
     end
 
 
@@ -92,13 +104,15 @@ all(a,b:SL)
     ensure
         a * b <= b
     assert
-        ensure a * b  = a * (b * b)
-        assert b * b = b end
-
-        a * (b * b) = a * b * b
-
-
-        a * b = a * b * b
+        ensure
+            a * b = a * b * b
+        assert
+            b = b * b
+        via [ a * b
+            , a * (b * b)
+            , a * b * b
+            ]
+        end
     end
 
 all(a,b,c:SL)
@@ -108,26 +122,25 @@ all(a,b,c:SL)
     ensure
         c <= a * b
     assert
-        c = c * a
-
         ensure
-            c * a = c * a * b
-        assert c * a = a * c
-               ensure a * c = a * (c * b)
-               assert c * b = c
-               end
-
-               a * (c * b) = a * c * b
-
-               ensure a * c * b  = c * a * b
-               assert a * c = c * a
-                      c * a in {x: a * c * b = x * b}
-               end
+            c = c * a * b
+        via [ c
+            , c * b
+            , c * a * b
+            ]
         end
-
-
-        c = c * a * b
     end
+
+
+
+
+
+
+deferred class
+    SEMILATTICE
+inherit
+    PARTIAL_ORDER
+end
 
 
 
