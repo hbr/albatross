@@ -21,7 +21,8 @@ Prerequisites:
 - ocaml: In order to compile the Albatross compiler you need the `OCaml`
   compiler. The OCaml compiler is available at no cost through
   [caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
-  platforms.
+  platforms. For the other needed packages it is best to have the ocaml
+  package manager `opam` installed.
 
 - ocamlbuild: Beside the ocaml compiler the program `ocamlbuild` is
   needed. The ocaml compiler versions below 4.03 already contain the program
@@ -29,12 +30,15 @@ Prerequisites:
   compiler suite and has to be installed separately. If you have opam just
   type `opam install ocamlbuild`.
 
+- menhir: The parser generator `menhir` is needed. It can be installed by
+  `opam install menhir`.
+
 
 Compile the Albatross compiler with the commands:
 
     cd path/to/albatross/ocaml
 
-    ocamlbuild -lib unix alba.native
+    ocamlbuild -use-ocamlfind -lib unix alba.native
 
 
 After these commands you have the file `alba.native` in the directory

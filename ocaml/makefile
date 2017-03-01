@@ -24,16 +24,32 @@ alba: alba.native
 
 
 alba.byte:
-	ocamlbuild -use-ocamlfind -yaccflag -v -lib unix alba.byte
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer \
+            -lib unix \
+	    alba.byte
 
 alba.d.byte:
-	ocamlbuild -use-ocamlfind -yaccflag -v -lib unix alba.d.byte
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer \
+            -lib unix \
+	    alba.d.byte
 
 alba.native:
-	ocamlbuild -use-ocamlfind -yaccflag -v -lib unix alba.native
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer \
+            -lib unix \
+            alba.native
 
 alba.p.native:
-	ocamlbuild -use-ocamlfind -yaccflag -v -lib unix alba.p.native
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer \
+            -lib unix \
+            alba.p.native
 
 
 alba-node: alba_node.byte

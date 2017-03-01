@@ -55,11 +55,6 @@ let keyword_table = Hashtbl.create 53
 let _ =
   List.iter (fun (kwd,tok) -> Hashtbl.add keyword_table kwd tok)
     [
-     ("CURRENT",   Parser.KWCURRENT);
-     ("Current",   Parser.KWCurrent);
-     ("NONE",      Parser.KWNONE);
-     ("Precursor", Parser.KWPrecursor);
-     ("Process",   Parser.KWProcess);
      ("Result",    Parser.KWResult);
 
      ("agent",     Parser.KWagent);
@@ -135,8 +130,10 @@ let kwtoken id =
   in
   match kw with
     Parser.KWrequire -> kw, (true,false)
+  | Parser.KWdeferred-> kw, (true,false)
   | Parser.KWensure  -> kw, (true,false)
   | Parser.KWall     -> kw, (true,false)
+  | Parser.KWclass   -> kw, (true,false)
   | Parser.KWend     -> kw, (false,true)
   | Parser.KWnot     -> kw, (true,false)
   | Parser.KWold     -> kw, (true,false)
@@ -146,8 +143,6 @@ let kwtoken id =
   | Parser.KWtrue    -> kw, (true,true)
   | Parser.KWfalse   -> kw, (true,true)
   | Parser.KWResult  -> kw, (true,true)
-  | Parser.KWCurrent -> kw, (true,true)
-  | Parser.KWProcess -> kw, (true,true)
   | _                -> kw, (false,false)
 
 

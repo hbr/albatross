@@ -127,9 +127,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 
 
 
-%token KWCURRENT KWCurrent
-%token KWNONE
-%token KWPrecursor KWProcess
 %token KWResult
 
 %token KWagent     KWall          KWand        KWas         KWassert
@@ -170,7 +167,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token EXCLAM
 %token GE
 %token GT
-%token HIGHEST_PREC
 %token LBRACE
 %token LBRACKET
 %token LE
@@ -189,7 +185,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token RPAREN
 %token SEMICOL
 %token TIMES
-%token UMINUS
 %token USCORE
 
 %token <int>    UIDENTIFIER
@@ -200,17 +195,15 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token <int>    NUMBER
 
 
-/*  0 */ %nonassoc LOWEST_PREC  KWghost
+/*  0 */ %nonassoc LOWEST_PREC
 /*  ? */ %nonassoc KWcase
-/*  5 */ %nonassoc ASSIGN
 /* 10 */ %right    SEMICOL
-/* 13 */ %right    ARROW     /* ??? */
 /* 15 */ %left     COLON /* greedy ???*/
 /* 18 */ %right    COMMA
 /* 19 */ %nonassoc KWall     KWsome  /* greedy */
 /* 20 */ %right    DARROW
 /* 25 */ %left     KWand     KWor
-/* 35 */ %nonassoc EQ        NEQ       EQV     NEQV
+/* 35 */ %nonassoc EQ        NEQ
                    LE        LT        GE      GT
                    KWin      NOTIN     KWas
                    RELOP
@@ -220,31 +213,60 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 /* 55 */ %right    CARET     DCOLON
 /* 60 */ %left     OPERATOR
 /* 61 */ %right    ROPERATOR
-/* 65 */ %nonassoc KWnot     KWold     QMARK
+/* 65 */ %nonassoc KWnot     KWold
 /* 66 */ %left     DOT
-/* 80 */ %nonassoc LPAREN    LBRACKET  LBRACE
-/* 90 */ %nonassoc UMINUS
-/*100 */ %nonassoc HIGHEST_PREC        KWdeferred
+/* 80 */ %nonassoc LPAREN    LBRACKET
+/*100 */ %nonassoc KWdeferred
 
-%start file use_block_opt
+%start file
+       use_block_opt
+       unused_tokens
+
 %type <Support.module_declaration> file
 %type <Support.use_block> use_block_opt
+%type <unit> unused_tokens
 
 
 
 
 %%
 /* ------------------------------------------------------------------------- */
+/* library */
+/* ------------------------------------------------------------------------- */
+
+separated_nonempty_reversed_list(sep,elem):
+    e=elem { [e] }
+|   list=separated_nonempty_reversed_list(sep,elem)
+    sep
+    e=elem { e :: list}
+
+separated_reversed_list(sep,elem):
+    {[]}
+|   l=separated_nonempty_reversed_list(sep,elem) {l}
+
+
+/* ------------------------------------------------------------------------- */
 /*  file structure  */
 /* ------------------------------------------------------------------------- */
 
-file:
-  use_block optsemi decls EOF {$1, List.rev $3}
-| decls EOF {[], List.rev $1 }
+unused_tokens:
+  ASSIGN KWwhile KWcheck KWdo KWelseif KWfrom KWimport KWinvariant
+  KWimmutable KWvariant KWlocal QMARK KWproof KWredefine KWundefine
+{ () }
 
-decls:
-    { [] }
-|   decls optsemi decl { $3::$1 }
+
+file:
+  u=use_block
+  SEMICOL
+  ds=decls
+  EOF
+  {u, List.rev ds}
+| ds=decls
+  EOF
+  {[], List.rev ds}
+
+decls: ds=separated_reversed_list(optsemi,decl) {ds}
+
 
 decl:
     class_declaration { $1 }
@@ -256,13 +278,16 @@ decl:
 
 
 use_block_opt:
-    { [] }
-| decl { [] }
-| use_block { $1 }
+    KWuse list=module_list KWend { List.rev list }
+|   EOF         { [] }
+|   KWclass     { [] }
+|   UIDENTIFIER { [] }
+|   LIDENTIFIER { [] }
+|   LPAREN      { [] }
 
 
 use_block:
-    KWuse module_list KWend { List.rev $2 }
+    KWuse list=module_list KWend { List.rev list }
 
 module_list:
     one_module  { [$1] }
@@ -577,12 +602,7 @@ rename_list:
 |   rename_item  optsemi rename_list { $1::$3 }
 
 rename_item:
-    name_sig KWas nameopconst  { $1,$3 }
-
-name_sig:
-    nameopconst { $1,[],None }
-|   nameopconst LPAREN type_list RPAREN { $1,$3,None }
-|   nameopconst LPAREN type_list RPAREN COLON type_nt { $1,$3, Some $6 }
+    nameopconst KWas nameopconst  { $1,$3 }
 
 
 
@@ -616,7 +636,7 @@ path: dotted_id_list DOT {
 
 
 dotted_id_list:
-    LIDENTIFIER  %prec LOWEST_PREC { [withinfo (rhs_info 1) $1] }
+    LIDENTIFIER { [withinfo (rhs_info 1) $1] }
 |   dotted_id_list DOT LIDENTIFIER { withinfo (rhs_info 3) $3 :: $1 }
 
 
@@ -829,7 +849,7 @@ formal_arguments: LPAREN entity_list RPAREN { $2 }
 /*  expressions  */
 /* ------------------------------------------------------------------------- */
 
-info_expr: expr %prec LOWEST_PREC { $1 }
+info_expr: expr { $1 }
 
 info_expr_1: expr_1 %prec LOWEST_PREC { $1 }
 
