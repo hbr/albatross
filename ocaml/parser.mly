@@ -19,23 +19,25 @@ let parse_error (_:string): unit =
 let filename (): string =
   (Parsing.symbol_start_pos ()).Lexing.pos_fname
 
-let symbol_info (): info =
-  info_from_position (Parsing.symbol_start_pos ())
-
-let rhs_info (i:int): info =
-  info_from_position (Parsing.rhs_start_pos i)
-
 let cinfo (i:info): string =  info_string (filename ()) i
 
+let pinfo (pos:Lexing.position) = info_from_position pos
+
+let winfo pos el = withinfo (info_from_position pos) el
 
 let syntax_error () = raise (Parsing.Parse_error)
 
-let binexp
+let binexp0
     (info:info) (op:operator) (e1:expression) (e2:expression): expression =
   withinfo e1.i (Funapp (withinfo info (Expop op), [e1;e2], AMop))
 
-let unexp (info:info) (op:operator) (e:expression): expression =
-  withinfo info (Funapp (withinfo info (Expop op), [e], AMop))
+let binexp
+    (pos:Lexing.position)
+    (op:operator) (e1:expression) (e2:expression): expression =
+    binexp0 (pinfo pos) op e1 e2
+
+let unexp (pos:Lexing.position) (op:operator) (e:expression): expression =
+  winfo pos (Funapp (winfo pos (Expop op), [e], AMop))
 
 
 let expression_from_dotted_id (l: int withinfo list): expression =
@@ -59,7 +61,7 @@ let set_of_expression_list (lst:expression list): expression =
   | hd::tl ->
       List.fold_left
         (fun res e ->
-          binexp hd.i Plusop res (singl e)
+          binexp0 hd.i Plusop res (singl e)
         )
         (singl hd)
         tl
@@ -267,6 +269,14 @@ file:
 
 decls: ds=separated_reversed_list(optsemi,decl) {ds}
 
+/*
+decl:
+    t=type_declaration_block { t }
+|   f=feature_declaration_block { f }
+|   t=theorem { t }
+
+type_declaration_block:
+*/
 
 decl:
     class_declaration { $1 }
@@ -296,7 +306,7 @@ module_list:
 
 one_module: dotted_id_list  {
   let lst = List.map (fun id -> id.v) $1 in
-  withinfo (rhs_info 1) (List.hd lst, List.tl lst)
+  winfo $startpos($1) (List.hd lst, List.tl lst)
 }
 
 
@@ -305,8 +315,9 @@ one_module: dotted_id_list  {
 /* ------------------------------------------------------------------------- */
 
 formal_generic:
-  UIDENTIFIER COLON type_nt { Formal_generic (withinfo (rhs_info 1) $1,
-                                              withinfo (rhs_info 3) $3) }
+  UIDENTIFIER COLON type_nt {
+      Formal_generic (winfo $startpos($1) $1,
+                      winfo $startpos($3) $3) }
 
 
 
@@ -345,7 +356,7 @@ theorem:
     KWall formal_arguments_opt opt_nl
     KWrequire info_expr_1 theorem_1
     KWend {
-  let entlst = withinfo (rhs_info 2) $2 in
+  let entlst = winfo $startpos($2) $2 in
   let req, ens, prf = $6 in
   let req = $5 :: req in
   assert (ens <> []);
@@ -354,7 +365,7 @@ theorem:
 |   KWall formal_arguments_opt opt_nl
     KWensure info_expr_1 theorem_2
     KWend {
-  let entlst = withinfo (rhs_info 2) $2 in
+  let entlst = winfo $startpos($2) $2 in
   let ens, prf = $6 in
   let ens = $5 :: ens in
   Theorem (entlst, [], ens, prf)
@@ -419,7 +430,7 @@ deferred_or_axiom: KWnote LIDENTIFIER {
   if str = "axiom" then
       SP_Axiom
   else
-    error_info (rhs_info 1) "must be 'axiom'"
+    error_info (pinfo $startpos($1)) "must be 'axiom'"
    }
 | KWdeferred { SP_Deferred }
 
@@ -451,7 +462,7 @@ inner_theorem:
     KWall formal_arguments opt_nl
     inner_theorem_1
     KWend {
-  let entlst = withinfo (rhs_info 2) $2 in
+  let entlst = winfo $startpos($2) $2 in
   let req, goal, prf = $4 in
   entlst, req, goal, prf
   }
@@ -486,7 +497,7 @@ inner_theorem_2: /*(* gets rest of assumptions goal source-proof *) */
 
 if_proof:
     KWif info_expr_1 source_proof KWelse source_proof  {
-      withinfo (rhs_info 1) (PE_If ($2, $3, $5))
+      winfo $startpos($1) (PE_If ($2, $3, $5))
     }
 
 
@@ -495,13 +506,13 @@ if_proof:
 
 guarded_if_proof:
     KWif info_expr_1 source_proof KWorif info_expr_1 source_proof {
-  withinfo (rhs_info 1) (PE_Guarded_If ($2, $3, $5, $6))
+  winfo $startpos($1) (PE_Guarded_If ($2, $3, $5, $6))
 }
 
 
 induction_proof:
     KWinspect info_expr_1 induction_proof_1 {
-  withinfo (rhs_info 1) (PE_Inspect ($2,$3))
+  winfo $startpos($1) (PE_Inspect ($2,$3))
     }
 
 induction_proof_1:
@@ -514,23 +525,23 @@ induction_proof_1:
 existential_proof:
     KWvia KWsome formal_arguments optsemi
     info_expr_1 source_proof {
-  let entlst = withinfo (rhs_info 3) $3
+  let entlst = winfo $startpos($3) $3
   in
-  withinfo (rhs_info 2) (PE_Existential (entlst, $5, $6))
+  winfo $startpos($2) (PE_Existential (entlst, $5, $6))
 }
 
 
 
 contradiction_proof:
     KWvia KWrequire info_expr_1 source_proof {
-  withinfo (rhs_info 2) (PE_Contradiction ($3,$4))
+  winfo $startpos($2) (PE_Contradiction ($3,$4))
 }
 
 
 transitivity_proof:
     KWvia LBRACKET expr RBRACKET {
   let lst = expression_list $3 in
-  withinfo (rhs_info 1) (PE_Transitivity lst)
+  winfo $startpos($1) (PE_Transitivity lst)
 }
 
 
@@ -554,12 +565,11 @@ class_declaration:
   create_clause
   inherit_clause
   KWend {
-  Class_declaration( withinfo (rhs_info 3) $1,
-                     withinfo (rhs_info 3) $3,
-                     withinfo (rhs_info 4) $4,
+  Class_declaration( winfo $startpos($3) $1,
+                     winfo $startpos($3) $3,
+                     winfo $startpos($4) $4,
                      $5,
-                     $6)
-}
+                     $6)}
 
 class_name:
     UIDENTIFIER { [], $1 }
@@ -575,7 +585,7 @@ class_list0:
     class_declaration { [$1] }
 |   class_declaration optsemi class_list0 { $1::$3 }
 
-class_list: KWfeature class_list0 KWend { Class_list(withinfo (rhs_info 1) $2) }
+class_list: KWfeature class_list0 KWend { Class_list(winfo $startpos($1) $2) }
 
 
 /* ------------------------------------------------------------------------- */
@@ -590,7 +600,9 @@ parent_list:
     parent { [$1] }
 |   parent optsemi parent_list { $1::$3 }
 
-parent: optghost type_nt feature_adaptation { $1, withinfo (rhs_info 2) $2, $3 }
+parent: optghost type_nt feature_adaptation {
+    $1, winfo $startpos($2) $2, $3
+}
 
 feature_adaptation:
     { [] }
@@ -612,7 +624,7 @@ rename_item:
 
 create_clause:
     { withinfo UNKNOWN [] }
-| KWcreate constructor_list { withinfo (rhs_info 1) $2 }
+| KWcreate constructor_list { winfo $startpos($1) $2 }
 
 constructor_list:
     constructor { [$1] }
@@ -636,8 +648,8 @@ path: dotted_id_list DOT {
 
 
 dotted_id_list:
-    LIDENTIFIER { [withinfo (rhs_info 1) $1] }
-|   dotted_id_list DOT LIDENTIFIER { withinfo (rhs_info 3) $3 :: $1 }
+    LIDENTIFIER { [winfo $startpos($1) $1] }
+|   dotted_id_list DOT LIDENTIFIER { winfo $startpos($3) $3 :: $1 }
 
 
 
@@ -708,7 +720,7 @@ type_list:
 /* ------------------------------------------------------------------------- */
 
 feature_list: KWfeature feature_list0 KWend {
-  Feature_list (withinfo (rhs_info 1) $2)
+  Feature_list (winfo $startpos($1) $2)
 }
 
 feature_list0:
@@ -745,7 +757,7 @@ named_feature:
   Named_feature ($1, noinfo [], Some $2, false, None, Some $4)
 }
 
-nameopconst_info: nameopconst { withinfo (rhs_info 1) $1 }
+nameopconst_info: nameopconst { winfo $startpos($1) $1 }
 
 nameopconst:
     LIDENTIFIER        { FNname $1 }
@@ -761,9 +773,9 @@ featopconst:
 
 
 return_type:
-    COLON elem_type         { withinfo (rhs_info 2) ($2,false,false) }
-|   COLON KWghost elem_type { withinfo (rhs_info 3) ($3,false,true)  }
-|   EXCLAM COLON elem_type  { withinfo (rhs_info 3) ($3,true,false)  }
+    COLON elem_type         { winfo $startpos($2) ($2,false,false) }
+|   COLON KWghost elem_type { winfo $startpos($3) ($3,false,true)  }
+|   EXCLAM COLON elem_type  { winfo $startpos($3) ($3,true,false)  }
 
 
 return_type_opt:
@@ -812,7 +824,7 @@ implementation_note: KWnote LIDENTIFIER optsemi {
   if str = "built_in" || str = "axiom" then Impbuiltin
   else if str = "event" then Impevent
   else
-    error_info (rhs_info 1) "must be one of {built_in,axiom,event}"
+    error_info (pinfo $startpos($1)) "must be one of {built_in,axiom,event}"
 }
 
 
@@ -833,7 +845,7 @@ identifier_list:
 
 
 
-formal_arguments_info: formal_arguments { withinfo (rhs_info 1) $1 }
+formal_arguments_info: formal_arguments { winfo $startpos($1) $1 }
 
 formal_arguments_opt:
     { [] }
@@ -861,17 +873,17 @@ expr:
 expr_1:  /* Without 'if' and 'inspect' expressions */
     atomic_expr                   { $1 }
 |   operator_expr                 { $1 }
-|   LPAREN expr RPAREN            { withinfo (rhs_info 1) (Expparen $2) }
-|   LPAREN operator RPAREN        { withinfo (rhs_info 1) (Expop $2) }
-|   LBRACKET RBRACKET             { withinfo (rhs_info 1) (Expop Bracketop) }
+|   LPAREN expr RPAREN            { winfo $startpos($1) (Expparen $2) }
+|   LPAREN operator RPAREN        { winfo $startpos($1) (Expop $2) }
+|   LBRACKET RBRACKET             { winfo $startpos($1) (Expop Bracketop) }
 
 |   LBRACKET expr RBRACKET        {
   let lst = expression_list $2 in
   let rec brexp lst =
     match lst with
-      []   -> withinfo (rhs_info 3) (Expop Bracketop)
+      []   -> winfo $startpos($3) (Expop Bracketop)
     | h::t ->
-        binexp h.i Caretop h (brexp t)
+        binexp0 h.i Caretop h (brexp t)
   in
   brexp lst
 }
@@ -886,68 +898,68 @@ expr_1:  /* Without 'if' and 'inspect' expressions */
 }
 
 |   expr_1 LBRACKET expr RBRACKET   {
-  let op = withinfo (rhs_info 2) (Expop Bracketop) in
+  let op = winfo $startpos($2) (Expop Bracketop) in
   withinfo $1.i (Funapp (op, $1 :: expression_list $3, AMop) )
 }
 
 |   expr_1 DOT LIDENTIFIER          {
-  withinfo $1.i (Funapp (withinfo (rhs_info 3) (Identifier $3),[$1],AMoo))
+  withinfo $1.i (Funapp (winfo $startpos($3) (Identifier $3),[$1],AMoo))
 }
 
 |   expr_1 DOT LBRACE expr RBRACE   {
-  withinfo $1.i (Funapp (predicate_of_expression (rhs_info 4) $4, [$1], AMoo))
+  withinfo $1.i (Funapp (predicate_of_expression (pinfo $startpos($4)) $4, [$1], AMoo))
 }
 |   dotted_id_list DOT LPAREN expr RPAREN   {
-  withinfo (rhs_info 1) (Funapp ($4, [expression_from_dotted_id $1], AMoo)) }
+  winfo $startpos($1) (Funapp ($4, [expression_from_dotted_id $1], AMoo)) }
 
 |   dotted_id_list DOT LBRACE expr RBRACE   {
   withinfo
-    (rhs_info 1)
-    (Funapp (predicate_of_expression (rhs_info 4) $4,
+    (pinfo $startpos($1))
+    (Funapp (predicate_of_expression (pinfo $startpos($4)) $4,
              [expression_from_dotted_id $1],
              AMoo))
 }
 |   expr_1 COLON type_nt        {
-  withinfo (rhs_info 1) (Typedexp ($1, withinfo (rhs_info 3) $3))
+  winfo $startpos($1) (Typedexp ($1, winfo $startpos($3) $3))
 }
 
 |   KWall  formal_arguments opt_nl expr_1 {
-  withinfo
-    (rhs_info 1)
-    (Expquantified (Universal, withinfo (rhs_info 2) $2, $4))
+  winfo
+    $startpos($1)
+    (Expquantified (Universal, winfo $startpos($2) $2, $4))
 }
 
 |   KWsome formal_arguments opt_nl expr_1 {
-  withinfo
-    (rhs_info 1)
-    (Expquantified (Existential, withinfo (rhs_info 2) $2, $4))
+  winfo
+    $startpos($1)
+    (Expquantified (Existential, winfo $startpos($2) $2, $4))
 }
 
 |   LBRACE expr RBRACE            {
-  predicate_of_expression (rhs_info 2) $2
+  predicate_of_expression (pinfo $startpos($2)) $2
 }
 |   LPAREN expr RPAREN ARROW expr {
   let lst  = expression_list $2
-  and info = rhs_info 2 in
+  and info = pinfo $startpos($2) in
   let entlst = entities_of_expression info lst in
-  withinfo
-    (rhs_info 1)
+  winfo
+    $startpos($1)
     (Exparrow (withinfo info entlst,$5))
 }
 |   KWagent formal_arguments_info return_type_opt optsemi
     require_block_opt
     KWensure ARROW expr
     KWend {
-  withinfo
-    (rhs_info 1)
+  winfo
+    $startpos($1)
     (Expagent ($2,$3,$5,$8))
 }
 |   LIDENTIFIER ARROW expr {
-  let info = rhs_info 1 in
+  let info = pinfo $startpos($1) in
   let entlst =
-    entities_of_expression info [withinfo (rhs_info 1) (Identifier $1)] in
-  withinfo
-    (rhs_info 1)
+    entities_of_expression info [winfo $startpos($1) (Identifier $1)] in
+  winfo
+    $startpos($1)
     (Exparrow (withinfo info entlst, $3))
 }
 
@@ -958,85 +970,85 @@ expr_2:
 
 
 atomic_expr:
-    KWResult                      { withinfo (rhs_info 1) ExpResult }
-|   NUMBER                        { withinfo (rhs_info 1) (Expnumber $1) }
-|   KWfalse                       { withinfo (rhs_info 1) Expfalse }
-|   KWtrue                        { withinfo (rhs_info 1) Exptrue }
-|   USCORE                        { withinfo (rhs_info 1) Expanon }
+    KWResult                      { winfo $startpos($1) ExpResult }
+|   NUMBER                        { winfo $startpos($1) (Expnumber $1) }
+|   KWfalse                       { winfo $startpos($1) Expfalse }
+|   KWtrue                        { winfo $startpos($1) Exptrue }
+|   USCORE                        { winfo $startpos($1) Expanon }
 |   dotted_id_list %prec LOWEST_PREC {
   expression_from_dotted_id $1
 }
 
 operator_expr:
-    expr_1 PLUS expr_1                { binexp (rhs_info 2) Plusop $1 $3 }
+    expr_1 PLUS expr_1                { binexp $startpos($2) Plusop $1 $3 }
 
-|   expr_1 MINUS expr_1               { binexp (rhs_info 2) Minusop $1 $3 }
+|   expr_1 MINUS expr_1               { binexp $startpos($2) Minusop $1 $3 }
 
-|   PLUS expr_1                       { unexp (rhs_info 1) Plusop $2 }
+|   PLUS expr_1                       { unexp $startpos($1) Plusop $2 }
 
-|   MINUS expr_1                      { unexp (rhs_info 1) Minusop $2 }
+|   MINUS expr_1                      { unexp $startpos($1) Minusop $2 }
 
-|   expr_1 TIMES expr_1               { binexp (rhs_info 2) Timesop $1 $3 }
+|   expr_1 TIMES expr_1               { binexp $startpos($2) Timesop $1 $3 }
 
-|   TIMES expr_1                      { unexp (rhs_info 1) Timesop $2 }
+|   TIMES expr_1                      { unexp $startpos($1) Timesop $2 }
 
-|   expr_1 DIVIDE expr_1              { binexp (rhs_info 2) Divideop $1 $3 }
+|   expr_1 DIVIDE expr_1              { binexp $startpos($2) Divideop $1 $3 }
 
-|   expr_1 CARET  expr_1              { binexp (rhs_info 2) Caretop $1 $3 }
+|   expr_1 CARET  expr_1              { binexp $startpos($2) Caretop $1 $3 }
 
-|   expr_1 KWin expr_1                { binexp (rhs_info 2) Inop $1 $3 }
+|   expr_1 KWin expr_1                { binexp $startpos($2) Inop $1 $3 }
 
-|   expr_1 NOTIN expr_1               { binexp (rhs_info 2) Notinop $1 $3 }
+|   expr_1 NOTIN expr_1               { binexp $startpos($2) Notinop $1 $3 }
 
-|   expr_1 EQ  expr_1                 { binexp (rhs_info 2) Eqop $1 $3 }
+|   expr_1 EQ  expr_1                 { binexp $startpos($2) Eqop $1 $3 }
 
-|   expr_1 NEQ  expr_1                { binexp (rhs_info 2) NEqop $1 $3 }
+|   expr_1 NEQ  expr_1                { binexp $startpos($2) NEqop $1 $3 }
 
-|   expr_1 LT  expr_1                 { binexp (rhs_info 2) LTop $1 $3 }
+|   expr_1 LT  expr_1                 { binexp $startpos($2) LTop $1 $3 }
 
-|   expr_1 LE  expr_1                 { binexp (rhs_info 2) LEop $1 $3 }
+|   expr_1 LE  expr_1                 { binexp $startpos($2) LEop $1 $3 }
 
-|   expr_1 GT  expr_1                 { binexp (rhs_info 2) GTop $1 $3  }
+|   expr_1 GT  expr_1                 { binexp $startpos($2) GTop $1 $3  }
 
-|   expr_1 GE  expr_1                 { binexp (rhs_info 2) GEop $1 $3  }
+|   expr_1 GE  expr_1                 { binexp $startpos($2) GEop $1 $3  }
 
-|   expr_1 KWas expr_1                { withinfo (rhs_info 2) (Expas ($1,$3)) }
+|   expr_1 KWas expr_1                { winfo $startpos($2) (Expas ($1,$3)) }
 
-|   expr_1 KWand  expr_1              { binexp (rhs_info 2) Andop $1 $3  }
+|   expr_1 KWand  expr_1              { binexp $startpos($2) Andop $1 $3  }
 
-|   expr_1 KWor   expr_1              { binexp (rhs_info 2) Orop $1 $3   }
+|   expr_1 KWor   expr_1              { binexp $startpos($2) Orop $1 $3   }
 
-|   expr_1 RELOP expr_1               { binexp (rhs_info 2) (Freeop $2) $1 $3 }
+|   expr_1 RELOP expr_1               { binexp $startpos($2) (Freeop $2) $1 $3 }
 
-|   expr_1 OPERATOR expr_1            { binexp (rhs_info 2) (Freeop $2) $1 $3  }
+|   expr_1 OPERATOR expr_1            { binexp $startpos($2) (Freeop $2) $1 $3  }
 
-|   expr_1 ROPERATOR expr_1           { binexp (rhs_info 2) (RFreeop $2) $1 $3 }
+|   expr_1 ROPERATOR expr_1           { binexp $startpos($2) (RFreeop $2) $1 $3 }
 
-|   KWnot   expr_1                    { unexp (rhs_info 1) Notop $2 }
+|   KWnot   expr_1                    { unexp $startpos($1) Notop $2 }
 
-|   KWold   expr_1                    { unexp (rhs_info 1) Oldop $2 }
+|   KWold   expr_1                    { unexp $startpos($1) Oldop $2 }
 
-|   expr_1 DCOLON expr_1              { binexp (rhs_info 2) DColonop $1 $3  }
+|   expr_1 DCOLON expr_1              { binexp $startpos($2) DColonop $1 $3  }
 
-|   expr_1 COLON expr_1               { withinfo (rhs_info 2) (Expcolon ($1,$3)) }
+|   expr_1 COLON expr_1               { winfo $startpos($2) (Expcolon ($1,$3)) }
 
-|   expr_1 COMMA expr_1               { withinfo (rhs_info 2) (Tupleexp ($1,$3)) }
+|   expr_1 COMMA expr_1               { winfo $startpos($2) (Tupleexp ($1,$3)) }
 
-|   expr_1 BAR  expr_1                { binexp (rhs_info 2) Barop $1 $3 }
+|   expr_1 BAR  expr_1                { binexp $startpos($2) Barop $1 $3 }
 
-|   expr_1 DBAR expr_1                { binexp (rhs_info 2) DBarop $1 $3 }
+|   expr_1 DBAR expr_1                { binexp $startpos($2) DBarop $1 $3 }
 
-|   expr_1 DARROW expr_1              { binexp (rhs_info 2) DArrowop $1 $3 }
+|   expr_1 DARROW expr_1              { binexp $startpos($2) DArrowop $1 $3 }
 
 
 exp_conditional:
     KWif expr_1 KWthen expr KWelse expr {
-  withinfo (rhs_info 1) (Expif ($2,$4,$6))
+  winfo $startpos($1) (Expif ($2,$4,$6))
 }
 
 exp_inspect:
     KWinspect expr exp_case_list {
-  withinfo (rhs_info 1) (Expinspect ($2,$3))
+  winfo $startpos($1) (Expinspect ($2,$3))
     }
 
 exp_case_list:
