@@ -77,6 +77,7 @@ let _ =
      ("from",      Parser.KWfrom);
      ("ghost",     Parser.KWghost);
      ("if",        Parser.KWif);
+     ("mod",       Parser.KWmod);
      ("immutable", Parser.KWimmutable);
      ("import",    Parser.KWimport);
      ("in",        Parser.KWin);

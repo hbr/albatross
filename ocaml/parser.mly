@@ -140,7 +140,7 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token KWif        KWimmutable    KWimport     KWin
        KWinherit   KWinspect      KWinvariant
 %token KWlocal
-%token KWmutable
+%token KWmod       KWmutable
 %token KWnot       KWnote
 %token KWold       KWor           KWorif
 %token KWproof
@@ -211,7 +211,7 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
                    RELOP
 /* 40 */ %left     BAR       DBAR
 /* 45 */ %left     PLUS      MINUS
-/* 50 */ %left     TIMES     DIVIDE
+/* 50 */ %left     TIMES     DIVIDE    KWmod
 /* 55 */ %right    CARET     DCOLON
 /* 60 */ %left     OPERATOR
 /* 61 */ %right    ROPERATOR
@@ -304,9 +304,9 @@ module_list:
 |   one_module separator module_list { $1 :: $3
                                      }
 
-one_module: dotted_id_list  {
-  let lst = List.map (fun id -> id.v) $1 in
-  winfo $startpos($1) (List.hd lst, List.tl lst)
+one_module: dlst=dotted_id_list  {
+  let lst = List.map (fun id -> id.v) dlst in
+  winfo $startpos(dlst) (List.hd lst, List.tl lst)
 }
 
 
@@ -994,6 +994,8 @@ operator_expr:
 
 |   expr_1 DIVIDE expr_1              { binexp $startpos($2) Divideop $1 $3 }
 
+|   expr_1 KWmod  expr_2              { binexp $startpos($2) Modop $1 $3 }
+
 |   expr_1 CARET  expr_1              { binexp $startpos($2) Caretop $1 $3 }
 
 |   expr_1 KWin expr_1                { binexp $startpos($2) Inop $1 $3 }
@@ -1069,6 +1071,7 @@ operator:
 |   MINUS     { Minusop }
 |   TIMES     { Timesop }
 |   DIVIDE    { Divideop }
+|   KWmod     { Modop }
 |   EQ        { Eqop }
 |   EQV       { Eqvop }
 |   NEQ       { NEqop }

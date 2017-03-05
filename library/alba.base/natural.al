@@ -725,3 +725,66 @@ end
 all ensure
     2 ^ 2 = 4
 end
+
+
+
+
+{: Division
+   ======== :}
+
+
+(/) (n,d:NATURAL): NATURAL
+    require
+        d /= 0
+    ensure
+        -> inspect
+               n
+           case 0 then
+               0
+           case successor(m) then
+               if n = (m / d + 1) * d then
+                   m / d + 1
+               else
+                   m / d
+    end
+
+
+
+all(n,d:NATURAL)
+    require
+        d /= 0
+    ensure
+        n / d * d <= n
+    inspect
+        n
+    case successor(m)
+        -- goal: successor(m)/d*d <= successor(m)
+        assert
+            all(d) d /= 0 ==> m/d*d <= m -- ind. hypo
+        if successor(m) = (m / d + 1) * d
+            assert
+                successor(m)/d = m/d + 1
+                ensure
+                    successor(m)/d*d = successor(m)
+                via [ successor(m)/d*d
+                    , (m/d + 1)*d        -- def '/'
+                    , successor(m)       -- 'if'
+                    ]
+                end
+        else
+            assert
+                m < successor(m)
+            via [ successor(m)/d*d
+                , m/d*d              -- def '/'
+                , m                  -- ind hypo
+                , successor(m)
+                ]
+    end
+
+
+(mod) (n,d:NATURAL): NATURAL
+    require
+        d /= 0
+    ensure
+        -> n - n / d * d
+    end

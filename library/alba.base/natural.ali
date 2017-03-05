@@ -42,7 +42,8 @@ end
            (a + n).successor
 
 (-)  (a,b:NATURAL): NATURAL
-    require b <= a
+    require
+        b <= a
     ensure
         -> inspect
                a,b
@@ -56,6 +57,22 @@ end
     -> inspect a
        case 0           then 0
        case n.successor then n*b + b
+
+
+(/) (n,d:NATURAL): NATURAL
+    require
+        d /= 0
+    ensure
+        -> inspect
+               n
+           case 0 then
+               0
+           case successor(m) then
+               if n = (m / d + 1) * d then
+                   m / d + 1
+               else
+                   m / d
+    end
 
 
 (^) (a,b: NATURAL):  NATURAL
@@ -119,6 +136,9 @@ all(a,b,c,x:NATURAL)
 
         -- distributive laws
         a * (b + c) = a*b + a*c
+
+        -- division
+        b /= 0 ==> a / b * b <= a
 
         -- exponentiation
         a^0 = 1

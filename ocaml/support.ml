@@ -257,6 +257,7 @@ type operator =
   | Minusop
   | Timesop
   | Divideop
+  | Modop
   | Caretop
   | Commaop
   | Dotop
@@ -295,6 +296,7 @@ let operator_data op =
   | Minusop   -> "-",   45,  Left
   | Timesop   -> "*",   50,  Left
   | Divideop  -> "/",   50,  Left
+  | Modop     -> "mod", 50,  Left
   | Caretop   -> "^",   55,  Right
   | Commaop   -> ",",   18,  Right
   | Dotop     -> ".",   70,  Left
