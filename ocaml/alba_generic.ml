@@ -135,16 +135,12 @@ let used_set (nms:module_name withinfo list) (pc:PC.t): IntSet.t =
 
 
 let analyze
-      (write:bool) (ast:declaration list) (pc:PC.t) (src:Module.Src.t)
+      (ast:declaration list) (pc:PC.t) (src:Module.Src.t)
     : unit =
-  begin
-    try
-      Ast.analyze ast pc
-    with Error_info (info,str) ->
-      Module.Src.info_abort info str src
-  end;
-  if write then
-    Module.Src.write_json src
+  try
+    Ast.analyze ast pc
+  with Error_info (info,str) ->
+    Module.Src.info_abort info str src
 
 
 
@@ -185,7 +181,7 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
   let ast = Src.parse src_al in
   if verbosity > 1 then
     Format.printf " verify implementation \"%s\"@." (ST.string nme);
-  analyze true ast pc src_al;
+  analyze ast pc src_al;
   if M.has_interface m then
     begin
       if verbosity > 1 then
@@ -200,8 +196,10 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
         with Error_info (info,str) ->
           Src.info_abort info str src_ali
       end;
-      analyze true ast pc src_ali
-    end
+      analyze ast pc src_ali;
+      Module.Src.write_meta src_ali
+    end;
+  Module.Src.write_meta src_al
 
 
 

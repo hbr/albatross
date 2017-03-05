@@ -20,7 +20,7 @@ sig
   val full_dependencies: t -> int list
   val parse: t -> declaration list
   val info_abort: info -> string -> t -> 'a
-  val write_json: t -> unit
+  val write_meta: t -> unit
 end
 
 

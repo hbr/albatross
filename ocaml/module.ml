@@ -173,7 +173,7 @@ module Src =
     let info_abort (info:info) (str:string) (s:t): 'a =
       info_abort (path s) info str
 
-    let write_json (s:t): unit =
+    let write_meta (s:t): unit =
       if is_affected s then
         Platform.write_dummy (json_path s)
 
