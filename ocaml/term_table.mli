@@ -36,6 +36,4 @@ val remove: int -> t -> t
     (** [remove i tab] removes the term with the index [i] from the table
         [tab] *)
 
-val remap_vappl: (int->int) -> t -> t
-
 val filter_and_remap: (int->bool) -> (int->int) -> t -> t

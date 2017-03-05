@@ -878,17 +878,6 @@ let filter_tables (pred:int->bool) (pc:t): unit =
   e.left  <- Term_table.filter pred e.left
 
 
-let remap_tables (pc:t): unit =
-  assert (is_global pc);
-  let e = pc.entry
-  and f = seed_function pc in
-  e.prvd  <- Term_table.remap_vappl f e.prvd;
-  e.prvd2 <- Term_table.remap_vappl f e.prvd2;
-  e.bwd   <- Term_table.remap_vappl f e.bwd;
-  e.fwd   <- Term_table.remap_vappl f e.fwd;
-  e.left  <- Term_table.remap_vappl f e.left
-
-
 let filter_and_remap_tables (pred:int->bool) (pc:t): unit =
   assert (is_global pc);
   let e = pc.entry

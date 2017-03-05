@@ -741,36 +741,6 @@ let merge_tabs (t1:t) (t2:t) (sfun:int->int): t =
 
 
 
-let remap_vappl (sfun:int->int) (tab:t): t =
-  let rec remap (tab:t): t =
-    let remap_apps apps =
-      IntMap.fold
-        (fun k (args,subs) map ->
-          let args = Array.map remap args in
-          let k1 = sfun k in
-          try
-            let args1,sublst1 = IntMap.find k1 apps
-            in
-            assert false (* nyi: k1 already present in the applications *)
-          with Not_found ->
-            assert false (* nyi: k1 not yet presend in the applications *)
-        )
-        apps
-        IntMap.empty
-    in
-    {tab with
-     apps = remap_apps tab.apps;
-     fapps = IntMap.map (fun (f,args) -> remap f, Array.map remap args) tab.fapps;
-     lams  = IntMap.map (fun (pres,exp) -> List.map remap pres, remap exp) tab.lams;
-     alls  = IntMap.map remap tab.alls;
-     somes = IntMap.map remap tab.somes;
-     flows = FlowMap.map (fun args -> Array.map remap args) tab.flows;
-     inds  = IntPairMap.map (fun args -> Array.map remap args) tab.inds
-   }
-  in
-  remap tab
-
-
 let remove (idx:int) (tab:t): t =
   filter (fun i -> i <> idx) tab
 
