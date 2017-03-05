@@ -324,7 +324,7 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
                            " does not inherit "  ^
                            (Class_table.class_name par ct) ^
                            " in implementation file");
-        if par <> Class_table.any_index &&
+        if par <> Constants.any_class &&
           not (Class_table.inherits_any par ct) then
           error_info tp.i ("Class " ^ (Class_table.class_name par ct) ^
                            " does not inherit ANY");

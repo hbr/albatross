@@ -18,9 +18,9 @@ val is_private:         t -> bool
 val is_public:          t -> bool
 val is_interface_use:   t -> bool
 val is_interface_check: t -> bool
-val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
-val add_current_module: int -> IntSet.t -> t -> unit
-val set_interface_check: IntSet.t -> t -> unit
+val add_used_module:    Module.M.t -> t -> unit
+val add_current_module: Module.M.t -> t -> unit
+val set_interface_check: t -> unit
 
 
 val depth:       t -> int
@@ -74,7 +74,7 @@ val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
 val apply_term:  term -> term array -> int -> t -> term
 val reconstruct_evaluation: Eval.t -> t -> term*term
 
-val make: int -> t
+val make: Module.Compile.t -> t
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
 val push_typed:   formals -> formals -> t -> t

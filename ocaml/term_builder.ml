@@ -187,13 +187,13 @@ let count_variables (tb:t): int =
 let in_index (tb:t): int =
   count_variables tb + Constants.in_index
 
-let any_index       (tb:t): int = count_all tb + Class_table.any_index
-let boolean_index   (tb:t): int = count_all tb + Class_table.boolean_index
-let predicate_index (tb:t): int = count_all tb + Class_table.predicate_index
-let function_index  (tb:t): int = count_all tb + Class_table.function_index
+let any_class       (tb:t): int = count_all tb + Constants.any_class
+let boolean_class   (tb:t): int = count_all tb + Constants.boolean_class
+let predicate_class (tb:t): int = count_all tb + Constants.predicate_class
+let function_class  (tb:t): int = count_all tb + Constants.function_class
 
-let any_type     (tb:t): type_term = Variable (any_index tb)
-let boolean_type (tb:t): type_term = Variable (boolean_index tb)
+let any_type     (tb:t): type_term = Variable (any_class tb)
+let boolean_type (tb:t): type_term = Variable (boolean_class tb)
 
 let string_of_term (t:term) (tb:t): string =
   let c = context tb in
@@ -324,9 +324,9 @@ let head_type (tb:t): type_term =
 
 let result_type_of_type (tp:type_term) (tb:t): type_term =
   let cls,ags = Class_table.split_type_term tp in
-  if cls = predicate_index tb then
+  if cls = predicate_class tb then
     boolean_type tb
-  else if cls = function_index tb  then
+  else if cls = function_class tb  then
     begin
       assert (Array.length ags = 2);
       ags.(1)
@@ -681,12 +681,12 @@ let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
 
 let predicate_of_args (start:int) (nargs:int) (tb:t): type_term =
   let tup = tuple_type_of_args start nargs tb in
-  make_type (predicate_index tb) [|tup|]
+  make_type (predicate_class tb) [|tup|]
 
 
 let function_of_args (start:int) (nargs:int) (rt:type_term) (tb:t): type_term =
   let tup = tuple_type_of_args start nargs tb in
-  make_type (function_index tb) [|tup;rt|]
+  make_type (function_class tb) [|tup;rt|]
 
 
 
@@ -754,7 +754,7 @@ let required_can_be_boolean (tb:t): bool =
         let cls,_ = Class_table.split_type_term cpt in
         assert (nall <= cls);
         Class_table.has_ancestor
-          Constants.boolean_index
+          Constants.boolean_class
           (cls - nall)
           (class_table tb)
      | _ ->
@@ -807,9 +807,9 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
           None -> false
         | Some tp ->
             let cls,_ = Class_table.split_type_term tp in
-            if cls = function_index tb then
+            if cls = function_class tb then
               false
-            else if cls = predicate_index tb then
+            else if cls = predicate_class tb then
               true
             else
               raise Reject
@@ -967,8 +967,8 @@ let complete_application (am:application_mode) (tb:t): unit =
         let args = Array.of_list (List.map (fun (t,_) -> t) args) in
         let cls,ags = Class_table.split_type_term f_tp in
         assert begin
-          cls = predicate_index tb ||
-          cls = function_index tb
+          cls = predicate_class tb ||
+          cls = function_class tb
         end;
         tuple_of_args args ags.(0) tb
       in

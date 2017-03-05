@@ -873,7 +873,7 @@ let get_transitivity_data
     Application (p, [|arg|], _) ->
       let p_tp = Context.type_of_term p c in
       let cls,ags = Class_table.split_type_term p_tp in
-      if cls = Context.predicate_index c then begin
+      if cls = Context.predicate_class c then begin
         assert (Array.length ags = 1);
         let ft = Context.feature_table c in
         let tup_tp = Class_table.domain_type p_tp in

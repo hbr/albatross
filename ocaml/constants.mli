@@ -11,10 +11,12 @@ val tuple_index:       int
 val first_index:       int
 val second_index:      int
 
-val dummy_index:       int
-val boolean_index:     int
-val any_index:         int
-val predicate_index:   int
-val function_index:    int
-val tuplec_index:      int
+val dummy_class:       int
+val boolean_class:     int
+val any_class:         int
+val predicate_class:   int
+val function_class:    int
+val tuple_class:       int
+val sequence_class:    int
+val list_class:        int
 

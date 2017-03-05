@@ -13,17 +13,14 @@ open Term
 open Container
 
 type t
-val make:  int -> t
+val make:  Module.Compile.t -> t
 
-val module_table: t -> Module_table.t
 val class_table: t  -> Class_table.t
 val feature_table:t -> Feature_table.t
 
-val current_module:     t -> int
-val used_modules:       int -> t -> IntSet.t
-val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
-val add_current_module: int -> IntSet.t -> t -> unit
-val set_interface_check: IntSet.t -> t -> unit
+val add_used_module:    Module.M.t -> t -> unit
+val add_current_module: Module.M.t -> t -> unit
+val set_interface_check: t -> unit
 
 val is_private:        t -> bool
 val is_public:         t -> bool
@@ -32,8 +29,6 @@ val is_interface_use:  t -> bool
     (** Are we using an interface? *)
 
 val verbosity: t -> int
-
-val find_module:        (int * int list) -> t -> int
 
 val push_with_gap:  entities list withinfo -> return_type -> bool -> bool -> bool
   -> int -> t -> t
@@ -142,8 +137,8 @@ val type_variables: t -> TVars_sub.t
 
 val boolean: t -> term
 
-val function_index:  t -> int
-val predicate_index: t -> int
+val function_class:  t -> int
+val predicate_class: t -> int
 
 val type_of_term: term -> t -> type_term
 val tuple_of_types: types -> t -> type_term

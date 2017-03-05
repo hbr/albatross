@@ -669,32 +669,3 @@ let specialize
             fgcon = [||]};
    premises = ps;
    target   = tgt}
-
-
-
-let find_constructor (t:term) (pvar:int) (rd:t): int =
-  (* extract the constructor from the premise [t] using the predicate
-     variable [pvar]. Raise [Not_found] if [t] does not represent a premise
-     of an induction law.*)
-  let imp_id = rd.ctxt.nargs + Context.implication_index rd.ctxt.c
-  in
-  let n,args,ps_rev,tgt =
-    Term.split_general_implication_chain t imp_id
-  in
-  assert false
-
-
-let constructors (rd:t): int list =
-  (* Extract the constructors from the rule [rd]. If [rd] does not represent
-     an induction law then return the empty list.
-
-     A rule is an induction law if it has the form
-
-       all(x:T, p:{T})  pp1 ==> pp2 ==> ... ==> x in p
-
-       ppi:  all(args) cond ==> ra1 in p ==> ... ==> c(args) in p
-
-       cond must not involve [p] and [c], only the arguments [args]
-   *)
-
-  assert false

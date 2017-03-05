@@ -617,24 +617,21 @@ let analyze_feature
     Context.tvars c
   in
   if Tvars.count tvs > 0 then
-    not_yet_implemented entlst.i "Type inference for named functions";
+    error_info entlst.i "Untyped variables not allowed in global functions";
   let ft = Proof_context.feature_table pc in
   let imp  = implementation_status fn.i bdy pc in
   let idx, is_new, is_export =
     try
       let idx = Feature_table.find_with_signature fn tvs sign ft in
       let is_export =
-        PC.is_interface_check pc && not (Feature_table.is_feature_public idx ft) in
+        PC.is_interface_check pc
+        && not (Feature_table.is_feature_visible idx ft) in
       if is_export && not (Sign.is_ghost sign) &&
         Feature_table.is_ghost_function idx ft
       then
         error_info fn.i "Must be a ghost function";
       if is_export then
-        Feature_table.export_feature idx false ft
-      else if PC.is_interface_use pc &&
-        not (Feature_table.is_feature_public idx ft)
-      then
-        Feature_table.export_feature idx true ft;
+        Feature_table.export_feature idx ft;
       idx, false, is_export
     with Not_found ->
       let cnt = Feature_table.count ft in
@@ -928,8 +925,8 @@ let put_creators
           try
             let idx = Feature_table.find_with_signature fn tvs sign ft in
             let is_export =
-              PC.is_public pc &&
-              not (Feature_table.is_feature_public idx ft) in
+              PC.is_interface_check pc &&
+              not (Feature_table.is_feature_visible idx ft) in
             idx, false, is_export
           with Not_found ->
             cnt, true, false
@@ -947,7 +944,7 @@ let put_creators
         if is_new then
           Feature_table.add_feature fn tvs nms sign imp ft
         else if is_export then
-          Feature_table.export_feature idx false ft;
+          Feature_table.export_feature idx ft;
         Feature_table.set_owner_class idx cls ft;
         update_feature fn.i idx is_new is_export spec imp pc;
         let is_base = is_base_constructor idx cls pc in

@@ -60,31 +60,14 @@ val is_ghost_specification: Feature.Spec.t -> t -> bool
 val false_constant: int -> term
 val true_constant:  int -> term
 
-val base_table: int -> t
+val base_table: Module.Compile.t -> t
 
 val class_table:  t -> Class_table.t
+val compilation_context: t -> Module.Compile.t
 
-val has_current_module: t -> bool
-    (** Is there a current module? *)
-
-val current_module:  t -> int
-    (** The current module *)
-
-val count_modules: t -> int
-    (** The number of modules in the system *)
-
-val find_module: (int * int list) -> t -> int
-    (** [find_module name lib ft] finds the module [lib.name] in [ft] *)
-
-val module_name: int -> t -> string
-    (** [module_name mdl ft] returns the name of the module [mdl] *)
-
-val used_modules: int -> t -> IntSet.t
-  (** [used_modules mdl ft] returns the used modules of module [mdl] *)
-
-val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
-val add_current_module: int -> IntSet.t -> t -> unit
-val set_interface_check: IntSet.t -> t -> unit
+val add_used_module:    Module.M.t -> t -> unit
+val add_current_module: Module.M.t -> t -> unit
+val set_interface_check: t -> unit
 
 val is_private: t -> bool
    (** Are we within the implementation of a module? *)
@@ -151,9 +134,8 @@ val peer_constructors: int -> t -> IntSet.t
 val unmatched_inspect_cases: term array -> int -> int -> t
   -> (int * term list * term) list
 
-val is_feature_public:  int -> t -> bool
 val is_feature_visible: int -> t -> bool
-val is_term_public:    term -> int -> t -> bool
+val is_term_visible:    term -> int -> t -> bool
 
 val owner: int -> t -> int
 
@@ -201,7 +183,7 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
 
 val update_specification: int -> Feature.Spec.t -> t -> unit
 val set_owner_class:      int -> int -> t -> unit
-val export_feature: int -> bool -> t -> unit
+val export_feature: int -> t -> unit
 
 val involved_assertions: int -> t -> IntSet.t
 val add_involved_assertion: int -> term -> t -> unit
@@ -210,8 +192,6 @@ val add_involved_assertion: int -> term -> t -> unit
 val term_to_string: term -> bool -> bool -> int -> int array -> Tvars.t -> t -> string
 val string_of_term_anon: term -> int -> t -> string
 
-val export_feature: int -> bool -> t -> unit
-
 val check_interface: t -> unit
 
 val downgrade_term: term -> int -> int -> t -> term
@@ -219,8 +199,6 @@ val downgrade_term: term -> int -> int -> t -> term
 val adapt_names: int array -> int array -> int array
 
 val domain_of_feature: int -> int -> agens -> Tvars.t -> t -> term
-
-val validate_visibility: term -> int -> info -> t -> unit
 
 val equal_symmetry_term: unit -> term
 val leibniz_term: unit -> term

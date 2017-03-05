@@ -263,6 +263,8 @@ file:
   ds=decls
   EOF
   {u, List.rev ds}
+| u=use_block EOF
+  {u, []}
 | ds=decls
   EOF
   {[], List.rev ds}

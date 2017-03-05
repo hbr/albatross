@@ -18,17 +18,11 @@ type formal = int * type_term
 type t
 type parent_descriptor
 
-val dummy_index:     int
-val boolean_index:   int
-val any_index:       int
-val predicate_index: int
-val function_index:  int
-val tuple_index:     int
 
 
 val result_type_of_compound: term -> int -> term
 
-val base_table: unit -> t
+val base_table: Module.Compile.t -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
@@ -42,30 +36,13 @@ val formal_generics: entities list withinfo -> return_type -> bool -> int
 
 val class_tvs: formal_generics -> t -> Tvars.t
 
-val module_table: t -> Module_table.t
+val compilation_context: t -> Module.Compile.t
 
-val has_current_module: t -> bool
-    (** Is there a current module? *)
+val current_module: t -> Module.M.t
 
-val current_module: t -> int
-    (** The current module *)
-
-val count_modules: t -> int
-    (** The number of modules in the system *)
-
-val find_module: (int * int list) -> t -> int
-    (** [find_module name ct] finds the module [name] in [ct] *)
-
-val used_modules: int -> t -> IntSet.t
-  (** [used_modules mdl ct] returns the used modules of module [mdl] *)
-
-
-val module_name: int -> t -> string
-    (** [module_name mdl ct] returns the name of the module [mdl] *)
-
-val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
-val add_current_module: int -> IntSet.t -> t -> unit
-val set_interface_check: IntSet.t -> t -> unit
+val add_used_module:    Module.M.t -> t -> unit
+val add_current_module: Module.M.t -> t -> unit
+val set_interface_check: t -> unit
 
 val is_private: t -> bool
    (** Are we within the implementation of a module? *)
@@ -78,6 +55,9 @@ val is_interface_check:  t -> bool
 
 val is_interface_use:  t -> bool
    (** Are we using an interface? *)
+
+val is_interface_public_use:  t -> bool
+   (** Are we using an interface publicly? *)
 
 
 val count: t -> int

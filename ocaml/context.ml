@@ -47,28 +47,17 @@ let empty_entry: entry =
 
 let class_table(c:t): Class_table.t     = Feature_table.class_table c.ft
 let feature_table(c:t): Feature_table.t = c.ft
-let module_table(c:t): Module_table.t   = Class_table.module_table (class_table c)
 
 
-let current_module (c:t): int =
-  Feature_table.current_module c.ft
 
-let find_module (name:int*int list) (c:t): int =
-  Feature_table.find_module name c.ft
+let add_used_module (m:Module.M.t) (c:t): unit =
+  Feature_table.add_used_module m c.ft
 
+let add_current_module (m:Module.M.t) (c:t): unit =
+  Feature_table.add_current_module m c.ft
 
-let add_used_module (name:int*int list) (used:IntSet.t) (c:t): unit =
-  Feature_table.add_used_module name used c.ft
-
-let add_current_module (name:int) (used:IntSet.t) (c:t): unit =
-  Feature_table.add_current_module name used c.ft
-
-let set_interface_check (pub_used:IntSet.t) (c:t): unit =
-  Feature_table.set_interface_check pub_used c.ft
-
-
-let used_modules (mdl:int) (c:t): IntSet.t =
-  Feature_table.used_modules mdl c.ft
+let set_interface_check (c:t): unit =
+  Feature_table.set_interface_check c.ft
 
 
 let is_private (c:t): bool = Feature_table.is_private c.ft
@@ -199,21 +188,21 @@ let ntvs (c:t): int =
   (count_formal_generics c) + (count_type_variables c)
 
 
-let function_index (c:t): int =
-  ntvs c + Class_table.function_index
+let function_class (c:t): int =
+  ntvs c + Constants.function_class
 
-let predicate_index (c:t): int =
-  ntvs c + Class_table.predicate_index
+let predicate_class (c:t): int =
+  ntvs c + Constants.predicate_class
 
 let tuple_class (c:t): int =
-  ntvs c + Class_table.tuple_index
+  ntvs c + Constants.tuple_index
 
 
 let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
-  VAppl (function_index c, [|a_tp;r_tp|], [||], false)
+  VAppl (function_class c, [|a_tp;r_tp|], [||], false)
 
 let predicate_type (a_tp: type_term) (c:t): type_term =
-  VAppl (predicate_index c, [|a_tp|], [||], false)
+  VAppl (predicate_class c, [|a_tp|], [||], false)
 
 let entry_local_argnames (e:entry): int array =
   Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
@@ -522,12 +511,12 @@ let variable (name:int) (c:t): int * Tvars.t * Sign.t =
   i,tvs,s
 
 
-let make (verbosity:int): t =
+let make (comp:Module.Compile.t): t =
   {entry = empty_entry;
    prev  = None;
    depth = 0;
-   ft    = Feature_table.base_table verbosity;
-   verbosity = verbosity
+   ft    = Feature_table.base_table comp;
+   verbosity = Module.Compile.verbosity comp
  }
 
 
@@ -680,8 +669,8 @@ let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
   and all_ntvs = ntvs c
   in
   let cls0 = cls - all_ntvs in
-  assert (cls0 = Class_table.predicate_index && Array.length ags = 1
-        || cls0 = Class_table.function_index && Array.length ags = 2);
+  assert (cls0 = Constants.predicate_class && Array.length ags = 1
+        || cls0 = Constants.function_class && Array.length ags = 2);
   let tps = extract_from_tuple n ags.(0) c in
   push_typed (nms,tps) empty_formals c
 
@@ -716,10 +705,10 @@ let rec type_of_term (t:term) (c:t): type_term =
   | Application(f,args,_) ->
       let f_tp = type_of_term f c in
       let cls,ags = Class_table.split_type_term f_tp in
-      if cls = function_index c then begin
+      if cls = function_class c then begin
         assert (Array.length ags = 2);
         ags.(1)
-      end else if cls = predicate_index c then begin
+      end else if cls = predicate_class c then begin
         assert (Array.length ags = 1);
         boolean c
       end else
@@ -742,7 +731,7 @@ let rec type_of_term (t:term) (c:t): type_term =
 
 
 let predicate_of_type (tp:type_term) (c:t): type_term =
-  let pred_idx = predicate_index c in
+  let pred_idx = predicate_class c in
   VAppl(pred_idx,[|tp|],[||],false)
 
 
@@ -765,7 +754,7 @@ let tuple_of_terms (args:arguments) (c:t): type_term =
 
 
 let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
-  let fidx = function_index c
+  let fidx = function_class c
   and tup  = tuple_of_types argtps c in
   VAppl(fidx, [|tup;r_tp|], [||],false)
 
@@ -1126,10 +1115,10 @@ let rec type_of_term_full
       : type_term * type_term option =
     let cls,ags = Class_table.split_type_term tp in
     assert (ntvs <= cls);
-    if cls = predicate_index c then begin
+    if cls = predicate_class c then begin
       assert (Array.length ags = 1);
       ags.(0), None
-    end else if cls = function_index c then begin
+    end else if cls = function_class c then begin
       assert (Array.length ags = 2);
       ags.(0), Some ags.(1)
     end else
@@ -1534,9 +1523,9 @@ let term_preconditions (t:term)  (c:t): term list =
         in
         let f_tp = type_of_term f c in
         let cls,ags = Class_table.split_type_term f_tp in
-        if cls = predicate_index c then
+        if cls = predicate_class c then
           lst
-        else if cls = function_index c then
+        else if cls = function_class c then
           let dom = VAppl (domain_index c,[|f|],ags,false) in
           Application(dom,args,false) :: lst
         else

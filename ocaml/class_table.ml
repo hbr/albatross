@@ -12,10 +12,16 @@ open Printf
 
 type formal = int * type_term
 
+
 module CMap = Map.Make(struct
   type t = int list * int
   let compare = Pervasives.compare
 end)
+
+
+
+
+
 
 type parent_descriptor = {
     is_ghost: bool;
@@ -32,7 +38,7 @@ type base_descriptor = { hmark:    header_mark;
                          mutable ancestors: parent_descriptor IntMap.t}
 
 
-type descriptor      = { mutable mdl:  int;
+type descriptor      = { mutable mdl:  Module.M.t option;
                          ident: int;
                          name: int;
                          bdesc: base_descriptor;
@@ -44,43 +50,33 @@ type t = {mutable map:   int CMap.t;
           mutable base:  int IntMap.t; (* module name -> class index *)
           mutable locs:  IntSet.t;
           mutable fgens: type_term IntMap.t;
-          mt:            Module_table.t}
+          mutable comp:  Module.Compile.t}
 
 
 
 
-let boolean_index   = 0
-let any_index       = 1
-let dummy_index     = 2
-let predicate_index = 3
-let function_index  = 4
-let tuple_index     = 5
-let sequence_index  = 6
-let list_index      = 7
+let compilation_context (ct:t): Module.Compile.t = ct.comp
 
+let current_module (ct:t): Module.M.t =
+  compilation_context ct |> Module.Compile.current
 
-let module_table (ct:t): Module_table.t = ct.mt
+let is_current_module (m:Module.M.t) (ct:t): bool =
+  Module.M.equal m (current_module ct)
 
-let has_current_module (ct:t): bool = Module_table.has_current ct.mt
+let is_private (ct:t): bool =
+  Module.Compile.is_verifying ct.comp
 
-let current_module (ct:t): int =
-  assert (has_current_module ct);
-  Module_table.current ct.mt
+let is_public (ct:t):  bool =
+  not (Module.Compile.is_verifying ct.comp)
 
-let count_modules (ct:t): int = Module_table.count ct.mt
+let is_interface_check  (ct:t): bool =
+  Module.Compile.is_interface_check ct.comp
 
-let find_module (name:int*int list) (ct:t): int =
-  Module_table.find name ct.mt
+let is_interface_use (ct:t): bool =
+  Module.Compile.is_interface_use ct.comp
 
-let used_modules (mdl:int) (ct:t): IntSet.t =
-  Module_table.used mdl ct.mt
-
-let module_name (mdl:int) (ct:t): string = Module_table.name mdl ct.mt
-
-let is_private (ct:t): bool = Module_table.is_private ct.mt
-let is_public (ct:t):  bool = Module_table.is_public ct.mt
-let is_interface_check  (ct:t): bool = Module_table.is_interface_check ct.mt
-let is_interface_use (ct:t): bool = Module_table.is_interface_use ct.mt
+let is_interface_public_use (ct:t): bool =
+  Module.Compile.is_interface_public_use ct.comp
 
 
 let count (ct:t):int =
@@ -112,22 +108,18 @@ let class_symbol (i:int) (ct:t): int =
 
 let class_name (i:int) (ct:t): string =
   let desc = descriptor i ct in
-  if desc.mdl = -1 then
-    ST.string desc.name
-  else
-    let lib = Module_table.library_of_module desc.mdl ct.mt
-    and mdlsym = Module_table.name_symbol desc.mdl ct.mt
-    in
-    let lst =
-      if Module_table.has_current ct.mt &&
-        desc.mdl = Module_table.current ct.mt then
-        [desc.name]
-      else if ST.string mdlsym = String.lowercase (ST.string desc.name) then
-        desc.name :: lib
-      else
-        desc.name :: mdlsym :: lib
-    in
-    String.concat "." (List.rev_map ST.string lst)
+  match desc.mdl with
+  | None ->
+     ST.string desc.name
+  | Some mdl ->
+     let m,pkg = Module.M.name mdl in
+     let lst =
+       if ST.string m = String.lowercase_ascii (ST.string desc.name) then
+         pkg
+       else
+         m :: pkg
+     in
+     String.concat "." (List.rev_map ST.string (desc.name :: lst))
 
 
 
@@ -147,13 +139,13 @@ let is_deferred (cls:int) (ct:t): bool =
 
 
 let has_any (ct:t): bool =
-  let desc = descriptor any_index ct in
-  desc.mdl <> -1
+  let desc = descriptor Constants.any_class ct in
+  desc.mdl <> None
 
 
 let has_predicate (ct:t): bool =
-  let desc = descriptor predicate_index ct in
-  desc.mdl <> -1
+  let desc = descriptor Constants.predicate_class ct in
+  desc.mdl <> None
 
 
 
@@ -162,25 +154,23 @@ let add_to_map (cls:int) (ct:t): unit =
    *)
   assert (cls < count ct);
   let desc = descriptor cls ct in
-  assert (desc.mdl <> -1);
+  assert (desc.mdl <> None);
+  let m,pkg = Module.M.name (Option.value desc.mdl) in
   let is_main =
-    String.lowercase (ST.string desc.name) =
-    Module_table.simple_name desc.mdl ct.mt
-  and mdl_sym = Module_table.name_symbol desc.mdl ct.mt
+    String.lowercase_ascii (ST.string desc.name) = ST.string m
   in
   if is_interface_use ct then begin
     if not is_main then
       ct.locs <- IntSet.add cls ct.locs;
     ct.map <- CMap.add ([],desc.name) cls ct.map;
-    ct.map <- CMap.add ([mdl_sym],desc.name) cls ct.map;
-    let lib = Module_table.library_of_module desc.mdl ct.mt in
-    if lib <> [] then
-      ct.map <- CMap.add (mdl_sym::lib,desc.name) cls ct.map;
-    if lib <> [] && is_main then
-      ct.map <- CMap.add (lib,desc.name) cls ct.map
+    ct.map <- CMap.add ([m],desc.name) cls ct.map;
+    if pkg <> [] then
+      ct.map <- CMap.add (m::pkg,desc.name) cls ct.map;
+    if pkg <> [] && is_main then
+      ct.map <- CMap.add (pkg,desc.name) cls ct.map
   end else begin
     ct.map <- CMap.add ([],desc.name) cls ct.map;
-    ct.map <- CMap.add ([mdl_sym],desc.name) cls ct.map
+    ct.map <- CMap.add ([m],desc.name) cls ct.map
   end
 
 
@@ -189,32 +179,34 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
   try
     let cls = IntMap.find mdl_nme ct.base in
     let desc = Seq.elem cls ct.seq in
-    assert (desc.mdl = -1);
-    desc.mdl <- current_module ct;
+    assert (desc.mdl = None);
+    desc.mdl <- Some (current_module ct);
     add_to_map cls ct
   with Not_found ->
     ()
 
 
 
-let add_used_module (name:int*int list) (used:IntSet.t) (ct:t): unit =
+let add_used_module (m:Module.M.t) (ct:t): unit =
   ct.fgens <- IntMap.empty;
-  Module_table.add_used name used ct.mt;
+  ct.comp  <- Module.Compile.set_current m ct.comp;
+  let name = Module.M.name m in
   add_base_classes (fst name) ct
 
 
 
 
-let add_current_module (name:int) (used:IntSet.t) (ct:t): unit =
+let add_current_module (m:Module.M.t) (ct:t): unit =
+  let name = Module.M.base_name m in
   ct.fgens <- IntMap.empty;
-  Module_table.add_current name used ct.mt;
+  ct.comp  <- Module.Compile.set_current m ct.comp;
   add_base_classes name ct
 
 
 
-let set_interface_check (used:IntSet.t) (ct:t): unit =
+let set_interface_check (ct:t): unit =
   ct.fgens <- IntMap.empty;
-  Module_table.set_interface_check used ct.mt
+  ct.comp  <- Module.Compile.set_interface_check ct.comp
 
 
 let descendants (i:int) (ct:t): IntSet.t =
@@ -284,7 +276,7 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
       tp
     else
       let i = i - 1
-      and tup_id = ntvs + tuple_index in
+      and tup_id = ntvs + Constants.tuple_class in
       let tp = VAppl(tup_id,[|args.(i);tp|], [||],false) in
       tuple i tp
   in
@@ -293,16 +285,16 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
 
 
 
-let boolean_type (ntvs:int)  = Variable (boolean_index+ntvs)
-let any (ntvs:int)           = Variable (any_index+ntvs)
-let func nb dom ran = VAppl(nb+function_index,[|dom;ran|],[||],false)
+let boolean_type (ntvs:int)  = Variable (Constants.boolean_class+ntvs)
+let any (ntvs:int)           = Variable (Constants.any_class+ntvs)
+let func nb dom ran = VAppl(nb+Constants.function_class,[|dom;ran|],[||],false)
 
 
 let predicate_type (tp:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+predicate_index,[|tp|],[||],false)
+  VAppl(ntvs+Constants.predicate_class,[|tp|],[||],false)
 
 let function_type (tp_a:type_term) (tp_b:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+function_index,[|tp_a;tp_b|],[||],false)
+  VAppl(ntvs+Constants.function_class,[|tp_a;tp_b|],[||],false)
 
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
   (* Convert the callable signature [0,1,...]:RT to the dummy signature
@@ -312,7 +304,7 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    VAppl(ntvs+dummy_index, [|tup;Sign.result s|],[||],false)
+    VAppl(ntvs+Constants.dummy_class, [|tup;Sign.result s|],[||],false)
 
 
 let to_function (ntvs:int) (s:Sign.t): type_term =
@@ -323,7 +315,7 @@ let to_function (ntvs:int) (s:Sign.t): type_term =
     Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s)
-    and fid = ntvs + function_index in
+    and fid = ntvs + Constants.function_class in
     VAppl(fid, [|tup;Sign.result s|], [||],false)
 
 
@@ -336,9 +328,9 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
   in
   let idx, args =
     if is_pred then
-      predicate_index,  [|tup|]
+      Constants.predicate_class,  [|tup|]
     else
-      function_index, [|tup;Sign.result s|]
+      Constants.function_class, [|tup;Sign.result s|]
   in
   let idx = idx + ntvs in
   VAppl(idx, args, [||],false)
@@ -347,11 +339,11 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
 
 let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
   let cls_idx,args = split_type_term tp in
-  if cls_idx = ntvs + predicate_index then begin
+  if cls_idx = ntvs + Constants.predicate_class then begin
     assert (Array.length args = 1);
     boolean_type ntvs
-  end else if cls_idx = ntvs + function_index ||
-              cls_idx = ntvs + dummy_index
+  end else if cls_idx = ntvs + Constants.function_class ||
+              cls_idx = ntvs + Constants.dummy_class
   then begin
     assert (Array.length args = 2);
     args.(1)
@@ -398,19 +390,19 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
       | VAppl (j,tarr,_,_) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
-          if j1 = predicate_index then begin
+          if j1 = Constants.predicate_class then begin
             assert (tarrlen=1);
             1, ("{" ^ (to_string tarr.(0) nb 1) ^ "}")
-          end else if j1 = sequence_index then begin
+          end else if j1 = Constants.sequence_class then begin
             assert (tarrlen=1);
             1, ((to_string tarr.(0) nb 1) ^ "*")
-          end else if j1 = list_index then begin
+          end else if j1 = Constants.list_class then begin
             assert (tarrlen=1);
             1, ("[" ^ (to_string tarr.(0) nb 1) ^ "]")
-          end else if j1 = function_index then begin
+          end else if j1 = Constants.function_class then begin
             assert (tarrlen=2);
             1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
-          end else if j1 = tuple_index then begin
+          end else if j1 = Constants.tuple_class then begin
             assert (tarrlen=2);
             0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
           end else begin
@@ -561,12 +553,7 @@ let is_visible (cidx:int) (ct:t): bool =
      current module and exported.
    *)
   assert (cidx < count ct);
-  not (is_interface_check ct) ||
-  let desc = descriptor cidx ct in
-  assert (desc.mdl <> -1);
-  let currmod = current_module ct in
-  (desc.mdl = currmod && desc.is_exp) ||
-  (desc.mdl <> currmod && Module_table.is_visible desc.mdl ct.mt)
+  not (is_interface_check ct) || (descriptor cidx ct).is_exp
 
 
 let is_class_public (cidx:int) (ct:t): bool = is_visible cidx ct
@@ -586,21 +573,24 @@ let find_for_declaration (cn:int list*int) (ct:t): int =
    *)
   let path, cn = cn in
   let idx = CMap.find (path,cn) ct.map in
-  (*let idx = find_base path cn true ct in*)
   let desc = descriptor idx ct in
-  if (path = [] && desc.mdl = current_module ct) ||
-     (path <> [] && desc.mdl <> current_module ct && is_visible idx ct)
-  then
-    idx
-  else
-    raise Not_found
+  match desc.mdl with
+  | None ->
+     assert false (* illegal call *)
+  | Some mdl ->
+     if (path = [] && is_current_module mdl ct)
+        || (path <> [] && not (is_current_module mdl ct) && is_visible idx ct)
+     then
+       idx
+     else
+       raise Not_found
 
 
 
 let extract_from_tuple
     (nargs:int) (ntvs:int) (tp:type_term): type_term array =
   assert (0 < nargs);
-  let tup_idx = ntvs + tuple_index in
+  let tup_idx = ntvs + Constants.tuple_class in
   let rec extract
       (n:int) (tp:type_term) (lst:type_term list): type_term list =
     assert (0 < n);
@@ -621,7 +611,7 @@ let extract_from_tuple
 
 
 let extract_from_tuple_max (ntvs:int) (tp:type_term): type_term array =
-  let tup_idx = ntvs + tuple_index in
+  let tup_idx = ntvs + Constants.tuple_class in
   let rec extract (tp:type_term) (lst:type_term list): type_term list =
     let cls_idx, args = split_type_term tp in
     if cls_idx = tup_idx then begin
@@ -635,9 +625,9 @@ let extract_from_tuple_max (ntvs:int) (tp:type_term): type_term array =
 
 
 let arity_of_downgraded (ntvs:int) (tp:type_term): int =
-  let pred_idx = predicate_index + ntvs
-  and func_idx = function_index  + ntvs
-  and dum_idx  = dummy_index     + ntvs
+  let pred_idx = Constants.predicate_class + ntvs
+  and func_idx = Constants.function_class  + ntvs
+  and dum_idx  = Constants.dummy_class     + ntvs
   in
   let cls,args = split_type_term tp in
   if cls = pred_idx || cls = func_idx || cls = dum_idx then begin
@@ -653,9 +643,9 @@ let downgrade_signature
   assert (Sign.arity sign < nargs);
   if not (Sign.is_constant sign || Sign.arity sign = 1) then
     raise Not_found;
-  let pred_idx = predicate_index + ntvs
-  and func_idx = function_index  + ntvs
-  and dum_idx  = dummy_index     + ntvs
+  let pred_idx = Constants.predicate_class + ntvs
+  and func_idx = Constants.function_class  + ntvs
+  and dum_idx  = Constants.dummy_class     + ntvs
   in
   if Sign.is_constant sign then
     let tp = Sign.result sign in
@@ -800,19 +790,21 @@ let update
     (tvs:   Tvars.t)
     (ct:    t)
     : unit =
-  assert (has_current_module ct);
   let desc = Seq.elem idx ct.seq
-  and mdl  = Module_table.current ct.mt
+  and mdl  = current_module ct
   in
-  if desc.mdl = -1 || desc.mdl = mdl then begin
-    if desc.mdl = -1 then
-      desc.mdl <- mdl;
-    if is_private ct || desc.is_exp then
-      update_base_descriptor hm tvs desc.bdesc ct
-    else if not desc.is_exp then
-      export idx hm tvs ct
-  end else
-    () (* cannot update a class from a different module *)
+  if desc.mdl = None then
+    desc.mdl <- Some mdl;
+  match desc.mdl with
+  | None ->
+     assert false (* cannot happen *)
+  | Some m when Module.M.equal m mdl ->
+     if is_private ct || desc.is_exp then
+       update_base_descriptor hm tvs desc.bdesc ct
+     else if not desc.is_exp then
+       export idx hm tvs ct
+  | _ ->
+     () (* cannot update a class from a different module *)
 
 
 
@@ -857,10 +849,10 @@ let add
   let idx  = count ct in
   let nfgs = Tvars.count_fgs tvs in
   let bdesc = standard_bdesc hm.v nfgs tvs idx
-  and is_exp = is_interface_use ct
+  and is_exp = is_interface_public_use ct
   in
   Seq.push
-    {mdl  = current_module ct;
+    {mdl  = Some (current_module ct);
      name = cn;
      ident = idx;
      is_exp = is_exp;
@@ -907,12 +899,17 @@ let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
     if cidx1 = cidx2 then
       cidx1
     else
-      let mdl1 = (descriptor cidx1 ct).mdl
-      and mdl2 = (descriptor cidx2 ct).mdl in
-      if mdl1 = mdl2 then begin
-        if cidx1 < cidx2 then cidx2 else cidx1
-      end else
-        if mdl1 < mdl2 then cidx2 else cidx1
+      let open Module in
+      match (descriptor cidx1 ct).mdl, (descriptor cidx2 ct).mdl with
+      | Some m1, Some m2 ->
+         let id1 = M.id m1
+         and id2 = M.id m2 in
+         if id1 = id2 then
+           if cidx1 < cidx2 then cidx2 else cidx1
+         else
+           if id1 < id2 then cidx2 else cidx1
+      | _, _ ->
+         assert false (* involved classes must belong to modules *)
   in
   let set =
     if Sign.arity s > 0 then Sign.involved_classes_arguments tvs s
@@ -939,26 +936,33 @@ let anchored (tvs:Tvars.t) (cls:int) (ct:t): int array =
 let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
   let desc  = descriptor owner ct
   and bdesc = base_descriptor owner ct in
-  let mdl = current_module ct in
   (match bdesc.hmark with
     Deferred_hmark -> ()
   | _ ->
       error_info info
         ("The owner class " ^ (class_name owner ct) ^ " is not deferred")
   );
-  if mdl <> desc.mdl then
-    error_info info
-      ("Can be defined only in the module \"" ^
-       (Module_table.name desc.mdl ct.mt) ^
-       "\" of the owner class " ^
-       (class_name owner ct))
-  else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants) then
-    error_info info
-      ("Owner class " ^ (class_name owner ct) ^" has already descendants")
-  else if nanchors <> 1 then
-    error_info info
-      ("There must be a unique formal generic anchored to the owner class " ^
-       (class_name owner ct))
+  match desc.mdl with
+  | None ->
+     assert false (* owner class must have a module *)
+  | Some m ->
+     if not (is_current_module m ct) then
+       error_info
+         info
+         ("Can be defined only in the module \""
+          ^ Module.M.string_of_name m
+          ^ "\" of the owner class "
+          ^ class_name owner ct)
+     else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants)
+     then
+       error_info
+         info
+         ("Owner class " ^ (class_name owner ct) ^" has already descendants")
+     else if nanchors <> 1 then
+       error_info
+         info
+         ("There must be a unique formal generic anchored to the owner class " ^
+            (class_name owner ct))
 
 
 
@@ -981,25 +985,22 @@ let rec satisfies_0
     and idx2,args2 = split_type_term tp2 in
     assert (nall1 <= idx1);
     assert (nall2 <= idx2);
-    if idx1 = nall1 + dummy_index then
+    try
+      let anc_args = findfun (idx1-nall1) (idx2-nall2) in
+      let nargs    = Array.length anc_args in
+      assert (nargs = Array.length args2);
+      let anc_args =
+        Array.map (fun t -> Term.subst t nall1 args1) anc_args
+      in
+      for i = 0 to nargs-1 do
+        if satisfies_0 anc_args.(i) tvs1 args2.(i) tvs2 findfun ct then
+          ()
+        else
+          raise Not_found
+      done;
       true
-    else
-      try
-        let anc_args = findfun (idx1-nall1) (idx2-nall2) in
-        let nargs    = Array.length anc_args in
-        assert (nargs = Array.length args2);
-        let anc_args =
-          Array.map (fun t -> Term.subst t nall1 args1) anc_args
-        in
-        for i = 0 to nargs-1 do
-          if satisfies_0 anc_args.(i) tvs1 args2.(i) tvs2 findfun ct then
-            ()
-          else
-            raise Not_found
-        done;
-        true
-      with Not_found ->
-        false
+    with Not_found ->
+      false
   in
   let sat1 (tp1:type_term) (tp2:type_term): bool =
     match tp1 with
@@ -1212,12 +1213,12 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
 
 
 let inherits_any (cls:int) (ct:t): bool =
-  cls <> any_index &&
-  has_ancestor cls any_index ct
+  cls <> Constants.any_class &&
+  has_ancestor cls Constants.any_class ct
 
 
 let descends_from_any (cls:int) (ct:t): bool =
-  has_ancestor cls any_index ct
+  has_ancestor cls Constants.any_class ct
 
 
 let type_descends_from_any (tp:term) (tvs:Tvars.t) (ct:t): bool =
@@ -1263,7 +1264,6 @@ let rec inherit_parent
   (* Inherit the parent [par,args] in the class [cls] and in the descendants of
      [cls]. *)
   let par_bdesc      = base_descriptor par ct
-  (*and cls_bdesc_priv = base_descriptor_priv cls ct*)
   and cls_bdesc      = base_descriptor cls ct in
   let cls_nfgs  = Tvars.count_fgs cls_bdesc.tvs in
   let inherit_ancestor anc anc_args is_ghost anc_bdesc cls_bdesc =
@@ -1515,7 +1515,7 @@ let analyze_signature
 
 
 
-let empty_table (): t =
+let empty_table (comp:Module.Compile.t): t =
   let cc = Seq.empty ()
   in
   {map   = CMap.empty;
@@ -1523,7 +1523,7 @@ let empty_table (): t =
    fgens = IntMap.empty;
    base  = IntMap.empty;
    locs  = IntSet.empty;
-   mt=Module_table.make ()}
+   comp = comp}
 
 
 
@@ -1545,13 +1545,13 @@ let add_base_class
   let bdesc = standard_bdesc hm nfgs tvs idx
   in
   Seq.push
-    {mdl=(-1);
+    {mdl = None;
      name = nme;
      ident = idx;
      is_exp = (name = "@DUMMY");
      bdesc = bdesc}
     ct.seq;
-  let mdl_nme = ST.symbol (String.lowercase name) in
+  let mdl_nme = ST.symbol (String.lowercase_ascii name) in
   assert (not (IntMap.mem mdl_nme ct.base));
   ct.base <- IntMap.add mdl_nme idx ct.base
 
@@ -1559,26 +1559,26 @@ let add_base_class
 
 
 let check_base_classes (ct:t): unit =
-  assert (tuple_index < (count ct));
-  assert ((class_name boolean_index   ct) = "BOOLEAN");
-  assert ((class_name any_index       ct) = "ANY");
-  assert ((class_name dummy_index     ct) = "@DUMMY");
-  assert ((class_name predicate_index ct) = "PREDICATE");
-  assert ((class_name function_index  ct) = "FUNCTION");
-  assert ((class_name tuple_index     ct) = "TUPLE");
-  assert ((class_name sequence_index  ct) = "SEQUENCE");
-  assert ((class_name list_index      ct) = "LIST");
+  assert (Constants.tuple_class < (count ct));
+  assert ((class_name Constants.boolean_class   ct) = "BOOLEAN");
+  assert ((class_name Constants.any_class       ct) = "ANY");
+  assert ((class_name Constants.dummy_class     ct) = "@DUMMY");
+  assert ((class_name Constants.predicate_class ct) = "PREDICATE");
+  assert ((class_name Constants.function_class  ct) = "FUNCTION");
+  assert ((class_name Constants.tuple_class     ct) = "TUPLE");
+  assert ((class_name Constants.sequence_class  ct) = "SEQUENCE");
+  assert ((class_name Constants.list_class      ct) = "LIST");
   ()
 
 
 
 
-let base_table (): t =
+let base_table (comp:Module.Compile.t): t =
   let fgg = ST.symbol "G"
   and fga = ST.symbol "A"
   and fgb = ST.symbol "B"
-  and anycon = Variable any_index
-  and ct = empty_table ()   in
+  and anycon = Variable Constants.any_class
+  and ct = empty_table (comp)   in
   add_base_class "BOOLEAN"   No_hmark        [||] ct;
   add_base_class "ANY"       Deferred_hmark  [||] ct;
   add_base_class "@DUMMY"    No_hmark        [||] ct;

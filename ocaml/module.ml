@@ -199,6 +199,9 @@ module M =
     let compare (m1:t) (m2:t): int =
       Pervasives.compare m1.name m2.name
 
+    let equal (m1:t) (m2:t): bool =
+      compare m1 m2 = 0
+
     let base_name (m:t): int =
       fst m.name
 
@@ -278,6 +281,14 @@ module M =
     let put_sorted (id:int) (m:t): unit =
       assert (not (has_id m));
       m.id <- Some id
+
+    let equal (m1:t) (m2:t): bool =
+      match m1.id, m2.id with
+      | Some id1, Some id2 ->
+         id1 = id2
+      | _ , _ ->
+         assert false (* call not allowed unless sorted *)
+
 
     let get (path:string) (name:string) (mname:module_name): t =
       let src_al =
@@ -563,6 +574,24 @@ module MSet =
     let iter (f:M.t->unit) (set:t): unit =
       Seq.iter f set.seq
 
+
+    let verify_dependencies (m:M.t) (set:t) : unit =
+      assert (M.has_implementation m);
+      assert (M.has_interface m);
+      let impl = M.implementation m
+      and ifc  = M.interface m in
+      List.iter
+        (fun nme ->
+          let m_used = must_find nme.v set in
+          if not (List.mem (M.id m_used) (Src.full_dependencies impl))
+          then
+            Src.info_abort
+              nme.i
+              ("module \"" ^ M.string_of_name m_used
+               ^ "\" not used in implementation file")
+              ifc
+        )
+        (Src.dependencies ifc)
   end (* MSet *)
 
 
@@ -693,3 +722,60 @@ let make_set (cmd:Command_line.t): MSet.t =
     (fun m -> MSet.put_sorted m graph)
     lst;
   graph
+
+
+
+module Compile =
+  struct
+    type t = {
+        set: MSet.t;
+        target:  M.t;  (* The module to be compiled *)
+        current: M.t;  (* The currently parsed module *)
+        mode: int;     (* 0: interface private use,
+                          1: interface public use,
+                          2: implementation verification,
+                          3: interface verification *)
+      }
+    let verbosity (c:t): int =
+      MSet.verbosity c.set
+    let set (c:t): MSet.t = c.set
+    let current (c:t): M.t = c.current
+    let target  (c:t): M.t = c.target
+    let current_is_target (c:t): bool =
+      M.equal c.current c.target
+    let is_interface_use (c:t): bool =
+      c.mode <= 1
+    let is_interface_public_use (c:t): bool =
+      c.mode = 1
+    let is_verifying (c:t): bool =
+      c.mode = 2
+    let is_interface_check (c:t): bool =
+      c.mode = 3
+    let is_publicly_visible (m:M.t) (c:t): bool =
+      M.has_interface c.target
+      && List.mem (M.id m) (c.target |> M.interface |> Src.full_dependencies)
+
+    let make (m:M.t) (set:MSet.t): t =
+      assert (M.has_id m);
+      { set = set; target = m; current = m; mode = 2}
+    let set_current (m:M.t) (c:t): t =
+      assert (M.has_interface m || M.equal m c.target);
+      let mode =
+        if M.equal m c.target then
+          2
+        else if M.has_interface c.target
+                && List.mem
+                     (M.id m)
+                     (c.target |> M.interface |> Src.full_dependencies)
+        then
+          1
+        else
+          0
+      in
+      {c with
+        mode = mode;
+        current = m}
+    let set_interface_check (c:t): t =
+      assert (current_is_target c);
+      {c with mode = 3}
+  end

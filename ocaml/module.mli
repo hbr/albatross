@@ -28,6 +28,7 @@ module M :
 sig
   type t
   val compare: t -> t -> int
+  val equal:   t -> t -> bool
   val primary_source: t -> Src.t
   val name: t -> module_name
   val base_name: t -> int
@@ -58,7 +59,28 @@ sig
   val dependencies: node -> graph -> node list
   val fold: ('a -> M.t -> 'a) -> 'a -> t -> 'a
   val iter: (M.t->unit) -> t -> unit
+  val verify_dependencies: M.t -> t -> unit
 end
 
 
 val make_set: Command_line.t -> MSet.graph
+
+
+
+module Compile:
+sig
+  type t
+  val verbosity: t -> int
+  val set:     t -> MSet.t
+  val target:  t -> M.t
+  val current: t -> M.t
+  val current_is_target: t -> bool
+  val is_interface_use:  t -> bool
+  val is_interface_public_use: t -> bool
+  val is_verifying: t -> bool
+  val is_interface_check: t -> bool
+  val is_publicly_visible: M.t -> t -> bool
+  val make: M.t -> MSet.t -> t
+  val set_current: M.t -> t -> t
+  val set_interface_check: t -> t
+end

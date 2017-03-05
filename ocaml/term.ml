@@ -45,6 +45,8 @@ module TermMap = Map.Make(struct
   type t = term
 end)
 
+
+
 let string_of_flow (ctrl:flow): string =
   match ctrl with
     Ifexp   -> "if"
@@ -75,6 +77,7 @@ let string_of_names (nms:names): string =
   (String.concat ","
      (List.map ST.string (Array.to_list nms))) ^
   ")"
+
 
 
 module Term: sig
@@ -1510,6 +1513,32 @@ end = struct
 end (* Term *)
 
 
+
+
+module Formals:
+sig
+  type t
+  val make:  names -> types -> t
+  val count: t -> int
+  val names: t -> names
+  val types: t -> types
+end
+  =
+  struct
+    type t = {
+        names: names;
+        types: types
+      }
+    let make (nms:names) (tps:types): t =
+      assert (Array.length nms = Array.length tps);
+      {names = nms; types = tps}
+
+    let names (formals:t): names = formals.names
+    let types (formals:t): types = formals.types
+    let count (formals:t): int = Array.length formals.names
+    let equivalent (f1:t) (f2:t): bool =
+      Term.equivalent_array f1.types f2.types
+  end (* Formals *)
 
 
 

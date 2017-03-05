@@ -117,23 +117,6 @@ let status (cmd:Command_line.t): unit =
 
 
 
-let used_set (nms:module_name withinfo list) (pc:PC.t): IntSet.t =
-  let mt = PC.module_table pc in
-  List.fold_left
-    (fun set1 nme ->
-      let mdl =
-        try
-          Module_table.find nme.v mt
-        with Not_found ->
-          Format.printf "used_set \"%s\" not found@." (string_of_module nme.v);
-          assert false
-      in
-      IntSet.union (Module_table.used mdl mt) set1
-    )
-    IntSet.empty
-    nms
-
-
 let analyze
       (ast:declaration list) (pc:PC.t) (src:Module.Src.t)
     : unit =
@@ -148,11 +131,9 @@ let add_used_module (m:Module.M.t) (mset:Module.MSet.t) (pc:PC.t): unit =
   let open Module in
   assert (M.has_interface m);
   let src_ali = M.interface m in
-  let deps = Src.dependencies src_ali in
-  let used = used_set deps pc in
-  PC.add_used_module (M.name m)  used pc;
+  PC.add_used_module m pc;
   let ast = Src.parse src_ali in
-  analyze false ast pc src_ali
+  analyze ast pc src_ali
 
 
 
@@ -160,10 +141,10 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
   let open Module in
   assert (M.has_implementation m);
   let verbosity = MSet.verbosity mset in
+  let comp = Compile.make m mset in
   if verbosity > 0 then
     Format.printf "Compile module \"%s\"@." (M.string_of_name m);
-  let pc = PC.make (MSet.verbosity mset) in
-  let mt = PC.module_table pc in
+  let pc = PC.make comp in
   let src_al = M.implementation m in
   let deps = Src.full_dependencies src_al in
   List.iter
@@ -174,10 +155,9 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
       add_used_module m mset pc
     )
     deps;
-  let used = used_set (Src.dependencies src_al) pc
-  and nme,_ = M.name m
+  let nme,_ = M.name m
   in
-  PC.add_current_module nme used pc;
+  PC.add_current_module m pc;
   let ast = Src.parse src_al in
   if verbosity > 1 then
     Format.printf " verify implementation \"%s\"@." (ST.string nme);
@@ -186,20 +166,15 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
     begin
       if verbosity > 1 then
         Format.printf " verify interface \"%s\"@." (ST.string nme);
+      MSet.verify_dependencies m (Compile.set comp);
       let src_ali = M.interface m in
       let ast = Src.parse src_ali in
-      begin
-        try
-          let used =
-            Module_table.interface_used (Src.dependencies src_ali) mt in
-          PC.set_interface_check used pc
-        with Error_info (info,str) ->
-          Src.info_abort info str src_ali
-      end;
+      PC.set_interface_check pc;
       analyze ast pc src_ali;
       Module.Src.write_meta src_ali
     end;
   Module.Src.write_meta src_al
+
 
 
 

@@ -26,28 +26,28 @@ alba: alba.native
 alba.byte:
 	ocamlbuild \
             -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
             -lib unix \
 	    alba.byte
 
 alba.d.byte:
 	ocamlbuild \
             -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
             -lib unix \
 	    alba.d.byte
 
 alba.native:
 	ocamlbuild \
             -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
             -lib unix \
             alba.native
 
 alba.p.native:
 	ocamlbuild \
             -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
             -lib unix \
             alba.p.native
 
@@ -86,15 +86,15 @@ test2_example: alba.byte
 test2_sf: alba.byte
 	./alba.byte -work-dir ../../sf compile -force -verbosity 1
 
-test: alba.native test_library test_draft test_example
+test: alba test_library test_draft test_example
 
-test_library: alba.native
+test_library: alba
 	./alba.native -work-dir ../library/alba.base compile -force -verbosity 1
 
-test_draft: alba.native
+test_draft: alba
 	./alba.native -work-dir ../_draft compile -force -verbosity 1
 
-test_example: alba.native
+test_example: alba
 	./alba.native -work-dir ../example compile -force -verbosity 1
 
 boolean: alba.byte

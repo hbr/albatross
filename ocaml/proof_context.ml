@@ -30,7 +30,6 @@ type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
 
 
 type gdesc = {mutable pub: bool;
-              mdl: int;
               defer: bool;
               anchor: int}
 
@@ -53,10 +52,6 @@ let is_tracing (pc:t): bool = pc.verbosity >= 3
 
 let context (pc:t): Context.t = Proof_table.context pc.base
 
-let module_table (pc:t): Module_table.t =
-  let c = context pc in
-  Context.module_table c
-
 let feature_table (pc:t): Feature_table.t =
   let c = context pc in
   Context.feature_table c
@@ -70,14 +65,14 @@ let is_public  (pc:t): bool = Proof_table.is_public  pc.base
 let is_interface_use   (pc:t): bool = Proof_table.is_interface_use  pc.base
 let is_interface_check (pc:t): bool = Proof_table.is_interface_check  pc.base
 
-let add_used_module (name:int*int list) (used:IntSet.t) (pc:t): unit =
-  Proof_table.add_used_module name used pc.base
+let add_used_module (m:Module.M.t) (pc:t): unit =
+  Proof_table.add_used_module m pc.base
 
-let add_current_module (name:int) (used:IntSet.t) (pc:t): unit =
-  Proof_table.add_current_module name used pc.base
+let add_current_module (m:Module.M.t) (pc:t): unit =
+  Proof_table.add_current_module m pc.base
 
-let set_interface_check (pub_used:IntSet.t) (pc:t): unit =
-  Proof_table.set_interface_check pub_used pc.base
+let set_interface_check (pc:t): unit =
+  Proof_table.set_interface_check pc.base
 
 
 
@@ -98,9 +93,10 @@ let copied_entry (e:entry): entry =
 
 
 
-let make (verbosity:int): t  =
+let make (comp:Module.Compile.t): t  =
+  let verbosity = Module.Compile.verbosity comp in
   let res =
-    {base     = Proof_table.make verbosity;
+    {base     = Proof_table.make comp;
      terms    = Ass_seq.empty ();
      gseq     = Seq.empty ();
      def_ass  = Term_table.empty;
@@ -352,7 +348,7 @@ let is_visible (i:int) (pc:t): bool =
   let ft = feature_table pc
   and t,c  = Proof_table.term i pc.base in
   let nb = Context.count_variables c in
-  Feature_table.is_term_public t nb ft
+  Feature_table.is_term_visible t nb ft
 
 
 let split_implication (t:term) (pc:t): term * term =
@@ -1121,7 +1117,7 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
   i < nbenv ||
   let idx = i - nbenv in
   idx = Constants.or_index ||
-  Feature_table.owner idx ft <> Class_table.boolean_index
+  Feature_table.owner idx ft <> Constants.boolean_class
 
 
 
@@ -2020,9 +2016,7 @@ let close (pc:t): unit =
   if is_global pc then
     ()
   else begin
-    let cnt0 = count pc in
     let rec cls (round:int): unit =
-      (*if count pc - cnt0 > 1000 then assert false; (* 'infinite' loop detection *)*)
       if has_work pc then begin
         let lst = List.rev pc.work in
         pc.work <- [];
@@ -2082,7 +2076,7 @@ let print_work (pc:t): unit =
 
 let boolean_type (nb:int) (pc:t): type_term =
   let ntvs = Context.ntvs (context pc) in
-  Variable (Class_table.boolean_index + nb + ntvs)
+  Variable (Constants.boolean_class + nb + ntvs)
 
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
@@ -2102,13 +2096,10 @@ let add_global (defer:bool) (anchor:int) (pc:t): unit =
     printf "add_global count pc = %d, Seq.count pc.gseq = %d\n"
       cnt (Seq.count pc.gseq);
   assert (cnt = Seq.count pc.gseq + 1);
-  let mt = module_table pc in
-  let mdl = Module_table.current mt in
   Seq.push
     {pub = is_public pc;
      defer = defer;
-     anchor = anchor;
-     mdl = mdl}
+     anchor = anchor}
     pc.gseq;
   assert (count pc = Seq.count pc.gseq)
 
@@ -2181,7 +2172,7 @@ let prove_equality (g:term) (pc:t): int =
   let nargs = Array.length args1 in
   let tup  = Context.tuple_of_terms args1 c
   and r_tp = Context.type_of_term left c in
-  let f_tp = VAppl (Context.function_index c, [|tup;r_tp|], [||], false) in
+  let f_tp = VAppl (Context.function_class c, [|tup;r_tp|], [||], false) in
   let lam = make_lambda nargs [||] [] tlam false f_tp pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);

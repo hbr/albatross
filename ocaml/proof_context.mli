@@ -13,7 +13,6 @@ open Proof
 type t
 
 val context: t -> Context.t
-val module_table: t  -> Module_table.t
 val class_table: t   -> Class_table.t
 val feature_table: t -> Feature_table.t
 
@@ -25,9 +24,9 @@ val is_tracing:         t -> bool
 val verbosity:          t -> int
 val trace_prefix:       t -> string
 val trace_prefix_0:     t -> string
-val add_used_module:    (int * int list) -> IntSet.t -> t -> unit
-val add_current_module: int -> IntSet.t -> t -> unit
-val set_interface_check: IntSet.t -> t -> unit
+val add_used_module:    Module.M.t -> t -> unit
+val add_current_module: Module.M.t -> t -> unit
+val set_interface_check: t -> unit
 
 val has_result: t -> bool
 val has_result_variable: t -> bool
@@ -47,7 +46,7 @@ val is_well_typed: term -> t -> bool
 val prenex_term: term -> t -> term
 val predicate_of_type: type_term -> t -> type_term
 
-val make:      int -> t
+val make: Module.Compile.t -> t
 
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t

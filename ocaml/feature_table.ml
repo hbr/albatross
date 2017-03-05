@@ -30,10 +30,16 @@ type definition = term
 type formal     = int * term
 
 
-class bdesc (idx:int) (nfgs:int) (classes:int array) (spec:Feature.Spec.t) =
+class bdesc
+        (is_exp:bool)
+        (idx:int)
+        (nfgs:int)
+        (classes:int array)
+        (spec:Feature.Spec.t)
+  =
   object (self:'self)
     val mutable is_inh = false
-    val mutable is_exp = false
+    val mutable is_exp = is_exp
     val mutable spec = spec
     val mutable sd = idx                    (* each new feature is its own seed *)
     val mutable subst = standard_substitution nfgs
@@ -71,7 +77,7 @@ class bdesc (idx:int) (nfgs:int) (classes:int array) (spec:Feature.Spec.t) =
   end
 
 type descriptor = {
-    mutable mdl: int;             (* -1: base feature, module not yet assigned*)
+    mutable mdl: Module.M.t option;(* None: base feature, module not yet assigned*)
     mutable cls: int;             (* owner class *)
     anchor_cls:  int;
     anchor_fg:   int;
@@ -95,39 +101,32 @@ type t = {
 
 
 
-let empty (verbosity:int): t =
+let empty (comp:Module.Compile.t): t =
+  let verbosity = Module.Compile.verbosity comp in
   {map  = Feature_map.empty;
    seq  = Seq.empty ();
    base = IntMap.empty;
-   ct   = Class_table.base_table ();
+   ct   = Class_table.base_table (comp);
    verbosity = verbosity}
 
 
 let class_table (ft:t):  Class_table.t   = ft.ct
-let module_table (ft:t): Module_table.t = Class_table.module_table ft.ct
+let compilation_context (ft:t): Module.Compile.t =
+  Class_table.compilation_context ft.ct
 
 let is_private (ft:t): bool = Class_table.is_private ft.ct
 let is_public  (ft:t): bool = Class_table.is_public  ft.ct
 let is_interface_check  (ft:t): bool = Class_table.is_interface_check ft.ct
 let is_interface_use (ft:t): bool = Class_table.is_interface_use ft.ct
+let is_interface_public_use (ft:t): bool =
+  Class_table.is_interface_public_use ft.ct
 
 
-let has_current_module (ft:t): bool =
-  Class_table.has_current_module ft.ct
+let current_module (ft:t): Module.M.t =
+  compilation_context ft |> Module.Compile.current
 
-let current_module (ft:t): int =
-  Class_table.current_module ft.ct
-
-let count_modules (ft:t): int =
-  Class_table.count_modules ft.ct
-
-let used_modules (mdl:int) (ft:t): IntSet.t =
-  Class_table.used_modules mdl ft.ct
-
-let find_module (name:int*int list)  (ft:t): int =
-  Class_table.find_module name ft.ct
-
-let module_name (mdl:int) (ft:t): string = Class_table.module_name mdl ft.ct
+let is_current_module (m:Module.M.t) (ft:t): bool =
+  Module.M.equal m (current_module ft)
 
 
 let count (ft:t): int =
@@ -189,7 +188,7 @@ let is_higher_order (i:int) (ft:t): bool =
   let cls,_ = Class_table.split_type_term (Sign.result desc.sign) in
   assert (ntvs <= cls);
   let cls = cls - ntvs in
-  cls = Constants.predicate_index || cls = Constants.function_index
+  cls = Constants.predicate_class || cls = Constants.function_class
 
 
 let tuple_arity (i:int) (ft:t): int =
@@ -210,22 +209,10 @@ let string_of_signature (i:int) (ft:t): string =
   (Class_table.string_of_complete_signature desc.sign desc.tvs ft.ct)
 
 
-let is_feature_public (i:int) (ft:t): bool =
-  assert (i < count ft);
-  is_private ft ||
-  let desc = descriptor i ft in
-  (desc.mdl = current_module ft && desc.bdesc#is_exported) ||
-  (desc.mdl <> current_module ft &&
-   Module_table.is_visible desc.mdl (module_table ft))
-
 
 let is_feature_visible (i:int) (ft:t): bool =
   assert (i < count ft);
-  not (is_interface_check ft) ||
-  let desc = descriptor i ft in
-  (desc.mdl = current_module ft && desc.bdesc#is_exported) ||
-  (desc.mdl <> current_module ft &&
-   Module_table.is_visible desc.mdl (module_table ft))
+  not (is_interface_check ft) || (descriptor i ft).bdesc#is_exported
 
 
 
@@ -380,41 +367,41 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
 
 
 
-let is_term_public (t:term) (nbenv:int) (ft:t): bool =
-  let rec check_pub t nb =
-    let check_pub_i i =
+let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
+  let rec check_visi t nb =
+    let check_visi_i i =
       let i = i - nb in
       assert (i < count ft);
-      if not (is_feature_public i ft) then
+      if not (is_feature_visible i ft) then
         raise Not_found
       else
         ()
-    and check_args args nb = Array.iter (fun t -> check_pub t nb) args
-    and check_lst  lst nb  = List.iter  (fun t -> check_pub t nb) lst
+    and check_args args nb = Array.iter (fun t -> check_visi t nb) args
+    and check_lst  lst nb  = List.iter  (fun t -> check_visi t nb) lst
     in
     match t with
       Variable i when i < nb ->
         ()
     | Variable i ->
-        check_pub_i i
+        check_visi_i i
     | VAppl(i,args,_,_) ->
-        check_pub_i i;
+        check_visi_i i;
         check_args args nb
     | Application(f,args,_) ->
-        check_pub f nb;
+        check_visi f nb;
         check_args args nb
     | Lam(n,nms,pres0,t0,_,_) ->
         check_lst pres0 (1+nb);
-        check_pub t0 (1+nb)
+        check_visi t0 (1+nb)
     | QExp(n,_,_,t0,_) ->
-        check_pub t0 (n+nb)
+        check_visi t0 (n+nb)
     | Flow (ctrl,args) ->
         check_args args nb
     | Indset (nme,tp,rs) ->
         check_args rs (1+nb)
   in
   try
-    check_pub t nbenv;
+    check_visi t nbenv;
     true
   with Not_found ->
     false
@@ -1759,7 +1746,7 @@ let is_predicate (i:int) (ft:t): bool =
   let res = Sign.result sign in
   match res with
     Variable i when nfgs <= i ->
-      i - nfgs = Constants.boolean_index
+      i - nfgs = Constants.boolean_class
   | _ ->
       false
 
@@ -2085,7 +2072,6 @@ let add_feature
       (fun tp -> Tvars.principal_class tp tvs)
       (Tvars.fgconcepts tvs)
   in
-  let mdl = Class_table.current_module ft.ct in
   let cls = Class_table.owner tvs sign ft.ct
   and anchor_fg, anchor_cls = Sign.anchor tvs sign in
   let anchored = Class_table.anchored tvs cls ft.ct in
@@ -2095,11 +2081,11 @@ let add_feature
       Class_table.check_deferred cls nanchors fn.i ft.ct
   | _ -> ()
   end;
-  let bdesc = new bdesc cnt nfgs classes spec
+  let bdesc = new  bdesc (is_interface_public_use ft) cnt nfgs classes spec
   and nfgs = Tvars.count_all tvs
   in
   let desc =
-    {mdl      = mdl;
+    {mdl      = Some (current_module ft);
      cls      = cls;
      anchor_cls = anchor_cls;
      anchor_fg  = anchor_fg;
@@ -2143,7 +2129,7 @@ let set_owner_class (idx:int) (cls:int) (ft:t): unit =
 
 
 
-let export_feature (i:int) (withspec:bool) (ft:t): unit =
+let export_feature (i:int) (ft:t): unit =
   (* Export the feature [i] unless it is already publicly available. *)
   assert (i < count ft);
   if ft.verbosity > 1 then
@@ -2174,8 +2160,9 @@ let add_base
   and ntvs = Array.length concepts
   and cnt  = count ft
   and nargs = Array.length argtypes
+  and is_exported = false
   in
-  let bdesc = new bdesc cnt ntvs [|cls|] spec
+  let bdesc = new bdesc is_exported cnt ntvs [|cls|] spec
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
   let anchored = Class_table.anchored tvs cls ft.ct in
@@ -2187,7 +2174,7 @@ let add_base
       ft.base <- IntMap.add mdl_nme lst ft.base;
       lst
   and desc = {
-    mdl = -1;
+    mdl = None;
     fname    = fn;
     cls      = cls;
     anchor_cls = anchor_cls;
@@ -2209,30 +2196,30 @@ let add_base
 
 
 
-let base_table (verbosity:int) : t =
+let base_table (comp:Module.Compile.t) : t =
   (** Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
-  let ft      = empty verbosity
+  let ft      = empty comp
   in
-  let any1  = Variable (Constants.any_index+1)
-  and any2  = Variable (Constants.any_index+2)
-  and bool1 = Variable (Constants.boolean_index+1)
+  let any1  = Variable (Constants.any_class+1)
+  and any2  = Variable (Constants.any_class+2)
+  and bool1 = Variable (Constants.boolean_class+1)
   and g_tp  = Variable 0
   and a_tp  = Variable 0
   and b_tp  = Variable 1 in
-  let p_tp1 = make_type (Constants.predicate_index+1) [|g_tp|]
-  and p_tp2 = make_type (Constants.predicate_index+2) [|a_tp|]
-  and f_tp  = make_type (Constants.function_index+2)  [|a_tp;b_tp|]
-  and tup_tp= make_type (Constants.tuplec_index+2) [|a_tp;b_tp|]
+  let p_tp1 = make_type (Constants.predicate_class+1) [|g_tp|]
+  and p_tp2 = make_type (Constants.predicate_class+2) [|a_tp|]
+  and f_tp  = make_type (Constants.function_class+2)  [|a_tp;b_tp|]
+  and tup_tp= make_type (Constants.tuple_class+2) [|a_tp;b_tp|]
   and spec_none n = Feature.Spec.make_func_def (standard_argnames n) None []
   and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t) []
   in
   add_base (* ==> *)
-    "boolean" Constants.boolean_index (FNoperator DArrowop)
+    "boolean" Constants.boolean_class (FNoperator DArrowop)
     [||] [|bool;bool|] bool false false (spec_none 2) ft;
 
   add_base (* false *)
-    "boolean" Constants.boolean_index FNfalse
+    "boolean" Constants.boolean_class FNfalse
     [||] [||] bool false false (spec_none 0) ft;
 
   let imp_id1   = 1 + Constants.implication_index
@@ -2250,31 +2237,31 @@ let base_table (verbosity:int) : t =
     Term.binary Constants.implication_index (false_constant 0) (false_constant 0)
   in
   add_base (* true *)
-    "boolean" Constants.boolean_index FNtrue
+    "boolean" Constants.boolean_class FNtrue
     [||] [||] bool false false (spec_term 0 true_term) ft;
 
   add_base (* not *)
-    "boolean" Constants.boolean_index (FNoperator Notop)
+    "boolean" Constants.boolean_class (FNoperator Notop)
     [||] [|bool|] bool false false (spec_term 1 not_term) ft;
 
   add_base (* and *)
-    "boolean" Constants.boolean_index (FNoperator Andop)
+    "boolean" Constants.boolean_class (FNoperator Andop)
     [||] [|bool;bool|] bool false false (spec_term 2 and_term) ft;
 
   add_base (* or *)
-    "boolean" Constants.boolean_index (FNoperator Orop)
+    "boolean" Constants.boolean_class (FNoperator Orop)
     [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
   add_base (* equality *)
-    "any" Constants.any_index (FNoperator Eqop)
+    "any" Constants.any_class (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 
   add_base (* in *)
-    "predicate" Constants.predicate_index (FNoperator Inop)
+    "predicate" Constants.predicate_class (FNoperator Inop)
     [|any1|] [|g_tp;p_tp1|] bool1 false false (spec_none 2) ft;
 
   add_base (* domain *)
-    "function" Constants.function_index (FNname ST.domain)
+    "function" Constants.function_class (FNname ST.domain)
     [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* tuple *)
@@ -2292,11 +2279,11 @@ let base_table (verbosity:int) : t =
     Flow (Inspect, [|Variable 0; pat; res |])
   in
   add_base (* first *)
-    "tuple" Constants.tuplec_index (FNname ST.first)
+    "tuple" Constants.tuple_class (FNname ST.first)
     [|any2;any2|] [|tup_tp|] a_tp false false (spec_term 1 (first_second_term 0)) ft;
 
   add_base (* second *)
-    "tuple" Constants.tuplec_index (FNname ST.second)
+    "tuple" Constants.tuple_class (FNname ST.second)
     [|any2;any2|] [|tup_tp|] b_tp false false (spec_term 1 (first_second_term 1)) ft;
 
   assert ((descriptor Constants.implication_index ft).fname = FNoperator DArrowop);
@@ -2310,20 +2297,6 @@ let base_table (verbosity:int) : t =
   assert ((descriptor Constants.first_index ft).fname   = FNname ST.first);
   assert ((descriptor Constants.second_index ft).fname  = FNname ST.second);
   ft
-
-
-let has_visible_variant (i:int) (ft:t): bool =
-  (* Does the feature [i] has a visible variant in the current module?
-   *)
-  assert (is_interface_use ft);
-  let bdesc = base_descriptor i ft
-  and mt    = module_table ft in
-  let used  = Module_table.current_used mt in
-  IntArrayMap.exists
-    (fun _ ivar ->
-      let desc  = descriptor ivar ft in
-      IntSet.mem desc.mdl used)
-    bdesc#variants
 
 
 
@@ -2593,12 +2566,13 @@ let is_equality (t:term) (nbenv:int) (ft:t): bool =
 let add_base_features (mdl_name:int) (ft:t): unit =
   try
     let lst = IntMap.find mdl_name ft.base in
-    let curr_mdl = current_module ft in
     List.iter
       (fun idx ->
         let desc = descriptor idx ft in
-        assert (desc.mdl = -1);
-        desc.mdl <- curr_mdl;
+        assert (desc.mdl = None);
+        desc.mdl <- Some (current_module ft);
+        if is_interface_use ft then
+          desc.bdesc#set_exported;
         add_key idx ft;
         add_class_feature idx ft)
       !lst
@@ -2608,15 +2582,17 @@ let add_base_features (mdl_name:int) (ft:t): unit =
 
 
 
-let add_used_module (name:int*int list) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_used_module name used ft.ct;
-  add_base_features (fst name) ft
+let add_used_module (m:Module.M.t) (ft:t): unit =
+  let name = Module.M.base_name m in
+  Class_table.add_used_module m ft.ct;
+  add_base_features name ft
 
 
 
 
-let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
-  Class_table.add_current_module name used ft.ct;
+let add_current_module (m:Module.M.t) (ft:t): unit =
+  let name = Module.M.base_name m in
+  Class_table.add_current_module m ft.ct;
   add_base_features name ft;
   if name <> ST.symbol "boolean" then begin
     let or_desc  = descriptor Constants.or_index ft
@@ -2629,38 +2605,27 @@ let add_current_module (name:int) (used:IntSet.t) (ft:t): unit =
 
 
 
-let set_interface_check (used:IntSet.t) (ft:t): unit =
-  Class_table.set_interface_check used ft.ct(*;
-  ft.map <- Feature_map.empty;
-  let mdl = current_module ft in
-  for i = 0 to count ft - 1 do
-    let desc = descriptor i ft in
-    if desc.mdl = mdl || IntSet.mem desc.mdl used then
-      match desc.pub with
-        Some bdesc ->
-          if not bdesc#is_inherited then
-            add_key i ft
-      | None ->
-          add_key i ft;
-          if desc.mdl <> mdl then
-            desc.pub <- Some (desc.priv)
-  done*)
+let set_interface_check (ft:t): unit =
+  Class_table.set_interface_check ft.ct
 
 
 
 let check_interface (ft:t): unit =
   assert (is_interface_check ft);
-  let mt = module_table ft in
-  let curr = Module_table.current mt in
   for i = 0 to count ft - 1 do
     let desc = descriptor i ft in
-    if curr = desc.mdl
-        && is_desc_deferred desc
-        && not desc.bdesc#is_exported
-        && Class_table.is_class_public desc.cls ft.ct then
-      error_info (FINFO (1,0))
-        ("deferred feature `" ^ (string_of_signature i ft) ^
-         "' is not public")
+    match desc.mdl with
+    | None ->
+       ()
+    | Some mdl ->
+       if is_current_module mdl ft
+          && is_desc_deferred desc
+          && not desc.bdesc#is_exported
+          && Class_table.is_class_public desc.cls ft.ct
+       then
+         error_info (FINFO (1,0))
+                    ("deferred feature \"" ^ (string_of_signature i ft) ^
+                       "\" is not exported")
   done
 
 
@@ -3199,23 +3164,6 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
   collect t nb IntSet.empty
 
 
-
-let validate_visibility (t:term) (nb:int) (info:info) (ft:t): unit =
-  if not (is_interface_check ft) then
-    ()
-  else
-    let set = collect_called t nb ft in
-    let set = IntSet.filter (fun idx -> not (is_feature_public idx ft)) set in
-    if not (IntSet.is_empty set) then
-      let strlst =
-        List.map
-          (fun idx -> "    " ^ (string_of_signature idx ft))
-          (IntSet.elements set) in
-      let str = String.concat "\n" strlst in
-      error_info info ("The following functions are not visible:\n" ^ str)
-
-
-
 let involved_assertions (fidx:int) (ft:t): IntSet.t =
   (base_descriptor fidx ft)#involved_assertions
 
@@ -3236,7 +3184,7 @@ let equal_symmetry_term (): term =
   and a = Variable 0
   and b = Variable 1
   and ag = Variable 0
-  and any_tp = Variable (1 + Constants.any_index)
+  and any_tp = Variable (1 + Constants.any_class)
   in
   let eq a b = VAppl (eq_id, [|a;b|], [|ag|], false) in
   let imp = Term.binary imp_id (eq a b) (eq b a) in
@@ -3255,7 +3203,7 @@ let leibniz_term (): term =
   and b = Variable 1
   and p = Variable 2
   and ag = Variable 0
-  and any_tp = Variable (1 + Constants.any_index)
+  and any_tp = Variable (1 + Constants.any_class)
   in
   let pred = Class_table.predicate_type ag 1 in
   let eqab = VAppl (eq_id, [|a;b|], [|ag|],false)

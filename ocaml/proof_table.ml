@@ -40,14 +40,14 @@ let is_interface_use   (at:t): bool = Context.is_interface_use  at.c
 let is_interface_check (at:t): bool = Context.is_interface_check  at.c
 
 
-let add_used_module (name:int*int list) (used:IntSet.t) (at:t): unit =
-  Context.add_used_module name used at.c
+let add_used_module (m:Module.M.t) (at:t): unit =
+  Context.add_used_module m at.c
 
-let add_current_module (name:int) (used:IntSet.t) (at:t): unit =
-  Context.add_current_module name used at.c
+let add_current_module (m:Module.M.t) (at:t): unit =
+  Context.add_current_module m at.c
 
-let set_interface_check (pub_used:IntSet.t) (at:t): unit =
-  Context.set_interface_check pub_used at.c
+let set_interface_check (at:t): unit =
+  Context.set_interface_check at.c
 
 
 let depth (at:t): int = at.depth
@@ -182,7 +182,7 @@ let prenex_term_bubble_one (t:term) (at:t): term =
 
 
 
-let make (verbosity:int): t =
+let make (comp:Module.Compile.t): t =
   {seq      = Ass_seq.empty ();
    depth    = 0;
    count0   = 0;
@@ -191,8 +191,8 @@ let make (verbosity:int): t =
    maxreq  = 0;
    reqs    = [];
    prev    = None;
-   c = Context.make verbosity;
-   verbosity = verbosity}
+   c = Context.make comp;
+   verbosity = Module.Compile.verbosity comp}
 
 
 let push0 (names: int array) (c:Context.t) (at:t): t =
