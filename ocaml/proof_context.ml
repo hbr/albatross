@@ -1302,8 +1302,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
   and eval_if
       (cond:term) (a:term) (b:term) (lazy_:bool) (depth:int) (pc:t)
       : term * Eval.t =
-    let cond,conde = maybe_eval cond lazy_ depth pc
-    in
+    let conde = Eval.Term cond in
     try
       let idx = find_match cond pc
       and fst,fste = maybe_eval a lazy_ depth pc
