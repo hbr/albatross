@@ -199,9 +199,6 @@ module M =
     let compare (m1:t) (m2:t): int =
       Pervasives.compare m1.name m2.name
 
-    let equal (m1:t) (m2:t): bool =
-      compare m1 m2 = 0
-
     let base_name (m:t): int =
       fst m.name
 
@@ -288,6 +285,11 @@ module M =
          id1 = id2
       | _ , _ ->
          assert false (* call not allowed unless sorted *)
+
+    let same_package (m1:t) (m2:t): bool =
+      let _,p1 = m1.name
+      and _,p2 = m2.name in
+      p1 = p2
 
 
     let get (path:string) (name:string) (mname:module_name): t =
@@ -465,9 +467,12 @@ module MSet =
 
     let map (g:graph): M.t Module_map.t = g.map
 
+    let find (nme:module_name) (set:graph): M.t =
+      Module_map.find nme set.map
+
     let must_find (nme:module_name) (set:graph): M.t =
       try
-        Module_map.find nme set.map
+        find nme set
       with Not_found ->
         assert false (* Module has to be in the map *)
 

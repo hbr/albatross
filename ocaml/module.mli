@@ -29,6 +29,7 @@ sig
   type t
   val compare: t -> t -> int
   val equal:   t -> t -> bool
+  val same_package: t -> t -> bool
   val primary_source: t -> Src.t
   val name: t -> module_name
   val base_name: t -> int
@@ -52,7 +53,8 @@ sig
   type t
   type graph = t
   val verbosity: t -> int
-  val map: graph -> M.t Module_map.t
+  val find: module_name -> t -> M.t
+  val must_find: module_name -> t -> M.t
   val string_of_node: node -> string
   val module_of_id: int -> t -> M.t
   val compare: node -> node -> int
