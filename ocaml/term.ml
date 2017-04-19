@@ -1561,6 +1561,7 @@ module Term_sub: sig
   val merge:          t -> t -> t
   val to_list:        t -> (int*term) list
   val arguments:      int -> t -> term array
+  val filled_arguments: int -> int -> t -> term array
   val has_only_variables: t -> bool
 end = struct
 
@@ -1662,6 +1663,38 @@ end = struct
         args.(i) <- t)
       sub;
     args
+
+  let filled_arguments (nargs:int) (ntvs:int) (sub:t): term array =
+    (* Convert the substitution [sub] into an argument array with [nargs] positions
+       and fill the missing positions with [nargs - sub.cardinal] arguments. Shift
+       all arguments in [sub] up by the added arguments and the corresponding
+       types by [ntvs]. *)
+    let nargs0 = IntMap.cardinal sub in
+    assert (nargs0 <= nargs);
+    let arr = Array.make nargs empty_term
+    in
+    let fill (pos0:int) (pos1:int) (var:int): int =
+      assert (pos0 <= pos1);
+      interval_iter
+        (fun p -> arr.(p) <- Variable (var + p + pos0))
+        pos0 pos1;
+      var + pos1 - pos0
+    in
+    let maxpos, maxvar =
+      IntMap.fold
+        (fun i t (maxpos,maxvar) ->
+          assert (maxpos <= i);
+          let maxvar = fill maxpos i maxvar
+          in
+          arr.(i) <- Term.shift (nargs-nargs0) ntvs t;
+          i + 1, maxvar
+        )
+      sub
+      (0,0)
+    in
+    let maxvar = fill maxpos nargs maxvar in
+    assert (maxvar = nargs - nargs0);
+    arr
 
   let has_only_variables (sub:t): bool =
     for_all
