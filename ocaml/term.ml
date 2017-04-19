@@ -203,7 +203,8 @@ module Term: sig
 
   val split_left_binop_chain: term -> int -> term list
 
-  val split_general_implication_chain: term -> int -> int * formals * term list * term
+  val split_general_implication_chain:
+    term -> int -> int * formals * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
   val induction_rule: int -> int -> term -> term -> term
@@ -1237,14 +1238,13 @@ end = struct
 
 
   let split_general_implication_chain (t:term) (imp_id:int)
-      : int * formals * term list * term =
-    let n,fargs,fgs,t0,is_all = qlambda_split_0 t in
-    assert (fgs = empty_formals);
+      : int * formals * formals * term list * term =
+    let n,tps,fgs,t0,is_all = qlambda_split_0 t in
     if n>0 && not is_all then
-      0, empty_formals, [], t
+      0, empty_formals, empty_formals, [], t
     else
       let ps_rev, tgt = split_implication_chain t0 (n+imp_id) in
-      n,fargs,ps_rev,tgt
+      n,tps,fgs,ps_rev,tgt
 
 
   let rec make_implication_chain
@@ -1455,7 +1455,9 @@ end = struct
       Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         assert (i < nrules);
-        let n,fargs,ps_rev,tgt = split_general_implication_chain rs.(i) (imp_id+1) in
+        let n,fargs,fgs,ps_rev,tgt =
+          split_general_implication_chain rs.(i) (imp_id+1) in
+        assert (fgs = empty_formals);
         let last,tgt = pair n tgt in
         let ps = List.fold_left
             (fun ps t ->

@@ -185,7 +185,7 @@ val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
 val complexity: term -> t -> int
 
 val split_general_implication_chain:
-    term -> t -> int * formals * term list * term
+    term -> t -> int * formals * formals * term list * term
 val split_equality: term -> int -> t -> int * int * term * term
 val definition: int -> int -> agens -> t -> int * int array * term
 val arity:      int -> int -> t -> int

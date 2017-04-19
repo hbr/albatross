@@ -468,7 +468,7 @@ let check_deferred (c:t): unit =
 
 
 let split_general_implication_chain
-    (t:term) (c:t): int * formals * term list * term =
+    (t:term) (c:t): int * formals * formals * term list * term =
   let nvars = count_variables c in
   let imp_id = nvars + Constants.implication_index in
   Term.split_general_implication_chain t imp_id

@@ -100,7 +100,7 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
 val split_implication:  term -> t -> term * term
 val implication_chain:  term list -> term -> t -> term
 val split_general_implication_chain:
-    term -> t -> int * formals * term list * term
+    term -> t -> int * formals * formals * term list * term
 val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
 val beta_reduce_term: term -> t -> term
 val count:          t -> int

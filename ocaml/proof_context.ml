@@ -377,7 +377,7 @@ let negation_expanded (a:term) (pc:t): term =
 
 
 let split_general_implication_chain
-    (t:term) (pc:t): int * formals * term list * term =
+    (t:term) (pc:t): int * formals * formals * term list * term =
   Context.split_general_implication_chain t (context pc)
 
 
@@ -493,10 +493,13 @@ let transformed_to_current (t:term) (idx:int) (pc:t): term =
 
 
 
+let unify_0 (t:term) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
+  List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab)
+
 let unify
     (t:term) (tab:Term_table.t) (pc:t)
     : (int * arguments * agens) list =
-  let lst = List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab) in
+  let lst = unify_0 t tab pc in
   List.fold_left
     (fun lst (idx,sub) ->
       let rd = rule_data idx pc in

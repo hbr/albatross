@@ -634,20 +634,22 @@ let add_set_induction_hypothesis
     *)
   let hypo = PC.term hypo_idx pc
   in
-  let n1,fargs1,ps_rev1,goal_redex1 =
+  let n1,fargs1,fgs1,ps_rev1,goal_redex1 =
     PC.split_general_implication_chain hypo pc
   in
+  assert (fgs1 = empty_formals);
   let pc1 = PC.push_typed fargs1 empty_formals pc
   in
   match goal_redex1 with
     Application(Lam(_),_,_) ->
       let outer_goal = PC.beta_reduce_term goal_redex1 pc1
       in
-      let n2,fargs2,ps_rev2,user_goal =
+      let n2,fargs2,fgs2,ps_rev2,user_goal =
         PC.split_general_implication_chain outer_goal pc1
       in
       let pc2 = PC.push_typed fargs2 empty_formals  pc1
       in
+      assert (fgs2 = empty_formals);
       (* Now we have two contexts: all(hypo_vars)  all(other_vars *)
       let alst_rev =
         List.rev_map
