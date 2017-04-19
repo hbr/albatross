@@ -1549,6 +1549,7 @@ module Term_sub: sig
   val count:          t -> int
   val for_all:        (int -> term -> bool) -> t -> bool
   val iter:           (int -> term -> unit) -> t -> unit
+  val fold:           (int -> term -> 'a -> 'a) -> t -> 'a -> 'a
   val is_identity:    t -> bool
   val is_injective:   t -> bool
   val empty:          t
@@ -1584,6 +1585,9 @@ end = struct
 
   let iter (f:int -> term -> unit) (sub:t): unit =
     IntMap.iter f sub
+
+  let fold (f:int->term->'a->'a) (sub:t) (a:'a): 'a =
+    IntMap.fold f sub a
 
   let is_identity (sub:t): bool =
     IntMap.for_all (fun i t -> Variable i = t) sub
