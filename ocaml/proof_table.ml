@@ -280,7 +280,7 @@ let nbenv_term (i:int) (at:t): int =
 let ntvs_term (i:int) (at:t): int =
   (* The complete number of type variables of the environment of the [i]th
      proved term.  *)
-  TVars_sub.count_all (Context.tvars_sub (descriptor i at).c)
+  Tvars.count_all (Context.tvars (descriptor i at).c)
 
 
 let local_term (i:int) (at:t): term =

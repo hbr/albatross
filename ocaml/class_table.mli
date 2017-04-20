@@ -27,7 +27,7 @@ val base_table: Module.Compile.t -> t
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
 val formal_generics: entities list withinfo -> return_type -> bool -> int
-  -> TVars_sub.t -> t -> TVars_sub.t
+  -> Tvars.t -> t -> Tvars.t
    (** [formal_generics entlst rt is_func ntvs_gap tvs ct] cumulates the
        formal generics encountered in the signature [entlst,rt,is_func] to the
        type context [tvs] if not yet in. Between the untyped arguments of the
@@ -185,8 +185,6 @@ val string_of_signature: Sign.t -> Tvars.t -> t -> string
 
 val string_of_complete_signature: Sign.t -> Tvars.t -> t -> string
 
-val string_of_complete_signature_sub: Sign.t -> TVars_sub.t -> t -> string
-
 val string_of_type: type_term -> Tvars.t -> t -> string
 val string_of_type_arr: agens -> Tvars.t -> t -> string
 
@@ -197,8 +195,6 @@ val string_of_fgconcepts: Tvars.t -> t -> string
 val string_of_sub: Term_sub.t -> Tvars.t -> t -> string
 
 val string_of_tvs: Tvars.t -> t -> string
-
-val string_of_tvs_sub: TVars_sub.t -> t -> string
 
 val string_of_detailed_tvs: Tvars.t -> t -> string
 

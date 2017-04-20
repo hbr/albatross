@@ -127,14 +127,9 @@ val argtypes: t -> types
 val local_types_reduced: t -> types
 
 val tvars: t -> Tvars.t
-val tvars_sub: t -> TVars_sub.t
 
 val ith_arguments_string: int -> t -> string
 val local_arguments_string: t -> string
-
-val type_variables: t -> TVars_sub.t
-    (** The type variables and their substitutions *)
-
 val boolean: t -> term
 
 val function_class:  t -> int

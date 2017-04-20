@@ -13,7 +13,7 @@ open Printf
 type formal = Class_table.formal
 
 type entry = {
-    tvs_sub:      TVars_sub.t;        (* cumulated *)
+    tvs:          Tvars.t;            (* cumulated *)
     fargs:        formal array;       (* cumulated *)
     ntvs_delta:   int;
     nfgs_delta:   int;
@@ -34,7 +34,7 @@ type t = {
 
 
 let empty_entry: entry =
-  {tvs_sub      = TVars_sub.empty;
+  {tvs          = Tvars.empty;
    fargs        = [||];
    ntvs_delta   = 0;
    nfgs_delta   = 0;
@@ -116,13 +116,13 @@ let count_type_variables (c:t): int =
   (** The number of cumulated type variables in this context and all
       preceeding contexts
    *)
-  TVars_sub.count c.entry.tvs_sub
+  Tvars.count c.entry.tvs
 
 let count_local_type_variables (c:t): int =
   c.entry.ntvs_delta
 
 
-let entry_nfgs (e:entry): int = TVars_sub.count_fgs e.tvs_sub
+let entry_nfgs (e:entry): int = Tvars.count_fgs e.tvs
 
 let count_formal_generics (c:t): int =
   (** The cumulated number of formal generics in this context and all
@@ -226,7 +226,7 @@ let local_formals (c:t): formals =
   entry_local_types c.entry
 
 let local_fgs (c:t): formals =
-  let tvs = TVars_sub.tvars c.entry.tvs_sub in
+  let tvs  = c.entry.tvs in
   let nfgs = c.entry.nfgs_delta in
   let fgnms = Array.sub (Tvars.fgnames tvs) 0 nfgs
   and fgcon = Array.sub (Tvars.fgconcepts tvs) 0 nfgs in
@@ -266,17 +266,15 @@ let varnames (c:t): int array = entry_varnames c.entry
 
 
 
-let entry_fgnames (e:entry): int array = TVars_sub.fgnames e.tvs_sub
+let entry_fgnames (e:entry): int array = Tvars.fgnames e.tvs
 
-let entry_fgconcepts (e:entry): type_term array = TVars_sub.fgconcepts e.tvs_sub
+let entry_fgconcepts (e:entry): type_term array = Tvars.fgconcepts e.tvs
 
 let fgnames (c:t): int array = entry_fgnames c.entry
 
 let fgconcepts (c:t): type_term array = entry_fgconcepts c.entry
 
-let tvars_sub (c:t): TVars_sub.t = c.entry.tvs_sub
-
-let tvars (c:t): Tvars.t = TVars_sub.tvars c.entry.tvs_sub
+let tvars (c:t): Tvars.t = c.entry.tvs
 
 
 let string_of_signature (s:Sign.t) (c:t): string =
@@ -431,7 +429,7 @@ let unique_names (nms:int array) (c:t): int array =
 let owner (c:t): int =
   if is_toplevel c then
     let ct  = class_table c
-    and tvs = TVars_sub.tvars c.entry.tvs_sub
+    and tvs = c.entry.tvs
     and s   = signature c
     in
     Class_table.owner tvs s ct
@@ -443,7 +441,7 @@ let owner (c:t): int =
 let anchor_class (c:t): int =
   if is_toplevel c then
     let ct  = class_table c
-    and tvs = TVars_sub.tvars c.entry.tvs_sub
+    and tvs = c.entry.tvs
     and s   = signature c
     in
     Class_table.anchor_class tvs s ct
@@ -458,7 +456,7 @@ let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
 let check_deferred (c:t): unit =
   assert (is_toplevel c);
   let ct  = class_table c
-  and tvs = TVars_sub.tvars c.entry.tvs_sub
+  and tvs = c.entry.tvs
   and s   = signature c
   in
   let owner = Class_table.owner tvs s ct in
@@ -496,7 +494,7 @@ let is_untyped (i:int) (c:t): bool =
 let variable_data (i:int) (c:t): Tvars.t * Sign.t =
   let nvars = count_variables c in
   if i < nvars then
-    TVars_sub.tvars c.entry.tvs_sub,
+    c.entry.tvs,
     Sign.make_const (snd c.entry.fargs.(i))
   else
     let idx = i - nvars in
@@ -520,28 +518,6 @@ let make (comp:Module.Compile.t): t =
  }
 
 
-let string_of_tvars (tv:TVars_sub.t) (c:t): string =
-  let ct = class_table c
-  and ntvs       = TVars_sub.count_local tv
-  and fgnames    = TVars_sub.fgnames tv
-  and fgconcepts = TVars_sub.fgconcepts tv
-  and concepts   = Array.to_list (TVars_sub.concepts tv)
-  in
-  let fgs = Array.to_list (Myarray.combine fgnames fgconcepts) in
-  let fgstring =
-    String.concat ","
-       (List.map
-          (fun (nme,cpt) ->
-            (ST.string nme) ^ ":" ^ Class_table.type2string cpt 0 [||] ct)
-          fgs)
-  and cptstring =
-    String.concat ","
-      (List.map (fun cpt -> Class_table.type2string cpt 0 [||] ct) concepts)
-  in
-  (string_of_int ntvs) ^ "[" ^ cptstring ^ "]["  ^ fgstring ^ "]"
-
-
-
 let push_with_gap
     (entlst: entities list withinfo)
     (rt: return_type)
@@ -557,12 +533,10 @@ let push_with_gap
   assert (not (is_pred && is_func));
   let entry      = c.entry
   and ct         = class_table c in
-  let tvs_sub  =
-    Class_table.formal_generics entlst rt is_func ntvs_gap entry.tvs_sub ct in
-  let tvs = TVars_sub.tvars tvs_sub
-  in
-  let ntvs0 = TVars_sub.count_local entry.tvs_sub
-  and nfgs0 = TVars_sub.count_fgs entry.tvs_sub
+  let tvs  =
+    Class_table.formal_generics entlst rt is_func ntvs_gap entry.tvs ct in
+  let ntvs0 = Tvars.count_local entry.tvs
+  and nfgs0 = Tvars.count_fgs entry.tvs
   in
   let ntvs1 = Tvars.count_local tvs - ntvs0
   and nfgs1 = Tvars.count_fgs tvs   - nfgs0
@@ -581,7 +555,7 @@ let push_with_gap
   assert (0 <= nargs_delta);
   {c with
    entry =
-   {tvs_sub    = tvs_sub;
+   {tvs          = tvs;
     fargs        = fargs;
     ntvs_delta   = ntvs1;
     nfgs_delta   = nfgs1;
@@ -632,8 +606,8 @@ let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
   assert (nargs_new = Array.length nms);
-  let tvs_sub = TVars_sub.augment 0 fgnms fgcon c.entry.tvs_sub in
-  let ntvs0   = TVars_sub.count_local c.entry.tvs_sub in
+  let tvs     = Tvars.augment_fgs fgnms fgcon c.entry.tvs in
+  let ntvs0   = Tvars.count_local c.entry.tvs in
   let nargs   = nargs_new + Array.length c.entry.fargs in
   let fargs = Array.init nargs
       (fun i ->
@@ -645,7 +619,7 @@ let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
           nme,con) in
   {c with
    entry =
-   {tvs_sub = tvs_sub;
+   {tvs     = tvs;
     fargs   = fargs;
     ntvs_delta  = 0;
     nfgs_delta  = nfgs_new;
@@ -683,11 +657,6 @@ let pop (c:t): t =
   assert (not (is_global c));
   previous c
 
-
-
-
-
-let type_variables (c:t): TVars_sub.t = c.entry.tvs_sub
 
 
 let boolean (c:t): term =
@@ -769,7 +738,7 @@ let function_of_terms (args:arguments) (result:term) (c:t): type_term =
 
 let update_types (subs:type_term array) (c:t): unit =
   let len = Array.length subs in
-  assert (len = TVars_sub.count_local c.entry.tvs_sub);
+  assert (len = Tvars.count_local c.entry.tvs);
   Array.iteri
     (fun i (nme,tp) ->
       let tp = Term.subst tp len subs in
@@ -784,7 +753,7 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
      not "()". In case that there are formal generics they are prefixed.
    *)
   let nargs = entry_arity e
-  and tvs   = TVars_sub.tvars e.tvs_sub
+  and tvs   = e.tvs
   in
   let args = Array.sub e.fargs 0 nargs in
   Class_table.arguments_string tvs args ct
@@ -1775,7 +1744,7 @@ let downgrade_term (t:term) (nb:int) (c:t): term =
 
 
 let arity_of_downgraded_type (tp:type_term) (c:t): int =
-  let ntvs = TVars_sub.count_all c.entry.tvs_sub in
+  let ntvs = Tvars.count_all c.entry.tvs in
   Class_table.arity_of_downgraded ntvs tp
 
 let specialized (t:term) (c:t): term =

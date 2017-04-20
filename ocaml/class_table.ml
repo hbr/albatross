@@ -476,25 +476,10 @@ let string_of_sub (sub:Term_sub.t) (tvs:Tvars.t) (ct:t): string =
 
 
 
-let string_of_tvs_sub (tvs:TVars_sub.t) (ct:t): string =
-  let subs = TVars_sub.subs tvs
-  and tvs  = TVars_sub.tvars tvs in
-  let subsstr =
-    String.concat ","
-      (List.map
-         (fun (i,t1,t2) ->
-           (string_of_int i) ^ ":=" ^
-           (string_of_type t1 tvs ct)
-         ) subs)
-  in
-  let subsstr = if subsstr = "" then "" else "[" ^ subsstr ^ "]" in
-  (string_of_tvs tvs ct) ^ subsstr
-
-
 let arguments_string
     (tvs:Tvars.t) (args:formal array) (ct:t)
     : string =
-  (* The string "(a:A, b1,b2:B, ... )" of then arguments [args] within the
+  (* The string "(a:A, b1,b2:B, ... )" of the arguments [args] within the
      type environment [tvs].
 
      In case that there are no arguments the empty string is returned and
@@ -1317,7 +1302,7 @@ let add_fg
     (name:int)
     (path: int list)
     (fgs: formal list)
-    (tvs:TVars_sub.t)
+    (tvs:Tvars.t)
     (ct:t)
     : formal list =
   (* Check if [name] is a new formal generic. If yes prepend it to [fgs].
@@ -1325,7 +1310,7 @@ let add_fg
      Note: [fgs] is reversed *)
   if path = [] &&
     not (List.exists (fun (nme,_)-> nme=name) fgs) &&
-    not (TVars_sub.has_fg name tvs)
+    not (Tvars.has_fg name tvs)
   then
     try
       let cpt = IntMap.find name ct.fgens in
@@ -1339,7 +1324,7 @@ let add_fg
 let collect_fgs
     (tp:type_t)
     (fgs:formal list)
-    (tvs:TVars_sub.t)
+    (tvs:Tvars.t)
     (ct:t)
     : formal list =
   (* Collect the formal generics of the type [tp] and prepend them to [fgs] if
@@ -1371,9 +1356,9 @@ let formal_generics
     (rt:       return_type)
     (is_func:  bool)
     (ntvs_gap: int)
-    (tvs:      TVars_sub.t)
+    (tvs:      Tvars.t)
     (ct:       t)
-    : TVars_sub.t =
+    : Tvars.t =
   let ntvs_new,fgs_new =
     List.fold_left
       (fun (ntvs,fgs) ent ->
@@ -1397,7 +1382,8 @@ let formal_generics
   let fgnames,fgconcepts = Myarray.split fgs_new in
   let nfgs_new = Array.length fgconcepts in
   let fgconcepts = Array.map (fun tp -> Term.up nfgs_new tp) fgconcepts in
-  TVars_sub.augment (ntvs_new+ntvs_gap) fgnames fgconcepts tvs
+  let tvs = Tvars.add_local (ntvs_new+ntvs_gap) tvs in
+  Tvars.augment_fgs fgnames fgconcepts tvs
 
 
 
@@ -1627,16 +1613,6 @@ let string_of_complete_signature
     (ct:t)
     : string =
   (string_of_tvs tvs ct) ^ (string_of_signature s tvs ct)
-
-
-
-let string_of_complete_signature_sub
-    (s:Sign.t)
-    (tvs_sub:TVars_sub.t)
-    (ct:t)
-    : string =
-  let tvs = TVars_sub.tvars tvs_sub in
-  (string_of_tvs_sub tvs_sub ct) ^ (string_of_signature s tvs ct)
 
 
 

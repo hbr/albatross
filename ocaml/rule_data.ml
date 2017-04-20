@@ -38,7 +38,7 @@ type t = {
 let count_variables (rd:t): int = Context.count_variables rd.ctxt.c
 
 let count_all_type_variables (rd:t): int =
-  TVars_sub.count_all (Context.tvars_sub rd.ctxt.c)
+  Tvars.count_all (Context.tvars rd.ctxt.c)
 
 let is_schematic (rd:t) : bool =  not rd.spec
 
