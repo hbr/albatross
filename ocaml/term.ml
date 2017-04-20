@@ -126,11 +126,7 @@ module Term: sig
 
   val equivalent_array: term array -> term array -> bool
 
-  val map: (int->int->int) -> term -> term
-
-  val map_to_term: (int->int->term) -> term -> term
-
-  val map_free: (int->int) -> term -> int -> term
+  val map_free: (int->int) -> (int->int) -> term -> term
 
   val lambda_inner: term -> int -> term
 
@@ -810,44 +806,61 @@ end = struct
 
 
 
-  let map (f:int->int->int) (t:term): term =
-    (* Map all variables 'j' of the term 't' to 'Variable(f j nb)' where 'nb'
-       is the number of bound variables in the context where 'j' appears.
+  let map_free (f1:int->int) (f2:int->int) (t:term): term =
+    (* Map all variables [i] of the term [t] to [f i] and all type variables
+       [j] to [f j]. Raise [Term_capture] of a free variable gets bound.
      *)
-    let rec mapr nb t =
-      let map_args nb args = Array.map (fun t -> mapr nb t) args
+    let fdummy (_:int): int =
+      assert false
+    in
+    let rec mapr (nb1:int) (nb2:int) (f1:int->int) (f2:int->int) (t:term): term =
+      let mapargs nb1 nb2 f1 f2 args = Array.map (mapr nb1 nb2 f1 f2) args
+      and maplst  nb1 nb2 f1 f2 lst  = List.map (mapr nb1 nb2 f1 f2) lst
+      in
+      let g1 i =
+        if f1 (i - nb1) < 0 then
+          raise Term_capture
+        else
+          nb1 + f1 (i - nb1)
       in
       match t with
-        Variable j -> Variable (f j nb)
-      | VAppl (j,args,ags,oo) ->
-          VAppl (f j nb, map_args nb args, ags,oo)
-      | Application (a,b,inop) ->
-          Application (mapr nb a, map_args nb b, inop)
-      | Lam (nargs,names,pres,t,pred,tp) ->
-          let nb = 1 + nb in
-          let pres = List.map (fun t -> mapr nb t) pres
-          and t    = mapr nb t in
-          Lam(nargs, names, pres, t, pred,tp)
-      | QExp (nargs,args,fgs,t,is_all) ->
-          QExp(nargs, args, fgs, mapr (nb+nargs) t, is_all)
-      | Flow (ctrl,args) ->
-          Flow(ctrl,map_args nb args)
-      | Indset (n,nms,rs) ->
-          Indset (n,nms, map_args (n+nb) rs)
-
+      | Variable i when i < nb1 ->
+         t
+      | Variable i ->
+         Variable (g1 i)
+      | VAppl(j,args,ags,oo) ->
+         VAppl(g1 j,
+               mapargs nb1 nb2 f1 f2 args,
+               mapargs nb2 0 f2 fdummy ags,
+               oo)
+      | Application(f,args,inop) ->
+         Application(mapr nb1 nb2 f1 f2 f,
+                     mapargs nb1 nb2 f1 f2 args,
+                     inop)
+      | Lam (nargs,names,pres,t0,pred,tp) ->
+         Lam (nargs,
+              names,
+              maplst (1+nb1) nb2 f1 f2 pres,
+              mapr (1+nb1) nb2 f1 f2 t0,
+              pred,
+              mapr nb2 0 f2 fdummy tp)
+      | QExp (nargs,(nms,tps), (fgnms,fgs), t0, is_all) ->
+         let ntvs = Array.length fgs
+         in
+         QExp (nargs,
+               (nms, mapargs (ntvs+nb2) 0 f2 fdummy tps),
+               (fgnms, mapargs (ntvs+nb2) 0 f2 fdummy fgs),
+               mapr (nargs+nb1) (ntvs+nb2) f1 f2 t0,
+               is_all)
+      | Flow(ctrl,args) ->
+         Flow(ctrl,
+              mapargs nb1 nb2 f1 f2 args)
+      | Indset (nme,tp,rs) ->
+         Indset (nme,
+                 mapr nb2 0 f2 fdummy tp,
+                 mapargs (1+nb1) nb2 f1 f2 rs)
     in
-    mapr 0 t
-
-
-  let map_free (f:int->int) (t:term) (start:int): term =
-    (* Map the free variable 'i' of the term 't' to 'f i *)
-    let fb (i:int) (nb:int): int =
-      if i < nb+start then
-        i
-      else
-        nb + start + f (i-nb-start)
-    in
-    map fb t
+    mapr 0 0 f1 f2 t
 
 
   let  lambda_inner (t:term) (i:int): term =
@@ -859,52 +872,26 @@ end = struct
         0
       else
         j+1
+    and f2 j = j
     in
-    map_free f t 0
+    map_free f f2 t
 
 
-  let  lambda_inner_map (t:term) (map:int IntMap.t): term =
-    (* Extract a lambda inner term where [map] maps i,j,k,... to the range
-       0,1,...,n-1 where [n] is the cardinality of [map]. The variables from
+  let  lambda_inner_map (t:term) (m:int IntMap.t): term =
+    (* Extract a lambda inner term where [m] maps i,j,k,... to the range
+       0,1,...,n-1 where [n] is the cardinality of [m]. The variables from
        the map become the variables 0,1,...,n-1 and all other variables are
        shiftet up by [n]. *)
-    let n = IntMap.cardinal map in
+    let n = IntMap.cardinal m in
     let f j =
       try
-        let i = IntMap.find j map in
+        let i = IntMap.find j m in
         assert (i < n); i
       with Not_found ->
         j + n
+    and f2 j = j
     in
-    map_free f t 0
-
-
-  let map_to_term (f:int->int->term) (t:term): term =
-    (* Map all variables 'j' of the term 't' to 'f j nb' where 'nb' is the
-       number of bound variables in the context where 'j' appears
-     *)
-    let rec mapr nb t =
-      let map_args nb args = Array.map (fun t -> mapr nb t) args in
-      match t with
-        Variable j -> f j nb
-      | VAppl (j,args,ags,oo) ->
-          VAppl (j, Array.map (fun t -> mapr nb t) args, ags, oo)
-      | Application (a,b,inop) ->
-          Application (mapr nb a, map_args nb b, inop)
-      | Lam (nargs,names,pres,t,pred,tp) ->
-          let nb = 1 + nb in
-          let pres = List.map (fun t -> mapr nb t) pres
-          and t = mapr nb t in
-          Lam(nargs, names, pres , t, pred, tp)
-      | QExp (nargs,args,fgs,t,is_all) ->
-          QExp(nargs, args, fgs, mapr (nb+nargs) t, is_all)
-      | Flow (ctrl,args) ->
-          Flow(ctrl, map_args nb args)
-      | Indset (n,nms,rs) ->
-          Indset (n,nms, map_args (n+nb) rs)
-
-    in
-    mapr 0 t
+    map_free f f2 t
 
 
 
@@ -919,7 +906,6 @@ end = struct
         else lst)
       lst
       t
-
 
 
 
