@@ -196,8 +196,6 @@ val check_interface: t -> unit
 
 val downgrade_term: term -> int -> int -> t -> term
 
-val adapt_names: int array -> int array -> int array
-
 val domain_of_feature: int -> int -> agens -> Tvars.t -> t -> term
 
 val equal_symmetry_term: unit -> term

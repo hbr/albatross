@@ -165,12 +165,6 @@ let string_of_term_anon (t:term) (nb:int) (at:t): string =
   Context.string_of_term0 t true false nb at.c
 
 
-
-let prepend_names (nms:int array) (names:int array): int array =
-  let nms = Feature_table.adapt_names nms names in
-  Array.append nms names
-
-
 let prenex_term (t:term) (at:t): term =
   (* The term [t] in prenex normal form with respect to universal quantifiers *)
   Context.prenex_term t at.c

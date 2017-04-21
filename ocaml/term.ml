@@ -113,8 +113,10 @@ module Term: sig
 
   val used_variables_0:     term -> int -> int list -> int list
   val used_variables:       term -> int -> int list
-  val used_variables_filtered_0: term -> (int -> bool) -> bool -> int list -> int list
+  val used_variables_filtered_0:
+    term -> (int -> bool) -> bool -> int list -> int list
   val used_variables_filtered:   term -> (int -> bool) -> bool -> int list
+  val used_variables_array_filtered:   term array -> (int -> bool) -> int list
   val used_variables_from:  term -> int -> bool -> int list
   val used_variables_transform: term -> int -> int array * int array
   val unused_transform:     formals -> int -> formals -> term ->
@@ -206,6 +208,7 @@ module Term: sig
   val induction_rule: int -> int -> term -> term -> term
     -> int * formals * term list * term
   val induction_law:  int -> term -> term -> type_term -> type_term -> term
+  val prepend_names:  names -> names -> names
   val prenex:            term -> int -> int -> int -> term
   val prenex_sort:       term -> int -> int -> int -> term
   val prenex_bubble_one: term -> int -> int -> int -> term
@@ -916,6 +919,13 @@ end = struct
 
 
 
+  let used_variables_array_filtered (arr:term array) (f:int->bool): int list =
+    Array.fold_left
+      (fun lst t -> used_variables_filtered_0 t f false lst)
+      []
+      arr
+
+
   let used_variables_0 (t:term) (nvars:int) (lst:int list): int list =
     (* The list of variables of the term [t] below [nvars] in reversed order in
        which they appear, accumulated to the list [lst] *)
@@ -926,6 +936,7 @@ end = struct
     (* The list of variables of the term [t] below [nvars] in reversed order in
        which they appear *)
     used_variables_0 t nvars []
+
 
 
   let used_variables_from (t:term) (nvars:int) (dup:bool): int list =
@@ -955,7 +966,7 @@ end = struct
 
   let used_variables_arr_transform (arr:term array) (nvars:int)
       : int array * int array =
-    (* Analyze the used variables of the array of term [arr] with variables in
+    (* Analyze the used variables of the array of terms [arr] with variables in
        the interval 0,1,...,nvars-1 and return two arrays.
 
        arr1: 0,1,...nused-1     index of the used variable i
@@ -1247,7 +1258,54 @@ end = struct
           imp_id
 
 
+(* Name clashes:
+
+   Variables in inner and outer contexts might have the same names. Internally
+   there is no problem because De Bruijn indices are used. However the human
+   reader might get confused, because he cannot determine to which context belongs
+   the variable.
+
+   Previous strategy: The inner variable names have been prefixed with '$' if the
+   a variable with the same name already existed in the outer context. If the
+   same prefixed name already existed another '$' had to be added until no more
+   conflicts arised.
+
+   New strategy: We use the prefix '$' as an escape. If a variable 'v' exists in
+   the inner and in an outer context, the outer variable is renamed to '$v'. All
+   variables in the outer context which are name '$$$$$...v' where there are zero
+   or more escapes get one escape more.
+
+ *)
+
+  let adapt_outer_names (nms_inner:int array) (nms_outer:int array): int array =
+    let nms_outer = Array.copy nms_outer in
+    let patch_outer inner i outer =
+      let str_outer = ST.string outer in
+      let nescapes,pure_str =
+        try
+          let nescapes = 1 + String.rindex str_outer '.' in
+          nescapes,
+          String.sub str_outer nescapes (String.length str_outer - nescapes)
+        with Not_found ->
+          0, str_outer
+      in
+      if ST.symbol pure_str = inner then
+        nms_outer.(i) <-
+          ST.symbol ("." ^  str_outer)
+      else
+        ()
+    in
+    Array.iter
+      (fun nme_inner ->
+        Array.iteri
+          (fun i nme_outer -> patch_outer nme_inner i nme_outer)
+          nms_outer
+      )
+      nms_inner;
+    nms_outer
+
   let adapt_names (nms:int array) (names:int array): int array =
+    (* old strategy *)
     let nms  = Array.copy nms in
     let nnms = Array.length nms in
     let patch i =
@@ -1275,8 +1333,8 @@ end = struct
 
 
   let prepend_names (nms1:int array) (nms2:int array): int array =
-   let nms1 = adapt_names nms1 nms2 in
-   Array.append nms1 nms2
+    let nms2 = adapt_outer_names nms1 nms2 in
+    Array.append nms1 nms2
 
 
 

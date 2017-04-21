@@ -227,40 +227,6 @@ let base_descriptor (i:int) (ft:t): bdesc =
 
 
 
-
-let adapt_names (nms:int array) (names:int array): int array =
-  let nms  = Array.copy nms in
-  let nnms = Array.length nms in
-  let patch i =
-    assert (i < nnms);
-    let str = "$" ^ (ST.string nms.(i)) in
-    nms.(i) <- ST.symbol str
-  and has i =
-    assert (i < nnms);
-    try
-      let _ = Search.array_find_min (fun nme -> nme = nms.(i)) names in
-      true
-    with Not_found ->
-      false
-  in
-  let rec patch_until_ok i =
-    if has i then begin
-      patch i;
-      patch_until_ok i
-    end
-  in
-  for i = 0 to nnms - 1 do
-    patch_until_ok i
-  done;
-  nms
-
-
-let prepend_names (nms:int array) (names:int array): int array =
-  let nms = adapt_names nms names in
-  Array.append nms names
-
-
-
 let is_constructor (i:int) (ft:t): bool =
   assert (i < count ft);
   let desc = descriptor i ft in
@@ -886,7 +852,7 @@ let term_to_string
     let lam_strs (n:int) (nms:int array) (ps:term list) (t:term)
         : string * string *string =
       let nanonused, nms = local_names n nms in
-      let names = Array.append nms names in
+      let names = Term.prepend_names nms names in
       args2str n nms,
       String.concat ";"
         (List.map (fun t -> to_string t names nanonused tvs false None) ps),
@@ -1068,7 +1034,6 @@ let term_to_string
               fapp2str f args inop
           end
       | Lam (n,nms,pres,t,pr,_) ->
-          let nms = adapt_names nms names in
           let nbenv = Array.length names in
           let remove_tup t = remove_tuple_accessors t n nbenv ft in
           let pres, t =
@@ -1079,26 +1044,26 @@ let term_to_string
               pres,t in
           None, lam2str n nms pres t pr
       | QExp (n,(nms,tps),(fgnms,fgcon),t,is_all) ->
-          let nms = adapt_names nms names in
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           in
           if not long && nanonused + Array.length names <> 0 then
             let argsstr, _, tstr = lam_strs n nms [] t in
             Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
-          else begin
-            let names = Array.append nms names in
-            let tvs1 = Tvars.make_fgs fgnms fgcon in
-            (*if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
-              printf "tvs1  %s\n" (Class_table.string_of_tvs tvs1 ft.ct);
-              printf "tvs   %s\n" (Class_table.string_of_tvs tvs  ft.ct);
-            end;
-            assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);*)
-            let tvs = if Tvars.is_empty tvs then tvs1 else tvs in
-            let argsstr = Class_table.arguments_string2 tvs nms tps ft.ct
-            and tvsstr  = Class_table.string_of_tvs tvs1 ft.ct
-            and tstr = to_string t names nanonused tvs false None in
-            Some op, opstr ^ tvsstr ^ argsstr ^ " " ^ tstr
-          end
+          else
+            begin
+              let names = Term.prepend_names nms names in
+              let tvs1 = Tvars.make_fgs fgnms fgcon in
+              (*if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
+                printf "tvs1  %s\n" (Class_table.string_of_tvs tvs1 ft.ct);
+                printf "tvs   %s\n" (Class_table.string_of_tvs tvs  ft.ct);
+              end;
+              assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);*)
+              let tvs = if Tvars.is_empty tvs then tvs1 else tvs in
+              let argsstr = Class_table.arguments_string2 tvs nms tps ft.ct
+              and tvsstr  = Class_table.string_of_tvs tvs1 ft.ct
+              and tstr = to_string t names nanonused tvs false None in
+              Some op, opstr ^ tvsstr ^ argsstr ^ " " ^ tstr
+            end
       | Flow (ctrl,args) ->
           begin
             match ctrl with
@@ -1108,10 +1073,9 @@ let term_to_string
           end
       | Indset (nme,tp,rs) ->
           let n,nms = 1, [|nme|] in
-          let nms = adapt_names nms names in
           let argsstr = args2str n nms in
           let nanonused, nms = local_names n nms in
-          let names = Array.append nms names in
+          let names = Term.prepend_names nms names in
           let rsstrs =
             List.map (fun t -> to_string t names nanonused tvs false None)
               (Array.to_list rs) in
