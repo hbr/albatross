@@ -170,111 +170,12 @@ let principal_class (tp:type_term) (tvs:t): int =
   else
     assert false
 
-
-let add_fgs (nfgs:int) (tvs_new:t) (tvs:t): t =
-  (* Add the first [nfgs] formal generics of [tvs_new] to [tvs] assuming that the
-     formal generics above nfgs are already at the end of [tvs].
-
-     tvs_new:         locs  +                 fgs1 + fgs2  (len(fgs1) = nfgs
-     tvs:     blocs + locs  +  globs + garb    +     fgs2
-   *)
-  if nfgs = 0 then
-    tvs
-  else
-    let up n arr = Array.map (fun tp -> Term.up n tp) arr
-    and up_from n start arr = Array.map (fun tp -> Term.up_from n start tp) arr
-    in
-    let nlocs  = count_local tvs_new in
-    let nblocs = count_local tvs - nlocs in
-    let nfgs2  = count_global tvs_new - nfgs in
-    let nglobs = count_global tvs
-    and ngarb  = count_fgs tvs - nfgs2
-    in
-    assert (nblocs = 0);
-    let fgnames1    = Array.sub tvs_new.fgnames    0 nfgs
-    and fgconcepts1 = Array.sub tvs_new.fgconcepts 0 nfgs in
-    let fgconcepts1 = up nblocs fgconcepts1 in
-    let fgconcepts1 = up_from (nglobs+ngarb) (nblocs+nlocs) fgconcepts1
-    in
-    let start = nblocs+nlocs+nglobs+ngarb in
-    let fgconcepts2 = up_from nfgs start tvs.fgconcepts
-    and concepts    = up_from nfgs start tvs.concepts
-    in
-    {tvs with
-     concepts   = concepts;
-     fgnames    = Array.append fgnames1 tvs.fgnames;
-     fgconcepts = Array.append fgconcepts1 fgconcepts2}
-
-
-
-
-
 let dummy_fgnames (n:int): int array =
   Array.init
     n
     (fun i ->
       let str = "@" ^ (string_of_int i) in
       Support.ST.symbol str)
-
-
-let insert_fgs (tvs1:t) (i:int) (tvs2:t): t =
-  assert (count tvs1 = 0);
-  assert (count tvs2 = 0);
-  assert (i <= count_fgs tvs1);
-  let nfgs1  = count_fgs tvs1
-  and nfgs2  = count_fgs tvs2 in
-  let fgnames1 = dummy_fgnames nfgs1 in
-  let fgnames =
-    Array.init
-      (nfgs1 + nfgs2)
-      (fun j ->
-        if j < i then
-          fgnames1.(j)
-        else if j < i + nfgs2 then
-          tvs2.fgnames.(j - i)
-        else
-          fgnames1.(j - i - nfgs2))
-  and fgconcepts =
-    Array.init
-      (nfgs1 + nfgs2)
-      (fun j ->
-        if j < i then
-          Term.up_from nfgs2 i tvs1.fgconcepts.(j)
-        else if j < i + nfgs2 then
-          let cpt = Term.up_from (nfgs1-i) nfgs2 tvs2.fgconcepts.(j-i) in
-          Term.up i cpt
-        else
-          Term.up nfgs2 tvs1.fgconcepts.(j-i-nfgs2))
-  in
-  {tvs1 with fgnames=fgnames; fgconcepts=fgconcepts}
-
-
-
-let update_fg (i:int) (cpt:type_term) (tvs:t): t =
-  assert (count tvs = 0);
-  assert (i < count_fgs tvs);
-  let fgconcepts = Array.copy tvs.fgconcepts in
-  fgconcepts.(i) <- cpt;
-  {tvs with fgconcepts = fgconcepts}
-
-
-
-let add_global (cs:type_term array) (tvs:t): t =
-  let nglob1 = Array.length cs
-  and cnt    = count tvs
-  and nfgs0  = count_fgs tvs
-  in
-  let concepts0 = Array.map (fun tp -> Term.up_from nglob1 cnt tp) tvs.concepts
-  and concepts1 = Array.map (fun tp -> Term.up_from nfgs0 nglob1 tp) cs
-  in
-  let concepts1 = Array.map (fun tp -> Term.up cnt tp) concepts1 in
-  {tvs with
-   concepts   = Array.append concepts0 concepts1;
-   fgconcepts = Array.map (fun tp -> Term.up_from nglob1 cnt tp) tvs.fgconcepts}
-
-
-
-
 
 
 let add_local (n:int) (tvs:t): t =
@@ -305,6 +206,7 @@ let augment_fgs
     (fgnames: int array)
     (fgconcepts:type_term array)
     (tvs:t): t =
+  (* fgconcepts are in their own type environment *)
   let nfgs1 = Array.length fgconcepts in
   assert (Array.length fgnames = nfgs1);
   let cnt = count tvs

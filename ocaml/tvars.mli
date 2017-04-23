@@ -59,18 +59,6 @@ val principal_variable: type_term -> t -> int
 val principal_class: type_term -> t -> int
     (** [principal_class tp tvs] returns the principal class of the type [tp] *)
 
-val add_fgs:      int -> t -> t -> t
-
-val insert_fgs:   t -> int -> t -> t
-    (** [insert_fgs tvs1 i tvs2] inserts in [tvs1] at [i] the concepts of the
-        formal generics of [tvs2] *)
-
-val update_fg: int -> type_term -> t -> t
-    (** [update_fg i tp tvs] updates the concept of the formal generic [i]
-        with the type [tp]*)
-
-
-val add_global:   type_term array -> t -> t
 val add_local:    int -> t -> t
 val remove_local: int -> t -> t
 val augment_fgs:  int array -> type_term array -> t -> t

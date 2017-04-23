@@ -1355,7 +1355,6 @@ let formal_generics
     (entlst:   entities list withinfo)
     (rt:       return_type)
     (is_func:  bool)
-    (ntvs_gap: int)
     (tvs:      Tvars.t)
     (ct:       t)
     : Tvars.t =
@@ -1382,7 +1381,7 @@ let formal_generics
   let fgnames,fgconcepts = Myarray.split fgs_new in
   let nfgs_new = Array.length fgconcepts in
   let fgconcepts = Array.map (fun tp -> Term.up nfgs_new tp) fgconcepts in
-  let tvs = Tvars.add_local (ntvs_new+ntvs_gap) tvs in
+  let tvs = Tvars.add_local ntvs_new tvs in
   Tvars.augment_fgs fgnames fgconcepts tvs
 
 

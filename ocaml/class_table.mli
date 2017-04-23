@@ -26,13 +26,11 @@ val base_table: Module.Compile.t -> t
 
 val put_formal: int withinfo -> type_t withinfo -> t -> unit
 
-val formal_generics: entities list withinfo -> return_type -> bool -> int
+val formal_generics: entities list withinfo -> return_type -> bool
   -> Tvars.t -> t -> Tvars.t
-   (** [formal_generics entlst rt is_func ntvs_gap tvs ct] cumulates the
+   (** [formal_generics entlst rt is_func tvs ct] cumulates the
        formal generics encountered in the signature [entlst,rt,is_func] to the
-       type context [tvs] if not yet in. Between the untyped arguments of the
-       signature [entlst,rt] and the free type variables already contained in
-       [tvs] a gap of [ntvs_gap] is left. *)
+       type context [tvs] if not yet in. *)
 
 val class_tvs: formal_generics -> t -> Tvars.t
 

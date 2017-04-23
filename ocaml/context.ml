@@ -518,23 +518,21 @@ let make (comp:Module.Compile.t): t =
  }
 
 
-let push_with_gap
+let push
     (entlst: entities list withinfo)
     (rt: return_type)
     (is_pred: bool)
     (is_func: bool)
     (rvar:    bool)
-    (ntvs_gap:int)
     (c: t)
     : t =
   (** Push the new type variables, formal generics and the formal arguments of
-      [entlst,rt] to the context [c] leaving a gap of [ntvs_gap] above the
-      possibly newly introduced type variables of the signature. *)
+      [entlst,rt] to the context [c]. *)
   assert (not (is_pred && is_func));
   let entry      = c.entry
   and ct         = class_table c in
   let tvs  =
-    Class_table.formal_generics entlst rt is_func ntvs_gap entry.tvs ct in
+    Class_table.formal_generics entlst rt is_func entry.tvs ct in
   let ntvs0 = Tvars.count_local entry.tvs
   and nfgs0 = Tvars.count_fgs entry.tvs
   in
@@ -569,32 +567,6 @@ let push_with_gap
 
 
 
-let push
-    (entlst: entities list withinfo)
-    (rt: return_type)
-    (is_pred: bool)
-    (is_func: bool)
-    (rvar:    bool)
-    (c: t)
-    : t =
-  (** Push the new type variables, formal generics and the formal arguments of
-      [entlst,rt] to the context [c]. *)
-  push_with_gap entlst rt is_pred is_func rvar 0 c
-
-
-
-
-let push_untyped_with_gap
-    (names:int array) (is_pred:bool) (is_func:bool) (rvar:bool) (ntvs_gap:int) (c:t)
-    : t =
-  let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
-  push_with_gap entlst None is_pred is_func rvar ntvs_gap c
-
-
-let push_untyped_gap (names:int array) (ntvs_gap:int) (c:t): t =
-  push_untyped_with_gap names false false false ntvs_gap c
-
-
 let push_untyped (names:int array) (c:t): t =
   let entlst = withinfo UNKNOWN [Untyped_entities (Array.to_list names)] in
   push entlst None false false false c
@@ -606,6 +578,7 @@ let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
   assert (nargs_new = Array.length nms);
+  assert (nfgs_new = 0 || Tvars.count_fgs c.entry.tvs = 0);
   let tvs     = Tvars.augment_fgs fgnms fgcon c.entry.tvs in
   let ntvs0   = Tvars.count_local c.entry.tvs in
   let nargs   = nargs_new + Array.length c.entry.fargs in
@@ -1294,22 +1267,25 @@ let transformed_term0 (t:term) (nargs:int) (c0:t) (c:t): term =
   (* The term [t] with [nargs] arguments valid in the context [c0] transformed
      to the inner context [c].  *)
   assert (is_outer c0 c);
-  if is_global c0 then begin
-    assert (not (Term.is_all_quantified t));
-    let nvars = count_variables c
-    and ntvs  = count_formal_generics c + count_type_variables c in
-    Term.shift_from nvars nargs ntvs 0 t
-  end else begin
-    assert (not (is_global c0));
-    assert (count_formal_generics c0 = count_formal_generics c);
-    let ntvs0 = count_type_variables c0
-    and ntvs  = count_type_variables c in
-    assert (ntvs0 <= ntvs);
-    let nvars0 = count_variables c0
-    and nvars  = count_variables c in
-    assert (nvars0 <= nvars);
-    Term.shift_from (nvars-nvars0) nargs (ntvs-ntvs0) 0 t
-  end
+  if is_global c0 then
+    begin
+      assert (not (Term.is_all_quantified t));
+      let nvars = count_variables c
+      and ntvs  = count_formal_generics c + count_type_variables c in
+      Term.shift_from nvars nargs ntvs 0 t
+    end
+  else
+    begin
+      assert (not (is_global c0));
+      assert (count_formal_generics c0 = count_formal_generics c);
+      let ntvs0 = count_type_variables c0
+      and ntvs  = count_type_variables c in
+      assert (ntvs0 <= ntvs);
+      let nvars0 = count_variables c0
+      and nvars  = count_variables c in
+      assert (nvars0 <= nvars);
+      Term.shift_from (nvars-nvars0) nargs (ntvs-ntvs0) 0 t
+    end
 
 
 let transformed_term (t:term) (c0:t) (c:t): term =

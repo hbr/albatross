@@ -30,11 +30,7 @@ val is_interface_use:  t -> bool
 
 val verbosity: t -> int
 
-val push_with_gap:  entities list withinfo -> return_type -> bool -> bool -> bool
-  -> int -> t -> t
 val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
-val push_untyped_with_gap: int array -> bool -> bool -> bool -> int -> t -> t
-val push_untyped_gap: int array -> int -> t -> t
 val push_untyped:     int array -> t -> t
 val push_typed:       formals -> formals -> t -> t
 val previous: t -> t
