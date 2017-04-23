@@ -431,6 +431,10 @@ let first_pass
       : max_numbers * eterm
       =
     let c_new = Context.push entlst rt is_pred (not is_pred) false c in
+    if Context.count_last_formal_generics c_new > 0 then
+      error_info
+        entlst.i
+        "Lambda expression must not introduce new formal generic";
     let mn =
       {mn with
        max_locs  = max mn.max_locs (Context.count_type_variables c_new);
@@ -462,6 +466,10 @@ let first_pass
       : max_numbers * eterm
       =
     let c_new = Context.push entlst None false false false c in
+    if Context.count_last_formal_generics c_new > 0 then
+      error_info
+        entlst.i
+        "Quantified expression must not introduce new formal generic";
     let nargs = Context.count_last_variables c_new in
     let mn =
       {mn with
@@ -666,6 +674,17 @@ let variable_type_mismatch
 
 
 
+let iterate_tbs (f: TB.t->unit) (tbs:TB.t list): TB.t list =
+  List.fold_left
+    (fun tbs tb ->
+      try
+        f tb;
+        tb :: tbs
+      with Reject ->
+        tbs
+    )
+    []
+    tbs
 
 
 
@@ -698,17 +717,7 @@ let analyze_eterm
           printf "%s%s expression\n"
             (prefix level)
             (pred_fun is_pred);
-        let tbs1 =
-          List.fold_left
-            (fun tbs tb ->
-              try
-                TB.start_lambda et0.context is_pred tb;
-                tb :: tbs
-              with Reject ->
-                tbs
-            )
-            []
-            tbs
+        let tbs1 = iterate_tbs (TB.start_lambda et0.context is_pred) tbs
         in
         if tbs1 = [] then
           error_info
@@ -732,7 +741,7 @@ let analyze_eterm
             pres
         in
         List.iter
-          (fun tb -> TB.complete_lambda is_pred (List.length pres) tb)
+          (TB.complete_lambda is_pred (List.length pres))
           tbs3;
         if trace then
           trace_head_terms level et.context tbs3;
@@ -742,18 +751,7 @@ let analyze_eterm
           printf "%s%s quantification\n"
             (prefix level)
             (if is_all then "universal" else "existential");
-        let tbs1 =
-          List.fold_left
-            (fun tbs tb ->
-              try
-                TB.start_quantified et0.context tb;
-                tb :: tbs
-              with Reject ->
-                tbs
-            )
-            []
-            tbs
-        in
+        let tbs1 = iterate_tbs (TB.start_quantified et0.context) tbs in
         if tbs1 = [] then
           error_info
             et.info
@@ -763,29 +761,20 @@ let analyze_eterm
              string_of_required_types tbs
             );
         let tbs2 = analyze et0 tbs1 (level+1) in
-        List.iter
-          (fun tb -> TB.complete_quantified is_all tb)
-          tbs2;
+        let tbs3 = iterate_tbs (TB.complete_quantified is_all) tbs2 in
+        if tbs3 = [] then
+          error_info
+            et.info
+            "Some of the variable types could not be inferred completely";
         if trace then
-          trace_head_terms level et.context tbs2;
-        tbs2
+          trace_head_terms level et.context tbs3;
+        tbs3
     | ETyped (e, tp) ->
         if trace then
           printf "%sexpect type %s\n"
             (prefix level)
             (Context.string_of_type tp.v e.context);
-        let tbs1 =
-          List.fold_left
-            (fun tbs tb ->
-              try
-                TB.expect_type tp.v tb;
-                tb :: tbs
-              with Reject ->
-                tbs
-            )
-            []
-            tbs
-        in
+        let tbs1 = iterate_tbs (TB.expect_type tp.v) tbs in
         if tbs1 = [] then
           error_info
             tp.i
@@ -818,18 +807,7 @@ let analyze_eterm
     | EAs (insp,pat) ->
         if trace then
           printf "%sas expression\n%sinspected\n" (prefix level) (prefix level);
-        let tbs1 =
-          List.fold_left
-            (fun tbs tb ->
-              try
-                TB.start_as_expression tb;
-                tb :: tbs
-              with Reject ->
-                tbs
-            )
-            []
-            tbs
-        in
+        let tbs1 = iterate_tbs TB.start_as_expression tbs in
         let tbs2 = analyze insp tbs1 (level+1) in
         if trace then
           printf "%spattern\n" (prefix level);
@@ -875,18 +853,7 @@ let analyze_eterm
           printf "%sinductive set\n" (prefix level);
         assert (rules <> []);
         let c0 = (List.hd rules).context in
-        let tbs1 =
-          List.fold_left
-            (fun tbs tb ->
-              try
-                TB.start_inductive_set c0 tb;
-                tb :: tbs
-              with Reject ->
-                tbs
-            )
-            []
-            tbs
-        in
+        let tbs1 = iterate_tbs (TB.start_inductive_set c0) tbs in
         let tbs2,nrules =
           List.fold_left
             (fun (tbs,i) rule ->
@@ -905,18 +872,7 @@ let analyze_eterm
         tbs2
 
   and variable et i tbs level =
-    let tbs1 =
-      List.fold_left
-        (fun tbs1 tb ->
-          try
-            TB.add_variable i tb;
-            tb :: tbs1
-          with Reject ->
-            tbs1
-        )
-        []
-        tbs
-    in
+    let tbs1 = iterate_tbs (TB.add_variable i) tbs in
     if tbs1 = [] then
       variable_type_mismatch et.info i et.context tbs;
     if trace then
@@ -1013,27 +969,22 @@ let get_difference (t1:term) (t2:term) (c:Context.t): string * string =
 
 let undefined_untyped (e:expression) (tb:TB.t) (c:Context.t): unit =
   let undefs = TB.undefined_untyped tb in
-  let open Context in
-  let n = count_last_variables c in
-  let nms =
-    interval_fold
-      (fun nms i ->
-        match variable_type i c with
-        | Variable j when List.mem j undefs ->
-           (ST.string (variable_name i c)) :: nms
-        | _ ->
-           nms
-      )
-      []
-      0 n
-  in
-  let vars = if List.length nms = 1 then "variable" else "variables" in
-  let str =
-    "The type of the " ^ vars^ "\n\n   "
+  match undefs with
+  | [] ->
+     error_info
+       e.i
+       ("The types of some variables of some inner lambda expression "
+        ^ "cannot be inferred completely")
+  | _ ->
+     let open Context in
+     let nms = List.map (fun i -> ST.string (variable_name i c)) undefs in
+     let vars = if List.length nms = 1 then "variable" else "variables" in
+     let str =
+       "The type of the " ^ vars ^ "\n\n   "
     ^ String.concat ", " nms
     ^ "\n\ncannot be inferred completely"
-  in
-  error_info e.i str
+     in
+     error_info e.i str
 
 
 let different_untyped

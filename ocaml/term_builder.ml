@@ -55,6 +55,7 @@ type application =
   | TermApp of int * int (* nargs, start fgs *)
 
 type t = {
+    outer_nvars:       int;
     mutable req:       type_term option;
     mutable reqs:      type_term list;
     mutable terms:     (term*type_term) list;
@@ -350,7 +351,8 @@ let string_of_complete_head_term (tb:t): string =
 
 
 let copy (tb:t): t =
-  {req = tb.req;
+  {outer_nvars = tb.outer_nvars;
+   req = tb.req;
    reqs = tb.reqs;
    terms = tb.terms;
    calls = tb.calls;
@@ -550,6 +552,7 @@ let make
    terms = [];
    calls = [];
    contexts  = [c];
+   outer_nvars = Context.count_variables c - Context.count_last_variables c;
    nlocals  = nlocs_c;
    nglobals = 0;
    nfgs     = nfgs_c;
@@ -759,6 +762,49 @@ let required_can_be_boolean (tb:t): bool =
           (class_table tb)
      | _ ->
         tp = boolean_type tb
+
+
+
+let undefined_untyped (tb:t): int list =
+  (* The list of untyped variables of the context of [tb] which could not be
+     determined completely. *)
+  let c = context tb in
+  let nvars = Context.count_variables c - tb.outer_nvars
+  and lastnvars = Context.count_last_variables c in
+  let var_type i = substituted_type (variable_type i tb) tb
+  and filt i = globals_start tb <= i && i < globals_beyond tb
+  in
+  let globals_set =
+    IntSet.of_list
+      (interval_fold
+         (fun lst i ->
+           Term.used_variables_filtered_0
+             (var_type i)
+             filt
+             false
+             lst
+         )
+         []
+         lastnvars
+         nvars)
+  in
+  List.rev
+    (interval_fold
+       (fun lst i ->
+         if
+           IntSet.subset
+             (IntSet.of_list
+                (Term.used_variables_filtered (var_type i) filt false))
+             globals_set
+         then
+           lst
+         else
+           i :: lst
+       )
+       []
+       0
+       lastnvars)
+
 
 
 
@@ -1014,6 +1060,8 @@ let start_quantified (c:Context.t) (tb:t): unit =
 
 
 let complete_quantified (is_all:bool) (tb:t): unit =
+  if undefined_untyped tb <> [] then
+    raise Reject;
   let nargs,names,tps = context_names_and_types tb in
   let t0,t0_tp = List.hd tb.terms in
   let t =
@@ -1071,6 +1119,7 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
     add_tup_acc t0,
     List.map (fun (t,tp) -> add_tup_acc t) pres
   in
+  assert (nargs = Array.length names);
   let t = Lam (nargs,names,pres,t0,is_pred,tp)
   in
   pop_context tb;
@@ -1256,31 +1305,6 @@ let head_term_in_context (tb:t): term =
         Flow (ctrl, targs args)
   in
   term (head_term tb)
-
-
-let undefined_untyped (tb:t): int list =
-  (* The list of untyped variables of the context of [tb] which could not be
-     determined completely *)
-  assert (is_in_outer_context tb);
-  let c = context tb in
-  let tvs_c = Context.tvars c in
-  let nlocs_c = Tvars.count_local tvs_c
-  and globs_beyond = globals_beyond tb
-  and locs_start   = locals_start tb
-  in
-  assert (Tvars.count_global tvs_c = 0);
-  assert (nlocs_c = tb.nlocals);
-  interval_fold
-    (fun lst i ->
-      let sub = substituted_type tb.sub.(locs_start+i) tb in
-      match sub with
-      | Variable j when j < globs_beyond ->
-         i :: lst
-      | _ ->
-         lst
-    )
-    []
-    0 nlocs_c
 
 
 let untyped_in_context (tb:t): type_term array =
