@@ -1044,8 +1044,12 @@ let push_context (c_new:Context.t) (tb:t): unit =
 
 let pop_context (tb:t): unit =
   let c = context tb in
-  let nlocals_delta = Context.count_last_type_variables c in
+  let nlocals_delta = Context.count_last_type_variables c
+  and locs_start = locals_start tb in
   assert (nlocals_delta <= tb.nlocals);
+  for i = locs_start to locs_start + nlocals_delta - 1 do
+    tb.sub.(i) <- empty_term
+  done;
   tb.nlocals <- tb.nlocals - nlocals_delta;
   tb.contexts <- List.tl tb.contexts
 
@@ -1101,7 +1105,7 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   and names = Context.local_argnames c
   and nargs = Context.count_last_arguments c
   in
-  let tp = upgraded_signature csig is_pred tb in
+  let tp = substituted_type (upgraded_signature csig is_pred tb) tb in
   (* pop preconditions *)
   let pres,terms = pop_args npres tb.terms
   in
@@ -1243,7 +1247,7 @@ let complete_inductive_set (n:int) (tb:t): unit =
   let args,terms = pop_args n tb.terms in
   let names = Context.local_argnames (context tb) in
   assert (Array.length names = 1);
-  let tp = variable_type 0 tb
+  let tp = substituted_type (variable_type 0 tb) tb
   and rules = Array.of_list (List.map (fun (t,tp) -> t) args)
   in
   let t = Indset (names.(0), tp, rules) in
