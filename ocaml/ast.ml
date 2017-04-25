@@ -83,7 +83,7 @@ let analyze_body (i:int) (info:info) (bdy: feature_body) (c:Context.t)
 
 let get_boolean_term (e: expression) (pc:Proof_context.t): term =
   let c = Proof_context.context pc in
-  Typer.boolean_term e c
+  (Typer.boolean_term e c).v
 
 let term_preconditions (info:info) (t:term) (pc:PC.t): term list =
   let c = PC.context pc in
@@ -422,14 +422,10 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         not_yet_implemented
           info
           "Lambda expressions in recursive definitions"
-        (*let c0 = Context.push_untyped [|ST.symbol "x"|] c in
-        check t0 nbranch tlst c0*)
     | QExp (n,fargs,fgs,t0,_) ->
         error_info
           info
           "Quantified expressions not allowed in recursive definitions"
-        (*let c0 = Context.push_untyped nms c in
-        check t0 nbranch tlst c0*)
     | Flow (Ifexp, args) ->
         check_args args
     | Flow (Asexp, args) ->
@@ -447,7 +443,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         interval_iter
           (fun i ->
             let n,fargs,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-            let c1 = Context.push_typed fargs empty_formals c in
+            let c1 = Context.push_typed fargs empty_formals false c in
             let pat_tp = Context.type_of_term pat c1 in
             let parr =
               let arr = Feature_table.args_of_tuple pat (n+nb) ft in
@@ -460,7 +456,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
                                                    pattern for the inspected
                                                    expressions *)
             let tlst2 = add_pattern insp_arr2 n parr nb tlst in
-            let c = Context.push_typed fargs empty_formals c in
+            let c = Context.push_typed fargs empty_formals false c in
             check res (nbranch+1) tlst2 c
           )
           0 ncases

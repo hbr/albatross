@@ -227,7 +227,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
          when n1 = n2
               && pr1 = pr2
               && Term.equivalent_list ps1 ps2
-              && Term.equivalent tp1 tp2 ->
+      (*&& Term.equivalent tp1 tp2*) ->
         let nb = 1 + nb in
         begin try
           let pos,poslst,elst,tlst =
@@ -243,10 +243,10 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
     | QExp(n1,(nms1,tps1),(fgnms1,fgtps1),t01,is_all1),
       QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,is_all2)
          when n1 = n2 && is_all1 = is_all2
-              && let nfgs = Array.length fgtps1 in
+              (*&& let nfgs = Array.length fgtps1 in
                  nfgs = Array.length fgtps2
                  && Term.equivalent_array fgtps1 fgtps2
-                 && Term.equivalent_array tps1 tps2
+                 && Term.equivalent_array tps1 tps2*)
       ->
         begin try
           comp t01 t02 (n1+nb) (1+pos) poslst elst tlst

@@ -22,6 +22,7 @@ val copy: t -> t
 val expect_argument: int -> t -> unit
 val expect_boolean: t -> unit
 val expect_type: type_term -> t -> unit
+val set_required_type: type_term option -> t -> unit
 val add_variable: int -> t -> unit
 val start_global_application: int -> int -> t -> unit
 val complete_application: application_mode -> t -> unit
@@ -46,8 +47,12 @@ val has_undefined_globals: t -> bool
 val required_can_be_boolean: t -> bool
 val start_predicate_application: int -> t -> unit
 val start_function_application:  int -> t -> unit
+val push_term: info -> t -> unit
+val terms_with_context: t -> formals * formals * bool * info_term list
 val is_fully_typed: t -> bool
 val undefined_untyped: t -> int list
 val untyped_in_context: t -> type_term array
 val update_context: Context.t -> t -> unit
 val result_term: t -> term
+val function_predicate_variable: t -> t -> int
+val different_subterms: t -> t -> info * string * string

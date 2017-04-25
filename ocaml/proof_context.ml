@@ -126,6 +126,9 @@ let nbenv (at:t): int = Proof_table.count_variables at.base
 let count_all_type_variables (pc:t): int =
   Context.ntvs (context pc)
 
+let count_type_variables (pc:t): int =
+  Context.count_type_variables (context pc)
+
 
 let count_variables (at:t): int =
   Proof_table.count_variables at.base
@@ -260,14 +263,16 @@ let push_untyped (names:int array) (pc:t): t =
 
 
 
-let push_typed (fargs:formals) (fgs:formals) (pc:t): t =
-  let base = Proof_table.push_typed fargs fgs pc.base in
+let push_typed (fargs:formals) (fgs:formals) (rvar:bool) (pc:t): t =
+  let base = Proof_table.push_typed fargs fgs rvar pc.base in
   push0 base pc
 
+let push_typed0 (fargs:formals) (fgs:formals) (pc:t): t =
+  push_typed fargs fgs false pc
 
 
 let push_empty (pc:t): t =
-  let base = Proof_table.push_typed empty_formals empty_formals pc.base in
+  let base = Proof_table.push_typed empty_formals empty_formals false pc.base in
   push0 base pc
 
 

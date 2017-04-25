@@ -226,10 +226,14 @@ let push_untyped (names:int array) (at:t): t =
 
 
 
-let push_typed (tps:formals) (fgs:formals) (at:t): t =
-  let c = Context.push_typed tps fgs at.c in
+let push_typed (tps:formals) (fgs:formals) (rvar:bool) (at:t): t =
+  let c = Context.push_typed tps fgs rvar at.c in
   let nms = fst tps in
   push0 nms c at
+
+
+let push_typed0 (tps:formals) (fgs:formals) (at:t): t =
+  push_typed tps fgs false at
 
 
 let pop (at:t): t =
@@ -909,7 +913,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         if trace then print1 t idx at;
         t
     | Subproof (tps,fgs,res_idx,pt_arr,bubble) ->
-        let at = push_typed tps fgs at in
+        let at = push_typed0 tps fgs at in
         let pt_len = Array.length pt_arr in
         let pt_nass =
           if trace then count_assumptions pt_arr else 0

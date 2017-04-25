@@ -31,6 +31,7 @@ and agens      = type_term array
 and types      = type_term array
 and formals    = names * arguments
 and type_term  = term
+and info_term  = term withinfo
 
 exception Term_capture
 exception Empty_term
@@ -1568,6 +1569,7 @@ sig
   val count: t -> int
   val names: t -> names
   val types: t -> types
+  val formals: t -> formals
 end
   =
   struct
@@ -1582,6 +1584,7 @@ end
     let names (formals:t): names = formals.names
     let types (formals:t): types = formals.types
     let count (formals:t): int = Array.length formals.names
+    let formals(formals:t): formals = formals.names, formals.types
     let equivalent (f1:t) (f2:t): bool =
       Term.equivalent_array f1.types f2.types
   end (* Formals *)

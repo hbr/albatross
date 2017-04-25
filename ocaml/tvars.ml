@@ -199,7 +199,25 @@ let remove_local (n:int) (tvs:t): t =
     assert false (* cannot happen *)
 
 
-
+let push_fgs (fgnames:names) (fgconcepts:types) (tvs:t): t =
+  assert (count_global tvs = 0);
+  let nfgs1 = Array.length fgconcepts in
+  assert (Array.length fgnames = nfgs1);
+  if nfgs1 = 0 then
+    copy tvs
+  else
+    begin
+      assert (count_local tvs = 0);
+      let nms0 = tvs.fgnames
+      and tps0 = tvs.fgconcepts in
+      let tps0 = Array.map (Term.up nfgs1) tps0 in
+      let fgnames    = Array.append fgnames nms0
+      and fgconcepts = Array.append fgconcepts tps0
+      and nlocal = 0
+      and concepts = [||]
+      in
+      {nlocal;concepts;fgnames;fgconcepts}
+    end
 
 
 let augment_fgs

@@ -56,6 +56,7 @@ type application =
 
 type t = {
     outer_nvars:       int;
+    mutable term_stack:info_term list;
     mutable req:       type_term option;
     mutable reqs:      type_term list;
     mutable terms:     (term*type_term) list;
@@ -352,6 +353,7 @@ let string_of_complete_head_term (tb:t): string =
 
 let copy (tb:t): t =
   {outer_nvars = tb.outer_nvars;
+   term_stack  = tb.term_stack;
    req = tb.req;
    reqs = tb.reqs;
    terms = tb.terms;
@@ -553,6 +555,7 @@ let make
    calls = [];
    contexts  = [c];
    outer_nvars = Context.count_variables c - Context.count_last_variables c;
+   term_stack = [];
    nlocals  = nlocs_c;
    nglobals = 0;
    nfgs     = nfgs_c;
@@ -601,11 +604,19 @@ let expect_boolean (tb:t): unit =
   tb.req <- Some (boolean_type tb)
 
 
+
 let expect_type (tp:type_term) (tb:t): unit =
   let tp = (transform_from_context (context tb) tb) tp in
   unify_with_required tp tb;
   tb.req <- Some tp
 
+let set_required_type (tp:type_term option) (tb:t): unit =
+  match tp with
+  | None ->
+     tb.req <- None
+  | Some tp ->
+     let tp = (transform_from_context (context tb) tb) tp in
+     tb.req <- Some tp
 
 let pop_term
     (terms:(term*type_term) list)
@@ -1267,20 +1278,45 @@ let is_fully_typed (tb:t): bool =
 
 
 
+let substitution_for_context (ntvs:int) (tb:t): type_term array =
+  assert (is_fully_typed tb);
+  assert (ntvs = 0 || ntvs = Context.count_type_variables (context tb));
+  let sub = Array.copy tb.sub in
+  let n_down = fgs_start tb - ntvs in
+  assert (n_down >= 0);
+  for i = locals_start tb to globals_beyond tb - 1 do
+    sub.(i) <-
+      try
+        Term.down n_down (substituted_type sub.(i) tb)
+      with Term_capture ->
+        assert (i < globals_start tb);
+        empty_term
+  done;
+  sub
+
+
 let type_in_context (tp:type_term) (tb:t): type_term =
   let tp = substituted_type tp tb in
+  let ntvs = Context.count_type_variables (context tb) in
+  let fg0 = fgs_start tb in
   try
-    let ntvs = Context.count_type_variables (context tb) in
-    let fg0 = fgs_start tb in
-    let tp = Term.down fg0 tp in
-    Term.up ntvs tp
+    Term.shift (ntvs - fg0) 0 tp
+    (*let tp = Term.down fg0 tp in
+    Term.up ntvs tp*)
   with Term_capture ->
     assert false (* substituted type should not contain type variables *)
 
 
 let head_term_in_context (tb:t): term =
   assert (is_fully_typed tb);
-  let tpc tp = type_in_context tp tb in
+  let ntvs = Context.count_type_variables (context tb)
+  in
+  let arr  = substitution_for_context ntvs tb in
+  try
+    Term.subst0 (head_term tb) 0 [||] ntvs arr
+  with Empty_term ->
+    assert false (* cannot happen *)
+  (*let tpc tp = type_in_context tp tb in
   let tpc_args args = Array.map tpc args in
   let rec term t =
     let targs args = Array.map term args
@@ -1308,7 +1344,7 @@ let head_term_in_context (tb:t): term =
     | Flow (ctrl,args) ->
         Flow (ctrl, targs args)
   in
-  term (head_term tb)
+  term (head_term tb)*)
 
 
 let untyped_in_context (tb:t): type_term array =
@@ -1351,3 +1387,103 @@ let result_term (tb:t): term =
   let t = head_term_in_context tb in
   let t = Context.specialized t (context tb) in
   Context.prenex_term t (context tb)
+
+
+let push_term (info:info) (tb:t): unit =
+  match tb.terms with
+  | [t,_] ->
+     tb.terms <- [];
+     tb.term_stack <- withinfo info t :: tb.term_stack
+  | _ ->
+     assert false (* exactly one term has to be there *)
+
+
+let local_formals (tb:t): formals * bool =
+  let c = context tb in
+  (Context.local_varnames c,
+   Array.map (transform_from_context c tb) (Context.local_vartypes c)),
+  (Context.has_result_variable c)
+
+let local_fgs (tb:t): formals =
+  let c = context tb in
+  let nms,fgs = Context.local_fgs c in
+  let fgs = Array.map (transform_from_context c tb) fgs in
+  nms,fgs
+
+
+let terms_with_context (tb:t): formals * formals * bool * info_term list =
+  assert (tb.terms = []);
+  assert (tb.term_stack <> []);
+  let (nms,tps),rvar = local_formals tb
+  and fgnms,fgs = local_fgs tb in
+  let sub = substitution_for_context 0 tb in
+  let sub_type tp = Term.subst0 tp 0 sub   0 [||]
+  and sub_term t  = Term.subst0 t  0 [||]  0 sub
+  in
+  let tps = Array.map sub_type tps
+  and fgs = Array.map sub_type fgs
+  in
+  let c0 = Context.previous (context tb) in
+  let c1 = Context.push_typed (nms,tps) (fgnms,fgs) rvar c0 in
+  let tlst =
+    List.rev_map
+      (fun t ->
+        let info = t.i in
+        let t = sub_term t.v in
+        let t = Context.specialized t c1 in
+        let t = Context.prenex_term t c1 in
+        assert (Context.is_well_typed t c1);
+        withinfo info t
+      )
+      tb.term_stack
+  in
+  (nms,tps), (fgnms,fgs), rvar, tlst
+
+
+
+let function_predicate_variable (tb1:t) (tb2:t): int =
+  let c1 = context tb1 in
+  let nargs = Context.count_last_variables c1 in
+  interval_find
+    (fun i ->
+      let tp1 = substituted_type (variable_type i tb1) tb1
+      and tp2 = substituted_type (variable_type i tb2) tb2 in
+      let cls1,_ = Class_table.split_type_term tp1
+      and cls2,_ = Class_table.split_type_term tp2 in
+      (cls1 = predicate_class tb1 && cls2 = function_class tb2)
+      || (cls2 = predicate_class tb2 && cls1 = function_class tb1)
+    )
+    0 nargs
+
+
+let different_subterms (tb1:t) (tb2:t): info * string * string =
+  let rec find lst1 lst2 =
+    match lst1, lst2 with
+    | t1::lst1, t2::lst2 ->
+       begin
+         try
+           let _,_,arr1,arr2 = Term_algo.compare t1.v t2.v (fun _ _ -> ()) in
+           assert (Array.length arr1 > 0);
+           assert (Array.length arr1 = Array.length arr2);
+           begin
+             match arr1.(0), arr2.(0) with
+             | VAppl(i1,_,_,_), VAppl(i2,_,_,_) ->
+                let nvars = count_variables tb1
+                and ft = feature_table tb1 in
+                let str1 = Feature_table.string_of_signature (i1-nvars) ft
+                and str2 = Feature_table.string_of_signature (i2-nvars) ft in
+                t1.i, str1, str2
+             | _ ->
+                assert false (* Cannot happen, there must be differences *)
+           end
+         with Not_found ->
+              find lst1 lst2
+       end
+    | [], [] ->
+       raise Not_found
+    | [], _ ->
+       assert false (* illegal call *)
+    | _, [] ->
+       assert false (* illegal call *)
+  in
+  find tb1.term_stack tb2.term_stack

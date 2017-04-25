@@ -183,6 +183,7 @@ module Mylist: sig
   val has_duplicates: 'a list -> bool
 
   val combine:      'a list -> 'b list -> ('a*'b) list
+  val split_at:     int -> 'a list -> 'a list * 'a list
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -230,6 +231,19 @@ end = struct
       | a::l1, b::l2 -> comb l1 l2 ((a,b)::res)
     in
     List.rev (comb l1 l2 [])
+
+  let split_at (i:int) (l:'a list): 'a list * 'a list =
+    let rec split i l1_rev l2 =
+      if i = 0 then
+        List.rev l1_rev, l2
+      else
+        match l2 with
+        | hd::tl ->
+           split (i-1) (hd::l1_rev) tl
+        | _ ->
+           assert false (* i out of bound *)
+    in
+    split i [] l
 end
 
 

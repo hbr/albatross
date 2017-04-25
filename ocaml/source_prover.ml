@@ -45,8 +45,7 @@ let verify_preconditions (it:info_term) (pc:PC.t): unit =
 
 let get_boolean_term (e: expression) (pc:Proof_context.t): info_term =
   let c = PC.context pc in
-  let t = Typer.boolean_term e c in
-  withinfo e.i t
+  Typer.boolean_term e c
 
 
 let get_boolean_term_verified
@@ -58,8 +57,7 @@ let get_boolean_term_verified
 
 let get_term (e:expression) (pc:PC.t): info_term =
   let c = PC.context pc in
-  let t = Typer.untyped_term e c in
-  withinfo e.i t
+  Typer.untyped_term e c
 
 
 let get_term_verified
@@ -72,7 +70,21 @@ let get_term_verified
 
 
 
+let push
+    (entlst: entities list withinfo)
+    (rlst: compound)
+    (elst: compound)
+    (pc:PC.t)
+    :  info_terms * info_terms * PC.t =
+  assert (PC.count_type_variables pc = 0);
+  let tps,fgs,rlst,elst =
+    Typer.structured_assertion entlst rlst elst (PC.context pc)
+  in
+  rlst, elst, PC.push_typed0 tps fgs pc
 
+
+
+(*
 let push
     (entlst: entities list withinfo)
     (rlst: compound)
@@ -103,7 +115,7 @@ let push
     )
     nms;
   rlst, elst, pc1
-
+ *)
 
 let add_assumptions (rlst:info_terms) (pc:PC.t): unit =
   List.iter
@@ -238,7 +250,7 @@ let inner_case_context
     =
   let stren_goal = PC.beta_reduce_term case_goal_pred pc in
   let n1,fargs1,fgs1,chn = Term.all_quantifier_split_1 stren_goal in
-  let pc1 = PC.push_typed fargs1 fgs1 pc in
+  let pc1 = PC.push_typed0 fargs1 fgs1 pc in
   let ass_lst_rev, goal =
     interval_fold
       (fun (alst,chn) _ ->
@@ -305,15 +317,10 @@ let analyze_type_case_pattern
     (pc:PC.t)
     : int * names =
   (* cons_idx, names *)
-  let c     = PC.context pc
-  and nvars = PC.count_variables pc in
-  let pat,nms = Typer.case_variables e false c in
-  let n = Array.length nms in
-  let pc1 = PC.push_untyped nms pc in
-  let c1  = PC.context pc1
-  and tp  = Term.up n tp
+  let nms,pat =  Typer.case_pattern e tp (PC.context pc) in
+  let nvars = PC.count_variables pc
+  and n = Array.length nms
   in
-  let pat = Typer.typed_term pat tp c1 in
   let invalid_pat () =
     error_info e.i
       ("Invalid pattern \"" ^ (string_of_expression e) ^ "\"") in
@@ -331,7 +338,6 @@ let analyze_type_case_pattern
     | _ ->
         invalid_pat ()
   in cons_idx, nms
-
 
 
 let inductive_type_case_context
@@ -383,7 +389,7 @@ let inductive_type_case_context
   in
   let tps = Feature_table.argument_types cons_idx ags ntvs ft
   in
-  let pc1 = PC.push_typed (nms,tps) empty_formals pc
+  let pc1 = PC.push_typed0 (nms,tps) empty_formals pc
   in
   let n1,_,_,ps_rev,case_goal_pred =
     Feature_table.constructor_rule cons_idx goal_pred ags nvars ft
@@ -590,7 +596,7 @@ let inductive_set_case
     (data: inductive_set_data)
     : int * term =
   let c = PC.context data.pc in
-  let rule = Typer.boolean_term case_exp c in
+  let rule = (Typer.boolean_term case_exp c).v in
   let irule =
     try
       interval_find
@@ -638,7 +644,7 @@ let add_set_induction_hypothesis
     PC.split_general_implication_chain hypo pc
   in
   assert (fgs1 = empty_formals);
-  let pc1 = PC.push_typed fargs1 empty_formals pc
+  let pc1 = PC.push_typed0 fargs1 empty_formals pc
   in
   match goal_redex1 with
     Application(Lam(_),_,_) ->
@@ -647,7 +653,8 @@ let add_set_induction_hypothesis
       let n2,fargs2,fgs2,ps_rev2,user_goal =
         PC.split_general_implication_chain outer_goal pc1
       in
-      let pc2 = PC.push_typed fargs2 empty_formals  pc1
+      assert (fgs2 = empty_formals);
+      let pc2 = PC.push_typed0 fargs2 empty_formals pc1
       in
       assert (fgs2 = empty_formals);
       (* Now we have two contexts: all(hypo_vars)  all(other_vars *)
@@ -780,7 +787,7 @@ let inductive_set_case_context
     assert (n = m);
     n,(nms,tps), ps, goal_pred1
   in
-  let pc1 = PC.push_typed fargs1 empty_formals pc in
+  let pc1 = PC.push_typed0 fargs1 empty_formals pc in
   (* add induction hypotheses *)
   let ass_lst_rev, hlst_rev, _ =
     List.fold_left
@@ -851,7 +858,7 @@ let get_transitivity_data
       and nms = standard_argnames 3
       and tps = [|tp;tp;tp|]
       in
-      let pc1 = PC.push_typed (nms,tps) empty_formals pc in
+      let pc1 = PC.push_typed0 (nms,tps) empty_formals pc in
       let t =
         let ab = rel 3 a b
         and bc = rel 3 b c
@@ -1029,6 +1036,7 @@ and prove_one
 and prove_sequence
     (lst: proof_step list)
     (pc: PC.t): unit =
+  assert (PC.count_type_variables pc = 0);
   let expand (i:int): unit =
     PC.expand_variable_definitions i pc
   in
@@ -1450,7 +1458,7 @@ and prove_exist_elim
   in
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
   let n,fargs,t0 = Term.some_quantifier_split someexp.v in
-  let pc1 = PC.push_typed fargs empty_formals pc in
+  let pc1 = PC.push_typed0 fargs empty_formals pc in
   ignore (PC.add_assumption t0 true pc1);
   PC.close pc1;
   let goal = Term.up n goal in
@@ -1510,7 +1518,7 @@ and prove_by_transitivity
   let idx_law, first, last, tp, ags, rel =
     get_transitivity_data info goal pc
   in
-  let lst = List.map (fun ie -> withinfo ie.i (Typer.typed_term ie tp c)) lst
+  let lst = List.map (fun ie -> Typer.typed_term ie tp c) lst
   in
   match lst with
     b :: tail ->

@@ -50,7 +50,8 @@ val make: Module.Compile.t -> t
 
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
-val push_typed:   formals -> formals -> t -> t
+val push_typed:   formals -> formals -> bool -> t -> t
+val push_typed0:  formals -> formals -> t -> t
 val push_empty:   t -> t
 val pop:          t -> t
 
@@ -110,6 +111,7 @@ val count_global:   t -> int
 val count_variables:      t -> int
 val count_last_arguments: t -> int
 val count_all_type_variables: t -> int
+val count_type_variables: t -> int
 val local_argnames: t -> names
 val local_formals: t -> formals
 val local_fgs: t -> formals

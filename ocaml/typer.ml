@@ -48,9 +48,7 @@ let prefix (level:int): string =
   String.make (2+2*level) ' '
 
 
-
-
-let used_variables (nargs:int) (et:eterm): IntSet.t =
+let used_variables_0 (nargs:int) (et:eterm) (set:IntSet.t): IntSet.t =
   let rec used et nb set =
     let used_args args nb set =
       Array.fold_left
@@ -112,7 +110,11 @@ let used_variables (nargs:int) (et:eterm): IntSet.t =
           set
           rules
   in
-  used et 0 IntSet.empty
+  used et 0 set
+
+
+let used_variables (nargs:int) (et:eterm): IntSet.t =
+  used_variables_0 nargs et IntSet.empty
 
 
 let max_globs_of_features (flst:int list) (c:Context.t): int =
@@ -227,8 +229,9 @@ let case_variables
                      (string_of_expression e) ^ "\"")
 
 
-let first_pass
+let first_pass_0
     (e:expression)
+    (mn:max_numbers)
     (c:Context.t)
     : max_numbers * eterm
     =
@@ -558,15 +561,70 @@ let first_pass
     {info = info;
      context = c;
      term = EInspect (einsp,ecases)}
-
   in
+  first e mn c
 
-  first
+
+let first_pass
+    (e:expression)
+    (c:Context.t)
+    : max_numbers * eterm
+    =
+  first_pass_0
     e
     {max_locs  = Context.count_type_variables c;
      max_globs = 0;
      max_fgs   = 0}
     c
+
+
+let first_pass_list
+      (info:info)
+      (check_used: bool)
+      (lst: (expression * type_term option) list)
+      (c:Context.t)
+    : max_numbers * (eterm*type_term option*expression) list =
+  let nargs = Context.count_last_variables c in
+  let first_pass_list0 mn used lst =
+    let mn,used,lst =
+      List.fold_left
+        (fun (mn,used,lst) (e,tp) ->
+          let mn,et = first_pass_0 e mn c in
+          let used = used_variables_0 nargs et used in
+          mn, used, (et,tp,e) :: lst)
+        (mn,used,[])
+        lst
+    in
+    mn, used, List.rev lst
+  in
+  let mn = {max_locs  = Context.count_type_variables c;
+            max_globs = 0;
+            max_fgs   = 0} in
+  let mn,used,lst = first_pass_list0 mn IntSet.empty lst in
+  if check_used && IntSet.cardinal used < nargs then
+    begin
+      let unused =
+        List.rev
+          (interval_fold
+             (fun unused i ->
+               if IntSet.mem i used then
+                 unused
+               else
+                 ST.string (Context.variable_name i c) :: unused
+             )
+             [] 0 nargs)
+      in
+      assert (unused <> []);
+      let vars =
+        if List.length unused = 1 then "variable is" else "variables are" in
+      error_info
+        info
+        ("The following " ^ vars ^ " not used: \""
+         ^ String.concat "," unused ^ "\". Neither in assumptions nor in goals")
+    end
+  else
+    mn, lst
+
 
 
 let replicate_tbs (tbs:TB.t list) (flst:int list): (int * TB.t list) list =
@@ -967,12 +1025,12 @@ let get_difference (t1:term) (t2:term) (c:Context.t): string * string =
 
 
 
-let undefined_untyped (e:expression) (tb:TB.t) (c:Context.t): unit =
+let undefined_untyped (inf:info) (tb:TB.t) (c:Context.t): unit =
   let undefs = TB.undefined_untyped tb in
   match undefs with
   | [] ->
      error_info
-       e.i
+       inf
        ("The types of some variables of some inner lambda expression "
         ^ "cannot be inferred completely")
   | _ ->
@@ -981,10 +1039,10 @@ let undefined_untyped (e:expression) (tb:TB.t) (c:Context.t): unit =
      let vars = if List.length nms = 1 then "variable" else "variables" in
      let str =
        "The type of the " ^ vars ^ "\n\n   "
-    ^ String.concat ", " nms
-    ^ "\n\ncannot be inferred completely"
+       ^ String.concat ", " nms
+       ^ "\n\ncannot be inferred completely"
      in
-     error_info e.i str
+     error_info inf str
 
 
 let different_untyped
@@ -1021,83 +1079,149 @@ let different_untyped
 
 
 
-let general_term
-    (e:expression) (tp:type_term option) (c:Context.t)
-    : term =
+
+
+let make_tb (mn:max_numbers) (c:Context.t): TB.t =
+  TB.make None mn.max_locs mn.max_globs mn.max_fgs c
+
+let analyze_term_list
+      (info:info)
+      (check_used:bool)
+      (lst: (expression * type_term option) list)
+      (c: Context.t)
+    : formals * formals * bool * info_term list =
   let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
-  if trace then
-    printf "\ntyper analyze expression\n\n\t%s\n\n" (string_of_expression e);
-  let mn,et = first_pass e c in
-  let tb = TB.make tp mn.max_locs mn.max_globs mn.max_fgs c in
-  assert (TB.context tb == c);
-  let lst = analyze_eterm et [tb] 0 trace
-  in
-  if trace then
-    printf "typer end analysis\n\n";
-  let min_nodes =
+  let analyze_list
+        (elst: (eterm*type_term option*expression) list)
+        (tbs:TB.t list)
+      : TB.t list =
     List.fold_left
-      (fun min_nodes tb ->
-        let n = Term.nodes (TB.head_term tb) in
-        if min_nodes = 0 then n else min min_nodes n
+      (fun tbs (et,tp,e) ->
+        if trace then
+          Format.printf
+            "@[<v>@,@[<v 4>%s@,@,%s@,@]@]@."
+            "typer analyze term"
+            (string_of_expression e);
+        List.iter (TB.set_required_type tp) tbs;
+        let tbs = analyze_eterm et tbs 0 trace in
+        List.iter (TB.push_term et.info) tbs;
+        tbs
       )
-      0
-      lst
+      tbs
+      elst
   in
-  let lst =
-    List.filter
-      (fun tb -> Term.nodes (TB.head_term tb) = min_nodes)
-      lst
-  in
-  match lst with
-    [] ->
+  let mn, lst_et =
+    first_pass_list info check_used lst c in
+  let tbs = analyze_list lst_et [make_tb mn c] in
+  if trace then
+    Format.printf "@[<v>%s@,@,@]" "typer end analysis";
+  match tbs with
+  |  [] ->
       assert false (* Cannot happen; at least one term is returned, otherwise an
                       error would have been reported *)
   | [tb] ->
      if TB.has_undefined_globals tb then
-       undefined_untyped e tb c;
-      TB.update_context c tb;
-      let t = TB.result_term tb in
-      assert (Context.is_well_typed t c);
-      t
+       undefined_untyped info tb c;
+     TB.terms_with_context tb
   | tb1 :: tb2 :: _ ->
-     if TB.has_undefined_globals tb1 then
-       undefined_untyped e tb c;
-     let tpsub1 = TB.untyped_in_context tb1
-     and tpsub2 = TB.untyped_in_context tb2 in
-     if not (Term.equivalent_array tpsub1 tpsub2) then
-       different_untyped e tpsub1 tpsub2 c;
-     Context.update_types tpsub1 c;
-     let t1 = TB.result_term tb1
-     and t2 = TB.result_term tb2 in
-     let str1, str2 = get_difference t1 t2 c in
-     let estr = string_of_expression e in
-     error_info
-       e.i
-       ("The expression\n\n\t" ^ estr ^ "\n\nis ambiguous\n\n\t" ^
-          str1 ^ "\n\t" ^ str2)
+     try
+       printf "check predicate function ambiguity\n";
+       let i = Term_builder.function_predicate_variable tb1 tb2 in
+       error_info
+         info
+         ("It cannot be determined if the type of the variable \""
+          ^ ST.string (Context.variable_name i c)
+          ^ "\" is a PREDICATE or a FUNCTION")
+     with Not_found ->
+       try
+         printf "check different subterms\n";
+         let info,str1,str2 = Term_builder.different_subterms tb1 tb2 in
+         error_info
+           info
+           ("The expression is ambiguous\n\n\t"
+            ^ str1 ^ "\n\t" ^ str2)
+       with Not_found ->
+         error_info
+           info
+           ("Some inner context has a variable whose type is either a "
+            ^ "FUNCTION or a PREDICATE; but it cannot be decided")
 
 
 
+let structured_assertion
+      (entlst: entities list withinfo)
+      (rlst: compound)
+      (elst: compound)
+      (c: Context.t)
+    : formals * formals * info_term list * info_term list =
+  assert (Context.count_type_variables c = 0);
+  let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
+  if trace then
+    begin
+      let open Format in
+      printf "@[<v>@,@[<v 2>%s@,@,@[<v 2>all(%s)@,@[<v 2>require"
+              "typer analyze structured assertion"
+              (string_of_formals entlst.v);
+      List.iter (fun e -> printf "@,%s" (string_of_expression e)) rlst;
+      printf "@]@,@[<v 2>ensure";
+      List.iter (fun e -> printf "@,%s" (string_of_expression e)) elst;
+      printf "@]@,end@]@]@,@,@]"
+    end;
+  let c1 = Context.push entlst None false false false c in
+  let tp = Context.boolean c1 in
+  let lst = List.map (fun e -> e, Some tp) (rlst @ elst) in
+  let tps,fgs,rvar,lst = analyze_term_list entlst.i true lst c1 in
+  let rlst,elst = Mylist.split_at (List.length rlst) lst in
+  assert (not rvar);
+  tps,fgs,rlst,elst
 
-let typed_term (e:expression) (tp:type_term) (c:Context.t): term =
-  assert (not (Context.is_global c));
-  general_term e (Some tp) c
+
+let general_term (e:expression) (tp:type_term option) (c:Context.t): info_term =
+  assert(Context.count_type_variables c = 0);
+  let _,_,_,lst = analyze_term_list e.i false [e,tp] c in
+  match lst with
+  |  [t] ->
+      t
+  | _ ->
+     assert false (* cannot happen *)
 
 
-
-let untyped_term (e:expression) (c:Context.t): term =
-  assert (not (Context.is_global c));
+let untyped_term (e:expression) (c:Context.t): info_term =
+  assert(Context.count_type_variables c = 0);
   general_term e None c
 
 
+let typed_term (e:expression) (tp:type_term) (c:Context.t): info_term =
+  assert(Context.count_type_variables c = 0);
+  general_term e (Some tp) c
 
-let boolean_term (e: expression) (c:Context.t): term =
-  assert (not (Context.is_global c));
+
+let boolean_term (e:expression) (c:Context.t): info_term =
+  assert(Context.count_type_variables c = 0);
   general_term e (Some (Context.boolean c)) c
 
 
 let result_term (e:expression) (c:Context.t): term =
+  assert(Context.count_type_variables c = 0);
   assert (not (Context.is_global c));
   assert (Context.has_result c);
   let tp = Context.result_type c in
-  typed_term e tp c
+  (general_term e (Some tp) c).v
+
+
+let case_pattern (pat:expression) (tp:type_term) (c:Context.t): names * term =
+  assert(Context.count_type_variables c = 0);
+  let pat,nms = case_variables pat false c in
+  let n = Array.length nms in
+  let c1 = Context.push_untyped nms c
+  and tp = Term.up n tp
+  in
+  let _,_,_,lst = analyze_term_list pat.i false [pat,Some tp] c1 in
+  let pat =
+    match lst with
+    |  [t] ->
+        t.v
+    | _ ->
+       assert false (* cannot happen *)
+  in
+  nms,pat

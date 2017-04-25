@@ -61,7 +61,8 @@ val principal_class: type_term -> t -> int
 
 val add_local:    int -> t -> t
 val remove_local: int -> t -> t
-val augment_fgs:  int array -> type_term array -> t -> t
+val push_fgs:     names -> types -> t -> t
+val augment_fgs:  names -> types -> t -> t
 val fgs_to_global: t -> t
 val add_involved_classes: type_term -> t -> IntSet.t -> IntSet.t
 val involved_classes:     type_term -> t -> IntSet.t

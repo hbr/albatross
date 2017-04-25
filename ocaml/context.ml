@@ -217,9 +217,17 @@ let entry_argtypes (e:entry): types =
   Array.init (Array.length e.fargs) (fun i -> snd e.fargs.(i))
 
 
-let local_argnames (c:t): int array = entry_local_argnames c.entry
+let local_argnames (c:t): names = entry_local_argnames c.entry
 
-let local_types (c:t): term array = entry_local_types c.entry
+let local_varnames (c:t): names =
+  let nvars = count_last_variables c in
+  Array.init nvars (fun i -> fst c.entry.fargs.(i))
+
+let local_vartypes (c:t): types =
+  let nvars = count_last_variables c in
+  Array.init nvars (fun i -> snd c.entry.fargs.(i))
+
+let local_argtypes (c:t): term array = entry_local_types c.entry
 
 let local_formals (c:t): formals =
   entry_local_argnames c.entry,
@@ -572,36 +580,45 @@ let push_untyped (names:int array) (c:t): t =
   push entlst None false false false c
 
 
-let push_typed ((nms,tps):formals) ((fgnms,fgcon):formals) (c:t): t =
-  assert (ntvs c = 0 || (fgnms,fgcon) = empty_formals);
+let push_typed
+      ((nms,tps):formals) ((fgnms,fgcon):formals) (rvar:bool) (c:t)
+    : t =
+  assert (count_type_variables c = 0 || (fgnms,fgcon) = empty_formals);
   let nfgs_new  = Array.length fgcon
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
   assert (nargs_new = Array.length nms);
-  assert (nfgs_new = 0 || Tvars.count_fgs c.entry.tvs = 0);
-  let tvs     = Tvars.augment_fgs fgnms fgcon c.entry.tvs in
-  let ntvs0   = Tvars.count_local c.entry.tvs in
+  assert (not rvar || nargs_new > 0);
+  let tvs     = Tvars.push_fgs fgnms fgcon c.entry.tvs in
   let nargs   = nargs_new + Array.length c.entry.fargs in
   let fargs = Array.init nargs
       (fun i ->
         if i < nargs_new then nms.(i), tps.(i)
         else
           let i = i - nargs_new in
-          let nme,con = c.entry.fargs.(i) in
-          let con = Term.up_from nfgs_new ntvs0 con in
-          nme,con) in
+          let nme,tp = c.entry.fargs.(i) in
+          let tp = Term.up nfgs_new tp in
+          nme,tp
+      )
+  in
   {c with
    entry =
    {tvs     = tvs;
     fargs   = fargs;
     ntvs_delta  = 0;
     nfgs_delta  = nfgs_new;
-    nargs_delta = nargs_new;
-    rvar    = false;
+    nargs_delta = nargs_new - if rvar then 1 else 0;
+    rvar    = rvar;
     result  = Result_type.empty;
     info    = UNKNOWN};
    prev = Some c;
    depth = 1 + c.depth}
+
+
+let push_typed0
+      (tps:formals) (fgs:formals) (c:t)
+    : t =
+  push_typed tps fgs false c
 
 
 
@@ -619,7 +636,7 @@ let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
   assert (cls0 = Constants.predicate_class && Array.length ags = 1
         || cls0 = Constants.function_class && Array.length ags = 2);
   let tps = extract_from_tuple n ags.(0) c in
-  push_typed (nms,tps) empty_formals c
+  push_typed0 (nms,tps) empty_formals c
 
 
 
@@ -666,7 +683,7 @@ let rec type_of_term (t:term) (c:t): type_term =
       | Inspect ->
           assert (3 <= Array.length args);
           let _,tps,_,res = Term.case_split args.(1) args.(2) in
-          let c1 = push_typed tps empty_formals c in
+          let c1 = push_typed0 tps empty_formals c in
           type_of_term res c1
       | Asexp ->
           boolean c
@@ -1186,7 +1203,7 @@ let rec type_of_term_full
       end
   | Lam (n,nms,ps,t0,pr,tp) ->
       let argtp,rtp = get_arg_types tp pr in
-      let c1 = push_typed ([|ST.symbol "t"|],[|argtp|]) empty_formals c in
+      let c1 = push_typed0 ([|ST.symbol "t"|],[|argtp|]) empty_formals c in
       ignore (type_of_term_full
                 t0
                 (if pr then
@@ -1198,7 +1215,7 @@ let rec type_of_term_full
       check_and_trace tp
   | QExp (n,tps,fgs,t0,is_all) ->
       assert (ntvs = 0 || fgs = empty_formals);
-      let c1 = push_typed tps fgs c in
+      let c1 = push_typed0 tps fgs c in
       ignore (type_of_term_full t0 (Some (boolean c1)) trace c1);
       check_and_trace (boolean c)
   | Indset (nme,tp,rs) ->
@@ -1219,7 +1236,7 @@ let rec type_of_term_full
           assert (len = 2);
           let tp = type_of_term_full args.(0) None trace c in
           let n,tps,t0 = Term.pattern_split args.(1) in
-          let c1 = push_typed tps empty_formals c in
+          let c1 = push_typed0 tps empty_formals c in
           ignore (type_of_term_full t0 (Some tp) trace c1);
           check_and_trace (boolean c)
       | Inspect ->
@@ -1234,7 +1251,7 @@ let rec type_of_term_full
             else
               let n,(nms,tps),pat,res =
                 Term.case_split args.(2*i+1) args.(2*i+2) in
-              let c1 = push_typed (nms,tps) empty_formals c in
+              let c1 = push_typed0 (nms,tps) empty_formals c in
               ignore (type_of_term_full pat (Some insp_tp) trace c1);
               let req_tp = type_of_term_full res req_tp trace c1 in
               check_cases_from (i + 1) (Some req_tp)
@@ -1509,7 +1526,7 @@ let term_preconditions (t:term)  (c:t): term list =
         in
         prepend_pres_of_term ps_rev t0 lst
     | QExp (n,tps,fgs,t0,is_all) ->
-        let c = push_typed tps fgs c in
+        let c = push_typed0 tps fgs c in
         let lst0 = pres t0 [] c in
         List.fold_right
           (fun t lst ->
@@ -1518,7 +1535,7 @@ let term_preconditions (t:term)  (c:t): term list =
           lst0
           lst
     | Indset (nme,tp,rs) ->
-        let c = push_typed ([|nme|],[|tp|]) empty_formals c in
+        let c = push_typed0 ([|nme|],[|tp|]) empty_formals c in
         let lst =
           Array.fold_left
             (fun lst r ->
@@ -1583,7 +1600,7 @@ let term_preconditions (t:term)  (c:t): term list =
                 else
                   let n,(nms,tps),pat,res =
                     Term.case_split args.(2*i+1) args.(2*i+2) in
-                  let c1 = push_typed (nms,tps) empty_formals c in
+                  let c1 = push_typed0 (nms,tps) empty_formals c in
                   let lst_inner   = pres res [] c1 in
                   let lst_inner   = List.rev lst_inner in
                   let lst =

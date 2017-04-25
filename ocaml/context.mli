@@ -32,7 +32,7 @@ val verbosity: t -> int
 
 val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped:     int array -> t -> t
-val push_typed:       formals -> formals -> t -> t
+val push_typed:   formals -> formals -> bool -> t -> t
 val previous: t -> t
 val pop:   t -> t
 
@@ -114,7 +114,9 @@ val fgnames: t   -> int array
 val fgnames:    t -> int array
 val fgconcepts: t -> types
 val local_argnames: t -> int array
-val local_types:    t -> types
+val local_varnames: t -> int array
+val local_argtypes:    t -> types
+val local_vartypes:    t -> types
 val local_formals:  t -> formals
 val local_fgs: t -> formals
 val argnames: t -> names

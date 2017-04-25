@@ -77,7 +77,7 @@ val reconstruct_evaluation: Eval.t -> t -> term*term
 val make: Module.Compile.t -> t
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped: int array -> t -> t
-val push_typed:   formals -> formals -> t -> t
+val push_typed:   formals -> formals -> bool -> t -> t
 val pop:  t -> t
 
 val definition: int -> int -> agens -> t -> int * int array * term
