@@ -188,6 +188,7 @@ let complexity (t:term) (rd:t): int =
 let premises (rd:t) (c:Context.t): (term*bool) list =
   (* The premises of [rd] transformed into the context [c]. *)
   assert (Context.is_outer rd.ctxt.c c);
+  assert (Context.has_no_type_variables c);
   assert (is_fully_specialized rd);
   assert (is_implication rd);
   let conservative = (* A premise is conservative if the original rule is not
@@ -343,6 +344,7 @@ let ndrops_to_backward
 
 
 let make (t:term) (c:Context.t): t =
+  assert (Context.has_no_type_variables c);
   let nargs,(nms,tps),(fgnms,fgcon),t0 =
     try Term.all_quantifier_split t
     with Not_found -> 0,empty_formals,empty_formals, t
@@ -423,12 +425,17 @@ let schematic_term (rd:t): int * int * term =
 
 let drop (rd:t) (c:Context.t): t =
   (* Drop the first premise of [rd] and construct the new rule_data valid
-     in the context [c]
+     in the context [c].
+
+     The rule must have the form
+
+         p1 ==> all(...) p2 ==> ... ==> tgt
    *)
   assert (is_specialized rd);
   assert (is_implication rd);
   assert (not (is_generic rd));
   assert (Context.is_outer rd.ctxt.c c);
+  assert (Context.has_no_type_variables c);
   let gp1,gp1_tp,p = List.hd rd.premises in
   let nds_p = complexity p rd in
   assert (gp1 = 0);
@@ -464,6 +471,7 @@ let term_a (rd:t) (c:Context.t): term =
   assert (is_specialized rd);
   assert (is_implication rd);
   assert (Context.is_outer rd.ctxt.c c);
+  assert (Context.has_no_type_variables c);
   let gp1,gp1_tp,p = List.hd rd.premises in
   assert (gp1 = 0);
   assert (gp1_tp = 0);
@@ -476,6 +484,7 @@ let term_b (rd:t) (c:Context.t): term =
   assert (is_specialized rd);
   assert (is_implication rd);
   assert (Context.is_outer rd.ctxt.c c);
+  assert (Context.has_no_type_variables c);
   let ps = List.tl rd.premises in
   let t  = prepend_premises ps rd in
   Context.transformed_term t rd.ctxt.c c

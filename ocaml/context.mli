@@ -50,7 +50,8 @@ val result_type: t -> type_term
 val count_type_variables: t -> int
     (** The number of cumulated type variables in this context and all
         preceeding contexts *)
-
+val has_type_variables: t -> bool
+val has_no_type_variables: t -> bool
 val count_local_type_variables: t -> int
     (** The number of type variables in this context without all preceeding
         contexts *)
@@ -81,7 +82,7 @@ val count_variables:  t -> int
 
 val varnames: t -> names
 
-val ntvs: t -> int
+val count_all_type_variables: t -> int
 
 val implication_index: t -> int
 val is_equality_index: int -> t -> bool

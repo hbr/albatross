@@ -462,6 +462,8 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
   and desc  = descriptor i at
   and nall  = Tvars.count_all tvs
   in
+  assert (Context.has_no_type_variables at.c);
+  assert (Context.has_no_type_variables desc.c);
   let nvars_i = Context.count_variables desc.c
   and ntvs_i  = ntvs_term i at
   in

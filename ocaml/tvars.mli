@@ -31,6 +31,10 @@ val make_fgs:    int array -> type_term array -> t
 
 val fgconcepts: t -> type_term array
 val fgnames:    t -> int array
+val has_variables: t -> bool
+val has_no_variables: t -> bool
+val has_formal_generics: t -> bool
+val has_no_formal_generics: t -> bool
 val has_fg:     int -> t -> bool
 val count_local:  t -> int
 val count_global: t -> int

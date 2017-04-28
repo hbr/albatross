@@ -68,6 +68,20 @@ let count_all(tvs:t): int = tvs.nlocal + count_global tvs + count_fgs tvs
 let is_empty (tvs:t): bool =
   count_all tvs = 0
 
+let has_no_variables (tvs:t): bool =
+  count tvs = 0
+
+let has_variables (tvs:t): bool =
+  count tvs > 0
+
+let has_no_formal_generics (tvs:t): bool =
+  count_fgs tvs = 0
+
+let has_formal_generics (tvs:t): bool =
+  count_fgs tvs > 0
+
+
+
 let concept (i:int) (tvs:t): type_term =
   assert (count_local tvs <= i);
   assert (i < count_all tvs);

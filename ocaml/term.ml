@@ -1599,6 +1599,7 @@ module Term_sub: sig
   val for_all:        (int -> term -> bool) -> t -> bool
   val iter:           (int -> term -> unit) -> t -> unit
   val fold:           (int -> term -> 'a -> 'a) -> t -> 'a -> 'a
+  val map:            (term -> term) -> t -> t
   val is_identity:    t -> bool
   val is_injective:   t -> bool
   val empty:          t
@@ -1637,6 +1638,9 @@ end = struct
 
   let fold (f:int->term->'a->'a) (sub:t) (a:'a): 'a =
     IntMap.fold f sub a
+
+  let map (f:term->term) (sub:t): t =
+    IntMap.map f sub
 
   let is_identity (sub:t): bool =
     IntMap.for_all (fun i t -> Variable i = t) sub

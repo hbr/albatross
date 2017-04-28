@@ -118,6 +118,13 @@ let count_type_variables (c:t): int =
    *)
   Tvars.count c.entry.tvs
 
+let has_type_variables (c:t): bool =
+  count_type_variables c > 0
+
+let has_no_type_variables (c:t): bool =
+  count_type_variables c = 0
+
+
 let count_local_type_variables (c:t): int =
   c.entry.ntvs_delta
 
@@ -181,7 +188,7 @@ let variable_type (i:int) (c:t): type_term =
   assert (i < count_variables c);
   snd c.entry.fargs.(i)
 
-let ntvs (c:t): int =
+let count_all_type_variables (c:t): int =
   (** The cumulated number of formal generics and type variables in
       this context and all previous contexts
    *)
@@ -189,13 +196,13 @@ let ntvs (c:t): int =
 
 
 let function_class (c:t): int =
-  ntvs c + Constants.function_class
+  count_all_type_variables c + Constants.function_class
 
 let predicate_class (c:t): int =
-  ntvs c + Constants.predicate_class
+  count_all_type_variables c + Constants.predicate_class
 
 let tuple_class (c:t): int =
-  ntvs c + Constants.tuple_index
+  count_all_type_variables c + Constants.tuple_index
 
 
 let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
@@ -368,15 +375,25 @@ let some_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term
 
 
 let prenex_term (t:term) (c:t): term =
-  Term.prenex t (count_variables c) (ntvs c) Constants.implication_index
+  Term.prenex
+    t
+    (count_variables c)
+    (count_all_type_variables c)
+    Constants.implication_index
 
 let prenex_sort_term (t:term) (c:t): term =
   Term.prenex_sort
-    t (count_variables c) (ntvs c) Constants.implication_index
+    t
+    (count_variables c)
+    (count_all_type_variables c)
+    Constants.implication_index
 
 let prenex_term_bubble_one (t:term) (c:t): term =
   Term.prenex_bubble_one
-    t (count_variables c) (ntvs c) Constants.implication_index
+    t
+    (count_variables c)
+    (count_all_type_variables c)
+    Constants.implication_index
 
 
 
@@ -623,14 +640,14 @@ let push_typed0
 
 
 let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
-  Class_table.extract_from_tuple n (ntvs c) tp
+  Class_table.extract_from_tuple n (count_all_type_variables c) tp
 
 
 let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
   assert (0 < n);
   assert (n = Array.length nms);
   let cls,ags = Class_table.split_type_term tp
-  and all_ntvs = ntvs c
+  and all_ntvs = count_all_type_variables c
   in
   let cls0 = cls - all_ntvs in
   assert (cls0 = Constants.predicate_class && Array.length ags = 1
@@ -650,7 +667,7 @@ let pop (c:t): t =
 
 
 let boolean (c:t): term =
-  Class_table.boolean_type (ntvs c)
+  Class_table.boolean_type (count_all_type_variables c)
 
 
 let rec type_of_term (t:term) (c:t): type_term =
@@ -660,7 +677,7 @@ let rec type_of_term (t:term) (c:t): type_term =
   | Variable i -> assert false (* Global constants are not variables *)
   | VAppl(i,args,ags,_) ->
       assert (nvars <= i);
-      Feature_table.result_type (i-nvars) ags (ntvs c) c.ft
+      Feature_table.result_type (i-nvars) ags (count_all_type_variables c) c.ft
   | Application(f,args,_) ->
       let f_tp = type_of_term f c in
       let cls,ags = Class_table.split_type_term f_tp in
@@ -701,7 +718,7 @@ let predicate_of_term (t:term) (c:t): type_term =
 
 
 let tuple_of_types (argtps:types) (c:t): type_term =
-  let ntvs = ntvs c in
+  let ntvs = count_all_type_variables c in
   Class_table.to_tuple ntvs 0 argtps
 
 
@@ -1068,7 +1085,7 @@ let rec type_of_term_full
     (c:t)
     : type_term =
   let nvars = count_variables c
-  and ntvs  = ntvs c in
+  and ntvs  = count_all_type_variables c in
   let split_function_or_predicate
       (tp:type_term)
       : type_term * type_term option =
@@ -1284,25 +1301,17 @@ let transformed_term0 (t:term) (nargs:int) (c0:t) (c:t): term =
   (* The term [t] with [nargs] arguments valid in the context [c0] transformed
      to the inner context [c].  *)
   assert (is_outer c0 c);
-  if is_global c0 then
-    begin
-      assert (not (Term.is_all_quantified t));
-      let nvars = count_variables c
-      and ntvs  = count_formal_generics c + count_type_variables c in
-      Term.shift_from nvars nargs ntvs 0 t
-    end
-  else
-    begin
-      assert (not (is_global c0));
-      assert (count_formal_generics c0 = count_formal_generics c);
-      let ntvs0 = count_type_variables c0
-      and ntvs  = count_type_variables c in
-      assert (ntvs0 <= ntvs);
-      let nvars0 = count_variables c0
-      and nvars  = count_variables c in
-      assert (nvars0 <= nvars);
-      Term.shift_from (nvars-nvars0) nargs (ntvs-ntvs0) 0 t
-    end
+  assert (count_type_variables c0 = 0);
+  assert (count_type_variables c  = 0);
+  let nvars0 = count_variables c0
+  and nvars  = count_variables c
+  and nfgs0  = count_formal_generics c0
+  and nfgs   = count_formal_generics c
+  in
+  assert (nvars0 <= nvars);
+  assert (nfgs0  <= nfgs);
+  Term.shift_from (nvars-nvars0) nargs (nfgs-nfgs0) 0 t
+
 
 
 let transformed_term (t:term) (c0:t) (c:t): term =
@@ -1404,7 +1413,7 @@ let case_preconditions
   (*  Generate all(x,y,...) insp = pat ==> pre
    *)
   let cls,ags = Class_table.split_type_term insp_tp in
-  let cls0 = cls - ntvs c in
+  let cls0 = cls - count_all_type_variables c in
   let insp   = Term.up n insp
   and imp_id = n + nb + implication_index c
   and eq_id  =
@@ -1426,7 +1435,8 @@ let case_preconditions
 
 let term_preconditions (t:term)  (c:t): term list =
   (* The preconditions of the term [t] *)
-  let all_ntvs = ntvs c
+  assert (has_no_type_variables c);
+  let all_ntvs = count_all_type_variables c
   in
   let rec pres
       (t:term) (lst:term list) (c:t)
@@ -1732,7 +1742,7 @@ let downgrade_term (t:term) (nb:int) (c:t): term =
   Feature_table.downgrade_term
     t
     (nb + count_variables c)
-    (ntvs c)
+    (count_all_type_variables c)
     c.ft
 
 

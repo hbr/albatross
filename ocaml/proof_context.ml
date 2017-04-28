@@ -21,11 +21,10 @@ type var_def_data = {
   }
 
 
-type entry = {mutable prvd:  Term_table.t;  (* all proved terms *)
-              mutable prvd2: Term_table.t;  (* as schematic terms *)
-              mutable bwd:   Term_table.t;
-              mutable fwd:   Term_table.t;
-              mutable left:  Term_table.t;
+type entry = {mutable prvd: Term_table.t;  (* all proved (incl. schematic) terms *)
+              mutable bwd:  Term_table.t;
+              mutable fwd:  Term_table.t;
+              mutable left: Term_table.t;
               mutable slots: slot_data array}
 
 
@@ -78,17 +77,16 @@ let set_interface_check (pc:t): unit =
 
 let make_entry () =
   let e = Term_table.empty in
-  {prvd=e; prvd2=e; bwd=e; fwd=e; left=e;
+  {prvd=e; bwd=e; fwd=e; left=e;
    slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
 
 
 let copied_entry (e:entry): entry =
-  {prvd     = e.prvd;
-   prvd2    = e.prvd2;
-   bwd      = e.bwd;
-   fwd      = e.fwd;
-   left     = e.left;
-   slots    = Array.copy e.slots}
+  {prvd  = e.prvd;
+   bwd   = e.bwd;
+   fwd   = e.fwd;
+   left  = e.left;
+   slots = Array.copy e.slots}
 
 
 
@@ -124,7 +122,7 @@ let is_toplevel (at:t): bool =
 let nbenv (at:t): int = Proof_table.count_variables at.base
 
 let count_all_type_variables (pc:t): int =
-  Context.ntvs (context pc)
+  Context.count_all_type_variables (context pc)
 
 let count_type_variables (pc:t): int =
   Context.count_type_variables (context pc)
@@ -501,45 +499,65 @@ let transformed_to_current (t:term) (idx:int) (pc:t): term =
 let unify_0 (t:term) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
   List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab)
 
+
+let args_and_ags_of_substitution
+      (idx:int) (sub:Term_sub.t) (pc:t)
+    : arguments * agens =
+  let rd = rule_data idx pc in
+  let args = Term_sub.arguments (Term_sub.count sub) sub in
+  try
+    let ags = RD.verify_specialization args (context pc) rd in
+    args,ags
+  with Not_found ->
+    (*printf "cannot unify types of actual arguments with formal arguments\n";
+      printf "   actuals %s\n" (string_of_term_array args pc);
+      printf "   rule    %s\n" (string_long_of_term_i idx pc);*)
+    raise Not_found
+
+
 let unify
     (t:term) (tab:Term_table.t) (pc:t)
     : (int * arguments * agens) list =
   let lst = unify_0 t tab pc in
   List.fold_left
     (fun lst (idx,sub) ->
-      let rd = rule_data idx pc in
-      let args = Term_sub.arguments (Term_sub.count sub) sub in
       try
-        let ags = RD.verify_specialization args (context pc) rd in
-        (idx,args,ags)::lst
+        let args,ags = args_and_ags_of_substitution idx sub pc in
+        (idx,args,ags) :: lst
       with Not_found ->
-        (*printf "cannot unify types of actual arguments with formal arguments\n";
-          printf "   actuals %s\n" (string_of_term_array args pc);
-          printf "   rule    %s\n" (string_long_of_term_i idx pc);*)
         lst
     )
     []
     lst
 
 
-let unify_with
-    (t:term) (nargs:int) (tps:types) (tab:Term_table.t) (pc:t)
-    : (int * arguments) list =
+let unify_with_0
+    (t:term) (nargs:int) (tab:Term_table.t) (pc:t)
+    : (int * Term_sub.t) list =
   (* Find the terms which can be unified with [t] which has [nargs] arguments
      and comes from the current environment.
    *)
   let nvars = nbenv pc
   and nb,_,_,t0 = Term.all_quantifier_split_1 t
   in
-  let lst = Term_table.unify_with t0 nb nargs nvars true (seed_function pc) tab
-  in
+  Term_table.unify_with t0 nb nargs nvars true (seed_function pc) tab
+
+
+
+let unify_with
+    (t:term) (nargs:int) (tps:types) (tab:Term_table.t) (pc:t)
+    : (int * arguments) list =
+  (* Find the terms which can be unified with [t] which has [nargs] arguments
+     with types [tps] and comes from the current environment.
+   *)
+  let lst = unify_with_0 t nargs tab pc in
   List.fold_left
     (fun lst (idx,sub) ->
       (* [sub] is valid in the environment of [idx] *)
       let args = Term_sub.arguments (Term_sub.count sub) sub in
       let args = Array.map (fun t -> transformed_to_current t idx pc) args in
       let argtps = Array.map (fun t -> type_of_term t pc) args in
-      if tps = argtps then
+      if Term.equivalent_array tps argtps then
         (idx,args)::lst
       else
         lst
@@ -582,21 +600,11 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
   if is_global pc then printf "\n"
 
 
-(*
-  let find_in_tab (t:term) (pc:t): int =
-  (** The index of the assertion [t].
-   *)
-  let sublst = unify_with t 0 [||] pc.entry.prvd pc in
-  match sublst with
-  []          -> raise Not_found
-  | [(idx,sub)] -> idx
-  | _ -> assert false  (* cannot happen, all entries in [prvd] are unique *)
- *)
 
 let find (t:term) (pc:t): int =
   let n,_,_,t0 = Term.all_quantifier_split_1 t in
   let sublst =
-    Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd2 in
+    Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd in
   match sublst with
     (idx,sub)::_ ->
       assert (Term_sub.is_empty sub);
@@ -831,10 +839,8 @@ let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
 
 let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
-  (*if not (is_global pc) then
-    pc.entry.prvd  <- Term_table.add t 0 (nbenv pc) idx sfun pc.entry.prvd;*)
   let nargs,nbenv,t = RD.schematic_term rd in
-  pc.entry.prvd2 <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd2
+  pc.entry.prvd <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd
 
 
 
@@ -880,7 +886,6 @@ let filter_tables (pred:int->bool) (pc:t): unit =
   assert (is_global pc);
   let e = pc.entry in
   e.prvd  <- Term_table.filter pred e.prvd;
-  e.prvd2 <- Term_table.filter pred e.prvd2;
   e.bwd   <- Term_table.filter pred e.bwd;
   e.fwd   <- Term_table.filter pred e.fwd;
   e.left  <- Term_table.filter pred e.left
@@ -891,7 +896,6 @@ let filter_and_remap_tables (pred:int->bool) (pc:t): unit =
   let e = pc.entry
   and f = seed_function pc in
   e.prvd  <- Term_table.filter_and_remap pred f e.prvd;
-  e.prvd2 <- Term_table.filter_and_remap pred f e.prvd2;
   e.bwd   <- Term_table.filter_and_remap pred f e.bwd;
   e.fwd   <- Term_table.filter_and_remap pred f e.fwd;
   e.left  <- Term_table.filter_and_remap pred f e.left
@@ -984,7 +988,7 @@ let find_schematic (t:term) (nargs:int) (pc:t): int * agens =
      the substituted assertion is the same as the term 't' and the substitution
      is the indentity substitution with [nargs] arguments.
    *)
-  let sublst = unify t pc.entry.prvd2 pc in
+  let sublst = unify t pc.entry.prvd pc in
   let sublst =
     List.filter
       (fun (_,args,_) ->
@@ -1009,7 +1013,7 @@ let find_match (g:term) (pc:t): int =
   try
     find g pc
   with Not_found ->
-    let sublst = unify g pc.entry.prvd2 pc in
+    let sublst = unify g pc.entry.prvd pc in
     if sublst = [] then
       raise Not_found;
     try
@@ -1575,7 +1579,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
   assert (nbenv_a = nbenv);
   if RD.is_schematic rd then (* the implication is schematic *)
     if RD.is_forward rd then begin
-      let sublst = unify_with a gp1 tps pc.entry.prvd2 pc
+      let sublst = unify_with a gp1 tps pc.entry.prvd pc
       in
       let sublst = List.rev sublst in
       List.iter
@@ -1591,7 +1595,7 @@ let add_consequences_implication (i:int) (rd:RD.t) (pc:t): unit =
       let idx = find a pc in   (* check for exact match *)
       add_mp_fwd idx i pc
     with Not_found -> (* no exact match *)
-      let sublst = unify a pc.entry.prvd2 pc
+      let sublst = unify a pc.entry.prvd pc
       in
       match sublst with
         [] -> ()
@@ -2072,7 +2076,7 @@ let print_work (pc:t): unit =
 
 
 let boolean_type (nb:int) (pc:t): type_term =
-  let ntvs = Context.ntvs (context pc) in
+  let ntvs = Context.count_all_type_variables (context pc) in
   Variable (Constants.boolean_class + nb + ntvs)
 
 
@@ -2235,7 +2239,7 @@ let backward_witness (t:term) (pc:t): int =
      if there is no witness or [t] is not existentially quantified.
    *)
   let nargs,(nms,tps),t0 = Term.some_quantifier_split t in
-  let sublst  = unify_with t0 nargs tps pc.entry.prvd2 pc in
+  let sublst  = unify_with t0 nargs tps pc.entry.prvd pc in
   let idx,args = List.find (fun (idx,args) -> Array.length args = nargs) sublst
   in
   let witness = term idx pc in
@@ -2261,6 +2265,146 @@ let find_goal (g:term) (pc:t): int =
 
 
 
+module Backward =
+  struct
+    type rule = {
+        idx: int;
+        n:   int;
+        tps: formals;
+        fgs: formals;
+        mutable ps: term list;          (* remaining premises *)
+        mutable subs: Term_sub.t list;  (* set of substitutions *)
+        pc: t
+      }
+
+    let has_some (r:rule): bool =
+      r.subs <> []
+
+    let is_complete (r:rule): bool =
+      match r.subs with
+      | [] ->
+         true
+      | sub :: _ ->
+         Term_sub.count sub = r.n (* all the others must have the same variables
+                                     substituted, because the same subterms have
+                                     been used to find them *)
+
+
+    let merge
+          (sub:Term_sub.t) (old_subs:Term_sub.t list) (cumulated:Term_sub.t list)
+        : Term_sub.t list =
+      (* Merge the new substitution [sub] with each substitutions of [old_subs]
+         and prepend the merged substitutions in front of [cumulated]. *)
+      List.fold_left
+        (fun cumulated old_sub ->
+          try
+            (Term_sub.merge sub old_sub) :: cumulated
+          with Not_found ->
+            cumulated
+        )
+        cumulated
+        old_subs
+
+
+    let rec complete_rule (r:rule): rule =
+      (* Returns a rule with a nonempty list of complete substitutions or
+         raises Not_found, if not possible.*)
+      assert (has_some r);
+      if is_complete r then
+        r
+      else
+        match r.ps with
+        | [] ->
+           assert false (* As long as the substitutions are not yet complete there
+                           must be premises *)
+        | p :: ps ->
+           r.ps <- ps;
+           let sublst = unify_with_0 p r.n r.pc.entry.prvd r.pc in
+           r.subs <-
+             List.fold_left
+               (fun subs (idx,new_sub) ->
+                 let new_sub =
+                   Term_sub.map
+                     (fun t -> transformed_to_current t idx r.pc)
+                     new_sub
+                 in
+                 merge new_sub r.subs subs
+               )
+               []
+               sublst;
+           if r.subs = [] then
+             raise Not_found; (* The rule cannot be completed *)
+           complete_rule r
+
+    let find_rules (g:term) (blacklst:IntSet.t) (pc:t): rule list =
+      List.fold_left
+        (fun lst (idx,sub) ->
+          if IntSet.mem idx blacklst || not (is_visible idx pc) then
+            lst
+          else
+            let n,tps,fgs,ps_rev,tgt =
+              split_general_implication_chain (term idx pc) pc
+            in
+            assert (ps_rev <> []); (* has to be a backward rule
+                                      i.e. an implication *)
+            let ps = List.rev ps_rev in
+            try
+              {n; tps; fgs; idx; ps; subs = [sub]; pc} :: lst
+            with Not_found ->
+              lst
+        )
+        []
+        (unify_0 g pc.entry.bwd pc)
+
+    let specialize_rule (r:rule) (lst:int list): int list =
+      (* Specialized the rule [r] for all its substitutions and append
+         the successfully specialized rules to the list [lst]. *)
+      assert (RD.is_backward (rule_data r.idx r.pc));
+      List.fold_left
+        (fun lst sub ->
+          try
+            let args,ags = args_and_ags_of_substitution r.idx sub r.pc in
+            if Array.length args = 0 then
+              r.idx :: lst
+            else
+              let cnt = count r.pc in
+              let idx = specialized r.idx args ags 2 r.pc in
+              if idx = cnt then (* no duplicate *)
+                cnt :: lst
+              else
+                lst
+          with Not_found ->
+            lst
+        )
+        lst
+        r.subs
+
+    let complete_rules (rules:rule list): int list =
+      List.fold_left
+        (fun lst r ->
+          try
+            let r = complete_rule r in
+            specialize_rule r lst
+          with Not_found ->
+            lst
+        )
+        []
+        rules
+
+
+    let find (g:term) (blacklst:IntSet.t) (pc:t): int list =
+      let rules = find_rules g blacklst pc in
+      let lst = complete_rules rules in
+      List.sort
+        (fun i j ->
+          let rdi = rule_data i pc
+          and rdj = rule_data j pc in
+          compare (RD.count_premises rdi) (RD.count_premises rdj))
+        lst
+  end (* Backward *)
+
+
+(*
 let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
   let sublst = unify g pc.entry.bwd pc in
   let lst =
@@ -2291,7 +2435,7 @@ let backward_in_table (g:term) (blacklst: IntSet.t) (pc:t): int list =
       and rdj = rule_data j pc in
       compare (RD.count_premises rdi) (RD.count_premises rdj))
     lst
-
+ *)
 
 let eval_reduce (g:term) (lst:int list) (pc:t): int list =
   let add_eval t e lst =
@@ -2347,7 +2491,8 @@ let find_backward_goal (g:term) (blacklst:IntSet.t) (pc:t): int list =
   if lst <> [] then
     lst
   else begin
-    let lst = backward_in_table g blacklst pc in
+    let lst = Backward.find g blacklst pc in
+    (*let lst = backward_in_table g blacklst pc in*)
     let lst = eval_reduce g lst pc in
     if pc.trace && is_trace_extended pc then begin
       let prefix = trace_prefix pc

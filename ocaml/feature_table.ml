@@ -1229,6 +1229,7 @@ let variant_feature
      substitute the formal generics of the variant feature.
    *)
   assert (i < nb + count ft);
+  assert (Tvars.has_no_variables tvs);
   let idx = i - nb in
   if Array.length ags <> count_fgs idx ft then begin
     printf "variant_feature %d %s\n" idx (string_of_signature idx ft);
@@ -1279,6 +1280,7 @@ let substituted
      Note: The presence of type variables and formal generics is mutually
            exclusive.
    *)
+  assert (Tvars.has_no_variables tvs); (* not usable during typing *)
   let len    = Array.length args
   and is_gen = (0 < Array.length ags)
   and nall   = Tvars.count_all tvs in
