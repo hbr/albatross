@@ -72,7 +72,8 @@ let is_specialized (rd:t): bool =
 let is_fully_specialized (rd:t): bool =
   rd.ctxt.nargs = 0
 
-
+let target_has_all_variables (rd:t): bool =
+  rd.nbwd = 0
 
 let allows_partial_specialization (rd:t): bool =
   (* Can the rule be partially specialized i.e. can it be specialized and
@@ -95,7 +96,6 @@ let allows_premise_specialization (rd:t): bool =
 
 let is_backward_recursive (rd:t): bool =
   assert (is_implication rd);
-  assert (rd.nbwd = 0);
   List.exists
     (fun (_,_,p) -> Term.equivalent p rd.target)
     rd.premises
@@ -229,12 +229,46 @@ let is_backward_catchall (rd:t): bool =
       false
 
 
-let is_backward (rd:t): bool =
-  is_implication rd &&
-  (rd.nbwd = 0 &&
-   not (is_backward_catchall rd) &&
-   not (is_backward_recursive rd))
+let is_backward_pure_catchall (rd:t): bool =
+  Term.is_variable_below rd.ctxt.nargs rd.target
 
+
+let is_induction_law (rd:t): bool =
+  target_has_all_variables rd
+  && match rd.target with
+     | Application (Variable i,args,_) when i < rd.ctxt.nargs ->
+        begin
+          assert (Array.length args = 1);
+          let nvars = count_variables rd
+          and ft = Context.feature_table rd.ctxt.c in
+          let args =
+            Feature_table.args_of_tuple args.(0) (rd.ctxt.nargs + nvars) ft
+          in
+          Array.for_all (Term.is_variable_below rd.ctxt.nargs) args
+          (*&& List.for_all
+               (fun (_,_,p) -> Term.used_variables p rd.ctxt.nargs = [i])
+               rd.premises*)
+        end
+     | _ ->
+        false
+
+
+let is_backward_restricted (rd:t): bool =
+  is_implication rd
+  && target_has_all_variables rd
+  && not (is_backward_catchall rd)
+  && not (is_backward_recursive rd)
+
+
+let is_backward_extended (rd:t): bool =
+  is_implication rd
+  && not (is_backward_pure_catchall rd)
+  && not (is_induction_law rd)
+  && not (is_backward_recursive rd)
+
+
+let is_backward (rd:t): bool =
+  is_backward_restricted rd
 
 
 let is_forward (rd:t): bool =
@@ -408,9 +442,6 @@ let schematic_premise (rd:t): int * types * int * term =
 
 
 let schematic_target (rd:t): int * int * term =
-  if rd.nbwd <> 0 then
-    printf "schematic_target nbwd %d\n" rd.nbwd;
-  assert (rd.nbwd = 0);
   rd.ctxt.nargs, count_variables rd, rd.target
 
 
