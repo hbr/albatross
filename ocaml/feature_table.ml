@@ -1051,18 +1051,16 @@ let term_to_string
             Some op, opstr ^ "(" ^ argsstr ^ ") " ^ tstr
           else
             begin
-              let names = Term.prepend_names nms names in
-              let tvs1 = Tvars.make_fgs fgnms fgcon in
-              (*if not (Tvars.is_empty tvs || Tvars.is_empty tvs1) then begin
-                printf "tvs1  %s\n" (Class_table.string_of_tvs tvs1 ft.ct);
-                printf "tvs   %s\n" (Class_table.string_of_tvs tvs  ft.ct);
-              end;
-              assert (Tvars.is_empty tvs || Tvars.is_empty tvs1);*)
-              let tvs = if Tvars.is_empty tvs then tvs1 else tvs in
-              let argsstr = Class_table.arguments_string2 tvs nms tps ft.ct
-              and tvsstr  = Class_table.string_of_tvs tvs1 ft.ct
-              and tstr = to_string t names nanonused tvs false None in
-              Some op, opstr ^ tvsstr ^ argsstr ^ " " ^ tstr
+              assert (Tvars.has_no_variables tvs || Array.length fgcon = 0);
+              let names = Term.prepend_names nms names
+              and nfgs  = Array.length fgnms
+              and tvs1 = Tvars.push_fgs fgnms fgcon tvs
+              in
+              let fgsstr  = Class_table.string_of_inner_fgs nfgs tvs1 ft.ct
+              and argsstr = Class_table.arguments_string2 tvs1 nms tps ft.ct
+              and tstr = to_string t names nanonused tvs1 false None
+              in
+              Some op, opstr ^ fgsstr ^ argsstr ^ " " ^ tstr
             end
       | Flow (ctrl,args) ->
           begin

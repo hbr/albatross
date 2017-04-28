@@ -463,6 +463,28 @@ let string_of_tvs (tvs:Tvars.t) (ct:t): string =
   str1 ^ strcpts
 
 
+let string_of_inner_fgs (nfgs:int) (tvs:Tvars.t) (ct:t): string =
+  assert (Tvars.has_no_variables tvs);
+  assert (nfgs <= Tvars.count_fgs tvs);
+  if nfgs = 0 then
+    ""
+  else
+    "[" ^
+      String.concat
+        ","
+        (Array.to_list
+           (Array.init
+              nfgs
+              (fun i ->
+                ST.string (Tvars.fgnames tvs).(i) ^ ":" ^
+                  string_of_type (Tvars.fgconcepts tvs).(i) tvs ct
+              )
+           )
+        )
+      ^ "]"
+
+
+
 let string_of_sub (sub:Term_sub.t) (tvs:Tvars.t) (ct:t): string =
   let lst = Term_sub.to_list sub in
   let str =

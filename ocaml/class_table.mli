@@ -194,6 +194,8 @@ val string_of_sub: Term_sub.t -> Tvars.t -> t -> string
 
 val string_of_tvs: Tvars.t -> t -> string
 
+val string_of_inner_fgs: int -> Tvars.t -> t -> string
+
 val string_of_detailed_tvs: Tvars.t -> t -> string
 
 val arguments_string: Tvars.t -> formal array -> t -> string
