@@ -89,6 +89,7 @@ module Term: sig
 
   val variable:    term -> int
   val is_variable: term -> bool
+  val is_variable_below: int -> term -> bool
   val is_argument: term -> int -> bool
 
   val nodes0: term -> int -> int array -> int
@@ -295,6 +296,14 @@ end = struct
     try
       let _ = variable t in
       true
+    with Not_found ->
+      false
+
+
+  let is_variable_below (n:int) (t:term): bool =
+    try
+      let i = variable t in
+      i < n
     with Not_found ->
       false
 

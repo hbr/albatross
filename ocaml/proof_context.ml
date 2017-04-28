@@ -2317,6 +2317,11 @@ module Backward =
         | [] ->
            assert false (* As long as the substitutions are not yet complete there
                            must be premises *)
+        | p :: ps when Term.is_variable_below r.n p ->
+           printf "\n\nRule %s\nhas a premise which is catch all\n\n"
+                  (string_of_term_i r.idx r.pc);
+           r.ps <- ps;
+           complete_rule r
         | p :: ps ->
            r.ps <- ps;
            let sublst = unify_with_0 p r.n r.pc.entry.prvd r.pc in
