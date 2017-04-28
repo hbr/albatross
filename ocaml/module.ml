@@ -300,7 +300,7 @@ module M =
           Format.eprintf
             "The module \"%s\" does not have an implementation file@."
             name;
-          exit 1
+          raise Not_found
       in
       try
         let src_ali = Src.get path (name ^ ".ali") [] in
@@ -512,14 +512,31 @@ module MSet =
       mtime true deps None
 
 
-    let set_full_dependencies (src:Src.t) (set:graph): unit =
+    let set_full_dependencies
+          (is_interface:bool) (src:Src.t) (set:graph)
+        : unit =
       let full_deps =
         let deps = Src.dependencies src
         in
         let lstlst =
           List.rev_map
             (fun nme ->
-              let m_used = must_find nme.v set in
+              let m_used =
+                try
+                  find nme.v set
+                with Not_found ->
+                  begin
+                    if not is_interface then
+                      assert false; (* cannot happen in implementation file *)
+                    Format.eprintf
+                      "@[%s %s \"%s\" %s@]@."
+                      (info_string (Src.path src) nme.i)
+                      "The module"
+                      (string_of_module nme.v)
+                      "has not been used in any implementation file";
+                    exit 1
+                  end
+              in
               if not (M.has_interface m_used) then
                 begin
                   Format.eprintf
@@ -546,9 +563,9 @@ module MSet =
       M.put_sorted i m;
       Seq.push m set.seq;
       if M.has_interface m then
-        set_full_dependencies (M.interface m) set;
+        set_full_dependencies true (M.interface m) set;
       if M.has_implementation m then
-        set_full_dependencies (M.implementation m) set
+        set_full_dependencies false (M.implementation m) set
 
 
     let dependencies (m:node) (set: t): node list =
@@ -565,7 +582,16 @@ module MSet =
               if M.is_external m || pkg <> [] then
                 M.get_external dir (ST.string nme) mnme.v
               else
-                M.get dir (ST.string nme) mnme.v
+                try
+                  M.get dir (ST.string nme) mnme.v
+                with Not_found ->
+                  Format.eprintf
+                    "@[%s %s \"%s\" %s@]@."
+                    (info_string (Src.path src) mnme.i)
+                    "The module"
+                    (ST.string nme)
+                    "does not exist.";
+                  exit 1
             in
             set.map <- Module_map.add mnme.v m set.map;
             m :: lst
@@ -692,7 +718,14 @@ let read_module_infos
       if Module_map.mem nme map then
         map, lst
       else
-        let m = M.get wdir mname nme in
+        let m =
+          try
+            M.get wdir mname nme
+          with Not_found ->
+            Format.eprintf "Cannot find the module %s@." mname;
+            exit 1
+        in
+
         Module_map.add nme m map, m :: lst
     )
     (Module_map.empty,[])
