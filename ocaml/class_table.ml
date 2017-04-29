@@ -683,10 +683,11 @@ let downgrade_signature
 
 
 
-let update_base_descriptor
+let check_base_descriptor
     (hm:    header_mark withinfo)
     (tvs:   Tvars.t)
     (desc:  base_descriptor)
+    (update: bool)
     (ct:    t)
     : unit =
   if hm.v <> desc.hmark then
@@ -696,14 +697,17 @@ let update_base_descriptor
       ^ "\"\n"
     in
     error_info hm.i str);
-  if not (Tvars.is_equivalent desc.tvs tvs) then begin
-    let str =
-      "The formal generics are not consistent with previous declaration\n" ^
-      "   previous declaration \"" ^ (string_of_tvs desc.tvs ct)
-      ^ "\""
-    in error_info hm.i str
-  end;
-  desc.tvs <- tvs
+  if not (Tvars.is_equivalent desc.tvs tvs) then
+    begin
+      let str =
+        "The formal generics are not consistent with previous declaration\n" ^
+          "   previous declaration \"" ^ (string_of_tvs desc.tvs ct)
+          ^ "\""
+      in error_info hm.i str;
+    end;
+  if update then
+    desc.tvs <- tvs
+
 
 
 
@@ -789,6 +793,13 @@ let export
 
 
 
+let check_class
+    (idx:   int)
+    (hm:    header_mark withinfo)
+    (tvs:   Tvars.t)
+    (ct:    t)
+    : unit =
+  check_base_descriptor hm tvs (base_descriptor idx ct) false ct
 
 
 let update
@@ -807,7 +818,7 @@ let update
      assert false (* cannot happen *)
   | Some m when Module.M.equal m mdl ->
      if is_private ct || desc.is_exp then
-       update_base_descriptor hm tvs desc.bdesc ct
+       check_base_descriptor hm tvs desc.bdesc true ct
      else if not desc.is_exp then
        export idx hm tvs ct
   | _ ->

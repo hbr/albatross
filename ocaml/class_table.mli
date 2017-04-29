@@ -68,6 +68,7 @@ val concepts_of_class: int -> t -> type_term array
 
 val class_type: int -> t -> type_term*Tvars.t
 
+val class_index: int list -> int -> Tvars.t -> info -> t -> int
 val get_type: type_t withinfo -> Tvars.t -> t -> type_term
 
 val is_class_public: int -> t -> bool
@@ -109,6 +110,7 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
 
 val arity_of_downgraded: int -> type_term -> int
 
+val check_class: int -> header_mark withinfo -> Tvars.t -> t -> unit
 val update: int -> header_mark withinfo -> Tvars.t -> t -> unit
 
 val add: header_mark withinfo -> int -> Tvars.t -> t -> unit

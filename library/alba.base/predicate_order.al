@@ -99,7 +99,7 @@ all(p,q,r:{A})
 
 
 class
-    predicate.PREDICATE[A]
+    PREDICATE[A]
 inherit
     ghost PARTIAL_ORDER
 end

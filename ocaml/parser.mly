@@ -282,6 +282,7 @@ type_declaration_block:
 
 decl:
     class_declaration { $1 }
+|   i=inheritance_declaration {i}
 |   named_feature     { $1 }
 |   formal_generic    { $1 }
 |   ass_feat          { $1 }
@@ -565,13 +566,23 @@ header_mark:
 class_declaration:
   header_mark KWclass class_name class_generics
   create_clause
-  inherit_clause
   KWend {
   Class_declaration( winfo $startpos($3) $1,
                      winfo $startpos($3) $3,
                      winfo $startpos($4) $4,
-                     $5,
-                     $6)}
+                     $5)}
+
+
+inheritance_declaration:
+  header_mark KWclass class_name class_generics
+  inherit_clause
+  KWend {
+  Inheritance_declaration( winfo $startpos($3) $1,
+                           winfo $startpos($3) $3,
+                           winfo $startpos($4) $4,
+                           $5)}
+
+
 
 class_name:
     UIDENTIFIER { [], $1 }
@@ -595,8 +606,7 @@ class_list: KWfeature class_list0 KWend { Class_list(winfo $startpos($1) $2) }
 /* ------------------------------------------------------------------------- */
 
 inherit_clause:
-    { [] }
-| KWinherit parent_list { $2 }
+    KWinherit parent_list { $2 }
 
 parent_list:
     parent { [$1] }

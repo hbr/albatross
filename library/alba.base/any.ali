@@ -18,7 +18,7 @@ all(a,b:G)
     end
 
 class
-    boolean.BOOLEAN
+    BOOLEAN
 inherit
     ANY
 end

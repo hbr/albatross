@@ -736,6 +736,10 @@ type declaration =
         * classname
         * formal_generics
         * create_clause
+  | Inheritance_declaration of
+      header_mark withinfo
+        * classname
+        * formal_generics
         * inherit_clause
   | Class_list   of declaration list withinfo
   | Feature_list of declaration list withinfo

@@ -2,6 +2,8 @@ use any end
 
 G: ANY
 
+class PREDICATE[G] end
+
 class
     PREDICATE[G]
 inherit

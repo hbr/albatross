@@ -29,7 +29,7 @@ all(a,b:G)
 
 
 class
-    boolean.BOOLEAN
+    BOOLEAN
 inherit
     ANY
 end

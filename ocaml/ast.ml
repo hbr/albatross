@@ -1015,7 +1015,6 @@ let put_class
     (cn:       classname)
     (fgs:      formal_generics)
     (creators: (feature_name withinfo * entities list) list withinfo)
-    (inherits: inherit_clause)
     (pc: Proof_context.t)
     : unit =
   (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
@@ -1054,8 +1053,26 @@ let put_class
     inherit_case_any idx cls_tp pc;
     let _,tvs = Class_table.class_type idx ct in
     put_creators idx is_new tvs cls_tp creators pc
-  end;
-  Inherit.inherit_parents idx inherits pc
+  end
+
+
+let put_inheritance
+    (hm:       header_mark withinfo)
+    (cn:       classname)
+    (fgs:      formal_generics)
+    (inherits: inherit_clause)
+    (pc: Proof_context.t)
+    : unit =
+  (** Analyze the inheritance declaration [hm,cn,fgs,inherits] and update the
+      corresponding class.  *)
+  assert (Proof_context.is_global pc);
+  let ft = Proof_context.feature_table pc in
+  let ct = Feature_table.class_table ft in
+  let tvs = Class_table.class_tvs fgs ct in
+  let path,cn0 = cn.v in
+  let cls = Class_table.class_index  path cn0 Tvars.empty cn.i ct in
+  Class_table.check_class cls hm tvs ct;
+  Inherit.inherit_parents cls inherits pc
 
 
 
@@ -1065,8 +1082,10 @@ let analyze (ast: declaration list) (pc:Proof_context.t): unit =
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
-        Class_declaration (hm, cname, fgens, creators, inherits) ->
-          put_class hm cname fgens creators inherits pc
+      | Class_declaration (hm, cname, fgens, creators) ->
+         put_class hm cname fgens creators pc
+      | Inheritance_declaration (hm,cname,fgens,inherits) ->
+         put_inheritance hm cname fgens inherits pc
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
           analyze_feature fn entlst rt is_func body expr pc
       | Theorem (entlst, req, ens, prf) ->
