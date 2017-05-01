@@ -24,7 +24,7 @@ val result_type_of_compound: term -> int -> term
 
 val base_table: Module.Compile.t -> t
 
-val put_formal: int withinfo -> type_t withinfo -> t -> unit
+val put_formal: int withinfo -> int -> t -> unit
 
 val formal_generics: entities list withinfo -> return_type -> bool
   -> Tvars.t -> t -> Tvars.t
@@ -63,8 +63,6 @@ val count: t -> int
 val class_symbol: int -> t -> int
 
 val class_name:   int -> t -> string
-
-val concepts_of_class: int -> t -> type_term array
 
 val class_type: int -> t -> type_term*Tvars.t
 
@@ -110,10 +108,13 @@ val downgrade_signature: int -> Sign.t -> int -> Sign.t
 
 val arity_of_downgraded: int -> type_term -> int
 
-val check_class: int -> header_mark withinfo -> Tvars.t -> t -> unit
-val update: int -> header_mark withinfo -> Tvars.t -> t -> unit
+val check_class: int -> header_mark withinfo -> int withinfo option ->Tvars.t -> t
+                 -> unit
+val update: int -> info -> header_mark withinfo -> int withinfo option
+            -> Tvars.t -> t -> unit
 
-val add: header_mark withinfo -> int -> Tvars.t -> t -> unit
+val add: header_mark withinfo -> int withinfo option -> int -> Tvars.t -> t
+         -> unit
 
 val is_case_class:    int -> t -> bool
 val has_constructors: int -> t -> bool

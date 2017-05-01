@@ -814,18 +814,6 @@ let string_of_assertion (t:term) (c: t): string =
   ^ (string_of_term t c)
 
 
-let put_formal_generic
-    (name:int withinfo)
-    (concept:type_t withinfo)
-    (c:t)
-    : unit =
-  (** Add the formal generic [name] with its [concept] to the formal
-      generics.
-   *)
-  assert (is_global c);
-  Class_table.put_formal name concept (class_table c)
-
-
 let find_features (fn:feature_name) (c:t): int list =
   Feature_table.find_features fn (count_variables c) c.ft
 

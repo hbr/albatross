@@ -646,8 +646,6 @@ let hmark2string_wblank (hm:header_mark) =
   else str ^ " "
 
 
-
-
 (* Features *)
 
 type classname = (int list * int) withinfo
@@ -731,9 +729,10 @@ type declaration =
         * bool  (* is function without explicit return type *)
         * feature_body option
         * expression option
-  | Formal_generic of int withinfo * type_t withinfo
+  | Formal_generic of int withinfo * classname
   | Class_declaration of
       header_mark withinfo
+        * int withinfo option  (* optional class variable *)
         * classname
         * formal_generics
         * create_clause

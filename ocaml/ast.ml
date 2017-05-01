@@ -1012,6 +1012,7 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
 
 let put_class
     (hm:       header_mark withinfo)
+    (cv:       int withinfo option) (* optional class variable *)
     (cn:       classname)
     (fgs:      formal_generics)
     (creators: (feature_name withinfo * entities list) list withinfo)
@@ -1023,10 +1024,21 @@ let put_class
   let ft = Proof_context.feature_table pc in
   let ct = Feature_table.class_table ft in
   let tvs = Class_table.class_tvs fgs ct in
+  begin
+    match hm.v, cv with
+    | _ , None | Deferred_hmark, Some _ ->
+       ()
+    | _,  Some cv  ->
+       Format.printf
+         "%s %s@."
+         (info_string cv.i)
+         "Only deferred (i.e. abstract classes) can have a class variable.";
+       exit 1
+  end;
   let idx,is_new =
     try
       let idx = Class_table.find_for_declaration cn.v ct in
-      Class_table.update idx hm tvs ct;
+      Class_table.update idx cn.i hm cv tvs ct;
       idx, false
     with Not_found ->
       let path, cn0 = cn.v in
@@ -1034,7 +1046,7 @@ let put_class
         error_info cn.i
           ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
       let idx = Class_table.count ct in
-      Class_table.add hm cn0 tvs ct;
+      Class_table.add hm cv cn0 tvs ct;
       idx, true
   in
   if 2 <= PC.verbosity pc then begin
@@ -1071,27 +1083,32 @@ let put_inheritance
   let tvs = Class_table.class_tvs fgs ct in
   let path,cn0 = cn.v in
   let cls = Class_table.class_index  path cn0 Tvars.empty cn.i ct in
-  Class_table.check_class cls hm tvs ct;
+  Class_table.check_class cls hm None tvs ct;
   Inherit.inherit_parents cls inherits pc
 
 
+let put_formal_generic (fgnme:int withinfo) (cn:classname) (pc:PC.t): unit =
+  let ct = PC.class_table pc in
+  let path, cn0 = cn.v
+  and info = cn.i in
+  let cidx = Class_table.class_index path cn0 Tvars.empty info ct in
+  Class_table.put_formal fgnme cidx ct
 
 
 let analyze (ast: declaration list) (pc:Proof_context.t): unit =
-  let context = Proof_context.context pc in
   let rec analyz (ast: declaration list): unit =
     let one_decl (d:declaration) =
       match d with
-      | Class_declaration (hm, cname, fgens, creators) ->
-         put_class hm cname fgens creators pc
+      | Class_declaration (hm, cvar, cname, fgens, creators) ->
+         put_class hm cvar cname fgens creators pc
       | Inheritance_declaration (hm,cname,fgens,inherits) ->
          put_inheritance hm cname fgens inherits pc
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
           analyze_feature fn entlst rt is_func body expr pc
       | Theorem (entlst, req, ens, prf) ->
           Source_prover.prove_and_store entlst req ens prf pc
-      | Formal_generic (name, concept) ->
-          Context.put_formal_generic name concept context
+      | Formal_generic (fgname, cn) ->
+         put_formal_generic fgname cn pc
       | Class_list lst ->
           not_yet_implemented lst.i "Mutually recursive types"
       | Feature_list lst ->

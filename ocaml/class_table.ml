@@ -29,8 +29,11 @@ type parent_descriptor = {
   }
 
 type base_descriptor = { hmark:    header_mark;
+                         mutable cvar: int;  (* class variable,
+                                                for deferred classes *)
                          mutable tvs: Tvars.t;
-                         mutable generics: (bool*int) list;
+                         mutable generics: (bool*int) list; (* features and
+                                                               assertions *)
                          mutable constructors: IntSet.t;
                          mutable base_constructors: IntSet.t;
                          mutable indlaw:       int;
@@ -82,13 +85,18 @@ let is_interface_public_use (ct:t): bool =
 let count (ct:t):int =
   Seq.count ct.seq
 
-let standard_bdesc (hm:header_mark) (nfgs:int) (tvs:Tvars.t) (idx:int)
+let standard_bdesc (hm:header_mark) (cvar:int) (tvs:Tvars.t) (idx:int)
     : base_descriptor =
-  let args = Array.init nfgs (fun i -> Variable i) in
+  let args =
+    Array.init
+      (Tvars.count_fgs tvs)
+      (fun i -> Variable i)
+  in
   let anc  = IntMap.singleton idx
       {is_ghost = false; actual_generics = args} in
   {hmark = hm;
-   tvs   = tvs;
+   cvar;
+   tvs;
    generics = [];
    base_constructors = IntSet.empty;
    constructors = IntSet.empty;
@@ -214,26 +222,21 @@ let descendants (i:int) (ct:t): IntSet.t =
   (base_descriptor i ct).descendants
 
 
-let concepts_of_class (i:int) (ct:t): type_term array =
-  assert (i < count ct);
-  let tvs = (base_descriptor i ct).tvs in
-  assert (Tvars.count tvs = 0);
-  Tvars.fgconcepts tvs
-
-
 let class_type (i:int) (ct:t): type_term * Tvars.t =
-  (* A type term and a type environment which represents the class. For inheritable
-     classes (for the moment only deferred classes) a type variable (formal generic)
-     is returned whose concept is the class.
-   *)
+  (* A type term and a type environment which represents the class. For
+     inheritable classes (deferred classes) a type variable (formal generic)
+     is returned whose concept is the class.  *)
   assert (i < count ct);
   let bdesc = base_descriptor i ct in
   let nfgs  = Tvars.count_fgs bdesc.tvs in
-  if is_deferred i ct then begin (* or other inheritable *)
-    assert (nfgs = 0); (* nyi: deferred classes with formal generics *)
-    let tvs = Tvars.make_fgs [|ST.symbol "A"|] [|Variable (i+1)|] in
-    (Variable 0), tvs
-  end else
+  if is_deferred i ct then
+    begin
+      let tvs = Tvars.augment_fgs [|bdesc.cvar|] [|Variable i|] bdesc.tvs in
+      let ags = Array.init nfgs (fun i -> Variable (i+1)) in
+      let tp  = VAppl(0,ags,[||],false) in
+      tp, tvs
+    end
+  else
     let tp =
       if nfgs = 0 then
         Variable i
@@ -681,36 +684,6 @@ let downgrade_signature
 
 
 
-
-
-let check_base_descriptor
-    (hm:    header_mark withinfo)
-    (tvs:   Tvars.t)
-    (desc:  base_descriptor)
-    (update: bool)
-    (ct:    t)
-    : unit =
-  if hm.v <> desc.hmark then
-    (let str =
-      "Header mark should be \""
-      ^ (hmark2string desc.hmark)
-      ^ "\"\n"
-    in
-    error_info hm.i str);
-  if not (Tvars.is_equivalent desc.tvs tvs) then
-    begin
-      let str =
-        "The formal generics are not consistent with previous declaration\n" ^
-          "   previous declaration \"" ^ (string_of_tvs desc.tvs ct)
-          ^ "\""
-      in error_info hm.i str;
-    end;
-  if update then
-    desc.tvs <- tvs
-
-
-
-
 let constructors (cls:int) (ct:t): IntSet.t =
   assert (cls < count ct);
   let bdesc = base_descriptor cls ct in
@@ -793,40 +766,6 @@ let export
 
 
 
-let check_class
-    (idx:   int)
-    (hm:    header_mark withinfo)
-    (tvs:   Tvars.t)
-    (ct:    t)
-    : unit =
-  check_base_descriptor hm tvs (base_descriptor idx ct) false ct
-
-
-let update
-    (idx:   int)
-    (hm:    header_mark withinfo)
-    (tvs:   Tvars.t)
-    (ct:    t)
-    : unit =
-  let desc = Seq.elem idx ct.seq
-  and mdl  = current_module ct
-  in
-  if desc.mdl = None then
-    desc.mdl <- Some mdl;
-  match desc.mdl with
-  | None ->
-     assert false (* cannot happen *)
-  | Some m when Module.M.equal m mdl ->
-     if is_private ct || desc.is_exp then
-       check_base_descriptor hm tvs desc.bdesc true ct
-     else if not desc.is_exp then
-       export idx hm tvs ct
-  | _ ->
-     () (* cannot update a class from a different module *)
-
-
-
-
 
 
 let generics (cidx:int) (ct:t): (bool*int) list =
@@ -853,30 +792,6 @@ let add_generics (idx:int) (is_ass:bool) (tvs:Tvars.t) (ct:t): unit =
   IntSet.iter
     (fun cls -> add_generic idx is_ass cls ct)
     set
-
-
-
-
-
-let add
-    (hm:    header_mark withinfo)
-    (cn:    int)
-    (tvs:   Tvars.t)
-    (ct:    t)
-    : unit =
-  let idx  = count ct in
-  let nfgs = Tvars.count_fgs tvs in
-  let bdesc = standard_bdesc hm.v nfgs tvs idx
-  and is_exp = is_interface_public_use ct
-  in
-  Seq.push
-    {mdl  = Some (current_module ct);
-     name = cn;
-     ident = idx;
-     is_exp = is_exp;
-     bdesc = bdesc}
-    ct.seq;
-  add_to_map idx ct
 
 
 
@@ -1319,16 +1234,142 @@ let rec inherit_parent
 
 
 
-let put_formal (name: int withinfo) (concept: type_t withinfo) (ct:t): unit =
-  (** Add the formal generic with [name] and [concept] to the formal generics
-      of the class table [ct] *)
-  let cpt = get_type concept Tvars.empty ct in
+let put_formal (name: int withinfo) (cidx:int) (ct:t): unit =
+  (** Add the formal generic with [name] based on the class [cidx] to the
+      formal generics of the class table [ct] *)
+  assert (cidx < count ct);
   if IntMap.mem name.v ct.fgens then
     error_info
       name.i
       ("formal generic " ^ (ST.string name.v) ^ " already defined")
   else
-    ct.fgens <- IntMap.add name.v cpt ct.fgens
+    ct.fgens <- IntMap.add name.v (Variable cidx) ct.fgens
+
+
+
+
+
+let check_base_descriptor
+    (hm:    header_mark withinfo)
+    (cv:    int withinfo option)
+    (tvs:   Tvars.t)
+    (desc:  base_descriptor)
+    (cidx:  int)
+    (update: bool)
+    (ct:    t)
+    : unit =
+  if hm.v <> desc.hmark then
+    (let str =
+      "Header mark should be \""
+      ^ (hmark2string desc.hmark)
+      ^ "\"\n"
+    in
+    error_info hm.i str);
+  assert (not (Option.has cv) || hm.v = Deferred_hmark);
+  if not (Tvars.is_equivalent desc.tvs tvs) then
+    begin
+      let str =
+        "The formal generics are not consistent with previous declaration\n" ^
+          "   previous declaration \"" ^ (string_of_tvs desc.tvs ct)
+          ^ "\""
+      in error_info hm.i str;
+    end;
+  if update then
+    begin
+      desc.tvs <- tvs;
+      match cv with
+      | None ->
+         ()
+      | Some cv ->
+         put_formal cv cidx ct;
+         desc.cvar <- cv.v
+    end
+
+
+
+
+let check_class
+    (idx:   int)
+    (hm:    header_mark withinfo)
+    (cv:    int withinfo option)
+    (tvs:   Tvars.t)
+    (ct:    t)
+    : unit =
+  check_base_descriptor hm cv tvs (base_descriptor idx ct) idx false ct
+
+
+let update
+    (idx:   int)
+    (info:info)
+    (hm:    header_mark withinfo)
+    (cv:    int withinfo option)
+    (tvs:   Tvars.t)
+    (ct:    t)
+    : unit =
+  let desc = Seq.elem idx ct.seq
+  and mdl  = current_module ct
+  in
+  if desc.mdl = None then
+    desc.mdl <- Some mdl;
+  match desc.mdl with
+  | None ->
+     assert false (* cannot happen *)
+  | Some m when Module.M.equal m mdl ->
+     check_base_descriptor hm cv tvs desc.bdesc idx true ct;
+     if not desc.is_exp then
+       export idx hm tvs ct
+  | Some m ->
+     (* This error handling shall never happen *)
+     let open Format in
+     eprintf
+       "%s %s %s %s \"%s\" %s@."
+       (info_string info)
+       "The class"
+       (class_name idx ct)
+       "belongs to module"
+       (Module.M.string_of_name m)
+       "You cannot redeclare it in another module";
+     exit 1
+
+
+
+
+
+
+
+let add
+    (hm:    header_mark withinfo)
+    (cv:    int withinfo option)
+    (cn:    int)
+    (tvs:   Tvars.t)
+    (ct:    t)
+    : unit =
+  let idx  = count ct in
+  let cvar =
+    match cv with
+    | None -> -1
+    | Some cv ->
+       assert (hm.v = Deferred_hmark);
+       cv.v
+  in
+  let bdesc = standard_bdesc hm.v cvar tvs idx
+  and is_exp = is_interface_public_use ct
+  in
+  Seq.push
+    {mdl  = Some (current_module ct);
+     name = cn;
+     ident = idx;
+     is_exp = is_exp;
+     bdesc = bdesc}
+    ct.seq;
+  add_to_map idx ct;
+  begin
+    match cv with
+    | None -> ()
+    | Some cv ->
+       put_formal cv  idx ct
+  end
+
 
 
 let add_fg
@@ -1432,11 +1473,12 @@ let class_formal_generics (fgens: formal_generics) (ct:t): formal array =
        fgens.v)
 
 
-let class_tvs (fgens:formal_generics) (ct:t): Tvars.t =
+let class_tvs
+      (fgens:formal_generics) (ct:t): Tvars.t =
   let fgs = class_formal_generics fgens ct in
+  let nfgs = Array.length fgs in
   let fgnms, fgcon = Myarray.split fgs in
-  let nfgs = Array.length fgcon in
-  let fgcon = Array.map (fun tp -> Term.up nfgs tp) fgcon in
+  let fgcon = Array.map (Term.up nfgs) fgcon in
   Tvars.make_fgs fgnms fgcon
 
 
@@ -1544,7 +1586,21 @@ let empty_table (comp:Module.Compile.t): t =
    comp = comp}
 
 
-
+let tvars_with_class_variable
+      (hm:header_mark) (cv:int option ) (tvs:Tvars.t) (cls:int)
+    : Tvars.t =
+  match hm with
+  | Deferred_hmark ->
+     let nme =
+       match cv with
+       | None ->
+          ST.symbol "CV"
+       | Some cv ->
+          cv
+     in
+     Tvars.augment_fgs [|nme|] [|Variable cls|] tvs
+  | _ ->
+     tvs
 
 
 let add_base_class
@@ -1560,7 +1616,14 @@ let add_base_class
   in
   let concepts = Array.map (fun tp -> Term.up nfgs tp) concepts in
   let tvs  = Tvars.make_fgs fgnames concepts in
-  let bdesc = standard_bdesc hm nfgs tvs idx
+  let cvar =
+    match hm with
+    | Deferred_hmark ->
+       ST.symbol "CV"
+    | _ ->
+       -1
+  in
+  let bdesc = standard_bdesc hm cvar tvs idx
   in
   Seq.push
     {mdl = None;

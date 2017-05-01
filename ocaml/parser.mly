@@ -315,9 +315,9 @@ one_module: dlst=dotted_id_list  {
 /* ------------------------------------------------------------------------- */
 
 formal_generic:
-  UIDENTIFIER COLON type_nt {
-      Formal_generic (winfo $startpos($1) $1,
-                      winfo $startpos($3) $3) }
+  fn=UIDENTIFIER COLON cn=class_name {
+      Formal_generic (winfo $startpos(fn) fn,
+                      winfo $startpos(cn) cn) }
 
 
 
@@ -559,15 +559,25 @@ header_mark:
 
 
 
-
 class_declaration:
-  header_mark KWclass class_name class_generics
-  create_clause
+  hm=header_mark
+  KWclass cn=class_name fgs=class_generics
+  cr=create_clause
   KWend {
-  Class_declaration( winfo $startpos($3) $1,
-                     winfo $startpos($3) $3,
-                     winfo $startpos($4) $4,
-                     $5)}
+  Class_declaration( winfo $startpos(cn) hm,
+                     None,
+                     winfo $startpos(cn) cn,
+                     winfo $startpos(fgs) fgs,
+                     cr)}
+| hm=header_mark
+  KWclass cv=UIDENTIFIER COLON cn=class_name fgs=class_generics
+  cr=create_clause
+  KWend {
+  Class_declaration( winfo $startpos(cn) hm,
+                     Some (winfo $startpos(cv) cv),
+                     winfo $startpos(cn) cn,
+                     winfo $startpos(fgs) fgs,
+                     cr)}
 
 
 inheritance_declaration:

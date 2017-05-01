@@ -174,8 +174,6 @@ val find_feature:    feature_name -> int -> t -> (int * Tvars.t * Sign.t) list
 val variable_data:   int -> t -> Tvars.t * Sign.t
 val variable:        int -> t -> int * Tvars.t * Sign.t
 
-val put_formal_generic: int withinfo -> type_t withinfo -> t -> unit
-
 val complexity: term -> t -> int
 
 val split_general_implication_chain:
