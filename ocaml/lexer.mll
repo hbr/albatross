@@ -22,17 +22,23 @@ let last_pos: Lexing.position ref = ref Lexing.dummy_pos
 let cached_tok: (extended_token * Lexing.position) option ref
     = ref None
 
-let reset (): unit =
+let initialize (filename:string) (lexbuf:Lexing.lexbuf): unit =
+  let open Lexing in
+  lexbuf.lex_curr_p <-
+      {lexbuf.lex_curr_p with pos_fname = filename};
   last_is_endtok := false;
-  last_pos       := Lexing.dummy_pos;
+  last_pos       := lexbuf.lex_curr_p;
   cached_tok     := None
 
 
 
 let info_of_pos (pos:Lexing.position): Support.info =
-  let line = pos.Lexing.pos_lnum
-  and col  = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
-  Support.FINFO (line,col)
+  let open Lexing in
+  let line = pos.pos_lnum
+  and col  = pos.pos_cnum - pos.Lexing.pos_bol + 1
+  and fn   = pos.pos_fname
+  in
+  Support.FINFO (line,col,fn)
 
 let info_of_last_pos (): Support.info =
   info_of_pos !last_pos

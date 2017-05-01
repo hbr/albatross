@@ -2587,9 +2587,13 @@ let check_interface (ft:t): unit =
           && not desc.bdesc#is_exported
           && Class_table.is_class_public desc.cls ft.ct
        then
-         error_info (FINFO (1,0))
-                    ("deferred feature \"" ^ (string_of_signature i ft) ^
-                       "\" is not exported")
+         begin
+           let open Module in
+           assert (M.has_interface mdl);
+           error_info (FINFO (1,0,Src.path (M.interface mdl)))
+                      ("deferred feature \"" ^ (string_of_signature i ft) ^
+                         "\" is not exported")
+         end
   done
 
 

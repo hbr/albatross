@@ -2676,9 +2676,16 @@ let check_interface (pc:t): unit =
         && Class_table.is_class_public gdesc.anchor (class_table pc)
         && not (has_public_deferred (term i pc) pc)
     then
-      error_info (FINFO (1,0))
-        ("deferred assertion \"" ^ (string_of_term (term i pc) pc) ^
-         "\" is not public")
+      begin
+        let open Module in
+        let m = Compile.current (Feature_table.compilation_context ft) in
+        assert (M.has_interface m);
+        let fn = Src.path (M.interface m) in
+        error_info
+          (FINFO (1,0,fn))
+          ("deferred assertion \"" ^ (string_of_term (term i pc) pc) ^
+             "\" is not public")
+      end
   done
 
 let excluded_middle (pc:t): int =

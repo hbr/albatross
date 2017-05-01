@@ -16,10 +16,7 @@ open Container
 let parse_error (_:string): unit =
   raise Parsing.Parse_error
 
-let filename (): string =
-  (Parsing.symbol_start_pos ()).Lexing.pos_fname
-
-let cinfo (i:info): string =  info_string (filename ()) i
+let cinfo (i:info): string =  info_string i
 
 let pinfo (pos:Lexing.position) = info_from_position pos
 

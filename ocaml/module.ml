@@ -28,14 +28,14 @@ let abort (str:string) =
 
 
 let info_abort (fn:string) (info:Support.info) (str:string) =
-  abort ((Support.info_string fn info) ^ " " ^ str)
+  abort ((Support.info_string info) ^ " " ^ str)
 
 
 let parse (fn:string) (parse_function: 'a parse_function): 'a =
   try
-    Lexer.reset ();
     let ch_in = open_in fn in
     let lexbuf = Lexing.from_channel ch_in in
+    Lexer.initialize fn lexbuf;
     let res = parse_function Lexer.token lexbuf in
     close_in ch_in;
     res
@@ -369,7 +369,7 @@ module PSet =
           with Not_found ->
             eprintf
               "%s Cannot find the package \"%s\"@."
-              (info_string (Src.path s) info)
+              (info_string info)
               (string_of_library p);
             exit 1
         in
@@ -530,7 +530,7 @@ module MSet =
                       assert false; (* cannot happen in implementation file *)
                     Format.eprintf
                       "@[%s %s \"%s\" %s@]@."
-                      (info_string (Src.path src) nme.i)
+                      (info_string nme.i)
                       "The module"
                       (string_of_module nme.v)
                       "has not been used in any implementation file";
@@ -541,7 +541,7 @@ module MSet =
                 begin
                   Format.eprintf
                     "%s The module \"%s\" does not have an interface@."
-                    (info_string (Src.path src) nme.i)
+                    (info_string nme.i)
                     (M.string_of_name m_used);
                   exit 1
                 end;
@@ -587,7 +587,7 @@ module MSet =
                 with Not_found ->
                   Format.eprintf
                     "@[%s %s \"%s\" %s@]@."
-                    (info_string (Src.path src) mnme.i)
+                    (info_string mnme.i)
                     "The module"
                     (ST.string nme)
                     "does not exist.";
