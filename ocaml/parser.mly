@@ -182,7 +182,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token RBRACE
 %token RBRACKET
 %token RPAREN
-%token SEMICOL
 %token TIMES
 %token USCORE
 
@@ -192,6 +191,7 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 %token <int>    OPERATOR
 %token <int>    ROPERATOR
 %token <int>    NUMBER
+%token <bool>   SEMICOL
 
 
 /*  0 */ %nonassoc LOWEST_PREC
@@ -215,7 +215,6 @@ let body_exp (fb:feature_body1 option): feature_body option * expression option 
 /* 65 */ %nonassoc KWnot     KWold
 /* 66 */ %left     DOT
 /* 80 */ %nonassoc LPAREN    LBRACKET
-/*100 */ %nonassoc KWdeferred
 
 %start file
        use_block_opt
@@ -249,42 +248,91 @@ separated_reversed_list(sep,elem):
 /* ------------------------------------------------------------------------- */
 
 unused_tokens:
-  ASSIGN KWwhile KWcheck KWdo KWelseif KWfrom KWimport KWinvariant
+  ASSIGN KWwhile KWcheck KWdo KWelseif KWfeature KWfrom KWimport KWinvariant
   KWimmutable KWvariant KWlocal QMARK KWproof KWredefine KWundefine
+  NEWLINE
 { () }
 
 
 file:
-  u=use_block
+  u = use_block
   SEMICOL
-  ds=decls
+  ds = declarations
   EOF
   {u, List.rev ds}
-| u=use_block EOF
+| u = use_block EOF
   {u, []}
-| ds=decls
+| ds = declarations
   EOF
   {[], List.rev ds}
 
-decls: ds=separated_reversed_list(optsemi,decl) {ds}
 
-/*
-decl:
-    t=type_declaration_block { t }
-|   f=feature_declaration_block { f }
-|   t=theorem { t }
+declarations:
+    { [] }
+|   ds=nonempty_declarations {
+        ds
+    }
+|   ds1 = declarations_1 {
+        let ds, (nme,args,rt,bool) = ds1 in
+        Named_feature(nme,args,rt,bool,None,None) :: ds
+    }
 
-type_declaration_block:
-*/
+nonempty_declarations:
+    d = declaration {
+        [d]
+    }
+|   ds1 = declarations_1
+    fb  = feature_body {
+        let ds, (nme,args,rt,bool) = ds1 in
+        let bdy,exp = body_exp (Some fb) in
+        Named_feature(nme,args,rt,bool,bdy,exp) :: ds
+    }
+|   ds1 = declarations_1
+    s=SEMICOL
+    fb = feature_body {
+        if s then
+            error_info (pinfo $startpos(s)) "Unexpected semicolon";
+        let ds, (nme,args,rt,bool) = ds1 in
+        let bdy,exp = body_exp (Some fb) in
+        Named_feature(nme,args,rt,bool,bdy,exp) :: ds
+    }
+|   ds1 = declarations_1
+    SEMICOL
+    d = declaration {
+        let ds, (nme,args,rt,bool) = ds1 in
+        d :: Named_feature(nme,args,rt,bool,None,None) :: ds
+    }
+|   ds = nonempty_declarations
+    SEMICOL
+    d = declaration {
+        d :: ds
+    }
 
-decl:
+declarations_1: /* A sequence of declarations ending with a pure function
+                   declaration */
+|   ds = nonempty_declarations
+    SEMICOL
+    f1 = named_feature_part1 {
+        ds, f1
+    }
+|   ds1 = declarations_1
+    SEMICOL
+    f1 = named_feature_part1 {
+        let ds, (nme,args,rt,bool) = ds1 in
+        Named_feature(nme,args,rt,bool,None,None) :: ds,
+        f1
+    }
+|   f1 = named_feature_part1 {
+        [], f1
+    }
+
+
+declaration:
     class_declaration { $1 }
 |   i=inheritance_declaration {i}
 |   named_feature     { $1 }
 |   formal_generic    { $1 }
-|   ass_feat          { $1 }
-|   class_list        { $1 }
-|   feature_list      { $1 }
+|   t = theorem       { t }
 
 
 use_block_opt:
@@ -301,7 +349,7 @@ use_block:
 
 module_list:
     one_module  { [$1] }
-|   one_module separator module_list { $1 :: $3
+|   one_module SEMICOL module_list { $1 :: $3
                                      }
 
 one_module: dlst=dotted_id_list  {
@@ -324,8 +372,6 @@ formal_generic:
 /* ------------------------------------------------------------------------- */
 /*  assertions  */
 /* ------------------------------------------------------------------------- */
-
-ass_feat: theorem { $1 }
 
 
 ass_req:
@@ -563,21 +609,23 @@ class_declaration:
   hm=header_mark
   KWclass cn=class_name fgs=class_generics
   cr=create_clause
-  KWend {
-  Class_declaration( winfo $startpos(cn) hm,
-                     None,
-                     winfo $startpos(cn) cn,
-                     winfo $startpos(fgs) fgs,
-                     cr)}
+  {
+      Class_declaration( winfo $startpos(cn) hm,
+                         None,
+                         winfo $startpos(cn) cn,
+                         winfo $startpos(fgs) fgs,
+                         cr)
+  }
 | hm=header_mark
   KWclass cv=UIDENTIFIER COLON cn=class_name fgs=class_generics
   cr=create_clause
-  KWend {
-  Class_declaration( winfo $startpos(cn) hm,
-                     Some (winfo $startpos(cv) cv),
-                     winfo $startpos(cn) cn,
-                     winfo $startpos(fgs) fgs,
-                     cr)}
+  {
+      Class_declaration( winfo $startpos(cn) hm,
+                         Some (winfo $startpos(cv) cv),
+                         winfo $startpos(cn) cn,
+                         winfo $startpos(fgs) fgs,
+                         cr)
+  }
 
 
 inheritance_declaration:
@@ -600,12 +648,6 @@ class_generics:
     { [] }
 |   LBRACKET uidentifier_list RBRACKET { $2 }
 
-
-class_list0:
-    class_declaration { [$1] }
-|   class_declaration optsemi class_list0 { $1::$3 }
-
-class_list: KWfeature class_list0 KWend { Class_list(winfo $startpos($1) $2) }
 
 
 /* ------------------------------------------------------------------------- */
@@ -643,11 +685,11 @@ rename_item:
 
 create_clause:
     { withinfo UNKNOWN [] }
-| KWcreate constructor_list { winfo $startpos($1) $2 }
+| KWcreate cs=constructor_list KWend { winfo $startpos(cs) cs }
 
 constructor_list:
     constructor { [$1] }
-|   constructor separator constructor_list { $1::$3 }
+|   constructor SEMICOL constructor_list { $1::$3 }
 
 
 constructor: nameopconst_info formal_arguments_opt {
@@ -738,43 +780,71 @@ type_list:
 /* Features */
 /* ------------------------------------------------------------------------- */
 
-feature_list: KWfeature feature_list0 KWend {
-  Feature_list (winfo $startpos($1) $2)
-}
+/*
+    constant declaration
 
-feature_list0:
-    named_feature { [$1] }
-|   named_feature optsemi feature_list0 { $1 :: $3 }
+        false: BOOLEAN
+
+        empty: {A} = {x: false}
+
+    complete function declaration
+
+        name(a:A,...): RT -> exp
+
+    splitted function declaration
+
+        name(a:A,...): RT   -- <-- optional semicol as newline
+            require
+                ....
+            ensure
+                ...
+            end
+
+        name(a:A,...): RT
+
+ */
 
 named_feature:
-    nameopconst_info
-    formal_arguments_info
-    return_type_opt
-    optsemi
-    feature_body_opt {
-  let bdy,exp = body_exp $5 in
-  Named_feature ($1, $2, $3, false, bdy, exp)
-}
-|   nameopconst_info
-    return_type
-    optsemi
-    feature_body_opt {
-  let bdy,exp = body_exp $4 in
-  Named_feature ($1, noinfo [], Some $2, false, bdy, exp)
-}
-|   nameopconst_info
-    formal_arguments_info
-    return_type_opt
-    ARROW
-    info_expr {
-  Named_feature ($1, $2, $3, true, None, Some $5)
-}
-|   nameopconst_info
-    return_type
+|   /* a constant with definition
+       empty: {A} = {x: false}
+    */
+    nme = nameopconst_info
+    rt  = return_type
     EQ
-    info_expr {
-  Named_feature ($1, noinfo [], Some $2, false, None, Some $4)
+    e = info_expr {
+        Named_feature (nme, noinfo [], Some rt, false, None, Some e)
 }
+|   /* a function with '->' definition
+       name(a:A,...): RT -> exp
+    */
+    nme  = nameopconst_info
+    args = formal_arguments
+    rt   = return_type
+    ARROW
+    e = info_expr {
+        Named_feature (nme, winfo $startpos(args) args, Some rt,
+                       true, None, Some e)
+    }
+
+
+named_feature_part1:
+    /* a pure constant declaration
+       false: BOOLEAN
+     */
+    nme = nameopconst_info
+    rt  = return_type {
+        nme, noinfo [], Some rt, false
+    }
+|   /* name(a:A,...): RT */
+    nme  = nameopconst_info
+    fargs= formal_arguments
+    rt   = return_type_opt {
+        let fargs = winfo $startpos(fargs) fargs in
+        nme, fargs, rt, false
+    }
+
+
+
 
 nameopconst_info: nameopconst { winfo $startpos($1) $1 }
 
@@ -801,10 +871,6 @@ return_type_opt:
     { None }
 |   return_type { Some $1 }
 
-
-feature_body_opt:
-    %prec LOWEST_PREC { None }
-|   feature_body      { Some $1 }
 
 feature_body:
     require_block feature_implementation ensure_block KWend
@@ -1125,8 +1191,8 @@ optghost:
 | KWghost { true }
 
 optsemi:
-    %prec LOWEST_PREC {()}
-|   SEMICOL {()}
+    {None}
+|   s=SEMICOL { Some s }
 
 
 uidentifier_list:
@@ -1134,11 +1200,12 @@ uidentifier_list:
 |   UIDENTIFIER COMMA uidentifier_list { $1::$3 }
 
 
+newline: /* A newline and not a semicolon */
+    s=SEMICOL {
+        if s then
+            error_info (pinfo $startpos(s)) "Unexpected semicolon"
+    }
+
 opt_nl:
     {()}
-|   SEMICOL {()}
-|   NEWLINE {()}
-
-separator:
-    SEMICOL  {()}
-|   NEWLINE  {()}
+|   newline { () }

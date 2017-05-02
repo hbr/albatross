@@ -7,7 +7,7 @@ end
 A: ANY
 B: ANY
 
-class FUNCTION[A,B] end
+class FUNCTION[A,B]
 
 
 domain (f:A->B): ghost {A}  note built_in end

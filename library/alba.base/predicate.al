@@ -6,7 +6,7 @@ end
 
 G: ANY
 
-class PREDICATE[G] end
+class PREDICATE[G]
 
 (in)  (e:G, p:{G}): BOOLEAN
 (/in) (a:G, p:{G}): BOOLEAN -> not p(a)

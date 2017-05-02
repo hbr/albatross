@@ -4,9 +4,7 @@ use
 end
 
 
-deferred class LINEAR_ORDER end
-
-LO: LINEAR_ORDER
+deferred class LO:LINEAR_ORDER
 
 (=)  (a,b:LO): BOOLEAN    deferred end
 (<=) (a,b:LO): BOOLEAN    deferred end

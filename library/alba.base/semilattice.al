@@ -3,10 +3,7 @@ use
 end
 
 deferred class
-    SEMILATTICE
-end
-
-SL: SEMILATTICE
+    SL:SEMILATTICE
 
 (=)  (a,b:SL): BOOLEAN deferred end
 (*)  (a,b:SL): SL      deferred end

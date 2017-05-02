@@ -192,7 +192,7 @@ rule next_token = parse
 
 | ')'             { Parser.RPAREN,   (false,true)  }
 
-| ';'             { Parser.SEMICOL,  (false,false) }
+| ';'             { Parser.SEMICOL true,  (false,false) }
 
 | '_'             { Parser.USCORE,   (true,true) }
 
@@ -318,7 +318,7 @@ let rec token lexbuf =
         in
         if is_start_token tok then
           (last_is_endtok:=false;
-           return_tok Parser.SEMICOL false pos)
+           return_tok (Parser.SEMICOL false) false pos)
         else
           token lexbuf
       else

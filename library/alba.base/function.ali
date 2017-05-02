@@ -3,7 +3,7 @@ use predicate end
 A: ANY
 B: ANY
 
-class FUNCTION[A,B] end
+class FUNCTION[A,B]
 
 class
     FUNCTION[A,B]

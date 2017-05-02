@@ -32,6 +32,7 @@ let info_abort (fn:string) (info:Support.info) (str:string) =
 
 
 let parse (fn:string) (parse_function: 'a parse_function): 'a =
+  (* Parse the file [fn] by using the parse function [parse_function]. *)
   try
     let ch_in = open_in fn in
     let lexbuf = Lexing.from_channel ch_in in
@@ -167,6 +168,7 @@ module Src =
       }
 
     let parse (s:t): declaration list =
+      (* Parse the declarations of the source [s] and throw away the use block. *)
       let use_blk, ast = parse (path s) Parser.file in
       ast
 

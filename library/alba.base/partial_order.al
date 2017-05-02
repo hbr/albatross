@@ -5,9 +5,8 @@ use
     tuple
 end
 
-deferred class PARTIAL_ORDER end
+deferred class PO:PARTIAL_ORDER
 
-PO:  PARTIAL_ORDER
 PO2: PARTIAL_ORDER
 
 

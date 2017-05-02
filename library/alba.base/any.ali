@@ -1,6 +1,6 @@
 use boolean end
 
-deferred class G:ANY end
+deferred class G:ANY
 
 
 (=) (a,b:G): BOOLEAN    deferred end

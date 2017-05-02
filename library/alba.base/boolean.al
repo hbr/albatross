@@ -1,4 +1,4 @@
-class BOOLEAN end
+class BOOLEAN
 
 
 {: Built in functions
