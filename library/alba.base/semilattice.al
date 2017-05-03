@@ -11,8 +11,6 @@ deferred class
 
 all(a,b,c:SL)
     ensure
-        a = a
-
         a * a = a
 
         a * b = b * a

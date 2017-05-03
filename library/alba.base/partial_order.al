@@ -9,14 +9,12 @@ deferred class PO:PARTIAL_ORDER
 
 PO2: PARTIAL_ORDER
 
-
 (<=) (a,b:PO): BOOLEAN   deferred end
 
 (=)  (a,b:PO): BOOLEAN   deferred end
 
 all(a,b,c:PO)
     ensure
-        a = a
         a <= a                               -- reflexive
         (a <= b) ==> (b <= a) ==> (a = b)    -- antisymmetric
         (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive

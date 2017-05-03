@@ -971,7 +971,7 @@ let put_creators
 
 
 
-let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
+let inherit_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
   let simple_type (str:string): type_t =
     Normal_type ([], ST.symbol str,[])
   in
@@ -984,22 +984,6 @@ let inherit_case_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
     and imp    = if PC.is_public pc then None else Some Impbuiltin
     in
     analyze_feature fn entlst rt true (Some ([],imp,[])) None pc
-  end;
-  begin (* add reflexivity of equality *)
-    let arga     = ST.symbol "a" in
-    let entlst = withinfo UNKNOWN [Typed_entities ([arga],cls_tp)]
-    and elst   =
-      let eq = withinfo UNKNOWN (Expop Eqop)
-      and a  = withinfo UNKNOWN (Identifier arga)
-      in
-      [withinfo UNKNOWN (Funapp (eq,[a;a],AMop))]
-    and prf =
-      if PC.is_private pc then
-        SP_Axiom
-      else
-        SP_Proof([],None)
-    in
-    Source_prover.prove_and_store entlst [] elst prf pc
   end;
   begin (* inherit ANY *)
     let parent = false, withinfo UNKNOWN (simple_type "ANY"), [] in
@@ -1062,7 +1046,7 @@ let put_class
       error_info hm.i "An inductive type needs the module \"any\"";
     if not (Class_table.has_predicate ct) then
       error_info hm.i "An inductive type needs the module \"predicate\"";
-    inherit_case_any idx cls_tp pc;
+    inherit_any idx cls_tp pc;
     let _,tvs = Class_table.class_type idx ct in
     put_creators idx is_new tvs cls_tp creators pc
   end

@@ -14,7 +14,6 @@ PO2: PARTIAL_ORDER
 
 all(a,b,c:PO)
     ensure
-        a = a
         a <= a                               -- reflexive
         (a <= b) ==> (b <= a) ==> (a = b)    -- antisymmetric
         (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive

@@ -6,7 +6,12 @@ deferred class G:ANY
 
 (/=) (a,b:G): BOOLEAN -> not (a = b)
 
-all(a:G) ensure a = a deferred end
+all(a:G)
+    ensure
+        a = a
+    note
+        axiom
+    end
 
 
 all(a:G)

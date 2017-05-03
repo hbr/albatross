@@ -11,7 +11,6 @@ deferred class LO:LINEAR_ORDER
 
 all(a,b,c:LO)
     ensure
-        a = a
         a <= b or b <= a
         a <= b  ==>  b <= a  ==>  a = b
         a <= b  ==>  b <= c  ==>  a <= c
