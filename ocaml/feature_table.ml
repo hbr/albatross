@@ -2070,6 +2070,37 @@ let add_feature
 
 
 
+let equality_signature (cls:int) (ft:t): Tvars.t * Sign.t =
+  let tp, tvs =  Class_table.class_type cls ft.ct
+  in
+  let sign =
+    Sign.make_func
+      [|tp;tp|]
+      (Class_table.boolean_type (Tvars.count_all tvs)) in
+  tvs, sign
+
+
+
+let add_equality (cls:int) (ft:t): unit =
+  (* Add an undefined equality function to the class [cls] *)
+  let tvs,sign = equality_signature cls ft
+  and m       =  Class_table.module_of_class cls ft.ct
+  in
+  assert (Module.M.equal m (current_module ft));
+  let impl =
+    if Class_table.is_deferred cls ft.ct then
+      Feature.Deferred
+    else
+      Feature.Builtin
+  in
+  add_feature
+    (withinfo UNKNOWN (FNoperator Eqop))
+    tvs
+    (standard_argnames 2)
+    sign
+    impl
+    ft
+
 
 
 let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
@@ -2099,6 +2130,13 @@ let export_feature (i:int) (ft:t): unit =
   if ft.verbosity > 1 then
     printf "  export feature %d %s\n" i (string_of_signature i ft);
   (descriptor i ft).bdesc#set_exported
+
+
+let export_equality (cls:int) (ft:t): unit =
+  let tvs,sign = equality_signature cls ft
+  and fn = withinfo UNKNOWN (FNoperator Eqop) in
+  let i = find_with_signature fn tvs sign ft in
+  export_feature i ft
 
 
 let add_base

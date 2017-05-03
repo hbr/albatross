@@ -64,6 +64,10 @@ val class_symbol: int -> t -> int
 
 val class_name:   int -> t -> string
 
+val module_of_class: int -> t -> Module.M.t
+
+val is_deferred: int -> t -> bool
+
 val class_type: int -> t -> type_term*Tvars.t
 
 val class_index: int list -> int -> Tvars.t -> info -> t -> int

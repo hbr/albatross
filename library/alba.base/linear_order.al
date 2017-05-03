@@ -6,7 +6,6 @@ end
 
 deferred class LO:LINEAR_ORDER
 
-(=)  (a,b:LO): BOOLEAN    deferred end
 (<=) (a,b:LO): BOOLEAN    deferred end
 
 all(a,b,c:LO)

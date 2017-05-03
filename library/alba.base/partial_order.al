@@ -11,8 +11,6 @@ PO2: PARTIAL_ORDER
 
 (<=) (a,b:PO): BOOLEAN   deferred end
 
-(=)  (a,b:PO): BOOLEAN   deferred end
-
 all(a,b,c:PO)
     ensure
         a <= a                               -- reflexive
@@ -20,11 +18,6 @@ all(a,b,c:PO)
         (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive
     deferred
     end
-
-
-deferred class PARTIAL_ORDER
-inherit        ANY end
-
 
 
 (<)  (a,b:PO): BOOLEAN  -> a /= b and a <= b

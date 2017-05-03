@@ -485,6 +485,7 @@ end = struct
         added elem st
 
   let key (s:int) (st:'a t): 'a =
+    assert (0 <= s);
     assert (s < Seq.count st.seq);
     Seq.elem s st.seq
 

@@ -5,7 +5,6 @@ end
 deferred class
     SL:SEMILATTICE
 
-(=)  (a,b:SL): BOOLEAN deferred end
 (*)  (a,b:SL): SL      deferred end
 (<=) (a,b:SL): BOOLEAN -> a = a * b
 
@@ -18,9 +17,6 @@ all(a,b,c:SL)
         a * b * c = a * (b * c)
     deferred end
 
-
-deferred class SEMILATTICE
-inherit        ANY end
 
 all(a:SL)
     ensure

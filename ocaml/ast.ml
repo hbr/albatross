@@ -975,20 +975,15 @@ let inherit_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
   let simple_type (str:string): type_t =
     Normal_type ([], ST.symbol str,[])
   in
-  begin (* add equality *)
-    let argnames = Array.to_list (standard_argnames 2) in
-    let fn     = withinfo UNKNOWN (FNoperator Eqop)
-    and entlst = withinfo UNKNOWN [Typed_entities (argnames,cls_tp)]
-    and rt     =
-      Some (withinfo UNKNOWN (simple_type "BOOLEAN",false,false))
-    and imp    = if PC.is_public pc then None else Some Impbuiltin
-    in
-    analyze_feature fn entlst rt true (Some ([],imp,[])) None pc
-  end;
-  begin (* inherit ANY *)
-    let parent = false, withinfo UNKNOWN (simple_type "ANY"), [] in
-    Inherit.inherit_parents cls [parent] pc
-  end
+  (* add or export equality *)
+  if PC.is_interface_check pc then
+    Feature_table.export_equality cls (PC.feature_table pc)
+  else
+    Feature_table.add_equality cls (PC.feature_table pc);
+  (* inherit ANY *)
+  let parent = false, withinfo UNKNOWN (simple_type "ANY"), [] in
+  Inherit.inherit_parents cls [parent] pc
+
 
 
 
@@ -1027,8 +1022,11 @@ let put_class
     with Not_found ->
       let path, cn0 = cn.v in
       if path <> [] then
-        error_info cn.i
+        error_info
+          cn.i
           ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
+      if hm.v = Deferred_hmark && Tvars.count_fgs tvs > 0 then
+        not_yet_implemented cn.i "Deferred classes with formal generics";
       let idx = Class_table.count ct in
       Class_table.add hm cv cn0 tvs ct;
       idx, true
@@ -1041,15 +1039,25 @@ let put_class
     let lib,cls = cn.v in
     let fgtps   = List.map (fun nme -> Normal_type([],nme,[])) fgs.v in
     Normal_type (lib, cls, fgtps) in
-  if creators.v <> [] then begin
-    if not (Class_table.has_any ct) then
-      error_info hm.i "An inductive type needs the module \"any\"";
-    if not (Class_table.has_predicate ct) then
-      error_info hm.i "An inductive type needs the module \"predicate\"";
-    inherit_any idx cls_tp pc;
-    let _,tvs = Class_table.class_type idx ct in
-    put_creators idx is_new tvs cls_tp creators pc
-  end
+  if idx <> Constants.any_class && (hm.v = Deferred_hmark || creators.v <> [])
+  then
+    begin
+      let ind_or_defer =
+        if hm.v = Deferred_hmark then "A deferred "
+        else "An inductive "
+      in
+      if not (Class_table.has_any ct) then
+        error_info hm.i
+                   (ind_or_defer ^ "type needs the module \"any\"");
+      if not (Class_table.has_predicate ct) then
+        error_info hm.i
+                   (ind_or_defer ^ "type needs the module \"predicate\"");
+      inherit_any idx cls_tp pc;
+      if hm.v = Deferred_hmark && creators.v <> [] then
+        not_yet_implemented creators.i "Deferred inductive types";
+      if creators.v <> [] then
+        put_creators idx is_new tvs cls_tp creators pc
+    end
 
 
 let put_inheritance

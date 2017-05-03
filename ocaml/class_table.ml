@@ -157,6 +157,16 @@ let has_predicate (ct:t): bool =
 
 
 
+let module_of_class (cls:int) (ct:t): Module.M.t =
+  assert (cls < count ct);
+  let m = (descriptor cls ct).mdl in
+  match m with
+    None ->
+    assert false (* illegal call *)
+  | Some m ->
+     m
+
+
 let add_to_map (cls:int) (ct:t): unit =
   (* Add the class [cls] to the map in order to be able to find it.
    *)
@@ -231,9 +241,14 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
   let nfgs  = Tvars.count_fgs bdesc.tvs in
   if is_deferred i ct then
     begin
-      let tvs = Tvars.augment_fgs [|bdesc.cvar|] [|Variable i|] bdesc.tvs in
-      let ags = Array.init nfgs (fun i -> Variable (i+1)) in
-      let tp  = VAppl(0,ags,[||],false) in
+      let tvs = Tvars.augment_fgs [|bdesc.cvar|] [|Variable (i+1)|] bdesc.tvs in
+      let tp =
+        if nfgs = 0 then
+          Variable 0
+        else
+          let ags = Array.init nfgs (fun i -> Variable (i+1)) in
+          VAppl(0,ags,[||],false)
+      in
       tp, tvs
     end
   else
@@ -383,13 +398,14 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
     in
     let inner_prec, str =
       match t with
-        Variable j ->
-          2,
-          if j<nb then
-            string_of_int j
-          else if j < nb+nfgs then
-            ST.string fgnames.(j-nb)
-          else class_name (j-nb-nfgs) ct
+      | Variable j ->
+         2,
+         if j<nb then
+           string_of_int j
+         else if j < nb+nfgs then
+           ST.string fgnames.(j-nb)
+         else
+           class_name (j-nb-nfgs) ct
       | VAppl (j,tarr,_,_) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
@@ -553,7 +569,6 @@ let arguments_string2
   assert (nargs = Array.length tps);
   let args = Myarray.combine nms tps in
   arguments_string tvs args ct
-
 
 
 
@@ -1347,7 +1362,14 @@ let add
   let idx  = count ct in
   let cvar =
     match cv with
-    | None -> -1
+    | None ->
+       begin
+         match hm.v with
+         | Deferred_hmark ->
+            ST.symbol "CV"
+         | _ ->
+            -1
+       end
     | Some cv ->
        assert (hm.v = Deferred_hmark);
        cv.v

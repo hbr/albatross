@@ -9,8 +9,6 @@ PO2: PARTIAL_ORDER
 
 (<=) (a,b:PO): BOOLEAN   deferred end
 
-(=)  (a,b:PO): BOOLEAN   deferred end
-
 
 all(a,b,c:PO)
     ensure
@@ -19,10 +17,6 @@ all(a,b,c:PO)
         (a <= b) ==> (b <= c) ==> (a <= c)   -- transitive
     deferred
     end
-
-
-deferred class PARTIAL_ORDER
-inherit        ANY end
 
 
 -- More function definitions

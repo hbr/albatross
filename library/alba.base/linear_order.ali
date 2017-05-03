@@ -5,7 +5,6 @@ end
 
 deferred class LO:LINEAR_ORDER
 
-(=)  (a,b:LO): BOOLEAN    deferred end
 (<=) (a,b:LO): BOOLEAN    deferred end
 
 all(a,b,c:LO)
@@ -16,8 +15,6 @@ all(a,b,c:LO)
     deferred
     end
 
-deferred class LINEAR_ORDER
-inherit        ANY end
 {:
 is_lower_bound (a:LO, p:LO?): ghost BOOLEAN
     -> all(x) x in p ==> a <= x
