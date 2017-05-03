@@ -1,7 +1,7 @@
 .PHONY: build
 
 build:
-	cd ocaml;       \
-	make alba;      \
-	make alba.byte
+	cd ocaml;          \
+	make alba.native;  \
+	make alba.d.byte
 

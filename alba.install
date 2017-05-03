@@ -1,4 +1,8 @@
 bin: [
-     "ocaml/alba"
-     "ocaml/alba-debug"
+     "ocaml/_build/alba.native" {"alba"}
+     "ocaml/_build/alba.d.byte" {"alba.d.byte"}
+]
+
+lib: [
+     "library/alba.base/boolean.ali" {"alba.base/boolean.ali"}
 ]
