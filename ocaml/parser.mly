@@ -76,7 +76,7 @@ let entities_of_expression (info:info) (lst: expression list): entities list =
         entlist lst (id::idlst) entlst
     | ({v = Typedexp ({v = Identifier id; i = _},tp); i = _})::lst ->
         let idlst = List.rev (id::idlst) in
-        let entlst = (Typed_entities (idlst,tp.v))::entlst in
+        let entlst = (Typed_entities (idlst,tp))::entlst in
         entlist lst [] entlst
     | e::lst ->
         error_info info ("\"" ^
@@ -920,8 +920,10 @@ entity_list:
 |   entity_group COMMA entity_list { $1::$3 }
 
 entity_group:
-    identifier_list { Untyped_entities $1 }
-|   identifier_list COLON type_nt { Typed_entities ($1,$3) }
+    ids=identifier_list { Untyped_entities ids }
+|   ids=identifier_list COLON tp=type_nt {
+        Typed_entities (ids, winfo $startpos(tp) tp)
+    }
 
 
 identifier_list:

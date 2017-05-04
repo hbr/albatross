@@ -1723,7 +1723,7 @@ let function_postconditions (idx:int) (posts:term list) (c:t): term list =
 
 let get_type (tp:type_t withinfo) (c:t): type_term =
   let tvs = tvars c in
-  Class_table.get_type tp tvs (class_table c)
+  Class_table.get_type tp false tvs (class_table c)
 
 
 let downgrade_term (t:term) (nb:int) (c:t): term =

@@ -231,13 +231,13 @@ let string_of_return_type (rt:return_type): string =
 
 type entities =
     Untyped_entities of int list
-  | Typed_entities   of int list * type_t
+  | Typed_entities   of int list * type_t withinfo
 
 
 let string_of_entities (args: entities) =
   match args with
     Typed_entities (l,t) ->
-      (string_of_list l ST.string ",") ^ ":" ^ string_of_type t
+      (string_of_list l ST.string ",") ^ ":" ^ string_of_type t.v
   | Untyped_entities l -> string_of_list l ST.string ","
 
 

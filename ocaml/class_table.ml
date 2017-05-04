@@ -1066,18 +1066,22 @@ let list_name      = ST.symbol "LIST"
 
 let get_type
     (tp:type_t withinfo)
+    (deferred_allowed: bool)
     (tvs: Tvars.t)
     (ct:t)
     : term =
   (* Convert the syntactic type [tp] in an environment with the [tvs] type
      variables and the formal generics [fgnames,concepts] into a type term.
 
+     [deferred_allowed] specifies wheather a deferred class is allowed at
+     the top.
+
      Only visible classes can be used legally in a type!
    *)
   let class_index0 path (nme: int): int = class_index path nme tvs tp.i ct
   in
   let info = tp.i in
-  let rec get_tp (tp:type_t): type_term =
+  let rec get_tp (top:bool) (tp:type_t): type_term =
     let valid_tp (idx:int) (args:type_term array): type_term =
         valid_type idx args info tvs ct
     in
@@ -1085,9 +1089,9 @@ let get_type
       let ta, tb =
         match tp_list with
           [tpa;tpb] ->
-            get_tp tpa, get_tp tpb
+            get_tp false tpa, get_tp false tpb
         | tpa::tail ->
-            get_tp tpa, tuple tail
+            get_tp false tpa, tuple tail
         | _ ->
             assert false (* tuple type must have at least two types *)
       in
@@ -1095,28 +1099,35 @@ let get_type
     in
     match tp with
       Normal_type (path,name,actuals) ->
-        let args = List.map (fun tp -> get_tp tp) actuals in
+        let args = List.map (get_tp false) actuals in
         let args = Array.of_list args in
-        valid_tp (class_index0 path name) args
+        let cls = class_index0 path name in
+        let cls0 = cls - Tvars.count_all tvs in
+        assert (cls0 < count ct);
+        if not (deferred_allowed && top) && 0 <= cls0 && is_deferred cls0 ct then
+          error_info
+            info
+            ("Deferred class " ^ class_name cls0 ct ^ " must not be used directly");
+        valid_tp cls args
     | Paren_type tp ->
-        get_tp tp
+        get_tp false tp
     | Brace_type tp ->
-        let t = get_tp tp in
+        let t = get_tp false tp in
         valid_tp (class_index0 [] predicate_name) [|t|]
     | Star_type tp ->
-        let t = get_tp tp in
+        let t = get_tp false tp in
         valid_tp (class_index0 [] sequence_name) [|t|]
     | List_type tp ->
-        let t = get_tp tp in
+        let t = get_tp false tp in
         valid_tp (class_index0 [] list_name) [|t|]
     | Arrow_type (tpa,tpb) ->
-        let ta = get_tp tpa
-        and tb = get_tp tpb in
+        let ta = get_tp false tpa
+        and tb = get_tp false tpb in
         valid_tp (class_index0 [] function_name) [|ta;tb|]
     | Tuple_type tp_lst ->
         tuple tp_lst
   in
-  get_tp tp.v
+  get_tp true tp.v
 
 
 
@@ -1179,7 +1190,7 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
   assert (cls < count ct);
   let tvs = (base_descriptor cls ct).tvs
   in
-  let tp_term = get_type tp tvs ct
+  let tp_term = get_type tp true tvs ct
   and n = Tvars.count_all tvs
   in
   let i, args = split_type_term tp_term
@@ -1461,7 +1472,7 @@ let formal_generics
           Untyped_entities vars ->
             ntvs + List.length vars, fgs
         | Typed_entities (_,tp) ->
-            ntvs, collect_fgs tp fgs tvs ct)
+            ntvs, collect_fgs tp.v fgs tvs ct)
       (0,[])
       entlst.v
   in
@@ -1533,11 +1544,7 @@ let formal_arguments
         n_untyped := List.length lst;
         List.mapi (fun i name -> name, Variable i) lst
     | Typed_entities (lst,tp) ->
-        let t =
-          get_type
-            (withinfo entlst.i tp)
-            tvs
-            ct in
+        let t = get_type tp false tvs ct in
         List.map (fun name -> name,t) lst
   in
   let arglst = List.concat (List.map fargs entlst.v) in
@@ -1569,7 +1576,7 @@ let result_type
   | Some tpinf ->
       let tp,proc,ghost = tpinf.v in
       let t =
-        get_type (withinfo tpinf.i tp) tvs ct
+        get_type (withinfo tpinf.i tp) false tvs ct
       in
       Result_type.make t proc ghost
 

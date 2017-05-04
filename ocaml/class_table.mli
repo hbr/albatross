@@ -71,7 +71,7 @@ val is_deferred: int -> t -> bool
 val class_type: int -> t -> type_term*Tvars.t
 
 val class_index: int list -> int -> Tvars.t -> info -> t -> int
-val get_type: type_t withinfo -> Tvars.t -> t -> type_term
+val get_type: type_t withinfo -> bool -> Tvars.t -> t -> type_term
 
 val is_class_public: int -> t -> bool
 
