@@ -292,21 +292,18 @@ let analyze_type_inspect
   assert (Sign.is_constant s);
   let cons_set, cls, tp =
     let tp = Sign.result s in
-    let cls,_ = Class_table.split_type_term tp
-    and ntvs = Tvars.count_all tvs in
-    let set =
-      if cls < ntvs then IntSet.empty
-      else
-        let cls = cls - ntvs in
-        Class_table.constructors cls ct in
-    if IntSet.is_empty set then begin
-      let nms = Context.argnames c in
-      let str = ST.string nms.(ivar) in
-      error_info info ("Type of \"" ^ str ^ "\" is not inductive")
-    end;
-    set, cls-ntvs, tp
+    let cls =
+      try
+        Class_table.inductive_class_of_type tvs tp ct
+      with Not_found ->
+        let str = ST.string (Context.variable_name ivar c) in
+        error_info info ("Type of \"" ^ str ^ "\" is not inductive")
+    in
+    (Class_table.constructors cls ct),
+    cls,
+    tp
   in
-  let ind_idx = PC.add_induction_law tp ivar goal pc in
+  let ind_idx = PC.add_specialized_induction_law tp ivar goal pc in
   cons_set,ind_idx,tp
 
 
@@ -995,10 +992,17 @@ and prove_one
   assert (PC.is_private pc);
   let result idx =
     let ok = Term.equivalent goal (PC.term idx pc) in
-    if not ok then begin
-      printf "goal   %s\n" (PC.string_long_of_term goal pc);
-      printf "proved %s\n" (PC.string_long_of_term_i idx pc)
-    end;
+    if not ok then
+      begin
+        printf "proved %s  %s\n"
+               (PC.string_long_of_term (PC.term idx pc) pc)
+               (Term.to_string (PC.term idx pc));
+        assert (PC.is_well_typed (PC.term idx pc) pc);
+        printf "goal   %s  %s\n"
+               (PC.string_long_of_term goal pc)
+               (Term.to_string goal);
+        assert (PC.is_well_typed goal pc);
+      end;
     assert (Term.equivalent goal (PC.term idx pc));
     idx
   in

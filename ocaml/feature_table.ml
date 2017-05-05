@@ -250,16 +250,21 @@ let inductive_arguments (i:int) (ft:t): int list =
   (* Reversed list of inductive arguments *)
   assert (is_constructor i ft);
   let desc = descriptor i ft in
-  let ntvs = Tvars.count_all desc.tvs in
-  let lst = interval_fold
+  let is_inductive arg_tp =
+    try
+      desc.cls
+      =  Class_table.inductive_class_of_type desc.tvs arg_tp ft.ct
+    with Not_found ->
+         false
+  in
+  let lst =
+    interval_fold
       (fun lst i ->
-        match Sign.arg_type i desc.sign with
-          Variable cls when cls = desc.cls + ntvs ->
-            i :: lst
-        | VAppl(cls,_,_,_) when cls = desc.cls + ntvs ->
-            i :: lst
-        | _ ->
-            lst)
+        if is_inductive (Sign.arg_type i desc.sign) then
+          i :: lst
+        else
+          lst
+      )
       []
       0 (Sign.arity desc.sign) in
   List.rev lst
@@ -288,7 +293,7 @@ let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
   let tps = Sign.arguments desc.sign
   in
   let n       = arity idx ft in
-  let nms     = anon_argnames n in
+  let nms     = standard_argnames n in
   let p       = Term.up n p in
   let call    = VAppl (idx+n+nb, standard_substitution n, ags, false) in
   let tgt     = Application(p,[|call|],false) in

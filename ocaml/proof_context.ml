@@ -500,6 +500,7 @@ let unify_0 (t:term) (tab:Term_table.t) (pc:t): (int * Term_sub.t) list =
   List.rev (Term_table.unify t (nbenv pc) (seed_function pc) tab)
 
 
+
 let args_and_ags_of_substitution
       (idx:int) (sub:Term_sub.t) (pc:t)
     : arguments * agens =
@@ -1702,8 +1703,11 @@ let add_axiom (t:term) (pc:t): int =
 
 
 
-let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
-  (* Add the induction law of the case type [tp] for the goal [goal].
+let add_specialized_induction_law
+      (tp:type_term) (ivar:int) (goal:term) (pc:t)
+    : int =
+  (* Add the specialized induction law of the inductive type [tp] specialized
+     for the goal [goal].
 
      [tp] is the type of the inspect term.
 
@@ -1715,20 +1719,26 @@ let add_induction_law (tp:type_term) (ivar:int) (goal:term) (pc:t): int =
 
    *)
   let ct = class_table pc
-  and cls,ags = Class_table.split_type_term tp
-  and ntvs  = count_all_type_variables pc
   in
-  assert (ntvs <= cls);
-  let cls = cls - ntvs in
   let idx =
-    try Class_table.induction_law cls ct
-    with Not_found -> assert false
+    try
+      Class_table.induction_law
+        (Class_table.inductive_class_of_type (tvars pc) tp ct)
+        ct
+    with Not_found ->
+      assert false (* tp must be an inductive type *)
   in
   let p =
     let t0 = Term.lambda_inner goal ivar in
     let ptp = predicate_of_type tp pc in
     Lam (1, anon_argnames 1, [], t0, true, ptp) in
   let sub = [|p; Variable ivar|] in
+  let ags =
+    try
+      RD.verify_specialization sub (context pc) (rule_data idx pc)
+    with Not_found ->
+      assert false
+  in
   specialized idx sub ags 0 pc
 
 

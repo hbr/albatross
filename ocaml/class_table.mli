@@ -120,7 +120,8 @@ val update: int -> info -> header_mark withinfo -> int withinfo option
 val add: header_mark withinfo -> int withinfo option -> int -> Tvars.t -> t
          -> unit
 
-val is_case_class:    int -> t -> bool
+val is_inductive_class: int -> t -> bool
+val inductive_class_of_type: Tvars.t -> type_term -> t -> int
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
 val base_constructors:     int -> t -> IntSet.t
@@ -175,7 +176,7 @@ val extract_from_tuple_max: int -> type_term -> types
 
 val upgrade_signature: int -> bool -> Sign.t -> type_term
 
-
+val formal_arguments: entities list withinfo -> Tvars.t -> t -> formal list * int
 val analyze_signature:
     entities list withinfo -> return_type -> bool -> bool -> bool -> Tvars.t -> t
       -> formal array * Result_type.t

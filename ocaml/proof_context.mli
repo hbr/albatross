@@ -134,7 +134,7 @@ val anchor_class:   t -> int
 
 
 val add_induction_law0:  int -> t -> unit
-val add_induction_law:   type_term ->  int -> term -> t -> int
+val add_specialized_induction_law:   type_term ->  int -> term -> t -> int
 val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit

@@ -807,7 +807,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
    *)
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
-  assert (Class_table.is_case_class cls ct);
+  assert (Class_table.is_inductive_class cls ct);
   IntSet.exists
     (fun c ->
       let tvs,sign = Feature_table.signature0 c ft in
@@ -850,7 +850,7 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
           false
       | VAppl(i,ags,_,_) ->
           assert (ntvs <= i);
-          Class_table.is_case_class (i-ntvs) ct &&
+          Class_table.is_inductive_class (i-ntvs) ct &&
           begin
             let nags = Array.length ags in
             let rec get_posset_from k posset =
@@ -897,23 +897,23 @@ let put_creators
     (cls: int)
     (cls_is_new:bool)
     (tvs: Tvars.t)
-    (cls_tp: type_t)
+    (cls_tp: type_term)
     (creators: (feature_name withinfo * entities list) list withinfo)
     (pc: Proof_context.t)
     : unit =
-  let rt = Some (withinfo UNKNOWN (cls_tp,false,false))
-  and c    = Proof_context.context pc
+  let c    = Proof_context.context pc
   and info = creators.i in
   let ft   = Context.feature_table c in
   let ct   = Feature_table.class_table ft in
   let c0lst, c1lst =
     List.fold_left
       (fun (c0lst,c1lst) (fn,ents) ->
-        let formals,res =
-          Class_table.analyze_signature (withinfo fn.i ents) rt
-            false true false tvs ct in
+        let formals,n_untyped =
+          Class_table.formal_arguments (withinfo fn.i ents) tvs ct in
+        assert (n_untyped = 0);
+        let formals = Array.of_list formals in
         let nms, argtps = Myarray.split formals in
-        let sign = Sign.make argtps res in
+        let sign = Sign.make_func argtps cls_tp in
         let cnt = Feature_table.count ft in
         let spec = Feature.Spec.make_func_def nms None []
         and imp  = Feature.Empty in
@@ -956,12 +956,13 @@ let put_creators
   let clst = List.rev clst_rev in
   let cset = IntSet.of_list clst
   and cset_base = IntSet.of_list c0lst in
-  if not (Class_table.has_constructors cls ct) then begin
-    creators_check_formal_generics creators.i clst tvs ft;
-    add_case_inversions cls clst pc;
-    add_case_injections clst pc;
-    Class_table.set_constructors cset_base cset cls ct;
-    PC.add_induction_law0 cls pc
+  if not (Class_table.has_constructors cls ct) then
+    begin
+      creators_check_formal_generics creators.i clst tvs ft;
+      add_case_inversions cls clst pc;
+      add_case_injections clst pc;
+      Class_table.set_constructors cset_base cset cls ct;
+      PC.add_induction_law0 cls pc;
   end else if
     not (IntSet.equal (Class_table.constructors cls ct) cset)
   then
@@ -971,7 +972,7 @@ let put_creators
 
 
 
-let inherit_any (cls:int) (cls_tp:type_t) (pc:Proof_context.t): unit =
+let inherit_any (cls:int) (pc:Proof_context.t): unit =
   let simple_type (str:string): type_t =
     Normal_type ([], ST.symbol str,[])
   in
@@ -1034,29 +1035,26 @@ let put_class
   if 2 <= PC.verbosity pc then begin
     let str = if is_new then "new" else "update" in
     printf "\n  %s class %s\n" str (ST.string (snd cn.v));
-  end;
-  let cls_tp =
-    let lib,cls = cn.v in
-    let fgtps   = List.map (fun nme -> Normal_type([],nme,[])) fgs.v in
-    Normal_type (lib, cls, fgtps) in
+    end;
+  let cls_tp,cls_tvs = Class_table.class_type idx ct in
   if idx <> Constants.any_class && (hm.v = Deferred_hmark || creators.v <> [])
   then
     begin
-      let ind_or_defer =
+      if hm.v = Deferred_hmark && creators.v <> [] then
+        not_yet_implemented creators.i "Deferred inductive types";
+      let ind_or_defer () =
         if hm.v = Deferred_hmark then "A deferred "
         else "An inductive "
       in
       if not (Class_table.has_any ct) then
         error_info hm.i
-                   (ind_or_defer ^ "type needs the module \"any\"");
+                   (ind_or_defer () ^ "type needs the module \"any\"");
       if not (Class_table.has_predicate ct) then
         error_info hm.i
-                   (ind_or_defer ^ "type needs the module \"predicate\"");
-      inherit_any idx cls_tp pc;
-      if hm.v = Deferred_hmark && creators.v <> [] then
-        not_yet_implemented creators.i "Deferred inductive types";
+                   (ind_or_defer () ^ "type needs the module \"predicate\"");
+      inherit_any idx pc;
       if creators.v <> [] then
-        put_creators idx is_new tvs cls_tp creators pc
+        put_creators idx is_new cls_tvs cls_tp creators pc
     end
 
 

@@ -725,7 +725,7 @@ let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
 
 
-let is_case_class (cls:int) (ct:t): bool =
+let is_inductive_class (cls:int) (ct:t): bool =
   assert (cls < count ct);
   has_constructors cls ct
 
@@ -751,7 +751,28 @@ let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
 
 
 
-
+let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
+  (* Find the inductive class of the type [tp] or raise [Not_found] if
+     the type is not inductive.
+   *)
+  assert (Tvars.count tvs = 0);
+  let nfgs = Tvars.count_fgs tvs in
+  let rec class_ tp =
+    match tp with
+    | Variable i when i < nfgs ->
+       class_ (Tvars.concept i tvs)
+    | Variable cls when is_inductive_class (cls - nfgs) ct->
+       cls - nfgs
+    | Variable _ ->
+       raise Not_found
+    | VAppl(cls,_,_,_) when nfgs <= cls && is_inductive_class (cls - nfgs) ct ->
+       cls - nfgs
+    | VAppl(cls,_,_,_) ->
+       raise Not_found
+    | _ ->
+       assert false (* cannot happen in types *)
+  in
+  class_ tp
 
 let export
     (idx:   int)

@@ -1396,21 +1396,22 @@ let transformed_term (t:term) (c0:t) (c:t): term =
 let case_preconditions
     (insp:term) (insp_tp:type_term)
     (n:int) (nms:int array) (tps:types) (pat:term)
-    (pres:term list) (lst:term list) (nb:int) (c:t)
+    (pres:term list) (lst:term list) (c:t)
     : term list =
-  (*  Generate all(x,y,...) insp = pat ==> pre
+  (*  Generate from pres the list of terms of the form
+
+          all(x,y,...) insp = pat ==> pre
    *)
-  let cls,ags = Class_table.split_type_term insp_tp in
-  let cls0 = cls - count_all_type_variables c in
   let insp   = Term.up n insp
-  and imp_id = n + nb + implication_index c
-  and eq_id  =
-    let ndelta = n + nb + count_variables c in
-    ndelta + Feature_table.equality_index cls0 c.ft
+  and imp_id = n + implication_index c
+  and nb = n + count_variables c
+  and tvs = tvars c
   in
   List.fold_left
     (fun lst pre ->
-      let eq = VAppl (eq_id, [|insp;pat|], ags, false) in
+      let eq =
+        Feature_table.equality_term insp pat nb insp_tp  tvs c.ft
+      in
       let t = Term.binary imp_id eq pre in
       let t = Term.all_quantified n (nms,tps) empty_formals t in
       t :: lst)
@@ -1603,7 +1604,7 @@ let term_preconditions (t:term)  (c:t): term list =
                   let lst_inner   = List.rev lst_inner in
                   let lst =
                     let tp = type_of_term args.(0) c in
-                    case_preconditions args.(0) tp n nms tps pat lst_inner lst 0 c
+                    case_preconditions args.(0) tp n nms tps pat lst_inner lst c
                   in
                   cases_from (i+1) lst
               in
