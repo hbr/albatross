@@ -2183,7 +2183,7 @@ let prove_equality (g:term) (pc:t): int =
   let nargs = Array.length args1 in
   let tup  = Context.tuple_of_terms args1 c
   and r_tp = Context.type_of_term left c in
-  let f_tp = VAppl (Context.function_class c, [|tup;r_tp|], [||], false) in
+  let f_tp = make_type (Context.function_class c) [|tup;r_tp|] in
   let lam = make_lambda nargs [||] [] tlam false f_tp pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);

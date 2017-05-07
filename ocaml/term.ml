@@ -65,7 +65,18 @@ let standard_substitution (n:int): term array =
   Array.init n (fun i -> Variable i)
 
 let make_type (cls:int) (ags:arguments): type_term =
-  VAppl (cls,ags,[||],false)
+  Application (Variable cls, ags, false)
+
+
+let split_type (tp:type_term): int * agens =
+  match tp with
+  | Variable i ->
+     i, [||]
+  | Application(Variable i,args,_) ->
+     i,args
+  | _ -> assert false (* other cases not possible with types *)
+
+
 
 
 let count_formals ((nms,tps):formals): int =

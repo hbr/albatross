@@ -92,7 +92,6 @@ val check_deferred:  int -> int -> info -> t -> unit
 
 val find_for_declaration: int list*int -> t -> int
 
-val split_type_term: type_term -> int * type_term array
 val domain_type: type_term -> type_term
 
 

@@ -247,7 +247,7 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
           Variable 0
         else
           let ags = Array.init nfgs (fun i -> Variable (i+1)) in
-          VAppl(0,ags,[||],false)
+          make_type 0 ags
       in
       tp, tvs
     end
@@ -256,31 +256,16 @@ let class_type (i:int) (ct:t): type_term * Tvars.t =
       if nfgs = 0 then
         Variable i
       else
-        VAppl(i+nfgs, Array.init nfgs (fun i -> Variable i), [||], false)
+        make_type (i+nfgs) (Array.init nfgs (fun i -> Variable i))
     in
     tp, bdesc.tvs
-
-
-let split_type_term (tp:type_term): int * type_term array =
-  match tp with
-    Variable i -> i, [||]
-  | VAppl (i,args,_,_) -> i, args
-  | _ -> assert false (* other cases not possible with types *)
-
-
-let combine_type_term (cls_idx:int) (args: type_term array): type_term =
-  if 0 < Array.length args then
-    VAppl (cls_idx, args, [||],false)
-  else
-    Variable cls_idx
-
 
 
 let domain_type (tp:type_term): type_term =
   (* [tp] is either a function type [A->B] or a predicate type {A}. The domain
      type is in both cases A.
    *)
-  let _,ags = split_type_term tp in
+  let _,ags = split_type tp in
   assert (0 < Array.length ags);
   ags.(0)
 
@@ -295,7 +280,7 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
     else
       let i = i - 1
       and tup_id = ntvs + Constants.tuple_class in
-      let tp = VAppl(tup_id,[|args.(i);tp|], [||],false) in
+      let tp = make_type tup_id [|args.(i);tp|] in
       tuple i tp
   in
   tuple (n-1) args.(n-1)
@@ -305,14 +290,15 @@ let to_tuple (ntvs:int) (start:int) (args:type_term array): type_term =
 
 let boolean_type (ntvs:int)  = Variable (Constants.boolean_class+ntvs)
 let any (ntvs:int)           = Variable (Constants.any_class+ntvs)
-let func nb dom ran = VAppl(nb+Constants.function_class,[|dom;ran|],[||],false)
+let func nb dom ran =
+  make_type (nb+Constants.function_class) [|dom;ran|]
 
 
 let predicate_type (tp:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+Constants.predicate_class,[|tp|],[||],false)
+  make_type (ntvs+Constants.predicate_class) [|tp|]
 
 let function_type (tp_a:type_term) (tp_b:type_term) (ntvs:int): type_term =
-  VAppl(ntvs+Constants.function_class,[|tp_a;tp_b|],[||],false)
+  make_type(ntvs+Constants.function_class) [|tp_a;tp_b|]
 
 let to_dummy (ntvs:int) (s:Sign.t): type_term =
   (* Convert the callable signature [0,1,...]:RT to the dummy signature
@@ -322,7 +308,7 @@ let to_dummy (ntvs:int) (s:Sign.t): type_term =
     Sign.result s
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s) in
-    VAppl(ntvs+Constants.dummy_class, [|tup;Sign.result s|],[||],false)
+    make_type (ntvs+Constants.dummy_class) [|tup;Sign.result s|]
 
 
 let to_function (ntvs:int) (s:Sign.t): type_term =
@@ -334,7 +320,7 @@ let to_function (ntvs:int) (s:Sign.t): type_term =
   else
     let tup = to_tuple ntvs 0 (Sign.arguments s)
     and fid = ntvs + Constants.function_class in
-    VAppl(fid, [|tup;Sign.result s|], [||],false)
+    make_type fid [|tup;Sign.result s|]
 
 
 let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
@@ -351,12 +337,12 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
       Constants.function_class, [|tup;Sign.result s|]
   in
   let idx = idx + ntvs in
-  VAppl(idx, args, [||],false)
+  make_type idx args
 
 
 
 let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
-  let cls_idx,args = split_type_term tp in
+  let cls_idx,args = split_type tp in
   if cls_idx = ntvs + Constants.predicate_class then begin
     assert (Array.length args = 1);
     boolean_type ntvs
@@ -406,7 +392,7 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
            ST.string fgnames.(j-nb)
          else
            class_name (j-nb-nfgs) ct
-      | VAppl (j,tarr,_,_) ->
+      | Application(Variable j, tarr, _ ) ->
           let j1 = j-nb-nfgs
           and tarrlen = Array.length tarr in
           if j1 = Constants.predicate_class then begin
@@ -427,7 +413,10 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
           end else begin
             2,
             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
-          end
+            end
+      | VAppl (j,tarr,_,_) ->
+         printf "type2string VAppl cannot happen %s\n" (Term.to_string t);
+         0, to_string (make_type j tarr) nb 1
       | _ ->
           assert false (* cannot happen with types *)
     in
@@ -621,7 +610,7 @@ let extract_from_tuple
     if n = 1 then
       tp :: lst
     else
-      let cls_idx, args = split_type_term tp in
+      let cls_idx, args = split_type tp in
       if cls_idx = tup_idx then
         extract (n-1) args.(1) (args.(0)::lst)
       else
@@ -637,7 +626,7 @@ let extract_from_tuple
 let extract_from_tuple_max (ntvs:int) (tp:type_term): type_term array =
   let tup_idx = ntvs + Constants.tuple_class in
   let rec extract (tp:type_term) (lst:type_term list): type_term list =
-    let cls_idx, args = split_type_term tp in
+    let cls_idx, args = split_type tp in
     if cls_idx = tup_idx then begin
       extract args.(1) (args.(0)::lst)
     end else
@@ -653,7 +642,7 @@ let arity_of_downgraded (ntvs:int) (tp:type_term): int =
   and func_idx = Constants.function_class  + ntvs
   and dum_idx  = Constants.dummy_class     + ntvs
   in
-  let cls,args = split_type_term tp in
+  let cls,args = split_type tp in
   if cls = pred_idx || cls = func_idx || cls = dum_idx then begin
     assert (0 < Array.length args);
     let args = extract_from_tuple_max ntvs args.(0) in
@@ -673,7 +662,7 @@ let downgrade_signature
   in
   if Sign.is_constant sign then
     let tp = Sign.result sign in
-    let cls_idx,args = split_type_term tp in
+    let cls_idx,args = split_type tp in
     if cls_idx < ntvs then
       raise Not_found
     else if cls_idx = pred_idx then begin
@@ -764,9 +753,11 @@ let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
        cls - nfgs
     | Variable _ ->
        raise Not_found
-    | VAppl(cls,_,_,_) when nfgs <= cls && is_inductive_class (cls - nfgs) ct ->
+    | Application(Variable cls,_,_) when
+           nfgs <= cls
+           && is_inductive_class (cls - nfgs) ct ->
        cls - nfgs
-    | VAppl(cls,_,_,_) ->
+    | Application( Variable cls,_,_) ->
        raise Not_found
     | _ ->
        assert false (* cannot happen in types *)
@@ -949,8 +940,8 @@ let rec satisfies_0
   and nall2 = Tvars.count_all   tvs2
   in
   let sat0 (tp1:type_term) (tp2:type_term): bool =
-    let idx1,args1 = split_type_term tp1
-    and idx2,args2 = split_type_term tp2 in
+    let idx1,args1 = split_type tp1
+    and idx2,args2 = split_type tp2 in
     assert (nall1 <= idx1);
     assert (nall2 <= idx2);
     try
@@ -1045,7 +1036,7 @@ let valid_type
     if nargs = 0 then
       Variable cls_idx
     else
-      VAppl (cls_idx, args, [||],false)
+      make_type cls_idx args
   end
 
 
@@ -1179,7 +1170,7 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
      environment with [ntvs] type variables *)
    assert (ntvs <= anc_cls);
    assert (anc_cls-ntvs < count ct);
-   let cls,args = split_type_term tp in
+   let cls,args = split_type tp in
    assert (ntvs <= cls);
    assert (cls-ntvs < count ct);
    let pargs = (ancestor (cls-ntvs) (anc_cls-ntvs) ct).actual_generics in
@@ -1187,7 +1178,7 @@ let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
      Variable anc_cls
    else
      let pargs = Array.map (fun tp -> Term.subst tp ntvs args) pargs in
-     VAppl(anc_cls,pargs,[||],false)
+     make_type anc_cls pargs
 
 
 
@@ -1213,7 +1204,7 @@ let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
   let tp_term = get_type tp true tvs ct
   and n = Tvars.count_all tvs
   in
-  let i, args = split_type_term tp_term
+  let i, args = split_type tp_term
   in
   if i < n then
     error_info tp.i "Formal generic not allowed as parent class";

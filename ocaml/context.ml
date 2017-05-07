@@ -206,10 +206,10 @@ let tuple_class (c:t): int =
 
 
 let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
-  VAppl (function_class c, [|a_tp;r_tp|], [||], false)
+  make_type (function_class c) [|a_tp;r_tp|]
 
 let predicate_type (a_tp: type_term) (c:t): type_term =
-  VAppl (predicate_class c, [|a_tp|], [||], false)
+  make_type (predicate_class c) [|a_tp|]
 
 let entry_local_argnames (e:entry): int array =
   Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
@@ -646,7 +646,7 @@ let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
 let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
   assert (0 < n);
   assert (n = Array.length nms);
-  let cls,ags = Class_table.split_type_term tp
+  let cls,ags = split_type tp
   and all_ntvs = count_all_type_variables c
   in
   let cls0 = cls - all_ntvs in
@@ -680,7 +680,7 @@ let rec type_of_term (t:term) (c:t): type_term =
       Feature_table.result_type (i-nvars) ags (count_all_type_variables c) c.ft
   | Application(f,args,_) ->
       let f_tp = type_of_term f c in
-      let cls,ags = Class_table.split_type_term f_tp in
+      let cls,ags = split_type f_tp in
       if cls = function_class c then begin
         assert (Array.length ags = 2);
         ags.(1)
@@ -708,7 +708,7 @@ let rec type_of_term (t:term) (c:t): type_term =
 
 let predicate_of_type (tp:type_term) (c:t): type_term =
   let pred_idx = predicate_class c in
-  VAppl(pred_idx,[|tp|],[||],false)
+  make_type pred_idx [|tp|]
 
 
 let predicate_of_term (t:term) (c:t): type_term =
@@ -732,7 +732,7 @@ let tuple_of_terms (args:arguments) (c:t): type_term =
 let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
   let fidx = function_class c
   and tup  = tuple_of_types argtps c in
-  VAppl(fidx, [|tup;r_tp|], [||],false)
+  make_type fidx [|tup;r_tp|]
 
 
 
@@ -1028,7 +1028,7 @@ let tuple_of_args (args:arguments) (tup_tp:type_term) (c:t): term =
       args.(i)
     else begin
       assert (i + 2 <= nargs);
-      let cls,ags = Class_table.split_type_term tup_tp in
+      let cls,ags = split_type tup_tp in
       assert (cls = tuple_class c);
       assert (Array.length ags = 2);
       let b = tup_from (i + 1) ags.(1) in
@@ -1077,7 +1077,7 @@ let rec type_of_term_full
   let split_function_or_predicate
       (tp:type_term)
       : type_term * type_term option =
-    let cls,ags = Class_table.split_type_term tp in
+    let cls,ags = split_type tp in
     assert (ntvs <= cls);
     if cls = predicate_class c then begin
       assert (Array.length ags = 1);
@@ -1483,7 +1483,7 @@ let term_preconditions (t:term)  (c:t): term list =
         let lst = pres_args args lst
         in
         let f_tp = type_of_term f c in
-        let cls,ags = Class_table.split_type_term f_tp in
+        let cls,ags = split_type f_tp in
         if cls = predicate_class c then
           lst
         else if cls = function_class c then
@@ -1497,7 +1497,7 @@ let term_preconditions (t:term)  (c:t): term list =
         and c      = push_lambda n nms tp c
         and imp_id = n + imp_id
         and tps =
-          let cls,ags = Class_table.split_type_term tp in
+          let cls,ags = split_type tp in
           extract_from_tuple n ags.(0) c
         in
         let prepend_pres

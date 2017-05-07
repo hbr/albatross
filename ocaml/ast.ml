@@ -813,7 +813,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
       let tvs,sign = Feature_table.signature0 c ft in
       assert (Tvars.count tvs = 0);
       let nfgs = Tvars.count_fgs tvs in
-      let cls2,fgs = Class_table.split_type_term (Sign.result sign) in
+      let cls2,fgs = split_type (Sign.result sign) in
       assert (cls2 = cls + nfgs);
       let fgset:IntSet.t =
         IntSet.fold
@@ -825,7 +825,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
           IntSet.empty in
       List.for_all
         (fun argtp ->
-          let cls,_ = Class_table.split_type_term argtp in
+          let cls,_ = split_type argtp in
           not (IntSet.mem cls fgset)
         )
         (Array.to_list (Sign.arguments sign))

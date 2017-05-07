@@ -300,7 +300,7 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
     try Term.all_quantifier_split t
     with Not_found -> assert false in
   assert (Array.length fgcon = 1); (* Only one formal generic *)
-  let bcls0,_ = Class_table.split_type_term fgcon.(0) in
+  let bcls0,_ = split_type fgcon.(0) in
   assert (bcls0 = bcls + 1);
   let ft = feature_table at
   and ct = class_table at in

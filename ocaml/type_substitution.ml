@@ -71,10 +71,10 @@ let unify (t1:type_term) (t2:type_term) (s:t): unit =
        put i1 t2 s
     | Variable i1, Variable i2 ->
        unicls i1 i2
-    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
+    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
        unicls i1 i2;
        uniargs args1 args2
-    | Variable _, VAppl _ | VAppl _, Variable _ ->
+    | Variable _, Application _ | Application _, Variable _ ->
        raise Reject
     | _, _ ->
        assert false (* cannot happen with wellformed types *)

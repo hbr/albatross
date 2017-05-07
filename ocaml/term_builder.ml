@@ -325,7 +325,7 @@ let head_type (tb:t): type_term =
 
 
 let result_type_of_type (tp:type_term) (tb:t): type_term =
-  let cls,ags = Class_table.split_type_term tp in
+  let cls,ags = split_type tp in
   if cls = predicate_class tb then
     boolean_type tb
   else if cls = function_class tb  then
@@ -476,14 +476,15 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
     | _, Variable j ->
        raise Reject  (* Different types cannot be unified *)
 
-    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) when i1 = i2 ->
+    | Application(Variable i1,args1,_), Application(Variable i2,args2,_)
+         when i1 = i2 ->
        let len = Array.length args1 in
        assert (len = Array.length args2);
        for i = 0 to len - 1 do
          unify0 args1.(i) args2.(i)
        done
 
-    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
+    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
        assert (i1 <> i2);
        raise Reject (* Different classes cannot be unified *)
     | _ ->
@@ -765,7 +766,7 @@ let required_can_be_boolean (tb:t): bool =
         assert (globals_start tb <= i);
         let cpt = concept i tb
         and nall = count_all tb in
-        let cls,_ = Class_table.split_type_term cpt in
+        let cls,_ = split_type cpt in
         assert (nall <= cls);
         Class_table.has_ancestor
           Constants.boolean_class
@@ -863,7 +864,7 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
         match tb.req with
           None -> false
         | Some tp ->
-            let cls,_ = Class_table.split_type_term tp in
+            let cls,_ = split_type tp in
             if cls = function_class tb then
               false
             else if cls = predicate_class tb then
@@ -921,7 +922,7 @@ let start_predicate_application (nargs:int) (tb:t): unit =
       assert false (* cannot happen because required can be boolean *)
   end;
   add_anys nargs tb;
-  (* Set the required type to FUNCTION[ARGTUP,TP] *)
+  (* Set the required type to PREDICATE[ARGTUP] *)
   tb.req <- Some (predicate_of_args start nargs tb)
 
 
@@ -1022,7 +1023,7 @@ let complete_application (am:application_mode) (tb:t): unit =
       let f_tp = substituted_type f_tp tb in
       let arg =
         let args = Array.of_list (List.map (fun (t,_) -> t) args) in
-        let cls,ags = Class_table.split_type_term f_tp in
+        let cls,ags = split_type f_tp in
         assert begin
           cls = predicate_class tb ||
           cls = function_class tb
@@ -1448,8 +1449,8 @@ let function_predicate_variable (tb1:t) (tb2:t): int =
     (fun i ->
       let tp1 = substituted_type (variable_type i tb1) tb1
       and tp2 = substituted_type (variable_type i tb2) tb2 in
-      let cls1,_ = Class_table.split_type_term tp1
-      and cls2,_ = Class_table.split_type_term tp2 in
+      let cls1,_ = split_type tp1
+      and cls2,_ = split_type tp2 in
       (cls1 = predicate_class tb1 && cls2 = function_class tb2)
       || (cls2 = predicate_class tb2 && cls1 = function_class tb1)
     )

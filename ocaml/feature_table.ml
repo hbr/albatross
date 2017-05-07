@@ -185,7 +185,7 @@ let is_higher_order (i:int) (ft:t): bool =
   let desc = descriptor i ft in
   assert (Sign.has_result desc.sign);
   let ntvs = Tvars.count_all desc.tvs in
-  let cls,_ = Class_table.split_type_term (Sign.result desc.sign) in
+  let cls,_ = split_type (Sign.result desc.sign) in
   assert (ntvs <= cls);
   let cls = cls - ntvs in
   cls = Constants.predicate_class || cls = Constants.function_class
@@ -196,7 +196,7 @@ let tuple_arity (i:int) (ft:t): int =
   let desc = descriptor i ft in
   assert (Sign.has_result desc.sign);
   let ntvs = Tvars.count_all desc.tvs in
-  let _,args = Class_table.split_type_term (Sign.result desc.sign) in
+  let _,args = split_type (Sign.result desc.sign) in
   assert (Array.length args = 1);
   let args = Class_table.extract_from_tuple_max ntvs args.(0) in
   Array.length args
@@ -594,7 +594,7 @@ let ith_tuple_element
   in
   let elem (i:int) (tp:type_term): term =
     let split_tup (tp:type_term): agens =
-      let _,ags = Class_table.split_type_term tp in
+      let _,ags = split_type tp in
       assert (Array.length ags = 2);
       ags
     in
@@ -691,7 +691,7 @@ let tuple_of_args
       args.(i)
     else begin
       assert (i + 2 <= nargs);
-      let _,ags = Class_table.split_type_term tup_tp in
+      let _,ags = split_type tup_tp in
       assert (Array.length ags = 2);
       let b = tup_from (i + 1) ags.(1) in
       VAppl (tup_id, [| args.(i); b |], ags, false)
@@ -783,7 +783,7 @@ let fake_tuple_type (n:int): type_term =
     if i = 0 then
       tp
     else
-      let tp = VAppl (-1, [|empty_term; tp|], [||], false) in
+      let tp = make_type (-1) [|empty_term; tp|] in
       tup (i - 1) tp
   in
   tup (n - 1) empty_term
@@ -1190,7 +1190,7 @@ let unify_types
     | Variable i, Variable j ->
         assert (nall <= j);
         assert (i-nfgs = j-nall)
-    | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
+    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
         let len = Array.length args1 in
         if len <> Array.length args2 then
           raise Not_found;
