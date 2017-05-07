@@ -1059,7 +1059,12 @@ let term_to_string
               assert (Tvars.has_no_variables tvs || Array.length fgcon = 0);
               let names = Term.prepend_names nms names
               and nfgs  = Array.length fgnms
-              and tvs1 = Tvars.push_fgs fgnms fgcon tvs
+              and tvs1 =
+                assert (Tvars.count tvs = 0 || Array.length fgcon = 0);
+                if Tvars.count tvs = 0 then
+                  Tvars.push_fgs fgnms fgcon tvs
+                else
+                  tvs
               in
               let fgsstr  = Class_table.string_of_inner_fgs nfgs tvs1 ft.ct
               and argsstr = Class_table.arguments_string2 tvs1 nms tps ft.ct

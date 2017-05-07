@@ -483,7 +483,6 @@ let string_of_tvs (tvs:Tvars.t) (ct:t): string =
 
 
 let string_of_inner_fgs (nfgs:int) (tvs:Tvars.t) (ct:t): string =
-  assert (Tvars.has_no_variables tvs);
   assert (nfgs <= Tvars.count_fgs tvs);
   if nfgs = 0 then
     ""
