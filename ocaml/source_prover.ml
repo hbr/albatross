@@ -344,10 +344,12 @@ let inductive_type_case_context
     (goal_pred:term)
     (nass: int)         (* number of assumptions in the goal predicate *)
     (pc:PC.t)
-    : int list * term * term * PC.t
-      (* assumptions, goal, case_goal_pred (middle context), inner context *)
+    : int list * term * term * term * PC.t
+      (* assumptions, goal, (inner context,
+         pattern, case_goal_pred (middle context),
+         inner context *)
     =
-  (* Prepare the inner contextand return the reversed list of assumptions,
+  (* Prepare the inner context and return the reversed list of assumptions,
      the goal and the inner context (2 levels deeper than the inspect context).
 
      goal_pred: p = {x: all(y,...) r1 ==> r2 ==> ... ==> goal}
@@ -381,8 +383,22 @@ let inductive_type_case_context
   and ntvs = PC.count_all_type_variables pc
   and ft    = PC.feature_table pc
   in
-  let _, ags = Class_table.split_type_term tp
-  and n = Array.length nms
+  let ags =
+    let open Type_substitution in
+    let tvs1,sign = Feature_table.signature0 cons_idx ft in
+    let sub =
+      make (Tvars.count_fgs tvs1) tvs1 (PC.tvars pc) (PC.class_table pc)
+    in
+    begin
+      try
+        unify (Sign.result sign) tp sub
+      with Reject ->
+        assert false (* cannot happen *)
+    end;
+    assert (greatest_plus1 sub = Tvars.count_fgs tvs1);
+    array (Tvars.count_fgs tvs1) sub
+  in
+  let n = Array.length nms
   in
   let tps = Feature_table.argument_types cons_idx ags ntvs ft
   in
@@ -390,6 +406,9 @@ let inductive_type_case_context
   in
   let n1,_,_,ps_rev,case_goal_pred =
     Feature_table.constructor_rule cons_idx goal_pred ags nvars ft
+  and pat =
+    Feature_table.feature_call
+      cons_idx (nvars+n) (standard_substitution n) ags ft
   in
   assert (n1 = n);
   let ind_hyp_idx_lst =
@@ -410,7 +429,7 @@ let inductive_type_case_context
   PC.close pc1;
   let ass_lst_rev, goal, pc2 =
     inner_case_context ass_lst_rev case_goal_pred nass pc1 in
-  ass_lst_rev, goal, case_goal_pred, pc2
+  ass_lst_rev, goal, pat, case_goal_pred, pc2
 
 
 
@@ -1265,16 +1284,8 @@ and prove_type_case
     : int =
   (* Prove one case of an inductive type
    *)
-  let _, ags = Class_table.split_type_term tp
-  and n = Array.length nms
-  and nvars = PC.count_variables pc
-  and ft = PC.feature_table pc
-  in
-  let ass_lst_rev, goal, case_goal_pred, pc2 =
+  let ass_lst_rev, goal, pat, case_goal_pred, pc2 =
     inductive_type_case_context cons_idx nms tp goal_pred nass pc
-  and pat =
-    let args = standard_substitution n in
-    Feature_table.feature_call cons_idx (nvars+n) args ags ft
   in
   let pc1 = PC.pop pc2 in
   if PC.is_tracing pc then begin

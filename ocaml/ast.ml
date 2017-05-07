@@ -1040,8 +1040,6 @@ let put_class
   if idx <> Constants.any_class && (hm.v = Deferred_hmark || creators.v <> [])
   then
     begin
-      if hm.v = Deferred_hmark && creators.v <> [] then
-        not_yet_implemented creators.i "Deferred inductive types";
       let ind_or_defer () =
         if hm.v = Deferred_hmark then "A deferred "
         else "An inductive "

@@ -115,6 +115,7 @@ val count_type_variables: t -> int
 val local_argnames: t -> names
 val local_formals: t -> formals
 val local_fgs: t -> formals
+val tvars: t -> Tvars.t
 
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool

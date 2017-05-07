@@ -1031,8 +1031,10 @@ let undefined_untyped (inf:info) (tb:TB.t) (c:Context.t): unit =
   | [] ->
      error_info
        inf
-       ("The types of some variables of some inner lambda expression "
-        ^ "cannot be inferred completely")
+       (" The types of some constants "
+        ^ "or of some variables of inner function or predicate expressions "
+        ^ "cannot be determined completely. "
+        ^ "Consider adding type annotations.")
   | _ ->
      let open Context in
      let nms = List.map (fun i -> ST.string (variable_name i c)) undefs in

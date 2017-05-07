@@ -534,7 +534,7 @@ let target (rd:t) (c:Context.t): term =
 
 let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
   (* Verify that the specialization of the first arguments by [args] is
-     possible and return needed actual generics.
+     possible and return the needed actual generics.
 
      The arguments [args] come from the context [c].
 
@@ -549,74 +549,35 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
      If [rd] does not have a global context, then both contexts must agree on
      the formal generics, they must not have global type variables but they may
      have a different number of local (untyped) type variables.
-
    *)
   let nargs = Array.length args in
   assert (nargs <= rd.ctxt.nargs);
   let argtps = Array.map (fun t -> Context.type_of_term t c) args
   and acttvs = Context.tvars c
+  and rdtvs  = Context.tvars rd.ctxt.c
+  and ct     = Context.class_table c
   in
-  if not (Context.is_global rd.ctxt.c) then begin
-    let reqtvs = Context.tvars rd.ctxt.c
-    and reqtps = Array.sub rd.ctxt.tps 0 nargs in
-    Class_table.verify_substitution reqtps reqtvs argtps acttvs;
-    [||]
-  end else begin (* global context !! *)
-    let nfgs = Array.length rd.ctxt.fgcon in
-    let ags = Array.init nfgs (fun i -> empty_term)
-    and reqtvs = Tvars.make_fgs rd.ctxt.fgnms rd.ctxt.fgcon
-    and ct = Context.class_table c in
-    let actnall = Tvars.count_all acttvs
-    and reqnall = Tvars.count_all reqtvs
-    in
-    let do_sub i tp =
-      if ags.(i) = empty_term then
-        ags.(i) <- tp
-      else if ags.(i) = tp then
-        ()
-      else
-        raise Not_found
-    in
-    let rec unify reqtp acttp =
-      let unicls i1 i2 =
-        if i1-nfgs = i2-actnall then
-          ()
-        else
-          raise Not_found
-      in
-      match reqtp, acttp with
-        Variable i1,_ when i1 < nfgs ->
-          assert (nfgs = reqnall);
-          if Class_table.satisfies acttp acttvs reqtp reqtvs ct then
-            do_sub i1 acttp
-          else
-            raise Not_found
-      | Variable i1, Variable i2 ->
-          unicls i1 i2
-      | VAppl(i1,args1,_,_), VAppl(i2,args2,_,_) ->
-          if Array.length args1 <> Array.length args2 then
-            raise Not_found;
-          unicls i1 i2;
-          uniargs args1 args2
-      | _ ->
-          raise Not_found
-    and uniargs args1 args2 =
-      let len = Array.length args2 in
-      assert (len <= Array.length args1);
-      for k = 0 to len-1 do
-        unify args1.(k) args2.(k)
+  let tvs  = Tvars.push_fgs rd.ctxt.fgnms rd.ctxt.fgcon rdtvs
+  and nfgs = Array.length rd.ctxt.fgcon in
+  let sub = Type_substitution.make nfgs tvs acttvs ct in
+  let open Type_substitution in
+  begin
+    try
+      for i = 0 to nargs - 1 do
+        unify rd.ctxt.tps.(i) argtps.(i) sub
       done
-    in
-    uniargs rd.ctxt.tps argtps;
-    let nfgs_used =
-      try
-        Search.array_find_min (fun tp -> tp = empty_term) ags
-      with Not_found ->
-        nfgs
-    in
-    assert (interval_for_all (fun i -> ags.(i) = empty_term) nfgs_used nfgs);
-    Array.sub ags 0 nfgs_used
-  end
+    with Reject ->
+      raise Not_found
+  end;
+  let len = greatest_plus1 sub in
+  assert (greatest_plus1 sub = nfgs); (*partial not yet tested*)
+  let ags = array len sub in
+  assert (
+      interval_for_all
+        (fun i -> ags.(i) <> empty_term)
+        0 len
+    );
+  ags
 
 
 let count_args_to_specialize (rd:t): int =
