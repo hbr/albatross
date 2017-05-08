@@ -820,14 +820,17 @@ let add_to_equalities (t:term) (idx:int) (pc:t): unit =
 
 let has_public_deferred (t:term) (pc:t): bool =
   assert (is_global pc);
-  let sublst = Term_table.find t 0 0 (seed_function pc) pc.def_ass in
-  match sublst with
-    [] ->
+  try
+    let sublst = Term_table.find t 0 0 (seed_function pc) pc.def_ass in
+    match sublst with
+      [] ->
       false
-  | [idx,sub] ->
-      true
-  | _ ->
-      assert false (* no duplicates *)
+    | [idx,sub] ->
+       true
+    | _ ->
+       assert false (* no duplicates *)
+  with Not_found ->
+    false
 
 
 

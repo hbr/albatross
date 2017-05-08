@@ -990,8 +990,10 @@ let rec prove_and_store
     ignore (PC.add_proved false (-1) t pt pc)
   in
   match prf with
-    SP_Axiom | SP_Deferred ->
+  | SP_Axiom ->
       store_unproved false elst pc1
+  | SP_Deferred ->
+      store_unproved true elst pc1
   | SP_Proof([],None) ->
       if PC.is_interface_use pc1 then
         store_unproved false elst pc1

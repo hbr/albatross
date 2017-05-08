@@ -7,10 +7,9 @@ deferred class G:ANY
 
 (/=) (a,b:G): BOOLEAN -> not (a = b)
 
-all(a:G) ensure a = a deferred end
-
 all(a,b:G)
     ensure
+        a = a
         a /= a ==> false
         a = b or a /= b
     end
