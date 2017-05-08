@@ -293,6 +293,30 @@ module M =
       and _,p2 = m2.name in
       p1 = p2
 
+    let uses0 (public:bool) (m1:t) (m2:t): bool =
+      (* Does the module [m1] use (publicly?) the module [m2]? *)
+      let uses_public id2 =
+        has_interface m1
+        && List.mem id2 (Src.full_dependencies (interface m1))
+      and uses_private id2 =
+        has_implementation m1
+        && List.mem id2 (Src.full_dependencies (implementation m1))
+      in
+      match m1.id, m2.id with
+      | Some id1, Some id2 ->
+         id1 = id2
+         || if public then
+              uses_public id2
+            else
+              uses_public id2 || uses_private id2
+      | _, _ ->
+         assert false (* call not allowed unless sorted *)
+
+    let uses_public (m1:t) (m2:t): bool =
+      uses0 true m1 m2
+
+    let uses (m1:t) (m2:t): bool =
+      uses0 false m1 m2
 
     let get (path:string) (name:string) (mname:module_name): t =
       let src_al =

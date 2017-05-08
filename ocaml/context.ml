@@ -451,30 +451,6 @@ let unique_names (nms:int array) (c:t): int array =
 
 
 
-let owner (c:t): int =
-  if is_toplevel c then
-    let ct  = class_table c
-    and tvs = c.entry.tvs
-    and s   = signature c
-    in
-    Class_table.owner tvs s ct
-  else
-    -1
-
-
-
-let anchor_class (c:t): int =
-  if is_toplevel c then
-    let ct  = class_table c
-    and tvs = c.entry.tvs
-    and s   = signature c
-    in
-    Class_table.anchor_class tvs s ct
-  else
-    -1
-
-
-
 let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
   Feature_table.split_equality t (nb + count_variables c) c.ft
 
@@ -484,10 +460,10 @@ let check_deferred (c:t): unit =
   and tvs = c.entry.tvs
   and s   = signature c
   in
-  let owner = Class_table.owner tvs s ct in
-  let anchored = Class_table.anchored tvs owner ct in
-  let nanchors = Array.length anchored in
-  Class_table.check_deferred owner nanchors c.entry.info ct
+  let dominant_cls = Class_table.dominant_class tvs s ct in
+  let dominant_fg  = Class_table.dominant_formal_generic tvs dominant_cls ct
+  in
+  Class_table.check_deferred dominant_cls dominant_fg c.entry.info ct
 
 
 let split_general_implication_chain

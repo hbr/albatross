@@ -64,6 +64,7 @@ val class_symbol: int -> t -> int
 
 val class_name:   int -> t -> string
 
+val has_module: int -> t -> bool
 val module_of_class: int -> t -> Module.M.t
 
 val is_deferred: int -> t -> bool
@@ -83,12 +84,9 @@ val generics: int -> t -> (bool*int) list
 val add_generic: int -> bool -> int -> t -> unit
 val add_generics: int -> bool -> Tvars.t -> t -> unit
 
-
-val owner: Tvars.t -> Sign.t -> t -> int
-val anchor_class: Tvars.t -> Sign.t -> t -> int
-val anchored: Tvars.t -> int -> t -> int array
-val anchor_formal_generics: Tvars.t -> Sign.t -> t -> int array
-val check_deferred:  int -> int -> info -> t -> unit
+val dominant_class: Tvars.t -> Sign.t -> t -> int option
+val dominant_formal_generic: Tvars.t -> int option -> t -> int option
+val check_deferred:  int option -> int option -> info -> t -> unit
 
 val find_for_declaration: int list*int -> t -> int
 

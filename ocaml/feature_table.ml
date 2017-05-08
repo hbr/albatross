@@ -78,13 +78,11 @@ class bdesc
 
 type descriptor = {
     mutable mdl: Module.M.t option;(* None: base feature, module not yet assigned*)
-    mutable cls: int;             (* owner class *)
-    anchor_cls:  int;
-    anchor_fg:   int;
+    dominant_cls:int option;
+    dominant_fg: int option;
     fname:       feature_name;
     impl:        Feature.implementation;
     tvs:         Tvars.t;         (* only formal generics *)
-    mutable anchored: int array;  (* formal generics anchored to the owner class *)
     argnames:    names;
     sign:        Sign.t;
     mutable tp:  type_term;
@@ -173,9 +171,6 @@ let signature (i:int) (ags:agens) (ntvs:int) (ft:t): Sign.t =
 let argument_names (i:int) (ft:t): int array =
   (descriptor i ft).argnames
 
-let class_of_feature (i:int) (ft:t): int =
-  (descriptor i ft).cls
-
 
 let arity (i:int) (ft:t): int =
   Sign.arity (descriptor i ft).sign
@@ -227,20 +222,36 @@ let base_descriptor (i:int) (ft:t): bdesc =
 
 
 
-let is_constructor (i:int) (ft:t): bool =
+let has_owner (i:int) (ft:t): bool =
+  assert (i < count ft);
+  Option.has (descriptor i ft).dominant_cls
+
+
+let owner (i:int) (ft:t): int =
+  assert (i < count ft);
+  Option.value (descriptor i ft).dominant_cls
+
+
+let is_ghost_function (i:int) (ft:t): bool =
   assert (i < count ft);
   let desc = descriptor i ft in
-  assert (desc.cls <> -1);
-  IntSet.mem i (Class_table.constructors desc.cls ft.ct)
+  Sign.is_ghost desc.sign
+
+
+let is_constructor (i:int) (ft:t): bool =
+  assert (i < count ft);
+  match (descriptor i ft).dominant_cls with
+  | None ->
+     false (* constructor must have an owner class *)
+  | Some cls ->
+     IntSet.mem i (Class_table.constructors cls ft.ct)
 
 
 
 
 let inductive_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
   assert (is_constructor i ft);
-  let desc = descriptor i ft in
-  assert (desc.cls <> -1);
-  let ctp, _ = Class_table.class_type desc.cls ft.ct in
+  let ctp, _ = Class_table.class_type (owner i ft) ft.ct in
   Term.subst ctp ntvs ags
 
 
@@ -252,7 +263,7 @@ let inductive_arguments (i:int) (ft:t): int list =
   let desc = descriptor i ft in
   let is_inductive arg_tp =
     try
-      desc.cls
+      owner i ft
       =  Class_table.inductive_class_of_type desc.tvs arg_tp ft.ct
     with Not_found ->
          false
@@ -1136,24 +1147,6 @@ let count_fgs (i:int) (ft:t): int =
   Tvars.count_fgs (descriptor i ft).tvs
 
 
-let anchor (i:int) (ft:t): int =
-  let desc = descriptor i ft in
-  (*let a = desc.anchor_fg in
-  if a = -1 then
-    raise Not_found
-  else
-    a*) (*anchor*)
-  if Array.length desc.anchored = 1 then
-    desc.anchored.(0)
-  else
-    raise Not_found
-
-
-let has_anchor (i:int) (ft:t): bool =
-  try let _ = anchor i ft in true
-  with Not_found -> false
-
-
 let seed (i:int) (ft:t): int =
   assert (i < count ft);
   (base_descriptor i ft)#seed
@@ -1636,17 +1629,6 @@ let body (i:int) (ft:t): Feature.body =
   bdesc#specification, desc.impl
 
 
-let owner (i:int) (ft:t): int =
-  assert (i < count ft);
-  (descriptor i ft).cls
-
-
-let is_ghost_function (i:int) (ft:t): bool =
-  assert (i < count ft);
-  let desc = descriptor i ft in
-  Sign.is_ghost desc.sign
-
-
 let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
   let rec is_ghost (t:term) (nb:int): bool =
     let rec ghost_args (args:term array) (i:int) (n:int): bool =
@@ -1821,7 +1803,6 @@ let definition_equality (i:int) (ft:t): term =
   and nfgs  = Tvars.count_all desc.tvs
   and r_tp  = Sign.result desc.sign
   in
-  assert (desc.cls <> -1);
   let f_id  = nargs + i
   in
   let t = Option.value (Feature.Spec.definition bdesc#specification) in
@@ -1900,8 +1881,7 @@ let find_seed_with_signature
    *)
   let ntvs = Tvars.count_all tvs in
   let tp   = Class_table.to_dummy ntvs sign in
-  let ntvs = Tvars.count_all tvs
-  and tab = Feature_map.find fn.v ft.map in
+  let tab = Feature_map.find fn.v ft.map in
   let lst  = Term_table.unify0 tp ntvs !tab in
   let lst =
     List.fold_left
@@ -1916,9 +1896,9 @@ let find_seed_with_signature
           assert (Tvars.count     desc.tvs = 0);
           let ok =
             interval_for_all
-            (fun i ->
-              Class_table.satisfies ags.(i) tvs (Variable i) desc.tvs ft.ct
-            )
+              (fun i ->
+                Class_table.satisfies ags.(i) tvs (Variable i) desc.tvs ft.ct
+              )
               0 len
           in
           if ok then
@@ -2025,7 +2005,6 @@ let add_keys (ft:t): unit =
   done
 
 
-
 let add_feature
     (fn:       feature_name withinfo)
     (tvs:      Tvars.t)
@@ -2041,36 +2020,30 @@ let add_feature
   in
   assert (not (Feature.Spec.has_definition spec));
   assert (Tvars.count tvs = 0);
+  let dominant_cls = Class_table.dominant_class tvs sign ft.ct in
+  let dominant_fg  = Class_table.dominant_formal_generic tvs dominant_cls ft.ct
+  in
   let classes =
     Array.map
       (fun tp -> Tvars.principal_class tp tvs)
       (Tvars.fgconcepts tvs)
   in
-  let cls = Class_table.owner tvs sign ft.ct
-  and anchor_fg, anchor_cls = Sign.anchor tvs sign in
-  let anchored = Class_table.anchored tvs cls ft.ct in
-  let nanchors = Array.length anchored in
-  begin match impl with
-    Feature.Deferred ->
-      Class_table.check_deferred cls nanchors fn.i ft.ct
-  | _ -> ()
-  end;
+  if impl = Feature.Deferred then
+    Class_table.check_deferred dominant_cls dominant_fg fn.i ft.ct;
   let bdesc = new  bdesc (is_interface_public_use ft) cnt nfgs classes spec
   and nfgs = Tvars.count_all tvs
   in
   let desc =
     {mdl      = Some (current_module ft);
-     cls      = cls;
-     anchor_cls = anchor_cls;
-     anchor_fg  = anchor_fg;
+     dominant_cls;
+     dominant_fg;
      fname    = fn.v;
-     impl     = impl;
-     tvs      = tvs;
-     argnames = argnames;
-     sign     = sign;
+     impl;
+     tvs;
+     argnames;
+     sign;
      tp       = Class_table.to_dummy nfgs sign;
-     anchored = anchored;
-     bdesc    = bdesc}
+     bdesc}
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
@@ -2128,10 +2101,6 @@ let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
 
 
 
-let set_owner_class (idx:int) (cls:int) (ft:t): unit =
-  assert (idx < count ft);
-  (descriptor idx ft).cls <- cls
-
 
 
 let export_feature (i:int) (ft:t): unit =
@@ -2177,8 +2146,9 @@ let add_base
   let bdesc = new bdesc is_exported cnt ntvs [|cls|] spec
   in
   let tvs = Tvars.make_fgs (standard_fgnames ntvs) concepts in
-  let anchored = Class_table.anchored tvs cls ft.ct in
-  let anchor_fg, anchor_cls = Sign.anchor tvs sign in
+  let dominant_cls = Class_table.dominant_class tvs sign ft.ct in
+  let dominant_fg  = Class_table.dominant_formal_generic tvs dominant_cls ft.ct
+  in
   let lst =
     try IntMap.find mdl_nme ft.base
     with Not_found ->
@@ -2188,19 +2158,17 @@ let add_base
   and desc = {
     mdl = None;
     fname    = fn;
-    cls      = cls;
-    anchor_cls = anchor_cls;
-    anchor_fg  = anchor_fg;
+    dominant_cls;
+    dominant_fg;
     impl     =
     if Feature.Spec.has_definition spec then Feature.Empty
     else if defer then Feature.Deferred
     else Feature.Builtin;
-    tvs      = tvs;
-    anchored = anchored;
+    tvs;
     argnames = standard_argnames nargs;
-    sign     = sign;
+    sign;
     tp       = Class_table.to_dummy ntvs sign;
-    bdesc    = bdesc
+    bdesc
   }
   in
   Seq.push desc ft.seq;
@@ -2633,7 +2601,7 @@ let check_interface (ft:t): unit =
        if is_current_module mdl ft
           && is_desc_deferred desc
           && not desc.bdesc#is_exported
-          && Class_table.is_class_public desc.cls ft.ct
+          && Class_table.is_class_public (owner i ft) ft.ct
        then
          begin
            let open Module in
@@ -2676,7 +2644,7 @@ let pattern_subterms (n:int) (pat:term) (nb:int) (ft:t): (int*term*int) list =
 let peer_constructors (i:int) (ft:t): IntSet.t =
   assert (i < count ft);
   assert (is_constructor i ft);
-  let cls = class_of_feature i ft in
+  let cls = owner i ft in
   assert (cls <> -1);
   let set = Class_table.constructors cls ft.ct in
   assert (IntSet.mem i set);

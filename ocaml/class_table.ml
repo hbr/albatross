@@ -2,7 +2,7 @@
 
    This file is distributed under the terms of the GNU General Public License
    version 2 (GPLv2) as published by the Free Software Foundation.
-*)
+ *)
 
 open Support
 open Term
@@ -14,9 +14,9 @@ type formal = int * type_term
 
 
 module CMap = Map.Make(struct
-  type t = int list * int
-  let compare = Pervasives.compare
-end)
+                        type t = int list * int
+                        let compare = Pervasives.compare
+                      end)
 
 
 
@@ -93,7 +93,7 @@ let standard_bdesc (hm:header_mark) (cvar:int) (tvs:Tvars.t) (idx:int)
       (fun i -> Variable i)
   in
   let anc  = IntMap.singleton idx
-      {is_ghost = false; actual_generics = args} in
+                              {is_ghost = false; actual_generics = args} in
   {hmark = hm;
    cvar;
    tvs;
@@ -157,6 +157,11 @@ let has_predicate (ct:t): bool =
 
 
 
+let has_module (cls:int) (ct:t): bool =
+  assert (cls < count ct);
+  Option.has (descriptor cls ct).mdl
+
+
 let module_of_class (cls:int) (ct:t): Module.M.t =
   assert (cls < count ct);
   let m = (descriptor cls ct).mdl in
@@ -177,19 +182,22 @@ let add_to_map (cls:int) (ct:t): unit =
   let is_main =
     String.lowercase_ascii (ST.string desc.name) = ST.string m
   in
-  if is_interface_use ct then begin
-    if not is_main then
-      ct.locs <- IntSet.add cls ct.locs;
-    ct.map <- CMap.add ([],desc.name) cls ct.map;
-    ct.map <- CMap.add ([m],desc.name) cls ct.map;
-    if pkg <> [] then
-      ct.map <- CMap.add (m::pkg,desc.name) cls ct.map;
-    if pkg <> [] && is_main then
-      ct.map <- CMap.add (pkg,desc.name) cls ct.map
-  end else begin
-    ct.map <- CMap.add ([],desc.name) cls ct.map;
-    ct.map <- CMap.add ([m],desc.name) cls ct.map
-  end
+  if is_interface_use ct then
+    begin
+      if not is_main then
+        ct.locs <- IntSet.add cls ct.locs;
+      ct.map <- CMap.add ([],desc.name) cls ct.map;
+      ct.map <- CMap.add ([m],desc.name) cls ct.map;
+      if pkg <> [] then
+        ct.map <- CMap.add (m::pkg,desc.name) cls ct.map;
+      if pkg <> [] && is_main then
+        ct.map <- CMap.add (pkg,desc.name) cls ct.map
+    end
+  else
+    begin
+      ct.map <- CMap.add ([],desc.name) cls ct.map;
+      ct.map <- CMap.add ([m],desc.name) cls ct.map
+    end
 
 
 
@@ -344,28 +352,28 @@ let upgrade_signature (ntvs:int) (is_pred:bool) (s:Sign.t): type_term =
 let result_type_of_compound (tp:type_term) (ntvs:int): type_term =
   let cls_idx,args = split_type tp in
   if cls_idx = ntvs + Constants.predicate_class then begin
-    assert (Array.length args = 1);
-    boolean_type ntvs
-  end else if cls_idx = ntvs + Constants.function_class ||
-              cls_idx = ntvs + Constants.dummy_class
+      assert (Array.length args = 1);
+      boolean_type ntvs
+    end else if cls_idx = ntvs + Constants.function_class ||
+                  cls_idx = ntvs + Constants.dummy_class
   then begin
-    assert (Array.length args = 2);
-    args.(1)
-  end else
+      assert (Array.length args = 2);
+      args.(1)
+    end else
     raise Not_found
 
 
 
 let is_boolean_binary (s:Sign.t) (ntvs:int): bool =
-  (Sign.is_binary s) &&
-  (Sign.arg_type 0 s) = (boolean_type ntvs) &&
-  (Sign.arg_type 1 s) = (boolean_type ntvs) &&
-  (Sign.result s)     = (boolean_type ntvs)
+  (Sign.is_binary s)
+  && (Sign.arg_type 0 s) = (boolean_type ntvs)
+  && (Sign.arg_type 1 s) = (boolean_type ntvs)
+  && (Sign.result s)     = (boolean_type ntvs)
 
 let is_boolean_unary (s:Sign.t) (ntvs:int): bool =
-  (Sign.is_unary s) &&
-  (Sign.arg_type 0 s) = (boolean_type ntvs) &&
-  (Sign.result s)     = (boolean_type ntvs)
+  (Sign.is_unary s)
+  && (Sign.arg_type 0 s) = (boolean_type ntvs)
+  && (Sign.result s)     = (boolean_type ntvs)
 
 
 
@@ -378,7 +386,8 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
   let rec to_string(t:term) (nb:int) (prec:int): string =
     let args_to_string (tarr:term array) (nb:int): string =
       "["
-      ^ (String.concat ","
+      ^ (String.concat
+           ","
            (Array.to_list (Array.map (fun t -> to_string t nb 1) tarr)))
       ^ "]"
     in
@@ -393,32 +402,32 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
          else
            class_name (j-nb-nfgs) ct
       | Application(Variable j, tarr, _ ) ->
-          let j1 = j-nb-nfgs
-          and tarrlen = Array.length tarr in
-          if j1 = Constants.predicate_class then begin
-            assert (tarrlen=1);
-            1, ("{" ^ (to_string tarr.(0) nb 1) ^ "}")
-          end else if j1 = Constants.sequence_class then begin
-            assert (tarrlen=1);
-            1, ((to_string tarr.(0) nb 1) ^ "*")
-          end else if j1 = Constants.list_class then begin
-            assert (tarrlen=1);
-            1, ("[" ^ (to_string tarr.(0) nb 1) ^ "]")
-          end else if j1 = Constants.function_class then begin
-            assert (tarrlen=2);
-            1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
-          end else if j1 = Constants.tuple_class then begin
-            assert (tarrlen=2);
-            0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
-          end else begin
-            2,
-            (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
-            end
+         let j1 = j-nb-nfgs
+         and tarrlen = Array.length tarr in
+         if j1 = Constants.predicate_class then begin
+             assert (tarrlen=1);
+             1, ("{" ^ (to_string tarr.(0) nb 1) ^ "}")
+           end else if j1 = Constants.sequence_class then begin
+             assert (tarrlen=1);
+             1, ((to_string tarr.(0) nb 1) ^ "*")
+           end else if j1 = Constants.list_class then begin
+             assert (tarrlen=1);
+             1, ("[" ^ (to_string tarr.(0) nb 1) ^ "]")
+           end else if j1 = Constants.function_class then begin
+             assert (tarrlen=2);
+             1, ((to_string tarr.(0) nb 2) ^ "->" ^ (to_string tarr.(1) nb 1))
+           end else if j1 = Constants.tuple_class then begin
+             assert (tarrlen=2);
+             0, ((to_string tarr.(0) nb 1) ^ "," ^ (to_string tarr.(1) nb 0))
+           end else begin
+             2,
+             (to_string (Variable j) nb 1) ^ (args_to_string tarr nb)
+           end
       | VAppl (j,tarr,_,_) ->
          printf "type2string VAppl cannot happen %s\n" (Term.to_string t);
          0, to_string (make_type j tarr) nb 1
       | _ ->
-          assert false (* cannot happen with types *)
+         assert false (* cannot happen with types *)
     in
     if inner_prec < prec then "(" ^ str ^ ")" else str
   in
@@ -447,7 +456,7 @@ let string_of_fgconcepts (tvs:Tvars.t) (ct:t): string =
   String.concat
     ","
     (List.map (fun (n,tp) ->
-      (ST.string n) ^ ":" ^ (string_of_type tp tvs ct)) lst)
+         (ST.string n) ^ ":" ^ (string_of_type tp tvs ct)) lst)
 
 
 let string_of_tvs (tvs:Tvars.t) (ct:t): string =
@@ -495,7 +504,8 @@ let string_of_inner_fgs (nfgs:int) (tvs:Tvars.t) (ct:t): string =
 let string_of_sub (sub:Term_sub.t) (tvs:Tvars.t) (ct:t): string =
   let lst = Term_sub.to_list sub in
   let str =
-    String.concat ","
+    String.concat
+      ","
       (List.map
          (fun (i,t) ->
            (string_of_int i) ^ ":=" ^ (string_of_type t tvs ct))
@@ -506,7 +516,7 @@ let string_of_sub (sub:Term_sub.t) (tvs:Tvars.t) (ct:t): string =
 
 
 let arguments_string
-    (tvs:Tvars.t) (args:formal array) (ct:t)
+      (tvs:Tvars.t) (args:formal array) (ct:t)
     : string =
   (* The string "(a:A, b1,b2:B, ... )" of the arguments [args] within the
      type environment [tvs].
@@ -521,31 +531,31 @@ let arguments_string
     let fargs = Array.to_list args
     in
     let llst = List.fold_left
-        (fun ll (n,tp) -> match ll with
-          [] -> [[n],tp]
-        | (ns,tp1)::tl ->
-            if tp=tp1 then (n::ns,tp)::tl
-            else           ([n],tp)::ll )
-        []
-        fargs
+                 (fun ll (n,tp) -> match ll with
+                                     [] -> [[n],tp]
+                                   | (ns,tp1)::tl ->
+                                      if tp=tp1 then (n::ns,tp)::tl
+                                      else           ([n],tp)::ll )
+                 []
+                 fargs
     in
     "("
     ^  String.concat
-        ","
-        (List.rev_map
-           (fun (ns,tp) ->
-             let ntvs = Tvars.count tvs in
-             (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
-             ^ ":"
-             ^ (type2string tp ntvs (Tvars.fgnames tvs) ct))
-           llst)
+         ","
+         (List.rev_map
+            (fun (ns,tp) ->
+              let ntvs = Tvars.count tvs in
+              (String.concat "," (List.rev_map (fun n -> ST.string n) ns))
+              ^ ":"
+              ^ (type2string tp ntvs (Tvars.fgnames tvs) ct))
+            llst)
     ^ ")"
 
 
 
 
 let arguments_string2
-    (tvs:Tvars.t) (nms:names) (tps:types) (ct:t)
+      (tvs:Tvars.t) (nms:names) (tps:types) (ct:t)
     : string =
   (* The string "(a:A, b1,b2:B, ... )" of the arguments [args] within the
      type environment [tvs] prefixed of a potential list of formal generics.
@@ -601,11 +611,11 @@ let find_for_declaration (cn:int list*int) (ct:t): int =
 
 
 let extract_from_tuple
-    (nargs:int) (ntvs:int) (tp:type_term): type_term array =
+      (nargs:int) (ntvs:int) (tp:type_term): type_term array =
   assert (0 < nargs);
   let tup_idx = ntvs + Constants.tuple_class in
   let rec extract
-      (n:int) (tp:type_term) (lst:type_term list): type_term list =
+            (n:int) (tp:type_term) (lst:type_term list): type_term list =
     assert (0 < n);
     if n = 1 then
       tp :: lst
@@ -614,7 +624,7 @@ let extract_from_tuple
       if cls_idx = tup_idx then
         extract (n-1) args.(1) (args.(0)::lst)
       else
-         raise Not_found
+        raise Not_found
   in
   let lst = extract nargs tp [] in
   Array.of_list (List.rev lst)
@@ -628,8 +638,8 @@ let extract_from_tuple_max (ntvs:int) (tp:type_term): type_term array =
   let rec extract (tp:type_term) (lst:type_term list): type_term list =
     let cls_idx, args = split_type tp in
     if cls_idx = tup_idx then begin
-      extract args.(1) (args.(0)::lst)
-    end else
+        extract args.(1) (args.(0)::lst)
+      end else
       tp :: lst
   in
   let lst = extract tp [] in
@@ -644,15 +654,15 @@ let arity_of_downgraded (ntvs:int) (tp:type_term): int =
   in
   let cls,args = split_type tp in
   if cls = pred_idx || cls = func_idx || cls = dum_idx then begin
-    assert (0 < Array.length args);
-    let args = extract_from_tuple_max ntvs args.(0) in
-    Array.length args
-  end else
+      assert (0 < Array.length args);
+      let args = extract_from_tuple_max ntvs args.(0) in
+      Array.length args
+    end else
     0
 
 
 let downgrade_signature
-    (ntvs:int) (sign:Sign.t) (nargs:int): Sign.t =
+      (ntvs:int) (sign:Sign.t) (nargs:int): Sign.t =
   assert (Sign.arity sign < nargs);
   if not (Sign.is_constant sign || Sign.arity sign = 1) then
     raise Not_found;
@@ -665,24 +675,29 @@ let downgrade_signature
     let cls_idx,args = split_type tp in
     if cls_idx < ntvs then
       raise Not_found
-    else if cls_idx = pred_idx then begin
-      assert (Array.length args = 1);
-      Sign.make_func
-        (extract_from_tuple nargs ntvs args.(0))
-        (boolean_type ntvs)
-    end else if cls_idx = func_idx || cls_idx = dum_idx then begin
-      assert (Array.length args = 2);
-      Sign.make_func
-        (extract_from_tuple nargs ntvs args.(0))
-        args.(1)
-    end else
+    else if cls_idx = pred_idx then
+      begin
+        assert (Array.length args = 1);
+        Sign.make_func
+          (extract_from_tuple nargs ntvs args.(0))
+          (boolean_type ntvs)
+      end
+    else if cls_idx = func_idx || cls_idx = dum_idx then
+      begin
+        assert (Array.length args = 2);
+        Sign.make_func
+          (extract_from_tuple nargs ntvs args.(0))
+          args.(1)
+      end
+    else
       raise Not_found
-  else begin
-    let args, rt = Sign.arguments sign, Sign.result_type sign in
-    assert (Array.length args = 1);
-    let args = extract_from_tuple nargs ntvs args.(0) in
-    Sign.make args rt
-  end
+  else
+    begin
+      let args, rt = Sign.arguments sign, Sign.result_type sign in
+      assert (Array.length args = 1);
+      let args = extract_from_tuple nargs ntvs args.(0) in
+      Sign.make args rt
+    end
 
 
 
@@ -720,7 +735,7 @@ let is_inductive_class (cls:int) (ct:t): bool =
 
 
 let set_constructors
-    (base_set:IntSet.t) (set:IntSet.t) (cls:int) (ct:t): unit =
+      (base_set:IntSet.t) (set:IntSet.t) (cls:int) (ct:t): unit =
   assert (cls < count ct);
   assert (not (is_interface_check ct));
   let bdesc = base_descriptor cls ct in
@@ -765,28 +780,28 @@ let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
   class_ tp
 
 let export
-    (idx:   int)
-    (hm:    header_mark withinfo)
-    (tvs:   Tvars.t)
-    (ct:    t)
+      (idx:   int)
+      (hm:    header_mark withinfo)
+      (tvs:   Tvars.t)
+      (ct:    t)
     : unit =
   let desc = Seq.elem idx ct.seq in
   let hm1, hm2 = desc.bdesc.hmark, hm.v in
   if hm1 <> hm2 then begin
-    let hstr = hmark2string hm1 in
-    let hstr = if hstr = "" then "" else " \"" ^ hstr ^ "\"" in
-    error_info
-      hm.i
-      ("Header mark is not consistent with previous header mark" ^
-       hstr)
-  end;
+      let hstr = hmark2string hm1 in
+      let hstr = if hstr = "" then "" else " \"" ^ hstr ^ "\"" in
+      error_info
+        hm.i
+        ("Header mark is not consistent with previous header mark" ^
+           hstr)
+    end;
   if not (Tvars.is_equivalent desc.bdesc.tvs tvs) then begin
-    let str =
-      "The formal generics are not consistent with previous declaration\n" ^
-      "   previous declaration \"" ^ (string_of_tvs desc.bdesc.tvs ct)
-      ^ "\""
-    in error_info hm.i str
-  end;
+      let str =
+        "The formal generics are not consistent with previous declaration\n" ^
+          "   previous declaration \"" ^ (string_of_tvs desc.bdesc.tvs ct)
+          ^ "\""
+      in error_info hm.i str
+    end;
   desc.bdesc.tvs <- tvs;
   desc.is_exp    <- true
 
@@ -812,116 +827,121 @@ let add_generic (idx:int) (is_ass:bool) (cls:int) (ct:t): unit =
 let add_generics (idx:int) (is_ass:bool) (tvs:Tvars.t) (ct:t): unit =
   assert (Tvars.count_all tvs = Tvars.count_fgs tvs);
   let set = Array.fold_left
-      (fun set tp -> IntSet.add (Tvars.principal_class tp tvs) set)
-      IntSet.empty
-      (Tvars.fgconcepts tvs) in
+              (fun set tp -> IntSet.add (Tvars.principal_class tp tvs) set)
+              IntSet.empty
+              (Tvars.fgconcepts tvs) in
   IntSet.iter
     (fun cls -> add_generic idx is_ass cls ct)
     set
 
 
 
-let anchor_formal_generics (tvs:Tvars.t) (s:Sign.t) (ct:t): int array =
-  assert (Tvars.count tvs = 0);
-  let nfgs = Tvars.count_fgs tvs
-  in
-  let add_formal_generic tp fgs =
-    match tp with
-      Variable i when i < nfgs ->
-        IntSet.add i fgs
-    | _ ->
-        fgs
-  in
-  let fgs =
-    Array.fold_left
-      (fun fgs tp -> add_formal_generic tp fgs)
+let can_see (c1:int) (c2:int) (ct:t): bool =
+  (* Can class [c1] see [c2] i.e. has [c2] been defined before in the same
+     module or i   n a module which is used by the current module? *)
+  if not (has_module c1 ct  && has_module c2 ct) then
+    c2 <= c1
+  else
+    let m1 = module_of_class c1 ct
+    and m2 = module_of_class c2 ct in
+    if Module.M.equal m1 m2 then
+      c1 >= c2
+    else if is_public ct then
+      Module.M.uses_public m1 m2
+    else
+      Module.M.uses m1 m2
+
+
+
+let can_see_all (c:int) (cs:IntSet.t) (ct:t): bool =
+  IntSet.for_all (fun c2 -> can_see c c2 ct) cs
+
+
+
+let dominant_class (tvs:Tvars.t) (s:Sign.t) (ct:t): int option =
+  let classes = Sign.involved_classes tvs s in
+  let owners =
+    IntSet.fold
+      (fun c owners ->
+        if can_see_all c classes ct then
+          IntSet.add c owners
+        else
+          owners
+      )
+      classes
       IntSet.empty
-      (Sign.arguments s)
   in
-  let fgs =
-    if Sign.has_result s then
-      add_formal_generic (Sign.result s) fgs
-    else
-      fgs
-  in
-  Array.of_list (IntSet.elements fgs)
+  if IntSet.cardinal owners = 1 then
+    Some (IntSet.choose owners)
+  else
+    None
 
 
 
-let anchor_class (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
-  let _,cls = Sign.anchor tvs s in cls
-
-
-
-let owner (tvs:Tvars.t) (s:Sign.t) (ct:t): int =
-  let max (cidx1:int) (cidx2:int): int =
-    if cidx1 = cidx2 then
-      cidx1
-    else
-      let open Module in
-      match (descriptor cidx1 ct).mdl, (descriptor cidx2 ct).mdl with
-      | Some m1, Some m2 ->
-         let id1 = M.id m1
-         and id2 = M.id m2 in
-         if id1 = id2 then
-           if cidx1 < cidx2 then cidx2 else cidx1
-         else
-           if id1 < id2 then cidx2 else cidx1
-      | _, _ ->
-         assert false (* involved classes must belong to modules *)
-  in
-  let set =
-    if Sign.arity s > 0 then Sign.involved_classes_arguments tvs s
-    else Sign.involved_classes tvs s in
-  IntSet.fold
-    (fun i idx_max -> if idx_max = -1 then i else max i idx_max)
-    set
-    (-1)
-
-
-let anchored (tvs:Tvars.t) (cls:int) (ct:t): int array =
-  assert (Tvars.count tvs = 0);
-  let nfgs = Tvars.count_all tvs
-  in
-  let anch = ref [] in
-  for i = 0 to nfgs - 1 do
-    let pcls = Tvars.principal_class (Variable i) tvs in
-    if pcls = cls then
-        anch := i :: !anch;
-  done;
-  Array.of_list (List.rev !anch)
-
-
-let check_deferred  (owner:int) (nanchors:int) (info:info) (ct:t): unit =
-  let desc  = descriptor owner ct
-  and bdesc = base_descriptor owner ct in
-  (match bdesc.hmark with
-    Deferred_hmark -> ()
-  | _ ->
-      error_info info
-        ("The owner class " ^ (class_name owner ct) ^ " is not deferred")
-  );
-  match desc.mdl with
+let dominant_formal_generic (tvs:Tvars.t) (owner:int option) (ct:t): int option =
+  match owner with
   | None ->
-     assert false (* owner class must have a module *)
-  | Some m ->
-     if not (is_current_module m ct) then
-       error_info
-         info
-         ("Can be defined only in the module \""
-          ^ Module.M.string_of_name m
-          ^ "\" of the owner class "
-          ^ class_name owner ct)
-     else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants)
-     then
-       error_info
-         info
-         ("Owner class " ^ (class_name owner ct) ^" has already descendants")
-     else if nanchors <> 1 then
-       error_info
-         info
-         ("There must be a unique formal generic anchored to the owner class " ^
-            (class_name owner ct))
+     None
+  | Some owner ->
+     let fgtps = Tvars.fgconcepts tvs
+     and nfgs  = Tvars.count_fgs tvs in
+     let fgs =
+       interval_fold
+         (fun fgs i ->
+           match fgtps.(i) with
+           | Variable j when nfgs <= j ->
+              if j = owner + nfgs then
+                IntSet.add i fgs
+              else
+                fgs
+           | _ ->
+              assert false (* Cannot happen with concepts *)
+         )
+         IntSet.empty
+         0 nfgs
+     in
+     if IntSet.cardinal fgs = 1 then
+       Some (IntSet.choose fgs)
+     else
+       None
+
+
+
+let check_deferred  (owner:int option) (fg:int option) (info:info) (ct:t): unit =
+  match owner with
+  | None ->
+     ()
+  | Some owner ->
+     let desc  = descriptor owner ct
+     and bdesc = base_descriptor owner ct in
+     (match bdesc.hmark with
+        Deferred_hmark -> ()
+      | _ ->
+         error_info
+           info
+           ("The owner class " ^ (class_name owner ct) ^ " is not deferred")
+     );
+     match desc.mdl with
+     | None ->
+        ()
+     | Some m ->
+        if not (is_current_module m ct) then
+          error_info
+            info
+            ("Can be defined only in the module \""
+             ^ Module.M.string_of_name m
+             ^ "\" of the owner class "
+             ^ class_name owner ct)
+        else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants)
+        then
+          error_info
+            info
+            ("Owner class " ^ (class_name owner ct) ^" has already descendants")
+        else if fg = None then
+          error_info
+            info
+            ("There must be a unique formal generic anchored to the owner class " ^
+               (class_name owner ct))
 
 
 
@@ -968,8 +988,20 @@ let rec satisfies_0
     | Variable i when i < nall1 ->
         let tp1 = Tvars.concept i tvs1 in
         sat0 tp1 tp2
+    | Application (Variable i, args, _) when i < nall1 ->
+       assert (i <= ntvs1);
+       begin
+         match Tvars.concept i tvs1 with
+         | Variable i0 ->
+            assert (nall1 <= i0);
+            sat0 (make_type i0 args) tp2
+         | _ ->
+            assert false (* Concept has to be a class *)
+       end
+    | Variable _  | Application _  ->
+       sat0 tp1 tp2
     | _ ->
-        sat0 tp1 tp2
+       assert false (* cannot happen with types *)
   in
   match tp2 with
     Variable j when j < ntvs2 -> true
@@ -981,7 +1013,7 @@ let rec satisfies_0
 
 
 
-let rec satisfies
+let satisfies
     (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
     : bool =
   let findfun (c1:int) (c2:int): type_term array =

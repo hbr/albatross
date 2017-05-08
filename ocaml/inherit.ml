@@ -86,12 +86,14 @@ let check_ghost_variant
 
 let inherit_feature
     (idx:int)
+    (par:int)
     (cls:int)
     (ghost:bool)
     (info:info)
     (pc:PC.t)
     : (int*bool*int*agens) list =
-  (* Inherit the feature [idx] in the class [cls].
+  (* Inherit the feature [idx] via the new inheritance relation between [par]
+     and [cls].
 
      - Find all new variants of the feature. Variants are either new variants
        which can be found in the search tables or already existing variants of
@@ -108,7 +110,7 @@ let inherit_feature
      - Return a list of triples with
             sd:   Seed of the variant
             ivar: New variant
-            ags:  Actual generics to substituted the formal generics of the seed.
+            ags:  Actual generics to substitute the formal generics of the seed.
    *)
   let ft = PC.feature_table pc in
   let defer = Feature_table.is_deferred idx ft in
@@ -159,7 +161,7 @@ let inherit_feature
       error_info info str
     in
     match lst with
-      [sd,is_new,ivar,ags] ->
+    | [sd,is_new,ivar,ags] ->
         assert (Array.length ags = 1); (* nyi: deferred features with more than
                                           one formal generic *)
         let tvs = Feature_table.tvars ivar ft in
@@ -217,18 +219,22 @@ let inherit_assertion (i:int) (cls:int) (info:info) (pc:PC.t): unit =
 let inherit_generics
     (par:int) (cls:int) (ghost:bool) (info:info) (pc:PC.t)
     : unit =
-  (* Inherit in the generic features/assertions of the parent class [par] in
+  (* Inherit the generic features/assertions of the parent class [par] in
      the class [cls]. *)
   let ft = PC.feature_table pc in
   let sd_var_lst =
     List.fold_left
       (fun lst (is_ass,idx) ->
-        if is_ass then begin
-          inherit_assertion idx cls info pc;
-          lst
-        end else
-          let lst1 = inherit_feature idx cls ghost info pc in
-          List.rev_append lst1 lst
+        if is_ass then
+          begin
+            inherit_assertion idx cls info pc;
+            lst
+          end
+        else
+          begin
+            let lst1 = inherit_feature idx par cls ghost info pc in
+            List.rev_append lst1 lst
+          end
       )
       []
       (Class_table.generics par (class_table pc))

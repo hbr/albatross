@@ -166,6 +166,7 @@ let store_unproved
     else
       -1
   in
+  assert (not is_defer || anchor <> -1);
   let pc0 = PC.pop pc in
   PC.add_proved_list is_defer anchor pair_lst pc0
 
@@ -188,7 +189,7 @@ let prove_goal (goal: info_term) (pc:PC.t): unit =
   let idx = prove_insert_report goal false pc in
   let t,pt = PC.discharged_bubbled idx pc in
   let pc0 = PC.pop pc in
-  ignore (PC.add_proved false (-1) t pt pc0)
+  ignore (PC.add_proved t pt pc0)
 
 
 
@@ -987,7 +988,7 @@ let rec prove_and_store
         error_info goal.i ("Cannot prove" ^ msg)
     in
     let t,pt = PC.discharged_bubbled idx pc1 in
-    ignore (PC.add_proved false (-1) t pt pc)
+    ignore (PC.add_proved t pt pc)
   in
   match prf with
   | SP_Axiom ->
@@ -1084,7 +1085,7 @@ and prove_sequence
               error_info goal.i ("Cannot prove" ^ msg)
           in
           let t,pt = PC.discharged_bubbled idx pc1 in
-          expand (PC.add_proved false (-1) t pt pc)
+          expand (PC.add_proved t pt pc)
       end;
       PC.close pc
     )

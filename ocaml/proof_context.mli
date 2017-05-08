@@ -76,8 +76,8 @@ val close_assumptions:  t -> unit
 val discharged:         int  -> t -> term * proof_term
 val discharged_bubbled: int  -> t -> term * proof_term
 val add_proved_term:    term -> proof_term -> bool -> t -> int
-val add_proved_0:       bool -> int -> term -> proof_term -> int -> t -> int
-val add_proved:         bool -> int -> term -> proof_term -> t -> int
+val add_proved_with_delta: term -> proof_term -> int -> t -> int
+val add_proved:         term -> proof_term -> t -> int
 val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
 val remove_or_remap:    IntSet.t -> t -> unit
 val premises:           int -> t -> (term*bool) list
@@ -131,7 +131,6 @@ val assumption_indices: t -> int list
 val assumptions_for_variables: int array -> int list -> t -> int list * int list
 val check_deferred: t -> unit
 val owner:          t -> int
-val anchor_class:   t -> int
 
 
 val add_induction_law0:  int -> t -> unit

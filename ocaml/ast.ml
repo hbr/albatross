@@ -178,17 +178,6 @@ let add_axioms (lst:term withinfo list) (pc:Proof_context.t): (int*info) list =
 
 
 
-let add_proved
-    (defer: bool)
-    (owner: int)
-    (lst: (term*proof_term) list)
-    (pc:Proof_context.t)
-    : unit =
-  Proof_context.add_proved_list defer owner lst pc
-
-
-
-
 let function_property_list (lst:compound) (pc:PC.t): term list =
   let pc1 = Proof_context.push_empty pc in
   List.map
@@ -212,7 +201,7 @@ let add_property_assertion
   let lst = Feature_table.function_property_assertions idx ft in
   List.iter
     (fun t ->
-      ignore(PC.add_proved false (-1) t (Axiom t) pc)
+      ignore(PC.add_proved t (Axiom t) pc)
     )
     lst
 
@@ -648,7 +637,7 @@ let analyze_feature
 
 
 let add_case_axiom (t:term) (pc:Proof_context.t): int =
-  Proof_context.add_proved false (-1) t (Proof.Axiom t) pc
+  PC.add_proved t (Proof.Axiom t) pc
 
 
 
@@ -941,7 +930,6 @@ let put_creators
           Feature_table.add_feature fn tvs nms sign imp ft
         else if is_export then
           Feature_table.export_feature idx ft;
-        Feature_table.set_owner_class idx cls ft;
         update_feature fn.i idx is_new is_export spec imp pc;
         let is_base = is_base_constructor idx cls pc in
         if is_base && c1lst <> [] then

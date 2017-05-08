@@ -21,15 +21,7 @@ val count:      t -> int
 val count_fgs:  int -> t -> int
     (** [count_fgs i ft] returns the number of formal generics of the feature [i] *)
 
-val anchor: int -> t -> int
-    (** [anchor i ft] returns the formal generic which serves as an anchor for
-        inheritance. Raises [Not_found] if there is no unique anchor *)
-
-
-val class_of_feature:  int -> t -> int
 val arity: int -> t -> int
-
-val has_anchor: int -> t -> bool
 
 val is_deferred: int -> t -> bool
 
@@ -182,7 +174,6 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
   -> Feature.implementation -> t -> unit
 val add_equality: int -> t -> unit
 val update_specification: int -> Feature.Spec.t -> t -> unit
-val set_owner_class:      int -> int -> t -> unit
 val export_feature: int -> t -> unit
 val export_equality: int -> t -> unit
 

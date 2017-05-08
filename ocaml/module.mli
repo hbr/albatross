@@ -43,6 +43,8 @@ sig
   val implementation: t -> Src.t
   val has_id: t -> bool
   val id: t -> int
+  val uses_public: t -> t -> bool
+  val uses: t -> t -> bool
   val get: string -> string -> module_name -> t
 end
 

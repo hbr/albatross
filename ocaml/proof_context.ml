@@ -29,6 +29,7 @@ type entry = {mutable prvd: Term_table.t;  (* all proved (incl. schematic) terms
 
 
 type gdesc = {mutable pub: bool;
+              (*deferred: int option; ( * The owner class of a deferred assertion *)
               defer: bool;
               anchor: int}
 
@@ -304,6 +305,9 @@ let is_local_assumption (i:int) (pc:t): bool =
 
 let tvars (pc:t): Tvars.t =
   Context.tvars (context pc)
+
+let signature (pc:t): Signature.Sign.t =
+  Context.signature (context pc)
 
 let string_of_term (t:term) (pc:t): string =
   Context.string_of_term t (context pc)
@@ -2095,9 +2099,18 @@ let boolean_type (nb:int) (pc:t): type_term =
 
 let check_deferred (pc:t): unit = Context.check_deferred (context pc)
 
-let owner (pc:t): int = Context.owner (context pc)
+let owner (pc:t): int =
+  (* The owner class of the signature *)
+  assert (is_toplevel pc);
+  let ct = class_table pc
+  and tvs = tvars pc
+  and s   = signature pc in
+  match Class_table.dominant_class tvs s ct with
+  | None ->
+     -1
+  | Some cls ->
+     cls
 
-let anchor_class (pc:t): int = Context.anchor_class (context pc)
 
 let variant (i:int) (bcls:int) (cls:int) (pc:t): term =
   Proof_table.variant i bcls cls pc.base
@@ -2589,23 +2602,28 @@ let add_proved_0
   end;
   cnt
 
+let add_proved_with_delta
+      (t:term)
+      (pterm:proof_term)
+      (delta: int)
+      (pc:t)
+    : int =
+  add_proved_0 false (-1) t pterm delta pc
 
 
 let add_proved
-    (defer:bool)
-    (owner:int)
     (t:term)
     (pterm:proof_term)
     (pc:t)
     : int =
-  add_proved_0 defer owner t pterm 0 pc
+  add_proved_0 false (-1) t pterm 0 pc
 
 
 
 
 let add_proved_list
     (defer:bool)
-    (owner:int)
+    (anchor:int)
     (lst: (term*proof_term) list)
     (pc:t)
     : unit =
@@ -2613,7 +2631,7 @@ let add_proved_list
   List.iter
     (fun (t,pt) ->
       let delta = count pc - cnt in
-      let _ = add_proved_0 defer owner t pt delta pc in ())
+      let _ = add_proved_0 defer anchor t pt delta pc in ())
     lst
 
 
@@ -2654,8 +2672,10 @@ let remove_or_remap (set:IntSet.t) (pc:t): unit =
 let add_induction_law0 (cls:int) (pc:t): unit =
   assert (is_global pc);
   let law = Proof_table.type_induction_law cls pc.base
-  and pt  = Indtype cls in
-  let idx = add_proved_0 false (-1) law pt 0 pc in
+  and pt  = Indtype cls
+  and defer = Class_table.is_deferred cls (class_table pc)
+  in
+  let idx = add_proved_0 defer cls law pt 0 pc in
   let ct = class_table pc in
   Class_table.set_induction_law idx cls ct
 

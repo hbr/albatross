@@ -163,8 +163,6 @@ val string_of_feature_signature: int -> t -> string
 val transformed_term0: term -> int -> t -> t -> term
 val transformed_term:  term -> t -> t -> term
 
-val owner:          t -> int
-val anchor_class:   t -> int
 val check_deferred: t -> unit
 
 val is_case_match_expression: term -> t -> bool
