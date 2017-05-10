@@ -1042,35 +1042,36 @@ let valid_type
   let ntvs  = Tvars.count tvs
   and nall  = Tvars.count_all tvs
   and nargs = Array.length args in
-  if cls_idx < ntvs then begin
-    assert false (* shall never happen *)
-  end else if cls_idx < nall then begin
-    if nargs <> 0 then
-      error_info info "Generics cannot have actual generics"
+  assert (ntvs <= cls_idx);
+  let cls_idx_0 =
+    if cls_idx < nall then
+      match Tvars.concept cls_idx tvs with
+      | Variable i ->
+         assert (nall <= i);
+         i - nall
+      | _ ->
+         assert false (* Concept has to be a class *)
     else
-      Variable cls_idx
-  end else begin
-    let cls_idx_0 = cls_idx - nall in
-    let bdesc = base_descriptor cls_idx_0 ct in
-    let fgconcepts = Tvars.fgconcepts bdesc.tvs in
-    if nargs <> Array.length fgconcepts then
-      error_info info "number of actual generics wrong";
-    for i = 0 to nargs-1 do
-      if satisfies args.(i) tvs fgconcepts.(i) bdesc.tvs ct then
-        ()
-      else
-        error_info info ("actual generic #" ^ (string_of_int i) ^
-                         " " ^ (string_of_type args.(i) tvs ct) ^
-                         " of class " ^ (class_name cls_idx_0 ct) ^
-                         " does not satisfy the required concept " ^
-                         (string_of_type fgconcepts.(i) bdesc.tvs ct))
-    done;
-    if nargs = 0 then
-      Variable cls_idx
+      cls_idx - nall
+  in
+  let bdesc = base_descriptor cls_idx_0 ct in
+  let fgconcepts = Tvars.fgconcepts bdesc.tvs in
+  if nargs <> Array.length fgconcepts then
+    error_info info "number of actual generics wrong";
+  for i = 0 to nargs-1 do
+    if satisfies args.(i) tvs fgconcepts.(i) bdesc.tvs ct then
+      ()
     else
-      make_type cls_idx args
-  end
-
+      error_info info ("actual generic #" ^ (string_of_int i)
+                       ^ " " ^ (string_of_type args.(i) tvs ct)
+                       ^ " of class " ^ (class_name cls_idx_0 ct)
+                       ^ " does not satisfy the required concept "
+                       ^ (string_of_type fgconcepts.(i) bdesc.tvs ct))
+  done;
+  if nargs = 0 then
+    Variable cls_idx
+  else
+    make_type cls_idx args
 
 
 let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =

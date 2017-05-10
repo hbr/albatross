@@ -1078,7 +1078,7 @@ let rec type_of_term_full
     end;
     argtp, rtp
   in
-  let feature_signature (i:int) (ags:type_term array): Sign.t =
+  let feature_signature (i:int) (ags:agens): Sign.t =
     assert (nvars <= i);
     let tvs,s = Feature_table.signature0 (i-nvars) c.ft in
     if Tvars.count_fgs tvs <> Array.length ags then
@@ -1156,12 +1156,17 @@ let rec type_of_term_full
       check_and_trace (variable_type i c)
   | VAppl (i,args,ags,_) ->
       assert (nvars <= i);
+      if trace then
+        begin
+          printf "  feature application %d %s\n"
+                 (i-nvars)
+                 (Feature_table.string_of_signature (i-nvars) (feature_table c));
+          printf "     ags        %s\n" (string_of_ags ags c);
+          printf "     signature  %s\n"
+                 (string_of_signature (feature_signature i ags) c);
+        end;
       let len = Array.length args
       and s   = feature_signature i ags in
-      if trace then begin
-        printf "  feature application ags %s\n" (string_of_ags ags c);
-        printf "          signature       %s\n" (string_of_signature s c);
-      end;
       assert (Sign.has_result s);
       if len = Sign.arity s then begin
         check_args (Sign.arguments s) args;

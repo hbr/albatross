@@ -202,4 +202,5 @@ val downgrade_term: term -> int -> t -> term
 
 val arity_of_downgraded_type: type_term -> t -> int
 val specialized: term -> t -> term
+val type_of_term_full: term -> type_term option -> bool -> t -> type_term
 val is_well_typed:    term -> t -> bool

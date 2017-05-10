@@ -58,34 +58,33 @@ let array (len:int) (s:t): type_term array =
   Array.sub s.sub 0 len
 
 
-let unify (t1:type_term) (t2:type_term) (s:t): unit =
+let rec unify (t1:type_term) (t2:type_term) (s:t): unit =
   let unicls i1 i2 =
-    if i1 - s.n + s.delta = i2 then
-      ()
-    else
+    if i1 < s.n then
+      put i1 (Variable i2) s
+    else if i1 - s.n + s.delta <>i2 then
       raise Reject
   in
-  let rec uni t1 t2 =
-    match t1, t2 with
-    | Variable i1, _ when i1 < s.n ->
-       put i1 t2 s
-    | Variable i1, Variable i2 ->
-       unicls i1 i2
-    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
-       unicls i1 i2;
-       uniargs args1 args2
-    | Variable _, Application _ | Application _, Variable _ ->
-       raise Reject
-    | _, _ ->
-       assert false (* cannot happen with wellformed types *)
-  and uniargs args1 args2 =
+  match t1, t2 with
+  | Variable i1, _ when i1 < s.n ->
+     put i1 t2 s
+  | Variable i1, Variable i2 ->
+     unicls i1 i2
+  | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
+     unicls i1 i2;
+     unify_types args1 args2 s
+  | Variable _, Application _ | Application _, Variable _ ->
+     raise Reject
+  | _, _ ->
+     assert false (* cannot happen with wellformed types *)
+
+and unify_types (args1:types) (args2:types) (s:t) =
     let len = Array.length args1 in
     assert (len = Array.length args2);
     for k = 0 to len - 1 do
-      uni args1.(k) args2.(k)
+      unify args1.(k) args2.(k) s
     done
-  in
-  uni t1 t2
+
 
 let make (n:int) (tvs1:Tvars.t) (tvs2:Tvars.t) (ct:Class_table.t): t =
   assert (Tvars.has_no_variables tvs1);

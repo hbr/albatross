@@ -232,6 +232,25 @@ let owner (i:int) (ft:t): int =
   Option.value (descriptor i ft).dominant_cls
 
 
+let is_desc_deferred (desc:descriptor): bool =
+  match desc.impl with
+    Feature.Deferred -> true
+  | _                -> false
+
+
+let is_deferred (i:int) (ft:t): bool =
+  assert (i < count ft);
+  is_desc_deferred (descriptor i ft)
+
+
+
+let dominant_formal_generic (i:int) (ft:t): int =
+  assert (i < count ft);
+  assert (is_deferred i ft);
+  Option.value (descriptor i ft).dominant_fg
+
+
+
 let is_ghost_function (i:int) (ft:t): bool =
   assert (i < count ft);
   let desc = descriptor i ft in
@@ -1173,13 +1192,16 @@ let unify_types
      corresponding type [tp2] coming from an environment with [nall] type
      variables and accumulate the substitutions into [ags].  *)
   assert (nfgs = Array.length ags);
+  let put i tp =
+    if ags.(i) = empty_term then
+      ags.(i) <- tp
+    else
+      assert (Term.equivalent ags.(i) tp);
+  in
   let rec uni tp1 tp2 =
     match tp1, tp2 with
-      Variable i, _ when i < nfgs ->
-        if ags.(i) = empty_term then
-          ags.(i) <- tp2
-        else
-          assert (ags.(i) = tp2)
+    | Variable i, _ when i < nfgs ->
+       put i tp2
     | Variable i, Variable j ->
         assert (nall <= j);
         assert (i-nfgs = j-nall)
@@ -1187,13 +1209,15 @@ let unify_types
         let len = Array.length args1 in
         if len <> Array.length args2 then
           raise Not_found;
-        if i1-nfgs <> i2-nall then
-          raise Not_found;
         assert (len = Array.length args2);
+        if i1 < nfgs then
+          put i1 (Variable i2)
+        else if i1-nfgs <> i2-nall then
+          raise Not_found;
         assert (i1-nfgs = i2-nall);
         interval_iter (fun k -> uni args1.(k) args2.(k)) 0 len
     | _ ->
-        raise Not_found
+       raise Not_found
   in
   uni tp1 tp2
 
@@ -1201,11 +1225,12 @@ let unify_types
 
 
 let variant_generics
-    (idx_var:int) (idx:int) (ags:agens) (ntvs:int) (ft:t): agens =
+    (idx_var:int) (idx:int) (ags:agens) (tvs:Tvars.t) (ft:t): agens =
   (* [idx_var] is a variant of the feature [idx]. We consider a feature call
-     of the form [VAppl(idx,_,ags)] where [ags] come from a type environment
-     with [ntvs] type variables. The routine calculates the actual generics of
-     the call of the variant feature [VAppl(idx_var,_,ags_var)].  *)
+     of the form [VAppl(idx,_,ags)] where [ags] are from the type environment
+     [tvs]. The routine calculates the actual generics of the call of the
+     variant feature [VAppl(idx_var,_,ags_var)].
+   *)
   let desc     = descriptor idx ft
   and desc_var = descriptor idx_var ft
   in
@@ -1213,6 +1238,7 @@ let variant_generics
   if nfgs_var = 0 then
     [||]
   else begin
+    let ntvs = Tvars.count_all tvs in
     let subst tp    = Term.subst tp ntvs ags in
     let ags         = Array.make nfgs_var empty_term in
     unify_types desc_var.tp nfgs_var (subst desc.tp) ntvs ags;
@@ -1240,11 +1266,11 @@ let variant_feature
   let nfgs = Array.length ags in
   if nfgs = 0 then
     i,ags
-  else begin
+  else begin (* variant has to be found via the common seed *)
     let bdesc = base_descriptor idx ft in
     let sd,ags_sd = bdesc#seed, bdesc#ags
     and nall = Tvars.count_all tvs in
-    let ags1 =
+    let ags1 = (* ags transformed into actual generics for the seed *)
       if sd = i then
         ags
       else
@@ -1252,8 +1278,18 @@ let variant_feature
     in
     let classes = Array.map (fun tp -> Tvars.principal_class tp tvs) ags1 in
     try
-      let idx_var = variant idx classes ft in
-      let ags_var = variant_generics idx_var idx ags nall ft in
+      let idx_var = variant sd classes ft in
+      let ags_var = variant_generics idx_var idx ags tvs ft in
+      if not (Array.for_all (fun tp -> tp <> empty_term) ags_var)
+      then
+        begin
+          printf "base    %d %s\n" idx (string_of_signature idx ft);
+          printf "variant %d %s\n" idx_var (string_of_signature idx_var ft);
+          printf "tvs %s, ags %s\n"
+                 (Class_table.string_of_tvs tvs ft.ct)
+                 (Class_table.string_of_type_arr ags tvs ft.ct)
+        end;
+      assert (Array.for_all (fun tp -> tp <> empty_term) ags_var);
       nb + idx_var, ags_var
     with Not_found ->
       i,ags
@@ -1302,14 +1338,17 @@ let substituted
     | Variable i ->
         Variable (i - len + d)
     | VAppl(i0,args,ags0,oo) ->
+       assert (Array.for_all (fun tp -> tp <> empty_term) ags0);
         let ags0 = Array.map subtp ags0
         and args   = spec_args nb args in
+       assert (Array.for_all (fun tp -> tp <> empty_term) ags0);
         let i,ags0 =
           if is_gen then
             variant_feature i0 (nb+nargs+nbenv) ags0 tvs ft
           else
             i0,ags0
         in
+       assert (Array.for_all (fun tp -> tp <> empty_term) ags0);
         let i = i - len + d in
         VAppl (i,args,ags0,oo)
     | Application (f,args,inop) ->
@@ -1850,17 +1889,6 @@ let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list 
 
 
 
-let is_desc_deferred (desc:descriptor): bool =
-  match desc.impl with
-    Feature.Deferred -> true
-  | _                -> false
-
-
-let is_deferred (i:int) (ft:t): bool =
-  assert (i < count ft);
-  is_desc_deferred (descriptor i ft)
-
-
 let names_of_formals (farr: formal array): int array =
   Array.map (fun (name,_) -> name) farr
 
@@ -2330,25 +2358,14 @@ let variant_data (i:int) (k:int) (ft:t): agens =
   and desc_k = descriptor k ft
   in
   let nfgs_i = Tvars.count_fgs desc_i.tvs
-  and nfgs_k = Tvars.count_fgs desc_k.tvs
   in
-  let ags = Array.make nfgs_i empty_term
-  in
-  unify_types desc_i.tp nfgs_i desc_k.tp nfgs_k ags;
-  let ok =
-    interval_for_all
-      (fun j ->
-        Class_table.satisfies
-          ags.(j) desc_k.tvs
-          (Tvars.concept j desc_i.tvs) desc_i.tvs
-          ft.ct
-      )
-      0 nfgs_i in
-  if ok then
-    ags
-  else
+  let open Type_substitution in
+  try
+    let sub = make nfgs_i desc_i.tvs desc_k.tvs ft.ct in
+    unify desc_i.tp desc_k.tp sub;
+    array nfgs_i sub
+  with Reject ->
     raise Not_found
-
 
 
 

@@ -130,6 +130,7 @@ val is_feature_visible: int -> t -> bool
 val is_term_visible:    term -> int -> t -> bool
 
 val owner: int -> t -> int
+val dominant_formal_generic: int -> t -> int
 
 val add_tuple_accessors: term -> int -> type_term -> int -> t -> term
 val make_lambda:

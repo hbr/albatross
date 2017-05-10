@@ -863,21 +863,28 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
 
 
 let creators_check_formal_generics
-    (info:info) (clst:int list) (tvs:Tvars.t) (ft:Feature_table.t): unit =
+      (info:info) (clst:int list) (tvs:Tvars.t) (cls:int) (ft:Feature_table.t)
+    : unit =
   assert (Tvars.count tvs = 0);
-  for i = 0 to (Tvars.count_fgs tvs) - 1 do
-    if List.for_all
-        (fun cidx ->
-          let _,sign = Feature_table.signature0 cidx ft in
-          let argtps = Sign.arguments sign in
-          interval_for_all
-            (fun j ->
-              argtps.(j) <> Variable i)
-            0 (Array.length argtps))
-        clst then
-          let nme = (Tvars.fgnames tvs).(i) in
-          error_info info ("Formal generic " ^ (ST.string nme) ^
-                           " does not occur in any constructor")
+  let nfgs = Tvars.count_fgs tvs in
+  for i = 0 to nfgs - 1 do
+    match Tvars.concept i tvs with
+    | Variable i  when i = cls + nfgs ->
+       ()
+    | _ ->
+       if List.for_all
+            (fun cidx ->
+              let _,sign = Feature_table.signature0 cidx ft in
+              let argtps = Sign.arguments sign in
+              interval_for_all
+                (fun j ->
+                  argtps.(j) <> Variable i)
+                0 (Array.length argtps))
+            clst
+       then
+         let nme = (Tvars.fgnames tvs).(i) in
+         error_info info ("Formal generic " ^ (ST.string nme)
+                          ^ " does not occur in any constructor")
   done
 
 
@@ -946,7 +953,7 @@ let put_creators
   and cset_base = IntSet.of_list c0lst in
   if not (Class_table.has_constructors cls ct) then
     begin
-      creators_check_formal_generics creators.i clst tvs ft;
+      creators_check_formal_generics creators.i clst tvs cls ft;
       add_case_inversions cls clst pc;
       add_case_injections clst pc;
       Class_table.set_constructors cset_base cset cls ct;

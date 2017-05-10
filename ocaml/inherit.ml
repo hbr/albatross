@@ -68,7 +68,6 @@ let check_transform_valid
 
 
 
-
 let check_ghost_variant
     (i:int) (ivar:int) (is_ghost:bool) (info:info) (ft:Feature_table.t)
     : unit =
@@ -99,8 +98,8 @@ let inherit_feature
        which can be found in the search tables or already existing variants of
        the seed of [idx].
 
-     - If [idx] is a deferred feature, then there must be a variant. Otherwise
-       report an error.
+     - If [idx] is a deferred feature of the parent class, then there must be
+       a variant. Otherwise report an error.
 
      - If [idx] is an effective feature, then its specification has to be valid in
        all minimal variants of the feature.
@@ -114,6 +113,9 @@ let inherit_feature
    *)
   let ft = PC.feature_table pc in
   let defer = Feature_table.is_deferred idx ft in
+  let defer_par = defer && Feature_table.owner idx ft = par
+  and deferred_has_variant = ref false
+  in
   let fold_fun
       (is_new:bool)
       (lst:(int*bool*int*agens) list)
@@ -132,8 +134,23 @@ let inherit_feature
     if is_new then
       Feature_table.add_variant info sd ivar sdags ft;
     check_ghost_variant idx ivar ghost info ft;
-    if PC.is_private pc && not defer then
-      check_transform_valid idx ivar ags info pc;
+    if PC.is_private pc then
+      begin
+        if not defer then
+          check_transform_valid idx ivar ags info pc
+        else
+          let dominant_fg = Feature_table.dominant_formal_generic idx ft
+          and tvs = Feature_table.tvars ivar ft
+          in
+          if defer_par
+             && cls = Tvars.principal_class ags.(dominant_fg) tvs
+          then
+            deferred_has_variant := true
+          else
+            begin
+              assert false (* illegal variant *)
+            end
+      end;
     (sd,is_new,ivar,sdags)::lst
   in
   let lst =
@@ -148,29 +165,18 @@ let inherit_feature
       lst
       (Feature_table.find_new_variants idx ft)
   in
-  if not defer || PC.is_interface_use pc then
+  if not defer_par || PC.is_interface_use pc then
     lst
+  else if not !deferred_has_variant then
+    let ct = class_table pc  in
+    let str =
+      "The class " ^ (Class_table.class_name cls ct)
+      ^ " does not have a variant of the deferred feature \n\t\""
+      ^ (Feature_table.string_of_signature idx ft)
+      ^ "\"" in
+    error_info info str
   else
-    let error_deferred () =
-      let ct = class_table pc  in
-      let str =
-        "The class " ^ (Class_table.class_name cls ct) ^
-        " does not have a variant of the deferred feature \n\t\"" ^
-        (Feature_table.string_of_signature idx ft) ^
-        "\"" in
-      error_info info str
-    in
-    match lst with
-    | [sd,is_new,ivar,ags] ->
-        assert (Array.length ags = 1); (* nyi: deferred features with more than
-                                          one formal generic *)
-        let tvs = Feature_table.tvars ivar ft in
-        if Tvars.principal_class ags.(0) tvs <> cls then begin
-          error_deferred ()
-        end;
-        lst
-    | _ ->
-        error_deferred ()
+    lst
 
 
 
