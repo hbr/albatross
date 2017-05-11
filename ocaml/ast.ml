@@ -912,7 +912,12 @@ let put_creators
         let sign = Sign.make_func argtps cls_tp in
         let cnt = Feature_table.count ft in
         let spec = Feature.Spec.make_func_def nms None []
-        and imp  = Feature.Empty in
+        and imp  =
+          if Class_table.is_deferred cls ct then
+            Feature.Deferred
+          else
+            Feature.Empty
+        in
         let idx, is_new, is_export =
           try
             let idx = Feature_table.find_with_signature fn tvs sign ft in
