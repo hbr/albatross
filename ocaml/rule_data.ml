@@ -399,12 +399,8 @@ let make (t:term) (c:Context.t): t =
   let fwd_blckd =
     if nargs = 0 || nbwd > 0 then false
     else
-      let ft = Context.feature_table c in
-      let tvs =
-        if Context.is_global c then
-          Tvars.make_fgs fgnms fgcon
-        else
-          Context.tvars c
+      let ft  = Context.feature_table c
+      and tvs = Tvars.push_fgs fgnms fgcon (Context.tvars c)
       and nb = nargs + nbenv in
       let _,fwd_blckd = forward_blocked (List.rev ps) tgt nb tvs ft in
       fwd_blckd in
