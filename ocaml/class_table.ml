@@ -768,12 +768,8 @@ let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
        cls - nfgs
     | Variable _ ->
        raise Not_found
-    | Application(Variable cls,_,_) when
-           nfgs <= cls
-           && is_inductive_class (cls - nfgs) ct ->
-       cls - nfgs
     | Application( Variable cls,_,_) ->
-       raise Not_found
+       class_ (Variable cls)
     | _ ->
        assert false (* cannot happen in types *)
   in
