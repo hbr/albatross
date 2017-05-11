@@ -344,6 +344,8 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
           printf "  inherit %s in %s\n"
             (Class_table.class_name par ct) (Class_table.class_name cls ct);
         if not (Class_table.is_interface_check ct) then begin
+          if Class_table.is_inductive_class par ct then
+            not_yet_implemented tp.i "Inheritance of deferred inductive types";
           Class_table.inherit_parent cls par par_args ghost tp.i ct;
           inherit_generics par cls ghost tp.i pc
         end
