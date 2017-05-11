@@ -70,6 +70,7 @@ val module_of_class: int -> t -> Module.M.t
 val is_deferred: int -> t -> bool
 
 val class_type: int -> t -> type_term*Tvars.t
+val tvs_of_class_for_parent: int -> t -> Tvars.t
 
 val class_index: int list -> int -> Tvars.t -> info -> t -> int
 val get_type: type_t withinfo -> bool -> Tvars.t -> t -> type_term
@@ -139,7 +140,7 @@ val has_predicate: t -> bool
 
 val inherits_any:      int -> t -> bool
 
-val parent_type:    int -> type_t withinfo -> t -> int * type_term array
+val parent_type:    int -> Tvars.t -> type_t withinfo -> t -> int * type_term array
 
 
 val inherit_parent: int  -> int -> type_term array -> bool -> info -> t -> unit

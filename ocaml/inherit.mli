@@ -9,6 +9,6 @@ open Term
 
 type parent_descriptor = Class_table.parent_descriptor
 
-val inherit_parents: int -> inherit_clause -> Proof_context.t -> unit
+val inherit_parents: int -> Tvars.t -> inherit_clause -> Proof_context.t -> unit
 
 val add_new_feature: info -> int -> Proof_context.t -> unit

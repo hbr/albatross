@@ -316,7 +316,7 @@ let add_new_feature (info:info) (idx:int) (pc:PC.t): unit =
 
 
 
-let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
+let inherit_parents (cls:int) (tvs:Tvars.t) (clause:inherit_clause) (pc:PC.t): unit =
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
   List.iter
@@ -324,7 +324,7 @@ let inherit_parents (cls:int) (clause:inherit_clause) (pc:PC.t): unit =
       if renames <> [] then
         not_yet_implemented tp.i "rename";
       assert (renames = [] ); (* nyi: feature adaption *)
-      let par, par_args = Class_table.parent_type cls tp ct in
+      let par, par_args = Class_table.parent_type cls tvs tp ct in
       if Class_table.has_ancestor cls par ct then
         ()
       else if Class_table.has_ancestor par cls ct then

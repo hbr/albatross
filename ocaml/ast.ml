@@ -982,8 +982,11 @@ let inherit_any (cls:int) (pc:Proof_context.t): unit =
   else
     Feature_table.add_equality cls (PC.feature_table pc);
   (* inherit ANY *)
-  let parent = false, withinfo UNKNOWN (simple_type "ANY"), [] in
-  Inherit.inherit_parents cls [parent] pc
+  let parent = false, withinfo UNKNOWN (simple_type "ANY"), []
+  and tvs =
+    Class_table.tvs_of_class_for_parent cls (Proof_context.class_table pc)
+  in
+  Inherit.inherit_parents cls tvs [parent] pc
 
 
 
@@ -1070,7 +1073,7 @@ let put_inheritance
   let path,cn0 = cn.v in
   let cls = Class_table.class_index  path cn0 Tvars.empty cn.i ct in
   Class_table.check_class cls hm None tvs ct;
-  Inherit.inherit_parents cls inherits pc
+  Inherit.inherit_parents cls tvs inherits pc
 
 
 let put_formal_generic (fgnme:int withinfo) (cn:classname) (pc:PC.t): unit =

@@ -1188,11 +1188,9 @@ let type_descends_from_any (tp:term) (tvs:Tvars.t) (ct:t): bool =
   descends_from_any cls ct
 
 
-let parent_type (cls:int) (tp:type_t withinfo) (ct:t)
+let parent_type (cls:int) (tvs:Tvars.t) (tp:type_t withinfo) (ct:t)
     : int * type_term array =
   assert (cls < count ct);
-  let tvs = (base_descriptor cls ct).tvs
-  in
   let tp_term = get_type tp true tvs ct
   and n = Tvars.count_all tvs
   in
@@ -1276,7 +1274,8 @@ let put_formal (name: int withinfo) (cidx:int) (ct:t): unit =
 
 
 
-
+let tvs_of_class_for_parent (cls:int) (ct:t): Tvars.t =
+  (base_descriptor cls ct).tvs
 
 let check_base_descriptor
     (hm:    header_mark withinfo)
