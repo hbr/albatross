@@ -457,7 +457,6 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
            (* Both have substitutions *)
          unify0 tb.sub.(i) tb.sub.(j)
 
-
     | Variable i, _ when i < ntvs ->
        if has_substitution i tb then
          unify0 tb.sub.(i) t2
@@ -476,17 +475,13 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
     | _, Variable j ->
        raise Reject  (* Different types cannot be unified *)
 
-    | Application(Variable i1,args1,_), Application(Variable i2,args2,_)
-         when i1 = i2 ->
+    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
+       unify0 (Variable i1) (Variable i2);
        let len = Array.length args1 in
        assert (len = Array.length args2);
        for i = 0 to len - 1 do
          unify0 args1.(i) args2.(i)
        done
-
-    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
-       assert (i1 <> i2);
-       raise Reject (* Different classes cannot be unified *)
     | _ ->
        assert false (* Cannot happen with types *)
   in
