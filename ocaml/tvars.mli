@@ -43,6 +43,7 @@ val count_fgs:    t -> int
 val count_all:    t -> int
 val is_empty:     t -> bool
 val concept:      int -> t -> type_term
+val concept_class:int -> t -> int
 val name:         int -> t -> int
 val concepts:     t -> type_term array
 val fgconcepts:   t -> type_term array

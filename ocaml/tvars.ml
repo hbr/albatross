@@ -90,6 +90,20 @@ let concept (i:int) (tvs:t): type_term =
   else
     tvs.fgconcepts.(i - count tvs)
 
+
+let concept_class (i:int) (tvs:t): int =
+  let nall = count_all tvs in
+  assert (count_local tvs <= i);
+  assert (i < nall);
+  match concept i tvs with
+  | Variable j ->
+     assert (nall <= j);
+     j - nall
+  | _ ->
+     assert false (* Concept must be a class *)
+
+
+
 let name (i:int) (tvs:t): int =
   assert (count tvs <= i);
   tvs.fgnames.(i - count tvs)

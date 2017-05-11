@@ -43,7 +43,7 @@ let get (i:int) (s:t): type_term =
 
 let put (i:int) (t:type_term) (s:t): unit =
   assert (i < count s);
-  if not (Class_table.satisfies t s.tvs2 (Tvars.concept i s.tvs1) s.tvs1 s.ct) then
+  if not (Class_table.satisfies t s.tvs2 (Variable i) s.tvs1 s.ct) then
     raise Reject;
   if not (has i s) then
     begin

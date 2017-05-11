@@ -947,80 +947,81 @@ let check_deferred  (owner:int option) (fg:int option) (info:info) (ct:t): unit 
 
 
 
+let ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
+  let bdesc = base_descriptor cls ct in
+  IntMap.find anc bdesc.ancestors
 
-let rec satisfies_0
-    (tp1:type_term) (tvs1:Tvars.t)
-    (tp2:type_term) (tvs2:Tvars.t)
-    (findfun: int->int-> type_term array)
-    (ct:t)
-    : bool =
-  let ntvs1 = Tvars.count_local tvs1
-  and nall1 = Tvars.count_all   tvs1
-  and ntvs2 = Tvars.count_local tvs2
-  and nall2 = Tvars.count_all   tvs2
-  in
-  let sat0 (tp1:type_term) (tp2:type_term): bool =
-    let idx1,args1 = split_type tp1
-    and idx2,args2 = split_type tp2 in
-    assert (nall1 <= idx1);
-    assert (nall2 <= idx2);
-    try
-      let anc_args = findfun (idx1-nall1) (idx2-nall2) in
-      let nargs    = Array.length anc_args in
-      assert (nargs = Array.length args2);
-      let anc_args =
-        Array.map (fun t -> Term.subst t nall1 args1) anc_args
-      in
-      for i = 0 to nargs-1 do
-        if satisfies_0 anc_args.(i) tvs1 args2.(i) tvs2 findfun ct then
-          ()
-        else
-          raise Not_found
-      done;
-      true
-    with Not_found ->
-      false
-  in
-  let sat1 (tp1:type_term) (tp2:type_term): bool =
-    match tp1 with
-      Variable i when i < ntvs1 ->
-        false
-    | Variable i when i < nall1 ->
-        let tp1 = Tvars.concept i tvs1 in
-        sat0 tp1 tp2
-    | Application (Variable i, args, _) when i < nall1 ->
-       assert (i <= ntvs1);
-       begin
-         match Tvars.concept i tvs1 with
-         | Variable i0 ->
-            assert (nall1 <= i0);
-            sat0 (make_type i0 args) tp2
-         | _ ->
-            assert false (* Concept has to be a class *)
-       end
-    | Variable _  | Application _  ->
-       sat0 tp1 tp2
-    | _ ->
-       assert false (* cannot happen with types *)
-  in
-  match tp2 with
-    Variable j when j < ntvs2 -> true
-  | Variable j when j < nall2 ->
-      let tp2 = Tvars.concept j tvs2 in
-      sat1 tp1 tp2
-  | _ ->
-      sat1 tp1 tp2
+
+let is_ghost_ancestor (cls:int) (anc:int) (ct:t): bool =
+  try
+    (ancestor cls anc ct).is_ghost
+  with Not_found ->
+    assert false
+
+
+let has_ancestor (cls:int) (anc:int) (ct:t): bool =
+  (** Does the class [cls] have [anc] as an ancestor ? *)
+  cls = anc ||
+  try let _ = ancestor cls anc ct in true
+  with Not_found -> false
+
+
+
+
+let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
+  (* The ancestor type of type [tp] with the ancestor class [anc_cls] in an
+     environment with [ntvs] type variables *)
+   assert (ntvs <= anc_cls);
+   assert (anc_cls-ntvs < count ct);
+   let cls,args = split_type tp in
+   assert (ntvs <= cls);
+   assert (cls-ntvs < count ct);
+   let pargs = (ancestor (cls-ntvs) (anc_cls-ntvs) ct).actual_generics in
+   if Array.length pargs = 0 then
+     Variable anc_cls
+   else
+     let pargs = Array.map (fun tp -> Term.subst tp ntvs args) pargs in
+     make_type anc_cls pargs
 
 
 
 let satisfies
     (tp1:type_term) (tvs1:Tvars.t) (tp2:type_term) (tvs2:Tvars.t) (ct:t)
     : bool =
-  let findfun (c1:int) (c2:int): type_term array =
-    let bdesc1 = base_descriptor c1 ct in
-    (IntMap.find c2 bdesc1.ancestors).actual_generics
+  (* Does [tp1] satisfy the concept [tp2] or the concept of the class variable
+     in [tp2]? *)
+  let nlocs1 = Tvars.count_local tvs1
+  and nall1  = Tvars.count_all   tvs1
+  and nlocs2 = Tvars.count_local tvs2
+  and nall2  = Tvars.count_all   tvs2
   in
-  satisfies_0 tp1 tvs1 tp2 tvs2 findfun ct
+  let sat_tp1 c2 =
+    (* Does [tp1] inherit class [c2]? *)
+    let sat c1 = has_ancestor c1 c2 ct in
+    match tp1 with
+    | Variable i1 when i1 < nlocs1 ->
+       false
+    | Variable i1 when i1 < nall1 ->
+       sat (Tvars.concept_class i1 tvs1)
+    | Variable i1 ->
+       sat (i1 - nall1)
+    | Application (Variable i1, ags, _) when i1 < nall1 ->
+       assert (nlocs1 <= i1);
+       sat (Tvars.concept_class i1 tvs1)
+    | Application (Variable i1, ags, _) ->
+       sat (i1 - nall1)
+    | _ ->
+       assert false (* Not possible with types *)
+  in
+  match tp2 with
+  | Variable i2 when i2 < nlocs2 ->
+     true
+  | Variable i2 when i2 < nall2 -> (* A class variable *)
+     sat_tp1 (Tvars.concept_class i2 tvs2)
+  | Variable i2 -> (* A concept *)
+     sat_tp1 (i2 - nall2)
+  | _ ->
+     assert false (* Must be some type/class variable or a concept *)
 
 
 
@@ -1174,44 +1175,6 @@ let get_type
   get_tp true tp.v
 
 
-
-
-
-let ancestor (cls:int) (anc:int) (ct:t): parent_descriptor =
-  let bdesc = base_descriptor cls ct in
-  IntMap.find anc bdesc.ancestors
-
-
-let is_ghost_ancestor (cls:int) (anc:int) (ct:t): bool =
-  try
-    (ancestor cls anc ct).is_ghost
-  with Not_found ->
-    assert false
-
-
-let has_ancestor (cls:int) (anc:int) (ct:t): bool =
-  (** Does the class [cls] have [anc] as an ancestor ? *)
-  cls = anc ||
-  try let _ = ancestor cls anc ct in true
-  with Not_found -> false
-
-
-
-
-let ancestor_type (tp:type_term) (anc_cls:int) (ntvs:int) (ct:t): type_term =
-  (* The ancestor type of type [tp] with the ancestor class [anc_cls] in an
-     environment with [ntvs] type variables *)
-   assert (ntvs <= anc_cls);
-   assert (anc_cls-ntvs < count ct);
-   let cls,args = split_type tp in
-   assert (ntvs <= cls);
-   assert (cls-ntvs < count ct);
-   let pargs = (ancestor (cls-ntvs) (anc_cls-ntvs) ct).actual_generics in
-   if Array.length pargs = 0 then
-     Variable anc_cls
-   else
-     let pargs = Array.map (fun tp -> Term.subst tp ntvs args) pargs in
-     make_type anc_cls pargs
 
 
 
