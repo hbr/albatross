@@ -1021,8 +1021,6 @@ let put_class
         error_info
           cn.i
           ("Class \"" ^ (string_of_classname path cn0) ^ "\" cannot be found");
-      if hm.v = Deferred_hmark && Tvars.count_fgs tvs > 0 then
-        not_yet_implemented cn.i "Deferred classes with formal generics";
       let idx = Class_table.count ct in
       Class_table.add hm cv cn0 tvs ct;
       idx, true
