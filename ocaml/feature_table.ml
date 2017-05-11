@@ -1186,44 +1186,6 @@ let variant (i:int) (classes:int array) (ft:t): int =
 
 
 
-let unify_types
-    (tp1:type_term) (nfgs:int) (tp2:type_term) (nall:int) (ags:agens): unit =
-  (* unify the type [tp1] which has [nfgs] formal generics with the
-     corresponding type [tp2] coming from an environment with [nall] type
-     variables and accumulate the substitutions into [ags].  *)
-  assert (nfgs = Array.length ags);
-  let put i tp =
-    if ags.(i) = empty_term then
-      ags.(i) <- tp
-    else
-      assert (Term.equivalent ags.(i) tp);
-  in
-  let rec uni tp1 tp2 =
-    match tp1, tp2 with
-    | Variable i, _ when i < nfgs ->
-       put i tp2
-    | Variable i, Variable j ->
-        assert (nall <= j);
-        assert (i-nfgs = j-nall)
-    | Application(Variable i1,args1,_), Application(Variable i2,args2,_) ->
-        let len = Array.length args1 in
-        if len <> Array.length args2 then
-          raise Not_found;
-        assert (len = Array.length args2);
-        if i1 < nfgs then
-          put i1 (Variable i2)
-        else if i1-nfgs <> i2-nall then
-          raise Not_found;
-        assert (i1-nfgs = i2-nall);
-        interval_iter (fun k -> uni args1.(k) args2.(k)) 0 len
-    | _ ->
-       raise Not_found
-  in
-  uni tp1 tp2
-
-
-
-
 let variant_generics
     (idx_var:int) (idx:int) (ags:agens) (tvs:Tvars.t) (ft:t): agens =
   (* [idx_var] is a variant of the feature [idx]. We consider a feature call
@@ -1235,14 +1197,22 @@ let variant_generics
   and desc_var = descriptor idx_var ft
   in
   let nfgs_var = Tvars.count_fgs desc_var.tvs in
+  assert (Tvars.has_no_variables desc_var.tvs);
+  assert (Tvars.has_no_variables desc.tvs);
+  assert (Tvars.has_no_variables tvs);
   if nfgs_var = 0 then
     [||]
   else begin
-    let ntvs = Tvars.count_all tvs in
-    let subst tp    = Term.subst tp ntvs ags in
-    let ags         = Array.make nfgs_var empty_term in
-    unify_types desc_var.tp nfgs_var (subst desc.tp) ntvs ags;
-    ags
+    let idx_tp_substituted = Term.subst desc.tp (Tvars.count_fgs tvs) ags in
+    let open Type_substitution in
+    let sub = make nfgs_var desc_var.tvs tvs ft.ct in
+    begin
+      try
+        unify desc_var.tp idx_tp_substituted sub
+      with Reject ->
+        assert false (* must be unifiable *)
+    end;
+    array nfgs_var sub
   end
 
 
