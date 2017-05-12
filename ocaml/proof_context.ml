@@ -166,8 +166,8 @@ let imp_id(pc:t): int = Proof_table.imp_id pc.base
 let term (i:int) (pc:t): term =
   (** The [i]th proved term in the current environment.
    *)
-  assert (is_consistent pc);
   assert (i < count pc);
+  assert (count pc <= count_base pc);
   Proof_table.local_term i pc.base
 
 
@@ -607,15 +607,25 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
 
 
 let find (t:term) (pc:t): int =
-  let n,_,_,t0 = Term.all_quantifier_split_1 t in
+  let n,_,(_,fgtps),t0 = Term.all_quantifier_split_1 t in
+  let nfgs = Array.length fgtps in
   let sublst =
     Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd in
-  match sublst with
-    (idx,sub)::_ ->
-      assert (Term_sub.is_empty sub);
-      idx
-  | _ ->
-      raise Not_found
+  let idx,sub =
+    List.find
+      (fun (idx,sub) ->
+        assert (Term_sub.is_empty sub);
+        if nfgs = 0 then
+          true
+        else
+          let _,_,(_,fgtps_found),_ =
+            Term.all_quantifier_split_1 (term idx pc) in
+          Array.length fgtps_found = nfgs
+          && Term.equivalent_array fgtps fgtps_found
+      )
+      sublst
+  in
+  idx
 
 
 
