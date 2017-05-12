@@ -1691,7 +1691,7 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
 
 let is_ghost_specification (spec:Feature.Spec.t) (ft:t): bool =
   Feature.Spec.has_postconditions spec ||
-  (Feature.Spec.has_definition spec &&
+  (Feature.Spec.has_definition_term spec &&
    let nargs = Feature.Spec.count_arguments spec in
    is_ghost_term (Feature.Spec.definition_term spec) nargs ft)
 
@@ -1814,7 +1814,7 @@ let definition_equality (i:int) (ft:t): term =
   in
   let f_id  = nargs + i
   in
-  let t = Option.value (Feature.Spec.definition bdesc#specification) in
+  let t = Option.value (Feature.Spec.definition_term_opt bdesc#specification) in
   let f =
     if nargs = 0 then
       Variable f_id
@@ -2016,7 +2016,7 @@ let add_feature
   and spec    = Feature.Spec.make_empty argnames
   and nfgs    = Tvars.count_all tvs
   in
-  assert (not (Feature.Spec.has_definition spec));
+  assert (not (Feature.Spec.has_definition_term spec));
   assert (Tvars.count tvs = 0);
   let dominant_cls = Class_table.dominant_class tvs sign ft.ct in
   let dominant_fg  = Class_table.dominant_formal_generic tvs dominant_cls ft.ct
@@ -2090,14 +2090,16 @@ let update_specification (i:int) (spec:Feature.Spec.t) (ft:t): unit =
   assert (Feature.Spec.is_empty bdesc#specification);
   assert begin
     not (is_interface_check ft) ||
-    Feature.Spec.private_public_consistent
+    Feature.Spec.is_consistent
       (base_descriptor i ft)#specification
       spec
   end;
   bdesc#set_specification spec
 
 
-
+let hide_definition (i:int) (ft:t): unit =
+  let bdesc = base_descriptor i ft in
+  bdesc#set_specification (Feature.Spec.without_definition bdesc#specification)
 
 
 
@@ -2128,7 +2130,7 @@ let add_base
     (spec: Feature.Spec.t)
     (ft:t)
     : unit =
-  assert (not defer || not (Feature.Spec.has_definition spec));
+  assert (not defer || not (Feature.Spec.has_definition_term spec));
   let mdl_nme            = ST.symbol mdl_nme
   in
   let sign =
@@ -2159,7 +2161,7 @@ let add_base
     dominant_cls;
     dominant_fg;
     impl     =
-    if Feature.Spec.has_definition spec then Feature.Empty
+    if Feature.Spec.has_definition_term spec then Feature.Empty
     else if defer then Feature.Deferred
     else Feature.Builtin;
     tvs;
@@ -2230,7 +2232,7 @@ let base_table (comp:Module.Compile.t) : t =
     "boolean" Constants.boolean_class (FNoperator Orop)
     [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
-  add_base (* equality *)
+  add_base (* any equality *)
     "any" Constants.any_class (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 

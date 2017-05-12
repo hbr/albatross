@@ -175,6 +175,7 @@ val add_feature: feature_name withinfo -> Tvars.t -> int array -> Sign.t
   -> Feature.implementation -> t -> unit
 val add_equality: int -> t -> unit
 val update_specification: int -> Feature.Spec.t -> t -> unit
+val hide_definition: int -> t -> unit
 val export_feature: int -> t -> unit
 val export_equality: int -> t -> unit
 

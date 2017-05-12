@@ -233,11 +233,13 @@ let update_feature
   if PC.is_private pc || not (PC.is_interface_check pc) then begin
     if not is_new then begin
       let spec0,impl0 = Feature_table.body idx ft in
-      if not (Feature.Spec.private_public_consistent spec0 spec) then
+      if not (Feature.Spec.is_consistent spec0 spec) then
         error_info info "Specification does not match the previous declaration";
       if not ((PC.is_private pc && impl0=impl) || match_impl impl0 impl) then
         error_info info
           "Implementation status does not match the previous declaration";
+      if Feature.Spec.has_no_definition spec then
+        Feature_table.hide_definition idx ft
     end else
       update ()
   end else if is_export then begin
@@ -245,7 +247,7 @@ let update_feature
     let spec0,impl0 = Feature_table.body idx ft in
     if not (match_impl impl0 impl) then
       error_info info "Implementation status is not consistent with private status";
-    if not (Feature.Spec.private_public_consistent spec0 spec) then
+    if not (Feature.Spec.is_consistent spec0 spec) then
       error_info info "Specification is not consistent with private specification"
   end else begin
     assert (PC.is_interface_check pc);

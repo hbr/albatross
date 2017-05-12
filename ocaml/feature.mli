@@ -7,10 +7,10 @@ module Spec: sig
   val make_func_spec:  int array -> term list -> term list -> t
   val is_empty:        t -> bool
   val equivalent:      t -> t -> bool
-  val private_public_consistent: t -> t -> bool
-  val has_definition:  t -> bool
-  val definition:      t -> term option
-  val definition_term: t -> term
+  val is_consistent: t -> t -> bool
+  val has_definition_term:  t -> bool
+  val definition_term_opt:  t -> term option
+  val definition_term:      t -> term
   val count_arguments: t -> int
   val names:           t -> int * int array
   val has_preconditions: t -> bool
@@ -19,6 +19,8 @@ module Spec: sig
   val has_postconditions: t -> bool
   val postcondition:    int -> t -> term
   val postconditions:   t -> term list
+  val has_no_definition: t -> bool
+  val without_definition: t -> t
 end
 
 type implementation =

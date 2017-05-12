@@ -26,10 +26,10 @@ module Spec = struct
   let count_arguments (spec:t): int =
     Array.length spec.nms
 
-  let has_definition (spec:t): bool =
+  let has_definition_term (spec:t): bool =
     Option.has spec.def
 
-  let definition (spec:t): term option =
+  let definition_term_opt (spec:t): term option =
     spec.def
 
   let definition_term (spec:t): term =
@@ -60,6 +60,12 @@ module Spec = struct
   let postconditions (spec:t): term list =
     spec.posts
 
+  let has_no_definition (s:t): bool =
+    not (has_definition_term s || has_postconditions s)
+
+  let without_definition (s:t): t =
+    {s with def = None; posts = []}
+
 
   let equivalent (s1:t) (s2:t): bool =
     (* equivalent ignoring names *)
@@ -70,18 +76,19 @@ module Spec = struct
     s1.def = s2.def && s1.pres = s2.pres && s1.posts = s2.posts
 
 
-  let private_public_consistent (priv:t) (pub:t): bool =
-    Term.equivalent_list priv.pres pub.pres
+  let is_consistent (s:t) (snew:t): bool =
+    Term.equivalent_list s.pres snew.pres
       &&
-    (pub.posts = [] || Term.equivalent_list pub.posts priv.posts)
+    (snew.posts = [] || Term.equivalent_list snew.posts s.posts)
       &&
-    match pub.def, priv.def with
+    match snew.def, s.def with
       None, _ ->
         true
-    | Some pubdef, Some privdef ->
-        Term.equivalent pubdef privdef
+    | Some snewdef, Some sdef ->
+        Term.equivalent snewdef sdef
     | _ ->
-        false
+       false
+
 end
 
 
