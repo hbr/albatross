@@ -411,9 +411,9 @@ let add_proved_0 (t:term) (pt:proof_term) (at:t): unit =
 exception Illegal_proof_term
 
 
-let definition (idx:int) (nb:int) (ags:agens) (at:t): int * int array * term =
+let definition_term (idx:int) (nb:int) (ags:agens) (at:t): int * int array * term =
   let c = context at in
-  Context.definition idx nb ags c
+  Context.definition_term idx nb ags c
 
 
 let arity (idx:int) (nb:int) (at:t): int =
@@ -536,7 +536,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         VAppl(idx,argsa,ags,false), doma
     | Eval.Exp (idx,ags,args,e) ->
         let n,nms,t =
-          try definition idx nb ags at
+          try definition_term idx nb ags at
           with Not_found -> raise Illegal_proof_term
         in
         let ta,tb = reconstruct e nb

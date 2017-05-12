@@ -846,13 +846,13 @@ let find_feature
 
 
 
-let definition (idx:int) (nb:int) (ags:agens) (c:t)
+let definition_term (idx:int) (nb:int) (ags:agens) (c:t)
     : int * int array * term =
   let nbenv = count_variables c in
   if idx < nb + nbenv then
     raise Not_found
   else
-    Feature_table.definition idx (nb + nbenv) ags (tvars c) (feature_table c)
+    Feature_table.definition_term idx (nb + nbenv) ags (tvars c) (feature_table c)
 
 
 

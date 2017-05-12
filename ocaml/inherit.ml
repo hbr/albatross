@@ -35,6 +35,17 @@ let check_transform_valid
      into the environment of the feature [ivar] by using the actual generics
      [ags] to substitute the formal generics of [i]. *)
   let ft = PC.feature_table pc in
+  if Feature_table.has_no_definition i ft then
+    begin
+      let open Format in
+      let open Feature_table in
+      eprintf "@[<v>%s Illegal variant@,@," (info_string info);
+      eprintf "The feature@,@,  %s@,@," (string_of_signature i ft);
+      eprintf "has no definition and therefore cannot have variants.@,";
+      eprintf "However there appeared the following variant@,@,  %s@]@."
+              (string_of_signature ivar ft);
+      exit 1
+    end;
   if 3 <= PC.verbosity pc then begin
     printf "\n\n   Check the validity of the feature\n";
     printf "         %d %s\n" i (Feature_table.string_of_signature i ft);

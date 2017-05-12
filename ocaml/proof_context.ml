@@ -1169,11 +1169,11 @@ let inductive_set (t:term) (pc:t): term =
   Proof_table.inductive_set t pc.base
 
 
-let definition (i:int) (nb:int) (ags:agens) (pc:t): int * int array * term =
+let definition_term (i:int) (nb:int) (ags:agens) (pc:t): int * int array * term =
   if i < nb || is_inductive_set (i-nb) pc then
     raise Not_found
   else
-    Proof_table.definition i nb ags pc.base
+    Proof_table.definition_term i nb ags pc.base
 
 let arity (i:int) (nb:int) (pc:t): int =
   Proof_table.arity i nb pc.base
@@ -1260,7 +1260,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     let is_lazy i = i = and_id || i = or_id || i = imp_id
     in
     try
-      let n,nms,t0 = definition i 0 ags pc
+      let n,nms,t0 = definition_term i 0 ags pc
       and argse = Array.map (fun t -> Eval.Term t) args
       in
       assert (n = Array.length args);

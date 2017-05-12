@@ -93,11 +93,12 @@ val equality_index_of_type: term -> Tvars.t -> t -> int
 
 val feature_call: int -> int -> arguments -> agens -> t -> term
 
-val definition: int -> int -> agens -> Tvars.t -> t -> int * int array * term
+val definition_term: int -> int -> agens -> Tvars.t -> t -> int * int array * term
     (** [definition idx nb ft] returns the definition of the feature
         [idx]. Raises [Not_found] if feature [idx] has no definition *)
 
-val has_definition: int -> t -> bool
+val has_definition_term: int -> t -> bool
+val has_no_definition: int -> t -> bool
 
 val is_inductive_set: int -> int -> t -> bool
 val inductive_set: int -> term array -> agens -> int -> Tvars.t -> t -> term

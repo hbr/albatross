@@ -1438,12 +1438,12 @@ let implication (a:term) (b:term) (nb:int): term =
 
 
 
-let definition_term (i:int) (ft:t): term =
+let raw_definition_term (i:int) (ft:t): term =
   assert (i < count ft);
   Feature.Spec.definition_term (base_descriptor i ft)#specification
 
 
-let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
+let definition_term (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
     : int * int array * term =
   (* The definition term of the feature [i-nb] transformed into an environment with
      [nb] variables, the formal generics substituted by [ags] which come from the
@@ -1451,11 +1451,15 @@ let definition (i:int) (nb:int) (ags:agens) (tvs:Tvars.t) (ft:t)
   assert (nb <= i);
   assert (i  <= nb + count ft);
   let idx = i - nb in
-  let t0 = definition_term idx ft in
+  let t0 = raw_definition_term idx ft in
   let desc = descriptor idx ft in
   let nargs = arity idx ft in
   let t = substituted t0 nargs 0 0 [||] nb ags tvs ft in
   nargs, desc.argnames, t
+
+
+let has_no_definition (i:int) (ft:t): bool =
+  Feature.Spec.has_no_definition (base_descriptor i ft)#specification
 
 
 (* Really necessary?? *)
@@ -1470,16 +1474,18 @@ let expanded_definition
   assert (nb <= i);
   assert (i  <= nb + count ft);
   let idx = i - nb in
-  let t0 = definition_term idx ft in
+  let t0 = raw_definition_term idx ft in
   let nargs = Array.length args in
   assert (nargs = arity idx ft);
   substituted t0 nargs 0 0 args nb ags tvs ft
 
 
 
-let has_definition (i:int) (ft:t): bool =
-  try ignore (definition_term i ft); true
-  with Not_found -> false
+let has_definition_term (i:int) (ft:t): bool =
+  try
+    ignore (raw_definition_term i ft); true
+  with Not_found ->
+    false
 
 
 
@@ -1488,7 +1494,7 @@ let is_inductive_set (i:int) (nb:int) (ft:t): bool =
      an inductively defined set`*)
   assert (nb <= i);
   try
-    let t = definition_term (i-nb) ft in
+    let t = raw_definition_term (i-nb) ft in
     begin
       match t with
         Indset _ -> true
@@ -1804,7 +1810,7 @@ let equality_index_of_type (tp:term) (tvs:Tvars.t) (ft:t): int =
 
 let definition_equality (i:int) (ft:t): term =
   assert (i < count ft);
-  assert (has_definition i ft);
+  assert (has_definition_term i ft);
   let desc  = descriptor i ft
   and bdesc = base_descriptor i ft in
   assert (Sign.has_result desc.sign);
@@ -1833,7 +1839,7 @@ let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list 
   (* The specification assertions of the feature [i] in the environment of the
      variant feature [ivar] with the actual generics valid in the variant. *)
   let posts =
-    if has_definition i ft then
+    if has_definition_term i ft then
       [definition_equality i ft]
     else
       let _,_,posts = postconditions i 0 ft in
