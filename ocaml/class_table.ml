@@ -13,15 +13,6 @@ open Printf
 type formal = int * type_term
 
 
-module CMap = Map.Make(struct
-                        type t = int list * int
-                        let compare = Pervasives.compare
-                      end)
-
-
-
-
-
 
 type parent_descriptor = {
     is_ghost: bool;
@@ -48,7 +39,7 @@ type descriptor      = { mutable mdl:  Module.M.t option;
                          mutable is_exp: bool}
 
 
-type t = {mutable map:   int CMap.t;
+type t = {mutable map:   int list IntMap.t;
           seq:           descriptor seq;
           mutable base:  int IntMap.t; (* module name -> class index *)
           mutable locs:  IntSet.t;
@@ -65,6 +56,10 @@ let current_module (ct:t): Module.M.t =
 
 let is_current_module (m:Module.M.t) (ct:t): bool =
   Module.M.equal m (current_module ct)
+
+let current_package (ct:t): library_name =
+  let open Module in
+  current_module ct |> M.package_name
 
 let is_private (ct:t): bool =
   Module.Compile.is_verifying ct.comp
@@ -110,27 +105,6 @@ let descriptor (idx:int) (ct:t): descriptor =
   Seq.elem idx ct.seq
 
 
-let class_symbol (i:int) (ct:t): int =
-  assert (i<count ct);
-  (descriptor i ct).name
-
-let class_name (i:int) (ct:t): string =
-  let desc = descriptor i ct in
-  match desc.mdl with
-  | None ->
-     ST.string desc.name
-  | Some mdl ->
-     let m,pkg = Module.M.name mdl in
-     let lst =
-       if ST.string m = String.lowercase_ascii (ST.string desc.name) then
-         pkg
-       else
-         m :: pkg
-     in
-     String.concat "." (List.rev_map ST.string (desc.name :: lst))
-
-
-
 let base_descriptor (idx:int) (ct:t): base_descriptor =
   assert (0 <= idx);
   assert (idx < count ct);
@@ -146,15 +120,9 @@ let is_deferred (cls:int) (ct:t): bool =
 
 
 
-let has_any (ct:t): bool =
-  let desc = descriptor Constants.any_class ct in
-  desc.mdl <> None
-
-
-let has_predicate (ct:t): bool =
-  let desc = descriptor Constants.predicate_class ct in
-  desc.mdl <> None
-
+let class_symbol (i:int) (ct:t): int =
+  assert (i<count ct);
+  (descriptor i ct).name
 
 
 let has_module (cls:int) (ct:t): bool =
@@ -166,10 +134,121 @@ let module_of_class (cls:int) (ct:t): Module.M.t =
   assert (cls < count ct);
   let m = (descriptor cls ct).mdl in
   match m with
-    None ->
-    assert false (* illegal call *)
+  | None ->
+     assert false (* illegal call *)
   | Some m ->
      m
+
+
+let is_visible (cidx:int) (ct:t): bool =
+  (* Is the class visible i.e. being in interface check mode implies that the
+     class is either defined in a publicly used module or it is defined in the
+     current module and exported.
+   *)
+  assert (cidx < count ct);
+  not (is_interface_check ct) || (descriptor cidx ct).is_exp
+
+
+let is_class_public (cidx:int) (ct:t): bool = is_visible cidx ct
+
+
+
+exception Ambiguous of int list
+
+let find_unqualified
+      (nme: int) (ct:t): int =
+  (* Find a class by its unqualified name.
+
+     The class can be identifed  uniquely in the following cases:
+
+     - The classname is unique in the system
+
+     - A class with this name exists in the current module
+
+     - Only one class of this name exists in the current package.
+
+     If no class of [nme] is found then [Not_found] is raised. If the
+        class cannot be uniquely identified then [Ambiguous lst] is
+        raised. *)
+  let m = current_module ct in
+  let lst0 = IntMap.find nme ct.map in
+  let lst0 = List.filter (fun c -> is_visible c ct) lst0 in
+  match lst0 with
+  | [] ->
+     raise Not_found
+  | [cls] ->
+     cls
+  | _ ->
+     let lst1 =
+       List.filter
+         (fun cls -> Module.M.equal m (module_of_class cls ct))
+         lst0
+     in
+     match lst1 with
+     | [c] ->
+        c
+     | _ ->
+        assert (lst1 = []); (* There cannot be multiple classes with the
+                               same name in the same module. *)
+        let lst2 =
+          List.filter
+            (fun c -> Module.M.same_package m (module_of_class c ct))
+                lst0
+        in
+        match lst2 with
+        | [c] ->
+           c
+        | _ ->
+           raise (Ambiguous lst0)
+
+
+let qualified_class_name (i:int) (ct:t): string =
+  let open Module in
+  let desc = descriptor i ct in
+  let str = ST.string desc.name
+  in
+  match desc.mdl with
+  | None ->
+     str
+  | Some m ->
+     let curr = current_module ct
+     in
+     if M.equal curr m then
+       str
+     else if M.same_package m curr then
+       ST.string (M.base_name m) ^ "." ^ str
+     else
+       M.string_of_name m ^ "." ^ str
+
+
+let class_name (i:int) (ct:t): string =
+  let desc = descriptor i ct in
+  match desc.mdl with
+  | None ->
+     ST.string desc.name
+  | Some mdl ->
+     try
+       let i2 = find_unqualified desc.name ct in
+       if i = i2 then
+         ST.string desc.name
+       else
+         qualified_class_name i ct
+     with Not_found ->
+          assert false (* cannot happen *)
+        | Ambiguous _ ->
+           qualified_class_name i ct
+
+
+
+let has_any (ct:t): bool =
+  let desc = descriptor Constants.any_class ct in
+  desc.mdl <> None
+
+
+let has_predicate (ct:t): bool =
+  let desc = descriptor Constants.predicate_class ct in
+  desc.mdl <> None
+
 
 
 let add_to_map (cls:int) (ct:t): unit =
@@ -178,26 +257,12 @@ let add_to_map (cls:int) (ct:t): unit =
   assert (cls < count ct);
   let desc = descriptor cls ct in
   assert (desc.mdl <> None);
-  let m,pkg = Module.M.name (Option.value desc.mdl) in
-  let is_main =
-    String.lowercase_ascii (ST.string desc.name) = ST.string m
-  in
-  if is_interface_use ct then
-    begin
-      if not is_main then
-        ct.locs <- IntSet.add cls ct.locs;
-      ct.map <- CMap.add ([],desc.name) cls ct.map;
-      ct.map <- CMap.add ([m],desc.name) cls ct.map;
-      if pkg <> [] then
-        ct.map <- CMap.add (m::pkg,desc.name) cls ct.map;
-      if pkg <> [] && is_main then
-        ct.map <- CMap.add (pkg,desc.name) cls ct.map
-    end
-  else
-    begin
-      ct.map <- CMap.add ([],desc.name) cls ct.map;
-      ct.map <- CMap.add ([m],desc.name) cls ct.map
-    end
+  try
+    let lst = IntMap.find desc.name ct.map in
+    assert (not (List.mem cls lst));
+    ct.map <- IntMap.add desc.name (cls::lst) ct.map
+  with Not_found ->
+    ct.map <- IntMap.add desc.name [cls] ct.map
 
 
 
@@ -570,43 +635,13 @@ let arguments_string2
 
 
 
-let is_visible (cidx:int) (ct:t): bool =
-  (* Is the class visible i.e. being in interface check mode implies that the
-     class is either defined in a publicly used module or it is defined in the
-     current module and exported.
+let find_for_declaration (cn:int) (ct:t): int =
+  (* A class declaration declares a new class unless the class has already
+     been declared in the same module.
    *)
-  assert (cidx < count ct);
-  not (is_interface_check ct) || (descriptor cidx ct).is_exp
-
-
-let is_class_public (cidx:int) (ct:t): bool = is_visible cidx ct
-
-
-let find_for_declaration (cn:int list*int) (ct:t): int =
-  (* In a class declaration an unqualified classname always refers to a class
-     in the current module.
-
-     A class declaration redeclares a class:
-
-     - The class is already present in the current module.
-
-     - The class name is qualified and already present in a publicly used module.
-
-     Otherwise the class declaration declares a new class.
-   *)
-  let path, cn = cn in
-  let idx = CMap.find (path,cn) ct.map in
-  let desc = descriptor idx ct in
-  match desc.mdl with
-  | None ->
-     assert false (* illegal call *)
-  | Some mdl ->
-     if (path = [] && is_current_module mdl ct)
-        || (path <> [] && not (is_current_module mdl ct) && is_visible idx ct)
-     then
-       idx
-     else
-       raise Not_found
+  List.find
+    (fun cls -> is_current_module (module_of_class cls ct) ct)
+    (IntMap.find cn ct.map)
 
 
 
@@ -1071,26 +1106,76 @@ let valid_type
     make_type cls_idx args
 
 
+let find_qualified (mnme:int) (pckg:library_name) (nme:int) (ct:t): int =
+  let lst = IntMap.find nme ct.map in
+  let lst =
+    List.filter
+      (fun c ->
+        let open Module in
+        let mc = module_of_class c ct in
+        mnme = M.base_name mc
+        && match pckg with
+           | [] ->
+              M.same_package mc (current_module ct)
+           | _ ->
+              pckg = M.package_name mc
+      )
+      lst
+  in
+  match lst with
+  | [] ->
+     raise Not_found
+  | [c] ->
+     c
+  | _ ->
+     assert false (* Qualified cannot be ambiguous *)
+
 let class_index (path:int list) (name:int) (tvs:Tvars.t) (info:info) (ct:t): int =
   (* Find the class index/type variable index of [path.name] in the type
-     environment [tvs].  *)
+     environment [tvs].
+
+     If the name is unqualified then classes of the same module or the same
+     package have precedence.
+
+     Multiple classes with the same name in the same module cannot exist. But
+     a package can have multiple classes with the same name. I.e. different
+     modules can declare different classes with the same name.
+
+   *)
   let ntvs    = Tvars.count tvs
   and fgnames = Tvars.fgnames tvs
   and nall    = Tvars.count_all tvs
   in
-  try (* If there is no path then try to find the name in the formal generics *)
+  try (* If there is no path then first try to find the name in the
+         formal generics *)
     if path = [] then
       ntvs + Search.array_find_min (fun n -> n=name) fgnames
     else
       raise Not_found
   with Not_found ->
-    (* [name] is not a formal generic *)
+    (* [name] is not a formal generic in tvs *)
     try
-      let idx = CMap.find (path,name) ct.map in
-      if not (is_visible idx ct) then
-        error_info info ("Class " ^ (string_of_classname path name)
-                         ^ " is not visible in this context");
-      nall + idx
+      match path with
+      | [] ->
+         begin
+           try
+             nall + find_unqualified name ct
+           with Ambiguous lst ->
+             let open Format in
+             eprintf "@[<v>%s Ambiguous classname %s@,@,"
+                     (info_string info)
+                     (ST.string name);
+             eprintf "The class name %s is ambiguous, it could be one of@,"
+                     (ST.string name);
+             List.iter
+               (fun c ->
+                 eprintf "@,  %s" (qualified_class_name c ct))
+               lst;
+             eprintf "@]@.";
+             exit 1
+         end
+      | m::p ->
+         nall + find_qualified m p name ct
     with Not_found ->
       error_info info ("Class " ^ (string_of_classname path name)
                        ^ " does not exist in this context")
@@ -1609,7 +1694,7 @@ let analyze_signature
 let empty_table (comp:Module.Compile.t): t =
   let cc = Seq.empty ()
   in
-  {map   = CMap.empty;
+  {map   = IntMap.empty;
    seq   = cc;
    fgens = IntMap.empty;
    base  = IntMap.empty;

@@ -89,7 +89,7 @@ val dominant_class: Tvars.t -> Sign.t -> t -> int option
 val dominant_formal_generic: Tvars.t -> int option -> t -> int option
 val check_deferred:  int option -> int option -> info -> t -> unit
 
-val find_for_declaration: int list*int -> t -> int
+val find_for_declaration: int -> t -> int
 
 val domain_type: type_term -> type_term
 

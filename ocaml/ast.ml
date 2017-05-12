@@ -503,7 +503,10 @@ let feature_specification
         let unique =
           try Context.uniqueness_condition posts context
           with Not_found ->
-            error_info info "Result type does not inherit ANY"
+            error_info
+              info
+              ("Result type does not inherit "
+               ^ (Class_table.class_name Constants.any_class (PC.class_table pc)))
         in
         prove exist  "existence";
         prove unique "uniqueness"
@@ -937,8 +940,9 @@ let put_creators
           then
             error_info fn.i
               ("Type " ^
-               (Class_table.string_of_type arg tvs ct) ^
-               " does not inherit ANY")
+                 (Class_table.string_of_type arg tvs ct)
+                 ^ " does not inherit "
+                 ^ (Class_table.class_name Constants.any_class ct))
         done;
         if is_new then
           Feature_table.add_feature fn tvs nms sign imp ft
@@ -1003,9 +1007,11 @@ let put_class
     (creators: (feature_name withinfo * entities list) list withinfo)
     (pc: Proof_context.t)
     : unit =
-  (** Analyze the class declaration [hm,cn,fgs,inherits] and add or update the
+  (** Analyze the class declaration [hm,cn,fgs,creators] and add or update the
       corresponding class.  *)
   assert (Proof_context.is_global pc);
+  if fst cn.v <> [] then
+    error_info cn.i "Illegal class name qualification";
   let ft = Proof_context.feature_table pc in
   let ct = Feature_table.class_table ft in
   let tvs = Class_table.class_tvs fgs ct in
@@ -1022,7 +1028,7 @@ let put_class
   end;
   let idx,is_new =
     try
-      let idx = Class_table.find_for_declaration cn.v ct in
+      let idx = Class_table.find_for_declaration (snd cn.v) ct in
       Class_table.update idx cn.i hm cv tvs ct;
       idx, false
     with Not_found ->

@@ -349,8 +349,9 @@ let inherit_parents (cls:int) (tvs:Tvars.t) (clause:inherit_clause) (pc:PC.t): u
                            " in implementation file");
         if par <> Constants.any_class &&
           not (Class_table.inherits_any par ct) then
-          error_info tp.i ("Class " ^ (Class_table.class_name par ct) ^
-                           " does not inherit ANY");
+          error_info tp.i ("Class " ^ (Class_table.class_name par ct)
+                           ^ " does not inherit "
+                           ^ (Class_table.class_name Constants.any_class ct));
         if 1 < Feature_table.verbosity ft then
           printf "  inherit %s in %s\n"
             (Class_table.class_name par ct) (Class_table.class_name cls ct);
