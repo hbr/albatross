@@ -29,6 +29,9 @@ val path_separator: unit -> char
 val modification_time: string -> float
 val write_dummy: string -> unit
 
+val system: string -> Unix.process_status
+val system_with_output: string -> string list
+
 module Filename:
 sig
   val concat: string -> string -> string

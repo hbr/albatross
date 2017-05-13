@@ -75,3 +75,39 @@ module Filename =
     let concat (dir:string) (name:string): string =
       Filename.concat dir name
   end
+
+
+
+let system (cmd:string): Unix.process_status =
+  (* Execute the command [cmd] by the shell and return the exit status. *)
+  Unix.system cmd
+
+let system_with_output (cmd:string): string list =
+  (* Execute the command [cmd] by the shell and return the output of the
+     command as a list of lines (i.e. strings).
+   *)
+  let chin,chout,cherr =
+    Unix.open_process_full cmd (Unix.environment ()) in
+  let rec call ch lst =
+    try
+      call ch ((input_line ch) :: lst)
+    with
+      End_of_file ->
+      lst
+  in
+  let lst_in  = call chin [] in
+  let lst_err = call cherr [] in
+  (* Note: There is a possible deadlock if the system command writes to stderr
+     and afterward to stdout and the pipe buffer is not large enough to store
+     all the outout to stdout. *)
+  begin
+    match List.rev lst_err with
+    | [] ->
+       ()
+    | hd::_ ->
+       raise (Sys_error hd)
+  end;
+  close_in chin;
+  close_in cherr;
+  close_out chout;
+  List.rev lst_in
