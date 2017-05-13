@@ -77,7 +77,7 @@ class bdesc
   end
 
 type descriptor = {
-    mutable mdl: Module.M.t option;(* None: base feature, module not yet assigned*)
+    mdl: Module.M.t;
     dominant_cls:int option;
     dominant_fg: int option;
     fname:       feature_name;
@@ -126,6 +126,8 @@ let current_module (ft:t): Module.M.t =
 let is_current_module (m:Module.M.t) (ft:t): bool =
   Module.M.equal m (current_module ft)
 
+let core_module (ft:t): Module.M.t =
+  Class_table.core_module ft.ct
 
 let count (ft:t): int =
   Seq.count ft.seq
@@ -2038,7 +2040,7 @@ let add_feature
   and nfgs = Tvars.count_all tvs
   in
   let desc =
-    {mdl      = Some (current_module ft);
+    {mdl      = current_module ft;
      dominant_cls;
      dominant_fg;
      fname    = fn.v;
@@ -2162,7 +2164,7 @@ let add_base
       ft.base <- IntMap.add mdl_nme lst ft.base;
       lst
   and desc = {
-    mdl = None;
+    mdl = core_module ft;
     fname    = fn;
     dominant_cls;
     dominant_fg;
@@ -2544,8 +2546,6 @@ let add_base_features (mdl_name:int) (ft:t): unit =
     List.iter
       (fun idx ->
         let desc = descriptor idx ft in
-        assert (desc.mdl = None);
-        desc.mdl <- Some (current_module ft);
         if is_interface_use ft then
           desc.bdesc#set_exported;
         add_key idx ft;
@@ -2589,22 +2589,18 @@ let check_interface (ft:t): unit =
   assert (is_interface_check ft);
   for i = 0 to count ft - 1 do
     let desc = descriptor i ft in
-    match desc.mdl with
-    | None ->
-       ()
-    | Some mdl ->
-       if is_current_module mdl ft
-          && is_desc_deferred desc
-          && not desc.bdesc#is_exported
-          && Class_table.is_class_public (owner i ft) ft.ct
-       then
-         begin
-           let open Module in
-           assert (M.has_interface mdl);
-           error_info (FINFO (1,0,Src.path (M.interface mdl)))
-                      ("deferred feature \"" ^ (string_of_signature i ft) ^
-                         "\" is not exported")
-         end
+    if is_current_module desc.mdl ft
+       && is_desc_deferred desc
+       && not desc.bdesc#is_exported
+       && Class_table.is_class_public (owner i ft) ft.ct
+    then
+      begin
+        let open Module in
+        assert (M.has_interface desc.mdl);
+        error_info (FINFO (1,0,Src.path (M.interface desc.mdl)))
+                   ("deferred feature \"" ^ (string_of_signature i ft) ^
+                      "\" is not exported")
+      end
   done
 
 

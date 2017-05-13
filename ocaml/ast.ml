@@ -1054,16 +1054,6 @@ let put_class
   if idx <> Constants.any_class && (hm.v = Deferred_hmark || creators.v <> [])
   then
     begin
-      let ind_or_defer () =
-        if hm.v = Deferred_hmark then "A deferred "
-        else "An inductive "
-      in
-      if not (Class_table.has_any ct) then
-        error_info hm.i
-                   (ind_or_defer () ^ "type needs the module \"any\"");
-      if not (Class_table.has_predicate ct) then
-        error_info hm.i
-                   (ind_or_defer () ^ "type needs the module \"predicate\"");
       inherit_any idx pc;
       if creators.v <> [] then
         put_creators idx is_new cls_tvs cls_tp creators pc

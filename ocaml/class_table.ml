@@ -32,7 +32,7 @@ type base_descriptor = { hmark:    header_mark;
                          mutable ancestors: parent_descriptor IntMap.t}
 
 
-type descriptor      = { mutable mdl:  Module.M.t option;
+type descriptor      = { mdl:  Module.M.t;
                          ident: int;
                          name: int;
                          bdesc: base_descriptor;
@@ -125,19 +125,15 @@ let class_symbol (i:int) (ct:t): int =
   (descriptor i ct).name
 
 
-let has_module (cls:int) (ct:t): bool =
-  assert (cls < count ct);
-  Option.has (descriptor cls ct).mdl
-
-
 let module_of_class (cls:int) (ct:t): Module.M.t =
   assert (cls < count ct);
-  let m = (descriptor cls ct).mdl in
-  match m with
-  | None ->
-     assert false (* illegal call *)
-  | Some m ->
-     m
+  (descriptor cls ct).mdl
+
+let core_module (ct:t): Module.M.t =
+  let comp = compilation_context ct in
+  let open Module in
+  assert (MSet.has_id 0 (Compile.set comp));
+  MSet.module_of_id 0 (Compile.set comp)
 
 let is_exported (c:int) (ct:t): bool =
   (descriptor c ct).is_exp
@@ -218,49 +214,33 @@ let find_unqualified
 let qualified_class_name (i:int) (ct:t): string =
   let open Module in
   let desc = descriptor i ct in
+  let m = desc.mdl in
   let str = ST.string desc.name
   in
-  match desc.mdl with
-  | None ->
-     str
-  | Some m ->
-     let curr = current_module ct
-     in
-     if M.equal curr m then
-       str
-     else if M.same_package m curr then
-       ST.string (M.base_name m) ^ "." ^ str
-     else
-       M.string_of_name m ^ "." ^ str
+  let curr = current_module ct
+  in
+  if M.equal curr m then
+    str
+  else if M.same_package m curr then
+    ST.string (M.base_name m) ^ "." ^ str
+  else
+    M.string_of_name m ^ "." ^ str
 
 
 let class_name (i:int) (ct:t): string =
   let desc = descriptor i ct in
-  match desc.mdl with
-  | None ->
-     ST.string desc.name
-  | Some mdl ->
-     try
-       let i2 = find_unqualified desc.name ct in
-       if i = i2 then
-         ST.string desc.name
-       else
-         qualified_class_name i ct
-     with Not_found ->
-          assert false (* cannot happen *)
-        | Ambiguous _ ->
-           qualified_class_name i ct
+  try
+    let i2 = find_unqualified desc.name ct in
+    if i = i2 then
+      ST.string desc.name
+    else
+      qualified_class_name i ct
+  with Not_found ->
+       ST.string desc.name
+     | Ambiguous _ ->
+        qualified_class_name i ct
 
 
-
-let has_any (ct:t): bool =
-  let desc = descriptor Constants.any_class ct in
-  desc.mdl <> None
-
-
-let has_predicate (ct:t): bool =
-  let desc = descriptor Constants.predicate_class ct in
-  desc.mdl <> None
 
 
 
@@ -269,7 +249,6 @@ let add_to_map (cls:int) (ct:t): unit =
    *)
   assert (cls < count ct);
   let desc = descriptor cls ct in
-  assert (desc.mdl <> None);
   try
     let lst = IntMap.find desc.name ct.map in
     assert (not (List.mem cls lst));
@@ -283,12 +262,7 @@ let add_base_classes (mdl_nme:int) (ct:t): unit =
   try
     let clslst = IntMap.find mdl_nme ct.base in
     List.iter
-      (fun cls ->
-        let desc = Seq.elem cls ct.seq in
-        assert (desc.mdl = None);
-        desc.mdl <- Some (current_module ct);
-        add_to_map cls ct
-      )
+      (fun cls -> add_to_map cls ct)
       clslst
   with Not_found ->
     ()
@@ -887,17 +861,14 @@ let add_generics (idx:int) (is_ass:bool) (tvs:Tvars.t) (ct:t): unit =
 let can_see (c1:int) (c2:int) (ct:t): bool =
   (* Can class [c1] see [c2] i.e. has [c2] been defined before in the same
      module or i   n a module which is used by the current module? *)
-  if not (has_module c1 ct  && has_module c2 ct) then
-    c2 <= c1
+  let m1 = module_of_class c1 ct
+  and m2 = module_of_class c2 ct in
+  if Module.M.equal m1 m2 then
+    c1 >= c2
+  else if is_public ct then
+    Module.M.uses_public m1 m2
   else
-    let m1 = module_of_class c1 ct
-    and m2 = module_of_class c2 ct in
-    if Module.M.equal m1 m2 then
-      c1 >= c2
-    else if is_public ct then
-      Module.M.uses_public m1 m2
-    else
-      Module.M.uses m1 m2
+    Module.M.uses m1 m2
 
 
 
@@ -969,27 +940,24 @@ let check_deferred  (owner:int option) (fg:int option) (info:info) (ct:t): unit 
            info
            ("The owner class " ^ (class_name owner ct) ^ " is not deferred")
      );
-     match desc.mdl with
-     | None ->
-        ()
-     | Some m ->
-        if not (is_current_module m ct) then
-          error_info
-            info
-            ("Can be defined only in the module \""
-             ^ Module.M.string_of_name m
-             ^ "\" of the owner class "
-             ^ class_name owner ct)
-        else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants)
-        then
-          error_info
-            info
+     let m = desc.mdl in
+     if not (is_current_module m ct) then
+       error_info
+         info
+         ("Can be defined only in the module \""
+          ^ Module.M.string_of_name m
+          ^ "\" of the owner class "
+          ^ class_name owner ct)
+     else if not (is_interface_check ct || IntSet.is_empty bdesc.descendants)
+     then
+       error_info
+         info
             ("Owner class " ^ (class_name owner ct) ^" has already descendants")
-        else if fg = None then
-          error_info
-            info
-            ("There must be a unique formal generic anchored to the owner class " ^
-               (class_name owner ct))
+     else if fg = None then
+       error_info
+         info
+         ("There must be a unique formal generic anchored to the owner class " ^
+            (class_name owner ct))
 
 
 
@@ -1439,27 +1407,26 @@ let update
   let desc = Seq.elem idx ct.seq
   and mdl  = current_module ct
   in
-  if desc.mdl = None then
-    desc.mdl <- Some mdl;
-  match desc.mdl with
-  | None ->
-     assert false (* cannot happen *)
-  | Some m when Module.M.equal m mdl ->
-     check_base_descriptor hm cv tvs desc.bdesc idx true ct;
-     if not desc.is_exp then
-       export idx hm tvs ct
-  | Some m ->
-     (* This error handling shall never happen *)
-     let open Format in
-     eprintf
-       "%s %s %s %s \"%s\" %s@."
-       (info_string info)
-       "The class"
-       (class_name idx ct)
-       "belongs to module"
-       (Module.M.string_of_name m)
-       "You cannot redeclare it in another module";
-     exit 1
+  if Module.M.equal desc.mdl mdl then
+    begin
+      check_base_descriptor hm cv tvs desc.bdesc idx true ct;
+      if not desc.is_exp then
+        export idx hm tvs ct
+    end
+  else
+    begin
+      (* This error handling shall never happen *)
+      let open Format in
+      eprintf
+        "%s %s %s %s \"%s\" %s@."
+        (info_string info)
+        "The class"
+        (class_name idx ct)
+        "belongs to module"
+        (Module.M.string_of_name desc.mdl)
+        "You cannot redeclare it in another module";
+      exit 1
+    end
 
 
 
@@ -1493,7 +1460,7 @@ let add
   and is_exp = is_interface_public_use ct
   in
   Seq.push
-    {mdl  = Some (current_module ct);
+    {mdl  = current_module ct;
      name = cn;
      ident = idx;
      is_exp = is_exp;
@@ -1760,7 +1727,7 @@ let add_base_class
   let bdesc = standard_bdesc hm cvar tvs idx
   in
   Seq.push
-    {mdl = None;
+    {mdl = core_module ct;
      name = nme;
      ident = idx;
      is_exp = (name = "@DUMMY");

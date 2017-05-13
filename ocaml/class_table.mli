@@ -37,6 +37,7 @@ val class_tvs: formal_generics -> t -> Tvars.t
 val compilation_context: t -> Module.Compile.t
 
 val current_module: t -> Module.M.t
+val core_module: t -> Module.M.t
 
 val add_used_module:    Module.M.t -> t -> unit
 val add_current_module: Module.M.t -> t -> unit
@@ -64,7 +65,6 @@ val class_symbol: int -> t -> int
 
 val class_name:   int -> t -> string
 
-val has_module: int -> t -> bool
 val module_of_class: int -> t -> Module.M.t
 
 val is_deferred: int -> t -> bool
@@ -134,9 +134,6 @@ val ancestor_type: type_term -> int -> int -> t -> type_term
 
 val descends_from_any: int -> t -> bool
 val type_descends_from_any: term -> Tvars.t -> t -> bool
-
-val has_any: t -> bool
-val has_predicate: t -> bool
 
 val inherits_any:      int -> t -> bool
 
