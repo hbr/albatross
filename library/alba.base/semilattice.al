@@ -160,7 +160,7 @@ all(p,q,r:{G})
     end
 
 class
-    predicate.PREDICATE[G]
+    core.PREDICATE[G]
 inherit
     ghost SEMILATTICE
 end

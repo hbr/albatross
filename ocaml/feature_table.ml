@@ -2201,11 +2201,11 @@ let base_table (comp:Module.Compile.t) : t =
   and spec_term n t = Feature.Spec.make_func_def (standard_argnames n) (Some t) []
   in
   add_base (* ==> *)
-    "boolean" Constants.boolean_class (FNoperator DArrowop)
+    "core" Constants.boolean_class (FNoperator DArrowop)
     [||] [|bool;bool|] bool false false (spec_none 2) ft;
 
   add_base (* false *)
-    "boolean" Constants.boolean_class FNfalse
+    "core" Constants.boolean_class FNfalse
     [||] [||] bool false false (spec_none 0) ft;
 
   let imp_id1   = 1 + Constants.implication_index
@@ -2223,35 +2223,35 @@ let base_table (comp:Module.Compile.t) : t =
     Term.binary Constants.implication_index (false_constant 0) (false_constant 0)
   in
   add_base (* true *)
-    "boolean" Constants.boolean_class FNtrue
+    "core" Constants.boolean_class FNtrue
     [||] [||] bool false false (spec_term 0 true_term) ft;
 
   add_base (* not *)
-    "boolean" Constants.boolean_class (FNoperator Notop)
+    "core" Constants.boolean_class (FNoperator Notop)
     [||] [|bool|] bool false false (spec_term 1 not_term) ft;
 
   add_base (* and *)
-    "boolean" Constants.boolean_class (FNoperator Andop)
+    "core" Constants.boolean_class (FNoperator Andop)
     [||] [|bool;bool|] bool false false (spec_term 2 and_term) ft;
 
   add_base (* or *)
-    "boolean" Constants.boolean_class (FNoperator Orop)
+    "core" Constants.boolean_class (FNoperator Orop)
     [||] [|bool;bool|] bool false false (spec_term 2 or_term) ft;
 
   add_base (* any equality *)
-    "any" Constants.any_class (FNoperator Eqop)
+    "core" Constants.any_class (FNoperator Eqop)
     [|any1|] [|g_tp;g_tp|] bool1 true false (spec_none 2) ft;
 
   add_base (* in *)
-    "predicate" Constants.predicate_class (FNoperator Inop)
+    "core" Constants.predicate_class (FNoperator Inop)
     [|any1|] [|g_tp;p_tp1|] bool1 false false (spec_none 2) ft;
 
   add_base (* domain *)
-    "function" Constants.function_class (FNname ST.domain)
+    "core" Constants.function_class (FNname ST.domain)
     [|any2;any2|] [|f_tp|] p_tp2 false true (spec_none 1) ft;
 
   add_base (* tuple *)
-    "tuple" Constants.tuple_index (FNname ST.tuple)
+    "core" Constants.tuple_index (FNname ST.tuple)
     [|any2;any2|] [|a_tp;b_tp|] tup_tp false false (spec_none 2) ft;
 
   let first_second_term i =
@@ -2265,11 +2265,11 @@ let base_table (comp:Module.Compile.t) : t =
     Flow (Inspect, [|Variable 0; pat; res |])
   in
   add_base (* first *)
-    "tuple" Constants.tuple_class (FNname ST.first)
+    "core" Constants.tuple_class (FNname ST.first)
     [|any2;any2|] [|tup_tp|] a_tp false false (spec_term 1 (first_second_term 0)) ft;
 
   add_base (* second *)
-    "tuple" Constants.tuple_class (FNname ST.second)
+    "core" Constants.tuple_class (FNname ST.second)
     [|any2;any2|] [|tup_tp|] b_tp false false (spec_term 1 (first_second_term 1)) ft;
 
   assert ((descriptor Constants.implication_index ft).fname = FNoperator DArrowop);
@@ -2569,7 +2569,7 @@ let add_current_module (m:Module.M.t) (ft:t): unit =
   let name = Module.M.base_name m in
   Class_table.add_current_module m ft.ct;
   add_base_features name ft;
-  if name <> ST.symbol "boolean" then begin
+  if name <> ST.symbol "core" then begin
     let or_desc  = descriptor Constants.or_index ft
     and and_desc = descriptor Constants.and_index ft in
     or_desc.bdesc#set_specification

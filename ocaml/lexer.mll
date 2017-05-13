@@ -271,6 +271,11 @@ and comment level = parse
 
 | '\n'          { Lexing.new_line lexbuf; comment level lexbuf }
 
+| eof           {
+    Support.error_info
+        (info_of_lexbuf lexbuf)
+        "End of file within comment"
+}
 | "{:"          { comment (level+1) lexbuf}
 
 | ":}"          { if level = 0 then

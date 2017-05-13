@@ -334,17 +334,19 @@ module M =
       with Sys_error _ ->
         { name = mname; sources = Implementation src_al; id = None }
 
-    let get_external (path:string) (name:string) (mnme:module_name): t =
+    let get_external (path:string) (name:string) (mnme:module_name withinfo): t =
       let src_ali =
         try
-          Src.get path (name ^ ".ali") (snd mnme)
+          Src.get path (name ^ ".ali") (snd mnme.v)
         with Sys_error _ ->
-          Format.eprintf
-            "The module \"%s\" does not have an interface file@."
+          let open Format in
+          eprintf
+            "%s The module \"%s\" does not have an interface file@."
+            (info_string mnme.i)
             name;
           exit 1
       in
-      {name = mnme; sources = Interface src_ali; id = None}
+      {name = mnme.v; sources = Interface src_ali; id = None}
 
   end (* M *)
 
@@ -512,6 +514,12 @@ module MSet =
     let compare (m1:node) (m2:node): int =
       M.compare m1 m2
 
+    let count_sorted (set:t): int =
+      Seq.count set.seq
+
+    let has_id (i:int) (set:t): bool =
+      i < count_sorted set
+
     let module_of_id (i:int) (set:graph): M.t =
       assert (i < Seq.count set.seq);
       Seq.elem i set.seq
@@ -595,8 +603,19 @@ module MSet =
 
 
     let dependencies (m:node) (set: t): node list =
+      let deps =
+        if M.has_implementation m then
+          Src.dependencies (M.implementation m)
+        else
+          []
+      in
+      let deps =
+        if M.has_interface m then
+          Src.dependencies (M.interface m) @ deps
+        else
+          deps
+      in
       let src = M.primary_source m in
-      let deps = Src.dependencies src in
       List.fold_left
         (fun lst mnme ->
           let nme,pkg = mnme.v in
@@ -606,7 +625,7 @@ module MSet =
             let dir = PSet.find pkg mnme.i src set.ps in
             let m =
               if M.is_external m || pkg <> [] then
-                M.get_external dir (ST.string nme) mnme.v
+                M.get_external dir (ST.string nme) mnme
               else
                 try
                   M.get dir (ST.string nme) mnme.v

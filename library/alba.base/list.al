@@ -1,20 +1,11 @@
 use
-    boolean_logic
-    predicate_logic
-    function
-    tuple
+    boolean
+    predicate
     natural
 end
 
 G:ANY
 H:ANY
-
-class
-    LIST[G]
-create
-    []
-    (^) (head:G, tail:[G])   -- [G] is a shorthand for LIST[G]
-end
 
 
 all(x:G,a:[G])

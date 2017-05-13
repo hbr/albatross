@@ -137,7 +137,30 @@ let add_used_module (m:Module.M.t) (mset:Module.MSet.t) (pc:PC.t): unit =
 
 
 
+let check_core (mset:Module.MSet.t): unit =
+  let open Module in
+  if MSet.has_id 0 mset then
+    begin
+      let open Format in
+      let m0 = MSet.module_of_id 0 mset in
+      if ST.string (M.base_name m0) <> "core" then
+        begin
+          eprintf "The module \"core\" is not used@.";
+          exit 1
+        end
+      else
+        let pkg = string_of_library (M.package_name m0) in
+        if pkg <> "" && pkg <> "alba.base" then
+          begin
+            eprintf "@[<v>The module \"core\" is used from the package@,@,";
+            eprintf "  %s" pkg;
+            eprintf "@,@,instead of the package@,@,  alba.base@]@."
+          end
+    end
+
+
 let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
+  check_core mset;
   let open Module in
   assert (M.has_implementation m);
   let verbosity = MSet.verbosity mset in
@@ -174,8 +197,6 @@ let compile_module (m:Module.M.t) (mset:Module.MSet.t): unit =
       Module.Src.write_meta src_ali
     end;
   Module.Src.write_meta src_al
-
-
 
 
 

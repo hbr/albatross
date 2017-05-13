@@ -1,6 +1,6 @@
 use
     endorelation
-    function_logic
+    function
 end
 
 A: ANY

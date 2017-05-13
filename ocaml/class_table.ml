@@ -41,7 +41,7 @@ type descriptor      = { mutable mdl:  Module.M.t option;
 
 type t = {mutable map:   int list IntMap.t;
           seq:           descriptor seq;
-          mutable base:  int IntMap.t; (* module name -> class index *)
+          mutable base:  int list IntMap.t; (* module name -> class indices *)
           mutable locs:  IntSet.t;
           mutable fgens: type_term IntMap.t;
           mutable comp:  Module.Compile.t}
@@ -139,6 +139,8 @@ let module_of_class (cls:int) (ct:t): Module.M.t =
   | Some m ->
      m
 
+let is_exported (c:int) (ct:t): bool =
+  (descriptor c ct).is_exp
 
 let is_visible (cidx:int) (ct:t): bool =
   (* Is the class visible i.e. being in interface check mode implies that the
@@ -146,7 +148,18 @@ let is_visible (cidx:int) (ct:t): bool =
      current module and exported.
    *)
   assert (cidx < count ct);
-  not (is_interface_check ct) || (descriptor cidx ct).is_exp
+  let open Module in
+  let curr_mdl = current_module ct
+  and cls_mdl  = module_of_class cidx ct
+  in
+  if is_private ct then
+    true
+  else if is_interface_use ct then
+    M.uses_public curr_mdl cls_mdl
+  else
+    (* interface check mode *)
+    (M.equal curr_mdl cls_mdl && is_exported cidx ct)
+    || M.uses_public curr_mdl cls_mdl
 
 
 let is_class_public (cidx:int) (ct:t): bool = is_visible cidx ct
@@ -268,11 +281,15 @@ let add_to_map (cls:int) (ct:t): unit =
 
 let add_base_classes (mdl_nme:int) (ct:t): unit =
   try
-    let cls = IntMap.find mdl_nme ct.base in
-    let desc = Seq.elem cls ct.seq in
-    assert (desc.mdl = None);
-    desc.mdl <- Some (current_module ct);
-    add_to_map cls ct
+    let clslst = IntMap.find mdl_nme ct.base in
+    List.iter
+      (fun cls ->
+        let desc = Seq.elem cls ct.seq in
+        assert (desc.mdl = None);
+        desc.mdl <- Some (current_module ct);
+        add_to_map cls ct
+      )
+      clslst
   with Not_found ->
     ()
 
@@ -1720,6 +1737,7 @@ let tvars_with_class_variable
 
 
 let add_base_class
+    (mdl_name: string)
     (name:string)
     (hm:  header_mark)
     (fgs: formal array)
@@ -1748,9 +1766,15 @@ let add_base_class
      is_exp = (name = "@DUMMY");
      bdesc = bdesc}
     ct.seq;
-  let mdl_nme = ST.symbol (String.lowercase_ascii name) in
-  assert (not (IntMap.mem mdl_nme ct.base));
-  ct.base <- IntMap.add mdl_nme idx ct.base
+  let mdl_nme = ST.symbol mdl_name in
+  begin
+    try
+      let lst = IntMap.find mdl_nme ct.base in
+      assert (not (List.mem idx lst));
+      ct.base <- IntMap.add mdl_nme (idx::lst) ct.base
+    with Not_found ->
+      ct.base <- IntMap.add mdl_nme [idx] ct.base
+  end
 
 
 
@@ -1776,14 +1800,16 @@ let base_table (comp:Module.Compile.t): t =
   and fgb = ST.symbol "B"
   and anycon = Variable Constants.any_class
   and ct = empty_table (comp)   in
-  add_base_class "BOOLEAN"   No_hmark        [||] ct;
-  add_base_class "ANY"       Deferred_hmark  [||] ct;
-  add_base_class "@DUMMY"    No_hmark        [||] ct;
-  add_base_class "PREDICATE" No_hmark        [|fgg,anycon|] ct;
-  add_base_class "FUNCTION"  No_hmark        [|(fga,anycon);(fgb,anycon)|] ct;
-  add_base_class "TUPLE"     No_hmark        [|(fga,anycon);(fgb,anycon)|] ct;
-  add_base_class "SEQUENCE"  No_hmark        [|fga,anycon|] ct;
-  add_base_class "LIST"      No_hmark        [|fga,anycon|] ct;
+  add_base_class "core"      "BOOLEAN"   No_hmark        [||] ct;
+  add_base_class "core"      "ANY"       Deferred_hmark  [||] ct;
+  add_base_class "@dummy"    "@DUMMY"    No_hmark        [||] ct;
+  add_base_class "core"      "PREDICATE" No_hmark        [|fgg,anycon|] ct;
+  add_base_class "core"      "FUNCTION"  No_hmark
+                 [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "core"      "TUPLE"     No_hmark
+                 [|(fga,anycon);(fgb,anycon)|] ct;
+  add_base_class "core"      "SEQUENCE"  No_hmark        [|fga,anycon|] ct;
+  add_base_class "core"      "LIST"      No_hmark        [|fga,anycon|] ct;
   check_base_classes ct;
   ct
 

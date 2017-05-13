@@ -1,7 +1,6 @@
 use
-    boolean_logic
-    predicate_logic
-    tuple
+    boolean
+    predicate
 end
 
 

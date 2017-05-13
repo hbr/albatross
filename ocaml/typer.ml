@@ -146,7 +146,7 @@ let find_features (info:info) (fn:feature_name) (c:Context.t): int list =
   if flst = [] then
     error_info
       info
-      ("Unknow function \"" ^ feature_name_to_string fn ^ "\"");
+      ("Unknown function \"" ^ feature_name_to_string fn ^ "\"");
   flst
 
 

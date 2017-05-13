@@ -1041,6 +1041,11 @@ let put_class
       Class_table.add hm cv cn0 tvs ct;
       idx, true
   in
+  if is_new && PC.is_interface_check pc then
+    error_info
+      cn.i
+      ("A new class "  ^ (ST.string (snd cn.v))
+       ^ " cannot be declared in an interface file");
   if 2 <= PC.verbosity pc then begin
     let str = if is_new then "new" else "update" in
     printf "\n  %s class %s\n" str (ST.string (snd cn.v));

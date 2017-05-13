@@ -1,38 +1,24 @@
-class BOOLEAN
-
-false: BOOLEAN
-true:  BOOLEAN
-(==>) (a,b:BOOLEAN): BOOLEAN
-(and) (a,b:BOOLEAN): BOOLEAN
-(or)  (a,b:BOOLEAN): BOOLEAN
-(not) (a:BOOLEAN):   BOOLEAN -> a ==> false
-(=)   (a,b:BOOLEAN): BOOLEAN -> (a ==> b) and (b ==> a)
+use core end
 
 all(a,b,c:BOOLEAN)
     ensure
-        true
+        a or b ==> b or a             -- commutativity of 'or'
 
-        a = a
+        -- de Morgan 1
+        not (a or b) ==> not a
+        not (a or b) ==> not b
+        not a ==> not b ==> not (a or b)
 
-        -- negation
-        (not a ==> false) ==> a       -- indirect proof
-        false ==> a                   -- ex falso quodlibet
+        -- de Morgan 2
+        not (a and b)  ==> not a or not b
+        not a or not b ==> not (a and b)
 
-        -- conjunction
-        a and b ==> a                 -- and elimination
-        a and b ==> b
-        a ==> b ==> a and b           -- and introduction
 
-        -- disjunction
-        a ==> a or b                  -- or introduction
-        b ==> a or b
+        -- associativity of 'or'
+        (a or b) or c ==> a or (b or c)
+        a or (b or c) ==> (a or b) or c
 
-        a or b
-        ==> (a ==> c)
-        ==> (b ==> c)
-        ==> c                         -- or elimination
+        a or b ==> not a ==> b        -- 'or' and '==>'
+        (not a ==> b) ==> a or b
 
-        a or not a                    -- excluded middle
-
-        a or a ==> a                  -- idempotence of 'or'
     end

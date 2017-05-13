@@ -47,7 +47,7 @@ all(a,b:SL)
 G: ANY
 
 class
-    predicate.PREDICATE[G]
+    core.PREDICATE[G]
 inherit
     ghost SEMILATTICE
 end

@@ -1,5 +1,5 @@
 use
-    predicate
+    core
 end
 
 G:ANY

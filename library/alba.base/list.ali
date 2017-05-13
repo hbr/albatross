@@ -1,7 +1,4 @@
 use
-    predicate
-    function
-    tuple
     natural
 end
 
@@ -9,12 +6,6 @@ end
 G:ANY
 H:ANY
 
-class
-    LIST[G]
-create
-    []
-    (^) (head:G, tail:[G])  -- [G] is a shorthand for LIST[G]
-end
 
 
 size (a:[G]): NATURAL

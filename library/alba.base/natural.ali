@@ -1,6 +1,5 @@
 use
-    predicate
-    tuple
+    core
 end
 
 

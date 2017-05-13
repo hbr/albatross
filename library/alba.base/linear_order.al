@@ -1,5 +1,5 @@
 use
-    boolean_logic
+    boolean
     partial_order
 end
 

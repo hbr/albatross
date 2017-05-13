@@ -1,5 +1,5 @@
 use
-    predicate_logic
+    predicate
     partial_order
     -- endofunction
 end

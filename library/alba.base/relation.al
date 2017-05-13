@@ -1,6 +1,5 @@
 use
-    predicate_logic
-    tuple
+    predicate
 end
 
 A: ANY

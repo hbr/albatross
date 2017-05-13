@@ -1,170 +1,132 @@
-class BOOLEAN
+use core end
 
 
-{: Built in functions
-   ================== :}
-
-false: BOOLEAN               note built_in end
-
-(==>) (a,b:BOOLEAN): BOOLEAN note built_in end
-
-
-
-
-
-{: Negation
-   ======== :}
-
-(not) (a:BOOLEAN): BOOLEAN   -> a ==> false
-
-
-
-
-all(a:BOOLEAN)
-    ensure
-        not not a ==> a    -- double negation
-    note axiom
-    end
-
-all(a:BOOLEAN)
-        -- indirect proof
-    require
-        not a ==> false
-    ensure
-        a
-        assert
-            not not a  -- can be derived from assumption and
-                       -- proves 'a' by the double negation law
-    end
-
-all(a:BOOLEAN)
-    require
-        false
-    ensure
-        a
-        via require not a
-    end
-
-
-{: The constant 'true'
-   =================== :}
-
-true: BOOLEAN                = false ==> false
-
-
-all ensure true end
-
-
-
-(and) (a,b:BOOLEAN): BOOLEAN -> not (a ==> b ==> false)
+{: de Morgan 1: 'not (a or b) = not a and not b'
+   ============================================= :}
 
 
 all(a,b:BOOLEAN)
-        -- 'and' elimination 1
     require
-        a and b
+        not (a or b)
     ensure
-        a
-        via require not a
-    end
-
-all(a,b:BOOLEAN)
-        -- 'and' elimination 2
-    require
-        a and b
-    ensure
-        b
-        via require not b
+        not a
     end
 
 
 all(a,b:BOOLEAN)
-        -- 'and' introduction
+    require
+        not (a or b)
     ensure
-        a ==> b ==> a and b
+        not b
+    end
+
+
+all(a,b:BOOLEAN)
+    require
+        not a
+        not b
+    ensure
+        not (a or b)
     end
 
 
 
-(or)  (a,b:BOOLEAN): BOOLEAN -> not a ==> b
+
+{: de Morgan 2: 'not (a and b) = not a or not b'
+   ============================================= :}
+
 
 
 all(a,b:BOOLEAN)
-        -- 'or' introduction
     require
-        a
+        not (a and b)
     ensure
+        not a or not b
+    via require
+        not (not a or not b)
+            {: apply 'not (x or y) ==> not x' and  'not (x or y) ==> not y'
+               and then the double negation law to derive a contradiction
+               with the premise 'not (a and b)' :}
+    end
+
+
+all(a,b:BOOLEAN)
+    require
+        not a or not b
+    ensure
+        not (a and b)
+        if not a
+        orif not b
+    end
+
+
+
+
+{: Commutativity of 'or'
+   ===================== :}
+
+
+all(a,b:BOOLEAN)
+    require
         a or b
-    assert
-        require
-            not a
-        ensure
-            b
-            via require not b
-        end
-    end
-
-
-all(a,b:BOOLEAN)
-        -- 'or' introduction 2
     ensure
-        b ==> a or b
+        b or a
+        if a orif b
     end
 
+
+
+
+
+
+
+{: Associativity of 'or'
+   ==================== :}
 
 
 
 all(a,b,c:BOOLEAN)
-        -- 'or' elimination
+    require
+        a or b or c
+    ensure
+        a or (b or c)
+        if a or b
+            if a orif b
+        orif c
+    end
+
+
+
+all(a,b,c:BOOLEAN)
+    require
+        a or (b or c)
+    ensure
+        a or b or c
+        if a
+        orif b or c
+            if b orif c
+    end
+
+
+
+{: 'or' and '==>'
+   ============== :}
+
+all(a,b:BOOLEAN)
     require
         a or b
-        a ==> c
-        b ==> c
+        not a
     ensure
-        c
-        via require not c
-        assert
-            not a  -- contrapositive of 'a ==> c'
-            b      -- def 'a or b'
-            c
+        b
+    if a
+        assert false
+    orif b
     end
 
-
-all(a:BOOLEAN)
+all(a,b:BOOLEAN)
     require
-        a or a
+        not a ==> b
     ensure
-        a
-        if a orif a
-    end
-
-
-all(a:BOOLEAN)
-    ensure
-        a or not a
-    end
-
-all(a,b:BOOLEAN)
-    ensure
-        a or b ==> not a ==> b
-    end
-
-
-all(a,b:BOOLEAN)
-    ensure
-        (not a ==> b) ==> a or b
-    end
-
-
-
-
-{: Boolean equivalence
-   =================== :}
-
-
-(=)   (a,b:BOOLEAN): BOOLEAN -> (a ==> b) and (b ==> a)
-
-all(a:BOOLEAN)
-    ensure
-        a = a
+        a or b
+        if a orif not a
     end

@@ -1,6 +1,5 @@
 use
-    predicate_logic
-    function
+    predicate
     relation
 end
 

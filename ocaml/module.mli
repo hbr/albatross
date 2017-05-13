@@ -58,6 +58,7 @@ sig
   val find: module_name -> t -> M.t
   val must_find: module_name -> t -> M.t
   val string_of_node: node -> string
+  val has_id: int -> t -> bool
   val module_of_id: int -> t -> M.t
   val compare: node -> node -> int
   val dependencies: node -> graph -> node list

@@ -1,4 +1,6 @@
-use predicate_logic; function end
+use
+    predicate
+end
 
 deferred class PO:PARTIAL_ORDER
 

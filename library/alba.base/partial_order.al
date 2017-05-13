@@ -1,8 +1,6 @@
 use
-    predicate_logic
+    predicate
     order_relation
-    function
-    tuple
 end
 
 deferred class PO:PARTIAL_ORDER
