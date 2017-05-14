@@ -4,5 +4,85 @@ bin: [
 ]
 
 lib: [
-     "library/alba.base/boolean.ali" {"alba.base/boolean.ali"}
+     "library/alba.base/core.ali"               {"alba.base/core.ali"}
+     "library/alba.base/core.al"                {"alba.base/core.al"}
+     "library/alba.base/.alba/core.al.json"     {"alba.base/.alba/core.al.json"}
+     "library/alba.base/.alba/core.ali.json"    {"alba.base/.alba/core.ali.json"}
+
+     "library/alba.base/boolean.ali"            {"alba.base/boolean.ali"}
+     "library/alba.base/boolean.al"             {"alba.base/boolean.al"}
+     "library/alba.base/.alba/boolean.al.json"  {"alba.base/.alba/boolean.al.json"}
+     "library/alba.base/.alba/boolean.ali.json" {"alba.base/.alba/boolean.ali.json"}
+
+     "library/alba.base/predicate.ali"
+         {"alba.base/predicate.ali"}
+     "library/alba.base/predicate.al"
+         {"alba.base/predicate.al"}
+     "library/alba.base/.alba/predicate.al.json"
+         {"alba.base/.alba/predicate.al.json"}
+     "library/alba.base/.alba/predicate.ali.json"
+         {"alba.base/.alba/predicate.ali.json"}
+
+     "library/alba.base/function.ali"
+         {"alba.base/function.ali"}
+     "library/alba.base/function.al"
+         {"alba.base/function.al"}
+     "library/alba.base/.alba/function.al.json"
+         {"alba.base/.alba/function.al.json"}
+     "library/alba.base/.alba/function.ali.json"
+         {"alba.base/.alba/function.ali.json"}
+
+     "library/alba.base/list.ali"
+         {"alba.base/list.ali"}
+     "library/alba.base/list.al"
+         {"alba.base/list.al"}
+     "library/alba.base/.alba/list.al.json"
+         {"alba.base/.alba/list.al.json"}
+     "library/alba.base/.alba/list.ali.json"
+         {"alba.base/.alba/list.ali.json"}
+
+     "library/alba.base/natural.ali"
+         {"alba.base/natural.ali"}
+     "library/alba.base/natural.al"
+         {"alba.base/natural.al"}
+     "library/alba.base/.alba/natural.al.json"
+         {"alba.base/.alba/natural.al.json"}
+     "library/alba.base/.alba/natural.ali.json"
+         {"alba.base/.alba/natural.ali.json"}
+
+     "library/alba.base/relation.ali"
+         {"alba.base/relation.ali"}
+     "library/alba.base/relation.al"
+         {"alba.base/relation.al"}
+     "library/alba.base/.alba/relation.al.json"
+         {"alba.base/.alba/relation.al.json"}
+     "library/alba.base/.alba/relation.ali.json"
+         {"alba.base/.alba/relation.ali.json"}
+
+     "library/alba.base/endorelation.ali"
+         {"alba.base/endorelation.ali"}
+     "library/alba.base/endorelation.al"
+         {"alba.base/endorelation.al"}
+     "library/alba.base/.alba/endorelation.al.json"
+         {"alba.base/.alba/endorelation.al.json"}
+     "library/alba.base/.alba/endorelation.ali.json"
+         {"alba.base/.alba/endorelation.ali.json"}
+
+     "library/alba.base/predicate_order.ali"
+         {"alba.base/predicate_order.ali"}
+     "library/alba.base/predicate_order.al"
+         {"alba.base/predicate_order.al"}
+     "library/alba.base/.alba/predicate_order.al.json"
+         {"alba.base/.alba/predicate_order.al.json"}
+     "library/alba.base/.alba/predicate_order.ali.json"
+         {"alba.base/.alba/predicate_order.ali.json"}
+
+     "library/alba.base/predicate_order.ali"
+         {"alba.base/predicate_order.ali"}
+     "library/alba.base/predicate_order.al"
+         {"alba.base/predicate_order.al"}
+     "library/alba.base/.alba/predicate_order.al.json"
+         {"alba.base/.alba/predicate_order.al.json"}
+     "library/alba.base/.alba/predicate_order.ali.json"
+         {"alba.base/.alba/predicate_order.ali.json"}
 ]

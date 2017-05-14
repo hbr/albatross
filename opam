@@ -13,4 +13,5 @@ build: [
 depends: [
   "ocamlfind"
   "ocamlbuild"
+  "menhir"
 ]

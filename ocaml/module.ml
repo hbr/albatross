@@ -372,8 +372,13 @@ module PSet =
             Mystring.split
               (Platform.getenv "ALBA_LIBRARY_PATH")
               (Platform.path_separator ())
+          and paths3 =
+            try
+              Platform.system_with_output "opam config var alba:lib"
+            with Sys_error str ->
+              []
           in
-          paths1 @ paths2
+          paths1 @ paths2 @ paths3
         with Not_found ->
           paths1
       in

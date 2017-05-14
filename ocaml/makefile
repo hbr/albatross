@@ -1,4 +1,6 @@
-.PHONY: test                       \
+.PHONY: alba.base                  \
+	alba                       \
+	test                       \
         test2                      \
         test2_library              \
         test2_draft                \
@@ -20,7 +22,6 @@
 
 
 alba: alba.native
-	cp alba.native alba
 
 
 alba.byte:
@@ -66,7 +67,9 @@ alba_node.byte:
 	-syntax camlp4o                       \
 	alba_node.byte
 
-
+alba.base: alba.native
+	./alba.native -work-dir ../library/alba.base init;  \
+	./alba.native -work-dir ../library/alba.base compile
 
 doc:
 	ocamlbuild eiffelc.docdir/index.html

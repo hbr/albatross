@@ -3,5 +3,6 @@
 build:
 	cd ocaml;          \
 	make alba.native;  \
-	make alba.d.byte
+	make alba.d.byte;  \
+	make alba.base
 
