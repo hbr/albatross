@@ -325,7 +325,7 @@ module M =
         with Sys_error _ ->
           Format.eprintf
             "The module \"%s\" does not have an implementation file@."
-            name;
+            (string_of_module mname);
           raise Not_found
       in
       try
@@ -341,9 +341,9 @@ module M =
         with Sys_error _ ->
           let open Format in
           eprintf
-            "%s The module \"%s\" does not have an interface file@."
+            "%s The module \"%s\" does not exist@."
             (info_string mnme.i)
-            name;
+            (string_of_module mnme.v);
           exit 1
       in
       {name = mnme.v; sources = Interface src_ali; id = None}
