@@ -1470,7 +1470,9 @@ let different_subterms (tb1:t) (tb2:t): info * string * string =
                 and str2 = Feature_table.string_of_signature (i2-nvars) ft in
                 t1.i, str1, str2
              | _ ->
-                assert false (* Cannot happen, there must be differences *)
+                t1.i,
+                (string_of_term arr1.(0) tb1),
+                (string_of_term arr2.(0) tb2)
            end
          with Not_found ->
               find lst1 lst2
