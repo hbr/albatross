@@ -463,9 +463,6 @@ let type2string (t:term) (nb:int) (fgnames: int array) (ct:t): string =
          if j1 = Constants.predicate_class then begin
              assert (tarrlen=1);
              1, ("{" ^ (to_string tarr.(0) nb 1) ^ "}")
-           end else if j1 = Constants.sequence_class then begin
-             assert (tarrlen=1);
-             1, ((to_string tarr.(0) nb 1) ^ "*")
            end else if j1 = Constants.list_class then begin
              assert (tarrlen=1);
              1, ("[" ^ (to_string tarr.(0) nb 1) ^ "]")

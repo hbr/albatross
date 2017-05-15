@@ -716,7 +716,7 @@ dotted_id_list:
 
 
 type_nt:
-    elem_type     %prec LOWEST_PREC { $1 }
+    elem_type     { $1 }
 |   arrow_type    { $1 }
 
 
@@ -724,7 +724,6 @@ type_nt:
 elem_type:
     simple_type  { $1 }
 |   tuple_type   { $1 }
-|   star_type    { $1 }
 |   LBRACE type_nt_inner RBRACE { Brace_type $2 }
 |   LBRACKET type_nt_inner RBRACKET { List_type $2 }
 |   LPAREN type_nt RPAREN { Paren_type $2 }
@@ -754,9 +753,6 @@ actual_generics:
 arrow_type: elem_type ARROW type_nt {
   Arrow_type ($1,$3)
 }
-
-
-star_type:  elem_type TIMES   { Star_type $1 }
 
 
 tuple_type:  LPAREN type_list_min2  RPAREN { Tuple_type $2 }
