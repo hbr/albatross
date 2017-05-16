@@ -18,9 +18,6 @@ module type Application_data =
 
 module type S =
     sig
-      type ('a, 'b) result =
-        | Ok of 'a
-        | Error of 'b
       type node
       type graph
       val print_cycle: Format.formatter -> node list -> unit
