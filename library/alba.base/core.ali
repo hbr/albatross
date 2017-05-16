@@ -3,6 +3,13 @@ class BOOLEAN
 deferred class A:ANY
 {:-----------------------------------------------------------------------:}
 
+class
+    BOOLEAN
+inherit
+    ANY
+end
+
+
 false: BOOLEAN
 true:  BOOLEAN
 (==>) (a,b:BOOLEAN): BOOLEAN
@@ -13,12 +20,6 @@ true:  BOOLEAN
 
 (=)  (a,b:A): BOOLEAN   deferred end
 (/=) (a,b:A): BOOLEAN   -> not (a = b)
-
-class
-    BOOLEAN
-inherit
-    ANY
-end
 
 all(a,b:A)
     ensure
@@ -241,3 +242,60 @@ create
     just (item:A)
 end
 { :------------------------------------------------------------------------:}
+
+
+
+
+
+
+{:------------------------------------------------------------------------:}
+class NAT
+{:------------------------------------------------------------------------:}
+
+
+class
+    NAT
+inherit
+    ANY
+end
+
+0: NAT
+greatest: NAT
+successor (n:NAT): NAT
+(+)  (a,b:NAT): NAT
+(-)  (a,b:NAT): NAT
+(*)  (a,b:NAT): NAT
+(mod)(a,b:NAT): NAT
+(/)  (a,b:NAT): NAT
+    require
+        b /= 0
+    end
+
+
+(=)  (a,b:NAT): BOOLEAN
+(<=) (a,b:NAT): BOOLEAN
+
+upper_set (n:NAT): ghost {NAT}
+    -> {(p): n in p,
+             all(n) n /= greatest ==> n in p ==> n.successor in p}
+
+
+
+all(a,b,n:NAT, p:{NAT})
+    ensure
+        n = greatest ==> n.successor = 0
+
+        n /= n.successor
+
+        0 in p
+        ==> (all(n) n /= greatest ==> n in p ==> n.successor in p)
+        ==> n in p
+
+        a + 0 = a
+        a + b.successor = (a + b).successor
+
+        a * 0 = 0
+        a * b.successor = (a * b) + a
+
+        (a <= b) = (b in a.upper_set)
+    end

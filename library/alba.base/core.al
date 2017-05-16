@@ -477,3 +477,55 @@ end
 {:------------------------------------------------------------------------:}
 
 
+
+{:------------------------------------------------------------------------:}
+class NAT
+{:------------------------------------------------------------------------:}
+
+(=) (a,b:NAT): BOOLEAN    note built_in end
+
+
+class
+    NAT
+inherit
+    ANY
+end
+
+0: NAT                     note built_in end
+greatest: NAT              note built_in end
+successor (n:NAT): NAT     note built_in end
+(+)  (a,b:NAT): NAT        note built_in end
+(-)  (a,b:NAT): NAT        note built_in end
+(*)  (a,b:NAT): NAT        note built_in end
+(mod)(a,b:NAT): NAT        note built_in end
+(/)  (a,b:NAT): NAT
+    require
+        b /= 0
+    note built_in end
+
+(<=) (a,b:NAT): BOOLEAN     note built_in end
+
+upper_set (n:NAT): ghost {NAT}
+    -> {(p): n in p,
+             all(n) n /= greatest ==> n in p ==> n.successor in p}
+
+all(a,b,n:NAT, p:{NAT})
+    ensure
+        n = greatest ==> n.successor = 0
+
+        n /= n.successor
+
+        0 in p
+        ==> (all(n) n /= greatest ==> n in p ==> n.successor in p)
+        ==> n in p
+
+        a + 0 = a
+        a + b.successor = (a + b).successor
+
+        a * 0 = 0
+        a * b.successor = (a * b) + a
+
+        (a <= b) = (b in a.upper_set)
+    note
+        axiom
+    end

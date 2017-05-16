@@ -706,23 +706,23 @@ all(a,b:NATURAL)
 
 
 all ensure
-    1 + 1 = 2
+    1:NATURAL + 1 = 2
 end
 
 all ensure
-    1 + 2 = 3
+    1:NATURAL + 2 = 3
 end
 
 all ensure
-    1 * 2 = 2
+    (1:NATURAL) * 2 = 2
 end
 
 all ensure
-    2 * 2 = 4
+    2:NATURAL * 2 = 4
 end
 
 all ensure
-    2 ^ 2 = 4
+    2:NATURAL ^ 2 = 4
 end
 
 
