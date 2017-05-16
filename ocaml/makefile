@@ -81,13 +81,13 @@ test2_library: alba.byte
 	./alba.byte -work-dir ../library/alba.base compile -force -verbosity 1
 
 test2_draft: alba.byte
-	./alba.byte -work-dir ../_draft compile -force -verbosity 1
+	./alba.byte -I ../library -work-dir ../_draft compile -force -verbosity 1
 
 test2_example: alba.byte
-	./alba.byte -work-dir ../example compile -force -verbosity 1
+	./alba.byte -I ../library -work-dir ../example compile -force -verbosity 1
 
 test2_sf: alba.byte
-	./alba.byte -work-dir ../../sf compile -force -verbosity 1
+	./alba.byte -I ../library -work-dir ../../sf compile -force -verbosity 1
 
 test: alba test_library test_draft test_example
 
@@ -95,10 +95,10 @@ test_library: alba
 	./alba.native -work-dir ../library/alba.base compile -force -verbosity 1
 
 test_draft: alba
-	./alba.native -work-dir ../_draft compile -force -verbosity 1
+	./alba.native -I ../library -work-dir ../_draft compile -force -verbosity 1
 
 test_example: alba
-	./alba.native -work-dir ../example compile -force -verbosity 1
+	./alba.native -I ../library -work-dir ../example compile -force -verbosity 1
 
 boolean: alba.byte
 	./alba.byte -work-dir ../library/alba.base  \
