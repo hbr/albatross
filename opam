@@ -1,11 +1,11 @@
 opam-version: "1.2"
 name: "alba"
-version: "v0.4.0~rc1"
+version: "v0.4.0~rc2"
 maintainer: "Helmut Brandl <helmut.brandl@gmx.net>"
 authors: "Helmut Brandl <helmut.brandl@gmx.net>"
 homepage: "http://albatross-lang.sourceforge.net"
 license: "GPLv2"
-dev-repo: "http://github.com/hbr/albatross"
+dev-repo: "git+https://github.com/hbr/albatross.git"
 bug-reports: "http://github.com/hbr/albatross"
 build: [
   [make "build"]

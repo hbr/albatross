@@ -7,7 +7,6 @@
 
 open Container
 
-
 module type Application_data =
   sig
     type node
@@ -21,6 +20,9 @@ module type Application_data =
 
 module type S =
     sig
+      type ('a, 'b) result =
+        | Ok of 'a
+        | Error of 'b
       type node
       type graph
       val print_cycle: Format.formatter -> node list -> unit
@@ -31,6 +33,9 @@ module type S =
 
 module Make(AD: Application_data) =
   struct
+    type ('a, 'b) result =
+      | Ok of 'a
+      | Error of 'b
     type node = AD.node
     type graph = AD.graph
 

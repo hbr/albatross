@@ -4,6 +4,11 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
+
+type ('a, 'b) result =
+  | Ok of 'a
+  | Error of 'b
+
 (*
 -----------------------------------------------------------------------------
    Line and column info
