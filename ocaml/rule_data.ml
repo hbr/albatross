@@ -23,13 +23,8 @@ type t = {
     ctxt: ctxt;
     spec:      bool;  (* is specialized *)
     fwd_blckd: bool;  (* is blocked as forward rule *)
-    nbwd:      int;   (* number of premises to drop until target has all vars *)
-    ndropped:  int;   (* number of dropped premises *)
     maxnds_dropped: int; (* max nodes of dropped premises *)
-    premises:  (int * int * term) list;
-                               (* gp1, gp1_tp, cons,  term
-                                  A premise is conservative if it is not
-                                  more complex than the target. *)
+    premises:  (int * int * term) list; (* gp1, gp1_tp, term *)
     target:   term;
     eq:        (int * term * term) option; (* equality id, left, right *)
   }
@@ -72,8 +67,15 @@ let is_specialized (rd:t): bool =
 let is_fully_specialized (rd:t): bool =
   rd.ctxt.nargs = 0
 
+
+let target_has_all (tgt:term) (nargs:int): bool =
+  nargs = 0
+  || nargs = IntSet.cardinal (Term.bound_variables tgt nargs)
+
+
 let target_has_all_variables (rd:t): bool =
-  rd.nbwd = 0
+  target_has_all rd.target rd.ctxt.nargs
+
 
 let allows_partial_specialization (rd:t): bool =
   (* Can the rule be partially specialized i.e. can it be specialized and
@@ -344,39 +346,6 @@ let split_term
 
 
 
-
-let ndrops_to_backward
-    (ps:(int*int*term) list) (tgt:term) (nargs:int): int =
-  (* compute the number of premises to drop until the target contains all
-     variables *)
-  let rec bwdfun
-      (ndropped:int)                 (* dropped premises *)
-      (nspecialized:int)             (* specialized variables *)
-      (ps:(int*int*term) list)       (* remaining premises *)
-      (set:IntSet.t)                 (* remaining unspecialized variables in
-                                        the target *)
-      : int =
-    if IntSet.cardinal set = nargs - nspecialized then
-      ndropped
-    else
-      match ps with
-        [] ->
-          assert false (* not possible, because the chain must contain all
-                          variables *)
-      | (gp1,_,_)::ps ->
-          let set =
-            if 0 < gp1 then
-              IntSet.filter (fun i -> gp1 <= i) set (* only the unspecialized
-                                                       remain *)
-            else
-              set
-          in
-          bwdfun (1+ndropped) (max nspecialized gp1) ps set
-  in
-  bwdfun 0 0 ps (Term.bound_variables tgt nargs)
-
-
-
 let make (t:term) (c:Context.t): t =
   assert (Context.has_no_type_variables c);
   let nargs,(nms,tps),(fgnms,fgcon),t0 =
@@ -395,9 +364,10 @@ let make (t:term) (c:Context.t): t =
   let nfgs = Array.length fgcon in
   let ps, tgt = split_term t0 nargs nbenv nfgs tps
   in
-  let nbwd = ndrops_to_backward ps tgt nargs in
   let fwd_blckd =
-    if nargs = 0 || nbwd > 0 then false
+    if nargs = 0 || not (target_has_all tgt nargs)
+    then
+      false
     else
       let ft  = Context.feature_table c
       and tvs = Tvars.push_fgs fgnms fgcon (Context.tvars c)
@@ -413,11 +383,9 @@ let make (t:term) (c:Context.t): t =
     else None
   in
   let rd = { orig      = None;
-             ctxt      = ctxt;
+             ctxt;
              spec      = nargs = 0;
              fwd_blckd = fwd_blckd;
-             nbwd      = nbwd;
-             ndropped  = 0;
              maxnds_dropped = 0;
              premises  = ps;
              target    = tgt;
@@ -484,8 +452,6 @@ let drop (rd:t) (c:Context.t): t =
   in
   {rd with
    spec      = rd.ctxt.nargs = 0;
-   nbwd      = if rd.nbwd > 0 then rd.nbwd - 1 else 0;
-   ndropped  = rd.ndropped + 1;
    maxnds_dropped = max rd.maxnds_dropped nds_p;
    ctxt = {rd.ctxt with c = c; tps = tps};
    premises  = ps;
@@ -657,7 +623,6 @@ let specialize
    orig  = Some orig;
    spec  = true;
    fwd_blckd = fwd_blckd;
-   nbwd = if nargs_new = 0 then 0 else rd.nbwd; (* ???? WRONG ??? *)
    ctxt  = {c = c;
             nargs = nargs_new;
             nms   = nms;
