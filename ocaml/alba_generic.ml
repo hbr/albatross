@@ -14,7 +14,7 @@ module PC = Proof_context
 
 
 
-let alba_version = "v0.4.0~rc4"
+let alba_version = "v0.4.0~rc4x"
 
 
 
