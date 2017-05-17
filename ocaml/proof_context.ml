@@ -421,36 +421,28 @@ let assumptions_for_variables
      [ind_vars] and all the other variables which are not in [insp_vars] but
      in the contexts.
    *)
-  let ind_vars  = Array.copy ind_vars
+  let ind_vars  = (* make a sorted copy of the induction variables *)
+    let ind_vars = Array.copy ind_vars in
+    Array.sort compare ind_vars;
+    ind_vars
   and nvars = Array.length ind_vars in
   assert (0 < nvars);
-  Array.sort Pervasives.compare ind_vars;
   let rec collect
       (i:int) (nargs:int) (ass:int list) (pc:t)
       : int list * int =
+    (* collect starting from induction variable number [i] *)
     let idx_lst_rev = assumption_indices pc in
     let ass = List.rev_append idx_lst_rev ass
     in
-    let c = context pc in
-    let loc_nargs = Context.count_last_arguments c in
-    let i =
-      interval_fold
-        (fun i k ->
-          let k = k + nargs in
-          assert (i <= nvars);
-          if i = nvars || k <> ind_vars.(i) then
-            i
-          else
-            i + 1
-        )
-        i 0 loc_nargs
-    in
-    if nvars = i then
-      ass, loc_nargs+nargs
-    else begin
+    let loc_nargs = count_last_variables pc in
+    try
+      let i_next =
+        interval_find (fun i -> loc_nargs + nargs <= ind_vars.(i)) i nvars
+      in
       assert (is_local pc);
-      collect i (loc_nargs + nargs) ass (pop pc)
-    end
+      collect i_next (loc_nargs+nargs) ass (pop pc)
+    with Not_found ->
+      ass, loc_nargs + nargs
   in
   let ass, nvars = collect 0 0 [] pc in
   let used_lst =

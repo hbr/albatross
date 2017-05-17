@@ -454,14 +454,7 @@ let induction_goal_predicate
   and argnames = Context.argnames c
   and argtypes = Context.argtypes c
   in
-  let ass_rev =
-    List.fold_left
-      (fun lst idx ->
-        let p = PC.term idx pc in
-        p :: lst
-      )
-      ([])
-      ass_lst
+  let ass_rev = List.rev_map (fun idx -> PC.term idx pc) ass_lst
   and n_ind_vars = Array.length vars
   and all_vars = Array.append (Array.of_list others) vars
   in
@@ -523,8 +516,6 @@ let inductive_set
 
 
 
-
-
 let inductive_set_context
     (info: info)
     (elem: term)
@@ -547,7 +538,9 @@ let inductive_set_context
   let goal_pred, other_vars, ass_lst =
     let ft = Context.feature_table c in
     let set_vars = Term.used_variables set nvars in
-    let vars   = Feature_table.args_of_tuple elem nvars ft in
+    let vars   =
+      Myarray.remove_duplicates (Feature_table.args_of_tuple elem nvars ft)
+    in
     let vars = Array.map
         (fun arg ->
           match arg with

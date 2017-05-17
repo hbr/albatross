@@ -254,6 +254,7 @@ module Myarray: sig
   val combine: 'a array -> 'b array -> ('a*'b) array
   val split:   ('a*'b) array -> 'a array * 'b array
   val sum: int -> int array -> int
+  val remove_duplicates: 'a array -> 'a array
 
 end = struct
 
@@ -269,6 +270,18 @@ end = struct
 
   let sum (start:int) (arr:int array): int =
     Array.fold_left (fun sum n -> sum + n) start arr
+
+  let remove_duplicates (arr:'a array): 'a array =
+    (Array.fold_left
+       (fun lst e ->
+         if List.mem e lst then
+           lst
+         else
+           e :: lst
+       )
+       []
+       arr)
+    |> List.rev |> Array.of_list
 end
 
 
