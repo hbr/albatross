@@ -369,9 +369,12 @@ module PSet =
         let paths1 = Command_line.package_paths cmd in
         try
           let paths2 =
-            Mystring.split
-              (Platform.getenv "ALBA_LIBRARY_PATH")
-              (Platform.path_separator ())
+            try
+              Mystring.split
+                (Platform.getenv "ALBA_LIBRARY_PATH")
+                (Platform.path_separator ())
+            with Not_found ->
+              []
           and paths3 =
             try
               Platform.system_with_output "opam config var alba:lib"
@@ -404,7 +407,8 @@ module PSet =
               "%s Cannot find the package \"%s\"@."
               (info_string info)
               (string_of_library p);
-            exit 1
+            assert false
+                   (*exit 1*)
         in
         let path = FN.concat path pstr in
         let alba_path = FN.concat path ".alba" in
