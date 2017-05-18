@@ -84,38 +84,6 @@ let push
 
 
 
-(*
-let push
-    (entlst: entities list withinfo)
-    (rlst: compound)
-    (elst: compound)
-    (pc:PC.t)
-    :  info_terms * info_terms * PC.t =
-  let pc1 = PC.push entlst None false false false pc
-  in
-  let nvars = PC.count_last_arguments pc1
-  and nms   = PC.local_argnames pc1
-  in
-  let get_bool ie = get_boolean_term ie pc1
-  in
-  let rlst = List.map get_bool rlst
-  and elst = List.map get_bool elst
-  in
-  let used_vars t lst = Term.used_variables_0 t nvars lst
-  in
-  let used = List.fold_left (fun lst it -> used_vars it.v lst) [] rlst
-  in
-  let used = List.fold_left (fun lst it -> used_vars it.v lst) used elst
-  in
-  Array.iteri
-    (fun i nme ->
-      if not (List.mem i used) then
-        error_info entlst.i ("Variable \"" ^ (ST.string nme) ^
-                             "\" is not used, neither in assumptions nor in goals")
-    )
-    nms;
-  rlst, elst, pc1
- *)
 
 let add_assumptions (rlst:info_terms) (pc:PC.t): unit =
   List.iter
@@ -244,15 +212,18 @@ type inductive_set_data =
 
 let inner_case_context
     (ass_lst_rev: int list) (* List of assumptions already in the middle context *)
+    (hypo_lst_rev: int list)(* List of induction hypotheses *)
     (case_goal_pred: term)  (* case goal predicate *)
     (nass:int)              (* additional assumptions in the goal predicate *)
     (pc:PC.t)
     : int list * term * PC.t (* assumptions, goal, inner context *)
     =
   let stren_goal = PC.beta_reduce_term case_goal_pred pc in
-  let n1,fargs1,fgs1,chn = Term.all_quantifier_split_1 stren_goal in
-  let pc1 = PC.push_typed0 fargs1 fgs1 pc in
-  let ass_lst_rev, goal =
+  let n1,tps1,fgs1,chn =
+    Term.all_quantifier_split_1 stren_goal in
+  assert (fgs1 = empty_formals);
+  let pc1 = PC.push_typed0 tps1 fgs1 pc in
+  let complete_ass_lst_rev, goal =
     interval_fold
       (fun (alst,chn) _ ->
         let a,chn =
@@ -268,9 +239,26 @@ let inner_case_context
       0
       nass
   in
+  if n1 <> 0 && nass = 0 then (* Add specialized induction hypotheses *)
+    List.iter
+      (fun hypo_idx ->
+        (* Induction hypothesis has the form 'all(y,...) goal' for the
+           induction variable *)
+        let hypo = PC.term hypo_idx pc1 in
+        if not (Term.is_all_quantified hypo) then
+          begin
+            printf "hypo is not all quantified\n";
+            printf "  %s\n" (PC.string_long_of_term hypo pc1);
+            printf "  goal %s\n" (PC.string_long_of_term stren_goal pc);
+          end;
+        let idx = PC.specialized hypo_idx (standard_substitution n1) [||] 2 pc1 in
+        PC.add_to_work idx pc1;
+        ()
+      )
+      (List.rev hypo_lst_rev);
   (* Now we have context [all(other_vars) require a1; a2; ...] *)
   PC.close pc1;
-  ass_lst_rev, goal, pc1
+  complete_ass_lst_rev, goal, pc1
 
 
 
@@ -346,7 +334,7 @@ let inductive_type_case_context
     (nass: int)         (* number of assumptions in the goal predicate *)
     (pc:PC.t)
     : int list * term * term * term * PC.t
-      (* assumptions, goal, (inner context,
+      (* assumptions, goal, (inner context),
          pattern, case_goal_pred (middle context),
          inner context *)
     =
@@ -363,28 +351,30 @@ let inductive_type_case_context
                     ...
                 ensure
                     p(cons_i(...))
-                    assert
-                        'p(ra1) beta reduced'
-                        'p(ra2) beta reduced'
-                        ...
-                        all(y,...)
-                            require
-                                r1
-                                r2
-                                ...
-                            ensure
-                                goal[x:=cons_i(...)]
-                                assert
-                                   ...  -- <- user proof
-                            end
-
+                assert
+                    'p(ra1) beta reduced'
+                    'p(ra2) beta reduced'
+                    ...
+                    all(y,...)
+                        require
+                            r1
+                            r2
+                            ...
+                        ensure
+                            goal[x:=cons_i(...)]
+                        assert
+                          'p(ra1) beta reduced and specialized'
+                          'p(ra2) beta reduced and specialized'
+                          ...
+                           ...  -- <- user proof
+                        end
                 end
    *)
   let nvars = PC.count_variables pc
   and ntvs = PC.count_all_type_variables pc
   and ft    = PC.feature_table pc
   in
-  let ags =
+  let ags = (* actual generics for the constructor [cons_idx] *)
     let open Type_substitution in
     let tvs1,sign = Feature_table.signature0 cons_idx ft in
     let sub =
@@ -421,7 +411,7 @@ let inductive_type_case_context
       []
       (List.rev ps_rev)
   in
-  let ass_lst_rev =
+  let hyp_lst_rev =
     List.fold_left
       (fun lst idx -> (PC.add_beta_reduced idx true pc1) :: lst)
       []
@@ -429,7 +419,7 @@ let inductive_type_case_context
   in
   PC.close pc1;
   let ass_lst_rev, goal, pc2 =
-    inner_case_context ass_lst_rev case_goal_pred nass pc1 in
+    inner_case_context hyp_lst_rev hyp_lst_rev case_goal_pred nass pc1 in
   ass_lst_rev, goal, pat, case_goal_pred, pc2
 
 
@@ -448,7 +438,7 @@ let induction_goal_predicate
         {vars: all(others) a1 ==> a2 ==> ... ==> goal}
 
    *)
-  assert (ass_lst <> [] || others = []);
+  (*assert (ass_lst <> [] || others = []);*)
   let c = PC.context pc in
   let nvars = PC.count_variables pc
   and argnames = Context.argnames c
@@ -561,7 +551,7 @@ let inductive_set_context
     let ass_lst, other_var_lst =
       let insp_vars = Term.used_variables elem nvars in
       let insp_vars = Term.used_variables_0 set nvars insp_vars in
-      PC.assumptions_for_variables vars insp_vars pc in
+      PC.assumptions_for_variables vars insp_vars user_goal pc in
     let goal_pred =
       induction_goal_predicate
         vars
@@ -826,7 +816,7 @@ let inductive_set_case_context
   PC.close pc1;
   (* Now we have context [all(rule_vars) require c1(set); c1(q); ... set(e)] *)
   let ass_lst_rev, goal, pc2 =
-    inner_case_context ass_lst_rev goal_pred1 nass pc1
+    inner_case_context ass_lst_rev [] goal_pred1 nass pc1
   in
   ass_lst_rev, goal, goal_pred1, pc2
 
@@ -1204,7 +1194,7 @@ and prove_inductive_type
       (ST.string (Context.argnames (PC.context pc)).(ivar))
   end;
   let ass_idx_lst, other_vars =
-    PC.assumptions_for_variables [|ivar|] [ivar] pc in
+    PC.assumptions_for_variables [|ivar|] [ivar] goal pc in
   let goal_pred =
     induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
   and nass = List.length ass_idx_lst
@@ -1222,7 +1212,6 @@ and prove_inductive_type
       (fun map (ie,prf) ->
         let cons_idx, nms =
           analyze_type_case_pattern ie cons_set tp pc in
-        (*let idx = prove_type_case cons_idx nms tp prf ivar goal pc in*)
         let idx =
           prove_type_case ie.i cons_idx nms tp prf ivar goal_pred nass pc in
         IntMap.add cons_idx idx map
@@ -1240,8 +1229,6 @@ and prove_inductive_type
           with Not_found ->
             let n   = Feature_table.arity cons_idx ft in
             let nms = anon_argnames n in
-            (*prove_type_case
-              cons_idx nms tp (SP_Proof([],None)) ivar goal pc*)
             prove_type_case
               info cons_idx nms tp (SP_Proof([],None)) ivar goal_pred nass pc
         in

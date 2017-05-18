@@ -410,20 +410,17 @@ let assumptions_chain (tgt:term) (pc:t): term =
   implication_chain (List.rev (assumptions pc)) tgt pc
 
 
-
-let assumptions_for_variables
-    (ind_vars: int array)  (* The induction variables *)
-    (insp_vars: int list)  (* All variables of the inspect expression *)
+let assumptions_for_variables_0
+    (vars: int array)      (* The variables *)
     (pc:t)
-    : int list * int list =
+    : int list * int =
   (* All assumptions of the contexts which are needed to define the variables
-     [ind_vars] and all the other variables which are not in [insp_vars] but
-     in the contexts.
+     [vars] and the number of variables in these contexts.
    *)
-  let nvars = Array.length ind_vars in
+  let nvars = Array.length vars in
   assert (0 < nvars);
   let var_max =
-    Array.fold_left (fun v i -> max v i) (-1) ind_vars
+    Array.fold_left (fun v i -> max v i) (-1) vars
   in
   let rec collect (nargs:int) (ass:int list) (pc:t): int list * int =
     (* collect while [nargs <= var_max] *)
@@ -436,15 +433,32 @@ let assumptions_for_variables
     else
       collect nargs_new ass (pop pc)
   in
-  let ass, nvars = collect 0 [] pc in
+  collect 0 [] pc
+
+
+let assumptions_for_variables
+    (ind_vars: int array)  (* The induction variables *)
+    (insp_vars: int list)  (* All variables of the inspect expression *)
+    (goal: term)
+    (pc:t)
+    : int list * int list =
+  (* All assumptions of the contexts which are needed to define the variables
+     [ind_vars] and all the other variables which are not in [insp_vars] but
+     in the contexts plus the variable in the goal.
+   *)
+  let ass, nvars = assumptions_for_variables_0 ind_vars pc in
   let used_lst =
-    if ass = [] then
+    (*if ass = [] then
       []
-    else
+    else*)
       let used_lst_rev =
         List.fold_left
           (fun lst idx -> Term.used_variables_0 (term idx pc) nvars lst)
-          []
+          ((*if Term.is_all_quantified goal then
+             []  should not be needed
+           else*)
+             Term.used_variables goal nvars
+          )
           ass
       in
       let insp_vars = Array.of_list insp_vars in
@@ -878,6 +892,10 @@ let add_last_to_tables (pc:t): unit =
   add_to_forward  rd idx pc;
   add_to_backward rd idx pc;
   add_to_equalities t idx pc;
+  if not (has t pc) then
+    begin
+      printf "add_last_to_tables %d %s\n" idx (string_long_of_term_i idx pc);
+    end;
   assert (has t pc)
 
 
@@ -903,6 +921,9 @@ let filter_and_remap_tables (pred:int->bool) (pc:t): unit =
   e.left  <- Term_table.filter_and_remap pred f e.left
 
 
+
+let add_to_work (idx:int) (pc:t): unit =
+  pc.work <- idx :: pc.work
 
 let add_last_to_work (pc:t): unit =
   assert (0 < count pc);
@@ -966,7 +987,15 @@ let specialized
   assert (idx < count pc);
   let rd    = rule_data idx pc in
   if RD.is_specialized rd then
-    begin assert (Array.length args = 0); idx end
+    begin
+      if Array.length args <> 0 then
+        begin
+          printf "specialize\n";
+          printf "    idx %d  term %s\n" idx (string_long_of_term_i idx pc);
+          printf "    |args| %d\n" (Array.length args);
+        end;
+      assert (Array.length args = 0); idx
+    end
   else if Array.length args = 0 && RD.count_args_to_specialize rd > 0 then
     idx
   else begin
@@ -976,9 +1005,13 @@ let specialized
       find t pc
     with Not_found ->
       let search =
-        if reason = 0 then false
-        else if reason = 1 then not (RD.is_forward rd) && RD.is_backward rd
-        else true in
+        if reason = 0 then
+          false
+        else if reason = 1 then
+          not (RD.is_forward rd) && RD.is_backward rd
+        else
+          true
+      in
       Proof_table.add_specialize t idx args ags pc.base;
       raw_add0 t rd search pc
   end
@@ -1938,7 +1971,7 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
   try
     let idx, ivar, exp = var_def i in
     assert (not (variable_has_definition ivar pc));
-    let ass_lst, _ = assumptions_for_variables [|ivar|] [] pc in
+    let ass_lst, _ = assumptions_for_variables_0 [|ivar|] pc in
     add_variable_definition ivar idx pc;
     let nvars = count_variables pc in
     let exp_used = Term.used_variables exp nvars in
@@ -2141,6 +2174,19 @@ let predicate_of_term (t:term) (pc:t): type_term =
   Context.predicate_of_term t (context pc)
 
 
+let find_equality (t1:term) (t2:term) (pc:t): int =
+  let eq = Context.equality_term t1 t2 (context pc) in
+  find_match eq pc
+
+
+let find_leibniz_for (t1:term) (t2:term) (pc:t): int =
+  let gen_leibniz = leibniz_term pc in
+  let eq_idx = find_equality t1 t2 pc in
+  let tp = Context.type_of_term t1 (context pc) in
+  let spec_leibniz = specialized gen_leibniz [|t1;t2|] [|tp|] 0 pc in
+  add_mp eq_idx spec_leibniz false pc
+
+
 (* Subterm equality:
 
       The goal has the form             lhs  = rhs
@@ -2178,15 +2224,7 @@ let prove_equality (g:term) (pc:t): int =
     | _ ->
         raise Not_found
   in
-  let imp_id = 1 + imp_id pc in
-  let find_leibniz t1 t2 =
-    (* find: all(p) p(t1) ==> p(t2) *)
-    let tp_p = predicate_of_term t1 pc in
-    let p t = Application(Variable 0, [|Term.up 1 t|], false) in
-    let imp = Term.binary imp_id (p t1) (p t2) in
-    let t   =
-      Term.all_quantified 1 ([|ST.symbol "p"|],[|tp_p|]) empty_formals imp in
-    find t pc
+  let find_leibniz t1 t2 = find_leibniz_for t1 t2 pc
   in
   let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in

@@ -454,6 +454,7 @@ let unique_names (nms:int array) (c:t): int array =
 let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
   Feature_table.split_equality t (nb + count_variables c) c.ft
 
+
 let check_deferred (c:t): unit =
   assert (is_toplevel c);
   let ct  = class_table c
@@ -717,6 +718,14 @@ let function_of_terms (args:arguments) (result:term) (c:t): type_term =
   let r_tp = type_of_term result c
   and argtps = Array.map (fun t -> type_of_term t c) args in
   function_of_types argtps r_tp c
+
+
+let equality_term (t1:term) (t2:term) (c:t): term =
+  let tp = type_of_term t1 c
+  and nvars = count_variables c
+  and tvs = tvars c in
+  assert (Term.equivalent tp (type_of_term t2 c));
+  Feature_table.equality_term t1 t2 nvars tp tvs c.ft
 
 
 let update_types (subs:type_term array) (c:t): unit =

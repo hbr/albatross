@@ -177,6 +177,7 @@ val complexity: term -> t -> int
 val split_general_implication_chain:
     term -> t -> int * formals * formals * term list * term
 val split_equality: term -> int -> t -> int * int * term * term
+val equality_term: term -> term -> t -> term
 val definition_term: int -> int -> agens -> t -> int * int array * term
 val arity:      int -> int -> t -> int
 val is_inductive_set: int -> t -> bool

@@ -69,6 +69,7 @@ val add_some_elim_specialized: int -> term -> bool -> t -> int
 val specialized:        int -> arguments -> agens -> int -> t -> int
 val has_work:           t -> bool
 val work:               t -> int list
+val add_to_work:        int -> t -> unit
 val clear_work:         t -> unit
 val close_step:         t -> unit
 val close:              t -> unit
@@ -128,7 +129,8 @@ val false_constant: t -> term
 val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
 val assumption_indices: t -> int list
-val assumptions_for_variables: int array -> int list -> t -> int list * int list
+val assumptions_for_variables: int array -> int list -> term -> t
+                               -> int list * int list
 val check_deferred: t -> unit
 val owner:          t -> int
 
