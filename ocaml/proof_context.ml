@@ -411,7 +411,6 @@ let assumptions_chain (tgt:term) (pc:t): term =
 
 
 
-
 let assumptions_for_variables
     (ind_vars: int array)  (* The induction variables *)
     (insp_vars: int list)  (* All variables of the inspect expression *)
@@ -421,30 +420,23 @@ let assumptions_for_variables
      [ind_vars] and all the other variables which are not in [insp_vars] but
      in the contexts.
    *)
-  let ind_vars  = (* make a sorted copy of the induction variables *)
-    let ind_vars = Array.copy ind_vars in
-    Array.sort compare ind_vars;
-    ind_vars
-  and nvars = Array.length ind_vars in
+  let nvars = Array.length ind_vars in
   assert (0 < nvars);
-  let rec collect
-      (i:int) (nargs:int) (ass:int list) (pc:t)
-      : int list * int =
-    (* collect starting from induction variable number [i] *)
+  let var_max =
+    Array.fold_left (fun v i -> max v i) (-1) ind_vars
+  in
+  let rec collect (nargs:int) (ass:int list) (pc:t): int list * int =
+    (* collect while [nargs <= var_max] *)
     let idx_lst_rev = assumption_indices pc in
     let ass = List.rev_append idx_lst_rev ass
     in
-    let loc_nargs = count_last_variables pc in
-    try
-      let i_next =
-        interval_find (fun i -> loc_nargs + nargs <= ind_vars.(i)) i nvars
-      in
-      assert (is_local pc);
-      collect i_next (loc_nargs+nargs) ass (pop pc)
-    with Not_found ->
-      ass, loc_nargs + nargs
+    let nargs_new = nargs + count_last_variables pc in
+    if var_max < nargs_new then
+      ass, nargs_new
+    else
+      collect nargs_new ass (pop pc)
   in
-  let ass, nvars = collect 0 0 [] pc in
+  let ass, nvars = collect 0 [] pc in
   let used_lst =
     if ass = [] then
       []
