@@ -9,7 +9,7 @@ open Term
 
 type sublist = (int*Term_sub.t) list
 
-type result =
+type substitutions =
     Initial
   | Sub_list of sublist
 
@@ -90,7 +90,7 @@ let qmap (is_all:bool) (tab:t): t IntMap.t =
 
 
 
-let merge_avars (avars:(int*int*int) list) (t:term) (r:result): sublist =
+let merge_avars (avars:(int*int*int) list) (t:term) (r:substitutions): sublist =
   let rec merge avars lst reslst =
     (* avars and lst are descending *)
     match avars, lst with
@@ -125,7 +125,7 @@ let merge_avars (avars:(int*int*int) list) (t:term) (r:result): sublist =
 
 
 
-let merge_idxlst (idxlst:int list) (r:result): sublist =
+let merge_idxlst (idxlst:int list) (r:substitutions): sublist =
   let rec merge idxlst lst reslst =
     (* idxlst and lst are descending *)
     match idxlst, lst with
@@ -197,13 +197,13 @@ let extract_idxlst_locvars
 
 
 
-type unifier = term -> t -> int -> result -> sublist
+type unifier = term -> t -> int -> substitutions -> sublist
 
 let uni_args
     (args: term array)
     (nb:int)
     (argtabs: t array)
-    (r: result)
+    (r: substitutions)
     (uni: unifier)
     : sublist =
   let len = Array.length args in
@@ -212,7 +212,10 @@ let uni_args
     interval_fold
       (fun (sublst,r) i ->
         let r =
-          if sublst = [] then r else Sub_list (List.rev sublst)
+          if sublst = [] then
+            r
+          else
+            Sub_list (List.rev sublst)
         in
         let sublst = uni args.(i) argtabs.(i) nb r in
         if sublst = [] then begin
@@ -230,13 +233,17 @@ let uni_args
 
 let uni_core
     (t:term) (nb:int) (nb0:int) (nargs:int) (nvars:int)
-    (r:result)
+    (r:substitutions)
     (uni:unifier)
     (sfun: int->int)
     (tab:t)
     : sublist =
   (* The core part of the unifier which handles all parts except argument
      variables.
+
+     The term [t] has [nb] bound variables and the first [nb0] of them are
+     universally quantied. Then come [nargs] argument variables and [nvars]
+     free variables.
 
      The unifier tries to find an exact match between the toplevel part of
      the term [t] and the current [tab]. If no exact match is possible the
@@ -342,7 +349,7 @@ let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
            the term [ut] at the corresponding index [idx] the term [ut]
            has to be transformed into the environment of [t].
    *)
-  let rec uni (t:term) (tab:t) (nb:int) (r:result): sublist =
+  let rec uni (t:term) (tab:t) (nb:int) (r:substitutions): sublist =
     let avar_subs: sublist = (* merge all assertions which have at this position
                                 an argument variable into the result *)
       try
@@ -364,8 +371,16 @@ let unify (t:term) (nbt:int) (sfun:int->int) (table:t)
 
 
 let merge_avars_exact
-    (avars:(int*int*int) list) (avar:int) (nargs:int) (r:result)
+    (avars:(int*int*int) list) (avar:int) (nargs:int) (r:substitutions)
     : sublist =
+  (* The term has the argument variable [avar] of [nargs] at the current
+     position. The term table has terms in [avars] with argument variables at
+     the same position. The unifier has already generated the substitutions in
+     [r]. We select the terms in avars which have the same argument at that
+     position and which occur already in [r].
+
+     Note: All substitutions must be empty.
+*)
   let rec merge avars lst reslst =
     (* avars and lst are descending *)
     match avars, lst with
@@ -398,7 +413,7 @@ let find (t:term) (nargs:int) (nvars:int) (sfun:int->int) (table:t)
   (* Find the indices of all terms which are identical to the term [t] which has
      [nargs] argument variables and comes from an environment with [nvars] local
      variables.*)
-  let rec uni (t:term) (tab:t) (nb:int) (r:result): sublist =
+  let rec uni (t:term) (tab:t) (nb:int) (r:substitutions): sublist =
     match t with
       Variable i when nb <= i && i < nb + nargs ->
         merge_avars_exact tab.avars (i - nb) nargs r
@@ -415,7 +430,7 @@ let merge_terms
     (terms:(int*int*int*int*term)list)
     (nb0:int)
     (bvars_flg:bool) (* schematic terms will be considered only if nargs = nb0 *)
-    (r:result)
+    (r:substitutions)
     : sublist =
   (* Merge the terms of a table entry which can substitute the argument
      variable [var] in a local environment with [nbenv] variables into the
@@ -507,7 +522,7 @@ let unify_with
             into the environment of the term at [idx] (e.g. in the term [t]
             space has to be made for the variables of the term at [idx]).
    *)
-  let rec uniw (t:term) (tab:t) (nb:int) (r:result): sublist =
+  let rec uniw (t:term) (tab:t) (nb:int) (r:substitutions): sublist =
     match t with
       Variable i when nb <= i && i < nb + nargs ->
         (* argument variable of [t] *)
