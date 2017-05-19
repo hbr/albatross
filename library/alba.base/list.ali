@@ -81,7 +81,7 @@ permutation: ghost {[G],[G]}
     -> inspect
            a
        case [] then
-           []
+           a
        case h ^ t then
            - t + [h]
 

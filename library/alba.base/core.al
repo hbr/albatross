@@ -494,6 +494,7 @@ end
 0: NAT                     note built_in end
 greatest: NAT              note built_in end
 successor (n:NAT): NAT     note built_in end
+predecessor (n:NAT): NAT   note built_in end
 (+)  (a,b:NAT): NAT        note built_in end
 (-)  (a,b:NAT): NAT        note built_in end
 (*)  (a,b:NAT): NAT        note built_in end
@@ -511,9 +512,10 @@ upper_set (n:NAT): ghost {NAT}
 
 all(a,b,n:NAT, p:{NAT})
     ensure
-        n = greatest ==> n.successor = 0
-
         n /= n.successor
+        n = greatest ==> n.successor = 0
+        n.successor.predecessor = n
+
 
         0 in p
         ==> (all(n) n /= greatest ==> n in p ==> n.successor in p)

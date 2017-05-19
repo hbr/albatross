@@ -174,36 +174,44 @@ all(a,b,c:[G])
    ============= :}
 
 (-) (a:[G]): [G]
-    -> inspect a
-       case []    then []
-       case h ^ t then -t + h ^ []
+    -> inspect
+           a
+       case [] then
+           a
+       case h ^ t then
+           -t + [h]
 
 all(a,b:[G])
     ensure
-       -(a + b) = -b + -a
-    inspect a
-    case x^a assert
-        (- (x^a + b))       =   -(a + b) + [x]    -- def '+', '-'
-        (- (a + b)) + [x]   =   -b + -a + [x]     -- ind hypo
-        (-b) + -a + [x]     =   -b + (-a + [x])   -- assoc '+'
-        (-b) + (-a + [x] )  =   -b + - x^a        -- def '-'
+        - (a + b) = -b + -a
+    inspect
+        a
+    case x ^ xs
+        -- goal -(x ^ xs + b) = -b + - x ^ xs
+        via [ -(x ^ xs + b)
+            , - x ^ (xs + b)           -- def '+'
+            , - (xs + b) + [x]         -- def '-'
+            , -b + - xs + [x]          -- ind hypo
+            , -b + (- xs + [x])        -- assoc
+            , -b + - x ^ xs            -- def '-'
+            ]
     end
 
 
 all(a:[G])
+       -- list reversal is an involution
     ensure
-        -(-a) = a
-    inspect a
-    case x^a assert
-            -(-x^a) = - (-a + [x])
-
-            ;- (-a + [x]) = -[x] + -(-a)
-
-            ensure -[x] + -(-a) = [x] + a
-            assert  -[x] = [x]
-            end
-
-            [x] + a = x^a
+        - - a = a
+    inspect
+        a
+    case x ^ xs
+        -- goal: - - x ^ xs = x ^ xs
+        via [ - - x ^ xs
+            , - (-xs + [x])       -- def '-'
+            , -[x] + - - xs       -- - (a + b) = - b + - a
+            , -[x] + xs           -- ind hyp
+            , x ^ xs              -- def '+'
+            ]
     end
 
 
