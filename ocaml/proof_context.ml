@@ -608,7 +608,8 @@ let find (t:term) (pc:t): int =
   let n,_,(_,fgtps),t0 = Term.all_quantifier_split_1 t in
   let nfgs = Array.length fgtps in
   let sublst =
-    Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd in
+    Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd
+  in
   let idx,sub =
     List.find
       (fun (idx,sub) ->
@@ -631,7 +632,7 @@ let has (t:term) (pc:t): bool =
   (** Is the term [t] already in the proof context [pc]?
    *)
   try
-    let _ = find t pc in
+    ignore(find t pc);
     true
   with Not_found ->
     false
@@ -853,10 +854,10 @@ let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
     pc.def_ass  <- Term_table.add t 0 0 idx sfun pc.def_ass
 
 
-let add_to_proved (t:term) (rd:RD.t) (idx:int) (pc:t): unit =
+let add_to_proved (t:term) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
-  let nargs,nbenv,t = RD.schematic_term rd in
-  pc.entry.prvd <- Term_table.add t nargs nbenv idx sfun pc.entry.prvd
+  let n,_,_,t0 = Term.all_quantifier_split_1 t in
+  pc.entry.prvd <- Term_table.add t0 n (count_variables pc) idx sfun pc.entry.prvd
 
 
 
@@ -888,14 +889,10 @@ let add_last_to_tables (pc:t): unit =
   let t = term idx pc
   and rd = rule_data idx pc in
   assert (not (has t pc));
-  add_to_proved   t rd idx pc;
+  add_to_proved   t idx pc;
   add_to_forward  rd idx pc;
   add_to_backward rd idx pc;
   add_to_equalities t idx pc;
-  if not (has t pc) then
-    begin
-      printf "add_last_to_tables %d %s\n" idx (string_long_of_term_i idx pc);
-    end;
   assert (has t pc)
 
 
