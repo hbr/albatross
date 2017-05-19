@@ -55,8 +55,8 @@ it you have to compile it.
 
     alba compile
 
-Set the environment variable `ALBA_LIB_PATH` to `path/to/albatross/library`
-(e.g. in the bash shell `export ALBA_LIB_PATH=/path/to/albatross/library`)
+Set the environment variable `ALBA_LIBRARY_PATH` to `path/to/albatross/library`
+(e.g. in the bash shell `export ALBA_LIBRARY_PATH=/path/to/albatross/library`)
 and the compiler will find the libraries automatically.
 
 For the emacs editor there is an albatross mode which does syntax
