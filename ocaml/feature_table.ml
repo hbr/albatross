@@ -87,6 +87,8 @@ type descriptor = {
     sign:        Sign.t;
     mutable tp:  type_term;
     bdesc:       bdesc;
+    mutable recognizers: (term * term option) list;
+    mutable projectors: int IntMap.t
   }
 
 type t = {
@@ -1798,8 +1800,6 @@ and feature_complexity
 
 
 
-
-
 let equality_index (cls:int) (ft:t): int =
   variant Constants.eq_index [|cls|] ft
 
@@ -2049,7 +2049,9 @@ let add_feature
      argnames;
      sign;
      tp       = Class_table.to_dummy nfgs sign;
-     bdesc}
+     bdesc;
+     recognizers = [];
+     projectors  = IntMap.empty}
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
@@ -2176,7 +2178,9 @@ let add_base
     argnames = standard_argnames nargs;
     sign;
     tp       = Class_table.to_dummy ntvs sign;
-    bdesc
+    bdesc;
+    recognizers = [];
+    projectors  = IntMap.empty
   }
   in
   Seq.push desc ft.seq;
@@ -2505,6 +2509,33 @@ let set_seed (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
    *)
   (base_descriptor ivar ft)#set_seed sd ags
 
+
+let has_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): bool =
+  try
+    ignore(List.find
+             (fun (e,c) -> e = exp && c = cond)
+             (descriptor idx ft).recognizers);
+    true
+  with Not_found ->
+    false
+
+
+
+let set_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): unit =
+  if has_recognizer exp cond idx ft then
+    ()
+  else
+    let desc = descriptor idx ft in
+    desc.recognizers <- (exp,cond) :: desc.recognizers
+
+
+
+let set_projector (proj:int) (ivar:int) (idx:int) (ft:t): unit =
+  let desc = descriptor idx ft in
+  if IntMap.mem ivar desc.projectors then
+    ()
+  else
+    desc.projectors <- IntMap.add ivar proj desc.projectors
 
 
 

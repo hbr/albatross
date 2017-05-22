@@ -64,6 +64,9 @@ let standard_substitution (n:int): term array =
   assert (0 <= n);
   Array.init n (fun i -> Variable i)
 
+let is_standard_substitution (args:term array): bool =
+  interval_for_all (fun i -> args.(i) = Variable i) 0 (Array.length args)
+
 let make_type (cls:int) (ags:arguments): type_term =
   Application (Variable cls, ags, false)
 
@@ -1585,6 +1588,7 @@ end (* Term *)
 module Formals:
 sig
   type t
+  val empty: t
   val make:  names -> types -> t
   val count: t -> int
   val names: t -> names
@@ -1597,6 +1601,7 @@ end
         names: names;
         types: types
       }
+    let empty: t = {names = [||]; types = [||]}
     let make (nms:names) (tps:types): t =
       assert (Array.length nms = Array.length tps);
       {names = nms; types = tps}

@@ -938,16 +938,22 @@ let get_rule_data (t:term) (pc:t): RD.t =
 let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
   assert (count pc + 1 = count_base pc);
   let cnt = count pc in
-  let res = try find t pc with Not_found -> cnt in
+  let res =
+    try find t pc
+    with Not_found -> cnt
+  in
   let dup = res <> cnt in
   if pc.trace && ((search && not dup) || is_trace_extended pc) then
     trace_term t rd search dup pc;
   Ass_seq.push rd pc.terms;
-  if search && not dup then begin
-    add_last_to_tables pc;
-    if not dup && is_global pc then
-      Feature_table.add_involved_assertion cnt t (feature_table pc)
-  end;
+  if search && not dup then
+    begin
+      add_last_to_tables pc;
+      if not dup && is_global pc then
+        Feature_table.add_involved_assertion cnt t (feature_table pc)
+    end;
+  if not dup && is_global pc then
+    Induction.put_assertion res t (feature_table pc);
   res
 
 
