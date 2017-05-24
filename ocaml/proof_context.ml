@@ -1741,10 +1741,10 @@ let add_axiom (t:term) (pc:t): int =
 
 
 let add_specialized_induction_law
-      (tp:type_term) (ivar:int) (goal:term) (pc:t)
+      (tp:type_term) (ivar:int) (goal_pred:term) (pc:t)
     : int =
   (* Add the specialized induction law of the inductive type [tp] specialized
-     for the goal [goal].
+     for the goal predicate [goal_pred].
 
      [tp] is the type of the inspect term.
 
@@ -1765,11 +1765,7 @@ let add_specialized_induction_law
     with Not_found ->
       assert false (* tp must be an inductive type *)
   in
-  let p =
-    let t0 = Term.lambda_inner goal ivar in
-    let ptp = predicate_of_type tp pc in
-    Lam (1, anon_argnames 1, [], t0, true, ptp) in
-  let sub = [|p; Variable ivar|] in
+  let sub = [|goal_pred; Variable ivar|] in
   let ags =
     try
       RD.verify_specialization sub (context pc) (rule_data idx pc)

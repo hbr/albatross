@@ -60,6 +60,22 @@ let formals (fc:t): Formals.t =
 let count_variables (fc:t): int =
   Formals.count (formals fc)
 
+
+let variable_type (i:int) (fc:t): type_term =
+  let fs = formals fc in
+  assert (i < Formals.count fs);
+  (Formals.types fs).(i)
+
+
+let tvars (fc:t): Tvars.t =
+  Class_context.tvars fc.cc
+
+let class_context (fc:t): Class_context.t =
+  fc.cc
+
+let class_table (fc:t): Class_table.t =
+  Class_context.class_table fc.cc
+
 let feature_table (fc:t): Feature_table.t =
   fc.ft
 

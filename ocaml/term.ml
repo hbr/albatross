@@ -106,6 +106,7 @@ module Term: sig
   val is_variable_below: int -> term -> bool
   val is_argument: term -> int -> bool
 
+  val is_permutation: term array -> bool
   val nodes0: term -> int -> int array -> int
   val nodes: term -> int
 
@@ -236,6 +237,23 @@ end = struct
       Variable j when i=j -> true
     | _                   -> false
 
+  let is_permutation (a:term array): bool =
+    let n = Array.length a in
+    let p = Array.make n true in
+    try
+      for i = 0 to n - 1 do
+        match a.(i) with
+        | Variable j when j < n ->
+           if p.(j) then
+             p.(j) <- false
+           else
+             raise Not_found
+        | _ ->
+           raise Not_found
+      done;
+      true
+    with Not_found ->
+      false
 
   let rec to_string (t:term): string =
     let argsstr nargs names =

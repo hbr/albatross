@@ -32,11 +32,16 @@ type base_descriptor = { hmark:    header_mark;
                          mutable ancestors: parent_descriptor IntMap.t}
 
 
-type descriptor      = { mdl:  Module.M.t;
-                         ident: int;
-                         name: int;
-                         bdesc: base_descriptor;
-                         mutable is_exp: bool}
+type descriptor      = {
+    mdl:  Module.M.t;
+    ident: int;
+    name: int;
+    bdesc: base_descriptor;
+    mutable indlaws: (int * (term list * int) list) list;
+                   (* law idx, constructors
+                      each constructor with a list of preconditions *)
+    mutable is_exp: bool
+  }
 
 
 type t = {mutable map:   int list IntMap.t;
@@ -798,6 +803,32 @@ let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
   in
   class_ tp
 
+
+
+let find_induction_law
+      (cs:int list) (cls:int) (ct:t)
+    : int * (term list * int) list =
+  let has cs0 c =
+    List.exists (fun (_,c0) -> c0 = c) cs0
+  in
+  List.find
+    (fun (i,cs0) -> List.for_all (has cs0) cs)
+    (descriptor cls ct).indlaws
+
+
+
+let add_induction_law
+      (idx:int) (cs:(term list * int) list) (cls:int) (ct:t)
+    : unit =
+  (* Add the induction law [idx] with its constructors [cs] to the class
+     [cls]. *)
+  assert (cls < count ct);
+  let desc = descriptor cls ct in
+  desc.indlaws <- desc.indlaws @ [idx,cs]
+
+
+
+
 let export
       (idx:   int)
       (hm:    header_mark withinfo)
@@ -1461,6 +1492,7 @@ let add
      name = cn;
      ident = idx;
      is_exp = is_exp;
+     indlaws = [];
      bdesc = bdesc}
     ct.seq;
   add_to_map idx ct;
@@ -1728,6 +1760,7 @@ let add_base_class
      name = nme;
      ident = idx;
      is_exp = (name = "@DUMMY");
+     indlaws = [];
      bdesc = bdesc}
     ct.seq;
   let mdl_nme = ST.symbol mdl_name in

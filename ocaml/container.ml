@@ -184,6 +184,8 @@ module Mylist: sig
 
   val combine:      'a list -> 'b list -> ('a*'b) list
   val split_at:     int -> 'a list -> 'a list * 'a list
+
+  val find2: ('a -> 'b -> bool) -> 'a list -> 'b list -> 'a * 'b
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -244,6 +246,19 @@ end = struct
            assert false (* i out of bound *)
     in
     split i [] l
+
+  let find2 (f:'a -> 'b -> bool) (l1:'a list) (l2:'b list): 'a * 'b =
+    let rec find l1 l2 =
+      match l1, l2 with
+      | [], _ | _, [] ->
+         raise Not_found
+      | h1::t1, h2::t2 ->
+         if f h1 h2 then
+           h1, h2
+         else
+           find t1 t2
+    in
+    find l1 l2
 end
 
 

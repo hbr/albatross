@@ -51,10 +51,12 @@ let is_tracing (ft:Feature_table.t): bool =
 let has_all_recursive_arguments
       (rec_args:IntSet.t)
       (c:int)
+      (args: term array)
       (fc:Feature_context.t)
     : bool =
   (* Are all recursive arguments of [c] contained in recargs? *)
   let ft = Feature_context.feature_table fc
+  and nargs = Array.length args
   and nvars = Feature_context.count_variables fc in
   let tvs,s = Feature_table.signature0 (c-nvars) ft in
   assert (Sign.has_result s);
@@ -62,14 +64,18 @@ let has_all_recursive_arguments
   interval_for_all
     (fun i ->
       if Term.equivalent (Sign.arg_type i s) rt then
-        IntSet.mem i rec_args
+        match args.(i) with
+        | Variable j when j < nargs ->
+          IntSet.mem j rec_args
+        | _ ->
+           assert false (* cannot happen *)
       else
         true
     )
     0 (Sign.arity s)
 
 
-let constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
+let split_constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
   (* Check if [pp] is a constructor rule of the form
 
          all(a1,...) pp1 ==> ... ==> c(a1,...) in p
@@ -88,7 +94,7 @@ let constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
   let fc1 = push nms tps fgnms fgtps fc in
   match t0 with
   | Application(Variable n,[|VAppl(c,args,_,_)|],_)
-       when is_standard_substitution args
+       when Term.is_permutation args
             && Array.length args = n ->
      let pres,recargs =
        List.fold_left
@@ -109,9 +115,10 @@ let constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
          ([],IntSet.empty)
          ps_rev
      in
-     if not (has_all_recursive_arguments recargs c fc1) then
+     if has_all_recursive_arguments recargs c args fc1 then
+       pres, c - count_variables fc1
+     else
        raise Not_found;
-     pres, c - count_variables fc1
   | _ ->
      raise Not_found
 
@@ -120,23 +127,29 @@ let constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
 
 
 let put_induction_law
-      (t:term) (ps_rev: term list) (fc:Feature_context.t)
+      (idx:int) (t:term) (ps_rev: term list) (fc:Feature_context.t)
     : unit =
-  (* A law of the form all(p,x) pp1 ==> ... ==> x in p has been
+  (* A law of the form
+
+         all(p,x) pp1 ==> ... ==> x in p has been
+
      encountered. Analyze if its an normal induction law i.e. that each
      premise in [ps_rev] is a constructor rule of the form
 
          all(a1,..) cond ==> ra1 in p ==> ... ==> c(a1,...) in p
 
-     Note: - [p] is always the variable 0 in the outer context.
+     Note: - [p] is always the variable 0 and [x] the variable 1 in the
+     context.
 
            - multiple preconditions might occur *)
   try
     let open Feature_context in
+    let tp = variable_type 1 fc in
+    let cls = Tvars.principal_class tp (tvars fc) in
     let lst =
       List.fold_left
         (fun lst pp ->
-          let pres,c = constructor_rule pp fc in
+          let pres,c = split_constructor_rule pp fc in
           if List.for_all (fun (_,c0) -> c <> c0) lst then
             (pres,c) :: lst
           else
@@ -149,7 +162,9 @@ let put_induction_law
       begin
         printf "\nnormal induction law\n";
         printf "   %s\n\n" (string_of_term t (pop fc));
-      end
+      end;
+    let ct = Feature_context.class_table fc in
+    Class_table.add_induction_law idx lst cls ct
   with Not_found ->
     ()
 
@@ -212,8 +227,18 @@ let put_assertion (idx:int) (t:term) (ft:Feature_table.t): unit =
   (* Induction law all(p,x) pp1 ==> pp2 ==> ... ==> x in p *)
   match t0 with
   | Application(Variable 0, [|Variable 1|],_)
-       when n = 2 && ps_rev <> [] ->
-     put_induction_law t ps_rev fc
+       when n = 2
+            && ps_rev <> []
+            && List.for_all
+                 (fun pp ->
+                   try (* premises must not contain the induction variable *)
+                     ignore(Term.shift_from (-1) 1 0 0 pp);
+                     true
+                   with Term_capture ->
+                        false)
+                 ps_rev
+    ->
+     put_induction_law idx t ps_rev fc
 
   (* Projector all(a1,..) proj_ij(ci(a1,..) = aj *)
   | VAppl(eq,[|VAppl(proj,[|VAppl(c,cargs,_,_)|],_,_);Variable i|],_,_)

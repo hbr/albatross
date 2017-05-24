@@ -266,7 +266,7 @@ let inner_case_context
 let analyze_type_inspect
     (info:info)
     (ivar:int) (* induction variable *)
-    (goal:term)
+    (goal_pred:term)
     (pc:PC.t)
     : IntSet.t * int * type_term =
   (* constructor set, induction law, inductive type *)
@@ -275,12 +275,10 @@ let analyze_type_inspect
   and ct    = Context.class_table c
   in
   assert (ivar < nvars);
-  let tvs,s = Context.variable_data ivar c
-  in
+  let tvs = Context.tvars c in
   assert (ivar < nvars);
-  assert (Sign.is_constant s);
   let cons_set, cls, tp =
-    let tp = Sign.result s in
+    let tp = Context.variable_type ivar c in
     let cls =
       try
         Class_table.inductive_class_of_type tvs tp ct
@@ -292,7 +290,7 @@ let analyze_type_inspect
     cls,
     tp
   in
-  let ind_idx = PC.add_specialized_induction_law tp ivar goal pc in
+  let ind_idx = PC.add_specialized_induction_law tp ivar goal_pred pc in
   cons_set,ind_idx,tp
 
 
@@ -346,6 +344,7 @@ let inductive_type_case_context
          case cons_i(...)
             all(cvars)
                 require
+                    cond     -- optional precondition
                     p(ra1)   -- induction hypothesis ra1: recursive argument 1
                     p(ra2)
                     ...
@@ -610,7 +609,128 @@ let inductive_set_case
 
 
 
+let type_cases
+      (ivar: int)
+      (cases:one_case list)
+      (c:Context.t)
+    : (int*names*info*source_proof) list * int list =
+  (* Return the reversed list of cases and a corresponding list of
+     constructors. *)
+  let tp = Context.variable_type ivar c
+  and nvars = Context.count_variables c
+  in
+  List.fold_left
+    (fun (lst,cs) (e,prf) ->
+      let nms,pat = Typer.case_pattern e tp c in
+      let n = Array.length nms in
+      let invalid_pat str =
+        error_info
+          e.i
+          (str ^ " pattern \"" ^ (string_of_expression e) ^ "\"")
+      in
+      let cons_idx =
+        match pat with
+        | VAppl(i,args,_,_) ->
+           let argslen = Array.length args in
+           if argslen <> n then
+             invalid_pat "Invalid";
+           for k = 0 to n-1 do
+             if args.(k) <> Variable k then
+               invalid_pat "Invalid"
+           done;
+           i - nvars - n
+        | _ ->
+           invalid_pat "Invalid"
+      in
+      try
+        ignore (List.find (fun (c,_,_,_) -> cons_idx = c) lst);
+        invalid_pat "Duplicate"
+      with Not_found ->
+        (cons_idx,nms,e.i,prf) :: lst, cons_idx::cs
+    )
+    ([],[])
+    cases
 
+(*
+module TID =
+  struct
+    module RD = Rule_data
+    type t = {
+        ivar:int; (* induction variable *)
+        goal:term;
+        goal_pred: term;
+        law_idx: int;  (* specialized law *)
+        cs: int list;  (* constructors *)
+        ps: term list; (* premises of the specialized induction law *)
+        tgt: term;     (* target of the specialized induction law *)
+        case_lst: (int * names * info * source_proof) list;
+        pc: PC.t   (* outer context *)
+      }
+
+    let induction_type (data:t): type_term =
+      Context.variable_type data.ivar (PC.context data.pc)
+
+    let constructor_rule (c:int) (data:t): names * types * term list * term =
+      let _,pp =
+        Mylist.find2
+          (fun c0 _ -> c = c0)
+          data.cs
+          data.ps
+      in
+      let n,(nms,tps),fgs,ps_rev,tgt =
+        PC.split_general_implication_chain pp data.pc
+      in
+      assert (fgs = empty_formals);
+      nms,tps,ps_rev,tgt
+
+    let make
+          (info:info) (ivar:int) (goal:term) (cases:one_case list) (pc:PC.t)
+        : t =
+      let c = PC.context pc in
+      let ct = Context.class_table c in
+      let ass_idx_lst, other_vars =
+        PC.assumptions_for_variables [|ivar|] [ivar] goal pc in
+      let goal_pred =
+        induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
+      and tp = Context.variable_type ivar c
+      and tvs = Context.tvars c
+      in
+      let cls = Tvars.principal_class tp tvs
+      in
+      let case_lst_rev, cs_rev = type_cases ivar cases c
+      in
+      let law_idx0,cs =
+        try
+          Class_table.find_induction_law cs_rev cls ct
+        with Not_found ->
+          error_info
+            info
+            ("The class " ^ (Class_table.class_name cls ct)
+             ^ " does not have an induction law for the chosen constructors")
+      in
+      let law_idx =
+        let sub = [|goal_pred; Variable ivar|] in
+        let ags =
+          try
+            RD.verify_specialization sub c (PC.rule_data law_idx0 pc)
+          with Not_found ->
+            assert false
+        in
+        PC.specialized law_idx0 sub ags 0 pc
+      in
+      let ps_rev,tgt =
+        Term.split_implication_chain
+          (PC.term law_idx pc)
+          (PC.count_variables pc + Constants.implication_index)
+      in
+      assert (List.length cs = List.length ps_rev);
+      {ivar; goal; goal_pred; law_idx; tgt;
+       ps = List.rev ps_rev;
+       cs = List.map (fun (_,c) -> c) cs;
+       case_lst = List.rev case_lst_rev;
+       pc}
+  end (* TID *)
+ *)
 
 let error_string_case (ps_rev:term list) (goal:term) (pc:PC.t): string =
   let psstr = String.concat "\n"
@@ -1193,16 +1313,15 @@ and prove_inductive_type
       prefix
       (ST.string (Context.argnames (PC.context pc)).(ivar))
   end;
+  (*let data = TID.make info ivar goal cases pc in*)
   let ass_idx_lst, other_vars =
     PC.assumptions_for_variables [|ivar|] [ivar] goal pc in
   let goal_pred =
     induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
   and nass = List.length ass_idx_lst
   in
-  let goal =
-    beta_reduced (Application(goal_pred,[|Variable ivar|],false)) pc in
   let cons_set, ind_idx, tp =
-    analyze_type_inspect info ivar goal pc
+    analyze_type_inspect info ivar goal_pred pc
   in
   let c  = PC.context pc in
   let ft  = Context.feature_table c in
