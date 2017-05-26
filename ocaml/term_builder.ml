@@ -443,12 +443,14 @@ let unify (t1:type_term) (t2:type_term) (tb:t): unit =
       ()
 
     | Variable i, Variable j when i < ntvs && j < ntvs ->
-       assert (not (is_local i tb && is_local j tb));
        let i_has_sub = has_substitution i tb
        and j_has_sub = has_substitution j tb
        in
        if not i_has_sub && not j_has_sub then
-         substitute_var_var i j tb
+         begin
+           assert (not (is_local i tb && is_local j tb));
+           substitute_var_var i j tb
+         end
        else if not i_has_sub then
          unify0 t1 tb.sub.(j)
        else if not j_has_sub then
