@@ -1611,6 +1611,7 @@ sig
   val count: t -> int
   val names: t -> names
   val types: t -> types
+  val sub:   int -> int -> t -> t
   val formals: t -> formals
 end
   =
@@ -1627,6 +1628,12 @@ end
     let names (formals:t): names = formals.names
     let types (formals:t): types = formals.types
     let count (formals:t): int = Array.length formals.names
+    let sub (start:int) (n:int) (fs:t): t =
+      assert (start <= count fs);
+      assert (start + n <= count fs);
+      make
+        (Array.sub (names fs) start n)
+        (Array.sub (types fs) start n)
     let formals(formals:t): formals = formals.names, formals.types
     let equivalent (f1:t) (f2:t): bool =
       Term.equivalent_array f1.types f2.types

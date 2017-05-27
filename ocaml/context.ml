@@ -14,7 +14,7 @@ type formal = Class_table.formal
 
 type entry = {
     tvs:          Tvars.t;            (* cumulated *)
-    fargs:        formal array;       (* cumulated *)
+    fargs:        Formals.t;          (* cumulated *)
     ntvs_delta:   int;
     nfgs_delta:   int;
     nargs_delta:  int;
@@ -35,7 +35,7 @@ type t = {
 
 let empty_entry: entry =
   {tvs          = Tvars.empty;
-   fargs        = [||];
+   fargs        = Formals.empty;
    ntvs_delta   = 0;
    nfgs_delta   = 0;
    nargs_delta  = 0;
@@ -152,7 +152,7 @@ let count_last_variables (c:t): int =
   c.entry.nargs_delta +
   if has_result c then 1 else 0
 
-let count_variables (c:t): int = Array.length c.entry.fargs
+let count_variables (c:t): int = Formals.count c.entry.fargs
 
 
 let implication_index (c:t): int =
@@ -181,12 +181,12 @@ let is_equality_index (i:int) (c:t): bool =
 
 let variable_name (i:int) (c:t): int =
   assert (i < count_variables c);
-  fst c.entry.fargs.(i)
+  (Formals.names c.entry.fargs).(i)
 
 
 let variable_type (i:int) (c:t): type_term =
   assert (i < count_variables c);
-  snd c.entry.fargs.(i)
+  (Formals.types c.entry.fargs).(i)
 
 let count_all_type_variables (c:t): int =
   (** The cumulated number of formal generics and type variables in
@@ -211,28 +211,28 @@ let function_type (a_tp: type_term) (r_tp: type_term) (c:t): type_term =
 let predicate_type (a_tp: type_term) (c:t): type_term =
   make_type (predicate_class c) [|a_tp|]
 
-let entry_local_argnames (e:entry): int array =
-  Array.init e.nargs_delta (fun i -> fst e.fargs.(i))
+let entry_local_argnames (e:entry): names =
+  Array.sub (Formals.names e.fargs) 0 e.nargs_delta
 
 let entry_local_types (e:entry): term array =
-  Array.init e.nargs_delta (fun i -> snd e.fargs.(i))
+  Array.sub (Formals.types e.fargs) 0 e.nargs_delta
 
 let entry_argnames (e:entry): names =
-  Array.init (Array.length e.fargs) (fun i -> fst e.fargs.(i))
+  Formals.names e.fargs
 
 let entry_argtypes (e:entry): types =
-  Array.init (Array.length e.fargs) (fun i -> snd e.fargs.(i))
+  Formals.types e.fargs
 
 
 let local_argnames (c:t): names = entry_local_argnames c.entry
 
 let local_varnames (c:t): names =
   let nvars = count_last_variables c in
-  Array.init nvars (fun i -> fst c.entry.fargs.(i))
+  Array.sub (Formals.names c.entry.fargs) 0 nvars
 
 let local_vartypes (c:t): types =
   let nvars = count_last_variables c in
-  Array.init nvars (fun i -> snd c.entry.fargs.(i))
+  Array.sub (Formals.types c.entry.fargs) 0 nvars
 
 let local_argtypes (c:t): term array = entry_local_types c.entry
 
@@ -258,7 +258,7 @@ let local_type_reduced (i:int) (c:t): type_term =
   (* Requires that the type of argument i does not contain local type variables *)
   assert (i < count_last_arguments c);
   let ntvs = count_last_type_variables c in
-  let _,tp = c.entry.fargs.(i) in
+  let tp = variable_type i c in
   try
     Term.down ntvs tp
   with
@@ -274,7 +274,7 @@ let local_types_reduced (c:t): types =
 
 
 let entry_varnames (e:entry): int array =
-  Array.map (fun (n,_) -> n) e.fargs
+  Formals.names e.fargs
 
 
 let varnames (c:t): int array = entry_varnames c.entry
@@ -340,6 +340,32 @@ let string_of_ags (ags:agens) (c:t): string =
   ^ "]"
 
 
+
+let string_of_variables (c:t): string =
+  let nms = Formals.names c.entry.fargs
+  and tps = Formals.types c.entry.fargs
+  in
+  let str =
+    String.concat
+      ","
+      (List.rev
+         (interval_fold
+            (fun lst i ->
+              (ST.string nms.(i) ^ ":" ^ string_of_type tps.(i) c) :: lst
+            )
+            [] 0 (Array.length nms)
+         )
+      )
+  in
+  if str = "" then
+    ""
+  else
+    "(" ^ str ^ ")"
+
+
+let string_of_tvs (c:t): string =
+  Class_table.string_of_tvs (tvars c) (class_table c)
+
 let make_lambda
     (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int)
     (tp:type_term)
@@ -399,7 +425,7 @@ let prenex_term_bubble_one (t:term) (c:t): term =
 
 let entry_signature (e:entry) (c:t): Sign.t =
   (** The signature of the entry [e] in the context [c].  *)
-  let argtypes = Array.init (entry_arity e) (fun i -> snd e.fargs.(i)) in
+  let argtypes = Array.sub (Formals.types e.fargs) 0 (entry_arity e) in
   Sign.make argtypes e.result
 
 
@@ -430,7 +456,7 @@ let string_of_feature_signature (fidx:int) (c:t): string =
 
 
 let variable_index (nme:int) (c:t): int =
-  Search.array_find_min (fun (n,_) -> n = nme) c.entry.fargs
+  Search.array_find_min (fun n -> n = nme) (Formals.names c.entry.fargs)
 
 
 
@@ -486,7 +512,7 @@ let rec ith_entry (i:int) (c:t): entry =
 let is_untyped (i:int) (c:t): bool =
   (* Is the variable [i] untyped? *)
   assert (i < count_variables c);
-  let tp = snd c.entry.fargs.(i) in
+  let tp = variable_type i c in
   match tp with
     Variable j when j < count_type_variables c -> true
   | _ -> false
@@ -497,7 +523,7 @@ let variable_data (i:int) (c:t): Tvars.t * Sign.t =
   let nvars = count_variables c in
   if i < nvars then
     c.entry.tvs,
-    Sign.make_const (snd c.entry.fargs.(i))
+    Sign.make_const (variable_type i c)
   else
     let idx = i - nvars in
     let tvs,s = Feature_table.signature0 idx (feature_table c) in
@@ -543,12 +569,21 @@ let push
   in
   let fargs1, res =
     Class_table.analyze_signature entlst rt is_pred is_func rvar tvs ct in
+  let nms1,tps1 = Myarray.split fargs1 in
   let fargs =
+    Formals.make
+      (Term.prepend_names nms1 (Formals.names entry.fargs))
+      (Array.append
+         tps1
+         (Array.map
+            (fun tp -> Term.up ntvs1 (Term.up_from nfgs1 ntvs0 tp))
+            (Formals.types entry.fargs)))
+  (*let fargs =
     Array.append
       fargs1
       (Array.map
          (fun (n,t) -> n, Term.up ntvs1 (Term.up_from nfgs1 ntvs0 t))
-         entry.fargs)
+         entry.fargs)*)
   and nargs_delta = Array.length fargs1 -
     if rvar then 1 else 0 (*variables*)
   in
@@ -584,16 +619,14 @@ let push_typed
   assert (nargs_new = Array.length nms);
   assert (not rvar || nargs_new > 0);
   let tvs     = Tvars.push_fgs fgnms fgcon c.entry.tvs in
-  let nargs   = nargs_new + Array.length c.entry.fargs in
-  let fargs = Array.init nargs
-      (fun i ->
-        if i < nargs_new then nms.(i), tps.(i)
-        else
-          let i = i - nargs_new in
-          let nme,tp = c.entry.fargs.(i) in
-          let tp = Term.up nfgs_new tp in
-          nme,tp
-      )
+  let fargs =
+    Formals.make
+      (Term.prepend_names nms (Formals.names c.entry.fargs))
+      (Array.append
+         tps
+         (Array.map
+            (Term.up nfgs_new)
+            (Formals.types c.entry.fargs)))
   in
   {c with
    entry =
@@ -607,6 +640,7 @@ let push_typed
     info    = UNKNOWN};
    prev = Some c;
    depth = 1 + c.depth}
+
 
 
 let push_typed0
@@ -731,11 +765,17 @@ let equality_term (t1:term) (t2:term) (c:t): term =
 let update_types (subs:type_term array) (c:t): unit =
   let len = Array.length subs in
   assert (len = Tvars.count_local c.entry.tvs);
+  let tps = Formals.types c.entry.fargs  in
   Array.iteri
+    (fun i tp ->
+      let tp = Term.subst tp len subs in
+      tps.(i) <- tp)
+    tps
+  (*Array.iteri
     (fun i (nme,tp) ->
       let tp = Term.subst tp len subs in
       c.entry.fargs.(i) <- nme,tp)
-    c.entry.fargs
+    c.entry.fargs*)
 
 
 
@@ -747,7 +787,11 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
   let nargs = entry_arity e
   and tvs   = e.tvs
   in
-  let args = Array.sub e.fargs 0 nargs in
+  let nms = Array.sub (Formals.names e.fargs) 0 nargs
+  and tps = Array.sub (Formals.types e.fargs) 0 nargs
+  in
+  let args = Myarray.combine nms tps in
+  (*let args = Array.sub e.fargs 0 nargs in*)
   Class_table.arguments_string tvs args ct
 
 
