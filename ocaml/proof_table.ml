@@ -1166,7 +1166,42 @@ let discharged0 (i:int) (bubble:bool) (at:t)
 
 
 let discharged (i:int) (at:t): term * proof_term =
-  discharged0 i false at
+  assert (count_last_type_variables at = 0);
+  let tgt = local_term i at
+  and pt  = proof_term i at in
+  if count_last_arguments at = 0
+     && count_local_assumptions at = 0
+     && count_last_local at = 1
+     && i = count_previous at
+  then
+    begin
+      assert (i = count_previous at);
+      tgt,pt
+    end
+  else
+    begin
+      let t0 = discharged_assumptions i at
+      and args = local_formals at
+      and fgs  = local_fgs at in
+      let n = count_formals args in
+      let t = Term.all_quantified n args fgs t0
+      and pt =
+        let cnt0  = count_previous at in
+        let narr = if at.maxreq <= i then i+1-cnt0 else at.maxreq-cnt0 in
+        if narr = 0 then
+          begin
+            assert (i < cnt0);
+            Subproof (empty_formals,empty_formals,i,[||],false)
+          end
+        else
+          begin
+            let ptarr = Array.init narr (fun j -> proof_term (cnt0+j) at) in
+            Subproof (args,fgs,i,ptarr,false)
+          end
+      in
+      t,pt
+   end
+
 
 
 let discharged_bubbled (i:int) (at:t): term * proof_term =
