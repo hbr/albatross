@@ -52,9 +52,9 @@ all(a,b,c:A, r,s:{A,A})
         r(a,c)
     ensure
         some(d) r(b,d) and s(c,d)
-        via some(d) r(b,d) and r(c,d)
-                assert
-                    r(b,d) and s(c,d)
+    via some(d) r(b,d) and r(c,d)   -- r is a diamond
+    assert
+        r(b,d) and s(c,d)
     end
 
 
@@ -166,29 +166,29 @@ all(a,b,c:A, r:{A,A})
     ensure
         some(d) r(b,d) and (+r)(c,d)
 
-        inspect
-            (+r)(a,b)
-        case
-            all(a,b) r(a,b) ==> (+r)(a,b)
-        assert
-            r <= +r
+    inspect
+        (+r)(a,b)
 
-        case
-            all(a,b,d) (+r)(a,b) ==> r(b,d) ==> (+r)(a,d)
-            {:      a ----> c           --->        r
-                    .       .           ...>       +r
-                    .       .
-                    v       v
-                    b ----> e
-                    |       |
-                    v       v
-                    d ----> f
-            :}
-            via some(e) r(b,e) and (+r)(c,e)
-                    via some(f) r(d,f) and r(e,f)
-                            assert
-                                r(b,d)
-                                r(d,f) and (+r)(c,f)
+    case all(a,b) r(a,b) ==> (+r)(a,b)
+        -- goal: some(d) r(b,d) and (+r)(c,d)
+        via some(d) r(b,d) and r(c,d)   -- r is a diamond
+        assert
+            r(b,d) and (+r)(c,d)        -- +r includes r
+
+    case all(a,b,d) (+r)(a,b) ==> r(b,d) ==> (+r)(a,d)
+        {:      a ----> c           --->        r
+                .       .           ...>       +r
+                .       .
+                v       v
+                b ----> e
+                |       |
+                v       v
+                d ----> f
+        :}
+        via some(e) r(b,e) and (+r)(c,e)   -- by induction hypo
+        via some(f) r(d,f) and r(e,f)      -- because r is a diamond
+        assert
+            r(d,f) and (+r)(c,f)
     end
 
 
@@ -201,26 +201,27 @@ all(a,b,c:A, r:{A,A})
     ensure
         some(d) (+r)(b,d) and (+r)(c,d)
 
-        inspect
-            (+r)(a,c)
-        case
-            all(a,c) r(a,c) ==> (+r)(a,c)
-                   via some(d) r(b,d) and (+r)(c,d)
-                           assert
-                               r(a,c)
-                               (+r)(b,d) and (+r)(c,d)
-        case
-            all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
-            {:  a . . .> c ---> e           --->        r
-                .        .      .           ...>       +r
-                .        .      .
-                v        v      v
-                b . . .> d ---> f
-            :}
-            via some(d) (+r)(b,d) and (+r)(c,d)
-                    via some(f) r(d,f) and (+r)(e,f)
-                            assert
-                                (+r)(b,f) and (+r)(e,f)
+    inspect
+        (+r)(a,c)
+
+    case all(a,c) r(a,c) ==> (+r)(a,c)
+        via some(d) r(b,d) and (+r)(c,d)  -- by intermediate lemma
+        assert
+            (+r)(b,d) and (+r)(c,d)   -- +r includes r
+
+    case all(a,c,e) (+r)(a,c) ==> r(c,e) ==> (+r)(a,e)
+        {:  a . . .> c ---> e           --->        r
+            .        .      .           ...>       +r
+            .        .      .
+            v        v      v
+            b . . .> d ---> f
+        :}
+        -- goal: some(f) (+r)(b,f) and (+r)(e,f)
+        -- hypo: some(d) (+r)(b,d) and (+r)(c,d)
+        via some(d) (+r)(b,d) and (+r)(c,d)   -- by ind hypo
+        via some(f) r(d,f) and (+r)(e,f)      -- by intermediate lemma
+        assert
+            (+r)(b,f) and (+r)(e,f)
     end
 
 
@@ -232,7 +233,7 @@ all(r:{A,A}) ensure r.is_diamond ==> (+r).is_diamond end
 
 is_confluent(r:{A,A}): ghost BOOLEAN
         -- Is the relation confluent i.e. starting from an element 'a' and stepping
-        -- form 'a' to 'b' and from 'a' to 'c', is there an element 'd' so that 'd'
+        -- from 'a' to 'b' and from 'a' to 'c', is there an element 'd' so that 'd'
         -- can be reached from 'b' and 'c' in zero or more steps?
     -> all(a,b,c)
            r(a,b)
@@ -241,19 +242,20 @@ is_confluent(r:{A,A}): ghost BOOLEAN
 
 
 all(r:{A,A})
+        -- All diamonds are confluent.
     require
         r.is_diamond
     ensure
         r.is_confluent
-        assert
-            all(a,b,c)
-                require
-                    r(a,b)
-                    r(a,c)
-                ensure
-                    some(d) d in b.closed(r) and d in c.closed(r)
-                    via some(d) r(b,d) and r(c,d)
-                        assert
-                            d in b.closed(r) and d in c.closed(r)
-                end
+    assert
+        all(a,b,c)
+            require
+                r(a,b)
+                r(a,c)
+            ensure
+                some(d) d in b.closed(r) and d in c.closed(r)
+            via some(d) r(b,d) and r(c,d)
+                assert
+                    d in b.closed(r) and d in c.closed(r)
+            end
     end
