@@ -1337,6 +1337,9 @@ let eval_term (t:term) (pc:t): term * Eval.t =
   and eval_if
       (cond:term) (a:term) (b:term) (lazy_:bool) (depth:int) (pc:t)
       : term * Eval.t =
+    (*printf "eval_if %s\n" (string_of_term cond pc);
+    printf "   a %s\n" (string_of_term a pc);
+    printf "   b %s\n" (string_of_term b pc);*)
     let conde = Eval.Term cond in
     try
       let idx = find_match cond pc
@@ -1344,11 +1347,14 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       in
       fst, Eval.If (true, idx, [|conde; fste; Eval.Term b|])
     with Not_found ->
+      (*printf "  cond %s not matched\n" (string_of_term cond pc);*)
       try
         let idx = find_match (negation_expanded cond pc) pc
         and  snd,snde = maybe_eval b lazy_ depth pc in
         snd, Eval.If (false, idx, [|conde; Eval.Term a; snde|])
       with Not_found ->
+        (*printf "  not cond %s not matched\n"
+               (string_of_term (negation_expanded cond pc) pc);*)
         raise No_branch_evaluation
 
   and eval_inspect
@@ -1362,7 +1368,12 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     and ft = feature_table pc
     in
     let rec cases_from (i:int): term * Eval.t =
-      assert (i < ncases); (* cannot happen that all cases are rejected *)
+      if i = ncases then
+        (* All case are rejected. This can happen only if the expression has
+           preconditions which are not satisfied because the expression is
+           evaluated in a context which has a contradiction. *)
+        raise No_branch_evaluation;
+      assert (i < ncases);
       let n,_,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
       try
         let sub = Pattern.unify_with_pattern insp n pat nvars ft in
@@ -1413,10 +1424,13 @@ let eval_term (t:term) (pc:t): term * Eval.t =
 
 
 let evaluated_term (t:term) (pc:t): term * Eval.t * bool =
+  (*printf "evaluated_term %s\n" (string_of_term t pc);*)
   try
     let t,e = eval_term t pc in
+    (*printf "  value %s\n" (string_of_term t pc);*)
     t, e, true
   with No_evaluation ->
+    (*printf "  no value\n";*)
     t, Eval.Term t, false
 
 
