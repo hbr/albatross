@@ -196,7 +196,23 @@ all(a,b,c:A, r:{A,A})
 
 (*) (r:{A,A}): ghost {A,A}
         -- The least reflexive transitive relation which contains 'r'.
-    -> {x,y: y in x.closed(r)}
+    -> {(s):
+           all(a,b) r(a,b) ==> s(a,a)
+           ,
+           all(a,b) r(a,b) ==> s(b,b)
+           ,
+           all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c)
+       }
+
+all(a,b,c:A, r:{A,A})
+        -- The reflexive transitive closure is transitive
+    require
+        (*r)(a,b)
+        (*r)(b,c)
+    ensure
+        (*r)(a,c)
+    end
+
 
 
 {: Equivalence

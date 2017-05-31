@@ -62,4 +62,3 @@ all(r:{A,A})
     ensure
         r.is_diamond ==> r.is_confluent
     end
-
