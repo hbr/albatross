@@ -250,10 +250,11 @@ let inner_case_context
             printf "hypo is not all quantified\n";
             printf "  %s\n" (PC.string_long_of_term hypo pc1);
             printf "  goal %s\n" (PC.string_long_of_term stren_goal pc);
+            assert false
           end;
-        let idx = PC.specialized hypo_idx (standard_substitution n1) [||] 2 pc1 in
-        PC.add_to_work idx pc1;
-        ()
+        let idx = PC.specialized hypo_idx (standard_substitution n1) [||] 2 pc1
+        in
+        PC.add_to_work idx pc1
       )
       (List.rev hypo_lst_rev);
   (* Now we have context [all(other_vars) require a1; a2; ...] *)
