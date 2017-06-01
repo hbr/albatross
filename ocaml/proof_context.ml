@@ -1363,7 +1363,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     assert (3 <= len);
     assert (len mod 2 = 1);
     let ncases = len / 2
-    and insp, inspe = maybe_eval args.(0) lazy_ depth pc
+    and insp, inspe = maybe_eval args.(0) true depth pc
     and nvars = count_variables pc
     and ft = feature_table pc
     in
