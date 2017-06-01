@@ -186,6 +186,8 @@ module Mylist: sig
   val split_at:     int -> 'a list -> 'a list * 'a list
 
   val find2: ('a -> 'b -> bool) -> 'a list -> 'b list -> 'a * 'b
+
+  val take_rev: int -> 'a list -> 'a list
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -259,6 +261,20 @@ end = struct
            find t1 t2
     in
     find l1 l2
+
+  let take_rev (n:int) (lst:'a list): 'a list =
+    let rec take n lst acc =
+      if n = 0 then
+        acc
+      else
+        match lst with
+        | hd :: tl ->
+           take (n-1) tl (hd::acc)
+        | _ ->
+           assert false (* called with illegal argument, list must have
+                           at least n elements *)
+    in
+    take n lst []
 end
 
 
