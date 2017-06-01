@@ -118,14 +118,26 @@ all(a,b,c,x:NATURAL)
         a <= b  ==> some(x) a + x = b
         a + x = b ==> a <= b
         a < a + 1
+
         a <= b  ==> a + x <= b + x
         a + x <= b + x ==> a <= b
+
+        a <= a + b
+        b <= a + b
+
         a <= b or b <= a
         a <= b or b < a
         not (a <= b) ==> b <= a
+
         a <= a
         a <= b  ==>  b <= a  ==> a = b
         a <= b  ==>  b <= c  ==> a <= c
+
+        -- difference
+        b <= a ==> a - b + b = a
+        c <= a ==> a - c = b ==> a = b + c
+        c <= a ==> a = b + c ==> a - c = b
+        a - a = 0
 
         -- multiplication
         a * 0 = 0

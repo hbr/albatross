@@ -575,6 +575,23 @@ all(a,b,n:NATURAL)
 
 
 
+all(a,b:NATURAL)
+    ensure
+        a <= a + b
+    inspect
+        b
+    end
+
+
+all(a,b:NATURAL)
+    ensure
+        b <= a + b
+    inspect
+        b
+    end
+
+
+
 
 {: Difference
    ========== :}
@@ -610,11 +627,68 @@ all(a,b,n,m:NATURAL)
 
 
 (-)  (a,b:NATURAL): NATURAL
-    require b <= a
-    ensure  -> inspect a,b
-               case    _, 0 then a
-               case    successor(a), successor(b) then a - b
+    require
+        b <= a
+    ensure
+        -> inspect
+               a,b
+           case _, 0 then
+               a
+           case successor(a), successor(b) then
+               a - b
     end
+
+
+
+all(n,m:NATURAL)
+    require
+        m <= n
+    ensure
+        n - m + m = n
+    inspect
+        m
+    case l.successor
+        inspect
+            n
+        case k.successor
+        assert
+            k - l + l = k
+        via [ (k.successor - l.successor) + l.successor
+            , (k - l + l).successor
+            , k.successor
+            ]
+    end
+
+
+all(a,b,n:NATURAL)
+    require
+        n <= a
+        a - n = b
+    ensure
+        a = b + n
+    end
+
+all(a,b,n:NATURAL)
+    require
+        n <= a
+        a = b + n
+    ensure
+        a - n = b
+    inspect
+        n
+    end
+
+all(n:NATURAL)
+    ensure
+        n - n = 0
+    inspect
+        n
+    end
+
+
+
+
+
 
 
 
