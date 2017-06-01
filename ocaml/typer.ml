@@ -309,7 +309,7 @@ let first_pass_0
          context = c;
          term = ETyped (et, withinfo tp_.i tp)}
     | Expcolon (e1,e2) ->
-        assert false (* Really needed ? *)
+       not_yet_implemented e.i "Colon operator" (* Really needed ? *)
     | Expif (cond,e1,e2) ->
         let mn, cond = first cond mn c in
         let mn, e1   = first e1 mn c in
