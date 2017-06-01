@@ -700,7 +700,7 @@ and  info_proof_expression = proof_expression withinfo
 
 and proof_expression =
     PE_If of
-      expression * source_proof * source_proof
+      expression * source_proof * info * source_proof
   | PE_Guarded_If of
       expression * source_proof * expression * source_proof
   | PE_Inspect of

@@ -542,8 +542,9 @@ inner_theorem_2: /*(* gets rest of assumptions goal source-proof *) */
 
 
 if_proof:
-    KWif info_expr_1 source_proof KWelse source_proof  {
-      winfo $startpos($1) (PE_If ($2, $3, $5))
+    kwi=KWif c=info_expr_1 p1=source_proof kwe=KWelse p2=source_proof  {
+      ignore(kwi); ignore(kwe); (* otherwise they are reported as unused *)
+      winfo $startpos(kwi) (PE_If (c, p1, pinfo $startpos(kwe), p2))
     }
 
 

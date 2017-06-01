@@ -1142,8 +1142,8 @@ and prove_one
           try
             result (
               match prf.v with
-                PE_If (cond, sprf1, sprf2) ->
-                  prove_if prf.i goal cond sprf1 sprf2 pc
+                PE_If (cond, sprf1, else_info, sprf2) ->
+                  prove_if prf.i goal cond sprf1 else_info sprf2 pc
               | PE_Guarded_If (cond1, sprf1, cond2, sprf2) ->
                   prove_guarded_if prf.i goal cond1 sprf1 cond2 sprf2  pc
               | PE_Inspect (insp, cases) ->
@@ -1230,6 +1230,7 @@ and prove_if
     (goal: term)
     (c1:expression)
     (prf1:source_proof)
+    (else_info:info)
     (prf2:source_proof)
     (pc:PC.t)
     : int =
@@ -1258,7 +1259,7 @@ and prove_if
   let result_idx =
     let branch1_idx = prove_branch c1 goal prf1 pc in
     PC.add_mp branch1_idx result_idx false pc in
-  let branch2_idx = prove_branch (withinfo c1.i c1neg) goal prf2 pc in
+  let branch2_idx = prove_branch (withinfo else_info c1neg) goal prf2 pc in
   PC.add_mp branch2_idx result_idx false pc
 
 
