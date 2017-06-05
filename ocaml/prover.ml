@@ -460,9 +460,17 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
   let rec round (i:int) (start:int): unit =
     if PC.is_interface_check pc && 1 < i then
       raise (Proof_failed "");
-    if goal_limit () <= start then
+    if PC.verbosity pc >= 1 && start / goal_limit () > 0 then
+      begin
+        printf "next round entered with %d goals\n" start;
+        let g0 = Seq.elem 0 gs.goals in
+        printf "  hard to prove %s\n"
+               (PC.string_of_term g0.goal g0.ctxt.pc);
+        flush_all ()
+      end;
+    (*if goal_limit () <= start then
       raise (Proof_failed (", goal limit " ^ (string_of_int (goal_limit())) ^
-                           " exceeded"));
+                           " exceeded"));*)
     let cnt = count gs in
     if PC.is_tracing pc then
       printf "%s-- round %d with %d goals --\n" (PC.trace_prefix pc) i (cnt - start);
