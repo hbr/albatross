@@ -119,6 +119,11 @@ all(a,b,c,x:NATURAL)
         a + x = b ==> a <= b
         a < a + 1
 
+        a < b ==> 1 <= b
+
+        not (a < b) ==> not (a = b) ==> b < a
+        not (a < b) ==> not (a = b) ==> 0 < a
+
         a <= b  ==> a + x <= b + x
         a + x <= b + x ==> a <= b
 
@@ -134,10 +139,20 @@ all(a,b,c,x:NATURAL)
         a <= b  ==>  b <= c  ==> a <= c
 
         -- difference
+        a - a = 0
+
         b <= a ==> a - b + b = a
+
+        c <= a ==> a - c + b = a + b - c
+
         c <= a ==> a - c = b ==> a = b + c
         c <= a ==> a = b + c ==> a - c = b
-        a - a = 0
+
+        c <= a ==> a - c <= b ==> a <= b + c
+
+        a /= 0 ==> a <= b ==> a - 1 < b
+
+        not (a < b) ==> not (a = b) ==> 0 < a
 
         -- multiplication
         a * 0 = 0

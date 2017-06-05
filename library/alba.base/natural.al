@@ -591,6 +591,37 @@ all(a,b:NATURAL)
     end
 
 
+all(a,b:NATURAL)
+    require
+        not (a < b)
+        not (a = b)
+    ensure
+        b < a
+    assert
+        b <= a
+    end
+
+all(a,b:NATURAL)
+    require
+        not (a < b)
+        not (a = b)
+    ensure
+        0 < a
+    end
+
+
+all(a,b:NATURAL)
+    require
+        a < b
+    ensure
+        1 <= b
+    inspect
+        b
+    end
+
+
+
+
 
 
 {: Difference
@@ -686,8 +717,67 @@ all(n:NATURAL)
     end
 
 
+all(a,b,c:NATURAL)
+    require
+        c <= a
+        a - c <= b
+    ensure
+        a <= b + c
+    inspect
+        c
+    case m.successor
+        inspect
+            a
+    end
 
 
+
+all(a,b:NATURAL)
+    require
+        b <= a
+    ensure
+        (a - b).successor = a.successor - b
+    inspect
+        a
+    case 0
+        assert
+            b = 0
+    case k.successor
+        inspect
+            b
+        case m.successor
+    end
+
+all(a,b,c:NATURAL)
+    require
+        c <= a
+    ensure
+        a - c + b = a + b - c
+    inspect
+        b
+    case b.successor
+        assert
+            a - c + b = a + b - c
+        via [ (a - c + b).successor
+            , (a + b - c).successor
+            , (a + b).successor - c
+            , a + b.successor - c
+            ]
+    end
+
+all(a,b:NATURAL)
+    require
+        a /= 0
+        a <= b
+    ensure
+        a - 1 < b
+    assert
+        1 <= a
+        a = a - 1 + 1
+        a < b + 1;  {: therefore :} a <= b + 1
+        a - 1 + 1 in {a: a <= b + 1}
+        a - 1 + 1 <= b + 1
+    end
 
 
 
