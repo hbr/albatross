@@ -204,13 +204,17 @@ all(a,b,c:A, r:{A,A})
            all(a,b,c) s(a,b) ==> r(b,c) ==> s(a,c)
        }
 
-all(a,b,c:A, r:{A,A})
-        -- The reflexive transitive closure is transitive
-    require
-        (*r)(a,b)
-        (*r)(b,c)
+all(a,b,c:A, r,s:{A,A})
     ensure
-        (*r)(a,c)
+        (*r)(a,b) ==> (*r)(b,c) ==> (*r)(a,c)    -- transitive
+
+        r <= *r                    -- increasing
+        r <= s ==> *r <= *s        -- monotonic
+        (* * r) = * r              -- idempotent
+
+        (*r).carrier <= r.carrier  -- does not increase carrier
+        s <= *r ==> *s <= *r
+        (+r) <= *r
     end
 
 

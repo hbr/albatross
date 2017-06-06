@@ -559,6 +559,139 @@ all(a,b,c:A, r:{A,A})
     end
 
 
+all(r:{A,A})
+        -- Reflexive transitive closure is increasing
+    ensure
+        r <= *r
+    assert
+        all(a)
+            require
+                a in r.domain
+            ensure
+                (*r)(a,a)
+            via some(b) r(a,b)
+            end
+
+        all(a,b)
+            require
+                r(a,b)
+            ensure
+                (*r)(a,b)
+            assert
+                (*r)(a,a)
+            end
+    end
+
+
+all(r:{A,A})
+        -- Transitive closure is less equal reflexive transitive closure
+    ensure
+        +r <= *r
+    assert
+        all(a,b)
+            require
+                (+r)(a,b)
+            ensure
+                (*r)(a,b)
+            inspect
+                (+r)(a,b)
+            case all(a,b) r(a,b) ==> (+ r)(a,b)
+                assert
+                    r <= *r
+            end
+    end
+
+
+all(r,s:{A,A})
+        -- Reflexive transitive closure in monotonic.
+    require
+        r <= s
+    ensure
+        *r <= *s
+    assert
+        all(a,b)
+            require
+                (*r)(a,b)
+            ensure
+                (*s)(a,b)
+            inspect
+                (*r)(a,b)
+            case all(a,b) r(a,b) ==> (*r)(a,a)
+                assert
+                    s(a,b)
+            case all(a,b) r(a,b) ==> (*r)(b,b)
+                assert
+                    s(a,b)
+            end
+    end
+
+
+
+
+
+all(r:{A,A})
+        -- Reflexive transitive closure does not increase the carrier.
+    ensure
+        (*r).carrier <= r.carrier
+    assert
+        all(a)
+             require
+                a in (*r).carrier
+             ensure
+                a in r.carrier
+             if a in (*r).domain
+                 via some(b) (*r)(a,b)
+                 inspect
+                     (*r)(a,b)
+             orif a in (*r).range
+                 via some(b) (*r)(b,a)
+                 inspect
+                     (*r)(b,a)
+             end
+    end
+
+
+all(r,s:{A,A})
+    require
+        s <= *r
+    ensure
+        *s <= *r
+    assert
+        s.carrier <= (*r).carrier   -- precondition and carrier is monotonic
+        s.carrier <= r.carrier      -- (*r).carrier <= r.carrier
+
+        all(a,b)
+            require
+                (*s)(a,b)
+            ensure
+                (*r)(a,b)
+            inspect
+                (*s)(a,b)
+            case all(a,b) s(a,b) ==> (* s)(a,a)
+                assert
+                    a in r.carrier
+                if a in r.domain
+                    via some(b) r(a,b)
+                orif a in r.range
+                    via some(b) r(b,a)
+            case all(a,b) s(a,b) ==> (* s)(b,b)
+                assert
+                    b in r.carrier
+                if b in r.domain
+                    via some(a) r(b,a)
+                orif b in r.range
+                    via some(a) r(a,b)
+            end
+    end
+
+
+all(r:{A,A})
+        -- Idempotence
+    ensure
+        * * r = * r
+    end
+
+
 
 {: Equivalence
    =========== :}
