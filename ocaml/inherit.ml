@@ -127,6 +127,9 @@ let inherit_feature
   let defer_par = defer && Feature_table.owner idx ft = par
   and deferred_has_variant = ref false
   in
+  if 1 < PC.verbosity pc then
+    printf "    inherit feature %d \"%s\"\n"
+           idx (Feature_table.string_of_signature idx ft);
   let fold_fun
       (is_new:bool)
       (lst:(int*bool*int*agens) list)
