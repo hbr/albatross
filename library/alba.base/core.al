@@ -361,40 +361,39 @@ all(x:A, f:A->B)
         x in f.domain
     ensure
         f(x) in f.range
-        assert
-            x in f.domain and f(x) = f(x)
+    assert
+        x in f.domain and f(x) = f(x)
     end
 
 all(f:A->B)
     ensure
         f[f.domain] <= f.range
-        assert
-            all(y)
+    assert
+        all(y)
             require
                 y in f[f.domain]
             ensure
                 y in f.range
-                via some (x)
-                        x in f.domain and
-                        x in f.domain and
-                        f(x) = y
+            via some (x)
+                    x in f.domain and
+                    x in f.domain and
+                    f(x) = y
             end
     end
 
 all(f:A->B)
     ensure
         f.range <= f[f.domain]
-        assert
-            all(y)
+    assert
+        all(y)
             require
                 y in f.range
             ensure
                 y in f[f.domain]
-                via some(x) x in f.domain and f(x) = y
-                    assert
-                        x in f.domain and x in f.domain and f(x) = y
+            via some(x) x in f.domain and f(x) = y
+                assert
+                    x in f.domain and x in f.domain and f(x) = y
             end
-
     end
 
 
@@ -403,17 +402,16 @@ all(p,q:{A}, f:A->B)
         p <= q
     ensure
         f[p] <= f[q]
-        assert
-            all(y)
+    assert
+        all(y)
             require
                 y in f[p]
             ensure
                 y in f[q]
-                via some(x) x in p and x in f.domain and f(x) = y
-                    assert
-                        x in q and x in f.domain and f(x) = y
+            via some(x) x in p and x in f.domain and f(x) = y
+            assert
+                x in q and x in f.domain and f(x) = y
             end
-
     end
 
 
