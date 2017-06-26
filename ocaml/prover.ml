@@ -12,11 +12,38 @@ open Printf
 
 module PC = Proof_context
 
+(*
+
+          |   pointer to subgoal
+          |
+          |
+     +------------------------------------------+
+     | s1 s2 ...   |                            | ^  subgoals
+     |  alt1       |  alt2   ...                | |  backward reasoning
+     |------------------------------------------|
+     |  all(...) p1 ==> p2 ==> ... ==> tgt      | ^
+     |                                          | |  enter
+     |            goal                          |
+     |------------------------------------------|
+     | par1 | par2 | ...                        |
+     +------------------------------------------+
+               |
+               |  backpointer to parent
+               |  with goal #, alternative and subgoal within alternative
+
+
+    - An alternative fails if one of its subgoals fails
+    - A (sub)goal becomes obsolete all alternatives which need it are failed
+      or obsolete.
+    - All alternatives to prove an obsolete goal become obsolete.
+
+ *)
 
 type context = {pc:PC.t; mutable map: int TermMap.t}
 
 type alternative = {
-    premises: (int*int) array;   (* subgoal,idx *)
+    premises: (int*int) array;   (* subgoal, idx in proved assertions
+                                             (-1) not yet proved *)
     mutable npremises: int;      (* number of premises still to prove *)
     bwd_idx: int                 (* index of the backward rule *)
   }
@@ -26,15 +53,21 @@ type alternative = {
 type goal = {
     goal: term;
     ctxt: context;
-    black:  IntSet.t;
+    black:  IntSet.t; (* Blacklist of rules which are no longer to be considered *)
     mutable target:   term;
+    (* The target is the same as the goal, if the goal is not a general
+       implication chain, otherwise its the target of the chain. *)
     mutable tgt_ctxt: context;
     mutable visited:  bool;
+    mutable ancestors: IntSet.t;
     mutable parent:  (int*int*int) option;  (* parent, alternative, subgoal *)
+    (* Backpointer to parent, which alternative in the parent and which subgoal
+       within the alternative.*)
     mutable alternatives: alternative array;
     mutable nfailed: int;  (* number of failed alternatives *)
-    mutable pos: int;
-    mutable obsolete: bool
+    mutable pos: int;      (* in proof table *)
+    mutable obsolete: bool (* A goal becomes obsolete if some other goal of the
+                              same alternative has failed. *)
   }
 
 
@@ -52,15 +85,35 @@ let goal_limit_ref = ref 10000
 let goal_limit () = !goal_limit_ref
 
 
-let goal (g:term) (black:IntSet.t) (par:(int*int*int) option) (pc: PC.t): goal =
+
+let count (gs:t): int = Seq.count gs.goals
+
+
+let item (i:int) (gs:t): goal =
+  assert (i < count gs);
+  Seq.elem i gs.goals
+
+
+let goal (g:term) (i:int) (black:IntSet.t)
+         (par:(int*int*int) option)
+         (ctxt:context)
+         (gs:t)
+    : goal =
   (*assert (PC.is_well_typed g pc);*)
-  let c = {pc=pc; map = TermMap.empty} in
   {goal      = g;
-   ctxt      = c;
-   black     = black;
+   ctxt;
+   black;
    target    = g;
-   tgt_ctxt  = c;
+   tgt_ctxt  = ctxt;
    visited   = false;
+   ancestors =
+     begin
+       match par with
+       |  None ->
+           IntSet.singleton i
+       | Some(ipar,_,_) ->
+          IntSet.add i (item ipar gs).ancestors
+     end;
    parent    = par;
    alternatives = [||];
    nfailed   = 0;
@@ -70,20 +123,13 @@ let goal (g:term) (black:IntSet.t) (par:(int*int*int) option) (pc: PC.t): goal =
 
 
 
-let root_goal (g:term) (pc: PC.t): goal =
-  goal g IntSet.empty None pc
+let root_goal (g:term) (pc: PC.t) (gs:t): goal =
+  goal g 0 IntSet.empty None {pc; map = TermMap.empty} gs
+
 
 
 exception Root_succeeded
 
-
-
-let count (gs:t): int = Seq.count gs.goals
-
-
-let item (i:int) (gs:t): goal =
-  assert (i < count gs);
-  Seq.elem i gs.goals
 
 
 let has_succeeded (i:int) (gs:t): bool =
@@ -97,9 +143,13 @@ let is_visitable (i:int) (gs:t): bool =
 
 
 let init (g:term) (pc:PC.t): t =
-  {goals = Seq.singleton (root_goal g pc);
-   verbosity = PC.verbosity pc;
-   trace     = PC.is_tracing pc}
+  let gs = {goals = Seq.empty ();
+            verbosity = PC.verbosity pc;
+            trace = PC.is_tracing pc}
+  in
+  let goal = root_goal g pc gs in
+  Seq.push goal gs.goals;
+  gs
 
 
 
@@ -119,13 +169,13 @@ and set_obsolete_alternative (ialt:int) (i:int) (gs:t): unit =
 
 
 let rec set_failed (i:int) (gs:t): unit =
-  (* The goal [i] has failed. If the goal is the root goal then the whole proof is
-     failed.
+  (* The goal [i] has failed. If the goal is the root goal then the whole
+     proof is failed.
 
-     If the goal is not the root goal then it belongs to an alternative of its parent.
-     The alternative is failed. All other subgoals of the parent become obsolete. If
-     the alternative is the last alternative then the parent fails as well.
-   *)
+     If the goal is not the root goal then it belongs to an alternative of its
+     parent. The alternative is failed. All other subgoals of the parent
+     become obsolete. If the alternative is the last alternative then the
+     parent fails as well.  *)
   let g = item i gs in
   if gs.trace then begin
     let prefix = PC.trace_prefix g.ctxt.pc in
@@ -193,9 +243,9 @@ let succeed_alternative (ialt:int) (g:goal): int =
 
 
 let rec set_succeeded (i:int) (gs:t): unit =
-  (* The goal [i] has succeeded. If the goal is the root goal then the proof is done.
-     If the goal is not the root goal then it belongs to an alternative of its parent.
-   *)
+  (* The goal [i] has succeeded. If the goal is the root goal then the proof
+     is done.  If the goal is not the root goal then it belongs to an
+     alternative of its parent.  *)
   let g = item i gs in
   if gs.trace then begin
     let prefix = PC.trace_prefix g.ctxt.pc
@@ -325,6 +375,8 @@ let trace_target_subgoals (i:int) (gs:t): unit =
   done
 
 
+exception Cyclic
+
 let generate_subgoal
     (p:term) (cons:bool) (j:int) (j_idx:int) (jsub:int) (i:int) (gs:t): int =
   (* Generate a subgoal with the term [p] where [cons] indicates if the
@@ -334,14 +386,22 @@ let generate_subgoal
   let black =
     calc_blacklist cons j_idx g.black g.tgt_ctxt.pc
   in
-  let sub = goal p black (Some (i,j,jsub)) g.tgt_ctxt.pc in
+  let sub = goal p cnt black (Some (i,j,jsub)) g.tgt_ctxt gs in
   let ctxt = g.tgt_ctxt in
   begin try
     let isub = TermMap.find p ctxt.map in
     if gs.trace then
       printf "%sduplicate subgoal %d: %s at %d\n"
-        (PC.trace_prefix ctxt.pc)
-        isub (PC.string_of_term p ctxt.pc) cnt
+             (PC.trace_prefix ctxt.pc)
+             isub (PC.string_of_term p ctxt.pc) cnt;
+    if IntSet.mem isub g.ancestors then
+      begin
+        if gs.trace then
+          printf "%scyclic subgoal %d: %s\n"
+                 (PC.trace_prefix ctxt.pc)
+                 isub (PC.string_of_term p ctxt.pc);
+        raise Cyclic
+      end;
   with Not_found ->
     ctxt.map <- TermMap.add p cnt ctxt.map
   end;
@@ -357,18 +417,25 @@ let generate_subgoals (i:int) (gs:t): unit =
   let _, alts =
     List.fold_left (* all alternatives *)
       (fun (j,alts) bwd_idx ->
-        let ps = PC.premises bwd_idx g.tgt_ctxt.pc in
-        let ps,npremises =
-          List.fold_left (* all premises i.e. subgoals *)
-            (fun (ps,jsub) (p,cons) ->
+        let cnt = count gs in
+        try
+          let ps = PC.premises bwd_idx g.tgt_ctxt.pc in
+          let ps,npremises =
+            List.fold_left (* all premises i.e. subgoals *)
+              (fun (ps,jsub) (p,cons) ->
               (generate_subgoal p cons j bwd_idx jsub i gs,-1) :: ps,
               jsub+1)
-            ([],0)
-            ps
-        in
-        let ps = List.rev ps in
-        let ps = Array.of_list ps in
-        (j+1), {premises = ps; bwd_idx = bwd_idx; npremises = npremises} :: alts)
+              ([],0)
+              ps
+          in
+          let ps = List.rev ps in
+          let ps = Array.of_list ps in
+          (j+1),
+          {premises = ps; bwd_idx = bwd_idx; npremises = npremises} :: alts
+        with Cyclic ->
+          Seq.keep cnt gs.goals;
+          j, alts
+      )
       (0,[])
       alts
   in
@@ -380,14 +447,7 @@ let generate_subgoals (i:int) (gs:t): unit =
 
 
 let ancestors (i:int) (gs:t): int list =
-  let rec ancs i lst =
-    let g = item i gs in
-    match g.parent with
-      None -> i :: lst
-    | Some (ipar,_,_) ->
-        ancs ipar (i::lst)
-  in
-  ancs i []
+  IntSet.elements (item i gs).ancestors
 
 
 let trace_ancestors (i:int) (gs:t): unit =
