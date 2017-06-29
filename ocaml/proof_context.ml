@@ -2032,7 +2032,11 @@ let expand_variable_definitions (i:int) (pc:t): unit =
           tail
           i
       in
-      ignore(subst i idx v exp true)
+      try
+        ignore(subst i idx v exp true)
+      with Not_found ->
+        (* The leibniz law is not yet available *)
+        ()
 
 
 

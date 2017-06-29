@@ -41,11 +41,13 @@ module PC = Proof_context
 
 type context = {pc:PC.t; mutable map: int TermMap.t}
 
+
 type alternative = {
-    premises: (int*int) array;   (* subgoal, idx in proved assertions
-                                             (-1) not yet proved *)
+    premises: (int * int option) array; (* subgoal, pos in proved assertions*)
     mutable npremises: int;      (* number of premises still to prove *)
-    bwd_idx: int                 (* index of the backward rule *)
+    bwd_idx: int;                (* index of the backward rule *)
+    mutable failed: bool;
+    mutable obsolete: bool;
   }
 
 
@@ -64,10 +66,10 @@ type goal = {
     (* Backpointer to parent, which alternative in the parent and which subgoal
        within the alternative.*)
     mutable alternatives: alternative array;
-    mutable nfailed: int;  (* number of failed alternatives *)
-    mutable pos: int;      (* in proof table *)
-    mutable obsolete: bool (* A goal becomes obsolete if some other goal of the
-                              same alternative has failed. *)
+    mutable nfailed: int;    (* number of failed alternatives *)
+    mutable pos: int option; (* position in proof table *)
+    mutable obsolete: bool;
+    mutable failed: bool
   }
 
 
@@ -117,8 +119,9 @@ let goal (g:term) (i:int) (black:IntSet.t)
    parent    = par;
    alternatives = [||];
    nfailed   = 0;
-   pos       = -1;
-   obsolete = false
+   pos       = None;
+   obsolete = false;
+   failed = false
  }
 
 
@@ -133,7 +136,7 @@ exception Root_succeeded
 
 
 let has_succeeded (i:int) (gs:t): bool =
-  (item i gs).pos <> -1
+  (item i gs).pos <> None
 
 
 let is_visitable (i:int) (gs:t): bool =
@@ -154,21 +157,47 @@ let init (g:term) (pc:PC.t): t =
 
 
 
-let rec set_obsolete (i:int) (gs:t): unit =
+let rec set_goal_obsolete (i:int) (gs:t): unit =
   let g = item i gs in
   g.obsolete <- true;
   for ialt = g.nfailed to Array.length g.alternatives - 1 do
-    set_obsolete_alternative ialt i gs
+    set_alternative_obsolete ialt i gs
   done
 
-and set_obsolete_alternative (ialt:int) (i:int) (gs:t): unit =
+and set_alternative_obsolete (ialt:int) (i:int) (gs:t): unit =
+  (* The alternative [ialt] of the goal [i] becomes obsolete the goal has become
+     obsolete. *)
   let g   = item i gs in
   let alt = g.alternatives.(ialt) in
-  Array.iter (fun (p,pos) -> if pos = -1 then set_obsolete p gs) alt.premises
+  alt.obsolete <- true;
+  Array.iter
+    (fun (p,pos) ->
+      match pos with
+      | None ->
+         set_goal_obsolete p gs
+      | _ ->
+         ()
+    )
+    alt.premises
+
+and set_alternative_failed (ialt:int) (i:int) (gs:t): unit =
+  (* The alternative [ialt] of the goal [i] fails because one of its subgoals
+     failed. The subgoals of the alternative become obsolete. *)
+  let g   = item i gs in
+  let alt = g.alternatives.(ialt) in
+  alt.failed <- true;
+  Array.iter
+    (fun (p,pos) ->
+      match pos with
+      | None ->
+         set_goal_obsolete p gs
+      | _ ->
+         ()
+    )
+    alt.premises
 
 
-
-let rec set_failed (i:int) (gs:t): unit =
+let rec set_goal_failed (i:int) (gs:t): unit =
   (* The goal [i] has failed. If the goal is the root goal then the whole
      proof is failed.
 
@@ -177,10 +206,13 @@ let rec set_failed (i:int) (gs:t): unit =
      become obsolete. If the alternative is the last alternative then the
      parent fails as well.  *)
   let g = item i gs in
-  if gs.trace then begin
-    let prefix = PC.trace_prefix g.ctxt.pc in
-    printf "%sfailed  goal %d: %s\n" prefix i (PC.string_of_term g.goal g.ctxt.pc);
-  end;
+  if gs.trace then
+    begin
+      let prefix = PC.trace_prefix g.ctxt.pc in
+      printf "%sfailed  goal %d: %s\n"
+             prefix i (PC.string_of_term g.goal g.ctxt.pc);
+    end;
+  g.failed <- true;
   match g.parent with
     None ->
       assert (i = 0);
@@ -188,15 +220,19 @@ let rec set_failed (i:int) (gs:t): unit =
   | Some (ipar,ialt,isub) ->
       let par = item ipar gs in
       par.nfailed <- 1 + par.nfailed;
-      set_obsolete_alternative ialt ipar gs;
+      set_alternative_failed ialt ipar gs;
       if par.nfailed = Array.length par.alternatives then
-        set_failed ipar gs
+        set_goal_failed ipar gs
+
+
 
 let pc_discharged (pos:int) (pc:PC.t): term * proof_term =
   try
     PC.discharged pos pc
   with Not_found ->
     assert false (* cannot happen in generated proof *)
+
+
 
 let discharged (pos:int) (pc:PC.t): int * PC.t =
   let t,pt = pc_discharged pos pc
@@ -223,7 +259,7 @@ let discharge_target (pos:int) (g:goal): unit =
       discharge pos pc
   in
   let pos = discharge pos g.tgt_ctxt.pc in
-  g.pos <- pos
+  g.pos <- Some pos
 
 
 let succeed_alternative (ialt:int) (g:goal): int =
@@ -232,12 +268,16 @@ let succeed_alternative (ialt:int) (g:goal): int =
   let rec premise (i:int) (a_idx:int): int =
     if i = n then
       a_idx
-    else begin
-      let _,pos = alt.premises.(i) in
-      assert (0 <= pos);
-      let a_idx = PC.add_mp pos a_idx false g.tgt_ctxt.pc in
-      premise (i+1) a_idx
-    end
+    else
+      begin
+        let _,pos = alt.premises.(i) in
+        match pos with
+        | None ->
+           assert false
+        | Some pos ->
+           let a_idx = PC.add_mp pos a_idx false g.tgt_ctxt.pc in
+           premise (i+1) a_idx
+      end
   in
   premise 0 alt.bwd_idx
 
@@ -247,14 +287,19 @@ let rec set_succeeded (i:int) (gs:t): unit =
      is done.  If the goal is not the root goal then it belongs to an
      alternative of its parent.  *)
   let g = item i gs in
-  if gs.trace then begin
-    let prefix = PC.trace_prefix g.ctxt.pc
-    and obs = if g.obsolete then " of obsolete" else "" in
-    printf "%ssuccess%s goal %d: %s\n"
-      prefix obs i (PC.string_long_of_term g.goal g.ctxt.pc);
-  end;
-  assert (0 <= g.pos);
-  assert (g.pos < PC.count g.ctxt.pc);
+  if gs.trace then
+    begin
+      let prefix = PC.trace_prefix g.ctxt.pc
+      and obs = if g.obsolete then " of obsolete" else "" in
+      printf "%ssuccess%s goal %d: %s\n"
+             prefix obs i (PC.string_long_of_term g.goal g.ctxt.pc);
+    end;
+  let g_pos =
+    match g.pos with
+    | Some pos -> pos
+    | _ -> assert false (* The goal has succeeded *)
+  in
+  assert (g_pos < PC.count g.ctxt.pc);
   if g.obsolete then
     ()
   else
@@ -269,9 +314,9 @@ let rec set_succeeded (i:int) (gs:t): unit =
         assert (isub < Array.length alt.premises);
         let p,pos = alt.premises.(isub) in
         assert (p = i);
-        assert (pos = -1);
+        assert (pos = None);
         assert (0 < alt.npremises);
-        alt.premises.(isub) <- p,g.pos;
+        alt.premises.(isub) <- p, Some g_pos;
         alt.npremises <- alt.npremises - 1;
         if alt.npremises = 0 then begin
           let pos = succeed_alternative ialt par in
@@ -279,7 +324,7 @@ let rec set_succeeded (i:int) (gs:t): unit =
           set_succeeded ipar gs;
           for jalt = 0 to Array.length par.alternatives - 1 do
             if jalt <> ialt then
-              set_obsolete_alternative jalt ipar gs
+              set_alternative_obsolete jalt ipar gs
           done
         end
 
@@ -287,53 +332,31 @@ let rec set_succeeded (i:int) (gs:t): unit =
 
 
 
-let push_premise (shared:bool) (g:goal): unit =
-  let pc = g.tgt_ctxt.pc in
-  let a,b = PC.split_implication g.target pc in
-  let pc =
-    if shared then begin
-      let pc = PC.push_untyped [||] pc in
-      g.tgt_ctxt <- {pc=pc; map = TermMap.empty};
-      pc
-    end else
-      pc
-  in
-  let _ = PC.add_assumption a true pc in
-  g.target <- b
-
-
-
-
-
-let push_variables (g:goal): unit =
-  let pc = g.tgt_ctxt.pc in
-  let n,tps,fgs,t = Term.all_quantifier_split g.target in
-  let pc = PC.push_typed0 tps fgs pc in
-  g.tgt_ctxt <- {pc = pc; map = TermMap.empty};
-  g.target   <- t
-
-
-
-
-
 let enter (i:int) (gs:t): unit =
-  let g = Seq.elem i gs.goals in
-  let rec do_implication (shared:bool): unit =
-    try
-      push_premise shared g;
-      do_implication false
-    with Not_found ->
-      if not shared then
-        PC.close_assumptions g.tgt_ctxt.pc;
-      do_all_quantified ()
-  and do_all_quantified (): unit =
-    try
-      push_variables g;
-      do_implication false
-    with Not_found ->
-      ()
-  in
-  do_implication true
+  (* Check if the goal is a generalized implication chain i.e. universally
+     quantified and/or and implication chain.
+
+     If yes, create a new target and a target context, push the assumptions
+     and close the context.
+   *)
+  let g = item i gs in
+  let n,tps,fgs,ps_rev,tgt =
+    PC.split_general_implication_chain g.goal g.ctxt.pc in
+  if n = 0 && ps_rev = [] then
+    ()
+  else
+    begin
+      let pc = PC.push_typed0 tps fgs g.ctxt.pc in
+      List.iter
+        (fun p ->
+          ignore (PC.add_assumption p true pc);
+        )
+        (List.rev ps_rev);
+      if ps_rev <> [] then
+        PC.close_assumptions pc;
+      g.target <- tgt;
+      g.tgt_ctxt <- {pc; map = TermMap.empty}
+    end
 
 
 
@@ -423,15 +446,18 @@ let generate_subgoals (i:int) (gs:t): unit =
           let ps,npremises =
             List.fold_left (* all premises i.e. subgoals *)
               (fun (ps,jsub) (p,cons) ->
-              (generate_subgoal p cons j bwd_idx jsub i gs,-1) :: ps,
-              jsub+1)
+                (generate_subgoal p cons j bwd_idx jsub i gs, None)
+                :: ps,
+                jsub+1
+              )
               ([],0)
               ps
           in
           let ps = List.rev ps in
           let ps = Array.of_list ps in
           (j+1),
-          {premises = ps; bwd_idx = bwd_idx; npremises = npremises} :: alts
+          {premises = ps; bwd_idx; npremises; failed = false; obsolete = false}
+          :: alts
         with Cyclic ->
           Seq.keep cnt gs.goals;
           j, alts
@@ -441,7 +467,7 @@ let generate_subgoals (i:int) (gs:t): unit =
   in
   g.alternatives <- Array.of_list (List.rev alts);
   if Array.length g.alternatives = 0 then
-    set_failed i gs;
+    set_goal_failed i gs;
   if gs.trace then trace_target_subgoals i gs
 
 
@@ -534,7 +560,8 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
                            " exceeded"));
     let cnt = count gs in
     if PC.is_tracing pc then
-      printf "%s-- round %d with %d goals --\n" (PC.trace_prefix pc) i (cnt - start);
+      printf "%s-- round %d with %d goals --\n"
+             (PC.trace_prefix pc) i (cnt - start);
     for j = start to cnt - 1 do
       if is_visitable j gs then
         visit j gs
@@ -549,9 +576,13 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
                     but we cannot fall through *)
   with Root_succeeded ->
     let g = item 0 gs in
-    assert (0 <= g.pos);
-    assert (g.pos < PC.count g.ctxt.pc);
-    pc_discharged g.pos g.ctxt.pc
+    let g_pos =
+      match g.pos with
+      | Some pos -> pos
+      | _ -> assert false (* Root goal has succeeded *)
+    in
+    assert (g_pos < PC.count g.ctxt.pc);
+    pc_discharged g_pos g.ctxt.pc
 
 
 
