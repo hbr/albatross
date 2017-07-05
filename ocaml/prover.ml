@@ -55,16 +55,17 @@ type alternative = {
 type goal = {
     goal: term;
     ctxt: context;
-    black:  IntSet.t; (* Blacklist of rules which are no longer to be considered *)
+    mutable black:  IntSet.t; (* Blacklist of rules which are no longer to be
+                                 considered *)
     mutable target:   term;
     (* The target is the same as the goal, if the goal is not a general
        implication chain, otherwise its the target of the chain. *)
     mutable tgt_ctxt: context;
     mutable visited:  bool;
     mutable ancestors: IntSet.t;
-    mutable parent:  (int*int*int) option;  (* parent, alternative, subgoal *)
-    (* Backpointer to parent, which alternative in the parent and which subgoal
-       within the alternative.*)
+    mutable parents:  (int*int*int) list;  (* parent, alternative, subgoal *)
+    (* Backpointer to parent, alternative in the parent and subgoal
+       within the alternative. *)
     mutable alternatives: alternative array;
     mutable nfailed: int;    (* number of failed alternatives *)
     mutable pos: int option; (* position in proof table *)
@@ -75,6 +76,7 @@ type goal = {
 
 type t = {
     goals: goal Seq.t;
+    mutable reactivated: int list;
     verbosity: int;
     trace:     bool;
   }
@@ -82,7 +84,7 @@ type t = {
 
 
 let goal_report_threshold = 500
-let goal_limit_ref = ref 10000
+let goal_limit_ref = ref 5000
 
 let goal_limit () = !goal_limit_ref
 
@@ -97,7 +99,7 @@ let item (i:int) (gs:t): goal =
 
 
 let goal (g:term) (i:int) (black:IntSet.t)
-         (par:(int*int*int) option)
+         (parents:(int*int*int) list)
          (ctxt:context)
          (gs:t)
     : goal =
@@ -109,14 +111,15 @@ let goal (g:term) (i:int) (black:IntSet.t)
    tgt_ctxt  = ctxt;
    visited   = false;
    ancestors =
-     begin
-       match par with
-       |  None ->
-           IntSet.singleton i
-       | Some(ipar,_,_) ->
-          IntSet.add i (item ipar gs).ancestors
-     end;
-   parent    = par;
+     IntSet.add
+       i
+       (List.fold_left
+          (fun set (ipar,_,_) ->
+            IntSet.union set (item ipar gs).ancestors
+          )
+          IntSet.empty
+          parents);
+   parents;
    alternatives = [||];
    nfailed   = 0;
    pos       = None;
@@ -127,7 +130,7 @@ let goal (g:term) (i:int) (black:IntSet.t)
 
 
 let root_goal (g:term) (pc: PC.t) (gs:t): goal =
-  goal g 0 IntSet.empty None {pc; map = TermMap.empty} gs
+  goal g 0 IntSet.empty [] {pc; map = TermMap.empty} gs
 
 
 
@@ -147,6 +150,7 @@ let is_visitable (i:int) (gs:t): bool =
 
 let init (g:term) (pc:PC.t): t =
   let gs = {goals = Seq.empty ();
+            reactivated = [];
             verbosity = PC.verbosity pc;
             trace = PC.is_tracing pc}
   in
@@ -156,17 +160,60 @@ let init (g:term) (pc:PC.t): t =
 
 
 
+let rec reactivate_goal (i:int) (gs:t): unit =
+  (* Reactivate the goal [i] if it has become obsolete and has not yet
+     failed. *)
+  let g = item i gs in
+  if g.obsolete && not g.failed then
+    begin
+      assert (g.pos = None);
+      g.obsolete <- false;
+      gs.reactivated <- i :: gs.reactivated;
+      Array.iter
+        (fun alt ->
+          reactivate_alternative alt gs
+        )
+        g.alternatives
+    end
+
+and reactivate_alternative (alt:alternative) (gs:t): unit =
+  (* Reactivate the alternative [alt] if it has become obsolete and has not
+     yet failed. *)
+  if alt.obsolete && not alt.failed then
+    begin
+      alt.obsolete <- false;
+      Array.iter
+        (fun (j,jpos) ->
+          if jpos = None then
+            reactivate_goal j gs
+        )
+        alt.premises
+    end
+
+
 
 let rec set_goal_obsolete (i:int) (gs:t): unit =
   let g = item i gs in
-  g.obsolete <- true;
-  for ialt = g.nfailed to Array.length g.alternatives - 1 do
-    set_alternative_obsolete ialt i gs
-  done
+  if
+    List.for_all
+      (fun (ipar,ialt,isub) ->
+        assert (0 <= ialt);
+        assert (ialt < Array.length (item ipar gs).alternatives);
+        let alt = (item ipar gs).alternatives.(ialt) in
+        alt.failed || alt.obsolete
+      )
+      g.parents
+  then
+    begin
+      g.obsolete <- true;
+      for ialt = g.nfailed to Array.length g.alternatives - 1 do
+        set_alternative_obsolete ialt i gs
+      done
+    end
 
 and set_alternative_obsolete (ialt:int) (i:int) (gs:t): unit =
-  (* The alternative [ialt] of the goal [i] becomes obsolete the goal has become
-     obsolete. *)
+  (* The alternative [ialt] of the goal [i] becomes obsolete because the goal
+     has become obsolete. *)
   let g   = item i gs in
   let alt = g.alternatives.(ialt) in
   alt.obsolete <- true;
@@ -182,19 +229,23 @@ and set_alternative_obsolete (ialt:int) (i:int) (gs:t): unit =
 
 and set_alternative_failed (ialt:int) (i:int) (gs:t): unit =
   (* The alternative [ialt] of the goal [i] fails because one of its subgoals
-     failed. The subgoals of the alternative become obsolete. *)
+     failed. The other subgoals of the alternative become obsolete. *)
   let g   = item i gs in
   let alt = g.alternatives.(ialt) in
-  alt.failed <- true;
-  Array.iter
-    (fun (p,pos) ->
-      match pos with
-      | None ->
-         set_goal_obsolete p gs
-      | _ ->
-         ()
+  if not alt.failed then
+    begin
+      g.nfailed <- 1 + g.nfailed;
+      alt.failed <- true;
+      Array.iter
+        (fun (p,pos) ->
+          match pos with
+          | None ->
+             set_goal_obsolete p gs
+          | _ ->
+             ()
     )
-    alt.premises
+        alt.premises
+    end
 
 
 let rec set_goal_failed (i:int) (gs:t): unit =
@@ -206,23 +257,29 @@ let rec set_goal_failed (i:int) (gs:t): unit =
      become obsolete. If the alternative is the last alternative then the
      parent fails as well.  *)
   let g = item i gs in
-  if gs.trace then
+  if not g.failed then
     begin
-      let prefix = PC.trace_prefix g.ctxt.pc in
-      printf "%sfailed  goal %d: %s\n"
-             prefix i (PC.string_of_term g.goal g.ctxt.pc);
-    end;
-  g.failed <- true;
-  match g.parent with
-    None ->
-      assert (i = 0);
-      raise (Proof_failed "")
-  | Some (ipar,ialt,isub) ->
-      let par = item ipar gs in
-      par.nfailed <- 1 + par.nfailed;
-      set_alternative_failed ialt ipar gs;
-      if par.nfailed = Array.length par.alternatives then
-        set_goal_failed ipar gs
+      if gs.trace then
+        begin
+          let prefix = PC.trace_prefix g.ctxt.pc in
+          printf "%sfailed  goal %d: %s\n"
+                 prefix i (PC.string_of_term g.goal g.ctxt.pc);
+        end;
+      g.failed <- true;
+      if g.parents = [] then
+        begin
+          assert (i = 0);
+          raise (Proof_failed "")
+        end;
+      List.iter
+        (fun (ipar,ialt,isub) ->
+          let par = item ipar gs in
+          set_alternative_failed ialt ipar gs;
+          if par.nfailed = Array.length par.alternatives then
+            set_goal_failed ipar gs
+        )
+        g.parents
+    end
 
 
 
@@ -262,7 +319,12 @@ let discharge_target (pos:int) (g:goal): unit =
   g.pos <- Some pos
 
 
+
+
 let succeed_alternative (ialt:int) (g:goal): int =
+  (* The alternative [ialt] of the goal [g] has succeeded because all subgoals
+     of the alternative have succeeded. Apply the modus ponens law and
+     calculate the position of the goal in the assertion table. *)
   let alt = g.alternatives.(ialt) in
   let n   = Array.length alt.premises in
   let rec premise (i:int) (a_idx:int): int =
@@ -282,7 +344,9 @@ let succeed_alternative (ialt:int) (g:goal): int =
   premise 0 alt.bwd_idx
 
 
-let rec set_succeeded (i:int) (gs:t): unit =
+
+
+let rec set_goal_succeeded (i:int) (gs:t): unit =
   (* The goal [i] has succeeded. If the goal is the root goal then the proof
      is done.  If the goal is not the root goal then it belongs to an
      alternative of its parent.  *)
@@ -300,34 +364,40 @@ let rec set_succeeded (i:int) (gs:t): unit =
     | _ -> assert false (* The goal has succeeded *)
   in
   assert (g_pos < PC.count g.ctxt.pc);
-  if g.obsolete then
-    ()
-  else
-    match g.parent with
-      None ->
-        assert (i = 0);
-        raise Root_succeeded
-    | Some (ipar,ialt,isub) ->
+  if g.parents = [] then
+    begin
+      assert (i = 0);
+      raise Root_succeeded
+    end;
+  List.iter
+    (fun (ipar,ialt,isub) ->
         let par = item ipar gs in
         assert (ialt < Array.length par.alternatives);
         let alt = par.alternatives.(ialt) in
         assert (isub < Array.length alt.premises);
         let p,pos = alt.premises.(isub) in
         assert (p = i);
-        assert (pos = None);
-        assert (0 < alt.npremises);
-        alt.premises.(isub) <- p, Some g_pos;
-        alt.npremises <- alt.npremises - 1;
-        if alt.npremises = 0 then begin
-          let pos = succeed_alternative ialt par in
-          discharge_target pos par;
-          set_succeeded ipar gs;
-          for jalt = 0 to Array.length par.alternatives - 1 do
-            if jalt <> ialt then
-              set_alternative_obsolete jalt ipar gs
-          done
-        end
-
+        if pos = None then
+          begin
+            assert (pos = None);
+            assert (0 < alt.npremises);
+            alt.premises.(isub) <- p, Some g_pos;
+            alt.npremises <- alt.npremises - 1;
+            if alt.npremises = 0 then
+              begin
+                (* The alternative has succeeded. *)
+                let pos = succeed_alternative ialt par in
+                discharge_target pos par;
+                set_goal_succeeded ipar gs;
+                (* All other alternatives become obsolete. *)
+                for jalt = 0 to Array.length par.alternatives - 1 do
+                  if jalt <> ialt then
+                    set_alternative_obsolete jalt ipar gs
+                done
+              end
+          end
+    )
+    g.parents
 
 
 
@@ -402,34 +472,43 @@ exception Cyclic
 
 let generate_subgoal
     (p:term) (cons:bool) (j:int) (j_idx:int) (jsub:int) (i:int) (gs:t): int =
-  (* Generate a subgoal with the term [p] where [cons] indicates if the
-     subgoal is conservative for the alternative [j] of the goal [i]. *)
+  (* Generate a subgoal [p] where [cons] indicates if the subgoal is
+     conservative for the alternative [j] (at position [j_idx] in the assertion
+     table) of the goal [i]. *)
   let cnt = count gs in
-  let g   = item i gs in
-  let black =
-    calc_blacklist cons j_idx g.black g.tgt_ctxt.pc
+  let g   = item i gs in (* Parent goal *)
+  let generate (): int =
+    let black =
+      calc_blacklist cons j_idx g.black g.tgt_ctxt.pc
+    in
+    let sub = goal p cnt black [i,j,jsub] g.tgt_ctxt gs in
+    Seq.push sub gs.goals;
+    cnt
   in
-  let sub = goal p cnt black (Some (i,j,jsub)) g.tgt_ctxt gs in
-  let ctxt = g.tgt_ctxt in
-  begin try
-    let isub = TermMap.find p ctxt.map in
+  try
+    let isub = TermMap.find p g.tgt_ctxt.map in
     if gs.trace then
-      printf "%sduplicate subgoal %d: %s at %d\n"
-             (PC.trace_prefix ctxt.pc)
-             isub (PC.string_of_term p ctxt.pc) cnt;
+      printf "%sduplicate subgoal %d: %s\n"
+             (PC.trace_prefix g.tgt_ctxt.pc)
+             isub (PC.string_of_term p g.tgt_ctxt.pc);
     if IntSet.mem isub g.ancestors then
       begin
         if gs.trace then
           printf "%scyclic subgoal %d: %s\n"
-                 (PC.trace_prefix ctxt.pc)
-                 isub (PC.string_of_term p ctxt.pc);
+                 (PC.trace_prefix g.ctxt.pc)
+                 isub (PC.string_of_term p g.ctxt.pc);
         raise Cyclic
       end;
+    (*let sub = item isub gs in
+    let black = calc_blacklist cons j_idx g.black g.tgt_ctxt.pc in
+    sub.black <- IntSet.union black sub.black;
+    sub.parents <- (i,j,jsub) :: sub.parents;
+    if (item isub gs).obsolete then
+      reactivate_goal isub gs;*)
+    isub
   with Not_found ->
-    ctxt.map <- TermMap.add p cnt ctxt.map
-  end;
-  Seq.push sub gs.goals;
-  cnt
+    g.tgt_ctxt.map <- TermMap.add p cnt g.tgt_ctxt.map;
+    generate ()
 
 
 
@@ -437,38 +516,73 @@ let generate_subgoals (i:int) (gs:t): unit =
   (* Generate the subgoals of all alternatives of the goal [i]. *)
   let g     = item i gs in
   let alts = PC.find_backward_goal g.target g.black g.tgt_ctxt.pc in
-  let _, alts =
+  let _, alts, patches =
     List.fold_left (* all alternatives *)
-      (fun (j,alts) bwd_idx ->
+      (fun (j,alts,patches) bwd_idx ->
         let cnt = count gs in
         try
           let ps = PC.premises bwd_idx g.tgt_ctxt.pc in
-          let ps,npremises =
+          let ps,_,npremises,patches =
             List.fold_left (* all premises i.e. subgoals *)
-              (fun (ps,jsub) (p,cons) ->
-                (generate_subgoal p cons j bwd_idx jsub i gs, None)
-                :: ps,
-                jsub+1
+              (fun (ps,jsub,npremises,patches) (p,cons) ->
+                let cnt = count gs in
+                let k = generate_subgoal p cons j bwd_idx jsub i gs in
+                let k_pos = (item k gs).pos in
+                (k, k_pos) :: ps,
+                jsub+1,
+                npremises + (if k_pos = None then 1 else 0),
+                if k < cnt then
+                  (k,cons,i,j,bwd_idx,jsub) :: patches
+                else
+                  patches
               )
-              ([],0)
+              ([],0,0,patches)
               ps
           in
           let ps = List.rev ps in
           let ps = Array.of_list ps in
           (j+1),
           {premises = ps; bwd_idx; npremises; failed = false; obsolete = false}
-          :: alts
+          :: alts,
+          patches
         with Cyclic ->
+          interval_iter
+            (fun k ->
+              g.tgt_ctxt.map <- TermMap.remove (item k gs).goal g.tgt_ctxt.map
+            )
+            cnt (count gs);
           Seq.keep cnt gs.goals;
-          j, alts
+          j, alts, patches
       )
-      (0,[])
+      (0,[],[])
       alts
   in
   g.alternatives <- Array.of_list (List.rev alts);
+  List.iter
+    (fun (k,cons,ipar,ialt,bwd_idx,isub) ->
+      let sub = item k gs
+      and par = item ipar gs in
+      let black = calc_blacklist cons bwd_idx par.black par.tgt_ctxt.pc in
+      sub.black <- IntSet.union black sub.black;
+      sub.parents <- (ipar,ialt,isub) :: sub.parents;
+      if sub.obsolete then
+        reactivate_goal k gs
+    )
+    patches;
   if Array.length g.alternatives = 0 then
     set_goal_failed i gs;
-  if gs.trace then trace_target_subgoals i gs
+  if gs.trace then
+    trace_target_subgoals i gs;
+  try
+    let ialt =
+      Search.array_find_min (fun alt -> alt.npremises = 0) g.alternatives in
+    let pos = succeed_alternative ialt g in
+    discharge_target pos g;
+    set_goal_succeeded i gs;
+  with Not_found ->
+    ()
+
+
 
 
 
@@ -491,20 +605,20 @@ let trace_visit (i:int) (gs:t): unit =
     prefix i
     (PC.string_long_of_term g.goal g.ctxt.pc);
   printf "                     %s\n" (Term.to_string g.goal);
-  match g.parent with
-    None -> ()
-  | Some (ipar,ialt,isub) ->
+  List.iter
+    (fun (ipar,ialt,isub) ->
       let par = item ipar gs in
       trace_ancestors i gs;
       printf "%s  parent %d %s\n" prefix ipar
-        (PC.string_of_term par.goal par.ctxt.pc);
+             (PC.string_of_term par.goal par.ctxt.pc);
       if par.goal <> par.target then
         printf "%s  parent target %s\n"
           prefix (PC.string_of_term par.target par.tgt_ctxt.pc)(*;
       let alt = par.alternatives.(ialt) in
       printf "%salternative   %s\n"
         prefix (PC.string_of_term_i alt.a_idx par.tgt_ctxt)*)
-
+    )
+    g.parents
 
 
 
@@ -517,12 +631,12 @@ let visit (i:int) (gs:t): unit =
   g.visited <- true;
   try
     prove_trivially g;
-    set_succeeded i gs
+    set_goal_succeeded i gs
   with Not_found ->
     enter i gs;
     try
       prove_trivially g;
-      set_succeeded i gs
+      set_goal_succeeded i gs
     with Not_found ->
       generate_subgoals i gs
 
@@ -560,12 +674,20 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
                            " exceeded"));
     let cnt = count gs in
     if PC.is_tracing pc then
-      printf "%s-- round %d with %d goals --\n"
-             (PC.trace_prefix pc) i (cnt - start);
+      printf "%s-- round %d with %d goals starting from %d --\n"
+             (PC.trace_prefix pc) i (cnt - start) start;
     for j = start to cnt - 1 do
       if is_visitable j gs then
         visit j gs
     done;
+    while gs.reactivated <> [] do
+      let lst = List.rev gs.reactivated in
+      gs.reactivated <- [];
+      List.iter
+        (fun j -> if is_visitable j gs then visit j gs)
+        lst;
+    done;
+    assert (gs.reactivated = []);
     assert (cnt < count gs);
     if PC.is_tracing pc then printf "\n";
     round (i+1) cnt
