@@ -187,8 +187,6 @@ let trace_pop (pc:t): unit =
 
 let pop (pc:t): t =
   assert (is_local pc);
-  if pc.trace then
-    trace_pop pc;
   match pc.prev with
     None -> assert false
   | Some x -> x
@@ -693,6 +691,11 @@ let add_variable_definition (v:int) (idx:int) (pc:t): unit =
      v = exp
    *)
   assert (v < count_variables pc);
+  if pc.trace then
+    printf "%svariable definition %d %s\n"
+           (trace_prefix pc)
+           idx
+           (string_of_term_i idx pc);
   let def = pc.var_defs.(v) in
   assert (not (Option.has def.definition));
   pc.var_defs.(v) <- {def with definition = Some idx}
@@ -1921,6 +1924,18 @@ let substitute_variable
      definition term [def_term]. Use this definition to substitute the
      variable in the assertion [t] at [idx]
    *)
+  if pc.trace then
+    begin
+      let prefix = trace_prefix pc in
+      printf "%ssubstitute variable %s by %s\n"
+             prefix
+             (string_of_term (Variable var) pc)
+             (string_of_term def_term pc);
+      printf "%s  in %d %s\n"
+             prefix
+             idx
+             (string_of_term t pc)
+    end;
   let leib = leibniz def_idx (Variable var) def_term pc
                   (* leib: all(p:{T} p(var) ==> p(def_term) *)
   and pterm = Term.lambda_inner t var
@@ -1934,7 +1949,12 @@ let substitute_variable
   in
   let idx_redex1 = add_beta_redex redex1 idx false pc in
   let idx_redex2 = add_mp idx_redex1 imp_idx false pc in
-  add_beta_reduced idx_redex2 search pc
+  let res = add_beta_reduced idx_redex2 search pc in
+  if pc.trace then
+    printf "%ssubstituted term %s\n"
+           (trace_prefix pc)
+           (string_of_term_i res pc);
+  res
 
 
 
@@ -1955,7 +1975,9 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
      - Scan all assumptions which contain [v] and add the assumptions with
        [v] substituted by [exp] to the context. Furthermore add the substituted
        assumptions to all variables occurring in [exp].
-   *)
+
+     - Scan all assertions whre [v] has already been used in the substitution
+       term of another variable. *)
   let var_def (i:int): int * int * term  =
     let eq_id, left, right = equality_data i pc in
     match left,right with
@@ -2004,7 +2026,12 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
               ()
           end
       )
-      ass_lst
+      ass_lst;
+    List.iter
+      (fun ass_idx ->
+        ignore(substitute_variable ivar idx exp (term ass_idx pc) ass_idx true pc)
+      )
+      pc.var_defs.(ivar).used
   with Not_found ->
     ()
 
@@ -2543,7 +2570,8 @@ let substituted_goal (g:term) (lst:int list) (pc:t): int list =
           gsub, imp::imps
         )
         (g,[])
-        (List.rev (get_variable_definitions g pc))
+        (get_variable_definitions g pc)
+        (*(List.rev (get_variable_definitions g pc))*)
     in
     if imps = [] then
       lst
@@ -2559,6 +2587,12 @@ let substituted_goal (g:term) (lst:int list) (pc:t): int list =
       let imp,pt = Proof_table.discharged idx_g pc0.base in
       Proof_table.add_proved imp pt 0 pc.base;
       let imp_idx = raw_add imp false pc in
+      if pc.trace then
+        begin
+          let prefix = trace_prefix pc in
+          printf "%sgoal substitution backward rule\n" prefix;
+          printf "%s   %d %s\n" prefix imp_idx (string_of_term_i imp_idx pc)
+        end;
       imp_idx :: lst
   with Not_found ->
     lst
