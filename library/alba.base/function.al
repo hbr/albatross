@@ -328,10 +328,10 @@ all(f,g:A->B)
                 x in f.domain
             ensure
                 f(x) = (f + g)(x)
-                if x in g.domain
+            if x in g.domain
                 assert
                     g(x) = (f + g)(x)
-                orif x /in g.domain
+            orif x /in g.domain
             end
     end
 
