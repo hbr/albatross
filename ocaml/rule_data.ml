@@ -620,7 +620,11 @@ let specialize
       List.rev ps_rev, false
   in
   {rd with
-   orig  = Some orig;
+   orig =
+     if rd.orig <> None then
+       rd.orig
+     else
+       Some orig;
    spec  = true;
    fwd_blckd = fwd_blckd;
    ctxt  = {c = c;
