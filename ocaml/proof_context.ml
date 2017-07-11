@@ -301,6 +301,9 @@ let is_local_assumption (i:int) (pc:t): bool =
   Proof_table.is_local_assumption i pc.base
 
 
+let count_local_assumptions (pc:t): int =
+  Proof_table.count_local_assumptions pc.base
+
 let tvars (pc:t): Tvars.t =
   Context.tvars (context pc)
 

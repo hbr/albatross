@@ -120,6 +120,7 @@ val tvars: t -> Tvars.t
 
 val term:           int -> t -> term
 val is_assumption:  int -> t -> bool
+val count_local_assumptions: t -> int
 val rule_data: int -> t -> Rule_data.t
 
 val negation:       term -> t -> term

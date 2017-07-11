@@ -215,6 +215,8 @@ let inner_case_context
     (hypo_lst_rev: int list)(* List of induction hypotheses *)
     (case_goal_pred: term)  (* case goal predicate *)
     (nass:int)              (* additional assumptions in the goal predicate *)
+    (ass_no_ivar: bool)     (* Do the assumptions not contain the induction
+                               variables? *)
     (pc:PC.t)
     : int list * term * PC.t (* assumptions, goal, inner context *)
     =
@@ -239,21 +241,31 @@ let inner_case_context
       0
       nass
   in
-  if n1 <> 0 && nass = 0 then (* Add specialized induction hypotheses *)
+  if n1 <> 0 && (nass = 0 || ass_no_ivar) then
+    (* Add specialized induction hypotheses *)
     List.iter
       (fun hypo_idx ->
-        (* Induction hypothesis has the form 'all(y,...) goal' for the
-           induction variable *)
+        (* Induction hypothesis has the form 'all(y,...) r1 ==> r2 ==> ... ==>
+           goal' and the induction variable does not occur in the
+           assumptions. *)
         let hypo = PC.term hypo_idx pc1 in
-        if not (Term.is_all_quantified hypo) then
-          begin
-            printf "hypo is not all quantified\n";
-            printf "  %s\n" (PC.string_long_of_term hypo pc1);
-            printf "  goal %s\n" (PC.string_long_of_term stren_goal pc);
-            assert false
-          end;
-        let idx = PC.specialized hypo_idx (standard_substitution n1) [||] 2 pc1
+        assert (Term.is_all_quantified hypo);
+        let idx =
+          let reason = if nass = 0 then 2 else 0 in
+          PC.specialized hypo_idx (standard_substitution n1) [||] reason pc1
         in
+        let rec use_local_ass_from (i:int) (idx:int): int =
+          if i = nass then
+            idx
+          else
+            begin
+              let search = if i + 1 = nass then true else false in
+              let a_idx = i + PC.count_previous pc1 in
+              let idx = PC.add_mp a_idx idx search pc1 in
+              use_local_ass_from (i+1) idx
+            end
+        in
+        let idx = use_local_ass_from 0 idx in
         PC.add_to_work idx pc1
       )
       (List.rev hypo_lst_rev);
@@ -331,6 +343,7 @@ let inductive_type_case_context
     (tp:  type_term)    (* type of the induction variable *)
     (goal_pred:term)
     (nass: int)         (* number of assumptions in the goal predicate *)
+    (ass_no_ivar: bool) (* Do the assumptions not contain the induction variable?*)
     (pc:PC.t)
     : int list * term * term * term * PC.t
       (* assumptions, goal, (inner context),
@@ -419,7 +432,8 @@ let inductive_type_case_context
   in
   PC.close pc1;
   let ass_lst_rev, goal, pc2 =
-    inner_case_context hyp_lst_rev hyp_lst_rev case_goal_pred nass pc1 in
+    inner_case_context hyp_lst_rev hyp_lst_rev case_goal_pred nass ass_no_ivar pc1
+  in
   ass_lst_rev, goal, pat, case_goal_pred, pc2
 
 
@@ -937,7 +951,7 @@ let inductive_set_case_context
   PC.close pc1;
   (* Now we have context [all(rule_vars) require c1(set); c1(q); ... set(e)] *)
   let ass_lst_rev, goal, pc2 =
-    inner_case_context ass_lst_rev [] goal_pred1 nass pc1
+    inner_case_context ass_lst_rev [] goal_pred1 nass false pc1
   in
   ass_lst_rev, goal, goal_pred1, pc2
 
@@ -1321,6 +1335,13 @@ and prove_inductive_type
   let goal_pred =
     induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
   and nass = List.length ass_idx_lst
+  and ass_no_ivar =
+    List.for_all
+      (fun i ->
+        Term.used_variables_filtered (PC.term i pc) (fun j -> j=ivar) false
+        = []
+      )
+      ass_idx_lst
   in
   let cons_set, ind_idx, tp =
     analyze_type_inspect info ivar goal_pred pc
@@ -1334,7 +1355,8 @@ and prove_inductive_type
         let cons_idx, nms =
           analyze_type_case_pattern ie cons_set tp pc in
         let idx =
-          prove_type_case ie.i cons_idx nms tp prf ivar goal_pred nass pc in
+          prove_type_case ie.i cons_idx nms tp prf
+                          ivar goal_pred nass ass_no_ivar pc in
         IntMap.add cons_idx idx map
       )
       IntMap.empty
@@ -1351,7 +1373,8 @@ and prove_inductive_type
             let n   = Feature_table.arity cons_idx ft in
             let nms = anon_argnames n in
             prove_type_case
-              info cons_idx nms tp (SP_Proof([],None)) ivar goal_pred nass pc
+              info cons_idx nms tp (SP_Proof([],None))
+              ivar goal_pred nass ass_no_ivar pc
         in
         PC.add_mp idx ind_idx false pc
       )
@@ -1384,12 +1407,13 @@ and prove_type_case
     (ivar:int)       (* induction variable *)
     (goal_pred:term) (* in the outer context *)
     (nass:int)       (* number of assumptions in the goal predicate *)
+    (ass_no_ivar:bool)
     (pc:PC.t)        (* outer context *)
     : int =
   (* Prove one case of an inductive type
    *)
   let ass_lst_rev, goal, pat, case_goal_pred, pc2 =
-    inductive_type_case_context cons_idx nms tp goal_pred nass pc
+    inductive_type_case_context cons_idx nms tp goal_pred nass ass_no_ivar pc
   in
   let pc1 = PC.pop pc2 in
   if PC.is_tracing pc then begin
