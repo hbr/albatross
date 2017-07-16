@@ -364,7 +364,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
           let n,nms,tps,ps_rev,tgt = constructor_rule idx p ags (nb+2) ft in
           let chn  = Term.make_implication_chain ps_rev tgt (n+imp_id) in
           Term.all_quantified n (nms,tps) empty_formals chn in
-        (*let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in*)
+        let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in
         Term.binary imp_id rule tgt)
       (Application(p,[|x|],false))
       lst in

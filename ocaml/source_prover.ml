@@ -282,7 +282,7 @@ let analyze_type_inspect
     (goal_pred:term)
     (pc:PC.t)
     : IntSet.t * int * type_term =
-  (* constructor set, induction law, inductive type *)
+  (* constructor set, specialized induction law, inductive type *)
   let c     = PC.context pc in
   let nvars = Context.count_variables c
   and ct    = Context.class_table c
@@ -337,8 +337,49 @@ let analyze_type_case_pattern
   in cons_idx, nms
 
 
+
+let find_constructor_rule
+      (cons_idx:int)  (* constructor *)
+      (src_nms: names)
+      (law_idx:int)   (* specialized induction law *)
+      (pc:PC.t)
+    : formals * term list * term * term =
+  (* arguments, ind hypos reversed, pattern, target *)
+  let n0,_,_,ps_rev0,tgt0 =
+    PC.split_general_implication_chain (PC.term law_idx pc) pc in
+  assert (n0 = 0);
+  let rec find_rule ps_rev0 =
+    match ps_rev0 with
+    | [] ->
+       assert false (* cannot happen, there must be one rule for [cons_idx] *)
+    | rule :: ps_rev0 ->
+       let n,(_,tps),_,ps_rev,tgt = PC.split_general_implication_chain rule pc in
+       match tgt with
+       | Application (gp, [|VAppl(i,args,ags,oo)|], _)
+            when cons_idx + n + (PC.count_variables pc) = i ->
+          assert (n = Array.length src_nms);
+          let nms = Array.make n (-1) in
+          Array.iteri
+            (fun i arg ->
+               match arg with
+               | Variable j ->
+                  assert (j < n);
+                  nms.(j) <- src_nms.(i)
+               | _ ->
+                  assert false (* cannot happen *)
+            )
+            args;
+          (nms,tps), ps_rev, (VAppl(i,args,ags,oo)), tgt
+       | _ ->
+          find_rule ps_rev0
+  in
+  find_rule ps_rev0
+
+
+
 let inductive_type_case_context
     (cons_idx: int)     (* constructor *)
+    (ind_idx: int)      (* index of the specialized induction law *)
     (nms: names)        (* argument names of the constructor *)
     (tp:  type_term)    (* type of the induction variable *)
     (goal_pred:term)
@@ -383,38 +424,11 @@ let inductive_type_case_context
                         end
                 end
    *)
-  let nvars = PC.count_variables pc
-  and ntvs = PC.count_all_type_variables pc
-  and ft    = PC.feature_table pc
+  let tps,ps_rev,pat,case_goal_pred =
+    find_constructor_rule cons_idx nms ind_idx pc
   in
-  let ags = (* actual generics for the constructor [cons_idx] *)
-    let open Type_substitution in
-    let tvs1,sign = Feature_table.signature0 cons_idx ft in
-    let sub =
-      make (Tvars.count_fgs tvs1) tvs1 (PC.tvars pc) (PC.class_table pc)
-    in
-    begin
-      try
-        unify (Sign.result sign) tp sub
-      with Reject ->
-        assert false (* cannot happen *)
-    end;
-    assert (greatest_plus1 sub = Tvars.count_fgs tvs1);
-    array (Tvars.count_fgs tvs1) sub
+  let pc1 = PC.push_typed0 tps empty_formals pc
   in
-  let n = Array.length nms
-  in
-  let tps = Feature_table.argument_types cons_idx ags ntvs ft
-  in
-  let pc1 = PC.push_typed0 (nms,tps) empty_formals pc
-  in
-  let n1,_,_,ps_rev,case_goal_pred =
-    Feature_table.constructor_rule cons_idx goal_pred ags nvars ft
-  and pat =
-    Feature_table.feature_call
-      cons_idx (nvars+n) (standard_substitution n) ags ft
-  in
-  assert (n1 = n);
   let ind_hyp_idx_lst =
     List.fold_left
       (fun lst hypo ->
@@ -1355,7 +1369,7 @@ and prove_inductive_type
         let cons_idx, nms =
           analyze_type_case_pattern ie cons_set tp pc in
         let idx =
-          prove_type_case ie.i cons_idx nms tp prf
+          prove_type_case ie.i cons_idx ind_idx nms tp prf
                           ivar goal_pred nass ass_no_ivar pc in
         IntMap.add cons_idx idx map
       )
@@ -1373,7 +1387,7 @@ and prove_inductive_type
             let n   = Feature_table.arity cons_idx ft in
             let nms = anon_argnames n in
             prove_type_case
-              info cons_idx nms tp (SP_Proof([],None))
+              info cons_idx ind_idx nms tp (SP_Proof([],None))
               ivar goal_pred nass ass_no_ivar pc
         in
         PC.add_mp idx ind_idx false pc
@@ -1401,6 +1415,7 @@ and prove_inductive_type
 and prove_type_case
     (info:info)
     (cons_idx:int)
+    (ind_idx:int)    (* index of the specialized induction law *)
     (nms: names)     (* The names of the arguments of the constructor *)
     (tp:type_term)   (* inductive type in the outer context *)
     (prf:source_proof)
@@ -1413,7 +1428,8 @@ and prove_type_case
   (* Prove one case of an inductive type
    *)
   let ass_lst_rev, goal, pat, case_goal_pred, pc2 =
-    inductive_type_case_context cons_idx nms tp goal_pred nass ass_no_ivar pc
+    inductive_type_case_context
+      cons_idx ind_idx nms tp goal_pred nass ass_no_ivar pc
   in
   let pc1 = PC.pop pc2 in
   if PC.is_tracing pc then begin

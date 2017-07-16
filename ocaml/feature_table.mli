@@ -121,8 +121,6 @@ val is_constructor:    int -> t -> bool
 val inductive_type:    int -> agens -> int -> t -> type_term
 val evaluated_as_expression: term -> int -> Tvars.t -> t -> term
 val inductive_arguments: int -> t -> int list
-val constructor_rule:  int -> term -> agens -> int -> t
-  -> int * names * arguments * term list * term
 val induction_law:    int -> int -> t -> term
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
