@@ -84,7 +84,7 @@ type t = {
 
 
 let goal_report_threshold = 500
-let goal_limit_ref = ref 5000
+let goal_limit_ref = ref 2000
 
 let goal_limit () = !goal_limit_ref
 
@@ -644,7 +644,7 @@ let visit (i:int) (gs:t): unit =
 
 
 let proof_term (g:term) (pc:PC.t): term * proof_term =
-  let pc = PC.push_untyped [||] pc in
+  let pc = PC.push_empty pc in
   PC.close_assumptions pc;
   let gs = init g pc in
   if gs.trace then begin

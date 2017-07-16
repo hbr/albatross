@@ -254,11 +254,6 @@ let push
   push0 base pc
 
 
-let push_untyped (names:int array) (pc:t): t =
-  let base = Proof_table.push_untyped names pc.base in
-  push0 base pc
-
-
 
 let push_typed (fargs:formals) (fgs:formals) (rvar:bool) (pc:t): t =
   let base = Proof_table.push_typed fargs fgs rvar pc.base in
@@ -445,21 +440,14 @@ let assumptions_for_variables
     : int list * int list =
   (* All assumptions of the contexts which are needed to define the variables
      [ind_vars] and all the other variables which are not in [insp_vars] but
-     in the contexts plus the variable in the goal.
+     in the contexts plus the variables in the goal.
    *)
   let ass, nvars = assumptions_for_variables_0 ind_vars pc in
   let used_lst =
-    (*if ass = [] then
-      []
-    else*)
       let used_lst_rev =
         List.fold_left
           (fun lst idx -> Term.used_variables_0 (term idx pc) nvars lst)
-          ((*if Term.is_all_quantified goal then
-             []  should not be needed
-           else*)
-             Term.used_variables goal nvars
-          )
+          (Term.used_variables goal nvars)
           ass
       in
       let insp_vars = Array.of_list insp_vars in

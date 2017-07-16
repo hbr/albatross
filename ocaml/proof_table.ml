@@ -218,13 +218,6 @@ let push
 
 
 
-let push_untyped (names:int array) (at:t): t =
-  let c = context at in
-  let c = Context.push_untyped names c in
-  assert (names = Context.local_argnames c);
-  push0 names c at
-
-
 
 let push_typed (tps:formals) (fgs:formals) (rvar:bool) (at:t): t =
   let c = Context.push_typed tps fgs rvar at.c in
@@ -235,6 +228,9 @@ let push_typed (tps:formals) (fgs:formals) (rvar:bool) (at:t): t =
 let push_typed0 (tps:formals) (fgs:formals) (at:t): t =
   push_typed tps fgs false at
 
+
+let push_empty (at:t): t =
+  push_typed empty_formals empty_formals false at
 
 let pop (at:t): t =
   assert (is_local at);

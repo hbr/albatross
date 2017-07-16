@@ -33,6 +33,7 @@ val verbosity: t -> int
 val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped:     int array -> t -> t
 val push_typed:   formals -> formals -> bool -> t -> t
+val push_empty: t -> t
 val previous: t -> t
 val pop:   t -> t
 

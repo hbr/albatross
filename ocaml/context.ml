@@ -578,12 +578,6 @@ let push
          (Array.map
             (fun tp -> Term.up ntvs1 (Term.up_from nfgs1 ntvs0 tp))
             (Formals.types entry.fargs)))
-  (*let fargs =
-    Array.append
-      fargs1
-      (Array.map
-         (fun (n,t) -> n, Term.up ntvs1 (Term.up_from nfgs1 ntvs0 t))
-         entry.fargs)*)
   and nargs_delta = Array.length fargs1 -
     if rvar then 1 else 0 (*variables*)
   in
@@ -612,7 +606,7 @@ let push_untyped (names:int array) (c:t): t =
 let push_typed
       ((nms,tps):formals) ((fgnms,fgcon):formals) (rvar:bool) (c:t)
     : t =
-  assert (count_type_variables c = 0 || (fgnms,fgcon) = empty_formals);
+  assert (count_type_variables c = 0 );
   let nfgs_new  = Array.length fgcon
   and nargs_new = Array.length tps in
   assert (nfgs_new  = Array.length fgnms);
@@ -648,6 +642,8 @@ let push_typed0
     : t =
   push_typed tps fgs false c
 
+let push_empty (c:t): t =
+  push_typed empty_formals empty_formals false c
 
 
 let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
@@ -771,11 +767,6 @@ let update_types (subs:type_term array) (c:t): unit =
       let tp = Term.subst tp len subs in
       tps.(i) <- tp)
     tps
-  (*Array.iteri
-    (fun i (nme,tp) ->
-      let tp = Term.subst tp len subs in
-      c.entry.fargs.(i) <- nme,tp)
-    c.entry.fargs*)
 
 
 
