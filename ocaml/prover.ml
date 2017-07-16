@@ -245,10 +245,12 @@ and set_alternative_failed (ialt:int) (i:int) (gs:t): unit =
              ()
     )
         alt.premises
-    end
+    end;
+  if g.nfailed = Array.length g.alternatives then
+    set_goal_failed i gs
 
 
-let rec set_goal_failed (i:int) (gs:t): unit =
+and set_goal_failed (i:int) (gs:t): unit =
   (* The goal [i] has failed. If the goal is the root goal then the whole
      proof is failed.
 
@@ -273,10 +275,7 @@ let rec set_goal_failed (i:int) (gs:t): unit =
         end;
       List.iter
         (fun (ipar,ialt,isub) ->
-          let par = item ipar gs in
-          set_alternative_failed ialt ipar gs;
-          if par.nfailed = Array.length par.alternatives then
-            set_goal_failed ipar gs
+          set_alternative_failed ialt ipar gs
         )
         g.parents
     end
@@ -566,7 +565,9 @@ let generate_subgoals (i:int) (gs:t): unit =
       sub.black <- IntSet.union black sub.black;
       sub.parents <- (ipar,ialt,isub) :: sub.parents;
       if sub.obsolete then
-        reactivate_goal k gs
+        reactivate_goal k gs;
+      if sub.failed then
+        set_alternative_failed ialt i gs
     )
     patches;
   if Array.length g.alternatives = 0 then
