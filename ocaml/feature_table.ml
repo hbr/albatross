@@ -88,7 +88,8 @@ type descriptor = {
     mutable tp:  type_term;
     bdesc:       bdesc;
     mutable recognizers: (term * term option) list;
-    mutable projectors: int IntMap.t
+    mutable projectors: int IntMap.t;
+    mutable is_constr: bool
   }
 
 type t = {
@@ -280,21 +281,14 @@ let inductive_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
 
 
 
-let inductive_arguments (i:int) (ft:t): int list =
-  (* Reversed list of inductive arguments *)
+let recursive_arguments (i:int) (ft:t): int list =
+  (* List of recursive arguments *)
   assert (is_constructor i ft);
   let desc = descriptor i ft in
-  let is_inductive arg_tp =
-    try
-      owner i ft
-      =  Class_table.inductive_class_of_type desc.tvs arg_tp ft.ct
-    with Not_found ->
-         false
-  in
   let lst =
     interval_fold
       (fun lst i ->
-        if is_inductive (Sign.arg_type i desc.sign) then
+        if Sign.arg_type i desc.sign = Sign.result desc.sign then
           i :: lst
         else
           lst
@@ -331,7 +325,7 @@ let constructor_rule (idx:int) (p:term) (ags:agens) (nb:int) (ft:t)
   let p       = Term.up n p in
   let call    = VAppl (idx+n+nb, standard_substitution n, ags, false) in
   let tgt     = Application(p,[|call|],false) in
-  let indargs = inductive_arguments idx ft in
+  let indargs = recursive_arguments idx ft in
   let ps_rev  =
     List.rev_map
       (fun iarg -> Application(p,[|Variable iarg|],false)) indargs in
@@ -2051,7 +2045,8 @@ let add_feature
      tp       = Class_table.to_dummy nfgs sign;
      bdesc;
      recognizers = [];
-     projectors  = IntMap.empty}
+     projectors  = IntMap.empty;
+     is_constr   = false}
   in
   Seq.push desc ft.seq;
   add_key cnt ft;
@@ -2180,7 +2175,8 @@ let add_base
     tp       = Class_table.to_dummy ntvs sign;
     bdesc;
     recognizers = [];
-    projectors  = IntMap.empty
+    projectors  = IntMap.empty;
+    is_constr   = false
   }
   in
   Seq.push desc ft.seq;

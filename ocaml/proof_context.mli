@@ -61,6 +61,7 @@ val has:                term -> t -> bool
 val add_assumption:     term -> bool -> t -> int
 val add_axiom:          term -> t -> int
 val add_mp:             int -> int -> bool -> t -> int
+val try_add_beta_reduced:int -> bool -> t -> int
 val add_beta_reduced:   int -> bool -> t -> int
 val add_beta_redex:     term -> int -> bool -> t -> int
 val add_some_elim:      int -> bool -> t -> int
@@ -135,9 +136,8 @@ val assumptions_for_variables: int array -> int list -> term -> t
 val check_deferred: t -> unit
 val owner:          t -> int
 
-
+val specialize_induction_law: int -> term -> int -> t -> int
 val add_induction_law0:  int -> t -> unit
-val add_specialized_induction_law:   type_term ->  int -> term -> t -> int
 val add_set_induction_law: term -> term -> term -> t -> int
 
 val check_interface: t -> unit

@@ -249,24 +249,32 @@ let inner_case_context
            goal' and the induction variable does not occur in the
            assumptions. *)
         let hypo = PC.term hypo_idx pc1 in
-        assert (Term.is_all_quantified hypo);
-        let idx =
-          let reason = if nass = 0 then 2 else 0 in
-          PC.specialized hypo_idx (standard_substitution n1) [||] reason pc1
-        in
-        let rec use_local_ass_from (i:int) (idx:int): int =
-          if i = nass then
-            idx
-          else
-            begin
-              let search = if i + 1 = nass then true else false in
-              let a_idx = i + PC.count_previous pc1 in
-              let idx = PC.add_mp a_idx idx search pc1 in
-              use_local_ass_from (i+1) idx
-            end
-        in
-        let idx = use_local_ass_from 0 idx in
-        PC.add_to_work idx pc1
+        if not (Term.is_all_quantified hypo) then
+          () (* Must be a precondition of a constructor rule of a pseudo
+                inductive type. A precondition does not contain the goal
+                predicate and therefore is not universally quantified.
+              *)
+        else
+          begin
+            assert (Term.is_all_quantified hypo);
+            let idx =
+              let reason = if nass = 0 then 2 else 0 in
+              PC.specialized hypo_idx (standard_substitution n1) [||] reason pc1
+            in
+            let rec use_local_ass_from (i:int) (idx:int): int =
+              if i = nass then
+                idx
+              else
+                begin
+                  let search = if i + 1 = nass then true else false in
+                  let a_idx = i + PC.count_previous pc1 in
+                  let idx = PC.add_mp a_idx idx search pc1 in
+                  use_local_ass_from (i+1) idx
+                end
+            in
+            let idx = use_local_ass_from 0 idx in
+            PC.add_to_work idx pc1
+          end
       )
       (List.rev hypo_lst_rev);
   (* Now we have context [all(other_vars) require a1; a2; ...] *)
@@ -288,23 +296,25 @@ let analyze_type_inspect
   and ct    = Context.class_table c
   in
   assert (ivar < nvars);
-  let tvs = Context.tvars c in
-  assert (ivar < nvars);
-  let cons_set, cls, tp =
-    let tp = Context.variable_type ivar c in
-    let cls =
-      try
-        Class_table.inductive_class_of_type tvs tp ct
-      with Not_found ->
-        let str = ST.string (Context.variable_name ivar c) in
-        error_info info ("Type of \"" ^ str ^ "\" is not inductive")
-    in
-    (Class_table.constructors cls ct),
-    cls,
-    tp
+  let tp = Context.variable_type ivar c in
+  let cls = Context.variable_class ivar c in
+  let gen_ind_idx, cs =
+    try
+      Class_table.primary_induction_law cls ct
+    with Not_found ->
+      let str = ST.string (Context.variable_name ivar c) in
+      error_info info ("The type of \"" ^ str ^ "\" has no induction law")
   in
-  let ind_idx = PC.add_specialized_induction_law tp ivar goal_pred pc in
-  cons_set,ind_idx,tp
+  let ind_idx = PC.specialize_induction_law gen_ind_idx goal_pred ivar pc
+  and cons_set =
+    List.fold_left
+      (fun set (_,cons) ->
+        IntSet.add cons set
+      )
+      IntSet.empty
+      cs
+  in
+  cons_set, ind_idx, tp
 
 
 let analyze_type_case_pattern
@@ -432,7 +442,14 @@ let inductive_type_case_context
   let ind_hyp_idx_lst =
     List.fold_left
       (fun lst hypo ->
-        let idx = PC.add_assumption hypo false pc1 in
+        let search =
+          match hypo with
+          | Application (Lam _, [|Variable _|],_) ->
+             false
+          | _ ->
+             true
+        in
+        let idx = PC.add_assumption hypo search pc1 in
         idx :: lst
       )
       []
@@ -440,7 +457,12 @@ let inductive_type_case_context
   in
   let hyp_lst_rev =
     List.fold_left
-      (fun lst idx -> (PC.add_beta_reduced idx true pc1) :: lst)
+      (fun lst idx ->
+        try
+          (PC.try_add_beta_reduced idx true pc1) :: lst
+        with Not_found ->
+          idx :: lst
+      )
       []
       (List.rev ind_hyp_idx_lst)
   in

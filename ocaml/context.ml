@@ -291,6 +291,9 @@ let fgconcepts (c:t): type_term array = entry_fgconcepts c.entry
 
 let tvars (c:t): Tvars.t = c.entry.tvs
 
+let variable_class (i:int) (c:t): int =
+  Tvars.principal_class (variable_type i c) (tvars c)
+
 
 let string_of_signature (s:Sign.t) (c:t): string =
   Class_table.string_of_signature

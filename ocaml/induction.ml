@@ -106,6 +106,8 @@ let split_constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
               pres, IntSet.add rai recargs
            | _ ->
               (* extract a precondition *)
+              if Term.is_all_quantified pp then
+                raise Not_found;
               try
                 let pre = Term.shift_from (-2) n 0 0  pp in
                 pre :: pres, recargs
@@ -126,22 +128,25 @@ let split_constructor_rule (pp:term) (fc:Feature_context.t): term list * int =
 
 
 
-let put_induction_law
+let put_potential_induction_law
       (idx:int) (t:term) (ps_rev: term list) (fc:Feature_context.t)
     : unit =
   (* A law of the form
 
          all(p,x) pp1 ==> ... ==> x in p has been
 
-     encountered. Analyze if its an normal induction law i.e. that each
+     encountered. Analyze if its a normal induction law i.e. that each
      premise in [ps_rev] is a constructor rule of the form
 
          all(a1,..) cond ==> ra1 in p ==> ... ==> c(a1,...) in p
 
      Note: - [p] is always the variable 0 and [x] the variable 1 in the
-     context.
+             context.
+           - multiple preconditions might occur
 
-           - multiple preconditions might occur *)
+    In case of a normal induction law store the law index and the constructors
+    as an induction law within the corresponding class and mark the
+    constructors.  *)
   try
     let open Feature_context in
     let tp = variable_type 1 fc in
@@ -219,6 +224,9 @@ let recognizer_condition_constructor
 
 
 let put_assertion (idx:int) (t:term) (ft:Feature_table.t): unit =
+  (* Analyze the assertion [t] which has been entered at [idx]. Find out if it
+     is an induction law, it defines a projector or it defines a case recognizer
+     and store the corresponding information. *)
   let n,(nms,tps),(fgnms,fgtps),ps_rev,t0 =
     Term.split_general_implication_chain t Constants.implication_index
   in
@@ -238,7 +246,7 @@ let put_assertion (idx:int) (t:term) (ft:Feature_table.t): unit =
                         false)
                  ps_rev
     ->
-     put_induction_law idx t ps_rev fc
+     put_potential_induction_law idx t ps_rev fc
 
   (* Projector all(a1,..) proj_ij(ci(a1,..) = aj *)
   | VAppl(eq,[|VAppl(proj,[|VAppl(c,cargs,_,_)|],_,_);Variable i|],_,_)

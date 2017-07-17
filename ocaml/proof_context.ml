@@ -1476,8 +1476,7 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
 
 
 
-let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
-  (* [idx] must represent a term which can be beta reduced *)
+let try_add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   let t = term idx pc in
   match t with
     Application(Lam(n,_,_,t0,prlam,tp), [|arg|], _) ->
@@ -1486,7 +1485,20 @@ let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
       Proof_table.add_proved reduct pt 0 pc.base;
       raw_add_work reduct search pc
   | _ ->
-      assert false (* The term [idx] is not a beta redex *)
+     raise Not_found
+
+
+
+let add_beta_reduced (idx:int) (search:bool) (pc:t): int =
+  (* [idx] must represent a term which can be beta reduced *)
+  try
+    try_add_beta_reduced idx search pc
+  with Not_found ->
+    printf "add_beta_reduced\n";
+    printf "   The term %d \"%s\" is not a beta redex\n"
+           idx
+           (string_of_term_i idx pc);
+    assert false (* The term [idx] is not a beta redex *)
 
 
 
@@ -1747,33 +1759,27 @@ let add_axiom (t:term) (pc:t): int =
 
 
 
-
-let add_specialized_induction_law
-      (tp:type_term) (ivar:int) (goal_pred:term) (pc:t)
+let specialize_induction_law
+      (idx:int)    (* induction law *)
+      (p: term)    (* goal predicate *)
+      (ivar: int)  (* induction variable *)
+      (pc:t)
     : int =
-  (* Add the specialized induction law of the inductive type [tp] specialized
-     for the goal predicate [goal_pred].
+  (* Specialize the induction law [idx] with the goal predicate [p].
 
-     [tp] is the type of the inspect term.
+     An induction law has the form
 
-     An induction law is of the form:
+         all(p0,x) p01 ==> p02 ==> ... ==> x in p0
 
-         all(p,x) p0 ==> p1 ==> x in p
+     where each p0i is a constructor rule.
 
-     where there is a premise for each constructor.
+     The specialized induction law has the form
 
+         p1 ==> p2 ==> ... ivar in p
+
+     where p0i and p0 are specialized with ivar and p
    *)
-  let ct = class_table pc
-  in
-  let idx =
-    try
-      Class_table.induction_law
-        (Class_table.inductive_class_of_type (tvars pc) tp ct)
-        ct
-    with Not_found ->
-      assert false (* tp must be an inductive type *)
-  in
-  let sub = [|goal_pred; Variable ivar|] in
+  let sub = [|p; Variable ivar|] in
   let ags =
     try
       RD.verify_specialization sub (context pc) (rule_data idx pc)
@@ -1781,6 +1787,7 @@ let add_specialized_induction_law
       assert false
   in
   specialized idx sub ags 0 pc
+
 
 
 

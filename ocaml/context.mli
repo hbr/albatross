@@ -106,6 +106,7 @@ val variable_name: int -> t -> int
 val variable_type: int -> t -> type_term
     (** The type of the [i]th variable argument *)
 
+val variable_class: int -> t -> int
 val variable_index: int -> t -> int
 
 val unique_name:  int -> t -> int

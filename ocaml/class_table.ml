@@ -750,8 +750,6 @@ let induction_law (cls:int) (ct:t): int =
   else bdesc.indlaw
 
 
-
-
 let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
 
@@ -782,27 +780,13 @@ let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
 
 
 
-let inductive_class_of_type (tvs:Tvars.t) (tp:type_term) (ct:t): int =
-  (* Find the inductive class of the type [tp] or raise [Not_found] if
-     the type is not inductive.
-   *)
-  assert (Tvars.count tvs = 0);
-  let nfgs = Tvars.count_fgs tvs in
-  let rec class_ tp =
-    match tp with
-    | Variable i when i < nfgs ->
-       class_ (Tvars.concept i tvs)
-    | Variable cls when is_inductive_class (cls - nfgs) ct->
-       cls - nfgs
-    | Variable _ ->
-       raise Not_found
-    | Application( Variable cls,_,_) ->
-       class_ (Variable cls)
-    | _ ->
-       assert false (* cannot happen in types *)
-  in
-  class_ tp
-
+let primary_induction_law (cls:int) (ct:t): int * (term list * int) list =
+  assert (cls < count ct);
+  match (descriptor cls ct).indlaws with
+  | law :: _ ->
+     law
+  | _ ->
+     raise Not_found
 
 
 let find_induction_law
