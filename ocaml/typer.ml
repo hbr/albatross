@@ -150,14 +150,16 @@ let find_features (info:info) (fn:feature_name) (c:Context.t): int list =
   flst
 
 
-let is_constant_constructor (nme:int) (c:Context.t): bool =
+let is_constant (nme:int) (c:Context.t): bool =
   let nvars = Context.count_variables c
   and ft = Context.feature_table c in
   try
     let lst   = Context.find_identifier nme 0 c in
-    let lst = List.filter
+    let lst =
+      List.filter
         (fun (idx,_,_) ->
-          nvars <= idx && Feature_table.is_constructor (idx-nvars) ft
+          nvars <= idx
+          && Feature_table.arity (idx-nvars) ft = 0
         )
         lst in
     lst <> []
@@ -179,7 +181,7 @@ let case_variables
         e, nanon, lst
     | Identifier nme | Typedexp({v=Identifier nme;i=_},_)->
         let lst =
-          if is_constant_constructor nme c then
+          if is_constant nme c then
             lst
           else if dups && List.mem nme lst then
             lst
@@ -1086,37 +1088,10 @@ let different_untyped
 let make_tb (mn:max_numbers) (c:Context.t): TB.t =
   TB.make None mn.max_locs mn.max_globs mn.max_fgs c
 
-let analyze_term_list
-      (info:info)
-      (check_used:bool)
-      (lst: (expression * type_term option) list)
-      (c: Context.t)
+
+let extract_unique
+      (info:info) (tbs:TB.t list) (c:Context.t)
     : formals * formals * bool * info_term list =
-  let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
-  let analyze_list
-        (elst: (eterm*type_term option*expression) list)
-        (tbs:TB.t list)
-      : TB.t list =
-    List.fold_left
-      (fun tbs (et,tp,e) ->
-        if trace then
-          Format.printf
-            "@[<v>@,@[<v 4>%s@,@,%s@,@]@]@."
-            "typer analyze term"
-            (string_of_expression e);
-        List.iter (TB.set_required_type tp) tbs;
-        let tbs = analyze_eterm et tbs 0 trace in
-        List.iter (TB.push_term et.info) tbs;
-        tbs
-      )
-      tbs
-      elst
-  in
-  let mn, lst_et =
-    first_pass_list info check_used lst c in
-  let tbs = analyze_list lst_et [make_tb mn c] in
-  if trace then
-    Format.printf "@[<v>%s@,@,@]" "typer end analysis";
   match tbs with
   |  [] ->
       assert false (* Cannot happen; at least one term is returned, otherwise an
@@ -1148,6 +1123,137 @@ let analyze_term_list
            ("Some inner context has a variable whose type is either a "
             ^ "FUNCTION or a PREDICATE; but it cannot be decided")
 
+
+let check_one_pattern (info:info) (pat:term) (c:Context.t): unit =
+  let nvars = Context.count_variables c in
+  let rec check pat =
+    match pat with
+    | Variable i when i < nvars ->
+       assert (i < Context.count_last_variables c); (* The typer only extracts
+                                                       new variables *)
+       ()
+    | Variable i ->
+       assert false (* Global constants cannot be variables *)
+    | VAppl (i,args,ags,oo) ->
+       if not (Feature_table.is_constructor (i-nvars) (Context.feature_table c)) then
+         begin
+           let open Format in
+           eprintf "@[<v>%s Pattern error@," (info_string info);
+           eprintf "%s@,@,    %s@,@,%s@,@,    %s@,@,%s@,@]@."
+                  "The pattern"
+                  (Context.string_of_term pat c)
+                  "contains a call to"
+                  (Feature_table.string_of_signature
+                     (i-nvars) (Context.feature_table c))
+                  "which is not a valid constructor";
+           exit 1
+         end;
+       Array.iter check args
+    | _ ->
+       assert false (* Other subexpressions cannot occur in a pattern *)
+  in
+  check pat
+
+
+
+let check_pattern_match
+      (tps:formals)
+      (fgs:formals)
+      (rvar:bool)
+      (lst: info_term list)
+      (c:Context.t)
+    : unit =
+  let rec check (info:info) (t:term) (c:Context.t): unit =
+    let check_args args c =
+      Array.iter (fun t -> check info t c) args
+    and check_lst lst c =
+      List.iter (fun t -> check info t c) lst
+    in
+    match t with
+    | Variable i when i < Context.count_variables c ->
+       ()
+    | Variable i ->
+       assert false (* Global constants cannot be variables *)
+    | VAppl(i,args,ags,oo) ->
+       check_args args c
+    | Application (f,args,_) ->
+       check info f c;
+       check_args args c
+    | Lam (n,nms,pres,t0,is_pred,tp) ->
+       let dtp = Context.domain_type tp c in
+       let c1 =
+         Context.push_typed0 ([|ST.symbol "t"|],[|dtp|]) empty_formals c
+       in
+       check_lst pres c1;
+       check info t0 c1
+    | QExp (n,tps,fgs,t0,is_all) ->
+       check info t0 (Context.push_typed0 tps fgs c)
+    | Flow (Ifexp,args) ->
+       check_args args c
+    | Flow (Inspect,args) ->
+       let len = Array.length args in
+       assert (3 <= len);
+       assert (len mod 2 = 1);
+       check info args.(0) c; (* the inspected expression *)
+       interval_iter
+         (fun i ->
+           let n,tps,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+           let c1 = Context.push_typed0 tps empty_formals c in
+           check_one_pattern info pat c1;
+           check info res c1
+         )
+         0 (len/2)
+    | Flow (Asexp,args) ->
+       let len = Array.length args in
+       assert (len = 2);
+       check info args.(0) c;
+       let n,tps,pat = Term.pattern_split args.(1) in
+       let c1 = Context.push_typed0 tps empty_formals c in
+       check_one_pattern info pat c1
+    | Indset (nme,tp,rules) ->
+       let c1 = Context.push_typed0 ([|nme|],[|tp|]) empty_formals c in
+       check_args rules c1
+  in
+  let c0 = Context.previous c in
+  let c1 = Context.push_typed tps fgs rvar c0 in
+  List.iter (fun t -> check t.i t.v c1) lst
+
+
+let analyze_term_list
+      (info:info)
+      (check_used:bool)
+      (lst: (expression * type_term option) list)
+      (c: Context.t)
+    : formals * formals * bool * info_term list =
+  assert (not (Context.is_global c));
+  let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
+  let analyze_list
+        (elst: (eterm*type_term option*expression) list)
+        (tbs:TB.t list)
+      : TB.t list =
+    List.fold_left
+      (fun tbs (et,tp,e) ->
+        if trace then
+          Format.printf
+            "@[<v>@,@[<v 4>%s@,@,%s@,@]@]@."
+            "typer analyze term"
+            (string_of_expression e);
+        List.iter (TB.set_required_type tp) tbs;
+        let tbs = analyze_eterm et tbs 0 trace in
+        List.iter (TB.push_term et.info) tbs;
+        tbs
+      )
+      tbs
+      elst
+  in
+  let mn, lst_et =
+    first_pass_list info check_used lst c in
+  let tbs = analyze_list lst_et [make_tb mn c] in
+  if trace then
+    Format.printf "@[<v>%s@,@,@]" "typer end analysis";
+  let tps,fgs,rvar,lst = extract_unique info tbs c in
+  check_pattern_match tps fgs rvar lst c;
+  tps,fgs,rvar,lst
 
 
 let structured_assertion
