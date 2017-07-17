@@ -319,7 +319,7 @@ let is_feature_term_recursive (t:term) (idx:int) (pc:PC.t): bool =
    Valid recursive call: At least one argument of the recursive call is
                          structurally smaller than the original argument.
 
-   Algorithm: We maintain a list of quaduples
+   Algorithm: We maintain a list of quadruples
 
        (n,term,level,iarg)
 
