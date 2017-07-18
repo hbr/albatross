@@ -1482,12 +1482,21 @@ end = struct
         assert (not recursive || not (is_all_quantified t1));
         Array.length nms, (nms,tps), (fgnms,fgcon), t1
     | QExp(n0,(nms,tps),(fgnms,fgcon),t0,false) ->
-        assert ((fgnms,fgcon) = empty_formals);
+       let nfgs = Array.length fgnms in
+       let nb = nb + n0 and nb2 = Array.length fgnms in
+       let t0 = pren t0 nb nb2 imp_id in
+       let (nms,tps), (fgnms,fgcon), t0 =
+         remove_unused (nms,tps) 0 (fgnms,fgcon) t0 in
+       assert (n0 = Array.length nms);
+       assert (nfgs = Array.length fgnms);
+       0, empty_formals, empty_formals,
+       QExp(n0, (nms,tps), (fgnms,fgcon), pren t0 nb nb2 imp_id, false)
+    | Flow(Ifexp,args) ->
         0, empty_formals, empty_formals,
-        QExp(n0, (nms,tps), (fgnms,fgcon), pren t0 nb nb2 imp_id, false)
+        Flow(Ifexp, norm_args args nb nb2)
     | Flow(ctrl,args) ->
         0, empty_formals, empty_formals,
-        Flow(ctrl, norm_args args nb nb2)
+        Flow(ctrl,args)
     | Indset (nme,tp,rs) ->
         let rs = norm_args rs (1+nb) nb2 in
         0, empty_formals, empty_formals , Indset (nme,tp,rs)
