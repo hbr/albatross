@@ -2756,9 +2756,7 @@ let add_induction_law0 (cls:int) (pc:t): unit =
   and pt  = Indtype cls
   and defer = Class_table.is_deferred cls (class_table pc)
   in
-  let idx = add_proved_0 defer cls law pt 0 pc in
-  let ct = class_table pc in
-  Class_table.set_induction_law idx cls ct
+  ignore(add_proved_0 defer cls law pt 0 pc)
 
 
 

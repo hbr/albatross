@@ -801,7 +801,7 @@ let can_be_constructed_without (cls:int) (posset:IntSet.t) (pc:PC.t): bool =
    *)
   let ct = PC.class_table pc
   and ft = PC.feature_table pc in
-  assert (Class_table.is_inductive_class cls ct);
+  assert (Class_table.is_inductive cls ct);
   IntSet.exists
     (fun c ->
       let tvs,sign = Feature_table.signature0 c ft in
@@ -844,7 +844,7 @@ let is_base_constructor (idx:int) (cls:int) (pc:PC.t): bool =
           false
       | VAppl(i,ags,_,_) ->
           assert (ntvs <= i);
-          Class_table.is_inductive_class (i-ntvs) ct &&
+          Class_table.is_inductive (i-ntvs) ct &&
           begin
             let nags = Array.length ags in
             let rec get_posset_from k posset =
@@ -968,7 +968,7 @@ let put_creators
       add_case_inversions cls clst pc;
       add_case_injections clst pc;
       Class_table.set_constructors cset_base cset cls ct;
-      PC.add_induction_law0 cls pc;
+      PC.add_induction_law0 cls pc
   end else if
     not (IntSet.equal (Class_table.constructors cls ct) cset)
   then

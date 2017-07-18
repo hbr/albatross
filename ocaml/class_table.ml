@@ -27,7 +27,6 @@ type base_descriptor = { hmark:    header_mark;
                                                                assertions *)
                          mutable constructors: IntSet.t;
                          mutable base_constructors: IntSet.t;
-                         mutable indlaw:       int;
                          mutable descendants:  IntSet.t;
                          mutable ancestors: parent_descriptor IntMap.t}
 
@@ -100,7 +99,6 @@ let standard_bdesc (hm:header_mark) (cvar:int) (tvs:Tvars.t) (idx:int)
    generics = [];
    base_constructors = IntSet.empty;
    constructors = IntSet.empty;
-   indlaw       = -1;
    descendants  = IntSet.empty;
    ancestors=anc}
 
@@ -742,22 +740,20 @@ let base_constructors (cls:int) (ct:t): IntSet.t =
   bdesc.base_constructors
 
 
-let induction_law (cls:int) (ct:t): int =
-  assert (cls < count ct);
-  let bdesc = base_descriptor cls ct in
-  if bdesc.indlaw = -1 then
-    raise Not_found
-  else bdesc.indlaw
-
 
 let has_constructors (cls:int) (ct:t): bool =
   constructors cls ct <> IntSet.empty
 
 
-let is_inductive_class (cls:int) (ct:t): bool =
+
+let is_inductive (cls:int) (ct:t): bool =
   assert (cls < count ct);
   has_constructors cls ct
 
+
+let is_pseudo_inductive (cls:int) (ct:t): bool =
+  (descriptor cls ct).indlaws <> []
+  && not (is_inductive cls ct)
 
 
 let set_constructors
@@ -771,15 +767,6 @@ let set_constructors
 
 
 
-let set_induction_law (indlaw:int) (cls:int) (ct:t): unit =
-  assert (cls < count ct);
-  assert (not (is_interface_check ct));
-  let bdesc = base_descriptor cls ct in
-  assert (bdesc.indlaw = -1);
-  bdesc.indlaw <- indlaw
-
-
-
 let primary_induction_law (cls:int) (ct:t): int * (term list * int) list =
   assert (cls < count ct);
   match (descriptor cls ct).indlaws with
@@ -787,18 +774,6 @@ let primary_induction_law (cls:int) (ct:t): int * (term list * int) list =
      law
   | _ ->
      raise Not_found
-
-
-let find_induction_law
-      (cs:int list) (cls:int) (ct:t)
-    : int * (term list * int) list =
-  let has cs0 c =
-    List.exists (fun (_,c0) -> c0 = c) cs0
-  in
-  List.find
-    (fun (i,cs0) -> List.for_all (has cs0) cs)
-    (descriptor cls ct).indlaws
-
 
 
 let add_induction_law

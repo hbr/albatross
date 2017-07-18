@@ -118,15 +118,13 @@ val update: int -> info -> header_mark withinfo -> int withinfo option
 val add: header_mark withinfo -> int withinfo option -> int -> Tvars.t -> t
          -> unit
 
-val is_inductive_class: int -> t -> bool
+val is_inductive: int -> t -> bool
+val is_pseudo_inductive: int -> t -> bool
 val has_constructors: int -> t -> bool
 val constructors:     int -> t -> IntSet.t
 val base_constructors:     int -> t -> IntSet.t
-val induction_law:    int -> t -> int
 val set_constructors:  IntSet.t -> IntSet.t -> int -> t -> unit
-val set_induction_law: int -> int -> t -> unit
 
-val find_induction_law: int list -> int -> t -> int * (term list * int) list
 val add_induction_law: int -> (term list * int) list -> int -> t -> unit
 val primary_induction_law: int -> t -> int * (term list * int) list
 

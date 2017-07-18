@@ -2527,6 +2527,7 @@ let set_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): unit =
 
 
 let set_projector (proj:int) (ivar:int) (idx:int) (ft:t): unit =
+  assert (ivar < arity idx ft);
   let desc = descriptor idx ft in
   if IntMap.mem ivar desc.projectors then
     ()
@@ -2534,6 +2535,9 @@ let set_projector (proj:int) (ivar:int) (idx:int) (ft:t): unit =
     desc.projectors <- IntMap.add ivar proj desc.projectors
 
 
+let has_all_projectors (idx:int) (ft:t): bool =
+  IntMap.cardinal (descriptor idx ft).projectors
+  = arity idx ft
 
 
 let is_equality_index (idx:int) (ft:t): bool =

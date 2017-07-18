@@ -38,6 +38,7 @@ val set_seed: int -> int -> agens -> t -> unit
 
 val set_recognizer: term -> term option -> int -> t -> unit
 val set_projector:  int -> int -> int -> t -> unit
+val has_all_projectors: int -> t -> bool
 
 val complexity: term -> int -> Tvars.t -> t -> int
 

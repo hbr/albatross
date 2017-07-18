@@ -225,15 +225,15 @@ let recognizer_condition_constructor
 
 let put_assertion (idx:int) (t:term) (ft:Feature_table.t): unit =
   (* Analyze the assertion [t] which has been entered at [idx]. Find out if it
-     is an induction law, it defines a projector or it defines a case recognizer
-     and store the corresponding information. *)
+     is an induction law, it defines a projector or it defines a potential
+     case recognizer and store the corresponding information. *)
   let n,(nms,tps),(fgnms,fgtps),ps_rev,t0 =
     Term.split_general_implication_chain t Constants.implication_index
   in
   let fc = Feature_context.make_from_arguments nms tps fgnms fgtps ft
   in
-  (* Induction law all(p,x) pp1 ==> pp2 ==> ... ==> x in p *)
   match t0 with
+  (* Induction law all(p,x) pp1 ==> pp2 ==> ... ==> x in p *)
   | Application(Variable 0, [|Variable 1|],_)
        when n = 2
             && ps_rev <> []
@@ -280,7 +280,8 @@ let put_assertion (idx:int) (t:term) (ft:Feature_table.t): unit =
            begin
              let open Feature_context in
              let open Feature_table in
-             printf "\nrecognizer found for %s\n" (string_of_signature c ft);
+             printf "\npotential recognizer found for %s\n"
+                    (string_of_signature c ft);
              printf "  recognizer     %s\n" (string_of_term exp fc);
              printf "  equivalent to  %s\n\n"
                     (string_of_term
