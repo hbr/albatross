@@ -455,6 +455,12 @@ second (t:(A,B)): B
            b
 
 
+-- Only for demonstration of a call with explicit arguments
+all(a:A,b:B)
+    ensure
+        first(a,b) = a
+    end
+
 {:------------------------------------------------------------------------:}
 class
     LIST[A]

@@ -51,7 +51,11 @@ variable.
 *)
 type application =
     GlFun of int*Sign.t*bool*int*int*int*bool
-                        (* is_const, nargs, start fgs, nfgs, is_pred *)
+                        (* is_const, nargs, start fgs, nfgs, is_pred
+                           is_const: the global function has no arguments, i.e. it
+                                     has to be either a function or a predicate
+                                     constant
+                         *)
   | TermApp of int * int (* nargs, start fgs *)
 
 type t = {
@@ -589,10 +593,35 @@ let expect_argument (i:int) (tb:t): unit =
   (* Set the required type for the argument [i] of the current function *)
   assert (tb.calls <> []);
   match List.hd tb.calls with
-    GlFun (_,s,_,nargs,_,_,_) ->
+  |  GlFun (_,s,_,nargs,_,_,_) ->
       assert (i < nargs);
-      assert (i < Sign.arity s);
-      tb.req <- Some (Sign.arg_type i s)
+      assert (Sign.arity s <= nargs);
+      let ari = Sign.arity s in
+      if nargs = ari || i + 1 < ari then
+        begin
+          assert (i < ari);
+          tb.req <- Some (Sign.arg_type i s)
+        end
+      else
+        begin
+          (* There are more arguments provided than the arity of the
+             function. Therefore the last argument type of the signature must be
+             a tuple.  *)
+          assert (ari < nargs);
+          assert (ari <= i + 1);
+          assert (0 < ari);
+          tb.req <-
+            Some (
+                try
+                  (Class_table.extract_from_tuple
+                     (nargs-ari+1)
+                     (count_all tb)
+                     (Sign.arg_type (ari - 1) s)
+                  ).(i + 1 - ari )
+                with Not_found ->
+                  assert false (* The last type must be a tuple *)
+              )
+        end
   | TermApp (nargs,start) ->
       assert (i < nargs);
       tb.req <- Some (Variable (start+i))
@@ -626,10 +655,14 @@ let pop_term
   | _ ->
       assert false (* Cannot happen *)
 
+
 let pop_args
-    (n:int) (terms:(term*type_term) list)
+      (n:int) (terms:(term*type_term) list)
     : (term*type_term) list * (term*type_term) list
-    =
+  =
+  (* Pop [n] arguments from the list [terms] and return the list of arguments and
+     the list of the remaining terms. Note: The arguments are in reversed order in
+     the list [terms]. Therefore they are in the correct order in the result. *)
   assert (n <= List.length terms);
   let args,terms =
     interval_fold
@@ -834,8 +867,19 @@ let start_global_application (fidx:int) (nargs:int) (tb:t): unit =
     (fidx,start,nfgs) :: tb.feature_fg_ranges
   end;
   let nargs_s = Sign.arity s in
-  if nargs = nargs_s then
+  if nargs = nargs_s || (0 < nargs_s && nargs_s < nargs) then
     begin
+      if nargs_s < nargs then
+        begin
+          assert (0 < nargs_s);
+          try
+            ignore(Class_table.extract_from_tuple
+                     (nargs - nargs_s + 1)
+                     (count_all tb)
+                     (Sign.arg_type (nargs_s - 1) s))
+          with Not_found ->
+            raise Reject
+        end;
       tb.calls <- GlFun (fidx,s,false,nargs,start,nfgs,false) :: tb.calls;
       unify_with_required (Sign.result s) tb
     end
@@ -938,6 +982,39 @@ let start_function_application (nargs:int) (tb:t): unit =
      tb.req <- Some (function_of_args start nargs tp tb)
 
 
+let convert_last_to_tuple
+      (nargs:int)
+      (nargs_s:int)
+      (args:(term*type_term) list)
+      (tb:t)
+    : (term*type_term) list =
+  if nargs_s < nargs then
+    let rec convert (i:int) (args): (term*type_term) list =
+      match args with
+      | [] ->
+         assert false (* cannot happen *)
+      | hd :: tl ->
+         if i + 1 = nargs_s then
+           (* It is the last argument of the signature *)
+           begin
+             assert (tl <> []);
+             let args,tps = List.split args in
+             let tp =
+               Class_table.to_tuple
+                 (count_all tb)
+                 0
+                 (Array.of_list tps)
+             in
+             let t =  tuple_of_args (Array.of_list args) tp tb
+             in
+             [t,tp]
+           end
+         else
+           hd :: convert (i+1) tl
+    in
+    convert 0 args
+  else
+    args
 
 
 
@@ -949,11 +1026,12 @@ let complete_application (am:application_mode) (tb:t): unit =
       let nargs_s = Sign.arity s in
       let ags = Array.init nfgs (fun i -> Variable (start + i)) in
       let args,terms = pop_args nargs tb.terms in
+      let args = convert_last_to_tuple nargs nargs_s args tb in
       let args,tps = List.split args in
       let args = Array.of_list args
       and tps  = Array.of_list tps
       in
-      if not is_const && nargs = nargs_s then
+      if not is_const && nargs_s <= nargs then
         begin
           let t =
             if fidx = in_index tb then
@@ -970,6 +1048,10 @@ let complete_application (am:application_mode) (tb:t): unit =
 
              ((c,d) -> f(a,b,c,d))
 
+             Partial application is not yet implemented in general. Therefore
+             this case can happen onle if a global function is used in a place
+             where a function term is expected. In that case the global function
+             is converted to a lambda expression.
            *)
           let tp = partially_upgraded_signature s nargs is_pred tb
           and names =
