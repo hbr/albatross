@@ -583,6 +583,10 @@ let variable_type (i:int) (tb:t): type_term =
   (transform_from_context c tb) tp
 
 
+let string_of_variable_type (i:int) (tb:t): string =
+  string_of_substituted_type_with_tvs (variable_type i tb) tb
+
+
 let add_variable (i:int) (tb:t): unit =
   let tp = variable_type i tb in
   unify_with_required tp tb;

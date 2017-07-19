@@ -667,6 +667,19 @@ let string_of_required_types (tbs:TB.t list): string =
   "\n"
 
 
+let string_of_variable_types (i:int) (tbs:TB.t list): string =
+  (if List.length tbs = 1 then
+    "type"
+  else
+    "types") ^
+  "\n\n\t" ^
+  String.concat
+    "\n\t"
+    (List.map (fun tb -> TB.string_of_variable_type i tb) tbs) ^
+  "\n"
+
+
+
 let filter_global_functions
     (info:info)
     (flst:int list)            (* The possible global functions *)
@@ -725,11 +738,10 @@ let variable_type_mismatch
   error_info
     info
     ("Type mismatch\n" ^
-     "The variable \"" ^ ST.string (Context.variable_name i c) ^
-     "\" has type\n\n\t" ^
-     Context.string_of_type (Context.variable_type i c) c ^
-     "\n\nwhich does not match " ^
-     string_of_required_types tbs)
+       "The variable \"" ^ ST.string (Context.variable_name i c) ^ "\" has "
+       ^ string_of_variable_types i tbs
+       ^ "\n\nwhich does not match "
+       ^ string_of_required_types tbs)
 
 
 

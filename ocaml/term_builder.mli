@@ -13,6 +13,7 @@ val count_terms: t -> int
 val head_term: t -> term
 val has_required_type: t -> bool
 val string_of_required_type: t -> string
+val string_of_variable_type: int -> t -> string
 val string_of_head_term: t -> string
 val string_of_complete_head_term: t -> string
 val string_of_tvs: t -> string
