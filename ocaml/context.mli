@@ -39,6 +39,7 @@ val previous: t -> t
 val pop:   t -> t
 
 val is_global:   t -> bool
+val is_local:    t -> bool
 val is_toplevel: t -> bool
 val depth:       t -> int
 val arity:       t -> int
@@ -139,6 +140,8 @@ val predicate_class: t -> int
 
 val domain_type: type_term -> t -> type_term
 val type_of_term: term -> t -> type_term
+val class_of_term: term -> t -> int
+val class_of_type: type_term -> t -> int
 val tuple_of_types: types -> t -> type_term
 val tuple_of_terms: arguments -> t -> type_term
 val predicate_of_type: type_term -> t -> type_term

@@ -71,6 +71,9 @@ let is_global (c:t): bool =
   c.prev = None
 
 
+let is_local (c:t): bool =
+  c.prev <> None
+
 let is_toplevel (c:t): bool =
   match c.prev with
     Some prev -> is_global prev
@@ -714,6 +717,15 @@ let rec type_of_term (t:term) (c:t): type_term =
           type_of_term res c1
       | Asexp ->
           boolean c
+
+
+
+let class_of_type (tp:type_term) (c:t): int =
+  Tvars.principal_class tp (tvars c)
+
+
+let class_of_term (t:term) (c:t): int =
+  class_of_type (type_of_term t c) c
 
 
 let predicate_of_type (tp:type_term) (c:t): type_term =

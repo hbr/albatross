@@ -536,3 +536,8 @@ all(a,b,n:NAT, p:{NAT})
     note
         axiom
     end
+
+all(a:NAT)
+    ensure
+        a = 0 ==> a /= 0 ==> false
+    end

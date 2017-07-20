@@ -965,9 +965,9 @@ let put_creators
   if not (Class_table.has_constructors cls ct) then
     begin
       creators_check_formal_generics creators.i clst tvs cls ft;
+      Class_table.set_constructors cset_base cset cls ct;
       add_case_inversions cls clst pc;
       add_case_injections clst pc;
-      Class_table.set_constructors cset_base cset cls ct;
       PC.add_induction_law0 cls pc
   end else if
     not (IntSet.equal (Class_table.constructors cls ct) cset)

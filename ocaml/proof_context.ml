@@ -947,7 +947,7 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
         Feature_table.add_involved_assertion cnt t (feature_table pc)
     end;
   if not dup && is_global pc then
-    Induction.put_assertion res t (feature_table pc);
+    Induction.put_assertion res t (context pc);
   res
 
 
