@@ -723,8 +723,8 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
     assert (gs.reactivated = []);
     if cnt = count gs then
       begin
-        if PC.is_tracing pc then
-          trace_viable_subgoals gs;
+        (*if PC.is_tracing pc then
+          trace_viable_subgoals gs;*)
         raise (Proof_failed (" (subgoals exhausted)"))
       end;
     assert (cnt < count gs);
