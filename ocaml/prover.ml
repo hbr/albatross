@@ -193,6 +193,8 @@ and reactivate_alternative (alt:alternative) (gs:t): unit =
 
 
 let rec set_goal_obsolete (i:int) (gs:t): unit =
+  (* A goal becomes obsolete if alternatives which use it are either failed
+     or obsolte. *)
   let g = item i gs in
   if
     List.for_all
@@ -642,6 +644,36 @@ let visit (i:int) (gs:t): unit =
       generate_subgoals i gs
 
 
+let trace_viable_subgoals (gs:t): unit =
+  let max_level = 10 in
+  let prefix level = String.make (2*level) ' '
+  in
+  let rec trace (i:int) (level:int): unit =
+    let pref = prefix level in
+    let g = item i gs in
+    printf "%sgoal %d %s\n" pref i (PC.string_of_term g.goal g.ctxt.pc);
+    printf "%s    failed %b, obsolete %b, proved %b\n"
+           pref g.failed g.obsolete (g.pos <> None);
+    if level = 10 then
+      printf "level %d reached\n" max_level;
+    if not (g.failed || g.obsolete || g.pos <> None) && level < max_level then
+      Array.iteri
+        (fun i (alt:alternative) ->
+          if not (alt.obsolete || alt.failed) then
+            begin
+              assert (alt.bwd_idx >= 0);
+              printf "%salternative %d %s\n"
+                     pref i (PC.string_of_term_i alt.bwd_idx g.tgt_ctxt.pc);
+              Array.iter
+                (fun (j,pos) ->
+                  trace j (level+1))
+                alt.premises
+            end
+        )
+        g.alternatives
+  in
+  trace 0 0
+
 
 let proof_term (g:term) (pc:PC.t): term * proof_term =
   let pc = PC.push_empty pc in
@@ -689,6 +721,12 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
         lst;
     done;
     assert (gs.reactivated = []);
+    if cnt = count gs then
+      begin
+        if PC.is_tracing pc then
+          trace_viable_subgoals gs;
+        raise (Proof_failed (" (subgoals exhausted)"))
+      end;
     assert (cnt < count gs);
     if PC.is_tracing pc then printf "\n";
     round (i+1) cnt
