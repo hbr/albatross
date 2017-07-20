@@ -1181,7 +1181,7 @@ let start_lambda (c_new:Context.t) (is_pred:bool) (tb:t): unit =
   link_new_locals_to_new_globals tb;
   let csig = context_signature tb in
   assert (Sign.has_result csig);
-  let tp = upgraded_signature csig is_pred tb in
+  let tp = substituted_type (upgraded_signature csig is_pred tb) tb in
   unify_with_required tp tb;
   tb.req <-
     Some begin
