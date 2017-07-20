@@ -1,6 +1,10 @@
 .PHONY: alba.base                  \
 	alba                       \
 	test                       \
+        test_library               \
+        test_draft                 \
+        test_example               \
+        test_example_book          \
         test2                      \
         test2_library              \
         test2_draft                \
@@ -89,7 +93,7 @@ test2_example: alba.byte
 test2_sf: alba.byte
 	./alba.byte -I ../library -work-dir ../../sf compile -force -verbosity 1
 
-test: alba test_library test_draft test_example
+test: alba test_library test_draft test_example test_example_book
 
 test_library: alba
 	./alba.native -work-dir ../library/alba.base compile -force -verbosity 1
@@ -99,6 +103,10 @@ test_draft: alba
 
 test_example: alba
 	./alba.native -I ../library -work-dir ../example compile -force -verbosity 1
+
+test_example_book: alba
+	./alba.native -I ../library -work-dir ../../examples/src \
+        compile -force -verbosity 1
 
 boolean: alba.byte
 	./alba.byte -work-dir ../library/alba.base  \
