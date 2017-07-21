@@ -164,7 +164,7 @@ let rec reactivate_goal (i:int) (gs:t): unit =
   (* Reactivate the goal [i] if it has become obsolete and has not yet
      failed. *)
   let g = item i gs in
-  if g.obsolete && not g.failed then
+  if g.obsolete && not g.failed && g.pos = None then
     begin
       assert (g.pos = None);
       g.obsolete <- false;
