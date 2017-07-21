@@ -769,7 +769,8 @@ let equality_term (t1:term) (t2:term) (c:t): term =
   let tp = type_of_term t1 c
   and nvars = count_variables c
   and tvs = tvars c in
-  assert (Term.equivalent tp (type_of_term t2 c));
+  if not (Term.equivalent tp (type_of_term t2 c)) then
+    raise Not_found;
   Feature_table.equality_term t1 t2 nvars tp tvs c.ft
 
 
