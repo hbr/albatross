@@ -122,6 +122,7 @@ val is_constructor:    int -> t -> bool
 val inductive_type:    int -> agens -> int -> t -> type_term
 val evaluated_as_expression: term -> int -> Tvars.t -> t -> term
 val induction_law:    int -> int -> t -> term
+val is_pattern: int -> term -> int -> t -> bool
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
 val unmatched_inspect_cases: term array -> int -> int -> t

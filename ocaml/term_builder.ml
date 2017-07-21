@@ -1241,6 +1241,19 @@ let complete_if_expression (tb:t): unit =
   tb.terms <- (Flow (Ifexp, [|cond;e1;e2|]),e1_tp) :: terms
 
 
+let is_pattern (n:int) (pat:term) (tb:t): bool =
+  Feature_table.is_pattern
+    n
+    pat
+    ((count_variables tb) - n)
+    (feature_table tb)
+
+let check_pattern (n:int) (pat:term) (tb:t): unit =
+  if is_pattern n pat tb then
+    ()
+  else
+    raise Reject
+
 
 let start_as_expression (tb:t): unit =
   unify_with_required (boolean_type tb) tb;
@@ -1256,6 +1269,7 @@ let expect_as_pattern (c:Context.t) (tb:t): unit =
 let complete_as_expression (tb:t): unit =
   let (pat,_),  terms = pop_term tb.terms in
   let nargs,names,tps = context_names_and_types tb in
+  check_pattern nargs pat tb;
   let pat = Term.some_quantified nargs (names,tps) pat
   in
   pop_context tb;
@@ -1304,6 +1318,7 @@ let complete_case (tb:t): unit =
   let (res,_), terms = pop_term tb.terms in
   let (pat,_), terms = pop_term terms in
   let nargs, names,tps = context_names_and_types tb in
+  check_pattern nargs pat tb;
   let pat = Term.some_quantified nargs (names,tps) pat
   and res = Term.some_quantified nargs (names,tps) res in
   tb.terms <- (res,empty_term) :: (pat,empty_term) :: terms;

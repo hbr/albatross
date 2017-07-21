@@ -760,6 +760,12 @@ let iterate_tbs (f: TB.t->unit) (tbs:TB.t list): TB.t list =
 
 
 
+let illegal_pattern (info:info): 'a =
+  error_info
+    info
+    ("Illegal pattern\n"
+     ^ "A pattern must consist only of variables and constructors")
+
 let analyze_eterm
     (et_outer:eterm)
     (tbs:TB.t list)
@@ -885,10 +891,13 @@ let analyze_eterm
           printf "%spattern\n" (prefix level);
         List.iter (fun tb -> TB.expect_as_pattern pat.context tb) tbs2;
         let tbs3 = analyze pat tbs2 (level+1) in
-        List.iter TB.complete_as_expression tbs3;
+        let tbs4 = iterate_tbs TB.complete_as_expression tbs3 in
+        if tbs4 = [] then
+          illegal_pattern pat.info;
         if trace then
-          trace_head_terms level et.context tbs3;
-        tbs3
+          trace_head_terms level et.context tbs4;
+        tbs4
+
     | EInspect (insp,cases) ->
         if trace then
           printf "%sinspect\n" (prefix level);
@@ -909,8 +918,10 @@ let analyze_eterm
                 printf "%sresult\n" (prefix (level+1));
               List.iter TB.expect_case_result tbs1;
               let tbs2 = analyze res tbs1 (level+2) in
-              List.iter TB.complete_case tbs2;
-              tbs2
+              let tbs3 = iterate_tbs TB.complete_case tbs2 in
+              if tbs3 = [] then
+                illegal_pattern pat.info;
+              tbs3
             )
             tbs1
             cases
