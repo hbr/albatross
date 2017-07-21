@@ -358,7 +358,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
       Printf.printf " args1 %s\n" (argsstr args1);
       Printf.printf " args2 %s\n" (argsstr args2);
       Printf.printf " tappl %s\n" (Term.to_string t1);
-      Printf.printf " torig  %s\n" (Term.to_string t2);
+      Printf.printf " torig %s\n" (Term.to_string t2);
       false
     end
   in

@@ -545,8 +545,8 @@ end = struct
           (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb1 nb2) pres1 pres2
           with Invalid_argument _ -> false)
             &&
-          eq t1 t2 nb1 nb2 &&
-          eq tp1 tp2 nb2 0
+          eq t1 t2 nb1 nb2 (*&&
+          eq tp1 tp2 nb2 0*)
       | QExp(n1,(nms1,tps1),(fgnms1,fgs1),t1,is_all1),
         QExp(n2,(nms2,tps2),(fgnms2,fgs2),t2,is_all2)
         when n1 = n2 && is_all1 = is_all2 ->
@@ -557,8 +557,8 @@ end = struct
             and nb2 = nfgs1 + nb2 in
             Array.length nms1 = Array.length nms2 &&
             Array.length fgnms1 = Array.length fgnms2 &&
-            eqarr fgs1 fgs2 nb2 0 &&
-            eqarr tps1 tps2 nb2 0 &&
+            (*eqarr fgs1 fgs2 nb2 0 &&
+            eqarr tps1 tps2 nb2 0 &&*)
             eq t1 t2 nb1 nb2
           else
             false
