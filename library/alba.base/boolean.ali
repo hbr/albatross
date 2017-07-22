@@ -2,6 +2,11 @@ use core end
 
 all(a,b,c:BOOLEAN)
     ensure
+        -- elimination of negated implication
+        not (a ==> b) ==> a
+        not (a ==> b) ==> not b
+        not (a ==> not b) ==> b
+
         a or b ==> b or a             -- commutativity of 'or'
 
         -- de Morgan 1

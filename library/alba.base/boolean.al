@@ -1,6 +1,34 @@
 use core end
 
 
+{: Negated Implication
+   =================== :}
+
+all(a,b:BOOLEAN)
+    require
+        not (a ==> b)
+    ensure
+        a
+    via require not a
+    end
+
+all(a,b:BOOLEAN)
+    require
+        not (a ==> b)
+    ensure
+        not b
+    end
+
+all(a,b:BOOLEAN)
+    require
+        not (a ==> not b)
+    ensure
+        b
+    via require not b
+    end
+
+
+
 {: de Morgan 1: 'not (a or b) = not a and not b'
    ============================================= :}
 
