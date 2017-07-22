@@ -648,6 +648,106 @@ all(p:{NATURAL},y:NATURAL)
 
 
 
+{: Wellorder
+   ========= :}
+
+is_least(a:NATURAL, p:{NATURAL}): ghost BOOLEAN
+    -> a in p and (all(x) x in p ==> a <= x)
+
+all(a:NATURAL, p:{NATURAL})
+    require
+        a in p
+        not a.is_least(p)
+    ensure
+        some(x) x in p and x < a
+    assert
+        not (all(x) x in p ==> a <= x)  -- because 'a in p'
+        ensure
+           not (all(x) x in {x: x in p ==> a <= x})
+           {: This complicated detour is necessary because De Morgan on
+              quantifiers does currently work only with expressions of
+              the form 'x in p' :}
+        via require all(x) x in {x: x in p ==> a <= x}
+        assert
+            all(x)
+                require
+                    x in p
+                ensure
+                    a <= x
+                assert
+                    x in {x: x in p ==> a <= x}
+                end
+        end
+    via some(x) x /in {x: x in p ==> a <= x}
+    assert
+        not (x in p ==> a <= x)
+        x in p and x < a
+    end
+
+
+all(a,b:NATURAL, p:{NATURAL})
+    require
+        a.is_least(p)
+        b.is_least(p)
+    ensure
+        a = b
+    end
+
+
+all(p:{NATURAL})
+    require
+        p.has_some
+    ensure
+        some(x) x.is_least(p)
+
+    assert
+        all(a:NATURAL, p:{NATURAL})
+            require
+                some(x) x <= a and x in p {: Weaker assumption gives a stronger
+                                             induction hypothesis :}
+            ensure
+                some(x) x.is_least(p)
+            inspect
+                a
+            case 0
+                via some(x) x <= 0 and x in p
+                assert
+                    x.is_least(p)
+            case n.successor
+            {: ind hypo: all(p) (some(x) x <= n and x in p) ==>
+                                (some(x) x.is_least(p))
+               ass:  some(x) x <= n.successor and x in p
+            :}
+                if n.successor.is_least(p)
+                else
+                    via some(x) x <= n.successor and x in p
+                    if n.successor in p
+                        via some(k) k in p and k < n.successor
+                        assert
+                            k <= n and k in p
+                    else
+                        assert
+                            x < n.successor
+                            x <= n and x in p
+            end
+
+    via some(a) a in p
+    assert
+        a <= a and a in p
+        some(x) x <= a and x in p
+    end
+
+
+least(p:{NATURAL}): ghost NATURAL
+    require
+        p.has_some
+    ensure
+        Result.is_least(p)
+    end
+
+
+
+
 {: Difference
    ========== :}
 
