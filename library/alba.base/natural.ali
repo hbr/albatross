@@ -170,3 +170,11 @@ all(a,b,c,x:NATURAL)
         a^0 = 1
         a ^ b.successor = a^b * a
     end
+
+all(p:{NATURAL},y:NATURAL)
+        -- '<'  is a wellfounded relation
+    require
+        all(y) (all(x) x < y ==> x in p) ==> y in p
+    ensure
+        y in p
+    end

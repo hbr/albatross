@@ -622,6 +622,30 @@ all(a,b:NATURAL)
 
 
 
+{: Wellfounded Relation
+   ==================== :}
+
+all(p:{NATURAL},y:NATURAL)
+        -- '<'  is a wellfounded relation
+    require
+        all(y) (all(x) x < y ==> x in p) ==> y in p
+    ensure
+        y in p
+    assert
+        all(p:{NATURAL},x,y:NATURAL)
+            require
+                all(y) (all(x) x < y ==> x in p) ==> y in p
+                x <= y
+            ensure
+                x in p
+            inspect
+                y
+            case 0
+                assert
+                    x = 0
+            end
+    end
+
 
 
 {: Difference
