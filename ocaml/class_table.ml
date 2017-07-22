@@ -39,6 +39,7 @@ type descriptor      = {
     mutable indlaws: (int * (term list * int) list) list;
                    (* law idx, constructors
                       each constructor with a list of preconditions *)
+    mutable wflaws: (int * int) list; (* law idx, relation *)
     mutable is_exp: bool
   }
 
@@ -786,6 +787,23 @@ let add_induction_law
   desc.indlaws <- desc.indlaws @ [idx,cs]
 
 
+let primary_wellfounded_relation (cls:int) (ct:t): int =
+  assert (cls < count ct);
+  match (descriptor cls ct).wflaws with
+  | (law,rel) :: _ ->
+     rel
+  | _ ->
+     raise Not_found
+
+
+let add_wellfounded_induction_law
+      (idx:int) (rel_idx:int) (cls:int) (ct:t)
+    : unit =
+  (* Add the wellfounded induction law [idx] with its relation [rel_idx] to
+     the class [cls]. *)
+  assert (cls < count ct);
+  let desc = descriptor cls ct in
+  desc.wflaws <- desc.wflaws @ [idx,rel_idx]
 
 
 let export
@@ -1452,6 +1470,7 @@ let add
      ident = idx;
      is_exp = is_exp;
      indlaws = [];
+     wflaws =  [];
      bdesc = bdesc}
     ct.seq;
   add_to_map idx ct;
@@ -1720,6 +1739,7 @@ let add_base_class
      ident = idx;
      is_exp = (name = "@DUMMY");
      indlaws = [];
+     wflaws =  [];
      bdesc = bdesc}
     ct.seq;
   let mdl_nme = ST.symbol mdl_name in

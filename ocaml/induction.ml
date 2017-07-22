@@ -98,18 +98,16 @@ let split_constructor_rule (pp:term) (c:Context.t): term list * int =
             && Array.length args = n ->
      let pres,recargs =
        List.fold_left
-         (fun (pres,recargs) pp ->
-           match pp with
+         (fun (pres,recargs) ppi ->
+           match ppi with
            | Application (Variable n,[|Variable rai|],_) when rai < n ->
               if IntSet.mem rai recargs then
                 raise Not_found;
               pres, IntSet.add rai recargs
            | _ ->
               (* extract a precondition *)
-              if Term.is_all_quantified pp then
-                raise Not_found;
               try
-                let pre = Term.shift_from (-2) n 0 0  pp in
+                let pre = Term.down_from (-2) n ppi in
                 pre :: pres, recargs
               with Term_capture ->
                 raise Not_found
@@ -153,25 +151,64 @@ let put_potential_induction_law
   try
     let tp = variable_type 1 c in
     let cls = Tvars.principal_class tp (tvars c) in
-    let lst =
-      List.fold_left
-        (fun lst pp ->
-          let pres,co = split_constructor_rule pp c in
-          if List.for_all (fun (_,co0) -> co <> co0) lst then
-            (pres,co) :: lst
-          else
+    match ps_rev with
+    (* wellfounded induction law with induction hypothesis
+           all(y) (all(x) x < y ==> x in p) ==> y in p *)
+    | [QExp(n1,tps1,fgs1,
+            VAppl(imp1,
+                  [|QExp(n2,tps2,fgs2,
+                         VAppl(imp2,
+                               [|rel;
+                                 Application(Variable 2,
+                                             [|Variable 0|],_)
+                               |],
+                               [||],_),
+                         true
+                        );
+                    Application(Variable 1,[|Variable 0|],_)|],
+                  [||], _),
+            true)
+      ]  when n1 = 1 && n2 = 1
+              && imp1 = 3 + Constants.implication_index
+              && imp2 = 4 + Constants.implication_index ->
+       let rel_idx =
+         match rel with
+         | VAppl(i,[|Variable 0; Variable 1|],_,_) when 4 <= i ->
+            i - 4
+         | _ ->
             raise Not_found
-        )
-        []
-        ps_rev
-    in
-    if is_tracing c then
-      begin
-        printf "\nnormal induction law\n";
-        printf "   %s\n\n" (string_of_term t (pop c));
-      end;
-    Class_table.add_induction_law idx lst cls (class_table c);
-    check_class cls (feature_table c)
+       in
+       if is_tracing c then
+         begin
+           printf "\nwellfounded induction law\n";
+           printf "  %s\n" (string_of_term t (pop c));
+           printf "  with wellfounded relation\n";
+           printf "    %s\n\n"
+                  (Feature_table.string_of_signature rel_idx (feature_table c))
+         end;
+       Class_table.add_wellfounded_induction_law idx rel_idx cls (class_table c)
+
+    (* Normal induction law *)
+    | _ ->
+       let lst =
+         List.fold_left
+           (fun lst pp ->
+             let pres,co = split_constructor_rule pp c in
+             if List.for_all (fun (_,co0) -> co <> co0) lst then
+               (pres,co) :: lst
+             else
+               raise Not_found
+           )
+           []
+           ps_rev
+       in
+       if is_tracing c then
+         begin
+           printf "\nnormal induction law\n";
+           printf "   %s\n\n" (string_of_term t (pop c));
+         end;
+       Class_table.add_induction_law idx lst cls (class_table c);
+       check_class cls (feature_table c)
   with Not_found ->
     ()
 

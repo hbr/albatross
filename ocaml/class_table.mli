@@ -127,6 +127,8 @@ val set_constructors:  IntSet.t -> IntSet.t -> int -> t -> unit
 
 val add_induction_law: int -> (term list * int) list -> int -> t -> unit
 val primary_induction_law: int -> t -> int * (term list * int) list
+val add_wellfounded_induction_law: int -> int -> int -> t -> unit
+val primary_wellfounded_relation: int -> t -> int
 
 val has_ancestor: int -> int -> t -> bool
 val ancestor:     int -> int -> t -> parent_descriptor
