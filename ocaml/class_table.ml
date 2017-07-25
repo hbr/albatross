@@ -36,9 +36,11 @@ type descriptor      = {
     ident: int;
     name: int;
     bdesc: base_descriptor;
-    mutable indlaws: (int * (term list * int) list) list;
-                   (* law idx, constructors
-                      each constructor with a list of preconditions *)
+    mutable indlaws: (int * (term * int) array * IntSet.t) list;
+                   (* law idx, constructors, constructor set
+                      array: each constructor with a ghost recognizer *)
+    mutable rec_pairs: (term * term) list;
+    mutable can_match_pattern: bool;
     mutable wflaws: (int * int) list; (* law idx, relation *)
     mutable is_exp: bool
   }
@@ -729,46 +731,7 @@ let downgrade_signature
 
 
 
-let constructors (cls:int) (ct:t): IntSet.t =
-  assert (cls < count ct);
-  let bdesc = base_descriptor cls ct in
-  bdesc.constructors
-
-
-let base_constructors (cls:int) (ct:t): IntSet.t =
-  assert (cls < count ct);
-  let bdesc = base_descriptor cls ct in
-  bdesc.base_constructors
-
-
-
-let has_constructors (cls:int) (ct:t): bool =
-  constructors cls ct <> IntSet.empty
-
-
-
-let is_inductive (cls:int) (ct:t): bool =
-  assert (cls < count ct);
-  has_constructors cls ct
-
-
-let is_pseudo_inductive (cls:int) (ct:t): bool =
-  (descriptor cls ct).indlaws <> []
-  && not (is_inductive cls ct)
-
-
-let set_constructors
-      (base_set:IntSet.t) (set:IntSet.t) (cls:int) (ct:t): unit =
-  assert (cls < count ct);
-  assert (not (is_interface_check ct));
-  let bdesc = base_descriptor cls ct in
-  assert (bdesc.constructors = IntSet.empty);
-  bdesc.base_constructors <- base_set;
-  bdesc.constructors <- set
-
-
-
-let primary_induction_law (cls:int) (ct:t): int * (term list * int) list =
+let primary_induction_law (cls:int) (ct:t): int * (term * int) array * IntSet.t =
   assert (cls < count ct);
   match (descriptor cls ct).indlaws with
   | law :: _ ->
@@ -778,13 +741,75 @@ let primary_induction_law (cls:int) (ct:t): int * (term list * int) list =
 
 
 let add_induction_law
-      (idx:int) (cs:(term list * int) list) (cls:int) (ct:t)
+      (idx:int) (cs:(term * int) array) (cls:int) (ct:t)
     : unit =
   (* Add the induction law [idx] with its constructors [cs] to the class
      [cls]. *)
   assert (cls < count ct);
+  let cset =
+    Array.fold_left
+      (fun cset (_,co) -> IntSet.add co cset) IntSet.empty cs
+  in
   let desc = descriptor cls ct in
-  desc.indlaws <- desc.indlaws @ [idx,cs]
+  desc.indlaws <- desc.indlaws @ [idx,cs,cset]
+
+
+
+let is_inductive (cls:int) (ct:t): bool =
+  assert (cls < count ct);
+  (base_descriptor cls ct).constructors <> IntSet.empty
+
+
+let is_pseudo_inductive (cls:int) (ct:t): bool =
+  (descriptor cls ct).indlaws <> []
+  && not (is_inductive cls ct)
+
+
+let constructors (cls:int) (ct:t): IntSet.t =
+  assert (cls < count ct);
+  if is_inductive cls ct then
+    let bdesc = base_descriptor cls ct in
+    bdesc.constructors
+  else if is_pseudo_inductive cls ct then
+    let _,_,cset = primary_induction_law cls ct in
+    cset
+  else
+    IntSet.empty
+
+
+let base_constructors (cls:int) (ct:t): IntSet.t =
+  assert (cls < count ct);
+  let bdesc = base_descriptor cls ct in
+  bdesc.base_constructors
+
+
+let can_match_pattern (cls:int) (ct:t): bool =
+  (descriptor cls ct).can_match_pattern
+
+let set_pattern_match (cls:int) (ct:t): unit =
+  assert (is_pseudo_inductive cls ct);
+  (descriptor cls ct).can_match_pattern <- true
+
+
+let set_constructors
+      (base_set:IntSet.t) (set:IntSet.t) (cls:int) (ct:t): unit =
+  assert (cls < count ct);
+  assert (not (is_interface_check ct));
+  assert (not (is_inductive cls ct));
+  let bdesc = base_descriptor cls ct in
+  assert (bdesc.constructors = IntSet.empty);
+  bdesc.base_constructors <- base_set;
+  bdesc.constructors <- set
+
+
+
+let recognizer_pairs (cls:int) (ct:t): (term*term) list =
+  (descriptor cls ct).rec_pairs
+
+
+let add_recognizer_pair (t1:term) (t2:term) (cls:int) (ct:t): unit =
+  let desc = descriptor cls ct in
+  desc.rec_pairs <- (t1,t2) :: desc.rec_pairs
 
 
 let primary_wellfounded_relation (cls:int) (ct:t): int =
@@ -1470,7 +1495,9 @@ let add
      ident = idx;
      is_exp = is_exp;
      indlaws = [];
-     wflaws =  [];
+     wflaws  = [];
+     rec_pairs = [];
+     can_match_pattern = false;
      bdesc = bdesc}
     ct.seq;
   add_to_map idx ct;
@@ -1739,7 +1766,9 @@ let add_base_class
      ident = idx;
      is_exp = (name = "@DUMMY");
      indlaws = [];
-     wflaws =  [];
+     wflaws  = [];
+     rec_pairs = [];
+     can_match_pattern = false;
      bdesc = bdesc}
     ct.seq;
   let mdl_nme = ST.symbol mdl_name in

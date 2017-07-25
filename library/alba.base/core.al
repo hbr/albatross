@@ -520,7 +520,7 @@ all(a,b,n:NAT, p:{NAT})
         n = greatest ==> n.successor = 0
         n.successor.predecessor = n
 
-        (n /= 0) = (some(m) m /= greatest and m.successor = n)
+        (n /= 0) = (some(m) m /= greatest and n = m.successor)
 
         0 in p
         ==> (all(n) n /= greatest ==> n in p ==> n.successor in p)

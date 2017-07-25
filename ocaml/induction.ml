@@ -44,6 +44,11 @@ open Container
 open Signature
 open Printf
 
+exception Reject
+
+let is_tracing_ft (ft:Feature_table.t): bool =
+  Feature_table.verbosity ft > 1
+
 let is_tracing (c:Context.t): bool =
   Context.verbosity c > 1
 
@@ -75,15 +80,19 @@ let has_all_recursive_arguments
     0 (Sign.arity s)
 
 
-let split_constructor_rule (pp:term) (c:Context.t): term list * int =
+
+
+let split_constructor_rule (pp:term) (c:Context.t): term * int =
   (* Check if [pp] is a constructor rule of the form
 
          all(a1,...) pp1 ==> ... ==> c(a1,...) in p
 
      where each premise ppi is either a general condition not containing [p]
      or has the form [rai in p] where [rai] is a recursive argument of the
-     constructor [c]. In case of success return the list of preconditions and
-     the constructor. Otherwise raise Not_found.
+     constructor [c]. In case of success return the ghost recognizer and the
+     constructor. Otherwise raise Not_found.
+
+     Ghost recognizer: some(a1,...) cond1 and cond1 and ... x = c(a1,...)
    *)
   let open Context in
   let n,(nms,tps),(fgnms,fgtps),ps_rev,t0 =
@@ -93,7 +102,7 @@ let split_constructor_rule (pp:term) (c:Context.t): term list * int =
     raise Not_found;
   let c1 = push_typed0 (nms,tps) (fgnms,fgtps) c in
   match t0 with
-  | Application(Variable n,[|VAppl(c,args,_,_)|],_)
+  | Application(Variable n,[|VAppl(co,args,ags,oo)|],_)
        when Term.is_permutation args
             && Array.length args = n ->
      let pres,recargs =
@@ -107,24 +116,138 @@ let split_constructor_rule (pp:term) (c:Context.t): term list * int =
            | _ ->
               (* extract a precondition *)
               try
-                let pre = Term.down_from (-2) n ppi in
-                pre :: pres, recargs
+                ignore(Term.down_from (-2) n ppi);
+                ppi :: pres, recargs
               with Term_capture ->
                 raise Not_found
          )
          ([],IntSet.empty)
          ps_rev
      in
-     if has_all_recursive_arguments recargs c args c1 then
-       pres, c - count_variables c1
+     if has_all_recursive_arguments recargs co args c1 then
+       let reco0 =
+         (* build cond1 and cond2 and ... x = c(cargs) *)
+         let x_eq_co =
+           Context.equality_term (Variable (n+1)) (VAppl(co,args,ags,oo)) c1
+         in
+         match (List.rev pres) with
+         | [] ->
+            x_eq_co
+         | hd :: tl ->
+            Context.and_term
+              (List.fold_left
+                 (fun res cond -> Context.and_term res cond c1)
+                 hd
+                 tl)
+              x_eq_co
+              c1
+       in
+       let reco =
+         Context.prenex_term (Term.some_quantified n (nms,tps) reco0) c
+       in
+       assert (Context.is_well_typed reco c);
+       reco, co - count_variables c1
      else
        raise Not_found;
   | _ ->
      raise Not_found
 
 
+
+
+let is_pair_mutually_exclusive
+      (i:int)
+      (j:int)
+      (carr:(term*int) array)
+      (cls: int)
+      (ft:Feature_table.t)
+    : bool =
+  let pairs = Class_table.recognizer_pairs cls (Feature_table.class_table ft)
+  in
+  List.exists
+    (fun ri ->
+      List.exists
+        (fun rj ->
+          try
+            ignore
+              (List.find
+                  (fun (t1,t2) ->
+                    (Term.equivalent t1 ri &&  Term.equivalent t2 rj)
+                    || (Term.equivalent t2 ri &&  Term.equivalent t1 rj)
+                  )
+                  pairs
+              );
+            true
+          with Not_found ->
+            false
+        )
+        (Feature_table.recognizers (snd carr.(j)) ft)
+    )
+    (Feature_table.recognizers (snd carr.(i)) ft)
+
+
+
+let are_all_mutually_exclusive
+      (carr:(term*int) array)
+      (cls: int)
+      (ft:Feature_table.t)
+    : bool =
+  try
+    Array.iteri
+      (fun i (_,co_i) ->
+        Array.iteri
+          (fun j (_,co_j) ->
+            if i < j then
+              if is_pair_mutually_exclusive i j carr cls ft then
+                ()
+              else
+                raise Reject
+            else
+              ()
+          )
+          carr
+      )
+      carr;
+    true
+  with Reject ->
+    false
+
+
 let check_class (cls:int) (ft:Feature_table.t): unit =
-  ()
+  (* Check that a class is a complete pseudoinductive class i.e. a class which
+     can pattern match. The following conditions must be satisfied:
+
+     - The class has an induction law.
+
+     - All constructors have a complete set of projectors and at least one
+       candidate for a computable recognizer expression.
+
+     - The recognizer expressions must be mutually exclusive.
+   *)
+  let ct = Feature_table.class_table ft in
+  if Class_table.is_pseudo_inductive cls ct
+     && not (Class_table.can_match_pattern cls ct) then
+    let law_idx, carr, cset = Class_table.primary_induction_law cls ct in
+    if Array.for_all
+         (fun (_,co) -> Feature_table.has_all_projectors co ft)
+         carr then
+      begin
+        Array.iter
+          (fun (reco,co) ->
+            Feature_table.filter_recognizers reco co ft
+          )
+          carr;
+        if are_all_mutually_exclusive carr cls ft then
+          begin
+            if is_tracing_ft ft then
+              printf "\n\nClass %s can do pattern match\n\n"
+                     (Class_table.class_name cls ct);
+            Class_table.set_pattern_match cls ct
+          end
+      end
+
+
+
 
 
 let put_potential_induction_law
@@ -193,9 +316,9 @@ let put_potential_induction_law
        let lst =
          List.fold_left
            (fun lst pp ->
-             let pres,co = split_constructor_rule pp c in
+             let ghost_reco,co = split_constructor_rule pp c in
              if List.for_all (fun (_,co0) -> co <> co0) lst then
-               (pres,co) :: lst
+               (ghost_reco,co) :: lst
              else
                raise Not_found
            )
@@ -205,12 +328,41 @@ let put_potential_induction_law
        if is_tracing c then
          begin
            printf "\nnormal induction law\n";
-           printf "   %s\n\n" (string_of_term t (pop c));
+           printf "   %s\n" (string_of_term t (pop c));
+           printf "recognizers\n";
+           List.iter
+             (fun (reco,co) ->
+               printf "   %s\n" (string_of_term reco c))
+             lst;
+           printf "\n"
          end;
-       Class_table.add_induction_law idx lst cls (class_table c);
+       let carr =
+         Array.of_list
+           (List.map (fun (reco,co) -> Term.down 1 reco,co) lst) (* remove [p] *)
+       in
+       Class_table.add_induction_law idx carr cls (class_table c);
+       begin
+         try
+           let const_idx =
+             Search.array_find_min
+               (fun (reco,co) ->
+                 match reco with
+                 | QExp (_,_,_,_,false) ->
+                    false
+                 | _ ->
+                    true
+               )
+               carr
+           in
+           let reco,co = carr.(const_idx) in
+           Feature_table.add_recognizer  reco reco co (feature_table c)
+         with Not_found ->
+           ()
+       end;
        check_class cls (feature_table c)
   with Not_found ->
     ()
+
 
 
 
@@ -357,7 +509,8 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
             && not (Feature_table.is_ghost_term exp n ft)
             && is_most_general (Variable 0) c ->
      begin
-       let c2 = Context.push_typed0 (nms2,tps2) (fgnms2,fgtps2) c in
+       let ghost_reco = QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,false)
+       and c2 = Context.push_typed0 (nms2,tps2) (fgnms2,fgtps2) c in
        try
          let cond,co,cls = recognizer_condition_constructor t02 c2 in
          if is_tracing c then
@@ -369,10 +522,10 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
              printf "  recognizer     %s\n" (string_of_term exp c);
              printf "  equivalent to  %s\n\n"
                     (string_of_term
-                       (QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,false))
+                       ghost_reco
                        c);
            end;
-         Feature_table.set_recognizer exp cond co ft;
+         Feature_table.add_recognizer exp ghost_reco co ft;
          check_class cls ft
        with Not_found ->
             ()
@@ -397,7 +550,22 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
                  )
                  ps_rev
     ->
-     printf "n %d, len %d, i %d, false_id %d \n"
-            n (List.length ps_rev) i Constants.false_index
+     let open Context in
+     let a,b =
+       match ps_rev with
+       | [b;a] ->
+           a,b
+       | _ ->
+          assert false
+     and cls = class_of_type tps.(0) c
+     in
+     if is_tracing c then
+       begin
+         printf "\n\nmutually exclusive recognizer candidates found\n";
+         printf "   %s\n" (string_of_term a c);
+         printf "   %s\n\n" (string_of_term b c);
+       end;
+     Class_table.add_recognizer_pair a b cls (class_table c);
+     check_class cls (feature_table c)
   | _ ->
      ()

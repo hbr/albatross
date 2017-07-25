@@ -765,6 +765,12 @@ let function_of_terms (args:arguments) (result:term) (c:t): type_term =
   function_of_types argtps r_tp c
 
 
+
+
+let and_term (t1:term) (t2:term) (c:t): term =
+  Term.binary (and_index c) t1 t2
+
+
 let equality_term (t1:term) (t2:term) (c:t): term =
   let tp = type_of_term t1 c
   and nvars = count_variables c

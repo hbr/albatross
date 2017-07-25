@@ -962,7 +962,7 @@ let put_creators
   let clst = List.rev clst_rev in
   let cset = IntSet.of_list clst
   and cset_base = IntSet.of_list c0lst in
-  if not (Class_table.has_constructors cls ct) then
+  if not (Class_table.is_inductive cls ct) then
     begin
       creators_check_formal_generics creators.i clst tvs cls ft;
       Class_table.set_constructors cset_base cset cls ct;

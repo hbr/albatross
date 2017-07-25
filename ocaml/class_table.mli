@@ -120,13 +120,16 @@ val add: header_mark withinfo -> int withinfo option -> int -> Tvars.t -> t
 
 val is_inductive: int -> t -> bool
 val is_pseudo_inductive: int -> t -> bool
-val has_constructors: int -> t -> bool
+val can_match_pattern: int -> t -> bool
+val set_pattern_match: int -> t -> unit
 val constructors:     int -> t -> IntSet.t
 val base_constructors:     int -> t -> IntSet.t
 val set_constructors:  IntSet.t -> IntSet.t -> int -> t -> unit
 
-val add_induction_law: int -> (term list * int) list -> int -> t -> unit
-val primary_induction_law: int -> t -> int * (term list * int) list
+val add_induction_law: int -> (term * int) array -> int -> t -> unit
+val primary_induction_law: int -> t -> int * (term * int) array * IntSet.t
+val recognizer_pairs: int -> t -> (term*term) list
+val add_recognizer_pair: term -> term -> int -> t -> unit
 val add_wellfounded_induction_law: int -> int -> int -> t -> unit
 val primary_wellfounded_relation: int -> t -> int
 

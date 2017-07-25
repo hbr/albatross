@@ -298,7 +298,7 @@ let analyze_type_inspect
   assert (ivar < nvars);
   let tp = Context.variable_type ivar c in
   let cls = Context.variable_class ivar c in
-  let gen_ind_idx, cs =
+  let gen_ind_idx, cs, _ =
     try
       Class_table.primary_induction_law cls ct
     with Not_found ->
@@ -307,7 +307,7 @@ let analyze_type_inspect
   in
   let ind_idx = PC.specialize_induction_law gen_ind_idx goal_pred ivar pc
   and cons_set =
-    List.fold_left
+    Array.fold_left
       (fun set (_,cons) ->
         IntSet.add cons set
       )

@@ -36,7 +36,10 @@ val add_variant: info -> int -> int -> agens -> t -> unit
 
 val set_seed: int -> int -> agens -> t -> unit
 
-val set_recognizer: term -> term option -> int -> t -> unit
+val add_recognizer: term -> term -> int -> t -> unit
+val recognizers: int -> t -> term list
+val filter_recognizers: term -> int -> t -> unit
+
 val set_projector:  int -> int -> int -> t -> unit
 val has_all_projectors: int -> t -> bool
 

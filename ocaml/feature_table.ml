@@ -87,7 +87,7 @@ type descriptor = {
     sign:        Sign.t;
     mutable tp:  type_term;
     bdesc:       bdesc;
-    mutable recognizers: (term * term option) list;
+    mutable recognizers: (term * term) list; (* reco, ghost_reco *)
     mutable projectors: int IntMap.t;
     mutable is_constr: bool
   }
@@ -339,7 +339,7 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
      all(p,x) ind1 ==> ... ==> indn ==> p(x)
    *)
   assert (nb = 0); (* global only *)
-  assert (Class_table.has_constructors cls ft.ct);
+  assert (Class_table.is_inductive cls ft.ct);
   let cons = Class_table.constructors cls ft.ct
   and tp,tvs = Class_table.class_type cls ft.ct
   and imp_id = nb + 2 + Constants.implication_index
@@ -2506,10 +2506,11 @@ let set_seed (sd:int) (ivar:int) (ags:agens) (ft:t): unit =
   (base_descriptor ivar ft)#set_seed sd ags
 
 
-let has_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): bool =
+let has_recognizer (exp:term) (gh_reco:term) (idx:int) (ft:t): bool =
   try
+    let eq t1 t2 = Term.equivalent t1 t2 in
     ignore(List.find
-             (fun (e,c) -> e = exp && c = cond)
+             (fun (e,gr) -> eq e exp && eq  gr gh_reco)
              (descriptor idx ft).recognizers);
     true
   with Not_found ->
@@ -2517,12 +2518,37 @@ let has_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): bool =
 
 
 
-let set_recognizer (exp:term) (cond:term option) (idx:int) (ft:t): unit =
-  if has_recognizer exp cond idx ft then
+let recognizers (idx:int) (ft:t): term list =
+  List.map fst (descriptor idx ft).recognizers
+
+
+let add_recognizer (exp:term) (ghost_reco:term) (idx:int) (ft:t): unit =
+  if has_recognizer exp ghost_reco idx ft then
     ()
   else
+    begin
     let desc = descriptor idx ft in
-    desc.recognizers <- (exp,cond) :: desc.recognizers
+    desc.recognizers <- (exp,ghost_reco) :: desc.recognizers
+    end
+
+
+
+let filter_recognizers (ghost_reco:term) (co:int) (ft:t): unit =
+  (* Filter out the recognizers which have the ghost recognizer [ghost_reco] of
+     constructor [co].
+
+     A ghost recognizer has the form
+
+        some(cargs) cond and x = c(cargs)
+
+     which comes from the corresponding induction law.
+   *)
+  let desc = descriptor co ft in
+  desc.recognizers <-
+    List.filter
+      (fun (exp,ghost_reco0) -> Term.equivalent ghost_reco ghost_reco0)
+      desc.recognizers
+
 
 
 
