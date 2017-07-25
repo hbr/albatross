@@ -792,7 +792,7 @@ let update_types (subs:type_term array) (c:t): unit =
 
 
 
-let arguments_string (e:entry) (ct:Class_table.t): string =
+let entry_arguments_string (e:entry) (ct:Class_table.t): string =
   (* The string "(a:A, b1,b2:B, ... )" of all local arguments of the entry [e].
      In case that there are no arguments the empty string is returned and
      not "()". In case that there are formal generics they are prefixed.
@@ -804,7 +804,21 @@ let arguments_string (e:entry) (ct:Class_table.t): string =
   and tps = Array.sub (Formals.types e.fargs) 0 nargs
   in
   let args = Myarray.combine nms tps in
-  (*let args = Array.sub e.fargs 0 nargs in*)
+  Class_table.arguments_string tvs args ct
+
+
+
+let entry_full_arguments_string (e:entry) (ct:Class_table.t): string =
+  (* The string "(a:A, b1,b2:B, ... )" of all arguments of the entry [e].
+     In case that there are no arguments the empty string is returned and
+     not "()". In case that there are formal generics they are prefixed.
+   *)
+  let tvs   = e.tvs
+  in
+  let nms = Formals.names e.fargs
+  and tps = Formals.types e.fargs
+  in
+  let args = Myarray.combine nms tps in
   Class_table.arguments_string tvs args ct
 
 
@@ -814,12 +828,17 @@ let ith_arguments_string (i:int) (c:t): string =
   let e = ith_entry i c
   and ct = class_table c
   in
-  arguments_string e ct
+  entry_arguments_string e ct
 
 
 let local_arguments_string (c:t): string =
   let ct = class_table c in
-  arguments_string c.entry ct
+  entry_arguments_string c.entry ct
+
+
+let arguments_string (c:t): string =
+  let ct = class_table c in
+  entry_full_arguments_string c.entry ct
 
 
 let result_string (e:entry) (ct:Class_table.t): string =
@@ -833,7 +852,7 @@ let named_signature_string (c:t): string =
   (** Print the signature of the context [c] with all argument names.
    *)
   let ct = class_table c in
-  let argsstr = arguments_string c.entry ct
+  let argsstr = entry_arguments_string c.entry ct
   and resstr  = result_string    c.entry ct
   in
   let has_args = argsstr <> ""

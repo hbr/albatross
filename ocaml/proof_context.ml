@@ -268,6 +268,9 @@ let push_empty (pc:t): t =
   push0 base pc
 
 
+let arguments_string (pc:t): string =
+  Context.arguments_string (context pc)
+
 let rec global (pc:t): t =
   if is_global pc then
     pc

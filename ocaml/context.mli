@@ -133,6 +133,7 @@ val tvars: t -> Tvars.t
 
 val ith_arguments_string: int -> t -> string
 val local_arguments_string: t -> string
+val arguments_string: t -> string
 val boolean: t -> term
 
 val function_class:  t -> int

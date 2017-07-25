@@ -21,6 +21,7 @@ val is_public:          t -> bool
 val is_interface_use:   t -> bool
 val is_interface_check: t -> bool
 val is_tracing:         t -> bool
+val is_trace_extended:  t -> bool
 val verbosity:          t -> int
 val trace_prefix:       t -> string
 val trace_prefix_0:     t -> string
@@ -41,6 +42,7 @@ val string_of_term_anon: term -> int -> t -> string
 val string_of_term_i: int -> t -> string
 val string_long_of_term_i: int -> t -> string
 val string_of_type: type_term -> t -> string
+val arguments_string: t -> string
 
 val is_well_typed: term -> t -> bool
 val prenex_term: term -> t -> term

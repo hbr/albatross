@@ -254,16 +254,6 @@ let transformed_to_current (t:term) (idx:int) (at:t): term =
   Context.transformed_term t (descriptor idx at).c (context at)
 
 
-let string_of_term_i (i:int) (at:t): string =
-  let desc = descriptor i at in
-  Context.string_of_term desc.term desc.c
-
-
-let string_long_of_term_i (i:int) (at:t): string =
-  let desc = descriptor i at in
-  Context.string_long_of_term desc.term desc.c
-
-
 let nbenv_term (i:int) (at:t): int =
   (** The number of variables of the environment of the  [i]th proved term.
    *)
@@ -286,6 +276,14 @@ let local_term (i:int) (at:t): term =
     desc.term
   else
     Context.transformed_term desc.term desc.c at.c
+
+
+let string_of_term_i (i:int) (at:t): string =
+  string_of_term (local_term i at) at
+
+
+let string_long_of_term_i (i:int) (at:t): string =
+  string_long_of_term (local_term i at) at
 
 
 let variant (i:int) (bcls:int) (cls:int) (at:t): term =

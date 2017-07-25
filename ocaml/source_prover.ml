@@ -878,18 +878,37 @@ let string_of_case_context
     (goal: term)
     (pc:PC.t)
     : string =
-  let ass_str =
-    String.concat
-      ("\n" ^ prefix)
-      (List.rev_map
-         (fun a_idx -> PC.string_long_of_term_i a_idx pc)
-         ass_lst_rev)
+  let ass_str_lst =
+    List.fold_left
+      (fun lst a_idx ->
+        let str = PC.string_long_of_term_i a_idx pc in
+        let str =
+          if PC.is_trace_extended pc then
+            str ^ "\n" ^ prefix ^ "  " ^ Term.to_string (PC.term a_idx pc)
+          else
+            str
+        in
+        if List.mem str lst then
+          lst
+        else
+          str :: lst
+      )
+      []
+      ass_lst_rev
+  in
+  let ass_str = String.concat ("\n" ^ prefix) ass_str_lst
   and goal_str =
     PC.string_long_of_term goal pc
   in
-  prefix ^ ass_str ^ "\n"
-  ^ prefix ^ "---------------------\n"
+  prefix ^ "variables  " ^ (PC.arguments_string pc) ^ "\n"
+  ^ prefix ^ "-------------------------------\n"
+  ^ prefix ^ ass_str ^ "\n"
+  ^ prefix ^ "-------------------------------\n"
   ^ prefix ^ goal_str ^ "\n"
+  ^ (if PC.is_trace_extended pc then
+       prefix ^  "  "  ^ Term.to_string goal ^ "\n"
+     else
+       "")
 
 
 
@@ -1466,7 +1485,7 @@ and prove_type_case
     try
       prove_one goal prf pc2
     with Proof.Proof_failed msg ->
-      let casestr = string_of_case_context "" ass_lst_rev goal pc2
+      let casestr = string_of_case_context "    " ass_lst_rev goal pc2
       and patstr  = PC.string_of_term pat pc1 in
       error_info info ("Cannot prove case \"" ^ patstr ^ "\""
                        ^ msg ^ "\n" ^ casestr)
@@ -1598,7 +1617,7 @@ and prove_inductive_set_case
     try
       prove_one goal prf pc1
     with Proof.Proof_failed msg ->
-      let casestr = string_of_case_context "" ass_lst_rev goal pc1
+      let casestr = string_of_case_context "    " ass_lst_rev goal pc1
       and rulestr = PC.string_of_term rule pc0 in
       error_info info ("Cannot prove case \"" ^ rulestr ^ "\""
                        ^ msg ^ "\n" ^ casestr)
