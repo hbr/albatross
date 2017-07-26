@@ -540,7 +540,33 @@ end = struct
     Seq.iteri f t.seq
 end
 
+module Permutation: sig
+  val is_valid: int array -> bool
+  val invert:   int array -> int array
+end = struct
+  let is_valid (p:int array): bool =
+    let n = Array.length p in
+    let flags = Array.make n false in
+    try
+      for i = 0 to n - 1 do
+        if not (0 <= p.(i) && p.(i) < n) then
+          raise Not_found;
+        if flags.(p.(i)) then
+          raise Not_found;  (* duplicate element *)
+        flags.(p.(i)) <- true
+      done;
+      true
+    with Not_found ->
+      false
 
+  let invert (p:int array): int array =
+    let n = Array.length p in
+    let inv = Array.make n 0 in
+    for i = 0 to n - 1 do
+      inv.(p.(i)) <- i
+    done;
+    inv
+end
 
 
 let levenshtein_distance (s:string) (t:string) =
