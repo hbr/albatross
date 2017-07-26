@@ -440,10 +440,11 @@ let assumptions_for_variables
     (insp_vars: int list)  (* All variables of the inspect expression *)
     (goal: term)
     (pc:t)
-    : int list * int list =
+    : int list * int list * int =
   (* All assumptions of the contexts which are needed to define the variables
-     [ind_vars] and all the other variables which are not in [insp_vars] but
-     in the contexts plus the variables in the goal.
+     [ind_vars], all the other variables which are not in [insp_vars] but
+     in the contexts plus the variables in the goal and the total number of
+     variables encounterd in the contexts.
    *)
   let ass, nvars = assumptions_for_variables_0 ind_vars pc in
   let used_lst =
@@ -462,7 +463,7 @@ let assumptions_for_variables
         )
         (List.rev used_lst_rev)
   in
-  ass, used_lst
+  ass, used_lst, nvars
 
 
 

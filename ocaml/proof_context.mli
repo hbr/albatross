@@ -134,7 +134,7 @@ val assumptions:        t -> term list
 val assumptions_chain:  term -> t -> term
 val assumption_indices: t -> int list
 val assumptions_for_variables: int array -> int list -> term -> t
-                               -> int list * int list
+                               -> int list * int list * int
 val check_deferred: t -> unit
 val owner:          t -> int
 

@@ -480,9 +480,10 @@ let induction_goal_predicate
     (vars:int array)              (* induction variables *)
     (others:int list)             (* other variables *)
     (ass_lst:int list)            (* list of assumptions *)
+    (nvars_total: int)            (* number of variables in the used contexts *)
     (goal: term)
     (pc:PC.t)
-    : term =
+    : term * int array =
   (* Generate the goal predicate:
 
         {vars: all(others) a1 ==> a2 ==> ... ==> goal}
@@ -490,47 +491,50 @@ let induction_goal_predicate
    *)
   (*assert (ass_lst <> [] || others = []);*)
   let c = PC.context pc in
-  let nvars = PC.count_variables pc
-  and argnames = Context.argnames c
-  and argtypes = Context.argtypes c
-  in
-  let ass_rev = List.rev_map (fun idx -> PC.term idx pc) ass_lst
-  and n_ind_vars = Array.length vars
-  and all_vars = Array.append (Array.of_list others) vars
-  in
-  let n_all_vars = Array.length all_vars
-  in
-  let imp_id = n_all_vars + nvars + Constants.implication_index
-  and n_other_vars = n_all_vars - n_ind_vars
-  in
-  let map,_ =
-    Array.fold_left
-      (fun (map,i) ivar -> IntMap.add ivar i map, i+1)
-      (IntMap.empty,0)
-      all_vars in
-  let subst t = Term.lambda_inner_map t map in
-  let nms_inner = Array.init n_other_vars (fun i -> argnames.(all_vars.(i)))
-  and tps_inner = Array.init n_other_vars (fun i -> argtypes.(all_vars.(i)))
-  and nms_outer =
-    Array.init n_ind_vars (fun i -> argnames.(all_vars.(i+n_other_vars)))
-  and tps_outer =
-    Array.init n_ind_vars (fun i -> argtypes.(all_vars.(i+n_other_vars)))
-  in
   let chn =
-    List.fold_left
-      (fun chn p ->
-        let p = subst p in
-        Term.binary imp_id p chn
-      )
-      (subst goal)
-      ass_rev
+    PC.implication_chain
+      (List.rev_map (fun idx -> PC.term idx pc) ass_lst)
+      goal
+      pc
+  in
+  let others =
+    Term.used_variables_filtered
+      chn
+      (fun i -> IntSet.mem i (IntSet.of_list others))
+      false
+    |>  List.rev |> Array.of_list
+  in
+  let nothers = Array.length others
+  and nvars   = Array.length vars in
+  let chn =
+    let map =
+      interval_fold
+        (fun map i ->
+          let ivar =
+            if i < nothers then
+              others.(i)
+            else
+              vars.(i-nothers) in
+          IntMap.add ivar i map
+        )
+        IntMap.empty
+        0 (nothers + nvars)
+    in
+    Term.lambda_inner_map chn map
+  in
+  let varnme arr i = Context.variable_name arr.(i) c
+  and vartp  arr i = Context.variable_type arr.(i) c in
+  let nms_inner = Array.init nothers (varnme others)
+  and tps_inner = Array.init nothers (vartp  others)
+  and nms_outer = Array.init nvars   (varnme vars)
+  and tps_outer = Array.init nvars   (vartp  vars)
   in
   let t =
-    Term.all_quantified n_other_vars (nms_inner,tps_inner) empty_formals chn
+    Term.all_quantified nothers (nms_inner,tps_inner) empty_formals chn
   in
   let tp = Context.predicate_of_type (Context.tuple_of_types tps_outer c) c in
-  let t = Context.make_lambda n_ind_vars nms_outer  [] t true 0 tp c in
-  t
+  let t = Context.make_lambda nvars nms_outer  [] t true 0 tp c in
+  t, others
 
 
 
@@ -598,19 +602,20 @@ let inductive_set_context
         )
         vars
     in
-    let ass_lst, other_var_lst =
+    let ass_lst, other_vars, nvars_total =
       let insp_vars = Term.used_variables elem nvars in
       let insp_vars = Term.used_variables_0 set nvars insp_vars in
       PC.assumptions_for_variables vars insp_vars user_goal pc in
-    let goal_pred =
+    let goal_pred, other_vars =
       induction_goal_predicate
         vars
-        other_var_lst
+        other_vars
         ass_lst
+        nvars_total
         user_goal
         pc
     in
-    goal_pred, Array.of_list other_var_lst, ass_lst
+    goal_pred, other_vars, ass_lst
   in
   let pa = Application(set,[|elem|],false) in
   let pa_idx = prove_insert_report_base info pa false pc in
@@ -1374,21 +1379,11 @@ and prove_inductive_type
     (cases: one_case list)
     (pc:PC.t)
     : int =
-  if PC.is_tracing pc then begin
-    let prefix = PC.trace_prefix pc in
-    printf "\n\n%sInduction Proof\n\n" prefix;
-    printf "%sensure\n" prefix;
-    printf "%s    %s\n" prefix (PC.string_long_of_term goal pc);
-    printf "%sinspect\n" prefix;
-    printf "%s    %s\n\n"
-      prefix
-      (ST.string (Context.argnames (PC.context pc)).(ivar))
-  end;
-  (*let data = TID.make info ivar goal cases pc in*)
-  let ass_idx_lst, other_vars =
+  let ass_idx_lst, other_vars, nvars_total =
     PC.assumptions_for_variables [|ivar|] [ivar] goal pc in
-  let goal_pred =
-    induction_goal_predicate [|ivar|] other_vars ass_idx_lst goal pc
+  let goal_pred, other_vars =
+    induction_goal_predicate
+      [|ivar|] other_vars ass_idx_lst nvars_total goal pc
   and nass = List.length ass_idx_lst
   and ass_no_ivar =
     List.for_all
@@ -1398,6 +1393,19 @@ and prove_inductive_type
       )
       ass_idx_lst
   in
+  if PC.is_tracing pc then begin
+    let prefix = PC.trace_prefix pc in
+    printf "\n\n%sInduction Proof\n\n" prefix;
+    printf "%sensure\n" prefix;
+    printf "%s    %s\n" prefix (PC.string_long_of_term goal pc);
+    printf "%sgoal predicate\n" prefix;
+    printf "%s    %s\n" prefix (PC.string_long_of_term goal_pred pc);
+    printf "%sinspect\n" prefix;
+    printf "%s    %s\n\n"
+      prefix
+      (ST.string (Context.argnames (PC.context pc)).(ivar))
+  end;
+  (*let data = TID.make info ivar goal cases pc in*)
   let cons_set, ind_idx, tp =
     analyze_type_inspect info ivar goal_pred pc
   in
@@ -1438,7 +1446,7 @@ and prove_inductive_type
   in
   let res =
     let idx  = PC.add_beta_reduced idx_goal_redex false pc in
-    let vars = Array.map (fun i -> Variable i) (Array.of_list other_vars) in
+    let vars = Array.map (fun i -> Variable i) other_vars in
     PC.specialized idx vars [||] 0 pc
   in
   let res =
