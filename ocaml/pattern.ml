@@ -1,6 +1,7 @@
 open Term
 open Container
 open Support
+open Printf
 
 module FT = Feature_table
 
@@ -85,3 +86,72 @@ let unify_with_pattern
   in
   uni t pat;
   args
+
+
+let evaluated_primary_as_expression
+      (e:term) (n:int) (tps:types) (pat:term) (c:Context.t): term =
+  (* The as expression is [e as pat] where [e] cannot be matched neither
+     partially against the pattern.
+
+     The as expression has the evaluation
+
+         all(pvars) e = pat
+
+   *)
+  let nms = anon_argnames n in
+  let e = Term.up n e
+  and c1 = Context.push_typed0 (nms,tps) empty_formals c in
+  Term.some_quantified n (nms,tps) (Context.equality_term e pat c1)
+
+
+let make_as_expression
+      (e:term) (tps:formals) (pat:term) (c:Context.t): term =
+  (* Construct the as expression [e as pat] and eliminate all unused variables
+     from (nms,tps).
+   *)
+  assert (Context.has_no_type_variables c);
+  let (nms,tps),fgs,pat = Term.remove_unused tps 0 empty_formals pat in
+  let n = Array.length nms in
+  Flow( Asexp, [|e; Term.pattern n (nms,tps) pat|] )
+
+
+let evaluated_as_expression (t:term) (c:Context.t): term =
+  match t with
+  | Flow (Asexp, [|e;pat|]) ->
+     let n,(nms,tps),pat = Term.pattern_split pat in
+     let rec collect
+               (e:term) (pat:term) (lst:(term*term) list): (term*term) list =
+       match e, pat with
+       | VAppl(i,args1,_,_), VAppl(j,args2,_,_) when i +  n= j ->
+          let len = Array.length args1 in
+          assert (len = Array.length args2);
+          if len = 0 then
+            (e,pat)::lst
+          else
+          interval_fold
+            (fun lst k -> collect args1.(k) args2.(k) lst)
+            lst 0 len
+       | _ ->
+          (e,pat)::lst
+     in
+     begin
+       match collect e pat [] |> List.rev with
+       | [] ->
+          assert false (* cannot happen; at least one pair must be present *)
+       | [e0,pat0] ->
+          assert (Term.equivalent e e0);
+          assert (Term.equivalent pat pat0);
+          evaluated_primary_as_expression e n tps pat c
+       | (e0,pat0) :: rest ->
+          List.fold_left
+            (fun res (e0,pat0) ->
+              Context.and_term
+                res
+                (make_as_expression e0 (nms,tps) pat0 c)
+                c
+            )
+            (make_as_expression e0 (nms,tps) pat0 c)
+            rest
+     end
+  | _ ->
+     assert false (* Not an as expression *)

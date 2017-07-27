@@ -1414,8 +1414,9 @@ let evaluated_as_expression
     equality_term t0 (VAppl(c,args,ags,false)) (nb+n) tp tvs ft
   in
   match t with
-    Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags,_),_)|]) ->
+  | Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags,_),_)|]) ->
       assert (n + nb <= c);
+      assert (0 < n);
       let eq = eq_term c n t0 args ags in
       QExp(n,(nms,tps),fgs,eq,false)
   | Flow(Asexp,[|t0;VAppl(c,args,ags,_)|]) ->

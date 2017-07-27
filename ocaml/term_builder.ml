@@ -1270,6 +1270,7 @@ let complete_as_expression (tb:t): unit =
   let (pat,_),  terms = pop_term tb.terms in
   let nargs,names,tps = context_names_and_types tb in
   check_pattern nargs pat tb;
+  let names = empty_argnames nargs in
   let pat = Term.some_quantified nargs (names,tps) pat
   in
   pop_context tb;

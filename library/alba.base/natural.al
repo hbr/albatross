@@ -254,20 +254,31 @@ all(a,b:NATURAL)
 all(a:NATURAL)
     ensure
         a <= a
-    inspect a end
-
-
-all(a:NATURAL)
-    ensure
-        a <= 0 ==> a = 0
-    inspect a end
-
-
-
-all(a:NATURAL)
-    ensure
-       successor(a) <= 0 ==> false
+    inspect
+        a
     end
+
+
+all(a:NATURAL)
+    require
+        a <= 0
+    ensure
+        a = 0
+    inspect
+        a
+    end
+
+all(a:NATURAL)
+    require
+        a <= 0
+        a as successor(_)
+    ensure
+        false
+    assert
+        a = 0
+    end
+
+
 
 
 all(a,b:NATURAL)
@@ -751,19 +762,6 @@ least(p:{NATURAL}): ghost NATURAL
 {: Difference
    ========== :}
 
-
-
-all(a,b:NATURAL)
-    require
-        b <= a
-    ensure
-        not ((a,b) as (0,successor(_)))
-    inspect
-        a
-    case 0
-        assert
-            b = 0
-    end
 
 
 

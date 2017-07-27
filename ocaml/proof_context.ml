@@ -1403,10 +1403,8 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       Feature_table.false_constant nvars,
       Eval.As(false,eargs)
     | Undecidable ->
-        let tvs = tvars pc in
-        let exp =
-          Feature_table.evaluated_as_expression t nvars tvs ft in
-        exp, Eval.AsExp t
+        Pattern.evaluated_as_expression t (context pc),
+        Eval.AsExp t
 
   and maybe_eval (t:term) (lazy_:bool) (depth:int) (pc:t): term * Eval.t =
     try

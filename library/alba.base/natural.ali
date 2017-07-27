@@ -124,6 +124,9 @@ all(a,b,c,x:NATURAL,p:{NATURAL})
         a + b = 0  ==> b = 0
 
         -- order
+        a <= 0     ==>  a = 0
+        a <= 0 ==> a as successor(_) ==> false
+
         a <= b     ==>  a < b + 1
         a < b + 1  ==>  a <= b
         a + 1 <= b ==>  a < b

@@ -138,7 +138,7 @@ module Term: sig
   val used_variables_transform: term -> int -> int array * int array
   val unused_transform:     formals -> int -> formals -> term ->
     formals * arguments * formals * arguments
-
+  val remove_unused: formals -> int -> formals -> term -> formals * formals * term
   val equivalent: term -> term -> bool
 
   val equivalent_list: term list -> term list -> bool
