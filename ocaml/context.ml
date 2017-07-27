@@ -770,8 +770,13 @@ let and_term (t1:term) (t2:term) (c:t): term =
   Term.binary (and_index c) t1 t2
 
 
+let not_term (t:term) (c:t): term =
+  Term.unary (not_index c) t
+
+
 let implication_term (t1:term) (t2:term) (c:t): term =
   Term.binary (implication_index c) t1 t2
+
 
 let implication_chain (ps_rev:term list) (tgt:term) (c:t): term =
   Term.make_implication_chain ps_rev tgt (implication_index c)
@@ -1676,19 +1681,17 @@ let term_preconditions (t:term)  (c:t): term list =
               assert (len mod 2 = 1);
               let ncases = len / 2
               and nvars = count_variables c in
-              let unmatched =
-                Feature_table.unmatched_inspect_cases args nvars all_ntvs c.ft
-              in
               let lst = List.fold_left
                   (fun lst (n,tps,pat) ->
-                    let nms = standard_argnames n
+                    let nms = empty_argnames n
                     and tps = Array.of_list tps in
                     let q = Term.pattern n (nms,tps) pat in
                     let t = Flow(Asexp,[|args.(0);q|]) in
                     let t = Term.unary not_id t in
                     t :: lst)
                   lst
-                  unmatched in
+                  (Feature_table.unmatched_inspect_cases args nvars all_ntvs c.ft)
+                  in
               let rec cases_from (i:int) (lst:term list): term list =
                 if i = ncases then
                   lst

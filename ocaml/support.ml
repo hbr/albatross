@@ -134,6 +134,8 @@ let standard_argnames (size:int): int array =
 let anon_argnames (size:int): int array =
   Array.init size (fun i -> ST.symbol ("$" ^ (string_of_int i)))
 
+let empty_argnames (size:int): int array =
+  Array.make size (ST.symbol "_")
 
 (*
 -----------------------------------------------------------------------------
