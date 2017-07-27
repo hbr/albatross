@@ -463,7 +463,7 @@ source_proof_1: /* gets a proof step list and a proof_expression */
 }
 
 
-source_proof_2: /* gets a proof expression */
+source_proof_2: /* gets an optional proof expression */
     { None }
 |   optsemi proof_expression {
   Some $2
@@ -873,7 +873,6 @@ feature_body:
     require_block feature_implementation ensure_block KWend
     { Body1($1, Some $2, $3) }
 |   require_block feature_implementation KWend  { Body1($1, Some $2, []) }
-|   feature_implementation ensure_block KWend   { Body1([], Some $1, $2) }
 |   require_block ensure_block KWend            { Body1($1, None,    $2) }
 |   require_block KWend                         { Body1($1, None,    []) }
 |   feature_implementation KWend                { Body1([], Some $1, []) }

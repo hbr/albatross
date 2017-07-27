@@ -139,6 +139,7 @@ let kwtoken id =
     Parser.KWrequire -> kw, (true,false)
   | Parser.KWdeferred-> kw, (true,false)
   | Parser.KWensure  -> kw, (true,false)
+  | Parser.KWassert  -> kw, (true,false)
   | Parser.KWall     -> kw, (true,false)
   | Parser.KWclass   -> kw, (true,false)
   | Parser.KWend     -> kw, (false,true)
