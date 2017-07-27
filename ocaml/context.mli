@@ -150,6 +150,8 @@ val predicate_of_term: term -> t -> type_term
 val function_of_types: types -> type_term -> t -> type_term
 val function_of_terms: arguments -> term -> t -> type_term
 
+val args_of_tuple: term -> t -> term array
+
 val update_types: type_term array -> t -> unit
 
 val string_of_term0:      term -> bool -> bool -> int -> t -> string
@@ -187,6 +189,8 @@ val split_general_implication_chain:
 val split_equality: term -> int -> t -> int * int * term * term
 val equality_term: term -> term -> t -> term
 val and_term: term -> term -> t -> term
+val implication_term: term -> term -> t -> term
+val implication_chain: term list -> term -> t -> term
 val definition_term: int -> int -> agens -> t -> int * int array * term
 val arity:      int -> int -> t -> int
 val is_inductive_set: int -> t -> bool

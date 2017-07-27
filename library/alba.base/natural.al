@@ -753,7 +753,6 @@ least(p:{NATURAL}): ghost NATURAL
 
 
 
-
 all(a,b:NATURAL)
     require
         b <= a
@@ -765,19 +764,6 @@ all(a,b:NATURAL)
         assert
             b = 0
     end
-
-
-
-all(a,b,n,m:NATURAL)
-    require
-        b <= a
-        (a,b) = (successor(n),successor(m))
-    ensure
-        m <= n
-    assert
-        (successor(n),successor(m)) in {x,y: y <= x}
-    end
-
 
 
 

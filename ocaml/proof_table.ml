@@ -137,8 +137,8 @@ let split_some_quantified (t:term) (at:t): int * formals * term =
 let implication (a:term) (b:term) (at:t): term =
   Term.binary (imp_id at) a b
 
-let implication_chain (ps: term list) (tgt:term) (at:t): term =
-  Term.make_implication_chain ps tgt (imp_id at)
+let implication_chain (ps_rev: term list) (tgt:term) (at:t): term =
+  Context.implication_chain ps_rev tgt at.c
 
 let split_implication_chain (t:term) (at:t): term list * term =
   Term.split_implication_chain t (imp_id at)

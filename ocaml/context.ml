@@ -750,7 +750,6 @@ let tuple_of_terms (args:arguments) (c:t): type_term =
   tuple_of_types argtps c
 
 
-
 let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
   let fidx = function_class c
   and tup  = tuple_of_types argtps c in
@@ -769,6 +768,13 @@ let function_of_terms (args:arguments) (result:term) (c:t): type_term =
 
 let and_term (t1:term) (t2:term) (c:t): term =
   Term.binary (and_index c) t1 t2
+
+
+let implication_term (t1:term) (t2:term) (c:t): term =
+  Term.binary (implication_index c) t1 t2
+
+let implication_chain (ps_rev:term list) (tgt:term) (c:t): term =
+  Term.make_implication_chain ps_rev tgt (implication_index c)
 
 
 let equality_term (t1:term) (t2:term) (c:t): term =
@@ -1097,6 +1103,14 @@ let tuple_of_args (args:arguments) (tup_tp:type_term) (c:t): term =
     end
   in
   tup_from 0 tup_tp
+
+
+let args_of_tuple (t:term) (c:t): term array =
+  Feature_table.args_of_tuple t (count_variables c) c.ft
+
+
+let nargs_of_tuple (t:term) (n:int) (tp:type_term) (c:t): term array =
+  Feature_table.args_of_tuple_ext t tp (count_variables c) n c.ft
 
 
 let is_case_match_expression (t:term) (c:t): bool =
@@ -1460,27 +1474,43 @@ let transformed_term (t:term) (c0:t) (c:t): term =
 
 
 let case_preconditions
-    (insp:term) (insp_tp:type_term)
-    (n:int) (nms:int array) (tps:types) (pat:term)
-    (pres:term list) (lst:term list) (c:t)
+      (insp:term) (insp_tp:type_term)      (* Inspected term *)
+      (n:int) (nms:int array) (tps:types)  (* Case context *)
+      (pat:term)
+      (pres:term list)            (* Preconditions of the result expression *)
+      (lst:term list)             (* List to prepend preconditions *)
+      (c:t)
     : term list =
   (*  Generate from pres the list of terms of the form
 
           all(x,y,...) insp = pat ==> pre
+
+      If the inspected expression and the pattern are tuples [i1,i2,...]
+      [p1,p2,...], then the precondition term is
+
+          all(x,y,...) i1 = p1 ==> i2 = p2 ==> ... ==> pre
+
    *)
   let insp   = Term.up n insp
-  and imp_id = n + implication_index c
-  and nb = n + count_variables c
-  and tvs = tvars c
+  and c1 = push_typed0 (nms,tps) empty_formals c
   in
+  let insp_arr = args_of_tuple insp c1 in
+  let ntup = Array.length insp_arr in
+  let pat_arr = nargs_of_tuple pat ntup insp_tp c1
+  in
+  assert (ntup = Array.length pat_arr);
   List.fold_left
     (fun lst pre ->
-      let eq =
-        Feature_table.equality_term insp pat nb insp_tp  tvs c.ft
+      let eqlst_rev =
+        interval_fold
+          (fun eqlst i ->
+            (equality_term insp_arr.(i) pat_arr.(i) c1) :: eqlst
+          )
+          [] 0 ntup
       in
-      let t = Term.binary imp_id eq pre in
-      let t = Term.all_quantified n (nms,tps) empty_formals t in
-      t :: lst)
+      let chn = implication_chain eqlst_rev pre c1 in
+      (Term.all_quantified n (nms,tps) empty_formals chn) :: lst
+    )
     lst
     pres
 
