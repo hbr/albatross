@@ -100,14 +100,19 @@ let add_axiom (it:info_term) (pc:PC.t): int =
 
 
 
-let prove_insert_report_base
-    (info:info) (goal:term) (search:bool) (pc:PC.t): int =
+let prove_insert_report_base0
+    (info:info) (goal:term) (print_goal:term) (search:bool) (pc:PC.t): int =
   try
     let t,pt = Prover.proof_term goal pc in
     PC.add_proved_term t pt search pc
   with Proof.Proof_failed msg ->
-    error_info info ("Cannot prove \"" ^ (PC.string_of_term goal pc)
+    error_info info ("Cannot prove \"" ^ (PC.string_of_term print_goal pc)
                      ^ "\"" ^ msg)
+
+
+let prove_insert_report_base
+      (info:info) (goal:term) (search:bool) (pc:PC.t): int =
+  prove_insert_report_base0 info goal goal search pc
 
 
 let prove_insert_report (goal:info_term) (search:bool) (pc:PC.t): int =
@@ -543,6 +548,9 @@ let induction_goal_predicate
 let inductive_set
     (info:info) (set:term) (c:Context.t)
     : term * type_term * term array =
+  (* Check if the term [set] represents an inductively defined set. If yes,
+     return the set term expanded, the type of the set and the rules
+     transformed to the context. *)
   try
     let set_exp = Context.inductive_set set c in
     begin
@@ -558,12 +566,70 @@ let inductive_set
                      "\" does not evaluate to an inductive set")
 
 
+let inductive_set_elements
+      (info:info)
+      (set:term)
+      (elem:term)
+      (c:Context.t)
+    : term array * int list =
+  (* Check the inductive set elements [elem] and return an element array with
+     a list of positions (in reversed order) which need to be substituted by
+     new variables.  *)
+  let open Format in
+  begin
+    (* Check that [set] and [elem] do not have common variables. *)
+    let nvars = Context.count_variables c in
+    let common_vars =
+      IntSet.inter
+        (IntSet.of_list (Term.used_variables elem nvars))
+        (IntSet.of_list (Term.used_variables set nvars))
+    in
+    if not (IntSet.is_empty common_vars) then
+      begin
+        eprintf "@[<v>%s: %s@,%s@,@,   %s@,@,%s@,@,   %s@,@,%s@,@,   %s@]@."
+                (info_string info)
+                "Induction error"
+                "The inductive set"
+                (Context.string_of_term set c)
+                "must not have common variables with the element(s)"
+                (Context.string_of_term elem c)
+                "but there the common variable(s)"
+                (String.concat
+                   ", "
+                   (List.map
+                      (fun i -> ST.string (Context.variable_name i c))
+                      (IntSet.elements common_vars)));
+        exit 0
+      end
+  end;
+  let elems = Context.args_of_tuple elem c in
+  let vlst,elst =
+    interval_fold
+      (fun (vlst,elst) i ->
+        match elems.(i) with
+        | Variable j ->
+           if List.mem j vlst then
+             vlst,
+             i :: elst
+           else
+             j :: vlst,
+             elst
+        | _ ->
+           vlst,
+           i :: elst
+      )
+      ([],[]) 0 (Array.length elems)
+  in
+  elems, elst
+
+
 
 
 let inductive_set_context
     (info: info)
     (elem: term)
     (set:  term)
+    (insp: term)
     (user_goal: term)
     (pc:PC.t)
     : inductive_set_data =
@@ -576,31 +642,15 @@ let inductive_set_context
    *)
   assert (not (PC.is_global pc));
   let c    = PC.context pc in
-  let set_expanded, set_tp, rules = inductive_set info set c
-  in
   let nvars = Context.count_variables c in
+  let set_expanded, set_tp, rules = inductive_set info set c in
   let goal_pred, other_vars, ass_lst =
-    let ft = Context.feature_table c in
-    let set_vars = Term.used_variables set nvars in
-    let vars   =
-      Myarray.remove_duplicates (Feature_table.args_of_tuple elem nvars ft)
-    in
-    let vars = Array.map
-        (fun arg ->
-          match arg with
-            Variable i when i < nvars ->
-              if List.mem i set_vars then
-                error_info
-                  info
-                  ("Induction variable \"" ^ (PC.string_of_term arg pc) ^
-                   "\" must not occur in the set/relation \"" ^
-                   (PC.string_of_term set pc) ^ "\"");
-              i
-          | _ ->
-              error_info info ("\"" ^ (PC.string_of_term arg pc) ^
-                               "\" is not a variable")
-        )
-        vars
+    let vars =
+      Array.map
+        (fun v -> match v with
+                  | Variable i -> i
+                  | _ -> assert false)
+        (Context.args_of_tuple elem c)
     in
     let ass_lst, other_vars, nvars_total =
       let insp_vars = Term.used_variables elem nvars in
@@ -618,31 +668,21 @@ let inductive_set_context
     goal_pred, other_vars, ass_lst
   in
   let pa = Application(set,[|elem|],false) in
-  let pa_idx = prove_insert_report_base info pa false pc in
+  let pa_idx = prove_insert_report_base0 info pa insp false pc in
   let ind_idx = PC.add_set_induction_law set goal_pred elem pc in
-  if PC.is_tracing pc then begin
-    let prefix = PC.trace_prefix pc in
-    printf "\n\n";
-    printf "%sProof with inductively defined set\n\n" prefix;
-    printf "%sensure\n" prefix;
-    printf "%s    %s\n" prefix (PC.string_long_of_term user_goal pc);
-    printf "%sinspect\n" prefix;
-    printf "%s    %s\n\n"
-      prefix
-      (PC.string_long_of_term (Application(set,[|elem|],false)) pc)
-  end;
-  {pc             = pc;
+  {pc;
    goal           = user_goal;
    goal_predicate = goal_pred;
-   other_vars     = other_vars;
-   ass_lst        = ass_lst;
-   set            = set;
-   set_expanded   = set_expanded;
+   other_vars;
+   ass_lst;
+   set;
+   set_expanded;
    element        = elem;
-   rules          = rules;
+   rules;
    induction_rule = ind_idx;
    element_in_set = pa_idx;
  }
+
 
 
 
@@ -1357,20 +1397,120 @@ and prove_branch
   PC.add_proved_term t pt false pc
 
 
+
 and prove_inspect
     (info:info)
     (goal:term)
     (insp:expression) (cases:one_case list) (pc:PC.t): int =
+  (* Decide if it is an induction proof with an inductively defined set or an
+     inductive class. If instead of pure induction variables general expressions
+     are used then a new context has to be introduced with variables which are
+     equal to the expressions and the induction proof has to be executed in the
+     new context.
+   *)
   let insp = get_term insp pc in
-  match insp.v with
-    Variable var_idx ->
-      prove_inductive_type info goal var_idx cases pc
-  | Application (set,args,_) ->
-      assert (Array.length args = 1);
-      prove_inductive_set info goal args.(0) set cases pc
-  | _ ->
-      error_info info "Illegal induction proof"
-
+  let c = PC.context pc in
+  let cls = Context.class_of_term insp.v c in
+  let open Format in
+  if cls = Constants.boolean_class then
+    begin (* Induction on the definition of a set *)
+      match insp.v with
+      | Application (set,args,_) ->
+         assert (Array.length args = 1);
+         let elems,elst_rev = inductive_set_elements insp.i set args.(0) c in
+         if PC.is_tracing pc then
+           begin
+             let open Format in
+             printf
+               "@[<v>@,@,%s@[<v 4>%s@,%s@,    %s@,%s@,    %s@,@,@]@]@."
+               (PC.trace_prefix pc)
+               "Induction Proof with Inductive Set"
+               "ensure"
+               (PC.string_of_term goal pc)
+               "inspect"
+               (PC.string_of_term insp.v pc)
+           end;
+         if elst_rev <> [] then
+           let nnew = List.length elst_rev in
+           let nms1 = anon_argnames nnew
+           and tps1 =
+             Array.of_list
+               (List.rev_map (fun i -> Context.type_of_term elems.(i) c) elst_rev)
+           and earr =
+             Array.of_list
+               (List.rev_map (fun i -> elems.(i)) elst_rev)
+           in
+           PC.close pc;
+           let pc1 = PC.push_typed0 (nms1,tps1) empty_formals pc
+           and elems1 = Array.map (Term.up nnew) elems
+           and set1 = Term.up nnew set
+           and goal1 = Term.up nnew goal
+           and insp1 = Term.up nnew insp.v
+           in
+           let c1 = PC.context pc1 in
+           let eq_terms,_ =
+             List.fold_left
+               (fun (lst,i) j ->
+                 let k = nnew - i - 1 in (* we are going in reverse order *)
+                 let eq1 = Context.equality_term elems1.(j) (Variable k) c1
+                 and eq  = Context.equality_term elems.(j) elems.(j) c
+                 in
+                 elems1.(j) <- Variable k;
+                 (eq1,eq) :: lst, i + 1
+               )
+               ([],0)
+               elst_rev
+           in
+           List.iter
+             (fun (eq1,eq) -> ignore(PC.add_assumption eq1 true pc1))
+             eq_terms;
+           PC.close pc1;
+           let elem1 = Context.tuple_of_args elems1 c1 in
+           let idx =
+             prove_inductive_set insp.i elem1 set1 insp1 goal1 cases pc1
+           in
+           let t,pt = PC.discharged idx pc1 in
+           let idx = PC.add_proved_term t pt false pc in
+           let idx = PC.specialized idx earr [||] 0 pc in
+           List.fold_left
+             (fun idx (eq1,eq) ->
+               let eq_idx =
+                 try
+                   PC.find_goal eq pc
+                 with Not_found ->
+                   assert false (* 'exp = exp' must be found *)
+               in
+               PC.add_mp eq_idx idx false pc
+             )
+             idx
+             eq_terms
+         else
+           let elem = Context.tuple_of_args elems c in
+           prove_inductive_set insp.i elem set insp.v goal cases pc
+      | _ ->
+         error_info insp.i "Illegal inspect term"
+    end
+  else
+    begin (* Induction on an inductive type *)
+      try
+        let ind_idx = Class_table.primary_induction_law cls (PC.class_table pc)
+        in
+        match insp.v with
+        | Variable ivar ->
+           prove_inductive_type insp.i goal ivar cases pc
+        | _ ->
+           not_yet_implemented insp.i "Induction on general expressions"
+      with Not_found ->
+        eprintf "@[<v>%s: %s@,%s@ \"%s\" %s %s %s]@."
+                (info_string insp.i)
+                "Type error"
+                "The term"
+                (PC.string_of_term insp.v pc)
+                "has type"
+                (Context.string_of_type (Context.type_of_term insp.v c) c)
+                "which is not an inductive type";
+        exit 1
+    end
 
 and prove_inductive_type
     (info:info)
@@ -1510,12 +1650,13 @@ and prove_type_case
 
 
 and prove_inductive_set
-    (info:info)
-    (goal:term)
-    (elem:term)
-    (set: term)
-    (cases: one_case list)
-    (pc:PC.t)
+      (info:info)
+      (elem:term)
+      (set:term)     (* elem in set *)
+      (insp:term)    (* as originally in the source *)
+      (goal:term)
+      (cases: one_case list)
+      (pc:PC.t)
     : int =
   (* Execute a proof with an inductive set:
 
@@ -1532,9 +1673,7 @@ and prove_inductive_set
          ...
          end
    *)
-  assert (not (PC.is_global pc));
-  let data = inductive_set_context info elem set goal pc
-  in
+  let data = inductive_set_context info elem set insp goal pc in
   let nrules = Array.length data.rules
   in
   let proved =
@@ -1549,7 +1688,7 @@ and prove_inductive_set
             irule
             (List.length data.ass_lst)
             data.goal_predicate
-            pc in
+            data.pc in
         let idx =
           prove_inductive_set_case
             ie.i rule ass_lst_rev goal goal_pred prf pc_inner data.pc
@@ -1574,7 +1713,7 @@ and prove_inductive_set
                 irule
                 (List.length data.ass_lst)
                 data.goal_predicate
-                pc
+                data.pc
             in
             prove_inductive_set_case
               info data.rules.(irule) ass_lst_rev goal goal_pred
@@ -1587,14 +1726,14 @@ and prove_inductive_set
   let gidx = PC.add_mp data.element_in_set ind_idx false data.pc
   in
   let res =
-    let idx = PC.add_beta_reduced gidx false pc in
+    let idx = PC.add_beta_reduced gidx false data.pc in
     let vars = Array.map (fun i -> Variable i) data.other_vars in
-    PC.specialized idx vars [||] 0 pc
+    PC.specialized idx vars [||] 0 data.pc
   in
   let res =
     List.fold_left
       (fun res ass_idx ->
-        PC.add_mp ass_idx res false pc
+        PC.add_mp ass_idx res false data.pc
       )
       res
       data.ass_lst

@@ -1088,26 +1088,12 @@ let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
   Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 
-let tuple_of_args (args:arguments) (tup_tp:type_term) (c:t): term =
-  (* The arguments [a,b,...] transformed to a tuple (a,b,...) or the type [tup_tp].
+let tuple_of_args (args:arguments) (c:t): term =
+  (* The arguments [a,b,...] transformed to a tuple (a,b,...).
    *)
-  let nargs = Array.length args
-  and tup_id = tuple_index c
-  in
-  assert (0 < nargs);
-  let rec tup_from (i:int) (tup_tp:type_term): term =
-    if i = nargs - 1 then
-      args.(i)
-    else begin
-      assert (i + 2 <= nargs);
-      let cls,ags = split_type tup_tp in
-      assert (cls = tuple_class c);
-      assert (Array.length ags = 2);
-      let b = tup_from (i + 1) ags.(1) in
-      VAppl (tup_id, [| args.(i); b |], ags, false)
-    end
-  in
-  tup_from 0 tup_tp
+  let tp = tuple_of_terms args c
+  and nvars = count_variables c in
+  Feature_table.tuple_of_args args tp nvars c.ft
 
 
 let args_of_tuple (t:term) (c:t): term array =

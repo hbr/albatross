@@ -180,6 +180,7 @@ module Mylist: sig
 
   val sum:          ('a -> int) -> int -> 'a list -> int
 
+  val has: ('a -> bool) -> 'a list -> bool
   val has_duplicates: 'a list -> bool
 
   val combine:      'a list -> 'b list -> ('a*'b) list
@@ -220,6 +221,13 @@ end = struct
 
   let sum (f:'a->int) (start:int) (l:'a list): int =
     List.fold_left (fun cum e -> cum + f e) start l
+
+  let has (f:'a->bool)  (lst:'a list): bool =
+    try
+      ignore(List.find f lst);
+      true
+    with Not_found ->
+      false
 
   let rec has_duplicates (l:'a list): bool =
     match l with

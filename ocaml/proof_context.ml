@@ -1976,7 +1976,7 @@ let add_consequences_variable_definition (i:int) (pc:t): unit =
        [v] substituted by [exp] to the context. Furthermore add the substituted
        assumptions to all variables occurring in [exp].
 
-     - Scan all assertions whre [v] has already been used in the substitution
+     - Scan all assertions where [v] has already been used in the substitution
        term of another variable. *)
   let var_def (i:int): int * int * term  =
     let eq_id, left, right = equality_data i pc in

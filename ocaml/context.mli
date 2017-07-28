@@ -145,6 +145,7 @@ val class_of_term: term -> t -> int
 val class_of_type: type_term -> t -> int
 val tuple_of_types: types -> t -> type_term
 val tuple_of_terms: arguments -> t -> type_term
+val tuple_of_args:  arguments -> t -> term
 val predicate_of_type: type_term -> t -> type_term
 val predicate_of_term: term -> t -> type_term
 val function_of_types: types -> type_term -> t -> type_term
