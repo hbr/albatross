@@ -84,7 +84,7 @@ val add_proved:         term -> proof_term -> t -> int
 val add_proved_list:    bool -> int -> (term*proof_term) list -> t -> unit
 val remove_or_remap:    IntSet.t -> t -> unit
 val premises:           int -> t -> (term*bool) list
-val previous_schematic: int  -> t -> int option
+val previous_schematics:int  -> t -> int list
 val trying_goal:        term -> t -> unit
 val failed_goal:        term -> t -> unit
 val proved_goal:        term -> t -> unit

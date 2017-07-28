@@ -19,7 +19,7 @@ type ctxt = {
   }
 
 type t = {
-    orig:int option;  (* original schematic assertion *)
+    orig:int list;   (* original schematic assertions *)
     ctxt: ctxt;
     spec:      bool;  (* is specialized *)
     fwd_blckd: bool;  (* is blocked as forward rule *)
@@ -42,12 +42,12 @@ let is_generic (rd:t): bool =
 
 let is_orig_schematic (rd:t): bool =
   match rd.orig with
-    None -> false
-  | Some _ -> true
+  | [] -> false
+  | _  -> true
 
 
 
-let previous_schematic (rd:t): int option =
+let previous_schematics (rd:t): int list =
   rd.orig
 
 
@@ -382,7 +382,7 @@ let make (t:term) (c:Context.t): t =
       with Not_found -> None
     else None
   in
-  let rd = { orig      = None;
+  let rd = { orig      = [];
              ctxt;
              spec      = nargs = 0;
              fwd_blckd = fwd_blckd;
@@ -620,11 +620,7 @@ let specialize
       List.rev ps_rev, false
   in
   {rd with
-   orig =
-     if rd.orig <> None then
-       rd.orig
-     else
-       Some orig;
+   orig = orig :: rd.orig;
    spec  = true;
    fwd_blckd = fwd_blckd;
    ctxt  = {c = c;

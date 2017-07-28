@@ -441,12 +441,15 @@ let prove_trivially (g:goal): unit =
 
 let calc_blacklist (cons:bool) (idx:int) (used:IntSet.t) (pc:PC.t): IntSet.t =
   let used =
-    if cons then used
+    if cons then
+      used
     else
-      match PC.previous_schematic idx pc with
-        None -> used
-      | Some prev ->
-          IntSet.add prev used
+      List.fold_left
+        (fun set i ->
+          IntSet.add i set
+        )
+        used
+        (PC.previous_schematics idx pc)
   in
   IntSet.add idx used
 

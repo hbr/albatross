@@ -22,7 +22,7 @@ val is_implication:       t -> bool
 val is_intermediate:      t -> bool
 val is_equality:          t -> bool
 val equality_data:        t -> int * int * term * term
-val previous_schematic:   t -> int option
+val previous_schematics:  t -> int list
 val premises:             t -> Context.t -> (term*bool) list
 val count_premises:       t -> int
 val short_string:         t -> string

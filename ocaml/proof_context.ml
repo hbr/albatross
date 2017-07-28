@@ -2762,10 +2762,10 @@ let add_induction_law0 (cls:int) (pc:t): unit =
 
 
 
-let previous_schematic (idx:int) (pc:t): int option =
+let previous_schematics (idx:int) (pc:t): int list =
   assert (idx < count pc);
   let rd = rule_data idx pc in
-  RD.previous_schematic rd
+  RD.previous_schematics rd
 
 
 let premises (idx:int) (pc:t): (term*bool) list =
