@@ -206,6 +206,7 @@ all(a,b,c:A, r:{A,A})
 
 all(a,b,c:A, r,s:{A,A})
     ensure
+        a in r.carrier ==> (*r)(a,a)             -- reflexivity
         (*r)(a,b) ==> (*r)(b,c) ==> (*r)(a,c)    -- transitive
 
         r <= *r                    -- increasing

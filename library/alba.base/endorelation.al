@@ -545,7 +545,22 @@ all(r:{A,A})
 
 
 
+all(r:{A,A}, a:A)
+        -- '*r' is reflexive
+    require
+        a in r.carrier
+    ensure
+        (*r)(a,a)
+    if a in r.domain
+        via some(b) r(a,b)
+    orif a in r.range
+        via some(b) r(b,a)
+    end
+
+
+
 all(a,b,c:A, r:{A,A})
+        -- '*r' is transitive
     require
         (*r)(a,b)
         (*r)(b,c)
