@@ -265,11 +265,10 @@ let is_ghost_function (i:int) (ft:t): bool =
 let is_constructor (i:int) (ft:t): bool =
   assert (i < count ft);
   match (descriptor i ft).dominant_cls with
-  | None ->
-     false (* constructor must have an owner class *)
-  | Some cls ->
+  | Some cls when Class_table.can_match_pattern cls ft.ct ->
      IntSet.mem i (Class_table.constructors cls ft.ct)
-
+  | _ ->
+     false
 
 
 
@@ -283,7 +282,6 @@ let inductive_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
 
 let recursive_arguments (i:int) (ft:t): int list =
   (* List of recursive arguments *)
-  assert (is_constructor i ft);
   let desc = descriptor i ft in
   let lst =
     interval_fold

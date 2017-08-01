@@ -796,10 +796,12 @@ let set_constructors
   assert (cls < count ct);
   assert (not (is_interface_check ct));
   assert (not (is_inductive cls ct));
-  let bdesc = base_descriptor cls ct in
-  assert (bdesc.constructors = IntSet.empty);
-  bdesc.base_constructors <- base_set;
-  bdesc.constructors <- set
+  assert (not (is_pseudo_inductive cls ct));
+  let desc = descriptor cls ct in
+  assert (desc.bdesc.constructors = IntSet.empty);
+  desc.bdesc.base_constructors <- base_set;
+  desc.bdesc.constructors <- set;
+  desc.can_match_pattern <- true
 
 
 
