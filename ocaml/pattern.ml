@@ -27,8 +27,8 @@ let is_pattern (n:int) (t:term) (nb:int) (ft:FT.t): bool =
 let unify_with_pattern
     (t:term) (n:int) (pat:term) (nb:int) (ft:FT.t)
     : arguments =
-  (* Unify the term [t] with the pattern [n,pat]. The term an pattern above its
-     pattern variables come from an environment with [nb] variables.
+  (* Unify the term [t] with the pattern [n,pat]. The term and pattern above
+     its pattern variables come from an environment with [nb] variables.
 
      Three cases are possible:
 
@@ -43,7 +43,7 @@ let unify_with_pattern
      (c) The term might match the pattern, but it cannot be decided because
      there is not enough information in the term. The exception [Undecidable]
      is raised.
- *)
+   *)
   let args = Array.make n empty_term
   in
   let is_constr i =
@@ -111,18 +111,18 @@ let make_as_expression
    *)
   assert (Context.has_no_type_variables c);
   let (nms,tps),fgs,pat = Term.remove_unused tps 0 empty_formals pat in
-  let n = Array.length nms in
-  Flow( Asexp, [|e; Term.pattern n (nms,tps) pat|] )
+  Asexp(e,tps,pat)
 
 
 let evaluated_as_expression (t:term) (c:Context.t): term =
   match t with
-  | Flow (Asexp, [|e;pat|]) ->
-     let n,(nms,tps),pat = Term.pattern_split pat in
+  | Asexp(e,tps,pat) ->
+     let n = Array.length tps in
+     let nms = anon_argnames n in
      let rec collect
                (e:term) (pat:term) (lst:(term*term) list): (term*term) list =
        match e, pat with
-       | VAppl(i,args1,_,_), VAppl(j,args2,_,_) when i +  n= j ->
+       | VAppl(i,args1,_,_), VAppl(j,args2,_,_) when i +  n = j ->
           let len = Array.length args1 in
           assert (len = Array.length args2);
           if len = 0 then

@@ -594,44 +594,39 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           raise Illegal_proof_term
         end;
         ta,right
-    | Eval.Flow (ctrl,args) ->
-        let argsa, argsb = reconstr_args args in
-        Flow (ctrl,argsa), Flow (ctrl,argsb)
     | Eval.If (cond,idx,args) ->
         assert (Array.length args = 3);
         let argsa, argsb = reconstr_args args in
-        Flow (Ifexp,argsa), if cond then argsb.(1) else argsb.(2)
-    | Eval.As (cond,args) ->
-        assert (Array.length args = 2);
-        let argsa, argsb = reconstr_args args in
-        let res =
-          let nvars = count_variables at in
-          if cond then Feature_table.true_constant nvars
-          else Feature_table.false_constant nvars
-        in
-        Flow (Asexp,argsa), res
+        Ifexp (argsa.(0),argsa.(1),argsa.(2)),
+        if cond then argsb.(1) else argsb.(2)
+    | Eval.As (cond, inspe, tps, pat) ->
+       let inspa, inspb = reconstruct inspe nb in
+       let res =
+         let nvars = count_variables at in
+         if cond then Feature_table.true_constant nvars
+         else Feature_table.false_constant nvars
+       in
+       Asexp (inspa,tps,pat), res
     | Eval.AsExp t ->
         let nvars = count_variables at
         and ft = feature_table at
         and tvs = tvars at in
         let exp = Feature_table.evaluated_as_expression t (nb+nvars) tvs ft in
         t, exp
-    | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+    | Eval.Inspect (t,inspe,icase,rese) ->
         let inspa,inspb = reconstruct inspe nb
         and resa,resb   = reconstruct rese nb in
-        begin match t with
-          Flow(Inspect,args) ->
-            let len = Array.length args in
-            if len < 3 || len mod 2 <> 1 then raise Illegal_proof_term;
-            let ncases = len / 2 in
+        begin
+          match t with
+          | Inspect(insp,cases) ->
+            let ncases = Array.length cases in
             if icase < 0 || ncases <= icase then raise Illegal_proof_term;
-            let n1,_,mtch,res =
-              Term.case_split args.(2*icase+1) args.(2*icase+2)
-            in
+            let (nms,tps),pat,res = cases.(icase) in
+            let n1 = Array.length tps in
             begin try
               let ft = feature_table at
               and nvars = count_variables at in
-              let subarr = Pattern.unify_with_pattern inspb n1 mtch nvars ft in
+              let subarr = Pattern.unify_with_pattern inspb n1 pat nvars ft in
               assert (Array.length subarr = n1);
                 let res = Term.apply res subarr in
                 if not (Term.equivalent res resa) then begin
@@ -646,7 +641,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
               printf "  term      %s\n" (string_of_term_anon inspa nb at);
               printf "  eval      %s\n" (string_of_term_anon inspb nb at);
               printf "  case %d   %s\n"
-                icase (string_of_term_anon mtch (n1+nb) at);
+                icase (string_of_term_anon pat (n1+nb) at);
               raise Illegal_proof_term
             end
         | _ ->

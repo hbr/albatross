@@ -1191,6 +1191,7 @@ let check_pattern_match
       Array.iter (fun t -> check info t c) args
     and check_lst lst c =
       List.iter (fun t -> check info t c) lst
+    and check0 t = check info t c
     in
     match t with
     | Variable i when i < Context.count_variables c ->
@@ -1211,28 +1212,24 @@ let check_pattern_match
        check info t0 c1
     | QExp (n,tps,fgs,t0,is_all) ->
        check info t0 (Context.push_typed0 tps fgs c)
-    | Flow (Ifexp,args) ->
-       check_args args c
-    | Flow (Inspect,args) ->
-       let len = Array.length args in
-       assert (3 <= len);
-       assert (len mod 2 = 1);
-       check info args.(0) c; (* the inspected expression *)
-       interval_iter
-         (fun i ->
-           let n,tps,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+    | Ifexp (cond,a,b) ->
+       check0 cond;
+       check0 a;
+       check0 b
+    | Asexp(insp,tps,pat) ->
+       check0 insp;
+       let n = Array.length tps in
+       let c1 = Context.push_typed0 (anon_argnames n,tps) empty_formals c in
+       check_one_pattern info pat c1
+    | Inspect(insp,cases) ->
+       check0 insp;
+       Array.iter
+         (fun (tps,pat,res) ->
            let c1 = Context.push_typed0 tps empty_formals c in
            check_one_pattern info pat c1;
            check info res c1
          )
-         0 (len/2)
-    | Flow (Asexp,args) ->
-       let len = Array.length args in
-       assert (len = 2);
-       check info args.(0) c;
-       let n,tps,pat = Term.pattern_split args.(1) in
-       let c1 = Context.push_typed0 tps empty_formals c in
-       check_one_pattern info pat c1
+         cases
     | Indset (nme,tp,rules) ->
        let c1 = Context.push_typed0 ([|nme|],[|tp|]) empty_formals c in
        check_args rules c1

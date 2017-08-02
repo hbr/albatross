@@ -705,18 +705,15 @@ let rec type_of_term (t:term) (c:t): type_term =
   | Lam(_,_,_,_,_,tp) -> tp
   | QExp _            -> boolean c
   | Indset (_,tp,_)   -> tp
-  | Flow(ctrl,args) ->
-      match ctrl with
-        Ifexp ->
-          assert (2 <= Array.length args);
-          type_of_term args.(1) c
-      | Inspect ->
-          assert (3 <= Array.length args);
-          let _,tps,_,res = Term.case_split args.(1) args.(2) in
-          let c1 = push_typed0 tps empty_formals c in
-          type_of_term res c1
-      | Asexp ->
-          boolean c
+  | Ifexp (cond,a,b) ->
+     type_of_term a c
+  | Asexp _ ->
+     boolean c
+  | Inspect (insp,cases) ->
+     assert (Array.length cases > 0);
+     let tps,pat,res = cases.(0) in
+     let c1 = push_typed0 tps empty_formals c in
+     type_of_term res c1
 
 
 
@@ -1297,45 +1294,39 @@ let rec type_of_term_full
   | Indset (nme,tp,rs) ->
       (* Missing: Verify types of the rules!! *)
       check_and_trace tp
-  | Flow (ctrl,args) ->
-      let len = Array.length args in
-      match ctrl with
-        Ifexp ->
-          assert (2 <= len);
-          assert (len <= 3);
-          ignore (type_of_term_full args.(0) (Some (boolean c)) trace c);
-          let if_tp = type_of_term_full args.(1) req_tp trace c in
-          if len = 3 then
-            ignore (type_of_term_full args.(2) (Some if_tp) trace c);
-          check_and_trace if_tp
-      | Asexp ->
-          assert (len = 2);
-          let tp = type_of_term_full args.(0) None trace c in
-          let n,tps,t0 = Term.pattern_split args.(1) in
-          let c1 = push_typed0 tps empty_formals c in
-          ignore (type_of_term_full t0 (Some tp) trace c1);
-          check_and_trace (boolean c)
-      | Inspect ->
-          assert (3 <= len);
-          assert (len mod 2 = 1);
-          let ncases = len / 2 in
-          assert (0 < ncases);
-          let insp_tp = type_of_term_full args.(0) None trace c in
-          let rec check_cases_from i req_tp =
-            if i = ncases then
-              req_tp
-            else
-              let n,(nms,tps),pat,res =
-                Term.case_split args.(2*i+1) args.(2*i+2) in
-              let c1 = push_typed0 (nms,tps) empty_formals c in
-              ignore (type_of_term_full pat (Some insp_tp) trace c1);
-              let req_tp = type_of_term_full res req_tp trace c1 in
-              check_cases_from (i + 1) (Some req_tp)
-          in
-          let tp = check_cases_from 0 req_tp in
-          match tp with
-            Some tp -> check_and_trace tp
-          | _ -> assert false
+  | Ifexp (cond, a, b) ->
+     ignore (type_of_term_full cond (Some (boolean c)) trace c);
+     let if_tp = type_of_term_full a req_tp trace c in
+     ignore (type_of_term_full b (Some if_tp) trace c);
+     check_and_trace if_tp
+  | Asexp (insp, tps, pat) ->
+     let tp = type_of_term_full insp None trace c in
+     let nms = anon_argnames (Array.length tps) in
+     let c1 = push_typed0 (nms,tps) empty_formals c in
+     ignore (type_of_term_full pat (Some tp) trace c1);
+     check_and_trace (boolean c)
+  | Inspect (insp,cases) ->
+     let insp_tp = type_of_term_full insp None trace c
+     and ncases = Array.length cases
+     in
+     let rec check_cases_from i req_tp =
+       if i = ncases then
+         req_tp
+       else
+         let tps,pat,res = cases.(i) in
+         let c1 = push_typed0 tps empty_formals c in
+         ignore(type_of_term_full pat (Some insp_tp) trace c1);
+         let req_tp = type_of_term_full res req_tp trace c1 in
+         check_cases_from (i+1) (Some req_tp)
+     in
+     let tp = check_cases_from 0 req_tp in
+     begin
+       match tp with
+       | Some tp ->
+          check_and_trace tp
+       | _ ->
+          assert false
+     end
 
 
 
@@ -1634,70 +1625,46 @@ let term_preconditions (t:term)  (c:t): term list =
             lst
             rs in
         lst
-    | Flow (ctrl,args) ->
-        let len = Array.length args in
-        begin
-          match ctrl with
-            Ifexp ->
-              assert (2 <= len);
-              assert (len <= 3);
-              let lst1 = pres args.(0) lst c
-              and lst2 = pres args.(1) [] c
-              in
-              let reslst =
-                List.fold_right
-                  (fun t lst -> (Term.binary imp_id args.(0) t) :: lst)
-                  lst2
-                  lst1
-              in
-              let reslst =
-                if len = 2 then
-                  args.(0) :: reslst
-                else
-                  let neg = Term.unary not_id args.(0)
-                  and lst3 = pres args.(2) [] c in
-                  List.fold_right
-                    (fun t lst -> (Term.binary imp_id neg t) :: lst)
-                    lst3
-                    reslst
-              in
-              reslst
-          | Inspect ->
-              assert (3 <= len);
-              assert (len mod 2 = 1);
-              let ncases = len / 2
-              and nvars = count_variables c in
-              let lst = List.fold_left
-                  (fun lst (n,tps,pat) ->
-                    let nms = empty_argnames n
-                    and tps = Array.of_list tps in
-                    let q = Term.pattern n (nms,tps) pat in
-                    let t = Flow(Asexp,[|args.(0);q|]) in
-                    let t = Term.unary not_id t in
-                    t :: lst)
-                  lst
-                  (Feature_table.unmatched_inspect_cases args nvars all_ntvs c.ft)
-                  in
-              let rec cases_from (i:int) (lst:term list): term list =
-                if i = ncases then
-                  lst
-                else
-                  let n,(nms,tps),pat,res =
-                    Term.case_split args.(2*i+1) args.(2*i+2) in
-                  let c1 = push_typed0 (nms,tps) empty_formals c in
-                  let lst_inner   = pres res [] c1 in
-                  let lst_inner   = List.rev lst_inner in
-                  let lst =
-                    let tp = type_of_term args.(0) c in
-                    case_preconditions args.(0) tp n nms tps pat lst_inner lst c
-                  in
-                  cases_from (i+1) lst
-              in
-              cases_from 0 lst
-          | Asexp ->
-              assert (len = 2);
-              pres args.(0) lst c
-        end
+    | Ifexp (cond, a, b) ->
+       let lstcond = pres cond lst c
+       and lsta    = pres a [] c
+       and lstb    = pres b [] c
+       and negcond = not_term cond c
+       in
+       let reslst =
+         List.fold_right
+           (fun t lst -> (implication_term cond t c) :: lst)
+           lsta
+           lstcond
+       in
+       List.fold_right
+         (fun t lst -> (implication_term negcond t c) :: lst)
+         lstb
+         reslst
+    | Asexp (insp, tps, pat) ->
+       pres insp lst c
+    | Inspect (insp,cases) ->
+       let nvars = count_variables c
+       and insp_tp = type_of_term insp c in
+       let lst = pres insp lst c (* inspected term *)
+       in
+       let lst = (* all unmatched cases *)
+         List.fold_left
+           (fun lst (n,tps,pat) ->
+             (not_term (Asexp (insp,Array.of_list tps,pat)) c) :: lst
+           )
+           lst
+           (Feature_table.unmatched_inspect_cases cases nvars all_ntvs c.ft)
+       in
+       Array.fold_left (* all preconditions of the results *)
+         (fun lst ((nms,tps),pat,res) ->
+           let n = Array.length nms in
+           let c1 = push_typed0 (nms,tps) empty_formals c in
+           let lst_inner = List.rev (pres res [] c1) in
+           case_preconditions insp insp_tp n nms tps pat lst_inner lst c
+         )
+         lst
+         cases
   in
   List.rev_map
     (fun p -> prenex_term p c)

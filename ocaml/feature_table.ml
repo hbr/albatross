@@ -392,8 +392,22 @@ let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
         check_visi t0 (1+nb)
     | QExp(n,_,_,t0,_) ->
         check_visi t0 (n+nb)
-    | Flow (ctrl,args) ->
-        check_args args nb
+    | Ifexp (cond,a,b) ->
+       check_visi cond nb;
+       check_visi a nb;
+       check_visi b nb
+    | Asexp (insp,tps,pat) ->
+       check_visi insp nb;
+       check_visi pat (Array.length tps)
+    | Inspect(insp,cases) ->
+       check_visi insp nb;
+       Array.iter
+         (fun ((nms,tps),pat,res) ->
+           let nb = nb + Array.length nms in
+           check_visi pat nb;
+           check_visi res nb
+         )
+         cases
     | Indset (nme,tp,rs) ->
         check_args rs (1+nb)
   in
@@ -504,8 +518,20 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | QExp (n,tps,fgs,t0,is_all) ->
         let t0 = untup0 t0 (n+nb) in
         QExp(n,tps,fgs,t0,is_all), 0, 0
-    | Flow (ctrl,args) ->
-        Flow (ctrl, Array.map (fun t -> untup0 t nb) args), 0, 0
+    | Ifexp (cond,a,b) ->
+       Ifexp( untup0 cond nb, untup0 a nb, untup0 b nb), 0, 0
+    | Asexp (insp, tps, pat) ->
+       let n = Array.length tps in
+       Asexp (untup0 insp nb, tps, untup0 pat (nb+n)), 0, 0
+    | Inspect (insp,cases) ->
+       Inspect (untup0 insp nb,
+                Array.map
+                  (fun ((nms,tps),pat,res) ->
+                    let nb = nb + Array.length nms in
+                    (nms,tps), untup0 pat nb, untup0 res nb
+                  )
+                  cases),
+       0 , 0
     | Indset (nme,tp,rs) ->
         let rs = Array.map (fun r -> untup0 r (1+nb)) rs in
         Indset (nme,tp,rs), 0, 0
@@ -992,52 +1018,28 @@ let term_to_string
         | _ -> "agent (" ^ argsstr ^ ") require " ^
             presstr ^
             " ensure -> " ^ tstr ^ " end"
-    and if2str (args:term array): string =
-      let len = Array.length args in
-      assert(2 <= len); assert (len <= 3);
+    and if2str (cond:term) (a:term) (b:term): string =
       let to_str t = to_string t names nanonused tvs false None in
-      let cond_exp (c:term) (e:term) (isif:bool): string =
-        (if isif then "if " else " elseif ") ^ (to_str c) ^ " then " ^ (to_str e)
-      in
-      let rec ifrest (t:term): string =
-        match t with
-          Flow (Ifexp,args) -> ifargs args false
-        | _                 -> " else " ^ (to_str t)
-      and ifargs (args: term array) (is_outer:bool): string =
-        let len = Array.length args in
-        assert(2 <= len); assert (len <= 3);
-        (cond_exp args.(0) args.(1) true) ^
-        (if len = 2 then "" else ifrest args.(2)) ^
-        (if is_outer then " end" else "")
-      in
-      ifargs args true
-    and insp2str (args:term array): string =
-      let len = Array.length args in
-      assert (len mod 2 = 1);
-      assert (3 <= len);
-      let ncases = len / 2 in
-      let case (i:int): string =
-        let n, (nms,_), mtch, res = Term.case_split args.(2*i+1) args.(2*i+2) in
+      "(if " ^ to_str cond ^ " then " ^ to_str a ^ " else " ^ to_str b ^ ")"
+    and insp2str insp cases =
+      "(inspect "
+      ^ to_string insp names nanonused tvs false None
+      ^ Array.fold_left
+          (fun str ((nms,tps),pat,res) ->
+            let nms1 = Term.prepend_names nms names in
+            let to_str t = to_string t nms1 nanonused tvs false None in
+            str ^ " case " ^ to_str pat ^  " then " ^ to_str res
+          )
+          ""
+          cases
+      ^ ")"
+    and as2str insp tps pat =
+      to_string insp names nanonused tvs false (Some (Asop,true))
+      ^ " as "
+      ^ let n = Array.length tps in
+        let nms = anon_argnames n in
         let names1 = Array.append nms names in
-        let to_str t = to_string t names1 nanonused tvs false None in
-        " case " ^ (to_str mtch) ^ " then " ^ (to_str res)
-      in
-      let rec cases_from (i:int) (str:string): string =
-        if i = ncases then
-          str
-        else
-          (cases_from (1+i) (str ^ (case i))) in
-      let to_str t = to_string t names nanonused tvs false None in
-      "inspect "  ^  (to_str args.(0)) ^ (cases_from 0 "") ^ " end"
-    and as2str (args:term array): string =
-      let len = Array.length args in
-      assert (len = 2);
-      let str1 = to_string args.(0) names nanonused tvs false (Some (Asop,true)) in
-      let str2 =
-        let n,(nms,_),mtch = Term.pattern_split args.(1) in
-        let names1 = Array.append nms names in
-        to_string mtch names1 nanonused tvs false (Some (Asop,false)) in
-      str1 ^ " as " ^ str2
+        to_string pat names1 nanonused tvs false (Some (Asop,false))
     in
     let inop, str =
       match t with
@@ -1098,13 +1100,19 @@ let term_to_string
               in
               Some op, opstr ^ fgsstr ^ argsstr ^ " " ^ tstr
             end
-      | Flow (ctrl,args) ->
+      | Ifexp (cond,a,b) ->
+         None, if2str cond a b
+      | Asexp (insp,tps,pat) ->
+         Some(Asop), as2str insp tps pat
+      | Inspect (insp,cases) ->
+         None, insp2str insp cases
+      (*| Flow (ctrl,args) ->
           begin
             match ctrl with
               Ifexp   -> None, if2str args
             | Inspect -> None, insp2str args
             | Asexp   -> Some(Asop), as2str args
-          end
+          end*)
       | Indset (nme,tp,rs) ->
           let n,nms = 1, [|nme|] in
           let argsstr = args2str n nms in
@@ -1314,7 +1322,7 @@ let substituted
           else
             i0,ags0
         in
-       assert (Array.for_all (fun tp -> tp <> empty_term) ags0);
+        assert (Array.for_all (fun tp -> tp <> empty_term) ags0);
         let i = i - len + d in
         VAppl (i,args,ags0,oo)
     | Application (f,args,inop) ->
@@ -1333,8 +1341,22 @@ let substituted
         let t0 = spec nb t0
         and tps = Array.map subtp tps in
         QExp (n,(nms,tps),fgs,t0,is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, spec_args nb args)
+    | Ifexp (cond, a, b) ->
+       Ifexp(spec nb cond, spec nb a, spec nb b)
+    | Asexp (insp, tps, pat) ->
+       Asexp(spec nb insp,
+              Array.map subtp tps,
+              let nb = nb + Array.length tps in
+              spec nb pat)
+    | Inspect(insp, cases) ->
+       Inspect(spec nb insp,
+               Array.map
+                 (fun ((nms,tps),pat,res) ->
+                   let nb = nb + Array.length tps in
+                   (nms, Array.map subtp tps),
+                   spec nb pat,
+                   spec nb res)
+                 cases)
     | Indset (nme,tp,rs) ->
         let nb = 1 + nb in
         let rs = spec_args nb rs
@@ -1371,8 +1393,19 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
         let nb = n + nb in
         let t0 = spec nb t0 in
         QExp (n,tps,fgs,t0,is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, spec_args nb args)
+    | Ifexp(cond, a, b) ->
+       Ifexp(spec nb cond, spec nb a, spec nb b)
+    | Asexp(insp, tps, pat) ->
+       Asexp(spec nb insp,
+             tps,
+             spec (nb + Array.length tps) pat)
+    | Inspect(insp,cases) ->
+       Inspect(spec nb insp,
+               Array.map
+                 (fun ((nms,tps),pat,res) ->
+                   let nb = nb + Array.length tps in
+                   (nms,tps), spec nb pat, spec nb res)
+                 cases)
     | Indset (nme,tp,rs) ->
         let nb = 1 + nb in
         let rs = spec_args nb rs in
@@ -1412,17 +1445,13 @@ let evaluated_as_expression
     equality_term t0 (VAppl(c,args,ags,false)) (nb+n) tp tvs ft
   in
   match t with
-  | Flow(Asexp,[|t0;QExp(n,(nms,tps),fgs,VAppl(c,args,ags,_),_)|]) ->
-      assert (n + nb <= c);
-      assert (0 < n);
-      let eq = eq_term c n t0 args ags in
-      QExp(n,(nms,tps),fgs,eq,false)
-  | Flow(Asexp,[|t0;VAppl(c,args,ags,_)|]) ->
-      eq_term c 0 t0 args ags
+  | Asexp (insp, tps, VAppl(co,args,ags,_)) ->
+     let n = Array.length tps in
+     let eq = eq_term co n insp args ags in
+     let nms = standard_argnames n in
+     Term.some_quantified n (nms,tps) eq
   | _ ->
-      printf "%s\n" (term_to_string t true true nb [||] tvs ft);
-      printf "%s\n" (Term.to_string t);
-      assert false (* not an as expression *)
+     assert false (* not an as expression *)
 
 
 
@@ -1657,29 +1686,17 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
         is_ghost t (1+nb)
     | QExp _ ->
         true
-    | Flow (ctrl, args) ->
-        let len = Array.length args in
-        begin match ctrl with
-          Ifexp ->
-            ghost_args args 0 len
-        | Asexp ->
-            assert (len = 2);
-            is_ghost args.(0) nb
-        | Inspect ->
-            assert (3 <= len);
-            assert (len mod 2 = 1);
-            let ncases = len / 2 in
-            let rec cases_from i ghost =
-              if ghost || i = ncases then
-                ghost
-              else
-                let n,_,_,t = Term.case_split args.(2*i+1) args.(2*i+2) in
-                let ghost = is_ghost t (n+nb) in
-                cases_from (1+i) ghost
-            in
-            let ghost = is_ghost args.(0) nb in
-            cases_from 0 ghost
-        end
+    | Ifexp(cond, a, b) ->
+       is_ghost cond nb || is_ghost a nb || is_ghost b nb
+    | Asexp (insp,tps,pat) ->
+       is_ghost insp nb
+    | Inspect(insp,cases) ->
+       is_ghost insp nb
+       || Array.exists
+            (fun ((nms,tps),pat,res) ->
+              is_ghost res (nb + Array.length tps)
+            )
+            cases
     | Indset _ ->
         true
     | VAppl (i,args,_,_) ->
@@ -1765,7 +1782,7 @@ and complexity_base
       1 + complexity_base t0 (1+nb) cargs nbenv tvs ft
   | QExp (n,tps,fgs,t0,is_all) ->
       1 + complexity_base t0 (n+nb) cargs nbenv tvs ft
-  | Flow _ | Indset _ ->
+  | Ifexp _ | Asexp _ | Inspect _ | Indset _ ->
       Term.nodes0 t nb cargs
 
 and feature_complexity
@@ -2261,9 +2278,10 @@ let base_table (comp:Module.Compile.t) : t =
     and ags  = standard_substitution 2
     and nms  = standard_argnames 2 in
     let tup = VAppl(Constants.tuple_index+3, args, ags, false) in
-    let pat = Term.some_quantified 2 (nms,ags) tup
-    and res = Term.some_quantified 2 (nms,ags) (Variable i) in
-    Flow (Inspect, [|Variable 0; pat; res |])
+    (*let pat = Term.some_quantified 2 (nms,ags) tup
+    and res = Term.some_quantified 2 (nms,ags) (Variable i) in*)
+    Inspect(Variable 0, [|(nms,ags),tup,Variable i|])
+           (*Flow (Inspect, [|Variable 0; pat; res |])*)
   in
   add_base (* first *)
     "core" Constants.tuple_class (FNname ST.first)
@@ -3096,29 +3114,26 @@ let unmatched_and_splitted
 
 
 
-let unmatched_inspect_cases (args:term array) (nb:int) (ntvs:int) (ft:t)
+let unmatched_inspect_cases
+      (cases: (formals*term*term) array)
+      (nb:int)
+      (ntvs:int)
+      (ft:t)
     : (int * tplst* term) list =
   (* The unmatched cases of the inspect expression [Flow(Inspect,args)]
    *)
-  let len = Array.length args in
-  assert (3 <= len);
-  assert (len mod 2 = 1);
-  let ncases = len / 2 in
-  let rec unmatched_from (i:int) (lst:(int*tplst*term) list)
-      : (int*tplst*term) list =
-    assert (i <= ncases);
-    if i = ncases then
-      lst
-    else begin
-      let npat_i,(_,tps_i),pat_i = Term.pattern_split args.(2*i+1) in
-      let tps_i = Array.to_list tps_i in
-      let unmatched,_ = unmatched_and_splitted npat_i tps_i pat_i lst nb ntvs ft in
-      unmatched_from (i+1) unmatched
-    end
-  in
-  unmatched_from 0 [1, [empty_term], Variable 0] (* empty_term shall not be used!! *)
-
-
+  assert (Array.length cases > 0);
+  Array.fold_left
+    (fun lst ((nms,tps),pat,res) ->
+      let n = Array.length tps in
+      let tpslst = Array.to_list tps in
+      let unmatched,_ =
+        unmatched_and_splitted n tpslst pat lst nb ntvs ft
+      in
+      unmatched
+    )
+    [1, [empty_term], Variable 0] (* empty_term shall not be used!! *)
+    cases
 
 
 
@@ -3157,8 +3172,18 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
         Lam (n,nms, down_list pres (1+nb), down t0 (1+nb), pr, tp)
     | QExp (n,tps,fgs,t0,is_all) ->
         QExp (n,tps,fgs, down t0 (n+nb), is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, down_args args nb)
+    | Ifexp(cond,a,b) ->
+       Ifexp (down cond nb, down a nb, down b nb)
+    | Asexp(insp,tps,pat) ->
+       Asexp(down insp nb, tps, pat)
+    | Inspect(insp, cases) ->
+       Inspect(down insp nb,
+               Array.map
+                 (fun ((nms,tps),pat,res) ->
+                   let nb = nb + Array.length tps in
+                   (nms,tps), pat, down res nb
+                 )
+                 cases)
     | Indset (nme,tp,rs) ->
         Indset (nme, tp, down_args rs (1+nb))
   in
@@ -3187,8 +3212,18 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
         collect t0 (1+nb) set
     | QExp (n, args, fgs, t0, is_all) ->
         collect t0 (n+nb) set
-    | Flow (flow, args) ->
-        collect_args args nb set
+    | Ifexp(cond,a,b) ->
+       collect cond nb set |> collect a nb |> collect b nb
+    | Asexp (insp,tps,pat) ->
+       collect insp nb set |> collect pat (nb+Array.length tps)
+    | Inspect(insp,cases) ->
+       Array.fold_left
+         (fun set ((nms,tps),pat,res) ->
+           let nb = nb + Array.length tps in
+           collect pat nb set |> collect res nb
+         )
+         (collect insp nb set)
+         cases
     | Indset (nme,tp,rs) ->
         collect_args rs (1+nb) set
   in

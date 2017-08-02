@@ -7,6 +7,7 @@
 module Option: sig
   val has:   'a option -> bool
   val value: 'a option -> 'a
+  val map:   ('a -> 'b) -> 'a option -> 'b option
 end = struct
   let has (o: 'a option): bool =
     match o with None -> false | Some _ -> true
@@ -14,6 +15,12 @@ end = struct
     match o with
       None -> assert false (* illegal call *)
     | Some x -> x
+  let map (f:'a->'b) (o:'a option): 'b option =
+    match o with
+    | None ->
+       None
+    | Some x ->
+       Some (f x)
 end
 
 

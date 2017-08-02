@@ -1105,7 +1105,8 @@ let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
           res,
           Eval.Apply(fe,argse,rese),
           modi
-      | Lam _ | QExp _ | Flow _ | Indset _ -> t, Eval.Term t, false
+      | Lam _ | QExp _ | Ifexp _ | Asexp _ | Inspect _ | Indset _ ->
+         t, Eval.Term t, false
     in
     let sublst = unify t pc.entry.left pc in
     let sublst =
@@ -1266,13 +1267,12 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         raise No_evaluation
     | QExp _ ->
         raise No_evaluation
-    | Flow(Ifexp,args) ->
-        assert (Array.length args = 3);
-        eval_if args.(0) args.(1) args.(2) lazy_ depth pc
-    | Flow(Inspect,args) ->
-        eval_inspect t args lazy_ depth pc
-    | Flow(Asexp,args) ->
-        eval_as t args lazy_ depth pc
+    | Ifexp (c, a, b) ->
+       eval_if c a b lazy_ depth pc
+    | Asexp (insp, tps, pat) ->
+       eval_as t insp tps pat lazy_ depth pc
+    | Inspect (insp, cases) ->
+       eval_inspect t insp cases lazy_ depth pc
     | Indset _ ->
         raise No_evaluation
 
@@ -1356,12 +1356,15 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         raise No_branch_evaluation
 
   and eval_inspect
-      (t:term) (args:term array) (lazy_:bool) (depth:int) (pc:t): term * Eval.t =
-    let len = Array.length args in
-    assert (3 <= len);
-    assert (len mod 2 = 1);
-    let ncases = len / 2
-    and insp, inspe = maybe_eval args.(0) true depth pc
+        (t:term)
+        (insp:term)
+        (cases: (formals*term*term) array)
+        (lazy_:bool)
+        (depth:int)
+        (pc:t)
+      : term * Eval.t =
+    let ncases = Array.length cases
+    and insp, inspe = maybe_eval insp true depth pc
     and nvars = count_variables pc
     and ft = feature_table pc
     in
@@ -1372,13 +1375,14 @@ let eval_term (t:term) (pc:t): term * Eval.t =
            evaluated in a context which has a contradiction. *)
         raise No_branch_evaluation;
       assert (i < ncases);
-      let n,_,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
+      let (nms,tps),pat, res = cases.(i) in
+      let n = Array.length nms in
       try
         let sub = Pattern.unify_with_pattern insp n pat nvars ft in
         assert (Array.length sub = n);
         let res = Term.apply res sub in
         let res,rese = maybe_eval res lazy_ depth pc in
-        res, Eval.Inspect(t, inspe, i, n, rese)
+        res, Eval.Inspect(t, inspe, i, rese)
       with Undecidable ->
         raise No_branch_evaluation
       | Reject ->
@@ -1387,21 +1391,20 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     cases_from 0
 
   and eval_as
-      (t:term) (args:term array) (lazy_:bool) (depth:int) (pc:t): term * Eval.t =
-    let len = Array.length args in
-    assert (len = 2);
+        (t:term) (insp:term) (tps:types) (pat:term) (lazy_:bool) (depth:int) (pc:t)
+      : term * Eval.t =
     let nvars = nbenv pc in
-    let n,nms,pat = Term.pattern_split args.(1) in
-    let insp,inspe = maybe_eval args.(0) lazy_ depth pc in
-    let eargs = [|inspe; Eval.Term args.(1)|]
-    and ft = feature_table pc in
+    let n = Array.length tps in
+    let insp,inspe = maybe_eval insp lazy_ depth pc in
+    let (*eargs = [|inspe; Eval.Term args.(1)|]
+    and *)ft = feature_table pc in
     try
       ignore(Pattern.unify_with_pattern insp n pat nvars ft);
       Feature_table.true_constant nvars,
-      Eval.As(true,eargs)
+      Eval.As(true,inspe,tps,pat)
     with Reject ->
       Feature_table.false_constant nvars,
-      Eval.As(false,eargs)
+      Eval.As(false,inspe,tps,pat)
     | Undecidable ->
         Pattern.evaluated_as_expression t (context pc),
         Eval.AsExp t

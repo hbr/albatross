@@ -107,9 +107,12 @@ let unify_pattern
     | QExp(n1,_,_,t01,all1), QExp(n2,_,_,t02,all2)
       when n1 = n2 && all1 = all2 ->
         assert false (* nyi: *)
-    | Flow(ctrl1,args1), Flow(ctrl2,args2)
-      when ctrl1 = ctrl2 && Array.length args1 = Array.length args2 ->
-        assert false (* nyi: *)
+    | Ifexp(cond1,a1,b1), Ifexp(cond2,a2,b2) ->
+       assert false (* nyi *)
+    | Asexp(insp1,tps1,pat1), Asexp(insp2,tps2,pat2) ->
+       assert false (* nyi *)
+    | Inspect(insp1,cases1), Inspect(insp2,cases2) ->
+       assert false (* nyi *)
     | _ ->
         raise Not_found
   in
@@ -253,14 +256,42 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Flow(ctrl1,args1), Flow(ctrl2,args2)
-      when ctrl1=ctrl2 && Array.length args1 = Array.length args2 ->
-        begin try
-          let pos  = pos + 1 in
-          comp_args pos poslst elst tlst args1 args2
-        with Not_found ->
-          different t1 t2 pos poslst elst tlst
-        end
+    | Ifexp(cond1,a1,b1), Ifexp(cond2,a2,b2) ->
+       begin
+         try
+           let pos = pos + 1 in
+           comp_args pos poslst elst tlst [|cond1;a1;b1|] [|cond2;a1;b2|]
+         with Not_found ->
+           different t1 t2 pos poslst elst tlst
+       end
+    | Asexp(insp1,tps1,pat1), Asexp(insp2,tps2,pat2)
+         when Term.equivalent_array tps1 tps2
+              && Term.equivalent pat1 pat2 ->
+       begin
+         try
+           comp insp1 insp2 nb (1+pos) poslst elst tlst
+         with Not_found ->
+           different t1 t2 pos poslst elst tlst
+       end
+    | Inspect(insp1,cases1), Inspect(insp2,cases2)
+         when Array.length cases1 = Array.length cases2 ->
+       begin
+         try
+           let pos = pos + 1 in
+           interval_fold
+             (fun (pos,poslst,elst,tlst) i ->
+               let (nms1,tps1),pat1,res1 = cases1.(i)
+               and (nms2,tps2),pat2,res2 = cases2.(i) in
+               if not (Term.equivalent_array tps1 tps2
+                       && Term.equivalent pat1 pat2) then
+                 raise Not_found;
+               comp res1 res2 (nb+Array.length tps1) pos poslst elst tlst
+             )
+             (comp insp1 insp2 nb pos poslst elst tlst)
+             0 (Array.length cases1)
+         with Not_found ->
+           different t1 t2 pos poslst elst tlst
+       end
     | _, _ ->
         different t1 t2 pos poslst elst tlst
   in
@@ -332,13 +363,24 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,t0 =
             mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
           nextpos, nextvar, poslst, QExp(n,tps,fgs,t0,is_all)
-    | Flow (ctrl,args) ->
+    | Ifexp (cond,a,b) ->
+        if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
+        else
+          let nextpos = nextpos + 1 in
+          let nextpos,nextvar,poslst,args =
+            mk_args nextpos nextvar poslst [|cond;a;b|] in
+          nextpos, nextvar, poslst, Ifexp(cond,a,b)
+    | Asexp (insp,tps,pat) ->
+       assert false (* nyi *)
+    | Inspect (insp,cases) ->
+       assert false (* nyi *)
+    (*| Flow (ctrl,args) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nextpos = nextpos + 1 in
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
-          nextpos, nextvar, poslst, Flow(ctrl,args)
+          nextpos, nextvar, poslst, Flow(ctrl,args)*)
     | Indset (nme,tp,rs) ->
         assert false (* nyi *)
   in

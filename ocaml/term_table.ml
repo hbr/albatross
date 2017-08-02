@@ -13,15 +13,20 @@ type substitutions =
     Initial
   | Sub_list of sublist
 
-module FlowMap = Map.Make(struct
-  let compare = Pervasives.compare
-  type t = flow*int
-end)
 
 module IntPairMap = Map.Make(struct
   let compare = Pervasives.compare
   type t = int*int
 end)
+
+
+let intmap_find (i:int) (def:'a) (map:'a IntMap.t): 'a =
+  try
+    IntMap.find i map
+  with Not_found ->
+    def
+
+
 
 type t = {
     terms: (int*int*int*int*term) list;    (* idx,nb,nargs,nbenv,term *)
@@ -34,8 +39,11 @@ type t = {
                               (* one for each number of preconditions *)
     alls:  t IntMap.t;        (* one for each number of arguments *)
     somes: t IntMap.t;        (* one for each number of arguments *)
-    flows: (t array) FlowMap.t;
-         (* one for each flow control with the number of arguments*)
+    ifs:   (t * t * t) option;
+    ases:  (t * t) IntMap.t;  (* one for each number of pattern variables *)
+    inspects: (t * ((t * t) IntMap.t) array) IntMap.t;
+    (* one for each number of cases and each case one for each number of
+       pattern variables *)
     inds: (t array) IntPairMap.t;
          (* one for each pair (nsets,nrules) *)
   }
@@ -51,7 +59,9 @@ let empty = {
   lams  = IntMap.empty;
   alls  = IntMap.empty;
   somes = IntMap.empty;
-  flows = FlowMap.empty;
+  ifs   = None;
+  ases  = IntMap.empty;
+  inspects = IntMap.empty;
   inds  = IntPairMap.empty}
 
 
@@ -230,6 +240,13 @@ let uni_args
   sublst
 
 
+let substitutions (lst:sublist): substitutions =
+  match lst with
+  | [] ->
+     raise Not_found
+  | _ ->
+     Sub_list (List.rev lst)
+
 
 let uni_core
     (t:term) (nb:int) (nb0:int) (nargs:int) (nvars:int)
@@ -279,11 +296,7 @@ let uni_core
       assert (nb + nargs + nvars <= i);
       let idx = i - nb - nargs - nvars in
       let idx = sfun idx in
-      let argtabs,idxlst =
-        try
-          IntMap.find idx tab.apps
-        with Not_found ->
-          raise Not_found
+      let argtabs,idxlst = IntMap.find idx tab.apps
       in
       let len = Array.length args in
       assert (len = Array.length argtabs);
@@ -298,8 +311,7 @@ let uni_core
       let sublst = uni f ftab nb r in
       interval_fold
         (fun sublst i ->
-          if sublst = [] then raise Not_found;
-          uni args.(i) argtabs.(i) nb (Sub_list (List.rev sublst))
+          uni args.(i) argtabs.(i) nb (substitutions sublst)
         )
         sublst
         0 len
@@ -308,12 +320,12 @@ let uni_core
       let prestablst,ttab = find_lam len tab in
       let sublst = uni t ttab (1 + nb) r in
       let rec addpres pres prestablst sublst =
-        if sublst = [] then raise Not_found;
+        let r = substitutions sublst in
         match pres, prestablst with
           [], [] ->
             sublst
         | p::pres, tab::prestablst ->
-            let sublst = uni p tab (1+nb) (Sub_list (List.rev sublst)) in
+            let sublst = uni p tab (1+nb) r in
             addpres pres prestablst sublst
         | _ ->
             assert false (* lists must have the same size *)
@@ -322,10 +334,31 @@ let uni_core
   | QExp (n,_,_,t,is_all) ->
       let ttab = IntMap.find n (qmap is_all tab) in
       uni t ttab (n+nb) r
-  | Flow (ctrl,args) ->
-      let len = Array.length args in
-      let argtabs = FlowMap.find (ctrl,len) tab.flows in
-      uni_args args nb argtabs r uni
+  | Ifexp (cond,a,b) ->
+     begin
+       match tab.ifs with
+       | None ->
+          raise Not_found
+       | Some (tabc, taba, tabb) ->
+          uni_args [|cond;a;b|] nb [|tabc;taba;tabb|] r uni
+     end
+  | Asexp (insp, tps, pat) ->
+     let n = Array.length tps in
+     let itab,ptab = IntMap.find n tab.ases in
+     let sublst = uni insp itab nb r in
+     uni pat ptab (nb+n) (substitutions sublst)
+  | Inspect(insp,cases) ->
+     let ncases = Array.length cases in
+     let itab,ctabmaps = IntMap.find ncases tab.inspects in
+     interval_fold
+       (fun sublst i ->
+         let (_,tps),pat,res = cases.(i) in
+         let n = Array.length tps in
+         let ptab,restab = IntMap.find n ctabmaps.(i) in
+         let sublst = uni pat ptab (nb+n) (substitutions sublst) in
+         uni res restab (nb+n) (substitutions sublst)
+       )
+       (uni insp itab nb r) 0 ncases
   | Indset (nme,tp,rs) ->
       let nrules = Array.length rs in
       let argtabs = IntPairMap.find (1,nrules) tab.inds in
@@ -601,9 +634,8 @@ let add_base
           and fidx = i - nb - nargs - nbenv in
           let fidx = sfun fidx in
           let argtabs,idxlst =
-            try IntMap.find fidx tab.apps
-            with Not_found ->
-              Array.make len empty, [] in
+            intmap_find fidx (Array.make len empty, []) tab.apps
+          in
           let idxlst = if len = 0 then idx::idxlst else idxlst
           in
           let argtabs =
@@ -612,10 +644,7 @@ let add_base
       | Application (f,args,_) ->
           let len = Array.length args in
           let ftab,argtabs =
-            try
-              IntMap.find len tab.fapps
-            with Not_found ->
-              empty, Array.make len empty
+            intmap_find len (empty, Array.make len empty) tab.fapps
           in
           let ftab    = add0 f nb ftab
           and argtabs =
@@ -644,24 +673,50 @@ let add_base
           in
           add_lam len (prestab,ttab) tab
       | QExp (n,_,_,t,is_all) ->
-          let ttab =
-            try IntMap.find n (qmap is_all tab)
-            with Not_found -> empty
+          let ttab = intmap_find n empty (qmap is_all tab)
           in
           let ttab = add0 t (nb+n) ttab in
           if is_all then
             {tab with alls = IntMap.add n ttab tab.alls}
           else
             {tab with somes = IntMap.add n ttab tab.somes}
-      | Flow (ctrl,args) ->
-          let n = Array.length args in
-          let argtabs =
-            try FlowMap.find (ctrl,n) tab.flows
-            with Not_found -> Array.make n empty
-          in
-          let argtabs =
-            Array.mapi (fun i tab -> add0 args.(i) nb tab) argtabs in
-          {tab with flows = FlowMap.add (ctrl,n) argtabs tab.flows}
+      | Ifexp (cond,a,b) ->
+         let ctab,atab,btab =
+           match tab.ifs with
+           | None ->
+              empty, empty, empty
+           | Some(ctab,atab,btab) ->
+              ctab,atab,btab
+         in
+         let ctab = add0 cond nb ctab
+         and atab = add0 a    nb atab
+         and btab = add0 b    nb btab
+         in
+         {tab with ifs = Some(ctab,atab,btab)}
+      | Asexp (insp,tps,pat) ->
+         let n = Array.length tps in
+         let itab,ptab = intmap_find n (empty,empty) tab.ases in
+         let itab = add0 insp nb itab
+         and ptab = add0 pat (nb+n) ptab in
+         {tab with ases = IntMap.add n (itab,ptab) tab.ases}
+      | Inspect (insp,cases) ->
+         let ncases = Array.length cases in
+         let itab,ctabs =
+           intmap_find ncases (empty,Array.make ncases IntMap.empty) tab.inspects
+         in
+         let itab = add0 insp nb itab
+         and ctabs = Array.copy ctabs in
+         interval_iter
+           (fun i ->
+             let (nms,tps),pat,res = cases.(i) in
+             let ptab,rtab = intmap_find i (empty,empty) ctabs.(i) in
+             let n = Array.length tps in
+             let ptab = add0 pat (n+nb) ptab
+             and rtab = add0 res (n+nb) rtab in
+             ctabs.(i) <- IntMap.add i (ptab,rtab) ctabs.(i)
+           )
+           0 ncases;
+         {tab with inspects = IntMap.add ncases (itab,ctabs) tab.inspects}
       | Indset (_,_,rs) ->
           let n = 1 in
           let nrules = Array.length rs in
@@ -706,7 +761,18 @@ let filter (f:int -> bool) (tab:t): t =
      lams  = IntMap.map (fun (pres,exp) -> List.map filt pres, filt exp) tab.lams;
      alls  = IntMap.map filt tab.alls;
      somes = IntMap.map filt tab.somes;
-     flows = FlowMap.map (fun args -> Array.map filt args) tab.flows;
+     ifs   = Option.map (fun (c,a,b) -> filt c, filt a, filt b) tab.ifs;
+     ases  = IntMap.map (fun (insp,pat) -> filt insp, filt pat) tab.ases;
+     inspects =
+       IntMap.map
+         (fun (itab,ctabs) ->
+           filt itab,
+           Array.map
+             (fun cmap ->
+               IntMap.map (fun (ptab,rtab) -> filt ptab, filt rtab) cmap)
+             ctabs
+         )
+         tab.inspects;
      inds  = IntPairMap.map (fun args -> Array.map filt args) tab.inds}
   in
   filt tab

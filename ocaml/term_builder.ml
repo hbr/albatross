@@ -1238,7 +1238,7 @@ let complete_if_expression (tb:t): unit =
   let (cond,cond_tp),terms = pop_term tb.terms in
   let (e2,e1_tp),terms     = pop_term terms in
   let (e1,e2_tp),terms     = pop_term terms in
-  tb.terms <- (Flow (Ifexp, [|cond;e1;e2|]),e1_tp) :: terms
+  tb.terms <- (Ifexp (cond,e1,e2), e1_tp) :: terms
 
 
 let is_pattern (n:int) (pat:term) (tb:t): bool =
@@ -1270,12 +1270,9 @@ let complete_as_expression (tb:t): unit =
   let (pat,_),  terms = pop_term tb.terms in
   let nargs,names,tps = context_names_and_types tb in
   check_pattern nargs pat tb;
-  let names = empty_argnames nargs in
-  let pat = Term.some_quantified nargs (names,tps) pat
-  in
   pop_context tb;
   let (insp,_), terms = pop_term terms in
-  let t = Flow(Asexp,[|insp;pat|])
+  let t = Asexp (insp,tps,pat)
   and tp = boolean_type tb
   in
   tb.terms <- (t,tp) :: terms
@@ -1331,10 +1328,18 @@ let complete_inspect (ncases:int) (tb:t): unit =
   assert (List.length tb.terms >= 2*ncases + 1);
   let args,terms = pop_args (2*ncases+1) tb.terms in
   let args = Array.of_list (List.map (fun (t,_) -> t) args) in
-  let tp = List.nth tb.reqs 1
-  and t = Flow(Inspect,args) in
-  tb.terms <- (t,tp) :: terms;
-  tb.reqs <- List.tl (List.tl tb.reqs)
+  let tp = List.nth tb.reqs 1 in
+  let cases =
+    Array.init
+      ncases
+      (fun i ->
+        let n,(nms,tps),pat,res =
+          Term.case_split args.(2*i+1) args.(2*i+2) in
+        (nms,tps),pat,res
+      )
+  in
+  tb.terms <- (Inspect(args.(0),cases), tp) :: terms;
+  tb.reqs  <- List.tl (List.tl tb.reqs)
 
 
 let start_inductive_set (c_new:Context.t) (tb:t): unit =

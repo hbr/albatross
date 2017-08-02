@@ -374,11 +374,14 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
             lst)
       lst 0 len_insp
   in
-  let rec check (t:term) (nbranch:int) (tlst:(int*term*int*int) list) (c:Context.t)
-      : unit =
+  let rec check
+            (t:term) (nbranch:int) (tlst:(int*term*int*int) list) (c:Context.t)
+          : unit =
     let nb = Context.count_variables c in
     let check_args args =
-      Array.iter (fun arg -> check arg nbranch tlst c) args in
+      Array.iter (fun arg -> check arg nbranch tlst c) args
+    and check0 t = check t nbranch tlst c
+    in
     match t with
       Variable i when i = idx + nb ->
         assert (nargs = 0);
@@ -417,40 +420,38 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         error_info
           info
           "Quantified expressions not allowed in recursive definitions"
-    | Flow (Ifexp, args) ->
-        check_args args
-    | Flow (Asexp, args) ->
-        assert (Array.length args = 2);
-        check args.(0) nbranch tlst c
-    | Flow (Inspect,args) ->
-        let len = Array.length args in
-        assert (3 <= len);
-        assert (len mod 2 = 1);
-        let ncases = len / 2 in
-        let insp_arr = Feature_table.args_of_tuple args.(0) nb ft
-        in
-        let insp_arr2 = Array.map (fun t -> find_opt nb t tlst) insp_arr in
-        let ninsp    = Array.length insp_arr in
-        interval_iter
-          (fun i ->
-            let n,fargs,pat,res = Term.case_split args.(2*i+1) args.(2*i+2) in
-            let c1 = Context.push_typed fargs empty_formals false c in
-            let pat_tp = Context.type_of_term pat c1 in
-            let parr =
-              let arr = Feature_table.args_of_tuple pat (n+nb) ft in
-              if Array.length arr > ninsp then
-                Feature_table.args_of_tuple_ext pat pat_tp (n+nb) ninsp ft
-              else
-                arr
-            in
-            assert (Array.length parr = ninsp); (* because there have to be enough
-                                                   pattern for the inspected
-                                                   expressions *)
-            let tlst2 = add_pattern insp_arr2 n parr nb tlst in
-            let c = Context.push_typed fargs empty_formals false c in
-            check res (nbranch+1) tlst2 c
-          )
-          0 ncases
+    | Ifexp (c, a, b) ->
+       check0 c;
+       check0 a;
+       check0 b
+    | Asexp (t, tps, pat) ->
+       check0 t (* the pattern has only constructors,
+                   no recursive calls possible *)
+    | Inspect (insp, cases) ->
+       check0 insp;
+       let insp_arr = Feature_table.args_of_tuple insp nb ft
+       in
+       let insp_arr2 = Array.map (fun t -> find_opt nb t tlst) insp_arr in
+       let ninsp    = Array.length insp_arr in
+       Array.iter
+         (fun ((nms,tps),pat,res) ->
+           let n = Array.length nms in
+           let c1 = Context.push_typed0 (nms,tps) empty_formals c in
+           let pat_tp = Context.type_of_term pat c1 in
+           let parr =
+             let arr = Feature_table.args_of_tuple pat (n+nb) ft in
+             if Array.length arr > ninsp then
+               Feature_table.args_of_tuple_ext pat pat_tp (n+nb) ninsp ft
+             else
+               arr
+           in
+           assert (Array.length parr = ninsp); (* because there have to be enough
+                                                  pattern for the inspected
+                                                  expressions *)
+           let tlst2 = add_pattern insp_arr2 n parr nb tlst in
+           check res (nbranch+1) tlst2 c1
+         )
+         cases
     | Indset (n,nms,rs) ->
         error_info
           info
@@ -697,21 +698,18 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and tvs2,s2 = Feature_table.signature0 idx2 ft in
   assert (tvs1 = tvs2);
   let ags = standard_substitution (Tvars.count_fgs tvs1) in
-  let make_pattern idx s =
+  let make_asexp idx s =
     let n = Sign.arity s in
-    let args = standard_substitution n
-    and nms  = standard_argnames n
-    and tps  = Sign.arguments s
-    in
-    let t    = VAppl(1+n+idx, args, ags,false) in
-    Term.some_quantified n (nms,tps) t
+    let args = standard_substitution n in
+    Asexp (Variable 0,
+           Sign.arguments s,
+           VAppl (1+n+idx, args, ags, false))
   in
-  let pat1 = make_pattern idx1 s1
-  and pat2 = make_pattern idx2 s2
+  let pat1 = make_asexp idx1 s1
+  and pat2 = make_asexp idx2 s2
   and imp_id   = 1 + Constants.implication_index
-  and false_const = Feature_table.false_constant 1 in
-  let pat1 = Flow(Asexp, [|Variable 0; pat1|])
-  and pat2 = Flow(Asexp, [|Variable 0; pat2|]) in
+  and false_const = Feature_table.false_constant 1
+  in
   let t = Term.binary imp_id pat1 (Term.binary imp_id pat2 false_const) in
   let nms = standard_argnames 1
   and tps = [|Sign.result s1|]

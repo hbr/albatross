@@ -23,12 +23,11 @@ module Eval = struct
     | Beta of t * t (* redex and reduct *)
     | Simpl of t * int * term array * agens
           (* e, idx of simplifying equality assertion, specialization arguments *)
-    | Flow of flow * t array
     | If of (bool * int * t array) (* cond, idx cond, args *)
-    | As of bool * t array
+    | As of bool * t * types * term (* true or false, inspe, types, pattern *)
     | AsExp of term
-    | Inspect of (term * t * int * int * t)
-          (* uneval, eval insp, case, nvars, eval res *)
+    | Inspect of (term * t * int * t)
+          (* uneval, eval insp, case, eval res *)
   let rec print (prefix:string) (e:t): unit =
     let print_args args =
       let prefix = prefix ^ "  " in
@@ -60,17 +59,13 @@ module Eval = struct
     | Simpl (e,idx,args,ags) ->
         printf "%s simpl eq_idx %d\n" prefix idx;
         print (prefix ^ "    ") e
-    | Flow (ctrl,args) ->
-        printf "%s flow <%s>\n" prefix (string_of_flow ctrl);
-        print_args args
     | If (cond,idx,args) ->
         printf "%s \"if\" %b idx %d\n" prefix cond idx;
         print_args args
-    | As (cond,args) ->
-        printf "%s \"as\" %b\n" prefix cond;
-        print_args args
+    | As (cond,insp,tps,pat) ->
+        printf "%s \"as\" %b\n" prefix cond
     | AsExp t -> printf "%s as %s\n" prefix (Term.to_string t)
-    | Inspect (t,inspe,icase,nvars,rese) ->
+    | Inspect (t,inspe,icase,rese) ->
         printf "%s \"inspect\" case %d\n" prefix icase
 
 end
@@ -197,14 +192,12 @@ end = struct
       | Eval.Beta (e1,e2) -> Eval.Beta (adapt_eval e1, adapt_eval e2)
       | Eval.Simpl (e,eq_idx,args,ags) ->
           Eval.Simpl (adapt_eval e, index eq_idx, args, ags)
-      | Eval.Flow (ctrl,args) ->
-          Eval.Flow (ctrl, adapt_args args)
       | Eval.If (cond,idx,args) ->
           Eval.If (cond, index idx, adapt_args args)
-      | Eval.As (cond,args) ->
-          Eval.As (cond, adapt_args args)
-      | Eval.Inspect (t,inspe,icase,nvars,rese) ->
-          Eval.Inspect (t, adapt_eval inspe, icase, nvars, adapt_eval rese)
+      | Eval.As (cond,inspe,tps,pat) ->
+         Eval.As (cond, adapt_eval inspe, tps, pat)
+      | Eval.Inspect (t,inspe,icase,rese) ->
+          Eval.Inspect (t, adapt_eval inspe, icase, adapt_eval rese)
 
     in
     let rec adapt (pt:t): t =
@@ -266,10 +259,10 @@ end = struct
           used_eval e set
       | Eval.Beta (e1,e2)      -> used_eval e1 (used_eval e2 set)
       | Eval.Simpl (e,i,args,_)-> used_eval e (add_idx i set)
-      | Eval.Flow (ctrl,args)  -> used_args set args
       | Eval.If (cond,idx,args)-> used_args (add_idx idx set) args
-      | Eval.As (cond,args)    -> used_args set args
-      | Eval.Inspect (t,inspe,icase,nvars,rese) ->
+      | Eval.As (cond,inspe,tps,pat) ->
+         used_eval inspe set
+      | Eval.Inspect (t,inspe,icase,rese) ->
           used_eval rese (used_eval inspe set)
     in
     let set = add_idx k set in
@@ -326,10 +319,10 @@ end = struct
         | Eval.Simpl (e,i,args,_) ->
             let set = usd i pt_arr set in
             usd_eval e set
-        | Eval.Flow (ctrl,args) -> usd_args set args
         | Eval.If (cond,idx,args) -> usd_args (usd idx pt_arr set) args
-        | Eval.As (cond,args)   -> usd_args set args
-        | Eval.Inspect(t,inspe,icase,nvars,rese) ->
+        | Eval.As (cond,inspe,tps,pat) ->
+           usd_eval inspe set
+        | Eval.Inspect(t,inspe,icase,rese) ->
             usd_eval rese (usd_eval inspe set)
       in
       if k < start then
@@ -415,12 +408,12 @@ end = struct
         | Eval.Beta (e1,e2)   -> Eval.Beta (transform_eval e1, transform_eval e2)
         | Eval.Simpl (e,i,args,ags) ->
             Eval.Simpl (transform_eval e, index i,args,ags)
-        | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, Array.map transform_eval args)
         | Eval.If (cond,i,args) ->
             Eval.If(cond,index i, Array.map transform_eval args)
-        | Eval.As (cond,args)   -> Eval.As(cond,Array.map transform_eval args)
-        | Eval.Inspect (t,inspe,icase,nvars,rese) ->
-            Eval.Inspect (t, transform_eval inspe, icase, nvars, transform_eval rese)
+        | Eval.As (cond,inspe,tps,pat) ->
+           Eval.As (cond, transform_eval inspe,tps,pat)
+        | Eval.Inspect (t,inspe,icase,rese) ->
+            Eval.Inspect (t, transform_eval inspe, icase, transform_eval rese)
       in
       let transform (i:int) (pt:proof_term): proof_term =
         match pt with
@@ -650,14 +643,18 @@ end = struct
               and args = shrink_args_inner args nb nb2
               and ags  = shrink_types_inner ags nb2 in
               Eval.Simpl (e, idx, args, ags)
-          | Eval.Flow (ctrl,args) -> Eval.Flow (ctrl, shrnk_eargs args)
           | Eval.If(cond,idx,args)-> Eval.If(cond,idx,shrnk_eargs args)
-          | Eval.As(cond,args)    -> Eval.As(cond,shrnk_eargs args)
-          | Eval.Inspect(t,inspe,icase,nvars,rese) ->
+          | Eval.As(cond,inspe,tps,pat) ->
+             let n = Array.length tps in
+             Eval.As (cond,
+                      shrnk inspe nb nb2,
+                      shrink_types_inner tps nb2,
+                      shrink_inner pat (nb+n) nb2)
+          | Eval.Inspect(t,inspe,icase,rese) ->
               let t = shrink_inner t nb nb2
               and inspe = shrnk inspe nb nb2
               and rese  = shrnk rese  nb nb2 in
-              Eval.Inspect(t,inspe,icase,nvars,rese)
+              Eval.Inspect(t,inspe,icase,rese)
         in
         shrnk e 0 0
       in

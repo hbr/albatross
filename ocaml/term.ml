@@ -7,11 +7,6 @@
 open Support
 open Container
 
-type flow =
-    Ifexp
-  | Inspect
-  | Asexp
-
 type term =
     Variable    of int
   | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
@@ -19,11 +14,9 @@ type term =
   | Lam         of int * names * term list * term * bool * type_term
                    (* n, names, pres, t, is_pred, type *)
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
-  | Flow        of flow * arguments
-                   (* if:      args = [c e1 e2]   'e2' is optional
-                      inspect: args = [inspe pat0 e0 pat1 e1 ... ]
-                      as:      args = [e pat]
-                    *)
+  | Ifexp       of term * term * term
+  | Asexp       of term * types * term
+  | Inspect     of term * (formals * term * term) array
   | Indset      of int * type_term * arguments (* name, type, rules *)
 and names      = int array
 and arguments  = term array
@@ -46,13 +39,6 @@ module TermMap = Map.Make(struct
   type t = term
 end)
 
-
-
-let string_of_flow (ctrl:flow): string =
-  match ctrl with
-    Ifexp   -> "if"
-  | Inspect -> "inspect"
-  | Asexp   -> "as"
 
 
 let empty_term:    term = Variable (-1)
@@ -298,19 +284,20 @@ end = struct
         let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
         qstr ^ "(" ^ argsstr ^ ") " ^ (to_string t)
-    | Flow (ctrl,args) ->
-        let argsstr = Array.to_list (Array.map to_string args) in
-        begin
-          match ctrl with
-            Ifexp ->
-              assert (Array.length args <= 3);
-              "if(" ^ (String.concat "," argsstr) ^ ")"
-          | Inspect ->
-              "inspect(" ^ (String.concat "," argsstr) ^ ")"
-          | Asexp ->
-              assert (Array.length args = 2);
-              "as(" ^ (String.concat "," argsstr) ^ ")"
-        end
+    | Ifexp (cond,e1,e2) ->
+       "(if " ^ to_string cond ^ " then " ^ to_string e1
+       ^ " else " ^ to_string e2 ^ ")"
+    | Asexp (e,_,pat) ->
+       "( "  ^ to_string e ^ " as "  ^ to_string pat ^ ")"
+    | Inspect (insp,cases) ->
+       "(inspect "  ^ to_string insp
+       ^ (String.concat
+            ","
+            (Array.to_list
+               (Array.map (fun (_,pat,res) ->
+                    " case " ^ to_string pat ^ " then " ^ to_string res
+                  ) cases)))
+       ^ ")"
     | Indset (n,nms,rs) ->
         "{(" ^ (string_of_int n) ^ "):"
         ^ (String.concat "," (List.map to_string (Array.to_list rs)))
@@ -368,8 +355,18 @@ end = struct
           1 + nds t (1 + nb) (* preconditions are not counted *)
       | QExp (n,_,_,t,_) ->
           1 + nds t (n + nb)
-      | Flow (ctrl,args) ->
-          ndsarr 1 args
+      | Ifexp (c,e1,e2) ->
+         1 + nds c nb + nds e1 nb + nds e2 nb
+      | Asexp (t,tps,pat) ->
+         1 + nds t nb + nds pat (nb + Array.length tps)
+      | Inspect (insp,cases) ->
+         1 + nds insp nb +
+           Array.fold_left
+             (fun sum ((nms,_),pat,res) ->
+               let nb = nb + Array.length nms in
+               sum + nds pat nb + nds res nb)
+             0
+             cases
       | Indset (_,_,rs) ->
           ndsarr 1 rs
     in
@@ -389,8 +386,15 @@ end = struct
         1 + nodes t (* preconditions are not counted *)
     | QExp (_,_,_,t,_) ->
         1 + (nodes t)
-    | Flow (ctrl,args) ->
-        1 + nodesarr args
+    | Ifexp (c,e1,e2) ->
+       1 + nodes c + nodes e1 + nodes e2
+    | Asexp (e, _, pat) ->
+       1 + nodes e + nodes pat
+    | Inspect (insp,cases) ->
+       Array.fold_left
+         (fun sum (_,pat,res) -> sum + nodes pat + nodes res)
+         (1 + nodes insp)
+         cases
     | Indset (_,_,rs) ->
         1 + nodesarr rs
 
@@ -423,8 +427,25 @@ end = struct
           fld a t level nb
       | QExp (n,_,_,t,_) ->
           fld a t (level+1) (nb+n)
-      | Flow (ctrl,args) ->
-          fldarr a args nb
+      | Ifexp (cond, e1, e2) ->
+         let level = level + 1 in
+         fld
+           (fld
+              (fld a cond level nb)
+              e1 level nb
+           )
+           e2 level nb
+      | Asexp (t,tps,pat) ->
+         fld a t (level+1) nb
+      | Inspect(insp, cases) ->
+         let level = level + 1 in
+         Array.fold_left
+           (fun a ((nms,_),pat,res) ->
+             let nb = nb + Array.length nms in
+             fld a res level nb
+           )
+           (fld a insp level nb)
+           cases
       | Indset (n,nms,rs) ->
           fldarr a rs (n+nb)
     in
@@ -562,9 +583,30 @@ end = struct
             eq t1 t2 nb1 nb2
           else
             false
-      | Flow(ctrl1,args1), Flow(ctrl2,args2) ->
-          ctrl1 = ctrl2 &&
-          eqarr args1 args2 nb1 nb2
+      | Ifexp (c1, a1, b1), Ifexp (c2, a2, b2) ->
+         let eq0 t1 t2 = eq t1 t2 nb1 nb2 in
+         eq0 c1 c2 && eq0 a1 a1 && eq0 b1 b2
+      | Asexp (t1, tps1, pat1), Asexp (t2, tps2, pat2) ->
+         let len = Array.length tps1 in
+         len = Array.length tps2
+         && eq t1 t2 nb1 nb2
+         && eqarr tps1 tps1 nb2 0
+         && eq pat1 pat2 (nb1+len) nb2
+      | Inspect (insp1,cases1), Inspect (insp2,cases2) ->
+         let len = Array.length cases1 in
+         len = Array.length cases2
+         && eq insp1 insp2 nb1 nb2
+         && interval_for_all
+              (fun i ->
+                let (nms1,_),pat1,res1 = cases1.(i)
+                and (nms2,_),pat2,res2 = cases2.(i) in
+                let n = Array.length nms1 in
+                let nb1 = nb1 + n in
+                n = Array.length nms2
+                && eq pat1 pat1 nb1 nb2
+                && eq res2 res2 nb1 nb2
+              )
+              0 len
       | Indset (nme1,tp1,rs1), Indset (nme2,tp2,rs2) ->
           eq tp1 tp2 nb2 0 &&
           eqarr rs1 rs2 (1+nb1) nb2
@@ -612,7 +654,9 @@ end = struct
         else Array.map (fun t -> shift_from d1 s1 d2 s2 t) args
       and shift_list d1 s1 d2 s2 lst =
         if d1=0 && d2 = 0 then lst
-        else List.map (fun t -> shift_from d1 s1 d2 s2 t) lst in
+        else List.map (fun t -> shift_from d1 s1 d2 s2 t) lst
+      and shift0 = shift_from delta1 start1 delta2 start2
+      in
       match t with
         Variable i ->
           Variable (shift_i delta1 start1 i)
@@ -641,8 +685,25 @@ end = struct
                (fgnms, shift_args delta2 start2 0 0 fgcon),
                shift_from delta1 start1 delta2 start2 t0,
                is_all)
-      | Flow (ctrl,args) ->
-          Flow (ctrl, shift_args delta1 start1 delta2 start2 args)
+      | Ifexp (cond, a, b) ->
+         Ifexp (shift0 cond, shift0 a, shift0 b)
+      | Asexp (t, tps, pat) ->
+         let n = Array.length tps in
+         Asexp (shift0 t,
+                shift_args delta2 start2 0 0 tps,
+                shift_from delta1 (start1+n) delta2 start2 pat)
+      | Inspect (insp,cases) ->
+         Inspect(
+             shift0 insp,
+             Array.map
+               (fun ((nms,tps),pat,res) ->
+                 let n = Array.length tps in
+                 let shift1 = shift_from delta1 (start1+n) delta2 start2 in
+                 (nms, shift_args delta2 start2 0 0 tps),
+                 shift1 pat,
+                 shift1 res
+               )
+               cases)
       | Indset (nme,tp,rs) ->
           let start1 = 1 + start1 in
           Indset(nme,
@@ -713,7 +774,9 @@ end = struct
     and sub_list lst n1 nb1 d1 args1 n2 nb2 d2 args2 =
       List.map
         (fun t -> partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2)
-        lst in
+        lst
+    and sub0 t = partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2
+    in
     if len1=0 && d1=0 && len2=0 && d2=0 then
       t
     else
@@ -752,8 +815,27 @@ end = struct
                (fgnms, sub_args fgtps n2 nb2 d2 args2 0 0 0 [||]),
                partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
                is_all)
-      | Flow(ctrl,args) ->
-          Flow (ctrl, sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2)
+      | Ifexp (cond, a, b) ->
+         Ifexp (sub0 cond, sub0 a, sub0 b)
+      | Asexp (t, tps, pat) ->
+         let n = Array.length tps in
+         let nb1 = n + nb1 in
+         Asexp (sub0 t,
+                sub_args tps n2 nb2 d2 args2 0 0 0 [||],
+                partial_subst_from pat n1 nb1 d1 args1 n2 nb2 d2 args2)
+      | Inspect (insp, cases) ->
+         Inspect (sub0 insp,
+                  Array.map
+                    (fun ((nms,tps),pat,res) ->
+                      let n = Array.length tps in
+                      let nb1 = n + nb1 in
+                      let sub1 t =
+                        partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2 in
+                      (nms, sub_args tps n2 nb2 d2 args2 0 0 0 [||]),
+                      sub1 pat,
+                      sub1 res
+                    )
+                    cases)
       | Indset (nme,tp,rs) ->
           let nb1 = 1 + nb1 in
           Indset (nme,
@@ -852,8 +934,8 @@ end = struct
 
 
   let map_free (f1:int->int) (f2:int->int) (t:term): term =
-    (* Map all variables [i] of the term [t] to [f i] and all type variables
-       [j] to [f j]. Raise [Term_capture] of a free variable gets bound.
+    (* Map all variables [i] of the term [t] to [f1 i] and all type variables
+       [j] to [f2 j]. Raise [Term_capture] of a free variable gets bound.
      *)
     let fdummy (_:int): int =
       assert false
@@ -861,6 +943,7 @@ end = struct
     let rec mapr (nb1:int) (nb2:int) (f1:int->int) (f2:int->int) (t:term): term =
       let mapargs nb1 nb2 f1 f2 args = Array.map (mapr nb1 nb2 f1 f2) args
       and maplst  nb1 nb2 f1 f2 lst  = List.map (mapr nb1 nb2 f1 f2) lst
+      and map0 = mapr nb1 nb2 f1 f2
       in
       let g1 i =
         if f1 (i - nb1) < 0 then
@@ -897,9 +980,24 @@ end = struct
                (fgnms, mapargs (ntvs+nb2) 0 f2 fdummy fgs),
                mapr (nargs+nb1) (ntvs+nb2) f1 f2 t0,
                is_all)
-      | Flow(ctrl,args) ->
-         Flow(ctrl,
-              mapargs nb1 nb2 f1 f2 args)
+      | Ifexp (cond, a, b) ->
+         Ifexp (map0 cond, map0 a, map0 b)
+      | Asexp (t, tps, pat) ->
+         let n = Array.length tps in
+         Asexp(map0 t,
+               mapargs nb2 0 f2 fdummy tps,
+               mapr (nb1+n) nb2 f1 f2 pat)
+      | Inspect (insp,cases) ->
+         Inspect (map0 insp,
+                  Array.map
+                    (fun ((nms,tps),pat,res) ->
+                      let n = Array.length tps in
+                      let map1 t = mapr (nb1+n) nb2 f1 f2 t in
+                      (nms, mapargs nb2 0 f2 fdummy tps),
+                      map1 pat,
+                      map1 res
+                    )
+                    cases)
       | Indset (nme,tp,rs) ->
          Indset (nme,
                  mapr nb2 0 f2 fdummy tp,
@@ -1436,7 +1534,9 @@ end = struct
     let norm_args (args:term array) (nb:int) (nb2:int): term array =
       Array.map (fun t -> pren t nb nb2 imp_id) args
     and norm_lst  (lst: term list) (nb:int) (nb2:int): term list =
-      List.map (fun t -> pren t nb nb2 imp_id) lst in
+      List.map (fun t -> pren t nb nb2 imp_id) lst
+    and pren0 t = pren t nb nb2 imp_id
+    in
     match t with
       Variable i -> 0, empty_formals, empty_formals, t
     | VAppl(i,args,ags,oo) when i = nb + imp_id ->
@@ -1491,12 +1591,12 @@ end = struct
        assert (nfgs = Array.length fgnms);
        0, empty_formals, empty_formals,
        QExp(n0, (nms,tps), (fgnms,fgcon), pren t0 nb nb2 imp_id, false)
-    | Flow(Ifexp,args) ->
-        0, empty_formals, empty_formals,
-        Flow(Ifexp, norm_args args nb nb2)
-    | Flow(ctrl,args) ->
-        0, empty_formals, empty_formals,
-        Flow(ctrl,args)
+    | Ifexp (c, a, b) ->
+       0, empty_formals, empty_formals, Ifexp( pren0 c, pren0 a, pren0 b)
+    | Asexp _ ->
+       0, empty_formals, empty_formals, t
+    | Inspect _ ->
+       0, empty_formals, empty_formals, t
     | Indset (nme,tp,rs) ->
         let rs = norm_args rs (1+nb) nb2 in
         0, empty_formals, empty_formals , Indset (nme,tp,rs)
