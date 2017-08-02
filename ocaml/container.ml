@@ -196,6 +196,7 @@ module Mylist: sig
   val find2: ('a -> 'b -> bool) -> 'a list -> 'b list -> 'a * 'b
 
   val take_rev: int -> 'a list -> 'a list
+  val filter_rev: ('a -> bool) -> 'a list -> 'a list
 end = struct
 
   let is_empty (l:'a list): bool = match l with [] -> true | _ -> false
@@ -290,6 +291,17 @@ end = struct
                            at least n elements *)
     in
     take n lst []
+
+  let filter_rev (f:'a->bool) (lst:'a list): 'a list =
+    List.fold_left
+      (fun res e ->
+        if f e then
+          e :: res
+        else
+          res
+      )
+      []
+      lst
 end
 
 
