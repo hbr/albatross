@@ -372,6 +372,13 @@ let string_of_variables (c:t): string =
 let string_of_tvs (c:t): string =
   Class_table.string_of_tvs (tvars c) (class_table c)
 
+let is_constructor (i:int) (c:t): bool =
+  Feature_table.is_constructor (i - count_variables c) c.ft
+
+let is_pseudo_constructor (i:int) (c:t): bool =
+  Feature_table.is_pseudo_constructor (i - count_variables c) c.ft
+
+
 let make_lambda
     (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int)
     (tp:type_term)

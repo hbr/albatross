@@ -1208,6 +1208,17 @@ let arity (i:int) (nb:int) (pc:t): int =
   Proof_table.arity i nb pc.base
 
 
+
+let decide (t:term) (pc:t): bool * int =
+  try
+    true, find_match t pc
+  with Not_found ->
+       try
+         false, find_match (negation_expanded t pc) pc
+       with  Not_found ->
+         raise Undecidable
+
+
 exception No_evaluation
 exception No_branch_evaluation
 
@@ -1335,25 +1346,17 @@ let eval_term (t:term) (pc:t): term * Eval.t =
   and eval_if
       (cond:term) (a:term) (b:term) (lazy_:bool) (depth:int) (pc:t)
       : term * Eval.t =
-    (*printf "eval_if %s\n" (string_of_term cond pc);
-    printf "   a %s\n" (string_of_term a pc);
-    printf "   b %s\n" (string_of_term b pc);*)
     let conde = Eval.Term cond in
     try
-      let idx = find_match cond pc
-      and fst,fste = maybe_eval a lazy_ depth pc
-      in
-      fst, Eval.If (true, idx, [|conde; fste; Eval.Term b|])
-    with Not_found ->
-      (*printf "  cond %s not matched\n" (string_of_term cond pc);*)
-      try
-        let idx = find_match (negation_expanded cond pc) pc
-        and  snd,snde = maybe_eval b lazy_ depth pc in
+      let res,idx = decide cond pc in
+      if res then
+        let fst,fste = maybe_eval a lazy_ depth pc in
+        fst, Eval.If (true, idx, [|conde; fste; Eval.Term b|])
+      else
+        let snd,snde = maybe_eval b lazy_ depth pc in
         snd, Eval.If (false, idx, [|conde; Eval.Term a; snde|])
-      with Not_found ->
-        (*printf "  not cond %s not matched\n"
-               (string_of_term (negation_expanded cond pc) pc);*)
-        raise No_branch_evaluation
+    with Undecidable ->
+      raise No_branch_evaluation
 
   and eval_inspect
         (t:term)
@@ -1365,8 +1368,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       : term * Eval.t =
     let ncases = Array.length cases
     and insp, inspe = maybe_eval insp true depth pc
-    and nvars = count_variables pc
-    and ft = feature_table pc
+    and c = context pc
     in
     let rec cases_from (i:int): term * Eval.t =
       if i = ncases then
@@ -1378,8 +1380,21 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       let (nms,tps),pat, res = cases.(i) in
       let n = Array.length nms in
       try
-        let sub = Pattern.unify_with_pattern insp n pat nvars ft in
+        let sub,reqs = Pattern.unify_with_pattern insp n pat c in
         assert (Array.length sub = n);
+        let req_idx_lst =
+          List.fold_left
+            (fun lst t ->
+              let cond,idx = decide t pc in
+              if not cond then
+                begin
+                  printf "case %d rejected\n" i;
+                  raise Reject;
+                end;
+              idx :: lst
+            )
+            [] reqs
+        in
         let res = Term.apply res sub in
         let res,rese = maybe_eval res lazy_ depth pc in
         res, Eval.Inspect(t, inspe, i, rese)
@@ -1396,10 +1411,9 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     let nvars = nbenv pc in
     let n = Array.length tps in
     let insp,inspe = maybe_eval insp lazy_ depth pc in
-    let (*eargs = [|inspe; Eval.Term args.(1)|]
-    and *)ft = feature_table pc in
+    let c = context pc in
     try
-      ignore(Pattern.unify_with_pattern insp n pat nvars ft);
+      ignore(Pattern.unify_with_pattern insp n pat c);
       Feature_table.true_constant nvars,
       Eval.As(true,inspe,tps,pat)
     with Reject ->

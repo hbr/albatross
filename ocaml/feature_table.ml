@@ -270,7 +270,14 @@ let is_constructor (i:int) (ft:t): bool =
   | _ ->
      false
 
-
+let is_pseudo_constructor (i:int) (ft:t): bool =
+  match (descriptor i ft).dominant_cls with
+  | Some cls ->
+     Class_table.is_pseudo_inductive cls ft.ct
+     && Class_table.can_match_pattern cls ft.ct
+     && IntSet.mem i (Class_table.constructors cls ft.ct)
+  | _ ->
+     false
 
 let inductive_type (i:int) (ags:agens) (ntvs:int) (ft:t): type_term =
   assert (is_constructor i ft);
@@ -1106,13 +1113,6 @@ let term_to_string
          Some(Asop), as2str insp tps pat
       | Inspect (insp,cases) ->
          None, insp2str insp cases
-      (*| Flow (ctrl,args) ->
-          begin
-            match ctrl with
-              Ifexp   -> None, if2str args
-            | Inspect -> None, insp2str args
-            | Asexp   -> Some(Asop), as2str args
-          end*)
       | Indset (nme,tp,rs) ->
           let n,nms = 1, [|nme|] in
           let argsstr = args2str n nms in
@@ -1143,15 +1143,17 @@ let term_to_string
           "(" ^ str ^ ")"
         else
           str
-    (*| Some iop, None when is_fun ->
-        "(" ^ str ^ ")"*)
     | _ -> str
   in
-  let nnames = Array.length names in
+  let names =
+    Term.prepend_names
+      (anon_argnames nanon)
+      names
+  (*let nnames = Array.length names in
   let names = Array.init (nnames + nanon)
       (fun i ->
         if i<nanon then anon_symbol i 0
-        else names.(i-nanon))
+        else names.(i-nanon))*)
   in
   to_string t names nanon tvs false None
 
@@ -1206,18 +1208,28 @@ let variant_generics
   assert (Tvars.has_no_variables tvs);
   if nfgs_var = 0 then
     [||]
-  else begin
+  else
     let idx_tp_substituted = Term.subst desc.tp (Tvars.count_fgs tvs) ags in
-    let open Type_substitution in
-    let sub = make nfgs_var desc_var.tvs tvs ft.ct in
+    try
+      Type_substitution.make_equal
+        desc_var.tp desc_var.tvs
+        idx_tp_substituted tvs
+        ft.ct
+    with Not_found ->
+      assert false (* must be unifiable *)
+      (*
     begin
-      try
-        unify desc_var.tp idx_tp_substituted sub
-      with Reject ->
-        assert false (* must be unifiable *)
-    end;
-    array nfgs_var sub
-  end
+      let idx_tp_substituted = Term.subst desc.tp (Tvars.count_fgs tvs) ags in
+      let open Type_substitution in
+      let sub = make nfgs_var desc_var.tvs tvs ft.ct in
+      begin
+        try
+          unify desc_var.tp idx_tp_substituted sub
+        with Reject ->
+          assert false (* must be unifiable *)
+      end;
+      array nfgs_var sub
+    end*)
 
 
 let variant_feature
@@ -2539,13 +2551,26 @@ let recognizers (idx:int) (ft:t): term list =
   List.map fst (descriptor idx ft).recognizers
 
 
+let recognizer (idx:int) (ft:t): term =
+  (* Return the first recognizer or raise Not_found if there are no recognizers
+
+     A recognizer has only one free variable which can be substituted by the
+     expression to be recognized for the constructor [idx]. If the constructor
+     [idx] has formal generics these have to be substituted by the actual
+     generics.  *)
+  match (descriptor idx ft).recognizers with
+  | [] ->
+     raise Not_found
+  | (reco,_) :: _ ->
+     reco
+
 let add_recognizer (exp:term) (ghost_reco:term) (idx:int) (ft:t): unit =
   if has_recognizer exp ghost_reco idx ft then
     ()
   else
     begin
-    let desc = descriptor idx ft in
-    desc.recognizers <- (exp,ghost_reco) :: desc.recognizers
+      let desc = descriptor idx ft in
+      desc.recognizers <- (exp,ghost_reco) :: desc.recognizers
     end
 
 
@@ -2581,6 +2606,18 @@ let set_projector (proj:int) (ivar:int) (idx:int) (ft:t): unit =
 let has_all_projectors (idx:int) (ft:t): bool =
   IntMap.cardinal (descriptor idx ft).projectors
   = arity idx ft
+
+
+let projectors (idx:int) (ft:t): int array =
+  let map = (descriptor idx ft).projectors in
+  Array.init
+    (arity idx ft)
+    (fun i ->
+      try
+        IntMap.find i map
+      with Not_found ->
+        assert false (* Illegal call, not all projectors available *)
+    )
 
 
 let is_equality_index (idx:int) (ft:t): bool =

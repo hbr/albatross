@@ -111,6 +111,9 @@ val variable_type: int -> t -> type_term
 val variable_class: int -> t -> int
 val variable_index: int -> t -> int
 
+val is_constructor: int -> t -> bool
+val is_pseudo_constructor: int -> t -> bool
+
 val unique_name:  int -> t -> int
 val unique_names: int array -> t -> int array
 
@@ -157,6 +160,7 @@ val update_types: type_term array -> t -> unit
 
 val string_of_term0:      term -> bool -> bool -> int -> t -> string
 val string_of_term:       term -> t -> string
+val string_of_term_anon:  term -> int -> t -> string
 val string_long_of_term:  term -> t -> string
 val string_of_term_array: string -> term array -> t -> string
 val string_of_arguments:  term array -> t -> string

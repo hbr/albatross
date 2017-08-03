@@ -38,10 +38,12 @@ val set_seed: int -> int -> agens -> t -> unit
 
 val add_recognizer: term -> term -> int -> t -> unit
 val recognizers: int -> t -> term list
+val recognizer:  int -> t -> term
 val filter_recognizers: term -> int -> t -> unit
 
 val set_projector:  int -> int -> int -> t -> unit
 val has_all_projectors: int -> t -> bool
+val projectors: int -> t -> int array
 
 val complexity: term -> int -> Tvars.t -> t -> int
 
@@ -121,6 +123,7 @@ val result_type: int -> agens -> int -> t -> type_term
 val argument_names: int -> t -> int array
 val body:         int -> t -> Feature.body
 
+val is_pseudo_constructor:    int -> t -> bool
 val is_constructor:    int -> t -> bool
 val inductive_type:    int -> agens -> int -> t -> type_term
 val evaluated_as_expression: term -> int -> Tvars.t -> t -> term

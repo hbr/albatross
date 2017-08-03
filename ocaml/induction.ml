@@ -162,28 +162,21 @@ let is_pair_mutually_exclusive
       (cls: int)
       (ft:Feature_table.t)
     : bool =
-  let pairs = Class_table.recognizer_pairs cls (Feature_table.class_table ft)
-  in
-  List.exists
-    (fun ri ->
-      List.exists
-        (fun rj ->
-          try
-            ignore
-              (List.find
-                  (fun (t1,t2) ->
-                    (Term.equivalent t1 ri &&  Term.equivalent t2 rj)
-                    || (Term.equivalent t2 ri &&  Term.equivalent t1 rj)
-                  )
-                  pairs
-              );
-            true
-          with Not_found ->
-            false
-        )
-        (Feature_table.recognizers (snd carr.(j)) ft)
-    )
-    (Feature_table.recognizers (snd carr.(i)) ft)
+  try
+    ignore(
+        List.find
+          (fun (t1,t2) ->
+            let ri = Feature_table.recognizer (snd carr.(i)) ft
+            and rj = Feature_table.recognizer (snd carr.(j)) ft
+            in
+            (Term.equivalent t1 ri &&  Term.equivalent t2 rj)
+            || (Term.equivalent t2 ri &&  Term.equivalent t1 rj)
+          )
+          (Class_table.recognizer_pairs cls (Feature_table.class_table ft))
+      );
+    true
+  with Not_found ->
+    false
 
 
 
@@ -240,7 +233,7 @@ let check_class (cls:int) (ft:Feature_table.t): unit =
         if are_all_mutually_exclusive carr cls ft then
           begin
             if is_tracing_ft ft then
-              printf "\n\nClass %s can do pattern match\n\n"
+              printf "Class %s can do pattern match\n\n"
                      (Class_table.class_name cls ct);
             Class_table.set_pattern_match cls ct
           end
@@ -481,7 +474,7 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
      put_potential_induction_law idx t ps_rev c
 
   (* Projector all(a1,..) proj_ij(ci(a1,..) = aj *)
-  | VAppl(eq,[|VAppl(proj,[|VAppl(co,cargs,ags,oo)|],_,_);Variable i|],_,_)
+  | VAppl(eq,[|VAppl(proj,[|VAppl(co,cargs,ags,oo)|],pags,_);Variable i|],_,_)
        when ps_rev = []
             && proj <> co
             && i < n

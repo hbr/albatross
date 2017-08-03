@@ -1,4 +1,5 @@
 open Term
+open Signature
 open Container
 open Support
 open Printf
@@ -24,68 +25,164 @@ let is_pattern (n:int) (t:term) (nb:int) (ft:FT.t): bool =
 
 
 
+let recognizer (t:term) (co:int) (ags:agens) (c:Context.t): term =
+  (* A recognizer expression which expresses the fact that term [t] has been
+     constructed by the constructor [co] using [ags] to substitute the formal
+     generics of [co]. Raise [Not_found] if [co] has no recognizer.*)
+  try
+    let open Context in
+    let nvars = count_variables c
+    and tvs = tvars c
+    and ft = feature_table c
+    in
+    assert (nvars <= co);
+    let reco = Feature_table.recognizer (co-nvars) ft in
+    let res =
+      Feature_table.substituted reco 1 0 0 [|t|] nvars ags tvs ft
+    in
+    (*printf "recognizer\n";
+      printf "    constr %s\n" (Feature_table.string_of_signature (co-nvars) c.ft);
+      printf "    reco   %s\n" (string_of_term res c);*)
+      res
+  with Not_found ->
+    assert false (* Illegal call *)
+
+
+
+let project (t:term) (co:int) (n:int) (ags:agens) (c:Context.t): arguments =
+  (* The term [t] projected onto the arguments of the constructor [co] with
+     [n] arguments with the actual generics [ags]. *)
+  try
+    let open Context in
+    let nvars = count_variables c
+    and tvs = tvars c
+    and ft = feature_table c
+    in
+    assert (nvars + n <= co);
+    let tvs_co,sign_co = Feature_table.signature0 (co-n-nvars) ft
+    and nfgs_c = Tvars.count_fgs tvs
+    and projs = Feature_table.projectors (co-n-nvars) ft in
+    assert (Sign.arity sign_co = n);
+    assert (Tvars.count_fgs tvs_co = Array.length ags);
+    let res =
+    Array.map
+      (fun proj ->
+        let ags_new =
+          let tvs_pr,sign_pr = Feature_table.signature0 proj ft in
+          assert (Sign.arity sign_pr = 1);
+          assert (Tvars.count_fgs tvs_pr = Tvars.count_fgs tvs_co);
+          let subs =
+            Type_substitution.make_equal
+              (Sign.arg_type 0 sign_pr) tvs_pr
+              (Sign.result sign_co) tvs_co
+              (Context.class_table c)
+          in
+          Term.subst_array subs nfgs_c ags
+        in
+        VAppl(proj+nvars, [|t|], ags_new, false)
+      )
+      projs
+    in
+    printf "project %s\n" (Context.string_of_term t c);
+    printf "  onto constructor %s\n"
+           (Feature_table.string_of_signature (co-n-nvars) ft);
+    printf "  %s\n" (Context.string_of_term_array "," res c);
+    res
+  with Not_found ->
+    assert false (* Illegal call *)
+
+
+
+
+
+
 let unify_with_pattern
-    (t:term) (n:int) (pat:term) (nb:int) (ft:FT.t)
-    : arguments =
-  (* Unify the term [t] with the pattern [n,pat]. The term and pattern above
-     its pattern variables come from an environment with [nb] variables.
+      (t:term) (n:int) (pat:term) (c:Context.t)
+    : arguments * term list =
+  (* Match the term [t] against the pattern [pat] with [n] pattern variables.
 
-     Three cases are possible:
+     Return a substitution for the pattern variables and a list of recognizer
+     conditions to be satisfied.
 
-     (a) The term can be matched with the pattern. Then a substitution is
-     returned which applied to the pattern makes it equivalent to the
-     term. The term is then an instance of the pattern.
+     Exceptions:
 
-     (b) The term can definitely not matched with the pattern because there
-     are conflicting constructors at the corresponding positions. The
-     Exception [Reject] is raised
+     a) Reject: Conflicting constructors if inductive classes present
+     b) Undecidable: For some constructors of inductive classes there is not
+                     enough information in the term [t] to decide the case.
 
-     (c) The term might match the pattern, but it cannot be decided because
-     there is not enough information in the term. The exception [Undecidable]
-     is raised.
+     Pseudo inductive types: For each constructor of a pseudo inductive class
+     the corresponding recognizer is added to the list and either the corresponding
+     part of the term [t] can be matched or a projector is used to substitute
+     the variable.
+
    *)
   let args = Array.make n empty_term
   in
-  let is_constr i =
-    assert (nb <= i);
-    FT.is_constructor (i-nb) ft
-  in
-  let do_sub i t =
-    if args.(i) = empty_term then
-      args.(i) <- t
-    else if not (Term.equivalent args.(i) t) then
-      raise Reject
-  in
-  let rec uni (t:term) (pat:term): unit =
-    let uniargs args1 args =
-      let nargs = Array.length args1 in
-      assert (nargs = Array.length args);
-      let undecidable =
-        Container.interval_fold
-          (fun undec i ->
-            try
-              uni args1.(i) args.(i);
-              undec
-            with Undecidable ->
-              true
-          )
-          false 0 nargs
-      in
-      if undecidable then raise Undecidable
-    in
-    match t, pat with
-      _, Variable i ->
-        assert (i < n);
-        do_sub i t
-    | VAppl(i1,args1,ags1,_), VAppl(i,args,ags,_) when is_constr i1 ->
-        if i1 + n <> i then
-          raise Reject;
-        uniargs args1 args
+  let term_args (i1:int) (nargs:int) (ags:agens) (pseudo:bool) (t:term): arguments =
+    match t with
+    | VAppl(i2,args2,_,_) when i2 + n = i1 ->
+       args2
+    | VAppl(i2,args2,_,_) when not pseudo ->
+       if i2 + n <> i1 && Context.is_constructor i2 c then
+         raise Reject
+       else
+         raise Undecidable
+    | _ when pseudo ->
+       if nargs = 0 then
+         [||]
+       else
+         project t i1 nargs ags c
     | _ ->
-        raise Undecidable
+       raise Undecidable
+  and do_sub i t =
+    assert (i < n);
+    assert (args.(i) = empty_term); (* No duplicate pattern variables possible *)
+    args.(i) <- t
+  and args_complete () =
+    Array.for_all (fun t -> t <> empty_term) args
   in
-  uni t pat;
-  args
+  let rec pmatch (pat:term) (t:term) (rlst): term list =
+    let match_args pargs targs rlst =
+      let len = Array.length pargs in
+      assert (len = Array.length targs);
+      interval_fold
+        (fun lst i ->
+          pmatch pargs.(i) targs.(i) lst
+        )
+        rlst 0 len
+    in
+    match pat with
+    | Variable i ->               (* A pattern variable *)
+       assert (i < n);
+       do_sub i t;
+       rlst
+    | VAppl(i1,args1,ags1,_) ->      (* A constructor *)
+       let n1 = Array.length args1 in
+       if Context.is_pseudo_constructor (i1-n) c then
+         begin
+           try
+             let rlst =
+               let reco = recognizer t (i1-n) ags1 c in
+               if List.mem reco rlst then
+                 rlst
+               else
+                 reco :: rlst
+             in
+             match_args args1 (term_args i1 n1 ags1 true t) rlst
+           with Not_found ->
+             printf "        recognizer not found\n";
+             assert false (* There must be a recognizer *)
+         end
+       else
+         match_args args1 (term_args i1 n1 ags1 false t) rlst
+    | _ ->
+       assert false (* [pat] consists only of variables and constructors. *)
+  in
+  let rlst = pmatch pat t [] in
+  assert (args_complete ());
+  args, List.rev rlst
+
+
 
 
 let evaluated_primary_as_expression

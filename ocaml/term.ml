@@ -1410,13 +1410,12 @@ end = struct
    same prefixed name already existed another '$' had to be added until no more
    conflicts arised.
 
-   New strategy: We use the prefix '$' as an escape. If a variable 'v' exists in
-   the inner and in an outer context, the outer variable is renamed to '$v'. All
-   variables in the outer context which are name '$$$$$...v' where there are zero
+   New strategy: We use the prefix '.' as an escape. If a variable 'v' exists in
+   the inner and in an outer context, the outer variable is renamed to '.v'. All
+   variables in the outer context which are name '...v' where there are zero
    or more escapes get one escape more.
 
  *)
-
   let adapt_outer_names (nms_inner:int array) (nms_outer:int array): int array =
     let nms_outer = Array.copy nms_outer in
     let patch_outer inner i outer =

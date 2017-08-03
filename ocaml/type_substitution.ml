@@ -12,8 +12,8 @@ exception Reject
    tvs2.
 
    tvs1 is the environment for the subtitutable formal generics and tvs2 is
-   the environment for the substitution.  that the substitution applied to
-   [tp1] results in [tp2].
+   the environment for the substitution.  The substitution applied to [tp1]
+   results in [tp2].
 
         tvs1:      vars1 vars2   fgs                  |vars1 vars2| = n
         tvs2:                    ....   fgs
@@ -53,7 +53,7 @@ let put (i:int) (t:type_term) (s:t): unit =
   else if not (Term.equivalent (get i s) t) then
     raise Reject
 
-let array (len:int) (s:t): type_term array =
+let array (len:int) (s:t): types =
   assert (len <= count s);
   Array.sub s.sub 0 len
 
@@ -111,3 +111,20 @@ let make (n:int) (tvs1:Tvars.t) (tvs2:Tvars.t) (ct:Class_table.t): t =
       ok
     );
   {n; gp1 = 0; sub = Array.make n empty_term; delta; tvs1; tvs2; ct}
+
+
+
+let make_equal
+      (tp1:type_term) (tvs1:Tvars.t)
+      (tp2:type_term) (tvs2:Tvars.t)
+      (ct:Class_table.t)
+    : types =
+  (* The types [tp1] from [tvs1] and [tp2] from [tvs2] should be
+     equivalent. If this is the case then return a substitution of the formal
+     generics of [tp1] which makes it identical to [tp2]. *)
+  assert (Tvars.has_no_variables tvs1);
+  assert (Tvars.has_no_variables tvs2);
+  let nfgs = Tvars.count_fgs tvs1 in
+  let s = make nfgs tvs1 tvs2 ct in
+  unify tp1 tp2 s;
+  array nfgs s
