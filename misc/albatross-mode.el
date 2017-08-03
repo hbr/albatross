@@ -62,13 +62,13 @@
 (modify-syntax-entry ?\} "){  " alba-syntax-table)
 
 (modify-syntax-entry ?\{ "()1n"
-                     alba-syntax-table) ; { is first character of comment start
+                     alba-syntax-table) ; '{' is first character of comment start
 
 (modify-syntax-entry ?:  ". 23n"
-                     alba-syntax-table) ; : is second character of comment start,
+                     alba-syntax-table) ; ':' is second character of comment start,
                                         ; and first character of comment end
 (modify-syntax-entry ?\} ")(4" alba-syntax-table)
-                                        ; } is last character of comment end
+                                        ; '}' is last character of comment end
 
 
 (define-derived-mode albatross-mode fundamental-mode "albatross"

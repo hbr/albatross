@@ -114,7 +114,21 @@ let make_as_expression
   Asexp(e,tps,pat)
 
 
+
 let evaluated_as_expression (t:term) (c:Context.t): term =
+  (*
+    If an as expression allows a partial match e.g.
+
+        (a,b) as (0, successor(_))
+
+    then the evaluation returns the splitted as expression
+
+        a as 0  and  b as successor(_)
+
+    instead of evaluating it directly to
+
+        some(n) (a,b) = (0, successor(n))
+   *)
   match t with
   | Asexp(e,tps,pat) ->
      let n = Array.length tps in
