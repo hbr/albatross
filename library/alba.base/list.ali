@@ -8,10 +8,30 @@ H:ANY
 
 
 
-size (a:[G]): NATURAL
-    -> inspect a
-       case []  then 0
-       case h^t then t.size.successor
+length (a:[G]): NATURAL
+    -> inspect
+           a
+       case [] then
+           0
+       case x ^ xs then
+           xs.length + 1
+
+
+[] (a:[G], i:NATURAL): G
+        -- The ith element of the list 'a'.
+    require
+        i < a.length
+    ensure
+        -> inspect
+               a
+           case x ^ xs then
+               inspect
+                   i
+               case 0 then
+                   x
+               case j.successor then
+                   xs[j]
+    end
 
 
 head (a:[G]): G
@@ -111,6 +131,11 @@ is_prefix (a,b:[G]): BOOLEAN
 
 all(a,b,c:[G], x:G)
     ensure
+        -- list length
+        a as _ ^ _ ==> 0 < a.length
+        a as _ ^ _ ==> 1 <= a.length
+        a as [_]   ==> a as _ ^ _
+
         -- concatenation of lists
         a   + []  =  a
 

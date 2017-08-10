@@ -4,6 +4,7 @@ use
     natural
 end
 
+A:ANY
 G:ANY
 H:ANY
 
@@ -73,6 +74,9 @@ all(x,y:G, a,b:[G])
 
 
 
+{: List Length
+   =========== :}
+
 
 size (a:[G]): NATURAL
     -> inspect a
@@ -80,6 +84,62 @@ size (a:[G]): NATURAL
        case h^t then t.size.successor
 
 
+length (a:[A]): NATURAL
+    -> inspect
+           a
+       case [] then
+           0
+       case x ^ xs then
+           xs.length + 1
+
+
+all(a:[A])
+    require
+        a as _ ^ _
+    ensure
+        0 < a.length
+    via some(x,xs) a = x ^ xs
+    end
+
+all(a:[A])
+    require
+        a as _ ^ _
+    ensure
+        1 <= a.length
+    assert
+        0 + 1 <= a.length
+    end
+
+all(a:[A])
+        {: This proof is needed as long as advanced as-expression handling is
+           not yet implemented :}
+    require
+        a as [_]
+    ensure
+        a as _ ^ _
+    via some(x) a = [x]
+    end
+
+
+
+{: Element Access
+   ============== :}
+
+[] (a:[A], i:NATURAL): A
+        -- The ith element of the list 'a'.
+    require
+        i < a.length
+    ensure
+        -> inspect
+               a
+           case x ^ xs then
+               inspect
+                   i
+               case 0 then
+                   x
+               case j.successor then
+                   xs[j]
+    end
 
 
 {: List Content
