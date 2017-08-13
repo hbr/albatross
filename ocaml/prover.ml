@@ -408,26 +408,32 @@ let enter (i:int) (gs:t): unit =
      quantified and/or and implication chain.
 
      If yes, create a new target and a target context, push the assumptions
-     and close the context.
+     and close the context. Iterate the procedure if the target is universally
+     quantified and/or an implication chain.
    *)
   let g = item i gs in
-  let n,tps,fgs,ps_rev,tgt =
-    PC.split_general_implication_chain g.goal g.ctxt.pc in
-  if n = 0 && ps_rev = [] then
-    ()
-  else
-    begin
-      let pc = PC.push_typed0 tps fgs g.ctxt.pc in
-      List.iter
-        (fun p ->
-          ignore (PC.add_assumption p true pc);
-        )
-        (List.rev ps_rev);
-      if ps_rev <> [] then
-        PC.close_assumptions pc;
-      g.target <- tgt;
-      g.tgt_ctxt <- {pc; map = TermMap.empty}
-    end
+  let rec do_enter gl ctxt =
+    let n,tps,fgs,ps_rev,tgt =
+      PC.split_general_implication_chain gl ctxt.pc in
+    if n = 0 && ps_rev = [] then
+      ()
+    else
+      begin
+        let pc = PC.push_typed0 tps fgs ctxt.pc in
+        let tgt_ctxt = {pc; map = TermMap.empty} in
+        List.iter
+          (fun p ->
+            ignore (PC.add_assumption p true pc);
+          )
+          (List.rev ps_rev);
+        if ps_rev <> [] then
+          PC.close_assumptions pc;
+        g.target <- tgt;
+        g.tgt_ctxt <- tgt_ctxt;
+        do_enter tgt tgt_ctxt
+      end
+  in
+  do_enter g.goal g.ctxt
 
 
 
