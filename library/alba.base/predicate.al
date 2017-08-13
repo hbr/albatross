@@ -420,3 +420,115 @@ all(p:{G}, ps:{{G}})
                 p in ps and x in p
             end
     end
+
+
+{: Quantifier Transformations
+   ========================== :}
+
+A: ANY
+
+all(p:{A}, e:BOOLEAN)
+    ensure
+        ((all(x) p(x)) or e) = (all(x) p(x) or e)
+    assert
+        require
+             (all(x) p(x)) or e
+        ensure
+             all(x) p(x) or e
+        end
+
+        require
+             all(x) p(x) or e
+        ensure
+             (all(x) p(x)) or e
+        if e
+        else
+            assert
+                all(x)
+                    ensure
+                        p(x)
+                    assert
+                        e or p(x)
+                    end
+        end
+    end
+
+
+
+all(p:{A})
+    ensure
+        not (some(x) x in p) = (all(x) x /in p)
+    end
+
+all(p:{A})
+    ensure
+        not (all(x) x in p)  = (some(x) x /in p)
+    end
+
+
+all(p:{A}, e:BOOLEAN)
+    ensure
+        ((some(x) x in p) ==> e)
+        =
+        (all(x) x in p ==> e)
+    end
+
+
+all(p:{A}, e:BOOLEAN)
+    ensure
+        (some(x) x in p and e) = ((some(x) x in p) and e)
+    assert
+        require
+            some(x) x in p and e
+        ensure
+            (some(x) x in p) and e
+        via some(x)
+            x in p and e
+        end
+
+        require
+            (some(x) x in p) and e
+        ensure
+            some(x) x in p and e
+        via some(x)
+            x in p
+        assert
+            x in p and e
+        end
+    end
+
+all(p:{A}, e:BOOLEAN)
+    require
+         (all(x) p(x)) and e
+    ensure
+         all(x) p(x) and e
+    end
+
+
+all(p,q:{A})
+    ensure
+        (some(x) p(x)) or (some(x) q(x)) = (some(x) p(x) or q(x))
+    assert
+        require
+            (some(x) p(x)) or (some(x) q(x))
+        ensure
+            some(x) p(x) or q(x)
+        if some(x) p(x)
+            via some(x) p(x)
+            assert
+                p(x) or q(x)
+        orif some(x) q(x)
+            via some(x) q(x)
+            assert
+                p(x) or q(x)
+        end
+        require
+            some(x) p(x) or q(x)
+        ensure
+            (some(x) p(x)) or (some(x) q(x))
+        via some(x)
+            p(x) or q(x)
+        if p(x)
+        orif q(x)
+        end
+    end

@@ -134,3 +134,22 @@ all(p:{G}, ps:{{G}})
     ensure
         p in ps ==> p <= + ps
     end
+
+
+
+
+{: Quantifier Transformations
+   ========================== :}
+
+A: ANY
+
+all(p,q:{A}, e:BOOLEAN)
+    ensure
+        ((all(x) p(x)) or e) = (all(x) p(x) or e)
+
+        ((some(x) x in p) ==> e) = (all(x) x in p ==> e)
+
+        (some(x) x in p and e) = ((some(x) x in p) and e)
+
+        (some(x) p(x)) or (some(x) q(x)) = (some(x) p(x) or q(x))
+    end
