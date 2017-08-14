@@ -64,8 +64,8 @@ let used_variables_0 (nargs:int) (et:eterm) (set:IntSet.t): IntSet.t =
     in
     match et.term with
       EVar i ->
-        if i < nargs then
-          IntSet.add i set
+        if nb <= i && i < nargs + nb then
+          IntSet.add (i-nb) set
         else
           set
     | EGlAppl (_,args,_) ->
