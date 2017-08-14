@@ -942,7 +942,11 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
   in
   let dup = res <> cnt in
   if pc.trace && ((search && not dup) || is_trace_extended pc) then
-    trace_term t rd search dup pc;
+    trace_term t rd search dup pc
+  else if is_global pc && verbosity pc > 1 then begin
+      printf "\n%s\n" (string_of_term t pc);
+      flush_all ()
+    end;
   Ass_seq.push rd pc.terms;
   if search && not dup then
     begin
