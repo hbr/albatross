@@ -1096,7 +1096,11 @@ let analyze (ast: declaration list) (pc:Proof_context.t): unit =
       | Named_feature (fn, entlst, rt, is_func, body, expr) ->
           analyze_feature fn entlst rt is_func body expr pc
       | Theorem (entlst, req, ens, prf) ->
-          Source_prover.prove_and_store entlst req ens prf pc
+         if PC.verbosity pc > 1 then
+           Prover.push_statistics ();
+         Source_prover.prove_and_store entlst req ens prf pc;
+         if PC.is_private pc && PC.verbosity pc > 1 then
+           Prover.print_statistics_and_pop (PC.trace_prefix pc)
       | Formal_generic (fgname, cn) ->
          put_formal_generic fgname cn pc
       | Class_list lst ->

@@ -39,6 +39,116 @@ module PC = Proof_context
 
  *)
 
+
+module Statistics:
+sig
+  type t
+  val make: unit -> t
+  val add_proof: t -> unit
+  val add_goal:  t -> unit
+  val add_alternatives: int -> t -> unit
+  val add_falses: int -> t -> unit
+  val push: t -> unit
+  val pop: t -> unit
+  val print_and_pop: Format.formatter -> t -> unit
+  val print: Format.formatter -> t -> unit
+end =
+  struct
+    type entry = {
+        mutable nproofs: int;
+        mutable ngoals: int;
+        mutable nalternatives: int;
+        mutable nfalses: int;
+      }
+    type t = {
+        mutable stack: entry list;
+        entry: entry
+      }
+
+    let make_entry (): entry =
+      { nproofs = 0;
+        ngoals = 0;
+        nalternatives = 0;
+        nfalses = 0;
+      }
+
+    let copy_entry (e:entry): entry =
+      { nproofs = e.nproofs;
+        ngoals  = e.ngoals;
+        nalternatives = e.nalternatives;
+        nfalses = e.nfalses}
+
+    let make (): t =
+      {stack = [];
+       entry = make_entry ()
+      }
+
+    let add_proof (s:t): unit =
+      s.entry.nproofs <- s.entry.nproofs + 1
+
+    let add_goal (s:t): unit =
+      s.entry.ngoals <- s.entry.ngoals + 1
+
+    let add_alternatives (n:int) (s:t): unit =
+      s.entry.nalternatives <- s.entry.nalternatives + n - 1
+
+    let add_falses (n:int) (s:t): unit =
+      s.entry.nfalses <- s.entry.nfalses + n - 1
+
+    let push (s:t): unit =
+      s.stack <- copy_entry s.entry :: s.stack
+
+    let pop (s:t): unit =
+      match s.stack with
+      | [] ->
+         assert false (* Illegal call *)
+      | hd :: tl ->
+         s.stack <- tl
+
+    let print_delta (f:Format.formatter) (e:entry ) (s:t): unit =
+      let nproofs = s.entry.nproofs - e.nproofs
+      and ngoals = s.entry.ngoals - e.ngoals
+      and nalternatives = s.entry.nalternatives - e.nalternatives
+      and nfalses = s.entry.nfalses - e.nfalses in
+      let open Format in
+      fprintf f "@[<v>Statistics@,";
+      if nproofs > 1 then
+        fprintf f "nproofs %d@," nproofs;
+      fprintf
+        f "%s%s(false)@,%6d%16d(%5d)"
+        "ngoals" "   nalternatives"
+        ngoals (nalternatives + nfalses) nfalses;
+      if nproofs > 1 then
+        fprintf f "@,%6.1f%16.1f(%5.1f)"
+                (float_of_int ngoals /. float_of_int nproofs)
+                (float_of_int (nalternatives + nfalses) /. float_of_int nproofs)
+                (float_of_int nfalses /. float_of_int nproofs);
+      fprintf f "@,@]"
+
+    let print_and_pop (f:Format.formatter) (s:t): unit =
+      match s.stack with
+      | [] ->
+         assert false (* Illegal call *)
+      | hd :: tl ->
+         s.stack <- tl;
+         print_delta f hd s
+
+    let print (f:Format.formatter) (s:t): unit =
+      print_delta f (make_entry ()) s
+  end
+
+
+let statistics = Statistics.make ()
+
+let push_statistics (): unit =
+  Statistics.push statistics
+
+let print_statistics_and_pop (str:string): unit =
+  let open Format in
+  printf "@[%s" str;
+  Statistics.print_and_pop std_formatter statistics;
+  printf "@]@."
+
 type context = {pc:PC.t; mutable map: int TermMap.t}
 
 
@@ -492,6 +602,7 @@ let generate_subgoal
       calc_blacklist cons j_idx g.black g.tgt_ctxt.pc
     in
     let sub = goal p cnt black [i,j,jsub] g.tgt_ctxt gs in
+    Statistics.add_goal statistics;
     Seq.push sub gs.goals;
     cnt
   in
@@ -568,6 +679,11 @@ let generate_subgoals (i:int) (gs:t): unit =
       alts
   in
   g.alternatives <- Array.of_list (List.rev alts);
+  let nalts = Array.length g.alternatives in
+  if Term.equivalent g.target (PC.false_constant g.tgt_ctxt.pc) then
+    Statistics.add_falses nalts statistics
+  else
+    Statistics.add_alternatives nalts statistics;
   List.iter
     (fun (k,cons,ipar,ialt,bwd_idx,isub) ->
       let sub = item k gs
@@ -687,6 +803,8 @@ let trace_viable_subgoals (gs:t): unit =
 let proof_term (g:term) (pc:PC.t): term * proof_term =
   let pc = PC.push_empty pc in
   PC.close_assumptions pc;
+  Statistics.push statistics;
+  Statistics.add_proof statistics;
   let gs = init g pc in
   if gs.trace then begin
     printf "\n%strying to prove: %s\n"
@@ -744,7 +862,8 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
     round 0 0;
     assert false (* shall not happen, because either we succeed or we fail,
                     but we cannot fall through *)
-  with Root_succeeded ->
+  with
+  | Root_succeeded ->
     let g = item 0 gs in
     let g_pos =
       match g.pos with
@@ -752,7 +871,14 @@ let proof_term (g:term) (pc:PC.t): term * proof_term =
       | _ -> assert false (* Root goal has succeeded *)
     in
     assert (g_pos < PC.count g.ctxt.pc);
+    if gs.trace then
+      print_statistics_and_pop (PC.trace_prefix pc)
+    else
+      Statistics.pop statistics;
     pc_discharged g_pos g.ctxt.pc
+  | Proof_failed msg ->
+     Statistics.pop statistics;
+     raise (Proof_failed msg)
 
 
 
