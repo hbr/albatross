@@ -39,7 +39,6 @@ and eterm = {
 
 type max_numbers = {
     max_locs: int;
-    max_fgs: int;
     max_globs: int
   }
 
@@ -284,8 +283,7 @@ let first_pass_0
           not_yet_implemented entlst.i "Multiple inductive sets";
         assert (nlocs <= 1);
         let mn =
-          {mn with
-           max_globs = mn.max_globs + nlocs;
+          {max_globs = mn.max_globs + nlocs;
            max_locs  = max mn.max_locs (Context.count_type_variables c_new)}
         in
         let mn, rules =
@@ -441,8 +439,7 @@ let first_pass_0
         entlst.i
         "Lambda expression must not introduce new formal generic";
     let mn =
-      {mn with
-       max_locs  = max mn.max_locs (Context.count_type_variables c_new);
+      {max_locs  = max mn.max_locs (Context.count_type_variables c_new);
        max_globs = mn.max_globs + Context.count_local_type_variables c_new
      }
     in
@@ -575,8 +572,7 @@ let first_pass
   first_pass_0
     e
     {max_locs  = Context.count_type_variables c;
-     max_globs = 0;
-     max_fgs   = 0}
+     max_globs = 0}
     c
 
 
@@ -600,8 +596,7 @@ let first_pass_list
     mn, used, List.rev lst
   in
   let mn = {max_locs  = Context.count_type_variables c;
-            max_globs = 0;
-            max_fgs   = 0} in
+            max_globs = 0} in
   let mn,used,lst = first_pass_list0 mn IntSet.empty lst in
   if check_used && IntSet.cardinal used < nargs then
     begin
@@ -1109,7 +1104,7 @@ let different_untyped
 
 
 let make_tb (mn:max_numbers) (c:Context.t): TB.t =
-  TB.make None mn.max_locs mn.max_globs mn.max_fgs c
+  TB.make None mn.max_locs mn.max_globs c
 
 
 let extract_unique

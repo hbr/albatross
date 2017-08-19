@@ -510,7 +510,7 @@ let unify_with_required (tp:type_term) (tb:t): unit =
 
 
 let make
-    (tp:type_term option) (nlocs:int) (nglobs:int) (nfgs:int) (c:Context.t)
+    (tp:type_term option) (nlocs:int) (nglobs:int) (c:Context.t)
     : t =
   let tvs_c = Context.tvars c in
   assert (Tvars.count_global tvs_c = 0);
@@ -521,11 +521,11 @@ let make
   in
   let maxlocs  = nlocs + nlocs_c
   and maxglobs = nglobs (* Context does not have globals *)
-  and maxfgs   = nfgs + nfgs_c
+  and maxfgs   = nfgs_c
   in
   let trans =
     let start  = nlocs_c
-    and space1 = maxglobs + nfgs
+    and space1 = maxglobs
     and space2 = nlocs in
     transform0 start space1 space2
   in

@@ -18,7 +18,7 @@ val string_of_head_term: t -> string
 val string_of_complete_head_term: t -> string
 val string_of_tvs: t -> string
 val string_of_substitutions: t -> string
-val make: type_term option -> int -> int -> int -> Context.t -> t
+val make: type_term option -> int -> int -> Context.t -> t
 val copy: t -> t
 val expect_argument: int -> t -> unit
 val expect_boolean: t -> unit
