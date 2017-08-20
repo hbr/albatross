@@ -7,6 +7,7 @@
 open Support
 open Container
 
+
 type term =
     Variable    of int
   | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
@@ -23,6 +24,7 @@ and arguments  = term array
 and agens      = type_term array
 and types      = type_term array
 and formals    = names * arguments
+and formals2   = (int,type_term) Array2.t
 and type_term  = term
 and info_term  = term withinfo
 
@@ -1713,7 +1715,7 @@ end (* Term *)
 
 module Formals:
 sig
-  type t
+  type t = (int,type_term) Array2.t
   val empty: t
   val make:  names -> types -> t
   val count: t -> int
@@ -1724,27 +1726,17 @@ sig
 end
   =
   struct
-    type t = {
-        names: names;
-        types: types
-      }
-    let empty: t = {names = [||]; types = [||]}
+    type t = (int,type_term) Array2.t
+    let empty: t = Array2.empty
     let make (nms:names) (tps:types): t =
-      assert (Array.length nms = Array.length tps);
-      {names = nms; types = tps}
-
-    let names (formals:t): names = formals.names
-    let types (formals:t): types = formals.types
-    let count (formals:t): int = Array.length formals.names
-    let sub (start:int) (n:int) (fs:t): t =
-      assert (start <= count fs);
-      assert (start + n <= count fs);
-      make
-        (Array.sub (names fs) start n)
-        (Array.sub (types fs) start n)
-    let formals(formals:t): formals = formals.names, formals.types
+      Array2.make nms tps
+    let names (f:t) = Array2.first f
+    let types (f:t) = Array2.second f
+    let count (f:t) = Array2.count f
+    let sub (start:int) (n:int) (f:t): t = Array2.sub start n f
+    let formals (f:t) = Array2.first f, Array2.second f
     let equivalent (f1:t) (f2:t): bool =
-      Term.equivalent_array f1.types f2.types
+      Term.equivalent_array (types f1) (types f2)
   end (* Formals *)
 
 

@@ -383,6 +383,47 @@ end
 
 
 
+module Array2:
+sig
+  type ('a, 'b) t
+  val empty: ('a,'b) t
+  val make: 'a array -> 'b array -> ('a,'b) t
+  val count: ('a,'b) t -> int
+  val first: ('a,'b) t -> 'a array
+  val second: ('a,'b) t -> 'b array
+  val elem1: int -> ('a,'b) t -> 'a
+  val elem2: int -> ('a,'b) t -> 'b
+  val sub: int -> int -> ('a,'b) t -> ('a,'b) t
+end =
+  struct
+    type ('a, 'b) t =
+      { arr1: 'a array; arr2: 'b array}
+    let make (arr1: 'a array) (arr2:'b array): ('a,'b) t =
+      assert (Array.length arr1 = Array.length arr2);
+      {arr1; arr2}
+    let empty: ('a,'b) t =
+      {arr1 = [||]; arr2 =  [||]}
+    let count (a:('a,'b) t): int =
+      Array.length a.arr1
+    let first (a:('a,'b) t): 'a array =
+      a.arr1
+    let second (a:('a,'b) t): 'b array =
+      a.arr2
+    let elem1 (i:int) (a:('a,'b) t): 'a =
+      assert (i < count a);
+      a.arr1.(i)
+    let elem2 (i:int) (a:('a,'b) t): 'b =
+      assert (i < count a);
+      a.arr2.(i)
+    let sub (start:int) (n:int) (a:('a,'b) t): ('a,'b) t =
+      assert (start <= count a);
+      assert (start + n <= count a);
+      make
+        (Array.sub a.arr1 start n)
+        (Array.sub a.arr2 start n)
+  end
+
+
 module Seq: sig
   type 'a t
   val empty: unit -> 'a t
