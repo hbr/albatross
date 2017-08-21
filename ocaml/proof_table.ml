@@ -96,10 +96,10 @@ let count_last_variables (at:t): int =
 let local_argnames (at:t): int array =
   Context.local_argnames at.c
 
-let local_formals (at:t): formals =
+let local_formals (at:t): formals0 =
   Context.local_formals at.c
 
-let local_fgs (at:t): formals =
+let local_fgs (at:t): formals0 =
   Context.local_fgs at.c
 
 let has_result (at:t): bool =
@@ -128,10 +128,10 @@ let imp_id (at:t): int =
 let split_implication (t:term) (at:t): term * term =
   Term.binary_split t (imp_id at)
 
-let split_all_quantified (t:term) (at:t): int * formals * formals * term =
+let split_all_quantified (t:term) (at:t): Formals.t * Formals.t * term =
   Term.all_quantifier_split t
 
-let split_some_quantified (t:term) (at:t): int * formals * term =
+let split_some_quantified (t:term) (at:t): Formals.t * term =
   Term.some_quantifier_split t
 
 let implication (a:term) (b:term) (at:t): term =
@@ -144,15 +144,15 @@ let split_implication_chain (t:term) (at:t): term list * term =
   Term.split_implication_chain t (imp_id at)
 
 let quantified
-    (is_all:bool) (nargs:int) (tps:formals) (fgs:formals) (t:term) (at:t)
+    (is_all:bool) (tps:Formals.t) (fgs:Formals.t) (t:term) (at:t)
     : term =
-  Context.quantified is_all nargs tps fgs t at.c
+  Context.quantified is_all tps fgs t at.c
 
-let all_quantified (nargs:int)  (tps:formals) (fgs:formals)(t:term) (at:t): term =
-  Context.all_quantified nargs tps fgs t at.c
+let all_quantified (tps:Formals.t) (fgs:Formals.t)(t:term) (at:t): term =
+  Context.all_quantified tps fgs t at.c
 
-let some_quantified (nargs:int)  (tps:formals) (fgs:formals) (t:term) (at:t): term =
-  Context.some_quantified nargs tps fgs t at.c
+let some_quantified (tps:Formals.t) (fgs:Formals.t) (t:term) (at:t): term =
+  Context.some_quantified tps fgs t at.c
 
 
 let string_of_term (t:term) (at:t): string =
@@ -290,23 +290,24 @@ let variant (i:int) (bcls:int) (cls:int) (at:t): term =
   assert (is_global at);
   let t,c = term i at in
   assert (c == at.c);
-  let n,(nms,tps),(fgnms,fgcon),t0 =
+  let tps,fgs,t0 =
     try Term.all_quantifier_split t
     with Not_found -> assert false in
-  assert (Array.length fgcon = 1); (* Only one formal generic *)
-  let bcls0,_ = split_type fgcon.(0) in
+  let n = Formals.count tps in
+  assert (Formals.count fgs = 1); (* Only one formal generic *)
+  let bcls0,_ = split_type (Formals.typ 0 fgs) in
   assert (bcls0 = bcls + 1);
   let ft = feature_table at
   and ct = class_table at in
   let ctp,tvs = Class_table.class_type cls ct in
   let ags = [|ctp|] in
   let nall = Tvars.count_all tvs in
-  let tps  = Array.map
-      (fun tp -> Term.subst tp nall ags)
-      tps
+  let tps  = Formals.map
+               (fun tp -> Term.subst tp nall ags)
+               tps
   and fgnms, fgcon = Tvars.fgnames tvs, Tvars.fgconcepts tvs in
   let t0 = Feature_table.substituted t0 n 0 0 [||] 0 ags tvs ft in
-  Term.all_quantified n (nms,tps) (fgnms,fgcon) t0
+  Term.all_quantified tps (Formals.make fgnms fgcon) t0
 
 
 
@@ -351,11 +352,10 @@ let discharged_term (i:int) (at:t): term =
    *)
   assert (not (is_global at));
   let t0 = discharged_assumptions i at in
-  let n   = count_last_arguments at
-  and tps = local_formals at
+  let tps = local_formals at
   and fgs = local_fgs at
   in
-  Term.all_quantified n tps fgs t0
+  Term.all_quantified (Formals.from_pair tps) (Formals.from_pair fgs) t0
 
 
 
@@ -462,18 +462,19 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
   and ntvs_i  = ntvs_term i at
   in
   let d1 = count_variables at - nvars_i in
-  let n,(nms,tps),(fgnms,fgcon),t0 =
+  let tps,fgs,t0 =
     try Term.all_quantifier_split desc.term
-    with Not_found -> 0, empty_formals, empty_formals, desc.term
+    with Not_found -> Formals.empty, Formals.empty, desc.term
   in
+  let n = Formals.count tps in
   assert (nargs <= n);
   let tsub =
     Feature_table.substituted
       t0 n nvars_i ntvs_i
       args d1
       ags tvs (feature_table at)
-  and nms = Array.sub nms nargs (n-nargs)
-  and tps = Array.sub tps nargs (n-nargs)
+  and nms = Array.sub (Formals.names tps) nargs (n-nargs)
+  and tps = Array.sub (Formals.types tps) nargs (n-nargs)
   in
   let tps = Term.subst_array tps (nall-ntvs_i) ags in
   if nargs < n then
@@ -484,7 +485,7 @@ let term_of_specialize (i:int) (args:term array) (ags:agens) (at:t): term =
       Term.binary
         imp_id0
         (Term.down (n-nargs) a)
-        (Term.all_quantified (n-nargs) (nms,tps) empty_formals b)
+        (Term.all_quantified (Formals.make nms tps) Formals.empty b)
     with Term_capture ->
       printf "term capture\n";
       raise Illegal_proof_term
@@ -559,8 +560,10 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         let ta,tb = reconstruct e (1 + nb) in
         Lam (n,nms,pres,ta,pr,tp), Lam (n,nms,pres,tb,pr,tp)
     | Eval.QExp (n,tps,fgs,e,is_all) ->
-        let ta,tb = reconstruct e (nb+n) in
-        QExp (n,tps,fgs,ta,is_all), QExp (n,tps,fgs,tb,is_all)
+       let ta,tb = reconstruct e (nb+n)
+       and tps = Formals.from_pair tps
+       and fgs = Formals.from_pair fgs in
+       QExp (tps,fgs,ta,is_all), QExp (tps,fgs,tb,is_all)
     | Eval.Beta (e_redex, e_reduct) ->
         let ta_redex,tb_redex   = reconstruct e_redex nb
         and ta_reduct,tb_reduct = reconstruct e_reduct nb in
@@ -723,7 +726,6 @@ let term_of_eval_bwd (t:term) (e:Eval.t) (at:t): term =
 let term_of_witness
     (i:int) (nms:names) (tps:types) (t:term) (args:term array) (at:t)
     : term =
-  let nargs = Array.length args in
   Array.iter
     (fun t ->
       match t with Variable i when i = -1 ->
@@ -731,7 +733,7 @@ let term_of_witness
       | _ -> ()
     )
     args;
-  let some_term = Term.some_quantified nargs (nms,tps) t in
+  let some_term = Term.some_quantified (Formals.make nms tps) t in
   let ti  = local_term i at in
   let wt  = Term.apply t args in
   if not (Term.equivalent ti wt) then begin
@@ -755,7 +757,8 @@ let someelim (i:int) (at:t): term =
    *)
   assert (i < count at);
   let t_i = local_term i at in
-  let nargs,(nms,tps),t0 = split_some_quantified t_i at in
+  let tps,t0 = split_some_quantified t_i at in
+  let nargs = Formals.count tps in
   let imp_id  = imp_id at
   in
   let imp_id_inner = imp_id + (nargs+1)
@@ -766,9 +769,9 @@ let someelim (i:int) (at:t): term =
   let t1 = Term.up_from 1 nargs t0
   in
   let t_impl_u   = Term.binary imp_id_inner t1 (Variable nargs) in
-  let all_inner  = Term.all_quantified nargs (nms,tps) empty_formals t_impl_u in
+  let all_inner  = Term.all_quantified tps Formals.empty t_impl_u in
   let impl_outer = Term.binary imp_id_outer all_inner (Variable 0) in
-  Term.all_quantified 1 ([|e_name|],[|e_tp|]) empty_formals impl_outer
+  Term.all_quantified (Formals.make [|e_name|] [|e_tp|]) Formals.empty impl_outer
 
 
 
@@ -1120,7 +1123,8 @@ let discharged0 (i:int) (bubble:bool) (at:t)
     in
     let n1new, n2new = count_formals tps, count_formals fgs in
     let t0 = Term.subst0 t0 n1new args n2new ags in
-    let t  = Term.all_quantified n1new tps fgs t0 in
+    let t  =
+      Term.all_quantified (Formals.from_pair tps) (Formals.from_pair fgs) t0 in
     let t  =
       if bubble then
         prenex_term_bubble_one t (pop at)
@@ -1182,8 +1186,8 @@ let discharged (i:int) (at:t): term * proof_term =
       let t0 = discharged_assumptions i at
       and args = local_formals at
       and fgs  = local_fgs at in
-      let n = count_formals args in
-      let t = Term.all_quantified n args fgs t0
+      let t =
+        Term.all_quantified (Formals.from_pair args) (Formals.from_pair fgs) t0
       and pt =
         let cnt0  = count_previous at in
         let narr = if at.maxreq <= i then i+1-cnt0 else at.maxreq-cnt0 in

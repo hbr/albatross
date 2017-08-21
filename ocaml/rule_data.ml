@@ -154,9 +154,8 @@ let prepend_premises
     implication_chain ps rd.target (rd.ctxt.nargs + count_variables rd)
   in
   Term.all_quantified
-    rd.ctxt.nargs
-    (rd.ctxt.nms,   rd.ctxt.tps)
-    (rd.ctxt.fgnms, rd.ctxt.fgcon)
+    (Formals.make rd.ctxt.nms rd.ctxt.tps)
+    (Formals.make rd.ctxt.fgnms rd.ctxt.fgcon)
     t
 
 
@@ -348,10 +347,15 @@ let split_term
 
 let make (t:term) (c:Context.t): t =
   assert (Context.has_no_type_variables c);
-  let nargs,(nms,tps),(fgnms,fgcon),t0 =
+  let tps,fgs,t0 =
     try Term.all_quantifier_split t
-    with Not_found -> 0,empty_formals,empty_formals, t
+    with Not_found -> Formals.empty,Formals.empty, t
   in
+  let nargs = Formals.count tps
+  and nms = Formals.names tps
+  and tps = Formals.types tps
+  and fgnms = Formals.names fgs
+  and fgcon = Formals.types fgs in
   let ctxt = {c = c;
               nargs     = nargs;
               nms       = nms;

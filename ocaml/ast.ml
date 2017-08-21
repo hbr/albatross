@@ -416,7 +416,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
         not_yet_implemented
           info
           "Lambda expressions in recursive definitions"
-    | QExp (n,fargs,fgs,t0,_) ->
+    | QExp (fargs,fgs,t0,_) ->
         error_info
           info
           "Quantified expressions not allowed in recursive definitions"
@@ -677,9 +677,8 @@ let add_case_inversion_equal (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
       (VAppl(eq_id, [|t1;t2|], ags,false))
       (Feature_table.false_constant (n1+n2)) in
   let t = Term.all_quantified
-      (n1+n2)
-      (standard_argnames (n1+n2),tps)
-      (fgnms,fgcon)
+      (Formals.make (standard_argnames (n1+n2)) tps)
+      (Formals.make fgnms fgcon)
       t in
   (*printf "inversion %s\n" (Proof_context.string_of_term t pc);*)
   ignore(add_case_axiom t pc)
@@ -716,7 +715,8 @@ let add_case_inversion_as (idx1:int) (idx2:int) (cls:int) (pc:PC.t): unit =
   and fgnms = Tvars.fgnames tvs1
   and fgcon = Tvars.fgconcepts tvs1
   in
-  let q = Term.all_quantified 1 (nms,tps) (fgnms,fgcon) t in
+  let q = Term.all_quantified (Formals.make nms tps) (Formals.make fgnms fgcon) t
+  in
   (*printf "inversion %s\n" (PC.string_of_term q pc);*)
   ignore(add_case_axiom q pc)
 
@@ -785,7 +785,11 @@ let add_case_injections
             Feature_table.equality_term ai bi (2*n) itp tvs ft
           in
           let imp = Feature_table.implication eq_ca_cb eq_ai_bi (2*n) in
-          let t = Term.all_quantified (2*n) (nms,tps) (fgnms,fgcon) imp in
+          let t =
+            Term.all_quantified
+              (Formals.make nms tps)
+              (Formals.make fgnms fgcon)
+              imp in
           (*printf "injection %s\n" (Proof_context.string_of_term t pc);*)
           ignore(add_case_axiom t pc)
         done)

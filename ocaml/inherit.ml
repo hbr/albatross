@@ -203,18 +203,19 @@ let inherit_assertion (i:int) (cls:int) (info:info) (pc:PC.t): unit =
   assert (PC.is_global pc);
   let t = PC.term i pc in
   match t with
-    QExp(n,(nms,tps),(fgnms,fgcon),t0,true) ->
-      let nfgs = Array.length fgnms in
-      assert (nfgs = 1); (* Deferred assertion must have one formal generic. *)
-      let ft = PC.feature_table pc in
-      let ct = Feature_table.class_table ft in
-      let ctp,tvs = Class_table.class_type cls ct in
-      let t1 =
-        Feature_table.substituted t0 n 0 0
-          (standard_substitution n)
-          n [|ctp|] tvs ft in
+  | QExp(tps,fgs,t0,true) ->
+     let n = Formals.count tps
+     and nfgs = Formals.count fgs in
+     assert (nfgs = 1); (* Deferred assertion must have one formal generic. *)
+     let ft = PC.feature_table pc in
+     let ct = Feature_table.class_table ft in
+     let ctp,tvs = Class_table.class_type cls ct in
+     let t1 =
+       Feature_table.substituted t0 n 0 0
+                                 (standard_substitution n)
+                                 n [|ctp|] tvs ft in
       begin try
-        let goal = QExp(n,empty_formals,empty_formals,t1,true) in
+        let goal = QExp(tps,Formals.empty,t1,true) in
         let ivar = PC.find goal pc in
         if 1 < PC.verbosity pc then begin
           printf "    deferred assertion %2d \"%s\"\n"

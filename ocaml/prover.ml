@@ -523,14 +523,15 @@ let enter (i:int) (gs:t): unit =
    *)
   let g = item i gs in
   let rec do_enter gl ctxt =
-    let n,tps,fgs,ps_rev,tgt =
+    let tps,fgs,ps_rev,tgt =
       PC.split_general_implication_chain gl ctxt.pc in
+    let n = Formals.count tps in
     if n = 0 && ps_rev = [] then
       ()
     else
       begin
         let pc =
-          PC.push_typed0 (Formals.from_pair tps) (Formals.from_pair fgs) ctxt.pc in
+          PC.push_typed0 tps fgs ctxt.pc in
         let tgt_ctxt = {pc; map = TermMap.empty} in
         List.iter
           (fun p ->

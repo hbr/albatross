@@ -13,6 +13,6 @@ val boolean_term: expression -> Context.t -> info_term
 val result_term:  expression -> Context.t -> term
 val structured_assertion:
   entities list withinfo -> compound -> compound -> Context.t
-  -> formals * formals * term withinfo list * term withinfo list
+  -> formals0 * formals0 * term withinfo list * term withinfo list
 val case_variables: expression -> bool -> Context.t -> expression * int array
 val case_pattern: expression -> type_term -> Context.t -> names * term

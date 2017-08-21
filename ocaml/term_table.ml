@@ -331,9 +331,10 @@ let uni_core
             assert false (* lists must have the same size *)
       in
       addpres pres prestablst sublst
-  | QExp (n,_,_,t,is_all) ->
-      let ttab = IntMap.find n (qmap is_all tab) in
-      uni t ttab (n+nb) r
+  | QExp (tps,_,t,is_all) ->
+     let n = Formals.count tps in
+     let ttab = IntMap.find n (qmap is_all tab) in
+     uni t ttab (n+nb) r
   | Ifexp (cond,a,b) ->
      begin
        match tab.ifs with
@@ -672,7 +673,8 @@ let add_base
           and prestab = addpres pres prestab
           in
           add_lam len (prestab,ttab) tab
-      | QExp (n,_,_,t,is_all) ->
+      | QExp (tps,_,t,is_all) ->
+         let n = Formals.count tps in
           let ttab = intmap_find n empty (qmap is_all tab)
           in
           let ttab = add0 t (nb+n) ttab in

@@ -14,17 +14,17 @@ type term =
   | Application of term * arguments * bool (* fterm, args, inop *)
   | Lam         of int * names * term list * term * bool * type_term
                    (* n, names, pres, t, is_pred, type *)
-  | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
+  | QExp        of formals * formals * term * bool (* args, fgs, t, is_all *)
   | Ifexp       of term * term * term
   | Asexp       of term * types * term
-  | Inspect     of term * (formals2 * term * term) array
+  | Inspect     of term * (formals * term * term) array
   | Indset      of int * type_term * arguments (* name, type, rules *)
 and names      = int array
 and arguments  = term array
 and agens      = type_term array
 and types      = type_term array
-and formals    = names * arguments
-and formals2   = (int,type_term) Array2.t
+and formals0   = names * arguments
+and formals   = (int,type_term) Array2.t
 and type_term  = term
 and info_term  = term withinfo
 
@@ -45,7 +45,7 @@ end)
 
 let empty_term:    term = Variable (-1)
 
-let empty_formals: formals = [||], [||]
+let empty_formals: formals0 = [||], [||]
 
 
 let standard_substitution (n:int): term array =
@@ -70,7 +70,7 @@ let split_type (tp:type_term): int * agens =
 
 
 
-let count_formals ((nms,tps):formals): int =
+let count_formals ((nms,tps):formals0): int =
   let n = Array.length nms in
   assert (n = Array.length tps);
   n
@@ -124,9 +124,10 @@ module Term: sig
   val used_variables_array_filtered:   term array -> (int -> bool) -> int list
   val used_variables_from:  term -> int -> bool -> int list
   val used_variables_transform: term -> int -> int array * int array
-  val unused_transform:     formals -> int -> formals -> term ->
-    formals * arguments * formals * arguments
-  val remove_unused: formals -> int -> formals -> term -> formals * formals * term
+  val unused_transform:     formals0 -> int -> formals0 -> term ->
+    formals0 * arguments * formals0 * arguments
+  val remove_unused: formals0 -> int -> formals0 -> term ->
+                     formals0 * formals0 * term
   val equivalent: term -> term -> bool
 
   val equivalent_list: term list -> term list -> bool
@@ -168,32 +169,32 @@ module Term: sig
 
   val lambda_split: term -> int * int array * term list * term * bool * type_term
 
-  val qlambda_split_0: term -> int * formals * formals * term * bool
-  val qlambda_split: term -> int * formals * formals * term * bool
+  val qlambda_split_0: term -> formals * formals * term * bool
+  val qlambda_split: term -> formals * formals * term * bool
 
   val unary: int -> term -> term
 
   val unary_split: term -> int -> term
 
-  val quantified: bool -> int -> formals -> formals -> term -> term
+  val quantified: bool -> formals -> formals -> term -> term
 
-  val all_quantified:  int -> formals -> formals -> term -> term
+  val all_quantified:  formals -> formals -> term -> term
 
-  val some_quantified:  int -> formals -> term -> term
+  val some_quantified:  formals -> term -> term
 
-  val quantifier_split: term -> bool -> int * formals * formals * term
+  val quantifier_split: term -> bool -> formals * formals * term
 
-  val all_quantifier_split:  term-> int * formals * formals * term
-  val all_quantifier_split_1:term-> int * formals * formals * term
+  val all_quantifier_split:  term-> formals * formals * term
+  val all_quantifier_split_1:term-> formals * formals * term
 
-  val some_quantifier_split: term -> int * formals * term
+  val some_quantifier_split: term -> formals * term
 
   val is_all_quantified: term -> bool
   val is_generic: term -> bool
 
-  val pattern: int -> formals -> term -> term
-  val pattern_split: term -> int * formals * term
-  val case_split: term -> term -> int * formals * term * term
+  val pattern: formals -> term -> term
+  val pattern_split: term -> formals * term
+  val case_split: term -> term -> formals * term * term
 
   val binary: int -> term -> term -> term
 
@@ -207,11 +208,11 @@ module Term: sig
   val split_left_binop_chain: term -> int -> term list
 
   val split_general_implication_chain:
-    term -> int -> int * formals * formals * term list * term
+    term -> int -> formals * formals * term list * term
 
   val closure_rule:   int -> term -> term -> term
   val induction_rule: int -> int -> term -> term -> term
-    -> int * formals * term list * term
+    -> formals * term list * term
   val induction_law:  int -> term -> term -> type_term -> type_term -> term
   val prepend_names:  names -> names -> names
   val prenex:            term -> int -> int -> int -> term
@@ -282,8 +283,10 @@ end = struct
         ^ ")"
     | Lam(nargs,names,pres,t,pred,_) ->
         strlam nargs names pres t pred
-    | QExp (nargs,(names,_),_,t,is_all) ->
-        let argsstr = argsstr nargs names in
+    | QExp (tps,_,t,is_all) ->
+       let nargs = Array2.count tps
+       and names = Array2.first tps in
+       let argsstr = argsstr nargs names in
         let qstr    = if is_all then "all" else "some" in
         qstr ^ "(" ^ argsstr ^ ") " ^ (to_string t)
     | Ifexp (cond,e1,e2) ->
@@ -355,8 +358,8 @@ end = struct
           ndsarr (nds f nb) args
       | Lam (_,_,pres,t,_,_) ->
           1 + nds t (1 + nb) (* preconditions are not counted *)
-      | QExp (n,_,_,t,_) ->
-          1 + nds t (n + nb)
+      | QExp (tps,_,t,_) ->
+          1 + nds t (Array2.count tps + nb)
       | Ifexp (c,e1,e2) ->
          1 + nds c nb + nds e1 nb + nds e2 nb
       | Asexp (t,tps,pat) ->
@@ -386,7 +389,7 @@ end = struct
         nodes f + nodesarr args
     | Lam (_,_,pres,t,_,_) ->
         1 + nodes t (* preconditions are not counted *)
-    | QExp (_,_,_,t,_) ->
+    | QExp (_,_,t,_) ->
         1 + (nodes t)
     | Ifexp (c,e1,e2) ->
        1 + nodes c + nodes e1 + nodes e2
@@ -427,8 +430,8 @@ end = struct
           and nb    = 1 + nb in
           let a = List.fold_left (fun a t -> fld a t level nb) a pres in
           fld a t level nb
-      | QExp (n,_,_,t,_) ->
-          fld a t (level+1) (nb+n)
+      | QExp (tps,_,t,_) ->
+          fld a t (level+1) (nb + Array2.count tps)
       | Ifexp (cond, e1, e2) ->
          let level = level + 1 in
          fld
@@ -570,21 +573,20 @@ end = struct
             &&
           eq t1 t2 nb1 nb2 (*&&
           eq tp1 tp2 nb2 0*)
-      | QExp(n1,(nms1,tps1),(fgnms1,fgs1),t1,is_all1),
-        QExp(n2,(nms2,tps2),(fgnms2,fgs2),t2,is_all2)
-        when n1 = n2 && is_all1 = is_all2 ->
-          let nfgs1 = Array.length fgs1
-          and nfgs2 = Array.length fgs2 in
-          if nfgs1 = nfgs2 then
-            let nb1 = n1 + nb1
-            and nb2 = nfgs1 + nb2 in
-            Array.length nms1 = Array.length nms2 &&
-            Array.length fgnms1 = Array.length fgnms2 &&
-            (*eqarr fgs1 fgs2 nb2 0 &&
-            eqarr tps1 tps2 nb2 0 &&*)
-            eq t1 t2 nb1 nb2
-          else
-            false
+      | QExp(tps1,fgs1,t1,is_all1), QExp(tps2,fgs2,t2,is_all2)
+           when Array2.count tps1 = Array2.count tps2
+                && is_all1 = is_all2 ->
+         let nfgs1 = Array2.count fgs1
+         and nfgs2 = Array2.count fgs2
+         and n1 = Array2.count tps1 in
+         if nfgs1 = nfgs2 then
+           let nb1 = n1 + nb1
+           and nb2 = nfgs1 + nb2 in
+           (*eqarr fgs1 fgs2 nb2 0 &&
+             eqarr tps1 tps2 nb2 0 &&*)
+           eq t1 t2 nb1 nb2
+         else
+           false
       | Ifexp (c1, a1, b1), Ifexp (c2, a2, b2) ->
          let eq0 t1 t2 = eq t1 t2 nb1 nb2 in
          eq0 c1 c2 && eq0 a1 a1 && eq0 b1 b2
@@ -678,13 +680,16 @@ end = struct
               shift_from delta1 start1 delta2 start2 t,
               pred,
               shift_from delta2 start2 0 0 tp)
-      | QExp (n,(nms,tps),(fgnms,fgcon),t0,is_all) ->
-          assert (n = Array.length tps);
-          let start1 = n + start1
-          and start2 = Array.length fgcon + start2 in
-          QExp(n,
-               (nms,   shift_args delta2 start2 0 0 tps),
-               (fgnms, shift_args delta2 start2 0 0 fgcon),
+      | QExp (tps,fgs,t0,is_all) ->
+         let n = Array2.count tps
+         and nms = Array2.first tps
+         and tps = Array2.second tps
+         and fgnms = Array2.first fgs
+         and fgcon = Array2.second fgs in
+         let start1 = n + start1
+         and start2 = Array.length fgcon + start2 in
+          QExp(Array2.make nms (shift_args delta2 start2 0 0 tps),
+               Array2.make fgnms (shift_args delta2 start2 0 0 fgcon),
                shift_from delta1 start1 delta2 start2 t0,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -811,12 +816,16 @@ end = struct
                partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
                pr,
                partial_subst_from tp n2 nb2 d2 args2 0  0   0  [||])
-      | QExp (n,(nms,tps),(fgnms,fgtps),t0,is_all) ->
-          let nb1 = n + nb1
-          and nb2 = nb2 + Array.length fgtps in
-          QExp(n,
-               (nms,   sub_args tps   n2 nb2 d2 args2 0 0 0 [||]),
-               (fgnms, sub_args fgtps n2 nb2 d2 args2 0 0 0 [||]),
+      | QExp (tps,fgs,t0,is_all) ->
+         let n = Array2.count tps
+         and nms = Array2.first tps
+         and tps = Array2.second tps
+         and fgnms = Array2.first fgs
+         and fgtps = Array2.second fgs in
+         let nb1 = n + nb1
+         and nb2 = nb2 + Array.length fgtps in
+         QExp( Array2.make nms (sub_args tps   n2 nb2 d2 args2 0 0 0 [||]),
+               Array2.make fgnms (sub_args fgtps n2 nb2 d2 args2 0 0 0 [||]),
                partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -978,12 +987,16 @@ end = struct
               mapr (1+nb1) nb2 f1 f2 t0,
               pred,
               mapr nb2 0 f2 fdummy tp)
-      | QExp (nargs,(nms,tps), (fgnms,fgs), t0, is_all) ->
+      | QExp (tps, fgs, t0, is_all) ->
+         let nargs = Array2.count tps
+         and nms = Array2.first tps
+         and tps = Array2.second tps
+         and fgnms = Array2.first fgs
+         and fgs = Array2.second fgs in
          let ntvs = Array.length fgs
          in
-         QExp (nargs,
-               (nms, mapargs (ntvs+nb2) 0 f2 fdummy tps),
-               (fgnms, mapargs (ntvs+nb2) 0 f2 fdummy fgs),
+         QExp (Array2.make nms (mapargs (ntvs+nb2) 0 f2 fdummy tps),
+               Array2.make fgnms (mapargs (ntvs+nb2) 0 f2 fdummy fgs),
                mapr (nargs+nb1) (ntvs+nb2) f1 f2 t0,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -1136,11 +1149,11 @@ end = struct
 
 
   let unused_transform
-      ((nms,tps):    formals)
+      ((nms,tps):    formals0)
       (ntvs:int)
-      ((fgnms,fgcon):formals)
+      ((fgnms,fgcon):formals0)
       (t:term)
-      : formals  * arguments * formals  * agens =
+      : formals0  * arguments * formals0  * agens =
     (* Find the used variables in the term [t] and the used type variables in the
        types [tps].
 
@@ -1180,11 +1193,11 @@ end = struct
 
 
   let remove_unused
-      ((nms,tps):formals)
+      ((nms,tps):formals0)
       (ntvs:int)
-      ((fgnms,fgcon):formals)
+      ((fgnms,fgcon):formals0)
       (t:term)
-      : formals * formals * term =
+      : formals0 * formals0 * term =
     let (nms,tps), args, (fgnms,fgcon), ags =
       unused_transform (nms,tps) ntvs (fgnms,fgcon) t in
     let n1new = Array.length nms
@@ -1200,30 +1213,32 @@ end = struct
     | _ -> raise Not_found
 
 
-  let qlambda_split_0 (t:term): int * formals * formals * term * bool =
+  let qlambda_split_0 (t:term): formals * formals * term * bool =
     match t with
-      QExp (n,args,fgs,t,is_all) -> n,args,fgs,t,is_all
+      QExp (args,fgs,t,is_all) -> args,fgs,t,is_all
     | _ ->
-        0, empty_formals, empty_formals, t, false
+        Array2.empty, Array2.empty, t, false
 
-  let qlambda_split (t:term): int * formals * formals * term * bool =
+  let qlambda_split (t:term): formals * formals * term * bool =
     match t with
-      QExp (n,args,fgs,t,is_all) -> n,args,fgs,t,is_all
+      QExp (args,fgs,t,is_all) -> args,fgs,t,is_all
     | _ -> raise Not_found
 
-  let pattern_split (t:term): int * formals * term =
-    let n,fargs,_,t,is_all = qlambda_split_0 t in
+  let pattern_split (t:term): formals * term =
+    let fargs,_,t,is_all = qlambda_split_0 t in
     assert (not is_all);
-    n, fargs, t
+    fargs, t
 
-  let case_split (t1:term) (t2:term): int * formals * term * term =
-    let n1,fargs1,t1 = pattern_split t1 in
+  let case_split (t1:term) (t2:term): formals * term * term =
+    let fargs1,t1 = pattern_split t1 in
+    let n1 = Array2.count fargs1 in
     if n1 = 0 then
-      n1, fargs1, t1, t2 (* There are not pattern variables *)
+      fargs1, t1, t2 (* There are not pattern variables *)
     else begin
-      let n2,fargs2,t2 = pattern_split t2 in
-      assert (n1 = n2);
-      n1, fargs1, t1, t2
+        let fargs2,t2 = pattern_split t2 in
+        let n2 = Array2.count fargs2 in
+        assert (n1 = n2);
+        fargs1, t1, t2
     end
 
 
@@ -1262,56 +1277,49 @@ end = struct
 
 
 
-  let quantified (is_all:bool) (nargs:int) (args:formals) (fgs:formals) (t:term)
+  let quantified (is_all:bool) (args:formals) (fgs:formals) (t:term)
       : term =
-    begin
-      let (nms,tps), (fgnms,fgcon) = args, fgs in
-      let n1,n2 = Array.length nms, Array.length fgnms in
-      assert (n1 = Array.length tps);
-      assert (n2 = Array.length fgcon);
-      assert (nargs = 0 || nargs = n1)
-    end;
-    if nargs = 0 then
+    if Array2.count args = 0 then
       t
     else
-      QExp (nargs,args,fgs,t,is_all)
+      QExp (args,fgs,t,is_all)
 
 
-  let all_quantified (nargs:int) (args:formals) (fgs:formals) (t:term): term =
-    quantified true nargs args fgs t
+  let all_quantified (args:formals) (fgs:formals) (t:term): term =
+    quantified true args fgs t
 
-  let some_quantified (nargs:int) (args:formals)(t:term): term =
-    quantified false nargs args empty_formals t
-
-
-  let pattern (n:int) (args:formals) (t:term): term =
-    some_quantified n args t
+  let some_quantified (args:formals) (t:term): term =
+    quantified false args Array2.empty t
 
 
-  let quantifier_split (t:term) (is_all:bool): int * formals * formals * term =
-    let n,args,fgs,t0,is_all0 = qlambda_split t in
+  let pattern (args:formals) (t:term): term =
+    some_quantified args t
+
+
+  let quantifier_split (t:term) (is_all:bool): formals * formals * term =
+    let args,fgs,t0,is_all0 = qlambda_split t in
     if is_all = is_all0 then
-      n,args,fgs,t0
+      args,fgs,t0
     else
       raise Not_found
 
 
-  let all_quantifier_split (t:term): int * formals * formals * term =
+  let all_quantifier_split (t:term): formals * formals * term =
     quantifier_split t true
 
 
 
-  let all_quantifier_split_1 (t:term): int * formals * formals * term =
+  let all_quantifier_split_1 (t:term): formals * formals * term =
     try
       all_quantifier_split t
     with Not_found ->
-        0, empty_formals, empty_formals, t
+        Array2.empty, Array2.empty, t
 
 
-  let some_quantifier_split (t:term): int * formals * term =
-    let n,tps,fgs,t = quantifier_split t false in
-    assert (fgs = empty_formals);
-    n,tps,t
+  let some_quantifier_split (t:term): formals * term =
+    let tps,fgs,t = quantifier_split t false in
+    assert (fgs = Array2.empty);
+    tps,t
 
 
   let is_all_quantified (t:term): bool =
@@ -1321,10 +1329,8 @@ end = struct
 
   let is_generic (t:term): bool =
     try
-      let _,_,(fgnms,fgcon),_ = all_quantifier_split t in
-      let nfgs = Array.length fgnms in
-      assert (nfgs = Array.length fgcon);
-      nfgs > 0
+      let _,fgs,_ = all_quantifier_split t in
+      Array2.count fgs > 0
     with Not_found ->
       false
 
@@ -1383,13 +1389,14 @@ end = struct
 
 
   let split_general_implication_chain (t:term) (imp_id:int)
-      : int * formals * formals * term list * term =
-    let n,tps,fgs,t0,is_all = qlambda_split_0 t in
-    if n>0 && not is_all then
-      0, empty_formals, empty_formals, [], t
+      : formals * formals * term list * term =
+    let tps,fgs,t0,is_all = qlambda_split_0 t in
+    let n = Array2.count tps in
+    if n > 0 && not is_all then
+      Array2.empty, Array2.empty, [], t
     else
       let ps_rev, tgt = split_implication_chain t0 (n+imp_id) in
-      n,tps,fgs,ps_rev,tgt
+      tps,fgs,ps_rev,tgt
 
 
   let rec make_implication_chain
@@ -1494,17 +1501,17 @@ end = struct
 
        Note: The implication index is valid in the global environment!!
      *)
-   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id true 0 in
-   all_quantified n tps fgs t0
+   let tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id true 0 in
+   all_quantified tps fgs t0
 
 
   and prenex_sort (t:term) (nb:int) (nb2:int) (imp_id:int): term =
-   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 0 in
-   all_quantified n tps fgs t0
+   let tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 0 in
+   all_quantified tps fgs t0
 
   and prenex_bubble_one (t:term) (nb:int) (nb2:int) (imp_id:int): term =
-   let n,tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 1 in
-   all_quantified n tps fgs t0
+   let tps,fgs,t0 = prenex_0 t nb 0 nb2 imp_id false 1 in
+   all_quantified tps fgs t0
 
 
   and prenex_0
@@ -1515,7 +1522,7 @@ end = struct
       (imp_id:int)
       (recursive:bool)
       (nbubble:int)
-      : int * formals * formals * term =
+      : formals * formals * term =
     (* Calculate the number of variables (with their names and types) which
        bubble up from the term [t] because the target of an implication chain
        is universally quantified.
@@ -1545,50 +1552,70 @@ end = struct
     and pren0 t = pren t nb nb2 imp_id
     in
     match t with
-      Variable i -> 0, empty_formals, empty_formals, t
+    | Variable i ->
+       Array2.empty, Array2.empty, t
     | VAppl(i,args,ags,oo) when i = nb + imp_id ->
         assert (Array.length args = 2);
         assert (Array.length ags  = 0);
         let a = pren args.(0) nb nb2 imp_id
-        and n,(nms,tps),(fgnms,fgcon),b1 =
+        and tps,fgs,b1 =
           prenex_0 args.(1) nb nargs nb2 imp_id recursive nbubble in
+        let n = Array2.count tps
+        and nms = Array2.first tps
+        and tps = Array2.second tps
+        and fgnms = Array2.first fgs
+        and fgcon = Array2.second fgs in
         let a1 = shift n (Array.length fgnms) a in
         assert (not recursive || not (is_all_quantified b1));
         let t = VAppl(i+n,[|a1;b1|],ags,oo) in
-        n, (nms,tps), (fgnms,fgcon), t
+        (Array2.make nms tps), (Array2.make fgnms fgcon), t
     | VAppl(i,args,ags,oo) ->
-        0, empty_formals, empty_formals,
+        Array2.empty, Array2.empty,
         VAppl(i, norm_args args nb nb2, ags, oo)
     | Application(f,args,inop) ->
         let f = pren f nb nb2 imp_id
         and args = norm_args args nb nb2 in
-        0, empty_formals, empty_formals, Application(f,args,inop)
+        Array2.empty, Array2.empty, Application(f,args,inop)
     | Lam(n,nms,ps,t0,pr,tp) ->
         let ps = norm_lst ps (1+nb) nb2
         and t0 = pren t0 (1+nb) nb2 imp_id in
-          0, empty_formals, empty_formals, Lam(n,nms,ps,t0,pr,tp)
-    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,true) ->
-        let nb  = nb  + n0
-        and nb2 = nb2 + Array.length fgnms in
-        let n1,(nms1,tps1),(fgnms1,fgcon1),t1 =
-          if recursive then
-            prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive nbubble
-          else if nbubble > 0 then
-            prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive (nbubble-1)
-          else
-            0, empty_formals, empty_formals, t0
-        in
-        assert (not recursive || not (is_all_quantified t1));
-        let nms   = prepend_names nms1 nms
-        and tps   = Array.append tps1 tps
-        and fgnms = prepend_names fgnms fgnms1
-        and fgcon = Array.append fgcon fgcon1
-        in
-        let (nms,tps),(fgnms,fgcon),t1 =
-          remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
-        assert (not recursive || not (is_all_quantified t1));
-        Array.length nms, (nms,tps), (fgnms,fgcon), t1
-    | QExp(n0,(nms,tps),(fgnms,fgcon),t0,false) ->
+        Array2.empty, Array2.empty, Lam(n,nms,ps,t0,pr,tp)
+    | QExp(tps,fgs,t0,true) ->
+       let n0 = Array2.count tps
+       and nms = Array2.first tps
+       and tps = Array2.second tps
+       and fgnms = Array2.first fgs
+       and fgcon = Array2.second fgs in
+       let nb  = nb  + n0
+       and nb2 = nb2 + Array.length fgnms in
+       let tps1,fgs1,t1 =
+         if recursive then
+           prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive nbubble
+         else if nbubble > 0 then
+           prenex_0 t0 nb (n0+nargs) nb2 imp_id recursive (nbubble-1)
+         else
+           Array2.empty, Array2.empty, t0
+       in
+       let nms1 = Array2.first tps1
+       and tps1 = Array2.second tps1
+       and fgnms1 = Array2.first fgs1
+       and fgcon1 = Array2.second fgs1 in
+       assert (not recursive || not (is_all_quantified t1));
+       let nms   = prepend_names nms1 nms
+       and tps   = Array.append tps1 tps
+       and fgnms = prepend_names fgnms fgnms1
+       and fgcon = Array.append fgcon fgcon1
+       in
+       let (nms,tps),(fgnms,fgcon),t1 =
+         remove_unused (nms,tps) 0 (fgnms,fgcon) t1 in
+       assert (not recursive || not (is_all_quantified t1));
+       (Array2.make nms tps), (Array2.make fgnms fgcon), t1
+    | QExp(tps,fgs,t0,false) ->
+       let n0 = Array2.count tps
+       and nms = Array2.first tps
+       and tps = Array2.second tps
+       and fgnms = Array2.first fgs
+       and fgcon = Array2.second fgs in
        let nfgs = Array.length fgnms in
        let nb = nb + n0 and nb2 = Array.length fgnms in
        let t0 = pren t0 nb nb2 imp_id in
@@ -1596,17 +1623,18 @@ end = struct
          remove_unused (nms,tps) 0 (fgnms,fgcon) t0 in
        assert (n0 = Array.length nms);
        assert (nfgs = Array.length fgnms);
-       0, empty_formals, empty_formals,
-       QExp(n0, (nms,tps), (fgnms,fgcon), pren t0 nb nb2 imp_id, false)
+       Array2.empty, Array2.empty,
+       QExp(Array2.make nms tps, Array2.make fgnms fgcon,
+            pren t0 nb nb2 imp_id, false)
     | Ifexp (c, a, b) ->
-       0, empty_formals, empty_formals, Ifexp( pren0 c, pren0 a, pren0 b)
+       Array2.empty, Array2.empty, Ifexp( pren0 c, pren0 a, pren0 b)
     | Asexp _ ->
-       0, empty_formals, empty_formals, t
+       Array2.empty, Array2.empty, t
     | Inspect _ ->
-       0, empty_formals, empty_formals, t
+       Array2.empty, Array2.empty, t
     | Indset (nme,tp,rs) ->
-        let rs = norm_args rs (1+nb) nb2 in
-        0, empty_formals, empty_formals , Indset (nme,tp,rs)
+       let rs = norm_args rs (1+nb) nb2 in
+       Array2.empty, Array2.empty , Indset (nme,tp,rs)
 
 
 
@@ -1627,7 +1655,7 @@ end = struct
 
 
   let induction_rule (imp_id:int) (i:int) (p:term) (pr:term) (q:term)
-      : int * formals * term list * term =
+      : formals * term list * term =
     (* Calculate the induction rule [i] for the inductively defined set [p]
        represented by [pr] with the goal predicate [q].
 
@@ -1657,9 +1685,10 @@ end = struct
       Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         assert (i < nrules);
-        let n,fargs,fgs,ps_rev,tgt =
+        let fargs,fgs,ps_rev,tgt =
           split_general_implication_chain rs.(i) (imp_id+1) in
-        assert (fgs = empty_formals);
+        let n = Array2.count fargs in
+        assert (fgs = Array2.empty);
         let last,tgt = pair n tgt in
         let ps = List.fold_left
             (fun ps t ->
@@ -1672,7 +1701,7 @@ end = struct
             [last]
             ps_rev
         in
-        n,fargs,ps,tgt
+        fargs,ps,tgt
     | _ ->
         invalid_arg "Not an inductive set"
 
@@ -1695,9 +1724,10 @@ end = struct
       Indset (nme,tp,rs) ->
         let nrules = Array.length rs in
         let rule i =
-          let n,fargs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
+          let fargs,ps,tgt = induction_rule imp_id i p pr (Variable 0) in
+          let n = Array2.count fargs in
           let chn = make_implication_chain (List.rev ps) tgt (imp_id+n) in
-          all_quantified n fargs empty_formals chn in
+          all_quantified fargs Array2.empty chn in
         let pa = Application (pr,[|Variable 1|],true)
         and qa = Application (Variable 0, [|Variable 1|],true) in
         let tgt = binary imp_id pa qa in
@@ -1711,7 +1741,7 @@ end = struct
             0 nrules in
         let nms = [|ST.symbol "q";ST.symbol "a"|]
         and tps = [|set_tp; el_tp|] in
-        all_quantified 2 (nms,tps) empty_formals tgt
+        all_quantified (Array2.make nms tps) Array2.empty tgt
     | _ ->
         invalid_arg "Not an inductive set"
 end (* Term *)
@@ -1735,7 +1765,7 @@ sig
   val map:   (type_term -> type_term) -> t -> t
   val sub:   int -> int -> t -> t
   val prepend: t -> t -> t
-  val formals: t -> formals
+  val formals: t -> formals0
 end
   =
   struct

@@ -362,12 +362,12 @@ let induction_law (cls:int) (nb:int) (ft:t): term =
           let ags = Array.init (Array.length fgcon) (fun i -> Variable i) in
           let n,nms,tps,ps_rev,tgt = constructor_rule idx p ags (nb+2) ft in
           let chn  = Term.make_implication_chain ps_rev tgt (n+imp_id) in
-          Term.all_quantified n (nms,tps) empty_formals chn in
+          Term.all_quantified (Formals.make nms tps) Formals.empty chn in
         let rule = Term.prenex rule (2+nb) (Tvars.count_fgs tvs) imp_id in
         Term.binary imp_id rule tgt)
       (Application(p,[|x|],false))
       lst in
-  Term.all_quantified 2 (nms,tps) (fgnms,fgcon) t0
+  Term.all_quantified (Formals.make nms tps) (Formals.make fgnms fgcon) t0
 
 
 
@@ -397,8 +397,8 @@ let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
     | Lam(n,nms,pres0,t0,_,_) ->
         check_lst pres0 (1+nb);
         check_visi t0 (1+nb)
-    | QExp(n,_,_,t0,_) ->
-        check_visi t0 (n+nb)
+    | QExp(tps,_,t0,_) ->
+        check_visi t0 (Formals.count tps + nb)
     | Ifexp (cond,a,b) ->
        check_visi cond nb;
        check_visi a nb;
@@ -522,9 +522,10 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
         let t0 = untup0 t0 (1+nb)
         and pres0 = untup0_lst pres0 (1+nb) in
         Lam(n,nms,pres0,t0,pr,tp), 0, 0
-    | QExp (n,tps,fgs,t0,is_all) ->
+    | QExp (tps,fgs,t0,is_all) ->
+       let n = Formals.count tps in
         let t0 = untup0 t0 (n+nb) in
-        QExp(n,tps,fgs,t0,is_all), 0, 0
+        QExp(tps,fgs,t0,is_all), 0, 0
     | Ifexp (cond,a,b) ->
        Ifexp( untup0 cond nb, untup0 a nb, untup0 b nb), 0, 0
     | Asexp (insp, tps, pat) ->
@@ -1083,7 +1084,12 @@ let term_to_string
             else
               pres,t in
           None, lam2str n nms pres t pr
-      | QExp (n,(nms,tps),(fgnms,fgcon),t,is_all) ->
+      | QExp (tps,fgs,t,is_all) ->
+         let n = Formals.count tps
+         and nms = Formals.names tps
+         and tps = Formals.types tps
+         and fgnms = Formals.names fgs
+         and fgcon = Formals.types fgs in
           let op, opstr  = if is_all then Allop, "all"  else Someop, "some"
           in
           if not long && nanonused + Array.length names <> 0 then
@@ -1347,12 +1353,12 @@ let substituted
         and t0 = spec nb t0
         and tp = subtp tp in
         Lam (n,nms,ps,t0,pr,tp)
-    | QExp (n,(nms,tps),fgs,t0,is_all) ->
-        assert (fgs = empty_formals);
-        let nb = n + nb in
-        let t0 = spec nb t0
-        and tps = Array.map subtp tps in
-        QExp (n,(nms,tps),fgs,t0,is_all)
+    | QExp (tps,fgs,t0,is_all) ->
+       assert (fgs = Formals.empty);
+       let n = Formals.count tps in
+       let nb = n + nb in
+       let t0 = spec nb t0 in
+        QExp (Formals.map subtp tps, fgs, t0, is_all)
     | Ifexp (cond, a, b) ->
        Ifexp(spec nb cond, spec nb a, spec nb b)
     | Asexp (insp, tps, pat) ->
@@ -1402,11 +1408,11 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
         let ps = spec_lst nb ps
         and t0 = spec nb t0 in
         Lam (n,nms,ps,t0,pr,tp)
-    | QExp (n,tps,fgs,t0,is_all) ->
-        assert (fgs = empty_formals);
-        let nb = n + nb in
-        let t0 = spec nb t0 in
-        QExp (n,tps,fgs,t0,is_all)
+    | QExp (tps,fgs,t0,is_all) ->
+       assert (fgs = Formals.empty);
+       let nb = Formals.count tps + nb in
+       let t0 = spec nb t0 in
+       QExp (tps,fgs,t0,is_all)
     | Ifexp(cond, a, b) ->
        Ifexp(spec nb cond, spec nb a, spec nb b)
     | Asexp(insp, tps, pat) ->
@@ -1463,7 +1469,7 @@ let evaluated_as_expression
      let n = Array.length tps in
      let eq = eq_term co n insp args ags in
      let nms = standard_argnames n in
-     Term.some_quantified n (nms,tps) eq
+     Term.some_quantified (Formals.make nms tps) eq
   | _ ->
      assert false (* not an as expression *)
 
@@ -1619,7 +1625,9 @@ let function_property_assertions (idx:int) (ft:t): term list =
         Term.make_implication_chain pres e (nargs + Constants.implication_index)
       in
       let t =
-        Term.all_quantified nargs (desc.argnames,tps) (fgnms,fgcon) chn
+        Term.all_quantified
+          (Formals.make desc.argnames tps) (Formals.make fgnms fgcon)
+          chn
       in
       Term.prenex t 0 0 Constants.implication_index
     )
@@ -1794,8 +1802,8 @@ and complexity_base
       Myarray.sum cf cargs
   | Lam (n,nms,ps,t0,pr,tp) ->
       1 + complexity_base t0 (1+nb) cargs nbenv tvs ft
-  | QExp (n,tps,fgs,t0,is_all) ->
-      1 + complexity_base t0 (n+nb) cargs nbenv tvs ft
+  | QExp (tps,fgs,t0,is_all) ->
+      1 + complexity_base t0 (Formals.count tps + nb) cargs nbenv tvs ft
   | Ifexp _ | Asexp _ | Inspect _ | Indset _ ->
       Term.nodes0 t nb cargs
 
@@ -1883,7 +1891,7 @@ let transformed_specifications (i:int) (ivar:int) (ags:agens) (ft:t): term list 
       let t1 = Term.make_implication_chain pres_rev t imp_id
       and args = standard_substitution n in
       let t2 = substituted t1 n 0 0 args n ags desc_var.tvs ft in
-      QExp(n,(nms,tps),(fgnms,fgcon),t2,true)
+      QExp((Formals.make nms tps),(Formals.make fgnms fgcon),t2,true)
     )
     posts
 
@@ -2629,7 +2637,8 @@ let split_equality (t:term) (nbenv:int) (ft:t): int * int * term * term =
   (* Return [nargs, eq_id, left, right] if the term is an equality. *)
   let nargs, t =
     try
-      let n,(nms,_),_,t0 = Term.all_quantifier_split t in
+      let tps,_,t0 = Term.all_quantifier_split t in
+      let n = Formals.count tps in
       n, t0
     with Not_found ->
       0, t
@@ -3152,7 +3161,7 @@ let unmatched_and_splitted
 
 
 let unmatched_inspect_cases
-      (cases: (formals2*term*term) array)
+      (cases: (formals*term*term) array)
       (nb:int)
       (ntvs:int)
       (ft:t)
@@ -3207,8 +3216,8 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
         Application (down f nb, down_args args nb, inop)
     | Lam(n,nms,pres,t0,pr,tp) ->
         Lam (n,nms, down_list pres (1+nb), down t0 (1+nb), pr, tp)
-    | QExp (n,tps,fgs,t0,is_all) ->
-        QExp (n,tps,fgs, down t0 (n+nb), is_all)
+    | QExp (tps,fgs,t0,is_all) ->
+        QExp (tps,fgs, down t0 (Formals.count tps + nb), is_all)
     | Ifexp(cond,a,b) ->
        Ifexp (down cond nb, down a nb, down b nb)
     | Asexp(insp,tps,pat) ->
@@ -3247,8 +3256,8 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
         collect_args args nb set
     | Lam (n, nms, pres, t0, is_pred, tp) ->
         collect t0 (1+nb) set
-    | QExp (n, args, fgs, t0, is_all) ->
-        collect t0 (n+nb) set
+    | QExp (args, fgs, t0, is_all) ->
+        collect t0 (Formals.count args + nb) set
     | Ifexp(cond,a,b) ->
        collect cond nb set |> collect a nb |> collect b nb
     | Asexp (insp,tps,pat) ->
@@ -3292,9 +3301,8 @@ let equal_symmetry_term (): term =
   let eq a b = VAppl (eq_id, [|a;b|], [|ag|], false) in
   let imp = Term.binary imp_id (eq a b) (eq b a) in
   Term.all_quantified
-    2
-    (standard_argnames 2,[|ag;ag|])
-    (standard_fgnames 1,[|any_tp|])
+    (Formals.make (standard_argnames 2) [|ag;ag|])
+    (Formals.make (standard_fgnames 1)  [|any_tp|])
     imp
 
 
@@ -3313,7 +3321,6 @@ let leibniz_term (): term =
   and p x  = Application (p, [|x|], false) in
   let imp = Term.binary imp_id eqab (Term.binary imp_id (p a) (p b)) in
   Term.all_quantified
-    3
-    (standard_argnames 3, [|ag;ag;pred|])
-    (standard_fgnames 1, [|any_tp|])
+    (Formals.make (standard_argnames 3) [|ag;ag;pred|])
+    (Formals.make (standard_fgnames 1)  [|any_tp|])
     imp

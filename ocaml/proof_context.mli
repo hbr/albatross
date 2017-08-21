@@ -104,7 +104,7 @@ val find_backward_goal: term -> IntSet.t -> t -> int list
 val split_implication:  term -> t -> term * term
 val implication_chain:  term list -> term -> t -> term
 val split_general_implication_chain:
-    term -> t -> int * formals * formals * term list * term
+    term -> t -> Formals.t * Formals.t * term list * term
 val beta_reduce: int -> term -> type_term -> term array -> int -> t -> term
 val beta_reduce_term: term -> t -> term
 val count:          t -> int
@@ -116,8 +116,8 @@ val count_last_arguments: t -> int
 val count_all_type_variables: t -> int
 val count_type_variables: t -> int
 val local_argnames: t -> names
-val local_formals: t -> formals
-val local_fgs: t -> formals
+val local_formals: t -> formals0
+val local_fgs: t -> formals0
 val tvars: t -> Tvars.t
 
 val term:           int -> t -> term

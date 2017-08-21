@@ -37,19 +37,19 @@ val count_last_arguments:  t -> int
 val count_last_variables:  t -> int
 val count_last_type_variables:  t -> int
 val local_argnames: t -> int array
-val local_formals:  t -> formals
-val local_fgs:      t -> formals
+val local_formals:  t -> formals0
+val local_fgs:      t -> formals0
 val last_arguments_string: t -> string
 val names:       t -> int array
 val imp_id:      t -> int
 
 val prenex_term: term -> t -> term
 val split_implication: term -> t -> term * term
-val split_all_quantified: term -> t -> int * formals * formals * term
-val split_some_quantified: term -> t -> int * formals * term
+val split_all_quantified: term -> t -> Formals.t * Formals.t * term
+val split_some_quantified: term -> t -> Formals.t * term
 val split_equality: term -> int -> t -> int * term * term
 val implication: term -> term -> t -> term
-val all_quantified:  int -> formals -> formals -> term -> t -> term
+val all_quantified:  Formals.t -> Formals.t -> term -> t -> term
 val implication_chain: term list -> term -> t -> term
 val someelim:  int -> t -> term
 

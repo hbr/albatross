@@ -1165,9 +1165,9 @@ let complete_quantified (is_all:bool) (tb:t): unit =
   let t0,t0_tp = List.hd tb.terms in
   let t =
     if is_all then
-      Term.all_quantified nargs (names,tps) empty_formals t0
+      Term.all_quantified (Formals.make names tps) Formals.empty t0
     else
-      Term.some_quantified nargs (names,tps) t0
+      Term.some_quantified (Formals.make names tps) t0
   in
   pop_context tb;
   tb.terms <- (t,t0_tp) :: List.tl tb.terms
@@ -1317,8 +1317,8 @@ let complete_case (tb:t): unit =
   let (pat,_), terms = pop_term terms in
   let nargs, names,tps = context_names_and_types tb in
   check_pattern nargs pat tb;
-  let pat = Term.some_quantified nargs (names,tps) pat
-  and res = Term.some_quantified nargs (names,tps) res in
+  let pat = Term.some_quantified (Formals.make names tps) pat
+  and res = Term.some_quantified (Formals.make names tps) res in
   tb.terms <- (res,empty_term) :: (pat,empty_term) :: terms;
   pop_context tb
 
@@ -1332,11 +1332,7 @@ let complete_inspect (ncases:int) (tb:t): unit =
   let cases =
     Array.init
       ncases
-      (fun i ->
-        let n,(nms,tps),pat,res =
-          Term.case_split args.(2*i+1) args.(2*i+2) in
-        (Array2.make nms tps),pat,res
-      )
+      (fun i -> Term.case_split args.(2*i+1) args.(2*i+2))
   in
   tb.terms <- (Inspect(args.(0),cases), tp) :: terms;
   tb.reqs  <- List.tl (List.tl tb.reqs)
@@ -1503,20 +1499,20 @@ let push_term (info:info) (tb:t): unit =
      assert false (* exactly one term has to be there *)
 
 
-let local_formals (tb:t): formals * bool =
+let local_formals (tb:t): formals0 * bool =
   let c = context tb in
   (Context.local_varnames c,
    Array.map (transform_from_context c tb) (Context.local_vartypes c)),
   (Context.has_result_variable c)
 
-let local_fgs (tb:t): formals =
+let local_fgs (tb:t): formals0 =
   let c = context tb in
   let nms,fgs = Context.local_fgs c in
   let fgs = Array.map (transform_from_context c tb) fgs in
   nms,fgs
 
 
-let terms_with_context (tb:t): formals * formals * bool * info_term list =
+let terms_with_context (tb:t): formals0 * formals0 * bool * info_term list =
   assert (tb.terms = []);
   assert (tb.term_stack <> []);
   let (nms,tps),rvar = local_formals tb

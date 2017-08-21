@@ -49,7 +49,7 @@ val required_can_be_boolean: t -> bool
 val start_predicate_application: int -> t -> unit
 val start_function_application:  int -> t -> unit
 val push_term: info -> t -> unit
-val terms_with_context: t -> formals * formals * bool * info_term list
+val terms_with_context: t -> formals0 * formals0 * bool * info_term list
 val is_fully_typed: t -> bool
 val undefined_untyped: t -> int list
 val untyped_in_context: t -> type_term array

@@ -145,10 +145,10 @@ let count_last_type_variables (pc:t): int =
 let local_argnames (pc:t): int array =
   Proof_table.local_argnames pc.base
 
-let local_formals (pc:t): formals =
+let local_formals (pc:t): formals0 =
   Proof_table.local_formals pc.base
 
-let local_fgs (pc:t): formals =
+let local_fgs (pc:t): formals0 =
   Proof_table.local_fgs pc.base
 
 let count_base (pc:t): int = Proof_table.count pc.base
@@ -383,12 +383,12 @@ let negation_expanded (a:term) (pc:t): term =
 
 
 let split_general_implication_chain
-    (t:term) (pc:t): int * formals * formals * term list * term =
+    (t:term) (pc:t): Formals.t * Formals.t * term list * term =
   Context.split_general_implication_chain t (context pc)
 
 
-let all_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (pc:t): term =
-  Proof_table.all_quantified nargs tps fgs t pc.base
+let all_quantified (tps:Formals.t) (fgs:Formals.t) (t:term) (pc:t): term =
+  Proof_table.all_quantified tps fgs t pc.base
 
 
 let prenex_term (t:term) (pc:t): term =
@@ -534,8 +534,9 @@ let unify_with_0
      and comes from the current environment.
    *)
   let nvars = nbenv pc
-  and nb,_,_,t0 = Term.all_quantifier_split_1 t
+  and tps,_,t0 = Term.all_quantifier_split_1 t
   in
+  let nb = Formals.count tps in
   Term_table.unify_with t0 nb nargs nvars true (seed_function pc) tab
 
 
@@ -598,7 +599,9 @@ let trace_term (t:term) (rd:RD.t) (search:bool) (dup:bool) (pc:t): unit =
 
 
 let find (t:term) (pc:t): int =
-  let n,_,(_,fgtps),t0 = Term.all_quantifier_split_1 t in
+  let tps,fgs,t0 = Term.all_quantifier_split_1 t in
+  let n = Formals.count tps
+  and fgtps = Formals.types fgs in
   let nfgs = Array.length fgtps in
   let sublst =
     Term_table.find t0 n (nbenv pc) (seed_function pc) pc.entry.prvd
@@ -610,8 +613,9 @@ let find (t:term) (pc:t): int =
         if nfgs = 0 then
           true
         else
-          let _,_,(_,fgtps_found),_ =
+          let _,fgs,_ =
             Term.all_quantifier_split_1 (term idx pc) in
+          let fgtps_found = Formals.types fgs in
           Array.length fgtps_found = nfgs
           && Term.equivalent_array fgtps fgtps_found
       )
@@ -854,7 +858,8 @@ let add_to_public_deferred (t:term) (idx:int) (pc:t): unit =
 
 let add_to_proved (t:term) (idx:int) (pc:t): unit =
   let sfun = seed_function pc in
-  let n,_,_,t0 = Term.all_quantifier_split_1 t in
+  let tps,_,t0 = Term.all_quantifier_split_1 t in
+  let n = Formals.count tps in
   pc.entry.prvd <- Term_table.add t0 n (count_variables pc) idx sfun pc.entry.prvd
 
 
@@ -1365,7 +1370,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
   and eval_inspect
         (t:term)
         (insp:term)
-        (cases: (formals2*term*term) array)
+        (cases: (formals*term*term) array)
         (lazy_:bool)
         (depth:int)
         (pc:t)
@@ -2361,7 +2366,10 @@ let backward_witness (t:term) (pc:t): int =
   (* Find a witness for the existentially quantified term [t] or raise [Not_found]
      if there is no witness or [t] is not existentially quantified.
    *)
-  let nargs,(nms,tps),t0 = Term.some_quantifier_split t in
+  let tps,t0 = Term.some_quantifier_split t in
+  let nargs = Formals.count tps
+  and nms = Formals.names tps
+  and tps = Formals.types tps in
   let sublst  = unify_with t0 nargs tps pc.entry.prvd pc in
   let idx,args = List.find (fun (idx,args) -> Array.length args = nargs) sublst
   in
@@ -2392,9 +2400,8 @@ module Backward =
   struct
     type rule = {
         idx: int;
-        n:   int;
-        tps: formals;
-        fgs: formals;
+        tps: Formals.t;
+        fgs: Formals.t;
         mutable ps: term list;          (* remaining premises *)
         mutable subs: Term_sub.t list;  (* set of substitutions *)
         pc: t
@@ -2408,7 +2415,8 @@ module Backward =
       | [] ->
          true
       | sub :: _ ->
-         Term_sub.count sub = r.n (* all the others must have the same variables
+         Term_sub.count sub = Formals.count r.tps
+                                  (* all the others must have the same variables
                                      substituted, because the same subterms have
                                      been used to find them *)
 
@@ -2440,14 +2448,15 @@ module Backward =
         | [] ->
            assert false (* As long as the substitutions are not yet complete there
                            must be premises *)
-        | p :: ps when Term.is_variable_below r.n p ->
+        | p :: ps when Term.is_variable_below (Formals.count r.tps) p ->
            printf "\n\nRule %s\nhas a premise which is catch all\n\n"
                   (string_of_term_i r.idx r.pc);
            r.ps <- ps;
            complete_rule r
         | p :: ps ->
            r.ps <- ps;
-           let sublst = unify_with_0 p r.n r.pc.entry.prvd r.pc in
+           let sublst =
+             unify_with_0 p (Formals.count r.tps) r.pc.entry.prvd r.pc in
            r.subs <-
              List.fold_left
                (fun subs (idx,new_sub) ->
@@ -2470,14 +2479,14 @@ module Backward =
           if IntSet.mem idx blacklst || not (is_visible idx pc) then
             lst
           else
-            let n,tps,fgs,ps_rev,tgt =
+            let tps,fgs,ps_rev,tgt =
               split_general_implication_chain (term idx pc) pc
             in
             assert (ps_rev <> []); (* has to be a backward rule
                                       i.e. an implication *)
             let ps = List.rev ps_rev in
             try
-              {n; tps; fgs; idx; ps; subs = [sub]; pc} :: lst
+              {tps; fgs; idx; ps; subs = [sub]; pc} :: lst
             with Not_found ->
               lst
         )
@@ -2830,7 +2839,7 @@ let excluded_middle (pc:t): int =
   let em = Term.binary or_id (Variable 0) (Term.unary not_id (Variable 0)) in
   let nms = standard_argnames 1
   and tps = [| boolean_type 1 pc |] in
-  let em = Term.all_quantified 1 (nms,tps) empty_formals em in
+  let em = Term.all_quantified (Formals.make nms tps) Formals.empty em in
   find em pc
 
 
@@ -2847,7 +2856,7 @@ let indirect_proof_law (pc:t): int =
   let btp = boolean_type 1 pc in
   let nms = standard_argnames 1
   and tps = [| btp |] in
-  let indirect = Term.all_quantified 1 (nms,tps) empty_formals t in
+  let indirect = Term.all_quantified (Formals.make nms tps) Formals.empty t in
   find indirect pc
 
 
@@ -2868,7 +2877,7 @@ let or_elimination (pc:t): int =
   let btp = boolean_type 3 pc in
   let nms = standard_argnames 3
   and tps = [| btp; btp; btp |] in
-  let or_elim = Term.all_quantified 3 (nms,tps) empty_formals or_elim in
+  let or_elim = Term.all_quantified (Formals.make nms tps) Formals.empty or_elim in
   find or_elim pc
 
 

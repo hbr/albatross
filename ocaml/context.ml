@@ -239,11 +239,11 @@ let local_vartypes (c:t): types =
 
 let local_argtypes (c:t): term array = entry_local_types c.entry
 
-let local_formals (c:t): formals =
+let local_formals (c:t): formals0 =
   entry_local_argnames c.entry,
   entry_local_types c.entry
 
-let local_fgs (c:t): formals =
+let local_fgs (c:t): formals0 =
   let tvs  = c.entry.tvs in
   let nfgs = c.entry.nfgs_delta in
   let fgnms = Array.sub (Tvars.fgnames tvs) 0 nfgs
@@ -402,15 +402,15 @@ let beta_reduce
   Feature_table.beta_reduce n tlam tp args (nb+count_variables c) c.ft
 
 
-let quantified (is_all:bool) (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t)
+let quantified (is_all:bool) (tps:formals) (fgs:formals) (t:term) (c:t)
     : term =
-  Term.quantified is_all nargs tps fgs t
+  Term.quantified is_all tps fgs t
 
-let all_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term =
-  quantified true nargs tps fgs t c
+let all_quantified (tps:formals) (fgs:formals) (t:term) (c:t): term =
+  quantified true tps fgs t c
 
-let some_quantified (nargs:int) (tps:formals) (fgs:formals) (t:term) (c:t): term =
-  quantified false nargs tps fgs t c
+let some_quantified (tps:formals) (fgs:formals) (t:term) (c:t): term =
+  quantified false tps fgs t c
 
 
 let prenex_term (t:term) (c:t): term =
@@ -491,7 +491,7 @@ let check_deferred (c:t): unit =
 
 
 let split_general_implication_chain
-    (t:term) (c:t): int * formals * formals * term list * term =
+    (t:term) (c:t): Formals.t * Formals.t * term list * term =
   let nvars = count_variables c in
   let imp_id = nvars + Constants.implication_index in
   Term.split_general_implication_chain t imp_id
@@ -1274,9 +1274,9 @@ let rec type_of_term_full
                 trace
                 c1);
       check_and_trace tp
-  | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
-      assert (ntvs = 0 || (fgnms,fgs) = empty_formals);
-      let c1 = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgs) c in
+  | QExp (tps,fgs,t0,is_all) ->
+      assert (ntvs = 0 || fgs = Formals.empty);
+      let c1 = push_typed0 tps fgs c in
       ignore (type_of_term_full t0 (Some (boolean c1)) trace c1);
       check_and_trace (boolean c)
   | Indset (nme,tp,rs) ->
@@ -1445,7 +1445,7 @@ let transformed_term (t:term) (c0:t) (c:t): term =
 
 let case_preconditions
       (insp:term) (insp_tp:type_term)      (* Inspected term *)
-      (n:int) (nms:int array) (tps:types)  (* Case context *)
+      (tps: Formals.t)                     (* Case context *)
       (pat:term)
       (pres:term list)            (* Preconditions of the result expression *)
       (lst:term list)             (* List to prepend preconditions *)
@@ -1461,8 +1461,9 @@ let case_preconditions
           all(x,y,...) i1 = p1 ==> i2 = p2 ==> ... ==> pre
 
    *)
+  let n = Formals.count tps in
   let insp   = Term.up n insp
-  and c1 = push_typed0 (Formals.make nms tps) Formals.empty c
+  and c1 = push_typed0 tps Formals.empty c
   in
   let insp_arr = args_of_tuple insp c1 in
   let ntup = Array.length insp_arr in
@@ -1479,7 +1480,7 @@ let case_preconditions
           [] 0 ntup
       in
       let chn = implication_chain eqlst_rev pre c1 in
-      (Term.all_quantified n (nms,tps) empty_formals chn) :: lst
+      (Term.all_quantified tps Formals.empty chn) :: lst
     )
     lst
     pres
@@ -1569,7 +1570,7 @@ let term_preconditions (t:term)  (c:t): term list =
         let prepend_pres
             (ps_rev:term list) (tgt:term) (lst:term list): term list =
           let chn = Term.make_implication_chain ps_rev tgt imp_id in
-          QExp (n, (nms,tps), empty_formals, chn, true) :: lst
+          QExp ((Formals.make nms tps), Formals.empty, chn, true) :: lst
         in
         let prepend_pres_of_term
             (ps_rev:term list) (p:term) (lst:term list)
@@ -1590,24 +1591,25 @@ let term_preconditions (t:term)  (c:t): term list =
             pres0
         in
         prepend_pres_of_term ps_rev t0 lst
-    | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
-        let c = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgs) c in
+    | QExp (tps,fgs,t0,is_all) ->
+        let c = push_typed0 tps fgs c in
         let lst0 = pres t0 [] c in
         List.fold_right
           (fun t lst ->
-            QExp(n,(nms,tps),(fgnms,fgs),t,true) :: lst
+            QExp(tps,fgs,t,true) :: lst
           )
           lst0
           lst
     | Indset (nme,tp,rs) ->
-        let c = push_typed0 (Formals.make [|nme|] [|tp|]) Formals.empty c in
+       let tps = Formals.make [|nme|] [|tp|] in
+        let c = push_typed0 tps Formals.empty c in
         let lst =
           Array.fold_left
             (fun lst r ->
               let lst_r = pres r [] c in (* reversed *)
               let lst_r =
                 List.rev_map
-                  (fun p -> Term.all_quantified 1 ([|nme|],[|tp|]) empty_formals p)
+                  (fun p -> Term.all_quantified tps Formals.empty p)
                   lst_r in
               List.rev_append lst_r lst)
             lst
@@ -1650,7 +1652,7 @@ let term_preconditions (t:term)  (c:t): term list =
            let c1 = push_typed0 fs Formals.empty c in
            let lst_inner = List.rev (pres res [] c1) in
            case_preconditions insp insp_tp
-                              n (Array2.first fs) (Array2.second fs)
+                              fs
                               pat lst_inner lst c
          )
          lst
@@ -1685,7 +1687,9 @@ let existence_condition (posts:term list) (c:t): term =
       (fun inner p -> Term.binary and_id inner (replace p))
       (replace (List.hd posts))
       (List.tl posts) in
-  Term.some_quantified 1 ([|ST.symbol "x"|],[|result_type c|]) term_inner
+  Term.some_quantified
+    (Formals.make [|ST.symbol "x"|] [|result_type c|])
+    term_inner
 
 
 
@@ -1735,7 +1739,7 @@ let uniqueness_condition (posts:term list) (c:t): term =
   and nms = [|ST.symbol "x"; ST.symbol "y"|]
   and tps = [|rt; rt|]
   in
-  Term.all_quantified 2 (nms,tps) empty_formals term_inner
+  Term.all_quantified (Formals.make nms tps) Formals.empty term_inner
 
 
 

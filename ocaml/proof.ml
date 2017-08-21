@@ -19,7 +19,7 @@ module Eval = struct
     | VApply of  int * t array * type_term array
     | Apply of t * t array * t (* eval f, eval args, eval result *)
     | Lam of int * int array * term list * t * bool * type_term
-    | QExp of int * formals * formals * t * bool
+    | QExp of int * formals0 * formals0 * t * bool
     | Beta of t * t (* redex and reduct *)
     | Simpl of t * int * term array * agens
           (* e, idx of simplifying equality assertion, specialization arguments *)
@@ -85,12 +85,12 @@ type proof_term =
   | Specialize of int * arguments * agens
   | Eval       of int*Eval.t  (* index of the term evaluated,evaluation *)
   | Eval_bwd   of term*Eval.t (* term which is backward evaluated, evaluation *)
-  | Witness    of int * formals * term * term array
+  | Witness    of int * formals0 * term * term array
         (* term [i] is a witness for [some (a,b,...) t] where
            [a,b,..] in [t] are substituted by the arguments in the term array *)
   | Someelim   of int        (* index of the existenially quantified term *)
   | Inherit    of int * int * int (* assertion, base/descendant class *)
-  | Subproof   of formals * formals * int * proof_term array * bool
+  | Subproof   of formals0 * formals0 * int * proof_term array * bool
                         (* _,_,res,_,bubble_up *)
 
 
@@ -113,7 +113,7 @@ module Proof_term: sig
 
   val print_pt: string -> int -> t -> unit
 
-  val split_subproof: t -> formals * formals * int * t array
+  val split_subproof: t -> formals0 * formals0 * int * t array
 
   val is_subproof: t -> bool
 
@@ -730,7 +730,7 @@ end = struct
 
 
 
-  let split_subproof (pt:t): formals * formals * int * t array =
+  let split_subproof (pt:t): formals0 * formals0 * int * t array =
     match pt with
       Subproof (nb,nms,i,pt_arr,_) -> nb,nms,i,pt_arr
     | _ -> raise Not_found

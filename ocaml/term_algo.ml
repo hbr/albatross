@@ -104,8 +104,8 @@ let unify_pattern
     | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
       when pr1 = pr2 ->
         assert false (* nyi: *)
-    | QExp(n1,_,_,t01,all1), QExp(n2,_,_,t02,all2)
-      when n1 = n2 && all1 = all2 ->
+    | QExp(tps1,_,t01,all1), QExp(tps2,_,t02,all2)
+      when Formals.count tps1 = Formals.count tps2 && all1 = all2 ->
         assert false (* nyi: *)
     | Ifexp(cond1,a1,b1), Ifexp(cond2,a2,b2) ->
        assert false (* nyi *)
@@ -243,14 +243,15 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | QExp(n1,(nms1,tps1),(fgnms1,fgtps1),t01,is_all1),
-      QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,is_all2)
-         when n1 = n2 && is_all1 = is_all2
+    | QExp(tps1,fgs1,t01,is_all1),
+      QExp(tps2,fgs2,t02,is_all2)
+         when Formals.count tps1 = Formals.count tps2 && is_all1 = is_all2
               (*&& let nfgs = Array.length fgtps1 in
                  nfgs = Array.length fgtps2
                  && Term.equivalent_array fgtps1 fgtps2
                  && Term.equivalent_array tps1 tps2*)
       ->
+       let n1 = Formals.count tps1 in
         begin try
           comp t01 t02 (n1+nb) (1+pos) poslst elst tlst
         with Not_found ->
@@ -359,12 +360,13 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,t0 =
             mklambda nextpos nextvar poslst t0 nb in
           nextpos, nextvar, poslst, Lam(n,nms,pres,t0,pr,tp)
-    | QExp(n,tps,fgs,t0,is_all) ->
-        if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
-        else
-          let nextpos,nextvar,poslst,t0 =
-            mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
-          nextpos, nextvar, poslst, QExp(n,tps,fgs,t0,is_all)
+    | QExp(tps,fgs,t0,is_all) ->
+       let n = Formals.count tps in
+       if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
+       else
+         let nextpos,nextvar,poslst,t0 =
+           mklambda (nextpos+1) nextvar poslst t0 (n+nb) in
+         nextpos, nextvar, poslst, QExp(tps,fgs,t0,is_all)
     | Ifexp (cond,a,b) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else

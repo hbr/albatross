@@ -175,7 +175,8 @@ let find_goals (elst: info_terms) (pc:PC.t): unit =
       and fgs = PC.local_fgs pc
       and n   = PC.count_last_arguments pc
       in
-      let t1 = Term.all_quantified n tps fgs chn in
+      let t1 =
+        Term.all_quantified (Formals.from_pair tps) (Formals.from_pair fgs) chn in
       let pc0 = PC.pop pc in
       let t2 = PC.prenex_term t1 pc0 in
       try
@@ -226,10 +227,11 @@ let inner_case_context
     : int list * term * PC.t (* assumptions, goal, inner context *)
     =
   let stren_goal = PC.beta_reduce_term case_goal_pred pc in
-  let n1,tps1,fgs1,chn =
+  let tps1,fgs1,chn =
     Term.all_quantifier_split_1 stren_goal in
-  assert (fgs1 = empty_formals);
-  let pc1 = PC.push_typed0 (Formals.from_pair tps1) (Formals.from_pair fgs1) pc in
+  let n1 = Formals.count tps1 in
+  assert (fgs1 = Formals.empty);
+  let pc1 = PC.push_typed0 tps1 fgs1 pc in
   let complete_ass_lst_rev, goal =
     interval_fold
       (fun (alst,chn) _ ->
@@ -358,17 +360,20 @@ let find_constructor_rule
       (src_nms: names)
       (law_idx:int)   (* specialized induction law *)
       (pc:PC.t)
-    : formals * term list * term * term =
+    : formals0 * term list * term * term =
   (* arguments, ind hypos reversed, pattern, target *)
-  let n0,_,_,ps_rev0,tgt0 =
+  let tps,_,ps_rev0,tgt0 =
     PC.split_general_implication_chain (PC.term law_idx pc) pc in
+  let n0 = Formals.count tps in
   assert (n0 = 0);
   let rec find_rule ps_rev0 =
     match ps_rev0 with
     | [] ->
        assert false (* cannot happen, there must be one rule for [cons_idx] *)
     | rule :: ps_rev0 ->
-       let n,(_,tps),_,ps_rev,tgt = PC.split_general_implication_chain rule pc in
+       let tps,_,ps_rev,tgt = PC.split_general_implication_chain rule pc in
+       let n = Formals.count tps
+       and tps = Formals.types tps in
        match tgt with
        | Application (gp, [|VAppl(i,args,ags,oo)|], _)
             when cons_idx + n + (PC.count_variables pc) = i ->
@@ -535,7 +540,7 @@ let induction_goal_predicate
   and tps_outer = Array.init nvars   (vartp  vars)
   in
   let t =
-    Term.all_quantified nothers (nms_inner,tps_inner) empty_formals chn
+    Term.all_quantified (Formals.make nms_inner tps_inner) Formals.empty chn
   in
   let tp = Context.predicate_of_type (Context.tuple_of_types tps_outer c) c in
   let t = Context.make_lambda nvars nms_outer  [] t true 0 tp c in
@@ -856,23 +861,24 @@ let add_set_induction_hypothesis
     *)
   let hypo = PC.term hypo_idx pc
   in
-  let n1,fargs1,fgs1,ps_rev1,goal_redex1 =
+  let fargs1,fgs1,ps_rev1,goal_redex1 =
     PC.split_general_implication_chain hypo pc
   in
-  assert (fgs1 = empty_formals);
-  let pc1 = PC.push_typed0 (Formals.from_pair fargs1) Formals.empty pc
+  let n1 = Formals.count fargs1 in
+  assert (fgs1 = Formals.empty);
+  let pc1 = PC.push_typed0 fargs1 fgs1 pc
   in
   match goal_redex1 with
     Application(Lam(_),_,_) ->
       let outer_goal = PC.beta_reduce_term goal_redex1 pc1
       in
-      let n2,fargs2,fgs2,ps_rev2,user_goal =
+      let fargs2,fgs2,ps_rev2,user_goal =
         PC.split_general_implication_chain outer_goal pc1
       in
-      assert (fgs2 = empty_formals);
-      let pc2 = PC.push_typed0 (Formals.from_pair fargs2) Formals.empty pc1
+      let n2 = Formals.count fargs2 in
+      assert (fgs2 = Formals.empty);
+      let pc2 = PC.push_typed0 fargs2 fgs2 pc1
       in
-      assert (fgs2 = empty_formals);
       (* Now we have two contexts: all(hypo_vars)  all(other_vars *)
       let alst_rev =
         List.rev_map
@@ -1015,12 +1021,14 @@ let inductive_set_case_context
   let n1,fargs1,ps,goal_pred1 =
     let nvars = PC.count_variables pc in
     let imp_id = nvars + Constants.implication_index in
-    let n,(_,tps), ps, goal_pred1 =
+    let tps, ps, goal_pred1 =
       Term.induction_rule imp_id irule set_expanded set goal_pred
     in
-    let m,(nms,_),_,_ = Term.all_quantifier_split_1 rule in
-    assert (n = m);
-    n,(nms,tps), ps, goal_pred1
+    let n = Formals.count tps
+    and tps = Formals.types tps in
+    let tps_rule,_,_ = Term.all_quantifier_split_1 rule in
+    assert (n = Formals.count tps_rule);
+    n,(Formals.names tps_rule,tps), ps, goal_pred1
   in
   let pc1 = PC.push_typed0 (Formals.from_pair fargs1) Formals.empty pc in
   (* add induction hypotheses *)
@@ -1104,8 +1112,11 @@ let get_transitivity_data
         try
           PC.find_schematic t 3 pc1
         with Not_found ->
-          let law = Term.all_quantified
-              3 (standard_argnames 3,[|tp;tp;tp|]) empty_formals t
+          let law =
+            Term.all_quantified
+              (Formals.make (standard_argnames 3) [|tp;tp;tp|])
+              Formals.empty
+              t
           in
           error_info info ("Cannot find the transitivity law\n\t\"" ^
                            (PC.string_long_of_term law pc) ^
@@ -1804,8 +1815,9 @@ and prove_exist_elim
          "\"" ^ msg)
   in
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
-  let n,fargs,t0 = Term.some_quantifier_split someexp.v in
-  let pc1 = PC.push_typed0 (Formals.from_pair fargs) Formals.empty pc in
+  let fargs,t0 = Term.some_quantifier_split someexp.v in
+  let n = Formals.count fargs in
+  let pc1 = PC.push_typed0 fargs Formals.empty pc in
   ignore (PC.add_assumption t0 true pc1);
   PC.close pc1;
   let goal = Term.up n goal in

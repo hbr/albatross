@@ -95,9 +95,9 @@ val make_lambda:
 val make_application: term -> arguments -> type_term -> int -> t -> term
 val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 
-val quantified:      bool -> int -> formals -> formals -> term -> t -> term
-val all_quantified:  int -> formals -> formals -> term -> t -> term
-val some_quantified: int -> formals -> formals -> term -> t -> term
+val quantified:      bool -> Formals.t -> Formals.t -> term -> t -> term
+val all_quantified:  Formals.t -> Formals.t -> term -> t -> term
+val some_quantified: Formals.t -> Formals.t -> term -> t -> term
 val prenex_term:     term -> t -> term
 val prenex_sort_term:term -> t -> term
 val prenex_term_bubble_one:term -> t -> term
@@ -122,8 +122,8 @@ val local_argnames: t -> int array
 val local_varnames: t -> int array
 val local_argtypes:    t -> types
 val local_vartypes:    t -> types
-val local_formals:  t -> formals
-val local_fgs: t -> formals
+val local_formals:  t -> formals0
+val local_fgs: t -> formals0
 val argnames: t -> names
 val argtypes: t -> types
 
@@ -187,7 +187,7 @@ val variable:        int -> t -> int * Tvars.t * Sign.t
 val complexity: term -> t -> int
 
 val split_general_implication_chain:
-    term -> t -> int * formals * formals * term list * term
+    term -> t -> Formals.t * Formals.t * term list * term
 val split_equality: term -> int -> t -> int * int * term * term
 val equality_term: term -> term -> t -> term
 val and_term: term -> term -> t -> term

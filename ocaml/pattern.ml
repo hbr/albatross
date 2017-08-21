@@ -198,11 +198,11 @@ let evaluated_primary_as_expression
   let nms = anon_argnames n in
   let e = Term.up n e
   and c1 = Context.push_typed0 (Formals.make nms tps) Formals.empty c in
-  Term.some_quantified n (nms,tps) (Context.equality_term e pat c1)
+  Term.some_quantified (Formals.make nms tps) (Context.equality_term e pat c1)
 
 
 let make_as_expression
-      (e:term) (tps:formals) (pat:term) (c:Context.t): term =
+      (e:term) (tps:formals0) (pat:term) (c:Context.t): term =
   (* Construct the as expression [e as pat] and eliminate all unused variables
      from (nms,tps).
    *)

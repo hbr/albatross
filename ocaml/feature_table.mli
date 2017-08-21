@@ -131,7 +131,7 @@ val induction_law:    int -> int -> t -> term
 val is_pattern: int -> term -> int -> t -> bool
 val pattern_subterms:  int -> term -> int -> t -> (int*term*int) list
 val peer_constructors: int -> t -> IntSet.t
-val unmatched_inspect_cases: (formals2*term*term) array -> int -> int -> t
+val unmatched_inspect_cases: (formals*term*term) array -> int -> int -> t
   -> (int * term list * term) list
 
 val is_feature_visible: int -> t -> bool

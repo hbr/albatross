@@ -1109,7 +1109,7 @@ let make_tb (mn:max_numbers) (c:Context.t): TB.t =
 
 let extract_unique
       (info:info) (tbs:TB.t list) (c:Context.t)
-    : formals * formals * bool * info_term list =
+    : formals0 * formals0 * bool * info_term list =
   match tbs with
   |  [] ->
       assert false (* Cannot happen; at least one term is returned, otherwise an
@@ -1175,8 +1175,8 @@ let check_one_pattern (info:info) (pat:term) (c:Context.t): unit =
 
 
 let check_pattern_match
-      (tps:formals)
-      (fgs:formals)
+      (tps:formals0)
+      (fgs:formals0)
       (rvar:bool)
       (lst: info_term list)
       (c:Context.t)
@@ -1205,9 +1205,8 @@ let check_pattern_match
        in
        check_lst pres c1;
        check info t0 c1
-    | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
-       check info t0 (Context.push_typed0
-                        (Formals.make nms tps) (Formals.make fgnms fgs) c)
+    | QExp (tps,fgs,t0,is_all) ->
+       check info t0 (Context.push_typed0 tps fgs c)
     | Ifexp (cond,a,b) ->
        check0 cond;
        check0 a;
@@ -1244,7 +1243,7 @@ let analyze_term_list
       (check_used:bool)
       (lst: (expression * type_term option) list)
       (c: Context.t)
-    : formals * formals * bool * info_term list =
+    : formals0 * formals0 * bool * info_term list =
   assert (not (Context.is_global c));
   let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
   let analyze_list
@@ -1281,7 +1280,7 @@ let structured_assertion
       (rlst: compound)
       (elst: compound)
       (c: Context.t)
-    : formals * formals * info_term list * info_term list =
+    : formals0 * formals0 * info_term list * info_term list =
   assert (Context.count_type_variables c = 0);
   let trace = not (Context.is_interface_use c) && Context.verbosity c >= 5 in
   if trace then

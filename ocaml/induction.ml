@@ -95,12 +95,12 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
      Ghost recognizer: some(a1,...) cond1 and cond1 and ... x = c(a1,...)
    *)
   let open Context in
-  let n,(nms,tps),(fgnms,fgtps),ps_rev,t0 =
+  let tps,fgs,ps_rev,t0 =
     split_general_implication_chain pp c
   in
-  if Array.length fgtps > 0 then
+  if Formals.count fgs > 0 then
     raise Not_found;
-  let c1 = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgtps) c in
+  let c1 = push_typed0 tps fgs c in
   match t0 with
   | Application(Variable n,[|VAppl(co,args,ags,oo)|],_)
        when Term.is_permutation args
@@ -143,7 +143,7 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
               c1
        in
        let reco =
-         Context.prenex_term (Term.some_quantified n (nms,tps) reco0) c
+         Context.prenex_term (Term.some_quantified tps reco0) c
        in
        assert (Context.is_well_typed reco c);
        reco, co - count_variables c1
@@ -270,9 +270,9 @@ let put_potential_induction_law
     match ps_rev with
     (* wellfounded induction law with induction hypothesis
            all(y) (all(x) x < y ==> x in p) ==> y in p *)
-    | [QExp(n1,tps1,fgs1,
+    | [QExp(tps1,fgs1,
             VAppl(imp1,
-                  [|QExp(n2,tps2,fgs2,
+                  [|QExp(tps2,fgs2,
                          VAppl(imp2,
                                [|rel;
                                  Application(Variable 2,
@@ -284,7 +284,7 @@ let put_potential_induction_law
                     Application(Variable 1,[|Variable 0|],_)|],
                   [||], _),
             true)
-      ]  when n1 = 1 && n2 = 1
+      ]  when Formals.count tps1 = 1 && Formals.count tps2 = 1
               && imp1 = 3 + Constants.implication_index
               && imp2 = 4 + Constants.implication_index ->
        let rel_idx =
@@ -340,7 +340,7 @@ let put_potential_induction_law
              Search.array_find_min
                (fun (reco,co) ->
                  match reco with
-                 | QExp (_,_,_,_,false) ->
+                 | QExp (_,_,_,false) ->
                     false
                  | _ ->
                     true
@@ -450,12 +450,13 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
      is an induction law, it defines a projector or it defines a potential
      case recognizer and store the corresponding information. *)
   assert (Context.is_global c0);
-  let n,(nms,tps),(fgnms,fgtps),ps_rev,t0 =
+  let tps,fgs,ps_rev,t0 =
     Term.split_general_implication_chain t Constants.implication_index
   in
+  let n = Formals.count tps in
   let ft = Context.feature_table c0
   and c =
-    Context.push_typed0 (Formals.make nms tps) (Formals.make fgnms fgtps) c0
+    Context.push_typed0 tps fgs c0
   in
   match t0 with
   (* Induction law all(p,x) pp1 ==> pp2 ==> ... ==> x in p *)
@@ -496,19 +497,16 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
      check_class (Context.class_of_term (VAppl(co,cargs,ags,oo)) c) ft
 
   (* Case recognizer: all(x) exp = some(a1,...) cond and c(a1,...) = x *)
-  | VAppl(eq,[|exp; QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,false)|],_,_)
+  | VAppl(eq,[|exp; QExp(tps2,fgs2,t02,false)|],_,_)
        when n = 1
             && ps_rev = []
             && Feature_table.is_equality_index (eq - n) ft
             && not (Feature_table.is_ghost_term exp n ft)
             && is_most_general (Variable 0) c ->
      begin
-       let ghost_reco = QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,false)
+       let ghost_reco = QExp(tps2,fgs2,t02,false)
        and c2 =
-         Context.push_typed0
-           (Formals.make nms2 tps2)
-           (Formals.make fgnms2 fgtps2)
-           c in
+         Context.push_typed0 tps2 fgs2 c in
        try
          let cond,co,cls = recognizer_condition_constructor t02 c2 in
          if is_tracing c then
@@ -555,7 +553,7 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
            a,b
        | _ ->
           assert false
-     and cls = class_of_type tps.(0) c
+     and cls = class_of_type (Formals.typ 0 tps) c
      in
      if is_tracing c then
        begin
