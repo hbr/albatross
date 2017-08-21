@@ -80,7 +80,7 @@ let push
   let tps,fgs,rlst,elst =
     Typer.structured_assertion entlst rlst elst (PC.context pc)
   in
-  rlst, elst, PC.push_typed0 tps fgs pc
+  rlst, elst, PC.push_typed0 (Formals.from_pair tps) (Formals.from_pair fgs) pc
 
 
 
@@ -229,7 +229,7 @@ let inner_case_context
   let n1,tps1,fgs1,chn =
     Term.all_quantifier_split_1 stren_goal in
   assert (fgs1 = empty_formals);
-  let pc1 = PC.push_typed0 tps1 fgs1 pc in
+  let pc1 = PC.push_typed0 (Formals.from_pair tps1) (Formals.from_pair fgs1) pc in
   let complete_ass_lst_rev, goal =
     interval_fold
       (fun (alst,chn) _ ->
@@ -442,7 +442,7 @@ let inductive_type_case_context
   let tps,ps_rev,pat,case_goal_pred =
     find_constructor_rule cons_idx nms ind_idx pc
   in
-  let pc1 = PC.push_typed0 tps empty_formals pc
+  let pc1 = PC.push_typed0 (Formals.from_pair tps) Formals.empty pc
   in
   let ind_hyp_idx_lst =
     List.fold_left
@@ -860,7 +860,7 @@ let add_set_induction_hypothesis
     PC.split_general_implication_chain hypo pc
   in
   assert (fgs1 = empty_formals);
-  let pc1 = PC.push_typed0 fargs1 empty_formals pc
+  let pc1 = PC.push_typed0 (Formals.from_pair fargs1) Formals.empty pc
   in
   match goal_redex1 with
     Application(Lam(_),_,_) ->
@@ -870,7 +870,7 @@ let add_set_induction_hypothesis
         PC.split_general_implication_chain outer_goal pc1
       in
       assert (fgs2 = empty_formals);
-      let pc2 = PC.push_typed0 fargs2 empty_formals pc1
+      let pc2 = PC.push_typed0 (Formals.from_pair fargs2) Formals.empty pc1
       in
       assert (fgs2 = empty_formals);
       (* Now we have two contexts: all(hypo_vars)  all(other_vars *)
@@ -1022,7 +1022,7 @@ let inductive_set_case_context
     assert (n = m);
     n,(nms,tps), ps, goal_pred1
   in
-  let pc1 = PC.push_typed0 fargs1 empty_formals pc in
+  let pc1 = PC.push_typed0 (Formals.from_pair fargs1) Formals.empty pc in
   (* add induction hypotheses *)
   let ass_lst_rev, hlst_rev, _ =
     List.fold_left
@@ -1093,7 +1093,7 @@ let get_transitivity_data
       and nms = standard_argnames 3
       and tps = [|tp;tp;tp|]
       in
-      let pc1 = PC.push_typed0 (nms,tps) empty_formals pc in
+      let pc1 = PC.push_typed0 (Formals.make nms tps) Formals.empty pc in
       let t =
         let ab = rel 3 a b
         and bc = rel 3 b c
@@ -1441,7 +1441,7 @@ and prove_inspect
                (List.rev_map (fun i -> elems.(i)) elst_rev)
            in
            PC.close pc;
-           let pc1 = PC.push_typed0 (nms1,tps1) empty_formals pc
+           let pc1 = PC.push_typed0 (Formals.make nms1 tps1) Formals.empty pc
            and elems1 = Array.map (Term.up nnew) elems
            and set1 = Term.up nnew set
            and goal1 = Term.up nnew goal
@@ -1805,7 +1805,7 @@ and prove_exist_elim
   in
   let elim_idx = PC.add_some_elim_specialized someexp_idx goal false pc in
   let n,fargs,t0 = Term.some_quantifier_split someexp.v in
-  let pc1 = PC.push_typed0 fargs empty_formals pc in
+  let pc1 = PC.push_typed0 (Formals.from_pair fargs) Formals.empty pc in
   ignore (PC.add_assumption t0 true pc1);
   PC.close pc1;
   let goal = Term.up n goal in

@@ -280,12 +280,14 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
            let pos = pos + 1 in
            interval_fold
              (fun (pos,poslst,elst,tlst) i ->
-               let (nms1,tps1),pat1,res1 = cases1.(i)
-               and (nms2,tps2),pat2,res2 = cases2.(i) in
-               if not (Term.equivalent_array tps1 tps2
+               let fs1,pat1,res1 = cases1.(i)
+               and fs2,pat2,res2 = cases2.(i) in
+               if not (Term.equivalent_array
+                         (Array2.second fs1)
+                         (Array2.second fs2)
                        && Term.equivalent pat1 pat2) then
                  raise Not_found;
-               comp res1 res2 (nb+Array.length tps1) pos poslst elst tlst
+               comp res1 res2 (nb+Array2.count fs1) pos poslst elst tlst
              )
              (comp insp1 insp2 nb pos poslst elst tlst)
              0 (Array.length cases1)

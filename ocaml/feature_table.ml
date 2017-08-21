@@ -409,8 +409,8 @@ let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
     | Inspect(insp,cases) ->
        check_visi insp nb;
        Array.iter
-         (fun ((nms,tps),pat,res) ->
-           let nb = nb + Array.length nms in
+         (fun (fs,pat,res) ->
+           let nb = nb + Array2.count fs in
            check_visi pat nb;
            check_visi res nb
          )
@@ -533,9 +533,9 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
     | Inspect (insp,cases) ->
        Inspect (untup0 insp nb,
                 Array.map
-                  (fun ((nms,tps),pat,res) ->
-                    let nb = nb + Array.length nms in
-                    (nms,tps), untup0 pat nb, untup0 res nb
+                  (fun (fs,pat,res) ->
+                    let nb = nb + Array2.count fs in
+                    fs, untup0 pat nb, untup0 res nb
                   )
                   cases),
        0 , 0
@@ -1032,8 +1032,8 @@ let term_to_string
       "(inspect "
       ^ to_string insp names nanonused tvs false None
       ^ Array.fold_left
-          (fun str ((nms,tps),pat,res) ->
-            let nms1 = Term.prepend_names nms names in
+          (fun str (fs,pat,res) ->
+            let nms1 = Term.prepend_names (Array2.first fs) names in
             let to_str t = to_string t nms1 nanonused tvs false None in
             str ^ " case " ^ to_str pat ^  " then " ^ to_str res
           )
@@ -1097,7 +1097,7 @@ let term_to_string
               and tvs1 =
                 assert (Tvars.count tvs = 0 || Array.length fgcon = 0);
                 if Tvars.count tvs = 0 then
-                  Tvars.push_fgs fgnms fgcon tvs
+                  Tvars.push_fgs (Formals.make fgnms fgcon) tvs
                 else
                   tvs
               in
@@ -1363,9 +1363,11 @@ let substituted
     | Inspect(insp, cases) ->
        Inspect(spec nb insp,
                Array.map
-                 (fun ((nms,tps),pat,res) ->
-                   let nb = nb + Array.length tps in
-                   (nms, Array.map subtp tps),
+                 (fun (fs,pat,res) ->
+                   let nb = nb + Array2.count fs in
+                   (Array2.make
+                      (Array2.first fs)
+                      (Array.map subtp (Array2.second fs))),
                    spec nb pat,
                    spec nb res)
                  cases)
@@ -1414,9 +1416,9 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
     | Inspect(insp,cases) ->
        Inspect(spec nb insp,
                Array.map
-                 (fun ((nms,tps),pat,res) ->
-                   let nb = nb + Array.length tps in
-                   (nms,tps), spec nb pat, spec nb res)
+                 (fun (fs,pat,res) ->
+                   let nb = nb + Array2.count fs in
+                   fs, spec nb pat, spec nb res)
                  cases)
     | Indset (nme,tp,rs) ->
         let nb = 1 + nb in
@@ -1705,8 +1707,8 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
     | Inspect(insp,cases) ->
        is_ghost insp nb
        || Array.exists
-            (fun ((nms,tps),pat,res) ->
-              is_ghost res (nb + Array.length tps)
+            (fun (fs,pat,res) ->
+              is_ghost res (nb + Array2.count fs)
             )
             cases
     | Indset _ ->
@@ -2289,11 +2291,9 @@ let base_table (comp:Module.Compile.t) : t =
     let args = standard_substitution 2
     and ags  = standard_substitution 2
     and nms  = standard_argnames 2 in
+    let fs = Array2.make nms ags in
     let tup = VAppl(Constants.tuple_index+3, args, ags, false) in
-    (*let pat = Term.some_quantified 2 (nms,ags) tup
-    and res = Term.some_quantified 2 (nms,ags) (Variable i) in*)
-    Inspect(Variable 0, [|(nms,ags),tup,Variable i|])
-           (*Flow (Inspect, [|Variable 0; pat; res |])*)
+    Inspect(Variable 0, [|fs,tup,Variable i|])
   in
   add_base (* first *)
     "core" Constants.tuple_class (FNname ST.first)
@@ -3152,7 +3152,7 @@ let unmatched_and_splitted
 
 
 let unmatched_inspect_cases
-      (cases: (formals*term*term) array)
+      (cases: (formals2*term*term) array)
       (nb:int)
       (ntvs:int)
       (ft:t)
@@ -3161,9 +3161,9 @@ let unmatched_inspect_cases
    *)
   assert (Array.length cases > 0);
   Array.fold_left
-    (fun lst ((nms,tps),pat,res) ->
-      let n = Array.length tps in
-      let tpslst = Array.to_list tps in
+    (fun lst (fs,pat,res) ->
+      let n = Array2.count fs in
+      let tpslst = Array.to_list (Array2.second fs) in
       let unmatched,_ =
         unmatched_and_splitted n tpslst pat lst nb ntvs ft
       in
@@ -3216,9 +3216,9 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
     | Inspect(insp, cases) ->
        Inspect(down insp nb,
                Array.map
-                 (fun ((nms,tps),pat,res) ->
-                   let nb = nb + Array.length tps in
-                   (nms,tps), pat, down res nb
+                 (fun (fs,pat,res) ->
+                   let nb = nb + Array2.count fs in
+                   fs, pat, down res nb
                  )
                  cases)
     | Indset (nme,tp,rs) ->
@@ -3255,8 +3255,8 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
        collect insp nb set |> collect pat (nb+Array.length tps)
     | Inspect(insp,cases) ->
        Array.fold_left
-         (fun set ((nms,tps),pat,res) ->
-           let nb = nb + Array.length tps in
+         (fun set (fs,pat,res) ->
+           let nb = nb + Array2.count fs in
            collect pat nb set |> collect res nb
          )
          (collect insp nb set)

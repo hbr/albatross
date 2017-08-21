@@ -100,7 +100,7 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
   in
   if Array.length fgtps > 0 then
     raise Not_found;
-  let c1 = push_typed0 (nms,tps) (fgnms,fgtps) c in
+  let c1 = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgtps) c in
   match t0 with
   | Application(Variable n,[|VAppl(co,args,ags,oo)|],_)
        when Term.is_permutation args
@@ -454,7 +454,8 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
     Term.split_general_implication_chain t Constants.implication_index
   in
   let ft = Context.feature_table c0
-  and c = Context.push_typed0 (nms,tps) (fgnms,fgtps) c0
+  and c =
+    Context.push_typed0 (Formals.make nms tps) (Formals.make fgnms fgtps) c0
   in
   match t0 with
   (* Induction law all(p,x) pp1 ==> pp2 ==> ... ==> x in p *)
@@ -503,7 +504,11 @@ let put_assertion (idx:int) (t:term) (c0:Context.t): unit =
             && is_most_general (Variable 0) c ->
      begin
        let ghost_reco = QExp(n2,(nms2,tps2),(fgnms2,fgtps2),t02,false)
-       and c2 = Context.push_typed0 (nms2,tps2) (fgnms2,fgtps2) c in
+       and c2 =
+         Context.push_typed0
+           (Formals.make nms2 tps2)
+           (Formals.make fgnms2 fgtps2)
+           c in
        try
          let cond,co,cls = recognizer_condition_constructor t02 c2 in
          if is_tracing c then

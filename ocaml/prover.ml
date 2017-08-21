@@ -529,7 +529,8 @@ let enter (i:int) (gs:t): unit =
       ()
     else
       begin
-        let pc = PC.push_typed0 tps fgs ctxt.pc in
+        let pc =
+          PC.push_typed0 (Formals.from_pair tps) (Formals.from_pair fgs) ctxt.pc in
         let tgt_ctxt = {pc; map = TermMap.empty} in
         List.iter
           (fun p ->

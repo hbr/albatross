@@ -219,18 +219,18 @@ let push
 
 
 
-let push_typed (tps:formals) (fgs:formals) (rvar:bool) (at:t): t =
+let push_typed (tps:Formals.t) (fgs:Formals.t) (rvar:bool) (at:t): t =
   let c = Context.push_typed tps fgs rvar at.c in
-  let nms = fst tps in
+  let nms = Formals.names tps in
   push0 nms c at
 
 
-let push_typed0 (tps:formals) (fgs:formals) (at:t): t =
+let push_typed0 (tps:Formals.t) (fgs:Formals.t) (at:t): t =
   push_typed tps fgs false at
 
 
 let push_empty (at:t): t =
-  push_typed empty_formals empty_formals false at
+  push_typed Formals.empty Formals.empty false at
 
 let pop (at:t): t =
   assert (is_local at);
@@ -621,8 +621,8 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
           | Inspect(insp,cases) ->
             let ncases = Array.length cases in
             if icase < 0 || ncases <= icase then raise Illegal_proof_term;
-            let (nms,tps),pat,res = cases.(icase) in
-            let n1 = Array.length tps in
+            let fs,pat,res = cases.(icase) in
+            let n1 = Array2.count fs in
             begin
               try
                 let subarr,reqs =
@@ -914,7 +914,7 @@ let reconstruct_term (pt:proof_term) (trace:bool) (at:t): term =
         if trace then print1 t idx at;
         t
     | Subproof (tps,fgs,res_idx,pt_arr,bubble) ->
-        let at = push_typed0 tps fgs at in
+        let at = push_typed0 (Formals.from_pair tps) (Formals.from_pair fgs) at in
         let pt_len = Array.length pt_arr in
         let pt_nass =
           if trace then count_assumptions pt_arr else 0

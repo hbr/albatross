@@ -1201,12 +1201,13 @@ let check_pattern_match
     | Lam (n,nms,pres,t0,is_pred,tp) ->
        let dtp = Context.domain_type tp c in
        let c1 =
-         Context.push_typed0 ([|ST.symbol "t"|],[|dtp|]) empty_formals c
+         Context.push_typed0 (Formals.make [|ST.symbol "t"|] [|dtp|]) Formals.empty c
        in
        check_lst pres c1;
        check info t0 c1
-    | QExp (n,tps,fgs,t0,is_all) ->
-       check info t0 (Context.push_typed0 tps fgs c)
+    | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
+       check info t0 (Context.push_typed0
+                        (Formals.make nms tps) (Formals.make fgnms fgs) c)
     | Ifexp (cond,a,b) ->
        check0 cond;
        check0 a;
@@ -1214,23 +1215,27 @@ let check_pattern_match
     | Asexp(insp,tps,pat) ->
        check0 insp;
        let n = Array.length tps in
-       let c1 = Context.push_typed0 (anon_argnames n,tps) empty_formals c in
+       let c1 =
+         Context.push_typed0 (Formals.make (anon_argnames n) tps) Formals.empty c
+       in
        check_one_pattern info pat c1
     | Inspect(insp,cases) ->
        check0 insp;
        Array.iter
-         (fun (tps,pat,res) ->
-           let c1 = Context.push_typed0 tps empty_formals c in
+         (fun (fs,pat,res) ->
+           let c1 = Context.push_typed0 fs Formals.empty c in
            check_one_pattern info pat c1;
            check info res c1
          )
          cases
     | Indset (nme,tp,rules) ->
-       let c1 = Context.push_typed0 ([|nme|],[|tp|]) empty_formals c in
+       let c1 = Context.push_typed0 (Formals.make [|nme|] [|tp|]) Formals.empty c in
        check_args rules c1
   in
   let c0 = Context.previous c in
-  let c1 = Context.push_typed tps fgs rvar c0 in
+  let c1 =
+    Context.push_typed (Formals.from_pair tps) (Formals.from_pair fgs) rvar c0
+  in
   List.iter (fun t -> check t.i t.v c1) lst
 
 

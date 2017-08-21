@@ -473,22 +473,6 @@ let variable_index (nme:int) (c:t): int =
 
 
 
-let unique_name (nme:int) (c:t): int =
-  let patched nme = ST.symbol ("$" ^ (ST.string nme)) in
-  let rec name n =
-    try ignore(variable_index n c); name (patched n)
-    with Not_found -> n
-  in
-  name nme
-
-
-let unique_names (nms:int array) (c:t): int array =
-  let nms  = Array.copy nms in
-  Array.iteri (fun i n -> nms.(i) <- unique_name n c) nms;
-  nms
-
-
-
 
 let split_equality (t:term) (nb:int) (c:t): int * int * term * term =
   Feature_table.split_equality t (nb + count_variables c) c.ft
@@ -617,23 +601,18 @@ let push_untyped (names:int array) (c:t): t =
 
 
 let push_typed
-      ((nms,tps):formals) ((fgnms,fgcon):formals) (rvar:bool) (c:t)
+      (tps:Formals.t) (fgs:Formals.t) (rvar:bool) (c:t)
     : t =
   assert (count_type_variables c = 0 );
-  let nfgs_new  = Array.length fgcon
-  and nargs_new = Array.length tps in
-  assert (nfgs_new  = Array.length fgnms);
-  assert (nargs_new = Array.length nms);
+  let nfgs_new  = Formals.count fgs
+  and nargs_new = Formals.count tps in
   assert (not rvar || nargs_new > 0);
-  let tvs     = Tvars.push_fgs fgnms fgcon c.entry.tvs in
+  let tvs  = Tvars.push_fgs fgs c.entry.tvs
+  in
   let fargs =
-    Formals.make
-      (Term.prepend_names nms (Formals.names c.entry.fargs))
-      (Array.append
-         tps
-         (Array.map
-            (Term.up nfgs_new)
-            (Formals.types c.entry.fargs)))
+    Formals.prepend
+      tps
+      (Formals.map (Term.up nfgs_new) c.entry.fargs)
   in
   {c with
    entry =
@@ -651,12 +630,12 @@ let push_typed
 
 
 let push_typed0
-      (tps:formals) (fgs:formals) (c:t)
+      (tps:Formals.t) (fgs:Formals.t) (c:t)
     : t =
   push_typed tps fgs false c
 
 let push_empty (c:t): t =
-  push_typed empty_formals empty_formals false c
+  push_typed Formals.empty Formals.empty false c
 
 
 let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
@@ -673,7 +652,7 @@ let push_lambda (n:int) (nms:names) (tp:type_term) (c:t): t =
   assert (cls0 = Constants.predicate_class && Array.length ags = 1
         || cls0 = Constants.function_class && Array.length ags = 2);
   let tps = extract_from_tuple n ags.(0) c in
-  push_typed0 (nms,tps) empty_formals c
+  push_typed0 (Formals.make nms tps) Formals.empty c
 
 
 
@@ -718,8 +697,8 @@ let rec type_of_term (t:term) (c:t): type_term =
      boolean c
   | Inspect (insp,cases) ->
      assert (Array.length cases > 0);
-     let tps,pat,res = cases.(0) in
-     let c1 = push_typed0 tps empty_formals c in
+     let fs,pat,res = cases.(0) in
+     let c1 = push_typed0 fs Formals.empty c in
      type_of_term res c1
 
 
@@ -1283,7 +1262,9 @@ let rec type_of_term_full
       end
   | Lam (n,nms,ps,t0,pr,tp) ->
       let argtp,rtp = get_arg_types tp pr in
-      let c1 = push_typed0 ([|ST.symbol "t"|],[|argtp|]) empty_formals c in
+      let c1 =
+        push_typed0 (Formals.make [|ST.symbol "t"|] [|argtp|]) Formals.empty c
+      in
       ignore (type_of_term_full
                 t0
                 (if pr then
@@ -1293,9 +1274,9 @@ let rec type_of_term_full
                 trace
                 c1);
       check_and_trace tp
-  | QExp (n,tps,fgs,t0,is_all) ->
-      assert (ntvs = 0 || fgs = empty_formals);
-      let c1 = push_typed0 tps fgs c in
+  | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
+      assert (ntvs = 0 || (fgnms,fgs) = empty_formals);
+      let c1 = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgs) c in
       ignore (type_of_term_full t0 (Some (boolean c1)) trace c1);
       check_and_trace (boolean c)
   | Indset (nme,tp,rs) ->
@@ -1309,7 +1290,7 @@ let rec type_of_term_full
   | Asexp (insp, tps, pat) ->
      let tp = type_of_term_full insp None trace c in
      let nms = anon_argnames (Array.length tps) in
-     let c1 = push_typed0 (nms,tps) empty_formals c in
+     let c1 = push_typed0 (Formals.make nms tps) Formals.empty c in
      ignore (type_of_term_full pat (Some tp) trace c1);
      check_and_trace (boolean c)
   | Inspect (insp,cases) ->
@@ -1320,8 +1301,8 @@ let rec type_of_term_full
        if i = ncases then
          req_tp
        else
-         let tps,pat,res = cases.(i) in
-         let c1 = push_typed0 tps empty_formals c in
+         let fs,pat,res = cases.(i) in
+         let c1 = push_typed0 fs Formals.empty c in
          ignore(type_of_term_full pat (Some insp_tp) trace c1);
          let req_tp = type_of_term_full res req_tp trace c1 in
          check_cases_from (i+1) (Some req_tp)
@@ -1481,7 +1462,7 @@ let case_preconditions
 
    *)
   let insp   = Term.up n insp
-  and c1 = push_typed0 (nms,tps) empty_formals c
+  and c1 = push_typed0 (Formals.make nms tps) Formals.empty c
   in
   let insp_arr = args_of_tuple insp c1 in
   let ntup = Array.length insp_arr in
@@ -1609,17 +1590,17 @@ let term_preconditions (t:term)  (c:t): term list =
             pres0
         in
         prepend_pres_of_term ps_rev t0 lst
-    | QExp (n,tps,fgs,t0,is_all) ->
-        let c = push_typed0 tps fgs c in
+    | QExp (n,(nms,tps),(fgnms,fgs),t0,is_all) ->
+        let c = push_typed0 (Formals.make nms tps) (Formals.make fgnms fgs) c in
         let lst0 = pres t0 [] c in
         List.fold_right
           (fun t lst ->
-            QExp(n,tps,fgs,t,true) :: lst
+            QExp(n,(nms,tps),(fgnms,fgs),t,true) :: lst
           )
           lst0
           lst
     | Indset (nme,tp,rs) ->
-        let c = push_typed0 ([|nme|],[|tp|]) empty_formals c in
+        let c = push_typed0 (Formals.make [|nme|] [|tp|]) Formals.empty c in
         let lst =
           Array.fold_left
             (fun lst r ->
@@ -1664,11 +1645,13 @@ let term_preconditions (t:term)  (c:t): term list =
            (Feature_table.unmatched_inspect_cases cases nvars all_ntvs c.ft)
        in
        Array.fold_left (* all preconditions of the results *)
-         (fun lst ((nms,tps),pat,res) ->
-           let n = Array.length nms in
-           let c1 = push_typed0 (nms,tps) empty_formals c in
+         (fun lst (fs,pat,res) ->
+           let n = Array2.count fs in
+           let c1 = push_typed0 fs Formals.empty c in
            let lst_inner = List.rev (pres res [] c1) in
-           case_preconditions insp insp_tp n nms tps pat lst_inner lst c
+           case_preconditions insp insp_tp
+                              n (Array2.first fs) (Array2.second fs)
+                              pat lst_inner lst c
          )
          lst
          cases

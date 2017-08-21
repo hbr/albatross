@@ -32,8 +32,8 @@ val verbosity: t -> int
 
 val push:  entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
 val push_untyped:     int array -> t -> t
-val push_typed:   formals -> formals -> bool -> t -> t
-val push_typed0:  formals -> formals -> t -> t
+val push_typed:   Formals.t -> Formals.t -> bool -> t -> t
+val push_typed0:  Formals.t -> Formals.t -> t -> t
 val push_empty: t -> t
 val previous: t -> t
 val pop:   t -> t
@@ -113,9 +113,6 @@ val variable_index: int -> t -> int
 
 val is_constructor: int -> t -> bool
 val is_pseudo_constructor: int -> t -> bool
-
-val unique_name:  int -> t -> int
-val unique_names: int array -> t -> int array
 
 val fgnames: t   -> int array
 

@@ -197,7 +197,7 @@ let evaluated_primary_as_expression
    *)
   let nms = anon_argnames n in
   let e = Term.up n e
-  and c1 = Context.push_typed0 (nms,tps) empty_formals c in
+  and c1 = Context.push_typed0 (Formals.make nms tps) Formals.empty c in
   Term.some_quantified n (nms,tps) (Context.equality_term e pat c1)
 
 

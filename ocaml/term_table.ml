@@ -352,8 +352,8 @@ let uni_core
      let itab,ctabmaps = IntMap.find ncases tab.inspects in
      interval_fold
        (fun sublst i ->
-         let (_,tps),pat,res = cases.(i) in
-         let n = Array.length tps in
+         let fs,pat,res = cases.(i) in
+         let n = Array2.count fs in
          let ptab,restab = IntMap.find n ctabmaps.(i) in
          let sublst = uni pat ptab (nb+n) (substitutions sublst) in
          uni res restab (nb+n) (substitutions sublst)
@@ -708,9 +708,9 @@ let add_base
          and ctabs = Array.copy ctabs in
          interval_iter
            (fun i ->
-             let (nms,tps),pat,res = cases.(i) in
+             let fs,pat,res = cases.(i) in
              let ptab,rtab = intmap_find i (empty,empty) ctabs.(i) in
-             let n = Array.length tps in
+             let n = Array2.count fs in
              let ptab = add0 pat (n+nb) ptab
              and rtab = add0 res (n+nb) rtab in
              ctabs.(i) <- IntMap.add i (ptab,rtab) ctabs.(i)

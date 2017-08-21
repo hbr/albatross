@@ -434,9 +434,9 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
        let insp_arr2 = Array.map (fun t -> find_opt nb t tlst) insp_arr in
        let ninsp    = Array.length insp_arr in
        Array.iter
-         (fun ((nms,tps),pat,res) ->
-           let n = Array.length nms in
-           let c1 = Context.push_typed0 (nms,tps) empty_formals c in
+         (fun (fs,pat,res) ->
+           let n = Array2.count fs in
+           let c1 = Context.push_typed0 fs Formals.empty c in
            let pat_tp = Context.type_of_term pat c1 in
            let parr =
              let arr = Feature_table.args_of_tuple pat (n+nb) ft in

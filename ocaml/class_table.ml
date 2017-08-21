@@ -1950,7 +1950,7 @@ let string_of_reduced_complete_signature
       (fun i ->
         let idx = IntMap.find (i+nlocs0+nglobs0) tvmap in
         Tvars.name idx tvs) in
-  let tvs0 = Tvars.make nlocs0 concepts fgnames fgconcepts in
+  let tvs0 = Tvars.make nlocs0 concepts (Formals.make fgnames fgconcepts) in
   (string_of_detailed_tvs tvs0 ct) ^
   (string_of_signature s0 tvs0 ct)
 

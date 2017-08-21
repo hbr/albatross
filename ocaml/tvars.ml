@@ -11,50 +11,47 @@ type t = {
     nlocal:int;                  (* local type variables without concept *)
     concepts: type_term array;   (* global type variables with concept
                                     coming from used functions           *)
-    fgconcepts: type_term array; (* concepts of the formal generics      *)
-    fgnames:    int array        (* names of the formal generics         *)
+    fgs: Formals.t               (* Formal generics *)
   }
 
 
 let empty: t =
-  {nlocal=0;concepts=[||];fgconcepts=[||];fgnames=[||]}
+  {nlocal=0;concepts=[||];fgs = Formals.empty}
 
 let make
     (nlocs:int)
     (concepts:type_term array)
-    (fgnames:int array) (fgconcepts:type_term array): t =
-  assert (Array.length fgnames = Array.length fgconcepts);
+    (fgs: Formals.t)
+    : t =
   {nlocal = nlocs;
-   concepts = concepts;
-   fgnames  = fgnames;
-   fgconcepts = fgconcepts}
+   concepts;
+   fgs}
 
 
 let copy (tvs:t): t =
-  {nlocal     = tvs.nlocal;
-   concepts   = Array.copy tvs.concepts;
-   fgnames    = Array.copy tvs.fgnames;
-   fgconcepts = Array.copy tvs.fgconcepts}
+  {nlocal   = tvs.nlocal;
+   concepts = Array.copy tvs.concepts;
+   fgs      = Formals.copy tvs.fgs}
 
-let count_fgs (tvs:t): int = Array.length tvs.fgnames
-
-
-let fgconcepts (tvs:t): type_term array = tvs.fgconcepts
+let count_fgs (tvs:t): int = Formals.count tvs.fgs
 
 
-let fgnames (tvs:t): int array = tvs.fgnames
+let fgconcepts (tvs:t): type_term array = Formals.types tvs.fgs
+
+
+let fgnames (tvs:t): int array = Formals.names tvs.fgs
 
 
 let has_fg (name:int) (tvs:t): bool =
   try
-    let _ = Search.array_find_min (fun n -> n=name) tvs.fgnames in
+    let _ = Search.array_find_min (fun n -> n=name) (fgnames tvs) in
     true
   with Not_found ->
     false
 
 
 let make_fgs (nms: int array) (cpts:type_term array): t =
-  {nlocal=0;concepts=[||];fgnames=nms;fgconcepts=cpts}
+  {nlocal=0;concepts=[||];fgs = Formals.make nms cpts}
 
 
 let count_local (tvs:t): int = tvs.nlocal
@@ -88,7 +85,7 @@ let concept (i:int) (tvs:t): type_term =
   if i < count tvs then
     tvs.concepts.(i - count_local tvs)
   else
-    tvs.fgconcepts.(i - count tvs)
+    Formals.typ (i - count tvs) tvs.fgs
 
 
 let concept_class (i:int) (tvs:t): int =
@@ -106,16 +103,15 @@ let concept_class (i:int) (tvs:t): int =
 
 let name (i:int) (tvs:t): int =
   assert (count tvs <= i);
-  tvs.fgnames.(i - count tvs)
+  Formals.name (i - count tvs) tvs.fgs
 
 let concepts (tvs:t): type_term array = tvs.concepts
 
-let fgconcepts (tvs:t): type_term array = tvs.fgconcepts
 
 let is_equivalent (tvs1:t) (tvs2:t): bool =
-  tvs1.nlocal     =  tvs2.nlocal &&
-  tvs1.concepts   =  tvs2.concepts &&
-  tvs1.fgconcepts =  tvs2.fgconcepts
+  tvs1.nlocal =  tvs2.nlocal
+  && Term.equivalent_array tvs1.concepts tvs2.concepts
+  && Formals.is_equivalent tvs1.fgs tvs2.fgs
 
 
 let is_equal (tp1:type_term) (tvs1:t) (tp2:type_term) (tvs2:t): bool =
@@ -207,10 +203,9 @@ let dummy_fgnames (n:int): int array =
 
 
 let add_local (n:int) (tvs:t): t =
-  {tvs with
-   nlocal     = tvs.nlocal + n;
+  {nlocal     = tvs.nlocal + n;
    concepts   = Array.map (fun tp -> Term.up n tp) tvs.concepts;
-   fgconcepts = Array.map (fun tp -> Term.up n tp) tvs.fgconcepts}
+   fgs = Formals.map (Term.up n) tvs.fgs}
 
 
 
@@ -219,33 +214,30 @@ let add_local (n:int) (tvs:t): t =
 let remove_local (n:int) (tvs:t): t =
   assert (n <= (count_local tvs));
   try
-    {tvs with
-     nlocal     = tvs.nlocal - n;
-     concepts   = Array.map (fun tp -> Term.down n tp) tvs.concepts;
-     fgconcepts = Array.map (fun tp -> Term.down n tp) tvs.fgconcepts}
+    {nlocal     = tvs.nlocal - n;
+     concepts   = Array.map (Term.down n) tvs.concepts;
+     fgs = Formals.map (Term.down n) tvs.fgs}
   with Term_capture ->
     assert false (* cannot happen *)
 
 
-let push_fgs (fgnames:names) (fgconcepts:types) (tvs:t): t =
+let push_fgs (fgs:Formals.t) (tvs:t): t =
   assert (count_global tvs = 0);
-  let nfgs1 = Array.length fgconcepts in
-  assert (Array.length fgnames = nfgs1);
+  let nfgs1 = Formals.count fgs in
   if nfgs1 = 0 then
     copy tvs
   else
     begin
       assert (count_local tvs = 0);
-      let nms0 = tvs.fgnames
-      and tps0 = tvs.fgconcepts in
-      let tps0 = Array.map (Term.up nfgs1) tps0 in
-      let fgnames    = Array.append fgnames nms0
-      and fgconcepts = Array.append fgconcepts tps0
-      and nlocal = 0
-      and concepts = [||]
-      in
-      {nlocal;concepts;fgnames;fgconcepts}
+      {nlocal = 0;
+       concepts = [||];
+       fgs =
+         Formals.prepend
+           fgs
+           (Formals.map (Term.up nfgs1) tvs.fgs)}
     end
+
+
 
 
 let augment_fgs
@@ -257,8 +249,7 @@ let augment_fgs
   assert (Array.length fgnames = nfgs1);
   let cnt = count tvs
   and nfgs0 = count_fgs tvs in
-  let fgconcepts0 =
-    Array.map (fun tp -> Term.up_from nfgs1 cnt tp) tvs.fgconcepts
+  let fgs0 = Formals.map (Term.up_from nfgs1 cnt) tvs.fgs
   and concepts =
     Array.map (fun tp -> Term.up_from nfgs1 cnt tp) tvs.concepts
   and fgconcepts1 =
@@ -266,9 +257,8 @@ let augment_fgs
   in
   let fgconcepts1 = Array.map (fun tp -> Term.up cnt tp) fgconcepts1 in
   {tvs with
-   concepts   = concepts;
-   fgnames    = Array.append fgnames    tvs.fgnames;
-   fgconcepts = Array.append fgconcepts1 fgconcepts0}
+    concepts;
+    fgs = Formals.prepend (Formals.make fgnames fgconcepts1) fgs0}
 
 
 
@@ -276,9 +266,8 @@ let augment_fgs
 let fgs_to_global (tvs:t):t =
   assert (count tvs = 0);
   {nlocal   = 0;
-   concepts = tvs.fgconcepts;
-   fgnames  = [||];
-   fgconcepts = [||]}
+   concepts = fgconcepts tvs;
+   fgs = Formals.empty}
 
 
 

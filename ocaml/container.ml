@@ -388,12 +388,16 @@ sig
   type ('a, 'b) t
   val empty: ('a,'b) t
   val make: 'a array -> 'b array -> ('a,'b) t
+  val copy: ('a,'b) t -> ('a,'b) t
   val count: ('a,'b) t -> int
   val first: ('a,'b) t -> 'a array
   val second: ('a,'b) t -> 'b array
+  val map1:   ('a->'c) -> ('a,'b) t -> ('c,'b) t
+  val map2:   ('b->'c) -> ('a,'b) t -> ('a,'c) t
   val elem1: int -> ('a,'b) t -> 'a
   val elem2: int -> ('a,'b) t -> 'b
   val sub: int -> int -> ('a,'b) t -> ('a,'b) t
+  val pair: ('a,'b) t -> 'a array * 'b array
 end =
   struct
     type ('a, 'b) t =
@@ -401,6 +405,9 @@ end =
     let make (arr1: 'a array) (arr2:'b array): ('a,'b) t =
       assert (Array.length arr1 = Array.length arr2);
       {arr1; arr2}
+    let copy (a:('a,'b) t): ('a,'b) t =
+      {arr1 = Array.copy a.arr1;
+       arr2 = Array.copy a.arr2}
     let empty: ('a,'b) t =
       {arr1 = [||]; arr2 =  [||]}
     let count (a:('a,'b) t): int =
@@ -415,12 +422,20 @@ end =
     let elem2 (i:int) (a:('a,'b) t): 'b =
       assert (i < count a);
       a.arr2.(i)
+    let map1 (f:'a -> 'c) (a:('a,'b) t): ('c,'b) t =
+      {arr1 = Array.map f a.arr1;
+       arr2 = a.arr2}
+    let map2 (f:'b -> 'c) (a:('a,'b) t): ('a,'c) t =
+      {arr2 = Array.map f a.arr2;
+       arr1 = a.arr1}
     let sub (start:int) (n:int) (a:('a,'b) t): ('a,'b) t =
       assert (start <= count a);
       assert (start + n <= count a);
       make
         (Array.sub a.arr1 start n)
         (Array.sub a.arr2 start n)
+    let pair (a:('a,'b) t): 'a array * 'b array =
+      a.arr1, a.arr2
   end
 
 

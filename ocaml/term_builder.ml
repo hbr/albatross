@@ -549,7 +549,7 @@ let make
           if i < maxfgs - nfgs_c then sym
           else fgnames_c.(i - (maxfgs - nfgs_c)))
     in
-    Tvars.make maxlocs concepts fgnames fgconcepts
+    Tvars.make maxlocs concepts (Formals.make fgnames fgconcepts)
   in
   {req = tp;
    reqs = [];
@@ -1335,7 +1335,7 @@ let complete_inspect (ncases:int) (tb:t): unit =
       (fun i ->
         let n,(nms,tps),pat,res =
           Term.case_split args.(2*i+1) args.(2*i+2) in
-        (nms,tps),pat,res
+        (Array2.make nms tps),pat,res
       )
   in
   tb.terms <- (Inspect(args.(0),cases), tp) :: terms;
@@ -1529,7 +1529,8 @@ let terms_with_context (tb:t): formals * formals * bool * info_term list =
   and fgs = Array.map sub_type fgs
   in
   let c0 = Context.previous (context tb) in
-  let c1 = Context.push_typed (nms,tps) (fgnms,fgs) rvar c0 in
+  let c1 =
+    Context.push_typed (Formals.make nms tps) (Formals.make fgnms fgs) rvar c0 in
   let tlst =
     List.rev_map
       (fun t ->

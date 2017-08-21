@@ -255,16 +255,16 @@ let push
 
 
 
-let push_typed (fargs:formals) (fgs:formals) (rvar:bool) (pc:t): t =
+let push_typed (fargs:Formals.t) (fgs:Formals.t) (rvar:bool) (pc:t): t =
   let base = Proof_table.push_typed fargs fgs rvar pc.base in
   push0 base pc
 
-let push_typed0 (fargs:formals) (fgs:formals) (pc:t): t =
+let push_typed0 (fargs:Formals.t) (fgs:Formals.t) (pc:t): t =
   push_typed fargs fgs false pc
 
 
 let push_empty (pc:t): t =
-  let base = Proof_table.push_typed empty_formals empty_formals false pc.base in
+  let base = Proof_table.push_empty pc.base in
   push0 base pc
 
 
@@ -1365,7 +1365,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
   and eval_inspect
         (t:term)
         (insp:term)
-        (cases: (formals*term*term) array)
+        (cases: (formals2*term*term) array)
         (lazy_:bool)
         (depth:int)
         (pc:t)
@@ -1381,8 +1381,8 @@ let eval_term (t:term) (pc:t): term * Eval.t =
            evaluated in a context which has a contradiction. *)
         raise No_branch_evaluation;
       assert (i < ncases);
-      let (nms,tps),pat, res = cases.(i) in
-      let n = Array.length nms in
+      let fs, pat, res = cases.(i) in
+      let n = Array2.count fs in
       try
         let sub,reqs = Pattern.unify_with_pattern insp n pat c in
         assert (Array.length sub = n);

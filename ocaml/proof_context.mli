@@ -51,8 +51,8 @@ val predicate_of_type: type_term -> t -> type_term
 val make: Module.Compile.t -> t
 
 val push: entities list withinfo -> return_type -> bool -> bool -> bool -> t -> t
-val push_typed:   formals -> formals -> bool -> t -> t
-val push_typed0:  formals -> formals -> t -> t
+val push_typed:   Formals.t -> Formals.t -> bool -> t -> t
+val push_typed0:  Formals.t -> Formals.t -> t -> t
 val push_empty:   t -> t
 val pop:          t -> t
 

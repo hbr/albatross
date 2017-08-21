@@ -17,7 +17,7 @@ type term =
   | QExp        of int * formals * formals * term * bool (* n, args, fgs, t, is_all *)
   | Ifexp       of term * term * term
   | Asexp       of term * types * term
-  | Inspect     of term * (formals * term * term) array
+  | Inspect     of term * (formals2 * term * term) array
   | Indset      of int * type_term * arguments (* name, type, rules *)
 and names      = int array
 and arguments  = term array
@@ -364,8 +364,8 @@ end = struct
       | Inspect (insp,cases) ->
          1 + nds insp nb +
            Array.fold_left
-             (fun sum ((nms,_),pat,res) ->
-               let nb = nb + Array.length nms in
+             (fun sum (fs,pat,res) ->
+               let nb = nb + Array2.count fs in
                sum + nds pat nb + nds res nb)
              0
              cases
@@ -442,8 +442,8 @@ end = struct
       | Inspect(insp, cases) ->
          let level = level + 1 in
          Array.fold_left
-           (fun a ((nms,_),pat,res) ->
-             let nb = nb + Array.length nms in
+           (fun a (fs,pat,res) ->
+             let nb = nb + Array2.count fs in
              fld a res level nb
            )
            (fld a insp level nb)
@@ -600,11 +600,11 @@ end = struct
          && eq insp1 insp2 nb1 nb2
          && interval_for_all
               (fun i ->
-                let (nms1,_),pat1,res1 = cases1.(i)
-                and (nms2,_),pat2,res2 = cases2.(i) in
-                let n = Array.length nms1 in
+                let fs1,pat1,res1 = cases1.(i)
+                and fs2,pat2,res2 = cases2.(i) in
+                let n = Array2.count fs1 in
                 let nb1 = nb1 + n in
-                n = Array.length nms2
+                n = Array2.count fs2
                 && eq pat1 pat1 nb1 nb2
                 && eq res2 res2 nb1 nb2
               )
@@ -698,10 +698,12 @@ end = struct
          Inspect(
              shift0 insp,
              Array.map
-               (fun ((nms,tps),pat,res) ->
-                 let n = Array.length tps in
+               (fun (fs,pat,res) ->
+                 let n = Array2.count fs in
                  let shift1 = shift_from delta1 (start1+n) delta2 start2 in
-                 (nms, shift_args delta2 start2 0 0 tps),
+                 (Array2.make
+                   (Array2.first fs)
+                   (shift_args delta2 start2 0 0 (Array2.second fs))),
                  shift1 pat,
                  shift1 res
                )
@@ -828,12 +830,14 @@ end = struct
       | Inspect (insp, cases) ->
          Inspect (sub0 insp,
                   Array.map
-                    (fun ((nms,tps),pat,res) ->
-                      let n = Array.length tps in
+                    (fun (fs,pat,res) ->
+                      let n = Array2.count fs in
                       let nb1 = n + nb1 in
                       let sub1 t =
                         partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2 in
-                      (nms, sub_args tps n2 nb2 d2 args2 0 0 0 [||]),
+                      (Array2.make
+                         (Array2.first fs)
+                         (sub_args (Array2.second fs) n2 nb2 d2 args2 0 0 0 [||])),
                       sub1 pat,
                       sub1 res
                     )
@@ -992,10 +996,12 @@ end = struct
       | Inspect (insp,cases) ->
          Inspect (map0 insp,
                   Array.map
-                    (fun ((nms,tps),pat,res) ->
-                      let n = Array.length tps in
+                    (fun (fs,pat,res) ->
+                      let n = Array2.count fs in
                       let map1 t = mapr (nb1+n) nb2 f1 f2 t in
-                      (nms, mapargs nb2 0 f2 fdummy tps),
+                      (Array2.make
+                         (Array2.first fs)
+                         (mapargs nb2 0 f2 fdummy (Array2.second fs))),
                       map1 pat,
                       map1 res
                     )
@@ -1718,10 +1724,17 @@ sig
   type t = (int,type_term) Array2.t
   val empty: t
   val make:  names -> types -> t
+  val from_pair: (names*types) -> t
+  val copy:  t -> t
   val count: t -> int
   val names: t -> names
   val types: t -> types
+  val name:  int -> t -> int
+  val is_equivalent: t -> t -> bool
+  val typ:   int -> t -> type_term
+  val map:   (type_term -> type_term) -> t -> t
   val sub:   int -> int -> t -> t
+  val prepend: t -> t -> t
   val formals: t -> formals
 end
   =
@@ -1730,10 +1743,22 @@ end
     let empty: t = Array2.empty
     let make (nms:names) (tps:types): t =
       Array2.make nms tps
+    let from_pair ((nms,tps):names*types): t =
+      make nms tps
+    let copy (f:t): t = Array2.copy f
     let names (f:t) = Array2.first f
     let types (f:t) = Array2.second f
+    let name (i:int) (f:t): int = Array2.elem1 i f
+    let is_equivalent (f1:t) (f2:t): bool =
+      Term.equivalent_array (types f1) (types f2)
+    let typ  (i:int) (f:t): type_term = Array2.elem2 i f
+    let map  (f:type_term -> type_term) (fs:t): t = Array2.map2 f fs
     let count (f:t) = Array2.count f
     let sub (start:int) (n:int) (f:t): t = Array2.sub start n f
+    let prepend (f1:t) (f2:t): t =
+      make
+        (Term.prepend_names (names f1) (names f2))
+        (Array.append (types f1) (types f2))
     let formals (f:t) = Array2.first f, Array2.second f
     let equivalent (f1:t) (f2:t): bool =
       Term.equivalent_array (types f1) (types f2)

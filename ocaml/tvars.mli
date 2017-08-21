@@ -19,7 +19,7 @@ type t
 val empty: t
     (** An empty type environment *)
 
-val make: int -> type_term array -> int array -> type_term array -> t
+val make: int -> type_term array -> Formals.t -> t
 val copy: t -> t
 
 val make_fgs:    int array -> type_term array -> t
@@ -66,7 +66,7 @@ val principal_class: type_term -> t -> int
 
 val add_local:    int -> t -> t
 val remove_local: int -> t -> t
-val push_fgs:     names -> types -> t -> t
+val push_fgs:     Formals.t -> t -> t
 val augment_fgs:  names -> types -> t -> t
 val fgs_to_global: t -> t
 val add_involved_classes: type_term -> t -> IntSet.t -> IntSet.t

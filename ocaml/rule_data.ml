@@ -370,7 +370,7 @@ let make (t:term) (c:Context.t): t =
       false
     else
       let ft  = Context.feature_table c
-      and tvs = Tvars.push_fgs fgnms fgcon (Context.tvars c)
+      and tvs = Tvars.push_fgs (Formals.make fgnms fgcon) (Context.tvars c)
       and nb = nargs + nbenv in
       let _,fwd_blckd = forward_blocked (List.rev ps) tgt nb tvs ft in
       fwd_blckd in
@@ -519,7 +519,7 @@ let verify_specialization (args:arguments) (c:Context.t) (rd:t): agens =
   and rdtvs  = Context.tvars rd.ctxt.c
   and ct     = Context.class_table c
   in
-  let tvs  = Tvars.push_fgs rd.ctxt.fgnms rd.ctxt.fgcon rdtvs
+  let tvs  = Tvars.push_fgs (Formals.make rd.ctxt.fgnms rd.ctxt.fgcon) rdtvs
   and nfgs = Array.length rd.ctxt.fgcon in
   let sub = Type_substitution.make nfgs tvs acttvs ct in
   let open Type_substitution in
