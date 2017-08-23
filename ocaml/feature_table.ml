@@ -555,66 +555,6 @@ let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
   end
 
 
-(*
-let beta_reduce_0
-    (tlam: term) (nbenv:int) (arg:term) (ndelta:int) (ft:t): term =
-  (* Beta reduce the term [tlam] which comes from an environment with [nbenv+1]
-     variables where variable 0 is the argument variable. [arg] is the argument
-     which is an optional tuple and comes from an environment with [nbenv+ndelta]
-     variables. All possible transformations of the form [(a,b).first ~> a] and
-     [(a,b).second ~> b] are done.
-
-     The reduced term is in an environment with [nbenv+ndelta] variables. *)
-  assert (ndelta = 0);
-  let rec reduce (t:term) (nb:int): term =
-    let first_id  = nb + 1 + nbenv + first_index
-    and second_id = nb + 1 + nbenv + second_index
-    and tuple_id  = nb + nbenv + ndelta + tuple_index
-    in
-    let reduce_args args = Array.map (fun a -> reduce a nb) args
-    in
-    let reduce_tuple arg fstsnd_id fstsnd =
-      assert (fstsnd = 0 || fstsnd = 1);
-      let tup = reduce arg nb in
-      match tup with
-        VAppl (i,args) when i = tuple_id ->
-          assert (Array.length args = 2);
-          args.(fstsnd)
-      | _ ->
-          VAppl (fstsnd_id - 1 + ndelta, [|tup|])
-    in
-    match t with
-      Variable i when i < nb ->
-        t
-    | Variable i when i = nb ->
-        Term.up nb arg
-    | Variable i ->
-        Variable (i - 1 + ndelta)
-    | VAppl (i,args) when i = first_id ->
-        assert (Array.length args = 1);
-        reduce_tuple args.(0) i 0
-    | VAppl (i,args) when i = second_id ->
-        assert (Array.length args = 1);
-        reduce_tuple args.(0) i 1
-    | VAppl (i,args) ->
-        let args = reduce_args args in
-        VAppl (i - 1 + ndelta, args)
-    | Application(f,args) ->
-        let f    = reduce f nb
-        and args = reduce_args args in
-        Application(f,args)
-    | Lam(n,nms,pres0,t0,pr) ->
-        Lam(n, nms, pres0, reduce t0 (1+nb), pr)
-    | QExp(n,nms,t0,is_all) ->
-        QExp(n, nms, reduce t0 (n + nb), is_all)
-    | Flow (ctrl,args) ->
-        Flow (ctrl, reduce_args args)
-    | Indset (n,nms,rs) ->
-        assert false (* nyi *)
-  in
-  reduce tlam 0
-*)
-
 
 let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
   (* The tuple (a,b,...) transformed into an argument array [a,b,...].

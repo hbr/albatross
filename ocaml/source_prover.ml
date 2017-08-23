@@ -173,7 +173,6 @@ let find_goals (elst: info_terms) (pc:PC.t): unit =
       let chn = PC.assumptions_chain e.v pc
       and tps = PC.local_formals pc
       and fgs = PC.local_fgs pc
-      and n   = PC.count_last_arguments pc
       in
       let t1 =
         Term.all_quantified (Formals.from_pair tps) (Formals.from_pair fgs) chn in
@@ -542,7 +541,8 @@ let induction_goal_predicate
   let t =
     Term.all_quantified (Formals.make nms_inner tps_inner) Formals.empty chn
   in
-  let tp = Context.predicate_of_type (Context.tuple_of_types tps_outer c) c in
+  let tp =
+    Context.predicate_of_type (Context.tuple_type_of_types tps_outer c) c in
   let t = Context.make_lambda nvars nms_outer  [] t true 0 tp c in
   t, others
 

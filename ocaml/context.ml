@@ -722,20 +722,22 @@ let predicate_of_term (t:term) (c:t): type_term =
 
 
 
-let tuple_of_types (argtps:types) (c:t): type_term =
+let tuple_type_of_types (argtps:types) (c:t): type_term =
+  (* Convert the type array [argtps = [A,B,...]] into the tuple type
+     [(A,B,...)] *)
   let ntvs = count_all_type_variables c in
   Class_table.to_tuple ntvs 0 argtps
 
 
 
-let tuple_of_terms (args:arguments) (c:t): type_term =
+let tuple_type_of_terms (args:arguments) (c:t): type_term =
   let argtps = Array.map (fun t -> type_of_term t c) args in
-  tuple_of_types argtps c
+  tuple_type_of_types argtps c
 
 
 let function_of_types (argtps:types) (r_tp:type_term) (c:t): type_term =
   let fidx = function_class c
-  and tup  = tuple_of_types argtps c in
+  and tup  = tuple_type_of_types argtps c in
   make_type fidx [|tup;r_tp|]
 
 
@@ -1074,7 +1076,7 @@ let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
 let tuple_of_args (args:arguments) (c:t): term =
   (* The arguments [a,b,...] transformed to a tuple (a,b,...).
    *)
-  let tp = tuple_of_terms args c
+  let tp = tuple_type_of_terms args c
   and nvars = count_variables c in
   Feature_table.tuple_of_args args tp nvars c.ft
 

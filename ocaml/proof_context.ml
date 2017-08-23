@@ -2299,7 +2299,7 @@ let prove_equality (g:term) (pc:t): int =
   let tlam, leibniz, args1, args2 =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
-  let tup  = Context.tuple_of_terms args1 c
+  let tup  = Context.tuple_type_of_terms args1 c
   and r_tp = Context.type_of_term left c in
   let f_tp = make_type (Context.function_class c) [|tup;r_tp|] in
   let lam = make_lambda nargs [||] [] tlam false f_tp pc in

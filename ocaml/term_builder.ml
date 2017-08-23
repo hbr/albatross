@@ -1053,7 +1053,7 @@ let complete_application (am:application_mode) (tb:t): unit =
              ((c,d) -> f(a,b,c,d))
 
              Partial application is not yet implemented in general. Therefore
-             this case can happen onle if a global function is used in a place
+             this case can happen only if a global function is used in a place
              where a function term is expected. In that case the global function
              is converted to a lambda expression.
            *)
