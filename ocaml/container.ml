@@ -388,6 +388,7 @@ sig
   type ('a, 'b) t
   val empty: ('a,'b) t
   val make: 'a array -> 'b array -> ('a,'b) t
+  val from_pair: ('a array * 'b array) -> ('a,'b) t
   val copy: ('a,'b) t -> ('a,'b) t
   val count: ('a,'b) t -> int
   val first: ('a,'b) t -> 'a array
@@ -405,6 +406,8 @@ end =
     let make (arr1: 'a array) (arr2:'b array): ('a,'b) t =
       assert (Array.length arr1 = Array.length arr2);
       {arr1; arr2}
+    let from_pair ((a,b):'a array * 'b array): ('a,'b) t =
+      make a b
     let copy (a:('a,'b) t): ('a,'b) t =
       {arr1 = Array.copy a.arr1;
        arr2 = Array.copy a.arr2}

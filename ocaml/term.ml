@@ -655,7 +655,7 @@ end = struct
           i + delta
       and shift_args d1 s1 d2 s2 args =
         if d1=0 && d2 = 0 then args
-        else Array.map (fun t -> shift_from d1 s1 d2 s2 t) args
+        else Array.map (shift_from d1 s1 d2 s2) args
       and shift_list d1 s1 d2 s2 lst =
         if d1=0 && d2 = 0 then lst
         else List.map (fun t -> shift_from d1 s1 d2 s2 t) lst
@@ -681,15 +681,10 @@ end = struct
               pred,
               shift_from delta2 start2 0 0 tp)
       | QExp (tps,fgs,t0,is_all) ->
-         let n = Array2.count tps
-         and nms = Array2.first tps
-         and tps = Array2.second tps
-         and fgnms = Array2.first fgs
-         and fgcon = Array2.second fgs in
-         let start1 = n + start1
-         and start2 = Array.length fgcon + start2 in
-          QExp(Array2.make nms (shift_args delta2 start2 0 0 tps),
-               Array2.make fgnms (shift_args delta2 start2 0 0 fgcon),
+         let start1 = Array2.count tps + start1
+         and start2 = Array2.count fgs + start2 in
+         let shift_tp = shift_from delta2 start2 0 0 in
+         QExp (Array2.map2 shift_tp tps, Array2.map2 shift_tp fgs,
                shift_from delta1 start1 delta2 start2 t0,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -700,15 +695,14 @@ end = struct
                 shift_args delta2 start2 0 0 tps,
                 shift_from delta1 (start1+n) delta2 start2 pat)
       | Inspect (insp,cases) ->
+         let shift_tp = shift_from delta2 start2 0 0 in
          Inspect(
              shift0 insp,
              Array.map
                (fun (fs,pat,res) ->
                  let n = Array2.count fs in
                  let shift1 = shift_from delta1 (start1+n) delta2 start2 in
-                 (Array2.make
-                   (Array2.first fs)
-                   (shift_args delta2 start2 0 0 (Array2.second fs))),
+                 (Array2.map2 shift_tp fs),
                  shift1 pat,
                  shift1 res
                )
@@ -817,15 +811,10 @@ end = struct
                pr,
                partial_subst_from tp n2 nb2 d2 args2 0  0   0  [||])
       | QExp (tps,fgs,t0,is_all) ->
-         let n = Array2.count tps
-         and nms = Array2.first tps
-         and tps = Array2.second tps
-         and fgnms = Array2.first fgs
-         and fgtps = Array2.second fgs in
-         let nb1 = n + nb1
-         and nb2 = nb2 + Array.length fgtps in
-         QExp( Array2.make nms (sub_args tps   n2 nb2 d2 args2 0 0 0 [||]),
-               Array2.make fgnms (sub_args fgtps n2 nb2 d2 args2 0 0 0 [||]),
+         let nb1 = Array2.count tps + nb1
+         and nb2 = Array2.count fgs + nb2 in
+         let sub_tp tp = partial_subst_from tp n2 nb2 d2 args2 0 0 0 [||] in
+         QExp( Array2.map2 sub_tp tps, Array2.map2 sub_tp fgs,
                partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -837,6 +826,7 @@ end = struct
                 sub_args tps n2 nb2 d2 args2 0 0 0 [||],
                 partial_subst_from pat n1 nb1 d1 args1 n2 nb2 d2 args2)
       | Inspect (insp, cases) ->
+         let sub_tp tp = partial_subst_from tp n2 nb2 d2 args2 0 0 0 [||] in
          Inspect (sub0 insp,
                   Array.map
                     (fun (fs,pat,res) ->
@@ -844,9 +834,7 @@ end = struct
                       let nb1 = n + nb1 in
                       let sub1 t =
                         partial_subst_from t n1 nb1 d1 args1 n2 nb2 d2 args2 in
-                      (Array2.make
-                         (Array2.first fs)
-                         (sub_args (Array2.second fs) n2 nb2 d2 args2 0 0 0 [||])),
+                      Array2.map2 sub_tp fs,
                       sub1 pat,
                       sub1 res
                     )
@@ -989,14 +977,11 @@ end = struct
               mapr nb2 0 f2 fdummy tp)
       | QExp (tps, fgs, t0, is_all) ->
          let nargs = Array2.count tps
-         and nms = Array2.first tps
-         and tps = Array2.second tps
-         and fgnms = Array2.first fgs
-         and fgs = Array2.second fgs in
-         let ntvs = Array.length fgs
+         and ntvs = Array2.count fgs
          in
-         QExp (Array2.make nms (mapargs (ntvs+nb2) 0 f2 fdummy tps),
-               Array2.make fgnms (mapargs (ntvs+nb2) 0 f2 fdummy fgs),
+         let map_tp = mapr (ntvs+nb2) 0 f2 fdummy in
+         QExp (Array2.map2 map_tp tps,
+               Array2.map2 map_tp fgs,
                mapr (nargs+nb1) (ntvs+nb2) f1 f2 t0,
                is_all)
       | Ifexp (cond, a, b) ->
@@ -1007,14 +992,13 @@ end = struct
                mapargs nb2 0 f2 fdummy tps,
                mapr (nb1+n) nb2 f1 f2 pat)
       | Inspect (insp,cases) ->
+         let map_tp = mapr nb2 0 f2 fdummy in
          Inspect (map0 insp,
                   Array.map
                     (fun (fs,pat,res) ->
                       let n = Array2.count fs in
                       let map1 t = mapr (nb1+n) nb2 f1 f2 t in
-                      (Array2.make
-                         (Array2.first fs)
-                         (mapargs nb2 0 f2 fdummy (Array2.second fs))),
+                      Array2.map2 map_tp fs,
                       map1 pat,
                       map1 res
                     )
@@ -1205,6 +1189,12 @@ end = struct
     let t = subst0 t n1new args n2new ags in
     (nms,tps), (fgnms,fgcon), t
 
+  let remove_unused_new
+        (tps:formals) (fgs:formals) (t:term)
+      : formals * formals * term =
+    let tps,fgs,t =
+      remove_unused (Array2.pair tps) 0 (Array2.pair fgs) t in
+    Array2.from_pair tps, Array2.from_pair fgs, t
 
 
   let lambda_split (t:term): int * names * term list * term * bool * type_term =
@@ -1560,15 +1550,11 @@ end = struct
         let a = pren args.(0) nb nb2 imp_id
         and tps,fgs,b1 =
           prenex_0 args.(1) nb nargs nb2 imp_id recursive nbubble in
-        let n = Array2.count tps
-        and nms = Array2.first tps
-        and tps = Array2.second tps
-        and fgnms = Array2.first fgs
-        and fgcon = Array2.second fgs in
-        let a1 = shift n (Array.length fgnms) a in
+        let n = Array2.count tps in
+        let a1 = shift n (Array2.count fgs) a in
         assert (not recursive || not (is_all_quantified b1));
         let t = VAppl(i+n,[|a1;b1|],ags,oo) in
-        (Array2.make nms tps), (Array2.make fgnms fgcon), t
+        tps, fgs, t
     | VAppl(i,args,ags,oo) ->
         Array2.empty, Array2.empty,
         VAppl(i, norm_args args nb nb2, ags, oo)
@@ -1612,19 +1598,12 @@ end = struct
        (Array2.make nms tps), (Array2.make fgnms fgcon), t1
     | QExp(tps,fgs,t0,false) ->
        let n0 = Array2.count tps
-       and nms = Array2.first tps
-       and tps = Array2.second tps
-       and fgnms = Array2.first fgs
-       and fgcon = Array2.second fgs in
-       let nfgs = Array.length fgnms in
-       let nb = nb + n0 and nb2 = Array.length fgnms in
+       and nfgs = Array2.count fgs in
+       let nb = nb + n0 and nb2 = nfgs in
        let t0 = pren t0 nb nb2 imp_id in
-       let (nms,tps), (fgnms,fgcon), t0 =
-         remove_unused (nms,tps) 0 (fgnms,fgcon) t0 in
-       assert (n0 = Array.length nms);
-       assert (nfgs = Array.length fgnms);
+       let tps,fgs,t0 = remove_unused_new tps fgs t0 in
        Array2.empty, Array2.empty,
-       QExp(Array2.make nms tps, Array2.make fgnms fgcon,
+       QExp(tps,fgs,
             pren t0 nb nb2 imp_id, false)
     | Ifexp (c, a, b) ->
        Array2.empty, Array2.empty, Ifexp( pren0 c, pren0 a, pren0 b)
