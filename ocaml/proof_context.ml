@@ -1397,7 +1397,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
               let cond,idx = decide t pc in
               if not cond then
                 begin
-                  printf "case %d rejected\n" i;
+                  printf "case %d (%s) rejected\n" i (string_of_term t pc);
                   raise Reject;
                 end;
               idx :: lst

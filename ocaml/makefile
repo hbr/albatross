@@ -15,6 +15,8 @@
         alba.native                \
         alba.p.native              \
         alba_node.byte             \
+        alba_draft.byte            \
+        alba_draft.native          \
         boolean                    \
         predicate                  \
         tuple                      \
@@ -56,6 +58,20 @@ alba.p.native:
             -lib unix \
             alba.p.native
 
+
+alba_draft.byte:
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
+            -lib unix \
+	    alba_draft.byte
+
+alba_draft.native:
+	ocamlbuild \
+            -use-ocamlfind \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
+            -lib unix \
+	    alba_draft.native
 
 alba-node: alba_node.byte
 	js_of_ocaml \

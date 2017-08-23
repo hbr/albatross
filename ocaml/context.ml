@@ -1648,7 +1648,6 @@ let term_preconditions (t:term)  (c:t): term list =
        in
        Array.fold_left (* all preconditions of the results *)
          (fun lst (fs,pat,res) ->
-           let n = Array2.count fs in
            let c1 = push_typed0 fs Formals.empty c in
            let lst_inner = List.rev (pres res [] c1) in
            case_preconditions insp insp_tp
