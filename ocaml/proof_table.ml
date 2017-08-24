@@ -558,7 +558,7 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         assert (Term.equivalent resa (Application (fb,argsb,false)));
         Application (fa,argsa,false), resb
     | Eval.Lam (tps,fgs,pres,e,rt) ->
-        let ta,tb = reconstruct e (1 + nb) in
+        let ta,tb = reconstruct e (Formals.count tps + nb) in
         Lam (tps,fgs,pres,ta,rt), Lam (tps,fgs,pres,tb,rt)
     | Eval.QExp (n,tps,fgs,e,is_all) ->
        let ta,tb = reconstruct e (nb+n)

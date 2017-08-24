@@ -391,7 +391,11 @@ let make_application
 let beta_reduce
     (n:int) (tlam:term) (tup_tp:type_term) (args:term array) (nb:int )(c:t)
     : term =
-  Feature_table.beta_reduce n tlam tup_tp args (nb+count_variables c) c.ft
+  Feature_table.beta_reduce
+    n tlam tup_tp args
+    (nb+count_variables c)
+    (count_all_type_variables c)
+    c.ft
 
 
 let quantified (is_all:bool) (tps:formals) (fgs:formals) (t:term) (c:t)
@@ -1046,14 +1050,14 @@ let domain_of_lambda
      The domain is the set {a:A: p1 and p2 and ... } or {a:A: true} in case that
      there are no preconditions.
    *)
-  let nbenv = count_variables c
+  let nbenv = count_variables c + Formals.count tps
   in
   match pres with
     [] ->
-      let true_const = Feature_table.true_constant (1+nb+nbenv) in
+      let true_const = Feature_table.true_constant (nb+nbenv) in
       Lam(tps,fgs, [], true_const, None)
   | p::pres ->
-      let and_id  = 1 + nb + nbenv + Constants.and_index in
+      let and_id = nb + nbenv + Constants.and_index in
       let inner =
         List.fold_left
           (fun t p -> Term.binary and_id t p)
@@ -1073,11 +1077,6 @@ let domain_of_feature (idx:int) (nb:int) (ags:agens) (c:t): term =
   else
     let tvs = tvars c in
     Feature_table.domain_of_feature idx (nb+nbenv) ags tvs c.ft
-
-
-let remove_tuple_accessors (t:term) (nargs:int) (c:t): term =
-  let nbenv = count_variables c in
-  Feature_table.remove_tuple_accessors t nargs nbenv c.ft
 
 
 let tuple_of_args (args:arguments) (c:t): term =
@@ -1240,6 +1239,8 @@ let rec type_of_term_full
         check_args (Sign.arguments s) args;
         check_and_trace (Sign.result s)
       end else begin
+          if len <> 0 then
+            raise (Type_error "len <> 0");
         assert (len = 0);
         check_and_trace_sign s
       end
@@ -1257,9 +1258,7 @@ let rec type_of_term_full
       end
   | Lam (tps,fgs,ps,t0,rt) ->
      let argtp = tuple_type_of_types (Formals.types tps) c in
-     let c1 =
-       push_typed0 (Formals.make [|ST.symbol "t"|] [|argtp|]) fgs c
-     in
+     let c1 = push_typed0 tps fgs c in
      ignore (type_of_term_full
                t0
                (if rt = None then
@@ -1563,9 +1562,7 @@ let term_preconditions (t:term)  (c:t): term list =
     | Lam (tps,fgs,pres0,t0,rt) ->
        let n = Formals.count tps
        in
-       let t0     = remove_tuple_accessors t0 n c
-       and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0
-       and c      = push_typed0 tps fgs c
+       let c      = push_typed0 tps fgs c
        and imp_id = n + imp_id
        in
        let prepend_pres

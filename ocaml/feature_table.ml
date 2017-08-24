@@ -394,9 +394,10 @@ let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
     | Application(f,args,_) ->
         check_visi f nb;
         check_args args nb
-    | Lam(_,_,pres0,t0,_) ->
-        check_lst pres0 (1+nb);
-        check_visi t0 (1+nb)
+    | Lam(tps,_,pres0,t0,_) ->
+       let nb = nb + Formals.count tps in
+       check_lst pres0 nb;
+       check_visi t0 nb
     | QExp(tps,_,t0,_) ->
         check_visi t0 (Formals.count tps + nb)
     | Ifexp (cond,a,b) ->
@@ -423,137 +424,6 @@ let is_term_visible (t:term) (nbenv:int) (ft:t): bool =
     true
   with Not_found ->
     false
-
-
-
-(* removal of tuple accessors:
-   We have to find pattern of the form
-
-      0.second.second...second.first
-      0.second.second...second.second
-
-   where the sequence of second is less or equal [nargs-2].
-
-   Example: nargs = 3
-
-   [a,b,c]  ~> [0.first, 0.second.first, 0.second.second]
-
-   There might be subexpressions of the following form in the original term:
-
-      a.first   ~>   0.first.first
-      a.second  ~>   0.first.second
-      b.first   ~>   0.second.first.first
-      b.second  ~>   0.second.first.second
-      c.first   ~>   0.second.second.first
-      c.second  ~>   0.second.second.second
-
-   There is no ambiguity because none of these expressions fits the pattern of
-   at most [nargs-2] seconds and a first or second as the outer function.
- *)
-
-
-
-let remove_tuple_accessors (t:term) (nargs:int) (nbenv:int) (ft:t): term =
-  (* Convert the inner term [t] which expects an [nargs] tuple back into its
-     original form expecting [nargs] arguments.
-
-     The function has to find subterms of the form
-        0.second...first
-        0.second...second
-     where
-        .second..
-     is is zero up to [nargs-2] applications of [second] and replace them by
-     the corresponding argument.  *)
-  let rec untup (t:term) (nb:int) (outer:int) (nsnds:int) : term * int * int =
-    (* outer 0: neither first nor second
-             1: first
-             2: second *)
-    let first_id  = nb + 1 + nbenv + Constants.first_index
-    and second_id = nb + 1 + nbenv + Constants.second_index
-    and vappl i t ags  = VAppl (i+nargs-1, [|t|], ags, true), 0, 0
-    in
-    match t with
-      Variable i when i < nb ->
-        t, 0, 0
-    | Variable i when i = nb ->
-        assert (0 < outer);
-        let nsnds2 = if nsnds <= nargs - 2 then nsnds else nargs - 2 in
-        Variable (i + nsnds2 + outer - 1),
-        outer,
-        nsnds2
-    | Variable i ->
-        Variable (i + nargs - 1), 0 , 0
-    | VAppl(i,args,ags,_) when i = first_id ->
-        assert (Array.length args = 1);
-        let t,outer,nsnds = untup args.(0) nb 1 0 in
-        assert (outer = 0 || outer = 1);
-        assert (nsnds = 0);
-        if outer = 1 then
-          t, 0, 0
-        else
-          vappl i t ags
-    | VAppl(i,args,ags,_) when i = second_id && outer = 0 ->
-        assert (Array.length args = 1);
-        let t,outer,nsnds = untup args.(0) nb 2 0 in
-        assert (outer = 0 || outer = 2);
-        assert (nsnds = 0);
-        if outer = 2 then
-          t, 0, 0
-        else
-          vappl i t ags
-    | VAppl(i,args,ags,_) when i = second_id->
-        assert (Array.length args = 1);
-        assert (outer = 1 || outer = 2);
-        let t1,outer1,nsnds1 = untup args.(0) nb outer (nsnds+1) in
-        if outer1 = 0 || nsnds1 = 0 then
-          vappl i t1 ags
-        else begin
-          assert (outer1 = outer);
-          t1, outer1, nsnds1-1
-        end
-    | VAppl(i,args,ags,oo) ->
-        let args = Array.map (fun t -> untup0 t nb) args in
-        VAppl(i+nargs-1,args,ags,oo), 0, 0
-    | Application(f,args,inop) ->
-        let f = untup0 f nb
-        and args = Array.map (fun t -> untup0 t nb) args in
-        Application(f,args,inop), 0, 0
-    | Lam (tps,fgs,pres0,t0,rt) ->
-        let t0 = untup0 t0 (1+nb)
-        and pres0 = untup0_lst pres0 (1+nb) in
-        Lam(tps,fgs,pres0,t0,rt), 0, 0
-    | QExp (tps,fgs,t0,is_all) ->
-       let n = Formals.count tps in
-        let t0 = untup0 t0 (n+nb) in
-        QExp(tps,fgs,t0,is_all), 0, 0
-    | Ifexp (cond,a,b) ->
-       Ifexp( untup0 cond nb, untup0 a nb, untup0 b nb), 0, 0
-    | Asexp (insp, tps, pat) ->
-       let n = Array.length tps in
-       Asexp (untup0 insp nb, tps, untup0 pat (nb+n)), 0, 0
-    | Inspect (insp,cases) ->
-       Inspect (untup0 insp nb,
-                Array.map
-                  (fun (fs,pat,res) ->
-                    let nb = nb + Array2.count fs in
-                    fs, untup0 pat nb, untup0 res nb
-                  )
-                  cases),
-       0 , 0
-    | Indset (nme,tp,rs) ->
-        let rs = Array.map (fun r -> untup0 r (1+nb)) rs in
-        Indset (nme,tp,rs), 0, 0
-  and untup0 t nb =
-    let t,_,_ = untup t nb 0 0 in t
-  and untup0_lst lst nb =
-    List.map (fun t -> untup0 t nb) lst
-  in
-  if nargs <= 1 then
-      t
-  else begin
-    untup0 t 0
-  end
-
 
 
 let args_of_tuple (t:term) (nbenv:int) (ft:t): term array =
@@ -703,30 +573,6 @@ let tuple_of_args
 
 
 
-
-
-
-let add_tuple_accessors
-    (t:term) (nargs:int) (tup_tp:type_term) (nbenv:int) (ft:t)
-    : term =
-  (* Convert the inner term [t] which has [nargs] arguments below [nbenv] variables
-     to a term with one argument expecting an [nargs] tuple.
-
-     nargs = 4
-     args: [0.first, 0.second.first, 0.second.second.first, 0.second.second.second]
-   *)
-  let res =
-  if nargs <= 1 then
-    t
-  else
-    let args =
-      args_of_tuple_ext (Variable 0) tup_tp (nbenv+1) nargs ft in
-    Term.subst t 1 args
-  in
-  assert (remove_tuple_accessors res nargs nbenv ft = t);
-  res
-
-
 let make_lambda
       (tps:formals) (fgs:formals) (ps: term list) (t:term)
       (rt:type_term option)
@@ -734,16 +580,6 @@ let make_lambda
       (ft:t)
     : term =
   assert (Formals.count tps > 0);
-  let n = Formals.count tps
-  and tup_tp =
-    Class_table.to_tuple
-      (ntvs + Formals.count fgs)
-      0
-      (Formals.types tps)
-  in
-  let add_tup t = add_tuple_accessors t n tup_tp nvars ft in
-  let t = add_tup t
-  and ps = List.map add_tup ps in
   Lam(tps,fgs,ps,t,rt)
 
 
@@ -763,7 +599,8 @@ let make_application
 
 
 let beta_reduce
-    (n:int) (tlam: term) (tup_tp:type_term) (args:term array) (nbenv:int) (ft:t)
+      (n:int) (tlam: term) (tup_tp:type_term) (args:term array)
+      (nbenv:int) (ntvs:int) (ft:t)
     : term =
   (* Beta reduce the expression ((x,y,...)->tlam)(args). The expression comes from
      an environment with [nbenv] variables. The expression is normalized i.e. fully
@@ -771,13 +608,21 @@ let beta_reduce
 
      [tp] is the type of the lambda term.
    *)
-  assert (0 < Array.length args);
-  assert (Array.length args <= n);
-  assert (Array.length args = 1);
-  let t0   = remove_tuple_accessors tlam n nbenv ft
+  let len = Array.length args in
+  assert (0 < len);
+  assert (len <= n);
+  let args =
+    if len < n then
+      let tps = Class_table.extract_from_tuple n ntvs tup_tp in
+      let tup_tp2 = Class_table.to_tuple ntvs (len-1) tps in
+      let args2 = args_of_tuple_ext args.(len-1) tup_tp2 nbenv (n-len+1) ft
+      in
+      Array.append (Array.sub args 0 (len-1)) args2
+    else
+      args
   in
-  let args = args_of_tuple_ext args.(0) tup_tp nbenv n ft in
-  Term.apply t0 args
+  assert (Array.length args = n);
+  Term.apply tlam args
 
 
 
@@ -877,7 +722,6 @@ let term_to_string
     in
     let fapp2str
         (f:term) (args:term array) (inop:bool): operator option * string =
-      assert (Array.length args = 1);
       let argsstr = argsstr args in
       if inop then
         let argstr =
@@ -1025,14 +869,6 @@ let term_to_string
          and nms = Formals.names tps
          and pr = (rt = None)
          in
-         let nbenv = Array.length names in
-         let remove_tup t = remove_tuple_accessors t n nbenv ft in
-         let pres, t =
-           if norm then
-             List.map remove_tup pres,
-             remove_tup t
-           else
-             pres,t in
          None, lam2str n nms pres t pr
       | QExp (tps,fgs,t,is_all) ->
          let n = Formals.count tps
@@ -1299,7 +1135,7 @@ let substituted
         Application (f,args,inop)
     | Lam (tps,fgs,ps,t0,rt) ->
        assert (Formals.count fgs = 0);
-       let nb = 1 + nb in
+       let nb = Formals.count tps + nb in
        Lam(Formals.map subtp tps,
            Formals.map subtp fgs,
            spec_lst nb ps,
@@ -1356,7 +1192,7 @@ let specialized (t:term) (nb:int) (tvs:Tvars.t) (ft:t)
         and args = spec_args nb args in
         Application (f,args,inop)
     | Lam (tps,fgs,ps,t0,rt) ->
-        let nb = 1 + nb in
+        let nb = Formals.count tps + nb in
         let ps = spec_lst nb ps
         and t0 = spec nb t0 in
         Lam (tps,fgs,ps,t0,rt)
@@ -1656,8 +1492,8 @@ let is_ghost_term (t:term) (nargs:int) (ft:t): bool =
       Variable i when i < nb+nargs -> false
     | Variable i ->
         is_ghost_function (i-nb-nargs) ft
-    | Lam (_,_,_,t,_) ->
-        is_ghost t (1+nb)
+    | Lam (tps,_,_,t,_) ->
+        is_ghost t (Formals.count tps + nb)
     | QExp _ ->
         true
     | Ifexp(cond, a, b) ->
@@ -1752,8 +1588,8 @@ and complexity_base
       let cf = compl f
       and cargs = Array.map compl args in
       Myarray.sum cf cargs
-  | Lam (_,_,ps,t0,_) ->
-      1 + complexity_base t0 (1+nb) cargs nbenv tvs ft
+  | Lam (tps,_,ps,t0,_) ->
+      1 + complexity_base t0 (Formals.count tps + nb) cargs nbenv tvs ft
   | QExp (tps,fgs,t0,is_all) ->
       1 + complexity_base t0 (Formals.count tps + nb) cargs nbenv tvs ft
   | Ifexp _ | Asexp _ | Inspect _ | Indset _ ->
@@ -3167,7 +3003,8 @@ let downgrade_term (t:term) (nb:int) (ntvs:int) (ft:t): term =
     | Application(f,args,inop) ->
         Application (down f nb, down_args args nb, inop)
     | Lam(tps,fgs,pres,t0,rt) ->
-        Lam (tps,fgs, down_list pres (1+nb), down t0 (1+nb), rt)
+       let nb = nb + Formals.count tps in
+        Lam (tps,fgs, down_list pres nb, down t0 nb, rt)
     | QExp (tps,fgs,t0,is_all) ->
         QExp (tps,fgs, down t0 (Formals.count tps + nb), is_all)
     | Ifexp(cond,a,b) ->
@@ -3206,8 +3043,8 @@ let collect_called (t:term) (nb:int) (ft:t): IntSet.t =
     | Application (f,args,_) ->
         let set = collect f nb set in
         collect_args args nb set
-    | Lam (_, _, pres, t0, _) ->
-        collect t0 (1+nb) set
+    | Lam (tps, _, pres, t0, _) ->
+        collect t0 (Formals.count tps + nb) set
     | QExp (args, fgs, t0, is_all) ->
         collect t0 (Formals.count args + nb) set
     | Ifexp(cond,a,b) ->

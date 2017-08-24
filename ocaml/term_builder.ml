@@ -1082,15 +1082,7 @@ let complete_application (am:application_mode) (tb:t): unit =
                    else
                      Some (Sign.result s)
           in
-          let t0 =
-            let t0 = VAppl(fidx+nargs_s-nargs, args, ags, false) in
-            Feature_table.add_tuple_accessors
-              t0
-              (nargs_s-nargs)
-              tup_tp
-              (count_variables tb)
-              (feature_table tb)
-          in
+          let t0 = VAppl(fidx+nargs_s-nargs, args, ags, false) in
           let tps = Class_table.extract_from_tuple
                       (nargs_s - nargs)
                       (count_all tb)
@@ -1237,16 +1229,8 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   and terms = List.tl terms
   in
   let tps = Class_table.extract_from_tuple nargs (count_all tb) tup_tp in
-  let t0,pres =
-    let ft = Context.feature_table c in
-    let nvars = Context.count_variables c in
-    let add_tup_acc t =
-      Feature_table.add_tuple_accessors t nargs tup_tp (nvars-nargs) ft
-    in
-    add_tup_acc t0,
-    List.map (fun (t,tp) -> add_tup_acc t) pres
-  in
   assert (nargs = Array.length names);
+  let pres = List.map (fun (t,tp) -> t) pres in
   let t = Lam (Formals.make names tps, Formals.empty, pres, t0, rt) in
   pop_context tb;
   tb.terms <- (t,tp) :: terms

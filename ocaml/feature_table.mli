@@ -140,12 +140,12 @@ val is_term_visible:    term -> int -> t -> bool
 val owner: int -> t -> int
 val dominant_formal_generic: int -> t -> int
 
-val add_tuple_accessors: term -> int -> type_term -> int -> t -> term
 val make_lambda:
   formals -> formals -> term list -> term -> type_term option
   -> int -> int -> t -> term
 val make_application: term -> arguments -> type_term -> int -> t -> term
-val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
+val beta_reduce:
+  int -> term -> type_term -> term array -> int -> int -> t -> term
 
 val substituted:
     term -> int -> int -> int
@@ -155,7 +155,6 @@ val specialized:      term -> int -> Tvars.t -> t -> term
 val equality_term: term -> term -> int -> type_term -> Tvars.t -> t -> term
 val implication: term -> term -> int -> term
 
-val remove_tuple_accessors: term -> int -> int -> t -> term
 val tuple_of_args:    arguments -> type_term -> int -> t -> term
 val args_of_tuple:    term -> int -> t -> term array
 val args_of_tuple_ext:term -> type_term -> int -> int -> t -> term array
