@@ -91,7 +91,7 @@ val implication_index: t -> int
 val is_equality_index: int -> t -> bool
 
 val make_lambda:
-    int -> int array -> term list -> term -> bool -> int -> type_term -> t -> term
+  Formals.t -> Formals.t -> term list -> term -> type_term option -> t -> term
 val make_application: term -> arguments -> type_term -> int -> t -> term
 val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 
@@ -205,7 +205,7 @@ val function_property: int -> int -> term array -> t -> term
 val has_preconditions: int -> int -> t -> bool
 val term_preconditions: term -> t -> term list
 
-val domain_of_lambda:  int -> int array -> term list -> type_term -> int -> t -> term
+val domain_of_lambda:  Formals.t -> Formals.t -> term list  -> int -> t -> term
 val domain_of_feature: int -> int -> agens -> t -> term
 
 val existence_condition: term list -> t -> term

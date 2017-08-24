@@ -1169,27 +1169,32 @@ let triggers_eval (i:int) (nb:int) (pc:t): bool =
 
 
 let beta_reduce
-    (n:int) (t:term) (tp:type_term) (args:term array) (nb:int) (pc:t)
+    (n:int) (t:term) (tup_tp:type_term) (args:term array) (nb:int) (pc:t)
     : term =
-  Proof_table.beta_reduce n t tp args nb pc.base
+  Proof_table.beta_reduce n t tup_tp args nb pc.base
 
 
 let beta_reduce_term (t:term) (pc:t): term =
   match t with
-    Application (Lam(n,_,_,t0,_,tp), args, _) ->
-      beta_reduce n t0 tp args 0 pc
+  | Application (Lam(tps,_,_,t0,_), args, _) ->
+     let n = Formals.count tps
+     and tup_tp =
+       Context.tuple_type_of_types
+         (Formals.types tps)
+         (context pc) in
+      beta_reduce n t0 tup_tp args 0 pc
   | _ ->
       printf "beta_reduce_term %s\n" (string_long_of_term t pc);
       assert false (* Is not a redex *)
 
 
 let make_lambda
-    (n:int) (nms:int array) (ps: term list) (t:term) (pr:bool)
-    (tp:type_term)
+    (tps:Formals.t) (fgs:Formals.t) (ps: term list) (t:term)
+    (rt: type_term option)
     (pc:t)
     : term =
   let c = context pc in
-  Context.make_lambda n nms ps t pr 0 tp c
+  Context.make_lambda tps fgs ps t rt c
 
 
 let make_application
@@ -1246,15 +1251,19 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       Variable i ->
         assert (i < nvars);
         raise No_evaluation
-    | VAppl (i,[|Lam(n,nms,pres,t0,pr,tp0)|],ags,inop) when i = domain_id ->
-        assert (not pr);
-        let args = [|Eval.Term (Lam(n,nms,pres,t0,pr,tp0))|]
-        and dom = Context.domain_of_lambda n nms pres tp0 0 (context pc) in
-        dom, Eval.Exp(i, ags, args, Eval.Term dom)
+    | VAppl (i,[|Lam(tps,fgs,pres,t0,rt)|],ags,inop) when i = domain_id ->
+       assert (rt <> None);
+       let args = [|Eval.Term (Lam(tps,fgs,pres,t0,rt))|]
+       and dom = Context.domain_of_lambda tps fgs pres 0 (context pc) in
+       dom, Eval.Exp(i, ags, args, Eval.Term dom)
     | VAppl(i,args,ags,oo) ->
         eval_vappl t i args ags oo lazy_ depth pc
-    | Application (Lam(n,nms,_,t0,_,tp), args, inop) ->
-        let reduct = beta_reduce n t0 tp args 0 pc
+    | Application (Lam(tps,fgs,_,t0,_), args, inop) ->
+       let tup_tp =
+         Context.tuple_type_of_types (Formals.types tps) (context pc)
+       and n = Formals.count tps
+       in
+        let reduct = beta_reduce n t0 tup_tp args 0 pc
         and te = Eval.Term t in
         begin try
           let res,rese = maybe_eval reduct lazy_ depth pc in
@@ -1283,7 +1292,7 @@ let eval_term (t:term) (pc:t): term * Eval.t =
             else
               raise No_evaluation
         end
-    | Lam (n,nms,pres,t0,pr,tp) ->
+    | Lam _ ->
         raise No_evaluation
     | QExp _ ->
         raise No_evaluation
@@ -1507,11 +1516,15 @@ let add_mp (i:int) (j:int) (search:bool) (pc:t): int =
 let try_add_beta_reduced (idx:int) (search:bool) (pc:t): int =
   let t = term idx pc in
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp), [|arg|], _) ->
-      let reduct = beta_reduce n t0 tp [|arg|] 0 pc in
-      let pt = Eval(idx, Eval.Beta (Eval.Term t, Eval.Term reduct)) in
-      Proof_table.add_proved reduct pt 0 pc.base;
-      raw_add_work reduct search pc
+  | Application(Lam(tps,fgs,_,t0,_), [|arg|], _) ->
+     let n = Formals.count tps
+     and tup_tp =
+       Context.tuple_type_of_types (Formals.types tps) (context pc)
+     in
+     let reduct = beta_reduce n t0 tup_tp [|arg|] 0 pc in
+     let pt = Eval(idx, Eval.Beta (Eval.Term t, Eval.Term reduct)) in
+     Proof_table.add_proved reduct pt 0 pc.base;
+     raw_add_work reduct search pc
   | _ ->
      raise Not_found
 
@@ -1535,16 +1548,19 @@ let add_beta_redex (t:term) (idx:int) (search:bool) (pc:t): int =
      term [idx]. The term [t] is added.
    *)
   match t with
-    Application(Lam(n,_,_,t0,prlam,tp), [|arg|], _) ->
-      let reduced = beta_reduce n t0 tp [|arg|] 0 pc in
-      let e1,e2 = Eval.Term t, Eval.Term reduced in
-      let pt = Eval_bwd(t,Eval.Beta (e1,e2))     (* proves the implication
-                                                    [t_idx ==> t] *)
-      in
-      let impl = implication reduced t pc in
-      Proof_table.add_proved impl pt 0 pc.base;
-      let idx_impl = raw_add  impl false pc in
-      add_mp idx idx_impl search pc
+  | Application(Lam(tps,fgs,_,t0,_), [|arg|], _) ->
+     let n = Formals.count tps
+     and tup_tp = Context.tuple_type_of_types (Formals.types tps) (context pc)
+     in
+     let reduced = beta_reduce n t0 tup_tp [|arg|] 0 pc in
+     let e1,e2 = Eval.Term t, Eval.Term reduced in
+     let pt = Eval_bwd(t,Eval.Beta (e1,e2))     (* proves the implication
+                                                   [t_idx ==> t] *)
+     in
+     let impl = implication reduced t pc in
+     Proof_table.add_proved impl pt 0 pc.base;
+     let idx_impl = raw_add  impl false pc in
+     add_mp idx idx_impl search pc
   | _ ->
       assert false
 
@@ -1926,7 +1942,8 @@ let variable_substitution_implication
   let pterm = Term.lambda_inner t v
   and tp = type_of_term (Variable v) pc in
   let ptp = predicate_of_type tp pc in
-  let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
+  let tps = Formals.make (standard_argnames 1) [|tp|] in
+  let p = make_lambda tps Formals.empty [] pterm None pc in
   let redex1 = make_application p [|exp|] tp 0 pc
   and tr = beta_reduce 1 pterm ptp [|exp|] 0 pc
   and idx_leib = leibniz idx exp (Variable v) pc in
@@ -1967,8 +1984,8 @@ let substitute_variable
   and pterm = Term.lambda_inner t var
   and tp = type_of_term (Variable var) pc
   in
-  let ptp = predicate_of_type tp pc in
-  let p = make_lambda 1 (standard_argnames 1) [] pterm true ptp pc in
+  let tps = Formals.make (standard_argnames 1) [|tp|] in
+  let p = make_lambda tps Formals.empty [] pterm None pc in
   let imp_idx = specialized leib [|p|] [||] 0 pc
       (* {var: term}(var) ==> {var:term}(def_term) *)
   and redex1 = make_application p [|Variable var|] tp 0 pc
@@ -2300,9 +2317,10 @@ let prove_equality (g:term) (pc:t): int =
     Term_algo.compare left right find_leibniz in
   let nargs = Array.length args1 in
   let tup  = Context.tuple_type_of_terms args1 c
+  and tps  = Array.map (fun t -> Context.type_of_term t c) args1
   and r_tp = Context.type_of_term left c in
-  let f_tp = make_type (Context.function_class c) [|tup;r_tp|] in
-  let lam = make_lambda nargs [||] [] tlam false f_tp pc in
+  let tps = Formals.make (standard_argnames nargs) tps in
+  let lam = make_lambda tps Formals.empty [] tlam (Some r_tp) pc in
   assert (nargs = Array.length args2);
   assert (0 < nargs);
   let lam_1up = Term.up 1 lam
@@ -2330,8 +2348,8 @@ let prove_equality (g:term) (pc:t): int =
     for i = 0 to nargs - 1 do
       let pred_inner_i = pred_inner i
       and tp  = type_of_term args1.(i) pc in
-      let ptp = predicate_of_type tp pc in
-      let pred_i = Lam(1,[||],[],pred_inner_i,true,ptp) in
+      let tps = Formals.make [|ST.symbol "$1"|] [|tp|] in
+      let pred_i = Lam(tps,Formals.empty,[],pred_inner_i,None) in
       let ai_abstracted =
         make_application pred_i [|args1.(i)|] tp 0 pc
       and ai_reduced = term !result pc in

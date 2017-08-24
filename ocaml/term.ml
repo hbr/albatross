@@ -12,8 +12,7 @@ type term =
     Variable    of int
   | VAppl       of int * arguments * arguments * bool (* fidx, args, ags, oo *)
   | Application of term * arguments * bool (* fterm, args, inop *)
-  | Lam         of int * names * term list * term * bool * type_term
-                   (* n, names, pres, t, is_pred, type *)
+  | Lam         of formals * formals * term list * term * type_term option
   | QExp        of formals * formals * term * bool (* args, fgs, t, is_all *)
   | Ifexp       of term * term * term
   | Asexp       of term * types * term
@@ -167,7 +166,7 @@ module Term: sig
   val apply0: term -> term array -> term array -> term
   val apply:  term -> term array -> term
 
-  val lambda_split: term -> int * int array * term list * term * bool * type_term
+  val lambda_split: term -> formals * formals * term list * term * type_term option
 
   val qlambda_split_0: term -> formals * formals * term * bool
   val qlambda_split: term -> formals * formals * term * bool
@@ -281,8 +280,11 @@ end = struct
         fstr ^ "(" ^
         (String.concat "," argsstr)
         ^ ")"
-    | Lam(nargs,names,pres,t,pred,_) ->
-        strlam nargs names pres t pred
+    | Lam(tps,_,pres,t,rt) ->
+       let nargs = Array2.count tps
+       and names = Array2.first tps
+       and pred  = (rt = None) in
+       strlam nargs names pres t pred
     | QExp (tps,_,t,is_all) ->
        let nargs = Array2.count tps
        and names = Array2.first tps in
@@ -356,7 +358,7 @@ end = struct
           ndsarr 1 args
       | Application (f,args,_) ->
           ndsarr (nds f nb) args
-      | Lam (_,_,pres,t,_,_) ->
+      | Lam (_,_,pres,t,_) ->
           1 + nds t (1 + nb) (* preconditions are not counted *)
       | QExp (tps,_,t,_) ->
           1 + nds t (Array2.count tps + nb)
@@ -387,7 +389,7 @@ end = struct
     | VAppl (i,args,_,_) -> 1 + nodesarr args
     | Application (f,args,_) ->
         nodes f + nodesarr args
-    | Lam (_,_,pres,t,_,_) ->
+    | Lam (_,_,pres,t,_) ->
         1 + nodes t (* preconditions are not counted *)
     | QExp (_,_,t,_) ->
         1 + (nodes t)
@@ -425,11 +427,12 @@ end = struct
       | Application (f,args,_) ->
           let a = fld a f (level+1) nb in
           fldarr a args nb
-      | Lam (n,_,pres,t,_,_) ->
-          let level = 1 + level
-          and nb    = 1 + nb in
-          let a = List.fold_left (fun a t -> fld a t level nb) a pres in
-          fld a t level nb
+      | Lam (tps,_,pres,t,_) ->
+         let n = Array2.count tps in
+         let level = 1 + level
+         and nb    = 1 + nb in
+         let a = List.fold_left (fun a t -> fld a t level nb) a pres in
+         fld a t level nb
       | QExp (tps,_,t,_) ->
           fld a t (level+1) (nb + Array2.count tps)
       | Ifexp (cond, e1, e2) ->
@@ -563,11 +566,12 @@ end = struct
       | Application (f1,args1,_), Application (f2,args2,_) ->
           eq f1 f2 nb1 nb2 &&
           eqarr args1 args2 nb1 nb2
-      | Lam(n1,nms1,pres1,t1,pr1,tp1), Lam(n2,nms2,pres2,t2,pr2,tp2) ->
+      | Lam(tps1,_,pres1,t1,rt1), Lam(tps2,_,pres2,t2,rt2) ->
+         let n1 = Array2.count tps1
+         and n2 = Array2.count tps2 in
           let nb1 = 1 + nb1 in
           n1 = n2 &&
-          Array.length nms1 = Array.length nms2 &&
-          pr1 = pr2 &&
+          (rt1 = None) = (rt2 = None) &&
           (try List.for_all2 (fun t1 t2 -> eq t1 t2 nb1 nb2) pres1 pres2
           with Invalid_argument _ -> false)
             &&
@@ -673,13 +677,14 @@ end = struct
           Application(shift_from delta1 start1 delta2 start2 f,
                       shift_args delta1 start1 delta2 start2 args,
                       inop)
-      | Lam(n,nms,pres,t,pred,tp) ->
-          let start1 = 1 + start1 in
-          Lam(n,nms,
+      | Lam(tps,fgs,pres,t,rt) ->
+         let start1 = 1 + start1 in
+         let shift_tp = shift_from delta2 start2 0 0 in
+         Lam( Array2.map2 shift_tp tps,
+              Array2.map2 shift_tp fgs,
               shift_list delta1 start1 delta2 start2 pres,
               shift_from delta1 start1 delta2 start2 t,
-              pred,
-              shift_from delta2 start2 0 0 tp)
+              Option.map shift_tp rt)
       | QExp (tps,fgs,t0,is_all) ->
          let start1 = Array2.count tps + start1
          and start2 = Array2.count fgs + start2 in
@@ -803,13 +808,14 @@ end = struct
           Application (partial_subst_from f n1 nb1 d1 args1 n2 nb2 d2 args2,
                        sub_args args n1 nb1 d1 args1 n2 nb2 d2 args2,
                        inop)
-      | Lam (n,nms,ps,t0,pr,tp) ->
-          let nb1 = 1 + nb1 in
-          Lam (n,nms,
-               sub_list ps n1 nb1 d1 args1 n2 nb2 d2 args2,
-               partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
-               pr,
-               partial_subst_from tp n2 nb2 d2 args2 0  0   0  [||])
+      | Lam (tps,fgs,ps,t0,rt) ->
+         let nb1 = 1 + nb1 in
+         let sub_tp tp = partial_subst_from tp n2 nb2 d2 args2 0 0 0 [||] in
+         Lam (Array2.map2 sub_tp tps,
+              Array2.map2 sub_tp fgs,
+              sub_list ps n1 nb1 d1 args1 n2 nb2 d2 args2,
+              partial_subst_from t0 n1 nb1 d1 args1 n2 nb2 d2 args2,
+              Option.map sub_tp rt)
       | QExp (tps,fgs,t0,is_all) ->
          let nb1 = Array2.count tps + nb1
          and nb2 = Array2.count fgs + nb2 in
@@ -968,13 +974,13 @@ end = struct
          Application(mapr nb1 nb2 f1 f2 f,
                      mapargs nb1 nb2 f1 f2 args,
                      inop)
-      | Lam (nargs,names,pres,t0,pred,tp) ->
-         Lam (nargs,
-              names,
+      | Lam (tps,fgs,pres,t0,rt) ->
+         let map_tp = mapr nb2 0 f2 fdummy in
+         Lam (Array2.map2 map_tp tps,
+              Array2.map2 map_tp fgs,
               maplst (1+nb1) nb2 f1 f2 pres,
               mapr (1+nb1) nb2 f1 f2 t0,
-              pred,
-              mapr nb2 0 f2 fdummy tp)
+              Option.map map_tp rt)
       | QExp (tps, fgs, t0, is_all) ->
          let nargs = Array2.count tps
          and ntvs = Array2.count fgs
@@ -1197,9 +1203,11 @@ end = struct
     Array2.from_pair tps, Array2.from_pair fgs, t
 
 
-  let lambda_split (t:term): int * names * term list * term * bool * type_term =
+  let lambda_split
+        (t:term)
+      : formals * formals * term list * term * type_term option =
     match t with
-      Lam (n,nms,pres,t,p,tp) -> n,nms,pres,t,p,tp
+      Lam (tps,fgs,pres,t,rt) -> tps,fgs,pres,t,rt
     | _ -> raise Not_found
 
 
@@ -1562,10 +1570,10 @@ end = struct
         let f = pren f nb nb2 imp_id
         and args = norm_args args nb nb2 in
         Array2.empty, Array2.empty, Application(f,args,inop)
-    | Lam(n,nms,ps,t0,pr,tp) ->
+    | Lam(tps,fgs,ps,t0,rt) ->
         let ps = norm_lst ps (1+nb) nb2
         and t0 = pren t0 (1+nb) nb2 imp_id in
-        Array2.empty, Array2.empty, Lam(n,nms,ps,t0,pr,tp)
+        Array2.empty, Array2.empty, Lam(tps,fgs,ps,t0,rt)
     | QExp(tps,fgs,t0,true) ->
        let n0 = Array2.count tps
        and nms = Array2.first tps

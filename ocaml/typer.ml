@@ -1198,12 +1198,9 @@ let check_pattern_match
     | Application (f,args,_) ->
        check info f c;
        check_args args c
-    | Lam (n,nms,pres,t0,is_pred,tp) ->
-       let dtp = Context.domain_type tp c in
-       let c1 =
-         Context.push_typed0 (Formals.make [|ST.symbol "t"|] [|dtp|]) Formals.empty c
-       in
-       check_lst pres c1;
+    | Lam (tps,fgs,ps,t0,rt) ->
+       let c1 = Context.push_typed0 tps fgs c in
+       check_lst ps c1;
        check info t0 c1
     | QExp (tps,fgs,t0,is_all) ->
        check info t0 (Context.push_typed0 tps fgs c)
@@ -1269,7 +1266,7 @@ let analyze_term_list
     first_pass_list info check_used lst c in
   let tbs = analyze_list lst_et [make_tb mn c] in
   if trace then
-    Format.printf "@[<v>%s@,@,@]" "typer end analysis";
+    Format.printf "@[<v>%s@,@,@]@." "typer end analysis";
   let tps,fgs,rvar,lst = extract_unique info tbs c in
   check_pattern_match tps fgs rvar lst c;
   tps,fgs,rvar,lst

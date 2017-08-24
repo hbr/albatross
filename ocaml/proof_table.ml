@@ -437,9 +437,9 @@ let specialized (i:int) (args:term array) (nb:int) (at:t): term =
 
 
 let beta_reduce
-    (n:int) (t:term) (tp:type_term) (args:term array) (nb:int) (at:t)
+    (n:int) (t:term) (tup_tp:type_term) (args:term array) (nb:int) (at:t)
     : term =
-  Context.beta_reduce n t tp args nb at.c
+  Context.beta_reduce n t tup_tp args nb at.c
 
 
 let apply_term (t:term) (args:term array) (nb:int) (at:t): term =
@@ -518,15 +518,16 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         if Array.length args <> 1 then raise Illegal_proof_term;
         let argsa,argsb = reconstr_args args in
         assert (argsa = argsb); (* must be valid in case of domain_id *)
-        begin match argsa.(0) with
-          Lam(n,nms,pres,t0,pr,tp0) ->
-            if pr then raise Illegal_proof_term;
-            if Context.domain_of_lambda n nms pres tp0 nb (context at) <> doma then
-              raise Illegal_proof_term
-        | VAppl(idx2,args,ags,_) when arity idx2 nb at > 0 ->
-            if Context.domain_of_feature idx2 nb ags (context at) <> doma then
-              raise Illegal_proof_term
-        | _ -> ()
+        begin
+          match argsa.(0) with
+          |  Lam(tps,fgs,pres,t0,rt) ->
+              if rt = None then raise Illegal_proof_term;
+              if Context.domain_of_lambda tps fgs pres nb (context at) <> doma then
+                raise Illegal_proof_term
+          | VAppl(idx2,args,ags,_) when arity idx2 nb at > 0 ->
+             if Context.domain_of_feature idx2 nb ags (context at) <> doma then
+               raise Illegal_proof_term
+          | _ -> ()
         end;
         VAppl(idx,argsa,ags,false), doma
     | Eval.Exp (idx,ags,args,e) ->
@@ -556,9 +557,9 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
         and resa,resb = reconstruct e nb in
         assert (Term.equivalent resa (Application (fb,argsb,false)));
         Application (fa,argsa,false), resb
-    | Eval.Lam (n,nms,pres,e,pr,tp) ->
+    | Eval.Lam (tps,fgs,pres,e,rt) ->
         let ta,tb = reconstruct e (1 + nb) in
-        Lam (n,nms,pres,ta,pr,tp), Lam (n,nms,pres,tb,pr,tp)
+        Lam (tps,fgs,pres,ta,rt), Lam (tps,fgs,pres,tb,rt)
     | Eval.QExp (n,tps,fgs,e,is_all) ->
        let ta,tb = reconstruct e (nb+n)
        and tps = Formals.from_pair tps
@@ -567,12 +568,19 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
     | Eval.Beta (e_redex, e_reduct) ->
         let ta_redex,tb_redex   = reconstruct e_redex nb
         and ta_reduct,tb_reduct = reconstruct e_reduct nb in
-        begin match tb_redex with
-          Application(Lam(n,nms,_,t0,_,tp), args, _) ->
-            let reduct = beta_reduce n t0 tp args nb at in
-            assert (Term.equivalent ta_reduct reduct);
-            ta_redex,tb_reduct
-        | _ -> raise Illegal_proof_term end
+        begin
+          match tb_redex with
+          | Application(Lam(tps,fgs,_,t0,rt), args, _) ->
+             let n = Formals.count tps
+             and tup_tp =
+               Context.tuple_type_of_types (Formals.types tps) at.c
+             in
+             let reduct = beta_reduce n t0 tup_tp args nb at in
+             assert (Term.equivalent ta_reduct reduct);
+             ta_redex,tb_reduct
+          | _ ->
+             raise Illegal_proof_term
+        end
     | Eval.Simpl (e,idx,args,ags) ->
         let eq = term_of_specialize idx args ags at in
         let eq = Term.up nb eq in

@@ -142,8 +142,8 @@ val dominant_formal_generic: int -> t -> int
 
 val add_tuple_accessors: term -> int -> type_term -> int -> t -> term
 val make_lambda:
-    int -> int array -> term list -> term -> bool
-      -> int -> type_term -> t -> term
+  formals -> formals -> term list -> term -> type_term option
+  -> int -> int -> t -> term
 val make_application: term -> arguments -> type_term -> int -> t -> term
 val beta_reduce:      int -> term -> type_term -> term array -> int -> t -> term
 

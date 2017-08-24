@@ -101,8 +101,8 @@ let unify_pattern
     | Application(f1,args1,_), Application(f2,args2,_)
       when Array.length args1 = Array.length args2 ->
         assert false (* nyi: *)
-    | Lam(n1,nms1,ps1,t01,pr1,_), Lam(n2,nms2,ps2,t02,pr2,_)
-      when pr1 = pr2 ->
+    | Lam(tps1,fgs1,ps1,t01,rt1), Lam(tps2,fgs2,ps2,t02,rt2)
+      when (rt1 = None) = (rt2 = None) ->
         assert false (* nyi: *)
     | QExp(tps1,_,t01,all1), QExp(tps2,_,t02,all2)
       when Formals.count tps1 = Formals.count tps2 && all1 = all2 ->
@@ -226,9 +226,9 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
         with Not_found ->
           different t1 t2 pos poslst elst tlst
         end
-    | Lam(n1,nms1,ps1,t01,pr1,tp1), Lam(n2,nms2,ps2,t02,pr2,tp2)
-         when n1 = n2
-              && pr1 = pr2
+    | Lam(tps1,fgs1,ps1,t01,rt1), Lam(tps2,fgs2,ps2,t02,rt2)
+         when Formals.count tps1 = Formals.count tps2
+              && (rt1 = None) = (rt2 = None)
               && Term.equivalent_list ps1 ps2
       (*&& Term.equivalent tp1 tp2*) ->
         let nb = 1 + nb in
@@ -344,7 +344,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let nextpos,nextvar,poslst,args =
             mk_args nextpos nextvar poslst args in
           nextpos, nextvar, poslst, Application(f,args,inop)
-    | Lam(n,nms,pres,t0,pr,tp) ->
+    | Lam(tps,fgs,pres,t0,rt) ->
         if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)
         else
           let nb = 1 + nb in
@@ -359,7 +359,7 @@ let compare (t1:term) (t2:term) (eq:term->term->'a)
           let pres = List.rev pres_rev in
           let nextpos,nextvar,poslst,t0 =
             mklambda nextpos nextvar poslst t0 nb in
-          nextpos, nextvar, poslst, Lam(n,nms,pres,t0,pr,tp)
+          nextpos, nextvar, poslst, Lam(tps,fgs,pres,t0,rt)
     | QExp(tps,fgs,t0,is_all) ->
        let n = Formals.count tps in
        if nextpos = hd then (nextpos+1), (nextvar+1), tl, Variable (nextvar+nb)

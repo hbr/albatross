@@ -412,7 +412,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | Application (f,args,_) ->
         check f nbranch tlst c;
         check_args args
-    | Lam (n,nms,pres,t0,pr,tp) ->
+    | Lam (tps,fgs,pres,t0,rt) ->
         not_yet_implemented
           info
           "Lambda expressions in recursive definitions"

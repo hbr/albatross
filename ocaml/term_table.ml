@@ -315,22 +315,22 @@ let uni_core
         )
         sublst
         0 len
-  | Lam (n,_,pres,t,_,_) ->
-      let len = List.length pres in
-      let prestablst,ttab = find_lam len tab in
-      let sublst = uni t ttab (1 + nb) r in
-      let rec addpres pres prestablst sublst =
-        let r = substitutions sublst in
-        match pres, prestablst with
-          [], [] ->
-            sublst
-        | p::pres, tab::prestablst ->
-            let sublst = uni p tab (1+nb) r in
+  | Lam (_,_,pres,t,_) ->
+     let len = List.length pres in
+     let prestablst,ttab = find_lam len tab in
+     let sublst = uni t ttab (1 + nb) r in
+     let rec addpres pres prestablst sublst =
+       let r = substitutions sublst in
+       match pres, prestablst with
+         [], [] ->
+         sublst
+       | p::pres, tab::prestablst ->
+          let sublst = uni p tab (1+nb) r in
             addpres pres prestablst sublst
-        | _ ->
-            assert false (* lists must have the same size *)
-      in
-      addpres pres prestablst sublst
+       | _ ->
+          assert false (* lists must have the same size *)
+     in
+     addpres pres prestablst sublst
   | QExp (tps,_,t,is_all) ->
      let n = Formals.count tps in
      let ttab = IntMap.find n (qmap is_all tab) in
@@ -652,7 +652,7 @@ let add_base
             Array.mapi (fun i tab  -> add0 args.(i) nb tab) argtabs
           in
           {tab with fapps = IntMap.add len (ftab,argtabs) tab.fapps}
-      | Lam (n,_,pres,t,_,_) ->
+      | Lam (_,_,pres,t,_) ->
           let len = List.length pres in
           let rec addpres pres prestablst =
             match pres, prestablst with

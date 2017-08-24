@@ -188,9 +188,11 @@ let find_goals (elst: info_terms) (pc:PC.t): unit =
 
 let beta_reduced (t:term) (pc:PC.t): term =
   match t with
-    Application(Lam(n,_,_,t0,_,tp), args, _) ->
-      assert (Array.length args = 1);
-      PC.beta_reduce n t0 tp args 0 pc
+  | Application(Lam(tps,fgs,_,t0,rt), args, _) ->
+     assert (Array.length args = 1);
+     let n = Formals.count tps
+     and tup_tp = Context.tuple_type_of_types (Formals.types tps) (PC.context pc) in
+     PC.beta_reduce n t0 tup_tp args 0 pc
   | _ ->
       t
 
@@ -543,7 +545,10 @@ let induction_goal_predicate
   in
   let tp =
     Context.predicate_of_type (Context.tuple_type_of_types tps_outer c) c in
-  let t = Context.make_lambda nvars nms_outer  [] t true 0 tp c in
+  let t =
+    Context.make_lambda
+      (Formals.make nms_outer tps_outer) Formals.empty [] t None c
+  in
   t, others
 
 

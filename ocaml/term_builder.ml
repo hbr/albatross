@@ -726,6 +726,8 @@ let tuple_type_of_args (start:int) (nargs:int) (tb:t): type_term =
   Class_table.to_tuple (count_all tb) 0 arr
 
 
+let tuple_type_of_types (tps:type_term array) (tb:t): type_term =
+  Class_table.to_tuple (count_all tb) 0 tps
 
 
 let predicate_of_args (start:int) (nargs:int) (tb:t): type_term =
@@ -1057,19 +1059,31 @@ let complete_application (am:application_mode) (tb:t): unit =
              where a function term is expected. In that case the global function
              is converted to a lambda expression.
            *)
+          if nargs <> 0 then
+            begin
+              printf "partial application not yet implemented\n";
+              assert false
+            end;
           let tp = partially_upgraded_signature s nargs is_pred tb
           and names =
-            Feature_table.argument_names
-              (fidx - count_variables tb)
-              (feature_table tb)
+            Array.sub
+              (Feature_table.argument_names
+                 (fidx - count_variables tb)
+                 (feature_table tb))
+              nargs (nargs_s - nargs)
           and args =
             let args1 = Array.map (fun t -> Term.up (nargs_s-nargs) t) args
             and args2 = Array.init (nargs_s-nargs) (fun i -> Variable i) in
             Array.append args1 args2
           in
+          let tup_tp = Class_table.domain_type tp
+          and rt = if is_pred then
+                     None
+                   else
+                     Some (Sign.result s)
+          in
           let t0 =
-            let t0 = VAppl(fidx+nargs_s-nargs, args, ags, false)
-            and tup_tp = Class_table.domain_type tp in
+            let t0 = VAppl(fidx+nargs_s-nargs, args, ags, false) in
             Feature_table.add_tuple_accessors
               t0
               (nargs_s-nargs)
@@ -1077,7 +1091,13 @@ let complete_application (am:application_mode) (tb:t): unit =
               (count_variables tb)
               (feature_table tb)
           in
-          let t = Lam (nargs_s-nargs, names, [], t0, is_pred, tp) in
+          let tps = Class_table.extract_from_tuple
+                      (nargs_s - nargs)
+                      (count_all tb)
+                      tup_tp
+          in
+          let t = Lam (Formals.make names tps, Formals.empty,
+                       [], t0, rt) in
           tb.terms <- (t,tp) :: terms
         end
       else if is_const then
@@ -1201,6 +1221,14 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   and nargs = Context.count_last_arguments c
   in
   let tp = substituted_type (upgraded_signature csig is_pred tb) tb in
+  let tup_tp, rt =
+    let _,ags = split_type tp in
+    assert (is_pred || Array.length ags = 2);
+    if is_pred then
+      ags.(0), None
+    else
+      ags.(0), Some ags.(1)
+  in
   (* pop preconditions *)
   let pres,terms = pop_args npres tb.terms
   in
@@ -1208,8 +1236,8 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
   let t0,t0_tp = List.hd terms
   and terms = List.tl terms
   in
+  let tps = Class_table.extract_from_tuple nargs (count_all tb) tup_tp in
   let t0,pres =
-    let tup_tp = Class_table.domain_type tp in
     let ft = Context.feature_table c in
     let nvars = Context.count_variables c in
     let add_tup_acc t =
@@ -1219,8 +1247,7 @@ let complete_lambda (is_pred:bool) (npres:int) (tb:t): unit =
     List.map (fun (t,tp) -> add_tup_acc t) pres
   in
   assert (nargs = Array.length names);
-  let t = Lam (nargs,names,pres,t0,is_pred,tp)
-  in
+  let t = Lam (Formals.make names tps, Formals.empty, pres, t0, rt) in
   pop_context tb;
   tb.terms <- (t,tp) :: terms
 

@@ -379,14 +379,6 @@ let is_pseudo_constructor (i:int) (c:t): bool =
   Feature_table.is_pseudo_constructor (i - count_variables c) c.ft
 
 
-let make_lambda
-    (n:int) (nms:int array) (ps:term list) (t:term) (pred:bool) (nb:int)
-    (tp:type_term)
-    (c:t)
-    : term =
-  let nbenv = count_variables c in
-  Feature_table.make_lambda n nms ps t pred (nb+nbenv) tp c.ft
-
 
 let make_application
     (f:term) (args:term array) (tup:type_term) (nb:int)(c:t)
@@ -397,9 +389,9 @@ let make_application
 
 
 let beta_reduce
-    (n:int) (tlam:term) (tp:type_term) (args:term array) (nb:int )(c:t)
+    (n:int) (tlam:term) (tup_tp:type_term) (args:term array) (nb:int )(c:t)
     : term =
-  Feature_table.beta_reduce n tlam tp args (nb+count_variables c) c.ft
+  Feature_table.beta_reduce n tlam tup_tp args (nb+count_variables c) c.ft
 
 
 let quantified (is_all:bool) (tps:formals) (fgs:formals) (t:term) (c:t)
@@ -669,6 +661,24 @@ let boolean (c:t): term =
   Class_table.boolean_type (count_all_type_variables c)
 
 
+let tuple_type_of_types (argtps:types) (c:t): type_term =
+  (* Convert the type array [argtps = [A,B,...]] into the tuple type
+     [(A,B,...)] *)
+  let ntvs = count_all_type_variables c in
+  Class_table.to_tuple ntvs 0 argtps
+
+
+let make_lambda
+    (tps:Formals.t) (fgs:Formals.t) (ps:term list) (t:term)
+    (rt:type_term option)
+    (c:t)
+    : term =
+  let nbenv = count_variables c
+  and ntvs  = count_all_type_variables c
+  in
+  Feature_table.make_lambda tps fgs ps t rt nbenv ntvs c.ft
+
+
 let rec type_of_term (t:term) (c:t): type_term =
   let nvars = count_variables c in
   match t with
@@ -688,7 +698,15 @@ let rec type_of_term (t:term) (c:t): type_term =
         boolean c
       end else
         assert false (* cannot happen, must be either a predicate or a function *)
-  | Lam(_,_,_,_,_,tp) -> tp
+  | Lam(tps,fgs,_,_,rt) ->
+     let tup_tp = tuple_type_of_types (Formals.types tps) c in
+     begin
+       match rt with
+       | None ->
+          predicate_type tup_tp c
+       | Some rt ->
+          function_type tup_tp rt c
+     end
   | QExp _            -> boolean c
   | Indset (_,tp,_)   -> tp
   | Ifexp (cond,a,b) ->
@@ -719,14 +737,6 @@ let predicate_of_type (tp:type_term) (c:t): type_term =
 let predicate_of_term (t:term) (c:t): type_term =
   let tp = type_of_term t c in
   predicate_of_type tp c
-
-
-
-let tuple_type_of_types (argtps:types) (c:t): type_term =
-  (* Convert the type array [argtps = [A,B,...]] into the tuple type
-     [(A,B,...)] *)
-  let ntvs = count_all_type_variables c in
-  Class_table.to_tuple ntvs 0 argtps
 
 
 
@@ -1017,7 +1027,7 @@ let domain_type (tp:type_term) (c:t): type_term =
 
 
 let domain_of_lambda
-    (n:int) (nms:int array) (pres:term list) (f_tp:type_term) (nb:int) (c:t)
+      (tps:Formals.t) (fgs:Formals.t) (pres:term list) (nb:int) (c:t)
     : term =
   (* Construct the domain of a lambda expression with the preconditions [pres] where
      the lambda expression is within an environment with [nb] variables more than the
@@ -1036,15 +1046,12 @@ let domain_of_lambda
      The domain is the set {a:A: p1 and p2 and ... } or {a:A: true} in case that
      there are no preconditions.
    *)
-  let a_tp = domain_type f_tp c in
-  let p_tp = predicate_type a_tp c in
   let nbenv = count_variables c
-  and is_pred = true
   in
   match pres with
     [] ->
       let true_const = Feature_table.true_constant (1+nb+nbenv) in
-      Lam(n, nms, [], true_const, is_pred, p_tp)
+      Lam(tps,fgs, [], true_const, None)
   | p::pres ->
       let and_id  = 1 + nb + nbenv + Constants.and_index in
       let inner =
@@ -1052,7 +1059,7 @@ let domain_of_lambda
           (fun t p -> Term.binary and_id t p)
           p
           pres in
-      Lam(n, nms, [], inner, is_pred, p_tp)
+      Lam(tps,fgs, [], inner, None)
 
 
 
@@ -1138,20 +1145,6 @@ let rec type_of_term_full
       ags.(0), Some ags.(1)
     end else
       assert false
-  in
-  let get_arg_types (tp:type_term) (pr:bool): type_term * type_term option =
-    let argtp, rtp = split_function_or_predicate tp in
-    begin match rtp with
-      None when not pr ->
-        raise (Type_error
-                 ("The type " ^ string_of_type tp c ^ " is not a predicate"))
-    | Some _  when pr ->
-        raise (Type_error
-                 ("The type " ^ string_of_type tp c ^ " is not a function"))
-    | _ ->
-        ()
-    end;
-    argtp, rtp
   in
   let feature_signature (i:int) (ags:agens): Sign.t =
     assert (nvars <= i);
@@ -1262,20 +1255,27 @@ let rec type_of_term_full
         | Some tp ->
             check_and_trace tp
       end
-  | Lam (n,nms,ps,t0,pr,tp) ->
-      let argtp,rtp = get_arg_types tp pr in
-      let c1 =
-        push_typed0 (Formals.make [|ST.symbol "t"|] [|argtp|]) Formals.empty c
-      in
-      ignore (type_of_term_full
-                t0
-                (if pr then
+  | Lam (tps,fgs,ps,t0,rt) ->
+     let argtp = tuple_type_of_types (Formals.types tps) c in
+     let c1 =
+       push_typed0 (Formals.make [|ST.symbol "t"|] [|argtp|]) fgs c
+     in
+     ignore (type_of_term_full
+               t0
+               (if rt = None then
                   Some (boolean c1)
                 else
-                  rtp)
-                trace
-                c1);
-      check_and_trace tp
+                  rt)
+               trace
+               c1);
+     let tp =
+       match rt with
+       | None ->
+          predicate_type argtp c
+       | Some rt ->
+          function_type argtp rt c
+     in
+     check_and_trace tp
   | QExp (tps,fgs,t0,is_all) ->
       assert (ntvs = 0 || fgs = Formals.empty);
       let c1 = push_typed0 tps fgs c in
@@ -1560,39 +1560,38 @@ let term_preconditions (t:term)  (c:t): term list =
           Application(dom,args,false) :: lst
         else
           assert false (* Cannot happen *)
-    | Lam (n,nms,pres0,t0,pr,tp) ->
-        let t0     = remove_tuple_accessors t0 n c
-        and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0
-        and c      = push_lambda n nms tp c
-        and imp_id = n + imp_id
-        and tps =
-          let cls,ags = split_type tp in
-          extract_from_tuple n ags.(0) c
-        in
-        let prepend_pres
-            (ps_rev:term list) (tgt:term) (lst:term list): term list =
-          let chn = Term.make_implication_chain ps_rev tgt imp_id in
-          QExp ((Formals.make nms tps), Formals.empty, chn, true) :: lst
-        in
-        let prepend_pres_of_term
-            (ps_rev:term list) (p:term) (lst:term list)
-            : term list =
-          let pres_p_rev = pres p [] c in
-          List.fold_left
-            (fun lst p -> prepend_pres ps_rev p lst)
-            lst
-            (List.rev pres_p_rev)
-        in
-        let ps_rev,lst =
-          List.fold_left
-            (fun (ps_rev,lst) p ->
-              p :: ps_rev,
-              prepend_pres_of_term ps_rev p lst
-            )
-            ([],lst)
-            pres0
-        in
-        prepend_pres_of_term ps_rev t0 lst
+    | Lam (tps,fgs,pres0,t0,rt) ->
+       let n = Formals.count tps
+       in
+       let t0     = remove_tuple_accessors t0 n c
+       and pres0  = List.map (fun p -> remove_tuple_accessors p n c) pres0
+       and c      = push_typed0 tps fgs c
+       and imp_id = n + imp_id
+       in
+       let prepend_pres
+             (ps_rev:term list) (tgt:term) (lst:term list): term list =
+         let chn = Term.make_implication_chain ps_rev tgt imp_id in
+         QExp (tps, fgs, chn, true) :: lst
+       in
+       let prepend_pres_of_term
+             (ps_rev:term list) (p:term) (lst:term list)
+           : term list =
+         let pres_p_rev = pres p [] c in
+         List.fold_left
+           (fun lst p -> prepend_pres ps_rev p lst)
+           lst
+           (List.rev pres_p_rev)
+       in
+       let ps_rev,lst =
+         List.fold_left
+           (fun (ps_rev,lst) p ->
+             p :: ps_rev,
+             prepend_pres_of_term ps_rev p lst
+           )
+           ([],lst)
+           pres0
+       in
+       prepend_pres_of_term ps_rev t0 lst
     | QExp (tps,fgs,t0,is_all) ->
         let c = push_typed0 tps fgs c in
         let lst0 = pres t0 [] c in

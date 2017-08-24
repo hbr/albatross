@@ -18,7 +18,7 @@ module Eval = struct
                                             eval args, eval of expansion *)
     | VApply of  int * t array * type_term array
     | Apply of t * t array * t (* eval f, eval args, eval result *)
-    | Lam of int * int array * term list * t * bool * type_term
+    | Lam of formals * formals * term list * t * type_term option
     | QExp of int * formals0 * formals0 * t * bool
     | Beta of t * t (* redex and reduct *)
     | Simpl of t * int * term array * agens
@@ -46,9 +46,10 @@ module Eval = struct
         print (prefix ^ "    ") f;
         print_args args;
         print (prefix ^ "    ") e
-    | Lam (n,nms,pres,e,pr,tp) ->
-        printf "%s lambda %s\n" prefix (if pr then "predicate" else "function");
-        print (prefix ^ "    ") e
+    | Lam (_,_,pres,e,rt) ->
+       let pr = (rt = None) in
+       printf "%s lambda %s\n" prefix (if pr then "predicate" else "function");
+       print (prefix ^ "    ") e
     | QExp (n,_,_,e,is_all) ->
         printf "%s qexp %s\n" prefix (if is_all then "all" else "some");
         print (prefix ^ "    ") e
@@ -185,8 +186,8 @@ end = struct
           and args = adapt_args args
           and e = adapt_eval e in
           Eval.Apply (f,args,e)
-      | Eval.Lam (n,nms,pres,e,pr,tp) ->
-          Eval.Lam (n, nms, pres, adapt_eval e, pr,tp)
+      | Eval.Lam (tps,fgs,pres,e,rt) ->
+          Eval.Lam (tps, fgs, pres, adapt_eval e, rt)
       | Eval.QExp (n,tps,fgs,e,is_all) ->
           Eval.QExp (n, tps, fgs, adapt_eval e, is_all)
       | Eval.Beta (e1,e2) -> Eval.Beta (adapt_eval e1, adapt_eval e2)
@@ -255,7 +256,7 @@ end = struct
       | Eval.Exp (i,_,args,e)  -> used_eval e (used_args set args)
       | Eval.VApply(i,args,_)  -> used_args set args
       | Eval.Apply (f,args,e)  -> used_eval e (used_args (used_eval f set) args)
-      | Eval.Lam (n,_,_,e,_,_) | Eval.QExp (n,_,_,e,_) ->
+      | Eval.Lam (_,_,_,e,_) | Eval.QExp (_,_,_,e,_) ->
           used_eval e set
       | Eval.Beta (e1,e2)      -> used_eval e1 (used_eval e2 set)
       | Eval.Simpl (e,i,args,_)-> used_eval e (add_idx i set)
@@ -314,7 +315,7 @@ end = struct
             let set = usd_eval f set in
             let set = usd_args set args in
             usd_eval e set
-        | Eval.Lam (n,_,_,e,_,_) | Eval.QExp(n,_,_,e,_) -> usd_eval e set
+        | Eval.Lam (_,_,_,e,_) | Eval.QExp(_,_,_,e,_) -> usd_eval e set
         | Eval.Beta (e1,e2)    -> usd_eval e1 (usd_eval e2 set)
         | Eval.Simpl (e,i,args,_) ->
             let set = usd i pt_arr set in
@@ -401,8 +402,8 @@ end = struct
             Eval.Apply (transform_eval f,
                         Array.map transform_eval args,
                         transform_eval e)
-        | Eval.Lam (n,nms,pres,e,pr,tp) ->
-            Eval.Lam (n,nms,pres,transform_eval e,pr,tp)
+        | Eval.Lam (tps,fgs,pres,e,rt) ->
+            Eval.Lam (tps,fgs,pres,transform_eval e,rt)
         | Eval.QExp (n,tps,fgs,e,ia) ->
             Eval.QExp (n,tps,fgs,transform_eval e,ia)
         | Eval.Beta (e1,e2)   -> Eval.Beta (transform_eval e1, transform_eval e2)
@@ -622,13 +623,13 @@ end = struct
               and args = shrnk_eargs args
               and e = shrnk e nb nb2 in
               Eval.Apply (f,args,e)
-          | Eval.Lam (n,nms,pres,e,pr,tp) ->
-              Eval.Lam (n,
-                        nms,
-                        shrink_list_inner pres (1+nb) nb2,
-                        shrnk e (1+nb) nb2,
-                        pr,
-                        shrink_type_inner tp nb2)
+          | Eval.Lam (tps,fgs,pres,e,rt) ->
+             let shrnk_tp tp = shrink_type_inner tp nb2 in
+             Eval.Lam (Formals.map shrnk_tp tps,
+                       Formals.map shrnk_tp fgs,
+                       shrink_list_inner pres (1+nb) nb2,
+                       shrnk e (1+nb) nb2,
+                       Option.map shrnk_tp rt)
           | Eval.QExp (n,(nms,tps),(fgnms,fgcon),e,is_all) ->
               assert ((fgnms,fgcon) = empty_formals);
               let nb  = nb + n
