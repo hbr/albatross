@@ -237,8 +237,8 @@ all(a,b:A)
         a = b
     ensure
         b = a
-        assert
-            b in {x: x = a}
+    assert
+        b in {x: x = a}
     end
 
 all(a,b,c:A)

@@ -13,8 +13,13 @@ all(r,s:{A,B})
         r <= s
     assert
         all(t)
-            ensure  r(t) ==> s(t)
-            inspect t end
+            require
+                r(t)
+            ensure
+                s(t)
+            inspect
+                t
+            end
     end
 
 
