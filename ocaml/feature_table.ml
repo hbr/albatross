@@ -812,9 +812,9 @@ let term_to_string
       else
         match pres with
           [] -> "((" ^ argsstr ^ ") -> " ^ tstr ^ ")"
-        | _ -> "agent (" ^ argsstr ^ ") require " ^
+        | _ -> "(agent (" ^ argsstr ^ ") require " ^
             presstr ^
-            " ensure -> " ^ tstr ^ " end"
+            " ensure -> " ^ tstr ^ " end)"
     and if2str (cond:term) (a:term) (b:term): string =
       let to_str t = to_string t names nanonused tvs false None in
       "(if " ^ to_str cond ^ " then " ^ to_str a ^ " else " ^ to_str b ^ ")"
