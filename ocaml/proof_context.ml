@@ -25,6 +25,7 @@ type entry = {mutable prvd: Term_table.t;  (* all proved (incl. schematic) terms
               mutable bwd:  Term_table.t;
               mutable fwd:  Term_table.t;
               mutable left: Term_table.t;
+              mutable reeval: Term_table.t;
               mutable slots: slot_data array}
 
 
@@ -78,7 +79,7 @@ let set_interface_check (pc:t): unit =
 
 let make_entry () =
   let e = Term_table.empty in
-  {prvd=e; bwd=e; fwd=e; left=e;
+  {prvd=e; bwd=e; fwd=e; left=e; reeval=e;
    slots = Array.make 1 {ndown = 0; sprvd = TermMap.empty}}
 
 
@@ -87,6 +88,7 @@ let copied_entry (e:entry): entry =
    bwd   = e.bwd;
    fwd   = e.fwd;
    left  = e.left;
+   reeval = e.reeval;
    slots = Array.copy e.slots}
 
 
@@ -957,7 +959,17 @@ let raw_add0 (t:term) (rd:RD.t) (search:bool) (pc:t): int =
     begin
       add_last_to_tables pc;
       if not dup && is_global pc then
-        Feature_table.add_involved_assertion cnt t (feature_table pc)
+        Feature_table.add_involved_assertion cnt t (feature_table pc);
+      List.iter
+        (fun (i,_) ->
+          add_to_work i pc;
+          if is_tracing pc then
+            begin
+              printf "reevaluate %s\n" (string_of_term_i i pc);
+              printf "  because of %s\n" (string_of_term t pc)
+            end
+        )
+        (unify_0 t pc.entry.reeval pc)
     end;
   if not dup && is_global pc then
     Induction.put_assertion res t (context pc);
@@ -1222,6 +1234,9 @@ let arity (i:int) (nb:int) (pc:t): int =
   Proof_table.arity i nb pc.base
 
 
+exception Undecidable of term
+exception No_evaluation of term option
+exception No_branch_evaluation of term option
 
 let decide (t:term) (pc:t): bool * int =
   try
@@ -1230,19 +1245,30 @@ let decide (t:term) (pc:t): bool * int =
        try
          false, find_match (negation_expanded t pc) pc
        with  Not_found ->
-         raise Undecidable
+         raise (Undecidable t)
 
+let string_of_term_option (t:term option) (pc:t): string =
+  match t with
+  | None -> "None"
+  | Some t ->
+     "Some(" ^ string_of_term t pc ^ ")"
 
-exception No_evaluation
-exception No_branch_evaluation
+let chain_term_option (t1:term option) (t2:term option): term option =
+  match t1 with
+  | None ->
+     t2
+  | Some _ ->
+     t1
 
-let eval_term (t:term) (pc:t): term * Eval.t =
+let eval_term (t:term) (pc:t): term * Eval.t * term option =
   (* Evaluate the term [t] and return the evaluated term, the corresponding Eval
      structure. Raise [No_evaluation] if the term does not have an evaluation.
    *)
-  let rec eval (t:term) (lazy_:bool) (depth:int) (pc:t): term * Eval.t =
+  let rec eval
+            (t:term) (lazy_:bool) (depth:int) (pc:t)
+          : term * Eval.t * term option =
     if depth > 500 then
-      raise No_evaluation;
+      raise (No_evaluation None);
     let depth = depth + 1 in
     let nvars = nbenv pc in
     let domain_id = nvars + Constants.domain_index
@@ -1250,12 +1276,12 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     match t with
       Variable i ->
         assert (i < nvars);
-        raise No_evaluation
+        raise (No_evaluation None)
     | VAppl (i,[|Lam(tps,fgs,pres,t0,rt)|],ags,inop) when i = domain_id ->
        assert (rt <> None);
        let args = [|Eval.Term (Lam(tps,fgs,pres,t0,rt))|]
        and dom = Context.domain_of_lambda tps fgs pres 0 (context pc) in
-       dom, Eval.Exp(i, ags, args, Eval.Term dom)
+       dom, Eval.Exp(i, ags, args, Eval.Term dom),None
     | VAppl(i,args,ags,oo) ->
         eval_vappl t i args ags oo lazy_ depth pc
     | Application (Lam(tps,fgs,_,t0,_), args, inop) ->
@@ -1266,36 +1292,39 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         let reduct = beta_reduce n t0 tup_tp args 0 pc
         and te = Eval.Term t in
         begin try
-          let res,rese = maybe_eval reduct lazy_ depth pc in
+          let res,rese,cond = maybe_eval reduct lazy_ depth pc in
           let e = Eval.Beta (te, rese) in
-          res, e
-        with No_branch_evaluation ->
-          raise No_evaluation
+          res, e, cond
+        with No_branch_evaluation cond ->
+          raise (No_evaluation cond)
         end
     | Application (f,args,inop) ->
         assert (Array.length args = 1);
         begin
           try
-            let f_exp,fe = eval f lazy_ (depth - 1) pc
+            let f_exp,fe,fcond = eval f lazy_ (depth - 1) pc
             and argse = [| Eval.Term args.(0) |] in
-            let t_exp,te =
+            let t_exp,te,tcond =
               maybe_eval (Application(f_exp,args,inop)) lazy_ depth pc in
-            t_exp, Eval.Apply(fe,argse,te)
-          with No_evaluation ->
+            let cond = match fcond with
+              | None -> tcond
+              | Some _ -> fcond in
+            t_exp, Eval.Apply(fe,argse,te), cond
+          with No_evaluation cond ->
             if depth = 1 then
-              let args,argse = eval_args args (depth - 1) pc in
+              let args,argse,cond = eval_args args (depth - 1) pc in
               let t_exp = Application(f,args,inop) in
               let fe = Eval.Term f
               and te = Eval.Term t_exp
               in
-              t_exp, Eval.Apply(fe, argse,te)
+              t_exp, Eval.Apply(fe, argse,te), cond
             else
-              raise No_evaluation
+              raise (No_evaluation cond)
         end
     | Lam _ ->
-        raise No_evaluation
+        raise (No_evaluation None)
     | QExp _ ->
-        raise No_evaluation
+        raise (No_evaluation None)
     | Ifexp (c, a, b) ->
        eval_if c a b lazy_ depth pc
     | Asexp (insp, tps, pat) ->
@@ -1303,12 +1332,12 @@ let eval_term (t:term) (pc:t): term * Eval.t =
     | Inspect (insp, cases) ->
        eval_inspect t insp cases lazy_ depth pc
     | Indset _ ->
-        raise No_evaluation
+        raise (No_evaluation None)
 
   and eval_vappl
       (t:term) (i:int) (args:arguments) (ags:agens) (oo:bool)
       (lazy_:bool) (depth:int) (pc:t)
-      : term * Eval.t =
+      : term * Eval.t * term option =
     let nvars = nbenv pc in
     let and_id    = nvars + Constants.and_index
     and or_id     = nvars + Constants.or_index
@@ -1324,57 +1353,72 @@ let eval_term (t:term) (pc:t): term * Eval.t =
       let t_expanded = Proof_table.apply_term t0 args 0 pc.base in
       begin
         try
-          let res, rese = maybe_eval t_expanded lazy_ depth pc in
-          res, Eval.Exp(i,ags,argse,rese)
-        with No_branch_evaluation ->
-          let args,argse = eval_args args depth pc in
-            VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags)
+          let res, rese,cond = maybe_eval t_expanded lazy_ depth pc in
+          res, Eval.Exp(i,ags,argse,rese), cond
+        with No_branch_evaluation cond_t ->
+             try
+               let args,argse,cond = eval_args args depth pc in
+               let cond = chain_term_option cond_t cond in
+               VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags), cond
+             with No_evaluation cond ->
+               let cond = chain_term_option cond_t cond in
+               let argse = Array.map (fun t -> Eval.Term t) args in
+               VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags), cond
+          (*let args,argse,cond = eval_args args depth pc in
+          let cond = match cond_t with
+            | None -> cond
+            | Some _ -> cond_t
+          in
+          VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags), cond*)
       end
     with Not_found -> (* No definition *)
       if Array.length args = 0 || (lazy_ && depth > 1) || is_lazy i then
-        raise No_evaluation
+        raise (No_evaluation None)
       else
-        let args,argse = eval_args args depth pc in
-        VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags)
+        let args,argse,cond = eval_args args depth pc in
+        VAppl(i,args,ags,oo), Eval.VApply(i,argse,ags), cond
 
   and eval_args
       (args:arguments) (depth:int) (pc:t)
-      : arguments * Eval.t array =
+      : arguments * Eval.t array * term option =
     let len = Array.length args in
     let args  = Array.copy args
     and argse = Array.map (fun t -> Eval.Term t) args in
-    let modi =
+    let modi,cond =
       interval_fold
-        (fun modi i ->
+        (fun (modi,cond) i ->
           try
-            let t, te = eval args.(i) false depth pc in
+            let t, te, cond_i = eval args.(i) false depth pc in
             args.(i)  <- t;
             argse.(i) <- te;
-            true
-          with No_evaluation ->
-            modi
+            true,
+            if cond = None then cond_i else cond
+          with No_evaluation cond_i ->
+            if cond = None then
+              modi,cond_i
+            else modi, cond
         )
-        false 0 len
+        (false,None) 0 len
     in
     if modi then
-      args, argse
+      args, argse, cond
     else
-      raise No_evaluation
+      raise (No_evaluation cond)
 
   and eval_if
       (cond:term) (a:term) (b:term) (lazy_:bool) (depth:int) (pc:t)
-      : term * Eval.t =
+      : term * Eval.t * term option =
     let conde = Eval.Term cond in
     try
       let res,idx = decide cond pc in
       if res then
-        let fst,fste = maybe_eval a lazy_ depth pc in
-        fst, Eval.If (true, idx, [|conde; fste; Eval.Term b|])
+        let fst,fste,fst_cond = maybe_eval a lazy_ depth pc in
+        fst, Eval.If (true, idx, [|conde; fste; Eval.Term b|]), fst_cond
       else
-        let snd,snde = maybe_eval b lazy_ depth pc in
-        snd, Eval.If (false, idx, [|conde; Eval.Term a; snde|])
-    with Undecidable ->
-      raise No_branch_evaluation
+        let snd,snde,snd_cond = maybe_eval b lazy_ depth pc in
+        snd, Eval.If (false, idx, [|conde; Eval.Term a; snde|]), snd_cond
+    with Undecidable cond ->
+      raise (No_branch_evaluation (Some cond))
 
   and eval_inspect
         (t:term)
@@ -1383,17 +1427,17 @@ let eval_term (t:term) (pc:t): term * Eval.t =
         (lazy_:bool)
         (depth:int)
         (pc:t)
-      : term * Eval.t =
+      : term * Eval.t * term option =
     let ncases = Array.length cases
-    and insp, inspe = maybe_eval insp true depth pc
+    and insp, inspe, icond = maybe_eval insp true depth pc
     and c = context pc
     in
-    let rec cases_from (i:int): term * Eval.t =
+    let rec cases_from (i:int): term * Eval.t * term option =
       if i = ncases then
         (* All case are rejected. This can happen only if the expression has
            preconditions which are not satisfied because the expression is
            evaluated in a context which has a contradiction. *)
-        raise No_branch_evaluation;
+        raise (No_branch_evaluation None);
       assert (i < ncases);
       let fs, pat, res = cases.(i) in
       let n = Array2.count fs in
@@ -1414,10 +1458,18 @@ let eval_term (t:term) (pc:t): term * Eval.t =
             [] reqs
         in
         let res = Term.apply res sub in
-        let res,rese = maybe_eval res lazy_ depth pc in
-        res, Eval.Inspect(t, inspe, i, rese)
-      with Undecidable ->
-        raise No_branch_evaluation
+        let res,rese,rcond = maybe_eval res lazy_ depth pc in
+        let cond =
+          match icond with
+          | None -> rcond
+          | Some _ -> icond
+        in
+        res, Eval.Inspect(t, inspe, i, rese), cond
+      with
+      | Support.Undecidable ->
+         raise (No_branch_evaluation None)
+      | Undecidable cond ->
+         raise (No_branch_evaluation (Some cond))
       | Reject ->
           cases_from (i+1)
     in
@@ -1425,44 +1477,46 @@ let eval_term (t:term) (pc:t): term * Eval.t =
 
   and eval_as
         (t:term) (insp:term) (tps:types) (pat:term) (lazy_:bool) (depth:int) (pc:t)
-      : term * Eval.t =
+      : term * Eval.t * term option =
     let nvars = nbenv pc in
     let n = Array.length tps in
-    let insp,inspe = maybe_eval insp lazy_ depth pc in
+    let insp,inspe,cond = maybe_eval insp lazy_ depth pc in
     let c = context pc in
     try
       ignore(Pattern.unify_with_pattern insp n pat c);
       Feature_table.true_constant nvars,
-      Eval.As(true,inspe,tps,pat)
-    with Reject ->
-      Feature_table.false_constant nvars,
-      Eval.As(false,inspe,tps,pat)
-    | Undecidable ->
-        Pattern.evaluated_as_expression t (context pc),
-        Eval.AsExp t
+      Eval.As(true,inspe,tps,pat),None
+    with
+    | Reject ->
+       Feature_table.false_constant nvars,
+       Eval.As(false,inspe,tps,pat),
+       cond
+    | Support.Undecidable ->
+       Pattern.evaluated_as_expression t (context pc),
+       Eval.AsExp t,
+       cond
 
-  and maybe_eval (t:term) (lazy_:bool) (depth:int) (pc:t): term * Eval.t =
+  and maybe_eval
+        (t:term) (lazy_:bool) (depth:int) (pc:t)
+      : term * Eval.t * term option=
     try
       eval t lazy_ depth pc
-    with No_evaluation ->
-      t, Eval.Term t
+    with No_evaluation cond ->
+      t, Eval.Term t, cond
   in
   try
     eval t true 0 pc
-  with No_branch_evaluation ->
-    raise No_evaluation
+  with No_branch_evaluation cond ->
+    raise (No_evaluation cond)
 
 
 
-let evaluated_term (t:term) (pc:t): term * Eval.t * bool =
-  (*printf "evaluated_term %s\n" (string_of_term t pc);*)
+let evaluated_term (t:term) (pc:t): term * Eval.t * term option * bool =
   try
-    let t,e = eval_term t pc in
-    (*printf "  value %s\n" (string_of_term t pc);*)
-    t, e, true
-  with No_evaluation ->
-    (*printf "  no value\n";*)
-    t, Eval.Term t, false
+    let t,e,cond = eval_term t pc in
+    t, e, cond, true
+  with No_evaluation cond ->
+    t, Eval.Term t, cond, false
 
 
 
@@ -1733,18 +1787,37 @@ let add_consequences_evaluation (i:int) (pc:t): unit =
      context and to the work items.
    *)
   let t = term i pc in
-  let add_eval t e =
-    try
-      ignore(add_fwd_evaluation t i e true pc)
-    with Not_found ->
-      ()
+  let add_eval t e = add_fwd_evaluation t i e true pc
   in
   let t1,e,modi = simplified_term t i pc in
   if modi then
-    add_eval t1 e;
-  let t1,e,modi = evaluated_term t pc in
-  if modi then
-    add_eval t1 e
+    ignore(add_eval t1 e);
+  let t1,e,reeval_term,modi = evaluated_term t pc in
+  let idx =
+    if modi then
+      add_eval t1 e
+    else
+      i
+  in
+  begin
+    match reeval_term with
+    | None ->
+       ()
+    | Some cond ->
+       if is_tracing pc then
+         begin
+           printf "more evaluation would be possible of\n";
+           printf "  %s\n" (string_of_term t pc);
+           printf "if the following condition where decidable\n";
+           printf "  %s\n" (string_of_term cond pc)
+         end;
+       let nbenv = count_variables pc in
+       pc.entry.reeval <-
+         Term_table.add cond 0 nbenv idx (seed_function pc) pc.entry.reeval;
+       pc.entry.reeval <-
+         let cond = negation_expanded cond pc in
+         Term_table.add cond 0 nbenv idx (seed_function pc) pc.entry.reeval;
+  end
 
 
 
@@ -2602,7 +2675,7 @@ let eval_reduce (g:term) (lst:int list) (pc:t): int list =
   in
   let t1,e,modi = simplified_term g (count pc) pc in
   let lst = if modi then add_eval t1 e lst else lst in
-  let t1,e,modi = evaluated_term g pc in
+  let t1,e,_,modi = evaluated_term g pc in
   if modi then add_eval t1 e lst else lst
 
 
