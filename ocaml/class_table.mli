@@ -126,8 +126,8 @@ val constructors:     int -> t -> IntSet.t
 val base_constructors:     int -> t -> IntSet.t
 val set_constructors:  IntSet.t -> IntSet.t -> int -> t -> unit
 
-val add_induction_law: int -> (term * int) array -> int -> t -> unit
-val primary_induction_law: int -> t -> int * (term * int) array * IntSet.t
+val add_induction_law: int -> (term * int * term list) array -> int -> t -> unit
+val primary_induction_law: int -> t -> int * (term * int * term list) array * IntSet.t
 val recognizer_pairs: int -> t -> (term*term) list
 val add_recognizer_pair: term -> term -> int -> t -> unit
 val add_wellfounded_induction_law: int -> int -> int -> t -> unit

@@ -36,9 +36,10 @@ type descriptor      = {
     ident: int;
     name: int;
     bdesc: base_descriptor;
-    mutable indlaws: (int * (term * int) array * IntSet.t) list;
+    mutable indlaws: (int * (term * int * term list) array * IntSet.t) list;
                    (* law idx, constructors, constructor set
-                      array: each constructor with a ghost recognizer *)
+                      array: each constructor with a ghost recognizer and
+                      preconditions *)
     mutable rec_pairs: (term * term) list;
     mutable can_match_pattern: bool;
     mutable wflaws: (int * int) list; (* law idx, relation *)
@@ -731,7 +732,8 @@ let downgrade_signature
 
 
 
-let primary_induction_law (cls:int) (ct:t): int * (term * int) array * IntSet.t =
+let primary_induction_law (cls:int) (ct:t)
+    : int * (term * int * term list) array * IntSet.t =
   assert (cls < count ct);
   match (descriptor cls ct).indlaws with
   | law :: _ ->
@@ -741,14 +743,14 @@ let primary_induction_law (cls:int) (ct:t): int * (term * int) array * IntSet.t 
 
 
 let add_induction_law
-      (idx:int) (cs:(term * int) array) (cls:int) (ct:t)
+      (idx:int) (cs:(term * int * term list) array) (cls:int) (ct:t)
     : unit =
   (* Add the induction law [idx] with its constructors [cs] to the class
      [cls]. *)
   assert (cls < count ct);
   let cset =
     Array.fold_left
-      (fun cset (_,co) -> IntSet.add co cset) IntSet.empty cs
+      (fun cset (_,co,_) -> IntSet.add co cset) IntSet.empty cs
   in
   let desc = descriptor cls ct in
   desc.indlaws <- desc.indlaws @ [idx,cs,cset]

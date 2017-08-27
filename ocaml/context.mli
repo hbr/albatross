@@ -35,6 +35,7 @@ val push_untyped:     int array -> t -> t
 val push_typed:   Formals.t -> Formals.t -> bool -> t -> t
 val push_typed0:  Formals.t -> Formals.t -> t -> t
 val push_empty: t -> t
+val context_of_feature: int -> t -> t
 val previous: t -> t
 val pop:   t -> t
 

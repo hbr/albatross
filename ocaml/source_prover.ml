@@ -316,7 +316,7 @@ let analyze_type_inspect
   let ind_idx = PC.specialize_induction_law gen_ind_idx goal_pred ivar pc
   and cons_set =
     Array.fold_left
-      (fun set (_,cons) ->
+      (fun set (_,cons,_) ->
         IntSet.add cons set
       )
       IntSet.empty

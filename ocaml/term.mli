@@ -48,6 +48,7 @@ module Term: sig
   val is_argument: term -> int -> bool
 
   val is_permutation: term array -> bool
+  val invert_permutation: term array -> term array
   val nodes0: term -> int -> int array -> int
   val nodes: term -> int
 

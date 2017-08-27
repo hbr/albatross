@@ -40,6 +40,8 @@ val add_recognizer: term -> term -> int -> t -> unit
 val recognizers: int -> t -> term list
 val recognizer:  int -> t -> term
 val filter_recognizers: term -> int -> t -> unit
+val constructor_preconditions: int -> t -> term list
+val add_constructor_preconditions: term list -> int -> t -> unit
 
 val set_projector:  int -> int -> int -> t -> unit
 val has_all_projectors: int -> t -> bool

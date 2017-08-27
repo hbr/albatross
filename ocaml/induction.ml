@@ -81,18 +81,28 @@ let has_all_recursive_arguments
 
 
 
+let permute_arguments
+      (args:arguments) (ags:agens) (t:term)
+    : term =
+  assert (Term.is_permutation args);
+  assert (Term.is_permutation ags);
+  Term.subst0 t
+              (Array.length args) (Term.invert_permutation args)
+              (Array.length ags)  (Term.invert_permutation ags)
 
-let split_constructor_rule (pp:term) (c:Context.t): term * int =
+
+
+let split_constructor_rule (pp:term) (c:Context.t): term * int * term list =
   (* Check if [pp] is a constructor rule of the form
 
          all(a1,...) pp1 ==> ... ==> c(a1,...) in p
 
      where each premise ppi is either a general condition not containing [p]
      or has the form [rai in p] where [rai] is a recursive argument of the
-     constructor [c]. In case of success return the ghost recognizer and the
-     constructor. Otherwise raise Not_found.
+     constructor [c]. In case of success return the ghost recognizer, the
+     constructor and the list of preconditions. Otherwise raise Not_found.
 
-     Ghost recognizer: some(a1,...) cond1 and cond1 and ... x = c(a1,...)
+     Ghost recognizer: some(a1,...) cond1 and cond2 and ... x = c(a1,...)
    *)
   let open Context in
   let tps,fgs,ps_rev,t0 =
@@ -104,7 +114,8 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
   match t0 with
   | Application(Variable n,[|VAppl(co,args,ags,oo)|],_)
        when Term.is_permutation args
-            && Array.length args = n ->
+            && Array.length args = n
+            && Term.is_permutation ags ->
      let pres,recargs =
        List.fold_left
          (fun (pres,recargs) ppi ->
@@ -116,7 +127,7 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
            | _ ->
               (* extract a precondition *)
               try
-                ignore(Term.down_from (-2) n ppi);
+                ignore(Term.down_from 2 n ppi);
                 ppi :: pres, recargs
               with Term_capture ->
                 raise Not_found
@@ -144,9 +155,14 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
        in
        let reco =
          Context.prenex_term (Term.some_quantified tps reco0) c
+       and pres =
+         List.map
+           (fun pre ->
+             permute_arguments args ags pre |> Term.down_from 2 n)
+           pres
        in
        assert (Context.is_well_typed reco c);
-       reco, co - count_variables c1
+       reco, co - count_variables c1, pres
      else
        raise Not_found;
   | _ ->
@@ -158,7 +174,7 @@ let split_constructor_rule (pp:term) (c:Context.t): term * int =
 let is_pair_mutually_exclusive
       (i:int)
       (j:int)
-      (carr:(term*int) array)
+      (carr:(term*int*term list) array)
       (cls: int)
       (ft:Feature_table.t)
     : bool =
@@ -166,8 +182,10 @@ let is_pair_mutually_exclusive
     ignore(
         List.find
           (fun (t1,t2) ->
-            let ri = Feature_table.recognizer (snd carr.(i)) ft
-            and rj = Feature_table.recognizer (snd carr.(j)) ft
+            let _,co_i,_ = carr.(i)
+            and _,co_j,_ = carr.(j) in
+            let ri = Feature_table.recognizer co_i ft
+            and rj = Feature_table.recognizer co_j ft
             in
             (Term.equivalent t1 ri &&  Term.equivalent t2 rj)
             || (Term.equivalent t2 ri &&  Term.equivalent t1 rj)
@@ -181,15 +199,15 @@ let is_pair_mutually_exclusive
 
 
 let are_all_mutually_exclusive
-      (carr:(term*int) array)
+      (carr:(term*int*term list) array)
       (cls: int)
       (ft:Feature_table.t)
     : bool =
   try
     Array.iteri
-      (fun i (_,co_i) ->
+      (fun i (_,co_i,_) ->
         Array.iteri
-          (fun j (_,co_j) ->
+          (fun j (_,co_j,_) ->
             if i < j then
               if is_pair_mutually_exclusive i j carr cls ft then
                 ()
@@ -222,11 +240,11 @@ let check_class (cls:int) (ft:Feature_table.t): unit =
      && not (Class_table.can_match_pattern cls ct) then
     let law_idx, carr, cset = Class_table.primary_induction_law cls ct in
     if Array.for_all
-         (fun (_,co) -> Feature_table.has_all_projectors co ft)
+         (fun (_,co,_) -> Feature_table.has_all_projectors co ft)
          carr then
       begin
         Array.iter
-          (fun (reco,co) ->
+          (fun (reco,co,_) ->
             Feature_table.filter_recognizers reco co ft
           )
           carr;
@@ -309,9 +327,9 @@ let put_potential_induction_law
        let lst =
          List.fold_left
            (fun lst pp ->
-             let ghost_reco,co = split_constructor_rule pp c in
-             if List.for_all (fun (_,co0) -> co <> co0) lst then
-               (ghost_reco,co) :: lst
+             let ghost_reco,co,pres = split_constructor_rule pp c in
+             if List.for_all (fun (_,co0,_) -> co <> co0) lst then
+               (ghost_reco,co,pres) :: lst
              else
                raise Not_found
            )
@@ -320,25 +338,41 @@ let put_potential_induction_law
        in
        if is_tracing c then
          begin
+           let ft = Context.feature_table c in
+           assert (Context.is_global (pop c));
            printf "\nnormal induction law\n";
            printf "   %s\n" (string_of_term t (pop c));
-           printf "recognizers\n";
+           printf "constructors\n";
            List.iter
-             (fun (reco,co) ->
-               printf "   %s\n" (string_of_term reco c))
+             (fun (reco,co,pres) ->
+               let cf = Context.context_of_feature co (pop c) in
+               printf "   %s\n" (Feature_table.string_of_signature co ft);
+               printf "     recognizer %s\n" (string_of_term reco c);
+               List.iteri
+                 (fun i pre ->
+                   printf "     precondition %d %s\n" i (string_of_term pre cf)
+                 )
+                 pres
+             )
              lst;
            printf "\n"
          end;
        let carr =
          Array.of_list
-           (List.map (fun (reco,co) -> Term.down 1 reco,co) lst) (* remove [p] *)
+           (List.map
+              (fun (reco,co,pres) ->
+                Term.down 1 reco,  (* remove [p] *)
+                co,
+                pres
+              )
+              lst)
        in
        Class_table.add_induction_law idx carr cls (class_table c);
        begin
          try
            let const_idx =
              Search.array_find_min
-               (fun (reco,co) ->
+               (fun (reco,co,_) ->
                  match reco with
                  | QExp (_,_,_,false) ->
                     false
@@ -347,8 +381,9 @@ let put_potential_induction_law
                )
                carr
            in
-           let reco,co = carr.(const_idx) in
-           Feature_table.add_recognizer  reco reco co (feature_table c)
+           let reco,co,pres = carr.(const_idx) in
+           Feature_table.add_recognizer reco reco co (feature_table c);
+           Feature_table.add_constructor_preconditions pres co (feature_table c)
          with Not_found ->
            ()
        end;

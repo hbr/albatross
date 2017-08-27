@@ -107,6 +107,22 @@ module Term = struct
     with Not_found ->
       false
 
+  let invert_permutation (arr:term array): term array =
+    let n = Array.length arr in
+    let arr_perm = Array.make n empty_term in
+    for i = 0 to n - 1 do
+      match arr.(i) with
+      | Variable j ->
+         assert (j < n);
+         assert (arr_perm.(j) = empty_term);
+         arr_perm.(j) <- Variable i
+      | _ ->
+         assert false (* illegal call *)
+    done;
+    arr_perm
+
+
+
   let rec to_string (t:term): string =
     let argsstr nargs names =
       let nnames = Array.length names in

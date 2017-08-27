@@ -634,6 +634,17 @@ let push_empty (c:t): t =
   push_typed Formals.empty Formals.empty false c
 
 
+let context_of_feature (idx:int) (c:t): t =
+  assert (is_global c);
+  let tvs,sign = Feature_table.signature0 idx c.ft
+  and nms = Feature_table.argument_names idx c.ft in
+  push_typed0
+    (Formals.make nms (Sign.arguments sign))
+    (Formals.make (Tvars.fgnames tvs) (Tvars.fgconcepts tvs))
+    c
+
+
+
 let extract_from_tuple (n:int) (tp:type_term) (c:t): types =
   Class_table.extract_from_tuple n (count_all_type_variables c) tp
 

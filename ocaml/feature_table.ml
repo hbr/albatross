@@ -89,6 +89,7 @@ type descriptor = {
     bdesc:       bdesc;
     mutable recognizers: (term * term) list; (* reco, ghost_reco *)
     mutable projectors: int IntMap.t;
+    mutable co_preconditions: term list;
     mutable is_constr: bool
   }
 
@@ -1872,6 +1873,7 @@ let add_feature
      bdesc;
      recognizers = [];
      projectors  = IntMap.empty;
+     co_preconditions = [];
      is_constr   = false}
   in
   Seq.push desc ft.seq;
@@ -2002,6 +2004,7 @@ let add_base
     bdesc;
     recognizers = [];
     projectors  = IntMap.empty;
+    co_preconditions = [];
     is_constr   = false
   }
   in
@@ -2360,7 +2363,18 @@ let recognizer (idx:int) (ft:t): term =
   | (reco,_) :: _ ->
      reco
 
-let add_recognizer (exp:term) (ghost_reco:term) (idx:int) (ft:t): unit =
+
+let constructor_preconditions (idx:int) (ft:t): term list =
+  (descriptor idx ft).co_preconditions
+
+
+let add_constructor_preconditions (pres:term list) (idx:int) (ft:t): unit =
+  (descriptor idx ft).co_preconditions <- pres
+
+
+let add_recognizer
+      (exp:term) (ghost_reco:term) (idx:int) (ft:t)
+    : unit =
   if has_recognizer exp ghost_reco idx ft then
     ()
   else
@@ -2368,7 +2382,6 @@ let add_recognizer (exp:term) (ghost_reco:term) (idx:int) (ft:t): unit =
       let desc = descriptor idx ft in
       desc.recognizers <- (exp,ghost_reco) :: desc.recognizers
     end
-
 
 
 let filter_recognizers (ghost_reco:term) (co:int) (ft:t): unit =
