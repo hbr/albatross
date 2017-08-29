@@ -635,35 +635,32 @@ let reconstruct_evaluation (e:Eval.t) (at:t): term * term =
             let fs,pat,res = cases.(icase) in
             let n1 = Array2.count fs in
             begin
-              try
-                let subarr,reqs =
-                  Pattern.unify_with_pattern inspb n1 pat at.c in
-                assert (Array.length subarr = n1);
-                if reqs <> [] then
-                  begin
-                    printf "reconstruct_evaluation\n  check requirements\n";
-                    List.iter
-                      (fun t ->
-                        printf "     %s\n" (string_of_term t at))
-                      reqs
-                  end;
-                let res = Term.apply res subarr in
-                if not (Term.equivalent res resa) then
-                  begin
-                    printf "inspect result different\n";
-                    printf "  res       %s\n" (string_of_term_anon res nb at);
-                    printf "  resa      %s\n" (string_of_term_anon resa nb at);
-                    raise Illegal_proof_term
-                  end;
-                t, resb
-              with Reject
-                 | Undecidable ->
-                    printf "inspect no match\n";
-                    printf "  term      %s\n" (string_of_term_anon inspa nb at);
-                    printf "  eval      %s\n" (string_of_term_anon inspb nb at);
-                    printf "  case %d   %s\n"
-                           icase (string_of_term_anon pat (n1+nb) at);
-                    raise Illegal_proof_term
+              match Pattern.unify_with_pattern inspb n1 pat at.c with
+              | None | Some (Error _ ) ->
+                 printf "inspect no match\n";
+                 printf "  term      %s\n" (string_of_term_anon inspa nb at);
+                 printf "  eval      %s\n" (string_of_term_anon inspb nb at);
+                 printf "  case %d   %s\n"
+                        icase (string_of_term_anon pat (n1+nb) at);
+                 raise Illegal_proof_term
+              | Some (Ok (args,pres) ) ->
+                 (*if pres <> [] then
+                   begin
+                     printf "reconstruct_evaluation\n  check requirements\n";
+                     List.iter
+                       (fun t ->
+                         printf "     %s\n" (string_of_term t at))
+                       pres
+                   end;*)
+                 let res = Term.apply res args in
+                 if not (Term.equivalent res resa) then
+                   begin
+                     printf "inspect result different\n";
+                     printf "  res       %s\n" (string_of_term_anon res nb at);
+                     printf "  resa      %s\n" (string_of_term_anon resa nb at);
+                     raise Illegal_proof_term
+                   end;
+                 t, resb
             end
         | _ ->
             printf "no inspect expression %s\n" (string_of_term_anon t nb at);

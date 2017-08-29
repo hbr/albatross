@@ -114,6 +114,7 @@ val variable_index: int -> t -> int
 
 val is_constructor: int -> t -> bool
 val is_pseudo_constructor: int -> t -> bool
+val constructor_preconditions: int -> arguments -> agens -> t -> term list
 
 val fgnames: t   -> int array
 

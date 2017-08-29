@@ -1087,6 +1087,14 @@ let find_match (g:term) (pc:t): int =
         assert false (* specialization not type safe ? *)
 
 
+
+let find_match_list (lst:term list) (pc:t): int list =
+  List.fold_left
+    (fun lst t -> (find_match t pc) :: lst)
+    []
+    (List.rev lst)
+
+
 let simplified_term (t:term) (below_idx:int) (pc:t): term * Eval.t * bool =
   (* Simplify the term [t] and return the simplified term, the corresponding Eval
      structure and a flag which tells if the term [t] and its simplification are
@@ -1428,52 +1436,35 @@ let eval_term (t:term) (pc:t): term * Eval.t * term option =
         (depth:int)
         (pc:t)
       : term * Eval.t * term option =
-    let ncases = Array.length cases
-    and insp, inspe, icond = maybe_eval insp true depth pc
+    let insp, inspe, icond = maybe_eval insp true depth pc
     and c = context pc
     in
-    let rec cases_from (i:int): term * Eval.t * term option =
-      if i = ncases then
-        (* All case are rejected. This can happen only if the expression has
-           preconditions which are not satisfied because the expression is
-           evaluated in a context which has a contradiction. *)
-        raise (No_branch_evaluation None);
-      assert (i < ncases);
-      let fs, pat, res = cases.(i) in
-      let n = Array2.count fs in
-      try
-        let sub,reqs = Pattern.unify_with_pattern insp n pat c in
-        assert (Array.length sub = n);
-        let req_idx_lst =
-          List.fold_left
-            (fun lst t ->
-              let cond,idx = decide t pc in
-              if not cond then
-                begin
-                  printf "case %d (%s) rejected\n" i (string_of_term t pc);
-                  raise Reject;
-                end;
-              idx :: lst
-            )
-            [] reqs
-        in
-        let res = Term.apply res sub in
-        let res,rese,rcond = maybe_eval res lazy_ depth pc in
-        let cond =
-          match icond with
-          | None -> rcond
-          | Some _ -> icond
-        in
-        res, Eval.Inspect(t, inspe, i, rese), cond
-      with
-      | Support.Undecidable ->
-         raise (No_branch_evaluation None)
-      | Undecidable cond ->
-         raise (No_branch_evaluation (Some cond))
-      | Reject ->
-          cases_from (i+1)
-    in
-    cases_from 0
+    match Pattern.decide_inspect insp cases c with
+    | None ->
+       raise (No_branch_evaluation None)
+    | Some (i, args, pres) ->
+       try
+         ignore(find_match_list pres pc); (* nyi: include in proof term *)
+         let _,_,res = cases.(i) in
+         let res = Term.apply res args in
+         let res,rese,rcond = maybe_eval res lazy_ depth pc in
+         let cond = chain_term_option icond rcond in
+         res, Eval.Inspect(t,inspe,i,rese), cond
+       with Not_found ->
+         let pre =
+           try
+             List.find
+               (fun pre ->
+                 try
+                   ignore(find_match pre pc);
+                   false
+                 with Not_found ->
+                   true)
+               pres
+           with Not_found ->
+             assert false (* Cannot happen *)
+         in
+         raise (No_branch_evaluation (Some pre))
 
   and eval_as
         (t:term) (insp:term) (tps:types) (pat:term) (lazy_:bool) (depth:int) (pc:t)
@@ -1482,19 +1473,35 @@ let eval_term (t:term) (pc:t): term * Eval.t * term option =
     let n = Array.length tps in
     let insp,inspe,cond = maybe_eval insp lazy_ depth pc in
     let c = context pc in
+    let undecide () =
+      Pattern.evaluated_as_expression t (context pc),
+      Eval.AsExp t,
+      cond
+    in
+    let find_pres pres =
+      try
+        find_match_list pres pc
+      with Not_found ->
+        raise Support.Undecidable
+    in
     try
-      ignore(Pattern.unify_with_pattern insp n pat c);
-      Feature_table.true_constant nvars,
-      Eval.As(true,inspe,tps,pat),None
-    with
-    | Reject ->
-       Feature_table.false_constant nvars,
-       Eval.As(false,inspe,tps,pat),
-       cond
-    | Support.Undecidable ->
-       Pattern.evaluated_as_expression t (context pc),
-       Eval.AsExp t,
-       cond
+      begin
+        match Pattern.unify_with_pattern insp n pat c with
+        | None ->
+           undecide ()
+        | Some (Error (pres) ) ->
+           ignore(find_pres pres); (* nyi: include in proof term *)
+           Feature_table.false_constant nvars,
+           Eval.As(false,inspe,tps,pat),
+           cond
+        | Some ( Ok (args,pres) ) ->
+           ignore(find_pres pres); (* nyi: include in proof term *)
+           Feature_table.true_constant nvars,
+           Eval.As(true,inspe,tps,pat),
+           None
+      end
+    with Support.Undecidable ->
+      undecide ()
 
   and maybe_eval
         (t:term) (lazy_:bool) (depth:int) (pc:t)

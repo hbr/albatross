@@ -378,6 +378,16 @@ let is_constructor (i:int) (c:t): bool =
 let is_pseudo_constructor (i:int) (c:t): bool =
   Feature_table.is_pseudo_constructor (i - count_variables c) c.ft
 
+let constructor_preconditions
+      (co:int) (args:arguments) (ags:agens) (c:t)
+    : term list =
+  let nvars = count_variables c
+  and nargs = Array.length args in
+  assert (nvars <= co);
+  List.map
+    (fun pre ->
+      Feature_table.substituted pre nargs 0 0 args nvars ags (tvars c) c.ft)
+    (Feature_table.constructor_preconditions (co - nvars) c.ft)
 
 
 let make_application

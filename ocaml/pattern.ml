@@ -4,6 +4,10 @@ open Container
 open Support
 open Printf
 
+
+type match_result = (term array * term list, term list) result
+
+
 module FT = Feature_table
 
 let is_pattern (n:int) (t:term) (nb:int) (ft:FT.t): bool =
@@ -94,93 +98,112 @@ let project (t:term) (co:int) (n:int) (ags:agens) (c:Context.t): arguments =
 
 
 
+let add_to_list_unique (t:term) (lst: term list): term list =
+  try
+    ignore (List.find (Term.equivalent t) lst);
+    lst
+  with Not_found ->
+    t :: lst
+
+
+let prepend_list_unique (lst1:term list) (lst:term list): term list =
+  List.fold_left
+    (fun lst t -> add_to_list_unique t lst)
+    lst
+    lst1
 
 
 let unify_with_pattern
       (t:term) (n:int) (pat:term) (c:Context.t)
-    : arguments * term list =
+    : match_result option =
   (* Match the term [t] against the pattern [pat] with [n] pattern variables.
 
-     Return a substitution for the pattern variables and a list of recognizer
-     conditions to be satisfied.
+     Three cases are possible:
 
-     Exceptions:
+     a) Success: A substitution and a list of constructor preconditions is
+                 returned.
 
-     a) Reject: Conflicting constructors if inductive classes present
-     b) Undecidable: For some constructors of inductive classes there is not
-                     enough information in the term [t] to decide the case.
+     b) Reject: There are conflicting constructors. Only a list of
+                preconditions is returned.
 
-     Pseudo inductive types: For each constructor of a pseudo inductive class
-     the corresponding recognizer is added to the list and either the corresponding
-     part of the term [t] can be matched or a projector is used to substitute
-     the variable.
+     c) Undecidable: Nothing is returned (i.e. None).
 
    *)
   let args = Array.make n empty_term
+  and pres = ref []
   in
-  let term_args (i1:int) (nargs:int) (ags:agens) (pseudo:bool) (t:term): arguments =
-    match t with
-    | VAppl(i2,args2,_,_) when i2 + n = i1 ->
-       args2
-    | VAppl(i2,args2,_,_) when not pseudo ->
-       if i2 + n <> i1 && Context.is_constructor i2 c then
-         raise Reject
-       else
-         raise Undecidable
-    | _ when pseudo ->
-       if nargs = 0 then
-         [||]
-       else
-         project t i1 nargs ags c
-    | _ ->
-       raise Undecidable
-  and do_sub i t =
+  let do_sub i t =
     assert (i < n);
     assert (args.(i) = empty_term); (* No duplicate pattern variables possible *)
     args.(i) <- t
   and args_complete () =
     Array.for_all (fun t -> t <> empty_term) args
+  and add_pres co args ags =
+    pres :=
+      prepend_list_unique
+        (Context.constructor_preconditions co args ags c)
+        !pres
   in
-  let rec pmatch (pat:term) (t:term) (rlst): term list =
-    let match_args pargs targs rlst =
-      let len = Array.length pargs in
-      assert (len = Array.length targs);
-      interval_fold
-        (fun lst i ->
-          pmatch pargs.(i) targs.(i) lst
-        )
-        rlst 0 len
-    in
-    match pat with
-    | Variable i ->               (* A pattern variable *)
+  let rec pmatch (pat:term) (t:term): unit =
+    match pat, t with
+    | Variable i, _ ->               (* A pattern variable *)
        assert (i < n);
-       do_sub i t;
-       rlst
-    | VAppl(i1,args1,ags1,_) ->      (* A constructor *)
+       do_sub i t
+    | VAppl(i1,args1,ags1,_), VAppl(i2,args2,ags2,_)
+         when i1 = i2 + n ->
        let n1 = Array.length args1 in
-       if Context.is_pseudo_constructor (i1-n) c then
-         begin
-           try
-             let rlst =
-               let reco = recognizer t (i1-n) ags1 c in
-               if List.mem reco rlst then
-                 rlst
-               else
-                 reco :: rlst
-             in
-             match_args args1 (term_args i1 n1 ags1 true t) rlst
-           with Not_found ->
-             printf "        recognizer not found\n";
-             assert false (* There must be a recognizer *)
-         end
-       else
-         match_args args1 (term_args i1 n1 ags1 false t) rlst
+       assert (n1 = Array.length args2);
+       add_pres i2 args2 ags2;
+       for i = 0 to n1 - 1 do
+         pmatch args1.(i) args2.(i)
+       done
+    | VAppl(i1,args1,ags1,_), VAppl(i2,args2,ags2,_)
+         when Context.is_constructor i2 c  ->
+       raise Reject
+    | VAppl(i1,args1,ags1,_), VAppl(i2,args2,ags2,_)
+         when Context.is_pseudo_constructor i2 c  ->
+       add_pres i2 args2 ags2;
+       raise Reject
+    | VAppl _, _ ->
+       raise Undecidable
     | _ ->
-       assert false (* [pat] consists only of variables and constructors. *)
+       assert false (* [pat] must consist only of variables and constructors. *)
   in
-  let rlst = pmatch pat t [] in
-  assert (args_complete ());
-  args, List.rev rlst
+  try
+    pmatch pat t;
+    assert (args_complete ());
+    Some ( Ok (args,!pres) )
+  with
+  | Undecidable ->
+    None
+  | Reject ->
+     Some (Error !pres)
+
+let decide_inspect
+      (insp:term) (cases: (formals * term * term) array) (c:Context.t)
+    : (int * arguments * term list) option =
+  let ncases = Array.length cases
+  in
+  let rec decide_from (i:int) (pres:term list)
+          : (int * arguments * term list) option =
+    if i = ncases then
+      None
+    else
+      let tps,pat,res = cases.(i) in
+      let n = Formals.count tps in
+      match unify_with_pattern insp n pat c with
+      | None ->
+         None
+      | Some (Ok (args,pres1)) ->
+         Some (i, args, prepend_list_unique pres1 pres)
+      | Some (Error pres1) ->
+         decide_from
+           (i+1)
+           (prepend_list_unique pres1 pres)
+  in
+  decide_from 0 []
+
+
 
 
 

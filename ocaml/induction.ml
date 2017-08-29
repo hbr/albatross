@@ -346,7 +346,7 @@ let put_potential_induction_law
            List.iter
              (fun (reco,co,pres) ->
                let cf = Context.context_of_feature co (pop c) in
-               printf "   %s\n" (Feature_table.string_of_signature co ft);
+               printf "   %d %s\n" co (Feature_table.string_of_signature co ft);
                printf "     recognizer %s\n" (string_of_term reco c);
                List.iteri
                  (fun i pre ->
@@ -368,9 +368,15 @@ let put_potential_induction_law
               lst)
        in
        Class_table.add_induction_law idx carr cls (class_table c);
+       Array.iter
+         (fun (reco,co,pres) ->
+           Feature_table.add_constructor_preconditions pres co (feature_table c)
+         )
+         carr;
        begin
          try
            let const_idx =
+             (* find constant constructor *)
              Search.array_find_min
                (fun (reco,co,_) ->
                  match reco with
@@ -383,7 +389,6 @@ let put_potential_induction_law
            in
            let reco,co,pres = carr.(const_idx) in
            Feature_table.add_recognizer reco reco co (feature_table c);
-           Feature_table.add_constructor_preconditions pres co (feature_table c)
          with Not_found ->
            ()
        end;
