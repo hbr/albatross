@@ -681,7 +681,10 @@ is_wellorder(r:{A,A}): ghost BOOLEAN
        and
        r.nonempty_has_least
 
-
+all(r:{A,A})
+    ensure
+        r.nonempty_has_least ==> r.is_dichotomic
+    end
 
 
 

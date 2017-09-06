@@ -122,8 +122,8 @@ all(x:G, p:{G})
 all(x:G)
     ensure
         {x}.has_some
-        assert
-            x in {x}
+    assert
+        x in {x}
     end
 
 
@@ -230,6 +230,17 @@ all(p:{G})
 
 disjoint(p,q:{G}): ghost BOOLEAN -> (p*q).is_empty
 
+
+all(p,q:{G})
+    require
+        p.has_some
+    ensure
+        (p + q).has_some
+    via some(x)
+        x in p
+    assert
+        x in p + q
+    end
 
 all(p,q,r:{G})
     require

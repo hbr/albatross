@@ -1409,6 +1409,25 @@ nonempty_has_least(r:{A,A}): ghost BOOLEAN
         -- Do all nonempty subsets of the carrier have a least element?
     -> all(p) p <= r.carrier ==> p.has_some ==> some(x) x.is_least(p,r)
 
+all(r:{A,A})
+    require
+        r.nonempty_has_least
+    ensure
+        r.is_dichotomic
+    assert
+        all(x,y)
+            require
+                {x,y} <= r.carrier
+            ensure
+                r(x,y) or r(y,x)
+            via some(z)
+                z.is_least({x,y},r)
+            if z in {x}
+            orif z in {y}
+            end
+    end
+
+
 is_wellorder(r:{A,A}): ghost BOOLEAN
         -- Is 'r' a wellorder i.e. a linear order where every nonempty set
         -- has a least element?

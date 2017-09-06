@@ -95,6 +95,7 @@ disjoint(p,q:{G}): ghost BOOLEAN
 
 all(a:G, p,q,r:{G})
     ensure
+        p.has_some ==> (p + q).has_some
         p + q <= r ==> p <= r
         p + q <= r ==> q <= r
         p <= r ==> q <= r ==> p + q <= r

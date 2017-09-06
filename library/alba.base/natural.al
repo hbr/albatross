@@ -281,15 +281,6 @@ all(a:NATURAL)
 
 
 
-all(a,b:NATURAL)
-    require
-        a <= b  ==> a < successor(b)
-        successor(a) <= successor(b)
-    ensure
-        successor(a) < b.successor.successor
-    assert
-        a <= b
-    end
 
 
 all(a,b:NATURAL)
@@ -298,9 +289,14 @@ all(a,b:NATURAL)
     ensure
         a < b.successor
 
-        inspect a
-        case successor(a)
-            inspect b
+    inspect
+        a
+    case n.successor
+        inspect
+            b
+        case m.successor
+            assert
+                n < m.successor
     end
 
 
@@ -317,9 +313,13 @@ all(a,b:NATURAL)
 
 
 all(a,b:NATURAL)
+    require
+        a.successor <= b
     ensure
-        a.successor <= b ==>  a < b
-    inspect b end
+        a < b
+    inspect
+        b
+    end
 
 
 all(a,b:NATURAL)
