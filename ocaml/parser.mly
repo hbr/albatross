@@ -1077,7 +1077,7 @@ operator_expr:
 
 |   expr_1 DIVIDE expr_1              { binexp $startpos($2) Divideop $1 $3 }
 
-|   expr_1 KWmod  expr_2              { binexp $startpos($2) Modop $1 $3 }
+|   expr_1 KWmod  expr_1              { binexp $startpos($2) Modop $1 $3 }
 
 |   expr_1 CARET  expr_1              { binexp $startpos($2) Caretop $1 $3 }
 
