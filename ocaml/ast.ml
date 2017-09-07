@@ -375,12 +375,12 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
       lst 0 len_insp
   in
   let rec check
-            (t:term) (nbranch:int) (tlst:(int*term*int*int) list) (c:Context.t)
+            (t:term) (tlst:(int*term*int*int) list) (c:Context.t)
           : unit =
     let nb = Context.count_variables c in
     let check_args args =
-      Array.iter (fun arg -> check arg nbranch tlst c) args
-    and check0 t = check t nbranch tlst c
+      Array.iter (fun arg -> check arg  tlst c) args
+    and check0 t = check t tlst c
     in
     match t with
       Variable i when i = idx + nb ->
@@ -391,8 +391,6 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | Variable i ->
         ()
     | VAppl (i,args,_,_) when i = idx + nb ->
-        if nbranch = 0 then
-          error_info info "Recursive call must occur only within a branch";
         let len = Array.length args in
         if len = 0 then
           error_info info ("Illegal recursive call of the constant " ^
@@ -410,7 +408,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
     | VAppl (i,args,_,_) ->
         check_args args
     | Application (f,args,_) ->
-        check f nbranch tlst c;
+        check f tlst c;
         check_args args
     | Lam (tps,fgs,pres,t0,rt) ->
         not_yet_implemented
@@ -449,7 +447,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
                                                   pattern for the inspected
                                                   expressions *)
            let tlst2 = add_pattern insp_arr2 n parr nb tlst in
-           check res (nbranch+1) tlst2 c1
+           check res tlst2 c1
          )
          cases
     | Indset (n,nms,rs) ->
@@ -460,7 +458,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
   let nvars = Context.count_variables c in
   let tlst0 =
     interval_fold (fun lst i -> (nvars,Variable i,0,i)::lst) [] 0 nargs in
-  check t 0 tlst0 c
+  check t tlst0 c
 
 
 
