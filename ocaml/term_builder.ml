@@ -1260,7 +1260,7 @@ let is_pattern (n:int) (pat:term) (tb:t): bool =
     (feature_table tb)
 
 let check_pattern (n:int) (pat:term) (tb:t): unit =
-  if is_pattern n pat tb then
+  if Context.is_interface_use (context tb) || is_pattern n pat tb then
     ()
   else
     raise Reject

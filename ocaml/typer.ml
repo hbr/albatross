@@ -1170,7 +1170,8 @@ let check_one_pattern (info:info) (pat:term) (c:Context.t): unit =
     | _ ->
        assert false (* Other subexpressions cannot occur in a pattern *)
   in
-  check pat
+  if not (Context.is_interface_use c) then
+    check pat
 
 
 

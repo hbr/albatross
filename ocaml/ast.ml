@@ -464,7 +464,7 @@ let check_recursion0 (info:info) (idx:int) (t:term) (pc:PC.t): unit =
 
 
 let check_recursion (info:info) (idx:int) (t:term) (pc:PC.t): unit =
-  if is_feature_term_recursive t idx pc then
+  if not (PC.is_interface_use pc) && is_feature_term_recursive t idx pc then
     check_recursion0 info idx t pc
 
 
