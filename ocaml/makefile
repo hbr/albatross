@@ -26,52 +26,35 @@
         partial_order              \
         endorelation
 
+OCB_FLAGS = -use-ocamlfind \
+            -Is lib,_draft \
+            -yaccflags --explain,--dump,--infer,--fixed-exception \
+            -lib unix
+
+OCB = ocamlbuild $(OCB_FLAGS)
 
 alba: alba.native
 
 
 alba.byte:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-	    alba.byte
+	$(OCB) alba.byte
 
 alba.d.byte:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-	    alba.d.byte
+	$(OCB) alba.d.byte
 
 alba.native:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-            alba.native
+	$(OCB) alba.native
 
 alba.p.native:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-            alba.p.native
+	$(OCB) alba.p.native
 
 
 alba_draft.byte:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-	    alba_draft.byte
+	$(OCB) alba_draft.byte
 
 alba_draft.native:
-	ocamlbuild \
-            -use-ocamlfind \
-            -yaccflags --explain,--dump,--infer,--fixed-exception \
-            -lib unix \
-	    alba_draft.native
+	$(OCB) alba_draft.native
+
 
 alba-node: alba_node.byte
 	js_of_ocaml \
