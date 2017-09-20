@@ -50,7 +50,6 @@ type descriptor      = {
 type t = {mutable map:   int list IntMap.t;
           seq:           descriptor seq;
           mutable base:  int list IntMap.t; (* module name -> class indices *)
-          mutable locs:  IntSet.t;
           mutable fgens: type_term IntMap.t;
           mutable comp:  Module.Compile.t}
 
@@ -1720,7 +1719,6 @@ let empty_table (comp:Module.Compile.t): t =
    seq   = cc;
    fgens = IntMap.empty;
    base  = IntMap.empty;
-   locs  = IntSet.empty;
    comp = comp}
 
 
