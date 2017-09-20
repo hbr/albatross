@@ -377,7 +377,7 @@ module PSet =
               []
           and paths3 =
             try
-              Platform.system_with_output "opam config var alba:lib"
+              Platform.system_with_output "opam config var --yes alba:lib"
             with Sys_error str ->
               []
           in
