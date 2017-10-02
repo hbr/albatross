@@ -10,6 +10,7 @@
 
 (defconst alba-keywords
   '( "agent"    "all"      "and"         "as"         "assert"
+     "attribute"
      "case"     "check"       "class"      "create"
      "deferred" "do"
      "feature"  "from"
