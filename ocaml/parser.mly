@@ -648,6 +648,7 @@ class_name:
 class_generics:
     { [] }
 |   LBRACKET uidentifier_list RBRACKET { $2 }
+|   LPAREN uidentifier_list   RPAREN   { $2 }
 
 
 
@@ -747,6 +748,7 @@ simple_type:
 actual_generics:
     %prec LOWEST_PREC {[]}
 |   LBRACKET type_list RBRACKET { $2 }
+|   LPAREN   type_list RPAREN   { $2 }
 
 
 
