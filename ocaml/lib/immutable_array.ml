@@ -141,8 +141,35 @@ let push (e:'a) (t:'a t): 'a t =
   t
 
 
+let rec take (n:int) (t:'a t): 'a t =
+  assert (n <= length t);
+  match t with
+  | Leaf arr ->
+     Leaf (Array.sub arr 0 n)
+  | Node (s,h,arr) ->
+     if n = s then
+       t
+     else
+       let slot,rel = index n h in
+       let slot,rel =
+         if rel = 0 && 0 < slot then
+           slot - 1, 1 lsl (h*bitsize)
+         else
+           slot,rel
+       in
+       let t0 = take rel arr.(slot) in
+       if slot = 0 then
+         t0
+       else
+         let arr = Array.sub arr 0 (slot+1) in
+         arr.(slot) <- t0;
+         Node (n,h,arr)
+
+
+
 let test ()  =
   let n = 32768 in
+  let m = 1024 in
   let fill (n:int): int t =
     assert (0 <= n);
     let rec fill0 (i:int) (t:int t): int t =
@@ -167,8 +194,14 @@ let test ()  =
   for i = 0 to n - 1 do
     assert (elem i t = i)
   done;
-  let t = overwrite n t in
+  let t1 = overwrite n t in
   for i = 0 to n - 1 do
-    assert (elem i t = i + 1)
+    assert (elem i t1 = i + 1)
+  done;
+  let t2 = take m t in
+  printf "length t2 %d\n" (length t2);
+  printf "height t2 %d\n" (height t2);
+  for i = 0 to m - 1 do
+    assert (elem i t2 = i)
   done;
   printf "all checks done\n"
