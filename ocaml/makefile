@@ -15,6 +15,8 @@
         alba.native                \
         alba.p.native              \
         alba_node.byte             \
+        alba_web                   \
+        alba_web.byte              \
         alba_draft.byte            \
         alba_draft.native          \
         boolean                    \
@@ -32,6 +34,13 @@ OCB_FLAGS = -use-ocamlfind \
             -lib unix
 
 OCB = ocamlbuild $(OCB_FLAGS)
+
+OCBJS_FLAGS = -use-ocamlfind \
+	      -cflag -g -lflag -g -Is lib,_draft,js \
+              -yaccflags --table,--inspection,--explain,--dump,--infer,--fixed-exception \
+	      -pkgs menhirLib,js_of_ocaml,js_of_ocaml.ppx
+
+OCBJS = ocamlbuild $(OCBJS_FLAGS)
 
 alba: alba.native
 
@@ -60,9 +69,22 @@ alba-node: alba_node.byte
 	js_of_ocaml \
 	    --custom-header='#!/usr/bin/env node' \
 	    --pretty       \
+	    --sourcemap    \
             -o alba-node   \
 	    alba_node.byte;\
         chmod u+x alba-node
+
+js/alba_web.js: _build/js/alba_web.byte
+	js_of_ocaml \
+	    --pretty     \
+	    --sourcemap  \
+            -o js/alba_web.js  \
+	    alba_web.byte
+
+alba_web.byte:
+	$(OCBJS) alba_web.byte
+
+alba_web: alba_web.byte js/alba_web.js
 
 alba_node.byte:
 	ocamlbuild -use-ocamlfind             \

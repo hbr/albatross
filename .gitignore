@@ -12,7 +12,6 @@ _draft
 *_draft.ali
 doc
 .alba
-*.js
 *.native
 *.byte
 *.d.native
