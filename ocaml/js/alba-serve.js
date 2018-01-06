@@ -98,7 +98,7 @@ function read_directory (args, res) {
     fs.readdir(file_path(args), (err,files) => {
         if (err)
             respond_404 (res, err.message)
-        res.end(JSON.stringify(files))
+        res.end(files.join(','))
     })
 }
 
