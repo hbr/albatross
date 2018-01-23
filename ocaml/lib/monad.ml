@@ -15,6 +15,8 @@ module type S =
     val (>>=): 'a t -> ('a -> 'b t) -> 'b t
     val (>>):  'a t -> 'b t -> 'b t
     val sequence: 'a t list -> 'a list t
+    val map_list: 'a list -> ('a -> 'b t) -> 'b list t
+    val map_array: 'a array -> ('a -> 'b t) -> 'b array t
   end
 
 module Make (M:S0): S with type 'a t = 'a M.t =
@@ -36,4 +38,30 @@ module Make (M:S0): S with type 'a t = 'a M.t =
         (make [])
     let (>>) (m1:'a t) (m2:'b t): 'b t =
       m1 >>= fun _ -> m2
+    let map_list (lst:'a list) (f:'a -> 'b t): 'b list t =
+      let rec mplst (lst:'a list) (res:'b list): 'b list t =
+        match lst with
+        | [] ->
+           make res
+        | hd :: tl ->
+           f hd >>= fun b ->
+           mplst tl (b :: res)
+      in
+      map List.rev (mplst lst [])
+    let map_array (arr:'a array) (f:'a -> 'b t): 'b array t =
+      let len = Array.length arr in
+      let rec mp (i:int) (res:'b array): 'b array t =
+        if i = len then
+          make res
+        else
+          f arr.(i) >>= fun b ->
+          let res =
+            if Array.length res = len then
+              (res.(i) <- b; res)
+            else
+              (Array.make len b)
+          in
+          mp (i+1) res
+      in
+      mp 0 [||]
   end
