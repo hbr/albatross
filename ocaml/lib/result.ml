@@ -1,11 +1,3 @@
-module type S =
-  sig
-    type error
-    include Monad.S
-    val raise: error -> 'a t
-  end
-
-
 module Make (E: sig type t end) =
   struct
     type error = E.t
@@ -20,5 +12,35 @@ module Make (E: sig type t end) =
               | Error e -> Error e
           end
         )
-    let raise (e:error): 'a t = Error e
+    let throw (e:error): 'a t =
+      Error e
+    let catch (m:'a t) (f:error->'a t): 'a t =
+      match m with
+      | Ok a -> m
+      | Error e -> f e
+  end
+
+
+module Within (M:Monad.S) (E: sig type t end) =
+  struct
+    type error = E.t
+    include
+      Monad.Make(
+          struct
+            type 'a t = ('a,error) result M.t
+            let make (a:'a): 'a t =
+              Ok a |> M.make
+            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+              M.(m >>= fun res ->
+                 match res with
+                 | Ok a ->
+                    f a
+                 | Error e ->
+                    Error e |> make
+              )
+          end)
+    let unwrap (m:'a t): ('a,error) result M.t =
+      m
+    let wrap (m:('a,error) result M.t): 'a t =
+      m
   end
