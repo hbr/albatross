@@ -1,6 +1,5 @@
 opam-version: "1.2"
 name: "alba"
-version: "v0.4.x"
 maintainer: "Helmut Brandl <helmut.brandl@gmx.net>"
 authors: "Helmut Brandl <helmut.brandl@gmx.net>"
 homepage: "http://albatross-lang.sourceforge.net"
