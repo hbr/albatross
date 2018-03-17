@@ -4,6 +4,7 @@ module type S =
     include Monad.S
     val get: env t
     val local: (env -> env) -> 'a t -> 'a t
+    val eval: env -> 'a t -> 'a
   end
 
 
@@ -32,5 +33,5 @@ module Make (ENV: sig type t end) =
         a,e)
 
     let eval (e:env) (m:'a t): 'a =
-      m e |> snd
+      m e |> fst
   end

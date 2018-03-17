@@ -4,6 +4,7 @@ module type S =
     include Monad.S
     val get: env t
     val local: (env -> env) -> 'a t -> 'a t
+    val eval: env -> 'a t -> 'a
   end
 
 
