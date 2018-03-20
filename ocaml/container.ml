@@ -324,6 +324,8 @@ module Mystring: sig
   val rev_split: string -> char -> string list
   val split: string -> char -> string list
   val for_all: (char -> bool) -> string -> bool
+  val to_list: string -> char list
+  val of_list: char list -> string
 end = struct
   let rev_split (str:string) (sep:char): string list =
     let start    = ref 0
@@ -333,8 +335,8 @@ end = struct
     while !start < len do
       try
         let nxt = String.index_from str !start sep in
-      if !start < nxt then
-        lst := (String.sub str !start (nxt - !start)) :: !lst;
+        if !start < nxt then
+          lst := (String.sub str !start (nxt - !start)) :: !lst;
         start := nxt + 1
       with Not_found ->
         lst := (String.sub str !start (len - !start)) :: !lst;
@@ -354,6 +356,32 @@ end = struct
         f s.[i] && forall (i+1)
     in
     forall 0
+
+  let of_char (c:char): string =
+    String.make 1 c
+
+  let to_list (s:string): char list =
+    let rec list cs i =
+      if i = 0 then
+        cs
+      else
+        let j = i - 1 in
+        list (s.[j]::cs) j
+    in
+    list [] (String.length s)
+
+  let of_list (cs:char list): string =
+    let rec str cs i =
+      match cs with
+      | [] ->
+         Bytes.create i
+      | c::cs ->
+         let bs = str cs (i+1) in
+         Bytes.set bs i c;
+         bs
+    in
+    let bs = str cs 0 in
+    Bytes.unsafe_to_string bs
 end
 
 
