@@ -46,7 +46,7 @@ module Make (State: Common.ANY): (S with type state = State.t) =
   end
 
 
-module Within (M:Monad.S) (State:Common.ANY) =
+module Into (M:Monad.S) (State:Common.ANY) =
   struct
     type state = State.t
     include

@@ -14,7 +14,7 @@ module type S =
 module Make (State:Common.ANY): (S with type state = State.t)
 
 
-module Within (M:Monad.S) (State:Common.ANY):
+module Into (M:Monad.S) (State:Common.ANY):
 sig
   type state = State.t
   include Monad.S
