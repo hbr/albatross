@@ -11,4 +11,12 @@ module type S =
   end
 
 
-module Make (S: sig type t end): (S with type state = S.t)
+module Make (State:Common.ANY): (S with type state = State.t)
+
+
+module Within (M:Monad.S) (State:Common.ANY):
+sig
+  type state = State.t
+  include Monad.S
+          with type 'a t = state -> ('a * state) M.t
+end

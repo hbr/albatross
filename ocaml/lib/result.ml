@@ -1,4 +1,4 @@
-module Make (E: sig type t end) =
+module Make (E: Common.ANY) =
   struct
     type error = E.t
     include
@@ -21,7 +21,7 @@ module Make (E: sig type t end) =
   end
 
 
-module Within (M:Monad.S) (E: sig type t end) =
+module Within (M:Monad.S) (E: Common.ANY) =
   struct
     type error = E.t
     include

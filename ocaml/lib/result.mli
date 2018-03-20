@@ -1,4 +1,4 @@
-module Make (E: sig type t end):
+module Make (E: Common.ANY):
 sig
   type error = E.t
   include Monad.S with
@@ -7,7 +7,7 @@ sig
   val catch: 'a t -> (error->'a t) -> 'a t
 end
 
-module Within (M:Monad.S) (E: sig type t end):
+module Within (M:Monad.S) (E: Common.ANY):
 sig
   type error = E.t
   include Monad.S with
