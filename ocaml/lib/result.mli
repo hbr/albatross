@@ -1,3 +1,8 @@
+type  ('a,'e) t = ('a,'e) result
+
+val continue: ('a,'e) result -> ('a->'z) -> ('e->'z) -> 'z
+
+
 module Make (E: Common.ANY):
 sig
   type error = E.t

@@ -1,3 +1,14 @@
+type ('a,'e) t = ('a,'e) result
+
+
+let continue (r:('a,'e) result) (f1:'a->'z) (f2:'e->'z): 'z =
+  match r with
+  | Ok a ->
+     f1 a
+  | Error e ->
+     f2 e
+
+
 module Make (E: Common.ANY) =
   struct
     type error = E.t
@@ -23,6 +34,7 @@ module Make (E: Common.ANY) =
 
 module Within (M:Monad.S) (E: Common.ANY) =
   struct
+    module M = M
     type error = E.t
     include
       Monad.Make(
