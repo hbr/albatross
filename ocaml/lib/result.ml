@@ -51,6 +51,20 @@ module Within (M:Monad.S) (E: Common.ANY) =
                     Error e |> make
               )
           end)
+
+    let throw (e:error): 'a t =
+      Error e |> M.make
+
+    let catch (m:'a t) (f:error -> 'a t): 'a t =
+      M.bind m
+        (fun r ->
+          match r with
+          | Ok a ->
+             m
+          | Error e ->
+             f e
+        )
+
     let unwrap (m:'a t): ('a,error) result M.t =
       m
     let wrap (m:('a,error) result M.t): 'a t =
