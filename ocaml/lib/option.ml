@@ -28,7 +28,7 @@ let iter (f:'a -> unit) (m:'a t): unit =
 
 
 
-module Within (M:Monad.S) =
+module Within (M:Monad.MONAD) =
   struct
     include
       Monad.Make(
