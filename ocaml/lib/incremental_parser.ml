@@ -1,5 +1,4 @@
-module type ANY = Common.ANY
-
+open Common
 
 
 module type PARSER =
@@ -33,10 +32,12 @@ module type PARSER =
 
     val token: (token -> 'a M.t) -> ('a,'z) partial
 
-    val join: (('a*'b) -> 'c M.t) ->
-              ('a,'z) partial ->
-              ('b,'z) partial ->
-              ('c,'z) partial
+    val join: ('a,'z) partial -> ('b,'z) partial -> (('a*'b),'z) partial
+
+    val join_base: ('a,'z) partial ->
+                   ('b,'z) partial ->
+                   (('a*'b) -> 'c M.t) ->
+                   ('c,'z) partial
 
     val choose: (('a,'z) partial list) -> ('a,'z) partial
 
@@ -50,9 +51,9 @@ module type PARSER =
                    ('b -> 'c M.t) ->
                    ('c,'z) partial
 
-    val many0: ('a,'z) partial -> ('a list -> 'c M.t) -> ('c,'z) partial
+    val many0: ('a,'z) partial -> ('a list,'z) partial
 
-    val many1: ('a,'z) partial -> ('a list -> 'c M.t) -> ('c,'z) partial
+    val many1: ('a,'z) partial -> ('a list,'z) partial
 
     val between: ('a -> 'b -> 'c -> 'r M.t) ->
                  ('a,'z) partial ->
@@ -130,10 +131,10 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
                 (fun s e -> c.failure s e 0 [t])
             ))
 
-    let join
-          (f: ('a*'b) -> 'r M.t)
+    let join_base
           (pp: ('a,'z) partial)
           (qq: ('b,'z) partial)
+          (f: ('a*'b) -> 'r M.t)
           (c: ('r,'z) context)
         : 'z t =
       let cq s a =
@@ -155,10 +156,18 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
       pp cp
 
 
+    let join
+          (pp: ('a,'z) partial)
+          (qq: ('b,'z) partial)
+        : (('a*'b),'z) partial =
+      join_base pp qq M.make
+
+
     let backtrack
           (pp: ('a,'a) partial)
           (c:  ('a,'z) context)
         : 'z t =
+      let s0 = c.state in
       let rec f (p:'a t) (used:tlist): 'z t =
         match p with
         | Accept (s,a,la) ->
@@ -166,7 +175,7 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
         | More (s,fp) ->
            More (s, fun s t -> f (fp s t) (t::used))
         | Reject (s,e,n,la) ->
-           c.failure s e 0 used
+           c.failure s0 e 0 used
       in
       f (make pp c.state) []
 
@@ -181,7 +190,7 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
            | [] ->
               c.failure s e 0 la
            | pp :: rest ->
-              pp (context s rest)
+              consume (pp (context s rest)) (List.rev la)
          and context s l =
            {state = s;
             success = c.success;
@@ -237,21 +246,19 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
 
     let many0
           (pp: ('a,'z) partial)
-          (f:'a list -> 'c M.t)
-        : ('c,'z) partial =
+        : ('a list,'z) partial =
       many_base
         pp (fun _ -> true) (fun _ -> false)
-        [] (fun l a -> a :: l |> M.make) f
+        [] (fun l a -> a :: l |> M.make) (fun l -> List.rev l |> M.make)
 
     let many1
           (pp: ('a,'z) partial)
-          (f:'a list -> 'c M.t)
-        : ('c,'z) partial =
+        : ('a list,'z) partial =
       many_base
         pp
         (fun i -> i <> 0)
         (fun _ -> false)
-        [] (fun l a -> a :: l |> M.make) f
+        [] (fun l a -> a :: l |> M.make) (fun l -> List.rev l |> M.make)
 
 
     let count
@@ -286,8 +293,131 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
           (pp2: ('b,'z) partial)
           (pp3: ('c,'z) partial)
         : ('r,'z) partial =
-      join
-        (fun ((a,b),c) -> f a b c)
-        (join M.make pp1 pp2)
+      join_base
+        (join pp1 pp2)
         pp3
+        (fun ((a,b),c) -> f a b c)
   end
+
+
+
+
+
+
+
+module Character_parser =
+  struct
+    module Token =
+      struct
+        type t = One of char | End
+      end
+
+    module State =
+      struct
+        type t = {line:int; column:int}
+        let start: t = {line = 0; column = 0}
+      end
+
+    include Make (Token) (String) (State)
+
+    let make (pp:('a,'z) partial): 'a t =
+      make pp State.start
+
+    let run_string (s:string) (p:'a t): 'a t =
+      let len = String.length s in
+      let rec run i p: 'a t =
+        if i = len then
+          p
+        else
+          run (i+1) (next p (Token.One s.[i]))
+      in
+      next (run 0 p) Token.End
+
+    let expect_base (f:char->bool) (e:char->error): (char,'z) partial =
+      token
+        (fun t ->
+          match t with
+          | Token.One c when  f c ->
+             M.(update
+                  (fun s ->
+                    State.(if c = '\n' then
+                             {line = s.line + 1; column = 0}
+                           else
+                             {s with column = s.column + 1}))
+                >>= fun _ -> M.make c)
+          | Token.One c ->
+             M.throw (e c)
+          | Token.End ->
+             M.throw ("Unexpected end of stream")
+        )
+
+    let expect (c:char): (char,'z) partial =
+      expect_base
+        (fun c1 -> c1 = c)
+        (fun c1 -> "Expected '" ^ String_.one c ^
+                     "', found '" ^ String_.one c1 ^ "'")
+
+    let letter (c: (char,'z) context) : 'z t =
+      expect_base
+        Char_.is_letter
+        (fun c -> "Expected letter, found '"  ^ String_.one c ^ "'")
+        c
+
+    let digit (c: (char,'z) context) : 'z t =
+      expect_base
+        Char_.is_digit
+        (fun c -> "Expected digit, found '"  ^ String_.one c ^ "'")
+        c
+  end
+
+
+
+
+
+let test (): unit =
+  let open Printf in
+  let open Character_parser in
+  let print_result (p:'a t) (f:'a -> string): unit =
+    let rest la =
+      let rec rest0 l la =
+        match la with
+        | [] ->
+           l
+        | Token.One c :: tl ->
+           rest0 (c::l) tl
+        | Token.End :: tl ->
+           rest0 l tl
+      in
+      String_.of_list (rest0 [] la)
+    in
+    match p with
+    | Accept (s,a,la) ->
+       printf "(%d,%d) found '%s', rest '%s'\n"
+         s.State.line s.State.column
+         (f a)
+         (rest la)
+    | More (s,g) ->
+       printf "(%d,%d) not yet complete\n" s.State.line s.State.column
+    | Reject (s,e,n,la) ->
+       printf "(%d,%d) error '%s', consumed %d, rest '%s'\n"
+         s.State.line s.State.column
+         e n (rest la)
+  in
+  let run (p:'a t) (str:string) (f:'a -> string): unit =
+    print_result (run_string str p) f
+  in
+  printf "Test character parser\n";
+  (*run
+    (choose2 (many1 letter M.make) (many1 digit M.make) |> make)
+    "1234"
+    (fun l -> List.rev l |> String_.of_list);*)
+  (*run
+    (join (many1 letter) (many1 digit) |> make)
+    "hello1234:"
+    (fun (a,b) ->
+      String_.of_list a ^ ","
+      ^ String_.of_list b)*)
+  run
+    ((join letter letter) |> make)
+    "h.ello."
+    (fun (a,b) -> String_.one a ^ String_.one b)
