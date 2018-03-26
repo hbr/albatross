@@ -115,7 +115,13 @@ module type PARSER =
 
 
 
-module Make (Token:ANY) (Error:ANY) (State:ANY)
+
+
+
+
+
+(* The generic reactive parser *)
+module Generic (Token:ANY) (Error:ANY) (State:ANY)
        : (PARSER with type token = Token.t
                   and type error = Error.t
                   and type state = State.t)
@@ -432,6 +438,8 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
 
 
 
+
+
 module Character_parser =
   struct
     module Token =
@@ -445,7 +453,7 @@ module Character_parser =
         let start: t = {line = 0; column = 0}
       end
 
-    include Make (Token) (String) (State)
+    include Generic (Token) (String) (State)
 
     let make (pp:('a,'z) partial): 'a t =
       make pp State.start
