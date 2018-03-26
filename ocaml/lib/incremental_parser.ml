@@ -1,5 +1,29 @@
 open Common
 
+module Sexp =
+  struct
+    type t =
+      | Atom of string
+      | Seq of t array
+    let string(s:t): string =
+      let rec string0 i s =
+        match s with
+        | Atom str ->
+           str
+        | Seq arr ->
+           let s0 =
+             String.concat
+               ""
+               (List.map (string0 (i+1)) (Array.to_list arr))
+           in
+           if i = 0 then
+             s0
+           else
+             "(" ^ s0 ^ ")"
+      in
+      string0 0 s
+  end
+
 
 module type PARSER =
   sig
@@ -32,6 +56,14 @@ module type PARSER =
 
     val token: (token -> 'a M.t) -> ('a,'z) partial
 
+    val succeed: 'a -> ('a,'z) partial
+
+    val (>>=): ('a,'z) partial -> ('a -> 'b M.t) -> ('b,'z) partial
+    val catch: ('a,'z) partial -> (error -> 'a M.t) -> ('a,'z) partial
+
+
+    val and_then: ('b,'z) partial -> ('a,'z) partial -> (('a*'b),'z) partial
+
     val join: ('a,'z) partial -> ('b,'z) partial -> (('a*'b),'z) partial
 
     val join_base: ('a,'z) partial ->
@@ -63,12 +95,22 @@ module type PARSER =
                  ('c,'z) partial ->
                  ('b,'z) partial
 
+    val with_prefix: ('a,'z) partial ->
+                     ('b,'z) partial ->
+                     ('b,'z) partial
+
+    val with_suffix: ('a,'z) partial ->
+                     ('b,'z) partial ->
+                     ('a,'z) partial
+
     val count: int -> int ->
                ('a,'z) partial ->
                ('a list -> 'b M.t) ->
                ('b,'z) partial
 
     val optional: ('a,'z) partial -> ('a option,'z) partial
+
+    val matching: ('a,'z) partial -> ('a,'z) partial -> (Sexp.t,'z) partial
   end
 
 
@@ -120,12 +162,40 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
     let next (p: 'a t) (t:token): 'a t =
       consume p [t]
 
+    let consume_look_ahead (p:'a t) (la:tlist): 'a t =
+      consume p (List.rev la)
 
     module M = Monad.State_with_result (State) (Error)
 
 
     let succeed (a:'a) (c:('a,'z) context): 'z t =
       c.success c.state a 0 []
+
+    let (>>=) (pp:('a,'z) partial) (f:'a -> 'b M.t) (c:('b,'z) context): 'z t =
+      pp {state = c.state;
+          success =
+            (fun s a n la ->
+              M.continue
+                s (f a)
+                (fun s b -> consume_look_ahead (c.success s b n []) la)
+                (fun s e -> c.failure s e n la));
+          failure =
+            c.failure}
+
+    let catch (pp:('a,'z) partial) (f:error -> 'a M.t) (c:('a,'z) context): 'z t =
+      pp {state = c.state;
+          success = c.success;
+          failure =
+            (fun s e n la ->
+              if n = 0 then
+                M.continue
+                  s (f e)
+                  (fun s a -> consume_look_ahead (c.success s a 0 []) la)
+                  (fun s e -> c.failure s e n la)
+              else
+                c.failure s e n la)
+        }
+
 
     let token (f:token -> 'a M.t) (c:('a,'z) context): 'z t =
       More (c.state,
@@ -168,6 +238,25 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
         : (('a*'b),'z) partial =
       join_base pp qq M.make
 
+    let and_then
+          (p2: ('b,'z) partial)
+          (p1: ('a,'z) partial)
+        : ('a*'b,'z) partial =
+      join p1 p2
+
+    let between
+          (pp1: ('a,'z) partial)
+          (pp2: ('b,'z) partial)
+          (pp3: ('c,'z) partial)
+        : ('b,'z) partial =
+      pp1 |> and_then pp2 |> and_then pp3
+      >>= (fun ((a,b),c) -> M.make b)
+
+    let with_prefix (p:('a,'z) partial) (q:('b,'z) partial): ('b,'z) partial =
+      p |> and_then q >>= (fun (_,b) -> M.make b)
+
+    let with_suffix (p:('a,'z) partial) (q:('b,'z) partial): ('a,'z) partial =
+      p |> and_then q >>= (fun (a,_) -> M.make a)
 
     let backtrack
           (pp: ('a,'a) partial)
@@ -196,7 +285,7 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
            | [] ->
               c.failure s e 0 la
            | pp :: rest ->
-              consume (pp (context s rest)) (List.rev la)
+              consume_look_ahead (pp (context s rest)) la
          and context s l =
            {state = s;
             success = c.success;
@@ -220,8 +309,8 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
           (flush: int -> bool)
           (b0:'b)
           (f1: 'b -> 'a -> 'b M.t)
-          (f2: 'b -> 'c M.t)
-          (c:('c,'z) context)
+          (f2: 'b -> 'r M.t)
+          (c:('r,'z) context)
         : 'z t =
       let rec many (i:int) (ntoks:int) (b:'b) (s:state): 'z t =
         let continue s b ntoks (la:tlist) =
@@ -239,7 +328,7 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
                   M.continue
                     s (f1 b a)
                     (fun s b ->
-                      List.fold_left next (many (i+1) (ntoks+n) b s) (List.rev la))
+                      consume_look_ahead (many (i+1) (ntoks+n) b s) la)
                     (fun s e -> c.failure s e n la));
               failure =
                 (fun s e n la ->
@@ -296,10 +385,9 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
           (pp:('a,'z) partial)
           (sep: ('b,'z) partial)
         : ('a list,'z) partial =
-      join_base
-        pp
-        (many0 (join_base sep pp (fun (_,a) -> M.make a)))
-        (fun (a,l) -> a :: l |> M.make)
+      pp |> and_then (with_prefix sep pp |> many0)
+      >>= (fun (a,l) -> a :: l |> M.make)
+
 
     let many0_separated
           (pp:('a,'z) partial)
@@ -309,15 +397,33 @@ module Make (Token:ANY) (Error:ANY) (State:ANY)
         (many1_separated pp sep)
         (succeed [])
 
-    let between
+
+    (* Example: Matching Parentheses:
+
+       parens:  empty
+             |  ( parens ) parens
+
+     *)
+
+    let matching
           (pp1: ('a,'z) partial)
           (pp2: ('b,'z) partial)
-          (pp3: ('c,'z) partial)
-        : ('b,'z) partial =
-      join_base
-        (join pp1 pp2)
-        pp3
-        (fun ((a,b),c) -> M.make b)
+          (c: (Sexp.t,'z) context)
+        : 'z t =
+      let rec f (c:(Sexp.t,'z) context): 'z t =
+        (choose2
+           (
+             pp1 |> and_then f |> and_then pp2 |> and_then f
+             >>= (fun (((_,s1),_),s2) ->
+               match s2 with
+               | Sexp.Atom _ ->
+                  assert false
+               | Sexp.Seq arr ->
+                  M.make (Sexp.Seq (Array.append [|s1|] arr))))
+           (succeed (Sexp.Seq [||])))
+          c
+      in
+      f c
   end
 
 
@@ -344,7 +450,7 @@ module Character_parser =
     let make (pp:('a,'z) partial): 'a t =
       make pp State.start
 
-    let run_string (s:string) (p:'a t): 'a t =
+    let run_string (pp:('a,'a) partial) (s:string): 'a t =
       let len = String.length s in
       let rec run i p: 'a t =
         if i = len then
@@ -352,7 +458,7 @@ module Character_parser =
         else
           run (i+1) (next p (Token.One s.[i]))
       in
-      next (run 0 p) Token.End
+      next (run 0 (make pp)) Token.End
 
     let expect_base (f:char->bool) (e:char->error): (char,'z) partial =
       token
@@ -425,20 +531,16 @@ let test (): unit =
          s.State.line s.State.column
          e n (rest la)
   in
-  let run (p:'a t) (str:string) (f:'a -> string): unit =
-    print_result str (run_string str p) f
+  let run (pp:('a,'a) partial) (str:string) (f:'a -> string): unit =
+    print_result str (run_string pp str) f
   in
   printf "Test character parser\n";
   (*run
-    (choose2 (many1 letter M.make) (many1 digit M.make) |> make)
-    "1234"
-    (fun l -> List.rev l |> String_.of_list);*)
-  run
-    (many1_separated (choose2 (many1 letter) (many1 digit)) (expect ' ') |> make)
+    (many1_separated (choose2 (many1 letter) (many1 digit)) (expect ' '))
     "hello 1 2 3 4 r:"
     (fun l ->
-      String.concat " " (List.map String_.of_list l))
-  (*run
-    ((join letter letter) |> make)
-    "h.ello."
-    (fun (a,b) -> String_.one a ^ String_.one b)*)
+      String.concat " " (List.map String_.of_list l))*)
+  run
+    (matching (expect '(') (expect ')'))
+    "()((()))."
+    Sexp.string
