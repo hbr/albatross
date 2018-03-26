@@ -1,5 +1,51 @@
 open Common
 
+module type CHARACTER_TOKEN =
+  sig
+    type t = Char of char | End
+  end
+
+
+
+module type POSITION =
+  sig
+    type t
+    val line: t -> int
+    val column: t -> int
+    val start: t
+    val next: char -> t -> t
+  end
+
+
+module Position: POSITION =
+  struct
+    type t = {line:int; column:int}
+    let line (p:t): int = p.line
+    let column (p:t): int = p.column
+    let start: t = {line = 0; column = 0}
+    let next_column (p:t): t = {p with column = p.column + 1}
+    let next_line   (p:t): t = {line = p.line +1; column = 0}
+    let next (c:char) (p:t): t =
+      if c = '\n' then
+        next_line p
+      else
+        next_column p
+  end
+
+
+module type PARSE_POSITION =
+  sig
+    type t
+    val start: t -> Position.t
+    val current: t -> Position.t
+    val line: t -> int
+    val column: t -> int
+    val initial: t
+    val next: char -> t -> t
+    val start_of_current: t -> t
+  end
+
+
 module Sexp =
   struct
     type t =
@@ -23,6 +69,31 @@ module Sexp =
       in
       string0 0 s
   end
+
+
+
+module Character_token: CHARACTER_TOKEN =
+  struct
+    type t = Char of char | End
+  end
+
+
+module Parse_position =
+  struct
+    type t = {start: Position.t; current: Position.t}
+    let start   (p:t): Position.t = p.start
+    let current (p:t): Position.t = p.current
+    let line (p:t): int = Position.line p.current
+    let column (p:t): int = Position.column p.current
+    let initial: t = {start = Position.start; current = Position.start}
+    let next (c:char) (p:t): t =
+      {p with current = Position.next c p.current}
+    let start_of_current (p:t): t =
+      {p with start = p.current}
+  end
+
+
+
 
 
 module type PARSER =
@@ -112,11 +183,6 @@ module type PARSER =
 
     val matching: ('a,'z) partial -> ('a,'z) partial -> (Sexp.t,'z) partial
   end
-
-
-
-
-
 
 
 
@@ -435,11 +501,6 @@ module Generic (Token:ANY) (Error:ANY) (State:ANY)
 
 
 
-
-
-
-
-
 module Character_parser =
   struct
     module Token =
@@ -447,16 +508,10 @@ module Character_parser =
         type t = One of char | End
       end
 
-    module State =
-      struct
-        type t = {line:int; column:int}
-        let start: t = {line = 0; column = 0}
-      end
-
-    include Generic (Token) (String) (State)
+    include Generic (Character_token) (String) (Parse_position)
 
     let make (pp:('a,'z) partial): 'a t =
-      make pp State.start
+      make pp Parse_position.initial
 
     let run_string (pp:('a,'a) partial) (s:string): 'a t =
       let len = String.length s in
@@ -464,25 +519,21 @@ module Character_parser =
         if i = len then
           p
         else
-          run (i+1) (next p (Token.One s.[i]))
+          run (i+1) (next p (Character_token.Char s.[i]))
       in
-      next (run 0 (make pp)) Token.End
+      next (run 0 (make pp)) Character_token.End
 
     let expect_base (f:char->bool) (e:char->error): (char,'z) partial =
       token
         (fun t ->
           match t with
-          | Token.One c when  f c ->
+          | Character_token.Char c when  f c ->
              M.(update
-                  (fun s ->
-                    State.(if c = '\n' then
-                             {line = s.line + 1; column = 0}
-                           else
-                             {s with column = s.column + 1}))
+                  (Parse_position.next c)
                 >>= fun _ -> M.make c)
-          | Token.One c ->
+          | Character_token.Char c ->
              M.throw (e c)
-          | Token.End ->
+          | Character_token.End ->
              M.throw ("Unexpected end of stream")
         )
 
@@ -518,9 +569,9 @@ let test (): unit =
         match la with
         | [] ->
            l
-        | Token.One c :: tl ->
+        | Character_token.Char c :: tl ->
            rest0 (c::l) tl
-        | Token.End :: tl ->
+        | Character_token.End :: tl ->
            rest0 l tl
       in
       String_.of_list (rest0 [] la)
@@ -529,14 +580,18 @@ let test (): unit =
     match p with
     | Accept (s,a,n,la) ->
        printf "(%d,%d) found '%s', consumed %d, rest '%s'\n"
-         s.State.line s.State.column
+         (Parse_position.line s)
+         (Parse_position.column s)
          (f a)
          n (rest la)
     | More (s,g) ->
-       printf "(%d,%d) not yet complete\n" s.State.line s.State.column
+       printf "(%d,%d) not yet complete\n"
+         (Parse_position.line s)
+         (Parse_position.column s)
     | Reject (s,e,n,la) ->
        printf "(%d,%d) error %s, consumed %d, rest '%s'\n"
-         s.State.line s.State.column
+         (Parse_position.line s)
+         (Parse_position.column s)
          e n (rest la)
   in
   let run (pp:('a,'a) partial) (str:string) (f:'a -> string): unit =
