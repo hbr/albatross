@@ -34,3 +34,13 @@ sig
   val list: t -> char list
   val of_list: char list -> t
 end
+
+module type SEXP =
+  sig
+    type t =
+      | Atom of string
+      | Seq of t array
+    val string: t -> string
+  end
+
+module Sexp: SEXP

@@ -57,3 +57,38 @@ module String_ =
       let bs = str cs 0 in
       Bytes.unsafe_to_string bs
   end
+
+
+
+
+module type SEXP =
+  sig
+    type t =
+      | Atom of string
+      | Seq of t array
+    val string: t -> string
+  end
+
+module Sexp =
+  struct
+    type t =
+      | Atom of string
+      | Seq of t array
+    let string(s:t): string =
+      let rec string0 i s =
+        match s with
+        | Atom str ->
+           str
+        | Seq arr ->
+           let s0 =
+             String.concat
+               ""
+               (List.map (string0 (i+1)) (Array.to_list arr))
+           in
+           if i = 0 then
+             s0
+           else
+             "(" ^ s0 ^ ")"
+      in
+      string0 0 s
+  end
