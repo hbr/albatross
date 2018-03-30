@@ -85,7 +85,8 @@ module type STATE_WITH_RESULT =
 
 module Make (M:MONAD0): MONAD with type 'a t = 'a M.t
 
-module Result (Error:Common.ANY): RESULT
+module Result (Error:Common.ANY): RESULT with type error = Error.t and
+                                              type 'a t = ('a,Error.t) result
 
 module Result_in (M:MONAD) (Error:Common.ANY): RESULT_IN
 
