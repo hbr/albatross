@@ -62,6 +62,19 @@ module type STATE =
 
 
 
+module type STATE_INTO =
+  sig
+    include MONAD
+    module M: MONAD
+    type state
+    val lift: 'a M.t -> 'a t
+    val get: state t
+    val put: state -> unit t
+    val update: (state -> state) -> unit t
+  end
+
+
+
 
 module type STATE_WITH_RESULT =
   sig
@@ -90,7 +103,12 @@ module Result (Error:Common.ANY): RESULT with type error = Error.t and
 
 module Result_in (M:MONAD) (Error:Common.ANY): RESULT_IN
 
+
 module State (St:Common.ANY): STATE with type state = St.t
+
+
+module State_into (M:MONAD) (St:Common.ANY)
+       : STATE_INTO with type state = St.t
 
 
 module State_with_result (S:Common.ANY) (Error:Common.ANY)

@@ -62,6 +62,17 @@ module type STATE =
   end
 
 
+module type STATE_INTO =
+  sig
+    include MONAD
+    module M: MONAD
+    type state
+    val lift: 'a M.t -> 'a t
+    val get: state t
+    val put: state -> unit t
+    val update: (state -> state) -> unit t
+  end
+
 
 
 module type STATE_WITH_RESULT =
@@ -251,6 +262,40 @@ module State (St: Common.ANY): STATE with type state = St.t =
 
 
 
+
+
+
+module State_into (M:MONAD) (St:Common.ANY)
+       : STATE_INTO with type state = St.t
+  =
+  struct
+    module M = M
+    type state = St.t
+
+    include
+      Make(
+          struct
+            type 'a t = state -> ('a * state) M.t
+            let make (a:'a): 'a t =
+              fun s -> M.make (a,s)
+            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+              (fun s ->
+                M.(m s >>= fun (x,sx) -> f x sx))
+          end
+        )
+
+    let get: state t =
+      fun s -> M.make (s,s)
+
+    let put (s:state): unit t =
+      fun _ -> M.make ((),s)
+
+    let update (f:state->state): unit t =
+      fun s -> M.make ((),f s)
+
+    let lift (m:'a M.t): 'a t =
+      fun s -> M.(m >>= fun x -> make (x,s))
+  end (* State_into *)
 
 
 
