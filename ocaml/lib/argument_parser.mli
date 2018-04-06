@@ -28,6 +28,8 @@ module type S =
                (key*spec*doc) list ->
                anon ->
                (a,error) result
+
+    val string_of_error: error -> string
   end
 
 

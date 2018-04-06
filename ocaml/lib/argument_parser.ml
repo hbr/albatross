@@ -28,6 +28,8 @@ module type S =
                (key*spec*doc) list ->
                anon ->
                (a,error) result
+
+    val string_of_error: error -> string
   end
 
 
@@ -91,4 +93,23 @@ module Make (A:ANY) =
             parse (anon arg a) (i+1)
       in
       parse start 0
+
+    let string_of_error (e:error): string =
+      let option_expect k s =
+        "option '" ^ k ^ "' expects a " ^
+          (match s with
+           | Unit _ ->
+              assert false
+           | String _ ->
+              "string"
+           | Int _ ->
+              "integer")
+      in
+      match e with
+      | Unknown_option str ->
+         "unknown option '" ^ str ^ "'"
+      | Missing_argument (k,s,d) ->
+         "missing argument; " ^ option_expect k s
+      | Invalid_argument (k,s,d,arg) ->
+         "invalid argument '" ^ arg ^ "'; " ^ option_expect k s
   end
