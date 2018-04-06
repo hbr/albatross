@@ -2,7 +2,7 @@ module type IO_TYPE =
   sig
     include Monad.MONAD
     val exit: int -> 'a t
-    val execute: 'a t -> unit
+    val execute: unit t -> unit
     val command_line: string array t
     val get_line:    string option t
     val put_string:  string -> unit t

@@ -349,7 +349,7 @@ module type IO_TYPE =
   sig
     include Monad.MONAD
     val exit: int -> 'a t
-    val execute: 'a t -> unit
+    val execute: unit t -> unit
     val command_line: string array t
     val get_line:    string option t
     val put_string:  string -> unit t
@@ -393,7 +393,7 @@ module IO: IO_TYPE =
     let exit (code:int): 'a t =
       fun fs -> Error code, fs
 
-    let execute (p:'a t): unit =
+    let execute (p:unit t): unit =
       let r,fs = p (File_system.make ()) in
       File_system.flush_all fs;
       Pervasives.exit
