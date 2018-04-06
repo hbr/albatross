@@ -34,6 +34,16 @@ module String_ =
     let one (c:char): string =
       String.make 1 c
 
+    let find (f:char -> bool) (start:int) (s:string): int =
+      let len = String.length s in
+      let rec find i =
+        if i = len || f s.[i] then
+          i
+        else
+          find (i+1)
+      in
+      find start
+
     let list (s:string): char list =
       let rec list cs i =
         if i = 0 then

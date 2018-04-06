@@ -31,6 +31,7 @@ module String_:
 sig
   type t = string
   val one: char -> t
+  val find: (char -> bool) -> int -> t -> int
   val list: t -> char list
   val of_list: char list -> t
 end
