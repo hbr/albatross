@@ -12,17 +12,19 @@ module type IO_TYPE =
     val put_stderr_line:    string -> unit t
     val put_stderr_newline: unit t
 
-    type file_descr
-    val stdin:  file_descr
-    val stdout: file_descr
-    val stderr: file_descr
-    val getc: file_descr -> char option t
-    val putc: file_descr -> char -> unit t
-    val open_for_read:  string -> file_descr option t
-    val open_for_write: string -> file_descr option t
-    val create_file:    string -> file_descr option t
-    val close_file: file_descr -> unit t
-    val flush: file_descr -> unit t
+    type in_file
+    type out_file
+    val stdin:  in_file
+    val stdout: out_file
+    val stderr: out_file
+    val getc: in_file -> char option t
+    val putc: out_file -> char -> unit t
+    val open_for_read:  string -> in_file option t
+    val open_for_write: string -> out_file option t
+    val create_file:    string -> out_file option t
+    val close_in_file:  in_file -> unit t
+    val close_out_file: out_file -> unit t
+    val flush: out_file -> unit t
   end
 
 

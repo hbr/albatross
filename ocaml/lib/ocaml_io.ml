@@ -114,17 +114,19 @@ sig
   val put_stderr_line: t -> string -> unit
   val put_stderr_newline: t -> unit
 
-  type file_descr
-  val stdin: file_descr
-  val stdout: file_descr
-  val stderr: file_descr
-  val getc: t -> file_descr -> char option
-  val putc: t -> file_descr -> char -> unit
-  val open_for_read: t -> string -> file_descr option
-  val open_for_write: t -> string -> file_descr option
-  val create_file: t -> string -> file_descr option
-  val close_file:  t -> file_descr -> unit
-  val flush: t -> file_descr -> unit
+  type in_file
+  type out_file
+  val stdin: in_file
+  val stdout: out_file
+  val stderr: out_file
+  val getc: t -> in_file -> char option
+  val putc: t -> out_file -> char -> unit
+  val open_for_read: t -> string -> in_file option
+  val open_for_write: t -> string -> out_file option
+  val create_file: t -> string -> out_file option
+  val close_in_file:   t -> in_file -> unit
+  val close_out_file:  t -> out_file -> unit
+  val flush: t -> out_file -> unit
 end
   =
   struct
@@ -137,7 +139,8 @@ end
               mutable first_free: int;
               line_buf: Buffer.t}
 
-    type file_descr = int
+    type in_file = int
+    type out_file = int
 
     let buffer_size = 4096
 
@@ -178,7 +181,7 @@ end
       }
 
 
-    let put_to_files (fs:t) (file:file): file_descr option =
+    let put_to_files (fs:t) (file:file): int option =
       if fs.first_free >= 2 then
         begin
           let fd = fs.first_free in
@@ -199,7 +202,7 @@ end
           Some nfiles
         end
 
-    let writable_buffer (fs:t) (fd:file_descr): Buffer.t =
+    let writable_buffer (fs:t) (fd:int): Buffer.t =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Write (_,b) ->
@@ -207,7 +210,7 @@ end
       | _ ->
          assert false
 
-    let readable_buffer (fs:t) (fd:file_descr): Buffer.t =
+    let readable_buffer (fs:t) (fd:int): Buffer.t =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (_,b) ->
@@ -216,14 +219,14 @@ end
          assert false
 
 
-    let getc (fs:t) (fd:file_descr): char option =
+    let getc (fs:t) (fd:in_file): char option =
       Buffer.getc (readable_buffer fs fd)
 
-    let putc (fs:t) (fd:file_descr) (c:char): unit =
+    let putc (fs:t) (fd:out_file) (c:char): unit =
       Buffer.putc (writable_buffer fs fd) c
 
 
-    let open_for_read (fs:t) (path:string): file_descr option =
+    let open_for_read (fs:t) (path:string): in_file option =
       try
         put_to_files
           fs
@@ -231,7 +234,7 @@ end
       with Unix.Unix_error _ ->
         None
 
-    let open_for_write (fs:t) (path:string): file_descr option =
+    let open_for_write (fs:t) (path:string): out_file option =
       try
         put_to_files
           fs
@@ -239,7 +242,7 @@ end
       with Unix.Unix_error _ ->
         None
 
-    let create_file (fs:t) (path:string): file_descr option =
+    let create_file (fs:t) (path:string): out_file option =
       try
         put_to_files
           fs
@@ -247,7 +250,7 @@ end
       with Unix.Unix_error _ ->
         None
 
-    let unix_file_descriptor (fs:t) (fd:file_descr): Unix.file_descr =
+    let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (fd,b) -> fd
@@ -256,7 +259,7 @@ end
          assert false
 
 
-    let close_file (fs:t) (fd:file_descr): unit =
+    let close_file (fs:t) (fd:int): unit =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (fd,b) ->
@@ -267,8 +270,14 @@ end
       | Free _ ->
          ()
 
+    let close_in_file (fs:t) (fd:in_file): unit =
+      close_file fs fd
 
-    let flush (fs:t) (fd:file_descr) : unit =
+    let close_out_file (fs:t) (fd:out_file): unit =
+      close_file fs fd
+
+
+    let flush (fs:t) (fd:out_file) : unit =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Write (_,b) ->
@@ -281,11 +290,11 @@ end
         flush fs i
       done
 
-    let stdin: file_descr = 0
+    let stdin: in_file = 0
 
-    let stdout: file_descr = 1
+    let stdout: out_file = 1
 
-    let stderr: file_descr = 2
+    let stderr: out_file = 2
 
     let stdin_buffer (fs:t): Buffer.t =
       readable_buffer fs stdin
@@ -299,7 +308,7 @@ end
       writable_buffer fs stderr
 
 
-    let get_line_file (fs:t) (fd:file_descr): string option =
+    let get_line_file (fs:t) (fd:in_file): string option =
       assert (fd < Array.length fs.files);
       let b = readable_buffer fs fd in
       Buffer.reset fs.line_buf;
@@ -381,17 +390,19 @@ module type IO_TYPE =
     val put_stderr_line:    string -> unit t
     val put_stderr_newline: unit t
 
-    type file_descr
-    val stdin:  file_descr
-    val stdout: file_descr
-    val stderr: file_descr
-    val getc: file_descr -> char option t
-    val putc: file_descr -> char -> unit t
-    val open_for_read:  string -> file_descr option t
-    val open_for_write: string -> file_descr option t
-    val create_file:    string -> file_descr option t
-    val close_file: file_descr -> unit t
-    val flush: file_descr -> unit t
+    type in_file
+    type out_file
+    val stdin:  in_file
+    val stdout: out_file
+    val stderr: out_file
+    val getc: in_file -> char option t
+    val putc: out_file -> char -> unit t
+    val open_for_read:  string -> in_file option t
+    val open_for_write: string -> out_file option t
+    val create_file:    string -> out_file option t
+    val close_in_file:  in_file -> unit t
+    val close_out_file: out_file -> unit t
+    val flush: out_file -> unit t
   end
 
 
@@ -414,7 +425,8 @@ module IO: IO_TYPE =
               )
           end)
 
-    type file_descr = File_system.file_descr
+    type in_file = File_system.in_file
+    type out_file = File_system.out_file
 
     let exit (code:int): 'a t =
       fun fs -> Error code, fs
@@ -454,28 +466,31 @@ module IO: IO_TYPE =
     let put_stderr_line (str:string): unit t =
       fun fs -> Ok (File_system.put_stderr_line fs str), fs
 
-    let getc (fd:file_descr): char option t =
+    let getc (fd:in_file): char option t =
       fun fs -> Ok (File_system.getc fs fd), fs
 
-    let putc (fd:file_descr) (c:char): unit t =
+    let putc (fd:out_file) (c:char): unit t =
       fun fs -> Ok (File_system.putc fs fd c), fs
 
-    let stdin:  file_descr = File_system.stdin
-    let stdout: file_descr = File_system.stdout
-    let stderr: file_descr = File_system.stderr
+    let stdin:  in_file = File_system.stdin
+    let stdout: out_file = File_system.stdout
+    let stderr: out_file = File_system.stderr
 
-    let open_for_read (path:string): file_descr option t =
+    let open_for_read (path:string): in_file option t =
       fun fs -> Ok (File_system.open_for_read fs path), fs
 
-    let open_for_write (path:string): file_descr option t =
+    let open_for_write (path:string): out_file option t =
       fun fs -> Ok (File_system.open_for_write fs path), fs
 
-    let create_file (path:string): file_descr option t =
+    let create_file (path:string): out_file option t =
       fun fs -> Ok (File_system.create_file fs path), fs
 
-    let close_file (fd:file_descr): unit t =
-      fun fs -> Ok (File_system.close_file fs fd), fs
+    let close_in_file (fd:in_file): unit t =
+      fun fs -> Ok (File_system.close_in_file fs fd), fs
 
-    let flush (fd:file_descr): unit t =
+    let close_out_file (fd:out_file): unit t =
+      fun fs -> Ok (File_system.close_out_file fs fd), fs
+
+    let flush (fd:out_file): unit t =
       fun fs -> Ok (File_system.flush fs fd), fs
   end (* IO *)
