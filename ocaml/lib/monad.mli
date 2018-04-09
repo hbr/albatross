@@ -114,3 +114,13 @@ module State_into (M:MONAD) (St:Common.ANY)
 module State_with_result (S:Common.ANY) (Error:Common.ANY)
        : STATE_WITH_RESULT with type state = S.t and
                                 type error = Error.t
+module String_buffer:
+sig
+  include MONAD
+  val length: int t
+  val putc: char -> unit t
+  val getc: int -> char t
+  val put_string: string -> unit t
+  val put_substring: int -> int -> string -> unit t
+  val run: int -> 'a t -> string
+end

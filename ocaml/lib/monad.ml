@@ -328,3 +328,43 @@ module State_with_result (S:Common.ANY) (Error:Common.ANY) =
           | Error e ->
              f2 s e
   end (* State_with_result *)
+
+
+module String_buffer =
+  struct
+    include
+      Make(
+          struct
+            type 'a t = Buffer.t -> 'a * Buffer.t
+            let make (a:'a): 'a t =
+              fun buf -> a,buf
+            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+              fun buf ->
+              let a,buf1 = m buf in
+              f a buf1
+          end)
+
+    let getc (i:int): char t =
+      fun buf ->
+      try
+        Buffer.nth buf i,buf
+      with Invalid_argument _ ->
+        assert false
+
+    let length: int t =
+      fun buf -> Buffer.length buf,buf
+
+    let putc (c:char): unit t =
+      fun buf -> Buffer.add_char buf c; (),buf
+
+    let put_string (s:string): unit t =
+      fun buf -> Buffer.add_string buf s; (),buf
+
+    let put_substring (start:int) (len:int) (s:string): unit t =
+      fun buf -> Buffer.add_substring buf s start len; (),buf
+
+    let run (n:int) (m:'a t): string =
+      assert (0 <= n);
+      let _,buf = m (Buffer.create n) in
+      Buffer.contents buf
+  end
