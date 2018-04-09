@@ -357,6 +357,13 @@ module String_buffer =
     let putc (c:char): unit t =
       fun buf -> Buffer.add_char buf c; (),buf
 
+    let put_blanks (n:int): unit t =
+      fun buf ->
+      for i = 0 to n - 1 do
+        Buffer.add_char buf ' '
+      done;
+      (), buf
+
     let put_string (s:string): unit t =
       fun buf -> Buffer.add_string buf s; (),buf
 
