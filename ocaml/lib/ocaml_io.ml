@@ -94,7 +94,7 @@ end =
       for i = 0 to String.length s - 1 do
         putc b s.[i]
       done
-  end
+  end (* Buffer *)
 
 
 
@@ -106,13 +106,6 @@ sig
   type t
   val make: unit -> t
   val flush_all: t -> unit
-  val get_line: t -> string option
-  val put_string: t -> string -> unit
-  val put_line: t -> string -> unit
-  val put_newline: t -> unit
-  val put_stderr_string: t -> string -> unit
-  val put_stderr_line: t -> string -> unit
-  val put_stderr_newline: t -> unit
 
   type in_file
   type out_file
@@ -120,12 +113,13 @@ sig
   val stdout: out_file
   val stderr: out_file
   val getc: t -> in_file -> char option
+  val getline: t -> in_file -> string option
   val putc: t -> out_file -> char -> unit
   val open_for_read: t -> string -> in_file option
   val open_for_write: t -> string -> out_file option
   val create_file: t -> string -> out_file option
-  val close_in_file:   t -> in_file -> unit
-  val close_out_file:  t -> out_file -> unit
+  val close_in:   t -> in_file -> unit
+  val close_out:  t -> out_file -> unit
   val flush: t -> out_file -> unit
 end
   =
@@ -270,10 +264,10 @@ end
       | Free _ ->
          ()
 
-    let close_in_file (fs:t) (fd:in_file): unit =
+    let close_in (fs:t) (fd:in_file): unit =
       close_file fs fd
 
-    let close_out_file (fs:t) (fd:out_file): unit =
+    let close_out (fs:t) (fd:out_file): unit =
       close_file fs fd
 
 
@@ -308,7 +302,7 @@ end
       writable_buffer fs stderr
 
 
-    let get_line_file (fs:t) (fd:in_file): string option =
+    let getline (fs:t) (fd:in_file): string option =
       assert (fd < Array.length fs.files);
       let b = readable_buffer fs fd in
       Buffer.reset fs.line_buf;
@@ -337,33 +331,6 @@ end
           end
       in
       read 0
-
-    let get_line (fs:t): string option =
-      Buffer.flush (stdout_buffer fs);
-      get_line_file fs 0
-
-    let put_string (fs:t) (s:string): unit =
-      Buffer.put_string (stdout_buffer fs) s
-
-    let put_line (fs:t) (s:string): unit =
-      let b = stdout_buffer fs in
-      Buffer.put_string b s;
-      Buffer.putc b '\n'
-
-    let put_newline (fs:t): unit =
-      let b = stdout_buffer fs in
-      Buffer.putc b '\n'
-
-    let put_stderr_string (fs:t) (s:string): unit =
-      Buffer.put_string (stderr_buffer fs) s
-
-    let put_stderr_line (fs:t) (s:string): unit =
-      let b = stderr_buffer fs in
-      Buffer.put_string b s;
-      Buffer.putc b '\n'
-
-    let put_stderr_newline (fs:t): unit =
-      Buffer.putc (stderr_buffer fs) '\n'
   end (* File_system *)
 
 
@@ -382,13 +349,6 @@ module type IO_TYPE =
     val exit: int -> 'a t
     val execute: unit t -> unit
     val command_line: string array t
-    val get_line:    string option t
-    val put_string:  string -> unit t
-    val put_line:    string -> unit t
-    val put_newline: unit t
-    val put_stderr_string:  string -> unit t
-    val put_stderr_line:    string -> unit t
-    val put_stderr_newline: unit t
 
     type in_file
     type out_file
@@ -397,13 +357,27 @@ module type IO_TYPE =
     val stderr: out_file
     val getc: in_file -> char option t
     val putc: out_file -> char -> unit t
+    val get_line: in_file -> string option t
+    val put_string: out_file -> string -> unit t
     val open_for_read:  string -> in_file option t
     val open_for_write: string -> out_file option t
     val create_file:    string -> out_file option t
-    val close_in_file:  in_file -> unit t
-    val close_out_file: out_file -> unit t
+    val close_in:  in_file -> unit t
+    val close_out: out_file -> unit t
     val flush: out_file -> unit t
+
+    val get_line_in:    string option t
+    val putc_out: char -> unit t
+    val putc_err: char -> unit t
+    val put_string_out:  string -> unit t
+    val put_string_err:  string -> unit t
+    val put_line_out:    string -> unit t
+    val put_line_err:    string -> unit t
   end
+
+
+
+
 
 
 module IO: IO_TYPE =
@@ -428,6 +402,10 @@ module IO: IO_TYPE =
     type in_file = File_system.in_file
     type out_file = File_system.out_file
 
+    let stdin:  in_file = File_system.stdin
+    let stdout: out_file = File_system.stdout
+    let stderr: out_file = File_system.stderr
+
     let exit (code:int): 'a t =
       fun fs -> Error code, fs
 
@@ -444,37 +422,25 @@ module IO: IO_TYPE =
     let command_line: string array t =
       fun fs -> Ok Sys.argv, fs
 
-    let get_line: string Option.t t =
-      fun fs ->
-      Ok (File_system.get_line fs), fs
-
-    let put_string (str:string): unit t =
-      fun fs -> Ok (File_system.put_string fs str),fs
-
-    let put_newline: unit t =
-      fun fs -> Ok (File_system.put_newline fs),fs
-
-    let put_line (str:string): unit t =
-      fun fs -> Ok (File_system.put_line fs str),fs
-
-    let put_stderr_string (str:string): unit t =
-      fun fs -> Ok (File_system.put_stderr_string fs str), fs
-
-    let put_stderr_newline: unit t =
-      fun fs -> Ok (File_system.put_stderr_newline fs), fs
-
-    let put_stderr_line (str:string): unit t =
-      fun fs -> Ok (File_system.put_stderr_line fs str), fs
-
     let getc (fd:in_file): char option t =
       fun fs -> Ok (File_system.getc fs fd), fs
+
+    let get_line (fd:in_file): string option t =
+      fun fs ->
+      Ok (File_system.getline fs fd), fs
 
     let putc (fd:out_file) (c:char): unit t =
       fun fs -> Ok (File_system.putc fs fd c), fs
 
-    let stdin:  in_file = File_system.stdin
-    let stdout: out_file = File_system.stdout
-    let stderr: out_file = File_system.stderr
+    let put_string (fd:out_file) (str:string): unit t =
+      fun fs ->
+      for i = 0 to String.length str - 1 do
+        File_system.putc fs fd str.[i]
+      done;
+      Ok (), fs
+
+    let put_line (fd:out_file) (str:string): unit t =
+      put_string fd str >> putc fd '\n'
 
     let open_for_read (path:string): in_file option t =
       fun fs -> Ok (File_system.open_for_read fs path), fs
@@ -485,12 +451,39 @@ module IO: IO_TYPE =
     let create_file (path:string): out_file option t =
       fun fs -> Ok (File_system.create_file fs path), fs
 
-    let close_in_file (fd:in_file): unit t =
-      fun fs -> Ok (File_system.close_in_file fs fd), fs
+    let close_in (fd:in_file): unit t =
+      fun fs -> Ok (File_system.close_in fs fd), fs
 
-    let close_out_file (fd:out_file): unit t =
-      fun fs -> Ok (File_system.close_out_file fs fd), fs
+    let close_out (fd:out_file): unit t =
+      fun fs -> Ok (File_system.close_out fs fd), fs
 
     let flush (fd:out_file): unit t =
       fun fs -> Ok (File_system.flush fs fd), fs
+
+    let get_line_in: string option t =
+      fun fs ->
+      File_system.flush fs stdout;
+      Ok (File_system.getline fs stdin), fs
+
+    let putc_out (c:char): unit t =
+      fun fs ->
+      File_system.putc fs stdout c;
+      Ok (), fs
+
+    let putc_err (c:char): unit t =
+      fun fs ->
+      File_system.putc fs stderr c;
+      Ok (), fs
+
+    let put_string_out (str:string): unit t =
+      put_string stdout str
+
+    let put_string_err (str:string): unit t =
+      put_string stderr str
+
+    let put_line_out (str:string): unit t =
+      put_line stdout str
+
+    let put_line_err (str:string): unit t =
+      put_line stderr str
   end (* IO *)
