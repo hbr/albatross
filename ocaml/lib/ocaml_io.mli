@@ -19,6 +19,7 @@ module type IO_TYPE =
     val open_for_write: string -> file_descr option t
     val create_file:    string -> file_descr option t
     val close_file: file_descr -> unit t
+    val flush: file_descr -> unit t
   end
 
 

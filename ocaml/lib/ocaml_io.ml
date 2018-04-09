@@ -121,6 +121,7 @@ sig
   val open_for_write: t -> string -> file_descr option
   val create_file: t -> string -> file_descr option
   val close_file:  t -> file_descr -> unit
+  val flush: t -> file_descr -> unit
 end
   =
   struct
@@ -253,16 +254,28 @@ end
 
 
     let close_file (fs:t) (fd:file_descr): unit =
-      Unix.close (unix_file_descriptor fs fd)
+      assert (fd < Array.length fs.files);
+      match fs.files.(fd) with
+      | Read (fd,b) ->
+         Unix.close fd
+      | Write (fd,b) ->
+         Buffer.flush b;
+         Unix.close fd
+      | Free _ ->
+         ()
 
+
+    let flush (fs:t) (fd:file_descr) : unit =
+      assert (fd < Array.length fs.files);
+      match fs.files.(fd) with
+      | Write (_,b) ->
+         Buffer.flush b
+      | _ ->
+           ()
 
     let flush_all (fs:t): unit =
       for i = 0 to Array.length fs.files - 1 do
-        match fs.files.(i) with
-        | Write (_,b) ->
-           Buffer.flush b
-        | _ ->
-           ()
+        flush fs i
       done
 
     let stdin_buffer (fs:t): Buffer.t =
@@ -333,7 +346,7 @@ end
 
     let put_stderr_newline (fs:t): unit =
       Buffer.putc (stderr_buffer fs) '\n'
-  end
+  end (* File_system *)
 
 
 
@@ -366,6 +379,7 @@ module type IO_TYPE =
     val open_for_write: string -> file_descr option t
     val create_file:    string -> file_descr option t
     val close_file: file_descr -> unit t
+    val flush: file_descr -> unit t
   end
 
 
@@ -445,4 +459,7 @@ module IO: IO_TYPE =
 
     let close_file (fd:file_descr): unit t =
       fun fs -> Ok (File_system.close_file fs fd), fs
+
+    let flush (fd:file_descr): unit t =
+      fun fs -> Ok (File_system.flush fs fd), fs
   end (* IO *)
