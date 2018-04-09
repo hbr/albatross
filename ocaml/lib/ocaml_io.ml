@@ -22,8 +22,8 @@ sig
 end =
   struct
     type t = {
-        mutable rp: int; (* The content of the buffer is between the read and the
-                            write pointer. *)
+        mutable rp: int; (* The content of the buffer is between the read and
+                            the write pointer. *)
         mutable wp: int;
         mutable flag: bool; (* ok flag *)
         read:  Bytes.t -> int -> int -> int; (* refill function *)
@@ -115,6 +115,9 @@ sig
   val put_stderr_newline: t -> unit
 
   type file_descr
+  val stdin: file_descr
+  val stdout: file_descr
+  val stderr: file_descr
   val getc: t -> file_descr -> char option
   val putc: t -> file_descr -> char -> unit
   val open_for_read: t -> string -> file_descr option
@@ -278,16 +281,22 @@ end
         flush fs i
       done
 
+    let stdin: file_descr = 0
+
+    let stdout: file_descr = 1
+
+    let stderr: file_descr = 2
+
     let stdin_buffer (fs:t): Buffer.t =
-      readable_buffer fs 0
+      readable_buffer fs stdin
 
 
     let stdout_buffer (fs:t): Buffer.t =
-      writable_buffer fs 1
+      writable_buffer fs stdout
 
 
     let stderr_buffer (fs:t): Buffer.t =
-      writable_buffer fs 2
+      writable_buffer fs stderr
 
 
     let get_line_file (fs:t) (fd:file_descr): string option =
@@ -373,6 +382,9 @@ module type IO_TYPE =
     val put_stderr_newline: unit t
 
     type file_descr
+    val stdin:  file_descr
+    val stdout: file_descr
+    val stderr: file_descr
     val getc: file_descr -> char option t
     val putc: file_descr -> char -> unit t
     val open_for_read:  string -> file_descr option t
@@ -447,6 +459,10 @@ module IO: IO_TYPE =
 
     let putc (fd:file_descr) (c:char): unit t =
       fun fs -> Ok (File_system.putc fs fd c), fs
+
+    let stdin:  file_descr = File_system.stdin
+    let stdout: file_descr = File_system.stdout
+    let stderr: file_descr = File_system.stderr
 
     let open_for_read (path:string): file_descr option t =
       fun fs -> Ok (File_system.open_for_read fs path), fs

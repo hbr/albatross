@@ -13,6 +13,9 @@ module type IO_TYPE =
     val put_stderr_newline: unit t
 
     type file_descr
+    val stdin:  file_descr
+    val stdout: file_descr
+    val stderr: file_descr
     val getc: file_descr -> char option t
     val putc: file_descr -> char -> unit t
     val open_for_read:  string -> file_descr option t
