@@ -4,6 +4,7 @@ module type ANY =
   end
 
 
+
 module Either:
 sig
   type ('a,'b) t =
@@ -27,6 +28,8 @@ sig
   val is_digit:  t -> bool
 end
 
+
+
 module String_:
 sig
   type t = string
@@ -35,6 +38,16 @@ sig
   val list: t -> char list
   val of_list: char list -> t
 end
+
+
+
+module List_:
+sig
+  type 'a t = 'a list
+  val find: ('a -> bool) ->'a t -> 'a option
+end
+
+
 
 module type SEXP =
   sig

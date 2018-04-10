@@ -70,6 +70,16 @@ module String_ =
 
 
 
+module List_ =
+  struct
+    type 'a t = 'a list
+    let find (f:'a -> bool) (l:'a t): 'a option =
+      try
+        Some (List.find f l)
+      with Not_found ->
+        None
+  end
+
 
 module type SEXP =
   sig
