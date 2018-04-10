@@ -7,7 +7,7 @@ module type S =
 
     type key = string (* option key, must start with '-' *)
 
-    type doc = string (* option description *)
+    type doc = string list (* option description *)
 
     type spec (* specification of an option *)
       =
@@ -30,6 +30,8 @@ module type S =
                (a,error) result
 
     val string_of_error: error -> string
+
+    val argument_type: spec -> string
   end
 
 

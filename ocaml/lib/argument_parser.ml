@@ -7,7 +7,7 @@ module type S =
 
     type key = string (* option key, must start with '-' *)
 
-    type doc = string (* option description *)
+    type doc = string list (* option description *)
 
     type spec (* specification of an option *)
       =
@@ -30,6 +30,8 @@ module type S =
                (a,error) result
 
     val string_of_error: error -> string
+
+    val argument_type: spec -> string
   end
 
 
@@ -37,7 +39,7 @@ module Make (A:ANY) =
   struct
     type a = A.t
     type key = string
-    type doc = string
+    type doc = string list
     type spec =
       | Unit of (a -> a)             (* option with no argument *)
       | String of (string -> a -> a) (* option with string argument *)
@@ -50,6 +52,12 @@ module Make (A:ANY) =
     module M = Monad.Result (struct type t = error end)
 
     type anon = string -> a -> a
+
+    let argument_type (spec:spec): string =
+      match spec with
+      | Unit _ -> ""
+      | String _ -> " <string>"
+      | Int _ -> " <int>"
 
     let parse
           (args:string array)
@@ -69,7 +77,8 @@ module Make (A:ANY) =
           else if arg.[0] = '-' then
             begin
               try
-                let k,sp,doc = List.find (fun (k,sp,doc) -> k = arg) options in
+                let k,sp,doc =
+                  List.find (fun (k,sp,doc) -> k = arg) options in
                 match sp with
                 | Unit g ->
                    parse (g a) (i+1)
