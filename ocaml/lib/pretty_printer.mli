@@ -23,7 +23,10 @@ module type PRETTY =
     val hvbox:  int -> t -> t out
     val hovbox: int -> t -> t out
     val close:  t -> t out
+    val fill:   char -> int -> t -> t out
     val put:    string -> t -> t out
+    val put_left:  int -> string -> t -> t out
+    val put_right: int -> string -> t -> t out
     val put_sub: int -> int -> string -> t -> t out
     val put_wrapped: string list -> t -> t out
     val cut:    t -> t out

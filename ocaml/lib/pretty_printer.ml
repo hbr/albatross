@@ -117,7 +117,10 @@ module type PRETTY =
     val hvbox:  int -> t -> t out
     val hovbox: int -> t -> t out
     val close:  t -> t out
+    val fill:   char -> int -> t -> t out
     val put:    string -> t -> t out
+    val put_left:  int -> string -> t -> t out
+    val put_right: int -> string -> t -> t out
     val put_sub: int -> int -> string -> t -> t out
     val put_wrapped: string list -> t -> t out
     val cut:    t -> t out
@@ -360,6 +363,23 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
     let put (s:string) (p:t): t out =
       put_sub 0 (String.length s) s p
 
+    let fill (c:char) (n:int) (p:t): t out =
+      put (String.make n c) p
+
+    let put_left (width:int) (s:string) (p:t): t out =
+      let len = String.length s in
+      if len < width then
+        put s p >>= fill ' ' (width - len)
+      else
+        put s p
+
+    let put_right (width:int) (s:string) (p:t): t out =
+      let len = String.length s in
+      if len < width then
+        fill ' ' (width - len) p >>= put s
+      else
+        put s p
+
     let cut (p:t): t out =
       break 0 0 p
 
@@ -468,6 +488,15 @@ let test (): unit =
        >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
       |> buf
       = "bla123\n   456"
+    end;
+  assert
+    begin
+      (make 20 ()
+       >>= vbox 0 >>= put "line1" >>= cut >>= put "line2" >>= cut
+       >>= vbox 2 >>= put "line3" >>= cut >>= put "line4" >>= close
+       >>= close)
+      |> buf
+      = "line1\nline2\nline3\n  line4"
     end
 
 
