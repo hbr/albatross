@@ -101,7 +101,7 @@ module Make (A:ANY) =
           else
             parse (anon arg a) (i+1)
       in
-      parse start 0
+      parse start 1
 
     let string_of_error (e:error): string =
       let option_expect k s =
