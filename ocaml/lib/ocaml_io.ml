@@ -359,6 +359,8 @@ module type IO_TYPE =
     val putc: out_file -> char -> unit t
     val get_line: in_file -> string option t
     val put_string: out_file -> string -> unit t
+    val put_substring: out_file -> int -> int -> string -> unit t
+    val fill: out_file -> char -> int -> unit t
     val open_for_read:  string -> in_file option t
     val open_for_write: string -> out_file option t
     val create_file:    string -> out_file option t
@@ -432,10 +434,22 @@ module IO: IO_TYPE =
     let putc (fd:out_file) (c:char): unit t =
       fun fs -> Ok (File_system.putc fs fd c), fs
 
-    let put_string (fd:out_file) (str:string): unit t =
+    let put_substring
+          (fd:out_file) (start:int) (len:int) (str:string)
+        : unit t =
       fun fs ->
-      for i = 0 to String.length str - 1 do
+      for i = start to start + len - 1 do
         File_system.putc fs fd str.[i]
+      done;
+      Ok (), fs
+
+    let put_string (fd:out_file) (str:string): unit t =
+      put_substring fd 0 (String.length str) str
+
+    let fill (fd:out_file) (c:char) (n:int): unit t =
+      fun fs ->
+      for i = 0 to n - 1 do
+        File_system.putc fs fd c
       done;
       Ok (), fs
 

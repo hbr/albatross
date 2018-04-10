@@ -1,75 +1,49 @@
-(*type item =
-  | String of string
-  | Sub of (int*int*string)
-  | Space of int
-  | Newline of int
-
-type t
-
-val make: int -> t
-
-val has_pending: t -> bool
-
-val fold: ('a -> item -> 'a) -> 'a -> t -> 'a
-
-val hbox: t -> t
-
-val vbox: int -> t -> t
-
-val hvbox: int -> t -> t
-
-val hovbox: int -> t -> t
-
-val close: t -> t
-
-val put: string -> t -> t
-
-val put_sub: int -> int -> string -> t -> t
-
-val break: int -> int -> t -> t
- *)
-
-
-
-
 module type PRINTER =
+  (* The IO monad is a printer, the PRINTER module type is a subtype
+     of IO_TYPE. Therefore any module conforming to IO_TYPE can be
+     used to generate a pretty printer. *)
   sig
     include Monad.MONAD
-    type channel
-    val put: int -> int -> string -> channel -> unit t
-    val space: int -> channel -> unit t
-    val newline: int -> channel -> unit t
+    type out_file
+    val putc: out_file -> char -> unit t
+    val put_substring: out_file -> int -> int -> string -> unit t
+    val fill: out_file  -> char -> int -> unit t
   end
 
+
 module type PRETTY =
+  (* Signature of a pretty printer. *)
   sig
-    module P: PRINTER
+    type _ out
+    type out_file
     type t
-    val make:   int -> P.channel -> t P.t
-    val hbox:   t -> t P.t
-    val vbox:   int -> t -> t P.t
-    val hvbox:  int -> t -> t P.t
-    val hovbox: int -> t -> t P.t
-    val close:  t -> t P.t
-    val put:    string -> t -> t P.t
-    val put_sub: int -> int -> string -> t -> t P.t
-    val put_wrapped: string list -> t -> t P.t
-    val cut:    t -> t P.t
-    val space:  t -> t P.t
-    val break:  int -> int -> t -> t P.t
-    val (>>):   'a P.t -> 'b P.t -> 'b P.t
-    val (>>=):  'a P.t -> ('a -> 'b P.t) -> 'b P.t
+    val make:   int -> out_file -> t out
+    val hbox:   t -> t out
+    val vbox:   int -> t -> t out
+    val hvbox:  int -> t -> t out
+    val hovbox: int -> t -> t out
+    val close:  t -> t out
+    val put:    string -> t -> t out
+    val put_sub: int -> int -> string -> t -> t out
+    val put_wrapped: string list -> t -> t out
+    val cut:    t -> t out
+    val space:  t -> t out
+    val break:  int -> int -> t -> t out
+    val (>>):   'a out -> 'b out -> 'b out
+    val (>>=):  'a out -> ('a -> 'b out) -> 'b out
+    val stop:   t -> unit out
   end
 
 
 
 module String_printer:
 sig
-  include PRINTER with type channel = unit
+  include PRINTER with type out_file = unit
   val run: int -> 'a t -> string
 end
 
-module Make (P:PRINTER): PRETTY with module P = P
+module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
+                                     type out_file = P.out_file
 
 
 

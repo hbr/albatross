@@ -14,6 +14,8 @@ module type IO_TYPE =
     val putc: out_file -> char -> unit t
     val get_line: in_file -> string option t
     val put_string: out_file -> string -> unit t
+    val put_substring: out_file -> int -> int -> string -> unit t
+    val fill: out_file -> char -> int -> unit t
     val open_for_read:  string -> in_file option t
     val open_for_write: string -> out_file option t
     val create_file:    string -> out_file option t

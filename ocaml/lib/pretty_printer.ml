@@ -99,37 +99,44 @@ module Pending =
 module type PRINTER =
   sig
     include Monad.MONAD
-    type channel
-    val put: int -> int -> string -> channel -> unit t
-    val space: int -> channel -> unit t
-    val newline: int -> channel -> unit t
+    type out_file
+    val putc: out_file -> char -> unit t
+    val put_substring: out_file -> int -> int -> string -> unit t
+    val fill: out_file  -> char -> int -> unit t
   end
 
 
 module type PRETTY =
   sig
-    module P: PRINTER
     type t
-    val make:   int -> P.channel -> t P.t
-    val hbox:   t -> t P.t
-    val vbox:   int -> t -> t P.t
-    val hvbox:  int -> t -> t P.t
-    val hovbox: int -> t -> t P.t
-    val close:  t -> t P.t
-    val put:    string -> t -> t P.t
-    val put_sub: int -> int -> string -> t -> t P.t
-    val put_wrapped: string list -> t -> t P.t
-    val cut:    t -> t P.t
-    val space:  t -> t P.t
-    val break:  int -> int -> t -> t P.t
-    val (>>):   'a P.t -> 'b P.t -> 'b P.t
-    val (>>=):  'a P.t -> ('a -> 'b P.t) -> 'b P.t
+    type _ out
+    type out_file
+    val make:   int -> out_file -> t out
+    val hbox:   t -> t out
+    val vbox:   int -> t -> t out
+    val hvbox:  int -> t -> t out
+    val hovbox: int -> t -> t out
+    val close:  t -> t out
+    val put:    string -> t -> t out
+    val put_sub: int -> int -> string -> t -> t out
+    val put_wrapped: string list -> t -> t out
+    val cut:    t -> t out
+    val space:  t -> t out
+    val break:  int -> int -> t -> t out
+    val (>>):   'a out -> 'b out -> 'b out
+    val (>>=):  'a out -> ('a -> 'b out) -> 'b out
+    val stop:   t -> unit out
   end
 
 
-module Make (P:PRINTER): PRETTY with module P = P =
+
+module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
+                                     type out_file = P.out_file =
   struct
-    module P = P
+    type 'a out = 'a P.t
+
+    type out_file = P.out_file
+
     type box =
       | H
       | V of int * int  (* start, offset *)
@@ -139,19 +146,19 @@ module Make (P:PRINTER): PRETTY with module P = P =
                                                      break offset, pending *)
     type t = {
         current: int;
-        channel: P.channel;
+        channel: out_file;
         width: int;
         box: box;
         stack: box list
       }
 
-    let make (width:int) (channel:P.channel): t P.t =
+    let make (width:int) (channel:out_file): t out =
       P.make {current = 0; width; channel; box = H; stack = []}
 
-    let push (box:box) (p:t): t P.t =
+    let push (box:box) (p:t): t out =
       P.make {p with box; stack = p.box :: p.stack}
 
-    let pop (p:t): t P.t=
+    let pop (p:t): t out=
       match p.stack with
       | [] ->
          assert false (* illegal call *)
@@ -161,30 +168,44 @@ module Make (P:PRINTER): PRETTY with module P = P =
     let pending_exceeds (pend:Pending.t) (p:t): bool =
       p.current + Pending.size pend > p.width
 
-    let puts (start:int) (len:int) (s:string) (p:t): t P.t =
-      P.(put start len s p.channel
+    let puts (start:int) (len:int) (s:string) (p:t): t out =
+      P.(put_substring p.channel start len s
          >> make {p with current = len + p.current})
 
-    let newline (indent:int) (p:t) (box:box): t P.t =
-      P.(newline indent p.channel >> P.make {p with box; current = indent})
+    let newline (indent:int) (p:t) (box:box): t out =
+      P.(putc p.channel '\n'
+         >> fill p.channel ' ' indent
+         >> P.make {p with box; current = indent})
 
-    let space (n:int) (p:t) (box:box): t P.t =
-      P.(space n p.channel >> P.make {p with box; current = n + p.current})
+    let space (n:int) (p:t) (box:box): t out =
+      P.(fill p.channel ' ' n
+         >> P.make {p with box; current = n + p.current})
 
     let (>>) = P.(>>)
     let (>>=) = P.(>>=)
 
-    let rec replay_pending (pend:Pending.t) (p:t): t P.t =
+    let has_pending (p:t): bool =
+      match p.box with
+      | HV _ | HOVP _ ->
+         true
+      | _ ->
+         false
+
+    let is_top (p:t): bool =
+      p.stack = []
+
+
+    let rec replay_pending (pend:Pending.t) (p:t): t out =
       actions (Pending.actions pend) p
 
-    and actions (l:Pending.action list) (p:t): t P.t =
+    and actions (l:Pending.action list) (p:t): t out =
       match l with
       | [] ->
          P.make p
       | a :: tl ->
          P.(action a p >>= actions tl)
 
-    and action (a:Pending.action) (p:t): t P.t =
+    and action (a:Pending.action) (p:t): t out =
       match a with
       | Pending.String (start,len,s) ->
          put_sub start len s p
@@ -206,13 +227,13 @@ module Make (P:PRINTER): PRETTY with module P = P =
          close p
 
     and newline_pending (indent:int) (pend:Pending.t) (box:box) (p:t)
-        : t P.t =
+        : t out =
       if pending_exceeds pend p then
         newline indent p p.box >>= replay_pending pend
       else
         P.make {p with box}
 
-    and put_sub (sstart:int) (len:int) (s:string) (p:t): t P.t =
+    and put_sub (sstart:int) (len:int) (s:string) (p:t): t out =
       assert (0 <= sstart);
       assert (sstart + len <= String.length s);
       match p.box with
@@ -232,7 +253,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
          puts sstart len s p
 
-    and break (n:int) (ofs:int) (p:t): t P.t =
+    and break (n:int) (ofs:int) (p:t): t out =
       match p.box with
       | H ->
          space n p p.box
@@ -257,7 +278,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
          else
            space nbr p box >>= replay_pending pend
 
-    and hbox (p:t): t P.t =
+    and hbox (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -268,7 +289,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
          push H p
 
-    and vbox (ofs:int) (p:t): t P.t =
+    and vbox (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -281,7 +302,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
          push (V (p.current, ofs)) p
 
-    and hvbox (ofs:int) (p:t): t P.t =
+    and hvbox (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -293,7 +314,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
          push (HV (p.current, ofs, Pending.make_hv ofs)) p
 
-    and hovbox (ofs:int) (p:t): t P.t =
+    and hovbox (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -305,7 +326,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
            push (HOV (p.current, ofs)) p
 
-    and close (p:t): t P.t =
+    and close (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          if Pending.is_top pend then
@@ -336,16 +357,16 @@ module Make (P:PRINTER): PRETTY with module P = P =
       | _ ->
          pop p
 
-    let put (s:string) (p:t): t P.t =
+    let put (s:string) (p:t): t out =
       put_sub 0 (String.length s) s p
 
-    let cut (p:t): t P.t =
+    let cut (p:t): t out =
       break 0 0 p
 
-    let space (p:t): t P.t =
+    let space (p:t): t out =
       break 1 0 p
 
-    let put_wrapped (l:string list) (p:t): t P.t =
+    let put_wrapped (l:string list) (p:t): t out =
       let rec wrap first l p =
         match l with
         | [] ->
@@ -354,7 +375,7 @@ module Make (P:PRINTER): PRETTY with module P = P =
            let word_start i = String_.find (fun c -> c <> ' ') i str in
            let word_end i = String_.find (fun c -> c = ' ') i str in
            let len = String.length str in
-           let rec parse (first:bool) (i:int) (p:t): t P.t =
+           let rec parse (first:bool) (i:int) (p:t): t out =
              if i = len then
                P.make p
              else
@@ -377,6 +398,10 @@ module Make (P:PRINTER): PRETTY with module P = P =
            >>= wrap false tl
       in
       wrap true l p
+
+    let stop (p:t): unit out =
+      assert (is_top p);
+      P.make ()
   end
 
 
@@ -386,56 +411,26 @@ module Make (P:PRINTER): PRETTY with module P = P =
 
 module String_printer:
 sig
-  include PRINTER with type channel = unit
+  include PRINTER with type out_file = unit
   val run: int -> 'a t -> string
 end =
   struct
     include Monad.String_buffer
-    type channel = unit
-    let put (start:int) (len:int) (s:string) (): unit t =
-      put_substring start len s
-    let space (n:int) (): unit t =
-      put_blanks n
-    let newline (indent:int) (): unit t =
-      putc '\n' >> space indent ()
+    type out_file = unit
+    let put_substring (fd:out_file) = put_substring
+    let fill (fd:out_file) = fill
+    let putc (fd:out_file) = putc
   end
 
 
 
-
-module Outfile_of_io (IO:Ocaml_io.IO_TYPE) =
-  struct
-    include IO
-    type channel = file_descr
-    let put_f (n:int) (f:int -> char) (fd:channel): unit t =
-      let rec g i (): unit t =
-        if i = n then
-          make ()
-        else
-          putc fd (f i) >>= g (i+1)
-      in
-      g 0 ()
-
-    let put (start:int) (len:int) (s:string) (fd:channel): unit t =
-      put_f len (fun i -> s.[start+i]) fd
-
-    let space (n:int) (fd:channel): unit t =
-      put_f n (fun _ -> ' ') fd
-
-    let newline (n:int) (fd:channel): unit t =
-      putc fd '\n' >> space n fd
-  end
 
 
 
 let test (): unit =
+  Printf.printf "test pretty printer\n";
   let module PP = Make (String_printer) in
   let open PP in
-  let str_list =
-    ["This    is the first part of a very very long string splitted into";
-     "several substrings which might appear on different lines of a";
-     "paragraph";
-     "which might    consist of arbitrary long elements."] in
   let buf = String_printer.run 200 in
   assert
     begin
@@ -473,12 +468,23 @@ let test (): unit =
        >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
       |> buf
       = "bla123\n   456"
-    end;
-  let pp =
-    make 30 () >>= put "Start: "
-    >>= hovbox 5
-    >>= put_wrapped str_list
-    >>= close
-  and buf = String_printer.run 200
+    end
+
+
+(*
+let _ =
+  let open Ocaml_io in
+  let module PP = Make (IO) in
+  let open PP in
+  let str_list =
+    ["This    is the first part of a very very long string splitted into";
+     "several substrings which might appear on different lines of a";
+     "paragraph";
+     "which might    consist of arbitrary long elements."] in
+  let pp = make 30 IO.stdout
+           >>= hovbox 0
+           >>= put_wrapped str_list
+           >>= close >>= stop
   in
-  printf "test3\n%s\n" (buf pp)
+  IO.execute pp
+ *)
