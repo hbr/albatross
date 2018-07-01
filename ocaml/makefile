@@ -5,14 +5,17 @@
         test_draft                 \
         test_example               \
         test_example_book          \
+        unit_test                  \
         test2                      \
         test2_library              \
         test2_draft                \
         test2_example              \
         test2_sf                   \
         alba.byte                  \
+        alba2.byte                 \
         alba.d.byte                \
         alba.native                \
+        alba2.native               \
         alba.p.native              \
         alba_node.byte             \
         alba_web                   \
@@ -48,15 +51,26 @@ alba: alba.native
 alba.byte:
 	$(OCB) alba.byte
 
+alba2.byte:
+	$(OCB) alba2.byte
+
 alba.d.byte:
 	$(OCB) alba.d.byte
 
 alba.native:
 	$(OCB) alba.native
 
+alba2.native:
+	$(OCB) alba2.native
+
 alba.p.native:
 	$(OCB) alba.p.native
 
+unit_test.byte:
+	$(OCB) unit_test.byte
+
+unit_test: unit_test.byte
+	./unit_test.byte
 
 alba_draft.byte:
 	$(OCB) alba_draft.byte
