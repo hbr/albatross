@@ -7,7 +7,7 @@ module Pending =
 
     type action =
       | String of int * int * string
-      | Break of int * int
+      | Break of string * int * int
       | Open of box
       | Close
 
@@ -49,13 +49,13 @@ module Pending =
               max_size;
               buffer = String (start,len,s) :: p.buffer}
 
-    let break (n:int) (ofs:int) (p:t): t =
+    let break (sep:string) (n:int) (ofs:int) (p:t): t =
       let standard () =
-        let size = n + p.size in
+        let size = String.length sep + n + p.size in
         let max_size = max size p.max_size in
         {p with size;
                 max_size;
-                buffer = Break (n,ofs) :: p.buffer}
+                buffer = Break (sep,n,ofs) :: p.buffer}
       in
       match p.box with
       | H _ ->
@@ -64,7 +64,7 @@ module Pending =
          let size = start + ofsv + ofs in
          {p with size;
                  max_size = max size p.max_size;
-                 buffer = Break(n,ofs) :: p.buffer}
+                 buffer = Break(sep,n,ofs) :: p.buffer}
       | HV _ ->
          standard ()
       | HOV _ ->
@@ -91,7 +91,7 @@ module Pending =
       | [] ->
          assert false
       | box :: tl ->
-         {p with box = box; stack = tl}
+         {p with box; stack = tl}
   end (* Pending *)
 
 
@@ -125,7 +125,7 @@ module type PRETTY =
     val put_wrapped: string list -> t -> t out
     val cut:    t -> t out
     val space:  t -> t out
-    val break:  int -> int -> t -> t out
+    val break:  string -> int -> int -> t -> t out
     val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out
@@ -141,12 +141,41 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
     type out_file = P.out_file
 
     type box =
-      | H
-      | V of int * int  (* start, offset *)
-      | HV of int * int * Pending.t (* start, offset, pending *)
-      | HOV of int * int (* start, offset *)
-      | HOVP of int * int * int * int * Pending.t (* start, offset, nspaces,
-                                                     break offset, pending *)
+      | H (** Horizontal box. All break hints are printed as spaces and no
+             line break occurs. This box needs no start position and offset
+             because it does not break lines. *)
+      | V of int * int  (** start position of the box, offset for a
+                           newline. All material is printed immediately. A
+                           break hint generates a newline with indentation
+                           'start + offset + offset(break)' *)
+      | HV of
+          int * int
+          * Pending.t (** start, offset, pending. All material is put into
+                         pending. If the pending material gets too big to fit
+                         on a line the hvbox is converted to a vbox and the
+                         pending material is replayed on the vbox. If box is
+                         closed and the pending material fits on a line then
+                         all material is printed as if it were a hbox. *)
+      | HOV of
+          int * int (** start, offset.  All material is printed immediately
+                       until a break hint occurs. If the printed material with
+                       the space exceeds the line, the line is broken and
+                       continues as a hovbox initially. If the material still
+                       fits on the line after the first break hint, the box is
+                       converted into a HOVP box and more material is added as
+                       pending material. *)
+      | HOVP of
+          int * int * string * int * int
+          * Pending.t (** start, offset, separator, nspaces, break offset,
+                         pending. State of a hovbox after receiving a break
+                         hint within the line bounds. Additional material
+                         without break or with a break hint with stacked
+                         material pending exceeding the line width generates a
+                         newline and a replay of the pending material in an
+                         initial hovbox. An additional break hint at the top
+                         level cause printing either on the same line of after
+                         a line break depending on the size of the pending
+                         material. *)
     type t = {
         current: int;
         channel: out_file;
@@ -168,8 +197,8 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | box :: stack ->
          P.make {p with box; stack}
 
-    let pending_exceeds (pend:Pending.t) (p:t): bool =
-      p.current + Pending.size pend > p.width
+    let pending_exceeds (add:int) (pend:Pending.t) (p:t): bool =
+      p.current + add +  Pending.size pend > p.width
 
     let puts (start:int) (len:int) (s:string) (p:t): t out =
       P.(put_substring p.channel start len s
@@ -180,9 +209,14 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
          >> fill p.channel ' ' indent
          >> P.make {p with box; current = indent})
 
-    let space (n:int) (p:t) (box:box): t out =
-      P.(fill p.channel ' ' n
-         >> P.make {p with box; current = n + p.current})
+    let space_size (sep:string) (n:int): int =
+      String.length sep + n
+
+    let space (sep:string) (n:int) (p:t) (box:box): t out =
+      let len = String.length sep in
+      P.(put_substring p.channel 0 len sep
+         >> fill p.channel ' ' n
+         >> P.make {p with box; current = len + n + p.current})
 
     let (>>) = P.(>>)
     let (>>=) = P.(>>=)
@@ -212,8 +246,8 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       match a with
       | Pending.String (start,len,s) ->
          put_sub start len s p
-      | Pending.Break (n,ofs) ->
-         break n ofs p
+      | Pending.Break (sep,n,ofs) ->
+         break sep n ofs p
       | Pending.Open b ->
          begin
            match b with
@@ -229,66 +263,67 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | Pending.Close ->
          close p
 
-    and newline_pending (indent:int) (pend:Pending.t) (box:box) (p:t)
-        : t out =
-      if pending_exceeds pend p then
-        newline indent p p.box >>= replay_pending pend
-      else
-        P.make {p with box}
-
     and put_sub (sstart:int) (len:int) (s:string) (p:t): t out =
       assert (0 <= sstart);
       assert (sstart + len <= String.length s);
       match p.box with
       | HV (start,ofs,pend) ->
          let pend = Pending.put sstart len s pend in
-         if pending_exceeds pend p then
+         if pending_exceeds 0 pend p then
            replay_pending pend {p with box = V (start,ofs)}
          else
            P.make {p with box = HV (start,ofs,pend)}
-      | HOVP (start,ofs,n,ofsbr,pend) ->
+      | HOVP (start,ofs,sep,n,ofsbr,pend) ->
          let pend = Pending.put sstart len s pend in
-         if pending_exceeds pend p then
+         if pending_exceeds (space_size sep n) pend p then
            newline (start+ofs) p (HOV (start,ofs))
            >>= replay_pending pend
          else
-           P.make {p with box = HOVP (start,ofs,n,ofsbr,pend)}
+           P.make {p with box = HOVP (start,ofs,sep,n,ofsbr,pend)}
       | _ ->
          puts sstart len s p
 
-    and break (n:int) (ofs:int) (p:t): t out =
+    and break (sep:string) (n:int) (ofs:int) (p:t): t out =
       match p.box with
       | H ->
-         space n p p.box
+         space sep n p p.box
       | V (start,ofsv) ->
          let indent = start + ofsv + ofs in
          newline indent p p.box
       | HV (start,ofshv,pend) ->
-         let pend = Pending.break n ofs pend in
-         if pending_exceeds pend p then
+         let pend = Pending.break sep n ofs pend in
+         if pending_exceeds 0 pend p then
            replay_pending pend {p with box = V (start,ofshv)}
          else
            P.make {p with box = HV(start,ofshv,pend)}
       | HOV (start,ofshov) ->
-         P.make
-           {p with box = HOVP (start,ofshov,n,ofs,Pending.make_hov ofshov)}
-      | HOVP (start,ofshov,nbr,ofsbr,pend) ->
-         let pend = Pending.break n ofs pend in
-         let box = HOV (start,ofshov) in
-         if pending_exceeds pend p then
-           let indent = start + ofshov + ofsbr in
-           newline indent p box >>= replay_pending pend
+         let sp_size = space_size sep n in
+         if p.width <= p.current + sp_size then
+           newline (start+ofshov) p p.box
          else
-           space nbr p box >>= replay_pending pend
+           P.make
+             {p with
+               box = HOVP (start,ofshov,sep,n,ofs,Pending.make_hov ofshov)}
+      | HOVP (start,ofshov,sep,nbr,ofsbr,pend) ->
+         let pend1 = Pending.break sep n ofs pend in
+         let box = HOV (start,ofshov) in
+         if pending_exceeds (space_size sep nbr) pend p then
+           let indent = start + ofshov + ofsbr in
+           newline indent p box >>= replay_pending pend1
+         else if Pending.is_top pend then
+           space sep nbr p box >>= replay_pending pend1
+         else
+           P.make {p with box = HOVP (start,ofshov,sep,nbr,ofsbr,pend1)}
 
     and hbox (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
            {p with box = HV (start, ofs, Pending.hbox pend)}
-      | HOVP (start,ofshov,n,ofsbr,pend) ->
+      | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          P.make
-           {p with box = HOVP (start, ofshov, n, ofsbr, Pending.hbox pend)}
+           {p with
+             box = HOVP (start, ofshov, sep, n, ofsbr, Pending.hbox pend)}
       | _ ->
          push H p
 
@@ -298,9 +333,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
          P.make
            {p with box = HV (start, ofs,
                              Pending.vbox ofs pend)}
-      | HOVP (start,ofshov,n,ofsbr,pend) ->
+      | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          P.make
-           {p with box = HOVP (start, ofshov, n, ofsbr,
+           {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.vbox ofs pend)}
       | _ ->
          push (V (p.current, ofs)) p
@@ -310,9 +345,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | HV (start,ofs,pend) ->
          P.make
            {p with box = HV (start, ofs, Pending.hvbox ofs pend)}
-      | HOVP (start,ofshov,n,ofsbr,pend) ->
+      | HOVP (start,ofshov,sep, n,ofsbr,pend) ->
          P.make
-           {p with box = HOVP (start, ofshov, n, ofsbr,
+           {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.hvbox ofs pend)}
       | _ ->
          push (HV (p.current, ofs, Pending.make_hv ofs)) p
@@ -322,9 +357,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | HV (start,ofs,pend) ->
          P.make
            {p with box = HV (start, ofs, Pending.hovbox ofs pend)}
-      | HOVP (start,ofshov,n,ofsbr,pend) ->
+      | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          P.make
-           {p with box = HOVP (start, ofshov, n, ofsbr,
+           {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.hovbox ofs pend)}
       | _ ->
            push (HOV (p.current, ofs)) p
@@ -344,18 +379,18 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
               >>= close)
          else
            P.make {p with box = HV (start, ofs, Pending.close pend)}
-      | HOVP (start,ofshov,n,ofsbr,pend) ->
+      | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          if Pending.is_top pend then
            let box = HOV (start,ofshov) in
-           (if pending_exceeds pend p then
+           (if pending_exceeds (space_size sep n) pend p then
               newline (start+ofshov) p box
             else
-              space n p box)
+              space sep n p box)
              >>= replay_pending pend
              >>= close
          else
            P.make
-             {p with box = HOVP (start, ofshov, n, ofsbr,
+             {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                  Pending.close pend)}
       | _ ->
          pop p
@@ -381,10 +416,10 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
         put s p
 
     let cut (p:t): t out =
-      break 0 0 p
+      break "" 0 0 p
 
     let space (p:t): t out =
-      break 1 0 p
+      break "" 1 0 p
 
     let put_wrapped (l:string list) (p:t): t out =
       let rec wrap first l p =
@@ -484,10 +519,10 @@ let test (): unit =
     end;
   assert
     begin
-      (make 5 () >>= put "bla"
-       >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
-      |> buf
-      = "bla123\n   456"
+        (make 5 () >>= put "bla"
+         >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
+        |> buf
+        = "bla123\n   456"
     end;
   assert
     begin
@@ -497,6 +532,17 @@ let test (): unit =
        >>= close)
       |> buf
       = "line1\nline2\nline3\n  line4"
+    end;
+  assert
+    begin
+      (make 10 ()
+       >>= hovbox 0
+       >>= put "1234567" >>= space
+       >>= put "90" >>= space
+       >>= put "12345" >>= space
+       >>= put "1234567890" >>= close)
+      |> buf
+      = "1234567 90\n12345\n1234567890"
     end
 
 

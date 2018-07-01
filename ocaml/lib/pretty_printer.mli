@@ -31,7 +31,7 @@ module type PRETTY =
     val put_wrapped: string list -> t -> t out
     val cut:    t -> t out
     val space:  t -> t out
-    val break:  int -> int -> t -> t out
+    val break:  string -> int -> int -> t -> t out
     val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out
