@@ -106,6 +106,22 @@ module type PRINTER =
   end
 
 
+module String_printer:
+sig
+  include PRINTER with type out_file = unit
+  val run: int -> 'a t -> string
+end =
+  struct
+    include Monad.String_buffer
+    type out_file = unit
+    let put_substring (fd:out_file) = put_substring
+    let fill (fd:out_file) = fill
+    let putc (fd:out_file) = putc
+  end
+
+
+
+
 module type PRETTY =
   sig
     type t
@@ -461,21 +477,6 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
 
 
 
-
-
-
-module String_printer:
-sig
-  include PRINTER with type out_file = unit
-  val run: int -> 'a t -> string
-end =
-  struct
-    include Monad.String_buffer
-    type out_file = unit
-    let put_substring (fd:out_file) = put_substring
-    let fill (fd:out_file) = fill
-    let putc (fd:out_file) = putc
-  end
 
 
 

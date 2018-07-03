@@ -15,9 +15,16 @@ module type PRETTY =
   (* Signature of a pretty printer. *)
   sig
     type _ out
+
+    (** Type of the outfile *)
     type out_file
+
     type t
+
     val make:   int -> out_file -> t out
+    (** [make width fd] creates a pretty printer of line size [width]
+       outputting to the file [fd]. *)
+
     val hbox:   t -> t out
     val vbox:   int -> t -> t out
     val hvbox:  int -> t -> t out
