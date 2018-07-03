@@ -32,12 +32,14 @@ module Operator =
       | Notop
       | Arrowop
 
-    let quantifier_precedence: int = 30
+    let normal_precedence:     int = 20
+    let quantifier_precedence: int = 40
+    let highest_precedence:    int = 1000
 
     let data (op:t): string * int * associativity =
       match op with
       | Commaop   -> ",",   10, Right
-      | Colonop   -> ":",   20, Nonassoc
+      | Colonop   -> ":",   30, Nonassoc
       (* Logical operators *)
       | Arrowop   -> "->",  50, Right
       | Orop      -> "or",  51, Right

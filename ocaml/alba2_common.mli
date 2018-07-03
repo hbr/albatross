@@ -32,7 +32,9 @@ sig
     | Notop
     | Arrowop
 
+  val normal_precedence: int
   val quantifier_precedence: int
+  val highest_precedence: int
 
   val data: t -> string * int * associativity
 end
