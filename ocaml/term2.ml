@@ -104,19 +104,3 @@ let up_from (start:int) (n:int) (t:t): t =
 let up (n:int) (t:t): t =
   up_from 0 n t
 
-
-
-module type PRINT_CONTEXT =
-  sig
-    type term = t
-    type t
-    val push: Feature_name.t option -> t -> t
-    val count: t -> int
-    val name: int -> t -> Feature_name.t option
-    val shadow_level: int -> t -> int
-    val type_: int -> t -> term
-  end
-
-module Printer (C:PRINT_CONTEXT) (PP:Pretty_printer.PRETTY) =
-  struct
-  end
