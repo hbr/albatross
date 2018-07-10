@@ -28,6 +28,25 @@ and abstraction =  string option * typ * t * Info.t
 and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
+
+let maybe_sort (t:t): Sort.t option =
+  match t with
+  | Sort (s,_) ->
+     Some s
+  | _ ->
+     None
+
+
+
+let sort_of (t:t): Sort.t =
+  match t with
+  | Sort (s,_) ->
+     s
+  | _ ->
+     assert false (* is not a sort *)
+
+
+
 let fold_free_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold s a t =
     match t with

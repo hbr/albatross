@@ -68,6 +68,9 @@ let constructor_offset (i:int) (c:t): int =
 let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
   assert false
 
+let push_unnamed (tp:Term.typ) (c:t): t =
+  push None tp c
+
 let head_normal0
       (f:Term.t)
       (args:Term.t list)
@@ -138,9 +141,9 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
   | Variable (i,_), Variable (j,_) ->
      i = j
   | Lambda (_,tpa,ta,_), Lambda (_,tpb,tb,_) when equivalent tpa tpb c ->
-     equivalent ta tb (push None tpa c)
+     equivalent ta tb (push_unnamed tpa c)
   | All (_,tpa,ta,_), All (_,tpb,tb,_) when equivalent tpa tpb c ->
-     equivalent ta tb (push None tpa c)
+     equivalent ta tb (push_unnamed tpa c)
   | Inspect (ea,pa,casesa,_), Inspect (eb,pb,casesb,_)
        when equivalent ea eb c && equivalent pa pa c ->
      let ncases = Array.length casesa in
@@ -178,55 +181,75 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
      assert false (* nyi *)
   | All (_,tpa,ta,_), All(_,tpb,tb,_) ->
      equivalent tpa tpb c
-     && is_subtype ta tb (push None tpa c)
+     && is_subtype ta tb (push_unnamed tpa c)
   | _ ->
      equivalent_head ha hb c && equivalent_arguments argsa argsb c
 
 
 
 
-let rec type_of (c:t) (t:Term.t): Term.typ option =
-  (* Return the type of [t] if it is wellformed. *)
+let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
+  (* Return the type of [t] in the context [c] if it is wellformed. *)
   let open Term in
   match t with
   | Sort (Sort.Level i,_) ->
      Some (Sort (Sort.Level (if i = 0 then 2 else i+1), Info.Unknown))
   | Sort (Sort.Variable i,_) ->
-     assert false (* nyi *)
+     assert false (* nyi universe variables *)
   | Variable (i,_) ->
      assert (i < count c);
      Some (entry_type i c)
   | Application (f,a,_,_) ->
-     let f,args = split_application f [a] in
+     (* Does the type of [a] fit the argument type of [f]? *)
      Option.(
-       type_of c f >>= fun f_tp ->
-       let rec do_args f_tp args =
-         match args with
-         | [] ->
-            Some f_tp
-         | a::tl ->
-            type_of c a >>= fun a_tp ->
-            (application_result c f_tp a a_tp) >>= fun r_tp ->
-            do_args r_tp tl
-       in
-       do_args f_tp args)
-  | _ ->
-     assert false
-
-and application_result (c:t) (f:Term.typ) (a:Term.t) (a_tp:Term.typ)
-    : Term.typ option =
-  (* The result type of a function of type [f] applied to an argument [a]
-         of type [a_tp]. Assume that both types are wellformed. Return [None]
-         if a term of type [f] cannot be applied to an argument of type
-         [a]. *)
-  match head_normal f c with
-  | Term.All (_,tp,res_tp,_) when is_subtype a_tp tp c ->
-     Some (Term.substitute res_tp a)
-  | _ ->
-     None
+      maybe_type_of f c >>= fun ftp ->
+      maybe_type_of a c >>= fun atp ->
+      match head_normal ftp c with
+      | All (_, tp, res, _) when is_subtype atp tp c  ->
+         Some (Term.substitute res a)
+      | _ ->
+         None
+     )
+  | Lambda (_,tp,t,_) ->
+     Option.(
+      maybe_type_of tp c >>= fun s ->
+      Term.maybe_sort s >>= fun _ ->
+      let c1 = push_unnamed tp c in
+      maybe_type_of t c1 >>= fun ttp ->
+      let lam_tp = All (None, tp, ttp, Info.Unknown) in
+      maybe_type_of lam_tp c >>= fun s ->
+      Term.maybe_sort s >>= fun _ ->
+      Some lam_tp
+     )
+  | All (_,arg_tp,res_tp,_) ->
+     (* [arg_tp] must be a wellformed type. [res_tp] must be a wellformed type
+        in the context with [arg_tp] pushed. The sorts of [arg_tp] and
+        [res_tp] determine the sort of the quantified expression. *)
+     Option.(
+      let open Term in
+      maybe_type_of arg_tp c >>= fun arg_tp_tp ->
+      maybe_sort arg_tp_tp >>= fun arg_s ->
+      let c1 = push_unnamed arg_tp c in
+      maybe_type_of res_tp c1 >>= fun res_tp_tp ->
+      maybe_sort res_tp_tp >>= fun res_s ->
+      begin
+        let open Term.Sort in
+        match arg_s, res_s with
+        | Level i, Level j when j = 0 ->
+           Some ( Sort(Level  0, Info.Unknown) )
+        | Level i, Level j ->
+           Some ( Sort(Level (max i j), Info.Unknown) )
+        | _ ->
+           assert false (* nyi universe variables *)
+      end
+     )
+  | Inspect (ext,map,cases,_) ->
+     assert false (* nyi *)
+  | Fix (idx, arr,_) ->
+     assert false (* nyi *)
 
 
 let is_wellformed (c:t) (t:Term.t): bool =
-  match type_of c t with
+  match maybe_type_of t c with
   | None -> false
   | Some _ -> true

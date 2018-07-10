@@ -29,6 +29,8 @@ and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
 
+val sort_of: t -> Sort.t
+val maybe_sort: t -> Sort.t option
 
 val up: int -> t -> t
 
