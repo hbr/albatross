@@ -29,12 +29,16 @@ type entry = {
   }
 
 type t = {
+    nsorts: int;
     gamma: entry IArr.t;
-    assumption: int list
+    assumptions: int list
   }
 
 let count (c:t): int =
   IArr.length c.gamma
+
+let count_sorts (c:t): int =
+  c.nsorts
 
 let entry (i:int) (c:t): entry =
   (* entry 0 is the most recently added (i.e. the last) element *)
@@ -65,11 +69,19 @@ let constructor_offset (i:int) (c:t): int =
   assert (is_constructor i c);
   assert false (* nyi *)
 
+let empty: t =
+  {nsorts = 0;
+   gamma = IArr.empty;
+   assumptions = []}
+
 let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
   assert false
 
 let push_unnamed (tp:Term.typ) (c:t): t =
   push None tp c
+
+let push_sort (c:t): t =
+  {c with nsorts = 1 + c.nsorts}
 
 let head_normal0
       (f:Term.t)
@@ -168,6 +180,34 @@ and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
      false
 
 
+let is_valid_sort (s:Term.Sort.t) (c:t): bool =
+  let open Term.Sort in
+  let rec is_valid s =
+    match s with
+    | Proposition | Level _  ->
+       true
+    | Variable sv ->
+       sv < count_sorts c
+    | Type_of s ->
+       is_valid s
+    | Max (i, sv) ->
+       sv < count_sorts c
+    | Product (a,b) ->
+       is_valid a && is_valid b
+  in
+  is_valid s
+
+let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
+  let open Term.Sort in
+  match a, b with
+  | Proposition, _ ->
+     true
+  | Level i, Level j ->
+     i <= j
+  | _ ->
+     assert false (* nyi *)
+
+
 let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   (* Is [a] a subtype of [b] in the context [c]. Assume that both are
      wellformed.  *)
@@ -175,10 +215,8 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let hb,argsb = head_normal0 b [] c in
   let open Term in
   match ha, hb with
-  | Sort (Sort.Level i,_), Sort (Sort.Level j,_) ->
-     i <= j
   | Sort (sa,_), Sort (sb,_) ->
-     assert false (* nyi *)
+     is_subsort sa sb c
   | All (_,tpa,ta,_), All(_,tpb,tb,_) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
@@ -192,10 +230,11 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
   (* Return the type of [t] in the context [c] if it is wellformed. *)
   let open Term in
   match t with
-  | Sort (Sort.Level i,_) ->
-     Some (Sort (Sort.Level (if i = 0 then 2 else i+1), Info.Unknown))
-  | Sort (Sort.Variable i,_) ->
-     assert false (* nyi universe variables *)
+  | Sort (s,_) ->
+     if is_valid_sort s c then
+       Some (Sort (Sort.type_of s, Info.Unknown))
+     else
+       None
   | Variable (i,_) ->
      assert (i < count c);
      Some (entry_type i c)
@@ -227,29 +266,49 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
         [res_tp] determine the sort of the quantified expression. *)
      Option.(
       let open Term in
-      maybe_type_of arg_tp c >>= fun arg_tp_tp ->
-      maybe_sort arg_tp_tp >>= fun arg_s ->
-      let c1 = push_unnamed arg_tp c in
-      maybe_type_of res_tp c1 >>= fun res_tp_tp ->
-      maybe_sort res_tp_tp >>= fun res_s ->
-      begin
-        let open Term.Sort in
-        match arg_s, res_s with
-        | Level i, Level j when j = 0 ->
-           Some ( Sort(Level  0, Info.Unknown) )
-        | Level i, Level j ->
-           Some ( Sort(Level (max i j), Info.Unknown) )
-        | _ ->
-           assert false (* nyi universe variables *)
-      end
+      maybe_type_and_sort_of arg_tp c >>= fun (arg_tp_tp,arg_s) ->
+      maybe_type_and_sort_of
+        res_tp
+        (push_unnamed arg_tp c) >>= fun (res_tp_tp,res_s) ->
+      Some (Sort (Sort.product arg_s res_s, Info.Unknown))
      )
   | Inspect (ext,map,cases,_) ->
      assert false (* nyi *)
   | Fix (idx, arr,_) ->
      assert false (* nyi *)
 
+and maybe_type_and_sort_of (t:Term.t) (c:t): (Term.typ * Term.Sort.t) option =
+  Option.(
+    maybe_type_of t c >>= fun tp ->
+    Term.maybe_sort tp >>= fun s ->
+    Some (tp,s)
+  )
 
-let is_wellformed (c:t) (t:Term.t): bool =
+
+let is_wellformed (t:Term.t) (c:t): bool =
   match maybe_type_of t c with
   | None -> false
   | Some _ -> true
+
+
+(* Function arrow:
+
+   (->) (A,B:Any): Any := all(_:A) B
+
+   type of (->): all(A,B:Any,_A) B
+
+   We get 2 sort variables i and j: all(A:Any(i), B:Any(j), _:A) B
+ *)
+
+let test (): unit =
+  let open Term in
+  let c = push_sort (push_sort empty) in
+  let s0 = Sort.Variable 0
+  and s1 = Sort.Variable 1
+  in
+  assert ( is_valid_sort (Sort.Variable 0) c);
+  assert ( is_valid_sort (Sort.Variable 1) c);
+  assert ( is_wellformed (Sort (s0, Info.Unknown)) c );
+  assert ( is_wellformed (Sort (s1, Info.Unknown)) c );
+  Printf.printf "Test type checker\n";
+  ()

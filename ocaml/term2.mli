@@ -2,13 +2,16 @@ open Alba2_common
 
 module Sort:
 sig
+  type sortvariable = int
   type t =
-    | Variable of int
+    | Proposition
     | Level of int
-  type constraint_ =
-    | Eq of int * int
-    | LE of int * int
-    | LT of int * int
+    | Variable of int
+    | Type_of of t
+    | Max of int * sortvariable
+    | Product of t * t
+  val type_of: t -> t
+  val product: t -> t -> t
 end
 
 type fix_index = int

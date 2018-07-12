@@ -2,13 +2,37 @@ open Alba2_common
 
 module Sort =
   struct
+    type sortvariable = int
     type t =
-      | Variable of int
+      | Proposition
       | Level of int
-    type constraint_ =
-      | Eq of int * int
-      | LE of int * int
-      | LT of int * int
+      | Variable of int
+      | Type_of of t
+      | Max of int * sortvariable
+      | Product of t * t
+
+    let type_of (s:t): t =
+      match s with
+      | Proposition -> Level 1
+      | Level i -> Level (i+1)
+      | _ -> Type_of s
+
+    let product (s1:t) (s2:t): t =
+      match s1, s2 with
+      | Proposition, s2 ->
+         s2
+      | _, Proposition ->
+         Proposition
+      | Level i, Level k ->
+         Level (max i k)
+      | Type_of s1, s2 when s1 = s2 ->
+         Type_of s1
+      | s1, Type_of s2 when s1 = s2 ->
+         Type_of s1
+      | Level i, Variable sv | Variable sv, Level i ->
+         Max (i,sv)
+      | _, _ ->
+         Product (s1,s2)
   end
 
 type fix_index = int

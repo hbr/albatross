@@ -6,6 +6,7 @@
         test_example               \
         test_example_book          \
         unit_test                  \
+        unit_test.byte             \
         test2                      \
         test2_library              \
         test2_draft                \
