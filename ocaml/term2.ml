@@ -40,22 +40,22 @@ type decr_index = int
 type oo_application = bool
 
 type t =
-  | Sort of Sort.t * Info.t
-  | Variable of int * Info.t
-  | Application of t * t * oo_application *Info.t
+  | Sort of Sort.t
+  | Variable of int
+  | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * inspect_map * t array * Info.t
-  | Fix of fix_index * fixpoint * Info.t
+  | Inspect of t * inspect_map * t array
+  | Fix of fix_index * fixpoint
 and typ = t
-and abstraction =  string option * typ * t * Info.t
+and abstraction =  string option * typ * t
 and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
 
 let maybe_sort (t:t): Sort.t option =
   match t with
-  | Sort (s,_) ->
+  | Sort s ->
      Some s
   | _ ->
      None
@@ -64,7 +64,7 @@ let maybe_sort (t:t): Sort.t option =
 
 let sort_of (t:t): Sort.t =
   match t with
-  | Sort (s,_) ->
+  | Sort s ->
      s
   | _ ->
      assert false (* is not a sort *)
@@ -74,25 +74,25 @@ let sort_of (t:t): Sort.t =
 let fold_free_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold s a t =
     match t with
-    | Sort (s,_) -> t
-    | Variable (i,_) when i < start ->
+    | Sort s -> t
+    | Variable i when i < start ->
        a
-    | Variable (i,_) ->
+    | Variable i ->
        assert (s <= i);
        f a (i-s)
-    | Application (g,x,_,_) ->
+    | Application (g,x,_) ->
        fold s (fold s a g) x
-    | Lambda (_,tp,t,_) ->
+    | Lambda (_,tp,t) ->
        fold (s+1) (fold s a tp) t
-    | All (_,tp,t,_) ->
+    | All (_,tp,t) ->
        fold (s+1) (fold s a tp) t
-    | Inspect (t,mp,arr,_) ->
+    | Inspect (t,mp,arr) ->
        let fld = fold s in
        Array.fold_left
          fld
          (fld (fld a t) mp)
          arr
-    | Fix (idx,arr,_) ->
+    | Fix (idx,arr) ->
        let fld = fold (s + Array.length arr) in
        Array.fold_left
          (fun a (_,tp,_,t) ->
@@ -110,28 +110,27 @@ let fold_free (f:'a->int->'a) (a:'a) (t:t): 'a =
 let map_free_from (start:int) (f:int->int) (t:t): t =
   let rec map s t =
     match t with
-    | Sort (s,_) -> t
-    | Variable (i,_) when i < start ->
+    | Sort s -> t
+    | Variable i when i < start ->
        t
-    | Variable (i,info) ->
+    | Variable i ->
        assert (s <= i);
-       Variable (f (i-s) + s, info)
-    | Application (a,b,oo,info) ->
-       Application (map s a, map s b, oo, info)
-    | Lambda (nm,tp,t,info) ->
-       Lambda (nm, map s tp, map (s+1) t, info)
-    | All (nm,tp,t,info) ->
-       All (nm, map s tp, map (s+1) t, info)
-    | Inspect (t,mp,arr,info) ->
-       Inspect (map s t, map s mp, Array.map (map s) arr, info)
-    | Fix (idx,arr,info) ->
+       Variable (f (i-s) + s)
+    | Application (a,b,oo) ->
+       Application (map s a, map s b, oo)
+    | Lambda (nm,tp,t) ->
+       Lambda (nm, map s tp, map (s+1) t)
+    | All (nm,tp,t) ->
+       All (nm, map s tp, map (s+1) t)
+    | Inspect (t,mp,arr) ->
+       Inspect (map s t, map s mp, Array.map (map s) arr)
+    | Fix (idx,arr) ->
        let s = s + Array.length arr in
        Fix (idx,
             Array.map
               (fun (nm,tp,didx,t) ->
                 nm, map s tp, didx, map s t)
-              arr,
-            info)
+              arr)
   in
   map start t
 
@@ -148,14 +147,14 @@ let rec split_application (f:t) (args:t list): t * t list =
          application. Push all remaining arguments in the term [f] in front of
          the arguments [args].  *)
   match f with
-  | Application (f,a,_,_) ->
+  | Application (f,a,_) ->
      split_application f (a::args)
   | _ ->
      f, args
 
 let apply_args (f:t) (args:t list): t =
   List.fold_left
-    (fun f a -> Application (f,a,false,Info.Unknown))
+    (fun f a -> Application (f,a,false))
     f args
 
 let substitute (a:t) (b:t): t =
@@ -169,29 +168,28 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
   let rec subst bnd t =
     match t with
     | Sort _ -> t
-    | Variable (i,_) when i < bnd ->
+    | Variable i when i < bnd ->
        t
-    | Variable (i,_) when i < bnd + n ->
+    | Variable i when i < bnd + n ->
        assert false
-    | Variable (i,info) ->
-       Variable (i-n,info)
-    | Application (a, b, oo, info) ->
+    | Variable (i) ->
+       Variable (i-n)
+    | Application (a, b, oo) ->
        let sub = subst bnd in
-       Application (sub a, sub b, oo, info)
-    | Lambda (nm, tp, t0, info) ->
-       Lambda (nm, subst bnd tp, subst (bnd+1) t0, info)
-    | All (nm, tp, t0, info) ->
-       All (nm, subst bnd tp, subst (bnd+1) t0, info)
-    | Inspect (exp, map, cases, info) ->
+       Application (sub a, sub b, oo)
+    | Lambda (nm, tp, t0) ->
+       Lambda (nm, subst bnd tp, subst (bnd+1) t0)
+    | All (nm, tp, t0) ->
+       All (nm, subst bnd tp, subst (bnd+1) t0)
+    | Inspect (exp, map, cases) ->
        let sub = subst bnd in
-       Inspect (sub exp, sub map, Array.map sub cases, info)
-    | Fix (idx, arr, info) ->
+       Inspect (sub exp, sub map, Array.map sub cases)
+    | Fix (idx, arr) ->
        let sub = subst (bnd + Array.length arr) in
        Fix (idx,
             Array.map
               (fun (nm,tp,decr,t) -> nm, sub tp, decr, sub t)
-              arr,
-            info)
+              arr)
 
   in
   subst 0 t
@@ -203,7 +201,7 @@ let beta_reduce (f:t) (args:t list): t * t list =
          the beta reduced term and the remaining arguments. *)
   let rec beta f args args_rest =
     match f,args_rest with
-    | Lambda (_,_,t0,_), a :: args_rest ->
+    | Lambda (_,_,t0), a :: args_rest ->
        beta t0 (a :: args) args_rest
     | Application _, _ ->
        assert false (* [f] must not be an application. *)

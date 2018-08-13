@@ -96,24 +96,24 @@ let head_normal0
     let f,args = Term.beta_reduce f args in
     match f with
     (* normal cases *)
-    | Term.Variable (i,_) when has_definition i c ->
+    | Term.Variable i when has_definition i c ->
        normalize (definition i c) args
-    | Term.Inspect (exp,map,cases,_) ->
+    | Term.Inspect (exp,map,cases) ->
        let f1,args1 = normalize exp [] in
        begin
          match f1 with
-         | Term.Variable (cidx,_) when is_constructor cidx c ->
+         | Term.Variable cidx when is_constructor cidx c ->
             normalize
               cases.(constructor_offset cidx c)
               (args1 @ args)
          | _ ->
             f1, args1 @ args
        end
-    | Term.Fix (idx,arr,_) ->
+    | Term.Fix (idx,arr) ->
        assert false (* nyi *)
 
     (* error cases *)
-    | Term.Sort (s,_) when args <> [] ->
+    | Term.Sort s when args <> [] ->
        assert false (* A sort cannot be applied. *)
     | Term.Application _ ->
        assert false (* f cannot be an application. *)
@@ -148,15 +148,15 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
      in the context [c]? Assume that both terms are wellformed. *)
   let open Term in
   match a, b with
-  | Sort (sa,_), Sort (sb,_) ->
+  | Sort sa, Sort sb ->
      sa = sb
-  | Variable (i,_), Variable (j,_) ->
+  | Variable i,  Variable j ->
      i = j
-  | Lambda (_,tpa,ta,_), Lambda (_,tpb,tb,_) when equivalent tpa tpb c ->
+  | Lambda (_,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
      equivalent ta tb (push_unnamed tpa c)
-  | All (_,tpa,ta,_), All (_,tpb,tb,_) when equivalent tpa tpb c ->
+  | All (_,tpa,ta), All (_,tpb,tb) when equivalent tpa tpb c ->
      equivalent ta tb (push_unnamed tpa c)
-  | Inspect (ea,pa,casesa,_), Inspect (eb,pb,casesb,_)
+  | Inspect (ea,pa,casesa), Inspect (eb,pb,casesb)
        when equivalent ea eb c && equivalent pa pa c ->
      let ncases = Array.length casesa in
      assert(ncases <> Array.length casesb);
@@ -197,6 +197,8 @@ let is_valid_sort (s:Term.Sort.t) (c:t): bool =
   in
   is_valid s
 
+
+
 let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
   let open Term.Sort in
   match a, b with
@@ -208,6 +210,9 @@ let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
      assert false (* nyi *)
 
 
+
+
+
 let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   (* Is [a] a subtype of [b] in the context [c]. Assume that both are
      wellformed.  *)
@@ -215,9 +220,9 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let hb,argsb = head_normal0 b [] c in
   let open Term in
   match ha, hb with
-  | Sort (sa,_), Sort (sb,_) ->
+  | Sort sa, Sort sb ->
      is_subsort sa sb c
-  | All (_,tpa,ta,_), All(_,tpb,tb,_) ->
+  | All (_,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
   | _ ->
@@ -226,41 +231,42 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
 
 
 
+
+
+
+
 let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
   (* Return the type of [t] in the context [c] if it is wellformed. *)
   let open Term in
   match t with
-  | Sort (s,_) ->
+  | Sort s ->
      if is_valid_sort s c then
-       Some (Sort (Sort.type_of s, Info.Unknown))
+       Some (Sort (Sort.type_of s))
      else
        None
-  | Variable (i,_) ->
+  | Variable i ->
      assert (i < count c);
      Some (entry_type i c)
-  | Application (f,a,_,_) ->
+  | Application (f,a,_) ->
      (* Does the type of [a] fit the argument type of [f]? *)
      Option.(
       maybe_type_of f c >>= fun ftp ->
       maybe_type_of a c >>= fun atp ->
       match head_normal ftp c with
-      | All (_, tp, res, _) when is_subtype atp tp c  ->
+      | All (_, tp, res) when is_subtype atp tp c  ->
          Some (Term.substitute res a)
       | _ ->
          None
      )
-  | Lambda (_,tp,t,_) ->
+  | Lambda (_,tp,t) ->
      Option.(
-      maybe_type_of tp c >>= fun s ->
-      Term.maybe_sort s >>= fun _ ->
-      let c1 = push_unnamed tp c in
-      maybe_type_of t c1 >>= fun ttp ->
-      let lam_tp = All (None, tp, ttp, Info.Unknown) in
-      maybe_type_of lam_tp c >>= fun s ->
-      Term.maybe_sort s >>= fun _ ->
+      maybe_type_and_sort_of tp c >>= fun (s,_) ->
+      maybe_type_of t (push_unnamed tp c) >>= fun ttp ->
+      let lam_tp = All (None, tp, ttp) in
+      maybe_type_and_sort_of lam_tp c >>= fun (s,_) ->
       Some lam_tp
      )
-  | All (_,arg_tp,res_tp,_) ->
+  | All (_,arg_tp,res_tp) ->
      (* [arg_tp] must be a wellformed type. [res_tp] must be a wellformed type
         in the context with [arg_tp] pushed. The sorts of [arg_tp] and
         [res_tp] determine the sort of the quantified expression. *)
@@ -270,11 +276,11 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
       maybe_type_and_sort_of
         res_tp
         (push_unnamed arg_tp c) >>= fun (res_tp_tp,res_s) ->
-      Some (Sort (Sort.product arg_s res_s, Info.Unknown))
+      Some (Sort (Sort.product arg_s res_s))
      )
-  | Inspect (ext,map,cases,_) ->
+  | Inspect (ext,map,cases) ->
      assert false (* nyi *)
-  | Fix (idx, arr,_) ->
+  | Fix (idx, arr) ->
      assert false (* nyi *)
 
 and maybe_type_and_sort_of (t:Term.t) (c:t): (Term.typ * Term.Sort.t) option =
@@ -287,15 +293,19 @@ and maybe_type_and_sort_of (t:Term.t) (c:t): (Term.typ * Term.Sort.t) option =
 
 let is_wellformed (t:Term.t) (c:t): bool =
   match maybe_type_of t c with
-  | None -> false
-  | Some _ -> true
+  | None ->
+     false
+  | Some _ ->
+     true
 
 
 (* Function arrow:
 
-   (->) (A,B:Any): Any := all(_:A) B
+   (->) (A:Any(0), B:Any(1)): Any(0) * Any(1)
+       := all(_:A) B
 
-   type of (->): all(A,B:Any,_A) B
+   (->): all(A:Any(0), B:Any(1), _:A) Any(0) * Any(1)
+
 
    We get 2 sort variables i and j: all(A:Any(i), B:Any(j), _:A) B
  *)
@@ -308,7 +318,7 @@ let test (): unit =
   in
   assert ( is_valid_sort (Sort.Variable 0) c);
   assert ( is_valid_sort (Sort.Variable 1) c);
-  assert ( is_wellformed (Sort (s0, Info.Unknown)) c );
-  assert ( is_wellformed (Sort (s1, Info.Unknown)) c );
+  assert ( is_wellformed (Sort s0) c );
+  assert ( is_wellformed (Sort s1) c );
   Printf.printf "Test type checker\n";
   ()

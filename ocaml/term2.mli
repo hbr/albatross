@@ -19,15 +19,15 @@ type decr_index = int
 type oo_application = bool
 
 type t =
-  | Sort of Sort.t * Info.t
-  | Variable of int * Info.t
-  | Application of t * t * oo_application *Info.t
+  | Sort of Sort.t
+  | Variable of int
+  | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * inspect_map * t array * Info.t
-  | Fix of fix_index * fixpoint * Info.t
+  | Inspect of t * inspect_map * t array
+  | Fix of fix_index * fixpoint
 and typ = t
-and abstraction =  string option * typ * t * Info.t
+and abstraction =  string option * typ * t
 and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
