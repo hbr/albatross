@@ -1,39 +1,105 @@
+open Container
 open Alba2_common
+
 
 module Sort =
   struct
-    type sortvariable = int
+    type lower_bound =
+      | No
+      | DT
+      | A1
     type t =
       | Proposition
-      | Level of int
+      | Datatype
+      | Any1
       | Variable of int
-      | Type_of of t
-      | Max of int * sortvariable
-      | Product of t * t
+      | Variable_type of int
+      | Max of lower_bound * bool IntMap.t
 
-    let type_of (s:t): t =
+    let maybe_sort_of (s:t): t option =
       match s with
-      | Proposition -> Level 1
-      | Level i -> Level (i+1)
-      | _ -> Type_of s
+      | Proposition | Datatype ->
+         Some Any1
+      | Variable i ->
+         Some (Variable_type i)
+      | _ ->
+         None
+
+
+
+    let max_of (s:t): t =
+      match s with
+      | Proposition ->
+         assert false (* illegal call *)
+      | Datatype -> Max (DT, IntMap.empty)
+      | Any1 -> Max (A1, IntMap.empty)
+      | Variable i -> Max (No, IntMap.singleton i false)
+      | Variable_type i -> Max (No, IntMap.singleton i true)
+      | Max _ -> s
+
+
+    let merge (s1:t) (s2:t): t =
+      match s1, s2 with
+      | Max (lb1,m1), Max (lb2,m2) ->
+         begin
+           let lb =
+             match lb1, lb2 with
+             | A1, _ | _, A1 ->
+                A1
+             | DT, _ | _, DT ->
+                DT
+             | No,No ->
+                No
+           in
+           let m =
+             IntMap.fold
+               (fun i b m ->
+                 if b then
+                   IntMap.add i b m
+                 else if IntMap.mem i m then
+                   m
+                 else
+                   IntMap.add i b m
+               )
+               m1
+               m2
+        in
+        Max (lb,m)
+         end
+      | _, _ ->
+         assert false
+
+
+
 
     let product (s1:t) (s2:t): t =
       match s1, s2 with
-      | Proposition, s2 ->
+      | Proposition, _ ->
          s2
       | _, Proposition ->
          Proposition
-      | Level i, Level k ->
-         Level (max i k)
-      | Type_of s1, s2 when s1 = s2 ->
-         Type_of s1
-      | s1, Type_of s2 when s1 = s2 ->
-         Type_of s1
-      | Level i, Variable sv | Variable sv, Level i ->
-         Max (i,sv)
+      | Datatype, Datatype ->
+         Datatype
+      | Datatype, Any1
+        | Any1, Datatype
+        | Any1, Any1
+        ->
+         Any1
       | _, _ ->
-         Product (s1,s2)
-  end
+         let s1 = max_of s1
+         and s2 = max_of s2 in
+         merge s1 s2
+  end (* Sort *)
+
+
+
+
+
+
+
+
+
+
 
 type fix_index = int
 type decr_index = int
@@ -53,21 +119,34 @@ and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
 
+let datatype: t = Sort Sort.Datatype
+let proposition: t = Sort Sort.Proposition
+let any1: t = Sort Sort.Any1
+
+let sort_variable (i:int): t =
+  Sort (Sort.Variable i)
+
+let sort_variable_type (i:int): t =
+  Sort (Sort.Variable_type i)
+
 let maybe_sort (t:t): Sort.t option =
   match t with
   | Sort s ->
-     Some s
+     Sort.maybe_sort_of s
+  | _ ->
+     None
+
+let maybe_product (a:t) (b:t): t option =
+  match a, b with
+  | Sort sa, Sort sb ->
+     Some (Sort (Sort.product sa sb))
   | _ ->
      None
 
 
 
-let sort_of (t:t): Sort.t =
-  match t with
-  | Sort s ->
-     s
-  | _ ->
-     assert false (* is not a sort *)
+
+
 
 
 
@@ -141,6 +220,13 @@ let up_from (start:int) (n:int) (t:t): t =
 
 let up (n:int) (t:t): t =
   up_from 0 n t
+
+
+
+let arrow (a:t) (b:t): t =
+  All (None, a, up 1 b)
+
+
 
 let rec split_application (f:t) (args:t list): t * t list =
   (* Analyze the term [f(args)] and split [f] as long as it is an

@@ -74,14 +74,25 @@ let empty: t =
    gamma = IArr.empty;
    assumptions = []}
 
+
 let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
-  assert false
+  let n = count c in
+  {c with
+    gamma = IArr.push {typ = tp; just = Assumption nm} c.gamma;
+    assumptions = n :: c.assumptions}
+
+
 
 let push_unnamed (tp:Term.typ) (c:t): t =
   push None tp c
 
-let push_sort (c:t): t =
+let push_sort_variable (c:t): t =
   {c with nsorts = 1 + c.nsorts}
+
+let push_sort_variables (n:int) (c:t): t =
+  {c with nsorts = n + c.nsorts}
+
+
 
 let head_normal0
       (f:Term.t)
@@ -180,27 +191,14 @@ and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
      false
 
 
-let is_valid_sort (s:Term.Sort.t) (c:t): bool =
-  let open Term.Sort in
-  let rec is_valid s =
-    match s with
-    | Proposition | Level _  ->
-       true
-    | Variable sv ->
-       sv < count_sorts c
-    | Type_of s ->
-       is_valid s
-    | Max (i, sv) ->
-       sv < count_sorts c
-    | Product (a,b) ->
-       is_valid a && is_valid b
-  in
-  is_valid s
+
+
 
 
 
 let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
-  let open Term.Sort in
+  assert false
+  (*let open Term.Sort in
   match a, b with
   | Proposition, _ ->
      true
@@ -208,7 +206,7 @@ let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
      i <= j
   | _ ->
      assert false (* nyi *)
-
+   *)
 
 
 
@@ -240,13 +238,23 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
   let open Term in
   match t with
   | Sort s ->
-     if is_valid_sort s c then
-       Some (Sort (Sort.type_of s))
+     begin
+       match s with
+       | Sort.Variable i | Sort.Variable_type i when i < 0 || c.nsorts <= i ->
+          None
+       | _ ->
+          Option.(
+           Sort.maybe_sort_of s >>= fun s ->
+           Some (Sort s)
+          )
+     end
+
+  | Variable i ->
+     if  i < count c then
+       Some (entry_type i c)
      else
        None
-  | Variable i ->
-     assert (i < count c);
-     Some (entry_type i c)
+
   | Application (f,a,_) ->
      (* Does the type of [a] fit the argument type of [f]? *)
      Option.(
@@ -259,12 +267,14 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
          None
      )
   | Lambda (_,tp,t) ->
+     (* [tp] must be a wellformed type, [t] must be a wellformed term in the
+        context [c,tp] and the corresponding product must be wellformed.*)
      Option.(
-      maybe_type_and_sort_of tp c >>= fun (s,_) ->
-      maybe_type_of t (push_unnamed tp c) >>= fun ttp ->
+      maybe_sort_of tp c
+      >> maybe_type_of t (push_unnamed tp c) >>= fun ttp ->
       let lam_tp = All (None, tp, ttp) in
-      maybe_type_and_sort_of lam_tp c >>= fun (s,_) ->
-      Some lam_tp
+      maybe_sort_of lam_tp c
+      >> Some lam_tp
      )
   | All (_,arg_tp,res_tp) ->
      (* [arg_tp] must be a wellformed type. [res_tp] must be a wellformed type
@@ -272,18 +282,19 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
         [res_tp] determine the sort of the quantified expression. *)
      Option.(
       let open Term in
-      maybe_type_and_sort_of arg_tp c >>= fun (arg_tp_tp,arg_s) ->
-      maybe_type_and_sort_of
-        res_tp
-        (push_unnamed arg_tp c) >>= fun (res_tp_tp,res_s) ->
-      Some (Sort (Sort.product arg_s res_s))
+      maybe_type_of arg_tp c >>= fun arg_s ->
+      maybe_type_of res_tp (push_unnamed arg_tp c) >>= fun res_s ->
+      maybe_product arg_s res_s
      )
-  | Inspect (ext,map,cases) ->
+  | Inspect (e,res,cases) ->
      assert false (* nyi *)
   | Fix (idx, arr) ->
      assert false (* nyi *)
 
-and maybe_type_and_sort_of (t:Term.t) (c:t): (Term.typ * Term.Sort.t) option =
+and maybe_sort_of (t:Term.t) (c:t): (Term.typ * Term.Sort.t) option =
+  (* If [t] is a type, return the sort of the type, otherwise return [None].
+     Note: [Term.typ] is redundant, it can be reconstructed from the sort.
+   *)
   Option.(
     maybe_type_of t c >>= fun tp ->
     Term.maybe_sort tp >>= fun s ->
@@ -311,14 +322,46 @@ let is_wellformed (t:Term.t) (c:t): bool =
  *)
 
 let test (): unit =
-  let open Term in
-  let c = push_sort (push_sort empty) in
-  let s0 = Sort.Variable 0
-  and s1 = Sort.Variable 1
-  in
-  assert ( is_valid_sort (Sort.Variable 0) c);
-  assert ( is_valid_sort (Sort.Variable 1) c);
-  assert ( is_wellformed (Sort s0) c );
-  assert ( is_wellformed (Sort s1) c );
   Printf.printf "Test type checker\n";
+  let open Term in
+  let c = push_unnamed datatype
+            (push_sort_variables 2 empty) in
+  let c1 = push_unnamed (Variable 0) c in
+  assert ( is_wellformed (sort_variable 0) c);
+  assert ( is_wellformed (sort_variable 1) c);
+  assert ( maybe_type_of (sort_variable 0) c = Some (sort_variable_type 0));
+  assert ( maybe_type_of (sort_variable 2) c = None);
+  assert ( maybe_type_of (Variable 0) c = Some datatype);
+  assert ( maybe_type_of (Variable 1) c1 = Some datatype);
+  assert ( is_wellformed (Variable 0) c1);
+  assert ( maybe_type_of (Variable 0) c1 = Some (Variable 1));
+  assert (
+      Option.(
+        maybe_type_of (Variable 0) c1 >>= fun tp ->
+        maybe_type_of tp c1
+      ) = Some datatype);
+  (* Proposition -> Proposition *)
+  assert ( maybe_type_of (arrow proposition proposition) c = Some any1);
+
+  (* Natural -> Proposition *)
+  assert ( maybe_type_of (arrow (Variable 0) proposition) c = Some any1);
+
+  (* all(A:Prop) A -> A : Proposition *)
+  assert ( maybe_product proposition proposition = Some proposition );
+  assert ( maybe_product datatype proposition    = Some proposition );
+  assert ( maybe_type_of (All (None,
+                               proposition,
+                               arrow (Variable 0) (Variable 0))) c
+           = Some proposition);
+
+  (* all(n:Natural) n -> n is illformed *)
+  assert ( maybe_type_of (All (None,
+                               Variable 0,
+                               arrow (Variable 0) (Variable 0))) c
+           = None);
+
+  (* Natural -> Natural : Datatype *)
+  assert ( maybe_product datatype datatype    = Some datatype );
+  assert ( maybe_type_of (arrow (Variable 0) (Variable 0)) c
+           = Some datatype);
   ()

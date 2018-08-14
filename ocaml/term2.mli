@@ -1,18 +1,23 @@
+open Container
 open Alba2_common
 
 module Sort:
 sig
-  type sortvariable = int
+  type lower_bound =
+    | No
+    | DT
+    | A1
   type t =
     | Proposition
-    | Level of int
+    | Datatype
+    | Any1
     | Variable of int
-    | Type_of of t
-    | Max of int * sortvariable
-    | Product of t * t
-  val type_of: t -> t
+    | Variable_type of int
+    | Max of lower_bound * bool IntMap.t
+  val maybe_sort_of: t -> t option
   val product: t -> t -> t
 end
+
 
 type fix_index = int
 type decr_index = int
@@ -32,10 +37,18 @@ and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
 
-val sort_of: t -> Sort.t
+val datatype: t
+val proposition: t
+val any1: t
+val sort_variable: int -> t
+val sort_variable_type: int -> t
+val maybe_product: t -> t -> t option
+
 val maybe_sort: t -> Sort.t option
 
 val up: int -> t -> t
+
+val arrow: t -> t -> t
 
 val split_application: t -> t list -> t * t list
 
