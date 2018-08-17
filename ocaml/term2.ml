@@ -111,12 +111,15 @@ type t =
   | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * inspect_map * t array
+  | Inspect of t * t * t array
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
-and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
+
+type arguments = (string option * typ) array
+type argument_list = (string option * typ) list
+
 
 
 let datatype: t = Sort Sort.Datatype
@@ -129,12 +132,6 @@ let sort_variable (i:int): t =
 let sort_variable_type (i:int): t =
   Sort (Sort.Variable_type i)
 
-let maybe_sort (t:t): Sort.t option =
-  match t with
-  | Sort s ->
-     Sort.maybe_sort_of s
-  | _ ->
-     None
 
 let maybe_product (a:t) (b:t): t option =
   match a, b with
@@ -144,10 +141,17 @@ let maybe_product (a:t) (b:t): t option =
      None
 
 
+let get_sort (a:t): Sort.t option =
+  match a with
+  | Sort s ->
+     Some s
+  | _ ->
+     None
 
 
-
-
+let variable0: t = Variable 0
+let variable1: t = Variable 1
+let variable2: t = Variable 2
 
 
 let fold_free_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
@@ -190,7 +194,7 @@ let map_free_from (start:int) (f:int->int) (t:t): t =
   let rec map s t =
     match t with
     | Sort s -> t
-    | Variable i when i < start ->
+    | Variable i when i < s ->
        t
     | Variable i ->
        assert (s <= i);
@@ -242,6 +246,56 @@ let apply_args (f:t) (args:t list): t =
   List.fold_left
     (fun f a -> Application (f,a,false))
     f args
+
+let apply_arg_array (f:t) (args: t array): t =
+  let nargs = Array.length args in
+  let rec apply i t =
+    if i = nargs then
+      t
+    else
+      apply (i+1) (Application (t,args.(i),false))
+  in
+  apply 0 f
+
+
+
+let rec split_product0 (a:typ) (args: argument_list): typ * argument_list =
+  (* Analyze [all(a:A,b:B, ...) T], return (T, [...,B,A,args]) *)
+  match a with
+  | All(nme,tp,t) ->
+     split_product0 t ((nme,tp) :: args)
+  | _ ->
+     a, args
+
+
+
+let split_product(a:typ): arguments * typ =
+  (* Analyze [all(a:A,b:B, ...) T], return ([A,B,...], T) *)
+  let tp, args = split_product0 a [] in
+  let n = List.length args in
+  let arr = Array.make n (None,tp) in
+  let rec mkarr i args =
+    match args with
+    | [] ->
+       assert (i = 0)
+    | a :: tl ->
+       assert (i > 0);
+       arr.(i-1) <- a;
+       mkarr (i-1) tl
+  in
+  mkarr n args;
+  arr, tp
+
+
+let push_product (args:arguments) (tp:typ): typ =
+  let tp = ref tp in
+  for i = 0 to Array.length args - 1 do
+    let n,t = args.(i) in
+    tp := All(n,t,!tp)
+  done;
+  !tp
+
+
 
 let substitute (a:t) (b:t): t =
   (* Substitute the variable 0 in the term [a] by the term [b]. *)

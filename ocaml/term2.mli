@@ -29,13 +29,14 @@ type t =
   | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * inspect_map * t array
+  | Inspect of t * t * t array
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
-and inspect_map = t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
+type arguments = (string option * typ) array
+type argument_list = (string option * typ) list
 
 val datatype: t
 val proposition: t
@@ -43,17 +44,25 @@ val any1: t
 val sort_variable: int -> t
 val sort_variable_type: int -> t
 val maybe_product: t -> t -> t option
+val get_sort: t -> Sort.t option
 
-val maybe_sort: t -> Sort.t option
+val variable0: t
+val variable1: t
+val variable2: t
 
 val up: int -> t -> t
 
 val arrow: t -> t -> t
 
-val split_application: t -> t list -> t * t list
 
 val substitute: t -> t -> t
 
+val split_application: t -> t list -> t * t list
 val apply_args: t -> t list -> t
+val apply_arg_array: t -> t array -> t
+
+val split_product0: typ -> argument_list -> typ * argument_list
+val split_product: typ -> arguments * typ
+val push_product: arguments -> typ -> typ
 
 val beta_reduce: t -> t list -> t * t list
