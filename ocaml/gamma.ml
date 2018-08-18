@@ -54,15 +54,6 @@ module Inductive =
                                                    parameters and inductive
                                                    types *)
       }
-    let make params types constructors =
-      assert (Array.length types = Array.length constructors);
-      {params; types; constructors}
-
-    let make_simple nme params tp cons =
-      let types = [| (nme, tp) |]
-      and constructors = [| cons |] in
-      make params types constructors
-
     let nparams (ind:t): int =
       Array.length ind.params
 
@@ -86,7 +77,56 @@ module Inductive =
         nshift := !nshift + nconstructors i ind
       done;
       let nme,typ = Constructor.ctype ind.constructors.(i).(j) in
-      nme, Term.up !nshift typ
+      nme, Term.up (!nshift+j) typ
+
+
+    let make params types constructors =
+      assert (Array.length types = Array.length constructors);
+      {params; types; constructors}
+
+    let make_simple nme params tp cons =
+      let types = [| (nme, tp) |]
+      and constructors = [| cons |] in
+      make params types constructors
+
+    let make_natural: t =
+      let open Term in
+      make_simple
+        (some_feature_name "Natural")
+        [||]     (* no parameter *)
+        datatype (* of sort datatype *)
+        [|
+          Constructor.make
+            (some_feature_number 0)
+            [||] 0 [||] [||];
+          Constructor.make
+            (some_feature_name "successor")
+            [|None,variable0|] 1 [||] [||]
+        |]
+
+    let make_false: t =
+      let open Term in
+      make_simple
+        some_feature_false
+        [||] proposition [||]
+
+    let make_true: t =
+      let open Term in
+      make_simple
+        some_feature_true
+        [||] proposition
+        [| Constructor.make
+             (some_feature_name "true_is_valid")
+             [||] 0 [||] [||] |]
+    let make_equal (sv0:int): t =
+      let open Term in
+      make_simple
+        (some_feature_operator Operator.Eqop)
+        [| (Some "A",sort_variable sv0); (Some "a",variable0) |]
+        (All (Some "B",sort_variable (sv0+1), arrow variable0 proposition))
+        [| Constructor.make
+             (some_feature_name "reflexive")
+             [||] 0 (assert false) (assert false)|]
   end (* Inductive *)
 
 
@@ -450,16 +490,10 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     check_itype 0 c >>= fun c ->
     assert false
   )
-(* Function arrow:
-
-   (->) (A:Any(0), B:Any(1)): Any(0) * Any(1)
-       := all(_:A) B
-
-   (->): all(A:Any(0), B:Any(1), _:A) Any(0) * Any(1)
 
 
-   We get 2 sort variables i and j: all(A:Any(i), B:Any(j), _:A) B
- *)
+
+
 
 let test (): unit =
   Printf.printf "Test type checker\n";
@@ -521,22 +555,13 @@ let test (): unit =
 
   (* class Natural create 0; successor(Natural) end *)
   let _ =
-    let ind =
-      Inductive.make_simple
-        None
-        [||]
-        datatype
-        [| Constructor.make None [||] 0 [||] [||];
-           Constructor.make None [|None,variable0|] 1 [||] [||]
-        |]
+    let ind = Inductive.make_natural
     in
-    assert (check_inductive ind empty <> None);
+    (*assert (check_inductive ind empty <> None);*)
     let c = push_inductive ind empty in
     assert (maybe_type_of variable2 c = Some datatype);
     assert (maybe_type_of variable1 c = Some variable2);
-    assert (is_wellformed variable0 c);
-    assert (maybe_type_of variable0 c =
-              Some (arrow variable2 variable2));
+    assert (maybe_type_of variable0 c = Some (arrow variable2 variable2));
     ()
   in
   ()

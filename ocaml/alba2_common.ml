@@ -71,6 +71,9 @@ module Feature_name =
       | Name of string
       | Operator of Operator.t
       | Bracket
+      | True
+      | False
+      | Number of int
     module Map = Map.Make(
                      struct
                        type t0 = t (* Avoid cyclic error message *)
@@ -78,3 +81,18 @@ module Feature_name =
                        let compare = Pervasives.compare
                      end)
   end
+
+let some_feature_name (s:string): Feature_name.t option =
+  Some (Feature_name.Name s)
+
+let some_feature_operator (op:Operator.t): Feature_name.t option =
+  Some (Feature_name.Operator op )
+
+let some_feature_number (i:int): Feature_name.t option =
+  Some (Feature_name.Number i)
+
+let some_feature_true: Feature_name.t option =
+  Some Feature_name.True
+
+let some_feature_false: Feature_name.t option =
+  Some Feature_name.False
