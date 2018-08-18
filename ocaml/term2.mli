@@ -50,6 +50,7 @@ val variable0: t
 val variable1: t
 val variable2: t
 
+val shift: int -> t -> t
 val up: int -> t -> t
 
 val arrow: t -> t -> t

@@ -154,7 +154,7 @@ let variable1: t = Variable 1
 let variable2: t = Variable 2
 
 
-let fold_free_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
+let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold s a t =
     match t with
     | Sort s -> t
@@ -186,11 +186,11 @@ let fold_free_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   fold start a t
 
 
-let fold_free (f:'a->int->'a) (a:'a) (t:t): 'a =
-  fold_free_from 0 f a t
+let fold (f:'a->int->'a) (a:'a) (t:t): 'a =
+  fold_from 0 f a t
 
 
-let map_free_from (start:int) (f:int->int) (t:t): t =
+let map_from (start:int) (f:int->int) (t:t): t =
   let rec map s t =
     match t with
     | Sort s -> t
@@ -198,7 +198,9 @@ let map_free_from (start:int) (f:int->int) (t:t): t =
        t
     | Variable i ->
        assert (s <= i);
-       Variable (f (i-s) + s)
+       let idx = f (i-s) + s in
+       assert (s <= idx); (* no capturing allowed *)
+       Variable idx
     | Application (a,b,oo) ->
        Application (map s a, map s b, oo)
     | Lambda (nm,tp,t) ->
@@ -217,14 +219,22 @@ let map_free_from (start:int) (f:int->int) (t:t): t =
   in
   map start t
 
-let map_free (f:int -> int) (t:t): t = map_free_from 0 f t
+let map (f:int -> int) (t:t): t = map_from 0 f t
+
+let shift_from (start:int) (n:int) (t:t): t =
+  map_from start (fun i -> i + n) t
+
+let shift (n:int) (t:t): t =
+  shift_from 0 n t
 
 let up_from (start:int) (n:int) (t:t): t =
-  map_free_from start (fun i -> i + n) t
+  assert (0 <= n);
+  shift_from start n t
+
 
 let up (n:int) (t:t): t =
+  assert (0 <= n);
   up_from 0 n t
-
 
 
 let arrow (a:t) (b:t): t =
