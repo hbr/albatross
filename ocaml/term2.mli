@@ -50,6 +50,9 @@ val variable0: t
 val variable1: t
 val variable2: t
 
+val equal: t -> t -> bool
+val equal1: t option -> t -> bool
+
 val shift: int -> t -> t
 val up: int -> t -> t
 
@@ -61,6 +64,7 @@ val substitute: t -> t -> t
 val split_application: t -> t list -> t * t list
 val apply_args: t -> t list -> t
 val apply_arg_array: t -> t array -> t
+val apply_standard: int -> int -> t -> t
 
 val split_product0: typ -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ

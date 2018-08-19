@@ -16,6 +16,21 @@ module Sort =
       | Variable_type of int
       | Max of lower_bound * bool IntMap.t
 
+
+    let equal (s1:t) (s2:t): bool =
+      match s1, s2 with
+      | Proposition, Proposition
+        | Datatype, Datatype
+        | Any1, Any1 ->
+         true
+      | Variable i, Variable j | Variable_type i, Variable_type j when i = j ->
+         true
+      | Max (lb1,m1), Max (lb2,m2) ->
+         lb1 = lb2
+         && IntMap.equal (fun b1 b2 -> b1 = b2) m1 m2
+      | _, _ ->
+         false
+
     let maybe_sort_of (s:t): t option =
       match s with
       | Proposition | Datatype ->
@@ -154,6 +169,38 @@ let variable1: t = Variable 1
 let variable2: t = Variable 2
 
 
+let rec equal (a:t) (b:t): bool =
+  match a,b with
+  | Sort sa, Sort sb ->
+     Sort.equal sa sb
+  | Variable i, Variable j when i = j ->
+     true
+  | Application (fa,a,_), Application (fb,b,_) ->
+     equal fa fb && equal a b
+  | Lambda (_,tp1,t1), Lambda (_,tp2,t2)
+    | All (_,tp1,t1), Lambda (_,tp2,t2) ->
+     equal tp1 tp2 && equal t1 t2
+  | Inspect(e1,r1,f1), Inspect(e2,r2,f2) ->
+     let n = Array.length f1 in
+     n = Array.length f2
+     && equal e1 e2
+     && equal r1 r2
+     && assert false (* nyi *)
+  | Fix(i1,f1), Fix(i2,f2) when i1 = i2 ->
+     assert false (* nyi *)
+  | _, _ ->
+     false
+
+
+let equal1 (a:t option) (b:t): bool =
+  match a with
+  | None ->
+     false
+  | Some a ->
+     equal a b
+
+
+
 let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold s a t =
     match t with
@@ -242,6 +289,9 @@ let arrow (a:t) (b:t): t =
 
 
 
+
+
+
 let rec split_application (f:t) (args:t list): t * t list =
   (* Analyze the term [f(args)] and split [f] as long as it is an
          application. Push all remaining arguments in the term [f] in front of
@@ -252,10 +302,13 @@ let rec split_application (f:t) (args:t list): t * t list =
   | _ ->
      f, args
 
+
+
 let apply_args (f:t) (args:t list): t =
   List.fold_left
     (fun f a -> Application (f,a,false))
     f args
+
 
 let apply_arg_array (f:t) (args: t array): t =
   let nargs = Array.length args in
@@ -266,6 +319,21 @@ let apply_arg_array (f:t) (args: t array): t =
       apply (i+1) (Application (t,args.(i),false))
   in
   apply 0 f
+
+
+
+let apply_standard (n:int) (start:int) (f:t): t =
+  (* Compute the application
+
+         f (Variable (start+n-1)) (Variable (start+n-2)) ... (Variable start)
+   *)
+  let res = ref f in
+  for i = 0 to n - 1 do
+    res := Application (f, Variable (start + n - 1 - i), false)
+  done;
+  !res
+
+
 
 
 
