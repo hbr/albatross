@@ -96,3 +96,6 @@ let some_feature_true: Feature_name.t option =
 
 let some_feature_false: Feature_name.t option =
   Some Feature_name.False
+
+let some_feature_name_opt (s:string option): Feature_name.t option =
+  Option.(s >>= fun s -> some_feature_name s)

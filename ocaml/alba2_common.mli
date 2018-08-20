@@ -56,3 +56,4 @@ val some_feature_operator: Operator.t -> Feature_name.t option
 val some_feature_number: int -> Feature_name.t option
 val some_feature_true:  Feature_name.t option
 val some_feature_false: Feature_name.t option
+val some_feature_name_opt: string option -> Feature_name.t option

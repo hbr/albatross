@@ -54,6 +54,7 @@ val equal: t -> t -> bool
 val equal1: t option -> t -> bool
 
 val shift: int -> t -> t
+val up_from: int -> int -> t -> t
 val up: int -> t -> t
 
 val arrow: t -> t -> t

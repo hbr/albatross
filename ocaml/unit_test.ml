@@ -7,4 +7,5 @@ let _ =
 
 (* Albatross modules *)
 let _ =
+  Term_printer.test();
   Gamma.test ()

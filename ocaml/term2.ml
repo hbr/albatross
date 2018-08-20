@@ -338,7 +338,7 @@ let apply_standard (n:int) (start:int) (f:t): t =
 
 
 let rec split_product0 (a:typ) (args: argument_list): typ * argument_list =
-  (* Analyze [all(a:A,b:B, ...) T], return (T, [...,B,A,args]) *)
+  (* Analyze [all(a:A,b:B, ...) T], return (T, [...,b:B,a:A,args]) *)
   match a with
   | All(nme,tp,t) ->
      split_product0 t ((nme,tp) :: args)

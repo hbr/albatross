@@ -496,6 +496,15 @@ let test (): unit =
     end;
   assert
     begin
+      let f t =
+        vbox 0 t >>= put_wrapped ["123";"456"]
+      in
+      (make 5 () >>= f >>= close)
+      |> buf
+      = "123\n456"
+    end;
+  assert
+    begin
       (make 5 () >>= vbox 1 >>= put_wrapped ["123";"456"] >>= close)
       |> buf
       = "123\n 456"
