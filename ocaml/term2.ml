@@ -12,7 +12,7 @@ module Sort =
       | Proposition
       | Datatype
       | Any1
-      | Variable of int
+      | Variable of int     (* Datatype < Variable i, Any1 <= Variable i *)
       | Variable_type of int
       | Max of lower_bound * bool IntMap.t
 
@@ -105,7 +105,8 @@ module Sort =
          and s2 = max_of s2 in
          merge s1 s2
 
-    let sub (s1:t) (s2:t): bool =
+    let sub (s1:t) (s2:t) (le:int->int->bool): bool =
+      (* Proposition < Datatype < Any1 <= Variable i *)
       match s1 with
       | Proposition ->
          true
@@ -114,33 +115,42 @@ module Sort =
            match s2 with
            | Proposition ->
               false
-           | Datatype | Any1 ->
-              true
            | _ ->
-              assert false (* nyi *)
+              true
          end
       | Any1 ->
          begin
            match s2 with
            | Proposition | Datatype ->
               false
-           | Any1 ->
-              true
            | _ ->
-              assert false (* nyi *)
+              true
          end
       | Variable i ->
          begin
            match s2 with
-           | Variable j | Variable_type j when i = j ->
-              true
+           | Proposition | Datatype | Any1 ->
+              (* A sort variable cannot have a fixed upper bound *)
+              false
+           | Variable j | Variable_type j ->
+              i = j || le i j
            | _ ->
               assert false (* nyi *)
          end
       | Variable_type i ->
-         assert false
+         begin
+           match s2 with
+           | Proposition | Datatype | Any1 ->
+              false
+           | Variable j when i = j ->
+              false
+           | Variable_type j ->
+              i = j || le i j
+           | _ ->
+              assert false (* nyi *)
+         end
       | Max (lb1,m1) ->
-         assert false
+         assert false (* nyi *)
 
   end (* Sort *)
 

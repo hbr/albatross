@@ -16,7 +16,7 @@ sig
     | Max of lower_bound * bool IntMap.t
   val maybe_sort_of: t -> t option
   val product: t -> t -> t
-  val sub: t -> t -> bool
+  val sub: t -> t -> (int -> int -> bool) -> bool
 end
 
 

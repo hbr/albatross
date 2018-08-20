@@ -153,10 +153,10 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       | Sort.Any1 ->
          put "Any1"
       | Sort.Variable i ->
-         fun pp -> put "s#" pp >>= put (string_of_int i)
+         fun pp -> put "SV" pp >>= put (string_of_int i)
       | Sort.Variable_type i ->
          fun pp ->
-         put "s#" pp >>= put (string_of_int i) >>= put "'"
+         put "SV" pp >>= put (string_of_int i) >>= put "'"
       | Sort.Max (lb,m) ->
          assert false
 

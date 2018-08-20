@@ -201,17 +201,106 @@ type entry = {
     just: justification
   }
 
+
+module Sort_variables =
+  struct
+    type t = bool IntMap.t IArr.t (* set of lower bounds, if maps to true,
+                                     then it is a strict lower bound *)
+    let count (vs:t): int =
+      IArr.length vs
+
+    let le (vs:t) (i:int) (j:int): bool =
+      assert (i <> j);
+      assert (i < count vs);
+      assert (j < count vs);
+      try
+        IntMap.mem i (IArr.elem j vs)
+      with Not_found ->
+        false
+
+    let lt (vs:t) (i:int) (j:int): bool =
+      assert (i <> j);
+      assert (i < count vs);
+      assert (j < count vs);
+      try
+        IntMap.find i (IArr.elem j vs)
+      with Not_found ->
+        false
+
+    let empty: t =
+      IArr.empty
+
+
+    let add_map (i:int) (strict:bool) (m:bool IntMap.t): bool IntMap.t =
+      if strict || not (IntMap.mem i m) then
+        IntMap.add i strict m
+      else
+        m
+
+
+    let push (n:int) (cs:(int*int*bool) list) (vs:t): t =
+      let nvars = n + count vs
+      and vsr = ref vs in
+      for i = 0 to n - 1 do
+        vsr := IArr.push IntMap.empty !vsr
+      done;
+      assert (IArr.length !vsr = nvars);
+      List.iter
+        (fun (i,j,strict) ->
+          assert (i <> j);
+          assert (i < nvars);
+          assert (j < nvars);
+          assert (not (strict && le vs j i));
+          let jmap = ref (IArr.elem j !vsr) in
+          jmap := add_map i strict !jmap;
+          (* transitive closure *)
+          IntMap.iter
+            (fun k kstrict -> jmap := add_map k kstrict !jmap)
+            (IArr.elem i !vsr);
+          vsr := IArr.put j !jmap !vsr
+        )
+        cs;
+      !vsr
+  end
+
 type t = {
-    nsorts: int;
+    sort_variables: Sort_variables.t;
     gamma: entry IArr.t;
     assumptions: int list
   }
 
-let count (c:t): int =
-  IArr.length c.gamma
 
 let count_sorts (c:t): int =
-  c.nsorts
+  Sort_variables.count c.sort_variables
+
+
+let sortvariable_le (c:t) (i:int) (j:int): bool =
+  Sort_variables.le c.sort_variables i j
+
+
+let sortvariable_lt (c:t) (i:int) (j:int): bool =
+  Sort_variables.lt c.sort_variables i j
+
+
+let push_sorts (n:int) (cs: (int*int*bool) list) (c:t): t =
+  {c with
+    sort_variables = Sort_variables.push n cs c.sort_variables}
+
+let push_sort_variables (n:int) (c:t): t =
+  push_sorts n [] c
+
+
+let push_sort_variable (c:t): t =
+  push_sort_variables 1 c
+
+
+
+
+
+
+
+let count (c:t): int =
+  IArr.length c.gamma
 
 let entry (i:int) (c:t): entry =
   (* entry 0 is the most recently added (i.e. the last) element *)
@@ -247,7 +336,7 @@ let constructor_offset (i:int) (c:t): int =
   assert false (* nyi *)
 
 let empty: t =
-  {nsorts = 0;
+  {sort_variables = Sort_variables.empty;
    gamma = IArr.empty;
    assumptions = []}
 
@@ -263,13 +352,6 @@ let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
 let push_unnamed (tp:Term.typ) (c:t): t =
   push None tp c
 
-
-let push_sort_variable (c:t): t =
-  {c with nsorts = 1 + c.nsorts}
-
-
-let push_sort_variables (n:int) (c:t): t =
-  {c with nsorts = n + c.nsorts}
 
 
 
@@ -416,19 +498,6 @@ let normalize (t:Term.t) (c:t): Term.t =
   t (* nyi BUG!! *)
 
 
-let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
-  assert false
-  (*let open Term.Sort in
-  match a, b with
-  | Proposition, _ ->
-     true
-  | Level i, Level j ->
-     i <= j
-  | _ ->
-     assert false (* nyi *)
-   *)
-
-
 
 
 let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
@@ -439,10 +508,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ha, hb with
   | Sort sa, Sort sb ->
-     printf "sub sort %s %s\n"
-       (Term_printer.string_of_term ha)
-       (Term_printer.string_of_term hb);
-     Sort.sub sa sb
+     Sort.sub sa sb (sortvariable_le c)
   | All (_,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
@@ -463,7 +529,8 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
   | Sort s ->
      begin
        match s with
-       | Sort.Variable i | Sort.Variable_type i when i < 0 || c.nsorts <= i ->
+       | Sort.Variable i | Sort.Variable_type i
+            when i < 0 || count_sorts c <= i ->
           None
        | _ ->
           Option.(
@@ -584,22 +651,6 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
       for i = 0 to Inductive.ntypes ind - 1 do
         for j = 0 to Inductive.nconstructors i ind - 1 do
           let _,tp = Inductive.ctype0 i j ind in
-          let np = Inductive.nparams ind in
-          if np <> 0 then
-            begin
-              printf "check constructor %s\n"
-                (Term_printer.string_of_term tp);
-              let print_var i =
-                match maybe_type_of (Term.Variable i) cc with
-                | None ->
-                   printf "None\n";
-                | Some tp ->
-                   printf "  %d: %s\n" i (Term_printer.string_of_term tp)
-              in
-              print_var 0;
-              print_var 1;
-              print_var 2
-            end;
           match
             Option.(
             maybe_type_of tp cc >>= fun s ->
@@ -645,7 +696,7 @@ let test (): unit =
   Printf.printf "Test type checker\n";
   let open Term in
   let c = push_unnamed datatype
-            (push_sort_variables 2 empty) in
+            (push_sorts 2 [0,1,false] empty) in
   let c1 = push_unnamed variable0 c in
   assert ( is_wellformed (sort_variable 0) c);
   assert ( is_wellformed (sort_variable 1) c);
@@ -714,5 +765,5 @@ let test (): unit =
       assert (maybe_type_of variable0 c = Some (arrow variable2 variable2))
     );
 
-  (*assert (check_inductive (Inductive.make_equal 0) c <> None);*)
+  assert (check_inductive (Inductive.make_equal 0) c <> None);
   ()
