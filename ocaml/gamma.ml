@@ -1,5 +1,6 @@
 open Alba2_common
 open Container
+open Printf
 
 module IArr = Immutable_array
 
@@ -7,9 +8,27 @@ module Term = Term2
 
 type gamma = (Feature_name.t option * Term.typ) array
 
+(* Examples of inductive types:
 
-type definition =
-  Feature_name.t option * Term.typ * Term.t
+   class
+       List(A)
+   create
+       []
+       (^)(A,List(A))
+   end
+
+   Predicate (A:Any):  Any := A -> Proposition
+
+   Relation (A,B:Any): Any := A -> B -> Proposition
+
+   class
+       ( * ) (A:Any, r:Relation(A,A)): Relation(A,A)
+   create
+       start (a:A): ( *r)(a,a)
+       next (a,b,c:A): ( *r)(a,b) -> r(b,c) -> ( *r)(a,c)
+   end
+
+ *)
 
 module Constructor =
   struct
@@ -20,23 +39,20 @@ module Constructor =
     type t = {
         name: Feature_name.t option;
         args: Term.arguments;
-        index: int;
-        iparams: Term.t array;
         iargs: Term.t array
       }
-    let make
-          (name:Feature_name.t option) (args:Term.arguments)
-          (index:int) (iparams: Term.t array) (iargs: Term.t array)
-        : t =
-      {name; args; index; iparams; iargs}
+    let make name args iargs :t =
+      {name; args; iargs}
 
-    let ctype (c:t): Feature_name.t option * Term.typ =
+    let name (c:t): Feature_name.t option = c.name
+
+    let ctype (i:int) (ni:int) (np:int) (c:t): Term.typ =
       let open Term in
-      c.name,
+      let ncargs = Array.length c.args in
       push_product
         c.args
         (apply_arg_array
-           (apply_arg_array (Variable c.index) c.iparams)
+           (apply_standard np ncargs (Variable (ncargs + i)))
            c.iargs)
   end (* Constructor *)
 
@@ -64,20 +80,36 @@ module Inductive =
       assert (i < ntypes ind);
       Array.length ind.constructors.(i)
 
-    let itype (i:int) (ind:t): Feature_name.t option * Term.typ =
+    let parameter (i:int) (ind:t): string option * Term.typ =
+      assert (i < nparams ind);
+      ind.params.(i)
+
+    let itype0 (i:int) (ind:t): Feature_name.t option * Term.typ =
       assert (i < ntypes ind);
-      let nme,tp = ind.types.(i) in
+      ind.types.(i)
+
+    let itype (i:int) (ind:t): Feature_name.t option * Term.typ =
+      let nme,tp = itype0 i ind in
+      if i <> 0 then
+        printf "itype %d\n" i;
       nme, Term.up i (Term.push_product ind.params tp)
+
+    let ctype0 (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
+      let ni = ntypes ind
+      and np = nparams ind
+      and cons = ind.constructors.(i).(j) in
+      Constructor.name cons,
+      Constructor.ctype (np + ni - 1 - i) ni np cons
 
     let ctype (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
       assert (i < ntypes ind);
       assert (j < nconstructors i ind);
       let nshift = ref 0 in
-      for i = 0 to i - 1 do
-        nshift := !nshift + nconstructors i ind
+      for k = 0 to i - 1 do
+        nshift := !nshift + nconstructors k ind
       done;
-      let nme,typ = Constructor.ctype ind.constructors.(i).(j) in
-      nme, Term.up (!nshift+j) typ
+      let nm,tp = ctype0 i j ind in
+      nm, Term.up (!nshift+j) tp
 
 
     let make params types constructors =
@@ -89,6 +121,13 @@ module Inductive =
       and constructors = [| cons |] in
       make params types constructors
 
+
+    (* class
+           Natural
+       create
+           0
+           successor(Natural)
+       end *)
     let make_natural: t =
       let open Term in
       make_simple
@@ -98,26 +137,38 @@ module Inductive =
         [|
           Constructor.make
             (some_feature_number 0)
-            [||] 0 [||] [||];
+            [||] [||];
           Constructor.make
             (some_feature_name "successor")
-            [|None,variable0|] 1 [||] [||]
+            [|None,variable0|] [||]
         |]
 
+
+    (* class false create end *)
     let make_false: t =
       let open Term in
       make_simple
         some_feature_false
         [||] proposition [||]
 
+    (* class true create
+          true_is_valid
+       end *)
     let make_true: t =
       let open Term in
       make_simple
         some_feature_true
         [||] proposition
         [| Constructor.make
-             (some_feature_name "true_is_valid")
-             [||] 0 [||] [||] |]
+             (some_feature_name "true_is_valid") [||] [||] |]
+
+
+    (* class
+           (=) (A:Any, a:A): all(B:Any) B -> Proposition
+       create
+           reflexive: a = a
+       end
+     *)
     let make_equal (sv0:int): t =
       let open Term in
       make_simple
@@ -126,13 +177,16 @@ module Inductive =
         (All (Some "B",sort_variable (sv0+1), arrow variable0 proposition))
         [| Constructor.make
              (some_feature_name "reflexive")
-             [||] 0 (assert false) (assert false)|]
+             [||] [| variable1; variable0 |]|]
   end (* Inductive *)
 
 
 
 
 
+
+type definition =
+  Feature_name.t option * Term.typ * Term.t
 
 
 type justification =
@@ -169,7 +223,11 @@ let entry_type (i:int) (c:t): Term.t =
   Term.up (i + 1) (entry i c).typ
 
 let definition_opt (i:int) (c:t): Term.t option =
-  assert false (* nyi *)
+  match (entry i c).just with
+  | Definition _ ->
+     assert false (* nyi *)
+  | _ ->
+     None
 
 let has_definition (i:int) (c:t): bool =
   match definition_opt i c with
@@ -354,7 +412,8 @@ and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
 
 
 
-
+let normalize (t:Term.t) (c:t): Term.t =
+  t (* nyi BUG!! *)
 
 
 let is_subsort (a:Term.Sort.t) (b:Term.Sort.t) (c:t): bool =
@@ -380,7 +439,10 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ha, hb with
   | Sort sa, Sort sb ->
-     is_subsort sa sb c
+     printf "sub sort %s %s\n"
+       (Term_printer.string_of_term ha)
+       (Term_printer.string_of_term hb);
+     Sort.sub sa sb
   | All (_,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
@@ -460,35 +522,119 @@ let is_wellformed (t:Term.t) (c:t): bool =
   | Some _ ->
      true
 
+
 let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
-  let np = Inductive.nparams ind in
-  let rec check_params (i:int) (c:t): t option =
-    if i = np then
-      Some c
-    else
-      let _,tp = ind.Inductive.params.(i) in
-      if is_wellformed tp c then
-        check_params (i+1) (push_unnamed tp c)
+  (* Are all parameter types are valid? *)
+  let check_parameter (c:t): t option =
+    let np = Inductive.nparams ind in
+    let rec check i c =
+      if i = np then
+        Some c
       else
-        None
+        let _,tp = Inductive.parameter i ind in
+        if is_wellformed tp c then
+          check (i+1) (push_unnamed tp c)
+        else
+          begin
+            printf "parameter %d not wellformed\n" i;
+            None
+          end
+    in
+    check 0 c
   in
-  let ni = Inductive.ntypes ind in
-  let rec check_itype (i:int) (c:t): t option =
-    if i = ni then
-      Some c
-    else
-      let _,tp = ind.Inductive.types.(i) in
-      Option.(
-        maybe_type_of tp c >>= fun s ->
-        Term.get_sort s
-        >>
-        assert false
-      )
+  (* Are all inductive types arities of some sort? *)
+  let check_types (c:t): unit option =
+    let ni = Inductive.ntypes ind in
+    let rec check i =
+      if i = ni then
+        Some ()
+      else
+        let _,tp = Inductive.itype0 i ind in
+        let tp = normalize tp c in
+        Option.(
+          maybe_type_of tp c >>= fun s ->
+          Term.get_sort s (* BUG, we need the inner sort!!! *)
+          >> check (i+1)
+        )
+    in
+    check 0
+  in
+  let push_itypes (c:t): t =
+    let cr = ref c in
+    for i = 0 to Inductive.ntypes ind - 1 do
+      let _,tp = Inductive.itype i ind in
+      assert (maybe_type_of tp !cr <> None);
+      cr := push_unnamed tp !cr
+    done;
+    !cr
+  in
+  let push_parameter (c:t): t =
+    let ni = Inductive.ntypes ind
+    and np = Inductive.nparams ind
+    and cr = ref c in
+    for i = 0 to np - 1 do
+      let _,tp = Inductive.parameter i ind in
+      cr := push_unnamed (Term.up_from np ni tp) !cr
+    done;
+    !cr
+  in
+  let check_constructors (c:t): unit option =
+    try
+      let cc = push_parameter (push_itypes c) in
+      for i = 0 to Inductive.ntypes ind - 1 do
+        for j = 0 to Inductive.nconstructors i ind - 1 do
+          let _,tp = Inductive.ctype0 i j ind in
+          let np = Inductive.nparams ind in
+          if np <> 0 then
+            begin
+              printf "check constructor %s\n"
+                (Term_printer.string_of_term tp);
+              let print_var i =
+                match maybe_type_of (Term.Variable i) cc with
+                | None ->
+                   printf "None\n";
+                | Some tp ->
+                   printf "  %d: %s\n" i (Term_printer.string_of_term tp)
+              in
+              print_var 0;
+              print_var 1;
+              print_var 2
+            end;
+          match
+            Option.(
+            maybe_type_of tp cc >>= fun s ->
+            Term.get_sort s
+            )
+          with
+          | None ->
+             printf "constructor %d %d not valid (%s)\n"
+               i j
+               (if maybe_type_of tp cc = None then "term" else "not type");
+             printf "  %s\n" (Term_printer.string_of_term tp);
+             begin
+               match maybe_type_of Term.variable2 cc with
+               | None ->
+                  printf "None\n";
+               | Some tp ->
+                  printf "  2: %s\n" (Term_printer.string_of_term tp)
+             end;
+             let open Term in
+             assert (maybe_type_of variable1 cc = Some (sort_variable 0));
+             assert (maybe_type_of variable0 cc = Some variable1);
+             raise Not_found
+          | Some _ ->
+             ()
+        done
+      done;
+      Some ()
+    with Not_found ->
+      None
   in
   Option.(
-    check_params 0 c >>= fun c ->
-    check_itype 0 c >>= fun c ->
-    assert false
+    check_parameter c >>= fun cp ->
+    check_types cp
+    >> check_constructors c
+    >> Some ind
   )
 
 
@@ -553,15 +699,20 @@ let test (): unit =
                         arrow variable0 variable0) )
     );
 
+  assert (check_inductive Inductive.make_natural empty <> None);
+  assert (check_inductive Inductive.make_false empty <> None);
+  assert (check_inductive Inductive.make_true  empty <> None);
+
   (* class Natural create 0; successor(Natural) end *)
-  let _ =
-    let ind = Inductive.make_natural
-    in
-    (*assert (check_inductive ind empty <> None);*)
-    let c = push_inductive ind empty in
-    assert (maybe_type_of variable2 c = Some datatype);
-    assert (maybe_type_of variable1 c = Some variable2);
-    assert (maybe_type_of variable0 c = Some (arrow variable2 variable2));
-    ()
-  in
+  ignore(
+      let ind = Inductive.make_natural
+      in
+      assert (check_inductive ind empty <> None);
+      let c = push_inductive ind empty in
+      assert (maybe_type_of variable2 c = Some datatype);
+      assert (maybe_type_of variable1 c = Some variable2);
+      assert (maybe_type_of variable0 c = Some (arrow variable2 variable2))
+    );
+
+  (*assert (check_inductive (Inductive.make_equal 0) c <> None);*)
   ()
