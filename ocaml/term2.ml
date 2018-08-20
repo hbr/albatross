@@ -250,9 +250,9 @@ let equal1 (a:t option) (b:t): bool =
 
 
 let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
-  let rec fold s a t =
+  let rec fold (s:int) (a:'a) (t:t): 'a =
     match t with
-    | Sort s -> t
+    | Sort s -> a
     | Variable i when i < start ->
        a
     | Variable i ->
