@@ -104,6 +104,44 @@ module Sort =
          let s1 = max_of s1
          and s2 = max_of s2 in
          merge s1 s2
+
+    let sub (s1:t) (s2:t): bool =
+      match s1 with
+      | Proposition ->
+         true
+      | Datatype ->
+         begin
+           match s2 with
+           | Proposition ->
+              false
+           | Datatype | Any1 ->
+              true
+           | _ ->
+              assert false (* nyi *)
+         end
+      | Any1 ->
+         begin
+           match s2 with
+           | Proposition | Datatype ->
+              false
+           | Any1 ->
+              true
+           | _ ->
+              assert false (* nyi *)
+         end
+      | Variable i ->
+         begin
+           match s2 with
+           | Variable j | Variable_type j when i = j ->
+              true
+           | _ ->
+              assert false (* nyi *)
+         end
+      | Variable_type i ->
+         assert false
+      | Max (lb1,m1) ->
+         assert false
+
   end (* Sort *)
 
 
