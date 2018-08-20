@@ -329,7 +329,7 @@ let apply_standard (n:int) (start:int) (f:t): t =
    *)
   let res = ref f in
   for i = 0 to n - 1 do
-    res := Application (f, Variable (start + n - 1 - i), false)
+    res := Application (!res, Variable (start + n - 1 - i), false)
   done;
   !res
 
@@ -366,10 +366,11 @@ let split_product(a:typ): arguments * typ =
 
 
 let push_product (args:arguments) (tp:typ): typ =
-  let tp = ref tp in
+  let tp = ref tp
+  and n = Array.length args in
   for i = 0 to Array.length args - 1 do
-    let n,t = args.(i) in
-    tp := All(n,t,!tp)
+    let nme,t = args.(n - 1 - i) in
+    tp := All(nme,t,!tp)
   done;
   !tp
 
