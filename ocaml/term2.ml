@@ -414,10 +414,6 @@ let push_product (args:arguments) (tp:typ): typ =
 
 
 
-let substitute (a:t) (b:t): t =
-  (* Substitute the variable 0 in the term [a] by the term [b]. *)
-  assert false
-
 let substitute_args (n:int) (f:int->t) (t:t): t =
   (* Substitute the first [n] variables by the terms returned by the
          function [f] in the term [t]. Shift all variables above [n] down by
@@ -428,7 +424,7 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
     | Variable i when i < bnd ->
        t
     | Variable i when i < bnd + n ->
-       assert false
+       f (i - bnd)
     | Variable (i) ->
        Variable (i-n)
     | Application (a, b, oo) ->
@@ -450,6 +446,13 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
 
   in
   subst 0 t
+
+
+
+let substitute (a:t) (b:t): t =
+  (* Substitute the variable 0 in the term [a] by the term [b]. *)
+  substitute_args 1 (fun _ -> b) a
+
 
 let beta_reduce (f:t) (args:t list): t * t list =
   (* Beta reduce the term [f(args)] where [f] is not an
