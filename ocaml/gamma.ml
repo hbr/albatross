@@ -10,13 +10,6 @@ type gamma = (Feature_name.t option * Term.typ) array
 
 (* Examples of inductive types:
 
-   class
-       List(A)
-   create
-       []
-       (^)(A,List(A))
-   end
-
    Predicate (A:Any):  Any := A -> Proposition
 
    Relation (A,B:Any): Any := A -> B -> Proposition
@@ -34,12 +27,12 @@ module Constructor =
   struct
     (* c: all(args) I iparams iargs
 
-       The type is valid in an environment with the parameters and all
-       inductive types in context.  *)
+       The type is valid in an environment with all inductive types and the
+       parameters in the context (in that order)  *)
     type t = {
         name: Feature_name.t option;
-        args: Term.arguments;
-        iargs: Term.t array
+        args: Term.arguments;  (* without parameters *)
+        iargs: Term.t array    (* only index, no parameters *)
       }
     let make name args iargs :t =
       {name; args; iargs}
@@ -170,6 +163,30 @@ module Inductive =
           Constructor.make
             (some_feature_name "successor")
             [|None,variable0|] [||]
+        |]
+
+    (* class
+           List(A)
+       create
+           []
+           (^)(A,List(A))
+       end
+     *)
+    let make_list (sv0:int): t =
+      let open Term in
+      make_simple
+        (some_feature_name "List")
+        [| Some "A",sort_variable sv0 |]
+        (sort_variable (sv0+1))
+        [| Constructor.make
+             some_feature_bracket
+             [||]
+             [||];
+           Constructor.make
+             (some_feature_operator Operator.Caretop)
+             [| None, variable0;  (* A *)
+                None, (apply0 variable2 variable1) (* List(A) *) |]
+             [| |]
         |]
 
 
@@ -823,6 +840,7 @@ let test (): unit =
   assert (check_inductive Inductive.make_false empty <> None);
   assert (check_inductive Inductive.make_true  empty <> None);
   assert (check_inductive (Inductive.make_equal 0) c <> None);
+  assert (check_inductive (Inductive.make_list 0) c <> None);
 
   (* class Natural create 0; successor(Natural) end *)
   ignore(

@@ -216,6 +216,10 @@ let variable0: t = Variable 0
 let variable1: t = Variable 1
 let variable2: t = Variable 2
 
+let apply0 (a:t) (b:t): t =
+  Application (a, b, false)
+
+
 
 let rec equal (a:t) (b:t): bool =
   match a,b with

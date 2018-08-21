@@ -85,6 +85,9 @@ module Feature_name =
 let some_feature_name (s:string): Feature_name.t option =
   Some (Feature_name.Name s)
 
+let some_feature_bracket: Feature_name.t option =
+  Some Feature_name.Bracket
+
 let some_feature_operator (op:Operator.t): Feature_name.t option =
   Some (Feature_name.Operator op )
 

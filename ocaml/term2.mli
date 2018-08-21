@@ -50,6 +50,7 @@ val get_sort: t -> Sort.t option
 val variable0: t
 val variable1: t
 val variable2: t
+val apply0: t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool

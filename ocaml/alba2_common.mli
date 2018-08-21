@@ -52,6 +52,7 @@ sig
 end
 
 val some_feature_name: string -> Feature_name.t option
+val some_feature_bracket: Feature_name.t option
 val some_feature_operator: Operator.t -> Feature_name.t option
 val some_feature_number: int -> Feature_name.t option
 val some_feature_true:  Feature_name.t option
