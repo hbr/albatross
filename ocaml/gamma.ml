@@ -197,6 +197,8 @@ module Inductive =
         some_feature_false
         [||] proposition [||]
 
+
+
     (* class true create
           true_is_valid
        end *)
@@ -207,6 +209,79 @@ module Inductive =
         [||] proposition
         [| Constructor.make
              (some_feature_name "true_is_valid") [||] [||] |]
+
+
+    (* class
+           (and) (a,b:Proposition): Proposition
+       create
+           conjunction (a,b): a and b
+       end
+     *)
+    let make_and: t =
+      let open Term in
+      make_simple
+        (some_feature_operator Operator.Andop)
+        [| Some "a", proposition; Some "b", proposition |]
+        proposition
+        [| Constructor.make
+             (some_feature_name "conjunction")
+             [| None, variable1; None, variable1|]
+             [||]
+        |]
+
+
+    (* class
+           (or) (a,b:Proposition): Proposition
+       create
+           left (a): a or b
+           right(b): a or b
+       end
+     *)
+    let make_or: t =
+      let open Term in
+      make_simple
+        (some_feature_operator Operator.Orop)
+        [| Some "a", proposition; Some "b", proposition |]
+        proposition
+        [| Constructor.make
+             (some_feature_name "left")
+             [| None, variable1|]
+             [||];
+           Constructor.make
+             (some_feature_name "right")
+             [| None, variable0|]
+             [||]
+        |]
+
+
+
+    (* class
+           accessible (A:Any, r:Relation(A,A), y:A): Proposition
+       create
+           access_intro
+               (f:all(x) r(x,y) -> r.accessible(x))
+               : r.accessible(y)
+       end
+     *)
+    let make_accessible (sv0:int): t =
+      let open Term in
+      make_simple
+        (some_feature_name "accessible")
+        [| Some "A", sort_variable sv0;
+           Some "r", arrow variable0 (arrow variable0 proposition);
+           Some "y", variable1|]
+        proposition
+        [| Constructor.make
+             (some_feature_name "access_intro")
+             [| Some "f",
+                All(Some "x",
+                    variable2,
+                    arrow
+                      (apply_args variable2 [variable0;variable1])
+                      (apply_args variable4 [variable3;variable2;variable0])
+                  ) |]
+             [||]
+        |]
 
 
     (* class
@@ -725,11 +800,11 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
                    0 ntpargs
                 (* The final term constructs an inductive type *)
                 && Term.has_variables (indvar (k+ntpargs)) f
-                (* The first inductive arguments are the parameters *)
+                (*(* The first inductive arguments are the parameters *)
                 && interval_for_all
                      (fun l ->
                        args.(l) = Term.Variable (k+np-1-l))
-                     0 np
+                     0 np*)
                 (* The remaining arguments do not contain any inductive type
                  *)
                 && interval_for_all
@@ -836,9 +911,13 @@ let test (): unit =
                         arrow variable0 variable0) )
     );
 
+  (*printf "check accessible\n";
+  assert (check_inductive (Inductive.make_accessible 0) c <> None);*)
   assert (check_inductive Inductive.make_natural empty <> None);
   assert (check_inductive Inductive.make_false empty <> None);
-  assert (check_inductive Inductive.make_true  empty <> None);
+  assert (check_inductive Inductive.make_true empty <> None);
+  assert (check_inductive Inductive.make_and empty <> None);
+  assert (check_inductive Inductive.make_or empty <> None);
   assert (check_inductive (Inductive.make_equal 0) c <> None);
   assert (check_inductive (Inductive.make_list 0) c <> None);
 

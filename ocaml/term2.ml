@@ -215,6 +215,9 @@ let get_sort (a:t): Sort.t option =
 let variable0: t = Variable 0
 let variable1: t = Variable 1
 let variable2: t = Variable 2
+let variable3: t = Variable 3
+let variable4: t = Variable 4
+let variable5: t = Variable 5
 
 let apply0 (a:t) (b:t): t =
   Application (a, b, false)
