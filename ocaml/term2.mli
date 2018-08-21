@@ -58,7 +58,7 @@ val shift: int -> t -> t
 val up_from: int -> int -> t -> t
 val up: int -> t -> t
 
-val fold: ('a -> int -> 'a) -> 'a -> t -> 'a
+val has_variables: (int->bool) -> t -> bool
 
 val arrow: t -> t -> t
 

@@ -285,6 +285,13 @@ let fold (f:'a->int->'a) (a:'a) (t:t): 'a =
   fold_from 0 f a t
 
 
+let has_variables (f:int->bool) (t:t): bool =
+  fold
+    (fun has v -> has || f v)
+    false
+    t
+
+
 let map_from (start:int) (f:int->int) (t:t): t =
   let rec map s t =
     match t with

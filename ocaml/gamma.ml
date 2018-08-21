@@ -46,6 +46,8 @@ module Constructor =
 
     let name (c:t): Feature_name.t option = c.name
 
+    let cargs (c:t): Term.arguments = c.args
+
     let ctype (i:int) (ni:int) (np:int) (c:t): Term.typ =
       let open Term in
       let ncargs = Array.length c.args in
@@ -54,6 +56,18 @@ module Constructor =
         (apply_arg_array
            (apply_standard np ncargs (Variable (ncargs + i)))
            c.iargs)
+
+    let is_valid_iargs (ni:int) (np:int) (c:t): bool =
+      (* The arguments (index) of the constructed inductive type must not
+         contain any other inductive type of the definition. The context
+         contains all inductive types and the parameters in this order. *)
+      interval_for_all
+        (fun i ->
+          not (Term.has_variables
+                 (fun v -> np <= v && v < ni + np)
+                 c.iargs.(i)))
+      0 (Array.length c.iargs)
+
   end (* Constructor *)
 
 
@@ -80,6 +94,11 @@ module Inductive =
       assert (i < ntypes ind);
       Array.length ind.constructors.(i)
 
+    let constructor (i:int) (j:int) (ind:t): Constructor.t =
+      assert (i < ntypes ind);
+      assert (j < nconstructors i ind);
+      ind.constructors.(i).(j)
+
     let parameter (i:int) (ind:t): string option * Term.typ =
       assert (i < nparams ind);
       ind.params.(i)
@@ -97,9 +116,19 @@ module Inductive =
     let ctype0 (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
       let ni = ntypes ind
       and np = nparams ind
-      and cons = ind.constructors.(i).(j) in
+      and cons = constructor i j ind in
       Constructor.name cons,
       Constructor.ctype (np + ni - 1 - i) ni np cons
+
+    let is_valid_iargs (i:int) (j:int) (ind:t): bool =
+      Constructor.is_valid_iargs
+        (ntypes ind)
+        (nparams ind)
+        (constructor i j ind)
+
+    let cargs (i:int) (j:int) (ind:t): Term.arguments =
+      Constructor.cargs (constructor i j ind)
+
 
     let ctype (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
       assert (i < ntypes ind);
@@ -583,11 +612,13 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
 
 
 let is_wellformed (t:Term.t) (c:t): bool =
-  match maybe_type_of t c with
-  | None ->
-     false
-  | Some _ ->
-     true
+  maybe_type_of t c <> None
+
+let is_wellformed_type (tp:Term.t) (c:t): bool =
+  Option.(
+    maybe_type_of tp c >>= fun s ->
+    Term.get_sort s
+  ) <> None
 
 
 let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
@@ -645,36 +676,74 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     done;
     !cr
   in
+  let is_positive_cargs (i:int) (j:int) (c:t): bool =
+    let cargs = Inductive.cargs i j ind
+    and ni = Inductive.ntypes ind
+    and np = Inductive.nparams ind
+    and cr = ref c in
+    let indvar m v =
+      m + np <= v && v < m + np + ni
+    in
+    try
+      for k = 0 to Array.length cargs - 1 do
+        let _,tp = cargs.(k) in
+        if Term.has_variables (indvar k) tp then
+          begin
+              let tp = normalize tp !cr in
+              let tpargs,tp0 = Term.split_product tp in
+              let ntpargs = Array.length tpargs in
+              let f,args = Term.split_application tp0 [] in
+              let args = Array.of_list args in
+              let nargs = Array.length args in
+              assert (np <= nargs);
+              if
+                (* if the k-th argument is a function, then none of its
+                   arguments contains an inductive type *)
+                interval_for_all
+                   (fun l ->
+                     not (Term.has_variables
+                            (indvar (k+l))
+                            (snd tpargs.(l)))
+                   )
+                   0 ntpargs
+                (* The final term constructs an inductive type *)
+                && Term.has_variables (indvar (k+ntpargs)) f
+                (* The first inductive arguments are the parameters *)
+                && interval_for_all
+                     (fun l ->
+                       args.(l) = Term.Variable (k+np-1-l))
+                     0 np
+                (* The remaining arguments do not contain any inductive type
+                 *)
+                && interval_for_all
+                     (fun l ->
+                       not (Term.has_variables (indvar (k+ntpargs)) args.(l))
+                     )
+                     np nargs
+              then
+                ()
+              else
+                raise Not_found
+          end;
+        cr := push_unnamed tp !cr
+      done;
+      true
+    with Not_found ->
+      false
+  in
   let check_constructors (c:t): unit option =
     try
       let cc = push_parameter (push_itypes c) in
       for i = 0 to Inductive.ntypes ind - 1 do
         for j = 0 to Inductive.nconstructors i ind - 1 do
           let _,tp = Inductive.ctype0 i j ind in
-          match
-            Option.(
-            maybe_type_of tp cc >>= fun s ->
-            Term.get_sort s
-            )
-          with
-          | None ->
-             printf "constructor %d %d not valid (%s)\n"
-               i j
-               (if maybe_type_of tp cc = None then "term" else "not type");
-             printf "  %s\n" (Term_printer.string_of_term tp);
-             begin
-               match maybe_type_of Term.variable2 cc with
-               | None ->
-                  printf "None\n";
-               | Some tp ->
-                  printf "  2: %s\n" (Term_printer.string_of_term tp)
-             end;
-             let open Term in
-             assert (maybe_type_of variable1 cc = Some (sort_variable 0));
-             assert (maybe_type_of variable0 cc = Some variable1);
-             raise Not_found
-          | Some _ ->
-             ()
+          if is_wellformed_type tp cc
+             && Inductive.is_valid_iargs i j ind
+             && is_positive_cargs i j cc
+          then
+            ()
+          else
+            raise Not_found
         done
       done;
       Some ()
@@ -753,6 +822,7 @@ let test (): unit =
   assert (check_inductive Inductive.make_natural empty <> None);
   assert (check_inductive Inductive.make_false empty <> None);
   assert (check_inductive Inductive.make_true  empty <> None);
+  assert (check_inductive (Inductive.make_equal 0) c <> None);
 
   (* class Natural create 0; successor(Natural) end *)
   ignore(
@@ -765,5 +835,20 @@ let test (): unit =
       assert (maybe_type_of variable0 c = Some (arrow variable2 variable2))
     );
 
-  assert (check_inductive (Inductive.make_equal 0) c <> None);
+
+  (* Failed positivity:
+     class C create
+         _ (f:C->C): C
+     end
+   *)
+  assert
+    begin
+      let ind =
+        Inductive.make_simple
+          None [||] datatype
+          [| Constructor.make
+               None [| None, arrow variable0 variable0 |] [||] |]
+      in
+      check_inductive ind empty = None
+    end;
   ()
