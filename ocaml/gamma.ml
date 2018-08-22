@@ -29,7 +29,7 @@ type entry = {
 
 module Sort_variables =
   struct
-    type t = Term.Sort_set.t IArr.t
+    type t = Sorts.Set.t IArr.t
 
     let count (vs:t): int =
       IArr.length vs
@@ -38,13 +38,13 @@ module Sort_variables =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
-      Term.Sort_set.is_lower_bound i (IArr.elem j vs)
+      Sorts.Set.is_lower_bound i (IArr.elem j vs)
 
     let lt (vs:t) (i:int) (j:int): bool =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
-      Term.Sort_set.is_strict_lower_bound i (IArr.elem j vs)
+      Sorts.Set.is_strict_lower_bound i (IArr.elem j vs)
 
     let empty: t =
       IArr.empty
@@ -54,7 +54,7 @@ module Sort_variables =
       let nvars = n + count vs
       and vsr = ref vs in
       for i = 0 to n - 1 do
-        vsr := IArr.push Term.Sort_set.empty !vsr
+        vsr := IArr.push Sorts.Set.empty !vsr
       done;
       assert (IArr.length !vsr = nvars);
       List.iter
@@ -66,8 +66,8 @@ module Sort_variables =
           (* add i and the transitive closure to the lower bounds of j *)
           vsr := IArr.put
                    j
-                   (Term.Sort_set.add i strict (IArr.elem j !vsr)
-                    |> Term.Sort_set.union (IArr.elem i !vsr))
+                   (Sorts.Set.add i strict (IArr.elem j !vsr)
+                    |> Sorts.Set.union (IArr.elem i !vsr))
                    !vsr
         )
         cs;
@@ -319,7 +319,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ha, hb with
   | Sort sa, Sort sb ->
-     Sort.sub sa sb (sortvariable_le c)
+     Sorts.sub sa sb (sortvariable_le c)
   | All (_,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
@@ -340,12 +340,12 @@ let rec maybe_type_of (t:Term.t) (c:t): Term.typ option =
   | Sort s ->
      begin
        match s with
-       | Sort.Variable i | Sort.Variable_type i
+       | Sorts.Variable i | Sorts.Variable_type i
             when i < 0 || count_sorts c <= i ->
           None
        | _ ->
           Option.(
-           Sort.maybe_sort_of s >>= fun s ->
+           Sorts.maybe_sort_of s >>= fun s ->
            Some (Sort s)
           )
      end

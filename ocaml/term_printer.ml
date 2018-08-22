@@ -146,18 +146,18 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       let open Term in
       let open PP in
       match s with
-      | Sort.Proposition ->
+      | Sorts.Proposition ->
          put "Proposition"
-      | Sort.Datatype ->
+      | Sorts.Datatype ->
          put "Datatype"
-      | Sort.Any1 ->
+      | Sorts.Any1 ->
          put "Any1"
-      | Sort.Variable i ->
+      | Sorts.Variable i ->
          fun pp -> put "SV" pp >>= put (string_of_int i)
-      | Sort.Variable_type i ->
+      | Sorts.Variable_type i ->
          fun pp ->
          put "SV" pp >>= put (string_of_int i) >>= put "'"
-      | Sort.Max (lb,m) ->
+      | Sorts.Max s ->
          assert false
 
     and variable i c pp =

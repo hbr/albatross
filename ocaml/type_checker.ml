@@ -124,7 +124,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ha, hb with
   | Sort sa, Sort sb ->
-     Sort.sub sa sb (sortvariable_le c)
+     Sorts.sub sa sb (sortvariable_le c)
   | All (_,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_unnamed tpa c)
@@ -145,12 +145,12 @@ let rec check (t:Term.t) (c:t): Term.typ option =
   | Sort s ->
      begin
        match s with
-       | Sort.Variable i | Sort.Variable_type i
+       | Sorts.Variable i | Sorts.Variable_type i
             when i < 0 || count_sorts c <= i ->
           None
        | _ ->
           Option.(
-           Sort.maybe_sort_of s >>= fun s ->
+           Sorts.maybe_sort_of s >>= fun s ->
            Some (Sort s)
           )
      end

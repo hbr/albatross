@@ -1,43 +1,13 @@
 open Container
 open Alba2_common
 
-module Sort_set:
-sig
-  type t
-  val empty: t
-  val singleton: int -> bool -> t
-  val equal: t -> t -> bool
-  val add: int -> bool -> t -> t
-  val union: t -> t -> t
-  val is_lower_bound: int -> t -> bool
-  val is_strict_lower_bound: int -> t -> bool
-end
-
-module Sort:
-sig
-  type lower_bound =
-    | No
-    | DT
-    | A1
-  type t =
-    | Proposition
-    | Datatype
-    | Any1
-    | Variable of int
-    | Variable_type of int
-    | Max of lower_bound * Sort_set.t
-  val maybe_sort_of: t -> t option
-  val product: t -> t -> t
-  val sub: t -> t -> (int -> int -> bool) -> bool
-end
-
 
 type fix_index = int
 type decr_index = int
 type oo_application = bool
 
 type t =
-  | Sort of Sort.t
+  | Sort of Sorts.t
   | Variable of int
   | Application of t * t * oo_application
   | Lambda of abstraction
@@ -60,7 +30,7 @@ val any1: t
 val sort_variable: int -> t
 val sort_variable_type: int -> t
 val maybe_product: t -> t -> t option
-val get_sort: t -> Sort.t option
+val get_sort: t -> Sorts.t option
 
 val variable0: t
 val variable1: t
