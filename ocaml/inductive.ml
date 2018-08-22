@@ -74,13 +74,39 @@ let parameter (i:int) (ind:t): string option * Term.typ =
   assert (i < nparams ind);
   ind.params.(i)
 
-let itype0 (i:int) (ind:t): Feature_name.t option * Term.typ =
+let params0 (ind:t): Term.arguments =
+  ind.params
+
+let params (ind:t): Term.arguments =
+  let ni = ntypes ind
+  and np = nparams ind in
+  Array.map
+    (fun (nme,tp) -> nme, Term.up_from np ni tp)
+    ind.params
+
+let name (i:int) (ind:t): Feature_name.t option =
+  assert (i < ntypes ind);
+  fst ind.types.(i)
+
+let types0 (ind:t): Term.gamma =
+  ind.types
+
+let itype0 (i:int) (ind:t): Term.fname_type =
   assert (i < ntypes ind);
   ind.types.(i)
 
-let itype (i:int) (ind:t): Feature_name.t option * Term.typ =
+let itype (i:int) (ind:t): Term.fname_type =
   let nme,tp = itype0 i ind in
   nme, Term.up i (Term.push_product ind.params tp)
+
+
+let types (ind:t): Term.gamma =
+  Array.map
+    (fun (nme,tp) -> nme, Term.push_product ind.params tp)
+    ind.types
+
+let cname (i:int) (j:int) (ind:t): Feature_name.t option =
+  Constructor.name (constructor i j ind)
 
 let ctype0 (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
   let ni = ntypes ind

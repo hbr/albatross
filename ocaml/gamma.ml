@@ -122,6 +122,19 @@ let entry (i:int) (c:t): entry =
 let entry_type (i:int) (c:t): Term.t =
   Term.up (i + 1) (entry i c).typ
 
+let name (i:int) (c:t): Feature_name.t option =
+  match (entry i c).just with
+  | Assumption nme ->
+     nme
+  | Definition (nme,_,_) ->
+     nme
+  | Indtype (i,ind) ->
+     Inductive.name i ind
+  | Constructor (i,j,ind) ->
+     Inductive.cname i j ind
+  | Recursive fp ->
+     assert false
+
 let definition_opt (i:int) (c:t): Term.t option =
   match (entry i c).just with
   | Definition _ ->
@@ -164,6 +177,35 @@ let push_unnamed (tp:Term.typ) (c:t): t =
   push None tp c
 
 
+let push_n (n:int) (f:int -> Term.fname_type) (c:t): t =
+  let cr = ref c in
+  for i = 0 to n - 1 do
+    let nme,tp = f i in
+    cr := push nme tp !cr
+  done;
+  !cr
+
+let push_arguments (args:Term.arguments) (c:t): t =
+  push_n
+    (Array.length args)
+    (fun i -> let nme,tp = args.(i) in
+              some_feature_name_opt nme,tp)
+    c
+
+let push_gamma (g:Term.gamma) (c:t): t =
+  push_n
+    (Array.length g)
+    (fun i -> g.(i))
+    c
+
+
+let push_ind_params (ind: Inductive.t) (c:t): t =
+  push_arguments (Inductive.params0 ind) c
+
+
+let push_ind_types_params (ind:Inductive.t) (c:t): t =
+  push_gamma (Inductive.types ind) c
+  |> push_arguments (Inductive.params ind)
 
 
 let push_inductive

@@ -6,6 +6,12 @@ open Gamma
 module Term = Term2
 
 
+let string_of_term (c:t) (t:Term.t): string =
+  let module SP = Pretty_printer.String_printer in
+  let module PP = Pretty_printer.Make (SP) in
+  let module TP = Term_printer.Make (Gamma) (PP) in
+  let open PP in
+  SP.run 200 (make 100 () >>= TP.print t c)
 
 
 let head_normal0
@@ -257,25 +263,6 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     in
     checki 0
   in
-  let push_itypes (c:t): t =
-    let cr = ref c in
-    for i = 0 to Inductive.ntypes ind - 1 do
-      let _,tp = Inductive.itype i ind in
-      assert (check tp !cr <> None);
-      cr := push_unnamed tp !cr
-    done;
-    !cr
-  in
-  let push_parameter (c:t): t =
-    let ni = Inductive.ntypes ind
-    and np = Inductive.nparams ind
-    and cr = ref c in
-    for i = 0 to np - 1 do
-      let _,tp = Inductive.parameter i ind in
-      cr := push_unnamed (Term.up_from np ni tp) !cr
-    done;
-    !cr
-  in
   let is_positive_cargs (i:int) (j:int) (c:t): bool =
     let cargs = Inductive.cargs i j ind
     and ni = Inductive.ntypes ind
@@ -333,10 +320,11 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
   in
   let check_constructors (c:t): unit option =
     try
-      let cc = push_parameter (push_itypes c) in
+      let cc = Gamma.push_ind_types_params ind c in
       for i = 0 to Inductive.ntypes ind - 1 do
         for j = 0 to Inductive.nconstructors i ind - 1 do
           let _,tp = Inductive.ctype0 i j ind in
+          (*printf "constructor %s\n" (string_of_term cc tp);*)
           if is_wellformed_type tp cc
              && Inductive.is_valid_iargs i j ind
              && is_positive_cargs i j cc
@@ -450,7 +438,7 @@ let test (): unit =
     begin
       let ind =
         Inductive.make_simple
-          None [||] datatype
+          (some_feature_name "C") [||] datatype
           [| Inductive.Constructor.make
                None [| None, arrow variable0 variable0 |] [||] |]
       in
