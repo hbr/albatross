@@ -147,11 +147,11 @@ let make_simple nme params tp cons =
 
 
 (* class
-           Natural
-       create
-           0
-           successor(Natural)
-       end *)
+       Natural
+   create
+       0
+       successor(Natural)
+   end *)
 let make_natural: t =
   let open Term in
   make_simple
@@ -168,11 +168,11 @@ let make_natural: t =
     |]
 
 (* class
-           List(A)
-       create
-           []
-           (^)(A,List(A))
-       end
+       List(A)
+   create
+       []
+       (^)(A,List(A))
+   end
  *)
 let make_list (sv0:int): t =
   let open Term in
@@ -202,8 +202,8 @@ let make_false: t =
 
 
 (* class true create
-          true_is_valid
-       end *)
+       true_is_valid
+    end *)
 let make_true: t =
   let open Term in
   make_simple
@@ -214,10 +214,10 @@ let make_true: t =
 
 
 (* class
-           (and) (a,b:Proposition): Proposition
-       create
-           conjunction (a,b): a and b
-       end
+       (and) (a,b:Proposition): Proposition
+   create
+       conjunction (a,b): a and b
+   end
  *)
 let make_and: t =
   let open Term in
@@ -233,11 +233,11 @@ let make_and: t =
 
 
 (* class
-           (or) (a,b:Proposition): Proposition
-       create
-           left (a): a or b
-           right(b): a or b
-       end
+       (or) (a,b:Proposition): Proposition
+   create
+       left (a): a or b
+       right(b): a or b
+   end
  *)
 let make_or: t =
   let open Term in
@@ -258,12 +258,12 @@ let make_or: t =
 
 
 (* class
-           accessible (A:Any, r:Relation(A,A), y:A): Proposition
-       create
-           access_intro
-               (f:all(x) r(x,y) -> r.accessible(x))
-               : r.accessible(y)
-       end
+       accessible (A:Any, r:Relation(A,A), y:A): Proposition
+   create
+       access_intro
+           (f:all(x) r(x,y) -> r.accessible(x))
+           : r.accessible(y)
+   end
  *)
 let make_accessible (sv0:int): t =
   let open Term in
@@ -287,10 +287,10 @@ let make_accessible (sv0:int): t =
 
 
 (* class
-           (=) (A:Any, a:A): all(B:Any) B -> Proposition
-       create
-           reflexive: a = a
-       end
+       (=) (A:Any, a:A): all(B:Any) B -> Proposition
+   create
+       reflexive: a = a
+   end
  *)
 let make_equal (sv0:int): t =
   let open Term in
