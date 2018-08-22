@@ -451,7 +451,7 @@ let test (): unit =
       let ind =
         Inductive.make_simple
           None [||] datatype
-          [| Constructor.make
+          [| Inductive.Constructor.make
                None [| None, arrow variable0 variable0 |] [||] |]
       in
       check_inductive ind empty = None

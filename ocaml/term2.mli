@@ -36,8 +36,11 @@ and typ = t
 and abstraction =  string option * typ * t
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 
-type arguments = (string option * typ) array
-type argument_list = (string option * typ) list
+type name_type = string option * typ
+type fname_type = Feature_name.t option * typ
+type gamma = fname_type array
+type arguments = name_type array
+type argument_list = name_type list
 
 val datatype: t
 val proposition: t
