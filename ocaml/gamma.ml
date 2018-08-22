@@ -6,7 +6,9 @@ module IArr = Immutable_array
 
 module Term = Term2
 
-type gamma = (Feature_name.t option * Term.typ) array
+type name_type = string option * Term.typ
+type fname_type = Feature_name.t option * Term.typ
+type gamma = fname_type array
 
 (* Examples of inductive types:
 
@@ -848,104 +850,3 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     >> check_constructors c
     >> Some ind
   )
-
-
-
-
-
-let test (): unit =
-  Printf.printf "Test type checker\n";
-  let open Term in
-  let c = push_unnamed datatype
-            (push_sorts 2 [0,1,false] empty) in
-  let c1 = push_unnamed variable0 c in
-  assert ( is_wellformed (sort_variable 0) c);
-  assert ( is_wellformed (sort_variable 1) c);
-  assert ( maybe_type_of (sort_variable 0) c = Some (sort_variable_type 0));
-  assert ( maybe_type_of (sort_variable 2) c = None);
-  assert ( maybe_type_of variable0 c = Some datatype);
-  assert ( maybe_type_of variable1 c1 = Some datatype);
-  assert ( is_wellformed variable0 c1);
-  assert ( maybe_type_of variable0 c1 = Some variable1);
-  assert (
-      Option.(
-        maybe_type_of variable0 c1 >>= fun tp ->
-        maybe_type_of tp c1
-      ) = Some datatype);
-  (* Proposition -> Proposition *)
-  assert ( maybe_type_of (arrow proposition proposition) c = Some any1);
-
-  (* Natural -> Proposition *)
-  assert ( maybe_type_of (arrow variable0 proposition) c = Some any1);
-
-  (* all(A:Prop) A -> A : Proposition *)
-  assert ( maybe_product proposition proposition = Some proposition );
-  assert ( maybe_product datatype proposition    = Some proposition );
-  assert ( maybe_type_of (All (None,
-                               proposition,
-                               arrow variable0 variable0)) c
-           = Some proposition);
-
-  (* all(n:Natural) n -> n is illformed *)
-  assert ( maybe_type_of (All (None,
-                               Variable 0,
-                               arrow variable0 variable0)) c
-           = None);
-
-  (* Natural -> Natural : Datatype *)
-  assert ( maybe_product datatype datatype    = Some datatype );
-  assert ( maybe_type_of (arrow variable0 variable0) c
-           = Some datatype);
-
-  (* ((A:Prop,p:A) := p): all(A:Prop) A -> A *)
-  assert ( maybe_type_of
-             (Lambda (None,
-                      proposition,
-                      Lambda (None,
-                              variable0,
-                              variable0)
-                ))
-             c
-           = Some (All (None,
-                        proposition,
-                        arrow variable0 variable0) )
-    );
-
-  (*printf "check accessible\n";
-  assert (check_inductive (Inductive.make_accessible 0) c <> None);*)
-  assert (check_inductive Inductive.make_natural empty <> None);
-  assert (check_inductive Inductive.make_false empty <> None);
-  assert (check_inductive Inductive.make_true empty <> None);
-  assert (check_inductive Inductive.make_and empty <> None);
-  assert (check_inductive Inductive.make_or empty <> None);
-  assert (check_inductive (Inductive.make_equal 0) c <> None);
-  assert (check_inductive (Inductive.make_list 0) c <> None);
-
-  (* class Natural create 0; successor(Natural) end *)
-  ignore(
-      let ind = Inductive.make_natural
-      in
-      assert (check_inductive ind empty <> None);
-      let c = push_inductive ind empty in
-      assert (maybe_type_of variable2 c = Some datatype);
-      assert (maybe_type_of variable1 c = Some variable2);
-      assert (maybe_type_of variable0 c = Some (arrow variable2 variable2))
-    );
-
-
-  (* Failed positivity:
-     class C create
-         _ (f:C->C): C
-     end
-   *)
-  assert
-    begin
-      let ind =
-        Inductive.make_simple
-          None [||] datatype
-          [| Constructor.make
-               None [| None, arrow variable0 variable0 |] [||] |]
-      in
-      check_inductive ind empty = None
-    end;
-  ()
