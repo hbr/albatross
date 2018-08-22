@@ -1,6 +1,18 @@
 open Container
 open Alba2_common
 
+module Sort_set:
+sig
+  type t
+  val empty: t
+  val singleton: int -> bool -> t
+  val equal: t -> t -> bool
+  val add: int -> bool -> t -> t
+  val union: t -> t -> t
+  val is_lower_bound: int -> t -> bool
+  val is_strict_lower_bound: int -> t -> bool
+end
+
 module Sort:
 sig
   type lower_bound =
@@ -13,7 +25,7 @@ sig
     | Any1
     | Variable of int
     | Variable_type of int
-    | Max of lower_bound * bool IntMap.t
+    | Max of lower_bound * Sort_set.t
   val maybe_sort_of: t -> t option
   val product: t -> t -> t
   val sub: t -> t -> (int -> int -> bool) -> bool

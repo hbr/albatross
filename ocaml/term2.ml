@@ -1,6 +1,45 @@
 open Container
 open Alba2_common
 
+module Sort_set:
+sig
+  type t
+  val empty: t
+  val singleton: int -> bool -> t
+  val equal: t -> t -> bool
+  val add: int -> bool -> t -> t
+  val union: t -> t -> t
+  val is_lower_bound: int -> t -> bool
+  val is_strict_lower_bound: int -> t -> bool
+end
+  =
+  struct
+    type t = bool IntMap.t (* maps to true, if type of variable is meant,
+                              maps to false, if variable is meant *)
+    let equal (a:t) (b:t) :bool = IntMap.equal (fun b1 b2 -> b1 = b2)  a b
+    let empty = IntMap.empty
+    let singleton (i:int) (strict:bool): t =
+      IntMap.singleton i strict
+    let add (i:int) (strict:bool) (s:t): t =
+      if strict || not (IntMap.mem i s) then
+        IntMap.add i strict s
+      else
+        s
+    let union (a:t) (b:t): t =
+      let br = ref b in
+      IntMap.iter
+        (fun i strict -> br := add i strict !br)
+        a;
+      !br
+    let is_lower_bound (i:int) (s:t): bool =
+      IntMap.mem i s
+    let is_strict_lower_bound (i:int) (s:t): bool =
+      try
+        IntMap.find i s
+      with Not_found ->
+        false
+  end
+
 
 module Sort =
   struct
@@ -14,7 +53,7 @@ module Sort =
       | Any1
       | Variable of int     (* Datatype < Variable i, Any1 <= Variable i *)
       | Variable_type of int
-      | Max of lower_bound * bool IntMap.t
+      | Max of lower_bound * Sort_set.t
 
 
     let equal (s1:t) (s2:t): bool =
@@ -27,7 +66,7 @@ module Sort =
          true
       | Max (lb1,m1), Max (lb2,m2) ->
          lb1 = lb2
-         && IntMap.equal (fun b1 b2 -> b1 = b2) m1 m2
+         && Sort_set.equal m1 m2
       | _, _ ->
          false
 
@@ -46,10 +85,10 @@ module Sort =
       match s with
       | Proposition ->
          assert false (* illegal call *)
-      | Datatype -> Max (DT, IntMap.empty)
-      | Any1 -> Max (A1, IntMap.empty)
-      | Variable i -> Max (No, IntMap.singleton i false)
-      | Variable_type i -> Max (No, IntMap.singleton i true)
+      | Datatype -> Max (DT, Sort_set.empty)
+      | Any1 -> Max (A1, Sort_set.empty)
+      | Variable i -> Max (No, Sort_set.singleton i false)
+      | Variable_type i -> Max (No, Sort_set.singleton i true)
       | Max _ -> s
 
 
@@ -66,20 +105,7 @@ module Sort =
              | No,No ->
                 No
            in
-           let m =
-             IntMap.fold
-               (fun i b m ->
-                 if b then
-                   IntMap.add i b m
-                 else if IntMap.mem i m then
-                   m
-                 else
-                   IntMap.add i b m
-               )
-               m1
-               m2
-        in
-        Max (lb,m)
+           Max (lb,Sort_set.union m1 m2)
          end
       | _, _ ->
          assert false

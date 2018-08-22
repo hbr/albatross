@@ -29,8 +29,8 @@ type entry = {
 
 module Sort_variables =
   struct
-    type t = bool IntMap.t IArr.t (* set of lower bounds, if maps to true,
-                                     then it is a strict lower bound *)
+    type t = Term.Sort_set.t IArr.t
+
     let count (vs:t): int =
       IArr.length vs
 
@@ -38,36 +38,23 @@ module Sort_variables =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
-      try
-        IntMap.mem i (IArr.elem j vs)
-      with Not_found ->
-        false
+      Term.Sort_set.is_lower_bound i (IArr.elem j vs)
 
     let lt (vs:t) (i:int) (j:int): bool =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
-      try
-        IntMap.find i (IArr.elem j vs)
-      with Not_found ->
-        false
+      Term.Sort_set.is_strict_lower_bound i (IArr.elem j vs)
 
     let empty: t =
       IArr.empty
-
-
-    let add_map (i:int) (strict:bool) (m:bool IntMap.t): bool IntMap.t =
-      if strict || not (IntMap.mem i m) then
-        IntMap.add i strict m
-      else
-        m
 
 
     let push (n:int) (cs:(int*int*bool) list) (vs:t): t =
       let nvars = n + count vs
       and vsr = ref vs in
       for i = 0 to n - 1 do
-        vsr := IArr.push IntMap.empty !vsr
+        vsr := IArr.push Term.Sort_set.empty !vsr
       done;
       assert (IArr.length !vsr = nvars);
       List.iter
@@ -76,13 +63,12 @@ module Sort_variables =
           assert (i < nvars);
           assert (j < nvars);
           assert (not (strict && le vs j i));
-          let jmap = ref (IArr.elem j !vsr) in
-          jmap := add_map i strict !jmap;
-          (* transitive closure *)
-          IntMap.iter
-            (fun k kstrict -> jmap := add_map k kstrict !jmap)
-            (IArr.elem i !vsr);
-          vsr := IArr.put j !jmap !vsr
+          (* add i and the transitive closure to the lower bounds of j *)
+          vsr := IArr.put
+                   j
+                   (Term.Sort_set.add i strict (IArr.elem j !vsr)
+                    |> Term.Sort_set.union (IArr.elem i !vsr))
+                   !vsr
         )
         cs;
       !vsr
