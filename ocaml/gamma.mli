@@ -20,6 +20,7 @@ val definition: int -> t -> Term.t
 val is_constructor: int -> t -> bool
 val constructor_offset: int -> t -> int
 val push: Feature_name.t option -> Term.typ -> t -> t
+val push_simple: string option -> Term.typ -> t -> t
 val push_n: int -> (int -> Term.fname_type) -> t -> t
 val push_unnamed: Term.typ -> t -> t
 val push_arguments: Term.arguments -> t -> t

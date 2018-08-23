@@ -126,7 +126,8 @@ let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
     gamma = IArr.push {typ = tp; just = Assumption nm} c.gamma;
     assumptions = n :: c.assumptions}
 
-
+let push_simple (nme:string option) (tp:Term.typ) (c:t): t =
+  push (some_feature_name_opt nme) tp c
 
 let push_unnamed (tp:Term.typ) (c:t): t =
   push None tp c

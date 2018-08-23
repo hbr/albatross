@@ -86,10 +86,10 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
      sa = sb
   | Variable i,  Variable j ->
      i = j
-  | Lambda (_,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
-     equivalent ta tb (push_unnamed tpa c)
-  | All (_,tpa,ta), All (_,tpb,tb) when equivalent tpa tpb c ->
-     equivalent ta tb (push_unnamed tpa c)
+  | Lambda (nme,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
+     equivalent ta tb (push_simple nme tpa c)
+  | All (nme,tpa,ta), All (_,tpb,tb) when equivalent tpa tpb c ->
+     equivalent ta tb (push_simple nme tpa c)
   | Inspect (ea,pa,casesa), Inspect (eb,pb,casesb)
        when equivalent ea eb c && equivalent pa pa c ->
      let ncases = Array.length casesa in
@@ -131,9 +131,9 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   match ha, hb with
   | Sort sa, Sort sb ->
      Sorts.sub sa sb (sortvariable_le c) (sortvariable_lt c)
-  | All (_,tpa,ta), All(_,tpb,tb) ->
+  | All (nme,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
-     && is_subtype ta tb (push_unnamed tpa c)
+     && is_subtype ta tb (push_simple nme tpa c)
   | _ ->
      equivalent_head ha hb c && equivalent_arguments argsa argsb c
 
@@ -153,6 +153,7 @@ let rec check (t:Term.t) (c:t): Term.typ option =
        match s with
        | Sorts.Variable i | Sorts.Variable_type i
             when i < 0 || count_sorts c <= i ->
+          printf "sort variable (%d/%d) out of bounds\n" i (count_sorts c);
           None
        | _ ->
           Option.(
@@ -165,14 +166,18 @@ let rec check (t:Term.t) (c:t): Term.typ option =
      if  i < count c then
        Some (entry_type i c)
      else
-       None
+       begin
+         printf "variable (%d/%d) out of bounds\n" i (count c);
+         None
+       end
 
   | Application (f,a,_) ->
      (* Does the type of [a] fit the argument type of [f]? *)
      Option.(
       check f c >>= fun ftp ->
       check a c >>= fun atp ->
-      match head_normal ftp c with
+      let hn = head_normal ftp c in
+      match hn with
       | All (_, tp, res) when is_subtype atp tp c  ->
          Some (Term.substitute res a)
       | _ ->
@@ -183,19 +188,19 @@ let rec check (t:Term.t) (c:t): Term.typ option =
         context [c,tp] and the corresponding product must be wellformed.*)
      Option.(
       check tp c
-      >> check t (push_unnamed tp c) >>= fun ttp ->
+      >> check t (push_simple nme tp c) >>= fun ttp ->
       let lam_tp = All (nme,tp,ttp) in
       check lam_tp c
       >> Some lam_tp
      )
-  | All (_,arg_tp,res_tp) ->
+  | All (nme,arg_tp,res_tp) ->
      (* [arg_tp] must be a wellformed type. [res_tp] must be a wellformed type
         in the context with [arg_tp] pushed. The sorts of [arg_tp] and
         [res_tp] determine the sort of the quantified expression. *)
      Option.(
       let open Term in
       check arg_tp c >>= fun arg_s ->
-      check res_tp (push_unnamed arg_tp c) >>= fun res_s ->
+      check res_tp (push_simple nme arg_tp c) >>= fun res_s ->
       maybe_product arg_s res_s
      )
   | Inspect (e,res,cases) ->
@@ -235,14 +240,11 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
       if i = np then
         Some c
       else
-        let _,tp = Inductive.parameter i ind in
+        let nme,tp = Inductive.parameter i ind in
         if is_wellformed tp c then
-          checki (i+1) (push_unnamed tp c)
+          checki (i+1) (push (some_feature_name_opt nme) tp c)
         else
-          begin
-            printf "parameter %d not wellformed\n" i;
-            None
-          end
+          None
     in
     checki 0 c
   in
@@ -273,7 +275,7 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     in
     try
       for k = 0 to Array.length cargs - 1 do
-        let _,tp = cargs.(k) in
+        let nme,tp = cargs.(k) in
         if Term.has_variables (indvar k) tp then
           begin
               let tp = normalize tp !cr in
@@ -312,7 +314,7 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
               else
                 raise Not_found
           end;
-        cr := push_unnamed tp !cr
+        cr := push (some_feature_name_opt nme) tp !cr
       done;
       true
     with Not_found ->
@@ -323,8 +325,7 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
       let cc = Gamma.push_ind_types_params ind c in
       for i = 0 to Inductive.ntypes ind - 1 do
         for j = 0 to Inductive.nconstructors i ind - 1 do
-          let _,tp = Inductive.ctype0 i j ind in
-          (*printf "constructor %s\n" (string_of_term cc tp);*)
+          let nme,tp = Inductive.ctype0 i j ind in
           if is_wellformed_type tp cc
              && Inductive.is_valid_iargs i j ind
              && is_positive_cargs i j cc
@@ -408,8 +409,6 @@ let test (): unit =
                         arrow variable0 variable0) )
     );
 
-  (*printf "check accessible\n";
-  assert (check_inductive (Inductive.make_accessible 0) c <> None);*)
   assert (check_inductive Inductive.make_natural empty <> None);
   assert (check_inductive Inductive.make_false empty <> None);
   assert (check_inductive Inductive.make_true empty <> None);
@@ -417,6 +416,8 @@ let test (): unit =
   assert (check_inductive Inductive.make_or empty <> None);
   assert (check_inductive (Inductive.make_equal 0) c <> None);
   assert (check_inductive (Inductive.make_list 0) c <> None);
+  assert (check_inductive (Inductive.make_accessible 0) c <> None);
+
   (* class Natural create 0; successor(Natural) end *)
   ignore(
       let ind = Inductive.make_natural
