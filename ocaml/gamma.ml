@@ -9,14 +9,23 @@ module Term = Term2
 
 
 
-
-type definition =
-  Feature_name.t option * Term.typ * Term.t
+module Definition =
+  struct
+    type t = {name: Feature_name.t option;
+              typ:  Term.typ;
+              term: Term.t}
+    let name (def:t): Feature_name.t option = def.name
+    let typ (def:t): Term.typ = def.typ
+    let term (def:t): Term.t  = def.term
+    let make name typ term = {name;typ;term}
+    let make_simple name typ term =
+      make (some_feature_name_opt name) typ term
+  end
 
 
 type justification =
   | Assumption of Feature_name.t option
-  | Definition of definition
+  | Definition of Definition.t
   | Indtype of int * Inductive.t
   | Constructor of int * int * Inductive.t
   | Recursive of Term.fixpoint
@@ -81,8 +90,8 @@ let name (i:int) (c:t): Feature_name.t option =
   match (entry i c).just with
   | Assumption nme ->
      nme
-  | Definition (nme,_,_) ->
-     nme
+  | Definition def ->
+     Definition.name def
   | Indtype (i,ind) ->
      Inductive.name i ind
   | Constructor (i,j,ind) ->
@@ -90,22 +99,25 @@ let name (i:int) (c:t): Feature_name.t option =
   | Recursive fp ->
      assert false
 
-let definition_opt (i:int) (c:t): Term.t option =
+let definition_term (i:int) (c:t): Term.t option =
   match (entry i c).just with
-  | Definition _ ->
-     assert false (* nyi *)
+  | Definition d ->
+     Some (Definition.term d)
   | _ ->
      None
 
+
 let has_definition (i:int) (c:t): bool =
-  match definition_opt i c with
+  match definition_term i c with
   | None -> false
   | Some _ -> true
 
+
 let definition (i:int) (c:t): Term.t =
-  match definition_opt i c with
-  | None -> assert false (* must have a definition *)
+  match definition_term i c with
+  | None -> assert false (* illegal call *)
   | Some t -> t
+
 
 let is_constructor (i:int) (c:t): bool =
   assert false (* nyi *)
@@ -118,6 +130,17 @@ let empty: t =
   {sort_variables = Sorts.Variables.empty;
    gamma = IArr.empty;
    assumptions = []}
+
+
+let push_definition
+      (d: Definition.t) (c:t)
+    : t =
+  {c with gamma =
+            IArr.push {typ = Definition.typ d;
+                       just = Definition d}
+              c.gamma}
+
+
 
 
 let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =

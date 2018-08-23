@@ -2,7 +2,15 @@ open Alba2_common
 
 module Term = Term2
 
-
+module Definition:
+sig
+  type t
+  val name: t -> Feature_name.t option
+  val typ:  t -> Term.typ
+  val term: t -> Term.t
+  val make: Feature_name.t option -> Term.typ -> Term.t -> t
+  val make_simple: string option -> Term.typ -> Term.t -> t
+end
 
 type t
 val empty: t

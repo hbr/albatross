@@ -29,7 +29,7 @@ val proposition: t
 val any1: t
 val sort_variable: int -> t
 val sort_variable_type: int -> t
-val maybe_product: t -> t -> t option
+val product: t -> t -> t option
 val get_sort: t -> Sorts.t option
 
 val variable0: t

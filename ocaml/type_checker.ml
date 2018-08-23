@@ -43,11 +43,12 @@ let head_normal0
     | Term.Fix (idx,arr) ->
        assert false (* nyi *)
 
-    (* error cases *)
+    (* error cases: shall not happen because the term is wellformed! *)
     | Term.Sort s when args <> [] ->
-       assert false (* A sort cannot be applied. *)
+       assert false (* A sort cannot be applied *)
     | Term.Application _ ->
-       assert false (* f cannot be an application. *)
+       assert false (* f cannot be an application, because of
+                       'split_application. *)
     | Term.Lambda _ when args <> [] ->
        assert false (* cannot happen, term is already beta reduced *)
     | Term.All _ when args <> [] ->
@@ -83,7 +84,7 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
   let open Term in
   match a, b with
   | Sort sa, Sort sb ->
-     sa = sb
+     Sorts.equal sa sb
   | Variable i,  Variable j ->
      i = j
   | Lambda (nme,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
@@ -176,32 +177,40 @@ let rec check (t:Term.t) (c:t): Term.typ option =
      Option.(
       check f c >>= fun ftp ->
       check a c >>= fun atp ->
+      (* Now f,ftp and a,atp are wellformed *)
       let hn = head_normal ftp c in
       match hn with
-      | All (_, tp, res) when is_subtype atp tp c  ->
+      | All (_, tp, res) (* tp, res are wellformed *)
+           when is_subtype atp tp c  ->
          Some (Term.substitute res a)
       | _ ->
          None
      )
   | Lambda (nme,tp,t) ->
-     (* [tp] must be a wellformed type, [t] must be a wellformed term in the
-        context [c,tp] and the corresponding product must be wellformed.*)
+     (* check:
+        - Is [tp] a wellformed type?
+        - Is [t] a wellformed term in the context [c,tp]?
+        - Is the corresponding product wellformed? *)
      Option.(
-      check tp c
+      check tp c >>= fun s ->
+      Term.get_sort s
       >> check t (push_simple nme tp c) >>= fun ttp ->
       let lam_tp = All (nme,tp,ttp) in
       check lam_tp c
       >> Some lam_tp
      )
   | All (nme,arg_tp,res_tp) ->
-     (* [arg_tp] must be a wellformed type. [res_tp] must be a wellformed type
-        in the context with [arg_tp] pushed. The sorts of [arg_tp] and
-        [res_tp] determine the sort of the quantified expression. *)
+     (* check:
+        - Is [arg_tp] must be a wellformed type?
+        - Is [res_tp] must be a wellformed type in the context with [c,arg_tp]?
+
+        The sorts of [arg_tp] and [res_tp] determine the sort of the quantified
+        expression. *)
      Option.(
       let open Term in
       check arg_tp c >>= fun arg_s ->
       check res_tp (push_simple nme arg_tp c) >>= fun res_s ->
-      maybe_product arg_s res_s
+      product arg_s res_s
      )
   | Inspect (e,res,cases) ->
      assert false (* nyi *)
@@ -346,8 +355,33 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     >> Some ind
   )
 
+(* Relation (A,B:Any): Any := A -> A -> Proposition
+ *)
+let binary_relation (sv0:int): Gamma.Definition.t =
+  let open Term in
+  let v0 = sort_variable sv0
+  and v1 = sort_variable (sv0+1) in
+  let t = Lambda
+            (Some "A",v0,
+             Lambda
+               (Some "B",v1,
+                arrow variable1 (arrow variable0 proposition)))
+  and typ = All
+              (Some "A",
+               v0,
+               All
+                 (Some "B",
+                  v1,
+                  assert false))
+  in
+  Definition.make_simple (Some "Relation") typ t
 
 
+(* Endo_relation (A:Any): Any := Relation(A,A)
+ *)
+let endo_relation (sv0:int): Gamma.Definition.t =
+  let open Term in
+  assert false
 
 
 let test (): unit =
@@ -370,28 +404,34 @@ let test (): unit =
                Some s
       ) = Some datatype
     end;
+
   (* Proposition -> Proposition *)
   assert ( check (arrow proposition proposition) c = Some any1);
 
   (* Natural -> Proposition *)
   assert ( check (arrow variable0 proposition) c = Some any1);
 
+  (* (Natural -> Proposition) -> Proposition **)
+  assert ( check (arrow
+                    (arrow variable0 proposition)
+                    proposition) c = Some any1);
+
   (* all(A:Prop) A -> A : Proposition *)
-  assert ( maybe_product proposition proposition = Some proposition );
-  assert ( maybe_product datatype proposition    = Some proposition );
+  assert ( product proposition proposition = Some proposition );
+  assert ( product datatype proposition    = Some proposition );
   assert ( check (All (None,
-                               proposition,
-                               arrow variable0 variable0)) c
+                       proposition,
+                       arrow variable0 variable0)) c
            = Some proposition);
 
-  (* all(n:Natural) n -> n is illformed *)
+  (* all(n:Natural) n -> n is illformed, n is not a type! *)
   assert ( check (All (None,
-                               Variable 0,
-                               arrow variable0 variable0)) c
+                       Variable 0,
+                       arrow variable0 variable0)) c
            = None);
 
   (* Natural -> Natural : Datatype *)
-  assert ( maybe_product datatype datatype    = Some datatype );
+  assert ( product datatype datatype    = Some datatype );
   assert ( check (arrow variable0 variable0) c
            = Some datatype);
 
@@ -408,6 +448,18 @@ let test (): unit =
                         proposition,
                         arrow variable0 variable0) )
     );
+
+  (* All prover type:
+         all(p:Proposition) p: Proposition
+     is equivalent to false *)
+  assert( check (All (Some "p", proposition, variable0)) empty
+          = Some proposition);
+
+  (* All inhabitor type:
+         all(p:SV0) p:  SV0'
+     is equivalent to false *)
+  assert( check (All (Some "T", sort_variable 0, variable0)) c
+          = Some (sort_variable_type 0));
 
   assert (check_inductive Inductive.make_natural empty <> None);
   assert (check_inductive Inductive.make_false empty <> None);
@@ -445,4 +497,23 @@ let test (): unit =
       in
       check_inductive ind empty = None
     end;
+  (*
+  let sv0 = 0 in
+  let v0 = sort_variable sv0
+  and v1 = sort_variable (sv0+1) in
+  let t = Lambda
+            (Some "A",v0,
+             Lambda
+               (Some "B",v1,
+                arrow variable1 (arrow variable0 proposition)))
+  in
+  printf "t   %s\n" (string_of_term c t);
+  begin
+    match check t c with
+    | None ->
+       printf "not wellformed\n"
+    | Some tp ->
+       printf "wellformed\n";
+       printf "tp  %s\n" (string_of_term c tp)
+  end;*)
   ()

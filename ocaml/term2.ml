@@ -39,7 +39,7 @@ let sort_variable_type (i:int): t =
   Sort (Sorts.Variable_type i)
 
 
-let maybe_product (a:t) (b:t): t option =
+let product (a:t) (b:t): t option =
   match a, b with
   | Sort sa, Sort sb ->
      Some (Sort (Sorts.product sa sb))
