@@ -103,7 +103,7 @@ let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold (s:int) (a:'a) (t:t): 'a =
     match t with
     | Sort s -> a
-    | Variable i when i < start ->
+    | Variable i when i < s ->
        a
     | Variable i ->
        assert (s <= i);
@@ -291,7 +291,7 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
     | Variable i when i < bnd ->
        t
     | Variable i when i < bnd + n ->
-       f (i - bnd)
+       f (i - bnd) |> up bnd
     | Variable (i) ->
        Variable (i-n)
     | Application (a, b, oo) ->
