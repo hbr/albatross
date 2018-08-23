@@ -10,6 +10,16 @@ sig
   val is_strict_lower_bound: int -> t -> bool
 end
 
+module Variables:
+sig
+  type t
+  val count: t -> int
+  val le: t -> int -> int -> bool
+  val lt: t -> int -> int -> bool
+  val empty: t
+  val push: int -> (int*int*bool) list -> t -> t
+end
+
 type t =
   | Proposition
   | Datatype
@@ -18,7 +28,7 @@ type t =
   | Variable_type of int
   | Max of Set.t
 
-val maybe_sort_of: t -> t option
+val type_of: t -> t option
 val product: t -> t -> t
-val sub: t -> t -> (int -> int -> bool) -> bool
+val sub: t -> t -> (int -> int -> bool) -> (int -> int -> bool) -> bool
 val equal: t -> t -> bool

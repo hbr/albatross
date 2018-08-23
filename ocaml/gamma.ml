@@ -27,75 +27,30 @@ type entry = {
   }
 
 
-module Sort_variables =
-  struct
-    type t = Sorts.Set.t IArr.t
 
-    let count (vs:t): int =
-      IArr.length vs
-
-    let le (vs:t) (i:int) (j:int): bool =
-      assert (i <> j);
-      assert (i < count vs);
-      assert (j < count vs);
-      Sorts.Set.is_lower_bound i (IArr.elem j vs)
-
-    let lt (vs:t) (i:int) (j:int): bool =
-      assert (i <> j);
-      assert (i < count vs);
-      assert (j < count vs);
-      Sorts.Set.is_strict_lower_bound i (IArr.elem j vs)
-
-    let empty: t =
-      IArr.empty
-
-
-    let push (n:int) (cs:(int*int*bool) list) (vs:t): t =
-      let nvars = n + count vs
-      and vsr = ref vs in
-      for i = 0 to n - 1 do
-        vsr := IArr.push Sorts.Set.empty !vsr
-      done;
-      assert (IArr.length !vsr = nvars);
-      List.iter
-        (fun (i,j,strict) ->
-          assert (i <> j);
-          assert (i < nvars);
-          assert (j < nvars);
-          assert (not (strict && le vs j i));
-          (* add i and the transitive closure to the lower bounds of j *)
-          vsr := IArr.put
-                   j
-                   (Sorts.Set.add i strict (IArr.elem j !vsr)
-                    |> Sorts.Set.union (IArr.elem i !vsr))
-                   !vsr
-        )
-        cs;
-      !vsr
-  end
 
 type t = {
-    sort_variables: Sort_variables.t;
+    sort_variables: Sorts.Variables.t;
     gamma: entry IArr.t;
     assumptions: int list
   }
 
 
 let count_sorts (c:t): int =
-  Sort_variables.count c.sort_variables
+  Sorts.Variables.count c.sort_variables
 
 
 let sortvariable_le (c:t) (i:int) (j:int): bool =
-  Sort_variables.le c.sort_variables i j
+  Sorts.Variables.le c.sort_variables i j
 
 
 let sortvariable_lt (c:t) (i:int) (j:int): bool =
-  Sort_variables.lt c.sort_variables i j
+  Sorts.Variables.lt c.sort_variables i j
 
 
 let push_sorts (n:int) (cs: (int*int*bool) list) (c:t): t =
   {c with
-    sort_variables = Sort_variables.push n cs c.sort_variables}
+    sort_variables = Sorts.Variables.push n cs c.sort_variables}
 
 let push_sort_variables (n:int) (c:t): t =
   push_sorts n [] c
@@ -160,7 +115,7 @@ let constructor_offset (i:int) (c:t): int =
   assert false (* nyi *)
 
 let empty: t =
-  {sort_variables = Sort_variables.empty;
+  {sort_variables = Sorts.Variables.empty;
    gamma = IArr.empty;
    assumptions = []}
 
