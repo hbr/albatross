@@ -240,6 +240,16 @@ let apply_standard (n:int) (start:int) (f:t): t =
 
 
 
+let rec split_lambda0 (a:typ) (args: argument_list): typ * argument_list =
+  (* Analyze [(a:A,b:B, ...) := t], return (t, [...,b:B,a:A,args]) *)
+  match a with
+  | Lambda(nme,tp,t) ->
+     split_lambda0 t ((nme,tp) :: args)
+  | _ ->
+     a, args
+
+
+
 
 
 let rec split_product0 (a:typ) (args: argument_list): typ * argument_list =

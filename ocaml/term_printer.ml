@@ -134,9 +134,9 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       | Application (f,z,oo) ->
          application f z c
       | Lambda (nme,tp,t) ->
-         assert false
+         print_lambda nme tp t c
       | All(nme,tp,t) ->
-         product nme tp t c
+         print_product nme tp t c
       | Inspect (e,m,f) ->
          assert false
       | Fix (i,arr) ->
@@ -198,26 +198,34 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       in
       print f c pp >>= put "(" >>= print_args args >>= put ")"
 
-    and product nme tp t c pp =
+    and print_args args str tp c pp =
+      let open PP in
+      let print_arg nme a pp =
+        print_name nme pp >>= put ":" >>= print a c
+      in
+      match args with
+      | [] ->
+         assert false (* cannot happen *)
+      | [nme,a] ->
+         let nme = some_feature_name_opt nme in
+         print_arg nme a pp >>= put ") "
+         >>= put str >>= print tp (C.push nme tp c)
+      | (nme,a) :: args ->
+         let nme = some_feature_name_opt nme in
+         print_arg nme a pp >>= put ","
+         >>= print_args args str tp (C.push nme tp c)
+
+    and print_lambda nme tp t c pp =
+      let t,args_rev = Term.split_lambda0 t [nme,tp] in
+      let open PP in
+      put "((" pp
+      >>= print_args (List.rev args_rev) ":= " t c
+      >>= put ")"
+
+    and print_product nme tp t c pp =
       let tp,args_rev = Term.split_product0 t [nme,tp] in
       let open PP in
-      let rec print_args args tp c pp =
-        let print_arg nme a pp =
-          print_name nme pp >>= put ":" >>= print a c
-        in
-        match args with
-        | [] ->
-          assert false (* cannot happen *)
-        | [nme,a] ->
-           let nme = some_feature_name_opt nme in
-           print_arg nme a pp >>= put ") "
-           >>= print tp (C.push nme tp c)
-        | (nme,a) :: args ->
-           let nme = some_feature_name_opt nme in
-           print_arg nme a pp >>= put ","
-           >>= print_args args tp (C.push nme tp c)
-      in
-      put "all(" pp >>= print_args (List.rev args_rev) tp c
+      put "all(" pp >>= print_args (List.rev args_rev) "" tp c
   end (* Make *)
 
 

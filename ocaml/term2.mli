@@ -59,6 +59,9 @@ val apply_args: t -> t list -> t
 val apply_arg_array: t -> t array -> t
 val apply_standard: int -> int -> t -> t
 
+
+val split_lambda0: t -> argument_list -> t * argument_list
+
 val split_product0: typ -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ
 val push_product: arguments -> typ -> typ
