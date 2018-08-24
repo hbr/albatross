@@ -33,10 +33,10 @@ let proposition: t = Sort Sorts.Proposition
 let any1: t = Sort Sorts.Any1
 
 let sort_variable (i:int): t =
-  Sort (Sorts.Variable i)
+  Sort (Sorts.variable i)
 
 let sort_variable_type (i:int): t =
-  Sort (Sorts.Variable_type i)
+  Sort (Sorts.variable_type i)
 
 
 let product (a:t) (b:t): t option =

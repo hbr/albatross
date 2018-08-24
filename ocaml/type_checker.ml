@@ -131,7 +131,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ha, hb with
   | Sort sa, Sort sb ->
-     Sorts.sub sa sb (sortvariable_le c) (sortvariable_lt c)
+     Sorts.sub sa sb (sort_variables c)
   | All (nme,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_simple nme tpa c)
@@ -150,18 +150,7 @@ let rec check (t:Term.t) (c:t): Term.typ option =
   let open Term in
   match t with
   | Sort s ->
-     begin
-       match s with
-       | Sorts.Variable i | Sorts.Variable_type i
-            when i < 0 || count_sorts c <= i ->
-          printf "sort variable (%d/%d) out of bounds\n" i (count_sorts c);
-          None
-       | _ ->
-          Option.(
-           Sorts.type_of s >>= fun s ->
-           Some (Sort s)
-          )
-     end
+     Option.(Sorts.type_of s (count_sorts c) >>= fun s -> Some (Sort s))
 
   | Variable i ->
      if  i < count c then
@@ -497,7 +486,9 @@ let test (): unit =
       in
       check_inductive ind empty = None
     end;
-  (*
+
+  (* experimental for new sort order *)
+  printf "\nexperimental\n";
   let sv0 = 0 in
   let v0 = sort_variable sv0
   and v1 = sort_variable (sv0+1) in
@@ -515,5 +506,5 @@ let test (): unit =
     | Some tp ->
        printf "wellformed\n";
        printf "tp  %s\n" (string_of_term c tp)
-  end;*)
+  end;
   ()

@@ -16,8 +16,7 @@ type t
 val empty: t
 
 val count_sorts: t -> int
-val sortvariable_le: t -> int -> int -> bool
-val sortvariable_lt: t -> int -> int -> bool
+val sort_variables: t -> Sorts.Variables.t
 val push_sorts: int -> (int*int*bool) list -> t -> t
 
 val count: t -> int

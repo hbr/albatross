@@ -49,12 +49,8 @@ let count_sorts (c:t): int =
   Sorts.Variables.count c.sort_variables
 
 
-let sortvariable_le (c:t) (i:int) (j:int): bool =
-  Sorts.Variables.le c.sort_variables i j
-
-
-let sortvariable_lt (c:t) (i:int) (j:int): bool =
-  Sorts.Variables.lt c.sort_variables i j
+let sort_variables (c:t): Sorts.Variables.t =
+  c.sort_variables
 
 
 let push_sorts (n:int) (cs: (int*int*bool) list) (c:t): t =

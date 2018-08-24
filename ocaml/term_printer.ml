@@ -128,7 +128,7 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       let open Term in
       match t with
       | Sort s ->
-         sort s
+         print_sort s
       | Variable i ->
          variable i c
       | Application (f,z,oo) ->
@@ -142,7 +142,7 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       | Fix (i,arr) ->
          assert false
 
-    and sort s =
+    and print_sort s =
       let open Term in
       let open PP in
       match s with
@@ -152,13 +152,34 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
          put "Datatype"
       | Sorts.Any1 ->
          put "Any1"
-      | Sorts.Variable i ->
-         fun pp -> put "SV" pp >>= put (string_of_int i)
-      | Sorts.Variable_type i ->
-         fun pp ->
-         put "SV" pp >>= put (string_of_int i) >>= put "'"
       | Sorts.Max s ->
-         assert false
+         let string_of_sv i b =
+           let s = string_of_int i in
+           if b then
+             s ^ "'"
+           else
+             s
+         in
+         let rec print_list lst =
+           match lst with
+           | [] ->
+              assert false (* cannot happen *)
+           | [i,b] ->
+              put (string_of_sv i b)
+           | (i,b) :: lst ->
+              fun pp ->
+              put (string_of_sv i b) pp
+              >>= put ","
+              >>= print_list lst
+         in
+         match Sorts.Set.bindings s with
+         | [] ->
+            assert false
+         | [i,b] ->
+            put (string_of_sv i b)
+         | lst  ->
+            fun pp -> put "max(" pp >>= print_list lst >>= put ")"
+
 
     and variable i c pp =
       let open Feature_name in

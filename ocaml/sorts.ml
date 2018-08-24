@@ -3,20 +3,7 @@ open Container
 
 module IArr = Immutable_array
 
-module Set:
-sig
-  type t
-  val count: t -> int
-  val empty: t
-  val singleton: int -> bool -> t
-  val equal: t -> t -> bool
-  val add: int -> bool -> t -> t
-  val union: t -> t -> t
-  val is_singleton: int -> bool -> t -> bool
-  val is_lower_bound: int -> t -> bool
-  val is_strict_lower_bound: int -> t -> bool
-end
-  =
+module Set =
   struct
     type t = bool IntMap.t (* maps to true, if type of variable is meant,
                               maps to false, if variable is meant *)
@@ -35,6 +22,9 @@ end
       IntMap.cardinal s = 1
       && IntMap.min_binding s = (i,strict)
 
+    let bindings (s:t): (int*bool) list =
+      IntMap.bindings s
+
     let add (i:int) (strict:bool) (s:t): t =
       if strict || not (IntMap.mem i s) then
         IntMap.add i strict s
@@ -47,6 +37,19 @@ end
         (fun i strict -> br := add i strict !br)
         a;
       !br
+
+    let type_of (s:t) (n:int): t option =
+      try
+        Some
+          (IntMap.mapi
+             (fun i b ->
+               if i < 0 || n <= i || b then
+                 raise Not_found
+               else
+                 true)
+             s)
+      with Not_found ->
+        None
 
     let is_lower_bound (i:int) (s:t): bool =
       IntMap.mem i s
@@ -69,13 +72,13 @@ module Variables =
     let count (vs:t): int =
       IArr.length vs
 
-    let le (vs:t) (i:int) (j:int): bool =
+    let le (i:int) (j:int) (vs:t): bool =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
       Set.is_lower_bound i (IArr.elem j vs)
 
-    let lt (vs:t) (i:int) (j:int): bool =
+    let lt (i:int) (j:int) (vs:t): bool =
       assert (i <> j);
       assert (i < count vs);
       assert (j < count vs);
@@ -97,7 +100,7 @@ module Variables =
           assert (i <> j);
           assert (i < nvars);
           assert (j < nvars);
-          assert (not (strict && le vs j i));
+          assert (not (strict && le j i vs));
           (* add i and the transitive closure to the lower bounds of j *)
           vsr := IArr.put
                    j
@@ -115,11 +118,13 @@ type t =
   | Proposition
   | Datatype
   | Any1
-  | Variable of int     (* Datatype < Variable i, Any1 <= Variable i *)
-  | Variable_type of int
   | Max of Set.t
 
+let variable (i:int): t =
+  Max (Set.singleton i false)
 
+let variable_type (i:int): t =
+  Max (Set.singleton i true)
 
 let equal (s1:t) (s2:t): bool =
   match s1, s2 with
@@ -127,47 +132,23 @@ let equal (s1:t) (s2:t): bool =
     | Datatype, Datatype
     | Any1, Any1 ->
      true
-  | Variable i, Variable j | Variable_type i, Variable_type j when i = j ->
-     true
-  | Max s, Variable i | Variable i, Max s ->
-     Set.is_singleton i false s
-  | Max s, Variable_type i | Variable_type i, Max s ->
-     Set.is_singleton i true s
-  | Max s1, Max s2 ->
-     Set.equal s1 s2
+  | Max set1, Max set2 ->
+     Set.equal set1 set2
   | _, _ ->
      false
 
 
 
-let type_of (s:t): t option =
+let type_of (s:t) (n:int): t option =
   match s with
   | Proposition | Datatype ->
      Some Any1
-  | Variable i ->
-     Some (Variable_type i)
-  | _ ->
-     (* None *)
-     assert false (* Illegal call ?? Really ?? *)
-
-
-let max_of (s:t): t =
-  match s with
-  | Proposition ->
-     assert false (* illegal call *)
-  | Datatype -> Max Set.empty
-  | Any1 -> Max Set.empty
-  | Variable i -> Max (Set.singleton i false)
-  | Variable_type i -> Max (Set.singleton i true)
-  | Max _ -> s
-
-
-let merge (s1:t) (s2:t): t =
-  match s1, s2 with
-  | Max s1, Max s2 ->
-     Max (Set.union s1 s2)
-  | _, _ ->
-     assert false
+  | Any1 ->
+     None
+  | Max set ->
+     Option.(
+      Set.type_of set n >>= fun set ->
+      Some (Max set))
 
 
 
@@ -185,39 +166,14 @@ let product (s1:t) (s2:t): t =
     | Any1, Any1
     ->
      Any1
-  | Datatype, Variable i | Any1, Variable i
-    | Variable i, Datatype | Variable i, Any1 ->
-     Variable i
-  | Datatype, Variable_type i | Any1, Variable_type i
-    | Variable_type i, Datatype | Variable_type i, Any1 ->
-     Variable_type i
-  | Variable i, Variable j ->
-     if i = j then
-       Variable i
-     else
-       Max (Set.add i false (Set.singleton j false))
-  | Variable_type i, Variable j | Variable j, Variable_type i->
-     if i = j then
-       Variable_type i
-     else
-       Max (Set.add i true (Set.singleton j false))
-  | Variable_type i, Variable_type j ->
-     if i = j then
-       Variable_type i
-     else
-       Max (Set.add i true (Set.singleton j true))
-  | Max s, (Datatype|Any1) | (Datatype|Any1), Max s ->
-     Max s
-  | Variable i, Max s | Max s, Variable i ->
-     Max (Set.add i false s)
-  | Variable_type i, Max s | Max s, Variable_type i ->
-     Max (Set.add i true s)
-  | Max s1, Max s2 ->
-     Max (Set.union s1 s2)
+  | (Datatype | Any1), Max set | Max set, (Datatype | Any1) ->
+     Max set
+  | Max set1, Max set2 ->
+     Max (Set.union set1 set2)
 
 
 
-let sub (s1:t) (s2:t) (le:int->int->bool) (lt:int->int->bool): bool =
+let sub (s1:t) (s2:t) (vs:Variables.t): bool =
   (* Proposition < Datatype < Any1 <= Variable i *)
   match s1 with
   | Proposition ->
@@ -238,39 +194,27 @@ let sub (s1:t) (s2:t) (le:int->int->bool) (lt:int->int->bool): bool =
        | _ ->
           true
      end
-  | Variable i ->
+  | Max set1 ->
      begin
        match s2 with
-       | Proposition | Datatype | Any1 ->
+       | Datatype | Proposition | Any1 ->
           (* A sort variable cannot have a fixed upper bound *)
           false
-       | Variable j | Variable_type j ->
-          i = j || le i j
        | Max set2 ->
-          assert false (* nyi *)
+          IntMap.for_all
+            (fun i bi ->
+              IntMap.for_all
+                (fun j bj ->
+                  if not bi || bj then
+                    i = j || Variables.le i j vs
+                  else
+                    begin
+                      assert bi;
+                      assert (not bj);
+                      i <> j && Variables.lt i j vs
+                    end
+                )
+                set2
+            )
+            set1
      end
-  | Variable_type i ->
-     begin
-       match s2 with
-       | Proposition | Datatype | Any1 ->
-          false
-       | Variable j ->
-          i <> j &&  lt i j
-       | Variable_type j ->
-          i = j || le i j
-       | Max set2 ->
-          assert false (* nyi *)
-     end
-  | Max s1 ->
-     assert (Set.count s1 <> 0);
-     match s2 with
-     | Proposition | Datatype | Any1 ->
-        (* Sort variables have no fixed upper bound *)
-        false
-     | Variable j ->
-        assert false (* nyi *)
-     | Variable_type j ->
-        assert false (* nyi *)
-     | Max s2 ->
-        assert (Set.count s2 <> 0);
-        assert false (* nyi *)
