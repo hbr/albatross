@@ -49,6 +49,14 @@ let product (a:t) (b:t): t option =
      None
 
 
+let product1 (a:t) (b:t): t =
+  match product a b with
+  | None ->
+     assert false (* illegal call *)
+  | Some p ->
+     p
+
+
 let get_sort (a:t): Sorts.t option =
   match a with
   | Sort s ->

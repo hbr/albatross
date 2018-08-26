@@ -154,7 +154,7 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
          put "Any1"
       | Sorts.Max s ->
          let string_of_sv i b =
-           let s = string_of_int i in
+           let s = "SV" ^ string_of_int i in
            if b then
              s ^ "'"
            else

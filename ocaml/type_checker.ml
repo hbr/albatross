@@ -344,8 +344,17 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
     >> Some ind
   )
 
-(* Relation (A,B:Any): Any := A -> A -> Proposition
- *)
+
+(* Predicate (A:Any): Any := A -> Proposition *)
+let predicate (sv0:int): Gamma.Definition.t =
+  let open Term in
+  let v0 = sort_variable sv0 in
+  let t = Lambda (Some "A", v0, arrow variable0 proposition)
+  and typ = All (Some "A", v0, v0) in
+  Definition.make_simple (Some "Predicate") typ t []
+
+
+(* Relation (A,B:Any): Any := A -> Proposition *)
 let binary_relation (sv0:int): Gamma.Definition.t =
   let open Term in
   let v0 = sort_variable sv0
@@ -361,19 +370,44 @@ let binary_relation (sv0:int): Gamma.Definition.t =
                All
                  (Some "B",
                   v1,
-                  assert false))
+                  product1 v0 v1))
   in
-  Definition.make_simple (Some "Relation") typ t
+  Definition.make_simple (Some "Relation") typ t []
 
 
-(* Endo_relation (A:Any): Any := Relation(A,A)
- *)
-let endo_relation (sv0:int): Gamma.Definition.t =
+(* Endo_relation (A:Any): Any := Relation(A,A) *)
+let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Gamma.Definition.t =
   let open Term in
-  assert false
+  let t =
+    Lambda
+      (Some "A",
+       sort_variable sv0,
+       apply_args (Variable (rel_idx+1)) [variable0;variable0])
+  and typ =
+    All
+      (Some "A",
+       sort_variable sv0,
+       product1 (sort_variable rel_sv0) (sort_variable (rel_sv0+1)))
+  in
+  Definition.make_simple (Some "Endorelation") typ t
+    [(sv0,rel_sv0,false); (sv0,rel_sv0+1,false)]
 
+
+let print_type_of (t:Term.t) (c:t): unit =
+  match check t c with
+  | None ->
+     printf "not wellformed %s\n" (string_of_term c t);
+  | Some tp ->
+     printf "%s : %s\n" (string_of_term c t) (string_of_term c tp)
 
 let test (): unit =
+  let equal_opt a b =
+    match a with
+    | None ->
+       false
+    | Some a ->
+       Term.equal a b
+  in
   Printf.printf "test type checker\n";
   let open Term in
   let c = push_unnamed datatype
@@ -487,24 +521,35 @@ let test (): unit =
       check_inductive ind empty = None
     end;
 
-  (* experimental for new sort order *)
-  printf "\nexperimental\n";
-  let sv0 = 0 in
-  let v0 = sort_variable sv0
-  and v1 = sort_variable (sv0+1) in
-  let t = Lambda
-            (Some "A",v0,
-             Lambda
-               (Some "B",v1,
-                arrow variable1 (arrow variable0 proposition)))
-  in
-  printf "t   %s\n" (string_of_term c t);
+
+  (* Predicate, Relation, Endorelation *)
+  assert
+    begin
+      let d = predicate 0 in
+      equal_opt
+        (check (Definition.term d) c)
+        (Definition.typ d)
+    end;
+  assert
+    begin
+      let d = binary_relation 0 in
+      equal_opt
+        (check (Definition.term d) c)
+        (Definition.typ d)
+    end;
   begin
-    match check t c with
-    | None ->
-       printf "not wellformed\n"
-    | Some tp ->
-       printf "wellformed\n";
-       printf "tp  %s\n" (string_of_term c tp)
+    let endo = endorelation 2 0 0 in
+    let c =
+      (push_sorts 3 (Definition.constraints endo) empty)
+      |> push_definition (binary_relation 0)
+    in
+    assert (equal_opt (check (Definition.term endo) c) (Definition.typ endo));
+    let c =
+      push_definition endo c
+      |> push_simple (Some "Natural") datatype in
+    (* Endorelation(Natural) *)
+    let endo_nat = Application(variable1,variable0,false) in
+    (*print_type_of endo_nat c;*)
+    assert (is_wellformed endo_nat c)
   end;
   ()

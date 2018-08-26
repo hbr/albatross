@@ -8,18 +8,21 @@ module Term = Term2
 
 
 
+type constraint_list = (int*int*bool) list
 
 module Definition =
   struct
     type t = {name: Feature_name.t option;
               typ:  Term.typ;
-              term: Term.t}
+              term: Term.t;
+              constraints: constraint_list}
     let name (def:t): Feature_name.t option = def.name
     let typ (def:t): Term.typ = def.typ
     let term (def:t): Term.t  = def.term
-    let make name typ term = {name;typ;term}
-    let make_simple name typ term =
-      make (some_feature_name_opt name) typ term
+    let constraints (def:t): constraint_list = def.constraints
+    let make name typ term constraints = {name;typ;term;constraints}
+    let make_simple name typ term constraints =
+      make (some_feature_name_opt name) typ term constraints
   end
 
 
