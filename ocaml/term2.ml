@@ -18,7 +18,9 @@ type t =
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
-and fixpoint = (Feature_name.t option * typ * decr_index * t) array
+and fixpoint =
+  (Feature_name.t option * typ * decr_index * t) array (* typ in outer context,
+                                                          t in inner context *)
 
 type name_type = string option * typ
 type fname_type = Feature_name.t option * typ
@@ -121,10 +123,9 @@ let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
          (fld (fld a t) mp)
          arr
     | Fix (idx,arr) ->
-       let fld = fold (s + Array.length arr) in
        Array.fold_left
          (fun a (_,tp,_,t) ->
-           fld (fld a tp) t)
+           fold (s + Array.length arr) (fold s a tp) t)
          a
          arr
   in
@@ -162,11 +163,11 @@ let map_from (start:int) (f:int->int) (t:t): t =
     | Inspect (t,mp,arr) ->
        Inspect (map s t, map s mp, Array.map (map s) arr)
     | Fix (idx,arr) ->
-       let s = s + Array.length arr in
+       let s1 = s + Array.length arr in
        Fix (idx,
             Array.map
               (fun (nm,tp,didx,t) ->
-                nm, map s tp, didx, map s t)
+                nm, map s tp, didx, map s1 t)
               arr)
   in
   map start t
