@@ -78,7 +78,7 @@ let rec equal (a:t) (b:t): bool =
   | Application (fa,a,_), Application (fb,b,_) ->
      equal fa fb && equal a b
   | Lambda (_,tp1,t1), Lambda (_,tp2,t2)
-    | All (_,tp1,t1), Lambda (_,tp2,t2) ->
+    | All (_,tp1,t1), All (_,tp2,t2) ->
      equal tp1 tp2 && equal t1 t2
   | Inspect(e1,r1,f1), Inspect(e2,r2,f2) ->
      let n = Array.length f1 in
