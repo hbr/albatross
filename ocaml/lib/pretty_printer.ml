@@ -126,22 +126,23 @@ module type PRETTY =
   sig
     type t
     type _ out
+    type pp = t -> t out
     type out_file
     val make:   int -> out_file -> t out
-    val hbox:   t -> t out
-    val vbox:   int -> t -> t out
-    val hvbox:  int -> t -> t out
-    val hovbox: int -> t -> t out
-    val close:  t -> t out
-    val fill:   char -> int -> t -> t out
-    val put:    string -> t -> t out
-    val put_left:  int -> string -> t -> t out
-    val put_right: int -> string -> t -> t out
-    val put_sub: int -> int -> string -> t -> t out
-    val put_wrapped: string list -> t -> t out
-    val cut:    t -> t out
-    val space:  t -> t out
-    val break:  string -> int -> int -> t -> t out
+    val hbox:   pp -> pp
+    val vbox:   int -> pp -> pp
+    val hvbox:  int -> pp -> pp
+    val hovbox: int -> pp -> pp
+    val fill:   char -> int -> pp
+    val put:    string -> pp
+    val put_left:  int -> string -> pp
+    val put_right: int -> string -> pp
+    val put_sub: int -> int -> string -> pp
+    val put_wrapped: string list -> pp
+    val cut:    pp
+    val space:  pp
+    val break:  string -> int -> int -> pp
+    val chain:  pp list -> pp
     val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out
@@ -199,6 +200,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
         box: box;
         stack: box list
       }
+
+
+    type pp = t -> t out
 
     let make (width:int) (channel:out_file): t out =
       P.make {current = 0; width; channel; box = H; stack = []}
@@ -268,13 +272,13 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
          begin
            match b with
            | Pending.H start ->
-              hbox p
+              hbox0 p
            | Pending.V (start,ofs) ->
-              vbox ofs p
+              vbox0 ofs p
            | Pending.HV (start,ofs) ->
-              hvbox ofs p
+              hvbox0 ofs p
            | Pending.HOV (start,ofs) ->
-              hovbox ofs p
+              hovbox0 ofs p
          end
       | Pending.Close ->
          close p
@@ -331,7 +335,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
          else
            P.make {p with box = HOVP (start,ofshov,sep,nbr,ofsbr,pend1)}
 
-    and hbox (p:t): t out =
+    and hbox0 (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -343,7 +347,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | _ ->
          push H p
 
-    and vbox (ofs:int) (p:t): t out =
+    and vbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -356,7 +360,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | _ ->
          push (V (p.current, ofs)) p
 
-    and hvbox (ofs:int) (p:t): t out =
+    and hvbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -368,7 +372,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | _ ->
          push (HV (p.current, ofs, Pending.make_hv ofs)) p
 
-    and hovbox (ofs:int) (p:t): t out =
+    and hovbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
          P.make
@@ -410,6 +414,18 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
                                  Pending.close pend)}
       | _ ->
          pop p
+
+    let hbox (f:t->t out) (p:t): t out =
+      hbox0 p >>= f >>= close
+
+    let vbox (ofs:int) (f:t->t out) (p:t): t out =
+      vbox0 ofs p >>= f >>= close
+
+    let hvbox (ofs:int) (f:t->t out) (p:t): t out =
+      hvbox0 ofs p >>= f >>= close
+
+    let hovbox (ofs:int) (f:t->t out) (p:t): t out =
+      hovbox0 ofs p >>= f >>= close
 
     let put (s:string) (p:t): t out =
       put_sub 0 (String.length s) s p
@@ -470,6 +486,25 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       in
       wrap true l p
 
+    let chain (lst:pp list): pp =
+      assert (lst <> []);
+      let rec chn (p:t out) (lst:pp list): t out =
+        match lst with
+        | [] ->
+           p
+        | a :: tl ->
+           chn (p >>= a) tl
+      in
+      match lst with
+      | [] ->
+         assert false (* illegal call *)
+      | [a] ->
+         a
+      | a :: tl ->
+         fun p -> chn (a p) tl
+
+
+
     let stop (p:t): unit out =
       assert (is_top p);
       P.make ()
@@ -490,56 +525,48 @@ let test (): unit =
   let buf = String_printer.run 200 in
   assert
     begin
-      (make 5 () >>= vbox 0 >>= put_wrapped ["123";"456"] >>= close)
+      (make 5 () >>= vbox 0 (put_wrapped ["123";"456"]))
       |> buf
       = "123\n456"
     end;
   assert
     begin
-      let f t =
-        vbox 0 t >>= put_wrapped ["123";"456"]
-      in
-      (make 5 () >>= f >>= close)
-      |> buf
-      = "123\n456"
-    end;
-  assert
-    begin
-      (make 5 () >>= vbox 1 >>= put_wrapped ["123";"456"] >>= close)
+      (make 5 () >>= vbox 1 (put_wrapped ["123";"456"]))
       |> buf
       = "123\n 456"
     end;
   assert
     begin
-      (make 7 () >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
+      (make 7 () >>= hvbox 0 (put_wrapped ["123";"456"]))
       |> buf
       = "123 456"
     end;
   assert
     begin
-      (make 6 () >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
+      (make 6 () >>= hvbox 0 (put_wrapped ["123";"456"]))
       |> buf
       = "123\n456"
     end;
   assert
     begin
-      (make 6 () >>= hvbox 2 >>= put_wrapped ["123";"456"] >>= close)
+      (make 6 () >>= hvbox 2 (put_wrapped ["123";"456"]))
       |> buf
       = "123\n  456"
     end;
   assert
     begin
         (make 5 () >>= put "bla"
-         >>= hvbox 0 >>= put_wrapped ["123";"456"] >>= close)
+         >>= hvbox 0 (put_wrapped ["123";"456"]))
         |> buf
         = "bla123\n   456"
     end;
   assert
     begin
       (make 20 ()
-       >>= vbox 0 >>= put "line1" >>= cut >>= put "line2" >>= cut
-       >>= vbox 2 >>= put "line3" >>= cut >>= put "line4" >>= close
-       >>= close)
+       >>= vbox 0
+             (chain [put "line1"; cut; put "line2"; cut;
+                     vbox 2
+                       (chain [put "line3"; cut; put "line4"])]))
       |> buf
       = "line1\nline2\nline3\n  line4"
     end;
@@ -547,10 +574,8 @@ let test (): unit =
     begin
       (make 10 ()
        >>= hovbox 0
-       >>= put "1234567" >>= space
-       >>= put "90" >>= space
-       >>= put "12345" >>= space
-       >>= put "1234567890" >>= close)
+             (chain [put "1234567"; space; put "90"; space;
+                     put "12345"; space; put "1234567890"]))
       |> buf
       = "1234567 90\n12345\n1234567890"
     end

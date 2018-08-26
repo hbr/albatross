@@ -21,24 +21,26 @@ module type PRETTY =
 
     type t
 
+    type pp = t -> t out
+
     val make:   int -> out_file -> t out
     (** [make width fd] creates a pretty printer of line size [width]
        outputting to the file [fd]. *)
 
-    val hbox:   t -> t out
-    val vbox:   int -> t -> t out
-    val hvbox:  int -> t -> t out
-    val hovbox: int -> t -> t out
-    val close:  t -> t out
-    val fill:   char -> int -> t -> t out
-    val put:    string -> t -> t out
-    val put_left:  int -> string -> t -> t out
-    val put_right: int -> string -> t -> t out
-    val put_sub: int -> int -> string -> t -> t out
-    val put_wrapped: string list -> t -> t out
-    val cut:    t -> t out
-    val space:  t -> t out
-    val break:  string -> int -> int -> t -> t out
+    val hbox:   pp -> pp
+    val vbox:   int -> pp -> pp
+    val hvbox:  int -> pp -> pp
+    val hovbox: int -> pp -> pp
+    val fill:   char -> int -> pp
+    val put:    string -> pp
+    val put_left:  int -> string -> pp
+    val put_right: int -> string -> pp
+    val put_sub: int -> int -> string -> pp
+    val put_wrapped: string list -> pp
+    val cut:    pp
+    val space:  pp
+    val break:  string -> int -> int -> pp
+    val chain:  pp list -> pp
     val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out

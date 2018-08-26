@@ -81,7 +81,7 @@ module Make (IO:Ocaml_io.IO_TYPE) =
         | (key,spec,doc) :: tl ->
            cut p
            >>= put_left 20 (key ^ CLP.argument_type spec)
-           >>= hovbox 0 >>= put_wrapped doc >>= close
+           >>= hovbox 0 (put_wrapped doc)
            >>= print tl
       in
       print command_options p
@@ -94,7 +94,7 @@ module Make (IO:Ocaml_io.IO_TYPE) =
            IO.make p
         | (cmd,_,lst) :: tl ->
            cut p >>= put_left 10 cmd
-           >>= hovbox 0 >>= put_wrapped lst >>= close
+           >>= hovbox 0 (put_wrapped lst)
            >>= print tl
       in
       print commands p
@@ -103,29 +103,15 @@ module Make (IO:Ocaml_io.IO_TYPE) =
       let open PP in
       put "Usage: alba command options arguments" p
       >>= cut >>= cut
-      >>= vbox 4
-      >>= put "Commands:" >>= print_commands
-      >>= close >>= cut >>= cut
-      >>= vbox 4
-      >>= put "Options:" >>= print_options
-      >>= close >>= cut
-
-    let print_error (e:CLP.error): unit IO.t =
-      let open PP in
-      make 80 IO.stderr
-      >>= vbox 0
-      >>= put (CLP.string_of_error e) >>= cut >>= cut
-      >>= print_usage
-      >>= close
-      >>= stop
+      >>= vbox 4 (chain [put "Commands:"; print_commands])
+      >>= cut >>= cut
+      >>= vbox 4 (chain [put "Options:"; print_options])
+      >>= cut
 
     let print_error (s:string): unit IO.t =
       let open PP in
       make 80 IO.stderr
-      >>= vbox 0
-      >>= put "Error: " >>= put s >>= cut >>= cut
-      >>= print_usage
-      >>= close
+      >>= vbox 0 (chain [put "Error: "; put s; cut; cut; print_usage])
       >>= stop
 
     let run (): unit =
