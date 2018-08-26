@@ -324,16 +324,16 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
            P.make
              {p with
                box = HOVP (start,ofshov,sep,n,ofs,Pending.make_hov ofshov)}
-      | HOVP (start,ofshov,sep,nbr,ofsbr,pend) ->
+      | HOVP (start,ofshov,sephov,nbr,ofsbr,pend) ->
          let pend1 = Pending.break sep n ofs pend in
          let box = HOV (start,ofshov) in
-         if pending_exceeds (space_size sep nbr) pend p then
+         if pending_exceeds (space_size sephov nbr) pend p then
            let indent = start + ofshov + ofsbr in
            newline indent p box >>= replay_pending pend1
          else if Pending.is_top pend then
-           space sep nbr p box >>= replay_pending pend1
+           space sephov nbr p box >>= replay_pending pend1
          else
-           P.make {p with box = HOVP (start,ofshov,sep,nbr,ofsbr,pend1)}
+           P.make {p with box = HOVP (start,ofshov,sephov,nbr,ofsbr,pend1)}
 
     and hbox0 (p:t): t out =
       match p.box with
@@ -578,6 +578,47 @@ let test (): unit =
                      put "12345"; space; put "1234567890"]))
       |> buf
       = "1234567 90\n12345\n1234567890"
+    end;
+  assert
+    begin
+      (make 3 ()
+       >>= hvbox 0
+             (chain [put "a"; break ";" 0 0; put "b"]))
+      |> buf
+      = "a;b"
+    end;
+  assert
+    begin
+      (make 2 ()
+       >>= hvbox 0
+             (chain [put "a"; break ";" 0 0; put "b"]))
+      |> buf
+      = "a\nb"
+    end;
+  assert
+    begin
+      (make 10 ()
+       >>= hovbox 0
+             (chain [put "1234567"; space; put "90"; space;
+                     put "12345"; space; put "1234567890"]))
+      |> buf
+      = "1234567 90\n12345\n1234567890"
+    end;
+  assert
+    begin
+      (make 3 ()
+       >>= hovbox 0
+             (chain [put "a"; break ";" 0 0; put "b"]))
+      |> buf
+      = "a;b"
+    end;
+  assert
+    begin
+      (make 2 ()
+       >>= hovbox 0
+             (chain [put "a"; break ";" 0 0; put "b"]))
+      |> buf
+      = "a\nb"
     end
 
 
