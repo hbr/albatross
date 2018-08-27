@@ -31,6 +31,9 @@ module Pending =
     let is_top (p:t): bool =
       p.stack = []
 
+    let stack_size (p:t): int =
+      List.length p.stack
+
     let size (p:t): int =
       p.max_size
 
@@ -71,20 +74,28 @@ module Pending =
          standard ()
 
     let hbox (p:t): t =
+      let box = H p.max_size in
       {p with stack = p.box :: p.stack;
-              box = H p.max_size}
+              box;
+              buffer = Open box :: p.buffer}
 
     let vbox (ofs:int) (p:t): t =
+      let box = V (p.max_size,ofs) in
       {p with stack = p.box :: p.stack;
-              box = V (p.max_size,ofs)}
+              box;
+              buffer = Open box :: p.buffer}
 
     let hvbox (ofs:int) (p:t): t =
+      let box = HV (p.max_size,ofs) in
       {p with stack = p.box :: p.stack;
-              box = HV (p.max_size,ofs)}
+              box;
+              buffer = Open box :: p.buffer}
 
     let hovbox (ofs:int) (p:t): t =
+      let box = HOV (p.max_size,ofs) in
       {p with stack = p.box :: p.stack;
-              box = HOV (p.max_size,ofs)}
+              box;
+              buffer = Open box :: p.buffer}
 
     let close (p:t): t =
       match p.stack with
@@ -150,8 +161,7 @@ module type PRETTY =
 
 
 
-module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
-                                     type out_file = P.out_file =
+module Make (P:PRINTER) =
   struct
     type 'a out = 'a P.t
 
@@ -170,9 +180,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
           * Pending.t (** start, offset, pending. All material is put into
                          pending. If the pending material gets too big to fit
                          on a line the hvbox is converted to a vbox and the
-                         pending material is replayed on the vbox. If box is
-                         closed and the pending material fits on a line then
-                         all material is printed as if it were a hbox. *)
+                         pending material is replayed on the vbox. If the box
+                         is closed and the pending material fits on a line
+                         then all material is printed as if it were a hbox. *)
       | HOV of
           int * int (** start, offset.  All material is printed immediately
                        until a break hint occurs. If the printed material with
@@ -201,8 +211,21 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
         stack: box list
       }
 
-
     type pp = t -> t out
+
+    let string_of_box (b:box): string =
+      match b with
+      | H ->
+         "H"
+      | V _ ->
+         "V"
+      | HV _ ->
+         "HV"
+      | HOV _ ->
+         "HOV"
+      | HOVP _ ->
+         "HOVP"
+
 
     let make (width:int) (channel:out_file): t out =
       P.make {current = 0; width; channel; box = H; stack = []}
@@ -216,6 +239,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
          assert false (* illegal call *)
       | box :: stack ->
          P.make {p with box; stack}
+
 
     let pending_exceeds (add:int) (pend:Pending.t) (p:t): bool =
       p.current + add +  Pending.size pend > p.width
@@ -252,8 +276,8 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       p.stack = []
 
 
-    let rec replay_pending (pend:Pending.t) (p:t): t out =
-      actions (Pending.actions pend) p
+    let rec replay_pending (pend:Pending.t): t -> t out =
+      actions (Pending.actions pend)
 
     and actions (l:Pending.action list) (p:t): t out =
       match l with
@@ -296,7 +320,7 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       | HOVP (start,ofs,sep,n,ofsbr,pend) ->
          let pend = Pending.put sstart len s pend in
          if pending_exceeds (space_size sep n) pend p then
-           newline (start+ofs) p (HOV (start,ofs))
+           newline (start+ofs+ofsbr) p (HOV (start,ofs))
            >>= replay_pending pend
          else
            P.make {p with box = HOVP (start,ofs,sep,n,ofsbr,pend)}
@@ -387,6 +411,9 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
     and close (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
+         (*printf "close HV box %s is_top %b stack %d\n"
+           (string_of_box p.box) (Pending.is_top pend)
+           (Pending.stack_size pend);*)
          if Pending.is_top pend then
            P.(actions
                 (Pending.actions pend)
@@ -396,23 +423,24 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
                       V (start,ofs)
                     else
                       H}
-              >>= close)
+           >>= close)
          else
            P.make {p with box = HV (start, ofs, Pending.close pend)}
       | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          if Pending.is_top pend then
            let box = HOV (start,ofshov) in
            (if pending_exceeds (space_size sep n) pend p then
-              newline (start+ofshov) p box
+              newline (start+ofshov+ofsbr) p box
             else
               space sep n p box)
-             >>= replay_pending pend
-             >>= close
+           >>= replay_pending pend
+           >>= close
          else
            P.make
              {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                  Pending.close pend)}
       | _ ->
+         (*printf "close general\n";*)
          pop p
 
     let hbox (f:t->t out) (p:t): t out =
@@ -422,7 +450,10 @@ module Make (P:PRINTER): PRETTY with type 'a out = 'a P.t and
       vbox0 ofs p >>= f >>= close
 
     let hvbox (ofs:int) (f:t->t out) (p:t): t out =
-      hvbox0 ofs p >>= f >>= close
+      (*printf "hvbox\n";*)
+      hvbox0 ofs p >>= f >>= fun p ->
+      (*printf "close hvbox\n";*)
+      close p
 
     let hovbox (ofs:int) (f:t->t out) (p:t): t out =
       hovbox0 ofs p >>= f >>= close
@@ -523,6 +554,35 @@ let test (): unit =
   let module PP = Make (String_printer) in
   let open PP in
   let buf = String_printer.run 200 in
+  (*assert
+    begin
+      let str =
+      (make 100 ()
+       >>= hvbox 0
+             (chain [put "(a:Natural) :="; break "" 1 2;
+                     hvbox 0
+                       (chain [put "inspect"; break "" 1 2;
+                               (hvbox 0
+                                  (chain [put "exp"; break ";" 1 0; put "res"]));
+                               space; put "case"; space; put "end"])
+             ]))
+      |> buf
+      in
+      printf "%s\n" str;
+      str = ""
+    end;*)
+  assert
+    begin
+      (make 12 () >>=
+         hovbox 0
+           (chain [put "inspect"; break "" 1 2;
+                   (hvbox 0
+                      (chain [put "exp"; break ";" 1 0; put "res"]));
+                   space; put "case"; space; put "end"]
+           ))
+      |> buf
+      = "inspect\n  exp; res\ncase end"
+    end;
   assert
     begin
       (make 5 () >>= vbox 0 (put_wrapped ["123";"456"]))
