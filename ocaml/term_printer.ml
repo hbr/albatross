@@ -138,7 +138,7 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       | All(nme,tp,t) ->
          print_product nme tp t c
       | Inspect (e,m,f) ->
-         assert false
+         print_inspect e m f c
       | Fix (i,arr) ->
          assert false
 
@@ -229,24 +229,43 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
          assert false (* cannot happen *)
       | [nme,a] ->
          let nme = some_feature_name_opt nme in
-         print_arg nme a pp >>= put ") "
-         >>= put str >>= print tp (C.push nme tp c)
+         print_arg nme a pp >>= put ")"
+         >>= put str >>= break "" 1 2 >>= print tp (C.push nme tp c)
       | (nme,a) :: args ->
          let nme = some_feature_name_opt nme in
          print_arg nme a pp >>= put ","
          >>= print_args args str tp (C.push nme tp c)
 
-    and print_lambda nme tp t c pp =
+    and print_lambda nme tp t c =
       let t,args_rev = Term.split_lambda0 t [nme,tp] in
       let open PP in
-      put "((" pp
-      >>= print_args (List.rev args_rev) ":= " t c
-      >>= put ")"
+      hovbox 0
+        (chain [put "(("; print_args (List.rev args_rev) " :=" t c; put ")"])
+      (*put "((" pp
+      >>= print_args (List.rev args_rev) ":=" t c
+      >>= put ")"*)
 
     and print_product nme tp t c pp =
       let tp,args_rev = Term.split_product0 t [nme,tp] in
       let open PP in
       put "all(" pp >>= print_args (List.rev args_rev) "" tp c
+
+    (* inspect
+           e
+           res
+       case
+           c1(args) := f1
+           ...
+       end*)
+    and print_inspect e res f c =
+      let ncases = Array.length f in
+      let open PP in
+      hvbox 0
+        (chain
+           [put "inspect"; break "" 1 2;
+            (hvbox 0
+               (chain [print e c; break ";" 1 0; print res c]));
+            space; put "case"; space; put "end"])
   end (* Make *)
 
 
