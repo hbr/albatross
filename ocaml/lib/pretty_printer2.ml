@@ -18,7 +18,7 @@ module type DOCUMENT =
     val fold: (t -> t -> t) -> t list -> t
     val spread: t list -> t
     val stack:  t list -> t
-    val bracket: string -> t -> string -> t
+    val bracket: int -> string -> t -> string -> t
   end
 
 module Document =
@@ -81,8 +81,8 @@ module Document =
     let spread = fold (^+)
     let stack = fold (^/)
 
-    let bracket (l:string) (x:t) (r:string): t =
-      group (text l ^ (nest 2 (cut ^ x)) ^ cut ^ text r)
+    let bracket (indent:int) (l:string) (x:t) (r:string): t =
+      group (text l ^ (nest indent (cut ^ x)) ^ cut ^ text r)
   end (* Document *)
 
 
@@ -200,7 +200,7 @@ module Test_tree =
       | [] ->
          Nil
       | ts ->
-         bracket "[" (show_trees2 ts) "]"
+         bracket 2 "[" (show_trees2 ts) "]"
     and show_trees2 (ts:t list): Document.t =
       let open Document in
       match ts with

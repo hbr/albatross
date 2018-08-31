@@ -14,7 +14,7 @@ module type DOCUMENT =
     val fold: (t -> t -> t) -> t list -> t
     val spread: t list -> t
     val stack:  t list -> t
-    val bracket: string -> t -> string -> t
+    val bracket: int -> string -> t -> string -> t
   end
 
 

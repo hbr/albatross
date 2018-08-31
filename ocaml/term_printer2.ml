@@ -1,4 +1,5 @@
 open Alba2_common
+open Printf
 
 module Term = Term2
 
@@ -7,6 +8,7 @@ module type CONTEXT =
     type t
     val empty: t
     val push: Feature_name.t option -> Term.typ -> t -> t
+    val push_arguments: Term.arguments -> t -> t
     val name: int -> t -> Feature_name.t option
     (*val shadow_level: int -> t -> int
     val type_: int -> t -> Term.*)
@@ -17,6 +19,7 @@ module Raw_context =
     type t = unit
     let empty: t = ()
     let push (_:Feature_name.t option) (_:Term.typ) (c:t): t = c
+    let push_arguments (args:Term.arguments) (c:t): t = c
     let name (i:int) (c:t): Feature_name.t option =
       some_feature_name (string_of_int i)
   end
@@ -78,60 +81,53 @@ module Raw_context =
      around 'a,b'.
  *)
 
-
 module type S =
   sig
     type context
-    type ppt
-    type _ out
-    val print: Term.t -> context -> ppt -> ppt out
+    val print: Term.t -> context -> Pretty_printer2.Document.t
   end
 
-module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
-       : S with type 'a out = PP.t PP.out and
-                type ppt = PP.t and
-                type context = C.t
+
+module Make (C:CONTEXT)
   =
   struct
-    type ppt   = PP.t
-    type _ out = PP.t PP.out
-    type context = C.t
-    type pp  = PP.t PP.out
-    type ppf = PP.t -> pp
+    open Pretty_printer2
 
-    let print_name (nme:Feature_name.t option): ppf =
+    type context = C.t
+
+    let print_name (nme:Feature_name.t option): Document.t =
       let open Feature_name in
-      let open PP in
+      let open Document in
       match nme with
       | None ->
-         put "_"
+         text "_"
       | Some nme ->
          begin
            match nme with
            | Name s ->
-              put s
+              text s
            | Operator op ->
               let str,_,_ = Operator.data op in
-              fun pp -> put "(" pp >>= put str >>= put ")"
+              text "(" ^ text str ^ text ")"
            | Bracket ->
-              put "[]"
+              text "[]"
            | True ->
-              put "true"
+              text "true"
            | False ->
-              put "false"
+              text "false"
            | Number i ->
-              put (string_of_int i)
+              text (string_of_int i)
          end
 
-    let rec print (t:Term.t) (c:C.t): ppf =
+    let rec print (t:Term.t) (c:C.t): Document.t =
       let open Term in
       match t with
       | Sort s ->
          print_sort s
       | Variable i ->
-         variable i c
+         print_variable i c
       | Application (f,z,oo) ->
-         application f z c
+         print_application f z c
       | Lambda (nme,tp,t) ->
          print_lambda nme tp t c
       | All(nme,tp,t) ->
@@ -143,70 +139,53 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
 
     and print_sort s =
       let open Term in
-      let open PP in
+      let open Document in
       match s with
       | Sorts.Proposition ->
-         put "Proposition"
+         text "Proposition"
       | Sorts.Datatype ->
-         put "Datatype"
+         text "Datatype"
       | Sorts.Any1 ->
-         put "Any1"
+         text "Any1"
       | Sorts.Max s ->
-         let string_of_sv i b =
-           let s = "SV" ^ string_of_int i in
+         let sv i b =
+           let s = Pervasives.("SV" ^ (string_of_int i)) in
            if b then
-             s ^ "'"
+             text Pervasives.(s ^ "'")
            else
-             s
+             text s
          in
-         let rec print_list lst =
+         let rec sv_list lst =
            match lst with
            | [] ->
               assert false (* cannot happen *)
            | [i,b] ->
-              put (string_of_sv i b)
+              sv i b
            | (i,b) :: lst ->
-              fun pp ->
-              put (string_of_sv i b) pp
-              >>= put ","
-              >>= print_list lst
+              sv i b ^ text "," ^ sv_list lst
          in
          match Sorts.Set.bindings s with
          | [] ->
             assert false
          | [i,b] ->
-            put (string_of_sv i b)
+            sv i b
          | lst  ->
-            fun pp -> put "max(" pp >>= print_list lst >>= put ")"
+            text "max(" ^ sv_list lst ^ text ")"
 
 
-    and variable i c pp =
+    and print_variable i c =
       let open Feature_name in
-      let open PP in
+      let open Document in
       match C.name i c with
       | None ->
-         put "v#" pp >>= put (string_of_int i)
+         text Pervasives.("v#" ^ string_of_int i)
       | Some nme ->
-         begin
-           match nme with
-           | Name s ->
-              put s pp
-           | Operator op ->
-              let str,_,_ = Operator.data op in
-              put "(" pp >>= put str >>= put ")"
-           | Bracket ->
-              put "[]" pp
-           | True ->
-              put "true" pp
-           | False ->
-              put "false" pp
-           | Number i ->
-              put (string_of_int i) pp
-         end
+         print_name (Some nme)
 
-    and application f z c pp =
+
+    and print_application f z c =
+      let open Document in
       let f,args = Term.split_application f [z] in
-      let open PP in
       let rec print_args args =
         match args with
         | [] ->
@@ -214,40 +193,46 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
         | [a] ->
            print a c
         | a :: args ->
-           fun pp -> print a c pp >>= put "," >>= print_args args
+           print a c ^ text "," ^ cut ^ print_args args
       in
-      print f c pp >>= put "(" >>= print_args args >>= put ")"
+      print f c ^ bracket 2 "(" (print_args args) ")"
 
-    and print_args args str tp c pp =
-      let open PP in
-      let print_arg nme a pp =
-        print_name nme pp >>= put ":" >>= print a c
+
+    and print_formal_args (args:Term.argument_list) (c:context)
+        : Document.t * context =
+      let open Document in
+      let print_arg nme a c =
+        print_name nme ^ text ":" ^ print a c,
+        C.push nme a c
       in
       match args with
       | [] ->
          assert false (* cannot happen *)
       | [nme,a] ->
          let nme = some_feature_name_opt nme in
-         print_arg nme a pp >>= put ")"
-         >>= put str >>= break "" 1 2 >>= print tp (C.push nme tp c)
+         print_arg nme a c
       | (nme,a) :: args ->
          let nme = some_feature_name_opt nme in
-         print_arg nme a pp >>= put ","
-         >>= print_args args str tp (C.push nme tp c)
+         let doc1,c = print_arg nme a c in
+         let doc2,c = print_formal_args args c in
+         doc1 ^ text "," ^ doc2, c
+
 
     and print_lambda nme tp t c =
-      let t,args_rev = Term.split_lambda0 (-1) t 0 [nme,tp] in
-      let open PP in
-      hovbox 0
-        (chain [put "(("; print_args (List.rev args_rev) " :=" t c; put ")"])
-      (*put "((" pp
-      >>= print_args (List.rev args_rev) ":=" t c
-      >>= put ")"*)
+      let open Document in
+      let t,args_rev = Term.split_lambda0 (-1) t 1 [nme,tp] in
+      let docargs,c = print_formal_args (List.rev args_rev) c in
+      bracket 2 "(" docargs ")"
+      ^ text " :="
+      ^ group (nest 2 (space ^ print t c))
 
-    and print_product nme tp t c pp =
+    and print_product nme tp t c =
+      let open Document in
       let tp,args_rev = Term.split_product0 t [nme,tp] in
-      let open PP in
-      put "all(" pp >>= print_args (List.rev args_rev) "" tp c
+      let docargs,c = print_formal_args (List.rev args_rev) c in
+      text "all" ^ bracket 2 "(" docargs ")"
+      ^ group (nest 2 (space ^ print tp c))
+
 
     (* inspect
            e
@@ -257,35 +242,44 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
            ...
        end*)
     and print_inspect e res f c =
+      let open Document in
       let ncases = Array.length f in
-      let open PP in
-      hvbox 0
-        (chain
-           [put "inspect"; break "" 1 2;
-            (hvbox 0
-               (chain [print e c; break ";" 1 0; print res c]));
-            space; put "case"; space; put "end"])
+      let print_case i =
+        let co,def = f.(i) in
+        let args,co = Term.split_lambda co in
+        let c1 = C.push_arguments args c in
+        let def,_ = Term.split_lambda0 (Array.length args) def 0 [] in
+        group (print co c1 ^ text " :="
+               ^ nest 2 (space ^ print def c1))
+      in
+      let rec print_cases doc n =
+        if n = 0 then
+          doc
+        else
+          let i = n - 1 in
+          print_cases
+            (print_case i
+             ^ if n = ncases then doc else optional "; " ^ doc)
+            i
+      in
+      group (
+          text "inspect"
+          ^ nest 2 (space ^ print e c ^ optional "; " ^ print res c)
+          ^ space ^ text "case"
+          ^ nest 2 (space ^ print_cases empty ncases)
+          ^ space ^ text "end"
+        )
   end (* Make *)
 
 
-
-module String_printer =
-  Make
-    (Raw_context)
-    (Pretty_printer.Make (Pretty_printer.String_printer))
-
-
 let string_of_term (t:Term.t): string =
-  let module SP = Pretty_printer.String_printer in
-  let module PP = Pretty_printer.Make (SP) in
-  let module TP = Make (Raw_context) (PP) in
-  let open PP in
-  SP.run 200 (make 100 () >>= TP.print t Raw_context.empty)
-
+  let module PR = Make (Raw_context) in
+  let open Pretty_printer2 in
+  Layout.pretty 50 (PR.print t Raw_context.empty)
 
 
 let test (): unit =
-  Printf.printf "test term printer\n";
+  Printf.printf "test term printer2\n";
   let open Term in
   let print = string_of_term in
   assert
@@ -294,17 +288,15 @@ let test (): unit =
     end;
   assert
     begin
-      let t =
-        Application
-          (Application(variable0,variable1,false), variable2, false) in
-      print t = "0(1,2)"
+      print (apply2 variable0 variable1 variable2) = "0(1,2)"
     end;
+  ();
   assert
     begin
-      let t =
-        All (Some "a",
-             variable0,
-             All (Some "b",
-                  variable1, variable2)) in
-      print t = "all(a:0,b:1) 2"
+      let str =
+      print (push_product [|Some "a", variable0;
+                            Some "b", variable1|] variable2)
+      in
+      printf "%s\n" str;
+      str = "all(a:0,b:1) 2"
     end

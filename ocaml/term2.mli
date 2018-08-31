@@ -12,7 +12,7 @@ type t =
   | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * t * t array
+  | Inspect of t * t * (t*t) array
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
@@ -39,7 +39,8 @@ val variable2: t
 val variable3: t
 val variable4: t
 val variable5: t
-val apply0: t -> t -> t
+val apply1: t -> t -> t
+val apply2: t -> t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool
@@ -61,7 +62,9 @@ val apply_arg_array: t -> t array -> t
 val apply_standard: int -> int -> t -> t
 
 
-val split_lambda0: t -> argument_list -> t * argument_list
+val lambda: argument_list -> t -> t
+val split_lambda0: int -> t -> int -> argument_list -> t * argument_list
+val split_lambda: t -> arguments * t
 
 val split_product0: typ -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ

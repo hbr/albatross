@@ -9,4 +9,5 @@ let _ =
 (* Albatross modules *)
 let _ =
   Term_printer.test();
+  Term_printer2.test();
   Type_checker.test()

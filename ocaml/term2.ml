@@ -14,7 +14,7 @@ type t =
   | Application of t * t * oo_application
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * t * t array
+  | Inspect of t * t * (t*t) array
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
@@ -72,8 +72,11 @@ let variable3: t = Variable 3
 let variable4: t = Variable 4
 let variable5: t = Variable 5
 
-let apply0 (a:t) (b:t): t =
-  Application (a, b, false)
+let apply1 (f:t) (a:t): t =
+  Application (f, a, false)
+
+let apply2 (f:t) (a:t) (b:t): t =
+  apply1 (apply1 f a) b
 
 
 
@@ -127,7 +130,7 @@ let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
     | Inspect (t,mp,arr) ->
        let fld = fold s in
        Array.fold_left
-         fld
+         (fun a (c,f) -> fld (fld a c) f)
          (fld (fld a t) mp)
          arr
     | Fix (idx,arr) ->
@@ -169,7 +172,11 @@ let map_from (start:int) (f:int->int) (t:t): t =
     | All (nm,tp,t) ->
        All (nm, map s tp, map (s+1) t)
     | Inspect (t,mp,arr) ->
-       Inspect (map s t, map s mp, Array.map (map s) arr)
+       Inspect (map s t,
+                map s mp,
+                Array.map
+                  (fun (c,f) -> map s c, map s f)
+                  arr)
     | Fix (idx,arr) ->
        let s1 = s + Array.length arr in
        Fix (idx,
@@ -249,16 +256,33 @@ let apply_standard (n:int) (start:int) (f:t): t =
 
 
 
-let rec split_lambda0 (a:typ) (args: argument_list): typ * argument_list =
+let rec split_lambda0 (n:int) (a:t) (i:int) (args: argument_list)
+        : t * argument_list =
   (* Analyze [(a:A,b:B, ...) := t], return (t, [...,b:B,a:A,args]) *)
-  match a with
-  | Lambda(nme,tp,t) ->
-     split_lambda0 t ((nme,tp) :: args)
-  | _ ->
+  if i = n then
+    a,args
+  else
+    match a with
+    | Lambda(nme,tp,t) ->
+       split_lambda0 n t (i+1) ((nme,tp) :: args)
+    | _ ->
      a, args
 
 
+let split_lambda (a:t): arguments * t =
+  (* Analyze [(a:A,b:B, ...) := e], return ([a:A,b:B,...], e) *)
+  let e,args = split_lambda0 (-1) a 0 [] in
+  Array.of_list (List.rev args),
+  e
 
+
+
+let rec lambda (args:argument_list) (e:t): t =
+  match args with
+  | [] ->
+     e
+  | (nme,tp) :: args ->
+     Lambda (nme, tp, lambda args e)
 
 
 let rec split_product0 (a:typ) (args: argument_list): typ * argument_list =
@@ -322,7 +346,11 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
        All (nm, subst bnd tp, subst (bnd+1) t0)
     | Inspect (exp, map, cases) ->
        let sub = subst bnd in
-       Inspect (sub exp, sub map, Array.map sub cases)
+       Inspect (sub exp,
+                sub map,
+                Array.map
+                  (fun (c,f) -> sub c, sub f)
+                  cases)
     | Fix (idx, arr) ->
        let sub = subst (bnd + Array.length arr) in
        Fix (idx,

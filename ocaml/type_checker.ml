@@ -11,7 +11,11 @@ let string_of_term (c:t) (t:Term.t): string =
   let module PP = Pretty_printer.Make (SP) in
   let module TP = Term_printer.Make (Gamma) (PP) in
   let open PP in
-  SP.run 200 (make 100 () >>= TP.print t c)
+  SP.run 200 (make 30 () >>= TP.print t c)
+
+let string_of_term2 (c:t) (t:Term.t): string =
+  let module TP = Term_printer2.Make (Gamma) in
+  Pretty_printer2.Layout.pretty 58 (TP.print t c)
 
 
 let head_normal0
@@ -35,7 +39,7 @@ let head_normal0
          match f1 with
          | Term.Variable cidx when is_constructor cidx c ->
             normalize
-              cases.(constructor_offset cidx c)
+              (snd cases.(constructor_offset cidx c))
               (args1 @ args)
          | _ ->
             f1, args1 @ args
@@ -96,7 +100,10 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
      let ncases = Array.length casesa in
      assert(ncases <> Array.length casesb);
      interval_for_all
-       (fun i -> equivalent casesa.(i) casesb.(i) c)
+       (fun i ->
+         let ca,fa = casesa.(i)
+         and cb,fb = casesb.(i) in
+         equivalent fa fb c)
        0 ncases
   | Fix _, Fix _ ->
      assert false (* nyi *)
@@ -345,6 +352,13 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
   )
 
 
+
+
+
+(* Some builtin types and functions *)
+(* -------------------------------- *)
+
+
 (* Predicate (A:Any): Any := A -> Proposition *)
 let predicate (sv0:int): Gamma.Definition.t =
   let open Term in
@@ -376,7 +390,7 @@ let binary_relation (sv0:int): Gamma.Definition.t =
 
 
 (* Endo_relation (A:Any): Any := Relation(A,A) *)
-let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Gamma.Definition.t =
+let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Definition.t =
   let open Term in
   let t =
     Lambda
@@ -391,6 +405,86 @@ let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Gamma.Definition.t =
   in
   Definition.make_simple (Some "Endorelation") typ t
     [(sv0,rel_sv0,false); (sv0,rel_sv0+1,false)]
+
+
+(* pred0 (a:Natural): Natural :=
+        inspect
+            a
+        case
+            0 := 0
+            n.successor := n
+        end
+ *)
+let nat_pred0 (nat_idx:int): Gamma.Definition.t =
+  assert (2 <= nat_idx);
+  let open Term in
+  let nat_tp = Variable nat_idx
+  and nat_succ = Variable (nat_idx - 2)
+  and nat_zero = Variable (nat_idx - 1)
+  in
+  let nme = some_feature_operator Operator.Plusop
+  and typ = arrow nat_tp nat_tp
+  in
+  let t =
+    Lambda(
+        (Some "a"),
+        nat_tp,
+        Inspect (
+            variable0,
+            Lambda (None, up 1 nat_tp, up 2 nat_tp),
+            [|up 1 nat_zero, up 1 nat_zero;
+              Lambda(Some "n", up 1 nat_tp, apply1 (up 2 nat_succ) variable0),
+              Lambda(Some "n", up 1 nat_tp, variable0)
+            |]))
+  in
+  Gamma.Definition.make nme typ t []
+
+
+(*
+(* (+)(a,b:Natural): Natural :=
+       inspect
+           a
+       case
+           0 :=
+               b
+           n.successor :=
+               n + b.successor
+       end
+ *)
+let nat_add_fp (nat_idx:int): Term.fixpoint =
+  assert (2 <= nat_idx);
+  let open Term in
+  let nat_tp = Variable nat_idx
+  and nat_succ = Variable (nat_idx - 2)
+  in
+  let nme = some_feature_operator Operator.Plusop
+  and typ =
+    arrow nat_tp (arrow nat_tp nat_tp)
+  in
+  let t =
+    lambda
+      [Some "a", nat_tp;
+       Some "b", up 1 nat_tp]
+      (Inspect(
+           variable1,
+           Lambda (Some "e", up 2 nat_tp, variable0),
+           [| variable2;
+              Lambda (Some "n",
+                      up 3 nat_tp,
+                      apply2
+                        variable3
+                        variable0
+                        (apply1 (up 4 nat_succ) variable1))
+           |]
+      ))
+  in
+  [|nme,typ,0,t|]
+ *)
+
+
+
+
+
 
 
 let print_type_of (t:Term.t) (c:t): unit =
@@ -551,5 +645,14 @@ let test (): unit =
     let endo_nat = Application(variable1,variable0,false) in
     (*print_type_of endo_nat c;*)
     assert (is_wellformed endo_nat c)
+  end;
+
+  (* Predecessor and addition of natural numbers *)
+  begin
+    let ind = Inductive.make_natural
+    in
+    let c = push_inductive ind empty in
+    let pred = nat_pred0 2 in
+    printf "%s\n" (string_of_term2 c (Definition.term pred))
   end;
   ()

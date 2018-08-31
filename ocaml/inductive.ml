@@ -187,7 +187,7 @@ let make_list (sv0:int): t =
        Constructor.make
          (some_feature_operator Operator.Caretop)
          [| None, variable0;  (* A *)
-            None, (apply0 variable2 variable1) (* List(A) *) |]
+            None, (apply1 variable2 variable1) (* List(A) *) |]
          [| |]
     |]
 
