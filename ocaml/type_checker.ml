@@ -15,8 +15,12 @@ let string_of_term (c:t) (t:Term.t): string =
 
 let string_of_term2 (c:t) (t:Term.t): string =
   let module TP = Term_printer2.Make (Gamma) in
-  Pretty_printer2.Layout.pretty 58 (TP.print t c)
+  Pretty_printer2.Layout.pretty 70 (TP.print t c)
 
+
+let string_of_fixpoint (c:t) (fp:Term.fixpoint): string =
+  let module TP = Term_printer2.Make (Gamma) in
+  Pretty_printer2.Layout.pretty 70 (TP.print_fixpoint fp c)
 
 let head_normal0
       (f:Term.t)
@@ -407,6 +411,8 @@ let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Definition.t =
     [(sv0,rel_sv0,false); (sv0,rel_sv0+1,false)]
 
 
+
+
 (* pred0 (a:Natural): Natural :=
         inspect
             a
@@ -440,21 +446,17 @@ let nat_pred0 (nat_idx:int): Gamma.Definition.t =
   Gamma.Definition.make nme typ t []
 
 
-(*
 (* (+)(a,b:Natural): Natural :=
-       inspect
-           a
-       case
-           0 :=
-               b
-           n.successor :=
-               n + b.successor
+       inspect a case
+           0 := b
+           n.successor := n + b.successor
        end
  *)
 let nat_add_fp (nat_idx:int): Term.fixpoint =
   assert (2 <= nat_idx);
   let open Term in
   let nat_tp = Variable nat_idx
+  and nat_zero = Variable (nat_idx - 1)
   and nat_succ = Variable (nat_idx - 2)
   in
   let nme = some_feature_operator Operator.Plusop
@@ -463,12 +465,15 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
   in
   let t =
     lambda
-      [Some "a", nat_tp;
-       Some "b", up 1 nat_tp]
-      (Inspect(
+      [Some "a", up 1 nat_tp;
+       Some "b", up 2 nat_tp]
+      (Inspect( (* inner context has 3 variables: (+) a b *)
            variable1,
-           Lambda (Some "e", up 2 nat_tp, variable0),
-           [| variable2;
+           Lambda (None, up 3 nat_tp, up 4 nat_tp),
+           [| up 3 nat_zero,
+              variable0;
+
+              Lambda(Some "n", up 3 nat_tp, apply1 (up 4 nat_succ) variable0),
               Lambda (Some "n",
                       up 3 nat_tp,
                       apply2
@@ -479,7 +484,6 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
       ))
   in
   [|nme,typ,0,t|]
- *)
 
 
 
@@ -653,6 +657,8 @@ let test (): unit =
     in
     let c = push_inductive ind empty in
     let pred = nat_pred0 2 in
-    printf "%s\n" (string_of_term2 c (Definition.term pred))
+    printf "%s\n" (string_of_term2 c (Definition.term pred));
+    let plus_fp = nat_add_fp 2 in
+    printf "%s\n" (string_of_fixpoint c plus_fp)
   end;
   ()

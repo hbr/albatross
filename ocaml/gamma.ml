@@ -170,6 +170,13 @@ let push_arguments (args:Term.arguments) (c:t): t =
               some_feature_name_opt nme,tp)
     c
 
+let push_fixpoint (fp:Term.fixpoint) (c:t): t =
+  interval_fold
+    (fun c i ->
+      let nme,tp,_,_ = fp.(i) in
+      push nme (Term.up i tp) c)
+    c 0 (Array.length fp)
+
 let push_gamma (g:Term.gamma) (c:t): t =
   push_n
     (Array.length g)

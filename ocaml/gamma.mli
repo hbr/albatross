@@ -35,5 +35,6 @@ val push_definition: Definition.t -> t -> t
 val push_n: int -> (int -> Term.fname_type) -> t -> t
 val push_unnamed: Term.typ -> t -> t
 val push_arguments: Term.arguments -> t -> t
+val push_fixpoint: Term.fixpoint -> t -> t
 val push_ind_types_params: Inductive.t -> t -> t
 val push_inductive: Inductive.t -> t -> t

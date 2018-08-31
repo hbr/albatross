@@ -1,4 +1,5 @@
 open Alba2_common
+open Container
 open Printf
 
 module Term = Term2
@@ -8,7 +9,9 @@ module type CONTEXT =
     type t
     val empty: t
     val push: Feature_name.t option -> Term.typ -> t -> t
+    val push_simple: string option -> Term.typ -> t -> t
     val push_arguments: Term.arguments -> t -> t
+    val push_fixpoint: Term.fixpoint -> t -> t
     val name: int -> t -> Feature_name.t option
     (*val shadow_level: int -> t -> int
     val type_: int -> t -> Term.*)
@@ -19,7 +22,9 @@ module Raw_context =
     type t = unit
     let empty: t = ()
     let push (_:Feature_name.t option) (_:Term.typ) (c:t): t = c
+    let push_simple (_:string option) (_:Term.typ) (c:t): t = c
     let push_arguments (args:Term.arguments) (c:t): t = c
+    let push_fixpoint (fp:Term.fixpoint) (c:t): t = c
     let name (i:int) (c:t): Feature_name.t option =
       some_feature_name (string_of_int i)
   end
@@ -85,6 +90,7 @@ module type S =
   sig
     type context
     val print: Term.t -> context -> Pretty_printer2.Document.t
+    val print_fixpoint: Term.fixpoint -> context -> Pretty_printer2.Document.t
   end
 
 
@@ -269,6 +275,54 @@ module Make (C:CONTEXT)
           ^ nest 2 (space ^ print_cases empty ncases)
           ^ space ^ text "end"
         )
+
+    and print_formal_arguments args c =
+      let open Document in
+      let nargs = Array.length args in
+      let doc,c1 =
+        interval_fold
+          (fun (doc,c) i ->
+            let doc = if i = 0 then doc else doc ^ text ","
+            and nme,tp = args.(i) in
+            let nme = some_feature_name_opt nme
+            in
+            doc ^ print_name nme
+            ^ text ":" ^ print tp c,
+            C.push nme tp c)
+          (empty,c) 0 nargs
+      in
+      text "(" ^ doc ^ text ")",
+      c1
+
+
+    and print_one_fixpoint i fp c =
+      let open Document in
+      let nme,typ,decr,t = fp.(i) in
+      let e,args_rev = Term.split_lambda0 (-1) t 0 [] in
+      let docargs,c1 = print_formal_args (List.rev args_rev) c in
+      print_name nme
+      ^ bracket 2 "(" docargs ")"
+      ^ text " :="
+      ^ group (nest 2 (space ^ print e c1))
+
+    and print_fixpoint fp c =
+      let open Document in
+      let n = Array.length fp in
+      assert (0 < n);
+      let c1 = C.push_fixpoint fp c in
+      let rec print_below i doc =
+        if i = 0 then
+          doc
+        else
+          let br = if i = 1 then empty else optional "; " in
+          print_below
+            (i-1)
+            (br ^ print_one_fixpoint (i-1) fp c1)
+      in
+      if n = 1 then
+        print_below n empty
+      else
+        assert false (* nyi: mutual fixpoints *)
   end (* Make *)
 
 
