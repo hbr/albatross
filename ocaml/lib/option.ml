@@ -27,6 +27,21 @@ let iter (f:'a -> unit) (m:'a t): unit =
   ignore (map f m)
 
 
+let interval_fold (f:'a->int->'a t) (a0:'a t) (start:int) (beyond:int): 'a t =
+  assert (start <= beyond);
+  let rec fold i a =
+    if i = beyond then
+      a
+    else
+      match a with
+      | None ->
+         None
+      | Some a ->
+         fold (i+1) (f a i)
+  in
+  fold start a0
+
+
 
 module Within (M:Monad.MONAD) =
   struct
