@@ -51,6 +51,7 @@ module Constructor =
 type t = {
     params: Term.arguments;
     types:  Term.gamma; (* valid in a context with parameters *)
+    restr:  bool array;
     constructors: Constructor.t array array (* valid in a context with
                                                    parameters and inductive
                                                    types *)
@@ -60,6 +61,9 @@ let nparams (ind:t): int =
 
 let ntypes (ind:t): int =
   Array.length ind.types
+
+let is_restricted (i:int) (ind:t): bool =
+  ind.restr.(i)
 
 let nconstructors (i:int) (ind:t): int =
   assert (i < ntypes ind);
@@ -125,20 +129,32 @@ let cargs (i:int) (j:int) (ind:t): Term.arguments =
   Constructor.cargs (constructor i j ind)
 
 
+let constructor_base_index (i:int) (ind:t): int =
+  assert (i < ntypes ind);
+  let base = ref 0 in
+  for k = 0 to i - 1 do
+    base := !base + nconstructors k ind
+  done;
+  !base
+
 let ctype (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
   assert (i < ntypes ind);
   assert (j < nconstructors i ind);
-  let nshift = ref 0 in
-  for k = 0 to i - 1 do
-    nshift := !nshift + nconstructors k ind
-  done;
+  let nshift = constructor_base_index i ind in
   let nm,tp = ctype0 i j ind in
-  nm, Term.up (!nshift+j) tp
+  nm, Term.up (nshift+j) tp
 
+
+let restricted (i:int) (ind:t): t =
+  assert (i < ntypes ind);
+  let restr = Array.copy ind.restr in
+  restr.(i) <- true;
+  {ind with restr}
 
 let make params types constructors =
   assert (Array.length types = Array.length constructors);
-  {params; types; constructors}
+  let restr = Array.make (Array.length types) false in
+  {params; types; restr; constructors}
 
 let make_simple nme params tp cons =
   let types = [| (nme, tp) |]

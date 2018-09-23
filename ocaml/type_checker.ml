@@ -66,7 +66,8 @@ let head_normal0
          form. *)
     | _ ->
        f, args
-  in normalize f args
+  in
+  normalize f args
 
 
 let head_normal (t:Term.t) (c:t): Term.t =
@@ -213,9 +214,118 @@ let rec check (t:Term.t) (c:t): Term.typ option =
       product arg_s res_s
      )
   | Inspect (e,res,cases) ->
-     assert false (* nyi *)
+     check_inspect e res cases c
   | Fix (idx, arr) ->
      assert false (* nyi *)
+
+
+and check_inspect
+(e:Term.t) (res:Term.t) (cases:(Term.t*Term.t) array) (c:Gamma.t)
+    : Term.typ option =
+  (* inspect(e,res,cases)
+
+     1. Compute head normal form of the type of e: I p a
+        I must be an inductive type with nparams parameter. Therefore
+        parameters and arguments can be extracted.
+
+     2. Compute the type of res(a,e). inspect(e,res,cases): res(a,e).
+        If I has an elimination restriction, then the sort of res(a,e) must
+        be Proposition.
+
+     3. |cases| = number of constructors of I.
+
+     4. For all 0 <= j < |cases|:
+
+        Compute type of cj(p) where cj is the j-th constructor of I and p are
+        the parameters.
+            cj(p): all(t:T) I p aj.
+
+        Compute the type of fj = snd cases.(j).
+            fj: all(t:T) res(aj,cj(p,t))
+
+   *)
+  Option.(
+    check e c >>= fun e_tp ->
+    check_inductive e_tp c >>= fun (ivar,params,args,ind,ind_idx) ->
+
+    (* The term [res(args,e)] is the result type of the expression, its sort
+       must satisfy the potential elimination restrictions of [I]. *)
+    let res_tp = Term.apply1 (Term.apply_args res args) e in
+    check res_tp c >>= fun res_s ->
+    if Inductive.is_restricted ind_idx ind && res_s <> Term.proposition then
+      None
+    else if Inductive.nconstructors ind_idx ind <> Array.length cases then
+      None
+    else if
+      interval_for_all
+        (fun j ->
+          let cj, fj = cases.(j) in
+          let cj0 =
+            Term.apply_args
+              (Term.Variable (Gamma.constructor_of_inductive j ivar c))
+              params in
+          None <>
+            (check cj0 c >>= fun _ ->
+             check cj  c >>= fun cj_tp ->
+             check_case cj cj_tp fj res c
+            )
+        )
+        0 (Array.length cases)
+    then
+      Some res_tp
+    else
+      None
+  )
+
+
+and check_inductive (tp:Term.typ) (c:t)
+    : (Term.t           (* I *)
+       * Term.t list    (* params *)
+       * Term.t list    (* args *)
+       * Inductive.t
+       * int            (* ind_idx *)
+      ) option =
+  Option.(
+    let ivar,args = head_normal0 tp [] c in
+    Gamma.inductive_index ivar c >>= fun (ind_idx,ind) ->
+    let nparams = Inductive.nparams ind in
+    let params,args = Mylist.split_at nparams args in
+    Some (ivar,params,args,ind,ind_idx)
+  )
+
+
+and check_case
+(cj:Term.t) (* fst cases.(j) *)
+(cj_tp:Term.typ) (* type of cj *)
+(fj:Term.t) (* snd cases.(j) *)
+(res:Term.t)
+(c:Gamma.t)
+    : unit option =
+  (* - cp and cj must have an equivalent type
+     - cj: all(t:T) I p aj, fj: all(t:T) res(aj,cj(t))
+   *)
+  let rec split_product c_tp f_tp i c =
+    match c_tp, f_tp with
+    | Term.All(nm1,tp1,c_tp), Term.All(_,tp2,f_tp) when equivalent tp1 tp2 c ->
+       split_product c_tp f_tp (i+1) (Gamma.push_simple nm1 tp1 c)
+    | _ ->
+       Some (c_tp,f_tp,i,c)
+  in
+  Option.(
+    check fj c >>= fun fj_tp ->
+    split_product cj_tp fj_tp 0 c >>= fun (i_tp,res_tp,n,c1) ->
+    check_inductive i_tp c1 >>= fun (ivar,params,args,ind,ind_idx) ->
+    let res_tp_req =
+      Term.apply1
+        (Term.apply_args (Term.up n res) args)
+        (Term.apply_standard n 0 (Term.up n cj))
+    in
+    check res_tp_req c1 >>= fun _ ->
+    if equivalent res_tp_req res_tp c1 then
+      Some ()
+    else
+      None
+  )
 
 
 
@@ -359,6 +469,9 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
 
 
 
+
+
+
 (* Some builtin types and functions *)
 (* -------------------------------- *)
 
@@ -491,6 +604,8 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
 
 
 
+(* Test **********************************)
+
 let print_type_of (t:Term.t) (c:t): unit =
   match check t c with
   | None ->
@@ -505,6 +620,13 @@ let test (): unit =
        false
     | Some a ->
        Term.equal a b
+  in
+  let equivalent_opt a b c =
+    match a with
+    | None ->
+       false
+    | Some a ->
+       equivalent a b c
   in
   Printf.printf "test type checker\n";
   let open Term in
@@ -658,6 +780,11 @@ let test (): unit =
     let c = push_inductive ind empty in
     let pred = nat_pred0 2 in
     printf "%s\n" (string_of_term2 c (Definition.term pred));
+    assert (is_wellformed (Definition.term pred) c);
+    assert (equivalent_opt
+              (check (Definition.term pred) c)
+              (Definition.typ pred)
+              c);
     let plus_fp = nat_add_fp 2 in
     printf "%s\n" (string_of_fixpoint c plus_fp)
   end;

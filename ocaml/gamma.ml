@@ -118,12 +118,59 @@ let definition (i:int) (c:t): Term.t =
   | Some t -> t
 
 
+
+let inductive_index (t:Term.t) (c:t): (int * Inductive.t) option =
+  let open Term in
+  match t with
+  | Variable i when i < count c ->
+     begin
+       match (entry i c).just with
+       | Indtype (i,ind) ->
+          Some (i,ind)
+       | _ ->
+          None
+     end
+  | _ ->
+     None
+
+
+let constructor_index (t:Term.t) (c:t): (int * int * Inductive.t) option =
+  let open Term in
+  match t with
+  | Variable i when i < count c ->
+     begin
+       match (entry i c).just with
+       | Constructor (i,j,ind) ->
+          Some (i,j,ind)
+       | _ ->
+          None
+     end
+  | _ ->
+     None
+
+
 let is_constructor (i:int) (c:t): bool =
   assert false (* nyi *)
 
 let constructor_offset (i:int) (c:t): int =
   assert (is_constructor i c);
   assert false (* nyi *)
+
+let constructor_of_inductive (j:int) (ivar:Term2.t) (c:t): int =
+  (* The index of the j-th constructor of the inductive type ivar *)
+  match ivar with
+  | Term.Variable ivar ->
+     begin
+       match  (entry ivar c).just with
+       | Indtype (i,ind)  ->
+          let cbase = Inductive.constructor_base_index i ind in
+          ivar + i - Inductive.ntypes ind - cbase - j
+       | _ ->
+          assert false (* Illegal call *)
+     end
+  | _ ->
+     assert false (* Illegal call *)
+
 
 let empty: t =
   {sort_variables = Sorts.Variables.empty;
@@ -169,6 +216,14 @@ let push_arguments (args:Term.arguments) (c:t): t =
     (fun i -> let nme,tp = args.(i) in
               some_feature_name_opt nme,tp)
     c
+
+let rec push_argument_list (args:Term.argument_list) (c:t): t =
+  match args with
+  | [] ->
+     c
+  | (nme,tp) :: tl ->
+     push_argument_list tl (push_simple nme tp c)
+
 
 let push_fixpoint (fp:Term.fixpoint) (c:t): t =
   interval_fold

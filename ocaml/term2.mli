@@ -44,6 +44,7 @@ val apply2: t -> t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool
+val equal_arguments: arguments -> arguments -> bool
 
 val shift: int -> t -> t
 val up_from: int -> int -> t -> t

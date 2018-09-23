@@ -111,6 +111,13 @@ let equal1 (a:t option) (b:t): bool =
      equal a b
 
 
+let equal_arguments (a:arguments) (b:arguments): bool =
+  let n = Array.length a in
+  n = Array.length b
+  && interval_for_all
+       (fun i -> equal (snd a.(i)) (snd b.(i)))
+       0 n
+
 
 let fold_from (start:int) (f:'a->int->'a) (a:'a) (t:t): 'a =
   let rec fold (s:int) (a:'a) (t:t): 'a =

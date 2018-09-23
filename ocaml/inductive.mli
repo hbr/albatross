@@ -19,6 +19,8 @@ end
 type t
 val nparams: t -> int
 val ntypes: t -> int
+val is_restricted: int -> t -> bool
+val restricted: int -> t -> t
 val nconstructors: int -> t -> int
 val parameter: int -> t -> Term.name_type
 val params0: t -> Term.arguments
@@ -28,6 +30,7 @@ val itype0: int -> t -> Term.fname_type
 val itype: int -> t -> Term.fname_type
 val types0: t -> Term.gamma
 val types: t -> Term.gamma
+val constructor_base_index: int -> t -> int
 val cname: int -> int -> t -> Feature_name.t option
 val ctype0: int -> int -> t -> Term.fname_type
 val ctype: int -> int -> t -> Term.fname_type
