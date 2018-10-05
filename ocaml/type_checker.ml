@@ -22,6 +22,9 @@ let string_of_fixpoint (c:t) (fp:Term.fixpoint): string =
   let module TP = Term_printer2.Make (Gamma) in
   Pretty_printer2.Layout.pretty 70 (TP.print_fixpoint fp c)
 
+
+
+
 let head_normal0
       (f:Term.t)
       (args:Term.t list)
@@ -154,8 +157,9 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
 
 
 
-
-
+(* The Type Checker Function
+   =========================
+ *)
 
 let rec check (t:Term.t) (c:t): Term.typ option =
   (* Return the type of [t] in the context [c] if it is wellformed. *)
@@ -216,7 +220,13 @@ let rec check (t:Term.t) (c:t): Term.typ option =
   | Inspect (e,res,cases) ->
      check_inspect e res cases c
   | Fix (idx, arr) ->
-     assert false (* nyi *)
+     if idx < 0 || Array.length arr <= idx then
+       None
+     else
+       Option.(
+       check_fixpoint arr c
+       >> let _,typ,_,_ = arr.(idx) in
+          Some typ)
 
 
 and check_inspect
@@ -326,6 +336,33 @@ and check_case
     else
       None
   )
+
+and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
+  (* - All types must be valid in the current environment
+     - All terms must have the corresponding type
+     - All recursive calls must be with a structurally decreasing argument *)
+  let len = Array.length fp in
+  Option.(
+    interval_fold
+      (fun ci i ->
+        let nme,typ,decr,t = fp.(i) in
+        check typ c
+        >> Some (Gamma.push nme (Term2.up i typ) ci)
+      )
+      (Some c) 0 len
+    >>= fun c1 ->
+    interval_fold
+      (fun _ i ->
+        let nme,typ,decr,t = fp.(i) in
+        check t c1 >>= fun tp ->
+        if equivalent tp (Term.up len typ) c1 then
+          assert false (* nyi: recursion checker *)
+        else
+          None
+      )
+      (Some ()) 0 len
+  )
+
 
 
 
@@ -786,6 +823,7 @@ let test (): unit =
               (Definition.typ pred)
               c);
     let plus_fp = nat_add_fp 2 in
-    printf "%s\n" (string_of_fixpoint c plus_fp)
+    printf "%s\n" (string_of_fixpoint c plus_fp);
+    assert (check_fixpoint plus_fp c <> None)
   end;
   ()
