@@ -23,6 +23,13 @@ let value (o: 'a t): 'a =
   | Some x ->
      x
 
+
+let of_bool (b:bool): unit t =
+  if b then
+    Some ()
+  else
+    None
+
 let iter (f:'a -> unit) (m:'a t): unit =
   ignore (map f m)
 
