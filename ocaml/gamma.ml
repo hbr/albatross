@@ -232,11 +232,19 @@ let push_fixpoint (fp:Term.fixpoint) (c:t): t =
       push nme (Term.up i tp) c)
     c 0 (Array.length fp)
 
+
 let push_gamma (g:Term.gamma) (c:t): t =
   push_n
     (Array.length g)
     (fun i -> g.(i))
     c
+
+
+let push_lambda (t:Term.t) (c:t): Term.t * t =
+  let t1,args = Term.split_lambda0 (-1) t 0 [] in
+  let c1 = push_argument_list (List.rev args) c in
+  t1,c1
+
 
 
 let push_ind_params (ind: Inductive.t) (c:t): t =

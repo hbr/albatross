@@ -40,5 +40,6 @@ val push_unnamed: Term.typ -> t -> t
 val push_arguments: Term.arguments -> t -> t
 val push_argument_list: Term.argument_list -> t -> t
 val push_fixpoint: Term.fixpoint -> t -> t
+val push_lambda: Term.t -> t -> Term.t * t
 val push_ind_types_params: Inductive.t -> t -> t
 val push_inductive: Inductive.t -> t -> t
