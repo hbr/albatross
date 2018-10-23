@@ -14,9 +14,16 @@ type t =
   | All of abstraction
   | Inspect of t * t * (t*t) array
   | Fix of fix_index * fixpoint
+
 and typ = t
+
 and abstraction =  string option * typ * t
+
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
+(** Array of fixpoint components. Each component has a name, a type, a
+   decreasing argument and a term. The term has [n] bound variables where [n]
+   is the size of the fixpoint (usually 1). The bound variable [j] represents
+   the component [n - j - 1]. *)
 
 type name_type = string option * typ
 type fname_type = Feature_name.t option * typ
@@ -55,7 +62,29 @@ val has_variables: (int->bool) -> t -> bool
 val arrow: t -> t -> t
 
 
+
 val substitute: t -> t -> t
+(** [substitute a b] substitutes the variable 0 of the term [a] by the term
+   [b]. All other variables of [a] are shifted down by 1.
+
+   The term [a] has one bound variable (the variable 0). This bound variable
+   is substituted. I.e. the call [substitute a b] performs the beta
+   reduction [(lambda x.a) b -> a[x:=b]]. *)
+
+
+val reduce_fixpoint: int -> fixpoint -> t
+(** [reduce i fp] reduces the fixpoint [i] of [fp].
+
+   The fixpoint [fp] consists of [n] components. The component [j] of [fp] has
+   the term [t(j)]. The term [t(j)] has [n] bound variables. The variable [j]
+   represents the [n - j - 1] component of the fixpoint.
+
+   Fixpoints which are not mutually recursive have only one component.
+
+   [reduce i fp] is the term [t(i)] where the bound variables are
+   substitute. The bound variable [j] is substituted by [Fix (n - j - 1, fp)].
+*)
+
 
 val split_application: t -> t list -> t * t list
 val apply_args: t -> t list -> t
