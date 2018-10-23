@@ -23,6 +23,8 @@ val sort_variables: t -> Sorts.Variables.t
 val push_sorts: int -> (int*int*bool) list -> t -> t
 
 val count: t -> int
+val to_level: int -> t -> int
+val to_index: int -> t -> int
 val entry_type: int -> t -> Term.typ
 val name: int -> t -> Feature_name.t option
 val has_definition: int -> t -> bool

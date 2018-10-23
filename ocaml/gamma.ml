@@ -76,6 +76,19 @@ let push_sort_variable (c:t): t =
 let count (c:t): int =
   IArr.length c.gamma
 
+
+let to_level (i:int) (c:t): int =
+  assert (i < count c);
+  count c - i - 1
+
+let to_index (level:int) (c:t): int =
+  assert (level < count c);
+  (* to_index (to_level i c) c =
+     count c - (count c - i - 1) - 1 =
+     count c - count c + i + 1 - 1 =  i
+   *)
+  count c - level - 1
+
 let entry (i:int) (c:t): entry =
   (* entry 0 is the most recently added (i.e. the last) element *)
   let n = count c in
@@ -170,6 +183,7 @@ let constructor_of_inductive (j:int) (ivar:Term2.t) (c:t): int =
      end
   | _ ->
      assert false (* Illegal call *)
+
 
 
 let empty: t =
