@@ -5,10 +5,17 @@ module Term = Term2
 
 module Constructor =
   struct
-    (* c: all(args) I iparams iargs
+    (* A constructor consists of a name and a type. The type is a function
+       type i.e. a product of a function with 0 or more arguments. The final
+       type of the product is the inductive type of the constructed object.
+
+           c: all(args) I iparams iargs
+
+       The parameters are fixed and identical for all inductive types and all
+       constructors. The [iargs] can depent on the [args].
 
        The type is valid in an environment with all inductive types and the
-       parameters in the context (in that order)  *)
+       parameters in the context (in that order) *)
     type t = {
         name: Feature_name.t option;
         args: Term.arguments;  (* without parameters *)
@@ -20,6 +27,7 @@ module Constructor =
     let name (c:t): Feature_name.t option = c.name
 
     let cargs (c:t): Term.arguments = c.args
+
 
     let ctype (i:int) (ni:int) (np:int) (c:t): Term.typ =
       let open Term in
@@ -73,6 +81,30 @@ let constructor (i:int) (j:int) (ind:t): Constructor.t =
   assert (i < ntypes ind);
   assert (j < nconstructors i ind);
   ind.constructors.(i).(j)
+
+
+let recursive_arguments (i:int) (j:int) (ind:t): int list =
+  (* The recursive arguments of the constructor. *)
+  assert (i < ntypes ind);
+  let con = constructor i j ind in
+  let args = Constructor.cargs con in
+  let nargs = Array.length args in
+  let np = nparams ind
+  and nt = ntypes ind in
+  let is_inductive i =
+    np <= i && i <= np + nt
+  in
+  interval_fold
+    (fun lst i ->
+      let j = nargs - i - 1 in
+      let _,tp = args.(j) in
+      if Term.has_variables is_inductive tp then
+        j :: lst
+      else
+        lst
+    )
+    [] 0 nargs
+
 
 let parameter (i:int) (ind:t): string option * Term.typ =
   assert (i < nparams ind);

@@ -35,6 +35,7 @@ val cname: int -> int -> t -> Feature_name.t option
 val ctype0: int -> int -> t -> Term.fname_type
 val ctype: int -> int -> t -> Term.fname_type
 val cargs: int -> int -> t -> Term.arguments
+val recursive_arguments: int -> int -> t -> int list
 val is_valid_iargs: int -> int -> t -> bool
 val make: Term.arguments -> Term.gamma -> Constructor.t array array -> t
 val make_simple: Feature_name.t option -> Term.arguments -> Term.typ ->
