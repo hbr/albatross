@@ -23,86 +23,187 @@ let string_of_fixpoint (c:t) (fp:Term.fixpoint): string =
   Pretty_printer2.Layout.pretty 70 (TP.print_fixpoint fp c)
 
 
+(* =============================================
+
+   Key Reduction
+
+   =============================================
 
 
-let head_normal0
-      (f:Term.t)
-      (args:Term.t list)
-      (c:t)
-    : Term.t * Term.t list =
-  (* Transform [f(args)] into the head normal form. Assume that [f(args)] is
-     wellformed. Return an equivalent term [f2(args2)] which cannot be head
-     reduced. *)
-  let rec normalize f args =
-    let f,args = Term.split_application f args in
-    let f,args = Term.beta_reduce f args in
-    match f with
-    (* normal cases *)
-    | Term.Variable i when has_definition i c ->
-       normalize (definition i c) args
-    | Term.Inspect (exp,map,cases) ->
-       let f1,args1 = normalize exp [] in
-       begin
-         match f1 with
-         | Term.Variable cidx when is_constructor cidx c ->
-            normalize
-              (snd cases.(constructor_offset cidx c))
-              (args1 @ args)
-         | _ ->
-            f1, args1 @ args
-       end
-    | Term.Fix (idx,arr) ->
-       assert false (* nyi *)
+   1. (lam x:A. t) a args -> t[x:=a] args
 
-    (* error cases: shall not happen because the term is wellformed! *)
-    | Term.Sort s when args <> [] ->
-       assert false (* A sort cannot be applied *)
-    | Term.Application _ ->
-       assert false (* f cannot be an application, because of
-                       'split_application. *)
-    | Term.Lambda _ when args <> [] ->
-       assert false (* cannot happen, term is already beta reduced *)
-    | Term.All _ when args <> [] ->
-       assert false (* cannot be applied *)
 
-    (* default case, beta reduced term is already in simple head normal
-         form. *)
-    | _ ->
-       f, args
+
+   2. x a args -> t a args
+
+      where t is the definition of x
+
+
+   3. insp(e,r,cases) a args -> insp(f,r,cases)
+
+      where e -> f
+
+
+   4. insp(co(i) cargs,r,cases) a args -> case(i) cargs a args
+
+
+   5. fix(i,fp) args1 a args2 -> fix(i,fp) args1 b args2
+
+      where a -> b and a is decreasing argument for the fixpoint i
+
+
+   6. fix(i,fp) args1 (co(i) cargs) args2 -> t(i) args1 (co(i) cargs) args2
+
+      where t(i) is the term of the fixpoint i with all fixpoint variables j
+   substituted by fix(j,fp).
+
+ *)
+
+
+let rec key_normal0 (f:Term.t) (args: Term.t list) (c:t)
+        : Term.t * Term.t list =
+  let key = ref f
+  and args = ref args
+  and go_on = ref true
   in
-  normalize f args
+  let open Term in
+  while !go_on do
+    match !key, !args with
+
+    | Sort _, [] ->
+       go_on := false
+
+    | Sort s, _ :: _ ->
+       assert false (* sorts cannot be applied *)
+
+    | Variable i, hd :: tl when Gamma.has_definition i c ->
+       key := Gamma.definition i c
+
+    | Variable _, _ ->
+       go_on := false
+
+    | Application (f, a, _), _ ->
+       key := f;
+       args := a :: !args
+
+    | Lambda _, [] ->
+       go_on := false
+
+    | Lambda (_, tp, t), hd :: tl ->
+       key := substitute t hd;
+       args := tl
+
+    | All _, [] ->
+       go_on := false
+
+    | All _, _ :: _ ->
+       assert false (* product cannot be applied *)
+
+    | Inspect _, [] ->
+       go_on := false
+
+    | Inspect (e, res, cases), _ :: _ ->
+
+       let e, eargs = key_normal0 e [] c
+       in
+       begin
+         match e with
+
+         | Variable i when Gamma.is_constructor i c ->
+            key := snd cases.(Gamma.constructor_offset i c);
+            args := eargs @ !args
+
+         | _ ->
+            key := Inspect (apply_args e eargs, res, cases);
+            go_on := false
+       end
+
+    | Fix _, [] ->
+       go_on := false
+
+    | Fix (i, fp), _ :: _ ->
+
+       let _,_,decr,_ = fp.(i) in
+       let args1_rev,args2 =
+         Mylist.split_condition (fun i _ -> i = decr) !args
+       in
+
+       begin
+         match args2 with
+
+         | [] ->
+            go_on := false
+
+         | hd :: tl ->
+            let co,coargs = key_normal0 hd [] c in
+
+            match co with
+
+            | Variable j when Gamma.is_constructor j c ->
+               (* reduce fixpoint *)
+               key := Term.reduce_fixpoint i fp;
+               args := List.rev args1_rev @ (apply_args co coargs) :: args2
+
+            | _ ->
+               (* no reduction, but reinsert key normal form of decreasing
+                  argument. *)
+               args := List.rev args1_rev @ (apply_args co coargs) :: args2;
+               go_on := false
+       end
+  done;
+  !key, !args
 
 
-let head_normal (t:Term.t) (c:t): Term.t =
-  (* Transform [t] into its head normal form. *)
-  let f,args = head_normal0 t [] c in
-  Term.apply_args f args
+
+
+let key_normal (t:Term.t) (c:t): Term.t * Term.t list =
+  key_normal0 t [] c
+
+
+let key_normal_term (t:Term.t) (c:t): Term.t =
+  let key,args = key_normal0 t [] c in
+  Term.apply_args key args
 
 
 
+
+
+
+
+(* ==========================================================
+
+   Equivalence of Terms
+
+   ==========================================================
+ *)
 
 
 let rec equivalent (a:Term.t) (b:Term.t) (c:t): bool =
   (* Are [a] and [b] equivalent (i.e. convertible) in the context [c]?
      Assume that both terms are wellformed. *)
-  let ha,argsa = head_normal0 a [] c in
-  let hb,argsb = head_normal0 b [] c in
-  equivalent_head ha hb c && equivalent_arguments argsa argsb c
+  let ka,argsa = key_normal a c in
+  let kb,argsb = key_normal b c in
+  equivalent_key ka kb c && equivalent_arguments argsa argsb c
 
 
-and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
-  (* Are [a] and [b] equivalent as heads of an application in head normal form
+and equivalent_key (a:Term.t) (b:Term.t) (c:t): bool =
+  (* Are [a] and [b] equivalent as keys of an application in key normal form
      in the context [c]? Assume that both terms are wellformed. *)
   let open Term in
   match a, b with
+
   | Sort sa, Sort sb ->
      Sorts.equal sa sb
+
   | Variable i,  Variable j ->
      i = j
+
   | Lambda (nme,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
      equivalent ta tb (push_simple nme tpa c)
+
   | All (nme,tpa,ta), All (_,tpb,tb) when equivalent tpa tpb c ->
      equivalent ta tb (push_simple nme tpa c)
+
   | Inspect (ea,pa,casesa), Inspect (eb,pb,casesb)
        when equivalent ea eb c && equivalent pa pa c ->
      let ncases = Array.length casesa in
@@ -113,9 +214,11 @@ and equivalent_head (a:Term.t) (b:Term.t) (c:t): bool =
          and cb,fb = casesb.(i) in
          equivalent fa fb c)
        0 ncases
+
   | Fix _, Fix _ ->
      assert false (* nyi *)
-  (* default case: not an  application or different constructors *)
+
+  (* default case: not an application or different constructors *)
   | _ ->
      false
 
@@ -141,25 +244,266 @@ let normalize (t:Term.t) (c:t): Term.t =
 let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   (* Is [a] a subtype of [b] in the context [c]. Assume that both are
      wellformed.  *)
-  let ha,argsa = head_normal0 a [] c in
-  let hb,argsb = head_normal0 b [] c in
+  let ka,argsa = key_normal a c in
+  let kb,argsb = key_normal b c in
   let open Term in
-  match ha, hb with
+  match ka, kb with
   | Sort sa, Sort sb ->
      Sorts.sub sa sb (sort_variables c)
   | All (nme,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (push_simple nme tpa c)
   | _ ->
-     equivalent_head ha hb c && equivalent_arguments argsa argsb c
+     equivalent_key ka kb c && equivalent_arguments argsa argsb c
 
 
 
 
 
-(* The Type Checker Function
-   =========================
- *)
+
+
+(* ===================================================================
+
+   Decreasing Fixpoints
+
+   ===================================================================
+
+
+   A recursive call must be protected by one ore more pattern matches of the
+   decreasing argument.
+
+   The decreasing argument of the fixpoint term must be of an inductive type
+   of a family. A constructor argument is a recursive argument if its type
+   belongs to the same family as the constructor.
+
+   In a pattern match [inspect(x,r,[f1,f2,...])] each recursive argument of
+   any fi is structurally smaller than x. We expect the inspected expression
+   to be a variable.
+
+   The inspect expressions surrounding a recursive call gives the set of all
+   variables structurally smaller than the decreasing argument of the fixpoint
+   expression.
+
+   For any recursive call [y args] we get the argument expression
+   corresponding to the decreasing argument of [y]. This argument expression
+   must be structurally smaller than the decreasing formal argument of the
+   current fixpoint expression.
+
+   In Coq it is possible to compute a structurally smaller elements of the
+   original argument. A smaller accessibility proof term can be computed from
+   an acessibility proof term by giving a predecessor in the corresponding
+   relation. We do not use this possibility for the time being.
+
+   Having the argument expression of the decreasing argument of the recursive
+   call, the key normal form of this expression must have one of the
+   structurally smaller variables in the key (i.e. function) position.
+
+   The algorithm holds a set of structurally smaller variables (use De Bruijn
+   levels to describe them) during the term iteration. Whenver it encounters a
+   recursive call it reduces the argument expression to key normal form and
+   searches for the key variable in the set of structurally smaller varibles.
+
+  *)
+
+let check_fixpoint_decreasing
+      (t:Term.t) (fp:Term.fixpoint)
+      (nargs:int) (decr:int) (c:Gamma.t)
+    : unit option =
+  (* Check that the component term [t] of the fixpoint array [fp] with [nargs]
+     arguments is decreasing on the [decr] argument. The context [c] contains
+     all types of the fixpoints and all arguments of the current fixpoint.
+
+     - At least one branch calls another function j of the fixpoint array.
+
+     - A recursive call has the form [(Var j) args b ...] where [b] is the
+     decreasing argument of fixpoint j and b is a part of the argument [decr]
+     of the current fixpoint.
+
+     Remark:
+
+     - [t] is not an abstraction, all abstractions are already pushed into the
+     context.  *)
+  assert (decr < nargs);
+
+  let decr_level = (* level of decreasing argument *)
+    Gamma.count c - nargs + decr
+
+  and fixpoint_start = (* level of first fixpoint *)
+    Gamma.count c - nargs - Array.length fp
+
+  and fixpoint_beyond = (* level beyond last fixpoint *)
+    Gamma.count c - nargs
+  in
+
+  let decrementing_argument i c =
+    (* What is the decrementing argument of a recursive call with variable [i]
+       in the function position? Return [None] if variable [i] does not
+       represent a component of the fixpoint [fp]. *)
+    let level = Gamma.to_level i c in
+    if fixpoint_start <= level && level < fixpoint_beyond then
+      let _,_,decr,_ = fp.(fixpoint_beyond - level - 1) in
+      Some decr
+    else
+      None
+
+  and can_generate_smaller i smaller c =
+    let level = Gamma.to_level i c in
+    level = decr_level || IntSet.mem level smaller
+
+  and add_recursive_arguments i j smaller c =
+    (* add recursive arguments of the constructor [j] of the inductive type of
+       variable [i] to the set of structurally smaller variables. The
+       constructor arguments are not yet pushed into the context. Therefore
+       the level starts at [Gamma.count c]. *)
+    let tp = Gamma.entry_type i c in
+    let ivar,args = key_normal0 tp [] c in
+    match Gamma.inductive_index ivar c with
+    | Some (ind_idx,ind) ->
+       let rec_args = Inductive.recursive_arguments ind_idx j ind in
+       List.fold_left
+         (fun smaller recarg ->
+           IntSet.add (Gamma.count c + recarg) smaller
+         )
+         smaller rec_args
+    | None ->
+       assert false (* Variable i occurs as the inspected expression. The
+                       inspect expression is wellformed, therefore it must be
+                       an inductive type. *)
+  in
+
+  let rec check (t:Term.t) (smaller:IntSet.t) (c:t) (n:int)
+          : int option =
+    (* Check all recursive calls in the term [t]. Return the number of valid
+       recursive calls or None if there are illegal calls. *)
+
+    let check_with_lambda t smaller c n =
+      let t1, c1 = push_lambda t c in
+      check t1 smaller c1 n
+    in
+
+    let check_list lst n =
+      Option.fold_list
+        (fun n t _ -> check t smaller c n)
+        lst n
+    in
+
+    let key,args = key_normal0 t [] c
+    in
+    let open Term in
+    match key with
+    | Sort s ->
+       assert (args = []); (* sorts cannot be applied *)
+       Some n
+
+    | Variable i ->
+       begin
+         match decrementing_argument i c with
+
+         | Some decr_j ->
+            (* [key args] is a recursive call *)
+            let args1_rev,args2 =
+              Mylist.split_condition (fun k _ -> k = decr_j) args in
+            begin
+              match args2 with
+              | [] ->
+                 (* too few arguments in the recursive call *)
+                 None
+              | hd :: tl ->
+                 let hd_key,_ = key_normal0 hd [] c
+                 in
+                 match hd_key with
+                 | Variable i_hd ->
+                    if IntSet.mem (Gamma.to_level i_hd c) smaller then
+                      (* The argument [hd] is structurally smaller. Now it
+                         remains to check the other arguments beside [hd]. The
+                         arguments of [hd_key] need not be checked, because
+                         the positivity condition guarantees that they do not
+                         contain any inductive objects of the same inductive
+                         family. *)
+                      Option.(check_list args1_rev (n+1)
+                              >>= check_list tl)
+                    else
+                      (* [Variable i_hd] is not structurally smaller *)
+                      None
+                 | _ ->
+                    (* [hd] cannot be structurally smaller *)
+                    None
+            end
+
+         | None ->
+            (* We are not in a recursive call. Therefore check arguments
+               only. *)
+            check_list args n
+       end
+
+    | Application _ ->
+       assert false (* key cannot be an application *)
+
+    | Lambda (nme, tp, t) ->
+       assert (args = []); (* otherwise [key args] would have a key redex *)
+       check t smaller (Gamma.push_simple nme tp c) n
+
+    | All (nme, tp, t) ->
+       assert (args = []); (* product cannot be applied *)
+       check t smaller (Gamma.push_simple nme tp c) n
+
+    | Inspect (Variable i, res, cases)
+         when can_generate_smaller i smaller c ->
+       Option.(
+        fold_array
+          (fun n case j ->
+            let smaller = add_recursive_arguments i j smaller c in
+            check_with_lambda (snd case) smaller c n
+          )
+          n cases
+       )
+
+    | Inspect (e, res, cases) ->
+       Option.(
+        check e smaller c n >>= fun n ->
+        fold_array
+          (fun n case j ->
+            check_with_lambda (snd case) smaller c n
+          )
+          n cases
+       )
+
+    | Fix (i_inner, fp_inner) ->
+       (* The fixpoint array [fp2] is not interesting per se, but some of its
+          components might have recursive calls to some component of the outer
+          fixpoint. *)
+       let c1 = Gamma.push_fixpoint fp_inner c
+       in
+       Option.fold_array
+         (fun n comp _ ->
+           let _,_,_,t = comp in
+           check t smaller c1 n)
+         n fp_inner
+  in
+
+  Option.(
+    check t IntSet.empty c 0 >>= fun n ->
+    if n = 0 then
+      printf "fixpoint element does not contain a recursive call\n%s\n"
+        (string_of_term2 c t);
+    of_bool (0 < n)
+  )
+
+
+
+
+
+
+
+(* ===================================================================
+
+   Type Checking
+
+   ===================================================================
+
+  A collection of mutually recursive functions.
+
+*)
 
 let rec check (t:Term.t) (c:t): Term.typ option =
   (* Return the type of [t] in the context [c] if it is wellformed. *)
@@ -183,7 +527,7 @@ let rec check (t:Term.t) (c:t): Term.typ option =
       check f c >>= fun ftp ->
       check a c >>= fun atp ->
       (* Now f,ftp and a,atp are wellformed *)
-      let hn = head_normal ftp c in
+      let hn = key_normal_term ftp c in
       match hn with
       | All (_, tp, res) (* tp, res are wellformed *)
            when is_subtype atp tp c  ->
@@ -296,7 +640,7 @@ and check_inductive (tp:Term.typ) (c:t)
        * int            (* ind_idx *)
       ) option =
   Option.(
-    let ivar,args = head_normal0 tp [] c in
+    let ivar,args = key_normal0 tp [] c in
     Gamma.inductive_index ivar c >>= fun (ind_idx,ind) ->
     let nparams = Inductive.nparams ind in
     let params,args = Mylist.split_at nparams args in
@@ -343,26 +687,34 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
      - All recursive calls must be with a structurally decreasing argument *)
   let len = Array.length fp in
   Option.(
-    interval_fold
-      (fun ci i ->
-        let nme,typ,decr,t = fp.(i) in
+    (* Check all types and push them into the context. *)
+    fold_array
+      (fun ci element i ->
+        let nme,typ,decr,t = element in
         check typ c
         >> Some (Gamma.push nme (Term2.up i typ) ci)
       )
-      (Some c) 0 len
-    >>= fun c1 ->
+      c fp
+    >>= fun c1 -> (* Now c1 contains all types of the [len] fixpoints. *)
+    (* Now check all fixpoints that they have the correct type and are
+       structurally decreasing. *)
     interval_fold
       (fun _ i ->
         let nme,typ,decr,t = fp.(i) in
         check t c1 >>= fun tp ->
-        if equivalent tp (Term.up len typ) c1 then
-          assert false (* nyi: recursion checker *)
-        else
-          None
+        of_bool (equivalent tp (Term.up len typ) c1)
+        >>
+          (* fixpoint [i] has the correct type. *)
+          let t2,c2 = Gamma.push_lambda t c1 in
+          let nargs = Gamma.count c2 - Gamma.count c1 in
+          of_bool (decr < nargs)
+          >> check_inductive
+               (Gamma.entry_type (nargs - decr - 1) c2) c2
+          >>= fun (_,_,_,ind,_) ->
+          check_fixpoint_decreasing t2 fp nargs decr c2
       )
       (Some ()) 0 len
   )
-
 
 
 

@@ -34,19 +34,59 @@ let iter (f:'a -> unit) (m:'a t): unit =
   ignore (map f m)
 
 
-let interval_fold (f:'a->int->'a t) (a0:'a t) (start:int) (beyond:int): 'a t =
+let fold_interval (f:'a->int->'a t) (a0:'a) (start:int) (beyond:int): 'a t =
   assert (start <= beyond);
   let rec fold i a =
     if i = beyond then
-      a
+      Some a
     else
-      match a with
+      match f a i with
       | None ->
          None
       | Some a ->
-         fold (i+1) (f a i)
+         fold (i+1) a
   in
   fold start a0
+
+
+
+let fold_list (f:'a->'b->int->'a t) (lst:'b list) (start:'a): 'a t =
+  let rec fold a i lst =
+    match lst with
+    | [] ->
+       Some a
+    | hd :: tl ->
+       match f a hd i with
+       | Some a ->
+          fold a (i+1) tl
+       | None ->
+          None
+  in
+  fold start 0 lst
+
+
+
+
+let fold_array (f:'a->'b->int->'a t) (start:'a) (arr:'b array): 'a t =
+  let len = Array.length arr
+  in
+  let rec fold a i =
+    if i = len then
+      Some a
+    else
+      match f a arr.(i) i with
+       | Some a ->
+          fold a (i+1)
+       | None ->
+          None
+  in
+  fold start 0
+
+
+
+
+
+
 
 
 
