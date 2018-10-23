@@ -167,6 +167,7 @@ module Mylist: sig
 
   val combine:      'a list -> 'b list -> ('a*'b) list
   val split_at:     int -> 'a list -> 'a list * 'a list
+  val split_condition: (int -> 'a -> bool) -> 'a list -> 'a list * 'a list
 
   val find2: ('a -> 'b -> bool) -> 'a list -> 'b list -> 'a * 'b
 
@@ -239,6 +240,28 @@ end = struct
            assert false (* i out of bound *)
     in
     split i [] l
+
+
+  let split_condition (f:int -> 'a -> bool) (l:'a list): 'a list * 'a list =
+    (* split the list into [l1] and [l2] so that [rev l1 @ l2 = l] and the
+       first element [hd] of [l2] (if exists) is at position [i] and [f i hd]
+       is satisfied. *)
+    let l1 = ref []
+    and l2 = ref l
+    and i = ref 0
+    and go_on = ref true
+    in
+    while !go_on do
+      match !l2 with
+      | hd :: tl when not (f !i hd) ->
+         l1 := hd :: !l1;
+         l2 := tl;
+         i := !i + 1
+      | _ ->
+         go_on := false
+    done;
+    !l1, !l2
+
 
   let find2 (f:'a -> 'b -> bool) (l1:'a list) (l2:'b list): 'a * 'b =
     let rec find l1 l2 =
