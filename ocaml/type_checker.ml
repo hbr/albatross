@@ -175,6 +175,8 @@ let key_normal_term (t:Term.t) (c:t): Term.t =
    Equivalence of Terms
 
    ==========================================================
+
+   Two terms are equivalent if they have the same normal form.
  *)
 
 
@@ -210,17 +212,41 @@ and equivalent_key (a:Term.t) (b:Term.t) (c:t): bool =
      assert(ncases <> Array.length casesb);
      interval_for_all
        (fun i ->
-         let ca,fa = casesa.(i)
-         and cb,fb = casesb.(i) in
+         let _,fa = casesa.(i) (* only the second component is important *)
+         and _,fb = casesb.(i)
+         in
          equivalent fa fb c)
        0 ncases
 
-  | Fix _, Fix _ ->
-     assert false (* nyi *)
+  | Fix (i1, fp1), Fix (i2, fp2)
+       when i1 = i2 && Array.length fp1 = Array.length fp2 ->
+     let len = Array.length fp1 in
+     (* Corresponding types must be equivalent and corresponding terms must
+        decrease on the same argument. *)
+     interval_for_all
+       (fun i ->
+         let _,tp1,decr1,_ = fp1.(i)
+         and _,tp2,decr2,_ = fp2.(i)
+         in
+         decr1 = decr2
+         && equivalent tp1 tp2 c
+       )
+       0 len
+     && (* Corresponding terms must be equivalent *)
+       let c_inner = Gamma.push_fixpoint fp1 c in
+       interval_for_all
+         (fun i ->
+           let _,_,_,t1 = fp1.(i)
+           and _,_,_,t2 = fp2.(i)
+           in
+           equivalent t1 t2 c_inner
+         )
+         0 len
 
-  (* default case: not an application or different constructors *)
+  (* default case: different or incompatible constructors *)
   | _ ->
      false
+
 
 and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
     : bool =
@@ -239,6 +265,15 @@ let normalize (t:Term.t) (c:t): Term.t =
   t (* nyi BUG!! *)
 
 
+
+
+(* ==========================================================
+
+   Subtyping
+
+   ==========================================================
+
+ *)
 
 
 let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
@@ -740,7 +775,22 @@ let is_wellformed_type (tp:Term.t) (c:t): bool =
 
 
 
-let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
+
+
+
+(* ===================================================================
+
+   Checking of the Definition of Inductive Types
+
+   ===================================================================
+
+   The following functions check if an inductive definition [ind] is valid and
+   can be added to the context.
+
+*)
+
+let check_inductive_definition (ind:Inductive.t) (c:t)
+    : Inductive.t option =
   (* Are all parameter types are valid? *)
   let check_parameter (c:t): t option =
     let np = Inductive.nparams ind in
@@ -764,7 +814,7 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
         Some ()
       else
         let _,tp = Inductive.itype0 i ind in
-        let tp = normalize tp c in
+        let tp = normalize tp c in  (* normalize nyi *)
         Option.(
           check tp c >>= fun s ->
           Term.get_sort s (* BUG, we need the inner sort!!! *)
@@ -786,7 +836,7 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
         let nme,tp = cargs.(k) in
         if Term.has_variables (indvar k) tp then
           begin
-              let tp = normalize tp !cr in
+              let tp = normalize tp !cr in  (* normalize nyi *)
               let tpargs,tp0 = Term.split_product tp in
               let ntpargs = Array.length tpargs in
               let f,args = Term.split_application tp0 [] in
@@ -861,8 +911,14 @@ let check_inductive (ind:Inductive.t) (c:t): Inductive.t option =
 
 
 
-(* Some builtin types and functions *)
-(* -------------------------------- *)
+
+
+(* ============================================================
+
+   Some Builtin Types and Function
+
+   ============================================================
+ *)
 
 
 (* Predicate (A:Any): Any := A -> Proposition *)
@@ -993,7 +1049,14 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
 
 
 
-(* Test **********************************)
+
+
+(* ============================================================
+
+   Unit Tests
+
+   ============================================================
+ *)
 
 let print_type_of (t:Term.t) (c:t): unit =
   match check t c with
@@ -1093,20 +1156,20 @@ let test (): unit =
   assert( check (All (Some "T", sort_variable 0, variable0)) c
           = Some (sort_variable_type 0));
 
-  assert (check_inductive Inductive.make_natural empty <> None);
-  assert (check_inductive Inductive.make_false empty <> None);
-  assert (check_inductive Inductive.make_true empty <> None);
-  assert (check_inductive Inductive.make_and empty <> None);
-  assert (check_inductive Inductive.make_or empty <> None);
-  assert (check_inductive (Inductive.make_equal 0) c <> None);
-  assert (check_inductive (Inductive.make_list 0) c <> None);
-  assert (check_inductive (Inductive.make_accessible 0) c <> None);
+  assert (check_inductive_definition Inductive.make_natural empty <> None);
+  assert (check_inductive_definition Inductive.make_false empty <> None);
+  assert (check_inductive_definition Inductive.make_true empty <> None);
+  assert (check_inductive_definition Inductive.make_and empty <> None);
+  assert (check_inductive_definition Inductive.make_or empty <> None);
+  assert (check_inductive_definition (Inductive.make_equal 0) c <> None);
+  assert (check_inductive_definition (Inductive.make_list 0) c <> None);
+  assert (check_inductive_definition (Inductive.make_accessible 0) c <> None);
 
   (* class Natural create 0; successor(Natural) end *)
   ignore(
       let ind = Inductive.make_natural
       in
-      assert (check_inductive ind empty <> None);
+      assert (check_inductive_definition ind empty <> None);
       let c = push_inductive ind empty in
       assert (check variable2 c = Some datatype);
       assert (check variable1 c = Some variable2);
@@ -1127,7 +1190,7 @@ let test (): unit =
           [| Inductive.Constructor.make
                None [| None, arrow variable0 variable0 |] [||] |]
       in
-      check_inductive ind empty = None
+      check_inductive_definition ind empty = None
     end;
 
 
