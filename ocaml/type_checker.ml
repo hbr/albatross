@@ -789,39 +789,59 @@ let is_wellformed_type (tp:Term.t) (c:t): bool =
 
 *)
 
-let check_inductive_definition (ind:Inductive.t) (c:t)
+let check_arity (tp:Term.typ) (c:Gamma.t): Sorts.t option =
+  (* Check if [tp] is an arity, i.e. normalized it looks like [all(....) s]
+     for some sort [s]. Return the sort or [None] if the term [tp] is not
+     wellformed or not an arity. *)
+  if is_wellformed tp c then
+    let rec check t c =
+      let key,args = key_normal t c in
+      let open Term in
+      match key,args with
+      | Sort s, [] ->
+         Some s
+      | All(nme,tp,t), [] ->
+         check t (Gamma.push_simple nme tp c)
+      | _ ->
+         None
+    in
+    check tp c
+  else
+    None
+
+let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     : Inductive.t option =
+
   (* Are all parameter types are valid? *)
-  let check_parameter (c:t): t option =
-    let np = Inductive.nparams ind in
-    let rec checki i c =
-      if i = np then
-        Some c
-      else
-        let nme,tp = Inductive.parameter i ind in
+  let check_parameter (c:Gamma.t): Gamma.t option =
+    Option.fold_array
+      (fun c (nme,tp) i ->
         if is_wellformed tp c then
-          checki (i+1) (push (some_feature_name_opt nme) tp c)
+          Some (Gamma.push_simple nme tp c)
         else
           None
-    in
-    checki 0 c
+      )
+      c (Inductive.params ind)
   in
-  (* Are all inductive types arities of some sort? *)
+
+
+  (* Are all inductive types arities of some sort?
+
+     - All types must be valid and must be types (i.e. their type is some
+     sort)
+
+     - The normalized types must look like [all(a:A,b:B,...) s] for some sort
+     [s]. The sort [s] is not the sort of the complete type. Even if the
+     complete type is a type, [s] is not necessarily a sort. It could be a
+     type as well. *)
   let check_types (c:t): unit option =
-    let ni = Inductive.ntypes ind in
-    let rec checki i =
-      if i = ni then
-        Some ()
-      else
-        let _,tp = Inductive.itype0 i ind in
-        let tp = normalize tp c in  (* normalize nyi *)
-        Option.(
-          check tp c >>= fun s ->
-          Term.get_sort s (* BUG, we need the inner sort!!! *)
-          >> checki (i+1)
-        )
-    in
-    checki 0
+    Option.(
+      fold_array
+        (fun _ (_,tp) _ ->
+          check_arity tp c
+          >> Some ())
+        () (Inductive.types0 ind)
+    )
   in
   let is_positive_cargs (i:int) (j:int) (c:t): bool =
     let cargs = Inductive.cargs i j ind
