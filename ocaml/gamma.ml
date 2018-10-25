@@ -278,7 +278,8 @@ let push_inductive
   for i = 0 to Inductive.ntypes ind - 1 do
     let nme,typ = Inductive.itype i ind in
     gr := IArr.push
-            {typ; just = Indtype (i,ind)}
+            {typ = Term.up i typ;
+             just = Indtype (i,ind)}
             !gr
   done;
   for i = 0 to Inductive.ntypes ind - 1 do

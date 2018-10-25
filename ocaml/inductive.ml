@@ -131,9 +131,11 @@ let itype0 (i:int) (ind:t): Term.fname_type =
   assert (i < ntypes ind);
   ind.types.(i)
 
+
 let itype (i:int) (ind:t): Term.fname_type =
   let nme,tp = itype0 i ind in
-  nme, Term.up i (Term.push_product ind.params tp)
+  nme, Term.push_product ind.params tp
+
 
 
 let types (ind:t): Term.gamma =
