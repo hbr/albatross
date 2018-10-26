@@ -237,6 +237,16 @@ let apply_args (f:t) (args:t list): t =
     (fun f a -> Application (f,a,false))
     f args
 
+let rec apply_n_args (f:t) (n:int) (args: t list): t =
+  if n = 0 then
+    f
+  else
+    match args with
+    | [] ->
+       assert false (* Illegal call: Not enough arguments. *)
+    | hd :: tl ->
+       apply_n_args (apply1 f hd) (n-1) tl
+
 
 let apply_arg_array (f:t) (args: t array): t =
   let nargs = Array.length args in

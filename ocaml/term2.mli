@@ -88,6 +88,7 @@ val reduce_fixpoint: int -> fixpoint -> t
 
 val split_application: t -> t list -> t * t list
 val apply_args: t -> t list -> t
+val apply_n_args: t -> int -> t list -> t
 val apply_arg_array: t -> t array -> t
 val apply_standard: int -> int -> t -> t
 
