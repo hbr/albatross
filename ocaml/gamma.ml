@@ -162,6 +162,22 @@ let constructor_index (t:Term.t) (c:t): (int * int * Inductive.t) option =
      None
 
 
+let is_inductive (i:int) (c:t): bool =
+  match (entry i c).just with
+  | Indtype _ ->
+     true
+  | _ ->
+     false
+
+let count_inductive_params_and_types (i:int) (c:t): (int * int) option =
+  match (entry i c).just with
+  | Indtype (ii,ind) ->
+     Some (Inductive.nparams ind, Inductive.ntypes ind)
+  | _ ->
+     None
+
+
+
 let is_constructor (i:int) (c:t): bool =
   assert false (* nyi *)
 
@@ -169,22 +185,39 @@ let constructor_offset (i:int) (c:t): int =
   assert (is_constructor i c);
   assert false (* nyi *)
 
-let constructor_of_inductive (j:int) (ivar:Term2.t) (c:t): int =
-  (* The index of the j-th constructor of the inductive type ivar *)
-  match ivar with
-  | Term.Variable ivar ->
-     begin
-       match  (entry ivar c).just with
-       | Indtype (i,ind)  ->
-          let cbase = Inductive.constructor_base_index i ind in
-          ivar + i - Inductive.ntypes ind - cbase - j
-       | _ ->
-          assert false (* Illegal call *)
-     end
+
+let constructor_of_inductive (j:int) (ivar:int) (c:t): int =
+  (* The index of the j-th constructor of the inductive type i *)
+  match  (entry ivar c).just with
+  | Indtype (i,ind)  ->
+     to_index
+       (to_level ivar c - i        (* start level of the family *)
+        + Inductive.ntypes ind     (* start level of constructors *)
+        + Inductive.constructor_base_index i ind
+        + j)
+       c
   | _ ->
      assert false (* Illegal call *)
 
 
+let constructor_of_inductive_variable (j:int) (ivar:Term2.t) (c:t): int =
+  (* The index of the j-th constructor of the inductive type ivar *)
+  match ivar with
+  | Term.Variable i ->
+     constructor_of_inductive j i c
+  | _ ->
+     assert false (* Illegal call *)
+
+
+let constructor_types (i:int) (params:Term.t list) (c:t): Term.typ list =
+  (* The constructor types of the inductive type [i] applied to the parameters
+     [params]. *)
+  match (entry i c).just with
+  | Indtype (ith,ind) ->
+     assert (Inductive.nparams ind = List.length params);
+     assert false (* nyi *)
+  | _ ->
+     assert false (* Illegal call: [i] is not an inductive type. *)
 
 let empty: t =
   {sort_variables = Sorts.Variables.empty;

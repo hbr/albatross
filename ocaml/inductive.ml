@@ -37,18 +37,6 @@ module Constructor =
         (apply_arg_array
            (apply_standard np ncargs (Variable (ncargs + i)))
            c.iargs)
-
-    let is_valid_iargs (ni:int) (np:int) (c:t): bool =
-      (* The arguments (index) of the constructed inductive type must not
-         contain any other inductive type of the definition. The context
-         contains all inductive types and the parameters in this order. *)
-      interval_for_all
-        (fun i ->
-          not (Term.has_variables
-                 (fun v -> np <= v && v < ni + np)
-                 c.iargs.(i)))
-      0 (Array.length c.iargs)
-
   end (* Constructor *)
 
 
@@ -81,6 +69,8 @@ let constructor (i:int) (j:int) (ind:t): Constructor.t =
   assert (i < ntypes ind);
   assert (j < nconstructors i ind);
   ind.constructors.(i).(j)
+
+
 
 
 let recursive_arguments (i:int) (j:int) (ind:t): int list =
@@ -153,14 +143,19 @@ let ctype0 (i:int) (j:int) (ind:t): Feature_name.t option * Term.typ =
   Constructor.name cons,
   Constructor.ctype (np + ni - 1 - i) ni np cons
 
-let is_valid_iargs (i:int) (j:int) (ind:t): bool =
-  Constructor.is_valid_iargs
-    (ntypes ind)
-    (nparams ind)
-    (constructor i j ind)
 
-let cargs (i:int) (j:int) (ind:t): Term.arguments =
-  Constructor.cargs (constructor i j ind)
+
+
+let constructors (i:int) (ind:t): Term.fname_type list =
+  let ni = ntypes ind in
+  assert (i < ni);
+  let ncons = nconstructors i ind in
+  interval_fold
+    (fun lst j ->
+      ctype0 i (ncons - j - 1) ind :: lst
+    )
+    [] 0 ncons
+
 
 
 let constructor_base_index (i:int) (ind:t): int =

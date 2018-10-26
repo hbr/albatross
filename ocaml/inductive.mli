@@ -47,9 +47,15 @@ val constructor_base_index: int -> t -> int
 val cname: int -> int -> t -> Feature_name.t option
 val ctype0: int -> int -> t -> Term.fname_type
 val ctype: int -> int -> t -> Term.fname_type
-val cargs: int -> int -> t -> Term.arguments
+
+
+val constructors: int -> t -> Term.fname_type list
+(** [constructors ith ind] is the list of all constructors (names and types)
+   of the inductive type [ith] of the family [ind], valid in a context with
+   all absolute inductive types and the parameters.  *)
+
+
 val recursive_arguments: int -> int -> t -> int list
-val is_valid_iargs: int -> int -> t -> bool
 
 
 val make: Term.arguments -> Term.gamma -> Constructor.t array array -> t

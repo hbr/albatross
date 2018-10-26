@@ -31,9 +31,13 @@ val has_definition: int -> t -> bool
 val definition: int -> t -> Term.t
 val inductive_index: Term.t -> t -> (int*Inductive.t) option
 val constructor_index: Term.t -> t -> (int * int * Inductive.t) option
+
+val count_inductive_params_and_types: int -> t -> (int * int) option
+val constructor_types: int -> Term.t list -> t -> Term.typ list
+
 val is_constructor: int -> t -> bool
 val constructor_offset: int -> t -> int
-val constructor_of_inductive: int -> Term2.t -> t -> int
+val constructor_of_inductive_variable: int -> Term2.t -> t -> int
 val push: Feature_name.t option -> Term.typ -> t -> t
 val push_simple: string option -> Term.typ -> t -> t
 val push_definition: Definition.t -> t -> t
