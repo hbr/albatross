@@ -1,24 +1,23 @@
 open Container
 open Alba2_common
 open Printf
-open Gamma
 
 module Term = Term2
 
 
-let string_of_term (c:t) (t:Term.t): string =
+let string_of_term (c:Gamma.t) (t:Term.t): string =
   let module SP = Pretty_printer.String_printer in
   let module PP = Pretty_printer.Make (SP) in
   let module TP = Term_printer.Make (Gamma) (PP) in
   let open PP in
   SP.run 200 (make 30 () >>= TP.print t c)
 
-let string_of_term2 (c:t) (t:Term.t): string =
+let string_of_term2 (c:Gamma.t) (t:Term.t): string =
   let module TP = Term_printer2.Make (Gamma) in
   Pretty_printer2.Layout.pretty 70 (TP.print t c)
 
 
-let string_of_fixpoint (c:t) (fp:Term.fixpoint): string =
+let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
   let module TP = Term_printer2.Make (Gamma) in
   Pretty_printer2.Layout.pretty 70 (TP.print_fixpoint fp c)
 
@@ -60,7 +59,7 @@ let string_of_fixpoint (c:t) (fp:Term.fixpoint): string =
  *)
 
 
-let rec key_normal0 (f:Term.t) (args: Term.t list) (c:t)
+let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
         : Term.t * Term.t list =
   let key = ref f
   and args = ref args
@@ -156,11 +155,11 @@ let rec key_normal0 (f:Term.t) (args: Term.t list) (c:t)
 
 
 
-let key_normal (t:Term.t) (c:t): Term.t * Term.t list =
+let key_normal (t:Term.t) (c:Gamma.t): Term.t * Term.t list =
   key_normal0 t [] c
 
 
-let key_normal_term (t:Term.t) (c:t): Term.t =
+let key_normal_term (t:Term.t) (c:Gamma.t): Term.t =
   let key,args = key_normal0 t [] c in
   Term.apply_args key args
 
@@ -180,7 +179,7 @@ let key_normal_term (t:Term.t) (c:t): Term.t =
  *)
 
 
-let rec equivalent (a:Term.t) (b:Term.t) (c:t): bool =
+let rec equivalent (a:Term.t) (b:Term.t) (c:Gamma.t): bool =
   (* Are [a] and [b] equivalent (i.e. convertible) in the context [c]?
      Assume that both terms are wellformed. *)
   let ka,argsa = key_normal a c in
@@ -188,7 +187,7 @@ let rec equivalent (a:Term.t) (b:Term.t) (c:t): bool =
   equivalent_key ka kb c && equivalent_arguments argsa argsb c
 
 
-and equivalent_key (a:Term.t) (b:Term.t) (c:t): bool =
+and equivalent_key (a:Term.t) (b:Term.t) (c:Gamma.t): bool =
   (* Are [a] and [b] equivalent as keys of an application in key normal form
      in the context [c]? Assume that both terms are wellformed. *)
   let open Term in
@@ -201,10 +200,10 @@ and equivalent_key (a:Term.t) (b:Term.t) (c:t): bool =
      i = j
 
   | Lambda (nme,tpa,ta), Lambda (_,tpb,tb) when equivalent tpa tpb c ->
-     equivalent ta tb (push_simple nme tpa c)
+     equivalent ta tb (Gamma.push_simple nme tpa c)
 
   | All (nme,tpa,ta), All (_,tpb,tb) when equivalent tpa tpb c ->
-     equivalent ta tb (push_simple nme tpa c)
+     equivalent ta tb (Gamma.push_simple nme tpa c)
 
   | Inspect (ea,pa,casesa), Inspect (eb,pb,casesb)
        when equivalent ea eb c && equivalent pa pa c ->
@@ -248,7 +247,7 @@ and equivalent_key (a:Term.t) (b:Term.t) (c:t): bool =
      false
 
 
-and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
+and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:Gamma.t)
     : bool =
   match argsa, argsb with
   | [], [] ->
@@ -274,7 +273,7 @@ and equivalent_arguments (argsa: Term.t list) (argsb:Term.t list) (c:t)
  *)
 
 
-let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
+let rec is_subtype (a:Term.typ) (b:Term.typ) (c:Gamma.t): bool =
   (* Is [a] a subtype of [b] in the context [c]. Assume that both are
      wellformed.  *)
   let ka,argsa = key_normal a c in
@@ -282,10 +281,10 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:t): bool =
   let open Term in
   match ka, kb with
   | Sort sa, Sort sb ->
-     Sorts.sub sa sb (sort_variables c)
+     Sorts.sub sa sb (Gamma.sort_variables c)
   | All (nme,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
-     && is_subtype ta tb (push_simple nme tpa c)
+     && is_subtype ta tb (Gamma.push_simple nme tpa c)
   | _ ->
      equivalent_key ka kb c && equivalent_arguments argsa argsb c
 
@@ -404,19 +403,20 @@ let check_fixpoint_decreasing
                        an inductive type. *)
   in
 
-  let rec check (t:Term.t) (smaller:IntSet.t) (c:t) (n:int)
+  let rec check_recursive_calls
+            (t:Term.t) (smaller:IntSet.t) (c:Gamma.t) (n:int)
           : int option =
     (* Check all recursive calls in the term [t]. Return the number of valid
        recursive calls or None if there are illegal calls. *)
 
     let check_with_lambda t smaller c n =
-      let t1, c1 = push_lambda t c in
-      check t1 smaller c1 n
+      let t1, c1 = Gamma.push_lambda t c in
+      check_recursive_calls t1 smaller c1 n
     in
 
     let check_list lst n =
       Option.fold_list
-        (fun n t _ -> check t smaller c n)
+        (fun n t _ -> check_recursive_calls t smaller c n)
         lst n
     in
 
@@ -474,11 +474,11 @@ let check_fixpoint_decreasing
 
     | Lambda (nme, tp, t) ->
        assert (args = []); (* otherwise [key args] would have a key redex *)
-       check t smaller (Gamma.push_simple nme tp c) n
+       check_recursive_calls t smaller (Gamma.push_simple nme tp c) n
 
     | All (nme, tp, t) ->
        assert (args = []); (* product cannot be applied *)
-       check t smaller (Gamma.push_simple nme tp c) n
+       check_recursive_calls t smaller (Gamma.push_simple nme tp c) n
 
     | Inspect (Variable i, res, cases)
          when can_generate_smaller i smaller c ->
@@ -493,7 +493,7 @@ let check_fixpoint_decreasing
 
     | Inspect (e, res, cases) ->
        Option.(
-        check e smaller c n >>= fun n ->
+        check_recursive_calls e smaller c n >>= fun n ->
         fold_array
           (fun n case j ->
             check_with_lambda (snd case) smaller c n
@@ -510,17 +510,22 @@ let check_fixpoint_decreasing
        Option.fold_array
          (fun n comp _ ->
            let _,_,_,t = comp in
-           check t smaller c1 n)
+           check_recursive_calls t smaller c1 n)
          n fp_inner
   in
 
   Option.(
-    check t IntSet.empty c 0 >>= fun n ->
+    check_recursive_calls t IntSet.empty c 0 >>= fun n ->
     if n = 0 then
       printf "fixpoint element does not contain a recursive call\n%s\n"
         (string_of_term2 c t);
     of_bool (0 < n)
   )
+
+
+
+
+
 
 
 
@@ -538,27 +543,27 @@ let check_fixpoint_decreasing
 
 *)
 
-let rec check (t:Term.t) (c:t): Term.typ option =
+let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
   (* Return the type of [t] in the context [c] if it is wellformed. *)
   let open Term in
   match t with
   | Sort s ->
-     Option.(Sorts.type_of s (count_sorts c) >>= fun s -> Some (Sort s))
+     Option.(Sorts.type_of s (Gamma.count_sorts c) >>= fun s -> Some (Sort s))
 
   | Variable i ->
-     if  i < count c then
-       Some (entry_type i c)
+     if  i < Gamma.count c then
+       Some (Gamma.entry_type i c)
      else
        begin
-         printf "variable (%d/%d) out of bounds\n" i (count c);
+         printf "variable (%d/%d) out of bounds\n" i (Gamma.count c);
          None
        end
 
   | Application (f,a,_) ->
      (* Does the type of [a] fit the argument type of [f]? *)
      Option.(
-      check f c >>= fun ftp ->
-      check a c >>= fun atp ->
+      type_of f c >>= fun ftp ->
+      type_of a c >>= fun atp ->
       (* Now f,ftp and a,atp are wellformed *)
       let hn = key_normal_term ftp c in
       match hn with
@@ -574,11 +579,11 @@ let rec check (t:Term.t) (c:t): Term.typ option =
         - Is [t] a wellformed term in the context [c,tp]?
         - Is the corresponding product wellformed? *)
      Option.(
-      check tp c >>= fun s ->
+      type_of tp c >>= fun s ->
       Term.get_sort s
-      >> check t (push_simple nme tp c) >>= fun ttp ->
+      >> type_of t (Gamma.push_simple nme tp c) >>= fun ttp ->
       let lam_tp = All (nme,tp,ttp) in
-      check lam_tp c
+      type_of lam_tp c
       >> Some lam_tp
      )
   | All (nme,arg_tp,res_tp) ->
@@ -590,12 +595,12 @@ let rec check (t:Term.t) (c:t): Term.typ option =
         expression. *)
      Option.(
       let open Term in
-      check arg_tp c >>= fun arg_s ->
-      check res_tp (push_simple nme arg_tp c) >>= fun res_s ->
+      type_of arg_tp c >>= fun arg_s ->
+      type_of res_tp (Gamma.push_simple nme arg_tp c) >>= fun res_s ->
       product arg_s res_s
      )
   | Inspect (e,res,cases) ->
-     check_inspect e res cases c
+     type_of_inspect e res cases c
   | Fix (idx, arr) ->
      if idx < 0 || Array.length arr <= idx then
        None
@@ -606,7 +611,7 @@ let rec check (t:Term.t) (c:t): Term.typ option =
           Some typ)
 
 
-and check_inspect
+and type_of_inspect
 (e:Term.t) (res:Term.t) (cases:(Term.t*Term.t) array) (c:Gamma.t)
     : Term.typ option =
   (* inspect(e,res,cases)
@@ -632,13 +637,13 @@ and check_inspect
 
    *)
   Option.(
-    check e c >>= fun e_tp ->
+    type_of e c >>= fun e_tp ->
     check_inductive e_tp c >>= fun (ivar,params,args,ind,ind_idx) ->
 
     (* The term [res(args,e)] is the result type of the expression, its sort
        must satisfy the potential elimination restrictions of [I]. *)
     let res_tp = Term.apply1 (Term.apply_args res args) e in
-    check res_tp c >>= fun res_s ->
+    type_of res_tp c >>= fun res_s ->
     if Inductive.is_restricted ind_idx ind && res_s <> Term.proposition then
       None
     else if Inductive.nconstructors ind_idx ind <> Array.length cases then
@@ -652,8 +657,8 @@ and check_inspect
               (Term.Variable (Gamma.constructor_of_inductive_variable j ivar c))
               params in
           None <>
-            (check cj0 c >>= fun _ ->
-             check cj  c >>= fun cj_tp ->
+            (type_of cj0 c >>= fun _ ->
+             type_of cj  c >>= fun cj_tp ->
              check_case cj cj_tp fj res c
             )
         )
@@ -665,7 +670,7 @@ and check_inspect
   )
 
 
-and check_inductive (tp:Term.typ) (c:t)
+and check_inductive (tp:Term.typ) (c:Gamma.t)
     : (Term.t           (* I *)
        * Term.t list    (* params *)
        * Term.t list    (* args *)
@@ -703,7 +708,7 @@ and check_case
        Some (c_tp,f_tp,i,c)
   in
   Option.(
-    check fj c >>= fun fj_tp ->
+    type_of fj c >>= fun fj_tp ->
     split_product cj_tp fj_tp 0 c >>= fun (i_tp,res_tp,n,c1) ->
     check_inductive i_tp c1 >>= fun (ivar,params,args,ind,ind_idx) ->
     let res_tp_req =
@@ -711,7 +716,7 @@ and check_case
         (Term.apply_args (Term.up n res) args)
         (Term.apply_standard n 0 (Term.up n cj))
     in
-    check res_tp_req c1 >>= fun _ ->
+    type_of res_tp_req c1 >>= fun _ ->
     if equivalent res_tp_req res_tp c1 then
       Some ()
     else
@@ -724,7 +729,7 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
      - All recursive calls must be with a structurally decreasing argument *)
   Option.(
     Option.of_bool
-      (Array.for_all (fun (_,tp,_,_) -> check tp c <> None) fp)
+      (Array.for_all (fun (_,tp,_,_) -> type_of tp c <> None) fp)
     >> let c1 = Gamma.push_fixpoint fp c in
        let len = Array.length fp in
        (* c1 contains all types of the [len] fixpoints. *)
@@ -733,7 +738,7 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
        interval_fold
          (fun _ i ->
            let nme,typ,decr,t = fp.(i) in
-           check t c1 >>= fun tp ->
+           type_of t c1 >>= fun tp ->
            Option.of_bool
              (equivalent tp (Term.up len typ) c1)
            >>
@@ -752,21 +757,21 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
 
 
 
-let check_with_sort (t:Term.t) (c:t): (Term.typ*Term.typ) option =
+let type_and_sort_of (t:Term.t) (c:Gamma.t): (Term.typ*Term.typ) option =
   Option.(
-    check t c >>= fun tp ->
-    check tp c >>= fun s ->
+    type_of t c >>= fun tp ->
+    type_of tp c >>= fun s ->
     Some (tp,s)
   )
 
 
-let is_wellformed (t:Term.t) (c:t): bool =
-  check t c <> None
+let is_wellformed (t:Term.t) (c:Gamma.t): bool =
+  type_of t c <> None
 
 
-let is_wellformed_type (tp:Term.t) (c:t): bool =
+let is_wellformed_type (tp:Term.t) (c:Gamma.t): bool =
   Option.(
-    check tp c >>= fun s ->
+    type_of tp c >>= fun s ->
     Term.get_sort s
   ) <> None
 
@@ -982,7 +987,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
      [s]. The sort [s] is not the sort of the complete type. Even if the
      complete type is a type, [s] is not necessarily a sort. It could be a
      type as well. *)
-  let check_types (c:t): unit option =
+  let check_types (c:Gamma.t): unit option =
     Option.(
       fold_array
         (fun _ (_,tp) _ ->
@@ -991,7 +996,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
         () (Inductive.types0 ind)
     )
   in
-  let check_constructors (c:t): unit option =
+  let check_constructors (c:Gamma.t): unit option =
     let ni = Inductive.ntypes ind in
     let i_start = Gamma.count c in
     let i_beyond = i_start + ni in
@@ -1042,7 +1047,7 @@ let predicate (sv0:int): Gamma.Definition.t =
   let v0 = sort_variable sv0 in
   let t = Lambda (Some "A", v0, arrow variable0 proposition)
   and typ = All (Some "A", v0, v0) in
-  Definition.make_simple (Some "Predicate") typ t []
+  Gamma.Definition.make_simple (Some "Predicate") typ t []
 
 
 (* Relation (A,B:Any): Any := A -> Proposition *)
@@ -1063,11 +1068,11 @@ let binary_relation (sv0:int): Gamma.Definition.t =
                   v1,
                   product1 v0 v1))
   in
-  Definition.make_simple (Some "Relation") typ t []
+  Gamma.Definition.make_simple (Some "Relation") typ t []
 
 
 (* Endo_relation (A:Any): Any := Relation(A,A) *)
-let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Definition.t =
+let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Gamma.Definition.t =
   let open Term in
   let t =
     Lambda
@@ -1080,7 +1085,7 @@ let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Definition.t =
        sort_variable sv0,
        product1 (sort_variable rel_sv0) (sort_variable (rel_sv0+1)))
   in
-  Definition.make_simple (Some "Endorelation") typ t
+  Gamma.Definition.make_simple (Some "Endorelation") typ t
     [(sv0,rel_sv0,false); (sv0,rel_sv0+1,false)]
 
 
@@ -1173,8 +1178,8 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
    ============================================================
  *)
 
-let print_type_of (t:Term.t) (c:t): unit =
-  match check t c with
+let print_type_of (t:Term.t) (c:Gamma.t): unit =
+  match type_of t c with
   | None ->
      printf "not wellformed %s\n" (string_of_term c t);
   | Some tp ->
@@ -1197,56 +1202,57 @@ let test (): unit =
   in
   Printf.printf "test type checker\n";
   let open Term in
+  let open Gamma in
   let c = push_unnamed datatype
             (push_sorts 2 [0,1,false] empty) in
   let c1 = push_unnamed variable0 c in
   assert ( is_wellformed (sort_variable 0) c);
   assert ( is_wellformed (sort_variable 1) c);
-  assert ( check (sort_variable 0) c = Some (sort_variable_type 0));
-  assert ( check (sort_variable 2) c = None);
-  assert ( check variable0 c = Some datatype);
-  assert ( check variable1 c1 = Some datatype);
+  assert ( type_of (sort_variable 0) c = Some (sort_variable_type 0));
+  assert ( type_of (sort_variable 2) c = None);
+  assert ( type_of variable0 c = Some datatype);
+  assert ( type_of variable1 c1 = Some datatype);
   assert ( is_wellformed variable0 c1);
-  assert ( check variable0 c1 = Some variable1);
+  assert ( type_of variable0 c1 = Some variable1);
   assert
     begin
-      Option.( check_with_sort variable0 c1 >>= fun (_,s) ->
+      Option.( type_and_sort_of variable0 c1 >>= fun (_,s) ->
                Some s
       ) = Some datatype
     end;
 
   (* Proposition -> Proposition *)
-  assert ( check (arrow proposition proposition) c = Some any1);
+  assert ( type_of (arrow proposition proposition) c = Some any1);
 
   (* Natural -> Proposition *)
-  assert ( check (arrow variable0 proposition) c = Some any1);
+  assert ( type_of (arrow variable0 proposition) c = Some any1);
 
   (* (Natural -> Proposition) -> Proposition **)
-  assert ( check (arrow
+  assert ( type_of (arrow
                     (arrow variable0 proposition)
                     proposition) c = Some any1);
 
   (* all(A:Prop) A -> A : Proposition *)
   assert ( product proposition proposition = Some proposition );
   assert ( product datatype proposition    = Some proposition );
-  assert ( check (All (None,
+  assert ( type_of (All (None,
                        proposition,
                        arrow variable0 variable0)) c
            = Some proposition);
 
   (* all(n:Natural) n -> n is illformed, n is not a type! *)
-  assert ( check (All (None,
+  assert ( type_of (All (None,
                        Variable 0,
                        arrow variable0 variable0)) c
            = None);
 
   (* Natural -> Natural : Datatype *)
   assert ( product datatype datatype    = Some datatype );
-  assert ( check (arrow variable0 variable0) c
+  assert ( type_of (arrow variable0 variable0) c
            = Some datatype);
 
   (* ((A:Prop,p:A) := p): all(A:Prop) A -> A *)
-  assert ( check
+  assert ( type_of
              (Lambda (None,
                       proposition,
                       Lambda (None,
@@ -1262,13 +1268,13 @@ let test (): unit =
   (* All prover type:
          all(p:Proposition) p: Proposition
      is equivalent to false *)
-  assert( check (All (Some "p", proposition, variable0)) empty
+  assert( type_of (All (Some "p", proposition, variable0)) empty
           = Some proposition);
 
   (* All inhabitor type:
          all(p:SV0) p:  SV0'
      is equivalent to false *)
-  assert( check (All (Some "T", sort_variable 0, variable0)) c
+  assert( type_of (All (Some "T", sort_variable 0, variable0)) c
           = Some (sort_variable_type 0));
 
   assert (check_inductive_definition Inductive.make_natural empty <> None);
@@ -1286,9 +1292,9 @@ let test (): unit =
       in
       assert (check_inductive_definition ind empty <> None);
       let c = push_inductive ind empty in
-      assert (check variable2 c = Some datatype);
-      assert (check variable1 c = Some variable2);
-      assert (check variable0 c = Some (arrow variable2 variable2))
+      assert (type_of variable2 c = Some datatype);
+      assert (type_of variable1 c = Some variable2);
+      assert (type_of variable0 c = Some (arrow variable2 variable2))
     );
 
 
@@ -1314,14 +1320,14 @@ let test (): unit =
     begin
       let d = predicate 0 in
       equal_opt
-        (check (Definition.term d) c)
+        (type_of (Definition.term d) c)
         (Definition.typ d)
     end;
   assert
     begin
       let d = binary_relation 0 in
       equal_opt
-        (check (Definition.term d) c)
+        (type_of (Definition.term d) c)
         (Definition.typ d)
     end;
   begin
@@ -1330,7 +1336,7 @@ let test (): unit =
       (push_sorts 3 (Definition.constraints endo) empty)
       |> push_definition (binary_relation 0)
     in
-    assert (equal_opt (check (Definition.term endo) c) (Definition.typ endo));
+    assert (equal_opt (type_of (Definition.term endo) c) (Definition.typ endo));
     let c =
       push_definition endo c
       |> push_simple (Some "Natural") datatype in
@@ -1349,7 +1355,7 @@ let test (): unit =
     printf "%s\n" (string_of_term2 c (Definition.term pred));
     assert (is_wellformed (Definition.term pred) c);
     assert (equivalent_opt
-              (check (Definition.term pred) c)
+              (type_of (Definition.term pred) c)
               (Definition.typ pred)
               c);
     let plus_fp = nat_add_fp 2 in
