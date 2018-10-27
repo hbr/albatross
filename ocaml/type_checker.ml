@@ -669,9 +669,13 @@ and check_inductive (tp:Term.typ) (c:t)
     : (Term.t           (* I *)
        * Term.t list    (* params *)
        * Term.t list    (* args *)
-       * Inductive.t
-       * int            (* ind_idx *)
+       * Inductive.t    (* inductive structure *)
+       * int            (* position in the family *)
       ) option =
+  (* Check if [tp] is an inductive type. In case of yes, return the variable
+     representing the inductive type, the parameter and arguments such that [I
+     params args] is the key normal form of [tp], the inductive structure and
+     the position of the inductive type in its family. *)
   Option.(
     let ivar,args = key_normal0 tp [] c in
     Gamma.inductive_index ivar c >>= fun (ind_idx,ind) ->
@@ -718,35 +722,32 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
   (* - All types must be valid in the current environment
      - All terms must have the corresponding type
      - All recursive calls must be with a structurally decreasing argument *)
-  let len = Array.length fp in
   Option.(
-    (* Check all types and push them into the context. *)
-    fold_array
-      (fun ci element i ->
-        let nme,typ,decr,t = element in
-        check typ c
-        >> Some (Gamma.push nme (Term2.up i typ) ci)
-      )
-      c fp
-    >>= fun c1 -> (* Now c1 contains all types of the [len] fixpoints. *)
-    (* Now check all fixpoints that they have the correct type and are
-       structurally decreasing. *)
-    interval_fold
-      (fun _ i ->
-        let nme,typ,decr,t = fp.(i) in
-        check t c1 >>= fun tp ->
-        of_bool (equivalent tp (Term.up len typ) c1)
-        >>
-          (* fixpoint [i] has the correct type. *)
-          let t2,c2 = Gamma.push_lambda t c1 in
-          let nargs = Gamma.count c2 - Gamma.count c1 in
-          of_bool (decr < nargs)
-          >> check_inductive
-               (Gamma.entry_type (nargs - decr - 1) c2) c2
-          >>= fun (_,_,_,ind,_) ->
-          check_fixpoint_decreasing t2 fp nargs decr c2
-      )
-      (Some ()) 0 len
+    Option.of_bool
+      (Array.for_all (fun (_,tp,_,_) -> check tp c <> None) fp)
+    >> let c1 = Gamma.push_fixpoint fp c in
+       let len = Array.length fp in
+       (* c1 contains all types of the [len] fixpoints. *)
+       (* Check all fixpoints that they have the correct type and are
+          structurally decreasing. *)
+       interval_fold
+         (fun _ i ->
+           let nme,typ,decr,t = fp.(i) in
+           check t c1 >>= fun tp ->
+           Option.of_bool
+             (equivalent tp (Term.up len typ) c1)
+           >>
+             (* term of [fp.(i)] has the correct type. *)
+             let t2,c2 = Gamma.push_lambda t c1 in
+             let nargs = Gamma.count c2 - Gamma.count c1 in
+             Option.of_bool (decr < nargs) (* are there sufficient arguments?
+                                              *)
+             >> check_inductive
+                  (Gamma.entry_type (nargs - decr - 1) c2) c2
+             >>= fun (_,_,_,ind,_) ->
+             check_fixpoint_decreasing t2 fp nargs decr c2
+         )
+         (Some ()) 0 len
   )
 
 
