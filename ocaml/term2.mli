@@ -48,6 +48,7 @@ val variable4: t
 val variable5: t
 val apply1: t -> t -> t
 val apply2: t -> t -> t -> t
+val apply3: t -> t -> t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool
@@ -102,3 +103,7 @@ val split_product: typ -> arguments * typ
 val push_product: arguments -> typ -> typ
 
 val beta_reduce: t -> t list -> t * t list
+
+
+val to_level: int -> t -> t
+val to_index: int -> t -> t

@@ -78,6 +78,9 @@ let apply1 (f:t) (a:t): t =
 let apply2 (f:t) (a:t) (b:t): t =
   apply1 (apply1 f a) b
 
+let apply3 (f:t) (a:t) (b:t) (c:t): t =
+  apply1 (apply1 (apply1 f a) b) c
+
 
 
 let rec equal (a:t) (b:t): bool =
@@ -420,3 +423,42 @@ let beta_reduce (f:t) (args:t list): t * t list =
        args_rest
   in
   beta f [] args
+
+
+let rec to_level (n:int) (t:t): t =
+  (* Transform the variables of [t] which are De Bruijn indices into De Bruijn
+     levels. The term [t] has [n] free variables. *)
+  match t with
+  | Sort _ ->
+     t
+  | Variable i ->
+     Variable (n - i - 1)
+  | Application (f, a, oo) ->
+     Application (to_level n f, to_level n a, oo)
+  | Lambda (nme, tp, t) ->
+     Lambda (nme, to_level n tp, to_level (n+1) t)
+  | All (nme, tp, t) ->
+     All (nme, to_level n tp, to_level (n+1) t)
+  | Inspect (e, r, cases) ->
+     Inspect (to_level n e,
+              to_level n r,
+              Array.map
+                (fun (c,f) ->
+                  to_level n c,
+                  to_level n f)
+                cases)
+  | Fix (i, fp) ->
+     Fix (i,
+          let len = Array.length fp in
+          Array.map
+            (fun (nme,tp,k,t) ->
+              nme, to_level n tp, k, to_level (n+len) t)
+          fp)
+
+
+let to_index (n:int) (t:t): t =
+  (* Transform the variables of [t] which are De Bruijn levels into De Bruijn
+     indices. The term [t] has [n] free variables. *)
+  let res = to_level n t in
+  assert (to_level n res = t);
+  res

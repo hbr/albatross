@@ -191,6 +191,12 @@ let make_simple nme params tp cons =
   make params types constructors
 
 
+
+
+
+
+
+
 (* class
        Natural
    create
@@ -212,6 +218,14 @@ let make_natural: t =
         [|None,variable0|] [||]
     |]
 
+
+
+
+
+
+
+
+
 (* class
        List(A)
    create
@@ -225,16 +239,26 @@ let make_list (sv0:int): t =
     (some_feature_name "List")
     [| Some "A",sort_variable sv0 |]
     (sort_variable (sv0+1))
-    [| Constructor.make
-         some_feature_bracket
-         [||]
-         [||];
-       Constructor.make
-         (some_feature_operator Operator.Caretop)
-         [| None, variable0;  (* A *)
-            None, (apply1 variable2 variable1) (* List(A) *) |]
-         [| |]
-    |]
+    begin
+      let lst = variable0
+      and a = variable1
+      in
+      [|
+        Constructor.make
+          some_feature_bracket
+          [||]
+          [||];
+        Constructor.make
+          (some_feature_operator Operator.Caretop)
+          [| None, a |> to_index 2;
+             None, apply1 lst a |> to_index 3 |]
+          [||]
+      |]
+    end
+
+
+
+
 
 
 (* class false create end *)
@@ -258,6 +282,8 @@ let make_true: t =
          (some_feature_name "true_is_valid") [||] [||] |]
 
 
+
+
 (* class
        (and) (a,b:Proposition): Proposition
    create
@@ -275,6 +301,9 @@ let make_and: t =
          [| None, variable1; None, variable1|]
          [||]
     |]
+
+
+
 
 
 (* class
@@ -302,6 +331,8 @@ let make_or: t =
 
 
 
+
+
 (* class
        accessible (A:Any, r:Relation(A,A), y:A): Proposition
    create
@@ -318,17 +349,26 @@ let make_accessible (sv0:int): t =
        Some "r", arrow variable0 (arrow variable0 proposition);
        Some "y", variable1|]
     proposition
-    [| Constructor.make
+    [| let acc = variable0
+       and a =   variable1
+       and r =   variable2
+       and y =   variable3
+       and x =   variable4
+       and n =   4 in
+       Constructor.make
          (some_feature_name "access_intro")
          [| Some "f",
             All(Some "x",
-                variable2,
-                arrow
-                  (apply_args variable2 [variable0;variable1])
-                  (apply_args variable4 [variable3;variable2;variable0])
-              ) |]
+                a,
+                All(None, apply2 r x y, apply3 acc a r y)
+              )
+            |> to_index n
+         |]
          [||]
     |]
+
+
+
 
 
 (* class
