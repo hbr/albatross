@@ -35,6 +35,11 @@ val constructor_index: Term.t -> t -> (int * int * Inductive.t) option
 val count_inductive_params_and_types: int -> t -> (int * int) option
 val constructor_types: int -> Term.t list -> t -> Term.typ list
 
+val inductive_family: int -> t -> int * Inductive.t
+(** [inductive_family i c] returns the inductive family of the variable [i]
+   and the position of the type of [i] within the family. Assume that [i] is
+   an inductive definition. *)
+
 val is_constructor: int -> t -> bool
 val constructor_offset: int -> t -> int
 val constructor_of_inductive_variable: int -> Term2.t -> t -> int

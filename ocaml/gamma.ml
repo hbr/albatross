@@ -219,6 +219,17 @@ let constructor_types (i:int) (params:Term.t list) (c:t): Term.typ list =
   | _ ->
      assert false (* Illegal call: [i] is not an inductive type. *)
 
+
+
+let inductive_family (i:int) (c:t): int * Inductive.t =
+  match (entry i c).just with
+  | Indtype (ith,ind) ->
+     ith, ind
+  | _ ->
+     assert false (* Illegal call: [i] is not part of an inductive definition.*)
+
+
+
 let empty: t =
   {sort_variables = Sorts.Variables.empty;
    gamma = IArr.empty;
