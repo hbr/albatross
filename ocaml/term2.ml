@@ -22,6 +22,8 @@ and fixpoint =
   (Feature_name.t option * typ * decr_index * t) array (* typ in outer context,
                                                           t in inner context *)
 
+
+type fname = Feature_name.t option
 type name_type = string option * typ
 type fname_type = Feature_name.t option * typ
 type gamma = fname_type array
@@ -79,7 +81,10 @@ let apply2 (f:t) (a:t) (b:t): t =
   apply1 (apply1 f a) b
 
 let apply3 (f:t) (a:t) (b:t) (c:t): t =
-  apply1 (apply1 (apply1 f a) b) c
+  apply1 (apply2 f a b) c
+
+let apply4 (f:t) (a:t) (b:t) (c:t) (d:t): t =
+  apply1 (apply3 f a b c) d
 
 
 

@@ -186,6 +186,13 @@ let constructor_offset (i:int) (c:t): int =
   assert false (* nyi *)
 
 
+let constructor_arguments (ivar:int) (j:int) (c:t): Inductive.carg_class list =
+  match (entry ivar c).just with
+  | Indtype (i,ind) ->
+     Inductive.constructor_arguments i j ind
+  | _ ->
+     assert false (* Illegal call *)
+
 let constructor_of_inductive (j:int) (ivar:int) (c:t): int =
   (* The index of the j-th constructor of the inductive type i *)
   match  (entry ivar c).just with
@@ -306,7 +313,8 @@ let push_lambda (t:Term.t) (c:t): Term.t * t =
 
 
 let push_ind_params (ind: Inductive.t) (c:t): t =
-  push_arguments (Inductive.params0 ind) c
+  assert false (* necessary? *)
+(*push_arguments (Inductive.params0 ind) c*)
 
 
 let push_ind_types_params (ind:Inductive.t) (c:t): t =
@@ -326,25 +334,15 @@ let push_inductive
              just = Indtype (i,ind)}
             !gr
   done;
+  let nc = ref 0 in
   for i = 0 to Inductive.ntypes ind - 1 do
     for j = 0 to Inductive.nconstructors i ind - 1 do
       let nme,typ = Inductive.ctype i j ind in
       gr := IArr.push
-              {typ; just = Constructor (i,j,ind)}
-              !gr
+              {typ  = Term.up !nc typ;
+               just = Constructor (i,j,ind)}
+              !gr;
+      nc := !nc + 1
     done
   done;
   {c with gamma = !gr}
-
-
-
-let push_simple_inductive
-      (nme: Feature_name.t option)
-      (params:Term.arguments)
-      (tp: Term.typ)
-      (cons: Inductive.Constructor.t array)
-      (c:t)
-    :t =
-  let types = [| (nme, tp) |]
-  and constructors = [| cons |] in
-  push_inductive (Inductive.make params types constructors) c

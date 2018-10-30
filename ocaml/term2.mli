@@ -25,6 +25,7 @@ and fixpoint = (Feature_name.t option * typ * decr_index * t) array
    is the size of the fixpoint (usually 1). The bound variable [j] represents
    the component [n - j - 1]. *)
 
+type fname = Feature_name.t option
 type name_type = string option * typ
 type fname_type = Feature_name.t option * typ
 type gamma = fname_type array
@@ -49,6 +50,7 @@ val variable5: t
 val apply1: t -> t -> t
 val apply2: t -> t -> t -> t
 val apply3: t -> t -> t -> t -> t
+val apply4: t -> t -> t -> t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool

@@ -387,20 +387,33 @@ let check_fixpoint_decreasing
        variable [i] to the set of structurally smaller variables. The
        constructor arguments are not yet pushed into the context. Therefore
        the level starts at [Gamma.count c]. *)
-    let tp = Gamma.entry_type i c in
-    let ivar,args = key_normal0 tp [] c in
-    match Gamma.inductive_index ivar c with
-    | Some (ind_idx,ind) ->
-       let rec_args = Inductive.recursive_arguments ind_idx j ind in
-       List.fold_left
-         (fun smaller recarg ->
-           IntSet.add (Gamma.count c + recarg) smaller
-         )
-         smaller rec_args
-    | None ->
-       assert false (* Variable i occurs as the inspected expression. The
-                       inspect expression is wellformed, therefore it must be
-                       an inductive type. *)
+    let tp = Gamma.entry_type i c
+    and cnt = Gamma.count c
+    in
+    let key,args = key_normal0 tp [] c
+    in
+    match key with
+    | Term.Variable ivar ->
+       let _,smaller =
+         List.fold_left
+           (fun (k,smaller) cls ->
+             let open Inductive in
+             match cls with
+             | Normal ->
+                k+1, smaller
+             | Recursive ->
+                k+1, IntSet.add (cnt + k) smaller
+             | Positive ->
+                k+1,smaller (* nyi: Missing check of nested inductive types *)
+           )
+           (0,smaller)
+           (Gamma.constructor_arguments ivar j c)
+       in
+       smaller
+    | _ ->
+       assert false (* Illegal call: [Variable i] is either the decreasing
+                       argument or in the list of structurally smaller
+                       variables. Therefore its type must be inductive. *)
   in
 
   let rec check_recursive_calls
@@ -797,68 +810,89 @@ let is_wellformed_type (tp:Term.t) (c:Gamma.t): bool =
 (* ==== Positivity check of constructor types ==== *)
 let check_constructor_type_positivity
       (tp:Term.typ)  (* constructor type *)
+      (argcls:Inductive.carg_class list) (* classification of arguments:
+                                            Normal, Positive or Recursive *)
       (i_start:int)  (* level of the first inductive type *)
       (i_current:int)(* level of the current inductive type *)
       (i_beyond:int) (* level beyond the last inductive type *)
+      (parpos:bool array) (* parpos.(i) = parameter i is positive *)
       (c:Gamma.t)
     : unit option =
-  printf "  check positivity of %s\n" (string_of_term2 c tp);
+  printf "  check positivity of %s (nargs %d)\n"
+    (string_of_term2 c tp)
+    (List.length argcls);
   (* Check if [tp] is a valid constructor type for the inductive type
-     [i_current] in the context [c].
+     [i_current] in the context [c] which contains all absolute inductive types
+     and the parameters.
 
      Assume that [tp] is a wellformed type.
 
      A valid constructor type constructs an object of the inductive type
      [i_current] which is a type of the family and it uses in its arguments
      other objects of the inductive family only positively i.e. only already
-     constructed objects.
-   *)
+     constructed objects.  *)
   assert (i_start <= i_current);
   assert (i_current < i_beyond);
-
-  let is_family_inductive c i =
+  let par_beyond = i_beyond + Array.length parpos
+  in
+  let is_of_family c i =
     let li = Gamma.to_level i c in
     i_start <= li && li < i_beyond
+  and is_positive_parameter c i =
+    let li = Gamma.to_level i c in
+    i_beyond <= li && li < par_beyond && parpos.(li - i_beyond)
   in
-  let has_of_family t c =
-    Term.has_variables (is_family_inductive c) t
+  let is_positive c i =
+    is_of_family c i || is_positive_parameter c i
+  in
+  let has_of_positive c t =
+    Term.has_variables (is_positive c) t
   in
 
-  let rec check_constructor_type nested tp c =
+  let rec check_constructor_type tp argcls c =
+    (* Check all argument types and the final type of [tp]. *)
 
     let key,args = key_normal tp c in
 
     let open Term in
-    match key, args with
+    match key, args, argcls with
 
-    | Sort s, [] ->
+    | Sort s, [], []  ->
        None (* A sort cannot be a constructor type *)
 
-    | Variable i, _ ->
-       if nested then (* In 'check_constructor_argument' it has already been
-                         checked that the nested inductive type is non mutual
-                         and inductive types of the family are used only in
-                         parameters of the nested type. *)
-         Some ()
-       else if i_current = Gamma.to_level i c then
-         (* The arguments are correct because the type is wellformed. *)
+    | Variable i, _, [] ->
+       if i_current = Gamma.to_level i c then
+         (* [key args] has the form [I args] where [I] represents the current
+            inductive type of the family. Since [key args] is wellformed it
+            has the form [I params iargs]. *)
          Some ()
        else
+         (* An object of the current inductive type is not constructed. *)
          None
 
-    | All (nme, arg, tp), [] ->
+    | All (nme, arg, tp), [], cls :: argcls ->
        Option.(
-        check_constructor_argument nested arg c
-        >> check_constructor_type nested tp (Gamma.push_simple nme arg c)
+        check_constructor_argument arg cls c
+        >> check_constructor_type tp argcls (Gamma.push_simple nme arg c)
        )
-    | _, _ ->
+    | _, _, _ ->
        assert false (* Illegal call: The type [tp] is not wellformed. *)
 
-  and check_constructor_argument nested tp c =
+  and check_constructor_argument tp cls c =
     (* [tp] is the type of an argument of the constructor. If it is a function
        type, the argument types of the function must not contain any inductive
-       type of the family. The final type might or might not contain an
-       inductive type of the family. *)
+       type of the family nor any positive parameter. For [cls = Normal] the
+       final type must not contain a positive parameter nor an inductive type
+       of the family. For [cls = Recursive] the final type must contain an
+       inductive type of the family. For [cls = Positive] the final type must
+       contain a positive parameter. *)
+    printf "    check constructor argument (%s) %s\n"
+      (let open Inductive in
+       match cls with
+       | Normal -> "Normal"
+       | Recursive -> "Recursive"
+       | Positive -> "Positive")
+      (string_of_term2 c tp);
 
     let key,args = key_normal tp c in
 
@@ -870,70 +904,49 @@ let check_constructor_type_positivity
        Some ()
 
     | Variable i, _ ->
-       if nested then (* A previous call to 'check_constructor_argument' has
-                         already verified that the nesting is correct (non
-                         mutual and nesting only in parameters. *)
-         Some ()
+       (* [key args] is a final type of the constructor type. *)
+       begin
+         printf "    check argument final type %s\n"
+           (string_of_term2 c (Term.apply_args key args));
+         match cls with
+         | Inductive.Normal
+              when not (is_positive c i)
+                   && not (List.exists (has_of_positive c) args) ->
+            (* No inductive type of the family and no positive parameter is
+               involved, neither in the key nor in the arguments. *)
+            Some ()
 
-       else if is_family_inductive c i then
-         Some ()
+         | Inductive.Recursive when is_of_family c i ->
+            Some ()
 
-       else (* The constructor argument type [key args] is not a type of the
-               inductive family. We have to find out, if an member of the
-               inductive family is used within [args] (nesting condition). *)
-         let beyond_occurrence =
-           List.fold_left
-             (fun n arg -> if has_of_family arg c then n + 1 else n)
-             0 args
-         in
-         if beyond_occurrence = 0
-         then (* No inductive type of the family occurs in [key args]. *)
-           Some ()
-         else (* An inductive type of the family occurs in the argument before
-                 [beyond_occurrence], none in the rest. *)
-           begin
-             match Gamma.count_inductive_params_and_types i c with
-             | Some (nparams,ntypes) ->
-                if beyond_occurrence <= nparams
-                   && ntypes = 1 (* The nested inductive type is is non
-                                    mutually defined and types of the
-                                    inductive family are used only in the
-                                    parameters. *)
-                   && List.for_all
-                        (fun c_tp ->
-                          check_constructor_type true c_tp c
-                          <> None)
-                        (Gamma.constructor_types i (Mylist.take nparams args) c)
-                then (* All constructor types of the other inductive type are
-                        valid for the inductive family. *)
-                  Some ()
-                else (* An inductive type of the family occurs outside the
-                        parameters of the other inductive type or the other
-                        inductive type is mutually defined. *)
-                  None
-             | None ->
-                (* An inductive type of the family occurs in [args], but the key
-                   [key] is not another inductive type. *)
-                None
-           end
+         | Inductive.Recursive ->
+            assert false (* nyi: nesting case *)
+
+         | Inductive.Positive when is_positive_parameter c i ->
+            Some ()
+
+         | _ ->
+            None
+       end
 
     | All (nme, arg, tp), [] ->
        (* The argument type is a function type. None of the argument types of
           the function is allowed to contain an inductive type of the
-          family. *)
-       if has_of_family arg c then
+          family nor a positive parameter. *)
+       printf "    function arg %s\n" (string_of_term2 c arg);
+       if has_of_positive c arg then
          (printf "  strict positivity failed for %s\n"
            (string_of_term2 c arg);
          None)
        else
-         check_constructor_argument nested tp (Gamma.push_simple nme arg c)
+         check_constructor_argument tp cls (Gamma.push_simple nme arg c)
 
     | _, _ ->
        assert false (* Illegal call: The argument type [tp] is not
                        wellformed. *)
 
   in
-  check_constructor_type false tp c
+  check_constructor_type tp argcls c
 
 
 
@@ -961,11 +974,11 @@ let check_arity (tp:Term.typ) (c:Gamma.t): Sorts.t option =
 
 
 
-
+(* Check if [ind] is a valid inductive definition. *)
 let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     : Inductive.t option =
 
-  (* Are all parameter types are valid? *)
+  (* Are all parameter types are valid in the outer context? *)
   let check_parameter (c:Gamma.t): Gamma.t option =
     Option.fold_array
       (fun c (nme,tp) i ->
@@ -974,7 +987,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
         else
           None
       )
-      c (Inductive.params ind)
+      c (Inductive.params0 ind)
   in
 
 
@@ -988,6 +1001,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
      complete type is a type, [s] is not necessarily a sort. It could be a
      type as well. *)
   let check_types (c:Gamma.t): unit option =
+    (* [c] is a context with the parameters. *)
     Option.(
       fold_array
         (fun _ (_,tp) _ ->
@@ -1000,6 +1014,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     let ni = Inductive.ntypes ind in
     let i_start = Gamma.count c in
     let i_beyond = i_start + ni in
+    let parpos = Inductive.positive_parameters ind in
     let cc = Gamma.push_ind_types_params ind c in
     Option.fold_interval
       ((fun _ ith ->
@@ -1007,13 +1022,16 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
           (string_of_term2
              cc
              (Term.Variable (Gamma.to_index (i_start + ith) cc)));
-        Option.fold_list
-          (fun _ (nme,c_type) _ ->
-            check_constructor_type_positivity
-              c_type i_start (i_start + ith) i_beyond cc
+        Option.fold_array
+          (fun _ (nme,c_type,argcls) _ ->
+            Option.(
+             type_of c_type cc (* [c_type] is wellformed.*)
+             >> check_constructor_type_positivity
+                  c_type argcls i_start (i_start + ith) i_beyond parpos cc
+            )
           )
-          (Inductive.constructors ith ind)
           ()
+          (Inductive.constructors ith ind)
       ): unit -> int -> unit option)
       () 0 ni
   in
@@ -1305,11 +1323,17 @@ let test (): unit =
    *)
   assert
     begin
+      let open Inductive in
       let ind =
-        Inductive.make_simple
-          (some_feature_name "C") [||] datatype
-          [| Inductive.Constructor.make
-               None [| None, arrow variable0 variable0 |] [||] |]
+        make_simple
+          (some_feature_name "C")
+          []
+          datatype
+          false
+          [cmake
+             None
+             [Recursive]
+             (arrow (arrow variable0 variable0) variable0)]
       in
       check_inductive_definition ind empty = None
     end;
