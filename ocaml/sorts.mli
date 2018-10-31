@@ -18,6 +18,18 @@ sig
   val le: int -> int -> t -> bool
   val lt: int -> int -> t -> bool
   val empty: t
+
+  (** [push n [lo,hi,strict; .... ] vs] adds n new sort variables and a list
+     of constraints to the sort variables [vs].
+
+     constraint element:
+
+         lo,hi,false: lo <= hi
+
+         lo,hi,true: lo < hi
+
+     The new constraints must not introduce any circularity.
+ *)
   val push: int -> (int*int*bool) list -> t -> t
 end
 

@@ -3,6 +3,9 @@ open Container
 
 module IArr = Immutable_array
 
+
+(* Set of lower bound sort variables. A variable can be either a strict lower
+   bound or a lower bound in the set. *)
 module Set =
   struct
     type t = bool IntMap.t (* maps to true, if type of variable is meant,
@@ -49,6 +52,7 @@ module Set =
                  true)
              s)
       with Not_found ->
+        Printf.printf "Sorts.Set.type_of s %d  no type\n" n;
         None
 
     let is_lower_bound (i:int) (s:t): bool =
@@ -64,7 +68,8 @@ module Set =
 
 
 
-
+(* Variables implements an array of sort variables. Each sort variable is
+   characterized by its set of lower bounds. *)
 module Variables =
   struct
     type t = Set.t IArr.t
@@ -89,6 +94,16 @@ module Variables =
 
 
     let push (n:int) (cs:(int*int*bool) list) (vs:t): t =
+      (* Add [n] new sort variables and the constraints [cs] to the variables
+         [vs].
+
+         A constraint consist of a lower variable, a higher variable and a
+         strictness flag. With the strictness flag set, the lower variable is
+         strictly lower than the higher variable.
+
+         The new constraints must not introduce any circularity.
+
+       *)
       let nvars = n + count vs
       and vsr = ref vs in
       for i = 0 to n - 1 do
