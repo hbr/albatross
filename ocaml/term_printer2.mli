@@ -12,6 +12,7 @@ module type CONTEXT =
     val push_simple: string option -> Term.typ -> t -> t
     val push_arguments: Term.arguments -> t -> t
     val push_fixpoint: Term.fixpoint -> t -> t
+    val is_valid: int -> t -> bool
     val name: int -> t -> Feature_name.t option
   end
 

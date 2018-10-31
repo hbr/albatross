@@ -12,6 +12,7 @@ module type CONTEXT =
     val push_simple: string option -> Term.typ -> t -> t
     val push_arguments: Term.arguments -> t -> t
     val push_fixpoint: Term.fixpoint -> t -> t
+    val is_valid: int -> t -> bool
     val name: int -> t -> Feature_name.t option
     (*val shadow_level: int -> t -> int
     val type_: int -> t -> Term.*)
@@ -25,6 +26,8 @@ module Raw_context =
     let push_simple (_:string option) (_:Term.typ) (c:t): t = c
     let push_arguments (args:Term.arguments) (c:t): t = c
     let push_fixpoint (fp:Term.fixpoint) (c:t): t = c
+    let is_valid (i:int) (c:t): bool =
+      true
     let name (i:int) (c:t): Feature_name.t option =
       some_feature_name (string_of_int i)
   end
@@ -182,11 +185,14 @@ module Make (C:CONTEXT)
     and print_variable i c =
       let open Feature_name in
       let open Document in
-      match C.name i c with
-      | None ->
-         text Pervasives.("v#" ^ string_of_int i)
-      | Some nme ->
-         print_name (Some nme)
+      if C.is_valid i c then
+        match C.name i c with
+        | None ->
+           text Pervasives.("v#" ^ string_of_int i)
+        | Some nme ->
+           print_name (Some nme)
+      else
+        text Pervasives.("(v#" ^ string_of_int i ^ "?)")
 
 
     and print_application f z c =

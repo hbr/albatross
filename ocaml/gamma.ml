@@ -77,6 +77,10 @@ let count (c:t): int =
   IArr.length c.gamma
 
 
+let is_valid (i:int) (c:t): bool =
+  i < count c
+
+
 let to_level (i:int) (c:t): int =
   assert (i < count c);
   count c - i - 1
