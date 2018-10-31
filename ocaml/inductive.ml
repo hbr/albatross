@@ -471,8 +471,8 @@ let make_list (sv0:int): t =
   make_simple
     (some_feature_name "List")
     [ Some "A", sort_variable sv0, true]    (* one parameter *)
-    (sort_variable (sv0+1))                 (* arity *)
-    (Sorts.variable (sv0+1))
+    (sort_variable sv0)                     (* arity *)
+    (Sorts.variable sv0)
     false                                   (* no elim restriction *)
     begin
       let lst = variable0
@@ -503,9 +503,9 @@ let make_tree (sv0:int) (i_lst:int): t =
   let open Term in
   make_simple
     (some_feature_name "Tree")
-    [ Some "A", sort_variable sv0, true]    (* one parameter *)
-    (sort_variable (sv0+1))                 (* arity *)
-    (Sorts.variable (sv0+1))
+    [Some "A", sort_variable sv0, true]     (* one parameter *)
+    (sort_variable sv0)                     (* arity *)
+    (Sorts.variable sv0)
     false                                   (* no elim restriction *)
     begin
       let cnt = i_lst + 1

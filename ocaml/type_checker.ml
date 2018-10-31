@@ -1460,13 +1460,13 @@ let test (): unit =
   (* Check Tree *)
   ignore(
       let c =
-        Gamma.push_sorts 4 [3,0,false] Gamma.empty
+        Gamma.push_sorts 4 [1,0,false] Gamma.empty
         |> Gamma.push_inductive (Inductive.make_list 0)
       in
       assert (Gamma.count c = 3);
       assert (
           check_inductive_definition
-            (Inductive.make_tree 2 2)
+            (Inductive.make_tree 1 2)
             c
           <> None
         )
