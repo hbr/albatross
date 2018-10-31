@@ -45,8 +45,9 @@ type t = {
     params: (string option * Term.typ * bool) array; (* flag: is_positive *)
     types: (Feature_name.t option
             * Term.typ
+            * Sorts.t
             * bool) array;  (* Valid in a context with parameters; flag if
-                                   elimination is restricted. *)
+                               elimination is restricted. *)
     cs: (int * constructor array) array}
 
 
@@ -83,35 +84,63 @@ let positive_parameters ind =
 
 let name i ind =
   assert (i < ntypes ind);
-  let nme,_,_ = ind.types.(i) in
+  let nme,_,_,_ = ind.types.(i) in
   nme
 
 
 let itype i ind =
   (* The inductive type (and its name) in the base context. *)
   assert (i < ntypes ind);
-  let nme,tp,_ = ind.types.(i) in
+  let nme,tp,_,_ = ind.types.(i) in
   nme, Term.push_product (params0 ind) tp
 
 
 let types0 (ind:t): Term.gamma =
   (* The inductive types in a context with parameters. *)
   Array.map
-    (fun (nme,tp,_) -> nme,tp)
+    (fun (nme,tp,_,_) -> nme,tp)
     ind.types
 
 let types (ind:t): Term.gamma =
   let pars = params0 ind in
   Array.map
-    (fun (nme,tp,_) -> nme, Term.push_product pars tp)
+    (fun (nme,tp,_,_) -> nme, Term.push_product pars tp)
     ind.types
+
+let sort i ind =
+  assert (i < ntypes ind);
+  let _,_,s,_ = ind.types.(i) in
+  s
 
 
 let is_restricted i ind =
   assert (i < ntypes ind);
-  let _,_,res = ind.types.(i) in
+  let _,_,_,res = ind.types.(i) in
   res
 
+
+let is_restriction_consistent i ind =
+  assert (i < ntypes ind);
+  let _,_,s,res = ind.types.(i)
+  and _,cs = ind.cs.(i)
+  in
+  let ncs = Array.length cs
+  in
+  (not res (* Restriction => Prop and more than 0 constructors. *)
+   || (s = Sorts.Proposition && ncs > 0))
+  && (s <> Sorts.Proposition
+      || not (2 <= ncs)
+      || (* A propositon with at least 2 constructors must be restricted. *)
+        res)
+
+let all_args_propositions i ind =
+  assert (i < ntypes ind);
+  let _,_,s,res = ind.types.(i)
+  and _,cs = ind.cs.(i)
+  in
+  not res
+  && s = Sorts.Proposition
+  && Array.length cs = 1
 
 
 let cname i j ind =
@@ -175,8 +204,8 @@ let make params types cs =
 
 
 
-let make_simple name params typ restr cs =
-  make params [name,typ,restr] [cs]
+let make_simple name params typ sort restr cs =
+  make params [name,typ,sort,restr] [cs]
 
 
 
@@ -193,6 +222,7 @@ let make_false: t =
     some_feature_false
     []
     proposition
+    Sorts.Proposition
     false
     []
 
@@ -207,6 +237,7 @@ let make_true: t =
     some_feature_true
     []
     proposition
+    Sorts.Proposition
     false
     [cmake (some_feature_name "true_is_valid") [] variable0]
 
@@ -226,6 +257,7 @@ let make_and: t =
     [ Some "a", proposition, true;
       Some "b", proposition, true ]
     proposition
+    Sorts.Proposition
     false
     begin
       let vand = variable0
@@ -258,6 +290,7 @@ let make_or: t =
     [ Some "a", proposition, true;
       Some "b", proposition, true ]
     proposition
+    Sorts.Proposition
     true
     begin
       let vor = variable0
@@ -279,6 +312,37 @@ let make_or: t =
 
 
 
+(* class
+      exist (A:Any, pred:A->Proposition): Proposition
+   create
+      exist_intro (a:A, p:pred(a)): exist(A,pred)
+   end
+ *)
+let make_exist (sv0:int): t =
+  let open Term in
+  make_simple
+    (some_feature_name "exist")
+    [ Some "A", sort_variable sv0, false;
+      Some "pred", arrow variable0 proposition, false]
+    proposition
+    Sorts.Proposition
+    true (* elimination restricted *)
+    begin
+      let exist = variable0
+      and abig  = variable1
+      and pred  = variable2
+      and a     = variable3
+      and n     = 3 in
+      [cmake
+         (some_feature_name "exist_intro")
+         [Normal; Normal]
+         (All (Some "a",
+               abig,
+               ndproduct [apply1 pred a; apply2 exist abig pred])
+          |> to_index n)
+      ]
+    end
+
 
 
 
@@ -298,6 +362,7 @@ let make_accessible (sv0:int): t =
       Some "r", arrow variable0 (arrow variable0 proposition), false;
       Some "y", variable1, false]
     proposition
+    Sorts.Proposition
     false
     begin
       let acc = variable0
@@ -344,6 +409,7 @@ let make_equal (sv0:int): t =
     ]
     ( All(Some "B", sort_variable (sv0+1), ndproduct [bbig; proposition])
       |> to_index n)
+    Sorts.Proposition
     false
     begin
       let eq = variable0
@@ -375,6 +441,7 @@ let make_natural: t =
     (some_feature_name "Natural")
     []       (* no parameter *)
     datatype (* of sort datatype *)
+    Sorts.Datatype
     false    (* no elim restriction *)
     begin
       let nat = variable0 in
@@ -404,6 +471,7 @@ let make_list (sv0:int): t =
     (some_feature_name "List")
     [ Some "A", sort_variable sv0, true]    (* one parameter *)
     (sort_variable (sv0+1))                 (* arity *)
+    (Sorts.variable (sv0+1))
     false                                   (* no elim restriction *)
     begin
       let lst = variable0
@@ -436,6 +504,7 @@ let make_tree (sv0:int) (i_lst:int): t =
     (some_feature_name "Tree")
     [ Some "A", sort_variable sv0, true]    (* one parameter *)
     (sort_variable (sv0+1))                 (* arity *)
+    (Sorts.variable (sv0+1))
     false                                   (* no elim restriction *)
     begin
       let cnt = i_lst + 1

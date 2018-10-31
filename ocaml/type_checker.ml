@@ -789,6 +789,17 @@ let type_and_sort_of (t:Term.t) (c:Gamma.t): (Term.typ*Term.typ) option =
   )
 
 
+let sort_of (tp:Term.t) (c:Gamma.t): Sorts.t option =
+  Option.(
+    type_of tp c >>= fun tptp ->
+    let key,_ = key_normal tptp c in
+    match key with
+    | Term.Sort s ->
+       Some s
+    | _ ->
+       None
+  )
+
 let is_wellformed (t:Term.t) (c:Gamma.t): bool =
   type_of t c <> None
 
@@ -819,7 +830,7 @@ let is_wellformed_type (tp:Term.t) (c:Gamma.t): bool =
 
 
 (* ==== Positivity check of constructor types ==== *)
-let check_constructor_type_positivity
+let check_constructor_type
       (tp:Term.typ)  (* constructor type *)
       (argcls:Inductive.carg_class list) (* classification of arguments:
                                             Normal, Positive or Recursive *)
@@ -827,6 +838,7 @@ let check_constructor_type_positivity
       (i_current:int)(* level of the current inductive type *)
       (i_beyond:int) (* level beyond the last inductive type *)
       (parpos:bool array) (* parpos.(i) = parameter i is positive *)
+      (allprop:bool) (* all constructors must be propositions *)
       (c:Gamma.t)
     : unit option =
   printf "  check positivity of %s (nargs %d)\n"
@@ -884,8 +896,11 @@ let check_constructor_type_positivity
 
     | All (nme, arg, tp), [], cls :: argcls ->
        Option.(
-        check_constructor_argument arg cls c >>= fun _ ->
-        check_constructor_type tp argcls (Gamma.push_simple nme arg c)
+        if allprop && sort_of arg c <> Some Sorts.Proposition then
+          None
+        else
+          check_constructor_argument arg cls c >>= fun _ ->
+          check_constructor_type tp argcls (Gamma.push_simple nme arg c)
        )
     | _, _, _ ->
        assert false (* Illegal call: The type [tp] is not wellformed. *)
@@ -1043,10 +1058,12 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     printf "check types\n";
     Option.(
       fold_array
-        (fun _ (_,tp) _ ->
+        (fun _ (_,tp) ith ->
           printf "  check arity %s\n" (string_of_term2 c tp);
-          check_arity tp c >>= fun _ ->
-          Some ())
+          check_arity tp c >>= fun s ->
+          of_bool ( Inductive.sort ith ind = s
+                    && Inductive.is_restriction_consistent ith ind)
+        )
         () (Inductive.types0 ind)
     )
   in
@@ -1062,6 +1079,9 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
           (string_of_term2
              cc
              (Term.Variable (Gamma.to_index (i_start + ith) cc)));
+        let allprop =
+          Inductive.all_args_propositions ith ind
+        in
         Option.fold_array
           (fun _ (nme,c_type,argcls) _ ->
             Option.(
@@ -1071,8 +1091,8 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
              >>= fun ctptp ->
              printf "  ok %s : %s\n"
                (string_of_term2 cc c_type) (string_of_term2 cc ctptp);
-             check_constructor_type_positivity
-                  c_type argcls i_start (i_start + ith) i_beyond parpos cc
+             check_constructor_type
+               c_type argcls i_start (i_start + ith) i_beyond parpos allprop cc
             )
           )
           ()
@@ -1350,6 +1370,7 @@ let test (): unit =
   assert (check_inductive_definition (Inductive.make_equal 0) c <> None);
   assert (check_inductive_definition (Inductive.make_list 0) c <> None);
   assert (check_inductive_definition (Inductive.make_accessible 0) c <> None);
+  assert (check_inductive_definition (Inductive.make_exist 0) c <> None);
 
   (* class Natural create 0; successor(Natural) end *)
   ignore(
@@ -1375,6 +1396,7 @@ let test (): unit =
           (some_feature_name "C")
           []
           datatype
+          Sorts.Datatype
           false
           [cmake
              None

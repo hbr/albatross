@@ -25,9 +25,12 @@ val positive_parameters: t -> bool array
 val params:  t -> Term.arguments
 val types:   t -> Term.gamma
 val itype:   int -> t -> Term.fname_type
+val sort:    int -> t -> Sorts.t
 
 val name: int -> t -> Term.fname
 val is_restricted: int -> t -> bool
+val is_restriction_consistent: int -> t -> bool
+val all_args_propositions: int -> t -> bool
 
 val cname: int -> int -> t -> Term.fname
 val constructor_base_index: int -> t -> int
@@ -38,7 +41,7 @@ val constructor_arguments: int -> int -> t -> carg_class list
 
 val cmake: Term.fname -> carg_class list -> Term.typ -> constructor
 
-val make_simple: Term.fname -> param list -> Term.typ -> bool
+val make_simple: Term.fname -> param list -> Term.typ -> Sorts.t -> bool
                  -> constructor list -> t
 
 
@@ -47,6 +50,7 @@ val make_true: t
 val make_and: t
 val make_or: t
 val make_equal: int -> t
+val make_exist: int -> t
 val make_accessible: int -> t
 val make_natural: t
 val make_list: int -> t
