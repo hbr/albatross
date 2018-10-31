@@ -27,4 +27,5 @@ module Make (C:CONTEXT)
        : S with type context = C.t
 
 
+val string_of_term: Term.t -> string
 val test: unit -> unit

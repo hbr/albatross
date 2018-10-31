@@ -421,3 +421,36 @@ let make_list (sv0:int): t =
           (ndproduct [a; lsta; lsta] |> to_index 2)
       ]
     end
+
+
+
+(* class
+       Tree(A)
+   create
+       node (A, List(Tree(A)))
+   end
+ *)
+let make_tree (sv0:int) (i_lst:int): t =
+  let open Term in
+  make_simple
+    (some_feature_name "Tree")
+    [ Some "A", sort_variable sv0, true]    (* one parameter *)
+    (sort_variable (sv0+1))                 (* arity *)
+    false                                   (* no elim restriction *)
+    begin
+      let cnt = i_lst + 1
+      in
+      let lst  = Variable 0
+      and tree = Variable cnt
+      and a    = Variable (cnt + 1)
+      in
+      let tree_a = apply1 tree a
+      in
+      let lst_tree_a =apply1 lst tree_a
+      in
+      [ cmake
+          (some_feature_name "node")
+          [Positive; Recursive]
+          (ndproduct [a; lst_tree_a; tree_a] |> to_index (cnt+2))
+      ]
+    end

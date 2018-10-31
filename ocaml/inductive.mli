@@ -47,6 +47,7 @@ val make_true: t
 val make_and: t
 val make_or: t
 val make_equal: int -> t
+val make_accessible: int -> t
 val make_natural: t
 val make_list: int -> t
-val make_accessible: int -> t
+val make_tree: int -> int -> t

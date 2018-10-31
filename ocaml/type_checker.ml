@@ -578,11 +578,22 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
       type_of f c >>= fun ftp ->
       type_of a c >>= fun atp ->
       (* Now f,ftp and a,atp are wellformed *)
-      let hn = key_normal_term ftp c in
+      let hn = key_normal_term ftp c
+      in
       match hn with
+
       | All (_, tp, res) (* tp, res are wellformed *)
            when is_subtype atp tp c  ->
          Some (Term.substitute res a)
+
+      | All (_,tp,res) ->
+         printf "application failed 'f:%s', 'a:%s'\n  %s is no subtype of %s\n"
+           (string_of_term2 c ftp)
+           (string_of_term2 c atp)
+           (string_of_term2 c atp)
+           (string_of_term2 c tp);
+         None
+
       | _ ->
          None
      )
@@ -847,8 +858,9 @@ let check_constructor_type_positivity
   in
   let has_of_positive c t =
     Term.has_variables (is_positive c) t
+  and has_of_family c t =
+    Term.has_variables (is_of_family c) t
   in
-
   let rec check_constructor_type tp argcls c =
     (* Check all argument types and the final type of [tp]. *)
 
@@ -920,7 +932,31 @@ let check_constructor_type_positivity
             Some ()
 
          | Inductive.Recursive ->
-            assert false (* nyi: nesting case *)
+            (* Nesting case *)
+            printf "    check nesting %s\n"
+              (string_of_term2 c (Term.apply_args key args));
+            Option.(
+              Gamma.inductive_family i c >>= fun (ith,ind) ->
+              of_bool (Inductive.ntypes ind = 1) >>= fun _ ->
+              let pos_params = Inductive.positive_parameters ind
+              and np = Inductive.nparams ind
+              in
+              fold_list
+                (fun n arg pos ->
+                  if has_of_family c arg then
+                    (* Check that the argument at position [pos] is a positive
+                       parameter of the nested inductive type. nyi !!!!!! *)
+                    if pos < np && pos_params.(pos) then
+                      Some (n+1)
+                    else
+                      None
+                  else
+                    Some n
+                )
+                args 0
+              >>= fun n ->
+              of_bool (n > 0)
+            )
 
          | Inductive.Positive when is_positive_parameter c i ->
             Some ()
@@ -977,9 +1013,11 @@ let check_arity (tp:Term.typ) (c:Gamma.t): Sorts.t option =
 (* Check if [ind] is a valid inductive definition. *)
 let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     : Inductive.t option =
+  printf "check inductive definition\n";
 
   (* Are all parameter types are valid in the outer context? *)
   let check_parameter (c:Gamma.t): Gamma.t option =
+    printf "check parameter\n";
     Option.fold_array
       (fun c (nme,tp) i ->
         if is_wellformed tp c then
@@ -1027,11 +1065,12 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
         Option.fold_array
           (fun _ (nme,c_type,argcls) _ ->
             Option.(
-             printf "check constructor type %s\n"
-               (string_of_term2 cc c_type);
+             printf "check constructor type (%d args)\n"
+               (Gamma.count cc);
              type_of c_type cc (* [c_type] is wellformed.*)
              >>= fun ctptp ->
-             printf "  ok %s\n" (string_of_term2 cc ctptp);
+             printf "  ok %s : %s\n"
+               (string_of_term2 cc c_type) (string_of_term2 cc ctptp);
              check_constructor_type_positivity
                   c_type argcls i_start (i_start + ith) i_beyond parpos cc
             )
@@ -1345,6 +1384,21 @@ let test (): unit =
       check_inductive_definition ind empty = None
     end;
 
+
+  (* Check Tree *)
+  ignore(
+      let c =
+        Gamma.push_sorts 4 [3,0,false] Gamma.empty
+        |> Gamma.push_inductive (Inductive.make_list 0)
+      in
+      assert (Gamma.count c = 3);
+      assert (
+          check_inductive_definition
+            (Inductive.make_tree 2 2)
+            c
+          <> None
+        )
+    );
 
   (* Predicate, Relation, Endorelation *)
   assert

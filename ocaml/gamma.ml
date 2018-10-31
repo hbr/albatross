@@ -228,12 +228,12 @@ let constructor_types (i:int) (params:Term.t list) (c:t): Term.typ list =
 
 
 
-let inductive_family (i:int) (c:t): int * Inductive.t =
+let inductive_family (i:int) (c:t): (int * Inductive.t) option=
   match (entry i c).just with
   | Indtype (ith,ind) ->
-     ith, ind
+     Some (ith, ind)
   | _ ->
-     assert false (* Illegal call: [i] is not part of an inductive definition.*)
+     None
 
 
 
