@@ -41,7 +41,6 @@ module type PRETTY =
     val space:  pp
     val break:  string -> int -> int -> pp
     val chain:  pp list -> pp
-    val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out
   end

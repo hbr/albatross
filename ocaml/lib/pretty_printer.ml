@@ -154,7 +154,6 @@ module type PRETTY =
     val space:  pp
     val break:  string -> int -> int -> pp
     val chain:  pp list -> pp
-    val (>>):   'a out -> 'b out -> 'b out
     val (>>=):  'a out -> ('a -> 'b out) -> 'b out
     val stop:   t -> unit out
   end
@@ -245,24 +244,23 @@ module Make (P:PRINTER) =
       p.current + add +  Pending.size pend > p.width
 
     let puts (start:int) (len:int) (s:string) (p:t): t out =
-      P.(put_substring p.channel start len s
-         >> make {p with current = len + p.current})
+      P.(put_substring p.channel start len s >>= fun _ ->
+         make {p with current = len + p.current})
 
     let newline (indent:int) (p:t) (box:box): t out =
-      P.(putc p.channel '\n'
-         >> fill p.channel ' ' indent
-         >> P.make {p with box; current = indent})
+      P.(putc p.channel '\n' >>= fun _ ->
+         fill p.channel ' ' indent >>= fun _ ->
+         P.make {p with box; current = indent})
 
     let space_size (sep:string) (n:int): int =
       String.length sep + n
 
     let space (sep:string) (n:int) (p:t) (box:box): t out =
       let len = String.length sep in
-      P.(put_substring p.channel 0 len sep
-         >> fill p.channel ' ' n
-         >> P.make {p with box; current = len + n + p.current})
+      P.(put_substring p.channel 0 len sep >>= fun _ ->
+         fill p.channel ' ' n  >>= fun _ ->
+         P.make {p with box; current = len + n + p.current})
 
-    let (>>) = P.(>>)
     let (>>=) = P.(>>=)
 
     let has_pending (p:t): bool =

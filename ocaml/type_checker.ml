@@ -593,11 +593,11 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
         - Is the corresponding product wellformed? *)
      Option.(
       type_of tp c >>= fun s ->
-      Term.get_sort s
-      >> type_of t (Gamma.push_simple nme tp c) >>= fun ttp ->
+      Term.get_sort s >>= fun _ ->
+      type_of t (Gamma.push_simple nme tp c) >>= fun ttp ->
       let lam_tp = All (nme,tp,ttp) in
-      type_of lam_tp c
-      >> Some lam_tp
+      type_of lam_tp c >>= fun _ ->
+      Some lam_tp
      )
   | All (nme,arg_tp,res_tp) ->
      (* check:
@@ -619,9 +619,9 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
        None
      else
        Option.(
-       check_fixpoint arr c
-       >> let _,typ,_,_ = arr.(idx) in
-          Some typ)
+       check_fixpoint arr c >>= fun _ ->
+       let _,typ,_,_ = arr.(idx) in
+       Some typ)
 
 
 and type_of_inspect
@@ -742,30 +742,30 @@ and check_fixpoint (fp:Term.fixpoint) (c:Gamma.t): unit option =
      - All recursive calls must be with a structurally decreasing argument *)
   Option.(
     Option.of_bool
-      (Array.for_all (fun (_,tp,_,_) -> type_of tp c <> None) fp)
-    >> let c1 = Gamma.push_fixpoint fp c in
-       let len = Array.length fp in
-       (* c1 contains all types of the [len] fixpoints. *)
-       (* Check all fixpoints that they have the correct type and are
+      (Array.for_all (fun (_,tp,_,_) -> type_of tp c <> None) fp) >>= fun _ ->
+    let c1 = Gamma.push_fixpoint fp c in
+    let len = Array.length fp in
+    (* c1 contains all types of the [len] fixpoints. *)
+    (* Check all fixpoints that they have the correct type and are
           structurally decreasing. *)
-       interval_fold
-         (fun _ i ->
-           let nme,typ,decr,t = fp.(i) in
-           type_of t c1 >>= fun tp ->
-           Option.of_bool
-             (equivalent tp (Term.up len typ) c1)
-           >>
-             (* term of [fp.(i)] has the correct type. *)
-             let t2,c2 = Gamma.push_lambda t c1 in
-             let nargs = Gamma.count c2 - Gamma.count c1 in
-             Option.of_bool (decr < nargs) (* are there sufficient arguments?
-                                              *)
-             >> check_inductive
-                  (Gamma.entry_type (nargs - decr - 1) c2) c2
-             >>= fun (_,_,_,ind,_) ->
-             check_fixpoint_decreasing t2 fp nargs decr c2
-         )
-         (Some ()) 0 len
+    interval_fold
+      (fun _ i ->
+        let nme,typ,decr,t = fp.(i) in
+        type_of t c1 >>= fun tp ->
+        Option.of_bool
+          (equivalent tp (Term.up len typ) c1) >>= fun _ ->
+        (* term of [fp.(i)] has the correct type. *)
+        let t2,c2 = Gamma.push_lambda t c1 in
+        let nargs = Gamma.count c2 - Gamma.count c1 in
+        Option.of_bool (decr < nargs) (* are there sufficient arguments?
+                                       *)
+        >>= fun _ ->
+        check_inductive
+          (Gamma.entry_type (nargs - decr - 1) c2) c2
+        >>= fun (_,_,_,ind,_) ->
+        check_fixpoint_decreasing t2 fp nargs decr c2
+      )
+      (Some ()) 0 len
   )
 
 
@@ -872,8 +872,8 @@ let check_constructor_type_positivity
 
     | All (nme, arg, tp), [], cls :: argcls ->
        Option.(
-        check_constructor_argument arg cls c
-        >> check_constructor_type tp argcls (Gamma.push_simple nme arg c)
+        check_constructor_argument arg cls c >>= fun _ ->
+        check_constructor_type tp argcls (Gamma.push_simple nme arg c)
        )
     | _, _, _ ->
        assert false (* Illegal call: The type [tp] is not wellformed. *)
@@ -1002,11 +1002,13 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
      type as well. *)
   let check_types (c:Gamma.t): unit option =
     (* [c] is a context with the parameters. *)
+    printf "check types\n";
     Option.(
       fold_array
         (fun _ (_,tp) _ ->
-          check_arity tp c
-          >> Some ())
+          printf "  check arity %s\n" (string_of_term2 c tp);
+          check_arity tp c >>= fun _ ->
+          Some ())
         () (Inductive.types0 ind)
     )
   in
@@ -1025,8 +1027,12 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
         Option.fold_array
           (fun _ (nme,c_type,argcls) _ ->
             Option.(
+             printf "check constructor type %s\n"
+               (string_of_term2 cc c_type);
              type_of c_type cc (* [c_type] is wellformed.*)
-             >> check_constructor_type_positivity
+             >>= fun ctptp ->
+             printf "  ok %s\n" (string_of_term2 cc ctptp);
+             check_constructor_type_positivity
                   c_type argcls i_start (i_start + ith) i_beyond parpos cc
             )
           )
@@ -1038,8 +1044,10 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
   Option.(
     check_parameter c >>= fun cp ->
     check_types cp
-    >> check_constructors c
-    >> Some ind
+    >>= fun _ ->
+    check_constructors c
+    >>= fun _ ->
+    Some ind
   )
 
 
@@ -1314,7 +1322,6 @@ let test (): unit =
       assert (type_of variable1 c = Some variable2);
       assert (type_of variable0 c = Some (arrow variable2 variable2))
     );
-
 
   (* Failed positivity:
      class C create
