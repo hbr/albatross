@@ -838,10 +838,11 @@ let check_constructor_type
       (i_current:int)(* level of the current inductive type *)
       (i_beyond:int) (* level beyond the last inductive type *)
       (parpos:bool array) (* parpos.(i) = parameter i is positive *)
-      (allprop:bool) (* all constructors must be propositions *)
+      (allprop:bool) (* all constructor arguments must be propositions *)
+      (no_any:bool)  (* no constructor args can be [Any]. *)
       (c:Gamma.t)
     : unit option =
-  printf "  check positivity of %s (nargs %d)\n"
+  printf "  check constructor type %s (nargs %d)\n"
     (string_of_term2 c tp)
     (List.length argcls);
   (* Check if [tp] is a valid constructor type for the inductive type
@@ -898,6 +899,14 @@ let check_constructor_type
        Option.(
         if allprop && sort_of arg c <> Some Sorts.Proposition then
           None
+        else if no_any
+                && match sort_of arg c with
+                   | Some (Sorts.Max _) ->
+                      true
+                   | _ ->
+                      false
+        then
+          (printf "  failed predicativity\n";None)
         else
           check_constructor_argument arg cls c >>= fun _ ->
           check_constructor_type tp argcls (Gamma.push_simple nme arg c)
@@ -960,7 +969,7 @@ let check_constructor_type
                 (fun n arg pos ->
                   if has_of_family c arg then
                     (* Check that the argument at position [pos] is a positive
-                       parameter of the nested inductive type. nyi !!!!!! *)
+                       parameter of the nested inductive type. *)
                     if pos < np && pos_params.(pos) then
                       Some (n+1)
                     else
@@ -1079,20 +1088,20 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
           (string_of_term2
              cc
              (Term.Variable (Gamma.to_index (i_start + ith) cc)));
-        let allprop =
-          Inductive.all_args_propositions ith ind
+        let allprop = Inductive.all_args_propositions ith ind
+        and no_any  = Inductive.sort ith ind = Sorts.Datatype
         in
         Option.fold_array
           (fun _ (nme,c_type,argcls) _ ->
             Option.(
-             printf "check constructor type (%d args)\n"
-               (Gamma.count cc);
+             printf "check constructor type\n";
              type_of c_type cc (* [c_type] is wellformed.*)
              >>= fun ctptp ->
              printf "  ok %s : %s\n"
                (string_of_term2 cc c_type) (string_of_term2 cc ctptp);
              check_constructor_type
-               c_type argcls i_start (i_start + ith) i_beyond parpos allprop cc
+               c_type argcls i_start (i_start + ith) i_beyond
+               parpos allprop no_any cc
             )
           )
           ()
@@ -1382,6 +1391,47 @@ let test (): unit =
       assert (type_of variable1 c = Some variable2);
       assert (type_of variable0 c = Some (arrow variable2 variable2))
     );
+
+
+
+  (* Failed predicativity:
+     class Option(A:Any): Datatype create
+         just(a:A): Option(A)
+         nothing: Option(A)
+     end
+   *)
+  assert
+    begin
+      printf "check 'Option_bad'\n";
+      let open Inductive in
+      let open Term in
+      let c = Gamma.push_sorts 2 [] empty in
+      let ind =
+        make_simple
+          (some_feature_name "Option_bad")
+          [Some "A", sort_variable 0, true]
+          datatype
+          Sorts.Datatype
+          false
+          begin
+            let opt = variable0
+            and biga = variable1
+            and n = 2
+            in
+            [cmake
+               None
+               [Positive]
+               (Inductive.ndproduct [biga; apply1 opt biga] |> to_index n);
+
+             cmake
+               None
+               []
+               (apply1 opt biga |> to_index n)
+            ]
+          end
+      in
+      check_inductive_definition ind c = None
+    end;
 
   (* Failed positivity:
      class C create

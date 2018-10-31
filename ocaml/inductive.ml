@@ -143,6 +143,7 @@ let all_args_propositions i ind =
   && Array.length cs = 1
 
 
+
 let cname i j ind =
   assert (i < ntypes ind);
   let _,cs = ind.cs.(i) in

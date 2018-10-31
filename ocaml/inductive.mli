@@ -14,6 +14,8 @@ type constructor
 
 type t
 
+val ndproduct: Term.typ list -> Term.typ
+
 val nparams: t -> int
 val ntypes:  t -> int
 val nconstructors: int -> t -> int
