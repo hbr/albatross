@@ -110,12 +110,15 @@ module Variables =
         vsr := IArr.push Set.empty !vsr
       done;
       assert (IArr.length !vsr = nvars);
+      (* Iterate through all constraints [i,j,strict] and add [i] as a
+         (strict) lower bound to [j]. Avoid cyclicity *)
       List.iter
         (fun (i,j,strict) ->
           assert (i <> j);
           assert (i < nvars);
           assert (j < nvars);
-          assert (not (strict && le j i vs));
+          assert (not (strict && le j i vs)); (* Illegal call: No cycles
+                                                 allowed. *)
           (* add i and the transitive closure to the lower bounds of j *)
           vsr := IArr.put
                    j
