@@ -55,5 +55,5 @@ val make_equal: int -> t
 val make_exist: int -> t
 val make_accessible: int -> t
 val make_natural: t
-val make_list: int -> t
-val make_tree: int -> int -> t
+val make_list: int option -> t
+val make_tree: int option -> int -> t

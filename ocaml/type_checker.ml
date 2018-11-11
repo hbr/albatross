@@ -1377,7 +1377,7 @@ let test (): unit =
   assert (check_inductive_definition Inductive.make_and empty <> None);
   assert (check_inductive_definition Inductive.make_or empty <> None);
   assert (check_inductive_definition (Inductive.make_equal 0) c <> None);
-  assert (check_inductive_definition (Inductive.make_list 0) c <> None);
+  assert (check_inductive_definition (Inductive.make_list (Some 0)) c <> None);
   assert (check_inductive_definition (Inductive.make_accessible 0) c <> None);
   assert (check_inductive_definition (Inductive.make_exist 0) c <> None);
 
@@ -1461,12 +1461,12 @@ let test (): unit =
   ignore(
       let c =
         Gamma.push_sorts 4 [1,0,false] Gamma.empty
-        |> Gamma.push_inductive (Inductive.make_list 0)
+        |> Gamma.push_inductive (Inductive.make_list (Some 0))
       in
       assert (Gamma.count c = 3);
       assert (
           check_inductive_definition
-            (Inductive.make_tree 1 2)
+            (Inductive.make_tree (Some 1) 2)
             c
           <> None
         )

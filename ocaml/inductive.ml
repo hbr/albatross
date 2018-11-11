@@ -466,13 +466,20 @@ let make_natural: t =
        (^)(A,List(A))
    end
  *)
-let make_list (sv0:int): t =
+let make_list (sv0:int option): t =
   let open Term in
+  let sort_term,sort =
+    match sv0 with
+    | None ->
+       datatype, Sorts.Datatype
+    | Some sv0 ->
+       sort_variable sv0, Sorts.variable sv0
+  in
   make_simple
     (some_feature_name "List")
-    [ Some "A", sort_variable sv0, true]    (* one parameter *)
-    (sort_variable sv0)                     (* arity *)
-    (Sorts.variable sv0)
+    [ Some "A", sort_term, true]            (* one parameter *)
+    sort_term                               (* arity *)
+    sort
     false                                   (* no elim restriction *)
     begin
       let lst = variable0
@@ -499,13 +506,20 @@ let make_list (sv0:int): t =
        node (A, List(Tree(A)))
    end
  *)
-let make_tree (sv0:int) (i_lst:int): t =
+let make_tree (sv0:int option) (i_lst:int): t =
   let open Term in
+  let sort_term,sort =
+    match sv0 with
+    | None ->
+       datatype, Sorts.Datatype
+    | Some sv0 ->
+       sort_variable sv0, Sorts.variable sv0
+  in
   make_simple
     (some_feature_name "Tree")
-    [Some "A", sort_variable sv0, true]     (* one parameter *)
-    (sort_variable sv0)                     (* arity *)
-    (Sorts.variable sv0)
+    [Some "A", sort_term, true]             (* one parameter *)
+    sort_term                               (* arity *)
+    sort
     false                                   (* no elim restriction *)
     begin
       let cnt = i_lst + 1
