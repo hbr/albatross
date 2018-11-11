@@ -1,3 +1,7 @@
+module Ocaml_char = Char
+module Ocaml_string = String
+module Ocaml_list = List
+
 module type ANY =
   sig
     type t
@@ -14,6 +18,7 @@ module Either =
   end
 
 
+
 module Char_ =
   struct
     include Char
@@ -26,6 +31,8 @@ module Char_ =
     let is_digit (c:char): bool =
       '0' <= c && c <= '9'
   end
+
+
 
 module String_ =
   struct

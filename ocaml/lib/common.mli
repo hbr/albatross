@@ -1,3 +1,7 @@
+module Ocaml_char = Char
+module Ocaml_string = String
+module Ocaml_list = List
+
 module type ANY =
   sig
     type t
