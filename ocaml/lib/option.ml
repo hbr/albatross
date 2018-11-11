@@ -50,21 +50,6 @@ let fold_interval (f:'a->int->'a t) (a0:'a) (start:int) (beyond:int): 'a t =
 
 
 
-let fold_list (f:'a->'b->int->'a t) (lst:'b list) (start:'a): 'a t =
-  let rec fold a i lst =
-    match lst with
-    | [] ->
-       Some a
-    | hd :: tl ->
-       match f a hd i with
-       | Some a ->
-          fold a (i+1) tl
-       | None ->
-          None
-  in
-  fold start 0 lst
-
-
 
 
 let fold_array (f:'a->'b->int->'a t) (start:'a) (arr:'b array): 'a t =

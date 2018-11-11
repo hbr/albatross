@@ -1,8 +1,12 @@
 open Container
+open Common
 open Alba2_common
 open Printf
 
 module Term = Term2
+
+
+module ListMOption = List.Monadic (Option)
 
 
 let string_of_term (c:Gamma.t) (t:Term.t): string =
@@ -428,8 +432,8 @@ let check_fixpoint_decreasing
     in
 
     let check_list lst n =
-      Option.fold_list
-        (fun n t _ -> check_recursive_calls t smaller c n)
+      ListMOption.fold_left
+        (fun t n -> check_recursive_calls t smaller c n)
         lst n
     in
 
@@ -965,8 +969,8 @@ let check_constructor_type
               let pos_params = Inductive.positive_parameters ind
               and np = Inductive.nparams ind
               in
-              fold_list
-                (fun n arg pos ->
+              ListMOption.foldi_left
+                (fun pos arg n ->
                   if has_of_family c arg then
                     (* Check that the argument at position [pos] is a positive
                        parameter of the nested inductive type. *)

@@ -59,6 +59,12 @@ sig
   val rev_map : ('a -> 'b) -> 'a list -> 'b list
   val for_all : ('a -> bool) -> 'a list -> bool
   val exists : ('a -> bool) -> 'a list -> bool
+
+  module Monadic (M:Monad.MONAD):
+  sig
+    val fold_left:  ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
+    val foldi_left: (int -> 'a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
+  end
 end
 
 

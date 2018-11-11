@@ -71,6 +71,9 @@ module String =
 
 
 
+
+
+
 module List =
   struct
     include List
@@ -93,7 +96,33 @@ module List =
         Some (List.find f l)
       with Not_found ->
         None
+
+    module Monadic (M:Monad.MONAD) =
+      struct
+        let rec fold_left (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
+          match l with
+          | [] ->
+             M.make b
+          | hd :: tl ->
+             M.(f hd b >>= fold_left f tl)
+
+        let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (b:'b)
+                : 'b M.t =
+          let rec foldi i l b =
+            match l with
+            | [] ->
+               M.make b
+            | hd :: tl ->
+               M.(f i hd b >>= foldi (i+1) tl)
+          in
+          foldi 0 l b
+      end
   end
+
+
+
+
+
 
 
 module type SEXP =
@@ -103,6 +132,9 @@ module type SEXP =
       | Seq of t array
     val string: t -> string
   end
+
+
+
 
 module Sexp =
   struct
