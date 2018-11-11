@@ -1,3 +1,4 @@
+open Common_module_types
 open Common
 
 

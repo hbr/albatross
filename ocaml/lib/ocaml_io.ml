@@ -454,7 +454,7 @@ module IO: IO_TYPE =
       Ok (), fs
 
     let put_line (fd:out_file) (str:string): unit t =
-      put_string fd str >> putc fd '\n'
+      put_string fd str >>= fun _ ->  putc fd '\n'
 
     let open_for_read (path:string): in_file option t =
       fun fs -> Ok (File_system.open_for_read fs path), fs

@@ -1,3 +1,4 @@
+open Common_module_types
 open Common
 
 
@@ -75,29 +76,28 @@ module Make (A:ANY) =
           if n = 0 then
             parse a (i+1)
           else if arg.[0] = '-' then
-            begin
-              try
-                let k,sp,doc =
-                  List.find (fun (k,sp,doc) -> k = arg) options in
-                match sp with
-                | Unit g ->
-                   parse (g a) (i+1)
-                | String g ->
-                   if i + 1 = len then
-                     M.throw (Missing_argument (k,sp,doc))
-                   else
-                     parse (g args.(i+1) a) (i+2)
-                | Int g ->
-                   if i + 1 = len then
-                     M.throw (Missing_argument (k,sp,doc))
-                   else
-                     try
-                       parse (g (int_of_string args.(i+1)) a) (i+2)
-                     with Failure _ ->
-                       M.throw (Invalid_argument (k,sp,doc,args.(i+1)))
-              with Not_found ->
-                M.throw (Unknown_option arg)
-            end
+            match List.find (fun (k,sp,doc) -> k = arg) options with
+            | None ->
+               M.throw (Unknown_option arg)
+            | Some (k,sp,doc) ->
+               begin
+                 match sp with
+                 | Unit g ->
+                    parse (g a) (i+1)
+                 | String g ->
+                    if i + 1 = len then
+                      M.throw (Missing_argument (k,sp,doc))
+                    else
+                      parse (g args.(i+1) a) (i+2)
+                 | Int g ->
+                    if i + 1 = len then
+                      M.throw (Missing_argument (k,sp,doc))
+                    else
+                      try
+                        parse (g (int_of_string args.(i+1)) a) (i+2)
+                      with Failure _ ->
+                        M.throw (Invalid_argument (k,sp,doc,args.(i+1)))
+               end
           else
             parse (anon arg a) (i+1)
       in

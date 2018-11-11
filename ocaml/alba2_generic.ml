@@ -126,7 +126,7 @@ module Make (IO:Ocaml_io.IO_TYPE) =
                      print_error "no command given"
                   | Some cmd ->
                      match
-                       List_.find (fun (c,_,_) -> c = cmd) commands
+                       List.find (fun (c,_,_) -> c = cmd) commands
                      with
                      | None ->
                         print_error ("Unknown command '" ^ cmd ^ "'")
@@ -134,7 +134,7 @@ module Make (IO:Ocaml_io.IO_TYPE) =
                         f cl
                 end
              | Error e ->
-                print_error (CLP.string_of_error e) >> exit 1
+                print_error (CLP.string_of_error e) >>= fun _ -> exit 1
             )
       )
   end
