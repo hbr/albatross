@@ -31,7 +31,9 @@ type param =
   string option * Term.typ * bool
 
 type carg_class =
-  Normal | Positive | Recursive
+  | Normal          (* Normal argument, no recursion *)
+  | Positive        (* Potentially recursive, contains a parameter positively *)
+  | Recursive       (* Recursive argument *)
 
 type constructor = {
     cname: Term.fname;
@@ -42,13 +44,23 @@ type constructor = {
 
 
 type t = {
-    params: (string option * Term.typ * bool) array; (* flag: is_positive *)
+    params:
+      (string option  (* name *)
+       * Term.typ     (* type *)
+       * bool         (* parameter is positive? *)
+      ) array;
+
     types: (Feature_name.t option
-            * Term.typ
-            * Sorts.t
-            * bool) array;  (* Valid in a context with parameters; flag if
-                               elimination is restricted. *)
-    cs: (int * constructor array) array}
+            * Term.typ      (* Aritiy of the inductive type, valid in a
+                               context with parameters *)
+            * Sorts.t       (* Sort of the arity *)
+            * bool          (* elimination restricted? *)
+           ) array;
+
+    cs: (int                (* position of the first constructor of the type *)
+         * constructor array(* constructors of the type *)
+        ) array (* One set of constructors for each type *)
+  }
 
 
 let nparams ind = Array.length ind.params

@@ -335,9 +335,18 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:Gamma.t): bool =
    structurally smaller variables in the key (i.e. function) position.
 
    The algorithm holds a set of structurally smaller variables (use De Bruijn
-   levels to describe them) during the term iteration. Whenver it encounters a
-   recursive call it reduces the argument expression to key normal form and
-   searches for the key variable in the set of structurally smaller varibles.
+   levels to describe them in order to keep them invariant for the different
+   contexts) during the term iteration. Whenever it encounters a recursive
+   call it reduces the argument expression to key normal form and searches for
+   the key variable in the set of structurally smaller varibles.
+
+
+   Nesting Case:
+
+   An inductive family might use another inductive type (not mutually defined)
+   within the family. This happens if the other type has one positive
+   parameter which is instantiated with a type containing one type of the
+   family. E.g. [List(Tree(A))].
 
   *)
 
@@ -408,6 +417,8 @@ let check_fixpoint_decreasing
              | Recursive ->
                 k+1, IntSet.add (cnt + k) smaller
              | Positive ->
+                (* Argument [k] of the constructor has a positive parameter as
+                   its final type. It is potentially recursive. *)
                 k+1,smaller (* nyi: Missing check of nested inductive types *)
            )
            (0,smaller)
@@ -416,7 +427,7 @@ let check_fixpoint_decreasing
        smaller
     | _ ->
        assert false (* Illegal call: [Variable i] is either the decreasing
-                       argument or in the list of structurally smaller
+                       argument or it is in the list of structurally smaller
                        variables. Therefore its type must be inductive. *)
   in
 
@@ -868,7 +879,9 @@ let check_constructor_type
     i_start <= li && li < i_beyond
   and is_positive_parameter c i =
     let li = Gamma.to_level i c in
-    i_beyond <= li && li < par_beyond && parpos.(li - i_beyond)
+    i_beyond <= li
+    && li < par_beyond
+    && parpos.(li - i_beyond)
   in
   let is_positive c i =
     is_of_family c i || is_positive_parameter c i
@@ -931,7 +944,7 @@ let check_constructor_type
        match cls with
        | Normal -> "Normal"
        | Recursive -> "Recursive"
-       | Positive -> "Positive")
+       | Positive  -> "Positive")
       (string_of_term2 c tp);
 
     let key,args = key_normal tp c in
@@ -986,7 +999,8 @@ let check_constructor_type
               of_bool (n > 0)
             )
 
-         | Inductive.Positive when is_positive_parameter c i ->
+         | Inductive.Positive
+              when is_positive_parameter c i  ->
             Some ()
 
          | _ ->

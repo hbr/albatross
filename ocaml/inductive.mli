@@ -5,7 +5,9 @@ module Term = Term2
 (** Data structures to represent inductive types.*)
 
 type carg_class =
-  Normal | Positive | Recursive
+  | Normal          (* Normal argument, no recursion *)
+  | Positive        (* Potentially recursive, contains a parameter positively *)
+  | Recursive       (* Recursive argument *)
 
 
 type param = string option * Term.typ * bool
