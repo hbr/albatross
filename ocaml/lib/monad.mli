@@ -1,3 +1,5 @@
+open Common_module_types
+
 module type MONAD0 =
   sig
     type _ t
@@ -13,9 +15,9 @@ module type MONAD =
     val apply: ('a->'b) t -> 'a t -> 'b t
     val map:   ('a -> 'b) -> 'a t -> 'b t
     val (>>=): 'a t -> ('a -> 'b t) -> 'b t
-    val sequence: 'a t list -> 'a list t
-    val map_list: 'a list -> ('a -> 'b t) -> 'b list t
-    val map_array: 'a array -> ('a -> 'b t) -> 'b array t
+    (*val sequence: 'a t list -> 'a list t*)
+    (*val map_list: 'a list -> ('a -> 'b t) -> 'b list t*)
+    (*val map_array: 'a array -> ('a -> 'b t) -> 'b array t*)
   end
 
 
@@ -97,20 +99,20 @@ module type STATE_WITH_RESULT =
 
 module Make (M:MONAD0): MONAD with type 'a t = 'a M.t
 
-module Result (Error:Common.ANY): RESULT with type error = Error.t and
+module Result (Error:ANY): RESULT with type error = Error.t and
                                               type 'a t = ('a,Error.t) result
 
-module Result_in (M:MONAD) (Error:Common.ANY): RESULT_IN
+module Result_in (M:MONAD) (Error:ANY): RESULT_IN
 
 
-module State (St:Common.ANY): STATE with type state = St.t
+module State (St:ANY): STATE with type state = St.t
 
 
-module State_into (M:MONAD) (St:Common.ANY)
+module State_into (M:MONAD) (St:ANY)
        : STATE_INTO with type state = St.t
 
 
-module State_with_result (S:Common.ANY) (Error:Common.ANY)
+module State_with_result (S:ANY) (Error:ANY)
        : STATE_WITH_RESULT with type state = S.t and
                                 type error = Error.t
 module String_buffer:

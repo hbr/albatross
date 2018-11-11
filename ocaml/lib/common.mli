@@ -2,11 +2,6 @@ module Ocaml_char = Char
 module Ocaml_string = String
 module Ocaml_list = List
 
-module type ANY =
-  sig
-    type t
-  end
-
 
 
 module Either:
@@ -19,7 +14,7 @@ sig
 end
 
 
-module Char_:
+module Char:
 sig
   type t = char
   val code: t -> int
@@ -34,21 +29,36 @@ end
 
 
 
-module String_:
+module String:
 sig
   type t = string
   val one: char -> t
   val find: (char -> bool) -> int -> t -> int
   val list: t -> char list
   val of_list: char list -> t
+  val length: t -> int
+  val get: t -> int -> char
+  val escaped: t -> t
+  val make: int -> char -> t
 end
 
 
 
-module List_:
+module List:
 sig
   type 'a t = 'a list
   val find: ('a -> bool) ->'a t -> 'a option
+  val append: 'a list -> 'a list -> 'a list
+  val rev_append: 'a list -> 'a list -> 'a list
+  val rev: 'a t -> 'a t
+  val length: 'a t -> int
+  val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
+  val concat: 'a list list -> 'a list
+  val map : ('a -> 'b) -> 'a list -> 'b list
+  val mapi : (int -> 'a -> 'b) -> 'a list -> 'b list
+  val rev_map : ('a -> 'b) -> 'a list -> 'b list
+  val for_all : ('a -> bool) -> 'a list -> bool
+  val exists : ('a -> bool) -> 'a list -> bool
 end
 
 

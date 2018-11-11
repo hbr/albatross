@@ -1,6 +1,5 @@
+open Common_module_types
 open Common
-
-
 
 
 module type BASIC =

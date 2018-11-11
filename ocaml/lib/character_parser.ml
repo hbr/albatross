@@ -90,19 +90,19 @@ module Make =
     let expect (c:char): (char,'z) t =
       expect_base
         (fun c1 -> c1 = c)
-        (fun c1 -> "Expected '" ^ String_.one c ^
-                     "', found '" ^ String_.one c1 ^ "'")
+        (fun c1 -> "Expected '" ^ String.one c ^
+                     "', found '" ^ String.one c1 ^ "'")
 
     let letter (c: (char,'z) context) : 'z parser =
       expect_base
-        Char_.is_letter
-        (fun c -> "Expected letter, found '"  ^ String_.one c ^ "'")
+        Char.is_letter
+        (fun c -> "Expected letter, found '"  ^ String.one c ^ "'")
         c
 
     let digit (c: (char,'z) context) : 'z parser =
       expect_base
-        Char_.is_digit
-        (fun c -> "Expected digit, found '"  ^ String_.one c ^ "'")
+        Char.is_digit
+        (fun c -> "Expected digit, found '"  ^ String.one c ^ "'")
         c
 
     (* Example: Matching Parentheses:
@@ -147,7 +147,7 @@ let test (): unit =
           (Parse_position.line s)
           (Parse_position.column s)
           (f a)
-          n (String_.of_list (List.rev la)))
+          n (String.of_list (List.rev la)))
       (fun s ->
         printf "(%d,%d) not yet complete\n"
           (Parse_position.line s)
@@ -156,7 +156,7 @@ let test (): unit =
         printf "(%d,%d) error %s, consumed %d, rest '%s'\n"
           (Parse_position.line s)
           (Parse_position.column s)
-          e n (String_.of_list (List.rev la)))
+          e n (String.of_list (List.rev la)))
   in
   let run (pp:('a,'a) t) (str:string) (f:'a -> string): unit =
     print_result str (run_string pp str) f
@@ -166,11 +166,11 @@ let test (): unit =
     (many1_separated (many1 letter <|> many1 digit) (expect '\n'))
     "hello\n1\n2\n3 4 r:"
     (fun l ->
-      String.concat " " (List.map String_.of_list l))*)
+      String.concat " " (List.map String.of_list l))*)
   (*run
     (count 2 3 (fun i -> "not enough") letter)
     "abcd."
-    String_.of_list*)
+    String.of_list*)
   run
     (matching (expect '(') (expect ')'))
     "()((())).,-"

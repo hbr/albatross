@@ -488,8 +488,8 @@ module Make (P:PRINTER) =
         | [] ->
            P.make p
         | str :: tl ->
-           let word_start i = String_.find (fun c -> c <> ' ') i str in
-           let word_end i = String_.find (fun c -> c = ' ') i str in
+           let word_start i = String.find (fun c -> c <> ' ') i str in
+           let word_end i = String.find (fun c -> c = ' ') i str in
            let len = String.length str in
            let rec parse (first:bool) (i:int) (p:t): t out =
              if i = len then

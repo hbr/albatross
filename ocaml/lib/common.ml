@@ -2,12 +2,6 @@ module Ocaml_char = Char
 module Ocaml_string = String
 module Ocaml_list = List
 
-module type ANY =
-  sig
-    type t
-  end
-
-
 module Either =
   struct
     type ('a,'b) t =
@@ -19,7 +13,7 @@ module Either =
 
 
 
-module Char_ =
+module Char =
   struct
     include Char
     let is_lower (c:char): bool =
@@ -34,7 +28,7 @@ module Char_ =
 
 
 
-module String_ =
+module String =
   struct
     include String
 
@@ -77,9 +71,23 @@ module String_ =
 
 
 
-module List_ =
+module List =
   struct
-    type 'a t = 'a list
+    include List
+    include
+      Monad.Make (
+          struct
+            type 'a t = 'a list
+            let make (a:'a): 'a t =
+              [a]
+            let rec bind (m:'a t) (f:'a -> 'b t): 'b t =
+              match m with
+              | [] ->
+                 []
+              | hd :: tl ->
+                 f hd @ bind tl f
+          end
+        )
     let find (f:'a -> bool) (l:'a t): 'a option =
       try
         Some (List.find f l)
