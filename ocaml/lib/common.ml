@@ -99,13 +99,6 @@ module List =
 
     module Monadic (M:Monad.MONAD) =
       struct
-        let rec fold_left (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
-          match l with
-          | [] ->
-             M.make b
-          | hd :: tl ->
-             M.(f hd b >>= fold_left f tl)
-
         let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (b:'b)
                 : 'b M.t =
           let rec foldi i l b =
@@ -116,6 +109,12 @@ module List =
                M.(f i hd b >>= foldi (i+1) tl)
           in
           foldi 0 l b
+
+        let fold_left (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
+          M.(foldi_left (fun i -> f) l b)
+
+        let fold_right (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
+          fold_left f (rev l) b
       end
   end
 

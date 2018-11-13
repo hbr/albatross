@@ -63,6 +63,7 @@ sig
   module Monadic (M:Monad.MONAD):
   sig
     val fold_left:  ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
+    val fold_right: ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
     val foldi_left: (int -> 'a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
   end
 end
