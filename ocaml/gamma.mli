@@ -10,17 +10,13 @@ sig
   val name: t -> Feature_name.t option
   val typ:  t -> Term.typ
   val term: t -> Term.t
-  val constraints: t -> constraint_list
-  val make: Feature_name.t option -> Term.typ -> Term.t -> constraint_list -> t
-  val make_simple: string option -> Term.typ -> Term.t -> constraint_list -> t
+  val make: Feature_name.t option -> Term.typ -> Term.t -> t
+  val make_simple: string option -> Term.typ -> Term.t -> t
 end
 
 type t
 val empty: t
 
-val count_sorts: t -> int
-val sort_variables: t -> Sorts.Variables.t
-val push_sorts: int -> (int*int*bool) list -> t -> t
 
 val count: t -> int
 val is_valid: int -> t -> bool

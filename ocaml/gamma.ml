@@ -14,15 +14,13 @@ module Definition =
   struct
     type t = {name: Feature_name.t option;
               typ:  Term.typ;
-              term: Term.t;
-              constraints: constraint_list}
+              term: Term.t}
     let name (def:t): Feature_name.t option = def.name
     let typ (def:t): Term.typ = def.typ
     let term (def:t): Term.t  = def.term
-    let constraints (def:t): constraint_list = def.constraints
-    let make name typ term constraints = {name;typ;term;constraints}
-    let make_simple name typ term constraints =
-      make (some_feature_name_opt name) typ term constraints
+    let make name typ term = {name;typ;term}
+    let make_simple name typ term =
+      make (some_feature_name_opt name) typ term
   end
 
 
@@ -42,32 +40,9 @@ type entry = {
 
 
 type t = {
-    sort_variables: Sorts.Variables.t;
     gamma: entry IArr.t;
     assumptions: int list
   }
-
-
-let count_sorts (c:t): int =
-  Sorts.Variables.count c.sort_variables
-
-
-let sort_variables (c:t): Sorts.Variables.t =
-  c.sort_variables
-
-
-let push_sorts (n:int) (cs: (int*int*bool) list) (c:t): t =
-  {c with
-    sort_variables = Sorts.Variables.push n cs c.sort_variables}
-
-let push_sort_variables (n:int) (c:t): t =
-  push_sorts n [] c
-
-
-let push_sort_variable (c:t): t =
-  push_sort_variables 1 c
-
-
 
 
 
@@ -242,8 +217,7 @@ let inductive_family (i:int) (c:t): (int * Inductive.t) option=
 
 
 let empty: t =
-  {sort_variables = Sorts.Variables.empty;
-   gamma = IArr.empty;
+  {gamma = IArr.empty;
    assumptions = []}
 
 
@@ -260,8 +234,7 @@ let push_definition
 
 let push (nm:Feature_name.t option) (tp:Term.typ) (c:t): t =
   let n = count c in
-  {c with
-    gamma = IArr.push {typ = tp; just = Assumption nm} c.gamma;
+  { gamma = IArr.push {typ = tp; just = Assumption nm} c.gamma;
     assumptions = n :: c.assumptions}
 
 let push_simple (nme:string option) (tp:Term.typ) (c:t): t =

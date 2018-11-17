@@ -285,7 +285,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:Gamma.t): bool =
   let open Term in
   match ka, kb with
   | Sort sa, Sort sb ->
-     Sorts.sub sa sb (Gamma.sort_variables c)
+     Sorts.sub sa sb
   | All (nme,tpa,ta), All(_,tpb,tb) ->
      equivalent tpa tpb c
      && is_subtype ta tb (Gamma.push_simple nme tpa c)
@@ -576,7 +576,7 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
   let open Term in
   match t with
   | Sort s ->
-     Option.(Sorts.type_of s (Gamma.count_sorts c) >>= fun s -> Some (Sort s))
+     Option.(Sorts.type_of s >>= fun s -> Some (Sort s))
 
   | Variable i ->
      if  i < Gamma.count c then
@@ -918,7 +918,7 @@ let check_constructor_type
           None
         else if no_any
                 && match sort_of arg c with
-                   | Some (Sorts.Max _) ->
+                   | Some Sorts.Box ->
                       true
                    | _ ->
                       false
@@ -1107,7 +1107,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
              cc
              (Term.Variable (Gamma.to_index (i_start + ith) cc)));
         let allprop = Inductive.all_args_propositions ith ind
-        and no_any  = Inductive.sort ith ind = Sorts.Datatype
+        and no_any  = Inductive.sort ith ind = Sorts.Any
         in
         Option.fold_array
           (fun _ (nme,c_type,argcls) _ ->
@@ -1154,51 +1154,45 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
 
 
 (* Predicate (A:Any): Any := A -> Proposition *)
-let predicate (sv0:int): Gamma.Definition.t =
+let predicate: Gamma.Definition.t =
   let open Term in
-  let v0 = sort_variable sv0 in
-  let t = Lambda (Some "A", v0, arrow variable0 proposition)
-  and typ = All (Some "A", v0, v0) in
-  Gamma.Definition.make_simple (Some "Predicate") typ t []
+  let t = Lambda (Some "A", any, arrow variable0 proposition)
+  and typ = All (Some "A", any, any) in
+  Gamma.Definition.make_simple (Some "Predicate") typ t
 
 
 (* Relation (A,B:Any): Any := A -> Proposition *)
-let binary_relation (sv0:int): Gamma.Definition.t =
+let binary_relation: Gamma.Definition.t =
   let open Term in
-  let v0 = sort_variable sv0
-  and v1 = sort_variable (sv0+1) in
   let t = Lambda
-            (Some "A",v0,
+            (Some "A",any,
              Lambda
-               (Some "B",v1,
+               (Some "B",any,
                 arrow variable1 (arrow variable0 proposition)))
   and typ = All
               (Some "A",
-               v0,
+               any,
                All
                  (Some "B",
-                  v1,
-                  product1 v0 v1))
+                  any,
+                  any))
   in
-  Gamma.Definition.make_simple (Some "Relation") typ t []
+  Gamma.Definition.make_simple (Some "Relation") typ t
 
 
 (* Endo_relation (A:Any): Any := Relation(A,A) *)
-let endorelation (sv0:int) (rel_idx:int) (rel_sv0:int): Gamma.Definition.t =
+let endorelation (rel_idx:int): Gamma.Definition.t =
   let open Term in
   let t =
     Lambda
       (Some "A",
-       sort_variable sv0,
+       any,
        apply_args (Variable (rel_idx+1)) [variable0;variable0])
   and typ =
     All
-      (Some "A",
-       sort_variable sv0,
-       product1 (sort_variable rel_sv0) (sort_variable (rel_sv0+1)))
+      (Some "A", any, any)
   in
   Gamma.Definition.make_simple (Some "Endorelation") typ t
-    [(sv0,rel_sv0,false); (sv0,rel_sv0+1,false)]
 
 
 
@@ -1233,7 +1227,7 @@ let nat_pred0 (nat_idx:int): Gamma.Definition.t =
               Lambda(Some "n", up 1 nat_tp, variable0)
             |]))
   in
-  Gamma.Definition.make nme typ t []
+  Gamma.Definition.make nme typ t
 
 
 (* (+)(a,b:Natural): Natural :=
@@ -1315,7 +1309,7 @@ let test (): unit =
   Printf.printf "test type checker\n";
   let open Term in
   let open Gamma in
-  let c = push_unnamed datatype
+  (*let c = push_unnamed datatype
             (push_sorts 2 [0,1,false] empty) in
   let c1 = push_unnamed variable0 c in
   assert ( is_wellformed (sort_variable 0) c);
@@ -1331,22 +1325,25 @@ let test (): unit =
       Option.( type_and_sort_of variable0 c1 >>= fun (_,s) ->
                Some s
       ) = Some datatype
-    end;
+    end;*)
+
+  let c = push_unnamed any empty
+  in
 
   (* Proposition -> Proposition *)
-  assert ( type_of (arrow proposition proposition) c = Some any1);
+  assert ( type_of (arrow proposition proposition) empty = Some any);
 
   (* Natural -> Proposition *)
-  assert ( type_of (arrow variable0 proposition) c = Some any1);
+  assert ( type_of (arrow variable0 proposition) c = Some any);
 
   (* (Natural -> Proposition) -> Proposition **)
   assert ( type_of (arrow
                     (arrow variable0 proposition)
-                    proposition) c = Some any1);
+                    proposition) c = Some any);
 
   (* all(A:Prop) A -> A : Proposition *)
   assert ( product proposition proposition = Some proposition );
-  assert ( product datatype proposition    = Some proposition );
+  assert ( product any proposition         = Some proposition );
   assert ( type_of (All (None,
                        proposition,
                        arrow variable0 variable0)) c
@@ -1354,14 +1351,14 @@ let test (): unit =
 
   (* all(n:Natural) n -> n is illformed, n is not a type! *)
   assert ( type_of (All (None,
-                       Variable 0,
-                       arrow variable0 variable0)) c
+                         Variable 0,
+                         arrow variable0 variable0)) c
            = None);
 
-  (* Natural -> Natural : Datatype *)
-  assert ( product datatype datatype    = Some datatype );
+  (* Natural -> Natural : Any *)
+  assert ( product any any = Some any );
   assert ( type_of (arrow variable0 variable0) c
-           = Some datatype);
+           = Some any);
 
   (* ((A:Prop,p:A) := p): all(A:Prop) A -> A *)
   assert ( type_of
@@ -1384,20 +1381,20 @@ let test (): unit =
           = Some proposition);
 
   (* All inhabitor type:
-         all(p:SV0) p:  SV0'
+         all(A:Any) A  : Box
      is equivalent to false *)
-  assert( type_of (All (Some "T", sort_variable 0, variable0)) c
-          = Some (sort_variable_type 0));
+  assert( type_of (All (Some "A", any, variable0)) c
+          = Some box);
 
   assert (check_inductive_definition Inductive.make_natural empty <> None);
   assert (check_inductive_definition Inductive.make_false empty <> None);
   assert (check_inductive_definition Inductive.make_true empty <> None);
   assert (check_inductive_definition Inductive.make_and empty <> None);
   assert (check_inductive_definition Inductive.make_or empty <> None);
-  assert (check_inductive_definition (Inductive.make_equal 0) c <> None);
-  assert (check_inductive_definition (Inductive.make_list (Some 0)) c <> None);
-  assert (check_inductive_definition (Inductive.make_accessible 0) c <> None);
-  assert (check_inductive_definition (Inductive.make_exist 0) c <> None);
+  assert (check_inductive_definition Inductive.make_equal c <> None);
+  assert (check_inductive_definition Inductive.make_list c <> None);
+  assert (check_inductive_definition Inductive.make_accessible c <> None);
+  assert (check_inductive_definition Inductive.make_exist c <> None);
 
   (* class Natural create 0; successor(Natural) end *)
   ignore(
@@ -1405,51 +1402,13 @@ let test (): unit =
       in
       assert (check_inductive_definition ind empty <> None);
       let c = push_inductive ind empty in
-      assert (type_of variable2 c = Some datatype);
+      assert (type_of variable2 c = Some any);
       assert (type_of variable1 c = Some variable2);
       assert (type_of variable0 c = Some (arrow variable2 variable2))
     );
 
 
 
-  (* Failed predicativity:
-     class Option(A:Any): Datatype create
-         just(a:A): Option(A)
-         nothing: Option(A)
-     end
-   *)
-  assert
-    begin
-      printf "check 'Option_bad'\n";
-      let open Inductive in
-      let open Term in
-      let c = Gamma.push_sorts 2 [] empty in
-      let ind =
-        make_simple
-          (some_feature_name "Option_bad")
-          [Some "A", sort_variable 0, true]
-          datatype
-          Sorts.Datatype
-          false
-          begin
-            let opt = variable0
-            and biga = variable1
-            and n = 2
-            in
-            [cmake
-               None
-               [Positive]
-               (Inductive.ndproduct [biga; apply1 opt biga] |> to_index n);
-
-             cmake
-               None
-               []
-               (apply1 opt biga |> to_index n)
-            ]
-          end
-      in
-      check_inductive_definition ind c = None
-    end;
 
   (* Failed positivity:
      class C create
@@ -1463,8 +1422,8 @@ let test (): unit =
         make_simple
           (some_feature_name "C")
           []
-          datatype
-          Sorts.Datatype
+          any
+          Sorts.Any
           false
           [cmake
              None
@@ -1478,13 +1437,12 @@ let test (): unit =
   (* Check Tree *)
   ignore(
       let c =
-        Gamma.push_sorts 4 [1,0,false] Gamma.empty
-        |> Gamma.push_inductive (Inductive.make_list (Some 0))
+        Gamma.push_inductive Inductive.make_list empty
       in
       assert (Gamma.count c = 3);
       assert (
           check_inductive_definition
-            (Inductive.make_tree (Some 1) 2)
+            (Inductive.make_tree 2)
             c
           <> None
         )
@@ -1493,28 +1451,26 @@ let test (): unit =
   (* Predicate, Relation, Endorelation *)
   assert
     begin
-      let d = predicate 0 in
       equal_opt
-        (type_of (Definition.term d) c)
-        (Definition.typ d)
+        (type_of (Definition.term predicate) c)
+        (Definition.typ predicate)
     end;
   assert
     begin
-      let d = binary_relation 0 in
+      let d = binary_relation in
       equal_opt
         (type_of (Definition.term d) c)
         (Definition.typ d)
     end;
   begin
-    let endo = endorelation 2 0 0 in
+    let endo = endorelation 0 in
     let c =
-      (push_sorts 3 (Definition.constraints endo) empty)
-      |> push_definition (binary_relation 0)
+      push_definition binary_relation empty
     in
     assert (equal_opt (type_of (Definition.term endo) c) (Definition.typ endo));
     let c =
       push_definition endo c
-      |> push_simple (Some "Natural") datatype in
+      |> push_simple (Some "Natural") any in
     (* Endorelation(Natural) *)
     let endo_nat = Application(variable1,variable0,false) in
     (*print_type_of endo_nat c;*)

@@ -331,11 +331,11 @@ let make_or: t =
       exist_intro (a:A, p:pred(a)): exist(A,pred)
    end
  *)
-let make_exist (sv0:int): t =
+let make_exist: t =
   let open Term in
   make_simple
     (some_feature_name "exist")
-    [ Some "A", sort_variable sv0, false;
+    [ Some "A", any, false;
       Some "pred", arrow variable0 proposition, false]
     proposition
     Sorts.Proposition
@@ -367,11 +367,11 @@ let make_exist (sv0:int): t =
            : r.accessible(y)
    end
  *)
-let make_accessible (sv0:int): t =
+let make_accessible: t =
   let open Term in
   make_simple
     (some_feature_name "accessible")
-    [ Some "A", sort_variable sv0, false;
+    [ Some "A", any, false;
       Some "r", arrow variable0 (arrow variable0 proposition), false;
       Some "y", variable1, false]
     proposition
@@ -408,7 +408,7 @@ let make_accessible (sv0:int): t =
        reflexive: a = a
    end
  *)
-let make_equal (sv0:int): t =
+let make_equal: t =
   let open Term in
   let abig = variable0
   and bbig = variable2
@@ -417,10 +417,10 @@ let make_equal (sv0:int): t =
   make_simple
     (some_feature_operator Operator.Eqop)
     [
-      Some "A", (sort_variable sv0), true;
-      Some "a", abig,                false
+      Some "A", any,  true;
+      Some "a", abig, false
     ]
-    ( All(Some "B", sort_variable (sv0+1), ndproduct [bbig; proposition])
+    ( All(Some "B", any, ndproduct [bbig; proposition])
       |> to_index n)
     Sorts.Proposition
     false
@@ -453,8 +453,8 @@ let make_natural: t =
   make_simple
     (some_feature_name "Natural")
     []       (* no parameter *)
-    datatype (* of sort datatype *)
-    Sorts.Datatype
+    any      (* of sort any *)
+    Sorts.Any
     false    (* no elim restriction *)
     begin
       let nat = variable0 in
@@ -478,20 +478,13 @@ let make_natural: t =
        (^)(A,List(A))
    end
  *)
-let make_list (sv0:int option): t =
+let make_list: t =
   let open Term in
-  let sort_term,sort =
-    match sv0 with
-    | None ->
-       datatype, Sorts.Datatype
-    | Some sv0 ->
-       sort_variable sv0, Sorts.variable sv0
-  in
   make_simple
     (some_feature_name "List")
-    [ Some "A", sort_term, true]            (* one parameter *)
-    sort_term                               (* arity *)
-    sort
+    [ Some "A", any, true]                  (* one parameter *)
+    any                                     (* arity *)
+    Sorts.Any
     false                                   (* no elim restriction *)
     begin
       let lst = variable0
@@ -518,20 +511,13 @@ let make_list (sv0:int option): t =
        node (A, List(Tree(A)))
    end
  *)
-let make_tree (sv0:int option) (i_lst:int): t =
+let make_tree (i_lst:int): t =
   let open Term in
-  let sort_term,sort =
-    match sv0 with
-    | None ->
-       datatype, Sorts.Datatype
-    | Some sv0 ->
-       sort_variable sv0, Sorts.variable sv0
-  in
   make_simple
     (some_feature_name "Tree")
-    [Some "A", sort_term, true]             (* one parameter *)
-    sort_term                               (* arity *)
-    sort
+    [Some "A", any, true]                   (* one parameter *)
+    any                                     (* arity *)
+    Sorts.Any
     false                                   (* no elim restriction *)
     begin
       let cnt = i_lst + 1

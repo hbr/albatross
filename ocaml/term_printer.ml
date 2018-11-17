@@ -147,37 +147,10 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       match s with
       | Sorts.Proposition ->
          put "Proposition"
-      | Sorts.Datatype ->
-         put "Datatype"
-      | Sorts.Any1 ->
-         put "Any1"
-      | Sorts.Max s ->
-         let string_of_sv i b =
-           let s = "SV" ^ string_of_int i in
-           if b then
-             s ^ "'"
-           else
-             s
-         in
-         let rec print_list lst =
-           match lst with
-           | [] ->
-              assert false (* cannot happen *)
-           | [i,b] ->
-              put (string_of_sv i b)
-           | (i,b) :: lst ->
-              fun pp ->
-              put (string_of_sv i b) pp
-              >>= put ","
-              >>= print_list lst
-         in
-         match Sorts.Set.bindings s with
-         | [] ->
-            assert false
-         | [i,b] ->
-            put (string_of_sv i b)
-         | lst  ->
-            fun pp -> put "max(" pp >>= print_list lst >>= put ")"
+      | Sorts.Any ->
+         put "Any"
+      | Sorts.Box ->
+         put "Box"
 
 
     and variable i c pp =

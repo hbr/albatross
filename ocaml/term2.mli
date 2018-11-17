@@ -32,11 +32,10 @@ type gamma = fname_type array
 type arguments = name_type array
 type argument_list = name_type list
 
-val datatype: t
 val proposition: t
-val any1: t
-val sort_variable: int -> t
-val sort_variable_type: int -> t
+val any: t
+val box: t
+
 val product: t -> t -> t option
 val product1: t -> t -> t
 val get_sort: t -> Sorts.t option

@@ -53,9 +53,9 @@ val make_false: t
 val make_true: t
 val make_and: t
 val make_or: t
-val make_equal: int -> t
-val make_exist: int -> t
-val make_accessible: int -> t
+val make_equal: t
+val make_exist: t
+val make_accessible: t
 val make_natural: t
-val make_list: int option -> t
-val make_tree: int option -> int -> t
+val make_list: t
+val make_tree: int -> t

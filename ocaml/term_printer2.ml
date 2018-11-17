@@ -152,34 +152,10 @@ module Make (C:CONTEXT)
       match s with
       | Sorts.Proposition ->
          text "Proposition"
-      | Sorts.Datatype ->
-         text "Datatype"
-      | Sorts.Any1 ->
-         text "Any1"
-      | Sorts.Max s ->
-         let sv i b =
-           let s = Pervasives.("SV" ^ (string_of_int i)) in
-           if b then
-             text Pervasives.(s ^ "'")
-           else
-             text s
-         in
-         let rec sv_list lst =
-           match lst with
-           | [] ->
-              assert false (* cannot happen *)
-           | [i,b] ->
-              sv i b
-           | (i,b) :: lst ->
-              sv i b ^ text "," ^ sv_list lst
-         in
-         match Sorts.Set.bindings s with
-         | [] ->
-            assert false
-         | [i,b] ->
-            sv i b
-         | lst  ->
-            text "max(" ^ sv_list lst ^ text ")"
+      | Sorts.Any ->
+         text "Any"
+      | Sorts.Box ->
+         text "Box"
 
 
     and print_variable i c =

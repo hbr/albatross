@@ -31,16 +31,9 @@ type arguments = name_type array
 type argument_list = name_type list
 
 
-
-let datatype: t = Sort Sorts.Datatype
 let proposition: t = Sort Sorts.Proposition
-let any1: t = Sort Sorts.Any1
-
-let sort_variable (i:int): t =
-  Sort (Sorts.variable i)
-
-let sort_variable_type (i:int): t =
-  Sort (Sorts.variable_type i)
+let any: t = Sort Sorts.Any
+let box: t = Sort Sorts.Box
 
 
 let product (a:t) (b:t): t option =
