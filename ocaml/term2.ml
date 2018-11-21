@@ -397,9 +397,9 @@ let reduce_fixpoint (i:int) (fp:fixpoint): t =
 
 let beta_reduce (f:t) (args:t list): t * t list =
   (* Beta reduce the term [f(args)] where [f] is not an
-         application. Analyze the function term [f] and extract lambda terms
-         possible as many as there are arguments and do beta reduction. Return
-         the beta reduced term and the remaining arguments. *)
+     application. Analyze the function term [f] and extract lambda terms
+     possible as many as there are arguments and do beta reduction. Return
+     the beta reduced term and the remaining arguments. *)
   let rec beta f args args_rest =
     match f,args_rest with
     | Lambda (_,_,t0), a :: args_rest ->
@@ -413,7 +413,7 @@ let beta_reduce (f:t) (args:t list): t * t list =
           nargs
           (fun i ->
             (* argument 0 is the last argument (list is reversed). Last
-                   argument (innermost) has to replace the variable 0. *)
+               argument (innermost) has to replace the variable 0. *)
             assert (i < nargs);
             args.(i)
           )
