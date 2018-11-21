@@ -92,15 +92,14 @@ module Raw_context =
 module type S =
   sig
     type context
-    val print: Term.t -> context -> Pretty_printer2.Document.t
-    val print_fixpoint: Term.fixpoint -> context -> Pretty_printer2.Document.t
+    val print: Term.t -> context -> Document.t
+    val print_fixpoint: Term.fixpoint -> context -> Document.t
   end
 
 
 module Make (C:CONTEXT)
   =
   struct
-    open Pretty_printer2
 
     type context = C.t
 
@@ -310,8 +309,7 @@ module Make (C:CONTEXT)
 
 let string_of_term (t:Term.t): string =
   let module PR = Make (Raw_context) in
-  let open Pretty_printer2 in
-  Layout.pretty 50 (PR.print t Raw_context.empty)
+  Document.string_of 50 (PR.print t Raw_context.empty)
 
 
 let test (): unit =

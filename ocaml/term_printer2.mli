@@ -20,8 +20,8 @@ module type CONTEXT =
 module type S =
   sig
     type context
-    val print: Term.t -> context -> Pretty_printer2.Document.t
-    val print_fixpoint: Term.fixpoint -> context -> Pretty_printer2.Document.t
+    val print: Term.t -> context -> Document.t
+    val print_fixpoint: Term.fixpoint -> context -> Document.t
   end
 
 module Make (C:CONTEXT)

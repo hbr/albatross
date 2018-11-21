@@ -18,12 +18,12 @@ let string_of_term (c:Gamma.t) (t:Term.t): string =
 
 let string_of_term2 (c:Gamma.t) (t:Term.t): string =
   let module TP = Term_printer2.Make (Gamma) in
-  Pretty_printer2.Layout.pretty 70 (TP.print t c)
+  Document.string_of 70 (TP.print t c)
 
 
 let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
   let module TP = Term_printer2.Make (Gamma) in
-  Pretty_printer2.Layout.pretty 70 (TP.print_fixpoint fp c)
+  Document.string_of 70 (TP.print_fixpoint fp c)
 
 
 (* =============================================
