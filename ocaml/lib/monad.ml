@@ -50,6 +50,26 @@ module type RESULT_IN =
 
 
 
+module type OUTPUT =
+  sig
+    include MONAD
+    val putc: char -> unit t
+    val put_string: string -> unit t
+    val put_line:   string -> unit t
+    val put_newline: unit t
+    val put_substring: int -> int -> string -> unit t
+    val fill: char -> int -> unit t
+  end
+
+
+module type OUTPUT_INDENT =
+  sig
+    include OUTPUT
+    val indent: int -> 'a t -> 'a t
+  end
+
+
+
 module type READER =
   functor (Env:ANY) ->
   sig
@@ -58,6 +78,23 @@ module type READER =
     val ask: env t
     val local: (env->env) -> 'a t -> 'a t
   end
+
+
+
+module type READER_INTO =
+  functor (M:MONAD) (Env:ANY) ->
+  sig
+    include MONAD
+
+    type env = Env.t
+
+    val run: env -> 'a t -> 'a M.t
+    val ask: env t
+    val local: (env->env) -> 'a t -> 'a t
+    val lift: 'a M.t -> 'a t
+  end
+
+
 
 
 
@@ -201,23 +238,57 @@ module Reader (Env:ANY) =
     include
       Make (
           struct
-            type 'a t = Env.t -> 'a
-            let make (a:'a) (e:Env.t): 'a =
+            type 'a t = env -> 'a
+            let make (a:'a) (e:env): 'a =
               a
-            let bind (m:'a t) (f:'a -> 'b t) (e:Env.t): 'b =
+            let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b =
               f (m e) e
           end
         )
 
-    let run (e:Env.t) (m:'a t): 'a =
+    let run (e:env) (m:'a t): 'a =
       m e
 
-    let ask (e:Env.t): Env.t =
+    let ask (e:env): env =
       e
 
-    let local (f:Env.t->Env.t) (m:'a t) (e:env): 'a =
+    let local (f:env->env) (m:'a t) (e:env): 'a =
       f e |> m
   end
+
+
+
+
+module Reader_into: READER_INTO =
+  functor (M:MONAD) (Env:ANY) ->
+  struct
+    type env = Env.t
+    include
+      Make (
+          struct
+            type 'a t = env -> 'a M.t
+            let make (a:'a) (e:env): 'a M.t =
+              M.make a
+            let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b M.t =
+              M.(m e >>= fun a -> f a e)
+          end
+        )
+
+    let run (e:env) (m:'a t): 'a M.t =
+      m e
+
+    let ask: env t = M.make
+
+    let local (f:env->env) (m:'a t) (e:env): 'a M.t =
+      f e |> m
+
+    let lift (m:'a M.t) (e:env): 'a M.t =
+      m
+  end
+
+
+
+
 
 
 

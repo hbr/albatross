@@ -47,6 +47,27 @@ module type RESULT_IN =
 
 
 
+module type OUTPUT =
+  sig
+    include MONAD
+    val putc: char -> unit t
+    val put_string: string -> unit t
+    val put_line: string -> unit t
+    val put_newline: unit t
+    val put_substring: int -> int -> string -> unit t
+    val fill: char -> int -> unit t
+  end
+
+
+
+module type OUTPUT_INDENT =
+  sig
+    include OUTPUT
+    val indent: int -> 'a t -> 'a t
+  end
+
+
+
 module type READER =
   functor (Env:ANY) ->
   sig
@@ -54,6 +75,21 @@ module type READER =
     type env = Env.t
     val ask: env t
     val local: (env->env) -> 'a t -> 'a t
+  end
+
+
+
+module type READER_INTO =
+  functor (M:MONAD) (Env:ANY) ->
+  sig
+    include MONAD
+
+    type env = Env.t
+
+    val run: env -> 'a t -> 'a M.t
+    val ask: env t
+    val local: (env->env) -> 'a t -> 'a t
+    val lift: 'a M.t -> 'a t
   end
 
 
@@ -116,6 +152,8 @@ module Result_in (M:MONAD) (Error:ANY): RESULT_IN
 
 
 module Reader: READER
+
+module Reader_into: READER_INTO
 
 module State (St:ANY): STATE with type state = St.t
 
