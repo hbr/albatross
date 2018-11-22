@@ -96,9 +96,10 @@ module type READER_INTO =
 
 
 module type STATE =
+  functor (S:ANY) ->
   sig
     include MONAD
-    type state
+    type state = S.t
     val get: state t
     val put: state -> unit t
     val update: (state -> state) -> unit t
@@ -110,14 +111,16 @@ module type STATE =
 
 
 module type STATE_INTO =
+  functor (M:MONAD) (S:ANY) ->
   sig
     include MONAD
-    module M: MONAD
-    type state
+    type state = S.t
     val lift: 'a M.t -> 'a t
     val get: state t
     val put: state -> unit t
     val update: (state -> state) -> unit t
+    val run: state -> 'a t -> ('a*state) M.t
+    val eval: state -> 'a t -> 'a M.t
   end
 
 
@@ -155,11 +158,10 @@ module Reader: READER
 
 module Reader_into: READER_INTO
 
-module State (St:ANY): STATE with type state = St.t
+module State: STATE
 
 
-module State_into (M:MONAD) (St:ANY)
-       : STATE_INTO with type state = St.t
+module State_into: STATE_INTO
 
 
 module State_with_result (S:ANY) (Error:ANY)
