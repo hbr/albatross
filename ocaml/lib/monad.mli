@@ -47,6 +47,16 @@ module type RESULT_IN =
 
 
 
+module type READER =
+  functor (Env:ANY) ->
+  sig
+    include MONAD
+    type env = Env.t
+    val ask: env t
+    val local: (env->env) -> 'a t -> 'a t
+  end
+
+
 
 
 module type STATE =
@@ -104,6 +114,8 @@ module Result (Error:ANY): RESULT with type error = Error.t and
 
 module Result_in (M:MONAD) (Error:ANY): RESULT_IN
 
+
+module Reader: READER
 
 module State (St:ANY): STATE with type state = St.t
 

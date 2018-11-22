@@ -50,6 +50,16 @@ module type RESULT_IN =
 
 
 
+module type READER =
+  functor (Env:ANY) ->
+  sig
+    include MONAD
+    type env = Env.t
+    val ask: env t
+    val local: (env->env) -> 'a t -> 'a t
+  end
+
+
 
 module type STATE =
   sig
@@ -105,43 +115,6 @@ module Make (M:MONAD0): MONAD with type 'a t = 'a M.t =
       m >>= fun a -> make (f a)
     let apply (f: ('a -> 'b) t) (m:'a t): 'b t =
       f >>= fun f -> map f m
-    (*let sequence (lst:'a t list): 'a list t =
-      List.fold_right
-        (fun m mlst ->
-          mlst >>= fun lst ->
-          m >>= fun a ->
-          make (a :: lst)
-        )
-        lst
-        (make [])*)
-    let (>>) (m1:'a t) (m2:'b t): 'b t =
-      m1 >>= fun _ -> m2
-    (*let map_list (lst:'a list) (f:'a -> 'b t): 'b list t =
-      let rec mplst (lst:'a list) (res:'b list): 'b list t =
-        match lst with
-        | [] ->
-           make res
-        | hd :: tl ->
-           f hd >>= fun b ->
-           mplst tl (b :: res)
-      in
-      map List.rev (mplst lst [])*)
-    (*let map_array (arr:'a array) (f:'a -> 'b t): 'b array t =
-      let len = Array.length arr in
-      let rec mp (i:int) (res:'b array): 'b array t =
-        if i = len then
-          make res
-        else
-          f arr.(i) >>= fun b ->
-          let res =
-            if Array.length res = len then
-              (res.(i) <- b; res)
-            else
-              (Array.make len b)
-          in
-          mp (i+1) res
-      in
-      mp 0 [||]*)
   end
 
 
@@ -220,6 +193,31 @@ module Result_in (M:MONAD) (Error:ANY) =
   end (* Result_in *)
 
 
+
+
+module Reader (Env:ANY) =
+  struct
+    type env = Env.t
+    include
+      Make (
+          struct
+            type 'a t = Env.t -> 'a
+            let make (a:'a) (e:Env.t): 'a =
+              a
+            let bind (m:'a t) (f:'a -> 'b t) (e:Env.t): 'b =
+              f (m e) e
+          end
+        )
+
+    let run (e:Env.t) (m:'a t): 'a =
+      m e
+
+    let ask (e:Env.t): Env.t =
+      e
+
+    let local (f:Env.t->Env.t) (m:'a t) (e:env): 'a =
+      f e |> m
+  end
 
 
 
