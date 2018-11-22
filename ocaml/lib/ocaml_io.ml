@@ -359,6 +359,7 @@ module type IO_TYPE =
     val putc: out_file -> char -> unit t
     val get_line: in_file -> string option t
     val put_string: out_file -> string -> unit t
+    val put_line: out_file -> string -> unit t
     val put_substring: out_file -> int -> int -> string -> unit t
     val fill: out_file -> char -> int -> unit t
     val open_for_read:  string -> in_file option t
@@ -411,11 +412,19 @@ module IO: IO_TYPE =
     let exit (code:int): 'a t =
       fun fs -> Error code, fs
 
-    let execute (p:unit t): unit =
-      let r,fs = p (File_system.make ()) in
+    let execute (program:unit t): unit =
+      let fs = File_system.make ()
+      in
+      let result,fs =
+        try
+          fs |> program
+        with e ->
+          File_system.flush_all fs;
+          raise e
+      in
       File_system.flush_all fs;
       Pervasives.exit
-        (match r with
+        (match result with
          | Ok _ ->
             0
          | Error c ->
