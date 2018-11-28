@@ -1,9 +1,120 @@
+open Common
+
 module Info =
   struct
     type t =
       | Position of int * int
       | Unknown
   end
+
+module Application_type =
+  struct
+    type t =
+      | First
+      | First_implicit
+      | Target
+      | Binary
+      | Unary
+      | Implicit
+      | Any
+  end
+
+
+module Precedence =
+  struct
+    type associativity =
+      Left | Right | Nonassoc
+
+    type precedence = int
+
+    type t = precedence * associativity
+
+
+    let lowest: t     =        0, Nonassoc
+    let comma:  t     =       10, Right         (* a,b,c = a,(b,c) *)
+    let argument_list: t =    11, Nonassoc
+    let quantifier: t =       20, Nonassoc
+    let arrow: t      =       30, Right
+    let disjunction: t =      40, Right
+    let conjunction: t =      50, Right
+    let negation: t =         60, Nonassoc
+    let relop: t =            70, Nonassoc
+    let addition: t =         80, Left
+    let multiplication: t =   90, Left
+    let exponentiation:t =   100, Right
+    let application: t =     110, Left          (* f(x)(y) = (f(x))(y) *)
+    let dot: t =             120, Left          (* x.f.g = (x.f).g *)
+    let highest: t =         130, Nonassoc
+
+
+    let lower_needs_parens (upper:t) (lower:t): bool =
+      let lower,_ = lower
+      and upper,_ = upper
+      in
+      lower < upper
+
+    let left_needs_parens (upper:t) (left:t): bool =
+      let lprec,lass = left
+      and uprec,uass = upper
+      in
+      lprec < uprec || (lprec = uprec && lass = Right)
+
+    let right_needs_parens (upper:t) (right:t): bool =
+      let rprec,rass = right
+      and uprec,uass = upper
+      in
+      rprec < uprec || (rprec = uprec && rass = Left)
+
+  end
+
+module Operator2 =
+  struct
+    type t = string * Precedence.t
+
+    let compare ((a,_):t) ((b,_):t): int =
+      Pervasives.compare a b
+
+    module Map = Finite_map.Make (String)
+
+    let ops: t Map.t =
+      List.fold_left
+        (fun m (s,prec) -> Map.add s (s,prec) m)
+        Map.empty
+        ["+",   Precedence.addition;
+         "-",   Precedence.addition;
+         "*",   Precedence.multiplication;
+         "/",   Precedence.multiplication;
+         "mod", Precedence.multiplication;
+         "^",   Precedence.exponentiation;
+
+         "and", Precedence.conjunction;
+         "or",  Precedence.disjunction;
+         "not", Precedence.negation;
+
+         "=",   Precedence.relop;
+         "/=",  Precedence.relop;
+         "~",   Precedence.relop;
+         "/~",  Precedence.relop;
+         "<",   Precedence.relop;
+         ">",   Precedence.relop;
+         "<=",  Precedence.relop;
+         ">=",  Precedence.relop;
+
+
+         "->",  Precedence.arrow;
+         "=>",  Precedence.arrow;
+        ]
+
+    let of_string (s:string): t option =
+      Map.maybe_find s ops
+
+    let string (op:t): string =
+      fst op
+
+    let precedence (op:t): Precedence.t =
+      snd op
+  end
+
 
 
 module Operator =
@@ -69,7 +180,8 @@ module Feature_name =
   struct
     type t =
       | Name of string
-      | Operator of Operator.t
+      | Operator  of Operator.t
+      | Operator2 of Operator2.t
       | Bracket
       | True
       | False

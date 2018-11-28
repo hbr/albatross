@@ -11,7 +11,7 @@ type oo_application = bool
 type t =
   | Sort of Sorts.t
   | Variable of int
-  | Application of t * t * oo_application
+  | Application of t * t * Application_type.t
   | Lambda of abstraction
   | All of abstraction
   | Inspect of t * t * (t*t) array
@@ -67,17 +67,21 @@ let variable3: t = Variable 3
 let variable4: t = Variable 4
 let variable5: t = Variable 5
 
+
+let apply_any (f:t) (a:t): t =
+  Application (f, a, Application_type.Any)
+
 let apply1 (f:t) (a:t): t =
-  Application (f, a, false)
+  Application (f, a, Application_type.First)
 
 let apply2 (f:t) (a:t) (b:t): t =
-  apply1 (apply1 f a) b
+  apply_any (apply1 f a) b
 
 let apply3 (f:t) (a:t) (b:t) (c:t): t =
-  apply1 (apply2 f a b) c
+  apply_any (apply2 f a b) c
 
 let apply4 (f:t) (a:t) (b:t) (c:t) (d:t): t =
-  apply1 (apply3 f a b c) d
+  apply_any (apply3 f a b c) d
 
 
 
@@ -173,8 +177,8 @@ let map_from (start:int) (f:int->int) (t:t): t =
        let idx = f (i-s) + s in
        assert (s <= idx); (* no capturing allowed *)
        Variable idx
-    | Application (a,b,oo) ->
-       Application (map s a, map s b, oo)
+    | Application (a,b,app) ->
+       Application (map s a, map s b, app)
     | Lambda (nm,tp,t) ->
        Lambda (nm, map s tp, map (s+1) t)
     | All (nm,tp,t) ->
@@ -231,12 +235,21 @@ let rec split_application (f:t) (args:t list): t * t list =
   | _ ->
      f, args
 
-
+let application_type (i:int): Application_type.t =
+  if i = 0 then
+    Application_type.First
+  else
+    Application_type.Any
 
 let apply_args (f:t) (args:t list): t =
-  List.fold_left
-    (fun f a -> Application (f,a,false))
-    f args
+  let t,_ =
+    List.fold_left
+      (fun (f,i) a ->
+        Application (f, a, application_type i),
+        i+1)
+      (f,0) args
+  in
+  t
 
 let rec apply_n_args (f:t) (n:int) (args: t list): t =
   if n = 0 then
@@ -255,7 +268,7 @@ let apply_arg_array (f:t) (args: t array): t =
     if i = nargs then
       t
     else
-      apply (i+1) (Application (t,args.(i),false))
+      apply (i+1) (Application (t, args.(i), application_type i))
   in
   apply 0 f
 
@@ -268,15 +281,25 @@ let apply_standard (n:int) (start:int) (f:t): t =
    *)
   let res = ref f in
   for i = 0 to n - 1 do
-    res := Application (!res, Variable (start + n - 1 - i), false)
+    res := Application (!res,
+                        Variable (start + n - 1 - i),
+                        application_type i)
   done;
   !res
 
 
 
-let rec split_lambda0 (n:int) (a:t) (i:int) (args: argument_list)
+let rec split_lambda0
+          (n:int) (a:t) (i:int) (args: argument_list)
         : t * argument_list =
-  (* Analyze [(a:A,b:B, ...) := t], return (t, [...,b:B,a:A,args]) *)
+  (* Analyze [(a:A,b:B, ...) := t], return (t, [...,b:B,a:A,args])
+
+     [i]: number of arguments in [args]
+
+     [n]: number of arguments to split from [t], if -1 then all possible
+     splits.
+
+   *)
   if i = n then
     a,args
   else
@@ -303,19 +326,31 @@ let rec lambda (args:argument_list) (e:t): t =
      Lambda (nme, tp, lambda args e)
 
 
-let rec split_product0 (a:typ) (args: argument_list): typ * argument_list =
-  (* Analyze [all(a:A,b:B, ...) T], return (T, [...,b:B,a:A,args]) *)
-  match a with
-  | All(nme,tp,t) ->
-     split_product0 t ((nme,tp) :: args)
-  | _ ->
-     a, args
+let rec split_product0
+          (n:int) (a:typ) (i:int) (args: argument_list)
+        : typ * argument_list =
+  (* Analyze [all(a:A,b:B, ...) T], return (T, [...,b:B,a:A,args])
+
+     [i]: number of arguments in [args]
+
+     [n]: number of arguments to split from [t], if -1 then all possible
+     splits.
+
+   *)
+  if i = n then
+    a, args
+  else
+    match a with
+    | All(nme,tp,t) ->
+       split_product0 n t (i+1) ((nme,tp) :: args)
+    | _ ->
+       a, args
 
 
 
 let split_product(a:typ): arguments * typ =
   (* Analyze [all(a:A,b:B, ...) T], return ([A,B,...], T) *)
-  let tp, args = split_product0 a [] in
+  let tp, args = split_product0 (-1) a 0 [] in
   let n = List.length args in
   let arr = Array.make n (None,tp) in
   let rec mkarr i args =

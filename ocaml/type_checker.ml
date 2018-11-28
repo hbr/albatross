@@ -16,14 +16,15 @@ let string_of_term (c:Gamma.t) (t:Term.t): string =
   let open PP in
   SP.run 200 (make 30 () >>= TP.print t c)
 
+
 let string_of_term2 (c:Gamma.t) (t:Term.t): string =
   let module TP = Term_printer2.Make (Gamma) in
-  Document.string_of 70 (TP.print t c)
+  Document.string_of 70 (TP.term c TP.detailed t)
 
 
 let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
   let module TP = Term_printer2.Make (Gamma) in
-  Document.string_of 70 (TP.print_fixpoint fp c)
+  Document.string_of 70 (TP.fixpoint c TP.detailed fp)
 
 
 (* =============================================
@@ -1212,7 +1213,7 @@ let nat_pred0 (nat_idx:int): Gamma.Definition.t =
   and nat_succ = Variable (nat_idx - 2)
   and nat_zero = Variable (nat_idx - 1)
   in
-  let nme = some_feature_operator Operator.Plusop
+  let nme = some_feature_name "predecessor"
   and typ = arrow nat_tp nat_tp
   in
   let t =
@@ -1472,7 +1473,7 @@ let test (): unit =
       push_definition endo c
       |> push_simple (Some "Natural") any in
     (* Endorelation(Natural) *)
-    let endo_nat = Application(variable1,variable0,false) in
+    let endo_nat = apply1 variable1 variable0 in
     (*print_type_of endo_nat c;*)
     assert (is_wellformed endo_nat c)
   end;

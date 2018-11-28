@@ -1,4 +1,4 @@
-open Standard
+open Common_module_types
 
 module type S =
   sig

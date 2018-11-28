@@ -32,6 +32,9 @@ module Raw_context =
       some_feature_name (string_of_int i)
   end
 
+
+
+
 (*
   Basics
   ------
@@ -89,21 +92,117 @@ module Raw_context =
      around 'a,b'.
  *)
 
+
+(* ------------------------------------------------------------------
+
+   Design
+
+   ------------------------------------------------------------------
+
+   Each subterm is converted to a triple (doc,prec,assoc option). Precedence
+   is needed for all substerms, associativity only if the expression is a
+   binary operator.
+
+   The context is read only. A reader monad can be used to access the context.
+
+
+
+   Application:
+
+   a + b;  not b;  x.f(args);  f(args);   f
+
+   binary, unary, oo_style, normal, only implicit arguments
+
+   binary and unary: 2 or 1 essential arguments and (nice or no implicits)
+
+   oo_style: Application_type = Target
+
+   normal: First or f = Variable i
+
+
+
+ *)
+
+
+
 module type S =
+  functor (C:CONTEXT) ->
   sig
-    type context
-    val print: Term.t -> context -> Document.t
-    val print_fixpoint: Term.fixpoint -> context -> Document.t
+    type context = C.t
+
+    type level
+    val compact: level
+    val all_types: level
+    val detailed: level
+
+    val term: context -> level -> Term.t -> Document.t
+    val fixpoint: context -> level -> Term.fixpoint -> Document.t
   end
 
 
-module Make (C:CONTEXT)
-  =
+module Make: S =
+  functor (C:CONTEXT) ->
   struct
-
     type context = C.t
 
-    let print_name (nme:Feature_name.t option): Document.t =
+    type level = int
+
+    let compact: level     = 0
+    let outer_types: level = 1
+    let all_types: level   = 2
+    let detailed: level    = 3
+
+    let with_implicits (l:level): bool =
+      detailed = l
+
+    let no_implicits (l:level): bool =
+      l < detailed
+
+    let with_types (l:level): bool =
+      all_types <= l
+
+    include Monad.Reader (struct type t = C.t*level end)
+
+    type doc = Document.t
+
+    type doc_plus = doc * Precedence.t
+
+    type print_tp = Term.t -> doc_plus t
+
+
+    let push_simple nme tp (c,l) =
+      C.push_simple nme tp c, l
+
+    let push_arguments args (c,l) =
+      C.push_arguments args c, l
+
+    let push_fixpoint fp (c,l) =
+      C.push_fixpoint fp c, l
+
+    let of_sort (s:Sorts.t): doc_plus t =
+      let open Term in
+      let open Document in
+      let doc =
+        match s with
+        | Sorts.Proposition ->
+           text "Proposition"
+        | Sorts.Any ->
+           text "Any"
+        | Sorts.Box ->
+           text "Box"
+      in
+      make (doc, Precedence.highest)
+
+    let doc_of_simple_name (nme:string option) : doc =
+      let open Document in
+      match nme with
+      | None ->
+         text "_"
+      | Some s ->
+         text s
+
+
+    let doc_of_name (nme:Feature_name.t option): doc =
       let open Feature_name in
       let open Document in
       match nme with
@@ -114,6 +213,8 @@ module Make (C:CONTEXT)
            match nme with
            | Name s ->
               text s
+           | Operator2 op ->
+              text "("  ^  text (Operator2.string op)  ^  text ")"
            | Operator op ->
               let str,_,_ = Operator.data op in
               text "(" ^ text str ^ text ")"
@@ -127,189 +228,419 @@ module Make (C:CONTEXT)
               text (string_of_int i)
          end
 
-    let rec print (t:Term.t) (c:C.t): Document.t =
+
+    let of_variable (i:int) (pr:print_tp): doc_plus t =
+      ask >>= fun (c,_) ->
+      let open Feature_name in
+      let open Document in
+      let vhash = "v#" in
+      let doc =
+        if C.is_valid i c then
+          match C.name i c with
+          | None ->
+             text vhash ^ text (string_of_int i)
+          | Some nme ->
+             doc_of_name (Some nme)
+        else
+          text "(" ^ text vhash ^ text (string_of_int i) ^ text "?)"
+      in
+      make (doc, Precedence.highest)
+
+
+
+
+    let parens (d:doc): doc =
+      Document.bracket 2 "(" d ")"
+
+    let left_parens
+          (upper:Precedence.t)
+          ((d,prec):doc_plus)
+        : doc =
+      if Precedence.left_needs_parens upper prec then
+        parens d
+      else
+        d
+
+    let right_parens
+          (upper:Precedence.t)
+          ((d,prec):doc_plus)
+        : doc =
+      if Precedence.right_needs_parens upper prec then
+        parens d
+      else
+        d
+
+    let lower_parens
+          (upper:Precedence.t)
+          ((d,prec):doc_plus)
+        : doc =
+      if Precedence.lower_needs_parens upper prec then
+        parens d
+      else
+        d
+
+
+    let actual_arguments (args:Term.t list) (pr:print_tp): doc_plus t =
+      let prec = Precedence.argument_list
+      in
+      let pr_arg a =
+        map
+          (fun d ->
+            lower_parens prec d, Precedence.highest)
+          (pr a)
+      in
+      let rec arglist args =
+        match args with
+        | [] ->
+           assert false (* Illegal call *)
+        | [z] ->
+           pr_arg z
+        | a :: args ->
+           pr_arg a >>= fun (a,_) ->
+           arglist args >>= fun (args,_) ->
+           make Document.(a ^ text "," ^ cut ^ args, prec)
+      in
+      arglist args >>= fun (d,_) ->
+      make Document.(group d,prec)
+
+
+    let normal_application
+          (f:Term.t) (args:Term.t list) (n:int) (pr:print_tp)
+        : doc_plus t =
+      let prec = Precedence.application
+      in
+      if n = 0 then
+        (* all arguments are implicit *)
+        pr f
+      else
+        pr f >>= fun fdoc ->
+        actual_arguments args pr >>= fun (argsdoc,_) ->
+        let doc =
+          Document.(lower_parens prec fdoc ^ parens argsdoc)
+        in
+        make (doc,prec)
+
+
+
+    let oo_application
+          (tgt:Term.t) (f:Term.t) (args:Term.t list) (n:int) (pr:print_tp)
+        : doc_plus t =
+      assert false (* nyi *)
+
+
+    let operator_application
+          (i:int) (args:Term.t list) (pr:print_tp): doc_plus t =
+      ask >>= fun (c,_) ->
+      let open Term in
+      let open Feature_name in
+      if not (C.is_valid i c) then
+        normal_application (Variable i) args 2 pr
+      else
+        match C.name i c with
+        | Some (Operator2 op) ->
+           let op_string = Operator2.string op
+           and prec = Operator2.precedence op
+           in
+           begin
+             match args with
+             | [a] ->
+                pr a >>= fun adoc ->
+                let open Document in
+                let doc =
+                  text op_string ^ text " "
+                  ^ lower_parens prec adoc
+                  |> group
+                in
+                make (doc,prec)
+             | [a;b] ->
+                pr a >>= fun adoc ->
+                pr b >>= fun bdoc ->
+                let open Document in
+                let doc =
+                  left_parens prec adoc
+                  ^ space
+                  ^ text op_string
+                  ^ text " "
+                  ^ right_parens prec bdoc
+                  |> group in
+                make (doc,prec)
+
+             | _ ->
+                assert false (* illegal call, either one or two arguments. *)
+           end
+        | _ ->
+           normal_application (Variable i) args 2 pr
+
+
+    let of_application
+          (f:Term.t) (z:Term.t) (app:Application_type.t)
+          (pr:print_tp)
+        : doc_plus t =
+      ask >>= fun (_,level) ->
+      let rec of_appl f z app args n =
+        let open Term in
+        let open Application_type in
+        match app, f with
+        | First, _ ->
+           normal_application f (z :: args) (n+1) pr
+
+        | First_implicit, _ ->
+           normal_application f args n pr
+
+        | Target, _ ->
+           oo_application z f args n pr
+
+        | (Binary | Unary), Variable i when n = 0 ||  n = 1 ->
+           operator_application i (z :: args) pr
+
+        | Implicit, Application (f0, a, app0) when no_implicits level ->
+           of_appl f0 a app0 args n
+
+        | Implicit, _  when no_implicits level ->
+           normal_application f args n pr
+
+        | _, Application (f0, a, app0)  ->
+           of_appl f0 a app0 (z :: args) (n+1)
+
+        | _, _ ->
+           normal_application f (z :: args) (n+1) pr
+
+      in
+      of_appl f z app [] 0
+
+
+
+
+    let formal_argument
+          (nme: string option) (tp: Term.typ)
+          (pr:print_tp)
+        : doc_plus t =
+      let prec = Precedence.argument_list
+      in
+      pr tp >>= fun tpdoc ->
+      make (
+          Document.(doc_of_simple_name nme
+                      ^ text ":"
+                      ^ lower_parens prec tpdoc),
+          prec)
+
+
+    let formal_arguments
+          (args:Term.argument_list) (m:'a t) (pr:print_tp)
+        : (doc * 'a) t =
+      let rec formals args =
+        match args with
+        | [] ->
+           assert false (* Illegal call *)
+
+        | [nme,typ] ->
+           formal_argument nme typ pr >>= fun (arg,_) ->
+           local (push_simple nme typ) m >>= fun a ->
+           make (arg, a)
+
+        | (nme,typ) :: tl ->
+           formal_argument nme typ pr >>= fun (arg,_) ->
+           local (push_simple nme typ) (formals tl) >>= fun (argsdoc,a) ->
+           make (Document.(arg ^ text "," ^ cut ^ argsdoc),a)
+      in
+      formals args
+
+
+
+
+    let of_lambda
+          (nme:string option) (tp:Term.typ) (t:Term.t) (pr:print_tp)
+        : doc_plus t =
+      let prec = Precedence.quantifier in
+      let t,args_rev = Term.split_lambda0 (-1) t 1 [nme,tp]
+      in
+      formal_arguments (List.rev args_rev) (pr t) pr >>= fun (args,t) ->
+      let doc =
+        Document.(parens args
+                  ^ text " :="
+                  ^ group (nest 2 (space ^ lower_parens prec t))
+                  |> group)
+      in
+      make (doc,Precedence.quantifier)
+
+
+
+    let of_product
+          (nme:string option) (tp:Term.typ) (t:Term.t) (pr:print_tp)
+        : doc_plus t =
+      let prec = Precedence.quantifier in
+      let tp,args_rev = Term.split_product0 (-1) t 0 [nme,tp]
+      in
+      formal_arguments (List.rev args_rev) (pr tp) pr >>= fun (args,tp) ->
+      let doc =
+        Document.(text "all"
+                  ^ parens args
+                  ^ space
+                  ^ lower_parens prec tp
+                  |> group)
+        in
+        make (doc,Precedence.quantifier)
+
+
+    let of_case (co:Term.t) (def:Term.t) (pr:print_tp): doc t =
+      let args,co = Term.split_lambda co in
+      let def,_ = Term.split_lambda0 (Array.length args) def 0 [] in
+      local
+        (push_arguments args)
+        (pr co >>= fun (co,_) ->
+         pr def >>= fun (def,_) ->
+         let open Document in
+         group (co ^ text " :="
+                ^ nest 2 (space ^ def))
+         |> make)
+
+    let of_cases
+          (cases: (Term.t*Term.t) array)
+          (pr:print_tp)
+        : doc t =
+      let ncases = Array.length cases
+      in
+      assert (ncases > 0);
+      let rec cases_ i =
+        let open Document in
+        if i + 1 = ncases then
+          let co,def = cases.(i) in
+          of_case co def pr
+        else
+          let co,def = cases.(i) in
+          of_case co def pr >>= fun c ->
+          cases_ (i+1) >>= fun cs ->
+          c ^ optional "; " ^ cs
+          |> make
+      in
+      cases_ 0
+
+
+    let of_inspect
+          (e:Term.t)
+          (r:Term.t)
+          (cases: (Term.t*Term.t) array)
+          (pr:print_tp)
+        : doc_plus t =
+      pr e >>= fun (e,_) ->
+      pr r >>= fun (r,_) ->
+      of_cases cases pr >>= fun cases ->
+      let open Document in
+      let doc =
+        (text "inspect"
+         ^ nest 2 (space ^ e ^ optional "; " ^ r)
+         ^ space ^ text "case"
+         |> group)
+        ^ nest 2 (space ^ cases)
+        ^ space ^ text "end"
+        |> group
+      in
+      make (doc,Precedence.quantifier)
+
+
+    (* Fixpoint *)
+    (* mutual
+         count (t:Tree(A)): Natural :=
+            inspect t case
+              node (a, children) := 1 + count(children)
+            end
+         count (f:Forest(A)): Natural :=
+            inspect f case
+               [] := 0
+               x ^  xs := count(x) + count(xs)
+            end
+       end
+     *)
+    let of_one_fixpoint (i:int) (fp:Term.fixpoint) (pr:print_tp): doc t =
+      let nme,typ,decr,t = fp.(i)
+      and n = Array.length fp in
+      let e,args_rev = Term.split_lambda0 (-1) t 0 []
+      in
+      let nargs = List.length args_rev
+      in
+      let typ,_ = Term.split_product0 nargs (Term.up n typ) 0 []
+      in
+      let m =
+        pr e >>= fun e ->
+        pr typ >>= fun typ ->
+        make (e,typ)
+      in
+      formal_arguments (List.rev args_rev) m pr >>= fun (args,(e,(typ,_))) ->
+      let open Document in
+      let doc =
+        let prec = Precedence.quantifier
+        in
+        doc_of_name nme
+        ^ parens args
+        ^ text ": " ^ typ
+        ^ text " := "
+        ^ group (nest 2 (space ^ lower_parens prec e))
+        |> group
+      in
+      make doc
+
+    let of_fixpoint (fp:Term.fixpoint) (pr:print_tp): doc_plus t =
+      let n = Array.length fp in
+      assert (n > 0);
+      let open Document in
+      let rec fixpoints i fp =
+        if i + 1 = n then
+          of_one_fixpoint i fp pr
+        else
+          of_one_fixpoint i fp pr >>= fun fpi ->
+          fixpoints (i+1) fp >>= fun fps ->
+          fpi ^ cut ^ fps |> make
+      in
+      local
+        (push_fixpoint fp)
+        (fixpoints 0 fp >>= fun fps ->
+         let doc =
+           if n = 1 then
+             fps
+           else
+             text "mutual" ^ nest 2 (cut ^ fps) ^ cut ^ text "end"
+         in
+         make (doc,Precedence.quantifier))
+
+
+    let rec of_term (t:Term.t): doc_plus t =
       let open Term in
       match t with
       | Sort s ->
-         print_sort s
+         of_sort s
       | Variable i ->
-         print_variable i c
-      | Application (f,z,oo) ->
-         print_application f z c
+         of_variable i of_term
+      | Application (f,z,app) ->
+         of_application f z app of_term
       | Lambda (nme,tp,t) ->
-         print_lambda nme tp t c
+         of_lambda nme tp t of_term
       | All(nme,tp,t) ->
-         print_product nme tp t c
+         of_product nme tp t of_term
       | Inspect (e,m,f) ->
-         print_inspect e m f c
+         of_inspect e m f of_term
       | Fix (i,arr) ->
-         assert false
-
-    and print_sort s =
-      let open Term in
-      let open Document in
-      match s with
-      | Sorts.Proposition ->
-         text "Proposition"
-      | Sorts.Any ->
-         text "Any"
-      | Sorts.Box ->
-         text "Box"
+         assert false (* nyi *)
 
 
-    and print_variable i c =
-      let open Feature_name in
-      let open Document in
-      if C.is_valid i c then
-        match C.name i c with
-        | None ->
-           text Pervasives.("v#" ^ string_of_int i)
-        | Some nme ->
-           print_name (Some nme)
-      else
-        text Pervasives.("(v#" ^ string_of_int i ^ "?)")
+    let term (c:context) (level:level) (t:Term.t): Document.t =
+      run (c,level) (map fst (of_term t))
+
+    let fixpoint (c:context) (level:level) (fp:Term.fixpoint): Document.t =
+      run (c,level) (of_fixpoint fp of_term |> map fst)
+  end
 
 
-    and print_application f z c =
-      let open Document in
-      let f,args = Term.split_application f [z] in
-      let rec print_args args =
-        match args with
-        | [] ->
-           assert false (* cannot happen *)
-        | [a] ->
-           print a c
-        | a :: args ->
-           print a c ^ text "," ^ cut ^ print_args args
-      in
-      print f c ^ bracket 2 "(" (print_args args) ")"
 
 
-    and print_formal_args (args:Term.argument_list) (c:context)
-        : Document.t * context =
-      let open Document in
-      let print_arg nme a c =
-        print_name nme ^ text ":" ^ print a c,
-        C.push nme a c
-      in
-      match args with
-      | [] ->
-         assert false (* cannot happen *)
-      | [nme,a] ->
-         let nme = some_feature_name_opt nme in
-         print_arg nme a c
-      | (nme,a) :: args ->
-         let nme = some_feature_name_opt nme in
-         let doc1,c = print_arg nme a c in
-         let doc2,c = print_formal_args args c in
-         doc1 ^ text "," ^ doc2, c
 
 
-    and print_lambda nme tp t c =
-      let open Document in
-      let t,args_rev = Term.split_lambda0 (-1) t 1 [nme,tp] in
-      let docargs,c = print_formal_args (List.rev args_rev) c in
-      bracket 2 "(" docargs ")"
-      ^ text " :="
-      ^ group (nest 2 (space ^ print t c))
-
-    and print_product nme tp t c =
-      let open Document in
-      let tp,args_rev = Term.split_product0 t [nme,tp] in
-      let docargs,c = print_formal_args (List.rev args_rev) c in
-      text "all" ^ bracket 2 "(" docargs ")"
-      ^ group (nest 2 (space ^ print tp c))
 
 
-    (* inspect
-           e
-           res
-       case
-           c1(args) := f1
-           ...
-       end*)
-    and print_inspect e res f c =
-      let open Document in
-      let ncases = Array.length f in
-      let print_case i =
-        let co,def = f.(i) in
-        let args,co = Term.split_lambda co in
-        let c1 = C.push_arguments args c in
-        let def,_ = Term.split_lambda0 (Array.length args) def 0 [] in
-        group (print co c1 ^ text " :="
-               ^ nest 2 (space ^ print def c1))
-      in
-      let rec print_cases doc n =
-        if n = 0 then
-          doc
-        else
-          let i = n - 1 in
-          print_cases
-            (print_case i
-             ^ if n = ncases then doc else optional "; " ^ doc)
-            i
-      in
-      group (
-          text "inspect"
-          ^ nest 2 (space ^ print e c ^ optional "; " ^ print res c)
-          ^ space ^ text "case"
-          ^ nest 2 (space ^ print_cases empty ncases)
-          ^ space ^ text "end"
-        )
-
-    and print_formal_arguments args c =
-      let open Document in
-      let nargs = Array.length args in
-      let doc,c1 =
-        interval_fold
-          (fun (doc,c) i ->
-            let doc = if i = 0 then doc else doc ^ text ","
-            and nme,tp = args.(i) in
-            let nme = some_feature_name_opt nme
-            in
-            doc ^ print_name nme
-            ^ text ":" ^ print tp c,
-            C.push nme tp c)
-          (empty,c) 0 nargs
-      in
-      text "(" ^ doc ^ text ")",
-      c1
-
-
-    and print_one_fixpoint i fp c =
-      let open Document in
-      let nme,typ,decr,t = fp.(i) in
-      let e,args_rev = Term.split_lambda0 (-1) t 0 [] in
-      let docargs,c1 = print_formal_args (List.rev args_rev) c in
-      print_name nme
-      ^ bracket 2 "(" docargs ")"
-      ^ text " :="
-      ^ group (nest 2 (space ^ print e c1))
-
-    and print_fixpoint fp c =
-      let open Document in
-      let n = Array.length fp in
-      assert (0 < n);
-      let c1 = C.push_fixpoint fp c in
-      let rec print_below i doc =
-        if i = 0 then
-          doc
-        else
-          let br = if i = 1 then empty else optional "; " in
-          print_below
-            (i-1)
-            (br ^ print_one_fixpoint (i-1) fp c1)
-      in
-      if n = 1 then
-        print_below n empty
-      else
-        assert false (* nyi: mutual fixpoints *)
-  end (* Make *)
 
 
 let string_of_term (t:Term.t): string =
   let module PR = Make (Raw_context) in
-  Document.string_of 50 (PR.print t Raw_context.empty)
+  Document.string_of 50 (PR.term Raw_context.empty PR.detailed t)
 
 
 let test (): unit =

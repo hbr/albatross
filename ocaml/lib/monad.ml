@@ -77,6 +77,7 @@ module type READER =
     type env = Env.t
     val ask: env t
     val local: (env->env) -> 'a t -> 'a t
+    val run: env -> 'a t -> 'a
   end
 
 

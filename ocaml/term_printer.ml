@@ -110,6 +110,8 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
            match nme with
            | Name s ->
               put s
+           | Operator2 op ->
+              assert false (* nyi *)
            | Operator op ->
               let str,_,_ = Operator.data op in
               fun pp -> put "(" pp >>= put str >>= put ")"
@@ -164,6 +166,8 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
            match nme with
            | Name s ->
               put s pp
+           | Operator2 op ->
+              assert false (* nyi *)
            | Operator op ->
               let str,_,_ = Operator.data op in
               put "(" pp >>= put str >>= put ")"
@@ -218,7 +222,7 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
       >>= put ")"*)
 
     and print_product nme tp t c pp =
-      let tp,args_rev = Term.split_product0 t [nme,tp] in
+      let tp,args_rev = Term.split_product0 (-1) t 0 [nme,tp] in
       let open PP in
       put "all(" pp >>= print_args (List.rev args_rev) "" tp c
 
@@ -267,9 +271,10 @@ let test (): unit =
     end;
   assert
     begin
+      let app = Application_type.Any in
       let t =
         Application
-          (Application(variable0,variable1,false), variable2, false) in
+          (Application(variable0,variable1,app), variable2, app) in
       print t = "0(1,2)"
     end;
   assert

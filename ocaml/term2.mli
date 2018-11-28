@@ -9,7 +9,7 @@ type oo_application = bool
 type t =
   | Sort of Sorts.t
   | Variable of int
-  | Application of t * t * oo_application
+  | Application of t * t * Application_type.t
   | Lambda of abstraction
   | All of abstraction
   | Inspect of t * t * (t*t) array
@@ -99,7 +99,7 @@ val lambda: argument_list -> t -> t
 val split_lambda0: int -> t -> int -> argument_list -> t * argument_list
 val split_lambda: t -> arguments * t
 
-val split_product0: typ -> argument_list -> typ * argument_list
+val split_product0: int -> typ -> int -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ
 val push_product: arguments -> typ -> typ
 

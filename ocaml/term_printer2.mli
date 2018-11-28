@@ -16,16 +16,22 @@ module type CONTEXT =
     val name: int -> t -> Feature_name.t option
   end
 
-
 module type S =
+  functor (C:CONTEXT) ->
   sig
-    type context
-    val print: Term.t -> context -> Document.t
-    val print_fixpoint: Term.fixpoint -> context -> Document.t
+    type context = C.t
+
+    type level
+    val compact: level
+    val all_types: level
+    val detailed: level
+
+    val term: context -> level -> Term.t -> Document.t
+    val fixpoint: context -> level -> Term.fixpoint -> Document.t
   end
 
-module Make (C:CONTEXT)
-       : S with type context = C.t
+
+module Make: S
 
 
 val string_of_term: Term.t -> string

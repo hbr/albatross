@@ -32,6 +32,7 @@ end
 module String:
 sig
   type t = string
+  val compare: t -> t -> int
   val one: char -> t
   val find: (char -> bool) -> int -> t -> int
   val list: t -> char list
