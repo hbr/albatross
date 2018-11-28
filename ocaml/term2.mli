@@ -50,6 +50,8 @@ val apply1: t -> t -> t
 val apply2: t -> t -> t -> t
 val apply3: t -> t -> t -> t -> t
 val apply4: t -> t -> t -> t -> t -> t
+val apply_target: t -> t -> t
+val binary: t -> t -> t -> t
 
 val equal: t -> t -> bool
 val equal1: t option -> t -> bool
@@ -98,6 +100,7 @@ val apply_standard: int -> int -> t -> t
 val lambda: argument_list -> t -> t
 val split_lambda0: int -> t -> int -> argument_list -> t * argument_list
 val split_lambda: t -> arguments * t
+val push_lambda:  arguments -> t -> t
 
 val split_product0: int -> typ -> int -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ

@@ -71,6 +71,12 @@ let variable5: t = Variable 5
 let apply_any (f:t) (a:t): t =
   Application (f, a, Application_type.Any)
 
+let apply_operator (op:t) (a:t): t =
+  Application (op, a, Application_type.Operator)
+
+let apply_target (f:t) (tgt:t): t =
+  Application (f, tgt, Application_type.Target)
+
 let apply1 (f:t) (a:t): t =
   Application (f, a, Application_type.First)
 
@@ -83,7 +89,8 @@ let apply3 (f:t) (a:t) (b:t) (c:t): t =
 let apply4 (f:t) (a:t) (b:t) (c:t) (d:t): t =
   apply_any (apply3 f a b c) d
 
-
+let binary (op:t) (a:t) (b:t): t =
+  apply_any (apply_operator op a) b
 
 let rec equal (a:t) (b:t): bool =
   match a,b with
@@ -364,6 +371,16 @@ let split_product(a:typ): arguments * typ =
   in
   mkarr n args;
   arr, tp
+
+
+let push_lambda (args:arguments) (t:t): typ =
+  let t = ref t
+  and n = Array.length args in
+  for i = 0 to Array.length args - 1 do
+    let nme,tp = args.(n - 1 - i) in
+    t := Lambda(nme,tp,!t)
+  done;
+  !t
 
 
 let push_product (args:arguments) (tp:typ): typ =

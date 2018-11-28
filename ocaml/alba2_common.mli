@@ -11,8 +11,7 @@ sig
     | First
     | First_implicit
     | Target
-    | Binary
-    | Unary
+    | Operator
     | Implicit
     | Any
 end
@@ -43,54 +42,26 @@ sig
 end
 
 
-module Operator2:
+module Operator:
 sig
   type t
   val of_string: string -> t option
   val string: t -> string
   val precedence: t -> Precedence.t
+  val eq: t
+  val andop: t
+  val orop: t
+  val plus: t
+  val caret: t
 end
 
 
-module Operator:
-sig
-  type associativity =
-    Left | Right | Nonassoc
-  type t =
-    | Plusop
-    | Minusop
-    | Timesop
-    | Divideop
-    | Modop
-    | Caretop
-    | Commaop
-    | Colonop
-    | Eqop
-    | NEqop
-    | Eqvop
-    | NEqvop
-    | LTop
-    | LEop
-    | GTop
-    | GEop
-    | Andop
-    | Orop
-    | Notop
-    | Arrowop
-
-  val normal_precedence: int
-  val quantifier_precedence: int
-  val highest_precedence: int
-
-  val data: t -> string * int * associativity
-end
 
 module Feature_name:
 sig
   type t =
     | Name of string
-    | Operator  of Operator.t
-    | Operator2 of Operator2.t
+    | Operator of Operator.t
     | Bracket
     | True
     | False

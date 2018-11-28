@@ -266,7 +266,7 @@ let make_true: t =
 let make_and: t =
   let open Term in
   make_simple
-    (some_feature_operator Operator.Andop)
+    (some_feature_operator Operator.andop)
     [ Some "a", proposition, true;
       Some "b", proposition, true ]
     proposition
@@ -299,7 +299,7 @@ let make_and: t =
 let make_or: t =
   let open Term in
   make_simple
-    (some_feature_operator Operator.Orop)
+    (some_feature_operator Operator.orop)
     [ Some "a", proposition, true;
       Some "b", proposition, true ]
     proposition
@@ -415,7 +415,7 @@ let make_equal: t =
   and n = 4
   in
   make_simple
-    (some_feature_operator Operator.Eqop)
+    (some_feature_operator Operator.eq)
     [
       Some "A", any,  true;
       Some "a", abig, false
@@ -497,7 +497,7 @@ let make_list: t =
           (apply1 lst a |> to_index 2);
 
         cmake
-          (some_feature_operator Operator.Caretop)
+          (some_feature_operator Operator.caret)
           [Positive; Recursive]
           (ndproduct [a; lsta; lsta] |> to_index 2)
       ]

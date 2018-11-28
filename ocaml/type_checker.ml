@@ -1240,35 +1240,39 @@ let nat_pred0 (nat_idx:int): Gamma.Definition.t =
 let nat_add_fp (nat_idx:int): Term.fixpoint =
   assert (2 <= nat_idx);
   let open Term in
-  let nat_tp = Variable nat_idx
-  and nat_zero = Variable (nat_idx - 1)
-  and nat_succ = Variable (nat_idx - 2)
+  let nat = 0
+  and base = nat_idx + 1
   in
-  let nme = some_feature_operator Operator.Plusop
+  let nat_tp = Variable nat
+  and zero = Variable (nat + 1)
+  and succ = Variable (nat + 2)
+  and plus = Variable base
+  and a = Variable (base + 1)
+  and b = Variable (base + 2)
+  and n = Variable (base + 3)
+  in
+  let nme = some_feature_operator Operator.plus
   and typ =
-    arrow nat_tp (arrow nat_tp nat_tp)
+    push_product
+      [|Some "a",nat_tp; Some "b", nat_tp|]
+      nat_tp
   in
   let t =
-    lambda
-      [Some "a", up 1 nat_tp;
-       Some "b", up 2 nat_tp]
-      (Inspect( (* inner context has 3 variables: (+) a b *)
-           variable1,
-           Lambda (None, up 3 nat_tp, up 4 nat_tp),
-           [| up 3 nat_zero,
-              variable0;
+    push_lambda
+      [|Some "a",nat_tp; Some "b", nat_tp|]
+      (
+        Inspect (
+            a,
+            Lambda (None, nat_tp, nat_tp),
+            [|zero, b;
 
-              Lambda(Some "n", up 3 nat_tp, apply1 (up 4 nat_succ) variable0),
-              Lambda (Some "n",
-                      up 3 nat_tp,
-                      apply2
-                        variable3
-                        variable0
-                        (apply1 (up 4 nat_succ) variable1))
-           |]
-      ))
+              Lambda (Some "n", nat_tp, apply_target succ n),
+              Lambda (Some "n", nat_tp, binary plus n (apply_target succ b))
+            |]
+          )
+      )
   in
-  [|nme,typ,0,t|]
+  [|nme, typ |> to_index base, 0, t |> to_index (base + 1)|]
 
 
 

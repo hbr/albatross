@@ -213,11 +213,8 @@ module Make: S =
            match nme with
            | Name s ->
               text s
-           | Operator2 op ->
-              text "("  ^  text (Operator2.string op)  ^  text ")"
            | Operator op ->
-              let str,_,_ = Operator.data op in
-              text "(" ^ text str ^ text ")"
+              text "("  ^  text (Operator.string op)  ^  text ")"
            | Bracket ->
               text "[]"
            | True ->
@@ -325,7 +322,20 @@ module Make: S =
     let oo_application
           (tgt:Term.t) (f:Term.t) (args:Term.t list) (n:int) (pr:print_tp)
         : doc_plus t =
-      assert false (* nyi *)
+      let prec = Precedence.dot in
+      pr tgt >>= fun tgt ->
+      pr f >>= fun f ->
+      let open Document in
+      let doc =
+        lower_parens prec tgt
+        ^ text "."
+        ^ lower_parens prec f
+      in
+      if n = 0 then
+        make (doc,prec)
+      else
+        actual_arguments args pr >>= fun (args,_) ->
+        make (doc ^ parens args, prec)
 
 
     let operator_application
@@ -337,9 +347,9 @@ module Make: S =
         normal_application (Variable i) args 2 pr
       else
         match C.name i c with
-        | Some (Operator2 op) ->
-           let op_string = Operator2.string op
-           and prec = Operator2.precedence op
+        | Some (Operator op) ->
+           let op_string = Operator.string op
+           and prec = Operator.precedence op
            in
            begin
              match args with
@@ -390,7 +400,7 @@ module Make: S =
         | Target, _ ->
            oo_application z f args n pr
 
-        | (Binary | Unary), Variable i when n = 0 ||  n = 1 ->
+        | Operator, Variable i when n = 0 ||  n = 1 ->
            operator_application i (z :: args) pr
 
         | Implicit, Application (f0, a, app0) when no_implicits level ->

@@ -110,10 +110,8 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
            match nme with
            | Name s ->
               put s
-           | Operator2 op ->
-              assert false (* nyi *)
            | Operator op ->
-              let str,_,_ = Operator.data op in
+              let str = Operator.string op in
               fun pp -> put "(" pp >>= put str >>= put ")"
            | Bracket ->
               put "[]"
@@ -166,10 +164,8 @@ module Make (C:CONTEXT) (PP:Pretty_printer.PRETTY)
            match nme with
            | Name s ->
               put s pp
-           | Operator2 op ->
-              assert false (* nyi *)
            | Operator op ->
-              let str,_,_ = Operator.data op in
+              let str = Operator.string op in
               put "(" pp >>= put str >>= put ")"
            | Bracket ->
               put "[]" pp
