@@ -12,12 +12,14 @@ type t =
   | Application of t * t * Application_type.t
   | Lambda of abstraction
   | All of abstraction
-  | Inspect of t * t * (t*t) array
+  | Inspect of t * t * case array
   | Fix of fix_index * fixpoint
 
 and typ = t
 
 and abstraction =  string option * typ * t
+
+and case
 
 and fixpoint = (Feature_name.t option * typ * decr_index * t) array
 (** Array of fixpoint components. Each component has a name, a type, a
@@ -101,6 +103,12 @@ val lambda: argument_list -> t -> t
 val split_lambda0: int -> t -> int -> argument_list -> t * argument_list
 val split_lambda: t -> arguments * t
 val push_lambda:  arguments -> t -> t
+
+val make_case: arguments -> t -> t -> case
+val case_constructor: case -> t
+val case_definition: case -> t
+val case_pair: case -> t * t
+val split_case: case -> argument_list * t * t
 
 val split_product0: int -> typ -> int -> argument_list -> typ * argument_list
 val split_product: typ -> arguments * typ

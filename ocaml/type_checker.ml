@@ -107,7 +107,7 @@ let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
          match e with
 
          | Variable i when Gamma.is_constructor i c ->
-            key := snd cases.(Gamma.constructor_offset i c);
+            key := case_definition cases.(Gamma.constructor_offset i c);
             args := eargs @ !args
 
          | _ ->
@@ -209,8 +209,8 @@ and equivalent_key (a:Term.t) (b:Term.t) (c:Gamma.t): bool =
      assert(ncases <> Array.length casesb);
      interval_for_all
        (fun i ->
-         let _,fa = casesa.(i) (* only the second component is important *)
-         and _,fb = casesb.(i)
+         let fa = case_definition casesa.(i)
+         and fb = case_definition casesb.(i)
          in
          equivalent fa fb c)
        0 ncases
@@ -508,7 +508,7 @@ let check_fixpoint_decreasing
         fold_array
           (fun n case j ->
             let smaller = add_recursive_arguments i j smaller c in
-            check_with_lambda (snd case) smaller c n
+            check_with_lambda (case_definition case) smaller c n
           )
           n cases
        )
@@ -518,7 +518,7 @@ let check_fixpoint_decreasing
         check_recursive_calls e smaller c n >>= fun n ->
         fold_array
           (fun n case j ->
-            check_with_lambda (snd case) smaller c n
+            check_with_lambda (case_definition case) smaller c n
           )
           n cases
        )
@@ -645,7 +645,7 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
 
 
 and type_of_inspect
-(e:Term.t) (res:Term.t) (cases:(Term.t*Term.t) array) (c:Gamma.t)
+(e:Term.t) (res:Term.t) (cases: Term.case array) (c:Gamma.t)
     : Term.typ option =
   (* inspect(e,res,cases)
 
@@ -684,7 +684,7 @@ and type_of_inspect
     else if
       interval_for_all
         (fun j ->
-          let cj, fj = cases.(j) in
+          let cj, fj = Term.case_pair cases.(j) in
           let cj0 =
             Term.apply_args
               (Term.Variable (Gamma.constructor_of_inductive_variable j ivar c))
@@ -1202,26 +1202,37 @@ let endorelation (rel_idx:int): Gamma.Definition.t =
 let nat_pred0 (nat_idx:int): Gamma.Definition.t =
   assert (2 <= nat_idx);
   let open Term in
-  let nat_tp = Variable nat_idx
-  and nat_succ = Variable (nat_idx - 2)
-  and nat_zero = Variable (nat_idx - 1)
+  let nat = 0
+  and base = nat_idx + 1
+  in
+  let nat_tp = Variable nat
+  and zero = Variable (nat + 1)
+  and succ = Variable (nat + 2)
+  and a = Variable base
+  and n = Variable (base + 1)
   in
   let nme = some_feature_name "predecessor"
-  and typ = arrow nat_tp nat_tp
+  and typ = push_product [|Some "a", nat_tp|] nat_tp
   in
   let t =
-    Lambda(
-        (Some "a"),
-        nat_tp,
-        Inspect (
-            variable0,
-            Lambda (None, up 1 nat_tp, up 2 nat_tp),
-            [|up 1 nat_zero, up 1 nat_zero;
-              Lambda(Some "n", up 1 nat_tp, apply1 (up 2 nat_succ) variable0),
-              Lambda(Some "n", up 1 nat_tp, variable0)
-            |]))
+    push_lambda
+      [|Some "a", nat_tp|]
+      (Inspect (a,
+                Lambda (None, nat_tp, nat_tp),
+                [|
+                  make_case [||] zero zero;
+                  make_case
+                    [|Some "n",nat_tp|]
+                    (apply_target succ n)
+                    (n)
+                |]
+         )
+      )
   in
-  Gamma.Definition.make nme typ t
+  Gamma.Definition.make nme (typ |> to_index base) (t |> to_index base)
+
+
+
 
 
 (* (+)(a,b:Natural): Natural :=
@@ -1257,10 +1268,12 @@ let nat_add_fp (nat_idx:int): Term.fixpoint =
         Inspect (
             a,
             Lambda (None, nat_tp, nat_tp),
-            [|zero, b;
+            [|make_case [||] zero b;
 
-              Lambda (Some "n", nat_tp, apply_target succ n),
-              Lambda (Some "n", nat_tp, binary plus n (apply_target succ b))
+              make_case
+                [|Some "n", nat_tp|]
+                (apply_target succ n)
+                (binary plus n (apply_target succ b))
             |]
           )
       )

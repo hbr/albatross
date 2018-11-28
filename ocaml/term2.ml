@@ -18,6 +18,7 @@ type t =
   | Fix of fix_index * fixpoint
 and typ = t
 and abstraction =  string option * typ * t
+and case = t * t
 and fixpoint =
   (Feature_name.t option * typ * decr_index * t) array (* typ in outer context,
                                                           t in inner context *)
@@ -317,9 +318,13 @@ let rec split_lambda0
      a, args
 
 
+let split_lambda_list (a:t): t * argument_list =
+  split_lambda0 (-1) a 0 []
+
+
 let split_lambda (a:t): arguments * t =
   (* Analyze [(a:A,b:B, ...) := e], return ([a:A,b:B,...], e) *)
-  let e,args = split_lambda0 (-1) a 0 [] in
+  let e,args = split_lambda_list a in
   Array.of_list (List.rev args),
   e
 
@@ -331,6 +336,41 @@ let rec lambda (args:argument_list) (e:t): t =
      e
   | (nme,tp) :: args ->
      Lambda (nme, tp, lambda args e)
+
+
+
+let push_lambda (args:arguments) (t:t): typ =
+  let t = ref t
+  and n = Array.length args in
+  for i = 0 to Array.length args - 1 do
+    let nme,tp = args.(n - 1 - i) in
+    t := Lambda(nme,tp,!t)
+  done;
+  !t
+
+
+let make_case (args:arguments) (co:t) (def:t): case =
+  push_lambda args co, push_lambda args def
+
+
+let case_definition ((co,def):case): t =
+  def
+
+let case_constructor ((co,def):case): t =
+  co
+
+
+let case_pair (c:case): t * t =
+  c
+
+let split_case ((co,def):case): argument_list * t * t =
+  let co,args  = split_lambda_list co in
+  let n = List.length args in
+  let def,_ = split_lambda0 n def 0 [] in
+  args, co, def
+
+
+
 
 
 let rec split_product0
@@ -373,14 +413,6 @@ let split_product(a:typ): arguments * typ =
   arr, tp
 
 
-let push_lambda (args:arguments) (t:t): typ =
-  let t = ref t
-  and n = Array.length args in
-  for i = 0 to Array.length args - 1 do
-    let nme,tp = args.(n - 1 - i) in
-    t := Lambda(nme,tp,!t)
-  done;
-  !t
 
 
 let push_product (args:arguments) (tp:typ): typ =
@@ -391,6 +423,8 @@ let push_product (args:arguments) (tp:typ): typ =
     tp := All(nme,t,!tp)
   done;
   !tp
+
+
 
 
 

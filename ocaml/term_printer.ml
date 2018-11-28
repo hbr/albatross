@@ -505,7 +505,7 @@ module Make: S =
          |> make)
 
     let of_cases
-          (cases: (Term.t*Term.t) array)
+          (cases: Term.case array)
           (pr:print_tp)
         : doc t =
       let ncases = Array.length cases
@@ -513,11 +513,10 @@ module Make: S =
       assert (ncases > 0);
       let rec cases_ i =
         let open Document in
+        let co,def = Term.case_pair cases.(i) in
         if i + 1 = ncases then
-          let co,def = cases.(i) in
           of_case co def pr
         else
-          let co,def = cases.(i) in
           of_case co def pr >>= fun c ->
           cases_ (i+1) >>= fun cs ->
           c ^ optional "; " ^ cs
@@ -529,7 +528,7 @@ module Make: S =
     let of_inspect
           (e:Term.t)
           (r:Term.t)
-          (cases: (Term.t*Term.t) array)
+          (cases: Term.case array)
           (pr:print_tp)
         : doc_plus t =
       pr e >>= fun (e,_) ->
