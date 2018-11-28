@@ -9,21 +9,14 @@ module Term = Term2
 module ListMOption = List.Monadic (Option)
 
 
+
 let string_of_term (c:Gamma.t) (t:Term.t): string =
-  let module SP = Pretty_printer.String_printer in
-  let module PP = Pretty_printer.Make (SP) in
-  let module TP = Term_printer.Make (Gamma) (PP) in
-  let open PP in
-  SP.run 200 (make 30 () >>= TP.print t c)
-
-
-let string_of_term2 (c:Gamma.t) (t:Term.t): string =
-  let module TP = Term_printer2.Make (Gamma) in
+  let module TP = Term_printer.Make (Gamma) in
   Document.string_of 70 (TP.term c TP.detailed t)
 
 
 let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
-  let module TP = Term_printer2.Make (Gamma) in
+  let module TP = Term_printer.Make (Gamma) in
   Document.string_of 70 (TP.fixpoint c TP.detailed fp)
 
 
@@ -547,7 +540,7 @@ let check_fixpoint_decreasing
     check_recursive_calls t IntSet.empty c 0 >>= fun n ->
     if n = 0 then
       printf "fixpoint element does not contain a recursive call\n%s\n"
-        (string_of_term2 c t);
+        (string_of_term c t);
     of_bool (0 < n)
   )
 
@@ -604,10 +597,10 @@ let rec type_of (t:Term.t) (c:Gamma.t): Term.typ option =
 
       | All (_,tp,res) ->
          printf "application failed 'f:%s', 'a:%s'\n  %s is no subtype of %s\n"
-           (string_of_term2 c ftp)
-           (string_of_term2 c atp)
-           (string_of_term2 c atp)
-           (string_of_term2 c tp);
+           (string_of_term c ftp)
+           (string_of_term c atp)
+           (string_of_term c atp)
+           (string_of_term c tp);
          None
 
       | _ ->
@@ -859,7 +852,7 @@ let check_constructor_type
       (c:Gamma.t)
     : unit option =
   printf "  check constructor type %s (nargs %d)\n"
-    (string_of_term2 c tp)
+    (string_of_term c tp)
     (List.length argcls);
   (* Check if [tp] is a valid constructor type for the inductive type
      [i_current] in the context [c] which contains all absolute inductive types
@@ -946,7 +939,7 @@ let check_constructor_type
        | Normal -> "Normal"
        | Recursive -> "Recursive"
        | Positive  -> "Positive")
-      (string_of_term2 c tp);
+      (string_of_term c tp);
 
     let key,args = key_normal tp c in
 
@@ -961,7 +954,7 @@ let check_constructor_type
        (* [key args] is a final type of the constructor type. *)
        begin
          printf "    check argument final type %s\n"
-           (string_of_term2 c (Term.apply_args key args));
+           (string_of_term c (Term.apply_args key args));
          match cls with
          | Inductive.Normal
               when not (is_positive c i)
@@ -976,7 +969,7 @@ let check_constructor_type
          | Inductive.Recursive ->
             (* Nesting case *)
             printf "    check nesting %s\n"
-              (string_of_term2 c (Term.apply_args key args));
+              (string_of_term c (Term.apply_args key args));
             Option.(
               Gamma.inductive_family i c >>= fun (ith,ind) ->
               of_bool (Inductive.ntypes ind = 1) >>= fun _ ->
@@ -1012,10 +1005,10 @@ let check_constructor_type
        (* The argument type is a function type. None of the argument types of
           the function is allowed to contain an inductive type of the
           family nor a positive parameter. *)
-       printf "    function arg %s\n" (string_of_term2 c arg);
+       printf "    function arg %s\n" (string_of_term c arg);
        if has_of_positive c arg then
          (printf "  strict positivity failed for %s\n"
-           (string_of_term2 c arg);
+           (string_of_term c arg);
          None)
        else
          check_constructor_argument tp cls (Gamma.push_simple nme arg c)
@@ -1087,7 +1080,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     Option.(
       fold_array
         (fun _ (_,tp) ith ->
-          printf "  check arity %s\n" (string_of_term2 c tp);
+          printf "  check arity %s\n" (string_of_term c tp);
           check_arity tp c >>= fun s ->
           of_bool ( Inductive.sort ith ind = s
                     && Inductive.is_restriction_consistent ith ind)
@@ -1104,7 +1097,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
     Option.fold_interval
       ((fun _ ith ->
         printf "check constructors of %s\n"
-          (string_of_term2
+          (string_of_term
              cc
              (Term.Variable (Gamma.to_index (i_start + ith) cc)));
         let allprop = Inductive.all_args_propositions ith ind
@@ -1117,7 +1110,7 @@ let check_inductive_definition (ind:Inductive.t) (c:Gamma.t)
              type_of c_type cc (* [c_type] is wellformed.*)
              >>= fun ctptp ->
              printf "  ok %s : %s\n"
-               (string_of_term2 cc c_type) (string_of_term2 cc ctptp);
+               (string_of_term cc c_type) (string_of_term cc ctptp);
              check_constructor_type
                c_type argcls i_start (i_start + ith) i_beyond
                parpos allprop no_any cc
@@ -1488,7 +1481,7 @@ let test (): unit =
     in
     let c = push_inductive ind empty in
     let pred = nat_pred0 2 in
-    printf "%s\n" (string_of_term2 c (Definition.term pred));
+    printf "%s\n" (string_of_term c (Definition.term pred));
     assert (is_wellformed (Definition.term pred) c);
     assert (equivalent_opt
               (type_of (Definition.term pred) c)
