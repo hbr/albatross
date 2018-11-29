@@ -1319,35 +1319,17 @@ let test (): unit =
   in
   Printf.printf "test type checker\n";
   let open Term in
-  let open Gamma in
-  (*let c = push_unnamed datatype
-            (push_sorts 2 [0,1,false] empty) in
-  let c1 = push_unnamed variable0 c in
-  assert ( is_wellformed (sort_variable 0) c);
-  assert ( is_wellformed (sort_variable 1) c);
-  assert ( type_of (sort_variable 0) c = Some (sort_variable_type 0));
-  assert ( type_of (sort_variable 2) c = None);
-  assert ( type_of variable0 c = Some datatype);
-  assert ( type_of variable1 c1 = Some datatype);
-  assert ( is_wellformed variable0 c1);
-  assert ( type_of variable0 c1 = Some variable1);
-  assert
-    begin
-      Option.( type_and_sort_of variable0 c1 >>= fun (_,s) ->
-               Some s
-      ) = Some datatype
-    end;*)
 
-  let c = push_unnamed any empty
+  let c = Gamma.push_unnamed any Gamma.empty
   in
 
   (* Proposition -> Proposition *)
-  assert ( type_of (arrow proposition proposition) empty = Some any);
+  assert ( type_of (arrow proposition proposition) Gamma.empty = Some any);
 
   (* Natural -> Proposition *)
   assert ( type_of (arrow variable0 proposition) c = Some any);
 
-  (* (Natural -> Proposition) -> Proposition **)
+  (* (Natural -> Proposition) -> Proposition *)
   assert ( type_of (arrow
                     (arrow variable0 proposition)
                     proposition) c = Some any);
@@ -1388,7 +1370,7 @@ let test (): unit =
   (* All prover type:
          all(p:Proposition) p: Proposition
      is equivalent to false *)
-  assert( type_of (All (Some "p", proposition, variable0)) empty
+  assert( type_of (All (Some "p", proposition, variable0)) Gamma.empty
           = Some proposition);
 
   (* All inhabitor type:
@@ -1397,11 +1379,11 @@ let test (): unit =
   assert( type_of (All (Some "A", any, variable0)) c
           = Some box);
 
-  assert (check_inductive_definition Inductive.make_natural empty <> None);
-  assert (check_inductive_definition Inductive.make_false empty <> None);
-  assert (check_inductive_definition Inductive.make_true empty <> None);
-  assert (check_inductive_definition Inductive.make_and empty <> None);
-  assert (check_inductive_definition Inductive.make_or empty <> None);
+  assert (check_inductive_definition Inductive.make_natural Gamma.empty <> None);
+  assert (check_inductive_definition Inductive.make_false Gamma.empty <> None);
+  assert (check_inductive_definition Inductive.make_true Gamma.empty <> None);
+  assert (check_inductive_definition Inductive.make_and Gamma.empty <> None);
+  assert (check_inductive_definition Inductive.make_or Gamma.empty <> None);
   assert (check_inductive_definition Inductive.make_equal c <> None);
   assert (check_inductive_definition Inductive.make_list c <> None);
   assert (check_inductive_definition Inductive.make_accessible c <> None);
@@ -1411,8 +1393,8 @@ let test (): unit =
   ignore(
       let ind = Inductive.make_natural
       in
-      assert (check_inductive_definition ind empty <> None);
-      let c = push_inductive ind empty in
+      assert (check_inductive_definition ind Gamma.empty <> None);
+      let c = Gamma.push_inductive ind Gamma.empty in
       assert (type_of variable2 c = Some any);
       assert (type_of variable1 c = Some variable2);
       assert (type_of variable0 c = Some (arrow variable2 variable2))
@@ -1441,14 +1423,14 @@ let test (): unit =
              [Recursive]
              (arrow (arrow variable0 variable0) variable0)]
       in
-      check_inductive_definition ind empty = None
+      check_inductive_definition ind Gamma.empty = None
     end;
 
 
   (* Check Tree *)
   ignore(
       let c =
-        Gamma.push_inductive Inductive.make_list empty
+        Gamma.push_inductive Inductive.make_list Gamma.empty
       in
       assert (Gamma.count c = 3);
       assert (
@@ -1463,25 +1445,27 @@ let test (): unit =
   assert
     begin
       equal_opt
-        (type_of (Definition.term predicate) c)
-        (Definition.typ predicate)
+        (type_of (Gamma.Definition.term predicate) c)
+        (Gamma.Definition.typ predicate)
     end;
   assert
     begin
       let d = binary_relation in
       equal_opt
-        (type_of (Definition.term d) c)
-        (Definition.typ d)
+        (type_of (Gamma.Definition.term d) c)
+        (Gamma.Definition.typ d)
     end;
   begin
     let endo = endorelation 0 in
     let c =
-      push_definition binary_relation empty
+      Gamma.push_definition binary_relation Gamma.empty
     in
-    assert (equal_opt (type_of (Definition.term endo) c) (Definition.typ endo));
+    assert (equal_opt
+              (type_of (Gamma.Definition.term endo) c)
+              (Gamma.Definition.typ endo));
     let c =
-      push_definition endo c
-      |> push_simple (Some "Natural") any in
+      Gamma.push_definition endo c
+      |> Gamma.push_simple (Some "Natural") any in
     (* Endorelation(Natural) *)
     let endo_nat = apply1 variable1 variable0 in
     (*print_type_of endo_nat c;*)
@@ -1492,13 +1476,13 @@ let test (): unit =
   begin
     let ind = Inductive.make_natural
     in
-    let c = push_inductive ind empty in
+    let c = Gamma.push_inductive ind Gamma.empty in
     let pred = nat_pred0 2 in
-    printf "%s\n" (string_of_term c (Definition.term pred));
-    assert (is_wellformed (Definition.term pred) c);
+    printf "%s\n" (string_of_term c (Gamma.Definition.term pred));
+    assert (is_wellformed (Gamma.Definition.term pred) c);
     assert (equivalent_opt
-              (type_of (Definition.term pred) c)
-              (Definition.typ pred)
+              (type_of (Gamma.Definition.term pred) c)
+              (Gamma.Definition.typ pred)
               c);
     let plus_fp = nat_add_fp 2 in
     printf "%s\n" (string_of_fixpoint c plus_fp);
