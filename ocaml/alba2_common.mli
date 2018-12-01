@@ -48,6 +48,8 @@ sig
   val of_string: string -> t option
   val string: t -> string
   val precedence: t -> Precedence.t
+  val arrow: t
+  val fat_arrow: t
   val eq: t
   val andop: t
   val orop: t

@@ -1188,6 +1188,44 @@ let endorelation (rel_idx:int): Gamma.Definition.t =
   in
   Gamma.Definition.make_simple (Some "Endorelation") typ t
 
+(* (->) (A,B:Any): Any :=
+     all(_:A) B
+
+   (=>) (A,B:Proposition): Proposition :=
+     all(_:A) B
+ *)
+
+let generic_arrow_definition (sa:string) (sb:string) (op:Operator.t) (s:Term.t)
+    : Gamma.Definition.t =
+  let open Term in
+  let a = variable0
+  and b = variable1
+  in
+  let args = [| Some sa, s; Some sb, s |] in
+  let typ =
+    push_product args s
+  and term =
+    push_lambda
+      args
+      (All (None, a, b))
+  in
+  Gamma.Definition.make
+    (some_feature_operator op)
+    (typ  |> to_index 0)
+    (term |> to_index 0)
+
+
+let fat_arrow_definition: Gamma.Definition.t =
+  generic_arrow_definition
+    "a" "b"
+    Operator.fat_arrow
+    Term.proposition
+
+let arrow_definition: Gamma.Definition.t =
+  generic_arrow_definition
+    "A" "B"
+    Operator.arrow
+    Term.any
 
 
 
@@ -1353,7 +1391,7 @@ let test (): unit =
   assert ( type_of (arrow variable0 variable0) c
            = Some any);
 
-  (* ((A:Prop,p:A) := p): all(A:Prop) A -> A *)
+  (* ((a:Prop, p:a) := p): all(a:Prop) a => a *)
   assert ( type_of
              (Lambda (None,
                       proposition,
@@ -1441,28 +1479,26 @@ let test (): unit =
         )
     );
 
-  (* Predicate, Relation, Endorelation *)
-  assert
-    begin
-      equal_opt
-        (type_of (Gamma.Definition.term predicate) c)
-        (Gamma.Definition.typ predicate)
-    end;
-  assert
-    begin
-      let d = binary_relation in
-      equal_opt
-        (type_of (Gamma.Definition.term d) c)
-        (Gamma.Definition.typ d)
-    end;
+  let check_definition (c:Gamma.t) (def:Gamma.Definition.t): unit =
+    assert (equal_opt
+              (type_of (Gamma.Definition.term def) c)
+              (Gamma.Definition.typ def));
+  in
+
+  (* Arrow, Predicate, Relation *)
+  check_definition Gamma.empty arrow_definition;
+  check_definition Gamma.empty fat_arrow_definition;
+  check_definition Gamma.empty predicate;
+  check_definition Gamma.empty binary_relation;
+
+
+  (* Endorelation *)
   begin
     let endo = endorelation 0 in
     let c =
       Gamma.push_definition binary_relation Gamma.empty
     in
-    assert (equal_opt
-              (type_of (Gamma.Definition.term endo) c)
-              (Gamma.Definition.typ endo));
+    check_definition c endo;
     let c =
       Gamma.push_definition endo c
       |> Gamma.push_simple (Some "Natural") any in

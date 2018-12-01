@@ -119,6 +119,12 @@ module Operator =
     let basic_operator (s:string): t =
       of_string s |> Option.value
 
+    let arrow: t =
+      basic_operator "->"
+
+    let fat_arrow: t =
+      basic_operator "=>"
+
     let eq: t =
       basic_operator "="
 
