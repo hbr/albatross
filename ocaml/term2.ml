@@ -427,26 +427,28 @@ let push_product (args:arguments) (tp:typ): typ =
 
 
 
-
-let substitute_args (n:int) (f:int->t) (t:t): t =
-  (* Substitute the first [n] variables by the terms returned by the function
-     [f] in the term [t]. Shift all variables above [n] down by [n]. *)
+let substitute_vars (f:int->t) (t:t): t =
+  (* Substitute the free variable [i] by the term [f i] in the term [t]. *)
   let rec subst bnd t =
     match t with
     | Sort _ -> t
+
     | Variable i when i < bnd ->
        t
-    | Variable i when i < bnd + n ->
+
+    | Variable i ->
        f (i - bnd) |> up bnd
-    | Variable (i) ->
-       Variable (i-n)
+
     | Application (a, b, oo) ->
        let sub = subst bnd in
        Application (sub a, sub b, oo)
+
     | Lambda (nm, tp, t0) ->
        Lambda (nm, subst bnd tp, subst (bnd+1) t0)
+
     | All (nm, tp, t0) ->
        All (nm, subst bnd tp, subst (bnd+1) t0)
+
     | Inspect (exp, map, cases) ->
        let sub = subst bnd in
        Inspect (sub exp,
@@ -454,15 +456,31 @@ let substitute_args (n:int) (f:int->t) (t:t): t =
                 Array.map
                   (fun (c,f) -> sub c, sub f)
                   cases)
+
     | Fix (idx, arr) ->
        let sub = subst (bnd + Array.length arr) in
        Fix (idx,
             Array.map
               (fun (nm,tp,decr,t) -> nm, sub tp, decr, sub t)
               arr)
-
   in
   subst 0 t
+
+
+
+
+
+let substitute_args (n:int) (f:int->t) (t:t): t =
+  (* Substitute the first [n] variables by the terms returned by the function
+     [f] in the term [t]. Shift all variables above [n] down by [n]. *)
+  substitute_vars
+    (fun i ->
+      if i < n then
+        f i
+      else
+        Variable (i - n)
+    )
+    t
 
 
 
