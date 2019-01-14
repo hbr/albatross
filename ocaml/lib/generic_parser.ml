@@ -4,6 +4,7 @@ open Common
 
 module type BASIC =
   sig
+    type n_consumed = int
     type token
     type error
     type state
@@ -14,9 +15,9 @@ module type BASIC =
     val consume:  'a parser -> token list -> 'a parser
 
     val continue: 'a parser ->
-                  (state -> 'a -> int -> token list -> 'z) ->
+                  (state -> 'a -> n_consumed -> token list -> 'z) ->
                   (state -> 'z) ->
-                  (state -> error -> int -> token list -> 'z) ->
+                  (state -> error -> n_consumed -> token list -> 'z) ->
                   'z
 
     module M: Monad.STATE_WITH_RESULT with type state = state and
@@ -90,12 +91,13 @@ module Basic (Token:ANY) (Error:ANY) (State:ANY)
                  and type state = State.t)
   =
   struct
+    type n_consumed = int
     type token = Token.t
     type error = Error.t
     type state = State.t
     type tok = One of token | End
     type 'a parser =
-      | Accept of state * 'a * int * tok list
+      | Accept of state * 'a * n_consumed * tok list
       | More of state * (state -> tok -> 'a parser)
       | Reject of state * error * int * tok list
 
@@ -158,9 +160,9 @@ module Basic (Token:ANY) (Error:ANY) (State:ANY)
 
     let continue
           (p:'a parser)
-          (f1:state -> 'a -> int -> token list -> 'z)
+          (f1:state -> 'a -> n_consumed -> token list -> 'z)
           (f2:state -> 'z)
-          (f3:state -> error -> int -> token list -> 'z)
+          (f3:state -> error -> n_consumed -> token list -> 'z)
         : 'z =
       match p with
       | Accept (s,a,n,la) ->

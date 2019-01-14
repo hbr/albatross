@@ -4,6 +4,7 @@ open Common
 
 module type BASIC =
   sig
+    type n_consumed = int
     type token
     type error
     type state
@@ -14,9 +15,9 @@ module type BASIC =
     val consume:  'a parser -> token list -> 'a parser
 
     val continue: 'a parser ->
-                  (state -> 'a -> int -> token list -> 'z) ->
+                  (state -> 'a -> n_consumed -> token list -> 'z) ->
                   (state -> 'z) ->
-                  (state -> error -> int -> token list -> 'z) ->
+                  (state -> error -> n_consumed -> token list -> 'z) ->
                   'z
 
     module M: Monad.STATE_WITH_RESULT with type state = state and
