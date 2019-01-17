@@ -1,3 +1,8 @@
+module Make0: Io.S0
+
+module Make: Io.S
+
+(*
 module type IO_TYPE =
   sig
     include Monad.MONAD
@@ -35,3 +40,4 @@ module type IO_TYPE =
 
 
 module IO: IO_TYPE
+ *)

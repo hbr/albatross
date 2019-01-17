@@ -18,7 +18,6 @@ sig
   val flush: t -> unit
   val getc: t -> char option
   val putc: t -> char -> unit
-  val put_string: t -> string -> unit
 end =
   struct
     type t = {
@@ -89,11 +88,6 @@ end =
       assert (not (is_full b));
       Bytes.set b.bytes b.wp c;
       b.wp <- b.wp + 1
-
-    let put_string (b:t) (s:string): unit =
-      for i = 0 to String.length s - 1 do
-        putc b s.[i]
-      done
   end (* Buffer *)
 
 
@@ -379,11 +373,7 @@ module type IO_TYPE =
   end
 
 
-
-
-
-
-module IO: IO_TYPE =
+module Make0: Io.S0 =
   struct
     include
       Monad.Make(
@@ -433,37 +423,6 @@ module IO: IO_TYPE =
     let command_line: string array t =
       fun fs -> Ok Sys.argv, fs
 
-    let getc (fd:in_file): char option t =
-      fun fs -> Ok (File_system.getc fs fd), fs
-
-    let get_line (fd:in_file): string option t =
-      fun fs ->
-      Ok (File_system.getline fs fd), fs
-
-    let putc (fd:out_file) (c:char): unit t =
-      fun fs -> Ok (File_system.putc fs fd c), fs
-
-    let put_substring
-          (fd:out_file) (start:int) (len:int) (str:string)
-        : unit t =
-      fun fs ->
-      for i = start to start + len - 1 do
-        File_system.putc fs fd str.[i]
-      done;
-      Ok (), fs
-
-    let put_string (fd:out_file) (str:string): unit t =
-      put_substring fd 0 (String.length str) str
-
-    let fill (fd:out_file) (c:char) (n:int): unit t =
-      fun fs ->
-      for i = 0 to n - 1 do
-        File_system.putc fs fd c
-      done;
-      Ok (), fs
-
-    let put_line (fd:out_file) (str:string): unit t =
-      put_string fd str >>= fun _ ->  putc fd '\n'
 
     let open_for_read (path:string): in_file option t =
       fun fs -> Ok (File_system.open_for_read fs path), fs
@@ -483,30 +442,29 @@ module IO: IO_TYPE =
     let flush (fd:out_file): unit t =
       fun fs -> Ok (File_system.flush fs fd), fs
 
-    let get_line_in: string option t =
-      fun fs ->
-      File_system.flush fs stdout;
-      Ok (File_system.getline fs stdin), fs
+    let flush_all: unit t =
+      fun fs -> Ok (File_system.flush_all fs), fs
 
-    let putc_out (c:char): unit t =
+
+    let getc (fd:in_file): char option t =
+      fun fs -> Ok (File_system.getc fs fd), fs
+
+    let putc (fd:out_file) (c:char): unit t =
+      fun fs -> Ok (File_system.putc fs fd c), fs
+
+    let get_line (fd:in_file): string option t =
       fun fs ->
-      File_system.putc fs stdout c;
+      Ok (File_system.getline fs fd), fs
+
+    let put_substring
+          (fd:out_file) (start:int) (len:int) (str:string)
+        : unit t =
+      fun fs ->
+      for i = start to start + len - 1 do
+        File_system.putc fs fd str.[i]
+      done;
       Ok (), fs
+  end
 
-    let putc_err (c:char): unit t =
-      fun fs ->
-      File_system.putc fs stderr c;
-      Ok (), fs
 
-    let put_string_out (str:string): unit t =
-      put_string stdout str
-
-    let put_string_err (str:string): unit t =
-      put_string stderr str
-
-    let put_line_out (str:string): unit t =
-      put_line stdout str
-
-    let put_line_err (str:string): unit t =
-      put_line stderr str
-  end (* IO *)
+module Make: Io.S = Io.Make (Make0)

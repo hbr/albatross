@@ -1,7 +1,7 @@
 open Common
 
 
-module Make (IO:Ocaml_io.IO_TYPE) =
+module Make (IO:Io.S) =
   struct
     type command_line = {
         command: string option;

@@ -1,4 +1,4 @@
-module Make (IO:Ocaml_io.IO_TYPE):
+module Make (IO:Io.S):
 sig
   val run: unit -> unit
 end
