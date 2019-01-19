@@ -1,7 +1,6 @@
 open Common
 
 
-
 module Buffer:
 sig
   type t
@@ -24,7 +23,9 @@ end =
         mutable rp: int; (* The content of the buffer is between the read and
                             the write pointer. *)
         mutable wp: int;
-        mutable flag: bool; (* ok flag *)
+        mutable flag: bool; (* ok flag, set to false if (a) refilling a buffer
+                               adds 0 bytes, (b) flushing a nonempty buffer
+                               does not write anything to the filesystem. *)
         read:  Bytes.t -> int -> int -> int; (* refill function *)
         write: Bytes.t -> int -> int -> int; (* flush function *)
         bytes: Bytes.t}
@@ -73,6 +74,7 @@ end =
           reset b
 
     let getc (b:t): char option =
+      assert (is_ok b);
       if is_empty b then
         fill b;
       if is_empty b then
@@ -83,6 +85,7 @@ end =
          Some c)
 
     let putc (b:t) (c:char): unit =
+      assert (is_ok b);
       if is_full b then
         flush b;
       assert (not (is_full b));
@@ -108,10 +111,11 @@ sig
   val stderr: out_file
   val getc: t -> in_file -> char option
   val getline: t -> in_file -> string option
+  val scan: t -> in_file -> (char,'a) Scan.t -> 'a
   val putc: t -> out_file -> char -> unit
   val open_for_read: t -> string -> in_file option
   val open_for_write: t -> string -> out_file option
-  val create_file: t -> string -> out_file option
+  val create: t -> string -> out_file option
   val close_in:   t -> in_file -> unit
   val close_out:  t -> out_file -> unit
   val flush: t -> out_file -> unit
@@ -230,7 +234,7 @@ end
       with Unix.Unix_error _ ->
         None
 
-    let create_file (fs:t) (path:string): out_file option =
+    let create (fs:t) (path:string): out_file option =
       try
         put_to_files
           fs
@@ -325,6 +329,24 @@ end
           end
       in
       read 0
+
+    let scan (fs:t) (fd:in_file) (f:(char,'a) Scan.t): 'a =
+      assert (fd < Array.length fs.files);
+      let b = readable_buffer fs fd in
+      assert (Buffer.is_ok b);
+      let res = ref None
+      and f =   ref f
+      in
+      while !res = None do
+        let c = Buffer.getc b in
+        match !f c with
+        | Scan.End a ->
+           res := Some a
+        | Scan.More f1 ->
+           assert (c <> None);
+           f := f1
+      done;
+      Option.value !res
   end (* File_system *)
 
 
@@ -358,7 +380,7 @@ module type IO_TYPE =
     val fill: out_file -> char -> int -> unit t
     val open_for_read:  string -> in_file option t
     val open_for_write: string -> out_file option t
-    val create_file:    string -> out_file option t
+    val create:    string -> out_file option t
     val close_in:  in_file -> unit t
     val close_out: out_file -> unit t
     val flush: out_file -> unit t
@@ -373,7 +395,7 @@ module type IO_TYPE =
   end
 
 
-module Make0: Io.S0 =
+module IO0: Io.S0 =
   struct
     include
       Monad.Make(
@@ -430,8 +452,8 @@ module Make0: Io.S0 =
     let open_for_write (path:string): out_file option t =
       fun fs -> Ok (File_system.open_for_write fs path), fs
 
-    let create_file (path:string): out_file option t =
-      fun fs -> Ok (File_system.create_file fs path), fs
+    let create (path:string): out_file option t =
+      fun fs -> Ok (File_system.create fs path), fs
 
     let close_in (fd:in_file): unit t =
       fun fs -> Ok (File_system.close_in fs fd), fs
@@ -456,6 +478,10 @@ module Make0: Io.S0 =
       fun fs ->
       Ok (File_system.getline fs fd), fs
 
+
+    let scan (fd:in_file) (f:(char,'a) Scan.t): 'a t =
+      fun fs -> Ok (File_system.scan fs fd f), fs
+
     let put_substring
           (fd:out_file) (start:int) (len:int) (str:string)
         : unit t =
@@ -467,4 +493,4 @@ module Make0: Io.S0 =
   end
 
 
-module Make: Io.S = Io.Make (Make0)
+module IO: Io.S = Io.Make (IO0)

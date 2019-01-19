@@ -11,6 +11,12 @@ module Either =
     let right b = Right b
   end
 
+module type FUNCTOR =
+  sig
+    type _ t
+    val map: ('a -> 'b) -> 'a t -> 'b t
+  end
+
 
 
 module Char =
@@ -157,4 +163,14 @@ module Sexp =
              "(" ^ s0 ^ ")"
       in
       string0 0 s
+  end
+
+
+
+module Scan =
+  struct
+    type ('token,'a) result =
+      | More of ('token,'a) t
+      | End of 'a
+    and ('token,'a) t = 'token option -> ('token,'a) result
   end

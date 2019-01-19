@@ -1,3 +1,6 @@
+open Common
+
+
 module type S0 =
   sig
     type in_file
@@ -16,7 +19,7 @@ module type S0 =
 
     val open_for_read:  string -> in_file  option t
     val open_for_write: string -> out_file option t
-    val create_file: string -> out_file option t
+    val create: string -> out_file option t
     val close_in:  in_file  -> unit t
     val close_out: out_file -> unit t
     val flush: out_file -> unit t
@@ -25,6 +28,7 @@ module type S0 =
     val getc: in_file -> char option t
     val putc: out_file -> char ->  unit t
     val get_line: in_file -> string option t
+    val scan: in_file -> (char,'a) Scan.t -> 'a t
     val put_substring: out_file -> int -> int -> string -> unit t
   end
 
@@ -32,6 +36,10 @@ module type S0 =
 module type S =
   sig
     include S0
+
+    val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
+    val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
+    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t
 
     val put_string: out_file -> string -> unit t
     val put_line:   out_file -> string -> unit t

@@ -14,6 +14,13 @@ sig
 end
 
 
+module type FUNCTOR =
+  sig
+    type _ t
+    val map: ('a -> 'b) -> 'a t -> 'b t
+  end
+
+
 module Char:
 sig
   type t = char
@@ -80,3 +87,12 @@ module type SEXP =
   end
 
 module Sexp: SEXP
+
+
+module Scan:
+sig
+  type ('token,'a) result =
+    | More of ('token,'a) t
+    | End of 'a
+  and ('token,'a) t = 'token option -> ('token,'a) result
+end
