@@ -3,6 +3,10 @@ module Ocaml_string = String
 module Ocaml_list = List
 
 
+module Void:
+sig
+  type t
+end
 
 module Either:
 sig
