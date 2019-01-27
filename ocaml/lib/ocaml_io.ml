@@ -13,10 +13,15 @@ sig
   val content: t -> string
   val is_ok: t -> bool
   val is_empty: t -> bool
+  val fill: t -> unit
   val is_full: t -> bool
   val flush: t -> unit
   val getc: t -> char option
   val putc: t -> char -> unit
+  module Scan: functor (S:Io.SCANNER) ->
+               sig
+                 val scan: t -> S.t -> S.t
+               end
 end =
   struct
     type t = {
@@ -91,6 +96,19 @@ end =
       assert (not (is_full b));
       Bytes.set b.bytes b.wp c;
       b.wp <- b.wp + 1
+
+    module Scan (S:Io.SCANNER) =
+      struct
+        let scan (b:t) (s:S.t): S.t =
+          let sref = ref s in
+          while not (is_empty b) && S.can_receive !sref do
+            sref := S.receive (Bytes.get b.bytes b.rp) !sref
+          done;
+          if is_empty b && S.can_receive !sref then
+            S.end_buffer !sref
+          else
+            !sref
+      end
   end (* Buffer *)
 
 
@@ -119,6 +137,12 @@ sig
   val close_in:   t -> in_file -> unit
   val close_out:  t -> out_file -> unit
   val flush: t -> out_file -> unit
+
+  module Scan: functor (S:Io.SCANNER) ->
+               sig
+                 val scan_buffer: t -> in_file -> S.t -> S.t
+                 val scan: t -> in_file -> S.t -> S.t
+               end
 end
   =
   struct
@@ -347,6 +371,32 @@ end
            f := f1
       done;
       Option.value !res
+
+    module Scan (S:Io.SCANNER) =
+      struct
+        module BScan = Buffer.Scan (S)
+
+        let scan_buffer (fs:t) (fd:in_file) (s:S.t): S.t =
+          assert (fd < Array.length fs.files);
+          let b = readable_buffer fs fd in
+          assert (Buffer.is_ok b);
+          BScan.scan b s
+
+        let scan (fs:t) (fd:in_file) (s:S.t): S.t =
+          assert (fd < Array.length fs.files);
+          let b = readable_buffer fs fd in
+          assert (Buffer.is_ok b);
+          let sr = ref s in
+          while Buffer.is_ok b && S.can_receive !sr do
+            sr := BScan.scan b !sr;
+            if Buffer.is_empty b && S.can_receive !sr then
+              Buffer.fill b
+          done;
+          if not (Buffer.is_ok b) && S.can_receive !sr then
+            S.end_stream !sr
+          else
+            !sr
+      end
   end (* File_system *)
 
 
@@ -359,40 +409,6 @@ end
 
 
 
-module type IO_TYPE =
-  sig
-    include Monad.MONAD
-    val exit: int -> 'a t
-    val execute: unit t -> unit
-    val command_line: string array t
-
-    type in_file
-    type out_file
-    val stdin:  in_file
-    val stdout: out_file
-    val stderr: out_file
-    val getc: in_file -> char option t
-    val putc: out_file -> char -> unit t
-    val get_line: in_file -> string option t
-    val put_string: out_file -> string -> unit t
-    val put_line: out_file -> string -> unit t
-    val put_substring: out_file -> int -> int -> string -> unit t
-    val fill: out_file -> char -> int -> unit t
-    val open_for_read:  string -> in_file option t
-    val open_for_write: string -> out_file option t
-    val create:    string -> out_file option t
-    val close_in:  in_file -> unit t
-    val close_out: out_file -> unit t
-    val flush: out_file -> unit t
-
-    val get_line_in:    string option t
-    val putc_out: char -> unit t
-    val putc_err: char -> unit t
-    val put_string_out:  string -> unit t
-    val put_string_err:  string -> unit t
-    val put_line_out:    string -> unit t
-    val put_line_err:    string -> unit t
-  end
 
 
 module IO0: Io.S0 =
@@ -490,6 +506,19 @@ module IO0: Io.S0 =
         File_system.putc fs fd str.[i]
       done;
       Ok (), fs
+
+    module Scan  (S:Io.SCANNER) =
+      struct
+        module FS_Scan = File_system.Scan (S)
+
+        let buffer (fd:in_file) (s:S.t): S.t t =
+          fun fs ->
+          Ok (FS_Scan.scan_buffer fs fd s), fs
+
+        let stream (fd:in_file) (s:S.t): S.t t =
+          fun fs ->
+          Ok (FS_Scan.scan fs fd s), fs
+      end
   end
 
 

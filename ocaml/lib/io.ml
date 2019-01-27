@@ -1,6 +1,16 @@
 open Common
 
 
+module type SCANNER =
+  sig
+    type t
+    val can_receive: t -> bool
+    val receive: char -> t -> t
+    val end_buffer: t -> t
+    val end_stream: t -> t
+  end
+
+
 module type S0 =
   sig
     type in_file
@@ -30,6 +40,12 @@ module type S0 =
     val get_line: in_file -> string option t
     val scan: in_file -> (char,'a) Scan.t -> 'a t
     val put_substring: out_file -> int -> int -> string -> unit t
+
+    module Scan: functor (S:SCANNER) ->
+                 sig
+                   val buffer: in_file -> S.t -> S.t t
+                   val stream: in_file -> S.t -> S.t t
+                 end
   end
 
 
