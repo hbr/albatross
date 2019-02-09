@@ -20,7 +20,7 @@ let _ =
 
 
 (* Draft version of an output module with indentation *)
-module Output_indent (IO:Ocaml_io.IO_TYPE):
+module Output_indent (IO:Io.S):
 sig
   include Monad.OUTPUT_INDENT
   val eval: int -> int -> IO.out_file -> 'a t -> 'a IO.t
