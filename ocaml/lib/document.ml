@@ -4,7 +4,6 @@ type t =
   | Nest of int * t
   | Text of string
   | Line of string
-  | Group of t
   | Union of t * t
 
 let empty = Nil
@@ -32,17 +31,15 @@ let rec flatten (d:t): t =
   | Text s ->
      Text s
   | Line s ->
-     Text s (* remove line breaks and replace it by the corresponding
-                   string, i.e. an empty string, a space or some other
-                   optional replacement text. *)
+     Text s (* remove line breaks and replace it by the corresponding string,
+               i.e. an empty string, a space or some other optional
+               replacement text. *)
   | Union(x,_) ->
-     (* Invariant: All docs in a union flatten to the same doc. Therefore
-            we can choose the most flattened and flatten it completely. *)
-     flatten x
-  | Group x ->
+     (* Invariant: All docs in a union flatten to the same doc. Therefore we
+        can choose the most flattened and flatten it completely. *)
      flatten x
 
-let group (x:t): t = Group x (*Union (flatten x,x)*)
+let group (x:t): t = Union (flatten x,x)
 
 
 
@@ -93,11 +90,10 @@ let rec fits (w:int) (x:layout): bool =
        true
 
 let best (w:int) (x:t): layout =
-  let better w k x y =
+  let better k x y =
     if fits (w-k) x then x else y
   in
   let rec be
-            (w:int)  (* width of the line *)
             (k:int)  (* number of characters already on the line *)
             (lst: (int*t) list) (* list of documents with indentations *)
           : layout =
@@ -106,31 +102,26 @@ let best (w:int) (x:t): layout =
        LNil
 
     | (i,Nil) :: z ->
-       be w k z
+       be k z
 
     | (i,Concat(x,y)) :: z ->
-       be w k ((i,x) :: (i,y) :: z)
+       be k ((i,x) :: (i,y) :: z)
 
     | (i,Nest(j,x)) :: z ->
-       be w k ((i+j,x) :: z)
+       be k ((i+j,x) :: z)
 
     | (i,Text s) :: z ->
-       LText(s, be w (k + String.length s) z)
+       LText(s, be (k + String.length s) z)
 
     | (i,Line _) :: z ->
-       LLine (i, be w i z)
+       LLine (i, be i z)
 
     | (i,Union(x,y)) :: z ->
-       better w k
-         (be w k ((i,x) :: z))
-         (be w k ((i,y) :: z))
-
-    | (i,Group x) :: z ->
-       better w k
-         (be w k ((i,flatten x) :: z))
-         (be w k ((i,x) :: z))
+       better k
+         (be k ((i,x) :: z))
+         (be k ((i,y) :: z))
   in
-  be w 0 [0,x]
+  be 0 [0,x]
 
 
 
@@ -165,7 +156,7 @@ end =
 
 module Pretty (P:PRINTER) =
   struct
-    let print (width:int) (d:t): unit P. t =
+    let print (width:int) (d:t): unit P.t =
       let rec pr x =
         let open P in
         match x with
