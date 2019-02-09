@@ -81,7 +81,9 @@ module Make (M:S0): S =
   struct
     include M
 
-    let read_file (path:string) (cannot_open:'a t) (read:in_file -> 'a t): 'a t =
+    let read_file
+          (path:string) (cannot_open:'a t) (read:in_file -> 'a t)
+        : 'a t =
       open_for_read path >>= fun fd ->
       match fd with
       | None ->
@@ -91,7 +93,9 @@ module Make (M:S0): S =
          close_in fd >>= fun _ ->
          make a
 
-    let write_file (path:string) (cannot_open:'a t) (write:out_file -> 'a t): 'a t =
+    let write_file
+          (path:string) (cannot_open:'a t) (write:out_file -> 'a t)
+        : 'a t =
       open_for_write path >>= fun fd ->
       match fd with
       | None ->
@@ -163,3 +167,43 @@ module Make (M:S0): S =
     let put_newline_err: unit t =
       put_newline stderr
   end
+
+
+module Output (Io:S) =
+  struct
+    type out_file = Io.out_file
+
+    include
+      Monad.Make (
+          struct
+            type 'a t = out_file -> 'a Io.t
+            let make (a:'a) (fd:out_file): 'a Io.t =
+              Io.make a
+            let bind (m:'a t) (f:'a -> 'b t) (fd:out_file): 'b Io.t =
+              Io.(m fd >>= fun a -> f a fd)
+          end
+        )
+
+    let putc (c:char) (fd:out_file): unit Io.t =
+      Io.putc fd c
+
+    let put_substring
+          (start:int) (len:int) (s:string) (fd:out_file)
+        : unit Io.t =
+      Io.put_substring fd start len s
+
+    let put_string (s:string): unit t =
+      put_substring 0 (String.length s) s
+
+    let put_newline: unit t =
+      putc '\n'
+
+    let put_line (s:string): unit t =
+      put_string s >>= fun _ -> put_newline
+
+    let fill (c:char) (n:int) (fd:out_file): unit Io.t =
+      Io.fill fd c n
+
+    let run (fd:out_file) (m:'a t): 'a Io.t =
+      m fd
+ end

@@ -78,3 +78,10 @@ module type S =
 
 
 module Make (M:S0): S
+
+
+module Output (Io:S):
+sig
+  include Monad.OUTPUT
+  val run: Io.out_file -> 'a t -> 'a Io.t
+end
