@@ -51,6 +51,7 @@ sig
   val length: t -> int
   val get: t -> int -> char
   val escaped: t -> t
+  val sub: t -> int -> int -> t
   val make: int -> char -> t
 end
 
