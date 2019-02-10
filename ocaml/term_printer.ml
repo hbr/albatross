@@ -653,7 +653,7 @@ let string_of_term (t:Term.t): string =
 
 
 let test (): unit =
-  Printf.printf "test term printer2\n";
+  Printf.printf "test term printer\n";
   let open Term in
   let print = string_of_term in
   assert
