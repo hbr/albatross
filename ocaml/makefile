@@ -7,6 +7,7 @@
         test_example_book          \
         unit_test                  \
         unit_test.byte             \
+        unit_test.d.byte           \
         test2                      \
         test2_library              \
         test2_draft                \
@@ -69,6 +70,9 @@ alba.p.native:
 
 unit_test.byte:
 	$(OCB) unit_test.byte
+
+unit_test.d.byte:
+	$(OCB) unit_test.d.byte
 
 unit_test: unit_test.byte
 	./unit_test.byte
