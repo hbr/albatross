@@ -36,11 +36,9 @@ module State =
               mutable p: position;
               mutable pn: position;
               mutable oe: open_groups;  (* effective *)
-              mutable op: open_groups;  (* enclosing or before pending line
-                                           break *)
-              mutable op0: open_groups; (* op at pending line break *)
-              mutable opr: open_groups; (* to the right of the group of the
-                                           pending line break *)
+              mutable oa: open_groups;  (* active *)
+              mutable oa0: open_groups; (* active at pending line break *)
+              mutable opr: open_groups; (* to the right of the pending group *)
               (* op + opr is the sum of all open groups in the active region *)
               mutable oar: open_groups; (* to the right of all active groups *)
               mutable buf: command list
@@ -49,18 +47,18 @@ module State =
     module Group =
       struct
         let count (st:t): int =
-          st.oe + st.op + st.opr + st.oar
+          st.oe + st.oa + st.opr + st.oar
 
         let open_normal (st:t): unit =
           assert (st.opr = 0);
           assert (st.oar = 0);
-          st.op <- st.op + 1
+          st.oa <- st.oa + 1
 
         let close_normal (st:t): unit =
           assert (st.opr = 0);
           assert (st.oar = 0);
-          if st.op > 0 then
-            st.op <- st.op - 1
+          if st.oa > 0 then
+            st.oa <- st.oa - 1
           else
             (assert (st.oe > 0);
              st.oe <- st.oe - 1)
@@ -68,78 +66,78 @@ module State =
         let active_to_effective (st:t): unit =
           assert (st.opr = 0);
           assert (st.oar = 0);
-          assert (st.op0 = 0);
-          st.oe <- st.oe + st.op;
-          st.op <- 0
+          assert (st.oa0 = 0);
+          st.oe <- st.oe + st.oa;
+          st.oa <- 0
 
         let start_buffering (st:t): unit =
-          assert (0 < st.op);
-          st.op0 <- st.op
+          assert (0 < st.oa);
+          st.oa0 <- st.oa
 
         let is_pending_open (st:t): bool =
           (* Is the group of the pending line break still open? *)
-          assert (0 < st.op0);
-          let res = st.op0 <= st.op in
+          assert (0 < st.oa0);
+          let res = st.oa0 <= st.oa in
           if res then
             (assert (st.opr = 0);
              assert (st.oar = 0);
-             assert (st.op > 0)
+             assert (st.oa > 0)
             );
           res
 
         let is_pending_closed (st:t): bool =
           (* Is the group of the pending line break already closed? *)
-          assert (0 < st.op0);
-          st.op < st.op0
+          assert (0 < st.oa0);
+          st.oa < st.oa0
 
         let is_active_open (st:t): bool =
           (* Is there still a group enclosing the pending line break open? *)
-          let res = st.op > 0 in
+          let res = st.oa > 0 in
           if res then
             assert (st.oar = 0);
           res
 
         let is_active_closed (st:t): bool =
           (* Are all groups enclosing the pending line break closed? *)
-          st.op = 0
+          st.oa = 0
 
         let flush_flatten (st:t): unit =
           assert (is_pending_closed st);
           if is_active_closed st then
-            (st.op <- st.oar;
+            (st.oa <- st.oar;
              st.oar <- 0);
-          st.op0 <- 0
+          st.oa0 <- 0
 
         let flush_effective (st:t): unit =
           (* All open groups enclosing the pending line break (the active
              groups) become effective, all groups to the right of the pending
              group become the new active groups. *)
-          st.oe <- st.oe + st.op;
-          st.op <- st.opr + st.oar;
+          st.oe <- st.oe + st.oa;
+          st.oa <- st.opr + st.oar;
           st.opr <- 0;
           st.oar <- 0;
-          st.op0 <- 0
+          st.oa0 <- 0
 
         let open_buffering (st:t): unit =
           if is_pending_open st then
-             st.op <- st.op + 1
+             st.oa <- st.oa + 1
           else if is_active_open st then
              st.opr <- st.opr + 1
           else
-            (assert (st.op = 0);
+            (assert (st.oa = 0);
              assert (st.opr = 0);
              st.oar <- st.oar + 1)
 
         let close_buffering (st:t): unit =
           if is_pending_open st then
-             st.op <- st.op - 1
+             st.oa <- st.oa - 1
           else if is_active_open st then
              if st.opr > 0 then
                st.opr <- st.opr - 1
              else
-               st.op <- st.op - 1
+               st.oa <- st.oa - 1
           else
-            (assert (st.op = 0);
+            (assert (st.oa = 0);
              assert (st.opr = 0);
              assert (st.oar > 0);
              st.oar <- st.oar - 1)
@@ -152,7 +150,7 @@ module State =
       {width; ribbon;
        current_indent = indent;   line_indent = indent;
        p = 0;  pn = 0;
-       oe = 0; op = 0; op0 = 0; opr = 0; oar = 0;
+       oe = 0; oa = 0; oa0 = 0; opr = 0; oar = 0;
        buf = []
       }
 
@@ -175,7 +173,7 @@ module State =
 
     let out_line (st:t): unit =
       assert (normal st);
-      assert (st.op = 0);  (* Otherwise we must start buffering. *)
+      assert (st.oa = 0);  (* Otherwise we must start buffering. *)
       assert (st.opr = 0); (* There is no active group. *)
       assert (st.oar = 0); (* ... therefore nothing to the right of it. *)
       st.p <- st.current_indent;
