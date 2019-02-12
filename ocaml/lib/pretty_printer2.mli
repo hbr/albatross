@@ -8,28 +8,33 @@ module type PRINTER =
   end
 
 
+
 type alternative_text = string
 type start = int
 type length = int
 type indent = int
 
+module type PRETTY =
+  functor (P:PRINTER) ->
+  sig
+    include Monad.MONAD
 
-module Make (P:PRINTER):
-sig
-  include Monad.MONAD
+    val text_sub: start -> length -> string -> unit t
+    val text: string -> unit t
+    val line: alternative_text -> unit t
+    val cut: unit t
+    val space: unit t
+    val nest: indent -> 'a t -> unit t
+    val group: 'a t -> unit t
+    val fill_of_string: string -> unit t
+    val fill_of_stringlist: string list -> unit t
+    val chain: unit t list -> unit t
+    val run: int -> int -> int -> 'a t -> unit P.t
+  end
 
-  val text_sub: start -> length -> string -> unit t
-  val text: string -> unit t
-  val line: alternative_text -> unit t
-  val cut: unit t
-  val space: unit t
-  val nest: indent -> 'a t -> unit t
-  val group: 'a t -> unit t
-  val fill_of_string: string -> unit t
-  val fill_of_stringlist: string list -> unit t
-  val chain: unit t list -> unit t
-  val run: int -> int -> int -> 'a t -> unit P.t
-end
+
+
+module Make: PRETTY
 
 
 

@@ -25,8 +25,6 @@ type command =
 module State =
   struct
     type open_groups = int
-    type opened_active = int
-    type closed_pending_flag = bool
     type position = int
 
     type t = {width: int;          (* desired maximal line width *)
@@ -195,13 +193,29 @@ module State =
 
 
 
+module type PRETTY =
+  functor (P:PRINTER) ->
+  sig
+    include Monad.MONAD
+
+    val text_sub: start -> length -> string -> unit t
+    val text: string -> unit t
+    val line: alternative_text -> unit t
+    val cut: unit t
+    val space: unit t
+    val nest: indent -> 'a t -> unit t
+    val group: 'a t -> unit t
+    val fill_of_string: string -> unit t
+    val fill_of_stringlist: string list -> unit t
+    val chain: unit t list -> unit t
+    val run: int -> int -> int -> 'a t -> unit P.t
+  end
 
 
-module Make  (P:PRINTER) =
+module Make: PRETTY
+  =
+  functor (P:PRINTER) ->
   struct
-    let print_nothing: unit P.t =
-      P.make ()
-
     type state = State.t
 
     include
@@ -214,6 +228,9 @@ module Make  (P:PRINTER) =
               P.(m st >>= fun a -> f a st)
           end
         )
+
+    let print_nothing: unit P.t =
+      P.make ()
 
     let out_command (flatten:bool) (c:command): unit P.t =
       match c with
@@ -265,11 +282,10 @@ module Make  (P:PRINTER) =
       let len = String.length s
       in
       if State.is_active_open st && State.fits len st then
-          (State.start_buffering s st;
-           print_nothing)
+        (State.start_buffering s st;
+         print_nothing)
       else
-        (if State.is_active_open st then
-           State.active_to_effective st;
+        (State.active_to_effective st;
          State.out_line st;
          P.(putc '\n' >>= fun _ ->
             fill ' ' st.State.line_indent))
@@ -369,7 +385,7 @@ module Make  (P:PRINTER) =
       fill l true st
 
 
-    let run (indent:int) (width: int) (ribbon:int) (m:'a t): unit P.t =
+    let run (indent:int) (width:int) (ribbon:int) (m:'a t): unit P.t =
       let st = State.start indent width ribbon in
       P.(m st >>= fun _ ->
          if State.buffering st then
