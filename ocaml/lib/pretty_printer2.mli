@@ -3,7 +3,7 @@ module type PRINTER =
     include Monad.MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
-    val put_substring: int -> int -> string -> unit t
+    val put_substring: string -> int -> int -> unit t
     val fill: char -> int -> unit t
   end
 
@@ -19,7 +19,7 @@ module type PRETTY =
   sig
     include Monad.MONAD
 
-    val text_sub: start -> length -> string -> unit t
+    val text_sub: string -> start -> length -> unit t
     val text: string -> unit t
     val line: alternative_text -> unit t
     val cut: unit t

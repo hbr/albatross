@@ -111,9 +111,9 @@ module type PRINTER =
   sig
     include Monad.MONAD
     type out_file
-    val putc: out_file -> char -> unit t
-    val put_substring: out_file -> int -> int -> string -> unit t
-    val fill: out_file  -> char -> int -> unit t
+    val putc: char -> out_file -> unit t
+    val put_substring: string -> int -> int -> out_file -> unit t
+    val fill: char -> int -> out_file -> unit t
   end
 
 
@@ -125,9 +125,9 @@ end =
   struct
     include Monad.String_buffer
     type out_file = unit
-    let put_substring (fd:out_file) = put_substring
-    let fill (fd:out_file) = fill
-    let putc (fd:out_file) = putc
+    let put_substring s s0 len fd = put_substring s s0 len
+    let fill c n fd = fill c n
+    let putc (c:char) (fd:out_file) = putc c
   end
 
 
@@ -244,12 +244,12 @@ module Make (P:PRINTER) =
       p.current + add +  Pending.size pend > p.width
 
     let puts (start:int) (len:int) (s:string) (p:t): t out =
-      P.(put_substring p.channel start len s >>= fun _ ->
+      P.(put_substring s start len p.channel >>= fun _ ->
          make {p with current = len + p.current})
 
     let newline (indent:int) (p:t) (box:box): t out =
-      P.(putc p.channel '\n' >>= fun _ ->
-         fill p.channel ' ' indent >>= fun _ ->
+      P.(putc '\n' p.channel >>= fun _ ->
+         fill ' ' indent p.channel  >>= fun _ ->
          P.make {p with box; current = indent})
 
     let space_size (sep:string) (n:int): int =
@@ -257,8 +257,8 @@ module Make (P:PRINTER) =
 
     let space (sep:string) (n:int) (p:t) (box:box): t out =
       let len = String.length sep in
-      P.(put_substring p.channel 0 len sep >>= fun _ ->
-         fill p.channel ' ' n  >>= fun _ ->
+      P.(put_substring sep 0 len p.channel >>= fun _ ->
+         fill ' ' n  p.channel  >>= fun _ ->
          P.make {p with box; current = len + n + p.current})
 
     let (>>=) = P.(>>=)

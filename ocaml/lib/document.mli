@@ -21,7 +21,7 @@ module type PRINTER =
     include Monad.MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
-    val put_substring: int -> int -> string -> unit t
+    val put_substring: string -> int -> int -> unit t
     val fill: char -> int -> unit t
   end
 

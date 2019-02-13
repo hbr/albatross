@@ -487,7 +487,7 @@ module IO0: Io.S0 =
     let getc (fd:in_file): char option t =
       fun fs -> Ok (File_system.getc fs fd), fs
 
-    let putc (fd:out_file) (c:char): unit t =
+    let putc (c:char) (fd:out_file): unit t =
       fun fs -> Ok (File_system.putc fs fd c), fs
 
     let get_line (fd:in_file): string option t =
@@ -495,11 +495,11 @@ module IO0: Io.S0 =
       Ok (File_system.getline fs fd), fs
 
 
-    let scan (fd:in_file) (f:(char,'a) Scan.t): 'a t =
+    let scan(f:(char,'a) Scan.t) (fd:in_file): 'a t =
       fun fs -> Ok (File_system.scan fs fd f), fs
 
     let put_substring
-          (fd:out_file) (start:int) (len:int) (str:string)
+          (str:string) (start:int) (len:int) (fd:out_file)
         : unit t =
       fun fs ->
       for i = start to start + len - 1 do

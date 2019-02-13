@@ -6,7 +6,7 @@ module type PRINTER =
     include Monad.MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
-    val put_substring: int -> int -> string -> unit t
+    val put_substring: string -> int -> int -> unit t
     val fill: char -> int -> unit t
   end
 
@@ -134,7 +134,7 @@ module State =
       buf
 
 
-    let buffer_text (start:start) (len:length) (s:string) (st:t): unit =
+    let buffer_text (s:string) (start:start) (len:length) (st:t): unit =
       assert (buffering st);
       assert (fits len st);
       st.buf <- Text (start,len,s) :: st.buf;
@@ -198,7 +198,7 @@ module type PRETTY =
   sig
     include Monad.MONAD
 
-    val text_sub: start -> length -> string -> unit t
+    val text_sub: string -> start -> length -> unit t
     val text: string -> unit t
     val line: alternative_text -> unit t
     val cut: unit t
@@ -235,16 +235,16 @@ module Make: PRETTY
     let out_command (flatten:bool) (c:command): unit P.t =
       match c with
       | Text (start,len,s) ->
-         P.put_substring start len s
+         P.put_substring s start len
       | Line (s, i) ->
          if flatten then
            P.put_string s
          else
            P.(putc '\n' >>= fun _ -> fill ' ' i)
 
-    let out_text (start:start) (len:length) (s:string) (st:state): unit P.t =
+    let out_text (s:string) (start:start) (len:length) (st:state): unit P.t =
       State.out_text len st;
-      P.put_substring start len s
+      P.put_substring s start len
 
 
     let flush (flatten:bool) (st:state): unit P.t =
@@ -261,20 +261,20 @@ module Make: PRETTY
       in
       write buf
 
-    let text_sub (start:int) (len:int) (s:string) (st:state): unit P.t =
+    let text_sub (s:string) (start:int) (len:int) (st:state): unit P.t =
       assert (0 <= start);
       assert (start+len <= String.length s);
       if State.normal st then
-        out_text start len s st
+        out_text s start len st
       else if State.fits len st then
-        (State.buffer_text start len s st;
+        (State.buffer_text s start len st;
          print_nothing)
       else
-        (flush false >>= fun _ -> out_text start len s) st
+        (flush false >>= fun _ -> out_text s start len) st
 
 
     let text (s:string): unit t =
-      text_sub 0 (String.length s) s
+      text_sub s 0 (String.length s)
 
 
     let line_normal (s:alternative_text) (st:state): unit P.t =
@@ -362,7 +362,7 @@ module Make: PRETTY
         >>= fun _ ->
         if i < len then
           let j = word_end i in
-          text_sub i (j-i) s >>= fun _ ->
+          text_sub s i (j-i) >>= fun _ ->
           fill j
         else
           make ()

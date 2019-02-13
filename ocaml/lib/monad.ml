@@ -57,7 +57,7 @@ module type OUTPUT =
     val put_string: string -> unit t
     val put_line:   string -> unit t
     val put_newline: unit t
-    val put_substring: int -> int -> string -> unit t
+    val put_substring: string -> int -> int -> unit t
     val fill: char -> int -> unit t
   end
 
@@ -448,7 +448,7 @@ module String_buffer =
     let put_string (s:string): unit t =
       fun buf -> Buffer.add_string buf s; (),buf
 
-    let put_substring (start:int) (len:int) (s:string): unit t =
+    let put_substring (s:string) (start:int) (len:int): unit t =
       fun buf -> Buffer.add_substring buf s start len; (),buf
 
     let run (n:int) (m:'a t): string =

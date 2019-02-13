@@ -36,10 +36,10 @@ module type S0 =
     val flush_all: unit t
 
     val getc: in_file -> char option t
-    val putc: out_file -> char ->  unit t
+    val putc: char -> out_file  ->  unit t
     val get_line: in_file -> string option t
-    val scan: in_file -> (char,'a) Scan.t -> 'a t
-    val put_substring: out_file -> int -> int -> string -> unit t
+    val scan: (char,'a) Scan.t -> in_file -> 'a t
+    val put_substring: string -> int -> int -> out_file -> unit t
 
     module Scan: functor (S:SCANNER) ->
                  sig
@@ -57,10 +57,10 @@ module type S =
     val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
     val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t
 
-    val put_string: out_file -> string -> unit t
-    val put_line:   out_file -> string -> unit t
+    val put_string: string -> out_file -> unit t
+    val put_line:   string -> out_file -> unit t
     val put_newline:   out_file -> unit t
-    val fill: out_file -> char -> int -> unit t
+    val fill: char -> int -> out_file -> unit t
 
     val getc_in: char option t
     val get_line_in: string option t
@@ -116,23 +116,23 @@ module Make (M:S0): S =
          close_out fd >>= fun _ ->
          make a
 
-    let put_string (fd:out_file) (s:string): unit t =
-      put_substring fd 0 (String.length s) s
+    let put_string (s:string) (fd:out_file): unit t =
+      put_substring s 0 (String.length s) fd
 
     let put_newline (fd:out_file): unit t =
-      putc fd '\n'
+      putc '\n' fd
 
-    let put_line (fd:out_file) (s:string): unit t =
-      put_string fd s >>= fun _ ->
+    let put_line (s:string) (fd:out_file): unit t =
+      put_string s fd >>= fun _ ->
       put_newline fd
 
 
-    let fill (fd:out_file) (c:char) (n:int): unit t =
+    let fill (c:char) (n:int) (fd:out_file): unit t =
       let rec put i =
         if i = n then
           make ()
         else
-          putc fd c >>= fun _ -> put (i+1)
+          putc c fd >>= fun _ -> put (i+1)
       in
       put 0
 
@@ -144,25 +144,25 @@ module Make (M:S0): S =
       get_line stdin
 
     let putc_out (c:char): unit t =
-      putc stdout c
+      putc c stdout
 
     let put_string_out (s:string): unit t =
-      put_string stdout s
+      put_string s stdout
 
     let put_line_out (s:string): unit t =
-      put_line stdout s
+      put_line s stdout
 
     let put_newline_out: unit t =
       put_newline stdout
 
     let putc_err (c:char): unit t =
-      putc stderr c
+      putc c stderr
 
     let put_string_err (s:string): unit t =
-      put_string stderr s
+      put_string s stderr
 
     let put_line_err (s:string): unit t =
-      put_line stderr s
+      put_line s stderr
 
     let put_newline_err: unit t =
       put_newline stderr
@@ -184,25 +184,13 @@ module Output (Io:S) =
           end
         )
 
-    let putc (c:char) (fd:out_file): unit Io.t =
-      Io.putc fd c
+    let putc = Io.putc
+    let put_substring = Io.put_substring
+    let put_string = Io.put_string
+    let put_line = Io.put_line
+    let put_newline = Io.put_newline
 
-    let put_substring
-          (start:int) (len:int) (s:string) (fd:out_file)
-        : unit Io.t =
-      Io.put_substring fd start len s
-
-    let put_string (s:string): unit t =
-      put_substring 0 (String.length s) s
-
-    let put_newline: unit t =
-      putc '\n'
-
-    let put_line (s:string): unit t =
-      put_string s >>= fun _ -> put_newline
-
-    let fill (c:char) (n:int) (fd:out_file): unit Io.t =
-      Io.fill fd c n
+    let fill = Io.fill
 
     let run (fd:out_file) (m:'a t): 'a Io.t =
       m fd

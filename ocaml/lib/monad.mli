@@ -54,7 +54,7 @@ module type OUTPUT =
     val put_string: string -> unit t
     val put_line: string -> unit t
     val put_newline: unit t
-    val put_substring: int -> int -> string -> unit t
+    val put_substring: string -> int -> int -> unit t
     val fill: char -> int -> unit t
   end
 
@@ -176,6 +176,6 @@ sig
   val getc: int -> char t
   val fill: char -> int -> unit t
   val put_string: string -> unit t
-  val put_substring: int -> int -> string -> unit t
+  val put_substring: string -> int -> int -> unit t
   val run: int -> 'a t -> string
 end

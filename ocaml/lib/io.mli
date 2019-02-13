@@ -36,10 +36,10 @@ module type S0 =
     val flush_all: unit t
 
     val getc: in_file -> char option t
-    val putc: out_file -> char ->  unit t
+    val putc: char -> out_file  ->  unit t
     val get_line: in_file -> string option t
-    val scan: in_file -> (char,'a) Scan.t -> 'a t
-    val put_substring: out_file -> int -> int -> string -> unit t
+    val scan: (char,'a) Scan.t -> in_file -> 'a t
+    val put_substring: string -> int -> int -> out_file -> unit t
 
     module Scan: functor (S:SCANNER) ->
                  sig
@@ -57,10 +57,10 @@ module type S =
     val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
     val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t
 
-    val put_string: out_file -> string -> unit t
-    val put_line:   out_file -> string -> unit t
+    val put_string: string -> out_file -> unit t
+    val put_line:   string -> out_file -> unit t
     val put_newline:   out_file -> unit t
-    val fill: out_file -> char -> int -> unit t
+    val fill: char -> int -> out_file -> unit t
 
     val getc_in: char option t
     val get_line_in: string option t

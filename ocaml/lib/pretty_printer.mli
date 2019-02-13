@@ -5,9 +5,9 @@ module type PRINTER =
   sig
     include Monad.MONAD
     type out_file
-    val putc: out_file -> char -> unit t
-    val put_substring: out_file -> int -> int -> string -> unit t
-    val fill: out_file  -> char -> int -> unit t
+    val putc: char -> out_file -> unit t
+    val put_substring: string -> int -> int -> out_file -> unit t
+    val fill: char -> int -> out_file -> unit t
   end
 
 
