@@ -60,14 +60,6 @@ module type OUTPUT =
 
 
 
-module type OUTPUT_INDENT =
-  sig
-    include OUTPUT
-    val indent: int -> 'a t -> 'a t
-  end
-
-
-
 module type READER =
   functor (Env:ANY) ->
   sig
