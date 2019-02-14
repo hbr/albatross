@@ -15,6 +15,47 @@ type alternative_text = string
 type start = int
 type length = int
 type indent = int
+type width  = int
+type ribbon = int
+
+
+module Document =
+  struct
+    type t =
+      | Nil
+      | Concat of t * t
+      | Nest of int * t
+      | Text of string * start * length
+      | Line of alternative_text
+      | Group of t
+
+    let empty = Nil
+
+    let (^) (a:t) (b:t): t = Concat(a,b)
+
+    let nest (i:int) (a:t): t = Nest(i,a)
+
+    let text (s:string): t = Text (s,0,String.length s)
+
+    let text_sub (s:string) (i:start) (len:length): t = Text(s,i,len)
+
+    let space: t = Line " "
+
+    let cut: t   = Line ""
+
+    let line (s:string): t = Line s
+
+    let group (d:t): t = Group d
+
+    let bracket (ind:indent) (l:string) (d:t) (r:string): t =
+        group (text l ^ (nest ind (cut ^ d)) ^ cut ^ text r)
+
+    let group_nested (ind:indent) (d:t): t =
+      group (nest ind d)
+
+    let group_nested_space (ind:indent) (d:t): t =
+      nest ind (space ^ group d)
+  end
 
 type command =
   | Text of start * length * string
@@ -192,9 +233,7 @@ module State =
   end (* State *)
 
 
-
 module type PRETTY =
-  functor (P:PRINTER) ->
   sig
     include Monad.MONAD
 
@@ -208,11 +247,16 @@ module type PRETTY =
     val fill_of_string: string -> unit t
     val fill_of_stringlist: string list -> unit t
     val chain: unit t list -> unit t
-    val run: int -> int -> int -> 'a t -> unit P.t
+    val of_document: Document.t -> unit t
   end
 
 
-module Make: PRETTY
+module Make:
+  functor (P:PRINTER) ->
+  sig
+    include PRETTY
+    val run: int -> int -> int -> 'a t -> unit P.t
+  end
   =
   functor (P:PRINTER) ->
   struct
@@ -385,6 +429,22 @@ module Make: PRETTY
       fill l true st
 
 
+    let rec of_document (d:Document.t): unit t =
+      match d with
+      | Document.Nil ->
+         make ()
+      | Document.Text (s,i,len) ->
+         text_sub s i len
+      | Document.Line s ->
+         line s
+      | Document.Concat (a,b) ->
+         of_document a >>= fun _ ->
+         of_document b
+      | Document.Nest (i,d) ->
+         nest i (of_document d)
+      | Document.Group d ->
+         group (of_document d)
+
     let run (indent:int) (width:int) (ribbon:int) (m:'a t): unit P.t =
       let st = State.start indent width ribbon in
       P.(m st >>= fun _ ->
@@ -394,6 +454,14 @@ module Make: PRETTY
            print_nothing)
   end
 
+module Pretty_string =
+  struct
+    include Make (Monad.String_buffer)
+    let string_of (pp:'a t) (size:int) (ind:indent) (w:width) (r:ribbon): string =
+      Monad.String_buffer.run
+        size
+        (run ind w r pp)
+  end
 
 
 let test () =
@@ -402,9 +470,8 @@ let test () =
   let module PP = Make (Monad.String_buffer) in
   let open PP
   in
-  let buf = Monad.String_buffer.run 200 in
   let formatw p_flag w pp =
-    let s = run 0 w w pp |> buf in
+    let s = Pretty_string.string_of pp 200 0 w w in
     if p_flag then
       printf "%s\n" s;
     s
@@ -454,24 +521,23 @@ let test () =
 
   begin
     let maybe =
-      group
-        (chain [
-             (group (chain
-                       [text "class";
-                        nest 4 (chain [space; text "Maybe(A)"]);
-                        space; text "create"]));
-             nest 4
-               (chain
-                  [space;
-                   (group
-                      (chain
-                         [text "nothing"; line "; "; text "just(A)"]))
-                  ]
-               );
-             chain [space; text "end"]
-           ]
-        )
+      Document.(
+        group (group (text "class"
+                      ^ nest 4 (space ^ text "Maybe(A)")
+                      ^ space
+                      ^  text "create")
+             ^ nest 4 (space
+                       ^ group (text "nothing" ^ line "; " ^ text "just(A)"))
+             ^ space
+             ^ text "end")
+      )
     in
+    let maybe = of_document maybe
+    in
+    assert(
+        formatw false 70 maybe
+        = "class Maybe(A) create nothing; just(A) end"
+      );
     assert(
         formatw false 20 maybe
         = "class\n    Maybe(A)\ncreate\n    nothing; just(A)\nend"

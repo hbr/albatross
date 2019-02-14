@@ -13,9 +13,25 @@ type alternative_text = string
 type start = int
 type length = int
 type indent = int
+type width  = int
+type ribbon = int
+
+module Document:
+sig
+  type t
+  val empty: t
+  val text: string -> t
+  val text_sub: string -> start -> length -> t
+  val line: alternative_text -> t
+  val cut: t
+  val space: t
+  val (^): t -> t -> t (* concatenation *)
+  val nest: indent -> t -> t
+  val group: t -> t
+  val bracket: indent -> string -> t -> string -> t
+end
 
 module type PRETTY =
-  functor (P:PRINTER) ->
   sig
     include Monad.MONAD
 
@@ -29,13 +45,23 @@ module type PRETTY =
     val fill_of_string: string -> unit t
     val fill_of_stringlist: string list -> unit t
     val chain: unit t list -> unit t
-    val run: int -> int -> int -> 'a t -> unit P.t
+    val of_document: Document.t -> unit t
   end
 
 
 
-module Make: PRETTY
+module Make:
+functor (P:PRINTER) ->
+sig
+  include PRETTY
+  val run: indent -> width -> ribbon -> 'a t -> unit P.t
+end
 
+module Pretty_string: (* Pretty prints to a string *)
+sig
+  include PRETTY
+  val string_of: 'a t -> int -> indent -> width -> ribbon -> string
+end
 
 
 val test: unit -> unit
