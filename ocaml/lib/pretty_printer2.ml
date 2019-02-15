@@ -17,6 +17,9 @@ type length = int
 type indent = int
 type width  = int
 type ribbon = int
+type position = int
+type open_groups = int
+
 
 
 module Document =
@@ -59,14 +62,45 @@ module Document =
 
 type command =
   | Text of start * length * string
-  | Line of alternative_text * indent
+  | Line of alternative_text * indent * open_groups
 
+
+
+module Dequeue =
+  struct
+    type 'a t = {front: 'a list; rear:'a list}
+    let empty: 'a t =
+      {front = []; rear = []}
+
+    let append (d:'a t) (a:'a): 'a t =
+      {d with rear = a :: d.rear}
+
+    let push (a:'a) (d:'a t): 'a t =
+      {d with front = a :: d.front}
+
+    let normal (d:'a t): 'a t =
+      match d.front with
+      | [] ->
+         {front = List.rev d.rear; rear = []}
+      | _ ->
+         d
+
+    let pop (d:'a t): ('a * 'a t) option =
+      let d = normal d in
+      match d.front with
+      | [] ->
+         None
+      | a :: tl ->
+         Some (a, {d with front = tl})
+
+    let lists (d:'a t): 'a list * 'a list =
+      d.front, List.rev d.rear
+  end
 
 
 module State =
   struct
-    type open_groups = int
-    type position = int
+    type dequeue = command Dequeue.t
 
     type t = {width: int;          (* desired maximal line width *)
               ribbon: int;         (* desired maximal ribbon width *)
@@ -77,8 +111,9 @@ module State =
                                        effective *)
               mutable oe: open_groups;  (* effective *)
               mutable oa: open_groups;  (* active *)
-              mutable oa0: open_groups; (* active at pending line break *)
+              mutable o_0: open_groups;  (* at pending line break *)
               mutable opr: open_groups; (* to the right of the pending group *)
+              mutable d:   dequeue;
               mutable buf: command list
              }
 
@@ -90,7 +125,8 @@ module State =
       {width; ribbon;
        current_indent = indent;   line_indent = indent;
        p = 0;  pe = 0;
-       oe = 0; oa = 0; oa0 = 0; opr = 0;
+       oe = 0; oa = 0; o_0 = 0; opr = 0;
+       d = Dequeue.empty;
        buf = []
       }
 
@@ -107,20 +143,18 @@ module State =
 
     let is_pending_open (st:t): bool =
       (* Is the group of the pending line break still open? *)
-      assert (0 < st.oa0);
-      let res = st.oa0 <= st.oa in
-      if res then
-        (assert (st.opr = 0);
-         assert (st.oa > 0)
-        );
-      res
+      assert (buffering st);
+      0 < st.oa
+      && st.opr = 0
+      && st.o_0 <= st.oe + st.oa
 
+
+    let fits_pos (p:position) (st:t): bool =
+      p <= st.width
+      && p - st.line_indent <= st.ribbon
 
     let fits (len:int) (st:t): bool =
-      let newpos = st.p + len
-      in
-      newpos <= st.width
-      && newpos - st.line_indent <= st.ribbon
+      fits_pos (st.p + len) st
 
     let out_text(len:length) (st:t): unit =
       assert (normal st);
@@ -129,44 +163,70 @@ module State =
     let out_line (st:t): unit =
       assert (normal st);
       assert (st.oa = 0);  (* Otherwise we must start buffering. *)
-      assert (st.opr = 0); (* There is no active group. *)
       st.p <- st.current_indent;
       st.line_indent <- st.current_indent
 
     let active_to_effective (st:t): unit =
       assert (normal st);
-      assert (st.opr = 0);
-      assert (st.oa0 = 0);
       st.oe <- st.oe + st.oa;
       st.oa <- 0
 
+    let open_groups (st:t): open_groups =
+      st.oe + st.oa + st.opr
 
     let start_buffering (s:alternative_text) (st:t): unit =
       assert (normal st);
       assert (0 < st.oa);
       let len = String.length s in
       assert (fits len st);
-      st.buf <- Line (s, st.current_indent) :: st.buf;
-      st.oa0 <- st.oa;
+      st.buf <- Line (s, st.current_indent, open_groups st) :: st.buf;
+      st.o_0 <- st.oe + st.oa;
+      st.opr <- 0;
       st.p <- st.p + len;
       st.pe <- st.current_indent
 
+
+    let pop_effective (st:t): command list =
+      let rec pop () =
+        match Dequeue.pop st.d with
+        | None ->
+           []
+        | Some (c,d) ->
+           (match c with
+            | Text (i,l,s) ->
+               (st.d <- d; c :: pop ())
+            | Line (s,j,o) ->
+               if o = st.o_0 then
+                 (* line break of the pending group *)
+                 (assert (st.line_indent <= st.p);
+                  st.p <- st.p - st.line_indent + j;
+                  st.line_indent <- j;
+                  st.d <- d;
+                  c :: pop ()
+                 )
+               else
+                 (* line break of an inner group *)
+                 (st.o_0 <- o;
+                  if fits_pos st.p st then
+                    []
+                  else
+                    pop ()
+                 )
+           )
+      in
+      pop ()
 
     let flush (flatten:bool) (st:t): command list =
       assert (buffering st);
       if flatten then
         (assert (not (is_pending_open st));
-         st.oa <- st.oa + st.opr;
-         st.opr <- 0;
-         st.oa0 <- 0)
+         st.oa <- st.oa + st.opr)
       else
         ( (* All open groups enclosing the pending line break (the active
              groups) become effective, all groups to the right of the pending
              group become the new active groups. *)
           st.oe <- st.oe + st.oa;
           st.oa <- st.opr;
-          st.opr <- 0;
-          st.oa0 <- 0;
           (* update p and line_indent *)
           st.p   <- st.pe;
           st.line_indent <- st.current_indent);
@@ -188,7 +248,7 @@ module State =
       let len = String.length s in
       assert (fits len st);
       assert (is_pending_open st);
-      st.buf <- Line (s,st.current_indent) :: st.buf;
+      st.buf <- Line (s,st.current_indent,open_groups st) :: st.buf;
       st.p   <- st.p + len;
       st.pe  <- st.current_indent
 
@@ -204,8 +264,7 @@ module State =
 
     let open_group (st:t): unit =
       if normal st then
-        (assert (st.opr = 0);
-         st.oa <- st.oa + 1)
+        st.oa <- st.oa + 1
       else (* buffering *)
         if is_pending_open st then
           st.oa <- st.oa + 1
@@ -215,13 +274,11 @@ module State =
 
     let close_group (st:t): unit =
       if normal st then
-        (assert (st.opr = 0);
-         if st.oa > 0 then
-           st.oa <- st.oa - 1
-         else
-           (assert (st.oe > 0);
-            st.oe <- st.oe - 1)
-        )
+        if st.oa > 0 then
+          st.oa <- st.oa - 1
+        else
+          (assert (st.oe > 0);
+           st.oe <- st.oe - 1)
       else (* buffering *)
         if is_pending_open st then
           st.oa <- st.oa - 1
@@ -280,7 +337,7 @@ module Make:
       match c with
       | Text (start,len,s) ->
          P.put_substring s start len
-      | Line (s, i) ->
+      | Line (s, i, _) ->
          if flatten then
            P.put_string s
          else
@@ -545,5 +602,36 @@ let test () =
     assert(
         formatw false 15 maybe
         = "class\n    Maybe(A)\ncreate\n    nothing\n    just(A)\nend"
+      )
+  end;
+
+  begin
+    let open Document in
+    let plus =
+      let gns = group_nested_space 2
+      in
+      group (
+          text "(+)(a:Natural,b:Natural): Natural :="
+          ^ gns
+              (text "inspect"
+               ^ gns (text "a" ^ line "; "
+                      ^ text "(_:Natural) := Natural")
+               ^ space
+               ^ text "case"
+               ^ gns (
+                     text "0 :="
+                     ^ gns (text "b")
+                     ^ line "; "
+                     ^ text "n.successor :="
+                     ^ gns (text "n + b.successor")
+                   )
+               ^ space ^ text "end"
+              )
+        )
+    in
+    let plus = of_document plus in
+    assert(
+        formatw true 41 plus
+        <> ""
       )
   end
