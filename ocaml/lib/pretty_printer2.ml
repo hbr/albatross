@@ -68,33 +68,44 @@ type command =
 
 module Dequeue =
   struct
-    type 'a t = {front: 'a list; rear:'a list}
+    type 'a t = {
+        mutable front: 'a list;
+        mutable rear:  'a list}
+
+    let is_empty (d:'a t): bool =
+      d.front = [] && d.rear = []
+
     let empty: 'a t =
       {front = []; rear = []}
 
-    let append (d:'a t) (a:'a): 'a t =
-      {d with rear = a :: d.rear}
+    let append (d:'a t) (a:'a): unit =
+      d.rear <- a :: d.rear
 
-    let push (a:'a) (d:'a t): 'a t =
-      {d with front = a :: d.front}
+    let push (a:'a) (d:'a t): unit =
+      d.front <- a :: d.front
 
-    let normal (d:'a t): 'a t =
+    let rear_to_front (d:'a t): unit =
       match d.front with
       | [] ->
-         {front = List.rev d.rear; rear = []}
+         d.front <- List.rev d.rear;
+         d.rear <- []
       | _ ->
-         d
+         ()
 
-    let pop (d:'a t): ('a * 'a t) option =
-      let d = normal d in
+    let pop (d:'a t): 'a  option =
+      rear_to_front d;
       match d.front with
       | [] ->
          None
       | a :: tl ->
-         Some (a, {d with front = tl})
+         d.front <- tl;
+         Some a
 
-    let lists (d:'a t): 'a list * 'a list =
-      d.front, List.rev d.rear
+    let pop_all (d:'a t): 'a list * 'a list =
+      let l2 = d.front, List.rev d.rear in
+      d.front <- [];
+      d.rear <- [];
+      l2
   end
 
 
@@ -113,8 +124,7 @@ module State =
               mutable oa: open_groups;  (* active *)
               mutable o_0: open_groups;  (* at pending line break *)
               mutable opr: open_groups; (* to the right of the pending group *)
-              mutable d:   dequeue;
-              mutable buf: command list
+              d:   dequeue
              }
 
 
@@ -126,15 +136,14 @@ module State =
        current_indent = indent;   line_indent = indent;
        p = 0;  pe = 0;
        oe = 0; oa = 0; o_0 = 0; opr = 0;
-       d = Dequeue.empty;
-       buf = []
+       d = Dequeue.empty
       }
 
     let normal (st:t): bool =
-      st.buf = []
+      Dequeue.is_empty st.d
 
     let buffering (st:t): bool =
-      st.buf <> []
+      not (Dequeue.is_empty st.d)
 
 
     let is_active_open (st:t): bool =
@@ -174,12 +183,15 @@ module State =
     let open_groups (st:t): open_groups =
       st.oe + st.oa + st.opr
 
+    let append_line (s:string) (st:t): unit =
+      Dequeue.append st.d (Line  (s, st.current_indent, open_groups st))
+
     let start_buffering (s:alternative_text) (st:t): unit =
       assert (normal st);
       assert (0 < st.oa);
       let len = String.length s in
       assert (fits len st);
-      st.buf <- Line (s, st.current_indent, open_groups st) :: st.buf;
+      append_line s st;
       st.o_0 <- st.oe + st.oa;
       st.opr <- 0;
       st.p <- st.p + len;
@@ -191,54 +203,53 @@ module State =
         match Dequeue.pop st.d with
         | None ->
            []
-        | Some (c,d) ->
+        | Some c ->
            (match c with
             | Text (i,l,s) ->
-               (st.d <- d; c :: pop ())
+               c :: pop ()
             | Line (s,j,o) ->
                if o = st.o_0 then
                  (* line break of the pending group *)
                  (assert (st.line_indent <= st.p);
                   st.p <- st.p - st.line_indent + j;
                   st.line_indent <- j;
-                  st.d <- d;
                   c :: pop ()
                  )
                else
                  (* line break of an inner group *)
                  (st.o_0 <- o;
                   if fits_pos st.p st then
-                    []
+                    (Dequeue.push c st.d;
+                     [])
                   else
-                    pop ()
+                    c :: pop ()
                  )
            )
       in
       pop ()
 
-    let flush (flatten:bool) (st:t): command list =
-      assert (buffering st);
-      if flatten then
-        (assert (not (is_pending_open st));
-         st.oa <- st.oa + st.opr)
-      else
-        ( (* All open groups enclosing the pending line break (the active
-             groups) become effective, all groups to the right of the pending
-             group become the new active groups. *)
-          st.oe <- st.oe + st.oa;
-          st.oa <- st.opr;
-          (* update p and line_indent *)
-          st.p   <- st.pe;
-          st.line_indent <- st.current_indent);
-      let buf = List.rev st.buf in
-      st.buf <- [];
-      buf
+    let flush_flatten (st:t): command list * command list =
+      assert (not (is_pending_open st));
+      st.oa <- st.oa + st.opr;
+      Dequeue.pop_all st.d
+
+     let flush_effective (st:t): command list =
+       ( (* All open groups enclosing the pending line break (the active
+            groups) become effective, all groups to the right of the pending
+            group become th e new active groups. *)
+         st.oe <- st.oe + st.oa;
+         st.oa <- st.opr;
+         (* update p and line_indent *)
+         st.p   <- st.pe;
+         st.line_indent <- st.current_indent);
+       let l1,l2 = Dequeue.pop_all st.d in
+       l1 @ l2
 
 
     let buffer_text (s:string) (start:start) (len:length) (st:t): unit =
       assert (buffering st);
       assert (fits len st);
-      st.buf <- Text (start,len,s) :: st.buf;
+      Dequeue.append st.d (Text (start,len,s));
       st.p <- st.p + len;
       st.pe <- st.pe + len
 
@@ -248,7 +259,7 @@ module State =
       let len = String.length s in
       assert (fits len st);
       assert (is_pending_open st);
-      st.buf <- Line (s,st.current_indent,open_groups st) :: st.buf;
+      append_line s st;
       st.p   <- st.p + len;
       st.pe  <- st.current_indent
 
@@ -347,20 +358,22 @@ module Make:
       State.out_text len st;
       P.put_substring s start len
 
+    let rec print (l:command list) (flatten:bool): unit P.t =
+      match l with
+      | [] ->
+         print_nothing
+      | c :: tl ->
+         P.(out_command flatten c >>= fun _ ->
+            print tl flatten)
 
-    let flush (flatten:bool) (st:state): unit P.t =
-      let buf = State.flush flatten st in
-      let rec write buf =
-        match buf with
-        | [] ->
-           assert false (* buffer cannot be empty *)
-        | [c] ->
-           out_command flatten c
-        | c :: buf ->
-           P.(out_command flatten c >>= fun _ ->
-              write buf)
-      in
-      write buf
+
+    let flush_flatten (st:state): unit P.t =
+      let l1,l2 = State.flush_flatten st in
+      P.(print l1 true >>= fun _ -> print l2 true)
+
+    let flush_effective (st:state): unit P.t =
+      let l = State.flush_effective st in
+      print l false
 
     let text_sub (s:string) (start:int) (len:int) (st:state): unit P.t =
       assert (0 <= start);
@@ -371,7 +384,7 @@ module Make:
         (State.buffer_text s start len st;
          print_nothing)
       else
-        (flush false >>= fun _ -> out_text s start len) st
+        (flush_effective >>= fun _ -> out_text s start len) st
 
 
     let text (s:string): unit t =
@@ -399,9 +412,9 @@ module Make:
           (State.buffer_line s st;
            print_nothing)
         else
-          (flush false >>= fun _ -> line_normal s) st
+          (flush_effective >>= fun _ -> line_normal s) st
       else
-        (flush true >>= fun _ -> line_normal s) st
+        (flush_flatten >>= fun _ -> line_normal s) st
 
 
     let line (s:string) (st:state): unit P.t =
@@ -506,7 +519,7 @@ module Make:
       let st = State.start indent width ribbon in
       P.(m st >>= fun _ ->
          if State.buffering st then
-           flush true st
+           flush_flatten st
          else
            print_nothing)
   end
