@@ -43,7 +43,7 @@ module type PRETTY =
     val nest: indent -> 'a t -> unit t
     val group: 'a t -> unit t
     val fill_of_string: string -> unit t
-    val fill_of_stringlist: string list -> unit t
+    val fill_of_strings: string list -> unit t
     val chain: unit t list -> unit t
     val of_document: Document.t -> unit t
   end
