@@ -18,7 +18,7 @@ let space: t = Line " "
 
 let cut: t   = Line ""
 
-let optional (s:string): t = Line s
+let line (s:string): t = Line s
 
 let rec flatten (d:t): t =
   (* replace line breaks by spaces, whole doc on one line *)

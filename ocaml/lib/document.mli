@@ -6,7 +6,7 @@ val nest: int -> t -> t
 val text: string -> t
 val space: t
 val cut: t
-val optional: string -> t
+val line: string -> t
 val group: t -> t
 val (^+): t -> t -> t
 val (^/): t -> t -> t

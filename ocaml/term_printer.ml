@@ -519,7 +519,7 @@ module Make: S =
         else
           of_case co def pr >>= fun c ->
           cases_ (i+1) >>= fun cs ->
-          c ^ optional "; " ^ cs
+          c ^ line "; " ^ cs
           |> make
       in
       cases_ 0
@@ -537,7 +537,7 @@ module Make: S =
       let open Document in
       let doc =
         (text "inspect"
-         ^ nest 2 (space ^ e ^ optional "; " ^ r)
+         ^ nest 2 (space ^ e ^ line "; " ^ r)
          ^ space ^ text "case"
          |> group)
         ^ nest 2 (space ^ cases)
@@ -637,40 +637,3 @@ module Make: S =
     let fixpoint (c:context) (level:level) (fp:Term.fixpoint): Document.t =
       run (c,level) (of_fixpoint fp of_term |> map fst)
   end
-
-
-
-
-
-
-
-
-
-
-let string_of_term (t:Term.t): string =
-  let module PR = Make (Raw_context) in
-  Document.string_of 50 (PR.term Raw_context.empty PR.detailed t)
-
-
-let test (): unit =
-  Printf.printf "test term printer\n";
-  let open Term in
-  let print = string_of_term in
-  assert
-    begin
-      print variable1 = "1"
-    end;
-  assert
-    begin
-      print (apply2 variable0 variable1 variable2) = "0(1,2)"
-    end;
-  ();
-  assert
-    begin
-      let str =
-      print (push_product [|Some "a", variable0;
-                            Some "b", variable1|] variable2)
-      in
-      printf "%s\n" str;
-      str = "all(a:0,b:1) 2"
-    end
