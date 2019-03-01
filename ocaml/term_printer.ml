@@ -123,7 +123,7 @@ module Raw_context =
 
  *)
 
-
+module Document = Pretty_printer2.Document
 
 module type S =
   functor (C:CONTEXT) ->

@@ -12,12 +12,18 @@ module ListMOption = List.Monadic (Option)
 
 let string_of_term (c:Gamma.t) (t:Term.t): string =
   let module TP = Term_printer.Make (Gamma) in
-  Document.string_of 70 (TP.term c TP.detailed t)
+  let module PP = Pretty_printer2.Pretty_string in
+  PP.string_of
+    (PP.of_document (TP.term c TP.detailed t))
+    200 0 70 70
 
 
 let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
   let module TP = Term_printer.Make (Gamma) in
-  Document.string_of 70 (TP.fixpoint c TP.detailed fp)
+  let module PP = Pretty_printer2.Pretty_string in
+  PP.string_of
+    (PP.of_document (TP.fixpoint c TP.detailed fp))
+    200 0 70 70
 
 
 (* =============================================

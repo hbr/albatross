@@ -2,7 +2,7 @@ open Alba2_common
 
 module Term = Term2
 
-
+module Document = Pretty_printer2.Document
 
 module type CONTEXT =
   sig
@@ -32,7 +32,3 @@ module type S =
 
 
 module Make: S
-
-
-val string_of_term: Term.t -> string
-val test: unit -> unit
