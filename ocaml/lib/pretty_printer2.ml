@@ -61,9 +61,33 @@ module Document =
             (*nest ind (space ^ group d)*)
   end
 
-type command =
-  | Text of start * length * string
-  | Line of alternative_text * indent * open_groups
+
+
+
+
+module Text =
+  struct
+    type t = {s:string; i0:start; l:length}
+    let make s i0 l = {s;i0;l}
+    let string t = t.s
+    let start t = t.i0
+    let length t = t.l
+  end
+
+
+
+
+module Line =
+  struct
+    type t = {s:alternative_text; i:indent}
+    let make s i = {s;i}
+    let text (l:t): alternative_text = l.s
+    let length l = String.length l.s
+    let indent l = l.i
+  end
+
+
+
 
 
 
@@ -77,35 +101,6 @@ type command =
    c ::= l t* g*                    -- chunk
 *)
 
-type text = string*start*length
-
-
-
-
-module Text =
-  struct
-    type t = {s:string; i0:start; l:length}
-
-    let make s i0 l = {s;i0;l}
-
-    let string t = t.s
-
-    let start t = t.i0
-
-    let length t = t.l
-  end
-
-
-module Line =
-  struct
-    type t = {s:alternative_text; i:indent}
-
-    let make s i = {s;i}
-
-    let length l = String.length l.s
-
-    let indent l = l.i
-  end
 
 
 type chunk = {clen: length;
@@ -119,27 +114,15 @@ and group = {len:length;
 
 module Chunk =
   struct
-    type t = chunk
-
-    let length (c:chunk): length =
-      c.clen
-
-    let alternative_text (c:chunk): alternative_text =
-      c.line.Line.s
-
-    let groups (c:chunk): group list =
-      c.cgroups
-
-    let texts (c:chunk): Text.t list =
-      c.texts
-
+    let length (c:chunk): length = c.clen
+    let alternative_text (c:chunk): alternative_text = Line.text c.line
+    let groups (c:chunk): group list = c.cgroups
+    let texts (c:chunk): Text.t list = c.texts
     let make (line:Line.t): chunk =
-      {clen = String.length line.Line.s; line; texts = []; cgroups = []}
-
+      {clen = Line.length line; line; texts = []; cgroups = []}
     let add_text (t:Text.t) (c:chunk): chunk =
       assert (c.cgroups = []);
       {c with clen = c.clen + t.Text.l; texts = t :: c.texts}
-
     let add_group (g:group) (c:chunk): chunk =
       {c with clen = g.len + c.clen; cgroups = g :: c.cgroups}
   end
@@ -150,35 +133,23 @@ module Chunk =
 
 module Group =
   struct
-    type t = group
-
-    let length (g:group): length =
-      g.len
-
+    let length (g:group): length =  g.len
     let empty = {len = 0; groups = []; chunks = []}
-
-    let groups (g:group): group list =
-      g.groups
-
-    let chunks (g:group): chunk list =
-      g.chunks
-
+    let groups (g:group): group list = g.groups
+    let chunks (g:group): chunk list = g.chunks
     let of_line (l:Line.t): group =
       let c = Chunk.make l in
       {len = Chunk.length c; groups = []; chunks = [c]}
-
     let add_text (t:Text.t) (g:group): group =
       match g.chunks with
       | [] ->
          assert false (* Illegal call *)
       | c :: tl ->
          {g with len = g.len + t.Text.l; chunks = Chunk.add_text t c :: tl}
-
     let add_line (l:Line.t) (g:group): group =
       {g with
         len = g.len + String.length l.Line.s;
         chunks = Chunk.make l :: g.chunks}
-
     let add_group (gi:group) (go:group): group =
       let len = go.len + gi.len
       in
@@ -190,34 +161,24 @@ module Group =
   end
 
 
+
+
 module Buffer =
   struct
     type t = {gs: group list;
               l:  length;
               o:  open_groups}
 
-    let is_empty (b:t): bool =
-      b.o = 0
-
-    let length (b:t): length =
-      b.l
-
-    let count (b:t): open_groups =
-      b.o
-
-    let groups (b:t): group list =
-      b.gs
-
+    let is_empty (b:t): bool = (b.o = 0)
+    let length (b:t): length = b.l
+    let count (b:t): open_groups = b.o
+    let groups (b:t): group list = b.gs
     let empty: t =
       {gs = []; l = 0; o = 0;}
-
-
     let push (g:group) (b:t): t =
       {gs = g :: b.gs; l = Group.length g + b.l; o = b.o + 1}
-
     let one (g:group): t =
       push g empty
-
     let add_text (t:Text.t) (b:t): t =
       let open Text in
       match b.gs with
@@ -227,7 +188,6 @@ module Buffer =
          {b with
            gs = Group.add_text t g :: tl;
            l  = b.l + t.Text.l}
-
     let add_line (l:Line.t) (b:t): t =
       match b.gs with
       | [] ->
@@ -236,8 +196,6 @@ module Buffer =
          {b with
            gs = Group.add_line l g :: tl;
            l  = b.l + Line.length l}
-
-
     let open_groups (n:int) (b:t): t =
       assert (0 <= n);
       let rec ogs n gs =
@@ -247,7 +205,6 @@ module Buffer =
           Group.empty :: ogs (n-1) gs
       in
       {b with o = b.o + n; gs = ogs n b.gs}
-
     let close_groups (n:int) (b:t): t =
       assert (0 <= n);
       assert (n < b.o);
@@ -271,6 +228,7 @@ module Buffer =
 
 
 
+
 module type PRETTY =
   sig
     include Monad.MONAD
@@ -289,6 +247,10 @@ module type PRETTY =
   end
 
 
+
+
+
+
 module Make:
   functor (P:PRINTER) ->
   sig
@@ -299,8 +261,8 @@ module Make:
   functor (P:PRINTER) ->
   struct
     type state = {
-        width: int;          (* desired maximal line width *)
-        ribbon: int;         (* desired maximal ribbon width *)
+        width: int;                (* desired maximal line width *)
+        ribbon: int;               (* desired maximal ribbon width *)
         mutable line_indent: indent;
         mutable current_indent: indent;
         mutable p: position;       (* on current line at start of buffer *)
@@ -374,7 +336,8 @@ module Make:
           let open Text in
           out_text t.s t.i0 t.l)
 
-    let out_alternative_text (s:string): unit t =
+    let out_alternative_text (l:Line.t): unit t =
+      let s = Line.text l in
       out_text s 0 (String.length s)
 
     let out_line (i:indent) (st:state): unit P.t =
@@ -412,13 +375,13 @@ module Make:
       print_list cs flush_flatten_chunk
 
     and flush_flatten_chunk (c:chunk): unit t =
-      out_alternative_text c.line.Line.s >>= fun _ ->
+      out_alternative_text c.line >>= fun _ ->
       out_texts c.texts >>= fun _ ->
       flush_flatten_groups c.cgroups
 
     let flush_flatten: unit t =
       state >>= fun st ->
-      print_list (Buffer.groups st.b) flush_flatten_group>>= fun _ ->
+      print_list (Buffer.groups st.b) flush_flatten_group >>= fun _ ->
       st.b <- Buffer.empty;
       make ()
 
@@ -574,9 +537,13 @@ module Make:
       | hd :: tl ->
          P.(hd st >>= fun _ -> chain tl st)
 
+
     let fill_of_string (s:string) (st:state): unit P.t =
-      let word_start i = String.find (fun c -> c <> ' ') i s
-      and word_end   i = String.find (fun c -> c =  ' ') i s
+      let is_blank c = c = ' '
+      and is_not_blank c = c <> ' '
+      in
+      let word_start i = String.find is_not_blank i s
+      and word_end   i = String.find is_blank i s
       and len = String.length s
       in
       let rec fill p =

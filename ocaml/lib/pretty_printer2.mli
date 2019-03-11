@@ -9,12 +9,20 @@ module type PRINTER =
 
 
 
+
+
+
 type alternative_text = string
 type start = int
 type length = int
 type indent = int
 type width  = int
 type ribbon = int
+
+
+
+
+
 
 module Document:
 sig
@@ -30,6 +38,9 @@ sig
   val group: t -> t
   val bracket: indent -> string -> t -> string -> t
 end
+
+
+
 
 module type PRETTY =
   sig
@@ -50,6 +61,9 @@ module type PRETTY =
 
 
 
+
+
+
 module Make:
 functor (P:PRINTER) ->
 sig
@@ -57,7 +71,11 @@ sig
   val run: indent -> width -> ribbon -> 'a t -> unit P.t
 end
 
-module Pretty_string: (* Pretty prints to a string *)
+
+
+
+
+module Pretty_string: (* Pretty prints into a string *)
 sig
   include PRETTY
   val string_of: 'a t -> int -> indent -> width -> ribbon -> string
