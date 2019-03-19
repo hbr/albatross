@@ -255,7 +255,7 @@ module Make:
   functor (P:PRINTER) ->
   sig
     include PRETTY
-    val run: int -> int -> int -> 'a t -> unit P.t
+    val run: indent -> width -> ribbon -> 'a t -> unit P.t
   end
   =
   functor (P:PRINTER) ->
@@ -601,8 +601,39 @@ module Make:
            flush_flatten st
          else
            print_nothing)
-  end
+  end (* Make *)
 
+
+module Printer:
+sig
+  include PRINTER
+  val run: out_channel -> 'a t -> 'a
+end =
+  struct
+    include
+      Monad.Make (
+          struct
+            type 'a t = out_channel -> 'a
+            let make (a:'a) (oc:out_channel): 'a = a
+            let bind (m:'a t) (f:'a -> 'b t) (oc:out_channel): 'b =
+              f (m oc) oc
+          end
+        )
+    let putc (c:char) (oc:out_channel): unit =
+      output_char oc c
+    let fill (c:char) (n:int) (oc:out_channel): unit =
+      for i = 0 to n - 1 do
+        output_char oc c
+      done
+    let put_substring (s:string) (i0:start) (l:length) (oc:out_channel): unit =
+      for i = i0 to i0 + l - 1 do
+        output_char oc s.[i]
+      done
+    let put_string (s:string) (oc:out_channel): unit =
+      put_substring s 0 (String.length s) oc
+    let run (oc:out_channel) (m:'a t): 'a =
+      m oc
+  end
 
 
 
