@@ -26,45 +26,54 @@ let string_of_fixpoint (c:Gamma.t) (fp:Term.fixpoint): string =
     200 0 70 70
 
 
+
+
 (* =============================================
 
-   Key Reduction
+   Key Reduction a -> b
 
    =============================================
 
 
-   1. (lam x:A. t) a args -> t[x:=a] args
+   1. beta reduction: (lam x:A. t) a args -> t[x:=a] args
 
 
 
-   2. x a args -> t a args
+   2. definition expansion: x a args -> t a args
 
       where t is the definition of x
 
 
-   3. insp(e,r,cases) a args -> insp(f,r,cases)
+   3. Pattern match: (Parameters???)
+
+      insp(co(i) cargs,r,cases) a args -> cases(i) cargs a args
+
+
+   4. Fixpoint expansion:
+
+      fix(i,fp) args1 (co(i) cargs) args2 -> t(i) args1 (co(i) cargs) args2
+
+      where t(i) is the term of the fixpoint i with all fixpoint variables j
+      substituted by fix(j,fp).
+
+
+   5. insp(e,r,cases) args -> insp(f,r,cases) args
 
       where e -> f
 
 
-   4. insp(co(i) cargs,r,cases) a args -> case(i) cargs a args
-
-
-   5. fix(i,fp) args1 a args2 -> fix(i,fp) args1 b args2
+   6. fix(i,fp) args1 a args2 -> fix(i,fp) args1 b args2
 
       where a -> b and a is decreasing argument for the fixpoint i
-
-
-   6. fix(i,fp) args1 (co(i) cargs) args2 -> t(i) args1 (co(i) cargs) args2
-
-      where t(i) is the term of the fixpoint i with all fixpoint variables j
-   substituted by fix(j,fp).
 
  *)
 
 
 let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
         : Term.t * Term.t list =
+  (* Compute the key normal form of [f args] i.e. [key_normal0 f args1 c = key
+     args2] where [f args1 ~>* key args2] and [key] cannot be key reduced
+     anymore. *)
   let key = ref f
   and args = ref args
   and go_on = ref true
@@ -103,6 +112,7 @@ let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
        assert false (* product cannot be applied *)
 
     | Inspect _, [] ->
+       (* ????? *)
        go_on := false
 
     | Inspect (e, res, cases), _ :: _ ->
@@ -113,8 +123,8 @@ let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
          match e with
 
          | Variable i when Gamma.is_constructor i c ->
-            key := case_definition cases.(Gamma.constructor_offset i c);
-            args := eargs @ !args
+            key := Term.case_definition cases.(Gamma.constructor_offset i c);
+            args := eargs @ !args (* Parameters ???? *)
 
          | _ ->
             key := Inspect (apply_args e eargs, res, cases);
@@ -160,6 +170,8 @@ let rec key_normal0 (f:Term.t) (args: Term.t list) (c:Gamma.t)
 
 
 let key_normal (t:Term.t) (c:Gamma.t): Term.t * Term.t list =
+  (* Compute the key normal form of [t] i.e. [key_normal t c = key args] where
+     [t ~>* key args] and [key] cannot be key reduced anymore. *)
   key_normal0 t [] c
 
 
@@ -338,7 +350,7 @@ let rec is_subtype (a:Term.typ) (b:Term.typ) (c:Gamma.t): bool =
    levels to describe them in order to keep them invariant for the different
    contexts) during the term iteration. Whenever it encounters a recursive
    call it reduces the argument expression to key normal form and searches for
-   the key variable in the set of structurally smaller varibles.
+   the key variable in the set of structurally smaller variables.
 
 
    Nesting Case:
@@ -403,7 +415,7 @@ let check_fixpoint_decreasing
     let tp = Gamma.entry_type i c
     and cnt = Gamma.count c
     in
-    let key,args = key_normal0 tp [] c
+    let key,args = key_normal tp c
     in
     match key with
     | Term.Variable ivar ->
@@ -448,7 +460,7 @@ let check_fixpoint_decreasing
         lst n
     in
 
-    let key,args = key_normal0 t [] c
+    let key,args = key_normal t c
     in
     let open Term in
     match key with
@@ -470,7 +482,7 @@ let check_fixpoint_decreasing
                  (* too few arguments in the recursive call *)
                  None
               | hd :: tl ->
-                 let hd_key,_ = key_normal0 hd [] c
+                 let hd_key,_ = key_normal hd c
                  in
                  match hd_key with
                  | Variable i_hd ->
@@ -721,7 +733,7 @@ and check_inductive (tp:Term.typ) (c:Gamma.t)
      params args] is the key normal form of [tp], the inductive structure and
      the position of the inductive type in its family. *)
   Option.(
-    let ivar,args = key_normal0 tp [] c in
+    let ivar,args = key_normal tp c in
     Gamma.inductive_index ivar c >>= fun (ind_idx,ind) ->
     let nparams = Inductive.nparams ind in
     let params,args = Mylist.split_at nparams args in
