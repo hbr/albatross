@@ -416,17 +416,17 @@ module IO0: Io.S0 =
     include
       Monad.Make(
           struct
-            type 'a t = File_system.t -> ('a,int) result * File_system.t
+            type 'a t = File_system.t -> ('a,int) result
             let make (a:'a): 'a t =
-              fun fs -> Ok a, fs
+              fun fs -> Ok a
             let bind (m:'a t) (f:'a -> 'b t): 'b t =
               (fun fs ->
-                let r,fs = m fs in
+                let r = m fs in
                 match r with
                 | Ok a ->
                    f a fs
                 | Error code ->
-                   Error code, fs
+                   Error code
               )
           end)
 
@@ -438,12 +438,12 @@ module IO0: Io.S0 =
     let stderr: out_file = File_system.stderr
 
     let exit (code:int): 'a t =
-      fun fs -> Error code, fs
+      fun fs -> Error code
 
     let execute (program:unit t): unit =
       let fs = File_system.make ()
       in
-      let result,fs =
+      let result =
         try
           fs |> program
         with e ->
@@ -459,44 +459,44 @@ module IO0: Io.S0 =
             c)
 
     let command_line: string array t =
-      fun fs -> Ok Sys.argv, fs
+      fun fs -> Ok Sys.argv
 
 
     let open_for_read (path:string): in_file option t =
-      fun fs -> Ok (File_system.open_for_read fs path), fs
+      fun fs -> Ok (File_system.open_for_read fs path)
 
     let open_for_write (path:string): out_file option t =
-      fun fs -> Ok (File_system.open_for_write fs path), fs
+      fun fs -> Ok (File_system.open_for_write fs path)
 
     let create (path:string): out_file option t =
-      fun fs -> Ok (File_system.create fs path), fs
+      fun fs -> Ok (File_system.create fs path)
 
     let close_in (fd:in_file): unit t =
-      fun fs -> Ok (File_system.close_in fs fd), fs
+      fun fs -> Ok (File_system.close_in fs fd)
 
     let close_out (fd:out_file): unit t =
-      fun fs -> Ok (File_system.close_out fs fd), fs
+      fun fs -> Ok (File_system.close_out fs fd)
 
     let flush (fd:out_file): unit t =
-      fun fs -> Ok (File_system.flush fs fd), fs
+      fun fs -> Ok (File_system.flush fs fd)
 
     let flush_all: unit t =
-      fun fs -> Ok (File_system.flush_all fs), fs
+      fun fs -> Ok (File_system.flush_all fs)
 
 
     let getc (fd:in_file): char option t =
-      fun fs -> Ok (File_system.getc fs fd), fs
+      fun fs -> Ok (File_system.getc fs fd)
 
     let putc (c:char) (fd:out_file): unit t =
-      fun fs -> Ok (File_system.putc fs fd c), fs
+      fun fs -> Ok (File_system.putc fs fd c)
 
     let get_line (fd:in_file): string option t =
       fun fs ->
-      Ok (File_system.getline fs fd), fs
+      Ok (File_system.getline fs fd)
 
 
     let scan(f:(char,'a) Scan.t) (fd:in_file): 'a t =
-      fun fs -> Ok (File_system.scan fs fd f), fs
+      fun fs -> Ok (File_system.scan fs fd f)
 
     let put_substring
           (str:string) (start:int) (len:int) (fd:out_file)
@@ -505,7 +505,7 @@ module IO0: Io.S0 =
       for i = start to start + len - 1 do
         File_system.putc fs fd str.[i]
       done;
-      Ok (), fs
+      Ok ()
 
     module Scan  (S:Io.SCANNER) =
       struct
@@ -513,11 +513,11 @@ module IO0: Io.S0 =
 
         let buffer (fd:in_file) (s:S.t): S.t t =
           fun fs ->
-          Ok (FS_Scan.scan_buffer fs fd s), fs
+          Ok (FS_Scan.scan_buffer fs fd s)
 
         let stream (fd:in_file) (s:S.t): S.t t =
           fun fs ->
-          Ok (FS_Scan.scan fs fd s), fs
+          Ok (FS_Scan.scan fs fd s)
       end
   end
 
