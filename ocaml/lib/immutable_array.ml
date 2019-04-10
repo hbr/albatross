@@ -67,7 +67,7 @@ let rec elem (i:int) (t:'a t): 'a =
   match t with
   | Leaf arr ->
      arr.(i)
-  | Node (size,h,arr) ->
+  | Node (_,h,arr) ->
      let slot,rel = index i h in
      assert (slot < Array.length arr);
      elem rel arr.(slot)

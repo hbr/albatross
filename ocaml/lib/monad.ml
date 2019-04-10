@@ -173,7 +173,7 @@ module Result (E: ANY) =
 
     let catch (m:'a t) (f:error->'a t): 'a t =
       match m with
-      | Ok a -> m
+      | Ok _ -> m
       | Error e -> f e
 
     let continue (m:'a t) (f1:'a->'r) (f2:error->'r): 'r =
@@ -215,7 +215,7 @@ module Result_in (M:MONAD) (Error:ANY) =
       M.bind m
         (fun r ->
           match r with
-          | Ok a ->
+          | Ok _ ->
              m
           | Error e ->
              f e
@@ -235,7 +235,7 @@ module Reader (Env:ANY) =
       Make (
           struct
             type 'a t = env -> 'a
-            let make (a:'a) (e:env): 'a =
+            let make (a:'a) (_:env): 'a =
               a
             let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b =
               f (m e) e
@@ -263,7 +263,7 @@ module Reader_into: READER_INTO =
       Make (
           struct
             type 'a t = env -> 'a M.t
-            let make (a:'a) (e:env): 'a M.t =
+            let make (a:'a) (_:env): 'a M.t =
               M.make a
             let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b M.t =
               M.(m e >>= fun a -> f a e)
@@ -278,7 +278,7 @@ module Reader_into: READER_INTO =
     let local (f:env->env) (m:'a t) (e:env): 'a M.t =
       f e |> m
 
-    let lift (m:'a M.t) (e:env): 'a M.t =
+    let lift (m:'a M.t) (_:env): 'a M.t =
       m
   end
 
@@ -367,7 +367,7 @@ module State_into: STATE_INTO
       m s
 
     let eval (s:state) (m: 'a t): 'a M.t =
-      M.(m s >>= fun (a,s) -> make a)
+      M.(m s >>= fun (a,_) -> make a)
   end (* State_into *)
 
 
@@ -432,7 +432,7 @@ module String_buffer =
 
     let fill (c:char) (n:int): unit t =
       fun buf ->
-      for i = 0 to n - 1 do
+      for _ = 0 to n - 1 do
         Buffer.add_char buf c
       done;
       (), buf

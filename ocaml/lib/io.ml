@@ -177,7 +177,7 @@ module Output (Io:S) =
       Monad.Make (
           struct
             type 'a t = out_file -> 'a Io.t
-            let make (a:'a) (fd:out_file): 'a Io.t =
+            let make (a:'a) (_:out_file): 'a Io.t =
               Io.make a
             let bind (m:'a t) (f:'a -> 'b t) (fd:out_file): 'b Io.t =
               Io.(m fd >>= fun a -> f a fd)

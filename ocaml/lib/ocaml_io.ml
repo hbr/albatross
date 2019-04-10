@@ -14,7 +14,7 @@ sig
   val is_ok: t -> bool
   val is_empty: t -> bool
   val fill: t -> unit
-  val is_full: t -> bool
+  (*val is_full: t -> bool*)
   val flush: t -> unit
   val getc: t -> char option
   val putc: t -> char -> unit
@@ -76,6 +76,8 @@ end =
         if n = 0 then
           b.flag <- false
         else
+          (* BUG: what if n > 0 && n <> b.wp - b.rp ?? Only a part of the
+             buffer has been written!! *)
           reset b
 
     let getc (b:t): char option =
@@ -269,8 +271,8 @@ end
     let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
-      | Read (fd,b) -> fd
-      | Write (fd,b) -> fd
+      | Read (fd,_) -> fd
+      | Write (fd,_) -> fd
       | Free _ ->
          assert false
 
@@ -278,7 +280,7 @@ end
     let close_file (fs:t) (fd:int): unit =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
-      | Read (fd,b) ->
+      | Read (fd,_) ->
          Unix.close fd
       | Write (fd,b) ->
          Buffer.flush b;
@@ -418,7 +420,7 @@ module IO0: Io.S0 =
           struct
             type 'a t = File_system.t -> ('a,int) result
             let make (a:'a): 'a t =
-              fun fs -> Ok a
+              fun _ -> Ok a
             let bind (m:'a t) (f:'a -> 'b t): 'b t =
               (fun fs ->
                 let r = m fs in
@@ -438,7 +440,7 @@ module IO0: Io.S0 =
     let stderr: out_file = File_system.stderr
 
     let exit (code:int): 'a t =
-      fun fs -> Error code
+      fun _ -> Error code
 
     let execute (program:unit t): unit =
       let fs = File_system.make ()
@@ -459,7 +461,7 @@ module IO0: Io.S0 =
             c)
 
     let command_line: string array t =
-      fun fs -> Ok Sys.argv
+      fun _ -> Ok Sys.argv
 
 
     let open_for_read (path:string): in_file option t =

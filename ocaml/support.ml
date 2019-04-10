@@ -4,7 +4,6 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-
 (*
 -----------------------------------------------------------------------------
    Line and column info

@@ -144,7 +144,7 @@ module Basic (Token:ANY) (Error:ANY) (State:ANY)
          Reject (s,e,n, End :: la)
 
 
-    let rec consume (p:'a parser) (ts:token list): 'a parser =
+    let consume (p:'a parser) (ts:token list): 'a parser =
       List.fold_left put_token p ts
 
     let revert_la (l:tlist): token list =
@@ -235,7 +235,7 @@ module Basic (Token:ANY) (Error:ANY) (State:ANY)
            c.success s a n la
         | More (s,fp) ->
            More (s, fun s t -> f (fp s t) (t::used))
-        | Reject (s,e,n,la) ->
+        | Reject (_,e,_,_) ->
            c.failure s0 e 0 used
       in
       f (parser pp c.state) []
@@ -302,7 +302,7 @@ module Combinator (P:BASIC) =
           (pp2: ('b,'z) t)
           (pp3: ('c,'z) t)
         : ('b,'z) t =
-      pp1 >> pp2 >> pp3 |> map (fun ((a,b),c) -> b)
+      pp1 >> pp2 >> pp3 |> map (fun ((_,b),_) -> b)
 
 
     let with_prefix (p:('a,'z) t) (q:('b,'z) t): ('b,'z) t =

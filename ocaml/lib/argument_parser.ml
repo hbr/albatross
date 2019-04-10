@@ -76,7 +76,7 @@ module Make (A:ANY) =
           if n = 0 then
             parse a (i+1)
           else if arg.[0] = '-' then
-            match List.find (fun (k,sp,doc) -> k = arg) options with
+            match List.find (fun (k,_,_) -> k = arg) options with
             | None ->
                M.throw (Unknown_option arg)
             | Some (k,sp,doc) ->
@@ -117,8 +117,8 @@ module Make (A:ANY) =
       match e with
       | Unknown_option str ->
          "unknown option '" ^ str ^ "'"
-      | Missing_argument (k,s,d) ->
+      | Missing_argument (k,s,_) ->
          "missing argument; " ^ option_expect k s
-      | Invalid_argument (k,s,d,arg) ->
+      | Invalid_argument (k,s,_,arg) ->
          "invalid argument '" ^ arg ^ "'; " ^ option_expect k s
   end

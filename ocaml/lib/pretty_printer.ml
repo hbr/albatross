@@ -1,5 +1,4 @@
 open Common
-open Printf
 
 module Pending =
   struct

@@ -1,3 +1,4 @@
+open Lib
 open Term
 open Container
 

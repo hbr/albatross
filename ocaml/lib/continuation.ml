@@ -35,5 +35,5 @@ module Make (A: sig type t end) =
       fun g -> f g g *)
     (* leroy: let callcc (f: ('a->answer) -> ('a->answer) -> answer): 'a t =
       fun g -> f g g (* type annotion ok?*)*)
-    let throw x y = fun g -> x y
+    (*let throw x y = fun g -> x y*)
   end

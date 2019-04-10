@@ -1,5 +1,4 @@
 open Common
-open Printf
 
 module type PRINTER =
   sig
@@ -329,7 +328,7 @@ module Make:
       st.p <- st.p + len;
       P.put_substring s start len
 
-    let rec out_texts (l:Text.t list): unit t =
+    let out_texts (l:Text.t list): unit t =
       print_list
         l
         (fun t ->
@@ -622,7 +621,7 @@ end =
     let putc (c:char) (oc:out_channel): unit =
       output_char oc c
     let fill (c:char) (n:int) (oc:out_channel): unit =
-      for i = 0 to n - 1 do
+      for _ = 0 to n - 1 do
         output_char oc c
       done
     let put_substring (s:string) (i0:start) (l:length) (oc:out_channel): unit =

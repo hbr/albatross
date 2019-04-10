@@ -4,6 +4,7 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
+open Lib
 open Term
 open Signature
 open Proof

@@ -127,7 +127,7 @@ module List =
           foldi 0 l b
 
         let fold_left (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
-          M.(foldi_left (fun i -> f) l b)
+          foldi_left (fun _ -> f) l b
 
         let fold_right (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
           fold_left f (rev l) b

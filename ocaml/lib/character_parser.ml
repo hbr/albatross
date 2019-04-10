@@ -42,15 +42,15 @@ module type PARSE_POSITION =
 module Parse_position =
   struct
     type t = {start: Position.t; current: Position.t}
-    let start   (p:t): Position.t = p.start
-    let current (p:t): Position.t = p.current
+    (*unused: let start   (p:t): Position.t = p.start
+    let current (p:t): Position.t = p.current*)
     let line (p:t): int = Position.line p.current
     let column (p:t): int = Position.column p.current
     let initial: t = {start = Position.start; current = Position.start}
     let next (c:char) (p:t): t =
       {p with current = Position.next c p.current}
-    let start_of_current (p:t): t =
-      {p with start = p.current}
+    (* unused: let start_of_current (p:t): t =
+      {p with start = p.current}*)
   end
 
 
@@ -92,18 +92,19 @@ module Make =
         (fun c1 -> c1 = c)
         (fun c1 -> "Expected '" ^ String.one c ^
                      "', found '" ^ String.one c1 ^ "'")
-
+(* unused:
     let letter (c: (char,'z) context) : 'z parser =
       expect_base
         Char.is_letter
         (fun c -> "Expected letter, found '"  ^ String.one c ^ "'")
-        c
+        c*)
 
+(* unused:
     let digit (c: (char,'z) context) : 'z parser =
       expect_base
         Char.is_digit
         (fun c -> "Expected digit, found '"  ^ String.one c ^ "'")
-        c
+        c*)
 
     (* Example: Matching Parentheses:
 

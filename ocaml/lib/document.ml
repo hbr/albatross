@@ -26,7 +26,7 @@ let rec flatten (d:t): t =
   | Nil -> Nil
   | Concat (d1,d2) ->
      Concat (flatten d1, flatten d2)
-  | Nest (i,d) ->
+  | Nest (_,d) ->
      flatten d (*Nest (i, flatten d)*)
   | Text s ->
      Text s
@@ -86,7 +86,7 @@ let rec fits (w:int) (x:layout): bool =
        true
     | LText (s,x) ->
        fits (w - String.length s) x
-    | LLine (i,x) ->
+    | LLine (_,_) ->
        true
 
 let best (w:int) (x:t): layout =
@@ -101,7 +101,7 @@ let best (w:int) (x:t): layout =
     | [] ->
        LNil
 
-    | (i,Nil) :: z ->
+    | (_,Nil) :: z ->
        be k z
 
     | (i,Concat(x,y)) :: z ->
@@ -110,7 +110,7 @@ let best (w:int) (x:t): layout =
     | (i,Nest(j,x)) :: z ->
        be k ((i+j,x) :: z)
 
-    | (i,Text s) :: z ->
+    | (_,Text s) :: z ->
        LText(s, be (k + String.length s) z)
 
     | (i,Line _) :: z ->
