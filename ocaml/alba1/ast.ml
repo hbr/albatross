@@ -1008,7 +1008,7 @@ let put_class
     (creators: (feature_name withinfo * entities list) list withinfo)
     (pc: Proof_context.t)
     : unit =
-  (** Analyze the class declaration [hm,cn,fgs,creators] and add or update the
+  (*  Analyze the class declaration [hm,cn,fgs,creators] and add or update the
       corresponding class.  *)
   assert (Proof_context.is_global pc);
   if fst cn.v <> [] then
@@ -1068,7 +1068,7 @@ let put_inheritance
     (inherits: inherit_clause)
     (pc: Proof_context.t)
     : unit =
-  (** Analyze the inheritance declaration [hm,cn,fgs,inherits] and update the
+  (*  Analyze the inheritance declaration [hm,cn,fgs,inherits] and update the
       corresponding class.  *)
   assert (Proof_context.is_global pc);
   let ft = Proof_context.feature_table pc in

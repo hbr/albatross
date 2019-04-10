@@ -1,6 +1,7 @@
-(library
-  (libraries unix)
-  (name lib))
+(executable
+  (libraries lib unix)
+  (name alba2))
+
 
  (env (dev
     (flags (:standard -warn-error -A))))
