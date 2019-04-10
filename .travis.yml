@@ -1,6 +1,8 @@
 language: c
 sudo: required
-install: test -e .travis.docker.sh || wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-docker.sh
+services:
+  - docker
+install: test -e .travis-docker.sh || wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-docker.sh
 script: bash -ex .travis-docker.sh
 env:
   - OCAML_VERSION=4.07
