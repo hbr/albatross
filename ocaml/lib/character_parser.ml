@@ -176,3 +176,8 @@ let test (): unit =
     (matching (expect '(') (expect ')'))
     "()((())).,-"
     Sexp.string
+
+
+let%test _ =
+  Printf.printf "character parser: inline test\n";
+  true
