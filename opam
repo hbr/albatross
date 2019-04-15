@@ -15,4 +15,5 @@ depends: [
   "ocamlfind" {build}
   "menhir" {build}
   "dune" {build}
+  "ppx_inline_test" {build}
 ]
