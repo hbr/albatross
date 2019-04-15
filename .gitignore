@@ -4,6 +4,7 @@ gmon.txt
 
 _build
 _draft
+draft
 *_draft.ml
 *_draft.mli
 *_old.ml
