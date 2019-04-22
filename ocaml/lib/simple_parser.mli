@@ -21,11 +21,16 @@ sig
 
   val expect_end: final -> final t
   val char: char -> unit t
+  val one_of_chars: string -> unit t
   val string: string -> unit t
   val letter: char t
   val optional: 'a t -> 'a option t
   val one_or_more: 'a t -> 'a list t
   val zero_or_more: 'a t -> 'a list t
+  val skip_one_or_more: 'a t -> int t
+  val skip_zero_or_more: 'a t -> int t
+  val zero_or_more_separated: 'a t -> _ t -> 'a list t
+  val one_or_more_separated: 'a t -> _ t -> 'a list t
   val one_of: 'a t list -> 'a t
   val (<|>): 'a t -> 'a t -> 'a t
 

@@ -51,11 +51,17 @@ sig
 
   val expect_end: final -> final t
   val char: char -> unit t
+  val one_of_chars: string -> unit t
+  val space: unit t
   val string: string -> unit t
   val letter: char t
   val optional: 'a t -> 'a option t
   val one_or_more: 'a t -> 'a list t
   val zero_or_more: 'a t -> 'a list t
+  val skip_one_or_more: 'a t -> int t
+  val skip_zero_or_more: 'a t -> int t
+  val zero_or_more_separated: 'a t -> _ t -> 'a list t
+  val one_or_more_separated: 'a t -> _ t -> 'a list t
   val one_of: 'a t list -> 'a t
   val (<|>): 'a t -> 'a t -> 'a t
 
@@ -128,6 +134,21 @@ end =
             Error [estr ()])
         (estr ())
 
+    let one_of_chars (str:string): unit t =
+      let errstr = "one of \"" ^ str ^ "\"" in
+      expect
+        (fun c ->
+          let idx = String.find (fun d -> c = d) 0 str
+          and len = String.length str in
+          if idx < len then
+            Ok ()
+          else
+            Error [errstr])
+        errstr
+
+
+    let space: unit t =
+      char ' '
 
     let string (str:string): unit t =
       let len = String.length str in
@@ -168,8 +189,14 @@ end =
   end
 
 
+(* ********** *)
+(* Unit Tests *)
+(* ********** *)
+
+
 module CP = Simple_parser (Char)
 module UP = Simple_parser (Unit)
+module IP = Simple_parser (Int)
 
 let%test _ =
   let module P = Simple_parser (Char) in
@@ -212,7 +239,7 @@ let%test _ =
 
 
 (* Test the [>>-] combinator *)
-
+(* ************************* *)
 let%test _ =
   let open UP in
   let p = run (char 'a' >>= fun _ -> char 'b') "ab" in
@@ -224,6 +251,7 @@ let%test _ =
 
 
 (* Test the [>>-] combinator *)
+(* ************************* *)
 
 let%test _ =
   let open UP in
@@ -248,7 +276,7 @@ let%test _ =
 
 
 (* Test [optional] *)
-
+(* *************** *)
 let%test _ =
   let open UP in
   let p =
@@ -274,6 +302,7 @@ let%test _ =
 
 
 (* Test nested parenthesis *)
+(* *********************** *)
 
 let parens: unit UP.t =
   let open UP in
@@ -282,6 +311,16 @@ let parens: unit UP.t =
      >>= fun _ ->
      char ')' >>= pars)
     <|> succeed ()
+  in
+  pars ()
+
+let nesting: int IP.t =
+  let open IP in
+  let rec pars (): int t =
+    (consumer (char '(') >>= pars
+     >>= fun n ->
+     char ')' >>= pars >>= fun m -> succeed (max (n+1) m))
+    <|> succeed 0
   in
   pars ()
 
@@ -312,7 +351,22 @@ let%test _ =
   && lookahead p = [Some ')']
 
 
+let%test _ =
+  let open IP in
+  let p = run nesting "(())()"
+  in
+  has_ended p
+  && result p = Ok 2
+  && lookahead p = [None]
 
+
+let%test _ =
+  let open IP in
+  let p = run nesting "(()(()))"
+  in
+  has_ended p
+  && result p = Ok 3
+  && lookahead p = [None]
 
 
 (* String parser *)
@@ -381,3 +435,54 @@ let%test _ =
   && column p = 3
   && result p = Ok ()
   && lookahead p = []
+
+
+
+
+
+(* Sentences and Error Messages *)
+(* **************************** *)
+module String_list =
+  struct
+    type t = string list
+  end
+
+module SLP = Simple_parser (String_list)
+
+let word: string SLP.t =
+  let open SLP in
+  one_or_more letter >>= fun l -> succeed (String.of_list l)
+
+let separator: int SLP.t =
+  let open SLP in
+  skip_one_or_more (space <|> char ',')
+
+let sentence: string list SLP.t =
+  let open SLP in
+  one_or_more_separated word separator >>= fun lst ->
+  one_of_chars ".?!" >>= fun _ ->
+  succeed lst
+
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi,di,hi." in
+  result p = Ok ["hi"; "di"; "hi"]
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi,,di hi!" in
+  result p = Ok ["hi"; "di"; "hi"]
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi       di        hi?" in
+  result p = Ok ["hi"; "di"; "hi"]
+
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi,123" in
+  has_ended p
+  && result p = Error ["letter"]
+  && column p = 3

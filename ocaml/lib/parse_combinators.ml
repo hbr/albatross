@@ -19,8 +19,6 @@ module type BASIC =
 
 
 
-
-
 module type COMBINATORS =
   functor (P:BASIC) ->
   sig
@@ -30,10 +28,13 @@ module type COMBINATORS =
     val one_of: 'a P.t list -> (P.error list -> P.error) -> 'a P.t
     val zero_or_more: 'a P.t -> 'a list P.t
     val one_or_more:  'a P.t -> 'a list P.t
+    val skip_zero_or_more: 'a P.t -> int P.t
+    val skip_one_or_more:  'a P.t -> int P.t
+    val zero_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
+    val one_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
     val (|=): ('a -> 'b) P.t -> 'a P.t -> 'b P.t
     val (|.): 'v P.t -> 'a P.t -> 'v P.t
   end
-
 
 
 
@@ -75,6 +76,31 @@ module Combinators: COMBINATORS =
       P.(consumer p >>= fun a ->
           zero_or_more p >>= fun l ->
           succeed (a::l))
+
+    let skip_zero_or_more (p:'a P.t): int P.t =
+      let open P in
+      let rec many i =
+        (consumer p >>= fun _ -> many (i+1))
+        >>| fun _ -> succeed (i)
+      in
+      many 0
+
+    let skip_one_or_more (p:'a P.t): int P.t =
+      let open P in
+      p >>= fun _ ->
+      skip_zero_or_more p
+      >>= fun n -> succeed (n + 1)
+
+    let one_or_more_separated (p:'a P.t) (sep: _ P.t): 'a list P.t =
+      let open P in
+      p >>= fun a ->
+      zero_or_more (sep >>= fun _ -> p) >>= fun l ->
+      succeed (a::l)
+
+    let zero_or_more_separated (p:'a P.t) (sep: _ P.t): 'a list P.t =
+      let open P in
+      one_or_more_separated p sep
+      >>| fun _ -> succeed []
 
     let (|=) (pf:('a->'b) P.t) (p:'a P.t): 'b P.t =
       let open P in

@@ -27,6 +27,10 @@ module type COMBINATORS =
     val one_of: 'a P.t list -> (P.error list -> P.error) -> 'a P.t
     val zero_or_more: 'a P.t -> 'a list P.t
     val one_or_more:  'a P.t -> 'a list P.t
+    val skip_zero_or_more: 'a P.t -> int P.t
+    val skip_one_or_more:  'a P.t -> int P.t
+    val zero_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
+    val one_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
     val (|=): ('a -> 'b) P.t -> 'a P.t -> 'b P.t
     val (|.): 'v P.t -> 'a P.t -> 'v P.t
   end
