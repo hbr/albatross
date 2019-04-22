@@ -86,6 +86,7 @@ module Buffer (T:ANY) =
 
     let start_backtrack (b:t): unit =
       push b;
+      b.consumed <- false;
       b.isbuf <- true;
       b.committing <- false;
       b.committed  <- false
@@ -119,10 +120,13 @@ module Buffer (T:ANY) =
         remove_consumption nc false b
 
     let end_backtrack_fail (b:t): unit =
+      assert (not b.committed || b.consumed); (* committed => consumed *)
       let isbuf,c,nc,comm,commd = pop b in
       if not b.committed then
         (b.consumed <- c;
-         remove_consumption nc true b);
+         remove_consumption nc true b)
+      else if not isbuf then
+         remove_consumption nc false b;
       b.isbuf <- isbuf;
       b.committing <- comm;
       b.committed  <- commd
