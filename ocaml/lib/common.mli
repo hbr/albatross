@@ -8,6 +8,25 @@ sig
   type t
 end
 
+
+module Unit:
+sig
+  type t = unit
+end
+
+
+module Int:
+sig
+  type t = int
+end
+
+
+module Float:
+sig
+  type t = float
+end
+
+
 module Either:
 sig
   type ('a,'b) t =

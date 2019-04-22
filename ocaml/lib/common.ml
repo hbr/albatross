@@ -12,6 +12,35 @@ end =
   end
 
 
+module Unit:
+sig
+  type t = unit
+end =
+  struct
+    type t = unit
+  end
+
+
+module Int:
+sig
+  type t = int
+end =
+  struct
+    type t = int
+  end
+
+
+
+module Float:
+sig
+  type t = float
+end =
+  struct
+    type t = float
+  end
+
+
+
 module Either =
   struct
     type ('a,'b) t =
