@@ -1,6 +1,6 @@
 bin: [
-     "ocaml/_build/alba.native" {"alba"}
-     "ocaml/_build/alba.d.byte" {"alba.d.byte"}
+     "_build/default/ocaml/alba1/alba.exe"    {"alba"}
+     "_build/default/ocaml/alba2/alba2.exe"   {"alba2"}
 ]
 
 lib: [

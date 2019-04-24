@@ -1,6 +1,6 @@
-opam-version: "1.2"
+opam-version: "2.0"
 name: "alba"
-version: "v0.4.0~rc6x"
+synopsis: "Alba compiler"
 maintainer: "Helmut Brandl <helmut.brandl@gmx.net>"
 authors: "Helmut Brandl <helmut.brandl@gmx.net>"
 homepage: "http://albatross-lang.sourceforge.net"
@@ -8,11 +8,12 @@ license: "GPLv2"
 dev-repo: "git+https://github.com/hbr/albatross.git"
 bug-reports: "http://github.com/hbr/albatross"
 build: [
-  [make "build"]
+  [make "build_dune"]
 ]
 depends: [
-  "ocamlfind"
-  "ocamlbuild"
-  "menhir"
+  "ocaml" {>= "4.05.0"}
+  "ocamlfind" {build}
+  "menhir" {build}
+  "dune" {build}
+  "ppx_inline_test" {build}
 ]
-available: [ ocaml-version >= "4.03.0" ]

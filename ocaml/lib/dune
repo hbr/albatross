@@ -1,0 +1,8 @@
+(library
+  (libraries unix)
+  (inline_tests)
+  (preprocess (pps ppx_inline_test))
+  (name lib))
+
+(env (dev
+   (flags (:standard -warn-error -A))))

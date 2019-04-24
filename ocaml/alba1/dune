@@ -1,0 +1,11 @@
+(executable
+  (libraries lib unix)
+  (name alba))
+
+(ocamllex lexer)
+
+(menhir
+  (modules parser))
+
+ (env (dev
+    (flags (:standard -warn-error -A))))

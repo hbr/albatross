@@ -67,7 +67,7 @@ let rec elem (i:int) (t:'a t): 'a =
   match t with
   | Leaf arr ->
      arr.(i)
-  | Node (size,h,arr) ->
+  | Node (_,h,arr) ->
      let slot,rel = index i h in
      assert (slot < Array.length arr);
      elem rel arr.(slot)
@@ -141,6 +141,18 @@ let push (e:'a) (t:'a t): 'a t =
   t
 
 
+let rec push_list (l:'a list) (t:'a t): 'a t =
+  match l with
+  | [] ->
+     t
+  | e :: l ->
+     push_list l (push e t)
+
+
+let of_list (l:'a list): 'a t =
+  push_list l empty
+
+
 let rec take (n:int) (t:'a t): 'a t =
   assert (n <= length t);
   match t with
@@ -164,6 +176,8 @@ let rec take (n:int) (t:'a t): 'a t =
          let arr = Array.sub arr 0 (slot+1) in
          arr.(slot) <- t0;
          Node (n,h,arr)
+
+
 
 
 
