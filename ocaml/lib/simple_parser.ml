@@ -79,6 +79,14 @@ module Simple_parser (F:ANY) =
           | Some _ ->
              Error "end")
 
+    let (<?>) (p:'a t) (s:string): 'a t =
+      let es =
+        if String.length s = 0 then
+          []
+        else
+          [s] in
+      p <?> es
+
     let char (c:char): unit t =
       let estr = "'" ^ String.one c ^ "'"
       in
@@ -179,42 +187,81 @@ module CP = Simple_parser (Char)
 module UP = Simple_parser (Unit)
 module IP = Simple_parser (Int)
 
-let%test _ =
-  let module P = Simple_parser (Char) in
-  let p = P.(run letter "a") in
-  P.(has_ended p
-     && result p = Ok 'a'
-     && column p = 1
-     && lookahead p = [])
-
 
 
 let%test _ =
-  let module P = Simple_parser (Char) in
-  let p = P.(run letter "1") in
-  P.(has_ended p
-     && result p = Error ["letter"]
-     && column p = 0
-     && lookahead p = [Some '1'])
+  let open CP in
+  let p = run letter "a" in
+  has_ended p
+  && result p = Ok 'a'
+  && column p = 1
+  && lookahead p = []
 
 
 let%test _ =
-  let module P = Simple_parser (Unit) in
-  let p = P.(run (char 'a') "z") in
-  P.(has_ended p
-     && result p = Error ["'a'"]
-     && column p = 0
-     && lookahead p = [Some 'z'])
+  let open CP in
+  let p = run (letter >>= expect_end) "a" in
+  has_ended p
+  && result p = Ok 'a'
+  && column p = 1
+  && lookahead p = []
 
 
 
 let%test _ =
-  let module P = Simple_parser (Unit) in
-  let p = P.(run (char 'a') "a") in
-  P.(has_ended p
-     && result p = Ok ()
-     && column p = 1
-     && lookahead p = [])
+  let open CP in
+  let p = run letter "1" in
+  has_ended p
+  && result p = Error ["letter"]
+  && column p = 0
+  && lookahead p = [Some '1']
+
+let%test _ =
+  let open UP in
+  let p = run (char 'a') "z" in
+  has_ended p
+  && result p = Error ["'a'"]
+  && column p = 0
+  && lookahead p = [Some 'z']
+
+let%test _ =
+  let open UP in
+  let p = run (char 'a' >>= expect_end) "ab" in
+  has_ended p
+  && result p = Error ["end"]
+  && column p = 1
+  && lookahead p = [Some 'b']
+
+let%test _ =
+  let open UP in
+  let p = run (char 'a') "a" in
+  has_ended p
+  && result p = Ok ()
+  && column p = 1
+  && lookahead p = []
+
+let%test _ =
+  let open UP in
+  let p = run (char 'a'
+               >>= fun _ -> char 'b'
+               >>= expect_end)
+            "ab"
+  in
+  has_ended p
+  && result p = Ok ()
+  && column p = 2
+  && lookahead p = []
+
+let%test _ =
+  let open UP in
+  let p = run (char 'a'
+               >>= fun _ -> char 'b')
+            "a"
+  in
+  has_ended p
+  && result p = Error ["'b'"]
+  && column p = 1
+  && lookahead p = [None]
 
 
 
@@ -298,9 +345,12 @@ let parens: unit UP.t =
 let nesting: int IP.t =
   let open IP in
   let rec pars (): int t =
-    (consumer (char '(') >>= pars
+    (consumer (char '(')
+     >>= pars
      >>= fun n ->
-     char ')' >>= pars >>= fun m -> succeed (max (n+1) m))
+     char ')'
+     >>= pars
+     >>= fun m -> succeed (max (n+1) m))
     <|> succeed 0
   in
   pars ()
@@ -408,9 +458,10 @@ let%test _ =
   let open UP in
   let p =
     run
-      (backtrackable (string "(a)")
-       <|> string "(b)")
-      "(a)"
+      ((backtrackable (string "(a)")
+        <|> string "(b)")
+       >>= expect_end)
+      "(b)"
   in
   has_ended p
   && column p = 3
@@ -467,3 +518,51 @@ let%test _ =
   has_ended p
   && result p = Error ["' '" ; "','" ; "letter"]
   && column p = 3
+  && lookahead p = [Some '1']
+
+
+
+let word: string SLP.t =
+  let open SLP in
+  one_or_more letter <?> "word" >>= fun l -> succeed (String.of_list l)
+
+let separator: int SLP.t =
+  let open SLP in
+  skip_one_or_more (space <|> char ',')
+
+let sentence: string list SLP.t =
+  let open SLP in
+  one_or_more_separated word separator >>= fun lst ->
+  one_of_chars ".?!" >>= fun _ ->
+  succeed lst
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi,123" in
+  has_ended p
+  && result p = Error ["' '" ; "','" ; "word"]
+  && column p = 3
+  && lookahead p = [Some '1']
+
+
+let word: string SLP.t =
+  let open SLP in
+  one_or_more letter <?> "word" >>= fun l -> succeed (String.of_list l)
+
+let separator: int SLP.t =
+  let open SLP in
+  skip_one_or_more (space <|> char ',' <?> "")
+
+let sentence: string list SLP.t =
+  let open SLP in
+  one_or_more_separated word separator >>= fun lst ->
+  one_of_chars ".?!" >>= fun _ ->
+  succeed lst
+
+let%test _ =
+  let open SLP in
+  let p = run sentence "hi,123" in
+  has_ended p
+  && result p = Error ["word"]
+  && column p = 3
+  && lookahead p = [Some '1']

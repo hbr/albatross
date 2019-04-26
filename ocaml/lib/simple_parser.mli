@@ -34,6 +34,7 @@ sig
   val one_or_more_separated: 'a t -> _ t -> 'a list t
   val one_of: 'a t list -> 'a t
   val (<|>): 'a t -> 'a t -> 'a t
+  val (<?>): 'a t -> string -> 'a t
 
   val run: final t -> string -> parser
 
