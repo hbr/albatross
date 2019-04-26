@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/hbr/albatross.svg?branch=develop)](https://travis-ci.org/hbr/albatross)
+
 # General
 
 This repository holds the sources for the Albatross compiler.
