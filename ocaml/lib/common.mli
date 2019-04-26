@@ -71,6 +71,7 @@ sig
   val get: t -> int -> char
   val escaped: t -> t
   val sub: t -> int -> int -> t
+  val concat: string -> string list -> string
   val make: int -> char -> t
 end
 
