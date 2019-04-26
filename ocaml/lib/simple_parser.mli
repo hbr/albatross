@@ -5,19 +5,20 @@ module Simple_parser (F:ANY):
 sig
   type final = F.t
   type token = char option
-  type error = string list
+  type error = string
   type parser
-  type 'a res = ('a,error) result
 
-  include Monad.MONAD
+  type _ t
 
   val succeed: 'a -> 'a t
   val fail: error -> 'a t
   val backtrackable: 'a t -> 'a t
   val commit: 'a -> 'a t
+
+  val (>>=): 'a t -> ('a -> 'b t) -> 'b t
   val (>>-): 'a t -> ('a -> 'b t) -> 'b t
-  val (>>|): 'a t -> (error -> 'a t) -> 'a t
-  val expect: (char -> 'a res) -> string -> 'a t
+
+  val expect: (char -> ('a,error) result) -> error -> 'a t
 
   val expect_end: final -> final t
   val char: char -> unit t
@@ -38,8 +39,11 @@ sig
 
   val needs_more: parser -> bool
   val has_ended:  parser -> bool
-  val result: parser -> final res
+  val result: parser -> (final,error list) result
   val line:   parser -> int
   val column: parser -> int
   val lookahead: parser -> token list
+
+  val result_string: parser -> (final -> string) -> string
+  val lookahead_string: parser -> string
 end

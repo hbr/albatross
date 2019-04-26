@@ -1,27 +1,34 @@
 open Common_module_types
-open Parse_combinators
 
-module Basic (T:ANY) (S:ANY) (E:ANY) (F:ANY):
+module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY):
 sig
-  include BASIC with type token = T.t and
-                     type error = E.t
-  type final = F.t
+  type token = T.t
+  type error = E.t
   type state = S.t
+  type final = F.t
 
   type parser
 
-  val parser: state -> final t -> parser
-
-  val expect: (state -> token -> 'a res * state) -> 'a t
-  val get: state t
-  val put: state -> unit t
-  val update: (state -> state) -> unit t
-
   val needs_more: parser -> bool
   val has_ended:  parser -> bool
-  val state: parser -> state
-  val result: parser -> final res
-  val lookahead: parser -> token list
+  val put_token:  parser -> token -> parser
+  val state:      parser -> state
+  val result:     parser -> (final, error list) result
+  val lookahead:  parser -> token list
 
-  val put_token: parser -> token -> parser
+  type _ t
+
+  val make_parser: state -> final t -> parser
+
+  val succeed: 'a -> 'a t
+  val fail:    error -> 'a t
+  val token: (state -> token -> ('a*state,error) result) -> 'a t
+
+  val map: ('a -> 'b) -> 'a t -> 'b t
+  val consumer: 'a t -> 'a t
+  val (>>=): 'a t -> ('a -> 'b t) -> 'b t
+  val (<|>): 'a t -> 'a t -> 'a t
+  val (<?>): 'a t -> error list -> 'a t
+  val backtrackable: 'a t -> 'a t
+  val commit: 'a -> 'a t
 end

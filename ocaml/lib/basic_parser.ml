@@ -1,335 +1,357 @@
 open Common
 open Common_module_types
-open Parse_combinators
 
 
-
-
-module Buffer (T:ANY) =
-  struct
-    type token = T.t
-    type consumed = bool
-    type is_buffering = bool
-    type committing = bool
-    type committed  = bool
-    type consumption_length = int
-    type t = {
-        mutable consumption: token list;
-        mutable lookahead: token list;
-        mutable consumed: consumed;
-        mutable nc: consumption_length;
-        mutable isbuf: is_buffering;
-        mutable committing: committing;
-        mutable committed:  committed;
-        mutable stack:
-                  (is_buffering
-                   * consumed
-                   * consumption_length
-                   * committing
-                   * committed) list
-      }
-    let init (_:unit): t =
-      {consumption = []; lookahead = []; consumed = false;
-       nc = 0; isbuf = false; committing = false; committed = false;
-       stack = []}
-
-    let no_lookahead (b:t): bool =
-      b.lookahead = []
-
-    let consume (t:token) (b:t): unit =
-      assert (b.lookahead = []); (* Illegal call: Cannot consume tokens as
-                                    long as there are tokens in the lookahead
-                                    buffer. *)
-      if b.isbuf then
-        (b.consumption <- t :: b.consumption;
-         b.nc <- b.nc + 1;
-         if b.committing && not b.committed then
-           (b.committed <- true;
-            match b.stack with
-            | [] ->
-               b.isbuf <- false
-            | (isbuf,_,_,_,_) :: _ ->
-               b.isbuf <- isbuf)
-        );
-      b.consumed <- true
-
-    let reject (t:token) (b:t): unit =
-      assert (b.lookahead = []); (* Illegal call: Cannot reject tokens as long
-                                    as there are tokens in the lookahead
-                                    buffer. *)
-      b.lookahead <- t :: b.lookahead
-
-    let set_consumed (c:consumed) (b:t): unit =
-      b.consumed <- b.consumed || c
-
-    let reset_consumed (b:t): consumed =
-      let c = b.consumed in
-      b.consumed <- false;
-      c
-
-    let push (b:t): unit =
-      b.stack <-
-        (b.isbuf, b.consumed, b.nc, b.committing, b.committed)
-        :: b.stack
-
-    let pop (b:t): is_buffering
-                   * consumed
-                   * consumption_length
-                   * committing
-                   * committed =
-      match b.stack with
-      | [] ->
-         assert false (* Illegal call. *)
-      | top :: rest ->
-         b.stack <- rest;
-         top
-
-    let start_backtrack (b:t): unit =
-      push b;
-      b.consumed <- false;
-      b.isbuf <- true;
-      b.committing <- false;
-      b.committed  <- false
-
-    let commit (b:t): unit =
-      assert (b.isbuf);
-      assert (not b.committing);
-      assert (not b.committed);
-      b.committing <- true
-
-    let remove_consumption (nc:consumption_length) (la:bool) (b:t): unit =
-      assert (nc <= b.nc);
-      while nc <> b.nc do
-        match b.consumption with
-        | [] ->
-           assert false (* Illegal call *)
-        | t :: ts ->
-           b.consumption <- ts;
-           b.nc <- b.nc - 1;
-           if la then
-             b.lookahead <- t :: b.lookahead
-      done
-
-    let end_backtrack_success (b:t): unit =
-      let isbuf,c,nc,comm,commd = pop b in
-      b.isbuf <- isbuf;
-      b.consumed <- c || b.consumed;
-      b.committing <- comm;
-      b.committed  <- commd;
-      if not isbuf then
-        remove_consumption nc false b
-
-    let end_backtrack_fail (b:t): unit =
-      assert (not b.committed || b.consumed); (* committed => consumed *)
-      let isbuf,c,nc,comm,commd = pop b in
-      if not b.committed then
-        (b.consumed <- c;
-         remove_consumption nc true b)
-      else if not isbuf then
-         remove_consumption nc false b;
-      b.isbuf <- isbuf;
-      b.committing <- comm;
-      b.committed  <- commd
-
-
-
-    let pop_lookahead (b:t): token list =
-      let la = b.lookahead in
-      b.lookahead <- [];
-      la
-  end (* Buffer *)
-
-
-
-
-
-
-module Basic (T:ANY) (S:ANY) (E:ANY) (F:ANY):
+module Parse_buffer (S:ANY) (T:ANY) (E:ANY):
 sig
-  include BASIC with type token = T.t and
-                     type error = E.t
-  type final = F.t
   type state = S.t
+  type token = T.t
+  type error = E.t
+  type lookahead_length = int
+  type consumed = bool
+  type saved_errors
+  type back
+  type t
 
-  type parser
+  val has_lookahead: t -> bool
+  val has_consumed: t -> bool
+  val n_lookaheads: t -> int
+  val state:        t -> state
+  val lookahead:    t -> token list
+  val errors:       t -> error list
 
-  val parser: state -> final t -> parser
+  val init: state -> t
+  val pop_one_lookahead: t -> token * lookahead_length
 
-  val expect: (state -> token -> 'a res * state) -> 'a t
-  val get: state t
-  val put: state -> unit t
-  val update: (state -> state) -> unit t
+  val add_error: error -> t -> unit
 
-  val needs_more: parser -> bool
-  val has_ended:  parser -> bool
-  val state: parser -> state
-  val result: parser -> final res
-  val lookahead: parser -> token list
+  val consume: token -> state -> t -> unit
+  val reject:  token -> error -> t -> unit
+  val reset_consumed: t -> consumed
+  val set_consumed: consumed -> t -> unit
 
-  val put_token: parser -> token -> parser
+  val reset_errors: t -> saved_errors
+  val set_errors: error list -> t -> unit
+  val update_errors: saved_errors -> t -> unit
+
+  val start_backtrack: t -> back
+  val end_backtrack_success: back -> t -> unit
+  val end_backtrack_fail:    back -> t -> unit
+  val commit: t -> unit
 end =
   struct
+    type state = S.t
     type token = T.t
-    type lookaheads = token list
+    type error = E.t
+    type consumed = bool
+    type is_buffering = bool
+    type consumption_length = int
+    type lookahead_length = int
+
+    type commit = Not | Committing | Committed
+    type back = state * consumed * consumption_length
+                * error list
+                * is_buffering * is_buffering  * commit
+
+    type saved_errors = consumed * error list
+
+    type t = {mutable state: state;
+              mutable consumed:      consumed;
+              mutable consumption:   token list;
+              mutable lookahead:     token list;
+              mutable n_consumption: consumption_length;
+              mutable n_la:          lookahead_length;
+              mutable errors:        error list;
+              mutable isbuf:         is_buffering;
+              mutable isbuf_prev:    is_buffering;
+              mutable commit:        commit}
+
+    let has_lookahead(b:t): bool = b.n_la > 0
+    let n_lookaheads (b:t): int  = b.n_la
+    let lookahead    (b:t): token list = b.lookahead
+    let errors       (b:t): error list = List.rev b.errors
+    let has_consumed (b:t): bool = b.consumed
+    let state        (b:t): state = b.state
+
+    let init (s:state): t =
+      {state = s;
+       consumed = false; consumption = []; n_consumption = 0;
+       lookahead = []; n_la = 0;
+       errors = [];
+       isbuf = false; isbuf_prev = false; commit = Not}
+
+    let pop_one_lookahead (b:t): token * lookahead_length =
+      match b.lookahead with
+      | [] -> assert false (* Illegal call *)
+      | t :: rest ->
+         let n_la = b.n_la in
+         b.n_la <- b.n_la - 1;
+         b.lookahead <- rest;
+         t, n_la
+
+    let add_error (e:error) (b:t): unit =
+      b.errors <- e :: b.errors
+
+    let consume (t:token) (s:state) (b:t): unit =
+      b.consumed <- true;
+      b.state    <- s;
+      b.errors   <- [];
+      if b.isbuf then
+        (* A parser is buffering if it is part of a backtrackable parser which
+           has not yet committed. *)
+        ((* Put consumed token into the consumption buffer. *)
+         b.consumption   <- t :: b.consumption;         (* 2 *)
+         b.n_consumption <- b.n_consumption + 1;
+
+         if b.commit = Committing then
+           (b.commit <- Committed; (* If a commit has been issued
+                                      (i.e. [Committing]), the next consumed
+                                      token sets the [commit] to
+                                      [Committed]. *)
+            if not b.isbuf_prev then  (* A committed parser does no longer
+                                         buffer consumed tokens unless an
+                                         outer parser is buffering. *)
+              b.isbuf <- false)
+        )
+
+    let reject (t:token) (e:error) (b:t): unit =
+      b.errors <- e :: b.errors;
+      b.lookahead <- t :: b.lookahead;
+      b.n_la <- b.n_la + 1
+
+    let reset_consumed (b:t): bool =
+      let c = b.consumed in
+      b.consumed <- false; c
+
+    let set_consumed (c:bool) (b:t): unit =
+      b.consumed <- c
+
+    let reset_errors (b:t): saved_errors =
+      let saved = b.consumed, b.errors in
+      b.consumed <- false;  (* to be able to check if the next parser has
+                               consumed anything *)
+      b.errors <- [];       (* in order to collect the error messages
+                               generated by the next parser *)
+      saved
+
+    let set_errors (errs:error list) (b:t): unit =
+      b.errors <- errs
+
+    let update_errors ((c,errs):saved_errors) (b:t): unit =
+      if b.consumed then
+        () (* parser has advanced, old errors are obsolete *)
+      else
+        (b.consumed <- c;            (* restore consumption flag *)
+         b.errors <- b.errors @ errs  (* parser has not consumed, old error
+                                        messages are still valid *)
+        )
+
+    let move_buffered (n:int) (la:bool) (b:t): unit =
+      (* Remove the buffered consumed tokens so that the consumption buffer
+         has only n tokens and put them into the lookahead buffer if the la
+         flag is set. *)
+      assert (n <= b.n_consumption);
+      while n < b.n_consumption do
+        match b.consumption with
+        | [] -> assert false (* cannot happen *)
+        | t :: rest ->
+           b.consumption   <- rest;
+           b.n_consumption <- b.n_consumption - 1;
+           if la then
+             (b.lookahead <- t :: b.lookahead;
+              b.n_la <- b.n_la + 1)
+      done
+
+    let start_backtrack (b:t): back =
+      let saved = b.state, b.consumed, b.n_consumption,
+                  b.errors, b.isbuf, b.isbuf_prev, b.commit in
+      b.consumed <- false;
+      b.isbuf_prev <- b.isbuf;
+      b.isbuf <- true;
+      b.errors <- [];
+      b.commit <- Not;
+      saved
+
+    let end_backtrack_success ((_,c,n,es,ib,ibp,comm):back) (b:t): unit =
+      if not ib then (* no buffering previously, therefore remove all newly
+                        buffered tokens. *)
+        move_buffered n false b;
+      if not b.consumed then (* backtrackable parser has not consumed tokens,
+                                errors must be restored *)
+        b.errors <- es;
+      b.consumed   <- c && b.consumed;
+      b.isbuf      <- ib;
+      b.isbuf_prev <- ibp;
+      b.commit     <- comm
+
+    let end_backtrack_fail    ((s,c,n,es,ib,ibp,comm):back) (b:t): unit =
+      if b.commit <> Committed then (* undo consumption *)
+        (move_buffered n true b;
+         b.consumed <- c;
+         b.state <- s;
+         b.errors <- b.errors @ es)
+      else
+        b.consumed   <- c && b.consumed;
+      b.isbuf      <- ib;
+      b.isbuf_prev <- ibp;
+      b.commit     <- comm
+
+    let commit (b:t): unit =
+      if b.isbuf && b.commit = Not then
+        b.commit <- Committing
+
+  end
+
+
+
+
+
+
+module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
+  struct
+    type token = T.t
     type error = E.t
     type state = S.t
     type final = F.t
-    type 'a res = ('a,error) result
 
-    module B = Buffer (T)
+    module B = Parse_buffer (S) (T) (E)
 
     type parser =
-      | Final of state * final res * lookaheads
-      | More of state * (state -> token -> parser)
-
-
-    let state (p:parser): state =
-      match p with
-      | Final (st,_,_) | More (st,_) ->
-         st
+      | More  of state * (state -> token -> parser)
+      | Final of state * (final, error list) result * token list
 
     let needs_more (p:parser): bool =
       match p with
-      | More _ -> true
-      | _ -> false
+      | More _ -> true | Final _ -> false
 
-    let has_ended (p:parser): bool =
-      not (needs_more p)
+    let has_ended (p:parser): bool = not (needs_more p)
+
+    let put_token (p:parser) (t:token): parser =
+      assert (needs_more p);
+      match p with
+      | More (st,f) ->
+         f st t
+      | _ ->
+         assert false (* Illegal call *)
+
+    let state (p:parser): state =
+      match p with
+      | More (st,_) | Final (st,_,_) -> st
+
+    let result (p:parser): (final,error list) result =
+      match p with
+      | Final (_,r,_) -> r
+      | _ -> assert false (* Illegal call! *)
 
     let lookahead (p:parser): token list =
       match p with
-      | Final (_, _, la) ->
-         la
-      | _ ->
-         assert false (* Illegal call *)
-
-    let result (p:parser): final res =
-      match p with
-      | Final (_, r, _) ->
-         r
-      | _ ->
-         assert false (* Illegal call *)
-
-    let put_token (p:parser) (t:token): parser =
-      match p with
-      | Final (st,r,las) ->
-         Final (st, r, t :: las)
-      | More (st, f) ->
-         f st t
-
-    module K =
-      struct
-        (* Invariant: Every continuation function handles the lookahead before
-           applying an new parser. *)
-        type 'a t = 'a res -> state -> parser
-      end
+      | Final (_,_,la) -> la
+      | _ -> assert false (* Illegal call! *)
 
 
-    module M =
-      struct
-        (* Invariant: No parser of type ['a t] is ever called with some
-           lookahead tokens in the buffer. The lookahead tokens are handled by
-           the continuation function before calling any new parser of type ['a
-           t]. *)
-        type 'a t =  B.t -> state -> 'a K.t -> parser
 
-        let apply_lookahead (b:B.t) (p:'a t) (st:state) (k:'a K.t): parser =
-          let la = B.pop_lookahead b in
-          assert (B.no_lookahead b);
-          List.fold_left put_token (p b st k) la
+    type 'a t = ('a option -> parser) -> B.t -> parser
 
-        let make (a:'a) (b:B.t) (st:state) (k:'a K.t): parser =
-          assert (B.no_lookahead b);
-          k (Ok a) st
+    let make_parser (s:state) (p:final t): parser =
+      let b = B.init s in
+      p (fun o ->  (* continuation function for p *)
+          Final (B.state b,
+                 (match o with
+                  | Some x -> Ok x
+                  | None   -> Error (B.errors b)),
+                 B.lookahead b))
+        b
 
-        let bind (p:'a t) (f:'a -> 'b t) (b:B.t) (st:state) (k:'b K.t): parser =
-          assert (B.no_lookahead b);
-          p b st
-            (fun r st ->
-              match r with
-              | Ok a ->
-                 apply_lookahead b (f a) st k
-              | Error e ->
-                 k (Error e) st )
-      end
-    include Monad.Make (M)
+    let succeed (a:'a) (k:'a option -> parser) (_:B.t): parser =
+      k (Some a)
+
+    let fail (e:error) (k:'a option -> parser) (b:B.t): parser =
+      B.add_error e b;
+      k None
 
 
-    let parser (st:state) (p:final t): parser =
-      let b = B.init () in
-      p b st
-        (fun r st -> Final (st, r, b.lookahead))
+    let token
+          (f:state -> token -> ('a*state, error) result)
+          (k:'a option -> parser)
+          (b:B.t): parser =
+      More (B.state b,
+            fun s0 t ->
+            match f s0 t with
+            | Ok (a, s1) ->
+               B.consume t s1 b;
+               k (Some a)
+            | Error e ->
+               B.reject t e b;
+               k None)
 
-    let get (_:B.t) (st:state) (k: state K.t): parser =
-      k (Ok st) st
+    let map (f:'a -> 'b) (p:'a t) (k:'b option -> parser) (b:B.t): parser =
+      p (fun o ->
+          match o with
+          | None -> k None
+          | Some a -> k (Some (f a)))
+        b
 
-    let put (st:state) (_:B.t) (_:state) (k:unit K.t): parser =
-      k (Ok ()) st
+    let apply_lookahead (b:B.t) (p:parser): parser =
+      let p = ref p in
+      while needs_more !p && B.has_lookahead b do
+        let t, n_la = B.pop_one_lookahead b in
+        p := put_token !p t;
+        assert (has_ended !p || B.n_lookaheads b < n_la);
+      done;
+      !p
 
-    let update (f:state->state) (_:B.t) (st:state) (k:unit K.t): parser =
-      k (Ok ()) (f st)
 
-    let succeed: 'a -> 'a t = make
-
-    let fail (e:error) (b:B.t) (st:state) (k:'a K.t): parser =
-      assert (B.no_lookahead b);
-      k (Error e) st
-
-    let consumer (p:'a t) (b:B.t) (st:state) (k:'a K.t): parser =
+    let consumer (p:'a t) (k:'a option -> parser) (b:B.t): parser =
       let c0 = B.reset_consumed b in
-      p b st
-        (fun r st ->
-          let c1 = b.consumed in
-          B.set_consumed c0 b;
-          (match r with
-           | Ok _ ->
-              assert c1
-           | _ ->
-              ());
-          k r st)
+      p (fun o ->
+          let c1 = B.has_consumed b in
+          assert (o = None || c1);
+          B.set_consumed (c0 || c1) b;
+          k o)
+        b
 
-    let expect
-          (f:state->token->'a res * state) (b:B.t) (st:state) (k:'a K.t)
-        : parser =
-      assert (B.no_lookahead b);
-      More( st,
-            (fun st t ->
-              let r,st = f st t in
-              match r with
-              | Ok a ->
-                 B.consume t b;
-                 k (Ok a) st
-              | Error e ->
-                 B.reject t b;
-                 k (Error e) st) )
+    let (>>=) (p:'a t) (f:'a -> 'b t) (k:'b option -> parser) (b:B.t): parser =
+      p (fun o ->  (* continuation function for p *)
+          match o with
+          | Some a ->  (* p might have left over some lookahead *)
+             apply_lookahead b (f a k b)
+          | None ->
+             k None)
+        b
 
-    let catch (p:'a t) (f:error -> 'a t) (b:B.t) (st:state) (k:'a K.t): parser =
-      assert (B.no_lookahead b);
+    let (<|>) (p:'a t) (q:'a t) (k:'a option -> parser) (b:B.t): parser =
       let c0 = B.reset_consumed b in
-      p b st
-        (fun r st ->
-          let c1 = b.consumed in
-          B.set_consumed c0 b;
-          match r with
-          | Error e when not c1 ->
-             M.apply_lookahead b (f e) st k
+      p (fun o ->
+          let c1 = B.has_consumed b in
+          B.set_consumed (c0 || c1) b;
+          match o with
+          | None when not c1 -> (* p did not consume tokens *)
+             apply_lookahead b (q k b)
           | _ ->
-             k r st)
+             (* p either succeeded or failed and consumed tokens *)
+             k o)
+        b
 
-    let backtrackable (p:'a t) (b:B.t) (st0:state) (k:'a K.t): parser =
-      assert (B.no_lookahead b);
-      B.start_backtrack b;
-      p b st0
-        (fun r st1 ->
-          match r with
-          | Ok _ ->
-             B.end_backtrack_success b;
-             k r st1
-          | Error _ ->
-             B.end_backtrack_fail b;
-             k r st0)
+    let (<?>) (p:'a t) (es:error list) (k:'a option -> parser) (b:B.t): parser =
+      let e0 = B.reset_errors b in
+      p (fun o ->
+          (match o with
+           | None -> B.set_errors es b
+           | _ ->    ());
+          B.update_errors e0 b;
+          k o)
+        b
 
-    let commit (a:'a) (b:B.t) (st:state) (k:'a K.t): parser =
+    let backtrackable (p:'a t) (k:'a option -> parser) (b:B.t): parser =
+      let back = B.start_backtrack b in
+      p (fun o ->
+          (match o with
+           | Some _ -> B.end_backtrack_success back b
+           | None ->   B.end_backtrack_fail    back b);
+          k o)
+        b
+
+    let commit (a:'a) (k:'a option -> parser) (b:B.t): parser =
       B.commit b;
-      succeed a b st k
-  end (* Basic *)
+      k (Some a)
+  end (* Make *)

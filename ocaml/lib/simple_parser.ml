@@ -30,50 +30,7 @@ end =
 
 
 
-module Simple_parser (F:ANY):
-sig
-  type final = F.t
-  type token = char option
-  type error = string list
-  type parser
-  type 'a res = ('a,error) result
-
-  include Monad.MONAD
-
-  val succeed: 'a -> 'a t
-  val fail: error -> 'a t
-  val consumer: 'a t -> 'a t
-  val (>>-): 'a t -> ('a -> 'b t) -> 'b t
-  val backtrackable: 'a t -> 'a t
-  val commit: 'a -> 'a t
-  val (>>|): 'a t -> (error -> 'a t) -> 'a t
-  val expect: (char -> 'a res) -> string -> 'a t
-
-  val expect_end: final -> final t
-  val char: char -> unit t
-  val one_of_chars: string -> unit t
-  val space: unit t
-  val string: string -> unit t
-  val letter: char t
-  val optional: 'a t -> 'a option t
-  val one_or_more: 'a t -> 'a list t
-  val zero_or_more: 'a t -> 'a list t
-  val skip_one_or_more: 'a t -> int t
-  val skip_zero_or_more: 'a t -> int t
-  val zero_or_more_separated: 'a t -> _ t -> 'a list t
-  val one_or_more_separated: 'a t -> _ t -> 'a list t
-  val one_of: 'a t list -> 'a t
-  val (<|>): 'a t -> 'a t -> 'a t
-
-  val run: final t -> string -> parser
-
-  val needs_more: parser -> bool
-  val has_ended:  parser -> bool
-  val result: parser -> final res
-  val line:   parser -> int
-  val column: parser -> int
-  val lookahead: parser -> token list
-end =
+module Simple_parser (F:ANY) =
   struct
     module Token =
       struct
@@ -82,10 +39,10 @@ end =
 
     module Error =
       struct
-        type t = string list
+        type t = string
       end
 
-    module P = Basic_parser.Basic (Token) (Position) (Error) (F)
+    module P = Basic_parser.Make (Token) (Position) (Error) (F)
     include  P
 
     module C = Combinators (P)
@@ -93,46 +50,45 @@ end =
 
     let position =
       state
-    let expect_base =
-      expect
+
     let line (p:parser): int =
       Position.line (position p)
+
     let column (p:parser): int =
       Position.column (position p)
 
-    let expect (f:char -> 'a res) (e:string): 'a t =
-      expect_base
-        (fun st t ->
+    let expect (f:char -> ('a,error) result) (e:error): 'a t =
+      token
+        (fun pos t ->
           match t with
           | None ->
-             Error [e], st
+             Error e
           | Some c ->
-             let r = f c in
-             match r with
-              | Ok _ ->
-                 r, Position.next c st
-              | Error _ ->
-                 r, st)
+             match f c with
+             | Ok a ->
+                Ok (a, Position.next c pos)
+             | Error e ->
+                Error e)
 
     let expect_end (a:final): final t =
-      expect_base
-        (fun st t ->
-           match t with
-           | None ->
-              Ok a, st
-           | Some _ ->
-              Error ["end"], st)
+      token
+        (fun pos t ->
+          match t with
+          | None ->
+             Ok (a, pos)
+          | Some _ ->
+             Error "end")
 
     let char (c:char): unit t =
-      let estr () = "'" ^ String.one c ^ "'"
+      let estr = "'" ^ String.one c ^ "'"
       in
       expect
         (fun d ->
           if c = d then
             Ok ()
           else
-            Error [estr ()])
-        (estr ())
+            Error estr)
+        estr
 
     let one_of_chars (str:string): unit t =
       let errstr = "one of \"" ^ str ^ "\"" in
@@ -143,7 +99,7 @@ end =
           if idx < len then
             Ok ()
           else
-            Error [errstr])
+            Error errstr)
         errstr
 
 
@@ -166,27 +122,52 @@ end =
           if Char.is_letter c then
             Ok c
           else
-            Error ["letter"])
+            Error "letter")
         "letter"
 
-    let one_of (ps:'a t list): 'a t =
-      one_of ps List.concat
-
-    let (<|>) (p:'a t) (q:'a t): 'a t =
-      one_of [p; q]
-
     let run (p:final t) (s:string): parser =
-      let p = ref (parser Position.start p) in
+      let p = ref (make_parser Position.start p) in
       let i = ref 0
       and len = String.length s in
       while !i <> len && needs_more !p do
+        assert (needs_more !p);
         p := put_token !p (Some s.[!i]);
         i := !i + 1
       done;
       if needs_more !p then
         p := put_token !p None;
       !p
+
+    let lookahead_string (p:parser): string =
+      assert (has_ended p);
+      "["
+      ^ String.concat
+          "; "
+          (List.map
+             (fun o ->
+               match o with
+               | None ->
+                  "None"
+               | Some c ->
+                  "Some " ^ "'" ^ String.one c ^ "'")
+             (lookahead p))
+      ^
+        "]"
+
+    let result_string (p:parser) (f:final -> string): string =
+      assert (has_ended p);
+      match result p with
+      | Ok a ->
+         "Ok " ^ f a
+      | Error es ->
+         "Error ["
+         ^ String.concat "; " es
+         ^ "]"
   end
+
+
+
+
 
 
 (* ********** *)
@@ -338,7 +319,7 @@ let%test _ =
   in
   has_ended p
   && column p = 5
-  && result p = Error ["')'"]
+  && result p = Error ["'('"; "')'"]
   && lookahead p = [None]
 
 let%test _ =
@@ -484,5 +465,5 @@ let%test _ =
   let open SLP in
   let p = run sentence "hi,123" in
   has_ended p
-  && result p = Error ["letter"]
+  && result p = Error ["' '" ; "','" ; "letter"]
   && column p = 3

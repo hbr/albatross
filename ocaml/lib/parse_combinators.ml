@@ -3,29 +3,25 @@ open Common
 
 module type BASIC =
   sig
-    type token
+    type _ t
     type error
-    type 'a res = ('a,error) result
-
-    include Monad.MONAD
-
     val succeed: 'a -> 'a t
-    val fail: error -> 'a t
+    val fail:    error -> 'a t
     val consumer: 'a t -> 'a t
+    val map:     ('a -> 'b) -> 'a t -> 'b t
+    val (>>=):   'a t -> ('a -> 'b t) -> 'b t
+    val (<|>):   'a t -> 'a t -> 'a t
     val backtrackable: 'a t -> 'a t
     val commit: 'a -> 'a t
-    val catch: 'a t -> (error -> 'a t) -> 'a t
   end
-
 
 
 module type COMBINATORS =
   functor (P:BASIC) ->
   sig
     val (>>-): 'a P.t -> ('a -> 'b P.t) -> 'b P.t
-    val (>>|): 'a P.t -> (P.error -> 'a P.t) -> 'a P.t
     val optional: 'a P.t -> 'a option P.t
-    val one_of: 'a P.t list -> (P.error list -> P.error) -> 'a P.t
+    val one_of: 'a P.t list  -> 'a P.t
     val zero_or_more: 'a P.t -> 'a list P.t
     val one_or_more:  'a P.t -> 'a list P.t
     val skip_zero_or_more: 'a P.t -> int P.t
@@ -45,30 +41,26 @@ module Combinators: COMBINATORS =
     let (>>-) (p:'a P.t) (f:'a -> 'b P.t): 'b P.t =
       P.(backtrackable (p >>= commit >>= f))
 
-    let (>>|) = P.catch
-
     let optional (p:'a P.t): 'a option P.t =
       let open P in
-      (map (fun a -> Some a) p) >>| fun _ -> succeed None
+      (map (fun a -> Some a) p)
+      <|> succeed None
 
-    let one_of (l:'a P.t list) (f:P.error list -> P.error): 'a P.t =
+    let rec one_of (l:'a P.t list): 'a P.t =
       let open P in
-      let rec one_of l le =
-        match l with
-        | [] ->
-           assert false (* Illegal call *)
-        | [p] ->
-           p >>| fun e -> fail (List.rev (e::le) |> f)
-        | p :: ps ->
-           p >>| fun e -> one_of ps (e::le)
-      in
-      one_of l []
+      match l with
+      | [] ->
+         assert false (* Illegal call *)
+      | [p] ->
+         p
+      | p :: ps ->
+         p <|> one_of ps
 
     let zero_or_more (p:'a P.t): 'a list P.t =
       let open P in
       let rec many l =
         (p >>= fun a -> many (a::l))
-        >>| (fun _ -> succeed (List.rev l))
+        <|> succeed @@ List.rev @@ l
       in
       many []
 
@@ -81,7 +73,7 @@ module Combinators: COMBINATORS =
       let open P in
       let rec many i =
         (consumer p >>= fun _ -> many (i+1))
-        >>| fun _ -> succeed (i)
+        <|> succeed i
       in
       many 0
 
@@ -100,7 +92,8 @@ module Combinators: COMBINATORS =
     let zero_or_more_separated (p:'a P.t) (sep: _ P.t): 'a list P.t =
       let open P in
       one_or_more_separated p sep
-      >>| fun _ -> succeed []
+      <|> succeed []
+
 
     let (|=) (pf:('a->'b) P.t) (p:'a P.t): 'b P.t =
       let open P in
