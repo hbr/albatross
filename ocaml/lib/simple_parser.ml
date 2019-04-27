@@ -133,6 +133,15 @@ module Simple_parser (F:ANY) =
             Error "letter")
         "letter"
 
+    let digit: char t =
+      expect
+        (fun c ->
+          if Char.is_digit c then
+            Ok c
+          else
+            Error "digit")
+        "letter"
+
     let run (p:final t) (s:string): parser =
       let p = ref (make_parser Position.start p) in
       let i = ref 0
@@ -566,3 +575,26 @@ let%test _ =
   && result p = Error ["word"]
   && column p = 3
   && lookahead p = [Some '1']
+
+
+
+
+
+(* Parser Pipelines *)
+let%test _ =
+  let module SP = Simple_parser (String) in
+  let open SP in
+  let p =
+    run
+      (succeed (fun c1 c2 c3 -> String.one c1 ^ String.one c2 ^ String.one c3)
+       |= letter
+       |. letter
+       |= digit
+       |= letter
+       |. digit)
+      "ab1d0"
+  in
+  has_ended p
+  && result p = Ok "a1d"
+  && column p = 5
+  && lookahead p = []

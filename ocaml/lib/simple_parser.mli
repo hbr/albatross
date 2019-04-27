@@ -25,6 +25,7 @@ sig
   val one_of_chars: string -> unit t
   val string: string -> unit t
   val letter: char t
+  val digit:  char t
   val optional: 'a t -> 'a option t
   val one_or_more: 'a t -> 'a list t
   val zero_or_more: 'a t -> 'a list t
