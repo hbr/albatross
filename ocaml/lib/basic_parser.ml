@@ -7,7 +7,6 @@ sig
   type state = S.t
   type token = T.t
   type error = E.t
-  type lookahead_length = int
   type consumed = bool
   type saved_errors
   type back
@@ -15,13 +14,12 @@ sig
 
   val has_lookahead: t -> bool
   val has_consumed: t -> bool
-  val n_lookaheads: t -> int
   val state:        t -> state
   val lookahead:    t -> token list
   val errors:       t -> error list
 
   val init: state -> t
-  val pop_one_lookahead: t -> token * lookahead_length
+  val pop_one_lookahead: t -> token
 
   val add_error: error -> t -> unit
 
@@ -46,7 +44,6 @@ end =
     type consumed = bool
     type is_buffering = bool
     type consumption_length = int
-    type lookahead_length = int
 
     type commit = Not | Committing | Committed
     type back = state * consumed * consumption_length
@@ -60,14 +57,12 @@ end =
               mutable consumption:   token list;
               mutable lookahead:     token list;
               mutable n_consumption: consumption_length;
-              mutable n_la:          lookahead_length;
               mutable errors:        error list;
               mutable isbuf:         is_buffering;
               mutable isbuf_prev:    is_buffering;
               mutable commit:        commit}
 
-    let has_lookahead(b:t): bool = b.n_la > 0
-    let n_lookaheads (b:t): int  = b.n_la
+    let has_lookahead(b:t): bool = b.lookahead <> []
     let lookahead    (b:t): token list = b.lookahead
     let errors       (b:t): error list = List.rev b.errors
     let has_consumed (b:t): bool = b.consumed
@@ -76,18 +71,16 @@ end =
     let init (s:state): t =
       {state = s;
        consumed = false; consumption = []; n_consumption = 0;
-       lookahead = []; n_la = 0;
+       lookahead = [];
        errors = [];
        isbuf = false; isbuf_prev = false; commit = Not}
 
-    let pop_one_lookahead (b:t): token * lookahead_length =
+    let pop_one_lookahead (b:t): token =
       match b.lookahead with
       | [] -> assert false (* Illegal call *)
       | t :: rest ->
-         let n_la = b.n_la in
-         b.n_la <- b.n_la - 1;
          b.lookahead <- rest;
-         t, n_la
+         t
 
     let add_error (e:error) (b:t): unit =
       b.errors <- e :: b.errors
@@ -116,8 +109,7 @@ end =
 
     let reject (t:token) (e:error) (b:t): unit =
       b.errors <- e :: b.errors;
-      b.lookahead <- t :: b.lookahead;
-      b.n_la <- b.n_la + 1
+      b.lookahead <- t :: b.lookahead
 
     let reset_consumed (b:t): bool =
       let c = b.consumed in
@@ -158,8 +150,7 @@ end =
            b.consumption   <- rest;
            b.n_consumption <- b.n_consumption - 1;
            if la then
-             (b.lookahead <- t :: b.lookahead;
-              b.n_la <- b.n_la + 1)
+             b.lookahead <- t :: b.lookahead
       done
 
     let start_backtrack (b:t): back =
@@ -292,13 +283,11 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
         b
 
     let apply_lookahead (b:B.t) (p:parser): parser =
-      let p = ref p in
-      while needs_more !p && B.has_lookahead b do
-        let t, n_la = B.pop_one_lookahead b in
-        p := put_token !p t;
-        assert (has_ended !p || B.n_lookaheads b < n_la);
-      done;
-      !p
+      if B.has_lookahead b && needs_more p  then
+        let t = B.pop_one_lookahead b in
+        put_token p t
+      else
+        p
 
 
     let consumer (p:'a t) (k:'a option -> parser) (b:B.t): parser =
