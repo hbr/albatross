@@ -30,7 +30,7 @@ end =
 
 
 
-module Simple_parser (F:ANY) =
+module Make (F:ANY) =
   struct
     module Token =
       struct
@@ -192,9 +192,9 @@ module Simple_parser (F:ANY) =
 (* ********** *)
 
 
-module CP = Simple_parser (Char)
-module UP = Simple_parser (Unit)
-module IP = Simple_parser (Int)
+module CP = Make (Char)
+module UP = Make (Unit)
+module IP = Make (Int)
 
 
 
@@ -488,7 +488,7 @@ module String_list =
     type t = string list
   end
 
-module SLP = Simple_parser (String_list)
+module SLP = Make (String_list)
 
 let word: string SLP.t =
   let open SLP in
@@ -582,7 +582,7 @@ let%test _ =
 
 (* Parser Pipelines *)
 let%test _ =
-  let module SP = Simple_parser (String) in
+  let module SP = Make (String) in
   let open SP in
   let p =
     run

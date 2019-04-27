@@ -1,7 +1,7 @@
 open Common_module_types
 
 
-module Simple_parser (F:ANY):
+module Make (F:ANY):
 sig
   type final = F.t
   type token = char option
