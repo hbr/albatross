@@ -36,6 +36,8 @@ sig
   val one_of: 'a t list -> 'a t
   val (<|>): 'a t -> 'a t -> 'a t
   val (<?>): 'a t -> string -> 'a t
+  val (|=): ('a -> 'b) t -> 'a t -> 'b t
+  val (|.): 'a t -> _ t -> 'a t
 
   val run: final t -> string -> parser
 
