@@ -1,7 +1,9 @@
 (library
   (libraries unix)
   (inline_tests)
+  (modules_without_implementation lib)
   (preprocess (pps ppx_inline_test))
+  (public_name fmlib)
   (name lib))
 
 (env (dev
