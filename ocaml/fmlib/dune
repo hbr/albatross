@@ -1,10 +1,10 @@
 (library
   (libraries unix)
   (inline_tests)
-  (modules_without_implementation lib)
+  (modules_without_implementation fmlib)
   (preprocess (pps ppx_inline_test))
   (public_name fmlib)
-  (name lib))
+  (name fmlib))
 
 (env (dev
    (flags (:standard -warn-error -A))))

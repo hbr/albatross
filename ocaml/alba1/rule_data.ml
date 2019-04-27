@@ -4,7 +4,7 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Lib
+open Fmlib
 open Term
 open Signature
 open Container

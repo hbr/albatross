@@ -1,4 +1,4 @@
-open Lib
+open Fmlib
 
 module Alba2 = Alba2_generic.Make (Ocaml_io.IO)
 

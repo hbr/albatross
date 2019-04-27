@@ -1,4 +1,4 @@
-open Lib
+open Fmlib
 
 module Make (IO:Io.S):
 sig

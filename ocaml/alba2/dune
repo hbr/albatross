@@ -1,5 +1,5 @@
 (executable
-  (libraries lib unix)
+  (libraries fmlib unix)
   (name alba2))
 
  (env (dev
