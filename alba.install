@@ -32,15 +32,6 @@ lib: [
      "library/alba.base/.alba/function.ali.json"
          {"alba.base/.alba/function.ali.json"}
 
-     "library/alba.base/list.ali"
-         {"alba.base/list.ali"}
-     "library/alba.base/list.al"
-         {"alba.base/list.al"}
-     "library/alba.base/.alba/list.al.json"
-         {"alba.base/.alba/list.al.json"}
-     "library/alba.base/.alba/list.ali.json"
-         {"alba.base/.alba/list.ali.json"}
-
      "library/alba.base/natural.ali"
          {"alba.base/natural.ali"}
      "library/alba.base/natural.al"
@@ -49,6 +40,15 @@ lib: [
          {"alba.base/.alba/natural.al.json"}
      "library/alba.base/.alba/natural.ali.json"
          {"alba.base/.alba/natural.ali.json"}
+
+     "library/alba.base/list.ali"
+         {"alba.base/list.ali"}
+     "library/alba.base/list.al"
+         {"alba.base/list.al"}
+     "library/alba.base/.alba/list.al.json"
+         {"alba.base/.alba/list.al.json"}
+     "library/alba.base/.alba/list.ali.json"
+         {"alba.base/.alba/list.ali.json"}
 
      "library/alba.base/relation.ali"
          {"alba.base/relation.ali"}
@@ -68,14 +68,32 @@ lib: [
      "library/alba.base/.alba/endorelation.ali.json"
          {"alba.base/.alba/endorelation.ali.json"}
 
-     "library/alba.base/predicate_order.ali"
-         {"alba.base/predicate_order.ali"}
-     "library/alba.base/predicate_order.al"
-         {"alba.base/predicate_order.al"}
-     "library/alba.base/.alba/predicate_order.al.json"
-         {"alba.base/.alba/predicate_order.al.json"}
-     "library/alba.base/.alba/predicate_order.ali.json"
-         {"alba.base/.alba/predicate_order.ali.json"}
+     "library/alba.base/order_relation.ali"
+         {"alba.base/order_relation.ali"}
+     "library/alba.base/order_relation.al"
+         {"alba.base/order_relation.al"}
+     "library/alba.base/.alba/order_relation.al.json"
+         {"alba.base/.alba/order_relation.al.json"}
+     "library/alba.base/.alba/order_relation.ali.json"
+         {"alba.base/.alba/order_relation.ali.json"}
+
+     "library/alba.base/partial_order.ali"
+         {"alba.base/partial_order.ali"}
+     "library/alba.base/partial_order.al"
+         {"alba.base/partial_order.al"}
+     "library/alba.base/.alba/partial_order.al.json"
+         {"alba.base/.alba/partial_order.al.json"}
+     "library/alba.base/.alba/partial_order.ali.json"
+         {"alba.base/.alba/partial_order.ali.json"}
+
+     "library/alba.base/linear_order.ali"
+         {"alba.base/linear_order.ali"}
+     "library/alba.base/linear_order.al"
+         {"alba.base/linear_order.al"}
+     "library/alba.base/.alba/linear_order.al.json"
+         {"alba.base/.alba/linear_order.al.json"}
+     "library/alba.base/.alba/linear_order.ali.json"
+         {"alba.base/.alba/linear_order.ali.json"}
 
      "library/alba.base/predicate_order.ali"
          {"alba.base/predicate_order.ali"}
