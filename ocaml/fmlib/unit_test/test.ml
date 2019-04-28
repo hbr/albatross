@@ -1,4 +1,4 @@
-open Lib
+open Fmlib
 
 let _ =
   Document.test ();

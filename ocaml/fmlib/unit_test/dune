@@ -1,3 +1,3 @@
 (test
-  (libraries lib)
+  (libraries fmlib)
   (name test))
