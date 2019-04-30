@@ -28,7 +28,7 @@ installed.
 In order to work with the Albatross compiler you have to install and compile
 the basic library.
 
-- `mkdir <alba-libs>`
+- `mkdir <alba-libs>`         # directory where you want to store libraries><
 - `cd <alba-libs>`
 - `wget https://github.com/hbr/alba.base/archive/x.y.z.tar.gz` where `x.y.z`
   is the version of the library you want to install.
@@ -46,8 +46,8 @@ sources and issue
 
 
 Instead of using the `-I` option explicitly to indicate the location of the
-libraries you can also set the environment variable `ALBA_LIBRARY_PATH` to
-<alba-libs> and then ommit the `-I <alba-libs>`.
+libraries you can also set the environment variable `ALBA_LIBRARY_PATH`
+to <alba-libs> and then ommit the `-I <alba-libs>`.
 
 
 
