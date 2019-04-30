@@ -7,3 +7,12 @@ env:
   - OCAML_VERSION=4.07
 os:
   - linux
+
+deploy:
+  provider: pages
+  skip_cleanup: true
+  github_token: $GITHUB_TOKEN
+  keep_history: false
+  on:
+    branch: master
+  local_dir: /tmp/_build/default/_doc/_html/

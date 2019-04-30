@@ -12,6 +12,7 @@ build: [
   ["dune" "build" "@install" "-p" name "-j" jobs]
   ["dune" "build" "@runtest" ]
   ["dune" "build" "@doc" "-p" name]
+  ["sh" "./.copy_docu.sh"]
 ]
 depends: [
   "ocaml" {>= "4.05.0"}
