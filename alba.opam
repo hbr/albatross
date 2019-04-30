@@ -8,12 +8,16 @@ license: "GPLv2"
 dev-repo: "git+https://github.com/hbr/albatross.git"
 bug-reports: "http://github.com/hbr/albatross"
 build: [
-  [make "build_dune"]
+  [make "test_alba"]
+  ["dune" "build" "@install" "-p" name "-j" jobs]
+  ["dune" "build" "@runtest" ]
+  ["dune" "build" "@doc" "-p" name]
 ]
 depends: [
   "ocaml" {>= "4.05.0"}
   "ocamlfind" {build}
   "menhir" {build}
   "dune" {build}
+  "odoc" {build}
   "ppx_inline_test" {build}
 ]

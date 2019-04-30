@@ -20,53 +20,34 @@ language.
 
 Prerequisites:
 
-- ocaml: In order to compile the Albatross compiler you need the `OCaml`
-  compiler. The OCaml compiler is available at no cost through
-  [caml.inria.fr](http://caml.inria.fr) and installs easily on a variety of
-  platforms. For the other needed packages it is best to have the ocaml
-  package manager `opam` installed.
+You need to have the Ocaml compile and the Ocaml package manager `opam`
+installed.
 
-- ocamlbuild: Beside the ocaml compiler the program `ocamlbuild` is
-  needed. The ocaml compiler versions below 4.03 already contain the program
-  `ocamlbuild`. From version 4.03 on `ocamlbuild` is no longer part of the
-  compiler suite and has to be installed separately. If you have opam just
-  type `opam install ocamlbuild`.
+- `opam install alba`
 
-- menhir: The parser generator `menhir` is needed. It can be installed by
-  `opam install menhir`.
+In order to work with the Albatross compiler you have to install and compile
+the basic library.
 
-
-Compile the Albatross compiler with the commands:
-
-    cd path/to/albatross/ocaml
-
-    ocamlbuild -use-ocamlfind -lib unix alba.native
+- `mkdir <alba-libs>`
+- `cd <alba-libs>`
+- `wget https://github.com/hbr/alba.base/archive/x.y.z.tar.gz` where `x.y.z`
+  is the version of the library you want to install.
+- `tar xzf x.y.z.tar.gz`
+- `mv alba.base-x.y.z alba.base`
+- `alba init -work-dir alba.base`
+- `alba compile -work-dir alba.base`
 
 
-After these commands you have the file `alba.native` in the directory
-`albatross/ocaml/_build` which is the executable albatross compiler. Copy (or
-link) it under the name `alba` to any location which is in the search path for
-programs.
+After the installation you can go the source directory of your Albatross
+sources and issue
 
-The basic libary is in `path/to/albatross/library/alba.base`. In order to use
-it you have to compile it.
-
-    cd path/to/albatross/library/alba.base
-
-    alba init
-
-    alba compile
-
-Set the environment variable `ALBA_LIBRARY_PATH` to `path/to/albatross/library`
-(e.g. in the bash shell `export ALBA_LIBRARY_PATH=/path/to/albatross/library`)
-and the compiler will find the libraries automatically.
-
-For the emacs editor there is an albatross mode which does syntax
-highlighting. The file `albatross-mode.el` can be found in the directory
-`path/to/albatross/misc`. The file contains instructions to activate the mode
-in emacs.
+    alba init                    -- to initialize the directory
+    alba compile -I <alba-libs>  -- to compile your sources
 
 
+Instead of using the `-I` option explicitly to indicate the location of the
+libraries you can also set the environment variable `ALBA_LIBRARY_PATH` to
+<alba-libs> and then ommit the `-I <alba-libs>`.
 
 
 

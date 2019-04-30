@@ -1,7 +1,7 @@
 gmon.out
 gmon.txt
 *.log
-
+gh-pages/
 _build
 _draft
 draft
@@ -13,6 +13,8 @@ draft
 *_draft.ali
 doc
 .alba
+*.al.json
+*.ali.json
 *.native
 *.byte
 *.d.native

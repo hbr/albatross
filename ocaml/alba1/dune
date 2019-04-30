@@ -1,5 +1,6 @@
 (executable
   (libraries fmlib unix)
+  (public_name alba)
   (name alba))
 
 (ocamllex lexer)

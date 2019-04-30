@@ -1,4 +1,4 @@
-.PHONY: build
+.PHONY: build build_dune test_alba
 
 build:
 	cd ocaml;          \
@@ -12,5 +12,10 @@ build_dune:
 	dune build ocaml/alba1/alba.bc;   \
 	dune runtest;                     \
 	dune exec -- ocaml/alba1/alba.exe init    -work-dir library/alba.base; \
-	dune exec -- ocaml/alba1/alba.exe compile -work-dir library/alba.base
+	dune exec -- ocaml/alba1/alba.exe compile -work-dir library/alba.base; \
+	mv library/alba.base/.alba/*.json library/alba.base/alba-dir
 
+test_alba:
+	dune build ocaml/alba1/alba.exe;  \
+	dune exec -- ocaml/alba1/alba.exe init    -work-dir library/alba.base; \
+	dune exec -- ocaml/alba1/alba.exe compile -work-dir library/alba.base
