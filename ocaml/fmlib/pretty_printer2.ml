@@ -52,9 +52,6 @@ module Document =
     let bracket (ind:indent) (l:string) (d:t) (r:string): t =
         group (text l ^ (nest ind (cut ^ d)) ^ cut ^ text r)
 
-    let group_nested (ind:indent) (d:t): t =
-      group (nest ind d)
-
     let group_nested_space (ind:indent) (d:t): t =
       group (nest ind (space ^ d))
             (*nest ind (space ^ group d)*)
@@ -102,7 +99,7 @@ module Line =
 
 
 
-type chunk = {clen: length;
+type chunk = {clen: length; (* Really needed ?*)
               line: Line.t;
               texts:  Text.t list;
               cgroups: group list}
@@ -113,8 +110,7 @@ and group = {len:length;
 
 module Chunk =
   struct
-    let length (c:chunk): length = c.clen
-    let alternative_text (c:chunk): alternative_text = Line.text c.line
+    let line (c:chunk): Line.t = c.line
     let groups (c:chunk): group list = c.cgroups
     let texts (c:chunk): Text.t list = c.texts
     let make (line:Line.t): chunk =
@@ -136,9 +132,9 @@ module Group =
     let empty = {len = 0; groups = []; chunks = []}
     let groups (g:group): group list = g.groups
     let chunks (g:group): chunk list = g.chunks
-    let of_line (l:Line.t): group =
+    (*let of_line (l:Line.t): group =
       let c = Chunk.make l in
-      {len = Chunk.length c; groups = []; chunks = [c]}
+      {len = Chunk.length c; groups = []; chunks = [c]}*)
     let add_text (t:Text.t) (g:group): group =
       match g.chunks with
       | [] ->
@@ -147,7 +143,7 @@ module Group =
          {g with len = g.len + t.Text.l; chunks = Chunk.add_text t c :: tl}
     let add_line (l:Line.t) (g:group): group =
       {g with
-        len = g.len + String.length l.Line.s;
+        len = g.len + Line.length l;
         chunks = Chunk.make l :: g.chunks}
     let add_group (gi:group) (go:group): group =
       let len = go.len + gi.len
@@ -176,8 +172,6 @@ module Buffer =
       {gs = []; l = 0; o = 0;}
     let push (g:group) (b:t): t =
       {gs = g :: b.gs; l = Group.length g + b.l; o = b.o + 1}
-    let one (g:group): t =
-      push g empty
     let add_text (t:Text.t) (b:t): t =
       let open Text in
       match b.gs with
@@ -186,7 +180,7 @@ module Buffer =
       | g :: tl ->
          {b with
            gs = Group.add_text t g :: tl;
-           l  = b.l + t.Text.l}
+           l  = b.l + length t}
     let add_line (l:Line.t) (b:t): t =
       match b.gs with
       | [] ->
@@ -306,8 +300,8 @@ module Make:
       Monad.Make(
           struct
             type 'a t = state -> 'a P.t
-            let make (a:'a): 'a t =
-              fun st -> P.make a
+            let make (a:'a) (_:state): 'a P.t =
+              P.make a
             let bind (m:'a t) (f:'a -> 'b t) (st:state): 'b P.t =
               P.(m st >>= fun a -> f a st)
           end
@@ -333,7 +327,7 @@ module Make:
         l
         (fun t ->
           let open Text in
-          out_text t.s t.i0 t.l)
+          out_text (string t) (start t) (length t))
 
     let out_alternative_text (l:Line.t): unit t =
       let s = Line.text l in
@@ -361,8 +355,9 @@ module Make:
 
 
     let rec flush_flatten_group (g:group): unit t =
-      flush_flatten_groups g.groups >>= fun _ ->
-      flush_flatten_chunks g.chunks
+      let open Group in
+      flush_flatten_groups (groups g) >>= fun _ ->
+      flush_flatten_chunks (chunks g)
 
     and flush_flatten_groups (gs:group list): unit t =
       List.fold_right
@@ -374,9 +369,9 @@ module Make:
       print_list cs flush_flatten_chunk
 
     and flush_flatten_chunk (c:chunk): unit t =
-      out_alternative_text c.line >>= fun _ ->
-      out_texts c.texts >>= fun _ ->
-      flush_flatten_groups c.cgroups
+      out_alternative_text (Chunk.line c) >>= fun _ ->
+      out_texts (Chunk.texts c) >>= fun _ ->
+      flush_flatten_groups (Chunk.groups c)
 
     let flush_flatten: unit t =
       state >>= fun st ->
@@ -394,7 +389,7 @@ module Make:
         |> (flush_groups g.groups >>= fun _ ->
             flush_chunks g.chunks)
     and flush_chunk (c:chunk): unit t =
-      out_line (Line.indent c.line) >>= fun _ ->
+      out_line (Line.indent (Chunk.line c)) >>= fun _ ->
       out_texts c.texts >>= fun _ ->
       flush_groups c.cgroups
     and flush_groups (gs:group list): unit t =
@@ -601,38 +596,6 @@ module Make:
          else
            print_nothing)
   end (* Make *)
-
-
-module Printer:
-sig
-  include PRINTER
-  val run: out_channel -> 'a t -> 'a
-end =
-  struct
-    include
-      Monad.Make (
-          struct
-            type 'a t = out_channel -> 'a
-            let make (a:'a) (oc:out_channel): 'a = a
-            let bind (m:'a t) (f:'a -> 'b t) (oc:out_channel): 'b =
-              f (m oc) oc
-          end
-        )
-    let putc (c:char) (oc:out_channel): unit =
-      output_char oc c
-    let fill (c:char) (n:int) (oc:out_channel): unit =
-      for _ = 0 to n - 1 do
-        output_char oc c
-      done
-    let put_substring (s:string) (i0:start) (l:length) (oc:out_channel): unit =
-      for i = i0 to i0 + l - 1 do
-        output_char oc s.[i]
-      done
-    let put_string (s:string) (oc:out_channel): unit =
-      put_substring s 0 (String.length s) oc
-    let run (oc:out_channel) (m:'a t): 'a =
-      m oc
-  end
 
 
 
