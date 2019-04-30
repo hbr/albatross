@@ -4,6 +4,7 @@ module Common_module_types  = Common_module_types
 module Common = Common
 
 module Option = Option
+module Continuation = Continuation
 module Monad  = Monad
 
 module Io = Io
