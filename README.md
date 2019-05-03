@@ -50,7 +50,9 @@ libraries you can also set the environment variable `ALBA_LIBRARY_PATH`
 to <alba-libs> and then ommit the `-I <alba-libs>`.
 
 
+# Ignore (just for test)
 
+A reference to [doc_test](docs/doc_test.md)
 
 <!---
 Local Variables:
