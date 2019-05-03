@@ -8,6 +8,11 @@ env:
 os:
   - linux
 
+# safelist
+branches:
+  exept:
+  - /^fb_*$/
+
 deploy:
   provider: pages
   skip_cleanup: true
