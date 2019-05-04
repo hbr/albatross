@@ -10,8 +10,10 @@ os:
 
 # safelist
 branches:
-  exept:
-  - /^fb_*$/
+  only:
+  - master
+  - develop
+  - travis_test
 
 deploy:
   provider: pages
