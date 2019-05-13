@@ -1,6 +1,7 @@
-open Fmlib
 open Term
 open Container
+
+module Option = Fmlib.Option
 
 module Spec = struct
   type t = {nms:   int array;

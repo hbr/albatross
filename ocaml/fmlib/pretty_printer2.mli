@@ -1,6 +1,8 @@
+open Common_module_types
+
 module type PRINTER =
   sig
-    include Monad.MONAD
+    include MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
     val put_substring: string -> int -> int -> unit t
@@ -44,7 +46,7 @@ end
 
 module type PRETTY =
   sig
-    include Monad.MONAD
+    include MONAD
 
     val text_sub: string -> start -> length -> unit t
     val text: string -> unit t

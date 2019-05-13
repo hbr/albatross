@@ -1,34 +1,36 @@
+open Common_module_types
+open Common
+
 module type S =
   sig
     type answer
-    include Monad.MONAD
-    val answer: answer t -> answer
-    val run: 'a t -> ('a -> answer) -> answer
+    include MONAD
+    val run: answer t  -> answer
     val callcc: (('a -> 'b t) -> 'a t) -> 'a t
   end
 
 
-module Make (A: sig type t end) =
+module Make (A: ANY) =
   struct
     type answer = A.t (* The final answer *)
     include
-      Monad.Make(
+      Monad.Of_sig_min(
           struct
             type 'a t = ('a -> answer) -> answer
             (* The continuation monad of type 'a contains a function which
                maps a function of type 'a->answer to the answer. The function
                contained in the monad is a closure which has access to the
                intermediate value of type 'a. *)
-            let make (a: 'a): 'a t =
-              fun (k:'a->answer) -> k a
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
-              fun (k:'b->answer) -> m (fun a -> f a k)
+            let return (a: 'a) (k:'a -> answer): answer =
+              k a
+            let (>>=) (m:'a t) (f:'a -> 'b t) (k:'b->answer): answer =
+              m (fun a -> f a k)
           end
         )
-    let run (m:'a t) (f:'a->answer): answer =
-      m f
-    let answer (m: answer t): answer =
-      m (fun x -> x)
+
+    let run (m:answer t): answer =
+      m identity
+
     let callcc (f:('a->'b t)->'a t): 'a t =
       fun k -> f (fun x -> fun _ -> k x) k
     (*let callcc (f: ('a->'b t)->'a t): 'a t = (* signature from Haskell *)

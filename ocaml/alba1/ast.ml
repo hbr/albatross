@@ -4,7 +4,6 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Term
 open Proof
 open Signature
@@ -12,6 +11,7 @@ open Support
 open Container
 open Printf
 
+module Option = Fmlib.Option
 module PC = Proof_context
 
 type kind =

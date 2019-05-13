@@ -1,29 +1,31 @@
-module Ocaml_char = Char
-module Ocaml_string = String
-module Ocaml_list = List
-
-
+(** Module to represent types which cannot be inhabited. *)
 module Void:
 sig
   type t
 end
 
 
+(** Module to represent the [unit] type. *)
 module Unit:
 sig
   type t = unit
 end
 
 
+(** Module to represent the [int] type. *)
 module Int:
 sig
   type t = int
+  val compare: t -> t -> int
 end
 
 
+
+(** Module to represent the [float] type. *)
 module Float:
 sig
   type t = float
+  val compare: t -> t -> int
 end
 
 
@@ -37,11 +39,6 @@ sig
 end
 
 
-module type FUNCTOR =
-  sig
-    type _ t
-    val map: ('a -> 'b) -> 'a t -> 'b t
-  end
 
 
 module Char:
@@ -77,32 +74,6 @@ end
 
 
 
-module List:
-sig
-  type 'a t = 'a list
-  val find: ('a -> bool) ->'a t -> 'a option
-  val append: 'a list -> 'a list -> 'a list
-  val rev_append: 'a list -> 'a list -> 'a list
-  val rev: 'a t -> 'a t
-  val length: 'a t -> int
-  val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
-  val fold_right: ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b
-  val concat: 'a list list -> 'a list
-  val map : ('a -> 'b) -> 'a list -> 'b list
-  val mapi : (int -> 'a -> 'b) -> 'a list -> 'b list
-  val rev_map : ('a -> 'b) -> 'a list -> 'b list
-  val for_all : ('a -> bool) -> 'a list -> bool
-  val exists : ('a -> bool) -> 'a list -> bool
-
-  module Monadic (M:Monad.MONAD):
-  sig
-    val fold_left:  ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
-    val fold_right: ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
-    val foldi_left: (int -> 'a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
-  end
-end
-
-
 
 module type SEXP =
   sig
@@ -122,3 +93,6 @@ sig
     | End of 'a
   and ('token,'a) t = 'token option -> ('token,'a) result
 end
+
+
+val identity: 'a -> 'a

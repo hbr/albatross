@@ -4,12 +4,13 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Container
 open Support
 open Term
 open Signature
 open Printf
+
+module Option = Fmlib.Option
 
 module IntArrayMap = Map.Make(struct
   let compare = Pervasives.compare
@@ -652,7 +653,7 @@ let term_to_string
     (tvs: Tvars.t)
     (ft:t)
     : string =
-  (** Convert the term [t] in an environment with the named variables [names]
+  (* Convert the term [t] in an environment with the named variables [names]
       to a string.
    *)
   let anon_symbol (i:int) (nanon:int): int =
@@ -1797,7 +1798,7 @@ let add_class_feature (i:int) (ft:t)
 
 
 let add_key (i:int) (ft:t): unit =
-  (** Add the key of the feature [i] to the key table. *)
+  (* Add the key of the feature [i] to the key table. *)
   assert (i < count ft);
   let desc  = descriptor i ft in
   let ntvs  = Tvars.count_all desc.tvs
@@ -2015,7 +2016,7 @@ let add_base
 
 
 let base_table (comp:Module.Compile.t) : t =
-  (** Construct a basic table which contains at least implication.  *)
+  (* Construct a basic table which contains at least implication.  *)
   let bool    = Class_table.boolean_type 0 in
   let ft      = empty comp
   in

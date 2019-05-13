@@ -4,10 +4,10 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Support
 open Container
 
+module Option = Fmlib.Option
 
 let max_modification_time (t1:float option) (t2:float option): float option =
   match t1, t2 with

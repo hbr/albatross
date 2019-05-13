@@ -69,7 +69,7 @@ module Make (A:ANY) =
       let len = Array.length args in
       let rec parse (a: a) (i:int): a M.t =
         if i = len then
-          M.make a
+          M.return a
         else
           let arg = args.(i) in
           let n = String.length arg in

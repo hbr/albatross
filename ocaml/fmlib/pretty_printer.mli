@@ -1,9 +1,11 @@
+open Common_module_types
+
 module type PRINTER =
   (* The IO monad is a printer, the PRINTER module type is a subtype
      of IO_TYPE. Therefore any module conforming to IO_TYPE can be
      used to generate a pretty printer. *)
   sig
-    include Monad.MONAD
+    include MONAD
     type out_file
     val putc: char -> out_file -> unit t
     val put_substring: string -> int -> int -> out_file -> unit t

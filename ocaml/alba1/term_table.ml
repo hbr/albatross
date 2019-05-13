@@ -4,10 +4,11 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Support
 open Container
 open Term
+
+module Option = Fmlib.Option
 
 type sublist = (int*Term_sub.t) list
 

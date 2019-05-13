@@ -1,4 +1,8 @@
-include Monad.MONAD with type 'a t = 'a option
+open Common_module_types
+
+(** Optional values *)
+
+include MONAD with type 'a t = 'a option
 
 val has: 'a t -> bool
 val value: 'a t -> 'a
@@ -18,4 +22,4 @@ val fold_array: ('a->'b->int->'a t) -> 'a -> 'b array -> 'a t
 
 
 
-module Within (M:Monad.MONAD): Monad.MONAD with type 'a t = 'a t M.t
+module Within (M:MONAD): MONAD with type 'a t = 'a t M.t

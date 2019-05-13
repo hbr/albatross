@@ -20,5 +20,7 @@ depends: [
   "menhir" {build}
   "dune" {build}
   "odoc" {build}
+  "js_of_ocaml" {build}
+  "js_of_ocaml-ppx" {build}
   "ppx_inline_test" {build}
 ]

@@ -1,8 +1,3 @@
-module Ocaml_char = Char
-module Ocaml_string = String
-module Ocaml_list = List
-
-
 module Void:
 sig
   type t
@@ -21,22 +16,18 @@ end =
   end
 
 
-module Int:
-sig
-  type t = int
-end =
+module Int =
   struct
     type t = int
+    let compare = Pervasives.compare
   end
 
 
 
-module Float:
-sig
-  type t = float
-end =
+module Float =
   struct
     type t = float
+    let compare = Pervasives.compare
   end
 
 
@@ -49,13 +40,6 @@ module Either =
     let left a = Left a
     let right b = Right b
   end
-
-module type FUNCTOR =
-  sig
-    type _ t
-    val map: ('a -> 'b) -> 'a t -> 'b t
-  end
-
 
 
 module Char =
@@ -117,58 +101,6 @@ module String =
 
 
 
-
-
-module List =
-  struct
-    include List
-    include
-      Monad.Make (
-          struct
-            type 'a t = 'a list
-            let make (a:'a): 'a t =
-              [a]
-            let rec bind (m:'a t) (f:'a -> 'b t): 'b t =
-              match m with
-              | [] ->
-                 []
-              | hd :: tl ->
-                 f hd @ bind tl f
-          end
-        )
-    let find (f:'a -> bool) (l:'a t): 'a option =
-      try
-        Some (List.find f l)
-      with Not_found ->
-        None
-
-    module Monadic (M:Monad.MONAD) =
-      struct
-        let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (b:'b)
-                : 'b M.t =
-          let rec foldi i l b =
-            match l with
-            | [] ->
-               M.make b
-            | hd :: tl ->
-               M.(f i hd b >>= foldi (i+1) tl)
-          in
-          foldi 0 l b
-
-        let fold_left (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
-          foldi_left (fun _ -> f) l b
-
-        let fold_right (f:'a -> 'b -> 'b M.t) (l:'a t) (b:'b): 'b M.t =
-          fold_left f (rev l) b
-      end
-  end
-
-
-
-
-
-
-
 module type SEXP =
   sig
     type t =
@@ -178,7 +110,7 @@ module type SEXP =
   end
 
 
-
+let identity (a:'a): 'a = a
 
 module Sexp =
   struct

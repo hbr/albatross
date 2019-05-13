@@ -1,5 +1,4 @@
 open Fmlib
-open Common
 
 
 module Make (IO:Io.S) =
@@ -22,7 +21,7 @@ module Make (IO:Io.S) =
     let compile (cmd:command_line): unit IO.t =
       IO.put_line_out cmd.work_dir
 
-    let status (cmd:command_line): unit IO.t =
+    let status (_:command_line): unit IO.t =
       assert false
 
     let commands: (string*(command_line->unit IO.t)*string list) list =
@@ -78,7 +77,7 @@ module Make (IO:Io.S) =
       let rec print l p =
         match l with
         | [] ->
-           IO.make p
+           IO.return p
         | (key,spec,doc) :: tl ->
            cut p
            >>= put_left 20 (key ^ CLP.argument_type spec)
@@ -92,7 +91,7 @@ module Make (IO:Io.S) =
       let rec print l p =
         match l with
         | [] ->
-           IO.make p
+           IO.return p
         | (cmd,_,lst) :: tl ->
            cut p >>= put_left 10 cmd
            >>= hovbox 0 (put_wrapped lst)
@@ -121,7 +120,6 @@ module Make (IO:Io.S) =
              match parse args with
              | Ok cl ->
                 begin
-                  let open PP in
                   match cl.command with
                   | None ->
                      print_error "no command given"

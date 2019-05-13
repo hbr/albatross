@@ -1,3 +1,4 @@
+open Common_module_types
 open Common
 
 module Pending =
@@ -108,7 +109,7 @@ module Pending =
 
 module type PRINTER =
   sig
-    include Monad.MONAD
+    include MONAD
     type out_file
     val putc: char -> out_file -> unit t
     val put_substring: string -> int -> int -> out_file -> unit t
@@ -226,17 +227,17 @@ module Make (P:PRINTER) =
 
 
     let make (width:int) (channel:out_file): t out =
-      P.make {current = 0; width; channel; box = H; stack = []}
+      P.return {current = 0; width; channel; box = H; stack = []}
 
     let push (box:box) (p:t): t out =
-      P.make {p with box; stack = p.box :: p.stack}
+      P.return {p with box; stack = p.box :: p.stack}
 
     let pop (p:t): t out=
       match p.stack with
       | [] ->
          assert false (* illegal call *)
       | box :: stack ->
-         P.make {p with box; stack}
+         P.return {p with box; stack}
 
 
     let pending_exceeds (add:int) (pend:Pending.t) (p:t): bool =
@@ -244,12 +245,12 @@ module Make (P:PRINTER) =
 
     let puts (start:int) (len:int) (s:string) (p:t): t out =
       P.(put_substring s start len p.channel >>= fun _ ->
-         make {p with current = len + p.current})
+         return {p with current = len + p.current})
 
     let newline (indent:int) (p:t) (box:box): t out =
       P.(putc '\n' p.channel >>= fun _ ->
          fill ' ' indent p.channel  >>= fun _ ->
-         P.make {p with box; current = indent})
+         P.return {p with box; current = indent})
 
     let space_size (sep:string) (n:int): int =
       String.length sep + n
@@ -258,7 +259,7 @@ module Make (P:PRINTER) =
       let len = String.length sep in
       P.(put_substring sep 0 len p.channel >>= fun _ ->
          fill ' ' n  p.channel  >>= fun _ ->
-         P.make {p with box; current = len + n + p.current})
+         P.return {p with box; current = len + n + p.current})
 
     let (>>=) = P.(>>=)
 
@@ -279,7 +280,7 @@ module Make (P:PRINTER) =
     and actions (l:Pending.action list) (p:t): t out =
       match l with
       | [] ->
-         P.make p
+         P.return p
       | a :: tl ->
          P.(action a p >>= actions tl)
 
@@ -313,14 +314,14 @@ module Make (P:PRINTER) =
          if pending_exceeds 0 pend p then
            replay_pending pend {p with box = V (start,ofs)}
          else
-           P.make {p with box = HV (start,ofs,pend)}
+           P.return {p with box = HV (start,ofs,pend)}
       | HOVP (start,ofs,sep,n,ofsbr,pend) ->
          let pend = Pending.put sstart len s pend in
          if pending_exceeds (space_size sep n) pend p then
            newline (start+ofs+ofsbr) p (HOV (start,ofs))
            >>= replay_pending pend
          else
-           P.make {p with box = HOVP (start,ofs,sep,n,ofsbr,pend)}
+           P.return {p with box = HOVP (start,ofs,sep,n,ofsbr,pend)}
       | _ ->
          puts sstart len s p
 
@@ -336,13 +337,13 @@ module Make (P:PRINTER) =
          if pending_exceeds 0 pend p then
            replay_pending pend {p with box = V (start,ofshv)}
          else
-           P.make {p with box = HV(start,ofshv,pend)}
+           P.return {p with box = HV(start,ofshv,pend)}
       | HOV (start,ofshov) ->
          let sp_size = space_size sep n in
          if p.width <= p.current + sp_size then
            newline (start+ofshov) p p.box
          else
-           P.make
+           P.return
              {p with
                box = HOVP (start,ofshov,sep,n,ofs,Pending.make_hov ofshov)}
       | HOVP (start,ofshov,sephov,nbr,ofsbr,pend) ->
@@ -354,15 +355,15 @@ module Make (P:PRINTER) =
          else if Pending.is_top pend then
            space sephov nbr p box >>= replay_pending pend1
          else
-           P.make {p with box = HOVP (start,ofshov,sephov,nbr,ofsbr,pend1)}
+           P.return {p with box = HOVP (start,ofshov,sephov,nbr,ofsbr,pend1)}
 
     and hbox0 (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
-         P.make
+         P.return
            {p with box = HV (start, ofs, Pending.hbox pend)}
       | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
-         P.make
+         P.return
            {p with
              box = HOVP (start, ofshov, sep, n, ofsbr, Pending.hbox pend)}
       | _ ->
@@ -371,11 +372,11 @@ module Make (P:PRINTER) =
     and vbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
-         P.make
+         P.return
            {p with box = HV (start, ofs,
                              Pending.vbox ofs pend)}
       | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
-         P.make
+         P.return
            {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.vbox ofs pend)}
       | _ ->
@@ -384,10 +385,10 @@ module Make (P:PRINTER) =
     and hvbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
-         P.make
+         P.return
            {p with box = HV (start, ofs, Pending.hvbox ofs pend)}
       | HOVP (start,ofshov,sep, n,ofsbr,pend) ->
-         P.make
+         P.return
            {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.hvbox ofs pend)}
       | _ ->
@@ -396,10 +397,10 @@ module Make (P:PRINTER) =
     and hovbox0 (ofs:int) (p:t): t out =
       match p.box with
       | HV (start,ofs,pend) ->
-         P.make
+         P.return
            {p with box = HV (start, ofs, Pending.hovbox ofs pend)}
       | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
-         P.make
+         P.return
            {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                Pending.hovbox ofs pend)}
       | _ ->
@@ -422,7 +423,7 @@ module Make (P:PRINTER) =
                       H}
            >>= close)
          else
-           P.make {p with box = HV (start, ofs, Pending.close pend)}
+           P.return {p with box = HV (start, ofs, Pending.close pend)}
       | HOVP (start,ofshov,sep,n,ofsbr,pend) ->
          if Pending.is_top pend then
            let box = HOV (start,ofshov) in
@@ -433,7 +434,7 @@ module Make (P:PRINTER) =
            >>= replay_pending pend
            >>= close
          else
-           P.make
+           P.return
              {p with box = HOVP (start, ofshov, sep, n, ofsbr,
                                  Pending.close pend)}
       | _ ->
@@ -485,14 +486,14 @@ module Make (P:PRINTER) =
       let rec wrap first l p =
         match l with
         | [] ->
-           P.make p
+           P.return p
         | str :: tl ->
            let word_start i = String.find (fun c -> c <> ' ') i str in
            let word_end i = String.find (fun c -> c = ' ') i str in
            let len = String.length str in
            let rec parse (first:bool) (i:int) (p:t): t out =
              if i = len then
-               P.make p
+               P.return p
              else
                begin
                  assert (i < len); (* There is a word! *)
@@ -535,7 +536,7 @@ module Make (P:PRINTER) =
 
     let stop (p:t): unit out =
       assert (is_top p);
-      P.make ()
+      P.return ()
   end
 
 

@@ -1,25 +1,17 @@
 open Common_module_types
 
-module type MONAD0 =
+module type SIG_MIN =
   sig
     type _ t
-    val make: 'a -> 'a t
-    val bind: 'a t -> ('a -> 'b t) -> 'b t
-  end
-
-module type MONAD =
-  sig
-    type _ t
-    val make:  'a -> 'a t
-    val bind:  'a t -> ('a -> 'b t) -> 'b t
-    val apply: ('a->'b) t -> 'a t -> 'b t
-    val map:   ('a -> 'b) -> 'a t -> 'b t
+    val return: 'a -> 'a t
     val (>>=): 'a t -> ('a -> 'b t) -> 'b t
-    (*val sequence: 'a t list -> 'a list t*)
-    (*val map_list: 'a list -> ('a -> 'b t) -> 'b list t*)
-    (*val map_array: 'a array -> ('a -> 'b t) -> 'b array t*)
   end
 
+module type SIG_WITH_MAP =
+  sig
+    include SIG_MIN
+    val map: ('a -> 'b) -> 'a t -> 'b t
+  end
 
 
 
@@ -139,7 +131,10 @@ module type STATE_WITH_RESULT =
 
 
 
-module Make (M:MONAD0): MONAD with type 'a t = 'a M.t
+module Of_sig_min (M:SIG_MIN): MONAD with type 'a t = 'a M.t
+
+module Of_sig_with_map (M:SIG_WITH_MAP): MONAD with type 'a t = 'a M.t
+
 
 module Result (Error:ANY): RESULT with type error = Error.t and
                                        type 'a t = ('a,Error.t) result
@@ -160,6 +155,7 @@ module State_into: STATE_INTO
 module State_with_result (S:ANY) (Error:ANY)
        : STATE_WITH_RESULT with type state = S.t and
                                 type error = Error.t
+
 module String_buffer:
 sig
   include MONAD

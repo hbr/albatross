@@ -416,12 +416,12 @@ end
 module IO0: Io.S0 =
   struct
     include
-      Monad.Make(
+      Monad.Of_sig_min(
           struct
             type 'a t = File_system.t -> ('a,int) result
-            let make (a:'a): 'a t =
+            let return (a:'a): 'a t =
               fun _ -> Ok a
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
               (fun fs ->
                 let r = m fs in
                 match r with

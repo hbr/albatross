@@ -1,27 +1,19 @@
 open Common_module_types
 
 
-module type MONAD0 =
+module type SIG_MIN =
   sig
     type _ t
-    val make: 'a -> 'a t
-    val bind: 'a t -> ('a -> 'b t) -> 'b t
-  end
-
-
-
-module type MONAD =
-  sig
-    type _ t
-    val make:  'a -> 'a t
-    val bind:  'a t -> ('a -> 'b t) -> 'b t
-    val apply: ('a->'b) t -> 'a t -> 'b t
-    val map:   ('a -> 'b) -> 'a t -> 'b t
+    val return: 'a -> 'a t
     val (>>=): 'a t -> ('a -> 'b t) -> 'b t
-    (*val sequence: 'a t list -> 'a list t*)
-    (*val map_list: 'a list -> ('a -> 'b t) -> 'b list t*)
-    (*val map_array: 'a array -> ('a -> 'b t) -> 'b array t*)
   end
+
+module type SIG_WITH_MAP =
+  sig
+    include SIG_MIN
+    val map: ('a -> 'b) -> 'a t -> 'b t
+  end
+
 
 
 
@@ -140,14 +132,36 @@ module type STATE_WITH_RESULT =
 
 
 
-module Make (M:MONAD0): MONAD with type 'a t = 'a M.t =
+module Of_sig_with_map (M:SIG_WITH_MAP): MONAD with type 'a t = 'a M.t =
   struct
     include M
-    let (>>=) = bind
+
+    let (>=>) f g a =
+      f a >>= g
+
+    let (<*>) mf m =
+      mf >>= fun f -> map f m
+
+    let join mm =
+      mm >>= fun m -> m
+  end
+
+
+module Of_sig_min (M:SIG_MIN): MONAD with type 'a t = 'a M.t =
+  struct
+    include M
+
+    let (>=>) f g a =
+      f a >>= g
+
     let map (f:'a -> 'b) (m:'a t): 'b t =
-      m >>= fun a -> make (f a)
-    let apply (f: ('a -> 'b) t) (m:'a t): 'b t =
-      f >>= fun f -> map f m
+      m >>= fun a -> return (f a)
+
+    let (<*>) mf m =
+      mf >>= fun f -> map f m
+
+    let join mm =
+      mm >>= fun m -> m
   end
 
 
@@ -157,11 +171,11 @@ module Result (E: ANY) =
     type error = E.t
 
     include
-      Make(
+      Of_sig_min(
           struct
             type 'a t = ('a,error) result
-            let make (a:'a): 'a t = Ok a
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+            let return (a:'a): 'a t = Ok a
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
               match m with
               | Ok a -> f a
               | Error e -> Error e
@@ -193,32 +207,31 @@ module Result_in (M:MONAD) (Error:ANY) =
     module M = M
     type error = Error.t
     include
-      Make(
+      Of_sig_min(
           struct
             type 'a t = ('a,error) result M.t
-            let make (a:'a): 'a t =
-              Ok a |> M.make
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+            let return (a:'a): 'a t =
+              Ok a |> M.return
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
               M.(m >>= fun res ->
                  match res with
                  | Ok a ->
                     f a
                  | Error e ->
-                    Error e |> make
+                    Error e |> return
               )
           end)
 
     let throw (e:error): 'a t =
-      Error e |> M.make
+      Error e |> M.return
 
     let catch (m:'a t) (f:error -> 'a t): 'a t =
-      M.bind m
-        (fun r ->
-          match r with
-          | Ok _ ->
-             m
-          | Error e ->
-             f e
+      M.(m >>= fun r ->
+         match r with
+         | Ok _ ->
+            m
+         | Error e ->
+            f e
         )
 
     let lift (m:'a M.t): 'a t =
@@ -232,12 +245,12 @@ module Reader (Env:ANY) =
   struct
     type env = Env.t
     include
-      Make (
+      Of_sig_min (
           struct
             type 'a t = env -> 'a
-            let make (a:'a) (_:env): 'a =
+            let return (a:'a) (_:env): 'a =
               a
-            let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b =
+            let (>>=) (m:'a t) (f:'a -> 'b t) (e:env): 'b =
               f (m e) e
           end
         )
@@ -260,12 +273,12 @@ module Reader_into: READER_INTO =
   struct
     type env = Env.t
     include
-      Make (
+      Of_sig_min (
           struct
             type 'a t = env -> 'a M.t
-            let make (a:'a) (_:env): 'a M.t =
-              M.make a
-            let bind (m:'a t) (f:'a -> 'b t) (e:env): 'b M.t =
+            let return (a:'a) (_:env): 'a M.t =
+              M.return a
+            let (>>=) (m:'a t) (f:'a -> 'b t) (e:env): 'b M.t =
               M.(m e >>= fun a -> f a e)
           end
         )
@@ -273,7 +286,7 @@ module Reader_into: READER_INTO =
     let run (e:env) (m:'a t): 'a M.t =
       m e
 
-    let ask: env t = M.make
+    let ask: env t = M.return
 
     let local (f:env->env) (m:'a t) (e:env): 'a M.t =
       f e |> m
@@ -296,35 +309,37 @@ module State: STATE =
     type state = St.t
 
     include
-      Make(
+      Of_sig_min(
           struct
-            type 'a t = state -> 'a * state
-            let make (a:'a): 'a t =
-              fun s -> a,s
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
-              (fun s ->
-                let a,s1 = m s in
-                f a s1)
+            type 'a t = state ref -> 'a
+            let return (a:'a) (_:state ref): 'a =
+              a
+            let (>>=) (m:'a t) (f:'a -> 'b t) (sr:state ref) : 'b =
+              (f @@ m sr) sr
           end
         )
 
-    let get: state t =
-      (fun s -> s,s)
+    let get (sr:state ref): state =
+      !sr
 
-    let put (s:state): unit t =
-      fun _ -> (),s
+    let put (s:state) (sr:state ref): unit =
+      sr := s
 
-    let update (f:state->state): unit t =
-      fun s -> (), f s
+    let update (f:state->state) (sr:state ref): unit =
+      sr := f !sr
 
     let run (s:state) (m:'a t): 'a * state =
-      m s
+      let sr = ref s in
+      m sr, !sr
 
     let eval (s:state) (m:'a t): 'a =
-      m s |> fst
+      let sr = ref s in
+      m sr
 
     let state (s:state) (m:'a t): state =
-      m s |> snd
+      let sr = ref s in
+      ignore (m sr);
+      !sr
   end (* State *)
 
 
@@ -340,34 +355,34 @@ module State_into: STATE_INTO
     type state = St.t
 
     include
-      Make(
+      Of_sig_min(
           struct
             type 'a t = state -> ('a * state) M.t
-            let make (a:'a): 'a t =
-              fun s -> M.make (a,s)
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+            let return (a:'a): 'a t =
+              fun s -> M.return (a,s)
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
               (fun s ->
                 M.(m s >>= fun (x,sx) -> f x sx))
           end
         )
 
     let get: state t =
-      fun s -> M.make (s,s)
+      fun s -> M.return (s,s)
 
     let put (s:state): unit t =
-      fun _ -> M.make ((),s)
+      fun _ -> M.return ((),s)
 
     let update (f:state->state): unit t =
-      fun s -> M.make ((),f s)
+      fun s -> M.return ((),f s)
 
     let lift (m:'a M.t): 'a t =
-      fun s -> M.(m >>= fun x -> make (x,s))
+      fun s -> M.(m >>= fun x -> return (x,s))
 
     let run (s:state) (m:'a t): ('a*state) M.t =
       m s
 
     let eval (s:state) (m: 'a t): 'a M.t =
-      M.(m s >>= fun (a,_) -> make a)
+      M.(m s >>= fun (a,_) -> return a)
   end (* State_into *)
 
 
@@ -406,12 +421,12 @@ module State_with_result (S:ANY) (Error:ANY) =
 module String_buffer =
   struct
     include
-      Make(
+      Of_sig_min(
           struct
             type 'a t = Buffer.t -> 'a * Buffer.t
-            let make (a:'a): 'a t =
+            let return (a:'a): 'a t =
               fun buf -> a,buf
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
               fun buf ->
               let a,buf1 = m buf in
               f a buf1

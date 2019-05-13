@@ -1,8 +1,9 @@
+open Common_module_types
 open Common
 
 module type PRINTER =
   sig
-    include Monad.MONAD
+    include MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
     val put_substring: string -> int -> int -> unit t
@@ -224,7 +225,7 @@ module Buffer =
 
 module type PRETTY =
   sig
-    include Monad.MONAD
+    include MONAD
 
     val text_sub: string -> start -> length -> unit t
     val text: string -> unit t
@@ -297,26 +298,26 @@ module Make:
       st.oa <- 0
 
     include
-      Monad.Make(
+      Monad.Of_sig_min(
           struct
             type 'a t = state -> 'a P.t
-            let make (a:'a) (_:state): 'a P.t =
-              P.make a
-            let bind (m:'a t) (f:'a -> 'b t) (st:state): 'b P.t =
+            let return (a:'a) (_:state): 'a P.t =
+              P.return a
+            let (>>=) (m:'a t) (f:'a -> 'b t) (st:state): 'b P.t =
               P.(m st >>= fun a -> f a st)
           end
         )
 
     let state (st:state): state P.t =
-      P.make st
+      P.return st
 
     let print_nothing: unit P.t =
-      P.make ()
+      P.return ()
 
     let print_list (l:'a list) (f:'a -> unit t): unit t =
       List.fold_right
         (fun a pr -> pr >>= fun _ -> f a)
-        l (make ())
+        l (return ())
 
     let out_text (s:string) (start:start) (len:length) (st:state): unit P.t =
       st.p <- st.p + len;
@@ -363,7 +364,7 @@ module Make:
       List.fold_right
         (fun g pr -> pr >>= fun _ -> flush_flatten_group g)
         gs
-        (make ())
+        (return ())
 
     and flush_flatten_chunks (cs:chunk list): unit t =
       print_list cs flush_flatten_chunk
@@ -377,7 +378,7 @@ module Make:
       state >>= fun st ->
       print_list (Buffer.groups st.b) flush_flatten_group >>= fun _ ->
       st.b <- Buffer.empty;
-      make ()
+      return ()
 
 
     let rec flush_group (g:group) (st:state): unit P.t =
@@ -545,14 +546,14 @@ module Make:
         (if p < i then
            group space
          else
-           make ())
+           return ())
         >>= fun _ ->
         if i < len then
           let j = word_end i in
           text_sub s i (j-i) >>= fun _ ->
           fill j
         else
-          make ()
+          return ()
       in
       fill 0 st
 
@@ -561,7 +562,7 @@ module Make:
       let rec fill l first =
         match l with
         | [] ->
-           make ()
+           return ()
         | s :: tl ->
            let body = fill_of_string s >>= fun _ -> fill tl false in
            if first then
@@ -575,7 +576,7 @@ module Make:
     let rec of_document (d:Document.t): unit t =
       match d with
       | Document.Nil ->
-         make ()
+         return ()
       | Document.Text (s,i,len) ->
          text_sub s i len
       | Document.Line s ->

@@ -4,9 +4,10 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Support
 open Container
+
+module Option = Fmlib.Option
 
 
 type term =

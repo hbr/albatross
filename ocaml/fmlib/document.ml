@@ -1,3 +1,5 @@
+open Common_module_types
+
 type t =
   | Nil
   | Concat of t * t
@@ -128,7 +130,7 @@ let best (w:int) (x:t): layout =
 
 module type PRINTER =
   sig
-    include Monad.MONAD
+    include MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
     val put_substring: string -> int -> int -> unit t
@@ -161,7 +163,7 @@ module Pretty (P:PRINTER) =
         let open P in
         match x with
         | LNil ->
-           make ()
+           return ()
         | LText (s, x) ->
            put_string s >>= fun _ ->
            pr x

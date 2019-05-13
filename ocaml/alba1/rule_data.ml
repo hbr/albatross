@@ -4,11 +4,12 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Term
 open Signature
 open Container
 open Printf
+
+module Option = Fmlib.Option
 
 type ctxt = {
     c: Context.t;

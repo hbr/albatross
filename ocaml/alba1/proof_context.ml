@@ -4,13 +4,13 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Container
 open Term
 open Proof
 open Support
 open Printf
 
+module Option = Fmlib.Option
 module RD = Rule_data
 
 type slot_data = {ndown:int;

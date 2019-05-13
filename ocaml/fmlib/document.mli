@@ -1,3 +1,5 @@
+open Common_module_types
+
 type t
 
 val empty: t
@@ -18,7 +20,7 @@ val bracket: int -> string -> t -> string -> t
 
 module type PRINTER =
   sig
-    include Monad.MONAD
+    include MONAD
     val putc: char -> unit t
     val put_string: string -> unit t
     val put_substring: string -> int -> int -> unit t

@@ -4,12 +4,13 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
  *)
 
-open Fmlib
 open Container
 open Signature
 open Term
 open Support
 open Printf
+
+module Option = Fmlib.Option
 
 type formal = Class_table.formal
 

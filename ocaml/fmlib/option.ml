@@ -1,15 +1,33 @@
-include
-  Monad.Make(
-      struct
-        type 'a t = 'a option
-        let make (a:'a): 'a t =
-          Some a
-        let bind (m:'a t) (f:'a -> 'b t): 'b t =
-          match m with
-          | None -> None
-          | Some a -> f a
-      end
-    )
+open Common_module_types
+
+type 'a t = 'a option
+
+let return (a:'a): 'a t =
+  Some a
+
+let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
+  match m with
+  | None -> None
+  | Some a -> f a
+
+
+let map (f:'a -> 'b) (o:'a t): 'b t =
+  match o with
+  | None -> None
+  | Some a -> Some (f a)
+
+let (>=>) (f:'a -> 'b t) (g:'b -> 'c t) (a:'a): 'c t =
+  f a >>= g
+
+let (<*>) (fo: ('a -> 'b) t) (o:'a t): 'b t =
+  fo >>= fun f -> map f o
+
+
+let join (oo:'a option option): 'a option =
+  match oo with
+  | None -> None
+  | Some o -> o
+
 
 let has (o: 'a t): bool =
   match o with
@@ -75,19 +93,27 @@ let fold_array (f:'a->'b->int->'a t) (start:'a) (arr:'b array): 'a t =
 
 
 
-module Within (M:Monad.MONAD) =
+module Within (M:MONAD) =
   struct
-    include
-      Monad.Make(
-          struct
-            type 'a t = 'a option M.t
-            let make (a:'a): 'a t =
-              a |> make |> M.make
-            let bind (m:'a t) (f:'a -> 'b t): 'b t =
-              M.(m >>= fun opt ->
-                 match opt with
-                 | None -> make None
-                 | Some a -> f a)
-          end
-        )
+    type 'a t = 'a option M.t
+    let return (a:'a): 'a t =
+      a |> return |> M.return
+
+    let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
+      M.(m >>= fun o ->
+         match o with
+         | None -> return None
+         | Some a -> f a)
+
+    let (>=>) f g a =
+      f a >>= g
+
+    let map f o =
+      o >>= fun a -> return (f a)
+
+    let (<*>) fo o =
+      fo >>= fun f -> map f o
+
+    let join oo =
+      oo >>= fun o -> o
   end

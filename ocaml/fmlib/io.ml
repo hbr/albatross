@@ -1,4 +1,89 @@
+open Common_module_types
 open Common
+
+
+module type PATH =
+  sig
+    val separator: char
+    val delimiter: char
+    val basename: string -> string
+    val dirname: string -> string
+    val extname: string -> string
+  end
+
+
+module type STAT =
+  sig
+    type t
+    type time
+
+    val compare: time -> time -> int
+    val is_directory: t -> bool
+    val is_file:      t -> bool
+    val modification: t -> time
+  end
+
+
+module type BUFFER =
+  sig
+    type t
+    val alloc: int -> t
+  end
+
+module type BUFFERS =
+  functor (B:BUFFER) ->
+  sig
+    type t
+    val make: int -> t
+    val is_open_read: t -> int -> bool
+    val is_open_write: t -> int -> bool
+    val capacity: t -> int
+    val occupy_readable: t -> int -> int
+    val occupy_writable: t -> int -> int
+    val release: t -> int -> unit
+    val readable_file: t -> int -> int * B.t
+    val writable_file: t -> int -> int * B.t
+    val find_open: t -> int -> int
+  end
+
+
+
+
+
+
+
+module type READABLE =
+  sig
+    type t
+    val has_more: t -> bool
+    val peek: t -> char
+    val advance: t -> t
+  end
+
+
+
+
+
+module type WRITABLE =
+  sig
+    type t
+    val needs_more: t -> bool
+    val putc: t -> char ->  t
+    val putend: t -> t
+  end
+
+
+module type FILTER =
+  sig
+    module Readable: READABLE
+    type t
+    val needs_more: t -> bool
+    val putc: t -> char -> t * Readable.t
+    val put_end: t -> t * Readable.t
+  end
+
+
+
 
 
 module type SCANNER =
@@ -20,7 +105,7 @@ module type S0 =
     val stdout: out_file
     val stderr: out_file
 
-    include Monad.MONAD
+    include MONAD
 
     val exit: int -> 'a t
     val execute: unit t -> unit
@@ -77,6 +162,111 @@ module type S =
   end
 
 
+module String_reader =
+  struct
+    type t = {s: string; pos:int; beyond:int}
+
+    let of_substring (s:string) (start:int) (len:int): t =
+      assert (0 <= start);
+      assert (start + len <= String.length s);
+      {s; pos = start; beyond = start + len}
+
+    let of_string (s:string): t =
+      of_substring s 0 (String.length s)
+
+    let has_more (r:t): bool =
+      r.pos < r.beyond
+
+    let peek (r:t): char =
+      assert (has_more r);
+      r.s.[r.pos]
+
+    let advance (r:t): t =
+      assert (has_more r);
+      {r with pos = r.pos + 1}
+  end
+
+module Fill_reader =
+  struct
+    type t = {n:int; c:char}
+    let has_more (r:t): bool =
+      r.n > 0
+    let peek (r:t): char =
+      r.c
+    let advance (r:t): t =
+      {r with n = r.n - 1}
+    let make (n:int) (c:char): t =
+      {n;c}
+  end
+
+
+
+module Buffers: BUFFERS =
+  functor (B:BUFFER) ->
+  struct
+    type file =
+      | Read  of int * B.t
+      | Write of int * B.t
+
+
+    type t = {size: int;
+              files: file Pool.t}
+
+    let make (size:int): t =
+      {size;
+       files = Pool.make_empty ()}
+
+    let is_open (s:t) (i:int): bool =
+      Pool.has s.files i
+
+    let is_open_read (s:t) (i:int): bool =
+      Pool.has s.files i
+      && match Pool.elem s.files i with
+         | Read _  -> true
+         | Write _ -> false
+
+    let is_open_write (s:t) (i:int): bool =
+      Pool.has s.files i
+      && match Pool.elem s.files i with
+         | Read _  -> false
+         | Write _ -> true
+
+    let capacity (s:t): int =
+      Pool.capacity s.files
+
+    let occupy (s:t) (f:B.t -> file): int =
+      let buf = B.alloc s.size in
+      Pool.occupy s.files (f buf)
+
+    let occupy_readable (s:t) (fd:int): int =
+      occupy s (fun b -> Read(fd,b))
+
+    let occupy_writable (s:t) (fd:int): int =
+      occupy s (fun b -> Write(fd,b))
+
+    let release (s:t) (i:int): unit =
+      assert (is_open s i);
+      Pool.release s.files i
+
+    let readable_file (s:t) (i:int): int * B.t =
+      match Pool.elem s.files i with
+      | Read (fd,b) -> fd,b
+      | Write _ -> assert false (* Illegal call! *)
+
+    let writable_file (s:t) (i:int): int * B.t =
+      match Pool.elem s.files i with
+      | Read _ -> assert false (* Illegal call! *)
+      | Write (fd,b) -> fd,b
+
+    let find_open (s:t) (i:int): int =
+      assert (i <= Pool.capacity s.files);
+      Pool.find s.files i
+  end (* Buffers *)
+
+
+
+
+
 module Make (M:S0): S =
   struct
     include M
@@ -91,7 +281,7 @@ module Make (M:S0): S =
       | Some fd ->
          read fd >>= fun a ->
          close_in fd >>= fun _ ->
-         make a
+         return a
 
     let write_file
           (path:string) (cannot_open:'a t) (write:out_file -> 'a t)
@@ -103,7 +293,7 @@ module Make (M:S0): S =
       | Some fd ->
          write fd >>= fun a ->
          close_out fd >>= fun _ ->
-         make a
+         return a
 
     let create_file
           (path:string) (cannot_create:'a t) (write:out_file -> 'a t): 'a t =
@@ -114,7 +304,7 @@ module Make (M:S0): S =
       | Some fd ->
          write fd >>= fun a ->
          close_out fd >>= fun _ ->
-         make a
+         return a
 
     let put_string (s:string) (fd:out_file): unit t =
       put_substring s 0 (String.length s) fd
@@ -130,7 +320,7 @@ module Make (M:S0): S =
     let fill (c:char) (n:int) (fd:out_file): unit t =
       let rec put i =
         if i = n then
-          make ()
+          return ()
         else
           putc c fd >>= fun _ -> put (i+1)
       in
@@ -174,12 +364,12 @@ module Output (Io:S) =
     type out_file = Io.out_file
 
     include
-      Monad.Make (
+      Monad.Of_sig_min (
           struct
             type 'a t = out_file -> 'a Io.t
-            let make (a:'a) (_:out_file): 'a Io.t =
-              Io.make a
-            let bind (m:'a t) (f:'a -> 'b t) (fd:out_file): 'b Io.t =
+            let return (a:'a) (_:out_file): 'a Io.t =
+              Io.return a
+            let (>>=) (m:'a t) (f:'a -> 'b t) (fd:out_file): 'b Io.t =
               Io.(m fd >>= fun a -> f a fd)
           end
         )

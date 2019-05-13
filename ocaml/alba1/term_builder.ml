@@ -4,12 +4,13 @@
    version 2 (GPLv2) as published by the Free Software Foundation.
 *)
 
-open Fmlib
 open Support
 open Term
 open Container
 open Signature
 open Printf
+
+module Option = Fmlib.Option
 
 (*
 

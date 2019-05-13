@@ -1,0 +1,3 @@
+(executable
+  (libraries fmlib fmlib_node)
+  (name alba_node))

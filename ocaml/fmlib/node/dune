@@ -1,0 +1,5 @@
+(library
+  (libraries fmlib js_of_ocaml js_of_ocaml-ppx)
+  (preprocess (pps js_of_ocaml-ppx))
+  (public_name alba.fmlib_node)
+  (name fmlib_node))
