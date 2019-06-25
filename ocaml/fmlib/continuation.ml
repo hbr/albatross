@@ -1,14 +1,53 @@
 open Common_module_types
 open Common
 
-module type S =
+module type SIG_EXPERIMENTAL =
+  sig
+    type answer
+    include MONAD
+    val run: answer t -> answer
+  end
+
+
+module Make_experimental (A: ANY) =
+  struct
+    type answer = A.t (* The final answer *)
+
+    type state =
+      | More of (unit -> state)
+      | Done of answer
+
+    module M = struct
+      type 'a t = ('a -> state) -> state
+
+      let return (a:'a) (k:'a -> state): state =
+        k a
+
+      let (>>=) (m:'a t) (f:'a -> 'b t) (k:'b->state): state =
+        m (fun a -> More (fun () -> f a k))
+    end
+
+    include Monad.Of_sig_min (M)
+
+    let run (m:answer t): answer =
+      let rec iterate = function
+        | Done a ->
+           a
+        | More f ->
+           iterate (f ())
+      in
+      iterate @@ m (fun a -> Done a)
+  end
+
+
+
+module type SIG =
   sig
     type answer
     include MONAD
     val run: answer t  -> answer
     val callcc: (('a -> 'b t) -> 'a t) -> 'a t
   end
-
 
 module Make (A: ANY) =
   struct

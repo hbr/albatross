@@ -70,8 +70,12 @@ sig
   val sub: t -> int -> int -> t
   val concat: string -> string list -> string
   val make: int -> char -> t
+  val init: int -> (int -> char) -> t
 end
 
+
+module String_set: Set.S with type elt = String.t
+module String_map: Finite_map.S with type key = String.t
 
 
 

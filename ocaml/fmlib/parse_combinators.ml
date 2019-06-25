@@ -1,47 +1,55 @@
-module type BASIC =
-  sig
-    type _ t
-    type error
-    val succeed: 'a -> 'a t
-    val fail:    error -> 'a t
-    val consumer: 'a t -> 'a t
-    val map:     ('a -> 'b) -> 'a t -> 'b t
-    val (>>=):   'a t -> ('a -> 'b t) -> 'b t
-    val (<|>):   'a t -> 'a t -> 'a t
-    val backtrackable: 'a t -> 'a t
-    val commit: 'a -> 'a t
+module Loop_state =
+  struct
+    type ('a,'b) t =
+      | More of 'a
+      | Exit of 'b
+
+    let fold (f1:'a -> 'c) (f2:'b -> 'c) = function
+      | More a -> f1 a
+      | Exit b -> f2 b
+
+    let more a: ('a,'b) t = More a
+
+    let exit b: ('a,'b) t = Exit b
   end
 
 
 module type COMBINATORS =
-  functor (P:BASIC) ->
   sig
-    val (>>-): 'a P.t -> ('a -> 'b P.t) -> 'b P.t
-    val optional: 'a P.t -> 'a option P.t
-    val one_of: 'a P.t list  -> 'a P.t
-    val zero_or_more: 'a P.t -> 'a list P.t
-    val one_or_more:  'a P.t -> 'a list P.t
-    val skip_zero_or_more: 'a P.t -> int P.t
-    val skip_one_or_more:  'a P.t -> int P.t
-    val zero_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
-    val one_or_more_separated: 'a P.t -> _ P.t -> 'a list P.t
-    val (|=): ('a -> 'b) P.t -> 'a P.t -> 'b P.t
-    val (|.): 'v P.t -> 'a P.t -> 'v P.t
+    type 'a tp
+    val (>>-): 'a tp -> ('a -> 'b tp) -> 'b tp
+    val optional: 'a tp -> 'a option tp
+    val one_of: 'a tp list -> 'a tp
+    val loop: 'a -> ('a -> ('a,'b) Loop_state.t tp) -> 'b tp
+    val zero_or_more: 'a tp -> 'a list tp
+    val one_or_more:  'a tp -> 'a list tp
+    val skip_zero_or_more: 'a tp -> int tp
+    val skip_one_or_more:  'a tp -> int tp
+    val zero_or_more_separated: 'a tp -> _ tp -> 'a list tp
+    val one_or_more_separated: 'a tp -> _ tp -> 'a list tp
+    val (|=): ('a -> 'b) tp -> 'a tp -> 'b tp
+    val (|.): 'v tp -> 'a tp -> 'v tp
+  end
+
+module type ADD_COMBINATORS =
+  functor (P:Generic_parser.BASIC) ->
+  sig
+    include COMBINATORS with type 'a tp = 'a P.t
   end
 
 
 
-
-module Combinators: COMBINATORS =
-  functor (P:BASIC) ->
+module Add_combinators: ADD_COMBINATORS =
+  functor (P:Generic_parser.BASIC) ->
   struct
+    type 'a tp = 'a P.t
     let (>>-) (p:'a P.t) (f:'a -> 'b P.t): 'b P.t =
       P.(backtrackable (p >>= commit >>= f))
 
     let optional (p:'a P.t): 'a option P.t =
       let open P in
       (map (fun a -> Some a) p)
-      <|> succeed None
+      <|> return None
 
     let rec one_of (l:'a P.t list): 'a P.t =
       let open P in
@@ -53,24 +61,44 @@ module Combinators: COMBINATORS =
       | p :: ps ->
          p <|> one_of ps
 
+
+    let loop (a:'a) (f: 'a -> ('a,'b) Loop_state.t P.t): 'b P.t =
+      let open P in
+      let rec loop st =
+        Loop_state.fold
+          (fun a -> f a >>= loop)
+          return
+          st
+      in
+      f a >>= loop
+
+
+
     let zero_or_more (p:'a P.t): 'a list P.t =
       let open P in
-      let rec many l =
-        (p >>= fun a -> many (a::l))
-        <|> succeed @@ List.rev @@ l
-      in
-      many []
+      loop
+        []
+        (fun lst ->
+          (p >>= fun a ->
+           return @@ Loop_state.more (a :: lst))
+          <|> let st = Loop_state.exit (List.rev lst) in
+              if lst = [] then
+                return st
+              else
+                succeed st)
+
 
     let one_or_more (p:'a P.t): 'a list P.t =
       P.(consumer p >>= fun a ->
           zero_or_more p >>= fun l ->
           succeed (a::l))
 
+
     let skip_zero_or_more (p:'a P.t): int P.t =
       let open P in
       let rec many i =
         (consumer p >>= fun _ -> many (i+1))
-        <|> succeed i
+        <|> if i > 0 then succeed i else return i
       in
       many 0
 
@@ -89,12 +117,12 @@ module Combinators: COMBINATORS =
     let zero_or_more_separated (p:'a P.t) (sep: _ P.t): 'a list P.t =
       let open P in
       one_or_more_separated p sep
-      <|> succeed []
+      <|> return []
 
 
     let (|=) (pf:('a->'b) P.t) (p:'a P.t): 'b P.t =
       let open P in
-      pf >>= fun f -> p >>= fun a -> succeed (f a)
+      pf >>= fun f -> map f p
 
     let (|.) (v:'b P.t) (p:'a P.t): 'b P.t =
       let open P in

@@ -8,11 +8,23 @@ module Common_module_types  = Common_module_types
 
 module Common = Common
 
+
+(** {1 Immutable Data Types} *)
+
 module List = List
 module Option = Option
+module Finite_map = Finite_map
+module Segmented_array = Segmented_array
+
+
+(** {1 Monadic Data Types} *)
+
 module Continuation = Continuation
 module Monad = Monad
-module Finite_map = Finite_map
+
+
+(** {1 Mutable Data Types} *)
+
 module Vector = Vector
 module Pool = Pool
 
@@ -21,17 +33,18 @@ module Pool = Pool
 
 module Io = Io
 module Ocaml_io = Ocaml_io
+module Readable_printer = Readable_printer
 
 
 (** {1 Parsing }*)
 
-module Simple_parser = Simple_parser
-module Basic_parser = Basic_parser
+module Character_parser = Character_parser
+module Generic_parser   = Generic_parser
 
 
 (** {1 Pretty Printing }*)
 
-module Pretty_printer2 = Pretty_printer2
+module Pretty_printer = Pretty_printer
 
 
 
@@ -40,5 +53,4 @@ module Pretty_printer2 = Pretty_printer2
 (** {1 Old modules (deprecated)} *)
 
 module Document     = Document
-module Pretty_printer  = Pretty_printer
 module Argument_parser = Argument_parser

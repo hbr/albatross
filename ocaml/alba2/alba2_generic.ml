@@ -12,9 +12,6 @@ module Make (IO:Io.S) =
         arguments: string list (* reversed *)
       }
 
-    module PP =
-      Pretty_printer.Make (IO)
-
     module CLP =
       Argument_parser.Make (struct type t = command_line end)
 
@@ -24,34 +21,33 @@ module Make (IO:Io.S) =
     let status (_:command_line): unit IO.t =
       assert false
 
-    let commands: (string*(command_line->unit IO.t)*string list) list =
+    let commands: (string*(command_line->unit IO.t)*string) list =
       ["compile", compile,
-       ["Compile the modules provided on the command line and";
-        "all its dependencies if compilation is required.";
-        "If no modules are provided all modules of the package";
-        "which require compilation are compiled."
-       ];
-       "status", status,
-       ["Display all modules which require compilation or recompilation."]
+       "Compile the modules provided on the command line and all its \
+        dependencies if compilation is required. If no modules are provided \
+        all modules of the package which require compilation are compiled."
+      ;
+        "status", status,
+        "Display all modules which require compilation or recompilation."
       ]
 
     let command_options: (CLP.key*CLP.spec*CLP.doc) list =
       let open CLP in
       [("-verbosity",
         Int (fun i a -> {a with verbosity = i}),
-        ["Verbosity level (default 1)"]
+        "Verbosity level (default 1)"
        );
 
        ("-work-dir", String (fun s a -> {a with work_dir = s}),
-        ["Path to the directory where the Alba package is located";
-         "(default: current working directory)"]);
+        "Path to the directory where the Alba package is located (default: \
+         current working directory)");
 
        ("-I", String (fun s a -> {a with package_paths =
                                            s :: a.package_paths}),
-        ["Add argument to search path for used packages"]);
+        "Add argument to search path for used packages");
 
        ("-force", Unit (fun a -> {a with force = true}),
-        ["Force compilation, even if it is not necessary"])
+        "Force compilation, even if it is not necessary")
       ]
 
     let parse (args:string array): (command_line,CLP.error) result =
@@ -72,49 +68,59 @@ module Make (IO:Io.S) =
           | Some _ ->
              {a with arguments = s :: a.arguments})
 
-    let print_options (p:PP.t): PP.t IO.t =
-      let open PP in
-      let rec print l p =
-        match l with
-        | [] ->
-           IO.return p
-        | (key,spec,doc) :: tl ->
-           cut p
-           >>= put_left 20 (key ^ CLP.argument_type spec)
-           >>= hovbox 0 (put_wrapped doc)
-           >>= print tl
-      in
-      print command_options p
+    module Pr =
+      struct
+        include Pretty_printer
+        let put_left (width:int) (s:string): unit t =
+          let len = String.length s in
+          if len < width then
+            string s >> fill (width - len) ' '
+          else
+            string s
+      end
+    module R = Pr.Readable
 
-    let print_commands (p:PP.t): PP.t IO.t =
-      let open PP in
-      let rec print l p =
-        match l with
-        | [] ->
-           IO.return p
-        | (cmd,_,lst) :: tl ->
-           cut p >>= put_left 10 cmd
-           >>= hovbox 0 (put_wrapped lst)
-           >>= print tl
-      in
-      print commands p
+    let print_options: unit Pr.t =
+      let open Pr in
+      chain
+        (List.map
+           (fun (key,spec,doc) ->
+             chain [cut; put_left 20 (key ^ CLP.argument_type spec);
+                    nest 20 @@ fill_paragraph doc])
+           command_options)
 
-    let print_usage (p:PP.t): PP.t IO.t =
-      let open PP in
-      put "Usage: alba command options arguments" p
-      >>= cut >>= cut
-      >>= vbox 4 (chain [put "Commands:"; print_commands])
-      >>= cut >>= cut
-      >>= vbox 4 (chain [put "Options:"; print_options])
-      >>= cut
+
+    let print_commands: unit Pr.t =
+      let open Pr in
+      chain
+        (List.map
+           (fun (cmd,_,doc) ->
+             chain [cut; put_left 10 cmd; nest 10 @@ fill_paragraph doc])
+           commands)
+
+
+    let print_usage: unit Pr.t =
+      let open Pr in
+      chain
+        [string "Usage: alba command options arguments";
+         cut; cut;
+         nest 4 (string "Commands:" >> print_commands);
+         cut; cut;
+         nest 4 (string "Options:" >> print_options);
+         cut]
 
     let print_error (s:string): unit IO.t =
-      let open PP in
-      make 80 IO.stderr
-      >>= vbox 0 (chain [put "Error: "; put s; cut; cut; print_usage])
-      >>= stop
+      let module W = IO.Write(R) in
+      IO.(W.write IO.stderr
+            (let open Pr in
+             run 0 80 80
+             @@ chain [string "Error: "; string s; cut; cut; print_usage])
+
+          >>= fun _ -> return ())
+
 
     let run (): unit =
+      let module Write = IO.Write(R) in
       IO.(execute
             (command_line >>= fun args ->
              match parse args with
@@ -122,7 +128,7 @@ module Make (IO:Io.S) =
                 begin
                   match cl.command with
                   | None ->
-                     print_error "no command given"
+                     print_error "no commands given"
                   | Some cmd ->
                      match
                        List.find (fun (c,_,_) -> c = cmd) commands

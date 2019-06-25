@@ -8,7 +8,7 @@ module type S =
 
     type key = string (* option key, must start with '-' *)
 
-    type doc = string list (* option description *)
+    type doc = string (* option description *)
 
     type spec (* specification of an option *)
       =
@@ -40,7 +40,7 @@ module Make (A:ANY) =
   struct
     type a = A.t
     type key = string
-    type doc = string list
+    type doc = string
     type spec =
       | Unit of (a -> a)             (* option with no argument *)
       | String of (string -> a -> a) (* option with string argument *)

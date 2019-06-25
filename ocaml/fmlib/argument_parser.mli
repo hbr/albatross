@@ -7,7 +7,7 @@ module type S =
 
     type key = string (* option key, must start with '-' *)
 
-    type doc = string list (* option description *)
+    type doc = string (* option description *)
 
     type spec (* specification of an option *)
       =

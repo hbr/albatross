@@ -14,13 +14,21 @@ sig
   val is_ok: t -> bool
   val is_empty: t -> bool
   val fill: t -> unit
-  (*val is_full: t -> bool*)
+  val is_full: t -> bool
   val flush: t -> unit
   val getc: t -> char option
   val putc: t -> char -> unit
   module Scan: functor (S:Io.SCANNER) ->
                sig
                  val scan: t -> S.t -> S.t
+               end
+  module Read: functor (W:Io.WRITABLE) ->
+               sig
+                 val read: t -> W.t -> W.t
+               end
+  module Write: functor (R:Io.READABLE) ->
+               sig
+                 val write: t -> R.t -> R.t
                end
 end =
   struct
@@ -80,6 +88,12 @@ end =
              buffer has been written!! *)
           reset b
 
+    let get (b:t): char =
+      assert (not (is_empty b));
+      let c = Bytes.get b.bytes b.rp in
+      b.rp <- b.rp + 1;
+      c
+
     let getc (b:t): char option =
       assert (is_ok b);
       if is_empty b then
@@ -87,9 +101,7 @@ end =
       if is_empty b then
         None
       else
-        (let c = Bytes.get b.bytes b.rp in
-         b.rp <- b.rp + 1;
-         Some c)
+        Some (get b)
 
     let putc (b:t) (c:char): unit =
       assert (is_ok b);
@@ -110,6 +122,31 @@ end =
             S.end_buffer !sref
           else
             !sref
+      end
+
+    module Read (W:Io.WRITABLE) =
+      struct
+        let read (b:t) (w:W.t): W.t =
+          let rec read w =
+            if not (is_empty b) && W.needs_more w then
+              read (W.putc w (get b))
+            else
+              w
+          in
+          read w
+      end
+
+    module Write (R:Io.READABLE) =
+      struct
+        let write (b:t) (r:R.t): R.t =
+          let rec write r =
+            if not (is_full b) && R.has_more r then
+              (putc b (R.peek r);
+               write (R.advance r))
+            else
+              r
+          in
+          write r
       end
   end (* Buffer *)
 
@@ -145,6 +182,16 @@ sig
                  val scan_buffer: t -> in_file -> S.t -> S.t
                  val scan: t -> in_file -> S.t -> S.t
                end
+  module Read: functor (W:Io.WRITABLE) ->
+               sig
+                 val read_buffer: t -> in_file -> W.t -> W.t
+                 val read: t -> in_file -> W.t -> W.t
+               end
+  module Write: functor (R:Io.READABLE) ->
+                sig
+                  val write_buffer: t -> out_file -> R.t -> R.t
+                  val write: t -> out_file -> R.t -> R.t
+                end
 end
   =
   struct
@@ -399,6 +446,37 @@ end
           else
             !sr
       end
+    module Read (W:Io.WRITABLE) =
+      struct
+        let read_buffer (_:t) (_:in_file) (_:W.t): W.t =
+          assert false
+        let read (_:t) (_:in_file) (_:W.t): W.t =
+          assert false
+      end
+
+    module Write (R:Io.READABLE) =
+      struct
+        module BW = Buffer.Write (R)
+
+        let write_buffer (fs:t) (fd:out_file) (r:R.t): R.t =
+          assert (fd < Array.length fs.files);
+          BW.write (writable_buffer fs fd) r
+
+        let write (fs:t) (fd:out_file) (r:R.t): R.t =
+          assert (fd < Array.length fs.files);
+          let b = writable_buffer fs fd in
+          let rec write r =
+            let more = R.has_more r in
+            if not (Buffer.is_full b) && more then
+              write @@ BW.write b r
+            else if Buffer.is_ok b && more then
+              (Buffer.flush b;
+               write r)
+            else
+              r
+          in
+          write r
+      end
   end (* File_system *)
 
 
@@ -520,6 +598,24 @@ module IO0: Io.S0 =
         let stream (fd:in_file) (s:S.t): S.t t =
           fun fs ->
           Ok (FS_Scan.scan fs fd s)
+      end
+
+    module Read (W:Io.WRITABLE) =
+      struct
+        module FS_Read = File_system.Read (W)
+        let read_buffer (fd:in_file) (w:W.t): W.t t =
+          fun fs -> Ok (FS_Read.read_buffer fs fd w)
+        let read (_:in_file) (_:W.t): W.t t =
+          assert false
+      end
+
+    module Write (R:Io.READABLE) =
+      struct
+        module FS_Write = File_system.Write (R)
+        let write_buffer (_:out_file) (_:R.t): R.t t =
+          assert false
+        let write (fd:out_file) (r:R.t): R.t t =
+          fun fs -> Ok (FS_Write.write fs fd r)
       end
   end
 

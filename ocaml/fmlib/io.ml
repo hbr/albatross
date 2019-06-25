@@ -30,6 +30,34 @@ module type BUFFER =
     val alloc: int -> t
   end
 
+
+
+module type FILE_SYSTEM =
+  sig
+    type buffer
+    type stat
+    type 'a callback = 'a option -> unit
+    val mkdir: string -> 'a callback -> unit
+    val rmdir: string -> 'a callback -> unit
+
+    val stat: string -> stat callback -> unit
+
+    val open_: string -> string -> int callback -> unit
+    val close: string -> unit callback -> unit
+
+    val read:  int -> buffer -> int callback -> unit
+    val write: int -> buffer -> int callback -> unit
+
+    val readdir: string -> string array callback -> unit
+
+    val rename: string -> string -> unit callback -> unit
+    val unlink: string -> unit callback -> unit
+  end
+
+
+
+
+
 module type BUFFERS =
   functor (B:BUFFER) ->
   sig
@@ -131,6 +159,16 @@ module type S0 =
                    val buffer: in_file -> S.t -> S.t t
                    val stream: in_file -> S.t -> S.t t
                  end
+    module Read: functor (W:WRITABLE) ->
+                 sig
+                   val read_buffer: in_file -> W.t -> W.t t
+                   val read: in_file -> W.t -> W.t t
+                 end
+    module Write: functor (R:READABLE) ->
+                  sig
+                    val write_buffer: out_file -> R.t -> R.t t
+                    val write: out_file -> R.t -> R.t t
+                  end
   end
 
 
@@ -198,6 +236,22 @@ module Fill_reader =
     let make (n:int) (c:char): t =
       {n;c}
   end
+
+module Char_reader =
+  struct
+    type t = char option
+    let make (c:char): t =
+      Some c
+    let has_more (cr:t): bool =
+      cr <> None
+    let peek (cr:t): char =
+      match cr with
+      | None -> assert false (* Illegal call! *)
+      | Some c -> c
+    let advance (_:t): t =
+      None
+  end
+
 
 
 

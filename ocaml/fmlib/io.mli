@@ -145,6 +145,9 @@ module type WRITABLE =
     val putend: t -> t
   end
 
+
+
+
 (** IO filter
 
    An IO filter is a {!module-type:WRITABLE} structure which returns on each
@@ -214,6 +217,16 @@ module type S0 =
                    val buffer: in_file -> S.t -> S.t t
                    val stream: in_file -> S.t -> S.t t
                  end
+    module Read: functor (W:WRITABLE) ->
+                 sig
+                   val read_buffer: in_file -> W.t -> W.t t
+                   val read: in_file -> W.t -> W.t t
+                 end
+    module Write: functor (R:READABLE) ->
+                  sig
+                    val write_buffer: out_file -> R.t -> R.t t
+                    val write: out_file -> R.t -> R.t t
+                  end
   end
 
 
@@ -264,6 +277,15 @@ sig
 
   (** [make n c] makes a character filler with [n] characters [c]. *)
   val make: int -> char -> t
+end
+
+
+module Char_reader:
+sig
+  include READABLE
+
+  (** [make c] makes a character reader with the character [c]. *)
+  val make: char -> t
 end
 
 

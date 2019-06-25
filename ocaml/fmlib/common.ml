@@ -99,6 +99,9 @@ module String =
   end
 
 
+module String_set = Set.Make(String)
+module String_map = Finite_map.Make(String)
+
 
 
 module type SEXP =

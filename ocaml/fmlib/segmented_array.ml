@@ -27,8 +27,6 @@
           b2) last slot has still capacity
  *)
 
-open Printf
-
 let bitsize = 5 (* or the branching factor, i.e. branching factor = 32 *)
 let node_size = 1 lsl bitsize
 
@@ -49,12 +47,17 @@ let length (t:'a t): int =
   | Node (size,_,_) ->
      size
 
+let is_empty (t:'a t): bool =
+  length t = 0
+
 let height (t:'a t): int =
   match t with
   | Leaf _ ->
      0
   | Node (_,h,_) ->
      h
+
+let _ = height
 
 let index (i:int) (h:int): int * int =
   let slot = i lsr (h*bitsize) in
@@ -73,13 +76,16 @@ let rec elem (i:int) (t:'a t): 'a =
      elem rel arr.(slot)
 
 
-let rec singleton (e:'a) (h:int): 'a t =
+let rec singleton_with_height (e:'a) (h:int): 'a t =
   assert (0 <= h);
   if h = 0 then
     Leaf [|e|]
   else
-    Node (1,h, [|singleton e (h-1)|])
+    Node (1,h, [|singleton_with_height e (h-1)|])
 
+
+let singleton (a:'a): 'a t =
+  singleton_with_height a 0
 
 
 let push_array (e:'a) (arr:'a array): 'a array =
@@ -122,11 +128,11 @@ let push (e:'a) (t:'a t): 'a t =
        if size = len * (1 lsl (h*bitsize)) then
          if len = node_size then
            (* introduce a new level *)
-           Node (size+1, h+1, [|t; singleton e h|]),
+           Node (size+1, h+1, [|t; singleton_with_height e h|]),
            true
          else
            (* introduce a new slot *)
-           Node (size+1, h, push_array (singleton e (h-1)) arr),
+           Node (size+1, h, push_array (singleton_with_height e (h-1)) arr),
            false
        else
          (* push into last slot *)
@@ -139,6 +145,7 @@ let push (e:'a) (t:'a t): 'a t =
   let t,_ = push0 e t in
   assert (length t = n + 1);
   t
+
 
 
 let rec push_list (l:'a list) (t:'a t): 'a t =
@@ -179,43 +186,67 @@ let rec take (n:int) (t:'a t): 'a t =
 
 
 
+let to_array (arr:'a t): 'a array =
+  Array.init (length arr) (fun i -> elem i arr)
+
+let to_string (arr:char t): string =
+  String.init (length arr) (fun i -> elem i arr)
 
 
-let test ()  =
+
+(* ------------------------------------------------------------
+
+   Unit Tests
+
+   ------------------------------------------------------------*)
+
+let fill (n:int): int t =
+  assert (0 <= n);
+  let rec fill0 (i:int) (t:int t): int t =
+    if i = n then
+      t
+    else
+      fill0 (i+1) (push i t) in
+  fill0 0 empty
+
+
+let overwrite (n:int) (t:int t): int t =
+  let rec over i t =
+    if i = n then
+      t
+    else
+      over (i+1) (put i (i+1) t)
+  in
+  over 0 t
+
+let%test _ =
+  let n = 32768 in
+  let t = fill n in
+  let check = ref true in
+  for i = 0 to n - 1 do
+    check := !check && elem i t = i
+  done;
+  !check
+
+
+let%test _ =
+  let n = 32768 in
+  let t = fill n in
+  let t1 = overwrite n t in
+  let check = ref true in
+  for i = 0 to n - 1 do
+    check := !check && elem i t1 = i +1
+  done;
+  !check
+
+
+let%test _ =
   let n = 32768 in
   let m = 1024 in
-  let fill (n:int): int t =
-    assert (0 <= n);
-    let rec fill0 (i:int) (t:int t): int t =
-      if i = n then
-        t
-      else
-        fill0 (i+1) (push i t) in
-    fill0 0 empty
-  in
-  let overwrite (n:int) (t:int t): int t =
-    let rec over i t =
-      if i = n then
-        t
-      else
-        over (i+1) (put i (i+1) t)
-    in
-    over 0 t
-  in
   let t = fill n in
-  printf "length t %d\n" (length t);
-  printf "height t %d\n" (height t);
-  for i = 0 to n - 1 do
-    assert (elem i t = i)
-  done;
-  let t1 = overwrite n t in
-  for i = 0 to n - 1 do
-    assert (elem i t1 = i + 1)
-  done;
   let t2 = take m t in
-  printf "length t2 %d\n" (length t2);
-  printf "height t2 %d\n" (height t2);
+  let check = ref true in
   for i = 0 to m - 1 do
-    assert (elem i t2 = i)
+    check := !check && elem i t2 = i
   done;
-  printf "all checks done\n"
+  !check && length t2 = m
