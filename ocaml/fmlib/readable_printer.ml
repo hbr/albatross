@@ -72,7 +72,7 @@ module R =
   end
 
 
-module M =
+module M0 =
   struct
     type 'a t = ('a -> R.t) -> R.t
     let return (a:'a) (k:'a -> R.t): R.t =
@@ -81,10 +81,23 @@ module M =
       m (fun a -> f a k)
   end
 
-include Monad.Of_sig_min (M)
+module M = Monad.Of_sig_min (M0)
+
+
+type t = unit M.t
+
+
+let empty: t =
+  M.return ()
+
+
+let (<+>)  (p1:t) (p2:t): t =
+  M.(p1 >>= fun _ -> p2)
+
 
 let string (s:string) (k:unit -> R.t): R.t =
   R.make_substring s 0 (String.length s) k
+
 
 let substring (s:string) (start:int) (len:int) (k:unit -> R.t): R.t =
   assert (0 <= start);
@@ -92,13 +105,15 @@ let substring (s:string) (start:int) (len:int) (k:unit -> R.t): R.t =
   assert (start + len <= String.length s);
   R.make_substring s start len k
 
+
 let fill (n:int) (c:char) (k:unit -> R.t): R.t =
   assert (0 <= n);
   R.make_fill n c k
+
 
 let char (c:char) (k:unit -> R.t): R.t =
   R.make_char c k
 
 
-let readable (m:unit t): R.t =
+let readable (m:unit M.t): R.t =
   m (fun () -> R.make_empty)

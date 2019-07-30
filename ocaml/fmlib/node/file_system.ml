@@ -28,6 +28,11 @@ class type fs =
     method mkdir: js_string t -> (error t opt -> unit) callback -> unit meth
     method rmdir: js_string t -> (error t opt -> unit) callback -> unit meth
 
+    method readdir:
+             js_string t
+             -> (error t opt -> js_string t js_array t -> unit) callback
+             -> unit meth
+
     method unlink : js_string t -> (error t opt -> unit) callback -> unit meth
 
     method mkdirSync: js_string t -> unit meth
@@ -89,24 +94,17 @@ let rmdir (path:string) (f:unit option -> unit): unit =
           f @@ Some () )
 
 
+let readdir (path:string) (f:string array option -> unit): unit =
+  node_fs##readdir
+    (string path)
+    (wrap_callback @@
+       fun eopt arr ->
+       match Opt.to_option eopt with
+       | Some _ ->
+          f None
+       | None ->
+          f @@ Some (Array.map to_string (to_array arr)))
 
-
-let mkdirSync (path:string): unit option =
-  try
-    node_fs##mkdirSync (string path);
-    Some ()
-  with _ ->
-    None
-
-let rmdirSync (path:string): unit option =
-  try
-    node_fs##rmdirSync (string path);
-    Some ()
-  with
-  | Error _ ->
-     None
-  | _ ->
-     assert false
 
 let stat (path:string): _ option =
   try

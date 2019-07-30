@@ -1,190 +1,225 @@
 open Fmlib
-open Common
 open Common_module_types
-
-(* IO Interface *)
-module type IO =
-  sig
-    include MONAD
-
-    type in_file
-    type out_file
-    type in_stream
-    type out_stream
-
-    val exit: int -> 'a t
-    val execute: unit t -> unit
+open Common
 
 
-    module Reader (P:Io.WRITABLE):
-    sig
-      val parse_file: string -> P.t -> P.t option t
-    end
-
-    module Filter (F:Io.FILTER):
-    sig
-      type error =
-        | Cannot_open_input
-        | Cannot_open_output
-        | Cannot_write of F.t * F.Readable.t
-
-      val parse_file: string -> string -> F.t -> (F.t, error) result t
-    end
-  end
-
-
-
-
-
-module World = Io.Buffers (Io_buffer)
-
-module M =
+module World =
   struct
-    type 'a t = World.t -> ('a -> unit) -> unit
+    include Io.Buffers (Io_buffer)
 
-    let return (a:'a) (_:World.t) (k:'a -> unit): unit =
-      k a
+    let buffer_size = 4096 (* 16K: 16384, 32K: 32768, 64K: 65536, 2000 loc ~ 56K,
+                              3000 loc ~ 85K *)
 
-    let (>>=) (m:'a t) (f:'a -> 'b t) (w:World.t) (k:'b -> unit): unit =
-      m w
-        (fun a ->
-          f a w k)
+    let stdin:  int = 0
+    let stdout: int = 1
+    let stderr: int = 2
+
+    let init () =
+      let w = make buffer_size in
+      let i0 = occupy_readable w stdin in
+      assert (i0 = stdin);
+      let i1 = occupy_writable w stdout in
+      assert (i1 = stdout);
+      let i2 = occupy_writable w stderr in
+      assert (i2 = stderr);
+      w
   end
 
-include Monad.Of_sig_min (M)
 
-let write1 (fd:int) (buf:Io_buffer.t) (_:World.t) (k:int -> unit): unit =
-  File_system.write fd buf k
+module IO0: Io.SIG_MIN =
+  struct
+    type in_file = int
+    type out_file = int
 
-let flush (fd:int) (buf:Io_buffer.t) (w:World.t) (k:unit option->unit): unit =
-  let rec wrt () =
-    if Io_buffer.is_empty buf then
-      return @@ Some ()
-    else
-      write1 fd buf >>= fun n ->
-      if n = 0 then
-        return None
-      else
-        wrt ()
-  in
-  wrt () w k
+    let stdin:  in_file =  0
+    let stdout: out_file = 1
+    let stderr: out_file = 2
 
+    type program =
+      | More of (World.t * (World.t -> program))
+      | Done
 
-let write (i:int) (w:World.t) (k:unit option -> unit): unit =
-  assert (World.is_open_write w i);
-  let fd,buf = World.writable_file w i in
-  flush fd buf w k
+    module M =
+      Monad.Of_sig_min(
+          struct
+            type 'a t = World.t -> ('a -> World.t -> program) -> program
 
-let read (i:int) (w:World.t) (k:int -> unit): unit =
-  assert (World.is_open_read w i);
-  let fd,buf = World.readable_file w i in
-  assert (not (Io_buffer.is_full buf));
-  File_system.read fd buf k
+            let return (a:'a): 'a t =
+              fun w k ->
+              More (w, k a)
 
-let flush_all (w:World.t) (k: unit -> unit): unit =
-  let rec flush i =
-    let j = World.find_open w i in
-    if j = World.capacity w then
-      return ()
-    else
-      (if World.is_open_write w j then
-         write j
-       else
-         return @@ Some ())
-      >>= fun _ ->
-      flush (j+1)
-  in
-  flush 0 w k
+            let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
+              fun w k ->
+              More (w,
+                    fun w ->
+                    m w
+                      (fun a w -> f a w k))
+          end)
 
-let exit (code:int) (w:World.t) (k:'a -> unit): unit =
-  (flush_all >>= fun _ -> Process.exit code) w k
-
-type in_file  = int
-type out_file = int
-
-let stdin:  in_file  = 0
-let stdout: out_file = 1
-let stderr: out_file = 2
-
-let buffer_size = 4096 (* 16K: 16384, 32K: 32768, 64K: 65536, 2000 loc ~ 56K,
-                          3000 loc ~ 85K *)
+    include M
 
 
-let execute (program:unit t): unit =
-  let w = World.make buffer_size in
-  let i0 = World.occupy_readable w stdin in
-  assert (i0 = stdin);
-  let i1 = World.occupy_writable w stdout in
-  assert (i1 = stdout);
-  let i2 = World.occupy_writable w stderr in
-  assert (i2 = stderr);
-  (program >>= fun _ -> flush_all) w identity
-
-let create_directory (path:string) (_:World.t) (k:unit option -> unit): unit =
-  File_system.mkdir path k
-
-let remove_directory (path:string) (_:World.t) (k:unit option -> unit): unit =
-  File_system.rmdir path k
+    let rec execute_program (p:program): unit =
+      match p with
+      | Done ->
+         ()
+      | More (w,f) ->
+         execute_program (f w)
 
 
-let open_for_read (path:string) (w:World.t) (k:in_file option -> unit): unit =
-  File_system.open_ path "r"
-    (function
-     | None ->
-        k None
-     | Some fd ->
-        k @@ Some (World.occupy_readable w fd))
-
-let open_for_write (path:string) (w:World.t) (k:out_file option -> unit): unit =
-  File_system.open_ path "w"
-    (function
-     | None ->
-        k None
-     | Some fd ->
-        k @@ Some (World.occupy_writable w fd))
-
-let close (i:int) (w:World.t) (k:unit option -> unit): unit =
-  if World.is_open_read w i then
-    let fd,_ = World.readable_file w i in
-    World.release w i;
-    File_system.close fd k
-  else if World.is_open_write w i then
-    let fd,buf = World.readable_file w i in
-    World.release w i;
-    (flush fd buf w
-       (fun _ -> File_system.close fd k))
-  else
-    assert false (* Illegal call: File not open! *)
-
-let close_readable (fd:in_file) (w:World.t) (k:unit option -> unit): unit =
-  close fd w k
-
-let close_writable (fd:in_file) (w:World.t) (k:unit option -> unit): unit =
-  close fd w k
-
-let getc (i:in_file) (w:World.t) (k:char option -> unit): unit =
-  let _,buf = World.readable_file w i in
-  let o = Io_buffer.getc buf in
-  (match o with
-   | None ->
-      (read i >>= fun _ ->
-       return @@ Io_buffer.getc buf)
-   | Some c ->
-      return @@ Some c
-  ) w k
+    let world: World.t t =
+      fun w k -> k w w
 
 
-let putc (i:out_file) (c:char) (w:World.t) (k:unit option -> unit): unit =
-  let fd,buf = World.writable_file w i in
-  let o = Io_buffer.putc buf c in
-  (match o with
-   | None ->
-      (flush fd buf >>= fun _ ->
-       return @@ Io_buffer.putc buf c)
-   | Some () ->
-      return @@ Some ()
-  ) w k
+    let write1
+          (fd:int)
+          (buf:Io_buffer.t)
+          (w:World.t)
+          (k:int -> World.t -> program): program =
+      File_system.write
+        fd
+        buf
+        (fun n -> execute_program @@  k n w);
+      Done
 
-let getchar = getc stdin
-let putchar = putc stdout
-let errchar = putc stderr
+
+    let flush (fd:int) (buf:Io_buffer.t): unit option t =
+      let rec write () =
+        if Io_buffer.is_empty buf then
+          return (Some ())
+        else
+          write1 fd buf >>= fun n ->
+          if n = 0 then
+            return None
+          else
+            write ()
+      in
+      write ()
+
+
+
+    let writable_file (fd:out_file): (int * Io_buffer.t) t =
+      fun w k ->
+      assert (World.is_open_write w fd);
+      let fd,buf = World.writable_file w fd in
+      k (fd,buf) w
+
+
+    let write (fd:out_file): unit option t =
+      writable_file fd >>= fun (fd,buf) ->
+      flush fd buf
+
+
+    let flush_all: unit t =
+      world >>= fun w ->
+      let rec flush i =
+        if i = World.capacity w then
+          return ()
+
+        else if World.is_open_write w i then
+          write i >>= fun _ ->
+          flush (i + 1)
+        else
+          flush (i + 1)
+      in
+      flush 0
+
+
+    let make_program (m:unit t): program =
+      (m >>= fun _ -> flush_all)
+        (World.init ())
+        (fun _ _ -> Done)
+
+
+    let execute (m:unit t): unit =
+      execute_program @@ make_program m
+
+
+    module Process0 = Process
+
+    module Process =
+      struct
+        let exit (code:int): 'a t =
+          flush_all >>= fun _ -> Process0.exit code
+
+        let execute (program:unit t): unit =
+          execute program
+
+        let command_line: string array t =
+          return Process0.command_line
+
+        let current_working_directory: string t =
+          return (Process0.current_working_directory ())
+      end
+
+
+    module Path0 =
+      struct
+        let separator: char =
+          Path.separator
+        let delimiter: char =
+          Path.delimiter
+      end
+
+
+    let read_directory (path:string): string array option t =
+      fun w k ->
+      File_system.readdir
+        path
+        (fun arr ->
+          Printf.printf "read_directory %s\n" path;
+          execute_program @@ k arr w);
+      Done
+
+    let prompt (_:string): string option t =
+      assert false
+
+
+    module Read (W:WRITABLE) =
+      struct
+        let read_buffer (fd:in_file) (w:W.t): W.t t =
+          assert false
+
+        let read (fd:in_file) (w:W.t): W.t t =
+          assert false
+      end
+
+
+    module Write (R:READABLE) =
+      struct
+        let rec extract_readable (n_max:int) (r:R.t): string =
+          if n_max <> 0 && R.has_more r then
+            String.one (R.peek r) ^ extract_readable (n_max - 1) (R.advance r)
+          else
+            ""
+
+        module BW = Io_buffer.Write (R)
+        let write_buffer (fd:out_file) (r:R.t): R.t t =
+          writable_file fd >>= fun (_,buf) ->
+          return @@ BW.write buf r
+
+        let write (fd:out_file) (r:R.t): R.t t =
+          let str = extract_readable 300 r in
+
+          writable_file fd >>= fun (fd,buf) ->
+          let rec write i r =
+            assert (i < 100);
+            if R.has_more r then
+              if Io_buffer.is_full buf then
+                flush fd buf >>= function
+                | None ->
+                   return r
+                | Some () ->
+                   assert (not (Io_buffer.is_full buf));
+                   write (i+1) r
+              else
+                return @@ BW.write buf r >>= write (i+1)
+            else
+              return r
+          in
+          write 0 r
+      end
+  end
+
+
+module IO: Io.SIG = Io.Make (IO0)

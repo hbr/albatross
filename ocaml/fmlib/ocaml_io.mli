@@ -1,3 +1,3 @@
-module IO0: Io.S0
+module IO0: Io.SIG_MIN
 
-module IO: Io.S
+module IO: Io.SIG

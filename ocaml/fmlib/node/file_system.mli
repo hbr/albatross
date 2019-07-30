@@ -2,8 +2,7 @@
 val mkdir: string -> (unit option -> unit) -> unit
 val rmdir: string -> (unit option -> unit) -> unit
 
-val mkdirSync: string -> unit option
-val rmdirSync: string -> unit option
+val readdir: string -> (string array option -> unit) -> unit
 
 val stat: string -> 'a option
 

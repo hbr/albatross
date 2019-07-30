@@ -25,6 +25,7 @@ module Monad = Monad
 
 (** {1 Mutable Data Types} *)
 
+module Array = Array
 module Vector = Vector
 module Pool = Pool
 
@@ -34,6 +35,7 @@ module Pool = Pool
 module Io = Io
 module Ocaml_io = Ocaml_io
 module Readable_printer = Readable_printer
+module String_printer   = String_printer
 
 
 (** {1 Parsing }*)

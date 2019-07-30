@@ -1,1 +1,2 @@
-include Fmlib.Io.PATH
+val delimiter: char
+val separator: char

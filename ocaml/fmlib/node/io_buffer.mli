@@ -1,3 +1,5 @@
+open Fmlib.Common_module_types
+
 (**
    An IO buffer is an array of bytes
 {v
@@ -75,18 +77,18 @@ val set_write_pointer: t -> int -> unit
 val copy: t -> int -> int -> t -> int -> unit
 
 
-module Read (W:Fmlib.Io.WRITABLE):
+module Read (W:WRITABLE):
 sig
   val read: t -> W.t -> W.t
 end
 
-module Write (R:Fmlib.Io.READABLE):
+module Write (R:READABLE):
 sig
   val write: t -> R.t -> R.t
 end
 
 
-module Filter (F:Fmlib.Io.FILTER):
+module Filter (F:FILTER):
 sig
   (** [filter p bi bo] reads from input buffer [bi] filters the remaining data
      in the buffer using the filter program [p] and outputs the output from

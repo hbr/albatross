@@ -1,5 +1,6 @@
 (executable
-  (libraries fmlib unix)
+  (libraries fmlib albalib)
+  (public_name alba2)
   (name alba2))
 
  (env (dev

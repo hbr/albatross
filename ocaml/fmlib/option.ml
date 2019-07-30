@@ -2,6 +2,15 @@ open Common_module_types
 
 type 'a t = 'a option
 
+let use (o:'a t) (b:'b) (f:'a -> 'b): 'b =
+  match o with
+  | None -> b
+  | Some a -> f a
+
+let fold (none:'z) (some:'a -> 'z): 'a t -> 'z = function
+  | None -> none
+  | Some a -> some a
+
 let return (a:'a): 'a t =
   Some a
 

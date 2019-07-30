@@ -38,20 +38,6 @@ module type RESULT_IN =
   end
 
 
-
-module type OUTPUT =
-  sig
-    include MONAD
-    val putc: char -> unit t
-    val put_string: string -> unit t
-    val put_line: string -> unit t
-    val put_newline: unit t
-    val put_substring: string -> int -> int -> unit t
-    val fill: char -> int -> unit t
-  end
-
-
-
 module type READER =
   functor (Env:ANY) ->
   sig

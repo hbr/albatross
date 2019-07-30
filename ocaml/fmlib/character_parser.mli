@@ -13,7 +13,12 @@ end
 module Located:
 sig
   type 'a t
-  val use: 'a t -> (int -> int -> 'a -> int -> int -> 'b) -> 'b
+  val make: Position.t -> 'a -> Position.t -> 'a t
+  val map: ('a -> 'b) -> 'a t -> 'b t
+  val use: 'a t -> (Position.t -> 'a -> Position.t -> 'b) -> 'b
+  val start: 'a t -> Position.t
+  val end_:  'a t -> Position.t
+  val value: 'a t -> 'a
 end
 
 module type CONTEXT =
@@ -105,10 +110,10 @@ sig
   (** {2 Character Combinators} *)
 
   val expect: (char -> bool) -> string -> char t
-  val expect_end: final -> final t
+  val expect_end: unit t
   val whitespace_char: char t
   val whitespace: int t
-  val one_of_chars: string -> unit t
+  val one_of_chars: string -> string -> unit t
   val string: string -> unit t
   val char: char -> unit t
   val space: unit t
@@ -164,7 +169,7 @@ sig
   (** [make pc] makes a parser from a parser combinator [pc].*)
   val make: final t -> parser
 
-  (** [run pc str] makes a parser from the combinator [pc] and runs the parser
+  (** [run p str] makes a parser from the combinator [pc] and runs the parser
      on the string [str]. *)
   val run: final t -> string -> parser
 end
@@ -201,7 +206,7 @@ sig
   (** {2 Character Combinators} *)
 
   val expect: (char -> bool) -> Problem.t -> char t
-  val expect_end: final -> Problem.t -> final t
+  val expect_end:  Problem.t -> unit t
   val whitespace_char: Problem.t -> char t
   val whitespace: Problem.t -> int t
   val one_of_chars: string -> Problem.t -> unit t

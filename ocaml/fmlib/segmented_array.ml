@@ -38,6 +38,18 @@ type 'a t =
   | Node of int * int * 'a t array (* size, level, nodes *)
 
 
+
+let map (f:'a ->'b) (t:'a t): 'b t =
+  let rec map (t:'a t): 'b t =
+    match t with
+    | Leaf arr ->
+       Leaf (Array.map f arr)
+    | Node (size, h, arr) ->
+       Node (size, h,
+             Array.map map arr)
+  in
+  map t
+
 let empty = Leaf [||]
 
 let length (t:'a t): int =
@@ -47,8 +59,10 @@ let length (t:'a t): int =
   | Node (size,_,_) ->
      size
 
+
 let is_empty (t:'a t): bool =
   length t = 0
+
 
 let height (t:'a t): int =
   match t with
@@ -57,7 +71,9 @@ let height (t:'a t): int =
   | Node (_,h,_) ->
      h
 
+
 let _ = height
+
 
 let index (i:int) (h:int): int * int =
   let slot = i lsr (h*bitsize) in
@@ -66,6 +82,7 @@ let index (i:int) (h:int): int * int =
 
 
 let rec elem (i:int) (t:'a t): 'a =
+  assert (0 <= i);
   assert (i < length t);
   match t with
   | Leaf arr ->
@@ -156,8 +173,21 @@ let rec push_list (l:'a list) (t:'a t): 'a t =
      push_list l (push e t)
 
 
+
+let push_array (arr:'a array) (t:'a t): 'a t =
+  Array.fold_left
+    (fun t e -> push e t)
+    t
+    arr
+
+
 let of_list (l:'a list): 'a t =
   push_list l empty
+
+
+let of_array (arr:'a array): 'a t =
+  push_array arr empty
+
 
 
 let rec take (n:int) (t:'a t): 'a t =

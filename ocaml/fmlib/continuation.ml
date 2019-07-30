@@ -37,6 +37,23 @@ module Make_experimental (A: ANY) =
            iterate (f ())
       in
       iterate @@ m (fun a -> Done a)
+
+    let run_while (m:answer t): answer =
+      let st = ref (m (fun a -> Done a))
+      and goon = ref true
+      in
+      while !goon do
+        match !st with
+        | Done _ ->
+           goon := false
+        | More f ->
+           st := f ()
+      done;
+      match !st with
+      | Done a ->
+         a
+      | _ ->
+         assert false (* cannot happen *)
   end
 
 

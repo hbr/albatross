@@ -2,16 +2,6 @@ open Common_module_types
 open Common
 
 
-module type PATH =
-  sig
-    val separator: char
-    val delimiter: char
-    val basename: string -> string
-    val dirname: string -> string
-    val extname: string -> string
-  end
-
-
 module type STAT =
   sig
     type t
@@ -29,31 +19,6 @@ module type BUFFER =
     type t
     val alloc: int -> t
   end
-
-
-
-module type FILE_SYSTEM =
-  sig
-    type buffer
-    type stat
-    type 'a callback = 'a option -> unit
-    val mkdir: string -> 'a callback -> unit
-    val rmdir: string -> 'a callback -> unit
-
-    val stat: string -> stat callback -> unit
-
-    val open_: string -> string -> int callback -> unit
-    val close: string -> unit callback -> unit
-
-    val read:  int -> buffer -> int callback -> unit
-    val write: int -> buffer -> int callback -> unit
-
-    val readdir: string -> string array callback -> unit
-
-    val rename: string -> string -> unit callback -> unit
-    val unlink: string -> unit callback -> unit
-  end
-
 
 
 
@@ -77,180 +42,6 @@ module type BUFFERS =
 
 
 
-
-
-
-module type READABLE =
-  sig
-    type t
-    val has_more: t -> bool
-    val peek: t -> char
-    val advance: t -> t
-  end
-
-
-
-
-
-module type WRITABLE =
-  sig
-    type t
-    val needs_more: t -> bool
-    val putc: t -> char ->  t
-    val putend: t -> t
-  end
-
-
-module type FILTER =
-  sig
-    module Readable: READABLE
-    type t
-    val needs_more: t -> bool
-    val putc: t -> char -> t * Readable.t
-    val put_end: t -> t * Readable.t
-  end
-
-
-
-
-
-module type SCANNER =
-  sig
-    type t
-    val can_receive: t -> bool
-    val receive: char -> t -> t
-    val end_buffer: t -> t
-    val end_stream: t -> t
-  end
-
-
-module type S0 =
-  sig
-    type in_file
-    type out_file
-
-    val stdin:  in_file
-    val stdout: out_file
-    val stderr: out_file
-
-    include MONAD
-
-    val exit: int -> 'a t
-    val execute: unit t -> unit
-
-    val command_line: string array t
-
-    val open_for_read:  string -> in_file  option t
-    val open_for_write: string -> out_file option t
-    val create: string -> out_file option t
-    val close_in:  in_file  -> unit t
-    val close_out: out_file -> unit t
-    val flush: out_file -> unit t
-    val flush_all: unit t
-
-    val getc: in_file -> char option t
-    val putc: char -> out_file  ->  unit t
-    val get_line: in_file -> string option t
-    val scan: (char,'a) Scan.t -> in_file -> 'a t
-    val put_substring: string -> int -> int -> out_file -> unit t
-
-    module Scan: functor (S:SCANNER) ->
-                 sig
-                   val buffer: in_file -> S.t -> S.t t
-                   val stream: in_file -> S.t -> S.t t
-                 end
-    module Read: functor (W:WRITABLE) ->
-                 sig
-                   val read_buffer: in_file -> W.t -> W.t t
-                   val read: in_file -> W.t -> W.t t
-                 end
-    module Write: functor (R:READABLE) ->
-                  sig
-                    val write_buffer: out_file -> R.t -> R.t t
-                    val write: out_file -> R.t -> R.t t
-                  end
-  end
-
-
-module type S =
-  sig
-    include S0
-
-    val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
-    val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
-    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t
-
-    val put_string: string -> out_file -> unit t
-    val put_line:   string -> out_file -> unit t
-    val put_newline:   out_file -> unit t
-    val fill: char -> int -> out_file -> unit t
-
-    val getc_in: char option t
-    val get_line_in: string option t
-
-    val putc_out: char -> unit t
-    val put_string_out: string -> unit t
-    val put_line_out: string -> unit t
-    val put_newline_out: unit t
-
-    val putc_err: char -> unit t
-    val put_string_err: string -> unit t
-    val put_line_err: string -> unit t
-    val put_newline_err: unit t
-  end
-
-
-module String_reader =
-  struct
-    type t = {s: string; pos:int; beyond:int}
-
-    let of_substring (s:string) (start:int) (len:int): t =
-      assert (0 <= start);
-      assert (start + len <= String.length s);
-      {s; pos = start; beyond = start + len}
-
-    let of_string (s:string): t =
-      of_substring s 0 (String.length s)
-
-    let has_more (r:t): bool =
-      r.pos < r.beyond
-
-    let peek (r:t): char =
-      assert (has_more r);
-      r.s.[r.pos]
-
-    let advance (r:t): t =
-      assert (has_more r);
-      {r with pos = r.pos + 1}
-  end
-
-module Fill_reader =
-  struct
-    type t = {n:int; c:char}
-    let has_more (r:t): bool =
-      r.n > 0
-    let peek (r:t): char =
-      r.c
-    let advance (r:t): t =
-      {r with n = r.n - 1}
-    let make (n:int) (c:char): t =
-      {n;c}
-  end
-
-module Char_reader =
-  struct
-    type t = char option
-    let make (c:char): t =
-      Some c
-    let has_more (cr:t): bool =
-      cr <> None
-    let peek (cr:t): char =
-      match cr with
-      | None -> assert false (* Illegal call! *)
-      | Some c -> c
-    let advance (_:t): t =
-      None
-  end
 
 
 
@@ -321,11 +112,282 @@ module Buffers: BUFFERS =
 
 
 
-module Make (M:S0): S =
+
+
+module type SIG_MIN =
+  sig
+    type in_file
+    type out_file
+
+    val stdin:  in_file
+    val stdout: out_file
+    val stderr: out_file
+
+    module M: MONAD
+    include MONAD
+
+    module Process:
+    sig
+      val exit: int -> 'a t
+      val execute: unit t -> unit
+      val command_line: string array t
+      val current_working_directory: string  t
+    end
+
+    module Path0:
+    sig
+      val separator: char
+      val delimiter: char
+    end
+
+    val read_directory: string -> string array option t
+
+    val prompt: string -> string option t
+
+    (*val open_for_read:  string -> in_file  option t
+    val open_for_write: string -> out_file option t
+    val create: string -> out_file option t
+    val close_in:  in_file  -> unit t
+    val close_out: out_file -> unit t
+    val flush: out_file -> unit t
+    val flush_all: unit t
+
+    val getc: in_file -> char option t
+    val putc: char -> out_file  ->  unit t
+    val get_line: in_file -> string option t
+    val put_substring: string -> int -> int -> out_file -> unit t*)
+
+    module Read: functor (W:WRITABLE) ->
+                 sig
+                   val read_buffer: in_file -> W.t -> W.t t
+                   val read: in_file -> W.t -> W.t t
+                 end
+    module Write: functor (R:READABLE) ->
+                  sig
+                    val write_buffer: out_file -> R.t -> R.t t
+                    val write: out_file -> R.t -> R.t t
+                  end
+  end
+
+
+
+
+
+
+module type SIG =
+  sig
+    include SIG_MIN
+
+    module Path:
+    sig
+      val absolute: string -> string t
+      val split: string -> (string * string) option
+      val normalize: string -> string
+      val join: string -> string -> string
+    end
+
+    module Directory:
+    sig
+      val read: string -> string array option t
+    end
+
+    (*val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
+    val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
+    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t*)
+
+    module File:
+    sig
+      module In:
+      sig
+        type fd
+      end
+      module Out:
+      sig
+        type fd
+        val putc: char -> fd -> unit t
+        val substring: string -> int -> int -> fd -> unit t
+        val string: string -> fd -> unit t
+        val line: string -> fd -> unit t
+        val newline: fd -> unit t
+        val fill: int -> char -> fd -> unit t
+      end
+      val stdin:  In.fd
+      val stdout: Out.fd
+      val stderr: Out.fd
+    end
+
+    module Repl:
+    sig
+      val prompt: string -> string option t
+    end
+
+
+    (*val getc_in: char option t
+    val get_line_in: string option t*)
+
+    module Stdout:
+    sig
+      val putc: char -> unit t
+      val string: string -> unit t
+      val line: string -> unit t
+      val newline: unit t
+      val fill: int -> char -> unit t
+    end
+
+    module Stderr:
+    sig
+      val putc: char -> unit t
+      val string: string -> unit t
+      val line: string -> unit t
+      val newline: unit t
+      val fill: int -> char -> unit t
+    end
+  end
+
+
+let path_split (sep:char) (path:string): (string * string) option =
+  let len = String.length path
+  in
+  let len =
+    if 2 <= len && path.[len-1] = sep then
+      len - 1
+    else
+      len
+  in
+  let pos = String.find_bwd (fun c -> c = sep) len path
+  in
+  if pos = -1 || (pos = 0 && len = 1) then
+    None
+  else
+    let basename = String.sub path (pos+1) (len-pos-1)
+    and dirname =
+      if pos = 0 then
+        String.one sep
+      else
+        String.sub path 0 pos
+    in
+    Some (dirname, basename)
+
+let print_split sep path =
+  match path_split sep path with
+  | None ->
+     Printf.printf "split %s = None\n" path
+  | Some(d,b) ->
+     Printf.printf "split %s = (%s, %s)\n" path d b
+let _ = print_split
+
+let%test _ =
+  path_split '/' "" = None
+
+let%test _ =
+  path_split '/' "/" = None
+
+let%test _ =
+  path_split '/' "/hello" = Some ("/", "hello")
+
+let%test _ =
+  path_split '/' "/User/name/xxx" = Some ("/User/name", "xxx")
+
+let%test _ =
+  path_split '/' "/User/name/xxx/" = Some ("/User/name", "xxx")
+
+
+
+let path_normalize (sep:char) (path:string): string =
+  (* remove duplicate separators and normalize "." and ".." *)
+  let rec norm lst nlst =
+    match lst with
+    | [] ->
+       String.concat (String.one sep) (List.rev nlst)
+    | "" :: tl ->
+       if nlst = [] || tl = [] then
+         norm tl ("" :: nlst)
+       else
+         norm tl nlst
+    | "." :: tl ->
+       norm tl nlst
+    | h :: _ :: ".." :: tl ->
+       norm (h :: tl) nlst
+    | _ :: ".." :: tl ->
+       norm tl nlst
+    | h :: tl ->
+       norm tl (h :: nlst)
+  in
+  if String.length path = 0 then
+    "."
+  else
+    norm (String.split_on_char sep path) []
+
+let%test _ =
+  path_normalize '/' "/" = "/"
+
+let%test _ =
+  path_normalize '/' "//" = "/"
+
+let%test _ =
+  path_normalize '/' "" = "."
+
+let%test _ =
+  path_normalize '/' "abc/def/ghi" = "abc/def/ghi"
+
+let%test _ =
+  path_normalize '/' "abc/" = "abc/"
+
+let%test _ =
+  path_normalize '/' "abc/def///ghi" = "abc/def/ghi"
+
+let%test _ =
+  path_normalize '/' "abc/./def" = "abc/def"
+
+let%test _ =
+  path_normalize '/' "a/../b" = "b"
+
+let%test _ =
+  path_normalize '/' "../a" = "../a"
+
+let%test _ =
+  path_normalize '/' "a/b/../../d" = "d"
+
+
+
+
+
+
+
+module Make (M:SIG_MIN): SIG =
   struct
     include M
 
-    let read_file
+    module Path =
+      struct
+        let absolute (path:string): string t =
+          let len = String.length path
+          in
+          if 0 < len && path.[0] = Path0.separator then
+            return path
+          else
+            Process.current_working_directory >>= fun cwd ->
+            return (if len = 0
+                    then cwd
+                    else cwd ^ String.one Path0.separator ^ path)
+
+        let split (path:string): (string * string) option =
+          path_split Path0.separator path
+
+        let normalize (path:string): string =
+          path_normalize Path0.separator path
+
+        let join (dir:string) (base:string): string =
+          dir ^ String.one Path0.separator ^ base
+      end
+
+    module Directory =
+      struct
+        let read = read_directory
+      end
+
+
+    (*let read_file
           (path:string) (cannot_open:'a t) (read:in_file -> 'a t)
         : 'a t =
       open_for_read path >>= fun fd ->
@@ -359,83 +421,140 @@ module Make (M:S0): S =
          write fd >>= fun a ->
          close_out fd >>= fun _ ->
          return a
+     *)
 
-    let put_string (s:string) (fd:out_file): unit t =
-      put_substring s 0 (String.length s) fd
+    module File =
+      struct
+        module In =
+          struct
+            type fd = in_file
+          end
+        module Out =
+          struct
+            type fd = out_file
+            let substring
+                  (s:string) (start:int) (len:int) (fd:out_file)
+                : unit t =
+              let module W = Write (String_reader) in
+              W.write fd (String_reader.of_substring s start len)
+              >>= fun _ ->
+              return ()
 
-    let put_newline (fd:out_file): unit t =
-      putc '\n' fd
+            let string (s:string) (fd:out_file): unit t =
+              substring s 0 (String.length s) fd
 
-    let put_line (s:string) (fd:out_file): unit t =
-      put_string s fd >>= fun _ ->
-      put_newline fd
+            let putc (c:char) (fd:out_file): unit t =
+              let module W = Write (Char_reader) in
+              W.write fd (Char_reader.make c)
+              >>= fun _ ->
+              return ()
+
+            let newline (fd:out_file): unit t =
+              putc '\n' fd
+
+            let line (s:string) (fd:out_file): unit t =
+              string s fd >>= fun _ ->
+              newline fd
+
+            let fill (n:int) (c:char) (fd:out_file): unit t =
+              let module W = Write (Fill_reader) in
+              W.write fd (Fill_reader.make n c)
+              >>= fun _ ->
+              return ()
+          end
+
+        let stdin:  In.fd  = stdin
+        let stdout: Out.fd = stdout
+        let stderr: Out.fd = stderr
+      end
 
 
-    let fill (c:char) (n:int) (fd:out_file): unit t =
-      let rec put i =
-        if i = n then
-          return ()
-        else
-          putc c fd >>= fun _ -> put (i+1)
-      in
-      put 0
+    module Repl =
+      struct
+        let prompt = prompt
+      end
 
-
+(*
     let getc_in: char option t =
       getc stdin
 
     let get_line_in: string option t =
       get_line stdin
+ *)
 
-    let putc_out (c:char): unit t =
-      putc c stdout
 
-    let put_string_out (s:string): unit t =
-      put_string s stdout
+    module Stdout =
+      struct
+        open File
+        let putc (c:char): unit t =
+          Out.putc c stdout
 
-    let put_line_out (s:string): unit t =
-      put_line s stdout
+        let string (s:string): unit t =
+          Out.string s stdout
 
-    let put_newline_out: unit t =
-      put_newline stdout
+        let line (s:string): unit t =
+          Out.line s stdout
 
-    let putc_err (c:char): unit t =
-      putc c stderr
+        let newline: unit t =
+          Out.newline stdout
 
-    let put_string_err (s:string): unit t =
-      put_string s stderr
+        let fill n c = Out.fill n c stdout
+      end
 
-    let put_line_err (s:string): unit t =
-      put_line s stderr
 
-    let put_newline_err: unit t =
-      put_newline stderr
+    module Stderr =
+      struct
+        open File
+        let putc (c:char): unit t =
+          Out.putc c stderr
+
+        let string (s:string): unit t =
+          Out.string s stderr
+
+        let line (s:string): unit t =
+          Out.line s stderr
+
+        let newline: unit t =
+          Out.newline stderr
+
+        let fill n c = Out.fill n c stderr
+      end
   end
 
 
-module Output (Io:S) =
+module Output (Io:SIG) =
   struct
-    type out_file = Io.out_file
+    type fd = Io.File.Out.fd
 
-    include
-      Monad.Of_sig_min (
-          struct
-            type 'a t = out_file -> 'a Io.t
-            let return (a:'a) (_:out_file): 'a Io.t =
-              Io.return a
-            let (>>=) (m:'a t) (f:'a -> 'b t) (fd:out_file): 'b Io.t =
-              Io.(m fd >>= fun a -> f a fd)
-          end
-        )
+    type t =
+      | Leaf of (fd -> unit Io.t)
+      | Plus of t * t
 
-    let putc = Io.putc
-    let put_substring = Io.put_substring
-    let put_string = Io.put_string
-    let put_line = Io.put_line
-    let put_newline = Io.put_newline
 
-    let fill = Io.fill
+    let empty: t =
+      Leaf (fun _ -> Io.return ())
 
-    let run (fd:out_file) (m:'a t): 'a Io.t =
-      m fd
- end
+    let (<+>) (p1:t) (p2:t): t =
+      Plus (p1,p2)
+
+    let char c = Leaf (Io.File.Out.putc c)
+
+    let substring str start len = Leaf (Io.File.Out.substring str start len)
+
+    let string str = Leaf (Io.File.Out.string str)
+
+    let line str = Leaf (Io.File.Out.line str)
+
+    let newline = Leaf Io.File.Out.newline
+
+    let fill n c = Leaf (Io.File.Out.fill n c)
+
+    let run (fd:fd) (m:t): unit Io.t =
+      let rec run = function
+        | Leaf f ->
+           f fd
+        | Plus (p1, p2) ->
+           Io.(run p1 >>= fun _ -> run p2)
+      in
+      run m
+  end

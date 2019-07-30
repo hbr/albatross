@@ -6,6 +6,7 @@ gh-pages/
 _build
 _draft
 draft
+tmp
 *_draft.ml
 *_draft.mli
 *_old.ml
@@ -25,7 +26,6 @@ doc
 *~
 ocaml/alba
 ocaml/alba-debug
-ocaml/alba-node
 ocaml/alba_web.js
 \#*
 .\#*

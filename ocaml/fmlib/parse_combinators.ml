@@ -1,18 +1,4 @@
-module Loop_state =
-  struct
-    type ('a,'b) t =
-      | More of 'a
-      | Exit of 'b
-
-    let fold (f1:'a -> 'c) (f2:'b -> 'c) = function
-      | More a -> f1 a
-      | Exit b -> f2 b
-
-    let more a: ('a,'b) t = More a
-
-    let exit b: ('a,'b) t = Exit b
-  end
-
+open Common
 
 module type COMBINATORS =
   sig

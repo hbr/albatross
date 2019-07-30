@@ -1,48 +1,4 @@
 open Common_module_types
-open Common
-
-(** A path to a file or a directory. *)
-module type PATH =
-  sig
-    (** [separator = '/'] for posix and [separator = '\'] for windows.*)
-    val separator: char
-
-
-    (** [delimiter = ':'] for posix and [delimiter = ';'] for windows.*)
-    val delimiter: char
-
-
-    (** [basename path] returns the last portion of [path]. Trailing directory
-       separators are ignored.
-
-       [basename "/foo/bar/baz/asdf/quux.html" = "quux.html"] *)
-    val basename: string -> string
-
-
-    (** [dirname path] returns the directory name of a path, similar to the
-       Unix dirname command. Trailing directory separators are ignored.
-
-       [dirname "/foo/bar/baz/asdf/quux.html" = "/foo/bar/baz/asdf"] *)
-    val dirname: string -> string
-
-    (** [extname path] returns the extension of the path, from the last
-       occurrence of the . (period) character to end of string in the last
-       portion of the path. If there is no . in the last portion of the path,
-       or if the first character of the basename of path (see {!val:basename})
-       is ., then an empty string is returned.
-
-       [extname "index.html" = ".html"]
-
-       [extname "index.coffee.md" = ".md"]
-
-       [extname "index." = "."]
-
-       [extname "index" = ""]
-
-       [extname ".index" = ""] *)
-    val extname: string -> string
-  end
-
 
 
 
@@ -108,81 +64,11 @@ module type BUFFERS =
 
 
 
-(** A readable structure *)
-module type READABLE =
-  sig
-    (** Type of the structure.*)
-    type t
-
-    (** Does the structure have more characters to read? *)
-    val has_more: t -> bool
-
-    (** [peek r] returns the next character. *)
-    val peek: t -> char
-
-    (** [advance r] advances the structure by one character. *)
-    val advance: t -> t
-  end
 
 
 
 
-(** A writable structure *)
-module type WRITABLE =
-  sig
-    (** Type of the structure.*)
-    type t
-
-    (** Is it possible to write more characters to the structure? *)
-    val needs_more: t -> bool
-
-    (** [putc w c] writes the character [c] to the structure and returns a
-       structure which might accept more characters. *)
-    val putc: t -> char ->  t
-
-    (** [putend w] signals to the structure [w] that there are no more
-       characters available to write (e.g. eof reached). *)
-    val putend: t -> t
-  end
-
-
-
-
-(** IO filter
-
-   An IO filter is a {!module-type:WRITABLE} structure which returns on each
-   character besides the structure a {!module-type:READABLE} structure which is
-   considered as its output as a reaction to its input.
-
- *)
-module type FILTER =
-  sig
-    module Readable: READABLE
-    type t
-    val needs_more: t -> bool
-    val putc: t -> char -> t * Readable.t
-    val put_end: t -> t * Readable.t
-  end
-
-
-
-
-
-
-
-
-
-module type SCANNER =
-  sig
-    type t
-    val can_receive: t -> bool
-    val receive: char -> t -> t
-    val end_buffer: t -> t
-    val end_stream: t -> t
-  end
-
-
-module type S0 =
+module type SIG_MIN =
   sig
     type in_file
     type out_file
@@ -191,14 +77,28 @@ module type S0 =
     val stdout: out_file
     val stderr: out_file
 
+    module M: MONAD
     include MONAD
 
-    val exit: int -> 'a t
-    val execute: unit t -> unit
+    module Process:
+    sig
+      val exit: int -> 'a t
+      val execute: unit t -> unit
+      val command_line: string array t
+      val current_working_directory: string  t
+    end
 
-    val command_line: string array t
+    module Path0:
+    sig
+      val separator: char
+      val delimiter: char
+    end
 
-    val open_for_read:  string -> in_file  option t
+    val read_directory: string -> string array option t
+
+    val prompt: string -> string option t
+
+    (*val open_for_read:  string -> in_file  option t
     val open_for_write: string -> out_file option t
     val create: string -> out_file option t
     val close_in:  in_file  -> unit t
@@ -209,14 +109,8 @@ module type S0 =
     val getc: in_file -> char option t
     val putc: char -> out_file  ->  unit t
     val get_line: in_file -> string option t
-    val scan: (char,'a) Scan.t -> in_file -> 'a t
-    val put_substring: string -> int -> int -> out_file -> unit t
+    val put_substring: string -> int -> int -> out_file -> unit t*)
 
-    module Scan: functor (S:SCANNER) ->
-                 sig
-                   val buffer: in_file -> S.t -> S.t t
-                   val stream: in_file -> S.t -> S.t t
-                 end
     module Read: functor (W:WRITABLE) ->
                  sig
                    val read_buffer: in_file -> W.t -> W.t t
@@ -227,75 +121,136 @@ module type S0 =
                     val write_buffer: out_file -> R.t -> R.t t
                     val write: out_file -> R.t -> R.t t
                   end
+
   end
 
 
-module type S =
+
+module type SIG =
   sig
-    include S0
+    include SIG_MIN
 
-    val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
+    module Path:
+    sig
+      (** [absolute path] converts [path] into an absolute path. *)
+      val absolute: string -> string t
+
+
+      (** [split path] splits [path] into a dirname and a basename if
+         possible.
+
+         Examples:
+         {[
+           split ""                = None
+           split "/"               = None
+           split "/hello"          = Some ("/", "hello")
+           split "/User/name/xxx/" = Some("/User/name", "xxx")
+           split "/User/name/xxx"  = Some("/User/name", "xxx")
+         ]}
+
+       *)
+      val split: string -> (string * string) option
+
+
+      (** [normalize path] removes duplicate path separators and normalizes
+         "." and ".." segments.
+
+
+         Examples:
+         {[
+           normalize ""            = "."
+           normalize "/"           = "/"
+           normalize "////"        = "/"
+           normalize "a//b"        = "a/b"
+           normalize "a/./b"       = "a/b"
+           normalize "a/../b"      = "b"
+           normalize "a/b/../../c" = "c"
+           normalize "../a"        = "../a"
+         ]}
+       *)
+      val normalize: string -> string
+
+      (** [join dir file] joins the directory name [dir] with the file name
+         [file]. *)
+      val join: string -> string -> string
+    end
+
+
+    module Directory:
+    sig
+      (** [read path] reads the entries (files and subdirectories) of the
+         directory [path] and returns it in an array ([..] and [.] are not
+         included). *)
+      val read: string -> string array option t
+    end
+
+    (*val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
     val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
-    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t
+    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t*)
 
-    val put_string: string -> out_file -> unit t
-    val put_line:   string -> out_file -> unit t
-    val put_newline:   out_file -> unit t
-    val fill: char -> int -> out_file -> unit t
 
-    val getc_in: char option t
-    val get_line_in: string option t
+    module File:
+    sig
+      module In:
+      sig
+        type fd
+      end
+      module Out:
+      sig
+        type fd
+        val putc: char -> fd -> unit t
+        val substring: string -> int -> int -> fd -> unit t
+        val string: string -> fd -> unit t
+        val line: string -> fd -> unit t
+        val newline: fd -> unit t
+        val fill: int -> char -> fd -> unit t
+      end
+      val stdin:  In.fd
+      val stdout: Out.fd
+      val stderr: Out.fd
+    end
 
-    val putc_out: char -> unit t
-    val put_string_out: string -> unit t
-    val put_line_out: string -> unit t
-    val put_newline_out: unit t
 
-    val putc_err: char -> unit t
-    val put_string_err: string -> unit t
-    val put_line_err: string -> unit t
-    val put_newline_err: unit t
+    module Repl:
+    sig
+      val prompt: string -> string option t
+    end
+
+
+    (*val getc_in: char option t
+    val get_line_in: string option t*)
+
+    module Stdout:
+    sig
+      val putc: char -> unit t
+      val string: string -> unit t
+      val line: string -> unit t
+      val newline: unit t
+      val fill: int -> char -> unit t
+    end
+
+    module Stderr:
+    sig
+      val putc: char -> unit t
+      val string: string -> unit t
+      val line: string -> unit t
+      val newline: unit t
+      val fill: int -> char -> unit t
+    end
   end
 
 
 
-module String_reader:
-sig
-  include READABLE
-
-  (** [of_string s] creates a readable structure of the string [s]. *)
-  val of_string: string -> t
-
-  (** [of_substring s start len] creates a readable structure of the substring
-     of [s] starting at position [start] and having length [len]. *)
-  val of_substring: string -> int -> int -> t
-end
-
-module Fill_reader:
-sig
-  include READABLE
-
-  (** [make n c] makes a character filler with [n] characters [c]. *)
-  val make: int -> char -> t
-end
-
-
-module Char_reader:
-sig
-  include READABLE
-
-  (** [make c] makes a character reader with the character [c]. *)
-  val make: char -> t
-end
 
 
 module Buffers: BUFFERS
 
-module Make (M:S0): S
+
+module Make (M:SIG_MIN): SIG
 
 
-module Output (Io:S):
+module Output (Io:SIG):
 sig
-  include Monad.OUTPUT
-  val run: Io.out_file -> 'a t -> 'a Io.t
+  include OUTPUT
+  val run: Io.File.Out.fd -> t -> unit Io.t
 end

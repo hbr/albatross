@@ -16,6 +16,7 @@ build: [
 ]
 depends: [
   "ocaml" {>= "4.05.0"}
+  "linenoise"
   "ocamlfind" {build}
   "menhir" {build}
   "dune" {build}

@@ -66,12 +66,18 @@ module Located =
     let make start value end_ =
       {start;value;end_}
 
-    let use (l:'a t) (f: int -> int -> 'a -> int -> int -> 'b): 'b =
-      f (Position.line l.start)
-        (Position.column l.start)
-        l.value
-        (Position.line l.end_)
-        (Position.column l.end_)
+    let map (f:'a -> 'b) (l:'a t): 'b t =
+      {l with value = f l.value}
+
+    let use (l:'a t) (f: Position.t -> 'a -> Position.t -> 'b): 'b =
+      f l.start l.value l.end_
+
+    let value (l:'a t): 'a =
+      l.value
+
+    let start (l:'a t): Position.t = l.start
+
+    let end_ (l:'a t) = l.end_
   end
 
 
@@ -351,14 +357,16 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
             Error (error msg st))
         (error msg)
 
-    let expect_end (a:final) (msg:Problem.t): final t =
+
+    let expect_end (msg:Problem.t): unit t =
       Basic.token
         (fun st t ->
           match t with
           | None ->
-             Ok (a, st)
+             Ok ((), st)
           | Some _ ->
              Error (error msg st))
+
 
     let char (c:char) (msg:Problem.t): unit t =
       let e = error msg in
@@ -543,14 +551,14 @@ module Simple (Final:ANY) =
     module Advanced = Advanced (Unit) (Final) (String) (String)
     include Advanced
 
-    let expect_end (a:final): final t =
-      Advanced.expect_end a "end"
+    let expect_end: unit t =
+      Advanced.expect_end "end"
 
     let char (c:char): unit t =
       Advanced.char c @@ "'" ^ String.one c ^ "'"
 
-    let one_of_chars (str:string): unit t =
-      Advanced.one_of_chars str @@ "one of \"" ^ str ^ "\""
+    let one_of_chars (str:string) (msg:string) : unit t =
+      Advanced.one_of_chars str msg
 
     let space: unit t =
       Advanced.space "space"
@@ -610,7 +618,11 @@ let%test _ =
 
 let%test _ =
   let open CP in
-  let p = run (letter >>= expect_end) "a" in
+  let p = run (return identity
+               |= letter
+               |. expect_end)
+            "a"
+  in
   has_ended p
   && result p = Ok 'a'
   && column p = 1
@@ -638,7 +650,8 @@ let%test _ =
 
 let%test _ =
   let open UP in
-  let p = run (char 'a' >>= expect_end) "ab" in
+  let p = run (char 'a' |. expect_end) "ab"
+  in
   has_ended p
   && result p = Error (one_error 0 1 "end")
   && column p = 1
@@ -654,10 +667,7 @@ let%test _ =
 
 let%test _ =
   let open UP in
-  let p = run (char 'a'
-               >>= fun _ -> char 'b'
-               >>= expect_end)
-            "ab"
+  let p = run (char 'a' |. char 'b' |. expect_end) "ab"
   in
   has_ended p
   && result p = Ok ()
@@ -666,8 +676,7 @@ let%test _ =
 
 let%test _ =
   let open UP in
-  let p = run (char 'a'
-               >>= fun _ -> char 'b')
+  let p = run (char 'a' |. char 'b')
             "a"
   in
   has_ended p
@@ -847,7 +856,7 @@ let%test _ =
     run
       ((backtrackable (string "(a)")
         <|> string "(b)")
-       >>= expect_end)
+       |. expect_end)
       "(b)"
   in
   has_ended p

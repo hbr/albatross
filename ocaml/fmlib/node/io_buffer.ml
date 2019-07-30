@@ -1,4 +1,5 @@
 open Fmlib
+open Common_module_types
 open Js_of_ocaml
 
 type position = int
@@ -100,7 +101,7 @@ let alloc (size:int): t =
 
 
 
-module Read (W:Io.WRITABLE) =
+module Read (W:WRITABLE) =
   struct
     let read (b:t) (w:W.t): W.t =
       let rec next w =
@@ -116,24 +117,19 @@ module Read (W:Io.WRITABLE) =
      next w
   end
 
-module Write (R:Io.READABLE) =
+module Write (R:READABLE) =
   struct
     let write (b:t) (r:R.t): R.t =
-      let rec next r =
-        if R.has_more r && not (is_full b) then
-          let c = R.peek r in
-          match putc b c with
-          | None ->
-             assert false (* cannot happen: buffer is not full! *)
-          | Some () ->
-             next @@ R.advance r
-        else
-          r
-      in
-      next r
+      let r = ref r in
+      while R.has_more !r && not (is_full b) do
+        let o = putc b (R.peek !r) in
+        assert (o <> None);
+        r := R.advance !r
+      done;
+      !r
   end
 
-module Filter (F:Io.FILTER) =
+module Filter (F:FILTER) =
   struct
     let filter (p:F.t) (bi:t) (bo:t): F.t * F.Readable.t option =
       let module W = Write (F.Readable) in

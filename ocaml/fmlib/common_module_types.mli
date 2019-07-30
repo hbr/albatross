@@ -96,3 +96,76 @@ module type MONAD =
        container. *)
     val (<*>): ('a -> 'b) t -> 'a t -> 'b t
   end
+
+
+(** Readable structure *)
+module type READABLE =
+  sig
+    (** Type of the structure.*)
+    type t
+
+    (** Does the structure have more characters to read? *)
+    val has_more: t -> bool
+
+    (** [peek r] returns the next character. *)
+    val peek: t -> char
+
+    (** [advance r] advances the structure by one character. *)
+    val advance: t -> t
+  end
+
+
+
+
+(** Writable structure *)
+module type WRITABLE =
+  sig
+    (** Type of the structure.*)
+    type t
+
+    (** Is it possible to write more characters to the structure? *)
+    val needs_more: t -> bool
+
+    (** [putc w c] writes the character [c] to the structure and returns a
+       structure which might accept more characters. *)
+    val putc: t -> char ->  t
+
+    (** [putend w] signals to the structure [w] that there are no more
+       characters available to write (e.g. eof reached). *)
+    val putend: t -> t
+  end
+
+
+
+
+(** Filter structure
+
+   A filter is a {!module-type:WRITABLE} structure which returns on each
+   character besides the structure a {!module-type:READABLE} structure which is
+   considered as its output as a reaction to its input.
+
+ *)
+module type FILTER =
+  sig
+    module Readable: READABLE
+    type t
+    val needs_more: t -> bool
+    val putc: t -> char -> t * Readable.t
+    val put_end: t -> t * Readable.t
+  end
+
+
+
+
+module type OUTPUT =
+  sig
+    type t
+    val empty: t
+    val (<+>): t -> t -> t
+    val char: char -> t
+    val string: string -> t
+    val line: string -> t
+    val newline: t
+    val substring: string -> int -> int -> t
+    val fill: int -> char -> t
+  end

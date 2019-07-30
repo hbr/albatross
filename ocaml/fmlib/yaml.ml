@@ -105,14 +105,21 @@ module Parser =
       absolute
       @@ (scalar_or_object <|> list <|> return Empty)
 
+
     let result_string (p:parser): string =
       P.result_string p to_string
 
+
     let make () : parser =
-      P.make (yaml () >>= expect_end)
+      P.make (return identity
+              |= yaml ()
+              |. expect_end)
+
 
     let run (str:string): parser =
-      P.run (yaml () >>= expect_end) str
+      P.run (return identity
+             |= yaml ()
+             |. expect_end) str
   end
 
 

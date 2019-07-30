@@ -1,16 +1,4 @@
-module Loop_state:
-  sig
-    type ('a,'b) t =
-      | More of 'a
-      | Exit of 'b
-
-    val more: 'a -> ('a,'b) t
-    val exit: 'b -> ('a,'b) t
-    val fold: ('a -> 'c) -> ('b -> 'c) -> ('a,'b) t -> 'c
-  end
-
-
-
+open Common
 
 module type COMBINATORS =
   sig

@@ -1,4 +1,4 @@
-open Common
+open Common_module_types
 
 
 module Buffer:
@@ -18,15 +18,12 @@ sig
   val flush: t -> unit
   val getc: t -> char option
   val putc: t -> char -> unit
-  module Scan: functor (S:Io.SCANNER) ->
-               sig
-                 val scan: t -> S.t -> S.t
-               end
-  module Read: functor (W:Io.WRITABLE) ->
+
+  module Read: functor (W:WRITABLE) ->
                sig
                  val read: t -> W.t -> W.t
                end
-  module Write: functor (R:Io.READABLE) ->
+  module Write: functor (R:READABLE) ->
                sig
                  val write: t -> R.t -> R.t
                end
@@ -111,20 +108,7 @@ end =
       Bytes.set b.bytes b.wp c;
       b.wp <- b.wp + 1
 
-    module Scan (S:Io.SCANNER) =
-      struct
-        let scan (b:t) (s:S.t): S.t =
-          let sref = ref s in
-          while not (is_empty b) && S.can_receive !sref do
-            sref := S.receive (Bytes.get b.bytes b.rp) !sref
-          done;
-          if is_empty b && S.can_receive !sref then
-            S.end_buffer !sref
-          else
-            !sref
-      end
-
-    module Read (W:Io.WRITABLE) =
+    module Read (W:WRITABLE) =
       struct
         let read (b:t) (w:W.t): W.t =
           let rec read w =
@@ -136,7 +120,7 @@ end =
           read w
       end
 
-    module Write (R:Io.READABLE) =
+    module Write (R:READABLE) =
       struct
         let write (b:t) (r:R.t): R.t =
           let rec write r =
@@ -166,28 +150,23 @@ sig
   val stdin: in_file
   val stdout: out_file
   val stderr: out_file
-  val getc: t -> in_file -> char option
+  (*val getc: t -> in_file -> char option
   val getline: t -> in_file -> string option
-  val scan: t -> in_file -> (char,'a) Scan.t -> 'a
   val putc: t -> out_file -> char -> unit
   val open_for_read: t -> string -> in_file option
   val open_for_write: t -> string -> out_file option
   val create: t -> string -> out_file option
   val close_in:   t -> in_file -> unit
-  val close_out:  t -> out_file -> unit
+  val close_out:  t -> out_file -> unit*)
   val flush: t -> out_file -> unit
 
-  module Scan: functor (S:Io.SCANNER) ->
-               sig
-                 val scan_buffer: t -> in_file -> S.t -> S.t
-                 val scan: t -> in_file -> S.t -> S.t
-               end
-  module Read: functor (W:Io.WRITABLE) ->
+  module Read: functor (W:WRITABLE) ->
                sig
                  val read_buffer: t -> in_file -> W.t -> W.t
                  val read: t -> in_file -> W.t -> W.t
                end
-  module Write: functor (R:Io.READABLE) ->
+
+  module Write: functor (R:READABLE) ->
                 sig
                   val write_buffer: t -> out_file -> R.t -> R.t
                   val write: t -> out_file -> R.t -> R.t
@@ -284,7 +263,7 @@ end
          assert false
 
 
-    let getc (fs:t) (fd:in_file): char option =
+    (*let getc (fs:t) (fd:in_file): char option =
       Buffer.getc (readable_buffer fs fd)
 
     let putc (fs:t) (fd:out_file) (c:char): unit =
@@ -313,7 +292,7 @@ end
           fs
           (writable_file (Unix.openfile path [Unix.O_CREAT] 0o640))
       with Unix.Unix_error _ ->
-        None
+        None*)
 
     let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
       assert (fd < Array.length fs.files);
@@ -324,7 +303,7 @@ end
          assert false
 
 
-    let close_file (fs:t) (fd:int): unit =
+    (*let close_file (fs:t) (fd:int): unit =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (fd,_) ->
@@ -339,7 +318,7 @@ end
       close_file fs fd
 
     let close_out (fs:t) (fd:out_file): unit =
-      close_file fs fd
+      close_file fs fd*)
 
 
     let flush (fs:t) (fd:out_file) : unit =
@@ -361,7 +340,7 @@ end
 
     let stderr: out_file = 2
 
-    let stdin_buffer (fs:t): Buffer.t =
+    (*let stdin_buffer (fs:t): Buffer.t =
       readable_buffer fs stdin
 
 
@@ -402,51 +381,9 @@ end
           end
       in
       read 0
+     *)
 
-    let scan (fs:t) (fd:in_file) (f:(char,'a) Scan.t): 'a =
-      assert (fd < Array.length fs.files);
-      let b = readable_buffer fs fd in
-      assert (Buffer.is_ok b);
-      let res = ref None
-      and f =   ref f
-      in
-      while !res = None do
-        let c = Buffer.getc b in
-        match !f c with
-        | Scan.End a ->
-           res := Some a
-        | Scan.More f1 ->
-           assert (c <> None);
-           f := f1
-      done;
-      Option.value !res
-
-    module Scan (S:Io.SCANNER) =
-      struct
-        module BScan = Buffer.Scan (S)
-
-        let scan_buffer (fs:t) (fd:in_file) (s:S.t): S.t =
-          assert (fd < Array.length fs.files);
-          let b = readable_buffer fs fd in
-          assert (Buffer.is_ok b);
-          BScan.scan b s
-
-        let scan (fs:t) (fd:in_file) (s:S.t): S.t =
-          assert (fd < Array.length fs.files);
-          let b = readable_buffer fs fd in
-          assert (Buffer.is_ok b);
-          let sr = ref s in
-          while Buffer.is_ok b && S.can_receive !sr do
-            sr := BScan.scan b !sr;
-            if Buffer.is_empty b && S.can_receive !sr then
-              Buffer.fill b
-          done;
-          if not (Buffer.is_ok b) && S.can_receive !sr then
-            S.end_stream !sr
-          else
-            !sr
-      end
-    module Read (W:Io.WRITABLE) =
+    module Read (W:WRITABLE) =
       struct
         let read_buffer (_:t) (_:in_file) (_:W.t): W.t =
           assert false
@@ -454,7 +391,7 @@ end
           assert false
       end
 
-    module Write (R:Io.READABLE) =
+    module Write (R:READABLE) =
       struct
         module BW = Buffer.Write (R)
 
@@ -491,24 +428,35 @@ end
 
 
 
-module IO0: Io.S0 =
+module IO0: Io.SIG_MIN =
   struct
-    include
+    type program =
+      | More of (File_system.t * (File_system.t -> program))
+      | Done
+
+    let rec execute_program: program -> unit = function
+      | Done ->
+         ()
+      | More (w, f) ->
+         execute_program (f w)
+
+
+    type 'a cont = 'a -> File_system.t -> program
+
+    module M =
       Monad.Of_sig_min(
           struct
-            type 'a t = File_system.t -> ('a,int) result
+            type 'a t = File_system.t -> 'a cont -> program
+
             let return (a:'a): 'a t =
-              fun _ -> Ok a
+              fun fs k -> k a fs
+
             let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
-              (fun fs ->
-                let r = m fs in
-                match r with
-                | Ok a ->
-                   f a fs
-                | Error code ->
-                   Error code
-              )
+              fun fs k ->
+              m fs (fun a fs -> More (fs, fun fs -> f a fs k))
           end)
+
+    include M
 
     type in_file = File_system.in_file
     type out_file = File_system.out_file
@@ -517,107 +465,93 @@ module IO0: Io.S0 =
     let stdout: out_file = File_system.stdout
     let stderr: out_file = File_system.stderr
 
-    let exit (code:int): 'a t =
-      fun _ -> Error code
 
-    let execute (program:unit t): unit =
-      let fs = File_system.make ()
-      in
-      let result =
-        try
-          fs |> program
-        with e ->
-          File_system.flush_all fs;
-          raise e
-      in
-      File_system.flush_all fs;
-      Pervasives.exit
-        (match result with
-         | Ok _ ->
-            0
-         | Error c ->
-            c)
-
-    let command_line: string array t =
-      fun _ -> Ok Sys.argv
-
-
-    let open_for_read (path:string): in_file option t =
-      fun fs -> Ok (File_system.open_for_read fs path)
-
-    let open_for_write (path:string): out_file option t =
-      fun fs -> Ok (File_system.open_for_write fs path)
-
-    let create (path:string): out_file option t =
-      fun fs -> Ok (File_system.create fs path)
-
-    let close_in (fd:in_file): unit t =
-      fun fs -> Ok (File_system.close_in fs fd)
-
-    let close_out (fd:out_file): unit t =
-      fun fs -> Ok (File_system.close_out fs fd)
-
-    let flush (fd:out_file): unit t =
-      fun fs -> Ok (File_system.flush fs fd)
-
-    let flush_all: unit t =
-      fun fs -> Ok (File_system.flush_all fs)
-
-
-    let getc (fd:in_file): char option t =
-      fun fs -> Ok (File_system.getc fs fd)
-
-    let putc (c:char) (fd:out_file): unit t =
-      fun fs -> Ok (File_system.putc fs fd c)
-
-    let get_line (fd:in_file): string option t =
-      fun fs ->
-      Ok (File_system.getline fs fd)
-
-
-    let scan(f:(char,'a) Scan.t) (fd:in_file): 'a t =
-      fun fs -> Ok (File_system.scan fs fd f)
-
-    let put_substring
-          (str:string) (start:int) (len:int) (fd:out_file)
-        : unit t =
-      fun fs ->
-      for i = start to start + len - 1 do
-        File_system.putc fs fd str.[i]
-      done;
-      Ok ()
-
-    module Scan  (S:Io.SCANNER) =
+    module Process =
       struct
-        module FS_Scan = File_system.Scan (S)
+        let exit (code:int): 'a t =
+          fun fs k ->
+          File_system.flush_all fs;
+          Pervasives.exit code;
+          Done
 
-        let buffer (fd:in_file) (s:S.t): S.t t =
-          fun fs ->
-          Ok (FS_Scan.scan_buffer fs fd s)
+        let execute (p:unit t): unit =
+          let fs = File_system.make ()
+          in
+          let result =
+            try
+              execute_program
+                (p
+                   fs
+                   (fun () _ -> Done))
+            with e ->
+              File_system.flush_all fs;
+              raise e
+          in
+          File_system.flush_all fs;
+          Pervasives.exit 0
 
-        let stream (fd:in_file) (s:S.t): S.t t =
-          fun fs ->
-          Ok (FS_Scan.scan fs fd s)
+        let command_line: string array t =
+          fun fs k  -> k Sys.argv fs
+
+        let current_working_directory: string t =
+          fun fs k -> k (Sys.getcwd ()) fs
       end
 
-    module Read (W:Io.WRITABLE) =
+    module Path0 =
+      struct
+        let separator: char =
+          if Sys.win32 then '\\' else '/'
+        let delimiter: char =
+          if Sys.win32 then ';' else ':'
+      end
+
+
+    let read_directory (path:string): string array option t =
+      fun fs k ->
+      k
+        (try
+           Some (Sys.readdir path)
+         with _ ->
+           None)
+        fs
+
+    let prompt (prompt:string): string option t =
+      fun fs k ->
+      File_system.flush fs stdout;
+      k
+        (let res = LNoise.linenoise prompt in
+         match res with
+         | None ->
+            res
+         | Some str ->
+            ignore (LNoise.history_add str);
+            res)
+        fs
+
+
+    module Read (W:WRITABLE) =
       struct
         module FS_Read = File_system.Read (W)
+
         let read_buffer (fd:in_file) (w:W.t): W.t t =
-          fun fs -> Ok (FS_Read.read_buffer fs fd w)
-        let read (_:in_file) (_:W.t): W.t t =
-          assert false
+          fun fs k -> k (FS_Read.read_buffer fs fd w) fs
+
+        let read (fd:in_file) (w:W.t): W.t t =
+          fun fs k -> k (FS_Read.read fs fd w) fs
       end
 
-    module Write (R:Io.READABLE) =
+
+    module Write (R:READABLE) =
       struct
         module FS_Write = File_system.Write (R)
-        let write_buffer (_:out_file) (_:R.t): R.t t =
-          assert false
+
+        let write_buffer (fd:out_file) (r:R.t): R.t t =
+          fun fs k -> k (FS_Write.write_buffer fs fd r) fs
+
         let write (fd:out_file) (r:R.t): R.t t =
-          fun fs -> Ok (FS_Write.write fs fd r)
+          fun fs k -> k (FS_Write.write fs fd r) fs
       end
   end
 
 
-module IO: Io.S = Io.Make (IO0)
+module IO: Io.SIG = Io.Make (IO0)

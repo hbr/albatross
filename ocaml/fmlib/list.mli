@@ -71,6 +71,11 @@ val for_all : ('a -> bool) -> 'a list -> bool
 val exists : ('a -> bool) -> 'a list -> bool
 
 
+(** {1 Additional list functions}*)
+
+(** [map_and_filter f list] maps the list with [f] and removes the element for
+   which [f e = None].*)
+val map_and_filter: ('a -> 'b option) -> 'a list -> 'b list
 
 (** {1 Monadic list folding}*)
 

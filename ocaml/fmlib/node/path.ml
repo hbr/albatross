@@ -20,7 +20,7 @@ let delimiter: char =
   str.[0]
 
 let separator: char =
-  let str = to_string path##.delimiter in
+  let str = to_string path##.sep in
   assert (String.length str = 1);
   str.[0]
 

@@ -28,6 +28,20 @@ let find (p:'a -> bool) (l:'a t): 'a option =
     None
 
 
+
+let map_and_filter (f:'a -> 'b option) (l:'a list): 'b list =
+  let rec map = function
+    | [] ->
+       []
+    | hd :: tl ->
+       match f hd with
+       | None ->
+          map tl
+       | Some b ->
+          b :: map tl
+  in
+  map l
+
 module Monadic_fold (M:MONAD) =
   struct
     let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (start:'b)
