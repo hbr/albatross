@@ -156,7 +156,11 @@ module Pretty_make (Io:Io.SIG) =
             [line_no line;
              substring source offset (pos - offset);
              (if line = err_line then
-                string "<end>"
+                string
+                  (if pos = String.length source then
+                     "<end>"
+                   else
+                     " ...")
               else
                 empty);
              cut;
