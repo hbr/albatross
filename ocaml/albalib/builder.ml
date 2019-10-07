@@ -18,21 +18,32 @@ module Located =
 type required =
   Gamma.t     (* Context with placeholders with required types *)
 
-  * int list  (* Positions of the placeholders for not yet built
-                         arguments. *)
+  * int list  (* Positions of the placeholders for not yet built arguments. *)
 
 
 type actual =
-  Gamma.t     (* Context with placeholders for the arguments (there
-                         might be zero arguments). The context below the
-                         arguments is the base context. *)
+  Gamma.t     (* Context with placeholders for the arguments (there might be
+                 zero arguments). The context below the arguments is the base
+                 context. *)
 
   * int list  (* Positions of the placeholders for the arguments *)
 
   * Term.t    (* Term of the form [<0> + <1>] or [f <0> <1> <2> ... ]
-                         representing the expression to be built where
-                         placeholders are used instead of the arguments
-                         because the arguments are not yet built.  *)
+                 representing the expression to be built where placeholders
+                 are used instead of the arguments because the arguments are
+                 not yet built.  *)
+
+
+(* Problems:
+
+   Function expression:
+
+   - More actual arguments than formal arguments.
+
+   - Required type is not a function type with sufficient arguments.
+
+ *)
+
 
 module Problem =
   struct
@@ -46,9 +57,13 @@ module Problem =
 
 module Result = Monad.Result (Problem)
 
+
 module Print  (P:Pretty_printer.SIG) =
   struct
-    let required ((c,lst):required): P.t =
+    let required ((c,lst):required): P.t
+      (* Print the required type of the next argument (type of the topmost
+         placeholder). *)
+      =
       match lst with
       | [] ->
          assert false (* cannot happen *)
@@ -56,7 +71,10 @@ module Print  (P:Pretty_printer.SIG) =
          let module PP = Gamma.Pretty (P) in
          PP.print (Gamma.type_at_level i c) c
 
-    let actual ((c,_,t):actual): P.t =
+    let actual ((c,_,t):actual): P.t
+      (* Print the actual term and its type [t:T] where the term contains
+         placeholders for the arguments. *)
+      =
       let module PP = Gamma.Pretty (P) in
       P.(PP.print t c
          <+> string ": "
@@ -64,6 +82,40 @@ module Print  (P:Pretty_printer.SIG) =
                (Gamma.type_of_term t c)
                c)
   end
+
+
+
+(* Function Expression "\ x y ... := exp"
+
+   a) Required type is a placeholder without value:
+
+   - Push A:Any, x:A, B:Any, y:B, ..., E:Any, e:E into the context - e is
+   placeholder for "exp"
+
+   - build [exp] and unify with [e]
+
+   - make function expression and unify with the placeholder for the
+   expression. References to types in the context must be kept.
+
+
+   b) Required type has value:
+
+   - Extract argtypes and result type and push x:A, y:B, ..., e:RT onto the
+   context
+
+   - build [exp] and unify with [e]
+
+   - make function expression and unify with the placeholder for the
+   expression. References to types in the context must be kept.
+
+
+   Note: Substitutions are always done immediately, therefore type variables
+   which have substitutions do no longer occur in other substitutions.
+
+   If the arguments [x,y,...] with their types remain in the context, then the
+   variables might occur in other types because we have dependent types.
+
+*)
 
 
 let find_name (name:string) (pos:Position.t) (c:Context.t): int list Result.t =
@@ -76,12 +128,14 @@ let find_name (name:string) (pos:Position.t) (c:Context.t): int list Result.t =
 
 
 let extract_args
-      (nargs:int)
-      (mode: Term.appl)
+      (nargs:int)                      (* Name is applied to [nargs] arguments
+                                          *)
+      (mode: Term.appl)                (* Mode of the application *)
       (base:Context.t)
-      (pos:Position.t)
-      (len:int)
-      (lst: int list)
+      (pos:Position.t)                 (* Position of the name *)
+      (len:int)                        (* String length of the name *)
+      (lst: int list)                  (* Indices of the name (name might not
+                                          be unique) *)
     : (actual list, Problem.t) result
   =
   let cnt = Context.count base
@@ -132,7 +186,7 @@ let unify
   =
   match
     List.(
-    reqs    >>= fun (gamma_req, req_lst) ->
+    reqs >>= fun (gamma_req, req_lst) ->
     match req_lst with
     | [] ->
        assert false (* cannot happen *)
@@ -220,11 +274,14 @@ let term_of_number
 let rec build0
           (base:Context.t)
           (reqs: required list)
-          (nargs:int)
+          (nargs:int)                (* [expr] has [nargs] actual arguments *)
           (mode: Term.appl)
-          (expr:Parser.Expression.t)
+          (expr:Parser.Expression.t) (* expression to be built *)
         : (required list, Problem.t) result
   =
+  (* Build the term for [expr]. [reqs] is a list of contexts where the
+     toplevel placeholder represents the expression [expr]. The expression
+     [expr] must be able to receive [nargs] arguments. *)
   let open Parser.Expression in
   let pos = Located.start expr in
   let len =
@@ -258,6 +315,9 @@ let rec build0
        >>= fun reqs ->
        build0 base reqs 0 Term.Normal e2
      )
+
+  | Function (args, exp) ->
+     assert false
 
   | Parenthesized e ->
      build0 base reqs nargs mode e

@@ -63,7 +63,7 @@ val push_arguments: int -> Term.typ -> t -> (t * Term.typ) option
    It is required that [c1] without the last [nargs] entries is an initial
    segment of [c2].  *)
 val push_signature: t -> int -> Term.t -> t -> t * Term.t
-  
+
 
 
 
@@ -71,16 +71,11 @@ val push_signature: t -> int -> Term.t -> t -> t * Term.t
 val push_substitutable: Term.typ -> t -> t
 
 
-(** [substitute_at_level i t c]. Substitute the variable at level [i] with the
-   term [t] in the context [c].
 
-   Precondition: It has to be a substitutable at level [i] which does not yet
-   have any substitution.
-
-*)
-val substitute_at_level: int -> Term.t -> t -> t
-
-
+(** [unify t u c] unifies the term [t] with the term [u] and generates
+   substitutions such that [t] and [u] with the substitutions applied are
+   equivalent terms. Return a new context containing new substitutions if the
+   terms are unifiable, otherwise return [None]. *)
 val unify: Term.t -> Term.t -> t -> t option
 
 

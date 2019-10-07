@@ -1,8 +1,7 @@
 open Fmlib
 open Common
-open Character_parser
 
-type located_string = string Located.t
+module Located = Character_parser.Located
 type 'a located = 'a Located.t
 
 
@@ -11,7 +10,7 @@ module Expression = struct
 
 
   type t =
-    t0 Located.t
+    t0 located
 
 
   and t0 =
@@ -21,6 +20,7 @@ module Expression = struct
     | String of string
     | Operator of operator
     | Binary of t * operator located * t
+    | Function of string located list * t
     | Parenthesized of t
 
 
@@ -99,7 +99,7 @@ module Problem =
       | Operator_precedence of string * string
   end
 
-module P = Advanced (Unit) (Final) (Problem) (Context_msg)
+module P = Character_parser.Advanced (Unit) (Final) (Problem) (Context_msg)
 include P
 
 
@@ -116,33 +116,45 @@ let char (c:char): unit t =
          else
            "'" ^ String.one c ^ "'"))
 
+let string (s:string): unit t =
+  string s (fun _ -> Problem.Expect s)
+
 
 let word_ws
       (start:char->bool)
       (inner:char->bool)
       (msg:Problem.t)
-      (convert: string -> Expression.t0)
-    : Expression.t t
+    : string located t
   =
-  return (fun loc_str -> Located.map convert loc_str)
-  |= located @@ word start inner msg
+  located @@ word start inner msg
   |. whitespace
 
 
-let identifier: Expression.t t =
+let identifier: string located t =
   word_ws
     Char.is_letter
     (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
     (Problem.Expect "identifier")
-    (fun str -> Expression.Identifier str)
 
 
-let number: Expression.t t =
+let number: string located t =
   word_ws
     Char.is_digit
     Char.is_digit
     (Problem.Expect "number")
-    (fun str -> Expression.Number str)
+
+
+let identifier_expression: Expression.t t =
+  map
+    (Located.map (fun s -> Expression.Identifier s))
+    identifier
+
+
+let number_expression: Expression.t t =
+  map
+    (Located.map (fun s -> Expression.Number s))
+    number
+
 
 
 let lang_string: Expression.t t =
@@ -209,12 +221,14 @@ let lonely_operator: Expression.t t =
 let char_ws (c:char): unit t =
   char c |. whitespace
 
+let string_ws (s:string): unit t =
+  string s |. whitespace
 
 
-let rec op_expression (): Expression.t t =
-  let atomic (): Expression.t t =
-    identifier
-    <|> number
+let rec expression (): Expression.t t =
+  let primary (): Expression.t t =
+    identifier_expression
+    <|> number_expression
     <|> lang_char
     <|> lang_string
     <|> located
@@ -224,17 +238,22 @@ let rec op_expression (): Expression.t t =
                >>= fun _ ->
                (* op_expression has to be encapsulated in a function,
                   otherwise infinite recursion!! *)
-               op_expression () <|> lonely_operator)
+               expression () <|> lonely_operator)
            |. char_ws ')'
           )
+    <|> located
+          (return (fun args exp -> Expression.Function (args, exp))
+           |. char_ws '\\'
+           |= one_or_more identifier
+           |= (string_ws ":=" >>= fun _ -> expression ()))
   in
   let operator_and_operand =
     return (fun op exp -> (op,exp))
     |= operator
-    |= in_context Context_msg.Operand (atomic ())
+    |= in_context Context_msg.Operand (primary ())
   in
 
-  atomic () >>= fun e1 ->
+  primary () >>= fun e1 ->
 
   zero_or_more operator_and_operand >>= fun lst ->
 
@@ -250,6 +269,6 @@ let initial: parser =
   make
     (return identity
      |. whitespace
-     |= optional @@ op_expression ()
+     |= optional @@ expression ()
      |. expect_end (Problem.Expect "end of command"))
     ()

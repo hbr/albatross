@@ -96,6 +96,8 @@ module Pretty_make (Io:Io.SIG) =
                   char ' ';
                   exp e2;
                   char ')']
+        | Function (args,exp) ->
+           assert false
       in
       chain [string "expression";
              cut;

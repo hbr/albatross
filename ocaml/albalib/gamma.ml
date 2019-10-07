@@ -1,9 +1,11 @@
 open Fmlib
 open Common
 
+
 type name =
   | Normal of string
   | Binary_operator of string * Operator.t
+
 
 type definition =
   | No
@@ -479,6 +481,13 @@ let has_substitution_at_level (level:int) (c:t): bool =
 
 
 let substitute_at_level (level:int) (t:Term.t) (c:t): t =
+  (* [substitute_at_level i t c]. Substitute the variable at level [i] with
+     the term [t] in the context [c].
+
+     Precondition: It has to be a substitutable at level [i] which does not
+     yet have any substitution.
+   *)
+  assert (not (has_substitution_at_level level c));
   let cnt = count c
   and cnt0 = base_count c
   in
@@ -486,7 +495,6 @@ let substitute_at_level (level:int) (t:Term.t) (c:t): t =
   and lsub = level - cnt0
   in
   assert (0 <= lsub);
-  assert (not (has_substitution_at_level level c));
   let subs = Array.copy c.substitutions in
   for i = 0 to Array.length subs - 1 do
     if i = lsub then
@@ -503,7 +511,7 @@ let substitute_at_level (level:int) (t:Term.t) (c:t): t =
                 else
                   Term.Variable j1)
               ti,
-            cnt
+            cnt (* substitution valid in the outer context. *)
           )
           subs.(i)
   done;

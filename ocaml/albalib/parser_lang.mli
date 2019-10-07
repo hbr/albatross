@@ -1,6 +1,5 @@
 open Fmlib
 
-type located_string = string Character_parser.Located.t
 type 'a located = 'a Character_parser.Located.t
 
 module Expression:
@@ -18,6 +17,7 @@ sig
     | String of string
     | Operator of operator
     | Binary of t * operator located * t
+    | Function of string located list * t
     | Parenthesized of t
 end
 
