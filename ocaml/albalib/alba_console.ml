@@ -378,53 +378,6 @@ module Make (Io:Io.SIG) =
       Io.Stdout.line "status ..."
 
 
-    let continuation_character = ' '
-
-
-    let is_last_line (line:string): bool =
-      let len = String.length line in
-      len = 0 || line.[len - 1] <> continuation_character
-
-
-    let parse_line
-          (line:string)      (* The current line *)
-          (previous:string)  (* The concatenation of previous lines *)
-          (p:Parser.parser)
-        : string * Parser.parser =
-      (* Parse [line] with [p] and append the [line] to [previous] in repl
-         mode i.e. checking for the line continuation character. *)
-      let len = String.length line
-      and len_prev = String.length previous
-      in
-      let is_last = is_last_line line
-      and len_accu = len_prev + len
-      in
-      let accu =
-        String.init
-          len_accu
-          (fun i ->
-            if i < len_prev then
-              previous.[i]
-            else if i + 1 = len_prev + len && not is_last
-            then
-              '\n'
-            else
-              line.[i-len_prev])
-      in
-      let rec parse i p =
-        let more = Parser.needs_more p
-        in
-        if i = len_accu && is_last && more then
-          Parser.put_end p
-        else if i = len_accu || not more then
-          p
-        else
-          parse
-            (i+1)
-            (Parser.put_char p accu.[i])
-      in
-      accu, parse len_prev p
-
 
     let build_and_compute
           (src:string) (e:Parser.Expression.t)
@@ -542,31 +495,60 @@ module Make (Io:Io.SIG) =
              error_explanation errors]
 
 
-
     let repl (_:command_line): unit Io.t =
-      let open Io in
-      let rec repl (accu:string) (p:Parser.parser) =
-        let prompt =
-          if accu = "" then "> " else "| "
-        in
-        Repl.prompt prompt >>= function
-        | None ->
-           return ()
-
-        | Some line ->
-           if is_last_line line then
-             let accu,p = parse_line line accu p in
-             Pretty.print
-               Io.File.stdout 80
-               (eval_expression p accu)
-             >>= fun _ ->
-             repl "" Parser.initial
-
-           else
-             let accu,p = parse_line line accu p in
-             repl accu p
+      let module State =
+        struct
+          type t = {string:string; stop:bool}
+          let string (s:t): string =
+            s.string
+          let init: t = {string = ""; stop = false}
+          let prompt (s:t): string option =
+            if s.stop then
+              None
+            else
+              Some (if s.string = "" then "> " else "| ")
+          let is_last (line:string): bool =
+            let len = String.length line in
+            len = 0 || line.[len-1] <> ' '
+          let stop (s:t): t =
+            {s with stop = true}
+          let add (line:string) (s:t): t =
+            {s with string =
+                      if s.string = "" then
+                        line
+                      else
+                        s.string ^ "\n" ^ line}
+        end
       in
-      repl "" Parser.initial
+      let parse (s:string): Parser.parser =
+        let len = String.length s in
+        let rec parse i p =
+          let more = Parser.needs_more p in
+          if i < len && more then
+            parse (i+1) (Parser.put_char p s.[i])
+          else if more then
+            Parser.put_end p
+          else
+            p
+        in
+        parse 0 Parser.initial
+      in
+      let next (s:State.t): string option -> State.t Io.t = function
+        | None ->
+           Io.return (State.stop s)
+        | Some line ->
+           let s = State.add line s in
+           if State.is_last line then
+             let input = State.string s in
+             let p = parse input in
+             Io.(Pretty.print File.stdout 80 (eval_expression p input)
+                 >>= fun _ ->
+                 return State.init)
+           else
+             Io.return s
+      in
+      Io.(let module Cli = Cli (State) in
+          Cli.loop State.init next >>= fun _ -> return ())
 
 
 

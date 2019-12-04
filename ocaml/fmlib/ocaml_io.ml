@@ -515,18 +515,32 @@ module IO0: Io.SIG_MIN =
            None)
         fs
 
-    let prompt (prompt:string): string option t =
-      fun fs k ->
-      File_system.flush fs stdout;
-      k
-        (let res = LNoise.linenoise prompt in
-         match res with
-         | None ->
-            res
-         | Some str ->
-            ignore (LNoise.history_add str);
-            res)
+
+
+    module Cli (S:Io.CLI_STATE) =
+      struct
+        let prompt (prompt:string): string option t =
+          fun fs k ->
+          File_system.flush fs stdout;
+          k
+            (let res = LNoise.linenoise prompt in
+             match res with
+             | None ->
+                res
+             | Some str ->
+                ignore (LNoise.history_add str);
+                res)
         fs
+        let loop (s:S.t) (f:S.t -> string option -> S.t t): S.t t =
+          let rec cmd s =
+            match S.prompt s with
+            | None ->
+               return s
+            | Some prompt_string ->
+               prompt prompt_string >>= f s >>= cmd
+          in
+          cmd s
+      end
 
 
     module Read (W:WRITABLE) =

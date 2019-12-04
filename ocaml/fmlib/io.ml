@@ -14,6 +14,13 @@ module type STAT =
   end
 
 
+module type CLI_STATE =
+  sig
+    type t
+    val prompt: t -> string option
+  end
+
+
 module type BUFFER =
   sig
     type t
@@ -134,6 +141,13 @@ module type SIG_MIN =
       val current_working_directory: string  t
     end
 
+
+    module Cli: functor (S:CLI_STATE) ->
+    sig
+      val loop: S.t -> (S.t -> string option -> S.t t) -> S.t t
+    end
+
+
     module Path0:
     sig
       val separator: char
@@ -141,8 +155,6 @@ module type SIG_MIN =
     end
 
     val read_directory: string -> string array option t
-
-    val prompt: string -> string option t
 
     (*val open_for_read:  string -> in_file  option t
     val open_for_write: string -> out_file option t
@@ -214,11 +226,6 @@ module type SIG =
       val stdin:  In.fd
       val stdout: Out.fd
       val stderr: Out.fd
-    end
-
-    module Repl:
-    sig
-      val prompt: string -> string option t
     end
 
 
@@ -468,11 +475,6 @@ module Make (M:SIG_MIN): SIG =
         let stderr: Out.fd = stderr
       end
 
-
-    module Repl =
-      struct
-        let prompt = prompt
-      end
 
 (*
     let getc_in: char option t =
