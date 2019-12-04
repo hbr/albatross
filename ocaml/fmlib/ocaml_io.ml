@@ -531,15 +531,22 @@ module IO0: Io.SIG_MIN =
                 ignore (LNoise.history_add str);
                 res)
         fs
-        let loop (s:S.t) (f:S.t -> string option -> S.t t): S.t t =
-          let rec cmd s =
+        let loop
+              (s: S.t)
+              (next: S.t -> string -> S.t t)
+              (stop: S.t -> S.t t)
+            : S.t t =
+          let rec loop s =
             match S.prompt s with
             | None ->
-               return s
+                return s
             | Some prompt_string ->
-               prompt prompt_string >>= f s >>= cmd
+               prompt prompt_string >>= function
+               | None ->
+                  stop s
+               | Some line -> next s line >>= loop
           in
-          cmd s
+          loop s
       end
 
 

@@ -498,26 +498,20 @@ module Make (Io:Io.SIG) =
     let repl (_:command_line): unit Io.t =
       let module State =
         struct
-          type t = {string:string; stop:bool}
+          type t = string
           let string (s:t): string =
-            s.string
-          let init: t = {string = ""; stop = false}
+            s
+          let init: t =  ""
           let prompt (s:t): string option =
-            if s.stop then
-              None
-            else
-              Some (if s.string = "" then "> " else "| ")
+              Some (if s = "" then "> " else "| ")
           let is_last (line:string): bool =
             let len = String.length line in
             len = 0 || line.[len-1] <> ' '
-          let stop (s:t): t =
-            {s with stop = true}
           let add (line:string) (s:t): t =
-            {s with string =
-                      if s.string = "" then
-                        line
-                      else
-                        s.string ^ "\n" ^ line}
+            if s = "" then
+              line
+            else
+              s ^ "\n" ^ line
         end
       in
       let parse (s:string): Parser.parser =
@@ -533,22 +527,21 @@ module Make (Io:Io.SIG) =
         in
         parse 0 Parser.initial
       in
-      let next (s:State.t): string option -> State.t Io.t = function
-        | None ->
-           Io.return (State.stop s)
-        | Some line ->
-           let s = State.add line s in
-           if State.is_last line then
-             let input = State.string s in
-             let p = parse input in
-             Io.(Pretty.print File.stdout 80 (eval_expression p input)
-                 >>= fun _ ->
-                 return State.init)
-           else
-             Io.return s
+      let next (s:State.t) (line:string): State.t Io.t =
+        let s = State.add line s in
+        if State.is_last line then
+          let input = State.string s in
+          let p = parse input in
+          Io.(Pretty.print File.stdout 80 (eval_expression p input)
+              >>= fun _ ->
+              return State.init)
+        else
+          Io.return s
+      and stop (s:State.t): State.t Io.t =
+        Io.return s
       in
       Io.(let module Cli = Cli (State) in
-          Cli.loop State.init next >>= fun _ -> return ())
+          Cli.loop State.init next stop >>= fun _ -> return ())
 
 
 

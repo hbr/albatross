@@ -98,7 +98,7 @@ module type SIG_MIN =
 
     module Cli: functor (S:CLI_STATE) ->
     sig
-      val loop: S.t -> (S.t -> string option -> S.t t) -> S.t t
+      val loop: S.t -> (S.t -> string -> S.t t) -> (S.t -> S.t t) -> S.t t
     end
 
     module Path0:
