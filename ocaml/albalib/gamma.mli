@@ -46,7 +46,7 @@ val push_local: string -> Term.typ -> t -> t
 
 
 (** [push_arguments nargs tp c] treats [tp] as a function type with at least
-   [nargs} arguments.
+   [nargs] arguments.
 
    It pushes the argument types of [tp] into the context [c] and returns the
    context with the arguments and the result type of the functions.
