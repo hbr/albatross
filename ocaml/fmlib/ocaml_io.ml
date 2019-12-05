@@ -484,13 +484,12 @@ module IO0: Io.SIG_MIN =
         let exit (code:int): 'a t =
           fun fs k ->
           File_system.flush_all fs;
-          Pervasives.exit code;
-          Done
+          Pervasives.exit code
 
         let execute (p:unit t): unit =
           let fs = File_system.make ()
           in
-          let result =
+          let _ =
             try
               execute_program
                 (p

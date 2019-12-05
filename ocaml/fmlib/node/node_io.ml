@@ -83,7 +83,7 @@ module IO0: Io.SIG_MIN =
       Done
 
 
-    let flush (fd:int) (buf:Io_buffer.t): unit option t =
+    let flush_buffer (fd:int) (buf:Io_buffer.t): unit option t =
       let rec write () =
         if Io_buffer.is_empty buf then
           return (Some ())
@@ -97,6 +97,13 @@ module IO0: Io.SIG_MIN =
       write ()
 
 
+    let flush (fd:int): unit option t =
+      fun w k ->
+      assert (World.is_open_write w fd);
+      let fd,buf = World.writable_file w fd in
+      flush_buffer fd buf w k
+
+
 
     let writable_file (fd:out_file): (int * Io_buffer.t) t =
       fun w k ->
@@ -107,7 +114,7 @@ module IO0: Io.SIG_MIN =
 
     let write (fd:out_file): unit option t =
       writable_file fd >>= fun (fd,buf) ->
-      flush fd buf
+      flush_buffer fd buf
 
 
     let flush_all: unit t =
@@ -171,8 +178,38 @@ module IO0: Io.SIG_MIN =
           execute_program @@ k arr w);
       Done
 
-    let prompt (_:string): string option t =
-      assert false
+
+
+
+
+    module Cli (S:Io.CLI_STATE) =
+      struct
+        let loop
+              (s: S.t)
+              (next: S.t -> string -> S.t t)
+              (stop: S.t -> S.t t)
+            : S.t t =
+          let rl = Readline.create_interface () in
+          let rec loop s: S.t t =
+            flush stdout >>= fun _ ->
+            fun w k ->
+            match S.prompt s with
+            | None ->
+               Readline.close rl;
+               execute_program @@ stop s w k;
+               Done
+            | Some prompt_str ->
+               Readline.question
+                 rl
+                 prompt_str
+                 (fun answer ->
+                   execute_program @@
+                     (next s answer >>= loop) w k)
+                 (fun () -> execute_program @@ stop s w k);
+               Done
+          in
+          loop s
+      end
 
 
     module Read (W:WRITABLE) =
@@ -206,7 +243,7 @@ module IO0: Io.SIG_MIN =
             assert (i < 100);
             if R.has_more r then
               if Io_buffer.is_full buf then
-                flush fd buf >>= function
+                flush_buffer fd buf >>= function
                 | None ->
                    return r
                 | Some () ->
