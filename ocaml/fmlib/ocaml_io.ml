@@ -437,9 +437,22 @@ module IO0: Io.SIG_MIN =
     let rec execute_program: program -> unit = function
       | Done ->
          ()
-      | More (w, f) ->
-         execute_program (f w)
+      | More (fs, f) ->
+         execute_program (f fs) (* [f fs] does one execution step and returns
+                                   the remainder of the program. *)
 
+    (* The same as an iteration
+       ========================
+    let execute_program (p:program): unit =
+      let pref = ref p in
+      while !pref <> Done do
+        match !pref with
+        | Done ->
+           assert false (* cannot happen *)
+        | More (fs, f) ->
+           pref := f fs
+      done
+     *)
 
     type 'a cont = 'a -> File_system.t -> program
 
