@@ -215,6 +215,9 @@ module Pretty (P:Pretty_printer.SIG) =
       | Any ->
          None,
          P.string "Any"
+      | Box ->
+         None,
+         P.string "Box"
 
 
     let print_value: Term.Value.t -> pr_result = function
@@ -352,8 +355,13 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
   let rec typ t c =
     let open Term in
     match t with
-    | Sort _ ->
-       assert false (* Illegal call *)
+    | Sort s ->
+       (match s with
+        | Sort.Any ->
+           Sort Sort.Box
+        | Sort.Box ->
+           assert false (* Illegal call *)
+       )
 
     | Value v ->
        (match v with

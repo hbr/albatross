@@ -85,6 +85,7 @@ module Sort =
   struct
     type t =
       | Any
+      | Box
   end
 
 

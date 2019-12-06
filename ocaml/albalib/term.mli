@@ -21,6 +21,7 @@ module Sort:
 sig
   type t =
     | Any
+    | Box
 end
 
 
