@@ -212,12 +212,15 @@ module Pretty (P:Pretty_printer.SIG) =
 
 
     let print_sort: Term.Sort.t -> pr_result = function
-      | Any ->
+      | Any i ->
+         let str =
+           if i = 0 then
+             "Any"
+           else
+             "Any(" ^ string_of_int i ^ ")"
+         in
          None,
-         P.string "Any"
-      | Box ->
-         None,
-         P.string "Most general type"
+         P.string str
 
 
     let print_value: Term.Value.t -> pr_result = function
@@ -360,13 +363,8 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
   let rec typ t c =
     let open Term in
     match t with
-    | Sort s ->
-       (match s with
-        | Sort.Any ->
-           Sort Sort.Box
-        | Sort.Box ->
-           assert false (* Illegal call *)
-       )
+    | Sort (Sort.Any i) ->
+       Sort (Sort.Any (i+1))
 
     | Value v ->
        (match v with
@@ -397,8 +395,8 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
        (match
           typ tp c, typ t (push_local name tp c)
         with
-        | Sort Sort.Any, Sort Sort.Any ->
-           any
+        | Sort (Sort.Any i), Sort (Sort.Any j) ->
+           Sort (Sort.Any (max i j))
         | _ ->
            assert false (* nyi other product combinations. *)
        )
@@ -607,7 +605,7 @@ let rec unify (t:Term.t) (u:Term.t) (c:t): t option =
   | _, Variable i when i < n_subs ->
      unify u t c
 
-  | Sort s1, Sort s2 when s1 = s2 ->
+  | Sort s1, Sort s2 when Sort.is_super s1 s2 ->
      Some c
 
   | Variable i, Variable j when i = j ->

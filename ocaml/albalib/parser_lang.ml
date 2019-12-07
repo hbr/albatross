@@ -14,6 +14,7 @@ module Expression = struct
 
 
   and t0 =
+    | Any
     | Identifier of string
     | Number of string
     | Char of int
@@ -146,7 +147,13 @@ let number: string located t =
 
 let identifier_expression: Expression.t t =
   map
-    (Located.map (fun s -> Expression.Identifier s))
+    (Located.map
+       (fun s ->
+         if s = "Any" then
+           Expression.Any
+         else
+           Expression.Identifier s
+    ))
     identifier
 
 

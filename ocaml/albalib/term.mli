@@ -20,8 +20,8 @@ end
 module Sort:
 sig
   type t =
-    | Any
-    | Box
+    | Any of int
+  val is_super: t -> t -> bool
 end
 
 

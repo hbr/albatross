@@ -67,6 +67,9 @@ module Pretty_make (Io:Io.SIG) =
       let rec exp e =
         let open Expression in
         match Located.value e with
+        | Any ->
+           string "Any"
+
         | Identifier str | Number str ->
            string str
 

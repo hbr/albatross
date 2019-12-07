@@ -290,6 +290,11 @@ let rec build0
   match
     Located.value expr
   with
+  | Any ->
+     unify
+       pos (String.length "Any") base reqs
+       [Context.gamma base, [], Term.any]
+
   | Identifier name | Operator (name,_) ->
      term_of_name name pos nargs mode base reqs
 
@@ -345,7 +350,7 @@ let build
     (build0
        c
        [Gamma.(Context.gamma c
-               |> push_substitutable Term.any
+               |> push_substitutable (Term.Sort (Term.Sort.Any 2))
                |> push_substitutable (Term.Variable 0))
        , [cnt + 1]]
        0

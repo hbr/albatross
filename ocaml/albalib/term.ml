@@ -84,8 +84,12 @@ module Value =
 module Sort =
   struct
     type t =
-      | Any
-      | Box
+      | Any of int
+
+    let is_super (s1:t) (s2:t): bool =
+      match s1, s2 with
+      | Any i, Any j ->
+         j <= i
   end
 
 
@@ -116,7 +120,7 @@ and typ = t
 
 
 let any: t =
-  Sort Sort.Any
+  Sort (Sort.Any 0)
 
 
 let char (code:int): t =
