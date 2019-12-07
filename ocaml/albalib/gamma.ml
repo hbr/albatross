@@ -581,41 +581,46 @@ let substitute_at_index (i:int) (t:Term.t) (c:t): t =
 
 
 
-let rec unify (t:Term.t) (u:Term.t) (c:t): t option =
-  let n_subs = Array.length c.substitutions
-  in
-  let open Term
-  in
-  match t, u with
-  | Variable i, _ when i < n_subs ->
-     Option.(
-      unify
+let unify (t:Term.t) (u:Term.t) (c:t): t option =
+  let rec unify t u exact c =
+    let n_subs = Array.length c.substitutions
+    in
+    let open Term
+    in
+    match t, u with
+    | Variable i, _ when i < n_subs ->
+       Option.(
+        unify
         (type_at_level (level_of_index i c) c)
         (type_of_term u c)
+        false
         c
-      >>= fun c ->
-      match
-        substitution_at_index i c
-      with
-      | None ->
-         Some (substitute_at_index i u c)
-      | Some t_sub ->
-         unify t_sub u c)
-
-  | _, Variable i when i < n_subs ->
-     unify u t c
-
-  | Sort s1, Sort s2 when Sort.is_super s1 s2 ->
-     Some c
-
-  | Variable i, Variable j when i = j ->
-     Some c
-
-  | Appl (_, _, _ ), Appl (_, _, _ ) ->
-     assert false (* nyi *)
-
-  | Pi (_, _, _), Pi (_, _, _) ->
-     assert false (* nyi *)
-
-  | _, _ ->
-     None
+        >>= fun c ->
+        match
+          substitution_at_index i c
+        with
+        | None ->
+           Some (substitute_at_index i u c)
+        | Some t_sub ->
+           unify t_sub u exact c)
+      
+    | _, Variable i when i < n_subs ->
+       unify u t exact c
+      
+    | Sort s1, Sort s2
+         when (exact && s1 = s2) || (not exact && Sort.is_super s1 s2) ->
+       Some c
+      
+    | Variable i, Variable j when i = j ->
+       Some c
+      
+    | Appl (_, _, _ ), Appl (_, _, _ ) ->
+       assert false (* nyi *)
+      
+    | Pi (_, _, _), Pi (_, _, _) ->
+       assert false (* nyi *)
+      
+    | _, _ ->
+       None
+  in
+  unify t u true c
