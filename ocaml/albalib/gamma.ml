@@ -217,7 +217,7 @@ module Pretty (P:Pretty_printer.SIG) =
          P.string "Any"
       | Box ->
          None,
-         P.string "Box"
+         P.string "Most general type"
 
 
     let print_value: Term.Value.t -> pr_result = function
@@ -332,7 +332,7 @@ module Pretty (P:Pretty_printer.SIG) =
                      (string "all "
                       <+> print_name_type nme tp c)
                      lst;
-                   string ", ";
+                   string ": ";
                    snd @@ print t_inner c_inner])
 
       | Value v ->
@@ -341,6 +341,11 @@ module Pretty (P:Pretty_printer.SIG) =
     let print (t:Term.t) (c:t): P.t =
       snd (print t c)
   end (* Pretty *)
+
+
+
+
+
 
 
 let string_of_term (t:Term.t) (c:t): string =
