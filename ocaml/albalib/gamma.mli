@@ -18,6 +18,8 @@ val level_of_index: int -> t -> int
 val string_of_name: name -> string
 
 
+val raw_type_at_level: int -> t -> Term.typ
+
 (** [type_at_level level c] type of the entry at [level]. *)
 val type_at_level: int -> t -> Term.typ
 
@@ -49,40 +51,14 @@ val push_local: string -> Term.typ -> t -> t
    [nargs] arguments.
 
    It pushes the argument types of [tp] into the context [c] and returns the
-   context with the arguments and the result type of the functions.
+   context with the arguments and the result type of the function.
 
-   Returns [None] of [tp] is not a function type with at least [nargs]
+   Returns [None] if [tp] is not a function type with at least [nargs]
    arguments. *)
 val push_arguments: int -> Term.typ -> t -> (t * Term.typ) option
 
 
 
-(** [push_signature c1 nargs t c2] pushes the last [nargs] entries of [c1]
-   into [c2] and transforms [t] into the new [c2].
-
-   It is required that [c1] without the last [nargs] entries is an initial
-   segment of [c2].  *)
-val push_signature: t -> int -> Term.t -> t -> t * Term.t
-
-
-
-
-
-val push_substitutable: Term.typ -> t -> t
-
-
-
-(** [unify t u c] unifies the term [t] with the term [u] and generates
-   substitutions such that [t] and [u] with the substitutions applied are
-   equivalent terms. Return a new context containing new substitutions if the
-   terms are unifiable, otherwise return [None]. *)
-val unify: Term.t -> Term.t -> t -> t option
-
-
-val is_all_substituted: t -> bool
-
-(** [substitution level t] *)
-val substitution_at_level: int -> t -> Term.t
 
 
 

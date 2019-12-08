@@ -34,13 +34,6 @@ let count (c:t): int =
   Segmented_array.length c.gamma
 
 
-let count_substitutions (c:t): int =
-  Array.length c.substitutions
-
-
-let base_count (c:t): int =
-  count c - count_substitutions c
-
 
 let is_valid_index (i:int) (c:t): bool =
   0 <= i && i < count c
@@ -58,6 +51,9 @@ let entry (i:int) (c:t): entry =
   assert (is_valid_index i c);
   Segmented_array.elem i c.gamma
 
+
+let raw_type_at_level (i:int) (c:t): Term.typ =
+  (entry i c).typ
 
 let type_at_level (i:int) (c:t): Term.typ =
   let cnt = count c in
@@ -273,13 +269,7 @@ module Pretty (P:Pretty_printer.SIG) =
            (if is_valid_index i c then
               match name_of_index i c with
               | Normal str ->
-                 let csub = count_substitutions c in
-                 if i < csub && (str = "" || str = "_") then
-                   "<"
-                   ^ string_of_int (bruijn_convert i csub)
-                   ^ ">"
-                 else
-                   str
+                 str
 
               | Binary_operator (str, _) ->
                  "(" ^ str ^ ")"
@@ -450,177 +440,3 @@ let rec push_arguments
 
     | _ ->
        None
-
-
-let push_substitutable (typ: Term.typ) (c:t): t =
-  {gamma =
-     Segmented_array.push
-       {name = Normal "_"; typ; definition = No}
-       c.gamma;
-   substitutions =
-     Array.push None c.substitutions}
-
-
-let push_signature
-      (c0:t) (nargs:int) (t:Term.t)
-      (c:t)
-    : t * Term.t
-  =
-  let cnt0 = count c0 - nargs
-  and cnt  = count c in
-  assert (0 <= cnt0);
-  assert (cnt0 <= cnt);
-  let convert = Term.up_from (cnt - cnt0) in
-  let c1 =
-    Interval.fold
-    c
-    (fun i c ->
-      let e = entry (cnt0 + i) c0 in
-      push_substitutable (convert i e.typ) c
-    )
-    0 nargs
-  in
-  c1, convert nargs t
-
-
-
-let has_substitution_at_level (level:int) (c:t): bool =
-  let lsub = level - base_count c in
-  assert (0 <= lsub);
-  c.substitutions.(lsub) <> None
-
-
-
-let substitute_at_level (level:int) (t:Term.t) (c:t): t =
-  (* [substitute_at_level i t c]. Substitute the variable at level [i] with
-     the term [t] in the context [c].
-
-     Precondition: It has to be a substitutable at level [i] which does not
-     yet have any substitution.
-   *)
-  assert (not (has_substitution_at_level level c));
-  let cnt = count c
-  and cnt0 = base_count c
-  in
-  let idx = bruijn_convert level cnt
-  and lsub = level - cnt0
-  in
-  assert (0 <= lsub);
-  let subs = Array.copy c.substitutions in
-  for i = 0 to Array.length subs - 1 do
-    if i = lsub then
-      subs.(i) <- Some (t, cnt)
-    else
-      subs.(i) <-
-        Option.map
-          (fun (ti,n) ->
-            Term.substitute
-              (fun j ->
-                let j1 = j + cnt - n in
-                if j1 = idx then
-                  t
-                else
-                  Term.Variable j1)
-              ti,
-            cnt (* substitution valid in the outer context. *)
-          )
-          subs.(i)
-  done;
-  {c with substitutions = subs}
-
-
-
-let substitution_at_level (level:int) (c:t): Term.t =
-  (* in the base context, all variables must be substituted. *)
-  let cnt = count c
-  and cnt0 = base_count c
-  in
-  assert (cnt0 <= level);
-  assert (level < cnt);
-  match c.substitutions.(level - cnt0) with
-  | None ->
-     assert false (* Illegal call *)
-  | Some (t,n) ->
-     assert (cnt0 <= n);
-     match Term.down (n - cnt0) t with
-     | None ->
-        assert false (* Illegal call *)
-     | Some t ->
-        t
-
-
-let is_all_substituted (c:t): bool =
-  let csub = count_substitutions c in
-  let res = ref true
-  and i = ref 0 in
-  while !res && !i < csub do
-    if c.substitutions.(!i) = None then
-      res := false
-    else
-      i := !i + 1
-  done;
-  !res
-
-
-let substitution_at_index (i:int) (c:t): Term.t option =
-  (* in the current context *)
-  let n_subs = Array.length c.substitutions
-  and cnt = count c
-  in
-  assert (i < n_subs);
-  Option.map
-    (fun (t,n) ->
-      assert (n <= cnt);
-      Term.up (cnt - n) t)
-    c.substitutions.(bruijn_convert i n_subs)
-
-
-
-let substitute_at_index (i:int) (t:Term.t) (c:t): t =
-  substitute_at_level (level_of_index i c) t c
-
-
-
-let unify (t:Term.t) (u:Term.t) (c:t): t option =
-  let rec unify t u exact c =
-    let n_subs = Array.length c.substitutions
-    in
-    let open Term
-    in
-    match t, u with
-    | Variable i, _ when i < n_subs ->
-       Option.(
-        unify
-        (type_at_level (level_of_index i c) c)
-        (type_of_term u c)
-        false
-        c
-        >>= fun c ->
-        match
-          substitution_at_index i c
-        with
-        | None ->
-           Some (substitute_at_index i u c)
-        | Some t_sub ->
-           unify t_sub u exact c)
-      
-    | _, Variable i when i < n_subs ->
-       unify u t exact c
-      
-    | Sort s1, Sort s2
-         when (exact && s1 = s2) || (not exact && Sort.is_super s1 s2) ->
-       Some c
-      
-    | Variable i, Variable j when i = j ->
-       Some c
-      
-    | Appl (_, _, _ ), Appl (_, _, _ ) ->
-       assert false (* nyi *)
-      
-    | Pi (_, _, _), Pi (_, _, _) ->
-       assert false (* nyi *)
-      
-    | _, _ ->
-       None
-  in
-  unify t u true c
