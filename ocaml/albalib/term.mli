@@ -1,3 +1,6 @@
+val bruijn_convert: int -> int -> int
+
+
 module Value:
 sig
   type t =

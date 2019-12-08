@@ -1,6 +1,11 @@
 open Fmlib
 
 
+let bruijn_convert (i:int) (n:int): int =
+  assert (i < n);
+  n - i - 1
+
+
 module Value =
   struct
     type t =
