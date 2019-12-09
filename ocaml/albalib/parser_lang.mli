@@ -18,6 +18,7 @@ sig
     | String of string
     | Operator of operator
     | Binary of t * operator located * t
+    | Typed of t * t
     | Function of string located list * t
     | Parenthesized of t
 end

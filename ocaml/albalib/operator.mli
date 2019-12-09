@@ -7,6 +7,12 @@ type leaning =
   | No
 
 
+(** Precedence/associativity of colon ':' operator. *)
+val colon: t
+
+(** Precedence/associativity of relation operators. *)
+val relation: t
+
 (** Precedence/associativity of addition operators. *)
 val addition: t
 

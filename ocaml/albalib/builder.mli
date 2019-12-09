@@ -5,6 +5,7 @@ open Fmlib
 
 
 type pos = Character_parser.Position.t
+type range = pos * pos
 
 type required
 type actual
@@ -17,6 +18,7 @@ sig
     | No_name of pos * string
     | Not_enough_args of pos * int * int * actual list
     | None_conforms of pos * int * required list * actual list
+    | Not_yet_implemented of pos * int * string
 end
 
 

@@ -21,48 +21,64 @@ module Expression = struct
     | String of string
     | Operator of operator
     | Binary of t * operator located * t
+    | Typed of t * t
     | Function of string located list * t
     | Parenthesized of t
 
 
-    let rec binary
-              (e1:t)
-              (rest: (operator Located.t * t) list)
-            : (t, string * string) result
-      =
-      let mk_bin e1 op e2 =
-        let pos_start = Located.start e1
-        and pos_end   = Located.end_ e2 in
-        Located.make
-          pos_start (Binary (e1,op,e2)) pos_end
+  let rec binary
+            (e0:t)
+            (rest: (operator Located.t * t) list)
+          : (t, string * string) result
+    (* Analyze the precedence and associativity of an operator expresssion
+
+        e0 op1 e1 op2 e2 ... opn en
+
+       where [e0] is given explicitly and the rest is given as a list
+
+        [(op1,e1), (op2,e2), ...]
+     *)
+    =
+    let mk_bin e1 op e2 =
+      let pos_start = Located.start e1
+      and pos_end   = Located.end_ e2
+      and op_str,_    = Located.value op
       in
-      match rest with
-      | [] ->
-         Ok e1
+      Located.make
+        pos_start
+        (if op_str = ":" then
+           Typed (e1, e2)
+         else
+           Binary (e1,op,e2))
+        pos_end
+    in
+    match rest with
+    | [] ->
+       Ok e0
 
-      | [op, e2] ->
-         Ok (mk_bin e1 op e2)
+    | [op, e1] ->
+       Ok (mk_bin e0 op e1)
 
-      | (op1,e2) :: (op2,e3) :: rest ->
-         (* e1 op1 e2 op2 e3 rest *)
-         let op1_string, op1_data = Located.value op1
-         and op2_string, op2_data = Located.value op2
-         in
-         match Operator.leaning op1_data op2_data with
-         | Operator.Left ->
-            (* (e1 op1 e2) op2 e3 rest *)
-            binary (mk_bin e1 op1 e2) ((op2,e3) :: rest)
+    | (op1,e1) :: (op2,e2) :: rest ->
+       (* e0 op1 e2 op2 e3 rest *)
+       let op1_string, op1_data = Located.value op1
+       and op2_string, op2_data = Located.value op2
+       in
+       match Operator.leaning op1_data op2_data with
+       | Operator.Left ->
+          (* (e1 op1 e2) op2 e2 rest *)
+          binary (mk_bin e0 op1 e1) ((op2,e2) :: rest)
 
-         | Operator.Right ->
-            (* e1 op1 (e2 op2 e3 rest) *)
-            let module Res =
-              Monad.Result (struct type t = string * string end)
-            in
-            Res.map (mk_bin e1 op1) (binary e2 ((op2,e3) :: rest))
+       | Operator.Right ->
+          (* e1 op1 (e2 op2 e2 rest) *)
+          let module Res =
+            Monad.Result (struct type t = string * string end)
+          in
+          Res.map (mk_bin e0 op1) (binary e1 ((op2,e2) :: rest))
 
-         | Operator.No ->
-            (* Error case: I cannot decide on how to parenthesize *)
-            Error (op1_string, op2_string)
+       | Operator.No ->
+          (* Error case: I cannot decide on how to parenthesize *)
+          Error (op1_string, op2_string)
 end
 
 
@@ -204,17 +220,15 @@ let operator: Expression.operator Located.t t =
   located
   @@ map
        (fun lst ->
-         let arr = Array.of_list lst in
-         let op_str =
-           String.init
-             (Array.length arr)
-             (fun i -> arr.(i))
+         let op_str = String.of_list lst
          in
          op_str, Operator.of_string op_str)
        (one_or_more
           (expect
              is_op_char
-             (Problem.Expect "operator character")))
+             (Problem.Expect "operator character"))
+        <|> map (fun _ -> [':']) (char ':')
+       )
   |. whitespace
 
 

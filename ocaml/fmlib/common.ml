@@ -102,8 +102,8 @@ module String =
            Bytes.create i
         | c::cs ->
            let bs = str cs (i+1) in
-         Bytes.set bs i c;
-         bs
+           Bytes.set bs i c;
+           bs
       in
       let bs = str cs 0 in
       Bytes.unsafe_to_string bs

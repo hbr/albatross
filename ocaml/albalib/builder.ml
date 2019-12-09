@@ -2,13 +2,14 @@ open Fmlib
 open Common
 
 
-module Parser = Parser_lang
+module Parser     = Parser_lang
 module Expression = Parser.Expression
+module Position   = Character_parser.Position
 
-type pos = Character_parser.Position.t
 
-module Position =
-  Character_parser.Position
+type pos = Position.t
+
+type range = pos * pos
 
 module Located =
   Character_parser.Located
@@ -272,6 +273,7 @@ module Problem =
       | No_name of pos * string
       | Not_enough_args of pos * int * int * actual list
       | None_conforms of pos * int * required list * actual list
+      | Not_yet_implemented of pos * int * string
   end
 
 
@@ -546,8 +548,11 @@ let rec build0
        build0 base reqs 0 Term.Normal e2
      )
 
+  | Typed (exp, tp) ->
+     Error (Problem.Not_yet_implemented (pos,len, "typed expression"))
+
   | Function (args, exp) ->
-     assert false
+     Error (Problem.Not_yet_implemented (pos,len, "function expression"))
 
   | Parenthesized e ->
      build0 base reqs nargs mode e

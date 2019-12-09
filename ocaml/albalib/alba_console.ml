@@ -99,8 +99,12 @@ module Pretty_make (Io:Io.SIG) =
                   char ' ';
                   exp e2;
                   char ')']
+
+        | Typed (e, tp) ->
+           char '(' <+> exp e <+> string ": " <+> exp tp <+> char ')'
+
         | Function (args,exp) ->
-           assert false
+           assert false (* assert false *)
       in
       chain [string "expression";
              cut;
@@ -463,6 +467,16 @@ module Make (Io:Io.SIG) =
                      <+> cut
                      <+> indented_paragraphs (List.map GP.actual acts)
                      <+> cut)
+
+          | Builder.Problem.Not_yet_implemented (pos,len,str) ->
+             Pretty.(error_header "NOT YET IMPLEMENTED"
+                     <+> print_source
+                           src 0
+                           (Position.line pos) (Position.column pos)
+                           len
+                     <+> fill_paragraph ("<" ^ str ^ "> is not yet implemented")
+                     <+> cut
+             )
          )
 
       | Ok lst ->
