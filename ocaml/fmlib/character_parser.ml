@@ -79,7 +79,7 @@ module Located =
 
     let end_ (l:'a t) = l.end_
 
-    let positions (l:'a t): Position.t * Position.t =
+    let range (l:'a t): Position.t * Position.t =
       l.start, l.end_
   end
 

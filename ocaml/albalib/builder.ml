@@ -273,7 +273,7 @@ module Problem =
       | No_name of pos * string
       | Not_enough_args of pos * int * int * actual list
       | None_conforms of pos * int * required list * actual list
-      | Not_yet_implemented of pos * int * string
+      | Not_yet_implemented of range * string
   end
 
 
@@ -507,7 +507,9 @@ let rec build0
      toplevel placeholder represents the expression [expr]. The expression
      [expr] must be able to receive [nargs] arguments. *)
   let open Parser.Expression in
-  let pos = Located.start expr in
+  let pos = Located.start expr
+  and range = Located.range expr
+  in
   let len =
     Position.column (Located.end_ expr) - Position.column pos
   in
@@ -548,11 +550,11 @@ let rec build0
        build0 base reqs 0 Term.Normal e2
      )
 
-  | Typed (exp, tp) ->
-     Error (Problem.Not_yet_implemented (pos,len, "typed expression"))
+  | Typed (_, _) ->
+     Error (Problem.Not_yet_implemented (range, "typed expression"))
 
-  | Function (args, exp) ->
-     Error (Problem.Not_yet_implemented (pos,len, "function expression"))
+  | Function (_, _) ->
+     Error (Problem.Not_yet_implemented (range, "function expression"))
 
   | Parenthesized e ->
      build0 base reqs nargs mode e

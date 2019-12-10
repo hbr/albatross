@@ -4,7 +4,8 @@ open Common
 module Parser = Parser_lang
 
 module Position = Character_parser.Position
-
+type pos = Position.t
+type range = pos * pos
 
 
 
@@ -129,6 +130,64 @@ module Pretty_make (Io:Io.SIG) =
              fill nfill '-';
              cut;
              cut]
+
+
+    let print_source2 (source:string) ((pos1,pos2):range): t =
+      (* Print the source code in [range] with line numbers and error markers
+       *)
+      let start_line = Position.line pos1
+      and end_line   = Position.line pos2
+      and start_col  = Position.column pos1
+      and end_col    = Position.column pos2
+      and len        = String.length source
+      in
+      assert (start_line <= end_line);
+      assert (start_line < end_line || start_col < end_col);
+      let number_width =
+        String.length (string_of_int (end_line + 1))
+      in
+      let print_line start beyond line_no =
+        let line_no_str = string_of_int (line_no + 1) in
+        fill (number_width - String.length line_no_str) ' '
+        <+> string line_no_str
+        <+> string "| "
+        <+> substring source start (beyond - start)
+        <+> cut
+      and skip_line_no =
+        fill (number_width + 2) ' '
+      in
+      let rec print (char_offset:int) (line_no:int): t =
+        if len <= char_offset then
+          empty
+        else
+          let pos_newline = String.find (fun c -> c = '\n') char_offset source
+          in
+          (if line_no = start_line && start_line = end_line then
+             print_line char_offset pos_newline line_no
+             <+> skip_line_no
+             <+> fill start_col ' '
+             <+> fill (end_col - start_col) '^'
+             <+> cut
+           else if line_no = start_line && start_line < end_line then
+             skip_line_no
+             <+> fill start_col ' '
+             <+> char 'v'
+             <+> fill 3 '.'
+             <+> cut
+             <+> print_line char_offset pos_newline line_no
+           else if line_no = end_line && start_line <> end_line then
+             print_line char_offset pos_newline line_no
+             <+> skip_line_no
+             <+> fill (end_col - 1) '.'
+             <+> char '^'
+             <+> cut
+           else
+             (* normal line *)
+             print_line char_offset pos_newline line_no
+          )
+          <+> print (pos_newline + 1) (line_no + 1)
+      in
+      print 0 0
 
 
     let print_source
@@ -395,7 +454,7 @@ module Make (Io:Io.SIG) =
       | Error problem ->
          let module Position = Character_parser.Position in
          (match problem with
-          | Builder.Problem.Overflow (pos, str) ->
+          | Builder.Problem.Overflow (pos,str) ->
              let open Pretty in
              error_header "OVERFLOW"
              <+> print_source src 0
@@ -405,7 +464,7 @@ module Make (Io:Io.SIG) =
                                  word."
              <+> cut
 
-          | Builder.Problem.No_name (pos, str) ->
+          | Builder.Problem.No_name (pos,str) ->
              let open Pretty in
              chain
                [error_header "NAMING";
@@ -468,12 +527,10 @@ module Make (Io:Io.SIG) =
                      <+> indented_paragraphs (List.map GP.actual acts)
                      <+> cut)
 
-          | Builder.Problem.Not_yet_implemented (pos,len,str) ->
+          | Builder.Problem.Not_yet_implemented (range,str) ->
              Pretty.(error_header "NOT YET IMPLEMENTED"
-                     <+> print_source
-                           src 0
-                           (Position.line pos) (Position.column pos)
-                           len
+                     <+> print_source2 src range
+                     <+> cut
                      <+> fill_paragraph ("<" ^ str ^ "> is not yet implemented")
                      <+> cut
              )
