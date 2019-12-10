@@ -89,12 +89,20 @@ module Value =
 module Sort =
   struct
     type t =
+      | Proposition
       | Any of int
 
-    let is_super (s1:t) (s2:t): bool =
+    let is_sub (s1:t) (s2:t): bool =
       match s1, s2 with
+      | Proposition, Proposition | Proposition, Any _ ->
+         true
       | Any i, Any j ->
-         j <= i
+         i <= j
+      | _, _ ->
+         false
+
+    let is_super (s1:t) (s2:t): bool =
+      is_sub s2 s1
   end
 
 
@@ -123,6 +131,9 @@ type t =
   | Value of Value.t
 and typ = t
 
+
+let proposition: t =
+  Sort Sort.Proposition
 
 let any: t =
   Sort (Sort.Any 0)

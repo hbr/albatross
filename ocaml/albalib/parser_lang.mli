@@ -11,6 +11,7 @@ sig
     t0 Character_parser.Located.t
 
   and t0 =
+    | Proposition
     | Any
     | Identifier of string
     | Number of string

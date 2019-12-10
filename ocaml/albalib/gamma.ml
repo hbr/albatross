@@ -208,6 +208,9 @@ module Pretty (P:Pretty_printer.SIG) =
 
 
     let print_sort: Term.Sort.t -> pr_result = function
+      | Proposition ->
+         None, P.string "Proposition"
+
       | Any i ->
          let str =
            if i = 0 then
@@ -353,6 +356,9 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
   let rec typ t c =
     let open Term in
     match t with
+    | Sort Sort.Proposition ->
+       Sort (Sort.Any 0)
+
     | Sort (Sort.Any i) ->
        Sort (Sort.Any (i+1))
 

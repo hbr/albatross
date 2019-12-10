@@ -511,6 +511,9 @@ let rec build0
   match
     Located.value expr
   with
+  | Proposition ->
+     unify range base reqs [gsub_base, [], Term.proposition]
+
   | Any ->
      unify
        range base reqs

@@ -23,7 +23,13 @@ end
 module Sort:
 sig
   type t =
+    | Proposition
     | Any of int
+
+  (** [is_sub s1 s2] Is [s1] a subtype of [s2] (or equal)? *)
+  val is_sub: t -> t -> bool
+
+  (** [is_super s1 s2] Is [s1] a supertype of [s2] (or equal)? *)
   val is_super: t -> t -> bool
 end
 
@@ -49,6 +55,7 @@ type t =
 and typ = t
 
 
+val proposition: t
 val any: t
 val char:   int -> t
 val string: string -> t

@@ -14,6 +14,7 @@ module Expression = struct
 
 
   and t0 =
+    | Proposition
     | Any
     | Identifier of string
     | Number of string
@@ -165,7 +166,9 @@ let identifier_expression: Expression.t t =
   map
     (Located.map
        (fun s ->
-         if s = "Any" then
+         if s = "Proposition" then
+           Expression.Proposition
+         else if s = "Any" then
            Expression.Any
          else
            Expression.Identifier s
