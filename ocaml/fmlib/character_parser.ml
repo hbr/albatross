@@ -31,6 +31,8 @@ sig
   val start: t
   val make: int -> int -> t
   val next: char -> t -> t
+  val next_line: t -> t
+  val next_column: t -> t
 end =
   struct
     type t = {line:int; column:int}

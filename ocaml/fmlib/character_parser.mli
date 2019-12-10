@@ -8,6 +8,8 @@ sig
   type t
   val line:   t -> int
   val column: t -> int
+  val next_line:   t -> t
+  val next_column: t -> t
 end
 
 module Located:

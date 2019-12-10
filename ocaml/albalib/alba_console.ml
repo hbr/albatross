@@ -104,7 +104,7 @@ module Pretty_make (Io:Io.SIG) =
         | Typed (e, tp) ->
            char '(' <+> exp e <+> string ": " <+> exp tp <+> char ')'
 
-        | Function (args,exp) ->
+        | Function (_, _) ->
            assert false (* assert false *)
       in
       chain [string "expression";
@@ -132,7 +132,7 @@ module Pretty_make (Io:Io.SIG) =
              cut]
 
 
-    let print_source2 (source:string) ((pos1,pos2):range): t =
+    let print_source (source:string) ((pos1,pos2):range): t =
       (* Print the source code in [range] with line numbers and error markers
        *)
       let start_line = Position.line pos1
@@ -188,57 +188,6 @@ module Pretty_make (Io:Io.SIG) =
           <+> print (pos_newline + 1) (line_no + 1)
       in
       print 0 0
-
-
-    let print_source
-          (source:string)
-          (start_line:int)
-          (err_line:int)
-          (err_col: int)
-          (mark_len: int)
-        : t =
-      (* Print snippet of the erronous source code with line numbers and error
-         marker. *)
-      assert (0 <= start_line);
-      assert (start_line <= err_line);
-      assert (0 <= err_col);
-      assert (0 <= mark_len);
-      let err_line_str = string_of_int (err_line + 1) in
-      let number_width = String.length err_line_str
-      in
-      let line_no i =
-        let line_str = string_of_int (i + 1) in
-        chain
-          [fill
-             (number_width - String.length line_str)
-             ' ';
-           string line_str;
-           string "| "]
-      in
-      let rec lines offset line =
-        if err_line < line || String.length source < offset then
-          empty
-        else
-          let pos = String.find (fun c -> c = '\n') offset source in
-          chain
-            [line_no line;
-             substring source offset (pos - offset);
-             (if line = err_line then
-                string
-                  (if pos = String.length source then
-                     "<end>"
-                   else
-                     " ...")
-              else
-                empty);
-             cut;
-             lines (pos + 1) (line + 1)]
-      in
-      chain [lines 0 0;
-             fill (number_width + 2 + err_col) ' ';
-             fill mark_len '^';
-             cut;
-             cut]
 
 
     let one_error_explanation (err:Parser.Dead_end.t): t =
@@ -454,35 +403,28 @@ module Make (Io:Io.SIG) =
       | Error problem ->
          let module Position = Character_parser.Position in
          (match problem with
-          | Builder.Problem.Overflow (pos,str) ->
+          | Builder.Problem.Overflow range ->
              let open Pretty in
              error_header "OVERFLOW"
-             <+> print_source src 0
-                   (Position.line pos) (Position.column pos)
-                   (String.length str)
+             <+> print_source src range
              <+> fill_paragraph "Your number is too big to fit into a machine \
                                  word."
              <+> cut
 
-          | Builder.Problem.No_name (pos,str) ->
+          | Builder.Problem.No_name range ->
              let open Pretty in
              chain
                [error_header "NAMING";
-                print_source
-                  src 0
-                  (Position.line pos) (Position.column pos)
-                  (String.length str);
-                fill_paragraph @@ "A cannot find this name.";
+                print_source src range;
+                cut;
+                fill_paragraph @@ "I cannot find this name.";
                 cut]
 
-          | Builder.Problem.Not_enough_args (pos, len, nargs, acts) ->
+          | Builder.Problem.Not_enough_args (range, nargs, acts) ->
              assert (acts <> []);
              let module GP = Builder.Print (Pretty) in
              Pretty.(error_header "TYPE"
-                     <+> print_source
-                           src 0
-                           (Position.line pos) (Position.column pos)
-                           len
+                     <+> print_source src range
                      <+> fill_paragraph
                            ("I was expecting a function/operator which can \
                              be applied to " ^ string_of_int nargs
@@ -498,15 +440,12 @@ module Make (Io:Io.SIG) =
                               cut)
                      <+> cut)
 
-          | Builder.Problem.None_conforms (pos, len, reqs, acts) ->
+          | Builder.Problem.None_conforms (range, reqs, acts) ->
              assert (reqs <> []);
              assert (acts <> []);
              let module GP = Builder.Print (Pretty) in
              Pretty.(error_header "TYPE"
-                     <+> print_source
-                           src 0
-                           (Position.line pos) (Position.column pos)
-                           len
+                     <+> print_source src range
                      <+> fill_paragraph
                            ("I was expecting an expression of "
                             ^ if List.length reqs = 1 then
@@ -529,7 +468,7 @@ module Make (Io:Io.SIG) =
 
           | Builder.Problem.Not_yet_implemented (range,str) ->
              Pretty.(error_header "NOT YET IMPLEMENTED"
-                     <+> print_source2 src range
+                     <+> print_source src range
                      <+> cut
                      <+> fill_paragraph ("<" ^ str ^ "> is not yet implemented")
                      <+> cut
@@ -563,9 +502,11 @@ module Make (Io:Io.SIG) =
 
       | Error errors ->
          let open Pretty in
+         let pos1 = Parser.position p in
+         let pos2 = Character_parser.Position.next_column pos1 in
          chain
            [ error_header "SYNTAX";
-             print_source src 0 (Parser.line p) (Parser.column p) 1;
+             print_source src (pos1,pos2);
              error_explanation errors]
 
 

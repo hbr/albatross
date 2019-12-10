@@ -14,10 +14,10 @@ type actual
 module Problem:
 sig
   type t =
-    | Overflow of pos * string
-    | No_name of pos * string
-    | Not_enough_args of pos * int * int * actual list
-    | None_conforms of pos * int * required list * actual list
+    | Overflow of range
+    | No_name of range
+    | Not_enough_args of range * int * actual list
+    | None_conforms of range * required list * actual list
     | Not_yet_implemented of range * string
 end
 

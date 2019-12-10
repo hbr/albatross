@@ -269,10 +269,10 @@ type actual =
 module Problem =
   struct
     type t =
-      | Overflow of pos * string
-      | No_name of pos * string
-      | Not_enough_args of pos * int * int * actual list
-      | None_conforms of pos * int * required list * actual list
+      | Overflow of range
+      | No_name of range
+      | Not_enough_args of range * int * actual list
+      | None_conforms of range * required list * actual list
       | Not_yet_implemented of range * string
   end
 
@@ -342,10 +342,10 @@ module Print  (P:Pretty_printer.SIG) =
 *)
 
 
-let find_name (name:string) (pos:Position.t) (c:Context.t): int list Result.t =
+let find_name (name:string) (range:range) (c:Context.t): int list Result.t =
   match Context.find_name name c with
   | [] ->
-     Error (Problem.No_name (pos,name))
+     Error (Problem.No_name range)
   | lst ->
      Ok lst
 
@@ -356,8 +356,7 @@ let extract_args
                                           *)
       (mode: Term.appl)                (* Mode of the application *)
       (base:Context.t)
-      (pos:Position.t)                 (* Position of the name *)
-      (len:int)                        (* String length of the name *)
+      (range:range)                    (* Position of the name *)
       (lst: int list)                  (* Indices of the name (name might not
                                           be unique) *)
     : (actual list, Problem.t) result
@@ -388,7 +387,7 @@ let extract_args
   with
   | [] ->
      Error (Problem.Not_enough_args
-              (pos, len, nargs,
+              (range, nargs,
                List.map
                  (fun i ->
                    GSub.make (Context.gamma base),
@@ -401,8 +400,7 @@ let extract_args
 
 
 let unify
-      (pos:Position.t)
-      (len:int)
+      (range: range)
       (base:Context.t)
       (reqs: required list)
       (actuals: actual list)
@@ -444,32 +442,31 @@ let unify
     )
   with
   | [] ->
-     Error (Problem.None_conforms (pos, len, reqs, actuals))
+     Error (Problem.None_conforms (range, reqs, actuals))
   | lst ->
      Ok lst
 
 
 let term_of_name
       (name: string)
-      (pos: Position.t)
+      (range: range)
       (nargs: int)
       (mode: Term.appl)
       (base: Context.t)
       (reqs: required list)
     : (required list, Problem.t) result
   =
-  let len = String.length name in
   Result.(
-    find_name name pos base
-    >>= extract_args nargs mode base pos len
-    >>= unify pos len base reqs
+    find_name name range base
+    >>= extract_args nargs mode base range
+    >>= unify range base reqs
   )
 
 
 let term_of_number
-      (number:string)
-      (pos:Position.t)
-      (base:Context.t)
+      (number: string)
+      (range: range)
+      (base: Context.t)
       (reqs: required list)
     : (required list, Problem.t) result
   =
@@ -478,10 +475,10 @@ let term_of_number
   in
   match lst with
   | [] ->
-     Error (Problem.Overflow (pos,number))
+     Error (Problem.Overflow range)
   | _ ->
      unify
-       pos (String.length number) base reqs
+       range base reqs
        (List.map
           (fun v ->
             match v with
@@ -507,11 +504,7 @@ let rec build0
      toplevel placeholder represents the expression [expr]. The expression
      [expr] must be able to receive [nargs] arguments. *)
   let open Parser.Expression in
-  let pos = Located.start expr
-  and range = Located.range expr
-  in
-  let len =
-    Position.column (Located.end_ expr) - Position.column pos
+  let range = Located.range expr
   in
   let gsub_base = GSub.make (Context.gamma base)
   in
@@ -520,30 +513,30 @@ let rec build0
   with
   | Any ->
      unify
-       pos (String.length "Any") base reqs
+       range base reqs
        [gsub_base, [], Term.any]
 
   | Identifier name | Operator (name,_) ->
-     term_of_name name pos nargs mode base reqs
+     term_of_name name range nargs mode base reqs
 
   | Number str ->
      assert (nargs = 0);
-     term_of_number str pos base reqs
+     term_of_number str range base reqs
 
   | Char code ->
      assert (nargs = 0);
-     unify pos len base reqs
+     unify range base reqs
        [gsub_base, [], (Term.char code)]
 
   | String str ->
      assert (nargs = 0);
-     unify pos len base reqs [gsub_base, [], (Term.string str)]
+     unify range base reqs [gsub_base, [], (Term.string str)]
 
   | Binary (e1, op, e2) ->
      let name, _ = Located.value op
-     and pos  = Located.start op in
+     and range  = Located.range op in
      Result.(
-       term_of_name name pos 2 Term.Binary base reqs
+       term_of_name name range 2 Term.Binary base reqs
        >>= fun reqs ->
        build0 base reqs 0 Term.Normal e1
        >>= fun reqs ->
