@@ -181,6 +181,12 @@ module Pretty_make (Io:Io.SIG) =
              <+> fill (end_col - 1) '.'
              <+> char '^'
              <+> cut
+           else if pos_newline + 1 = len && start_line = line_no + 1 then
+             print_line char_offset pos_newline line_no
+             <+> skip_line_no
+             <+> fill (pos_newline - char_offset) ' '
+             <+> char '^'
+             <+> cut
            else
              (* normal line *)
              print_line char_offset pos_newline line_no
