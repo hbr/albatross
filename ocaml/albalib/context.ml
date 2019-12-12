@@ -1,12 +1,53 @@
 open Fmlib
 open Common
 
-type names = int list String_map.t
+
+
+module Name_map =
+  struct
+    type t =
+      {map: int list String_map.t; cnt: int}
+
+    let empty: t =
+      {map = String_map.empty; cnt = 0}
+
+    let count (m:t): int =
+      m.cnt
+
+    let find (name:string) (m:t): int list =
+      match String_map.maybe_find name m.map with
+      | None ->
+         []
+      | Some lst ->
+         lst
+
+    let add (name:string) (global:bool) (m:t): t =
+      {map =
+         String_map.add
+           name
+           (match String_map.maybe_find name m.map with
+            | None ->
+               [m.cnt]
+            | Some lst ->
+               if global then
+                 m.cnt :: lst
+               else
+                 [m.cnt])
+           m.map;
+       cnt =
+         1 + m.cnt}
+
+    let add_global (name:string) (m:t): t =
+      add name true m
+
+    let add_local (name: string) (m:t) : t =
+      add name false m
+  end
 
 
 type t = {
     gamma: Gamma.t;
-    map: names
+    map: Name_map.t
   }
 
 
@@ -18,32 +59,8 @@ let count (c:t): int =
 let gamma (c:t): Gamma.t =
   c.gamma
 
-
-let add_name_to_names
-      (name:string)
-      (i:int)
-      (global:bool)
-      (map:names)
-    : names
-  =
-  if name = "" || name = "_" then
-    map
-
-  else
-    String_map.add
-      name
-      (match
-         String_map.maybe_find name map
-       with
-       | None ->
-          [i]
-
-       | Some lst ->
-          if global then
-            i :: lst
-          else
-            [i])
-      map
+let name_map (c:t): Name_map.t =
+  c.map
 
 
 let standard (): t =
@@ -51,12 +68,10 @@ let standard (): t =
   {gamma;
    map =
      Interval.fold
-       String_map.empty
+       Name_map.empty
        (fun i m ->
-         add_name_to_names
+         Name_map.add_global
            Gamma.(string_of_name (name_of_level i gamma))
-           i
-           true
            m)
        0 (Gamma.count gamma)
   }
@@ -67,12 +82,7 @@ let compute (t:Term.t) (c:t): Term.t =
 
 
 let find_name (name:string) (c:t): int list =
-  match String_map.maybe_find name c.map with
-  | None ->
-     []
-
-  | Some lst ->
-     lst
+  Name_map.find name c.map
 
 
 module Pretty (P:Pretty_printer.SIG) =
