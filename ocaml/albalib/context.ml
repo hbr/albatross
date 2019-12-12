@@ -21,26 +21,36 @@ module Name_map =
       | Some lst ->
          lst
 
+
+    let add_unnamed (m:t): t =
+      {m with cnt = 1 + m.cnt}
+
     let add (name:string) (global:bool) (m:t): t =
-      {map =
-         String_map.add
-           name
-           (match String_map.maybe_find name m.map with
-            | None ->
-               [m.cnt]
-            | Some lst ->
-               if global then
-                 m.cnt :: lst
-               else
-                 [m.cnt])
-           m.map;
-       cnt =
-         1 + m.cnt}
+      assert (name <> "");
+      if name = "_" then
+        add_unnamed m
+      else
+        {map =
+           String_map.add
+             name
+             (match String_map.maybe_find name m.map with
+              | None ->
+                 [m.cnt]
+              | Some lst ->
+                 if global then
+                   m.cnt :: lst
+                 else
+                   [m.cnt])
+             m.map;
+         cnt =
+           1 + m.cnt}
 
     let add_global (name:string) (m:t): t =
+      assert (name <> "");
       add name true m
 
     let add_local (name: string) (m:t) : t =
+      assert (name <> "");
       add name false m
   end
 
