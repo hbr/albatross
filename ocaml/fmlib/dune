@@ -1,5 +1,4 @@
 (library
-  (libraries unix linenoise)
   (inline_tests)
   (modules_without_implementation fmlib)
   (preprocess (pps ppx_inline_test))

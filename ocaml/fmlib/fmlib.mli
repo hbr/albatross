@@ -33,7 +33,6 @@ module Pool = Pool
 (** {1 IO }*)
 
 module Io = Io
-module Ocaml_io = Ocaml_io
 module Readable_printer = Readable_printer
 module String_printer   = String_printer
 

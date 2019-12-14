@@ -1,0 +1,3 @@
+(library
+  (libraries unix linenoise fmlib)
+  (name fmlib_native))
