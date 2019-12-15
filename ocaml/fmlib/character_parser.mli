@@ -95,7 +95,6 @@ sig
   module Dead_end: DEAD_END with type msg = string
                              and type context = Context.t
 
-  type error = Dead_end.t
   type final = Final.t
   type token = char option
 
@@ -193,7 +192,6 @@ sig
 
   type final = Final.t
   type token = char option
-  type error = Dead_end.t
 
 
   (** {1 Combinators} *)
@@ -201,7 +199,7 @@ sig
 
   (** {2 Basic Combinators} *)
 
-  include Generic_parser.BASIC
+  include Generic_parser.BASIC with type error = Dead_end.t
   val fail: Problem.t -> 'a t
 
   (** {2 More Combinators} *)

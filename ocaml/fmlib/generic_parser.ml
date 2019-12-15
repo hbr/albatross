@@ -3,8 +3,10 @@ open Common_module_types
 module type BASIC =
   sig
     type 'a t
+    type error
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
+    val fail:    error -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
