@@ -2,27 +2,6 @@ open Common
 open Common_module_types
 open Parse_combinators
 
-module type CONTEXT =
-  sig
-    type t
-    type msg
-    val message: t -> msg
-    val line: t -> int
-    val column: t -> int
-  end
-
-module type DEAD_END =
-  sig
-    type t
-    type msg
-    type context
-    val message: t -> msg
-    val line: t -> int
-    val column: t -> int
-    val offside: t -> (int * int option) option
-    val contexts: t -> context list
-  end
-
 module Position:
 sig
   type t
@@ -59,6 +38,29 @@ end =
         next_column p
   end
 
+
+module type CONTEXT =
+  sig
+    type t
+    type msg
+    val message: t -> msg
+    val position: t -> Position.t
+    val line: t -> int
+    val column: t -> int
+  end
+
+module type DEAD_END =
+  sig
+    type t
+    type msg
+    type context
+    val message: t -> msg
+    val position: t -> Position.t
+    val line: t -> int
+    val column: t -> int
+    val offside: t -> (int * int option) option
+    val contexts: t -> context list
+  end
 
 module Located =
   struct
@@ -160,6 +162,8 @@ module Context (Msg:ANY) =
 
     let message (c:t) = c.msg
 
+    let position (c:t) = c.pos
+
     let line (c:t) = Position.line c.pos
 
     let column (c:t) = Position.column c.pos
@@ -184,6 +188,8 @@ module Error (Msg:ANY) (Ctx:CONTEXT) =
     let add_offside pos e = {e with offside = Some pos}
 
     let message (e:t) = e.msg
+
+    let position (e:t) = e.pos
 
     let line (e:t) = Position.line e.pos
 

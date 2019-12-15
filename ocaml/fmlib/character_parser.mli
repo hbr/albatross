@@ -29,6 +29,7 @@ module type CONTEXT =
     type t
     type msg
     val message: t -> msg
+    val position: t -> Position.t
     val line: t -> int
     val column: t -> int
   end
@@ -40,6 +41,7 @@ module type DEAD_END =
     type msg
     type context
     val message: t -> msg
+    val position: t -> Position.t
     val line: t -> int
     val column: t -> int
     val offside: t -> (int * int option) option
