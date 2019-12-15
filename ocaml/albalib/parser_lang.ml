@@ -121,9 +121,52 @@ module P = Character_parser.Advanced (Unit) (Final) (Problem) (Context_msg)
 include P
 
 
-let whitespace: int t =
-  P.whitespace (Problem.Expect "whitespace")
 
+let line_comment: unit t =
+  P.(backtrackable (string "--" (fun _ -> Problem.Expect "--"))
+     >>= fun _ ->
+     skip_zero_or_more
+       (expect
+          (fun c -> c <> '\n')
+          (Problem.Expect "any char except newline"))
+     >>= fun _ ->
+     return ()
+  )
+
+
+let expect_char (c:char): unit t =
+  P.char c (Problem.Expect (String.one c))
+
+let multiline_comment: unit t =
+  let open P in
+
+  let rec to_end (): unit t =
+    (expect_char '-' >>= fun _ ->
+     (expect_char '}'
+     <|> to_end ()))
+    <|> (expect (fun _ -> true) (Problem.Expect "any char")
+         >>= fun _ ->
+         to_end ())
+  in
+
+  backtrackable (string "{-" (fun _ -> Problem.Expect "{-"))
+  >>= fun _ ->
+  to_end ()
+
+
+
+let whitespace: int t =
+  let problem = Problem.Expect "whitespace"
+  in
+  P.(skip_zero_or_more
+       ((whitespace_char problem >>= fun _ -> return ())
+        <|> line_comment
+        <|> multiline_comment)
+  )
+
+(*let whitespace: int t =
+  P.whitespace (Problem.Expect "whitespace")
+ *)
 
 let char (c:char): unit t =
   char
