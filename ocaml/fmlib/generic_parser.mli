@@ -33,6 +33,8 @@ sig
   val state:      parser -> state
   val result:     parser -> (final, error list) result
   val lookahead:  parser -> token list
+  val has_succeeded: parser -> bool
+  val has_failed: parser -> bool
 
   val make_parser: state -> final t -> parser
 

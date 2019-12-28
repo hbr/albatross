@@ -87,29 +87,59 @@ module Located =
       l.start, l.end_
   end
 
-
 module Indent =
   struct
+
     type t = {
-        lb: int;
-        ub: int option;
-        abs: bool
+        lb: int;          (* lower bound of the indentation set *)
+        ub: int option;   (* upper bound of the indentation set *)
+        abs: bool;        (* absolute alignment *)
+        strict: bool;     (* default token indentation
+                               true:  token indentation >  parent
+                               false: token indentation >= parent *)
       }
+
     let initial: t = {lb = 0;
                       ub = None;
-                      abs = false}
+                      abs = false;
+                      strict = false}
 
 
     let bounds (ind:t): int * int option =
       ind.lb, ind.ub
 
+
+    let is_allowed_token_position (pos:int) (ind:t): bool =
+      if ind.abs then
+        (* The token position must be in the set of the allowed indentations
+           of the parent. *)
+        ind.lb <= pos
+        && match ind.ub with
+           | None ->
+              true
+           | Some ub ->
+              pos <= ub
+      else
+        (* The token must be strictly or nonstrictly indented relative to the
+           parent. *)
+        let incr = if ind.strict then 1 else 0 in
+        ind.lb + incr <= pos
+
+
     let is_offside (col:int) (ind:t): bool =
-      col < ind.lb
+      not (is_allowed_token_position col ind)
+
 
     let token (pos:int) (ind:t): t =
       if ind.abs then
-        {lb = pos; ub = Some pos; abs = false}
+        (* It is the first token of an absolutely aligned parent. *)
+        {ind with lb = pos; ub = Some pos; abs = false}
       else
+        (* Indentation of the parent is at most the indentation of the token
+           (strict = false) or the indentation of the token - 1 (strict =
+           true). *)
+        let pos = if ind.strict then pos - 1 else pos
+        in
         match ind.ub with
         | Some ub when ub <= pos ->
            ind
@@ -131,20 +161,20 @@ module Indent =
       if ind0.abs then
         ind
       else
-        let lb =
-          if strict then
-            ind.lb - 1
-          else
-            ind.lb
-        in
-        (assert (ind0.lb <= lb); (* Lower bound cannot decrease. *)
-         {ind0 with
-           ub =
-             Some (
-                 match ind0.ub with
-                 | None -> lb
-                 | Some ub0 -> min ub0 lb)}
-        )
+        match ind.ub with
+        | None ->
+           ind0
+        | Some ub ->
+           let incr = if strict then 1 else 0
+           in
+           assert (incr <= ub);
+           {ind0 with
+             ub =
+               match ind0.ub with
+               | None ->
+                  Some (ub - 1)
+               | Some ub0 ->
+                  Some (min ub0 (ub - 1))}
   end
 
 
@@ -490,6 +520,22 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
 
     let get_bounds: (int * int option) t =
       map State.bounds Basic.get
+
+
+    let one_or_more_aligned (p:'a t): 'a list t =
+      absolute (one_or_more (absolute p))
+
+    let zero_or_more_aligned (p:'a t): 'a list t =
+      absolute (zero_or_more (absolute p))
+
+    let skip_one_or_more_aligned (p:'a t): int t =
+      absolute (skip_one_or_more (absolute p))
+
+    let skip_zero_or_more_aligned (p:'a t): int t =
+      absolute (skip_zero_or_more (absolute p))
+
+
+    (* General functions *)
 
     let put_char (p:parser) (c:char): parser =
       assert (needs_more p);
@@ -905,6 +951,7 @@ let%test _ =
 
 
 (* Parser Pipelines *)
+(* **************** *)
 let%test _ =
   let module SP = Simple (String) in
   let open SP in
@@ -924,7 +971,10 @@ let%test _ =
   && lookahead p = []
 
 
-(* Variable *)
+
+
+(* Variable         *)
+(* **************** *)
 module Var =
   struct
     include SP
@@ -971,3 +1021,240 @@ let%test _ =
   && result p = Error (one_error 0 0 "variable")
   && column p = 5
   && lookahead p = [None]
+
+
+
+(* Indentation sensitivity *)
+(* *********************** *)
+module Indent_parser =
+  struct
+    module P = Simple (Unit)
+    include P
+
+    let white_space: int t =
+      detached P.whitespace
+
+    let letter_ws: char t =
+      return identity
+      |= letter
+      |. white_space
+
+    let result_string (p:parser): string =
+      result_string p (fun _ -> "()")
+
+    let print (p:parser) (str:string): unit =
+      let open Printf in
+      printf "string <%s>\n" (String.escaped str);
+      printf "line %d, column %d\n" (line p) (column p);
+      printf "%s\n"  (result_string p);
+      printf "lookahead %s\n\n" (lookahead_string p)
+
+    let _ = print (* to avoid warning of unused 'print' *)
+ end
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\nb" in
+  let p = run
+            (return ()
+             |. letter_ws
+             |. (indented true letter_ws)
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_failed p
+  && lookahead p = [Some 'b']
+  && line p = 1
+  && column p = 0
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\n b\nc" in
+  let p = run
+            (return ()
+             |. letter_ws
+             |. (indented true letter_ws)
+             |. letter_ws
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_succeeded p
+  && lookahead p = []
+  && line p = 2
+  && column p = 1
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\n  b c\n d\n     e\nz" in
+  let p = run
+            (return ()
+             |. letter_ws
+             |. (indented true (skip_one_or_more letter_ws))
+             |. letter_ws
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_succeeded p
+  && lookahead p = []
+  && line p = 4
+  && column p = 1
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = " a\n b\n  " in
+  let p = run
+            (return ()
+             |. white_space
+             |. absolute
+                  (return ()
+                   |. absolute (letter_ws)
+                   |. absolute (letter_ws))
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_succeeded p
+  && lookahead p = []
+  && line p = 2
+  && column p = 2
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = " a\n  b" in
+  let p = run
+            (return ()
+             |. white_space
+             |. absolute
+                  (return ()
+                   |. absolute (letter_ws)
+                   |. absolute (letter_ws))
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_failed p
+  && lookahead p = [Some 'b']
+  && line p = 1
+  && column p = 2
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\nb\n c\n d" in
+  let p = run
+            (return ()
+             |. white_space
+             |. absolute
+                  (return ()
+                   |. absolute (letter_ws)
+                   |. absolute (letter_ws)
+                   |. indented
+                        true
+                        (absolute
+                           ( return ()
+                             |. absolute (letter_ws)
+                             |. absolute (letter_ws)))
+                  )
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_succeeded p
+  && lookahead p = []
+  && line p = 3
+  && column p = 2
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\nb\n c\nd" in
+  let p = run
+            (return ()
+             |. white_space
+             |. absolute
+                  (return ()
+                   |. absolute (letter_ws)
+                   |. absolute (letter_ws)
+                   |. indented
+                        true
+                        (absolute
+                           ( return ()
+                             |. absolute (letter_ws)
+                             |. absolute (letter_ws)))
+                  )
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_failed p
+  && lookahead p = [Some 'd']
+  && line p = 3
+  && column p = 0
+
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\nb\n c\n  d" in
+  let p = run
+            (return ()
+             |. white_space
+             |. absolute
+                  (return ()
+                   |. absolute (letter_ws)
+                   |. absolute (letter_ws)
+                   |. indented
+                        true
+                        (absolute
+                           ( return ()
+                             |. absolute (letter_ws)
+                             |. absolute (letter_ws)))
+                  )
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && has_failed p
+  && lookahead p = [Some 'd']
+  && line p = 3
+  && column p = 2
+
+
+let%test _ =
+  let open Indent_parser in
+  let str = "a\n x\n y\nb\nc" in
+  let p = run
+            (return ()
+             |. skip_one_or_more_aligned
+                  (letter_ws
+                   |. indented true (skip_zero_or_more_aligned letter_ws)
+                  )
+             |. expect_end)
+            str
+  in
+  (*print p str;*)
+  has_ended p
+  && lookahead p = []
+  && line p = 4
+  && column p = 1

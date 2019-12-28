@@ -137,9 +137,19 @@ sig
   (** {2 Indentation Combinators} *)
 
   val absolute: 'a t -> 'a t
+  (** [absolute p] is the parser [p] whose set of possible indentation
+     positions is the singleton set consisting of the indentation position of
+     the first token.. *)
+
   val indented: bool -> 'a t -> 'a t
   val detached: 'a t -> 'a t
   val get_bounds: (int * int option) t
+
+  val one_or_more_aligned:  'a t -> 'a list t
+  val zero_or_more_aligned: 'a t -> 'a list t
+  val skip_one_or_more_aligned:  'a t -> int t
+  val skip_zero_or_more_aligned: 'a t -> int t
+
 
   (** {2 Context Combinator} *)
 

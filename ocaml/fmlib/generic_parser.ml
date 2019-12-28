@@ -286,6 +286,15 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
       | Final (_,_,la) -> la
       | _ -> assert false (* Illegal call! *)
 
+    let has_succeeded (p:parser): bool =
+      match p with
+      | Final (_, Ok _, _) ->
+         true
+      | _ ->
+         false
+
+    let has_failed (p:parser): bool =
+      not (has_succeeded p)
 
 
     type 'a cont = 'a option -> B.t -> parser

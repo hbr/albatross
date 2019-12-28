@@ -1,5 +1,6 @@
 open Common
 
+
 type t =
   | Empty
   | Scalar of string
@@ -143,7 +144,7 @@ let string_of_result res =
 
 let _ = string_of_result
 
-
+(*
 let%test _ =
   let open Parser in
   let p = run "" in
@@ -159,14 +160,51 @@ let%test _ =
   has_ended p
   && column p = 5
   && result p = Ok (Scalar "hello")
-(*
+
+
 let%test _ =
   let open Parser in
-  let p = run "a:x\nb:y\nc:\n -b1\n -b2\nd: \n   z" in
+  let str = "a:x\nb:y\nc:z\n  " in
+  let p = run str in
+  Printf.printf "string <%s>\n" (String.escaped str);
   Printf.printf "line %d, column %d\n" (line p) (column p);
   Printf.printf "%s\n"  (result_string p);
   Printf.printf "lookahead %s\n" (lookahead_string p);
   has_ended p
-  && column p = 5
-  && result p = Ok (Atom "hello")
+
+
+let%test _ =
+  let open Parser in
+  let str = "a:x\nb:y\n c:z" in
+  let p = run str in
+  Printf.printf "string <%s>\n" (String.escaped str);
+  Printf.printf "line %d, column %d\n" (line p) (column p);
+  Printf.printf "%s\n"  (result_string p);
+  Printf.printf "lookahead %s\n" (lookahead_string p);
+  has_ended p
+
+
+let%test _ =
+  let open Parser in
+  let str = "a:x\nb:y\nc:\n -d\n -e" in
+  let p = run str in
+  Printf.printf "string <%s>\n" (String.escaped str);
+  Printf.printf "line %d, column %d\n" (line p) (column p);
+  Printf.printf "%s\n"  (result_string p);
+  Printf.printf "lookahead %s\n" (lookahead_string p);
+  has_ended p
+
+
+let%test _ =
+  let open Parser in
+  let str = "a:x\nb:y\nc:\n -b1\n -b2\nd: \n   z" in
+  let p = run str in
+  Printf.printf "string <%s>\n" (String.escaped str);
+  Printf.printf "line %d, column %d\n" (line p) (column p);
+  Printf.printf "%s\n"  (result_string p);
+  Printf.printf "lookahead %s\n" (lookahead_string p);
+  has_ended p
+  && line p = 6
+  && column p = 4
+
  *)
