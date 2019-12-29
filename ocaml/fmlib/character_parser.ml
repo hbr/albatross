@@ -743,9 +743,6 @@ let%test _ =
 
 
 
-
-(* Test the [>>-] combinator *)
-(* ************************* *)
 let%test _ =
   let open UP in
   let p = run (char 'a' >>= fun _ -> char 'b') "ab" in
@@ -920,31 +917,6 @@ let%test _ =
   && column p = 3
   && result p = Ok ()
   && lookahead p = []
-
-
-(* Test the [>>-] combinator *)
-(* ************************* *)
-
-let%test _ =
-  let open UP in
-  let p =
-    run (char 'a' >>- fun _ -> char 'b') "ab"
-  in
-  has_ended p
-  && result p = Ok ()
-  && column p = 2
-  && lookahead p = []
-
-
-let%test _ =
-  let open UP in
-  let p =
-    run (char 'a' >>- fun _ -> char 'b') "ac"
-  in
-  has_ended p
-  && column p = 0
-  && lookahead p = [Some 'a'; Some 'c']
-
 
 
 

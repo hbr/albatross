@@ -3,7 +3,6 @@ open Common
 module type COMBINATORS =
   sig
     type 'a tp
-    val (>>-): 'a tp -> ('a -> 'b tp) -> 'b tp
     val optional: 'a tp -> 'a option tp
     val one_of: 'a tp list -> 'a tp
     val loop: 'a -> ('a -> ('a,'b) Loop_state.t tp) -> 'b tp
@@ -29,8 +28,8 @@ module Add_combinators: ADD_COMBINATORS =
   functor (P:Generic_parser.BASIC) ->
   struct
     type 'a tp = 'a P.t
-    let (>>-) (p:'a P.t) (f:'a -> 'b P.t): 'b P.t =
-      P.(backtrackable (p >>= commit >>= f))
+    (*let (>>-) (p:'a P.t) (f:'a -> 'b P.t): 'b P.t =
+      P.(backtrackable (p >>= commit >>= f))*)
 
     let optional (p:'a P.t): 'a option P.t =
       let open P in

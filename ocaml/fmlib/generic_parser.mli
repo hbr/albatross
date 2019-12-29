@@ -12,7 +12,6 @@ module type BASIC =
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
     val backtrackable: 'a t -> 'a t
-    val commit: 'a -> 'a t
   end
 
 

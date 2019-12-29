@@ -3,7 +3,6 @@ open Common
 module type COMBINATORS =
   sig
     type 'a tp
-    val (>>-): 'a tp -> ('a -> 'b tp) -> 'b tp
     val optional: 'a tp -> 'a option tp
     val one_of: 'a tp list -> 'a tp
     val loop: 'a -> ('a -> ('a,'b) Loop_state.t tp) -> 'b tp

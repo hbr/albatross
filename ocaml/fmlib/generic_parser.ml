@@ -12,7 +12,6 @@ module type BASIC =
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
     val backtrackable: 'a t -> 'a t
-    val commit: 'a -> 'a t
   end
 
 
@@ -220,13 +219,6 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
              commit = bs.commit};
        consumption;
        lookahead}
-
-
-    let commit (b:t): t =
-      if b.bs.is_buffering && b.bs.commit = Not then
-        {b with bs = {b.bs with commit = Committing}}
-      else
-        b
   end
 
 
@@ -393,8 +385,4 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
             (match o with
             | None -> B.end_backtrack_fail back b
             | Some _ -> B.end_backtrack_success back b))
-
-
-    let commit (a:'a) (b:B.t) (k:'a cont): parser =
-      k (Some a) (B.commit b)
   end (* Make *)
