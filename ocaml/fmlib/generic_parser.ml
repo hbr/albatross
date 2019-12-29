@@ -21,16 +21,12 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     type token = T.t
     type error = E.t
 
-    type commit = Not | Committing | Committed
-
     type backtrack_state = {
         state: state;
         has_consumed: bool;
         consumption_length: int;
         errors: error list;
-        is_buffering: bool;
-        is_previous_buffering: bool;
-        commit: commit
+        is_buffering: bool
       }
     type t = {
         bs: backtrack_state;
@@ -43,9 +39,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
              has_consumed = false;
              consumption_length = 0;
              errors = [];
-             is_buffering = false;
-             is_previous_buffering = false;
-             commit = Not};
+             is_buffering = false};
        consumption = [];
        lookahead = []}
 
@@ -82,7 +76,6 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
 
     let consume (t:token) (state:state) (b:t): t =
       let isbuf = b.bs.is_buffering
-      and committing = b.bs.commit = Committing
       in
       {b with
         bs = {b.bs with
@@ -94,16 +87,6 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
                    b.bs.consumption_length + 1
                  else
                    b.bs.consumption_length;
-               commit =
-                 if isbuf && committing then
-                   Committed
-                 else
-                   b.bs.commit;
-               is_buffering =
-                 if committing then
-                   b.bs.is_previous_buffering
-                 else
-                   b.bs.is_buffering
              };
         consumption =
           if isbuf then
@@ -151,10 +134,8 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
       bs,
       {b with bs = {bs with
                      has_consumed = false;
-                     is_previous_buffering = bs.is_buffering;
                      is_buffering = true;
-                     errors = [];
-                     commit = Not}}
+                     errors = []}}
 
 
     let end_backtrack_success (bs:backtrack_state) (b:t): t =
@@ -174,20 +155,17 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
               has_consumed = bs.has_consumed || b.bs.has_consumed (*????*);
               consumption_length;
               is_buffering = bs.is_buffering;
-              is_previous_buffering = bs.is_previous_buffering;
               errors =
                 if not b.bs.has_consumed then
                   bs.errors (* backtrackable parser has not consumed tokens,
                                errors must be restored *)
                 else
-                  b.bs.errors;
-              commit = bs.commit};
+                  b.bs.errors};
        consumption;
        lookahead}
 
     let end_backtrack_fail (bs:backtrack_state) (b:t): t =
-      let committed = b.bs.commit = Committed
-      and consumption_length =
+      let consumption_length =
         if bs.is_buffering then
           b.bs.consumption_length
         else
@@ -196,27 +174,15 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
       let consumption, lookahead =
         move_buffered
           (b.bs.consumption_length - consumption_length)
-          (not committed)
+          true
           b.consumption
           b.lookahead
       in
-      {bs = {state =  if committed then
-                        b.bs.state
-                      else
-                        bs.state;
-             has_consumed =
-               if committed then
-                 bs.has_consumed || b.bs.has_consumed
-               else
-                 bs.has_consumed;
+      {bs = {state =  bs.state;
+             has_consumed = bs.has_consumed;
              consumption_length;
-             errors = if committed then
-                        b.bs.errors
-                      else
-                        b.bs.errors @  bs.errors;
-             is_buffering = bs.is_buffering;
-             is_previous_buffering = bs.is_previous_buffering;
-             commit = bs.commit};
+             errors = b.bs.errors @  bs.errors;
+             is_buffering = bs.is_buffering};
        consumption;
        lookahead}
   end
