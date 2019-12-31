@@ -22,33 +22,31 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     type token = T.t
     type error = E.t
 
-    type backtrack_state = {
+    type t = {
         state: state;
         has_consumed: bool;
         consumption_length: int;
         errors: error list;
-        is_buffering: bool
-      }
-    type t = {
-        bs: backtrack_state;
+        is_buffering: bool;
+
         consumption: token list;
         lookahead:   token list;
       }
 
     let init (st:state): t =
-      {bs = {state = st;
-             has_consumed = false;
-             consumption_length = 0;
-             errors = [];
-             is_buffering = false};
+      {state = st;
+       has_consumed = false;
+       consumption_length = 0;
+       errors = [];
+       is_buffering = false;
        consumption = [];
        lookahead = []}
 
     let state (b:t): state =
-      b.bs.state
+      b.state
 
     let errors (b:t): error list =
-      List.rev b.bs.errors
+      List.rev b.errors
 
     let has_lookahead (b:t): bool =
       b.lookahead <> []
@@ -57,7 +55,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
       b.lookahead
 
     let update (f:state->state) (b:t): t =
-      {b with bs = {b.bs with state = f b.bs.state}}
+      {b with state = f b.state}
 
     let pop_one_lookahead (b:t): token * t =
       match b.lookahead with
@@ -66,26 +64,25 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
          t, {b with lookahead}
 
     let add_error (e:error) (b:t): t =
-      {b with bs = {b.bs with errors = e :: b.bs.errors}}
+      {b with errors = e :: b.errors}
 
     let clear_errors  (b:t): t =
-      {b with bs = {b.bs with errors = []}}
+      {b with errors = []}
 
 
     let consume (t:token) (state:state) (b:t): t =
-      let isbuf = b.bs.is_buffering
+      let isbuf = b.is_buffering
       in
       {b with
-        bs = {b.bs with
-               has_consumed = true;
-               state;
-               errors = [];
-               consumption_length =
-                 if isbuf then
-                   b.bs.consumption_length + 1
-                 else
-                   b.bs.consumption_length;
-             };
+        has_consumed = true;
+        state;
+        errors = [];
+        consumption_length =
+          if isbuf then
+            b.consumption_length + 1
+          else
+            b.consumption_length;
+
         consumption =
           if isbuf then
             t :: b.consumption
@@ -93,20 +90,19 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
             b.consumption}
 
     let reject (t:token) (e:error) (b:t): t =
-      {b with bs = {b.bs with errors = e :: b.bs.errors};
+      {b with errors    = e :: b.errors;
               lookahead = t :: b.lookahead}
 
 
     let start_new_consumer (b:t): t =
-      {b with bs = {b.bs with has_consumed = false}}
+      {b with has_consumed = false}
 
     let has_consumed (b:t): bool =
-      b.bs.has_consumed
+      b.has_consumed
 
     let end_new_consumer (b0:t) (b:t): t =
       {b with
-        bs = {b.bs with
-               has_consumed = b0.bs.has_consumed || b.bs.has_consumed}}
+        has_consumed = b0.has_consumed || b.has_consumed}
 
 
     let move_buffered (n:int) (flg:bool) (cons:token list) (la:token list)
@@ -132,79 +128,77 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
 
 
     let start_alternatives (b:t): t =
-      {b with bs = {b.bs with has_consumed = false}}
+      {b with has_consumed = false}
 
     let end_failed_alternatives (e:error) (b0:t) (b:t): t =
-      if b.bs.has_consumed then
+      if b.has_consumed then
         b
       else
         {b with
-          bs = {b.bs with
-                 has_consumed = b0.bs.has_consumed;
-                 errors = e :: b0.bs.errors}}
+          has_consumed = b0.has_consumed;
+          errors = e :: b0.errors}
 
     let end_succeeded_alternatives (b0:t) (b:t): t =
-      if b.bs.has_consumed then
+      if b.has_consumed then
         b
       else
         {b with
-          bs = {b.bs with
-                 has_consumed = b0.bs.has_consumed;
-                 errors = b0.bs.errors}}
+          has_consumed = b0.has_consumed;
+          errors = b0.errors}
 
 
     let start_backtrack (b:t): t =
-      {b with bs = {b.bs with
-                     has_consumed = false;
-                     is_buffering = true;
-                     errors = []}}
+      {b with has_consumed = false;
+              is_buffering = true;
+              errors = []}
 
 
     let end_backtrack_success (b0:t) (b:t): t =
       let consumption_length, consumption, lookahead =
-        if b0.bs.is_buffering then
-          b.bs.consumption_length, b.consumption, b.lookahead
+        if b0.is_buffering then
+          b.consumption_length, b.consumption, b.lookahead
         else
           (* not buffering previously, therefore remove all newly buffered
              tokens. *)
-          let n = b.bs.consumption_length - b0.bs.consumption_length in
+          let n = b.consumption_length - b0.consumption_length in
           let cons,la =
             move_buffered n false b.consumption b.lookahead
           in
-          b0.bs.consumption_length, cons, la
+          b0.consumption_length, cons, la
       in
-      {bs = {b.bs with
-              has_consumed = b0.bs.has_consumed || b.bs.has_consumed (*????*);
-              consumption_length;
-              is_buffering = b0.bs.is_buffering;
-              errors =
-                if not b.bs.has_consumed then
-                  b0.bs.errors (* backtrackable parser has not consumed
-                                  tokens, errors must be restored *)
-                else
-                  b.bs.errors};
-       consumption;
-       lookahead}
+      { b with
+        has_consumed = b0.has_consumed || b.has_consumed (*????*);
+        consumption_length;
+        is_buffering = b0.is_buffering;
+        errors =
+          if not b.has_consumed then
+            b0.errors (* backtrackable parser has not consumed tokens, errors
+                         must be restored *)
+          else
+            b.errors;
+        consumption;
+        lookahead}
+
 
     let end_backtrack_fail (b0:t) (b:t): t =
       let consumption_length =
-        if b0.bs.is_buffering then
-          b.bs.consumption_length
+        if b0.is_buffering then
+          b.consumption_length
         else
-          b0.bs.consumption_length
+          b0.consumption_length
       in
       let consumption, lookahead =
         move_buffered
-          (b.bs.consumption_length - consumption_length)
+          (b.consumption_length - consumption_length)
           true
           b.consumption
           b.lookahead
       in
-      {bs = {state =  b0.bs.state;
-             has_consumed = b0.bs.has_consumed;
-             consumption_length;
-             errors = b.bs.errors @  b0.bs.errors;
-             is_buffering = b0.bs.is_buffering};
+      {state =  b0.state;
+       has_consumed = b0.has_consumed;
+       consumption_length;
+       errors = b.errors @  b0.errors;
+       is_buffering = b0.is_buffering;
        consumption;
        lookahead}
   end
