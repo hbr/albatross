@@ -202,7 +202,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
 
     type parser =
       | More  of B.t * (B.t -> token -> parser)
-      | Final of B.t * (final, error list) result * token list
+      | Final of B.t * final option
 
     let needs_more (p:parser): bool =
       match p with
@@ -231,21 +231,27 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
 
     let state (p:parser): state =
       match p with
-      | More (b,_) | Final (b,_,_) -> B.state b
+      | More (b,_) | Final (b, _) -> B.state b
 
     let result (p:parser): (final,error list) result =
       match p with
-      | Final (_,r,_) -> r
+      | Final (b, r) ->
+         (match r with
+          | None ->
+             Error (B.errors b)
+          | Some a ->
+             Ok a)
       | _ -> assert false (* Illegal call! *)
 
     let lookahead (p:parser): token list =
       match p with
-      | Final (_,_,la) -> la
+      | Final (b, _) ->
+         B.lookahead b
       | _ -> assert false (* Illegal call! *)
 
     let has_succeeded (p:parser): bool =
       match p with
-      | Final (_, Ok _, _) ->
+      | Final (_, Some _) ->
          true
       | _ ->
          false
@@ -259,12 +265,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
 
     let make_parser (s:state) (p:final t): parser =
       p (B.init s)
-        (fun o b ->
-          Final (b,
-                 (match o with
-                  | Some x -> Ok x
-                  | None   -> Error (B.errors b)),
-                 B.lookahead b))
+        (fun res b -> Final (b, res))
 
     let update (f:state->state) (b:B.t) (k:unit cont): parser =
       k (Some ()) (B.update f b)
