@@ -387,6 +387,11 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
                   Error e)
 
 
+    let backtrackable (p: 'a t) (msg: Problem.t): 'a t =
+      Basic.get >>= fun st ->
+      Basic.backtrackable p (error msg st)
+
+
     (* Character Combinators *)
 
     let expect (p:char -> bool) (msg:Problem.t): char t =
@@ -879,14 +884,16 @@ let%test _ =
 
 let%test _ =
   let open UP in
+  let str = "(a)" in
   let p =
     run
-      (backtrackable (string "(a)"))
+      (backtrackable (string str) (String.escaped str))
       "(a"
   in
   has_ended p
+  && line   p = 0
   && column p = 0
-  && result p = Error (one_error 0 2 "')'")
+  && result p = Error (one_error 0 0 (String.escaped str))
   && lookahead p = [Some '('; Some 'a'; None]
 
 
@@ -894,7 +901,7 @@ let%test _ =
   let open UP in
   let p =
     run
-      (backtrackable (string "(a)")
+      (backtrackable (string "(a)") (String.escaped "(a)")
        <|> string "(b)")
       "(b)"
   in
@@ -908,7 +915,7 @@ let%test _ =
   let open UP in
   let p =
     run
-      ((backtrackable (string "(a)")
+      ((backtrackable (string "(a)") (String.escaped "(a)")
         <|> string "(b)")
        |. expect_end)
       "(b)"

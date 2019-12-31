@@ -106,6 +106,7 @@ sig
 
   include Generic_parser.BASIC
   val fail: string -> 'a t
+  val backtrackable: 'a t -> string -> 'a t
 
   (** {2 More Combinators} *)
 
@@ -211,6 +212,7 @@ sig
 
   include Generic_parser.BASIC with type error = Dead_end.t
   val fail: Problem.t -> 'a t
+  val backtrackable: 'a t -> Problem.t -> 'a t
 
   (** {2 More Combinators} *)
 

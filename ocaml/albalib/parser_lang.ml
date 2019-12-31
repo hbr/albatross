@@ -123,7 +123,8 @@ include P
 
 
 let line_comment: unit t =
-  P.(backtrackable (string "--" (fun _ -> Problem.Expect "--"))
+  let problem _ = Problem.Expect "--" in
+  P.(backtrackable (string "--" problem) (problem ())
      >>= fun _ ->
      skip_zero_or_more
        (expect
@@ -149,7 +150,9 @@ let multiline_comment: unit t =
          to_end ())
   in
 
-  backtrackable (string "{-" (fun _ -> Problem.Expect "{-"))
+  let problem _ = Problem.Expect "{-" in
+  backtrackable
+    (string "{-" problem) (problem ())
   >>= fun _ ->
   to_end ()
 
