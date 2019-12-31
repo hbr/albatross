@@ -11,6 +11,7 @@ module type BASIC =
     val map:     ('a -> 'b) -> 'a t -> 'b t
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
+    val (<?>):   'a t -> error -> 'a t
     val backtrackable: 'a t -> 'a t
   end
 
@@ -99,7 +100,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     let start_new_consumer (b:t): t =
       {b with bs = {b.bs with has_consumed = false}}
 
-    let has_consumed (_:t) (b:t): bool =
+    let has_consumed (b:t): bool =
       b.bs.has_consumed
 
     let end_new_consumer (b0:t) (b:t): t =
@@ -128,6 +129,28 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
                   la)
       in
       move n cons la
+
+
+    let start_alternatives (b:t): t =
+      {b with bs = {b.bs with has_consumed = false}}
+
+    let end_failed_alternatives (e:error) (b0:t) (b:t): t =
+      if b.bs.has_consumed then
+        b
+      else
+        {b with
+          bs = {b.bs with
+                 has_consumed = b0.bs.has_consumed;
+                 errors = e :: b0.bs.errors}}
+
+    let end_succeeded_alternatives (b0:t) (b:t): t =
+      if b.bs.has_consumed then
+        b
+      else
+        {b with
+          bs = {b.bs with
+                 has_consumed = b0.bs.has_consumed;
+                 errors = b0.bs.errors}}
 
 
     let start_backtrack (b:t): t =
@@ -284,7 +307,8 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
     let succeed (a:'a) (b:B.t) (k:'a cont): parser =
       k (Some a) (B.clear_errors b)
 
-    let fail (e:error) (b:B.t) (k:'a cont): parser =
+    let fail (e:error): 'a t =
+      fun b k ->
       k None (B.add_error e b)
 
 
@@ -314,7 +338,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
       fun b0 k ->
       p (B.start_new_consumer b0)
         (fun res b ->
-          let consumed = B.has_consumed b0 b in
+          let consumed = B.has_consumed b in
           assert (res = None || consumed);
           k res (B.end_new_consumer b0 b))
 
@@ -333,7 +357,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
       fun b0 k ->
       p (B.start_new_consumer b0)
         (fun res b ->
-          let consumed = B.has_consumed b0 b in
+          let consumed = B.has_consumed b in
           let b = B.end_new_consumer b0 b in
           match res with
           | None when not consumed ->
@@ -341,6 +365,17 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
              q b k
           |  _ ->
              k res b)
+
+
+    let (<?>) (p:'a t) (e:error): 'a t =
+      fun b0 k ->
+      p (B.start_alternatives b0)
+        (fun res b ->
+          match res with
+          | None ->
+             k None (B.end_failed_alternatives e b0 b)
+          | Some a ->
+             k (Some a) (B.end_succeeded_alternatives b0 b))
 
 
     let backtrackable (p:'a t): 'a t =
