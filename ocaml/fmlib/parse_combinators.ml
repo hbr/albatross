@@ -28,8 +28,6 @@ module Add_combinators: ADD_COMBINATORS =
   functor (P:Generic_parser.BASIC) ->
   struct
     type 'a tp = 'a P.t
-    (*let (>>-) (p:'a P.t) (f:'a -> 'b P.t): 'b P.t =
-      P.(backtrackable (p >>= commit >>= f))*)
 
     let optional (p:'a P.t): 'a option P.t =
       let open P in
