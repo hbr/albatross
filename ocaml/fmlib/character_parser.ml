@@ -1,6 +1,5 @@
 open Common
 open Common_module_types
-open Parse_combinators
 
 module Position:
 sig
@@ -333,9 +332,6 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
     module Basic = Generic_parser.Make (Token) (State) (Dead_end) (Final)
     include  Basic
 
-    module Combi = Add_combinators (Basic)
-    include Combi
-
     let state (p:parser): User.t =
       State.user (Basic.state p)
 
@@ -453,13 +449,13 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
           (start:char -> bool) (inner:char -> bool) (msg:Problem.t): string t
       =
       let module Arr = Segmented_array in
+      let rec rest arr =
+        (expect inner msg >>= fun c ->
+         rest (Arr.push c arr))
+        <|> return arr
+      in
       expect start msg >>= fun c ->
-      loop
-        (Arr.singleton c)
-        (fun arr ->
-          (expect inner msg >>= fun c ->
-           return @@ Loop_state.more (Arr.push c arr))
-          <|> succeed (Loop_state.exit @@ Arr.to_string arr))
+      map Arr.to_string (rest (Arr.singleton c))
 
 
     let whitespace_char (msg:Problem.t): char t =
@@ -475,7 +471,7 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
           (msg:Problem.t)
         : string t =
       Basic.get >>= fun st ->
-      word start inner msg >>= fun str ->
+      word start inner msg >>= succeed >>= fun str ->
       if String_set.mem str reserved then
         Basic.fail (error msg st)
       else
@@ -997,9 +993,10 @@ let%test _ =
       "class"
   in
   has_ended p
-  && result p = Error (one_error 0 0 "variable")
+  && has_failed p
   && column p = 5
   && lookahead p = [None]
+  && result p = Error (one_error 0 0 "variable")
 
 
 

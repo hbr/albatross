@@ -104,13 +104,10 @@ sig
 
   (** {2 Basic Combinators} *)
 
-  include Generic_parser.BASIC
+  include Generic_parser.COMBINATORS
   val fail: string -> 'a t
   val backtrackable: 'a t -> string -> 'a t
 
-  (** {2 More Combinators} *)
-
-  include Parse_combinators.COMBINATORS with type 'a tp = 'a t
 
   (** {2 Character Combinators} *)
 
@@ -210,13 +207,10 @@ sig
 
   (** {2 Basic Combinators} *)
 
-  include Generic_parser.BASIC with type error = Dead_end.t
+  include Generic_parser.COMBINATORS with type error = Dead_end.t
   val fail: Problem.t -> 'a t
   val backtrackable: 'a t -> Problem.t -> 'a t
 
-  (** {2 More Combinators} *)
-
-  include Parse_combinators.COMBINATORS with type 'a tp = 'a t
 
   (** {2 Character Combinators} *)
 

@@ -1,8 +1,33 @@
 open Common_module_types
 
-module type BASIC =
+
+
+module Error (Exp:ANY) (Sem:ANY) =
+  struct
+    type t =
+      | Syntax of Exp.t list
+      | Semantic of Sem.t
+
+    let init: t =
+      Syntax []
+
+    let add_expected (exp: Exp.t) (e: t): t =
+      match e with
+      | Syntax lst ->
+         Syntax (exp :: lst)
+      | _ ->
+         Syntax [exp]
+
+    let semantic (s: Sem.t): t =
+      Semantic s
+  end
+
+
+module type COMBINATORS =
   sig
     type 'a t
+    (*type expect
+    type semantic*)
     type error
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
@@ -13,7 +38,20 @@ module type BASIC =
     val (<|>):   'a t -> 'a t -> 'a t
     val (<?>):   'a t -> error -> 'a t
     val backtrackable: 'a t -> error -> 'a t
+
+    val optional: 'a t -> 'a option t
+    val one_of:   'a t list -> 'a t
+    val zero_or_more: 'a t -> 'a list t
+    val one_or_more_separated:  'a t -> _ t -> 'a list t
+    val zero_or_more_separated: 'a t -> _ t -> 'a list t
+    val one_or_more:  'a t -> 'a list t
+    val skip_zero_or_more: 'a t -> int t
+    val skip_one_or_more:  'a t -> int t
+
+    val (|=): ('a -> 'b) t -> 'a t -> 'b t
+    val (|.): 'a t -> _ t -> 'a t
   end
+
 
 
 module Buffer (S:ANY) (T:ANY) (E:ANY) =
@@ -240,6 +278,10 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
       let st = B.state b in
       k (Some st) (B.update f b)
 
+
+
+    (* Basic Combinators *)
+
     let return (a:'a) (b:B.t) (k:'a cont): parser =
       k (Some a) b
 
@@ -325,4 +367,72 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
             (match res with
             | None   -> B.end_backtrack_fail e b0 b
             | Some _ -> B.end_backtrack_success b0 b))
+
+
+
+    (* Advanced Combinators *)
+
+    let (|=) (p: ('a -> 'b) t) (q: 'a t): 'b t =
+      p >>= fun f -> map f q
+
+
+    let (|.) (p: 'a t) (q: _ t): 'a t =
+      p >>= fun a ->
+      q >>= fun _ -> return a
+
+
+    let optional (p: 'a t): 'a option t =
+      (map (fun a -> Some a) p)
+      <|> return None
+
+
+    let rec one_of (l: 'a t list): 'a t =
+      match l with
+      | [] ->
+         assert false (* Illegal call *)
+
+      | [p] ->
+         p
+
+      | p :: ps ->
+         p <|> one_of ps
+
+
+    let zero_or_more (p: 'a t): 'a list t =
+      let rec many l =
+        (consumer p >>= fun a -> many (a :: l))
+        <|> return (List.rev l)
+      in
+      many []
+
+
+    let one_or_more (p: 'a t): 'a list t =
+      p >>= fun a ->
+      zero_or_more p >>= fun l ->
+      return (a :: l)
+
+
+    let skip_zero_or_more (p: 'a t): int t =
+      let rec many i =
+        (consumer p >>= fun _ -> many (i+1))
+        <|> return i
+      in
+      many 0
+
+
+    let skip_one_or_more (p: 'a t): int t =
+      return (fun n -> n + 1)
+      |. p
+      |= skip_zero_or_more p
+
+
+    let one_or_more_separated (p: 'a t) (sep: _ t): 'a list t =
+      return (fun a l -> a :: l)
+      |= p
+      |= zero_or_more (sep >>= fun _ -> p)
+
+
+    let zero_or_more_separated (p: 'a t) (sep: _ t): 'a list t =
+      one_or_more_separated p sep
+      <|> return []
   end (* Make *)
