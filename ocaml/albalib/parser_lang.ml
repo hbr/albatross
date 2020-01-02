@@ -4,6 +4,7 @@ open Common
 module Located = Character_parser.Located
 type 'a located = 'a Located.t
 
+module Position = Character_parser.Position
 
 module Expression = struct
   type operator = string * Operator.t
@@ -30,7 +31,7 @@ module Expression = struct
   let rec binary
             (e0:t)
             (rest: (operator Located.t * t) list)
-          : (t, string * string) result
+          : (t, Position.t * Position.t * string * string) result
     (* Analyze the precedence and associativity of an operator expresssion
 
         e0 op1 e1 op2 e2 ... opn en
@@ -61,7 +62,7 @@ module Expression = struct
        Ok (mk_bin e0 op e1)
 
     | (op1,e1) :: (op2,e2) :: rest ->
-       (* e0 op1 e2 op2 e3 rest *)
+       (* e0 op1 e1 op2 e2 rest *)
        let op1_string, op1_data = Located.value op1
        and op2_string, op2_data = Located.value op2
        in
@@ -73,13 +74,14 @@ module Expression = struct
        | Operator.Right ->
           (* e1 op1 (e2 op2 e2 rest) *)
           let module Res =
-            Monad.Result (struct type t = string * string end)
+            Monad.Result
+              (struct type t = Position.t * Position.t * string * string end)
           in
           Res.map (mk_bin e0 op1) (binary e1 ((op2,e2) :: rest))
 
        | Operator.No ->
           (* Error case: I cannot decide on how to parenthesize *)
-          Error (op1_string, op2_string)
+          Error (Located.start e0, Located.end_ e2, op1_string, op2_string)
 end
 
 
@@ -113,81 +115,68 @@ module Context_msg =
 module Problem =
   struct
     type t =
-      | Expect of string
-      | Operator_precedence of string * string
+      | Operator_precedence of
+          Position.t * Position.t
+          * string * string (* the 2 operatos strings *)
   end
 
-module P = Character_parser.Advanced (Unit) (Final) (Problem) (Context_msg)
+module P =
+  Character_parser.Advanced (Unit) (Final) (String) (Problem) (Context_msg)
 include P
 
 
+let string (str: string): unit t =
+  P.string str (fun i -> "'" ^ String.one str.[i] ^ "'")
+
+
+let char (c:char): unit t =
+  P.char c ("'" ^ String.one c ^ "'")
+
+
+let whitespace_char: char t =
+  P.whitespace_char "whitespace"
+
 
 let line_comment: unit t =
-  let problem _ = Problem.Expect "--" in
-  P.(backtrackable (string "--" problem) (problem ())
-     >>= fun _ ->
-     skip_zero_or_more
-       (expect
-          (fun c -> c <> '\n')
-          (Problem.Expect "any char except newline"))
-     >>= fun _ ->
-     return ()
-  )
+  backtrackable (string "--") "\"--\""
+  >>= fun _ ->
+  skip_zero_or_more
+    (expect
+       (fun c -> c <> '\n')
+       "any char except newline")
+  >>= fun _ ->
+  return ()
 
-
-let expect_char (c:char): unit t =
-  P.char c (Problem.Expect (String.one c))
 
 let multiline_comment: unit t =
-  let open P in
-
   let rec to_end (): unit t =
-    (expect_char '-' >>= fun _ ->
-     (expect_char '}'
+    (char '-' >>= fun _ ->
+     (char '}'
      <|> to_end ()))
-    <|> (expect (fun _ -> true) (Problem.Expect "any char")
+    <|> (expect (fun _ -> true) "any char"
          >>= fun _ ->
          to_end ())
   in
-
-  let problem _ = Problem.Expect "{-" in
   backtrackable
-    (string "{-" problem) (problem ())
+    (string "{-")
+    "\"{-\""
   >>= fun _ ->
   to_end ()
 
 
 
 let whitespace: int t =
-  let problem = Problem.Expect "whitespace"
-  in
-  P.(skip_zero_or_more
-       ((whitespace_char problem >>= fun _ -> return ())
-        <|> line_comment
-        <|> multiline_comment)
-  )
+  skip_zero_or_more
+    ((map (fun _ -> ()) whitespace_char)
+     <|> line_comment
+     <|> multiline_comment)
 
-(*let whitespace: int t =
-  P.whitespace (Problem.Expect "whitespace")
- *)
-
-let char (c:char): unit t =
-  char
-    c
-    (Problem.Expect (
-         if c = '\'' then
-           String.one c
-         else
-           "'" ^ String.one c ^ "'"))
-
-let string (s:string): unit t =
-  string s (fun _ -> Problem.Expect s)
 
 
 let word_ws
-      (start:char->bool)
-      (inner:char->bool)
-      (msg:Problem.t)
+      (start: char->bool)
+      (inner: char->bool)
+      (msg:   string)
     : string located t
   =
   located @@ word start inner msg
@@ -198,14 +187,14 @@ let identifier: string located t =
   word_ws
     Char.is_letter
     (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
-    (Problem.Expect "identifier")
+    "identifier"
 
 
 let number: string located t =
   word_ws
     Char.is_digit
     Char.is_digit
-    (Problem.Expect "number")
+    "number"
 
 
 let identifier_expression: Expression.t t =
@@ -242,7 +231,7 @@ let lang_string: Expression.t t =
               (fun c ->
                 let i = Char.code c in
                 Char.code ' ' <= i && i < 128 && c <> '"')
-              (Problem.Expect "string character"))
+              "string character")
       |. char '"')
   |. whitespace
 
@@ -254,7 +243,7 @@ let lang_char: Expression.t t =
       |. char '\''
       |= expect
            (fun c -> c <> '\'' && c <> '\n')
-           (Problem.Expect "character")
+           "character"
       |. char '\'')
   |. whitespace
 
@@ -275,7 +264,7 @@ let operator: Expression.operator Located.t t =
        (one_or_more
           (expect
              is_op_char
-             (Problem.Expect "operator character"))
+             "operator character")
         <|> map (fun _ -> [':']) (char ':')
        )
   |. whitespace
@@ -331,8 +320,8 @@ let rec expression (): Expression.t t =
   | Ok e ->
      return e
 
-  | Error (op1,op2) ->
-     fail (Problem.Operator_precedence (op1,op2))
+  | Error (p0, p1, op1, op2) ->
+     fail (Problem.Operator_precedence (p0, p1, op1, op2))
 
 
 let initial: parser =
@@ -340,5 +329,5 @@ let initial: parser =
     (return identity
      |. whitespace
      |= optional @@ expression ()
-     |. expect_end (Problem.Expect "end of command"))
+     |. expect_end "end of command")
     ()

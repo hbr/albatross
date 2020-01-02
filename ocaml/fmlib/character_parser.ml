@@ -7,7 +7,6 @@ sig
   val line: t -> int
   val column: t -> int
   val start: t
-  val make: int -> int -> t
   val next: char -> t -> t
   val next_line: t -> t
   val next_column: t -> t
@@ -21,8 +20,6 @@ end =
 
     let start: t =
       {line = 0; column = 0}
-
-    let make line column = {line;column}
 
     let next_column (p:t): t =
       {p with column = p.column + 1}
@@ -48,18 +45,6 @@ module type CONTEXT =
     val column: t -> int
   end
 
-module type DEAD_END =
-  sig
-    type t
-    type msg
-    type context
-    val message: t -> msg
-    val position: t -> Position.t
-    val line: t -> int
-    val column: t -> int
-    val offside: t -> (int * int option) option
-    val contexts: t -> context list
-  end
 
 module Located =
   struct
@@ -201,34 +186,6 @@ module Context (Msg:ANY) =
 
 
 
-module Error (Msg:ANY) (Ctx:CONTEXT) =
-  struct
-    type msg = Msg.t
-    type context = Ctx.t
-    type t = {
-        pos: Position.t;
-        offside: (int * int option) option;
-        msg: Msg.t;
-        contexts: context list
-      }
-
-    let make pos contexts msg = {pos; msg; contexts; offside = None}
-
-    let add_offside pos e = {e with offside = Some pos}
-
-    let message (e:t) = e.msg
-
-    let position (e:t) = e.pos
-
-    let line (e:t) = Position.line e.pos
-
-    let column (e:t) = Position.column e.pos
-
-    let offside (e:t) = e.offside
-
-    let contexts (e:t): Ctx.t list =  e.contexts
-  end
-
 
 module State (User:ANY) (Context_msg:ANY) =
   struct
@@ -280,8 +237,6 @@ module State (User:ANY) (Context_msg:ANY) =
     let update (f:User.t->User.t) (s:t) =
       {s with user = f s.user}
 
-    let contexts (s:t): context list = s.contexts
-
     let push_context (msg:Context_msg.t) (s:t): t =
       {s with contexts = Context.make s.pos msg :: s.contexts}
 
@@ -314,10 +269,48 @@ module type PARSER =
 
 
 
+module type COMBINATORS =
+  sig
+    include Generic_parser.COMBINATORS
+
+    val get_position: (Position.t) t
+    val located: 'a t -> 'a Located.t t
+
+    type state
+    val get_state: state t
+    val update: (state -> state) -> unit t
+
+    val absolute: 'a t -> 'a t
+    val indented: bool -> 'a t -> 'a t
+    val detached: 'a t -> 'a t
+    val get_bounds: (int * int option) t
+
+    val one_or_more_aligned:  'a t -> 'a list t
+    val zero_or_more_aligned: 'a t -> 'a list t
+    val skip_one_or_more_aligned:  'a t -> int t
+    val skip_zero_or_more_aligned: 'a t -> int t
+
+    type context
+    val in_context: context -> 'a t -> 'a t
+
+  end
 
 
-module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
+
+
+
+
+
+module Advanced
+         (User:ANY)
+         (Final:ANY)
+         (Expect:ANY)
+         (Semantic:ANY)
+         (Context_msg:ANY) =
   struct
+    type state   = User.t
+    type context = Context_msg.t
+
     module Token =
       struct
         type t = char option
@@ -325,11 +318,10 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
 
     module Context = Context (Context_msg)
 
-    module Dead_end = Error (Problem) (Context)
-
     module State = State (User) (Context_msg)
 
-    module Basic = Generic_parser.Make (Token) (State) (Dead_end) (Final)
+    module Basic =
+      Generic_parser.Make (Token) (State) (Expect) (Semantic) (Final)
     include  Basic
 
     let state (p:parser): User.t =
@@ -344,9 +336,6 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
     let column (p:parser): int =
       State.column (Basic.state p)
 
-    let error (msg:Problem.t) (st:state): Dead_end.t =
-      Dead_end.make (State.position st) (State.contexts st) msg
-
     let get_state: User.t t =
       Basic.get >>= fun st ->
       return (State.user st)
@@ -358,14 +347,13 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
       Basic.get >>= fun st ->
       return (State.position st)
 
-    let fail (msg:Problem.t): 'a t =
-      Basic.get >>= fun st ->
-      Basic.fail @@ error msg st
+    let fail (e: Semantic.t): 'a t =
+      Basic.fail e
 
     let token
-          (f:state->char->('a,error) result)
-          (e:state->error) (* generate error in case there in no character or
-                              offside *)
+          (f: State.t -> char -> ('a,Expect.t) result)
+          (e: State.t -> Expect.t) (* generate expectation error in case there
+                                      is no character or offside *)
         : 'a t =
       Basic.token
         (fun st t ->
@@ -374,7 +362,7 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
              Error (e st)
           | Some c ->
              if State.is_offside st then
-               Error (Dead_end.add_offside (State.bounds st) (e st))
+               Error (e st)
              else
                match f st c with
                | Ok a ->
@@ -383,58 +371,57 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
                   Error e)
 
 
-    let backtrackable (p: 'a t) (msg: Problem.t): 'a t =
-      Basic.get >>= fun st ->
-      Basic.backtrackable p (error msg st)
+    let backtrackable (p: 'a t) (e: Expect.t): 'a t =
+      Basic.backtrackable p e
+
 
 
     (* Character Combinators *)
 
-    let expect (p:char -> bool) (msg:Problem.t): char t =
+    let expect (p:char -> bool) (e: Expect.t): char t =
       token
-        (fun st c ->
+        (fun _ c ->
           if p c then
             Ok c
           else
-            Error (error msg st))
-        (error msg)
+            Error e)
+        (fun _ -> e)
 
 
-    let expect_end (msg:Problem.t): unit t =
+    let expect_end (e: Expect.t): unit t =
       Basic.token
         (fun st t ->
           match t with
           | None ->
              Ok ((), st)
           | Some _ ->
-             Error (error msg st))
+             Error e)
 
 
-    let char (c:char) (msg:Problem.t): unit t =
-      let e = error msg in
+    let char (c:char) (e: Expect.t): unit t =
       token
-        (fun st d ->
+        (fun _ d ->
           if c = d then
             Ok ()
           else
-            Error (e st))
-        e
+            Error e)
+        (fun _ -> e)
 
-    let one_of_chars (str:string) (msg:Problem.t): unit t =
-      let e = error msg in
+
+    let one_of_chars (str:string) (e: Expect.t): unit t =
       token
-        (fun st c ->
+        (fun _ c ->
           if String.find (fun d -> c = d) 0 str = String.length str then
-            Error (e st)
+            Error e
           else
             Ok ())
-        e
+        (fun _ -> e)
 
 
-    let space (msg:Problem.t): unit t =
-      char ' ' msg
+    let space (e: Expect.t): unit t =
+      char ' ' e
 
-    let string (str:string) (msg:int -> Problem.t): unit t =
+    let string (str:string) (msg:int -> Expect.t): unit t =
       let len = String.length str in
       let rec parse i =
         if i = len then
@@ -446,42 +433,33 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
 
 
     let word
-          (start:char -> bool) (inner:char -> bool) (msg:Problem.t): string t
+          (start: char -> bool)
+          (inner: char -> bool)
+          (e: Expect.t)
+        : string t
       =
       let module Arr = Segmented_array in
       let rec rest arr =
-        (expect inner msg >>= fun c ->
+        (expect inner e >>= fun c ->
          rest (Arr.push c arr))
         <|> return arr
       in
-      expect start msg >>= fun c ->
+      expect start e >>= fun c ->
       map Arr.to_string (rest (Arr.singleton c))
 
 
-    let whitespace_char (msg:Problem.t): char t =
-      expect (fun c -> c = ' ' || c = '\n' || c = '\t') msg
+    let whitespace_char (e: Expect.t): char t =
+      expect (fun c -> c = ' ' || c = '\n' || c = '\t') e
 
-    let whitespace (msg:Problem.t): int t =
-      skip_zero_or_more (map (fun _ -> () ) (whitespace_char msg))
+    let whitespace (e: Expect.t): int t =
+      skip_zero_or_more (map (fun _ -> () ) (whitespace_char e))
 
-    let variable
-          (start:char -> bool)
-          (inner:char -> bool)
-          (reserved: String_set.t)
-          (msg:Problem.t)
-        : string t =
-      Basic.get >>= fun st ->
-      word start inner msg >>= succeed >>= fun str ->
-      if String_set.mem str reserved then
-        Basic.fail (error msg st)
-      else
-        return str
 
-    let letter (msg:Problem.t): char t =
-      expect Char.is_letter msg
+    let letter (e: Expect.t): char t =
+      expect Char.is_letter e
 
-    let digit (msg:Problem.t): char t =
-      expect Char.is_digit msg
+    let digit (e: Expect.t): char t =
+      expect Char.is_digit e
 
 
     (* Context *)
@@ -498,6 +476,8 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
       p >>= fun a ->
       Basic.get >>= fun st2 ->
       return @@ Located.make (State.position st1) a (State.position st2)
+
+
 
 
     (* Indentation combinators *)
@@ -578,35 +558,24 @@ module Advanced (User:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY) =
         "]"
 
     let result_string
-          (p:parser) (f:final -> string) (g:Problem.t->string): string =
+          (p:parser) (f:final -> string): string =
       assert (has_ended p);
       match result p with
-      | Ok a ->
-         "Ok " ^ f a
-      | Error es ->
-         "Error ["
-         ^ String.concat
-             ", "
-             (List.map
-                (fun e ->
-                  let string_of_pair i j =
-                    "(" ^ string_of_int i ^ "," ^ string_of_int j ^ ")"
-                  in
-                  string_of_pair (Dead_end.line e) (Dead_end.column e)
-                  ^ (match Dead_end.offside e with
-                     | None -> ""
-                     | Some (lb, None) -> " offside(" ^ string_of_int lb ^ ")"
-                     | Some (lb, Some ub) ->
-                        " offside" ^ string_of_pair lb ub)
-                  ^ " " ^ g @@ Dead_end.message e)
-                es)
-         ^ "]"
+      | Some a ->
+         "Some " ^ f a
+      | None ->
+         "None"
   end
+
+
+
+
+
 
 
 module Simple (Final:ANY) =
   struct
-    module Advanced = Advanced (Unit) (Final) (String) (String)
+    module Advanced = Advanced (Unit) (Final) (String) (String) (String)
     include Advanced
 
     let expect_end: unit t =
@@ -643,7 +612,7 @@ module Simple (Final:ANY) =
       Advanced.run pc () s
 
     let result_string (p:parser) (f:final->string): string =
-      Advanced.result_string p f identity
+      Advanced.result_string p f
   end
 
 
@@ -651,14 +620,11 @@ module Simple (Final:ANY) =
 (* ********** *)
 (* Unit Tests *)
 (* ********** *)
-
 module Simple_test (F:ANY) =
   struct
     include Simple (F)
-    let one_error line col msg =
-      [Dead_end.make (Position.make line col) [] msg]
-    let errors line col msgs =
-      List.map (Dead_end.make (Position.make line col) []) msgs
+    let one_expect (str:string): Error.t =
+      Error.make_expectations [str]
   end
 module CP = Simple_test (Char)
 module UP = Simple_test (Unit)
@@ -669,7 +635,7 @@ let%test _ =
   let open CP in
   let p = run letter "a" in
   has_ended p
-  && result p = Ok 'a'
+  && result p = Some 'a'
   && column p = 1
   && lookahead p = []
 
@@ -682,19 +648,19 @@ let%test _ =
             "a"
   in
   has_ended p
-  && result p = Ok 'a'
+  && result p = Some 'a'
   && column p = 1
   && lookahead p = []
 
 module Ctx = Context (String)
-module Dead_end = Error (String) (Ctx)
 
 
 let%test _ =
   let open CP in
   let p = run letter "1" in
   has_ended p
-  && result p = Error (one_error 0 0 "letter")
+  && result p = None
+  && error p = Error.make_expectations ["letter"]
   && column p = 0
   && lookahead p = [Some '1']
 
@@ -702,7 +668,8 @@ let%test _ =
   let open UP in
   let p = run (char 'a') "z" in
   has_ended p
-  && result p = Error (one_error 0 0 "'a'")
+  && result p = None
+  && error p = one_expect "'a'"
   && column p = 0
   && lookahead p = [Some 'z']
 
@@ -711,7 +678,8 @@ let%test _ =
   let p = run (char 'a' |. expect_end) "ab"
   in
   has_ended p
-  && result p = Error (one_error 0 1 "end")
+  && result p = None
+  && error p = one_expect "end"
   && column p = 1
   && lookahead p = [Some 'b']
 
@@ -719,7 +687,7 @@ let%test _ =
   let open UP in
   let p = run (char 'a') "a" in
   has_ended p
-  && result p = Ok ()
+  && result p = Some ()
   && column p = 1
   && lookahead p = []
 
@@ -728,7 +696,7 @@ let%test _ =
   let p = run (char 'a' |. char 'b' |. expect_end) "ab"
   in
   has_ended p
-  && result p = Ok ()
+  && result p = Some ()
   && column p = 2
   && lookahead p = []
 
@@ -738,7 +706,8 @@ let%test _ =
             "a"
   in
   has_ended p
-  && result p = Error (one_error 0 1 "'b'")
+  && result p = None
+  && error p = one_expect "'b'"
   && column p = 1
   && lookahead p = [None]
 
@@ -748,7 +717,7 @@ let%test _ =
   let open UP in
   let p = run (char 'a' >>= fun _ -> char 'b') "ab" in
   has_ended p
-  && result p = Ok ()
+  && result p = Some ()
   && column p = 2
   && lookahead p = []
 
@@ -821,7 +790,8 @@ let%test _ =
   in
   has_ended p
   && column p = 5
-  && result p = Error (errors 0 5 ["'('"; "')'"])
+  && result p = None
+  && error p = Error.make_expectations ["'('"; "')'"]
   && lookahead p = [None]
 
 let%test _ =
@@ -830,7 +800,7 @@ let%test _ =
   in
   has_ended p
   && column p = 0
-  && result p = Ok ()
+  && result p = Some ()
   && lookahead p = [Some ')']
 
 
@@ -839,7 +809,7 @@ let%test _ =
   let p = run nesting "(())()"
   in
   has_ended p
-  && result p = Ok 2
+  && result p = Some 2
   && lookahead p = [None]
 
 
@@ -848,7 +818,7 @@ let%test _ =
   let p = run nesting "(()(()))"
   in
   has_ended p
-  && result p = Ok 3
+  && result p = Some 3
   && lookahead p = [None]
 
 
@@ -861,7 +831,7 @@ let%test _ =
   in
   has_ended p
   && column p = 4
-  && result p = Ok ()
+  && result p = Some ()
   && lookahead p = []
 
 let%test _ =
@@ -870,7 +840,8 @@ let%test _ =
   in
   has_ended p
   && column p = 1
-  && result p = Error (one_error 0 1 "'a'")
+  && result p = None
+  && error p = one_expect "'a'"
   && lookahead p = [Some 'b']
 
 
@@ -883,13 +854,14 @@ let%test _ =
   let str = "(a)" in
   let p =
     run
-      (backtrackable (string str) (String.escaped str))
+      (backtrackable (string str) str)
       "(a"
   in
   has_ended p
   && line   p = 0
   && column p = 0
-  && result p = Error (one_error 0 0 (String.escaped str))
+  && result p = None
+  && error p = one_expect str
   && lookahead p = [Some '('; Some 'a'; None]
 
 
@@ -897,13 +869,13 @@ let%test _ =
   let open UP in
   let p =
     run
-      (backtrackable (string "(a)") (String.escaped "(a)")
+      (backtrackable (string "(a)") "(a)"
        <|> string "(b)")
       "(b)"
   in
   has_ended p
   && column p = 3
-  && result p = Ok ()
+  && result p = Some ()
   && lookahead p = []
 
 
@@ -911,14 +883,14 @@ let%test _ =
   let open UP in
   let p =
     run
-      ((backtrackable (string "(a)") (String.escaped "(a)")
+      ((backtrackable (string "(a)") "(a)"
         <|> string "(b)")
        |. expect_end)
       "(b)"
   in
   has_ended p
   && column p = 3
-  && result p = Ok ()
+  && result p = Some ()
   && lookahead p = []
 
 
@@ -941,62 +913,11 @@ let%test _ =
       "ab1d0"
   in
   has_ended p
-  && result p = Ok "a1d"
+  && result p = Some "a1d"
   && column p = 5
   && lookahead p = []
 
 
-
-
-(* Variable         *)
-(* **************** *)
-module Var =
-  struct
-    include SP
-    let var set =
-      variable
-        Char.is_letter
-        (fun c -> Char.is_letter c || Char.is_digit c)
-        set
-        "variable"
-  end
-
-let%test _ =
-  let open Var in
-  let p =
-    run
-      (var String_set.empty)
-      "a1b"
-  in
-  has_ended p
-  && result p = Ok "a1b"
-  && column p = 3
-  && lookahead p = [None]
-
-let%test _ =
-  let open Var in
-  let p =
-    run
-      (var String_set.empty)
-      "."
-  in
-  has_ended p
-  && result p = Error (one_error 0 0 "variable")
-  && column p = 0
-  && lookahead p = [Some '.']
-
-let%test _ =
-  let open Var in
-  let p =
-    run
-      (var @@ String_set.singleton "class")
-      "class"
-  in
-  has_ended p
-  && has_failed p
-  && column p = 5
-  && lookahead p = [None]
-  && result p = Error (one_error 0 0 "variable")
 
 
 

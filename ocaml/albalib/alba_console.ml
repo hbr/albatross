@@ -144,6 +144,12 @@ module Pretty_make (Io:Io.SIG) =
       and end_col    = Position.column pos2
       and len        = String.length source
       in
+      let end_col =
+        if start_line = end_line && start_col = end_col then
+          end_col + 1
+        else
+          end_col
+      in
       assert (start_line <= end_line);
       assert (start_line < end_line || start_col < end_col);
       let number_width =
@@ -199,7 +205,7 @@ module Pretty_make (Io:Io.SIG) =
       print 0 0
 
 
-    let one_error_explanation (err:Parser.Dead_end.t): t =
+    let explain_operator_precedence_error (op1: string) (op2: string): t =
       let source_text op1 op2 =
         chain [string "_ ";
                string op1;
@@ -219,48 +225,21 @@ module Pretty_make (Io:Io.SIG) =
                string op2;
                string " _ )"]
       in
-      match Parser.Dead_end.message err with
-      | Parser.Problem.Expect str ->
-         chain [char '<'; string str; char '>']
-
-      | Parser.Problem.Operator_precedence (op1, op2) ->
-         paragraphs
-           [string "to be able to group your operator expression";
-            indented_paragraph @@
-              source_text op1 op2;
-            string "either group the first two";
-            indented_paragraph @@
-              left op1 op2;
-            string "or group the second two";
-            indented_paragraph @@
-              right op1 op2;
-            fill_paragraph
-              "However the precedence and associativity of these operators \
-               don't give me enough information. Please put parentheses to \
-               indicate your intention."
-
-           ]
-
-
-    let error_explanation (errors:Parser.Dead_end.t list): t =
-      match errors with
-      | [] ->
-         assert false (* Illegal call! *)
-      | [e] ->
-         chain [string "At the marker I was expecting";
-                nest_list 4 [cut; cut; one_error_explanation e];
-                cut]
-      | _ ->
-         chain [string "At the marker I was expecting one of";
-                cut;
-                indented_paragraph @@
-                  print_list errors
-                    (fun e ->
-                      chain [
-                          string "- ";
-                          one_error_explanation e;
-                          cut])
-                ]
+      paragraphs
+        [string "I am not able to group your operator expression.";
+         indented_paragraph @@
+           source_text op1 op2;
+         string "I can either group the first two";
+         indented_paragraph @@
+           left op1 op2;
+         string "or group the second two";
+         indented_paragraph @@
+           right op1 op2;
+         fill_paragraph
+           "However the precedence and associativity of these operators \
+            don't give me enough information. Please put parentheses to \
+            indicate your intention."
+        ]
 
 
 
@@ -503,20 +482,49 @@ module Make (Io:Io.SIG) =
     let eval_expression (p:Parser.parser) (src:string): Pretty.t =
       assert (Parser.has_ended p);
       match Parser.result p with
-      | Ok None ->
+      | Some None ->
          Pretty.empty
 
-      | Ok (Some e) ->
+      | Some (Some e) ->
          Pretty.(expression e <+> build_and_compute src e)
 
-      | Error errors ->
+      | None ->
          let open Pretty in
-         let pos1 = Parser.position p in
-         let pos2 = Character_parser.Position.next_column pos1 in
-         chain
-           [ error_header "SYNTAX";
-             print_source src (pos1,pos2);
-             error_explanation errors]
+         let error = Parser.error p in
+         if Parser.Error.is_semantic error then
+           match Parser.Error.semantic error with
+           | Parser.Problem.Operator_precedence (pos1, pos2, op1, op2) ->
+              chain
+                [ error_header "SYNTAX";
+                  print_source src (pos1,pos2);
+                  cut;
+                  explain_operator_precedence_error op1 op2;
+                  cut
+                ]
+         else
+           let pos = Parser.position p in
+           chain
+             [ error_header "SYNTAX";
+               print_source src (pos, pos);
+               match Parser.Error.expectations error with
+               | [] ->
+                  assert false (* Illegal call! *)
+               | [e] ->
+                  chain [string "I was expecting";
+                         nest_list 4 [cut; cut; string e];
+                         cut]
+               | lst ->
+                  chain [string "I was expecting one of";
+                         cut;
+                         indented_paragraph @@
+                           print_list lst
+                             (fun e ->
+                               chain [
+                                   string "- ";
+                                   string e;
+                                   cut])
+                    ]
+             ]
 
 
     let repl (_:command_line): unit Io.t =

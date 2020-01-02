@@ -1,43 +1,93 @@
 open Common_module_types
 
 
+module type ERROR =
+  sig
+    type t
+    type semantic
+    type expect
+    val is_semantic: t -> bool
+    val semantic: t -> semantic
+    val expectations: t -> expect list
+    val make_semantic: semantic -> t
+    val make_expectations: expect list -> t
+  end
 
-module Error (Exp:ANY) (Sem:ANY) =
+
+module Error (Expect:ANY) (Semantic:ANY) =
   struct
+    type expect = Expect.t
+    type semantic = Semantic.t
     type t =
-      | Syntax of Exp.t list
-      | Semantic of Sem.t
+      | Syntax of Expect.t list
+      | Semantic of Semantic.t
+
+    let to_string
+          (e: t)
+          (f: Expect.t -> string)
+          (g: Semantic.t -> string)
+        : string =
+      match e with
+      | Syntax lst ->
+         "["
+         ^ String.concat
+             ", "
+             (List.rev_map f lst)
+         ^ "]"
+      | Semantic sem ->
+         g sem
 
     let init: t =
       Syntax []
 
-    let add_expected (exp: Exp.t) (e: t): t =
+    let add_expected (exp: Expect.t) (e: t): t =
       match e with
       | Syntax lst ->
          Syntax (exp :: lst)
       | _ ->
          Syntax [exp]
 
-    let semantic (s: Sem.t): t =
-      Semantic s
+    let make_semantic (sem: Semantic.t): t =
+      Semantic sem
+
+    let make_expectations (lst: Expect.t list): t =
+      Syntax (List.rev lst)
+
+    let is_semantic (e:t): bool =
+      match e with
+      | Syntax _ -> false
+      | _        -> true
+
+    let semantic (e:t): Semantic.t =
+      match e with
+      | Syntax _ ->
+         assert false (* Illegal call! *)
+      | Semantic sem ->
+         sem
+
+    let expectations (e:t): Expect.t list =
+      match e with
+      | Syntax es ->
+         List.rev es
+      | Semantic _ ->
+         assert false (* Illegal call! *)
   end
 
 
 module type COMBINATORS =
   sig
     type 'a t
-    (*type expect
-    type semantic*)
-    type error
+    type expect
+    type semantic
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
-    val fail:    error -> 'a t
+    val fail:    semantic -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
-    val (<?>):   'a t -> error -> 'a t
-    val backtrackable: 'a t -> error -> 'a t
+    val (<?>):   'a t -> expect -> 'a t
+    val backtrackable: 'a t -> expect -> 'a t
 
     val optional: 'a t -> 'a option t
     val one_of:   'a t list -> 'a t
@@ -54,16 +104,17 @@ module type COMBINATORS =
 
 
 
-module Buffer (S:ANY) (T:ANY) (E:ANY) =
+module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
   struct
     type state = S.t
     type token = T.t
-    type error = E.t
+    module Error = Error (Expect) (Semantic)
+    type error = Error.t
 
     type t = {
         state: state;
         has_consumed: bool;
-        errors: error list;
+        error: error;
         la_ptr: int;          (* position of first lookahead token *)
         buf_ptr: int option;  (* position where backtracking started *)
         toks: token array
@@ -72,7 +123,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     let init (st:state): t =
       {state = st;
        has_consumed = false;
-       errors = [];
+       error = Error.init;
        la_ptr = 0;
        buf_ptr = None;
        toks = [||]}
@@ -80,8 +131,8 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     let state (b:t): state =
       b.state
 
-    let errors (b:t): error list =
-      List.rev b.errors
+    let error (b:t): error =
+      b.error
 
     let count_toks (b:t): int =
       Array.length b.toks
@@ -113,21 +164,24 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     let update (f:state->state) (b:t): t =
       {b with state = f b.state}
 
-    let add_error (e:error) (b:t): t =
-      {b with errors = e :: b.errors}
+    let add_expected (e: Expect.t) (b:t): t =
+      {b with error = Error.add_expected e b.error}
+
+    let put_error (e: Semantic.t) (b: t): t =
+      {b with error = Error.make_semantic e}
 
     let clear_errors  (b:t): t =
-      {b with errors = []}
+      {b with error = Error.init}
 
     let consume (state:state) (b:t): t =
       assert (has_lookahead b);
       {b with state;
               has_consumed = true;
-              errors = [];
+              error = Error.init;
               la_ptr = 1 + b.la_ptr}
 
-    let reject (e:error) (b:t): t =
-      {b with errors    = e :: b.errors}
+    let reject (e: Expect.t) (b:t): t =
+      add_expected e b
 
     let start_new_consumer (b:t): t =
       {b with has_consumed = false}
@@ -143,13 +197,13 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
     let start_alternatives (b:t): t =
       {b with has_consumed = false}
 
-    let end_failed_alternatives (e:error) (b0:t) (b:t): t =
+    let end_failed_alternatives (e: Expect.t) (b0:t) (b:t): t =
       if b.has_consumed then
         b
       else
         {b with
           has_consumed = b0.has_consumed;
-          errors = e :: b0.errors}
+          error = Error.add_expected e b0.error}
 
     let end_succeeded_alternatives (b0:t) (b:t): t =
       if b.has_consumed then
@@ -157,7 +211,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
       else
         {b with
           has_consumed = b0.has_consumed;
-          errors = b0.errors}
+          error = b0.error}
 
 
     let start_backtrack (b:t): t =
@@ -173,7 +227,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
         {b with buf_ptr = b0.buf_ptr}
 
 
-    let end_backtrack_fail (e:error) (b0:t) (b:t): t =
+    let end_backtrack_fail (e: Expect.t) (b0: t) (b: t): t =
       match b.buf_ptr with
       | None ->
          assert false (* Cannot happen, must be backtracking i.e. buffering. *)
@@ -182,7 +236,7 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
                  has_consumed = b0.has_consumed;
                  buf_ptr = b0.buf_ptr;
                  la_ptr  = buf_ptr;
-                 errors  = e :: b0.errors}
+                 error = Error.add_expected e b0.error}
   end
 
 
@@ -190,14 +244,25 @@ module Buffer (S:ANY) (T:ANY) (E:ANY) =
 
 
 
-module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
+module Make
+         (T:ANY)
+         (S:ANY)
+         (Expect: ANY)
+         (Semantic: ANY)
+         (F:ANY) =
   struct
     type token = T.t
-    type error = E.t
+
+    module Error = Error (Expect) (Semantic)
+
     type state = S.t
+
     type final = F.t
 
-    module B = Buffer (S) (T) (E)
+    type expect   = Expect.t
+    type semantic = Semantic.t
+
+    module B = Buffer (S) (T) (Expect) (Semantic)
 
     type parser =
       | More  of B.t * (B.t -> parser)
@@ -233,15 +298,23 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
       match p with
       | More (b,_) | Final (b, _) -> B.state b
 
-    let result (p:parser): (final,error list) result =
+    let result (p:parser): final option =
       match p with
-      | Final (b, r) ->
-         (match r with
-          | None ->
-             Error (B.errors b)
-          | Some a ->
-             Ok a)
+      | Final (_, r) ->
+         r
       | _ -> assert false (* Illegal call! *)
+
+    let error (p:parser): Error.t =
+      match p with
+      | Final (b, _) | More (b, _) ->
+         B.error b
+
+    let error_string
+          (p:parser)
+          (f: Expect.t -> string)
+          (g: Semantic.t -> string)
+        : string =
+      Error.to_string (error p) f g
 
     let lookahead (p:parser): token list =
       match p with
@@ -288,13 +361,13 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
     let succeed (a:'a) (b:B.t) (k:'a cont): parser =
       k (Some a) (B.clear_errors b)
 
-    let fail (e:error): 'a t =
+    let fail (e: Semantic.t): 'a t =
       fun b k ->
-      k None (B.add_error e b)
+      k None (B.put_error e b)
 
 
     let token
-          (f:state -> token -> ('a*state, error) result)
+          (f:state -> token -> ('a*state, Expect.t) result)
           (b:B.t)
           (k:'a cont)
         : parser
@@ -348,7 +421,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
              k res b)
 
 
-    let (<?>) (p:'a t) (e:error): 'a t =
+    let (<?>) (p:'a t) (e: Expect.t): 'a t =
       fun b0 k ->
       p (B.start_alternatives b0)
         (fun res b ->
@@ -359,7 +432,7 @@ module Make (T:ANY) (S:ANY) (E:ANY) (F:ANY) =
              k (Some a) (B.end_succeeded_alternatives b0 b))
 
 
-    let backtrackable (p:'a t) (e: error): 'a t =
+    let backtrackable (p:'a t) (e: Expect.t): 'a t =
       fun b0 k ->
       p (B.start_backtrack b0)
         (fun res b ->

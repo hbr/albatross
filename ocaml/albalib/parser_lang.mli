@@ -30,8 +30,9 @@ end
 module Problem:
 sig
   type t =
-    | Expect of string
-    | Operator_precedence of string * string
+    | Operator_precedence of
+        Character_parser.Position.t * Character_parser.Position.t
+        * string * string (* the 2 operatos strings *)
 end
 
 
@@ -43,8 +44,8 @@ sig
 end
 
 
-module Dead_end: Character_parser.DEAD_END with type msg = Problem.t
-
+module Error: Generic_parser.ERROR with type expect = string
+                                    and type semantic = Problem.t
 
 type parser
 
@@ -56,7 +57,8 @@ val initial:    parser
 val put_char: parser -> char -> parser
 val put_end:  parser -> parser
 
-val result: parser -> (Expression.t option,Dead_end.t list) result
+val result: parser -> Expression.t option option
+val error:  parser -> Error.t
 val line: parser -> int
 val column: parser -> int
 val position: parser -> Character_parser.Position.t

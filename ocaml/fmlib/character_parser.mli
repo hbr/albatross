@@ -35,18 +35,6 @@ module type CONTEXT =
   end
 
 
-module type DEAD_END =
-  sig
-    type t
-    type msg
-    type context
-    val message: t -> msg
-    val position: t -> Position.t
-    val line: t -> int
-    val column: t -> int
-    val offside: t -> (int * int option) option
-    val contexts: t -> context list
-  end
 
 
 
@@ -86,14 +74,60 @@ module type PARSER =
 
 
 
+
+
+
+module type COMBINATORS =
+  sig
+    (** {2 Basic Combinators} *)
+
+    include Generic_parser.COMBINATORS
+
+    (** {2 Position and State Combinators} *)
+
+    val get_position: (Position.t) t
+    val located: 'a t -> 'a Located.t t
+
+    type state
+    val get_state: state t
+    val update: (state -> state) -> unit t
+
+
+    (** {2 Indentation Combinators} *)
+
+    val absolute: 'a t -> 'a t
+    val indented: bool -> 'a t -> 'a t
+    val detached: 'a t -> 'a t
+    val get_bounds: (int * int option) t
+
+    val one_or_more_aligned:  'a t -> 'a list t
+    val zero_or_more_aligned: 'a t -> 'a list t
+    val skip_one_or_more_aligned:  'a t -> int t
+    val skip_zero_or_more_aligned: 'a t -> int t
+
+
+    (** {2 Context Combinator} *)
+
+    type context
+    val in_context: context -> 'a t -> 'a t
+
+  end
+
+
+
+
+
+
+
 (** Simple Parser. *)
 module Simple (Final:ANY):
 sig
   (** {1 Modules and Types} *)
 
   module Context: CONTEXT with type msg = string
-  module Dead_end: DEAD_END with type msg = string
-                             and type context = Context.t
+
+  module Error: Generic_parser.ERROR with type expect   = string
+                                      and type semantic = string
 
   type final = Final.t
   type token = char option
@@ -101,57 +135,24 @@ sig
 
   (** {1 Combinators} *)
 
-
-  (** {2 Basic Combinators} *)
-
-  include Generic_parser.COMBINATORS
-  val fail: string -> 'a t
-  val backtrackable: 'a t -> string -> 'a t
+  include COMBINATORS with type expect   = string
+                       and type semantic = string
+                       and type state    = Unit.t
+                       and type context  = string
 
 
   (** {2 Character Combinators} *)
-
-  val expect: (char -> bool) -> string -> char t
+  val expect: (char -> bool) -> expect -> char t
   val expect_end: unit t
   val whitespace_char: char t
   val whitespace: int t
-  val one_of_chars: string -> string -> unit t
+  val one_of_chars: string -> expect -> unit t
   val string: string -> unit t
   val char: char -> unit t
   val space: unit t
   val letter: char t
-  val digit:  char t
-  val word: (char->bool) -> (char->bool) -> string -> string t
-  val variable: (char->bool) -> (char->bool) -> String_set.t
-                -> string -> string t
-
-
-  (** {2 Position Combinator} *)
-
-  val get_position: (Position.t) t
-  val located: 'a t -> 'a Located.t t
-
-
-  (** {2 Indentation Combinators} *)
-
-  val absolute: 'a t -> 'a t
-  (** [absolute p] is the parser [p] whose set of possible indentation
-     positions is the singleton set consisting of the indentation position of
-     the first token.. *)
-
-  val indented: bool -> 'a t -> 'a t
-  val detached: 'a t -> 'a t
-  val get_bounds: (int * int option) t
-
-  val one_or_more_aligned:  'a t -> 'a list t
-  val zero_or_more_aligned: 'a t -> 'a list t
-  val skip_one_or_more_aligned:  'a t -> int t
-  val skip_zero_or_more_aligned: 'a t -> int t
-
-
-  (** {2 Context Combinator} *)
-
-  val in_context: string -> 'a t -> 'a t
+  val digit: char t
+  val word: (char->bool) -> (char->bool) -> expect -> string t
 
 
   (** {1 Parser} *)
@@ -165,9 +166,11 @@ sig
 
   (** The result the parser has produced which is either a final value or a
      list of dead ends. Only valid if the parser has terminated. *)
-  val result: parser -> (final,error list) result
+  val result: parser -> final option
 
   val result_string: parser -> (final -> string) -> string
+
+  val error: parser -> Error.t
 
   (** The list of tokens (i.e. optional characters) which the parser has not
      processed at the point of termination. *)
@@ -189,14 +192,23 @@ end
 
 
 
+
+
+
 (** Advanced Parser. *)
-module Advanced (State:ANY) (Final:ANY) (Problem:ANY) (Context_msg:ANY):
+module Advanced
+         (State:ANY)
+         (Final:ANY)
+         (Expect:ANY)
+         (Semantic:ANY)
+         (Context_msg:ANY):
 sig
   (** {1 Modules and Types} *)
 
   module Context:  CONTEXT with type msg = Context_msg.t
-  module Dead_end: DEAD_END with type msg = Problem.t
-                             and type context = Context.t
+
+  module Error: Generic_parser.ERROR with type expect   = Expect.t
+                                      and type semantic = Semantic.t
 
   type final = Final.t
   type token = char option
@@ -204,47 +216,24 @@ sig
 
   (** {1 Combinators} *)
 
-
-  (** {2 Basic Combinators} *)
-
-  include Generic_parser.COMBINATORS with type error = Dead_end.t
-  val fail: Problem.t -> 'a t
-  val backtrackable: 'a t -> Problem.t -> 'a t
-
+  include COMBINATORS with type expect = Expect.t
+                       and type semantic = Semantic.t
+                       and type state = State.t
+                       and type context = Context_msg.t
 
   (** {2 Character Combinators} *)
 
-  val expect: (char -> bool) -> Problem.t -> char t
-  val expect_end:  Problem.t -> unit t
-  val whitespace_char: Problem.t -> char t
-  val whitespace: Problem.t -> int t
-  val one_of_chars: string -> Problem.t -> unit t
-  val string: string -> (int -> Problem.t) -> unit t
-  val char: char -> Problem.t -> unit t
-  val space: Problem.t -> unit t
-  val letter: Problem.t -> char t
-  val digit:  Problem.t -> char t
-  val word: (char->bool) -> (char->bool) -> Problem.t -> string t
-  val variable: (char->bool) -> (char->bool) -> String_set.t
-                  -> Problem.t -> string t
-
-
-  (** {2 Position and State Combinators} *)
-
-  val get_position: (Position.t) t
-  val located: 'a t -> 'a Located.t t
-
-  val get_state: State.t t
-  val update: (State.t -> State.t) -> unit t
-
-
-  (** {2 Indentation Combinators} *)
-  val absolute: 'a t -> 'a t
-  val indented: bool -> 'a t -> 'a t
-  val detached: 'a t -> 'a t
-
-  (** {2 Context Combinator} *)
-  val in_context: Context_msg.t -> 'a t -> 'a t
+  val expect: (char -> bool) -> expect -> char t
+  val expect_end:  expect -> unit t
+  val whitespace_char: expect -> char t
+  val whitespace: expect -> int t
+  val one_of_chars: string -> expect -> unit t
+  val string: string -> (int -> expect) -> unit t
+  val char: char -> expect -> unit t
+  val space: expect -> unit t
+  val letter: expect -> char t
+  val digit:  expect -> char t
+  val word: (char->bool) -> (char->bool) -> expect -> string t
 
   (** {1 Parser} *)
 
@@ -259,7 +248,11 @@ sig
 
   (** The result the parser has produced which is either a final value or a
      list of dead ends. Only valid if the parser has terminated. *)
-  val result: parser -> (final,error list) result
+  val result: parser -> final option
+
+
+  val error: parser -> Error.t
+
 
   (** The list of tokens (i.e. optional characters) which the parser has not
      processed at the point of termination. *)
