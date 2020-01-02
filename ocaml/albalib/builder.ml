@@ -1,3 +1,137 @@
+(* Principles of Term Building
+
+   Each (sub)term gets a placeholder which represents the term.
+
+   Each bound variable gets one placeholder for its type and an entry for the
+   variable.
+
+   If the type of any (sub)term / bound variable is known, its placeholder for
+   the type gets an immediate substitution.
+
+   Internal builder function
+
+ *)(*
+      build (exp: Parser.Expression.t)
+            (nargs: int)
+            (ptr: int)
+            (c: Gamma_sub.t)
+            : args * Gamma_sub.t
+    *)
+
+(* Because of the ambiguities we have to work with list of pairs (ptr,c) as
+   input and list of pairs (ptr_arr,c) as output.
+
+
+ *)
+
+
+(* Identifier or operator
+
+   Input:
+
+   - pointer to placeholder
+
+   - [n] explicit arguments
+
+   Output:
+
+   - placeholder substituted by f <a0> <a1> ... <am-1> where m is the number
+   of explicit and implict arguments.
+
+   - array of pointers to the placeholders of the n explicit arguments
+
+
+   Algorithm:
+
+   From the name map we get a list of indices (or levels).
+
+   Each index represents a global or local variable which has a type according
+   to the context gamma.
+
+   The type in key normal form must look like
+
+     all (x1:A1) ... (xk:Ak): Rk
+
+   where n <= k and k include all implicit arguments which occur before the n
+   explicit arguments.
+
+   Compare Rk with the required type R. If R is not an implicit nor an
+   explicit placeholder and starts with more implicit arguments as Rk we the
+   difference from Rk to get
+
+     all (x1:A1) ... (xk:Ak) ... (xm:Am): Rm
+
+   Otherwise we set m = k.
+
+   Form the new context
+
+      Gamma, x1:A1, ... , xm:Am
+
+   with the new placeholders x1,..., xm.
+
+   Unify Rm with R. And do the substitution
+
+     e := f <x1> ... <xm>
+
+   where e is the placeholder for the expression and f is a variable for the
+   function name.
+
+   and return an array pointing to the placeholders representing explicit
+   arguments.  *)
+
+
+
+
+(* Function Expression "(\ x y ... := exp) a1 a2 ... an"
+
+   Some arguments are typed, some are untyped. The result type of the lambda
+   abstraction might be there or not.
+
+   There are [nargs] arguments to which the function term is applied.
+
+   A fully typed lambda abstraction looks like
+
+     \ (x:A) (y:B) ... : RT := exp
+
+   First the signature is analyzed. The untyped arguments get placeholders for
+   their types without substitutions, the typed arguments get placeholders
+   with substitutions.
+
+     gamma, A:U, x:A, B:U, y:B ...
+
+   Type variables which occur in other types which are not propositions are
+   implicit. However if they occur in other types, their types get
+   substitutions i.e. can be treated as typed variables.
+
+   The expected type of the lambda abstraction applied to the arguments cannot
+   give any information for the types of formal arguments which correspond to
+   the arguments to which the lambda abstraction is applied. Task: Find the
+   number of formal arguments which correspond to actual arguments.
+
+   Number of formal arguments corresponding to actual arguments:
+
+   - Number of actual arguments + Number of implicit arguments (type args +
+   proof args)
+
+   - Scan from left to right, not counting implicit args until sufficient
+   formal args have been found.
+
+   - Error if there are not sufficient formal args to cover all actual args.
+
+
+   After covering all actual args there are remaining args (>= 0)
+
+      \ u v ... := exp
+
+   The expected type E of the whole lambda term applied to the actual
+   arguments must be the expected type of the remaining lambda abstraction. If
+   E is a dummy, then we cannot gain any information. If E is not a dummy, its
+   signature must have sufficient arguments for the remaining formal
+   arguments. The argument types derived from E must be unifiable with the
+   types of the formal arguments.
+
+*)
+
 open Fmlib
 open Common
 
@@ -13,6 +147,37 @@ type range = pos * pos
 
 module Located =
   Character_parser.Located
+
+
+
+
+
+(* Signature of a type T
+
+   Has the form
+
+     all (x1:A1) (x2:A2) ... (xn:An): R
+
+   where R is in key normal form not starting with "all ... " and n can be
+   zero.
+
+   R is either Any, Proposition or something else. In the first 2 cases the
+   type T reduces to a kind i.e. an expression of type T is a type
+   constructor.
+
+   If R = Proposition, then any expression of type T is a proposition.
+
+*)
+module Signature:
+sig
+  type t
+end =
+  struct
+    type t = unit
+  end
+
+
+
 
 
 
@@ -42,6 +207,9 @@ module GSub =
     let index_of_level (i:int) (c:t): int =
       Term.bruijn_convert i (count c)
 
+
+    let signature_of_type (_: Term.typ) (_:t): Signature.t =
+      assert false (* nyi *)
 
     let push_substitutable (typ: Term.typ) (c:t): t =
       let name = "<" ^ string_of_int (count c) ^ ">" in
@@ -307,39 +475,6 @@ module Print  (P:Pretty_printer.SIG) =
                c)
   end
 
-
-
-(* Function Expression "\ x y ... := exp"
-
-   a) Required type is a placeholder without value:
-
-   - Push A:Any, x:A, B:Any, y:B, ..., E:Any, e:E into the context - e is
-   placeholder for "exp"
-
-   - build [exp] and unify with [e]
-
-   - make function expression and unify with the placeholder for the
-   expression. References to types in the context must be kept.
-
-
-   b) Required type has value:
-
-   - Extract argtypes and result type and push x:A, y:B, ..., e:RT onto the
-   context
-
-   - build [exp] and unify with [e]
-
-   - make function expression and unify with the placeholder for the
-   expression. References to types in the context must be kept.
-
-
-   Note: Substitutions are always done immediately, therefore type variables
-   which have substitutions do no longer occur in other substitutions.
-
-   If the arguments [x,y,...] with their types remain in the context, then the
-   variables might occur in other types because we have dependent types.
-
-*)
 
 
 let find_name (name:string) (range:range) (c:Context.t): int list Result.t =
