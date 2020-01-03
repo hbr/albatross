@@ -181,6 +181,7 @@ let word_ws
   =
   located @@ word start inner msg
   |. whitespace
+  >>= succeed
 
 
 let identifier: string located t =
@@ -218,7 +219,7 @@ let number_expression: Expression.t t =
 
 
 
-let lang_string: Expression.t t =
+let literal_string: Expression.t t =
   located (
       return
         (fun chars ->
@@ -236,7 +237,7 @@ let lang_string: Expression.t t =
   |. whitespace
 
 
-let lang_char: Expression.t t =
+let literal_char: Expression.t t =
   located (
       return
         (fun c -> Expression.Char (Char.code c))
@@ -266,8 +267,10 @@ let operator: Expression.operator Located.t t =
              is_op_char
              "operator character")
         <|> map (fun _ -> [':']) (char ':')
+        <?> "operator or ':'"
        )
   |. whitespace
+  >>= succeed
 
 
 let lonely_operator: Expression.t t =
@@ -288,8 +291,8 @@ let rec expression (): Expression.t t =
   let primary (): Expression.t t =
     identifier_expression
     <|> number_expression
-    <|> lang_char
-    <|> lang_string
+    <|> literal_char
+    <|> literal_string
     <|> located
           (return
              (fun op_exp -> Expression.Parenthesized op_exp)
@@ -305,6 +308,7 @@ let rec expression (): Expression.t t =
            |. char_ws '\\'
            |= one_or_more identifier
            |= (string_ws ":=" >>= fun _ -> expression ()))
+    <?> "expression"
   in
   let operator_and_operand =
     return (fun op exp -> (op,exp))
