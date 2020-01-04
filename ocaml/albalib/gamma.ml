@@ -299,12 +299,13 @@ module Pretty (P:Pretty_printer.SIG) =
          in
          Some op_data,
          P.(chain [a_pr;
-                   char ' ';
+                   group space;
                    string op_str;
                    char ' ';
                    b_pr])
 
       | Appl (op, a, Binary) ->
+         (* (a op) ???? Postfix operator? *)
          let a_data, a_pr = print a c
          and op_str, op_data =
            operator_data op c
