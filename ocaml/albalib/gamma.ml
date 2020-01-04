@@ -142,7 +142,9 @@ let binary_type (level:int): Term.typ * int =
       Variable 0,
       Pi ("_",
           Variable 1,
-          Variable 2)),
+          Variable 2,
+          true),
+      true),
   (level + 1)
 
 
@@ -181,6 +183,10 @@ let standard (): t =
        (Builtin Term.Value.string_concat)
 
 
+
+
+
+
 module Pretty (P:Pretty_printer.SIG) =
   (* Operator printing:
 
@@ -198,7 +204,7 @@ module Pretty (P:Pretty_printer.SIG) =
               (c:t)
             : (string * Term.typ * t) list * Term.t * t =
       match t with
-      | Pi (nme, tp, t) ->
+      | Pi (nme, tp, t, _) ->
          let lst, t_inner, c_inner =
            pi_args t (push_local nme tp c)
          in
@@ -280,6 +286,7 @@ module Pretty (P:Pretty_printer.SIG) =
               "<invalid>")
 
       | Appl ( Appl (op, a, Binary), b, _ ) ->
+         (* a op b *)
          let a_data, a_pr = print a c
          and b_data, b_pr = print b c
          and op_str, op_data =
@@ -313,9 +320,9 @@ module Pretty (P:Pretty_printer.SIG) =
             <+> char ')')
 
       | Appl (_, _, _) ->
-         assert false
+         assert false  (* nyi *)
 
-      | Pi (nme, tp, t) ->
+      | Pi (nme, tp, t, _) ->
          let lst, t_inner, c_inner = pi_args t (push_local nme tp c)
          in
          None,
@@ -337,6 +344,10 @@ module Pretty (P:Pretty_printer.SIG) =
     let print (t:Term.t) (c:t): P.t =
       snd (print t c)
   end (* Pretty *)
+
+
+
+
 
 
 
@@ -381,13 +392,13 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
 
     | Appl (f, a, _) ->
        (match typ f c with
-        | Pi (_, _, t) ->
+        | Pi (_, _, t, _) ->
            apply t a
         | _ ->
            assert false (* Illegal call! Term is not welltyped. *)
        )
 
-    | Pi (name, tp, t) ->
+    | Pi (name, tp, t, _) ->
        (match
           typ tp c, typ t (push_local name tp c)
         with
@@ -438,7 +449,7 @@ let rec push_arguments
 
   else
     match tp with
-    | Pi (name, tp, t) ->
+    | Pi (name, tp, t, _) ->
        push_arguments
          (nargs - 1)
          t

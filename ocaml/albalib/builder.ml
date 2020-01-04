@@ -384,7 +384,7 @@ module GSub =
         | Appl (_, _, _ ), Appl (_, _, _ ) ->
            assert false (* nyi *)
 
-        | Pi (_, _, _), Pi (_, _, _) ->
+        | Pi (_, _, _, _), Pi (_, _, _, _) ->
            assert false (* nyi *)
 
         | _, _ ->

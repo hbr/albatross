@@ -48,7 +48,7 @@ type t =
 
   (*| Lam of typ * t*)
 
-  | Pi of string * typ * t
+  | Pi of string * typ * t * bool
 
   | Value of Value.t
 

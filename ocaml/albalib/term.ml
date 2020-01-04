@@ -126,7 +126,7 @@ type t =
 
   (*| Lam of typ * t*)
 
-  | Pi of string * typ * t
+  | Pi of string * typ * t * bool
 
   | Value of Value.t
 and typ = t
@@ -162,10 +162,11 @@ let up_from (delta:int) (start:int) (t:t): t =
     | Appl (f, a, mode) ->
        Appl (up f nb, up a nb, mode)
 
-    | Pi (nme, tp, t ) ->
+    | Pi (nme, tp, t, arr ) ->
        Pi (nme,
            up tp nb,
-           up t (nb + 1))
+           up t (nb + 1),
+           arr)
 
   in
   up t 0
@@ -203,10 +204,10 @@ let down_from (delta:int) (start:int) (t:t): t option =
        down a nb >>= fun a ->
        Some (Appl (f, a , mode))
 
-    | Pi (nme, tp, t ) ->
+    | Pi (nme, tp, t, arr ) ->
        down tp nb >>= fun tp ->
        down t (nb + 1) >>= fun t ->
-       Some (Pi (nme, tp, t))
+       Some (Pi (nme, tp, t, arr))
   in
   down t 0
 
@@ -230,8 +231,8 @@ let substitute (f:int -> t) (t:t): t =
     | Appl (f, a, mode) ->
        Appl (sub f nb, sub a nb, mode)
 
-    | Pi (nme, tp, t) ->
-       Pi (nme, sub tp nb, sub t (nb + 1))
+    | Pi (nme, tp, t, arrow) ->
+       Pi (nme, sub tp nb, sub t (nb + 1), arrow)
   in
   sub t 0
 
