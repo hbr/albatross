@@ -2,6 +2,8 @@ open Fmlib
 open Common
 
 
+module Pi_info = Term.Pi_info
+
 type name =
   | Normal of string
   | Binary_operator of string * Operator.t
@@ -137,14 +139,11 @@ let string_level = 2
 
 
 let binary_type (level:int): Term.typ * int =
-  let open Term in
-  Pi ("_",
-      Variable 0,
-      Pi ("_",
-          Variable 1,
+  Pi (Variable 0,
+      Pi (Variable 1,
           Variable 2,
-          true),
-      true),
+          Pi_info.arrow),
+      Pi_info.arrow),
   (level + 1)
 
 
@@ -187,6 +186,16 @@ let standard (): t =
 
 
 
+
+
+
+
+(* ---------------------------------------
+
+   Pretty Printing
+
+   ---------------------------------------
+ *)
 module Pretty (P:Pretty_printer.SIG) =
   (* Operator printing:
 
@@ -204,11 +213,11 @@ module Pretty (P:Pretty_printer.SIG) =
               (c:t)
             : (string * Term.typ * t) list * Term.t * t =
       match t with
-      | Pi (nme, tp, t, _) ->
+      | Pi (tp, t, info) when not (Pi_info.is_arrow info) ->
          let lst, t_inner, c_inner =
-           pi_args t (push_local nme tp c)
+           pi_args t (push_local (Pi_info.name info) tp c)
          in
-         (nme, tp, c) :: lst, t_inner, c_inner
+         (Pi_info.name info, tp, c) :: lst, t_inner, c_inner
       | _ ->
          [], t, c
 
@@ -323,8 +332,28 @@ module Pretty (P:Pretty_printer.SIG) =
       | Appl (_, _, _) ->
          assert false  (* nyi *)
 
-      | Pi (nme, tp, t, _) ->
-         let lst, t_inner, c_inner = pi_args t (push_local nme tp c)
+      | Pi (tp, rt, info) when Pi_info.is_arrow info ->
+         let c_inner = push_local "_" tp c in
+         let tp_data, tp_pr = print tp c
+         and rt_data, rt_pr = print rt c_inner
+         and op_data = Operator.of_string "->"
+         in
+         let tp_pr =
+           parenthesize tp_pr tp_data true op_data
+         and rt_pr =
+           parenthesize rt_pr rt_data false op_data
+         in
+         Some op_data,
+         P.(chain [tp_pr;
+                   group space;
+                   string "->";
+                   char ' ';
+                   rt_pr])
+
+      | Pi (tp, t, info) ->
+         let nme = Term.Pi_info.name info in
+         let lst, t_inner, c_inner =
+           pi_args t (push_local nme tp c)
          in
          None,
          P.(chain [List.fold_left
@@ -345,6 +374,12 @@ module Pretty (P:Pretty_printer.SIG) =
     let print (t:Term.t) (c:t): P.t =
       snd (print t c)
   end (* Pretty *)
+
+
+
+
+
+
 
 
 
@@ -393,13 +428,14 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
 
     | Appl (f, a, _) ->
        (match typ f c with
-        | Pi (_, _, t, _) ->
-           apply t a
+        | Pi (_, rt, _) ->
+           apply rt a
         | _ ->
            assert false (* Illegal call! Term is not welltyped. *)
        )
 
-    | Pi (name, tp, t, _) ->
+    | Pi (tp, t, info) ->
+       let name = Pi_info.name info in
        (match
           typ tp c, typ t (push_local name tp c)
         with
@@ -450,10 +486,11 @@ let rec push_arguments
 
   else
     match tp with
-    | Pi (name, tp, t, _) ->
+    | Pi (tp, rt, info) ->
+       let name = Term.Pi_info.name info in
        push_arguments
          (nargs - 1)
-         t
+         rt
          (push_local name tp c)
 
     | _ ->

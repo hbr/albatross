@@ -17,6 +17,7 @@ type t =
                  are considered equivalent. *)
 
 
+let arrow             = (30,   Right)
 let colon             = (40,   Left)
 let relation          = (50,   No)
 let addition          = (60,   Left)
@@ -30,6 +31,7 @@ let map: (int * assoc) String_map.t
   =
   let open String_map in
   empty
+  |> add "->" arrow
   |> add ":"  colon
   |> add "="  relation
   |> add "/=" relation

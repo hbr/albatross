@@ -7,6 +7,9 @@ type leaning =
   | No
 
 
+(** Precedence/associativity of arrow "->" operator. *)
+val arrow: t
+
 (** Precedence/associativity of colon ':' operator. *)
 val colon: t
 

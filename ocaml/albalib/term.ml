@@ -108,7 +108,38 @@ module Sort =
 
 
 
+module Pi_info =
+  struct
+    type t = {
+        name: string;  (* name of the argument *)
+        arrow: bool;   (* user has written 'A -> B' instead of 'all (nme:A):
+                          R' *)
+        typed: bool    (* false, if user has given no type information 'all x:
+                          R' *)
+      }
 
+    let name (i:t): string =
+      i.name
+
+    let is_anonymous (i:t): bool =
+      i.name = "_"
+
+    let is_arrow (i:t): bool =
+      i.arrow
+
+    let is_typed (i:t): bool =
+      i.typed
+
+    let arrow: t =
+      {name = "_"; arrow = true; typed = true}
+
+    let typed (name: string) : t =
+      {name; arrow = false; typed = true}
+
+    let untyped (name: string) : t =
+      {name; arrow = false; typed = false}
+
+  end
 
 
 type appl =
@@ -126,7 +157,7 @@ type t =
 
   (*| Lam of typ * t*)
 
-  | Pi of string * typ * t * bool
+  | Pi of typ * typ * Pi_info.t
 
   | Value of Value.t
 and typ = t
@@ -162,11 +193,10 @@ let up_from (delta:int) (start:int) (t:t): t =
     | Appl (f, a, mode) ->
        Appl (up f nb, up a nb, mode)
 
-    | Pi (nme, tp, t, arr ) ->
-       Pi (nme,
-           up tp nb,
-           up t (nb + 1),
-           arr)
+    | Pi (tp, rt, info) ->
+       Pi (up tp nb,
+           up rt (nb + 1),
+           info)
 
   in
   up t 0
@@ -204,10 +234,10 @@ let down_from (delta:int) (start:int) (t:t): t option =
        down a nb >>= fun a ->
        Some (Appl (f, a , mode))
 
-    | Pi (nme, tp, t, arr ) ->
+    | Pi (tp, t, info ) ->
        down tp nb >>= fun tp ->
        down t (nb + 1) >>= fun t ->
-       Some (Pi (nme, tp, t, arr))
+       Some (Pi (tp, t, info))
   in
   down t 0
 
@@ -231,8 +261,8 @@ let substitute (f:int -> t) (t:t): t =
     | Appl (f, a, mode) ->
        Appl (sub f nb, sub a nb, mode)
 
-    | Pi (nme, tp, t, arrow) ->
-       Pi (nme, sub tp nb, sub t (nb + 1), arrow)
+    | Pi (tp, t, info) ->
+       Pi (sub tp nb, sub t (nb + 1), info)
   in
   sub t 0
 

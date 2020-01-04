@@ -34,6 +34,21 @@ sig
 end
 
 
+
+module Pi_info:
+sig
+  type t
+  val name:         t -> string
+  val is_anonymous: t -> bool
+  val is_arrow:     t -> bool
+  val is_typed:     t -> bool
+
+  val arrow: t
+  val typed:   string -> t
+  val untyped: string -> t
+end
+
+
 type appl =
   | Normal
   | Binary
@@ -48,7 +63,7 @@ type t =
 
   (*| Lam of typ * t*)
 
-  | Pi of string * typ * t * bool
+  | Pi of typ * typ * Pi_info.t
 
   | Value of Value.t
 
