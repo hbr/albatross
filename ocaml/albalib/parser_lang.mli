@@ -2,6 +2,9 @@ open Fmlib
 
 type 'a located = 'a Character_parser.Located.t
 
+type range = Character_parser.Position.t * Character_parser.Position.t
+
+
 module Expression:
 sig
   type operator = string * Operator.t
@@ -31,8 +34,10 @@ module Problem:
 sig
   type t =
     | Operator_precedence of
-        Character_parser.Position.t * Character_parser.Position.t
+        range
         * string * string (* the 2 operatos strings *)
+
+      | Unexpected_keyword of range * string (* expectation *)
 end
 
 

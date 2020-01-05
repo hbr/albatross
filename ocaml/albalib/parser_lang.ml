@@ -6,6 +6,12 @@ type 'a located = 'a Located.t
 
 module Position = Character_parser.Position
 
+type range = Position.t * Position.t
+
+
+
+
+
 module Expression = struct
   type operator = string * Operator.t
 
@@ -116,13 +122,23 @@ module Problem =
   struct
     type t =
       | Operator_precedence of
-          Position.t * Position.t
+          range
           * string * string (* the 2 operatos strings *)
+
+      | Unexpected_keyword of range * string (* expectation *)
   end
 
 module P =
   Character_parser.Advanced (Unit) (Final) (String) (Problem) (Context_msg)
 include P
+
+
+
+let keywords: String_set.t =
+  let open String_set in
+  empty
+  |> add "create"
+  |> add "inspect"
 
 
 let string (str: string): unit t =
@@ -209,7 +225,11 @@ let identifier_expression: Expression.t t =
          else
            Expression.Identifier s
     ))
-    identifier
+    (identifier >>= fun s ->
+     if String_set.mem (Located.value s) keywords then
+       fail (Problem.Unexpected_keyword (Located.range s, "<identifier>"))
+     else
+       return s)
 
 
 let number_expression: Expression.t t =
@@ -325,7 +345,7 @@ let rec expression (): Expression.t t =
      return e
 
   | Error (p0, p1, op1, op2) ->
-     fail (Problem.Operator_precedence (p0, p1, op1, op2))
+     fail (Problem.Operator_precedence ((p0, p1), op1, op2))
 
 
 let initial: parser =

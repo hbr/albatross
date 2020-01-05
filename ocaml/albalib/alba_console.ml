@@ -480,12 +480,23 @@ module Make (Io:Io.SIG) =
          let error = Parser.error p in
          if Parser.Error.is_semantic error then
            match Parser.Error.semantic error with
-           | Parser.Problem.Operator_precedence (pos1, pos2, op1, op2) ->
+           | Parser.Problem.Operator_precedence (range, op1, op2) ->
               chain
                 [ error_header "SYNTAX";
-                  print_source src (pos1,pos2);
+                  print_source src range;
                   cut;
                   explain_operator_precedence_error op1 op2;
+                  cut
+                ]
+
+           | Parser.Problem.Unexpected_keyword (range, expect) ->
+              chain
+                [ error_header "SYNTAX";
+                  print_source src range;
+                  cut;
+                  fill_paragraph
+                    ("I did not expect to find a keyword. I was expecting "
+                     ^ expect);
                   cut
                 ]
          else
