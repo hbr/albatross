@@ -30,6 +30,7 @@ module Expression = struct
     | Operator of operator
     | Binary of t * operator located * t
     | Typed of t * t
+    | Application of t * t list
     | Function of string located list * t
     | Parenthesized of t
 
@@ -330,13 +331,31 @@ let rec expression (): Expression.t t =
            |= (string_ws ":=" >>= fun _ -> expression ()))
     <?> "expression"
   in
+
+  let application =
+    primary () >>= fun f ->
+    located (zero_or_more (primary ())) >>= fun args ->
+    match Located.value args with
+    | [] ->
+       return f
+    | arg_lst ->
+       let pos1 = Located.start f
+       and pos2 = Located.end_ args
+       in
+       return
+         (Located.make
+            pos1
+            (Expression.Application (f, arg_lst))
+            pos2)
+  in
+
   let operator_and_operand =
     return (fun op exp -> (op,exp))
     |= operator
-    |= in_context Context_msg.Operand (primary ())
+    |= application
   in
 
-  primary () >>= fun e1 ->
+  application >>= fun e1 ->
 
   zero_or_more operator_and_operand >>= fun lst ->
 

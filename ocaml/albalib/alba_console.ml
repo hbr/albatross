@@ -49,7 +49,7 @@ module Pretty_make (Io:Io.SIG) =
     let paragraphs (lst:t list): t =
       chain_separated lst cut
 
-
+(*
     let expression (e:Expression.t): t =
       (* print expression [e]. *)
       let rec exp e =
@@ -101,7 +101,7 @@ module Pretty_make (Io:Io.SIG) =
              cut;
              nest 4 (exp e);
              cut;cut]
-
+ *)
 
 
     let error_header
@@ -473,7 +473,7 @@ module Make (Io:Io.SIG) =
          Pretty.empty
 
       | Some (Some e) ->
-         Pretty.(expression e <+> build_and_compute src e)
+         build_and_compute src e
 
       | None ->
          let open Pretty in

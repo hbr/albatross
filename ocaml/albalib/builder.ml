@@ -684,6 +684,9 @@ let rec build0
   | Typed (_, _) ->
      Error (Problem.Not_yet_implemented (range, "typed expression"))
 
+  | Application _ ->
+     Error (Problem.Not_yet_implemented (range, "function application"))
+
   | Function (_, _) ->
      Error (Problem.Not_yet_implemented (range, "function expression"))
 
