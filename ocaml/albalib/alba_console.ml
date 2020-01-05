@@ -45,22 +45,9 @@ module Pretty_make (Io:Io.SIG) =
     let indented_paragraphs (lst: t list): t =
       indented_paragraph (chain lst)
 
-    let chain_separated (lst:t list) (sep:t): t =
-      let rec chn = function
-        | [] ->
-           empty
-        | [p] ->
-           p
-        | p :: tl ->
-           p <+> sep <+> chn tl
-      in
-      chn lst
-
 
     let paragraphs (lst:t list): t =
       chain_separated lst cut
-
-
 
 
     let expression (e:Expression.t): t =

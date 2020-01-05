@@ -4,6 +4,8 @@ open Common
 
 module Pi_info = Term.Pi_info
 
+module Lambda_info = Term.Lambda_info
+
 type name =
   | Normal of string
   | Binary_operator of string * Operator.t
@@ -12,6 +14,7 @@ type name =
 type definition =
   | No
   | Builtin of Term.Value.t
+  | Definition of Term.t
 
 
 type entry = {
@@ -192,14 +195,152 @@ let standard (): t =
        (Binary_operator ("=", Operator.of_string "="))
        (Term.(
           Pi (any,
-              Pi ( Variable 0,
-                   (Pi (Variable 1,
-                        proposition,
-                        Pi_info.arrow)),
-                   Pi_info.arrow),
+              Pi (Variable 0,
+                  (Pi (Variable 1,
+                       proposition,
+                       Pi_info.arrow)),
+                  Pi_info.arrow),
               Pi_info.typed "A")),
         0)
        No
+
+  |> add_entry
+       (* identity: all (A: Any): A -> A :=
+            \ A x := x *)
+       (Normal "identity")
+       (Term.(
+          Pi (any,
+              Pi (Variable 0,
+                  Variable 1,
+                  Pi_info.arrow),
+              Pi_info.typed "A")),
+        0)
+       (Definition
+          (Term.(
+             Lambda (any,
+                     Lambda (Variable 0,
+                             Variable 0,
+                             Lambda_info.untyped "x"),
+                     Lambda_info.untyped "A"))))
+
+
+
+
+let type_of_term (t:Term.t) (c:t): Term.typ =
+  let rec typ t c =
+    let open Term in
+    match t with
+    | Sort Sort.Proposition ->
+       Sort (Sort.Any 0)
+
+    | Sort (Sort.Any i) ->
+       Sort (Sort.Any (i+1))
+
+    | Value v ->
+       (match v with
+        | Value.Int _ ->
+           Variable (index_of_level int_level c)
+
+        | Value.Char _ ->
+           Variable (index_of_level char_level c)
+
+        | Value.String _ ->
+         Variable (index_of_level string_level c)
+
+        | Value.Unary _ | Value.Binary _ ->
+           assert false (* Illegal call! *)
+       )
+    | Variable i ->
+       type_at_level (level_of_index i c) c
+
+    | Appl (f, a, _) ->
+       (match typ f c with
+        | Pi (_, rt, _) ->
+           apply rt a
+        | _ ->
+           assert false (* Illegal call! Term is not welltyped. *)
+       )
+
+    | Lambda (tp, exp, info) ->
+       let c_inner = push_local (Lambda_info.name info) tp c in
+       let rt      = typ exp c_inner
+       in
+       Pi (tp, rt, Pi_info.typed (Lambda_info.name info))
+
+    | Pi (tp, t, info) ->
+       let name = Pi_info.name info in
+       (match
+          typ tp c, typ t (push_local name tp c)
+        with
+        | Sort (Sort.Any i), Sort (Sort.Any j) ->
+           Sort (Sort.Any (max i j))
+        | _ ->
+           assert false (* nyi other product combinations. *)
+       )
+  in
+  typ t c
+
+
+
+let rec compute (t:Term.t) (c:t): Term.t =
+  let open Term in
+  match t with
+  | Sort _ ->
+     t
+
+  | Value _ ->
+     t
+
+  | Variable i ->
+     (match (entry (level_of_index i c) c).definition with
+      | No ->
+         t
+
+      | Builtin v ->
+         Term.Value v
+
+      | Definition def ->
+         def
+     )
+
+  | Lambda _ ->
+     t
+
+  | Appl (Lambda (_, exp, _ ), a, _) ->
+     compute (Term.apply exp a) c
+
+  | Appl (f, a, mode) ->
+     let a, f = compute a c, compute f c in
+     (match f, a with
+      | Value vf, Value va ->
+         Value (Value.apply vf va)
+      | _ ->
+         Appl (f, a, mode))
+
+  | Pi _ ->
+     t
+
+
+let rec push_arguments
+          (nargs:int)
+          (tp:Term.typ)
+          (c:t)
+        : (t * Term.typ) option =
+  assert (0 <= nargs);
+  if nargs = 0 then
+    Some (c, tp)
+
+  else
+    match tp with
+    | Pi (tp, rt, info) ->
+       let name = Term.Pi_info.name info in
+       push_arguments
+         (nargs - 1)
+         rt
+         (push_local name tp c)
+
+    | _ ->
+       None
 
 
 
@@ -227,14 +368,28 @@ module Pretty (P:Pretty_printer.SIG) =
       Operator.t option * P.t
 
 
-    let rec pi_args
+    let rec split_lambda
+              (t: Term.t)
+              (c: t)
+            : (Lambda_info.t * Term.typ * t) list * Term.t * t =
+      match t with
+      | Lambda (tp, exp, info) ->
+         let lst, exp_inner, c_inner =
+           split_lambda exp (push_local (Lambda_info.name info) tp c)
+         in
+         (info, tp, c) :: lst, exp_inner, c_inner
+      | _ ->
+         [], t, c
+
+
+    let rec split_pi
               (t:Term.t)
               (c:t)
             : (string * Term.typ * t) list * Term.t * t =
       match t with
       | Pi (tp, t, info) when not (Pi_info.is_arrow info) ->
          let lst, t_inner, c_inner =
-           pi_args t (push_local (Pi_info.name info) tp c)
+           split_pi t (push_local (Pi_info.name info) tp c)
          in
          (Pi_info.name info, tp, c) :: lst, t_inner, c_inner
       | _ ->
@@ -288,7 +443,33 @@ module Pretty (P:Pretty_printer.SIG) =
         pr
 
 
+    let formal_arguments
+          (args: ('a * Term.typ * t) list)
+          (map: 'a -> string * bool)
+          (print: Term.t -> t -> P.t)
+        : P.t =
+      let open P in
+      let args =
+        List.map
+          (fun (a, tp, c) ->
+            let name, typed = map a in
+            if typed then
+              char '('
+              <+> string name
+              <+> string ": "
+              <+> print tp c
+              <+> char ')'
+            else
+              string name)
+          args
+      in
+      chain_separated args (group space)
+
+
     let rec print (t:Term.t) (c:t): pr_result =
+      let raw_print t c =
+        snd (print t c)
+      in
       let print_name_type name tp c =
         P.(char '('
            <+> (if name = "" then char '_' else string name)
@@ -351,6 +532,23 @@ module Pretty (P:Pretty_printer.SIG) =
       | Appl (_, _, _) ->
          assert false  (* nyi *)
 
+      | Lambda (tp, exp, info) ->
+         let arg_lst, exp_inner, c_inner =
+           split_lambda exp (push_local (Lambda_info.name info) tp c)
+         in
+         let args =
+           formal_arguments
+             ((info, tp, c) :: arg_lst)
+             Lambda_info.(fun info -> name info, is_typed info)
+             raw_print
+         and exp_inner = raw_print exp_inner c_inner
+         in
+         Some Operator.lambda,
+         P.(string "\\ "
+            <+> args
+            <+> string " := "
+            <+> exp_inner)
+
       | Pi (tp, rt, info) when Pi_info.is_arrow info ->
          let c_inner = push_local "_" tp c in
          let tp_data, tp_pr = print tp c
@@ -372,7 +570,7 @@ module Pretty (P:Pretty_printer.SIG) =
       | Pi (tp, t, info) ->
          let nme = Term.Pi_info.name info in
          let lst, t_inner, c_inner =
-           pi_args t (push_local nme tp c)
+           split_pi t (push_local nme tp c)
          in
          None,
          P.(chain [List.fold_left
@@ -397,120 +595,8 @@ module Pretty (P:Pretty_printer.SIG) =
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 let string_of_term (t:Term.t) (c:t): string =
   let module PP = Pretty_printer.Pretty (String_printer) in
   let module P = Pretty (PP) in
   String_printer.run
     (PP.run 0 80 80 (P.print t c))
-
-
-
-let type_of_term (t:Term.t) (c:t): Term.typ =
-  let rec typ t c =
-    let open Term in
-    match t with
-    | Sort Sort.Proposition ->
-       Sort (Sort.Any 0)
-
-    | Sort (Sort.Any i) ->
-       Sort (Sort.Any (i+1))
-
-    | Value v ->
-       (match v with
-        | Value.Int _ ->
-           Variable (index_of_level int_level c)
-
-        | Value.Char _ ->
-           Variable (index_of_level char_level c)
-
-        | Value.String _ ->
-         Variable (index_of_level string_level c)
-
-        | Value.Unary _ | Value.Binary _ ->
-           assert false (* Illegal call! *)
-       )
-    | Variable i ->
-       type_at_level (level_of_index i c) c
-
-    | Appl (f, a, _) ->
-       (match typ f c with
-        | Pi (_, rt, _) ->
-           apply rt a
-        | _ ->
-           assert false (* Illegal call! Term is not welltyped. *)
-       )
-
-    | Pi (tp, t, info) ->
-       let name = Pi_info.name info in
-       (match
-          typ tp c, typ t (push_local name tp c)
-        with
-        | Sort (Sort.Any i), Sort (Sort.Any j) ->
-           Sort (Sort.Any (max i j))
-        | _ ->
-           assert false (* nyi other product combinations. *)
-       )
-  in
-  typ t c
-
-
-
-let rec compute (t:Term.t) (c:t): Term.t =
-  let open Term in
-  match t with
-  | Sort _ ->
-     t
-  | Value _ ->
-     t
-  | Variable i ->
-     (match (entry (level_of_index i c) c).definition with
-      | No ->
-         t
-      | Builtin v ->
-         Term.Value v
-     )
-  | Appl (f, a, mode) ->
-     let a, f = compute a c, compute f c in
-     (match f, a with
-      | Value vf, Value va ->
-         Value (Value.apply vf va)
-      | _ ->
-         Appl (f, a, mode))
-
-  | Pi _ ->
-     t
-
-
-let rec push_arguments
-          (nargs:int)
-          (tp:Term.typ)
-          (c:t)
-        : (t * Term.typ) option =
-  assert (0 <= nargs);
-  if nargs = 0 then
-    Some (c, tp)
-
-  else
-    match tp with
-    | Pi (tp, rt, info) ->
-       let name = Term.Pi_info.name info in
-       push_arguments
-         (nargs - 1)
-         rt
-         (push_local name tp c)
-
-    | _ ->
-       None

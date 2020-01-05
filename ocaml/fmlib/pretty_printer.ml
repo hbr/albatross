@@ -34,6 +34,7 @@ module type SIG =
     val fill_paragraph: string -> t
     val (<+>): t -> t -> t
     val chain: t list -> t
+    val chain_separated: t list -> t -> t
   end
 
 
@@ -694,6 +695,18 @@ module Pretty (P:PRINTER) =
          return ()
       | hd :: tl ->
          hd >>= fun _ -> chain tl
+
+
+    let chain_separated (lst:t list) (sep:t): t =
+      let rec chn = function
+        | [] ->
+           empty
+        | [p] ->
+           p
+        | p :: tl ->
+           p <+> sep <+> chn tl
+      in
+      chn lst
 
 
     let group (m:t): t =

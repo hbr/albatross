@@ -106,12 +106,33 @@ module Sort =
   end
 
 
+module Lambda_info =
+  struct
+    type t = {
+        name:  string;    (* name of the argument *)
+        typed: bool;      (* false: user has not given type information for
+                             the argument '\ x: RT := exp' *)
+      }
+    let name (i:t): string =
+      i.name
 
+    let is_anonymous (i:t): bool =
+      i.name = "_"
+
+    let is_typed (i:t): bool =
+      i.typed
+
+    let typed (name: string): t =
+      {name; typed = true}
+
+    let untyped (name: string): t =
+      {name; typed = false}
+  end
 
 module Pi_info =
   struct
     type t = {
-        name: string;  (* name of the argument *)
+        name:  string; (* name of the argument *)
         arrow: bool;   (* user has written 'A -> B' instead of 'all (nme:A):
                           R' *)
         typed: bool    (* false, if user has given no type information 'all x:
@@ -155,7 +176,7 @@ type t =
 
   | Appl of t * t * appl
 
-  (*| Lam of typ * t*)
+  | Lambda of typ * t * Lambda_info.t
 
   | Pi of typ * typ * Pi_info.t
 
@@ -192,6 +213,11 @@ let up_from (delta:int) (start:int) (t:t): t =
 
     | Appl (f, a, mode) ->
        Appl (up f nb, up a nb, mode)
+
+    | Lambda (tp, exp, info) ->
+       Lambda (up tp nb,
+               up exp (nb + 1),
+               info)
 
     | Pi (tp, rt, info) ->
        Pi (up tp nb,
@@ -234,6 +260,11 @@ let down_from (delta:int) (start:int) (t:t): t option =
        down a nb >>= fun a ->
        Some (Appl (f, a , mode))
 
+    | Lambda (tp, exp, info ) ->
+       down tp nb >>= fun tp ->
+       down exp (nb + 1) >>= fun exp ->
+       Some (Lambda (tp, exp, info))
+
     | Pi (tp, t, info ) ->
        down tp nb >>= fun tp ->
        down t (nb + 1) >>= fun t ->
@@ -261,8 +292,11 @@ let substitute (f:int -> t) (t:t): t =
     | Appl (f, a, mode) ->
        Appl (sub f nb, sub a nb, mode)
 
-    | Pi (tp, t, info) ->
-       Pi (sub tp nb, sub t (nb + 1), info)
+    | Lambda (tp, exp, info) ->
+       Lambda (sub tp nb, sub exp (nb + 1), info)
+
+    | Pi (tp, rt, info) ->
+       Pi (sub tp nb, sub rt (nb + 1), info)
   in
   sub t 0
 
@@ -287,3 +321,30 @@ let rec application (f:t) (nargs:int) (mode:appl): t =
       (Appl (f, Variable (nargs - 1), mode))
       (nargs - 1)
       mode
+
+
+let fold_free_variables (s: 'a) (f: int -> 'a -> 'a) (t: t): 'a =
+  let rec fold s t nb =
+    match t with
+    | Value _ ->
+       s
+
+    | Sort _ ->
+       s
+
+    | Variable i when i < nb ->
+       s
+
+    | Variable i ->
+       f (i - nb) s
+
+    | Appl (f, a, _) ->
+       fold (fold s f nb) a nb
+
+    | Lambda (tp, exp, _) ->
+       fold (fold s tp nb) exp (nb + 1)
+
+    | Pi (tp, rt, _) ->
+       fold (fold s tp nb) rt (nb + 1)
+  in
+  fold s t 0

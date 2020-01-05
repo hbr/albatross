@@ -90,9 +90,8 @@ module type SIG =
     (** [chain list] Print the list of printers. *)
     val chain: t list -> t
 
-(*
-    (** [of_document d]: A pretty printer generated from the document [d]. *)
-    val of_document: Document.t -> t*)
+
+    val chain_separated: t list -> t -> t
   end
 
 

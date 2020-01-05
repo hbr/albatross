@@ -7,7 +7,13 @@ type leaning =
   | No
 
 
-(** Precedence/associativity of arrow "->" operator. *)
+(** Precedence/associativity of lambda_abstraction. *)
+val lambda: t
+
+(** Precedence/associativity of assignment ":=". *)
+val assign: t
+
+(** Precedence/associativity of arrow {"->", "=>"} operators. *)
 val arrow: t
 
 (** Precedence/associativity of colon ':' operator. *)

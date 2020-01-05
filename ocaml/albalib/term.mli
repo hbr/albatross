@@ -35,6 +35,18 @@ end
 
 
 
+module Lambda_info:
+sig
+  type t
+  val name:         t -> string
+  val is_anonymous: t -> bool
+  val is_typed:     t -> bool
+
+  val typed:   string -> t
+  val untyped: string -> t
+end
+
+
 module Pi_info:
 sig
   type t
@@ -61,7 +73,7 @@ type t =
 
   | Appl of t * t * appl
 
-  (*| Lam of typ * t*)
+  | Lambda of typ * t * Lambda_info.t
 
   | Pi of typ * typ * Pi_info.t
 
@@ -96,4 +108,15 @@ val substitute: (int -> t) -> t -> t
 
 val apply: t -> t -> t
 
+
+
+(** [application f n mode] returns
+
+       f (Var (n-1)) ... (Var 0)
+
+    where all applications are done with mode [mode].
+*)
 val application: t -> int -> appl -> t
+
+
+val fold_free_variables: 'a -> (int -> 'a -> 'a) -> t -> 'a
