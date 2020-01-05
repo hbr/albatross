@@ -181,6 +181,25 @@ let standard (): t =
        (binary_type string_level)
        (Builtin Term.Value.string_concat)
 
+  |> add_entry
+       (* List: Any -> Any *)
+       (Normal "List")
+       (Term.(Pi (any, any, Pi_info.arrow)), 0)
+       No
+
+  |> add_entry
+       (* (=) (A: Any): A -> A -> Proposition *)
+       (Binary_operator ("=", Operator.of_string "="))
+       (Term.(
+          Pi (any,
+              Pi ( Variable 0,
+                   (Pi (Variable 1,
+                        proposition,
+                        Pi_info.arrow)),
+                   Pi_info.arrow),
+              Pi_info.typed "A")),
+        0)
+       No
 
 
 
