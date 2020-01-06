@@ -489,14 +489,13 @@ module Make (Io:Io.SIG) =
                   cut
                 ]
 
-           | Parser.Problem.Unexpected_keyword (range, expect) ->
+           | Parser.Problem.Illegal_name (range, expect) ->
               chain
                 [ error_header "SYNTAX";
                   print_source src range;
                   cut;
                   fill_paragraph
-                    ("I did not expect to find a keyword. I was expecting "
-                     ^ expect);
+                    ("I was expecting " ^ expect);
                   cut
                 ]
          else

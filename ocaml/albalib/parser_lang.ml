@@ -31,7 +31,10 @@ module Expression = struct
     | Binary of t * operator located * t
     | Typed of t * t
     | Application of t * t list
-    | Function of string located list * t
+    | Function of
+        (string located * t option) list  (* args *)
+        * t option                        (* result type *)
+        * t                               (* defining expression *)
     | Parenthesized of t
 
 
@@ -126,7 +129,7 @@ module Problem =
           range
           * string * string (* the 2 operatos strings *)
 
-      | Unexpected_keyword of range * string (* expectation *)
+      | Illegal_name of range * string (* expectation *)
   end
 
 module P =
@@ -208,6 +211,19 @@ let identifier: string located t =
     "identifier"
 
 
+let formal_argument_name: string located t =
+  identifier >>= fun name_located ->
+  let name = Located.value name_located in
+  if String_set.mem name keywords
+     || name = "Proposition"
+     || name = "Any"
+  then
+    fail
+      (Problem.Illegal_name (Located.range name_located, "<argument name>"))
+  else
+    return name_located
+
+
 let number: string located t =
   word_ws
     Char.is_digit
@@ -228,7 +244,7 @@ let identifier_expression: Expression.t t =
     ))
     (identifier >>= fun s ->
      if String_set.mem (Located.value s) keywords then
-       fail (Problem.Unexpected_keyword (Located.range s, "<identifier>"))
+       fail (Problem.Illegal_name (Located.range s, "<identifier>"))
      else
        return s)
 
@@ -271,6 +287,19 @@ let literal_char: Expression.t t =
 
 
 
+let colon: unit t =
+  backtrackable
+    (char ':'
+     |. not_followed_by (char '=') "not '='")
+    "':'"
+
+
+let assign: unit t =
+  backtrackable
+    (string ":=")
+    "':='"
+
+
 let operator: Expression.operator Located.t t =
   let op_chars = "+-^*/=~<>" in
   let len = String.length op_chars in
@@ -287,7 +316,7 @@ let operator: Expression.operator Located.t t =
           (expect
              is_op_char
              "operator character")
-        <|> map (fun _ -> [':']) (char ':')
+        <|> map (fun _ -> [':']) colon
         <?> "operator or ':'"
        )
   |. whitespace
@@ -304,11 +333,24 @@ let lonely_operator: Expression.t t =
 let char_ws (c:char): unit t =
   char c |. whitespace
 
-let string_ws (s:string): unit t =
-  string s |. whitespace
-
 
 let rec expression (): Expression.t t =
+
+  let result_type: Expression.t option t =
+    optional
+      (colon |. whitespace >>= expression)
+  in
+
+  let formal_argument: (string located * Expression.t option) t =
+    (char_ws '(' >>= fun _ ->
+     formal_argument_name >>= fun name ->
+     colon |. whitespace >>= expression >>= fun typ ->
+     char_ws ')' >>= fun _ ->
+     return (name, Some typ)
+    )
+    <|> map (fun name -> name, None) formal_argument_name
+  in
+
   let primary (): Expression.t t =
     identifier_expression
     <|> number_expression
@@ -325,10 +367,11 @@ let rec expression (): Expression.t t =
            |. char_ws ')'
           )
     <|> located
-          (return (fun args exp -> Expression.Function (args, exp))
+          (return (fun args rt exp -> Expression.Function (args, rt, exp))
            |. char_ws '\\'
-           |= one_or_more identifier
-           |= (string_ws ":=" >>= fun _ -> expression ()))
+           |= one_or_more formal_argument
+           |= result_type
+           |= (assign |. whitespace >>= expression))
     <?> "expression"
   in
 
@@ -355,6 +398,7 @@ let rec expression (): Expression.t t =
     |= application
   in
 
+  (* expression parsing *)
   application >>= fun e1 ->
 
   zero_or_more operator_and_operand >>= fun lst ->

@@ -687,7 +687,7 @@ let rec build0
   | Application _ ->
      Error (Problem.Not_yet_implemented (range, "function application"))
 
-  | Function (_, _) ->
+  | Function (_, _, _) ->
      Error (Problem.Not_yet_implemented (range, "function expression"))
 
   | Parenthesized e ->

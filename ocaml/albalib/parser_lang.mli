@@ -24,7 +24,10 @@ sig
     | Binary of t * operator located * t
     | Typed of t * t
     | Application of t * t list
-    | Function of string located list * t
+    | Function of
+        (string located * t option) list  (* args *)
+        * t option                        (* result type *)
+        * t                               (* defining expression *)
     | Parenthesized of t
 end
 
@@ -38,7 +41,7 @@ sig
         range
         * string * string (* the 2 operatos strings *)
 
-      | Unexpected_keyword of range * string (* expectation *)
+      | Illegal_name of range * string (* expectation *)
 end
 
 
