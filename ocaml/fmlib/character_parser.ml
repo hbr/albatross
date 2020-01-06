@@ -895,6 +895,73 @@ let%test _ =
 
 
 
+(* Not Followed By *)
+(* *************** *)
+
+let%test _ =
+  let open UP in
+  let p =
+    run
+      (not_followed_by (string "abc") "not 'abc'")
+      "abc"
+  in
+  has_ended p
+  && column p = 0
+  && result p = None
+  && lookahead p = [Some 'a'; Some 'b'; Some 'c']
+
+
+
+let%test _ =
+  let open UP in
+  let p =
+    run
+      (not_followed_by (string "abc") "not 'abc'")
+      "abx"
+  in
+  has_ended p
+  && column p = 0
+  && result p = Some ()
+  && lookahead p = [Some 'a'; Some 'b'; Some 'x']
+
+
+let%test _ =
+  let open UP in
+  let p =
+    run
+      (backtrackable
+         (char ':'
+          |. not_followed_by (char '=') "not '='")
+         ":"
+      )
+      ":="
+  in
+  has_ended p
+  && column p = 0
+  && result p = None
+  && lookahead p = [Some ':'; Some '=']
+
+
+let%test _ =
+  let open UP in
+  let p =
+    run
+      (backtrackable
+         (char ':'
+          |. not_followed_by (char '=') "not '='")
+         ":"
+      )
+      ":"
+  in
+  has_ended p
+  && column p = 1
+  && result p = Some ()
+  && lookahead p = [None]
+
+
+
+
+
 
 
 (* Parser Pipelines *)

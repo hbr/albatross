@@ -81,6 +81,7 @@ module type COMBINATORS =
     type semantic
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
+    val unexpected: expect -> 'a t
     val fail:    semantic -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
@@ -88,6 +89,7 @@ module type COMBINATORS =
     val (<|>):   'a t -> 'a t -> 'a t
     val (<?>):   'a t -> expect -> 'a t
     val backtrackable: 'a t -> expect -> 'a t
+    val not_followed_by: 'a t -> expect -> unit t
 
     val optional: 'a t -> 'a option t
     val one_of:   'a t list -> 'a t
@@ -116,7 +118,7 @@ module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
         has_consumed: bool;
         error: error;
         la_ptr: int;          (* position of first lookahead token *)
-        buf_ptr: int option;  (* position where backtracking started *)
+        is_buffering: bool;
         toks: token array
       }
 
@@ -125,7 +127,7 @@ module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
        has_consumed = false;
        error = Error.init;
        la_ptr = 0;
-       buf_ptr = None;
+       is_buffering = false;
        toks = [||]}
 
     let state (b:t): state =
@@ -153,7 +155,7 @@ module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
       b.toks.(b.la_ptr)
 
     let push_token (t:token) (b:t): t =
-      if b.buf_ptr = None
+      if not b.is_buffering
          && b.la_ptr = count_toks b
       then
         {b with la_ptr = 0;
@@ -215,28 +217,27 @@ module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
 
 
     let start_backtrack (b:t): t =
-      {b with buf_ptr = Some b.la_ptr}
+      {b with is_buffering = true}
 
 
     let end_backtrack_success (b0:t) (b:t): t =
-      if b0.buf_ptr = None then
-        {b with buf_ptr = b0.buf_ptr;
-                toks = lookahead_toks b;
-                la_ptr = 0}
+      if b0.is_buffering then
+        b
       else
-        {b with buf_ptr = b0.buf_ptr}
+        {b with is_buffering = false;
+                toks = lookahead_toks b; (* only lookahead token *)
+                la_ptr = 0}
 
 
-    let end_backtrack_fail (e: Expect.t) (b0: t) (b: t): t =
-      match b.buf_ptr with
-      | None ->
-         assert false (* Cannot happen, must be backtracking i.e. buffering. *)
-      | Some buf_ptr ->
-         {b with state   = b0.state;
-                 has_consumed = b0.has_consumed;
-                 buf_ptr = b0.buf_ptr;
-                 la_ptr  = buf_ptr;
-                 error = Error.add_expected e b0.error}
+    let end_backtrack_fail (e: Expect.t option) (b0: t) (b: t): t =
+      {b0 with
+        toks = b.toks;
+        error =
+          match e with
+          | None ->
+             b0.error
+          | Some e ->
+             Error.add_expected e b0.error}
   end
 
 
@@ -365,6 +366,9 @@ module Make
       fun b k ->
       k None (B.put_error e b)
 
+    let unexpected (exp: expect): 'a t =
+      fun b k ->
+      k None (B.add_expected exp b)
 
     let token
           (f:state -> token -> ('a*state, Expect.t) result)
@@ -432,14 +436,26 @@ module Make
              k (Some a) (B.end_succeeded_alternatives b0 b))
 
 
-    let backtrackable (p:'a t) (e: Expect.t): 'a t =
+    let backtrackable (p: 'a t) (e: Expect.t): 'a t =
       fun b0 k ->
       p (B.start_backtrack b0)
         (fun res b ->
           k res
             (match res with
-            | None   -> B.end_backtrack_fail e b0 b
+            | None   -> B.end_backtrack_fail (Some e) b0 b
             | Some _ -> B.end_backtrack_success b0 b))
+
+
+    let not_followed_by (p: 'a t) (exp: expect): unit t =
+      fun b0 k ->
+      p (B.start_backtrack b0)
+        (fun res b ->
+          match res with
+          | None ->
+             k (Some ()) (B.end_backtrack_fail None b0 b)
+          | Some _ ->
+             k None (B.end_backtrack_fail (Some exp) b0 b))
+
 
 
 

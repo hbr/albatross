@@ -32,6 +32,7 @@ module type COMBINATORS =
     type semantic
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
+    val unexpected: expect -> 'a t
     val fail:    semantic -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
@@ -40,6 +41,7 @@ module type COMBINATORS =
     val (<?>):   'a t -> expect -> 'a t
     val backtrackable: 'a t -> expect -> 'a t
 
+    val not_followed_by: 'a t -> expect -> unit t
     val optional: 'a t -> 'a option t
     val one_of:   'a t list -> 'a t
     val zero_or_more: 'a t -> 'a list t
