@@ -13,7 +13,7 @@ val lambda: t
 (** Precedence/associativity of assignment ":=". *)
 val assign: t
 
-(** Precedence/associativity of arrow {"->", "=>"} operators. *)
+(** Precedence/associativity of arrow operators ["->", "=>"]. *)
 val arrow: t
 
 (** Precedence/associativity of colon ':' operator. *)

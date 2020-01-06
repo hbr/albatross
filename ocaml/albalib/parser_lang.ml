@@ -113,19 +113,6 @@ module Command =
 
 
 
-let command_names: string list =
-  ["type"; "evaluate"]
-
-
-let find_command (cmd: string): string list =
-  let len = String.length cmd in
-  List.filter
-    (fun candidate ->
-      len <= String.length candidate
-      && String.sub candidate 0 len = cmd)
-    command_names
-
-
 
 module Problem =
   struct
@@ -420,23 +407,44 @@ let rec expression (): Expression.t t =
      fail (Problem.Operator_precedence ((p0, p1), op1, op2))
 
 
+
+let commands: (string * Command.t t) list =
+  ["evaluate",
+   map (fun e -> Command.Evaluate e) (expression ());
+
+   "typecheck",
+   map (fun e -> Command.Type_check e) (expression ());
+  ]
+
+
+let find_command (cmd: string): (string * Command.t t) list =
+  List.filter
+    (fun (str, _) ->
+      String.is_prefix cmd str)
+  commands
+
+
+let command_names (cs: (string * Command.t t) list): string list =
+  List.map fst cs
+
+
 let command: Command.t t =
   (char ':' >>= fun _ ->
-   (identifier <?> "command") >>= fun cmd ->
-   expression () >>= fun exp ->
-   let str = Located.value cmd in
-   match find_command str with
+   (identifier <?> "command")
+
+   >>= fun cmd ->
+   match find_command (Located.value cmd) with
    | [] ->
-      fail (Problem.Illegal_command (Located.range cmd, command_names))
-   | [cmd_long] ->
-      if cmd_long = "evaluate" then
-        return (Command.Evaluate exp)
-      else if cmd_long = "type" then
-        return (Command.Type_check exp)
-      else
-        assert false
+      fail
+        (Problem.Illegal_command (Located.range cmd, command_names commands))
+
+   | [_, arg_parser] ->
+      arg_parser
+
    | lst ->
-      fail (Problem.Ambiguous_command (Located.range cmd, lst))
+      fail
+        (Problem.Ambiguous_command
+           (Located.range cmd, command_names lst))
   )
   <|> (return
          (fun exp ->
