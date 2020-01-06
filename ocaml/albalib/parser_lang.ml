@@ -100,25 +100,30 @@ end
 
 
 
-module Final =
-  struct
-    type t = Expression.t option
-  end
 
 
-
-
-
-
-module Context_msg =
+module Command =
   struct
     type t =
-      | Operand
+      | Evaluate of Expression.t
+      | Type_check of Expression.t
+      | Do_nothing
   end
 
 
 
 
+let command_names: string list =
+  ["type"; "evaluate"]
+
+
+let find_command (cmd: string): string list =
+  let len = String.length cmd in
+  List.filter
+    (fun candidate ->
+      len <= String.length candidate
+      && String.sub candidate 0 len = cmd)
+    command_names
 
 
 
@@ -130,10 +135,14 @@ module Problem =
           * string * string (* the 2 operatos strings *)
 
       | Illegal_name of range * string (* expectation *)
+
+      | Illegal_command of range * string list
+
+      | Ambiguous_command of range * string list
   end
 
 module P =
-  Character_parser.Advanced (Unit) (Final) (String) (Problem) (Context_msg)
+  Character_parser.Advanced (Unit) (Command) (String) (Problem) (String)
 include P
 
 
@@ -411,10 +420,34 @@ let rec expression (): Expression.t t =
      fail (Problem.Operator_precedence ((p0, p1), op1, op2))
 
 
+let command: Command.t t =
+  (char ':' >>= fun _ ->
+   (identifier <?> "command") >>= fun cmd ->
+   expression () >>= fun exp ->
+   let str = Located.value cmd in
+   match find_command str with
+   | [] ->
+      fail (Problem.Illegal_command (Located.range cmd, command_names))
+   | [cmd_long] ->
+      if cmd_long = "evaluate" then
+        return (Command.Evaluate exp)
+      else if cmd_long = "type" then
+        return (Command.Type_check exp)
+      else
+        assert false
+   | lst ->
+      fail (Problem.Ambiguous_command (Located.range cmd, lst))
+  )
+  <|> (return
+         (fun exp ->
+           match exp with
+           | None ->
+              Command.Do_nothing
+           | Some exp ->
+              Command.Evaluate exp)
+       |. whitespace
+       |= optional (expression ()))
+
+
 let initial: parser =
-  make
-    (return identity
-     |. whitespace
-     |= optional @@ expression ()
-     |. expect_end "end of command")
-    ()
+  make (command |. expect_end "end of command") ()

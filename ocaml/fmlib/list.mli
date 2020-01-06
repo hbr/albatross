@@ -56,6 +56,8 @@ val rev_append: 'a list -> 'a list -> 'a list
 
 val length: 'a t -> int
 
+val filter: ('a -> bool) -> 'a t -> 'a t
+
 val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
 
 val fold_right: ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b

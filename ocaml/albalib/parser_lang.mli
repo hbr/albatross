@@ -41,16 +41,24 @@ sig
         range
         * string * string (* the 2 operatos strings *)
 
-      | Illegal_name of range * string (* expectation *)
+    | Illegal_name of range * string (* expectation *)
+
+    | Illegal_command of range * string list
+
+    | Ambiguous_command of range * string list
 end
 
 
 
-module Context_msg:
+
+module Command:
 sig
   type t =
-    | Operand
+    | Evaluate of Expression.t
+    | Type_check of Expression.t
+    | Do_nothing
 end
+
 
 
 module Error: Generic_parser.ERROR with type expect = string
@@ -66,7 +74,7 @@ val initial:    parser
 val put_char: parser -> char -> parser
 val put_end:  parser -> parser
 
-val result: parser -> Expression.t option option
+val result: parser -> Command.t option
 val error:  parser -> Error.t
 val line: parser -> int
 val column: parser -> int

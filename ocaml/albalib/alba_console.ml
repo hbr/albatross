@@ -370,7 +370,9 @@ module Make (Io:Io.SIG) =
 
 
     let build_and_compute
-          (src:string) (e:Parser.Expression.t)
+          (src:string)
+          (e:Parser.Expression.t)
+          (compute: bool)
         : Pretty.t
       =
       let std_context = Context.standard () in
@@ -455,7 +457,12 @@ module Make (Io:Io.SIG) =
           paragraphs
             (List.map
                (fun (t,tp) ->
-                 let t = Context.compute t std_context in
+                 let t =
+                   if compute then
+                     Context.compute t std_context
+                   else
+                     t
+                 in
                  let module P = Context.Pretty (Pretty) in
                  P.print t std_context
                  <+> string ": "
@@ -469,11 +476,14 @@ module Make (Io:Io.SIG) =
     let eval_expression (p:Parser.parser) (src:string): Pretty.t =
       assert (Parser.has_ended p);
       match Parser.result p with
-      | Some None ->
+      | Some Parser.Command.Do_nothing ->
          Pretty.empty
 
-      | Some (Some e) ->
-         build_and_compute src e
+      | Some (Parser.Command.Evaluate e) ->
+         build_and_compute src e true
+
+      | Some (Parser.Command.Type_check e) ->
+         build_and_compute src e false
 
       | None ->
          let open Pretty in
@@ -496,6 +506,23 @@ module Make (Io:Io.SIG) =
                   cut;
                   fill_paragraph
                     ("I was expecting " ^ expect);
+                  cut
+                ]
+
+           | Parser.Problem.Illegal_command (range, _) ->
+              chain
+                [ error_header "SYNTAX";
+                  print_source src range;
+                  cut;
+                  string "Illegal command";
+                  cut
+                ]
+           | Parser.Problem.Ambiguous_command (range, _) ->
+              chain
+                [ error_header "SYNTAX";
+                  print_source src range;
+                  cut;
+                  string "Ambiguous command";
                   cut
                 ]
          else
