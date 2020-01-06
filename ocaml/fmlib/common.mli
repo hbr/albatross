@@ -62,6 +62,13 @@ end
 module String:
 sig
   type t = string
+
+  val is_prefix: t -> t -> bool
+  (** [is_prefix a b] Is [a] a prefix of [b]? *)
+
+  val is_suffix: t -> t -> bool
+  (** [is_suffix a b] Is [a] a suffix of [b]? *)
+
   val compare: t -> t -> int
   val one: char -> t
   val find: (char -> bool) -> int -> t -> int

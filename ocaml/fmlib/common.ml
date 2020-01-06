@@ -65,6 +65,17 @@ module String =
     let one (c:char): string =
       String.make 1 c
 
+    let is_prefix (a: string) (b:string): bool =
+      let len_a = length a in
+      len_a <= length b && a = sub b 0 len_a
+
+    let is_suffix (a: string) (b:string): bool =
+      let len_a = length a
+      and len_b = length b
+      in
+      len_a <= len_b
+      && a = sub b  (len_b - len_a) len_a
+
     let find (f:char -> bool) (start:int) (s:string): int =
       let len = String.length s in
       let rec find i =
