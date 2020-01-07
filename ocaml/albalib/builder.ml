@@ -1,3 +1,43 @@
+(* Term building function
+
+   Input: syntactic term + context
+
+   Output: list of (term, type) pairs or an error message.
+
+   Examples:
+
+      3 + 5: Int, 3 + 5: Natural, ...
+
+      "h": String
+
+      'c': Character
+
+      List: Any -> Any
+
+      []: all (A: Any): List A
+
+      (^): all (A: Any): A -> List A -> List A
+
+      identity: all (A: Any): A -> A
+
+   We reject all terms with bound variables where the type of the bound
+   variables cannot be inferred.
+
+   Example:
+
+      \ a b := a = b
+
+      Must be rejected, because (=) has the type
+
+         all (A: Any): A -> A -> Proposition
+
+   The term \ (a:Int) b := a = b is accepted.
+ *)
+
+
+
+
+
 (* Principles of Term Building
 
    Each (sub)term gets a placeholder which represents the term.
@@ -8,21 +48,77 @@
    If the type of any (sub)term / bound variable is known, its placeholder for
    the type gets an immediate substitution.
 
-   Internal builder function
+   Internal builder function:
 
- *)(*
-      build (exp: Parser.Expression.t)
-            (nargs: int)
-            (ptr: int)
-            (c: Gamma_sub.t)
-            : args * Gamma_sub.t
-    *)
+   Input:
 
-(* Because of the ambiguities we have to work with list of pairs (ptr,c) as
-   input and list of pairs (ptr_arr,c) as output.
+   - syntactic expression to be built
 
+   - number of explicit arguments to which the expression is applied
+
+   - name map to find the index / indices of names
+
+   - list of pairs (ptr, substitution gamma) where ptr points to the
+   placeholder representing the term to be constructed.
+
+   Output:
+
+   - list of pairs (ptr array, substitution gamma) where the pointer array
+   points to the placeholders for the explicit arguments
+
+   - or an error indication
 
  *)
+
+
+(* Possible Errors:
+
+   - A number is to large or to small to be represented by a number type.
+
+   - A function or operator name cannot be found in the name map.
+
+   - The types of all constructed terms, before applying them to the
+   arguments, are not function types with enough arguments.
+
+   - The types of all constructed terms, after applying them to the arguments,
+   are not unifiable with the expected result type.
+ *)
+
+(*
+    I was expecting a term which returns after application to n arguments a
+    value of one of the types
+
+        R1, R2, ....
+
+    but the term has one of the types
+
+        f _ _ _ :T1, f _ _ _ :T2, ...
+
+
+    I was expecting a term which returns after application to n arguments a
+    certain type. But none of the following combinations work:
+
+       Return type:    R1
+       Term type:      all (x:A) (y:B) ... : T1
+
+       Return type:    R2
+       Term type:      all (x:A) (y:B) ... : T2
+
+       ...
+
+       or
+       Return type:    R3
+       Term            f _ _ _ _ : T3
+
+
+    I was expecting a function which can accept n arguments, but the term has
+    the types
+
+        T1, T2,  ...
+
+ *)
+
+
 
 
 (* Identifier or operator
@@ -55,9 +151,9 @@
    where n <= k and k include all implicit arguments which occur before the n
    explicit arguments.
 
-   Compare Rk with the required type R. If R is not an implicit nor an
-   explicit placeholder and starts with more implicit arguments as Rk we the
-   difference from Rk to get
+   Compare Rk with the required type R. If R is not a placeholder and starts
+   with fewer implicit arguments than Rk we extract the difference from Rk to
+   get
 
      all (x1:A1) ... (xk:Ak) ... (xm:Am): Rm
 
@@ -151,33 +247,19 @@ module Located =
 
 
 
-
-(* Signature of a type T
-
-   Has the form
-
-     all (x1:A1) (x2:A2) ... (xn:An): R
-
-   where R is in key normal form not starting with "all ... " and n can be
-   zero.
-
-   R is either Any, Proposition or something else. In the first 2 cases the
-   type T reduces to a kind i.e. an expression of type T is a type
-   constructor.
-
-   If R = Proposition, then any expression of type T is a proposition.
-
-*)
-module Signature:
-sig
-  type t
-end =
+module Signature =
   struct
     type t = unit
+
+    let count_explicit_args (_: t): int =
+      assert false (* nyi *)
+
+    let count_first_implicits (_: t): int =
+      assert false (* nyi *)
+
+    let typ (_: t): Term.typ =
+      assert false (* nyi *)
   end
-
-
-
 
 
 
@@ -208,8 +290,13 @@ module GSub =
       Term.bruijn_convert i (count c)
 
 
-    let signature_of_type (_: Term.typ) (_:t): Signature.t =
-      assert false (* nyi *)
+    let type_of_term (t: Term.t) (c: t): Term.typ =
+      Gamma.type_of_term t c.gamma
+
+    let type_at_level (i: int) (c:t): Term.typ =
+      Gamma.type_at_level i c.gamma
+
+
 
     let push_substitutable (typ: Term.typ) (c:t): t =
       let name = "<" ^ string_of_int (count c) ^ ">" in
@@ -344,11 +431,11 @@ module GSub =
 
 
 
-    (* [unify t u c] unifies the term [t] with the term [u] and generates
-       substitutions such that [t] and [u] with the substitutions applied are
-       equivalent terms. Return a new context containing new substitutions if
-       the terms are unifiable, otherwise return [None]. *)
     let unify (t:Term.t) (u:Term.t) (c:t): t option =
+      (* [unify t u c] unifies the term [t] with the term [u] and generates
+         substitutions such that [t] and [u] with the substitutions applied
+         are equivalent terms. Return a new context containing new
+         substitutions if the terms are unifiable, otherwise return [None]. *)
       let rec unify t u exact c =
         let n_subs = Array.length c.substitutions
         in
@@ -392,6 +479,53 @@ module GSub =
       in
       unify t u true c
 
+
+
+    let signature (_: Term.typ) (_: t): Signature.t =
+      assert false (* nyi *)
+
+    let push_explicits
+          (_: int) (_: Term.t) (_: Signature.t) (_: t)
+        : Term.t * Signature.t * t * int array
+      =
+      assert false (* nyi *)
+
+    let push_implicits
+          (_: int) (_: Term.t) (_: Signature.t) (_: t)
+        : Term.t * Signature.t * t
+      =
+      assert false (* nyi *)
+
+
+    let push_argument_placeholders
+          (nargs: int)
+          (term: Term.t)    (* valid in the context of [act_sign] *)
+          (act_sign: Signature.t)
+          (req_sign: Signature.t)
+          (c: t)
+        : Term.t * Signature.t * int array * t
+      (* The returned term is valid in the returned context *)
+      =
+      let term, act_sign, c, ptr_array =
+        push_explicits nargs term act_sign c
+      in
+      let term, act_sign, c =
+        let n_req = Signature.count_first_implicits req_sign
+        and n_act = Signature.count_first_implicits act_sign
+        in
+        if n_act > n_req then
+          push_implicits (n_act - n_req) term act_sign c
+        else
+          term, act_sign, c
+      in
+      term, act_sign, ptr_array, c
+
+
+
+
+    let unify_signatures (_: Signature.t) (_: Signature.t) (_: t): t option =
+      assert false (* nyi *)
+
   end (* GSub *)
 
 
@@ -402,7 +536,209 @@ module GSub =
 
 
 
+(***************** New Builder ******************************************)
 
+type typ = Term.typ * Gamma.t
+
+module Problem2 =
+  struct
+    type t =
+      | Not_enough_args of range * int * typ list
+      | None_conforms of range * int * typ list * typ list
+  end
+
+
+module Build_context =
+  struct
+    type t = {
+        names: Context.Name_map.t;
+        base:  Gamma.t;
+        nargs: int;
+        contexts:  (GSub.t * int * int array) list;
+      }
+
+    let make (c:Context.t): t =
+      let cnt = Context.count c in
+      {names = Context.name_map c;
+       base  = Context.gamma c;
+       nargs = 0;
+       contexts  =
+         [GSub.(Context.gamma c
+                |> make
+                |> push_substitutable (Term.Sort (Term.Sort.Any 2))
+                |> push_substitutable (Term.Variable 0)),
+          cnt + 1,
+          [||] ]}
+
+
+    let required_types (c: t): typ list =
+      List.map
+        (fun (gam, ptr, _ ) -> GSub.(type_at_level ptr gam, gamma gam))
+        c.contexts
+
+    let unify_base_candidates
+          (range: range)
+          (candidates: (Term.t * Signature.t) list)
+          (c: t)
+        : (t, Problem2.t) result
+      =
+      let contexts =
+        List.(
+          c.contexts >>= fun (gam, ptr, _) ->
+          let req_sign =
+            GSub.(signature (type_at_level ptr gam) gam)
+          in
+          candidates >>= fun (term, act_sign) ->
+          let term, act_sign, ptr_array, gam =
+            GSub.push_argument_placeholders
+              c.nargs term act_sign req_sign gam
+          in
+          match
+            GSub.unify_signatures act_sign req_sign gam
+          with
+          | None ->
+             []
+          | Some gam ->
+             let gam =
+               GSub.substitute_at_level ptr term gam
+             in
+             [gam, ptr, ptr_array]
+        )
+      in
+      if contexts = [] then
+        Error
+          (Problem2.None_conforms
+             (range,
+              c.nargs,
+              required_types c,
+              List.map
+                (fun (_,sign) -> Signature.typ sign, c.base)
+                candidates))
+      else
+        Ok {c with contexts}
+
+
+
+
+    let check_base_terms
+          (range: range) (terms: Term.t list) (c: t)
+        : (t, Problem2.t) result
+      =
+      let base = GSub.make c.base
+      in
+      let candidates =
+        List.map_and_filter
+          (fun t ->
+            let s  =
+              GSub.(signature (type_of_term t base) base) in
+            let n  = Signature.count_explicit_args s in
+            if n < c.nargs then
+              None
+            else
+              Some (t, s))
+          terms
+      in
+      if candidates = [] then
+        let tps =
+          List.map (fun t -> Gamma.type_of_term t c.base, c.base) terms
+        in
+        Error
+          (Problem2.Not_enough_args (range, c.nargs, tps))
+      else
+        unify_base_candidates range candidates c
+
+
+    let proposition (range: range) (c: t): (t, Problem2.t) result
+      =
+      check_base_terms
+        range
+        [Term.proposition]
+        c
+
+    let any (range: range) (c: t): (t, Problem2.t) result =
+      check_base_terms
+        range
+        [Term.any]
+        c
+
+    let name (_: range) (_: string) (_:t): (t, Problem2.t) result =
+      assert false (* nyi *)
+  end (* Build_context *)
+
+
+
+
+
+
+
+
+
+
+let rec build0_new
+      (exp:Parser.Expression.t)
+      (nargs: int)
+      (c: Build_context.t)
+    : (Build_context.t, Problem2.t) result
+  =
+  let open Parser.Expression
+  in
+  let range = Located.range exp
+  in
+  match Located.value exp with
+  | Proposition ->
+     Build_context.proposition range c
+
+  | Any ->
+     Build_context.any range c
+
+  | Identifier name | Operator (name, _) ->
+     Build_context.name range name c
+
+  | Number _ ->
+     assert false (* nyi *)
+
+  | Char _ ->
+     assert false (* nyi *)
+
+  | String _ ->
+     assert false (* nyi *)
+
+  | Binary (_, _, _) ->
+     assert false (* nyi *)
+
+  | Typed (_, _) ->
+     assert false (* nyi *)
+
+  | Application (_, _) ->
+     assert false (* nyi *)
+
+  | Function (_, _, _) ->
+     assert false (* nyi *)
+
+  | Parenthesized exp ->
+     build0_new exp nargs c
+
+
+
+
+let build_new
+      (exp:Parser.Expression.t)
+      (c:Context.t)
+    : (Build_context.t, Problem2.t) result
+  =
+  build0_new exp 0 (Build_context.make c)
+
+let _ = build_new
+
+
+
+
+
+
+
+
+
+(***************** Old Builder ******************************************)
 
 type required =
   GSub.t     (* Context with placeholders with required types *)
@@ -422,16 +758,6 @@ type actual =
                  are used instead of the arguments because the arguments are
                  not yet built.  *)
 
-
-(* Problems:
-
-   Function expression:
-
-   - More actual arguments than formal arguments.
-
-   - Required type is not a function type with sufficient arguments.
-
- *)
 
 
 module Problem =
