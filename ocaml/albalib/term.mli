@@ -71,6 +71,8 @@ type t =
 
   | Variable of int
 
+  | Typed of t * typ
+
   | Appl of t * t * appl
 
   | Lambda of typ * t * Lambda_info.t
@@ -86,7 +88,7 @@ val proposition: t
 val any: t
 val char:   int -> t
 val string: string -> t
-
+val number_values: string -> t list
 
 (** [up_from delta start t] *)
 val up_from: int -> int -> t -> t

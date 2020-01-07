@@ -250,8 +250,13 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
         | Value.Unary _ | Value.Binary _ ->
            assert false (* Illegal call! *)
        )
+
     | Variable i ->
        type_at_level (level_of_index i c) c
+
+
+    | Typed (_, tp) ->
+       tp
 
     | Appl (f, a, _) ->
        (match typ f c with
@@ -303,8 +308,8 @@ let rec compute (t:Term.t) (c:t): Term.t =
          def
      )
 
-  | Lambda _ ->
-     t
+  | Typed (e, _ ) ->
+     compute e c
 
   | Appl (Lambda (_, exp, _ ), a, _) ->
      compute (Term.apply exp a) c
@@ -316,6 +321,9 @@ let rec compute (t:Term.t) (c:t): Term.t =
          Value (Value.apply vf va)
       | _ ->
          Appl (f, a, mode))
+
+  | Lambda _ ->
+     t
 
   | Pi _ ->
      t
@@ -367,6 +375,9 @@ module Pretty (P:Pretty_printer.SIG) =
     type pr_result =
       Operator.t option * P.t
 
+    type print0 = Term.t -> t -> P.t
+
+    type print  = Term.t -> t -> pr_result
 
     let rec split_lambda
               (t: Term.t)
@@ -443,10 +454,22 @@ module Pretty (P:Pretty_printer.SIG) =
         pr
 
 
+    let two_operands
+          (a: Term.t) (b:Term.t) (upper: Operator.t)
+          (print: print)
+          (c:t)
+        : P.t * P.t =
+      let a_data, a_pr = print a c
+      and b_data, b_pr = print b c in
+      parenthesize a_pr a_data true upper,
+      parenthesize b_pr b_data false upper
+
+
+
     let formal_arguments
           (args: ('a * Term.typ * t) list)
           (map: 'a -> string * bool)
-          (print: Term.t -> t -> P.t)
+          (print: print0)
         : P.t =
       let open P in
       let args =
@@ -494,17 +517,15 @@ module Pretty (P:Pretty_printer.SIG) =
             else
               "<invalid>")
 
+      | Typed (e, tp) ->
+         let e_pr, tp_pr = two_operands e tp Operator.colon print c in
+         Some Operator.colon,
+         P.(group (chain [e_pr; char ':'; space; tp_pr]))
+
       | Appl ( Appl (op, a, Binary), b, _ ) ->
          (* a op b *)
-         let a_data, a_pr = print a c
-         and b_data, b_pr = print b c
-         and op_str, op_data =
-           operator_data op c
-         in
-         let a_pr =
-           parenthesize a_pr a_data true op_data
-         and b_pr =
-           parenthesize b_pr b_data false op_data
+         let op_str, op_data = operator_data op c in
+         let a_pr, b_pr = two_operands a b op_data print c
          in
          Some op_data,
          P.(chain [a_pr;

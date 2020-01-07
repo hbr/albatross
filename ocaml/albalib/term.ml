@@ -16,7 +16,7 @@ module Value =
       | Binary of (t -> t -> t)
 
 
-    let int_value str =
+    let int_value (str: string): t option =
       let len = String.length str
       in
       let rec value i v =
@@ -174,6 +174,8 @@ type t =
 
   | Variable of int
 
+  | Typed of t * typ
+
   | Appl of t * t * appl
 
   | Lambda of typ * t * Lambda_info.t
@@ -199,6 +201,9 @@ let string (s:string): t =
   Value (Value.String s)
 
 
+let number_values (s:string): t list =
+  List.map (fun v -> Value v) (Value.number_values s)
+
 let up_from (delta:int) (start:int) (t:t): t =
   let rec up t nb =
     match t with
@@ -210,6 +215,9 @@ let up_from (delta:int) (start:int) (t:t): t =
 
     | Variable i ->
        Variable (i + delta)
+
+    | Typed (e, tp) ->
+       Typed (up e nb, up tp nb)
 
     | Appl (f, a, mode) ->
        Appl (up f nb, up a nb, mode)
@@ -255,6 +263,11 @@ let down_from (delta:int) (start:int) (t:t): t option =
     | Variable i ->
        Some (Variable (i - delta))
 
+    | Typed (e, tp) ->
+       down e nb  >>= fun e ->
+       down tp nb >>= fun tp ->
+       Some (Typed (e, tp))
+
     | Appl (f, a, mode) ->
        down f nb >>= fun f ->
        down a nb >>= fun a ->
@@ -288,6 +301,9 @@ let substitute (f:int -> t) (t:t): t =
 
     | Variable i ->
        up nb (f @@ i - nb)
+
+    | Typed (e, tp) ->
+       Typed (sub e nb, sub tp nb)
 
     | Appl (f, a, mode) ->
        Appl (sub f nb, sub a nb, mode)
@@ -337,6 +353,9 @@ let fold_free_variables (s: 'a) (f: int -> 'a -> 'a) (t: t): 'a =
 
     | Variable i ->
        f (i - nb) s
+
+    | Typed (e, tp) ->
+       fold (fold s e nb) tp nb
 
     | Appl (f, a, _) ->
        fold (fold s f nb) a nb
