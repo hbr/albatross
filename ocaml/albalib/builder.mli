@@ -7,6 +7,28 @@ open Fmlib
 type pos = Character_parser.Position.t
 type range = pos * pos
 
+
+(* new builder *)
+type required_type
+type candidate_type
+
+type problem =
+  | Overflow of range
+  | No_name of range
+  | Not_enough_args of range * int * candidate_type list
+  | None_conforms of range * int * required_type list * candidate_type list
+
+
+val build_new: Parser_lang.Expression.t
+               -> Context.t
+               -> ((Term.t * Term.typ) list, problem) result
+
+
+
+
+
+
+
 type required
 type actual
 

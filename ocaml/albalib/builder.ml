@@ -247,21 +247,6 @@ module Located =
 
 
 
-module Signature =
-  struct
-    type t = unit
-
-    let count_explicit_args (_: t): int =
-      assert false (* nyi *)
-
-    let count_first_implicits (_: t): int =
-      assert false (* nyi *)
-
-    let typ (_: t): Term.typ =
-      assert false (* nyi *)
-  end
-
-
 
 
 module GSub =
@@ -542,11 +527,131 @@ module GSub =
 
 type typ = Term.typ * Gamma.t
 
+type required_type = typ
+type candidate_type = typ
+
+
 type problem =
   | Overflow of range
   | No_name of range
-  | Not_enough_args of range * int * typ list
-  | None_conforms of range * int * typ list * typ list
+  | Not_enough_args of range * int * candidate_type list
+  | None_conforms of range * int * required_type list * candidate_type list
+
+
+module Required =
+  struct
+    type t = {
+        stack: int list;
+        gamma:  GSub.t
+      }
+
+    let base (c: t): GSub.t =
+      c.gamma
+
+
+    let top (c: t): int =
+      match c.stack with
+      | h :: _ ->
+         h
+      | _ ->
+         assert false (* Illegal call! *)
+
+
+    let top_type (c:t): Term.typ =
+      GSub.type_at_level (top c) c.gamma
+
+
+    let count (c: t): int =
+      GSub.count c.gamma
+
+
+    let make (gamma: GSub.t): t =
+      {gamma =
+         GSub.(gamma
+               |> push_substitutable (Term.Sort (Term.Sort.Any 2))
+               |> push_substitutable (Term.Variable 0));
+       stack = [GSub.count gamma + 1]}
+
+
+    let unify_candidate
+          (c: t)
+          (term: Term.t)      (* Valid in the same context as [act_sign] *)
+          (act_sign: Signature.t)
+          (nargs: int)        (* [term] has to be applied to [nargs] arguments *)
+        : t option
+      =
+      (* before: stack = ptr rest
+
+         after: stack = arg1 ... argn ptr rest
+
+            ptr substituted *)
+      let ptr = top c
+      in
+      let req_sign = GSub.(signature (type_at_level ptr c.gamma) c.gamma)
+      in
+      let term, act_sign, ptrs_rev, gsub =
+        GSub.push_argument_placeholders
+          nargs
+          term
+          act_sign
+          req_sign
+          c.gamma
+      in
+      let open Option in
+      let open GSub in
+      unify_signatures act_sign req_sign gsub >>= fun gsub ->
+      Some
+        {gamma =
+         substitute_at_level ptr term gsub;
+         stack =
+           List.rev_append ptrs_rev c.stack}
+
+
+    let start_typed_term (c: t): t =
+      let ptr = top c
+      and cnt = count c
+      in
+      let sort =
+        GSub.(type_of_term (type_at_level ptr c.gamma) c.gamma) in
+      let gam = GSub.push_substitutable sort c.gamma in
+      let gam = GSub.push_substitutable (Term.Variable 0) gam in
+      {gamma =
+         GSub.substitute_at_level
+           ptr
+           Term.(Typed (Variable 0, Variable 1)) gam;
+       stack = cnt + 1 :: cnt :: c.stack}
+
+
+    let unify_typed_term (_: t): t option =
+      (* A typed term is an expression of the form [exp_inner: tp]. Its
+         placeholder at [exp] is not yet substituted.
+
+         stack: tp exp_inner exp ...
+
+         - unify the type at [tp] with the required type of the placeholder
+         [exp].
+
+         - substitute [exp] by [Typed (exp_inner, tp)]
+
+         - pop tp
+
+         stack: exp_inner exp ...
+
+       *)
+      assert false (* nyi *)
+
+
+    let end_typed_term (_: t): t =
+      (* typed term [exp_inner: tp]
+
+         stack: exp_inner exp ...
+
+         - pop exp_inner
+
+         stack: exp ...
+       *)
+      assert false (* nyi *)
+  end
 
 
 
@@ -557,56 +662,31 @@ module Build_context =
     module Name_map = Context.Name_map
     module Result = Monad.Result (struct type t = problem end)
 
-    type context = GSub.t * int list
-
     type t = {
         names: Name_map.t;
         base:  Gamma.t;
         nargs: int;
-        contexts:  context list;
+        reqs:  Required.t list;
       }
 
     let make (c:Context.t): t =
-      let cnt = Context.count c in
       {names = Context.name_map c;
        base  = Context.gamma c;
        nargs = 0;
-       contexts  =
-         [GSub.(Context.gamma c
-                |> make
-                |> push_substitutable (Term.Sort (Term.Sort.Any 2))
-                |> push_substitutable (Term.Variable 0)),
-          [cnt + 1] ]}
+       reqs  = [Required.make (GSub.make (Context.gamma c))]}
 
 
-    let head (stack: int list): int =
-      match stack with
-      | h :: _ ->
-         h
-      | _ ->
-         assert false (* Illegal call! *)
 
-
-    let pop (stack: int list): int * int list =
-      match stack with
-      | h :: stack ->
-         h, stack
-      | _ ->
-         assert false (* Illegal call! *)
-
-    let pop_and_push (top: int list) (stack: int list): int list =
-      match stack with
-      | _ :: stack ->
-         List.rev_append top stack
-      | _ ->
-         assert false (* Illegal call! *)
-
+    let pop_top (_: t): t =
+      assert false (* nyi *)
 
     let required_types (c: t): typ list =
       List.map
-        (fun (gam, stack) ->
-          GSub.(type_at_level (head stack) gam, base gam))
-        c.contexts
+        (fun req ->
+          Required.top_type req,
+          GSub.base (Required.base req)
+        )
+        c.reqs
 
 
     let unify_base_candidates
@@ -615,32 +695,15 @@ module Build_context =
           (c: t)
         : (t, problem) result
       =
-      let contexts =
+      let reqs =
         List.(
-          c.contexts >>= fun (gam, stack) ->
-          let ptr = head stack
-          in
-          let req_sign =
-            GSub.(signature (type_at_level ptr gam) gam)
-          in
+          c.reqs >>= fun req ->
+          let uni = Required.unify_candidate req in
           candidates >>= fun (term, act_sign) ->
-          let term, act_sign, ptrs_rev, gam =
-            GSub.push_argument_placeholders
-              c.nargs term act_sign req_sign gam
-          in
-          match
-            GSub.unify_signatures act_sign req_sign gam
-          with
-          | None ->
-             []
-          | Some gam ->
-             let gam =
-               GSub.substitute_at_level ptr term gam
-             in
-             [gam, pop_and_push ptrs_rev stack]
+          Option.to_list (uni term act_sign c.nargs)
         )
       in
-      if contexts = [] then
+      if reqs = [] then
         Error
           (None_conforms
              (range,
@@ -650,7 +713,7 @@ module Build_context =
                 (fun (_,sign) -> Signature.typ sign, c.base)
                 candidates))
       else
-        Ok {c with contexts}
+        Ok {c with reqs}
 
 
 
@@ -742,12 +805,43 @@ module Build_context =
         [Term.char code]
         c
 
+
+    let start_typed_term (c: t): t =
+      {c with
+        reqs =
+          List.map Required.start_typed_term c.reqs
+      }
+
+
+    let unify_typed_term (c: t): (t, problem) result =
+      match
+        List.map_and_filter Required.unify_typed_term c.reqs
+      with
+      | [] ->
+         assert false (* nyi error message *)
+      | reqs ->
+         Ok {c with reqs}
+
+
+    let end_typed_term (c: t): t =
+      {c with
+        reqs =
+          List.map Required.end_typed_term c.reqs
+      }
+
+
     let rec build0_new
               (exp:Parser.Expression.t)
               (nargs: int)
               (c: t)
             : (t, problem) result
       =
+      (* Build the expression [exp] according to the type of the top
+         placeholder.
+
+         After successful build, the expression is stored in the top
+         placeholder.  The stack of placeholders is not modified, only the top
+         one has got a substitution. *)
       let open Parser.Expression
       in
       let range = Located.range exp
@@ -775,28 +869,27 @@ module Build_context =
          assert false (* nyi *)
 
       | Typed (inner, tp) ->
-         let c =
-           {c with
-             contexts =
-               List.map
-                 (fun (gam, stack) ->
-                   let exp_ptr, stack = pop stack
-                   and cnt = GSub.count gam
-                   in
-                   let sort =
-                     GSub.(type_of_term (type_at_level exp_ptr gam) gam) in
-                   let gam = GSub.push_substitutable sort gam in
-                   let gam = GSub.push_substitutable (Term.Variable 0) gam in
-                   GSub.substitute_at_level
-                     exp_ptr
-                     Term.(Typed (Variable 0, Variable 1)) gam,
-                   cnt + 1 :: cnt :: stack)
-                 c.contexts}
+         let c = start_typed_term c
          in
-         Result.(build0_new tp 0 c >>= build0_new inner 0)
+         Result.(
+           map
+             end_typed_term
+             (return (start_typed_term c)
+              >>= build0_new tp 0
+              >>= unify_typed_term
+              >>= build0_new inner 0)
+         )
 
-      | Application (_, _) ->
-         assert false (* nyi *)
+      | Application (f, args) ->
+         assert (args <> []);
+         let module Fold = List.Monadic_fold (Result) in
+         let nargs = List.length args in
+         Result.(
+           build0_new f nargs c
+           >>= Fold.fold_left
+                 (fun arg c -> map pop_top (build0_new arg 0 c))
+                 args
+         )
 
       | Function (_, _, _) ->
          assert false (* nyi *)
@@ -804,6 +897,19 @@ module Build_context =
       | Parenthesized exp ->
          build0_new exp nargs c
 
+    let to_base_context
+          (_: t)
+        : ((Term.t * Term.typ) list, problem) result
+      =
+      assert false (* nyi *)
+
+    let build
+          (exp:Parser.Expression.t)
+          (c:Context.t)
+        : ((Term.t * Term.typ) list, problem) result
+      =
+      Result.( build0_new exp 0 (make c)
+               >>= to_base_context )
   end (* Build_context *)
 
 
@@ -821,11 +927,9 @@ module Build_context =
 let build_new
       (exp:Parser.Expression.t)
       (c:Context.t)
-    : (Build_context.t, problem) result
+    : ((Term.t * Term.typ) list, problem) result
   =
-  Build_context.(build0_new exp 0 (make c))
-
-let _ = build_new
+  Build_context.build exp c
 
 
 

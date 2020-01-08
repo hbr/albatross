@@ -19,3 +19,13 @@ test_alba:
 	dune build ocaml/alba1/alba.exe;  \
 	dune exec -- ocaml/alba1/alba.exe init    -work-dir library/alba.base; \
 	dune exec -- ocaml/alba1/alba.exe compile -work-dir library/alba.base
+
+
+fmlib:
+	dune build @ocaml/fmlib/runtest
+
+albalib:
+	dune build ocaml/albalib/albalib.cma
+
+alba2:
+	dune build ocaml/alba2/alba2.bc
