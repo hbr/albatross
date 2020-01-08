@@ -1,7 +1,7 @@
 type t
 
 
-type leaning =
+type assoc =
   | Left
   | Right
   | No
@@ -34,6 +34,10 @@ val multiplication: t
 val application: t
 
 
+(** [compare op1 op2] compares the precedence of the operators. *)
+val compare: t -> t -> int
+
+
 (** [of_string op] computes the precedence information of the operator [op]
    given as a string. for unknow operators the highest precedence below
    function application and left associativity is returned. *)
@@ -46,7 +50,8 @@ val of_string: string -> t
 val needs_parens: t option -> bool -> t -> bool
 
 
-(** [leaning op1 op2] decides if the expression [a op1 b op2 c] shall be
-   parsed as left leaning [(a op1 b) op2 c] or right leaning [a op1 (b op2
-   c)]. *)
-val leaning: t -> t -> leaning
+
+
+val associativity: t -> assoc
+
+val precedence: t -> int

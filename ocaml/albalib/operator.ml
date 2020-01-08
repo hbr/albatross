@@ -1,14 +1,11 @@
 open Fmlib
 open Common
 
-type leaning =
+type assoc =
   | Left
   | Right
   | No
 
-
-type assoc =
-  leaning
 
 
 type t =
@@ -61,20 +58,14 @@ let of_string (op:string): t =
      d
 
 
-let leaning
-      ((prec1,assoc):t)
-      ((prec2,assoc2)    :t)
-    : leaning
-  =
-  if prec1 > prec2 then
-    Left
 
-  else if prec1 = prec2 then
-    (assert (assoc = assoc2);
-     assoc)
+let compare ((prec1,_): t) ((prec2,_): t): int =
+  Pervasives.compare prec1 prec2
 
-  else (* prec1 < prec2 *)
-    Right
+
+let precedence = fst
+
+let associativity = snd
 
 
 let needs_parens
