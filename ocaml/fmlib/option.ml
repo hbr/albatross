@@ -38,10 +38,19 @@ let join (oo:'a option option): 'a option =
   | Some o -> o
 
 
+let to_list (o: 'a t): 'a list =
+  match o with
+  | None ->
+     []
+  | Some v ->
+     [v]
+
+
 let has (o: 'a t): bool =
   match o with
   | None -> false
   | Some _ -> true
+
 
 let value (o: 'a t): 'a =
   match o with

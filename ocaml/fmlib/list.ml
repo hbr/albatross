@@ -42,6 +42,24 @@ let map_and_filter (f:'a -> 'b option) (l:'a list): 'b list =
   in
   map l
 
+
+
+let split_at (p:'a -> bool) (l: 'a t): 'a t * 'a t =
+  let rec split prefix rest =
+    match rest with
+    | [] ->
+       rev prefix, rest
+    | hd :: tl  ->
+       if p hd then
+         rev prefix, rest
+       else
+         split (hd :: prefix) tl
+  in
+  split [] l
+
+
+
+
 module Monadic_fold (M:MONAD) =
   struct
     let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (start:'b)

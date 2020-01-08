@@ -4,6 +4,8 @@ open Common_module_types
 
 include MONAD with type 'a t = 'a option
 
+
+val to_list: 'a t -> 'a list
 val use: 'a t -> 'b -> ('a -> 'b) -> 'b
 val fold: 'z -> ('a -> 'z) -> 'a t -> 'z
 val has: 'a t -> bool
