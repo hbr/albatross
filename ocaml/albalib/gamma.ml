@@ -126,6 +126,10 @@ let push_local (nme:string) (typ: Term.typ) (c:t): t =
   push (Normal nme) typ No c
 
 
+let push_unnamed (typ: Term.typ) (c: t): t =
+  push_local " " typ c
+
+
 let add_entry (name:name) (typ:Term.typ*int) (def:definition) (c:t): t =
   let typ,n = typ
   and cnt = count c
@@ -287,6 +291,18 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
 
 
 
+let definition_term (c: t) (idx: int): Term.t option =
+  match
+    (entry (level_of_index idx c) c).definition
+  with
+  | Definition def ->
+     Some def
+
+  | _ ->
+     None
+
+
+
 let rec compute (t:Term.t) (c:t): Term.t =
   let open Term in
   match t with
@@ -349,6 +365,96 @@ let rec push_arguments
 
     | _ ->
        None
+
+
+
+let key_split
+      (c: t)
+      (t: Term.t)
+      (args: (Term.t * Term.appl) list)
+    : Term.t * (Term.t * Term.appl) list
+  =
+  let rec split t args =
+    match t with
+    | Term.Variable i ->
+       (match definition_term c i with
+        | None ->
+           t, args
+        | Some def ->
+           split def args)
+
+    | Term.Appl (Term.Lambda (_, exp, _), arg, _) ->
+       split (Term.apply exp arg) args
+
+
+    | Term.Appl (f, arg, mode) ->
+       split f ((arg, mode) :: args)
+
+    | _ ->
+       t, args
+  in
+  split t args
+
+
+let key_normal (c: t) (t: Term.t): Term.t =
+  let key, args = key_split c t [] in
+  List.fold_left
+    (fun res (arg, mode) ->
+      Term.Appl (res, arg, mode))
+    key
+    args
+
+
+
+
+let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =
+  Term.fold_free_variables
+    set
+    (fun i set ->
+      let j = level_of_index i c in
+      if i < level then
+        set
+      else
+        Int_set.add j set)
+    t
+
+
+
+let signature (c: t) (tp: Term.typ): Signature.t =
+  let rec split c tp lst =
+    match key_normal c tp with
+    | Term.Pi (arg_tp, res_tp, _ ) ->
+       let c_inner = push_unnamed arg_tp c in
+       split c_inner res_tp ((c, arg_tp, tp) :: lst)
+
+    | _ ->
+       c, tp, lst
+  in
+  let c_inner, res_tp, args = split c tp []
+  and cnt = count c
+  in
+  let nargs = count c_inner - cnt
+  and set = add_vars_from cnt res_tp c_inner Int_set.empty
+  in
+  let _, _, sign =
+    List.fold_left
+      (fun (i, set, sign) (c, arg_tp, tp) ->
+        assert (0 < i);
+        let i = i - 1 in
+        let implicit = Int_set.mem (cnt + i) set
+        and set = add_vars_from cnt arg_tp c set
+        in
+        let sign = Signature.push sign tp arg_tp implicit in
+        i, set, sign)
+      (nargs, set, Signature.make tp)
+      args
+  in
+  sign
+
+
+
+
+
 
 
 

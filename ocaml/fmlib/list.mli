@@ -120,7 +120,9 @@ sig
    ]}*)
   val fold_right: ('a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
 
+
+
   (** The same as [fold_left] except that the folding function receives the
      position of the first argument in the list as an additional argument. *)
   val foldi_left: (int -> 'a -> 'b -> 'b M.t) -> 'a t -> 'b -> 'b M.t
-  end
+end

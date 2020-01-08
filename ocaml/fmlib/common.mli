@@ -23,6 +23,9 @@ sig
 end
 
 
+module Int_set: Set.S with type elt = Int.t
+
+
 
 (** Module to represent the [float] type. *)
 module Float:

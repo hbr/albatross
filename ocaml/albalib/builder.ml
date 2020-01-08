@@ -364,8 +364,20 @@ module GSub =
       {c with substitutions = subs}
 
 
+    let substitution_at_level (level:int) (c:t): Term.t option =
+      let cnt = count c
+      and cnt0 = base_count c
+      in
+      assert (cnt0 <= level);
+      assert (level < cnt);
+      Option.map
+        (fun (t, n) ->
+          assert (n <= cnt);
+          Term.up (cnt - n) t)
+        (c.substitutions.(level - cnt0))
 
-    let substitution_at_level (level:int) (c:t): Term.t =
+
+    let substitution_at_level_in_base (level:int) (c:t): Term.t =
       (* in the base context, all variables must be substituted. *)
       let cnt = count c
       and cnt0 = base_count c
@@ -382,6 +394,12 @@ module GSub =
             assert false (* Illegal call *)
          | Some t ->
             t
+
+
+    let to_base (t: Term.t) (c: t): Term.t option =
+      (* Transform [t] into the base context. Only possible if it does not
+         contain any placeholders or new local variables. *)
+      Term.down (count c - base_count c) t
 
 
     let is_all_substituted (c:t): bool =
@@ -466,8 +484,9 @@ module GSub =
 
 
 
-    let signature (_: Term.typ) (_: t): Signature.t =
-      assert false (* nyi *)
+    let signature (c: t) (tp: Term.typ): Signature.t =
+      Gamma.signature c.base tp
+
 
     let push_explicits
           (_: int) (_: Term.t) (_: Signature.t) (_: t)
@@ -587,7 +606,7 @@ module Required =
             ptr substituted *)
       let ptr = top c
       in
-      let req_sign = GSub.(signature (type_at_level ptr c.gamma) c.gamma)
+      let req_sign = GSub.(signature c.gamma (type_at_level ptr c.gamma))
       in
       let term, act_sign, ptrs_rev, gsub =
         GSub.push_argument_placeholders
@@ -651,6 +670,13 @@ module Required =
          stack: exp ...
        *)
       assert false (* nyi *)
+
+
+    let substitution_in_base (level:int) (c: t): Term.t option =
+      Option.(
+        GSub.(
+          substitution_at_level level c.gamma >>= fun t ->
+          to_base t c.gamma))
   end
 
 
@@ -731,7 +757,7 @@ module Build_context =
         List.map_and_filter
           (fun t ->
             let s  =
-              GSub.(signature (type_of_term t gam) gam) in
+              GSub.(signature gam (type_of_term t gam)) in
             let n  = Signature.count_explicit_args s in
             if n < c.nargs then
               None
@@ -898,10 +924,26 @@ module Build_context =
          build0_new exp nargs c
 
     let to_base_context
-          (_: t)
+          (c: t)
         : ((Term.t * Term.typ) list, problem) result
       =
-      assert false (* nyi *)
+      let cnt0 = Gamma.count c.base
+      in
+      let lst =
+        List.map_and_filter
+          (fun req ->
+            assert (cnt0 + 2 <= Required.count req);
+            Option.(
+              Required.(
+                substitution_in_base cnt0 req >>= fun tp ->
+                substitution_in_base (cnt0 + 1) req >>= fun t ->
+                Some (t, tp))))
+          c.reqs
+      in
+      if lst = [] then
+        assert false (* nyi *)
+      else
+        Ok lst
 
     let build
           (exp:Parser.Expression.t)
@@ -1235,8 +1277,8 @@ let build
           assert (req_lst = []);
           assert (cnt + 2 <= GSub.count gsub);
           assert (GSub.is_all_substituted gsub);
-          GSub.(substitution_at_level (cnt + 1) gsub,
-                 substitution_at_level cnt gsub)
+          GSub.(substitution_at_level_in_base (cnt + 1) gsub,
+                 substitution_at_level_in_base cnt gsub)
         )
         lst
     )

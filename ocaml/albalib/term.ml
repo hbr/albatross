@@ -339,6 +339,7 @@ let rec application (f:t) (nargs:int) (mode:appl): t =
       mode
 
 
+
 let fold_free_variables (s: 'a) (f: int -> 'a -> 'a) (t: t): 'a =
   let rec fold s t nb =
     match t with

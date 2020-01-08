@@ -59,6 +59,8 @@ val push_arguments: int -> Term.typ -> t -> (t * Term.typ) option
 
 
 
+val signature: t -> Term.typ -> Signature.t
+
 
 
 

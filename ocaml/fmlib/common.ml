@@ -24,6 +24,8 @@ module Int =
     let compare = Pervasives.compare
   end
 
+module Int_set = Set.Make (Int)
+
 
 
 module Float =
