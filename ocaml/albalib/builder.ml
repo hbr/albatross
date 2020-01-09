@@ -190,8 +190,8 @@
      \ (x:A) (y:B) ... : RT := exp
 
    First the signature is analyzed. The untyped arguments get placeholders for
-   their types without substitutions, the typed arguments get placeholders
-   with substitutions.
+   their types without substitutions, the typed arguments get placeholders with
+   substitutions.
 
      gamma, A:U, x:A, B:U, y:B ...
 

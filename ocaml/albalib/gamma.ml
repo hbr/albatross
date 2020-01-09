@@ -446,7 +446,7 @@ let signature (c: t) (tp: Term.typ): Signature.t =
         in
         let sign = Signature.push sign tp arg_tp implicit in
         i, set, sign)
-      (nargs, set, Signature.make tp)
+      (nargs, set, Signature.make cnt nargs tp)
       args
   in
   sign

@@ -1,91 +1,98 @@
+(* All entries of a signature have some common elements. *)
+
+type common = {
+    typ: Term.typ;    (* complete type *)
+
+    nb: int;          (* number of bound variables. *)
+    cnt: int;         (* size of the base context. *)
+    n_up: int;
+
+    implicits: int;   (* how many implicits starting from here to first
+                         explicit? *)
+    explicits: int;   (* how many explicit arguments does the signature have ? *)
+  }
+
+
+(* A signature has either no arguments i.e. consists only of the common
+   part. Or it has arguments. In the latter case it consists of the type of
+   the first argument, the common parts and the remaining part of the
+   signature .*)
 
 type t =
-  | Empty of Term.typ
-
-  | Some_args of
+  | Last of
+      common
+  | More of
       {
-        typ: Term.typ;    (* complete type *)
-        arg: Term.typ;    (* first argument *)
-        implicits: int;   (* how many implicits starting from here to first
-                             explicit? *)
-        explicits: int;   (* how many explicit arguments does the signature
-                             have ? *)
-        nargs: int;       (* number of arguments *)
+        arg: Term.typ;
+        common: common;
         rest: t
       }
 
 
-let count_args (s: t): int * int * int =
+let make (cnt: int) (nb: int) (typ: Term.typ): t =
+  Last {typ; nb; cnt; n_up = 0; implicits = 0; explicits = 0}
+
+
+let get_common (s: t): common =
   match s with
-  | Empty _ ->
-     0, 0, 0
-  | Some_args args ->
-     args.implicits, args.explicits, args.nargs
+  | Last common ->
+     common
+  | More e ->
+     e.common
+
+
+let push (s: t) (typ: Term.typ) (arg: Term.typ) (implicit: bool): t =
+  let common = get_common s in
+  assert (0 < common.nb);
+  More {
+      arg;
+      common =
+        {typ;
+         nb = common.nb - 1;
+         cnt = common.cnt;
+         n_up = 0;
+         implicits =
+           if implicit then
+             common.implicits + 1
+           else
+             0;
+         explicits =
+           if implicit then
+             common.explicits
+           else
+             common.explicits + 1;
+        };
+      rest = s;
+    }
+
+
+let up (s: t) (n: int): t =
+  let common_up common =
+    {common with n_up = common.n_up + n}
+  in
+  match s with
+  | Last common ->
+     Last (common_up common)
+  | More e ->
+     More {e with common = common_up e.common}
 
 
 
 let count_explicit_args (s: t): int =
-  let _, explicits, _ = count_args s in
-  explicits
-
-
+  (get_common s).explicits
 
 let count_first_implicits (s: t): int =
-  let implicits, _, _ = count_args s in
-  implicits
-
-
-let count (s: t): int =
-  let _, _, nargs = count_args s in
-  nargs
-
-
-let has_args (s: t): bool =
-  match s with
-  | Empty _ ->
-     false
-  | _ ->
-     true
+  (get_common s).implicits
 
 
 let typ (s: t): Term.typ =
-  match s with
-  | Empty tp ->
-     tp
-  | Some_args args ->
-     args.typ
+  (get_common s).typ
 
 
 let arg_typ (s: t): Term.typ =
   match s with
-  | Empty _ ->
+  | Last _ ->
      assert false (* Illegal call! *)
 
-  | Some_args args ->
-     args.arg
-
-
-
-let make (tp: Term.typ): t =
-  Empty tp
-
-
-let push (s: t) (typ: Term.typ) (arg: Term.typ) (implicit: bool): t =
-  let implicits, explicits, nargs = count_args s
-  in
-  Some_args {
-      typ;
-      arg;
-      implicits =
-        if implicit then
-          implicits + 1
-        else
-          implicits;
-      explicits =
-        if implicit then
-          explicits
-        else
-          explicits + 1;
-      nargs = nargs + 1;
-      rest = s
-    }
+  | More entry ->
+     entry.arg
