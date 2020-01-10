@@ -64,21 +64,15 @@ let is_empty (t:'a t): bool =
   length t = 0
 
 
-let height (t:'a t): int =
-  match t with
-  | Leaf _ ->
-     0
-  | Node (_,h,_) ->
-     h
+let slot_of_index (level: int) (index: int): int =
+  index lsr (level * bitsize)
 
 
-let _ = height
-
-
-let index (i:int) (h:int): int * int =
-  let slot = i lsr (h*bitsize) in
-  let rel  = i - slot lsl (h*bitsize) in
-  slot, rel
+let slot_and_offset (index: int) (level: int): int * int =
+  (* find the slot and the offset of the index within the slot. *)
+  let slot = slot_of_index level index in
+  let offset  = index - slot lsl (level * bitsize) in
+  slot, offset
 
 
 let rec elem (i:int) (t:'a t): 'a =
@@ -88,9 +82,10 @@ let rec elem (i:int) (t:'a t): 'a =
   | Leaf arr ->
      arr.(i)
   | Node (_,h,arr) ->
-     let slot,rel = index i h in
+     let slot,offset = slot_and_offset i h in
      assert (slot < Array.length arr);
-     elem rel arr.(slot)
+     elem offset arr.(slot)
+
 
 
 let rec singleton_with_height (e:'a) (h:int): 'a t =
@@ -123,7 +118,7 @@ let rec put (i:int) (e:'a) (t:'a t): 'a t =
   | Leaf arr ->
      Leaf (put_array i e arr)
   | Node (s,h,arr) ->
-     let slot, rel = index i h in
+     let slot, rel = slot_and_offset i h in
      let arr = put_array slot (put rel e arr.(slot)) arr in
      Node (s,h,arr)
 
@@ -199,7 +194,7 @@ let rec take (n:int) (t:'a t): 'a t =
      if n = s then
        t
      else
-       let slot,rel = index n h in
+       let slot,rel = slot_and_offset n h in
        let slot,rel =
          if rel = 0 && 0 < slot then
            slot - 1, 1 lsl (h*bitsize)
@@ -213,6 +208,12 @@ let rec take (n:int) (t:'a t): 'a t =
          let arr = Array.sub arr 0 (slot+1) in
          arr.(slot) <- t0;
          Node (n,h,arr)
+
+
+let remove_last (n: int) (arr: 'a t): 'a t =
+  let len = length arr in
+  assert (n <= len);
+  take (len - n) arr
 
 
 

@@ -7,6 +7,12 @@ let take (n:int) (arr:'a array): 'a array =
   sub arr 0 n
 
 
+let remove_last (n: int) (arr: 'a array): 'a array =
+  let len = length arr in
+  assert (n <= len);
+  take (len - n) arr
+
+
 let put (i:int) (a:'a) (arr:'a array): 'a array =
   assert (i < length arr);
   let res = copy arr in

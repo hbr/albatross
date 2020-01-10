@@ -16,4 +16,5 @@ val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b array -> 'a
 
 val put: int -> 'a -> 'a array -> 'a array
 val take: int -> 'a array -> 'a array
+val remove_last: int -> 'a array -> 'a array
 val push: 'a -> 'a array -> 'a array
