@@ -3,8 +3,9 @@
 type common = {
     typ: Term.typ;    (* complete type *)
 
-    nb: int;          (* number of bound variables. *)
-    cnt: int;         (* size of the base context. *)
+    nargs: int;       (* number of arguments *)
+    nb: int;          (* number of bound variables *)
+    cnt: int;         (* size of the base context *)
     n_up: int;
 
     implicits: int;   (* how many implicits starting from here to first
@@ -30,7 +31,7 @@ type t =
 
 
 let make (cnt: int) (nb: int) (typ: Term.typ): t =
-  Last {typ; nb; cnt; n_up = 0; implicits = 0; explicits = 0}
+  Last {typ; nargs = 0; nb; cnt; n_up = 0; implicits = 0; explicits = 0}
 
 
 let get_common (s: t): common =
@@ -48,9 +49,10 @@ let push (s: t) (typ: Term.typ) (arg: Term.typ) (implicit: bool): t =
       arg;
       common =
         {typ;
-         nb = common.nb - 1;
-         cnt = common.cnt;
-         n_up = 0;
+         nargs = common.nargs + 1;
+         nb    = common.nb - 1;
+         cnt   = common.cnt;
+         n_up  = 0;
          implicits =
            if implicit then
              common.implicits + 1
@@ -66,7 +68,10 @@ let push (s: t) (typ: Term.typ) (arg: Term.typ) (implicit: bool): t =
     }
 
 
-let up (s: t) (n: int): t =
+
+
+
+let up (n: int) (s: t): t =
   let common_up common =
     {common with n_up = common.n_up + n}
   in
@@ -77,6 +82,13 @@ let up (s: t) (n: int): t =
      More {e with common = common_up e.common}
 
 
+let base_count (s: t): int =
+  (get_common s).cnt
+
+
+let count_arguments (s: t): int =
+  (get_common s).nargs
+
 
 let count_explicit_args (s: t): int =
   (get_common s).explicits
@@ -85,14 +97,22 @@ let count_first_implicits (s: t): int =
   (get_common s).implicits
 
 
+let term_up (common: common) (term: Term.t): Term.t =
+  Term.up_from common.n_up common.nb term
+
+
 let typ (s: t): Term.typ =
-  (get_common s).typ
+  let common = get_common s in
+  term_up common common.typ
 
 
-let arg_typ (s: t): Term.typ =
+
+let pop (s: t): (Term.typ * t) option =
   match s with
-  | Last _ ->
-     assert false (* Illegal call! *)
-
   | More entry ->
-     entry.arg
+    Some (
+      term_up entry.common entry.arg,
+      up entry.common.n_up entry.rest
+    )
+  | _ ->
+    None

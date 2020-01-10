@@ -57,7 +57,7 @@ val push_local: string -> Term.typ -> t -> t
    arguments. *)
 val push_arguments: int -> Term.typ -> t -> (t * Term.typ) option
 
-
+val remove_last: int -> t -> t
 
 val signature: t -> Term.typ -> Signature.t
 

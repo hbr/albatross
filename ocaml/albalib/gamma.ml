@@ -24,10 +24,7 @@ type entry = {
   }
 
 
-type t = {
-    gamma: entry Segmented_array.t;
-    substitutions: (Term.t * int) option array
-  }
+type t = entry Segmented_array.t
 
 
 let bruijn_convert (i:int) (n:int): int =
@@ -36,7 +33,7 @@ let bruijn_convert (i:int) (n:int): int =
 
 
 let count (c:t): int =
-  Segmented_array.length c.gamma
+  Segmented_array.length c
 
 
 
@@ -54,7 +51,7 @@ let level_of_index (i:int) (c:t): int =
 
 let entry (i:int) (c:t): entry =
   assert (is_valid_index i c);
-  Segmented_array.elem i c.gamma
+  Segmented_array.elem i c
 
 
 let raw_type_at_level (i:int) (c:t): Term.typ =
@@ -110,16 +107,13 @@ let operator_data
 
 
 let empty: t =
-  {gamma = Segmented_array.empty;
-   substitutions = [||]}
+  Segmented_array.empty
 
 
 let push (name:name) (typ:Term.typ) (definition:definition) (c:t): t =
-  {c with
-    gamma =
-      Segmented_array.push
-        {name; typ; definition}
-        c.gamma}
+    Segmented_array.push
+      {name; typ; definition}
+      c
 
 
 let push_local (nme:string) (typ: Term.typ) (c:t): t =
@@ -128,6 +122,10 @@ let push_local (nme:string) (typ: Term.typ) (c:t): t =
 
 let push_unnamed (typ: Term.typ) (c: t): t =
   push_local " " typ c
+
+
+let remove_last (n: int) (c: t): t =
+  Segmented_array.remove_last n c
 
 
 let add_entry (name:name) (typ:Term.typ*int) (def:definition) (c:t): t =
