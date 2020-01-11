@@ -611,28 +611,20 @@ module GSub =
           (req_sign: Signature.t)
           (c: t): t option
       =
-      if Signature.count_arguments act_sign
-         = Signature.count_arguments req_sign
-      then
-        let rec uni act req n c =
-          match Signature.pop act, Signature.pop req with
-          | None, None ->
-            (* Result type found. *)
-            Option.map
-              (remove_last n)
-              (unify (Signature.typ act) (Signature.typ req) c)
-          | Some (act_arg, act), Some (req_arg, req) ->
-            Option.(
-              unify act_arg req_arg c >>= fun c ->
-              uni act req (n + 1) (push_bound "_" act_arg c)
-            )
-          | _ ->
-            assert false (* cannot happen, both signatures have the
-                            same number of arguments *)
-        in
-        uni act_sign req_sign 0 c
-      else
-        None
+      let rec uni act req n c =
+        match Signature.pop act, Signature.pop req with
+        | Some (act_arg, act), Some (req_arg, req) ->
+          Option.(
+            unify act_arg req_arg c >>= fun c ->
+            uni act req (n + 1) (push_bound "_" act_arg c)
+          )
+        | _ ->
+          (* One or both signatures has no more arguments. *)
+          Option.map
+            (remove_last n)
+            (unify (Signature.typ act) (Signature.typ req) c)
+      in
+      uni act_sign req_sign 0 c
 
   end (* GSub *)
 
