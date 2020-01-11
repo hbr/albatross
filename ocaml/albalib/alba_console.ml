@@ -369,6 +369,120 @@ module Make (Io:Io.SIG) =
 
 
 
+    let report_error
+          (header: string)
+          (src:    string)
+          (range:  range)
+          (content: Pretty.t)
+        : Pretty.t
+      =
+      let open Pretty
+      in
+      error_header header
+      <+> print_source src range
+      <+> cut
+      <+> content
+      <+> cut
+
+
+    let report_build_problem
+          (src: string)
+          (problem: Builder.problem)
+        : Pretty.t
+      =
+      let module Builder_print = Builder.Print (Pretty) in
+      let open Builder in
+      let open Pretty
+      in
+
+      let expect_nargs n =
+        if n = 0 then
+          string "which"
+        else
+          chain_separated
+            [wrap_words "which after applied to";
+             string (string_of_int n);
+             string "arguments"
+            ]
+            (group space)
+      and type_or_types lst =
+        match lst with
+        | [_] ->
+          wrap_words "the type"
+        | _ :: _ :: _ ->
+          wrap_words "one of the types"
+        | _ ->
+          assert false (* cannot happen, empty type lists not allowed! *)
+      in
+      match problem with
+      | Overflow _ ->
+        assert false (* nyi *)
+      | No_name range ->
+         report_error
+           "NAMING" src range
+           (string "I cannot find this name or operator.")
+      | Not_enough_args (range, _, _) ->
+         report_error
+           "NAMING" src range
+           (string "++ not enough args ++")
+      | None_conforms (range, nargs, reqs, cands) ->
+         report_error
+           "NAMING" src range
+           (chain_separated
+              [wrap_words "I was expecting a term";
+               expect_nargs nargs;
+               string "has";
+               type_or_types reqs]
+              (group space))
+           <+> cut
+           <+> (nest 4
+                  ((chain_separated
+                    (List.map (Builder_print.required_type) reqs)
+                    cut)))
+           <+> cut <+> cut
+           <+> (chain_separated
+                  [wrap_words "but I have inferred";
+                   type_or_types cands]
+                  (group space))
+           <+> cut <+> cut
+           <+> (nest 4
+                  ((chain_separated
+                    (List.map (Builder_print.candidate_type) cands)
+                    cut)))
+           <+> cut
+
+
+
+    let build_and_compute_new
+          (src: string)
+          (e: Parser.Expression.t)
+          (compute: bool)
+        : Pretty.t
+      =
+      let std_context = Context.standard () in
+      match Builder.build_new e std_context with
+      | Error e ->
+         report_build_problem src e
+
+      | Ok lst ->
+         Pretty.(
+          paragraphs
+            (List.map
+               (fun (t,tp) ->
+                 let t =
+                   if compute then
+                     Context.compute t std_context
+                   else
+                     t
+                 in
+                 let module P = Context.Pretty (Pretty) in
+                 P.print t std_context
+                 <+> string ": "
+                 <+> P.print tp std_context
+                 <+> cut)
+               lst)
+         )
+
     let build_and_compute
           (src:string)
           (e:Parser.Expression.t)
@@ -473,8 +587,17 @@ module Make (Io:Io.SIG) =
 
 
 
-    let eval_expression (p:Parser.parser) (src:string): Pretty.t =
+    let eval_command (p:Parser.parser) (src:string): Pretty.t =
       assert (Parser.has_ended p);
+      let new_flag =
+        true
+      in
+      let build_and_compute =
+        if new_flag then
+          build_and_compute_new
+        else
+          build_and_compute
+      in
       match Parser.result p with
       | Some Parser.Command.Do_nothing ->
          Pretty.empty
@@ -588,7 +711,7 @@ module Make (Io:Io.SIG) =
         if State.is_last line then
           let input = State.string s in
           let p = parse input in
-          Io.(Pretty.print File.stdout 80 (eval_expression p input)
+          Io.(Pretty.print File.stdout 80 (eval_command p input)
               >>= fun _ ->
               return State.init)
         else

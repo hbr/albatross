@@ -78,6 +78,11 @@ module type SIG =
     val group_list: t list -> t
 
 
+    (** [wrap_words s]: Print the string [s] with all the words in it
+        potentially wrapped. *)
+    val wrap_words: string -> t
+
+
     (** [fill_paragraph s]: Print the string [s] as a paragraph i.e. putting
        as many words on a line as possible. *)
     val fill_paragraph: string -> t

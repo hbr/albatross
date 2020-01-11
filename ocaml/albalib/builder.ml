@@ -247,6 +247,33 @@ module Located =
 
 
 
+module Explicits =
+  struct
+    type t =
+      | No
+      | Normal of int
+
+    let normal (nargs: int): t =
+      Normal nargs
+
+    let empty: t =
+      No
+
+    let count (e: t): int =
+      match e with
+      | No ->
+         0
+      | Normal n ->
+         n
+
+    let has (e: t): bool =
+      0 < count e
+  end
+
+
+
+
+
 
 
 module GSub =
@@ -264,6 +291,9 @@ module GSub =
 
     let count_substitutions (c:t): int =
       Array.length c.substitutions
+
+    let is_placeholder (c: t) (idx: int): bool =
+      idx < count_substitutions c  (* must be changed for bound variables!!! *)
 
     let base_count (c:t): int =
       count c - count_substitutions c
@@ -289,6 +319,10 @@ module GSub =
          Gamma.push_local name typ c.base;
        substitutions =
          Array.push None c.substitutions}
+
+
+    let push_bound (_: string) (_: Term.typ) (_: t): t =
+      assert false (* nyi *)
 
 
     (* [push_signature c1 nargs t c2] pushes the last [nargs] entries of [c1]
@@ -326,13 +360,12 @@ module GSub =
 
 
 
-    let substitute_at_level (level:int) (t:Term.t) (c:t): t =
-      (* [substitute_at_level i t c]. Substitute the variable at level [i]
-         with the term [t] in the context [c].
+    let add_substitution_at_level (level:int) (t:Term.t) (c:t): t =
+      (* [add_substitution_at_level i t c]. Substitute the variable at level
+         [i] with the term [t] in the context [c].
 
          Precondition: It has to be a substitutable at level [i] which does
-         not yet have any substitution.
-       *)
+         not yet have any substitution.  *)
       assert (not (has_substitution_at_level level c));
       let cnt = count c
       and cnt0 = base_count c
@@ -364,17 +397,24 @@ module GSub =
       {c with substitutions = subs}
 
 
+    let add_substitution_at_index (i:int) (t:Term.t) (c:t): t =
+      add_substitution_at_level (level_of_index i c) t c
+
+
+
     let substitution_at_level (level:int) (c:t): Term.t option =
+      (* require: there is a substitutable at [level] *)
       let cnt = count c
       and cnt0 = base_count c
       in
-      assert (cnt0 <= level);
-      assert (level < cnt);
-      Option.map
-        (fun (t, n) ->
-          assert (n <= cnt);
-          Term.up (cnt - n) t)
-        (c.substitutions.(level - cnt0))
+      if level < cnt0 then
+        assert false (* Illegal call, [level] is not a placeholder *)
+      else
+        Option.map
+          (fun (t, n) ->
+            assert (n <= cnt);
+            Term.up (cnt - n) t)
+          (c.substitutions.(level - cnt0))
 
 
     let substitution_at_level_in_base (level:int) (c:t): Term.t =
@@ -415,22 +455,31 @@ module GSub =
       !res
 
 
-    let substitution_at_index (i:int) (c:t): Term.t option =
+    let substitution (c:t) (i:int): Term.t option =
       (* in the current context *)
       let n_subs = Array.length c.substitutions
       and cnt = count c
       in
-      assert (i < n_subs);
-      Option.map
-        (fun (t,n) ->
-          assert (n <= cnt);
-          Term.up (cnt - n) t)
-        c.substitutions.(Term.bruijn_convert i n_subs)
+      if i < n_subs then
+        Option.map
+          (fun (t,n) ->
+            assert (n <= cnt);
+            Term.up (cnt - n) t)
+          c.substitutions.(Term.bruijn_convert i n_subs)
+      else
+        Some (Variable i)
 
 
+    let substitute (c: t) (term: Term.t): Term.t =
+      Term.substitute
+        (fun i ->
+          match substitution c i with
+          | None ->
+             Variable i
+          | Some t ->
+             t)
+        term
 
-    let substitute_at_index (i:int) (t:Term.t) (c:t): t =
-      substitute_at_level (level_of_index i c) t c
 
 
 
@@ -454,10 +503,10 @@ module GSub =
               c
             >>= fun c ->
             match
-              substitution_at_index i c
+              substitution c i
             with
             | None ->
-               Some (substitute_at_index i u c)
+               Some (add_substitution_at_index i u c)
             | Some t_sub ->
                unify t_sub u exact c)
 
@@ -489,10 +538,24 @@ module GSub =
 
 
     let push_explicits
-          (_: int) (_: Term.t) (_: Signature.t) (_: t)
+          (explicits: Explicits.t) (term: Term.t) (sign: Signature.t) (c: t)
         : Term.t * Signature.t * t * int list
       =
-      assert false (* nyi *)
+      let push explicits term sign c ptr_lst =
+        if Explicits.has explicits then
+          assert false
+        else
+          term, sign, c, ptr_lst
+      in
+      let term, sign =
+        let n_up = count c - Signature.base_count sign in
+        assert (0 <= n_up);
+        Term.up n_up term,
+        Signature.up n_up sign
+      in
+      push explicits term sign c []
+
+
 
     let push_implicits
           (_: int) (_: Term.t) (_: Signature.t) (_: t)
@@ -500,9 +563,20 @@ module GSub =
       =
       assert false (* nyi *)
 
+    let count_first_implicits (sign: Signature.t) (c: t): int option =
+      let n = Signature.count_first_implicits sign in
+      if n = 0 then
+        match substitute c (Signature.typ sign) with
+        | Term.Variable i when is_placeholder c i ->
+           None
+        | _ ->
+           Some 0
+      else
+        Some n
+
 
     let push_argument_placeholders
-          (nargs: int)
+          (explicits: Explicits.t)
           (term: Term.t)    (* valid in the context of [act_sign] *)
           (act_sign: Signature.t)
           (req_sign: Signature.t)
@@ -511,24 +585,54 @@ module GSub =
       (* The returned term is valid in the returned context *)
       =
       let term, act_sign, c, ptr_array =
-        push_explicits nargs term act_sign c
+        push_explicits explicits term act_sign c
       in
       let term, act_sign, c =
         let n_req = Signature.count_first_implicits req_sign
-        and n_act = Signature.count_first_implicits act_sign
         in
-        if n_act > n_req then
-          push_implicits (n_act - n_req) term act_sign c
-        else
-          term, act_sign, c
+        match
+          count_first_implicits act_sign c
+        with
+        | Some n_act when n_req < n_act ->
+           push_implicits (n_act - n_req) term act_sign c
+        | _ ->
+           term, act_sign, c
       in
       term, act_sign, ptr_array, c
 
 
+    let remove_last (n: int) (c: t): t =
+      { base = Gamma.remove_last n c.base;
+        substitutions = Array.remove_last n c.substitutions}
 
 
-    let unify_signatures (_: Signature.t) (_: Signature.t) (_: t): t option =
-      assert false (* nyi *)
+    let unify_signatures
+          (act_sign: Signature.t)
+          (req_sign: Signature.t)
+          (c: t): t option
+      =
+      if Signature.count_arguments act_sign
+         = Signature.count_arguments req_sign
+      then
+        let rec uni act req n c =
+          match Signature.pop act, Signature.pop req with
+          | None, None ->
+            (* Result type found. *)
+            Option.map
+              (remove_last n)
+              (unify (Signature.typ act) (Signature.typ req) c)
+          | Some (act_arg, act), Some (req_arg, req) ->
+            Option.(
+              unify act_arg req_arg c >>= fun c ->
+              uni act req (n + 1) (push_bound "_" act_arg c)
+            )
+          | _ ->
+            assert false (* cannot happen, both signatures have the
+                            same number of arguments *)
+        in
+        uni act_sign req_sign 0 c
+      else
+        None
 
   end (* GSub *)
 
@@ -596,21 +700,21 @@ module Required =
           (c: t)
           (term: Term.t)      (* Valid in the same context as [act_sign] *)
           (act_sign: Signature.t)
-          (nargs: int)        (* [term] has to be applied to [nargs] arguments *)
+          (explicits: Explicits.t)
         : t option
       =
       (* before: stack = ptr rest
+                 ptr without substitution
 
-         after: stack = arg1 ... argn ptr rest
-
-            ptr substituted *)
+         after:  stack =  arg1 ... argn ptr rest
+                 ptr substituted *)
       let ptr = top c
       in
       let req_sign = GSub.(signature c.gamma (type_at_level ptr c.gamma))
       in
       let term, act_sign, ptrs_rev, gsub =
         GSub.push_argument_placeholders
-          nargs
+          explicits
           term
           act_sign
           req_sign
@@ -621,7 +725,7 @@ module Required =
       unify_signatures act_sign req_sign gsub >>= fun gsub ->
       Some
         {gamma =
-         substitute_at_level ptr term gsub;
+           add_substitution_at_level ptr term gsub;
          stack =
            List.rev_append ptrs_rev c.stack}
 
@@ -635,7 +739,7 @@ module Required =
       let gam = GSub.push_substitutable sort c.gamma in
       let gam = GSub.push_substitutable (Term.Variable 0) gam in
       {gamma =
-         GSub.substitute_at_level
+         GSub.add_substitution_at_level
            ptr
            Term.(Typed (Variable 0, Variable 1)) gam;
        stack = cnt + 1 :: cnt :: c.stack}
@@ -673,11 +777,18 @@ module Required =
 
 
     let substitution_in_base (level:int) (c: t): Term.t option =
-      Option.(
-        GSub.(
-          substitution_at_level level c.gamma >>= fun t ->
-          to_base t c.gamma))
-  end
+      (* At [level] there must be a substitutable which has a substitution.
+         Transform the substitution to the base context or return [None],
+         if it still contains placeholders. *)
+      GSub.(
+        match substitution_at_level level c.gamma with
+        | None ->
+          assert false (* Illegal call, [level] does not have a
+                          substitution. *)
+        | Some term ->
+          to_base term c.gamma
+      )
+  end (* Required *)
 
 
 
@@ -691,14 +802,14 @@ module Build_context =
     type t = {
         names: Name_map.t;
         base:  Gamma.t;
-        nargs: int;
+        explicits: Explicits.t;
         reqs:  Required.t list;
       }
 
     let make (c:Context.t): t =
       {names = Context.name_map c;
        base  = Context.gamma c;
-       nargs = 0;
+       explicits = Explicits.empty;
        reqs  = [Required.make (GSub.make (Context.gamma c))]}
 
 
@@ -726,14 +837,14 @@ module Build_context =
           c.reqs >>= fun req ->
           let uni = Required.unify_candidate req in
           candidates >>= fun (term, act_sign) ->
-          Option.to_list (uni term act_sign c.nargs)
+          Option.to_list (uni term act_sign c.explicits)
         )
       in
       if reqs = [] then
         Error
           (None_conforms
              (range,
-              c.nargs,
+              Explicits.count c.explicits,
               required_types c,
               List.map
                 (fun (_,sign) -> Signature.typ sign, c.base)
@@ -759,7 +870,7 @@ module Build_context =
             let s  =
               GSub.(signature gam (type_of_term t gam)) in
             let n  = Signature.count_explicit_args s in
-            if n < c.nargs then
+            if n < Explicits.count c.explicits then
               None
             else
               Some (t, s))
@@ -770,7 +881,7 @@ module Build_context =
           List.map (fun t -> Gamma.type_of_term t c.base, c.base) terms
         in
         Error
-          (Not_enough_args (range, c.nargs, tps))
+          (Not_enough_args (range, Explicits.count c.explicits, tps))
       else
         unify_base_candidates range candidates c
 
@@ -858,7 +969,7 @@ module Build_context =
 
     let rec build0_new
               (exp:Parser.Expression.t)
-              (nargs: int)
+              (explicits: Explicits.t)
               (c: t)
             : (t, problem) result
       =
@@ -901,19 +1012,24 @@ module Build_context =
            map
              end_typed_term
              (return (start_typed_term c)
-              >>= build0_new tp 0
+              >>= build0_new tp Explicits.empty
               >>= unify_typed_term
-              >>= build0_new inner 0)
+              >>= build0_new inner Explicits.empty)
          )
 
       | Application (f, args) ->
          assert (args <> []);
          let module Fold = List.Monadic_fold (Result) in
-         let nargs = List.length args in
          Result.(
-           build0_new f nargs c
+           build0_new
+             f
+             (Explicits.normal (List.length args))
+             c
            >>= Fold.fold_left
-                 (fun arg c -> map pop_top (build0_new arg 0 c))
+                 (fun arg c ->
+                   map
+                     pop_top
+                     (build0_new arg Explicits.empty c))
                  args
          )
 
@@ -921,12 +1037,14 @@ module Build_context =
          assert false (* nyi *)
 
       | Parenthesized exp ->
-         build0_new exp nargs c
+         build0_new exp explicits c
+
 
     let to_base_context
           (c: t)
         : ((Term.t * Term.typ) list, problem) result
       =
+      assert (c.reqs <> []);
       let cnt0 = Gamma.count c.base
       in
       let lst =
@@ -935,8 +1053,10 @@ module Build_context =
             assert (cnt0 + 2 <= Required.count req);
             Option.(
               Required.(
-                substitution_in_base cnt0 req >>= fun tp ->
                 substitution_in_base (cnt0 + 1) req >>= fun t ->
+                Printf.printf "term found %s\n" (Gamma.string_of_term t c.base);
+                substitution_in_base cnt0 req >>= fun tp ->
+                Printf.printf "type found %s\n" (Gamma.string_of_term tp c.base);
                 Some (t, tp))))
           c.reqs
       in
@@ -945,12 +1065,13 @@ module Build_context =
       else
         Ok lst
 
-    let build
+
+let build
           (exp:Parser.Expression.t)
           (c:Context.t)
         : ((Term.t * Term.typ) list, problem) result
       =
-      Result.( build0_new exp 0 (make c)
+      Result.( build0_new exp Explicits.empty (make c)
                >>= to_base_context )
   end (* Build_context *)
 
@@ -1019,6 +1140,8 @@ module Result = Monad.Result (Problem)
 
 module Print  (P:Pretty_printer.SIG) =
   struct
+    module PP = Gamma.Pretty (P)
+
     let required ((c,lst):required): P.t
       (* Print the required type of the next argument (type of the topmost
          placeholder). *)
@@ -1042,6 +1165,12 @@ module Print  (P:Pretty_printer.SIG) =
          <+> PP.print
                (Gamma.type_of_term t c)
                c)
+
+      let typ ((tp,gamma): typ): P.t =
+        PP.print tp gamma
+
+      let required_type = typ
+      let candidate_type = typ
   end
 
 

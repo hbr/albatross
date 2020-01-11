@@ -48,6 +48,9 @@ module Print (P:Pretty_printer.SIG):
 sig
   val required: required -> P.t
   val actual:   actual -> P.t
+
+  val required_type: required_type -> P.t
+  val candidate_type: candidate_type -> P.t
 end
 
 val build: Parser_lang.Expression.t

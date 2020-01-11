@@ -31,6 +31,7 @@ module type SIG =
     val nest_relative: int -> t -> t
     val group: t -> t
     val group_list: t list -> t
+    val wrap_words: string -> t
     val fill_paragraph: string -> t
     val (<+>): t -> t -> t
     val chain: t list -> t
@@ -742,7 +743,7 @@ module Pretty (P:PRINTER) =
     let group_list (lst: t list): t =
       group @@ chain lst
 
-    let fill_paragraph (s:string): t =
+    let wrap_words (s:string): t =
       let open M in
       let is_blank c = c = ' '
       and is_not_blank c = c <> ' '
@@ -766,6 +767,8 @@ module Pretty (P:PRINTER) =
           return ()
       in
       fill 0
+
+    let fill_paragraph = wrap_words
 
     let run (indent:int) (width:int) (ribbon:int) (p:unit M.t): P.t =
       loop
