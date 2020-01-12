@@ -82,9 +82,19 @@ let up (n: int) (s: t): t =
      More {e with common = common_up e.common}
 
 
-let base_count (s: t): int =
+let base_context_size (s: t): int =
   (get_common s).cnt
 
+
+let to_context_size (n: int) (s: t): t =
+  let cnt0 = base_context_size s in
+  assert (cnt0 <= n);
+  up (n - cnt0) s
+
+
+let context_size (s: t): int =
+  let common = get_common s in
+  common.cnt + common.n_up + common.nb
 
 let count_arguments (s: t): int =
   (get_common s).nargs

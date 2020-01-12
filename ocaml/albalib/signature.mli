@@ -1,6 +1,10 @@
 type t
 
-val base_count: t -> int
+val base_context_size: t -> int
+
+val context_size: t -> int
+
+val to_context_size: int -> t -> t
 
 val count_arguments: t -> int
 
