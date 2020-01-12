@@ -90,7 +90,7 @@ let count_arguments (s: t): int =
   (get_common s).nargs
 
 
-let count_explicit_args (s: t): int =
+let count_explicits (s: t): int =
   (get_common s).explicits
 
 let count_first_implicits (s: t): int =
@@ -116,3 +116,11 @@ let pop (s: t): (Term.typ * t) option =
     )
   | _ ->
     None
+
+
+let pop_safe (s: t): Term.typ * t =
+  match pop s with
+  | None ->
+    assert false (* Illegal call! *)
+  | Some res ->
+    res
