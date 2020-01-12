@@ -612,8 +612,7 @@ module Pretty (P:Pretty_printer.SIG) =
 
 
     let parenthesize
-          (pr:P.t)
-          (lower: Operator.t option)
+          ((lower,pr): Operator.t option * P.t)
           (is_left: bool)
           (upper: Operator.t)
         : P.t
@@ -630,10 +629,8 @@ module Pretty (P:Pretty_printer.SIG) =
           (print: print)
           (c:t)
         : P.t * P.t =
-      let a_data, a_pr = print a c
-      and b_data, b_pr = print b c in
-      parenthesize a_pr a_data true upper,
-      parenthesize b_pr b_data false upper
+      parenthesize (print a c) true upper,
+      parenthesize (print b c) false upper
 
 
 
@@ -707,12 +704,11 @@ module Pretty (P:Pretty_printer.SIG) =
 
       | Appl (op, a, Binary) ->
          (* (a op) ???? Postfix operator? *)
-         let a_data, a_pr = print a c
-         and op_str, op_data =
+         let op_str, op_data =
            operator_data op c
          in
          let a_pr =
-           parenthesize a_pr a_data true op_data
+           parenthesize (print a c) true op_data
          in
          None,
          P.(char '('
@@ -722,13 +718,10 @@ module Pretty (P:Pretty_printer.SIG) =
             <+> char ')')
 
       | Appl (f, a, _) ->
-          let f_data, f_pr = print f c
-          and a_data, a_pr = print a c in
-          let f_pr = parenthesize f_pr f_data true Operator.application
-          and a_pr = parenthesize a_pr a_data false Operator.application
-          in
           Some Operator.application,
-          P.( f_pr <+> char ' ' <+> a_pr )
+          P.( parenthesize (print f c) true Operator.application
+              <+> char ' '
+              <+> parenthesize (print a c) false Operator.application )
 
       | Lambda (tp, exp, info) ->
          let arg_lst, exp_inner, c_inner =
@@ -748,15 +741,13 @@ module Pretty (P:Pretty_printer.SIG) =
             <+> exp_inner)
 
       | Pi (tp, rt, info) when Pi_info.is_arrow info ->
-         let c_inner = push_local "_" tp c in
-         let tp_data, tp_pr = print tp c
-         and rt_data, rt_pr = print rt c_inner
+         let c_inner = push_local "_" tp c
          and op_data = Operator.of_string "->"
          in
          let tp_pr =
-           parenthesize tp_pr tp_data true op_data
+           parenthesize (print tp c) true op_data
          and rt_pr =
-           parenthesize rt_pr rt_data false op_data
+           parenthesize (print rt c_inner) false op_data
          in
          Some op_data,
          P.(chain [tp_pr;
