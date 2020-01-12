@@ -400,7 +400,7 @@ module Make (Io:Io.SIG) =
           string "which"
         else
           chain_separated
-            [wrap_words "which after applied to";
+            [wrap_words "which applied to";
              string (string_of_int n);
              string "arguments"
             ]
@@ -421,13 +421,26 @@ module Make (Io:Io.SIG) =
          report_error
            "NAMING" src range
            (string "I cannot find this name or operator.")
-      | Not_enough_args (range, _, _) ->
+      | Not_enough_args (range, nargs, cands) ->
          report_error
-           "NAMING" src range
-           (string "++ not enough args ++")
+           "TYPE" src range
+           (list_separated
+                  (group space)
+                  [ wrap_words "I was expecting a term which can be applied to";
+                    string (string_of_int nargs);
+                    wrap_words "arguments, but I have inferred";
+                    type_or_types cands;
+                    wrap_words "for the term"]
+            <+> cut <+> cut
+            <+> (nest 4
+                    ((chain_separated
+                      (List.map (Builder_print.candidate_type) cands)
+                      cut)))
+            <+> cut
+            )
       | None_conforms (range, nargs, reqs, cands) ->
          report_error
-           "NAMING" src range
+           "TYPE" src range
            (chain_separated
               [wrap_words "I was expecting a term";
                expect_nargs nargs;
@@ -440,10 +453,11 @@ module Make (Io:Io.SIG) =
                     (List.map (Builder_print.required_type) reqs)
                     cut)))
            <+> cut <+> cut
-           <+> (chain_separated
+           <+> (list_separated
+                  (group space)
                   [wrap_words "but I have inferred";
-                   type_or_types cands]
-                  (group space))
+                   type_or_types cands;
+                   wrap_words "for the term"])
            <+> cut <+> cut
            <+> (nest 4
                   ((chain_separated

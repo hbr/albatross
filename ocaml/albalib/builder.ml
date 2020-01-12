@@ -254,6 +254,7 @@ module Explicits =
       | Normal of int
 
     let normal (nargs: int): t =
+      assert (0 < nargs);
       Normal nargs
 
     let empty: t =
@@ -268,6 +269,18 @@ module Explicits =
 
     let has (e: t): bool =
       0 < count e
+
+    let pop (e: t): Term.appl * t =
+      match e with
+      | No ->
+        assert false (* Illegal call! *)
+      | Normal n ->
+        assert (0 < n);
+        Term.Normal,
+        if 1 < n then
+          Normal (n - 1)
+        else
+          No
   end
 
 
@@ -312,9 +325,14 @@ module GSub =
       Gamma.type_at_level i c.base
 
 
+    let string_of_term (t: Term.t) (c: t): string =
+      Gamma.string_of_term t c.base
+
+let _ = string_of_term
+
 
     let push_substitutable (typ: Term.typ) (c:t): t =
-      let name = "<" ^ string_of_int (count c) ^ ">" in
+      let name = "<" ^ string_of_int (count_substitutions c) ^ ">" in
       {base =
          Gamma.push_local name typ c.base;
        substitutions =
@@ -537,18 +555,53 @@ module GSub =
       Gamma.signature c.base tp
 
 
+    let push_implicits
+          (n: int)
+          (term: Term.t)
+          (sign: Signature.t)
+          (c: t)
+        : Term.t * Signature.t * t
+      =
+      assert (n <= Signature.count_first_implicits sign);
+      let push_one (term, sign, c) =
+        let arg_tp, sign = Signature.pop_safe sign in
+        Term.(Appl (up1 term, Variable 0, Implicit)),
+        sign,
+        push_substitutable arg_tp c
+      in
+      Int.iterate n push_one (term, sign, c)
+
+
     let push_explicits
-          (explicits: Explicits.t) (term: Term.t) (sign: Signature.t) (c: t)
+          (explicits: Explicits.t)
+          (term: Term.t)
+          (sign: Signature.t)
+          (c: t)
         : Term.t * Signature.t * t * int list
       =
-      let push explicits term sign c ptr_lst =
+      assert (Explicits.count explicits
+              <= Signature.count_explicits sign);
+      let rec push explicits term sign c ptr_lst =
         if Explicits.has explicits then
-          assert false
+          let term, sign, c =
+            push_implicits
+              (Signature.count_first_implicits sign)
+              term sign c
+          in
+          let arg_tp, sign = Signature.pop_safe sign in
+          let appl, explicits = Explicits.pop explicits in
+          let cnt = count c in
+          push
+            explicits
+            (Term.( Appl (up1 term, Variable 0, appl) ))
+            sign
+            (push_substitutable arg_tp c)
+            (cnt :: ptr_lst)
         else
           term, sign, c, ptr_lst
       in
       let term, sign =
-        let n_up = count c - Signature.base_count sign in
+        let n_up = count c - Signature.base_context_size sign in
         assert (0 <= n_up);
         Term.up n_up term,
         Signature.up n_up sign
@@ -556,12 +609,6 @@ module GSub =
       push explicits term sign c []
 
 
-
-    let push_implicits
-          (_: int) (_: Term.t) (_: Signature.t) (_: t)
-        : Term.t * Signature.t * t
-      =
-      assert false (* nyi *)
 
     let count_first_implicits (sign: Signature.t) (c: t): int option =
       let n = Signature.count_first_implicits sign in
@@ -611,6 +658,9 @@ module GSub =
           (req_sign: Signature.t)
           (c: t): t option
       =
+      let cnt = count c in
+      assert (cnt = Signature.context_size act_sign);
+      assert (cnt = Signature.context_size req_sign);
       let rec uni act req n c =
         match Signature.pop act, Signature.pop req with
         | Some (act_arg, act), Some (req_arg, req) ->
@@ -676,6 +726,15 @@ module Required =
       GSub.type_at_level (top c) c.gamma
 
 
+    let pop_top (c: t): t =
+      {c with stack =
+        match c.stack with
+        | [] ->
+            assert false (* Illegal call! *)
+        | _ :: rest ->
+            rest}
+
+
     let count (c: t): int =
       GSub.count c.gamma
 
@@ -714,6 +773,7 @@ module Required =
       in
       let open Option in
       let open GSub in
+      let req_sign = Signature.to_context_size (count gsub) req_sign in
       unify_signatures act_sign req_sign gsub >>= fun gsub ->
       Some
         {gamma =
@@ -794,26 +854,27 @@ module Build_context =
     type t = {
         names: Name_map.t;
         base:  Gamma.t;
-        explicits: Explicits.t;
         reqs:  Required.t list;
       }
 
     let make (c:Context.t): t =
       {names = Context.name_map c;
        base  = Context.gamma c;
-       explicits = Explicits.empty;
        reqs  = [Required.make (GSub.make (Context.gamma c))]}
 
 
 
-    let pop_top (_: t): t =
-      assert false (* nyi *)
+    let pop_top (c: t): t =
+      {c with reqs = List.map Required.pop_top c.reqs}
+
 
     let required_types (c: t): typ list =
       List.map
         (fun req ->
-          Required.top_type req,
-          GSub.base (Required.base req)
+          GSub.(
+            let gsub = Required.base req in
+            substitute gsub (Required.top_type req),
+            base gsub)
         )
         c.reqs
 
@@ -821,6 +882,7 @@ module Build_context =
     let unify_base_candidates
           (range: range)
           (candidates: (Term.t * Signature.t) list)
+          (explicits: Explicits.t)
           (c: t)
         : (t, problem) result
       =
@@ -829,14 +891,14 @@ module Build_context =
           c.reqs >>= fun req ->
           let uni = Required.unify_candidate req in
           candidates >>= fun (term, act_sign) ->
-          Option.to_list (uni term act_sign c.explicits)
+          Option.to_list (uni term act_sign explicits)
         )
       in
       if reqs = [] then
         Error
           (None_conforms
              (range,
-              Explicits.count c.explicits,
+              Explicits.count explicits,
               required_types c,
               List.map
                 (fun (_,sign) -> Signature.typ sign, c.base)
@@ -850,6 +912,7 @@ module Build_context =
     let check_base_terms
           (range: range)
           (terms: Term.t list) (* all valid in the base context *)
+          (explicits: Explicits.t)
           (c: t)
         : (t, problem) result
       =
@@ -859,10 +922,10 @@ module Build_context =
       let candidates =
         List.map_and_filter
           (fun t ->
-            let s  =
-              GSub.(signature gam (type_of_term t gam)) in
-            let n  = Signature.count_explicit_args s in
-            if n < Explicits.count c.explicits then
+            let s  = GSub.(signature gam (type_of_term t gam)) in
+            if Signature.count_explicits s
+              < Explicits.count explicits
+            then
               None
             else
               Some (t, s))
@@ -873,27 +936,44 @@ module Build_context =
           List.map (fun t -> Gamma.type_of_term t c.base, c.base) terms
         in
         Error
-          (Not_enough_args (range, Explicits.count c.explicits, tps))
+          (Not_enough_args (range, Explicits.count explicits, tps))
       else
-        unify_base_candidates range candidates c
+        unify_base_candidates range candidates explicits c
 
 
-    let build_proposition (range: range) (c: t): (t, problem) result
+    let build_proposition
+      (range: range)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
       =
       check_base_terms
         range
         [Term.proposition]
+        explicits
         c
 
 
-    let build_any (range: range) (c: t): (t, problem) result =
+    let build_any
+      (range: range)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
+      =
       check_base_terms
         range
         [Term.any]
+        explicits
         c
 
 
-    let build_name (range: range) (name: string) (c:t): (t, problem) result =
+    let build_name
+      (range: range)
+      (name: string)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
+      =
       match
         Name_map.find name c.names
       with
@@ -907,10 +987,17 @@ module Build_context =
          check_base_terms
            range
            (List.map (fun i -> Gamma.term_at_level i c.base) level_lst)
+           explicits
            c
 
 
-    let build_number (range: range) (str: string) (c:t): (t, problem) result =
+    let build_number
+      (range: range)
+      (str: string)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
+      =
       match Term.number_values str with
       | [] ->
          Error (Overflow range)
@@ -918,20 +1005,35 @@ module Build_context =
          check_base_terms
            range
            terms
+           explicits
            c
 
 
-    let build_string (range: range) (str: string) (c:t): (t, problem) result =
+    let build_string
+      (range: range)
+      (str: string)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
+      =
       check_base_terms
         range
         [Term.string str]
+        explicits
         c
 
 
-    let build_char (range: range) (code: int) (c:t): (t, problem) result =
+    let build_char
+      (range: range)
+      (code: int)
+      (explicits: Explicits.t)
+      (c: t)
+      : (t, problem) result
+      =
       check_base_terms
         range
         [Term.char code]
+        explicits
         c
 
 
@@ -977,22 +1079,22 @@ module Build_context =
       in
       match Located.value exp with
       | Proposition ->
-         build_proposition range c
+         build_proposition range explicits c
 
       | Any ->
-         build_any range c
+         build_any range explicits c
 
       | Identifier name | Operator (name, _) ->
-         build_name range name c
+         build_name range name explicits c
 
       | Number str ->
-         build_number range str c
+         build_number range str explicits c
 
       | Char code ->
-         build_char range code c
+         build_char range code explicits c
 
       | String str ->
-         build_string range str c
+         build_string range str explicits c
 
       | Binary (_, _, _) ->
          assert false (* nyi *)
@@ -1046,9 +1148,7 @@ module Build_context =
             Option.(
               Required.(
                 substitution_in_base (cnt0 + 1) req >>= fun t ->
-                Printf.printf "term found %s\n" (Gamma.string_of_term t c.base);
                 substitution_in_base cnt0 req >>= fun tp ->
-                Printf.printf "type found %s\n" (Gamma.string_of_term tp c.base);
                 Some (t, tp))))
           c.reqs
       in
