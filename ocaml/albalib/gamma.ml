@@ -477,7 +477,7 @@ let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =
     set
     (fun i set ->
       let j = level_of_index i c in
-      if i < level then
+      if j < level then
         set
       else
         Int_set.add j set)
