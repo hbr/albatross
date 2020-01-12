@@ -36,6 +36,7 @@ module type SIG =
     val (<+>): t -> t -> t
     val chain: t list -> t
     val chain_separated: t list -> t -> t
+    val list_separated: t -> t list -> t
   end
 
 
@@ -698,7 +699,7 @@ module Pretty (P:PRINTER) =
          hd >>= fun _ -> chain tl
 
 
-    let chain_separated (lst:t list) (sep:t): t =
+    let list_separated (sep: t) (lst: t list): t =
       let rec chn = function
         | [] ->
            empty
@@ -708,6 +709,10 @@ module Pretty (P:PRINTER) =
            p <+> sep <+> chn tl
       in
       chn lst
+
+
+    let chain_separated (lst:t list) (sep:t): t =
+       list_separated sep lst
 
 
     let group (m:t): t =

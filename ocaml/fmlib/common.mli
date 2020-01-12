@@ -20,6 +20,7 @@ module Int:
 sig
   type t = int
   val compare: t -> t -> int
+  val iterate: t -> ('a -> 'a) -> 'a -> 'a
 end
 
 

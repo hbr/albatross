@@ -97,6 +97,8 @@ module type SIG =
 
 
     val chain_separated: t list -> t -> t
+
+    val list_separated: t -> t list -> t
   end
 
 
