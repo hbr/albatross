@@ -156,6 +156,14 @@ let int_type (c:t) =
   Term.Variable (index_of_level int_level c)
 
 
+let char_type (c:t) =
+  Term.Variable (index_of_level char_level c)
+
+
+let string_type (c:t) =
+  Term.Variable (index_of_level string_level c)
+
+
 let standard (): t =
   (* Standard context. *)
   empty
@@ -226,32 +234,42 @@ let standard (): t =
                      Lambda_info.untyped "A"))))
 
 
+let type_of_value (v: Term.Value.t) (c: t): Term.typ =
+  let open Term in
+  match v with
+  | Value.Int _ ->
+      int_type c
+
+  | Value.Char _ ->
+      char_type c
+
+  | Value.String _ ->
+      string_type c
+
+  | Value.Unary _ | Value.Binary _ ->
+      assert false (* Illegal call! *)
+
+
+let type_of_sort (s: Term.Sort.t): Term.typ =
+  let open Term in
+  let open Sort in
+  match s with
+  | Proposition ->
+      Sort (Any 0)
+
+  | Any i ->
+      Sort (Any (i + 1))
 
 
 let type_of_term (t:Term.t) (c:t): Term.typ =
   let rec typ t c =
     let open Term in
     match t with
-    | Sort Sort.Proposition ->
-       Sort (Sort.Any 0)
-
-    | Sort (Sort.Any i) ->
-       Sort (Sort.Any (i+1))
+    | Sort s ->
+        type_of_sort s
 
     | Value v ->
-       (match v with
-        | Value.Int _ ->
-           Variable (index_of_level int_level c)
-
-        | Value.Char _ ->
-           Variable (index_of_level char_level c)
-
-        | Value.String _ ->
-         Variable (index_of_level string_level c)
-
-        | Value.Unary _ | Value.Binary _ ->
-           assert false (* Illegal call! *)
-       )
+        type_of_value v c
 
     | Variable i ->
        type_at_level (level_of_index i c) c
@@ -274,15 +292,26 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
        in
        Pi (tp, rt, Pi_info.typed (Lambda_info.name info))
 
-    | Pi (tp, t, info) ->
+    | Pi (tp, rt, info) ->
        let name = Pi_info.name info in
        (match
-          typ tp c, typ t (push_local name tp c)
+          typ tp c, typ rt (push_local name tp c)
         with
-        | Sort (Sort.Any i), Sort (Sort.Any j) ->
-           Sort (Sort.Any (max i j))
-        | _ ->
-           assert false (* nyi other product combinations. *)
+        | Sort s1, Sort s2 ->
+          let open Sort in
+          (match s1, s2 with
+            | Proposition, Any i ->
+              Sort (Any i)
+
+            | Any i, Any j ->
+              Sort (Any (max i j))
+
+            | _, Proposition ->
+              Sort Proposition
+          )
+
+        | _, _ ->
+           assert false (* Illegal call: term is not welltyped! *)
        )
   in
   typ t c
