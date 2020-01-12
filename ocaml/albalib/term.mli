@@ -63,6 +63,7 @@ end
 
 type appl =
   | Normal
+  | Implicit
   | Binary
 
 
@@ -97,6 +98,7 @@ val up_from: int -> int -> t -> t
 (** [up delta t] *)
 val up: int -> t -> t
 
+val up1: t -> t
 
 (** [down_from delta start t] *)
 val down_from: int -> int -> t -> t option

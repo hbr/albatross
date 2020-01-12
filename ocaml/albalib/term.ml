@@ -165,6 +165,7 @@ module Pi_info =
 
 type appl =
   | Normal
+  | Implicit
   | Binary
 
 
@@ -242,6 +243,10 @@ let up (delta:int) (t:t): t =
     t
   else
     up_from delta 0 t
+
+
+let up1 (t: t): t =
+  up 1 t
 
 
 
