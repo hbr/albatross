@@ -1,4 +1,4 @@
-.PHONY: build build_dune test_alba
+.PHONY: build build_dune test_alba doc fmlib albalib alba2
 
 build:
 	cd ocaml;          \
@@ -21,11 +21,14 @@ test_alba:
 	dune exec -- ocaml/alba1/alba.exe compile -work-dir library/alba.base
 
 
+doc:
+	dune build @doc
+
 fmlib:
 	dune build @ocaml/fmlib/runtest
 
 albalib:
-	dune build ocaml/albalib/albalib.cma
+	dune build @ocaml/albalib/runtest
 
 alba2:
 	dune build ocaml/alba2/alba2.bc
