@@ -721,8 +721,14 @@ module Pretty (P:Pretty_printer.SIG) =
             <+> string op_str
             <+> char ')')
 
-      | Appl (_, _, _) ->
-         assert false  (* nyi *)
+      | Appl (f, a, _) ->
+          let f_data, f_pr = print f c
+          and a_data, a_pr = print a c in
+          let f_pr = parenthesize f_pr f_data true Operator.application
+          and a_pr = parenthesize a_pr a_data false Operator.application
+          in
+          Some Operator.application,
+          P.( f_pr <+> char ' ' <+> a_pr )
 
       | Lambda (tp, exp, info) ->
          let arg_lst, exp_inner, c_inner =
