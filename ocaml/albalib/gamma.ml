@@ -261,6 +261,10 @@ let type_of_sort (s: Term.Sort.t): Term.typ =
       Sort (Any (i + 1))
 
 
+let type_of_variable (i: int) (c: t): Term.typ =
+  type_at_level (level_of_index i c) c
+
+
 let type_of_term (t:Term.t) (c:t): Term.typ =
   let rec typ t c =
     let open Term in
@@ -272,8 +276,7 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
         type_of_value v c
 
     | Variable i ->
-       type_at_level (level_of_index i c) c
-
+        type_of_variable i c
 
     | Typed (_, tp) ->
        tp
@@ -432,6 +435,41 @@ let key_normal (c: t) (t: Term.t): Term.t =
     args
 
 
+let is_subtype (_: Term.typ) (_: Term.typ) (_: t): bool =
+  assert false (* nyi *)
+
+
+let rec typecheck (term: Term.t) (c: t): Term.typ option =
+  let open Term in
+  match term with
+  | Sort s ->
+      Some (type_of_sort s)
+
+  | Value v ->
+      Some (type_of_value v c)
+
+  | Variable i ->
+      Some (type_of_variable i c)
+
+  | Appl (f, arg, _ ) ->
+      Option.(
+        typecheck f c >>= fun f_type ->
+        typecheck arg c >>= fun arg_type ->
+        let key, args = key_split c f_type [] in
+        ( match key, args with
+          | Pi (tp, rt, _ ), []  when is_subtype arg_type tp c ->
+              Some (apply rt arg)
+          | _ ->
+              None ))
+
+  | Typed (_, _ ) ->
+      assert false (* nyi *)
+
+  | Lambda (_, _, _ ) ->
+      assert false (* nyi *)
+
+  | Pi (_, _, _) ->
+      assert false (* nyi *)
 
 
 let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =

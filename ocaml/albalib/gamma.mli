@@ -27,6 +27,8 @@ val int_type: t -> Term.typ
 
 val type_of_term: Term.t -> t -> Term.typ
 
+val typecheck: Term.t -> t -> Term.typ option
+
 
 (** [transfer c c1 t] transfer the term [t] from the context [c] into the
    context [c1] (requires that [c] is an initial segment of [c1]. *)
