@@ -305,7 +305,7 @@ module GSub =
     let count_substitutions (c:t): int =
       Array.length c.substitutions
 
-    let is_placeholder (c: t) (idx: int): bool =
+    let is_placeholder (idx: int) (c: t): bool =
       idx < count_substitutions c  (* must be changed for bound variables!!! *)
 
     let base_count (c:t): int =
@@ -376,6 +376,10 @@ let _ = string_of_term
       assert (0 <= lsub);
       c.substitutions.(lsub) <> None
 
+
+    let has_substitution (idx: int) (c: t): bool =
+      assert (is_placeholder idx c);
+      has_substitution_at_level (level_of_index idx c) c
 
 
     let add_substitution_at_level (level:int) (t:Term.t) (c:t): t =
@@ -457,6 +461,7 @@ let _ = string_of_term
     let to_base (t: Term.t) (c: t): Term.t option =
       (* Transform [t] into the base context. Only possible if it does not
          contain any placeholders or new local variables. *)
+      Printf.printf "to_base %s\n" (string_of_term t c);
       Term.down (count c - base_count c) t
 
 
@@ -473,7 +478,7 @@ let _ = string_of_term
       !res
 
 
-    let substitution (c:t) (i:int): Term.t option =
+    let substitution (i:int) (c:t): Term.t option =
       (* in the current context *)
       let n_subs = Array.length c.substitutions
       and cnt = count c
@@ -488,10 +493,10 @@ let _ = string_of_term
         Some (Variable i)
 
 
-    let substitute (c: t) (term: Term.t): Term.t =
+    let substitute (term: Term.t) (c: t): Term.t =
       Term.substitute
         (fun i ->
-          match substitution c i with
+          match substitution i c with
           | None ->
              Variable i
           | Some t ->
@@ -506,30 +511,39 @@ let _ = string_of_term
          substitutions such that [t] and [u] with the substitutions applied
          are equivalent terms. Return a new context containing new
          substitutions if the terms are unifiable, otherwise return [None]. *)
+      Printf.printf "unify %s with %s\n"
+        (string_of_term t c) (string_of_term u c);
       let rec unify t u exact c =
-        let n_subs = Array.length c.substitutions
+        let type_of_variable i = Gamma.type_of_variable i c.base
+        in
+        let unify_variable i term =
+          Option.(unify (type_of_variable i)
+                        (Gamma.type_of_term term c.base)
+                        false c
+                  >>= fun c ->
+                  Some (add_substitution_at_index i term c))
         in
         let open Term
         in
         match t, u with
-        | Variable i, _ when i < n_subs ->
-           Option.(
-            unify
-              (Gamma.type_at_level (level_of_index i c) c.base)
-              (Gamma.type_of_term u c.base)
-              false
-              c
-            >>= fun c ->
-            match
-              substitution c i
-            with
-            | None ->
-               Some (add_substitution_at_index i u c)
-            | Some t_sub ->
-               unify t_sub u exact c)
+        | Variable i, Variable j
+          when is_placeholder i c && is_placeholder j c
+          ->
+            assert (not (has_substitution i c));
+            assert (not (has_substitution j c));
+            ( match unify_variable i u with
+              | None ->
+                  unify_variable j t
+              | Some c ->
+                  Some c )
 
-        | _, Variable i when i < n_subs ->
-           unify u t exact c
+        | Variable i, _ when is_placeholder i c ->
+            assert (not (has_substitution i c));
+            unify_variable i u
+
+        | _, Variable j when is_placeholder j c ->
+            assert (not (has_substitution j c));
+            unify_variable j t
 
         | Sort s1, Sort s2
              when (exact && s1 = s2) || (not exact && Sort.is_super s1 s2) ->
@@ -547,7 +561,12 @@ let _ = string_of_term
         | _, _ ->
            None
       in
-      unify t u true c
+      let res = unify (substitute t c) (substitute u c) true c in
+      if res <> None then
+        Printf.printf "  ok\n"
+      else
+        Printf.printf "  failed\n";
+      res
 
 
 
@@ -562,9 +581,21 @@ let _ = string_of_term
           (c: t)
         : Term.t * Signature.t * t
       =
+      Printf.printf "push_implicits %d  %s: %s\n"
+        n
+        (string_of_term term c) (string_of_term (Signature.typ sign) c);
       assert (n <= Signature.count_first_implicits sign);
       let push_one (term, sign, c) =
         let arg_tp, sign = Signature.pop_safe sign in
+        let _ =
+          Printf.printf "  push_one arg_tp %s\n"
+            (string_of_term arg_tp c);
+          let c_inner = push_substitutable arg_tp c
+          and term = Term.(Appl (up1 term, Variable 0, Implicit)) in
+          Printf.printf "     %s: %s\n"
+            (string_of_term term c_inner)
+            (string_of_term (Signature.typ sign) c_inner)
+        in
         Term.(Appl (up1 term, Variable 0, Implicit)),
         sign,
         push_substitutable arg_tp c
@@ -582,6 +613,8 @@ let _ = string_of_term
       assert (Explicits.count explicits
               <= Signature.count_explicits sign);
       let rec push explicits term sign c ptr_lst =
+        Printf.printf " push %s: %s\n"
+          (string_of_term term c) (string_of_term (Signature.typ sign) c);
         if Explicits.has explicits then
           let term, sign, c =
             push_implicits
@@ -606,6 +639,9 @@ let _ = string_of_term
         Term.up n_up term,
         Signature.up n_up sign
       in
+      Printf.printf "push_explicits %d(%b) term = %s, type = %s\n"
+        (Explicits.count explicits) (Explicits.has explicits)
+        (string_of_term term c) (string_of_term (Signature.typ sign) c);
       push explicits term sign c []
 
 
@@ -613,8 +649,8 @@ let _ = string_of_term
     let count_first_implicits (sign: Signature.t) (c: t): int option =
       let n = Signature.count_first_implicits sign in
       if n = 0 then
-        match substitute c (Signature.typ sign) with
-        | Term.Variable i when is_placeholder c i ->
+        match substitute (Signature.typ sign) c with
+        | Term.Variable i when is_placeholder i c ->
            None
         | _ ->
            Some 0
@@ -634,16 +670,17 @@ let _ = string_of_term
       let term, act_sign, c, ptr_array =
         push_explicits explicits term act_sign c
       in
+      let req_sign = Signature.to_context_size (count c) req_sign
+      in
       let term, act_sign, c =
-        let n_req = Signature.count_first_implicits req_sign
-        in
         match
+          count_first_implicits req_sign c,
           count_first_implicits act_sign c
         with
-        | Some n_act when n_req < n_act ->
-           push_implicits (n_act - n_req) term act_sign c
-        | _ ->
-           term, act_sign, c
+        | Some n_req, Some n_act ->
+            push_implicits (n_act - n_req) term act_sign c
+        | _, _ ->
+            term, act_sign, c
       in
       term, act_sign, ptr_array, c
 
@@ -828,17 +865,17 @@ module Required =
       assert false (* nyi *)
 
 
-    let substitution_in_base (level:int) (c: t): Term.t option =
+    let substitution_in_base (level:int) (bc: t): Term.t option =
       (* At [level] there must be a substitutable which has a substitution.
          Transform the substitution to the base context or return [None],
-         if it still contains placeholders. *)
+         if it still contains other placeholders. *)
       GSub.(
-        match substitution_at_level level c.gamma with
+        match substitution_at_level level bc.gamma with
         | None ->
           assert false (* Illegal call, [level] does not have a
                           substitution. *)
         | Some term ->
-          to_base term c.gamma
+          to_base term bc.gamma
       )
   end (* Required *)
 
@@ -873,7 +910,7 @@ module Build_context =
         (fun req ->
           GSub.(
             let gsub = Required.base req in
-            substitute gsub (Required.top_type req),
+            substitute (Required.top_type req) gsub,
             base gsub)
         )
         c.reqs
@@ -1085,9 +1122,11 @@ module Build_context =
          build_any range explicits c
 
       | Identifier name | Operator (name, _) ->
+        Printf.printf "build identifier\n";
          build_name range name explicits c
 
       | Number str ->
+        Printf.printf "build number\n";
          build_number range str explicits c
 
       | Char code ->
@@ -1112,6 +1151,7 @@ module Build_context =
          )
 
       | Application (f, args) ->
+        Printf.printf "build appl nargs = %d\n" (List.length args);
          assert (args <> []);
          let module Fold = List.Monadic_fold (Result) in
          Result.(

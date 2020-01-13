@@ -333,46 +333,62 @@ let definition_term (c: t) (idx: int): Term.t option =
 
 
 
-let rec compute (t:Term.t) (c:t): Term.t =
+let compute (t:Term.t) (c:t): Term.t =
   let open Term in
-  match t with
-  | Sort _ ->
-     t
+  let rec compute term steps c =
+    match term with
+    | Sort _ | Value _ ->
+        term, steps
 
-  | Value _ ->
-     t
+    | Variable i ->
+       (match (entry (level_of_index i c) c).definition with
+        | No ->
+            term, steps
 
-  | Variable i ->
-     (match (entry (level_of_index i c) c).definition with
-      | No ->
-         t
+        | Builtin v ->
+           Term.Value v, steps + 1
 
-      | Builtin v ->
-         Term.Value v
+        | Definition def ->
+           def, steps + 1
+       )
 
-      | Definition def ->
-         def
-     )
+    | Typed (e, _ ) ->
+       compute e steps c
 
-  | Typed (e, _ ) ->
-     compute e c
+    | Appl (Value f, Value arg, _) ->
+        Value (Value.apply f arg), steps + 1
 
-  | Appl (Lambda (_, exp, _ ), a, _) ->
-     compute (Term.apply exp a) c
+    | Appl (Value f, arg, mode) ->
+        let arg, new_steps = compute arg steps c in
+        if steps < new_steps then
+          compute (Appl (Value f, arg, mode)) new_steps c
+        else
+          Appl (Value f, arg, mode), steps
 
-  | Appl (f, a, mode) ->
-     let a, f = compute a c, compute f c in
-     (match f, a with
-      | Value vf, Value va ->
-         Value (Value.apply vf va)
-      | _ ->
-         Appl (f, a, mode))
+    | Appl (Lambda (_, exp, _), arg, _) ->
+        compute (apply exp arg) (steps + 1) c
 
-  | Lambda _ ->
-     t
+    | Appl (Variable i, arg, mode) ->
+      let f, new_steps = compute (Variable i) steps c in
+      if steps < new_steps then
+        compute (Appl (f, arg, mode)) new_steps c
+      else
+        term, new_steps
 
-  | Pi _ ->
-     t
+    | Appl (f, arg, mode) ->
+        let f, new_steps = compute f steps c in
+        if steps < new_steps then
+          compute (Appl (f, arg, mode)) new_steps c
+        else
+          term, new_steps
+
+    | Lambda _ ->
+        term, steps
+
+    | Pi _ ->
+        term, steps
+  in
+  fst (compute t 0 c)
 
 
 let rec push_arguments
@@ -716,6 +732,9 @@ module Pretty (P:Pretty_printer.SIG) =
             <+> char ' '
             <+> string op_str
             <+> char ')')
+
+      | Appl (f, _, Implicit) ->
+          print f c
 
       | Appl (f, a, _) ->
           Some Operator.application,

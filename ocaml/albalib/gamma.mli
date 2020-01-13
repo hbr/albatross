@@ -25,6 +25,7 @@ val type_at_level: int -> t -> Term.typ
 
 val int_type: t -> Term.typ
 
+val type_of_variable: int -> t -> Term.typ
 val type_of_term: Term.t -> t -> Term.typ
 
 val typecheck: Term.t -> t -> Term.typ option
