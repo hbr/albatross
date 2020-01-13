@@ -1170,9 +1170,6 @@ module Build_context =
       | Function (_, _, _) ->
          assert false (* nyi *)
 
-      | Parenthesized exp ->
-         build0_new exp explicits c
-
 
     let to_base_context
           (c: t)
@@ -1519,9 +1516,6 @@ let rec build0
 
   | Function (_, _, _) ->
      Error (Problem.Not_yet_implemented (range, "function expression"))
-
-  | Parenthesized e ->
-     build0 base reqs nargs mode e
 
 
 let build

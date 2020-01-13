@@ -35,7 +35,6 @@ module Expression = struct
         (string located * t option) list  (* args *)
         * t option                        (* result type *)
         * t                               (* defining expression *)
-    | Parenthesized of t
 
 
   let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
@@ -370,16 +369,13 @@ let rec expression (): Expression.t t =
     <|> number_expression
     <|> literal_char
     <|> literal_string
-    <|> located
-          (return
-             (fun op_exp -> Expression.Parenthesized op_exp)
-           |= (char_ws '('
-               >>= fun _ ->
-               (* op_expression has to be encapsulated in a function,
-                  otherwise infinite recursion!! *)
-               expression () <|> lonely_operator)
-           |. char_ws ')'
-          )
+    <|> ( ( char_ws '('
+            >>= fun _ ->
+            (* op_expression has to be encapsulated in a function,
+               otherwise infinite recursion!! *)
+            expression () <|> lonely_operator)
+          |. char_ws ')'
+        )
     <|> located
           (return (fun args rt exp -> Expression.Function (args, rt, exp))
            |. char_ws '\\'

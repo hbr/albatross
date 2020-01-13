@@ -28,7 +28,6 @@ sig
         (string located * t option) list  (* args *)
         * t option                        (* result type *)
         * t                               (* defining expression *)
-    | Parenthesized of t
 end
 
 
