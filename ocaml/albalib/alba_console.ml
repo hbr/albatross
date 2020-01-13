@@ -436,7 +436,7 @@ module Make (Io:Io.SIG) =
                       (List.map (Builder_print.candidate_type) cands)
                       cut)))
             <+> cut <+> cut
-            <+> wrap_words "for the term"
+            <+> wrap_words "for the term."
             <+> cut
             )
       | None_conforms (range, nargs, reqs, cands) ->
@@ -464,7 +464,7 @@ module Make (Io:Io.SIG) =
                     (List.map (Builder_print.candidate_type) cands)
                     cut)))
             <+> cut <+> cut
-            <+> wrap_words "for the term"
+            <+> wrap_words "for the term."
            <+> cut
 
 
