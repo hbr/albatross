@@ -392,19 +392,18 @@ module Make (Io:Io.SIG) =
       =
       let module Builder_print = Builder.Print (Pretty) in
       let open Builder in
-      let open Pretty
+      let open Pretty in
+      let plural_s n = if n = 1 then empty else char 's'
       in
-
       let expect_nargs n =
         if n = 0 then
           string "which"
         else
-          chain_separated
+          list_separated
+            (group space)
             [wrap_words "which applied to";
              string (string_of_int n);
-             string "arguments"
-            ]
-            (group space)
+             string "argument" <+> plural_s n]
       and type_or_types lst =
         match lst with
         | [_] ->
@@ -428,14 +427,16 @@ module Make (Io:Io.SIG) =
                   (group space)
                   [ wrap_words "I was expecting a term which can be applied to";
                     string (string_of_int nargs);
-                    wrap_words "arguments, but I have inferred";
-                    type_or_types cands;
-                    wrap_words "for the term"]
+                    string "argument" <+> plural_s nargs <+> char ',';
+                    wrap_words "but I have inferred";
+                    type_or_types cands]
             <+> cut <+> cut
             <+> (nest 4
                     ((chain_separated
                       (List.map (Builder_print.candidate_type) cands)
                       cut)))
+            <+> cut <+> cut
+            <+> wrap_words "for the term"
             <+> cut
             )
       | None_conforms (range, nargs, reqs, cands) ->
@@ -456,13 +457,14 @@ module Make (Io:Io.SIG) =
            <+> (list_separated
                   (group space)
                   [wrap_words "but I have inferred";
-                   type_or_types cands;
-                   wrap_words "for the term"])
+                   type_or_types cands])
            <+> cut <+> cut
            <+> (nest 4
                   ((chain_separated
                     (List.map (Builder_print.candidate_type) cands)
                     cut)))
+            <+> cut <+> cut
+            <+> wrap_words "for the term"
            <+> cut
 
 
