@@ -394,6 +394,12 @@ let rec expression (): Expression.t t =
     | arg_lst ->
        let pos1 = Located.start f
        and pos2 = Located.end_ args
+       and f, arg_lst =
+        match Located.value f with
+        | Expression.Application (f0, arg_lst0) ->
+            f0, arg_lst0 @ arg_lst
+        | _ ->
+            f, arg_lst
        in
        return
          (Located.make
