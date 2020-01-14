@@ -42,66 +42,8 @@ module Pretty_make (Io:Io.SIG) =
       cut <+> nest 4 p <+> cut
 
 
-    let indented_paragraphs (lst: t list): t =
-      indented_paragraph (chain lst)
-
-
     let paragraphs (lst:t list): t =
       chain_separated lst cut
-
-(*
-    let expression (e:Expression.t): t =
-      (* print expression [e]. *)
-      let rec exp e =
-        let open Expression in
-        match Located.value e with
-        | Proposition ->
-           string "Proposition"
-
-        | Any ->
-           string "Any"
-
-        | Identifier str | Number str ->
-           string str
-
-        | Char i ->
-           char '\'' <+> char (Char.chr i) <+> char '\''
-
-        | String str ->
-           char '"' <+> string str <+> char '"'
-
-        | Operator op ->
-           let str, _ = op in
-           chain [char '(';
-                  string str;
-                  char ')']
-
-        | Parenthesized e ->
-           chain [char '(';
-                  exp e;
-                  char ')']
-
-        | Binary (e1, op, e2) ->
-           chain [char '(';
-                  exp e1;
-                  char ' ';
-                  string
-                    (let str, _  = Located.value op in str);
-                  char ' ';
-                  exp e2;
-                  char ')']
-
-        | Typed (e, tp) ->
-           char '(' <+> exp e <+> string ": " <+> exp tp <+> char ')'
-
-        | Function (_, _) ->
-           assert false (* assert false *)
-      in
-      chain [string "expression";
-             cut;
-             nest 4 (exp e);
-             cut;cut]
- *)
 
 
     let error_header
@@ -414,6 +356,11 @@ module Make (Io:Io.SIG) =
           assert false (* cannot happen, empty type lists not allowed! *)
       in
       match problem with
+      | Not_yet_implemented (range, str) ->
+          report_error "NOT YET IMPLEMENTED" src range
+            (string str <+> group space
+              <+> wrap_words "is not yet implemented"
+              <+> cut)
       | Overflow _ ->
         assert false (* nyi *)
       | No_name range ->
@@ -469,14 +416,14 @@ module Make (Io:Io.SIG) =
 
 
 
-    let build_and_compute_new
+    let build_and_compute
           (src: string)
           (e: Parser.Expression.t)
           (compute: bool)
         : Pretty.t
       =
       let std_context = Context.standard () in
-      match Builder.build_new e std_context with
+      match Builder.build e std_context with
       | Error e ->
          report_build_problem src e
 
@@ -499,121 +446,9 @@ module Make (Io:Io.SIG) =
                lst)
          )
 
-    let build_and_compute
-          (src:string)
-          (e:Parser.Expression.t)
-          (compute: bool)
-        : Pretty.t
-      =
-      let std_context = Context.standard () in
-      match Builder.build e std_context with
-      | Error problem ->
-         let module Position = Character_parser.Position in
-         (match problem with
-          | Builder.Problem.Overflow range ->
-             let open Pretty in
-             error_header "OVERFLOW"
-             <+> print_source src range
-             <+> fill_paragraph "Your number is too big to fit into a machine \
-                                 word."
-             <+> cut
-
-          | Builder.Problem.No_name range ->
-             let open Pretty in
-             chain
-               [error_header "NAMING";
-                print_source src range;
-                cut;
-                fill_paragraph @@ "I cannot find this name.";
-                cut]
-
-          | Builder.Problem.Not_enough_args (range, nargs, acts) ->
-             assert (acts <> []);
-             let module GP = Builder.Print (Pretty) in
-             Pretty.(error_header "TYPE"
-                     <+> print_source src range
-                     <+> fill_paragraph
-                           ("I was expecting a function/operator which can \
-                             be applied to " ^ string_of_int nargs
-                            ^ " arguments. But I found only"
-                            ^ if List.length acts = 1 then
-                                ""
-                              else
-                                " one of")
-                     <+> cut
-                     <+> indented_paragraph
-                           (chain_separated
-                              (List.map GP.actual acts)
-                              cut)
-                     <+> cut)
-
-          | Builder.Problem.None_conforms (range, reqs, acts) ->
-             assert (reqs <> []);
-             assert (acts <> []);
-             let module GP = Builder.Print (Pretty) in
-             Pretty.(error_header "TYPE"
-                     <+> print_source src range
-                     <+> fill_paragraph
-                           ("I was expecting an expression of "
-                            ^ if List.length reqs = 1 then
-                                "type"
-                              else
-                                "one of the types")
-                     <+> cut
-                     <+> indented_paragraph
-                           (chain_separated
-                              (List.map GP.required reqs)
-                              cut)
-                     <+> cut
-                     <+> string ("but I found"
-                                 ^ (if List.length acts = 1 then
-                                      ""
-                                    else " one of"))
-                     <+> cut
-                     <+> indented_paragraphs (List.map GP.actual acts)
-                     <+> cut)
-
-          | Builder.Problem.Not_yet_implemented (range,str) ->
-             Pretty.(error_header "NOT YET IMPLEMENTED"
-                     <+> print_source src range
-                     <+> cut
-                     <+> fill_paragraph ("<" ^ str ^ "> is not yet implemented")
-                     <+> cut
-             )
-         )
-
-      | Ok lst ->
-         Pretty.(
-          paragraphs
-            (List.map
-               (fun (t,tp) ->
-                 let t =
-                   if compute then
-                     Context.compute t std_context
-                   else
-                     t
-                 in
-                 let module P = Context.Pretty (Pretty) in
-                 P.print t std_context
-                 <+> string ": "
-                 <+> P.print tp std_context
-                 <+> cut)
-               lst)
-         )
-
-
 
     let eval_command (p:Parser.parser) (src:string): Pretty.t =
       assert (Parser.has_ended p);
-      let new_flag =
-        true
-      in
-      let build_and_compute =
-        if new_flag then
-          build_and_compute_new
-        else
-          build_and_compute
-      in
       match Parser.result p with
       | Some Parser.Command.Do_nothing ->
          Pretty.empty

@@ -15,6 +15,9 @@ type range = Position.t * Position.t
 module Expression = struct
   type operator = string * Operator.t
 
+  type argument =
+    | Normal
+    | Operand
 
   type t =
     t0 located
@@ -28,9 +31,8 @@ module Expression = struct
     | Char of int
     | String of string
     | Operator of operator
-    | Binary of t * operator located * t
     | Typed of t * t
-    | Application of t * t list
+    | Application of t * (t * argument) list
     | Function of
         (string located * t option) list  (* args *)
         * t option                        (* result type *)
@@ -47,7 +49,10 @@ module Expression = struct
       (if op_str = ":" then
          Typed (e1, e2)
        else
-         Binary (e1,op,e2))
+         Application (
+          Located.map (fun (op_str,_) -> Identifier op_str) op,
+          [ e1, Operand;
+            e2, Operand]))
       pos_end
 
 
@@ -392,20 +397,21 @@ let rec expression (): Expression.t t =
     | [] ->
        return f
     | arg_lst ->
-       let pos1 = Located.start f
-       and pos2 = Located.end_ args
-       and f, arg_lst =
-        match Located.value f with
-        | Expression.Application (f0, arg_lst0) ->
-            f0, arg_lst0 @ arg_lst
-        | _ ->
-            f, arg_lst
-       in
-       return
-         (Located.make
-            pos1
-            (Expression.Application (f, arg_lst))
-            pos2)
+        let arg_lst = List.map (fun arg -> arg, Expression.Normal) arg_lst in
+        let pos1 = Located.start f
+        and pos2 = Located.end_ args
+        and f, arg_lst =
+         match Located.value f with
+         | Expression.Application (f0, arg_lst0) ->
+             f0, arg_lst0 @ arg_lst
+         | _ ->
+             f, arg_lst
+        in
+        return
+          (Located.make
+             pos1
+             (Expression.Application (f, arg_lst))
+             pos2)
   in
 
   let operator_and_operand =

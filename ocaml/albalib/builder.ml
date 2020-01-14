@@ -249,38 +249,37 @@ module Located =
 
 module Explicits =
   struct
-    type t =
-      | No
-      | Normal of int
+    type t = {
+      args: (Expression.t * Expression.argument) list;
+      nargs: int
+    }
 
-    let normal (nargs: int): t =
-      assert (0 < nargs);
-      Normal nargs
+    let to_term_appl arg_appl =
+      match arg_appl with
+      | Expression.Normal ->
+          Term.Normal
+      | Expression.Operand ->
+          Term.Binary
 
     let empty: t =
-      No
+      {args = []; nargs = 0}
+
+    let make args: t =
+      {args; nargs = List.length args}
 
     let count (e: t): int =
-      match e with
-      | No ->
-         0
-      | Normal n ->
-         n
+      e.nargs
 
     let has (e: t): bool =
       0 < count e
 
     let pop (e: t): Term.appl * t =
-      match e with
-      | No ->
+      match e.args with
+      | [] ->
         assert false (* Illegal call! *)
-      | Normal n ->
-        assert (0 < n);
-        Term.Normal,
-        if 1 < n then
-          Normal (n - 1)
-        else
-          No
+      | (_, arg_appl) :: args ->
+        to_term_appl arg_appl,
+        { args; nargs = e.nargs - 1}
   end
 
 
@@ -461,7 +460,6 @@ let _ = string_of_term
     let to_base (t: Term.t) (c: t): Term.t option =
       (* Transform [t] into the base context. Only possible if it does not
          contain any placeholders or new local variables. *)
-      Printf.printf "to_base %s\n" (string_of_term t c);
       Term.down (count c - base_count c) t
 
 
@@ -511,8 +509,6 @@ let _ = string_of_term
          substitutions such that [t] and [u] with the substitutions applied
          are equivalent terms. Return a new context containing new
          substitutions if the terms are unifiable, otherwise return [None]. *)
-      Printf.printf "unify %s with %s\n"
-        (string_of_term t c) (string_of_term u c);
       let rec unify t u exact c =
         let type_of_variable i = Gamma.type_of_variable i c.base
         in
@@ -561,12 +557,7 @@ let _ = string_of_term
         | _, _ ->
            None
       in
-      let res = unify (substitute t c) (substitute u c) true c in
-      if res <> None then
-        Printf.printf "  ok\n"
-      else
-        Printf.printf "  failed\n";
-      res
+      unify (substitute t c) (substitute u c) true c
 
 
 
@@ -581,21 +572,9 @@ let _ = string_of_term
           (c: t)
         : Term.t * Signature.t * t
       =
-      Printf.printf "push_implicits %d  %s: %s\n"
-        n
-        (string_of_term term c) (string_of_term (Signature.typ sign) c);
       assert (n <= Signature.count_first_implicits sign);
       let push_one (term, sign, c) =
         let arg_tp, sign = Signature.pop_safe sign in
-        let _ =
-          Printf.printf "  push_one arg_tp %s\n"
-            (string_of_term arg_tp c);
-          let c_inner = push_substitutable arg_tp c
-          and term = Term.(Appl (up1 term, Variable 0, Implicit)) in
-          Printf.printf "     %s: %s\n"
-            (string_of_term term c_inner)
-            (string_of_term (Signature.typ sign) c_inner)
-        in
         Term.(Appl (up1 term, Variable 0, Implicit)),
         sign,
         push_substitutable arg_tp c
@@ -613,8 +592,6 @@ let _ = string_of_term
       assert (Explicits.count explicits
               <= Signature.count_explicits sign);
       let rec push explicits term sign c ptr_lst =
-        Printf.printf " push %s: %s\n"
-          (string_of_term term c) (string_of_term (Signature.typ sign) c);
         if Explicits.has explicits then
           let term, sign, c =
             push_implicits
@@ -639,9 +616,6 @@ let _ = string_of_term
         Term.up n_up term,
         Signature.up n_up sign
       in
-      Printf.printf "push_explicits %d(%b) term = %s, type = %s\n"
-        (Explicits.count explicits) (Explicits.has explicits)
-        (string_of_term term c) (string_of_term (Signature.typ sign) c);
       push explicits term sign c []
 
 
@@ -738,6 +712,7 @@ type problem =
   | No_name of range
   | Not_enough_args of range * int * candidate_type list
   | None_conforms of range * int * required_type list * candidate_type list
+  | Not_yet_implemented of range * string
 
 
 module Required =
@@ -1098,7 +1073,7 @@ module Build_context =
       }
 
 
-    let rec build0_new
+    let rec build0
               (exp:Parser.Expression.t)
               (explicits: Explicits.t)
               (c: t)
@@ -1122,11 +1097,9 @@ module Build_context =
          build_any range explicits c
 
       | Identifier name | Operator (name, _) ->
-        Printf.printf "build identifier\n";
          build_name range name explicits c
 
       | Number str ->
-        Printf.printf "build number\n";
          build_number range str explicits c
 
       | Char code ->
@@ -1135,40 +1108,37 @@ module Build_context =
       | String str ->
          build_string range str explicits c
 
-      | Binary (_, _, _) ->
-         assert false (* nyi *)
-
       | Typed (inner, tp) ->
-         let c = start_typed_term c
+          Error (Not_yet_implemented (range, "<Typed term>"))
+         (*let c = start_typed_term c
          in
          Result.(
            map
              end_typed_term
              (return (start_typed_term c)
-              >>= build0_new tp Explicits.empty
+              >>= build0 tp Explicits.empty
               >>= unify_typed_term
-              >>= build0_new inner Explicits.empty)
-         )
+              >>= build0 inner Explicits.empty)
+         )*)
 
       | Application (f, args) ->
-        Printf.printf "build appl nargs = %d\n" (List.length args);
          assert (args <> []);
          let module Fold = List.Monadic_fold (Result) in
          Result.(
-           build0_new
+           build0
              f
-             (Explicits.normal (List.length args))
+             (Explicits.make args)
              c
            >>= Fold.fold_left
-                 (fun arg c ->
+                 (fun (arg,_) c ->
                    map
                      pop_top
-                     (build0_new arg Explicits.empty c))
+                     (build0 arg Explicits.empty c))
                  args
          )
 
       | Function (_, _, _) ->
-         assert false (* nyi *)
+          Error (Not_yet_implemented (range, "<Function term>"))
 
 
     let to_base_context
@@ -1200,7 +1170,7 @@ let build
           (c:Context.t)
         : ((Term.t * Term.typ) list, problem) result
       =
-      Result.( build0_new exp Explicits.empty (make c)
+      Result.( build0 exp Explicits.empty (make c)
                >>= to_base_context )
   end (* Build_context *)
 
@@ -1216,334 +1186,21 @@ let build
 
 
 
-let build_new
+let build
       (exp:Parser.Expression.t)
       (c:Context.t)
     : ((Term.t * Term.typ) list, problem) result
   =
   Build_context.build exp c
 
-
-
-
-
-
-
-
-
-(***************** Old Builder ******************************************)
-
-type required =
-  GSub.t     (* Context with placeholders with required types *)
-
-  * int list  (* Positions of the placeholders for not yet built arguments. *)
-
-
-type actual =
-  GSub.t     (* Context with placeholders for the arguments (there might be
-                 zero arguments). The context below the arguments is the base
-                 context. *)
-
-  * int list  (* Positions of the placeholders for the arguments *)
-
-  * Term.t    (* Term of the form [<0> + <1>] or [f <0> <1> <2> ... ]
-                 representing the expression to be built where placeholders
-                 are used instead of the arguments because the arguments are
-                 not yet built.  *)
-
-
-
-module Problem =
-  struct
-    type t =
-      | Overflow of range
-      | No_name of range
-      | Not_enough_args of range * int * actual list
-      | None_conforms of range * required list * actual list
-      | Not_yet_implemented of range * string
-  end
-
-
-module Result = Monad.Result (Problem)
-
-
 module Print  (P:Pretty_printer.SIG) =
   struct
     module PP = Gamma.Pretty (P)
 
-    let required ((c,lst):required): P.t
-      (* Print the required type of the next argument (type of the topmost
-         placeholder). *)
-      =
-      let c = GSub.base c in
-      match lst with
-      | [] ->
-         assert false (* cannot happen *)
-      | i :: _ ->
-         let module PP = Gamma.Pretty (P) in
-         PP.print (Gamma.type_at_level i c) c
+    let typ ((tp,gamma): typ): P.t =
+      PP.print tp gamma
 
-    let actual ((c,_,t):actual): P.t
-      (* Print the actual term and its type [t:T] where the term contains
-         placeholders for the arguments. *)
-      =
-      let c = GSub.base c in
-      let module PP = Gamma.Pretty (P) in
-      P.(PP.print t c
-         <+> string ": "
-         <+> PP.print
-               (Gamma.type_of_term t c)
-               c)
-
-      let typ ((tp,gamma): typ): P.t =
-        PP.print tp gamma
-
-      let required_type = typ
-      let candidate_type = typ
+    let required_type = typ
+    let candidate_type = typ
   end
 
-
-
-let find_name (name:string) (range:range) (c:Context.t): int list Result.t =
-  match Context.find_name name c with
-  | [] ->
-     Error (Problem.No_name range)
-  | lst ->
-     Ok lst
-
-
-
-let extract_args
-      (nargs:int)                      (* Name is applied to [nargs] arguments
-                                          *)
-      (mode: Term.appl)                (* Mode of the application *)
-      (base:Context.t)
-      (range:range)                    (* Position of the name *)
-      (lst: int list)                  (* Indices of the name (name might not
-                                          be unique) *)
-    : (actual list, Problem.t) result
-  =
-  let cnt = Context.count base
-  in
-  match
-    List.map_and_filter
-      (fun i ->
-        Gamma.(
-         Option.map
-           (fun (gamma,_) ->
-             GSub.make gamma,
-             (Interval.fold
-                []
-                (fun i lst -> cnt + nargs - 1 - i :: lst)
-                0 nargs),
-             Term.(
-               application
-                 (Variable (index_of_level i gamma))
-                 nargs
-                 mode))
-           (push_arguments
-              nargs
-              (type_at_level i (Context.gamma base))
-              (Context.gamma base))))
-      lst
-  with
-  | [] ->
-     Error (Problem.Not_enough_args
-              (range, nargs,
-               List.map
-                 (fun i ->
-                   GSub.make (Context.gamma base),
-                   [],
-                   Gamma.term_at_level i (Context.gamma base))
-                 lst
-       ))
-  | lst ->
-     Ok lst
-
-
-let unify
-      (range: range)
-      (base:Context.t)
-      (reqs: required list)
-      (actuals: actual list)
-    : (required list, Problem.t) result
-  =
-  match
-    List.(
-    reqs >>= fun (gamma_req, req_lst) ->
-    match req_lst with
-    | [] ->
-       assert false (* cannot happen *)
-    | i_req :: req_lst ->
-       actuals >>= fun (gamma_act, act_args, t) ->
-       let cnt0 = Context.count base
-       and cnt = GSub.count gamma_req
-       in
-       assert (cnt0 <= cnt);
-       assert (cnt0 <= GSub.count gamma_act);
-       let nargs = GSub.count gamma_act - cnt0 in
-       let gsub, t =
-         GSub.push_signature
-           gamma_act nargs t
-           gamma_req
-       and req_lst =
-         (List.map (fun i -> i + (cnt - cnt0)) act_args)
-         @ req_lst
-       in
-       match
-         GSub.(unify
-                 (Term.Variable (index_of_level i_req gsub))
-                 t
-                 gsub)
-       with
-       | None ->
-          []
-       | Some gsub1 ->
-          assert GSub.(count gsub = count gsub1);
-          [gsub1, req_lst]
-    )
-  with
-  | [] ->
-     Error (Problem.None_conforms (range, reqs, actuals))
-  | lst ->
-     Ok lst
-
-
-let term_of_name
-      (name: string)
-      (range: range)
-      (nargs: int)
-      (mode: Term.appl)
-      (base: Context.t)
-      (reqs: required list)
-    : (required list, Problem.t) result
-  =
-  Result.(
-    find_name name range base
-    >>= extract_args nargs mode base range
-    >>= unify range base reqs
-  )
-
-
-let term_of_number
-      (number: string)
-      (range: range)
-      (base: Context.t)
-      (reqs: required list)
-    : (required list, Problem.t) result
-  =
-  let lst =
-    Term.Value.number_values number
-  in
-  match lst with
-  | [] ->
-     Error (Problem.Overflow range)
-  | _ ->
-     unify
-       range base reqs
-       (List.map
-          (fun v ->
-            match v with
-            | Term.Value.Int _ ->
-               GSub.make (Context.gamma base),
-               [],
-               Term.Value v
-            | _ ->
-               assert false (* Cannot happen. *)
-          )
-          lst)
-
-
-let rec build0
-          (base:Context.t)
-          (reqs: required list)
-          (nargs:int)                (* [expr] has [nargs] actual arguments *)
-          (mode: Term.appl)
-          (expr:Parser.Expression.t) (* expression to be built *)
-        : (required list, Problem.t) result
-  =
-  (* Build the term for [expr]. [reqs] is a list of contexts where the
-     toplevel placeholder represents the expression [expr]. The expression
-     [expr] must be able to receive [nargs] arguments. *)
-  let open Parser.Expression in
-  let range = Located.range expr
-  in
-  let gsub_base = GSub.make (Context.gamma base)
-  in
-  match
-    Located.value expr
-  with
-  | Proposition ->
-     unify range base reqs [gsub_base, [], Term.proposition]
-
-  | Any ->
-     unify
-       range base reqs
-       [gsub_base, [], Term.any]
-
-  | Identifier name | Operator (name,_) ->
-     term_of_name name range nargs mode base reqs
-
-  | Number str ->
-     assert (nargs = 0);
-     term_of_number str range base reqs
-
-  | Char code ->
-     assert (nargs = 0);
-     unify range base reqs
-       [gsub_base, [], (Term.char code)]
-
-  | String str ->
-     assert (nargs = 0);
-     unify range base reqs [gsub_base, [], (Term.string str)]
-
-  | Binary (e1, op, e2) ->
-     let name, _ = Located.value op
-     and range  = Located.range op in
-     Result.(
-       term_of_name name range 2 Term.Binary base reqs
-       >>= fun reqs ->
-       build0 base reqs 0 Term.Normal e1
-       >>= fun reqs ->
-       build0 base reqs 0 Term.Normal e2
-     )
-
-  | Typed (_, _) ->
-     Error (Problem.Not_yet_implemented (range, "typed expression"))
-
-  | Application _ ->
-     Error (Problem.Not_yet_implemented (range, "function application"))
-
-  | Function (_, _, _) ->
-     Error (Problem.Not_yet_implemented (range, "function expression"))
-
-
-let build
-      (expr:Parser.Expression.t)
-      (c:Context.t)
-    : ((Term.t*Term.typ) list, Problem.t) result
-  =
-  let cnt = Context.count c
-  in
-  Result.map
-    (fun lst ->
-      List.map
-        (fun (gsub, req_lst) ->
-          assert (req_lst = []);
-          assert (cnt + 2 <= GSub.count gsub);
-          assert (GSub.is_all_substituted gsub);
-          GSub.(substitution_at_level_in_base (cnt + 1) gsub,
-                 substitution_at_level_in_base cnt gsub)
-        )
-        lst
-    )
-    (build0
-       c
-       [GSub.(Context.gamma c
-              |> make
-              |> push_substitutable (Term.Sort (Term.Sort.Any 2))
-              |> push_substitutable (Term.Variable 0))
-       , [cnt + 1]]
-       0
-       Term.Normal
-       expr)

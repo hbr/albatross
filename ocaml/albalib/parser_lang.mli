@@ -10,6 +10,10 @@ sig
   type operator = string * Operator.t
 
 
+  type argument =
+    | Normal
+    | Operand
+
   type t =
     t0 Character_parser.Located.t
 
@@ -21,9 +25,8 @@ sig
     | Char of int
     | String of string
     | Operator of operator
-    | Binary of t * operator located * t
     | Typed of t * t
-    | Application of t * t list
+    | Application of t * (t * argument) list
     | Function of
         (string located * t option) list  (* args *)
         * t option                        (* result type *)
