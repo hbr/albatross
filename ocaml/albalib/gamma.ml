@@ -212,8 +212,8 @@ let standard (): t =
              Lambda (any,
                      Lambda (Variable 0,
                              Variable 0,
-                             Lambda_info.untyped "x"),
-                     Lambda_info.untyped "A"))))
+                             Lambda_info.typed "x"),
+                     Lambda_info.typed "A"))))
 
 
 let type_of_value (v: Term.Value.t) (c: t): Term.typ =
