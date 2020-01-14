@@ -97,7 +97,7 @@ let find_name (name:string) (c:t): int list =
 
 module Pretty (P:Pretty_printer.SIG) =
   struct
-    module P0 = Gamma.Pretty (P)
+    module P0 = Term_printer.Pretty (Gamma) (P)
     let print (t:Term.t) (c:t): P.t =
       P0.print t c.gamma
   end

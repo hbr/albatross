@@ -307,27 +307,28 @@ module GSub =
     let is_placeholder (idx: int) (c: t): bool =
       idx < count_substitutions c  (* must be changed for bound variables!!! *)
 
+
     let base_count (c:t): int =
       count c - count_substitutions c
 
-    let level_of_index (i:int) (c:t): int =
-      Term.bruijn_convert i (count c)
 
-    let index_of_level (i:int) (c:t): int =
+let level_of_index (i:int) (c:t): int =
       Term.bruijn_convert i (count c)
 
 
     let type_of_term (t: Term.t) (c: t): Term.typ =
       Gamma.type_of_term t c.base
 
+
     let type_at_level (i: int) (c:t): Term.typ =
       Gamma.type_at_level i c.base
 
 
     let string_of_term (t: Term.t) (c: t): string =
-      Gamma.string_of_term t c.base
+      let module P = Term_printer.String_print (Gamma) in
+      P.string_of_term t c.base
 
-let _ = string_of_term
+    let _ = string_of_term
 
 
     let push_substitutable (typ: Term.typ) (c:t): t =
@@ -340,33 +341,6 @@ let _ = string_of_term
 
     let push_bound (_: string) (_: Term.typ) (_: t): t =
       assert false (* nyi *)
-
-
-    (* [push_signature c1 nargs t c2] pushes the last [nargs] entries of [c1]
-       into [c2] and transforms [t] into the new [c2].
-
-       It is required that [c1] without the last [nargs] entries is an initial
-       segment of [c2].  *)
-    let push_signature
-          (c0:t) (nargs:int) (t:Term.t)
-          (c:t)
-        : t * Term.t
-      =
-      let cnt0 = count c0 - nargs
-      and cnt  = count c in
-      assert (0 <= cnt0);
-      assert (cnt0 <= cnt);
-      let convert = Term.up_from (cnt - cnt0) in
-      let c1 =
-        Interval.fold
-          c
-          (fun i c ->
-            let tp = Gamma.raw_type_at_level (cnt0 + i) c0.base in
-            push_substitutable (convert i tp) c
-          )
-          0 nargs
-      in
-      c1, convert nargs t
 
 
 
@@ -438,42 +412,10 @@ let _ = string_of_term
           (c.substitutions.(level - cnt0))
 
 
-    let substitution_at_level_in_base (level:int) (c:t): Term.t =
-      (* in the base context, all variables must be substituted. *)
-      let cnt = count c
-      and cnt0 = base_count c
-      in
-      assert (cnt0 <= level);
-      assert (level < cnt);
-      match c.substitutions.(level - cnt0) with
-      | None ->
-         assert false (* Illegal call *)
-      | Some (t,n) ->
-         assert (cnt0 <= n);
-         match Term.down (n - cnt0) t with
-         | None ->
-            assert false (* Illegal call *)
-         | Some t ->
-            t
-
-
     let to_base (t: Term.t) (c: t): Term.t option =
       (* Transform [t] into the base context. Only possible if it does not
          contain any placeholders or new local variables. *)
       Term.down (count c - base_count c) t
-
-
-    let is_all_substituted (c:t): bool =
-      let csub = count_substitutions c in
-      let res = ref true
-      and i = ref 0 in
-      while !res && !i < csub do
-        if c.substitutions.(!i) = None then
-          res := false
-        else
-          i := !i + 1
-      done;
-      !res
 
 
     let substitution (i:int) (c:t): Term.t option =
@@ -1195,7 +1137,7 @@ let build
 
 module Print  (P:Pretty_printer.SIG) =
   struct
-    module PP = Gamma.Pretty (P)
+    module PP = Term_printer.Pretty (Gamma) (P)
 
     let typ ((tp,gamma): typ): P.t =
       PP.print tp gamma
