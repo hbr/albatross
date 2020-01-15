@@ -375,15 +375,13 @@ module Make (Io:Io.SIG) =
                   [ wrap_words "I was expecting a term which can be applied to";
                     string (string_of_int nargs);
                     string "argument" <+> plural_s nargs <+> char ',';
-                    wrap_words "but I have inferred";
+                    wrap_words "but the term has";
                     type_or_types cands]
             <+> cut <+> cut
             <+> (nest 4
                     ((chain_separated
                       (List.map (Builder_print.candidate_type) cands)
                       cut)))
-            <+> cut <+> cut
-            <+> wrap_words "for the term."
             <+> cut
             )
       | None_conforms (range, nargs, reqs, cands) ->
@@ -403,15 +401,13 @@ module Make (Io:Io.SIG) =
            <+> cut <+> cut
            <+> (list_separated
                   (group space)
-                  [wrap_words "but I have inferred";
+                  [wrap_words "but the term has";
                    type_or_types cands])
            <+> cut <+> cut
            <+> (nest 4
                   ((chain_separated
                     (List.map (Builder_print.candidate_type) cands)
                     cut)))
-            <+> cut <+> cut
-            <+> wrap_words "for the term."
            <+> cut
 
 
@@ -429,7 +425,8 @@ module Make (Io:Io.SIG) =
 
       | Ok lst ->
          Pretty.(
-          paragraphs
+          cut
+          <+> paragraphs
             (List.map
                (fun (t,tp) ->
                  let t =
@@ -442,6 +439,7 @@ module Make (Io:Io.SIG) =
                  P.print (Term.Typed (t, tp)) std_context
                  <+> cut)
                lst)
+          <+> cut
          )
 
 
