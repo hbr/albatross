@@ -439,9 +439,7 @@ module Make (Io:Io.SIG) =
                      t
                  in
                  let module P = Context.Pretty (Pretty) in
-                 P.print t std_context
-                 <+> string ": "
-                 <+> P.print tp std_context
+                 P.print (Term.Typed (t, tp)) std_context
                  <+> cut)
                lst)
          )

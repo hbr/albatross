@@ -15,7 +15,7 @@ type t =
 
 
 let arrow             = (30,   Right)
-let colon             = (40,   Left)
+let colon             = (40,   Right)
 let assign            = (41,   No)
 let lambda            = (42,   No)
 let relation          = (50,   No)

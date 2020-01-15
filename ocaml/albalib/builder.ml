@@ -312,8 +312,16 @@ module GSub =
       count c - count_substitutions c
 
 
-let level_of_index (i:int) (c:t): int =
+    let index_of_level (i:int) (c:t): int =
       Term.bruijn_convert i (count c)
+
+
+    let level_of_index (i:int) (c:t): int =
+      Term.bruijn_convert i (count c)
+
+
+    let variable_of_level (level: int) (gsub: t): Term.t =
+      Term.Variable (index_of_level level gsub)
 
 
     let type_of_term (t: Term.t) (c: t): Term.typ =
@@ -412,6 +420,16 @@ let level_of_index (i:int) (c:t): int =
           (c.substitutions.(level - cnt0))
 
 
+    let substitution_at_level_safe (level: int) (gsub: t): Term.t =
+      (* precondition: There is a substitutable at [level] which has a
+      substitution. *)
+      match substitution_at_level level gsub with
+      | None ->
+          assert false (* Illegal call! *)
+      | Some term ->
+          term
+
+
     let to_base (t: Term.t) (c: t): Term.t option =
       (* Transform [t] into the base context. Only possible if it does not
          contain any placeholders or new local variables. *)
@@ -446,18 +464,18 @@ let level_of_index (i:int) (c:t): int =
 
 
 
-    let unify (t:Term.t) (u:Term.t) (c:t): t option =
+    let unify (t:Term.t) (is_super: bool) (u:Term.t) (c:t): t option =
       (* [unify t u c] unifies the term [t] with the term [u] and generates
          substitutions such that [t] and [u] with the substitutions applied
          are equivalent terms. Return a new context containing new
          substitutions if the terms are unifiable, otherwise return [None]. *)
-      let rec unify t u exact c =
+      let rec unify t is_super u c =
         let type_of_variable i = Gamma.type_of_variable i c.base
         in
         let unify_variable i term =
-          Option.(unify (type_of_variable i)
+          Option.(unify (type_of_variable i) true
                         (Gamma.type_of_term term c.base)
-                        false c
+                        c
                   >>= fun c ->
                   Some (add_substitution_at_index i term c))
         in
@@ -484,7 +502,7 @@ let level_of_index (i:int) (c:t): int =
             unify_variable j t
 
         | Sort s1, Sort s2
-             when (exact && s1 = s2) || (not exact && Sort.is_super s1 s2) ->
+             when (not is_super && s1 = s2) || (is_super && Sort.is_super s1 s2) ->
            Some c
 
         | Variable i, Variable j when i = j ->
@@ -499,7 +517,7 @@ let level_of_index (i:int) (c:t): int =
         | _, _ ->
            None
       in
-      unify (substitute t c) (substitute u c) true c
+      unify (substitute t c) is_super (substitute u c) c
 
 
 
@@ -618,14 +636,14 @@ let level_of_index (i:int) (c:t): int =
         match Signature.pop act, Signature.pop req with
         | Some (act_arg, act), Some (req_arg, req) ->
           Option.(
-            unify act_arg req_arg c >>= fun c ->
+            unify act_arg false req_arg c >>= fun c ->
             uni act req (n + 1) (push_bound "_" act_arg c)
           )
         | _ ->
           (* One or both signatures has no more arguments. *)
           Option.map
             (remove_last n)
-            (unify (Signature.typ act) (Signature.typ req) c)
+            (unify (Signature.typ req) true (Signature.typ act) c)
       in
       uni act_sign req_sign 0 c
 
@@ -702,7 +720,7 @@ module Required =
 
 
     let unify_candidate
-          (c: t)
+          (bc: t)
           (term: Term.t)      (* Valid in the same context as [act_sign] *)
           (act_sign: Signature.t)
           (explicits: Explicits.t)
@@ -713,9 +731,9 @@ module Required =
 
          after:  stack =  arg1 ... argn ptr rest
                  ptr substituted *)
-      let ptr = top c
+      let ptr = top bc
       in
-      let req_sign = GSub.(signature c.gamma (type_at_level ptr c.gamma))
+      let req_sign = GSub.(signature bc.gamma (type_at_level ptr bc.gamma))
       in
       let term, act_sign, ptrs_rev, gsub =
         GSub.push_argument_placeholders
@@ -723,7 +741,7 @@ module Required =
           term
           act_sign
           req_sign
-          c.gamma
+          bc.gamma
       in
       let open Option in
       let open GSub in
@@ -733,53 +751,75 @@ module Required =
         {gamma =
            add_substitution_at_level ptr term gsub;
          stack =
-           List.rev_append ptrs_rev c.stack}
+           List.rev_append ptrs_rev bc.stack}
 
 
-    let start_typed_term (c: t): t =
-      let ptr = top c
-      and cnt = count c
-      in
-      let sort =
-        GSub.(type_of_term (type_at_level ptr c.gamma) c.gamma) in
-      let gam = GSub.push_substitutable sort c.gamma in
-      let gam = GSub.push_substitutable (Term.Variable 0) gam in
+    let start_typed_term (bc: t): t =
+      (* A typed term has the form [exp_inner: tp]. First we need a placeholder
+      for the type, because the type is the first expression to be analyzed.
+
+      before: stack = exp: ?, ...       -- exp is the placeholder for the
+                                        -- whole expression
+      after:  stack = tp: Any(1), exp: ?, ...
+
+      *)
       {gamma =
-         GSub.add_substitution_at_level
-           ptr
-           Term.(Typed (Variable 0, Variable 1)) gam;
-       stack = cnt + 1 :: cnt :: c.stack}
+        GSub.push_substitutable Term.(Sort (Sort.Any 1)) bc.gamma;
+       stack =
+        (count bc) :: bc.stack}
 
 
-    let unify_typed_term (_: t): t option =
-      (* A typed term is an expression of the form [exp_inner: tp]. Its
-         placeholder at [exp] is not yet substituted.
-
-         stack: tp exp_inner exp ...
-
-         - unify the type at [tp] with the required type of the placeholder
-         [exp].
-
-         - substitute [exp] by [Typed (exp_inner, tp)]
-
-         - pop tp
-
-         stack: exp_inner exp ...
-
-       *)
-      assert false (* nyi *)
+    let variable_of_level (level: int) (bc: t): Term.t =
+      GSub.variable_of_level level bc.gamma
+    let _ = variable_of_level
 
 
-    let end_typed_term (_: t): t =
+    let unify_typed_term (bc: t): t option =
+      (* The type part of the typed expression [exp_inner: tp] has been built
+      and stored in the top placeholder.
+
+      before: stack = tp: Any(1), exp: ?, ...
+
+      - unify the type stored in the top placeholder with the type of exp.
+
+      - create a new placeholder of the inner expression.
+      *)
+      match bc.stack with
+      | tp_ptr :: exp_ptr :: _ ->
+          Option.map
+            (fun gsub ->
+              let open GSub in
+              let exp_inner_ptr = count gsub in
+              let gsub =
+                push_substitutable
+                  (substitution_at_level_safe tp_ptr gsub)
+                  gsub
+              in
+              let tp = substitution_at_level_safe tp_ptr gsub in
+              let exp = Term.(Typed (Variable 0, tp)) in
+              let gsub =
+                add_substitution_at_level exp_ptr exp gsub
+              in
+              {gamma = gsub; stack = exp_inner_ptr :: bc.stack})
+            GSub.(
+              unify
+                (type_at_level exp_ptr bc.gamma)
+                true
+                (variable_of_level tp_ptr bc.gamma)
+                bc.gamma
+            )
+      | _ ->
+          assert false (* Cannot happen, there are at least two pointers on the
+          stack. *)
+
+
+    let end_typed_term (bc: t): t =
       (* typed term [exp_inner: tp]
 
-         stack: exp_inner exp ...
-
-         - pop exp_inner
-
-         stack: exp ...
+         before: stack = exp_inner tp exp  ...
+         after   stack = exp ...
        *)
-      assert false (* nyi *)
+      pop_top (pop_top bc)
 
 
     let substitution_in_base (level:int) (bc: t): Term.t option =
@@ -1051,9 +1091,7 @@ module Build_context =
          build_string range str explicits c
 
       | Typed (inner, tp) ->
-          Error (Not_yet_implemented (range, "<Typed term>"))
-         (*let c = start_typed_term c
-         in
+          (* Error (Not_yet_implemented (range, "<Typed term>"))*)
          Result.(
            map
              end_typed_term
@@ -1061,7 +1099,7 @@ module Build_context =
               >>= build0 tp Explicits.empty
               >>= unify_typed_term
               >>= build0 inner Explicits.empty)
-         )*)
+         )
 
       | Application (f, args) ->
          assert (args <> []);
@@ -1107,7 +1145,7 @@ module Build_context =
         Ok lst
 
 
-let build
+    let build
           (exp:Parser.Expression.t)
           (c:Context.t)
         : ((Term.t * Term.typ) list, problem) result
