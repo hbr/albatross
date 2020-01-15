@@ -481,7 +481,16 @@ module GSub =
         in
         let open Term
         in
+        let t = Gamma.key_normal t c.base
+        and u = Gamma.key_normal u c.base
+        in
         match t, u with
+        | Sort s1, Sort s2
+          when (not is_super && s1 = s2)
+                || (is_super && Sort.is_super s1 s2)
+          ->
+           Some c
+
         | Variable i, Variable j
           when is_placeholder i c && is_placeholder j c
           ->
@@ -500,10 +509,6 @@ module GSub =
         | _, Variable j when is_placeholder j c ->
             assert (not (has_substitution j c));
             unify_variable j t
-
-        | Sort s1, Sort s2
-             when (not is_super && s1 = s2) || (is_super && Sort.is_super s1 s2) ->
-           Some c
 
         | Variable i, Variable j when i = j ->
            Some c
@@ -654,10 +659,6 @@ module GSub =
 
 
 
-
-
-
-(***************** New Builder ******************************************)
 
 
 

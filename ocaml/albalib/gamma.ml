@@ -374,9 +374,9 @@ let compute (t:Term.t) (c:t): Term.t =
 
 
 let key_split
-      (c: t)
       (t: Term.t)
       (args: (Term.t * Term.appl) list)
+      (c: t)
     : Term.t * (Term.t * Term.appl) list
   =
   let rec split t args =
@@ -395,14 +395,17 @@ let key_split
     | Term.Appl (f, arg, mode) ->
        split f ((arg, mode) :: args)
 
+    | Term.Typed (term, _) ->
+        term, args
+
     | _ ->
        t, args
   in
   split t args
 
 
-let key_normal (c: t) (t: Term.t): Term.t =
-  let key, args = key_split c t [] in
+let key_normal (t: Term.t) (c: t): Term.t =
+  let key, args = key_split t [] c in
   List.fold_left
     (fun res (arg, mode) ->
       Term.Appl (res, arg, mode))
@@ -430,7 +433,7 @@ let rec typecheck (term: Term.t) (c: t): Term.typ option =
       Option.(
         typecheck f c >>= fun f_type ->
         typecheck arg c >>= fun arg_type ->
-        let key, args = key_split c f_type [] in
+        let key, args = key_split f_type [] c in
         ( match key, args with
           | Pi (tp, rt, _ ), []  when is_subtype arg_type tp c ->
               Some (apply rt arg)
@@ -462,7 +465,7 @@ let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =
 
 let signature (c: t) (tp: Term.typ): Signature.t =
   let rec split c tp lst =
-    match key_normal c tp with
+    match key_normal tp c with
     | Term.Pi (arg_tp, res_tp, _ ) ->
        let c_inner = push_unnamed arg_tp c in
        split c_inner res_tp ((c, arg_tp, tp) :: lst)

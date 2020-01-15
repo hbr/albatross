@@ -49,4 +49,6 @@ val push_local: string -> Term.typ -> t -> t
 
 val remove_last: int -> t -> t
 
+val key_normal: Term.t -> t -> Term.t
+
 val signature: t -> Term.typ -> Signature.t
