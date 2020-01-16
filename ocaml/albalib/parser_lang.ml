@@ -37,6 +37,7 @@ module Expression = struct
         formal_argument list
         * t option                        (* result type *)
         * t                               (* defining expression *)
+    | Product of formal_argument list * t
 
   and formal_argument =
     string Located.t * t option
@@ -163,6 +164,7 @@ include P
 let keywords: String_set.t =
   let open String_set in
   empty
+  |> add "all"
   |> add "create"
   |> add "inspect"
 
@@ -358,9 +360,12 @@ let char_ws (c:char): unit t =
 
 let rec expression (): Expression.t t =
 
-  let result_type: Expression.t option t =
-    optional
-      (colon |. whitespace >>= expression)
+  let result_type: Expression.t t =
+    colon |. whitespace >>= expression
+  in
+
+  let optional_result_type: Expression.t option t =
+    optional result_type
   in
 
   let formal_argument: (string located * Expression.t option) t =
@@ -374,7 +379,7 @@ let rec expression (): Expression.t t =
   in
 
   let primary (): Expression.t t =
-    identifier_expression
+    backtrackable identifier_expression "identifier"
     <|> number_expression
     <|> literal_char
     <|> literal_string
@@ -389,8 +394,14 @@ let rec expression (): Expression.t t =
           (return (fun args rt exp -> Expression.Function (args, rt, exp))
            |. char_ws '\\'
            |= one_or_more formal_argument
-           |= result_type
+           |= optional_result_type
            |= (assign |. whitespace >>= expression))
+    <|> located
+          (return (fun args rt -> Expression.Product (args, rt))
+          |. backtrackable (string "all") "all"
+          |. whitespace
+          |= one_or_more formal_argument
+          |= result_type)
     <?> "expression"
   in
 

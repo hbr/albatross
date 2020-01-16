@@ -1199,6 +1199,16 @@ let end_typed_term (builder: t): t =
 
 
 
+let build_type
+  (tp: Expression.t)
+  (buildf: build_function)
+  (builder: t)
+  : (t, problem) result
+  =
+  buildf tp Explicits.empty (push_type 1 builder)
+
+
+
 let build_optional_type
   (tp: Expression.t option)
   (buildf: build_function)
@@ -1209,7 +1219,7 @@ let build_optional_type
   | None ->
       Ok (push_type 1 builder)
   | Some tp ->
-      buildf tp Explicits.empty (push_type 1 builder)
+      build_type tp buildf builder
 
 
 let build_formal_arguments
@@ -1297,7 +1307,15 @@ let rec build0
       >>= fun b -> Ok (push_term b)
       >>= build0 exp_inner Explicits.empty
       >>= fun _ ->
-      Error (Not_yet_implemented (range, "<Function term>"))
+      Error (Not_yet_implemented (range, "<complet function term>"))
+
+  | Product (formal_args, result_tp) ->
+      let open Result in
+      build_formal_arguments formal_args build0 c
+      >>= build_type result_tp build0
+      >>= fun _ ->
+      Error (Not_yet_implemented (range, "<complete product term>"))
+
 
 
 let to_base_context

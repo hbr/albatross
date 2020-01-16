@@ -31,6 +31,7 @@ sig
         formal_argument list
         * t option                        (* result type *)
         * t                               (* defining expression *)
+    | Product of formal_argument list * t
 
   and formal_argument =
     string located * t option
