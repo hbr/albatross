@@ -411,6 +411,75 @@ module Make (Io:Io.SIG) =
            <+> cut
 
 
+    let report_parse_problem
+          (src: string)
+          (p: Parser.parser)
+        : Pretty.t
+      =
+     let open Pretty in
+     let error = Parser.error p in
+     if Parser.Error.is_semantic error then
+       match Parser.Error.semantic error with
+       | Parser.Problem.Operator_precedence (range, op1, op2) ->
+          chain
+            [ error_header "SYNTAX";
+              print_source src range;
+              cut;
+              explain_operator_precedence_error op1 op2;
+              cut
+            ]
+
+       | Parser.Problem.Illegal_name (range, expect) ->
+          chain
+            [ error_header "SYNTAX";
+              print_source src range;
+              cut;
+              fill_paragraph
+                ("I was expecting " ^ expect);
+              cut
+            ]
+
+       | Parser.Problem.Illegal_command (range, _) ->
+          chain
+            [ error_header "SYNTAX";
+              print_source src range;
+              cut;
+              string "Illegal command";
+              cut
+            ]
+       | Parser.Problem.Ambiguous_command (range, _) ->
+          chain
+            [ error_header "SYNTAX";
+              print_source src range;
+              cut;
+              string "Ambiguous command";
+              cut
+            ]
+     else
+       let pos = Parser.position p in
+       chain
+         [ error_header "SYNTAX";
+           print_source src (pos, pos);
+           match Parser.Error.expectations error with
+           | [] ->
+              assert false (* Illegal call! *)
+           | [e] ->
+              chain [string "I was expecting";
+                     nest_list 4 [cut; cut; string e];
+                     cut]
+           | lst ->
+              chain [string "I was expecting one of";
+                     cut;
+                     indented_paragraph @@
+                       print_list lst
+                         (fun e ->
+                           chain [
+                               string "- ";
+                               string e;
+                               cut])
+                ]
+         ]
+
 
     let build_and_compute
           (src: string)
@@ -443,101 +512,31 @@ module Make (Io:Io.SIG) =
          )
 
 
-    let eval_command (p:Parser.parser) (src:string): Pretty.t =
-      assert (Parser.has_ended p);
-      match Parser.result p with
-      | Some Parser.Command.Do_nothing ->
-         Pretty.empty
-
-      | Some (Parser.Command.Evaluate e) ->
-         build_and_compute src e true
-
-      | Some (Parser.Command.Type_check e) ->
-         build_and_compute src e false
-
-      | None ->
-         let open Pretty in
-         let error = Parser.error p in
-         if Parser.Error.is_semantic error then
-           match Parser.Error.semantic error with
-           | Parser.Problem.Operator_precedence (range, op1, op2) ->
-              chain
-                [ error_header "SYNTAX";
-                  print_source src range;
-                  cut;
-                  explain_operator_precedence_error op1 op2;
-                  cut
-                ]
-
-           | Parser.Problem.Illegal_name (range, expect) ->
-              chain
-                [ error_header "SYNTAX";
-                  print_source src range;
-                  cut;
-                  fill_paragraph
-                    ("I was expecting " ^ expect);
-                  cut
-                ]
-
-           | Parser.Problem.Illegal_command (range, _) ->
-              chain
-                [ error_header "SYNTAX";
-                  print_source src range;
-                  cut;
-                  string "Illegal command";
-                  cut
-                ]
-           | Parser.Problem.Ambiguous_command (range, _) ->
-              chain
-                [ error_header "SYNTAX";
-                  print_source src range;
-                  cut;
-                  string "Ambiguous command";
-                  cut
-                ]
-         else
-           let pos = Parser.position p in
-           chain
-             [ error_header "SYNTAX";
-               print_source src (pos, pos);
-               match Parser.Error.expectations error with
-               | [] ->
-                  assert false (* Illegal call! *)
-               | [e] ->
-                  chain [string "I was expecting";
-                         nest_list 4 [cut; cut; string e];
-                         cut]
-               | lst ->
-                  chain [string "I was expecting one of";
-                         cut;
-                         indented_paragraph @@
-                           print_list lst
-                             (fun e ->
-                               chain [
-                                   string "- ";
-                                   string e;
-                                   cut])
-                    ]
-             ]
-
 
     let repl (_:command_line): unit Io.t =
       let module State =
         struct
-          type t = string
-          let string (s:t): string =
-            s
-          let init: t =  ""
+          type t = string option
+          let string (s: t): string =
+            Option.value s
+          let init: t =  Some ""
+          let exit: t =  None
           let prompt (s:t): string option =
-              Some (if s = "" then "> " else "| ")
-          let is_last (line:string): bool =
+            Option.map
+              (fun s ->
+                if s = "" then "> " else "| ")
+              s
+          let is_last (line: string): bool =
             let len = String.length line in
             len = 0 || line.[len-1] <> ' '
-          let add (line:string) (s:t): t =
-            if s = "" then
-              line
-            else
-              s ^ "\n" ^ line
+          let add (line: string) (s: t): t =
+            Option.map
+              (fun s ->
+                if s = "" then
+                  line
+                else
+                  s ^ "\n" ^ line)
+              s
         end
       in
       let parse (s:string): Parser.parser =
@@ -553,14 +552,31 @@ module Make (Io:Io.SIG) =
         in
         parse 0 Parser.initial
       in
+      let command (src: string): State.t Io.t =
+        let print pr =
+          Io.(Pretty.print File.stdout 80 pr)
+        in
+        let p = parse src in
+        assert (Parser.has_ended p);
+        match Parser.result p with
+        | Some Parser.Command.Do_nothing ->
+            Io.return State.init
+        | Some Parser.Command.Exit ->
+            Io.return State.exit
+        | Some (Parser.Command.Evaluate e) ->
+            Io.(print (build_and_compute src e true)
+                >>= fun _ -> return State.init )
+        | Some (Parser.Command.Type_check e) ->
+            Io.(print (build_and_compute src e false)
+                >>= fun _ -> return State.init )
+        | None ->
+            Io.(print (report_parse_problem src p)
+                >>= fun _ -> return State.init)
+      in
       let next (s:State.t) (line:string): State.t Io.t =
         let s = State.add line s in
         if State.is_last line then
-          let input = State.string s in
-          let p = parse input in
-          Io.(Pretty.print File.stdout 80 (eval_command p input)
-              >>= fun _ ->
-              return State.init)
+          command (State.string s)
         else
           Io.return s
       and stop (s:State.t): State.t Io.t =

@@ -19,9 +19,9 @@ module Expression = struct
     | Normal
     | Operand
 
-  type t =
-    t0 located
 
+  type t =
+    t0 Located.t
 
   and t0 =
     | Proposition
@@ -34,9 +34,12 @@ module Expression = struct
     | Typed of t * t
     | Application of t * (t * argument) list
     | Function of
-        (string located * t option) list  (* args *)
+        formal_argument list
         * t option                        (* result type *)
         * t                               (* defining expression *)
+
+  and formal_argument =
+    string Located.t * t option
 
 
   let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
@@ -129,6 +132,7 @@ module Command =
     type t =
       | Evaluate of Expression.t
       | Type_check of Expression.t
+      | Exit
       | Do_nothing
   end
 
@@ -437,6 +441,8 @@ let rec expression (): Expression.t t =
 let commands: (string * Command.t t) list =
   ["evaluate",
    map (fun e -> Command.Evaluate e) (expression ());
+
+   "exit", return Command.Exit;
 
    "typecheck",
    map (fun e -> Command.Type_check e) (expression ());

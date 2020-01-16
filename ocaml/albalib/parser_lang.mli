@@ -28,9 +28,12 @@ sig
     | Typed of t * t
     | Application of t * (t * argument) list
     | Function of
-        (string located * t option) list  (* args *)
+        formal_argument list
         * t option                        (* result type *)
         * t                               (* defining expression *)
+
+  and formal_argument =
+    string located * t option
 end
 
 
@@ -58,6 +61,7 @@ sig
   type t =
     | Evaluate of Expression.t
     | Type_check of Expression.t
+    | Exit
     | Do_nothing
 end
 
