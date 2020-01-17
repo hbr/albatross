@@ -410,6 +410,14 @@ module Make (Io:Io.SIG) =
                     cut)))
            <+> cut
 
+    | Unused_bound range ->
+        report_error
+            "TYPE" src range
+            (wrap_words "I cannot infer a type for this variable because \
+                         it is not used. Either use the variable or \
+                         provide an explicit type"
+            <+> cut)
+
 
     let report_parse_problem
           (src: string)

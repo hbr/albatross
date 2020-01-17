@@ -228,15 +228,35 @@ let word_ws
   >>= succeed
 
 
+let name: string located t =
+    located
+        (word
+            Char.is_letter
+            (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
+            "identifier")
+
+
+let name_ws: string located t =
+    name |. whitespace
+
+
 let identifier: string located t =
-  word_ws
-    Char.is_letter
-    (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
-    "identifier"
+    backtrackable
+        (located
+            (word
+                Char.is_letter
+                (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
+                "identifier")
+         >>= fun s ->
+         if String_set.mem (Located.value s) keywords then
+           fail (Problem.Illegal_name (Located.range s, "<identifier>"))
+         else
+            return s)
+        "identifier"
 
 
 let formal_argument_name: string located t =
-  identifier >>= fun name_located ->
+  identifier |. whitespace>>= fun name_located ->
   let name = Located.value name_located in
   if String_set.mem name keywords
      || name = "Proposition"
@@ -266,11 +286,7 @@ let identifier_expression: Expression.t t =
          else
            Expression.Identifier s
     ))
-    (identifier >>= fun s ->
-     if String_set.mem (Located.value s) keywords then
-       fail (Problem.Illegal_name (Located.range s, "<identifier>"))
-     else
-       return s)
+    (identifier |. whitespace)
 
 
 let number_expression: Expression.t t =
@@ -473,7 +489,7 @@ let command_names (cs: (string * Command.t t) list): string list =
 
 let command: Command.t t =
   (char ':' >>= fun _ ->
-   (identifier <?> "command")
+   (name_ws <?> "command")
 
    >>= fun cmd ->
    match find_command (Located.value cmd) with

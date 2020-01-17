@@ -940,6 +940,7 @@ type problem =
   | No_name of range
   | Not_enough_args of range * int * candidate_type list
   | None_conforms of range * int * required_type list * candidate_type list
+  | Unused_bound of range
   | Not_yet_implemented of range * string
 
 
@@ -947,11 +948,52 @@ type problem =
 module Name_map = Context.Name_map
 module Result = Monad.Result (struct type t = problem end)
 
+module Bounds =
+    struct
+        type t = {
+            map: bool list String_map.t; (* usage flag for each bound var *)
+        }
+
+        let empty: t =
+            {map = String_map.empty}
+
+        let push(name: string) (bnds: t): t =
+            {map =
+                match String_map.maybe_find name bnds.map with
+                | None ->
+                    String_map.add name [false] bnds.map
+                | Some lst ->
+                    String_map.add name (false :: lst) bnds.map}
+
+        let use (name: string) (bnds: t): t =
+            {map =
+                match String_map.maybe_find name bnds.map with
+                | None ->
+                    bnds.map
+                | Some [] ->
+                    assert false (* Illegal call! *)
+                | Some (_ :: rest) ->
+                    String_map.add name (true :: rest) bnds.map}
+
+        let pop (name: string) (bnds: t): bool * t =
+            match String_map.find name bnds.map with
+            | [] ->
+                assert false (* Illegal call! *)
+            | [flag] ->
+                flag,
+                {map = String_map.remove name bnds.map}
+            | flag :: flags ->
+                flag,
+                {map = String_map.add name flags bnds.map}
+    end
+
+
 
 type t = {
     names: Name_map.t;
     base:  Gamma.t;
     bcs :  BuildC.t list;
+    bounds: Bounds.t;
   }
 
 
@@ -965,12 +1007,13 @@ type build_function =
 
 
 let make (c:Context.t): t =
-  {names = Context.name_map c;
-   base  = Context.gamma c;
-   bcs =
-    let gsub = GSub.make (Context.gamma c) in
-    let bc = BuildC.(empty gsub |> push_type 2 |> push_term) in
-    [bc]}
+      {names = Context.name_map c;
+       base  = Context.gamma c;
+       bounds = Bounds.empty;
+       bcs =
+        let gsub = GSub.make (Context.gamma c) in
+        [BuildC.(empty gsub |> push_type 2 |> push_term)];
+       }
 
 
 let map (f: BuildC.t -> BuildC.t) (builder: t): t =
@@ -1056,6 +1099,7 @@ let check_base_terms
 
 let build_bound
   (_: range)
+  (name: string)
   (level: int)
   (explicits: Explicits.t)
   (builder: t)
@@ -1069,7 +1113,9 @@ let build_bound
   if bcs = [] then
     assert false
   else
-    Ok {builder with bcs}
+    Ok {builder with
+        bcs;
+        bounds = Bounds.use name builder.bounds}
 
 
 
@@ -1113,7 +1159,7 @@ let build_name
      Error (No_name range)
 
   | [i] when Gamma.count c.base <= i ->
-      build_bound range i explicits c
+      build_bound range name i explicits c
 
   | level_lst ->
      check_base_terms
@@ -1176,12 +1222,17 @@ let push_term: t -> t =
   map BuildC.push_term
 
 
-let push_bound (name: string) (builder: t): t =
+let push_bound (name: string) (untyped: bool) (builder: t): t =
   {builder with
     names =
       Name_map.add_local name builder.names;
     bcs =
-      List.map (BuildC.push_bound name) builder.bcs}
+      List.map (BuildC.push_bound name) builder.bcs;
+    bounds =
+        if untyped then
+            Bounds.push name builder.bounds
+        else
+            builder.bounds}
 
 
 let unify_typed_term (c: t): (t, problem) result =
@@ -1231,10 +1282,32 @@ let build_formal_arguments
   List_fold.fold_left
     (fun (name, tp) builder ->
       Result.map
-        (push_bound (Located.value name))
+        (push_bound (Located.value name) (tp = None))
         (build_optional_type tp buildf builder))
     args
     builder
+
+
+
+let check_formal_arguments_usage
+    (args: (string Located.t * Expression.t option) list)
+    (builder: t)
+    : (t, problem) result
+    =
+    List_fold.fold_right
+        (fun (name, tp) builder ->
+            if tp <> None then
+                Ok builder
+            else
+                let flag, bounds =
+                    Bounds.pop (Located.value name) builder.bounds in
+                if flag then
+                    Ok {builder with bounds}
+                else
+                    Error (Unused_bound (Located.range name))
+        )
+        args
+        builder
 
 
 
@@ -1306,13 +1379,15 @@ let rec build0
       >>= build_optional_type result_tp build0
       >>= fun b -> Ok (push_term b)
       >>= build0 exp_inner Explicits.empty
+      >>= check_formal_arguments_usage formal_args
       >>= fun _ ->
-      Error (Not_yet_implemented (range, "<complet function term>"))
+      Error (Not_yet_implemented (range, "<complete function term>"))
 
   | Product (formal_args, result_tp) ->
       let open Result in
       build_formal_arguments formal_args build0 c
       >>= build_type result_tp build0
+      >>= check_formal_arguments_usage formal_args
       >>= fun _ ->
       Error (Not_yet_implemented (range, "<complete product term>"))
 
