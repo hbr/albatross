@@ -1,5 +1,3 @@
-open Fmlib
-
 type name =
   | Normal of string
   | Binary_operator of string * Operator.t

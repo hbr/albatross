@@ -26,12 +26,6 @@ module type STAT =
 
 
 
-module type CLI_STATE =
-  sig
-    type t
-    val prompt: t -> string option
-  end
-
 
 (** IO Buffer *)
 module type BUFFER =
@@ -87,6 +81,8 @@ module type SIG_MIN =
     module M: MONAD
     include MONAD
 
+
+
     module Process:
     sig
       val exit: int -> 'a t
@@ -96,10 +92,16 @@ module type SIG_MIN =
     end
 
 
-    module Cli: functor (S:CLI_STATE) ->
-    sig
-      val loop: S.t -> (S.t -> string -> S.t t) -> (S.t -> S.t t) -> S.t t
-    end
+
+
+    val cli_loop:
+        'a
+        -> ('a -> string option)
+        -> ('a -> string -> 'a t)
+        -> ('a -> 'a t)
+        -> 'a t
+
+
 
     module Path0:
     sig
@@ -243,6 +245,48 @@ module type SIG =
       val newline: unit t
       val fill: int -> char -> unit t
     end
+
+
+
+
+    val cli_loop:
+        'a
+        -> ('a -> string option)
+        -> ('a -> string -> 'a t)
+        -> ('a -> 'a t)
+        -> 'a t
+    (** [cli_loop state prompt next stop] runs a cli loop which starts in state
+    [state] and prompts its users with the string returned by [prompt state]. If
+    [prompt state] returns [None], the cli_loop is ended.
+
+    If the user enters a line, the command [next state line] is performed.
+
+    If [prompt state] returns [None] or the user ends its input by pressing
+    [ctrl-d], the command [stop state] is performed.
+
+    Example:
+
+    The following command starts a cli_loop and prompts the user at most 5 times
+    with [i> ] and echoes back the input of the user.
+
+    {[
+        cli_loop
+            0
+            (fun i ->
+                if i < 5 then
+                    Some (string_of_int i ^ "> ")
+                else
+                    None)
+            (fun i line ->
+                Stdout.line line >>= fun _ -> return (i + 1))
+            (fun _ -> return ())
+    ]}
+    *)
+
+
+
+
+
   end
 
 

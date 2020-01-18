@@ -182,42 +182,49 @@ module IO0: Io.SIG_MIN =
 
 
 
-    module Cli (S:Io.CLI_STATE) =
-      struct
-        let loop
-              (s: S.t)
-              (next: S.t -> string -> S.t t)
-              (stop: S.t -> S.t t)
-            : S.t t =
-          let rl = Readline.create_interface () in
-          let rec loop s: S.t t =
-            flush stdout >>= fun _ ->
-            fun w k ->
-            match S.prompt s with
-            | None ->
-               Readline.close rl;
-               execute_program @@ stop s w k;
-               Done
-            | Some prompt_str ->
-               Readline.question
-                 rl
-                 prompt_str
-                 (fun answer ->
-                   execute_program @@
-                     (next s answer >>= loop) w k)
-                 (fun () -> execute_program @@ stop s w k);
-               Done
-          in
-          loop s
-      end
+
+
+
+
+    let cli_loop
+        (s: 'a)
+        (get_prompt: 'a -> string option)
+        (next: 'a -> string -> 'a t)
+        (stop: 'a -> 'a t)
+        : 'a t
+        =
+        let rl = Readline.create_interface ()
+        in
+        let rec loop s: 'a t =
+          flush stdout >>= fun _ ->
+          fun w k ->
+          match get_prompt s with
+          | None ->
+             Readline.close rl;
+             execute_program @@ stop s w k;
+             Done
+          | Some prompt_str ->
+             Readline.question
+               rl
+               prompt_str
+               (fun answer ->
+                 execute_program @@
+                   (next s answer >>= loop) w k)
+               (fun () -> execute_program @@ stop s w k);
+             Done
+        in
+        loop s
+
+
+
 
 
     module Read (W:WRITABLE) =
       struct
-        let read_buffer (fd:in_file) (w:W.t): W.t t =
+        let read_buffer (_:in_file) (_:W.t): W.t t =
           assert false
 
-        let read (fd:in_file) (w:W.t): W.t t =
+        let read (_:in_file) (_:W.t): W.t t =
           assert false
       end
 
@@ -229,6 +236,7 @@ module IO0: Io.SIG_MIN =
             String.one (R.peek r) ^ extract_readable (n_max - 1) (R.advance r)
           else
             ""
+        let _ = extract_readable (* might be used for debugging *)
 
         module BW = Io_buffer.Write (R)
         let write_buffer (fd:out_file) (r:R.t): R.t t =
@@ -236,8 +244,6 @@ module IO0: Io.SIG_MIN =
           return @@ BW.write buf r
 
         let write (fd:out_file) (r:R.t): R.t t =
-          let str = extract_readable 300 r in
-
           writable_file fd >>= fun (fd,buf) ->
           let rec write i r =
             assert (i < 100);

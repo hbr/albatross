@@ -591,8 +591,7 @@ module Make (Io:Io.SIG) =
       and stop (s:State.t): State.t Io.t =
         Io.return s
       in
-      Io.(let module Cli = Cli (State) in
-          Cli.loop State.init next stop >>= fun _ -> return ())
+      Io.(cli_loop State.init State.prompt next stop >>= fun _ -> return ())
 
 
 

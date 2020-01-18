@@ -1,4 +1,4 @@
-.PHONY: build build_dune test_alba doc fmlib albalib alba2
+.PHONY: build build_dune test_alba doc fmlib albalib alba2 alba-node
 
 build:
 	cd ocaml;          \
@@ -32,3 +32,6 @@ albalib:
 
 alba2:
 	dune build ocaml/alba2/alba2.bc
+
+alba-node:
+	dune build ocaml/alba-node/alba_node.bc.js

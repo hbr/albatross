@@ -531,37 +531,46 @@ module IO0: Io.SIG_MIN =
 
 
 
-    module Cli (S:Io.CLI_STATE) =
-      struct
-        let prompt (prompt:string): string option t =
-          fun fs k ->
-          File_system.flush fs stdout;
-          k
-            (let res = LNoise.linenoise prompt in
-             match res with
-             | None ->
-                res
-             | Some str ->
-                ignore (LNoise.history_add str);
-                res)
+
+
+
+    let cli_prompt (prompt: string): string option t =
+      fun fs k ->
+      File_system.flush fs stdout;
+      k
+        (let res = LNoise.linenoise prompt in
+         match res with
+         | None ->
+            res
+         | Some str ->
+            ignore (LNoise.history_add str);
+            res)
         fs
-        let loop
-              (s: S.t)
-              (next: S.t -> string -> S.t t)
-              (stop: S.t -> S.t t)
-            : S.t t =
-          let rec loop s =
-            match S.prompt s with
+
+    let cli_loop
+        (state: 'a)
+        (get_prompt: 'a -> string option)
+        (next: 'a -> string -> 'a t)
+        (stop: 'a -> 'a t)
+        : 'a t
+        =
+        let rec loop state =
+            match get_prompt state with
             | None ->
-                return s
+                return state
             | Some prompt_string ->
-               prompt prompt_string >>= function
-               | None ->
-                  stop s
-               | Some line -> next s line >>= loop
-          in
-          loop s
-      end
+                cli_prompt prompt_string >>= function
+                | None ->
+                    stop state
+                | Some line ->
+                    next state line >>= loop
+        in
+        loop state
+
+
+
+
+
 
 
     module Read (W:WRITABLE) =

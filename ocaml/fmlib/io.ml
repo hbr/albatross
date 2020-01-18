@@ -14,12 +14,6 @@ module type STAT =
   end
 
 
-module type CLI_STATE =
-  sig
-    type t
-    val prompt: t -> string option
-  end
-
 
 module type BUFFER =
   sig
@@ -142,10 +136,15 @@ module type SIG_MIN =
     end
 
 
-    module Cli: functor (S:CLI_STATE) ->
-    sig
-      val loop: S.t -> (S.t -> string -> S.t t) -> (S.t -> S.t t) -> S.t t
-    end
+
+    val cli_loop:
+        'a
+        -> ('a -> string option)
+        -> ('a -> string -> 'a t)
+        -> ('a -> 'a t)
+        -> 'a t
+
+
 
 
     module Path0:
@@ -203,9 +202,8 @@ module type SIG =
       val read: string -> string array option t
     end
 
-    (*val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
-    val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
-    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t*)
+
+
 
     module File:
     sig
@@ -229,8 +227,7 @@ module type SIG =
     end
 
 
-    (*val getc_in: char option t
-    val get_line_in: string option t*)
+
 
     module Stdout:
     sig
@@ -249,8 +246,31 @@ module type SIG =
       val newline: unit t
       val fill: int -> char -> unit t
     end
+
+    val cli_loop:
+        'a
+        -> ('a -> string option)
+        -> ('a -> string -> 'a t)
+        -> ('a -> 'a t)
+        -> 'a t
   end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+(* ----------------------------------------------------------------------- *)
+(* path functions *)
+(* ----------------------------------------------------------------------- *)
 
 let path_split (sep:char) (path:string): (string * string) option =
   let len = String.length path
@@ -275,13 +295,20 @@ let path_split (sep:char) (path:string): (string * string) option =
     in
     Some (dirname, basename)
 
+
+
+
 let print_split sep path =
+    (* Function for debugging *)
   match path_split sep path with
   | None ->
      Printf.printf "split %s = None\n" path
   | Some(d,b) ->
      Printf.printf "split %s = (%s, %s)\n" path d b
 let _ = print_split
+
+
+
 
 let%test _ =
   path_split '/' "" = None
@@ -361,7 +388,7 @@ let%test _ =
 
 
 
-module Make (M:SIG_MIN): SIG =
+module Make (M: SIG_MIN): SIG =
   struct
     include M
 
