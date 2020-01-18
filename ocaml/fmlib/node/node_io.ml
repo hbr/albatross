@@ -3,9 +3,102 @@ open Common_module_types
 open Common
 
 
+
+module type BUFFER =
+  sig
+    type t
+    val alloc: int -> t
+  end
+
+
+
+
+module type BUFFERS =
+  functor (B:BUFFER) ->
+  sig
+    type t
+    val make: int -> t
+    val is_open_read: t -> int -> bool
+    val is_open_write: t -> int -> bool
+    val capacity: t -> int
+    val occupy_readable: t -> int -> int
+    val occupy_writable: t -> int -> int
+    val release: t -> int -> unit
+    val readable_file: t -> int -> int * B.t
+    val writable_file: t -> int -> int * B.t
+    val find_open: t -> int -> int
+  end
+
+
+
+module Buffers: BUFFERS =
+  functor (B:BUFFER) ->
+  struct
+    type file =
+      | Read  of int * B.t
+      | Write of int * B.t
+
+
+    type t = {size: int;
+              files: file Pool.t}
+
+    let make (size:int): t =
+      {size;
+       files = Pool.make_empty ()}
+
+    let is_open (s:t) (i:int): bool =
+      Pool.has s.files i
+
+    let is_open_read (s:t) (i:int): bool =
+      Pool.has s.files i
+      && match Pool.elem s.files i with
+         | Read _  -> true
+         | Write _ -> false
+
+    let is_open_write (s:t) (i:int): bool =
+      Pool.has s.files i
+      && match Pool.elem s.files i with
+         | Read _  -> false
+         | Write _ -> true
+
+    let capacity (s:t): int =
+      Pool.capacity s.files
+
+    let occupy (s:t) (f:B.t -> file): int =
+      let buf = B.alloc s.size in
+      Pool.occupy s.files (f buf)
+
+    let occupy_readable (s:t) (fd:int): int =
+      occupy s (fun b -> Read(fd,b))
+
+    let occupy_writable (s:t) (fd:int): int =
+      occupy s (fun b -> Write(fd,b))
+
+    let release (s:t) (i:int): unit =
+      assert (is_open s i);
+      Pool.release s.files i
+
+    let readable_file (s:t) (i:int): int * B.t =
+      match Pool.elem s.files i with
+      | Read (fd,b) -> fd,b
+      | Write _ -> assert false (* Illegal call! *)
+
+    let writable_file (s:t) (i:int): int * B.t =
+      match Pool.elem s.files i with
+      | Read _ -> assert false (* Illegal call! *)
+      | Write (fd,b) -> fd,b
+
+    let find_open (s:t) (i:int): int =
+      assert (i <= Pool.capacity s.files);
+      Pool.find s.files i
+  end (* Buffers *)
+
+
+
+
 module World =
   struct
-    include Io.Buffers (Io_buffer)
+    include Buffers (Io_buffer)
 
     let buffer_size = 4096 (* 16K: 16384, 32K: 32768, 64K: 65536, 2000 loc ~ 56K,
                               3000 loc ~ 85K *)
@@ -26,7 +119,10 @@ module World =
   end
 
 
-module IO0: Io.SIG_MIN =
+
+
+
+module IO0: Make_io.SIG =
   struct
     type in_file = int
     type out_file = int
@@ -142,31 +238,23 @@ module IO0: Io.SIG_MIN =
       execute_program @@ make_program m
 
 
-    module Process0 = Process
+    let exit (code:int): 'a t =
+      flush_all >>= fun _ -> Process.exit code
 
-    module Process =
-      struct
-        let exit (code:int): 'a t =
-          flush_all >>= fun _ -> Process0.exit code
+    let command_line: string array t =
+      return Process.command_line
 
-        let execute (program:unit t): unit =
-          execute program
-
-        let command_line: string array t =
-          return Process0.command_line
-
-        let current_working_directory: string t =
-          return (Process0.current_working_directory ())
-      end
+    let current_working_directory: string t =
+      return (Process.current_working_directory ())
 
 
-    module Path0 =
-      struct
-        let separator: char =
-          Path.separator
-        let delimiter: char =
-          Path.delimiter
-      end
+
+    let path_separator: char =
+      Path.separator
+
+    let path_delimiter: char =
+      Path.delimiter
+
 
 
     let read_directory (path:string): string array option t =
@@ -265,4 +353,4 @@ module IO0: Io.SIG_MIN =
   end
 
 
-module IO: Io.SIG = Io.Make (IO0)
+module IO: Io.SIG = Make_io.Make (IO0)

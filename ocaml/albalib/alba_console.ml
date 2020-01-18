@@ -235,7 +235,7 @@ module Make (Io:Io.SIG) =
          Return the path to the directory, the directory entries and the
          position of the file "alba-workspace.yml" in the entries.  *)
       let open Io in
-      read_directory path >>= function
+      Directory.read path >>= function
       | None ->
          return None
       | Some arr ->
@@ -266,7 +266,7 @@ module Make (Io:Io.SIG) =
             return lst
           else
             let path1 = Path.join path entries.(i) in
-            read_directory path1 >>= function
+            Directory.read path1 >>= function
             | None ->
                find_in_entries (i+1) lst
             | Some entries1  ->

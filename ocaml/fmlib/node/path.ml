@@ -32,3 +32,8 @@ let basename (s:string): string =
 
 let extname (s:string): string =
   to_string @@ path##extname (string s)
+
+
+let _ = dirname
+let _ = basename
+let _ = extname

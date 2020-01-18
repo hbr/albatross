@@ -27,121 +27,16 @@ module type STAT =
 
 
 
-(** IO Buffer *)
-module type BUFFER =
-  sig
-    type t
-    val alloc: int -> t
-  end
-
-module type BUFFERS =
-  functor (B:BUFFER) ->
-  sig
-    type t
-    val make: int -> t
-    val is_open_read: t -> int -> bool
-    val is_open_write: t -> int -> bool
-    val capacity: t -> int
-
-    (** [occupy_readable s fd] allocates a buffer for reading and associates
-       the buffer with the file descriptor [fd]. Returns the position of the
-       file in the system. *)
-    val occupy_readable: t -> int -> int
-
-    (** [occupy_writable s fd] allocates a buffer for writing and associates
-       the buffer with the file descriptor [fd]. Returns the index of the
-       file in the system. *)
-    val occupy_writable: t -> int -> int
-
-    (** [release s idx] releases the buffer at the index [idx]. *)
-    val release: t -> int -> unit
-
-    val readable_file: t -> int -> int * B.t
-    val writable_file: t -> int -> int * B.t
-
-    val find_open: t -> int -> int
-  end
 
 
 
-
-
-
-
-
-module type SIG_MIN =
-  sig
-    type in_file
-    type out_file
-
-    val stdin:  in_file
-    val stdout: out_file
-    val stderr: out_file
-
-    module M: MONAD
-    include MONAD
-
-
-
-    module Process:
-    sig
-      val exit: int -> 'a t
-      val execute: unit t -> unit
-      val command_line: string array t
-      val current_working_directory: string  t
-    end
-
-
-
-
-    val cli_loop:
-        'a
-        -> ('a -> string option)
-        -> ('a -> string -> 'a t)
-        -> ('a -> 'a t)
-        -> 'a t
-
-
-
-    module Path0:
-    sig
-      val separator: char
-      val delimiter: char
-    end
-
-    val read_directory: string -> string array option t
-
-    (*val open_for_read:  string -> in_file  option t
-    val open_for_write: string -> out_file option t
-    val create: string -> out_file option t
-    val close_in:  in_file  -> unit t
-    val close_out: out_file -> unit t
-    val flush: out_file -> unit t
-    val flush_all: unit t
-
-    val getc: in_file -> char option t
-    val putc: char -> out_file  ->  unit t
-    val get_line: in_file -> string option t
-    val put_substring: string -> int -> int -> out_file -> unit t*)
-
-    module Read: functor (W:WRITABLE) ->
-                 sig
-                   val read_buffer: in_file -> W.t -> W.t t
-                   val read: in_file -> W.t -> W.t t
-                 end
-    module Write: functor (R:READABLE) ->
-                  sig
-                    val write_buffer: out_file -> R.t -> R.t t
-                    val write: out_file -> R.t -> R.t t
-                  end
-
-  end
 
 
 
 module type SIG =
   sig
-    include SIG_MIN
+    module M: MONAD
+    include MONAD
 
     module Path:
     sig
@@ -189,6 +84,16 @@ module type SIG =
     end
 
 
+
+    module Process:
+    sig
+        val exit: int -> 'a t
+        val execute: unit t -> unit
+        val command_line: string array t
+        val current_working_directory: string  t
+    end
+
+
     module Directory:
     sig
       (** [read path] reads the entries (files and subdirectories) of the
@@ -225,9 +130,10 @@ module type SIG =
 
 
 
-    (*val getc_in: char option t
-    val get_line_in: string option t*)
 
+
+
+    (** Write to standard output (usually the screen). *)
     module Stdout:
     sig
       val putc: char -> unit t
@@ -237,6 +143,9 @@ module type SIG =
       val fill: int -> char -> unit t
     end
 
+
+
+    (** Write to standard error (usually the screen). *)
     module Stderr:
     sig
       val putc: char -> unit t
@@ -290,13 +199,6 @@ module type SIG =
   end
 
 
-
-
-
-module Buffers: BUFFERS
-
-
-module Make (M:SIG_MIN): SIG
 
 
 

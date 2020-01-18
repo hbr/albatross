@@ -430,7 +430,7 @@ end
 
 
 
-module IO0: Io.SIG_MIN =
+module IO0: Make_io.SIG =
   struct
     type program =
       | More of (File_system.t * (File_system.t -> program))
@@ -481,43 +481,41 @@ module IO0: Io.SIG_MIN =
     let stderr: out_file = File_system.stderr
 
 
-    module Process =
-      struct
-        let exit (code:int): 'a t =
-          fun fs k ->
+    let exit (code:int): 'a t =
+      fun fs k ->
+      File_system.flush_all fs;
+      Pervasives.exit code
+
+    let execute (p:unit t): unit =
+      let fs = File_system.make ()
+      in
+      let _ =
+        try
+          execute_program
+            (p
+               fs
+               (fun () _ -> Done))
+        with e ->
           File_system.flush_all fs;
-          Pervasives.exit code
+          raise e
+      in
+      File_system.flush_all fs;
+      Pervasives.exit 0
 
-        let execute (p:unit t): unit =
-          let fs = File_system.make ()
-          in
-          let _ =
-            try
-              execute_program
-                (p
-                   fs
-                   (fun () _ -> Done))
-            with e ->
-              File_system.flush_all fs;
-              raise e
-          in
-          File_system.flush_all fs;
-          Pervasives.exit 0
+    let command_line: string array t =
+      fun fs k  -> k Sys.argv fs
 
-        let command_line: string array t =
-          fun fs k  -> k Sys.argv fs
+    let current_working_directory: string t =
+      fun fs k -> k (Sys.getcwd ()) fs
 
-        let current_working_directory: string t =
-          fun fs k -> k (Sys.getcwd ()) fs
-      end
 
-    module Path0 =
-      struct
-        let separator: char =
-          if Sys.win32 then '\\' else '/'
-        let delimiter: char =
-          if Sys.win32 then ';' else ':'
-      end
+
+
+    let path_separator: char =
+      if Sys.win32 then '\\' else '/'
+
+    let path_delimiter: char =
+      if Sys.win32 then ';' else ':'
 
 
     let read_directory (path:string): string array option t =
@@ -598,4 +596,4 @@ module IO0: Io.SIG_MIN =
   end
 
 
-module IO: Io.SIG = Io.Make (IO0)
+module IO: Io.SIG = Make_io.Make (IO0)
