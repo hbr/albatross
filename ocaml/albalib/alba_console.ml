@@ -19,7 +19,7 @@ module Pretty_make (Io:Io.SIG) =
   struct
     module Position = Character_parser.Position
     module Located = Character_parser.Located
-    module Expression = Parser.Expression
+    module Expression = Ast.Expression
     module Out = Fmlib.Io.Output (Io)
     module PP =  Pretty_printer.Pretty (Out)
     include PP
@@ -491,7 +491,7 @@ module Make (Io:Io.SIG) =
 
     let build_and_compute
           (src: string)
-          (e: Parser.Expression.t)
+          (e: Ast.Expression.t)
           (compute: bool)
         : Pretty.t
       =

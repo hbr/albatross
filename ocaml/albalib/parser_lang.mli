@@ -1,41 +1,10 @@
 open Fmlib
+open Ast
 
 type 'a located = 'a Character_parser.Located.t
 
 type range = Character_parser.Position.t * Character_parser.Position.t
 
-
-module Expression:
-sig
-  type operator = string * Operator.t
-
-
-  type argument =
-    | Normal
-    | Operand
-
-  type t =
-    t0 Character_parser.Located.t
-
-  and t0 =
-    | Proposition
-    | Any
-    | Identifier of string
-    | Number of string
-    | Char of int
-    | String of string
-    | Operator of operator
-    | Typed of t * t
-    | Application of t * (t * argument) list
-    | Function of
-        formal_argument list
-        * t option                        (* result type *)
-        * t                               (* defining expression *)
-    | Product of formal_argument list * t
-
-  and formal_argument =
-    string located * t option
-end
 
 
 

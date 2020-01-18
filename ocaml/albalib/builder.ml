@@ -70,6 +70,25 @@
 
  *)
 
+(* Placeholders
+   ------------
+
+   - Terms and subterms
+   - Types of bound variables and the toplevel expression
+   - Implicit arguments (inferable type variables and proof arguments)
+
+    We start with
+
+        Gamma, E: Any 2, e: E
+
+
+   All placeholders for terms and subterms are guaranteed to get a substitution.
+   Typed bound variables are guaranteed to get a substitution. The types of
+   annotated terms are guaranteed to get a substitution.
+
+
+
+*)
 
 (* Possible Errors:
 
@@ -233,7 +252,7 @@ open Common
 
 
 module Parser     = Parser_lang
-module Expression = Parser.Expression
+module Expression = Ast.Expression
 module Position   = Character_parser.Position
 
 
@@ -720,7 +739,7 @@ module GSub =
         | _ ->
           (* One or both signatures has no more arguments. *)
           Option.map
-            (remove_last n)
+            (remove_last n) (* only bound variables have been introduced. *)
             (unify (Signature.typ req) true (Signature.typ act) c)
       in
       uni act_sign (update_signature req_sign c) 0 c
@@ -799,7 +818,8 @@ module BuildC =
                  ptr without substitution
 
          after:  stack =  arg1 ... argn ptr rest
-                 ptr substituted *)
+                 ptr substituted
+                 placeholders added for all explicit and implicit arguments *)
       let ptr = top bc in
       let req_sign = required_signature bc in
       let open GSub in
@@ -1105,6 +1125,11 @@ let build_bound
   (builder: t)
   : (t, problem) result
   =
+  (*
+  ----------------------------------------------------------------------
+  MISSING: Check, if term can be applied to sufficient arguments like in
+  [check_base_terms]!!!!
+  ----------------------------------------------------------------------*)
   let bcs =
     List.map_and_filter
       (BuildC.build_bound level explicits)
@@ -1214,6 +1239,7 @@ let build_char
     explicits
     c
 
+
 let push_type (universe: int) (builder: t): t =
   map (BuildC.push_type universe) builder
 
@@ -1312,7 +1338,7 @@ let check_formal_arguments_usage
 
 
 let rec build0
-          (exp:Parser.Expression.t)
+          (exp:Ast.Expression.t)
           (explicits: Explicits.t)
           (c: t)
         : (t, problem) result
@@ -1323,7 +1349,7 @@ let rec build0
      After successful build, the expression is stored in the top
      placeholder.  The stack of placeholders is not modified, only the top
      one has got a substitution. *)
-  let open Parser.Expression
+  let open Ast.Expression
   in
   let range = Located.range exp
   in
@@ -1372,6 +1398,18 @@ let rec build0
              args
      )
 
+  | Product (formal_args, result_tp) ->
+        let open Result in
+        build_formal_arguments formal_args build0 c
+        >>= build_type result_tp build0
+        >>= check_formal_arguments_usage formal_args
+        >>= fun _ ->
+        (* We have to verify that all types depend only on placeholders before
+        the building of the product.
+
+        *)
+        Error (Not_yet_implemented (range, "<complete product term>"))
+
   | Function (formal_args, result_tp, exp_inner) ->
       let open Result
       in
@@ -1379,17 +1417,8 @@ let rec build0
       >>= build_optional_type result_tp build0
       >>= fun b -> Ok (push_term b)
       >>= build0 exp_inner Explicits.empty
-      >>= check_formal_arguments_usage formal_args
       >>= fun _ ->
       Error (Not_yet_implemented (range, "<complete function term>"))
-
-  | Product (formal_args, result_tp) ->
-      let open Result in
-      build_formal_arguments formal_args build0 c
-      >>= build_type result_tp build0
-      >>= check_formal_arguments_usage formal_args
-      >>= fun _ ->
-      Error (Not_yet_implemented (range, "<complete product term>"))
 
 
 
@@ -1418,7 +1447,7 @@ let to_base_context
 
 
 let build
-      (exp: Parser.Expression.t)
+      (exp: Ast.Expression.t)
       (c: Context.t)
     : ((Term.t * Term.typ) list, problem) result
   =

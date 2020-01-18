@@ -21,7 +21,7 @@ type problem =
   | Not_yet_implemented of range * string
 
 
-val build: Parser_lang.Expression.t
+val build: Ast.Expression.t
            -> Context.t
            -> ((Term.t * Term.typ) list, problem) result
 
