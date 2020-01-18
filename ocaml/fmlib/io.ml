@@ -560,3 +560,39 @@ module Output (Io:SIG) =
       in
       run m
   end
+
+
+
+
+
+
+
+module Output_new (Io:SIG) =
+    struct
+        type fd = Io.File.Out.fd
+
+        type t = fd -> unit Io.t
+
+        let empty (): t =
+            fun _ -> Io.return ()
+
+        let char (c: char) (): t =
+            Io.File.Out.putc c
+
+        let fill (n: int) (c: char) (): t =
+            Io.File.Out.fill n c
+
+        let substring (str: string) (start: int) (len: int) (): t =
+            Io.File.Out.substring str start len
+
+        let string (str: string) (): t =
+            Io.File.Out.string str
+
+
+        let (<+>) (p: t) (f: unit -> t): t =
+            fun fd ->
+            Io.(p fd >>= fun () -> f () fd)
+
+        let run (fd: fd) (p: t): unit Io.t =
+            p fd
+    end

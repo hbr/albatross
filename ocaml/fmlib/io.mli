@@ -255,8 +255,29 @@ module Buffers: BUFFERS
 module Make (M:SIG_MIN): SIG
 
 
+
+
+
+
 module Output (Io:SIG):
 sig
   include OUTPUT
   val run: Io.File.Out.fd -> t -> unit Io.t
+end
+
+
+
+
+
+(** Experimental new output module *)
+module Output_new (Io: SIG):
+sig
+    type t
+    val empty: unit -> t
+    val string: string -> unit -> t
+    val char: char -> unit -> t
+    val fill: int -> char -> unit -> t
+    val substring: string -> int -> int -> unit -> t
+    val (<+>): t -> (unit -> t) -> t
+    val run: Io.File.Out.fd -> t -> unit Io.t
 end
