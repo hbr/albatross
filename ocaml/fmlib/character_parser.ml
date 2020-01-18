@@ -258,6 +258,7 @@ module type PARSER =
     type parser
     val needs_more: parser -> bool
     val has_ended:  parser -> bool
+    val has_succeeded:  parser -> bool
     val position:   parser -> Position.t
     val line:   parser -> int
     val column: parser -> int

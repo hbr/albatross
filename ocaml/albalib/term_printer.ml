@@ -150,7 +150,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
       let print_name_type name tp c =
         P.(char '('
            <+> (if name = "" then char '_' else string name)
-           <+> char ':'
+           <+> string ": "
            <+> snd (print tp c)
            <+> char ')')
       in

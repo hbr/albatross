@@ -52,6 +52,9 @@ module type PARSER =
     (** Has the parser terminated (opposite of [needs_more p])? *)
     val has_ended:  parser -> bool
 
+    (** Has the parser succeeded *)
+    val has_succeeded:  parser -> bool
+
     (** The current position. *)
     val position:   parser -> Position.t
 

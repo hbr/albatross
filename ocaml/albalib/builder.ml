@@ -1475,3 +1475,125 @@ module Print  (P:Pretty_printer.SIG) =
     let candidate_type = typ
   end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(* ----------------------------------------------------------------------- *)
+(* Unit Test *)
+(* ----------------------------------------------------------------------- *)
+
+
+
+module Pretty_printer = Pretty_printer.Pretty (String_printer)
+
+module Term_print = Context.Pretty (Pretty_printer)
+
+module Expression_parser = Parser_lang.Make (Expression)
+
+
+
+let standard_context: Context.t =
+    Context.standard ()
+
+
+
+let string_of_term_type (term: Term.t) (typ: Term.t): string
+    =
+    String_printer.run (
+        Pretty_printer.run 0 80 80
+            (Term_print.print (Term.Typed (term,typ)) standard_context))
+
+
+
+let build_expression
+    (str: string)
+    : ((Term.t * Term.typ) list, problem) result
+    =
+    let open Expression_parser in
+    let p = run (expression ()) str in
+    assert (has_ended p);
+    assert (has_succeeded p);
+    build Option.(value (result p)) standard_context
+
+
+
+
+
+let%test _ =
+    match build_expression "1:Int" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "(1: Int): Int"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "identity" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "identity: all (A: Any): A -> A"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "identity 'a'" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "identity 'a': Character"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "'a'= 'b'  " with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "'a' = 'b': Proposition"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "abc" with
+    | Error (No_name _) ->
+        true
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "(+) 1 2 3" with
+    | Error (Not_enough_args _) ->
+        true
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "all (a:Int) b: a = b" with
+    | Error (Not_yet_implemented _) ->
+        true
+    | _ ->
+        false

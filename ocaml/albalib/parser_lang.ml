@@ -63,6 +63,7 @@ module type SIG =
 
         val needs_more: parser -> bool
         val has_ended:  parser -> bool
+        val has_succeeded: parser -> bool
 
         val put_char: parser -> char -> parser
         val put_end:  parser -> parser
@@ -76,6 +77,7 @@ module type SIG =
         val expression: unit -> Expression.t t
         val command: Command.t t
         val make: final t -> parser
+        val run: final t -> string -> parser
     end
 
 
@@ -448,7 +450,9 @@ module Make (Final: ANY) =
                |. whitespace
                |= optional (expression ()))
 
-        let make (p: 'a t): parser =
+        let make (p: final t): parser =
             make (p |. expect_end "end of input") ()
 
+        let run (p: final t) (input: string): parser =
+            run p () input
     end (* Make *)
