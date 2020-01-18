@@ -1,8 +1,11 @@
 open Fmlib
+open Common_module_types
+
 open Ast
 
 type 'a located = 'a Character_parser.Located.t
 
+type position = Character_parser.Position.t
 type range = Character_parser.Position.t * Character_parser.Position.t
 
 
@@ -37,21 +40,32 @@ end
 
 
 
-module Error: Generic_parser.ERROR with type expect = string
-                                    and type semantic = Problem.t
 
-type parser
+module type SIG =
+    sig
+        type parser
+        type final
+        type _ t
+
+        module Error: Generic_parser.ERROR with type expect = string
+                                            and type semantic = Problem.t
+
+        val needs_more: parser -> bool
+        val has_ended:  parser -> bool
+
+        val put_char: parser -> char -> parser
+        val put_end:  parser -> parser
+
+        val result: parser -> final option
+        val error:  parser -> Error.t
+        val line: parser -> int
+        val column: parser -> int
+        val position: parser -> position
+
+        val expression: unit -> Expression.t t
+        val command: Command.t t
+        val make: final t -> parser
+    end
 
 
-val needs_more: parser -> bool
-val has_ended:  parser -> bool
-val initial:    parser
-
-val put_char: parser -> char -> parser
-val put_end:  parser -> parser
-
-val result: parser -> Command.t option
-val error:  parser -> Error.t
-val line: parser -> int
-val column: parser -> int
-val position: parser -> Character_parser.Position.t
+module Make (Final: ANY): SIG with type final = Final.t

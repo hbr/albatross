@@ -2,6 +2,7 @@ open Fmlib
 open Common
 
 module Parser = Parser_lang
+module Repl_parser = Parser.Make (Parser.Command)
 
 module Position = Character_parser.Position
 type pos = Position.t
@@ -421,13 +422,13 @@ module Make (Io:Io.SIG) =
 
     let report_parse_problem
           (src: string)
-          (p: Parser.parser)
+          (p: Repl_parser.parser)
         : Pretty.t
       =
      let open Pretty in
-     let error = Parser.error p in
-     if Parser.Error.is_semantic error then
-       match Parser.Error.semantic error with
+     let error = Repl_parser.error p in
+     if Repl_parser.Error.is_semantic error then
+       match Repl_parser.Error.semantic error with
        | Parser.Problem.Operator_precedence (range, op1, op2) ->
           chain
             [ error_header "SYNTAX";
@@ -464,11 +465,11 @@ module Make (Io:Io.SIG) =
               cut
             ]
      else
-       let pos = Parser.position p in
+       let pos = Repl_parser.position p in
        chain
          [ error_header "SYNTAX";
            print_source src (pos, pos);
-           match Parser.Error.expectations error with
+           match Repl_parser.Error.expectations error with
            | [] ->
               assert false (* Illegal call! *)
            | [e] ->
@@ -547,26 +548,26 @@ module Make (Io:Io.SIG) =
               s
         end
       in
-      let parse (s:string): Parser.parser =
+      let parse (s:string): Repl_parser.parser =
         let len = String.length s in
         let rec parse i p =
-          let more = Parser.needs_more p in
+          let more = Repl_parser.needs_more p in
           if i < len && more then
-            parse (i+1) (Parser.put_char p s.[i])
+            parse (i+1) (Repl_parser.put_char p s.[i])
           else if more then
-            Parser.put_end p
+            Repl_parser.put_end p
           else
             p
         in
-        parse 0 Parser.initial
+        parse 0 Repl_parser.(make command)
       in
       let command (src: string): State.t Io.t =
         let print pr =
           Io.(Pretty.print File.stdout 80 pr)
         in
         let p = parse src in
-        assert (Parser.has_ended p);
-        match Parser.result p with
+        assert (Repl_parser.has_ended p);
+        match Repl_parser.result p with
         | Some Parser.Command.Do_nothing ->
             Io.return State.init
         | Some Parser.Command.Exit ->
