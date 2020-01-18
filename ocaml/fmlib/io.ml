@@ -524,74 +524,39 @@ module Make (M:SIG_MIN): SIG =
   end
 
 
-module Output (Io:SIG) =
-  struct
-    type fd = Io.File.Out.fd
-
-    type t =
-      | Leaf of (fd -> unit Io.t)
-      | Plus of t * t
-
-
-    let empty: t =
-      Leaf (fun _ -> Io.return ())
-
-    let (<+>) (p1:t) (p2:t): t =
-      Plus (p1,p2)
-
-    let char c = Leaf (Io.File.Out.putc c)
-
-    let substring str start len = Leaf (Io.File.Out.substring str start len)
-
-    let string str = Leaf (Io.File.Out.string str)
-
-    let line str = Leaf (Io.File.Out.line str)
-
-    let newline = Leaf Io.File.Out.newline
-
-    let fill n c = Leaf (Io.File.Out.fill n c)
-
-    let run (fd:fd) (m:t): unit Io.t =
-      let rec run = function
-        | Leaf f ->
-           f fd
-        | Plus (p1, p2) ->
-           Io.(run p1 >>= fun _ -> run p2)
-      in
-      run m
-  end
 
 
 
-
-
-
-
-module Output_new (Io:SIG) =
+module Output(Io: SIG) =
     struct
         type fd = Io.File.Out.fd
 
         type t = fd -> unit Io.t
 
-        let empty (): t =
+        let empty: t =
             fun _ -> Io.return ()
 
-        let char (c: char) (): t =
+        let (<+>) (a: t) (b: t): t =
+            fun fd ->
+            Io.(a fd >>= fun () -> b fd)
+
+        let char (c: char): t =
             Io.File.Out.putc c
 
-        let fill (n: int) (c: char) (): t =
+        let fill (n: int) (c: char): t =
             Io.File.Out.fill n c
 
-        let substring (str: string) (start: int) (len: int) (): t =
+        let substring (str: string) (start: int) (len: int): t =
             Io.File.Out.substring str start len
 
-        let string (str: string) (): t =
+        let string (str: string): t =
             Io.File.Out.string str
 
+        let line str =
+            Io.File.Out.line str
 
-        let (<+>) (p: t) (f: unit -> t): t =
-            fun fd ->
-            Io.(p fd >>= fun () -> f () fd)
+        let newline =
+            Io.File.Out.newline
 
         let run (fd: fd) (p: t): unit Io.t =
             p fd
