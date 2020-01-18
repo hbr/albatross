@@ -27,6 +27,7 @@ doc
 ocaml/alba
 ocaml/alba-debug
 ocaml/alba_web.js
+Session.vim
 \#*
 .\#*
 todo.md
