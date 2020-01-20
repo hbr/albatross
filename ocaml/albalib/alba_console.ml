@@ -416,7 +416,13 @@ module Make (Io:Io.SIG) =
             "TYPE" src range
             (wrap_words "I cannot infer a type for this variable because \
                          it is not used. Either use the variable or \
-                         provide an explicit type"
+                         provide an explicit type."
+            <+> cut)
+
+    | Cannot_infer_bound range ->
+        report_error
+            "TYPE" src range
+            (wrap_words "I cannot infer a type for this variable."
             <+> cut)
 
 

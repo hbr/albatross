@@ -36,6 +36,16 @@ val find: ('a -> bool) ->'a t -> 'a option
 
 
 
+val nth_strict: int -> 'a t -> 'a
+(** [ith_strict n list] returns the [n]th element of the list. Precondition:
+[list] has at least [n + 1] elements. *)
+
+
+val nth: int -> 'a t -> 'a option
+(** [ith_strict n list] returns the [n]th element of the list if the list is
+long enough. Otherwise [None] is returned. *)
+
+
 
 (** {1 List functions from Stdlib}*)
 

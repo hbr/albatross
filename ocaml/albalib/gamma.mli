@@ -21,6 +21,8 @@ val raw_type_at_level: int -> t -> Term.typ
 (** [type_at_level level c] type of the entry at [level]. *)
 val type_at_level: int -> t -> Term.typ
 
+val name_at_level: int -> t -> string
+
 val int_type: t -> Term.typ
 
 

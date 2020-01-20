@@ -29,6 +29,19 @@ let find (p:'a -> bool) (l:'a t): 'a option =
 
 
 
+let nth (i: int) (lst: 'a t): 'a option =
+    nth_opt lst i
+
+
+let nth_strict (i: int) (lst: 'a t): 'a =
+    match nth i lst with
+    | None ->
+        assert false (* Illegal call! *)
+    | Some e ->
+        e
+
+
+
 let map_and_filter (f:'a -> 'b option) (l:'a list): 'b list =
   let rec map = function
     | [] ->

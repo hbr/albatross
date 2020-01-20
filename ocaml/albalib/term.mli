@@ -109,6 +109,10 @@ val down: int -> t -> t option
 
 
 val substitute: (int -> t) -> t -> t
+(** [substitute f term] substitutes each free variable [i] in [term] by the term
+[f i]. *)
+
+
 
 val apply: t -> t -> t
 

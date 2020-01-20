@@ -283,16 +283,20 @@ let down_from (delta:int) (start:int) (t:t): t option =
        down exp (nb + 1) >>= fun exp ->
        Some (Lambda (tp, exp, info))
 
-    | Pi (tp, t, info ) ->
+    | Pi (tp, rt, info ) ->
        down tp nb >>= fun tp ->
-       down t (nb + 1) >>= fun t ->
-       Some (Pi (tp, t, info))
+       down rt (nb + 1) >>= fun rt ->
+       Some (Pi (tp, rt, info))
   in
   down t 0
 
 
 let down (delta:int) (t:t): t option =
   down_from delta 0 t
+
+
+
+
 
 
 let substitute (f:int -> t) (t:t): t =

@@ -1,4 +1,5 @@
 todo.txt
+todo.md
 gmon.out
 gmon.txt
 *.log
@@ -7,12 +8,10 @@ _build
 _draft
 draft
 tmp
-*_draft.ml
-*_draft.mli
+*_draft.*
+*_draft.*
 *_old.ml
 *_old.mli
-*_draft.al
-*_draft.ali
 doc
 .alba
 *.al.json

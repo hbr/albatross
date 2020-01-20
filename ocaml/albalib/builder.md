@@ -74,3 +74,25 @@ Success:
 - Unify its type (which must be either Any or Proposition) with the required
   result type of the whole expression.
 - Assign the generated term to its placeholder.
+
+
+## Correct generation of `all (x: [A]) (y: [B]) .... : [RT]`:
+
+After analyis of the syntactic expression the context looks like
+
+    Gamma = ..., A: Any 1, x: A, ..., B: Any 1, y: B, ..., RT: Any 1, ...
+
+    stack = RT, ..., B, A, ...
+
+The entries on the stack are references to the corresponding absolute positions
+in `Gammma`.
+
+Potential problem: The bound variable `x` might occur in `B`, ..., `RT`.
+Therefore in the types `A`, `B`, ... `RT` we must substitute the bound variables
+by the correct bound variables.
+
+We work with an array of optional pointers for each entry starting at `A`.
+
+    arguments : [ ., 0, ..., 1, ...]
+
+where 0, 1, ... point to the corresponding argument and `.` are void entries.

@@ -57,6 +57,7 @@ let entry (i:int) (c:t): entry =
 let raw_type_at_level (i:int) (c:t): Term.typ =
   (entry i c).typ
 
+
 let type_at_level (i:int) (c:t): Term.typ =
   let cnt = count c in
   Term.up (cnt - i) (entry i c).typ
@@ -73,18 +74,24 @@ let string_of_name (name:name): string =
 
 
 let name_of_level (i:int) (c:t): name =
-  (entry i c).name
+    (entry i c).name
 
 
 let name_of_index0 (i:int) (c:t): name =
   (entry (bruijn_convert i (count c)) c).name
 
 
+let name_at_level (level: int) (gamma: t): string =
+    match (Segmented_array.elem level gamma).name with
+    | Binary_operator (str, _ ) -> str
+    | Normal str -> str
+
+
+
 let name_of_index (i: int) (gamma: t): string =
   match name_of_index0 i gamma with
   | Binary_operator (str, _ ) -> str
   | Normal str -> str
-
 
 
 

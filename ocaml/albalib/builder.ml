@@ -1,252 +1,3 @@
-(* Term building function
-
-   Input: syntactic term + context
-
-   Output: list of (term, type) pairs or an error message.
-
-   Examples:
-
-      3 + 5: Int, 3 + 5: Natural, ...
-
-      "h": String
-
-      'c': Character
-
-      List: Any -> Any
-
-      []: all (A: Any): List A
-
-      (^): all (A: Any): A -> List A -> List A
-
-      identity: all (A: Any): A -> A
-
-   We reject all terms with bound variables where the type of the bound
-   variables cannot be inferred.
-
-   Example:
-
-      \ a b := a = b
-
-      Must be rejected, because (=) has the type
-
-         all (A: Any): A -> A -> Proposition
-
-   The term \ (a:Int) b := a = b is accepted.
- *)
-
-
-
-
-
-(* Principles of Term Building
-
-   Each (sub)term gets a placeholder which represents the term.
-
-   Each bound variable gets one placeholder for its type and an entry for the
-   variable.
-
-   If the type of any (sub)term / bound variable is known, its placeholder for
-   the type gets an immediate substitution.
-
-   Internal builder function:
-
-   Input:
-
-   - syntactic expression to be built
-
-   - number of explicit arguments to which the expression is applied
-
-   - name map to find the index / indices of names
-
-   - list of pairs (ptr, substitution gamma) where ptr points to the
-   placeholder representing the term to be constructed.
-
-   Output:
-
-   - list of pairs (ptr array, substitution gamma) where the pointer array
-   points to the placeholders for the explicit arguments
-
-   - or an error indication
-
- *)
-
-(* Placeholders
-   ------------
-
-   - Terms and subterms
-   - Types of bound variables and the toplevel expression
-   - Implicit arguments (inferable type variables and proof arguments)
-
-    We start with
-
-        Gamma, E: Any 2, e: E
-
-
-   All placeholders for terms and subterms are guaranteed to get a substitution.
-   Typed bound variables are guaranteed to get a substitution. The types of
-   annotated terms are guaranteed to get a substitution.
-
-
-
-*)
-
-(* Possible Errors:
-
-   - A number is to large or to small to be represented by a number type.
-
-   - A function or operator name cannot be found in the name map.
-
-   - The types of all constructed terms, before applying them to the
-   arguments, are not function types with enough arguments.
-
-   - The types of all constructed terms, after applying them to the arguments,
-   are not unifiable with the expected result type.
- *)
-
-(*
-    I was expecting a term which returns after application to n arguments a
-    value of one of the types
-
-        R1, R2, ....
-
-    but the term has one of the types
-
-        f _ _ _ :T1, f _ _ _ :T2, ...
-
-
-    I was expecting a term which returns after application to n arguments a
-    certain type. But none of the following combinations work:
-
-       Return type:    R1
-       Term type:      all (x:A) (y:B) ... : T1
-
-       Return type:    R2
-       Term type:      all (x:A) (y:B) ... : T2
-
-       ...
-
-       or
-       Return type:    R3
-       Term            f _ _ _ _ : T3
-
-
-    I was expecting a function which can accept n arguments, but the term has
-    the types
-
-        T1, T2,  ...
-
- *)
-
-
-
-
-(* Identifier or operator
-
-   Input:
-
-   - pointer to placeholder
-
-   - [n] explicit arguments
-
-   Output:
-
-   - placeholder substituted by f <a0> <a1> ... <am-1> where m is the number
-   of explicit and implict arguments.
-
-   - array of pointers to the placeholders of the n explicit arguments
-
-
-   Algorithm:
-
-   From the name map we get a list of indices (or levels).
-
-   Each index represents a global or local variable which has a type according
-   to the context gamma.
-
-   The type in key normal form must look like
-
-     all (x1:A1) ... (xk:Ak): Rk
-
-   where n <= k and k include all implicit arguments which occur before the n
-   explicit arguments.
-
-   Compare Rk with the required type R. If R is not a placeholder and starts
-   with fewer implicit arguments than Rk we extract the difference from Rk to
-   get
-
-     all (x1:A1) ... (xk:Ak) ... (xm:Am): Rm
-
-   Otherwise we set m = k.
-
-   Form the new context
-
-      Gamma, x1:A1, ... , xm:Am
-
-   with the new placeholders x1,..., xm.
-
-   Unify Rm with R. And do the substitution
-
-     e := f <x1> ... <xm>
-
-   where e is the placeholder for the expression and f is a variable for the
-   function name.
-
-   and return an array pointing to the placeholders representing explicit
-   arguments.  *)
-
-
-
-
-(* Function Expression "(\ x y ... := exp) a1 a2 ... an"
-
-   Some arguments are typed, some are untyped. The result type of the lambda
-   abstraction might be there or not.
-
-   There are [nargs] arguments to which the function term is applied.
-
-   A fully typed lambda abstraction looks like
-
-     \ (x:A) (y:B) ... : RT := exp
-
-   First the signature is analyzed. The untyped arguments get placeholders for
-   their types without substitutions, the typed arguments get placeholders with
-   substitutions.
-
-     gamma, A:U, x:A, B:U, y:B ...
-
-   Type variables which occur in other types which are not propositions are
-   implicit. However if they occur in other types, their types get
-   substitutions i.e. can be treated as typed variables.
-
-   The expected type of the lambda abstraction applied to the arguments cannot
-   give any information for the types of formal arguments which correspond to
-   the arguments to which the lambda abstraction is applied. Task: Find the
-   number of formal arguments which correspond to actual arguments.
-
-   Number of formal arguments corresponding to actual arguments:
-
-   - Number of actual arguments + Number of implicit arguments (type args +
-   proof args)
-
-   - Scan from left to right, not counting implicit args until sufficient
-   formal args have been found.
-
-   - Error if there are not sufficient formal args to cover all actual args.
-
-
-   After covering all actual args there are remaining args (>= 0)
-
-      \ u v ... := exp
-
-   The expected type E of the whole lambda term applied to the actual
-   arguments must be the expected type of the remaining lambda abstraction. If
-   E is a dummy, then we cannot gain any information. If E is not a dummy, its
-   signature must have sufficient arguments for the remaining formal
-   arguments. The argument types derived from E must be unifiable with the
-   types of the formal arguments.
-
-*)
-
 open Fmlib
 open Common
 
@@ -389,6 +140,10 @@ module GSub =
       Gamma.type_of_term t c.base
 
 
+    let name_at_level (i: int) (c:t): string =
+      Gamma.name_at_level i c.base
+
+
     let type_at_level (i: int) (c:t): Term.typ =
       Gamma.type_at_level i c.base
 
@@ -494,7 +249,7 @@ module GSub =
         )
 
 
-    let substitution_at_level_safe (level: int) (gsub: t): Term.t =
+    let substitution_at_level_unsafe (level: int) (gsub: t): Term.t =
       (* precondition: There is a substitutable at [level] which has a
       substitution. *)
       match substitution_at_level level gsub with
@@ -540,10 +295,11 @@ module GSub =
 
 
     let unify (t:Term.t) (is_super: bool) (u:Term.t) (c:t): t option =
-      (* [unify t u c] unifies the term [t] with the term [u] and generates
-         substitutions such that [t] and [u] with the substitutions applied
-         are equivalent terms. Return a new context containing new
-         substitutions if the terms are unifiable, otherwise return [None]. *)
+      (* [unify t u c] unifies the term [t] with the term [u] and generate
+         substitutions such that [t] and [u] with the substitutions applied are
+         equivalent terms or [t] is a supertype of [u]. Return a new context
+         containing new substitutions if the terms are unifiable, otherwise
+         return [None]. *)
       let rec unify t is_super u c =
         let type_of_variable i = Gamma.type_of_variable i c.base
         in
@@ -761,7 +517,7 @@ module BuildC =
       A context for unification and a stack of pointers pointing to placeholders
       for terms.
   *)
-  struct
+struct
     type t = {
         stack: int list;
         gamma:  GSub.t
@@ -771,12 +527,24 @@ module BuildC =
       c.gamma
 
 
+    let top_of_stack (stack: int list): int =
+        match stack with
+        | [] ->
+            assert false (* Illegal call! *)
+        | top :: _ ->
+            top
+
+
+    let pop_stack (stack: int list): int * int list =
+        match stack with
+        | [] ->
+            assert false (* Illegal call! *)
+        | hd :: tl ->
+            hd, tl
+
+
     let top (c: t): int =
-      match c.stack with
-      | h :: _ ->
-         h
-      | _ ->
-         assert false (* Illegal call! *)
+        top_of_stack c.stack
 
 
     let top_type (c:t): Term.typ =
@@ -840,6 +608,16 @@ module BuildC =
         (unify_signatures act_sign req_sign gsub )
 
 
+    let build_candidate
+        (term: Term.t) (explicits: Explicits.t) (bc: t): t option
+        =
+        unify_candidate
+            bc
+            term
+            GSub.(signature bc.gamma (type_of_term term bc.gamma))
+            explicits
+
+
     let build_bound (level: int) (explicits: Explicits.t) (bc: t): t option =
       (* before: stack = ptr rest
                  ptr without substitution
@@ -849,9 +627,7 @@ module BuildC =
       let open GSub
       in
       let term = variable_of_bound level bc.gamma in
-      let typ  = type_of_term term bc.gamma in
-      let act_sign = signature bc.gamma typ in
-      unify_candidate bc term act_sign explicits
+      build_candidate term explicits bc
 
 
     let push_type (universe: int) (bc: t): t =
@@ -898,10 +674,10 @@ module BuildC =
               let exp_inner_ptr = count gsub in
               let gsub =
                 push_substitutable
-                  (substitution_at_level_safe tp_ptr gsub)
+                  (substitution_at_level_unsafe tp_ptr gsub)
                   gsub
               in
-              let tp = substitution_at_level_safe tp_ptr gsub in
+              let tp = substitution_at_level_unsafe tp_ptr gsub in
               let exp = Term.(Typed (Variable 0, tp)) in
               let gsub =
                 add_substitution_at_level exp_ptr exp gsub
@@ -931,7 +707,96 @@ module BuildC =
         | Some term ->
           to_base term bc.gamma
       )
-  end (* BuildC *)
+
+
+    let has_nontrivial_substitution (level: int) (bc: t): bool =
+        match GSub.substitution_at_level level bc.gamma with
+        | None ->
+            false
+        | Some (Variable i) when level <= GSub.level_of_index i bc.gamma ->
+            false
+        | _ ->
+            true
+
+
+
+    let find_untyped_argument (nargs: int) (bc: t): int option =
+    (* stack = rt argn ... arg1
+    *)
+        let check i level =
+            if has_nontrivial_substitution level bc then
+                None
+            else
+                Some (nargs - i - 1)
+        in
+        let rec find i  stack =
+            if i = nargs then
+                None
+            else
+                match stack with
+                | [] ->
+                    assert false (* cannot happen *)
+                | level :: rest ->
+                    match find (i + 1) rest with
+                    | None ->
+                        if 0 <= i then
+                            check i level
+                        else
+                            None
+                    | res ->
+                        res
+        in
+        find (-1) bc.stack
+
+
+
+    let make_function_type (nargs: int) (bc: t): Term.typ * t =
+        (* make the term [all (x: A) (y: B) ... : RT]
+
+           where stack = RT Z ... B A ...
+
+
+           and remove the placeholders from the stack *)
+        let open Term
+        in
+        let term_at delta level =
+            Variable (delta + GSub.index_of_level level bc.gamma)
+        in
+        let rec make delta stack tp =
+            assert (0 <= delta);
+            if delta = 0 then
+                stack, tp
+            else
+                let level, stack = pop_stack stack
+                and delta = delta - 1
+                in
+                let name = GSub.name_at_level (level + 1) bc.gamma
+                and arg_tp = term_at delta level
+                in
+                let tp = Pi (arg_tp, tp, Pi_info.typed name) in
+                make delta stack tp
+        in
+        let level, stack = pop_stack bc.stack in
+        let rtp = term_at nargs level
+        in
+        let stack, tp = make nargs stack rtp
+        in
+        GSub.substitute tp bc.gamma, {bc with stack}
+        (* WRONG: bound variables must be corrected. *)
+        (* ========================================= *)
+
+
+
+    let end_function_type
+        (nargs: int)             (* of the function type *)
+        (explicits: Explicits.t) (* explicit arguments, the term is applied
+                                    to. *)
+        (bc: t)
+        : t option
+        =
+        let tp, bc = make_function_type nargs bc in
+        build_candidate tp explicits bc
+end (* BuildC *)
 
 
 
@@ -961,6 +826,7 @@ type problem =
   | Not_enough_args of range * int * candidate_type list
   | None_conforms of range * int * required_type list * candidate_type list
   | Unused_bound of range
+  | Cannot_infer_bound of range
   | Not_yet_implemented of range * string
 
 
@@ -1336,6 +1202,58 @@ let check_formal_arguments_usage
         builder
 
 
+let check_formal_argument_types
+    (args: (string Located.t * Expression.t option) list)
+    (builder: t)
+    : (t, problem) result
+    =
+    let nargs = List.length args in
+    let find_untyped =
+        BuildC.find_untyped_argument nargs
+    in
+    let bcs =
+        List.filter
+            (fun bc ->
+                match find_untyped bc with
+                | None ->
+                    true
+                | Some _ ->
+                    false)
+            builder.bcs
+    in
+    if bcs = [] then
+        match builder.bcs with
+        | [] ->
+            assert false (* cannot happen *)
+        | bc :: _ ->
+            match find_untyped bc with
+            | None ->
+                assert false (* cannot happen *)
+            | Some i ->
+                let str, _ = List.nth_strict i args in
+                Error (Cannot_infer_bound (Located.range str))
+    else
+        Ok builder
+
+
+
+let end_function_type
+    (_: range)
+    (nargs: int)
+    (explicits: Explicits.t)
+    (builder: t)
+    : (t, problem) result
+    =
+    let bcs =
+        List.map_and_filter
+            (BuildC.end_function_type nargs explicits)
+            builder.bcs
+    in
+    if bcs = [] then
+        assert false (* nyi error message *)
+    else
+        Ok {builder with bcs}
+
 
 let rec build0
           (exp:Ast.Expression.t)
@@ -1403,12 +1321,8 @@ let rec build0
         build_formal_arguments formal_args build0 c
         >>= build_type result_tp build0
         >>= check_formal_arguments_usage formal_args
-        >>= fun _ ->
-        (* We have to verify that all types depend only on placeholders before
-        the building of the product.
-
-        *)
-        Error (Not_yet_implemented (range, "<complete product term>"))
+        >>= check_formal_argument_types formal_args
+        >>= end_function_type range (List.length formal_args) explicits
 
   | Function (formal_args, result_tp, exp_inner) ->
       let open Result
@@ -1417,8 +1331,12 @@ let rec build0
       >>= build_optional_type result_tp build0
       >>= fun b -> Ok (push_term b)
       >>= build0 exp_inner Explicits.empty
-      >>= fun _ ->
-      Error (Not_yet_implemented (range, "<complete function term>"))
+        >>= fun _ ->
+        (* We have to verify that all types depend only on placeholders before
+        the building of the product.
+
+        *)
+        Error (Not_yet_implemented (range, "<complete product term>"))
 
 
 
@@ -1592,8 +1510,8 @@ let%test _ =
 
 
 let%test _ =
-    match build_expression "all (a:Int) b: a = b" with
-    | Error (Not_yet_implemented _) ->
+    match build_expression "all a b: a = b" with
+    | Error (Cannot_infer_bound _) ->
         true
     | _ ->
         false
