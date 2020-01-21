@@ -470,6 +470,13 @@ module Make (Io:Io.SIG) =
               string "Ambiguous command";
               cut
             ]
+        | Parser.Problem.Duplicate_argument range ->
+            chain [ error_header "SYNTAX";
+                    print_source src range;
+                    cut;
+                    wrap_words "I found a duplicate argument name. All names \
+                                of formal arguments must be different.";
+                    cut; cut]
      else
        let pos = Repl_parser.position p in
        chain

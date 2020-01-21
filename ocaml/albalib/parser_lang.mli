@@ -24,6 +24,8 @@ sig
     | Illegal_command of range * string list
 
     | Ambiguous_command of range * string list
+
+    | Duplicate_argument of range
 end
 
 

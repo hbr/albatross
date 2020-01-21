@@ -43,6 +43,8 @@ module Problem =
       | Illegal_command of range * string list
 
       | Ambiguous_command of range * string list
+
+      | Duplicate_argument of range
   end
 
 
@@ -306,6 +308,26 @@ module Make (Final: ANY) =
           char c |. whitespace
 
 
+        let rec find_duplicate_argument
+            (arg_lst: (string located * Expression.t option) list)
+            : string located option
+            =
+            match arg_lst with
+            | [] ->
+                None
+            | arg :: args ->
+                let arg_name (nme,_) =
+                    Located.value nme
+                in
+                let name = arg_name arg
+                in
+                match List.find (fun arg2 -> name = arg_name arg2) args with
+                | None ->
+                    find_duplicate_argument args
+                | Some (duplicate, _) ->
+                    Some duplicate
+
+
         let rec expression (): Expression.t t =
 
           let result_type: Expression.t t =
@@ -326,6 +348,16 @@ module Make (Final: ANY) =
             <|> map (fun name -> name, None) formal_argument_name
           in
 
+          let formal_arguments =
+            one_or_more formal_argument >>= fun lst ->
+            match find_duplicate_argument lst with
+            | None ->
+                return lst
+            | Some name ->
+                fail (Duplicate_argument (Located.range name))
+          in
+
+
           let primary (): Expression.t t =
             backtrackable identifier_expression "identifier"
             <|> number_expression
@@ -341,14 +373,14 @@ module Make (Final: ANY) =
             <|> located
                   (return (fun args rt exp -> Expression.Function (args, rt, exp))
                    |. char_ws '\\'
-                   |= one_or_more formal_argument
+                   |= formal_arguments
                    |= optional_result_type
                    |= (assign |. whitespace >>= expression))
             <|> located
                   (return (fun args rt -> Expression.Product (args, rt))
                   |. backtrackable (string "all") "all"
                   |. whitespace
-                  |= one_or_more formal_argument
+                  |= formal_arguments
                   |= result_type)
             <?> "expression"
           in

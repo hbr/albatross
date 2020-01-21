@@ -675,6 +675,7 @@ struct
       and stored in the top placeholder.
 
       before: stack = tp: Any(1), exp: ?, ...
+          where tp has already a substitution
 
       - unify the type stored in the top placeholder with the type of exp.
 
@@ -1226,7 +1227,7 @@ let push_bound (name: string) (untyped: bool) (builder: t): t =
             builder.bounds}
 
 
-let unify_typed_term (c: t): (t, problem) result =
+let unify_typed_term (_: range) (c: t): (t, problem) result =
   match
     List.map_and_filter BuildC.unify_typed_term c.bcs
   with
@@ -1398,7 +1399,7 @@ let rec build0
          end_typed_term
          (return (push_type 1 c)
           >>= build0 tp Explicits.empty
-          >>= unify_typed_term
+          >>= unify_typed_term range
           >>= build0 inner Explicits.empty)
      )
 
@@ -1424,7 +1425,6 @@ let rec build0
         >>= check_formal_arguments_usage formal_args
         >>= check_formal_argument_types formal_args
         >>= end_function_type_new range formal_args explicits
-        (*>>= end_function_type range (List.length formal_args) explicits*)
 
   | Function (formal_args, result_tp, exp_inner) ->
       let open Result
@@ -1438,7 +1438,7 @@ let rec build0
         the building of the product.
 
         *)
-        Error (Not_yet_implemented (range, "<complete product term>"))
+        Error (Not_yet_implemented (range, "<complete function term>"))
 
 
 
