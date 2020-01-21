@@ -222,6 +222,39 @@ let standard (): t =
                              Lambda_info.typed "x"),
                      Lambda_info.typed "A"))))
 
+    |> add_entry
+        (* true: Proposition *)
+        (Normal "true")
+        (Term.proposition, 0)
+        No
+
+    |> add_entry
+        (* false: Proposition *)
+        (Normal "false")
+        (Term.proposition, 0)
+        No
+
+    |> add_entry
+        (* (=>) (a b: Proposition): Proposition := a -> b *)
+        (Binary_operator ("=>", Operator.of_string "=>"))
+        (Term.(
+            Pi (proposition,
+                Pi (proposition, proposition, Pi_info.arrow),
+                Pi_info.arrow)),
+        0)
+        (Definition
+            Term.(
+                Lambda (
+                    proposition,
+                    Lambda (proposition,
+                            Pi (Variable 1,
+                                Variable 1,
+                                Pi_info.arrow),
+                            Lambda_info.typed "b"),
+                    Lambda_info.typed "a")
+            )
+        )
+
 
 let type_of_value (v: Term.Value.t) (c: t): Term.typ =
   let open Term in
