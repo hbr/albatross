@@ -14,8 +14,8 @@ type t =
                  are considered equivalent. *)
 
 
-let arrow             = (30,   Right)
-let colon             = (40,   Right)
+let colon             = (30,   Right)
+let arrow             = (40,   Right)
 let assign            = (41,   No)
 let lambda            = (42,   No)
 let relation          = (50,   No)

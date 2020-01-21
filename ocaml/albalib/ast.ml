@@ -47,6 +47,10 @@ module Expression = struct
       pos_start
       (if op_str = ":" then
          Typed (e1, e2)
+       else if op_str = "->" then
+           (* e1 -> e2 *)
+           let name = Located.map (fun _ -> "_") e1 in
+           Product ([name, Some e1], e2)
        else
          Application (
           Located.map (fun (op_str,_) -> Identifier op_str) op,

@@ -832,7 +832,7 @@ struct
 
 
 
-    let make_function_type_new
+    let make_function_type
         (args: Expression.formal_argument list)
         (bc: t)
         : Term.typ * t
@@ -864,7 +864,10 @@ struct
                             | None ->
                                 Term.Pi_info.untyped name
                             | Some _ ->
-                                Term.Pi_info.typed name
+                                if name = "_" then
+                                    Term.Pi_info.arrow
+                                else
+                                    Term.Pi_info.typed name
                         in
                         let rt = make (arg_no + 1) arg_levels args
                         in
@@ -882,14 +885,14 @@ struct
 
 
 
-    let end_function_type_new
+    let end_function_type
         (args: Expression.formal_argument list)
         (explicits: Explicits.t) (* explicit arguments, the term is applied
                                     to. *)
         (bc: t)
         : t option
         =
-        let tp, bc = make_function_type_new args bc in
+        let tp, bc = make_function_type args bc in
         build_candidate tp explicits bc
 
 
@@ -1337,7 +1340,7 @@ let check_formal_argument_types
 
 
 
-let end_function_type_new
+let end_function_type
     (_: range)
     (args: Expression.formal_argument list)
     (explicits: Explicits.t)
@@ -1346,7 +1349,7 @@ let end_function_type_new
     =
     let bcs =
         List.map_and_filter
-            (BuildC.end_function_type_new args explicits)
+            (BuildC.end_function_type args explicits)
             builder.bcs
     in
     if bcs = [] then
@@ -1424,7 +1427,7 @@ let rec build0
         >>= build_type result_tp build0
         >>= check_formal_arguments_usage formal_args
         >>= check_formal_argument_types formal_args
-        >>= end_function_type_new range formal_args explicits
+        >>= end_function_type range formal_args explicits
 
   | Function (formal_args, result_tp, exp_inner) ->
       let open Result
