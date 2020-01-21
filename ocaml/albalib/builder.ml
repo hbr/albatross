@@ -643,18 +643,6 @@ struct
 
 
 
-    let build_bound (level: int) (explicits: Explicits.t) (bc: t): t option =
-      (* before: stack = ptr rest
-                 ptr without substitution
-
-         after:  stack =  arg1 ... argn ptr rest
-                 ptr substituted *)
-      let open GSub
-      in
-      let term = variable_of_bound level bc.gamma in
-      build_candidate term explicits bc
-
-
     let push_type (universe: int) (bc: t): t =
       {gamma =
         GSub.push_substitutable Term.(Sort (Sort.Any universe)) bc.gamma;
@@ -686,27 +674,6 @@ struct
       GSub.variable_of_level level bc.gamma
 
     let _ = variable_of_level
-
-
-
-    let make_typed_term (bc: t): Term.t * t =
-        (*  make the term [Typed (exp_inner, typ)]
-
-            start: stack = exp_inner typ ...
-
-            end:   stack = ...
-        *)
-        match bc.stack with
-        | exp_ptr :: typ_ptr :: stack ->
-            let open GSub in
-            let exp = substitution_at_level_unsafe exp_ptr bc.gamma
-            and typ = substitution_at_level_unsafe typ_ptr bc.gamma
-            in
-            Term.Typed (exp, typ),
-            {bc with stack}
-        | _  ->
-            assert false (* cannot happen, there are at least 2 pointers on the
-            stack. *)
 
 
 
@@ -832,6 +799,34 @@ struct
 
 
 
+
+    let make_bound (level: int) (bc: t): Term.t * t =
+        GSub.variable_of_bound level bc.gamma,
+        bc
+
+
+
+    let make_typed_term (bc: t): Term.t * t =
+        (*  make the term [Typed (exp_inner, typ)]
+
+            start: stack = exp_inner typ ...
+
+            end:   stack = ...
+        *)
+        match bc.stack with
+        | exp_ptr :: typ_ptr :: stack ->
+            let open GSub in
+            let exp = substitution_at_level_unsafe exp_ptr bc.gamma
+            and typ = substitution_at_level_unsafe typ_ptr bc.gamma
+            in
+            Term.Typed (exp, typ),
+            {bc with stack}
+        | _  ->
+            assert false (* cannot happen, there are at least 2 pointers on the
+            stack. *)
+
+
+
     let make_function_type
         (args: Expression.formal_argument list)
         (bc: t)
@@ -883,17 +878,6 @@ struct
         in
         tp, {bc with stack}
 
-
-
-    let end_function_type
-        (args: Expression.formal_argument list)
-        (explicits: Explicits.t) (* explicit arguments, the term is applied
-                                    to. *)
-        (bc: t)
-        : t option
-        =
-        let tp, bc = make_function_type args bc in
-        build_candidate tp explicits bc
 
 
     let end_compound
@@ -1092,26 +1076,50 @@ let check_base_terms
 
 
 
+let end_compound
+    (range: range)
+    (make: BuildC.t -> Term.t * BuildC.t)
+    (explicits: Explicits.t)
+    (builder: t)
+    : (t,problem) result
+    =
+    let bcs =
+        List.map_and_filter
+            (BuildC.end_compound make explicits)
+            builder.bcs
+    in
+    if bcs = [] then
+        let lst =
+            List.map
+                (fun bc ->
+                    let term, bc = make bc in
+                    let typ = GSub.type_of_term term bc.gamma in
+                    let gamma = GSub.base (BuildC.base bc) in
+                    (BuildC.required_type bc, gamma),
+                    (typ, gamma))
+                builder.bcs
+        in
+        Error (No_candidate (range, Explicits.count explicits, lst))
+    else
+        Ok {builder with bcs}
+
+
+
+
 let build_bound
-  (_: range)
-  (name: string)
-  (level: int)
-  (explicits: Explicits.t)
-  (builder: t)
-  : (t, problem) result
-  =
-  let bcs =
-    List.map_and_filter
-      (BuildC.build_bound level explicits)
-      builder.bcs
-  in
-  if bcs = [] then
-    assert false (* nyi: error report, if bound variable does not satisfy the
-    required type. *)
-  else
-    Ok {builder with
-        bcs;
-        bounds = Bounds.use name builder.bounds}
+    (range: range)
+    (name: string)
+    (level: int)
+    (explicits: Explicits.t)
+    (builder: t)
+    : (t, problem) result
+    =
+    Result.(
+        end_compound range (BuildC.make_bound level) explicits builder
+        >>= fun builder ->
+        Ok {builder with
+            bounds = Bounds.use name builder.bounds}
+    )
 
 
 
@@ -1271,33 +1279,6 @@ let build_term
 
 
 
-let end_compound
-    (range: range)
-    (make: BuildC.t -> Term.t * BuildC.t)
-    (explicits: Explicits.t)
-    (builder: t)
-    : (t,problem) result
-    =
-    let bcs =
-        List.map_and_filter
-            (BuildC.end_compound make explicits)
-            builder.bcs
-    in
-    if bcs = [] then
-        let lst =
-            List.map
-                (fun bc ->
-                    let term, bc = make bc in
-                    let typ = GSub.type_of_term term bc.gamma in
-                    let gamma = GSub.base (BuildC.base bc) in
-                    (BuildC.required_type bc, gamma),
-                    (typ, gamma))
-                builder.bcs
-        in
-        Error (No_candidate (range, Explicits.count explicits, lst))
-    else
-        Ok {builder with bcs}
-
 
 
 let build_formal_arguments
@@ -1374,21 +1355,16 @@ let check_formal_argument_types
 
 
 let end_function_type (* Missing: Use [end_compound] *)
-    (_: range)
+    (range: range)
     (args: Expression.formal_argument list)
     (explicits: Explicits.t)
     (builder: t)
     : (t, problem) result
     =
-    let bcs =
-        List.map_and_filter
-            (BuildC.end_function_type args explicits)
-            builder.bcs
-    in
-    if bcs = [] then
-        assert false (* nyi error message *)
-    else
-        Ok {builder with bcs}
+    end_compound range
+        (BuildC.make_function_type args)
+        explicits
+        builder
 
 
 
