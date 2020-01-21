@@ -407,8 +407,13 @@ let compute (t:Term.t) (c:t): Term.t =
     | Lambda _ ->
         term, steps
 
-    | Pi _ ->
-        term, steps
+    | Pi (arg_tp, res_tp, info) ->
+        let c_inner = push_local (Pi_info.name info) arg_tp c in
+        let res_tp, new_steps = compute res_tp steps c_inner in
+        if steps < new_steps then
+            compute (Pi (arg_tp, res_tp, info)) new_steps c
+        else
+            term, steps
   in
   fst (compute t 0 c)
 
