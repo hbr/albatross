@@ -1630,3 +1630,13 @@ let%test _ =
         = "(all a (b: Int): a = b): Proposition"
     | _ ->
         false
+
+
+
+let%test _ =
+    match build_expression "Int -> all (A:Any): A" with
+    | Ok ([term, typ]) ->
+        string_of_term_type term typ
+        = "Int -> (all (A: Any): A): Any(1)"
+    | _ ->
+        false

@@ -50,7 +50,11 @@ module Expression = struct
        else if op_str = "->" then
            (* e1 -> e2 *)
            let name = Located.map (fun _ -> "_") e1 in
-           Product ([name, Some e1], e2)
+           match Located.value e2 with
+           | Product (formal_arguments, result_type) ->
+                Product ( (name, Some e1) :: formal_arguments, result_type )
+           | _ ->
+                Product ([name, Some e1], e2)
        else
          Application (
           Located.map (fun (op_str,_) -> Identifier op_str) op,

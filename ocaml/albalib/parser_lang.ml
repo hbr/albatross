@@ -377,7 +377,13 @@ module Make (Final: ANY) =
                    |= optional_result_type
                    |= (assign |. whitespace >>= expression))
             <|> located
-                  (return (fun args rt -> Expression.Product (args, rt))
+                  (return
+                    (fun args rt ->
+                        match Located.value rt with
+                        | Expression.Product (args_inner, rt) ->
+                            Expression.Product (args @ args_inner, rt)
+                        | _ ->
+                            Expression.Product (args, rt))
                   |. backtrackable (string "all") "all"
                   |. whitespace
                   |= formal_arguments
