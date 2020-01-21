@@ -290,7 +290,6 @@ module GSub =
 
 
 
-
     let unify (t:Term.t) (is_super: bool) (u:Term.t) (c:t): t option =
       (* [unify t u c] unifies the term [t] with the term [u] and generate
          substitutions such that [t] and [u] with the substitutions applied are
@@ -444,6 +443,8 @@ module GSub =
         : Term.t * Signature.t * int list * t
       (* The returned term is valid in the returned context *)
       =
+      assert (Explicits.count explicits
+              <= Signature.count_explicits act_sign);
       let term, act_sign, c, ptr_array =
         push_explicits explicits term act_sign c
       in
@@ -582,11 +583,14 @@ struct
 
 
 
+    let required_type (bc: t): Term.typ =
+        GSub.substitute (top_type bc) bc.gamma
+
+
+
     let required_signature (bc: t): Signature.t =
-      GSub.(
-        signature
-          bc.gamma
-          (type_at_level (top bc) bc.gamma))
+        GSub.signature bc.gamma (required_type bc)
+
 
 
     let unify_candidate
@@ -602,6 +606,8 @@ struct
          after:  stack =  arg1 ... argn ptr rest
                  ptr substituted
                  placeholders added for all explicit and implicit arguments *)
+      assert (Explicits.count explicits
+              <= Signature.count_explicits act_sign);
       let ptr = top bc in
       let req_sign = required_signature bc in
       let open GSub in
@@ -625,11 +631,16 @@ struct
     let build_candidate
         (term: Term.t) (explicits: Explicits.t) (bc: t): t option
         =
-        unify_candidate
-            bc
-            term
+        let act_sign =
             GSub.(signature bc.gamma (type_of_term term bc.gamma))
-            explicits
+        in
+        if Signature.count_explicits act_sign
+            < Explicits.count explicits
+        then
+            None
+        else
+            unify_candidate bc term act_sign explicits
+
 
 
     let build_bound (level: int) (explicits: Explicits.t) (bc: t): t option =
@@ -651,11 +662,18 @@ struct
         (count bc) :: bc.stack}
 
 
-    let push_term (bc: t): t =
+    let push_term (idx: int) (bc: t): t =
       {gamma =
-        GSub.push_substitutable Term.(Variable 0) bc.gamma;
+        GSub.push_substitutable Term.(Variable idx) bc.gamma;
        stack =
         (count bc) :: bc.stack}
+
+
+    let push_term_last (bc: t): t =
+        let level = top bc in
+        let idx = GSub.index_of_level level bc.gamma in
+        push_term idx bc
+
 
 
     let push_bound (name: string) (bc: t): t =
@@ -670,44 +688,26 @@ struct
     let _ = variable_of_level
 
 
-    let unify_typed_term (bc: t): t option =
-      (* The type part of the typed expression [exp_inner: tp] has been built
-      and stored in the top placeholder.
 
-      before: stack = tp: Any(1), exp: ?, ...
-          where tp has already a substitution
+    let make_typed_term (bc: t): Term.t * t =
+        (*  make the term [Typed (exp_inner, typ)]
 
-      - unify the type stored in the top placeholder with the type of exp.
+            start: stack = exp_inner typ ...
 
-      - create a new placeholder of the inner expression.
-      *)
-      match bc.stack with
-      | tp_ptr :: exp_ptr :: _ ->
-          Option.map
-            (fun gsub ->
-              let open GSub in
-              let exp_inner_ptr = count gsub in
-              let gsub =
-                push_substitutable
-                  (substitution_at_level_unsafe tp_ptr gsub)
-                  gsub
-              in
-              let tp = substitution_at_level_unsafe tp_ptr gsub in
-              let exp = Term.(Typed (Variable 0, tp)) in
-              let gsub =
-                add_substitution_at_level exp_ptr exp gsub
-              in
-              {gamma = gsub; stack = exp_inner_ptr :: bc.stack})
-            GSub.(
-              unify
-                (type_at_level exp_ptr bc.gamma)
-                true
-                (variable_of_level tp_ptr bc.gamma)
-                bc.gamma
-            )
-      | _ ->
-          assert false (* Cannot happen, there are at least two pointers on the
-          stack. *)
+            end:   stack = ...
+        *)
+        match bc.stack with
+        | exp_ptr :: typ_ptr :: stack ->
+            let open GSub in
+            let exp = substitution_at_level_unsafe exp_ptr bc.gamma
+            and typ = substitution_at_level_unsafe typ_ptr bc.gamma
+            in
+            Term.Typed (exp, typ),
+            {bc with stack}
+        | _  ->
+            assert false (* cannot happen, there are at least 2 pointers on the
+            stack. *)
+
 
 
     let substitution_in_base (level:int) (bc: t): Term.t option =
@@ -896,9 +896,14 @@ struct
         build_candidate tp explicits bc
 
 
-
-
-
+    let end_compound
+        (make: t -> Term.t * t)
+        (explicits: Explicits.t)
+        (bc: t)
+        : t option
+        =
+        let tp, bc = make bc in
+        build_candidate tp explicits bc
 end (* BuildC *)
 
 
@@ -928,6 +933,7 @@ type problem =
   | No_name of range
   | Not_enough_args of range * int * candidate_type list
   | None_conforms of range * int * required_type list * candidate_type list
+  | No_candidate  of range * int * (required_type * candidate_type) list
   | Unused_bound of range
   | Cannot_infer_bound of range
   | Not_yet_implemented of range * string
@@ -1001,7 +1007,7 @@ let make (c:Context.t): t =
        bounds = Bounds.empty;
        bcs =
         let gsub = GSub.make (Context.gamma c) in
-        [BuildC.(empty gsub |> push_type 2 |> push_term)];
+        [BuildC.(empty gsub |> push_type 2 |> push_term 0)];
        }
 
 
@@ -1094,18 +1100,14 @@ let build_bound
   (builder: t)
   : (t, problem) result
   =
-  (*
-  ----------------------------------------------------------------------
-  MISSING: Check, if term can be applied to sufficient arguments like in
-  [check_base_terms]!!!!
-  ----------------------------------------------------------------------*)
   let bcs =
     List.map_and_filter
       (BuildC.build_bound level explicits)
       builder.bcs
   in
   if bcs = [] then
-    assert false
+    assert false (* nyi: error report, if bound variable does not satisfy the
+    required type. *)
   else
     Ok {builder with
         bcs;
@@ -1214,7 +1216,9 @@ let push_type (universe: int) (builder: t): t =
 
 
 let push_term: t -> t =
-  map BuildC.push_term
+    (* Add a new placeholder for a new term to be constructed whose type is the
+    last constructed expression. *)
+  map BuildC.push_term_last
 
 
 let push_bound (name: string) (untyped: bool) (builder: t): t =
@@ -1228,20 +1232,6 @@ let push_bound (name: string) (untyped: bool) (builder: t): t =
             Bounds.push name builder.bounds
         else
             builder.bounds}
-
-
-let unify_typed_term (_: range) (c: t): (t, problem) result =
-  match
-    List.map_and_filter BuildC.unify_typed_term c.bcs
-  with
-  | [] ->
-     assert false (* nyi error message *)
-  | bcs  ->
-     Ok {c with bcs }
-
-
-let end_typed_term (builder: t): t =
-  map (fun bc -> BuildC.(pop_top (pop_top bc))) builder
 
 
 
@@ -1268,6 +1258,48 @@ let build_optional_type
       build_type tp buildf builder
 
 
+
+let build_term
+    (exp: Expression.t)
+    (buildf: build_function)
+    (builder: t)
+    : (t, problem) result
+    =
+    (* Build the term for [exp] whose type is the last built expression. *)
+    push_term builder
+    |> buildf exp Explicits.empty
+
+
+
+let end_compound
+    (range: range)
+    (make: BuildC.t -> Term.t * BuildC.t)
+    (explicits: Explicits.t)
+    (builder: t)
+    : (t,problem) result
+    =
+    let bcs =
+        List.map_and_filter
+            (BuildC.end_compound make explicits)
+            builder.bcs
+    in
+    if bcs = [] then
+        let lst =
+            List.map
+                (fun bc ->
+                    let term, bc = make bc in
+                    let typ = GSub.type_of_term term bc.gamma in
+                    let gamma = GSub.base (BuildC.base bc) in
+                    (BuildC.required_type bc, gamma),
+                    (typ, gamma))
+                builder.bcs
+        in
+        Error (No_candidate (range, Explicits.count explicits, lst))
+    else
+        Ok {builder with bcs}
+
+
+
 let build_formal_arguments
   (args: (string Located.t * Expression.t option) list)
   (buildf: build_function)
@@ -1281,6 +1313,7 @@ let build_formal_arguments
         (build_optional_type tp buildf builder))
     args
     builder
+
 
 
 
@@ -1340,7 +1373,7 @@ let check_formal_argument_types
 
 
 
-let end_function_type
+let end_function_type (* Missing: Use [end_compound] *)
     (_: range)
     (args: Expression.formal_argument list)
     (explicits: Explicits.t)
@@ -1372,75 +1405,65 @@ let rec build0
      After successful build, the expression is stored in the top
      placeholder.  The stack of placeholders is not modified, only the top
      one has got a substitution. *)
-  let open Ast.Expression
-  in
-  let range = Located.range exp
-  in
-  match Located.value exp with
-  | Proposition ->
-     build_proposition range explicits c
+    let open Ast.Expression
+    in
+    let range = Located.range exp
+    in
+    match Located.value exp with
+    | Proposition ->
+       build_proposition range explicits c
 
-  | Any ->
-     build_any range explicits c
+    | Any ->
+       build_any range explicits c
 
-  | Identifier name | Operator (name, _) ->
-     build_name range name explicits c
+    | Identifier name | Operator (name, _) ->
+       build_name range name explicits c
 
-  | Number str ->
-     build_number range str explicits c
+    | Number str ->
+       build_number range str explicits c
 
-  | Char code ->
-     build_char range code explicits c
+    | Char code ->
+       build_char range code explicits c
 
-  | String str ->
-     build_string range str explicits c
+    | String str ->
+       build_string range str explicits c
 
-  | Typed (inner, tp) ->
-      (* Error (Not_yet_implemented (range, "<Typed term>"))*)
-     Result.(
-       map
-         end_typed_term
-         (return (push_type 1 c)
-          >>= build0 tp Explicits.empty
-          >>= unify_typed_term range
-          >>= build0 inner Explicits.empty)
-     )
+    | Typed (inner, tp) ->
+        Result.(
+            build_type tp build0 c
+            >>= build_term inner build0
+            >>= end_compound range BuildC.make_typed_term explicits)
 
-  | Application (f, args) ->
-     assert (args <> []);
-     Result.(
-       build0
-         f
-         (Explicits.make args)
-         c
-       >>= List_fold.fold_left
-             (fun (arg,_) c ->
-               map
-                 pop_top
-                 (build0 arg Explicits.empty c))
-             args
-     )
+    | Application (f, args) ->
+       assert (args <> []);
+       Result.(
+         build0
+           f
+           (Explicits.make args)
+           c
+         >>= List_fold.fold_left
+               (fun (arg,_) c ->
+                 map
+                   pop_top
+                   (build0 arg Explicits.empty c))
+               args
+       )
 
-  | Product (formal_args, result_tp) ->
-        let open Result in
+    | Product (formal_args, result_tp) ->
+          let open Result in
+          build_formal_arguments formal_args build0 c
+          >>= build_type result_tp build0
+          >>= check_formal_arguments_usage formal_args
+          >>= check_formal_argument_types formal_args
+          >>= end_function_type range formal_args explicits
+
+    | Function (formal_args, result_tp, exp_inner) ->
+        let open Result
+        in
         build_formal_arguments formal_args build0 c
-        >>= build_type result_tp build0
-        >>= check_formal_arguments_usage formal_args
-        >>= check_formal_argument_types formal_args
-        >>= end_function_type range formal_args explicits
-
-  | Function (formal_args, result_tp, exp_inner) ->
-      let open Result
-      in
-      build_formal_arguments formal_args build0 c
-      >>= build_optional_type result_tp build0
-      >>= fun b -> Ok (push_term b)
-      >>= build0 exp_inner Explicits.empty
+        >>= build_optional_type result_tp build0
+        >>= build_term exp_inner build0
         >>= fun _ ->
-        (* We have to verify that all types depend only on placeholders before
-        the building of the product.
-
-        *)
         Error (Not_yet_implemented (range, "<complete function term>"))
 
 

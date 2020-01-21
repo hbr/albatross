@@ -328,6 +328,60 @@ module Make (Io:Io.SIG) =
       <+> cut
 
 
+    let report_none_conforms
+        (nargs: int)
+        (reqs:  Builder.required_type list)
+        (cands: Builder.candidate_type list)
+        : Pretty.t
+        =
+        let module Builder_print = Builder.Print (Pretty) in
+        let open Builder in
+        let open Pretty in
+        let plural_s n = if n = 1 then empty else char 's'
+        in
+        let expect_nargs n =
+          if n = 0 then
+            string "which"
+          else
+            list_separated
+              (group space)
+              [wrap_words "which applied to";
+               string (string_of_int n);
+               string "argument" <+> plural_s n]
+        and type_or_types lst =
+          match lst with
+          | [_] ->
+            wrap_words "the type"
+          | _ :: _ :: _ ->
+            wrap_words "one of the types"
+          | _ ->
+            assert false (* cannot happen, empty type lists not allowed! *)
+        in
+        (chain_separated
+           [wrap_words "I was expecting a term";
+            expect_nargs nargs;
+            string "has";
+            type_or_types reqs]
+           (group space))
+        <+> cut <+> cut
+        <+> (nest 4
+               ((chain_separated
+                 (List.map (Builder_print.required_type) reqs)
+                 cut)))
+        <+> cut <+> cut
+        <+> (list_separated
+               (group space)
+               [wrap_words "but the term has";
+                type_or_types cands])
+        <+> cut <+> cut
+        <+> (nest 4
+               ((chain_separated
+                 (List.map (Builder_print.candidate_type) cands)
+                 cut)))
+        <+> cut
+
+
+
     let report_build_problem
           (src: string)
           (problem: Builder.problem)
@@ -386,30 +440,15 @@ module Make (Io:Io.SIG) =
             <+> cut
             )
       | None_conforms (range, nargs, reqs, cands) ->
-         report_error
-           "TYPE" src range
-           (chain_separated
-              [wrap_words "I was expecting a term";
-               expect_nargs nargs;
-               string "has";
-               type_or_types reqs]
-              (group space))
-           <+> cut
-           <+> (nest 4
-                  ((chain_separated
-                    (List.map (Builder_print.required_type) reqs)
-                    cut)))
-           <+> cut <+> cut
-           <+> (list_separated
-                  (group space)
-                  [wrap_words "but the term has";
-                   type_or_types cands])
-           <+> cut <+> cut
-           <+> (nest 4
-                  ((chain_separated
-                    (List.map (Builder_print.candidate_type) cands)
-                    cut)))
-           <+> cut
+        report_error
+            "TYPE" src range
+            (report_none_conforms nargs reqs cands)
+
+    | No_candidate (range, nargs, lst) ->
+        let reqs, cands = List.split lst in
+        report_error
+            "TYPE" src range
+            (report_none_conforms nargs reqs cands)
 
     | Unused_bound range ->
         report_error

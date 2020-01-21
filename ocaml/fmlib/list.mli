@@ -57,6 +57,9 @@ val append: 'a list -> 'a list -> 'a list
 val concat: 'a list list -> 'a list
 
 
+(** Transform a list of pairs into a pair of lists. *)
+val split: ('a * 'b) list -> 'a list * 'b list
+
 
 (** [rev a] reverses the list [a]. *)
 val rev: 'a list -> 'a list
