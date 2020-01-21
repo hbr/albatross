@@ -1,5 +1,6 @@
 
 val length: 'a array -> int
+val is_empty: 'a array -> bool
 val make: int -> 'a -> 'a array
 val init: int -> (int -> 'a) -> 'a array
 val get: 'a array -> int -> 'a
@@ -15,8 +16,11 @@ val sub: 'a array -> int -> int -> 'a array
 val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b array -> 'a
 
 
+val first: 'a array -> 'a
+val last:  'a array -> 'a
 val find: ('a -> bool) -> 'a array -> int
 val put: int -> 'a -> 'a array -> 'a array
 val take: int -> 'a array -> 'a array
 val remove_last: int -> 'a array -> 'a array
 val push: 'a -> 'a array -> 'a array
+val fill: int -> 'a -> 'a array -> 'a array

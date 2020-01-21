@@ -50,16 +50,25 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
          [], t, c
 
 
+    let pi_info (info: Pi_info.t): string * bool =
+        let name = Pi_info.name info
+        and typed = Pi_info.is_typed info
+        in
+        name, typed
+
+
     let rec split_pi
               (t:Term.t)
               (c:t)
-            : (string * Term.typ * t) list * Term.t * t =
+            : (string * bool * Term.typ * t) list * Term.t * t =
       match t with
       | Pi (tp, t, info) when not (Pi_info.is_arrow info) ->
-         let lst, t_inner, c_inner =
-           split_pi t (push_local (Pi_info.name info) tp c)
+         let name, is_typed = pi_info info
          in
-         (Pi_info.name info, tp, c) :: lst, t_inner, c_inner
+         let lst, t_inner, c_inner =
+           split_pi t (push_local name tp c)
+         in
+         (name, is_typed, tp, c) :: lst, t_inner, c_inner
       | _ ->
          [], t, c
 
@@ -147,12 +156,17 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
       let raw_print t c =
         snd (print t c)
       in
-      let print_name_type name tp c =
-        P.(char '('
-           <+> (if name = "" then char '_' else string name)
-           <+> string ": "
-           <+> snd (print tp c)
-           <+> char ')')
+      let print_name_type name is_typed tp c =
+        let name = if name = "" then P.char '_' else P.string name
+        in
+        if is_typed then
+            P.(char '('
+                <+> name
+                <+> string ": "
+                <+> snd (print tp c)
+                <+> char ')')
+        else
+            name
       in
       match t with
       | Sort s ->
@@ -170,7 +184,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
               else
                 "(" ^ name ^ ")"
             else
-              "<invalid>")
+              "<invalid " ^ string_of_int i ^ ">")
 
       | Typed (e, tp) ->
          let e_pr, tp_pr = two_operands e tp Operator.colon print c in
@@ -218,7 +232,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
              raw_print
          and exp_inner = raw_print exp_inner c_inner
          in
-         Some Operator.lambda,
+         Some Operator.assign,
          P.(string "\\ "
             <+> args
             <+> string " := "
@@ -241,19 +255,19 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                    rt_pr])
 
       | Pi (tp, t, info) ->
-         let nme = Term.Pi_info.name info in
+         let nme, is_typed = pi_info info in
          let lst, t_inner, c_inner =
            split_pi t (push_local nme tp c)
          in
-         None,
+         Some Operator.colon,
          P.(chain [List.fold_left
-                     (fun pr (nme,tp,c) ->
+                     (fun pr (nme, is_typed, tp, c) ->
                        pr
                        <+> char ' '
-                       <+> print_name_type nme tp c
+                       <+> print_name_type nme is_typed tp c
                      )
                      (string "all "
-                      <+> print_name_type nme tp c)
+                      <+> print_name_type nme is_typed tp c)
                      lst;
                    string ": ";
                    snd @@ print t_inner c_inner])

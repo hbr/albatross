@@ -140,10 +140,6 @@ module GSub =
       Gamma.type_of_term t c.base
 
 
-    let name_at_level (i: int) (c:t): string =
-      Gamma.name_at_level i c.base
-
-
     let type_at_level (i: int) (c:t): Term.typ =
       Gamma.type_at_level i c.base
 
@@ -240,6 +236,7 @@ module GSub =
         assert false (* Illegal call, [level] is not a placeholder *)
       else
         ( let local = c.locals.(level - cnt0) in
+          if not (Local.is_placeholder local) then
           assert (Local.is_placeholder local);
           Option.map
             (fun (t, n) ->
@@ -542,6 +539,17 @@ struct
         | hd :: tl ->
             hd, tl
 
+    let pop_n_stack (n: int) (stack: int list): int list * int list =
+        let rec pop_n n stack result =
+            if n = 0 then
+                result, stack
+            else
+                let top, stack = pop_stack stack in
+                pop_n (n - 1) stack (top :: result)
+        in
+        pop_n n stack []
+
+
 
     let top (c: t): int =
         top_of_stack c.stack
@@ -566,6 +574,12 @@ struct
 
     let empty (gamma: GSub.t): t =
       {gamma; stack = []}
+
+
+    let string_of_term (term: Term.t) (bc: t): string =
+        GSub.string_of_term term bc.gamma
+    let _ = string_of_term
+
 
 
     let required_signature (bc: t): Signature.t =
@@ -750,52 +764,137 @@ struct
 
 
 
-    let make_function_type (nargs: int) (bc: t): Term.typ * t =
+    let placeholder_into
+        (level: int)
+        (nb: int)
+        (base_level: int)
+        (level_to_bound: int option array)
+        (bc: t)
+        : Term.t
+        =
+        (* return the content of the placeholder at [level] transformed into a
+        context with [nb] bound variables.
+
+        [level_to_bound.(i)] returns the number of the bound variable which is
+        encountered at level [base_level + i].
+
+        Precondition: There is a placeholder at [level] with a substitution.
+        *)
+        let term = GSub.substitution_at_level_unsafe level bc.gamma
+        and len = Array.length level_to_bound
+        in
+        Term.(substitute
+            (fun i ->
+                let level = GSub.level_of_index i bc.gamma in
+                if level < base_level || base_level + len <= level then
+                   Variable (i + nb)
+                else
+                    match level_to_bound.(level - base_level) with
+                    | None ->
+                        assert false (* There is no bound variable at [level] *)
+                    | Some arg_number ->
+                        assert (arg_number < nb);
+                        Variable (bruijn_convert arg_number nb))
+            term)
+
+
+    let make_level_to_bound
+        (nb: int)
+        (stack: int list)
+        : int * int option array * int list * int list
+        =
+        assert (nb > 0);
+        let arg_type_levels, stack =
+            pop_n_stack nb stack
+        in
+        let base_level = top_of_stack arg_type_levels
+        in
+        let level_to_bound =
+            let rec make level arg_no arg_type_levels level_to_bound =
+                match arg_type_levels with
+                | [] ->
+                    level_to_bound
+                | hd :: tail ->
+                    assert (arg_no < nb);
+                    assert (level <= hd);
+                    make
+                        (hd + 2)
+                        (arg_no + 1)
+                        tail
+                        Array.(
+                            fill (hd + 1 - level) None level_to_bound
+                            |> push (Some (arg_no)))
+            in
+            make base_level 0 arg_type_levels [||]
+        in
+        base_level, level_to_bound, arg_type_levels, stack
+
+
+
+    let make_function_type_new
+        (args: Expression.formal_argument list)
+        (bc: t)
+        : Term.typ * t
+        =
         (* make the term [all (x: A) (y: B) ... : RT]
 
            where stack = RT Z ... B A ...
 
+           and   gamma = ..., A:Any1, x:A, ..., B:Any1, y:B, ..., RT:Any1, ...
 
-           and remove the placeholders from the stack *)
-        let open Term
+           and remove the placeholders from the stack
+        *)
+        let nb = List.length args in
+        let rt_level, stack = pop_stack bc.stack in
+        let a_level, level_to_bound, arg_levels, stack =
+            make_level_to_bound nb stack
         in
-        let term_at delta level =
-            Variable (delta + GSub.index_of_level level bc.gamma)
+        let tp =
+            let rec make arg_no arg_levels args =
+                assert (arg_no <= nb);
+                if arg_no = nb then
+                    placeholder_into rt_level nb a_level level_to_bound bc
+                else
+                    match arg_levels, args with
+                    | level :: arg_levels, (name, atp) :: args ->
+                        let info =
+                            let name = Located.value name in
+                            match atp with
+                            | None ->
+                                Term.Pi_info.untyped name
+                            | Some _ ->
+                                Term.Pi_info.typed name
+                        in
+                        let rt = make (arg_no + 1) arg_levels args
+                        in
+                        let arg_tp =
+                            placeholder_into
+                                level arg_no a_level level_to_bound bc
+                        in
+                        Term.Pi (arg_tp, rt, info)
+                    | _, _ ->
+                        assert false (* cannot happen: nb > 0 *)
+            in
+            make 0 arg_levels args
         in
-        let rec make delta stack tp =
-            assert (0 <= delta);
-            if delta = 0 then
-                stack, tp
-            else
-                let level, stack = pop_stack stack
-                and delta = delta - 1
-                in
-                let name = GSub.name_at_level (level + 1) bc.gamma
-                and arg_tp = term_at delta level
-                in
-                let tp = Pi (arg_tp, tp, Pi_info.typed name) in
-                make delta stack tp
-        in
-        let level, stack = pop_stack bc.stack in
-        let rtp = term_at nargs level
-        in
-        let stack, tp = make nargs stack rtp
-        in
-        GSub.substitute tp bc.gamma, {bc with stack}
-        (* WRONG: bound variables must be corrected. *)
-        (* ========================================= *)
+        tp, {bc with stack}
 
 
 
-    let end_function_type
-        (nargs: int)             (* of the function type *)
+    let end_function_type_new
+        (args: Expression.formal_argument list)
         (explicits: Explicits.t) (* explicit arguments, the term is applied
                                     to. *)
         (bc: t)
         : t option
         =
-        let tp, bc = make_function_type nargs bc in
+        let tp, bc = make_function_type_new args bc in
         build_candidate tp explicits bc
+
+
+
+
+
 end (* BuildC *)
 
 
@@ -1237,22 +1336,24 @@ let check_formal_argument_types
 
 
 
-let end_function_type
+let end_function_type_new
     (_: range)
-    (nargs: int)
+    (args: Expression.formal_argument list)
     (explicits: Explicits.t)
     (builder: t)
     : (t, problem) result
     =
     let bcs =
         List.map_and_filter
-            (BuildC.end_function_type nargs explicits)
+            (BuildC.end_function_type_new args explicits)
             builder.bcs
     in
     if bcs = [] then
         assert false (* nyi error message *)
     else
         Ok {builder with bcs}
+
+
 
 
 let rec build0
@@ -1322,7 +1423,8 @@ let rec build0
         >>= build_type result_tp build0
         >>= check_formal_arguments_usage formal_args
         >>= check_formal_argument_types formal_args
-        >>= end_function_type range (List.length formal_args) explicits
+        >>= end_function_type_new range formal_args explicits
+        (*>>= end_function_type range (List.length formal_args) explicits*)
 
   | Function (formal_args, result_tp, exp_inner) ->
       let open Result
@@ -1432,7 +1534,7 @@ let standard_context: Context.t =
 let string_of_term_type (term: Term.t) (typ: Term.t): string
     =
     String_printer.run (
-        Pretty_printer.run 0 80 80
+        Pretty_printer.run 0 200 200
             (Term_print.print (Term.Typed (term,typ)) standard_context))
 
 
@@ -1513,5 +1615,15 @@ let%test _ =
     match build_expression "all a b: a = b" with
     | Error (Cannot_infer_bound _) ->
         true
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "all a (b:Int): a = b" with
+    | Ok ([term, typ]) ->
+        string_of_term_type term typ
+        = "(all a (b: Int): a = b): Proposition"
     | _ ->
         false

@@ -76,7 +76,7 @@ Success:
 - Assign the generated term to its placeholder.
 
 
-## Correct generation of `all (x: [A]) (y: [B]) .... : [RT]`:
+## Correct generation of `all (x: [A]) (y: [B]) .... : [RT]`
 
 After analyis of the syntactic expression the context looks like
 
