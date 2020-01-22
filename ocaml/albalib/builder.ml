@@ -712,33 +712,35 @@ struct
 
 
 
-    let find_untyped_argument (nargs: int) (bc: t): int option =
-    (* stack = rt argn ... arg1
+    let find_untyped_argument (nmore: int) (nargs: int) (bc: t): int option =
+    (* stack = ... Z ... B A
+               ^ nmore
     *)
         let check i level =
             if has_nontrivial_substitution level bc then
                 None
             else
-                Some (nargs - i - 1)
+                Some i
         in
-        let rec find i  stack =
-            if i = nargs then
+        let rec find i stack =
+            if i = 0 then
                 None
             else
                 match stack with
                 | [] ->
                     assert false (* cannot happen *)
                 | level :: rest ->
-                    match find (i + 1) rest with
+                    let i = i - 1 in
+                    match find i rest with
                     | None ->
-                        if 0 <= i then
+                        if i < nargs then
                             check i level
                         else
                             None
                     | res ->
                         res
         in
-        find (-1) bc.stack
+        find (nmore + nargs) bc.stack
 
 
 
@@ -837,6 +839,45 @@ struct
 
 
 
+
+    let args_into_binder
+        (first_arg_level: int)
+        (arg_levels: int list)
+        (args: Expression.formal_argument list)
+        (level_to_bound: int option array)
+        (f: Expression.formal_argument -> Term.typ -> Term.t -> Term.t)
+        (start: Term.t)
+        (bc: t)
+        : Term.t
+        =
+        let nb = List.length args
+        in
+        assert (nb = List.length arg_levels);
+        let rec make arg_no arg_levels args =
+            assert (arg_no <= nb);
+            if arg_no = nb then
+                start
+            else
+                match arg_levels, args with
+                | level :: arg_levels, arg :: args ->
+                    let term = make (arg_no + 1) arg_levels args
+                    in
+                    let arg_tp =
+                        placeholder_into
+                            level arg_no first_arg_level level_to_bound bc
+                    in
+                    f arg arg_tp term
+                | _, _ ->
+                    assert false (* cannot happen: nb > 0 *)
+        in
+        make 0 arg_levels args
+
+
+
+
+
+
+
     let make_function_type
         (args: Expression.formal_argument list)
         (bc: t)
@@ -855,38 +896,86 @@ struct
         let a_level, level_to_bound, arg_levels, stack =
             make_level_to_bound nb stack
         in
-        let tp =
-            let rec make arg_no arg_levels args =
-                assert (arg_no <= nb);
-                if arg_no = nb then
-                    placeholder_into rt_level nb a_level level_to_bound bc
-                else
-                    match arg_levels, args with
-                    | level :: arg_levels, (name, atp) :: args ->
-                        let info =
-                            let name = Located.value name in
-                            match atp with
-                            | None ->
-                                Term.Pi_info.untyped name
-                            | Some _ ->
-                                if name = "_" then
-                                    Term.Pi_info.arrow
-                                else
-                                    Term.Pi_info.typed name
-                        in
-                        let rt = make (arg_no + 1) arg_levels args
-                        in
-                        let arg_tp =
-                            placeholder_into
-                                level arg_no a_level level_to_bound bc
-                        in
-                        Term.Pi (arg_tp, rt, info)
-                    | _, _ ->
-                        assert false (* cannot happen: nb > 0 *)
+        let f (name,tp_opt) arg_tp rt =
+            let info =
+                let name = Located.value name in
+                match tp_opt with
+                | None ->
+                    Term.Pi_info.untyped name
+                | Some _ ->
+                    if name = "_" then
+                        Term.Pi_info.arrow
+                    else
+                        Term.Pi_info.typed name
             in
-            make 0 arg_levels args
+            Term.Pi (arg_tp, rt, info)
+        in
+        let rt =
+            placeholder_into rt_level nb a_level level_to_bound bc
+        in
+        let tp =
+            args_into_binder a_level arg_levels args level_to_bound f rt bc
         in
         tp, {bc with stack}
+
+
+
+
+
+    let make_function_term
+        (args: Expression.formal_argument list)
+        (has_result_type: bool)
+        (bc: t)
+        : Term.typ * t
+        =
+        (* make the term [\ (x: A) (y: B) ... : RT := exp]
+
+           where stack = exp RT Z ... B A ...
+
+           and   gamma = ...,
+                         A:Any1, x:A, ...,
+                         B:Any1, y:B, ...,
+                         ...
+                         RT:Any1, ...,
+                         exp: RT, ...
+
+           and remove the placeholders from the stack
+        *)
+        let nb = List.length args in
+        let exp_level, stack = pop_stack bc.stack
+        in
+        let rt_level, stack = pop_stack stack
+        in
+        let a_level, level_to_bound, arg_levels, stack =
+            make_level_to_bound nb stack
+        in
+        let f (name,tp_opt) arg_tp rt =
+            let info =
+                let name = Located.value name in
+                match tp_opt with
+                | None ->
+                    Term.Lambda_info.untyped name
+                | Some _ ->
+                    Term.Lambda_info.typed name
+            in
+            Term.Lambda (arg_tp, rt, info)
+        in
+        let exp =
+            let exp =
+                placeholder_into exp_level nb a_level level_to_bound bc
+            in
+            if has_result_type then
+                let rt =
+                    placeholder_into rt_level nb a_level level_to_bound bc
+                in
+                Term.Typed (exp, rt)
+            else
+                exp
+        in
+        let term =
+            args_into_binder a_level arg_levels args level_to_bound f exp bc
+        in
+        term, {bc with stack}
 
 
 
@@ -1300,6 +1389,7 @@ let build_formal_argument
         (build_optional_type tp buildf builder)
 
 
+
 let build_formal_arguments
   (args: (string Located.t * Expression.t option) list)
   (buildf: build_function)
@@ -1319,14 +1409,15 @@ let check_formal_arguments_usage
     (builder: t)
     : (t, problem) result
     =
+    (* Check that all formal arguments have been used. *)
     List_fold.fold_right
         (fun (name, tp) builder ->
             if tp <> None then
                 Ok builder
             else
-                let flag, bounds =
+                let usage_flag, bounds =
                     Bounds.pop (Located.value name) builder.bounds in
-                if flag then
+                if usage_flag then
                     Ok {builder with bounds}
                 else
                     Error (Unused_bound (Located.range name))
@@ -1337,12 +1428,14 @@ let check_formal_arguments_usage
 
 let check_formal_argument_types
     (args: (string Located.t * Expression.t option) list)
+    (nmore: int)
     (builder: t)
     : (t, problem) result
     =
+    (* Verify that a type has been inferred for all untyped bound variables. *)
     let nargs = List.length args in
     let find_untyped =
-        BuildC.find_untyped_argument nargs
+        BuildC.find_untyped_argument nmore nargs
     in
     let bcs =
         List.filter
@@ -1370,37 +1463,50 @@ let check_formal_argument_types
 
 
 
-let end_function_type (* Missing: Use [end_compound] *)
+let end_function_type
     (range: range)
     (args: Expression.formal_argument list)
     (explicits: Explicits.t)
     (builder: t)
     : (t, problem) result
     =
-    end_compound range
+    end_compound
+        range
         (BuildC.make_function_type args)
         explicits
         builder
 
 
-
-let split_formal_arguments
+let end_function_term
+    (range: range)
     (args: Expression.formal_argument list)
+    (has_result_type: bool)
     (explicits: Explicits.t)
-    : Expression.formal_argument list * Expression.formal_argument list
+    (builder: t)
+    : (t, problem) result
     =
-    let rec split n args1 args2 =
-        if n = 0 then
-            List.rev args1, args2
-        else
-            match args2 with
-            | [] ->
-                List.rev args1, args2
-            | arg :: args2 ->
-                split (n - 1) (arg :: args1) args2
-    in
-    split (Explicits.count explicits) [] args
+    end_compound
+        range
+        (BuildC.make_function_term args has_result_type)
+        explicits
+        builder
 
+
+
+
+let build_function_signature
+    (args: Expression.formal_argument list)
+    (result_type: Expression.t option)
+    (_: Explicits.t)
+    (buildf: build_function)
+    (builder: t)
+    : (t, problem) result
+    =
+    Result.(
+        build_formal_arguments args buildf builder
+        >>= build_optional_type result_type buildf
+        (* nyi: Unify function signature with the required signature.*)
+    )
 
 
 let rec build0
@@ -1445,39 +1551,33 @@ let rec build0
             >>= end_compound range BuildC.make_typed_term explicits)
 
     | Application (f, args) ->
-       assert (args <> []);
-       Result.(
-         build0
-           f
-           (Explicits.make args)
-           c
-         >>= List_fold.fold_left
-               (fun (arg,_) c ->
-                 map
-                   pop_top
-                   (build0 arg Explicits.empty c))
-               args
-       )
+        assert (args <> []);
+        let open Result in
+        build0 f (Explicits.make args) c
+        >>= List_fold.fold_left
+              (fun (arg,_) c ->
+                map
+                  pop_top
+                  (build0 arg Explicits.empty c))
+              args
 
     | Product (formal_args, result_tp) ->
-          let open Result in
-          build_formal_arguments formal_args build0 c
-          >>= build_type result_tp build0
-          >>= check_formal_arguments_usage formal_args
-          >>= check_formal_argument_types formal_args
-          >>= end_function_type range formal_args explicits
+        let open Result in
+        build_formal_arguments formal_args build0 c
+        >>= build_type result_tp build0
+        >>= check_formal_arguments_usage formal_args
+        >>= check_formal_argument_types formal_args 1
+        >>= end_function_type range formal_args explicits
 
     | Function (formal_args, result_tp, exp_inner) ->
-        let fargs1, fargs2 = split_formal_arguments formal_args explicits
-        in
         let open Result
         in
-        build_formal_arguments fargs1 build0 c
-        >>= fun _ -> assert false
-        >>= build_optional_type result_tp build0
+        build_function_signature
+            formal_args result_tp explicits build0 c
         >>= build_term exp_inner build0
-        >>= fun _ ->
-        Error (Not_yet_implemented (range, "<complete function term>"))
+        >>= check_formal_argument_types formal_args 2
+        >>= end_function_term
+                range formal_args Option.(has result_tp) explicits
 
 
 

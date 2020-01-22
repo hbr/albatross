@@ -5,6 +5,41 @@ substitution.
 
 
 
+# Function Abstraction `\ (x: A) (y: B) ... : RT := exp`
+
+Variables can be typed or untyped, the return is optional.
+
+The function abstraction can be applied to arguments
+
+    (\ x y ... := exp) a b ...
+
+We have an expected type `E` for the result of the lambda abstraction applied to
+its arguments. The expected type has a signature `all .... : .`.
+
+We split the formal arguments in 2 parts:
+
+- nargs: corresponding to the explicit arguments a b ...
+
+- margs: remaining formal arguments
+
+There might be more actual arguments than formal arguments. In that case `nargs`
+is equal to the number of formal arguments and `margs = 0`.
+
+The first nargs must not contain any inferable type or type constructor
+variable. (=> error message). There is a one-to-one correspondence between
+`nargs` formal arguments and the actual arguments. All `nargs` formal arguments
+must be explicit.
+
+For the remaining `margs` formal arguments we do the following:
+
+- untyped argument: use the corresponding type from the signature of `E`
+
+- typed argument: use the specified type
+
+
+
+
+
 # Function type "all (x: A) (y: B)  ... : RT"
 
 - Variables can be untyped, the return type must be given.
