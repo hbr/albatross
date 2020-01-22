@@ -81,7 +81,7 @@ let standard (): t =
        Name_map.empty
        (fun i m ->
          Name_map.add_global
-           Gamma.(string_of_name (name_of_level i gamma))
+           Gamma.(name_of_level i gamma)
            m)
        0 (Gamma.count gamma)
   }

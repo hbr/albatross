@@ -6,9 +6,6 @@ module Pi_info = Term.Pi_info
 
 module Lambda_info = Term.Lambda_info
 
-type name =
-  | Normal of string
-  | Binary_operator of string * Operator.t
 
 
 type definition =
@@ -18,7 +15,7 @@ type definition =
 
 
 type entry = {
-    name: name;
+    name: string;
     typ: Term.typ;
     definition: definition
   }
@@ -67,31 +64,22 @@ let term_at_level (i:int) (c:t): Term.t =
   Term.Variable (level_of_index i c)
 
 
-let string_of_name (name:name): string =
-  match name with
-  | Normal str | Binary_operator (str, _) ->
-     str
 
-
-let name_of_level (i:int) (c:t): name =
+let name_of_level (i:int) (c:t): string =
     (entry i c).name
 
 
-let name_of_index0 (i:int) (c:t): name =
+let name_of_index0 (i:int) (c:t): string =
   (entry (bruijn_convert i (count c)) c).name
 
 
 let name_at_level (level: int) (gamma: t): string =
-    match (Segmented_array.elem level gamma).name with
-    | Binary_operator (str, _ ) -> str
-    | Normal str -> str
+    (Segmented_array.elem level gamma).name
 
 
 
 let name_of_index (i: int) (gamma: t): string =
-  match name_of_index0 i gamma with
-  | Binary_operator (str, _ ) -> str
-  | Normal str -> str
+  name_of_index0 i gamma
 
 
 
@@ -99,14 +87,14 @@ let empty: t =
   Segmented_array.empty
 
 
-let push (name:name) (typ:Term.typ) (definition:definition) (c:t): t =
+let push (name: string) (typ:Term.typ) (definition:definition) (c:t): t =
     Segmented_array.push
       {name; typ; definition}
       c
 
 
-let push_local (nme:string) (typ: Term.typ) (c:t): t =
-  push (Normal nme) typ No c
+let push_local (nme: string) (typ: Term.typ) (c:t): t =
+  push nme typ No c
 
 
 let push_unnamed (typ: Term.typ) (c: t): t =
@@ -117,7 +105,7 @@ let remove_last (n: int) (c: t): t =
   Segmented_array.remove_last n c
 
 
-let add_entry (name:name) (typ:Term.typ*int) (def:definition) (c:t): t =
+let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
   let typ,n = typ
   and cnt = count c
   in
@@ -157,41 +145,41 @@ let standard (): t =
   (* Standard context. *)
   empty
 
-  |> add_entry (Normal "Int") (Term.any ,0) No
+  |> add_entry "Int" (Term.any ,0) No
 
-  |> add_entry (Normal "Character") (Term.any, 0) No
+  |> add_entry "Character" (Term.any, 0) No
 
-  |> add_entry (Normal "String") (Term.any, 0) No
+  |> add_entry "String" (Term.any, 0) No
 
   |> add_entry
-       (Binary_operator ("+", Operator.of_string "+"))
+       "+"
        (binary_type int_level)
        (Builtin Term.Value.int_plus)
 
   |> add_entry
-       (Binary_operator ("-", Operator.of_string "-"))
+       "-"
        (binary_type int_level)
        (Builtin Term.Value.int_minus)
 
   |> add_entry
-       (Binary_operator ("*", Operator.of_string "*"))
+       "*"
        (binary_type int_level)
        (Builtin Term.Value.int_times)
 
   |> add_entry
-       (Binary_operator ("+", Operator.of_string "+"))
+       "+"
        (binary_type string_level)
        (Builtin Term.Value.string_concat)
 
   |> add_entry
        (* List: Any -> Any *)
-       (Normal "List")
+       "List"
        (Term.(Pi (any, any, Pi_info.arrow)), 0)
        No
 
   |> add_entry
        (* (=) (A: Any): A -> A -> Proposition *)
-       (Binary_operator ("=", Operator.of_string "="))
+       "="
        (Term.(
           Pi (any,
               Pi (Variable 0,
@@ -206,7 +194,7 @@ let standard (): t =
   |> add_entry
        (* identity: all (A: Any): A -> A :=
             \ A x := x *)
-       (Normal "identity")
+       "identity"
        (Term.(
           Pi (any,
               Pi (Variable 0,
@@ -224,19 +212,19 @@ let standard (): t =
 
     |> add_entry
         (* true: Proposition *)
-        (Normal "true")
+        "true"
         (Term.proposition, 0)
         No
 
     |> add_entry
         (* false: Proposition *)
-        (Normal "false")
+        "false"
         (Term.proposition, 0)
         No
 
     |> add_entry
         (* (=>) (a b: Proposition): Proposition := a -> b *)
-        (Binary_operator ("=>", Operator.of_string "=>"))
+        "=>"
         (Term.(
             Pi (proposition,
                 Pi (proposition, proposition, Pi_info.arrow),
@@ -257,7 +245,7 @@ let standard (): t =
 
     |> add_entry
         (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
-        (Binary_operator ("|>", Operator.of_string "|>"))
+        "|>"
         (Term.(
             Pi (any,
                 Pi (Variable 0,
