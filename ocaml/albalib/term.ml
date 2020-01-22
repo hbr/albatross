@@ -187,6 +187,15 @@ end
 
 
 
+
+
+
+
+(* ----------------------------------------------------------- *)
+(* Term                                                        *)
+(* ----------------------------------------------------------- *)
+
+
 type t =
   | Sort of Sort.t
 
@@ -201,7 +210,17 @@ type t =
   | Pi of typ * typ * Pi_info.t
 
   | Value of Value.t
+
 and typ = t
+
+and formal_argument = string * typ
+
+and inductive = {
+    base_count: int;
+    n_up: int;
+    parameters: formal_argument list;
+    types: (formal_argument * formal_argument array) array}
+
 
 
 let proposition: t =
@@ -221,6 +240,64 @@ let string (s:string): t =
 
 let number_values (s:string): t list =
   List.map (fun v -> Value v) (Value.number_values s)
+
+
+let variable i: t =
+    Variable i
+
+
+let application (f: t) (a: t): t =
+    Appl (f, a, Application_info.Normal)
+
+
+let lambda (name: string) (tp: typ) (exp: t): t =
+    assert (name <> "");
+    Lambda (tp, exp, Lambda_info.typed name)
+
+
+let lambda_untyped (name: string) (tp: typ) (exp: t): t =
+    assert (name <> "");
+    Lambda (tp, exp, Lambda_info.untyped name)
+
+
+let product (name: string) (arg_tp: typ) (result_tp: typ): t =
+    assert (name <> "");
+    let info =
+        if name = "_" then
+            Pi_info.arrow
+        else
+            Pi_info.typed name
+    in
+    Pi (arg_tp, result_tp, info)
+
+
+let product_untyped (name: string) (arg_tp: typ) (result_tp: typ): t =
+    assert (name <> "");
+    assert (name <> "_");
+    Pi (arg_tp, result_tp, Pi_info.untyped name)
+
+
+let arrow (arg_tp: typ) (result_tp: typ): t =
+    product "_" arg_tp result_tp
+
+
+let lambda_in (fargs: formal_argument list) (exp: t): t =
+    List.fold_right
+        (fun (name, arg_tp) ->
+            lambda name arg_tp)
+        fargs
+        exp
+
+
+let product_in (fargs: formal_argument list) (result_tp: t): t =
+    List.fold_right
+        (fun (name, arg_tp) ->
+            product name arg_tp)
+        fargs
+        result_tp
+
+
+
 
 let up_from (delta:int) (start:int) (t:t): t =
   let rec up t nb =
@@ -355,11 +432,11 @@ let apply (f:t) (a:t): t =
 
 
 
-let rec application (f:t) (nargs:int) (mode: Application_info.t): t =
+let rec apply_nargs (f:t) (nargs:int) (mode: Application_info.t): t =
   if nargs = 0 then
     f
   else
-    application
+    apply_nargs
       (Appl (f, Variable (nargs - 1), mode))
       (nargs - 1)
       mode
@@ -394,3 +471,89 @@ let fold_free_variables (s: 'a) (f: int -> 'a -> 'a) (t: t): 'a =
        fold (fold s tp nb) rt (nb + 1)
   in
   fold s t 0
+
+
+
+
+(* ----------------------------------------------------------- *)
+(* Index to level conversion                                   *)
+(* ----------------------------------------------------------- *)
+
+
+let rec to_index (n: int) (term: t): t =
+    match term with
+    | Value _ | Sort _ ->
+        term
+
+    | Variable i ->
+        Variable (bruijn_convert i n)
+
+    | Appl (f, arg, info) ->
+        Appl (to_index n f,
+              to_index n arg,
+              info)
+
+    | Typed (term, typ) ->
+        Typed (to_index n term,
+               to_index n typ)
+
+    | Lambda (typ, exp, info) ->
+        Lambda (to_index n typ,
+                to_index (n + 1) exp,
+                info)
+
+    | Pi (typ, rtyp, info) ->
+        Pi (to_index n typ,
+            to_index (n + 1) rtyp,
+            info)
+
+
+let to_level = to_index
+
+
+
+(* ----------------------------------------------------------- *)
+(* Inductive                                                   *)
+(* ----------------------------------------------------------- *)
+
+  module Inductive =
+  struct
+    let make_simple_inductive
+        (base_count: int)
+        (parameters: formal_argument list)
+        (typ: formal_argument)
+        (constructors: formal_argument list)
+        : inductive
+        =
+        {base_count;
+         n_up = 0;
+         parameters;
+         types = [| typ, Array.of_list constructors|]}
+
+    type term = t
+
+    type t =
+        | Type of int * inductive
+        | Constructor of int * int * inductive
+
+
+    let is_simple (ind: inductive): bool =
+        Array.length ind.types = 1
+
+    module Type =
+    struct
+        type t = int * inductive
+
+        let simple (ind: inductive): t =
+            assert (is_simple ind);
+            0, ind
+    end
+
+    let typ (ind: inductive): t =
+        Type (0, ind)
+
+
+    let constructor (i: int) (ind: inductive): t =
+        assert (is_simple ind);
+        Constructor (0, i, ind)
+  end

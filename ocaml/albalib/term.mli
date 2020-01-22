@@ -88,12 +88,41 @@ type t =
 
 and typ = t
 
+and formal_argument = string * typ
+
+and inductive
+
+
+
 
 val proposition: t
 val any: t
+
+val variable: int -> t
+
+val application: t -> t -> t
+
+val lambda:  string -> typ -> t -> t
+val product: string -> typ -> typ -> t
+val arrow:   typ -> typ -> typ
+val lambda_untyped:  string -> typ -> t -> t
+val product_untyped: string -> typ -> typ -> t
+
+val lambda_in:  formal_argument list -> t -> t
+val product_in: formal_argument list -> t -> t
+
+
+(** [char code] character value. *)
 val char:   int -> t
+
+(** [string str] string value. *)
 val string: string -> t
+
 val number_values: string -> t list
+
+
+
+
 
 (** [up_from delta start t] *)
 val up_from: int -> int -> t -> t
@@ -122,13 +151,37 @@ val apply: t -> t -> t
 
 
 
-(** [application f n mode] returns
+(** [apply_nargs f n mode] returns
 
        f (Var (n-1)) ... (Var 0)
 
     where all applications are done with mode [mode].
 *)
-val application: t -> int -> Application_info.t -> t
+val apply_nargs: t -> int -> Application_info.t -> t
 
 
 val fold_free_variables: 'a -> (int -> 'a -> 'a) -> t -> 'a
+
+
+
+
+val to_index: int -> t -> t
+val to_level: int -> t -> t
+
+
+
+
+(** Inductive types *)
+module Inductive:
+sig
+    type term = t
+
+    type t
+
+    val make_simple_inductive:
+        int
+        -> formal_argument list  (** Parameters *)
+        -> formal_argument       (** Type *)
+        -> formal_argument list  (** Constructors *)
+        -> inductive
+end

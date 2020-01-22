@@ -335,7 +335,6 @@ module Make (Io:Io.SIG) =
         : Pretty.t
         =
         let module Builder_print = Builder.Print (Pretty) in
-        let open Builder in
         let open Pretty in
         let plural_s n = if n = 1 then empty else char 's'
         in
@@ -392,16 +391,7 @@ module Make (Io:Io.SIG) =
       let open Pretty in
       let plural_s n = if n = 1 then empty else char 's'
       in
-      let expect_nargs n =
-        if n = 0 then
-          string "which"
-        else
-          list_separated
-            (group space)
-            [wrap_words "which applied to";
-             string (string_of_int n);
-             string "argument" <+> plural_s n]
-      and type_or_types lst =
+      let type_or_types lst =
         match lst with
         | [_] ->
           wrap_words "the type"

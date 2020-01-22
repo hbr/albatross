@@ -27,11 +27,11 @@ doc:
 fmlib:
 	dune build @ocaml/fmlib/runtest
 
-albalib:
+albalib: fmlib
 	dune build @ocaml/albalib/runtest
 
-alba2:
+alba2: albalib
 	dune build ocaml/alba2/alba2.bc
 
-alba-node:
+alba-node: albalib
 	dune build ocaml/alba-node/alba_node.bc.js

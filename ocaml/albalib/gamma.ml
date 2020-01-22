@@ -143,6 +143,8 @@ let string_type (c:t) =
 
 let standard (): t =
   (* Standard context. *)
+  let open Term
+  in
   empty
 
   |> add_entry "Int" (Term.any ,0) No
@@ -222,43 +224,63 @@ let standard (): t =
         (Term.proposition, 0)
         No
 
-    |> add_entry
-        (* (=>) (a b: Proposition): Proposition := a -> b *)
-        "=>"
-        (Term.(
-            Pi (proposition,
-                Pi (proposition, proposition, Pi_info.arrow),
-                Pi_info.arrow)),
-        0)
-        (Definition
-            Term.(
-                Lambda (
-                    proposition,
-                    Lambda (proposition,
-                            Pi (Variable 1,
-                                Variable 1,
-                                Pi_info.arrow),
-                            Lambda_info.typed "b"),
-                    Lambda_info.typed "a")
-            )
+    |> (* (=>) (a b: Proposition): Proposition := a -> b *)
+       (let typ =
+            product "_"
+                proposition
+                (product "_" proposition proposition)
+        and def =
+            let a = Variable 0
+            and b = Variable 1 in
+            to_index 0
+                (lambda "a" proposition
+                   (lambda "b" proposition
+                        (arrow a b)))
+        in
+        add_entry
+            "=>" (typ,0) (Definition def)
         )
 
-    |> add_entry
-        (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
-        "|>"
-        (Term.(
-            Pi (any,
-                Pi (Variable 0,
-                    Pi (any,
-                        Pi (Pi (Variable 2, Variable 1, Pi_info.arrow),
-                            Variable 1,
-                            Pi_info.typed "f"),
-                        Pi_info.typed "B"),
-                    Pi_info.typed "a"),
-                Pi_info.typed "A")
-         ),
-         0)
-        No
+    |> (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
+        (let biga = Variable 0
+         and a    = Variable 1
+         and bigb = Variable 2
+         and f    = Variable 3
+         in
+         let args = ["A", any;
+                     "a", biga;
+                     "B", any;
+                     "f", arrow biga bigb]
+         in
+         let typ = product_in args bigb
+         and def = lambda_in args (application f a)
+         in
+         add_entry
+            "|>"
+            (to_index 0 typ, 0)
+            (Definition (to_index 0 def))
+        )
+
+    |> (* (<|) (A: Any) (B: Any) (f: A -> B) (a: A): B := f a *)
+        (let biga = Variable 0
+         and bigb = Variable 1
+         and f    = Variable 2
+         and a    = Variable 3
+         in
+         let args = ["A", any;
+                     "B", any;
+                     "f", arrow biga bigb;
+                     "a", biga]
+         in
+         let typ = product_in args bigb
+         and def = lambda_in args (application f a)
+         in
+         add_entry
+            "<|"
+            (to_index 0 typ, 0)
+            (Definition (to_index 0 def))
+        )
+
 
 
 let type_of_value (v: Term.Value.t) (c: t): Term.typ =
