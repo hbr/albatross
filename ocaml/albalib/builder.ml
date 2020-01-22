@@ -16,11 +16,21 @@ module Located =
 
 
 
+(* The explicitly given actual arguments of a function call. *)
+module Explicits: sig
+    type t
 
-module Explicits =
-  struct
+    val empty: t
+    val make: (Expression.t * Expression.argument_type) list -> t
+
+    val count: t -> int
+    val has: t -> bool
+    val pop: t -> Term.appl * t
+end
+=
+struct
     type t = {
-      args: (Expression.t * Expression.argument) list;
+      args: (Expression.t * Expression.argument_type) list;
       nargs: int
     }
 
@@ -1279,6 +1289,15 @@ let build_term
 
 
 
+let build_formal_argument
+    (buildf: build_function)
+    ((name,tp): string Located.t * Expression.t option)
+    (builder: t)
+    : (t, problem) result
+    =
+    Result.map
+        (push_bound (Located.value name) (tp = None))
+        (build_optional_type tp buildf builder)
 
 
 let build_formal_arguments
@@ -1288,10 +1307,7 @@ let build_formal_arguments
   : (t, problem) result
   =
   List_fold.fold_left
-    (fun (name, tp) builder ->
-      Result.map
-        (push_bound (Located.value name) (tp = None))
-        (build_optional_type tp buildf builder))
+    (build_formal_argument buildf)
     args
     builder
 
@@ -1368,6 +1384,24 @@ let end_function_type (* Missing: Use [end_compound] *)
 
 
 
+let split_formal_arguments
+    (args: Expression.formal_argument list)
+    (explicits: Explicits.t)
+    : Expression.formal_argument list * Expression.formal_argument list
+    =
+    let rec split n args1 args2 =
+        if n = 0 then
+            List.rev args1, args2
+        else
+            match args2 with
+            | [] ->
+                List.rev args1, args2
+            | arg :: args2 ->
+                split (n - 1) (arg :: args1) args2
+    in
+    split (Explicits.count explicits) [] args
+
+
 
 let rec build0
           (exp:Ast.Expression.t)
@@ -1434,9 +1468,12 @@ let rec build0
           >>= end_function_type range formal_args explicits
 
     | Function (formal_args, result_tp, exp_inner) ->
+        let fargs1, fargs2 = split_formal_arguments formal_args explicits
+        in
         let open Result
         in
-        build_formal_arguments formal_args build0 c
+        build_formal_arguments fargs1 build0 c
+        >>= fun _ -> assert false
         >>= build_optional_type result_tp build0
         >>= build_term exp_inner build0
         >>= fun _ ->

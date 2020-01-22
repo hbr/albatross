@@ -25,17 +25,6 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
 
     type print  = Term.t -> Gamma.t -> pr_result
 
-
-    let split_application (term: Term.t): Term.t * Term.t list =
-      let rec split term arg_lst =
-        match term with
-        | Appl (f, arg, _ ) ->
-            split f (arg :: arg_lst)
-        | _ ->
-            term, arg_lst
-      in
-      split term []
-
     let rec split_lambda
               (t: Term.t)
               (c: Gamma.t)
@@ -153,127 +142,148 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
 
 
     let rec print (t:Term.t) (c:Gamma.t): pr_result =
-      let raw_print t c =
-        snd (print t c)
-      in
-      let print_name_type name is_typed tp c =
-        let name = if name = "" then P.char '_' else P.string name
+        let raw_print t c =
+          snd (print t c)
         in
-        if is_typed then
-            P.(char '('
-                <+> name
-                <+> string ": "
-                <+> snd (print tp c)
-                <+> char ')')
-        else
-            name
-      in
-      match t with
-      | Sort s ->
-         print_sort s
+        let print_name_type name is_typed tp c =
+          let name = if name = "" then P.char '_' else P.string name
+          in
+          if is_typed then
+              P.(char '('
+                  <+> name
+                  <+> string ": "
+                  <+> snd (print tp c)
+                  <+> char ')')
+          else
+              name
+        in
+        match t with
+        | Sort s ->
+           print_sort s
 
-      | Variable i ->
-         None,
-         P.string
-           (if is_valid_index i c then
-              let name = name_of_index i c in
-              assert (0 < String.length name);
-              let c0 = name.[0] in
-              if Char.is_letter c0 || c0 = '_' then
-                name
+        | Variable i ->
+           None,
+           P.string
+             (if is_valid_index i c then
+                let name = name_of_index i c in
+                assert (0 < String.length name);
+                let c0 = name.[0] in
+                if Char.is_letter c0 || c0 = '_' then
+                  name
+                else
+                  "(" ^ name ^ ")"
               else
-                "(" ^ name ^ ")"
-            else
-              "<invalid " ^ string_of_int i ^ ">")
+                "<invalid " ^ string_of_int i ^ ">")
 
-      | Typed (e, tp) ->
-         let e_pr, tp_pr = two_operands e tp Operator.colon print c in
-         Some Operator.colon,
-         P.(group (chain [e_pr; char ':'; space; tp_pr]))
+        | Typed (e, tp) ->
+           let e_pr, tp_pr = two_operands e tp Operator.colon print c in
+           Some Operator.colon,
+           P.(group (chain [e_pr; char ':'; space; tp_pr]))
 
-      | Appl ( Appl (op, a, Binary), b, _ ) ->
-         (* a op b *)
-          let op_string =
-            let op,_ = split_application op in
-            match op with
-            | Variable i when is_valid_index i c ->
-                name_of_index i c
-            | _ ->
-              "<invalid operator>"
-          in
-          let op_data = Operator.of_string op_string
-          in
-          let a_pr, b_pr = two_operands a b op_data print c
-          in
-          Some op_data,
-          P.(chain [a_pr;
-                    group space;
-                    string op_string;
-                    char ' ';
-                    b_pr])
+        | Appl (f, operand2, Binary) ->
+            let rec find_operand1 f =
+                match f with
+                | Appl (f, operand1, Binary) ->
+                    Some (f, operand1)
+                | Appl (f, _, Implicit ) ->
+                    find_operand1 f
+                | _ ->
+                    None
+            in
+            let rec find_operator f =
+                match f with
+                | Appl (f, _, Implicit) ->
+                    find_operator f
+                | Variable i when is_valid_index i c ->
+                    Some i
+                | _ ->
+                    None
+            in
+            let res =
+                Option.(
+                    find_operand1 f >>= fun (f, operand1) ->
+                    find_operator f >>= fun operator ->
+                    Some (operator, operand1))
+            in
+            (match res with
+            | None ->
+                print (Appl (f, operand2, Normal)) c
+            | Some (op_idx, operand1) ->
+                let op_string = name_of_index op_idx c in
+                let op_data = Operator.of_string op_string in
+                let a_pr, b_pr =
+                    two_operands operand1 operand2 op_data print c
+                in
+                Some op_data,
+                P.(chain [a_pr;
+                          group space;
+                          string op_string;
+                          char ' ';
+                          b_pr])
+            )
 
-      | Appl (f, _, Implicit) ->
-          print f c
+        | Appl (f, _, Implicit) ->
+            print f c
 
-      | Appl (f, a, _) ->
-          Some Operator.application,
-          P.( parenthesize (print f c) true Operator.application
-              <+> char ' '
-              <+> parenthesize (print a c) false Operator.application )
+        | Appl (f, a, _) ->
+            Some Operator.application,
+            P.( parenthesize (print f c) true Operator.application
+                <+> char ' '
+                <+> parenthesize (print a c) false Operator.application )
 
-      | Lambda (tp, exp, info) ->
-         let arg_lst, exp_inner, c_inner =
-           split_lambda exp (push_local (Lambda_info.name info) tp c)
-         in
-         let args =
-           formal_arguments
-             ((info, tp, c) :: arg_lst)
-             Lambda_info.(fun info -> name info, is_typed info)
-             raw_print
-         and exp_inner = raw_print exp_inner c_inner
-         in
-         Some Operator.assign,
-         P.(string "\\ "
-            <+> args
-            <+> string " := "
-            <+> exp_inner)
+        | Lambda (tp, exp, info) ->
+           let arg_lst, exp_inner, c_inner =
+             split_lambda exp (push_local (Lambda_info.name info) tp c)
+           in
+           let args =
+             formal_arguments
+               ((info, tp, c) :: arg_lst)
+               Lambda_info.(fun info -> name info, is_typed info)
+               raw_print
+           and exp_inner = raw_print exp_inner c_inner
+           in
+           Some Operator.assign,
+           P.(string "\\ "
+              <+> args
+              <+> string " := "
+              <+> exp_inner)
 
-      | Pi (tp, rt, info) when Pi_info.is_arrow info ->
-         let c_inner = push_local "_" tp c
-         and op_data = Operator.of_string "->"
-         in
-         let tp_pr =
-           parenthesize (print tp c) true op_data
-         and rt_pr =
-           parenthesize (print rt c_inner) false op_data
-         in
-         Some op_data,
-         P.(chain [tp_pr;
-                   group space;
-                   string "->";
-                   char ' ';
-                   rt_pr])
+        | Pi (tp, rt, info) when Pi_info.is_arrow info ->
+           let c_inner = push_local "_" tp c
+           and op_data = Operator.of_string "->"
+           in
+           let tp_pr =
+             parenthesize (print tp c) true op_data
+           and rt_pr =
+             parenthesize (print rt c_inner) false op_data
+           in
+           Some op_data,
+           P.(chain [tp_pr;
+                     group space;
+                     string "->";
+                     char ' ';
+                     rt_pr])
 
-      | Pi (tp, t, info) ->
-         let nme, is_typed = pi_info info in
-         let lst, t_inner, c_inner =
-           split_pi t (push_local nme tp c)
-         in
-         Some Operator.colon,
-         P.(chain [List.fold_left
-                     (fun pr (nme, is_typed, tp, c) ->
-                       pr
-                       <+> char ' '
-                       <+> print_name_type nme is_typed tp c
-                     )
-                     (string "all "
-                      <+> print_name_type nme is_typed tp c)
-                     lst;
-                   string ": ";
-                   snd @@ print t_inner c_inner])
+        | Pi (tp, t, info) ->
+           let nme, is_typed = pi_info info in
+           let lst, t_inner, c_inner =
+             split_pi t (push_local nme tp c)
+           in
+           Some Operator.colon,
+           P.(chain [List.fold_left
+                       (fun pr (nme, is_typed, tp, c) ->
+                         pr
+                         <+> char ' '
+                         <+> print_name_type nme is_typed tp c
+                       )
+                       (string "all "
+                        <+> print_name_type nme is_typed tp c)
+                       lst;
+                     string ": ";
+                     snd @@ print t_inner c_inner])
 
-      | Value v ->
-         print_value v
+        | Value v ->
+           print_value v
 
     let print (t:Term.t) (c: Gamma.t): P.t =
       snd (print t c)

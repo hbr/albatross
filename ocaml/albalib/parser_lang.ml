@@ -275,7 +275,7 @@ module Make (Final: ANY) =
 
 
         let operator: Expression.operator Located.t t =
-          let op_chars = "+-^*/=~<>" in
+          let op_chars = "+-^*|/=~<>" in
           let len = String.length op_chars in
           let is_op_char c =
             String.find (fun op_char -> c = op_char) 0 op_chars < len

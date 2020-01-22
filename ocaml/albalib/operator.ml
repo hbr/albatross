@@ -18,6 +18,8 @@ let colon             = (30,   Right)
 let arrow             = (40,   Right)
 let assign            = (41,   No)
 let lambda            = (42,   No)
+let push_arg          = (45,   Left)
+let pull_arg          = (46,   Right)
 let relation          = (50,   No)
 let addition          = (60,   Left)
 let multiplication    = (61,   Left)
@@ -34,6 +36,8 @@ let map: (int * assoc) String_map.t
   |> add "=>" arrow
   |> add ":=" assign
   |> add ":"  colon
+  |> add "|>" push_arg
+  |> add "<|" pull_arg
   |> add "="  relation
   |> add "/=" relation
   |> add "<"  relation

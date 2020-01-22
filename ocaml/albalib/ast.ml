@@ -10,7 +10,7 @@ type range = Position.t * Position.t
 module Expression = struct
   type operator = string * Operator.t
 
-  type argument =
+  type argument_type =
     | Normal
     | Operand
 
@@ -27,7 +27,7 @@ module Expression = struct
     | String of string
     | Operator of operator
     | Typed of t * t
-    | Application of t * (t * argument) list
+    | Application of t * (t * argument_type) list
     | Function of
         formal_argument list
         * t option                        (* result type *)

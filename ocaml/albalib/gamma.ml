@@ -255,6 +255,23 @@ let standard (): t =
             )
         )
 
+    |> add_entry
+        (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
+        (Binary_operator ("|>", Operator.of_string "|>"))
+        (Term.(
+            Pi (any,
+                Pi (Variable 0,
+                    Pi (any,
+                        Pi (Pi (Variable 2, Variable 1, Pi_info.arrow),
+                            Variable 1,
+                            Pi_info.typed "f"),
+                        Pi_info.typed "B"),
+                    Pi_info.typed "a"),
+                Pi_info.typed "A")
+         ),
+         0)
+        No
+
 
 let type_of_value (v: Term.Value.t) (c: t): Term.typ =
   let open Term in
