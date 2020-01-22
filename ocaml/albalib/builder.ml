@@ -25,7 +25,7 @@ module Explicits: sig
 
     val count: t -> int
     val has: t -> bool
-    val pop: t -> Term.appl * t
+    val pop: t -> Term.Application_info.t * t
 end
 =
 struct
@@ -37,9 +37,9 @@ struct
     let to_term_appl arg_appl =
       match arg_appl with
       | Expression.Normal ->
-          Term.Normal
+          Term.Application_info.Normal
       | Expression.Operand ->
-          Term.Binary
+          Term.Application_info.Binary
 
     let empty: t =
       {args = []; nargs = 0}
@@ -53,7 +53,7 @@ struct
     let has (e: t): bool =
       0 < count e
 
-    let pop (e: t): Term.appl * t =
+    let pop (e: t): Term.Application_info.t * t =
       match e.args with
       | [] ->
         assert false (* Illegal call! *)

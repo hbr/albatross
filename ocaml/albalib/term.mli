@@ -61,10 +61,14 @@ sig
 end
 
 
-type appl =
-  | Normal
-  | Implicit
-  | Binary
+module Application_info:
+sig
+    type t =
+      | Normal
+      | Implicit
+      | Binary
+end
+
 
 
 type t =
@@ -74,7 +78,7 @@ type t =
 
   | Typed of t * typ
 
-  | Appl of t * t * appl
+  | Appl of t * t * Application_info.t
 
   | Lambda of typ * t * Lambda_info.t
 
@@ -124,7 +128,7 @@ val apply: t -> t -> t
 
     where all applications are done with mode [mode].
 *)
-val application: t -> int -> appl -> t
+val application: t -> int -> Application_info.t -> t
 
 
 val fold_free_variables: 'a -> (int -> 'a -> 'a) -> t -> 'a

@@ -437,9 +437,9 @@ let compute (t:Term.t) (c:t): Term.t =
 
 let key_split
       (t: Term.t)
-      (args: (Term.t * Term.appl) list)
+      (args: (Term.t * Term.Application_info.t) list)
       (c: t)
-    : Term.t * (Term.t * Term.appl) list
+    : Term.t * (Term.t * Term.Application_info.t) list
   =
   let rec split t args =
     match t with

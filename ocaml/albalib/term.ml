@@ -106,6 +106,11 @@ module Sort =
   end
 
 
+
+
+
+
+
 module Lambda_info =
   struct
     type t = {
@@ -128,6 +133,11 @@ module Lambda_info =
     let untyped (name: string): t =
       {name; typed = false}
   end
+
+
+
+
+
 
 module Pi_info =
   struct
@@ -163,10 +173,17 @@ module Pi_info =
   end
 
 
-type appl =
-  | Normal
-  | Implicit
-  | Binary
+
+
+
+module Application_info =
+struct
+    type t =
+      | Normal
+      | Implicit
+      | Binary
+end
+
 
 
 
@@ -177,7 +194,7 @@ type t =
 
   | Typed of t * typ
 
-  | Appl of t * t * appl
+  | Appl of t * t * Application_info.t
 
   | Lambda of typ * t * Lambda_info.t
 
@@ -338,7 +355,7 @@ let apply (f:t) (a:t): t =
 
 
 
-let rec application (f:t) (nargs:int) (mode:appl): t =
+let rec application (f:t) (nargs:int) (mode: Application_info.t): t =
   if nargs = 0 then
     f
   else
