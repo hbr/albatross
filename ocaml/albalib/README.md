@@ -1,1 +1,0 @@
-- [Term Builder](builder.md)
