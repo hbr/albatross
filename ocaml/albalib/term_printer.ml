@@ -166,12 +166,16 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
            P.string
              (if is_valid_index i c then
                 let name = name_of_index i c in
-                assert (0 < String.length name);
+                let len  = String.length name in
+                assert (1 <= len);
                 let c0 = name.[0] in
-                if Char.is_letter c0 || c0 = '_' then
-                  name
+                if Char.is_letter c0
+                    || c0 = '_'
+                    || (2 <= len && Char.is_letter name.[1])
+                then
+                    name
                 else
-                  "(" ^ name ^ ")"
+                    "(" ^ name ^ ")"
               else
                 "<invalid " ^ string_of_int i ^ ">")
 
