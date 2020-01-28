@@ -224,18 +224,20 @@ and inductive = {
 
 
 let proposition: t =
-  Sort Sort.Proposition
+    Sort Sort.Proposition
 
 let any: t =
-  Sort (Sort.Any 0)
+    Sort (Sort.Any 0)
 
+let any_uni (uni: int): t =
+    Sort (Sort.Any uni)
 
 let char (code:int): t =
-  Value (Value.Char code)
+    Value (Value.Char code)
 
 
 let string (s:string): t =
-  Value (Value.String s)
+    Value (Value.String s)
 
 
 let number_values (s:string): t list =

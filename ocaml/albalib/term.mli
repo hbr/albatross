@@ -97,6 +97,7 @@ and inductive
 
 val proposition: t
 val any: t
+val any_uni: int -> t
 
 val variable: int -> t
 

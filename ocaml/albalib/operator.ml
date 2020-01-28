@@ -64,7 +64,7 @@ let of_string (op:string): t =
 
 
 let compare ((prec1,_): t) ((prec2,_): t): int =
-  Pervasives.compare prec1 prec2
+  Stdlib.compare prec1 prec2
 
 
 let precedence = fst

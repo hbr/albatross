@@ -985,8 +985,8 @@ struct
         (bc: t)
         : t option
         =
-        let tp, bc = make bc in
-        build_candidate tp explicits bc
+        let term, bc = make bc in
+        build_candidate term explicits bc
 end (* BuildC *)
 
 
