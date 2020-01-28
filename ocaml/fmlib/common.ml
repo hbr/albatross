@@ -21,7 +21,7 @@ end =
 module Int =
   struct
     type t = int
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
 
     let iterate (n: t) (f: 'a -> 'a) (start: 'a): 'a =
       let rec iter n v =
@@ -40,7 +40,7 @@ module Int_set = Set.Make (Int)
 module Float =
   struct
     type t = float
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
   end
 
 

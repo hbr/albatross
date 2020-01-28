@@ -1,6 +1,6 @@
 module String_map = Finite_map.Make (struct
                                       type t = string
-                                      let compare = Pervasives.compare
+                                      let compare = Stdlib.compare
                                     end)
 
 module IString =
