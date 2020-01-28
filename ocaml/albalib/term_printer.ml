@@ -171,7 +171,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                 let c0 = name.[0] in
                 if Char.is_letter c0
                     || c0 = '_'
-                    || (2 <= len && Char.is_letter name.[1])
+                    || (2 <= len && Char.is_digit name.[1])
                 then
                     name
                 else
