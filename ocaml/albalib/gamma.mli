@@ -22,6 +22,8 @@ val int_type: t -> Term.typ
 val type_of_variable: int -> t -> Term.typ
 val type_of_term: Term.t -> t -> Term.typ
 
+val is_kind: Term.typ -> t -> bool
+
 val typecheck: Term.t -> t -> Term.typ option
 
 

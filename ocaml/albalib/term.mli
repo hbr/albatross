@@ -161,15 +161,14 @@ val apply: t -> t -> t
 val apply_nargs: t -> int -> Application_info.t -> t
 
 
-val fold_free_variables: 'a -> (int -> 'a -> 'a) -> t -> 'a
-
-
+val fold_free: (int -> 'a -> 'a) -> t -> 'a -> 'a
 
 
 val to_index: int -> t -> t
 val to_level: int -> t -> t
 
 
+val has_variable: int -> t -> bool
 
 
 (** Inductive types *)

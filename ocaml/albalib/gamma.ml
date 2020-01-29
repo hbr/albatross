@@ -485,6 +485,26 @@ let key_normal (t: Term.t) (c: t): Term.t =
     args
 
 
+
+let rec sort_of_kind (k: Term.typ) (c:t): Term.Sort.t option =
+    let open Term
+    in
+    match key_normal k c with
+    | Sort s ->
+        Some s
+    | Pi (arg_tp, res_tp, _) ->
+        sort_of_kind res_tp (push_local "_" arg_tp c)
+    | _ ->
+        None
+
+
+let is_kind (k: Term.typ) (c: t): bool =
+    Option.has (sort_of_kind k c)
+
+
+
+
+
 let is_subtype (_: Term.typ) (_: Term.typ) (_: t): bool =
   assert false (* nyi *)
 
@@ -523,8 +543,7 @@ let rec typecheck (term: Term.t) (c: t): Term.typ option =
 
 
 let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =
-  Term.fold_free_variables
-    set
+  Term.fold_free
     (fun i set ->
       let j = level_of_index i c in
       if j < level then
@@ -532,6 +551,7 @@ let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =
       else
         Int_set.add j set)
     t
+    set
 
 
 

@@ -1,4 +1,5 @@
 open Fmlib
+open Common_module_types
 
 
 let bruijn_convert (i:int) (n:int): int =
@@ -445,35 +446,74 @@ let rec apply_nargs (f:t) (nargs:int) (mode: Application_info.t): t =
 
 
 
-let fold_free_variables (s: 'a) (f: int -> 'a -> 'a) (t: t): 'a =
-  let rec fold s t nb =
-    match t with
-    | Value _ ->
-       s
 
-    | Sort _ ->
-       s
 
-    | Variable i when i < nb ->
-       s
 
-    | Variable i ->
-       f (i - nb) s
+(* ----------------------------------------------------------- *)
+(* Monadic functions                                           *)
+(* ----------------------------------------------------------- *)
 
-    | Typed (e, tp) ->
-       fold (fold s e nb) tp nb
 
-    | Appl (f, a, _) ->
-       fold (fold s f nb) a nb
+module Monadic (M: MONAD) =
+struct
+    let fold_free
+        (f: int -> 'a -> 'a M.t)
+        (term: t)
+        (start: 'a)
+        : 'a M.t
+        =
+        let rec fold term nb start =
+            match term with
 
-    | Lambda (tp, exp, _) ->
-       fold (fold s tp nb) exp (nb + 1)
+            | Value _ | Sort _ ->
+                M.return start
 
-    | Pi (tp, rt, _) ->
-       fold (fold s tp nb) rt (nb + 1)
-  in
-  fold s t 0
+            | Variable i when i < nb ->
+                M.return start
 
+            | Variable i ->
+                f (i - nb) start
+
+            | Typed (e, tp) ->
+                M.(fold e nb start >>= fold tp nb)
+
+            | Appl (f, a, _) ->
+                M.(fold f nb start >>= fold a nb)
+
+            | Lambda (tp, exp, _) ->
+                M.(fold tp nb start >>= fold exp (nb + 1))
+
+            | Pi (tp, rt, _) ->
+                M.(fold tp nb start >>= fold rt (nb + 1))
+        in
+        fold term 0 start
+end
+
+
+
+
+let has_variable (i: int) (term: t): bool =
+    let module Mon = Monadic (Option) in
+    None
+    = Mon.fold_free
+        (fun j () ->
+            if i = j then
+                None
+            else
+                Some ())
+        term
+        ()
+
+
+
+
+let fold_free (f: int -> 'a -> 'a) (term: t) (start: 'a): 'a =
+    let module Mon = Monadic (Monad.Identity) in
+    Monad.Identity.eval
+        (Mon.fold_free
+            (fun i start -> Monad.Identity.return (f i start))
+            term
+            start)
 
 
 
