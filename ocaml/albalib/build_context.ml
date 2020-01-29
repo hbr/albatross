@@ -293,27 +293,115 @@ let make_typed (bc: t): Term.t * t =
 
 
 
-let push_function (_: t): t =
-    assert false
+let push_any (uni: int) (bc: t): t =
+    let cnt = count bc
+    in
+    {bc with
+        base =
+            Gamma.push_local
+                (placeholder_name cnt)
+                Term.(any_uni uni)
+                bc.base;
+
+        locals = Array.push Local.make bc.locals;
+
+        stack = Required_type (Term.Variable 0, cnt + 1) :: bc.stack
+    }
+
+
+
+let start_function_application: t -> t =
+    push_any 1
 
 
 
 
-let push_implicits (_: t): t =
-    assert false
+let rec push_implicits (bc: t): t =
+    match bc.stack with
+    | Built f_n :: stack ->
+        let open Gamma in
+        let open Term in
+        let f = term_of_term_n f_n bc in
+        let tp = type_of_term f bc.base in
+        (match key_normal tp bc.base with
+            | Pi (arg_tp, res_tp, _ )
+                when is_kind arg_tp bc.base
+                    && has_variable 0 res_tp
+                ->
+                push_implicits
+                    {bc with
+                        base =
+                            push_local "_" arg_tp bc.base;
+                        locals =
+                            Array.push Local.make bc.locals;
+                        stack =
+                            Built
+                                (Appl (up1 f,
+                                       Variable 0,
+                                       Application_info.Implicit),
+                                 count bc.base + 1)
+                            :: stack}
+            | _ ->
+                bc)
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 
 
-let push_argument (_: t): t option =
-    assert false
+let push_argument (bc: t): t option =
+    match bc.stack with
+    | Built f_n :: _ ->
+        let open Gamma in
+        let open Term in
+        let f = term_of_term_n f_n bc in
+        let tp = type_of_term f bc.base in
+        (match key_normal tp bc.base with
+            | Pi (arg_tp, _, _ ) ->
+                Some
+                    {bc with
+                        stack =
+                            Required_type (arg_tp, count bc.base) :: bc.stack}
+            | _ ->
+                None)
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 
 
-let apply_argument (_: Ast.Expression.argument_type) (_: t): t =
-    assert false
+let apply_argument (mode: Ast.Expression.argument_type) (bc: t): t =
+    match bc.stack with
+    | Built arg_n :: Built f_n :: stack ->
+        let f =   term_of_term_n f_n   bc
+        and arg = term_of_term_n arg_n bc
+        and mode =
+            match mode with
+            | Ast.Expression.Normal ->
+                Term.Application_info.Normal
+            | Ast.Expression.Operand ->
+                Term.Application_info.Binary
+        in
+        {bc with
+            stack =
+                Built (Term.Appl (f, arg, mode), count bc)
+                :: stack}
+    | _ ->
+        assert false (* Illegal call! *)
 
+
+
+
+
+
+
+let pop (bc: t): Term.t * t =
+    match bc.stack with
+    | Built res_n :: stack ->
+        term_of_term_n res_n bc,
+        {bc with stack}
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 
@@ -321,20 +409,7 @@ let apply_argument (_: Ast.Expression.argument_type) (_: t): t =
 
 
 let make (base: Gamma.t): t =
-    {
-        base0 =
-            base;
-
-        base =
-            Gamma.push_local
-                (placeholder_name 0)
-                Term.(any_uni 2)
-                base;
-
-        locals = [|Local.make|];
-
-        stack = [Required_type (Term.Variable 0, Gamma.count base + 1)]
-    }
+    push_any 2 {base0 = base; base; locals = [||]; stack = []}
 
 
 

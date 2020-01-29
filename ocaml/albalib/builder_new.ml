@@ -186,6 +186,28 @@ let map_filter_bcs
 
 
 
+let terminate_term
+    (range: range)
+    (make: Build_context.t -> Term.t * Build_context.t)
+    : t -> (t, problem) result
+    =
+    map_filter_bcs
+        (fun bc ->
+            let term, bc = make bc in
+            Build_context.candidate term bc)
+        (fun builder ->
+            let lst =
+                List.map
+                    (fun bc ->
+                        let term, bc = Build_context.make_typed bc in
+                        let req      = Build_context.required_type bc in
+                        let gamma    = Build_context.base bc in
+                        (req, gamma),
+                        (Gamma.type_of_term term gamma, gamma))
+                    builder.bcs
+            in
+            No_candidate (range, lst))
+
 
 let rec build0
     (exp: Expression.t)
@@ -238,60 +260,53 @@ let rec build0
         build0
             exp
             (map_bcs Build_context.push_typed builder)
-        >>= fun builder ->
-        map_filter_bcs
-            (fun bc ->
-                let term, bc = Build_context.make_typed bc in
-                Build_context.candidate term bc)
-            (fun builder ->
-                let lst =
-                    List.map
-                        (fun bc ->
-                            let term, bc = Build_context.make_typed bc in
-                            let req      = Build_context.required_type bc in
-                            let gamma    = Build_context.base bc in
-                            (req, gamma),
-                            (Gamma.type_of_term term gamma, gamma))
-                        builder.bcs
-                in
-                No_candidate (range, lst))
-            builder
+        >>= terminate_term range Build_context.make_typed
 
     | Application (f, args ) ->
         let pos1, pos2 = Located.range f
         in
+        (* Build the function term. *)
         build0
             f
-            (map_bcs Build_context.push_function builder)
+            (map_bcs Build_context.start_function_application builder)
         >>=
+        (* Build all arguments and apply the function term incrementally to the
+        arguments. *)
         fun builder ->
-            map fst
-                (List_fold.fold_left
-                    (fun (arg,mode) (builder, pos2) ->
-                        let builder =
-                            map_bcs Build_context.push_implicits builder
-                        in
-                        map
-                            (fun b ->
-                                map_bcs (Build_context.apply_argument mode) b,
-                                Located.end_ arg)
-                            (map_filter_bcs
-                                Build_context.push_argument
-                                (fun builder ->
-                                    Not_enough_args (
-                                        (pos1,pos2),
-                                        built_types builder
-                                    ))
-                                builder
-                             >>= build0 arg)
-                    )
-                    args
-                    (builder, pos2))
-
-    | Product (_, _) ->
-        assert false (* nyi *)
+            (List_fold.fold_left
+                (fun (arg,mode) (builder, pos2) ->
+                    let builder =
+                        map_bcs Build_context.push_implicits builder
+                    in
+                    map
+                        (fun b ->
+                            map_bcs (Build_context.apply_argument mode) b,
+                            Located.end_ arg)
+                        (map_filter_bcs
+                            Build_context.push_argument
+                            (fun builder ->
+                                Not_enough_args (
+                                    (pos1,pos2),
+                                    built_types builder
+                                ))
+                            builder
+                         >>= build0 arg)
+                )
+                args
+                (builder, pos2))
+        >>=
+        (* Complete the function application. Pop the term off the stack and
+        unify its type with the required type. *)
+        fun (builder, pos2) ->
+        terminate_term
+            (pos1,pos2)
+            Build_context.pop
+            builder
 
     | Function (_, _, _) ->
+        assert false (* nyi *)
+
+    | Product (_, _) ->
         assert false (* nyi *)
 
 
@@ -476,7 +491,6 @@ let%test _ =
 
 
 
-(*
 let%test _ =
     match build_expression "'a'= 'b'  " with
     | Ok ([term,typ]) ->
@@ -496,6 +510,7 @@ let%test _ =
 
 
 
+(*
 let%test _ =
     match build_expression "all a b: a = b" with
     | Error (Cannot_infer_bound _) ->
