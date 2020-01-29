@@ -50,6 +50,10 @@ let base_count (bc: t): int =
     Gamma.count bc.base0
 
 
+let base (bc: t): Gamma.t =
+    bc.base
+
+
 
 let top_of_stack (bc: t): entry =
     match bc.stack with
@@ -77,38 +81,20 @@ let term_of_term_n ((term,n): term_n) (bc: t): Term.t =
 
 
 
-let empty (base: Gamma.t): t =
-    {base0 = base; base;  locals = [||]; stack = []}
-
-
-let push_type_and_term (uni: int) (bc: t): t =
-    let cnt = count bc
-    and nlocs = count_locals bc
-    in
-    {bc with
-        base =
-            Gamma.(
-                push_local (placeholder_name nlocs) Term.(any_uni uni) bc.base
-            );
-        locals = Array.push Local.make bc.locals;
-
-        stack = Required_type (Term.Variable 0, cnt + 1) :: bc.stack
-    }
-
-
-let make (base: Gamma.t): t =
-    empty base
-    |> push_type_and_term 2
-
-
-
-
-
-
 let required_type (bc: t): Term.typ =
     match top_of_stack bc with
     | Required_type (term_n) ->
         term_of_term_n term_n bc
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
+
+let built_type (bc: t): Term.typ =
+    match top_of_stack bc with
+    | Built (term_n) ->
+        Gamma.type_of_term (term_of_term_n term_n bc) bc.base
     | _ ->
         assert false (* Illegal call! *)
 
@@ -206,14 +192,35 @@ let unify
         | Variable ireq, Variable iact
             when is_inferable ireq bc && is_inferable iact bc
             ->
-                assert false
+                assert false (* nyi *)
 
         | Variable i, _ when is_inferable i bc ->
             assert (not (has_value i bc));
             set_inferable i act
 
+        | _, Variable j when is_inferable j bc ->
+            assert false (* nyi *)
+
+        | Variable i, Variable j when i = j ->
+            Some bc
+
+        | Typed (req, _), Typed (act, _) ->
+            uni req is_super act bc
+
+        | Appl _, Appl _ ->
+            assert false (* nyi *)
+
+        | Pi _, Pi _ ->
+            assert false (* nyi *)
+
+        | Lambda _, Lambda _ ->
+            assert false (* nyi *)
+
+        | Value _, _ | _, Value _ ->
+            assert false (* Illegal call! [req] and [act] are no types! *)
+
         | _, _ ->
-            assert false
+            None
     in
     uni (expand req bc) is_super (expand act bc) bc
 
@@ -230,17 +237,106 @@ let set_term (value: Term.t) (bc: t): t =
 
 
 
-
-let base_candidate (term: Term.t) (bc: t): t option =
-    let term =
-        Term.up (count_locals bc) term
-    in
+let candidate (term: Term.t) (bc: t): t option =
     let act_typ = Gamma.type_of_term term bc.base
     and req_typ = required_type bc
     in
     Option.map
         (fun bc -> set_term term bc)
         (unify req_typ true act_typ bc)
+
+
+
+
+let base_candidate (term: Term.t) (bc: t): t option =
+    let term =
+        Term.up (count_locals bc) term
+    in
+    candidate term bc
+
+
+
+
+let push_type (bc: t): t =
+    (* Expecting a type as the next expression. *)
+    {bc with
+        stack = Required_type (Term.any_uni 1,0) :: bc.stack}
+
+
+
+
+let push_typed (bc: t): t =
+    (* Expecting a term whose required type is the last built expression. *)
+    {bc with
+        stack =
+            match bc.stack with
+            | Built typ_n :: _ ->
+                Required_type typ_n :: bc.stack
+            | _ ->
+                assert false (* Illegal call! *)
+    }
+
+
+
+
+let make_typed (bc: t): Term.t * t =
+    match bc.stack with
+    | Built exp_n :: Built typ_n :: stack ->
+        Term.Typed (
+            term_of_term_n exp_n bc,
+            term_of_term_n typ_n bc),
+        {bc with stack}
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
+
+
+let push_function (_: t): t =
+    assert false
+
+
+
+
+let push_implicits (_: t): t =
+    assert false
+
+
+
+
+let push_argument (_: t): t option =
+    assert false
+
+
+
+
+let apply_argument (_: Ast.Expression.argument_type) (_: t): t =
+    assert false
+
+
+
+
+
+
+
+let make (base: Gamma.t): t =
+    {
+        base0 =
+            base;
+
+        base =
+            Gamma.push_local
+                (placeholder_name 0)
+                Term.(any_uni 2)
+                base;
+
+        locals = [|Local.make|];
+
+        stack = [Required_type (Term.Variable 0, Gamma.count base + 1)]
+    }
+
+
 
 
 

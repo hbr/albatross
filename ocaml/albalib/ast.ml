@@ -26,7 +26,7 @@ module Expression = struct
     | Char of int
     | String of string
     | Operator of operator
-    | Typed of t * t
+    | Typed of t * t                      (* exp, type *)
     | Application of t * (t * argument_type) list
     | Function of
         formal_argument list

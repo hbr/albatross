@@ -25,9 +25,9 @@ type candidate_type = typ
 type problem =
   | Overflow of range
   | No_name of range
-  | Not_enough_args of range * int * candidate_type list
+  | Not_enough_args of range * candidate_type list
   | None_conforms of range * required_type list * candidate_type list
-  | No_candidate  of range * int * (required_type * candidate_type) list
+  | No_candidate  of range * (required_type * candidate_type) list
   | Unused_bound of range
   | Cannot_infer_bound of range
   | Not_yet_implemented of range * string
@@ -114,8 +114,17 @@ let make (c: Context.t): t =
 
 
 
-let required_types (_: t): required_type list =
-    assert false
+let required_types (builder: t): required_type list =
+    List.map
+        (fun bc -> Build_context.(required_type bc, base bc))
+        builder.bcs
+
+
+
+let built_types (builder: t): candidate_type list =
+    List.map
+        (fun bc -> Build_context.(built_type bc, base bc))
+        builder.bcs
 
 
 
@@ -148,13 +157,43 @@ let base_candidates
 
 
 
-let build0
+
+let map_bcs
+    (f: Build_context.t -> Build_context.t)
+    (builder: t)
+    : t
+    =
+    {builder with bcs = List.map f builder.bcs}
+
+
+
+
+
+let map_filter_bcs
+    (f: Build_context.t -> Build_context.t option)
+    (g: t -> problem)
+    (builder: t)
+    : (t, problem) result
+    =
+    let bcs =
+        List.map_and_filter f builder.bcs
+    in
+    if bcs = [] then
+        Error (g builder)
+    else
+        Ok {builder with bcs}
+
+
+
+
+
+let rec build0
     (exp: Expression.t)
     (builder: t)
     : (t, problem) result
     =
-    let open Expression
-    in
+    let open Expression in
+    let open Result in
     let range = Located.range exp
     in
     match Located.value exp with
@@ -182,14 +221,78 @@ let build0
                     builder
         )
 
+    | Number str ->
+        base_candidates range (Term.number_values str) builder
+
     | Char code ->
         base_candidates range [Term.char code] builder
 
     | String str ->
         base_candidates range [Term.string str] builder
 
-    | _ ->
-        assert false
+    | Typed (exp, typ) ->
+        build0
+            typ
+            (map_bcs Build_context.push_type builder)
+        >>= fun builder ->
+        build0
+            exp
+            (map_bcs Build_context.push_typed builder)
+        >>= fun builder ->
+        map_filter_bcs
+            (fun bc ->
+                let term, bc = Build_context.make_typed bc in
+                Build_context.candidate term bc)
+            (fun builder ->
+                let lst =
+                    List.map
+                        (fun bc ->
+                            let term, bc = Build_context.make_typed bc in
+                            let req      = Build_context.required_type bc in
+                            let gamma    = Build_context.base bc in
+                            (req, gamma),
+                            (Gamma.type_of_term term gamma, gamma))
+                        builder.bcs
+                in
+                No_candidate (range, lst))
+            builder
+
+    | Application (f, args ) ->
+        let pos1, pos2 = Located.range f
+        in
+        build0
+            f
+            (map_bcs Build_context.push_function builder)
+        >>=
+        fun builder ->
+            map fst
+                (List_fold.fold_left
+                    (fun (arg,mode) (builder, pos2) ->
+                        let builder =
+                            map_bcs Build_context.push_implicits builder
+                        in
+                        map
+                            (fun b ->
+                                map_bcs (Build_context.apply_argument mode) b,
+                                Located.end_ arg)
+                            (map_filter_bcs
+                                Build_context.push_argument
+                                (fun builder ->
+                                    Not_enough_args (
+                                        (pos1,pos2),
+                                        built_types builder
+                                    ))
+                                builder
+                             >>= build0 arg)
+                    )
+                    args
+                    (builder, pos2))
+
+    | Product (_, _) ->
+        assert false (* nyi *)
+
+    | Function (_, _, _) ->
+        assert false (* nyi *)
 
 
 
@@ -353,7 +456,6 @@ let%test _ =
 
 
 
-(*
 let%test _ =
     match build_expression "1:Int" with
     | Ok ([term,typ]) ->
@@ -374,6 +476,7 @@ let%test _ =
 
 
 
+(*
 let%test _ =
     match build_expression "'a'= 'b'  " with
     | Ok ([term,typ]) ->
