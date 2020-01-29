@@ -122,6 +122,14 @@ module Of_sig_min (M:SIG_MIN): MONAD with type 'a t = 'a M.t
 module Of_sig_with_map (M:SIG_WITH_MAP): MONAD with type 'a t = 'a M.t
 
 
+
+module Identity:
+sig
+    include MONAD
+    val eval: 'a t -> 'a
+end
+
+
 module Result (Error:ANY): RESULT with type error = Error.t and
                                        type 'a t = ('a,Error.t) result
 

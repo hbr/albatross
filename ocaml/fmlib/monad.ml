@@ -154,6 +154,25 @@ module Of_sig_min (M:SIG_MIN): MONAD with type 'a t = 'a M.t =
 
 
 
+
+module Identity =
+struct
+    include
+        Of_sig_min (
+        struct
+            type 'a t = 'a
+            let return (a: 'a): 'a t = a
+            let (>>=) (m: 'a t) (f: 'a -> 'b t): 'b t =
+                f m
+        end
+        )
+    let eval (m: 'a t): 'a =
+        m
+end
+
+
+
+
 module Result (E: ANY) =
   struct
     type error = E.t
