@@ -730,7 +730,7 @@ module Pretty (P:PRINTER) =
       get_and_update (State.increment_indent i) >>= fun st ->
       let pos,ind = State.position st, State.current_indent st in
       let m =
-        if pos < ind + i then
+        if pos = 0 (*pos < ind + i*) then
           fill (ind + i - pos) ' ' >>= fun _ -> m
         else
           m

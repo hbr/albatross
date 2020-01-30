@@ -430,13 +430,15 @@ let final (bc: t): Term.t * Term.typ * Gamma.t =
                     (fun i ->
                         let term = Variable i in
                         if is_inferable i bc then
-                            Term.Typed (
+                            Typed (
                                 term,
-                                expand (Gamma.type_of_term term bc.base) bc)
+                                expand (Gamma.type_of_term term bc.base) bc
+                            )
                         else
                             term)
                     typ)
             in
+            Printf.printf "final\n%s\n\n" (string_of_term typ bc);
             term, typ, bc.base
         )
 

@@ -180,9 +180,14 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                 "<invalid " ^ string_of_int i ^ ">")
 
         | Typed (e, tp) ->
-           let e_pr, tp_pr = two_operands e tp Operator.colon print c in
-           Some Operator.colon,
-           P.(group (chain [e_pr; char ':'; space; tp_pr]))
+            let e_pr, tp_pr = two_operands e tp Operator.colon print c in
+            Some Operator.colon,
+            P.( group (
+                    e_pr <+> char ':'
+                    <+> nest 4
+                            (space <+> tp_pr)
+                )
+            )
 
         | Appl (f, operand2, Binary) ->
             let rec find_operand1 f =
@@ -269,24 +274,27 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                      rt_pr])
 
         | Pi (tp, t, info) ->
-           let nme, is_typed = pi_info info in
-           let lst, t_inner, c_inner =
-             split_pi t (push_local nme tp c)
-           in
-           Some Operator.colon,
-           P.(
-                List.fold_left
-                    (fun pr (nme, is_typed, tp, c) ->
-                      pr
-                      <+> char ' '
-                      <+> print_name_type nme is_typed tp c
+            let nme, is_typed = pi_info info in
+            let lst, t_inner, c_inner =
+                split_pi t (push_local nme tp c) in
+            let lst = (nme, is_typed, tp, c) :: lst in
+            Some Operator.colon,
+            P.(
+                group (
+                    string "all "
+                    <+> nest_relative 0 (
+                        list_separated
+                            space
+                            (List.map
+                                (fun (nme, is_typed, tp, c) ->
+                                    print_name_type nme is_typed tp c
+                                )
+                                lst
+                            )
+                        <+> cut <+> string ": "
+                        <+> raw_print t_inner c_inner
                     )
-                    (   string "all "
-                        <+> print_name_type nme is_typed tp c
-                    )
-                    lst
-                <+> string ": "
-                <+> raw_print t_inner c_inner
+                )
             )
 
         | Value v ->
