@@ -397,21 +397,24 @@ module Pretty (P:PRINTER) =
 
     type state = State.t
 
-    type loop =
-      | More of (unit -> loop)
+    type loop_state =
+      | More of (unit -> loop_state)
       | Done of P.t
 
-    let rec loop: loop -> P.t = function
-      | Done p ->
-         p
-      | More f ->
-         loop @@ f ()
 
+    let loop: loop_state -> P.t =
+        let rec do_loop i = function
+        | Done p ->
+            p
+        | More f ->
+            do_loop (i + 1) (f ())
+        in
+        do_loop 0
 
     type 'a cont =
       (* A continuation function takes a value, a state and the cumulated
          printing command and returns the remainder of the loop. *)
-      'a -> state -> P.t -> loop
+      'a -> state -> P.t -> loop_state
 
     module M =
       struct
@@ -419,7 +422,7 @@ module Pretty (P:PRINTER) =
           state
           -> P.t      (* printed up to now *)
           -> 'a cont  (* continuation *)
-          -> loop
+          -> loop_state
 
         let return (a:'a): 'a t =
           fun st p k -> k a st p
