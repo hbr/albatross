@@ -159,7 +159,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
         in
         match t with
         | Sort s ->
-           print_sort s
+            print_sort s
 
         | Variable i ->
            None,
@@ -274,35 +274,47 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
              split_pi t (push_local nme tp c)
            in
            Some Operator.colon,
-           P.(chain [List.fold_left
-                       (fun pr (nme, is_typed, tp, c) ->
-                         pr
-                         <+> char ' '
-                         <+> print_name_type nme is_typed tp c
-                       )
-                       (string "all "
-                        <+> print_name_type nme is_typed tp c)
-                       lst;
-                     string ": ";
-                     snd @@ print t_inner c_inner])
+           P.(
+                List.fold_left
+                    (fun pr (nme, is_typed, tp, c) ->
+                      pr
+                      <+> char ' '
+                      <+> print_name_type nme is_typed tp c
+                    )
+                    (   string "all "
+                        <+> print_name_type nme is_typed tp c
+                    )
+                    lst
+                <+> string ": "
+                <+> raw_print t_inner c_inner
+            )
 
         | Value v ->
            print_value v
 
     let print (t:Term.t) (c: Gamma.t): P.t =
-      snd (print t c)
+        snd (print t c)
   end (* Pretty *)
 
 
+
+
+
+
+
 module String_print (Gamma:GAMMA) =
-  struct
+struct
     let string_of_term (t:Term.t) (c: Gamma.t): string =
-      let module PP = Pretty_printer.Pretty (String_printer) in
-      let module P = Pretty (Gamma) (PP) in
-      String_printer.run
-        (PP.run 0 80 80 (P.print t c))
-      end
+        let module PP = Pretty_printer.Pretty (String_printer) in
+        let module P = Pretty (Gamma) (PP) in
+        String_printer.run
+            (PP.run 0 100 100 (P.print t c))
+end
+
+
+
+
 
 let string_of_term (t:Term.t) (c: Gamma.t): string =
-  let module SP = String_print (Gamma) in
-  SP.string_of_term t c
+    let module SP = String_print (Gamma) in
+    SP.string_of_term t c
