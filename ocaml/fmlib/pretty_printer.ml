@@ -796,17 +796,6 @@ module Pretty (P:PRINTER) =
 
 
 
-module PP = Pretty (Readable_printer)
-
-include PP
-
-let run (indent:int) (width:int) (ribbon:int) (m:t): Readable_printer.R.t =
-  PP.run
-    indent width ribbon
-    m
-  |> Readable_printer.readable
-
-
 
 
 
@@ -822,6 +811,17 @@ let run (indent:int) (width:int) (ribbon:int) (m:t): Readable_printer.R.t =
   Module Tests
   ------------
  *)
+
+module PP = Pretty (Readable_printer)
+
+include PP
+
+let run (indent:int) (width:int) (ribbon:int) (m:t): Readable_printer.R.t =
+  PP.run
+    indent width ribbon
+    m
+  |> Readable_printer.readable
+
 
 module R = Readable_printer.R
 

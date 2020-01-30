@@ -102,13 +102,6 @@ module type SIG =
   end
 
 
-include SIG
-
-(** [run indent width ribbon pp]: A readable generated from the pretty printer
-   [pp] formatted with an initial [indent], a line [width] and a [ribbon]
-   width. *)
-val run: int -> int -> int -> t -> Readable_printer.R.t
-
 
 
 
