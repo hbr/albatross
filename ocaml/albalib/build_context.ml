@@ -46,9 +46,6 @@ let count_locals (bc: t): int =
     Array.length bc.locals
 
 
-let base_count (bc: t): int =
-    Gamma.count bc.base0
-
 
 let base (bc: t): Gamma.t =
     bc.base
@@ -328,10 +325,11 @@ let rec push_implicits (bc: t): t =
                 when is_kind arg_tp bc.base
                     && has_variable 0 res_tp
                 ->
+                let name = placeholder_name (count_locals bc) in
                 push_implicits
                     {bc with
                         base =
-                            push_local "_" arg_tp bc.base;
+                            push_local name arg_tp bc.base;
                         locals =
                             Array.push Local.make bc.locals;
                         stack =
@@ -419,14 +417,26 @@ let make (base: Gamma.t): t =
 let final (bc: t): Term.t * Term.typ * Gamma.t =
     match bc.stack with
     | [Built term_n] ->
-        let term = expand (term_of_term_n term_n bc) bc
-        and typ  = expand (Gamma.term_at_level (base_count bc) bc.base) bc
-        and nlocs = count_locals bc
+        let term = expand (term_of_term_n term_n bc) bc in
+        let typ  = expand (Gamma.type_of_term term bc.base) bc in
+        let nlocs = count_locals bc
         in
         (match Term.down nlocs term, Term.down nlocs typ with
         | Some term, Some typ ->
             term, typ , bc.base0
         | _, _ ->
+            let typ =
+                Term.(substitute
+                    (fun i ->
+                        let term = Variable i in
+                        if is_inferable i bc then
+                            Term.Typed (
+                                term,
+                                expand (Gamma.type_of_term term bc.base) bc)
+                        else
+                            term)
+                    typ)
+            in
             term, typ, bc.base
         )
 

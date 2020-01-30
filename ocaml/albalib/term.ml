@@ -249,8 +249,30 @@ let variable i: t =
     Variable i
 
 
+
 let application (f: t) (a: t): t =
     Appl (f, a, Application_info.Normal)
+
+
+let implicit_application (f: t) (a: t): t =
+    Appl (f, a, Application_info.Implicit)
+
+
+let binary (a: t) (op: t) (b: t): t =
+    let mode = Application_info.Binary
+    in
+    Appl ( Appl (op, a, mode), b, mode)
+
+
+let rec applications (f: t) (args: t list): t =
+    match args with
+    | [] ->
+        f
+    | arg :: args ->
+        applications
+            (Appl (f, arg, Application_info.Normal))
+            args
+
 
 
 let lambda (name: string) (tp: typ) (exp: t): t =
@@ -258,9 +280,11 @@ let lambda (name: string) (tp: typ) (exp: t): t =
     Lambda (tp, exp, Lambda_info.typed name)
 
 
+
 let lambda_untyped (name: string) (tp: typ) (exp: t): t =
     assert (name <> "");
     Lambda (tp, exp, Lambda_info.untyped name)
+
 
 
 let product (name: string) (arg_tp: typ) (result_tp: typ): t =

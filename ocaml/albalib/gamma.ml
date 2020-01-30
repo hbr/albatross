@@ -118,6 +118,7 @@ let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
 let int_level    = 0
 let char_level   = 1
 let string_level = 2
+let eq_level     = 8
 
 
 let binary_type (level:int): Term.typ * int =
@@ -179,7 +180,7 @@ let standard (): t =
        (Term.(Pi (any, any, Pi_info.arrow)), 0)
        No
 
-  |> add_entry
+  |> add_entry (* 8 *)
        (* (=) (A: Any): A -> A -> Proposition *)
        "="
        (Term.(
@@ -279,6 +280,33 @@ let standard (): t =
             "<|"
             (to_index 0 typ, 0)
             (Definition (to_index 0 def))
+        )
+
+    (* leibniz (A: Any) (f: A -> Proposition)
+               (a b: A)
+               : a = b => f a => f b *)
+    |>  (let n = eq_level + 1 in
+         let biga = Variable (n + 0)
+         and f    = Variable (n + 1)
+         and a    = Variable (n + 2)
+         and b    = Variable (n + 3)
+         and eq   = Variable eq_level
+         in
+         let args = ["A", any;
+                     "f", arrow biga proposition;
+                     "a", biga;
+                     "b", biga;
+                     "eq", binary
+                            a
+                            (implicit_application eq biga)
+                            b;
+                     "fa", application f a]
+         in
+         let typ = product_in args (application f b)
+         in
+         add_entry
+            "leibniz" (to_index n typ, n)
+            No
         )
 
 
@@ -509,6 +537,9 @@ let is_subtype (_: Term.typ) (_: Term.typ) (_: t): bool =
   assert false (* nyi *)
 
 
+
+
+
 let rec typecheck (term: Term.t) (c: t): Term.typ option =
   let open Term in
   match term with
@@ -540,6 +571,9 @@ let rec typecheck (term: Term.t) (c: t): Term.typ option =
 
   | Pi (_, _, _) ->
       assert false (* nyi *)
+
+
+
 
 
 let add_vars_from (level: int) (t: Term.t) (c: t) (set: Int_set.t): Int_set.t =

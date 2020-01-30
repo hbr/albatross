@@ -28,6 +28,7 @@ type problem =
   | Not_enough_args of range * candidate_type list
   | None_conforms of range * required_type list * candidate_type list
   | No_candidate  of range * (required_type * candidate_type) list
+  | Incomplete_type of range * candidate_type list
   | Unused_bound of range
   | Cannot_infer_bound of range
   | Not_yet_implemented of range * string
@@ -338,7 +339,13 @@ let build
             builder.bcs
     in
     if lst = [] then
-        assert false (* nyi *)
+        Error (Incomplete_type (
+            Located.range exp,
+            List.map
+                (fun bc ->
+                    let _, typ, gamma = Build_context.final bc in
+                    typ, gamma)
+                builder.bcs))
     else
         Ok lst
 
@@ -408,7 +415,6 @@ let build_expression
     assert (has_ended p);
     assert (has_succeeded p);
     build Option.(value (result p)) standard_context
-
 
 
 
@@ -509,6 +515,14 @@ let%test _ =
         false
 
 
+
+
+let%test _ =
+    match build_expression "leibniz 'a'" with
+    | Error (Incomplete_type _) ->
+        true
+    | _ ->
+        false
 
 (*
 let%test _ =

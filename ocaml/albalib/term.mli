@@ -102,6 +102,9 @@ val any_uni: int -> t
 val variable: int -> t
 
 val application: t -> t -> t
+val implicit_application: t -> t -> t
+val binary: t -> t -> t -> t
+val applications: t -> t list -> t
 
 val lambda:  string -> typ -> t -> t
 val product: string -> typ -> typ -> t
