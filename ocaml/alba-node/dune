@@ -12,4 +12,3 @@
     (flags (:standard -warn-error -A))
    )
  )
- 

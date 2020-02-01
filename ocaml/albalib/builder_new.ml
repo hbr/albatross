@@ -702,7 +702,7 @@ let%test _ =
 
 
 
-(*
+
 let%test _ =
     match build_expression "Int -> all (A:Any): A" with
     | Ok ([term, typ]) ->
@@ -710,4 +710,3 @@ let%test _ =
         = "Int -> (all (A: Any): A): Any(1)"
     | _ ->
         false
-*)

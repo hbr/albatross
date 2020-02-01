@@ -2,6 +2,7 @@
     (libraries fmlib)
     (inline_tests)
     (preprocess (pps ppx_inline_test))
+    (modules_without_implementation gamma_holes)
     (public_name alba.albalib)
     (name albalib))
 

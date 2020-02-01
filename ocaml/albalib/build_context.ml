@@ -7,37 +7,37 @@ type term_n = Term.t * int
 module Local =
 struct
     type t =
-        | Placeholder of term_n option
+        | Hole of term_n option
         | Bound of int  (* number of bound variable (counting upwards) *)
 
-    let placeholder: t =
-        Placeholder None
+    let hole: t =
+        Hole None
 
     let make_bound (n: int): t =
         Bound n
 
-    let is_placeholder (loc: t): bool =
+    let is_hole (loc: t): bool =
         match loc with
-        | Placeholder _ ->
+        | Hole _ ->
             true
         | Bound _ ->
             false
 
     let is_bound (loc: t): bool =
-        not (is_placeholder loc)
+        not (is_hole loc)
 
 
     let value (loc: t): term_n option =
         match loc with
-        | Placeholder value ->
+        | Hole value ->
             value
         | _ ->
             None
 
     let set_value (term_n: term_n) (loc: t): t =
         match loc with
-        | Placeholder _ ->
-            Placeholder (Some term_n)
+        | Hole _ ->
+            Hole (Some term_n)
         | _ ->
             assert false (* Illegal call! *)
 
@@ -145,9 +145,9 @@ let local_of_index (idx: int) (bc: t): Local.t =
 
 
 
-let is_placeholder (idx: int) (bc: t): bool =
+let is_hole (idx: int) (bc: t): bool =
     idx < count_locals bc
-    && Local.is_placeholder (local_of_index idx bc)
+    && Local.is_hole (local_of_index idx bc)
 
 
 
@@ -181,7 +181,7 @@ let expand (term: Term.t) (bc: t): Term.t =
 
 
 
-let set_placeholder (idx: int) (value: Term.t) (bc: t): t =
+let fill_hole (idx: int) (value: Term.t) (bc: t): t =
     let cnt    = count bc
     and nlocs  = count_locals bc
     and locals = Array.copy bc.locals
@@ -233,8 +233,8 @@ struct
     let down (typ: Term.typ) (uc: t): Term.typ option =
         Term.down (delta uc) typ
 
-    let is_placeholder (idx: int) (uc: t): bool =
-        is_placeholder (idx - delta uc) uc.bc
+    let is_hole (idx: int) (uc: t): bool =
+        is_hole (idx - delta uc) uc.bc
 
     let expand (term: Term.t) (uc: t): Term.t =
         let del = delta uc
@@ -270,7 +270,7 @@ struct
                     >>= fun typ0 ->
                     map
                         (fun uc ->
-                            {uc with bc = set_placeholder (i - nb) typ0 uc.bc})
+                            {uc with bc = fill_hole (i - nb) typ0 uc.bc})
                         (uni
                             (Gamma.type_of_term typ uc.gamma)
                             (Gamma.type_of_variable i uc.gamma)
@@ -287,8 +287,8 @@ struct
             in
             match act, req with
             | Variable i, Variable j ->
-                let iph = is_placeholder i uc
-                and jph = is_placeholder j uc
+                let iph = is_hole i uc
+                and jph = is_hole j uc
                 in
                 if i = j then
                     Some uc
@@ -309,10 +309,10 @@ struct
                 else
                     assert false (* cannot happen, illegal path *)
 
-            | Variable i, _ when is_placeholder i uc ->
+            | Variable i, _ when is_hole i uc ->
                 set i req
 
-            | _, Variable j when is_placeholder j uc ->
+            | _, Variable j when is_hole j uc ->
                 set j act
 
             | Sort act, Sort req
@@ -417,7 +417,7 @@ let push_placeholder (uni: int) (bc: t): t =
                 Term.(any_uni uni)
                 bc.base;
 
-        locals = Array.push Local.placeholder bc.locals;
+        locals = Array.push Local.hole bc.locals;
     }
 
 
@@ -469,7 +469,7 @@ let rec push_implicits (bc: t): t =
                         base =
                             push_local name arg_tp bc.base;
                         locals =
-                            Array.push Local.placeholder bc.locals;
+                            Array.push Local.hole bc.locals;
                         stack =
                             Built
                                 (Appl (up1 f,
@@ -707,7 +707,7 @@ let final (bc: t): Term.t * Term.typ * Gamma.t =
                 Term.(substitute
                     (fun i ->
                         let term = Variable i in
-                        if is_placeholder i bc then
+                        if is_hole i bc then
                             Typed (
                                 term,
                                 expand (Gamma.type_of_term term bc.base) bc
