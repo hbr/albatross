@@ -528,7 +528,18 @@ let string_of_term_type (term: Term.t) (typ: Term.t): string
             (Term_print.print (Term.Typed (term,typ)) standard_context))
 let _ = string_of_term_type
 
-
+let string_of_error ((_,p): problem): string =
+    match p with
+    | Overflow -> "overflow"
+    | No_name -> "no name"
+    | Not_enough_args _ -> "not enough args"
+    | None_conforms _ -> "None conforms"
+    | No_candidate _ -> "no candidate"
+    | Incomplete_type _ -> "incomplete type"
+    | Unused_bound -> "unused bound"
+    | Cannot_infer_bound -> "cannot infer bound"
+    | Not_yet_implemented _ -> "not yet implemented"
+let _ = string_of_error
 
 let build_expression
     (str: string)
@@ -631,6 +642,7 @@ let%test _ =
 
 
 
+
 let%test _ =
     match build_expression "(+) 1 2 3" with
     | Error (_, Not_enough_args _) ->
@@ -675,6 +687,16 @@ let%test _ =
     | Ok ([term, typ]) ->
         string_of_term_type term typ
         = "(all a (b: Int): a = b): Proposition"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "1 |> (+) 2" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "1 |> (+) 2: Int"
     | _ ->
         false
 

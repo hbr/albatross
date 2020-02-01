@@ -27,13 +27,6 @@ struct
         not (is_placeholder loc)
 
 
-    let has_value (loc: t): bool =
-        match loc with
-        | Placeholder (Some _) ->
-            true
-        | _ ->
-            false
-
     let value (loc: t): term_n option =
         match loc with
         | Placeholder value ->
@@ -152,14 +145,11 @@ let local_of_index (idx: int) (bc: t): Local.t =
 
 
 
-let is_inferable (idx: int) (bc: t): bool =
+let is_placeholder (idx: int) (bc: t): bool =
     idx < count_locals bc
     && Local.is_placeholder (local_of_index idx bc)
 
 
-
-let has_value (idx: int) (bc: t): bool =
-    Local.has_value (local_of_index idx bc)
 
 
 
@@ -218,79 +208,138 @@ let set_placeholder (idx: int) (value: Term.t) (bc: t): t =
 
 
 
-let unify
-    (req: Term.typ)     (* required type *)
-    (is_super: bool)    (* required type can be supertype of actual type?  *)
-    (act: Term.typ)     (* actual type *)
-    (bc: t): t option
-    =
-    let rec uni req is_super act bc =
-        let set_placeholder i term =
-            Option.map
-                (set_placeholder i term)
-                (uni
-                    (Gamma.type_of_variable i bc.base)
-                    true
-                    (Gamma.type_of_term term bc.base)
-                    bc)
+
+
+
+
+
+module Unify =
+struct
+    type bc = t
+
+    type t = {
+        bc: bc;
+        gamma: Gamma.t
+    }
+
+    let string_of_term (term: Term.t) (uc: t): string =
+        Term_printer.string_of_term term uc.gamma
+    let _ = string_of_term
+
+    let delta (uc: t): int =
+        Gamma.count uc.gamma - count uc.bc
+
+
+    let down (typ: Term.typ) (uc: t): Term.typ option =
+        Term.down (delta uc) typ
+
+    let is_placeholder (idx: int) (uc: t): bool =
+        is_placeholder (idx - delta uc) uc.bc
+
+    let expand (term: Term.t) (uc: t): Term.t =
+        let del = delta uc
         in
-        let req = Gamma.key_normal req bc.base (* key split !!! *)
-        and act = Gamma.key_normal act bc.base
+        Term.substitute
+            (fun i ->
+                if i < del then
+                    Variable i
+                else
+                    match value (i - del) uc.bc with
+                    | None ->
+                        Variable i
+                    | Some term ->
+                        Term.up del term)
+            term
+
+    let push (tp: Term.typ) (uc: t): t =
+        {uc with gamma = Gamma.push_local "_" tp uc.gamma}
+
+    let unify
+        (act: Term.typ)
+        (req: Term.typ)
+        (is_super: bool)
+        (bc: bc)
+        : bc option
+        =
+        let rec uni act req is_super uc =
+            let nb = delta uc
+            in
+            let set i typ =
+                Option.(
+                    down typ uc
+                    >>= fun typ0 ->
+                    map
+                        (fun uc ->
+                            {uc with bc = set_placeholder (i - nb) typ0 uc.bc})
+                        (uni
+                            (Gamma.type_of_term typ uc.gamma)
+                            (Gamma.type_of_variable i uc.gamma)
+                            true
+                            uc))
+            in
+            let req = expand req uc
+            and act = expand act uc
+            in
+            let req = Gamma.key_normal req uc.gamma
+            and act = Gamma.key_normal act uc.gamma
+            in
+            let open Term
+            in
+            match act, req with
+            | Variable i, Variable j ->
+                let iph = is_placeholder i uc
+                and jph = is_placeholder j uc
+                in
+                if i = j then
+                    Some uc
+                else if i < nb || j < nb then
+                    None
+                else if not (iph || jph) then
+                    None
+                else if iph && jph then
+                    match set j act with
+                    | None ->
+                        set i req
+                    | res ->
+                        res
+                else if iph then
+                    set i req
+                else if jph then
+                    set j act
+                else
+                    assert false (* cannot happen, illegal path *)
+
+            | Variable i, _ when is_placeholder i uc ->
+                set i req
+
+            | _, Variable j when is_placeholder j uc ->
+                set j act
+
+            | Sort act, Sort req
+                when (is_super && Sort.is_super req act)
+                     || (not is_super && req = act)
+                ->
+                    Some uc
+
+            | Pi (act_arg, act_rt, _), Pi (req_arg, req_rt, _) ->
+                Option.(
+                    uni act_arg req_arg false uc
+                    >>= fun uc ->
+                    uni act_rt req_rt is_super (push act_arg uc)
+                )
+
+            | Pi (_, _, _), _ ->
+                assert false
+
+            | _, _ ->
+                None
         in
-        let open Term
-        in
-        (* MISSING: key split, avoid cases which cannot be types in key normal
-        form. *)
-        match req, act with
-        | Sort req, Sort act
-            when (is_super && Sort.is_super req act)
-                 || (not is_super && req = act)
-            ->
-                Some bc
+        Option.map
+            (fun uc -> uc.bc)
+            (uni act req is_super {bc; gamma = bc.base})
+end
 
-        | Variable i, Variable j
-            when is_inferable i bc && is_inferable j bc
-            ->
-            assert (not (has_value i bc));
-            assert (not (has_value j bc));
-            (   match set_placeholder i act with
-                | None ->
-                    set_placeholder j req
-                | Some bc ->
-                    Some bc
-            )
 
-        | Variable i, _ when is_inferable i bc ->
-            assert (not (has_value i bc));
-            set_placeholder i act
-
-        | _, Variable j when is_inferable j bc ->
-            assert (not (has_value j bc));
-            set_placeholder j act
-
-        | Variable i, Variable j when i = j ->
-            Some bc
-
-        | Typed (req, _), Typed (act, _) -> (* IMPOSSIBLE *)
-            uni req is_super act bc
-
-        | Appl _, Appl _ ->
-            assert false (* nyi *)
-
-        | Pi _, Pi _ -> (* implicit arguments in the actual type which cannot be
-        unified with the required type *)
-            assert false (* nyi *)
-
-        | Lambda _, Lambda _ -> (* IMPOSSIBLE *)
-            assert false (* nyi *)
-
-        | Value _, _ | _, Value _ ->
-            assert false (* Illegal call! [req] and [act] are no types! *)
-
-        | _, _ ->
-            None
-    in
-    uni (expand req bc) is_super (expand act bc) bc
 
 
 
@@ -311,7 +360,8 @@ let candidate (term: Term.t) (bc: t): t option =
     in
     Option.map
         (fun bc -> set_term term bc)
-        (unify req_typ true act_typ bc)
+        (Unify.unify act_typ req_typ true bc)
+        (*(unify req_typ true act_typ bc)*)
 
 
 
@@ -407,7 +457,7 @@ let rec push_implicits (bc: t): t =
         let open Gamma in
         let open Term in
         let f = term_of_term_n f_n bc in
-        let tp = type_of_term f bc.base in
+        let tp = expand (type_of_term f bc.base) bc in
         (match key_normal tp bc.base with
             | Pi (arg_tp, res_tp, _ )
                 when is_kind arg_tp bc.base
@@ -441,7 +491,7 @@ let push_argument (bc: t): t option =
         let open Gamma in
         let open Term in
         let f = term_of_term_n f_n bc in
-        let tp = type_of_term f bc.base in
+        let tp = expand (type_of_term f bc.base) bc in
         (match key_normal tp bc.base with
             | Pi (arg_tp, _, _ ) ->
                 Some
@@ -459,8 +509,8 @@ let push_argument (bc: t): t option =
 let apply_argument (mode: Ast.Expression.argument_type) (bc: t): t =
     match bc.stack with
     | Built arg_n :: Built f_n :: stack ->
-        let f =   term_of_term_n f_n   bc
-        and arg = term_of_term_n arg_n bc
+        let f =   expand (term_of_term_n f_n bc) bc
+        and arg = expand (term_of_term_n arg_n bc) bc
         and mode =
             match mode with
             | Ast.Expression.Normal ->
@@ -657,7 +707,7 @@ let final (bc: t): Term.t * Term.typ * Gamma.t =
                 Term.(substitute
                     (fun i ->
                         let term = Variable i in
-                        if is_inferable i bc then
+                        if is_placeholder i bc then
                             Typed (
                                 term,
                                 expand (Gamma.type_of_term term bc.base) bc
