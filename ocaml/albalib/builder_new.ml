@@ -22,67 +22,60 @@ type required_type = typ
 type candidate_type = typ
 
 
-type problem =
-  | Overflow of range
-  | No_name of range
-  | Not_enough_args of range * candidate_type list
-  | None_conforms of range * required_type list * candidate_type list
-  | No_candidate  of range * (required_type * candidate_type) list
-  | Incomplete_type of range * candidate_type list
-  | Unused_bound of range
-  | Cannot_infer_bound of range
-  | Not_yet_implemented of range * string
+type problem_description =
+  | Overflow
+  | No_name
+  | Not_enough_args of candidate_type list
+  | None_conforms of required_type list * candidate_type list
+  | No_candidate  of (required_type * candidate_type) list
+  | Incomplete_type of candidate_type list
+  | Unused_bound
+  | Cannot_infer_bound
+  | Not_yet_implemented of string
 
+
+type problem = range * problem_description
 
 
 module Name_map = Context.Name_map
 module Result = Monad.Result (struct type t = problem end)
 module List_fold = List.Monadic_fold (Result)
+module Interval_monadic = Interval.Monadic (Result)
 
 
-
-
-
-
-module Bounds =
-    (* This module keeps track of the usage status of bound variables. *)
+module Bounds:
+sig
+    type t
+    val count: t -> int
+    val empty: t
+    val push: range -> bool -> t -> t
+    val use:  int -> t -> t
+    val status: int -> t -> range * bool
+end
+=
 struct
-    type t = {
-        map: bool list String_map.t; (* usage flag for each bound var *)
-    }
+    type t = (range * bool) array
 
-    let empty: t =
-        {map = String_map.empty}
+    let count bnds =
+        Array.length bnds
 
-    (*let push(name: string) (bnds: t): t =
-        {map =
-            match String_map.maybe_find name bnds.map with
-            | None ->
-                String_map.add name [false] bnds.map
-            | Some lst ->
-                String_map.add name (false :: lst) bnds.map}*)
+    let empty = [||]
 
-    (*let use (name: string) (bnds: t): t =
-        {map =
-            match String_map.maybe_find name bnds.map with
-            | None ->
-                bnds.map
-            | Some [] ->
-                assert false (* Illegal call! *)
-            | Some (_ :: rest) ->
-                String_map.add name (true :: rest) bnds.map}*)
+    let push range typed bnds =
+        Array.push (range, typed) bnds
 
-    (*let pop (name: string) (bnds: t): bool * t =
-        match String_map.find name bnds.map with
-        | [] ->
-            assert false (* Illegal call! *)
-        | [flag] ->
-            flag,
-            {map = String_map.remove name bnds.map}
-        | flag :: flags ->
-            flag,
-            {map = String_map.add name flags bnds.map}*)
-end (* Bounds *)
+    let use i bnds =
+        let range, flag = bnds.(i) in
+        if flag then
+            bnds
+        else
+            (let bnds_new = Array.copy bnds in
+             bnds_new.(i) <- range, true;
+             bnds_new)
+
+    let status i bnds =
+        bnds.(i)
+end
 
 
 
@@ -104,6 +97,14 @@ type t = {
   }
 
 
+let count_base (builder: t): int =
+    Gamma.count builder.base
+
+
+let count_bounds (builder: t): int =
+    Bounds.count builder.bounds
+
+
 let make (c: Context.t): t =
     {
         names = Context.name_map c;
@@ -112,6 +113,21 @@ let make (c: Context.t): t =
         bcs = [Build_context.make (Context.gamma c)]
      }
 
+
+
+let push_bound
+    (name: string Located.t)
+    (typed: bool)
+    (builder: t)
+    : t
+    =
+    let name_str  = Located.value name
+    in
+    {builder with
+        names =
+            Name_map.add_local name_str builder.names;
+        bounds =
+            Bounds.push (Located.range name) typed builder.bounds}
 
 
 
@@ -144,9 +160,9 @@ let base_candidates
     in
     if bcs = [] then
         Error
-            (None_conforms
-                (range,
-                 required_types builder,
+            (range,
+             None_conforms
+                (required_types builder,
                  List.map
                     (fun term ->
                         Gamma.type_of_term term builder.base,
@@ -166,6 +182,29 @@ let map_bcs
     =
     {builder with bcs = List.map f builder.bcs}
 
+
+
+let map_bcs2
+    (f: Build_context.t -> (Build_context.t, 'a) result)
+    (g: 'a list -> problem)
+    (builder: t)
+    : (t, problem) result
+    =
+    let bcs, errors =
+        List.fold_left
+            (fun (bcs, errors)  bc ->
+                match f bc with
+                | Ok bc ->
+                    bc :: bcs, errors
+                | Error problem ->
+                    bcs, problem :: errors)
+            ([], [])
+            builder.bcs
+    in
+    if bcs <> [] then
+        Ok {builder with bcs}
+    else
+        Error (g errors)
 
 
 
@@ -207,7 +246,10 @@ let terminate_term
                         (Gamma.type_of_term term gamma, gamma))
                     builder.bcs
             in
-            No_candidate (range, lst))
+            range, No_candidate lst)
+
+
+
 
 
 let rec build0
@@ -215,11 +257,18 @@ let rec build0
     (builder: t)
     : (t, problem) result
     =
+    let build_type typ builder =
+        build0
+            typ
+            (map_bcs Build_context.push_type builder)
+    in
     let open Expression in
     let open Result in
     let range = Located.range exp
     in
-    match Located.value exp with
+    match
+        Located.value exp
+    with
     | Proposition ->
         base_candidates range [Term.proposition] builder
 
@@ -227,13 +276,19 @@ let rec build0
         base_candidates range [Term.any] builder
 
     | Identifier name | Operator (name, _) ->
+        let cnt_base = count_base builder in
         (
             match Name_map.find name builder.names with
             | [] ->
-                Error (No_name range)
+                Error (range, No_name)
 
-            | [level] when Gamma.count builder.base <= level ->
-                assert false (* nyi bound variables *)
+            | [level] when cnt_base <= level ->
+                terminate_term
+                    range
+                    (Build_context.make_bound level)
+                    {builder with
+                        bounds =
+                            Bounds.use (level - cnt_base) builder.bounds}
 
             | lst ->
                 base_candidates
@@ -254,9 +309,7 @@ let rec build0
         base_candidates range [Term.string str] builder
 
     | Typed (exp, typ) ->
-        build0
-            typ
-            (map_bcs Build_context.push_type builder)
+        build_type typ builder
         >>= fun builder ->
         build0
             exp
@@ -286,10 +339,8 @@ let rec build0
                         (map_filter_bcs
                             Build_context.push_argument
                             (fun builder ->
-                                Not_enough_args (
-                                    (pos1,pos2),
-                                    built_types builder
-                                ))
+                                (pos1, pos2),
+                                Not_enough_args (built_types builder))
                             builder
                          >>= build0 arg)
                 )
@@ -304,11 +355,83 @@ let rec build0
             Build_context.pop
             builder
 
-    | Function (_, _, _) ->
-        assert false (* nyi *)
+    | Function (fargs, res_tp, exp) ->
+        List_fold.fold_left
+            (fun (name, arg_tp) builder->
+                match arg_tp with
+                | None ->
+                    Ok (map_bcs
+                            Build_context.lambda_bound
+                            (push_bound name false builder))
+                | Some arg_tp ->
+                    build_type arg_tp (push_bound name true builder)
+                    >>=
+                    map_bcs2
+                        Build_context.lambda_bound_typed
+                        (fun _ -> assert false)
+            )
+            fargs
+            (map_bcs Build_context.start_binder builder)
+        >>= fun builder ->
+        (   match res_tp with
+            | None ->
+                Ok (map_bcs Build_context.lambda_inner builder)
+            | Some res_tp ->
+                build_type res_tp builder
+                >>=
+                map_bcs2
+                    Build_context.lambda_inner_typed
+                    (fun _ -> assert false)
+        )
+        >>=
+        build0 exp
+        >>= fun _ ->
+        assert false
 
-    | Product (_, _) ->
-        assert false (* nyi *)
+    | Product (fargs, res_tp) ->
+        let nbounds0 = count_bounds builder in
+        (* Build formal arguments. *)
+        List_fold.fold_left
+            (fun (name, arg_tp) builder ->
+                let name_str = Located.value name in
+                match arg_tp with
+                | None ->
+                    Ok (map_bcs
+                            (Build_context.pi_bound name_str)
+                            (push_bound name false builder))
+
+                | Some arg_tp ->
+                    map
+                        (map_bcs (Build_context.pi_bound_typed name_str))
+                        (build_type
+                            arg_tp
+                            (push_bound name true builder)))
+            fargs
+            (map_bcs Build_context.start_binder builder)
+        >>=
+        (* Build result type. *)
+        build_type res_tp
+        >>=
+        (* Check usage of untyped formal arguments and complete type inference.*)
+        fun builder ->
+        let nbounds = count_bounds builder - nbounds0 in
+        Interval_monadic.fold
+            (fun i builder ->
+                let range, used_or_typed =
+                    Bounds.status i builder.bounds
+                in
+                (if used_or_typed then
+                    Ok builder
+                 else
+                    Error (range, Unused_bound))
+                >>=
+                map_bcs2
+                    (Build_context.check_bound i nbounds)
+                    (fun _ -> range, Cannot_infer_bound)
+            )
+            0 nbounds builder
+        >>=
+        terminate_term range Build_context.pi_make
 
 
 
@@ -339,13 +462,14 @@ let build
             builder.bcs
     in
     if lst = [] then
-        Error (Incomplete_type (
+        Error (
             Located.range exp,
-            List.map
-                (fun bc ->
-                    let _, typ, gamma = Build_context.final bc in
-                    typ, gamma)
-                builder.bcs))
+            Incomplete_type (
+                List.map
+                    (fun bc ->
+                        let _, typ, gamma = Build_context.final bc in
+                        typ, gamma)
+                    builder.bcs))
     else
         Ok lst
 
@@ -421,7 +545,7 @@ let build_expression
 
 let%test _ =
     match build_expression "abc" with
-    | Error (No_name _) ->
+    | Error (_, No_name) ->
         true
     | _ ->
         false
@@ -509,7 +633,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(+) 1 2 3" with
-    | Error (Not_enough_args _) ->
+    | Error (_, Not_enough_args _) ->
         true
     | _ ->
         false
@@ -519,7 +643,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "leibniz 'a'" with
-    | Error (Incomplete_type _) ->
+    | Error (_, Incomplete_type _) ->
         true
     | _ ->
         false
@@ -528,10 +652,18 @@ let%test _ =
 
 
 
-(*
+let%test _ =
+    match build_expression "all a b: 'x' = b" with
+    | Error (_, Unused_bound) ->
+        true
+    | _ ->
+        false
+
+
+
 let%test _ =
     match build_expression "all a b: a = b" with
-    | Error (Cannot_infer_bound _) ->
+    | Error (_, Cannot_infer_bound) ->
         true
     | _ ->
         false
@@ -548,6 +680,7 @@ let%test _ =
 
 
 
+(*
 let%test _ =
     match build_expression "Int -> all (A:Any): A" with
     | Ok ([term, typ]) ->

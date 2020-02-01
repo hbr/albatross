@@ -163,10 +163,10 @@ module Interval =
     module Monadic (M:Common_module_types.MONAD) =
       struct
         let fold
-              (a:'a)
               (f: int -> 'a -> 'a M.t)
-              (start:int)
-              (beyond:int)
+              (start: int)
+              (beyond: int)
+              (a: 'a)
             : 'a M.t
           =
           assert (start <= beyond);

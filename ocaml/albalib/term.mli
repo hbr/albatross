@@ -1,3 +1,5 @@
+open Fmlib.Common_module_types
+
 val bruijn_convert: int -> int -> int
 
 
@@ -173,6 +175,12 @@ val to_level: int -> t -> t
 
 val has_variable: int -> t -> bool
 
+
+(** Monadic functions *)
+module Monadic (M: MONAD):
+sig
+    val fold_free: (int -> 'a -> 'a M.t) -> t -> 'a -> 'a M.t
+end
 
 (** Inductive types *)
 module Inductive:

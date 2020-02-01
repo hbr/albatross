@@ -1,25 +1,59 @@
 open Fmlib
+open Common
 
 
 type term_n = Term.t * int
 
 module Local =
 struct
-    type t = {
-        value: term_n option;
-    }
+    type t =
+        | Placeholder of term_n option
+        | Bound of int  (* number of bound variable (counting upwards) *)
 
-    let make: t =
-        {value = None;}
+    let placeholder: t =
+        Placeholder None
+
+    let make_bound (n: int): t =
+        Bound n
+
+    let is_placeholder (loc: t): bool =
+        match loc with
+        | Placeholder _ ->
+            true
+        | Bound _ ->
+            false
+
+    let is_bound (loc: t): bool =
+        not (is_placeholder loc)
+
 
     let has_value (loc: t): bool =
-        Option.has loc.value
+        match loc with
+        | Placeholder (Some _) ->
+            true
+        | _ ->
+            false
 
     let value (loc: t): term_n option =
-        loc.value
+        match loc with
+        | Placeholder value ->
+            value
+        | _ ->
+            None
 
-    let set_value (term_n: term_n) (_: t): t =
-        {value = Some term_n}
+    let set_value (term_n: term_n) (loc: t): t =
+        match loc with
+        | Placeholder _ ->
+            Placeholder (Some term_n)
+        | _ ->
+            assert false (* Illegal call! *)
+
+    let bound_number (loc: t): int =
+        match loc with
+        | Bound n ->
+            n
+        | _ ->
+            assert false (* Illegal call! *)
 end
 
 
@@ -34,8 +68,11 @@ type t = {
     base0: Gamma.t;
     base: Gamma.t;
     locals: Local.t array;
+    bounds: (int * bool) array;          (* level of bound, is typed? *)
     stack: entry list;
+    binders: (int * int) list; (* start bound, start local *)
 }
+
 
 
 let count (bc: t): int =
@@ -44,6 +81,14 @@ let count (bc: t): int =
 
 let count_locals (bc: t): int =
     Array.length bc.locals
+
+
+let count_bounds (bc: t): int =
+    Array.length bc.bounds
+
+
+let count_base (bc: t): int =
+    count bc - count_locals bc
 
 
 
@@ -109,6 +154,7 @@ let local_of_index (idx: int) (bc: t): Local.t =
 
 let is_inferable (idx: int) (bc: t): bool =
     idx < count_locals bc
+    && Local.is_placeholder (local_of_index idx bc)
 
 
 
@@ -132,19 +178,6 @@ let value (idx: int) (bc: t): Term.t option =
 
 
 
-let set_inferable (idx: int) (value: Term.t) (bc: t): t =
-    let cnt    = count bc
-    and nlocs  = count_locals bc
-    and locals = Array.copy bc.locals
-    in
-    let loc_level = Term.bruijn_convert idx nlocs
-    in
-    locals.(loc_level) <-
-        Local.set_value (value, cnt) locals.(loc_level);
-    {bc with locals}
-
-
-
 let expand (term: Term.t) (bc: t): Term.t =
     Term.substitute
         (fun i ->
@@ -158,6 +191,33 @@ let expand (term: Term.t) (bc: t): Term.t =
 
 
 
+let set_placeholder (idx: int) (value: Term.t) (bc: t): t =
+    let cnt    = count bc
+    and nlocs  = count_locals bc
+    and locals = Array.copy bc.locals
+    in
+    let loc_level = Term.bruijn_convert idx nlocs
+    in
+    locals.(loc_level) <-
+        Local.set_value (value, cnt) locals.(loc_level);
+    let bc_new = {bc with locals}
+    in
+    for i = 0 to nlocs - 1 do
+        if i <> loc_level then
+            match Local.value locals.(i) with
+            | None ->
+                ()
+            | Some term_n ->
+                let term =
+                    expand (term_of_term_n term_n bc_new) bc_new
+                in
+                locals.(i) <-
+                    Local.set_value (term, cnt) locals.(i)
+    done;
+    {bc with locals}
+
+
+
 let unify
     (req: Term.typ)     (* required type *)
     (is_super: bool)    (* required type can be supertype of actual type?  *)
@@ -165,20 +225,22 @@ let unify
     (bc: t): t option
     =
     let rec uni req is_super act bc =
-        let set_inferable i term =
+        let set_placeholder i term =
             Option.map
-                (set_inferable i term)
+                (set_placeholder i term)
                 (uni
                     (Gamma.type_of_variable i bc.base)
                     true
                     (Gamma.type_of_term term bc.base)
                     bc)
         in
-        let req = Gamma.key_normal req bc.base
+        let req = Gamma.key_normal req bc.base (* key split !!! *)
         and act = Gamma.key_normal act bc.base
         in
         let open Term
         in
+        (* MISSING: key split, avoid cases which cannot be types in key normal
+        form. *)
         match req, act with
         | Sort req, Sort act
             when (is_super && Sort.is_super req act)
@@ -186,31 +248,40 @@ let unify
             ->
                 Some bc
 
-        | Variable ireq, Variable iact
-            when is_inferable ireq bc && is_inferable iact bc
+        | Variable i, Variable j
+            when is_inferable i bc && is_inferable j bc
             ->
-                assert false (* nyi *)
+            assert (not (has_value i bc));
+            assert (not (has_value j bc));
+            (   match set_placeholder i act with
+                | None ->
+                    set_placeholder j req
+                | Some bc ->
+                    Some bc
+            )
 
         | Variable i, _ when is_inferable i bc ->
             assert (not (has_value i bc));
-            set_inferable i act
+            set_placeholder i act
 
         | _, Variable j when is_inferable j bc ->
-            assert false (* nyi *)
+            assert (not (has_value j bc));
+            set_placeholder j act
 
         | Variable i, Variable j when i = j ->
             Some bc
 
-        | Typed (req, _), Typed (act, _) ->
+        | Typed (req, _), Typed (act, _) -> (* IMPOSSIBLE *)
             uni req is_super act bc
 
         | Appl _, Appl _ ->
             assert false (* nyi *)
 
-        | Pi _, Pi _ ->
+        | Pi _, Pi _ -> (* implicit arguments in the actual type which cannot be
+        unified with the required type *)
             assert false (* nyi *)
 
-        | Lambda _, Lambda _ ->
+        | Lambda _, Lambda _ -> (* IMPOSSIBLE *)
             assert false (* nyi *)
 
         | Value _, _ | _, Value _ ->
@@ -288,27 +359,44 @@ let make_typed (bc: t): Term.t * t =
 
 
 
-
-
-let push_any (uni: int) (bc: t): t =
-    let cnt = count bc
-    in
+let push_placeholder (uni: int) (bc: t): t =
     {bc with
         base =
             Gamma.push_local
-                (placeholder_name cnt)
+                (placeholder_name (count_locals bc))
                 Term.(any_uni uni)
                 bc.base;
 
-        locals = Array.push Local.make bc.locals;
+        locals = Array.push Local.placeholder bc.locals;
+    }
 
-        stack = Required_type (Term.Variable 0, cnt + 1) :: bc.stack
+
+let push_placeholder_for_term (uni: int) (bc: t): t =
+    let bc = push_placeholder uni bc in
+    {bc with
+        stack =
+            Required_type (Term.Variable 0, count bc)
+            :: bc.stack
+    }
+
+
+
+let push_bound (name: string) (typed: bool) (typ: Term.typ) (bc: t): t =
+    {bc with
+        base = Gamma.push_local name typ bc.base;
+
+        locals =
+            Array.push
+                (Local.make_bound (Array.length bc.bounds))
+                bc.locals;
+
+        bounds = Array.push (count bc, typed) bc.bounds;
     }
 
 
 
 let start_function_application: t -> t =
-    push_any 1
+    push_placeholder_for_term 1
 
 
 
@@ -331,7 +419,7 @@ let rec push_implicits (bc: t): t =
                         base =
                             push_local name arg_tp bc.base;
                         locals =
-                            Array.push Local.make bc.locals;
+                            Array.push Local.placeholder bc.locals;
                         stack =
                             Built
                                 (Appl (up1 f,
@@ -389,6 +477,139 @@ let apply_argument (mode: Ast.Expression.argument_type) (bc: t): t =
 
 
 
+let start_binder (bc: t): t =
+    {bc with
+        binders = (count_bounds bc, count_locals bc) :: bc.binders}
+
+
+let make_bound (level: int) (bc: t): Term.t * t =
+    let cnt_base = count_base bc in
+    assert (cnt_base <= level);
+    assert (level < count bc);
+    let bnd_level = level - cnt_base in
+    Gamma.term_at_level
+        (fst bc.bounds.(bnd_level))
+        bc.base,
+    bc
+
+
+
+let check_bound (i: int) (nb: int) (bc: t): (t, unit) result =
+    (* Check if the type of the i-th bound variable of the current binder, which
+    has [nb] bound variables, is completely inferred.*)
+    let module Result = Monad.Result (Unit) in
+    let module Monadic = Term.Monadic ( Monad.Result (Unit) )
+    in
+    match bc.binders with
+    | (_, cnt0) :: _ ->
+        let level,_ = bc.bounds.(count_bounds bc - nb + i) in
+        let cnt   = count bc in
+        let typ   = expand (Gamma.type_at_level level bc.base) bc in
+        Monadic.fold_free
+            (fun idx bc ->
+                if cnt - cnt0 <= idx then
+                    Ok bc
+                else
+                    Error ())
+            typ
+            bc
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
+
+
+let lambda_bound (_: t): t =
+    assert false
+
+let lambda_inner (_: t): t =
+    assert false
+
+let lambda_bound_typed (_: t): (t, Term.typ * t) result =
+    assert false
+
+
+let lambda_inner_typed (_: t): (t, Term.typ * t) result =
+    assert false
+
+
+let pi_bound (name: string) (bc: t): t =
+    push_bound name false Term.(Variable 0) (push_placeholder 1 bc)
+
+
+let pi_bound_typed (name: string) (bc: t): t =
+    match bc.stack with
+    | Built typ_n :: stack ->
+        push_bound
+            name
+            true
+            (term_of_term_n typ_n bc)
+            {bc with stack}
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
+let pi_make (bc: t): Term.typ * t =
+    (* bounds = ... a:A, b:B, ...
+       stack  = RT ...  *)
+    match bc.stack, bc.binders with
+    | Built res_tp_n             :: stack,
+      (cnt_bounds0, cnt_locals0) :: binders
+        ->
+        let nb = Array.length bc.bounds - cnt_bounds0
+        and cnt_locals_new = count_locals bc - cnt_locals0
+        in
+        let into nb tp =
+            (* adapt references to bound variables into a new context. Must not
+            contain any placeholders above [cnt_locals0], only to bound
+            variables 0, ..., i-1 *)
+            Term.substitute
+                (fun idx ->
+                    if cnt_locals_new <= idx then
+                        Variable (idx + nb)
+                    else
+                        (let loc = local_of_index idx bc in
+                         assert (Local.is_bound loc);
+                         let bnd_no = Local.bound_number loc in
+                         assert (bnd_no < nb);
+                         Variable (Term.bruijn_convert bnd_no nb)))
+                tp
+        in
+        let res_tp = expand (term_of_term_n res_tp_n bc) bc
+        in
+        let res =
+            let rec make arg_no res_tp =
+                if arg_no = nb then
+                    into arg_no res_tp
+                else
+                    let res_tp = make (arg_no + 1) res_tp in
+                    let open Term in
+                    let level, typed = bc.bounds.(cnt_bounds0 + arg_no) in
+                    let arg_tp =
+                        into arg_no
+                            (expand (Gamma.type_at_level level bc.base) bc)
+                    and name = Gamma.name_at_level level bc.base
+                    in
+                    let mode =
+                        if name = "_" then
+                            Pi_info.arrow
+                        else if typed then
+                            Pi_info.typed name
+                        else
+                            Pi_info.untyped name
+                    in
+                    Pi (arg_tp, res_tp, mode)
+            in
+            make 0 res_tp
+        in
+        res,
+        {bc with
+            stack;
+            binders}
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 
@@ -407,7 +628,14 @@ let pop (bc: t): Term.t * t =
 
 
 let make (base: Gamma.t): t =
-    push_any 2 {base0 = base; base; locals = [||]; stack = []}
+    push_placeholder_for_term
+        2
+        {base0 = base;
+         base;
+         locals = [||];
+         bounds = [||];
+         stack = [];
+         binders = []}
 
 
 
@@ -438,7 +666,6 @@ let final (bc: t): Term.t * Term.typ * Gamma.t =
                             term)
                     typ)
             in
-            Printf.printf "final\n%s\n\n" (string_of_term typ bc);
             term, typ, bc.base
         )
 

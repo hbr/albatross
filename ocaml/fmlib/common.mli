@@ -115,7 +115,7 @@ sig
   sig
     (** Like ordinary [fold], but uses the monad [M] to sequence the
        operations. *)
-    val fold: 'a -> (int -> 'a -> 'a M.t) -> int -> int -> 'a M.t
+    val fold: (int -> 'a -> 'a M.t) -> int -> int -> 'a -> 'a M.t
   end
 end
 

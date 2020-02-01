@@ -12,16 +12,19 @@ type range = pos * pos
 type required_type
 type candidate_type
 
-type problem =
-  | Overflow of range
-  | No_name of range
-  | Not_enough_args of range * candidate_type list
-  | None_conforms of range * required_type list * candidate_type list
-  | No_candidate  of range * (required_type * candidate_type) list
-  | Incomplete_type of range * candidate_type list
-  | Unused_bound of range
-  | Cannot_infer_bound of range
-  | Not_yet_implemented of range * string
+type problem_description =
+  | Overflow
+  | No_name
+  | Not_enough_args of candidate_type list
+  | None_conforms of required_type list * candidate_type list
+  | No_candidate  of (required_type * candidate_type) list
+  | Incomplete_type of candidate_type list
+  | Unused_bound
+  | Cannot_infer_bound
+  | Not_yet_implemented of string
+
+
+type problem = range * problem_description
 
 
 val build: Ast.Expression.t
