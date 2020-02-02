@@ -398,7 +398,7 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
 
 
 
-let definition_term (c: t) (idx: int): Term.t option =
+let definition_term (idx: int) (c: t): Term.t option =
   match
     (entry (level_of_index idx c) c).definition
   with
@@ -482,7 +482,7 @@ let key_split
   let rec split t args =
     match t with
     | Term.Variable i ->
-       (match definition_term c i with
+       (match definition_term i c with
         | None ->
            t, args
         | Some def ->
