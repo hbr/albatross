@@ -17,19 +17,6 @@ module Make (Gamma: GAMMA) =
 struct
     include Gamma
 
-    let typecheck (_: Term.t) (_: t): Term.typ option =
-        assert false (* nyi *)
-
-
-
-
-
-    let is_valid_context (_: t): bool =
-        assert false (* nyi *)
-
-
-
-
     let type_of_term (t:Term.t) (c:t): Term.typ =
         let rec typ t c =
             let open Term in

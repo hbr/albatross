@@ -623,13 +623,16 @@ let to_level = to_index
         let simple (ind: inductive): t =
             assert (is_simple ind);
             0, ind
+        let _ = simple
     end
 
     let typ (ind: inductive): t =
         Type (0, ind)
+    let _ = typ
 
 
     let constructor (i: int) (ind: inductive): t =
         assert (is_simple ind);
         Constructor (0, i, ind)
+    let _ = constructor
   end

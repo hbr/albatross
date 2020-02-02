@@ -1,14 +1,10 @@
 module type HOLES =
 sig
-    type t
-
-    val count: t -> int
+    include Gamma_algo.GAMMA
 
     val context: t -> Gamma.t
 
     val expand: Term.t -> t -> Term.t
-
-    val type_of_term: Term.t -> t -> Term.typ
 
     val is_hole: int -> t -> bool
 
@@ -16,7 +12,6 @@ sig
 
     val fill_hole: int -> Term.t -> t -> t
 end
-
 
 
 

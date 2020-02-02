@@ -44,30 +44,7 @@ end
 
 module Make (Gamma: GAMMA):
 sig
-    include GAMMA
-
-
-    val is_valid_context: t -> bool
-    (**
-        [is_valid_context gamma]
-
-        Is the context [gamma] wellformed?
-    *)
-
-    val typecheck: Term.t -> t -> Term.typ option
-    (**
-        [typecheck term gamma]
-
-        Verify if [term] is welltyped in the valid context [gamma]. If yes,
-        return its type.
-
-        Precondition:
-        {[is_valid_context gamma]}
-    *)
-
-
-
-    val type_of_term: Term.t -> t -> Term.typ
+    val type_of_term: Term.t -> Gamma.t -> Term.typ
     (**
         [type_of_term term gamma]
 
@@ -77,7 +54,7 @@ sig
     *)
 
 
-    val sort_of_kind: Term.typ -> t -> Term.Sort.t option
+    val sort_of_kind: Term.typ -> Gamma.t -> Term.Sort.t option
     (**
         [sort_of_kind typ gamma]
 
@@ -95,7 +72,7 @@ sig
     *)
 
 
-    val is_kind: Term.typ -> t -> bool
+    val is_kind: Term.typ -> Gamma.t -> bool
     (**
         [is_kind typ gamma]
 
@@ -105,7 +82,7 @@ sig
 
 
 
-    val key_normal: Term.t -> t -> Term.t
+    val key_normal: Term.t -> Gamma.t -> Term.t
     (**
         [keynormal term gamma]
 

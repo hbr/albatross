@@ -3,15 +3,11 @@ open Fmlib
 
 module type HOLES =
 sig
-    type t
-
-    val count: t -> int
+    include Gamma_algo.GAMMA
 
     val context: t -> Gamma.t
 
     val expand: Term.t -> t -> Term.t
-
-    val type_of_term: Term.t -> t -> Term.typ
 
     val is_hole: int -> t -> bool
 
@@ -23,6 +19,8 @@ end
 
 module Make (GH: HOLES) =
 struct
+    module Algo = Gamma_algo.Make (GH)
+
     type t = {
         gh: GH.t;
         gamma: Gamma.t
