@@ -6,7 +6,7 @@ sig
 
     val count: t -> int
     val push_local: string -> Term.typ -> t -> t
-    val type_of_value:    Term.Value.t -> t -> Term.typ
+    val type_of_literal:    Term.Value.t -> t -> Term.typ
     val type_of_variable: int -> t -> Term.typ
     val definition_term: int -> t -> Term.t option
 end
@@ -30,20 +30,6 @@ struct
 
 
 
-
-
-    let type_of_sort (s: Term.Sort.t): Term.typ =
-        (* Function shoult be in [Term]!!! *)
-        let open Term in
-        let open Sort in
-        match s with
-        | Proposition ->
-            Sort (Any 0)
-
-        | Any i ->
-            Sort (Any (i + 1))
-
-
     let type_of_term (t:Term.t) (c:t): Term.typ =
         let rec typ t c =
             let open Term in
@@ -52,7 +38,7 @@ struct
                 type_of_sort s
 
             | Value v ->
-                type_of_value v c
+                type_of_literal v c
 
             | Variable i ->
                 type_of_variable i c

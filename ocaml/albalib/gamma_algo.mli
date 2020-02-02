@@ -17,7 +17,7 @@ sig
 
     *)
 
-    val type_of_value: Term.Value.t -> t -> Term.typ
+    val type_of_literal: Term.Value.t -> t -> Term.typ
 
 
     val type_of_variable: int -> t -> Term.typ

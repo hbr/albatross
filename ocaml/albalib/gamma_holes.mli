@@ -31,6 +31,11 @@ val count_bounds: t -> int
 (** The number of bound variables which have been entered. *)
 
 
+
+val definition_term: int -> t -> Term.t option
+
+
+
 val is_hole: int -> t -> bool
 (** Is the variable a hole? *)
 
@@ -53,7 +58,6 @@ val bound_number: int -> t -> int
 
 
 
-(*
 val level_of_bound: int -> t -> int
 (** [level_of_bound i gh]
 
@@ -61,7 +65,6 @@ val level_of_bound: int -> t -> int
 
     Precondition:
     {[i< count_bounds gh]}
-*)
 *)
 
 
@@ -119,15 +122,23 @@ info] or [Lambda (arg_tp, exp, info]. [is_typed] is used to construct the
 binder. *)
 
 
+val push_local: string -> Term.typ -> t -> t
+(** [push_local name typ gh] is synonym for [push_bound name true gh] *)
 
 
-(*
-val type_of_term: Term.t -> t -> Term.typ
-(** [type_of_term term gh] Compute the type of [term]. The result does not
-contain holes which have been filled.*)
+val type_of_variable: int -> t -> Term.typ
+(**
+    [type_of_variable idx gh]
+
+    Return the expanded type of the variable [idx].
 *)
 
-(*
+
+val type_of_literal: Term.Value.t -> t -> Term.typ
+
+
+
+
 val pi: int -> int -> Term.typ -> t -> Term.typ
 (** [pi cnt0 nbounds result_tp gh]
 
@@ -142,7 +153,6 @@ val pi: int -> int -> Term.typ -> t -> Term.typ
       nbound <= count_bounds gh
       cnt0   <= level_of_bound (nbound - 1)]}
     and [A, B, ..., RT] do not contain unfilled holes starting at level [cnt0].
-
 *)
 
 val lambda: int -> int -> Term.t -> t -> Term.t
@@ -161,6 +171,6 @@ val lambda: int -> int -> Term.t -> t -> Term.t
     and [A, B, ..., exp] do not contain unfilled holes starting at level [cnt0].
 
 *)
-*)
+
 
 val make: Gamma.t -> t

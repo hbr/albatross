@@ -60,6 +60,16 @@ type t = {
 }
 
 
+
+let make (base: Gamma.t): t =
+    {base0 = base;
+     base;
+     locals = [||];
+     bounds = [||]}
+
+
+
+
 let count (gh: t): int =
     Gamma.count gh.base
 
@@ -114,6 +124,13 @@ let bound_number (idx: int) (gh: t): int =
     Local.bound_number (local_of_index idx gh)
 
 
+
+let level_of_bound (i: int) (gh: t): int =
+    assert (i < count_bounds gh);
+    fst gh.bounds.(i)
+
+
+
 let value (idx: int) (gh: t): Term.t option =
     let nlocs = count_locals gh
     in
@@ -150,6 +167,27 @@ let is_expanded (_: Term.t) (_: t): bool =
     assert false
 
 
+
+let type_of_variable (idx: int) (gh: t): Term.typ =
+    let typ = Gamma.type_of_variable idx gh.base
+    in
+    if idx < count_locals gh then
+        expand typ gh
+    else
+        typ
+
+
+
+let type_of_literal (value: Term.Value.t) (gh: t): Term.typ =
+    Gamma.type_of_literal value gh.base
+
+
+
+let definition_term (idx: int) (gh: t): Term.t option =
+    Gamma.definition_term idx gh.base
+
+
+
 let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
     {gh with
         base = Gamma.push_local name typ gh.base;
@@ -161,6 +199,11 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
 
         bounds = Array.push (count gh, typed) gh.bounds;
     }
+
+
+
+let push_local (name: string) (typ: Term.typ) (gh: t): t =
+    push_bound name true typ gh
 
 
 
@@ -201,10 +244,9 @@ let fill_hole (idx: int) (value: Term.t) (gh: t): t =
     {gh with locals}
 
 
+let pi (_: int) (_: int) (_: Term.typ) (_: t): Term.typ =
+    assert false
 
 
-let make (base: Gamma.t): t =
-    {base0 = base;
-     base;
-     locals = [||];
-     bounds = [||]}
+let lambda (_: int) (_: int) (_: Term.t) (_: t): Term.t =
+    assert false

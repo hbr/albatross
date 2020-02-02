@@ -104,6 +104,13 @@ module Sort =
 
     let is_super (s1:t) (s2:t): bool =
       is_sub s2 s1
+
+    let type_of (s: t): t =
+        match s with
+        | Proposition ->
+            Any 0
+        | Any i ->
+            Any (i + 1)
   end
 
 
@@ -323,6 +330,9 @@ let product_in (fargs: formal_argument list) (result_tp: t): t =
         fargs
         result_tp
 
+
+let type_of_sort (s: Sort.t): typ =
+    Sort (Sort.type_of s)
 
 
 

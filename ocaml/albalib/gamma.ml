@@ -311,7 +311,7 @@ let standard (): t =
 
 
 
-let type_of_value (v: Term.Value.t) (c: t): Term.typ =
+let type_of_literal (v: Term.Value.t) (c: t): Term.typ =
   let open Term in
   match v with
   | Value.Int _ ->
@@ -327,15 +327,6 @@ let type_of_value (v: Term.Value.t) (c: t): Term.typ =
       assert false (* Illegal call! *)
 
 
-let type_of_sort (s: Term.Sort.t): Term.typ =
-  let open Term in
-  let open Sort in
-  match s with
-  | Proposition ->
-      Sort (Any 0)
-
-  | Any i ->
-      Sort (Any (i + 1))
 
 
 let type_of_variable (i: int) (c: t): Term.typ =
@@ -350,7 +341,7 @@ let type_of_term (t:Term.t) (c:t): Term.typ =
         type_of_sort s
 
     | Value v ->
-        type_of_value v c
+        type_of_literal v c
 
     | Variable i ->
         type_of_variable i c
@@ -547,7 +538,7 @@ let rec typecheck (term: Term.t) (c: t): Term.typ option =
       Some (type_of_sort s)
 
   | Value v ->
-      Some (type_of_value v c)
+      Some (type_of_literal v c)
 
   | Variable i ->
       Some (type_of_variable i c)

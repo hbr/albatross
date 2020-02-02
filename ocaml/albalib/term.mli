@@ -33,6 +33,8 @@ sig
 
   (** [is_super s1 s2] Is [s1] a supertype of [s2] (or equal)? *)
   val is_super: t -> t -> bool
+
+  val type_of: t -> t
 end
 
 
@@ -127,7 +129,7 @@ val string: string -> t
 val number_values: string -> t list
 
 
-
+val type_of_sort: Sort.t -> typ
 
 
 (** [up_from delta start t] *)

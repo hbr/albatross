@@ -2,6 +2,8 @@ open Fmlib
 open Common
 
 
+module GAlgo = Gamma_algo.Make (Gamma_holes)
+
 type term_n = Term.t * int
 
 module Local =
