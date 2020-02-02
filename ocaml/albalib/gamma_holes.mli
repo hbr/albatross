@@ -39,6 +39,21 @@ val is_bound: int -> t -> bool
 (** Is the variable a bound variable? *)
 
 
+val bound_number: int -> t -> int
+(**
+    [bound_number idx gh]
+
+    Return the number of the bound variable at [idx].
+
+    Precondition:
+    {[is_bound idx gh]}
+*)
+
+
+
+
+
+(*
 val level_of_bound: int -> t -> int
 (** [level_of_bound i gh]
 
@@ -47,7 +62,7 @@ val level_of_bound: int -> t -> int
     Precondition:
     {[i< count_bounds gh]}
 *)
-
+*)
 
 
 val has_value: int -> t -> bool
@@ -106,13 +121,13 @@ binder. *)
 
 
 
-
+(*
 val type_of_term: Term.t -> t -> Term.typ
 (** [type_of_term term gh] Compute the type of [term]. The result does not
 contain holes which have been filled.*)
+*)
 
-
-
+(*
 val pi: int -> int -> Term.typ -> t -> Term.typ
 (** [pi cnt0 nbounds result_tp gh]
 
@@ -146,6 +161,6 @@ val lambda: int -> int -> Term.t -> t -> Term.t
     and [A, B, ..., exp] do not contain unfilled holes starting at level [cnt0].
 
 *)
-
+*)
 
 val make: Gamma.t -> t
