@@ -18,14 +18,24 @@ end
 
 module Make (H: HOLES):
 sig
-   val unify: Term.typ -> Term.typ -> bool -> H.t -> H.t option
-   (**
-        [unify act req is_super gh]
+    type t
 
-        Unify the type [act] with the type [req] using [gh] as the context with
-        holes.
+    val make: H.t -> t
 
-        [is_super] indicates if the typ [req] can be regarded as a supertype of
-        [act].
-   *)
+    val context: t -> H.t
+
+    val push: Term.typ -> t -> t
+
+    val unify0: Term.typ -> Term.typ -> bool -> t -> t option
+
+    val unify: Term.typ -> Term.typ -> bool -> H.t -> H.t option
+    (**
+         [unify act req is_super gh]
+
+         Unify the type [act] with the type [req] using [gh] as the context with
+         holes.
+
+         [is_super] indicates if the typ [req] can be regarded as a supertype of
+         [act].
+    *)
 end
