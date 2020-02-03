@@ -195,11 +195,6 @@ let term_of_term_n ((term,n): Term.t_n) (gh: t): Term.t =
 
 
 
-let is_expanded (_: Term.t) (_: t): bool =
-    assert false (* nyi *)
-
-
-
 
 let type_at_level (level: int) (gh: t): Term.typ =
     let typ = Gamma.type_at_level level gh.base in

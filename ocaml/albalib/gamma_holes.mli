@@ -100,9 +100,6 @@ val expand: Term.t -> t -> Term.t
 available. *)
 
 
-val is_expanded: Term.t -> t -> bool
-(** [is_expanded term gh] Does [term] not have any holes which have already got
-a value?  *)
 
 
 val term_of_term_n: Term.t_n -> t -> Term.t
