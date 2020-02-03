@@ -35,6 +35,8 @@ sig
   val is_super: t -> t -> bool
 
   val type_of: t -> t
+
+  val pi_sort: t -> t -> t
 end
 
 
@@ -97,6 +99,8 @@ and formal_argument = string * typ
 and inductive
 
 
+type t_n   = t * int
+type typ_n = typ * int
 
 
 val proposition: t
@@ -130,6 +134,11 @@ val number_values: string -> t list
 
 
 val type_of_sort: Sort.t -> typ
+
+
+val is_sort: typ -> bool
+
+val pi_sort: typ -> typ -> typ
 
 
 (** [up_from delta start t] *)

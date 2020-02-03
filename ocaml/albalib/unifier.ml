@@ -38,7 +38,11 @@ struct
         Term.down (delta uc) typ
 
     let is_hole (idx: int) (uc: t): bool =
-        GH.is_hole (idx - delta uc) uc.gh
+        let nb = delta uc in
+        if idx < nb then
+            false
+        else
+            GH.is_hole (idx - delta uc) uc.gh
 
     let expand (term: Term.t) (uc: t): Term.t =
         let del = delta uc

@@ -111,6 +111,15 @@ module Sort =
             Any 0
         | Any i ->
             Any (i + 1)
+
+    let pi_sort (arg: t) (res: t): t =
+        match arg, res with
+        | _, Proposition ->
+            Proposition
+        | Proposition, Any j ->
+            Any j
+        | Any i, Any j ->
+            Any (max i j)
   end
 
 
@@ -230,6 +239,8 @@ and inductive = {
     types: (formal_argument * formal_argument array) array}
 
 
+type t_n   = t * int
+type typ_n = typ * int
 
 let proposition: t =
     Sort Sort.Proposition
@@ -334,6 +345,20 @@ let product_in (fargs: formal_argument list) (result_tp: t): t =
 let type_of_sort (s: Sort.t): typ =
     Sort (Sort.type_of s)
 
+
+let is_sort (typ: typ): bool =
+    match typ with
+    | Sort _ ->
+        true
+    | _ ->
+        false
+
+let pi_sort (arg: typ) (res: typ): typ =
+    match arg, res with
+    | Sort argsort, Sort ressort ->
+        Sort (Sort.pi_sort argsort ressort)
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 let up_from (delta:int) (start:int) (t:t): t =

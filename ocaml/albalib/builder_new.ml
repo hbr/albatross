@@ -15,7 +15,6 @@ module Located =
   Character_parser.Located
 
 
-
 type typ = Term.typ * Gamma.t
 
 type required_type = typ

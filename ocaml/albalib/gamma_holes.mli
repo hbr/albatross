@@ -58,14 +58,17 @@ val bound_number: int -> t -> int
 
 
 
-val level_of_bound: int -> t -> int
-(** [level_of_bound i gh]
+val variable_of_bound: int -> t -> Term.t
+(**
+    [variable_of_bound i gh]
 
-    Compute the level of the [i]th bound variable.
+    Compute the variable corresponding to the [i]th bound variable.
 
     Precondition:
     {[i< count_bounds gh]}
 *)
+
+
 
 
 val has_value: int -> t -> bool
@@ -89,6 +92,9 @@ val unfilled_holes: int -> Term.t -> t -> int list
 *)
 
 
+
+
+
 val expand: Term.t -> t -> Term.t
 (** [expand term gh] Replace all holes in [term] with its values, if
 available. *)
@@ -97,6 +103,14 @@ available. *)
 val is_expanded: Term.t -> t -> bool
 (** [is_expanded term gh] Does [term] not have any holes which have already got
 a value?  *)
+
+
+val term_of_term_n: Term.t_n -> t -> Term.t
+(**
+    [term_of_term_n tn gh]
+
+    Lift the term [tn] into the context and expand it.
+*)
 
 
 
@@ -140,34 +154,34 @@ val type_of_literal: Term.Value.t -> t -> Term.typ
 
 
 val pi: int -> int -> Term.typ -> t -> Term.typ
-(** [pi cnt0 nbounds result_tp gh]
+(** [pi cnt0 bnd0 result_tp gh]
 
-    Compute a product type with [result_tp] using the [nbounds] most recently
-    introduced bound variables.
+    Compute a product type with [result_tp] using the bound variables starting
+    from [bnd0].
 
     {[all (a: A) (b: B) ... : RT]}
 
     Preconditions:
     {[cnt0   <= count gh
-      0      <  nbound
-      nbound <= count_bounds gh
-      cnt0   <= level_of_bound (nbound - 1)]}
+      0      <=  bnd0
+      bnd0   <  count_bounds gh
+      cnt0   <= level_of_bound (bnd0)]}
     and [A, B, ..., RT] do not contain unfilled holes starting at level [cnt0].
 *)
 
 val lambda: int -> int -> Term.t -> t -> Term.t
-(** [lambda cnt0 nbounds exp gh]
+(** [lambda cnt0 bnd0 exp gh]
 
-    Compute a function term with the inner expression [exp] using the [nbounds]
-    most recently introduced bound variables.
+    Compute a function term with the inner expression [exp] using the bound
+    variables starting from [bnd0].
 
     {[\ (a: A) (b: B) ... := exp]}
 
     Preconditions:
     {[cnt0   <= count gh
-      0      <  nbound
-      nbound <= count_bounds gh
-      cnt0   <= level_of_bound (nbound - 1)]}
+      0      <=  bnd0
+      bnd0   <  count_bounds gh
+      cnt0   <= level_of_bound (bnd0)]}
     and [A, B, ..., exp] do not contain unfilled holes starting at level [cnt0].
 
 *)

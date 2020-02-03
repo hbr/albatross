@@ -5,9 +5,9 @@ val is_valid_context: Gamma.t -> bool
     Is the context [gamma] wellformed?
 *)
 
-val typecheck: Term.t -> Gamma.t -> Term.typ option
+val check: Term.t -> Gamma.t -> Term.typ option
 (**
-    [typecheck term gamma]
+    [check term gamma]
 
     Verify if [term] is welltyped in the valid context [gamma]. If yes,
     return its type.
