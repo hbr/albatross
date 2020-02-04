@@ -112,58 +112,6 @@ let unify (act: Term.typ) (req: Term.typ) (is_super: bool) (bc: t): t option =
         (Uni.unify act req is_super bc.gh)
 
 
-let candidate (term: Term.t) (bc: t): t option =
-    let act_typ = type_of_term term bc
-    and req_typ = required_type bc
-    in
-    Option.map
-        (fun bc -> set_term term bc)
-        (unify act_typ req_typ true bc)
-
-
-
-
-let base_candidate (term: Term.t) (bc: t): t option =
-    let term =
-        Term.up (count_locals bc) term
-    in
-    candidate term bc
-
-
-
-
-let push_type (bc: t): t =
-    (* Expecting a type as the next expression. *)
-    {bc with
-        stack = Required_type (Term.any_uni 1,0) :: bc.stack}
-
-
-
-
-let push_typed (bc: t): t =
-    (* Expecting a term whose required type is the last built expression. *)
-    {bc with
-        stack =
-            match bc.stack with
-            | Built typ_n :: _ ->
-                Required_type typ_n :: bc.stack
-            | _ ->
-                assert false (* Illegal call! *)
-    }
-
-
-
-
-let make_typed (bc: t): Term.t * t =
-    match bc.stack with
-    | Built exp_n :: Built typ_n :: stack ->
-        Term.Typed (
-            term_of_term_n exp_n bc,
-            term_of_term_n typ_n bc),
-        {bc with stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
 
 
 let push_hole (uni: int) (bc: t): t =
@@ -189,7 +137,85 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (bc: t): t =
 
 
 
-let start_function_application: t -> t =
+
+let candidate (term: Term.t) (bc: t): t option =
+    let act_typ = type_of_term term bc
+    and req_typ = required_type bc
+    in
+    Option.map
+        (fun bc -> set_term term bc)
+        (unify act_typ req_typ true bc)
+
+
+
+
+let receive_candidate (term: Term.t) (bc: t): (t, Term.typ * t) result =
+    let act_typ = type_of_term term bc
+    and req_typ = required_type bc
+    in
+    match unify act_typ req_typ true bc with
+    | None ->
+        Error (req_typ, bc)
+    | Some bc ->
+        Ok (set_term term bc)
+
+
+
+
+let receive_base_candidate (term: Term.t) (bc: t): t option =
+    match
+        receive_candidate
+            (Term.up (count_locals bc) term)
+            bc
+    with
+    | Ok bc ->
+        Some bc
+    | _ ->
+        None
+
+
+
+
+
+let expect_type (bc: t): t =
+    (* Expecting a type as the next expression. *)
+    {bc with
+        stack = Required_type (Term.any_uni 1,0) :: bc.stack}
+
+
+
+
+let expect_typed (bc: t): t =
+    (* Expecting a term whose required type is the last built expression. *)
+    {bc with
+        stack =
+            match bc.stack with
+            | Built typ_n :: _ ->
+                Required_type typ_n :: bc.stack
+            | _ ->
+                assert false (* Illegal call! *)
+    }
+
+
+let expect_untyped (bc: t): t =
+    push_hole_for_term 1 bc
+
+
+
+
+let make_typed (bc: t): Term.t * t =
+    match bc.stack with
+    | Built exp_n :: Built typ_n :: stack ->
+        Term.Typed (
+            term_of_term_n exp_n bc,
+            term_of_term_n typ_n bc),
+        {bc with stack}
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
+let expect_function (_: int):  t -> t =
     push_hole_for_term 1
 
 
@@ -305,23 +331,29 @@ let check_bound (i: int) (_: int) (bc: t): (t, unit) result =
 
 
 
-let lambda_bound (_: t): t =
-    assert false
-
-let lambda_inner (_: t): t =
-    assert false
-
-let lambda_bound_typed (_: t): (t, Term.typ * t) result =
-    assert false
+let lambda_bound (name: string) (bc: t): t =
+    push_hole 1 bc
+    |> push_bound name false Term.(Variable 0)
 
 
-let lambda_inner_typed (_: t): (t, Term.typ * t) result =
+let lambda_bound_typed (_: string) (_: t): (t, Term.typ * t) result =
     assert false
+
+
+let lambda_inner_typed (bc: t): t =
+    match bc.stack with
+    | Built exp :: Built typ :: stack ->
+        {bc with stack =
+            Built
+             (Term.Typed (term_of_term_n exp bc, term_of_term_n typ bc),
+              count bc)
+            :: stack}
+    | _ ->
+        assert false (* Illegal call! *)
 
 
 let pi_bound (name: string) (bc: t): t =
-    push_hole 1 bc
-    |> push_bound name false Term.(Variable 0)
+    lambda_bound name bc
 
 
 let pi_bound_typed (name: string) (bc: t): t =

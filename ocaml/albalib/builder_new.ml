@@ -49,11 +49,11 @@ sig
     val empty: t
     val push: range -> bool -> t -> t
     val use:  int -> t -> t
-    val status: int -> t -> range * bool
+    val status: int -> t -> range * bool * bool
 end
 =
 struct
-    type t = (range * bool) array
+    type t = (range * bool * bool) array (* used?, typed? *)
 
     let count bnds =
         Array.length bnds
@@ -61,15 +61,15 @@ struct
     let empty = [||]
 
     let push range typed bnds =
-        Array.push (range, typed) bnds
+        Array.push (range, false, typed) bnds
 
     let use i bnds =
-        let range, flag = bnds.(i) in
-        if flag then
+        let range, used, typed = bnds.(i) in
+        if used then
             bnds
         else
             (let bnds_new = Array.copy bnds in
-             bnds_new.(i) <- range, true;
+             bnds_new.(i) <- range, true, typed;
              bnds_new)
 
     let status i bnds =
@@ -154,7 +154,7 @@ let base_candidates
         List.(
             builder.bcs >>= fun bc ->
             candidates >>= fun term ->
-            Option.to_list (Build_context.base_candidate term bc)
+            Option.to_list (Build_context.receive_base_candidate term bc)
         )
     in
     if bcs = [] then
@@ -204,6 +204,8 @@ let map_bcs2
         Ok {builder with bcs}
     else
         Error (g errors)
+
+
 
 
 
@@ -259,7 +261,7 @@ let rec build0
     let build_type typ builder =
         build0
             typ
-            (map_bcs Build_context.push_type builder)
+            (map_bcs Build_context.expect_type builder)
     in
     let open Expression in
     let open Result in
@@ -312,16 +314,37 @@ let rec build0
         >>= fun builder ->
         build0
             exp
-            (map_bcs Build_context.push_typed builder)
+            (map_bcs Build_context.expect_typed builder)
         >>= terminate_term range Build_context.make_typed
 
     | Application (f, args ) ->
+        assert (args <> []);
         let pos1, pos2 = Located.range f
         in
+        (*
+        let build_arg arg mode b =
+            assert false
+        in
+        let rec build args b ->
+            match args with
+            [] ->
+                build0 f b
+            (arg,mode) :: args ->
+                map
+                    (map_bcs (Build_context.apply_argument mode))
+                    (build args b (expect_function b)
+                     >>= build0 arg)
+        in
+        build arg builder*)
+
+
         (* Build the function term. *)
         build0
             f
-            (map_bcs Build_context.start_function_application builder)
+            (map_bcs
+                (Build_context.expect_function
+                    (List.length args))
+                builder)
         >>=
         (* Build all arguments and apply the function term incrementally to the
         arguments. *)
@@ -355,35 +378,59 @@ let rec build0
             builder
 
     | Function (fargs, res_tp, exp) ->
+        let nbounds0 = count_bounds builder in
+        (* Build formal arguments. *)
         List_fold.fold_left
             (fun (name, arg_tp) builder->
+                let name_str = Located.value name in
                 match arg_tp with
                 | None ->
                     Ok (map_bcs
-                            Build_context.lambda_bound
+                            (Build_context.lambda_bound name_str)
                             (push_bound name false builder))
                 | Some arg_tp ->
                     build_type arg_tp (push_bound name true builder)
                     >>=
                     map_bcs2
-                        Build_context.lambda_bound_typed
+                        (Build_context.lambda_bound_typed name_str)
                         (fun _ -> assert false)
             )
             fargs
             (map_bcs Build_context.start_binder builder)
+        (* Build inner expression. *)
         >>= fun builder ->
-        (   match res_tp with
+        (
+            match res_tp with
             | None ->
-                Ok (map_bcs Build_context.lambda_inner builder)
+                build0
+                    exp
+                    (map_bcs Build_context.expect_untyped builder)
             | Some res_tp ->
-                build_type res_tp builder
-                >>=
-                map_bcs2
-                    Build_context.lambda_inner_typed
-                    (fun _ -> assert false)
+                map
+                    (map_bcs Build_context.lambda_inner_typed)
+                    (build_type res_tp builder
+                    >>= fun builder ->
+                    build0
+                        exp
+                        (map_bcs Build_context.expect_typed builder))
         )
-        >>=
-        build0 exp
+        (** Check inference of all bound variables. *)
+        >>= fun builder ->
+        let nbounds = count_bounds builder - nbounds0 in
+        Interval_monadic.fold
+            (fun i builder ->
+                let range, _, typed =
+                    Bounds.status i builder.bounds
+                in
+                if typed then
+                    Ok builder
+                else
+                    map_bcs2
+                        (Build_context.check_bound i nbounds)
+                        (fun _ -> range, Cannot_infer_bound)
+                        builder
+            )
+            0 nbounds builder
         >>= fun _ ->
         assert false
 
@@ -416,10 +463,10 @@ let rec build0
         let nbounds = count_bounds builder - nbounds0 in
         Interval_monadic.fold
             (fun i builder ->
-                let range, used_or_typed =
+                let range, used, typed =
                     Bounds.status i builder.bounds
                 in
-                (if used_or_typed then
+                (if used || typed then
                     Ok builder
                  else
                     Error (range, Unused_bound))
@@ -709,3 +756,23 @@ let%test _ =
         = "Int -> (all (A: Any): A): Any(1)"
     | _ ->
         false
+
+
+
+let%test _ =
+    match build_expression "\\ x := x" with
+    | Error (_, Cannot_infer_bound) ->
+        true
+    | _ ->
+        false
+
+
+(*
+let%test _ =
+    match build_expression "\\ x := x + \"world\"" with
+    | Ok ([term, typ]) ->
+        string_of_term_type term typ
+        =
+        "\ x := x + \"world\": all (x: String): String"
+    | _ ->
+        false*)
