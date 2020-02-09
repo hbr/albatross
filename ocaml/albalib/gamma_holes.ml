@@ -151,28 +151,33 @@ let has_value (idx: int) (gh: t): bool =
 
 
 
-let unfilled_holes (cnt0: int) (term: Term.t) (gh: t): int list =
+let collect_holes (cnt0: int) (filled: bool) (term: Term.t) (gh: t): Int_set.t =
     let cnt = count gh
     and nlocs = count_locals gh
     in
     assert (cnt0 <= cnt);
-    let set =
-        Term.fold_free
-            (fun idx set ->
-                if nlocs <= idx then
-                    set
-                else
-                    let loc = local_of_index idx gh in
-                    if Local.is_hole loc && Local.value loc = None then
-                        Int_set.add
-                            (Gamma.level_of_index idx gh.base)
-                            set
-                    else
-                        set)
-            term
-            Int_set.empty
+    let nmin = min nlocs (cnt - cnt0)
     in
-    Int_set.elements set
+    Term.fold_free
+        (fun idx set ->
+            if nmin <= idx then
+                set
+            else
+                let loc = local_of_index idx gh in
+                if Local.is_hole loc && ((Local.value loc <> None) = filled) then
+                    Int_set.add
+                        (Gamma.level_of_index idx gh.base)
+                        set
+                else
+                    set)
+        term
+        Int_set.empty
+
+
+
+
+let unfilled_holes (cnt0: int) (term: Term.t) (gh: t): Int_set.t =
+    collect_holes cnt0 false term gh
 
 
 
@@ -186,6 +191,11 @@ let expand (term: Term.t) (gh: t): Term.t =
             | Some term ->
                 term)
         term
+
+
+let is_expanded (term: Term.t) (gh: t): bool =
+    Int_set.is_empty
+        (collect_holes 0 true term gh)
 
 
 

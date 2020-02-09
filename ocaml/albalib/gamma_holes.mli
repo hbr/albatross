@@ -7,6 +7,9 @@
 
 *)
 
+open Fmlib
+open Common
+
 
 type t
 
@@ -79,12 +82,12 @@ val value: int -> t -> Term.t option
 (** The optional value of the hole. *)
 
 
-val unfilled_holes: int -> Term.t -> t -> int list
+val unfilled_holes: int -> Term.t -> t -> Int_set.t
 (** [unfilled_holes cnt0 term gh]
 
     List of unfilled holes in [term] starting at level [cnt0].
 
-    The returned list contains the De Bruijn indices of the unfilled holes.
+    The returned list contains the De Bruijn levels of the unfilled holes.
 
     Precondition:
     {[cnt0 <= count gh]}
@@ -99,6 +102,14 @@ val expand: Term.t -> t -> Term.t
 (** [expand term gh] Replace all holes in [term] with its values, if
 available. *)
 
+
+
+
+val is_expanded: Term.t -> t -> bool
+(**
+    [is_expanded term gh] Is the term [term] expanded i.e. does it not contain
+    any filled holes?
+*)
 
 
 

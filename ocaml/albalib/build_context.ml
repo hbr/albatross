@@ -320,7 +320,7 @@ let check_bound (i: int) (_: int) (bc: t): (t, unit) result =
                 (Gamma_holes.variable_of_bound (bnd0 + i) bc.gh)
                 bc
         in
-        if Gamma_holes.unfilled_holes cnt0 typ bc.gh = [] then
+        if Int_set.is_empty (Gamma_holes.unfilled_holes cnt0 typ bc.gh) then
             Ok bc
         else
             Error ()
