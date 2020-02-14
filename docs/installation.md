@@ -2,7 +2,7 @@
 
 Prerequisites:
 
-You need to have the Ocaml compile and the Ocaml package manager `opam`
+You need to have the Ocaml compiler and the Ocaml package manager `opam`
 installed.
 
 - `opam install alba`
@@ -20,7 +20,7 @@ the basic library.
 - `alba compile -work-dir alba.base`
 
 
-After the installation you can go the source directory of your Albatross
+After the installation you can go to the source directory of your Albatross
 sources and issue
 
     alba init                    -- to initialize the directory
