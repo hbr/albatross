@@ -68,7 +68,7 @@ val variable_of_bound: int -> t -> Term.t
     Compute the variable corresponding to the [i]th bound variable.
 
     Precondition:
-    {[i< count_bounds gh]}
+    {[i < count_bounds gh]}
 *)
 
 
