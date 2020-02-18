@@ -7,11 +7,13 @@ type term_n = Term.t * int
 module Local =
 struct
     type t =
-        | Hole of term_n option
+        | Hole of
+            term_n option
+            * Int_set.t (* Users *)
         | Bound of int  (* number of bound variable (counting upwards) *)
 
     let hole: t =
-        Hole None
+        Hole (None, Int_set.empty)
 
     let make_bound (n: int): t =
         Bound n
@@ -23,23 +25,48 @@ struct
         | Bound _ ->
             false
 
+    let is_unfilled (loc: t): bool =
+        match loc with
+        | Hole (None, _ ) ->
+            true
+        | _ ->
+            false
+
     let is_bound (loc: t): bool =
         not (is_hole loc)
 
 
     let value (loc: t): term_n option =
         match loc with
-        | Hole value ->
+        | Hole (value, _) ->
             value
         | _ ->
             None
 
-    let set_value (term_n: term_n) (loc: t): t =
+    let users (loc: t): Int_set.t =
         match loc with
-        | Hole _ ->
-            Hole (Some term_n)
+        | Hole (_, users) ->
+            users
         | _ ->
             assert false (* Illegal call! *)
+
+
+    let add_users (user: int) (users: Int_set.t) (loc: t): t =
+        match loc with
+        | Hole (value, users0) ->
+            let set = Int_set.add user (Int_set.union users0 users) in
+            Hole (value, set)
+        | _ ->
+            assert false (* Illegal call! *)
+
+
+    let set_value (term_n: term_n) (loc: t): t =
+        match loc with
+        | Hole (_, users) ->
+            Hole (Some term_n, users)
+        | _ ->
+            assert false (* Illegal call! *)
+
 
     let bound_number (loc: t): int =
         match loc with
@@ -99,6 +126,10 @@ let index_of_level (level: int) (gh: t): int =
     Gamma.index_of_level level gh.base
 
 
+let level_of_index (idx: int) (gh: t): int =
+    Gamma.level_of_index idx gh.base
+
+
 let local_of_index (idx: int) (gh: t): Local.t =
     let nlocs = count_locals gh
     in
@@ -109,6 +140,15 @@ let local_of_index (idx: int) (gh: t): Local.t =
 let is_hole (idx: int) (gh: t): bool =
     idx < count_locals gh
     && Local.is_hole (local_of_index idx gh)
+
+
+let is_unfilled (idx: int) (gh: t): bool =
+    let level = level_of_index idx gh
+    and cnt0 = count_base gh in
+    cnt0 <= level
+    &&
+    let iloc = level - cnt0 in
+    Local.is_unfilled gh.locals.(iloc)
 
 
 
@@ -265,30 +305,44 @@ let push_hole (typ: Term.typ) (gh: t): t =
 
 
 let fill_hole (idx: int) (value: Term.t) (gh: t): t =
+    assert (is_unfilled idx gh);
+    assert (is_expanded value gh);
     let cnt    = count gh
     and nlocs  = count_locals gh
     and locals = Array.copy gh.locals
     in
-    let loc_level = Term.bruijn_convert idx nlocs
+    let cnt0 = cnt - nlocs
+    and loc_level = Term.bruijn_convert idx nlocs
     in
-    locals.(loc_level) <-
-        Local.set_value (value, cnt) locals.(loc_level);
     let gh_new = {gh with locals}
     in
-    for i = 0 to nlocs - 1 do
-        if i <> loc_level then
-            match Local.value locals.(i) with
-            | None ->
-                ()
-            | Some term_n ->
-                let term =
-                    expand (term_of_term_n term_n gh_new) gh_new
-                in
-                locals.(i) <-
-                    Local.set_value (term, cnt) locals.(i)
-    done;
-    {gh with locals}
+    (* fill the hole *)
+    locals.(loc_level) <-
+        Local.set_value (value, cnt) locals.(loc_level);
 
+    (* [idx] and users of [idx] become also users of all unfilled holes in
+    [value] *)
+    let users = Local.users locals.(loc_level) in
+    Int_set.iter
+        (fun unfilled ->
+            let iloc = unfilled - cnt0 in
+            locals.(iloc) <-
+                Local.add_users (cnt0 + loc_level) users locals.(iloc))
+        (unfilled_holes cnt0 value gh);
+
+    (* Expand all users of [idx] *)
+    Int_set.iter
+        (fun user ->
+            let i = user - cnt0 in
+            match Local.value locals.(i) with
+            | Some term_n ->
+                let term = expand (term_of_term_n term_n gh_new) gh_new in
+                locals.(i) <- Local.set_value (term, cnt) locals.(i)
+            | _ ->
+                assert false (* Illegal, all users must have a substitution,
+                otherwise they would not be users. *))
+        users;
+    gh_new
 
 
 
