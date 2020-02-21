@@ -148,6 +148,10 @@ val push_local: string -> Term.typ -> t -> t
 (** [push_local name typ gh] is synonym for [push_bound name true gh] *)
 
 
+
+val type_at_level: int -> t -> Term.typ
+
+
 val type_of_variable: int -> t -> Term.typ
 (**
     [type_of_variable idx gh]
