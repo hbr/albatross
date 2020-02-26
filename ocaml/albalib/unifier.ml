@@ -103,27 +103,28 @@ struct
         in
         match act, req with
         | Variable i, Variable j ->
-            let iph = is_hole i uc
-            and jph = is_hole j uc
-            in
             if i = j then
                 Some uc
             else if i < nb || j < nb then
                 None
-            else if not (iph || jph) then
-                None
-            else if iph && jph then
-                match set j act with
-                | None ->
-                    set i req
-                | res ->
-                    res
-            else if iph then
-                set i req
-            else if jph then
-                set j act
             else
-                assert false (* cannot happen, illegal path *)
+                let iph = is_hole i uc
+                and jph = is_hole j uc
+                in
+                if not (iph || jph) then
+                    None
+                else if iph && jph then
+                    match set j act with
+                    | None ->
+                        set i req
+                    | res ->
+                        res
+                else if iph then
+                    set i req
+                else if jph then
+                    set j act
+                else
+                    assert false (* cannot happen, illegal path *)
 
         | Variable i, _ when is_hole i uc ->
             set i req
@@ -137,6 +138,12 @@ struct
             ->
                 Some uc
 
+        | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
+            let open Option in
+            unify0 f_act f_req false uc
+            >>=
+            unify0 arg_act arg_req false
+
         | Pi (act_arg, act_rt, _), Pi (req_arg, req_rt, _) ->
             Option.(
                 unify0 act_arg req_arg false uc
@@ -149,6 +156,8 @@ struct
 
         | _, _ ->
             None
+
+
 
 
     let unify

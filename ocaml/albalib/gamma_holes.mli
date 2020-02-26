@@ -34,6 +34,13 @@ val count_bounds: t -> int
 (** The number of bound variables which have been entered. *)
 
 
+val count_locals: t -> int
+(** The number of holes and bound variable which have been entered. *)
+
+
+val index_of_level: int -> t -> int
+
+
 
 val definition_term: int -> t -> Term.t option
 
