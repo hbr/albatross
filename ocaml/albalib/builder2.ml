@@ -224,6 +224,11 @@ let rec build0
                 (Build_context.Product.end_ (List.length fargs))
                 (fun _ -> assert false)
 
+
+    | Application (_, _) ->
+        assert false
+
+
     | _ ->
         assert false
 
@@ -373,3 +378,24 @@ let%test _ =
         = "('a': Character: Any): Character: Any"
     | _ ->
         false
+
+
+let%test _ =
+    let tp_str = "Int -> (all (B: Any): (Int -> B) -> B)"
+    in
+    match build_expression ("(|>): " ^ tp_str)  with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "((|>): " ^ tp_str ^ "): "  ^ tp_str
+    | _ ->
+        false
+
+(*
+let%test _ =
+    match build_expression "all a b: a = b" with
+    | Error (_, Cannot_infer_bound) ->
+        true
+    | _ ->
+        false
+*)

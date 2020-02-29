@@ -64,6 +64,15 @@ let type_of_term (term: Term.t) (bc: t): Term.typ =
 
 
 
+let key_normal (term: Term.t) (bc: t): Term.t =
+    Algo.key_normal term bc.gh
+
+
+let is_kind (typ: Term.typ) (bc: t): bool =
+    Algo.is_kind typ bc.gh
+
+
+
 let required_type (bc: t): Term.typ =
     type_at_level bc.sp bc
 
@@ -82,6 +91,28 @@ let top_term (bc: t): Term.t =
 
 
 
+let add_one_implicit
+    (term: Term.t) (typ: Term.typ) (bc: t)
+    : (Term.t * Term.typ * t) option
+    =
+    let open Term in
+    match typ with
+    | Pi (arg, res, _) when is_kind arg bc && has_variable 0 res ->
+        Some (
+            Appl (
+                up1 term,
+                Variable 0,
+                Application_info.Implicit),
+            res,
+            {bc with gh = Gamma_holes.push_hole arg bc.gh}
+        )
+    | _ ->
+        None
+
+
+
+
+
 
 let add_implicits
     (_: Term.t) (_: Term.typ) (_:t)
@@ -93,9 +124,28 @@ let add_implicits
 
 
 let unify (act: Term.typ) (req: Term.typ) (bc: t): t option =
+    Printf.printf "unify %s with %s\n"
+        (string_of_term act bc) (string_of_term req bc);
     Option.map
         (fun gh -> {bc with gh})
         (Uni.unify act req true bc.gh)
+
+
+
+let unify_plus (term: Term.t) (bc: t): (Term.t * t) option =
+    let rec uni term tp bc =
+        let tp = key_normal tp bc
+        and req = required_type bc in
+        match Uni.unify tp req true bc.gh with
+        | Some gh ->
+            Some (Gamma_holes.expand term gh, {bc with gh})
+        | None ->
+            Option.(add_one_implicit term tp bc
+                    >>= fun (term, tp, bc) ->
+                    uni term tp bc)
+    in
+    uni term (type_of_term term bc) bc
+
 
 
 
@@ -150,17 +200,20 @@ let final
 
 
 let candidate (term: Term.t) (nargs: int) (bc: t): t option =
-    let tp = type_of_term term bc in
+    assert (nargs = 0);
     if 0 < nargs then
+        let tp = type_of_term term bc in
         let term, tp, bc = add_implicits term tp bc in
         Option.map
             (set_term term)
             (unify tp (required_type bc) bc)
     else
         (* Missing: adding of implicit arguments!!! *)
-        Option.map
-            (set_term term)
-            (unify tp (required_type bc) bc)
+        match unify_plus term bc with
+        | None ->
+            None
+        | Some (term, bc) ->
+            Some (set_term term bc)
 
 
 
