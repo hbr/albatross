@@ -74,6 +74,9 @@ let term_at_level (level: int) (bc: t): Term.t =
         (Term.Variable (index_of_level level bc))
         bc.gh
 
+
+
+
 let top_term (bc: t): Term.t =
     term_at_level bc.sp bc
 
@@ -183,6 +186,10 @@ let bound (ibound: int) (nargs: int) (bc: t): (t, Term.typ) result =
 
 
 
+
+
+
+
 module Product =
 (* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
 struct
@@ -254,4 +261,43 @@ struct
                         stack;
                         entry;
                         entries})
+end
+
+
+module Typed =
+struct
+    let start (bc: t): t =
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+    let expression (bc: t): t =
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole (top_term bc) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0;
+        }
+
+    let end_ (nargs: int) (bc: t): (t, unit) result =
+        let tp, stack = Stack.split bc.stack in
+        let sp, stack = Stack.split stack in
+        let tp = term_at_level tp bc
+        and exp = top_term bc
+        in
+        let term = Term.Typed (exp, tp)
+        and bc = {bc with sp; stack} in
+        match candidate term nargs bc with
+        | None ->
+            assert false (* nyi *)
+        | Some bc ->
+            Ok bc
+
 end

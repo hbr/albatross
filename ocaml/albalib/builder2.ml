@@ -149,6 +149,15 @@ let rec build0
     match
         Located.value exp
     with
+    | Number str ->
+        base_candidates range (Term.number_values str) nargs builder
+
+    | Char code ->
+        base_candidates range [Term.char code] nargs builder
+
+    | String str ->
+        base_candidates range [Term.string str] nargs builder
+
     | Proposition ->
         base_candidates range [Term.proposition] nargs builder
 
@@ -178,6 +187,17 @@ let rec build0
                     builder
         )
 
+    | Typed (exp, tp) ->
+        let open Result in
+        (map_bcs_list Build_context.Typed.start builder
+        |> build0 tp 0)
+        >>= fun builder ->
+        (map_bcs_list Build_context.Typed.expression builder
+        |> build0 exp 0)
+        >>=
+        map_bcs
+            (Build_context.Typed.end_ nargs)
+            (fun _ -> assert false)
 
     | Product (fargs, res) ->
         let open Result in
@@ -342,5 +362,14 @@ let%test _ =
     | Error (problem) ->
         Printf.printf "%s\n" (string_of_error problem);
         false
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "'a' : Character : Any" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        = "('a': Character: Any): Character: Any"
     | _ ->
         false

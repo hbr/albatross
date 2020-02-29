@@ -78,13 +78,23 @@ the implicit arguments before assigning it to the next to be constructed term.
 
 
 
-(** {1 Function Type [all (a: A) ... : RT]} *)
+(** {1 Product [all (a: A) ... : RT]} *)
 
 module Product:
 sig
     val start: t -> t
     val next: string -> bool -> t -> t
     val end_: int -> t -> (t, int) result
+end
+
+
+(** {1 Typed expression [exp: tp]} *)
+
+module Typed:
+sig
+    val start: t -> t
+    val expression: t -> t
+    val end_: int -> t -> (t, unit) result
 end
 
 
