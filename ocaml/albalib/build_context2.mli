@@ -30,6 +30,8 @@ val final:
 
 (** {1 Terminals } *)
 
+
+
 val base_candidate: Term.t -> int -> t -> t option
 (**
     [base_candidate term nargs bc]
@@ -44,6 +46,11 @@ val base_candidate: Term.t -> int -> t -> t option
     - Variables from the base context
 *)
 
+
+val bound: int -> int -> t -> (t, Term.typ) result
+(**
+    [bound level nargs bc]
+*)
 
 
 
@@ -69,6 +76,16 @@ the implicit arguments before assigning it to the next to be constructed term.
 *)
 
 
+
+
+(** {1 Function Type [all (a: A) ... : RT]} *)
+
+module Product:
+sig
+    val start: t -> t
+    val next: string -> bool -> t -> t
+    val end_: int -> t -> (t, int) result
+end
 
 
 (** {1 Function Application [f a b c ... ]}

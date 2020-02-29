@@ -288,6 +288,12 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
 
 
 
+let remove_bounds (n: int) (gh: t): t =
+    assert (n <= count_bounds gh);
+    {gh with bounds = Array.remove_last n gh.bounds}
+
+
+
 let push_local (name: string) (typ: Term.typ) (gh: t): t =
     push_bound name true typ gh
 

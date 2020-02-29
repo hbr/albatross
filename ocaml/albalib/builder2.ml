@@ -55,6 +55,14 @@ let count_base (builder: t): int =
     Gamma.count builder.base
 
 
+
+
+let push_bound (name: string) (builder: t): t =
+    {builder with
+        names = Name_map.add_local name builder.names}
+
+
+
 let make (c: Context.t): t =
     {
         names = Context.name_map c;
@@ -82,6 +90,10 @@ let base_candidates
     else
         Ok {builder with bcs}
 
+
+
+let map_bcs_list (f: Build_context.t -> Build_context.t) (builder: t): t =
+    {builder with bcs = List.map f builder.bcs}
 
 
 
@@ -126,7 +138,7 @@ let map_bcs
 
 
 
-let build0
+let rec build0
     (exp: Expression.t)
     (nargs: int)
     (builder: t)
@@ -140,6 +152,9 @@ let build0
     | Proposition ->
         base_candidates range [Term.proposition] nargs builder
 
+    | Any ->
+        base_candidates range [Term.any] nargs builder
+
     | Identifier name | Operator (name, _) ->
         let cnt_base = count_base builder in
         (
@@ -148,7 +163,10 @@ let build0
                 Error (range, No_name)
 
             | [level] when cnt_base <= level ->
-                assert false (* nyi *)
+                map_bcs
+                    (Build_context.bound (level - cnt_base) nargs)
+                    (fun _ -> assert false)
+                    builder
 
             | lst ->
                 base_candidates
@@ -159,6 +177,32 @@ let build0
                     nargs
                     builder
         )
+
+
+    | Product (fargs, res) ->
+        let open Result in
+        List_fold.fold_left
+            (fun (name, arg_tp) builder ->
+                let name_str = Located.value name in
+                let next typed builder =
+                    map_bcs_list
+                        (Build_context.Product.next name_str typed)
+                        builder
+                    |> push_bound (Located.value name)
+                in
+                match arg_tp with
+                | None ->
+                    Ok (next false builder)
+                | Some tp ->
+                    map
+                        (next true)
+                        (build0 tp 0 builder))
+            fargs
+            (map_bcs_list Build_context.Product.start builder)
+        >>= build0 res 0
+        >>= map_bcs
+                (Build_context.Product.end_ (List.length fargs))
+                (fun _ -> assert false)
 
     | _ ->
         assert false
@@ -253,6 +297,26 @@ let%test _ =
 
 
 let%test _ =
+    match build_expression "Any" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "Any: Any(1)"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "Int" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "Int: Any"
+    | _ ->
+        false
+
+
+
+let%test _ =
     match build_expression "abc" with
     | Error (_, No_name) ->
         true
@@ -260,3 +324,23 @@ let%test _ =
         false
 
 
+
+let%test _ =
+    match build_expression "(|>)" with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        = "(|>): all (A: Any) (a: A) (B: Any) (f: A -> B): B"
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "Int -> all (B: Any): (Int -> B) -> B" with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        = "Int -> (all (B: Any): (Int -> B) -> B): Any(1)"
+    | Error (problem) ->
+        Printf.printf "%s\n" (string_of_error problem);
+        false
+    | _ ->
+        false

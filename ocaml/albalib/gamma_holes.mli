@@ -151,6 +151,14 @@ info] or [Lambda (arg_tp, exp, info]. [is_typed] is used to construct the
 binder. *)
 
 
+val remove_bounds: int -> t -> t
+(**
+    [remove_bounds n gh]
+
+    Remove the [n] last bound variables.
+*)
+
+
 val push_local: string -> Term.typ -> t -> t
 (** [push_local name typ gh] is synonym for [push_bound name true gh] *)
 
