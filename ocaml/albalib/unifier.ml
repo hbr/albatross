@@ -19,7 +19,7 @@ end
 
 module Make (GH: HOLES) =
 struct
-    module Algo = Gamma_algo.Make (GH)
+    module Algo = Gamma_algo.Make (Gamma)
 
     type t = {
         gh: GH.t;
@@ -43,9 +43,6 @@ struct
 
     let delta (uc: t): int =
         Gamma.count uc.gamma - GH.count uc.gh
-
-    let down (typ: Term.typ) (uc: t): Term.typ option =
-        Term.down (delta uc) typ
 
     let is_hole (idx: int) (uc: t): bool =
         let nb = delta uc in
@@ -82,13 +79,16 @@ struct
         in
         let set i typ =
             Option.(
-                down typ uc
+                Term.down nb typ
                 >>= fun typ0 ->
+                    (* typ does not contain any new bound variables!!i
+                       typ0 is valid in gh,
+                       (i - nb) is the hole in gh *)
                 map
                     (fun uc ->
                         {uc with gh = GH.fill_hole (i - nb) typ0 uc.gh})
                     (unify0
-                        (Gamma.type_of_term typ uc.gamma)
+                        (Algo.type_of_term typ uc.gamma)
                         (Gamma.type_of_variable i uc.gamma)
                         true
                         uc))
@@ -137,6 +137,17 @@ struct
                  || (not is_super && req = act)
             ->
                 Some uc
+
+        | _, Appl (Variable f, Variable 0, _ ) when is_hole f uc ->
+            let act = Term.up_from 1 1 act
+            and tp0 = Gamma.type_of_variable 0 uc.gamma
+            in
+            let lam = Term.Lambda (
+                tp0,
+                act,
+                Lambda_info.typed (Gamma.name_of_index 0 uc.gamma))
+            in
+            set f lam
 
         | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
             let open Option in
