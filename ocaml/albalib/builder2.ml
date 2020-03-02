@@ -222,11 +222,47 @@ let rec build0
         >>= build0 res 0
         >>= map_bcs
                 (Build_context.Product.end_ (List.length fargs))
-                (fun _ -> assert false)
+                (fun lst ->
+                    let i_min =
+                        List.fold_left
+                            (fun i_min i -> min i_min i)
+                            (List.length fargs)
+                            lst
+                    in
+                    let name, _ = List.nth_strict i_min fargs in
+                    Located.range name, Cannot_infer_bound)
 
 
-    | Application (_, _) ->
-        assert false
+    | Application (f, args) ->
+        let open Result in
+        let nargs, args =
+            List.fold_right
+                (fun (arg, mode) (n,args) -> n + 1, (n,arg,mode) :: args)
+                args
+                (0, [])
+        in
+        build0
+            f
+            nargs
+            (map_bcs_list
+                (Build_context.Application.start nargs)
+                builder)
+        >>=
+        List_fold.fold_left
+            (fun (n, arg, mode) builder ->
+                let mode =
+                    match mode with
+                    | Ast.Expression.Normal ->
+                        Term.Application_info.Normal
+                    | Ast.Expression.Operand ->
+                        Term.Application_info.Binary
+                in
+                build0 arg 0 builder
+                >>=
+                map_bcs
+                    (Build_context.Application.apply n mode)
+                    (fun _ -> assert false))
+            args
 
 
     | _ ->
@@ -391,11 +427,20 @@ let%test _ =
     | _ ->
         false
 
-(*
+
 let%test _ =
     match build_expression "all a b: a = b" with
     | Error (_, Cannot_infer_bound) ->
         true
     | _ ->
         false
-*)
+
+
+let%test _ =
+    match build_expression "all a (b: Int): a = b" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "(all a (b: Int): a = b): Proposition"
+    | _ ->
+        false

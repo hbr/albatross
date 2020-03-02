@@ -47,7 +47,7 @@ val base_candidate: Term.t -> int -> t -> t option
 *)
 
 
-val bound: int -> int -> t -> (t, Term.typ) result
+val bound: int -> int -> t -> (t, Term.typ * Gamma.t) result
 (**
     [bound level nargs bc]
 *)
@@ -94,24 +94,26 @@ module Typed:
 sig
     val start: t -> t
     val expression: t -> t
-    val end_: int -> t -> (t, unit) result
+    val end_: int -> t -> (t, Term.typ * Gamma.t) result
 end
 
 
-(** {1 Function Application [f a b c ... ]}
+(** {1 Function Application [f a b c ... ]} *)
 
-{[
-    start_application nargs bc
-    ...                    (* process function term *)
-    expect_argument bc
-    ...                    (* process argument a *)
-    expect_argument bc
-    ...                    (* process argument b *)
-    ...
-    end_application bc
-]}
+module Application:
+sig
+    val start:  int -> t -> t
+    (** [start nargs bc] Start a function application with [nargs] arguments. *)
 
-*)
+    val apply:
+        int
+        -> Term.Application_info.t
+        -> t
+        -> (t, Term.typ * Gamma.t) result
+    (** [apply n_remaining mode bc] Apply the function to the argument. There are
+    [n_remaining] remaining arguments. *)
+end
+
 (*
 val expect_application: int -> t -> t
 (**

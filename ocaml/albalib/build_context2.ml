@@ -115,15 +115,23 @@ let add_one_implicit
 
 
 let add_implicits
-    (_: Term.t) (_: Term.typ) (_:t)
+    (term: Term.t) (typ: Term.typ) (bc: t)
     : Term.t * Term.typ * t
     =
-    assert false
+    let rec add term typ bc =
+        match add_one_implicit term typ bc with
+        | None ->
+            term, typ, bc
+        | Some (term, typ, bc) ->
+            add term typ bc
+    in
+    add term typ bc
 
 
 
 
-let unify (act: Term.typ) (req: Term.typ) (bc: t): t option =
+let unify (act: Term.typ) (bc: t): t option =
+    let req = required_type bc in
     Printf.printf "unify %s with %s\n"
         (string_of_term act bc) (string_of_term req bc);
     Option.map
@@ -179,6 +187,8 @@ let make (gamma: Gamma.t): t =
    }
 
 
+
+
 let final
     (bc: t)
     : (Term.t * Term.typ, Term.t list * Term.t * Term.typ * Gamma.t) result
@@ -199,21 +209,29 @@ let final
 
 
 
-let candidate (term: Term.t) (nargs: int) (bc: t): t option =
-    assert (nargs = 0);
+let candidate
+    (term: Term.t) (nargs: int) (bc: t)
+    : (t, Term.typ * Gamma.t) result
+    =
     if 0 < nargs then
         let tp = type_of_term term bc in
         let term, tp, bc = add_implicits term tp bc in
-        Option.map
-            (set_term term)
-            (unify tp (required_type bc) bc)
+        match unify tp bc with
+        | None ->
+            Error (required_type bc, Gamma_holes.context bc.gh)
+        | Some bc ->
+            let bc = set_term term bc in
+            match bc.stack with
+            | f :: a :: _  when f = bc.sp ->
+                Ok {bc with sp = a}
+            | _ ->
+                assert false (* cannot happen *)
     else
-        (* Missing: adding of implicit arguments!!! *)
         match unify_plus term bc with
         | None ->
-            None
+            Error (required_type bc, Gamma_holes.context bc.gh)
         | Some (term, bc) ->
-            Some (set_term term bc)
+            Ok (set_term term bc)
 
 
 
@@ -224,18 +242,19 @@ let base_candidate
     : t option
     =
     let term = Term.up (count_locals bc) term in
-    candidate term nargs bc
+    match candidate term nargs bc with
+    | Ok bc ->
+        Some bc
+    | Error _ ->
+        None
 
 
 
-let bound (ibound: int) (nargs: int) (bc: t): (t, Term.typ) result =
-    match
-        candidate (Gamma_holes.variable_of_bound ibound bc.gh) nargs bc
-    with
-    | None ->
-        Error (required_type bc)
-    | Some bc ->
-        Ok bc
+let bound
+    (ibound: int) (nargs: int) (bc: t)
+    : (t, Term.typ * Gamma.t) result
+    =
+    candidate (Gamma_holes.variable_of_bound ibound bc.gh) nargs bc
 
 
 
@@ -247,6 +266,7 @@ module Product =
 (* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
 struct
     let start (bc: t): t =
+        Printf.printf "Product.start sp %d\n" bc.sp;
         let cnt0 = count bc
         and bnd0 = count_bounds bc
         in
@@ -308,6 +328,10 @@ struct
             let sp, stack = Stack.split stack in
             let tp = Gamma_holes.pi bc.entry.cnt0 bc.entry.bnd0 res bc.gh in
             let entry, entries = Stack.split bc.entries in
+            Printf.printf "res %s\ntp %s\nsp %d\n"
+                (string_of_term res bc)
+                (string_of_term tp bc)
+                sp;
             Ok (set_term tp
                     {   gh = Gamma_holes.remove_bounds nargs bc.gh;
                         sp;
@@ -317,9 +341,15 @@ struct
 end
 
 
+
+
+
+
 module Typed =
+(* [exp : tp] *)
 struct
     let start (bc: t): t =
+        (* Expect the type term. *)
         let cnt0 = count bc in
         {bc with
             gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
@@ -330,6 +360,7 @@ struct
         }
 
     let expression (bc: t): t =
+        (* Expect the expression. *)
         let cnt0 = count bc in
         {bc with
             gh = Gamma_holes.push_hole (top_term bc) bc.gh;
@@ -339,7 +370,7 @@ struct
             sp = cnt0;
         }
 
-    let end_ (nargs: int) (bc: t): (t, unit) result =
+    let end_ (nargs: int) (bc: t): (t, Term.typ * Gamma.t) result =
         let tp, stack = Stack.split bc.stack in
         let sp, stack = Stack.split stack in
         let tp = term_at_level tp bc
@@ -347,10 +378,85 @@ struct
         in
         let term = Term.Typed (exp, tp)
         and bc = {bc with sp; stack} in
-        match candidate term nargs bc with
-        | None ->
-            assert false (* nyi *)
-        | Some bc ->
-            Ok bc
+        candidate term nargs bc
+end
 
+
+
+
+
+
+module Application =
+(* [f a b c ...]
+
+    f   a   b   c
+    . g .
+    .    h  .
+
+
+For each argument we introduce 4 holes:
+
+    A: Any(1)
+    F: A -> Any(1)
+    a: A
+    f: all (x: A): F x
+    ...
+
+    stack = f a g b h c ...
+
+*)
+struct
+    let start (nargs: int) (bc: t): t =
+        Printf.printf "Application.start nargs %d, loc0 %d, cnt0 %d\n"
+            nargs (Gamma_holes.count_locals bc.gh) (count bc);
+        let cnt0 = count bc in
+        let rec shift cnt0 n gh stack =
+            Printf.printf "shift cnt0 %d, n %d\n" cnt0 n;
+            if n = 0 then
+                gh, stack
+            else
+                let open Gamma_holes in
+                shift
+                    (cnt0 + 4)
+                    (n - 1)
+                    (push_hole Term.(any_uni 1) gh  (* A: Any(1) *)
+                    |> push_hole                    (* F: A -> Any(1) *)
+                        Term.(Pi (Variable 0, any_uni 1, Pi_info.arrow))
+                    |> push_hole Term.(Variable 1)  (* a: A *)
+                    |> push_hole Term.(             (* f: all (x:A): F x *)
+                        Pi (Variable 2,
+                            Appl (
+                                Variable 2,
+                                Variable 0,
+                                Application_info.Normal),
+                            Pi_info.typed "x")))
+                    (cnt0 + 3 :: cnt0 + 2 :: stack)
+        in
+        let gh, stack = shift cnt0 nargs bc.gh (bc.sp :: bc.stack) in
+        {bc with
+            gh;
+            stack;
+            sp = cnt0 + 4 * nargs - 1}
+
+    let apply
+        (n_remaining: int)
+        (mode: Term.Application_info.t)
+        (bc: t)
+        : (t, Term.typ * Gamma.t) result
+        =
+        Printf.printf "Application.apply %d\n" n_remaining;
+        match bc.stack with
+        | f :: a :: e :: stack when a = bc.sp ->
+            let open Term in
+            candidate
+                (Appl (
+                    term_at_level f bc,
+                    term_at_level a bc,
+                    mode))
+                n_remaining
+                {bc with
+                    stack = e :: stack;
+                    sp = e}
+        | _ ->
+            assert false (* Illegal call! *)
 end
