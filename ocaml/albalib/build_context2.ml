@@ -13,6 +13,13 @@ struct
             assert false (* Illegal call! *)
         | hd :: tl ->
             hd, tl
+
+    let swap (sp: 'a) (stack: 'a list): 'a * 'a list =
+        match stack with
+        | hd :: tl ->
+            hd, sp :: tl
+        | _ ->
+            assert false (* Illegal call! *)
 end
 
 
@@ -132,8 +139,6 @@ let add_implicits
 
 let unify (act: Term.typ) (bc: t): t option =
     let req = required_type bc in
-    Printf.printf "unify %s with %s\n"
-        (string_of_term act bc) (string_of_term req bc);
     Option.map
         (fun gh -> {bc with gh})
         (Uni.unify act req true bc.gh)
@@ -221,11 +226,8 @@ let candidate
             Error (required_type bc, Gamma_holes.context bc.gh)
         | Some bc ->
             let bc = set_term term bc in
-            match bc.stack with
-            | f :: a :: _  when f = bc.sp ->
-                Ok {bc with sp = a}
-            | _ ->
-                assert false (* cannot happen *)
+            let sp, stack = Stack.swap bc.sp bc.stack in
+            Ok {bc with sp; stack}
     else
         match unify_plus term bc with
         | None ->
@@ -266,7 +268,6 @@ module Product =
 (* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
 struct
     let start (bc: t): t =
-        Printf.printf "Product.start sp %d\n" bc.sp;
         let cnt0 = count bc
         and bnd0 = count_bounds bc
         in
@@ -328,10 +329,6 @@ struct
             let sp, stack = Stack.split stack in
             let tp = Gamma_holes.pi bc.entry.cnt0 bc.entry.bnd0 res bc.gh in
             let entry, entries = Stack.split bc.entries in
-            Printf.printf "res %s\ntp %s\nsp %d\n"
-                (string_of_term res bc)
-                (string_of_term tp bc)
-                sp;
             Ok (set_term tp
                     {   gh = Gamma_holes.remove_bounds nargs bc.gh;
                         sp;
@@ -407,13 +404,10 @@ For each argument we introduce 4 holes:
 *)
 struct
     let start (nargs: int) (bc: t): t =
-        Printf.printf "Application.start nargs %d, loc0 %d, cnt0 %d\n"
-            nargs (Gamma_holes.count_locals bc.gh) (count bc);
         let cnt0 = count bc in
-        let rec shift cnt0 n gh stack =
-            Printf.printf "shift cnt0 %d, n %d\n" cnt0 n;
+        let rec shift cnt0 n gh sp stack =
             if n = 0 then
-                gh, stack
+                gh, sp, stack
             else
                 let open Gamma_holes in
                 shift
@@ -430,13 +424,15 @@ struct
                                 Variable 0,
                                 Application_info.Normal),
                             Pi_info.typed "x")))
-                    (cnt0 + 3 :: cnt0 + 2 :: stack)
+                    (cnt0 + 3)
+                    (cnt0 + 2 :: sp :: stack)
         in
-        let gh, stack = shift cnt0 nargs bc.gh (bc.sp :: bc.stack) in
+        let gh, sp, stack = shift cnt0 nargs bc.gh bc.sp bc.stack in
         {bc with
             gh;
             stack;
-            sp = cnt0 + 4 * nargs - 1}
+            sp}
+
 
     let apply
         (n_remaining: int)
@@ -444,18 +440,19 @@ struct
         (bc: t)
         : (t, Term.typ * Gamma.t) result
         =
-        Printf.printf "Application.apply %d\n" n_remaining;
         match bc.stack with
-        | f :: a :: e :: stack when a = bc.sp ->
+        | f :: e :: stack ->
             let open Term in
-            candidate
-                (Appl (
+            let term = Appl (
                     term_at_level f bc,
-                    term_at_level a bc,
-                    mode))
+                    term_at_level bc.sp bc,
+                    mode)
+            in
+            candidate
+                term
                 n_remaining
                 {bc with
-                    stack = e :: stack;
+                    stack;
                     sp = e}
         | _ ->
             assert false (* Illegal call! *)

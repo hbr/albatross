@@ -126,6 +126,17 @@ struct
                 else
                     assert false (* cannot happen, illegal path *)
 
+        | _, Appl (Variable f, Variable 0, _ ) when is_hole f uc ->
+            let act = Term.up_from 1 1 act
+            and tp0 = Gamma.type_of_variable 0 uc.gamma
+            in
+            let lam = Term.Lambda (
+                tp0,
+                act,
+                Lambda_info.typed (Gamma.name_of_index 0 uc.gamma))
+            in
+            set f lam
+
         | Variable i, _ when is_hole i uc ->
             set i req
 
@@ -137,17 +148,6 @@ struct
                  || (not is_super && req = act)
             ->
                 Some uc
-
-        | _, Appl (Variable f, Variable 0, _ ) when is_hole f uc ->
-            let act = Term.up_from 1 1 act
-            and tp0 = Gamma.type_of_variable 0 uc.gamma
-            in
-            let lam = Term.Lambda (
-                tp0,
-                act,
-                Lambda_info.typed (Gamma.name_of_index 0 uc.gamma))
-            in
-            set f lam
 
         | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
             let open Option in

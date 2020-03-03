@@ -359,7 +359,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "Any" with
-    | Ok ([term,typ]) ->
+    | Ok [term,typ] ->
         string_of_term_type term typ
         = "Any: Any(1)"
     | _ ->
@@ -369,7 +369,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "Int" with
-    | Ok ([term,typ]) ->
+    | Ok [term,typ] ->
         string_of_term_type term typ
         = "Int: Any"
     | _ ->
@@ -400,9 +400,6 @@ let%test _ =
     | Ok [term,typ] ->
         string_of_term_type term typ
         = "Int -> (all (B: Any): (Int -> B) -> B): Any(1)"
-    | Error (problem) ->
-        Printf.printf "%s\n" (string_of_error problem);
-        false
     | _ ->
         false
 
@@ -442,5 +439,25 @@ let%test _ =
         string_of_term_type term typ
         =
         "(all a (b: Int): a = b): Proposition"
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "(|>) \"A\" (+) \"a\"" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "(|>) \"A\" (+) \"a\": String"
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "1 |> (+) 2" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "1 |> (+) 2: Int"
     | _ ->
         false
