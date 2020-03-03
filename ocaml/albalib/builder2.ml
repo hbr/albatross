@@ -414,6 +414,26 @@ let%test _ =
 
 
 let%test _ =
+    match build_expression "identity" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "identity: all (A: Any): A -> A"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "identity: Int -> Int" with
+    | Ok ([term,typ]) ->
+        string_of_term_type term typ
+        = "(identity: Int -> Int): Int -> Int"
+    | _ ->
+        false
+
+
+
+let%test _ =
     let tp_str = "Int -> (all (B: Any): (Int -> B) -> B)"
     in
     match build_expression ("(|>): " ^ tp_str)  with
@@ -431,6 +451,15 @@ let%test _ =
         true
     | _ ->
         false
+
+
+let%test _ =
+    match build_expression "all a b: 'x' = b" with
+    | Error (_, Cannot_infer_bound) ->
+        true
+    | _ ->
+        false
+
 
 
 let%test _ =
@@ -461,3 +490,22 @@ let%test _ =
         "1 |> (+) 2: Int"
     | _ ->
         false
+
+
+let%test _ =
+    match build_expression "'a'= 'b'  " with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        = "'a' = 'b': Proposition"
+    | _ ->
+        false
+
+
+(*
+let%test _ =
+    match build_expression "(+) 1 2 3" with
+    | Error (_, Not_enough_args _) ->
+        true
+    | _ ->
+        false
+*)
