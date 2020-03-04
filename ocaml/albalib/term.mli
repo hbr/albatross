@@ -145,6 +145,16 @@ val is_sort: typ -> bool
 val pi_sort: typ -> typ -> typ
 
 
+
+val map: (int -> int) -> t -> t
+(**
+    [map f t]
+
+    Map the free variables with [f]
+*)
+
+
+
 (** [up_from delta start t] *)
 val up_from: int -> int -> t -> t
 

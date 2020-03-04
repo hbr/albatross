@@ -382,36 +382,45 @@ let pi_sort (arg: typ) (res: typ): typ =
         assert false (* Illegal call! *)
 
 
+
+
+let map (f: int -> int) (t: t): t =
+    let rec map nb t =
+        match t with
+        | Sort _ | Value _ ->
+            t
+
+        | Variable i when i < nb ->
+            Variable i
+
+        | Variable i ->
+            Variable (f (i - nb) + nb)
+
+        | Typed (exp, tp) ->
+            Typed (map nb exp, map nb tp)
+
+        | Appl (f, a, info) ->
+            Appl (map nb f, map nb a, info)
+
+        | Lambda (tp, exp, info) ->
+            Lambda (map nb tp, map (nb + 1) exp, info)
+
+        | Pi (tp, res, info) ->
+            Pi (map nb tp, map (nb + 1) res, info)
+    in
+    map 0 t
+
+
+
+
 let up_from (delta:int) (start:int) (t:t): t =
-  let rec up t nb =
-    match t with
-    | Sort _ | Value _ ->
-       t
-
-    | Variable i when i < nb + start->
-       Variable i
-
-    | Variable i ->
-       Variable (i + delta)
-
-    | Typed (e, tp) ->
-       Typed (up e nb, up tp nb)
-
-    | Appl (f, a, mode) ->
-       Appl (up f nb, up a nb, mode)
-
-    | Lambda (tp, exp, info) ->
-       Lambda (up tp nb,
-               up exp (nb + 1),
-               info)
-
-    | Pi (tp, rt, info) ->
-       Pi (up tp nb,
-           up rt (nb + 1),
-           info)
-
-  in
-  up t 0
+    map
+        (fun i ->
+            if start <= i then
+                i + delta
+            else
+                i)
+        t
 
 
 let up (delta:int) (t:t): t =
