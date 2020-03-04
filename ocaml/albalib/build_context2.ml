@@ -543,7 +543,7 @@ struct
             else
                 exp
         in
-        let lam = Gamma_holes.lambda nargs exp bc.gh in
+        let lam = Gamma_holes.lambda nbounds exp bc.gh in
         let sp, stack = Stack.pop (nbounds + 1) sp stack
         in
         candidate
