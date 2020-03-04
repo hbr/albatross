@@ -374,9 +374,12 @@ let pi_make (bc: t): Term.typ * t =
        stack  = RT ...  *)
     match bc.stack, bc.binders with
     | Built res_tp_n :: stack,
-      (bnd0, cnt0)   :: binders
+      (bnd0, _)   :: binders
         ->
-        Gamma_holes.pi cnt0 bnd0 (term_of_term_n res_tp_n bc) bc.gh,
+        Gamma_holes.pi
+            (count_bounds bc - bnd0)
+            (term_of_term_n res_tp_n bc)
+            bc.gh,
         {bc with
             stack;
             binders}

@@ -293,16 +293,37 @@ let rec applications (f: t) (args: t list): t =
 
 
 
-let lambda (name: string) (tp: typ) (exp: t): t =
+let lambda0 (name: string) (typed: bool) (tp: typ) (exp: t): t =
     assert (name <> "");
-    Lambda (tp, exp, Lambda_info.typed name)
+    let info =
+        if typed then
+            Lambda_info.typed name
+        else
+            Lambda_info.untyped name
+    in
+    Lambda (tp, exp, info)
 
+
+let lambda (name: string) (tp: typ) (exp: t): t =
+    lambda0 name true tp exp
 
 
 let lambda_untyped (name: string) (tp: typ) (exp: t): t =
-    assert (name <> "");
-    Lambda (tp, exp, Lambda_info.untyped name)
+    lambda0 name false tp exp
 
+
+
+let product0 (name: string) (typed: bool) (arg_tp: typ) (result_tp: typ): t =
+    assert (name <> "");
+    let info =
+        if name = "_" then
+            Pi_info.arrow
+        else if typed then
+            Pi_info.typed name
+        else
+            Pi_info.untyped name
+    in
+    Pi (arg_tp, result_tp, info)
 
 
 let product (name: string) (arg_tp: typ) (result_tp: typ): t =

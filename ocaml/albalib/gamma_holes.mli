@@ -180,36 +180,30 @@ val type_of_literal: Term.Value.t -> t -> Term.typ
 
 
 
-val pi: int -> int -> Term.typ -> t -> Term.typ
-(** [pi cnt0 bnd0 result_tp gh]
+val pi: int -> Term.typ -> t -> Term.typ
+(** [pi nbounds result_tp gh]
 
-    Compute a product type with [result_tp] using the bound variables starting
-    from [bnd0].
+    Compute a product type with [result_tp] using the last [nbounds] bound
+    variables.
 
     {[all (a: A) (b: B) ... : RT]}
 
     Preconditions:
-    {[cnt0   <= count gh
-      0      <=  bnd0
-      bnd0   <  count_bounds gh
-      cnt0   <= level_of_bound (bnd0)]}
-    and [A, B, ..., RT] do not contain unfilled holes starting at level [cnt0].
+    {[nbounds <=  count_bounds gh]}
 *)
 
-val lambda: int -> int -> Term.t -> t -> Term.t
-(** [lambda cnt0 bnd0 exp gh]
 
-    Compute a function term with the inner expression [exp] using the bound
-    variables starting from [bnd0].
+
+val lambda: int -> Term.t -> t -> Term.t
+(** [lambda nbounds exp gh]
+
+    Compute a function term with the inner expression [exp] using the last
+    [nbounds] bound variables.
 
     {[\ (a: A) (b: B) ... := exp]}
 
     Preconditions:
-    {[cnt0   <= count gh
-      0      <=  bnd0
-      bnd0   <  count_bounds gh
-      cnt0   <= level_of_bound (bnd0)]}
-    and [A, B, ..., exp] do not contain unfilled holes starting at level [cnt0].
+    {[nbounds <= count_bounds gh]}
 
 *)
 

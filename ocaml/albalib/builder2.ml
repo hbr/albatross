@@ -265,8 +265,45 @@ let rec build0
             args
 
 
-    | _ ->
-        assert false
+    | Function (args, res, exp) ->
+        let open Result in
+        List_fold.fold_left
+            (fun (name, tp) builder ->
+                let str = Located.value name
+                in
+                let next typed builder=
+                    map_bcs_list
+                        (Build_context.Lambda.next str typed)
+                        builder
+                    |> push_bound str
+                in
+                match tp with
+                | None ->
+                    Ok (next false builder)
+                | Some tp ->
+                    map (next true) (build0 tp 0 builder)
+            )
+            args
+            (map_bcs_list Build_context.Lambda.start builder)
+        >>= fun builder ->
+        (
+            let inner = map_bcs_list Build_context.Lambda.inner
+            in
+            match res with
+            | None ->
+                Ok (inner builder)
+            | Some res ->
+                map inner (build0 res 0 builder)
+        )
+        >>= fun builder ->
+        build0 exp 0 builder
+        >>=
+        map_bcs
+            (Build_context.Lambda.end_
+                nargs
+                (List.length args)
+                (res <> None))
+            (fun _ -> assert false)
 
 
 
@@ -500,6 +537,35 @@ let%test _ =
     | _ ->
         false
 
+
+let%test _ =
+    match build_expression "1 + 2" with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        = "1 + 2: Int"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "all x: x + 2 = 3" with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        = "(all x: x + 2 = 3): Proposition"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "(\\x := x + 2) 1" with
+    | Ok [term,typ] ->
+        string_of_term_type term typ
+        =
+        "(\\ x := x + 2) 1: Int"
+    | _ ->
+        false
 
 (*
 let%test _ =

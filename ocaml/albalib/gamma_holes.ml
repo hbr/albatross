@@ -172,6 +172,7 @@ let variable_of_bound (i: int) (gh: t): Term.t =
                 (fst gh.bounds.(i))
                 gh)
 
+
 let value (idx: int) (gh: t): Term.t option =
     let nlocs = count_locals gh
     in
@@ -354,46 +355,51 @@ let fill_hole (idx: int) (value: Term.t) (gh: t): t =
 
 
 let into_binder
-    (cnt0: int)
     (bnd0: int)
-    (i: int)
-    (tp: Term.typ)
+    (nb: int)
+    (term: Term.t)
     (gh: t)
     : Term.typ
     =
-    (* Adapt references to bound variable into a binder. The type [tp] must not
-    contain any holes above the level [cnt0], only to bound variables
-    [0,1,...,i-1]. *)
-    assert (cnt0 <= count gh);
+    (* Put [term] into a context with additional [nb] bound variables. The bound
+    variables [bnd0, bnd0+1, ..., bnd0+nb-1] become the new bound variables
+    [0,1,...,nb-1]. *)
     assert (bnd0 <= count_bounds gh);
-    let cnt = count gh
+    let nlocs = count_locals gh
     in
     Term.substitute
         (fun idx ->
-            if cnt - cnt0 <= idx then
-                Variable (idx + i)
-            else (
+            if nlocs <= idx then
+                Variable (idx + nb)
+            else
                 let loc = local_of_index idx gh in
-                assert (Local.is_bound loc);
-                let i_bnd = Local.bound_number loc in
-                assert (bnd0 <= i_bnd);
-                assert (i_bnd < bnd0 + i);
-                Variable (Term.bruijn_convert (i_bnd - bnd0) i)))
-        tp
+                if Local.is_bound loc then
+                    let i = Local.bound_number loc in
+                    if bnd0 <= i then
+                    (
+                        assert (i < bnd0 + nb);
+                        Variable (Term.bruijn_convert (i - bnd0) nb)
+                    )
+                    else
+                        Variable (idx + nb)
+                else
+                    Variable (idx + nb))
+        term
 
 
-
-let pi (cnt0: int) (bnd0: int) (res_tp: Term.typ) (gh: t): Term.typ =
-    assert (0 <= bnd0);
-    assert (bnd0 < count_bounds gh);
-    let open Term
-    in
-    let nbounds = count_bounds gh - bnd0
-    and into = into_binder cnt0 bnd0
-    in
-    let rec make i res_tp =
+let pi_lambda
+    (mk: string -> bool -> Term.typ -> Term.t -> Term.t)
+    (nbounds: int)
+    (inner: Term.t)
+    (gh: t)
+    : Term.t
+    =
+    assert (nbounds <= count_bounds gh);
+    let bnd0 = count_bounds gh - nbounds in
+    let into = into_binder bnd0 in
+    let rec make i exp =
         if i = 0 then
-            res_tp
+            exp
         else
             let i = i - 1 in
             let name, typed, arg_tp =
@@ -402,27 +408,22 @@ let pi (cnt0: int) (bnd0: int) (res_tp: Term.typ) (gh: t): Term.typ =
                 typed,
                 into i (type_at_level level gh) gh
             in
-            make
-                i
-                (Pi (
-                        arg_tp,
-                        res_tp,
-                        if name = "_" then
-                            Pi_info.arrow
-                        else if typed then
-                            Pi_info.typed name
-                        else
-                            Pi_info.untyped name))
+            make i (mk name typed arg_tp exp)
     in
-    make
-        nbounds
-        (into nbounds (expand res_tp gh) gh)
+    make nbounds (into nbounds inner gh)
 
 
 
 
+let pi (nargs: int) (res_tp: Term.typ) (gh: t): Term.typ =
+    assert (0 < nargs);
+    assert (nargs <= count_bounds gh);
+    pi_lambda Term.product0 nargs res_tp gh
 
 
 
-let lambda (_: int) (_: int) (_: Term.t) (_: t): Term.t =
-    assert false
+
+let lambda (nargs: int) (exp: Term.t) (gh: t): Term.t =
+    assert (0 < nargs);
+    assert (nargs <= count_bounds gh);
+    pi_lambda Term.lambda0 nargs exp gh

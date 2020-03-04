@@ -114,9 +114,13 @@ val implicit_application: t -> t -> t
 val binary: t -> t -> t -> t
 val applications: t -> t list -> t
 
+val lambda0: string -> bool -> typ -> t -> t
+val product0: string -> bool -> typ -> typ -> typ
+
 val lambda:  string -> typ -> t -> t
 val product: string -> typ -> typ -> t
 val arrow:   typ -> typ -> typ
+
 val lambda_untyped:  string -> typ -> t -> t
 val product_untyped: string -> typ -> typ -> t
 

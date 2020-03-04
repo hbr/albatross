@@ -114,77 +114,33 @@ sig
     [n_remaining] remaining arguments. *)
 end
 
-(*
-val expect_application: int -> t -> t
-(**
-    [expect_applicition nargs bc]
 
-    Expect a function application with [nargs] arguments as the next term
-    to be constructed.
+(** {1 Function Abstraction [\ x y ... := t]} *)
 
-    For each argument introduce one placeholder for the function term and one
-    for the argument term and one placeholder for the corresponding types.
-
-{[
-
-    Syntactic expression:  f a b c
-
-    stack = f  a   g   b   h   c   e
-]}
-*)
-*)
+module Lambda:
+sig
+    val start: t -> t
+    (** Start a function abstraction and expect the first argument type. *)
 
 
-(*
-val expect_argument: t -> t
-(**
-[expect_argument bc]
+    val next:  string -> bool -> t -> t
+    (** [next name typed bc]
 
-Expect the next argument of the function application.
-
-If [n] arguments have already been received, the top of the stack points to the
-function term applied to [n] arguments plus potential implicit arguments to be
-applied before the next argument. The type of the next argument has already been
-unified.
-{v
-    A: Any1, a: A, F: A -> Any1, f: all (x: A): F x
-v}
-{[
-before:  stack = f a e ...
-
-assign   e := f a i0 i1 ...
-
-after:   stack = a e ...
-]}
-*)
-*)
+        Add a bound variable whose type is the last analyzed expression and
+        expect the next variable type or the type of the inner expression.
+    *)
 
 
-
-(** {1 Function Abstraction [\ x y ... := t]}
-
-{[
-    start_function nargs bc
-    ...                      (* process formal argument type *)
-    end_formal_argument bc
-    ...                      (* process formal argument type *)
-    end_formal_argument bc
-    ...                      (* process result type *)
-    end_result_type bc
-    ...                      (* process inner term *)
-    end_function bc
-]}
-*)
-
-(*
-val start_function: int -> t -> t
-
-val end_formal_argument: t -> t
-
-val end_result_type: t -> t
-
-val end_function: t -> t
-*)
+    val inner: t -> t
+    (** Expect the inner expression of the function abstraction whose type is
+    the last analyzed expression. *)
 
 
+    val end_:  int -> int -> bool -> t -> (t, Term.typ * Gamma.t) result
+    (**
+        [end_ nargs nbounds typed cb]
 
+    End the function abstraction with [nbounds] bound variables. The function
+    abstraction is applied to [nargs] arguments.
+    *)
+end

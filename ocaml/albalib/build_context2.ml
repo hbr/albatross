@@ -20,6 +20,16 @@ struct
             hd, sp :: tl
         | _ ->
             assert false (* Illegal call! *)
+
+    let rec pop (nargs: int) (sp: 'a) (stack: 'a list): 'a * 'a list =
+        if nargs = 0 then
+            sp, stack
+        else
+            match stack with
+            | [] ->
+                assert false (* Illegal call! *)
+            | sp :: stack ->
+                pop (nargs - 1) sp stack
 end
 
 
@@ -63,6 +73,7 @@ let count_bounds (bc: t): int =
 
 
 let type_at_level (level: int) (bc: t): Term.typ =
+    assert (level < count bc);
     Gamma_holes.type_at_level level bc.gh
 
 
@@ -299,6 +310,7 @@ struct
         }
 
     let end_ (nargs: int) (bc: t): (t, int) result =
+        assert (0 < nargs);
         let res = top_term bc
         and arg_tps, stack =
             let rec args nargs stack tps =
@@ -327,7 +339,7 @@ struct
             Error i
         | None ->
             let sp, stack = Stack.split stack in
-            let tp = Gamma_holes.pi bc.entry.cnt0 bc.entry.bnd0 res bc.gh in
+            let tp = Gamma_holes.pi nargs res bc.gh in
             let entry, entries = Stack.split bc.entries in
             Ok (set_term tp
                     {   gh = Gamma_holes.remove_bounds nargs bc.gh;
@@ -456,4 +468,89 @@ struct
                     sp = e}
         | _ ->
             assert false (* Illegal call! *)
+end
+
+
+
+
+
+module Lambda =
+(*
+    \ (x: A) (y: B) ... : T := t
+
+One placeholder for each optional argument type, one placeholder for the
+optional result type and one placeholder for the inner expression.
+
+    stack = t T ... B A ...
+*)
+struct
+    let start (bc: t): t =
+    (* Push a placeholder for the first argument type. I.e. expect the first
+    argument type. *)
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+
+    let next (name: string) (typed: bool) (bc: t): t =
+    (* Add a bound variable based on the last argument type and push a
+    placeholder for the next argument type or the result type. I.e. expect the
+    next argument type or the result type. *)
+        let cnt0 = count bc
+        and tp = top_term bc
+        in
+        {bc with
+            gh =
+                Gamma_holes.(
+                    push_bound name typed tp bc.gh
+                    |> push_hole Term.(any_uni 1)
+                );
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0 + 1
+        }
+
+
+
+    let inner (bc: t): t =
+    (* Push a placeholder based on the result type (the previously analyzed ast),
+    i.e. expect the inner term of the function abstraction. *)
+        let cnt0 = count bc
+        and tp = top_term bc
+        in
+        let open Gamma_holes in
+        {bc with
+            gh = push_hole tp bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+
+    let end_
+        (nargs: int) (nbounds: int) (typed: bool) (bc: t)
+        : (t, Term.typ * Gamma.t) result
+        =
+        let exp = top_term bc in
+        let sp, stack = Stack.split bc.stack in
+        let exp =
+            if typed then
+                Term.Typed (exp, term_at_level sp bc)
+            else
+                exp
+        in
+        let lam = Gamma_holes.lambda nargs exp bc.gh in
+        let sp, stack = Stack.pop (nbounds + 1) sp stack
+        in
+        candidate
+            lam
+            nargs
+            {bc with sp; stack}
 end
