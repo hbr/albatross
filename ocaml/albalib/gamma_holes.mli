@@ -129,6 +129,19 @@ val term_of_term_n: Term.t_n -> t -> Term.t
 
 
 
+val fill_hole0: int -> Term.t -> bool -> t -> t
+(** [fill_hole idx value gh] Fill the hole at [idx] with [value]. In case that
+[value] is a function abstraction appearing in a function position and the flag
+[beta_reduce] is set, do a beta reduction.
+
+    Preconditions:
+    {[is_hole idx gh
+      not (has_value idx gh)
+      is_expanded value gh
+    ]}
+*)
+
+
 val fill_hole: int -> Term.t -> t -> t
 (** [fill_hole idx value gh] Fill the hole at [idx] with [value].
 

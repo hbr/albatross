@@ -17,60 +17,6 @@ module Make (Gamma: GAMMA) =
 struct
     include Gamma
 
-    let type_of_term (t:Term.t) (c:t): Term.typ =
-        let rec typ t c =
-            let open Term in
-            match t with
-            | Sort s ->
-                type_of_sort s
-
-            | Value v ->
-                type_of_literal v c
-
-            | Variable i ->
-                type_of_variable i c
-
-            | Typed (_, tp) ->
-               tp
-
-            | Appl (f, a, _) ->
-               (match typ f c with
-                | Pi (_, rt, _) ->
-                   apply rt a
-                | _ ->
-                   assert false (* Illegal call! Term is not welltyped. *)
-               )
-
-            | Lambda (tp, exp, info) ->
-               let c_inner = push_local (Lambda_info.name info) tp c in
-               let rt      = typ exp c_inner
-               in
-               Pi (tp, rt, Pi_info.typed (Lambda_info.name info))
-
-            | Pi (tp, rt, info) ->
-               let name = Pi_info.name info in
-               (match
-                  typ tp c, typ rt (push_local name tp c)
-                with
-                | Sort s1, Sort s2 ->
-                  let open Sort in
-                  (match s1, s2 with
-                    | Proposition, Any i ->
-                      Sort (Any i)
-
-                    | Any i, Any j ->
-                      Sort (Any (max i j))
-
-                    | _, Proposition ->
-                      Sort Proposition
-                  )
-
-                | _, _ ->
-                   assert false (* Illegal call: term is not welltyped! *)
-               )
-        in
-        typ t c
-
     let key_split
           (t: Term.t)
           (args: (Term.t * Term.Application_info.t) list)
@@ -110,6 +56,62 @@ struct
               Term.Appl (res, arg, mode))
             key
             args
+
+
+
+    let type_of_term (t:Term.t) (c:t): Term.typ =
+        let rec typ t c =
+            let open Term in
+            match t with
+            | Sort s ->
+                type_of_sort s
+
+            | Value v ->
+                type_of_literal v c
+
+            | Variable i ->
+                type_of_variable i c
+
+            | Typed (_, tp) ->
+               tp
+
+            | Appl (f, a, _) ->
+               (match key_normal (typ f c) c with
+                | Pi (_, rt, _) ->
+                   apply rt a
+                | _ ->
+                   assert false (* Illegal call! Term is not welltyped. *)
+               )
+
+            | Lambda (tp, exp, info) ->
+               let c_inner = push_local (Lambda_info.name info) tp c in
+               let rt      = typ exp c_inner
+               in
+               Pi (tp, rt, Pi_info.typed (Lambda_info.name info))
+
+            | Pi (tp, rt, info) ->
+               let name = Pi_info.name info in
+               (match
+                  typ tp c, typ rt (push_local name tp c)
+                with
+                | Sort s1, Sort s2 ->
+                  let open Sort in
+                  (match s1, s2 with
+                    | Proposition, Any i ->
+                      Sort (Any i)
+
+                    | Any i, Any j ->
+                      Sort (Any (max i j))
+
+                    | _, Proposition ->
+                      Sort Proposition
+                  )
+
+                | _, _ ->
+                   assert false (* Illegal call: term is not welltyped! *)
+               )
+        in
+        typ t c
 
 
 

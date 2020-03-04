@@ -10,7 +10,7 @@ sig
 
     val value: int -> t -> Term.t option
 
-    val fill_hole: int -> Term.t -> t -> t
+    val fill_hole0: int -> Term.t -> bool -> t -> t
 end
 
 

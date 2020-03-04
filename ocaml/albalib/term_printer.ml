@@ -316,7 +316,7 @@ struct
         let module PP = Pretty_printer.Pretty (String_printer) in
         let module P = Pretty (Gamma) (PP) in
         String_printer.run
-            (PP.run 0 100 100 (P.print t c))
+            (PP.run 0 70 70 (P.print t c))
 end
 
 

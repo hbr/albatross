@@ -11,6 +11,16 @@ position or an argument position.
 *)
 
 
+val count: t -> int
+
+val count_base: t -> int
+
+val count_locals: t -> int
+
+val count_bounds: t -> int
+
+
+
 val make: Gamma.t -> t
 (**
     [make gamma]

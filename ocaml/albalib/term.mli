@@ -172,9 +172,20 @@ val down_from: int -> int -> t -> t option
 val down: int -> t -> t option
 
 
+
+val substitute0: (int -> t) -> bool -> t -> t
+(** [substitute0 f beta_reduce t] *)
+
 val substitute: (int -> t) -> t -> t
 (** [substitute f term] substitutes each free variable [i] in [term] by the term
 [f i]. *)
+
+
+
+val substitute_with_beta: (int -> t) -> t -> t
+(** [substitute f term] substitutes each free variable [i] in [term] by the term
+[f i] and do beta reduction in case that [f i] appears in a function position
+and is a function abstraction. *)
 
 
 

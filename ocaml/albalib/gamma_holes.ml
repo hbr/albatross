@@ -96,6 +96,10 @@ let make (base: Gamma.t): t =
      bounds = [||]}
 
 
+let string_of_term (term: Term.t) (gh: t): string =
+    Term_printer.string_of_term term gh.base
+let _ = string_of_term
+
 
 
 let count (gh: t): int =
@@ -311,7 +315,7 @@ let push_hole (typ: Term.typ) (gh: t): t =
 
 
 
-let fill_hole (idx: int) (value: Term.t) (gh: t): t =
+let fill_hole0 (idx: int) (value: Term.t) (beta_reduce: bool) (gh: t): t =
     assert (is_unfilled idx gh);
     assert (is_expanded value gh);
     let cnt    = count gh
@@ -327,7 +331,7 @@ let fill_hole (idx: int) (value: Term.t) (gh: t): t =
     locals.(loc_level) <-
         Local.set_value (value, cnt) locals.(loc_level);
 
-    (* [idx] and users of [idx] become also users of all unfilled holes in
+    (* [idx] and users of [idx] also become users of all unfilled holes in
     [value] *)
     let users = Local.users locals.(loc_level) in
     Int_set.iter
@@ -337,13 +341,23 @@ let fill_hole (idx: int) (value: Term.t) (gh: t): t =
                 Local.add_users (cnt0 + loc_level) users locals.(iloc))
         (unfilled_holes cnt0 value gh);
 
-    (* Expand all users of [idx] *)
+    (* Substitute in all users of [idx] the variable [idx] by value. *)
     Int_set.iter
         (fun user ->
             let i = user - cnt0 in
             match Local.value locals.(i) with
-            | Some term_n ->
-                let term = expand (term_of_term_n term_n gh_new) gh_new in
+            | Some (term,n) ->
+                let term = Term.up (count gh - n) term in
+                let term =
+                    Term.substitute0
+                        (fun k ->
+                            if k = idx then
+                                value
+                            else
+                                Term.Variable k)
+                        beta_reduce
+                        term
+                in
                 locals.(i) <- Local.set_value (term, cnt) locals.(i)
             | _ ->
                 assert false (* Illegal, all users must have a substitution,
@@ -351,6 +365,10 @@ let fill_hole (idx: int) (value: Term.t) (gh: t): t =
         users;
     gh_new
 
+
+
+let fill_hole (idx: int) (value: Term.t) (gh: t): t =
+    fill_hole0 idx value false gh
 
 
 

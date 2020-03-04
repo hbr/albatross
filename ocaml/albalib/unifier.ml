@@ -13,7 +13,7 @@ sig
 
     val value: int -> t -> Term.t option
 
-    val fill_hole: int -> Term.t -> t -> t
+    val fill_hole0: int -> Term.t -> bool -> t -> t
 end
 
 
@@ -26,8 +26,10 @@ struct
         gamma: Gamma.t
     }
 
+
     let make (gh: GH.t): t =
         {gh; gamma = GH.context gh}
+
 
     let context (uc: t): GH.t =
         uc.gh
@@ -41,8 +43,10 @@ struct
         Term_printer.string_of_term term uc.gamma
     let _ = string_of_term
 
+
     let delta (uc: t): int =
         Gamma.count uc.gamma - GH.count uc.gh
+
 
     let is_hole (idx: int) (uc: t): bool =
         let nb = delta uc in
@@ -50,6 +54,7 @@ struct
             false
         else
             GH.is_hole (idx - delta uc) uc.gh
+
 
     let expand (term: Term.t) (uc: t): Term.t =
         let del = delta uc
@@ -68,6 +73,58 @@ struct
 
 
 
+    type unifier = Term.typ -> Term.typ -> bool -> t -> t option
+
+
+    let set
+        (i: int) (typ: Term.typ) (beta_reduce: bool) (uni: unifier) (uc: t)
+        : t option
+        =
+    (* Fill the hole [i] with [typ] if their types can be unified. *)
+        let open Option in
+        let nb = delta uc in
+        Term.down nb typ
+        >>= fun typ0 ->
+            (* typ does not contain any new bound variables!!i
+               typ0 is valid in gh,
+               (i - nb) is the hole in gh *)
+        map
+            (fun uc ->
+                {uc with gh = GH.fill_hole0 (i - nb) typ0 beta_reduce uc.gh})
+            (uni
+                (Algo.type_of_term typ uc.gamma)
+                (Gamma.type_of_variable i uc.gamma)
+                true
+                uc)
+
+
+    let setf
+        (f: int) (arg: Term.t) (typ: Term.typ) (uni: unifier) (uc: t)
+        : t option
+        =
+        (* Unify [f arg] with [typ] where [f] is a hole, i.e. assign [\lam x :=
+        typ] to [f]. *)
+        let fterm =
+            let arg_tp = Algo.type_of_term arg uc.gamma
+            and exp =
+                match arg with
+                | Variable i ->
+                    Term.map
+                        (fun j ->
+                            if i = j then
+                                0
+                            else
+                                j + 1)
+                        typ
+                | _ ->
+                    Term.up1 typ
+            in
+            Term.lambda "_" arg_tp exp
+        in
+        set f fterm true uni uc
+
+
+
     let rec unify0
         (act: Term.typ)
         (req: Term.typ)
@@ -75,29 +132,10 @@ struct
         (uc: t)
         : t option
         =
-        let nb = delta uc
-        in
-        let set i typ =
-            Option.(
-                Term.down nb typ
-                >>= fun typ0 ->
-                    (* typ does not contain any new bound variables!!i
-                       typ0 is valid in gh,
-                       (i - nb) is the hole in gh *)
-                map
-                    (fun uc ->
-                        {uc with gh = GH.fill_hole (i - nb) typ0 uc.gh})
-                    (unify0
-                        (Algo.type_of_term typ uc.gamma)
-                        (Gamma.type_of_variable i uc.gamma)
-                        true
-                        uc))
-        in
-        let req = expand req uc
-        and act = expand act uc
-        in
-        let req = Gamma.key_normal req uc.gamma
-        and act = Gamma.key_normal act uc.gamma
+        let req = Algo.key_normal (expand req uc) uc.gamma
+        and act = Algo.key_normal (expand act uc) uc.gamma
+        and nb = delta uc
+        and set i typ = set i typ false unify0 uc
         in
         let open Term
         in
@@ -126,16 +164,11 @@ struct
                 else
                     assert false (* cannot happen, illegal path *)
 
-        | _, Appl (Variable f, Variable 0, _ ) when is_hole f uc ->
-            let act = Term.up_from 1 1 act
-            and tp0 = Gamma.type_of_variable 0 uc.gamma
-            in
-            let lam = Term.Lambda (
-                tp0,
-                act,
-                Lambda_info.typed (Gamma.name_of_index 0 uc.gamma))
-            in
-            set f lam
+        | Appl (Variable f, arg, _), _  when is_hole f uc ->
+            setf f arg req unify0 uc
+
+        | _, Appl (Variable f, arg, _ ) when is_hole f uc ->
+            setf f arg act unify0 uc
 
         | Variable i, _ when is_hole i uc ->
             set i req

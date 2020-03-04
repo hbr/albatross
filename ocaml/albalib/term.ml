@@ -484,66 +484,87 @@ let down (delta:int) (t:t): t option =
 
 
 
+let rec substitute0 (f:int -> t) (beta_reduce: bool) (t:t): t =
+    let rec sub t nb =
+        match t with
+        | Sort _ | Value _ ->
+            t
+
+        | Variable i when i < nb ->
+            t
+
+        | Variable i ->
+            up nb (f @@ i - nb)
+
+        | Typed (e, tp) ->
+            Typed (sub e nb, sub tp nb)
+
+        | Appl (Variable i, a, mode) ->
+            let f = sub (Variable i) nb
+            and a = sub a nb in
+            (
+                match f with
+                | Lambda (_, exp, _) when beta_reduce ->
+                    apply exp a
+                | _ ->
+                    Appl (f, a, mode)
+            )
+
+        | Appl (f, a, mode) ->
+            Appl (sub f nb, sub a nb, mode)
+
+            | Lambda (tp, exp, info) ->
+               Lambda (sub tp nb, sub exp (nb + 1), info)
+
+            | Pi (tp, rt, info) ->
+               Pi (sub tp nb, sub rt (nb + 1), info)
+    in
+    sub t 0
+
+
+and apply (f: t) (a: t): t =
+    substitute0
+        (fun i ->
+            if i = 0 then
+                a
+            else
+                Variable (i - 1))
+        false
+        f
+
+
+let substitute_with_beta (f: int -> t) (t: t): t =
+    substitute0 f true t
+
 
 let substitute (f:int -> t) (t:t): t =
-  let rec sub t nb =
-    match t with
-    | Sort _ | Value _ ->
-        t
-
-    | Variable i when i < nb ->
-       t
-
-    | Variable i ->
-       up nb (f @@ i - nb)
-
-    | Typed (e, tp) ->
-       Typed (sub e nb, sub tp nb)
-
-    | Appl (f, a, mode) ->
-       Appl (sub f nb, sub a nb, mode)
-
-    | Lambda (tp, exp, info) ->
-       Lambda (sub tp nb, sub exp (nb + 1), info)
-
-    | Pi (tp, rt, info) ->
-       Pi (sub tp nb, sub rt (nb + 1), info)
-  in
-  sub t 0
+    substitute0 f false t
 
 
 
-let apply (f:t) (a:t): t =
-  substitute
-    (fun i ->
-      if i = 0 then
-        a
-      else
-        Variable (i - 1))
-    f
 
 
 
 let rec apply_nargs (f:t) (nargs:int) (mode: Application_info.t): t =
-  if nargs = 0 then
-    f
-  else
-    apply_nargs
-      (Appl (f, Variable (nargs - 1), mode))
-      (nargs - 1)
-      mode
+    if nargs = 0 then
+        f
+    else
+        apply_nargs
+            (Appl (f, Variable (nargs - 1), mode))
+            (nargs - 1)
+            mode
 
 
 
 
 
 
-(* ----------------------------------------------------------- *)
-(* Monadic functions                                           *)
-(* ----------------------------------------------------------- *)
+    (* ----------------------------------------------------------- *)
+    (* Monadic functions                                           *)
+    (* ----------------------------------------------------------- *)
 
 
-module Monadic (M: MONAD) =
+    module Monadic (M: MONAD) =
 struct
     let fold_free
         (f: int -> 'a -> 'a M.t)

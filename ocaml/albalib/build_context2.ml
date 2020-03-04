@@ -35,7 +35,6 @@ end
 
 type entry = {
     cnt0: int;
-    bnd0: int;
 }
 
 type t = {
@@ -196,7 +195,6 @@ let make (gamma: Gamma.t): t =
 
         entry = {
             cnt0;
-            bnd0 = 0;
         };
 
         entries = [];
@@ -280,7 +278,6 @@ module Product =
 struct
     let start (bc: t): t =
         let cnt0 = count bc
-        and bnd0 = count_bounds bc
         in
         {
             gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
@@ -291,7 +288,7 @@ struct
 
             entries = bc.entry :: bc.entries;
 
-            entry = {cnt0; bnd0}
+            entry = {cnt0}
         }
 
     let next (name: string) (typed: bool) (bc: t): t =

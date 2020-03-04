@@ -567,6 +567,27 @@ let%test _ =
     | _ ->
         false
 
+
+let%test _ =
+    match build_expression "(\\x f := f x) 1 ((+) 2)" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "(\\ x f := f x) 1 ((+) 2): Int"
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "(\\x y f := f x y) 1 2 (+)" with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "(\\ x y f := f x y) 1 2 (+): Int"
+    | _ ->
+        false
+
+
 (*
 let%test _ =
     match build_expression "(+) 1 2 3" with
