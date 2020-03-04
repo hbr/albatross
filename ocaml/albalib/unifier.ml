@@ -140,42 +140,6 @@ struct
         let open Term
         in
         match act, req with
-        | Variable i, Variable j ->
-            if i = j then
-                Some uc
-            else if i < nb || j < nb then
-                None
-            else
-                let iph = is_hole i uc
-                and jph = is_hole j uc
-                in
-                if not (iph || jph) then
-                    None
-                else if iph && jph then
-                    match set j act with
-                    | None ->
-                        set i req
-                    | res ->
-                        res
-                else if iph then
-                    set i req
-                else if jph then
-                    set j act
-                else
-                    assert false (* cannot happen, illegal path *)
-
-        | Appl (Variable f, arg, _), _  when is_hole f uc ->
-            setf f arg req unify0 uc
-
-        | _, Appl (Variable f, arg, _ ) when is_hole f uc ->
-            setf f arg act unify0 uc
-
-        | Variable i, _ when is_hole i uc ->
-            set i req
-
-        | _, Variable j when is_hole j uc ->
-            set j act
-
         | Sort act, Sort req
             when (is_super && Sort.is_super req act)
                  || (not is_super && req = act)
@@ -195,8 +159,41 @@ struct
                 unify0 act_rt req_rt is_super (push act_arg uc)
             )
 
-        | Pi (_, _, _), _ ->
-            assert false
+        | Variable i, Variable j ->
+            if i = j then
+                Some uc
+            else if i < nb || j < nb then
+                None
+            else
+                let i_hole = is_hole i uc
+                and j_hole = is_hole j uc
+                in
+                if not (i_hole || j_hole) then
+                    None
+                else if i_hole && j_hole then
+                    match set j act with
+                    | None ->
+                        set i req
+                    | res ->
+                        res
+                else if i_hole then
+                    set i req
+                else if j_hole then
+                    set j act
+                else
+                    assert false (* cannot happen, illegal path *)
+
+        | Appl (Variable f, arg, _), _  when is_hole f uc ->
+            setf f arg req unify0 uc
+
+        | _, Appl (Variable f, arg, _ ) when is_hole f uc ->
+            setf f arg act unify0 uc
+
+        | Variable i, _ when is_hole i uc ->
+            set i req
+
+        | _, Variable j when is_hole j uc ->
+            set j act
 
         | _, _ ->
             None
