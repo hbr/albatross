@@ -120,18 +120,6 @@ sig
 end
 
 
-module Loop_state:
-sig
-  type ('a,'b) t =
-    | More of 'a
-    | Exit of 'b
-
-  val more: 'a -> ('a,'b) t
-  val exit: 'b -> ('a,'b) t
-  val fold: ('a -> 'c) -> ('b -> 'c) -> ('a,'b) t -> 'c
-end
-
-
 module String_reader:
 sig
   include Common_module_types.READABLE
@@ -160,16 +148,3 @@ sig
   (** [make c] makes a character reader with the character [c]. *)
   val make: char -> t
 end
-
-
-
-
-module type SEXP =
-  sig
-    type t =
-      | Atom of string
-      | Seq of t array
-    val string: t -> string
-  end
-
-module Sexp: SEXP

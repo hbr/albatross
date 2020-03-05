@@ -38,7 +38,7 @@ module Make_experimental (A: ANY) =
       in
       iterate @@ m (fun a -> Done a)
 
-    let run_while (m:answer t): answer =
+    (*let run_while (m:answer t): answer =
       let st = ref (m (fun a -> Done a))
       and goon = ref true
       in
@@ -53,7 +53,7 @@ module Make_experimental (A: ANY) =
       | Done a ->
          a
       | _ ->
-         assert false (* cannot happen *)
+         assert false (* cannot happen *)*)
   end
 
 

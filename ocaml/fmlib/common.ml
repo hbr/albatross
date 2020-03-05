@@ -182,20 +182,6 @@ module Interval =
       end
   end
 
-module Loop_state =
-  struct
-    type ('a,'b) t =
-      | More of 'a
-      | Exit of 'b
-
-    let fold (f1:'a -> 'c) (f2:'b -> 'c) = function
-      | More a -> f1 a
-      | Exit b -> f2 b
-
-    let more a: ('a,'b) t = More a
-
-    let exit b: ('a,'b) t = Exit b
-  end
 
 
 
@@ -223,6 +209,8 @@ module String_reader =
       {r with pos = r.pos + 1}
   end
 
+
+
 module Fill_reader =
   struct
     type t = {n:int; c:char}
@@ -235,6 +223,9 @@ module Fill_reader =
     let make (n:int) (c:char): t =
       {n;c}
   end
+
+
+
 
 module Char_reader =
   struct
@@ -249,40 +240,4 @@ module Char_reader =
       | Some c -> c
     let advance (_:t): t =
       None
-  end
-
-
-
-
-module type SEXP =
-  sig
-    type t =
-      | Atom of string
-      | Seq of t array
-    val string: t -> string
-  end
-
-
-module Sexp =
-  struct
-    type t =
-      | Atom of string
-      | Seq of t array
-    let string(s:t): string =
-      let rec string0 i s =
-        match s with
-        | Atom str ->
-           str
-        | Seq arr ->
-           let s0 =
-             String.concat
-               ""
-               (List.map (string0 (i+1)) (Array.to_list arr))
-           in
-           if i = 0 then
-             s0
-           else
-             "(" ^ s0 ^ ")"
-      in
-      string0 0 s
   end
