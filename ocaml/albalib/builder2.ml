@@ -648,6 +648,18 @@ let%test _ =
 
 
 let%test _ =
+    let tp_str = "(Character -> String) -> String"
+    in
+    match build_expression ("(|>) 'a': " ^ tp_str)  with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "((|>) 'a': " ^ tp_str ^ "): "  ^ tp_str
+    | _ ->
+        false
+
+
+let%test _ =
     match build_expression "all a b: a = b" with
     | Error (_, Cannot_infer_bound) ->
         true
