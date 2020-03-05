@@ -22,8 +22,3 @@ val fold_array: ('a->'b->int->'a t) -> 'a -> 'b array -> 'a t
 
    The function [f] maps an element of type ['a], an element of the array with
    its position in the array into an element of type ['a].  *)
-
-
-
-
-module Within (M:MONAD): MONAD with type 'a t = 'a t M.t

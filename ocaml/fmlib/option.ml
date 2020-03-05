@@ -1,5 +1,3 @@
-open Common_module_types
-
 type 'a t = 'a option
 
 let use (o:'a t) (b:'b) (f:'a -> 'b): 'b =
@@ -102,36 +100,3 @@ let fold_array (f:'a->'b->int->'a t) (start:'a) (arr:'b array): 'a t =
           None
   in
   fold start 0
-
-
-
-
-
-
-
-
-
-module Within (M:MONAD) =
-  struct
-    type 'a t = 'a option M.t
-    let return (a:'a): 'a t =
-      a |> return |> M.return
-
-    let (>>=) (m:'a t) (f:'a -> 'b t): 'b t =
-      M.(m >>= fun o ->
-         match o with
-         | None -> return None
-         | Some a -> f a)
-
-    let (>=>) f g a =
-      f a >>= g
-
-    let map f o =
-      o >>= fun a -> return (f a)
-
-    let (<*>) fo o =
-      fo >>= fun f -> map f o
-
-    let join oo =
-      oo >>= fun o -> o
-  end
