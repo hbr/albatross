@@ -401,9 +401,9 @@ module Make (Io:Io.SIG) =
         : Pretty.t
         =
         let std_context = Context.standard () in
-        match Builder2.build e std_context with
+        match Builder.build e std_context with
         | Error (range, descr) ->
-            let module Builder_print = Builder2.Print (Pretty) in
+            let module Builder_print = Builder.Print (Pretty) in
             let open Pretty in
             error_header "TYPE"
             <+> print_source src range

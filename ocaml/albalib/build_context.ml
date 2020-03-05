@@ -1,22 +1,60 @@
 open Fmlib
 open Common
 
-
 module Algo = Gamma_algo.Make (Gamma_holes)
 module Uni  = Unifier.Make (Gamma_holes)
 
 
-type entry =
-    | Required_type of Term.typ_n
-    | Built of Term.t_n
+module Stack =
+struct
+    let split (stack: 'a list): 'a * 'a list =
+        match stack with
+        | [] ->
+            assert false (* Illegal call! *)
+        | hd :: tl ->
+            hd, tl
+
+    let swap (sp: 'a) (stack: 'a list): 'a * 'a list =
+        match stack with
+        | hd :: tl ->
+            hd, sp :: tl
+        | _ ->
+            assert false (* Illegal call! *)
+
+    let rec pop (nargs: int) (sp: 'a) (stack: 'a list): 'a * 'a list =
+        if nargs = 0 then
+            sp, stack
+        else
+            match stack with
+            | [] ->
+                assert false (* Illegal call! *)
+            | sp :: stack ->
+                pop (nargs - 1) sp stack
+end
 
 
+type entry = {
+    cnt0: int;
+}
 
 type t = {
     gh: Gamma_holes.t;
-    stack: entry list;
-    binders: (int * int) list; (* start bound, start level *)
+    sp: int;
+    stack: int list;
+    entry: entry;
+    entries: entry list;
 }
+
+type type_in_context = int list * Term.typ * Gamma.t
+
+
+let index_of_level (level: int) (bc: t): int =
+    Gamma_holes.index_of_level level bc.gh
+
+
+let string_of_term (term: Term.t) (bc: t): string =
+    Term_printer.string_of_term term (Gamma_holes.context bc.gh)
+let _ = string_of_term
 
 
 
@@ -26,42 +64,25 @@ let count (bc: t): int =
 let count_base (bc: t): int =
     Gamma_holes.count_base bc.gh
 
+
 let count_locals (bc: t): int =
-    count bc - count_base bc
+    Gamma_holes.count_locals bc.gh
+
 
 let count_bounds (bc: t): int =
     Gamma_holes.count_bounds bc.gh
 
-let base (bc: t): Gamma.t =
+let context (bc: t): Gamma.t =
     Gamma_holes.context bc.gh
 
-
-
-let top_of_stack (bc: t): entry =
-    match bc.stack with
-    | top :: _ ->
-        top
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-let string_of_term (term: Term.t) (bc: t): string =
-    Term_printer.string_of_term
-        term
-        (Gamma_holes.context bc.gh)
-
-let _ = string_of_term
-
-
-
-
-let term_of_term_n (tn: Term.t_n) (bc: t): Term.t =
-    Gamma_holes.term_of_term_n tn bc.gh
+let type_at_level (level: int) (bc: t): Term.typ =
+    assert (level < count bc);
+    Gamma_holes.type_at_level level bc.gh
 
 
 let type_of_term (term: Term.t) (bc: t): Term.typ =
     Algo.type_of_term term bc.gh
+
 
 
 let key_normal (term: Term.t) (bc: t): Term.t =
@@ -74,102 +95,54 @@ let is_kind (typ: Term.typ) (bc: t): bool =
 
 
 let required_type (bc: t): Term.typ =
-    match top_of_stack bc with
-    | Required_type (term_n) ->
-        term_of_term_n term_n bc
-    | _ ->
-        assert false (* Illegal call! *)
+    type_at_level bc.sp bc
 
 
 
-
-let built_type (bc: t): Term.typ =
-    match top_of_stack bc with
-    | Built (term_n) ->
-        type_of_term (term_of_term_n term_n bc) bc
-    | _ ->
-        assert false (* Illegal call! *)
+let term_at_level (level: int) (bc: t): Term.t =
+    Gamma_holes.expand
+        (Term.Variable (index_of_level level bc))
+        bc.gh
 
 
 
+let top_term (bc: t): Term.t =
+    term_at_level bc.sp bc
 
 
+let unfilled_holes (term: Term.t) (bc: t): int list =
+    Int_set.elements
+        (Gamma_holes.unfilled_holes
+            (count_base bc)
+            term
+            bc.gh)
 
 
+let type_in_context (typ: Term.typ) (bc: t): type_in_context =
+    unfilled_holes typ bc,
+    typ,
+    context bc
 
 
-let set_term (value: Term.t) (bc: t): t =
-    match bc.stack with
-    | Required_type _ :: rest ->
-        {bc with stack = Built (value, count bc) :: rest}
-    | _ ->
-        assert false (* Illegal call! *)
+let required_type_in_context (bc: t): type_in_context =
+    type_in_context (required_type bc) bc
 
 
-let unify (act: Term.typ) (req: Term.typ) (is_super: bool) (bc: t): t option =
-    Option.map
-        (fun gh -> {bc with gh})
-        (Uni.unify act req is_super bc.gh)
-
-
-
-
-let push_hole (uni: int) (bc: t): t =
-    {bc with
-        gh =
-            Gamma_holes.push_hole Term.(any_uni uni) bc.gh}
-
-
-let push_hole_for_term (uni: int) (bc: t): t =
-    let bc = push_hole uni bc in
-    {bc with
-        stack =
-            Required_type (Term.Variable 0, count bc)
-            :: bc.stack
-    }
-
-
-
-let push_bound (name: string) (typed: bool) (typ: Term.typ) (bc: t): t =
-    {bc with
-        gh =
-            Gamma_holes.push_bound name typed typ bc.gh}
-
-
-
-
-let candidate (term: Term.t) (bc: t): t option =
-    let act_typ = type_of_term term bc
-    and req_typ = required_type bc
-    in
-    Option.map
-        (fun bc -> set_term term bc)
-        (unify act_typ req_typ true bc)
-
-
-
-
-let receive_candidate (term: Term.t) (bc: t): (t, Term.typ * t) result =
-    let act_typ = type_of_term term bc
-    and req_typ = required_type bc
-    in
-    match unify act_typ req_typ true bc with
-    | None ->
-        Error (req_typ, bc)
-    | Some bc ->
-        Ok (set_term term bc)
-
-
-
-
-let receive_base_candidate (term: Term.t) (bc: t): t option =
-    match
-        receive_candidate
-            (Term.up (count_locals bc) term)
-            bc
-    with
-    | Ok bc ->
-        Some bc
+let add_one_implicit
+    (term: Term.t) (typ: Term.typ) (bc: t)
+    : (Term.t * Term.typ * t) option
+    =
+    let open Term in
+    match typ with
+    | Pi (arg, res, _) when is_kind arg bc && has_variable 0 res ->
+        Some (
+            Appl (
+                up1 term,
+                Variable 0,
+                Application_info.Implicit),
+            res,
+            {bc with gh = Gamma_holes.push_hole arg bc.gh}
+        )
     | _ ->
         None
 
@@ -177,256 +150,435 @@ let receive_base_candidate (term: Term.t) (bc: t): t option =
 
 
 
-let expect_type (bc: t): t =
-    (* Expecting a type as the next expression. *)
-    {bc with
-        stack = Required_type (Term.any_uni 1,0) :: bc.stack}
 
-
-
-
-let expect_typed (bc: t): t =
-    (* Expecting a term whose required type is the last built expression. *)
-    {bc with
-        stack =
-            match bc.stack with
-            | Built typ_n :: _ ->
-                Required_type typ_n :: bc.stack
-            | _ ->
-                assert false (* Illegal call! *)
-    }
-
-
-let expect_untyped (bc: t): t =
-    push_hole_for_term 1 bc
-
-
-
-
-let make_typed (bc: t): Term.t * t =
-    match bc.stack with
-    | Built exp_n :: Built typ_n :: stack ->
-        Term.Typed (
-            term_of_term_n exp_n bc,
-            term_of_term_n typ_n bc),
-        {bc with stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-let expect_function (_: int):  t -> t =
-    push_hole_for_term 1
-
-
-
-
-let rec push_implicits (bc: t): t =
-    match bc.stack with
-    | Built f_n :: stack ->
-        let open Term in
-        let f = term_of_term_n f_n bc in
-        let tp = type_of_term f bc in
-        (match key_normal tp bc with
-            | Pi (arg_tp, res_tp, _ )
-                when is_kind arg_tp bc
-                    && has_variable 0 res_tp
-                ->
-                push_implicits
-                    {bc with
-                        gh =
-                            Gamma_holes.push_hole arg_tp bc.gh;
-                        stack =
-                            Built
-                                (Appl (up1 f,
-                                       Variable 0,
-                                       Application_info.Implicit),
-                                 count bc + 1)
-                            :: stack}
-            | _ ->
-                bc)
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-
-let push_argument (bc: t): t option =
-    match bc.stack with
-    | Built f_n :: _ ->
-        let open Term in
-        let f = term_of_term_n f_n bc in
-        let tp = type_of_term f bc in
-        (match key_normal tp bc with
-            | Pi (arg_tp, _, _ ) ->
-                Some
-                    {bc with
-                        stack =
-                            Required_type (arg_tp, count bc) :: bc.stack}
-            | _ ->
-                None)
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-
-let apply_argument (mode: Ast.Expression.argument_type) (bc: t): t =
-    match bc.stack with
-    | Built arg_n :: Built f_n :: stack ->
-        let f =   term_of_term_n f_n bc
-        and arg = term_of_term_n arg_n bc
-        and mode =
-            match mode with
-            | Ast.Expression.Normal ->
-                Term.Application_info.Normal
-            | Ast.Expression.Operand ->
-                Term.Application_info.Binary
-        in
-        {bc with
-            stack =
-                Built (Term.Appl (f, arg, mode), count bc)
-                :: stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-let start_binder (bc: t): t =
-    {bc with
-        binders = (count_bounds bc, count bc) :: bc.binders}
-
-
-let make_bound (level: int) (bc: t): Term.t * t =
-    let cnt_base = count_base bc in
-    assert (cnt_base <= level);
-    assert (level < count bc);
-    let ibnd = level - cnt_base in
-    Gamma_holes.variable_of_bound ibnd bc.gh,
-    bc
-
-
-
-let check_bound (i: int) (_: int) (bc: t): (t, unit) result =
-    (* Check if the type of the i-th bound variable of the current binder is
-    completely inferred.*)
-    let module Result = Monad.Result (Unit) in
-    let module Monadic = Term.Monadic ( Monad.Result (Unit) )
+let add_implicits
+    (term: Term.t) (typ: Term.typ) (bc: t)
+    : Term.t * Term.typ * t
+    =
+    let rec add term typ bc =
+        match add_one_implicit term typ bc with
+        | None ->
+            term, typ, bc
+        | Some (term, typ, bc) ->
+            add term typ bc
     in
-    match bc.binders with
-    | (bnd0, cnt0) :: _ ->
-        let typ =
-            type_of_term
-                (Gamma_holes.variable_of_bound (bnd0 + i) bc.gh)
-                bc
-        in
-        if Int_set.is_empty (Gamma_holes.unfilled_holes cnt0 typ bc.gh) then
-            Ok bc
-        else
-            Error ()
+    add term typ bc
+
+
+
+
+let unify (act: Term.typ) (bc: t): t option =
+    let req = required_type bc in
+    Option.map
+        (fun gh -> {bc with gh})
+        (Uni.unify act req true bc.gh)
+
+
+
+let unify_plus (term: Term.t) (bc: t): (Term.t * t) option =
+    let rec uni term tp bc =
+        let tp = key_normal tp bc
+        and req = required_type bc in
+        match Uni.unify tp req true bc.gh with
+        | Some gh ->
+            Some (Gamma_holes.expand term gh, {bc with gh})
+        | None ->
+            Option.(add_one_implicit term tp bc
+                    >>= fun (term, tp, bc) ->
+                    uni term tp bc)
+    in
+    uni term (type_of_term term bc) bc
+
+
+
+
+let set_term (term: Term.t) (bc: t): t =
+    {bc with
+        gh =
+            Gamma_holes.fill_hole (index_of_level bc.sp bc) term bc.gh}
+
+
+
+let make (gamma: Gamma.t): t =
+    let cnt0 = Gamma.count gamma in
+    {
+        gh =
+            Gamma_holes.(
+                make gamma
+                |> push_hole Term.(any_uni 2)
+                |> push_hole Term.(Variable 0)
+            );
+
+        sp = cnt0 + 1;
+
+        stack = [];
+
+        entry = {
+            cnt0;
+        };
+
+        entries = [];
+   }
+
+
+
+
+let final
+    (bc: t)
+    : (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
+    =
+    let cnt0 = count_base bc
+    and nlocs = count_locals bc in
+    assert (bc.stack = []);
+    assert (bc.entries = []);
+    assert (bc.sp = cnt0 + 1);
+    let term = top_term bc in
+    let typ  = type_of_term term bc in
+    match Term.down nlocs term, Term.down nlocs typ with
+    | Some term, Some typ ->
+        Ok (term, typ)
     | _ ->
-        assert false (* Illegal call! *)
-
-
-
-
-
-let lambda_bound (name: string) (bc: t): t =
-    push_hole 1 bc
-    |> push_bound name false Term.(Variable 0)
-
-
-let lambda_bound_typed (_: string) (_: t): (t, Term.typ * t) result =
-    assert false
-
-
-let lambda_inner_typed (bc: t): t =
-    match bc.stack with
-    | Built exp :: Built typ :: stack ->
-        {bc with stack =
-            Built
-             (Term.Typed (term_of_term_n exp bc, term_of_term_n typ bc),
-              count bc)
-            :: stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-let pi_bound (name: string) (bc: t): t =
-    lambda_bound name bc
-
-
-let pi_bound_typed (name: string) (bc: t): t =
-    match bc.stack with
-    | Built typ_n :: stack ->
-        push_bound
-            name
-            true
-            (term_of_term_n typ_n bc)
-            {bc with stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-let pi_make (bc: t): Term.typ * t =
-    (* bounds = ... a:A, b:B, ...
-       stack  = RT ...  *)
-    match bc.stack, bc.binders with
-    | Built res_tp_n :: stack,
-      (bnd0, _)   :: binders
-        ->
-        Gamma_holes.pi
-            (count_bounds bc - bnd0)
-            (term_of_term_n res_tp_n bc)
-            bc.gh,
-        {bc with
-            stack;
-            binders}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-
-let pop (bc: t): Term.t * t =
-    match bc.stack with
-    | Built res_n :: stack ->
-        term_of_term_n res_n bc,
-        {bc with stack}
-    | _ ->
-        assert false (* Illegal call! *)
-
-
-
-
-
-
-let make (base: Gamma.t): t =
-    push_hole_for_term
-        2
-        {gh = Gamma_holes.make base;
-         stack = [];
-         binders = []}
-
-
-
-
-
-
-let final (bc: t): Term.t * Term.typ * Gamma.t =
-    match bc.stack with
-    | [Built term_n] ->
-        let term = term_of_term_n term_n bc in
-        let typ  = type_of_term term bc in
-        let nlocs = count_locals bc
-        in
-        (match Term.down nlocs term, Term.down nlocs typ with
-        | Some term, Some typ ->
-            term, typ , Gamma_holes.base_context bc.gh
-        | _, _ ->
-            term, typ, Gamma_holes.context bc.gh
+        let gamma = Gamma_holes.context bc.gh in
+        Error(
+            unfilled_holes typ bc,
+            typ,
+            gamma
         )
 
-    | _ ->
-        assert false (* Illegal call! Not in final state. *)
+
+
+
+let candidate
+    (term: Term.t) (nargs: int) (bc: t)
+    : (t, type_in_context * type_in_context) result
+    =
+    if 0 < nargs then
+        let tp = type_of_term term bc in
+        let term, tp, bc = add_implicits term tp bc in
+        match unify tp bc with
+        | None ->
+            Error (required_type_in_context bc, type_in_context tp bc)
+        | Some bc ->
+            let bc = set_term term bc in
+            let sp, stack = Stack.swap bc.sp bc.stack in
+            Ok {bc with sp; stack}
+    else
+        match unify_plus term bc with
+        | None ->
+            Error (
+                required_type_in_context bc,
+                type_in_context (type_of_term term bc) bc
+            )
+        | Some (term, bc) ->
+            Ok (set_term term bc)
+
+
+
+let base_candidate
+    (term: Term.t)
+    (nargs: int)
+    (bc: t)
+    : t option
+    =
+    let term = Term.up (count_locals bc) term in
+    match candidate term nargs bc with
+    | Ok bc ->
+        Some bc
+    | Error _ ->
+        None
+
+
+
+let bound
+    (ibound: int) (nargs: int) (bc: t)
+    : (t, type_in_context * type_in_context) result
+    =
+    candidate (Gamma_holes.variable_of_bound ibound bc.gh) nargs bc
+
+
+
+
+
+
+
+module Product =
+(* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
+struct
+    let start (bc: t): t =
+        let cnt0 = count bc
+        in
+        {
+            gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0;
+
+            entries = bc.entry :: bc.entries;
+
+            entry = {cnt0}
+        }
+
+    let next (name: string) (typed: bool) (bc: t): t =
+        let cnt0 = count bc
+        and tp = top_term bc
+        in
+        {bc with
+            gh = Gamma_holes.(
+                push_bound name typed tp bc.gh
+                |> push_hole Term.(any_uni 1)
+            );
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0 + 1
+        }
+
+    let end_ (nargs: int) (bc: t): (t, int) result =
+        assert (0 < nargs);
+        let res = top_term bc
+        and arg_tps, stack =
+            let rec args nargs stack tps =
+                if nargs = 0 then
+                    tps, stack
+                else
+                    let sp, stack = Stack.split stack in
+                    args (nargs - 1) stack (term_at_level sp bc :: tps)
+            in
+            args nargs bc.stack []
+        in
+        let rec find_incomplete i tps =
+            if i = nargs then
+                None
+            else
+                let tp, tps = Stack.split tps in
+                if Int_set.is_empty
+                    (Gamma_holes.unfilled_holes bc.entry.cnt0 tp bc.gh)
+                then
+                    find_incomplete (i + 1) tps
+                else
+                    Some i
+        in
+        match find_incomplete 0 arg_tps with
+        | Some i ->
+            Error i
+        | None ->
+            let sp, stack = Stack.split stack in
+            let tp = Gamma_holes.pi nargs res bc.gh in
+            let entry, entries = Stack.split bc.entries in
+            Ok (set_term tp
+                    {   gh = Gamma_holes.remove_bounds nargs bc.gh;
+                        sp;
+                        stack;
+                        entry;
+                        entries})
+end
+
+
+
+
+
+
+module Typed =
+(* [exp : tp] *)
+struct
+    let start (bc: t): t =
+        (* Expect the type term. *)
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+    let expression (bc: t): t =
+        (* Expect the expression. *)
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole (top_term bc) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0;
+        }
+
+    let end_
+        (nargs: int) (bc: t)
+        : (t, type_in_context * type_in_context) result
+        =
+        let tp, stack = Stack.split bc.stack in
+        let sp, stack = Stack.split stack in
+        let tp = term_at_level tp bc
+        and exp = top_term bc
+        in
+        let term = Term.Typed (exp, tp)
+        and bc = {bc with sp; stack} in
+        candidate term nargs bc
+end
+
+
+
+
+
+
+module Application =
+(* [f a b c ...]
+
+    f   a   b   c
+    . g .
+    .    h  .
+
+
+For each argument we introduce 4 holes:
+
+    A: Any(1)
+    F: A -> Any(1)
+    a: A
+    f: all (x: A): F x
+    ...
+
+    stack = f a g b h c ...
+
+*)
+struct
+    let start (nargs: int) (bc: t): t =
+        let cnt0 = count bc in
+        let rec shift cnt0 n gh sp stack =
+            if n = 0 then
+                gh, sp, stack
+            else
+                let open Gamma_holes in
+                shift
+                    (cnt0 + 4)
+                    (n - 1)
+                    (push_hole Term.(any_uni 1) gh  (* A: Any(1) *)
+                    |> push_hole                    (* F: A -> Any(1) *)
+                        Term.(Pi (Variable 0, any_uni 1, Pi_info.arrow))
+                    |> push_hole Term.(Variable 1)  (* a: A *)
+                    |> push_hole Term.(             (* f: all (x:A): F x *)
+                        Pi (Variable 2,
+                            Appl (
+                                Variable 2,
+                                Variable 0,
+                                Application_info.Normal),
+                            Pi_info.typed "x")))
+                    (cnt0 + 3)
+                    (cnt0 + 2 :: sp :: stack)
+        in
+        let gh, sp, stack = shift cnt0 nargs bc.gh bc.sp bc.stack in
+        {bc with
+            gh;
+            stack;
+            sp}
+
+
+    let apply
+        (n_remaining: int)
+        (mode: Term.Application_info.t)
+        (bc: t)
+        : (t, type_in_context * type_in_context) result
+        =
+        match bc.stack with
+        | f :: e :: stack ->
+            let open Term in
+            let term = Appl (
+                    term_at_level f bc,
+                    term_at_level bc.sp bc,
+                    mode)
+            in
+            candidate
+                term
+                n_remaining
+                {bc with
+                    stack;
+                    sp = e}
+        | _ ->
+            assert false (* Illegal call! *)
+end
+
+
+
+
+
+module Lambda =
+(*
+    \ (x: A) (y: B) ... : T := t
+
+One placeholder for each optional argument type, one placeholder for the
+optional result type and one placeholder for the inner expression.
+
+    stack = t T ... B A ...
+*)
+struct
+    let start (bc: t): t =
+    (* Push a placeholder for the first argument type. I.e. expect the first
+    argument type. *)
+        let cnt0 = count bc in
+        {bc with
+            gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+
+    let next (name: string) (typed: bool) (bc: t): t =
+    (* Add a bound variable based on the last argument type and push a
+    placeholder for the next argument type or the result type. I.e. expect the
+    next argument type or the result type. *)
+        let cnt0 = count bc
+        and tp = top_term bc
+        in
+        {bc with
+            gh =
+                Gamma_holes.(
+                    push_bound name typed tp bc.gh
+                    |> push_hole Term.(any_uni 1)
+                );
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0 + 1
+        }
+
+
+
+    let inner (bc: t): t =
+    (* Push a placeholder based on the result type (the previously analyzed ast),
+    i.e. expect the inner term of the function abstraction. *)
+        let cnt0 = count bc
+        and tp = top_term bc
+        in
+        let open Gamma_holes in
+        {bc with
+            gh = push_hole tp bc.gh;
+
+            stack = bc.sp :: bc.stack;
+
+            sp = cnt0
+        }
+
+
+    let end_
+        (nargs: int) (nbounds: int) (typed: bool) (bc: t)
+        : (t, type_in_context * type_in_context) result
+        =
+        let exp = top_term bc in
+        let sp, stack = Stack.split bc.stack in
+        let exp =
+            if typed then
+                Term.Typed (exp, term_at_level sp bc)
+            else
+                exp
+        in
+        let lam = Gamma_holes.lambda nbounds exp bc.gh in
+        let sp, stack = Stack.pop (nbounds + 1) sp stack
+        in
+        candidate
+            lam
+            nargs
+            {bc with sp; stack}
+end

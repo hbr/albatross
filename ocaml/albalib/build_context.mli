@@ -1,100 +1,161 @@
 type t
 
+type type_in_context = int list * Term.typ * Gamma.t
 
 
+(**
+
+A build context consists of a context with holes and a stack of to be
+constructed terms.
+
+There is always a next to be constructed term. The term is either in a function
+position or an argument position.
+
+*)
+
+
+val count: t -> int
+
+val count_base: t -> int
+
+val count_locals: t -> int
+
+val count_bounds: t -> int
+
+val required_type_in_context: t -> type_in_context
 
 val make: Gamma.t -> t
-
-val final: t -> Term.t * Term.typ * Gamma.t
-
-
-val expect_type: t -> t
 (**
-    [expect_type bc]
+    [make gamma]
 
-    Expect a type as the next term to be constructed i.e. push a new element
-    onto the stack whose required type is [Any(1)].
+    Make a build context based on [gamma]. Push 2 holes onto the context to get
+
+    Gamma, E: Any(2), e: E
+
+    The next to be constructed term points to [e].
 *)
 
 
-val expect_typed: t -> t
+val final:
+        t
+        -> (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
+
+
+(** {1 Terminals } *)
+
+
+
+val base_candidate: Term.t -> int -> t -> t option
 (**
-    [expect_typed bc]
-
-    Expect a term whose type conforms to the previously constructed type.
-*)
-
-
-
-val expect_untyped: t -> t
-(**
-    [expect_untyped bc]
-
-    Expect a term whose type is not known and must be inferred. I.e. we have to
-    add a hole of [Any(1)] and make this new type variable the expected type of
-    the term.
-*)
-
-
-
-
-
-val expect_function: int -> t -> t
-(**
-    [expect_function nargs bc]
-
-    Expect a function which can be applied to [nargs] arguments as the next term
-    to be constructed.
-
-*)
-
-
-
-
-val receive_base_candidate: Term.t -> t -> t option
-(**
-    [receive_base_candidate term bc]
+    [base_candidate term nargs bc]
 
     Receive the term [term] as a candidate for the next to be constructed term.
-    The candidate is from the base context.
+    The candidate is from the base context and in applied to [nargs] arguments.
 
-    In case of success set the next to be constructed term to the status
-    constructed.
+    Base candidates are either
 
-    In case of failure return [None].
+    - Literals (Numbers, characters, strings)
+
+    - Variables from the base context
+*)
+
+
+val bound: int -> int -> t -> (t, type_in_context * type_in_context) result
+(**
+    [bound level nargs bc]
 *)
 
 
 
-val base:           t -> Gamma.t
-val required_type:  t -> Term.typ
-val built_type:     t -> Term.typ
+(*
+val candidate: Term.t -> t -> t option
+(**
+    [candidate term bc]
 
-val candidate:      Term.t -> t -> t option
-val pop: t -> Term.t * t
+    Receive the term [term] as a candidate for the next to be constructed term.
 
-val make_typed: t -> Term.t * t
+    Candidates are either
 
-val push_implicits: t -> t
-val push_argument: t -> t option
-val apply_argument: Ast.Expression.argument_type -> t -> t
+    - Base candidates
+
+    - Bound variables
 
 
-val start_binder: t -> t
-val make_bound: int -> t -> Term.t * t
-val check_bound: int -> int -> t -> (t, unit) result
+New placeholder for implicit arguments have to be generated in case that the
+required type is not just a placeholder. The candidate term has to be applied to
+the implicit arguments before assigning it to the next to be constructed term.
 
-val lambda_bound: string -> t -> t
-(** Insert a type variable for the unknown type of the bound variable and the
-bound variable. *)
+*)
+*)
 
-val lambda_bound_typed: string -> t -> (t, Term.typ * t) result
-val lambda_inner_typed: t -> t
 
-val pi_bound: string -> t -> t
-(** Insert a type variable for the unknown type of the bound variable and the
-bound variable. *)
 
-val pi_bound_typed: string -> t -> t
 
-val pi_make: t -> Term.typ * t
+(** {1 Product [all (a: A) ... : RT]} *)
+
+module Product:
+sig
+    val start: t -> t
+    val next: string -> bool -> t -> t
+    val end_: int -> t -> (t, int) result
+end
+
+
+(** {1 Typed expression [exp: tp]} *)
+
+module Typed:
+sig
+    val start: t -> t
+    val expression: t -> t
+    val end_: int -> t -> (t, type_in_context * type_in_context) result
+end
+
+
+(** {1 Function Application [f a b c ... ]} *)
+
+module Application:
+sig
+    val start:  int -> t -> t
+    (** [start nargs bc] Start a function application with [nargs] arguments. *)
+
+    val apply:
+        int
+        -> Term.Application_info.t
+        -> t
+        -> (t, type_in_context * type_in_context) result
+    (** [apply n_remaining mode bc] Apply the function to the argument. There are
+    [n_remaining] remaining arguments. *)
+end
+
+
+(** {1 Function Abstraction [\ x y ... := t]} *)
+
+module Lambda:
+sig
+    val start: t -> t
+    (** Start a function abstraction and expect the first argument type. *)
+
+
+    val next:  string -> bool -> t -> t
+    (** [next name typed bc]
+
+        Add a bound variable whose type is the last analyzed expression and
+        expect the next variable type or the type of the inner expression.
+    *)
+
+
+    val inner: t -> t
+    (** Expect the inner expression of the function abstraction whose type is
+    the last analyzed expression. *)
+
+
+    val end_:
+        int -> int -> bool -> t
+        -> (t, type_in_context * type_in_context) result
+    (**
+        [end_ nargs nbounds typed cb]
+
+    End the function abstraction with [nbounds] bound variables. The function
+    abstraction is applied to [nargs] arguments.
+    *)
+end
