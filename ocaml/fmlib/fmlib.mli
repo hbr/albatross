@@ -56,5 +56,4 @@ module Pretty_printer = Pretty_printer
 
 (** {1 Old modules (deprecated)} *)
 
-module Document     = Document
 module Argument_parser = Argument_parser
