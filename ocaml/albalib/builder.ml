@@ -210,7 +210,7 @@ let rec build0
                 base_candidates
                     range
                     (List.map
-                        (fun level -> Gamma.term_at_level level builder.base)
+                        (fun level -> Gamma.variable_at_level level builder.base)
                         lst)
                     nargs
                     builder
