@@ -19,7 +19,6 @@ module Segmented_array = Segmented_array
 
 (** {1 Monadic Data Types} *)
 
-module Continuation = Continuation
 module Monad = Monad
 
 
