@@ -18,15 +18,11 @@ module type BUFFERS =
   sig
     type t
     val make: int -> t
-    val is_open_read: t -> int -> bool
     val is_open_write: t -> int -> bool
     val capacity: t -> int
     val occupy_readable: t -> int -> int
     val occupy_writable: t -> int -> int
-    val release: t -> int -> unit
-    val readable_file: t -> int -> int * B.t
     val writable_file: t -> int -> int * B.t
-    val find_open: t -> int -> int
   end
 
 
@@ -45,15 +41,6 @@ module Buffers: BUFFERS =
     let make (size:int): t =
       {size;
        files = Pool.make_empty ()}
-
-    let is_open (s:t) (i:int): bool =
-      Pool.has s.files i
-
-    let is_open_read (s:t) (i:int): bool =
-      Pool.has s.files i
-      && match Pool.elem s.files i with
-         | Read _  -> true
-         | Write _ -> false
 
     let is_open_write (s:t) (i:int): bool =
       Pool.has s.files i
@@ -74,23 +61,10 @@ module Buffers: BUFFERS =
     let occupy_writable (s:t) (fd:int): int =
       occupy s (fun b -> Write(fd,b))
 
-    let release (s:t) (i:int): unit =
-      assert (is_open s i);
-      Pool.release s.files i
-
-    let readable_file (s:t) (i:int): int * B.t =
-      match Pool.elem s.files i with
-      | Read (fd,b) -> fd,b
-      | Write _ -> assert false (* Illegal call! *)
-
     let writable_file (s:t) (i:int): int * B.t =
       match Pool.elem s.files i with
       | Read _ -> assert false (* Illegal call! *)
       | Write (fd,b) -> fd,b
-
-    let find_open (s:t) (i:int): int =
-      assert (i <= Pool.capacity s.files);
-      Pool.find s.files i
   end (* Buffers *)
 
 

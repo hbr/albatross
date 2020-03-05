@@ -10,7 +10,7 @@ module type ANY =
 (** A sortable type is a type with a comparison function. *)
 module type SORTABLE =
   sig
-    include ANY
+    type t
     val compare: t -> t -> int
   end
 
@@ -133,39 +133,4 @@ module type WRITABLE =
     (** [putend w] signals to the structure [w] that there are no more
        characters available to write (e.g. eof reached). *)
     val putend: t -> t
-  end
-
-
-
-
-(** Filter structure
-
-   A filter is a {!module-type:WRITABLE} structure which returns on each
-   character besides the structure a {!module-type:READABLE} structure which is
-   considered as its output as a reaction to its input.
-
- *)
-module type FILTER =
-  sig
-    module Readable: READABLE
-    type t
-    val needs_more: t -> bool
-    val putc: t -> char -> t * Readable.t
-    val put_end: t -> t * Readable.t
-  end
-
-
-
-
-module type OUTPUT =
-  sig
-    type t
-    val empty: t
-    val (<+>): t -> t -> t
-    val char: char -> t
-    val string: string -> t
-    val line: string -> t
-    val newline: t
-    val substring: string -> int -> int -> t
-    val fill: int -> char -> t
   end

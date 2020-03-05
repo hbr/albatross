@@ -10,20 +10,12 @@ sig
             (Bytes.t -> int -> int -> int) ->
             (Bytes.t -> int -> int -> int) ->
             t
-  val size: t -> int
-  val reset: t -> unit
-  val content: t -> string
   val is_ok: t -> bool
-  val is_empty: t -> bool
-  val fill: t -> unit
   val is_full: t -> bool
   val flush: t -> unit
-  val getc: t -> char option
-  val putc: t -> char -> unit
 
   module Read: functor (W:WRITABLE) ->
                sig
-                 val read: t -> W.t -> W.t
                end
   module Write: functor (R:READABLE) ->
                sig
@@ -41,9 +33,6 @@ end =
         read:  Bytes.t -> int -> int -> int; (* refill function *)
         write: Bytes.t -> int -> int -> int; (* flush function *)
         bytes: Bytes.t}
-
-    let size (b:t): int =
-      Bytes.length b.bytes
 
     let make (n:int)
           (read:Bytes.t -> int -> int -> int)
@@ -63,19 +52,8 @@ end =
       b.rp <- 0;
       b.wp <- 0
 
-    let content (b:t): string =
-      Bytes.sub_string b.bytes b.rp (b.wp - b.rp)
-
     let is_full (b:t): bool =
       b.wp = Bytes.length b.bytes
-
-    let fill (b:t): unit =
-      assert (is_empty b);
-      assert (is_ok b);
-      let n = b.read b.bytes 0 (Bytes.length b.bytes) in
-      b.rp <- 0; b.wp <- n;
-      if n = 0 then
-        b.flag <- false
 
     let flush (b:t): unit =
       if not (is_empty b) && is_ok b then
@@ -87,20 +65,11 @@ end =
              buffer has been written!! *)
           reset b
 
-    let get (b:t): char =
+    (*let get (b:t): char =
       assert (not (is_empty b));
       let c = Bytes.get b.bytes b.rp in
       b.rp <- b.rp + 1;
-      c
-
-    let getc (b:t): char option =
-      assert (is_ok b);
-      if is_empty b then
-        fill b;
-      if is_empty b then
-        None
-      else
-        Some (get b)
+      c*)
 
     let putc (b:t) (c:char): unit =
       assert (is_ok b);
@@ -112,14 +81,14 @@ end =
 
     module Read (W:WRITABLE) =
       struct
-        let read (b:t) (w:W.t): W.t =
+        (*let read (b:t) (w:W.t): W.t =
           let rec read w =
             if not (is_empty b) && W.needs_more w then
               read (W.putc w (get b))
             else
               w
           in
-          read w
+          read w*)
       end
 
     module Write (R:READABLE) =
@@ -179,7 +148,7 @@ end
     type file =
       | Read of Unix.file_descr * Buffer.t
       | Write of Unix.file_descr * Buffer.t
-      | Free of int
+      (*| Free of int*)
 
     type t = {mutable files: file array;
               mutable first_free: int;
@@ -227,7 +196,7 @@ end
       }
 
 
-    let put_to_files (fs:t) (file:file): int option =
+    (*let put_to_files (fs:t) (file:file): int option =
       if fs.first_free >= 2 then
         begin
           let fd = fs.first_free in
@@ -246,7 +215,7 @@ end
           Array.blit fs.files 0 files 0 nfiles;
           fs.files <- files;
           Some nfiles
-        end
+        end*)
 
     let writable_buffer (fs:t) (fd:int): Buffer.t =
       assert (fd < Array.length fs.files);
@@ -256,13 +225,13 @@ end
       | _ ->
          assert false
 
-    let readable_buffer (fs:t) (fd:int): Buffer.t =
+    (*let readable_buffer (fs:t) (fd:int): Buffer.t =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (_,b) ->
          b
       | _ ->
-         assert false
+         assert false*)
 
 
     (*let getc (fs:t) (fd:in_file): char option =
@@ -296,13 +265,11 @@ end
       with Unix.Unix_error _ ->
         None*)
 
-    let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
+    (*let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
       assert (fd < Array.length fs.files);
       match fs.files.(fd) with
       | Read (fd,_) -> fd
-      | Write (fd,_) -> fd
-      | Free _ ->
-         assert false
+      | Write (fd,_) -> fd*)
 
 
     (*let close_file (fs:t) (fd:int): unit =
@@ -482,9 +449,9 @@ module IO0: Make_io.SIG =
 
 
     let exit (code:int): 'a t =
-      fun fs k ->
+      fun fs _ ->
       File_system.flush_all fs;
-      Pervasives.exit code
+      Stdlib.exit code
 
     let execute (p:unit t): unit =
       let fs = File_system.make ()
@@ -500,7 +467,7 @@ module IO0: Make_io.SIG =
           raise e
       in
       File_system.flush_all fs;
-      Pervasives.exit 0
+      Stdlib.exit 0
 
     let command_line: string array t =
       fun fs k  -> k Sys.argv fs

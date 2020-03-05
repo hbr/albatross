@@ -207,6 +207,14 @@ module type SIG =
 
 module Output (Io:SIG):
 sig
-  include OUTPUT
-  val run: Io.File.Out.fd -> t -> unit Io.t
+    type t
+    val empty: t
+    val (<+>): t -> t -> t
+    val char: char -> t
+    val string: string -> t
+    val line: string -> t
+    val newline: t
+    val substring: string -> int -> int -> t
+    val fill: int -> char -> t
+    val run: Io.File.Out.fd -> t -> unit Io.t
 end

@@ -128,25 +128,3 @@ module Write (R:READABLE) =
       done;
       !r
   end
-
-module Filter (F:FILTER) =
-  struct
-    let filter (p:F.t) (bi:t) (bo:t): F.t * F.Readable.t option =
-      let module W = Write (F.Readable) in
-      let rec next p =
-        if F.needs_more p then
-          match getc bi with
-          | None ->
-             p, None
-          | Some c ->
-             let p,r = F.putc p c in
-             let r = W.write bo r in
-             if F.Readable.has_more r then
-               p, Some r
-             else
-               next p
-        else
-          p, None
-      in
-      next p
-  end

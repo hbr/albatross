@@ -86,14 +86,3 @@ module Write (R:READABLE):
 sig
   val write: t -> R.t -> R.t
 end
-
-
-module Filter (F:FILTER):
-sig
-  (** [filter p bi bo] reads from input buffer [bi] filters the remaining data
-     in the buffer using the filter program [p] and outputs the output from
-     the filter program to the output buffer [bo]. In case that the output
-     buffer is full before all output from the filter program [p] has been
-     written, the remaining output is returned. *)
-  val filter: F.t -> t -> t -> F.t * F.Readable.t option
-end

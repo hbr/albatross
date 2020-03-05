@@ -7,7 +7,7 @@ module type ANY =
 
 module type SORTABLE =
   sig
-    include ANY
+    type t
     val compare: t -> t -> int
   end
 
@@ -58,30 +58,4 @@ module type WRITABLE =
     val needs_more: t -> bool
     val putc: t -> char ->  t
     val putend: t -> t
-  end
-
-
-
-
-module type FILTER =
-  sig
-    module Readable: READABLE
-    type t
-    val needs_more: t -> bool
-    val putc: t -> char -> t * Readable.t
-    val put_end: t -> t * Readable.t
-  end
-
-
-module type OUTPUT =
-  sig
-    type t
-    val empty: t
-    val (<+>): t -> t -> t
-    val char: char -> t
-    val string: string -> t
-    val line: string -> t
-    val newline: t
-    val substring: string -> int -> int -> t
-    val fill: int -> char -> t
   end
