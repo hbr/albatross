@@ -1,5 +1,8 @@
 type t
 
+type type_in_context = int list * Term.typ * Gamma.t
+
+
 (**
 
 A build context consists of a context with holes and a stack of to be
@@ -19,7 +22,7 @@ val count_locals: t -> int
 
 val count_bounds: t -> int
 
-
+val required_type_in_context: t -> type_in_context
 
 val make: Gamma.t -> t
 (**
@@ -57,7 +60,7 @@ val base_candidate: Term.t -> int -> t -> t option
 *)
 
 
-val bound: int -> int -> t -> (t, Term.typ * Gamma.t) result
+val bound: int -> int -> t -> (t, type_in_context * type_in_context) result
 (**
     [bound level nargs bc]
 *)
@@ -104,7 +107,7 @@ module Typed:
 sig
     val start: t -> t
     val expression: t -> t
-    val end_: int -> t -> (t, Term.typ * Gamma.t) result
+    val end_: int -> t -> (t, type_in_context * type_in_context) result
 end
 
 
@@ -119,7 +122,7 @@ sig
         int
         -> Term.Application_info.t
         -> t
-        -> (t, Term.typ * Gamma.t) result
+        -> (t, type_in_context * type_in_context) result
     (** [apply n_remaining mode bc] Apply the function to the argument. There are
     [n_remaining] remaining arguments. *)
 end
@@ -146,7 +149,9 @@ sig
     the last analyzed expression. *)
 
 
-    val end_:  int -> int -> bool -> t -> (t, Term.typ * Gamma.t) result
+    val end_:
+        int -> int -> bool -> t
+        -> (t, type_in_context * type_in_context) result
     (**
         [end_ nargs nbounds typed cb]
 

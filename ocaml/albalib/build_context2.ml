@@ -45,6 +45,8 @@ type t = {
     entries: entry list;
 }
 
+type type_in_context = int list * Term.typ * Gamma.t
+
 
 let index_of_level (level: int) (bc: t): int =
     Gamma_holes.index_of_level level bc.gh
@@ -70,6 +72,8 @@ let count_locals (bc: t): int =
 let count_bounds (bc: t): int =
     Gamma_holes.count_bounds bc.gh
 
+let context (bc: t): Gamma.t =
+    Gamma_holes.context bc.gh
 
 let type_at_level (level: int) (bc: t): Term.typ =
     assert (level < count bc);
@@ -102,10 +106,26 @@ let term_at_level (level: int) (bc: t): Term.t =
 
 
 
-
 let top_term (bc: t): Term.t =
     term_at_level bc.sp bc
 
+
+let unfilled_holes (term: Term.t) (bc: t): int list =
+    Int_set.elements
+        (Gamma_holes.unfilled_holes
+            (count_base bc)
+            term
+            bc.gh)
+
+
+let type_in_context (typ: Term.typ) (bc: t): type_in_context =
+    unfilled_holes typ bc,
+    typ,
+    context bc
+
+
+let required_type_in_context (bc: t): type_in_context =
+    type_in_context (required_type bc) bc
 
 
 let add_one_implicit
@@ -220,7 +240,7 @@ let final
     | _ ->
         let gamma = Gamma_holes.context bc.gh in
         Error(
-            Int_set.elements (Gamma_holes.unfilled_holes cnt0 typ bc.gh),
+            unfilled_holes typ bc,
             typ,
             gamma
         )
@@ -230,14 +250,14 @@ let final
 
 let candidate
     (term: Term.t) (nargs: int) (bc: t)
-    : (t, Term.typ * Gamma.t) result
+    : (t, type_in_context * type_in_context) result
     =
     if 0 < nargs then
         let tp = type_of_term term bc in
         let term, tp, bc = add_implicits term tp bc in
         match unify tp bc with
         | None ->
-            Error (required_type bc, Gamma_holes.context bc.gh)
+            Error (required_type_in_context bc, type_in_context tp bc)
         | Some bc ->
             let bc = set_term term bc in
             let sp, stack = Stack.swap bc.sp bc.stack in
@@ -245,7 +265,10 @@ let candidate
     else
         match unify_plus term bc with
         | None ->
-            Error (required_type bc, Gamma_holes.context bc.gh)
+            Error (
+                required_type_in_context bc,
+                type_in_context (type_of_term term bc) bc
+            )
         | Some (term, bc) ->
             Ok (set_term term bc)
 
@@ -268,7 +291,7 @@ let base_candidate
 
 let bound
     (ibound: int) (nargs: int) (bc: t)
-    : (t, Term.typ * Gamma.t) result
+    : (t, type_in_context * type_in_context) result
     =
     candidate (Gamma_holes.variable_of_bound ibound bc.gh) nargs bc
 
@@ -381,7 +404,10 @@ struct
             sp = cnt0;
         }
 
-    let end_ (nargs: int) (bc: t): (t, Term.typ * Gamma.t) result =
+    let end_
+        (nargs: int) (bc: t)
+        : (t, type_in_context * type_in_context) result
+        =
         let tp, stack = Stack.split bc.stack in
         let sp, stack = Stack.split stack in
         let tp = term_at_level tp bc
@@ -452,7 +478,7 @@ struct
         (n_remaining: int)
         (mode: Term.Application_info.t)
         (bc: t)
-        : (t, Term.typ * Gamma.t) result
+        : (t, type_in_context * type_in_context) result
         =
         match bc.stack with
         | f :: e :: stack ->
@@ -538,7 +564,7 @@ struct
 
     let end_
         (nargs: int) (nbounds: int) (typed: bool) (bc: t)
-        : (t, Term.typ * Gamma.t) result
+        : (t, type_in_context * type_in_context) result
         =
         let exp = top_term bc in
         let sp, stack = Stack.split bc.stack in

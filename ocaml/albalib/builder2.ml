@@ -16,12 +16,29 @@ module Located =
 
 
 
+module Build_context = Build_context2
+type type_in_context = Build_context.type_in_context
+
+
 type problem_description =
     | Overflow
     | No_name
     | Incomplete_type of (int list * Term.typ * Gamma.t) list
     | Cannot_infer_bound
-    | Not_a_function of (Term.typ * Gamma.t) list
+    | Not_a_function of type_in_context list
+    | Wrong_type of (type_in_context * type_in_context) list
+    | Wrong_base of type_in_context list * type_in_context list
+
+
+let description_of_type_in_context
+    (nargs: int)
+    (lst: (type_in_context * type_in_context) list)
+    : problem_description
+    =
+    if 0 < nargs then
+        Not_a_function (List.map snd lst)
+    else
+        Wrong_type lst
 
 
 type problem = range * problem_description
@@ -35,8 +52,6 @@ module Result = Monad.Result (struct type t = problem end)
 module List_fold = List.Monadic_fold (Result)
 module Interval_monadic = Interval.Monadic (Result)
 module Algo = Gamma_algo.Make (Gamma)
-
-module Build_context = Build_context2
 
 
 type t = {
@@ -82,17 +97,20 @@ let base_candidates
             Option.to_list (Build_context.base_candidate term nargs bc))
     in
     if bcs = [] then
+        let acts =
+            List.map
+                (fun term ->
+                    [],
+                    Algo.type_of_term term builder.base,
+                    builder.base)
+                candidates
+        and reqs =
+            List.map Build_context.required_type_in_context builder.bcs
+        in
         if 0 < nargs then
-            Error (
-                range,
-                Not_a_function
-                    (List.map
-                        (fun term ->
-                            Algo.type_of_term term builder.base, builder.base)
-                        candidates)
-            )
+            Error (range, Not_a_function acts)
         else
-            assert false
+            Error (range, Wrong_base (reqs, acts))
     else
         Ok {builder with bcs}
 
@@ -184,7 +202,9 @@ let rec build0
             | [level] when cnt_base <= level ->
                 map_bcs
                     (Build_context.bound (level - cnt_base) nargs)
-                    (fun _ -> assert false)
+                    (fun lst ->
+                        range,
+                        description_of_type_in_context nargs lst)
                     builder
 
             | lst ->
@@ -207,7 +227,9 @@ let rec build0
         >>=
         map_bcs
             (Build_context.Typed.end_ nargs)
-            (fun _ -> assert false)
+            (fun lst ->
+                range,
+                description_of_type_in_context nargs lst)
 
     | Product (fargs, res) ->
         let open Result in
@@ -271,7 +293,10 @@ let rec build0
                 >>=
                 map_bcs
                     (Build_context.Application.apply n mode)
-                    (fun _ -> assert false))
+                    (fun lst ->
+                        (fst range, Located.end_ arg),
+                        description_of_type_in_context n lst)
+            )
             args
 
 
@@ -313,7 +338,9 @@ let rec build0
                 nargs
                 (List.length args)
                 (res <> None))
-            (fun _ -> assert false)
+            (fun lst ->
+                range,
+                description_of_type_in_context nargs lst)
 
 
 
@@ -387,6 +414,37 @@ struct
             in
             holes <+> space <+> tp
 
+    let type_list (lst: type_in_context list): P.t =
+        let open P in
+        nest 4
+            (list_separated
+                cut
+                (List.map
+                    (fun (holes, tp, gamma) ->
+                        group (typ holes tp gamma))
+                    lst))
+
+    let wrong_type
+        (reqs: type_in_context list)
+        (acts: type_in_context list)
+        : P.t
+        =
+        let open P in
+        wrap_words "I was expecting a term which has"
+        <+> group space
+        <+> type_or_types reqs
+        <+> cut <+> cut
+        <+> type_list reqs
+        <+> cut <+> cut
+        <+> wrap_words "but the expression has"
+        <+> group space
+        <+> type_or_types acts
+        <+> cut <+> cut
+        <+> type_list acts
+        <+> cut <+> cut
+
+
+
     let description (descr: problem_description): P.t =
         let open P in
         match descr with
@@ -403,14 +461,7 @@ struct
             <+> group space
             <+> with_plural_s lst "type"
             <+> cut <+> cut
-            <+>
-            nest 4
-                (list_separated
-                    cut
-                    (List.map
-                        (fun (holes, tp, gamma) ->
-                            group (typ holes tp gamma))
-                        lst))
+            <+> type_list lst
             <+> cut <+> cut
             <+> wrap_words "This usually happens if I cannot infer the types \
                             of some bound variables."
@@ -423,17 +474,18 @@ struct
             <+> group space
             <+> type_or_types lst
             <+> cut <+> cut
-            <+>
-            nest
-                4
-                (list_separated
-                    cut
-                    (List.map
-                        (fun (tp, gamma) ->
-                            group (typ [] tp gamma))
-                        lst))
+            <+> type_list lst
             <+> cut <+> cut
             <+> wrap_words "which is not a function type." <+> cut
+
+        | Wrong_type lst ->
+            assert (lst <> []);
+            let reqs, acts = List.split lst in
+            wrong_type reqs acts
+
+        | Wrong_base (reqs, acts) ->
+            wrong_type reqs acts
+
 end
 
 
