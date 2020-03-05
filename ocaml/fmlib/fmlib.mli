@@ -3,7 +3,7 @@
 
 (** {1 Basic Modules} *)
 
-module Common_module_types  = Common_module_types
+module Module_types  = Module_types
 (** Common module types like [ANY, SORTABLE, ...] *)
 
 module Common = Common

@@ -1,5 +1,5 @@
 open Fmlib
-open Common_module_types
+open Module_types
 
 
 let bruijn_convert (i:int) (n:int): int =

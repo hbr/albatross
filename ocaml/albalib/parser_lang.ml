@@ -1,5 +1,5 @@
 open Fmlib
-open Common_module_types
+open Module_types
 open Common
 open Ast
 

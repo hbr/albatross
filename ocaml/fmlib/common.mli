@@ -111,7 +111,7 @@ sig
 
 
   module Monadic:
-  functor (M:Common_module_types.MONAD) ->
+  functor (M: Module_types.MONAD) ->
   sig
     (** Like ordinary [fold], but uses the monad [M] to sequence the
        operations. *)
@@ -122,7 +122,7 @@ end
 
 module String_reader:
 sig
-  include Common_module_types.READABLE
+  include Module_types.READABLE
 
   (** [of_string s] creates a readable structure of the string [s]. *)
   val of_string: string -> t
@@ -134,7 +134,7 @@ end
 
 module Fill_reader:
 sig
-  include Common_module_types.READABLE
+  include Module_types.READABLE
 
   (** [make n c] makes a character filler with [n] characters [c]. *)
   val make: int -> char -> t
@@ -143,7 +143,7 @@ end
 
 module Char_reader:
 sig
-  include Common_module_types.READABLE
+  include Module_types.READABLE
 
   (** [make c] makes a character reader with the character [c]. *)
   val make: char -> t

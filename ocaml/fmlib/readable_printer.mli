@@ -1,4 +1,4 @@
-open Common_module_types
+open Module_types
 
 (** A readable printer is a structure you can issue print commands on and
    which returns a readable structure which can be read character by

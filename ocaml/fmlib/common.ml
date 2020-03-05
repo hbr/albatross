@@ -160,7 +160,7 @@ module Interval =
       fold start a
 
 
-    module Monadic (M:Common_module_types.MONAD) =
+    module Monadic (M: Module_types.MONAD) =
       struct
         let fold
               (f: int -> 'a -> 'a M.t)

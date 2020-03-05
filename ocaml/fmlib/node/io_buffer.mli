@@ -1,4 +1,4 @@
-open Fmlib.Common_module_types
+open Fmlib.Module_types
 
 (**
    An IO buffer is an array of bytes

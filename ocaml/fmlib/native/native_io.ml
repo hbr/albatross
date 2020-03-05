@@ -1,6 +1,6 @@
 open Fmlib
 
-open Common_module_types
+open Module_types
 
 
 module Buffer:

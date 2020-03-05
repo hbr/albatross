@@ -1,5 +1,5 @@
 include Stdlib.List
-include Common_module_types
+include Module_types
 
 type 'a t = 'a list
 

@@ -1,4 +1,4 @@
-open Fmlib.Common_module_types
+open Fmlib.Module_types
 
 val bruijn_convert: int -> int -> int
 

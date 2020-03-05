@@ -1,4 +1,4 @@
-open Common_module_types
+open Module_types
 
 
 module Error  (Exp:ANY) (Sem:ANY):

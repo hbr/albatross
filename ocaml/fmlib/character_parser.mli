@@ -1,5 +1,5 @@
 open Common
-open Common_module_types
+open Module_types
 
 
 (** Position within a stream.*)
