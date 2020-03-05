@@ -312,147 +312,8 @@ module Make (Io:Io.SIG) =
 
 
 
-    let report_error
-          (header: string)
-          (src:    string)
-          (range:  range)
-          (content: Pretty.t)
-        : Pretty.t
-      =
-      let open Pretty
-      in
-      error_header header
-      <+> print_source src range
-      <+> cut
-      <+> content
-      <+> cut
 
 
-    let report_none_conforms
-        (nargs: int)
-        (reqs:  Builder.required_type list)
-        (cands: Builder.candidate_type list)
-        : Pretty.t
-        =
-        let module Builder_print = Builder.Print (Pretty) in
-        let open Pretty in
-        let plural_s n = if n = 1 then empty else char 's'
-        in
-        let expect_nargs n =
-          if n = 0 then
-            string "which"
-          else
-            list_separated
-              (group space)
-              [wrap_words "which applied to";
-               string (string_of_int n);
-               string "argument" <+> plural_s n]
-        and type_or_types lst =
-          match lst with
-          | [_] ->
-            wrap_words "the type"
-          | _ :: _ :: _ ->
-            wrap_words "one of the types"
-          | _ ->
-            assert false (* cannot happen, empty type lists not allowed! *)
-        in
-        (chain_separated
-           [wrap_words "I was expecting a term";
-            expect_nargs nargs;
-            string "has";
-            type_or_types reqs]
-           (group space))
-        <+> cut <+> cut
-        <+> (nest 4
-               ((chain_separated
-                 (List.map (Builder_print.required_type) reqs)
-                 cut)))
-        <+> cut <+> cut
-        <+> (list_separated
-               (group space)
-               [wrap_words "but the term has";
-                type_or_types cands])
-        <+> cut <+> cut
-        <+> (nest 4
-               ((chain_separated
-                 (List.map (Builder_print.candidate_type) cands)
-                 cut)))
-        <+> cut
-
-
-
-    let report_build_problem
-          (src: string)
-          (problem: Builder.problem)
-        : Pretty.t
-      =
-      let module Builder_print = Builder.Print (Pretty) in
-      let open Builder in
-      let open Pretty in
-      let plural_s n = if n = 1 then empty else char 's'
-      in
-      let type_or_types lst =
-        match lst with
-        | [_] ->
-          wrap_words "the type"
-        | _ :: _ :: _ ->
-          wrap_words "one of the types"
-        | _ ->
-          assert false (* cannot happen, empty type lists not allowed! *)
-      in
-      match problem with
-      | Not_yet_implemented (range, str) ->
-          report_error "NOT YET IMPLEMENTED" src range
-            (string str <+> group space
-              <+> wrap_words "is not yet implemented"
-              <+> cut)
-      | Overflow _ ->
-        assert false (* nyi *)
-      | No_name range ->
-         report_error
-           "NAMING" src range
-           (string "I cannot find this name or operator.")
-      | Not_enough_args (range, nargs, cands) ->
-         report_error
-           "TYPE" src range
-           (list_separated
-                  (group space)
-                  [ wrap_words "I was expecting a term which can be applied to";
-                    string (string_of_int nargs);
-                    string "argument" <+> plural_s nargs <+> char ',';
-                    wrap_words "but the term has";
-                    type_or_types cands]
-            <+> cut <+> cut
-            <+> (nest 4
-                    ((chain_separated
-                      (List.map (Builder_print.candidate_type) cands)
-                      cut)))
-            <+> cut
-            )
-      | None_conforms (range, nargs, reqs, cands) ->
-        report_error
-            "TYPE" src range
-            (report_none_conforms nargs reqs cands)
-
-    | No_candidate (range, nargs, lst) ->
-        let reqs, cands = List.split lst in
-        report_error
-            "TYPE" src range
-            (report_none_conforms nargs reqs cands)
-
-    | Unused_bound range ->
-        report_error
-            "TYPE" src range
-            (wrap_words "I cannot infer a type for this variable because \
-                         it is not used. Either use the variable or \
-                         provide an explicit type."
-            <+> cut)
-
-    | Cannot_infer_bound range ->
-        report_error
-            "TYPE" src range
-            (wrap_words "I cannot infer a type for this variable."
-            <+> cut)
 
 
     let report_parse_problem
@@ -532,38 +393,8 @@ module Make (Io:Io.SIG) =
          ]
 
 
+
     let build_and_compute
-          (src: string)
-          (e: Ast.Expression.t)
-          (compute: bool)
-        : Pretty.t
-      =
-      let std_context = Context.standard () in
-      match Builder.build e std_context with
-      | Error e ->
-         report_build_problem src e
-
-      | Ok lst ->
-         Pretty.(
-          cut
-          <+> paragraphs
-            (List.map
-               (fun (t,tp) ->
-                 let t =
-                   if compute then
-                     Context.compute t std_context
-                   else
-                     t
-                 in
-                 let module P = Context.Pretty (Pretty) in
-                 P.print (Term.Typed (t, tp)) std_context
-                 <+> cut)
-               lst)
-          <+> cut
-         )
-
-
-    let build_and_compute_new
         (src: string)
         (e: Ast.Expression.t)
         (compute: bool)
@@ -645,13 +476,6 @@ module Make (Io:Io.SIG) =
         in
         let p = parse src in
         assert (Repl_parser.has_ended p);
-        let build_and_compute =
-            let build_new = true in
-            if build_new then
-                build_and_compute_new
-            else
-                build_and_compute
-        in
         match Repl_parser.result p with
         | Some Parser.Command.Do_nothing ->
             Io.return State.init
