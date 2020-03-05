@@ -156,7 +156,14 @@ struct
             Option.(
                 unify0 act_arg req_arg false uc
                 >>= fun uc ->
-                unify0 act_rt req_rt is_super (push act_arg uc)
+                let gamma = uc.gamma in
+                map
+                    (fun uc -> {uc with gamma})
+                    (unify0
+                        act_rt
+                        req_rt
+                        is_super
+                        (push act_arg uc))
             )
 
         | Variable i, Variable j ->
