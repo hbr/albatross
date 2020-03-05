@@ -84,10 +84,16 @@ struct
                )
 
             | Lambda (tp, exp, info) ->
-               let c_inner = push_local (Lambda_info.name info) tp c in
-               let rt      = typ exp c_inner
-               in
-               Pi (tp, rt, Pi_info.typed (Lambda_info.name info))
+                let c_inner = push_local (Lambda_info.name info) tp c in
+                let rt      = typ exp c_inner
+                in
+                let info =
+                    if has_variable 0 rt then
+                        Pi_info.typed (Lambda_info.name info)
+                    else
+                        Pi_info.arrow
+                in
+                Pi (tp, rt, info)
 
             | Pi (tp, rt, info) ->
                let name = Pi_info.name info in

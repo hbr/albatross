@@ -60,8 +60,14 @@ let type_at_level (i:int) (c:t): Term.typ =
   Term.up (cnt - i) (entry i c).typ
 
 
+
+let variable_at_level (i:int) (c:t): Term.t =
+    Term.Variable (index_of_level i c)
+
+
+
 let term_at_level (i:int) (c:t): Term.t =
-  Term.Variable (level_of_index i c)
+    variable_at_level i c
 
 
 

@@ -205,7 +205,7 @@ let make (gamma: Gamma.t): t =
 
 let final
     (bc: t)
-    : (Term.t * Term.typ, Term.t list * Term.t * Term.typ * Gamma.t) result
+    : (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
     =
     let cnt0 = count_base bc
     and nlocs = count_locals bc in
@@ -218,7 +218,12 @@ let final
     | Some term, Some typ ->
         Ok (term, typ)
     | _ ->
-        assert false (* nyi: find the unresolved holes. *)
+        let gamma = Gamma_holes.context bc.gh in
+        Error(
+            Int_set.elements (Gamma_holes.unfilled_holes cnt0 typ bc.gh),
+            typ,
+            gamma
+        )
 
 
 

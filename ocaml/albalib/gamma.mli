@@ -32,6 +32,7 @@ val name_of_level: int -> t -> string
 
 val name_of_index: int -> t -> string
 
+val variable_at_level: int -> t -> Term.t
 val term_at_level: int -> t -> Term.t
 
 val definition_term: int -> t -> Term.t option

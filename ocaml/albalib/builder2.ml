@@ -14,31 +14,27 @@ type range = pos * pos
 module Located =
   Character_parser.Located
 
-type typ = Term.typ * Gamma.t
-
-type required_type = typ
-type candidate_type = typ
 
 
 type problem_description =
-  | Overflow
-  | No_name
-  | Not_enough_args of candidate_type list
-  | None_conforms of required_type list * candidate_type list
-  | No_candidate  of (required_type * candidate_type) list
-  | Incomplete_type of (Term.t list * Term.t * Term.typ * Gamma.t) list
-  | Unused_bound
-  | Cannot_infer_bound
-  | Not_yet_implemented of string
+    | Overflow
+    | No_name
+    | Incomplete_type of (int list * Term.typ * Gamma.t) list
+    | Cannot_infer_bound
+    | Not_a_function of (Term.typ * Gamma.t) list
 
 
 type problem = range * problem_description
+
+
+
 
 
 module Name_map = Context.Name_map
 module Result = Monad.Result (struct type t = problem end)
 module List_fold = List.Monadic_fold (Result)
 module Interval_monadic = Interval.Monadic (Result)
+module Algo = Gamma_algo.Make (Gamma)
 
 module Build_context = Build_context2
 
@@ -73,7 +69,7 @@ let make (c: Context.t): t =
 
 
 let base_candidates
-    (_: range)
+    (range: range)
     (candidates: Term.t list)
     (nargs: int)
     (builder: t)
@@ -86,7 +82,17 @@ let base_candidates
             Option.to_list (Build_context.base_candidate term nargs bc))
     in
     if bcs = [] then
-        assert false
+        if 0 < nargs then
+            Error (
+                range,
+                Not_a_function
+                    (List.map
+                        (fun term ->
+                            Algo.type_of_term term builder.base, builder.base)
+                        candidates)
+            )
+        else
+            assert false
     else
         Ok {builder with bcs}
 
@@ -150,7 +156,11 @@ let rec build0
         Located.value exp
     with
     | Number str ->
-        base_candidates range (Term.number_values str) nargs builder
+        let lst = Term.number_values str in
+        if lst = [] then
+            Error (range, Overflow)
+        else
+            base_candidates range lst nargs builder
 
     | Char code ->
         base_candidates range [Term.char code] nargs builder
@@ -327,6 +337,109 @@ let build
 
 
 
+(* ----------------------------------------------------------------------- *)
+(* Printing of Problems *)
+(* ----------------------------------------------------------------------- *)
+
+module Print (P: Pretty_printer.SIG) =
+struct
+    module PP = Term_printer.Pretty (Gamma) (P)
+
+
+    let with_plural_s (l: 'a list) (s: string): P.t =
+        match l with
+        | [_] ->
+            P.string s
+        | _ :: _ :: _ ->
+            P.(string s <+>  char 's')
+        | _ ->
+            assert false (* Illegal call! *)
+
+    let type_or_types (l: 'a list): P.t =
+        match l with
+        | [_] ->
+            P.wrap_words "the type"
+        | _ :: _ :: _ ->
+            P.wrap_words "one of the types"
+        | _ ->
+            assert false (* Illegal call! *)
+
+    let typ (holes: int list) (tp: Term.typ) (gamma: Gamma.t): P.t =
+        let tp = PP.print tp gamma in
+        let open P in
+        match holes with
+        | [] ->
+            tp
+        | _ ->
+            let holes =
+                char '['
+                <+>
+                list_separated
+                    (char ',' <+> group space)
+                    (List.map
+                        (fun level ->
+                            let v = Gamma.variable_at_level level gamma
+                            and vtp = Gamma.type_at_level level gamma in
+                            PP.print v gamma <+> char ':' <+> char ' '
+                            <+> PP.print vtp gamma)
+                        holes)
+                <+> char ']'
+            in
+            holes <+> space <+> tp
+
+    let description (descr: problem_description): P.t =
+        let open P in
+        match descr with
+        | Overflow ->
+            wrap_words "The number does not fit into a machine word" <+> cut
+        | No_name ->
+            string "I cannot find this name or operator" <+> cut
+        | Cannot_infer_bound ->
+            wrap_words "I cannot infer a type for this variable" <+> cut
+        | Incomplete_type lst  ->
+            assert (lst <> []);
+            wrap_words "I cannot infer a complete type of the expression. \
+                        Only the incomplete"
+            <+> group space
+            <+> with_plural_s lst "type"
+            <+> cut <+> cut
+            <+>
+            nest 4
+                (list_separated
+                    cut
+                    (List.map
+                        (fun (holes, tp, gamma) ->
+                            group (typ holes tp gamma))
+                        lst))
+            <+> cut <+> cut
+            <+> wrap_words "This usually happens if I cannot infer the types \
+                            of some bound variables."
+            <+> cut
+
+        | Not_a_function lst ->
+            assert (lst <> []);
+            wrap_words "I was expecting a function which can be applied to \
+                        arguments. But the expression has"
+            <+> group space
+            <+> type_or_types lst
+            <+> cut <+> cut
+            <+>
+            nest
+                4
+                (list_separated
+                    cut
+                    (List.map
+                        (fun (tp, gamma) ->
+                            group (typ [] tp gamma))
+                        lst))
+            <+> cut <+> cut
+            <+> wrap_words "which is not a function type." <+> cut
+end
+
+
+
+
+
 
 (* ----------------------------------------------------------------------- *)
 (* Unit Test *)
@@ -355,7 +468,7 @@ let string_of_term_type (term: Term.t) (typ: Term.t): string
 let _ = string_of_term_type
 
 
-
+(*
 let string_of_error ((_,p): problem): string =
     match p with
     | Overflow -> "overflow"
@@ -368,7 +481,7 @@ let string_of_error ((_,p): problem): string =
     | Cannot_infer_bound -> "cannot infer bound"
     | Not_yet_implemented _ -> "not yet implemented"
 let _ = string_of_error
-
+*)
 
 
 let build_expression
@@ -587,6 +700,13 @@ let%test _ =
     | _ ->
         false
 
+
+let%test _ =
+    match build_expression "\\ x y := x = y" with
+    | Error (_, Incomplete_type _) ->
+        true
+    | _ ->
+        false
 
 (*
 let%test _ =

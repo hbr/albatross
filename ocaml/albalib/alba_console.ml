@@ -563,6 +563,42 @@ module Make (Io:Io.SIG) =
          )
 
 
+    let build_and_compute_new
+        (src: string)
+        (e: Ast.Expression.t)
+        (compute: bool)
+        : Pretty.t
+        =
+        let std_context = Context.standard () in
+        match Builder2.build e std_context with
+        | Error (range, descr) ->
+            let module Builder_print = Builder2.Print (Pretty) in
+            let open Pretty in
+            error_header "TYPE"
+            <+> print_source src range
+            <+> cut
+            <+> Builder_print.description descr
+            <+> cut
+        | Ok lst ->
+            Pretty.(
+                cut
+                <+> paragraphs
+                (List.map
+                    (fun (t,tp) ->
+                        let t =
+                            if compute then
+                                Context.compute t std_context
+                            else
+                            t
+                        in
+                        let module P = Context.Pretty (Pretty) in
+                        P.print (Term.Typed (t, tp)) std_context
+                        <+> cut)
+                    lst)
+                <+> cut
+         )
+
+
 
     let repl (_:command_line): unit Io.t =
       let module State =
@@ -609,6 +645,13 @@ module Make (Io:Io.SIG) =
         in
         let p = parse src in
         assert (Repl_parser.has_ended p);
+        let build_and_compute =
+            let build_new = true in
+            if build_new then
+                build_and_compute_new
+            else
+                build_and_compute
+        in
         match Repl_parser.result p with
         | Some Parser.Command.Do_nothing ->
             Io.return State.init

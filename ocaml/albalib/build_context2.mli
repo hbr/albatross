@@ -35,7 +35,7 @@ val make: Gamma.t -> t
 
 val final:
         t
-        -> (Term.t * Term.typ, Term.t list * Term.t * Term.typ * Gamma.t) result
+        -> (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
 
 
 (** {1 Terminals } *)
