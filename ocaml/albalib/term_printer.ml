@@ -40,10 +40,8 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
 
 
     let pi_info (info: Pi_info.t): string * bool =
-        let name = Pi_info.name info
-        and typed = Pi_info.is_typed info
-        in
-        name, typed
+        Pi_info.name info,
+        Pi_info.is_typed info
 
 
     let rec split_pi
