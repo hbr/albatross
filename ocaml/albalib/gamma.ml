@@ -70,12 +70,12 @@ let name_at_level (level: int) (gamma: t): string =
 
 
 let name_of_index (i: int) (gamma: t): string =
-  (entry (bruijn_convert i (count gamma)) gamma).name
+    (entry (bruijn_convert i (count gamma)) gamma).name
 
 
 
 let empty: t =
-  Segmented_array.empty
+    Segmented_array.empty
 
 
 let push (name: string) (typ:Term.typ) (definition:definition) (c:t): t =
@@ -85,17 +85,17 @@ let push (name: string) (typ:Term.typ) (definition:definition) (c:t): t =
 
 
 let push_local (nme: string) (typ: Term.typ) (c:t): t =
-  push nme typ No c
+    push nme typ No c
 
 
 let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
-  let typ,n = typ
-  and cnt = count c
-  in
-  assert (n <= cnt);
-  let typ = Term.up (cnt - n) typ
-  in
-  push name typ def c
+    let typ,n = typ
+    and cnt = count c
+    in
+    assert (n <= cnt);
+    let typ = Term.up (cnt - n) typ
+    in
+    push name typ def c
 
 
 let int_level    = 0
