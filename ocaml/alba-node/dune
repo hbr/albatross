@@ -5,6 +5,7 @@
               ;--disable genprim
               ;--disable=debugger
               )))
+  (modes js)
   (name alba_node))
 
  (env

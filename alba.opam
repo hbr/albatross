@@ -15,7 +15,7 @@ build: [
   ["sh" "./.copy_docu.sh"]
 ]
 depends: [
-  "ocaml" {>= "4.05.0"}
+  "ocaml" {>= "4.08.0"}
   "linenoise"
   "ocamlfind" {build}
   "menhir" {build}
