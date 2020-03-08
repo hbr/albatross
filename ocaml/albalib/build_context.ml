@@ -580,5 +580,9 @@ struct
         candidate
             lam
             nargs
-            {bc with sp; stack}
+            {bc with
+                gh = Gamma_holes.remove_bounds nbounds bc.gh;
+                sp;
+                stack
+            }
 end
