@@ -33,9 +33,14 @@ struct
 end
 
 
+
+
+
+
 type entry = {
     cnt0: int;
 }
+
 
 type t = {
     gh: Gamma_holes.t;
@@ -45,7 +50,10 @@ type t = {
     entries: entry list;
 }
 
+
 type type_in_context = int list * Term.typ * Gamma.t
+
+
 
 
 let index_of_level (level: int) (bc: t): int =

@@ -346,6 +346,8 @@ let rec build0
                 range,
                 description_of_type_in_context nargs lst)
 
+    | Where (_, _) ->
+        assert false
 
 
 

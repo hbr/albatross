@@ -72,7 +72,7 @@ module Located =
   end
 
 module Indent =
-  struct
+struct
 
     type t = {
         lb: int;          (* lower bound of the indentation set *)
@@ -88,58 +88,92 @@ module Indent =
                       abs = false;
                       strict = false}
 
+    let string_of (ind: t): string =
+        "lb " ^ string_of_int ind.lb
+        ^
+        (
+            match ind.ub with
+            | None ->
+                ""
+            | Some ub ->
+                ", ub " ^ string_of_int ub
+        )
+        ^ ", abs "  ^ string_of_bool ind.abs
+        ^ ", strict "  ^ string_of_bool ind.strict
+    let _ = string_of
+
 
     let bounds (ind:t): int * int option =
       ind.lb, ind.ub
 
 
     let is_allowed_token_position (pos:int) (ind:t): bool =
-      if ind.abs then
-        (* The token position must be in the set of the allowed indentations
-           of the parent. *)
-        ind.lb <= pos
-        && match ind.ub with
-           | None ->
-              true
-           | Some ub ->
-              pos <= ub
-      else
-        (* The token must be strictly or nonstrictly indented relative to the
-           parent. *)
-        let incr = if ind.strict then 1 else 0 in
-        ind.lb + incr <= pos
+        if ind.abs then
+            (* The token position must be in the set of the allowed indentations
+            of the parent. *)
+            ind.lb <= pos
+            && match ind.ub with
+               | None ->
+                  true
+               | Some ub ->
+                  pos <= ub
+        else
+            (* The token must be strictly or nonstrictly indented relative to
+            the parent. *)
+            let incr =
+                if ind.strict then
+                    1
+                else
+                    0
+            in
+            ind.lb + incr <= pos
 
 
     let is_offside (col:int) (ind:t): bool =
-      not (is_allowed_token_position col ind)
+        not (is_allowed_token_position col ind)
 
 
     let token (pos:int) (ind:t): t =
-      if ind.abs then
-        (* It is the first token of an absolutely aligned parent. *)
-        {ind with lb = pos; ub = Some pos; abs = false}
-      else
-        (* Indentation of the parent is at most the indentation of the token
-           (strict = false) or the indentation of the token - 1 (strict =
-           true). *)
-        let pos = if ind.strict then pos - 1 else pos
-        in
-        match ind.ub with
-        | Some ub when ub <= pos ->
-           ind
-        | _ ->
-           {ind with ub = Some pos}
+        if ind.abs then
+            (* It is the first token of an absolutely aligned parent. *)
+            { ind with
+                lb = pos;
+                ub = Some pos;
+                abs = false
+            }
+        else
+            (* Indentation of the parent is at most the indentation of the token
+               (strict = false) or the indentation of the token - 1 (strict =
+               true). *)
+            let pos =
+                if ind.strict then
+                    pos - 1
+                else
+                    pos
+            in
+            match ind.ub with
+            | Some ub when ub <= pos ->
+               ind
+            | _ ->
+               {ind with ub = Some pos}
+
 
     let absolute (ind:t): t =
       {ind with abs = true}
+
 
     let start_indented (strict:bool) (ind:t): t =
       if ind.abs then
         ind
       else
-        let incr = if strict then 1 else 0
+        let incr =
+            if strict then
+                1
+            else
+                0
         in
         {ind with lb = ind.lb + incr; ub = None}
+
 
     let end_indented (strict:bool) (ind0:t) (ind:t): t =
       if ind0.abs then
@@ -159,7 +193,7 @@ module Indent =
                   Some (ub - 1)
                | Some ub0 ->
                   Some (min ub0 (ub - 1))}
-  end
+end
 
 
 
@@ -201,6 +235,12 @@ module State (User:ANY) (Context_msg:ANY) =
       }
 
     let make pos user = {pos;user; indent = Indent.initial; contexts = []}
+
+    let string_of (s: t): string =
+        "line "  ^ string_of_int (Position.line s.pos)
+        ^ ", col " ^ string_of_int (Position.column s.pos)
+        ^ ", ind "  ^ Indent.string_of s.indent
+    let _ = string_of
 
     let position (s:t): Position.t = s.pos
     let line (s:t): int = Position.line s.pos
@@ -363,7 +403,8 @@ module Advanced
              Error (e st)
           | Some c ->
              if State.is_offside st then
-               Error (e st)
+                ((*Printf.printf "is_offside %s\n" (State.string_of st);*)
+                Error (e st))
              else
                match f st c with
                | Ok a ->

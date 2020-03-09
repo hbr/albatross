@@ -15,27 +15,31 @@ module Expression = struct
     | Operand
 
 
-  type t =
-    t0 Located.t
+    type t =
+        t0 Located.t
 
-  and t0 =
-    | Proposition
-    | Any
-    | Identifier of string
-    | Number of string
-    | Char of int
-    | String of string
-    | Operator of operator
-    | Typed of t * t                      (* exp, type *)
-    | Application of t * (t * argument_type) list
-    | Function of
-        formal_argument list
-        * t option                        (* result type *)
-        * t                               (* defining expression *)
-    | Product of formal_argument list * t
+    and t0 =
+        | Proposition
+        | Any
+        | Identifier of string
+        | Number of string
+        | Char of int
+        | String of string
+        | Operator of operator
+        | Typed of t * t                      (* exp, type *)
+        | Application of t * (t * argument_type) list
+        | Function of
+            formal_argument list
+            * t option                        (* result type *)
+            * t                               (* defining expression *)
+        | Product of formal_argument list * t
+        | Where of t * definition list
 
-  and formal_argument =
-    string Located.t * t option
+    and formal_argument =
+        string Located.t * t option
+
+    and definition =
+        string Located.t * formal_argument list * t
 
 
   let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
