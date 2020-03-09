@@ -252,7 +252,7 @@ let rec build0
             (map_bcs_list Build_context.Product.start builder)
         >>= build0 res 0
         >>= map_bcs
-                (Build_context.Product.end_ (List.length fargs))
+                (Build_context.Product.check (List.length fargs))
                 (fun lst ->
                     let i_min =
                         List.fold_left
@@ -262,6 +262,11 @@ let rec build0
                     in
                     let name, _ = List.nth_strict i_min fargs in
                     Located.range name, Cannot_infer_bound)
+        >>= map_bcs
+            (Build_context.Product.end_ nargs (List.length fargs))
+            (fun lst ->
+                range,
+                description_of_type_in_context nargs lst)
 
 
     | Application (f, args) ->
@@ -519,20 +524,6 @@ let string_of_term_type (term: Term.t) (typ: Term.t): string
 let _ = string_of_term_type
 
 
-(*
-let string_of_error ((_,p): problem): string =
-    match p with
-    | Overflow -> "overflow"
-    | No_name -> "no name"
-    | Not_enough_args _ -> "not enough args"
-    | None_conforms _ -> "None conforms"
-    | No_candidate _ -> "no candidate"
-    | Incomplete_type _ -> "incomplete type"
-    | Unused_bound -> "unused bound"
-    | Cannot_infer_bound -> "cannot infer bound"
-    | Not_yet_implemented _ -> "not yet implemented"
-let _ = string_of_error
-*)
 
 
 let build_expression
@@ -632,6 +623,13 @@ let%test _ =
     | _ ->
         false
 
+
+let%test _ =
+    match build_expression "Int -> String: Proposition" with
+    | Error (_, Wrong_type _) ->
+        true
+    | _ ->
+        false
 
 
 let%test _ =
@@ -771,11 +769,10 @@ let%test _ =
     | _ ->
         false
 
-(*
+
 let%test _ =
     match build_expression "(+) 1 2 3" with
-    | Error (_, Not_enough_args _) ->
+    | Error (_, Not_a_function _) ->
         true
     | _ ->
         false
-*)

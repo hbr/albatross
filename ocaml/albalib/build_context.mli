@@ -96,8 +96,17 @@ the implicit arguments before assigning it to the next to be constructed term.
 module Product:
 sig
     val start: t -> t
+
     val next: string -> bool -> t -> t
-    val end_: int -> t -> (t, int) result
+
+    val check: int -> t -> (t, int) result
+
+    val end_:
+        int -> int -> t
+        -> (t, type_in_context * type_in_context) result
+    (**
+        [end_ nargs nbounds bc]
+    *)
 end
 
 

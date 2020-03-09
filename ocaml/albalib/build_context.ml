@@ -334,21 +334,25 @@ struct
             sp = cnt0 + 1
         }
 
-    let end_ (nargs: int) (bc: t): (t, int) result =
-        assert (0 < nargs);
-        let res = top_term bc
-        and arg_tps, stack =
-            let rec args nargs stack tps =
-                if nargs = 0 then
+
+    let  check
+        (nbounds: int)
+        (bc: t)
+        : (t, int) result
+        =
+        assert (0 < nbounds);
+        let arg_tps, _ =
+            let rec args nbounds stack tps =
+                if nbounds = 0 then
                     tps, stack
                 else
                     let sp, stack = Stack.split stack in
-                    args (nargs - 1) stack (term_at_level sp bc :: tps)
+                    args (nbounds - 1) stack (term_at_level sp bc :: tps)
             in
-            args nargs bc.stack []
+            args nbounds bc.stack []
         in
         let rec find_incomplete i tps =
-            if i = nargs then
+            if i = nbounds then
                 None
             else
                 let tp, tps = Stack.split tps in
@@ -363,15 +367,31 @@ struct
         | Some i ->
             Error i
         | None ->
-            let sp, stack = Stack.split stack in
-            let tp = Gamma_holes.pi nargs res bc.gh in
-            let entry, entries = Stack.split bc.entries in
-            Ok (set_term tp
-                    {   gh = Gamma_holes.remove_bounds nargs bc.gh;
-                        sp;
-                        stack;
-                        entry;
-                        entries})
+            Ok bc
+
+
+    let end_
+        (nargs: int)
+        (nbounds: int)
+        (bc: t)
+        : (t, type_in_context * type_in_context) result
+        =
+        assert (0 < nbounds);
+        let res = top_term bc
+        and sp, stack = Stack.pop (nbounds + 1) bc.sp bc.stack
+        in
+        let tp = Gamma_holes.pi nbounds res bc.gh in
+        let entry, entries = Stack.split bc.entries in
+        candidate
+            tp
+            nargs
+            {
+                gh = Gamma_holes.remove_bounds nbounds bc.gh;
+                sp;
+                stack;
+                entry;
+                entries;
+            }
 end
 
 
