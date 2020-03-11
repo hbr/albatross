@@ -10,17 +10,17 @@ build: [
   [make "test_alba"]
   ["dune" "build" "@install" "-p" name "-j" jobs]
   ["dune" "build" "@runtest" "-p" name] {with-test}
-  ["dune" "build" "@doc" "-p" name] {with-doc}
+  ["dune" "build" "@doc" "-p" name]     {with-doc}
   # ["sh" "./.copy_docu.sh"] recommended to delete (camelus test)
 ]
 depends: [
-  "ocaml" {>= "4.08.0"}
+  "ocaml"            {>= "4.08.0"}
+  "dune"             {>= "1.8.0"}
   "linenoise"
-  "ocamlfind" {build}
-  "menhir" {build}
-  "dune" {>= "1.8.0"}
-  "odoc" {with-doc}
-  "js_of_ocaml" {build}
   "js_of_ocaml-ppx"
-  "ppx_inline_test" {with-test}
+  "menhir"           {build}
+  "js_of_ocaml"      {build}
+  "ppx_inline_test"  {build} (* is needed for building the libraries,
+                                otherwise it does not compile *)
+  "odoc"             {with-doc}
 ]
