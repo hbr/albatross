@@ -435,7 +435,7 @@ struct
             formal_argument_name >>= fun name ->
             (formal_arguments true |. assign |. whitespace)
             >>= fun fargs ->
-            expression ()
+            indented true (expression ())
             >>= fun e ->
             return (name, fargs, e)
         in
