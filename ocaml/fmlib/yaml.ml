@@ -75,7 +75,7 @@ module Parser =
         scalar >>= fun key ->
         char ':' >>= fun _ ->
         white_space >>= fun _ ->
-        indented true (yaml ()) >>= fun v ->
+        indented (yaml ()) >>= fun v ->
         white_space >>= fun _ ->
         return (key,v)
       and item =
@@ -89,7 +89,7 @@ module Parser =
         scalar >>= fun str ->
         (char ':' >>= fun _ ->
          white_space >>= fun _ ->
-         indented true (yaml ()) >>= fun v ->
+         indented (yaml ()) >>= fun v ->
          white_space >>= fun _ ->
          zero_or_more (absolute key_value) >>= fun lst ->
          return (Object (Array.of_list @@ (str,v) :: lst))
@@ -98,7 +98,7 @@ module Parser =
       and list =
         char '-' >>= fun _ ->
         white_space >>= fun _ ->
-        indented true (yaml ()) >>= fun v ->
+        indented (yaml ()) >>= fun v ->
         white_space >>= fun _ ->
         zero_or_more (absolute item) >>= fun lst ->
         return @@ Array (Array.of_list @@ v :: lst)

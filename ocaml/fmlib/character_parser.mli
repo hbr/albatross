@@ -99,7 +99,8 @@ module type COMBINATORS =
     (** {2 Indentation Combinators} *)
 
     val absolute: 'a t -> 'a t
-    val indented: bool -> 'a t -> 'a t
+    val indented: 'a t -> 'a t
+    val maybe_indented: 'a t -> 'a t
     val detached: 'a t -> 'a t
     val get_bounds: (int * int option) t
 

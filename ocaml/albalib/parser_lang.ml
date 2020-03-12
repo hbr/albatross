@@ -435,7 +435,7 @@ struct
             formal_argument_name >>= fun name ->
             (formal_arguments true |. assign |. whitespace)
             >>= fun fargs ->
-            indented true (expression ())
+            indented (expression ())
             >>= fun e ->
             return (name, fargs, e)
         in
@@ -444,9 +444,7 @@ struct
         let where_block: Expression.definition list t =
             (backtrackable (string "where") "where" |. whitespace)
             >>= fun _ ->
-            indented
-                true
-                (one_or_more_aligned definition)
+            indented (one_or_more_aligned definition)
         in
 
 

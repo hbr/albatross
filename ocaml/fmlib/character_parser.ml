@@ -322,7 +322,8 @@ module type COMBINATORS =
     val update: (state -> state) -> unit t
 
     val absolute: 'a t -> 'a t
-    val indented: bool -> 'a t -> 'a t
+    val indented: 'a t -> 'a t
+    val maybe_indented: 'a t -> 'a t
     val detached: 'a t -> 'a t
     val get_bounds: (int * int option) t
 
@@ -529,11 +530,20 @@ module Advanced
       Basic.update State.absolute >>= fun _ ->
       p
 
-    let indented (strict:bool) (p:'a t): 'a t =
+    let indented1 (strict: bool) (p: 'a t): 'a t =
       Basic.get_and_update (State.start_indented strict) >>= fun st ->
       p >>= fun a ->
       Basic.update (State.end_indented strict st) >>= fun _ ->
       return a
+
+
+    let indented (p: 'a t): 'a t =
+        indented1 true p
+
+
+    let maybe_indented (p: 'a t): 'a t =
+        indented1 false p
+
 
     let detached (p:'a t): 'a t =
       Basic.get_and_update State.start_detached >>= fun st ->
@@ -1064,7 +1074,7 @@ let%test _ =
   let p = run
             (return ()
              |. letter_ws
-             |. (indented true letter_ws)
+             |. (indented letter_ws)
              |. expect_end)
             str
   in
@@ -1083,7 +1093,7 @@ let%test _ =
   let p = run
             (return ()
              |. letter_ws
-             |. (indented true letter_ws)
+             |. (indented letter_ws)
              |. letter_ws
              |. expect_end)
             str
@@ -1103,7 +1113,7 @@ let%test _ =
   let p = run
             (return ()
              |. letter_ws
-             |. (indented true (skip_one_or_more letter_ws))
+             |. (indented (skip_one_or_more letter_ws))
              |. letter_ws
              |. expect_end)
             str
@@ -1172,7 +1182,6 @@ let%test _ =
                    |. absolute (letter_ws)
                    |. absolute (letter_ws)
                    |. indented
-                        true
                         (absolute
                            ( return ()
                              |. absolute (letter_ws)
@@ -1201,7 +1210,6 @@ let%test _ =
                    |. absolute (letter_ws)
                    |. absolute (letter_ws)
                    |. indented
-                        true
                         (absolute
                            ( return ()
                              |. absolute (letter_ws)
@@ -1230,7 +1238,6 @@ let%test _ =
                    |. absolute (letter_ws)
                    |. absolute (letter_ws)
                    |. indented
-                        true
                         (absolute
                            ( return ()
                              |. absolute (letter_ws)
@@ -1254,7 +1261,7 @@ let%test _ =
             (return ()
              |. skip_one_or_more_aligned
                   (letter_ws
-                   |. indented true (skip_zero_or_more_aligned letter_ws)
+                   |. indented (skip_zero_or_more_aligned letter_ws)
                   )
              |. expect_end)
             str
