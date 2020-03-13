@@ -77,19 +77,14 @@ module Error (Expect:ANY) (Semantic:ANY) =
 module type COMBINATORS =
   sig
     type 'a t
-    type expect
     type semantic
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
-    val unexpected: expect -> 'a t
     val fail:    semantic -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
-    val (<?>):   'a t -> expect -> 'a t
-    val backtrackable: 'a t -> expect -> 'a t
-    val not_followed_by: 'a t -> expect -> unit t
 
     val optional: 'a t -> 'a option t
     val one_of:   'a t list -> 'a t

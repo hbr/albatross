@@ -59,9 +59,10 @@ module type SIG =
         type final
         type _ t
 
-        module Error: Generic_parser.ERROR with type expect = string
-                                            and type semantic = Problem.t
-
+        module Error:
+            Generic_parser.ERROR
+                with type expect = string * Character_parser.Indent.t
+                and  type semantic = Problem.t
 
         val needs_more: parser -> bool
         val has_ended:  parser -> bool
@@ -116,30 +117,30 @@ struct
 
 
     let line_comment: unit t =
-      backtrackable (string "--") "\"--\""
-      >>= fun _ ->
-      skip_zero_or_more
-        (expect
-           (fun c -> c <> '\n')
-           "any char except newline")
-      >>= fun _ ->
-      return ()
+        backtrackable (string "--") "\"--\""
+        >>= fun _ ->
+        skip_zero_or_more
+          (expect
+             (fun c -> c <> '\n')
+             "any char except newline")
+        >>= fun _ ->
+        return ()
 
 
     let multiline_comment: unit t =
-      let rec to_end (): unit t =
-        (char '-' >>= fun _ ->
-         (char '}'
-         <|> to_end ()))
-        <|> (expect (fun _ -> true) "any char"
-             >>= fun _ ->
-             to_end ())
-      in
-      backtrackable
-        (string "{-")
-        "\"{-\""
-      >>= fun _ ->
-      to_end ()
+        let rec to_end (): unit t =
+          (char '-' >>= fun _ ->
+           (char '}'
+           <|> to_end ()))
+          <|> (expect (fun _ -> true) "any char"
+               >>= fun _ ->
+               to_end ())
+        in
+        backtrackable
+          (string "{-")
+          "\"{-\""
+        >>= fun _ ->
+        to_end ()
 
 
 
@@ -333,8 +334,12 @@ struct
 
     let rec expression (): Expression.t t =
 
+        let indented_expression () =
+            indented (expression ())
+        in
+
         let result_type: Expression.t t =
-          colon |. whitespace >>= expression
+          colon |. whitespace >>= indented_expression
         in
 
         let optional_result_type: Expression.t option t =
@@ -344,7 +349,7 @@ struct
         let formal_argument: (string located * Expression.t option) t =
           (char_ws '(' >>= fun _ ->
            formal_argument_name >>= fun name ->
-           colon |. whitespace >>= expression >>= fun typ ->
+           colon |. whitespace >>= indented_expression >>= fun typ ->
            char_ws ')' >>= fun _ ->
            return (name, Some typ)
           )
@@ -366,24 +371,35 @@ struct
 
 
         let primary (): Expression.t t =
-          backtrackable identifier_expression "identifier"
-          <|> number_expression
-          <|> literal_char
-          <|> literal_string
-          <|> ( ( char_ws '('
-                  >>= fun _ ->
-                  (* op_expression has to be encapsulated in a function,
-                     otherwise infinite recursion!! *)
-                  expression () <|> lonely_operator)
-                |. char_ws ')'
-              )
-          <|> located
+            backtrackable identifier_expression "identifier"
+            <|>
+            number_expression
+            <|>
+            literal_char
+            <|>
+            literal_string
+            <|>
+            (*  ( exp ) *)
+            ( ( char_ws '('
+                >>= fun _ ->
+                (* op_expression has to be encapsulated in a function,
+                   otherwise infinite recursion!! *)
+                indented_expression ()
+                <|>
+                indented lonely_operator)
+              |. char_ws ')'
+            )
+            <|>
+            (* \ (x: A) (y: B) ... : RT := exp *)
+            located
                 (return (fun args rt exp -> Expression.Function (args, rt, exp))
                  |. char_ws '\\'
                  |= formal_arguments false
                  |= optional_result_type
-                 |= (assign |. whitespace >>= expression))
-          <|> located
+                 |= (assign |. whitespace >>= indented_expression))
+            <|>
+            (* all (a: A) (b: B) ... : RT *)
+            located
                 (return
                   (fun args rt ->
                       match Located.value rt with
@@ -395,7 +411,8 @@ struct
                 |. whitespace
                 |= formal_arguments false
                 |= result_type)
-          <?> "expression"
+            <?>
+            "expression"
         in
 
         let application =
@@ -435,7 +452,7 @@ struct
             formal_argument_name >>= fun name ->
             (formal_arguments true |. assign |. whitespace)
             >>= fun fargs ->
-            indented (expression ())
+            indented_expression ()
             >>= fun e ->
             return (name, fargs, e)
         in
@@ -464,19 +481,21 @@ struct
         in
 
         (* expression parsing *)
-        operator_exression >>= fun e ->
-        located (optional where_block) >>= fun def ->
+        absolute (
+            operator_exression >>= fun e ->
+            located (optional where_block) >>= fun def ->
 
-        match Located.value def with
-        | None ->
-            return e
-        | Some definitions ->
-            assert (definitions <> []);
-            return (
-                Located.make
-                    (Located.start e)
-                    (Expression.Where (e, definitions))
-                    (Located.end_ def))
+            match Located.value def with
+            | None ->
+                return e
+            | Some definitions ->
+                assert (definitions <> []);
+                return (
+                    Located.make
+                        (Located.start e)
+                        (Expression.Where (e, definitions))
+                        (Located.end_ def))
+        )
 
 
 

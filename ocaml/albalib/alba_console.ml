@@ -375,7 +375,7 @@ module Make (Io:Io.SIG) =
            match Repl_parser.Error.expectations error with
            | [] ->
               assert false (* Illegal call! *)
-           | [e] ->
+           | [e,_] ->
               chain [string "I was expecting";
                      nest_list 4 [cut; cut; string e];
                      cut]
@@ -384,7 +384,7 @@ module Make (Io:Io.SIG) =
                      cut;
                      indented_paragraph @@
                        print_list lst
-                         (fun e ->
+                         (fun (e, _) ->
                            chain [
                                string "- ";
                                string e;

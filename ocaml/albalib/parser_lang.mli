@@ -49,8 +49,10 @@ module type SIG =
         type final
         type _ t
 
-        module Error: Generic_parser.ERROR with type expect = string
-                                            and type semantic = Problem.t
+        module Error:
+            Generic_parser.ERROR
+                with type expect = string * Character_parser.Indent.t
+                and  type semantic = Problem.t
 
         val needs_more: parser -> bool
         val has_ended:  parser -> bool

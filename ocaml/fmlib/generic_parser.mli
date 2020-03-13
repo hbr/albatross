@@ -28,20 +28,15 @@ module type ERROR =
 module type COMBINATORS =
   sig
     type 'a t
-    type expect
     type semantic
     val return: 'a -> 'a t
     val succeed: 'a -> 'a t
-    val unexpected: expect -> 'a t
     val fail:    semantic -> 'a t
     val consumer: 'a t -> 'a t
     val map:     ('a -> 'b) -> 'a t -> 'b t
     val (>>=):   'a t -> ('a -> 'b t) -> 'b t
     val (<|>):   'a t -> 'a t -> 'a t
-    val (<?>):   'a t -> expect -> 'a t
-    val backtrackable: 'a t -> expect -> 'a t
 
-    val not_followed_by: 'a t -> expect -> unit t
     val optional: 'a t -> 'a option t
     val one_of:   'a t list -> 'a t
     val zero_or_more: 'a t -> 'a list t
@@ -59,40 +54,43 @@ module type COMBINATORS =
 
 module Make (T:ANY) (S:ANY) (Expect:ANY) (Semantic:ANY) (F:ANY):
 sig
-  type token = T.t
-  type final = F.t
+    type token = T.t
+    type final = F.t
 
-  type parser
+    type parser
 
-  include COMBINATORS
-          with type expect = Expect.t
-           and type semantic = Semantic.t
+    include COMBINATORS with type semantic = Semantic.t
 
-  module Error: ERROR with type semantic = Semantic.t
-                       and type expect   = Expect.t
+    module Error: ERROR with type semantic = Semantic.t
+                         and type expect   = Expect.t
 
-  val needs_more: parser -> bool
-  val has_ended:  parser -> bool
-  val put_token:  parser -> token -> parser
-  val state:      parser -> S.t
-  val result:     parser -> final option
-  val error:      parser -> Error.t
+    val unexpected: Expect.t -> 'a t
+    val (<?>):   'a t -> Expect.t -> 'a t
+    val backtrackable: 'a t -> Expect.t -> 'a t
+    val not_followed_by: 'a t -> Expect.t -> unit t
 
-  val error_string:
-    parser
-    -> (Expect.t -> string)
-    -> (Semantic.t -> string)
-    -> string
+    val needs_more: parser -> bool
+    val has_ended:  parser -> bool
+    val put_token:  parser -> token -> parser
+    val state:      parser -> S.t
+    val result:     parser -> final option
+    val error:      parser -> Error.t
 
-  val lookahead:  parser -> token list
-  val has_succeeded: parser -> bool
-  val has_failed: parser -> bool
+    val error_string:
+      parser
+      -> (Expect.t -> string)
+      -> (Semantic.t -> string)
+      -> string
 
-  val make_parser: S.t -> final t -> parser
+    val lookahead:  parser -> token list
+    val has_succeeded: parser -> bool
+    val has_failed: parser -> bool
 
-  val get: S.t t
-  val update: (S.t -> S.t) -> unit t
-  val get_and_update: (S.t -> S.t) -> S.t t
+    val make_parser: S.t -> final t -> parser
 
-  val token: (S.t -> token -> ('a * S.t, Expect.t) result) -> 'a t
+    val get: S.t t
+    val update: (S.t -> S.t) -> unit t
+    val get_and_update: (S.t -> S.t) -> S.t t
+
+    val token: (S.t -> token -> ('a * S.t, Expect.t) result) -> 'a t
 end
