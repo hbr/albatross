@@ -100,20 +100,10 @@ let keywords: String_set.t =
 module Make (Final: ANY) =
 struct
     module P =
-      Character_parser.Advanced
-        (Unit) (Final) (String) (Problem) (String)
+        Character_parser.Normal (Unit) (Final) (Problem) (String)
+
+
     include P
-
-    let string (str: string): unit t =
-      P.string str (fun i -> "'" ^ String.one str.[i] ^ "'")
-
-
-    let char (c:char): unit t =
-      P.char c ("'" ^ String.one c ^ "'")
-
-
-    let whitespace_char: char t =
-      P.whitespace_char "whitespace"
 
 
     let line_comment: unit t =
@@ -552,7 +542,7 @@ struct
            |= optional (expression ()))
 
     let make (p: final t): parser =
-        make (p |. expect_end "end of input") ()
+        make (p |. expect_end) ()
 
     let run (p: final t) (input: string): parser =
         run p () input

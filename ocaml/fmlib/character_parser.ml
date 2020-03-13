@@ -681,7 +681,7 @@ struct
 
 
     let expect_end: unit t =
-        Advanced.expect_end "end"
+        Advanced.expect_end "end of input"
 
 
     let char (c:char): unit t =
@@ -834,7 +834,7 @@ let%test _ =
     in
     has_ended p
     && result p = None
-    && UP.has_expect_error "end" p
+    && UP.has_expect_error "end of input" p
     && column p = 1
     && lookahead p = [Some 'b']
 
