@@ -8,8 +8,11 @@ type 'a located = 'a Located.t
 
 module Position = Character_parser.Position
 
+module Indent   = Character_parser.Indent
+
+type indent   = Character_parser.Indent.t
 type position = Character_parser.Position.t
-type range = Position.t * Position.t
+type range    = Position.t * Position.t
 
 
 
@@ -35,21 +38,24 @@ module Problem =
   struct
     type t =
       | Operator_precedence of
-          range
-          * string * string (* the 2 operator strings *)
+          string * string (* the 2 operator strings *)
 
-      | Illegal_name of range * string (* expectation *)
+      | Illegal_name of string (* expectation *)
 
-      | Illegal_command of range * string list
+      | Illegal_command of string list
 
-      | Ambiguous_command of range * string list
+      | Ambiguous_command of string list
 
-      | Duplicate_argument of range
+      | Duplicate_argument
   end
 
 
 
 
+module type ERROR =
+            Generic_parser.ERROR
+                with type expect   = string * Character_parser.Indent.t
+                and  type semantic = range * Problem.t
 
 
 
@@ -59,10 +65,7 @@ module type SIG =
         type final
         type _ t
 
-        module Error:
-            Generic_parser.ERROR
-                with type expect = string * Character_parser.Indent.t
-                and  type semantic = Problem.t
+        module Error: ERROR
 
         val needs_more: parser -> bool
         val has_ended:  parser -> bool
@@ -100,7 +103,11 @@ let keywords: String_set.t =
 module Make (Final: ANY) =
 struct
     module P =
-        Character_parser.Normal (Unit) (Final) (Problem) (String)
+        Character_parser.Normal
+            (Unit)
+            (Final)
+            (struct type t = range * Problem.t end)
+            (String)
 
 
     include P
@@ -175,24 +182,24 @@ struct
                     "identifier")
              >>= fun s ->
              if String_set.mem (Located.value s) keywords then
-               fail (Problem.Illegal_name (Located.range s, "<identifier>"))
+               fail (Located.range s, Problem.Illegal_name "<identifier>")
              else
                 return s)
             "identifier"
 
 
     let formal_argument_name: string located t =
-      identifier |. whitespace>>= fun name_located ->
-      let name = Located.value name_located in
-      if String_set.mem name keywords
-         || name = "Proposition"
-         || name = "Any"
-      then
-        fail
-          (Problem.Illegal_name
-            (Located.range name_located, "<argument name>"))
-      else
-        return name_located
+        identifier |. whitespace>>= fun name_located ->
+        let name = Located.value name_located in
+        if String_set.mem name keywords
+           || name = "Proposition"
+           || name = "Any"
+        then
+            fail
+                (Located.range name_located,
+                 Problem.Illegal_name "<argument name>")
+        else
+            return name_located
 
 
     let number: string located t =
@@ -356,7 +363,7 @@ struct
             | None ->
                 return lst
             | Some name ->
-                fail (Duplicate_argument (Located.range name))
+                fail (Located.range name, Problem.Duplicate_argument)
         in
 
 
@@ -466,7 +473,7 @@ struct
                    return e
 
                 | Error (range, op1, op2) ->
-                   fail (Problem.Operator_precedence (range, op1, op2))
+                   fail (range, Problem.Operator_precedence (op1, op2))
             )
         in
 
@@ -519,17 +526,17 @@ struct
        >>= fun cmd ->
        match find_command (Located.value cmd) with
        | [] ->
-          fail
-            (Problem.Illegal_command
-                (Located.range cmd, command_names commands))
+            fail
+                (Located.range cmd,
+                 Problem.Illegal_command (command_names commands))
 
        | [_, arg_parser] ->
           arg_parser
 
        | lst ->
-          fail
-            (Problem.Ambiguous_command
-               (Located.range cmd, command_names lst))
+            fail
+                (Located.range cmd,
+                 Problem.Ambiguous_command (command_names lst))
       )
       <|> (return
              (fun exp ->
@@ -547,3 +554,50 @@ struct
     let run (p: final t) (input: string): parser =
         run p () input
 end (* Make *)
+
+
+module Print (Error: ERROR) (P: Pretty_printer.SIG) =
+struct
+    let problem (_: Problem.t): P.t =
+        assert false
+
+
+    let expectations
+        (col: int)
+        (exps: (string * indent) list)
+        : P.t
+        =
+        let open P in
+        let expectation e ind =
+            if Indent.is_offside col ind then
+                string e
+                <+> string " at columns "
+                <+> string (Indent.string_of_set ind)
+            else
+                string e
+        in
+        match exps with
+        | [] ->
+            assert false (* Cannot happen, at least one expectation *)
+
+        | [e, ind] ->
+            string "I was expecting an"
+            <+> cut <+> cut
+            <+> nest 4 (expectation e ind)
+            <+> cut <+> cut
+
+        | lst ->
+            string "I was expecting one of the following"
+            <+> cut <+> cut
+            <+> nest
+                    4
+                    (list_separated
+                        cut
+                        (List.map
+                            (fun (e,ind) ->
+                                string "- "
+                                <+>
+                                expectation e ind)
+                            lst))
+            <+> cut <+> cut
+end

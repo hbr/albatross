@@ -32,13 +32,6 @@ module Pretty_make (Io:Io.SIG) =
       else
         string s
 
-    let print_list (l:'a list) (f:'a -> t): t =
-      List.fold_right
-        (fun a pr ->
-          pr <+> f a)
-        l
-        empty
-
     let indented_paragraph (p:t): t =
       cut <+> nest 4 p <+> cut
 
@@ -317,80 +310,70 @@ module Make (Io:Io.SIG) =
 
 
     let report_parse_problem
-          (src: string)
-          (p: Repl_parser.parser)
+        (src: string)
+        (p: Repl_parser.parser)
         : Pretty.t
-      =
-     let open Pretty in
-     let error = Repl_parser.error p in
-     if Repl_parser.Error.is_semantic error then
-       match Repl_parser.Error.semantic error with
-       | Parser.Problem.Operator_precedence (range, op1, op2) ->
-          chain
-            [ error_header "SYNTAX";
-              print_source src range;
-              cut;
-              explain_operator_precedence_error op1 op2;
-              cut
-            ]
+        =
+        let module Parser_print =
+            Parser.Print (Repl_parser.Error) (Pretty)
+        in
+        let open Pretty in
+        let error = Repl_parser.error p in
+        if Repl_parser.Error.is_semantic error then
+            let range, error = Repl_parser.Error.semantic error
+            in
+            match error with
+            | Parser.Problem.Operator_precedence (op1, op2) ->
+               chain
+                 [ error_header "SYNTAX";
+                   print_source src range;
+                   cut;
+                   explain_operator_precedence_error op1 op2;
+                   cut
+                 ]
 
-       | Parser.Problem.Illegal_name (range, expect) ->
-          chain
-            [ error_header "SYNTAX";
-              print_source src range;
-              cut;
-              fill_paragraph
-                ("I was expecting " ^ expect);
-              cut
-            ]
+            | Parser.Problem.Illegal_name expect ->
+               chain
+                 [ error_header "SYNTAX";
+                   print_source src range;
+                   cut;
+                   fill_paragraph
+                     ("I was expecting " ^ expect);
+                   cut
+                 ]
 
-       | Parser.Problem.Illegal_command (range, _) ->
-          chain
-            [ error_header "SYNTAX";
-              print_source src range;
-              cut;
-              string "Illegal command";
-              cut
-            ]
-       | Parser.Problem.Ambiguous_command (range, _) ->
-          chain
-            [ error_header "SYNTAX";
-              print_source src range;
-              cut;
-              string "Ambiguous command";
-              cut
-            ]
-        | Parser.Problem.Duplicate_argument range ->
-            chain [ error_header "SYNTAX";
-                    print_source src range;
-                    cut;
-                    wrap_words "I found a duplicate argument name. All names \
-                                of formal arguments must be different.";
-                    cut; cut]
-     else
-       let pos = Repl_parser.position p in
-       chain
-         [ error_header "SYNTAX";
-           print_source src (pos, pos);
-           match Repl_parser.Error.expectations error with
-           | [] ->
-              assert false (* Illegal call! *)
-           | [e,_] ->
-              chain [string "I was expecting";
-                     nest_list 4 [cut; cut; string e];
-                     cut]
-           | lst ->
-              chain [string "I was expecting one of";
-                     cut;
-                     indented_paragraph @@
-                       print_list lst
-                         (fun (e, _) ->
-                           chain [
-                               string "- ";
-                               string e;
-                               cut])
-                ]
-         ]
+            | Parser.Problem.Illegal_command _ ->
+               chain
+                 [ error_header "SYNTAX";
+                   print_source src range;
+                   cut;
+                   string "Illegal command";
+                   cut
+                 ]
+            | Parser.Problem.Ambiguous_command _ ->
+               chain
+                 [ error_header "SYNTAX";
+                   print_source src range;
+                   cut;
+                   string "Ambiguous command";
+                   cut
+                 ]
+             | Parser.Problem.Duplicate_argument ->
+                 chain [ error_header "SYNTAX";
+                         print_source src range;
+                         cut;
+                         wrap_words "I found a duplicate argument name. \
+                                     All names \
+                                     of formal arguments must be different.";
+                         cut; cut]
+        else
+           let pos = Repl_parser.position p in
+           let range = pos, pos in
+           error_header "SYNTAX"
+           <+> print_source src range
+           <+> Parser_print.expectations
+                (Repl_parser.column p)
+                (Repl_parser.Error.expectations error)
 
 
 

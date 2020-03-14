@@ -1,15 +1,6 @@
 open Module_types
 
 
-module Error  (Exp:ANY) (Sem:ANY):
-sig
-  type t =
-    | Syntax of Exp.t list
-    | Semantic of Sem.t
-end
-
-
-
 module type ERROR =
   sig
     type t
@@ -49,6 +40,9 @@ module type COMBINATORS =
     val (|=): ('a -> 'b) t -> 'a t -> 'b t
     val (|.): 'a t -> _ t -> 'a t
   end
+
+
+
 
 
 

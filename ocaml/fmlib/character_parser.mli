@@ -43,6 +43,19 @@ module type CONTEXT =
 module Indent:
 sig
     type t
+    (** Allowed indentations *)
+
+
+    val is_offside: int -> t -> bool
+    (**
+        [is_offside col ind] Is the column [col] offside for the allowed
+        indentation [ind]?
+    *)
+
+    val string_of_set: t -> string
+    (**
+        [string_of_set ind]
+    *)
 end
 
 

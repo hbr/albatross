@@ -106,7 +106,7 @@ struct
         ind.lb, ind.ub
 
 
-    let is_allowed_token_position (pos:int) (ind:t): bool =
+    let is_allowed_token_position (pos: int) (ind: t): bool =
         if ind.abs then
             (* The token position must be in the set of the allowed indentations
             of the parent. *)
@@ -120,6 +120,25 @@ struct
             (* The token must be strictly or nonstrictly indented relative to
             the parent. *)
             ind.lb <= pos
+
+    let string_of_set (ind: t): string =
+        if ind.abs then
+            match ind.ub with
+            | None ->
+                "{" ^ string_of_int ind.lb ^ "}"
+            | Some ub ->
+                if ind.lb = ub then
+                    "{" ^ string_of_int ind.lb ^ "}"
+                else
+                    "{"
+                    ^ string_of_int ind.lb
+                    ^ ","
+                    ^ string_of_int ub
+                    ^ "}"
+        else
+            "{"
+            ^ string_of_int ind.lb
+            ^ ",..}"
 
 
     let is_offside (col:int) (ind:t): bool =

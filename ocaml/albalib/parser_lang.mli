@@ -5,8 +5,9 @@ open Ast
 
 type 'a located = 'a Character_parser.Located.t
 
+type indent   = Character_parser.Indent.t
 type position = Character_parser.Position.t
-type range = Character_parser.Position.t * Character_parser.Position.t
+type range    = Character_parser.Position.t * Character_parser.Position.t
 
 
 
@@ -16,16 +17,15 @@ module Problem:
 sig
   type t =
     | Operator_precedence of
-        range
-        * string * string (* the 2 operatos strings *)
+        string * string (* the 2 operatos strings *)
 
-    | Illegal_name of range * string (* expectation *)
+    | Illegal_name of string (* expectation *)
 
-    | Illegal_command of range * string list
+    | Illegal_command of string list
 
-    | Ambiguous_command of range * string list
+    | Ambiguous_command of string list
 
-    | Duplicate_argument of range
+    | Duplicate_argument
 end
 
 
@@ -41,6 +41,11 @@ sig
 end
 
 
+module type ERROR =
+            Generic_parser.ERROR
+                with type expect   = string * Character_parser.Indent.t
+                and  type semantic = range * Problem.t
+
 
 
 module type SIG =
@@ -49,10 +54,7 @@ module type SIG =
         type final
         type _ t
 
-        module Error:
-            Generic_parser.ERROR
-                with type expect = string * Character_parser.Indent.t
-                and  type semantic = Problem.t
+        module Error: ERROR
 
         val needs_more: parser -> bool
         val has_ended:  parser -> bool
@@ -74,4 +76,14 @@ module type SIG =
     end
 
 
-module Make (Final: ANY): SIG with type final = Final.t
+module Make (Final: ANY):
+sig
+    include SIG with type final = Final.t
+end
+
+
+module Print (Error: ERROR) (P: Pretty_printer.SIG):
+sig
+    val problem: Problem.t -> P.t
+    val expectations: int -> (string * indent) list -> P.t
+end
