@@ -84,6 +84,8 @@ module type PARSER =
     (** The current column. *)
     val column: parser -> int
 
+    val error_tabs: parser -> int list
+
     (** [put_char p c] feeds the parser [p] with the character token [c]. Only
         possible if [needs_more p] is valid. *)
     val put_char: parser -> char -> parser

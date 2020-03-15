@@ -144,6 +144,9 @@ struct
     let is_offside (col:int) (ind:t): bool =
         not (is_allowed_token_position col ind)
 
+    let lower_bound (ind: t): int =
+        ind.lb
+
 
     let token (pos:int) (ind:t): t =
         if ind.abs then
@@ -323,6 +326,7 @@ module type PARSER =
     val position:   parser -> Position.t
     val line:   parser -> int
     val column: parser -> int
+    val error_tabs: parser -> int list
     val put_char: parser -> char -> parser
     val put_end: parser -> parser
   end
@@ -632,6 +636,29 @@ struct
 
 
     (* General functions *)
+
+    let error_tabs (p: parser): int list =
+        if has_ended p && not (has_succeeded p) then
+            let err = error p in
+            if Error.is_semantic err then
+                []
+            else
+                let col = column p
+                in
+                Int_set.elements
+                    (List.fold_left
+                        (fun set (_, ind) ->
+                            if Indent.is_offside col ind then
+                                Int_set.add
+                                    (Indent.lower_bound ind)
+                                    set
+                            else
+                                set
+                        )
+                        Int_set.empty
+                        (Error.expectations err))
+        else
+            []
 
 
     let put_char (p:parser) (c:char): parser =
