@@ -68,6 +68,7 @@ module type SIG =
         val line: parser -> int
         val column: parser -> int
         val position: parser -> position
+        val error_tabs: parser -> int list
 
         val expression: unit -> Expression.t t
         val command: Command.t t

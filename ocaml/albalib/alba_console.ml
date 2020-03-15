@@ -81,12 +81,28 @@ module Pretty_make (Io:Io.SIG) =
         <+> markers n <+> cut
 
 
+    let print_tabs (offset: int) (tabs: int list): t =
+        let rec print col lst =
+            match lst with
+            | [] ->
+                empty
+            | [pos] ->
+                fill (pos - col) ' ' <+> char '.'
+            | pos1 :: pos2 :: rest ->
+                fill (pos1 - col) ' ' <+> char '.'
+                <+>
+                print pos1 (pos2 :: rest)
+        in
+        fill offset ' '
+        <+>
+        print 0 tabs
+        <+> cut
 
 
     let print_source
         (source:string)
         ((pos1,pos2):range)
-        (nruler: int)
+        (error_tabs: int list)
         : t
         =
       (* Print the source code in [range] with line numbers and error markers
@@ -157,7 +173,19 @@ module Pretty_make (Io:Io.SIG) =
       in
       print 0 0
       <+>
-      print_ruler (number_width + 2) nruler <+> cut
+      (
+        if error_tabs = [] then
+            empty
+        else
+            let tabs = true in
+            if tabs then
+                print_tabs (number_width + 2) error_tabs
+            else
+                print_ruler
+                    (number_width + 2)
+                    8
+                <+> cut
+      )
 
 
     let explain_operator_precedence_error (op1: string) (op2: string): t =
@@ -358,7 +386,7 @@ module Make (Io:Io.SIG) =
             | Parser.Problem.Operator_precedence (op1, op2) ->
                chain
                  [ error_header "SYNTAX";
-                   print_source src range 0;
+                   print_source src range [];
                    cut;
                    explain_operator_precedence_error op1 op2;
                    cut
@@ -367,7 +395,7 @@ module Make (Io:Io.SIG) =
             | Parser.Problem.Illegal_name expect ->
                chain
                  [ error_header "SYNTAX";
-                   print_source src range 0;
+                   print_source src range [];
                    cut;
                    fill_paragraph
                      ("I was expecting " ^ expect);
@@ -377,7 +405,7 @@ module Make (Io:Io.SIG) =
             | Parser.Problem.Illegal_command _ ->
                chain
                  [ error_header "SYNTAX";
-                   print_source src range 0;
+                   print_source src range [];
                    cut;
                    string "Illegal command";
                    cut
@@ -385,14 +413,14 @@ module Make (Io:Io.SIG) =
             | Parser.Problem.Ambiguous_command _ ->
                chain
                  [ error_header "SYNTAX";
-                   print_source src range 0;
+                   print_source src range [];
                    cut;
                    string "Ambiguous command";
                    cut
                  ]
              | Parser.Problem.Duplicate_argument ->
                  chain [ error_header "SYNTAX";
-                         print_source src range 0;
+                         print_source src range [];
                          cut;
                          wrap_words "I found a duplicate argument name. \
                                      All names \
@@ -402,7 +430,10 @@ module Make (Io:Io.SIG) =
            let pos = Repl_parser.position p in
            let range = pos, pos in
            error_header "SYNTAX"
-           <+> print_source src range 5
+           <+> print_source
+                src
+                range
+                (Repl_parser.error_tabs p)
            <+> Parser_print.expectations
                 (Repl_parser.column p)
                 (Repl_parser.Error.expectations error)
@@ -421,7 +452,7 @@ module Make (Io:Io.SIG) =
             let module Builder_print = Builder.Print (Pretty) in
             let open Pretty in
             error_header "TYPE"
-            <+> print_source src range 0
+            <+> print_source src range []
             <+> cut
             <+> Builder_print.description descr
             <+> cut
