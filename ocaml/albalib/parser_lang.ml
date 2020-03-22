@@ -557,10 +557,72 @@ struct
 end (* Make *)
 
 
+
+
+
+
+
+
+
 module Print (Error: ERROR) (P: Pretty_printer.SIG) =
 struct
-    let problem (_: Problem.t): P.t =
-        assert false
+    let problem (problem: Problem.t): P.t =
+        let open Problem in
+        let open P
+        in
+        match problem with
+        | Operator_precedence (op1, op2) ->
+            let source_text op1 op2 =
+                string "_ "
+                <+> string op1
+                <+> string " _ "
+                <+> string op2
+                <+> string " _"
+            and left op1 op2 =
+                string "( _ "
+                <+> string op1
+                <+> string " _ ) "
+                <+> string op2
+                <+> string " _"
+            and right op1 op2 =
+                string "_ "
+                <+> string op1
+                <+> string " ( _ "
+                <+> string op2
+                <+> string " _ )"
+            in
+            wrap_words "I am no able to group your operator expression"
+            <+> cut <+> cut
+            <+> nest 4 (source_text op1 op2) <+> cut <+> cut
+            <+> wrap_words "I can either group the first two"
+            <+> cut <+> cut
+            <+> nest 4 (left op1 op2) <+> cut <+> cut
+            <+> wrap_words "or group the second two"
+            <+> cut <+> cut
+            <+> nest 4 (right op1 op2) <+> cut <+> cut
+            <+> wrap_words
+               "However the precedence and associativity of these operators \
+                don't give me enough information. Please put parentheses to \
+                indicate your intention."
+            <+> cut <+> cut
+
+        | Illegal_name expect ->
+            wrap_words "I was expecting"
+            <+> group space
+            <+> string expect
+            <+> cut
+
+        | Illegal_command _ ->
+            string "Illegal commmand" <+> cut
+
+        | Ambiguous_command _ ->
+            string "Ambiguous commmand" <+> cut
+
+        | Duplicate_argument ->
+            wrap_words "I found a duplicate argument name. All names \
+                        of formal arguments must be different."
+            <+> cut <+> cut
+
 
 
     let expectations

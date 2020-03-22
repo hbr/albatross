@@ -32,10 +32,6 @@ module Pretty_make (Io:Io.SIG) =
       else
         string s
 
-    let indented_paragraph (p:t): t =
-      cut <+> nest 4 p <+> cut
-
-
     let paragraphs (lst:t list): t =
       chain_separated lst cut
 
@@ -186,43 +182,6 @@ module Pretty_make (Io:Io.SIG) =
                     8
                 <+> cut
       )
-
-
-    let explain_operator_precedence_error (op1: string) (op2: string): t =
-      let source_text op1 op2 =
-        chain [string "_ ";
-               string op1;
-               string " _ ";
-               string op2;
-               string " _"]
-      and left op1 op2 =
-        chain [string "( _ ";
-               string op1;
-               string " _ ) ";
-               string op2;
-               string " _"]
-      and right op1 op2 =
-        chain [string "_ ";
-               string op1;
-               string " ( _ ";
-               string op2;
-               string " _ )"]
-      in
-      paragraphs
-        [string "I am not able to group your operator expression.";
-         indented_paragraph @@
-           source_text op1 op2;
-         string "I can either group the first two";
-         indented_paragraph @@
-           left op1 op2;
-         string "or group the second two";
-         indented_paragraph @@
-           right op1 op2;
-         fill_paragraph
-           "However the precedence and associativity of these operators \
-            don't give me enough information. Please put parentheses to \
-            indicate your intention."
-        ]
 
 
 
@@ -382,50 +341,9 @@ module Make (Io:Io.SIG) =
         if Repl_parser.Error.is_semantic error then
             let range, error = Repl_parser.Error.semantic error
             in
-            match error with
-            | Parser.Problem.Operator_precedence (op1, op2) ->
-               chain
-                 [ error_header "SYNTAX";
-                   print_source src range [];
-                   cut;
-                   explain_operator_precedence_error op1 op2;
-                   cut
-                 ]
-
-            | Parser.Problem.Illegal_name expect ->
-               chain
-                 [ error_header "SYNTAX";
-                   print_source src range [];
-                   cut;
-                   fill_paragraph
-                     ("I was expecting " ^ expect);
-                   cut
-                 ]
-
-            | Parser.Problem.Illegal_command _ ->
-               chain
-                 [ error_header "SYNTAX";
-                   print_source src range [];
-                   cut;
-                   string "Illegal command";
-                   cut
-                 ]
-            | Parser.Problem.Ambiguous_command _ ->
-               chain
-                 [ error_header "SYNTAX";
-                   print_source src range [];
-                   cut;
-                   string "Ambiguous command";
-                   cut
-                 ]
-             | Parser.Problem.Duplicate_argument ->
-                 chain [ error_header "SYNTAX";
-                         print_source src range [];
-                         cut;
-                         wrap_words "I found a duplicate argument name. \
-                                     All names \
-                                     of formal arguments must be different.";
-                         cut; cut]
+            error_header "SYNTAX"
+            <+> print_source src range []
+            <+> Parser_print.problem error
         else
            let pos = Repl_parser.position p in
            let range = pos, pos in
