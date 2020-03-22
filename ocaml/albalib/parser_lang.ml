@@ -47,6 +47,8 @@ module Problem =
       | Ambiguous_command of string list
 
       | Duplicate_argument
+
+      | Unused_definition of string
   end
 
 
@@ -112,6 +114,28 @@ struct
 
 
     include P
+
+
+    let make_where
+        (e: Expression.t)
+        (defs: Expression.definition list)
+        (end_pos: position)
+        : Expression.t t
+        =
+        match Expression.find_unused_definition e defs with
+        | [] ->
+            return (
+                Located.make
+                    (Located.start e)
+                    (Expression.Where (e, defs))
+                    end_pos)
+        | name :: _ ->
+            fail (
+                Located.range name,
+                Problem.Unused_definition (Located.value name)
+            )
+
+
 
 
     let line_comment: unit t =
@@ -488,11 +512,7 @@ struct
                 return e
             | Some definitions ->
                 assert (definitions <> []);
-                return (
-                    Located.make
-                        (Located.start e)
-                        (Expression.Where (e, definitions))
-                        (Located.end_ def))
+                make_where e definitions (Located.end_ def)
         )
 
 
@@ -621,6 +641,11 @@ struct
         | Duplicate_argument ->
             wrap_words "I found a duplicate argument name. All names \
                         of formal arguments must be different."
+            <+> cut <+> cut
+
+        | Unused_definition _ ->
+            wrap_words "This local definition is not used. \
+                        Sorry, this is not allowed."
             <+> cut <+> cut
 
 

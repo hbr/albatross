@@ -125,4 +125,87 @@ module Expression = struct
          Res.(binary e1 ((op2,e2) :: rest2)
               >>= fun e ->
               binary (make_binary e0 op1 e) rest3)
+
+
+    let rec name_occurs (name: string Located.t) (exp: t): bool =
+        let occurs_opt name term_opt =
+            match term_opt with
+            | None ->
+                false
+            | Some term ->
+                name_occurs name term
+        in
+        let rec occurs_in_fargs fargs opt1 opt2=
+            match fargs with
+            | [] ->
+                occurs_opt name opt1 || occurs_opt name opt2
+            | (arg_name, arg_tp) :: fargs ->
+                Located.value arg_name <> Located.value name
+                &&
+                (occurs_opt name arg_tp || occurs_in_fargs fargs opt1 opt2)
+        in
+        match Located.value exp with
+        | Proposition | Any | Number _ | Char _ | String _ | Operator _ ->
+            false
+
+        | Identifier str ->
+            str = Located.value name
+
+        | Typed (exp, tp) ->
+            name_occurs name exp || name_occurs name tp
+
+        | Application (f, args) ->
+            name_occurs name f
+            ||
+            List.find (fun (arg, _) -> name_occurs name arg) args
+            <>
+            None
+
+        | Function (fargs, res, exp) ->
+            occurs_in_fargs fargs res (Some exp)
+
+        | Product (fargs, res) ->
+            occurs_in_fargs fargs (Some res) None
+
+        | Where (_, _) ->
+            assert false (* nyi *)
+
+
+    let filter_unused
+        (exp: t)
+        (name_list: (string Located.t) list)
+        : (string Located.t) list
+        =
+        let rec filter name_list filtered =
+            match name_list with
+            | [] ->
+                filtered
+            | name :: name_list ->
+                if name_occurs name exp then
+                    filter name_list filtered
+                else
+                    filter name_list (name :: filtered)
+        in
+        filter name_list []
+
+
+
+
+    let find_unused_definition
+        (exp: t)
+        (defs: definition list)
+        : string Located.t list
+        =
+        let rec find_unused name_list def_list =
+            match def_list with
+            | [] ->
+                name_list
+            | (nme, _, def_exp) :: rest ->
+                let lst_rev = filter_unused def_exp name_list in
+                find_unused (nme :: lst_rev) rest
+        in
+        List.rev
+            (filter_unused
+                exp
+                (find_unused [] defs))
 end

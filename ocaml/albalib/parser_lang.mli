@@ -15,7 +15,7 @@ type range    = Character_parser.Position.t * Character_parser.Position.t
 
 module Problem:
 sig
-  type t =
+    type t =
     | Operator_precedence of
         string * string (* the 2 operatos strings *)
 
@@ -26,6 +26,8 @@ sig
     | Ambiguous_command of string list
 
     | Duplicate_argument
+
+    | Unused_definition of string
 end
 
 
