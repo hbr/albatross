@@ -27,6 +27,7 @@ type problem_description =
     | Not_a_function of type_in_context list
     | Wrong_type of (type_in_context * type_in_context) list
     | Wrong_base of type_in_context list * type_in_context list
+    | Not_yet_implemented of string
 
 
 let description_of_type_in_context
@@ -347,7 +348,7 @@ let rec build0
                 description_of_type_in_context nargs lst)
 
     | Where (_, _) ->
-        assert false
+        Error (range, Not_yet_implemented "Where-expression")
 
 
 
@@ -491,6 +492,11 @@ struct
 
         | Wrong_base (reqs, acts) ->
             wrong_type reqs acts
+
+        | Not_yet_implemented str ->
+            char '<' <+> string str <+> char '>'
+            <+> group space
+            <+> wrap_words "is not yet implemented"
 
 end
 
