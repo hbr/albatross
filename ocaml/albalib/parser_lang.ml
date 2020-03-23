@@ -122,14 +122,14 @@ struct
         (end_pos: position)
         : Expression.t t
         =
-        match Expression.find_unused_definition e defs with
-        | [] ->
+        match Expression.find_unused_local e defs with
+        | None ->
             return (
                 Located.make
                     (Located.start e)
                     (Expression.Where (e, defs))
                     end_pos)
-        | name :: _ ->
+        | Some name ->
             fail (
                 Located.range name,
                 Problem.Unused_definition (Located.value name)
@@ -512,7 +512,7 @@ struct
                 return e
             | Some definitions ->
                 assert (definitions <> []);
-                make_where e definitions (Located.end_ def)
+                make_where e (List.rev definitions) (Located.end_ def)
         )
 
 

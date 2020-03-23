@@ -47,6 +47,5 @@ sig
                 -> (operator Located.t * t) list
                 -> (t, range * string * string) result
 
-    val find_unused_definition:
-            t -> definition list -> string Located.t list
+    val find_unused_local: t -> definition list -> string Located.t option
 end

@@ -127,7 +127,14 @@ module Expression = struct
               binary (make_binary e0 op1 e) rest3)
 
 
-    let rec name_occurs (name: string Located.t) (exp: t): bool =
+
+
+
+
+    let rec occurs (name: string Located.t) (e: t0): bool =
+        let name_occurs name exp =
+            occurs name (Located.value exp)
+        in
         let occurs_opt name term_opt =
             match term_opt with
             | None ->
@@ -144,7 +151,7 @@ module Expression = struct
                 &&
                 (occurs_opt name arg_tp || occurs_in_fargs fargs opt1 opt2)
         in
-        match Located.value exp with
+        match e with
         | Proposition | Any | Number _ | Char _ | String _ | Operator _ ->
             false
 
@@ -167,45 +174,36 @@ module Expression = struct
         | Product (fargs, res) ->
             occurs_in_fargs fargs (Some res) None
 
-        | Where (_, _) ->
-            assert false (* nyi *)
+        | Where (exp, defs) ->
+            (
+                match defs with
+                | [] ->
+                    name_occurs name exp
 
-
-    let filter_unused
-        (exp: t)
-        (name_list: (string Located.t) list)
-        : (string Located.t) list
-        =
-        let rec filter name_list filtered =
-            match name_list with
-            | [] ->
-                filtered
-            | name :: name_list ->
-                if name_occurs name exp then
-                    filter name_list filtered
-                else
-                    filter name_list (name :: filtered)
-        in
-        filter name_list []
+                | (name2, fargs, def_exp) :: defs ->
+                    Located.value name <> Located.value name2
+                    &&
+                    (
+                        occurs_in_fargs fargs (Some def_exp) None
+                        ||
+                        occurs name (Where (exp, defs))
+                    )
+            )
 
 
 
-
-    let find_unused_definition
+    let rec find_unused_local
         (exp: t)
         (defs: definition list)
-        : string Located.t list
+        : string Located.t option
         =
-        let rec find_unused name_list def_list =
-            match def_list with
-            | [] ->
-                name_list
-            | (nme, _, def_exp) :: rest ->
-                let lst_rev = filter_unused def_exp name_list in
-                find_unused (nme :: lst_rev) rest
-        in
-        List.rev
-            (filter_unused
-                exp
-                (find_unused [] defs))
+        match defs with
+        | [] ->
+            None
+
+        | (name, _, _) :: defs ->
+            if occurs name (Where (exp, defs)) then
+                find_unused_local exp defs
+            else
+                Some name
 end
