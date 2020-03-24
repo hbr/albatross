@@ -594,3 +594,13 @@ struct
                 stack
             }
 end
+
+
+
+
+
+module Where =
+struct
+    let start (_: string) (_: t): t =
+        assert false
+end

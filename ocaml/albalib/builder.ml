@@ -166,8 +166,11 @@ let map_bcs
 
 
 
-let build_fargs
+
+
+let build_fargs_res
     (fargs: Expression.formal_argument list)
+    (res: Expression.t option)
     (build0: build_function)
     (builder: t)
     : (t, problem) result
@@ -191,6 +194,13 @@ let build_fargs
             )
             fargs
             builder
+    >>= fun builder ->
+    match res with
+    | None ->
+        Ok builder
+    | Some res ->
+        build0 res 0 builder
+
 
 
 
@@ -267,11 +277,11 @@ let rec build0
 
     | Product (fargs, res) ->
         let open Result in
-        build_fargs
+        build_fargs_res
             fargs
+            (Some res)
             build0
             (map_bcs_list Build_context.Product.start builder)
-        >>= build0 res 0
         >>= map_bcs
                 (Build_context.Product.check (List.length fargs))
                 (fun lst ->
@@ -327,27 +337,20 @@ let rec build0
 
     | Function (fargs, res, exp) ->
         let open Result in
-        build_fargs
+        build_fargs_res
             fargs
+            res
             build0
             (map_bcs_list Build_context.Lambda.start builder)
         >>= fun builder ->
-        (
-            let inner = map_bcs_list Build_context.Lambda.inner
-            in
-            match res with
-            | None ->
-                Ok (inner builder)
-            | Some res ->
-                map inner (build0 res 0 builder)
-        )
+        Ok (map_bcs_list Build_context.Lambda.inner builder)
         >>= fun builder ->
         build0 exp 0 builder
         >>=
         map_bcs
             (Build_context.Lambda.end_
                 nargs
-                (List.length args)
+                (List.length fargs)
                 (res <> None))
             (fun lst ->
                 range,
@@ -355,6 +358,24 @@ let rec build0
 
     | Where (_, _) ->
         Error (range, Not_yet_implemented "Where-expression")
+    (*| Where (exp, defs) ->
+        let open Result
+        in
+        let rec build_where defs builder =
+            match defs with
+            | [] ->
+                build0 exp 0 builder
+            | (name, _, _) :: defs ->
+                build_where
+                    defs
+                    (map_bcs_list
+                        (Build_context.Where.start (Located.value name))
+                        builder)
+                >>= fun _ ->
+                assert false
+
+        in
+        build_where defs builder*)
 
 
 

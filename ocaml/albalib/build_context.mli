@@ -170,3 +170,16 @@ sig
     abstraction is applied to [nargs] arguments.
     *)
 end
+
+
+
+
+
+
+(** {1 Where expression [exp where f ... := value]} *)
+
+module Where:
+sig
+    val start: string -> t -> t
+    (** Start a where expression with the name of the local definition. *)
+end
