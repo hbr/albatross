@@ -90,14 +90,19 @@ the implicit arguments before assigning it to the next to be constructed term.
 
 
 
+val next_formal_argument: string -> bool -> t -> t
+(** Add a bound variable based on the last argument type and push a
+placeholder for the next argument type or the result type. I.e. expect the
+next argument type or the result type. *)
+
+
+
 
 (** {1 Product [all (a: A) ... : RT]} *)
 
 module Product:
 sig
     val start: t -> t
-
-    val next: string -> bool -> t -> t
 
     val check: int -> t -> (t, int) result
 
@@ -137,20 +142,17 @@ sig
 end
 
 
+
+
+
+
+
 (** {1 Function Abstraction [\ x y ... := t]} *)
 
 module Lambda:
 sig
     val start: t -> t
     (** Start a function abstraction and expect the first argument type. *)
-
-
-    val next:  string -> bool -> t -> t
-    (** [next name typed bc]
-
-        Add a bound variable whose type is the last analyzed expression and
-        expect the next variable type or the type of the inner expression.
-    *)
 
 
     val inner: t -> t

@@ -307,6 +307,23 @@ let bound
 
 
 
+let next_formal_argument (name: string) (typed: bool) (bc: t): t =
+    let cnt0 = count bc
+    and tp = top_term bc
+    in
+    {bc with
+        gh =
+            Gamma_holes.(
+                push_bound name typed tp bc.gh
+                |> push_hole Term.(any_uni 1)
+            );
+
+        stack = bc.sp :: bc.stack;
+
+        sp = cnt0 + 1
+    }
+
+
 
 
 module Product =
@@ -326,22 +343,6 @@ struct
 
             entry = {cnt0}
         }
-
-    let next (name: string) (typed: bool) (bc: t): t =
-        let cnt0 = count bc
-        and tp = top_term bc
-        in
-        {bc with
-            gh = Gamma_holes.(
-                push_bound name typed tp bc.gh
-                |> push_hole Term.(any_uni 1)
-            );
-
-            stack = bc.sp :: bc.stack;
-
-            sp = cnt0 + 1
-        }
-
 
     let  check
         (nbounds: int)
@@ -551,27 +552,6 @@ struct
 
             sp = cnt0
         }
-
-
-    let next (name: string) (typed: bool) (bc: t): t =
-    (* Add a bound variable based on the last argument type and push a
-    placeholder for the next argument type or the result type. I.e. expect the
-    next argument type or the result type. *)
-        let cnt0 = count bc
-        and tp = top_term bc
-        in
-        {bc with
-            gh =
-                Gamma_holes.(
-                    push_bound name typed tp bc.gh
-                    |> push_hole Term.(any_uni 1)
-                );
-
-            stack = bc.sp :: bc.stack;
-
-            sp = cnt0 + 1
-        }
-
 
 
     let inner (bc: t): t =

@@ -29,6 +29,11 @@ type problem_description =
     | Wrong_base of type_in_context list * type_in_context list
     | Not_yet_implemented of string
 
+let dummy str = Not_yet_implemented str
+let _ = dummy
+
+
+
 
 let description_of_type_in_context
     (nargs: int)
@@ -60,6 +65,7 @@ type t = {
     bcs:   Build_context.t list;
 }
 
+type build_function = Expression.t -> int -> t -> (t, problem) result
 
 
 let count_base (builder: t): int =
@@ -160,6 +166,34 @@ let map_bcs
 
 
 
+let build_fargs
+    (fargs: Expression.formal_argument list)
+    (build0: build_function)
+    (builder: t)
+    : (t, problem) result
+    =
+    let open Result in
+    List_fold.fold_left
+            (fun (name, tp) builder ->
+                let str = Located.value name
+                in
+                let next typed builder =
+                    map_bcs_list
+                        (Build_context.next_formal_argument str typed)
+                        builder
+                    |> push_bound str
+                in
+                match tp with
+                | None ->
+                    Ok (next false builder)
+                | Some tp ->
+                    map (next true) (build0 tp 0 builder)
+            )
+            fargs
+            builder
+
+
+
 
 
 let rec build0
@@ -233,23 +267,9 @@ let rec build0
 
     | Product (fargs, res) ->
         let open Result in
-        List_fold.fold_left
-            (fun (name, arg_tp) builder ->
-                let name_str = Located.value name in
-                let next typed builder =
-                    map_bcs_list
-                        (Build_context.Product.next name_str typed)
-                        builder
-                    |> push_bound (Located.value name)
-                in
-                match arg_tp with
-                | None ->
-                    Ok (next false builder)
-                | Some tp ->
-                    map
-                        (next true)
-                        (build0 tp 0 builder))
+        build_fargs
             fargs
+            build0
             (map_bcs_list Build_context.Product.start builder)
         >>= build0 res 0
         >>= map_bcs
@@ -305,25 +325,11 @@ let rec build0
             args
 
 
-    | Function (args, res, exp) ->
+    | Function (fargs, res, exp) ->
         let open Result in
-        List_fold.fold_left
-            (fun (name, tp) builder ->
-                let str = Located.value name
-                in
-                let next typed builder=
-                    map_bcs_list
-                        (Build_context.Lambda.next str typed)
-                        builder
-                    |> push_bound str
-                in
-                match tp with
-                | None ->
-                    Ok (next false builder)
-                | Some tp ->
-                    map (next true) (build0 tp 0 builder)
-            )
-            args
+        build_fargs
+            fargs
+            build0
             (map_bcs_list Build_context.Lambda.start builder)
         >>= fun builder ->
         (
