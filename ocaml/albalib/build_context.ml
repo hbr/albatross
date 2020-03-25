@@ -525,7 +525,7 @@ struct
                     sp = e}
         | _ ->
             assert false (* Illegal call! *)
-end
+end (* Application *)
 
 
 
@@ -601,6 +601,22 @@ end
 
 module Where =
 struct
-    let start (_: string) (_: t): t =
-        assert false
+    let start (name: string) (bc: t): t =
+        Application.start 1 bc
+        |> Lambda.start
+        |> next_formal_argument name false
+        |> Lambda.inner
+
+
+
+    let end_inner (bc: t): (t, type_in_context * type_in_context) result =
+        Lambda.end_ 1 1 false bc
+
+
+    let end_ (bc: t): (t, type_in_context * type_in_context) result =
+        Application.apply
+            0
+            Term.Application_info.Normal
+            bc
+
 end

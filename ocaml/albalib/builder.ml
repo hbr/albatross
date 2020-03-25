@@ -165,6 +165,11 @@ let map_bcs
 
 
 
+let next_formal_argument (name: string) (typed: bool) (builder: t): t =
+    map_bcs_list
+        (Build_context.next_formal_argument name typed)
+        builder
+    |> push_bound name
 
 
 
@@ -180,11 +185,7 @@ let build_fargs_res
             (fun (name, tp) builder ->
                 let str = Located.value name
                 in
-                let next typed builder =
-                    map_bcs_list
-                        (Build_context.next_formal_argument str typed)
-                        builder
-                    |> push_bound str
+                let next typed builder = next_formal_argument str typed builder
                 in
                 match tp with
                 | None ->
@@ -356,26 +357,37 @@ let rec build0
                 range,
                 description_of_type_in_context nargs lst)
 
-    | Where (_, _) ->
-        Error (range, Not_yet_implemented "Where-expression")
-    (*| Where (exp, defs) ->
+    | Where (exp, defs) ->
         let open Result
         in
         let rec build_where defs builder =
             match defs with
             | [] ->
+                Printf.printf "build where inner\n";
                 build0 exp 0 builder
-            | (name, _, _) :: defs ->
+            | (name, fargs, def_exp) :: defs ->
+                assert (fargs = []); (* nyi: definitions with formal arguments *)
+                let str = Located.value name
+                in
                 build_where
                     defs
                     (map_bcs_list
-                        (Build_context.Where.start (Located.value name))
-                        builder)
-                >>= fun _ ->
-                assert false
+                        (Build_context.Where.start str)
+                        builder
+                    |> push_bound str)
+                >>=
+                map_bcs
+                    Build_context.Where.end_inner
+                    (fun lst -> range, description_of_type_in_context 1 lst)
+                >>=
+                build0 def_exp 0
+                >>=
+                map_bcs
+                    Build_context.Where.end_
+                    (fun lst -> range, description_of_type_in_context 1 lst)
 
         in
-        build_where defs builder*)
+        build_where defs builder
 
 
 
@@ -808,6 +820,15 @@ let%test _ =
 let%test _ =
     match build_expression "(+) 1 2 3" with
     | Error (_, Not_a_function _) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "1 + a where a := 8" with
+    | Ok [term, typ] ->
+        Printf.printf "%s\n" (string_of_term_type term typ);
         true
     | _ ->
         false

@@ -67,27 +67,6 @@ val bound: int -> int -> t -> (t, type_in_context * type_in_context) result
 
 
 
-(*
-val candidate: Term.t -> t -> t option
-(**
-    [candidate term bc]
-
-    Receive the term [term] as a candidate for the next to be constructed term.
-
-    Candidates are either
-
-    - Base candidates
-
-    - Bound variables
-
-
-New placeholder for implicit arguments have to be generated in case that the
-required type is not just a placeholder. The candidate term has to be applied to
-the implicit arguments before assigning it to the next to be constructed term.
-
-*)
-*)
-
 
 
 val next_formal_argument: string -> bool -> t -> t
@@ -176,10 +155,40 @@ end
 
 
 
-(** {1 Where expression [exp where f ... := value]} *)
+(** {1 Where expression [exp where f ... := value]}
+
+The where expression
+
+{[
+    exp where
+        f := value
+]}
+
+is treated like
+
+{[
+    (\f := exp) value
+]}
+
+i.e.
+{[
+    Appl ( Lambda (f, F, exp), value)
+]}
+
+i.e. a beta redex, and finally converted to
+
+{[
+    Where (f, F, exp, value)
+]}
+
+*)
 
 module Where:
 sig
     val start: string -> t -> t
     (** Start a where expression with the name of the local definition. *)
+
+    val end_inner: t -> (t, type_in_context * type_in_context) result
+
+    val end_: t -> (t, type_in_context * type_in_context) result
 end
