@@ -79,6 +79,9 @@ let push_bound (name: string) (builder: t): t =
         names = Name_map.add_local name builder.names}
 
 
+let set_names (names: Name_map.t) (builder: t): (t, problem) result =
+    Ok {builder with names}
+
 
 let make (c: Context.t): t =
     {
@@ -277,7 +280,10 @@ let rec build0
                 description_of_type_in_context nargs lst)
 
     | Product (fargs, res) ->
-        let open Result in
+        let open Result
+        in
+        let names = builder.names
+        in
         build_fargs_res
             fargs
             (Some res)
@@ -299,6 +305,7 @@ let rec build0
             (fun lst ->
                 range,
                 description_of_type_in_context nargs lst)
+        >>= set_names names
 
 
     | Application (f, args) ->
@@ -338,6 +345,7 @@ let rec build0
 
     | Function (fargs, res, exp) ->
         let open Result in
+        let names = builder.names in
         build_fargs_res
             fargs
             res
@@ -356,18 +364,17 @@ let rec build0
             (fun lst ->
                 range,
                 description_of_type_in_context nargs lst)
+        >>= set_names names
 
     | Where (exp, defs) ->
-        let open Result
-        in
+        let open Result in
         let rec build_where defs builder =
             match defs with
             | [] ->
-                Printf.printf "build where inner\n";
                 build0 exp 0 builder
             | (name, fargs, def_exp) :: defs ->
-                assert (fargs = []); (* nyi: definitions with formal arguments *)
                 let str = Located.value name
+                and names = builder.names
                 in
                 build_where
                     defs
@@ -379,8 +386,19 @@ let rec build0
                 map_bcs
                     Build_context.Where.end_inner
                     (fun lst -> range, description_of_type_in_context 1 lst)
+                >>= set_names names
                 >>=
-                build0 def_exp 0
+                (
+                    if fargs = [] then
+                        build0 def_exp 0
+                    else
+                        build0
+                            Located.(make
+                                (start name)
+                                (Function (fargs, None, def_exp))
+                                (end_ name))
+                            0
+                )
                 >>=
                 map_bcs
                     Build_context.Where.end_
