@@ -260,8 +260,6 @@ let candidate
     (term: Term.t) (nargs: int) (bc: t)
     : (t, type_in_context * type_in_context) result
     =
-    Printf.printf "candidate %s\n"
-        (string_of_term term bc);
     if 0 < nargs then
         let tp = type_of_term term bc in
         let term, tp, bc = add_implicits term tp bc in
