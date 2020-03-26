@@ -190,5 +190,5 @@ sig
 
     val end_inner: t -> (t, type_in_context * type_in_context) result
 
-    val end_: t -> (t, type_in_context * type_in_context) result
+    val end_: int -> t -> (t, type_in_context * type_in_context) result
 end

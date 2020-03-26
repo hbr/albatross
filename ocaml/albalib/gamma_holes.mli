@@ -135,10 +135,7 @@ val fill_hole0: int -> Term.t -> bool -> t -> t
 [beta_reduce] is set, do a beta reduction.
 
     Preconditions:
-    {[is_hole idx gh
-      not (has_value idx gh)
-      is_expanded value gh
-    ]}
+    {[is_unfilled idx gh]}
 *)
 
 

@@ -317,8 +317,8 @@ let push_hole (typ: Term.typ) (gh: t): t =
 
 let fill_hole0 (idx: int) (value: Term.t) (beta_reduce: bool) (gh: t): t =
     assert (is_unfilled idx gh);
-    assert (is_expanded value gh);
-    let cnt    = count gh
+    let value = expand value gh
+    and cnt    = count gh
     and nlocs  = count_locals gh
     and locals = Array.copy gh.locals
     in

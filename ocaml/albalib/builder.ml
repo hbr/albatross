@@ -401,7 +401,7 @@ let rec build0
                 )
                 >>=
                 map_bcs
-                    Build_context.Where.end_
+                    (Build_context.Where.end_ nargs)
                     (fun lst -> range, description_of_type_in_context 1 lst)
 
         in
