@@ -614,9 +614,24 @@ struct
 
 
     let end_ (bc: t): (t, type_in_context * type_in_context) result =
-        Application.apply
-            0
-            Term.Application_info.Normal
-            bc
-
+        match bc.stack with
+        | f :: e :: stack ->
+            let open Term in
+            (
+                match term_at_level f bc with
+                | Lambda (tp, exp, info) ->
+                    let term =
+                        Where (
+                            Lambda_info.name info,
+                            tp,
+                            exp,
+                            term_at_level bc.sp bc
+                        )
+                    in
+                    candidate term 0 {bc with stack; sp = e}
+                | _ ->
+                    assert false (* Illegal call! *)
+            )
+        | _ ->
+            assert false (* Illegal call! *)
 end

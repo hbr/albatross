@@ -216,6 +216,8 @@ end
 type t =
   | Sort of Sort.t
 
+  | Value of Value.t
+
   | Variable of int
 
   | Typed of t * typ
@@ -226,7 +228,7 @@ type t =
 
   | Pi of typ * typ * Pi_info.t
 
-  | Value of Value.t
+  | Where of string * typ * t * t
 
 and typ = t
 
@@ -363,6 +365,14 @@ let product_in (fargs: formal_argument list) (result_tp: t): t =
         result_tp
 
 
+let expand_where (name: string) (tp: typ) (exp: t) (def: t): t =
+    Appl (
+        Lambda (tp, exp, Lambda_info.typed name),
+        def,
+        Application_info.Normal
+    )
+
+
 let type_of_sort (s: Sort.t): typ =
     Sort (Sort.type_of s)
 
@@ -407,6 +417,9 @@ let map (f: int -> int) (t: t): t =
 
         | Pi (tp, res, info) ->
             Pi (map nb tp, map (nb + 1) res, info)
+
+        | Where (name, tp, exp, value) ->
+            Where (name, map nb tp, map (nb + 1) exp, map nb value)
     in
     map 0 t
 
@@ -473,6 +486,12 @@ let down_from (delta:int) (start:int) (t:t): t option =
        down tp nb >>= fun tp ->
        down rt (nb + 1) >>= fun rt ->
        Some (Pi (tp, rt, info))
+
+    | Where (name, tp, exp, def) ->
+        down tp nb >>= fun tp ->
+        down exp (nb + 1) >>= fun exp ->
+        down def nb >>= fun def ->
+        Some (Where (name, tp, exp, def))
   in
   down t 0
 
@@ -513,11 +532,14 @@ let rec substitute0 (f:int -> t) (beta_reduce: bool) (t:t): t =
         | Appl (f, a, mode) ->
             Appl (sub f nb, sub a nb, mode)
 
-            | Lambda (tp, exp, info) ->
-               Lambda (sub tp nb, sub exp (nb + 1), info)
+        | Lambda (tp, exp, info) ->
+           Lambda (sub tp nb, sub exp (nb + 1), info)
 
-            | Pi (tp, rt, info) ->
-               Pi (sub tp nb, sub rt (nb + 1), info)
+        | Pi (tp, rt, info) ->
+           Pi (sub tp nb, sub rt (nb + 1), info)
+
+        | Where (name, tp, exp, def) ->
+            Where (name, sub tp nb, sub exp (nb + 1), sub def nb)
     in
     sub t 0
 
@@ -559,12 +581,12 @@ let rec apply_nargs (f:t) (nargs:int) (mode: Application_info.t): t =
 
 
 
-    (* ----------------------------------------------------------- *)
-    (* Monadic functions                                           *)
-    (* ----------------------------------------------------------- *)
+(* ----------------------------------------------------------- *)
+(* Monadic functions                                           *)
+(* ----------------------------------------------------------- *)
 
 
-    module Monadic (M: MONAD) =
+module Monadic (M: MONAD) =
 struct
     let fold_free
         (f: int -> 'a -> 'a M.t)
@@ -595,6 +617,12 @@ struct
 
             | Pi (tp, rt, _) ->
                 M.(fold tp nb start >>= fold rt (nb + 1))
+
+            | Where (_, tp, exp, def) ->
+                let open M in
+                fold tp nb start
+                >>= fold exp (nb + 1)
+                >>= fold def nb
         in
         fold term 0 start
 end
@@ -658,6 +686,14 @@ let rec to_index (n: int) (term: t): t =
         Pi (to_index n typ,
             to_index (n + 1) rtyp,
             info)
+
+    | Where (name, tp, exp, def) ->
+        Where (
+            name,
+            to_index n tp,
+            to_index (n + 1) exp,
+            to_index n def
+        )
 
 
 let to_level = to_index

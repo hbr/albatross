@@ -116,6 +116,9 @@ struct
                 | _, _ ->
                    assert false (* Illegal call: term is not welltyped! *)
                )
+
+            | Where (name, tp, exp, def) ->
+                typ (expand_where name tp exp def) c
         in
         typ t c
 

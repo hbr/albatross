@@ -14,9 +14,10 @@ type t =
                  are considered equivalent. *)
 
 
+let where             = (20,   Left)
 let colon             = (30,   Right)
 let arrow             = (40,   Right)
-let assign            = (41,   No)
+let assign            = (41,   Right)
 let lambda            = (42,   No)
 let push_arg          = (45,   Left)
 let pull_arg          = (46,   Right)

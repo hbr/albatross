@@ -389,5 +389,8 @@ let compute (t:Term.t) (c:t): Term.t =
             compute (Pi (arg_tp, res_tp, info)) new_steps c
         else
             term, steps
+
+    | Where (_, _, exp, def) ->
+        compute (apply exp def) (steps + 1) c
   in
   fst (compute t 0 c)

@@ -116,6 +116,23 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
 
 
 
+    let formal_argument
+        (name: string)
+        (typed: bool)
+        (tp: Term.typ)
+        (print: print0)
+        (c: Gamma.t)
+        : P.t
+        =
+        let open P in
+        if typed then
+          char '(' <+> string name <+> string ": " <+> print tp c <+> char ')'
+        else
+          string name
+
+
+
+
     let formal_arguments
           (args: ('a * Term.typ * Gamma.t) list)
           (map: 'a -> string * bool)
@@ -126,17 +143,12 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
         List.map
           (fun (a, tp, c) ->
             let name, typed = map a in
-            if typed then
-              char '('
-              <+> string name
-              <+> string ": "
-              <+> print tp c
-              <+> char ')'
-            else
-              string name)
+            formal_argument name typed tp print c)
           args
       in
-      chain_separated args (group space)
+      list_separated (group space) args
+
+
 
 
     let rec print (t:Term.t) (c:Gamma.t): pr_result =
@@ -158,6 +170,9 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
         match t with
         | Sort s ->
             print_sort s
+
+        | Value v ->
+           print_value v
 
         | Variable i ->
            None,
@@ -295,8 +310,51 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                 )
             )
 
-        | Value v ->
-           print_value v
+        | Where (name, tp, exp, value) ->
+            let open P in
+            let print_def name value c =
+                let rec print exp c =
+                    match exp with
+                    | Lambda (tp, exp, info) ->
+                        let name = Lambda_info.name info in
+                        group space
+                        <+> formal_argument
+                                name
+                                (Lambda_info.is_typed info)
+                                tp
+                                raw_print
+                                c
+                        <+> print exp (push_local name tp c)
+                    | _ ->
+                        group space <+> string ":="
+                        <+> group (
+                            nest 4 (space <+> raw_print exp c)
+                        )
+                in
+                string name <+> print value c
+            in
+            let rec print_where name tp exp defs c =
+                let c = push_local name tp c in
+                match exp with
+                | Where (name, tp, exp, value) ->
+                    print_where
+                        name
+                        tp
+                        exp
+                        (print_def name value c :: defs)
+                        c
+                | _ ->
+                    raw_print exp c, defs
+            in
+            let exp, defs =
+                print_where name tp exp [print_def name value c] c
+            in
+            Some Operator.where,
+            exp <+> group space <+> string "where"
+            <+> group (
+                nest 4 (space <+> list_separated (line "; ") defs)
+            )
+
 
     let print (t:Term.t) (c: Gamma.t): P.t =
         snd (print t c)

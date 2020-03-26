@@ -80,6 +80,8 @@ end
 type t =
   | Sort of Sort.t
 
+  | Value of Value.t
+
   | Variable of int
 
   | Typed of t * typ
@@ -90,7 +92,7 @@ type t =
 
   | Pi of typ * typ * Pi_info.t
 
-  | Value of Value.t
+  | Where of string * typ * t * t
 
 and typ = t
 
@@ -126,6 +128,10 @@ val product_untyped: string -> typ -> typ -> t
 
 val lambda_in:  formal_argument list -> t -> t
 val product_in: formal_argument list -> t -> t
+
+
+val expand_where: string -> typ -> t -> t -> t
+(** Rewrite a where block as an application with a lambda term. *)
 
 
 (** [char code] character value. *)

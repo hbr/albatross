@@ -584,7 +584,7 @@ let standard_context: Context.t =
 let string_of_term_type (term: Term.t) (typ: Term.t): string
     =
     String_printer.run (
-        Pretty_printer.run 0 200 200
+        Pretty_printer.run 0 70 70
             (Term_print.print (Term.Typed (term,typ)) standard_context))
 let _ = string_of_term_type
 
@@ -704,7 +704,7 @@ let%test _ =
     | Ok [term, typ] ->
         string_of_term_type term typ
         =
-        "((|>): " ^ tp_str ^ "): "  ^ tp_str
+        "((|>): " ^ tp_str ^ "):\n    "  ^ tp_str
     | _ ->
         false
 
@@ -716,7 +716,7 @@ let%test _ =
     | Ok [term, typ] ->
         string_of_term_type term typ
         =
-        "((|>) 'a': " ^ tp_str ^ "): "  ^ tp_str
+        "((|>) 'a': " ^ tp_str ^ "):\n    "  ^ tp_str
     | _ ->
         false
 
@@ -843,10 +843,36 @@ let%test _ =
         false
 
 
+
 let%test _ =
-    match build_expression "1 + a where a := 8" with
+    match
+        build_expression
+            "1 + a + b where\
+            \n a := 8\
+            \n b := 10"
+    with
     | Ok [term, typ] ->
-        Printf.printf "%s\n" (string_of_term_type term typ);
-        true
+        string_of_term_type term typ
+        =
+        "(1 + a + b where a := 8; b := 10): Int"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match
+        build_expression
+            "1234567890 + f 12345677890 where\
+            \n f x := 20002000 + g x\
+            \n g x := 1234567890 * x"
+    with
+    | Ok [term, typ] ->
+        string_of_term_type term typ
+        =
+        "(1234567890 + f 12345677890 where\
+        \n    f x := 20002000 + g x\
+        \n    g x := 1234567890 * x):\
+        \n    Int"
     | _ ->
         false

@@ -89,6 +89,9 @@ let rec check (term: Term.t) (c: t): Term.typ option =
                 None
         )
 
+    | Where (name, tp, exp, def) ->
+        check (expand_where name tp exp def) c
+
 
 
 

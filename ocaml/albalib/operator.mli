@@ -7,6 +7,9 @@ type assoc =
   | No
 
 
+
+val where: t
+
 (** Precedence/associativity of lambda_abstraction. *)
 val lambda: t
 
