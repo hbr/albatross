@@ -552,7 +552,7 @@ struct
                  Problem.Illegal_command (command_names commands))
 
        | [_, arg_parser] ->
-          arg_parser
+          indented arg_parser
 
        | lst ->
             fail
