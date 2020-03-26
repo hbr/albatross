@@ -1,4 +1,5 @@
 open Fmlib
+open Alba_core
 
 module Located = Character_parser.Located
 

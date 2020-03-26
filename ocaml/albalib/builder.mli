@@ -1,4 +1,5 @@
 open Fmlib
+open Alba_core
 
 
 type pos = Character_parser.Position.t

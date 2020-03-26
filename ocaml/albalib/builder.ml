@@ -1,5 +1,6 @@
 open Fmlib
 open Common
+open Alba_core
 
 
 module Parser     = Parser_lang
@@ -52,7 +53,7 @@ type problem = range * problem_description
 
 
 
-module Name_map = Context.Name_map
+module Name_map = Name_map
 module Result = Monad.Result (struct type t = problem end)
 module List_fold = List.Monadic_fold (Result)
 module Interval_monadic = Interval.Monadic (Result)

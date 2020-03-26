@@ -1,3 +1,5 @@
+open Alba_core
+
 type t
 
 type type_in_context = int list * Term.typ * Gamma.t

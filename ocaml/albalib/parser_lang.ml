@@ -2,6 +2,7 @@ open Fmlib
 open Module_types
 open Common
 open Ast
+open Alba_core
 
 module Located = Character_parser.Located
 type 'a located = 'a Located.t

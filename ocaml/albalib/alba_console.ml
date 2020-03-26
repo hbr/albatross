@@ -1,5 +1,6 @@
 open Fmlib
 open Common
+open Alba_core
 
 module Parser = Parser_lang
 module Repl_parser = Parser.Make (Parser.Command)

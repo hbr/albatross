@@ -1,5 +1,7 @@
 open Fmlib
 open Common
+open Alba_core
+
 
 module Algo = Gamma_algo.Make (Gamma_holes)
 module Uni  = Unifier.Make (Gamma_holes)
