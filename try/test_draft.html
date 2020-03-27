@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+    <meta
+        name="viewport"
+        content="width=device-width, height=device-height, initial-scale=1.0"
+    >
+    <head>
+        <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            @media only screen and (max-width: 620px) {
+            }
+
+            body, html {
+                margin: 0px;
+            }
+
+            body {
+                font-size: 15px;
+                font-family: Arial, sans-serif;
+            }
+
+
+            .main-container {
+                /*justify-content: center;
+                align-items: center;*/
+                
+                background-color: lightgray;
+                height: 100vh;
+                display: flex;
+                justify-content: space-around;
+            }
+
+            .main-block {
+                background-color: green;
+                width: 49%;
+                display: flex;
+                flex-flow: column;
+                justify-content: space-around;
+            }
+
+            .editor-area {
+                display: block;
+                background-color: #e0e0e0;
+                font-family: Courier;
+                font-size: 100%;
+                overflow: auto;
+                resize: none;
+                border: none;
+                flex: 1;
+            }
+
+            .output-error {
+                background-color: black;
+                color: white;
+                overflow: auto;
+                padding: 0px;
+                margin: 0px;
+                flex: 1;
+            }
+
+            .output-result {
+                overflow: auto;
+            }
+
+            .inner {
+                background-color: tomato;
+                padding: 20px;
+            }
+        </style>
+    </head>
+
+
+    <body>
+        <div class="main-container">
+            <div class="main-block">
+                <textarea
+                    class="editor-area"
+                    placeholder="enter ONE expression"></textarea>
+
+                <pre class="output-error">
+1: Int
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+
+double (i: Int): Int := 2 * i
+                </pre>
+            </div>
+
+
+
+            <div class="main-block">
+                <div class="inner">One</div>
+                <div class="inner">Two</div>
+                <div class="inner">Three</div>
+                <div class="inner">Four</div>
+            </div>
+        </div>
+    </body>
+</html>

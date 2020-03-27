@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Alba_core__Sexp_parser (alba.Alba_core__Sexp_parser)</title><link rel="stylesheet" href="../../odoc.css"/><meta charset="utf-8"/><meta name="generator" content="odoc 1.5.1"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="../../highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body><div class="content"><header><nav><a href="../index.html">Up</a> – <a href="../index.html">alba</a> &#x00BB; Alba_core__Sexp_parser</nav><h1>Module <code>Alba_core__Sexp_parser</code></h1><p>Parser for the intermediate language.</p></header><aside><p>The intermediate language is lisp like i.e. easy to parse without any syntactic sugar. All binders must be fully typed and there are no implicit arguments.</p><p>Expressions are built according to the syntax:</p><pre>        term ::=
+            |   atom
+            |   literal
+            |   application
+            |   function-type
+            |   function-abstraction
+            |   pattern-match
+            |   fixpoint
+            |   mutual-fixpoint
+
+        application ::=
+            (app term term+)
+
+        function-type ::=
+            (all (name: term)+ : term)
+
+        function-abstraction ::=
+            (lambda (name: term)+ . term)
+
+
+        atom ::= identifier | operator | deBruijn | literal
+
+        name ::=
+            | identifier
+            | _
+
+        pattern-match ::=
+            (case term term+)    -- elimination function, list of functions
+
+        fixpoint ::=
+            (fix name number (name: term)+ : term . term)
+                -- decr argument, args, result type, def term</pre><p>Declarations are built according to the syntax:</p><pre>        declaration ::=
+            | builtin
+            | definition
+            | inductive
+
+        builtin ::=
+            (builtin string (name: term)* : term)
+
+        definition ::=
+            (def string (name: term)* : term term)
+
+        inductive ::=
+            (class string (name: term)* : term constructor* )
+
+        constructor ::=
+            (string constructor-argument* (: term+)? )
+
+        constructor-argument ::=
+            (name: ( term* ) term)
+
+        mutual-inductive ::=
+            (mutual-ind inductive+)</pre><p>A constructor type must always construct the corresponding inductive type. The type and the parameters are the same for all constructors of the type. The indices (if present) can be different. Therefore only the indices are present as an optional <code>: term+</code>.</p><p>The types of the constructor arguments are either simple types or function types. Therefore they consist of a (possibly empty) list of types and a mandatory type.</p><p>Some examples:</p><pre>        (all (A: Any) (a: A): A)
+
+
+        (def =&gt; (a: Proposition) (b: Proposition): Proposition
+            (all (_: a): b))
+
+
+        (builtin Int: Any)
+
+        (class false: Proposition)
+
+        (class true: Proposition (trueValid))
+
+        (class List (A: Any): Any
+            ([])
+            (+:
+                (_: () A)
+                (_: () (app List A))
+            ))
+
+        (class Natural (): Any
+            (zero)
+            (succ (_: Natural)))
+
+        (def pred (n: Natural): Natural
+            (case
+                (lambda (_: Natural) . Natural)
+                zero
+                (lambda (m: Natural) . m)))
+
+        (def isSucc: (all (_: Natural): Proposition)
+            (case
+                (lambda (_: Natural) . Proposition)
+                (false)
+                (lambda (_: Natural) . true)))</pre></aside><dl><dt class="spec type" id="type-range"><a href="#type-range" class="anchor"></a><code><span class="keyword">type</span> range</code><code> = <a href="../Fmlib__Character_parser/Located/index.html#type-range">Fmlib.Character_parser.Located.range</a></code></dt></dl><div class="spec module" id="module-Make"><a href="#module-Make" class="anchor"></a><code><span class="keyword">module</span> <a href="Make/index.html">Make</a> : <span class="keyword">functor</span> (<a href="Make/argument-1-Final/index.html">Final</a> : <a href="../Fmlib/Module_types/index.html#module-type-ANY">Fmlib.Module_types.ANY</a>) <span>&#45;&gt;</span> <span class="keyword">sig</span> ... <span class="keyword">end</span></code></div></div></body></html>
