@@ -1,0 +1,12 @@
+{
+    "name": "alba",
+    "version": "0.0.2",
+    "license": "BSD-3-Clause",
+    "files": [
+        "alba-node"
+    ],
+    "main": "alba-node",
+    "bin": {
+        "alba-node": "alba-node"
+    }
+}
