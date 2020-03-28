@@ -7,7 +7,7 @@ class type js_iface =
     method question: js_string t -> (js_string t -> unit) callback -> unit meth
     method close: unit meth
     method on:  js_string t -> (unit -> unit) callback -> unit meth
-    method off: js_string t -> (unit -> unit) callback -> unit meth
+    method removeListener: js_string t -> (unit -> unit) callback -> unit meth
   end
 
 type iface = js_iface t
@@ -34,7 +34,7 @@ let question
     (string prompt)
     (wrap_callback @@
        fun jstr ->
-       rl##off str_close cb;
+       rl##removeListener str_close cb;
        cmd (to_string jstr))
 
 
