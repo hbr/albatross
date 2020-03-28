@@ -472,12 +472,12 @@ struct
 
 
         let definition: Expression.definition t =
-            formal_argument_name >>= fun name ->
-            (formal_arguments true |. assign |. whitespace)
-            >>= fun fargs ->
-            indented_expression ()
-            >>= fun e ->
-            return (name, fargs, e)
+            return
+                (fun name args res_tp e -> name, args, res_tp, e)
+            |= formal_argument_name
+            |= formal_arguments true
+            |= optional_result_type
+            |= (assign |. whitespace >>= indented_expression)
         in
 
 

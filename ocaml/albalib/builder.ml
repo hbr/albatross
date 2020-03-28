@@ -373,7 +373,7 @@ let rec build0
             match defs with
             | [] ->
                 build0 exp 0 builder
-            | (name, fargs, def_exp) :: defs ->
+            | (name, fargs, res_tp, def_exp) :: defs ->
                 let str = Located.value name
                 and names = builder.names
                 in
@@ -390,13 +390,20 @@ let rec build0
                 >>= set_names names
                 >>=
                 (
-                    if fargs = [] then
+                    if fargs = [] && res_tp = None then
                         build0 def_exp 0
+                    else if fargs = [] then
+                        build0
+                            Located.(make
+                                (start name)
+                                (Typed (def_exp, Option.value res_tp))
+                                (end_ name))
+                        0
                     else
                         build0
                             Located.(make
                                 (start name)
-                                (Function (fargs, None, def_exp))
+                                (Function (fargs, res_tp, def_exp))
                                 (end_ name))
                             0
                 )

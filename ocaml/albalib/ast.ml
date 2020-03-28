@@ -40,7 +40,7 @@ module Expression = struct
         string Located.t * t option
 
     and definition =
-        string Located.t * formal_argument list * t
+        string Located.t * formal_argument list * t option * t
 
 
   let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
@@ -181,11 +181,13 @@ module Expression = struct
                 | [] ->
                     name_occurs name exp
 
-                | (name2, fargs, def_exp) :: defs ->
+                | (name2, fargs, res_tp, def_exp) :: defs ->
                     Located.value name <> Located.value name2
                     &&
                     (
                         occurs_in_fargs fargs (Some def_exp) None
+                        ||
+                        occurs_opt name res_tp
                         ||
                         occurs name (Where (exp, defs))
                     )
@@ -202,7 +204,7 @@ module Expression = struct
         | [] ->
             None
 
-        | (name, _, _) :: defs ->
+        | (name, _, _, _) :: defs ->
             if occurs name (Where (exp, defs)) then
                 find_unused_local exp defs
             else

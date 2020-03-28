@@ -41,7 +41,7 @@ sig
         string Located.t * t option
 
     and definition =
-        string Located.t * formal_argument list * t
+        string Located.t * formal_argument list * t option * t
 
 
     val binary: t
