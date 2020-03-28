@@ -326,9 +326,20 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                                 c
                         <+> print exp (push_local name tp c)
                     | _ ->
-                        group space <+> string ":="
-                        <+> group (
-                            nest 4 (space <+> raw_print exp c)
+                        (
+                            match exp with
+                            | Typed (exp, tp) ->
+                                char ':'
+                                <+> group space <+> raw_print tp c
+                                <+> group space <+> string ":="
+                                <+> group (
+                                    nest 4 (space <+> raw_print exp c)
+                                )
+                            | _ ->
+                                group space <+> string ":="
+                                <+> group (
+                                    nest 4 (space <+> raw_print exp c)
+                                )
                         )
                 in
                 string name <+> print value c
