@@ -350,7 +350,7 @@ let compute (t:Term.t) (c:t): Term.t =
        )
 
     | Typed (e, _ ) ->
-       compute e steps c
+       compute e (steps + 1) c
 
     | Appl (Value f, Value arg, _) ->
         Value (Value.apply f arg), steps + 1
