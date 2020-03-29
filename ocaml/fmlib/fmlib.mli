@@ -29,16 +29,6 @@ module Vector = Vector
 module Pool = Pool
 
 
-(** {1 IO }*)
-
-module Io = Io
-
-module Make_io = Make_io
-
-module Readable_printer = Readable_printer
-module String_printer   = String_printer
-
-
 (** {1 Parsing }*)
 
 module Character_parser = Character_parser
@@ -51,6 +41,22 @@ module Pretty_printer = Pretty_printer
 
 
 
+(** {1 IO }*)
+
+module Io = Io
+
+module Make_io = Make_io
+
+module Readable_printer = Readable_printer
+module String_printer   = String_printer
+
+
+
+(** {1 Web Applications} *)
+
+module Html = Html
+
+module Browser = Browser
 
 
 (** {1 Old modules (deprecated)} *)
