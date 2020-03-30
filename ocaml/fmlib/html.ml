@@ -32,7 +32,7 @@ let text (s: string): 'a t =
 
 let node
     (s: string)
-    (alist:'a Attribute.t list)
+    (alist: 'a Attribute.t list)
     (children: 'a t list)
     : 'a t =
     Node (s, alist, children)

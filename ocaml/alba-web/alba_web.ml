@@ -4,7 +4,11 @@ struct
 
     let view (): unit Fmlib.Html.t =
         let open Fmlib.Html in
-        text "Hello world"
+        div
+            []
+            [text "Hello world";
+             textarea [] [];
+             pre [] [text "preformatted"]]
 
     let update () () = ()
 
