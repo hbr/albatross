@@ -1,0 +1,24 @@
+(executable
+    (name alba_web)
+    (libraries fmlib fmlib_node)
+    (preprocess (pps js_of_ocaml-ppx))
+    (modes byte js))
+
+(rule
+    (targets alba_web.js)
+    (mode (promote (until-clean)))
+    (action
+        (run %{bin:js_of_ocaml}
+            --noruntime
+            +base/runtime.js
+            %{lib:js_of_ocaml-compiler:runtime.js}
+            ;--source-map
+            %{dep:alba_web.bc}
+            -o %{targets}
+            ;--pretty
+            )))
+
+
+(alias
+    (name default)
+    (deps alba_web.js index.html))
