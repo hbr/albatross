@@ -1,6 +1,9 @@
 module Attribute:
 sig
-    type _ t
+    type _ t =
+    | Style of string * string
+    | Attribute of string * string
+
 
     val style: string -> string -> 'a t
     (**
@@ -19,7 +22,9 @@ sig
 end
 
 
-type _ t
+type 'a t =
+| Text of string
+| Node of string * 'a Attribute.t list * 'a t list
 
 type 'a node_function =
     'a Attribute.t list -> 'a t list -> 'a t

@@ -1,7 +1,7 @@
 (executable
     (name alba_web)
     (libraries fmlib fmlib_node)
-    (preprocess (pps js_of_ocaml-ppx))
+    ;(preprocess (pps js_of_ocaml-ppx))
     (modes byte js))
 
 (rule
@@ -11,9 +11,11 @@
         (run %{bin:js_of_ocaml}
             --noruntime
             +base/runtime.js
+            +dynlink.js
+            +toplevel.js
             %{lib:js_of_ocaml-compiler:runtime.js}
-            ;--source-map
             %{dep:alba_web.bc}
+            ;--source-map
             -o %{targets}
             ;--pretty
             )))
@@ -22,3 +24,7 @@
 (alias
     (name default)
     (deps alba_web.js index.html))
+
+(env
+    (dev
+        (flags (:standard -warn-error -A))))

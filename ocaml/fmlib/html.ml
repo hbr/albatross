@@ -1,8 +1,8 @@
 module Attribute =
 struct
     type 'a t =
-      | Style of string * string
-      | Attribute of string * string
+    | Style of string * string
+    | Attribute of string * string
       (*| Property of string * Js.Unsafe.any (* Must be an encoded js value *)*)
 
 
@@ -18,8 +18,8 @@ end
 
 
 type 'a t =
-  | Text of string
-  | Node of string * 'a Attribute.t list * 'a t list
+| Text of string
+| Node of string * 'a Attribute.t list * 'a t list
 
 
 type 'a node_function =
