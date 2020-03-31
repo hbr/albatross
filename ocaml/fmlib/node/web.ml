@@ -45,6 +45,21 @@ struct
         | Property (name, value) ->
             Js.Unsafe.set node (Js.string name) (Js.string value)
 
+        | Handler (name, _) ->
+            let _ = (* id *)
+                Dom_html.addEventListener
+                    node
+                    (Dom_html.Event.make name)
+                    (Dom_html.handler
+                        (fun _ ->
+                            Printf.printf "event <%s>\n" name;
+                            Js._false
+                        )
+                    )
+                    Js._false
+            in
+            ()
+
 
 
     let make_html

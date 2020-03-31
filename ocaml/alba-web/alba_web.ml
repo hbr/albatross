@@ -20,8 +20,12 @@ struct
                     style "width" "50%"
                 ]
                 [text "preformatted"];
-             button [style "color" "blue"] [text "evaluate"];
-             button [] [text "typecheck"];
+             button
+                [style "color" "blue"]
+                [text "evaluate"];
+             button
+                [on "click" (Handler.Normal ())]
+                [text "typecheck"];
              button [attribute "class" "myclass"] [text "clear"];
             ]
 

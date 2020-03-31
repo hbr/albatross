@@ -1,11 +1,19 @@
+module Handler =
+struct
+    type 'a t =
+    | Normal of 'a
+end
+
+
+
 module Attribute =
 struct
     type 'a t =
     | Style of string * string
     | Attribute of string * string
-    | Property of string * string  (* nyi: arbitrary properties, only string
-                                      properties *)
+    | Property of string * string  (* Up to new only string properties. *)
       (*| Property of string * Js.Unsafe.any (* Must be an encoded js value *)*)
+    | Handler of string * 'a Handler.t
 
 
     let style (name: string) (value: string): 'a t =
@@ -18,6 +26,9 @@ struct
 
     let property (name: string) (value: string): 'a t =
         Property (name, value)
+
+    let on (name: string) (handler: 'a Handler.t): 'a t =
+        Handler (name, handler)
 end
 
 
@@ -44,16 +55,17 @@ let node
     Node (s, alist, children)
 
 
-let div: 'a node_function = node "div"
+let div attrs children =
+    node "div" attrs children
 
 
-let textarea: 'a node_function =
-    node "textarea"
+let textarea attrs children =
+    node "textarea" attrs children
 
 
-let pre: 'a node_function =
-    node "pre"
+let pre attrs children =
+    node "pre" attrs children
 
 
-let button: 'a node_function =
-    node "button"
+let button attrs children =
+    node "button" attrs children

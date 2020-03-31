@@ -1,10 +1,19 @@
+module Handler:
+sig
+    type 'a t =
+    | Normal of 'a (* Very primitive implementation. Normally a handler needs a
+                      decoder which is able to transform the event object (a
+                      javascript object) into a value of type ['a]. *)
+end
+
+
 module Attribute:
 sig
-    type _ t =
+    type 'a t =
     | Style of string * string
     | Attribute of string * string
-    | Property  of string * string  (* nyi: arbitrary properties, only string
-                                       properties *)
+    | Property  of string * string  (* Up to new only string properties. *)
+    | Handler of string * 'a Handler.t
 
 
     val style: string -> string -> 'a t
@@ -23,6 +32,8 @@ sig
     (** [attribute name value]. E.g. [attribute "for" "button"] *)
 
     val property: string -> string -> 'a t
+
+    val on: string -> 'a Handler.t -> 'a t
 end
 
 
