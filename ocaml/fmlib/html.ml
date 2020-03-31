@@ -38,8 +38,7 @@ let node
     Node (s, alist, children)
 
 
-let div: 'a node_function =
-    node "div"
+let div: 'a node_function = node "div"
 
 
 let textarea: 'a node_function =
@@ -48,3 +47,7 @@ let textarea: 'a node_function =
 
 let pre: 'a node_function =
     node "pre"
+
+
+let button: 'a node_function =
+    node "button"

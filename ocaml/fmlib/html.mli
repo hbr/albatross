@@ -29,6 +29,7 @@ type 'a t =
 type 'a node_function =
     'a Attribute.t list -> 'a t list -> 'a t
 
+
 val text: string -> 'a t
 
 val node: string -> 'a node_function
@@ -38,3 +39,5 @@ val div: 'a node_function
 val textarea: 'a node_function
 
 val pre: 'a node_function
+
+val button: 'a node_function

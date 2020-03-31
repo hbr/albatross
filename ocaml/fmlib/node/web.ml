@@ -28,6 +28,21 @@ struct
         remove ()
 
 
+
+    let add_attribute
+        (attr: 'msg Html.Attribute.t)
+        (node: Dom_html.element Js.t)
+        : unit
+        =
+        let open Html.Attribute in
+        match attr with
+        | Style (name, value) ->
+            Js.Unsafe.set node##.style (Js.string name) (Js.string value)
+        | Attribute (name, value) ->
+            node##setAttribute (Js.string name) (Js.string value)
+
+
+
     let make_html
         (html: 'msg Html.t)
         (doc: Dom_html.document Js.t)
@@ -41,13 +56,24 @@ struct
                     Js.Unsafe.coerce (doc##createTextNode (Js.string text))
                     : Dom_html.element Js.t
                 )
-            | Node (tag, _ , children) ->
+            | Node (tag, attributes, children) ->
+                let node =
+                    doc##createElement (Js.string tag)
+                in
+                let node =
+                    List.fold_left
+                        (fun node attr ->
+                            add_attribute attr node;
+                            node)
+                        node
+                        attributes
+                in
                 List.fold_left
                     (fun node child ->
                         Dom.appendChild node (make child);
                         node
                     )
-                    (doc##createElement (Js.string tag))
+                    node
                     children
         in
         make html

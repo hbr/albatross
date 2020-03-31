@@ -4,11 +4,21 @@ struct
 
     let view (): unit Fmlib.Html.t =
         let open Fmlib.Html in
+        let open Attribute in
         div
             []
             [text "Hello world";
              textarea [] [];
-             pre [] [text "preformatted"]]
+             pre
+                [   style "color" "red";
+                    style "backgroundColor" "lightgray";
+                    style "width" "50%"
+                ]
+                [text "preformatted"];
+             button [style "color" "blue"] [text "evaluate"];
+             button [] [text "typecheck"];
+             button [attribute "class" "myclass"] [text "clear"];
+             ]
 
     let update () () = ()
 
