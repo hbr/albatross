@@ -8,17 +8,22 @@ struct
         div
             []
             [text "Hello world";
-             textarea [] [];
+             textarea
+                [attribute "placeholder" "Enter expression";
+                 property  "value" "Sample";
+                 attribute "cols" "10";
+                 attribute "rows" "3"]
+                [];
              pre
                 [   style "color" "red";
-                    style "backgroundColor" "lightgray";
+                    style "background-color" "lightgray";
                     style "width" "50%"
                 ]
                 [text "preformatted"];
              button [style "color" "blue"] [text "evaluate"];
              button [] [text "typecheck"];
              button [attribute "class" "myclass"] [text "clear"];
-             ]
+            ]
 
     let update () () = ()
 

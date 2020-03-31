@@ -38,8 +38,12 @@ struct
         match attr with
         | Style (name, value) ->
             Js.Unsafe.set node##.style (Js.string name) (Js.string value)
+
         | Attribute (name, value) ->
             node##setAttribute (Js.string name) (Js.string value)
+
+        | Property (name, value) ->
+            Js.Unsafe.set node (Js.string name) (Js.string value)
 
 
 

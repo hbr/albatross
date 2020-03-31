@@ -3,6 +3,8 @@ sig
     type _ t =
     | Style of string * string
     | Attribute of string * string
+    | Property  of string * string  (* nyi: arbitrary properties, only string
+                                       properties *)
 
 
     val style: string -> string -> 'a t
@@ -19,6 +21,8 @@ sig
 
     val attribute: string -> string -> 'a t
     (** [attribute name value]. E.g. [attribute "for" "button"] *)
+
+    val property: string -> string -> 'a t
 end
 
 

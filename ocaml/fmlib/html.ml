@@ -3,6 +3,8 @@ struct
     type 'a t =
     | Style of string * string
     | Attribute of string * string
+    | Property of string * string  (* nyi: arbitrary properties, only string
+                                      properties *)
       (*| Property of string * Js.Unsafe.any (* Must be an encoded js value *)*)
 
 
@@ -12,6 +14,10 @@ struct
 
     let attribute (name: string) (value: string): 'a t =
         Attribute (name, value)
+
+
+    let property (name: string) (value: string): 'a t =
+        Property (name, value)
 end
 
 
