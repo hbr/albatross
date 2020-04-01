@@ -1,3 +1,93 @@
+module type JS =
+sig
+    type t
+    val int: t -> int option
+    val field: string -> t -> t option
+end
+
+
+
+module Make (Js: JS) =
+struct
+    module Decoder =
+    struct
+        type 'a t = Js.t -> 'a option
+
+        let return (a: 'a): 'a t =
+            fun _ -> Some a
+
+        let int: int t =
+            Js.int
+
+        let field (name: string) (d: 'a t): 'a t =
+            fun js ->
+                Option.( Js.field name js >>= d)
+
+        let run (js: Js.t) (d: 'a t): 'a option =
+            d js
+    end
+
+
+    module Handler =
+    struct
+        type 'msg t =
+        | Normal of 'msg Decoder.t
+    end
+
+
+    module Attribute =
+    struct
+        type 'msg t =
+        | Style of string * string
+        | Attribute of string * string
+        | Property of string * string (* up to now: only string properties. *)
+        | Handler of string * 'msg Handler.t
+    end
+
+
+
+    type 'msg t =
+    | Text of string
+    | Node of string * 'msg Attribute.t list * 'msg t list
+
+
+    type 'msg attributes = 'msg Attribute.t list
+    type 'msg children   = 'msg t list
+
+
+    let text (s: string): 'a t =
+        Text (s)
+
+
+    let node
+        (s: string)
+        (alist: 'a Attribute.t list)
+        (children: 'a t list)
+        : 'a t =
+        Node (s, alist, children)
+
+
+    let div attrs children =
+        node "div" attrs children
+
+
+    let textarea attrs children =
+        node "textarea" attrs children
+
+
+    let pre attrs children =
+        node "pre" attrs children
+
+
+    let button attrs children =
+        node "button" attrs children
+end
+
+
+
+
+
+
 module Handler =
 struct
     type 'a t =

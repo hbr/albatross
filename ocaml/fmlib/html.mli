@@ -1,3 +1,64 @@
+module type JS =
+sig
+    type t
+    val int: t -> int option
+    val field: string -> t -> t option
+end
+
+
+
+module Make (Js: JS):
+sig
+    module Decoder:
+    sig
+        type 'a t
+
+        val return: 'a -> 'a t
+        val int: int t
+        val field: string -> 'a t -> 'a t
+        val run: Js.t -> 'a t -> 'a option
+    end
+
+    module Handler:
+    sig
+        type 'msg t =
+        | Normal of 'msg Decoder.t
+    end
+
+    module Attribute:
+    sig
+        type 'msg t =
+        | Style of string * string
+        | Attribute of string * string
+        | Property of string * string (* up to now: only string properties. *)
+        | Handler of string * 'msg Handler.t
+    end
+
+    type 'msg t =
+    | Text of string
+    | Node of string * 'msg Attribute.t list * 'msg t list
+
+
+    type 'msg attributes = 'msg Attribute.t list
+    type 'msg children   = 'msg t list
+
+    val text: string -> 'msg t
+
+    val node: string -> 'msg attributes -> 'msg children -> 'msg t
+
+    val div: 'msg attributes -> 'msg children -> 'msg t
+
+    val textarea: 'msg attributes -> 'msg children -> 'msg t
+
+    val pre: 'msg attributes -> 'msg children -> 'msg t
+
+    val button: 'msg attributes -> 'msg children -> 'msg t
+end
+
+
+
+
+
 module Handler:
 sig
     type 'a t =

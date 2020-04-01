@@ -3,6 +3,19 @@ open Js_of_ocaml
 
 module Io =
 struct
+    module Js_object =
+    struct
+        type t = Js.Unsafe.any
+
+        let int (_: t): int option =
+            assert false
+
+        let field (_: string) (_: t): t option =
+            assert false
+    end
+
+    module Html2 = Html.Make (Js_object)
+
     type ('model,'msg) t = {
         window:   Dom_html.window Js.t;
         document: Dom_html.document Js.t;
@@ -108,6 +121,7 @@ struct
             Dom_html.handler
                 (fun _ ->
                     let state = make model view in
+                    Printf.printf "%s\n" (Js.to_string state.document##._URL);
                     remove_children (state.document##.body);
                     Dom.appendChild
                         state.document##.body
