@@ -1,6 +1,10 @@
 open Fmlib
 open Js_of_ocaml
 
+let window: Dom_html.window Js.t = Js.Unsafe.global
+
+let document: Dom_html.document Js.t = window##.document
+
 module Io =
 struct
     module Js_object =
@@ -16,17 +20,14 @@ struct
 
     module Html2 = Html.Make (Js_object)
 
+
     type ('model,'msg) t = {
-        window:   Dom_html.window Js.t;
-        document: Dom_html.document Js.t;
         model:    'model;
         view:     'model -> 'msg Html.t;
     }
 
     let make (model: 'a) (view: 'model -> 'msg Html.t): ('model,'msg) t =
-        let window = Dom_html.window in
-        let document = window##.document in
-        { window; document; model; view }
+        { model; view }
 
 
     let remove_children (node: Dom_html.element Js.t): unit =
@@ -117,15 +118,15 @@ struct
         (_: 'msg -> 'model -> 'model)
         : unit
         =
-        Dom_html.window##.onload :=
+        window##.onload :=
             Dom_html.handler
                 (fun _ ->
-                    let state = make model view in
-                    Printf.printf "%s\n" (Js.to_string state.document##._URL);
-                    remove_children (state.document##.body);
+                    let _ = make model view in (* state *)
+                    Printf.printf "%s\n" (Js.to_string document##._URL);
+                    remove_children (document##.body);
                     Dom.appendChild
-                        state.document##.body
-                        (make_html (view model) state.document);
+                        document##.body
+                        (make_html (view model) document);
                     Js._false
                 )
 end

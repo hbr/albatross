@@ -1,6 +1,7 @@
 .PHONY: build build_dune test_alba \
 	doc \
-	fmlib core albalib \
+	fmlib fmlib_js \
+	core albalib \
 	alba2 alba-node alba-web
 
 build:
@@ -26,6 +27,9 @@ test_alba:
 
 doc:
 	dune build @doc
+
+fmlib_js:
+	dune build ocaml/fmlib/node/fmlib_node.cma
 
 fmlib:
 	dune build @ocaml/fmlib/runtest
