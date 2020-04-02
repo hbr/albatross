@@ -3,6 +3,11 @@ sig
     type t
     val int: t -> int option
     val field: string -> t -> t option
+
+    val of_int:   int -> t
+    val object_of_list: t list -> t
+    val of_array: t array -> t
+    val of_list:  t list -> t
 end
 
 

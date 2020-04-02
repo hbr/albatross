@@ -16,6 +16,18 @@ struct
 
         let field (_: string) (_: t): t option =
             assert false
+
+        let of_int (_: int): t =
+            assert false
+
+        let object_of_list (_: t list): t =
+            assert false
+
+        let of_list (_: t list): t =
+            assert false
+
+        let of_array (_: t array): t =
+            assert false
     end
 
     module Html2 = Html.Make (Js_object)
