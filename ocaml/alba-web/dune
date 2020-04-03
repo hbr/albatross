@@ -20,6 +20,11 @@
             ;--pretty
             )))
 
+(rule
+    (targets alba_web2.js)
+    (mode (promote (until-clean)))
+    (action
+        (run %{bin:cp} %{dep:alba_web.bc.js} %{targets})))
 
 (alias
     (name default)
