@@ -135,6 +135,10 @@ struct
                 (fun _ ->
                     let _ = make model view in (* state *)
                     Printf.printf "%s\n" (Js.to_string document##._URL);
+                    ignore (window##.history##pushState
+                        Js.null
+                        (Js.string "")
+                        (Js.some (Js.string "?chapter=compile#5")));
                     remove_children (document##.body);
                     Dom.appendChild
                         document##.body
