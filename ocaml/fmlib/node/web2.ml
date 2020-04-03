@@ -238,7 +238,7 @@ struct
                 (fun _ ->
                     Printf.printf "load\n";
                     let document = state.window##.document in
-                    Printf.printf "%s\n" (Js.to_string document##._URL);
+                    document##.title := Js.string "my-test-app";
                     state.window##.history##pushState
                         Js.null
                         (Js.string "")
