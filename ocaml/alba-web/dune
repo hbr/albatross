@@ -1,11 +1,11 @@
 (executable
     (name alba_web)
-    (libraries fmlib fmlib_node)
+    (libraries fmlib fmlib_js)
     ;(preprocess (pps js_of_ocaml-ppx))
     (modes byte js))
 
 (rule
-    (targets alba_web.js)
+    (targets alba_web2.js)
     (mode (promote (until-clean)))
     (action
         (run %{bin:js_of_ocaml}
@@ -21,7 +21,7 @@
             )))
 
 (rule
-    (targets alba_web2.js)
+    (targets alba_web.js)
     (mode (promote (until-clean)))
     (action
         (run %{bin:cp} %{dep:alba_web.bc.js} %{targets})))

@@ -242,7 +242,7 @@ struct
                     state.window##.history##pushState
                         Js.null
                         (Js.string "")
-                        (Js.string "?chapter=compile#5");
+                        (Js.string "?chapter=compile#6");
                     let body = document##.body in
                     remove_children body;
                     body##appendChild

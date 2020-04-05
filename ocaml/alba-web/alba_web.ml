@@ -37,5 +37,5 @@ end
 
 
 let _ =
-    let module Web = Make (Fmlib_node.Web2.Io) in
+    let module Web = Make (Fmlib_js.Web.Io) in
     Web.run ()

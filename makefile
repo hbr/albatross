@@ -28,11 +28,14 @@ test_alba:
 doc:
 	dune build @doc
 
-fmlib_js:
-	dune build ocaml/fmlib/node/fmlib_node.cma
-
 fmlib:
 	dune build @ocaml/fmlib/runtest
+
+fmlib_js:
+	dune build ocaml/fmlib/js/fmlib_js.cma
+
+fmlib_node:
+	dune build ocaml/fmlib/node/fmlib_node.cma
 
 core: fmlib
 	dune build @ocaml/core/runtest
