@@ -129,6 +129,11 @@ module String =
       in
       let bs = str cs 0 in
       Bytes.unsafe_to_string bs
+
+
+    let reverse (s: string): string =
+        let len = length s in
+        init len (fun i -> s.[len - 1 - i])
   end
 
 

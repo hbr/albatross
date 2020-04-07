@@ -73,6 +73,10 @@ sig
   val is_suffix: t -> t -> bool
   (** [is_suffix a b] Is [a] a suffix of [b]? *)
 
+
+  val reverse: t -> t
+  (** Reverse the string. *)
+
   val compare: t -> t -> int
   val one: char -> t
   val find: (char -> bool) -> int -> t -> int
