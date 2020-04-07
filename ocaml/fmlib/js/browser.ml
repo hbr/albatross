@@ -114,44 +114,36 @@ let get_window (): window Js.t =
 
 
 
-
-module Io =
+module Decoder =
 struct
-    module Js_object =
-    struct
-        type t = Js.Unsafe.any
+    type 'a t = Js.Unsafe.any -> 'a option
 
-        let int (_: t): int option =
-            assert false
+    let return (a: 'a): 'a t =
+        fun _ -> Some a
 
-        let field (_: string) (_: t): t option =
-            assert false
+    let string: 'a t =
+        fun _ -> assert false
 
-        let of_int (_: int): t =
-            assert false
-
-        let object_of_list (_: t list): t =
-            assert false
-
-        let of_list (_: t list): t =
-            assert false
-
-        let of_array (_: t array): t =
-            assert false
-    end
-
-    module Html2 = Html.Make (Js_object)
+    let field (_: string) (_: 'a t): 'a t =
+        fun _ -> assert false
+end
 
 
+
+
+
+
+
+module Make (Vdom: Html2.VDOM with type 'a decoder = 'a Decoder.t) =
+struct
     type ('model,'msg) t = {
         window:   window Js.t;
-        view:     'model -> 'msg Html.t;
+        view:     'model -> 'msg Vdom.t;
         mutable model: 'model;
     }
 
 
-
-    let make (model: 'a) (view: 'model -> 'msg Html.t): ('model,'msg) t =
+    let make (model: 'model) (view: 'model -> 'msg Vdom.t): ('model,'msg) t =
         {   window = get_window ();
             model;
             view
@@ -159,11 +151,11 @@ struct
 
 
     let add_attribute
-        (attr: 'msg Html.Attribute.t)
+        (attr: 'msg Vdom.Attribute.t)
         (node: node Js.t)
         : unit
         =
-        let open Html.Attribute in
+        let open Vdom.Attribute in
         match attr with
         | Style (name, value) ->
             Js.Unsafe.set node##.style (Js.string name) (Js.string value)
@@ -174,8 +166,12 @@ struct
         | Property (name, value) ->
             Js.Unsafe.set node (Js.string name) (Js.string value)
 
-        | Handler (_, _) ->
-            () (* nyi *)
+        | On (name, _) ->
+            node##addEventListener
+                (Js.string name)
+                (Js.wrap_callback
+                    (fun _ ->
+                        Printf.printf "event <%s> occurred\n" name))
 
 
     let remove_children (node: node Js.t): unit =
@@ -192,11 +188,11 @@ struct
 
 
     let make_html
-        (html: 'msg Html.t)
+        (html: 'msg Vdom.t)
         (doc: document Js.t)
         : node Js.t
         =
-        let open Html in
+        let open Vdom in
         let rec make html =
             match html with
             | Text text ->
@@ -227,10 +223,11 @@ struct
 
     let sandbox
         (model: 'model)
-        (view: 'model -> 'msg Html.t)
+        (view: 'model -> 'msg Vdom.t)
         (_: 'msg -> 'model -> 'model)
         : unit
         =
+        Printf.printf "start sandbox\n";
         let state = make model view in
         state.window##addEventListener
             (Js.string "load")
@@ -249,6 +246,4 @@ struct
                         (make_html (view model) document)
                 )
             )
-
-
-end (* Io *)
+end

@@ -1,30 +1,45 @@
 (executable
     (name alba_web)
+    (modules alba_web)
     (libraries fmlib fmlib_js)
     ;(preprocess (pps js_of_ocaml-ppx))
     (modes byte js))
 
-(rule
-    (targets alba_web2.js)
-    (mode (promote (until-clean)))
-    (action
-        (run %{bin:js_of_ocaml}
-            --noruntime
-            +base/runtime.js
-            +dynlink.js
-            +toplevel.js
-            %{lib:js_of_ocaml-compiler:runtime.js}
-            %{dep:alba_web.bc}
-            ;--source-map
-            -o %{targets}
-            ;--pretty
-            )))
+;(rule
+;    (targets alba_web2.js)
+;    (mode (promote (until-clean)))
+;    (action
+;        (run %{bin:js_of_ocaml}
+;            --noruntime
+;            +base/runtime.js
+;            +dynlink.js
+;            +toplevel.js
+;            %{lib:js_of_ocaml-compiler:runtime.js}
+;            %{dep:alba_web.bc}
+;            ;--source-map
+;            -o %{targets}
+;            ;--pretty
+;            )))
 
 (rule
     (targets alba_web.js)
     (mode (promote (until-clean)))
     (action
         (run %{bin:cp} %{dep:alba_web.bc.js} %{targets})))
+
+
+(executable
+    (name alba_web2)
+    (modules alba_web2)
+    (libraries fmlib fmlib_js)
+    (modes byte js))
+
+(rule
+    (targets alba_web2.js)
+    (mode (promote (until-clean)))
+    (action
+        (run %{bin:cp} %{dep:alba_web2.bc.js} %{targets})))
+
 
 (alias
     (name default)
