@@ -12,6 +12,14 @@ type js_string = Js.js_string
 (* classes for javascript dom objects *)
 
 
+class type event =
+object
+    method stopPropagation: unit Js.meth
+    method preventDefault:  unit Js.meth
+end
+
+
+
 class type eventTarget =
 object
     method addEventListener:
@@ -88,6 +96,9 @@ object
 end
 
 
+
+
+
 class type window =
 object
     inherit eventTarget
@@ -95,6 +106,9 @@ object
     method history: history Js.t Js.readonly_prop
 
     method document: document Js.t Js.readonly_prop
+
+    method requestAnimationFrame:
+        (float -> unit) Js.callback -> unit Js.meth
 end
 
 
@@ -116,16 +130,36 @@ let get_window (): window Js.t =
 
 module Decoder =
 struct
-    type 'a t = Js.Unsafe.any -> 'a option
+    type 'a t =
+        Common.Void.t Js.t -> 'a option
 
     let return (a: 'a): 'a t =
         fun _ -> Some a
 
-    let string: 'a t =
-        fun _ -> assert false
+    let string: string t =
+        fun js ->
+            Printf.printf "typeof %s\n"
+                (Js.to_string (Js.typeof js));
+            if Js.to_string (Js.typeof js) = "string" then
+                Some (
+                    Printf.printf "string\n";
+                    Js.to_string (Js.Unsafe.coerce js)
+                )
+            else
+                (
+                    Printf.printf "no string\n";
+                    None
+                )
 
-    let field (_: string) (_: 'a t): 'a t =
-        fun _ -> assert false
+
+    let field (name: string) (decode: 'a t): 'a t =
+        fun obj ->
+            Printf.printf "field %s\n" name;
+            Option.(
+                Js.Opt.to_option (Js.Unsafe.get obj (Js.string name))
+                >>=
+                decode
+            )
 end
 
 
@@ -139,20 +173,30 @@ struct
     type ('model,'msg) t = {
         window:   window Js.t;
         view:     'model -> 'msg Vdom.t;
+        update:   'msg -> 'model -> 'model;
         mutable model: 'model;
+        mutable dirty: bool;
     }
 
 
-    let make (model: 'model) (view: 'model -> 'msg Vdom.t): ('model,'msg) t =
+    let make
+        (model: 'model)
+        (view: 'model -> 'msg Vdom.t)
+        (update: 'msg -> 'model -> 'model)
+        : ('model,'msg) t
+        =
         {   window = get_window ();
+            view;
+            update;
             model;
-            view
+            dirty = false;
         }
 
 
     let add_attribute
         (attr: 'msg Vdom.Attribute.t)
         (node: node Js.t)
+        (state: ('model, 'msg) t)
         : unit
         =
         let open Vdom.Attribute in
@@ -166,12 +210,25 @@ struct
         | Property (name, value) ->
             Js.Unsafe.set node (Js.string name) (Js.string value)
 
-        | On (name, _) ->
+        | On (name, decode) ->
             node##addEventListener
                 (Js.string name)
                 (Js.wrap_callback
-                    (fun _ ->
-                        Printf.printf "event <%s> occurred\n" name))
+                    (fun event ->
+                        Printf.printf "event <%s> occurred\n" name;
+                        (
+                            match decode event with
+                            | None ->
+                                Printf.printf "cannot decode\n"
+                            | Some message ->
+                                (
+                                    state.dirty <- true;
+                                    state.model <-
+                                        state.update message state.model
+                                )
+                        )
+                    )
+                )
 
 
     let remove_children (node: node Js.t): unit =
@@ -189,10 +246,11 @@ struct
 
     let make_html
         (html: 'msg Vdom.t)
-        (doc: document Js.t)
+        (state: ('model, 'msg) t)
         : node Js.t
         =
         let open Vdom in
+        let doc = state.window##.document in
         let rec make html =
             match html with
             | Text text ->
@@ -205,7 +263,7 @@ struct
                 let node =
                     List.fold_left
                         (fun node attr ->
-                            add_attribute attr node;
+                            add_attribute attr node state;
                             node)
                         node
                         attributes
@@ -221,14 +279,35 @@ struct
         make html
 
 
+    let update_html (state: ('model, 'msg) t): unit =
+        Printf.printf "update_html\n";
+        let node = state.window##.document##.body in
+        remove_children node;
+        node##appendChild
+            (make_html (state.view state.model) state);
+        state.dirty <- false
+
+
+
+    let rec animate (state: ('model, 'msg) t) (_: 'a): unit =
+        if state.dirty then
+            update_html state
+        else
+            ();
+        state.window##requestAnimationFrame
+            (Js.wrap_callback (animate state))
+
+
+
+
     let sandbox
         (model: 'model)
         (view: 'model -> 'msg Vdom.t)
-        (_: 'msg -> 'model -> 'model)
+        (update: 'msg -> 'model -> 'model)
         : unit
         =
         Printf.printf "start sandbox\n";
-        let state = make model view in
+        let state = make model view update in
         state.window##addEventListener
             (Js.string "load")
             (Js.wrap_callback
@@ -243,7 +322,9 @@ struct
                     let body = document##.body in
                     remove_children body;
                     body##appendChild
-                        (make_html (view model) document)
+                        (make_html (view model) state);
+                    state.window##requestAnimationFrame
+                        (Js.wrap_callback (animate state))
                 )
             )
 end
