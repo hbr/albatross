@@ -160,6 +160,10 @@ struct
                 >>=
                 decode
             )
+
+
+    let map (f: 'a -> 'b) (decode: 'a t): 'b t =
+        fun obj -> Option.( map f (decode obj) )
 end
 
 

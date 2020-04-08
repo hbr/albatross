@@ -5,6 +5,7 @@ sig
     val return: 'msg -> 'msg t
     val string: string t
     val field:  string -> 'msg t -> 'msg t
+    val map: ('a -> 'b) -> 'a t -> 'b t
 end
 
 
@@ -67,6 +68,32 @@ sig
         val property: string -> string -> 'msg t
 
         val on: string -> 'msg decoder -> 'msg t
+
+
+
+        val placeholder: string -> 'msg t
+
+        val value: string -> 'msg t
+
+
+        val onClick: 'msg -> 'msg t
+
+        val onDoubleClick: 'msg -> 'msg t
+
+        val onMouseDown: 'msg -> 'msg t
+
+        val onMouseUp: 'msg -> 'msg t
+
+        val onMouseEnter: 'msg -> 'msg t
+
+        val onMouseLeave: 'msg -> 'msg t
+
+        val onMouseOver: 'msg -> 'msg t
+
+        val onMouseOut: 'msg -> 'msg t
+
+
+        val onInput: (string -> 'msg) -> 'msg t
     end
 
 
@@ -84,6 +111,12 @@ sig
     val node: string -> 'msg attributes -> 'msg children -> 'msg t
 
     val div: 'msg attributes -> 'msg children -> 'msg t
+
+    val pre: 'msg attributes -> 'msg children -> 'msg t
+
+    val p: 'msg attributes -> 'msg children -> 'msg t
+
+    val button: 'msg attributes -> 'msg children -> 'msg t
 
     val input: 'msg attributes -> 'msg children -> 'msg t
 end

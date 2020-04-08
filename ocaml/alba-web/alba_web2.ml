@@ -18,13 +18,9 @@ let view (model: string): string Vdom.t =
     div
         []
         [   input
-                [   attribute "placeholder" "Text to reverse"
-                ;   property "value" model
-                ;   on
-                        "input"
-                        Browser.Decoder.(
-                            field "target" (field "value" string)
-                        )
+                [   placeholder "Text to reverse"
+                ;   value model
+                ;   onInput identity
                 ]
                 []
         ;   div [] [text (String.reverse model)]

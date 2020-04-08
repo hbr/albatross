@@ -5,6 +5,7 @@ sig
     val return: 'msg -> 'msg t
     val string: string t
     val field:  string -> 'msg t -> 'msg t
+    val map: ('a -> 'b) -> 'a t -> 'b t
 end
 
 
@@ -47,7 +48,9 @@ end
 
 module Vdom (Browser: BROWSER) =
 struct
-    type 'msg decoder = 'msg Browser.Decoder.t
+    module Decoder = Browser.Decoder
+
+    type 'msg decoder = 'msg Decoder.t
 
 
     module Attribute =
@@ -71,6 +74,50 @@ struct
 
         let on (name: string) (handler: 'msg decoder): 'msg t =
             On (name, handler)
+
+
+
+        let placeholder (value: string): 'msg t =
+            attribute "placeholder" value
+
+        let value (value: string): 'msg t =
+            property "value" value
+
+
+        let onClick (msg: 'msg): 'msg t =
+            on "click" (Decoder.return msg)
+
+        let onDoubleClick (msg: 'msg): 'msg t =
+            on "doubleclick" (Decoder.return msg)
+
+        let onMouseDown (msg: 'msg): 'msg t =
+            on "mousedown" (Decoder.return msg)
+
+        let onMouseUp (msg: 'msg): 'msg t =
+            on "mouseup" (Decoder.return msg)
+
+        let onMouseEnter (msg: 'msg): 'msg t =
+            on "mouseenter" (Decoder.return msg)
+
+        let onMouseLeave (msg: 'msg): 'msg t =
+            on "mouseleave" (Decoder.return msg)
+
+        let onMouseOver (msg: 'msg): 'msg t =
+            on "mouseover" (Decoder.return msg)
+
+        let onMouseOut (msg: 'msg): 'msg t =
+            on "mouseout" (Decoder.return msg)
+
+
+        let onInput (f: string -> 'msg): 'msg t =
+            on
+                "input"
+                Decoder.(
+                    field
+                        "target"
+                        (map
+                            f
+                            (field "value" string)))
     end
 
 
@@ -100,6 +147,18 @@ struct
 
     let div (attrs: 'msg attributes) (children: 'msg children): 'msg t =
         node "div" attrs children
+
+
+    let pre (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "pre" attrs children
+
+
+    let p (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "p" attrs children
+
+
+    let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "button" attrs children
 
 
     let input (attrs: 'msg attributes) (children: 'msg children): 'msg t =
