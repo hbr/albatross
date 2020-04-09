@@ -67,6 +67,8 @@ val rev: 'a list -> 'a list
 (** [rev_append a b] prepends the lists [rev a] in front of the list [b]. *)
 val rev_append: 'a list -> 'a list -> 'a list
 
+
+
 val length: 'a t -> int
 
 val filter: ('a -> bool) -> 'a t -> 'a t
@@ -74,6 +76,8 @@ val filter: ('a -> bool) -> 'a t -> 'a t
 val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
 
 val fold_right: ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b
+
+val iter: ('a -> unit) -> 'a list -> unit
 
 val map : ('a -> 'b) -> 'a list -> 'b list
 

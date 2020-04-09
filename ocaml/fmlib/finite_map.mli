@@ -12,6 +12,7 @@ module type S =
     val add: key -> 'a -> 'a t -> 'a t
     val remove: key -> 'a t -> 'a t
     val fold:   (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+    val bindings: 'a t -> (key * 'a) list
   end
 
 module Make (E:SORTABLE)
