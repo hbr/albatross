@@ -74,6 +74,12 @@ sig
         val placeholder: string -> 'msg t
 
         val value: string -> 'msg t
+        (** Value property. Used in input elements like 'input', 'textarea'. *)
+
+        val type_: string -> 'msg t
+        (** Set the type attribute of an input element. Legal values "text"
+        (default), "password", "checkbox", "radio", "color", "button", "file"
+        etc. *)
 
 
         val onClick: 'msg -> 'msg t
@@ -115,6 +121,18 @@ sig
     val pre: 'msg attributes -> 'msg children -> 'msg t
 
     val p: 'msg attributes -> 'msg children -> 'msg t
+
+    val h1: 'msg attributes -> 'msg children -> 'msg t
+
+    val h2: 'msg attributes -> 'msg children -> 'msg t
+
+    val h3: 'msg attributes -> 'msg children -> 'msg t
+
+    val h4: 'msg attributes -> 'msg children -> 'msg t
+
+    val h5: 'msg attributes -> 'msg children -> 'msg t
+
+    val h6: 'msg attributes -> 'msg children -> 'msg t
 
     val button: 'msg attributes -> 'msg children -> 'msg t
 

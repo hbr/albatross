@@ -83,6 +83,9 @@ struct
         let value (value: string): 'msg t =
             property "value" value
 
+        let type_ (value: string): 'msg t =
+            attribute "type" value
+
 
         let onClick (msg: 'msg): 'msg t =
             on "click" (Decoder.return msg)
@@ -155,6 +158,30 @@ struct
 
     let p (attrs: 'msg attributes) (children: 'msg children): 'msg t =
         node "p" attrs children
+
+
+    let h1 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h1" attrs children
+
+
+    let h2 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h2" attrs children
+
+
+    let h3 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h3" attrs children
+
+
+    let h4 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h4" attrs children
+
+
+    let h5 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h5" attrs children
+
+
+    let h6 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "h6" attrs children
 
 
     let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =
