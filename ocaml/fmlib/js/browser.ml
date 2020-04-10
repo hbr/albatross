@@ -44,6 +44,8 @@ object
 
     (* The following methods can be used only on elements *)
 
+    method innerHTML:   js_string Js.t Js.prop
+
     method firstChild:  node Js.t Js.Opt.t Js.readonly_prop
 
     method lastChild:   node Js.t Js.Opt.t Js.readonly_prop
@@ -416,7 +418,7 @@ struct
         let make_text (text: string) (node: node Js.t): 'msg t =
             { node; data = Text text }
 
-        let make_node
+        let fill_node
             (tag: string)
             (nd: node Js.t)
             (attributes: 'msg Attributes.t)
@@ -448,7 +450,7 @@ struct
             | Vdom.Text text,
               Text old_text when text = old_text
               ->
-                Some tree
+                None
 
             | Vdom.Node (tag, attributes, children),
               Node (old_tag, old_attributes, old_children)
@@ -472,9 +474,14 @@ struct
                                 []
 
                             | [], _ ->
+                                (* vdom has no more children, but actual dom
+                                still has. Remove the remaining children in the
+                                actual dom. *)
                                 assert false
 
                             | _, [] ->
+                                (* vdom has more children than the actual dom.
+                                *)
                                 assert false
 
                             | child :: children, old_child :: old_children ->
@@ -496,6 +503,7 @@ struct
                         update_cs tree children !old_children
                     );
                 None
+
             | _, _ ->
                 Some (make_tree vdom)
     end (* Tree *)
@@ -583,7 +591,7 @@ struct
                         (make_event_handler state)
                         attributes
                 in
-                Tree.make_node
+                Tree.fill_node
                     tag
                     node
                     attributes
