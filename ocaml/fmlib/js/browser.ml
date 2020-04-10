@@ -172,9 +172,28 @@ end
 
 
 
+module Encoder =
+struct
+    type t = Common.Void.t Js.t
+
+    let string (s: string): t =
+        Js.(Unsafe.coerce (string s))
+
+    let bool (b: bool): t =
+        Js.(Unsafe.coerce (bool b))
+
+    let object_ (_: (string * t) list): t =
+        assert false
+end
 
 
-module Make (Vdom: Html2.VDOM with type 'a decoder = 'a Decoder.t) =
+
+
+
+module Make
+    (Vdom: Html2.VDOM with type 'a decoder = 'a Decoder.t
+                      and  type encoder = Encoder.t)
+=
 struct
     type handler = (Void.t Js.t -> unit) Js.callback
 

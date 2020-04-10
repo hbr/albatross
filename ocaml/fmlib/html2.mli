@@ -9,9 +9,23 @@ sig
 end
 
 
+module type ENCODER =
+sig
+    type t
+
+    val string: string -> t
+    val bool:   bool -> t
+    val object_: (string * t) list -> t
+end
+
+
+
+
 module type VDOM =
 sig
     type _ decoder
+
+    type encoder
 
 
     module Attribute:
@@ -30,12 +44,19 @@ sig
 end
 
 
+
+
 module type BROWSER =
 sig
     module Decoder: DECODER
 
+    module Encoder: ENCODER
+
     module Make:
-    functor (Vdom: VDOM with type 'msg decoder = 'msg Decoder.t) ->
+    functor (Vdom: VDOM
+        with type 'msg decoder = 'msg Decoder.t
+        and  type encoder = Encoder.t)
+    ->
     sig
         val sandbox:
             'model
@@ -51,6 +72,8 @@ end
 module Vdom (Browser: BROWSER):
 sig
     type 'msg decoder = 'msg Browser.Decoder.t
+
+    type encoder = Browser.Encoder.t
 
 
     module Attribute:
