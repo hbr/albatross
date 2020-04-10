@@ -4,6 +4,7 @@ sig
 
     val return: 'msg -> 'msg t
     val string: string t
+    val bool:   bool t
     val field:  string -> 'msg t -> 'msg t
     val map: ('a -> 'b) -> 'a t -> 'b t
 end
@@ -33,7 +34,7 @@ sig
         type 'msg t =
         | Style of string * string
         | Attribute of string * string
-        | Property of string * string
+        | Property of string * encoder
         | On of string * 'msg decoder
     end
 
@@ -81,23 +82,32 @@ sig
         type 'msg t =
         | Style of string * string
         | Attribute of string * string
-        | Property of string * string
+        | Property of string * encoder
         | On of string * 'msg decoder
 
         val style: string -> string -> 'msg t
 
         val attribute: string -> string -> 'msg t
 
-        val property: string -> string -> 'msg t
+        val property: string -> encoder -> 'msg t
 
         val on: string -> 'msg decoder -> 'msg t
 
 
 
+        val string_property: string -> string -> 'msg t
+        (** [string_property name value] *)
+
+        val bool_property: string -> bool -> 'msg t
+        (** [bool_property name value] *)
+
         val placeholder: string -> 'msg t
 
         val value: string -> 'msg t
         (** Value property. Used in input elements like 'input', 'textarea'. *)
+
+        val checked: bool -> 'msg t
+        (** Indicate, if a checkbox is checked. *)
 
         val type_: string -> 'msg t
         (** Set the type attribute of an input element. Legal values "text"
@@ -123,6 +133,10 @@ sig
 
 
         val onInput: (string -> 'msg) -> 'msg t
+        (** React on input of an input element like 'input', 'textarea', etc. *)
+
+        val onCheck: (bool -> 'msg) -> 'msg t
+        (** React on a checkbox click. *)
     end
 
 

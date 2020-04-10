@@ -4,6 +4,7 @@ sig
 
     val return: 'msg -> 'msg t
     val string: string t
+    val bool:   bool t
     val field:  string -> 'msg t -> 'msg t
     val map: ('a -> 'b) -> 'a t -> 'b t
 end
@@ -34,7 +35,7 @@ sig
         type 'msg t =
         | Style of string * string
         | Attribute of string * string
-        | Property of string * string
+        | Property of string * encoder
         | On of string * 'msg decoder
     end
 
@@ -82,7 +83,7 @@ struct
         type 'msg t =
         | Style of string * string
         | Attribute of string * string
-        | Property of string * string
+        | Property of string * encoder
         | On of string * 'msg decoder
 
         let style (name: string) (value: string): 'msg t =
@@ -93,7 +94,7 @@ struct
             Attribute (name, value)
 
 
-        let property (name: string) (value: string): 'msg t =
+        let property (name: string) (value: encoder): 'msg t =
             Property (name, value)
 
         let on (name: string) (handler: 'msg decoder): 'msg t =
@@ -101,11 +102,21 @@ struct
 
 
 
+
+        let string_property (name: string) (value: string): 'msg t =
+            property name (Encoder.string value)
+
+        let bool_property (name: string) (value: bool): 'msg t =
+            property name (Encoder.bool value)
+
         let placeholder (value: string): 'msg t =
             attribute "placeholder" value
 
         let value (value: string): 'msg t =
-            property "value" value
+            string_property "value" value
+
+        let checked (value: bool): 'msg t =
+            bool_property "checked" value
 
         let type_ (value: string): 'msg t =
             attribute "type" value
@@ -145,6 +156,16 @@ struct
                         (map
                             f
                             (field "value" string)))
+
+
+        let onCheck (f: bool -> 'msg): 'msg t =
+            on
+                "click"
+                Decoder.(
+                    field
+                        "target"
+                        (map f
+                             (field "checked" bool)))
     end
 
 

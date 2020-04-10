@@ -154,6 +154,12 @@ struct
             else
                 None
 
+    let bool: bool t =
+        fun js ->
+            if Js.to_string (Js.typeof js) = "boolean" then
+                Some ( Js.to_bool (Js.Unsafe.coerce js) )
+            else
+                None
 
     let field (name: string) (decode: 'a t): 'a t =
         fun obj ->
@@ -204,7 +210,7 @@ struct
             type 'msg t = {
                 mutable styles: string String_map.t;
                 mutable attributes: string String_map.t;
-                mutable properties: string String_map.t;
+                mutable properties: Encoder.t String_map.t;
                 mutable handlers: handler String_map.t;
             }
 
@@ -274,10 +280,10 @@ struct
             let set_property
                 (node: node Js.t)
                 (name: string)
-                (value: string)
+                (value: Encoder.t)
                 : unit
                 =
-                Js.Unsafe.set node (Js.string name) (Js.string value)
+                Js.Unsafe.set node (Js.string name) value
 
 
             let set_attribute
@@ -321,11 +327,10 @@ struct
             let update_property
                 (node: node Js.t)
                 (name: string)
-                (new_value: string)
-                (value: string)
+                (new_value: Encoder.t)
+                (_: Encoder.t)
                 =
-                if new_value <> value then
-                    set_property node name new_value
+                set_property node name new_value
 
 
             let update_attribute
@@ -406,7 +411,7 @@ struct
                 update
                     (String_map.bindings new_attributes.attributes)
                     (String_map.bindings attributes.attributes)
-                    (update_property node);
+                    (update_attribute node);
                 update
                     (String_map.bindings new_attributes.handlers)
                     (String_map.bindings attributes.handlers)
@@ -580,7 +585,7 @@ struct
             (fun event ->
                 match decode event with
                 | None ->
-                    Printf.printf "cannot decode event/n"
+                    Printf.printf "cannot decode event\n"
                 | Some message ->
                     update message state
             )
