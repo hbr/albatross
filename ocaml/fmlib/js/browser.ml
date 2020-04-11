@@ -56,6 +56,8 @@ object
 
     method setAttribute: js_string Js.t -> js_string Js.t -> unit Js.meth
 
+    method removeAttribute: js_string Js.t -> unit Js.meth
+
     method appendChild: node Js.t -> unit Js.meth
 
     method removeChild: node Js.t -> unit Js.meth
@@ -189,7 +191,7 @@ struct
         Js.(Unsafe.coerce (bool b))
 
     let object_ (_: (string * t) list): t =
-        assert false
+        assert false (* nyi *)
 end
 
 
@@ -277,6 +279,15 @@ struct
                     (Js.string value)
 
 
+            let remove_style
+                (node: node Js.t)
+                (name: string)
+                (_:    string)
+                : unit
+                =
+                Js.Unsafe.delete node##.style (Js.string name)
+
+
             let set_property
                 (node: node Js.t)
                 (name: string)
@@ -286,6 +297,15 @@ struct
                 Js.Unsafe.set node (Js.string name) value
 
 
+            let remove_property
+                (node: node Js.t)
+                (name: string)
+                (_:    Encoder.t)
+                : unit
+                =
+                Js.Unsafe.delete node (Js.string name)
+
+
             let set_attribute
                 (node: node Js.t)
                 (name: string)
@@ -293,6 +313,15 @@ struct
                 : unit
                 =
                 node##setAttribute (Js.string name) (Js.string value)
+
+
+            let remove_attribute
+                (node: node Js.t)
+                (name: string)
+                (_:    string)
+                : unit
+                =
+                node##removeAttribute (Js.string name)
 
 
 
@@ -380,42 +409,60 @@ struct
                 (node: node Js.t)
                 : unit
                 =
-                let rec update news olds upd =
+                let rec update news olds add upd rem =
                     match news, olds with
                     | [], [] ->
                         ()
-                    | (name_new, value_new) :: news, (name, value) :: olds ->
+                    | (name_new, value_new) :: news1, (name, value) :: olds1 ->
                         let cmp = String.compare name_new name in
                         if cmp = -1 then
-                            assert false
+                        (
+                            add name_new value_new;
+                            update news1 olds add upd rem
+                        )
                         else if cmp = 0 then
-                            (
-                                upd name value_new value;
-                                update news olds upd
-                            )
+                        (
+                            upd name value_new value;
+                            update news1 olds1 add upd rem
+                        )
                         else
-                            assert false
+                        (
+                            rem name value;
+                            update news olds1 add upd rem
+                        )
                     | [], _ ->
-                        assert false
+                        List.iter
+                            (fun (name, value) -> rem name value)
+                            olds
                     | _, [] ->
-                        assert false
+                        List.iter
+                            (fun (name, value) -> add name value)
+                            news
                 in
                 update
                     (String_map.bindings new_attributes.styles)
                     (String_map.bindings attributes.styles)
-                    (update_style node);
+                    (set_style node)
+                    (update_style node)
+                    (remove_style node);
                 update
                     (String_map.bindings new_attributes.properties)
                     (String_map.bindings attributes.properties)
-                    (update_property node);
+                    (set_property node)
+                    (update_property node)
+                    (remove_property node);
                 update
                     (String_map.bindings new_attributes.attributes)
                     (String_map.bindings attributes.attributes)
-                    (update_attribute node);
+                    (set_attribute node)
+                    (update_attribute node)
+                    (remove_attribute node);
                 update
                     (String_map.bindings new_attributes.handlers)
                     (String_map.bindings attributes.handlers)
+                    (add_handler node)
                     (update_handler node)
+                    (remove_handler node)
         end (* Attributes *)
 
 
@@ -491,41 +538,55 @@ struct
                     old_attributes := attributes
                 );
                 old_children :=
-                    (
-                        let rec update_cs parent children old_children =
-                            match children, old_children with
-                            | [], [] ->
-                                []
+                (
+                    let rec update_cs parent children old_children =
+                        match children, old_children with
+                        | [], [] ->
+                            []
 
-                            | [], _ ->
-                                (* vdom has no more children, but actual dom
-                                still has. Remove the remaining children in the
-                                actual dom. *)
-                                assert false
+                        | [], _ ->
+                            (* vdom has no more children, but actual dom
+                            still has. Remove the remaining children in the
+                            actual dom. *)
+                            let parent = node tree in
+                            List.iter
+                                (fun child ->
+                                    parent##removeChild (node child))
+                                old_children;
+                            []
 
-                            | _, [] ->
-                                (* vdom has more children than the actual dom.
-                                *)
-                                assert false
+                        | _, [] ->
+                            (* vdom has more children than the actual dom.
+                            *)
+                            let children_rev =
+                                let parent = node tree in
+                                List.fold_left
+                                    (fun cs child ->
+                                        let child = make_tree child in
+                                        parent##appendChild (node child);
+                                        child :: cs)
+                                    [] children
+                            in
+                            List.rev children_rev
 
-                            | child :: children, old_child :: old_children ->
-                                (
-                                    match update child old_child with
-                                    | None ->
-                                        old_child
-                                        ::
-                                        update_cs parent children old_children
-                                    | Some child ->
-                                        (node parent)##replaceChild
-                                            (node child)
-                                            (node old_child);
-                                        child
-                                        ::
-                                        update_cs parent children old_children
-                                )
+                        | child :: children, old_child :: old_children ->
+                            (
+                                match update child old_child with
+                                | None ->
+                                    old_child
+                                    ::
+                                    update_cs parent children old_children
+                                | Some child ->
+                                    (node parent)##replaceChild
+                                        (node child)
+                                        (node old_child);
+                                    child
+                                    ::
+                                    update_cs parent children old_children
+                            )
                         in
                         update_cs tree children !old_children
-                    );
+                );
                 None
 
             | _, _ ->
