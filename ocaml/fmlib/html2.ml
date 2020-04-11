@@ -147,6 +147,21 @@ struct
             on "mouseout" (Decoder.return msg)
 
 
+
+
+        let onKeyDown (f: string -> 'msg): 'msg t =
+            on
+                "keydown"
+                Decoder.(map f (field "key" string))
+
+        let onKeyUp (f: string -> 'msg): 'msg t =
+            on
+                "keyup"
+                Decoder.(map f (field "key" string))
+
+
+
+
         let onInput (f: string -> 'msg): 'msg t =
             on
                 "input"
@@ -227,6 +242,18 @@ struct
 
     let h6 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
         node "h6" attrs children
+
+
+    let b (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "b" attrs children
+
+    let i (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "i" attrs children
+
+    let strong (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+        node "strong" attrs children
+
+
 
 
     let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =

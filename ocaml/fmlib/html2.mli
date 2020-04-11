@@ -132,6 +132,12 @@ sig
         val onMouseOut: 'msg -> 'msg t
 
 
+
+        val onKeyDown: (string -> 'msg) -> 'msg t
+
+        val onKeyUp: (string -> 'msg) -> 'msg t
+
+
         val onInput: (string -> 'msg) -> 'msg t
         (** React on input of an input element like 'input', 'textarea', etc. *)
 
@@ -170,6 +176,18 @@ sig
     val h5: 'msg attributes -> 'msg children -> 'msg t
 
     val h6: 'msg attributes -> 'msg children -> 'msg t
+
+
+    val b: 'msg attributes -> 'msg children -> 'msg t
+    (** Bold text *)
+
+    val i: 'msg attributes -> 'msg children -> 'msg t
+    (** Italic text *)
+
+    val strong: 'msg attributes -> 'msg children -> 'msg t
+    (** Important text *)
+
+
 
     val button: 'msg attributes -> 'msg children -> 'msg t
 
