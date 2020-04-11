@@ -20,6 +20,16 @@ end
 
 
 
+
+class type style =
+object
+    method setProperty:    js_string Js.t -> js_string Js.t -> unit Js.meth
+    method removeProperty: js_string Js.t -> unit Js.meth
+
+end
+
+
+
 class type eventTarget =
 object
     method addEventListener:
@@ -30,6 +40,7 @@ object
         js_string Js.t -> ('a Js.t -> unit) Js.callback -> unit Js.meth
         (* Do not use on text nodes! *)
 end
+
 
 
 
@@ -52,7 +63,7 @@ object
 
     method nextSibling: node Js.t Js.Opt.t Js.readonly_prop
 
-    method style: 'a Js.t Js.readonly_prop
+    method style: style Js.t Js.readonly_prop
 
     method setAttribute: js_string Js.t -> js_string Js.t -> unit Js.meth
 
@@ -274,7 +285,7 @@ struct
                 (value: string)
                 : unit
                 =
-                Js.Unsafe.set node##.style
+                node##.style##setProperty
                     (Js.string name)
                     (Js.string value)
 
@@ -285,7 +296,7 @@ struct
                 (_:    string)
                 : unit
                 =
-                Js.Unsafe.delete node##.style (Js.string name)
+                node##.style##removeProperty (Js.string name)
 
 
             let set_property
