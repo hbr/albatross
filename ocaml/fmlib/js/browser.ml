@@ -229,10 +229,13 @@ end
 
 
 module Make
-    (Vdom: Html2.VDOM with type 'a decoder = 'a Decoder.t
-                      and  type encoder = Encoder.t)
+    (Vapp: Virtual_application.VIRTUAL_APPLICATION
+            with type 'a decoder = 'a Decoder.t
+            and  type encoder = Encoder.t)
 =
 struct
+    module Vdom = Vapp.Virtual_dom
+
     type handler = (Void.t Js.t -> unit) Js.callback
 
     module Tree =
@@ -250,10 +253,10 @@ struct
 
             let make
                 (make_handler: 'msg Decoder.t -> handler)
-                (attributes: 'msg Vdom.Attribute.t list)
+                (attributes: 'msg Vapp.Attribute.t list)
                 : 'msg t
                 =
-                let module VA = Vdom.Attribute in
+                let module VA = Vapp.Attribute in
                 List.fold_left
                     (fun attributes attr ->
                         match attr with
@@ -789,6 +792,7 @@ struct
         : unit
         =
         let window = get_window () in
+        Printf.printf "time %f\n" (get_time ());
         window##addEventListener
             (Js.string "load")
             (Js.wrap_callback

@@ -22,7 +22,7 @@ end
 
 
 
-module type VDOM =
+module type VIRTUAL_APPLICATION =
 sig
     type _ decoder
 
@@ -38,10 +38,12 @@ sig
         | On of string * 'msg decoder
     end
 
-
-    type 'msg t =
-    | Text of string
-    | Node of string * 'msg Attribute.t list * 'msg t list
+    module Virtual_dom:
+    sig
+        type 'msg t =
+        | Text of string
+        | Node of string * 'msg Attribute.t list * 'msg t list
+    end
 end
 
 
@@ -54,14 +56,14 @@ sig
     module Encoder: ENCODER
 
     module Make:
-    functor (Vdom: VDOM
-        with type 'msg decoder = 'msg Decoder.t
-        and  type encoder = Encoder.t)
+    functor (Vapp: VIRTUAL_APPLICATION
+                    with type 'msg decoder = 'msg Decoder.t
+                    and  type encoder = Encoder.t)
     ->
     sig
         val sandbox:
             'model
-            -> ('model -> 'msg Vdom.t)
+            -> ('model -> 'msg Vapp.Virtual_dom.t)
             -> ('msg -> 'model -> 'model)
             -> unit
     end
@@ -70,7 +72,7 @@ end
 
 
 
-module Vdom (Browser: BROWSER):
+module Make (Browser: BROWSER):
 sig
     type 'msg decoder = 'msg Browser.Decoder.t
 
@@ -146,50 +148,52 @@ sig
     end
 
 
-
-    type 'msg t =
-    | Text of string
-    | Node of string * 'msg Attribute.t list * 'msg t list
-
-
-    type 'msg attributes = 'msg Attribute.t list
-    type 'msg children   = 'msg t list
-
-    val text: string -> 'msg t
-
-    val node: string -> 'msg attributes -> 'msg children -> 'msg t
-
-    val div: 'msg attributes -> 'msg children -> 'msg t
-
-    val pre: 'msg attributes -> 'msg children -> 'msg t
-
-    val p: 'msg attributes -> 'msg children -> 'msg t
-
-    val h1: 'msg attributes -> 'msg children -> 'msg t
-
-    val h2: 'msg attributes -> 'msg children -> 'msg t
-
-    val h3: 'msg attributes -> 'msg children -> 'msg t
-
-    val h4: 'msg attributes -> 'msg children -> 'msg t
-
-    val h5: 'msg attributes -> 'msg children -> 'msg t
-
-    val h6: 'msg attributes -> 'msg children -> 'msg t
+    module Virtual_dom:
+    sig
+        type 'msg t =
+        | Text of string
+        | Node of string * 'msg Attribute.t list * 'msg t list
 
 
-    val b: 'msg attributes -> 'msg children -> 'msg t
-    (** Bold text *)
+        type 'msg attributes = 'msg Attribute.t list
+        type 'msg children   = 'msg t list
 
-    val i: 'msg attributes -> 'msg children -> 'msg t
-    (** Italic text *)
+        val text: string -> 'msg t
 
-    val strong: 'msg attributes -> 'msg children -> 'msg t
-    (** Important text *)
+        val node: string -> 'msg attributes -> 'msg children -> 'msg t
+
+        val div: 'msg attributes -> 'msg children -> 'msg t
+
+        val pre: 'msg attributes -> 'msg children -> 'msg t
+
+        val p: 'msg attributes -> 'msg children -> 'msg t
+
+        val h1: 'msg attributes -> 'msg children -> 'msg t
+
+        val h2: 'msg attributes -> 'msg children -> 'msg t
+
+        val h3: 'msg attributes -> 'msg children -> 'msg t
+
+        val h4: 'msg attributes -> 'msg children -> 'msg t
+
+        val h5: 'msg attributes -> 'msg children -> 'msg t
+
+        val h6: 'msg attributes -> 'msg children -> 'msg t
+
+
+        val b: 'msg attributes -> 'msg children -> 'msg t
+        (** Bold text *)
+
+        val i: 'msg attributes -> 'msg children -> 'msg t
+        (** Italic text *)
+
+        val strong: 'msg attributes -> 'msg children -> 'msg t
+        (** Important text *)
 
 
 
-    val button: 'msg attributes -> 'msg children -> 'msg t
+        val button: 'msg attributes -> 'msg children -> 'msg t
 
-    val input: 'msg attributes -> 'msg children -> 'msg t
+        val input: 'msg attributes -> 'msg children -> 'msg t
+    end
 end

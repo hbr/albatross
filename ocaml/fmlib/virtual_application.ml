@@ -23,7 +23,7 @@ end
 
 
 
-module type VDOM =
+module type VIRTUAL_APPLICATION =
 sig
     type _ decoder
 
@@ -39,10 +39,12 @@ sig
         | On of string * 'msg decoder
     end
 
-
-    type 'msg t =
-    | Text of string
-    | Node of string * 'msg Attribute.t list * 'msg t list
+    module Virtual_dom:
+    sig
+        type 'msg t =
+        | Text of string
+        | Node of string * 'msg Attribute.t list * 'msg t list
+    end
 end
 
 
@@ -55,20 +57,23 @@ sig
     module Encoder: ENCODER
 
     module Make:
-    functor (Vdom: VDOM with type 'msg decoder = 'msg Decoder.t
-                        and  type encoder = Encoder.t)
+    functor (Vapp: VIRTUAL_APPLICATION
+                    with type 'msg decoder = 'msg Decoder.t
+                    and  type encoder = Encoder.t)
     ->
     sig
         val sandbox:
             'model
-            -> ('model -> 'msg Vdom.t)
+            -> ('model -> 'msg Vapp.Virtual_dom.t)
             -> ('msg -> 'model -> 'model)
             -> unit
     end
 end
 
 
-module Vdom (Browser: BROWSER) =
+
+
+module Make (Browser: BROWSER) =
 struct
     module Decoder = Browser.Decoder
     module Encoder = Browser.Encoder
@@ -185,82 +190,84 @@ struct
 
 
 
-
-    type 'msg t =
-    | Text of string
-    | Node of string * 'msg Attribute.t list * 'msg t list
-
-
-    type 'msg attributes = 'msg Attribute.t list
-    type 'msg children   = 'msg t list
+    module Virtual_dom =
+    struct
+        type 'msg t =
+        | Text of string
+        | Node of string * 'msg Attribute.t list * 'msg t list
 
 
-    let text (s: string): 'msg t =
-        Text s
+        type 'msg attributes = 'msg Attribute.t list
+        type 'msg children   = 'msg t list
 
 
-    let node
-        (tag: string)
-        (attrs: 'msg attributes)
-        (children: 'msg children)
-        : 'msg t
-        =
-        Node (tag, attrs, children)
+        let text (s: string): 'msg t =
+            Text s
 
 
-    let div (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "div" attrs children
+        let node
+            (tag: string)
+            (attrs: 'msg attributes)
+            (children: 'msg children)
+            : 'msg t
+            =
+            Node (tag, attrs, children)
 
 
-    let pre (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "pre" attrs children
+        let div (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "div" attrs children
 
 
-    let p (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "p" attrs children
+        let pre (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "pre" attrs children
 
 
-    let h1 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h1" attrs children
+        let p (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "p" attrs children
 
 
-    let h2 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h2" attrs children
+        let h1 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h1" attrs children
 
 
-    let h3 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h3" attrs children
+        let h2 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h2" attrs children
 
 
-    let h4 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h4" attrs children
+        let h3 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h3" attrs children
 
 
-    let h5 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h5" attrs children
+        let h4 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h4" attrs children
 
 
-    let h6 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "h6" attrs children
+        let h5 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h5" attrs children
 
 
-    let b (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "b" attrs children
-
-    let i (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "i" attrs children
-
-    let strong (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "strong" attrs children
+        let h6 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "h6" attrs children
 
 
+        let b (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "b" attrs children
+
+        let i (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "i" attrs children
+
+        let strong (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "strong" attrs children
 
 
-    let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "button" attrs children
 
 
-    let input (attrs: 'msg attributes) (children: 'msg children): 'msg t =
-        node "input" attrs children
+        let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "button" attrs children
+
+
+        let input (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "input" attrs children
+    end
 end
 

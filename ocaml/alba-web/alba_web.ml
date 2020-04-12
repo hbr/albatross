@@ -3,8 +3,13 @@ open Fmlib
 
 module Browser = Fmlib_js.Browser
 
+module Vapp = Virtual_application.Make (Browser)
 
-module Vdom = Html2.Vdom (Browser)
+module Vdom = Vapp.Virtual_dom
+
+module Attribute = Vapp.Attribute
+
+
 
 type entry = {
     id: int;
@@ -183,5 +188,5 @@ let view (model: model): message Vdom.t =
 
 
 let _ =
-    let module Program = Browser.Make (Vdom) in
+    let module Program = Browser.Make (Vapp) in
     Program.sandbox model view update

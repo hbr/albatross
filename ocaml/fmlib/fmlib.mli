@@ -54,10 +54,7 @@ module String_printer   = String_printer
 
 (** {1 Web Applications} *)
 
-module Html = Html
-module Html2 = Html2
-
-module Browser = Browser
+module Virtual_application = Virtual_application
 
 
 (** {1 Old modules (deprecated)} *)
