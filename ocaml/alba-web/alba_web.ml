@@ -3,9 +3,9 @@ open Fmlib
 
 module Browser = Fmlib_js.Browser
 
-module Vapp = Virtual_application.Make (Browser)
+module Vapp = Web_application.Make (Browser)
 
-module Vdom = Vapp.Virtual_dom
+module Vdom = Vapp.Dom
 
 module Attribute = Vapp.Attribute
 

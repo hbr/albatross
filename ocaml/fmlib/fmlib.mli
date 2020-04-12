@@ -54,7 +54,7 @@ module String_printer   = String_printer
 
 (** {1 Web Applications} *)
 
-module Virtual_application = Virtual_application
+module Web_application = Web_application
 
 
 (** {1 Old modules (deprecated)} *)

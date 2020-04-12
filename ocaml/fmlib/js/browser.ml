@@ -229,12 +229,12 @@ end
 
 
 module Make
-    (Vapp: Virtual_application.VIRTUAL_APPLICATION
+    (Vapp: Web_application.WEB_APPLICATION
             with type 'a decoder = 'a Decoder.t
             and  type encoder = Encoder.t)
 =
 struct
-    module Vdom = Vapp.Virtual_dom
+    module Vdom = Vapp.Dom
 
     type handler = (Void.t Js.t -> unit) Js.callback
 

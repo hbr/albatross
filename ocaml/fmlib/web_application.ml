@@ -23,7 +23,7 @@ end
 
 
 
-module type VIRTUAL_APPLICATION =
+module type WEB_APPLICATION =
 sig
     type _ decoder
 
@@ -39,7 +39,7 @@ sig
         | On of string * 'msg decoder
     end
 
-    module Virtual_dom:
+    module Dom:
     sig
         type 'msg t =
         | Text of string
@@ -57,14 +57,14 @@ sig
     module Encoder: ENCODER
 
     module Make:
-    functor (Vapp: VIRTUAL_APPLICATION
+    functor (Vapp: WEB_APPLICATION
                     with type 'msg decoder = 'msg Decoder.t
                     and  type encoder = Encoder.t)
     ->
     sig
         val sandbox:
             'model
-            -> ('model -> 'msg Vapp.Virtual_dom.t)
+            -> ('model -> 'msg Vapp.Dom.t)
             -> ('msg -> 'model -> 'model)
             -> unit
     end
@@ -190,7 +190,7 @@ struct
 
 
 
-    module Virtual_dom =
+    module Dom =
     struct
         type 'msg t =
         | Text of string
