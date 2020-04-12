@@ -804,4 +804,14 @@ struct
                         (Js.wrap_callback (animate state))
                 )
             )
+
+    let element
+        (_: 'a Decoder.t)
+        (_: 'a -> 'model)
+        (_: 'model -> 'msg Vdom.t)
+        (_: 'msg -> 'model -> 'model * 'msg Vapp.Command.t)
+        (_: 'model -> 'msg Vapp.Subscription.t)
+        : unit
+        =
+        assert false
 end

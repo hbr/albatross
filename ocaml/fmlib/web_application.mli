@@ -38,11 +38,48 @@ sig
         | On of string * 'msg decoder
     end
 
+
     module Dom:
     sig
         type 'msg t =
         | Text of string
         | Node of string * 'msg Attribute.t list * 'msg t list
+    end
+
+
+    module Command:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Http of
+            string * string * string
+            *
+            ((string,int) result -> 'msg)
+            (** [Http (type, url, data, handler)]
+
+                The type is GET, POST, HEAD, etc.
+
+                [data] will be sent as part of the request (makes sense only for
+                POST and related request types).
+
+                [handler] must be able to react to the response text or the
+                status in case an error occurs (the famous 404 for "page not
+                found").
+            *)
+    end
+
+
+    module Subscription:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Root of string * 'msg decoder
+        (** [Root (event_name, handler)] for events arriving on the root element
+        of the application. *)
     end
 end
 
@@ -65,6 +102,15 @@ sig
             'model
             -> ('model -> 'msg Vapp.Dom.t)
             -> ('msg -> 'model -> 'model)
+            -> unit
+
+
+        val element:
+            'a Decoder.t
+            -> ('a -> 'model)
+            -> ('model -> 'msg Vapp.Dom.t)
+            -> ('msg -> 'model -> 'model * 'msg Vapp.Command.t)
+            -> ('model -> 'msg Vapp.Subscription.t)
             -> unit
     end
 end
@@ -195,5 +241,33 @@ sig
         val button: 'msg attributes -> 'msg children -> 'msg t
 
         val input: 'msg attributes -> 'msg children -> 'msg t
+    end
+
+
+    module Command:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Http of
+            string  (* type: GET, POST, ... *)
+            *
+            string  (* url *)
+            *
+            string  (* data to be sent with the request *)
+            *
+            ((string,int) result -> 'msg)
+              (* response text or status e.g. 404 for not found *)
+    end
+
+
+    module Subscription:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Root of string * 'msg decoder (* events on the root element *)
     end
 end

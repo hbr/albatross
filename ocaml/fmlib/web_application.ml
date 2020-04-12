@@ -39,11 +39,40 @@ sig
         | On of string * 'msg decoder
     end
 
+
     module Dom:
     sig
         type 'msg t =
         | Text of string
         | Node of string * 'msg Attribute.t list * 'msg t list
+    end
+
+
+    module Command:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Http of
+            string  (* type: GET, POST, ... *)
+            *
+            string  (* url *)
+            *
+            string  (* data to be sent with the request *)
+            *
+            ((string,int) result -> 'msg)
+              (* response text or status e.g. 404 for not found *)
+    end
+
+
+    module Subscription:
+    sig
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Root of string * 'msg decoder (* events on the root element *)
     end
 end
 
@@ -66,6 +95,15 @@ sig
             'model
             -> ('model -> 'msg Vapp.Dom.t)
             -> ('msg -> 'model -> 'model)
+            -> unit
+
+
+        val element:
+            'a Decoder.t
+            -> ('a -> 'model)
+            -> ('model -> 'msg Vapp.Dom.t)
+            -> ('msg -> 'model -> 'model * 'msg Vapp.Command.t)
+            -> ('model -> 'msg Vapp.Subscription.t)
             -> unit
     end
 end
@@ -268,6 +306,34 @@ struct
 
         let input (attrs: 'msg attributes) (children: 'msg children): 'msg t =
             node "input" attrs children
+    end
+
+
+    module Command =
+    struct
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Http of
+            string  (* type: GET, POST, ... *)
+            *
+            string  (* url *)
+            *
+            string  (* data to be sent with the request *)
+            *
+            ((string,int) result -> 'msg)
+              (* response text or status e.g. 404 for not found *)
+    end
+
+
+    module Subscription =
+    struct
+        type 'msg t =
+        | None
+        | Batch of 'msg t list
+
+        | Root of string * 'msg decoder (* events on the root element *)
     end
 end
 
