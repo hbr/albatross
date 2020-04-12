@@ -3,13 +3,13 @@ open Fmlib
 open Common
 
 
+
+
+
+(* Javascript interface *)
+
+
 type js_string = Js.js_string
-
-
-
-
-
-(* classes for javascript dom objects *)
 
 
 class type event =
@@ -137,11 +137,30 @@ end
 
 
 
+class type xmlHttpRequest =
+object
+    inherit eventTarget
+
+    method readyState: int Js.readonly_prop
+    (*
+        0: request not initialized
+        1: server connection established
+        2: processing request
+        3: request finished and response ready
+    *)
+
+    method status: int Js.readonly_prop
+    (* 200: Ok, 403: forbidden, 404: not found. *)
+
+    method statusText: js_string Js.t Js.readonly_prop
+
+    method responseText: js_string Js.t Js.readonly_prop
+end
 
 
 
-(* Globals *)
-
+let get_time (): float =
+    Js.Unsafe.global##.Date##now ()
 
 let get_window (): window Js.t =
     Js.Unsafe.global
