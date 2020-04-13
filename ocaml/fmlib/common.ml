@@ -37,13 +37,6 @@ module Int_set = Set.Make (Int)
 
 
 
-module Float =
-  struct
-    type t = float
-    let compare = Stdlib.compare
-  end
-
-
 
 module Either =
   struct

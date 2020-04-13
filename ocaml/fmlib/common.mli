@@ -28,13 +28,6 @@ module Int_set: Set.S with type elt = Int.t
 
 
 
-(** Module to represent the [float] type. *)
-module Float:
-sig
-  type t = float
-  val compare: t -> t -> int
-end
-
 
 module Either:
 sig
