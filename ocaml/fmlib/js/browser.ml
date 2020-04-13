@@ -11,6 +11,16 @@ open Common
 
 type js_string = Js.js_string
 
+type js_any = Js.Unsafe.top
+
+let raise_js (message: string): 'a =
+    Js.(
+        raise_js_error
+            (new%js error_constr
+                (Js.string message)))
+
+
+
 
 
 class type primitive_number =
@@ -107,7 +117,7 @@ object
 
     method createTextNode: js_string Js.t -> node Js.t Js.meth
 
-    method getElementById: js_string Js.t -> node Js.Opt.t Js.meth
+    method getElementById: js_string Js.t -> node Js.t Js.Opt.t Js.meth
 
     method hasFocus: unit -> bool Js.t Js.meth
 
@@ -181,6 +191,22 @@ let get_window (): window Js.t =
 
 module Decoder =
 struct
+    type path_element =
+    | Name of string
+    | Index of int
+
+    type error =
+    | Int
+    | Bool
+    | String
+    | Field of string
+
+    type problem = error * path_element list
+
+
+    module Result = Monad.Result (struct type t = problem end)
+
+
     type 'a t =
         Common.Void.t Js.t -> 'a option
 
@@ -226,7 +252,7 @@ struct
     let field (name: string) (decode: 'a t): 'a t =
         fun obj ->
             Option.(
-                Js.Opt.to_option (Js.Unsafe.get obj (Js.string name))
+                Js.Optdef.to_option (Js.Unsafe.get obj (Js.string name))
                 >>=
                 decode
             )
@@ -234,6 +260,10 @@ struct
 
     let map (f: 'a -> 'b) (decode: 'a t): 'b t =
         fun obj -> Option.( map f (decode obj) )
+
+    let (>>=) (d: 'a t) (f: 'a -> 'b t): 'b t =
+        fun obj ->
+            Option.( d obj >>= fun a -> f a obj )
 end
 
 
@@ -259,12 +289,14 @@ end
 
 
 module Make
-    (Vapp: Web_application.WEB_APPLICATION
+    (App: Web_application.WEB_APPLICATION
             with type 'a decoder = 'a Decoder.t
             and  type encoder = Encoder.t)
 =
 struct
-    module Vdom = Vapp.Dom
+    module Vdom = App.Dom
+    module Command = App.Command
+    module Subscription = App.Subscription
 
     type handler = (Void.t Js.t -> unit) Js.callback
 
@@ -283,10 +315,10 @@ struct
 
             let make
                 (make_handler: 'msg Decoder.t -> handler)
-                (attributes: 'msg Vapp.Attribute.t list)
+                (attributes: 'msg App.Attribute.t list)
                 : 'msg t
                 =
-                let module VA = Vapp.Attribute in
+                let module VA = App.Attribute in
                 List.fold_left
                     (fun attributes attr ->
                         match attr with
@@ -663,7 +695,8 @@ struct
         window:   window Js.t;
         root:     node Js.t;
         view:     'model -> 'msg Vdom.t;
-        update:   'msg -> 'model -> 'model;
+        update:   'msg -> 'model -> 'model * 'msg Command.t;
+        subscription: 'model -> 'msg Subscription.t;
         mutable model: 'model;
         mutable dirty: bool;
         mutable tree: 'msg Tree.t option;
@@ -675,13 +708,15 @@ struct
         (root: node Js.t)
         (model: 'model)
         (view: 'model -> 'msg Vdom.t)
-        (update: 'msg -> 'model -> 'model)
+        (update: 'msg -> 'model -> 'model * 'msg Command.t)
+        (subscription: 'model -> 'msg Subscription.t)
         : ('model,'msg) t
         =
         {   window;
             root;
             view;
             update;
+            subscription;
             model;
             dirty = true;
             tree  = None;
@@ -692,10 +727,20 @@ struct
         state.view state.model
 
 
+    let do_command (_: ('model,'msg) t) (command: 'msg Command.t): unit =
+        match command with
+        | Command.None ->
+            ()
+        | _ ->
+            assert false (* nyi *)
+
 
     let update (message: 'msg) (state: ('model, 'msg) t): unit =
+        let model, command = state.update message state.model
+        in
         state.dirty <- true;
-        state.model <- state.update message state.model
+        state.model <- model;
+        do_command state command
 
 
 
@@ -752,6 +797,8 @@ struct
 
 
     let remove_children (node: node Js.t): unit =
+        Printf.printf "remove_children of %s\n"
+            (Js.to_string (node##.tagName));
         let rec remove () =
             match Js.Opt.to_option node##.firstChild with
             | None ->
@@ -773,8 +820,7 @@ struct
                 make_tree
                     state
                     (view state)
-            and root =
-                state.window##.document##.body
+            and root = state.root
             in
             remove_children root;
             root##appendChild (Tree.node tree);
@@ -827,7 +873,14 @@ struct
             (Js.wrap_callback
                 (fun _ ->
                     let state =
-                        make window window##.document##.body model view update
+                        make
+                            window
+                            window##.document##.body
+                            model
+                            view
+                            (fun msg model ->
+                                update msg model, Command.None)
+                            (fun _ -> Subscription.None)
                     in
                     state.window##requestAnimationFrame
                         (Js.wrap_callback (animate state))
@@ -835,12 +888,53 @@ struct
             )
 
     let element
-        (_: 'a Decoder.t)
-        (_: 'a -> 'model)
-        (_: 'model -> 'msg Vdom.t)
-        (_: 'msg -> 'model -> 'model * 'msg Vapp.Command.t)
-        (_: 'model -> 'msg Vapp.Subscription.t)
+        (decode: 'a Decoder.t)
+        (init: 'a -> 'model)
+        (view: 'model -> 'msg Vdom.t)
+        (update: 'msg -> 'model -> 'model * 'msg App.Command.t)
+        (subscription: 'model -> 'msg App.Subscription.t)
         : unit
         =
-        assert false
+        Printf.printf "Browser.element\n";
+        let decode_init: (string*'a) Decoder.t =
+            Decoder.(
+                field "node" string
+                >>= fun name ->
+                    map
+                        (fun data -> name,data)
+                        (field "data" decode)
+            )
+        in
+        Js.export "Alba"
+            (object%js
+                method init (js: Void.t Js.t): unit =
+                        match decode_init js with
+                        | None ->
+                            raise_js "Cannot decode init"
+                        | Some (root_name, (data: 'a)) ->
+                            let window = get_window () in
+                            let root =
+                                match
+                                    Js.Opt.to_option
+                                        (window##.document##getElementById
+                                            (Js.string root_name))
+                                with
+                                | None ->
+                                    raise_js ("Cannot find node " ^ root_name)
+                                | Some root ->
+                                    root
+                            in
+                            let state =
+                                make
+                                    window
+                                    root
+                                    (init data)
+                                    view
+                                    update
+                                    subscription
+                            in
+                            state.window##requestAnimationFrame
+                                (Js.wrap_callback (animate state))
+            end);
+        ()
 end
