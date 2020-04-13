@@ -12,6 +12,14 @@ open Common
 type js_string = Js.js_string
 
 
+
+class type primitive_number =
+object
+    method valueOf_float: unit -> float Js.meth
+end
+
+
+
 class type event =
 object
     method stopPropagation: unit Js.meth
@@ -178,6 +186,28 @@ struct
 
     let return (a: 'a): 'a t =
         fun _ -> Some a
+
+
+    let typeof (js: 'a Js.t): string =
+        Js.to_string (Js.typeof js)
+
+
+    let float: float t =
+        fun js ->
+            if typeof js = "number" then
+                Some ( (Js.Unsafe.coerce js)##valueOf_float () )
+            else
+                None
+
+    let int: int t =
+        fun js ->
+            Option.(
+                float js >>= fun fl ->
+                if Float.is_integer fl then
+                    Some (Float.to_int fl)
+                else
+                    None
+            )
 
     let string: string t =
         fun js ->
@@ -792,7 +822,6 @@ struct
         : unit
         =
         let window = get_window () in
-        Printf.printf "time %f\n" (get_time ());
         window##addEventListener
             (Js.string "load")
             (Js.wrap_callback

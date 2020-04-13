@@ -3,8 +3,12 @@ sig
     type _ t
 
     val return: 'msg -> 'msg t
+
+    val float:  float  t
+    val int:    int    t
     val string: string t
-    val bool:   bool t
+    val bool:   bool   t
+
     val field:  string -> 'msg t -> 'msg t
     val map: ('a -> 'b) -> 'a t -> 'b t
 end
