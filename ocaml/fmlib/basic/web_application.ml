@@ -168,6 +168,9 @@ struct
         let type_ (value: string): 'msg t =
             attribute "type" value
 
+        let class_ (value: string): 'msg t =
+            attribute "class" value
+
 
         let onClick (msg: 'msg): 'msg t =
             on "click" (Decoder.return msg)
@@ -260,12 +263,29 @@ struct
             node "div" attrs children
 
 
+        let span (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "span" attrs children
+
+
+
         let pre (attrs: 'msg attributes) (children: 'msg children): 'msg t =
             node "pre" attrs children
 
 
         let p (attrs: 'msg attributes) (children: 'msg children): 'msg t =
             node "p" attrs children
+
+
+        let ol (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "ol" attrs children
+
+
+        let ul (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "ul" attrs children
+
+
+        let li (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "li" attrs children
 
 
         let h1 (attrs: 'msg attributes) (children: 'msg children): 'msg t =
@@ -304,12 +324,16 @@ struct
 
 
 
+
         let button (attrs: 'msg attributes) (children: 'msg children): 'msg t =
             node "button" attrs children
 
 
         let input (attrs: 'msg attributes) (children: 'msg children): 'msg t =
             node "input" attrs children
+
+        let textarea (attrs: 'msg attributes) (children: 'msg children): 'msg t =
+            node "textarea" attrs children
     end
 
 
@@ -328,6 +352,13 @@ struct
             *
             ((string,int) result -> 'msg)
               (* response text or status e.g. 404 for not found *)
+
+        let http_get
+            (url: string)
+            (handler: (string,int) result -> 'msg)
+            : 'msg t
+            =
+            Http ("GET", url, "", handler)
     end
 
 

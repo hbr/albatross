@@ -167,6 +167,10 @@ sig
         etc. *)
 
 
+        val class_: string -> 'msg t
+        (** Set the class attribute of the element. *)
+
+
         val onClick: 'msg -> 'msg t
 
         val onDoubleClick: 'msg -> 'msg t
@@ -214,9 +218,17 @@ sig
 
         val div: 'msg attributes -> 'msg children -> 'msg t
 
+        val span: 'msg attributes -> 'msg children -> 'msg t
+
         val pre: 'msg attributes -> 'msg children -> 'msg t
 
         val p: 'msg attributes -> 'msg children -> 'msg t
+
+        val ol: 'msg attributes -> 'msg children -> 'msg t
+
+        val ul: 'msg attributes -> 'msg children -> 'msg t
+
+        val li: 'msg attributes -> 'msg children -> 'msg t
 
         val h1: 'msg attributes -> 'msg children -> 'msg t
 
@@ -245,6 +257,8 @@ sig
         val button: 'msg attributes -> 'msg children -> 'msg t
 
         val input: 'msg attributes -> 'msg children -> 'msg t
+
+        val textarea: 'msg attributes -> 'msg children -> 'msg t
     end
 
 
@@ -263,6 +277,12 @@ sig
             *
             ((string,int) result -> 'msg)
               (* response text or status e.g. 404 for not found *)
+
+
+        val http_get: string -> ((string,int) result -> 'msg) -> 'msg t
+        (** [http_get url handler] Make a http get request to [url] and handle
+        the response with [handler].
+        *)
     end
 
 
