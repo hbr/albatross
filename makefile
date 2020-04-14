@@ -2,7 +2,7 @@
 	doc \
 	fmlib fmlib_js \
 	core albalib \
-	alba2 alba-node alba-web
+	alba2 alba-node alba-web web-test
 
 build:
 	cd ocaml;          \
@@ -29,7 +29,7 @@ doc:
 	dune build @doc
 
 fmlib:
-	dune build @ocaml/fmlib/runtest
+	dune build @ocaml/fmlib/basic/runtest
 
 fmlib_js:
 	dune build ocaml/fmlib/js/fmlib_js.cma
@@ -52,3 +52,7 @@ alba-node: albalib
 
 alba-web: albalib
 	dune build ocaml/alba-web/alba_web.js
+
+
+web-test: albalib
+	dune build draft/web-test/test.js

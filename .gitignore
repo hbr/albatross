@@ -8,8 +8,8 @@ _build
 _draft
 draft
 tmp
-*_draft.*
-*_draft.*
+draft/
+draft.*
 *_old.ml
 *_old.mli
 doc
