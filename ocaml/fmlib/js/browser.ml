@@ -159,12 +159,17 @@ class type xmlHttpRequest =
 object
     inherit eventTarget
 
+    method open_: js_string Js.t -> js_string Js.t -> unit Js.meth
+
+    method send: js_string Js.t -> unit Js.meth
+
     method readyState: int Js.readonly_prop
     (*
         0: request not initialized
-        1: server connection established
-        2: processing request
-        3: request finished and response ready
+        1: open has been called
+        2: send has been called
+        3: loading
+        4: complete
     *)
 
     method status: int Js.readonly_prop
@@ -184,6 +189,10 @@ let get_window (): window Js.t =
     Js.Unsafe.global
 
 
+let new_http_request (): xmlHttpRequest Js.t =
+    let request = Js.Unsafe.global##._XMLHttpRequest
+    in
+    new%js request
 
 
 
@@ -727,20 +736,48 @@ struct
         state.view state.model
 
 
-    let do_command (_: ('model,'msg) t) (command: 'msg Command.t): unit =
-        match command with
-        | Command.None ->
-            ()
-        | _ ->
-            assert false (* nyi *)
-
-
-    let update (message: 'msg) (state: ('model, 'msg) t): unit =
+    let rec update (message: 'msg) (state: ('model, 'msg) t): unit =
         let model, command = state.update message state.model
         in
         state.dirty <- true;
         state.model <- model;
         do_command state command
+
+
+    and do_command (state: ('model,'msg) t) (command: 'msg Command.t): unit =
+        let rec perform command =
+            match command with
+            | Command.None ->
+                ()
+
+            | Command.Batch lst ->
+                List.iter perform lst
+
+            | Command.Http (type_, url, data, handler) ->
+                Printf.printf "http request <%s> <%s>\n" type_ url;
+                let request = new_http_request () in
+                request##open_
+                    (Js.string type_)
+                    (Js.string url);
+                request##addEventListener
+                    (Js.string "readystatechange")
+                    (Js.wrap_callback
+                        (fun _ ->
+                            if request##.readyState = 4 then
+                                ( let status = request##.status in
+                                  let result =
+                                    if 200 <= status && status < 300 then
+                                        Ok (Js.to_string request##.responseText)
+                                    else
+                                        Error status
+                                  in
+                                  update (handler result) state
+                                )
+                        )
+                    );
+                request##send (Js.string data)
+        in
+        perform command
 
 
 
@@ -797,8 +834,6 @@ struct
 
 
     let remove_children (node: node Js.t): unit =
-        Printf.printf "remove_children of %s\n"
-            (Js.to_string (node##.tagName));
         let rec remove () =
             match Js.Opt.to_option node##.firstChild with
             | None ->
@@ -889,13 +924,12 @@ struct
 
     let element
         (decode: 'a Decoder.t)
-        (init: 'a -> 'model)
+        (init: 'a -> 'model * 'msg App.Command.t)
         (view: 'model -> 'msg Vdom.t)
         (update: 'msg -> 'model -> 'model * 'msg App.Command.t)
         (subscription: 'model -> 'msg App.Subscription.t)
         : unit
         =
-        Printf.printf "Browser.element\n";
         let decode_init: (string*'a) Decoder.t =
             Decoder.(
                 field "node" string
@@ -924,17 +958,20 @@ struct
                                 | Some root ->
                                     root
                             in
+                            let model, command = init data
+                            in
                             let state =
                                 make
                                     window
                                     root
-                                    (init data)
+                                    model
                                     view
                                     update
                                     subscription
                             in
                             state.window##requestAnimationFrame
-                                (Js.wrap_callback (animate state))
+                                (Js.wrap_callback (animate state));
+                            do_command state command
             end);
         ()
 end

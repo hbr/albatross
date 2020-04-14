@@ -104,7 +104,7 @@ sig
 
         val element:
             'a Decoder.t
-            -> ('a -> 'model)
+            -> ('a -> 'model * 'msg Vapp.Command.t)
             -> ('model -> 'msg Vapp.Dom.t)
             -> ('msg -> 'model -> 'model * 'msg Vapp.Command.t)
             -> ('model -> 'msg Vapp.Subscription.t)
