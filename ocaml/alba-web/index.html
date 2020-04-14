@@ -3,8 +3,12 @@
         <link rel="stylesheet" type="text/css" href="style.css">
         <script type="text/javascript" src="alba_web.js"> </script>
     </head>
-    <body>
+    <body id="alba">
         Loading ...
-        <div>DIV</div>
     </body>
+    <script>
+        Alba.init({
+            node: 'alba',
+            data: 'https://api.github.com'})
+    </script>
 </html>

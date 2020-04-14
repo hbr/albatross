@@ -3,190 +3,164 @@ open Fmlib
 
 module Browser = Fmlib_js.Browser
 
-module Vapp = Web_application.Make (Browser)
+module App = Web_application.Make (Browser)
 
-module Vdom = Vapp.Dom
+module Vdom = App.Dom
 
-module Attribute = Vapp.Attribute
+module Attribute = App.Attribute
+
+module Command = App.Command
 
 
-
-type entry = {
-    id: int;
-    description: string;
-    completed: bool;
-}
+module Program = Browser.Make (App)
 
 
 type show =
-    | All
-    | Active
-    | Completed
+    | Output
+    | Error
+    | Info
 
 
 type model = {
-    task: string;
-    entries: entry list;
-    next_id: int;
+    expression: string;
+    result: string;
+    error: string;
+    info: string;
     show: show;
 }
 
 
 type message =
-    | No_operation
-    | Update_task of string
-    | Add
-    | Delete of int
-    | Check of int * bool
+    | Typecheck
+    | Evaluate
     | Show of show
+    | Update_expression of string
+    | Update_info of string
 
 
 
 
-let model: model =
-    {
-        task = "";
-        entries = [];
-        next_id = 0;
-        show = All;
-    }
+let init (url: string): model * message Command.t =
+    { expression = ""
+    ; result = ""
+    ; error = "error ?"
+    ; info = ""
+    ; show = Output
+    },
+    Command.http_get
+        url
+        (function
+            | Ok response ->
+                Update_info response
+            | Error code ->
+                Update_info ("Error: " ^ string_of_int code))
 
 
 
-let update (msg: message) (model: model): model =
+let update (msg: message) (model: model): model * 'message Command.t =
     match msg with
-    | No_operation ->
-        model
-
-    | Update_task task ->
-        {model with task}
-
-    | Add ->
-        assert (model.task <> "");
-        { model with
-            task = "";
-            next_id = model.next_id + 1;
-            entries =
-                model.entries
-                @
-                [{ description = model.task
-                 ; completed   = false
-                 ; id = model.next_id
-                 }]
-        }
-
-    | Delete id ->
-        { model with
-            entries =
-                List.filter (fun e -> e.id <> id) model.entries
-        }
-
-    | Check (id, completed) ->
+    | Typecheck ->
         {model with
-            entries =
-                List.map
-                    (fun e ->
-                        if e.id = id then
-                            {e with completed}
-                        else
-                            e)
-                    model.entries}
+            result = "typecheck: " ^ model.expression ;
+            show   = Output},
+        Command.None
+
+    | Evaluate ->
+        {model with
+            result = "evaluate: " ^ model.expression ;
+            show   = Output},
+        Command.None
 
     | Show show ->
-        if show = model.show then
-            model
-        else
-            { model with show }
+        {model with show}, Command.None
+
+    | Update_expression expression ->
+        {model with expression}, Command.None
+
+    | Update_info info ->
+        {model with info}, Command.None
 
 
 
-let view_filters (show: show): message Vdom.t =
+
+let menu_item
+    (show: show)
+    (my_show: show)
+    (str: string)
+    : message Vdom.t
+    =
     let open Vdom in
     let open Attribute in
-    let button_text bold str =
-        if bold then
-            strong [style "background-color" "lightgrey"] [text str]
-        else
-            text str
-    in
-    let make_button name show my_show: message Vdom.t =
-        if show = my_show then
-            button
-                [ onClick (Show my_show); style "background-color" "lightgrey" ]
-                [ text name ]
-        else
-            button [onClick (Show my_show)] [ text name ]
-    in
-    p []
-      [ text "Show: "
-      ; make_button "All" show All
-      ; make_button "Active" show Active
-      (*; button
-            [ onClick (Show Active) ]
-            [ button_text (show = Active) "Active" ]*)
-      ; button
-            [ onClick (Show Completed) ]
-            [ button_text (show = Completed) "Completed" ]
-      ]
-
-
-
-let view_entry (show: show) (e: entry): message Vdom.t option =
-    let open Vdom in
-    let open Attribute in
-    if  show = All
-        || (show = Active && not e.completed)
-        || (show = Completed && e.completed)
-    then
-        Some (
-            p []
-              [ input [ type_ "checkbox"
-                      ; checked e.completed
-                      ; onCheck
-                            (fun completed -> Check (e.id, completed))
-                      ]
-                      []
-              ; text e.description
-              ; input [ type_ "button"
-                      ; value "x"
-                      ; onClick (Delete e.id)]
-                      []
-              ]
-            )
+    if show = my_show then
+        li [ class_ "menu-item"
+           ; onClick (Show my_show)
+           ; style "background-color" "lightgrey"]
+           [text str]
     else
-        None
+        li [ class_ "menu-item"
+           ; onClick (Show my_show)
+           ]
+           [text str]
+
+
+let output (model: model): message Vdom.t =
+    let open Vdom in
+    let open Attribute in
+    let class_attr, str =
+        match model.show with
+        | Output ->
+            "output-result", model.result
+        | Error ->
+            "output-error" , model.error
+        | Info ->
+            "output-info"  , model.info
+    in
+    pre [class_ class_attr] [text str]
+
+
 
 
 let view (model: model): message Vdom.t =
     let open Vdom in
     let open Attribute in
     div []
-        (
-            h1 [] [text "todo list"]
-            ::
-            p []
-              [input [ placeholder "new task"
-                     ; value model.task
-                     ; onInput (fun task -> Update_task task)
-                     ; onKeyUp
-                        (fun key ->
-                            if key = "Enter" && model.task <> "" then
-                                Add
-                            else
-                                No_operation)
+        [ h2 [] [ text "Alba Expression Compiler"]
+        ; span  [ class_ "main-block" ]
+                [ div []
+                      [ button [onClick Typecheck] [text "Typecheck"]
+                      ; button [onClick Evaluate]  [text "Evaluate"]
+                      ]
+                ; div []
+                      [textarea [ class_ "editor-area"
+                                ; placeholder "enter expression ..."
+                                ; onInput (fun str -> Update_expression str)
+                                (*; attribute "rows" "50"
+                                ; attribute "cols" "80"*)
+                                ]
+                                []
+                      ]
+                ]
+        ; span  [ class_ "main-block" ]
+                [ ul [ class_ "menu" ]
+                     [ menu_item model.show Output "Output"
+                     ; menu_item model.show Error "Error"
+                     ; menu_item model.show Info "Info"
                      ]
-                     []
-              ]
-            ::
-            ( List.map_and_filter
-                (view_entry model.show)
-                model.entries
-              @
-              [view_filters model.show] )
-        )
+                ; output model
+                ]
+        ]
+
+
+
+let subscription (_: 'model): 'msg App.Subscription.t =
+    App.Subscription.None
 
 
 
 let _ =
-    let module Program = Browser.Make (Vapp) in
-    Program.sandbox model view update
+    Program.element
+        Browser.Decoder.string
+        init
+        view
+        update
+        subscription

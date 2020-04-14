@@ -1,4 +1,43 @@
-.myclass {
-    color: green;
-    font-size: 20px;
+.main-block {
+    display: inline-block;
+    width:   48%;
+    height: 100%;
+    border:  1px solid blue;
+    vertical-align: top;
+}
+
+
+.editor-area {
+    font-family: "Courier New";  /* or monospace */
+    width: 100%;
+    height: 90%;
+    font-size: 70%;
+    overflow: auto;
+}
+
+
+.menu {
+    list-style-type: none;
+}
+
+.menu-item {
+    display: inline-block;
+}
+
+.menu-item:hover {
+    background-color: yellow;
+}
+
+
+.output-result {
+}
+
+.output-error {
+    color: white;
+    background-color: black;
+}
+
+.output-info {
+    width: 100%;
+    overflow: scroll;
 }
