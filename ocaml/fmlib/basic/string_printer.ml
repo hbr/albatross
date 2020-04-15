@@ -54,7 +54,7 @@ struct
         assert (start + len <= String.length s);
         make_room len b;
         for i = 0 to len - 1 do
-            Bytes.set b.bytes (b.count + i) s.[i - start]
+            Bytes.set b.bytes (b.count + i) s.[start + i]
         done;
         b.count <- b.count + len
 end
