@@ -311,9 +311,12 @@ struct
     let whitespace: int t =
         detached
             (skip_zero_or_more
-                ((map (fun _ -> ()) whitespace_char)
-                 <|> line_comment
-                 <|> multiline_comment))
+                (
+                    (map (fun _ -> ()) whitespace_char)
+                    <|> line_comment
+                    <|> multiline_comment
+                    <?> "whitespace"
+                ))
 
 
 
