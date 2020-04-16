@@ -505,8 +505,12 @@ struct
             indented (expression ())
         in
 
+        let subexpression (kind: string) () =
+            maybe_indented (expression () <?> kind)
+        in
+
         let result_type: Expression.t t =
-          colon |. whitespace >>= indented_expression
+          colon |. whitespace >>= subexpression "type"
         in
 
         let optional_result_type: Expression.t option t =
@@ -514,12 +518,17 @@ struct
         in
 
         let formal_argument: (string located * Expression.t option) t =
-          (char_ws '(' >>= fun _ ->
-           formal_argument_name >>= fun name ->
-           colon |. whitespace >>= indented_expression >>= fun typ ->
-           char_ws ')' >>= fun _ ->
-           return (name, Some typ)
-          )
+          (
+            char_ws '(' >>= fun _ ->
+            formal_argument_name
+            >>= fun name ->
+            colon |. whitespace
+            >>= subexpression "type"
+            >>= fun typ ->
+            char_ws ')'
+            >>= fun _ ->
+            return (name, Some typ)
+         )
           <|> map (fun name -> name, None) formal_argument_name
         in
 
