@@ -76,6 +76,11 @@ module type SIG =
         val command: Command.t t
         val make: final t -> parser
         val run: final t -> string -> parser
+
+        module Error_printer (PP: Pretty_printer.SIG):
+        sig
+            val print_with_source: string -> parser -> PP.t
+        end
     end
 
 

@@ -62,6 +62,123 @@ module type ERROR =
 
 
 
+
+
+
+
+
+
+
+module Print (Error: ERROR) (P: Pretty_printer.SIG) =
+struct
+    let problem (problem: Problem.t): P.t =
+        let open Problem in
+        let open P
+        in
+        match problem with
+        | Operator_precedence (op1, op2) ->
+            let source_text op1 op2 =
+                string "_ "
+                <+> string op1
+                <+> string " _ "
+                <+> string op2
+                <+> string " _"
+            and left op1 op2 =
+                string "( _ "
+                <+> string op1
+                <+> string " _ ) "
+                <+> string op2
+                <+> string " _"
+            and right op1 op2 =
+                string "_ "
+                <+> string op1
+                <+> string " ( _ "
+                <+> string op2
+                <+> string " _ )"
+            in
+            wrap_words "I am no able to group your operator expression"
+            <+> cut <+> cut
+            <+> nest 4 (source_text op1 op2) <+> cut <+> cut
+            <+> wrap_words "I can either group the first two"
+            <+> cut <+> cut
+            <+> nest 4 (left op1 op2) <+> cut <+> cut
+            <+> wrap_words "or group the second two"
+            <+> cut <+> cut
+            <+> nest 4 (right op1 op2) <+> cut <+> cut
+            <+> wrap_words
+               "However the precedence and associativity of these operators \
+                don't give me enough information. Please put parentheses to \
+                indicate your intention."
+            <+> cut <+> cut
+
+        | Illegal_name expect ->
+            wrap_words "I was expecting"
+            <+> group space
+            <+> string expect
+            <+> cut
+
+        | Illegal_command _ ->
+            string "Illegal commmand" <+> cut
+
+        | Ambiguous_command _ ->
+            string "Ambiguous commmand" <+> cut
+
+        | Duplicate_argument ->
+            wrap_words "I found a duplicate argument name. All names \
+                        of formal arguments must be different."
+            <+> cut <+> cut
+
+        | Unused_definition _ ->
+            wrap_words "This local definition is not used. \
+                        Sorry, this is not allowed."
+            <+> cut <+> cut
+
+
+
+    let expectations
+        (col: int)
+        (exps: (string * indent) list)
+        : P.t
+        =
+        let open P in
+        let expectation e ind =
+            if Indent.is_offside col ind then
+                string e
+                <+> string " at columns "
+                <+> string (Indent.string_of_set ind)
+            else
+                string e
+        in
+        match exps with
+        | [] ->
+            assert false (* Cannot happen, at least one expectation *)
+
+        | [e, ind] ->
+            string "I was expecting an"
+            <+> cut <+> cut
+            <+> nest 4 (expectation e ind)
+            <+> cut <+> cut
+
+        | lst ->
+            string "I was expecting one of the following"
+            <+> cut <+> cut
+            <+> nest
+                    4
+                    (list_separated
+                        cut
+                        (List.map
+                            (fun (e,ind) ->
+                                string "- "
+                                <+>
+                                expectation e ind)
+                            lst))
+            <+> cut <+> cut
+end
+
+
+
+
+
 module type SIG =
     sig
         type parser
@@ -88,6 +205,11 @@ module type SIG =
         val command: Command.t t
         val make: final t -> parser
         val run: final t -> string -> parser
+
+        module Error_printer (PP: Pretty_printer.SIG):
+        sig
+            val print_with_source: string -> parser -> PP.t
+        end
     end
 
 
@@ -571,122 +693,40 @@ struct
            |= optional (expression ()))
 
     let make (p: final t): parser =
-        make (p |. expect_end) ()
+        P.make (p |. expect_end) ()
 
     let run (p: final t) (input: string): parser =
-        run p () input
-end (* Make *)
+        run (p |. expect_end) () input
 
 
 
+    module Error_printer (PP: Pretty_printer.SIG) =
+    struct
+        module PP0 = Printer.Make (PP)
+        module PPr = Print (Error) (PP)
 
+        open PP
 
-
-
-
-
-module Print (Error: ERROR) (P: Pretty_printer.SIG) =
-struct
-    let problem (problem: Problem.t): P.t =
-        let open Problem in
-        let open P
-        in
-        match problem with
-        | Operator_precedence (op1, op2) ->
-            let source_text op1 op2 =
-                string "_ "
-                <+> string op1
-                <+> string " _ "
-                <+> string op2
-                <+> string " _"
-            and left op1 op2 =
-                string "( _ "
-                <+> string op1
-                <+> string " _ ) "
-                <+> string op2
-                <+> string " _"
-            and right op1 op2 =
-                string "_ "
-                <+> string op1
-                <+> string " ( _ "
-                <+> string op2
-                <+> string " _ )"
-            in
-            wrap_words "I am no able to group your operator expression"
-            <+> cut <+> cut
-            <+> nest 4 (source_text op1 op2) <+> cut <+> cut
-            <+> wrap_words "I can either group the first two"
-            <+> cut <+> cut
-            <+> nest 4 (left op1 op2) <+> cut <+> cut
-            <+> wrap_words "or group the second two"
-            <+> cut <+> cut
-            <+> nest 4 (right op1 op2) <+> cut <+> cut
-            <+> wrap_words
-               "However the precedence and associativity of these operators \
-                don't give me enough information. Please put parentheses to \
-                indicate your intention."
-            <+> cut <+> cut
-
-        | Illegal_name expect ->
-            wrap_words "I was expecting"
-            <+> group space
-            <+> string expect
-            <+> cut
-
-        | Illegal_command _ ->
-            string "Illegal commmand" <+> cut
-
-        | Ambiguous_command _ ->
-            string "Ambiguous commmand" <+> cut
-
-        | Duplicate_argument ->
-            wrap_words "I found a duplicate argument name. All names \
-                        of formal arguments must be different."
-            <+> cut <+> cut
-
-        | Unused_definition _ ->
-            wrap_words "This local definition is not used. \
-                        Sorry, this is not allowed."
-            <+> cut <+> cut
-
-
-
-    let expectations
-        (col: int)
-        (exps: (string * indent) list)
-        : P.t
-        =
-        let open P in
-        let expectation e ind =
-            if Indent.is_offside col ind then
-                string e
-                <+> string " at columns "
-                <+> string (Indent.string_of_set ind)
+        let print_with_source
+            (source: string)
+            (p: parser)
+            : PP.t
+            =
+            assert (has_ended p);
+            assert (not (has_succeeded p));
+            if Error.is_semantic (error p) then
+                let range, error = Error.semantic (error p) in
+                PP0.print_error_header "SYNTAX"
+                <+>
+                PP0.print_source source range []
+                <+>
+                PPr.problem error
             else
-                string e
-        in
-        match exps with
-        | [] ->
-            assert false (* Cannot happen, at least one expectation *)
-
-        | [e, ind] ->
-            string "I was expecting an"
-            <+> cut <+> cut
-            <+> nest 4 (expectation e ind)
-            <+> cut <+> cut
-
-        | lst ->
-            string "I was expecting one of the following"
-            <+> cut <+> cut
-            <+> nest
-                    4
-                    (list_separated
-                        cut
-                        (List.map
-                            (fun (e,ind) ->
-                                string "- "
-                                <+>
-                                expectation e ind)
-                            lst))
-            <+> cut <+> cut
-end
+                let pos = position p in
+                PP0.print_error_header "SYNTAX"
+                <+>
+                PP0.print_source source (pos,pos) (error_tabs p)
+                <+>
+                PPr.expectations (column p) (Error.expectations (error p))
+    end
+end (* Make *)
