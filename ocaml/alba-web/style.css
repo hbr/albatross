@@ -2,7 +2,6 @@
     display: inline-block;
     width:   48%;
     height: 100%;
-    /*border:  1px solid blue;*/
     vertical-align: top;
 }
 
@@ -11,9 +10,9 @@
     color: white;
     background-color: black;
     font-family: "Courier New";  /* or monospace */
+    font-size: 80%;
     width: 100%;
     height: 90%;
-    font-size: 80%;
     overflow: auto;
     resize: none;
     border: none;
@@ -39,6 +38,8 @@
 
 
 .output-result {
+    font-family: "Courier New";  /* or monospace */
+    font-size: 80%;
     margin: 0px;
     overflow: scroll;
 }

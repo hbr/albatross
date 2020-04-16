@@ -173,7 +173,7 @@ struct
             assert false (* Cannot happen, at least one expectation *)
 
         | [e, ind] ->
-            string "I was expecting an"
+            string "I was expecting a"
             <+> cut <+> cut
             <+> nest 4 (expectation e ind)
             <+> cut <+> cut
@@ -316,7 +316,10 @@ struct
                     <|> line_comment
                     <|> multiline_comment
                     <?> "whitespace"
-                ))
+                )
+            >>= succeed (* To avoid error messages like "expecting whitespace"
+            *)
+            )
 
 
 
