@@ -88,10 +88,3 @@ module Make (Final: ANY):
 sig
     include SIG with type final = Final.t
 end
-
-
-module Print (Error: ERROR) (P: Pretty_printer.SIG):
-sig
-    val problem: Problem.t -> P.t
-    val expectations: int -> (string * indent) list -> P.t
-end
