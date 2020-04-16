@@ -334,28 +334,8 @@ module Make (Io:Io.SIG) =
         (p: Repl_parser.parser)
         : Pretty.t
         =
-        let module Parser_print =
-            Parser.Print (Repl_parser.Error) (Pretty)
-        in
-        let open Pretty in
-        let error = Repl_parser.error p in
-        if Repl_parser.Error.is_semantic error then
-            let range, error = Repl_parser.Error.semantic error
-            in
-            error_header "SYNTAX"
-            <+> print_source src range []
-            <+> Parser_print.problem error
-        else
-           let pos = Repl_parser.position p in
-           let range = pos, pos in
-           error_header "SYNTAX"
-           <+> print_source
-                src
-                range
-                (Repl_parser.error_tabs p)
-           <+> Parser_print.expectations
-                (Repl_parser.column p)
-                (Repl_parser.Error.expectations error)
+        let module Error_printer = Repl_parser.Error_printer (Pretty) in
+        Error_printer.print_with_source src p
 
 
 
