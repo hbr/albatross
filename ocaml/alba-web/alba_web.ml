@@ -15,6 +15,101 @@ module Command = App.Command
 module Program = Browser.Make (App)
 
 
+
+
+module Compiler =
+struct
+    open Alba_core
+    open Albalib
+
+    module Expression = Ast.Expression
+
+    module Pretty_printer =
+        Pretty_printer.Pretty (String_printer)
+
+    module Term_print =
+        Context.Pretty (Pretty_printer)
+
+    module Expression_parser =
+        Parser_lang.Make (Expression)
+
+    module Result = Monad.Result (String)
+
+
+
+    let string_of_printer (p: Pretty_printer.t): string =
+        String_printer.run (Pretty_printer.run 0 50 50 p)
+
+    let standard_context: Context.t =
+        Context.standard ()
+
+
+    let parse (input: string): (Expression.t, string) result =
+        let open Expression_parser in
+        let p = run (expression ()) input in
+        assert (has_ended p);
+        match result p with
+        | Some exp ->
+            Ok exp
+        | None ->
+            let module Error_printer =
+                Expression_parser.Error_printer (Pretty_printer)
+            in
+            Error (
+                string_of_printer
+                    (Error_printer.print_with_source input p)
+            )
+
+
+
+    let build (input: string) (evaluate: bool): (string, string) result =
+        let open Result in
+        parse input >>= fun exp ->
+        match Builder.build exp standard_context with
+        | Ok lst ->
+            let module P = Context.Pretty (Pretty_printer) in
+            Ok (
+                string_of_printer
+                    Pretty_printer.(
+                        list_separated
+                            cut
+                            (List.map
+                                (fun (term, typ) ->
+                                    let term =
+                                        if evaluate then
+                                            Context.compute
+                                                term
+                                                standard_context
+                                        else
+                                            term
+                                    in
+                                    P.print
+                                        Term.(Typed (term, typ))
+                                        standard_context
+                                )
+                                lst)
+                    )
+            )
+        | Error (range, description) ->
+            let module PP = Builder.Print (Pretty_printer) in
+            let module PP0 = Printer.Make (Pretty_printer) in
+            Error (
+                string_of_printer
+                    Pretty_printer.(
+                        PP0.print_error_header "TYPE"
+                        <+>
+                        PP0.print_source input range []
+                        <+>
+                        PP.description description
+                    )
+            )
+
+    let evaluate (_: string): (string, string) result =
+        assert false
+end
+
+
+
 type show =
     | Output
     | Error
@@ -58,18 +153,28 @@ let init (url: string): model * message Command.t =
 
 
 let update (msg: message) (model: model): model * 'message Command.t =
+    let build model evaluate =
+        match Compiler.build model.expression evaluate with
+        | Ok result ->
+            {model with
+                result;
+                error  = "";
+                show   = Output},
+            Command.None
+        | Error error ->
+            {model with
+                result = "";
+                error;
+                show   = Error},
+            Command.None
+    in
     match msg with
     | Typecheck ->
-        {model with
-            result = "typecheck: " ^ model.expression ;
-            show   = Output},
-        Command.None
+        build model false
+
 
     | Evaluate ->
-        {model with
-            result = "evaluate: " ^ model.expression ;
-            show   = Output},
-        Command.None
+        build model true
 
     | Show show ->
         {model with show}, Command.None
@@ -127,12 +232,17 @@ let view (model: model): message Vdom.t =
         [ h2 [] [ text "Alba Expression Compiler"]
         ; span  [ class_ "main-block" ]
                 [ div []
-                      [ button [onClick Typecheck] [text "Typecheck"]
+                      [ button [] [text "<"]
+                      ; button [] [text ">"]
+                      ; button [onClick Typecheck] [text "Typecheck"]
                       ; button [onClick Evaluate]  [text "Evaluate"]
                       ]
                 ; div []
                       [textarea [ class_ "editor-area"
-                                ; placeholder "enter expression ..."
+                                ; placeholder
+                                    "enter expression ... \
+                                    (for examples see \"Info\" \
+                                    on the right hand side)"
                                 ; onInput (fun str -> Update_expression str)
                                 (*; attribute "rows" "50"
                                 ; attribute "cols" "80"*)

@@ -1,7 +1,7 @@
 (executable
     (name alba_web)
     (modules alba_web)
-    (libraries fmlib fmlib_js)
+    (libraries albalib fmlib fmlib_js)
     (modes byte js))
 
 (rule
