@@ -138,14 +138,33 @@ struct
     let expectations
         (col: int)
         (exps: (string * indent) list)
+        (tab_positions: int list)
         : P.t
         =
         let open P in
+        let find_tab_number ind =
+            let rec find number tabs =
+                match tabs with
+                | [] ->
+                    assert false (* Illegal call! *)
+                | pos :: tabs ->
+                    if pos = Indent.lower_bound ind then
+                        number
+                    else
+                        find (number + 1) tabs
+            in
+            find 0 tab_positions
+        in
         let expectation e ind =
             if Indent.is_offside col ind then
                 string e
-                <+> string " at columns "
-                <+> string (Indent.string_of_set ind)
+                <+>
+                (if Indent.has_only_one_position ind then
+                    string " at tab marker "
+                 else
+                    string " starting at tab marker ")
+                <+>
+                string (string_of_int (find_tab_number ind))
             else
                 string e
         in
@@ -722,11 +741,16 @@ struct
                 <+>
                 PPr.problem error
             else
-                let pos = position p in
+                let pos = position p
+                and tabs = error_tabs p
+                in
                 PP0.print_error_header "SYNTAX"
                 <+>
-                PP0.print_source source (pos,pos) (error_tabs p)
+                PP0.print_source source (pos,pos) tabs
                 <+>
-                PPr.expectations (column p) (Error.expectations (error p))
+                PPr.expectations
+                    (column p)
+                    (Error.expectations (error p))
+                    tabs
     end
 end (* Make *)

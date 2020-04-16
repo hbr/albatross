@@ -106,6 +106,14 @@ struct
         ind.lb, ind.ub
 
 
+    let has_only_one_position (ind: t): bool =
+        match ind.ub with
+        | Some ub when ind.lb = ub ->
+            true
+        | _ ->
+            false
+
+
     let is_allowed_token_position (pos: int) (ind: t): bool =
         if ind.abs then
             (* The token position must be in the set of the allowed indentations

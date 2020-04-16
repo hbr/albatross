@@ -52,6 +52,13 @@ sig
         indentation [ind]?
     *)
 
+    val lower_bound: t -> int
+    (** The lower bound of the indentation set. *)
+
+    val has_only_one_position: t -> bool
+    (** Does the indentation set have exactly one position? *)
+
+
     val string_of_set: t -> string
     (**
         [string_of_set ind]
