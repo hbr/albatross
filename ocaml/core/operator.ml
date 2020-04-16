@@ -15,10 +15,9 @@ type t =
 
 
 let where             = (20,   Left)
+let assign            = (25,   Right)
 let colon             = (30,   Right)
 let arrow             = (40,   Right)
-let assign            = (41,   Right)
-let lambda            = (42,   No)
 let push_arg          = (45,   Left)
 let pull_arg          = (46,   Right)
 let relation          = (50,   No)
@@ -27,6 +26,19 @@ let multiplication    = (61,   Left)
 let exponentiation    = (62,   Right)
 let unknown           = (100,  Left)
 let application       = (200,  Left)
+
+(* Precedences:
+
+    expression                  parse               requirement
+    --------------------------------------------------------------
+    exp: A -> B                 exp: (A -> B)       colon < arrow
+
+    \x := exp: T                \x := (exp: T)      assign < colon
+
+    \x y := x => y              \x y := (x => y)
+
+*)
+
 
 
 let map: (int * assoc) String_map.t

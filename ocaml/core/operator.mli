@@ -10,9 +10,6 @@ type assoc =
 
 val where: t
 
-(** Precedence/associativity of lambda_abstraction. *)
-val lambda: t
-
 (** Precedence/associativity of assignment ":=". *)
 val assign: t
 
