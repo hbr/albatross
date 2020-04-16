@@ -129,6 +129,7 @@ type message =
     | Typecheck
     | Evaluate
     | Show of show
+    | New_expression
     | Update_expression of string
     | Update_info of string
 
@@ -154,19 +155,22 @@ let init (url: string): model * message Command.t =
 
 let update (msg: message) (model: model): model * 'message Command.t =
     let build model evaluate =
-        match Compiler.build model.expression evaluate with
-        | Ok result ->
-            {model with
-                result;
-                error  = "";
-                show   = Output},
-            Command.None
-        | Error error ->
-            {model with
-                result = "";
-                error;
-                show   = Error},
-            Command.None
+        if model.expression = "" then
+            model, Command.None
+        else
+            match Compiler.build model.expression evaluate with
+            | Ok result ->
+                {model with
+                    result;
+                    error  = "";
+                    show   = Output},
+                Command.None
+            | Error error ->
+                {model with
+                    result = "";
+                    error;
+                    show   = Error},
+                Command.None
     in
     match msg with
     | Typecheck ->
@@ -181,6 +185,9 @@ let update (msg: message) (model: model): model * 'message Command.t =
 
     | Update_expression expression ->
         {model with expression}, Command.None
+
+    | New_expression ->
+        {model with expression = ""}, Command.None
 
     | Update_info info ->
         {model with info}, Command.None
@@ -232,8 +239,9 @@ let view (model: model): message Vdom.t =
         [ h2 [] [ text "Alba Expression Compiler"]
         ; span  [ class_ "main-block" ]
                 [ div []
-                      [ button [] [text "<"]
+                      [(* button [] [text "<"]
                       ; button [] [text ">"]
+                      ;*) button [onClick New_expression] [text "New"]
                       ; button [onClick Typecheck] [text "Typecheck"]
                       ; button [onClick Evaluate]  [text "Evaluate"]
                       ]
@@ -243,9 +251,8 @@ let view (model: model): message Vdom.t =
                                     "enter expression ... \
                                     (for examples see \"Info\" \
                                     on the right hand side)"
+                                ; value model.expression
                                 ; onInput (fun str -> Update_expression str)
-                                (*; attribute "rows" "50"
-                                ; attribute "cols" "80"*)
                                 ]
                                 []
                       ]
