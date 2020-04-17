@@ -47,8 +47,7 @@ module Io = Io
 
 module Make_io = Make_io
 
-module Readable_printer = Readable_printer
-module String_printer   = String_printer
+module String_printer = String_printer
 
 
 

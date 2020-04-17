@@ -1,3 +1,5 @@
+(** Enviroment for Web Applications. *)
+
 module type DECODER =
 sig
     type _ t
