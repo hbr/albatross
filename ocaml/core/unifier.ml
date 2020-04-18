@@ -35,8 +35,8 @@ struct
         uc.gh
 
 
-    let push (tp: Term.typ) (uc: t): t =
-        {uc with gamma = Gamma.push_local "_" tp uc.gamma}
+    let push (name: string) (tp: Term.typ) (uc: t): t =
+        {uc with gamma = Gamma.push_local name tp uc.gamma}
 
 
     let string_of_term (term: Term.t) (uc: t): string =
@@ -152,7 +152,7 @@ struct
             >>=
             unify0 arg_act arg_req false
 
-        | Pi (act_arg, act_rt, _), Pi (req_arg, req_rt, _) ->
+        | Pi (act_arg, act_rt, info), Pi (req_arg, req_rt, _) ->
             Option.(
                 unify0 act_arg req_arg false uc
                 >>= fun uc ->
@@ -163,7 +163,7 @@ struct
                         act_rt
                         req_rt
                         is_super
-                        (push act_arg uc))
+                        (push (Pi_info.name info) act_arg uc))
             )
 
         | Variable i, Variable j ->

@@ -24,7 +24,7 @@ sig
 
     val context: t -> H.t
 
-    val push: Term.typ -> t -> t
+    val push: string -> Term.typ -> t -> t
 
     val unify0: Term.typ -> Term.typ -> bool -> t -> t option
 

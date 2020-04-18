@@ -85,15 +85,19 @@ type t = {
     base: Gamma.t;
     locals: Local.t array;
     bounds: (int * bool) array;          (* level of bound, is typed? *)
+    nholes: int;
 }
 
 
 
 let make (base: Gamma.t): t =
-    {base0 = base;
-     base;
-     locals = [||];
-     bounds = [||]}
+    {
+        base0 = base;
+        base;
+        locals = [||];
+        bounds = [||];
+        nholes = 0
+    }
 
 
 let string_of_term (term: Term.t) (gh: t): string =
@@ -305,11 +309,12 @@ let push_local (name: string) (typ: Term.typ) (gh: t): t =
 
 
 let push_hole (typ: Term.typ) (gh: t): t =
-    let name = "<" ^ string_of_int (count_locals gh) ^ ">"
+    let name = "<" ^ string_of_int gh.nholes ^ ">"
     in
     {gh with
         base   = Gamma.push_local name typ gh.base;
         locals = Array.push Local.hole gh.locals;
+        nholes = gh.nholes + 1;
     }
 
 
