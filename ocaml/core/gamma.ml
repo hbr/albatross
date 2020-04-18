@@ -104,6 +104,26 @@ let string_level = 2
 let eq_level     = 8
 
 
+let proposition_start_level = 12
+let true_offset    = 0
+let false_offset   = 1
+let impl_offset    = 2
+let exfalso_offset = 3
+let leibniz_offset = 4
+
+let true_level     = proposition_start_level + true_offset
+let false_level    = proposition_start_level + false_offset
+let impl_level     = proposition_start_level + impl_offset
+let exfalso_level  = proposition_start_level + exfalso_offset
+let leibniz_level  = proposition_start_level + leibniz_offset
+let _ =
+    true_level
+    , false_level
+    , impl_level
+    , exfalso_level
+    , leibniz_level
+
+
 let binary_type (level:int): Term.typ * int =
   Pi (Variable 0,
       Pi (Variable 1,
@@ -131,39 +151,39 @@ let standard (): t =
   in
   empty
 
-  |> add_entry "Int" (Term.any ,0) No
+  |> (* 0 *) add_entry "Int" (Term.any ,0) No
 
-  |> add_entry "Character" (Term.any, 0) No
+  |> (* 1 *) add_entry "Character" (Term.any, 0) No
 
-  |> add_entry "String" (Term.any, 0) No
+  |> (* 2 *) add_entry "String" (Term.any, 0) No
 
-  |> add_entry
+  |> (* 3 *) add_entry
        "+"
        (binary_type int_level)
        (Builtin Term.Value.int_plus)
 
-  |> add_entry
+  |> (* 4 *) add_entry
        "-"
        (binary_type int_level)
        (Builtin Term.Value.int_minus)
 
-  |> add_entry
+  |> (* 5 *) add_entry
        "*"
        (binary_type int_level)
        (Builtin Term.Value.int_times)
 
-  |> add_entry
+  |> (* 6 *) add_entry
        "+"
        (binary_type string_level)
        (Builtin Term.Value.string_concat)
 
-  |> add_entry
+  |> (* 7 *) add_entry
        (* List: Any -> Any *)
        "List"
        (Term.(Pi (any, any, Pi_info.arrow)), 0)
        No
 
-  |> add_entry (* 8 *)
+  |> (* 8 *) add_entry (* 8 *)
        (* (=) (A: Any): A -> A -> Proposition *)
        "="
        (Term.(
@@ -177,7 +197,7 @@ let standard (): t =
         0)
        No
 
-  |> add_entry
+  |> (* 9 *) add_entry
        (* identity: all (A: Any): A -> A :=
             \ A x := x *)
        "identity"
@@ -196,36 +216,7 @@ let standard (): t =
                              Lambda_info.typed "x"),
                      Lambda_info.typed "A"))))
 
-    |> add_entry
-        (* true: Proposition *)
-        "true"
-        (Term.proposition, 0)
-        No
-
-    |> add_entry
-        (* false: Proposition *)
-        "false"
-        (Term.proposition, 0)
-        No
-
-    |> (* (=>) (a b: Proposition): Proposition := a -> b *)
-       (let typ =
-            product "_"
-                proposition
-                (product "_" proposition proposition)
-        and def =
-            let a = Variable 0
-            and b = Variable 1 in
-            to_index 0
-                (lambda "a" proposition
-                   (lambda "b" proposition
-                        (arrow a b)))
-        in
-        add_entry
-            "=>" (typ,0) (Definition def)
-        )
-
-    |> (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
+    |> (* 10 *) (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
         (let biga = Variable 0
          and a    = Variable 1
          and bigb = Variable 2
@@ -245,7 +236,7 @@ let standard (): t =
             (Definition (to_index 0 def))
         )
 
-    |> (* (<|) (A: Any) (B: Any) (f: A -> B) (a: A): B := f a *)
+    |> (* 11 *) (* (<|) (A: Any) (B: Any) (f: A -> B) (a: A): B := f a *)
         (let biga = Variable 0
          and bigb = Variable 1
          and f    = Variable 2
@@ -265,7 +256,60 @@ let standard (): t =
             (Definition (to_index 0 def))
         )
 
-    (* leibniz (A: Any) (f: A -> Proposition)
+    |> (* 12 *) add_entry
+        (* true: Proposition *)
+        "true"
+        (Term.proposition, 0)
+        No
+
+    |> (* 13 *) add_entry
+        (* false: Proposition *)
+        "false"
+        (Term.proposition, 0)
+        No
+
+    |> (* 14 *) (* (=>): all (a b: Proposition): Proposition := a -> b *)
+       (let typ =
+            product "_"
+                proposition
+                (product "_" proposition proposition)
+        and def =
+            let a = Variable 0
+            and b = Variable 1 in
+            to_index 0
+                (lambda "a" proposition
+                   (lambda "b" proposition
+                        (arrow a b)))
+        in
+        add_entry
+            "=>" (typ,0) (Definition def)
+        )
+
+    |> (* 15 *)
+       (* ex_falso: false => all (a: Proposition): a *)
+    (
+        let n =
+            proposition_start_level + exfalso_offset
+        in
+        let typ =
+            binary
+                (Variable false_level)
+                (Variable impl_level)
+                (
+                    product
+                        "a"
+                        proposition
+                        (Variable n)
+                )
+        in
+        add_entry "ex_falso" (to_index n typ, n) No
+    )
+
+
+
+
+     (* 16 *)
+     (* leibniz (A: Any) (f: A -> Proposition)
                (a b: A)
                : a = b => f a => f b *)
     |>  (let n = eq_level + 1 in
