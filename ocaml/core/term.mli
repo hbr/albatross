@@ -18,6 +18,9 @@ sig
   val int_times: t
   val string_concat: t
   val apply: t -> t -> t
+
+  val is_equal: t -> t -> bool
+  (** [is_equal a b] checks if [a] and [b] are the same value. *)
 end
 
 

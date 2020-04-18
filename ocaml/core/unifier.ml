@@ -146,6 +146,12 @@ struct
             ->
                 Some uc
 
+        | Value act, Value req ->
+            if Value.is_equal act req then
+                Some uc
+            else
+                None
+
         | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
             let open Option in
             unify0 f_act f_req false uc

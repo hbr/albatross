@@ -80,6 +80,17 @@ module Value =
          Unary (f a)
       | _ ->
          assert false
+
+    let is_equal (a: t) (b: t): bool =
+        match a, b with
+        | Int a, Int b ->
+            a = b
+        | Char a, Char b ->
+            a = b
+        | String a, String b ->
+            a = b
+        | _ ->
+            false
   end
 
 
