@@ -1,4 +1,5 @@
 open Fmlib
+open Common
 
 
 module Browser = Fmlib_js.Browser
@@ -139,8 +140,8 @@ type message =
 let init (url: string): model * message Command.t =
     { expression = ""
     ; result = ""
-    ; error = "error ?"
-    ; info = ""
+    ; error = ""
+    ; info = "loading <" ^ url ^ ">"
     ; show = Output
     },
     Command.http_get
@@ -149,7 +150,8 @@ let init (url: string): model * message Command.t =
             | Ok response ->
                 Update_info response
             | Error code ->
-                Update_info ("Error: " ^ string_of_int code))
+                Update_info ("Error: " ^ string_of_int code
+                            ^ "\n Cannot load <" ^ url ^ ">"))
 
 
 
@@ -176,7 +178,6 @@ let update (msg: message) (model: model): model * 'message Command.t =
     | Typecheck ->
         build model false
 
-
     | Evaluate ->
         build model true
 
@@ -190,7 +191,7 @@ let update (msg: message) (model: model): model * 'message Command.t =
         {model with expression = ""}, Command.None
 
     | Update_info info ->
-        {model with info}, Command.None
+        {model with info; show = Info}, Command.None
 
 
 

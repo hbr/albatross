@@ -28,6 +28,10 @@ test_alba:
 doc:
 	dune build @doc
 
+doc-gh-pages: doc
+	rm -rf gh-pages/ocaml/*; \
+	cp -r _build/default/_doc/_html/* gh-pages/ocaml/
+
 fmlib:
 	dune build @ocaml/fmlib/basic/runtest
 
@@ -52,6 +56,15 @@ alba-node: albalib
 
 alba-web: albalib
 	dune build ocaml/alba-web/alba_web.js
+
+alba-web-gh-pages:
+	dune build --profile=release ocaml/alba-web/alba_web.js; \
+	rm -rf gh-pages/try/*; \
+	cp ocaml/alba-web/*.js gh-pages/try/; \
+	cp ocaml/alba-web/*.md gh-pages/try/; \
+	cp ocaml/alba-web/*.html gh-pages/try/; \
+	cp ocaml/alba-web/*.css gh-pages/try/
+
 
 
 web-test: albalib
