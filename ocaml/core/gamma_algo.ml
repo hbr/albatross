@@ -32,9 +32,14 @@ struct
             | Some def ->
                split def args)
 
-        | Term.Appl (Term.Lambda (_, exp, _), arg, _) ->
-           split (Term.apply exp arg) args
-
+        | Lambda (_, exp, _) ->
+            (
+                match args with
+                | [] ->
+                    t, args
+                | (arg, _) :: args ->
+                    split Term.(apply exp arg) args
+            )
 
         | Term.Appl (f, arg, mode) ->
            split f ((arg, mode) :: args)
