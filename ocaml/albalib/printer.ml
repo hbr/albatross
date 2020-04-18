@@ -111,7 +111,7 @@ struct
                     skip_line_no
                     <+> fill start_col ' '
                     <+> char 'v'
-                    <+> fill 3 '.'
+                    <+> fill 20 '.'
                     <+> cut
                     <+> print_line char_offset pos_newline line_no
                  else if line_no = end_line && start_line <> end_line then
