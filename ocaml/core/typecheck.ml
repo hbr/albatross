@@ -109,10 +109,16 @@ let is_valid_context (gamma: Gamma.t): bool =
             let typ = Gamma.type_at_level i gamma in
             match Term.down (cnt - i) typ with
             | None ->
+                Printf.printf "variables out of bound\n";
                 false
             | Some _ ->
                 match check typ gamma with
                 | None ->
+                    Printf.printf "type of level %d invalid\n %s\n"
+                        i
+                        (Term_printer.string_of_term typ gamma)
+                        ;
+
                     false
                 | Some _ ->
                     let idx = Gamma.index_of_level i gamma in
