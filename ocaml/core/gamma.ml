@@ -286,21 +286,19 @@ let standard (): t =
         )
 
     |> (* 15 *)
-       (* ex_falso: false => all (a: Proposition): a *)
+       (* ex_falso: all (a: Proposition): false => a *)
     (
         let n =
             proposition_start_level + exfalso_offset
         in
         let typ =
-            binary
-                (Variable false_level)
-                (Variable impl_level)
-                (
-                    product
-                        "a"
-                        proposition
-                        (Variable n)
-                )
+            product
+                "a"
+                proposition
+                (binary
+                    (Variable false_level)
+                    (Variable impl_level)
+                    (Variable n))
         in
         add_entry "ex_falso" (to_index n typ, n) No
     )
