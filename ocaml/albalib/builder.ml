@@ -508,7 +508,7 @@ struct
         <+> cut <+> cut
         <+> type_list reqs
         <+> cut <+> cut
-        <+> wrap_words "but the expression has"
+        <+> wrap_words "and the expression has"
         <+> group space
         <+> type_or_types acts
         <+> cut <+> cut
