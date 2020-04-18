@@ -76,7 +76,7 @@ In order to save some parentheses and to write some expressions more intuitive,
 Alba has the left associative operator `|>` and the right associative operator
 `<|`. The following expressions on the left and right are equivalent.
 
-    f (g a)                                 a |> f |> g
+    g (f a)                                 a |> f |> g
 
     f (a + b)                               a + b |> f
 
@@ -109,6 +109,16 @@ A function expression can be applied to actual arguments
 This expression evaluates to
 
     "Hello Jim and Joe"
+
+A function can be partially applied, returning a function which can be applied
+to the missing argument. I.e.
+
+    (\ x y := "Hello " + x + " and " + y) "Jim"
+
+has type
+
+    String -> String
+
 
 In many cases the compiler can infer the types. But it is possible to add type
 annotations
@@ -227,3 +237,17 @@ gives the compiler enough information to infer the type of the implicit argument
 `B`.
 
 Can you imagine what the type of `(<|)` is?
+
+
+
+
+## Propositions
+
+Propositions are assertions which exist only in the source code. E.g.
+
+    "Hello" = "world"
+
+is the proposition stating that the two strings are equal. Evidently this
+assertion is false. Propositions are types. An expression of type `"Hello" =
+"world"` is an evidence that the proposition is valid (i.e. it is a *proof* of
+the proposition).
