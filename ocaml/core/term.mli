@@ -96,6 +96,9 @@ type t =
   | Pi of typ * typ * Pi_info.t
 
   | Where of string * typ * t * t
+    (** Where [(name, tp, exp, def)] is equivalent to the beta redex
+        [Appl ( Lambda (tp, exp, "name"), def)]
+    *)
 
 and typ = t
 
