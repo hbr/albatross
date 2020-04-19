@@ -6,10 +6,34 @@ module Uni = Unifier.Make (Gamma_holes)
 
 
 include Gamma_holes
+    (* We use [Gamma_holes] as a normal [Gamma]. The type checker does not need
+    any holes, but the unifier expects a parameter which allows for filling
+    holes. *)
+
+
+
+module Problem =
+struct
+    type t =
+    | Out_of_bound of int * Gamma.t
+    | Argument_type
+    | Typed
+    | Lambda
+    | No_type
+    | Name of string
+end
+
+
+type path = int list
+
+
+module Result = Monad.Result (struct type t = path * Problem.t end)
+
 
 let string_of_term term gh =
     Term_printer.string_of_term term (Gamma_holes.context gh)
 let _ = string_of_term
+
 
 
 let is_subtype (sub: Term.typ) (typ: Term.typ) (gh: t) : bool
@@ -19,84 +43,155 @@ let is_subtype (sub: Term.typ) (typ: Term.typ) (gh: t) : bool
 
 
 
+let check_variable_name
+    (name: string)
+    (sort_of_type: Term.Sort.t)
+    : bool
+    =
+    let open Term.Sort in
+    let open Common in
+    let letter, lower, upper =
+        if String.length name > 0 then
+            let c = name.[0] in
+            Char.( is_letter c, is_lower c, is_upper c )
+        else
+            false, false, false
+    in
+    match sort_of_type with
+    | Any i when 0 < i && (not letter || upper)->
+        true
+    | Proposition | Any 0 when not letter || lower ->
+        true
+    | _ ->
+        false
 
-let rec check (term: Term.t) (c: t): Term.typ option =
+
+
+
+let rec check
+    (path: path)
+    (term: Term.t)
+    (c: t)
+    : (Term.typ, path * Problem.t) result
+    =
     let open Term in
-    let open Option in
+    let open Result in
     match term with
     | Sort s ->
-        Some (type_of_sort s)
+        Ok (type_of_sort s)
 
     | Value v ->
-        Some (type_of_literal v c)
+        Ok (type_of_literal v c)
 
     | Variable i ->
         if i < count c then
-            Some (type_of_variable i c)
+            Ok (type_of_variable i c)
         else
-            None
+            Error (path, Problem.Out_of_bound (i, context c))
 
     | Appl (f, arg, _ ) ->
-        check f c >>= fun f_type ->
-        check arg c >>= fun arg_type ->
+        check (0 :: path) f c
+        >>= fun f_type ->
+        check (1 :: path) arg c
+        >>= fun arg_type ->
         (
             match Algo.key_normal f_type c with
             | Pi (tp, rt, _ ) when is_subtype arg_type tp c ->
-                Some (apply rt arg)
+                Ok (apply rt arg)
+
             | _ ->
-              None
+              Error (path, Problem.Argument_type)
         )
 
     | Typed (exp, tp) ->
-        check exp c >>=
+        check (0 :: path) exp c
+        >>=
         fun exp_type ->
-        check tp c >>=
+        check (1 :: path) tp c >>=
         fun tp_tp ->
         (   match tp_tp with
             | Sort _  when is_subtype exp_type tp c ->
-                Some tp
+                Ok tp
+
             | _ ->
-                None
+                Error (path, Problem.Typed)
         )
 
     | Lambda (arg, exp, info ) ->
-        check arg c >>= fun sort ->
-        if Term.is_sort sort then
-            let name = Lambda_info.name info in
-            check exp (push_local name arg c)
-            >>= fun res ->
-            Some (
-                Pi (arg, res, Pi_info.typed name)
-            )
-        else
-            None
+        check (0 :: path) arg c
+        >>= fun sort ->
+        (
+            match sort with
+            | Sort sort ->
+                let name = Lambda_info.name info in
+                if check_variable_name name sort then
+                    check (1 :: path) exp (push_local name arg c)
+                    >>= fun res ->
+                    Ok ( Pi (arg, res, Pi_info.typed name) )
+                else
+                    Error (path, Problem.Name name)
+            | _ ->
+                Error (path, Problem.Lambda)
+        )
 
     | Pi (arg, res, info) ->
-        check arg c >>=
+        check (0 :: path) arg c
+        >>=
         (
             function
             | Sort arg_sort ->
-                check res (push_local (Pi_info.name info) arg c)
-                >>=
-                (
-                    function
-                    | Sort res_sort ->
-                        Some (Sort (Sort.pi_sort arg_sort res_sort))
-                    | _ ->
-                        None
-                )
+                let name = Pi_info.name info in
+                if check_variable_name name arg_sort then
+                    check
+                        (1 :: path)
+                        res
+                        (push_local (Pi_info.name info) arg c)
+                    >>=
+                    (
+                        function
+                        | Sort res_sort ->
+                            Ok (Sort (Sort.pi_sort arg_sort res_sort))
+                        | _ ->
+                            Error (path, Problem.No_type)
+                    )
+                else
+                    Error (path, Problem.Name name)
             | _ ->
-                None
+                Error (path, Problem.No_type)
         )
 
     | Where (name, tp, exp, def) ->
-        check (expand_where name tp exp def) c
+        check (0 :: path) tp c
+        >>= fun tp_tp ->
+        (
+            match tp_tp with
+            | Sort sort ->
+                if check_variable_name name sort then
+                    check (1 :: path) exp (push_local name tp c)
+                    >>= fun res_tp ->
+                    check (2 :: path) def c
+                    >>= fun def_type ->
+                    if is_subtype def_type tp c then
+                        Ok (apply res_tp def)
+                    else
+                        Error (path, Problem.Argument_type)
+                else
+                    Error (path, Problem.Name name)
+            | _ ->
+                Error (path, Problem.No_type)
+        )
+        (*
+        check path (expand_where name tp exp def) c*)
 
 
 
 
-let check (term: Term.t) (gamma: Gamma.t): Term.typ option =
-    check term (make gamma)
+let check
+    (term: Term.t)
+    (gamma: Gamma.t)
+    : (Term.typ, path * Problem.t) result
+    =
+    check [] term (make gamma)
 
 
 
@@ -113,14 +208,14 @@ let is_valid_context (gamma: Gamma.t): bool =
                 false
             | Some _ ->
                 match check typ gamma with
-                | None ->
+                | Error _ ->
                     Printf.printf "type of level %d invalid\n %s\n"
                         i
                         (Term_printer.string_of_term typ gamma)
                         ;
 
                     false
-                | Some _ ->
+                | Ok _ ->
                     let idx = Gamma.index_of_level i gamma in
                     match Gamma.definition_term idx gamma with
                     | None ->
@@ -131,9 +226,9 @@ let is_valid_context (gamma: Gamma.t): bool =
                             false
                         | Some _ ->
                             match check def gamma with
-                            | None ->
+                            | Error _ ->
                                 false
-                            | Some def_typ ->
+                            | Ok def_typ ->
                                 let gh = Gamma_holes.make gamma in
                                 is_subtype def_typ typ gh
                                 && check_entry (i + 1)
