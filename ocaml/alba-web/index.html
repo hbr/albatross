@@ -1,4 +1,5 @@
 <html>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <head>
         <link rel="stylesheet" type="text/css" href="style.css">
         <script type="text/javascript" src="alba_web.js"> </script>
@@ -7,8 +8,12 @@
         Loading ...
     </body>
     <script>
+        const alba_repo = 'https://cdn.jsdelivr.net/gh/hbr/albatross'
+        const branch    = '@feature/'
+        const path      = 'ocaml/alba-web/expression.md'
         Alba.init({
-            node: 'alba',
-            data: 'https://hbr.github.io/albatross/try/expression.md'})
+            node: 'alba'
+            , data: alba_repo + branch + path
+        })
     </script>
 </html>
