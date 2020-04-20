@@ -107,6 +107,25 @@ val split_at: ('a -> bool) -> 'a t -> 'a t * 'a t
 
 
 
+val transpose: 'a list list -> 'a list list
+(**
+    [transpose list_of_rows] returns the list of columns.
+
+    Preconditions:
+
+    - The list of rows must not be empty.
+
+    - All rows in the list of rows must not be empty and have the same length.
+
+    Example:
+    {[
+        transpose [ [1; 2; 3]; [4; 5; 6] ]
+        =
+        [ [1; 4]; [2; 5]; [3; 6] ]
+    ]}
+*)
+
+
 (** {1 Monadic list folding}*)
 
 (** Monadic list folding *)

@@ -72,6 +72,39 @@ let split_at (p:'a -> bool) (l: 'a t): 'a t * 'a t =
 
 
 
+let transpose (row_list: 'a list list): 'a list list =
+    assert (row_list <> []);
+    let first_column row_list =
+        (* Extract the first column of [row_list]. *)
+        fold_right
+            (fun row (column, row_list)->
+                match row with
+                | [] ->
+                    assert false
+                | el :: rest_row ->
+                    el :: column,
+                    rest_row :: row_list
+            )
+            row_list
+            ([], [])
+    in
+    let rec get_columns columns row_list =
+        match row_list with
+        | [] ->
+            assert false (* No rows is not allowed. *)
+
+        | [] :: _ ->
+            columns
+
+        | (_ :: _) :: _ ->
+            let column, row_list = first_column row_list in
+            get_columns (column :: columns) row_list
+    in
+    rev (get_columns [] row_list)
+
+
+
+
 
 module Monadic_fold (M:MONAD) =
   struct
@@ -92,3 +125,20 @@ module Monadic_fold (M:MONAD) =
     let fold_right (f:'a -> 'b -> 'b M.t) (l:'a t) (start:'b): 'b M.t =
       fold_left f (rev l) start
   end
+
+
+
+
+(* Unit Tests *)
+
+let%test _ =
+    transpose [ [1] ] = [ [1] ]
+
+
+let%test _ =
+    transpose
+        [ [1;2;3] ] = [ [1]; [2]; [3] ]
+
+let%test _ =
+    transpose
+        [ [1;2;3]; [4;5;6] ] = [ [1;4]; [2;5]; [3;6] ]
