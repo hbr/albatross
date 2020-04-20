@@ -28,6 +28,7 @@ type problem_description =
     | Not_a_function of type_in_context list
     | Wrong_type of (type_in_context * type_in_context) list
     | Wrong_base of type_in_context list * type_in_context list
+    | Ambiguous of type_in_context list
     | Not_yet_implemented of string
 
 let dummy str = Not_yet_implemented str
@@ -100,16 +101,26 @@ let base_candidates
     (builder: t)
     : (t, problem) result
     =
+    let candidates, _ =
+        List.fold_right
+            (fun term (candidates, variant) ->
+                (term, variant) :: candidates,
+                variant + 1)
+            candidates
+            ([], 0)
+    in
     let bcs =
         List.(
             builder.bcs >>= fun bc ->
-            candidates  >>= fun term ->
-            Option.to_list (Build_context.base_candidate term nargs bc))
+            candidates  >>= fun (term, variant) ->
+            Option.to_list
+                (Build_context.base_candidate
+                    range variant term nargs bc))
     in
     if bcs = [] then
         let acts =
             List.map
-                (fun term ->
+                (fun (term, _) ->
                     [],
                     Algo.type_of_term term builder.base,
                     builder.base)
@@ -417,18 +428,45 @@ let rec build0
 
 
 
+
+
+
 let build
       (exp: Ast.Expression.t)
       (c: Context.t)
-    : ((Term.t * Term.typ) list, problem) result
+    : (Term.t * Term.typ, problem) result
     =
-    let open Result
-    in
+    let open Result in
     build0 exp 0 (make c)
-    >>=
-    map_bcs0
-        Build_context.final
-        (fun lst -> Located.range exp, Incomplete_type lst)
+    >>= fun builder ->
+    match
+        map_bcs0
+            Build_context.final
+            (fun lst -> Located.range exp, Incomplete_type lst)
+            builder
+    with
+    | Ok [_, term, typ] ->
+        Ok (term, typ)
+
+    | Ok lst ->
+        assert (1 < List.length lst);
+        let bcs = List.map (fun (bc, _, _) -> bc) lst in
+        let range, base_terms =
+            Build_context.find_last_ambiguous bcs
+        in
+        Error (
+            range,
+            Ambiguous (
+                List.map
+                    (fun (_, typ) ->
+                        [], typ, Context.gamma c)
+                    base_terms
+            )
+        )
+
+    | Error problem ->
+        Error problem
+
 
 
 
@@ -558,12 +596,24 @@ struct
         | Wrong_base (reqs, acts) ->
             wrong_type reqs acts
 
+        | Ambiguous types ->
+            wrap_words
+                "This term is ambigous. It can have the following types."
+            <+> cut <+> cut
+            <+> type_list types
+            <+> cut <+> cut
+            <+> wrap_words
+                "Please give me more type information to infer a unique type."
+            <+> cut
+
         | Not_yet_implemented str ->
             char '<' <+> string str <+> char '>'
             <+> group space
             <+> wrap_words "is not yet implemented"
 
 end
+
+
 
 
 
@@ -601,7 +651,7 @@ let _ = string_of_term_type
 
 let build_expression
     (str: string)
-    : ((Term.t * Term.typ) list, problem) result
+    : (Term.t * Term.typ, problem) result
     =
     let open Expression_parser in
     let p = run (expression ()) str in
@@ -614,7 +664,7 @@ let build_expression
 
 let%test _ =
     match build_expression "Proposition" with
-    | Ok ([term,typ]) ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "Proposition: Any"
     | _ ->
@@ -624,7 +674,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "Any" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "Any: Any(1)"
     | _ ->
@@ -634,7 +684,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "Int" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "Int: Any"
     | _ ->
@@ -653,7 +703,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(|>)" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "(|>): all (A: Any) (a: A) (B: Any) (f: A -> B): B"
     | _ ->
@@ -662,7 +712,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "Int -> all (B: Any): (Int -> B) -> B" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "Int -> (all (B: Any): (Int -> B) -> B): Any(1)"
     | _ ->
@@ -671,7 +721,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "'a' : Character : Any" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "('a': Character: Any): Character: Any"
     | _ ->
@@ -680,7 +730,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "identity" with
-    | Ok ([term,typ]) ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "identity: all (A: Any): A -> A"
     | _ ->
@@ -690,7 +740,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "identity: Int -> Int" with
-    | Ok ([term,typ]) ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "(identity: Int -> Int): Int -> Int"
     | _ ->
@@ -709,7 +759,7 @@ let%test _ =
     let tp_str = "Int -> (all (B: Any): (Int -> B) -> B)"
     in
     match build_expression ("(|>): " ^ tp_str)  with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "((|>): " ^ tp_str ^ "):\n    "  ^ tp_str
@@ -721,7 +771,7 @@ let%test _ =
     let tp_str = "(Character -> String) -> String"
     in
     match build_expression ("(|>) 'a': " ^ tp_str)  with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "((|>) 'a': " ^ tp_str ^ "):\n    "  ^ tp_str
@@ -748,7 +798,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "all a (b: Int): a = b" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(all a (b: Int): a = b): Proposition"
@@ -758,7 +808,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(|>) \"A\" (+) \"a\"" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(|>) \"A\" (+) \"a\": String"
@@ -768,7 +818,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "1 |> (+) 2" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "1 |> (+) 2: Int"
@@ -778,7 +828,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "'a'= 'b'  " with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "'a' = 'b': Proposition"
     | _ ->
@@ -787,7 +837,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "1 + 2" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "1 + 2: Int"
     | _ ->
@@ -797,7 +847,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "all x: x + 2 = 3" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         = "(all x: x + 2 = 3): Proposition"
     | _ ->
@@ -807,7 +857,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(\\x := x + 2) 1" with
-    | Ok [term,typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(\\ x := x + 2) 1: Int"
@@ -817,7 +867,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(\\x f := f x) 1 ((+) 2)" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(\\ x f := f x) 1 ((+) 2): Int"
@@ -827,7 +877,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "(\\x y f := f x y) 1 2 (+)" with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(\\ x y f := f x y) 1 2 (+): Int"
@@ -859,7 +909,7 @@ let%test _ =
             \n a := 8\
             \n b := 10"
     with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(1 + a + b where a := 8; b := 10): Int"
@@ -875,12 +925,29 @@ let%test _ =
             \n f x := 20002000 + g x\
             \n g x := 1234567890 * x"
     with
-    | Ok [term, typ] ->
+    | Ok (term, typ) ->
         string_of_term_type term typ
         =
         "(1234567890 + f 12345677890 where\
         \n    f x := 20002000 + g x\
         \n    g x := 1234567890 * x):\
         \n    Int"
+    | _ ->
+        false
+
+
+
+let%test _ =
+    match build_expression "(+)" with
+    | Error (_, Ambiguous _ ) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "\\ x y := x + y" with
+    | Error (_, Ambiguous _ ) ->
+        true
     | _ ->
         false

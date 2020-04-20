@@ -2,6 +2,9 @@ open Fmlib
 open Common
 open Alba_core
 
+type pos = Character_parser.Position.t
+type range = pos * pos
+
 
 module Algo = Gamma_algo.Make (Gamma_holes)
 module Uni  = Unifier.Make (Gamma_holes)
@@ -38,7 +41,6 @@ end
 
 
 
-
 type entry = {
     cnt0: int;
 }
@@ -46,6 +48,7 @@ type entry = {
 
 type t = {
     gh: Gamma_holes.t;
+    base_candidates: (range * int * Term.t) list;
     sp: int;
     stack: int list;
     entry: entry;
@@ -219,6 +222,8 @@ let make (gamma: Gamma.t): t =
                 |> push_hole Term.(Variable 0)
             );
 
+        base_candidates = [];
+
         sp = cnt0 + 1;
 
         stack = [];
@@ -235,7 +240,7 @@ let make (gamma: Gamma.t): t =
 
 let final
     (bc: t)
-    : (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
+    : (t * Term.t * Term.typ, int list * Term.typ * Gamma.t) result
     =
     let cnt0 = count_base bc
     and nlocs = count_locals bc in
@@ -246,7 +251,7 @@ let final
     let typ  = type_of_term term bc in
     match Term.down nlocs term, Term.down nlocs typ with
     | Some term, Some typ ->
-        Ok (term, typ)
+        Ok (bc, term, typ)
     | _ ->
         let gamma = Gamma_holes.context bc.gh in
         Error(
@@ -285,17 +290,85 @@ let candidate
 
 
 let base_candidate
-    (term: Term.t)
+    (range: range)
+    (variant: int)
+    (term0: Term.t)
     (nargs: int)
     (bc: t)
     : t option
     =
-    let term = Term.up (count_locals bc) term in
+    let term = Term.up (count_locals bc) term0 in
     match candidate term nargs bc with
     | Ok bc ->
-        Some bc
+        Some
+            { bc with
+                base_candidates =
+                    (range, variant, term0) :: bc.base_candidates }
     | Error _ ->
         None
+
+
+
+
+let find_last_ambiguous (bcs: t list): range * (Term.t * Term.typ) list =
+    match bcs with
+    | [] ->
+        assert false (* Illegal call! *)
+    | bc :: _ ->
+        let _ = Gamma_holes.base_context bc.gh
+        in
+        let split candidates_list =
+            List.fold_right
+                (fun candidates (tops, chopped) ->
+                    match candidates with
+                    | [] ->
+                        assert false (* Illegal call, cannot be empty *)
+                    | top :: candidates ->
+                        top :: tops,
+                        candidates :: chopped
+                )
+                candidates_list
+                ([], [])
+        in
+        let ambiguous tops =
+            let map =
+                List.fold_left
+                    (fun map (range, variant, term) ->
+                        Int_map.add variant (range,term) map)
+                    Int_map.empty
+                    tops
+            in
+            assert (not (Int_map.is_empty map));
+            if Int_map.cardinal map = 1 then
+                None
+            else
+                let lst = Int_map.bindings map in
+                Some (
+                    ( match lst with
+                      | [] ->
+                        assert false (* cannot happen *)
+                      | (_, (range, _)) :: _ ->
+                        range
+                    ),
+                    List.map snd lst
+                )
+        in
+        let rec find candidates_list =
+            let tops, candidates_list = split candidates_list
+            in
+            match ambiguous tops with
+            | None ->
+                find candidates_list
+            | Some (range, terms) ->
+                let module Algo = Gamma_algo.Make (Gamma) in
+                let gamma = Gamma_holes.base_context bc.gh in
+                range,
+                List.map
+                    (fun (_, term) -> term, Algo.type_of_term term gamma)
+                    terms
+        in
+        find (List.map (fun bc -> bc.base_candidates) bcs)
+
 
 
 
@@ -334,7 +407,7 @@ struct
     let start (bc: t): t =
         let cnt0 = count bc
         in
-        {
+        { bc with
             gh = Gamma_holes.push_hole Term.(any_uni 1) bc.gh;
 
             stack = bc.sp :: bc.stack;
@@ -396,7 +469,7 @@ struct
         candidate
             tp
             nargs
-            {
+            { bc with
                 gh = Gamma_holes.remove_bounds nbounds bc.gh;
                 sp;
                 stack;

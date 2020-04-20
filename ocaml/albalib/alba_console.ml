@@ -33,8 +33,6 @@ module Pretty_make (Io:Io.SIG) =
       else
         string s
 
-    let paragraphs (lst:t list): t =
-      chain_separated lst cut
 
 
     let error_header
@@ -355,24 +353,21 @@ module Make (Io:Io.SIG) =
             <+> cut
             <+> Builder_print.description descr
             <+> cut
-        | Ok lst ->
-            Pretty.(
-                cut
-                <+> paragraphs
-                (List.map
-                    (fun (t,tp) ->
-                        let t =
-                            if compute then
-                                Context.compute t std_context
-                            else
-                            t
-                        in
-                        let module P = Context.Pretty (Pretty) in
-                        P.print (Term.Typed (t, tp)) std_context
-                        <+> cut)
-                    lst)
-                <+> cut
-         )
+        | Ok (term, typ) ->
+            let term =
+                if compute then
+                    Context.compute term std_context
+                else
+                    term
+            in
+            let open Pretty in
+            let module P = Context.Pretty (Pretty)
+            in
+            cut
+            <+>
+            P.print Term.(Typed (term, typ)) std_context
+            <+>
+            cut
 
 
 

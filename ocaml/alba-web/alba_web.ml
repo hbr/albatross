@@ -67,28 +67,22 @@ struct
         let open Result in
         parse input >>= fun exp ->
         match Builder.build exp standard_context with
-        | Ok lst ->
+        | Ok (term, typ) ->
             let module P = Context.Pretty (Pretty_printer) in
             Ok (
                 string_of_printer
-                    Pretty_printer.(
-                        list_separated
-                            cut
-                            (List.map
-                                (fun (term, typ) ->
-                                    let term =
-                                        if evaluate then
-                                            Context.compute
-                                                term
-                                                standard_context
-                                        else
-                                            term
-                                    in
-                                    P.print
-                                        Term.(Typed (term, typ))
-                                        standard_context
-                                )
-                                lst)
+                    (
+                        let term =
+                            if evaluate then
+                                Context.compute
+                                    term
+                                    standard_context
+                            else
+                                term
+                        in
+                        P.print
+                            Term.(Typed (term, typ))
+                            standard_context
                     )
             )
         | Error (range, description) ->

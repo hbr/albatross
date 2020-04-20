@@ -1,5 +1,8 @@
 open Alba_core
 
+type pos = Fmlib.Character_parser.Position.t
+type range = pos * pos
+
 type t
 
 type type_in_context = int list * Term.typ * Gamma.t
@@ -40,16 +43,16 @@ val make: Gamma.t -> t
 
 val final:
         t
-        -> (Term.t * Term.typ, int list * Term.typ * Gamma.t) result
+        -> (t * Term.t * Term.typ, int list * Term.typ * Gamma.t) result
 
 
 (** {1 Terminals } *)
 
 
 
-val base_candidate: Term.t -> int -> t -> t option
+val base_candidate: range -> int -> Term.t -> int -> t -> t option
 (**
-    [base_candidate term nargs bc]
+    [base_candidate range variant term nargs bc]
 
     Receive the term [term] as a candidate for the next to be constructed term.
     The candidate is from the base context and in applied to [nargs] arguments.
@@ -61,6 +64,8 @@ val base_candidate: Term.t -> int -> t -> t option
     - Variables from the base context
 *)
 
+
+val find_last_ambiguous: t list -> range * (Term.t * Term.typ) list
 
 val bound: int -> int -> t -> (t, type_in_context * type_in_context) result
 (**

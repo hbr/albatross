@@ -13,7 +13,7 @@ type problem = range * problem_description
 val build:
     Ast.Expression.t
     -> Context.t
-    -> ((Term.t * Term.typ) list, problem) result
+    -> (Term.t * Term.typ, problem) result
 
 
 module Print (P: Pretty_printer.SIG):
