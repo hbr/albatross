@@ -25,6 +25,7 @@ end
 
 
 module Int_set: Set.S with type elt = Int.t
+module Int_map: Finite_map.S with type key = Int.t
 
 
 

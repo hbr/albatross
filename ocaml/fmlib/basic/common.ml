@@ -34,7 +34,7 @@ module Int =
   end
 
 module Int_set = Set.Make (Int)
-
+module Int_map = Finite_map.Make (Int)
 
 
 
