@@ -311,63 +311,56 @@ let base_candidate
 
 
 let find_last_ambiguous (bcs: t list): range * (Term.t * Term.typ) list =
-    match bcs with
-    | [] ->
-        assert false (* Illegal call! *)
-    | bc :: _ ->
-        let _ = Gamma_holes.base_context bc.gh
+    let split lst =
+        match lst with
+        | [] ->
+            assert false
+        | hd :: tl ->
+            hd, tl
+    in
+    let bc, _ = split bcs
+    in
+    let ambiguous tops =
+        let map =
+            List.fold_left
+                (fun map (range, variant, term) ->
+                    Int_map.add variant (range,term) map)
+                Int_map.empty
+                tops
         in
-        let split candidates_list =
-            List.fold_right
-                (fun candidates (tops, chopped) ->
-                    match candidates with
-                    | [] ->
-                        assert false (* Illegal call, cannot be empty *)
-                    | top :: candidates ->
-                        top :: tops,
-                        candidates :: chopped
-                )
-                candidates_list
-                ([], [])
-        in
-        let ambiguous tops =
-            let map =
-                List.fold_left
-                    (fun map (range, variant, term) ->
-                        Int_map.add variant (range,term) map)
-                    Int_map.empty
-                    tops
-            in
-            assert (not (Int_map.is_empty map));
-            if Int_map.cardinal map = 1 then
-                None
-            else
-                let lst = Int_map.bindings map in
-                Some (
-                    ( match lst with
-                      | [] ->
-                        assert false (* cannot happen *)
-                      | (_, (range, _)) :: _ ->
-                        range
-                    ),
-                    List.map snd lst
-                )
-        in
-        let rec find candidates_list =
-            let tops, candidates_list = split candidates_list
-            in
-            match ambiguous tops with
-            | None ->
-                find candidates_list
-            | Some (range, terms) ->
-                let module Algo = Gamma_algo.Make (Gamma) in
-                let gamma = Gamma_holes.base_context bc.gh in
-                range,
-                List.map
-                    (fun (_, term) -> term, Algo.type_of_term term gamma)
-                    terms
-        in
-        find (List.map (fun bc -> bc.base_candidates) bcs)
+        assert (not (Int_map.is_empty map));
+        if Int_map.cardinal map = 1 then
+            None
+        else
+            let lst = Int_map.bindings map in
+            Some (
+                ( match lst with
+                  | [] ->
+                    assert false (* cannot happen *)
+                  | (_, (range, _)) :: _ ->
+                    range
+                ),
+                List.map snd lst
+            )
+    in
+    let rec find cands_list =
+        let tops, cands_list = split cands_list in
+        match ambiguous tops with
+        | None ->
+            find cands_list
+        | Some (range, terms) ->
+            let module Algo = Gamma_algo.Make (Gamma) in
+            let gamma = Gamma_holes.base_context bc.gh in
+            range,
+            List.map
+                (fun (_, term) -> term, Algo.type_of_term term gamma)
+                terms
+    in
+    find (
+        List.(
+            transpose
+                (map (fun bc -> bc.base_candidates) bcs))
+    )
 
 
 
