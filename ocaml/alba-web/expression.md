@@ -96,11 +96,32 @@ The term
 represents a function with 2 arguments `x` and `y`. The arguments usually occur
 in the defining expression `exp`. Example
 
-    \ x y := "Hello "  + x + "and " + y
+    \ x y := "Hello "  + x + " and " + y
 
 This expression has type
 
     String -> String -> String
+
+Note that the arrow operator `->` is right associative. I.e. the type expression
+is parsed as
+
+    String -> (String -> String)
+
+An expression of this type expects an argument of type `String` and returns a
+function which maps a `String` to a `String`. I.e. basically all functions are
+one argument functions and can return functions which accept the remaining
+arguments step by step.
+
+In many cases the compiler can infer the argument and result types of a function
+expression. However you can add explicit type annotations. The above function
+expression annotated with argument and result types reads
+
+    \ (x: String) (y: String): String :=
+        "Hello " + x + " and " + y
+
+Note that the defining expression occurring on a separate line must be indented.
+
+
 
 A function expression can be applied to actual arguments
 
@@ -149,6 +170,9 @@ Local definitions can be annotated with types
         f (x: Int): Int := 2 * x
 
 
+A local definition has to be indented relative to the main expression. If there
+is more than one local definition, all definitions have to be aligned.
+
 
 
 
@@ -166,7 +190,7 @@ I.e. `List` is a function which can be applied.
 
     List String: Any
 
-Since types have a type, it is possible to construct type value functions.
+Since types have a type, it is possible to construct type valued functions.
 
     \ A := List (List A)
 
@@ -256,20 +280,32 @@ the proposition).
 
     (=>): Proposition -> Proposition -> Proposition
 
-The expression `a => b` states that the proposition `b` follows from the
+The expression `a => b` states that the proposition `b` is a consequence of the
 proposition `a`.
 
-`a => b` is a type and an object of this type is evidence for the fact that `a`
+`a => b` is a type and an object of this type is evidence of the fact that `a`
 implies `b`.
 
+Note that the implication operator `=>` is right associative.
+
+    a => b => c
+
+is parsed as
+
+    a => (b => c)
+
+Therefore you can read `a => b => c` as `a` and `b` imply `c`.
+
+
+
 An evidence of the proposition `a => b` is a function mapping an evidence of `a`
-into an evidence of `b`. We can construct `e: 2 = 3 => 2 = 3` by the following
+into an evidence of `b`. We can construct `ev: 2 = 3 => 2 = 3` by the following
 expression:
 
-    e: 2 = 3 => 2 = 3 where
-        e x := x
+    ev: 2 = 3 => 2 = 3 where
+        ev x := x
 
-Note that `e` is the identity function. Therefore we can write as well
+Note that `ev` is the identity function. Therefore we can write as well
 
     identity: 2 = 3 => 2 = 3
 
@@ -296,10 +332,12 @@ evidence of `a`, i.e. again the identity function.
 
 or
 
-    \ a: a => a := e where e x := x
+    \ a: a => a :=
+        ev where
+            ev x := x
 
 
->   Exercise: Complete the following expressions
+### Exercise: Complete the following expressions
 
     \ a b : a => b => a
     := ev where
