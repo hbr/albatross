@@ -218,9 +218,9 @@ I.e. under the hood `|>` is a function with 4 arguments. But how can a binary
 operator have 4 arguments?
 
 The solution is quite simple. The arguments `A` and `B` are type arguments which
-occur in the subsequent argument argument or result types. Therefore the
-compiler treats them as *implicit* arguments and infers them from the actual
-arguments or the required result type.
+occur in the subsequent argument or result types. Therefore the compiler treats
+them as *implicit* arguments and infers them from the actual arguments or the
+required result type.
 
 E.g. the expression `(|>) "Hello"` has type
 
@@ -245,9 +245,92 @@ Can you imagine what the type of `(<|)` is?
 
 Propositions are assertions which exist only in the source code. E.g.
 
-    "Hello" = "world"
+    2 = 3
 
-is the proposition stating that the two strings are equal. Evidently this
+is the proposition stating that the two numbers are equal. Evidently this
 assertion is false. Propositions are types. An expression of type `"Hello" =
 "world"` is an evidence that the proposition is valid (i.e. it is a *proof* of
 the proposition).
+
+`=>` is the implication operator. It has the type
+
+    (=>): Proposition -> Proposition -> Proposition
+
+The expression `a => b` states that the proposition `b` follows from the
+proposition `a`.
+
+`a => b` is a type and an object of this type is evidence for the fact that `a`
+implies `b`.
+
+An evidence of the proposition `a => b` is a function mapping an evidence of `a`
+into an evidence of `b`. We can construct `e: 2 = 3 => 2 = 3` by the following
+expression:
+
+    e: 2 = 3 => 2 = 3 where
+        e x := x
+
+Note that `e` is the identity function. Therefore we can write as well
+
+    identity: 2 = 3 => 2 = 3
+
+Every proposition implies itself i.e. there should be evidence for `all a: a =>
+a`. The long form of this proposition is
+
+    all (a: Proposition): a => a
+
+An evidence of a universal quantification of the form `all (a: T): U` is a
+function mapping each `a` of type `T` into an object of type `U`. I.e. we need a
+function of the form
+
+    \ a: a => a := ...
+
+or in long form
+
+    \ (a: Proposition): a => a := ...
+
+This function takes one argument, the proposition `a` and has to return evidence
+for `a => a`. The return value is a function mapping an evidence of `a` into an
+evidence of `a`, i.e. again the identity function.
+
+    \ a: a => a := identity
+
+or
+
+    \ a: a => a := e where e x := x
+
+
+>   Exercise: Complete the following expressions
+
+    \ a b : a => b => a
+    := ev where
+         ev ... := ...
+
+
+    \ a b : a => (a => b) => b
+    := ev where
+         ev ... := ...
+
+
+    \ a b c: (a => b) => (b => c) => (a => c)
+    := ev where
+         ev ... := ...
+
+
+    \ a b c: (a => b => c) => (b => a => c)
+    := ev where
+         ev ... := ...
+
+
+    \ a b : (a => b) => (a => a => b)
+    := ev where
+         ev ... := ...
+
+
+    \ a b c d: (a => b) => (a => c) => (b => c => d) => (a => d)
+    := ev where
+         ev ... := ...
+
+
+    \a b c : (a => b => c) => (a => b) => (a => c)
+    := ev where
+         ev ... := ...
