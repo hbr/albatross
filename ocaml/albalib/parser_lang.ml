@@ -346,7 +346,7 @@ struct
         name |. whitespace
 
 
-    let identifier: string located t =
+    let identifier (with_any_prop: bool): string located t =
         backtrackable
             (
                 located
@@ -354,27 +354,21 @@ struct
                         Char.is_letter
                         (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
                         "identifier")
-                 >>= fun s ->
-                 if String_set.mem (Located.value s) keywords then
-                   fail (Located.range s, Problem.Illegal_name "<identifier>")
-                 else
+                >>= fun s ->
+                let str = Located.value s
+                in
+                if String_set.mem str keywords then
+                    fail (Located.range s, Problem.Illegal_name "<identifier>")
+                else if
+                    not with_any_prop
+                    && ( str = "Proposition" || str = "Any" )
+                then
+                    fail (Located.range s, Problem.Illegal_name "<identifier>")
+                else
                     return s
             )
             "identifier"
-
-
-    let formal_argument_name: string located t =
-        identifier |. whitespace >>= fun name_located ->
-        let name = Located.value name_located in
-        if String_set.mem name keywords
-           || name = "Proposition"
-           || name = "Any"
-        then
-            fail
-                (Located.range name_located,
-                 Problem.Illegal_name "<argument name>")
-        else
-            return name_located
+        |. whitespace
 
 
     let number: string located t =
@@ -395,7 +389,7 @@ struct
              else
                Expression.Identifier s
         ))
-        (identifier |. whitespace)
+        (identifier true)
 
 
     let number_expression: Expression.t t =
@@ -526,7 +520,7 @@ struct
         let formal_argument: (string located * Expression.t option) t =
             (
                 char_ws '(' >>= fun _ ->
-                formal_argument_name
+                identifier false
                 >>= fun name ->
                 colon |. whitespace
                 >>= subexpression "type"
@@ -536,7 +530,7 @@ struct
                 return (name, Some typ)
             )
             <|>
-            map (fun name -> name, None) formal_argument_name
+            map (fun name -> name, None) (identifier false)
             <?>
             "formal argument"
         in
@@ -645,7 +639,7 @@ struct
         let definition: Expression.definition t =
             return
                 (fun name args res_tp e -> name, args, res_tp, e)
-            |= formal_argument_name
+            |= identifier false
             |= formal_arguments true
             |= optional_result_type
             |= assign_defining_expression
