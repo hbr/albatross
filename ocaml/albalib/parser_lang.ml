@@ -173,7 +173,7 @@ struct
             assert false (* Cannot happen, at least one expectation *)
 
         | [e, ind] ->
-            string "I was expecting a"
+            string "I was expecting the following"
             <+> cut <+> cut
             <+> nest 4 (expectation e ind)
             <+> cut <+> cut
@@ -348,21 +348,23 @@ struct
 
     let identifier: string located t =
         backtrackable
-            (located
-                (word
-                    Char.is_letter
-                    (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
-                    "identifier")
-             >>= fun s ->
-             if String_set.mem (Located.value s) keywords then
-               fail (Located.range s, Problem.Illegal_name "<identifier>")
-             else
-                return s)
+            (
+                located
+                    (word
+                        Char.is_letter
+                        (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
+                        "identifier")
+                 >>= fun s ->
+                 if String_set.mem (Located.value s) keywords then
+                   fail (Located.range s, Problem.Illegal_name "<identifier>")
+                 else
+                    return s
+            )
             "identifier"
 
 
     let formal_argument_name: string located t =
-        identifier |. whitespace>>= fun name_located ->
+        identifier |. whitespace >>= fun name_located ->
         let name = Located.value name_located in
         if String_set.mem name keywords
            || name = "Proposition"
@@ -504,8 +506,8 @@ struct
 
     let rec expression (): Expression.t t =
 
-        let indented_expression () =
-            indented (expression ())
+        let indented_expression (kind: string) () =
+            indented (expression () <?> kind)
         in
 
         let subexpression (kind: string) () =
@@ -513,7 +515,8 @@ struct
         in
 
         let result_type: Expression.t t =
-          colon |. whitespace >>= subexpression "type"
+          (colon |. whitespace >>= subexpression "type")
+          <?> ": <result type>"
         in
 
         let optional_result_type: Expression.t option t =
@@ -521,18 +524,21 @@ struct
         in
 
         let formal_argument: (string located * Expression.t option) t =
-          (
-            char_ws '(' >>= fun _ ->
-            formal_argument_name
-            >>= fun name ->
-            colon |. whitespace
-            >>= subexpression "type"
-            >>= fun typ ->
-            char_ws ')'
-            >>= fun _ ->
-            return (name, Some typ)
-         )
-          <|> map (fun name -> name, None) formal_argument_name
+            (
+                char_ws '(' >>= fun _ ->
+                formal_argument_name
+                >>= fun name ->
+                colon |. whitespace
+                >>= subexpression "type"
+                >>= fun typ ->
+                char_ws ')'
+                >>= fun _ ->
+                return (name, Some typ)
+            )
+            <|>
+            map (fun name -> name, None) formal_argument_name
+            <?>
+            "formal argument"
         in
 
         let formal_arguments zero =
@@ -546,6 +552,14 @@ struct
                 return lst
             | Some name ->
                 fail (Located.range name, Problem.Duplicate_argument)
+        in
+
+        let assign_defining_expression =
+            assign
+            |. whitespace
+            >>= indented_expression "defining expression"
+            <?>
+            ":= <defining expression>"
         in
 
 
@@ -563,7 +577,7 @@ struct
                 >>= fun _ ->
                 (* op_expression has to be encapsulated in a function,
                    otherwise infinite recursion!! *)
-                indented_expression ()
+                indented_expression "expression" ()
                 <|>
                 indented lonely_operator)
               |. char_ws ')'
@@ -575,7 +589,8 @@ struct
                  |. char_ws '\\'
                  |= formal_arguments false
                  |= optional_result_type
-                 |= (assign |. whitespace >>= indented_expression))
+                 |= assign_defining_expression
+                )
             <|>
             (* all (a: A) (b: B) ... : RT *)
             located
@@ -633,12 +648,19 @@ struct
             |= formal_argument_name
             |= formal_arguments true
             |= optional_result_type
-            |= (assign |. whitespace >>= indented_expression)
+            |= assign_defining_expression
+            <?>
+            "local definition"
         in
 
 
         let where_block: Expression.definition list t =
-            (backtrackable (string "where") "where" |. whitespace)
+            (
+                backtrackable
+                    (string "where")
+                    "where <local definitions>"
+                |. whitespace
+            )
             >>= fun _ ->
             indented (one_or_more_aligned definition)
         in
