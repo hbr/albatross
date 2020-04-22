@@ -129,6 +129,12 @@ let context (gh: t): Gamma.t =
 let base_context (gh: t): Gamma.t =
     gh.base0
 
+let is_valid_index (idx: int) (gh: t): bool =
+    Gamma.is_valid_index idx gh.base
+
+let name_of_index (idx: int) (gh: t): string =
+    Gamma.name_of_index idx gh.base
+
 
 let index_of_level (level: int) (gh: t): int =
     Gamma.index_of_level level gh.base
@@ -255,6 +261,10 @@ let term_of_term_n ((term,n): Term.t_n) (gh: t): Term.t =
 
 
 
+let name_at_level (level: int) (gh: t): string =
+    Gamma.name_at_level level gh.base
+
+
 let type_at_level (level: int) (gh: t): Term.typ =
     let typ = Gamma.type_at_level level gh.base in
     if count_base gh <= level then
@@ -266,10 +276,6 @@ let type_at_level (level: int) (gh: t): Term.typ =
 let type_of_variable (idx: int) (gh: t): Term.typ =
     type_at_level (Gamma.level_of_index idx gh.base) gh
 
-
-
-let name_at_level (level: int) (gh: t): string =
-    Gamma.name_at_level level gh.base
 
 
 

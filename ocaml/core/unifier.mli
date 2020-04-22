@@ -18,16 +18,6 @@ end
 
 module Make (H: HOLES):
 sig
-    type t
-
-    val make: H.t -> t
-
-    val context: t -> H.t
-
-    val push: string -> Term.typ -> t -> t
-
-    val unify0: Term.typ -> Term.typ -> bool -> t -> t option
-
     val unify: Term.typ -> Term.typ -> bool -> H.t -> H.t option
     (**
          [unify act req is_super gh]

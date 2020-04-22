@@ -937,6 +937,8 @@ let%test _ =
 
 
 
+(* Ambiguous Expressions *)
+
 let%test _ =
     match build_expression "(+)" with
     | Error (_, Ambiguous _ ) ->
@@ -948,6 +950,35 @@ let%test _ =
 let%test _ =
     match build_expression "\\ x y := x + y" with
     | Error (_, Ambiguous _ ) ->
+        true
+    | _ ->
+        false
+
+
+
+
+
+(* Propositions *)
+
+let%test _ =
+    match build_expression "\\a := p: a => a where p x := x" with
+    | Ok _ ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "\\a: a => a := identity" with
+    | Ok _ ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match build_expression "\\a b: a => b => a := \\ x y := x" with
+    | Ok _ ->
         true
     | _ ->
         false

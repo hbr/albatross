@@ -5,6 +5,8 @@ sig
     type t
 
     val count: t -> int
+    val is_valid_index: int -> t -> bool
+    val name_of_index: int -> t -> string
     val push_local: string -> Term.typ -> t -> t
     val type_of_literal:    Term.Value.t -> t -> Term.typ
     val type_of_variable: int -> t -> Term.typ
@@ -16,6 +18,12 @@ end
 module Make (Gamma: GAMMA) =
 struct
     include Gamma
+
+    module String_print = Term_printer.String_print (Gamma)
+    let string_of_term (t: Term.t) (c: t): string =
+        String_print.string_of_term t c
+    let _ = string_of_term
+
 
     let key_split
           (t: Term.t)
@@ -64,7 +72,7 @@ struct
 
 
 
-    let type_of_term (t:Term.t) (c:t): Term.typ =
+    let type_of_term (t: Term.t) (c: t): Term.typ =
         let rec typ t c =
             let open Term in
             match t with

@@ -17,126 +17,297 @@ sig
 end
 
 
-module Make (GH: HOLES) =
+module Make (Gh: HOLES) =
 struct
-    module Algo = Gamma_algo.Make (Gamma)
 
-    type t = {
-        gh: GH.t;
-        gamma: Gamma.t
-    }
+    module Uc =
+    struct
+        type locals = (string * Term.typ) array
 
-
-    let make (gh: GH.t): t =
-        {gh; gamma = GH.context gh}
-
-
-    let context (uc: t): GH.t =
-        uc.gh
+        type t = {
+            gh: Gh.t;
+            locals: locals;
+            stack: locals list;
+        }
 
 
-    let push (name: string) (tp: Term.typ) (uc: t): t =
-        {uc with gamma = Gamma.push_local name tp uc.gamma}
+        let base (uc: t): Gh.t =
+            uc.gh
 
 
-    let string_of_term (term: Term.t) (uc: t): string =
-        Term_printer.string_of_term term uc.gamma
+        let nlocals (uc: t): int =
+            Array.length uc.locals
+
+
+        let count (uc: t): int =
+            Gh.count uc.gh + nlocals uc
+
+
+        let is_valid_index (idx: int) (uc: t): bool =
+            idx < count uc
+
+
+        let name_of_index (idx: int) (uc: t): string =
+            assert (is_valid_index idx uc);
+            if idx < nlocals uc then
+                fst uc.locals.(Term.bruijn_convert idx (nlocals uc))
+            else
+                Gh.name_of_index (idx - nlocals uc) uc.gh
+
+
+        let definition_term (idx: int) (uc: t): Term.t option =
+            assert (is_valid_index idx uc);
+            let nlocs = nlocals uc
+            in
+            if idx < nlocs then
+                None
+            else
+                Option.map
+                    (Term.up nlocs)
+                    (Gh.definition_term (idx - nlocs) uc.gh)
+
+
+        let type_of_variable (idx: int) (uc: t): Term.typ =
+            assert (is_valid_index idx uc);
+            let nlocs = nlocals uc
+            in
+            if idx < nlocs then
+                Term.up
+                    (idx + 1)
+                    (snd uc.locals.(
+                        Term.bruijn_convert idx (nlocals uc)))
+            else
+                Term.up
+                    nlocs
+                    (Gh.type_of_variable (idx - nlocs) uc.gh)
+
+
+        let type_of_literal (lit: Term.Value.t) (uc: t): Term.typ =
+            Term.up (nlocals uc) (Gh.type_of_literal lit uc.gh)
+
+
+        let is_hole (idx: int) (uc: t): bool =
+            let nlocs = nlocals uc in
+            if idx < nlocs then
+                false
+            else
+                Gh.is_hole (idx - nlocs) uc.gh
+
+        let fill_hole
+            (idx: int)
+            (typ: Term.typ)
+            (beta_reduce: bool)
+            (uc: t)
+            : t option
+            =
+            assert (is_hole idx uc);
+            let nlocs = nlocals uc
+            in
+            Option.map
+                (fun typ0 ->
+                    {uc with
+                        gh =
+                            Gh.fill_hole0
+                                (idx - nlocs)
+                                typ0
+                                beta_reduce
+                                uc.gh})
+                (Term.down nlocs typ)
+
+
+        let expand (term: Term.t) (uc: t): Term.t =
+            let nlocs = nlocals uc in
+            Term.substitute
+                (fun i ->
+                    if i < nlocs then
+                        Variable i
+                    else
+                        match Gh.value (i - nlocs) uc.gh with
+                        | None ->
+                            Variable i
+                        | Some term ->
+                            Term.up nlocs term)
+                term
+
+
+        let make (gh: Gh.t): t =
+            { gh; locals = [||]; stack = [] }
+
+
+        let push (name: string) (typ: Term.typ) (uc: t): t =
+            { uc with
+                locals = Array.push (name,typ) uc.locals;
+                stack  = uc.locals :: uc.stack;
+            }
+
+
+        let push_local = push
+
+
+        let pop (uc: t): t =
+            match uc.stack with
+            | [] ->
+                assert false (* Illegal call! *)
+            | locals :: stack ->
+                {uc with locals; stack}
+    end (* Uc *)
+
+
+
+
+
+
+
+    module Algo = Gamma_algo.Make (Uc)
+
+    let string_of_term (t: Term.t) (uc: Uc.t): string =
+        let module PP = Pretty_printer.Pretty (String_printer) in
+        let module P = Term_printer.Pretty (Uc) (PP) in
+        String_printer.run
+            (PP.run 0 70 70 (P.print t uc))
     let _ = string_of_term
 
 
-    let delta (uc: t): int =
-        Gamma.count uc.gamma - GH.count uc.gh
 
 
-    let is_hole (idx: int) (uc: t): bool =
-        let nb = delta uc in
-        if idx < nb then
-            false
+
+
+
+    type 'a t = Uc.t -> (Uc.t * 'a) option
+
+
+    let succeed (a: 'a) : 'a t =
+        fun uc -> Some (uc, a)
+
+
+    let fail: 'a t =
+        fun _ -> None
+
+
+    let (>>=) (m: 'a t) (f: 'a -> 'b t): 'b t =
+        fun uc ->
+        match m uc with
+        | None ->
+            fail uc
+        | Some (uc, a) ->
+            f a uc
+
+    let catch (m: 'a t) (f: unit -> 'a t): 'a t =
+        fun uc ->
+        match m uc with
+        | None ->
+            f () uc
+        | _ as res ->
+            res
+
+
+    let push (name: string) (typ: Term.typ): unit t =
+        fun uc -> Some (Uc.push name typ uc, ())
+
+
+    let pop (): unit t =
+        fun uc -> Some (Uc.pop uc, ())
+
+
+    let nlocals: int t =
+        fun uc -> Some (uc, Uc.nlocals uc)
+
+
+    let is_hole (idx: int): bool t =
+        fun uc ->
+        Some (uc, Uc.is_hole idx uc)
+
+
+    let is_hole_or_fail (idx: int): unit t =
+        is_hole idx >>= fun flag ->
+        if flag then
+            succeed ()
         else
-            GH.is_hole (idx - delta uc) uc.gh
+            fail
 
 
-    let expand (term: Term.t) (uc: t): Term.t =
-        let del = delta uc
+    let type_of_term (term: Term.t): Term.typ t =
+        fun uc ->
+        Some (uc, Algo.type_of_term term uc)
+
+
+    let type_of_variable (idx: int): Term.typ t =
+        fun uc ->
+        Some (uc, Uc.type_of_variable idx uc)
+
+
+    let key_normal (typ: Term.typ): Term.typ t =
+        fun uc ->
+        Some (
+            uc,
+            Algo.key_normal
+                (Uc.expand typ uc)
+                uc
+        )
+
+
+    let fill_hole (idx: int) (value: Term.typ) (beta_reduce: bool) (): unit t =
+        fun uc ->
+        Option.map
+            (fun uc -> uc, ())
+            (Uc.fill_hole idx value beta_reduce uc)
+
+
+    let get_fterm (arg: Term.t) (typ: Term.typ) (): Term.t t =
+        fun uc ->
+        let arg_tp = Algo.type_of_term arg uc
+        and exp =
+            match arg with
+            | Variable i ->
+                Term.map
+                    (fun j ->
+                        if i = j then
+                            0
+                        else
+                            j + 1)
+                    typ
+            | _ ->
+                Term.up1 typ
         in
-        Term.substitute
-            (fun i ->
-                if i < del then
-                    Variable i
-                else
-                    match GH.value (i - del) uc.gh with
-                    | None ->
-                        Variable i
-                    | Some term ->
-                        Term.up del term)
-            term
+        Some (uc, Term.lambda "_" arg_tp exp)
 
 
-
-    type unifier = Term.typ -> Term.typ -> bool -> t -> t option
-
-
-    let set
-        (i: int) (typ: Term.typ) (beta_reduce: bool) (uni: unifier) (uc: t)
-        : t option
+    let in_pushed
+        (name: string)
+        (typ: Term.typ)
+        (m: unit -> unit t)
+        ()
+        : unit t
         =
-    (* Fill the hole [i] with [typ] if their types can be unified. *)
-        let open Option in
-        let nb = delta uc in
-        Term.down nb typ
-        >>= fun typ0 ->
-            (* typ does not contain any new bound variables!!i
-               typ0 is valid in gh,
-               (i - nb) is the hole in gh *)
-        map
-            (fun uc ->
-                {uc with gh = GH.fill_hole0 (i - nb) typ0 beta_reduce uc.gh})
-            (uni
-                (Algo.type_of_term typ uc.gamma)
-                (Gamma.type_of_variable i uc.gamma)
-                true
-                uc)
-
-
-    let setf
-        (f: int) (arg: Term.t) (typ: Term.typ) (uni: unifier) (uc: t)
-        : t option
-        =
-        (* Unify [f arg] with [typ] where [f] is a hole, i.e. assign [\lam x :=
-        typ] to [f]. *)
-        let fterm =
-            let arg_tp = Algo.type_of_term arg uc.gamma
-            and exp =
-                match arg with
-                | Variable i ->
-                    Term.map
-                        (fun j ->
-                            if i = j then
-                                0
-                            else
-                                j + 1)
-                        typ
-                | _ ->
-                    Term.up1 typ
-            in
-            Term.lambda "_" arg_tp exp
-        in
-        set f fterm true uni uc
-
+        push name typ
+        >>= m
+        >>= pop
 
 
     let rec unify0
         (act: Term.typ)
         (req: Term.typ)
         (is_super: bool)
-        (uc: t)
-        : t option
+        ()
+        : unit t
         =
-        let req = Algo.key_normal (expand req uc) uc.gamma
-        and act = Algo.key_normal (expand act uc) uc.gamma
-        and nb = delta uc
-        and set i typ = set i typ false unify0 uc
+        let set i typ beta_reduce (): unit t =
+            type_of_term typ   >>= fun act ->
+            type_of_variable i >>= fun req ->
+            unify0 act req true ()
+            >>= fill_hole i typ beta_reduce
         in
+        let set_if_hole i typ (): unit t =
+            is_hole_or_fail i >>= set i typ false
+        in
+        let setF f arg typ: unit t =
+            is_hole_or_fail f
+            >>=
+            get_fterm arg typ >>= fun fterm ->
+            set f fterm true ()
+        in
+        key_normal act >>= fun act ->
+        key_normal req >>= fun req ->
         let open Term
         in
         match act, req with
@@ -144,72 +315,64 @@ struct
             when (is_super && Sort.is_super req act)
                  || (not is_super && req = act)
             ->
-                Some uc
+                succeed ()
 
         | Value act, Value req ->
             if Value.is_equal act req then
-                Some uc
+                succeed ()
             else
-                None
+                fail
 
         | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
-            let open Option in
-            unify0 f_act f_req false uc
+            unify0 f_act f_req false ()
             >>=
             unify0 arg_act arg_req false
 
         | Pi (act_arg, act_rt, info), Pi (req_arg, req_rt, _) ->
-            Option.(
-                unify0 act_arg req_arg false uc
-                >>= fun uc ->
-                let gamma = uc.gamma in
-                map
-                    (fun uc -> {uc with gamma})
-                    (unify0
-                        act_rt
-                        req_rt
-                        is_super
-                        (push (Pi_info.name info) act_arg uc))
-            )
+            unify0 act_arg req_arg false ()
+            >>= in_pushed
+                    (Pi_info.name info)
+                    act_arg
+                    (unify0 act_rt req_rt is_super)
 
         | Variable i, Variable j ->
             if i = j then
-                Some uc
-            else if i < nb || j < nb then
-                None
+                succeed ()
             else
-                let i_hole = is_hole i uc
-                and j_hole = is_hole j uc
-                in
-                if not (i_hole || j_hole) then
-                    None
-                else if i_hole && j_hole then
-                    match set j act with
-                    | None ->
-                        set i req
-                    | res ->
-                        res
-                else if i_hole then
-                    set i req
-                else if j_hole then
-                    set j act
+                nlocals >>= fun nb ->
+                if i < nb || j < nb then
+                    fail
                 else
-                    assert false (* cannot happen, illegal path *)
+                    is_hole i >>= fun i_hole ->
+                    is_hole j >>= fun j_hole ->
+                    if not (i_hole || j_hole) then
+                        fail
+                    else if i_hole && j_hole then
+                        catch
+                            (set j act false ())
+                            (set i req false)
+                    else if i_hole then
+                        set i req false ()
+                    else if j_hole then
+                        set j act false ()
+                    else
+                        assert false (* cannot happen, illegal path *)
 
-        | Appl (Variable f, arg, _), _  when is_hole f uc ->
-            setf f arg req unify0 uc
+        | Appl (Variable f, arg, _), _  ->
+            setF f arg req
 
-        | _, Appl (Variable f, arg, _ ) when is_hole f uc ->
-            setf f arg act unify0 uc
+        | _, Appl (Variable f, arg, _ ) ->
+            setF f arg act
 
-        | Variable i, _ when is_hole i uc ->
-            set i req
+        | Variable i, _ ->
+            set_if_hole i req ()
 
-        | _, Variable j when is_hole j uc ->
-            set j act
+        | _, Variable j ->
+            set_if_hole j act ()
 
         | _, _ ->
-            None
+            fail
+
 
 
 
@@ -218,11 +381,16 @@ struct
         (act: Term.typ)
         (req: Term.typ)
         (is_super: bool)
-        (gh: GH.t)
-        : GH.t option
+        (gh: Gh.t)
+        : Gh.t option
         =
         Option.map
-            (fun uc -> uc.gh)
-            (unify0 act req is_super (make gh))
-
-end
+            (fun (uc,()) ->
+                Uc.base uc)
+            (unify0
+                act
+                req
+                is_super
+                ()
+                (Uc.make gh))
+end (* Make *)

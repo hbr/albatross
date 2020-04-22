@@ -38,6 +38,11 @@ val count_locals: t -> int
 (** The number of holes and bound variable which have been entered. *)
 
 
+val is_valid_index: int -> t -> bool
+
+val name_of_index: int -> t -> string
+
+
 val index_of_level: int -> t -> int
 
 
@@ -130,9 +135,11 @@ val term_of_term_n: Term.t_n -> t -> Term.t
 
 
 val fill_hole0: int -> Term.t -> bool -> t -> t
-(** [fill_hole idx value gh] Fill the hole at [idx] with [value]. In case that
-[value] is a function abstraction appearing in a function position and the flag
-[beta_reduce] is set, do a beta reduction.
+(** [fill_hole idx value beta_reduce gh]
+
+Fill the hole at [idx] with [value]. In case that [value] is a function
+abstraction appearing in a function position and the flag [beta_reduce] is set,
+do a beta reduction.
 
     Preconditions:
     {[is_unfilled idx gh]}

@@ -6,6 +6,9 @@ sig
     (** Number of variables in the context. *)
 
 
+    val is_valid_index: int -> t -> bool
+    val name_of_index: int -> t -> string
+
     val push_local: string -> Term.typ -> t -> t
     (**
         [push_local name typ gamma]
