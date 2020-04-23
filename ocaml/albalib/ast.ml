@@ -94,38 +94,54 @@ module Expression = struct
 
     | (op1,e1) :: (op2,e2) :: rest ->
        (* e0 op1 e1 op2 e2 rest *)
-       let op1_string, op1_data = Located.value op1
-       and op2_string, op2_data = Located.value op2
-       in
-       let cmp = Operator.compare op1_data op2_data in
-       if cmp = 0 then
-         match Operator.associativity op1_data with
-         | Operator.No ->
-            (* Error case: I cannot decide on how to parenthesize *)
-            Error ((Located.start e0, Located.end_ e2), op1_string, op2_string)
-         | Operator.Left ->
-            (* (e1 op1 e2) op2 e2 rest *)
-            binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
-         | Operator.Right ->
-            (* e1 op1 (e2 op2 e2 rest) *)
-            Res.map (make_binary e0 op1) (binary e1 ((op2,e2) :: rest))
 
-       else if cmp = +1 then
-         (* (e1 op1 e2) op2 e2 rest *)
-         binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
+        let op1_string, op1_data = Located.value op1
+        and op2_string, op2_data = Located.value op2
+        in
+        let cmp =
+            Operator.compare op1_data op2_data
+        in
+        if cmp = 0 then
+            match Operator.associativity op1_data with
+            | Operator.No ->
+               (* Error case: I cannot decide on how to parenthesize *)
+                Error (
+                    (Located.start e0, Located.end_ e2),
+                    op1_string,
+                    op2_string
+                )
+            | Operator.Left ->
+               (* (e1 op1 e2) op2 e2 rest *)
+               binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
 
-       else
-         (* e0 op1 (e1 op2 e2 rest1) rest2 *)
-         let rest2, rest3 =
-           List.split_at
-             (fun (op,_) ->
-               Operator.precedence (snd (Located.value op))
-               <= Operator.precedence op1_data)
-             rest
-         in
-         Res.(binary e1 ((op2,e2) :: rest2)
-              >>= fun e ->
-              binary (make_binary e0 op1 e) rest3)
+            | Operator.Right ->
+               (* e1 op1 (e2 op2 e2 rest) *)
+               Res.map (make_binary e0 op1) (binary e1 ((op2,e2) :: rest))
+
+        else if cmp = +1 then
+            (* [op1] has higher precedence than [op2]
+
+                 (e1 op1 e2) op2 e2 rest
+             *)
+             binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
+
+        else
+            (* [op1] has lower precedence than [op2]
+
+                e0 op1 (e1 op2 e2 rest1) rest2
+            *)
+            let rest2, rest3 =
+                List.split_at
+                  (fun (op,_) ->
+                    Operator.precedence (snd (Located.value op))
+                    <= Operator.precedence op1_data)
+                  rest
+            in
+            Res.(
+                binary e1 ((op2,e2) :: rest2)
+                >>= fun e ->
+                binary e0 ((op1, e) :: rest3)
+            )
 
 
 
