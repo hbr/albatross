@@ -14,16 +14,19 @@ type t =
                  are considered equivalent. *)
 
 
-let where             = (20,   Left)
-let assign            = (25,   Right)
-let colon             = (30,   Right)
-let arrow             = (40,   Right)
-let push_arg          = (45,   Left)
-let pull_arg          = (46,   Right)
-let relation          = (50,   No)
-let addition          = (60,   Left)
-let multiplication    = (61,   Left)
-let exponentiation    = (62,   Right)
+let where             = (10,   Left)
+let assign            = (20,   Right)
+
+let comma             = (30,   Right)
+let colon             = (40,   Right)
+let arrow             = (50,   Right)
+let push_arg          = (55,   Left)
+let pull_arg          = (56,   Right)
+let relation          = (60,   No)
+let addition          = (70,   Left)
+let multiplication    = (80,   Left)
+let exponentiation    = (90,   Right)
+
 let unknown           = (100,  Left)
 let application       = (200,  Left)
 
@@ -45,6 +48,7 @@ let map: (int * assoc) String_map.t
   =
   let open String_map in
   empty
+  |> add ","  comma
   |> add "->" arrow
   |> add "=>" arrow
   |> add ":=" assign

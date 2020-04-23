@@ -443,38 +443,52 @@ struct
         "':='"
 
 
-    let operator: Expression.operator Located.t t =
-      let op_chars = "+-^*|/=~<>" in
-      let len = String.length op_chars in
-      let is_op_char c =
-        String.find (fun op_char -> c = op_char) 0 op_chars < len
-      in
-      located
-      @@ map
-           (fun lst ->
-             let op_str = String.of_list lst
-             in
-             op_str, Operator.of_string op_str)
-           (one_or_more
-              (expect
-                 is_op_char
-                 "operator character")
-            <|> map (fun _ -> [':']) colon
-            <?> "operator or ':'"
-           )
-      |. whitespace
-      >>= succeed
+    let operator
+        (with_comma: bool)
+        : Expression.operator Located.t t
+        =
+        let op_chars = "+-^*|/=~<>" in
+        let len = String.length op_chars in
+        let is_op_char c =
+          String.find (fun op_char -> c = op_char) 0 op_chars < len
+        in
+        located
+        @@ map
+             (fun lst ->
+               let op_str = String.of_list lst
+               in
+               op_str, Operator.of_string op_str)
+             (
+                one_or_more
+                    (expect
+                        is_op_char
+                        "operator character")
+                <|>
+                (
+                    let colon = map (fun _ -> [':']) colon
+                    and comma = map (fun _ -> [',']) (char ',')
+                    in
+                    if with_comma then
+                        colon <|> comma
+                    else
+                        colon
+                )
+                <?>
+                "operator"
+             )
+        |. whitespace
+        >>= succeed
 
 
     let lonely_operator: Expression.t t =
-      map
-        (fun op_located ->
-          Located.map (fun op -> Expression.Operator op) op_located)
-        operator
+        map
+            (fun op_located ->
+                Located.map (fun op -> Expression.Operator op) op_located)
+            (operator true)
 
 
     let char_ws (c:char): unit t =
-      char c |. whitespace
+        char c |. whitespace
 
 
     let rec find_duplicate_argument
@@ -498,14 +512,14 @@ struct
 
 
 
-    let rec expression (): Expression.t t =
+    let rec expression0 (with_comma: bool) (): Expression.t t =
 
         let indented_expression (kind: string) () =
-            indented (expression () <?> kind)
+            indented (expression0 false () <?> kind)
         in
 
         let subexpression (kind: string) () =
-            maybe_indented (expression () <?> kind)
+            maybe_indented (expression0 false () <?> kind)
         in
 
         let result_type: Expression.t t =
@@ -571,7 +585,7 @@ struct
                 >>= fun _ ->
                 (* op_expression has to be encapsulated in a function,
                    otherwise infinite recursion!! *)
-                indented_expression "expression" ()
+                indented (expression0 true ())
                 <|>
                 indented lonely_operator)
               |. char_ws ')'
@@ -629,9 +643,9 @@ struct
                    pos2)
         in
 
-        let operator_and_operand =
+        let operator_and_operand (with_comma: bool) =
           return (fun op exp -> (op,exp))
-          |= operator
+          |= operator with_comma
           |= application
         in
 
@@ -660,11 +674,11 @@ struct
         in
 
 
-        let operator_exression: Expression.t t =
-            application >>= fun e1 ->
-
-            zero_or_more operator_and_operand >>= fun lst ->
-
+        let operator_expression (with_comma: bool): Expression.t t =
+            application
+            >>= fun e1 ->
+            zero_or_more (operator_and_operand with_comma)
+            >>= fun lst ->
             (
                 match Expression.binary e1 lst with
                 | Ok e ->
@@ -677,9 +691,10 @@ struct
 
         (* expression parsing *)
         absolute (
-            operator_exression >>= fun e ->
-            located (optional where_block) >>= fun def ->
-
+            operator_expression with_comma
+            >>= fun e ->
+            located (optional where_block)
+            >>= fun def ->
             match Located.value def with
             | None ->
                 return e
@@ -688,6 +703,10 @@ struct
                 make_where e (List.rev definitions) (Located.end_ def)
         )
 
+
+
+    let expression (): Expression.t t =
+        expression0 false ()
 
 
 
