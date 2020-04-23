@@ -546,7 +546,7 @@ struct
         <+> cut <+> cut
         <+> type_list reqs
         <+> cut <+> cut
-        <+> wrap_words "and the expression has"
+        <+> wrap_words "and the highlighted term has"
         <+> group space
         <+> type_or_types acts
         <+> cut <+> cut
