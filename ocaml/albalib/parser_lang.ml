@@ -429,6 +429,33 @@ struct
       |. whitespace
 
 
+    let left_bracket: unit t =
+        backtrackable
+            (
+                char '['
+                |. not_followed_by (char ']') "not ']'"
+            )
+            "'['"
+        |. whitespace
+
+
+    let right_bracket: unit t =
+        char ']'
+        |. whitespace
+
+
+    let empty_list: Expression.t t =
+        map
+            (Located.map (fun _ -> Expression.Identifier "[]"))
+            (
+                located (
+                    backtrackable
+                        (string "[]")
+                        "[]"
+                )
+                |. whitespace
+            )
+
 
     let colon: unit t =
       backtrackable
@@ -580,6 +607,8 @@ struct
             <|>
             literal_string
             <|>
+            empty_list
+            <|>
             (*  "( exp )" *)
             ( ( char_ws '('
                 >>= fun _ ->
@@ -596,10 +625,10 @@ struct
                 map
                     Expression.to_list
                     (
-                        char_ws '['
+                        left_bracket
                         >>= fun _ ->
                         (indented (expression0 true ()))
-                        |. char_ws ']'
+                        |. right_bracket
                     )
             )
             <|>
