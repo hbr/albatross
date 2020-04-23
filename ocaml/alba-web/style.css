@@ -7,10 +7,11 @@
 
 
 .editor-area {
-    color: white;
-    background-color: black;
-    font-family: "Courier New";  /* or monospace */
-    font-size: 80%;
+    /*color: white;*/
+    background-color: #e0e0e0;
+    font-family: "Courier";  /* or monospace */
+    font-weight: 500;
+    font-size: 1.1vw;
     width: 100%;
     height: 90%;
     overflow: auto;
