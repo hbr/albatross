@@ -2,6 +2,7 @@ open Fmlib
 open Common
 open Alba_core
 
+module Located = Character_parser.Located
 type pos = Character_parser.Position.t
 type range = pos * pos
 
@@ -49,6 +50,7 @@ type entry = {
 type t = {
     gh: Gamma_holes.t;
     base_candidates: (range * int * Term.t) list;
+    formal_arguments: (string Located.t * int) list; (* level of type *)
     sp: int;
     stack: int list;
     entry: entry;
@@ -224,6 +226,8 @@ let make (gamma: Gamma.t): t =
 
         base_candidates = [];
 
+        formal_arguments = [];
+
         sp = cnt0 + 1;
 
         stack = [];
@@ -375,16 +379,25 @@ let bound
 
 
 
-let next_formal_argument (name: string) (typed: bool) (bc: t): t =
+let next_formal_argument
+    (name: string Located.t)
+    (typed: bool)
+    (bc: t)
+    : t
+    =
     let cnt0 = count bc
     and tp = top_term bc
+    and str = Located.value name
     in
     {bc with
         gh =
             Gamma_holes.(
-                push_bound name typed tp bc.gh
+                push_bound str typed tp bc.gh
                 |> push_hole Term.(any_uni 1)
             );
+
+        formal_arguments =
+            (name, bc.sp) :: bc.formal_arguments;
 
         stack = bc.sp :: bc.stack;
 
@@ -669,7 +682,7 @@ end
 
 module Where =
 struct
-    let start (name: string) (bc: t): t =
+    let start (name: string Located.t) (bc: t): t =
         Application.start 1 bc
         |> Lambda.start
         |> next_formal_argument name false

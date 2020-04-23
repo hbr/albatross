@@ -1,6 +1,7 @@
+open Fmlib
 open Alba_core
 
-type pos = Fmlib.Character_parser.Position.t
+type pos = Character_parser.Position.t
 type range = pos * pos
 
 type t
@@ -76,7 +77,7 @@ val bound: int -> int -> t -> (t, type_in_context * type_in_context) result
 
 
 
-val next_formal_argument: string -> bool -> t -> t
+val next_formal_argument: string Character_parser.Located.t -> bool -> t -> t
 (** Add a bound variable based on the last argument type and push a
 placeholder for the next argument type or the result type. I.e. expect the
 next argument type or the result type. *)
@@ -192,7 +193,7 @@ i.e. a beta redex, and finally converted to
 
 module Where:
 sig
-    val start: string -> t -> t
+    val start: string Character_parser.Located.t -> t -> t
     (** Start a where expression with the name of the local definition. *)
 
     val end_inner: t -> (t, type_in_context * type_in_context) result

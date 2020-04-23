@@ -180,11 +180,18 @@ let map_bcs
 
 
 
-let next_formal_argument (name: string) (typed: bool) (builder: t): t =
+let next_formal_argument
+    (name: string Located.t)
+    (typed: bool)
+    (builder: t)
+    : t
+    =
+    let str = Located.value name
+    in
     map_bcs_list
         (Build_context.next_formal_argument name typed)
         builder
-    |> push_bound name
+    |> push_bound str
 
 
 
@@ -198,9 +205,7 @@ let build_fargs_res
     let open Result in
     List_fold.fold_left
             (fun (name, tp) builder ->
-                let str = Located.value name
-                in
-                let next typed builder = next_formal_argument str typed builder
+                let next typed builder = next_formal_argument name typed builder
                 in
                 match tp with
                 | None ->
@@ -391,7 +396,7 @@ let rec build0
                 build_where
                     defs
                     (map_bcs_list
-                        (Build_context.Where.start str)
+                        (Build_context.Where.start name)
                         builder
                     |> push_bound str)
                 >>=
