@@ -83,6 +83,9 @@ placeholder for the next argument type or the result type. I.e. expect the
 next argument type or the result type. *)
 
 
+val find_first_untyped_formal: t -> range option
+
+
 
 
 (** {1 Product [all (a: A) ... : RT]} *)

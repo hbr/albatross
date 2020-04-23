@@ -50,7 +50,7 @@ type entry = {
 type t = {
     gh: Gamma_holes.t;
     base_candidates: (range * int * Term.t) list;
-    formal_arguments: (string Located.t * int) list; (* level of type *)
+    formal_arguments: (string Located.t * int) list; (* level of formal *)
     sp: int;
     stack: int list;
     entry: entry;
@@ -397,13 +397,29 @@ let next_formal_argument
             );
 
         formal_arguments =
-            (name, bc.sp) :: bc.formal_arguments;
+            (name, cnt0) :: bc.formal_arguments;
 
         stack = bc.sp :: bc.stack;
 
         sp = cnt0 + 1
     }
 
+
+
+let find_first_untyped_formal
+    (bc: t)
+    : range option
+    =
+    Option.map
+        (fun (name,_) -> Located.range name)
+        (List.find
+            (fun (_, level) ->
+                let open Gamma_holes in
+                let typ = type_at_level level bc.gh in
+                let holes = unfilled_holes 0 typ bc.gh in
+                not (Int_set.is_empty holes))
+            (List.rev bc.formal_arguments)
+        )
 
 
 

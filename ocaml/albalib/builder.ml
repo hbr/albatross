@@ -23,7 +23,7 @@ type type_in_context = Build_context.type_in_context
 type problem_description =
     | Overflow
     | No_name
-    | Incomplete_type of (int list * Term.typ * Gamma.t) list
+    | Incomplete_type of type_in_context list
     | Cannot_infer_bound
     | Not_a_function of type_in_context list
     | Wrong_type of (type_in_context * type_in_context) list
@@ -438,29 +438,17 @@ let rec build0
 
 
 
-
-let build
-      (exp: Ast.Expression.t)
-      (c: Context.t)
-    : (Term.t * Term.typ, problem) result
+let check_ambiguity
+    (c: Context.t)
+    (builder: t)
+    : (Build_context.t, problem) result
     =
-    let open Result in
-    build0 exp 0 (make c)
-    >>= fun builder ->
-    match
-        map_bcs0
-            Build_context.final
-            (fun lst -> Located.range exp, Incomplete_type lst)
-            builder
-    with
-    | Ok [_, term, typ] ->
-        Ok (term, typ)
-
-    | Ok lst ->
-        assert (1 < List.length lst);
-        let bcs = List.map (fun (bc, _, _) -> bc) lst in
+    match builder.bcs with
+    | [] ->
+        assert false (* Cannot happen! *)
+    | _ :: _ :: _ ->
         let range, base_terms =
-            Build_context.find_last_ambiguous bcs
+            Build_context.find_last_ambiguous builder.bcs
         in
         Error (
             range,
@@ -471,9 +459,50 @@ let build
                     base_terms
             )
         )
+    | [bc] ->
+        Ok bc
 
-    | Error problem ->
-        Error problem
+
+
+let check_formal_arguments
+    (bc: Build_context.t)
+    : (Build_context.t, problem) result
+    =
+    match Build_context.find_first_untyped_formal bc with
+    | None ->
+        Ok bc
+    | Some range ->
+        Error (range, Cannot_infer_bound)
+
+
+
+let check_incomplete
+    (range: range)
+    (bc: Build_context.t)
+    : (Term.t * Term.typ, problem) result
+    =
+    match Build_context.final bc with
+    | Error err ->
+        Error (range, Incomplete_type [err])
+
+    | Ok (_, term, typ) ->
+        Ok (term, typ)
+
+
+
+let build
+      (exp: Ast.Expression.t)
+      (c: Context.t)
+    : (Term.t * Term.typ, problem) result
+    =
+    let open Result in
+    build0 exp 0 (make c)
+    >>=
+    check_ambiguity c
+    >>=
+    check_formal_arguments
+    >>=
+    check_incomplete (Located.range exp)
 
 
 
@@ -895,7 +924,7 @@ let%test _ =
 
 let%test _ =
     match build_expression "\\ x y := x = y" with
-    | Error (_, Incomplete_type _) ->
+    | Error (_, Cannot_infer_bound) ->
         true
     | _ ->
         false
