@@ -426,6 +426,9 @@ let rec build0
         in
         build_where defs builder
 
+    | List _ ->
+        Error (range, Not_yet_implemented "Literal list")
+
 
 
 

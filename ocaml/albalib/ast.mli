@@ -36,6 +36,7 @@ sig
             * t                               (* defining expression *)
         | Product of formal_argument list * t
         | Where of t * definition list
+        | List of t list
 
     and formal_argument =
         string Located.t * t option
@@ -43,6 +44,8 @@ sig
     and definition =
         string Located.t * formal_argument list * t option * t
 
+
+    val to_list: t -> t0
 
     val binary: t
                 -> (operator Located.t * t) list

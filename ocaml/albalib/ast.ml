@@ -35,12 +35,33 @@ module Expression = struct
             * t                               (* defining expression *)
         | Product of formal_argument list * t
         | Where of t * definition list
+        | List of t list
 
     and formal_argument =
         string Located.t * t option
 
     and definition =
         string Located.t * formal_argument list * t option * t
+
+
+
+    let to_list (e: t): t0 =
+        let rec to_list e =
+            match Located.value e with
+            | Application (f, [(a, _) ; (b, _)]) ->
+                (
+                    match Located.value f with
+                    | Identifier "," ->
+                        a :: to_list b
+                    | _ ->
+                        [e]
+                )
+
+            | _ ->
+                [e]
+        in
+        List (to_list e)
+
 
 
   let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
@@ -208,6 +229,9 @@ module Expression = struct
                         occurs name (Where (exp, defs))
                     )
             )
+
+        | List lst ->
+            List.find (name_occurs name) lst <> None
 
 
 

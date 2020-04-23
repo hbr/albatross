@@ -580,7 +580,7 @@ struct
             <|>
             literal_string
             <|>
-            (*  ( exp ) *)
+            (*  "( exp )" *)
             ( ( char_ws '('
                 >>= fun _ ->
                 (* op_expression has to be encapsulated in a function,
@@ -589,6 +589,18 @@ struct
                 <|>
                 indented lonely_operator)
               |. char_ws ')'
+            )
+            <|>
+            (*  "[ e1, e2, ... ]" *)
+            located (
+                map
+                    Expression.to_list
+                    (
+                        char_ws '['
+                        >>= fun _ ->
+                        (indented (expression0 true ()))
+                        |. char_ws ']'
+                    )
             )
             <|>
             (* \ (x: A) (y: B) ... : RT := exp *)
