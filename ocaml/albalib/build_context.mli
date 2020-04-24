@@ -87,6 +87,9 @@ val find_first_untyped_formal: t -> range option
 
 
 
+val find_first_name_violation:
+    t -> (range * string * string) option
+
 
 (** {1 Product [all (a: A) ... : RT]} *)
 

@@ -423,6 +423,59 @@ let find_first_untyped_formal
 
 
 
+let find_first_name_violation
+    (bc: t)
+    : (range * string * string) option
+    =
+    let rec find lst =
+        match lst with
+        | [] ->
+            None
+        | (name, level) :: lst ->
+            let str, range = Located.value name, Located.range name
+            in
+            let typ = Gamma_holes.type_at_level level bc.gh
+            in
+            let is_lower, is_upper =
+                if String.length str > 0 then
+                    let c = str.[0] in
+                    Char.is_lower c, Char.is_upper c
+                else
+                    false, false
+            in
+            let violation typ =
+                match Algo.sort_of_kind typ bc.gh with
+                | Some (Term.Sort.Any _) ->
+                    (* Must be upper case *)
+                    if is_lower then
+                        Some ("Lower", "type of type constructor")
+                    else
+                        None
+                | Some Term.Sort.Proposition ->
+                    (* Must be lower case *)
+                    if is_upper then
+                        Some ("Upper", "proposition")
+                    else
+                        None
+                | None ->
+                    (* proof or object, must be lower case *)
+                    if is_upper then
+                        Some ("Upper", "function or object")
+                    else
+                        None
+            in
+            match violation typ with
+            | None ->
+                find lst
+            | Some (case, kind) ->
+                Some (range, case, kind)
+    in
+    find (List.rev bc.formal_arguments)
+
+
+
+
+
 module Product =
 (* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
 struct

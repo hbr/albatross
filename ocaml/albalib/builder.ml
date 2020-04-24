@@ -29,6 +29,7 @@ type problem_description =
     | Wrong_type of (type_in_context * type_in_context) list
     | Wrong_base of type_in_context list * type_in_context list
     | Ambiguous of type_in_context list
+    | Name_violation of string * string (* case, kind *)
     | Not_yet_implemented of string
 
 let dummy str = Not_yet_implemented str
@@ -471,8 +472,21 @@ let check_formal_arguments
     match Build_context.find_first_untyped_formal bc with
     | None ->
         Ok bc
+
     | Some range ->
         Error (range, Cannot_infer_bound)
+
+
+let check_name_violations
+    (bc: Build_context.t)
+    : (Build_context.t, problem) result
+    =
+    match Build_context.find_first_name_violation bc with
+    | None ->
+        Ok bc
+
+    | Some (range, case, kind) ->
+        Error (range, Name_violation (case, kind))
 
 
 
@@ -501,6 +515,8 @@ let build
     check_ambiguity c
     >>=
     check_formal_arguments
+    >>=
+    check_name_violations
     >>=
     check_incomplete (Located.range exp)
 
@@ -642,6 +658,26 @@ struct
             <+> wrap_words
                 "Please give me more type information to infer a unique type."
             <+> cut
+
+        | Name_violation (case, kind) ->
+            if case = "Upper" then
+                wrap_words
+                    "This identifier must not start with an upper case letter. \
+                    Identifiers starting with upper case letters are allowed \
+                    only for types and type constructors. \
+                    The highlighted identifier is a"
+                <+> group space
+                <+> string kind
+                <+> cut
+            else
+                wrap_words
+                    "This identifier must not start with a lower case letter. \
+                    Identifiers starting with lower case letters are allowed \
+                    only for object variables, proofs and propositions. \
+                    But the highlighted identifier is a"
+                <+> group space
+                <+> string kind
+                <+> cut
 
         | Not_yet_implemented str ->
             char '<' <+> string str <+> char '>'
