@@ -2,8 +2,13 @@ open Fmlib
 open Common
 
 
+type entry =
+    | Global of int list
+    | Local of int
+
+
 type t =
-    {map: int list String_map.t; has_locs: bool; cnt: int}
+    {map: entry String_map.t; has_locs: bool; cnt: int}
 
 
 let empty: t =
@@ -18,12 +23,19 @@ let has_locals (m: t): bool =
     m.has_locs
 
 
+
+
 let find (name:string) (m:t): int list =
     match String_map.maybe_find name m.map with
     | None ->
         []
-    | Some lst ->
-        lst
+    | Some e ->
+        match e with
+        | Global lst ->
+            lst
+        | Local i ->
+            [i]
+
 
 
 let add_unnamed (m: t): t =
@@ -45,9 +57,12 @@ let add_global (name: string) (m: t): t =
                 (
                     match String_map.maybe_find name m.map with
                     | None ->
-                        [ m.cnt ]
-                    | Some lst ->
-                        m.cnt :: lst
+                        Global [ m.cnt ]
+                    | Some (Global lst) ->
+                        Global (m.cnt :: lst)
+                    | _ ->
+                        (* Cannot happen, because there are no locals. *)
+                        assert false
                 )
                 m.map;
 
@@ -61,7 +76,7 @@ let add_local (name: string) (m: t) : t =
         add_unnamed m
     else
     {
-        map = String_map.add name [m.cnt] m.map;
+        map = String_map.add name (Local m.cnt) m.map;
 
         has_locs = true;
 
