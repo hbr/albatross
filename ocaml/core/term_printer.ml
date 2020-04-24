@@ -267,21 +267,25 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
             Some Operator.assign,
             print_definition "\\" term raw_print c
 
-        | Pi (tp, rt, info) when Pi_info.is_arrow info ->
-           let c_inner = push_local "_" tp c
-           and op_data = Operator.of_string "->"
-           in
-           let tp_pr =
-             parenthesize (print tp c) true op_data
-           and rt_pr =
-             parenthesize (print rt c_inner) false op_data
-           in
-           Some op_data,
-           P.(chain [tp_pr;
-                     group space;
-                     string "->";
-                     char ' ';
-                     rt_pr])
+        | Pi (tp, rt, info)
+            when
+                Pi_info.is_arrow info
+                || not (Term.has_variable 0 rt)
+            ->
+               let c_inner = push_local "_" tp c
+               and op_data = Operator.of_string "->"
+               in
+               let tp_pr =
+                 parenthesize (print tp c) true op_data
+               and rt_pr =
+                 parenthesize (print rt c_inner) false op_data
+               in
+               Some op_data,
+               P.(chain [tp_pr;
+                         group space;
+                         string "->";
+                         char ' ';
+                         rt_pr])
 
         | Pi (tp, t, info) ->
             let nme, is_typed = pi_info info in
