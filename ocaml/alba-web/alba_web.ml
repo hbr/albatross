@@ -39,7 +39,7 @@ struct
 
 
     let string_of_printer (p: Pretty_printer.t): string =
-        String_printer.run (Pretty_printer.run 0 50 50 p)
+        String_printer.run (Pretty_printer.run 0 70 70 p)
 
     let standard_context: Context.t =
         Context.standard ()
@@ -98,9 +98,6 @@ struct
                         PP.description description
                     )
             )
-
-    let evaluate (_: string): (string, string) result =
-        assert false
 end
 
 
