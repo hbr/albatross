@@ -2,9 +2,9 @@ open Fmlib
 open Common
 
 
-
 type t =
     {map: int list String_map.t; has_locs: bool; cnt: int}
+
 
 let empty: t =
     {map = String_map.empty; has_locs = false; cnt = 0}
@@ -26,45 +26,44 @@ let find (name:string) (m:t): int list =
         lst
 
 
-let add_unnamed (m:t): t =
-    {m with cnt = 1 + m.cnt; has_locs = true}
+let add_unnamed (m: t): t =
+    { m with
+        cnt = 1 + m.cnt;
+    }
 
 
-let add (name:string) (global:bool) (m:t): t =
+let add_global (name: string) (m: t): t =
+    assert (name <> "");
+    assert (not (has_locals m));
+    if name = "_" then
+        add_unnamed m
+    else
+    { m with
+        map =
+            String_map.add
+                name
+                (
+                    match String_map.maybe_find name m.map with
+                    | None ->
+                        [ m.cnt ]
+                    | Some lst ->
+                        m.cnt :: lst
+                )
+                m.map;
+
+        cnt = 1 + m.cnt;
+    }
+
+
+let add_local (name: string) (m: t) : t =
     assert (name <> "");
     if name = "_" then
         add_unnamed m
     else
-        {
-            map =
-                String_map.add
-                    name
-                    (
-                        if not global then
-                            [ m.cnt ]
-                        else
-                            match String_map.maybe_find name m.map with
-                            | None ->
-                                [ m.cnt ]
-                            | Some lst ->
-                                m.cnt :: lst
-                    )
-                    m.map;
+    {
+        map = String_map.add name [m.cnt] m.map;
 
-            has_locs =
-                not global;
+        has_locs = true;
 
-            cnt =
-                1 + m.cnt
-        }
-
-
-let add_global (name:string) (m:t): t =
-    assert (name <> "");
-    assert (not (has_locals m));
-    add name true m
-
-
-let add_local (name: string) (m:t) : t =
-    assert (name <> "");
-    add name false m
+        cnt = 1 + m.cnt;
+    }
