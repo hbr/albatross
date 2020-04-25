@@ -31,9 +31,20 @@ let standard (): t =
         Interval.fold
             Name_map.empty
             (fun i m ->
-                Name_map.add_global
-                    Gamma.(name_at_level i gamma)
-                    m
+                let open Gamma in
+                match
+                    Name_map.add_global
+                        (name_at_level i gamma)
+                        (type_at_level i gamma)
+                        gamma
+                        m
+                with
+                | None ->
+                    Printf.printf "Context.standard Cannot add %s\n"
+                        (name_at_level i gamma);
+                    assert false
+                | Some map ->
+                    map
             )
             0
             (Gamma.count gamma)

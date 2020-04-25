@@ -3,7 +3,7 @@ open Common
 
 
 type entry =
-    | Global of int list
+    | Global of Term_table.t * int list
     | Local of int
 
 
@@ -31,7 +31,7 @@ let find (name:string) (m:t): int list =
         []
     | Some e ->
         match e with
-        | Global lst ->
+        | Global (_, lst) ->
             lst
         | Local i ->
             [i]
@@ -44,20 +44,54 @@ let add_unnamed (m: t): t =
     }
 
 
-let add_global (name: string) (m: t): t =
+let add_global
+    (name: string)
+    (typ: Term.typ)
+    (gamma: Gamma.t)
+    (m: t)
+    : t option
+    =
     assert (name <> "");
     assert (not (has_locals m));
     if name = "_" then
-        add_unnamed m
+        Some (add_unnamed m)
     else
-    { m with
+        Option.(map
+            (fun value ->
+                {m with
+                    map = String_map.add name value m.map;
+                    cnt = m.cnt + 1})
+            (
+                match String_map.maybe_find name m.map with
+                | None ->
+                    Some (
+                        Global (
+                            Term_table.singleton typ gamma,
+                            [ m.cnt ]
+                        ))
+
+                | Some (Global (table, lst)) ->
+                    map
+                        (fun table ->
+                            Global (table, m.cnt :: lst))
+                        (Term_table.add_unique typ gamma table)
+
+                | Some (Local _) ->
+                    assert false (* Cannot happen, there are no locals. *)
+            )
+        )
+
+    (*{ m with
         map =
             String_map.add
                 name
                 (
                     match String_map.maybe_find name m.map with
                     | None ->
-                        Global [ m.cnt ]
+                        Global (
+                            Term_table.singleton typ gamma,
+                            [ m.cnt ]
+                        )
                     | Some (Global lst) ->
                         Global (m.cnt :: lst)
                     | _ ->
@@ -67,7 +101,7 @@ let add_global (name: string) (m: t): t =
                 m.map;
 
         cnt = 1 + m.cnt;
-    }
+    }*)
 
 
 let add_local (name: string) (m: t) : t =
