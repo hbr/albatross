@@ -323,17 +323,6 @@ struct
 
 
 
-    let word_ws
-          (start: char->bool)
-          (inner: char->bool)
-          (msg:   string)
-        : string located t
-      =
-      located @@ word start inner msg
-      |. whitespace
-      >>= succeed
-
-
     let name: string located t =
         located
             (word
@@ -372,10 +361,10 @@ struct
 
 
     let number: string located t =
-      word_ws
-        Char.is_digit
-        Char.is_digit
-        "number"
+        located
+            (word Char.is_digit Char.is_digit "digit")
+        |. not_followed_by letter "not a letter"
+        |. whitespace
 
 
     let identifier_expression: Expression.t t =
