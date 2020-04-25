@@ -50,23 +50,15 @@ albalib: core
 alba2: albalib
 	dune build ocaml/alba2/alba2.bc
 
-alba-node: albalib
-	dune build ocaml/alba-node/alba_node.bc.js; \
-	(echo '#!/usr/bin/env node'; \
-		cat _build/default/ocaml/alba-node/alba_node.bc.js) \
-		> ocaml/alba-node/alba-node; \
-	chmod u+x alba-node
 
+alba-node: albalib
+	dune build ocaml/alba-node/alba-node
 
 alba-node-release: albalib
-	dune build --profile=release ocaml/alba-node/alba_node.bc.js; \
-	(echo '#!/usr/bin/env node'; \
-		cat _build/default/ocaml/alba-node/alba_node.bc.js) \
-		> ocaml/alba-node/alba-node; \
-	chmod u+x alba-node
+	dune build --profile=release ocaml/alba-node/alba-node
 
 
-alba-web: albalib
+alba-web:
 	dune build ocaml/alba-web/alba_web.js
 
 alba-web-gh-pages:
