@@ -8,7 +8,7 @@ let bruijn_convert (i:int) (n:int): int =
 
 
 module Value =
-  struct
+struct
     type t =
       | Int of int (* int32? *)
       | Char of int
@@ -32,12 +32,14 @@ module Value =
       in
       value 0 0
 
+
     let number_values (str:string): t list =
       match int_value str with
       | None ->
          []
       | Some v ->
          [v]
+
 
     let int_binary (f:int -> int -> int): t =
       Binary
@@ -48,6 +50,7 @@ module Value =
           | _ ->
              assert false (* Illegal call *)
         )
+
 
     let string_binary (f:string -> string -> string): t =
       Binary
@@ -63,14 +66,18 @@ module Value =
     let int_plus: t =
       int_binary (+)
 
+
     let int_minus: t =
       int_binary (-)
+
 
     let int_times: t =
       int_binary ( * )
 
+
     let string_concat: t =
       string_binary (^)
+
 
     let apply (f:t) (a:t): t =
       match f with
@@ -80,6 +87,7 @@ module Value =
          Unary (f a)
       | _ ->
          assert false
+
 
     let is_equal (a: t) (b: t): bool =
         match a, b with
@@ -91,7 +99,28 @@ module Value =
             a = b
         | _ ->
             false
-  end
+
+
+    let compare (a: t) (b: t): int =
+        match a, b with
+        | Int a, Int b ->
+            Stdlib.compare a b
+
+        | Int _, _ ->
+            -1
+
+        | Char a, Char b ->
+            Stdlib.compare a b
+
+        | Char _, _ ->
+            -1
+
+        | String a, String b ->
+            Stdlib.compare a b
+
+        | _, _ ->
+            assert false (* Illegal call! One of the values is a function. *)
+end (* Value *)
 
 
 
@@ -99,22 +128,31 @@ module Value =
 
 
 module Sort =
-  struct
+struct
     type t =
       | Proposition
       | Any of int
 
+
+    let compare (s1: t) (s2: t): int =
+        match s1, s2 with
+        | Proposition, Proposition ->
+            0
+        | Proposition, _ ->
+            -1
+        | Any i, Any j ->
+            Stdlib.compare i j
+        | Any _, Proposition ->
+            +1
+
+
     let is_sub (s1:t) (s2:t): bool =
-      match s1, s2 with
-      | Proposition, Proposition | Proposition, Any _ ->
-         true
-      | Any i, Any j ->
-         i <= j
-      | _, _ ->
-         false
+        compare s1 s2 <= 0
+
 
     let is_super (s1:t) (s2:t): bool =
-      is_sub s2 s1
+        is_sub s2 s1
+
 
     let type_of (s: t): t =
         match s with
@@ -122,6 +160,7 @@ module Sort =
             Any 0
         | Any i ->
             Any (i + 1)
+
 
     let pi_sort (arg: t) (res: t): t =
         match arg, res with
@@ -131,7 +170,7 @@ module Sort =
             Any j
         | Any i, Any j ->
             Any (max i j)
-  end
+end (* Sort *)
 
 
 

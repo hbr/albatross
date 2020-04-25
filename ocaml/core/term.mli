@@ -5,41 +5,48 @@ val bruijn_convert: int -> int -> int
 
 module Value:
 sig
-  type t =
-    | Int of int (* int32? *)
-    | Char of int
-    | String of string
-    | Unary of (t -> t)
-    | Binary of (t -> t -> t)
+    type t =
+      | Int of int (* int32? *)
+      | Char of int
+      | String of string
+      | Unary of (t -> t)
+      | Binary of (t -> t -> t)
 
-  val number_values: string -> t list
-  val int_plus: t
-  val int_minus: t
-  val int_times: t
-  val string_concat: t
-  val apply: t -> t -> t
+    val number_values: string -> t list
+    val int_plus: t
+    val int_minus: t
+    val int_times: t
+    val string_concat: t
+    val apply: t -> t -> t
 
-  val is_equal: t -> t -> bool
-  (** [is_equal a b] checks if [a] and [b] are the same value. *)
+    val is_equal: t -> t -> bool
+    (** [is_equal a b] checks if [a] and [b] are the same value. *)
+
+    val compare: t -> t -> int
+    (** compare for sorting purposes. *)
 end
 
 
 
 module Sort:
 sig
-  type t =
-    | Proposition
-    | Any of int
+    type t =
+      | Proposition
+      | Any of int
 
-  (** [is_sub s1 s2] Is [s1] a subtype of [s2] (or equal)? *)
-  val is_sub: t -> t -> bool
 
-  (** [is_super s1 s2] Is [s1] a supertype of [s2] (or equal)? *)
-  val is_super: t -> t -> bool
+    val compare: t -> t -> int
+    (** compare for sorting purposes. *)
 
-  val type_of: t -> t
+    (** [is_sub s1 s2] Is [s1] a subtype of [s2] (or equal)? *)
+    val is_sub: t -> t -> bool
 
-  val pi_sort: t -> t -> t
+    (** [is_super s1 s2] Is [s1] a supertype of [s2] (or equal)? *)
+    val is_super: t -> t -> bool
+
+    val type_of: t -> t
+
+    val pi_sort: t -> t -> t
 end
 
 
