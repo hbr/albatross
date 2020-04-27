@@ -38,6 +38,8 @@ type 'a t = {
     sorts:    ('a base) Sort_map.t;
     bounds:   ('a base) Int_map.t;
     globals:  ('a base) Int_map.t;
+    applications: 'a t option;
+    typeds:   'a t option;
     lambdas:  'a t option;
     products: 'a t option;
 }
@@ -52,6 +54,8 @@ let empty: 'a t = {
         sorts    = Sort_map.empty;
         bounds   = Int_map.empty;
         globals  = Int_map.empty;
+        applications  = None;
+        typeds   = None;
         lambdas  = None;
         products = None;
     }
@@ -76,36 +80,53 @@ let find (term: Term.t) (n: int) (trie: 'a t): 'a option =
         | _, _ ->
             assert false (* Illegal call! *)
     in
-    let rec find term nb (f: 'a find_cont option) trie: 'a option =
+    let rec find term nb (k: 'a find_cont option) trie: 'a option =
         let open Term in
         match term with
+        | Value _ ->
+            assert false (* nyi *)
+
         | Sort s ->
             find_base
-                f
+                k
                 (Sort_map.maybe_find s trie.sorts)
 
         | Variable i when i < nb ->
             find_base
-                f
+                k
                 (Int_map.maybe_find i trie.bounds)
 
         | Variable i ->
             find_base
-                f
+                k
                 (Int_map.maybe_find
-                    (Term.bruijn_convert i n)
+                    (Term.bruijn_convert (i - nb) n)
                     trie.globals)
+
+        | Typed (exp, tp) ->
+            trie.typeds
+            >>=
+            find exp nb (Some (find tp nb k))
+
+
+        | Appl (f, arg, _ ) ->
+            trie.applications
+            >>=
+            find f nb (Some (find arg nb k))
+
+        | Lambda (tp, exp, _ ) ->
+            trie.lambdas
+            >>=
+            find tp nb (Some (find exp (nb + 1) k))
+
 
         | Pi (tp, res, _) ->
             trie.products
             >>=
-            find
-                tp
-                nb
-                (Some ( find res (nb + 1) f ))
+            find tp nb (Some (find res (nb + 1) k))
 
-        | _ ->
-            assert false
+        | Where (_, _, _, _) ->
+            assert false (* nyi *)
     in
     find term 0 None trie
 
@@ -180,6 +201,9 @@ let add_new (term: Term.t) (n: int) (a: 'a) (trie: 'a t): ('a t, 'a) result =
     let rec add term nb k trie =
         let open Term in
         match term with
+        | Value _ ->
+            assert false (* nyi *)
+
         | Sort s ->
             add_base
                 a
@@ -201,7 +225,7 @@ let add_new (term: Term.t) (n: int) (a: 'a) (trie: 'a t): ('a t, 'a) result =
                 (Int_map.maybe_find i trie.bounds)
 
         | Variable i ->
-            let level = Term.bruijn_convert i n
+            let level = Term.bruijn_convert (i - nb) n
             in
             add_base
                 a
@@ -212,6 +236,25 @@ let add_new (term: Term.t) (n: int) (a: 'a) (trie: 'a t): ('a t, 'a) result =
                             Int_map.add level value trie.globals})
                 (Int_map.maybe_find level trie.bounds)
 
+        | Typed (exp, tp) ->
+            add_compound
+                (fun res -> {trie with typeds = Some res})
+                (add exp nb (Some (add tp nb k)))
+                trie.typeds
+
+
+        | Appl (f, arg, _ ) ->
+            add_compound
+                (fun res -> {trie with applications = Some res})
+                (add f nb (Some (add arg nb k)))
+                trie.applications
+
+        | Lambda (tp, exp, _ ) ->
+            add_compound
+                (fun res -> {trie with lambdas = Some res})
+                (add tp nb (Some (add exp (nb + 1) k)))
+                trie.lambdas
+
 
         | Pi (tp, res, _) ->
             add_compound
@@ -219,7 +262,7 @@ let add_new (term: Term.t) (n: int) (a: 'a) (trie: 'a t): ('a t, 'a) result =
                 (add tp nb (Some (add res (nb + 1) k)))
                 trie.products
 
-        | _ ->
-            assert false
+        | Where (_, _, _, _) ->
+            assert false (* nyi *)
     in
     add term 0 None trie

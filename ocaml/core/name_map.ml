@@ -3,7 +3,7 @@ open Common
 
 
 type entry =
-    | Global of Term_table.t * int list
+    | Global of int Term_trie.t * int list
     | Local of int
 
 
@@ -44,6 +44,31 @@ let add_unnamed (m: t): t =
     }
 
 
+
+let add_to_trie
+    (typ: Term.typ)
+    (gamma: Gamma.t)
+    (trie: int Term_trie.t)
+    : int Term_trie.t option
+    =
+    let cnt = Gamma.count gamma
+    in
+    match
+        Term_trie.add_new typ cnt cnt trie
+    with
+    | Ok trie ->
+        assert (Term_trie.find typ cnt trie = Some cnt);
+        Some trie
+    | Error level ->
+        Printf.printf "Cannot add new %s: %s\n"
+            (Gamma.name_at_level level gamma)
+            (Term_printer.string_of_term typ gamma);
+            assert (Term_trie.find typ cnt trie <> None);
+            assert (Term_trie.find typ cnt trie = Some level);
+        None
+
+
+
 let add_global
     (name: string)
     (typ: Term.typ)
@@ -64,44 +89,21 @@ let add_global
             (
                 match String_map.maybe_find name m.map with
                 | None ->
-                    Some (
-                        Global (
-                            Term_table.singleton typ gamma,
-                            [ m.cnt ]
-                        ))
-
-                | Some (Global (table, lst)) ->
                     map
-                        (fun table ->
-                            Global (table, m.cnt :: lst))
-                        (Term_table.add_unique typ gamma table)
+                        (fun trie ->
+                            Global (trie, [m.cnt]))
+                        (add_to_trie typ gamma Term_trie.empty)
+
+                | Some (Global (trie, lst)) ->
+                    map
+                        (fun trie ->
+                            Global (trie, m.cnt :: lst))
+                        (add_to_trie typ gamma trie)
 
                 | Some (Local _) ->
                     assert false (* Cannot happen, there are no locals. *)
             )
         )
-
-    (*{ m with
-        map =
-            String_map.add
-                name
-                (
-                    match String_map.maybe_find name m.map with
-                    | None ->
-                        Global (
-                            Term_table.singleton typ gamma,
-                            [ m.cnt ]
-                        )
-                    | Some (Global lst) ->
-                        Global (m.cnt :: lst)
-                    | _ ->
-                        (* Cannot happen, because there are no locals. *)
-                        assert false
-                )
-                m.map;
-
-        cnt = 1 + m.cnt;
-    }*)
 
 
 let add_local (name: string) (m: t) : t =
