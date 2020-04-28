@@ -5,9 +5,6 @@ open Alba_core
 module Parser = Parser_lang
 module Repl_parser = Parser.Make (Parser.Command)
 
-module Position = Character_parser.Position
-type pos = Position.t
-type range = pos * pos
 
 
 
@@ -27,165 +24,14 @@ module Pretty_make (Io:Io.SIG) =
     include PP
 
     let put_left (width:int) (s:string): t =
-      let len = String.length s in
-      if len < width then
-        chain [string s; fill (width - len) ' ']
-      else
-        string s
-
-
-
-    let error_header
-          (error_type:string)
-        : t
-      =
-      (* Print the error header. *)
-      let err = " ERROR " in
-      let nfill =
-        max 0 (80 - 3 - (String.length error_type + String.length err))
-      in
-      chain [fill 2 '-';
-             char ' ';
-             string error_type;
-             string err;
-             fill nfill '-';
-             cut;
-             cut]
-
-
-    let print_ruler (offset: int) (n: int): t =
-        let n = n mod 10 in
-        let str = "0123456789"
-        in
-        let rec decimals i =
-            if i = n then
-                empty
-            else
-                string (string_of_int i)
-                <+> fill 9 ' '
-                <+> decimals (i + 1)
-        and markers n =
-            if n = 0 then
-                empty
-            else
-                string str <+> markers (n - 1)
-        in
-        fill offset ' '
-        <+> decimals 0
-        <+> cut <+> fill offset ' '
-        <+> markers n <+> cut
-
-
-    let print_tabs (offset: int) (tabs: int list): t =
-        let rec print col lst =
-            match lst with
-            | [] ->
-                empty
-            | [pos] ->
-                fill (pos - col) ' ' <+> char '.'
-            | pos1 :: pos2 :: rest ->
-                fill (pos1 - col) ' ' <+> char '.'
-                <+>
-                print pos1 (pos2 :: rest)
-        in
-        fill offset ' '
-        <+>
-        print 0 tabs
-        <+> cut
-
-
-    let print_source
-        (source:string)
-        ((pos1,pos2):range)
-        (error_tabs: int list)
-        : t
-        =
-      (* Print the source code in [range] with line numbers and error markers
-       *)
-      let start_line = Position.line pos1
-      and end_line   = Position.line pos2
-      and start_col  = Position.column pos1
-      and end_col    = Position.column pos2
-      and len        = String.length source
-      in
-      let end_col =
-        if start_line = end_line && start_col = end_col then
-          end_col + 1
+        let len = String.length s in
+        if len < width then
+            chain [string s; fill (width - len) ' ']
         else
-          end_col
-      in
-      assert (start_line <= end_line);
-      assert (start_line < end_line || start_col < end_col);
-      let number_width =
-        String.length (string_of_int (end_line + 1))
-      in
-      let print_line start beyond line_no =
-        let line_no_str = string_of_int (line_no + 1) in
-        fill (number_width - String.length line_no_str) ' '
-        <+> string line_no_str
-        <+> string "| "
-        <+> substring source start (beyond - start)
-        <+> cut
-      and skip_line_no =
-        fill (number_width + 2) ' '
-      in
-      let rec print (char_offset:int) (line_no:int): t =
-        if len <= char_offset then
-          empty
-        else
-          let pos_newline = String.find (fun c -> c = '\n') char_offset source
-          in
-          (if line_no = start_line && start_line = end_line then
-             print_line char_offset pos_newline line_no
-             <+> skip_line_no
-             <+> fill start_col ' '
-             <+> fill (end_col - start_col) '^'
-             <+> cut
-           else if line_no = start_line && start_line < end_line then
-             skip_line_no
-             <+> fill start_col ' '
-             <+> char 'v'
-             <+> fill 3 '.'
-             <+> cut
-             <+> print_line char_offset pos_newline line_no
-           else if line_no = end_line && start_line <> end_line then
-             print_line char_offset pos_newline line_no
-             <+> skip_line_no
-             <+> fill (end_col - 1) '.'
-             <+> char '^'
-             <+> cut
-           else if pos_newline + 1 = len && start_line = line_no + 1 then
-             print_line char_offset pos_newline line_no
-             <+> skip_line_no
-             <+> fill (pos_newline - char_offset) ' '
-             <+> char '^'
-             <+> cut
-           else
-             (* normal line *)
-             print_line char_offset pos_newline line_no
-          )
-          <+> print (pos_newline + 1) (line_no + 1)
-      in
-      print 0 0
-      <+>
-      (
-        if error_tabs = [] then
-            empty
-        else
-            let tabs = true in
-            if tabs then
-                print_tabs (number_width + 2) error_tabs
-            else
-                print_ruler
-                    (number_width + 2)
-                    8
-                <+> cut
-      )
-
-
+            string s
 
     let print (fd:Io.File.Out.fd) (width:int) (pp:t): unit Io.t =
-      Out.run fd (PP.run 0 width width pp)
+        Out.run fd (PP.run 0 width width pp)
   end (* Pretty_make *)
 
 
@@ -346,10 +192,11 @@ module Make (Io:Io.SIG) =
         let std_context = Context.standard () in
         match Builder.build e std_context with
         | Error (range, descr) ->
+            let module Print = Printer.Make (Pretty) in
             let module Builder_print = Builder.Print (Pretty) in
             let open Pretty in
-            error_header "TYPE"
-            <+> print_source src range []
+            Print.print_error_header "TYPE"
+            <+> Print.print_source src range []
             <+> cut
             <+> Builder_print.description descr
             <+> cut
