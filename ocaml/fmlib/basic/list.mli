@@ -1,3 +1,8 @@
+(** A thin wrapper around [Stdlib.List] which avoids throwing exceptions and
+with some additional monadic functions.
+*)
+
+
 open Module_types
 
 

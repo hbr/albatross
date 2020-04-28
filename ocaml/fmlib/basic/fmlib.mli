@@ -1,32 +1,41 @@
-(** *)
+(** Fmlib: Functional Monadic Library *)
 
 
-(** {1 Basic Modules} *)
+(** {1 Basics} *)
+
+
+val identity: 'a -> 'a
+(** Identity function *)
+
 
 module Module_types  = Module_types
-(** Common module types like [ANY, SORTABLE, ...] *)
 
-module Common = Common
-
-
-(** {1 Immutable Data Types} *)
 
 module List = List
+
 module Option = Option
+
+module Result = Result
+
 module Finite_map = Finite_map
+
 module Segmented_array = Segmented_array
 
 
-(** {1 Monadic Data Types} *)
 
 module Monad = Monad
 
 
-(** {1 Mutable Data Types} *)
 
 module Array = Array
 module Vector = Vector
 module Pool = Pool
+
+
+
+module Common = Common
+
+
 
 
 (** {1 Parsing }*)

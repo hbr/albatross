@@ -1,4 +1,10 @@
+(** Thin wrapper around [Stdlib.Map] which supports monadic operations instead
+of throwing exceptions.
+
+*)
+
 open Module_types
+
 
 module type S =
   sig

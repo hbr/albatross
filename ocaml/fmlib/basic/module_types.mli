@@ -1,3 +1,8 @@
+(** Common module types like [ANY, SORTABLE, ...] *)
+
+
+
+
 (** Can be any type. *)
 module type ANY =
   sig
