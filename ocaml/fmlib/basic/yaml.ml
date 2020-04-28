@@ -59,8 +59,17 @@ module Parser =
         (fun c -> Char.is_letter c || Char.is_digit c || c = '_' || c = '-')
         "atom"
 
+
+    let whitespace_char: char t =
+        expect
+            (fun c -> c = ' ' || c = '\n' || c = '\t')
+            "space, newline or tab"
+
+
     let white_space: int t =
-      detached P.whitespace
+      detached (
+        skip_zero_or_more (map (fun _ -> () ) whitespace_char)
+      )
 
 
 

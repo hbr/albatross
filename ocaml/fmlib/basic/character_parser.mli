@@ -184,15 +184,22 @@ sig
     (** {2 Character Combinators} *)
     val expect: (char -> bool) -> string -> char t
     val expect_end: unit t
-    val whitespace_char: char t
-    val whitespace: int t
     val one_of_chars: string -> string -> unit t
     val string: string -> unit t
     val char: char -> unit t
     val space: unit t
     val letter: char t
     val digit: char t
+
     val word: (char->bool) -> (char->bool) -> string -> string t
+    (** [word start_char inner_char error_message]
+
+        A word starts with a character satisfying [start_char] followed by zero
+        or more characters satisfying [inner_char].
+
+        In case that the first character does not satisfy [start_char] an
+        unsatisfied expectation with [error_message] is entered.
+    *)
 
 
     (** {1 Parser} *)
@@ -268,15 +275,22 @@ sig
     (** {2 Character Combinators} *)
     val expect: (char -> bool) -> string -> char t
     val expect_end: unit t
-    val whitespace_char: char t
-    val whitespace: int t
     val one_of_chars: string -> string -> unit t
     val string: string -> unit t
     val char: char -> unit t
     val space: unit t
     val letter: char t
     val digit: char t
+
     val word: (char->bool) -> (char->bool) -> string -> string t
+    (** [word start_char inner_char error_message]
+
+        A word starts with a character satisfying [start_char] followed by zero
+        or more characters satisfying [inner_char].
+
+        In case that the first character does not satisfy [start_char] an
+        unsatisfied expectation with [error_message] is entered.
+    *)
 
 
     (** {1 Parser} *)
@@ -364,8 +378,6 @@ sig
 
     val expect:          (char -> bool) -> Expect_msg.t -> char t
     val expect_end:      Expect_msg.t -> unit t
-    val whitespace_char: Expect_msg.t -> char t
-    val whitespace:      Expect_msg.t -> int t
     val one_of_chars:    string -> Expect_msg.t -> unit t
     val string:          string -> (int -> Expect_msg.t) -> unit t
     val char:            char -> Expect_msg.t -> unit t

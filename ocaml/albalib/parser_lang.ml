@@ -307,6 +307,11 @@ struct
         to_end ()
 
 
+    let whitespace_char: char t =
+        expect
+            (fun c -> c = ' ' || c = '\n' || c = '\t')
+            "space, newline or tab"
+
 
     let whitespace: int t =
         detached

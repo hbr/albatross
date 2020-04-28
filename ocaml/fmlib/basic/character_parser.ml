@@ -756,10 +756,6 @@ struct
             (fun i -> "'" ^ String.one str.[i] ^ "'")
 
 
-    let whitespace_char: char t =
-        Advanced.whitespace_char "whitespace"
-
-
     let whitespace: int t =
         Advanced.whitespace "whitespace"
 
