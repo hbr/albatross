@@ -32,8 +32,9 @@ struct
         : Term.t * (Term.t * Term.Application_info.t) list
       =
       let rec split t args =
+        let open Term in
         match t with
-        | Term.Variable i ->
+        | Variable i ->
            (match definition_term i c with
             | None ->
                t, args
@@ -45,20 +46,25 @@ struct
                 match args with
                 | [] ->
                     t, args
+
                 | (arg, _) :: args ->
                     split Term.(apply exp arg) args
             )
 
-        | Term.Appl (f, arg, mode) ->
+        | Appl (f, arg, mode) ->
            split f ((arg, mode) :: args)
 
-        | Term.Typed (term, _) ->
+        | Typed (term, _) ->
             term, args
+
+        | Where (_, _, exp, def) ->
+            split (apply exp def) args
 
         | _ ->
            t, args
       in
       split t args
+
 
 
 
@@ -68,6 +74,37 @@ struct
             (fun res (arg, mode) ->
               Term.Appl (res, arg, mode))
             key
+            args
+
+
+
+    let rec normalize (term: Term.t) (c: t): Term.t =
+        let normalize_key key c =
+            let open Term in
+            match key with
+            | Lambda (tp, exp, info) ->
+                Lambda (
+                    normalize tp c,
+                    normalize exp (push_local (Lambda_info.name info) tp c),
+                    info
+                )
+
+            | Pi (tp, res, info) ->
+                Pi (
+                    normalize tp c,
+                    normalize res
+                        (push_local (Pi_info.name info) tp c),
+                    info
+                )
+
+            | _ ->
+                key
+        in
+        let key, args = key_split term [] c in
+        List.fold_left
+            (fun res (arg, mode) ->
+                Term.Appl (res, normalize arg c, mode))
+            (normalize_key key c)
             args
 
 

@@ -81,6 +81,11 @@ let add_global
     if name = "_" then
         Some (add_unnamed m)
     else
+        let module Algo = Gamma_algo.Make (Gamma)
+        in
+        let typ =
+            Algo.normalize typ gamma
+        in
         Option.(map
             (fun value ->
                 {m with

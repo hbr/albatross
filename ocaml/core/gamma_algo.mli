@@ -92,4 +92,14 @@ sig
         Compute the key normal form of the welltyped term [term] in the valid
         context [gamma].
     *)
+
+
+
+    val normalize: Term.t -> Gamma.t -> Term.t
+    (**
+        [normalize term gamma]
+
+        Compute the normal form of the welltyped term [term] in the valid
+        context [gamma].
+    *)
 end
