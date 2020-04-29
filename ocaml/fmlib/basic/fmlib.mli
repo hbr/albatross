@@ -21,7 +21,7 @@ module Finite_map = Finite_map
 
 module Segmented_array = Segmented_array
 
-
+module Readable_printer = Readable_printer
 
 module Monad = Monad
 
