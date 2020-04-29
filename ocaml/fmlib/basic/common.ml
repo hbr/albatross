@@ -184,28 +184,16 @@ module Interval =
 
 
 module String_reader =
-  struct
-    type t = {s: string; pos:int; beyond:int}
+struct
+    include Readable_printer.R
 
-    let of_substring (s:string) (start:int) (len:int): t =
-      assert (0 <= start);
-      assert (start + len <= String.length s);
-      {s; pos = start; beyond = start + len}
+    let of_substring str start len =
+        Readable_printer.(readable (substring str start len))
 
-    let of_string (s:string): t =
-      of_substring s 0 (String.length s)
 
-    let has_more (r:t): bool =
-      r.pos < r.beyond
-
-    let peek (r:t): char =
-      assert (has_more r);
-      r.s.[r.pos]
-
-    let advance (r:t): t =
-      assert (has_more r);
-      {r with pos = r.pos + 1}
-  end
+    let of_string str =
+        Readable_printer.(readable (string str))
+end
 
 
 
