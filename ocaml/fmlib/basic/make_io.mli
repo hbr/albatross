@@ -1,5 +1,3 @@
-open Module_types
-
 (**
 
     This module contains a minimal signature for an io module and a functor
@@ -9,6 +7,12 @@ open Module_types
 *)
 
 
+open Module_types
+
+
+
+
+(** Minimal signature, which an implementation of an Io module must satisfy. *)
 module type SIG =
 sig
     type in_file

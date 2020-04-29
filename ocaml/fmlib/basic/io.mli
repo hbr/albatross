@@ -109,23 +109,31 @@ module type SIG =
 
     module File:
     sig
-      module In:
-      sig
-        type fd
-      end
-      module Out:
-      sig
-        type fd
-        val putc: char -> fd -> unit t
-        val substring: string -> int -> int -> fd -> unit t
-        val string: string -> fd -> unit t
-        val line: string -> fd -> unit t
-        val newline: fd -> unit t
-        val fill: int -> char -> fd -> unit t
-      end
-      val stdin:  In.fd
-      val stdout: Out.fd
-      val stderr: Out.fd
+        module In:
+        sig
+            type fd
+        end
+
+        module Out:
+        sig
+            type fd
+            val putc: char -> fd -> unit t
+            val substring: string -> int -> int -> fd -> unit t
+            val string: string -> fd -> unit t
+            val line: string -> fd -> unit t
+            val newline: fd -> unit t
+            val fill: int -> char -> fd -> unit t
+        end
+
+        val stdin:  In.fd
+        val stdout: Out.fd
+        val stderr: Out.fd
+
+        module Read (W: WRITABLE):
+        sig
+            val read_buffer: In.fd -> W.t -> W.t t
+            val read:        In.fd -> W.t -> W.t t
+        end
     end
 
 

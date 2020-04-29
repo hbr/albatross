@@ -2,6 +2,7 @@ open Module_types
 open Common
 
 
+
 module type SIG =
 sig
     type in_file
@@ -35,17 +36,25 @@ sig
 
     val read_directory: string -> string array option t
 
-    module Read: functor (W:WRITABLE) ->
-                 sig
-                   val read_buffer: in_file -> W.t -> W.t t
-                   val read: in_file -> W.t -> W.t t
-                 end
-    module Write: functor (R:READABLE) ->
-                  sig
-                    val write_buffer: out_file -> R.t -> R.t t
-                    val write: out_file -> R.t -> R.t t
-                  end
-end
+    module Read: functor (W: WRITABLE) ->
+    sig
+        val read_buffer: in_file -> W.t -> W.t t
+        val read: in_file -> W.t -> W.t t
+    end
+
+    module Write: functor (R: READABLE) ->
+    sig
+        val write_buffer: out_file -> R.t -> R.t t
+        val write: out_file -> R.t -> R.t t
+    end
+end (* SIG *)
+
+
+
+
+
+
+
 
 module Make (Base: SIG): Io.SIG =
   struct
@@ -125,49 +134,79 @@ module Make (Base: SIG): Io.SIG =
      *)
 
     module File =
-      struct
+    struct
+
         module In =
-          struct
+        struct
             type fd = in_file
-          end
+        end
+
+
         module Out =
-          struct
-            type fd = out_file
+        struct
+            type fd =
+                out_file
+
             let substring
-                  (s:string) (start:int) (len:int) (fd:out_file)
-                : unit t =
-              let module W = Write (String_reader) in
-              W.write fd (String_reader.of_substring s start len)
-              >>= fun _ ->
-              return ()
+                (s: string)
+                (start: int)
+                (len: int)
+                (fd: out_file)
+                : unit t
+                =
+                let module W =
+                    Write (String_reader)
+                in
+                W.write fd (String_reader.of_substring s start len)
+                >>= fun _ ->
+                return ()
 
-            let string (s:string) (fd:out_file): unit t =
-              substring s 0 (String.length s) fd
 
-            let putc (c:char) (fd:out_file): unit t =
-              let module W = Write (Char_reader) in
-              W.write fd (Char_reader.make c)
-              >>= fun _ ->
-              return ()
+            let string (s: string) (fd: out_file): unit t =
+                substring s 0 (String.length s) fd
 
-            let newline (fd:out_file): unit t =
-              putc '\n' fd
 
-            let line (s:string) (fd:out_file): unit t =
-              string s fd >>= fun _ ->
-              newline fd
+            let putc (c: char) (fd: out_file): unit t =
+                let module W =
+                    Write (Char_reader)
+                in
+                W.write fd (Char_reader.make c)
+                >>= fun _ ->
+                return ()
 
-            let fill (n:int) (c:char) (fd:out_file): unit t =
-              let module W = Write (Fill_reader) in
-              W.write fd (Fill_reader.make n c)
-              >>= fun _ ->
-              return ()
-          end
+
+            let newline (fd: out_file): unit t =
+                putc '\n' fd
+
+
+            let line (s: string) (fd: out_file): unit t =
+                string s fd >>= fun _ ->
+                newline fd
+
+
+            let fill (n: int) (c: char) (fd: out_file): unit t =
+                let module W = Write (Fill_reader) in
+                W.write fd (Fill_reader.make n c)
+                >>= fun _ ->
+                return ()
+        end
 
         let stdin:  In.fd  = stdin
         let stdout: Out.fd = stdout
         let stderr: Out.fd = stderr
-      end
+
+
+        module Read (W: WRITABLE) =
+        struct
+            module Read0 = Base.Read (W)
+
+            let read_buffer (fd: In.fd) (w: W.t): W.t t =
+                Read0.read_buffer fd w
+
+            let read(fd: In.fd) (w: W.t): W.t t =
+                Read0.read fd w
+        end
+    end
 
 
 (*
