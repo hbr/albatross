@@ -5,24 +5,36 @@ open Module_types
 
 module Buffer:
 sig
-  type t
-  val make: int ->
-            (Bytes.t -> int -> int -> int) ->
-            (Bytes.t -> int -> int -> int) ->
-            t
-  val is_ok: t -> bool
-  val is_full: t -> bool
-  val flush: t -> unit
+    type t
 
-  module Read: functor (W:WRITABLE) ->
-               sig
-               end
-  module Write: functor (R:READABLE) ->
-               sig
-                 val write: t -> R.t -> R.t
-               end
-end =
-  struct
+    val make: int ->
+              (Bytes.t -> int -> int -> int) ->
+              (Bytes.t -> int -> int -> int) ->
+              t
+
+
+    val is_ok:    t -> bool
+    val is_empty: t -> bool
+    val is_full:  t -> bool
+
+    val fill:  t -> unit
+    val flush: t -> unit
+
+
+
+    module Read: functor (W: WRITABLE) ->
+    sig
+        val read: t -> W.t -> W.t
+    end
+
+
+    module Write: functor (R: READABLE) ->
+    sig
+        val write: t -> R.t -> R.t
+    end
+end
+=
+struct
     type t = {
         mutable rp: int; (* The content of the buffer is between the read and
                             the write pointer. *)
@@ -34,26 +46,55 @@ end =
         write: Bytes.t -> int -> int -> int; (* flush function *)
         bytes: Bytes.t}
 
-    let make (n:int)
-          (read:Bytes.t -> int -> int -> int)
-          (write:Bytes.t -> int -> int -> int)
-        : t =
-      assert (n > 0);
-      assert (n <= Sys.max_string_length);
-      {rp = 0; wp = 0; bytes = Bytes.create n; flag = true; read; write}
+
+    let make
+        (n:int)
+        (read:  Bytes.t -> int -> int -> int)
+        (write: Bytes.t -> int -> int -> int)
+        : t
+        =
+        assert (n > 0);
+        assert (n <= Sys.max_string_length);
+        {
+                rp = 0;
+                wp = 0;
+                bytes = Bytes.create n;
+                flag = true;
+                read;
+                write;
+        }
+
 
     let is_ok (b:t): bool =
       b.flag
 
+
     let is_empty (b:t): bool =
       b.rp = b.wp
+
 
     let reset (b:t): unit =
       b.rp <- 0;
       b.wp <- 0
 
+
     let is_full (b:t): bool =
       b.wp = Bytes.length b.bytes
+
+
+    let fill (b: t): unit =
+        assert (is_ok b);
+        assert (is_empty b);
+        reset b;
+        let n =
+            b.read b.bytes b.rp (Bytes.length b.bytes)
+        in
+        if n = 0 then
+            b.flag <- false
+        else
+            b.wp <- n
+
+
 
     let flush (b:t): unit =
       if not (is_empty b) && is_ok b then
@@ -65,11 +106,13 @@ end =
              buffer has been written!! *)
           reset b
 
-    (*let get (b:t): char =
-      assert (not (is_empty b));
-      let c = Bytes.get b.bytes b.rp in
-      b.rp <- b.rp + 1;
-      c*)
+
+    let get (b:t): char =
+        assert (not (is_empty b));
+        let c = Bytes.get b.bytes b.rp in
+        b.rp <- b.rp + 1;
+        c
+
 
     let putc (b:t) (c:char): unit =
       assert (is_ok b);
@@ -79,31 +122,36 @@ end =
       Bytes.set b.bytes b.wp c;
       b.wp <- b.wp + 1
 
-    module Read (W:WRITABLE) =
-      struct
-        (*let read (b:t) (w:W.t): W.t =
-          let rec read w =
-            if not (is_empty b) && W.needs_more w then
-              read (W.putc w (get b))
-            else
-              w
-          in
-          read w*)
-      end
 
-    module Write (R:READABLE) =
-      struct
-        let write (b:t) (r:R.t): R.t =
-          let rec write r =
-            if not (is_full b) && R.has_more r then
-              (putc b (R.peek r);
-               write (R.advance r))
-            else
-              r
-          in
-          write r
-      end
-  end (* Buffer *)
+    module Read (W: WRITABLE) =
+    struct
+        let read (b: t) (w: W.t): W.t =
+            let rec read w =
+                if
+                    not (is_empty b)
+                    && W.needs_more w
+                then
+                    read (W.putc w (get b))
+                else
+                    w
+            in
+            read w
+    end
+
+
+    module Write (R: READABLE) =
+    struct
+        let write (b: t) (r: R.t): R.t =
+            let rec write r =
+                if not (is_full b) && R.has_more r then
+                    (putc b (R.peek r);
+                     write (R.advance r))
+                else
+                    r
+            in
+            write r
+    end
+end (* Buffer *)
 
 
 
@@ -112,39 +160,41 @@ end =
 
 module File_system:
 sig
-  type t
-  val make: unit -> t
-  val flush_all: t -> unit
+    type t
+    val make: unit -> t
+    val flush_all: t -> unit
 
-  type in_file
-  type out_file
-  val stdin: in_file
-  val stdout: out_file
-  val stderr: out_file
-  (*val getc: t -> in_file -> char option
-  val getline: t -> in_file -> string option
-  val putc: t -> out_file -> char -> unit
-  val open_for_read: t -> string -> in_file option
-  val open_for_write: t -> string -> out_file option
-  val create: t -> string -> out_file option
-  val close_in:   t -> in_file -> unit
-  val close_out:  t -> out_file -> unit*)
-  val flush: t -> out_file -> unit
+    type in_file
+    type out_file
+    val stdin: in_file
+    val stdout: out_file
+    val stderr: out_file
+    (*val getc: t -> in_file -> char option
+    val getline: t -> in_file -> string option
+    val putc: t -> out_file -> char -> unit
+    val open_for_read: t -> string -> in_file option
+    val open_for_write: t -> string -> out_file option
+    val create: t -> string -> out_file option
+    val close_in:   t -> in_file -> unit
+    val close_out:  t -> out_file -> unit*)
+    val flush: t -> out_file -> unit
 
-  module Read: functor (W:WRITABLE) ->
-               sig
-                 val read_buffer: t -> in_file -> W.t -> W.t
-                 val read: t -> in_file -> W.t -> W.t
-               end
 
-  module Write: functor (R:READABLE) ->
-                sig
-                  val write_buffer: t -> out_file -> R.t -> R.t
-                  val write: t -> out_file -> R.t -> R.t
-                end
+    module Read: functor (W:WRITABLE) ->
+    sig
+        val read_buffer: t -> in_file -> W.t -> W.t
+        val read: t -> in_file -> W.t -> W.t
+    end
+
+
+    module Write: functor (R:READABLE) ->
+    sig
+        val write_buffer: t -> out_file -> R.t -> R.t
+        val write: t -> out_file -> R.t -> R.t
+    end
 end
-  =
-  struct
+=
+struct
     type file =
       | Read of Unix.file_descr * Buffer.t
       | Write of Unix.file_descr * Buffer.t
@@ -218,20 +268,23 @@ end
         end*)
 
     let writable_buffer (fs:t) (fd:int): Buffer.t =
-      assert (fd < Array.length fs.files);
-      match fs.files.(fd) with
-      | Write (_,b) ->
-         b
-      | _ ->
-         assert false
+        assert (fd < Array.length fs.files);
+        match fs.files.(fd) with
+        | Write (_,b) ->
+            b
+        | _ ->
+            assert false
 
-    (*let readable_buffer (fs:t) (fd:int): Buffer.t =
-      assert (fd < Array.length fs.files);
-      match fs.files.(fd) with
-      | Read (_,b) ->
-         b
-      | _ ->
-         assert false*)
+
+
+
+    let readable_buffer (fs:t) (fd:int): Buffer.t =
+        assert (fd < Array.length fs.files);
+        match fs.files.(fd) with
+        | Read (_,b) ->
+            b
+        | _ ->
+            assert false
 
 
     (*let getc (fs:t) (fd:in_file): char option =
@@ -352,38 +405,66 @@ end
       read 0
      *)
 
-    module Read (W:WRITABLE) =
-      struct
-        let read_buffer (_:t) (_:in_file) (_:W.t): W.t =
-          assert false
-        let read (_:t) (_:in_file) (_:W.t): W.t =
-          assert false
-      end
 
-    module Write (R:READABLE) =
-      struct
+    module Read (W: WRITABLE) =
+    struct
+        module BR = Buffer.Read (W)
+
+        let read_buffer (fs: t) (fd: in_file) (w: W.t): W.t =
+            assert (fd < Array.length fs.files);
+            BR.read (readable_buffer fs fd) w
+
+        let read (fs: t) (fd: in_file) (w: W.t): W.t =
+            assert (fd < Array.length fs.files);
+            let b =
+                readable_buffer fs fd
+            in
+            let rec read w =
+                let more =
+                    W.needs_more w
+                in
+                if more && not (Buffer.is_empty b) then
+                    read (BR.read b w)
+
+                else if more then
+                (
+                    Buffer.fill b;
+                    if Buffer.is_ok b then
+                        read w
+                    else
+                        W.putend w
+                )
+                else
+                    w
+            in
+            read w
+    end
+
+
+    module Write (R: READABLE) =
+    struct
         module BW = Buffer.Write (R)
 
         let write_buffer (fs:t) (fd:out_file) (r:R.t): R.t =
-          assert (fd < Array.length fs.files);
-          BW.write (writable_buffer fs fd) r
+            assert (fd < Array.length fs.files);
+            BW.write (writable_buffer fs fd) r
 
         let write (fs:t) (fd:out_file) (r:R.t): R.t =
-          assert (fd < Array.length fs.files);
-          let b = writable_buffer fs fd in
-          let rec write r =
-            let more = R.has_more r in
-            if not (Buffer.is_full b) && more then
-              write @@ BW.write b r
-            else if Buffer.is_ok b && more then
-              (Buffer.flush b;
-               write r)
-            else
-              r
-          in
-          write r
-      end
-  end (* File_system *)
+            assert (fd < Array.length fs.files);
+            let b = writable_buffer fs fd in
+            let rec write r =
+                let more = R.has_more r in
+                if not (Buffer.is_full b) && more then
+                  write @@ BW.write b r
+                else if Buffer.is_ok b && more then
+                  (Buffer.flush b;
+                   write r)
+                else
+                  r
+            in
+            write r
+    end
+end (* File_system *)
 
 
 
@@ -398,7 +479,7 @@ end
 
 
 module IO0: Make_io.SIG =
-  struct
+struct
     type program =
       | More of (File_system.t * (File_system.t -> program))
       | Done
@@ -538,29 +619,41 @@ module IO0: Make_io.SIG =
 
 
 
-    module Read (W:WRITABLE) =
-      struct
+    module Read (W: WRITABLE) =
+    struct
         module FS_Read = File_system.Read (W)
 
         let read_buffer (fd:in_file) (w:W.t): W.t t =
-          fun fs k -> k (FS_Read.read_buffer fs fd w) fs
+            fun fs k ->
+            k
+                (FS_Read.read_buffer fs fd w)
+                fs
 
         let read (fd:in_file) (w:W.t): W.t t =
-          fun fs k -> k (FS_Read.read fs fd w) fs
-      end
+            fun fs k ->
+            k
+                (FS_Read.read fs fd w)
+                fs
+    end
 
 
-    module Write (R:READABLE) =
-      struct
+    module Write (R: READABLE) =
+    struct
         module FS_Write = File_system.Write (R)
 
         let write_buffer (fd:out_file) (r:R.t): R.t t =
-          fun fs k -> k (FS_Write.write_buffer fs fd r) fs
+            fun fs k ->
+            k
+                (FS_Write.write_buffer fs fd r)
+                fs
 
         let write (fd:out_file) (r:R.t): R.t t =
-          fun fs k -> k (FS_Write.write fs fd r) fs
-      end
-  end
+            fun fs k ->
+            k
+                (FS_Write.write fs fd r)
+                fs
+    end
+end (* IO0 *)
 
 
 module IO: Io.SIG = Make_io.Make (IO0)
