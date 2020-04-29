@@ -19,17 +19,19 @@ module type BUFFERS =
     type t
     val make: int -> t
     val is_open_write: t -> int -> bool
+    val is_open_read: t -> int -> bool
     val capacity: t -> int
     val occupy_readable: t -> int -> int
     val occupy_writable: t -> int -> int
     val writable_file: t -> int -> int * B.t
+    val readable_file: t -> int -> int * B.t
   end
 
 
 
 module Buffers: BUFFERS =
-  functor (B:BUFFER) ->
-  struct
+functor (B:BUFFER) ->
+struct
     type file =
       | Read  of int * B.t
       | Write of int * B.t
@@ -38,9 +40,18 @@ module Buffers: BUFFERS =
     type t = {size: int;
               files: file Pool.t}
 
+
     let make (size:int): t =
       {size;
        files = Pool.make_empty ()}
+
+
+    let is_open_read (s:t) (i:int): bool =
+      Pool.has s.files i
+      && match Pool.elem s.files i with
+         | Read _  -> true
+         | Write _ -> false
+
 
     let is_open_write (s:t) (i:int): bool =
       Pool.has s.files i
@@ -48,30 +59,47 @@ module Buffers: BUFFERS =
          | Read _  -> false
          | Write _ -> true
 
+
     let capacity (s:t): int =
       Pool.capacity s.files
+
 
     let occupy (s:t) (f:B.t -> file): int =
       let buf = B.alloc s.size in
       Pool.occupy s.files (f buf)
 
+
     let occupy_readable (s:t) (fd:int): int =
       occupy s (fun b -> Read(fd,b))
+
 
     let occupy_writable (s:t) (fd:int): int =
       occupy s (fun b -> Write(fd,b))
 
+
+    let readable_file (s:t) (i:int): int * B.t =
+        match Pool.elem s.files i with
+        | Write _ ->
+            assert false (* Illegal call! *)
+
+        | Read (fd,b) ->
+            fd, b
+
+
     let writable_file (s:t) (i:int): int * B.t =
-      match Pool.elem s.files i with
-      | Read _ -> assert false (* Illegal call! *)
-      | Write (fd,b) -> fd,b
-  end (* Buffers *)
+        match Pool.elem s.files i with
+        | Read _ ->
+            assert false (* Illegal call! *)
+
+        | Write (fd,b) ->
+            fd, b
+end (* Buffers *)
 
 
 
 
 module World =
-  struct
+struct
     include Buffers (Io_buffer)
 
     let buffer_size = 4096 (* 16K: 16384, 32K: 32768, 64K: 65536, 2000 loc ~ 56K,
@@ -82,22 +110,22 @@ module World =
     let stderr: int = 2
 
     let init () =
-      let w = make buffer_size in
-      let i0 = occupy_readable w stdin in
-      assert (i0 = stdin);
-      let i1 = occupy_writable w stdout in
-      assert (i1 = stdout);
-      let i2 = occupy_writable w stderr in
-      assert (i2 = stderr);
-      w
-  end
+        let w = make buffer_size in
+        let i0 = occupy_readable w stdin in
+        assert (i0 = stdin);
+        let i1 = occupy_writable w stdout in
+        assert (i1 = stdout);
+        let i2 = occupy_writable w stderr in
+        assert (i2 = stderr);
+        w
+end
 
 
 
 
 
 module IO0: Make_io.SIG =
-  struct
+struct
     type in_file = int
     type out_file = int
 
@@ -141,6 +169,24 @@ module IO0: Make_io.SIG =
       fun w k -> k w w
 
 
+    let fill_buffer (fd: int) (buf: Io_buffer.t): unit option t =
+        fun w k ->
+        Printf.printf "fill_buffer %d\n" fd;
+        File_system.read
+            fd
+            buf
+            (fun n ->
+                Printf.printf "fill_buffer fd %d, n %d\n" fd n;
+                let opt =
+                    if n = 0 then
+                        None
+                    else
+                        Some ()
+                in
+                execute_program (k opt w));
+        Done
+
+
     let write1
           (fd:int)
           (buf:Io_buffer.t)
@@ -173,6 +219,13 @@ module IO0: Make_io.SIG =
       let fd,buf = World.writable_file w fd in
       flush_buffer fd buf w k
 
+
+
+    let readable_file (fd:out_file): (int * Io_buffer.t) t =
+      fun w k ->
+      assert (World.is_open_read w fd);
+      let fd,buf = World.readable_file w fd in
+      k (fd,buf) w
 
 
     let writable_file (fd:out_file): (int * Io_buffer.t) t =
@@ -281,18 +334,40 @@ module IO0: Make_io.SIG =
 
 
 
-    module Read (W:WRITABLE) =
-      struct
-        let read_buffer (_:in_file) (_:W.t): W.t t =
-          assert false
+    module Read (W: WRITABLE) =
+    struct
+        module BR =
+            Io_buffer.Read (W)
 
-        let read (_:in_file) (_:W.t): W.t t =
-          assert false
-      end
+        let read_buffer (fd: in_file) (w: W.t): W.t t =
+            readable_file fd
+            >>= fun (_, buf) ->
+            return
+                (BR.read buf w)
+
+        let read (fd: in_file) (w: W.t): W.t t =
+            readable_file fd
+            >>= fun (fd, buf) ->
+            let rec read w =
+                if W.needs_more w then
+                    if Io_buffer.is_empty buf then
+                        fill_buffer fd buf >>= function
+                        | None ->
+                            return (W.putend w)
+                        | Some () ->
+                            assert (not (Io_buffer.is_empty buf));
+                            read w
+                    else
+                        read_buffer fd w >>= read
+                else
+                    return w
+            in
+            read w
+    end
 
 
-    module Write (R:READABLE) =
-      struct
+    module Write (R: READABLE) =
+    struct
         let rec extract_readable (n_max:int) (r:R.t): string =
           if n_max <> 0 && R.has_more r then
             String.one (R.peek r) ^ extract_readable (n_max - 1) (R.advance r)
@@ -300,31 +375,36 @@ module IO0: Make_io.SIG =
             ""
         let _ = extract_readable (* might be used for debugging *)
 
-        module BW = Io_buffer.Write (R)
-        let write_buffer (fd:out_file) (r:R.t): R.t t =
-          writable_file fd >>= fun (_,buf) ->
-          return @@ BW.write buf r
+        module BW =
+            Io_buffer.Write (R)
 
-        let write (fd:out_file) (r:R.t): R.t t =
-          writable_file fd >>= fun (fd,buf) ->
-          let rec write i r =
-            assert (i < 100);
-            if R.has_more r then
-              if Io_buffer.is_full buf then
-                flush_buffer fd buf >>= function
-                | None ->
-                   return r
-                | Some () ->
-                   assert (not (Io_buffer.is_full buf));
-                   write (i+1) r
-              else
-                return @@ BW.write buf r >>= write (i+1)
-            else
-              return r
-          in
-          write 0 r
-      end
+        let write_buffer (fd:out_file) (r:R.t): R.t t =
+            writable_file fd >>= fun (_,buf) ->
+            return
+                (BW.write buf r)
+
+        let write (fd: out_file) (r: R.t): R.t t =
+            writable_file fd
+            >>= fun (fd,buf) ->
+            let rec write i r =
+                if R.has_more r then
+                    if Io_buffer.is_full buf then
+                        flush_buffer fd buf >>= function
+                        | None ->
+                           return r
+                        | Some () ->
+                           assert (not (Io_buffer.is_full buf));
+                           write (i+1) r
+                    else
+                        return @@ BW.write buf r >>= write (i+1)
+                else
+                    return r
+            in
+            write 0 r
   end
+end (* IO0 *)
+
+
 
 
 module IO: Io.SIG = Make_io.Make (IO0)

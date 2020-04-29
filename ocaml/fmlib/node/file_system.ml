@@ -51,6 +51,7 @@ class type fs =
              -> offset -> length -> int opt
              -> (error t opt -> int -> Io_buffer.js_buffer -> unit) callback
              -> unit meth
+
     method write:
              file_descriptor -> Io_buffer.js_buffer -> offset -> length
              -> (error t opt -> int -> Io_buffer.js_buffer -> unit) callback
@@ -128,6 +129,7 @@ let open_ (path:string) (flags:string) (k:int option -> unit): unit =
          else
            k @@ Some fd))
 
+
 let close (fd:int) (k:unit option -> unit): unit =
   node_fs##close
     fd
@@ -138,18 +140,25 @@ let close (fd:int) (k:unit option -> unit): unit =
          else
            k @@ Some ()))
 
-let read (fd:int) (buf:Io_buffer.t) (f: int -> unit): unit =
-  node_fs##read
-    fd
-    (Io_buffer.js_buffer buf)
-    0
-    (Io_buffer.capacity buf)
-    Opt.empty  (* no explicit position, use the current file position *)
-    (wrap_callback
-       (fun _ n _ ->
-         Io_buffer.reset buf;
-         Io_buffer.set_write_pointer buf n;
-         f n))
+
+
+let read (fd: int) (buf: Io_buffer.t) (f: int -> unit): unit =
+    Printf.printf "File_system.read fd %d, cap %d\n"
+        fd (Io_buffer.capacity buf);
+    assert (Io_buffer.is_empty buf);
+    node_fs##read
+        fd
+        (Io_buffer.js_buffer buf)
+        0
+        (Io_buffer.capacity buf)
+        Opt.empty  (* no explicit position, use the current file position *)
+        (wrap_callback
+           (fun _ n _ ->
+                Io_buffer.reset buf;
+                Io_buffer.set_write_pointer buf n;
+                f n))
+
+
 
 let write (fd:int) (buf:Io_buffer.t) (f: int -> unit): unit =
   assert (Io_buffer.read_pointer buf = 0);
