@@ -21,7 +21,9 @@ val catch: ('a, 'e) t -> ('e -> ('a, 'e) t) -> ('a, 'e) t
 
 
 
-(** Result Monad, satisfying the complete monadic interface. *)
+(** Result Monad, satisfying the complete monadic interface as described in
+{!module-type:Module_types.MONAD}.
+*)
 module Make (Error: ANY):
 sig
     type error = Error.t

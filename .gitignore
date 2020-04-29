@@ -12,7 +12,7 @@ draft/
 draft.*
 *_old.ml
 *_old.mli
-doc
+./doc/
 .alba
 *.al.json
 *.ali.json

@@ -1,0 +1,83 @@
+{1  Fmlib: Functional Monadic Library}
+
+
+
+- Library of basic datastructures allowing functional monadic programming
+  ({!Fmlib})
+
+- Develop console applications which can be compiled to native code using the
+  ocaml compiler suite or into nodejs applications using js_of_ocaml and the
+  ocaml compiler suite ({!module: Fmlib.Io}, {!module: Fmlib_native.Io}, {!module:
+  Fmlib_node.Io}).
+
+- Develop interactive web applications in the Elm style.
+
+
+
+{2 Native and Nodejs Console Applications}
+
+With the ocaml compiler and the opam infrastructure it is easy to develop
+applications in Ocaml and share them with Ocaml/opam users. However things get
+more difficult to reach users which might be interested in using the programs
+written in Ocaml, but they don't know the Ocaml/opam tools.
+
+In order to reach all possible users, the restriction to the Ocaml
+infrastructure is not helpful. And since nodejs runs on nearly all machines and
+there is this nice thing called js_of_ocaml to compile Ocaml programs to
+javascript, it is possible in principle to deploy Ocaml programs compiled to
+javascript via the npm infrastructure.
+
+The Fmlib helps to develop Ocaml programs which run natively and can be compiled
+to javascript without changing the code of the application.
+
+You develop your program as a functor accepting a module argument of type
+[Fmlib.Io.SIG]. This program does all input/ouptut via the module [Io].
+
+{[
+    (* Content of file [program.ml] *)
+    module Make (Io: Io.SIG) =
+    struct
+        let run _: unit =
+        let open Io in
+        Process.execute
+            (Stdout.line "Hello world")
+    end
+
+]}
+
+The library provides two instances of type [Io.SIG]. One is [Fmlib_native.Io]
+for native applications and the other is [Fmlib_node.Io] for nodejs
+    applications.
+
+Then you can make a native application by
+{[
+    module P = Program.Make (Fmlib_native.Io)
+
+    let _ =
+        P.run ()
+
+]}
+
+and a nodejs application by
+{[
+    module P = Program.Make (Fmlib_node.Io)
+
+    let _ =
+        P.run ()
+
+]}
+
+
+
+
+
+
+{2 Sublibraries of Fmlib}
+
+{!module: Fmlib}
+
+{!module: Fmlib_native}
+
+{!module: Fmlib_node}
+
+{!module: Fmlib_js}

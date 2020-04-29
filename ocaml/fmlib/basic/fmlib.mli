@@ -38,19 +38,23 @@ module Common = Common
 
 
 
-(** {1 Parsing }*)
+(** {1 Parsing and Pretty Printing }*)
+
+(** {2 Parsing }*)
 
 module Character_parser = Character_parser
 module Generic_parser   = Generic_parser
 
 
-(** {1 Pretty Printing }*)
+(** {2 Pretty Printing }*)
 
 module Pretty_printer = Pretty_printer
 
 
 
-(** {1 IO }*)
+(** {1 Applications } *)
+
+(** {2 Console Applications }*)
 
 module Io = Io
 
@@ -60,7 +64,7 @@ module String_printer = String_printer
 
 
 
-(** {1 Web Applications} *)
+(** {2 Web Applications} *)
 
 module Web_application = Web_application
 
