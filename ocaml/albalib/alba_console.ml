@@ -172,7 +172,8 @@ module Make (Io:Io.SIG) =
 
 
     let evaluate (_:command_line): unit Io.t =
-        assert false
+        let module Repl = Repl.Make (Io) in
+        Repl.run_eval ()
 
 
     let repl _: unit Io.t =

@@ -1,7 +1,8 @@
 open Fmlib
 open Alba_core
 
-module Command_parser = Parser_lang.Make (Parser_lang.Command)
+module Command_parser =
+    Parser_lang.Make (Parser_lang.Command)
 
 
 module Make (Io: Io.SIG) =
@@ -151,9 +152,12 @@ struct
                                 false))
             )
         | None ->
-            let module Printer = Command_parser.Error_printer (Pretty) in
+            let module Printer =
+                Command_parser.Error_printer (Pretty)
+            in
             continue_after
-                (Pretty.run (Printer.print_with_source input p))
+                (Pretty.run
+                    (Printer.print_with_source input p))
 
 
 
@@ -186,4 +190,100 @@ struct
             >>= fun _ ->
             return ()
         )
+
+
+    module Evaluate_stdin =
+    struct
+        module Expression_parser =
+            Parser_lang.Make (Ast.Expression)
+
+
+        module Writable =
+        struct
+            type t = {
+                can_end: bool;
+                input: string;
+                parser: Expression_parser.parser;
+            }
+
+            let init (): t =
+                {
+                    can_end =
+                        false;
+
+                    input =
+                        "";
+
+                    parser =
+                        Expression_parser.(make (expression ()));
+                }
+
+            let needs_more (w: t): bool =
+                Expression_parser.needs_more w.parser
+                ||
+                not w.can_end
+
+
+            let putc (w: t) (c: char): t =
+                let open Expression_parser in
+                {
+                    can_end =
+                        c = '\n';
+
+                    input =
+                        w.input ^ Common.String.one c;
+
+                    parser =
+                        if needs_more w.parser then
+                            put_char w.parser c
+                        else
+                            w.parser;
+                }
+
+            let putend (w: t): t =
+                Printf.printf "putend\n";
+                let open Expression_parser in
+                { w with
+                    parser =
+                        if needs_more w.parser then
+                            put_end w.parser
+                        else
+                            w.parser;
+                }
+
+            let result (w: t): string * Expression_parser.parser =
+                w.input,
+                w.parser
+        end (* Writable *)
+
+        let run _: unit Io.t =
+            let module R = Io.File.Read (Writable) in
+            Io.(
+                R.read File.stdin (Writable.init ())
+                >>= fun w ->
+                let input, p = Writable.result w in
+                let open Expression_parser
+                in
+                assert (has_ended p);
+                match result p with
+                | None ->
+                    let module Printer =
+                        Error_printer (Pretty)
+                    in
+                    Pretty.run
+                        (Printer.print_with_source input p)
+
+                | Some expression ->
+                    Pretty.run
+                        (build_and_compute
+                            input
+                            expression
+                            false)
+            )
+    end
+
+
+
+    let run_eval _: unit Io.t =
+        Evaluate_stdin.run ()
 end
