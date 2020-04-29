@@ -71,10 +71,10 @@ struct
         and len        = String.length source
         in
         let end_col =
-        if start_line = end_line && start_col = end_col then
-          end_col + 1
-        else
-          end_col
+            if start_line = end_line && start_col = end_col then
+                end_col + 1
+            else
+                end_col
         in
         assert (start_line <= end_line);
         assert (start_line < end_line || start_col < end_col);
@@ -117,7 +117,7 @@ struct
                  else if line_no = end_line && start_line <> end_line then
                     print_line char_offset pos_newline line_no
                     <+> skip_line_no
-                    <+> fill (end_col - 1) '.'
+                    <+> fill (max 0 (end_col - 1)) '.'
                     <+> char '^'
                     <+> cut
                  else if pos_newline + 1 = len && start_line = line_no + 1 then
