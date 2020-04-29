@@ -1,6 +1,5 @@
 open Fmlib
 open Common
-open Alba_core
 
 module Parser = Parser_lang
 module Repl_parser = Parser.Make (Parser.Command)
@@ -172,139 +171,32 @@ module Make (Io:Io.SIG) =
 
 
 
-
-    let report_parse_problem
-        (src: string)
-        (p: Repl_parser.parser)
-        : Pretty.t
-        =
-        let module Error_printer = Repl_parser.Error_printer (Pretty) in
-        Error_printer.print_with_source src p
+    let evaluate (_:command_line): unit Io.t =
+        assert false
 
 
-
-    let build_and_compute
-        (src: string)
-        (e: Ast.Expression.t)
-        (compute: bool)
-        : Pretty.t
-        =
-        let std_context = Context.standard () in
-        match Builder.build e std_context with
-        | Error (range, descr) ->
-            let module Print = Printer.Make (Pretty) in
-            let module Builder_print = Builder.Print (Pretty) in
-            let open Pretty in
-            Print.print_error_header "TYPE"
-            <+> Print.print_source src range []
-            <+> cut
-            <+> Builder_print.description descr
-            <+> cut
-        | Ok (term, typ) ->
-            let term =
-                if compute then
-                    Context.compute term std_context
-                else
-                    term
-            in
-            let open Pretty in
-            let module P = Context.Pretty (Pretty)
-            in
-            cut
-            <+>
-            P.print Term.(Typed (term, typ)) std_context
-            <+>
-            cut
-
-
-
-    let repl (_:command_line): unit Io.t =
-      let module State =
-        struct
-          type t = string option
-          let string (s: t): string =
-            Option.value s
-          let init: t =  Some ""
-          let exit: t =  None
-          let prompt (s:t): string option =
-            Option.map
-              (fun s ->
-                if s = "" then "> " else "| ")
-              s
-          let is_last (line: string): bool =
-            let len = String.length line in
-            len = 0 || line.[len-1] <> ' '
-          let add (line: string) (s: t): t =
-            Option.map
-              (fun s ->
-                if s = "" then
-                  line
-                else
-                  s ^ "\n" ^ line)
-              s
-        end
-      in
-      let parse (s:string): Repl_parser.parser =
-        let len = String.length s in
-        let rec parse i p =
-          let more = Repl_parser.needs_more p in
-          if i < len && more then
-            parse (i+1) (Repl_parser.put_char p s.[i])
-          else if more then
-            Repl_parser.put_end p
-          else
-            p
-        in
-        parse 0 Repl_parser.(make command)
-      in
-      let command (src: string): State.t Io.t =
-        let print pr =
-          Io.(Pretty.print File.stdout 80 pr)
-        in
-        let p = parse src in
-        assert (Repl_parser.has_ended p);
-        match Repl_parser.result p with
-        | Some Parser.Command.Do_nothing ->
-            Io.return State.init
-        | Some Parser.Command.Exit ->
-            Io.return State.exit
-        | Some (Parser.Command.Evaluate e) ->
-            Io.(print (build_and_compute src e true)
-                >>= fun _ -> return State.init )
-        | Some (Parser.Command.Type_check e) ->
-            Io.(print (build_and_compute src e false)
-                >>= fun _ -> return State.init )
-        | None ->
-            Io.(print (report_parse_problem src p)
-                >>= fun _ -> return State.init)
-      in
-      let next (s:State.t) (line:string): State.t Io.t =
-        let s = State.add line s in
-        if State.is_last line then
-          command (State.string s)
-        else
-          Io.return s
-      and stop (s:State.t): State.t Io.t =
-        Io.return s
-      in
-      Io.(cli_loop State.init State.prompt next stop >>= fun _ -> return ())
-
-
+    let repl _: unit Io.t =
+        let module Repl = Repl.Make (Io) in
+        Repl.run_cli ()
 
 
 
     let commands: (string*(command_line->unit Io.t)*string) list =
-      ["compile", compile,
-       "Compile the modules provided on the command line and all its \
-        dependencies if compilation is required. If no modules are provided \
-        all modules of the package which require compilation are compiled."
-      ;
-        "status", status,
-        "Display all modules which require compilation or recompilation."
-      ;
-        "repl", repl,
-        "Start an interactive programming session."
-      ]
+        ["compile", compile,
+         "Compile the modules provided on the command line and all its \
+          dependencies if compilation is required. If no modules are provided \
+          all modules of the package which require compilation are compiled."
+        ;
+          "status", status,
+          "Display all modules which require compilation or recompilation."
+        ;
+          "repl", repl,
+          "Start an interactive programming session."
+        ;
+        "evaluate", evaluate,
+        "Read a module from standard input and evaluate it."
+        ]
+
 
     let command_options: (CLP.key*CLP.spec*CLP.doc) list =
       let open CLP in
