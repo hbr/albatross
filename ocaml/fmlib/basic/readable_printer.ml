@@ -6,7 +6,7 @@ struct
       | Fill of int * char
 
     type t =
-      | More of e * (t Lazy.t)
+      | More of e * (unit -> t)
       | Done
 
     let has_more (r:t): bool =
@@ -38,17 +38,17 @@ struct
             | String (s, pos, beyond) ->
                 assert (pos < beyond);
                 if pos + 1 = beyond then
-                    Lazy.force f
+                   f ()
                 else
                     More (String (s, pos+1, beyond), f)
 
             | Char _ ->
-                Lazy.force f
+                f ()
 
             | Fill (n,c) ->
                 assert (0 < n);
                 if n = 1 then
-                    Lazy.force f
+                    f ()
                 else
                     More (Fill (n-1, c), f)
 
@@ -65,18 +65,18 @@ struct
         if len = 0 then
             f ()
         else
-            More (String (s,start,start+len), Lazy.from_fun f)
+            More (String (s, start, start + len), f)
 
 
     let make_char (c:char) (f:unit -> t): t =
-        More (Char c, Lazy.from_fun f)
+        More (Char c, f)
 
 
     let make_fill (n:int) (c:char) (f:unit -> t): t =
         if n = 0 then
             f ()
         else
-            More (Fill(n,c), Lazy.from_fun f)
+            More (Fill(n,c), f)
 
     let make_empty: t =
         Done
