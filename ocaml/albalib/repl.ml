@@ -241,7 +241,6 @@ struct
                 }
 
             let putend (w: t): t =
-                Printf.printf "putend\n";
                 let open Expression_parser in
                 { w with
                     parser =
