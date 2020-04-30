@@ -18,8 +18,6 @@ struct
         {code; message}
 end
 
-type 'a io_result = ('a, Error.t) result
-
 
 
 
@@ -102,7 +100,7 @@ module type SIG =
         module Read (W: WRITABLE):
         sig
             val read_buffer: In.fd -> W.t -> W.t t
-            val read:        In.fd -> W.t -> W.t io_result t
+            val read:        In.fd -> W.t -> (W.t, W.t * Error.t) result t
         end
     end
 

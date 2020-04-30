@@ -9,8 +9,6 @@ type 'a io_result = ('a, Error.t) result
 
 
 
-
-
 module Buffer:
 sig
     type t
@@ -191,7 +189,7 @@ sig
     module Read: functor (W:WRITABLE) ->
     sig
         val read_buffer: t -> in_file -> W.t -> W.t
-        val read: t -> in_file -> W.t -> W.t io_result
+        val read: t -> in_file -> W.t -> (W.t, W.t * Error.t) result
     end
 
 
@@ -435,7 +433,7 @@ struct
             assert (fd < Array.length fs.files);
             BR.read (readable_buffer fs fd) w
 
-        let read (fs: t) (fd: in_file) (w: W.t): W.t io_result =
+        let read (fs: t) (fd: in_file) (w: W.t): (W.t, W.t * Error.t) result =
             assert (fd < Array.length fs.files);
             let b =
                 readable_buffer fs fd
@@ -451,7 +449,7 @@ struct
                 (
                     match Buffer.fill b with
                     | Error error ->
-                        Error error
+                        Error (w, error)
                     | Ok () ->
                         if Buffer.is_ok b then
                             read w
@@ -544,13 +542,6 @@ struct
           end)
 
     include M
-
-    module Error = Error
-
-    type 'a io_result = ('a, Error.t) result
-
-
-
 
 
     type in_file = File_system.in_file
@@ -661,7 +652,7 @@ struct
                 (FS_Read.read_buffer fs fd w)
                 fs
 
-        let read (fd:in_file) (w:W.t): W.t io_result t =
+        let read (fd:in_file) (w:W.t): (W.t, W.t * Error.t) result t =
             fun fs k ->
             k
                 (FS_Read.read fs fd w)

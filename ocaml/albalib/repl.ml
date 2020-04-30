@@ -265,7 +265,7 @@ struct
                 R.read File.stdin (Writable.init ())
                 >>= fun io_res ->
                 match io_res with
-                | Error error ->
+                | Error (_, error) ->
                     Pretty.(run
                         (string (Error.message error) <+> cut)
                     )

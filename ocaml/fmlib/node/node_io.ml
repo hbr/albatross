@@ -3,7 +3,7 @@ open Module_types
 open Common
 
 
-
+module Error = Io.Error
 
 
 
@@ -348,7 +348,7 @@ struct
             return
                 (BR.read buf w)
 
-        let read (fd: in_file) (w: W.t): W.t io_result t =
+        let read (fd: in_file) (w: W.t): (W.t, W.t * Error.t) result t =
             readable_file fd
             >>= fun (fd, buf) ->
             let rec read w =
@@ -365,7 +365,7 @@ struct
                                 read w
                             )
                         | Error error ->
-                            return (Error error)
+                            return (Error (w, error))
                     else
                         read_buffer fd w >>= read
                 else
