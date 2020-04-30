@@ -39,7 +39,7 @@ sig
     module Read: functor (W: WRITABLE) ->
     sig
         val read_buffer: in_file -> W.t -> W.t t
-        val read: in_file -> W.t -> W.t t
+        val read: in_file -> W.t -> (W.t,  Io.Error.t) result t
     end
 
     module Write: functor (R: READABLE) ->
@@ -197,6 +197,9 @@ module Make (Base: SIG): Io.SIG =
 
 
         module Read (W: WRITABLE) =
+            Base.Read (W)
+
+        (*module Read (W: WRITABLE) =
         struct
             module Read0 = Base.Read (W)
 
@@ -205,8 +208,8 @@ module Make (Base: SIG): Io.SIG =
 
             let read(fd: In.fd) (w: W.t): W.t t =
                 Read0.read fd w
-        end
-    end
+        end*)
+    end (* File *)
 
 
 (*

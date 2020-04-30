@@ -1,6 +1,28 @@
 open Module_types
 
 
+module Error =
+struct
+    type t = {
+        code: string;
+        message: string;
+    }
+
+    let code (error: t): string =
+        error.code
+
+    let message (error: t): string =
+        error.message
+
+    let make (code: string) (message: string): t =
+        {code; message}
+end
+
+type 'a io_result = ('a, Error.t) result
+
+
+
+
 module type STAT =
   sig
     type t
@@ -35,6 +57,8 @@ module type SIG =
     end
 
 
+
+
     module Process:
     sig
         val exit: int -> 'a t
@@ -42,6 +66,7 @@ module type SIG =
         val command_line: string array t
         val current_working_directory: string  t
     end
+
 
 
     module Directory:
@@ -77,7 +102,7 @@ module type SIG =
         module Read (W: WRITABLE):
         sig
             val read_buffer: In.fd -> W.t -> W.t t
-            val read:        In.fd -> W.t -> W.t t
+            val read:        In.fd -> W.t -> W.t io_result t
         end
     end
 

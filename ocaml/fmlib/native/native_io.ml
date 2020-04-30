@@ -3,12 +3,20 @@ open Fmlib
 open Module_types
 
 
+module Error = Io.Error
+
+type 'a io_result = ('a, Error.t) result
+
+
+
+
+
 module Buffer:
 sig
     type t
 
     val make: int ->
-              (Bytes.t -> int -> int -> int) ->
+              (Bytes.t -> int -> int -> int io_result) ->
               (Bytes.t -> int -> int -> int) ->
               t
 
@@ -17,7 +25,7 @@ sig
     val is_empty: t -> bool
     val is_full:  t -> bool
 
-    val fill:  t -> unit
+    val fill:  t -> unit io_result
     val flush: t -> unit
 
 
@@ -42,14 +50,14 @@ struct
         mutable flag: bool; (* ok flag, set to false if (a) refilling a buffer
                                adds 0 bytes, (b) flushing a nonempty buffer
                                does not write anything to the filesystem. *)
-        read:  Bytes.t -> int -> int -> int; (* refill function *)
+        read:  Bytes.t -> int -> int -> int io_result; (* refill function *)
         write: Bytes.t -> int -> int -> int; (* flush function *)
         bytes: Bytes.t}
 
 
     let make
         (n:int)
-        (read:  Bytes.t -> int -> int -> int)
+        (read:  Bytes.t -> int -> int -> int io_result)
         (write: Bytes.t -> int -> int -> int)
         : t
         =
@@ -82,17 +90,17 @@ struct
       b.wp = Bytes.length b.bytes
 
 
-    let fill (b: t): unit =
+    let fill (b: t): unit io_result =
         assert (is_ok b);
         assert (is_empty b);
         reset b;
-        let n =
-            b.read b.bytes b.rp (Bytes.length b.bytes)
-        in
-        if n = 0 then
-            b.flag <- false
-        else
-            b.wp <- n
+        Result.map
+            (fun n ->
+                if n = 0 then
+                    b.flag <- false
+                else
+                    b.wp <- n)
+            (b.read b.bytes b.rp (Bytes.length b.bytes))
 
 
 
@@ -183,7 +191,7 @@ sig
     module Read: functor (W:WRITABLE) ->
     sig
         val read_buffer: t -> in_file -> W.t -> W.t
-        val read: t -> in_file -> W.t -> W.t
+        val read: t -> in_file -> W.t -> W.t io_result
     end
 
 
@@ -209,11 +217,22 @@ struct
 
     let buffer_size = 4096
 
-    let unix_read (fd:Unix.file_descr) (b:Bytes.t) (ofs:int) (n:int): int =
-      try
-        Unix.read fd b ofs n
-      with Unix.Unix_error _ ->
-        0
+
+    let unix_read
+        (fd: Unix.file_descr)
+        (b: Bytes.t)
+        (ofs: int)
+        (n: int)
+        : int io_result
+        =
+        try
+            Ok (
+                Unix.read fd b ofs n
+            )
+        with Unix.Unix_error (error, _, _) ->
+            Error ( Error.make "NOCODE" (Unix.error_message error))
+
+
 
     let unix_write (fd:Unix.file_descr) (b:Bytes.t) (ofs:int) (n:int): int =
       try
@@ -221,11 +240,13 @@ struct
       with Unix.Unix_error _ ->
         0
 
-    let readable_file (fd:Unix.file_descr): file =
-      Read (fd, Buffer.make
-                  buffer_size
-                  (unix_read fd)
-                  (fun _ _ _ -> assert false))
+    let readable_file (fd: Unix.file_descr): file =
+        Read (
+            fd,
+            Buffer.make
+                buffer_size
+                (unix_read fd)
+                (fun _ _ _ -> assert false))
 
     let writable_file (fd:Unix.file_descr): file =
       Write (fd, Buffer.make
@@ -414,7 +435,7 @@ struct
             assert (fd < Array.length fs.files);
             BR.read (readable_buffer fs fd) w
 
-        let read (fs: t) (fd: in_file) (w: W.t): W.t =
+        let read (fs: t) (fd: in_file) (w: W.t): W.t io_result =
             assert (fd < Array.length fs.files);
             let b =
                 readable_buffer fs fd
@@ -428,14 +449,17 @@ struct
 
                 else if more then
                 (
-                    Buffer.fill b;
-                    if Buffer.is_ok b then
-                        read w
-                    else
-                        W.putend w
+                    match Buffer.fill b with
+                    | Error error ->
+                        Error error
+                    | Ok () ->
+                        if Buffer.is_ok b then
+                            read w
+                        else
+                            Ok (W.putend w)
                 )
                 else
-                    w
+                    Ok w
             in
             read w
     end
@@ -520,6 +544,14 @@ struct
           end)
 
     include M
+
+    module Error = Error
+
+    type 'a io_result = ('a, Error.t) result
+
+
+
+
 
     type in_file = File_system.in_file
     type out_file = File_system.out_file
@@ -629,7 +661,7 @@ struct
                 (FS_Read.read_buffer fs fd w)
                 fs
 
-        let read (fd:in_file) (w:W.t): W.t t =
+        let read (fd:in_file) (w:W.t): W.t io_result t =
             fun fs k ->
             k
                 (FS_Read.read fs fd w)

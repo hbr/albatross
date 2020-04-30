@@ -4,6 +4,9 @@ open Common
 
 
 
+
+
+
 module type BUFFER =
   sig
     type t
@@ -126,6 +129,10 @@ end
 
 module IO0: Make_io.SIG =
 struct
+
+    type 'a io_result = ('a, Io.Error.t) result
+
+
     type in_file = int
     type out_file = int
 
@@ -169,21 +176,17 @@ struct
       fun w k -> k w w
 
 
-    let fill_buffer (fd: int) (buf: Io_buffer.t): unit option t =
+    let fill_buffer (fd: int) (buf: Io_buffer.t): int io_result t =
         fun w k ->
-        Printf.printf "fill_buffer %d\n" fd;
         File_system.read
             fd
             buf
-            (fun n ->
-                Printf.printf "fill_buffer fd %d, n %d\n" fd n;
-                let opt =
-                    if n = 0 then
-                        None
-                    else
-                        Some ()
-                in
-                execute_program (k opt w));
+            (fun res ->
+                match res with
+                | Error error ->
+                    execute_program (k (Error error) w)
+                | Ok n ->
+                    execute_program (k (Ok n) w));
         Done
 
 
@@ -345,22 +348,28 @@ struct
             return
                 (BR.read buf w)
 
-        let read (fd: in_file) (w: W.t): W.t t =
+        let read (fd: in_file) (w: W.t): W.t io_result t =
             readable_file fd
             >>= fun (fd, buf) ->
             let rec read w =
                 if W.needs_more w then
                     if Io_buffer.is_empty buf then
-                        fill_buffer fd buf >>= function
-                        | None ->
-                            return (W.putend w)
-                        | Some () ->
-                            assert (not (Io_buffer.is_empty buf));
-                            read w
+                        fill_buffer fd buf
+                        >>= fun res ->
+                        match res with
+                        | Ok n ->
+                            if n = 0 then
+                                return (Ok (W.putend w))
+                            else (
+                                assert (not (Io_buffer.is_empty buf));
+                                read w
+                            )
+                        | Error error ->
+                            return (Error error)
                     else
                         read_buffer fd w >>= read
                 else
-                    return w
+                    return (Ok w)
             in
             read w
     end

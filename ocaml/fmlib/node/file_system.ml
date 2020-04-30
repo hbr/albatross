@@ -2,6 +2,15 @@ open Js_of_ocaml
 open Js
 
 
+
+class type error =
+object
+    method code: js_string t readonly_prop
+    method message: js_string t readonly_prop
+end
+
+
+
 class type stats =
     object
       method dev     : int readonly_prop
@@ -19,9 +28,8 @@ class type stats =
       method ctime   : date t readonly_prop
     end
 
-type file_descriptor = int
-type offset = int
-type length = int
+
+
 
 class type fs =
   object
@@ -47,13 +55,13 @@ class type fs =
     method close: int -> (error t opt -> unit) callback -> unit meth
 
     method read:
-             file_descriptor -> Io_buffer.js_buffer
-             -> offset -> length -> int opt
+             int -> Io_buffer.js_buffer
+             -> int -> int -> int opt
              -> (error t opt -> int -> Io_buffer.js_buffer -> unit) callback
              -> unit meth
 
     method write:
-             file_descriptor -> Io_buffer.js_buffer -> offset -> length
+             int -> Io_buffer.js_buffer -> int -> int
              -> (error t opt -> int -> Io_buffer.js_buffer -> unit) callback
              -> unit meth
   end
@@ -142,21 +150,35 @@ let close (fd:int) (k:unit option -> unit): unit =
 
 
 
-let read (fd: int) (buf: Io_buffer.t) (f: int -> unit): unit =
-    Printf.printf "File_system.read fd %d, cap %d\n"
-        fd (Io_buffer.capacity buf);
+let read
+    (fd: int)
+    (buf: Io_buffer.t)
+    (f: (int, Fmlib.Io.Error.t) result -> unit)
+    : unit
+    =
     assert (Io_buffer.is_empty buf);
     node_fs##read
         fd
         (Io_buffer.js_buffer buf)
         0
         (Io_buffer.capacity buf)
-        Opt.empty  (* no explicit position, use the current file position *)
-        (wrap_callback
-           (fun _ n _ ->
-                Io_buffer.reset buf;
-                Io_buffer.set_write_pointer buf n;
-                f n))
+        null (* no explicit position, use the current file position *)
+        (wrap_callback (
+            fun error n _ ->
+                match Opt.to_option error with
+                | None ->
+                    Io_buffer.reset buf;
+                    Io_buffer.set_write_pointer buf n;
+                    f (Ok n)
+                | Some js_error ->
+                    f (
+                        Error (
+                            Fmlib.Io.Error.make
+                                (to_string js_error##.code)
+                                (to_string js_error##.message)
+                        )
+                    )
+        ))
 
 
 

@@ -256,29 +256,38 @@ struct
                 w.parser
         end (* Writable *)
 
+
+
         let run _: unit Io.t =
             let module R = Io.File.Read (Writable) in
+            let module Error = Fmlib.Io.Error in
             Io.(
                 R.read File.stdin (Writable.init ())
-                >>= fun w ->
-                let input, p = Writable.result w in
-                let open Expression_parser
-                in
-                assert (has_ended p);
-                match result p with
-                | None ->
-                    let module Printer =
-                        Error_printer (Pretty)
+                >>= fun io_res ->
+                match io_res with
+                | Error error ->
+                    Pretty.(run
+                        (string (Error.message error) <+> cut)
+                    )
+                | Ok w ->
+                    let input, p = Writable.result w in
+                    let open Expression_parser
                     in
-                    Pretty.run
-                        (Printer.print_with_source input p)
+                    assert (has_ended p);
+                    match result p with
+                    | None ->
+                        let module Printer =
+                            Error_printer (Pretty)
+                        in
+                        Pretty.run
+                            (Printer.print_with_source input p)
 
-                | Some expression ->
-                    Pretty.run
-                        (build_and_compute
-                            input
-                            expression
-                            false)
+                    | Some expression ->
+                        Pretty.run
+                            (build_and_compute
+                                input
+                                expression
+                                false)
             )
     end
 

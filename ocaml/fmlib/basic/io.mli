@@ -1,6 +1,17 @@
 open Module_types
 
 
+(** IO Errors *)
+module Error:
+sig
+    type t
+    val code:    t -> string
+    val message: t -> string
+    val make: string -> string -> t
+end
+
+
+
 
 (** Statistic data about a file/directory. *)
 module type STAT =
@@ -102,9 +113,6 @@ module type SIG =
       val read: string -> string array option t
     end
 
-    (*val read_file:   string -> 'a t -> (in_file  -> 'a t) -> 'a t
-    val write_file:  string -> 'a t -> (out_file -> 'a t) -> 'a t
-    val create_file: string -> 'a t -> (out_file -> 'a t) -> 'a t*)
 
 
     module File:
@@ -129,10 +137,11 @@ module type SIG =
         val stdout: Out.fd
         val stderr: Out.fd
 
+
         module Read (W: WRITABLE):
         sig
             val read_buffer: In.fd -> W.t -> W.t t
-            val read:        In.fd -> W.t -> W.t t
+            val read:        In.fd -> W.t -> (W.t, Error.t) result t
         end
     end
 

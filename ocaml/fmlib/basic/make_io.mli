@@ -49,7 +49,7 @@ sig
     module Read: functor (W:WRITABLE) ->
                  sig
                    val read_buffer: in_file -> W.t -> W.t t
-                   val read: in_file -> W.t -> W.t t
+                   val read: in_file -> W.t -> (W.t, Io.Error.t) result t
                  end
     module Write: functor (R:READABLE) ->
                   sig
