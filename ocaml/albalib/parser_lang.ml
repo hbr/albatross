@@ -735,7 +735,10 @@ struct
                 return e
             | Some definitions ->
                 assert (definitions <> []);
-                make_where e (List.rev definitions) (Located.end_ def)
+                make_where
+                    e
+                    (List.rev definitions)
+                    (Located.end_ def)
         )
 
 
