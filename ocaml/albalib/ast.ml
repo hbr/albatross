@@ -41,7 +41,7 @@ module Expression = struct
         string Located.t * t option
 
     and definition =
-        string Located.t * formal_argument list * t option * t
+        (string Located.t * formal_argument list * t option * t) Located.t
 
 
 
@@ -218,7 +218,10 @@ module Expression = struct
                 | [] ->
                     name_occurs name exp
 
-                | (name2, fargs, res_tp, def_exp) :: defs ->
+                | def :: defs ->
+                    let name2, fargs, res_tp, def_exp =
+                        Located.value def
+                    in
                     Located.value name <> Located.value name2
                     &&
                     (
@@ -244,7 +247,8 @@ module Expression = struct
         | [] ->
             None
 
-        | (name, _, _, _) :: defs ->
+        | def :: defs ->
+            let name, _, _, _ = Located.value def in
             if occurs name (Where (exp, defs)) then
                 find_unused_local exp defs
             else

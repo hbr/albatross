@@ -405,7 +405,10 @@ let rec build0
             match defs with
             | [] ->
                 build0 exp 0 builder
-            | (name, fargs, res_tp, def_exp) :: defs ->
+            | def :: defs ->
+                let name, fargs, res_tp, def_exp =
+                    Located.value def
+                in
                 let str = Located.value name
                 and names = builder.names
                 in

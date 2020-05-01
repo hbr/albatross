@@ -687,7 +687,11 @@ struct
 
         let definition: Expression.definition t =
             return
-                (fun name args res_tp e -> name, args, res_tp, e)
+                (fun name args res_tp e ->
+                    let p1 = Located.start name
+                    and p2 = Located.end_ e
+                    in
+                    Located.make p1 (name, args, res_tp, e) p2)
             |= identifier false
             |= formal_arguments true
             |= optional_result_type
@@ -735,10 +739,12 @@ struct
                 return e
             | Some definitions ->
                 assert (definitions <> []);
+                let definitions = List.rev definitions in
+                let pos_end = Located.end_ (List.head_strict definitions) in
                 make_where
                     e
-                    (List.rev definitions)
-                    (Located.end_ def)
+                    definitions
+                    pos_end
         )
 
 

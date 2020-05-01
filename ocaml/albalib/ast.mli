@@ -42,7 +42,7 @@ sig
         string Located.t * t option
 
     and definition =
-        string Located.t * formal_argument list * t option * t
+        (string Located.t * formal_argument list * t option * t) Located.t
 
 
     val to_list: t -> t0
