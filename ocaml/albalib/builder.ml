@@ -68,7 +68,9 @@ type t = {
     bcs:   Build_context.t list;
 }
 
-type build_function = Expression.t -> int -> t -> (t, problem) result
+type build_monad = t -> (t, problem) result
+
+type build_function = Expression.t -> int -> build_monad
 
 
 let count_base (builder: t): int =
@@ -196,6 +198,23 @@ let next_formal_argument
 
 
 
+let build_farg
+    (build0: build_function)
+    ((name, tp): Expression.formal_argument)
+    : build_monad
+    =
+    fun builder ->
+    let next typed builder = next_formal_argument name typed builder
+    in
+    match tp with
+    | None ->
+        Ok (next false builder)
+    | Some tp ->
+        Result.map (next true) (build0 tp 0 builder)
+
+
+
+
 let build_fargs_res
     (fargs: Expression.formal_argument list)
     (res: Expression.t option)
@@ -205,17 +224,9 @@ let build_fargs_res
     =
     let open Result in
     List_fold.fold_left
-            (fun (name, tp) builder ->
-                let next typed builder = next_formal_argument name typed builder
-                in
-                match tp with
-                | None ->
-                    Ok (next false builder)
-                | Some tp ->
-                    map (next true) (build0 tp 0 builder)
-            )
-            fargs
-            builder
+        (build_farg build0)
+        fargs
+        builder
     >>= fun builder ->
     match res with
     | None ->
@@ -328,12 +339,15 @@ let rec build0
 
     | Application (f, args) ->
         let open Result in
+        (*  Get a position number for each argument and the total number of
+            arguments. *)
         let nargs, args =
             List.fold_right
                 (fun (arg, mode) (n,args) -> n + 1, (n,arg,mode) :: args)
                 args
                 (0, [])
         in
+        (* Build the function term. *)
         build0
             f
             nargs
@@ -341,6 +355,7 @@ let rec build0
                 (Build_context.Application.start nargs)
                 builder)
         >>=
+        (* Build the arguments. *)
         List_fold.fold_left
             (fun (n, arg, mode) builder ->
                 let mode =
