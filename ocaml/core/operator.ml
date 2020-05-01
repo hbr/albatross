@@ -15,9 +15,8 @@ type t =
 
 
 let where             = (10,   Left)
-let assign            = (20,   Right)
-
-let comma             = (30,   Right)
+let comma             = (20,   Right)
+let assign            = (30,   Right)
 let colon             = (40,   Right)
 let arrow             = (50,   Right)
 let push_arg          = (55,   Left)
@@ -39,6 +38,8 @@ let application       = (200,  Left)
     \x := exp: T                \x := (exp: T)      assign < colon
 
     \x y := x => y              \x y := (x => y)
+
+    \x := exp, 3                (\x := exp), 3      comma < assign
 
 *)
 
