@@ -41,6 +41,29 @@ let nth_strict (i: int) (lst: 'a t): 'a =
         e
 
 
+let split_head_tail (lst: 'a t): 'a * 'a t =
+    assert (lst <> []);
+    match lst with
+    | [] ->
+        assert false (* Illegal call! *)
+    | hd :: tl ->
+        hd, tl
+
+
+
+
+let head_strict (lst: 'a t): 'a =
+    assert (lst <> []);
+    fst (split_head_tail lst)
+
+
+
+let tail_strict (lst: 'a t): 'a t =
+    assert (lst <> []);
+    snd (split_head_tail lst)
+
+
+
 
 let map_and_filter (f:'a -> 'b option) (l:'a list): 'b list =
   let rec map = function

@@ -41,6 +41,22 @@ val find: ('a -> bool) ->'a t -> 'a option
 
 
 
+
+val split_head_tail: 'a t -> 'a * 'a t
+(** Split the list in its head and tail parts. Requires that the list is not
+empty. *)
+
+
+val head_strict: 'a t -> 'a
+(** Get the head of the list. Requires that the list is not empty. *)
+
+
+
+val tail_strict: 'a t -> 'a t
+(** Get the tail of the list. Requires that the list is not empty. *)
+
+
+
 val nth_strict: int -> 'a t -> 'a
 (** [ith_strict n list] returns the [n]th element of the list. Precondition:
 [list] has at least [n + 1] elements. *)
