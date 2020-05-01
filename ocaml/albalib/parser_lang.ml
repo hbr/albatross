@@ -512,6 +512,17 @@ struct
         char c |. whitespace
 
 
+
+    let zero_or_more_reversed (p: 'a t): 'a list t =
+        let rec many l =
+            (p >>= fun a -> many (a :: l))
+            <|>
+            return l
+        in
+        many []
+
+
+
     let rec find_duplicate_argument
         (arg_lst: (string located * Expression.t option) list)
         : string located option
@@ -653,29 +664,33 @@ struct
         in
 
         let application =
-          primary () >>= fun f ->
-          located (zero_or_more (primary ())) >>= fun args ->
-          match Located.value args with
-          | [] ->
-             return f
-          | arg_lst ->
-              let arg_lst =
-                  List.map (fun arg -> arg, Expression.Normal) arg_lst
-              in
-              let pos1 = Located.start f
-              and pos2 = Located.end_ args
-              and f, arg_lst =
-               match Located.value f with
-               | Expression.Application (f0, arg_lst0) ->
-                   f0, arg_lst0 @ arg_lst
-               | _ ->
-                   f, arg_lst
-              in
-              return
-                (Located.make
-                   pos1
-                   (Expression.Application (f, arg_lst))
-                   pos2)
+            primary () >>= fun f ->
+            zero_or_more_reversed (primary ()) >>= fun args_rev ->
+            match args_rev with
+            | [] ->
+                return f
+            | last :: _ ->
+                let arg_lst =
+                    List.rev_map
+                        (fun arg -> arg, Expression.Normal)
+                        args_rev
+                in
+                let f0, arg_lst =
+                    match Located.value f with
+                    | Expression.Application (f0, arg_lst0) ->
+                        f0, arg_lst0 @ arg_lst
+                    | _ ->
+                        f, arg_lst
+                in
+                let pos1 = Located.start f
+                and pos2 = Located.end_ last
+                in
+                return (
+                    Located.make
+                        pos1
+                        (Expression.Application (f0, arg_lst))
+                        pos2
+                )
         in
 
         let operator_and_operand (with_comma: bool) =
