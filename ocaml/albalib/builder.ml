@@ -23,7 +23,7 @@ type type_in_context = Build_context.type_in_context
 type problem_description =
     | Overflow
     | No_name
-    | Incomplete_type of type_in_context list
+    | Incomplete_type of type_in_context
     | Cannot_infer_bound
     | Not_a_function of type_in_context list
     | Wrong_type of (type_in_context * type_in_context) list
@@ -515,7 +515,7 @@ let check_incomplete
     =
     match Build_context.final bc with
     | Error err ->
-        Error (range, Incomplete_type [err])
+        Error (range, Incomplete_type err)
 
     | Ok (_, term, typ) ->
         Ok (term, typ)
@@ -554,15 +554,6 @@ struct
     module PP = Term_printer.Pretty (Gamma) (P)
 
 
-    let with_plural_s (l: 'a list) (s: string): P.t =
-        match l with
-        | [_] ->
-            P.string s
-        | _ :: _ :: _ ->
-            P.(string s <+>  char 's')
-        | _ ->
-            assert false (* Illegal call! *)
-
     let type_or_types (l: 'a list): P.t =
         match l with
         | [_] ->
@@ -593,7 +584,12 @@ struct
                         holes)
                 <+> char ']'
             in
-            holes <+> space <+> tp
+            tp
+            <+>
+            nest 4 (
+                cut
+                <+> string "unknown: "
+                <+> holes)
 
     let type_list (lst: type_in_context list): P.t =
         let open P in
@@ -602,7 +598,7 @@ struct
                 cut
                 (List.map
                     (fun (holes, tp, gamma) ->
-                        group (typ holes tp gamma))
+                        (typ holes tp gamma))
                     lst))
 
     let wrong_type
@@ -635,14 +631,11 @@ struct
             string "I cannot find this name or operator" <+> cut
         | Cannot_infer_bound ->
             wrap_words "I cannot infer a type for this variable" <+> cut
-        | Incomplete_type lst  ->
-            assert (lst <> []);
+        | Incomplete_type tp  ->
             wrap_words "I cannot infer a complete type of the expression. \
-                        Only the incomplete"
-            <+> group space
-            <+> with_plural_s lst "type"
+                        Only the incomplete type"
             <+> cut <+> cut
-            <+> type_list lst
+            <+> type_list [tp]
             <+> cut <+> cut
             <+> wrap_words "This usually happens if I cannot infer the types \
                             of some bound variables."
