@@ -498,7 +498,6 @@ struct
                 "operator"
              )
         |. whitespace
-        >>= succeed
 
 
     let lonely_operator: Expression.t t =
@@ -615,14 +614,19 @@ struct
             empty_list
             <|>
             (*  "( exp )" *)
-            ( ( char_ws '('
-                >>= fun _ ->
-                (* op_expression has to be encapsulated in a function,
-                   otherwise infinite recursion!! *)
-                indented (expression0 true ())
-                <|>
-                indented lonely_operator)
-              |. char_ws ')'
+            (
+                (
+                    char_ws '('
+                    >>= fun _ ->
+                    (* op_expression has to be encapsulated in a function,
+                       otherwise infinite recursion!! *)
+                    indented (
+                        lonely_operator
+                        <|>
+                        expression0 true ()
+                    )
+                )
+                |. char_ws ')'
             )
             <|>
             (*  "[ e1, e2, ... ]" *)
@@ -765,7 +769,7 @@ struct
 
 
     let expression (): Expression.t t =
-        expression0 false ()
+        expression0 true ()
 
 
 
