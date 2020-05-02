@@ -1,3 +1,54 @@
+(** Definition of an enviroment for console applications which can run natively
+or under nodejs or any other module which satisfies the signature [SIG].
+
+
+
+The Fmlib helps you to develop Ocaml programs which run natively and can be
+compiled to javascript without changing the code of the application.
+
+You develop your program as a functor accepting a module argument of type
+{!module-type: SIG}. The program does all input/ouptut via the module [Io].
+
+{[
+    (* Content of file [program.ml] *)
+    module Make (Io: Io.SIG) =
+    struct
+        let run _: unit =
+        let open Io in
+        Process.execute
+            (Stdout.line "Hello world")
+    end
+
+]}
+
+The library provides two instances of type [Io.SIG]. One is [Fmlib_native.Io]
+for native applications and the other is [Fmlib_node.Io] for nodejs
+    applications.
+
+You can make a native application by
+{[
+    module P = Program.Make (Fmlib_native.Io)
+
+    let _ =
+        P.run ()
+
+]}
+
+and a nodejs application by
+{[
+    module P = Program.Make (Fmlib_node.Io)
+
+    let _ =
+        P.run ()
+
+]}
+
+
+
+
+*)
+
+
 open Module_types
 
 
@@ -43,7 +94,7 @@ module type STAT =
 
 
 
-
+(** Signature of an IO environment. *)
 module type SIG =
   sig
     module M: MONAD
