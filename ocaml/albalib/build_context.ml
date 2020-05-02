@@ -39,6 +39,27 @@ struct
 end
 
 
+module Implicits =
+struct
+    type t = int String_map.t
+
+    let empty: t =
+        String_map.empty
+
+    let add (name: string) (impl: t): string * t =
+        let make_name n name =
+            name ^ "." ^ string_of_int n ^ "?"
+        in
+        match String_map.maybe_find name impl with
+        | None ->
+            name ^ "?",
+            String_map.add name 1 impl
+
+        | Some n ->
+            assert (0 < n);
+            make_name n name,
+            String_map.add name (n + 1) impl
+end
 
 
 
@@ -51,6 +72,7 @@ type t = {
     gh: Gamma_holes.t;
     base_candidates: (range * int * Term.t) list;
     formal_arguments: (string Located.t * int) list; (* level of formal *)
+    implicits: Implicits.t;
     sp: int;
     stack: int list;
     entry: entry;
@@ -149,14 +171,19 @@ let add_one_implicit
     =
     let open Term in
     match typ with
-    | Pi (arg, res, _) when is_kind arg bc && has_variable 0 res ->
+    | Pi (arg, res, info) when is_kind arg bc && has_variable 0 res ->
+        let name = Pi_info.name info in
+        let name2, implicits = Implicits.add name bc.implicits in
         Some (
             Appl (
                 up1 term,
                 Variable 0,
                 Application_info.Implicit),
             res,
-            {bc with gh = Gamma_holes.push_hole arg bc.gh}
+            {bc with gh =
+                Gamma_holes.push_named_hole name2 arg bc.gh;
+                implicits;
+            }
         )
     | _ ->
         None
@@ -227,6 +254,8 @@ let make (gamma: Gamma.t): t =
         base_candidates = [];
 
         formal_arguments = [];
+
+        implicits = Implicits.empty;
 
         sp = cnt0 + 1;
 

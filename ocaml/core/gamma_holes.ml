@@ -314,14 +314,21 @@ let push_local (name: string) (typ: Term.typ) (gh: t): t =
 
 
 
-let push_hole (typ: Term.typ) (gh: t): t =
-    let name = "<" ^ string_of_int gh.nholes ^ ">"
-    in
+let push_named_hole (name: string) (typ: Term.typ) (gh: t): t =
     {gh with
         base   = Gamma.push_local name typ gh.base;
         locals = Array.push Local.hole gh.locals;
         nholes = gh.nholes + 1;
     }
+
+
+
+
+let push_hole (typ: Term.typ) (gh: t): t =
+    push_named_hole
+        ("<" ^ string_of_int gh.nholes ^ ">")
+        typ
+        gh
 
 
 

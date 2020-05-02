@@ -157,6 +157,11 @@ val fill_hole: int -> Term.t -> t -> t
 *)
 
 
+val push_named_hole: string -> Term.typ -> t -> t
+(** [push_hole name typ gh] Add a hole with name [name] of type [typ] to [gh].
+*)
+
+
 val push_hole: Term.typ -> t -> t
 (** [push_hole typ gh] Add a hole of type [typ] to [gh]. *)
 
