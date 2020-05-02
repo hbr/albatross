@@ -521,6 +521,20 @@ struct
         many []
 
 
+    let parenthesized
+        (p: unit -> 'a Located.t t): 'a Located.t t =
+        located (char '(') |. whitespace
+        >>= fun loc1 ->
+        p ()
+        >>= fun a ->
+        located (char ')') |. whitespace
+        >>= fun loc2 ->
+        return
+            (Located.make
+                (Located.start loc1)
+                (Located.value a)
+                (Located.end_ loc2))
+
 
     let rec find_duplicate_argument
         (arg_lst: (string located * Expression.t option) list)
@@ -614,19 +628,13 @@ struct
             empty_list
             <|>
             (*  "( exp )" *)
-            (
-                (
-                    char_ws '('
-                    >>= fun _ ->
-                    (* op_expression has to be encapsulated in a function,
-                       otherwise infinite recursion!! *)
-                    indented (
-                        lonely_operator
-                        <|>
-                        expression0 true ()
-                    )
+            parenthesized (
+                fun _ ->
+                indented (
+                    lonely_operator
+                    <|>
+                    expression0 true ()
                 )
-                |. char_ws ')'
             )
             <|>
             (*  "[ e1, e2, ... ]" *)
