@@ -602,7 +602,7 @@ struct
         in
 
 
-        let primary (): Expression.t t =
+        let primary (what: string): Expression.t t =
             backtrackable identifier_expression "identifier"
             <|>
             number_expression
@@ -664,12 +664,15 @@ struct
                 |= formal_arguments false
                 |= result_type)
             <?>
-            "expression"
+            what
         in
 
         let application =
-            primary () >>= fun f ->
-            zero_or_more_reversed (primary ()) >>= fun args_rev ->
+            primary "expression" >>= fun f ->
+            indented (
+                zero_or_more_reversed (primary "function argument")
+            )
+            >>= fun args_rev ->
             match args_rev with
             | [] ->
                 return f
