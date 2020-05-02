@@ -770,58 +770,61 @@ struct
 
 
     let commands: (string * Command.t t) list =
-      ["evaluate",
-       map (fun e -> Command.Evaluate e) (expression ());
+        (* repl commands *)
+        ["evaluate",
+         map (fun e -> Command.Evaluate e) (expression ());
 
-       "exit", return Command.Exit;
+         "exit", return Command.Exit;
 
-       "typecheck",
-       map (fun e -> Command.Type_check e) (expression ());
-      ]
+         "typecheck",
+         map (fun e -> Command.Type_check e) (expression ());
+        ]
 
 
     let find_command (cmd: string): (string * Command.t t) list =
-      List.filter
-        (fun (str, _) ->
-          String.is_prefix cmd str)
-      commands
+        List.filter
+            (fun (str, _) ->
+              String.is_prefix cmd str)
+        commands
 
 
     let command_names (cs: (string * Command.t t) list): string list =
-      List.map fst cs
+        List.map fst cs
 
 
     let command: Command.t t =
-      (char ':' >>= fun _ ->
-       (name_ws <?> "command")
+        (char ':' >>= fun _ ->
+         (name_ws <?> "command")
+         >>= fun cmd ->
+         match find_command (Located.value cmd) with
+         | [] ->
+              fail
+                  (Located.range cmd,
+                   Problem.Illegal_command (command_names commands))
 
-       >>= fun cmd ->
-       match find_command (Located.value cmd) with
-       | [] ->
-            fail
-                (Located.range cmd,
-                 Problem.Illegal_command (command_names commands))
+         | [_, arg_parser] ->
+            indented arg_parser
 
-       | [_, arg_parser] ->
-          indented arg_parser
+         | lst ->
+              fail
+                  (Located.range cmd,
+                   Problem.Ambiguous_command (command_names lst))
+        )
+        <|> (return
+               (fun exp ->
+                 match exp with
+                 | None ->
+                    Command.Do_nothing
+                 | Some exp ->
+                    Command.Evaluate exp)
+             |. whitespace
+             |= optional (expression ()))
 
-       | lst ->
-            fail
-                (Located.range cmd,
-                 Problem.Ambiguous_command (command_names lst))
-      )
-      <|> (return
-             (fun exp ->
-               match exp with
-               | None ->
-                  Command.Do_nothing
-               | Some exp ->
-                  Command.Evaluate exp)
-           |. whitespace
-           |= optional (expression ()))
+
 
     let make (p: final t): parser =
         P.make (p |. expect_end) ()
+
 
     let run (p: final t) (input: string): parser =
         run (p |. expect_end) () input
