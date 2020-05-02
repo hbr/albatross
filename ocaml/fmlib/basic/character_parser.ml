@@ -301,8 +301,11 @@ struct
     let absolute (s:t): t =
       {s with indent = Indent.absolute s.indent}
 
-    let absolute_at (col: int) (s: t): t =
+    let start_absolute_at (col: int) (s: t): t =
       {s with indent = Indent.absolute_at col s.indent}
+
+    let end_absolute_at (s0: t)(s: t): t =
+      {s with indent = s0.indent}
 
     let start_detached (s:t): t =
       {s with indent = Indent.initial}
@@ -623,9 +626,14 @@ struct
         p
 
     let absolute_at (col: int) (p: 'a t): 'a t =
-        Basic.update (State.absolute_at col)
-        >>= fun _ ->
+        Basic.get_and_update (State.start_absolute_at col)
+        >>= fun state0 ->
         p
+        >>= fun a ->
+        Basic.update (State.end_absolute_at state0)
+        >>= fun _ ->
+        return a
+
 
     let indented1 (strict: bool) (p: 'a t): 'a t =
         Basic.get_and_update (State.start_indented strict) >>= fun st ->
@@ -1318,7 +1326,7 @@ let%test _ =
             )
             str
     in
-    print p str;
+    (*print p str;*)
     has_ended p
     && has_failed p
 
