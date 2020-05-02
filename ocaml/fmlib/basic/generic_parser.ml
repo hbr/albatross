@@ -452,6 +452,18 @@ module Make
              k None (B.end_backtrack_fail (Some exp) b0 b))
 
 
+    let followed_by (p: 'a t) (exp: expect): unit t =
+        fun b0 k ->
+        p
+            (B.start_backtrack b0)
+            (fun res b ->
+                match res with
+                | None ->
+                    k None (B.end_backtrack_fail (Some exp) b0 b)
+                | Some _ ->
+                    k (Some ()) (B.end_backtrack_fail None b0 b))
+
+
 
 
     (* Advanced Combinators *)

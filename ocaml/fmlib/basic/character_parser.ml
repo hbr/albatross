@@ -350,6 +350,7 @@ module type COMBINATORS =
     include Generic_parser.COMBINATORS
 
     val backtrackable:   'a t -> expect -> 'a t
+    val followed_by:     'a t -> expect -> unit t
     val not_followed_by: 'a t -> expect -> unit t
     val (<?>):           'a t -> expect -> 'a t
 
@@ -475,6 +476,12 @@ struct
             backtrackable p (expect_error e st)
         )
 
+
+    let followed_by (p: 'a t) (e: expect): unit t =
+        Basic.(
+            get >>= fun st ->
+            followed_by p (expect_error e st)
+        )
 
     let not_followed_by (p: 'a t) (e: expect): unit t =
         Basic.(
@@ -1127,8 +1134,22 @@ let%test _ =
 
 
 
-(* Not Followed By *)
-(* *************** *)
+(* Followed by and Not Followed By *)
+(* ******************************* *)
+
+let%test _ =
+    let open UP in
+    let p =
+      run
+        (followed_by (string "abc") "'abc'")
+        "abc"
+    in
+    has_ended p
+    && column p = 0
+    && result p = Some ()
+    && lookahead p = [Some 'a'; Some 'b'; Some 'c']
+
+
 
 let%test _ =
     let open UP in

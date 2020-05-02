@@ -61,7 +61,25 @@ sig
     val unexpected: Expect.t -> 'a t
     val (<?>):   'a t -> Expect.t -> 'a t
     val backtrackable: 'a t -> Expect.t -> 'a t
+
+
+    val followed_by: 'a t -> Expect.t -> unit t
+    (** [followed_by p expect]
+
+        Parses [p] and backtracks (i.e. all tokens of [p] will be pushed back to
+        the lookahead). In case [p] succeeds, the [followed_by] parser
+        succeeds without consuming tokens. Otherwise it fails without consuming
+        tokens.
+    *)
+
     val not_followed_by: 'a t -> Expect.t -> unit t
+    (** [not_followed_by p expect]
+
+        Parses [p] and backtracks (i.e. all tokens of [p] will be pushed back to
+        the lookahead). In case [p] succeeds, the [not_followed_by] parser
+        fails without consuming tokens. Otherwise it succeeds without consuming
+        tokens.
+    *)
 
     val needs_more: parser -> bool
     val has_ended:  parser -> bool
