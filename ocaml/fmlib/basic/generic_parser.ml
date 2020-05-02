@@ -187,8 +187,16 @@ module Buffer (S:ANY) (T:ANY) (Expect:ANY) (Semantic:ANY) =
       b.has_consumed
 
     let end_new_consumer (b0:t) (b:t): t =
-      {b with
-        has_consumed = b0.has_consumed || b.has_consumed}
+        {b with
+            has_consumed =
+                b0.has_consumed || b.has_consumed;
+
+            state =
+                if b.has_consumed then
+                    b.state
+                else
+                    b0.state
+        }
 
 
     let start_alternatives (b:t): t =
