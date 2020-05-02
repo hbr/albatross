@@ -135,6 +135,7 @@ module type COMBINATORS =
     (** {2 Indentation Combinators} *)
 
     val absolute: 'a t -> 'a t
+    val absolute_at: int -> 'a t -> 'a t
     val indented: 'a t -> 'a t
     val maybe_indented: 'a t -> 'a t
     val detached: 'a t -> 'a t

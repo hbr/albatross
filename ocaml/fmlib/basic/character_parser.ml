@@ -181,6 +181,14 @@ struct
         }
 
 
+    let absolute_at (pos: int) (_:t): t =
+        {
+            lb = pos;
+            ub = Some pos;
+            abs = true;
+        }
+
+
     let start_indented (strict: bool) (ind: t): t =
         if ind.abs then
             ind
@@ -293,6 +301,9 @@ struct
     let absolute (s:t): t =
       {s with indent = Indent.absolute s.indent}
 
+    let absolute_at (col: int) (s: t): t =
+      {s with indent = Indent.absolute_at col s.indent}
+
     let start_detached (s:t): t =
       {s with indent = Indent.initial}
 
@@ -362,6 +373,7 @@ module type COMBINATORS =
     val update: (state -> state) -> unit t
 
     val absolute: 'a t -> 'a t
+    val absolute_at: int -> 'a t -> 'a t
     val indented: 'a t -> 'a t
     val maybe_indented: 'a t -> 'a t
     val detached: 'a t -> 'a t
@@ -608,6 +620,11 @@ struct
 
     let absolute (p:'a t): 'a t =
         Basic.update State.absolute >>= fun _ ->
+        p
+
+    let absolute_at (col: int) (p: 'a t): 'a t =
+        Basic.update (State.absolute_at col)
+        >>= fun _ ->
         p
 
     let indented1 (strict: bool) (p: 'a t): 'a t =
@@ -1268,6 +1285,44 @@ module Indent_parser =
 
     let _ = print (* to avoid warning of unused 'print' *)
  end
+
+let%test _ =
+    let open Indent_parser in
+    let str = "    \na" in
+    let p =
+        run
+            (
+                return ()
+                |. whitespace
+                |. absolute_at 0 (char 'a')
+            )
+            str
+    in
+    (*print p str;*)
+    has_ended p
+    && has_succeeded p
+    && column p = 1
+    && lookahead p = []
+
+
+
+let%test _ =
+    let open Indent_parser in
+    let str = "    \n a" in
+    let p =
+        run
+            (
+                return ()
+                |. whitespace
+                |. absolute_at 0 (char 'a')
+            )
+            str
+    in
+    print p str;
+    has_ended p
+    && has_failed p
+
+
 
 let%test _ =
   let open Indent_parser in
