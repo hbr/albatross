@@ -34,9 +34,11 @@ val count_bounds: t -> int
 (** The number of bound variables which have been entered. *)
 
 
-val count_locals: t -> int
+val count_entries: t -> int
 (** The number of holes and bound variable which have been entered. *)
 
+
+val has_locals: t -> bool
 
 val is_valid_index: int -> t -> bool
 
@@ -135,7 +137,7 @@ val term_of_term_n: Term.t_n -> t -> Term.t
 
 
 val fill_hole0: int -> Term.t -> bool -> t -> t
-(** [fill_hole idx value beta_reduce gh]
+(** [fill_hole0 idx value beta_reduce gh]
 
 Fill the hole at [idx] with [value]. In case that [value] is a function
 abstraction appearing in a function position and the flag [beta_reduce] is set,
@@ -146,15 +148,15 @@ do a beta reduction.
 *)
 
 
+
+
 val fill_hole: int -> Term.t -> t -> t
 (** [fill_hole idx value gh] Fill the hole at [idx] with [value].
 
     Preconditions:
-    {[is_hole idx gh
-      not (has_value idx gh)
-      is_expanded value gh
-    ]}
+    {[is_unfilled idx gh]}
 *)
+
 
 
 val push_named_hole: string -> Term.typ -> t -> t
@@ -183,6 +185,7 @@ val remove_bounds: int -> t -> t
 
 val push_local: string -> Term.typ -> t -> t
 (** [push_local name typ gh] is synonym for [push_bound name true gh] *)
+
 
 
 

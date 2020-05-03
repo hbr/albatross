@@ -8,7 +8,8 @@ module Uni = Unifier.Make (Gamma_holes)
 include Gamma_holes
     (* We use [Gamma_holes] as a normal [Gamma]. The type checker does not need
     any holes, but the unifier expects a parameter which allows for filling
-    holes. *)
+    holes. However, if there are no holes, the unifier cannot fill any. We use
+    the unifier here only to check, if a type is a subtype of another. *)
 
 
 

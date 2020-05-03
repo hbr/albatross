@@ -4,7 +4,7 @@ open Common
 
 type term_n = Term.t * int
 
-module Local =
+module Entry =
 struct
     type t =
         | Hole of
@@ -83,9 +83,10 @@ end
 type t = {
     base0: Gamma.t;
     base: Gamma.t;
-    locals: Local.t array;
+    entries: Entry.t array;
     bounds: (int * bool) array;          (* level of bound, is typed? *)
     nholes: int;
+    nlocals: int; (* dummy: should always be 0!!! *)
 }
 
 
@@ -94,9 +95,10 @@ let make (base: Gamma.t): t =
     {
         base0 = base;
         base;
-        locals = [||];
+        entries = [||];
         bounds = [||];
-        nholes = 0
+        nholes = 0;
+        nlocals = 0;
     }
 
 
@@ -118,8 +120,20 @@ let count_bounds (gh: t): int =
     Array.length gh.bounds
 
 
+let count_entries (gh: t): int =
+    Array.length gh.entries
+
 let count_locals (gh: t): int =
-    Array.length gh.locals
+    gh.nlocals
+
+
+let entries_interval (gh: t): int * int =
+    (* min and max index of the entries *)
+    count_locals gh, count_locals gh + count_entries gh
+
+
+let has_locals (gh: t): bool =
+    0 < count_locals gh
 
 
 let context (gh: t): Gamma.t =
@@ -144,38 +158,49 @@ let level_of_index (idx: int) (gh: t): int =
     Gamma.level_of_index idx gh.base
 
 
-let local_of_index (idx: int) (gh: t): Local.t =
-    let nlocs = count_locals gh
+
+let is_entry (idx: int) (gh: t): bool =
+    let i0, i1 = entries_interval gh
     in
-    assert (idx < nlocs);
-    gh.locals.(Term.bruijn_convert idx nlocs)
+    i0 <= idx && idx < i1
+
+
+
+let entry_of_index (idx: int) (gh: t): Entry.t =
+    assert (is_entry idx gh);
+    let level = level_of_index idx gh in
+    gh.entries.(level - count_base gh)
+    (*
+    let nentries = count_entries gh
+    in
+    assert (idx < nentries);
+    gh.entries.(Term.bruijn_convert idx nentries)*)
+
 
 
 let is_hole (idx: int) (gh: t): bool =
-    idx < count_locals gh
-    && Local.is_hole (local_of_index idx gh)
+    is_entry idx gh
+    && Entry.is_hole (entry_of_index idx gh)
 
 
 let is_unfilled (idx: int) (gh: t): bool =
-    let level = level_of_index idx gh
-    and cnt0 = count_base gh in
-    cnt0 <= level
+    is_entry idx gh
     &&
-    let iloc = level - cnt0 in
-    Local.is_unfilled gh.locals.(iloc)
+    Entry.is_unfilled (entry_of_index idx gh)
 
 
 
 let is_bound (idx: int) (gh: t): bool =
-    idx < count_locals gh
-    && Local.is_bound (local_of_index idx gh)
+    is_entry idx gh
+    &&
+    Entry.is_bound (entry_of_index idx gh)
 
 
 
 
 let bound_number (idx: int) (gh: t): int =
     assert (is_bound idx gh);
-    Local.bound_number (local_of_index idx gh)
+    Entry.bound_number (entry_of_index idx gh)
 
 
 
@@ -187,17 +212,17 @@ let variable_of_bound (i: int) (gh: t): Term.t =
                 gh)
 
 
+
+
 let value (idx: int) (gh: t): Term.t option =
-    let nlocs = count_locals gh
-    in
-    if nlocs <= idx then
-        None
-    else
+    if is_entry idx gh then
         Option.map
             (fun (term, n) ->
                 assert (n <= count gh);
                 Term.up (count gh - n) term)
-            (Local.value (local_of_index idx gh))
+            (Entry.value (entry_of_index idx gh))
+    else
+        None
 
 
 
@@ -206,25 +231,37 @@ let has_value (idx: int) (gh: t): bool =
 
 
 
-let collect_holes (cnt0: int) (filled: bool) (term: Term.t) (gh: t): Int_set.t =
-    let cnt = count gh
-    and nlocs = count_locals gh
+let collect_holes
+    (cnt0: int)
+    (filled: bool)
+    (term: Term.t)
+    (gh: t)
+    : Int_set.t
+    =
+    (* collect filled or unfilled holes in [term] starting from [cnt0]. *)
+    let cntbase =count_base gh
     in
-    assert (cnt0 <= cnt);
-    let nmin = min nlocs (cnt - cnt0)
+    let i0, i1 = entries_interval gh
+    and delta = max (cnt0 - cntbase) 0
+    in
+    let i1 = i1 - delta
     in
     Term.fold_free
         (fun idx set ->
-            if nmin <= idx then
-                set
-            else
-                let loc = local_of_index idx gh in
-                if Local.is_hole loc && ((Local.value loc <> None) = filled) then
+            if i0 <= idx && idx < i1 then
+                let entry = entry_of_index idx gh
+                in
+                if
+                    Entry.is_hole entry
+                    && ((Entry.value entry <> None) = filled)
+                then
                     Int_set.add
                         (Gamma.level_of_index idx gh.base)
                         set
                 else
-                    set)
+                    set
+            else
+                set)
         term
         Int_set.empty
 
@@ -290,13 +327,14 @@ let definition_term (idx: int) (gh: t): Term.t option =
 
 
 let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
+    assert (not (has_locals gh));
     {gh with
         base = Gamma.push_local name typ gh.base;
 
-        locals =
+        entries =
             Array.push
-                (Local.make_bound (Array.length gh.bounds))
-                gh.locals;
+                (Entry.make_bound (Array.length gh.bounds))
+                gh.entries;
 
         bounds = Array.push (count gh, typed) gh.bounds;
     }
@@ -304,20 +342,35 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
 
 
 let remove_bounds (n: int) (gh: t): t =
+    assert (not (has_locals gh));
     assert (n <= count_bounds gh);
     {gh with bounds = Array.remove_last n gh.bounds}
 
 
 
-let push_local (name: string) (typ: Term.typ) (gh: t): t =
+let push_local_old (name: string) (typ: Term.typ) (gh: t): t =
     push_bound name true typ gh
 
 
 
+let push_local_new (name: string) (typ: Term.typ) (gh: t): t =
+    { gh with
+        base = Gamma.push_local name typ gh.base;
+
+        nlocals = gh.nlocals + 1
+    }
+let _ = push_local_new
+let _ = push_local_old
+
+let push_local = push_local_new
+
+
+
 let push_named_hole (name: string) (typ: Term.typ) (gh: t): t =
+    assert (not (has_locals gh));
     {gh with
         base   = Gamma.push_local name typ gh.base;
-        locals = Array.push Local.hole gh.locals;
+        entries = Array.push Entry.hole gh.entries;
         nholes = gh.nholes + 1;
     }
 
@@ -325,6 +378,7 @@ let push_named_hole (name: string) (typ: Term.typ) (gh: t): t =
 
 
 let push_hole (typ: Term.typ) (gh: t): t =
+    assert (not (has_locals gh));
     push_named_hole
         ("<" ^ string_of_int gh.nholes ^ ">")
         typ
@@ -337,33 +391,33 @@ let fill_hole0 (idx: int) (value: Term.t) (beta_reduce: bool) (gh: t): t =
     assert (is_unfilled idx gh);
     let value = expand value gh
     and cnt    = count gh
-    and nlocs  = count_locals gh
-    and locals = Array.copy gh.locals
+    and nentries  = count_entries gh
+    and entries = Array.copy gh.entries
     in
-    let cnt0 = cnt - nlocs
-    and loc_level = Term.bruijn_convert idx nlocs
+    let cnt0 = cnt - nentries
+    and loc_level = Term.bruijn_convert idx nentries
     in
-    let gh_new = {gh with locals}
+    let gh_new = {gh with entries}
     in
     (* fill the hole *)
-    locals.(loc_level) <-
-        Local.set_value (value, cnt) locals.(loc_level);
+    entries.(loc_level) <-
+        Entry.set_value (value, cnt) entries.(loc_level);
 
     (* [idx] and users of [idx] also become users of all unfilled holes in
     [value] *)
-    let users = Local.users locals.(loc_level) in
+    let users = Entry.users entries.(loc_level) in
     Int_set.iter
         (fun unfilled ->
             let iloc = unfilled - cnt0 in
-            locals.(iloc) <-
-                Local.add_users (cnt0 + loc_level) users locals.(iloc))
+            entries.(iloc) <-
+                Entry.add_users (cnt0 + loc_level) users entries.(iloc))
         (unfilled_holes cnt0 value gh);
 
     (* Substitute in all users of [idx] the variable [idx] by value. *)
     Int_set.iter
         (fun user ->
             let i = user - cnt0 in
-            match Local.value locals.(i) with
+            match Entry.value entries.(i) with
             | Some (term,n) ->
                 let term = Term.up (count gh - n) term in
                 let term =
@@ -376,7 +430,7 @@ let fill_hole0 (idx: int) (value: Term.t) (beta_reduce: bool) (gh: t): t =
                         beta_reduce
                         term
                 in
-                locals.(i) <- Local.set_value (term, cnt) locals.(i)
+                entries.(i) <- Entry.set_value (term, cnt) entries.(i)
             | _ ->
                 assert false (* Illegal, all users must have a substitution,
                 otherwise they would not be users. *))
@@ -401,16 +455,17 @@ let into_binder
     variables [bnd0, bnd0+1, ..., bnd0+nb-1] become the new bound variables
     [0,1,...,nb-1]. *)
     assert (bnd0 <= count_bounds gh);
-    let nlocs = count_locals gh
+    assert (not (has_locals gh));
+    let nentries = count_entries gh
     in
     Term.substitute
         (fun idx ->
-            if nlocs <= idx then
+            if nentries <= idx then
                 Variable (idx + nb)
             else
-                let loc = local_of_index idx gh in
-                if Local.is_bound loc then
-                    let i = Local.bound_number loc in
+                let entry = entry_of_index idx gh in
+                if Entry.is_bound entry then
+                    let i = Entry.bound_number entry in
                     if bnd0 <= i then
                     (
                         assert (i < bnd0 + nb);
@@ -431,6 +486,7 @@ let pi_lambda
     : Term.t
     =
     assert (nbounds <= count_bounds gh);
+    assert (not (has_locals gh));
     let bnd0 = count_bounds gh - nbounds in
     let into = into_binder bnd0 in
     let rec make i exp =
@@ -454,6 +510,7 @@ let pi_lambda
 let pi (nargs: int) (res_tp: Term.typ) (gh: t): Term.typ =
     assert (0 < nargs);
     assert (nargs <= count_bounds gh);
+    assert (not (has_locals gh));
     pi_lambda Term.product0 nargs res_tp gh
 
 
@@ -462,4 +519,5 @@ let pi (nargs: int) (res_tp: Term.typ) (gh: t): Term.typ =
 let lambda (nargs: int) (exp: Term.t) (gh: t): Term.t =
     assert (0 < nargs);
     assert (nargs <= count_bounds gh);
+    assert (not (has_locals gh));
     pi_lambda Term.lambda0 nargs exp gh

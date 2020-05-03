@@ -102,8 +102,8 @@ let count_base (bc: t): int =
     Gamma_holes.count_base bc.gh
 
 
-let count_locals (bc: t): int =
-    Gamma_holes.count_locals bc.gh
+let count_entries (bc: t): int =
+    Gamma_holes.count_entries bc.gh
 
 
 let count_bounds (bc: t): int =
@@ -276,7 +276,7 @@ let final
     : (t * Term.t * Term.typ, int list * Term.typ * Gamma.t) result
     =
     let cnt0 = count_base bc
-    and nlocs = count_locals bc in
+    and nlocs = count_entries bc in
     assert (bc.stack = []);
     assert (bc.entries = []);
     assert (bc.sp = cnt0 + 1);
@@ -330,7 +330,7 @@ let base_candidate
     (bc: t)
     : t option
     =
-    let term = Term.up (count_locals bc) term0 in
+    let term = Term.up (count_entries bc) term0 in
     match candidate term nargs bc with
     | Ok bc ->
         Some
@@ -414,6 +414,10 @@ let next_formal_argument
     (bc: t)
     : t
     =
+    (* Register the name of the next formal argument. The hole the type of the
+    argument has already been pushed. Push a new hole either for the upcoming
+    formal argument after that or for the result type of the function or product
+    type. *)
     let cnt0 = count bc
     and tp = top_term bc
     and str = Located.value name
@@ -509,6 +513,8 @@ module Product =
 (* ... A: Any1, x: A, B: Any1, y: B, ... , RT: Any1 *)
 struct
     let start (bc: t): t =
+        (* Push a placeholder for the first argument type. I.e. expect the first
+        argument type. *)
         let cnt0 = count bc
         in
         { bc with

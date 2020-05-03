@@ -716,6 +716,8 @@ module Term_print = Context.Pretty (Pretty_printer)
 
 module Expression_parser = Parser_lang.Make (Expression)
 
+module Error_print = Print (Pretty_printer)
+
 
 
 let standard_context: Context.t =
@@ -730,6 +732,13 @@ let string_of_term_type (term: Term.t) (typ: Term.t): string
             (Term_print.print (Term.Typed (term,typ)) standard_context))
 let _ = string_of_term_type
 
+
+let string_of_description (descr: problem_description): string
+    =
+    String_printer.run (
+        Pretty_printer.run 0 70 70
+            (Error_print.description descr))
+let _ = string_of_description
 
 
 
@@ -1048,7 +1057,9 @@ let%test _ =
     match build_expression "\\a := p: a => a where p x := x" with
     | Ok _ ->
         true
-    | _ ->
+    | Error (_, description) ->
+        Printf.printf "%s\n"
+            (string_of_description description);
         false
 
 
@@ -1056,7 +1067,9 @@ let%test _ =
     match build_expression "\\a: a => a := identity" with
     | Ok _ ->
         true
-    | _ ->
+    | Error (_, description) ->
+        Printf.printf "%s\n"
+            (string_of_description description);
         false
 
 
@@ -1064,5 +1077,7 @@ let%test _ =
     match build_expression "\\a b: a => b => a := \\ x y := x" with
     | Ok _ ->
         true
-    | _ ->
+    | Error (_, description) ->
+        Printf.printf "%s\n"
+            (string_of_description description);
         false
