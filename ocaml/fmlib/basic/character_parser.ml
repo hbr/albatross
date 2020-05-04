@@ -345,6 +345,7 @@ module type PARSER =
     val needs_more: parser -> bool
     val has_ended:  parser -> bool
     val has_succeeded:  parser -> bool
+    val has_failed:     parser -> bool
     val position:   parser -> Position.t
     val line:   parser -> int
     val column: parser -> int
@@ -678,7 +679,7 @@ struct
     (* General functions *)
 
     let error_tabs (p: parser): int list =
-        if has_ended p && not (has_succeeded p) then
+        if has_ended p && has_failed p then
             let err = error p in
             if Error.is_semantic err then
                 []

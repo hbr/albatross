@@ -82,6 +82,9 @@ module type PARSER =
     (** Has the parser succeeded *)
     val has_succeeded:  parser -> bool
 
+    (** Has the parser failed *)
+    val has_failed:  parser -> bool
+
     (** The current position. *)
     val position:   parser -> Position.t
 
