@@ -86,7 +86,6 @@ type t = {
     entries: Entry.t array;
     bounds: (int * bool) array;          (* level of bound, is typed? *)
     nholes: int;
-    nlocals: int; (* dummy: should always be 0!!! *)
 }
 
 
@@ -98,7 +97,6 @@ let make (base: Gamma.t): t =
         entries = [||];
         bounds = [||];
         nholes = 0;
-        nlocals = 0;
     }
 
 
@@ -122,18 +120,6 @@ let count_bounds (gh: t): int =
 
 let count_entries (gh: t): int =
     Array.length gh.entries
-
-let count_locals (gh: t): int =
-    gh.nlocals
-
-
-let entries_interval (gh: t): int * int =
-    (* min and max index of the entries *)
-    count_locals gh, count_locals gh + count_entries gh
-
-
-let has_locals (gh: t): bool =
-    0 < count_locals gh
 
 
 let context (gh: t): Gamma.t =
@@ -160,9 +146,7 @@ let level_of_index (idx: int) (gh: t): int =
 
 
 let is_entry (idx: int) (gh: t): bool =
-    let i0, i1 = entries_interval gh
-    in
-    i0 <= idx && idx < i1
+    idx < count_entries gh
 
 
 
@@ -170,11 +154,6 @@ let entry_of_index (idx: int) (gh: t): Entry.t =
     assert (is_entry idx gh);
     let level = level_of_index idx gh in
     gh.entries.(level - count_base gh)
-    (*
-    let nentries = count_entries gh
-    in
-    assert (idx < nentries);
-    gh.entries.(Term.bruijn_convert idx nentries)*)
 
 
 
@@ -241,14 +220,13 @@ let collect_holes
     (* collect filled or unfilled holes in [term] starting from [cnt0]. *)
     let cntbase =count_base gh
     in
-    let i0, i1 = entries_interval gh
-    and delta = max (cnt0 - cntbase) 0
+    let delta = max (cnt0 - cntbase) 0
     in
-    let i1 = i1 - delta
+    let idx_beyond = count_entries gh - delta
     in
     Term.fold_free
         (fun idx set ->
-            if i0 <= idx && idx < i1 then
+            if idx < idx_beyond then
                 let entry = entry_of_index idx gh
                 in
                 if
@@ -327,7 +305,6 @@ let definition_term (idx: int) (gh: t): Term.t option =
 
 
 let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
-    assert (not (has_locals gh));
     {gh with
         base = Gamma.push_local name typ gh.base;
 
@@ -342,32 +319,20 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
 
 
 let remove_bounds (n: int) (gh: t): t =
-    assert (not (has_locals gh));
     assert (n <= count_bounds gh);
     {gh with bounds = Array.remove_last n gh.bounds}
 
 
 
-let push_local_old (name: string) (typ: Term.typ) (gh: t): t =
+let push_local (name: string) (typ: Term.typ) (gh: t): t =
     push_bound name true typ gh
 
 
 
-let push_local_new (name: string) (typ: Term.typ) (gh: t): t =
-    { gh with
-        base = Gamma.push_local name typ gh.base;
-
-        nlocals = gh.nlocals + 1
-    }
-let _ = push_local_new
-let _ = push_local_old
-
-let push_local = push_local_new
 
 
 
 let push_named_hole (name: string) (typ: Term.typ) (gh: t): t =
-    assert (not (has_locals gh));
     {gh with
         base   = Gamma.push_local name typ gh.base;
         entries = Array.push Entry.hole gh.entries;
@@ -378,7 +343,6 @@ let push_named_hole (name: string) (typ: Term.typ) (gh: t): t =
 
 
 let push_hole (typ: Term.typ) (gh: t): t =
-    assert (not (has_locals gh));
     push_named_hole
         ("<" ^ string_of_int gh.nholes ^ ">")
         typ
@@ -455,7 +419,6 @@ let into_binder
     variables [bnd0, bnd0+1, ..., bnd0+nb-1] become the new bound variables
     [0,1,...,nb-1]. *)
     assert (bnd0 <= count_bounds gh);
-    assert (not (has_locals gh));
     let nentries = count_entries gh
     in
     Term.substitute
@@ -486,7 +449,6 @@ let pi_lambda
     : Term.t
     =
     assert (nbounds <= count_bounds gh);
-    assert (not (has_locals gh));
     let bnd0 = count_bounds gh - nbounds in
     let into = into_binder bnd0 in
     let rec make i exp =
@@ -510,7 +472,6 @@ let pi_lambda
 let pi (nargs: int) (res_tp: Term.typ) (gh: t): Term.typ =
     assert (0 < nargs);
     assert (nargs <= count_bounds gh);
-    assert (not (has_locals gh));
     pi_lambda Term.product0 nargs res_tp gh
 
 
@@ -519,5 +480,4 @@ let pi (nargs: int) (res_tp: Term.typ) (gh: t): Term.typ =
 let lambda (nargs: int) (exp: Term.t) (gh: t): Term.t =
     assert (0 < nargs);
     assert (nargs <= count_bounds gh);
-    assert (not (has_locals gh));
     pi_lambda Term.lambda0 nargs exp gh

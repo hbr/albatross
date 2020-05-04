@@ -38,7 +38,6 @@ val count_entries: t -> int
 (** The number of holes and bound variable which have been entered. *)
 
 
-val has_locals: t -> bool
 
 val is_valid_index: int -> t -> bool
 
