@@ -224,7 +224,7 @@ struct
                 not w.can_end
 
 
-            let putc (w: t) (c: char): t =
+            let put_character (w: t) (c: char): t =
                 let open Expression_parser in
                 {
                     can_end =
@@ -240,7 +240,7 @@ struct
                             w.parser;
                 }
 
-            let putend (w: t): t =
+            let put_end (w: t): t =
                 let open Expression_parser in
                 { w with
                     parser =

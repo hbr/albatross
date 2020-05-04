@@ -131,11 +131,11 @@ module type WRITABLE =
     (** Is it possible to write more characters to the structure? *)
     val needs_more: t -> bool
 
-    (** [putc w c] writes the character [c] to the structure and returns a
-       structure which might accept more characters. *)
-    val putc: t -> char ->  t
+    (** [put_character w c] writes the character [c] to the structure and
+    returns a structure which might accept more characters. *)
+    val put_character: t -> char ->  t
 
-    (** [putend w] signals to the structure [w] that there are no more
+    (** [put_end w] signals to the structure [w] that there are no more
        characters available to write (e.g. eof reached). *)
-    val putend: t -> t
+    val put_end: t -> t
   end

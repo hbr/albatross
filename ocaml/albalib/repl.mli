@@ -2,6 +2,6 @@ open Fmlib
 
 module Make (Io: Io.SIG):
 sig
-    val run_cli:  'a -> unit Io.t
-    val run_eval: 'a -> unit Io.t
+    val run_cli:  _ -> unit Io.t
+    val run_eval: _ -> unit Io.t
 end

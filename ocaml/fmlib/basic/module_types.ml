@@ -56,6 +56,6 @@ module type WRITABLE =
   sig
     type t
     val needs_more: t -> bool
-    val putc: t -> char ->  t
-    val putend: t -> t
+    val put_character: t -> char ->  t
+    val put_end: t -> t
   end

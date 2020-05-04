@@ -120,7 +120,7 @@ struct
         c
 
 
-    let putc (b:t) (c:char): unit =
+    let put_character (b:t) (c:char): unit =
       assert (is_ok b);
       if is_full b then
         flush b;
@@ -137,7 +137,7 @@ struct
                     not (is_empty b)
                     && W.needs_more w
                 then
-                    read (W.putc w (get b))
+                    read (W.put_character w (get b))
                 else
                     w
             in
@@ -150,7 +150,7 @@ struct
         let write (b: t) (r: R.t): R.t =
             let rec write r =
                 if not (is_full b) && R.has_more r then
-                    (putc b (R.peek r);
+                    (put_character b (R.peek r);
                      write (R.advance r))
                 else
                     r
@@ -454,7 +454,7 @@ struct
                         if Buffer.is_ok b then
                             read w
                         else
-                            Ok (W.putend w)
+                            Ok (W.put_end w)
                 )
                 else
                     Ok w
