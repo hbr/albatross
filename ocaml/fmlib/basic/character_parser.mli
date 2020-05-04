@@ -120,6 +120,7 @@ module type COMBINATORS =
 
     include Generic_parser.COMBINATORS
 
+    val unexpected: expect -> 'a t
     val backtrackable:   'a t -> expect -> 'a t
     val followed_by:     'a t -> expect -> unit t
     val not_followed_by: 'a t -> expect -> unit t
