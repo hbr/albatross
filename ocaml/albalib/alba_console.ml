@@ -175,6 +175,10 @@ module Make (Io:Io.SIG) =
         let module Repl = Repl.Make (Io) in
         Repl.run_eval ()
 
+    let compile_module _: unit Io.t =
+        let module Compile = Module.Make (Io) in
+        Compile.run ()
+
 
     let repl _: unit Io.t =
         let module Repl = Repl.Make (Io) in
@@ -195,7 +199,11 @@ module Make (Io:Io.SIG) =
           "Start an interactive programming session."
         ;
         "evaluate", evaluate,
-        "Read a module from standard input and evaluate it."
+        "Read an expression from standard input and evaluate it."
+        ;
+        "module", compile_module,
+        "Compile a module from standard input. The module might have commands \
+        like ':evaluate <expression>' or ':typecheck <expression>' in it."
         ]
 
 

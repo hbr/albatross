@@ -74,6 +74,7 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
+        val source_file: _ -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
 

@@ -222,6 +222,7 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
+        val source_file: _ -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
 
@@ -835,6 +836,9 @@ struct
              |. whitespace
              |= optional (expression ()))
 
+
+    let source_file _ : unit t =
+        assert false
 
 
     let make (p: final t): parser =
