@@ -334,7 +334,11 @@ module Make
          false
 
     let has_failed (p:parser): bool =
-      not (has_succeeded p)
+      match p with
+      | Final (_, None) ->
+         true
+      | _ ->
+         false
 
 
     type 'a cont = 'a option -> B.t -> parser
