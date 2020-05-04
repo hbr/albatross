@@ -209,6 +209,7 @@ module type SIG =
         val needs_more: parser -> bool
         val has_ended:  parser -> bool
         val has_succeeded: parser -> bool
+        val has_failed: parser -> bool
 
         val put_character: parser -> char -> parser
         val put_end:  parser -> parser
@@ -838,7 +839,7 @@ struct
 
 
     let source_file _ : unit t =
-        assert false
+        return ()
 
 
     let make (p: final t): parser =
