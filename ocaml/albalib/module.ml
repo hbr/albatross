@@ -1,4 +1,6 @@
 open Fmlib
+open Common
+open Alba_core
 
 
 module Parser = Parser_lang.Make (Unit)
@@ -7,23 +9,123 @@ module Parser = Parser_lang.Make (Unit)
 
 module Compiler =
 struct
+    type error =
+        | Parse_error
+
     type t = {
+        input:  string;
+        terminate_line: bool; (* error occurred, but line not yet completed. *)
         parser: Parser.parser;
+        context: Context.t;
+        values: (Term.t * Term.typ * Context.t) list;
+        error:  error option;
     }
 
 
-    let needs_more (_: t): bool =
-        assert false
-
-    let put_character (_: t) (_: char): t =
-        assert false
-
-    let put_end (_: t): t =
-        assert false
-
-
     let make _: t =
-        { parser = Parser.(make (source_file ()))}
+        {
+            input  = "";
+
+            terminate_line = false;
+
+            parser = Parser.(make (source_file ()));
+
+            context = Context.standard ();
+
+            values = [];
+
+            error = None;
+        }
+
+
+    let needs_more (compiler: t): bool =
+        (
+            compiler.error = None
+            &&
+            Parser.needs_more compiler.parser
+        )
+        ||
+        compiler.terminate_line
+
+
+    let has_succeeded (compiler: t): bool =
+        Parser.has_succeeded compiler.parser
+        &&
+        compiler.error = None
+
+
+    let make_step (c: char) (parser: Parser.parser) (compiler: t): t =
+        let failed = Parser.has_failed parser
+        in
+        { compiler with
+            input =
+                compiler.input ^ String.one c;
+
+            terminate_line = failed && c <> '\n';
+
+            parser;
+
+            error =
+                if failed then
+                    Some Parse_error
+                else
+                    None;
+        }
+
+
+    let put_character (compiler: t) (c: char): t =
+        assert (needs_more compiler);
+        if compiler.terminate_line then
+            { compiler with
+                input = compiler.input ^ String.one c;
+
+                terminate_line =
+                    c <> '\n';
+            }
+        else
+            let parser =
+                Parser.put_character compiler.parser c
+            in
+            make_step c parser compiler
+
+
+
+    let put_end (compiler: t): t =
+        assert (needs_more compiler);
+        if compiler.terminate_line then
+            { compiler with
+                terminate_line = false
+            }
+        else
+            let parser = Parser.put_end compiler.parser in
+            make_step '\n' parser compiler
+
+
+
+    module Print (Pretty: Pretty_printer.SIG) =
+    struct
+        let print_error (compiler: t): Pretty.t =
+            match compiler.error with
+            | None ->
+                assert false (* Illegal call! *)
+            | Some Parse_error ->
+                let module Parser_print =
+                    Parser.Error_printer (Pretty)
+                in
+                Parser_print.print_with_source
+                    compiler.input
+                    compiler.parser
+
+        let print_values (compiler: t): Pretty.t =
+            let module Context_print = Context.Pretty (Pretty) in
+            Pretty.chain
+                (List.map
+                    (fun (term, typ, context) ->
+                        Context_print.print
+                            Term.(Typed (term, typ))
+                            context)
+                    compiler.values)
+    end
 end
 
 
@@ -50,14 +152,23 @@ struct
 
     let run _: unit Io.t =
         let module Reader = Io.File.Read (Compiler) in
-        Io.(
-            Reader.read File.stdin (Compiler.make ())
-            >>= fun io_result ->
-            match io_result with
-            | Error (_, error) ->
-                let module Error = Fmlib.Io.Error in
-                Pretty.(run (string (Error.message error) <+> cut))
-            | Ok _ ->
-                assert false
-        )
+        let open Io in
+        Reader.read File.stdin (Compiler.make ())
+        >>= fun io_result ->
+        match io_result with
+        | Error (_, error) ->
+            let module Io_error = Fmlib.Io.Error in
+            Io.(
+                Pretty.(run (string (Io_error.message error) <+> cut))
+                >>= fun _ ->
+                exit 1)
+        | Ok compiler ->
+            let open Io in
+            let module Print = Compiler.Print (Pretty) in
+            Pretty.run (Print.print_values compiler)
+            >>= fun _ ->
+            if Compiler.has_succeeded compiler then
+                return ()
+            else
+                Pretty.run (Print.print_error compiler)
 end
