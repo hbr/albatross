@@ -72,8 +72,8 @@ module type PARSER =
     (** Parser Type *)
     type parser
 
-    (** Does the parser need more tokens (i.e. either [put_char] or [put_end])?
-     *)
+    (** Does the parser need more tokens (i.e. either [put_character] or
+    [put_end])?  *)
     val needs_more: parser -> bool
 
     (** Has the parser terminated (opposite of [needs_more p])? *)
@@ -93,9 +93,9 @@ module type PARSER =
 
     val error_tabs: parser -> int list
 
-    (** [put_char p c] feeds the parser [p] with the character token [c]. Only
-        possible if [needs_more p] is valid. *)
-    val put_char: parser -> char -> parser
+    (** [put_character p c] feeds the parser [p] with the character token [c].
+    Only possible if [needs_more p] is valid. *)
+    val put_character: parser -> char -> parser
 
     (** [put_end p] signals to the parser [p] the end of stream. Only possible
      if          [needs_more p] is valid.*)

@@ -70,7 +70,7 @@ struct
             let more = P.needs_more p
             in
             if i < len && more then
-                parse (i + 1) (P.put_char p input.[i])
+                parse (i + 1) (P.put_character p input.[i])
             else if more then
                 P.put_end p
             else
@@ -235,7 +235,7 @@ struct
 
                     parser =
                         if needs_more w.parser then
-                            put_char w.parser c
+                            put_character w.parser c
                         else
                             w.parser;
                 }

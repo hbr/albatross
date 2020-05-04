@@ -210,7 +210,7 @@ module type SIG =
         val has_ended:  parser -> bool
         val has_succeeded: parser -> bool
 
-        val put_char: parser -> char -> parser
+        val put_character: parser -> char -> parser
         val put_end:  parser -> parser
 
         val result: parser -> final option

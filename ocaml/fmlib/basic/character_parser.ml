@@ -349,7 +349,7 @@ module type PARSER =
     val line:   parser -> int
     val column: parser -> int
     val error_tabs: parser -> int list
-    val put_char: parser -> char -> parser
+    val put_character: parser -> char -> parser
     val put_end: parser -> parser
   end
 
@@ -701,7 +701,7 @@ struct
             []
 
 
-    let put_char (p:parser) (c:char): parser =
+    let put_character (p:parser) (c:char): parser =
       assert (needs_more p);
       Basic.put_token p (Some c)
 
@@ -717,7 +717,7 @@ struct
       let i = ref 0
       and len = String.length s in
       while !i <> len && needs_more !p do
-        p := put_char !p s.[!i];
+        p := put_character !p s.[!i];
         i := !i + 1
       done;
       if needs_more !p then
