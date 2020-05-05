@@ -69,8 +69,13 @@ end
 
 module type PARSER =
   sig
+    type state
+    (** State type *)
+
+
     (** Parser Type *)
     type parser
+
 
     (** Does the parser need more tokens (i.e. either [put_character] or
     [put_end])?  *)
@@ -93,6 +98,9 @@ module type PARSER =
 
     (** The current column. *)
     val column: parser -> int
+
+    val state: parser -> state
+    (** The state of the parser. *)
 
     val error_tabs: parser -> int list
 
@@ -212,7 +220,7 @@ sig
 
     (** {2 During Parsing} *)
 
-    include PARSER
+    include PARSER with type state = Unit.t
 
 
     (** {2 Terminated Parser} *)
@@ -303,7 +311,7 @@ sig
 
     (** {2 During Parsing} *)
 
-    include PARSER
+    include PARSER with type state = State.t
 
 
     (** {2 Terminated Parser} *)
@@ -396,10 +404,8 @@ sig
 
     (** {2 During Parsing} *)
 
-    include PARSER
+    include PARSER with type state = State.t
 
-    (** The state of the parser. *)
-    val state: parser -> State.t
 
     (** {2 Terminated Parser} *)
 

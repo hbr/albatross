@@ -341,6 +341,7 @@ end
 
 module type PARSER =
   sig
+    type state
     type parser
     val needs_more: parser -> bool
     val has_ended:  parser -> bool
@@ -349,6 +350,7 @@ module type PARSER =
     val position:   parser -> Position.t
     val line:   parser -> int
     val column: parser -> int
+    val state:  parser -> state
     val error_tabs: parser -> int list
     val put_character: parser -> char -> parser
     val put_end: parser -> parser
