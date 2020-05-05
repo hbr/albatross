@@ -68,11 +68,6 @@ type t = {
     bcs:   Build_context.t list;
 }
 
-type build_monad = t -> (t, problem) result
-
-type build_function = Expression.t -> int -> build_monad
-
-
 let count_base (builder: t): int =
     Gamma.count builder.base
 
@@ -97,13 +92,80 @@ let make (c: Context.t): t =
 
 
 
+
+
+type 'a build_monad =
+    t -> ('a, problem) result
+
+
+
+let map_bcs_list (f: Build_context.t -> Build_context.t) (builder: t): t =
+    {builder with bcs = List.map f builder.bcs}
+
+
+
+let map_bcs0
+    (f: Build_context.t -> ('a, 'b) result)
+    (g: 'b list -> problem)
+    : 'a list build_monad
+    =
+    fun builder ->
+    let lst, errors =
+        List.fold_left
+            (fun (lst, errors)  bc ->
+                match f bc with
+                | Ok a ->
+                    a :: lst, errors
+                | Error problem ->
+                    lst, problem :: errors)
+            ([], [])
+            builder.bcs
+    in
+    if lst <> [] then
+        Ok lst
+    else
+        Error (g errors)
+
+
+
+
+
+let map_bcs
+    (f: Build_context.t -> (Build_context.t, 'a) result)
+    (g: 'a list -> problem)
+    : t build_monad
+    =
+    fun builder ->
+    Result.map
+        (fun bcs -> {builder with bcs})
+        (map_bcs0 f g builder)
+
+
+
+let next_formal_argument
+    (name: string Located.t)
+    (typed: bool)
+    (builder: t)
+    : t
+    =
+    let str = Located.value name
+    in
+    map_bcs_list
+        (Build_context.next_formal_argument name typed)
+        builder
+    |> push_bound str
+
+
+
+
+
 let base_candidates
     (range: range)
     (candidates: Term.t list)
     (nargs: int)
-    (builder: t)
-    : (t, problem) result
+    : t build_monad
     =
+    fun builder ->
     let candidates, _ =
         List.fold_right
             (fun term (candidates, variant) ->
@@ -140,111 +202,12 @@ let base_candidates
 
 
 
-let map_bcs_list (f: Build_context.t -> Build_context.t) (builder: t): t =
-    {builder with bcs = List.map f builder.bcs}
-
-
-
-let map_bcs0
-    (f: Build_context.t -> ('a, 'b) result)
-    (g: 'b list -> problem)
-    (builder: t)
-    : ('a list, problem) result
-    =
-    let lst, errors =
-        List.fold_left
-            (fun (lst, errors)  bc ->
-                match f bc with
-                | Ok a ->
-                    a :: lst, errors
-                | Error problem ->
-                    lst, problem :: errors)
-            ([], [])
-            builder.bcs
-    in
-    if lst <> [] then
-        Ok lst
-    else
-        Error (g errors)
-
-
-
-
-
-let map_bcs
-    (f: Build_context.t -> (Build_context.t, 'a) result)
-    (g: 'a list -> problem)
-    (builder: t)
-    : (t, problem) result
-    =
-    Result.map
-        (fun bcs -> {builder with bcs})
-        (map_bcs0 f g builder)
-
-
-
-let next_formal_argument
-    (name: string Located.t)
-    (typed: bool)
-    (builder: t)
-    : t
-    =
-    let str = Located.value name
-    in
-    map_bcs_list
-        (Build_context.next_formal_argument name typed)
-        builder
-    |> push_bound str
-
-
-
-let build_farg
-    (build0: build_function)
-    ((name, tp): Expression.formal_argument)
-    : build_monad
-    =
-    fun builder ->
-    let next typed builder = next_formal_argument name typed builder
-    in
-    match tp with
-    | None ->
-        Ok (next false builder)
-    | Some tp ->
-        Result.map (next true) (build0 tp 0 builder)
-
-
-
-
-let build_fargs_res
-    (fargs: Expression.formal_argument list)
-    (res: Expression.t option)
-    (build0: build_function)
-    (builder: t)
-    : (t, problem) result
-    =
-    let open Result in
-    List_fold.fold_left
-        (build_farg build0)
-        fargs
-        builder
-    >>= fun builder ->
-    match res with
-    | None ->
-        Ok builder
-    | Some res ->
-        build0 res 0 builder
-
-
-
-
-
-
 let rec build0
     (exp: Expression.t)
     (nargs: int)
-    (builder: t)
-    : (t, problem) result
+    : t build_monad
     =
+    fun builder ->
     let open Expression in
     let range = Located.range exp in
     match
@@ -313,10 +276,9 @@ let rec build0
         in
         let names = builder.names
         in
-        build_fargs_res
+        build_signature
             fargs
             (Some res)
-            build0
             (map_bcs_list Build_context.Product.start builder)
         >>= map_bcs
                 (Build_context.Product.check (List.length fargs))
@@ -379,10 +341,9 @@ let rec build0
     | Function (fargs, res, exp) ->
         let open Result in
         let names = builder.names in
-        build_fargs_res
+        build_signature
             fargs
             res
-            build0
             (map_bcs_list Build_context.Lambda.start builder)
         >>= fun builder ->
         Ok (map_bcs_list Build_context.Lambda.inner builder)
@@ -452,6 +413,41 @@ let rec build0
 
     | List _ ->
         Error (range, Not_yet_implemented "Literal list")
+
+
+and build_formal_argument
+    ((name, tp): Expression.formal_argument)
+    : t build_monad
+    =
+    fun builder ->
+    let next typed builder = next_formal_argument name typed builder
+    in
+    match tp with
+    | None ->
+        Ok (next false builder)
+    | Some tp ->
+        Result.map (next true) (build0 tp 0 builder)
+
+
+and build_signature
+    (fargs: Expression.formal_argument list)
+    (res: Expression.t option)
+    (builder: t)
+    : (t, problem) result
+    =
+    let open Result in
+    List_fold.fold_left
+        build_formal_argument
+        fargs
+        builder
+    >>= fun builder ->
+    match res with
+    | None ->
+        Ok builder
+    | Some res ->
+        build0 res 0 builder
+
+
 
 
 
