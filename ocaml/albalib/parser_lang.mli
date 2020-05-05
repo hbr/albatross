@@ -43,6 +43,20 @@ sig
 end
 
 
+
+module Source_file:
+sig
+    type t
+
+    val count: t -> int
+
+    val is_top_expression: t -> bool
+
+    val top_expression: t -> bool * Expression.t
+end
+
+
+
 module type ERROR =
             Generic_parser.ERROR
                 with type expect   = string * Character_parser.Indent.t
@@ -53,6 +67,7 @@ module type ERROR =
 module type SIG =
     sig
         type parser
+        type state
         type final
         type _ t
 
@@ -62,6 +77,7 @@ module type SIG =
         val has_ended:  parser -> bool
         val has_succeeded: parser -> bool
         val has_failed: parser -> bool
+        val state: parser -> Source_file.t
 
         val put_character: parser -> char -> parser
         val put_end:  parser -> parser
@@ -89,4 +105,5 @@ module type SIG =
 module Make (Final: ANY):
 sig
     include SIG with type final = Final.t
+                and type state = Source_file.t
 end

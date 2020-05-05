@@ -55,7 +55,22 @@ struct
 
 
     let make_step (c: char) (parser: Parser.parser) (compiler: t): t =
+        (* The parser has already made its step, now we do the semantics. *)
         let failed = Parser.has_failed parser
+        in
+        let error, values =
+            if failed then
+                Some Parse_error, compiler.values
+            else
+                let src0 = Parser.state compiler.parser
+                and src1 = Parser.state parser
+                in
+                if
+                        Parser_lang.Source_file.(count src0 < count src1)
+                then
+                    assert false
+                else
+                    None, compiler.values
         in
         { compiler with
             input =
@@ -65,11 +80,9 @@ struct
 
             parser;
 
-            error =
-                if failed then
-                    Some Parse_error
-                else
-                    None;
+            error;
+
+            values;
         }
 
 

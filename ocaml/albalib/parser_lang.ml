@@ -33,6 +33,61 @@ module Command =
 
 
 
+module Source_file =
+struct
+    type entry =
+        | Expression of (bool * Expression.t)
+
+    type t = {
+        entries: entry list;
+        n: int;
+    }
+
+    let count (src: t): int =
+        src.n
+
+    let empty: t =
+        {
+            n = 0;
+            entries = [];
+        }
+
+    let top (src: t): entry =
+        assert (0 < count src);
+        fst (List.split_head_tail src.entries)
+
+
+    let is_top_expression (src: t): bool =
+        0 < count src
+        &&
+        match top src with
+        | Expression _ ->
+            true
+
+
+
+    let top_expression (src: t): bool * Expression.t =
+        assert (is_top_expression src);
+        match top src with
+        | Expression flag_exp ->
+            flag_exp
+
+
+
+    let push_expression
+        (evaluate_flag: bool) (exp: Expression.t) (src: t): t
+        =
+        {
+            entries =
+                Expression (evaluate_flag, exp) :: src.entries;
+
+            n = src.n + 1;
+        }
+end
+
+
+
+
 
 
 module Problem =
@@ -59,10 +114,6 @@ module type ERROR =
             Generic_parser.ERROR
                 with type expect   = string * Character_parser.Indent.t
                 and  type semantic = range * Problem.t
-
-
-
-
 
 
 
@@ -201,6 +252,7 @@ end
 module type SIG =
     sig
         type parser
+        type state
         type final
         type _ t
 
@@ -210,6 +262,7 @@ module type SIG =
         val has_ended:  parser -> bool
         val has_succeeded: parser -> bool
         val has_failed: parser -> bool
+        val state: parser -> Source_file.t
 
         val put_character: parser -> char -> parser
         val put_end:  parser -> parser
@@ -251,7 +304,7 @@ module Make (Final: ANY) =
 struct
     module P =
         Character_parser.Normal
-            (Unit)
+            (Source_file)
             (Final)
             (struct type t = range * Problem.t end)
             (String)
@@ -838,16 +891,54 @@ struct
              |= optional (expression ()))
 
 
+    let source_file_command: unit t =
+        backtrackable
+            (
+                char ':'
+                >>= fun _ ->
+                name_ws
+                >>= fun str ->
+                let str = Located.value str in
+                if str = "evaluate" then
+                    return true
+                else if str = "typecheck" then
+                    return false
+                else
+                    unexpected "command"
+            )
+            "':evaluate <expression>' or ':typecheck <expression>'"
+        >>= fun evaluate_flag ->
+        indented (expression ())
+        >>= fun exp ->
+        update (Source_file.push_expression evaluate_flag exp)
+
+
+
+
+    let declaration : unit t =
+        source_file_command
+
+
+    let declarations: unit t =
+        map (fun _ -> ())
+            (
+                skip_zero_or_more
+                    (absolute declaration)
+            )
+
+
     let source_file _ : unit t =
-        return ()
+        whitespace
+        >>= fun _ ->
+        absolute_at 0 declarations
 
 
     let make (p: final t): parser =
-        P.make (p |. expect_end) ()
+        P.make (p |. expect_end) (Source_file.empty)
 
 
     let run (p: final t) (input: string): parser =
-        run (p |. expect_end) () input
+        run (p |. expect_end) (Source_file.empty) input
 
 
 
