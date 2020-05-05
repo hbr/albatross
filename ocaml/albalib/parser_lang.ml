@@ -37,6 +37,8 @@ module Source_file =
 struct
     type entry =
         | Expression of (bool * Expression.t)
+        | Definition of (Expression.definition)
+
 
     type t = {
         entries: entry list;
@@ -57,20 +59,16 @@ struct
         fst (List.split_head_tail src.entries)
 
 
-    let is_top_expression (src: t): bool =
-        0 < count src
-        &&
-        match top src with
-        | Expression _ ->
-            true
+    let push_definition
+        (def: Expression.definition) (src: t)
+        : t
+        =
+        {
+            entries =
+                Definition def :: src.entries;
 
-
-
-    let top_expression (src: t): bool * Expression.t =
-        assert (is_top_expression src);
-        match top src with
-        | Expression flag_exp ->
-            flag_exp
+            n = src.n + 1;
+        }
 
 
 
@@ -91,7 +89,7 @@ end
 
 
 module Problem =
-  struct
+struct
     type t =
       | Operator_precedence of
           string * string (* the 2 operator strings *)
@@ -105,7 +103,11 @@ module Problem =
       | Duplicate_argument
 
       | Unused_definition of string
-  end
+
+      | No_result_type
+
+      | No_argument_type
+end
 
 
 
@@ -182,6 +184,17 @@ struct
         | Unused_definition _ ->
             wrap_words "This local definition is not used. \
                         Sorry, this is not allowed."
+            <+> cut <+> cut
+
+        | No_result_type ->
+            wrap_words
+                "Top level definitions must have an explicit result type."
+            <+> cut <+> cut
+
+        | No_argument_type ->
+            wrap_words
+                "In top level definitions all formal arguments \
+                must be explicitly typed."
             <+> cut <+> cut
 
 
@@ -276,7 +289,7 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
-        val source_file: _ -> unit t
+        val source_file: bool -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
 
@@ -616,63 +629,6 @@ struct
 
     let rec expression0 (with_comma: bool) (): Expression.t t =
 
-        let indented_expression (kind: string) () =
-            indented (expression0 false () <?> kind)
-        in
-
-        let subexpression (kind: string) () =
-            maybe_indented (expression0 false () <?> kind)
-        in
-
-        let result_type: Expression.t t =
-          (colon |. whitespace >>= subexpression "type")
-          <?> ": <result type>"
-        in
-
-        let optional_result_type: Expression.t option t =
-          optional result_type
-        in
-
-        let formal_argument: (string located * Expression.t option) t =
-            (
-                char_ws '(' >>= fun _ ->
-                identifier false
-                >>= fun name ->
-                colon |. whitespace
-                >>= subexpression "type"
-                >>= fun typ ->
-                char_ws ')'
-                >>= fun _ ->
-                return (name, Some typ)
-            )
-            <|>
-            map (fun name -> name, None) (identifier false)
-            <?>
-            "formal argument"
-        in
-
-        let formal_arguments zero =
-            (if zero then
-                zero_or_more formal_argument
-            else
-                one_or_more formal_argument)
-            >>= fun lst ->
-            match find_duplicate_argument lst with
-            | None ->
-                return lst
-            | Some name ->
-                fail (Located.range name, Problem.Duplicate_argument)
-        in
-
-        let assign_defining_expression =
-            assign
-            |. whitespace
-            >>= indented_expression "defining expression"
-            <?>
-            ":= <defining expression>"
-        in
-
-
         let primary (what: string): Expression.t t =
             backtrackable identifier_expression "identifier"
             <|>
@@ -711,8 +667,8 @@ struct
                 (return (fun args rt exp -> Expression.Function (args, rt, exp))
                  |. char_ws '\\'
                  |= formal_arguments false
-                 |= optional_result_type
-                 |= assign_defining_expression
+                 |= optional_result_type ()
+                 |= assign_defining_expression ()
                 )
             <|>
             (* all (a: A) (b: B) ... : RT *)
@@ -727,7 +683,7 @@ struct
                 |. backtrackable (string "all") "all"
                 |. whitespace
                 |= formal_arguments false
-                |= result_type)
+                |= result_type ())
             <?>
             what
         in
@@ -772,22 +728,6 @@ struct
         in
 
 
-        let definition: Expression.definition t =
-            return
-                (fun name args res_tp e ->
-                    let p1 = Located.start name
-                    and p2 = Located.end_ e
-                    in
-                    Located.make p1 (name, args, res_tp, e) p2)
-            |= identifier false
-            |= formal_arguments true
-            |= optional_result_type
-            |= assign_defining_expression
-            <?>
-            "local definition"
-        in
-
-
         let where_block: Expression.definition list t =
             (
                 backtrackable
@@ -796,7 +736,7 @@ struct
                 |. whitespace
             )
             >>= fun _ ->
-            indented (one_or_more_aligned definition)
+            indented (one_or_more_aligned (definition ()))
         in
 
 
@@ -833,6 +773,74 @@ struct
                     definitions
                     pos_end
         )
+
+    and indented_expression (kind: string) () =
+        indented (expression0 false () <?> kind)
+
+    and subexpression (kind: string) () =
+        maybe_indented (expression0 false () <?> kind)
+
+    and result_type _ : Expression.t t =
+      (colon |. whitespace >>= subexpression "type")
+      <?> ": <result type>"
+
+
+    and optional_result_type _ : Expression.t option t =
+      optional (result_type ())
+
+
+    and formal_argument _: (string located * Expression.t option) t =
+        (
+            char_ws '(' >>= fun _ ->
+            identifier false
+            >>= fun name ->
+            colon |. whitespace
+            >>= subexpression "type"
+            >>= fun typ ->
+            char_ws ')'
+            >>= fun _ ->
+            return (name, Some typ)
+        )
+        <|>
+        map (fun name -> name, None) (identifier false)
+        <?>
+        "formal argument"
+
+    and formal_arguments zero =
+        (
+            if zero then
+                zero_or_more (formal_argument ())
+            else
+                one_or_more (formal_argument ())
+        )
+        >>= fun lst ->
+        match find_duplicate_argument lst with
+        | None ->
+            return lst
+        | Some name ->
+            fail (Located.range name, Problem.Duplicate_argument)
+
+    and assign_defining_expression _: Expression.t t =
+        assign
+        |. whitespace
+        >>= indented_expression "defining expression"
+        <?>
+        ":= <defining expression>"
+
+
+    and definition _: Expression.definition t =
+        return
+            (fun name args res_tp e ->
+                let p1 = Located.start name
+                and p2 = Located.end_ e
+                in
+                Located.make p1 (name, args, res_tp, e) p2)
+        |= identifier false
+        |= formal_arguments true
+        |= optional_result_type ()
+        |= assign_defining_expression ()
+        <?>
+        "local definition"
 
 
 
@@ -893,6 +901,8 @@ struct
              |= optional (expression ()))
 
 
+
+
     let source_file_command: unit t =
         backtrackable
             (
@@ -917,22 +927,48 @@ struct
 
 
 
-    let declaration : unit t =
-        source_file_command
+    let source_definition _: unit t =
+        definition () >>= fun def ->
+        let name, fargs, res, _ =
+            Located.value def
+        in
+        match
+            List.find
+                (fun (_, tp) -> tp = None)
+                fargs
+        with
+        | Some (name, _) ->
+            fail (Located.range name, Problem.No_argument_type)
+
+        | None ->
+            if res = None then
+                fail (Located.range name, Problem.No_result_type)
+            else
+                update
+                    (Source_file.push_definition def)
 
 
-    let declarations: unit t =
+    let declaration (with_expressions: bool): unit t =
+        if with_expressions then
+            source_file_command
+            <|>
+            source_definition ()
+        else
+            source_definition ()
+
+
+    let declarations (with_expressions: bool): unit t =
         map (fun _ -> ())
             (
                 skip_zero_or_more
-                    (absolute declaration)
+                    (absolute (declaration with_expressions))
             )
 
 
-    let source_file _ : unit t =
+    let source_file (with_expressions: bool) : unit t =
         whitespace
         >>= fun _ ->
-        absolute_at 0 declarations
+        absolute_at 0 (declarations with_expressions)
 
 
     let make (p: final t): parser =

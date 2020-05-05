@@ -28,6 +28,10 @@ sig
     | Duplicate_argument
 
     | Unused_definition of string
+
+    | No_result_type
+
+    | No_argument_type
 end
 
 
@@ -46,13 +50,16 @@ end
 
 module Source_file:
 sig
+    type entry =
+        | Expression of (bool * Expression.t)
+        | Definition of (Expression.definition)
+
+
     type t
 
     val count: t -> int
 
-    val is_top_expression: t -> bool
-
-    val top_expression: t -> bool * Expression.t
+    val top: t -> entry
 end
 
 
@@ -91,7 +98,7 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
-        val source_file: _ -> unit t
+        val source_file: bool -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
 

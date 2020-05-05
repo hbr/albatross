@@ -38,7 +38,7 @@ struct
 
             terminate_line = false;
 
-            parser = Parser.(make (source_file ()));
+            parser = Parser.(make (source_file true));
 
             context = Context.standard ();
 
@@ -70,30 +70,34 @@ struct
         : error option * value list
         =
         let open Parser_lang in
-        let eval_flag, expression =
-            Source_file.top_expression (Parser.state parser)
-        in
-        match Builder.build expression compiler.context with
-        | Error problem ->
-            Some (Build_error problem),
-            compiler.values
+        let open Source_file in
+        match top (Parser.state parser) with
+        | Expression (eval_flag, expression) ->
+        (
+            match Builder.build expression compiler.context with
+            | Error problem ->
+                Some (Build_error problem),
+                compiler.values
 
-        | Ok (term, typ) ->
-            let term, typ =
-                match term with
-                | Term.Typed (term, typ) ->
-                    term, typ
-                | _ ->
-                    term, typ
-            in
-            let term =
-                if eval_flag then
-                    Context.compute term compiler.context
-                else
-                    term
-            in
-            None,
-            (term, typ, compiler.context) :: compiler.values
+            | Ok (term, typ) ->
+                let term, typ =
+                    match term with
+                    | Term.Typed (term, typ) ->
+                        term, typ
+                    | _ ->
+                        term, typ
+                in
+                let term =
+                    if eval_flag then
+                        Context.compute term compiler.context
+                    else
+                        term
+                in
+                None,
+                (term, typ, compiler.context) :: compiler.values
+        )
+        | Definition _ ->
+            assert false
 
 
     let add_character (c: char) (compiler: t) : string * lines =
