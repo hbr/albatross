@@ -58,6 +58,40 @@ struct
         offset <+> numbers <+> cut
 
 
+    let print_line_sub
+        (number_width: int)
+        (line_number: int)
+        (start: int)
+        (beyond: int)
+        (source: string)
+        : PP.t
+        =
+        let line_number_str = string_of_int (line_number + 1)
+        in
+        let len = String.length line_number_str
+        in
+        assert (len <= number_width);
+        fill (number_width - len) ' '
+        <+> string line_number_str
+        <+> string "| "
+        <+> substring source start (beyond - start)
+        <+> cut
+
+
+    let print_line
+        (number_width: int)
+        (line_number: int)
+        (line: string)
+        : PP.t
+        =
+        print_line_sub
+            number_width
+            line_number
+            0
+            (String.length line)
+            line
+
+
     let print_source
         (source: string)
         ((pos1,pos2): range)
@@ -78,61 +112,134 @@ struct
         in
         assert (start_line <= end_line);
         assert (start_line < end_line || start_col < end_col);
+        Printf.printf "print_source (%d,%d) (%d,%d)\n"
+            start_line start_col end_line end_col;
         let number_width =
             String.length (string_of_int (end_line + 1))
         in
         let print_line start beyond line_no =
-            let line_no_str = string_of_int (line_no + 1)
-            in
-            fill (number_width - String.length line_no_str) ' '
-            <+> string line_no_str
-            <+> string "| "
-            <+> substring source start (beyond - start)
-            <+> cut
+            print_line_sub number_width line_no start beyond source
         and skip_line_no =
             fill (number_width + 2) ' '
         in
         let rec print (char_offset: int) (line_no: int): t =
-            (*if len <= char_offset then
-                empty*)
+            assert (char_offset < len); (* error range cannot be outside
+                                           the input string *)
             if end_line < line_no then
                 empty
             else
                 let pos_newline =
                     String.find (fun c -> c = '\n') char_offset source
                 in
-                (if line_no = start_line && start_line = end_line then
-                    print_line char_offset pos_newline line_no
-                    <+> skip_line_no
-                    <+> fill start_col ' '
-                    <+> fill (end_col - start_col) '^'
-                    <+> cut
-                 else if line_no = start_line && start_line < end_line then
-                    skip_line_no
-                    <+> fill start_col ' '
-                    <+> char 'v'
-                    <+> fill 20 '.'
-                    <+> cut
-                    <+> print_line char_offset pos_newline line_no
-                 else if line_no = end_line && start_line <> end_line then
-                    print_line char_offset pos_newline line_no
-                    <+> skip_line_no
-                    <+> fill (max 0 (end_col - 1)) '.'
-                    <+> char '^'
-                    <+> cut
-                 else if pos_newline + 1 = len && start_line = line_no + 1 then
-                    print_line char_offset pos_newline line_no
-                    <+> skip_line_no
-                    <+> fill (pos_newline - char_offset) ' '
-                    <+> char '^'
-                    <+> cut
-                 else
-                    (* normal line *)
-                    print_line char_offset pos_newline line_no
+                (
+                    if
+                        line_no = start_line && start_line = end_line
+                    then
+                        print_line char_offset pos_newline line_no
+                        <+> skip_line_no
+                        <+> fill start_col ' '
+                        <+> fill (end_col - start_col) '^'
+                        <+> cut
+
+                    else if
+                        line_no = start_line && start_line < end_line
+                    then
+                        skip_line_no
+                        <+> fill start_col ' '
+                        <+> char 'v'
+                        <+> fill 20 '.'
+                        <+> cut
+                        <+> print_line char_offset pos_newline line_no
+
+                    else if
+                        line_no = end_line && start_line <> end_line
+                    then
+                        print_line char_offset pos_newline line_no
+                        <+> skip_line_no
+                        <+> fill (max 0 (end_col - 1)) '.'
+                        <+> char '^'
+                        <+> cut
+
+                    else
+                       (* normal line *)
+                       print_line char_offset pos_newline line_no
                 )
                 <+> print (pos_newline + 1) (line_no + 1)
         in
         print 0 0
+        <+>
+        (
+          if error_tabs = [] then
+              empty
+          else
+              print_tabs (number_width + 2) error_tabs
+        )
+
+
+    let print_source_lines
+        (lines: string Segmented_array.t)
+        ((pos1, pos2): range)
+        (error_tabs: int list)
+        : PP.t
+        =
+        let start_line = Position.line pos1
+        and end_line   = Position.line pos2
+        and start_col  = Position.column pos1
+        and end_col    = Position.column pos2
+        in
+        let end_col =
+            if start_line = end_line && start_col = end_col then
+                end_col + 1
+            else
+                end_col
+        and start_line0 = max 0 (start_line - 5)
+        in
+        assert (start_line <= end_line);
+        assert (start_line < end_line || start_col < end_col);
+        assert (end_line < Segmented_array.length lines);
+        let number_width =
+            String.length (string_of_int (end_line + 1))
+        in
+        let skip_line_no =
+            fill (number_width + 2) ' '
+        in
+        let print_lines first last =
+            Interval.fold
+                empty
+                (fun i pr ->
+                    pr
+                    <+>
+                    print_line
+                        number_width
+                        i
+                        (Segmented_array.elem i lines))
+                first (last + 1)
+        in
+        print_lines start_line0 (start_line - 1)
+        <+>
+        (
+            if start_line = end_line then
+                print_lines start_line start_line
+                <+>
+                (
+                    skip_line_no <+> fill start_col ' '
+                    <+> fill (end_col - start_col) '^'
+                    <+> cut
+                )
+            else
+                (
+                    skip_line_no <+> fill start_col ' '
+                    <+> char 'v' <+> fill 20 '.' <+> cut
+                )
+                <+> print_lines start_line end_line
+                <+>
+                (
+                    skip_line_no
+                    <+> fill (max 0 (end_col - 1)) '.'
+                    <+> char '^'
+                    <+> cut
+                )
+        )
         <+>
         (
           if error_tabs = [] then

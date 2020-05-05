@@ -283,6 +283,8 @@ module type SIG =
         module Error_printer (PP: Pretty_printer.SIG):
         sig
             val print_with_source: string -> parser -> PP.t
+            val print_with_source_lines:
+                string Segmented_array.t -> parser -> PP.t
         end
     end
 
@@ -949,18 +951,14 @@ struct
 
         open PP
 
-        let print_with_source
-            (source: string)
-            (p: parser)
-            : PP.t
-            =
+        let print0 (lines: range -> int list -> PP.t) (p: parser): PP.t =
             assert (has_ended p);
             assert (not (has_succeeded p));
             if Error.is_semantic (error p) then
                 let range, error = Error.semantic (error p) in
                 PP0.print_error_header "SYNTAX"
                 <+>
-                PP0.print_source source range []
+                lines range []
                 <+>
                 PPr.problem error
             else
@@ -969,11 +967,33 @@ struct
                 in
                 PP0.print_error_header "SYNTAX"
                 <+>
-                PP0.print_source source (pos,pos) tabs
+                lines (pos,pos) tabs
                 <+>
                 PPr.expectations
                     (column p)
                     (Error.expectations (error p))
                     tabs
+
+
+        let print_with_source
+            (source: string)
+            (p: parser)
+            : PP.t
+            =
+            assert (has_ended p);
+            assert (not (has_succeeded p));
+            print0
+                (PP0.print_source source)
+                p
+
+
+        let print_with_source_lines
+            (lines: string Segmented_array.t)
+            (p: parser)
+            : PP.t
+            =
+            print0
+                (PP0.print_source_lines lines)
+                p
     end
 end (* Make *)

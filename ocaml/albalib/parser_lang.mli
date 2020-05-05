@@ -98,6 +98,8 @@ module type SIG =
         module Error_printer (PP: Pretty_printer.SIG):
         sig
             val print_with_source: string -> parser -> PP.t
+            val print_with_source_lines:
+                string Segmented_array.t -> parser -> PP.t
         end
     end
 

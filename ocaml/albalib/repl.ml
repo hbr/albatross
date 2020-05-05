@@ -89,15 +89,9 @@ struct
         match
             Builder.build expression std_context
         with
-        | Error (range, descr) ->
-            let module Print = Printer.Make (Pretty) in
+        | Error problem ->
             let module Builder_print = Builder.Print (Pretty) in
-            let open Pretty in
-            Print.print_error_header "TYPE"
-            <+> Print.print_source input range []
-            <+> cut
-            <+> Builder_print.description descr
-            <+> cut
+            Builder_print.print_with_source input problem
 
         | Ok (term, typ) ->
             let term =

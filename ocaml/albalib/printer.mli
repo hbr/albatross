@@ -28,5 +28,8 @@ sig
 
         Add tab positions for the error tabs.
     *)
+
+    val print_source_lines:
+        string Segmented_array.t -> range -> int list -> PP.t
 end
 

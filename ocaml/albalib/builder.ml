@@ -695,6 +695,34 @@ struct
             <+> group space
             <+> wrap_words "is not yet implemented"
 
+
+    let print_with_source
+        (src: string) ((range, desc): problem)
+        : P.t
+        =
+        let module P0 = Printer.Make (P) in
+        let open P in
+        P0.print_error_header "TYPE"
+        <+>
+        P0.print_source src range []
+        <+>
+        description desc
+        <+> cut
+
+
+    let print_with_source_lines
+        (lines: string Segmented_array.t)
+        ((range, desc): problem)
+        : P.t
+        =
+        let module P0 = Printer.Make (P) in
+        let open P in
+        P0.print_error_header "TYPE"
+        <+>
+        P0.print_source_lines lines range []
+        <+>
+        description desc
+        <+> cut
 end
 
 
