@@ -234,7 +234,7 @@ let add_new (term: Term.t) (n: int) (a: 'a) (trie: 'a t): ('a t, 'a) result =
                     {trie with
                         globals =
                             Int_map.add level value trie.globals})
-                (Int_map.maybe_find level trie.bounds)
+                (Int_map.maybe_find level trie.globals)
 
         | Typed (exp, tp) ->
             add_compound
