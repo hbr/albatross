@@ -36,3 +36,5 @@ val standard: unit -> t
 val compute: Term.t -> t -> Term.t
 
 val push_local: string -> Term.typ -> t -> t
+
+val push_definition: string -> Term.typ -> Term.t -> t -> t

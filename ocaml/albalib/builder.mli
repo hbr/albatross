@@ -16,6 +16,21 @@ val build:
     -> (Term.t * Term.typ, problem) result
 
 
+
+val build_definition:
+    Ast.Expression.definition
+    -> Context.t
+    -> (Term.t * Term.typ, problem) result
+
+
+
+val add_definition:
+    Ast.Expression.definition
+    -> Context.t
+    -> (Context.t, problem) result
+
+
+
 module Print (P: Pretty_printer.SIG):
 sig
     val description: problem_description -> P.t

@@ -112,8 +112,6 @@ struct
         in
         assert (start_line <= end_line);
         assert (start_line < end_line || start_col < end_col);
-        Printf.printf "print_source (%d,%d) (%d,%d)\n"
-            start_line start_col end_line end_col;
         let number_width =
             String.length (string_of_int (end_line + 1))
         in

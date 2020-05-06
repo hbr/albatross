@@ -59,6 +59,23 @@ let find_name (name: string) (c: t): int list =
     Name_map.find name c.map
 
 
+let add_definition
+    (name: string) (typ: Term.typ) (exp: Term.t) (c: t): t option
+=
+    Option.map
+        (fun map ->
+            {
+                map;
+
+                gamma =
+                    Gamma.push_definition name typ exp c.gamma
+            })
+        (Name_map.add_global
+            name
+            typ
+            c.gamma
+            c.map)
+
 
 
 module Pretty (P: Pretty_printer.SIG) =

@@ -30,6 +30,7 @@ type problem_description =
     | Wrong_base of type_in_context list * type_in_context list
     | Ambiguous of type_in_context list
     | Name_violation of string * string (* case, kind *)
+    | Ambiguous_definition
     | Not_yet_implemented of string
 
 let dummy str = Not_yet_implemented str
@@ -157,6 +158,35 @@ let next_formal_argument
 
 
 
+let check_formal_arguments
+    (fargs: Expression.formal_argument list)
+    : t build_monad
+    =
+    map_bcs
+        (Build_context.Product.check (List.length fargs))
+        (fun lst ->
+            let i_min =
+                List.fold_left
+                    (fun i_min i -> min i_min i)
+                    (List.length fargs)
+                    lst
+            in
+            let name, _ = List.nth_strict i_min fargs in
+            Located.range name, Cannot_infer_bound)
+
+
+let end_product
+    (range: range)
+    (nargs_outer: int)
+    (nargs_inner: int)
+    : t build_monad
+    =
+    map_bcs
+        (Build_context.Product.end_ nargs_outer nargs_inner)
+        (fun lst ->
+            range,
+            description_of_type_in_context nargs_outer lst)
+
 
 
 let base_candidates
@@ -280,22 +310,10 @@ let rec build0
             fargs
             (Some res)
             (map_bcs_list Build_context.Product.start builder)
-        >>= map_bcs
-                (Build_context.Product.check (List.length fargs))
-                (fun lst ->
-                    let i_min =
-                        List.fold_left
-                            (fun i_min i -> min i_min i)
-                            (List.length fargs)
-                            lst
-                    in
-                    let name, _ = List.nth_strict i_min fargs in
-                    Located.range name, Cannot_infer_bound)
-        >>= map_bcs
-            (Build_context.Product.end_ nargs (List.length fargs))
-            (fun lst ->
-                range,
-                description_of_type_in_context nargs lst)
+        >>=
+        check_formal_arguments fargs
+        >>=
+        end_product range nargs (List.length fargs)
         >>= set_names names
 
 
@@ -367,7 +385,7 @@ let rec build0
             | [] ->
                 build0 exp 0 builder
             | def :: defs ->
-                let name, fargs, res_tp, def_exp =
+                let name, _, _, _ =
                     Located.value def
                 in
                 let str = Located.value name
@@ -385,24 +403,7 @@ let rec build0
                     (fun lst -> range, description_of_type_in_context 1 lst)
                 >>= set_names names
                 >>=
-                (
-                    if fargs = [] && res_tp = None then
-                        build0 def_exp 0
-                    else if fargs = [] then
-                        build0
-                            Located.(make
-                                (start name)
-                                (Typed (def_exp, Option.value res_tp))
-                                (end_ name))
-                        0
-                    else
-                        build0
-                            Located.(make
-                                (start name)
-                                (Function (fargs, res_tp, def_exp))
-                                (end_ name))
-                            0
-                )
+                build_definition0 def
                 >>=
                 map_bcs
                     (Build_context.Where.end_ nargs)
@@ -432,9 +433,9 @@ and build_formal_argument
 and build_signature
     (fargs: Expression.formal_argument list)
     (res: Expression.t option)
-    (builder: t)
-    : (t, problem) result
+    : t build_monad
     =
+    fun builder ->
     let open Result in
     List_fold.fold_left
         build_formal_argument
@@ -447,6 +448,32 @@ and build_signature
     | Some res ->
         build0 res 0 builder
 
+
+and build_definition0
+    (def: Expression.definition)
+    : t build_monad
+=
+    let open Expression
+    in
+    let name, fargs, res_tp, def_exp =
+        Located.value def
+    in
+    if fargs = [] && res_tp = None then
+        build0 def_exp 0
+    else if fargs = [] then
+        build0
+            Located.(make
+                (start name)
+                (Typed (def_exp, Option.value res_tp))
+                (end_ name))
+        0
+    else
+        build0
+            Located.(make
+                (start name)
+                (Function (fargs, res_tp, def_exp))
+                (end_ name))
+            0
 
 
 
@@ -533,6 +560,50 @@ let build
     check_name_violations
     >>=
     check_incomplete (Located.range exp)
+
+
+
+let build_definition
+    (def: Ast.Expression.definition)
+    (c: Context.t)
+    : (Term.t * Term.typ, problem) result
+=
+    let open Fmlib.Result in
+    build_definition0 def (make c)
+    >>=
+    check_ambiguity c
+    >>=
+    check_formal_arguments
+    >>=
+    check_name_violations
+    >>=
+    check_incomplete (Located.range def)
+
+
+
+let add_definition
+    (def: Ast.Expression.definition)
+    (context: Context.t)
+    : (Context.t, problem) result
+=
+    let open Fmlib.Result in
+    build_definition def context
+    >>= fun (term, typ) ->
+    let name, _, _, _ =
+        Located.value def
+    in
+    match
+        Context.add_definition
+            (Located.value name)
+            typ
+            term
+            context
+    with
+    | None ->
+        Error (Located.range name, Ambiguous_definition)
+
+    | Some context ->
+        Ok context
 
 
 
@@ -685,6 +756,14 @@ struct
                 <+> group space
                 <+> string kind
                 <+> cut
+
+        | Ambiguous_definition ->
+            wrap_words
+                "There is already a definition with the same name and \
+                the same signature. Remember that there can be multiple \
+                definitions with the same name as long as they have a \
+                different signature."
+
 
         | Not_yet_implemented str ->
             char '<' <+> string str <+> char '>'

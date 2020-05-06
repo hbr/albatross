@@ -14,6 +14,8 @@ val find_name: string -> t -> int list
 
 val compute: Term.t -> t -> Term.t
 
+val add_definition: string -> Term.typ -> Term.t -> t -> t option
+
 
 module Pretty (P:Pretty_printer.SIG):
 sig

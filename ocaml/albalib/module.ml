@@ -67,7 +67,7 @@ struct
 
     let make_semantic
         (parser: Parser.parser) (compiler: t)
-        : error option * value list
+        : error option * value list * Context.t
         =
         let open Parser_lang in
         let open Source_file in
@@ -77,7 +77,8 @@ struct
             match Builder.build expression compiler.context with
             | Error problem ->
                 Some (Build_error problem),
-                compiler.values
+                compiler.values,
+                compiler.context
 
             | Ok (term, typ) ->
                 let term, typ =
@@ -94,10 +95,20 @@ struct
                         term
                 in
                 None,
-                (term, typ, compiler.context) :: compiler.values
+                (term, typ, compiler.context) :: compiler.values,
+                compiler.context
         )
-        | Definition _ ->
-            assert false
+        | Definition def ->
+        (
+            match Builder.add_definition def compiler.context with
+            | Ok context ->
+                None, compiler.values, context
+
+            | Error problem ->
+                Some (Build_error problem),
+                compiler.values,
+                compiler.context
+        )
 
 
     let add_character (c: char) (compiler: t) : string * lines =
@@ -113,9 +124,9 @@ struct
         (* The parser has already made its step, now we do the semantics. *)
         let failed = Parser.has_failed parser
         in
-        let error, values =
+        let error, values, context =
             if failed then
-                Some Parse_error, compiler.values
+                Some Parse_error, compiler.values, compiler.context
             else
                 let src0 = Parser.state compiler.parser
                 and src1 = Parser.state parser
@@ -125,11 +136,11 @@ struct
                 then
                     make_semantic parser compiler
                 else
-                    None, compiler.values
+                    None, compiler.values, compiler.context
         and line, lines =
             add_character c compiler
         in
-        { compiler with
+        {
             line;
 
             lines;
@@ -138,6 +149,8 @@ struct
                 failed && c <> '\n';
 
             parser;
+
+            context;
 
             error;
 

@@ -88,6 +88,14 @@ let push_local (nme: string) (typ: Term.typ) (c:t): t =
     push nme typ No c
 
 
+let push_definition
+    (name: string) (typ: Term.typ) (def: Term.t) (c: t)
+    : t
+=
+    push name typ (Definition def) c
+
+
+
 let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
     let typ,n = typ
     and cnt = count c
@@ -361,14 +369,16 @@ let type_of_variable (i: int) (c: t): Term.typ =
 
 
 let definition_term (idx: int) (c: t): Term.t option =
-  match
-    (entry (level_of_index idx c) c).definition
-  with
-  | Definition def ->
-     Some def
+    let level = level_of_index idx c
+    in
+    match
+      (entry level c).definition
+    with
+    | Definition def ->
+       Some (Term.up (count c - level) def)
 
-  | _ ->
-     None
+    | _ ->
+       None
 
 
 
@@ -380,16 +390,19 @@ let compute (t:Term.t) (c:t): Term.t =
         term, steps
 
     | Variable i ->
-       (match (entry (level_of_index i c) c).definition with
-        | No ->
-            term, steps
+        let level = level_of_index i c in
+        (
+            match (entry level c).definition with
+            | No ->
+                term, steps
 
-        | Builtin v ->
-           Term.Value v, steps + 1
+            | Builtin v ->
+               Term.Value v, steps + 1
 
-        | Definition def ->
-           def, steps + 1
-       )
+            | Definition def ->
+               Term.up (count c - level) def,
+               steps + 1
+        )
 
     | Typed (e, _ ) ->
        compute e (steps + 1) c
