@@ -123,9 +123,7 @@ struct
             fill (number_width + 2) ' '
         in
         let rec print (char_offset: int) (line_no: int): t =
-            assert (char_offset < len); (* error range cannot be outside
-                                           the input string *)
-            if end_line < line_no then
+            if end_line < line_no || len < char_offset then
                 empty
             else
                 let pos_newline =
