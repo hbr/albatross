@@ -690,8 +690,17 @@ struct
 
         let application =
             primary "expression" >>= fun f ->
-            indented (
-                zero_or_more_reversed (primary "function argument")
+            (
+                match Located.value f with
+                | Proposition | Any
+                | Number _ | Char _ | String _
+                | Product _ ->
+                    return []
+                | _ ->
+                    indented (
+                        zero_or_more_reversed
+                            (primary "function argument"))
+
             )
             >>= fun args_rev ->
             match args_rev with
