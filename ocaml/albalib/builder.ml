@@ -30,7 +30,7 @@ type problem_description =
     | Wrong_base of type_in_context list * type_in_context list
     | Ambiguous of type_in_context list
     | Name_violation of string * string (* case, kind *)
-    | Ambiguous_definition
+    | Ambiguous_definition of int
     | Not_yet_implemented of string
 
 let dummy str = Not_yet_implemented str
@@ -599,10 +599,10 @@ let add_definition
             term
             context
     with
-    | None ->
-        Error (Located.range name, Ambiguous_definition)
+    | Error duplicate ->
+        Error (Located.range name, Ambiguous_definition duplicate)
 
-    | Some context ->
+    | Ok context ->
         Ok context
 
 
@@ -757,12 +757,13 @@ struct
                 <+> string kind
                 <+> cut
 
-        | Ambiguous_definition ->
+        | Ambiguous_definition _ ->
             wrap_words
                 "There is already a definition with the same name and \
                 the same signature. Remember that there can be multiple \
-                definitions with the same name as long as they have a \
-                different signature."
+                definitions with the same name only if they have \
+                different signatures."
+                <+> cut
 
 
         | Not_yet_implemented str ->

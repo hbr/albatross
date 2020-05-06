@@ -39,11 +39,11 @@ let standard (): t =
                         gamma
                         m
                 with
-                | None ->
+                | Error _ ->
                     Printf.printf "Context.standard Cannot add %s\n"
                         (name_at_level i gamma);
                     assert false
-                | Some map ->
+                | Ok map ->
                     map
             )
             0
@@ -60,9 +60,10 @@ let find_name (name: string) (c: t): int list =
 
 
 let add_definition
-    (name: string) (typ: Term.typ) (exp: Term.t) (c: t): t option
+    (name: string) (typ: Term.typ) (exp: Term.t) (c: t)
+    : (t, int) result
 =
-    Option.map
+    Result.map
         (fun map ->
             {
                 map;

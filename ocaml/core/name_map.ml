@@ -49,23 +49,11 @@ let add_to_trie
     (typ: Term.typ)
     (gamma: Gamma.t)
     (trie: int Term_trie.t)
-    : int Term_trie.t option
+    : (int Term_trie.t, int) result
     =
     let cnt = Gamma.count gamma
     in
-    match
-        Term_trie.add_new typ cnt cnt trie
-    with
-    | Ok trie ->
-        assert (Term_trie.find typ cnt trie = Some cnt);
-        Some trie
-    | Error level ->
-        Printf.printf "Cannot add new %s: %s\n"
-            (Gamma.name_at_level level gamma)
-            (Term_printer.string_of_term typ gamma);
-            assert (Term_trie.find typ cnt trie <> None);
-            assert (Term_trie.find typ cnt trie = Some level);
-        None
+    Term_trie.add_new typ cnt cnt trie
 
 
 
@@ -74,19 +62,19 @@ let add_global
     (typ: Term.typ)
     (gamma: Gamma.t)
     (m: t)
-    : t option
+    : (t, int) result
     =
     assert (name <> "");
     assert (not (has_locals m));
     if name = "_" then
-        Some (add_unnamed m)
+        Ok (add_unnamed m)
     else
         let module Algo = Gamma_algo.Make (Gamma)
         in
         let typ =
             Algo.normalize typ gamma
         in
-        Option.(map
+        Result.(map
             (fun value ->
                 {m with
                     map = String_map.add name value m.map;
