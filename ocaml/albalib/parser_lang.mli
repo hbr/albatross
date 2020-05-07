@@ -39,11 +39,13 @@ end
 
 module Command:
 sig
-  type t =
-    | Evaluate of Expression.t
-    | Type_check of Expression.t
-    | Exit
-    | Do_nothing
+    type t =
+        | Evaluate of Expression.t
+        | Type_check of Expression.t
+        | Define of Expression.definition
+        | Clear
+        | Exit
+        | Do_nothing
 end
 
 

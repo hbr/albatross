@@ -23,13 +23,15 @@ type range    = Position.t * Position.t
 
 
 module Command =
-  struct
+struct
     type t =
-      | Evaluate of Expression.t
-      | Type_check of Expression.t
-      | Exit
-      | Do_nothing
-  end
+        | Evaluate of Expression.t
+        | Type_check of Expression.t
+        | Define of Expression.definition
+        | Clear
+        | Exit
+        | Do_nothing
+end
 
 
 
@@ -876,15 +878,41 @@ struct
 
 
 
+    let global_definition _ : Expression.definition t =
+        definition true >>= fun def ->
+        let name, fargs, res, _ =
+            Located.value def
+        in
+        match
+            List.find
+                (fun (_, tp) -> tp = None)
+                fargs
+        with
+        | Some (name, _) ->
+            fail (Located.range name, Problem.No_argument_type)
+
+        | None ->
+            if res = None then
+                fail (Located.range name, Problem.No_result_type)
+            else
+                return def
+
+
+
     let commands: (string * Command.t t) list =
         (* repl commands *)
         ["evaluate",
          map (fun e -> Command.Evaluate e) (expression ());
 
-         "exit", return Command.Exit;
-
          "typecheck",
          map (fun e -> Command.Type_check e) (expression ());
+
+         "clear", return Command.Clear;
+
+         "define",
+         map (fun def -> Command.Define def) (global_definition ());
+
+         "exit", return Command.Exit;
         ]
 
 
@@ -951,27 +979,6 @@ struct
         >>= fun exp ->
         update (Source_file.push_expression evaluate_flag exp)
 
-
-
-
-    let global_definition _ : Expression.definition t =
-        definition true >>= fun def ->
-        let name, fargs, res, _ =
-            Located.value def
-        in
-        match
-            List.find
-                (fun (_, tp) -> tp = None)
-                fargs
-        with
-        | Some (name, _) ->
-            fail (Located.range name, Problem.No_argument_type)
-
-        | None ->
-            if res = None then
-                fail (Located.range name, Problem.No_result_type)
-            else
-                return def
 
 
 

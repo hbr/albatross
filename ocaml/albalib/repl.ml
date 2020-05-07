@@ -10,16 +10,25 @@ struct
 
     module Cli_state =
     struct
-        type t = string option
+        type entry = {
+            input: string;
+            context: Context.t;
+        }
 
-        let init: t = Some ""
+        type t = entry option
+
+        let init: t =
+            Some {
+                input = "";
+                context = Context.standard ();
+            }
 
         let exit: t = None
 
-        let prompt (state: t): t =
+        let prompt (state: t): string option =
             Option.map
-                (fun str ->
-                    if str = "" then
+                (fun entry ->
+                    if entry.input = "" then
                         "> "
                     else
                         "| ")
@@ -27,19 +36,43 @@ struct
 
         let add (line: string) (state: t): t =
             Option.map
-                (fun str ->
-                    if str = "" then
-                        line
-                    else
-                        str ^ "\n"  ^ line)
+                (fun entry ->
+                    {entry with
+                        input =
+                            if entry.input = "" then
+                                line
+                            else
+                                entry.input ^ "\n" ^ line
+                    }
+                )
                 state
 
-        let string (state: t): string =
+
+        let put_context (context: Context.t) (state: t): t =
+            Option.map
+                (fun _ ->
+                    {context; input = ""})
+                state
+
+
+        let clear_input (state: t): t =
+            Option.map
+                (fun entry ->
+                    {entry with input = ""})
+                state
+
+        let entry (state: t): entry =
             match state with
             | None ->
                 assert false (* Illegal call! *)
-            | Some str ->
-                str
+            | Some entry ->
+                entry
+
+        let input (state: t): string =
+            (entry state).input
+
+        let context (state: t): Context.t =
+            (entry state).context
     end (* Cli_state *)
 
 
@@ -81,13 +114,13 @@ struct
 
     let build_and_compute
         (input: string)
+        (context: Context.t)
         (expression: Ast.Expression.t)
         (compute: bool)
         : Pretty.t
         =
-        let std_context = Context.standard () in
         match
-            Builder.build expression std_context
+            Builder.build expression context
         with
         | Error problem ->
             let module Builder_print = Builder.Print (Pretty) in
@@ -96,7 +129,7 @@ struct
         | Ok (term, typ) ->
             let term =
                 if compute then
-                    Context.compute term std_context
+                    Context.compute term context
                 else
                     term
             in
@@ -105,15 +138,41 @@ struct
             in
             cut
             <+>
-            P.print Term.(Typed (term, typ)) std_context
+            P.print Term.(Typed (term, typ)) context
             <+>
             cut
 
 
+    let add_definition
+        (def: Ast.Expression.definition)
+        (state: Cli_state.t)
+        : Cli_state.t Io.t
+    =
+        let open Io in
+        match
+            Builder.add_definition def (Cli_state.context state)
+        with
+        | Ok context ->
+            return (Cli_state.put_context context state)
+        | Error problem ->
+            let module Builder_print = Builder.Print (Pretty) in
+            Pretty.run
+                (Builder_print.print_with_source
+                    (Cli_state.input state)
+                    problem)
+            >>= fun _ ->
+            return (Cli_state.clear_input state)
 
-    let process_input (input: string): Cli_state.t Io.t =
+
+
+    let process_input (state: Cli_state.t): Cli_state.t Io.t =
         let continue_after action =
-            Io.(action >>= fun _ -> return Cli_state.init)
+            Io.(
+                action
+                >>= fun _ ->
+                return (Cli_state.clear_input state))
+        in
+        let input = Cli_state.input state
         in
         let p = parse input
         in
@@ -124,7 +183,7 @@ struct
             (
                 match cmd with
                 | Parser_lang.Command.Do_nothing ->
-                    Io.return Cli_state.init
+                    Io.return (Cli_state.clear_input state)
 
                 | Parser_lang.Command.Exit ->
                     Io.return Cli_state.exit
@@ -134,6 +193,7 @@ struct
                         (Pretty.run
                             (build_and_compute
                                 input
+                                (Cli_state.context state)
                                 expression
                                 true))
 
@@ -142,8 +202,15 @@ struct
                         (Pretty.run
                             (build_and_compute
                                 input
+                                (Cli_state.context state)
                                 expression
                                 false))
+
+                | Parser_lang.Command.Clear ->
+                    Io.return Cli_state.init
+
+                | Parser_lang.Command.Define def ->
+                    add_definition def state
             )
         | None ->
             let module Printer =
@@ -165,7 +232,7 @@ struct
             || line.[len - 1] <> ' '
         in
         if is_last line then
-            process_input (Cli_state.string state)
+            process_input state
         else
             Io.return state
 
@@ -279,10 +346,11 @@ struct
                         Pretty.run
                             (build_and_compute
                                 input
+                                (Context.standard ())
                                 expression
                                 false)
             )
-    end
+    end (* Evaluate_stdin *)
 
 
 
