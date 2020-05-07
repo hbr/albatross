@@ -533,41 +533,48 @@ struct
         (string ":=")
         "':='"
 
-
-    let operator
+    let operator_string
         (with_comma: bool)
-        : Expression.operator Located.t t
-        =
+        : string Located.t t
+    =
         let op_chars = "+-^*|/=~<>" in
         let len = String.length op_chars in
         let is_op_char c =
           String.find (fun op_char -> c = op_char) 0 op_chars < len
         in
-        located
-        @@ map
-             (fun lst ->
-               let op_str = String.of_list lst
-               in
-               op_str, Operator.of_string op_str)
-             (
-                one_or_more
-                    (expect
-                        is_op_char
-                        "operator character")
-                <|>
+        located (
+            map
+                String.of_list
                 (
-                    let colon = map (fun _ -> [':']) colon
-                    and comma = map (fun _ -> [',']) (char ',')
-                    in
-                    if with_comma then
-                        colon <|> comma
-                    else
-                        colon
+                    one_or_more
+                        (expect
+                            is_op_char
+                            "operator character")
+                    <|>
+                    (
+                        let colon = map (fun _ -> [':']) colon
+                        and comma = map (fun _ -> [',']) (char ',')
+                        in
+                        if with_comma then
+                            colon <|> comma
+                        else
+                            colon
+                    )
+                    <?>
+                    "operator"
                 )
-                <?>
-                "operator"
-             )
+        )
         |. whitespace
+
+
+    let operator
+        (with_comma: bool)
+        : Expression.operator Located.t t
+    =
+        map
+            (Located.map
+                (fun op_str -> op_str, Operator.of_string op_str))
+            (operator_string with_comma)
 
 
     let lonely_operator: Expression.t t =
@@ -592,7 +599,9 @@ struct
 
 
     let parenthesized
-        (p: unit -> 'a Located.t t): 'a Located.t t =
+        (p: unit -> 'a Located.t t)
+        : 'a Located.t t
+    =
         located (char '(') |. whitespace
         >>= fun loc1 ->
         p ()
@@ -745,7 +754,7 @@ struct
                 |. whitespace
             )
             >>= fun _ ->
-            indented (one_or_more_aligned (definition ()))
+            indented (one_or_more_aligned (definition false))
         in
 
 
@@ -837,19 +846,28 @@ struct
         ":= <defining expression>"
 
 
-    and definition _: Expression.definition t =
+    and definition (with_operators: bool): Expression.definition t =
+        let name _ =
+            if with_operators then
+                identifier false
+                <|>
+                parenthesized
+                    (fun _ -> operator_string true)
+            else
+                identifier false
+        in
         return
             (fun name args res_tp e ->
                 let p1 = Located.start name
                 and p2 = Located.end_ e
                 in
                 Located.make p1 (name, args, res_tp, e) p2)
-        |= identifier false
+        |= name ()
         |= formal_arguments true
         |= optional_result_type ()
         |= assign_defining_expression ()
         <?>
-        "local definition"
+        "definition"
 
 
 
@@ -936,8 +954,8 @@ struct
 
 
 
-    let source_definition _: unit t =
-        definition () >>= fun def ->
+    let global_definition _ : Expression.definition t =
+        definition true >>= fun def ->
         let name, fargs, res, _ =
             Located.value def
         in
@@ -953,8 +971,14 @@ struct
             if res = None then
                 fail (Located.range name, Problem.No_result_type)
             else
-                update
-                    (Source_file.push_definition def)
+                return def
+
+
+
+    let source_definition _: unit t =
+        global_definition () >>= fun def ->
+        update
+            (Source_file.push_definition def)
 
 
     let declaration (with_expressions: bool): unit t =
