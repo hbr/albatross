@@ -331,6 +331,7 @@ let keywords: String_set.t =
 
 
 
+
 module Make (Final: ANY) =
 struct
     module P =
@@ -412,14 +413,15 @@ struct
             *)
             )
 
+    let raw_name: string t =
+        word
+            Char.is_letter
+            (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
+            "identifier"
 
 
     let name: string located t =
-        located
-            (word
-                Char.is_letter
-                (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
-                "identifier")
+        located raw_name
 
 
     let name_ws: string located t =
@@ -429,21 +431,18 @@ struct
     let identifier (with_any_prop: bool): string located t =
         backtrackable
             (
-                located
-                    (word
-                        Char.is_letter
-                        (fun c -> Char.is_letter c || Char.is_digit c || c = '_')
-                        "identifier")
+                name
                 >>= fun s ->
                 let str = Located.value s
                 in
-                if String_set.mem str keywords then
-                    fail (Located.range s, Problem.Illegal_name "<identifier>")
-                else if
-                    not with_any_prop
-                    && ( str = "Proposition" || str = "Any" )
+                if
+                    String_set.mem str keywords
+                    || Operator.is_keyword_operator str
+                    || (
+                        not with_any_prop
+                        && (str = "Proposition" || str = "Any"))
                 then
-                    fail (Located.range s, Problem.Illegal_name "<identifier>")
+                    unexpected "identifier"
                 else
                     return s
             )
@@ -549,23 +548,21 @@ struct
         (string ":=")
         "':='"
 
+
+    let operator_character: char t =
+        one_of_chars "+-^*|/=~<>" "operator character"
+
+
     let operator_string
         (with_comma: bool)
         : string Located.t t
     =
-        let op_chars = "+-^*|/=~<>" in
-        let len = String.length op_chars in
-        let is_op_char c =
-          String.find (fun op_char -> c = op_char) 0 op_chars < len
-        in
         located (
             map
                 String.of_list
                 (
                     one_or_more
-                        (expect
-                            is_op_char
-                            "operator character")
+                        operator_character
                     <|>
                     (
                         let colon = map (fun _ -> [':']) colon
@@ -576,10 +573,22 @@ struct
                         else
                             colon
                     )
-                    <?>
-                    "operator"
                 )
+            <|>
+            backtrackable
+                (
+                    raw_name
+                    >>=
+                    fun str ->
+                    if Operator.is_keyword_operator str then
+                        return str
+                    else
+                        unexpected "keyword operator"
+                )
+                "'and' or 'or'"
         )
+        <?>
+        "operator"
         |. whitespace
 
 
@@ -755,6 +764,7 @@ struct
                         pos2
                 )
         in
+
 
         let operator_and_operand (with_comma: bool) =
           return (fun op exp -> (op,exp))

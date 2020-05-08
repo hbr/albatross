@@ -7,6 +7,12 @@ type assoc =
   | No
 
 
+val is_unary: string -> bool
+
+val is_binary: string -> bool
+
+val is_keyword_operator: string -> bool
+
 
 val where: t
 

@@ -14,17 +14,19 @@ type t =
                  are considered equivalent. *)
 
 
-let where             = (10,   Left)
-let comma             = (20,   Right)
-let assign            = (30,   Right)
-let colon             = (40,   Right)
-let arrow             = (50,   Right)
-let push_arg          = (55,   Left)
-let pull_arg          = (56,   Right)
-let relation          = (60,   No)
-let addition          = (70,   Left)
-let multiplication    = (80,   Left)
-let exponentiation    = (90,   Right)
+let where             = ( 10,   Left)
+let comma             = ( 20,   Right)
+let assign            = ( 30,   Right)
+let colon             = ( 40,   Right)
+let arrow             = ( 50,   Right)
+let and_or            = ( 70,   Left)
+let negation          = ( 80,   Right)
+let push_arg          = (100,   Left)
+let pull_arg          = (120,   Right)
+let relation          = (140,   No)
+let addition          = (160,   Left)
+let multiplication    = (180,   Left)
+let exponentiation    = (200,   Right)
 
 let unknown           = (100,  Left)
 let application       = (200,  Left)
@@ -33,14 +35,20 @@ let application       = (200,  Left)
 
     expression                  parse               requirement
     --------------------------------------------------------------
-    exp: A -> B                 exp: (A -> B)       colon < arrow
+    \x := exp, 3                (\x := exp), 3      comma < assign
 
     \x := exp: T                \x := (exp: T)      assign < colon
 
-    \x y := x => y              \x y := (x => y)
+    exp: A -> B                 exp: (A -> B)       colon < arrow
 
-    \x := exp, 3                (\x := exp), 3      comma < assign
+    all p q: p => q             all p q: (p => q)   colon < arrow
 
+    \x y := x => y              \x y := (x => y)    assign < arrow
+
+
+    Therefore:
+
+        comma < assign < colon < arrow
 *)
 
 
@@ -49,24 +57,47 @@ let map: (int * assoc) String_map.t
   =
   let open String_map in
   empty
-  |> add ","  comma
-  |> add "->" arrow
-  |> add "=>" arrow
-  |> add ":=" assign
-  |> add ":"  colon
-  |> add "|>" push_arg
-  |> add "<|" pull_arg
-  |> add "="  relation
-  |> add "/=" relation
-  |> add "<"  relation
-  |> add ">"  relation
-  |> add "<=" relation
-  |> add ">=" relation
-  |> add "+"  addition
-  |> add "-"  addition
-  |> add "*"  multiplication
-  |> add "/"  multiplication
-  |> add "^"  exponentiation
+  |> add ","   comma
+  |> add "->"  arrow
+  |> add "=>"  arrow
+  |> add ":="  assign
+  |> add ":"   colon
+  |> add "and" and_or
+  |> add "or"  and_or
+  |> add "not" negation
+  |> add "|>"  push_arg
+  |> add "<|"  pull_arg
+  |> add "="   relation
+  |> add "/="  relation
+  |> add "<"   relation
+  |> add ">"   relation
+  |> add "<="  relation
+  |> add ">="  relation
+  |> add "+"   addition
+  |> add "-"   addition
+  |> add "*"   multiplication
+  |> add "mod" multiplication
+  |> add "/"   multiplication
+  |> add "^"   exponentiation
+
+
+
+
+let is_unary (op: string): bool =
+    op = "not" || op = "-"
+
+
+let is_binary (op: string): bool =
+    op <> "not"
+
+
+let is_keyword_operator (op: string): bool =
+    op = "and"
+    || op = "or"
+    || op = "not"
+    || op = "mod"
+
+
 
 
 let of_string (op:string): t =

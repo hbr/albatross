@@ -192,7 +192,9 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                 let len  = String.length name in
                 assert (1 <= len);
                 let c0 = name.[0] in
-                if Char.is_letter c0
+                if Operator.is_keyword_operator name then
+                    "("  ^ name ^ ")"
+                else if Char.is_letter c0
                     || c0 = '_'
                     || (2 <= len && Char.is_digit name.[1])
                 then
