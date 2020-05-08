@@ -53,3 +53,10 @@ sig
 
     val find_unused_local: t -> definition list -> string Located.t option
 end
+
+
+
+module Inductive:
+sig
+    type t
+end

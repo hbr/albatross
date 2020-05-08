@@ -1,8 +1,8 @@
 open Fmlib
 open Module_types
 open Common
-open Ast
 open Alba_core
+open Ast
 
 module Located = Character_parser.Located
 type 'a located = 'a Located.t
@@ -39,7 +39,8 @@ module Source_file =
 struct
     type entry =
         | Expression of (bool * Expression.t)
-        | Definition of (Expression.definition)
+        | Definition of Expression.definition
+        | Inductive of Inductive.t
 
 
     type t = {
@@ -66,8 +67,19 @@ struct
         : t
         =
         {
-            entries =
-                Definition def :: src.entries;
+            entries = Definition def :: src.entries;
+
+            n = src.n + 1;
+        }
+
+
+    let push_inductive
+        (ind: Inductive.t)
+        (src: t)
+        : t
+    =
+        {
+            entries = Inductive ind :: src.entries;
 
             n = src.n + 1;
         }
@@ -309,6 +321,8 @@ let keywords: String_set.t =
   let open String_set in
   empty
   |> add "all"
+  |> add "case"
+  |> add "class"
   |> add "create"
   |> add "inspect"
   |> add "where"
@@ -617,6 +631,7 @@ struct
                 (Located.end_ loc2))
 
 
+
     let rec find_duplicate_argument
         (arg_lst: (string located * Expression.t option) list)
         : string located option
@@ -899,6 +914,33 @@ struct
 
 
 
+    let inductive_type _: Inductive.t t
+    =
+        return (
+            fun _ _ -> assert false
+        )
+        |. backtrackable (string "class") "class"
+        |. whitespace
+        |= indented (
+            return (fun _ _ _ -> assert false)
+            |= (
+                identifier false
+                <|>
+                parenthesized (fun _ -> operator_string true)
+            )
+            |= formal_arguments true
+            |= optional_result_type ()
+        )
+        |. assign |. whitespace
+        |= indented (
+            assert false
+        )
+
+
+
+
+
+
     let commands: (string * Command.t t) list =
         (* repl commands *)
         ["evaluate",
@@ -988,13 +1030,23 @@ struct
             (Source_file.push_definition def)
 
 
+    let source_inductive _: unit t =
+        inductive_type () >>= fun ind ->
+        update
+            (Source_file.push_inductive ind)
+
+
     let declaration (with_expressions: bool): unit t =
         if with_expressions then
             source_file_command
             <|>
             source_definition ()
+            <|>
+            source_inductive ()
         else
             source_definition ()
+            <|>
+            source_inductive ()
 
 
     let declarations (with_expressions: bool): unit t =

@@ -253,4 +253,40 @@ module Expression = struct
                 find_unused_local exp defs
             else
                 Some name
+end (* Expression *)
+
+
+(*
+module Declaration =
+struct
+    type name = string Located.t
+    type formal_argument = Expression.formal_argument
+    type constructor = name * formal_argument list * Expression.t option
+
+    type class_declaration =
+        name
+        * formal_argument list
+        * Expression.t option
+        * constructor list option
+
+    type normal_declaration =
+        name
+        * formal_argument list
+        * Expression.t          (* result type *)
+        * Expression.t option   (* defining expression *)
+
+    type t =
+        | Normal of normal_declaration
+
+        | Class of class_declaration
+
+        | Mutual_normal of normal_declaration list
+
+        | Mutual_class of class_declaration list
+end
+*)
+
+module Inductive =
+struct
+    type t = unit
 end
