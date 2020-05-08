@@ -2,6 +2,7 @@ open Fmlib
 open Common
 open Alba_core
 
+
 module Located = Character_parser.Located
 type pos = Character_parser.Position.t
 type range = pos * pos
@@ -469,38 +470,12 @@ let find_first_name_violation
             in
             let typ = Gamma_holes.type_at_level level bc.gh
             in
-            let is_lower, is_upper =
-                if String.length str > 0 then
-                    let c = str.[0] in
-                    Char.is_lower c, Char.is_upper c
-                else
-                    false, false
-            in
-            let violation typ =
-                match Algo.sort_of_kind typ bc.gh with
-                | Some (Term.Sort.Any _) ->
-                    (* Must be upper case *)
-                    if is_lower then
-                        Some ("Lower", "type of type constructor")
-                    else
-                        None
-                | Some Term.Sort.Proposition ->
-                    (* Must be lower case *)
-                    if is_upper then
-                        Some ("Upper", "proposition")
-                    else
-                        None
-                | None ->
-                    (* proof or object, must be lower case *)
-                    if is_upper then
-                        Some ("Upper", "function or object")
-                    else
-                        None
-            in
-            match violation typ with
-            | None ->
+            match Algo.check_naming_convention str typ bc.gh with
+            | Ok () ->
                 find lst
-            | Some (case, kind) ->
+            | Error violation ->
+                let case, kind = Gamma_algo.strings_of_violation violation
+                in
                 Some (range, case, kind)
     in
     find (List.rev bc.formal_arguments)

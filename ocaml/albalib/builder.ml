@@ -587,11 +587,25 @@ let add_definition
     : (Context.t, problem) result
 =
     let open Fmlib.Result in
-    build_definition def context
-    >>= fun (term, typ) ->
-    let name, _, _, _ =
-        Located.value def
+    let name, _, _, _ = Located.value def
     in
+    build_definition def context
+    >>=
+    (   fun (term, typ) ->
+        match
+            Algo.check_naming_convention
+                (Located.value name)
+                typ
+                (Context.gamma context)
+        with
+        | Ok () ->
+            Ok (term, typ)
+        | Error violation ->
+            let case, kind = Gamma_algo.strings_of_violation violation
+            in
+            Error (Located.range name, Name_violation (case, kind))
+    )
+    >>= fun (term, typ) ->
     match
         Context.add_definition
             (Located.value name)

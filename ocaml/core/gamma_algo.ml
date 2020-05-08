@@ -1,4 +1,26 @@
 open Fmlib
+open Common
+
+
+type name_violation =
+    | Upper_for_proposition
+    | Lower_for_type
+    | Upper_for_object
+
+
+let strings_of_violation
+    : name_violation -> string * string
+=
+    function
+    | Upper_for_proposition ->
+        "Upper", "proposition"
+    | Lower_for_type ->
+        "Lower", "type or type constructor"
+    | Upper_for_object ->
+        "Upper", "object or function"
+
+
+
 
 module type GAMMA =
 sig
@@ -189,4 +211,42 @@ struct
     let is_kind (k: Term.typ) (c: t): bool =
         Option.has (sort_of_kind k c)
 
+
+
+    let check_naming_convention
+        (name: string)
+        (typ: Term.typ)
+        (c: t)
+        : (unit, name_violation) result
+    =
+        (* [check_naming_convention name sort]. Check, if [name] satisfies the
+        naming convention for a type of sort [sort]. If yes, return [Ok ()]. If
+        not return the name violation. *)
+        let is_lower, is_upper =
+            if String.length name > 0 then
+                let c = name.[0] in
+                Char.is_lower c, Char.is_upper c
+            else
+                false, false
+        in
+        match sort_of_kind typ c with
+        | Some (Term.Sort.Any _) ->
+            (* Must be upper case *)
+            if is_lower then
+                Error  Lower_for_type
+            else
+                Ok ()
+
+        | Some Term.Sort.Proposition ->
+            (* Must be lower case *)
+            if is_upper then
+                Error Upper_for_proposition
+            else
+                Ok ()
+        | None ->
+            (* proof or object, must be lower case *)
+            if is_upper then
+                Error Upper_for_object
+            else
+                Ok ()
 end

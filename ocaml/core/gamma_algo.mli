@@ -1,3 +1,12 @@
+type name_violation =
+    | Upper_for_proposition
+    | Lower_for_type
+    | Upper_for_object
+
+
+val strings_of_violation: name_violation -> string * string
+
+
 module type GAMMA =
 sig
     type t
@@ -102,4 +111,7 @@ sig
         Compute the normal form of the welltyped term [term] in the valid
         context [gamma].
     *)
+
+    val check_naming_convention:
+        string -> Term.typ -> Gamma.t -> (unit, name_violation) result
 end
