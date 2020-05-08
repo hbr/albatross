@@ -555,14 +555,16 @@ struct
             (fun _ -> e)
 
 
-    let one_of_chars (str:string) (e: Expect_msg.t): unit t =
-      token
-        (fun _ c ->
-          if String.find (fun d -> c = d) 0 str = String.length str then
-            Error e
-          else
-            Ok ())
-        (fun _ -> e)
+    let one_of_chars (str:string) (e: Expect_msg.t): char t =
+        token
+            (fun _ c ->
+                if not (String.has (fun d -> c = d) 0 str)
+                then
+                    Error e
+                else
+                    Ok c
+            )
+            (fun _ -> e)
 
 
     let space (e: Expect_msg.t): unit t =
@@ -785,7 +787,7 @@ struct
         Advanced.char c @@ "'" ^ String.one c ^ "'"
 
 
-    let one_of_chars (str: string) (msg: string) : unit t =
+    let one_of_chars (str: string) (msg: string) : char t =
         Advanced.one_of_chars str msg
 
 

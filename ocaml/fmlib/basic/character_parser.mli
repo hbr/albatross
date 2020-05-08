@@ -198,7 +198,7 @@ sig
     (** {2 Character Combinators} *)
     val expect: (char -> bool) -> string -> char t
     val expect_end: unit t
-    val one_of_chars: string -> string -> unit t
+    val one_of_chars: string -> string -> char t
     val string: string -> unit t
     val char: char -> unit t
     val space: unit t
@@ -289,7 +289,7 @@ sig
     (** {2 Character Combinators} *)
     val expect: (char -> bool) -> string -> char t
     val expect_end: unit t
-    val one_of_chars: string -> string -> unit t
+    val one_of_chars: string -> string -> char t
     val string: string -> unit t
     val char: char -> unit t
     val space: unit t
@@ -392,7 +392,7 @@ sig
 
     val expect:          (char -> bool) -> Expect_msg.t -> char t
     val expect_end:      Expect_msg.t -> unit t
-    val one_of_chars:    string -> Expect_msg.t -> unit t
+    val one_of_chars:    string -> Expect_msg.t -> char t
     val string:          string -> (int -> Expect_msg.t) -> unit t
     val char:            char -> Expect_msg.t -> unit t
     val space:           Expect_msg.t -> unit t
