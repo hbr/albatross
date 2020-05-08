@@ -6,7 +6,21 @@ type pos = Character_parser.Position.t
 type range = pos * pos
 
 
-type problem_description
+type type_in_context = Build_context.type_in_context
+
+type problem_description =
+    | Overflow
+    | No_name
+    | Incomplete_type of type_in_context
+    | Cannot_infer_bound
+    | Not_a_function of type_in_context list
+    | Wrong_type of (type_in_context * type_in_context) list
+    | Wrong_base of type_in_context list * type_in_context list
+    | Ambiguous of type_in_context list
+    | Name_violation of string * string (* case, kind *)
+    | Ambiguous_definition of int
+    | Not_yet_implemented of string
+
 
 type problem = range * problem_description
 
