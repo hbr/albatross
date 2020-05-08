@@ -74,6 +74,7 @@ sig
   val compare: t -> t -> int
   val one: char -> t
   val find: (char -> bool) -> int -> t -> int
+  val has:  (char -> bool) -> int -> t -> bool
   val find_bwd: (char -> bool) -> int -> t -> int
   val list: t -> char list
   val of_list: char list -> t

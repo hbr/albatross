@@ -90,6 +90,13 @@ module String =
       in
       find start
 
+
+    let has (f: char -> bool) (start: int) (s: string): bool =
+        find f start s
+        <
+        length s
+
+
     let find_bwd (f:char -> bool) (beyond:int) (s:string): int =
       assert (beyond <= String.length s);
       let rec find i =
