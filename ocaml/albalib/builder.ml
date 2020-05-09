@@ -343,7 +343,11 @@ let rec build0
                     | Ast.Expression.Normal ->
                         Term.Application_info.Normal
                     | Ast.Expression.Operand ->
-                        Term.Application_info.Binary
+                        assert (nargs = 1 || nargs = 2);
+                        if nargs = 2 then
+                            Term.Application_info.Binary
+                        else
+                            Term.Application_info.Unary
                 in
                 build0 arg 0 builder
                 >>=
