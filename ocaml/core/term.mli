@@ -83,6 +83,7 @@ sig
       | Normal
       | Implicit
       | Binary
+      | Unary
 end
 
 

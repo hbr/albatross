@@ -249,6 +249,7 @@ struct
       | Normal
       | Implicit
       | Binary
+      | Unary
 end
 
 

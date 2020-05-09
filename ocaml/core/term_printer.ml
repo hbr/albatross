@@ -256,6 +256,19 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                           b_pr])
             )
 
+        | Appl (Variable i, arg, Unary) ->
+            let op_str = name_of_index i c in
+            assert (Operator.is_unary op_str);
+            let op_data = Operator.of_string op_str
+            in
+            Some op_data,
+            P.(
+                string op_str
+                <+> char ' '
+                <+>
+                parenthesize (print arg c) false op_data
+            )
+
         | Appl (f, _, Implicit) ->
             print f c
 
