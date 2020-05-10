@@ -811,17 +811,17 @@ struct
         let operator_and_operand (with_comma: bool) =
           return (fun op exp -> (op,exp))
           |= operator with_comma
-          |= application
+          |= operand
         in
 
 
         let operator_expression (with_comma: bool): Expression.t t =
-            application
+            operand
             >>= fun e1 ->
             zero_or_more (operator_and_operand with_comma)
             >>= fun lst ->
             (
-                match Expression.binary e1 lst with
+                match Operator_expression.make e1 lst with
                 | Ok e ->
                    return e
 

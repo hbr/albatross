@@ -57,6 +57,22 @@ val needs_parens: t option -> bool -> t -> bool
 
 
 
+val is_left_leaning:  t -> t -> bool
+(** [is_left_leaning op1 op2]
+
+    [a op1 b op2 c] has to be parsed as [(a op1 b) op2 c]
+*)
+
+
+
+val is_right_leaning: t -> t -> bool
+(** [is_right_leaning op1 op2]
+
+    [a op1 b op2 c] has to be parsed as [a op1 (b op2 c)]
+*)
+
+
+
 
 val associativity: t -> assoc
 

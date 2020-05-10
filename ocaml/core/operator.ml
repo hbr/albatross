@@ -121,6 +121,30 @@ let precedence = fst
 let associativity = snd
 
 
+let is_left_leaning
+    ((prec1, assoc): t)
+    ((prec2, _)    : t)
+    : bool
+=
+    prec1 > prec2
+    ||
+    (prec1 = prec2 && assoc = Left)
+
+
+
+
+let is_right_leaning
+    ((prec1, assoc): t)
+    ((prec2, _)    : t)
+    : bool
+=
+    prec1 < prec2
+    ||
+    (prec1 = prec2 && assoc = Right)
+
+
+
+
 let needs_parens
       (lower: t option)
       (is_left:bool)

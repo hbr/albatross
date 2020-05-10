@@ -50,10 +50,6 @@ sig
 
     val to_list: t -> t0
 
-    val binary: t
-                -> (operator Located.t * t) list
-                -> (t, range * string * string) result
-
     val find_unused_local: t -> definition list -> string Located.t option
 end
 

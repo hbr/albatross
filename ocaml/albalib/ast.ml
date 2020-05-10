@@ -70,112 +70,6 @@ module Expression = struct
 
 
 
-
-  let make_binary (e1: t) (op: operator Located.t) (e2: t): t =
-    let pos_start = Located.start e1
-    and pos_end   = Located.end_ e2
-    and op_str,_    = Located.value op
-    in
-    Located.make
-      pos_start
-      (if op_str = ":" then
-         Typed (e1, e2)
-       else if op_str = "->" then
-           (* e1 -> e2 *)
-           let name = Located.map (fun _ -> "_") e1 in
-           match Located.value e2 with
-           | Product (formal_arguments, result_type) ->
-                Product ( (name, Some e1) :: formal_arguments, result_type )
-           | _ ->
-                Product ([name, Some e1], e2)
-       else
-         Application (
-          Located.map (fun (op_str,_) -> Identifier op_str) op,
-          [ e1, Operand;
-            e2, Operand]))
-      pos_end
-
-
-  let rec binary
-            (e0:t)
-            (rest: (operator Located.t * t) list)
-          : (t, range * string * string) result
-    (* Analyze the precedence and associativity of an operator expresssion
-
-        e0 op1 e1 op2 e2 ... opn en
-
-       where [e0] is given explicitly and the rest is given as a list
-
-        [(op1,e1), (op2,e2), ...]
-     *)
-    =
-    let module Res =
-      Monad.Result
-        (struct type t = range * string * string end)
-    in
-    match rest with
-    | [] ->
-       Ok e0
-
-    | [op, e1] ->
-       Ok (make_binary e0 op e1)
-
-    | (op1,e1) :: (op2,e2) :: rest ->
-       (* e0 op1 e1 op2 e2 rest *)
-
-        let op1_string, op1_data = Located.value op1
-        and op2_string, op2_data = Located.value op2
-        in
-        let cmp =
-            Operator.compare op1_data op2_data
-        in
-        if cmp = 0 then
-            match Operator.associativity op1_data with
-            | Operator.No ->
-               (* Error case: I cannot decide on how to parenthesize *)
-                Error (
-                    (Located.start e0, Located.end_ e2),
-                    op1_string,
-                    op2_string
-                )
-            | Operator.Left ->
-               (* (e1 op1 e2) op2 e2 rest *)
-               binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
-
-            | Operator.Right ->
-               (* e1 op1 (e2 op2 e2 rest) *)
-               Res.map (make_binary e0 op1) (binary e1 ((op2,e2) :: rest))
-
-        else if cmp = +1 then
-            (* [op1] has higher precedence than [op2]
-
-                 (e1 op1 e2) op2 e2 rest
-             *)
-             binary (make_binary e0 op1 e1) ((op2,e2) :: rest)
-
-        else
-            (* [op1] has lower precedence than [op2]
-
-                e0 op1 (e1 op2 e2 rest1) rest2
-            *)
-            let rest2, rest3 =
-                List.split_at
-                  (fun (op,_) ->
-                    Operator.precedence (snd (Located.value op))
-                    <= Operator.precedence op1_data)
-                  rest
-            in
-            Res.(
-                binary e1 ((op2,e2) :: rest2)
-                >>= fun e ->
-                binary e0 ((op1, e) :: rest3)
-            )
-
-
-
-
-
-
     let rec occurs (name: string Located.t) (e: t0): bool =
         let name_occurs name exp =
             occurs name (Located.value exp)
@@ -278,11 +172,25 @@ struct
 
 
     let is_left_leaning
-        (_: operator Located.t)
-        (_: operator Located.t)
+        (op1: operator Located.t)
+        (op2: operator Located.t)
         : bool
     =
-        assert false
+        let _, op1 = Located.value op1
+        and _, op2 = Located.value op2
+        in
+        Operator.is_left_leaning op1 op2
+
+
+    let is_right_leaning
+        (op1: operator Located.t)
+        (op2: operator Located.t)
+        : bool
+    =
+        let _, op1 = Located.value op1
+        and _, op2 = Located.value op2
+        in
+        Operator.is_right_leaning op1 op2
 
 
     let apply_unary (op: operator Located.t) (e: t): t =
@@ -300,8 +208,38 @@ struct
         Located.make pos1 inner pos2
 
 
-    let apply_binary (_: t) (_: operator Located.t) (_: t): t =
-        assert false
+    let apply_binary (e1: t) (op: operator Located.t) (e2: t): t =
+        let pos_start = Located.start e1
+        and pos_end   = Located.end_ e2
+        and op_str,_    = Located.value op
+        in
+        Located.make
+            pos_start
+            (
+                if op_str = ":" then
+                    Typed (e1, e2)
+                else if op_str = "->" then
+                    (* e1 -> e2 *)
+                    let name = Located.map (fun _ -> "_") e1
+                    in
+                    match Located.value e2 with
+                    | Product (formal_arguments, result_type) ->
+                        Product (
+                            (name, Some e1) :: formal_arguments,
+                            result_type
+                        )
+                    | _ ->
+                         Product ([name, Some e1], e2)
+                else
+                    Application (
+                        Located.map
+                            (fun (op_str,_) -> Identifier op_str)
+                            op,
+                        [ e1, Operand;
+                          e2, Operand]
+                    )
+            )
+            pos_end
 
 
     let split (op: operator Located.t) (rest: rest): rest * rest =
@@ -367,7 +305,7 @@ struct
                 without_unary
                     e
                     ((op2, e2) :: rest)
-            else
+            else if is_right_leaning op1 op2 then
                 (* e0 op1 (e1 op2 higher) lower_equal *)
                 let higher, lower_equal =
                     split op1 rest
@@ -377,6 +315,15 @@ struct
                 >>= fun e ->
                 without_unary
                     e0 ((op1, ([], e)) :: lower_equal)
+            else
+                let op1_str, _ = Located.value op1
+                and op2_str, _ = Located.value op2
+                in
+                Error (
+                    (Located.start e0, Located.end_ (snd e2)),
+                    op1_str,
+                    op2_str
+                )
 end (* Operator_exression *)
 
 
