@@ -9,11 +9,11 @@ type range = Position.t * Position.t
 
 
 module Expression = struct
-  type operator = string * Operator.t
+    type operator = string * Operator.t
 
-  type argument_type =
-    | Normal
-    | Operand
+    type argument_type =
+      | Normal
+      | Operand
 
 
     type t =
@@ -44,6 +44,8 @@ module Expression = struct
         (string Located.t * formal_argument list * t option * t) Located.t
 
 
+    type operand = operator Located.t list * t
+
 
     let to_list (e: t): t0 =
         let rec to_list e =
@@ -61,6 +63,11 @@ module Expression = struct
                 [e]
         in
         List (to_list e)
+
+
+
+
+
 
 
 
@@ -254,6 +261,118 @@ module Expression = struct
             else
                 Some name
 end (* Expression *)
+
+
+module Operator_expression =
+struct
+    open Expression
+
+    type rest = (operator Located.t * operand) list
+
+    let (>>=) = Result.(>>=)
+
+
+    let is_left_leaning
+        (_: operator Located.t)
+        (_: operator Located.t)
+        : bool
+    =
+        assert false
+
+
+    let apply_unary (op: operator Located.t) (e: t): t =
+        let pos1 = Located.start op
+        and pos2 = Located.end_ e
+        in
+        let inner =
+            Application (
+                Located.map
+                    (fun (op_str, _) -> Identifier op_str)
+                    op,
+                [e, Operand]
+            )
+        in
+        Located.make pos1 inner pos2
+
+
+    let apply_binary (_: t) (_: operator Located.t) (_: t): t =
+        assert false
+
+
+    let split (op: operator Located.t) (rest: rest): rest * rest =
+        (* Split the rest in two parts. The first part contains only operator
+        with higher precedence than [op]. The second part starts with an
+        operator with the same precedence or lower. *)
+        let precedence op =
+            Operator.precedence
+                (snd (Located.value op))
+        in
+        let prec = precedence op
+        in
+        List.split_at
+            (fun (op2, _) ->
+                precedence op2 <= prec)
+            rest
+
+
+
+    let rec make
+        ((unops, e0): operand)
+        (rest: rest)
+        : (t, range * string * string) result
+    =
+        match unops with
+        | [] ->
+            without_unary e0 rest
+
+        | u :: unops ->
+            let higher, lower_equal =
+                (* All operators in [rest1] have higher precedence than [u]. *)
+                split u rest
+            in
+            make (unops, e0) higher
+            >>=
+            fun e ->
+            without_unary
+                (apply_unary u e)
+                lower_equal
+
+
+    and without_unary
+        (e0: t)
+        (rest: rest)
+        : (t, range * string * string) result
+    =
+        match rest with
+        | [] ->
+            Ok e0
+
+        | [op1, e1] ->
+            make e1 []
+            >>= fun e1 ->
+            Ok (apply_binary e0 op1 e1)
+
+        | (op1, e1) :: (op2, e2) :: rest ->
+            if is_left_leaning op1 op2 then
+                (* (e0 op1 e1) op2 e2 rest *)
+                without_unary
+                    e0 [op1, e1]
+                >>=
+                fun e ->
+                without_unary
+                    e
+                    ((op2, e2) :: rest)
+            else
+                (* e0 op1 (e1 op2 higher) lower_equal *)
+                let higher, lower_equal =
+                    split op1 rest
+                in
+                make
+                    e1 ((op2, e2) :: higher)
+                >>= fun e ->
+                without_unary
+                    e0 ((op1, ([], e)) :: lower_equal)
+end
 
 
 (*

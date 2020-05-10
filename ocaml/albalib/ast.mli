@@ -45,6 +45,9 @@ sig
         (string Located.t * formal_argument list * t option * t) Located.t
 
 
+    type operand = operator Located.t list * t
+
+
     val to_list: t -> t0
 
     val binary: t
@@ -54,6 +57,16 @@ sig
     val find_unused_local: t -> definition list -> string Located.t option
 end
 
+
+module Operator_expression:
+sig
+    open Expression
+
+    val make:
+        operand
+        -> (operator Located.t * operand) list
+        -> (t, range * string * string) result
+end
 
 
 module Inductive:
