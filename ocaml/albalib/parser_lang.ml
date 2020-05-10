@@ -602,6 +602,20 @@ struct
             (operator_string with_comma)
 
 
+    let unary_operator: Expression.operator Located.t t =
+        backtrackable
+            (
+                operator false
+                >>= fun op ->
+                let op_str, _ = Located.value op in
+                if Operator.is_unary op_str then
+                    return op
+                else
+                    unexpected "unary operator"
+            )
+            "unary operator"
+
+
     let lonely_operator: Expression.t t =
         map
             (fun op_located ->
@@ -723,7 +737,7 @@ struct
             what
         in
 
-        let application =
+        let application: Expression.t t =
             primary "expression" >>= fun f ->
             (
                 match Located.value f with
@@ -766,13 +780,6 @@ struct
         in
 
 
-        let operator_and_operand (with_comma: bool) =
-          return (fun op exp -> (op,exp))
-          |= operator with_comma
-          |= application
-        in
-
-
         let where_block: Expression.definition list t =
             (
                 backtrackable
@@ -782,6 +789,29 @@ struct
             )
             >>= fun _ ->
             indented (one_or_more_aligned (definition false))
+        in
+
+
+        let operand: Expression.operand t =
+            map
+                (fun exp -> [], exp)
+                application
+            <|>
+            (
+                one_or_more unary_operator
+                >>= fun op_lst ->
+                application
+                >>= fun exp ->
+                return (op_lst, exp)
+            )
+        in
+
+
+
+        let operator_and_operand (with_comma: bool) =
+          return (fun op exp -> (op,exp))
+          |= operator with_comma
+          |= application
         in
 
 
