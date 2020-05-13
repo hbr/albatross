@@ -242,8 +242,8 @@ struct
             pos_end
 
 
-    let split (op: operator Located.t) (rest: rest): rest * rest =
-        (* Split the rest in two parts. The first part contains only operator
+    let split_higher (op: operator Located.t) (rest: rest): rest * rest =
+        (* Split the rest in two parts. The first part contains only operators
         with higher precedence than [op]. The second part starts with an
         operator with the same precedence or lower. *)
         let precedence op =
@@ -258,6 +258,22 @@ struct
             rest
 
 
+    let split_right (op: operator Located.t) (rest: rest): rest * rest =
+        (* Split the rest in two parts. The first part contains only operators
+        which are right leaning with respect to [op] i.e. [e0 op e1 op2 e2] must
+        be parsed as [e0 op (e1 op2 e2)].
+        *)
+        let _, op = Located.value op in
+        List.split_at
+            (fun (op2, _) ->
+                not (
+                    Operator.is_right_leaning
+                        op
+                        (snd (Located.value op2))
+                )
+            )
+            rest
+
 
     let rec make
         ((unops, e0): operand)
@@ -271,7 +287,7 @@ struct
         | u :: unops ->
             let higher, lower_equal =
                 (* All operators in [rest1] have higher precedence than [u]. *)
-                split u rest
+                split_higher u rest
             in
             make (unops, e0) higher
             >>=
@@ -308,7 +324,7 @@ struct
             else if is_right_leaning op1 op2 then
                 (* e0 op1 (e1 op2 higher) lower_equal *)
                 let higher, lower_equal =
-                    split op1 rest
+                    split_right op1 rest
                 in
                 make
                     e1 ((op2, e2) :: higher)
