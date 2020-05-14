@@ -77,7 +77,7 @@ struct
            split f ((arg, mode) :: args)
 
         | Typed (term, _) ->
-            term, args
+            split term args
 
         | Where (_, _, exp, def) ->
             split (apply exp def) args
