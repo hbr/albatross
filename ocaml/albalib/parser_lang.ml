@@ -1029,7 +1029,10 @@ struct
     let inductive_type _: Inductive.t t
     =
         return (
-            fun _ _ -> ()
+            fun _ cs ->
+                let _ = List.join cs
+                in
+                ()
         )
         |. backtrackable (string "class") "class"
         |. whitespace
@@ -1039,7 +1042,11 @@ struct
         |. assign |. whitespace
         |= indented (
             zero_or_more_aligned
-                (named_signature true true)
+                (
+                    one_or_more_separated
+                        (named_signature true true)
+                        (char ';' |. whitespace)
+                )
         )
 
 
