@@ -523,7 +523,13 @@ struct
         |. whitespace
 
 
-    let empty_list: Expression.t t =
+    let empty_list_string: string t =
+        map
+            (fun _ -> "[]")
+            (backtrackable (string "[]") "[]")
+
+
+    let empty_list_expression: Expression.t t =
         map
             (Located.map (fun _ -> Expression.Identifier "[]"))
             (
@@ -558,22 +564,30 @@ struct
         : string Located.t t
     =
         located (
-            map
-                String.of_list
-                (
-                    one_or_more
-                        operator_character
-                    <|>
-                    (
-                        let colon = map (fun _ -> [':']) colon
-                        and comma = map (fun _ -> [',']) (char ',')
-                        in
-                        if with_comma then
-                            colon <|> comma
-                        else
-                            colon
-                    )
-                )
+            (
+                map
+                    String.of_list
+                    (one_or_more operator_character)
+                >>= fun str ->
+                optional (char ':')
+                >>= fun oc ->
+                match oc with
+                | None ->
+                    return str
+                | Some _ ->
+                    return (str ^ ":")
+
+            )
+            <|>
+            (
+                let colon = map (fun _ -> ":") colon
+                and comma = map (fun _ -> ",") (char ',')
+                in
+                if with_comma then
+                    colon <|> comma
+                else
+                    colon
+            )
             <|>
             backtrackable
                 (
@@ -590,6 +604,7 @@ struct
         <?>
         "operator"
         |. whitespace
+
 
 
     let operator
@@ -658,6 +673,8 @@ struct
         if with_operators then
             identifier false
             <|>
+            located empty_list_string
+            <|>
             parenthesized
                 (fun _ -> operator_string true)
         else
@@ -696,7 +713,7 @@ struct
             <|>
             literal_string
             <|>
-            empty_list
+            empty_list_expression
             <|>
             (*  "( exp )" *)
             parenthesized (
@@ -924,6 +941,23 @@ struct
         | Some name ->
             fail (Located.range name, Problem.Duplicate_argument)
 
+    and signature
+        (typed: bool)
+        : Expression.signature t
+    =
+        formal_arguments true typed
+        >>= fun fargs ->
+        (
+            if typed then
+                map
+                    (fun exp -> Some exp)
+                    (result_type ())
+            else
+                optional_result_type ()
+        )
+        >>= fun res ->
+        return (fargs, res)
+
 
     and assign_defining_expression _: Expression.t t =
         assign
@@ -974,6 +1008,17 @@ struct
                 return def
 
 
+    let named_signature
+        (with_operators: bool)
+        (typed: bool)
+        : Expression.named_signature t
+    =
+        name_for_definition with_operators
+        >>= fun name ->
+        signature typed
+        >>= fun sign ->
+        return (name, sign)
+
 
     let inductive_type _: Inductive.t t
     =
@@ -983,14 +1028,12 @@ struct
         |. backtrackable (string "class") "class"
         |. whitespace
         |= indented (
-            return (fun _ _ _ -> ())
-            |= name_for_definition true
-            |= formal_arguments true false
-            |= optional_result_type ()
+            named_signature true false
         )
         |. assign |. whitespace
         |= indented (
-            return ()
+            zero_or_more_aligned
+                (named_signature true true)
         )
 
 

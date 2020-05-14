@@ -40,6 +40,12 @@ module Expression = struct
     and formal_argument =
         string Located.t * t option
 
+    and signature =
+        formal_argument list * t option
+
+    and named_signature =
+        string Located.t * signature
+
     and definition =
         (string Located.t * formal_argument list * t option * t) Located.t
 
