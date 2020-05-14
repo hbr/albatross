@@ -149,8 +149,7 @@ struct
 
             lines;
 
-            terminate_line =
-                failed && c <> '\n';
+            terminate_line = failed (*&& c <> '\n'*);
 
             parser;
 
@@ -200,6 +199,9 @@ struct
     module Print (Pretty: Pretty_printer.SIG) =
     struct
         let print_error (compiler: t): Pretty.t =
+            let lines =
+                Segmented_array.push compiler.line compiler.lines
+            in
             match compiler.error with
             | None ->
                 assert false (* Illegal call! *)
@@ -208,14 +210,14 @@ struct
                     Parser.Error_printer (Pretty)
                 in
                 Parser_print.print_with_source_lines
-                    compiler.lines
+                    lines
                     compiler.parser
             | Some (Build_error problem) ->
                 let module Builder_print =
                     Builder.Print (Pretty)
                 in
                 Builder_print.print_with_source_lines
-                    compiler.lines
+                    lines
                     problem
 
         let print_values (compiler: t): Pretty.t =
