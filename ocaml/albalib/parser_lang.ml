@@ -945,18 +945,10 @@ struct
         (typed: bool)
         : Expression.signature t
     =
-        formal_arguments true typed
-        >>= fun fargs ->
-        (
-            if typed then
-                map
-                    (fun exp -> Some exp)
-                    (result_type ())
-            else
-                optional_result_type ()
-        )
-        >>= fun res ->
-        return (fargs, res)
+        return
+            (fun fargs res -> fargs, res)
+        |= formal_arguments true typed
+        |= optional_result_type ()
 
 
     and assign_defining_expression _: Expression.t t =
