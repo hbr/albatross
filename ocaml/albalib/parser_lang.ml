@@ -654,6 +654,15 @@ struct
                 (Located.end_ loc2))
 
 
+    let name_for_definition (with_operators: bool): string Located.t t =
+        if with_operators then
+            identifier false
+            <|>
+            parenthesized
+                (fun _ -> operator_string true)
+        else
+            identifier false
+
 
     let rec find_duplicate_argument
         (arg_lst: (string located * Expression.t option) list)
@@ -715,7 +724,7 @@ struct
             located
                 (return (fun args rt exp -> Expression.Function (args, rt, exp))
                  |. char_ws '\\'
-                 |= formal_arguments false
+                 |= formal_arguments false false
                  |= optional_result_type ()
                  |= assign_defining_expression ()
                 )
@@ -731,7 +740,7 @@ struct
                           Expression.Product (args, rt))
                 |. backtrackable (string "all") "all"
                 |. whitespace
-                |= formal_arguments false
+                |= formal_arguments false false
                 |= result_type ())
             <?>
             what
@@ -864,29 +873,49 @@ struct
       optional (result_type ())
 
 
-    and formal_argument _: (string located * Expression.t option) t =
+    and typed_formal_argument
+        _
+        : Expression.formal_argument t
+    =
+        char_ws '(' >>= fun _ ->
+        identifier false
+        >>= fun name ->
+        colon |. whitespace
+        >>= subexpression "type"
+        >>= fun typ ->
+        char_ws ')'
+        >>= fun _ ->
+        return (name, Some typ)
+
+
+    and formal_argument
+        (typed: bool)
+        : Expression.formal_argument t
+    =
         (
-            char_ws '(' >>= fun _ ->
-            identifier false
-            >>= fun name ->
-            colon |. whitespace
-            >>= subexpression "type"
-            >>= fun typ ->
-            char_ws ')'
-            >>= fun _ ->
-            return (name, Some typ)
+            if typed then
+                typed_formal_argument ()
+            else
+                typed_formal_argument ()
+                <|>
+                map
+                    (fun name -> name, None)
+                    (identifier false)
         )
-        <|>
-        map (fun name -> name, None) (identifier false)
         <?>
         "formal argument"
 
-    and formal_arguments zero =
+
+    and formal_arguments
+        (zero: bool)
+        (typed: bool)
+        : Expression.formal_argument list t
+    =
         (
             if zero then
-                zero_or_more (formal_argument ())
+                zero_or_more (formal_argument typed)
             else
-                one_or_more (formal_argument ())
+                one_or_more (formal_argument typed)
         )
         >>= fun lst ->
         match find_duplicate_argument lst with
@@ -894,6 +923,7 @@ struct
             return lst
         | Some name ->
             fail (Located.range name, Problem.Duplicate_argument)
+
 
     and assign_defining_expression _: Expression.t t =
         assign
@@ -904,23 +934,14 @@ struct
 
 
     and definition (with_operators: bool): Expression.definition t =
-        let name _ =
-            if with_operators then
-                identifier false
-                <|>
-                parenthesized
-                    (fun _ -> operator_string true)
-            else
-                identifier false
-        in
         return
             (fun name args res_tp e ->
                 let p1 = Located.start name
                 and p2 = Located.end_ e
                 in
                 Located.make p1 (name, args, res_tp, e) p2)
-        |= name ()
-        |= formal_arguments true
+        |= name_for_definition with_operators
+        |= formal_arguments true false
         |= optional_result_type ()
         |= assign_defining_expression ()
         <?>
@@ -957,23 +978,19 @@ struct
     let inductive_type _: Inductive.t t
     =
         return (
-            fun _ _ -> assert false
+            fun _ _ -> ()
         )
         |. backtrackable (string "class") "class"
         |. whitespace
         |= indented (
-            return (fun _ _ _ -> assert false)
-            |= (
-                identifier false
-                <|>
-                parenthesized (fun _ -> operator_string true)
-            )
-            |= formal_arguments true
+            return (fun _ _ _ -> ())
+            |= name_for_definition true
+            |= formal_arguments true false
             |= optional_result_type ()
         )
         |. assign |. whitespace
         |= indented (
-            assert false
+            return ()
         )
 
 

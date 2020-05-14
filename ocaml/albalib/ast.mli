@@ -67,5 +67,5 @@ end
 
 module Inductive:
 sig
-    type t
+    type t = unit
 end

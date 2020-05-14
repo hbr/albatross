@@ -110,7 +110,9 @@ struct
                 compiler.context
         )
         | Inductive _ ->
-            assert false (* nyi *)
+            None,
+            compiler.values,
+            compiler.context
 
 
     let add_character (c: char) (compiler: t) : string * lines =
