@@ -738,27 +738,41 @@ struct
             )
             <|>
             (* \ (x: A) (y: B) ... : RT := exp *)
-            located
-                (return (fun args rt exp -> Expression.Function (args, rt, exp))
-                 |. char_ws '\\'
-                 |= formal_arguments false false
-                 |= optional_result_type ()
-                 |= assign_defining_expression ()
-                )
+            (
+                return
+                    (fun pos1 args rt exp ->
+                        Located.make
+                            pos1
+                            (Expression.Function (args, rt, exp))
+                            (Located.end_ exp))
+                |= get_position
+                |. char_ws '\\'
+                |= formal_arguments false false
+                |= optional_result_type ()
+                |= assign_defining_expression ()
+            )
             <|>
             (* all (a: A) (b: B) ... : RT *)
-            located
-                (return
-                  (fun args rt ->
-                      match Located.value rt with
-                      | Expression.Product (args_inner, rt) ->
-                          Expression.Product (args @ args_inner, rt)
-                      | _ ->
-                          Expression.Product (args, rt))
+            (
+                return
+                    (fun pos1 args rt ->
+                        Located.make
+                            pos1
+                            (
+                                match Located.value rt with
+                                | Expression.Product (args_inner, rt) ->
+                                    Expression.Product (args @ args_inner, rt)
+                                | _ ->
+                                    Expression.Product (args, rt)
+                            )
+                            (Located.end_ rt)
+                    )
+                |= get_position
                 |. backtrackable (string "all") "all"
                 |. whitespace
                 |= formal_arguments false false
-                |= result_type ())
+                |= result_type ()
+            )
             <?>
             what
         in
