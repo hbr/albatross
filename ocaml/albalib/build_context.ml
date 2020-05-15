@@ -171,7 +171,7 @@ let add_one_implicit
     : (Term.t * Term.typ * t) option
     =
     let open Term in
-    match typ with
+    match key_normal typ bc with
     | Pi (arg, res, info) when is_kind arg bc && has_variable 0 res ->
         let name = Pi_info.name info in
         let name2, implicits = Implicits.add name bc.implicits in
