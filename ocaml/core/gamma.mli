@@ -1,3 +1,19 @@
+type definition =
+  | Axiom
+  | Assumption
+  | Builtin_type of string
+  | Builtin of string * Term.Value.t
+  | Definition of Term.t
+
+
+type entry = {
+    name: string;
+    typ: Term.typ;
+    definition: definition
+  }
+
+
+
 type t
 
 val count: t -> int
@@ -7,6 +23,10 @@ val is_valid_index: int -> t -> bool
 val index_of_level: int -> t -> int
 
 val level_of_index: int -> t -> int
+
+
+val entry: int -> t -> entry
+(** [entry level c] *)
 
 
 val raw_type_at_level: int -> t -> Term.typ

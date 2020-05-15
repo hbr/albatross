@@ -8,8 +8,10 @@ module Lambda_info = Term.Lambda_info
 
 
 type definition =
-  | No
-  | Builtin of Term.Value.t
+  | Axiom
+  | Assumption
+  | Builtin_type of string
+  | Builtin of string * Term.Value.t
   | Definition of Term.t
 
 
@@ -45,9 +47,10 @@ let level_of_index (i:int) (c:t): int =
   bruijn_convert i (count c)
 
 
-let entry (i:int) (c:t): entry =
-  assert (is_valid_index i c);
-  Segmented_array.elem i c
+
+let entry (level: int) (c: t): entry =
+  assert (level < count c);
+  Segmented_array.elem level c
 
 
 let raw_type_at_level (i:int) (c:t): Term.typ =
@@ -85,7 +88,7 @@ let push (name: string) (typ:Term.typ) (definition:definition) (c:t): t =
 
 
 let push_local (nme: string) (typ: Term.typ) (c:t): t =
-    push nme typ No c
+    push nme typ Assumption c
 
 
 let push_definition
@@ -159,37 +162,37 @@ let standard (): t =
   in
   empty
 
-  |> (* 0 *) add_entry "Int" (Term.any ,0) No
+  |> (* 0 *) add_entry "Int" (Term.any ,0) (Builtin_type "int_type")
 
-  |> (* 1 *) add_entry "Character" (Term.any, 0) No
+  |> (* 1 *) add_entry "Character" (Term.any, 0) (Builtin_type "char_type")
 
-  |> (* 2 *) add_entry "String" (Term.any, 0) No
+  |> (* 2 *) add_entry "String" (Term.any, 0) (Builtin_type "string_type")
 
   |> (* 3 *) add_entry
        "+"
        (binary_type int_level)
-       (Builtin Term.Value.int_plus)
+       (Builtin ("int_plus", Term.Value.int_plus))
 
   |> (* 4 *) add_entry
        "-"
        (binary_type int_level)
-       (Builtin Term.Value.int_minus)
+       (Builtin ("int_minus", Term.Value.int_minus))
 
   |> (* 5 *) add_entry
        "*"
        (binary_type int_level)
-       (Builtin Term.Value.int_times)
+       (Builtin ("int_times", Term.Value.int_times))
 
   |> (* 6 *) add_entry
        "+"
        (binary_type string_level)
-       (Builtin Term.Value.string_concat)
+       (Builtin ("string_concat", Term.Value.string_concat))
 
   |> (* 7 *) add_entry
        (* List: Any -> Any *)
        "List"
        (Term.(Pi (any, any, Pi_info.arrow)), 0)
-       No
+       Axiom
 
   |> (* 8 *) add_entry (* 8 *)
        (* (=) (A: Any): A -> A -> Proposition *)
@@ -203,7 +206,7 @@ let standard (): t =
                   Pi_info.arrow),
               Pi_info.typed "A")),
         0)
-       No
+       Axiom
 
   |> (* 9 *) add_entry
        (* identity: all (A: Any): A -> A :=
@@ -268,13 +271,13 @@ let standard (): t =
         (* true: Proposition *)
         "true"
         (Term.proposition, 0)
-        No
+        Axiom
 
     |> (* 13 *) add_entry
         (* false: Proposition *)
         "false"
         (Term.proposition, 0)
-        No
+        Axiom
 
     |> (* 14 *) (* (=>): all (a b: Proposition): Proposition := a -> b *)
        (let typ =
@@ -308,7 +311,7 @@ let standard (): t =
                     (Variable impl_level)
                     (Variable n))
         in
-        add_entry "ex_falso" (to_index n typ, n) No
+        add_entry "ex_falso" (to_index n typ, n) Axiom
     )
 
 
@@ -339,7 +342,7 @@ let standard (): t =
          in
          add_entry
             "leibniz" (to_index n typ, n)
-            No
+            Axiom
         )
 
 
@@ -393,10 +396,10 @@ let compute (t:Term.t) (c:t): Term.t =
         let level = level_of_index i c in
         (
             match (entry level c).definition with
-            | No ->
+            | Axiom | Assumption | Builtin_type _ ->
                 term, steps
 
-            | Builtin v ->
+            | Builtin (_, v) ->
                Term.Value v, steps + 1
 
             | Definition def ->
