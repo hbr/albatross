@@ -71,7 +71,20 @@ sig
 end
 
 
-module Inductive:
+
+
+
+
+
+module Source_entry:
 sig
-    type t = unit
+    type named_signature =
+        Expression.named_signature
+
+    type inductive =
+        named_signature * named_signature array
+
+    type t =
+        | Normal of Expression.definition
+        | Inductive of inductive
 end

@@ -98,9 +98,9 @@ struct
                 (term, typ, compiler.context) :: compiler.values,
                 compiler.context
         )
-        | Definition def ->
+        | Entry entry ->
         (
-            match Builder.add_definition def compiler.context with
+            match Builder.add_entry entry compiler.context with
             | Ok context ->
                 None, compiler.values, context
 
@@ -109,10 +109,6 @@ struct
                 compiler.values,
                 compiler.context
         )
-        | Inductive _ ->
-            None,
-            compiler.values,
-            compiler.context
 
 
     let add_character (c: char) (compiler: t) : string * lines =

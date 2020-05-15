@@ -39,8 +39,7 @@ module Source_file =
 struct
     type entry =
         | Expression of (bool * Expression.t)
-        | Definition of Expression.definition
-        | Inductive of Inductive.t
+        | Entry of Source_entry.t
 
 
     type t = {
@@ -62,28 +61,13 @@ struct
         fst (List.split_head_tail src.entries)
 
 
-    let push_definition
-        (def: Expression.definition) (src: t)
-        : t
-        =
+    let push_entry
+        (entry: Source_entry.t) (src: t): t =
         {
-            entries = Definition def :: src.entries;
+            entries = Entry entry :: src.entries;
 
             n = src.n + 1;
         }
-
-
-    let push_inductive
-        (ind: Inductive.t)
-        (src: t)
-        : t
-    =
-        {
-            entries = Inductive ind :: src.entries;
-
-            n = src.n + 1;
-        }
-
 
 
     let push_expression
@@ -1026,13 +1010,13 @@ struct
         return (name, sign)
 
 
-    let inductive_type _: Inductive.t t
+    let inductive_type _: Source_entry.inductive t
     =
         return (
-            fun _ cs ->
-                let _ = List.join cs
-                in
-                ()
+            fun header constructors ->
+                header,
+                Array.of_list
+                    (List.join constructors)
         )
         |. backtrackable (string "class") "class"
         |. whitespace
@@ -1136,30 +1120,28 @@ struct
 
 
 
-
-    let source_definition _: unit t =
-        global_definition () >>= fun def ->
+    let source_entry _: unit t =
+        (
+        map
+            (fun ind -> Source_entry.Inductive ind)
+            (inductive_type ())
+        <|>
+        map
+            (fun def -> Source_entry.Normal def)
+            (global_definition ())
+        )
+        >>= fun entry ->
         update
-            (Source_file.push_definition def)
-
-
-    let source_inductive _: unit t =
-        inductive_type () >>= fun ind ->
-        update
-            (Source_file.push_inductive ind)
+            (Source_file.push_entry entry)
 
 
     let declaration (with_expressions: bool): unit t =
         if with_expressions then
             source_file_command
             <|>
-            source_definition ()
-            <|>
-            source_inductive ()
+            source_entry ()
         else
-            source_definition ()
-            <|>
-            source_inductive ()
+            source_entry ()
 
 
     let declarations (with_expressions: bool): unit t =

@@ -54,8 +54,7 @@ module Source_file:
 sig
     type entry =
         | Expression of (bool * Expression.t)
-        | Definition of Expression.definition
-        | Inductive of Inductive.t
+        | Entry of Source_entry.t
 
 
     type t

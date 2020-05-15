@@ -1,10 +1,10 @@
 open Fmlib
 open Common
 open Alba_core
+open Ast
 
 
 module Parser     = Parser_lang
-module Expression = Ast.Expression
 module Position   = Character_parser.Position
 
 
@@ -340,9 +340,9 @@ let rec build0
             (fun (n, arg, mode) builder ->
                 let mode =
                     match mode with
-                    | Ast.Expression.Normal ->
+                    | Expression.Normal ->
                         Term.Application_info.Normal
-                    | Ast.Expression.Operand ->
+                    | Expression.Operand ->
                         assert (nargs = 1 || nargs = 2);
                         if nargs = 2 then
                             Term.Application_info.Binary
@@ -625,7 +625,18 @@ let add_definition
 
 
 
+let add_entry
+    (entry: Source_entry.t)
+    (c: Context.t)
+    : (Context.t, problem) result
+=
+    match entry with
+    | Source_entry.Normal def ->
+        add_definition def c
 
+    | Source_entry.Inductive _ ->
+        Printf.printf "builder: nyi inductive type\n";
+        Ok c
 
 
 

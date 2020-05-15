@@ -44,6 +44,13 @@ val add_definition:
     -> (Context.t, problem) result
 
 
+val add_entry:
+    Ast.Source_entry.t
+    -> Context.t
+    -> (Context.t, problem) result
+
+
+
 
 module Print (P: Pretty_printer.SIG):
 sig

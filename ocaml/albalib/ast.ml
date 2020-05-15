@@ -349,37 +349,18 @@ struct
 end (* Operator_exression *)
 
 
-(*
-module Declaration =
+
+
+
+module Source_entry =
 struct
-    type name = string Located.t
-    type formal_argument = Expression.formal_argument
-    type constructor = name * formal_argument list * Expression.t option
+    type named_signature =
+        Expression.named_signature
 
-    type class_declaration =
-        name
-        * formal_argument list
-        * Expression.t option
-        * constructor list option
-
-    type normal_declaration =
-        name
-        * formal_argument list
-        * Expression.t          (* result type *)
-        * Expression.t option   (* defining expression *)
+    type inductive =
+        named_signature * named_signature array
 
     type t =
-        | Normal of normal_declaration
-
-        | Class of class_declaration
-
-        | Mutual_normal of normal_declaration list
-
-        | Mutual_class of class_declaration list
-end
-*)
-
-module Inductive =
-struct
-    type t = unit
+        | Normal of Expression.definition
+        | Inductive of inductive
 end
