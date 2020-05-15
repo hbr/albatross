@@ -58,6 +58,13 @@ struct
         offset <+> numbers <+> cut
 
 
+    let maybe_print_tabs (offset: int) (tabs: int list): t =
+        if tabs = [] then
+            empty
+        else
+            cut <+> print_tabs offset tabs
+
+
     let print_line_sub
         (number_width: int)
         (line_number: int)
@@ -131,6 +138,10 @@ struct
                     if
                         line_no = start_line && start_line = end_line
                     then
+                        maybe_print_tabs
+                            (number_width + 2)
+                            error_tabs
+                        <+>
                         print_line char_offset pos_newline line_no
                         <+> skip_line_no
                         <+> fill start_col ' '
@@ -163,13 +174,7 @@ struct
                 <+> print (pos_newline + 1) (line_no + 1)
         in
         print 0 0
-        <+>
-        (
-          if error_tabs = [] then
-              empty
-          else
-              print_tabs (number_width + 2) error_tabs
-        )
+
 
 
     let print_source_lines
@@ -215,6 +220,10 @@ struct
         <+>
         (
             if start_line = end_line then
+                maybe_print_tabs
+                    (number_width + 2)
+                    error_tabs
+                <+>
                 print_lines start_line start_line
                 <+>
                 (
@@ -235,13 +244,6 @@ struct
                     <+> char '^'
                     <+> cut
                 )
-        )
-        <+>
-        (
-          if error_tabs = [] then
-              empty
-          else
-              print_tabs (number_width + 2) error_tabs
         )
 end
 
