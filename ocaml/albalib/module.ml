@@ -14,7 +14,7 @@ struct
 
     type error =
         | Parse_error
-        | Build_error of Builder.problem
+        | Build_error of Build_problem.t
 
     type value =
         Term.t * Term.typ * Context.t
@@ -210,7 +210,7 @@ struct
                     compiler.parser
             | Some (Build_error problem) ->
                 let module Builder_print =
-                    Builder.Print (Pretty)
+                    Build_problem.Print (Pretty)
                 in
                 Builder_print.print_with_source_lines
                     lines

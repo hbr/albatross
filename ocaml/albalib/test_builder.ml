@@ -11,7 +11,7 @@ module Expression = Ast.Expression
 
 module Expression_parser = Parser_lang.Make (Expression)
 
-module Error_print = Builder.Print (Pretty_printer)
+module Error_print = Build_problem.Print (Pretty_printer)
 
 
 
@@ -28,7 +28,7 @@ let string_of_term_type (term: Term.t) (typ: Term.t): string
 let _ = string_of_term_type
 
 
-let string_of_description (descr: problem_description): string
+let string_of_description (descr: Build_problem.description): string
     =
     String_printer.run (
         Pretty_printer.run 0 70 70
@@ -39,7 +39,7 @@ let _ = string_of_description
 
 let build_expression
     (str: string)
-    : (Term.t * Term.typ, problem) result
+    : (Term.t * Term.typ, Build_problem.t) result
     =
     let open Expression_parser in
     let p = run (expression ()) str in

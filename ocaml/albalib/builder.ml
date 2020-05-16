@@ -20,21 +20,7 @@ module Located =
 type type_in_context = Build_context.type_in_context
 
 
-type problem_description =
-    | Overflow
-    | No_name
-    | Incomplete_type of type_in_context
-    | Cannot_infer_bound
-    | Not_a_function of type_in_context list
-    | Wrong_type of (type_in_context * type_in_context) list
-    | Wrong_base of type_in_context list * type_in_context list
-    | Ambiguous of type_in_context list
-    | Name_violation of string * string (* case, kind *)
-    | Ambiguous_definition of int
-    | Not_yet_implemented of string
 
-let dummy str = Not_yet_implemented str
-let _ = dummy
 
 
 
@@ -42,22 +28,18 @@ let _ = dummy
 let description_of_type_in_context
     (nargs: int)
     (lst: (type_in_context * type_in_context) list)
-    : problem_description
+    : Build_problem.description
     =
+    let open Build_problem
+    in
     if 0 < nargs then
         Not_a_function (List.map snd lst)
     else
         Wrong_type lst
 
 
-type problem = range * problem_description
-
-
-
-
-
 module Name_map = Name_map
-module Result = Monad.Result (struct type t = problem end)
+module Result = Monad.Result (Build_problem)
 module List_fold = List.Monadic_fold (Result)
 module Interval_monadic = Interval.Monadic (Result)
 module Algo = Gamma_algo.Make (Gamma)
@@ -80,8 +62,13 @@ let push_bound (name: string) (builder: t): t =
         names = Name_map.add_local name builder.names}
 
 
-let set_names (names: Name_map.t) (builder: t): (t, problem) result =
+let set_names
+    (names: Name_map.t)
+    (builder: t)
+    : (t, Build_problem.t) result
+=
     Ok {builder with names}
+
 
 
 let make (c: Context.t): t =
@@ -96,7 +83,7 @@ let make (c: Context.t): t =
 
 
 type 'a build_monad =
-    t -> ('a, problem) result
+    t -> ('a, Build_problem.t) result
 
 
 
@@ -107,7 +94,7 @@ let map_bcs_list (f: Build_context.t -> Build_context.t) (builder: t): t =
 
 let map_bcs0
     (f: Build_context.t -> ('a, 'b) result)
-    (g: 'b list -> problem)
+    (g: 'b list -> Build_problem.t)
     : 'a list build_monad
     =
     fun builder ->
@@ -133,7 +120,7 @@ let map_bcs0
 
 let map_bcs
     (f: Build_context.t -> (Build_context.t, 'a) result)
-    (g: 'a list -> problem)
+    (g: 'a list -> Build_problem.t)
     : t build_monad
     =
     fun builder ->
@@ -487,7 +474,7 @@ and build_definition0
 let check_ambiguity
     (c: Context.t)
     (builder: t)
-    : (Build_context.t, problem) result
+    : (Build_context.t, Build_problem.t) result
     =
     match builder.bcs with
     | [] ->
@@ -512,7 +499,7 @@ let check_ambiguity
 
 let check_formal_arguments
     (bc: Build_context.t)
-    : (Build_context.t, problem) result
+    : (Build_context.t, Build_problem.t) result
     =
     match Build_context.find_first_untyped_formal bc with
     | None ->
@@ -524,7 +511,7 @@ let check_formal_arguments
 
 let check_name_violations
     (bc: Build_context.t)
-    : (Build_context.t, problem) result
+    : (Build_context.t, Build_problem.t) result
     =
     match Build_context.find_first_name_violation bc with
     | None ->
@@ -538,7 +525,7 @@ let check_name_violations
 let check_incomplete
     (range: range)
     (bc: Build_context.t)
-    : (Term.t * Term.typ, problem) result
+    : (Term.t * Term.typ, Build_problem.t) result
     =
     match Build_context.final bc with
     | Error err ->
@@ -552,7 +539,7 @@ let check_incomplete
 let build
       (exp: Ast.Expression.t)
       (c: Context.t)
-    : (Term.t * Term.typ, problem) result
+    : (Term.t * Term.typ, Build_problem.t) result
     =
     let open Result in
     build0 exp 0 (make c)
@@ -570,7 +557,7 @@ let build
 let build_definition
     (def: Ast.Expression.definition)
     (c: Context.t)
-    : (Term.t * Term.typ, problem) result
+    : (Term.t * Term.typ, Build_problem.t) result
 =
     let open Fmlib.Result in
     build_definition0 def (make c)
@@ -588,7 +575,7 @@ let build_definition
 let add_definition
     (def: Ast.Expression.definition)
     (context: Context.t)
-    : (Context.t, problem) result
+    : (Context.t, Build_problem.t) result
 =
     let open Fmlib.Result in
     let name, _, _, _ = Located.value def
@@ -625,207 +612,25 @@ let add_definition
 
 
 
+
+let add_inductive
+    (_: Source_entry.inductive array)
+    (c: Context.t)
+    : (Context.t, Build_problem.t) result
+=
+    Printf.printf "builder: nyi inductive type\n";
+    Ok c
+
+
+
 let add_entry
     (entry: Source_entry.t)
     (c: Context.t)
-    : (Context.t, problem) result
+    : (Context.t, Build_problem.t) result
 =
     match entry with
     | Source_entry.Normal def ->
         add_definition def c
 
-    | Source_entry.Inductive _ ->
-        Printf.printf "builder: nyi inductive type\n";
-        Ok c
-
-
-
-
-(* ----------------------------------------------------------------------- *)
-(* Printing of Problems *)
-(* ----------------------------------------------------------------------- *)
-
-module Print (P: Pretty_printer.SIG) =
-struct
-    module PP = Term_printer.Pretty (Gamma) (P)
-
-
-    let type_or_types (l: 'a list): P.t =
-        match l with
-        | [_] ->
-            P.wrap_words "the type"
-        | _ :: _ :: _ ->
-            P.wrap_words "one of the types"
-        | _ ->
-            assert false (* Illegal call! *)
-
-    let typ (holes: int list) (tp: Term.typ) (gamma: Gamma.t): P.t =
-        let tp = PP.print tp gamma in
-        let open P in
-        match holes with
-        | [] ->
-            tp
-        | _ ->
-            let holes =
-                char '['
-                <+>
-                list_separated
-                    (char ',' <+> group space)
-                    (List.map
-                        (fun level ->
-                            let v = Gamma.variable_at_level level gamma
-                            and vtp = Gamma.type_at_level level gamma in
-                            PP.print v gamma <+> char ':' <+> char ' '
-                            <+> PP.print vtp gamma)
-                        holes)
-                <+> char ']'
-            in
-            tp
-            <+>
-            nest 4 (
-                cut
-                <+> string "unknown: "
-                <+> holes)
-
-    let type_list (lst: type_in_context list): P.t =
-        let open P in
-        nest 4
-            (list_separated
-                cut
-                (List.map
-                    (fun (holes, tp, gamma) ->
-                        (typ holes tp gamma))
-                    lst))
-
-    let wrong_type
-        (reqs: type_in_context list)
-        (acts: type_in_context list)
-        : P.t
-        =
-        let open P in
-        wrap_words "I was expecting a term which has"
-        <+> group space
-        <+> type_or_types reqs
-        <+> cut <+> cut
-        <+> type_list reqs
-        <+> cut <+> cut
-        <+> wrap_words "and the highlighted term has"
-        <+> group space
-        <+> type_or_types acts
-        <+> cut <+> cut
-        <+> type_list acts
-        <+> cut <+> cut
-
-
-
-    let description (descr: problem_description): P.t =
-        let open P in
-        match descr with
-        | Overflow ->
-            wrap_words "The number does not fit into a machine word" <+> cut
-        | No_name ->
-            string "I cannot find this name or operator" <+> cut
-        | Cannot_infer_bound ->
-            wrap_words "I cannot infer a type for this variable" <+> cut
-        | Incomplete_type tp  ->
-            wrap_words "I cannot infer a complete type of the expression. \
-                        Only the incomplete type"
-            <+> cut <+> cut
-            <+> type_list [tp]
-            <+> cut <+> cut
-            <+> wrap_words "This usually happens if I cannot infer the types \
-                            of some bound variables."
-            <+> cut
-
-        | Not_a_function lst ->
-            assert (lst <> []);
-            wrap_words "I was expecting a function which can be applied to \
-                        arguments. But the expression has"
-            <+> group space
-            <+> type_or_types lst
-            <+> cut <+> cut
-            <+> type_list lst
-            <+> cut <+> cut
-            <+> wrap_words "which is not a function type." <+> cut
-
-        | Wrong_type lst ->
-            assert (lst <> []);
-            let reqs, acts = List.split lst in
-            wrong_type reqs acts
-
-        | Wrong_base (reqs, acts) ->
-            wrong_type reqs acts
-
-        | Ambiguous types ->
-            wrap_words
-                "This term is ambigous. It can have the following types."
-            <+> cut <+> cut
-            <+> type_list types
-            <+> cut <+> cut
-            <+> wrap_words
-                "Please give me more type information to infer a unique type."
-            <+> cut
-
-        | Name_violation (case, kind) ->
-            if case = "Upper" then
-                wrap_words
-                    "This identifier must not start with an upper case letter. \
-                    Identifiers starting with upper case letters are allowed \
-                    only for types and type constructors. \
-                    The highlighted identifier is a"
-                <+> group space
-                <+> string kind
-                <+> cut
-            else
-                wrap_words
-                    "This identifier must not start with a lower case letter. \
-                    Identifiers starting with lower case letters are allowed \
-                    only for object variables, proofs and propositions. \
-                    But the highlighted identifier is a"
-                <+> group space
-                <+> string kind
-                <+> cut
-
-        | Ambiguous_definition _ ->
-            wrap_words
-                "There is already a definition with the same name and \
-                the same signature. Remember that there can be multiple \
-                definitions with the same name only if they have \
-                different signatures."
-                <+> cut
-
-
-        | Not_yet_implemented str ->
-            char '<' <+> string str <+> char '>'
-            <+> group space
-            <+> wrap_words "is not yet implemented"
-
-
-    let print_with_source
-        (src: string) ((range, desc): problem)
-        : P.t
-        =
-        let module P0 = Printer.Make (P) in
-        let open P in
-        P0.print_error_header "TYPE"
-        <+>
-        P0.print_source src range []
-        <+>
-        description desc
-        <+> cut
-
-
-    let print_with_source_lines
-        (lines: string Segmented_array.t)
-        ((range, desc): problem)
-        : P.t
-        =
-        let module P0 = Printer.Make (P) in
-        let open P in
-        P0.print_error_header "TYPE"
-        <+>
-        P0.print_source_lines lines range []
-        <+>
-        description desc
-        <+> cut
-end
+    | Source_entry.Inductive inds ->
+        add_inductive inds c

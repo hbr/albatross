@@ -1,0 +1,211 @@
+open Fmlib
+open Alba_core
+
+
+type pos = Character_parser.Position.t
+type range = pos * pos
+
+
+type type_in_context = Build_context.type_in_context
+
+type description =
+    | Overflow
+    | No_name
+    | Incomplete_type of type_in_context
+    | Cannot_infer_bound
+    | Not_a_function of type_in_context list
+    | Wrong_type of (type_in_context * type_in_context) list
+    | Wrong_base of type_in_context list * type_in_context list
+    | Ambiguous of type_in_context list
+    | Name_violation of string * string (* case, kind *)
+    | Ambiguous_definition of int
+    | Not_yet_implemented of string
+
+
+type t = range * description
+
+
+module Print (P: Pretty_printer.SIG) =
+struct
+    module PP = Term_printer.Pretty (Gamma) (P)
+
+
+    let type_or_types (l: 'a list): P.t =
+        match l with
+        | [_] ->
+            P.wrap_words "the type"
+        | _ :: _ :: _ ->
+            P.wrap_words "one of the types"
+        | _ ->
+            assert false (* Illegal call! *)
+
+    let typ (holes: int list) (tp: Term.typ) (gamma: Gamma.t): P.t =
+        let tp = PP.print tp gamma in
+        let open P in
+        match holes with
+        | [] ->
+            tp
+        | _ ->
+            let holes =
+                char '['
+                <+>
+                list_separated
+                    (char ',' <+> group space)
+                    (List.map
+                        (fun level ->
+                            let v = Gamma.variable_at_level level gamma
+                            and vtp = Gamma.type_at_level level gamma in
+                            PP.print v gamma <+> char ':' <+> char ' '
+                            <+> PP.print vtp gamma)
+                        holes)
+                <+> char ']'
+            in
+            tp
+            <+>
+            nest 4 (
+                cut
+                <+> string "unknown: "
+                <+> holes)
+
+    let type_list (lst: type_in_context list): P.t =
+        let open P in
+        nest 4
+            (list_separated
+                cut
+                (List.map
+                    (fun (holes, tp, gamma) ->
+                        (typ holes tp gamma))
+                    lst))
+
+    let wrong_type
+        (reqs: type_in_context list)
+        (acts: type_in_context list)
+        : P.t
+        =
+        let open P in
+        wrap_words "I was expecting a term which has"
+        <+> group space
+        <+> type_or_types reqs
+        <+> cut <+> cut
+        <+> type_list reqs
+        <+> cut <+> cut
+        <+> wrap_words "and the highlighted term has"
+        <+> group space
+        <+> type_or_types acts
+        <+> cut <+> cut
+        <+> type_list acts
+        <+> cut <+> cut
+
+
+
+    let description (descr: description): P.t =
+        let open P in
+        match descr with
+        | Overflow ->
+            wrap_words "The number does not fit into a machine word" <+> cut
+        | No_name ->
+            string "I cannot find this name or operator" <+> cut
+        | Cannot_infer_bound ->
+            wrap_words "I cannot infer a type for this variable" <+> cut
+        | Incomplete_type tp  ->
+            wrap_words "I cannot infer a complete type of the expression. \
+                        Only the incomplete type"
+            <+> cut <+> cut
+            <+> type_list [tp]
+            <+> cut <+> cut
+            <+> wrap_words "This usually happens if I cannot infer the types \
+                            of some bound variables."
+            <+> cut
+
+        | Not_a_function lst ->
+            assert (lst <> []);
+            wrap_words "I was expecting a function which can be applied to \
+                        arguments. But the expression has"
+            <+> group space
+            <+> type_or_types lst
+            <+> cut <+> cut
+            <+> type_list lst
+            <+> cut <+> cut
+            <+> wrap_words "which is not a function type." <+> cut
+
+        | Wrong_type lst ->
+            assert (lst <> []);
+            let reqs, acts = List.split lst in
+            wrong_type reqs acts
+
+        | Wrong_base (reqs, acts) ->
+            wrong_type reqs acts
+
+        | Ambiguous types ->
+            wrap_words
+                "This term is ambigous. It can have the following types."
+            <+> cut <+> cut
+            <+> type_list types
+            <+> cut <+> cut
+            <+> wrap_words
+                "Please give me more type information to infer a unique type."
+            <+> cut
+
+        | Name_violation (case, kind) ->
+            if case = "Upper" then
+                wrap_words
+                    "This identifier must not start with an upper case letter. \
+                    Identifiers starting with upper case letters are allowed \
+                    only for types and type constructors. \
+                    The highlighted identifier is a"
+                <+> group space
+                <+> string kind
+                <+> cut
+            else
+                wrap_words
+                    "This identifier must not start with a lower case letter. \
+                    Identifiers starting with lower case letters are allowed \
+                    only for object variables, proofs and propositions. \
+                    But the highlighted identifier is a"
+                <+> group space
+                <+> string kind
+                <+> cut
+
+        | Ambiguous_definition _ ->
+            wrap_words
+                "There is already a definition with the same name and \
+                the same signature. Remember that there can be multiple \
+                definitions with the same name only if they have \
+                different signatures."
+                <+> cut
+
+
+        | Not_yet_implemented str ->
+            char '<' <+> string str <+> char '>'
+            <+> group space
+            <+> wrap_words "is not yet implemented"
+
+
+    let print_with_source
+        (src: string) ((range, desc): t)
+        : P.t
+        =
+        let module P0 = Printer.Make (P) in
+        let open P in
+        P0.print_error_header "TYPE"
+        <+>
+        P0.print_source src range []
+        <+>
+        description desc
+        <+> cut
+
+
+    let print_with_source_lines
+        (lines: string Segmented_array.t)
+        ((range, desc): t)
+        : P.t
+        =
+        let module P0 = Printer.Make (P) in
+        let open P in
+        P0.print_error_header "TYPE"
+        <+>
+        P0.print_source_lines lines range []
+        <+>
+        description desc
+        <+> cut
+end

@@ -123,7 +123,7 @@ struct
             Builder.build expression context
         with
         | Error problem ->
-            let module Builder_print = Builder.Print (Pretty) in
+            let module Builder_print = Build_problem.Print (Pretty) in
             Builder_print.print_with_source input problem
 
         | Ok (term, typ) ->
@@ -155,7 +155,7 @@ struct
         | Ok context ->
             return (Cli_state.put_context context state)
         | Error problem ->
-            let module Builder_print = Builder.Print (Pretty) in
+            let module Builder_print = Build_problem.Print (Pretty) in
             Pretty.run
                 (Builder_print.print_with_source
                     (Cli_state.input state)
