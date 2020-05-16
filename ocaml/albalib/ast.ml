@@ -362,5 +362,5 @@ struct
 
     type t =
         | Normal of Expression.definition
-        | Inductive of inductive
+        | Inductive of inductive array
 end

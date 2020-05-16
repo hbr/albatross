@@ -287,6 +287,10 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
+        val global_definition:  _ -> Expression.definition t
+        val global_definitions: _ -> Expression.definition array t
+        val inductive_type:     _ -> Source_entry.inductive t
+        val inductive_family:   _ -> Source_entry.inductive array t
         val source_file: bool -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
@@ -307,8 +311,8 @@ let keywords: String_set.t =
   |> add "all"
   |> add "case"
   |> add "class"
-  |> add "create"
   |> add "inspect"
+  |> add "mutual"
   |> add "where"
 
 
@@ -998,6 +1002,14 @@ struct
                 return def
 
 
+    let global_definitions _: Expression.definition array t =
+        map
+            Array.of_list
+            (one_or_more_aligned (global_definition ()))
+
+
+
+
     let named_signature
         (with_operators: bool)
         (typed: bool)
@@ -1010,8 +1022,7 @@ struct
         return (name, sign)
 
 
-    let inductive_type _: Source_entry.inductive t
-    =
+    let inductive_type _: Source_entry.inductive t =
         return (
             fun header constructors ->
                 header,
@@ -1034,8 +1045,38 @@ struct
         )
 
 
+    let inductive_family _: Source_entry.inductive array t =
+        map
+            Array.of_list
+            (one_or_more_aligned (inductive_type ()))
 
 
+
+
+    let source_entry _: unit t =
+        (
+        map
+            (fun ind -> Source_entry.Inductive [|ind|])
+            (inductive_type ())
+        <|>
+        map
+            (fun def -> Source_entry.Normal def)
+            (global_definition ())
+        )
+        <|>
+        (
+            string "mutual" |. whitespace
+            >>= fun _ ->
+            indented (
+                map
+                    (fun inds -> Source_entry.Inductive inds)
+                    (inductive_family ())
+
+            )
+        )
+        >>= fun entry ->
+        update
+            (Source_file.push_entry entry)
 
 
     let commands: (string * Command.t t) list =
@@ -1120,21 +1161,6 @@ struct
 
 
 
-    let source_entry _: unit t =
-        (
-        map
-            (fun ind -> Source_entry.Inductive ind)
-            (inductive_type ())
-        <|>
-        map
-            (fun def -> Source_entry.Normal def)
-            (global_definition ())
-        )
-        >>= fun entry ->
-        update
-            (Source_file.push_entry entry)
-
-
     let declaration (with_expressions: bool): unit t =
         if with_expressions then
             source_file_command
@@ -1156,6 +1182,9 @@ struct
         whitespace
         >>= fun _ ->
         absolute_at 0 (declarations with_expressions)
+
+
+
 
 
     let make (p: final t): parser =

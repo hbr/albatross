@@ -100,6 +100,10 @@ module type SIG =
 
         val expression: unit -> Expression.t t
         val command: Command.t t
+        val global_definition:  _ -> Expression.definition t
+        val global_definitions: _ -> Expression.definition array t
+        val inductive_type:     _ -> Source_entry.inductive t
+        val inductive_family:   _ -> Source_entry.inductive array t
         val source_file: bool -> unit t
         val make: final t -> parser
         val run: final t -> string -> parser
