@@ -537,7 +537,7 @@ let check_incomplete
 
 
 let build
-      (exp: Ast.Expression.t)
+      (exp: Expression.t)
       (c: Context.t)
     : (Term.t * Term.typ, Build_problem.t) result
     =
@@ -555,7 +555,7 @@ let build
 
 
 let build_definition
-    (def: Ast.Expression.definition)
+    (def: Expression.definition)
     (c: Context.t)
     : (Term.t * Term.typ, Build_problem.t) result
 =
@@ -573,7 +573,7 @@ let build_definition
 
 
 let add_definition
-    (def: Ast.Expression.definition)
+    (def: Expression.definition)
     (context: Context.t)
     : (Context.t, Build_problem.t) result
 =

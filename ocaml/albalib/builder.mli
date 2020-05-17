@@ -1,5 +1,6 @@
 open Fmlib
 open Alba_core
+open Ast
 
 
 type pos = Character_parser.Position.t
@@ -22,6 +23,11 @@ val build_definition:
 
 val add_definition:
     Ast.Expression.definition
+    -> Context.t
+    -> (Context.t, Build_problem.t) result
+
+val add_inductive:
+    Source_entry.inductive array
     -> Context.t
     -> (Context.t, Build_problem.t) result
 
