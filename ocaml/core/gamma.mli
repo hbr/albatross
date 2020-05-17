@@ -16,6 +16,8 @@ type entry = {
 
 type t
 
+val empty: t
+
 val count: t -> int
 
 val is_valid_index: int -> t -> bool

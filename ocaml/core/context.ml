@@ -9,6 +9,11 @@ type t = {
   }
 
 
+let empty: t = {
+        gamma = Gamma.empty;
+        map   = Name_map.empty;
+}
+
 
 let count (c: t): int =
     Gamma.count c.gamma

@@ -8,6 +8,7 @@ val count: t -> int
 val gamma: t -> Gamma.t
 val name_map: t -> Name_map.t
 
+val empty: t
 val standard: unit -> t
 
 val find_name: string -> t -> int list
