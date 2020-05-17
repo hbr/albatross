@@ -1,3 +1,5 @@
+open Module_types
+
 
 val length: 'a array -> int
 val is_empty: 'a array -> bool
@@ -24,3 +26,12 @@ val take: int -> 'a array -> 'a array
 val remove_last: int -> 'a array -> 'a array
 val push: 'a -> 'a array -> 'a array
 val fill: int -> 'a -> 'a array -> 'a array
+
+
+
+module Monadic (M: MONAD):
+sig
+    val mapi: (int -> 'a -> 'b M.t) -> 'a array -> 'b array M.t
+
+    val map: ('a -> 'b M.t) -> 'a array -> 'b array M.t
+end

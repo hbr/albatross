@@ -1,4 +1,5 @@
 include Stdlib.Array
+open Module_types
 
 
 let is_empty (arr: 'a array): bool =
@@ -61,3 +62,41 @@ let fill (n: int) (e: 'a) (arr: 'a array): 'a array =
     let arr_new = make (len + n) e in
     blit arr 0 arr_new 0 len;
     arr_new
+
+
+module Monadic (M: MONAD) =
+struct
+    let mapi
+        (f: int -> 'a -> 'b M.t)
+        (arr: 'a array)
+        : 'b array M.t
+    =
+        let len = length arr in
+        if 0 < len then
+            let open M in
+            f 0 (get arr 0)
+            >>= fun b ->
+            let arr2 = make len b in
+            let rec make_from i =
+                if i = len then
+                    return arr2
+                else
+                    (
+                        f i (get arr i) >>= fun b ->
+                        set arr2 i b;
+                        make_from (i + 1)
+                    )
+            in
+            make_from 1
+        else
+            M.return [||]
+
+
+
+    let map
+        (f: 'a -> 'b M.t)
+        (arr: 'a array)
+        : 'b array M.t
+    =
+        mapi (fun _ -> f) arr
+end
