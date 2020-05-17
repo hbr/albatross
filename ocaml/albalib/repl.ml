@@ -120,7 +120,7 @@ struct
         : Pretty.t
         =
         match
-            Builder.build expression context
+            Build_expression.build expression context
         with
         | Error problem ->
             let module Builder_print = Build_problem.Print (Pretty) in

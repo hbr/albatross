@@ -6,7 +6,7 @@ open Ast
 type pos = Character_parser.Position.t
 type range = pos * pos
 
-
+(*
 val build:
     Ast.Expression.t
     -> Context.t
@@ -18,7 +18,7 @@ val build_definition:
     Ast.Expression.definition
     -> Context.t
     -> (Term.t * Term.typ, Build_problem.t) result
-
+*)
 
 
 val add_definition:

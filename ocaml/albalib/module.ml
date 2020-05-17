@@ -74,7 +74,7 @@ struct
         match top (Parser.state parser) with
         | Expression (eval_flag, expression) ->
         (
-            match Builder.build expression compiler.context with
+            match Build_expression.build expression compiler.context with
             | Error problem ->
                 Some (Build_error problem),
                 compiler.values,

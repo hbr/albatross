@@ -1,6 +1,6 @@
 open Fmlib
 open Alba_core
-open Builder
+open Build_expression
 
 
 module Pretty_printer = Pretty_printer.Pretty (String_printer)
