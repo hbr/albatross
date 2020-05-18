@@ -147,10 +147,10 @@ val transpose: 'a list list -> 'a list list
 *)
 
 
-(** {1 Monadic list folding}*)
+(** {1 Monadic list functions}*)
 
-(** Monadic list folding *)
-module Monadic_fold (M:MONAD):
+(** Monadic list functions *)
+module Monadic (M: MONAD):
 sig
   (** [fold_left f lst start] leftfolds the function [f] over the list [lst]
      starting with the value [start].  Continuation of the fold is determined

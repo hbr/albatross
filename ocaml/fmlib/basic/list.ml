@@ -129,7 +129,7 @@ let transpose (row_list: 'a list list): 'a list list =
 
 
 
-module Monadic_fold (M:MONAD) =
+module Monadic (M: MONAD) =
   struct
     let foldi_left (f:int -> 'a -> 'b -> 'b M.t) (l:'a t) (start:'b)
         : 'b M.t =
