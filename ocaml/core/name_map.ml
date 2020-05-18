@@ -99,6 +99,21 @@ let add_global
         )
 
 
+let add_global_strict
+    (name: string)
+    (typ: Term.typ)
+    (gamma: Gamma.t)
+    (m: t)
+    : t
+=
+    match add_global name typ gamma m with
+    | Ok m ->
+        m
+    | _ ->
+        assert false (* Illegal call! *)
+
+
+
 let add_local (name: string) (m: t) : t =
     assert (name <> "");
     if name = "_" then

@@ -31,6 +31,11 @@ val entry: int -> t -> entry
 (** [entry level c] *)
 
 
+val add_builtin_type:
+    string -> string -> Term.typ -> t -> t
+
+
+
 val raw_type_at_level: int -> t -> Term.typ
 
 (** [type_at_level level c] type of the entry at [level]. *)

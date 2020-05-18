@@ -29,6 +29,8 @@ let name_map (c: t): Name_map.t =
     c.map
 
 
+
+
 let standard (): t =
     let gamma = Gamma.standard () in
     {gamma;
@@ -62,6 +64,35 @@ let compute (t: Term.t) (c: t): Term.t =
 
 let find_name (name: string) (c: t): int list =
     Name_map.find name c.map
+
+
+
+let push_local (name: string) (typ: Term.typ) (c: t): t =
+    {
+        gamma =
+            Gamma.push_local name typ c.gamma;
+
+        map =
+            Name_map.add_local name c.map;
+    }
+
+
+let add_builtin_type
+    (descr: string)
+    (name: string)
+    (typ: Term.typ)
+    (c: t)
+    : t
+=
+    {
+        gamma =
+            Gamma.add_builtin_type descr name typ c.gamma;
+
+        map =
+            Name_map.add_global_strict name typ c.gamma c.map;
+    }
+
+
 
 
 let add_definition

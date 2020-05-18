@@ -15,6 +15,10 @@ val find_name: string -> t -> int list
 
 val compute: Term.t -> t -> Term.t
 
+val push_local: string -> Term.typ -> t -> t
+
+val add_builtin_type: string -> string -> Term.typ -> t -> t
+
 val add_definition: string -> Term.typ -> Term.t -> t -> (t, int) result
 
 

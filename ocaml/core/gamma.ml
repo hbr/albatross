@@ -109,6 +109,15 @@ let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
     push name typ def c
 
 
+let add_builtin_type (descr: string) (name: string) (typ: Term.typ) (c: t): t =
+    push
+        name
+        typ
+        (Builtin_type descr)
+        c
+
+
+
 let int_level    = 0
 let char_level   = 1
 let string_level = 2
