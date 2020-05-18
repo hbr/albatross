@@ -65,39 +65,14 @@ module Result = Fmlib.Result.Make (Build_problem)
 module Interval_monadic = Interval.Monadic (Result)
 
 
-let class_header
-    (i: int)
-    (inds: Source_entry.inductive array)
-    (context: Context.t)
-    : string Located.t * Term.typ Located.t list
-=
-    assert (i < Array.length inds);
-    assert false
-
-
 let add_inductive
     (inds: Source_entry.inductive array)
     (c: Context.t)
     : (Context.t, Build_problem.t) result
 =
     let open Result in
-    let len = Array.length inds in
-    assert (0 < len);
-    let nparams =
-        let (_, (fargs,_)), _ = inds.(0) in
-        List.length fargs
-    in
-    Interval_monadic.fold
-        (fun i _ ->
-            let (_, (fargs,_)), _ = inds.(i) in
-            if List.length fargs = nparams then
-                Ok ()
-            else
-                Error (assert false)
-        )
-        1 len ()
+    Build_inductive.build inds c
     >>= fun _ ->
-    Printf.printf "builder: nyi inductive type\n";
     Ok c
 
 
