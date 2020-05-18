@@ -25,7 +25,7 @@ let description_of_type_in_context
 
 module Name_map = Name_map
 module Result = Fmlib.Result.Make (Build_problem)
-module List_fold = List.Monadic_fold (Result)
+module List_fold = List.Monadic (Result)
 module Interval_monadic = Interval.Monadic (Result)
 module Algo = Gamma_algo.Make (Gamma)
 
@@ -554,6 +554,34 @@ let build_definition
     check_name_violations
     >>=
     check_incomplete (Located.range def)
+
+
+
+let build_named_type
+    (name: string Located.t)
+    (exp: Expression.t)
+    (c: Context.t)
+    : (Term.typ, Build_problem.t) result
+=
+    let open Fmlib.Result in
+    build exp c
+    >>= fun (typ, _) ->
+    match
+        Algo.check_naming_convention
+            (Located.value name)
+            typ
+            (Context.gamma c)
+    with
+    | Ok _ ->
+        Ok typ
+    | Error violation ->
+        let case, kind =
+            Gamma_algo.strings_of_violation violation
+        in
+        Error (
+            Located.range name,
+            Build_problem.Name_violation (case, kind)
+        )
 
 
 

@@ -1,4 +1,5 @@
 open Fmlib
+open Alba_core
 
 
 type pos = Character_parser.Position.t
@@ -18,6 +19,10 @@ type description =
     | Ambiguous of type_in_context list
     | Name_violation of string * string (* case, kind *)
     | Ambiguous_definition of int
+    | Wrong_parameter_count of int
+    | Wrong_parameter_name of string
+    | Wrong_parameter_type of Term.typ * Gamma.t
+    | No_inductive_type
     | Not_yet_implemented of string
 
 

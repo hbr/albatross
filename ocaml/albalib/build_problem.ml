@@ -19,6 +19,10 @@ type description =
     | Ambiguous of type_in_context list
     | Name_violation of string * string (* case, kind *)
     | Ambiguous_definition of int
+    | Wrong_parameter_count of int
+    | Wrong_parameter_name of string
+    | Wrong_parameter_type of Term.typ * Gamma.t
+    | No_inductive_type
     | Not_yet_implemented of string
 
 
@@ -174,6 +178,56 @@ struct
                 different signatures."
                 <+> cut
 
+        | Wrong_parameter_count required ->
+            wrap_words
+                "This inductive type is part of an inductive family. \
+                All members of the family must have"
+            <+> group space
+            <+> string (string_of_int required)
+            <+> group space
+            <+> wrap_words
+                "parameter(s)."
+            <+> cut
+
+        | Wrong_parameter_name required ->
+            wrap_words
+                "All corresponding parameters of an inductive family must \
+                have the same name. This parameter should have the name"
+            <+> group space
+            <+> string ("\"" ^ required ^ "\"")
+            <+> cut
+
+        | Wrong_parameter_type (required, gamma) ->
+            wrap_words
+                "All corresponding parameters of an inductive family must \
+                have the same type. This parameter should have the type"
+            <+> cut
+            <+> nest 4
+                (
+                    cut <+> PP.print required gamma
+                )
+            <+> cut
+
+        | No_inductive_type ->
+            wrap_words
+                "This is not an allowed type of an inductive type. A legal \
+                type of an inductive type must have a form like"
+            <+> cut <+> cut
+            <+> nest 4
+                (
+                    list_separated
+                        cut
+                        [ string "Any"
+                        ; string "Proposition"
+                        ; string "Int -> Int -> Proposition"
+                        ]
+                )
+            <+> cut <+> cut
+            <+> wrap_words
+                "or any type which reduces to one of these forms. \
+                The final type must be either \"Any\" or \
+                \"Proposition\""
+            <+> cut
 
         | Not_yet_implemented str ->
             char '<' <+> string str <+> char '>'

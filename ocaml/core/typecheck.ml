@@ -187,6 +187,12 @@ let rec check
 
 
 
+let equivalent (tp1: Term.typ) (tp2: Term.typ) (gamma: Gamma.t): bool =
+    Option.has (Uni.unify tp1 tp2 false (make gamma))
+
+
+
+
 let check
     (term: Term.t)
     (gamma: Gamma.t)

@@ -22,6 +22,11 @@ val is_valid_context: Gamma.t -> bool
 
 
 
+val equivalent: Term.typ -> Term.typ -> Gamma.t -> bool
+
+
+
+
 val check: Term.t -> Gamma.t -> (Term.typ, path * Problem.t) result
 (**
     [check term gamma]
