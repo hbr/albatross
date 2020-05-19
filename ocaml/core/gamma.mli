@@ -31,8 +31,10 @@ val entry: int -> t -> entry
 (** [entry level c] *)
 
 
-val add_builtin_type:
-    string -> string -> Term.typ -> t -> t
+val add_axiom: string -> Term.typ -> t -> t
+
+
+val add_builtin_type: string -> string -> Term.typ -> t -> t
 
 
 

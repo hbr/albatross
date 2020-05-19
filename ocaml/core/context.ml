@@ -77,6 +77,19 @@ let push_local (name: string) (typ: Term.typ) (c: t): t =
     }
 
 
+
+let add_axiom (name: string) (typ: Term.typ) (c: t): t =
+    {
+        gamma =
+            Gamma.add_axiom name typ c.gamma;
+
+        map =
+            Name_map.add_global_strict name typ c.gamma c.map;
+    }
+
+
+
+
 let add_builtin_type
     (descr: string)
     (name: string)
