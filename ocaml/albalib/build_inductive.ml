@@ -25,15 +25,25 @@ struct
 
     type params = named_type array
 
+    type typ =
+        int                  (* Number of previous constructors *)
+        *
+        named_type           (* name and type of the inductive type *)
+        *
+        named_type array     (* names and types of the constructors *)
+
     type t =
         params
         *
-        (   int                  (* Number of previous constructors *)
-            *
-            named_type           (* name and type of the inductive type *)
-            *
-            named_type array     (* names and types of the constructors *)
-        ) array
+        typ array
+
+
+    let make
+        (params: params)
+        (types:  typ array)
+        : t
+    =
+        params, types
 end
 
 
@@ -44,7 +54,7 @@ type params = (string Located.t * Term.typ) array
 
 type header0 = string Located.t * params * Term.typ
 
-type header = string Located.t * Term.typ
+type header = string Located.t * Term.typ (* type without params *)
 
 
 let (>>=) = Result.(>>=)
@@ -71,6 +81,7 @@ let class_header
     (c0: Context.t)
     : header0 result2
 =
+    (* class Name (P0: PT0) (P1: PT1) ... : TP *)
     assert (i < Array.length inds);
     let (name, (params, typ_exp)), _ = inds.(i) in
     List_monadic.(
@@ -120,6 +131,7 @@ let check_params
     (context: Context.t)
     : unit result2
 =
+    (* Check parameter count, names and types *)
     let nparams = Array.length params0 in
     if nparams <> Array.length params then
         Error (
@@ -194,34 +206,174 @@ let class_headers
 
 
 
-let one_constructor_set
-    (_: int)
-    (_: header array)
-    (_: Source_entry.inductive array)
+let push_params
+    (params: params)
+    (context: Context.t)
+    : Context.t
+=
+    Array.fold_left
+        (fun context (name,typ) ->
+            Context.push_local
+                (Located.value name)
+                typ
+                context)
+        context
+        params
+
+
+
+let prefix_params
+    (params: params)
+    (typ: Term.typ)
+    : Term.typ
+=
+    Array.fold_right
+        (fun (name, typ) res ->
+            Term.(Pi (typ, res, Pi_info.typed (Located.value name))))
+        params
+        typ
+
+
+
+let push_types
+    (params: params)
+    (headers: header array)
+    (context: Context.t)
+    : Context.t
+=
+    let _, context =
+        Array.fold_left
+            (fun (i,context) (name,typ) ->
+                i + 1,
+                Context.add_axiom
+                    (Located.value name)
+                    (Term.up i (prefix_params params typ))
+                    context
+            )
+            (0,context)
+            headers
+    in
+    context
+
+
+
+
+
+let check_constructor
+    (_: string Located.t)
+    (_: Term.typ)
     (_: Context.t)
-    : Term.typ array result2
+    : (string * Term.typ) result2
 =
     assert false
+
+
+
+
+let one_constructor
+    (_: int)                                      (* inductive type *)
+    ((name, (fargs, typ))
+        : Source_entry.named_signature)
+    (c: Context.t)                                (* with types and params *)
+    : (string * Term.typ) result2
+=
+    let module Lst = List.Monadic (Result) in
+    Lst.fold_left
+        (fun (name, typ) (fargs, c) ->
+            match typ with
+            | None ->
+                assert false  (* Illegal call! Parser must not allow that. *)
+            | Some typ ->
+                Build_expression.build_named_type name typ c
+                >>= fun typ ->
+                let name = Located.value name in
+                Ok (
+                    (name, typ) :: fargs
+                    ,
+                    Context.push_local name typ c
+                )
+        )
+        fargs
+        ([], c)
+    >>= fun (fargs, c1) ->
+    match typ with
+    | None ->
+        assert false
+
+    | Some typ ->
+        Build_expression.build_named_type name typ c1
+        >>= fun typ ->
+        let typ: Term.typ =
+            List.fold_left
+                (fun res (name, typ) ->
+                    Term.(Pi (typ, res, Pi_info.typed name)))
+                typ
+                fargs
+        in
+        check_constructor name typ c
+
+
+
+
+
+let one_constructor_set
+    (i: int)
+    (inds: Source_entry.inductive array)
+    (c: Context.t)  (* with types and params *)
+    : (string *Term.typ) array result2
+=
+    let module Arr = Array.Monadic (Result) in
+    Arr.fold_left
+        (fun constructor lst ->
+            one_constructor i constructor c
+            >>= fun co ->
+            Ok (co :: lst)
+        )
+        (snd inds.(i))
+        []
+    >>= fun lst ->
+    Ok (Array.of_list (List.rev lst))
 
 
 
 
 let constructors
-    (_: params)
+    (params: params)
     (headers: header array)
     (inds: Source_entry.inductive array)
     (context: Context.t)
     : Inductive.t result2
 =
+    let context1 =
+        push_types params headers context |> push_params params
+    in
     let module Arr = Array.Monadic (Result) in
-    Arr.mapi
-        (fun i header ->
-            one_constructor_set i headers inds context
-            >>= fun constructors ->
-            Ok (header, constructors))
+    Arr.foldi_left
+        (fun i header (n,constructors) ->
+            one_constructor_set i inds context1
+            >>= fun constructor_set ->
+            let header =
+                let name, typ = header in
+                Located.value name, typ
+            in
+            Ok (
+                n + Array.length constructor_set,
+                (n, header, constructor_set) :: constructors
+            )
+        )
         headers
-    >>= fun _ ->
-    assert false
+        (0, [])
+    >>=
+    fun (_, lst) ->
+        let params =
+            Array.map (fun (name,typ) -> Located.value name, typ) params
+        and types =
+            Array.of_list (List.rev lst)
+        in
+    Ok Inductive.(make params types)
+
+
+
 
 
 

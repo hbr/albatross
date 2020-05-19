@@ -23,6 +23,7 @@ type description =
     | Wrong_parameter_name of string
     | Wrong_parameter_type of Term.typ * Gamma.t
     | No_inductive_type
+    | No_inductive_type_constructed
     | Not_yet_implemented of string
 
 

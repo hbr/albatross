@@ -23,6 +23,7 @@ type description =
     | Wrong_parameter_name of string
     | Wrong_parameter_type of Term.typ * Gamma.t
     | No_inductive_type
+    | No_inductive_type_constructed
     | Not_yet_implemented of string
 
 
@@ -227,6 +228,13 @@ struct
                 "or any type which reduces to one of these forms. \
                 The final type must be either \"Any\" or \
                 \"Proposition\""
+            <+> cut
+
+        | No_inductive_type_constructed ->
+            wrap_words
+                "All constructors of an inductive type must construct an \
+                object of the inductive type. This constructor fails \
+                to do this"
             <+> cut
 
         | Not_yet_implemented str ->
