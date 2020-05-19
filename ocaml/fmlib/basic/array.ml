@@ -99,4 +99,35 @@ struct
         : 'b array M.t
     =
         mapi (fun _ -> f) arr
+
+
+
+    let foldi_left
+        (f: int -> 'a -> 'b -> 'b M.t)
+        (arr: 'a array)
+        (b: 'b)
+        : 'b M.t
+    =
+        let len = length arr
+        in
+        let rec fold_from i b =
+            if i = len then
+                M.return b
+            else
+                M.(f i (get arr i) b >>= fold_from (i + 1))
+        in
+        fold_from 0 b
+
+
+    let fold_left
+        (f: 'a -> 'b -> 'b M.t)
+        (arr: 'a array)
+        (b: 'b)
+        : 'b M.t
+    =
+        foldi_left
+            (fun _ -> f)
+            arr
+            b
+
 end

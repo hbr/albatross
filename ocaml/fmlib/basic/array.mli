@@ -34,4 +34,8 @@ sig
     val mapi: (int -> 'a -> 'b M.t) -> 'a array -> 'b array M.t
 
     val map: ('a -> 'b M.t) -> 'a array -> 'b array M.t
+
+    val fold_left: ('a -> 'b -> 'b M.t) -> 'a array -> 'b -> 'b M.t
+
+    val foldi_left: (int -> 'a -> 'b -> 'b M.t) -> 'a array -> 'b -> 'b M.t
 end
