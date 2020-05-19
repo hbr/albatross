@@ -16,6 +16,7 @@ val iter: ('a -> unit) -> 'a array -> unit
 val copy: 'a array -> 'a array
 val sub: 'a array -> int -> int -> 'a array
 val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b array -> 'a
+val fold_right: ('a -> 'b -> 'b) -> 'a array -> 'b -> 'b
 
 
 val first: 'a array -> 'a
