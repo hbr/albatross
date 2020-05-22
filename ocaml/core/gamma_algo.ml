@@ -99,6 +99,21 @@ struct
             args
 
 
+    let rec normalize_pi (typ: Term.typ) (c: t): Term.typ =
+        let open Term in
+        match key_normal typ c with
+        | Pi (tp, res, info) ->
+            Pi (
+                tp,
+                normalize_pi
+                    res
+                    (push_local (Pi_info.name info) tp c),
+                info
+            )
+        | typ ->
+            typ
+
+
 
     let rec normalize (term: Term.t) (c: t): Term.t =
         let normalize_key key c =
@@ -196,16 +211,34 @@ struct
 
 
 
-    let rec sort_of_kind (k: Term.typ) (c:t): Term.Sort.t option =
-        let open Term
+    let split_kind
+        (k: Term.typ)
+        (c: t)
+        : ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+    =
+        let rec split args k c =
+            let open Term in
+            match key_normal k c with
+            | Sort s ->
+                Some (List.rev args, s)
+
+            | Pi (arg, res, info) ->
+                split
+                    ((info, arg) :: args)
+                    res
+                    (push_local (Pi_info.name info) arg c)
+
+            | _ ->
+                None
         in
-        match key_normal k c with
-        | Sort s ->
-            Some s
-        | Pi (arg_tp, res_tp, _) ->
-            sort_of_kind res_tp (push_local "_" arg_tp c)
-        | _ ->
-            None
+        split [] k c
+
+
+
+    let sort_of_kind (k: Term.typ) (c:t): Term.Sort.t option =
+        Option.map
+            snd
+            (split_kind k c)
 
 
     let is_kind (k: Term.typ) (c: t): bool =

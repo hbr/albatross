@@ -66,6 +66,30 @@ sig
     *)
 
 
+    val split_kind:
+        Term.typ
+        -> Gamma.t
+        -> ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+    (**
+        [split_kind k gamma]:
+
+        Compute the arguments and the sort of the kind [k]. If [typ] does not
+        reduce to a kind, then return [None].
+
+        Precondition: [k] must be welltyped and the context [gamma] must be
+        valid.
+
+        A kind has the form
+
+        {[all (x: A) (y: B) .... : s]}
+
+        where [s] is a sort.
+    *)
+
+
+
+
+
     val sort_of_kind: Term.typ -> Gamma.t -> Term.Sort.t option
     (**
         [sort_of_kind typ gamma]
@@ -102,6 +126,22 @@ sig
         context [gamma].
     *)
 
+
+    val normalize_pi: Term.typ -> Gamma.t -> Term.typ
+    (** [normalize_pi typ gamma]
+
+        Precondition:
+
+        [typ] must be a valid type
+
+        Result: [typ] is expanded until the form
+        {[
+            all (a: A) (b: B) ... : R
+        ]}
+
+        is reached where [R] cannot be expanded further into a product type.
+
+    *)
 
 
     val normalize: Term.t -> Gamma.t -> Term.t
