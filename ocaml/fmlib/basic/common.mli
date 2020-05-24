@@ -100,6 +100,21 @@ sig
   val find: (int->bool) -> int -> int -> int
 
 
+    val exist: (int -> bool) -> int -> int -> bool
+    (** [exist p start beyond]
+
+        Is there an index [i] satisfying [p i] within [start <= i < beyond]?
+    *)
+
+
+
+    val forall: (int -> bool) -> int -> int -> bool
+    (** [forall p start beyond]
+
+        Do all indices [i] within [start <= i < beyond] satisfy [p i]?
+    *)
+
+
   (** [fold a f start beyond] starts with value [a] and folds the function [f]
      over the interval [start..beyond].
 

@@ -142,7 +142,7 @@ module String_map = Finite_map.Make(String)
 
 
 module Interval =
-  struct
+struct
     let find (p:int -> bool) (start:int) (beyond:int): int =
       let rec fnd i =
         if i = beyond || p i then
@@ -151,6 +151,16 @@ module Interval =
           fnd (i+1)
       in
       fnd start
+
+
+    let exist (p: int -> bool) (start: int) (beyond: int): bool =
+        find p start beyond <> beyond
+
+
+    let forall (p: int -> bool) (start: int) (beyond: int): bool =
+        let notp i = not (p i)
+        in
+        not (exist notp start beyond)
 
 
     let fold (a:'a) (f:int -> 'a -> 'a) (start:int) (beyond:int): 'a =
@@ -185,7 +195,7 @@ module Interval =
 
           fold start a
       end
-  end
+end
 
 
 
