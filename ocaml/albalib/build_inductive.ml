@@ -269,33 +269,20 @@ let check_constructor_type
             c
     )
     >>= fun c1 ->
-    let open Term in
-    let f, params_index =
-        split_application res
-    in
-    let params_index = Array.of_list params_index
-    in
-    let ind_var =
-        Variable (Context.index_of_level (cnt0 + i) c1)
-    and param_var k =
-        Variable (Context.index_of_level (cnt0 + ntypes + k) c1)
-    in
     if
-        f <> ind_var
-        ||
-        Interval.exist
-            (fun k ->
-                assert (k < Array.length params_index);
-                fst params_index.(k)
-                <> param_var k)
-            0 nparams
+        Inductive.Header.is_well_constructed
+            i
+            params
+            headers
+            Context.(count c1 - count c)
+            res
     then
+        assert false
+    else
         Error (
             Located.range name,
             Build_problem.Wrong_type_constructed
         )
-    else
-        assert false
 
 
 

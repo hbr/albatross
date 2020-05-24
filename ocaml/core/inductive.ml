@@ -1,5 +1,7 @@
 (* A pure representation of inductive types. *)
 
+open Fmlib
+
 
 type params = (string * Term.typ) array
 
@@ -13,6 +15,10 @@ struct
         sort:  Term.Sort.t;
     }
     (* [indices] and [sort] represent the normalized version of [kind]*)
+
+
+    let make name kind indices sort =
+        {name; kind; indices = Array.of_list indices; sort}
 
 
     let name header = header.name
@@ -33,8 +39,36 @@ struct
             header.kind
 
 
-    let make name kind indices sort =
-        {name; kind; indices = Array.of_list indices; sort}
+    let is_well_constructed
+        (i: int)
+        (params: params)
+        (headers: t array)
+        (nargs: int)
+        (typ: Term.typ)
+        : bool
+    =
+        (* Check that [typ] has the form [I p1 p2 ... i1 i2 ...] where [I]
+        corresponds to the [i]th inductive type, [p1 p2 ...] are the parameters
+        and [i1 i2 ... ] are the indices. *)
+        let open Term in
+        let nparams = Array.length params
+        and ntypes  = Array.length headers
+        and f, params_index = split_application typ in
+        let params_index = Array.of_list params_index
+        in
+        let inductive_variable =
+            Variable (bruijn_convert i (ntypes + nparams + nargs))
+        and param_variable k =
+            Variable (bruijn_convert k nparams)
+        in
+        f = inductive_variable
+        &&
+        Common.Interval.forall
+            (fun k ->
+                assert (k < Array.length params_index);
+                param_variable k = fst params_index.(k)
+            )
+            0 nparams
 end (* Header *)
 
 
