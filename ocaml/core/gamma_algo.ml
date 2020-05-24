@@ -211,27 +211,39 @@ struct
 
 
 
-    let split_kind
-        (k: Term.typ)
+    let split_type
+        (typ: Term.typ)
         (c: t)
-        : ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+        : (Term.Pi_info.t * Term.typ) list * Term.typ
     =
-        let rec split args k c =
+        let rec split args typ c =
             let open Term in
-            match key_normal k c with
-            | Sort s ->
-                Some (List.rev args, s)
-
+            match key_normal typ c with
             | Pi (arg, res, info) ->
                 split
                     ((info, arg) :: args)
                     res
                     (push_local (Pi_info.name info) arg c)
 
-            | _ ->
-                None
+            | typ ->
+                List.rev args, typ
         in
-        split [] k c
+        split [] typ c
+
+
+
+    let split_kind
+        (k: Term.typ)
+        (c: t)
+        : ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+    =
+        let args, res = split_type k c in
+        let open Term in
+        match res with
+        | Sort s ->
+            Some (args, s)
+        | _ ->
+            None
 
 
 

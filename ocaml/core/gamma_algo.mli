@@ -65,6 +65,10 @@ sig
         Precondition: [term] must be welltyped and the context valid.
     *)
 
+    val split_type:
+        Term.typ -> Gamma.t
+        ->  (Term.Pi_info.t * Term.typ) list * Term.typ
+
 
     val split_kind:
         Term.typ
