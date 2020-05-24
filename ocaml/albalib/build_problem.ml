@@ -22,6 +22,7 @@ type description =
     | Wrong_parameter_count of int
     | Wrong_parameter_name of string
     | Wrong_parameter_type of Term.typ * Gamma.t
+    | Missing_inductive_type
     | No_inductive_type
     | No_inductive_type_constructed
     | Not_yet_implemented of string
@@ -207,6 +208,14 @@ struct
                 (
                     cut <+> PP.print required gamma
                 )
+            <+> cut
+
+        | Missing_inductive_type ->
+            wrap_words
+                "The inductive type has indices. Therefore the constructor \
+                has to indicate explicitly the type of the object it \
+                constructs with all parameters and indices. Please add a \
+                type annotation."
             <+> cut
 
         | No_inductive_type ->

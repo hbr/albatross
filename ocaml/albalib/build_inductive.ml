@@ -247,18 +247,6 @@ let push_params
 
 
 
-let prefix_params
-    (params: Inductive.params)
-    (typ: Term.typ)
-    : Term.typ
-=
-    Array.fold_right
-        (fun (name, typ) res ->
-            Term.(Pi (typ, res, Pi_info.typed name)))
-        params
-        typ
-
-
 
 let push_types
     (params: Inductive.params)
@@ -273,7 +261,7 @@ let push_types
                 i + 1,
                 Context.add_axiom
                     (name header)
-                    (Term.up i (prefix_params params (kind header)))
+                    (Term.up i (kind params header))
                     context
             )
             (0,context)
@@ -285,10 +273,10 @@ let push_types
 
 
 
-let check_constructor
+let check_constructor_type
     (_: int)
-    (_: int)
-    (_: int)
+    (_: Inductive.params)
+    (_: Inductive.Header.t array)
     (_: string Located.t)
     (_: Term.typ)
     (_: Context.t)
@@ -301,19 +289,20 @@ let check_constructor
 
 let one_constructor
     (i: int)                                      (* inductive type *)
-    (ntypes: int)
-    (nparams: int)
+    (params: Inductive.params)
+    (headers: Inductive.Header.t array)
     ((name, (fargs, typ))
         : Source_entry.named_signature)
     (c: Context.t)                                (* with types and params *)
     : Inductive.Constructor.t result2
 =
+    (* Collect constructor arguments. *)
     let module Lst = List.Monadic (Result) in
     Lst.fold_left
         (fun (name, typ) (fargs, c) ->
             match typ with
             | None ->
-                assert false  (* Illegal call! Parser to prevent that. *)
+                assert false  (* Illegal call! Parser has to prevent that. *)
             | Some typ ->
                 Build_expression.build_named_type name typ c
                 >>= fun typ ->
@@ -327,30 +316,43 @@ let one_constructor
         fargs
         ([], c)
     >>= fun (fargs, c1) ->
-    match typ with
-    | None ->
-        assert false
+    (
+    (* Analyze final type of the signature. *)
+        match typ with
+        | None ->
+            (*  Must be the default inductive type. Only possible without
+                indices. *)
+            if
+                Inductive.Header.has_index headers.(i)
+            then
+                Error (
+                    Located.range name,
+                    Build_problem.Missing_inductive_type
+                )
+            else
+                assert false (* add default type *)
 
-    | Some typ ->
-        Build_expression.build_named_type name typ c1
-        >>= fun typ ->
-        let typ: Term.typ =
-            List.fold_left
-                (fun res (name, typ) ->
-                    Term.(Pi (typ, res, Pi_info.typed name)))
-                typ
-                fargs
-        in
-        check_constructor i ntypes nparams name typ c
+        | Some typ ->
+            Build_expression.build_named_type name typ c1
+    )
+    >>= fun typ ->
+    let typ =
+        List.fold_left
+            (fun res (name, typ) ->
+                Term.(Pi (typ, res, Pi_info.typed name)))
+            typ
+            fargs
+    in
+    check_constructor_type i params headers name typ c
 
 
 
 
 
 let one_constructor_set
-    (i: int)
-    (ntypes: int)
-    (nparams: int)
+    (i: int) (* inductive type *)
+    (params: Inductive.params)
+    (headers: Inductive.Header.t array)
     (inds: Source_entry.inductive array)
     (c: Context.t)  (* with types and params *)
     : Inductive.Constructor.t array result2
@@ -358,7 +360,7 @@ let one_constructor_set
     let module Arr = Array.Monadic (Result) in
     Arr.fold_left
         (fun constructor lst ->
-            one_constructor i ntypes nparams constructor c
+            one_constructor i params headers constructor c
             >>= fun co ->
             Ok (co :: lst)
         )
@@ -381,17 +383,13 @@ let constructors
         push_types params headers context
         |>
         push_params params
-    and ntypes =
-        Array.length headers
-    and nparams =
-        Array.length params
     in
     (* list of constructor sets with corresponding header a number of previous
     constructors. *)
     let module Arr = Array.Monadic (Result) in
     Arr.foldi_left
         (fun i header (n, constructors) ->
-            one_constructor_set i ntypes nparams inds context1
+            one_constructor_set i params headers inds context1
             >>= fun constructor_set ->
             Ok (
                 n + Array.length constructor_set

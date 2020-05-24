@@ -1,6 +1,9 @@
 (* A pure representation of inductive types. *)
 
 
+type params = (string * Term.typ) array
+
+
 module Header =
 struct
     type t = {
@@ -11,13 +14,25 @@ struct
     }
     (* [indices] and [sort] represent the normalized version of [kind]*)
 
+
     let name header = header.name
 
-    let kind header = header.kind
+
+    let has_index (header: t): bool =
+        0 <> Array.length header.indices
+
+
+    let kind (params: params) (header: t): Term.typ =
+        Array.fold_right
+            (fun (name, typ) res ->
+                Term.(Pi (typ, res, Pi_info.typed name)))
+            params
+            header.kind
+
 
     let make name kind indices sort =
         {name; kind; indices = Array.of_list indices; sort}
-end (* Type *)
+end (* Header *)
 
 
 
@@ -45,10 +60,7 @@ struct
 
     let make nprevious header constructors =
         {nprevious; header; constructors}
-end
-
-
-type params = (string * Term.typ) array
+end (* Type *)
 
 
 type t = {
