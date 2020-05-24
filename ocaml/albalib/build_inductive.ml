@@ -277,7 +277,7 @@ let check_constructor_type
             Context.(count c1 - count c)
             res
     then
-        assert false
+        Ok (Inductive.Constructor.make (Located.value name) typ)
     else
         Error (
             Located.range name,

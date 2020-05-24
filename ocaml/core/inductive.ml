@@ -82,6 +82,9 @@ struct
         typ:  Term.typ; (* Valid in context with all types of the family and the
         parameters. *)
     }
+
+    let make name typ =
+        {name; typ}
 end
 
 
