@@ -18,35 +18,6 @@ module List_monadic =
 module Algo =
     Gamma_algo.Make (Gamma)
 
-(*
-module Inductive =
-struct
-    type named_type = string * Term.typ
-
-    type params = named_type array
-
-    type typ =
-        int                  (* Number of previous constructors *)
-        *
-        named_type           (* name and type of the inductive type *)
-        *
-        named_type array     (* names and types of the constructors *)
-
-    type t =
-        params
-        *
-        typ array
-
-
-    let make
-        (params: params)
-        (types:  typ array)
-        : t
-    =
-        params, types
-end
-*)
-
 
 type 'a result2 = ('a, Build_problem.t) result
 
@@ -274,15 +245,57 @@ let push_types
 
 
 let check_constructor_type
-    (_: int)
-    (_: Inductive.params)
-    (_: Inductive.Header.t array)
-    (_: string Located.t)
-    (_: Term.typ)
-    (_: Context.t)
+    (i: int)
+    (params: Inductive.params)
+    (headers: Inductive.Header.t array)
+    (name: string Located.t)
+    (typ: Term.typ)
+    (c: Context.t)
     : Inductive.Constructor.t result2
 =
-    assert false
+    let nparams = Array.length params
+    and ntypes  = Array.length headers
+    in
+    let cnt0 = Context.count c - nparams - ntypes in
+    assert (0 <= cnt0);
+    let args, res =
+        Algo.split_type typ (Context.gamma c)
+    in
+    List_monadic.(
+        fold_left
+            (fun _ _ ->
+                assert false)
+            args
+            c
+    )
+    >>= fun c1 ->
+    let open Term in
+    let f, params_index =
+        split_application res
+    in
+    let params_index = Array.of_list params_index
+    in
+    let ind_var =
+        Variable (Context.index_of_level (cnt0 + i) c1)
+    and param_var k =
+        Variable (Context.index_of_level (cnt0 + ntypes + k) c1)
+    in
+    if
+        f <> ind_var
+        ||
+        Interval.exist
+            (fun k ->
+                assert (k < Array.length params_index);
+                fst params_index.(k)
+                <> param_var k)
+            0 nparams
+    then
+        Error (
+            Located.range name,
+            Build_problem.Wrong_type_constructed
+        )
+    else
+        assert false
 
 
 
@@ -330,7 +343,7 @@ let one_constructor
                     Build_problem.Missing_inductive_type
                 )
             else
-                assert false (* add default type *)
+                Ok (Inductive.default_type i params headers)
 
         | Some typ ->
             Build_expression.build_named_type name typ c1

@@ -24,7 +24,7 @@ type description =
     | Wrong_parameter_type of Term.typ * Gamma.t
     | Missing_inductive_type
     | No_inductive_type
-    | No_inductive_type_constructed
+    | Wrong_type_constructed
     | Not_yet_implemented of string
 
 

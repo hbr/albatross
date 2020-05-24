@@ -24,7 +24,7 @@ type description =
     | Wrong_parameter_type of Term.typ * Gamma.t
     | Missing_inductive_type
     | No_inductive_type
-    | No_inductive_type_constructed
+    | Wrong_type_constructed
     | Not_yet_implemented of string
 
 
@@ -239,11 +239,17 @@ struct
                 \"Proposition\""
             <+> cut
 
-        | No_inductive_type_constructed ->
+        | Wrong_type_constructed ->
             wrap_words
                 "All constructors of an inductive type must construct an \
-                object of the inductive type. This constructor fails \
-                to do this"
+                object of the inductive type. The constructed type must have \
+                the form"
+            <+> cut <+> cut
+            <+> nest 4 (string "I p1 p2 ... i1 i2 ...")
+            <+> cut <+> cut
+            <+> wrap_words
+                "where 'I' is the name of the inductive type, 'p1 p2 ...' \
+                are the parameters and 'i1 i2 ...' are the indices."
             <+> cut
 
         | Not_yet_implemented str ->

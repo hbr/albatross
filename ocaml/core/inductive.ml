@@ -18,8 +18,11 @@ struct
     let name header = header.name
 
 
+    let count_indices (header: t): int =
+        Array.length header.indices
+
     let has_index (header: t): bool =
-        0 <> Array.length header.indices
+        0 <> count_indices header
 
 
     let kind (params: params) (header: t): Term.typ =
@@ -61,6 +64,29 @@ struct
     let make nprevious header constructors =
         {nprevious; header; constructors}
 end (* Type *)
+
+
+let default_type
+    (i:int) (params: params) (headers: Header.t array)
+    : Term.typ
+=
+    (* Valid in a context with the types and the parameters. *)
+    let nparams = Array.length params
+    and ntypes  = Array.length headers
+    in
+    let rec make k typ =
+        if k = nparams then
+            typ
+        else
+            make
+                (k + 1)
+                Term.(
+                    application
+                        typ
+                        (Variable (bruijn_convert k nparams))
+                )
+    in
+    make 0 Term.(Variable (bruijn_convert i ntypes + nparams))
 
 
 type t = {
